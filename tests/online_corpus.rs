@@ -10,10 +10,10 @@
 //! visible:
 //!
 //! ```text
-//! cargo test --no-default-features --features host-test,shaderc-online --test online_corpus -- --nocapture
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test online_corpus -- --nocapture
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test online_corpus -- --nocapture
 //! ```
-#![cfg(feature = "shaderc-online")]
+#![cfg(all(feature = "shaderc-online", any(feature = "gpu-powervr", feature = "gpu-vivante")))]
 use core::ffi::c_char;
 use std::path::{Path, PathBuf};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -51,11 +51,11 @@ fn compile(stage: u32, src: &str) -> Result<(), String> {
 /// committed).
 /// The fixture's name: the GPU, and `_es2` where the build reports ES 2.0
 /// and so refuses every `#version 300 es` source.
-const GPU: &str = match (cfg!(feature = "gpu-vivante"), cfg!(feature = "report-es2")) {
-    (false, false) => "powervr",
-    (false, true) => "powervr_es2",
-    (true, false) => "gc7000",
-    (true, true) => "gc7000_es2",
+const GPU: &str = match (cfg!(feature = "gpu-powervr"), cfg!(feature = "report-es2")) {
+    (true, false) => "powervr",
+    (true, true) => "powervr_es2",
+    (false, false) => "gc7000",
+    (false, true) => "gc7000_es2",
 };
 
 #[test]
