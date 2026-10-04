@@ -175,6 +175,11 @@ void osal_v3d_diag_print(void);
  * shutdown op prints the same line but also tears the OSAL down, and the
  * product never calls it while the backend keeps its memory). printk. */
 void osal_zephyr_diag_print(void);
+
+/* The GC7000 OSAL's waits for kicks so far (zephyr_gc.c): how many, how many
+ * timed out (the 2 s bound), and the time spent in them and in the longest
+ * one. Read around a frame to tell GPU time from CPU time. */
+void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us);
 /* One line naming this OSAL's GPU memory now, NUL-terminated into
  * buf[n]: what is allocated, the frees it holds, and how large an
  * allocation can still succeed. Each Zephyr OSAL its own wording and

@@ -421,11 +421,47 @@ static int64_t z_completed(void)
  * this backend draws and well inside the inherited watchdog's window. */
 #define GC_WAIT_FOREVER_MS 2000u
 
+/* Every wait for a kick, counted: how many, how many timed out, and the
+ * time spent in them (osal_gc_wait_stats). A board without a console reads
+ * these around a frame to tell a frame that waited on the GPU from one that
+ * spent its time on the CPU. */
+static struct {
+	uint32_t waits, timeouts;
+	uint64_t cycles, max_cycles;
+} s_waits;
+
+static int timed_wait(uint32_t fence, uint32_t ms)
+{
+	const uint64_t c0 = k_cycle_get_64();
+	int rc = gc_render_wait(fence, ms);
+	const uint64_t dc = k_cycle_get_64() - c0;
+
+	s_waits.waits++;
+	s_waits.cycles += dc;
+	if (dc > s_waits.max_cycles)
+		s_waits.max_cycles = dc;
+	if (rc == -ETIMEDOUT)
+		s_waits.timeouts++;
+	return rc;
+}
+
+void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us)
+{
+	if (waits)
+		*waits = s_waits.waits;
+	if (timeouts)
+		*timeouts = s_waits.timeouts;
+	if (wait_us)
+		*wait_us = k_cyc_to_us_floor64(s_waits.cycles);
+	if (max_us)
+		*max_us = k_cyc_to_us_floor64(s_waits.max_cycles);
+}
+
 /* The full-queue wait of pending_frees.h: the backend waits with no deadline
  * (timeout -1), which z_wait bounds by GC_WAIT_FOREVER_MS; so does this. */
 static int wait_pending(uint32_t fence, uint32_t *completed)
 {
-	int rc = gc_render_wait(fence, GC_WAIT_FOREVER_MS);
+	int rc = timed_wait(fence, GC_WAIT_FOREVER_MS);
 
 	if (rc == -ETIMEDOUT)
 		return 1;
@@ -447,7 +483,7 @@ static int z_wait(int64_t fence, int64_t timeout_us)
 	else
 		ms = (uint32_t)MIN((timeout_us + 999) / 1000, (int64_t)UINT32_MAX);
 
-	rc = gc_render_wait((uint32_t)fence, ms);
+	rc = timed_wait((uint32_t)fence, ms);
 	if (rc == -ETIMEDOUT)
 		return 1;   /* the contract's "timed out"; the stall is already dumped */
 	return rc;
