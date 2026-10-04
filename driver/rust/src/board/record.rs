@@ -171,7 +171,9 @@ kinds! {
          (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
          failed later; w1 = the run's return code as int16 | the cause (CHECK_RUN_*) << 16 | \
          draws the GL core refused (yakogl_draws_refused, saturating) << 24, w2 = the \
-         animation frame it happened in (1 = the first after the check; 0 none), w3 = the \
+         animation frame it happened in (1 = the first after the check; 0 none; bits 0..9) | \
+         that frame's draw in ms << 10 (12 bits) | the compiles the online compiler ran in \
+         it << 22 (10 bits), each field's largest value meaning not measured, w3 = the \
          online compiler's keep high-water in KiB << 16 | the cause's detail in ms (how long \
          the wait or the frame took), 16 bits each, saturating";
 }
@@ -339,6 +341,25 @@ values! {
     CHECK_RUN_GL_ERROR = 5;
     CHECK_RUN_NO_FRAME = 6;
     CHECK_RUN_OTHER = 7;
+    // kind CHECK, tag CHECK_RUN, w2: the frame in bits 0..9, the frame's draw
+    // in ms in bits 10..21, the compiles it ran in bits 22..31; the largest
+    // value of a field means "not measured", one below it saturates.
+    CHECK_RUN_FRAME_MAX = 0x3ff;
+    CHECK_RUN_DRAW_SHIFT = 10;
+    CHECK_RUN_DRAW_ABSENT = 0xfff;
+    CHECK_RUN_COMPILES_SHIFT = 22;
+    CHECK_RUN_COMPILES_ABSENT = 0x3ff;
+}
+
+/// kind CHECK, tag CHECK_RUN's w2: the animation frame (saturating), the
+/// draw of that frame's iteration in ms and the compiles the online compiler
+/// ran in it, each saturating one below its "not measured" value, which is
+/// passed through as given.
+pub fn check_run_w2(frame: u32, draw_ms: u32, compiles: u32) -> u32 {
+    let field = |v: u32, absent: u32| if v == absent { absent } else { v.min(absent - 1) };
+    frame.min(CHECK_RUN_FRAME_MAX)
+        | field(draw_ms, CHECK_RUN_DRAW_ABSENT) << CHECK_RUN_DRAW_SHIFT
+        | field(compiles, CHECK_RUN_COMPILES_ABSENT) << CHECK_RUN_COMPILES_SHIFT
 }
 
 /// kind CHECK's w1..w3 for a failing probe: its index, window position, the
@@ -1036,11 +1057,8 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             CHECK_GUARD => write!(out, "guard: {w1} guard-row pixels changed"),
             CHECK_READPIXELS => write!(out, "readpixels: glReadPixels differs from memory at {w1} probes"),
             CHECK_NO_REFERENCE => out.write_str("no reference: no probe table for this window size"),
-            CHECK_RUN => write!(
-                out,
-                "run: the check passed, the run failed later: {} at frame {w2} ({} ms), rc {}; draws refused {}; \
-                 keep high-water {} KiB",
-                match (w1 >> 16) & 0xff {
+            CHECK_RUN => {
+                let cause = match (w1 >> 16) & 0xff {
                     CHECK_RUN_FENCE_TIMEOUT => "the frame's fence did not signal",
                     CHECK_RUN_OVER_BUDGET => "a frame over the budget",
                     CHECK_RUN_DRAW => "the UI's draw failed",
@@ -1049,12 +1067,29 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
                     CHECK_RUN_NO_FRAME => "no frame presented",
                     CHECK_RUN_OTHER => "another failure",
                     _ => "?",
-                },
-                w3 & 0xffff,
-                (w1 & 0xffff) as u16 as i16,
-                w1 >> 24,
-                w3 >> 16
-            ),
+                };
+                write!(
+                    out,
+                    "run: the check passed, the run failed later: {cause} at frame {} ({} ms; its draw ",
+                    w2 & CHECK_RUN_FRAME_MAX,
+                    w3 & 0xffff
+                )?;
+                match (w2 >> CHECK_RUN_DRAW_SHIFT) & CHECK_RUN_DRAW_ABSENT {
+                    CHECK_RUN_DRAW_ABSENT => out.write_str("not measured")?,
+                    ms => write!(out, "{ms} ms")?,
+                }
+                match w2 >> CHECK_RUN_COMPILES_SHIFT {
+                    CHECK_RUN_COMPILES_ABSENT => out.write_str(", compiles not counted")?,
+                    n => write!(out, ", {n} compiles")?,
+                }
+                write!(
+                    out,
+                    "), rc {}; draws refused {}; keep high-water {} KiB",
+                    (w1 & 0xffff) as u16 as i16,
+                    w1 >> 24,
+                    w3 >> 16
+                )
+            }
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
         _ => Ok(()),
@@ -1109,6 +1144,18 @@ pub fn write_c_header(out: &mut impl fmt::Write) -> fmt::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CHECK_RUN's w2: each field lands at its bits, saturates one below its
+    /// "not measured" value, and that value passes through unchanged.
+    #[test]
+    fn check_run_w2_keeps_not_measured_apart_from_saturated() {
+        let w = check_run_w2(2, 2700, 12);
+        assert_eq!((w & 0x3ff, (w >> 10) & 0xfff, w >> 22), (2, 2700, 12));
+        let big = check_run_w2(5000, 9000, 5000);
+        assert_eq!((big & 0x3ff, (big >> 10) & 0xfff, big >> 22), (0x3ff, 0xffe, 0x3fe), "saturated, not absent");
+        let none = check_run_w2(1, CHECK_RUN_DRAW_ABSENT, CHECK_RUN_COMPILES_ABSENT);
+        assert_eq!(((none >> 10) & 0xfff, none >> 22), (CHECK_RUN_DRAW_ABSENT, CHECK_RUN_COMPILES_ABSENT));
+    }
 
     /// A fixed buffer for `fmt::Write` (the crate has no allocator).
     struct Buf {

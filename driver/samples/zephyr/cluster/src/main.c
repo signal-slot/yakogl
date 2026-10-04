@@ -67,6 +67,7 @@
 #include <yakogl_record.h>
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
 int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
+uint32_t shc_online_compiles(void);                       /* gles_shaderc.h */
 #endif
 
 #define WIN_W CONFIG_CLUSTER_PANEL_WIDTH
@@ -288,11 +289,30 @@ static uint32_t us_since(uint32_t c0)
 	return (uint32_t)k_cyc_to_us_floor64(k_cycle_get_32() - c0);
 }
 
-/* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
- * first cause only, with the animation frame it happened in and a detail in
- * ms (how long the wait or the frame took). */
+/* The animation frame being built: when it started counting compiles, and
+ * how long its draw took (YK_RECORD_CHECK_RUN_DRAW_ABSENT until it is
+ * known). Outside the animation loop nothing is measured. */
 static struct {
-	uint32_t cause, frame, detail_ms;
+	bool live;
+	uint32_t compiles0, draw_ms;
+} s_frame;
+
+/* The online compiler's compile count; 0 without it (never read then). */
+static uint32_t compiles_now(void)
+{
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	return shc_online_compiles();
+#else
+	return 0u;
+#endif
+}
+
+/* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
+ * first cause only, with the animation frame it happened in, a detail in ms
+ * (how long the wait or the frame took), and that frame's draw time and the
+ * compiles it ran, each its own ABSENT value when not measured. */
+static struct {
+	uint32_t cause, frame, detail_ms, draw_ms, compiles;
 } s_run_fail;
 
 static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
@@ -301,7 +321,28 @@ static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 		s_run_fail.cause = cause;
 		s_run_fail.frame = frame;
 		s_run_fail.detail_ms = detail_ms;
+		s_run_fail.draw_ms = s_frame.live ? s_frame.draw_ms : YK_RECORD_CHECK_RUN_DRAW_ABSENT;
+		s_run_fail.compiles = YK_RECORD_CHECK_RUN_COMPILES_ABSENT;
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+		if (s_frame.live) {
+			s_run_fail.compiles = compiles_now() - s_frame.compiles0;
+		}
+#endif
 	}
+}
+
+/* CHECK_RUN's w2 (record.rs check_run_w2): each field saturates one below
+ * its "not measured" value, which passes through. */
+static uint32_t check_run_field(uint32_t v, uint32_t absent)
+{
+	return v == absent ? absent : (v < absent - 1u ? v : absent - 1u);
+}
+
+static uint32_t check_run_w2(uint32_t frame, uint32_t draw_ms, uint32_t compiles)
+{
+	return (frame < YK_RECORD_CHECK_RUN_FRAME_MAX ? frame : YK_RECORD_CHECK_RUN_FRAME_MAX) |
+	       check_run_field(draw_ms, YK_RECORD_CHECK_RUN_DRAW_ABSENT) << YK_RECORD_CHECK_RUN_DRAW_SHIFT |
+	       check_run_field(compiles, YK_RECORD_CHECK_RUN_COMPILES_ABSENT) << YK_RECORD_CHECK_RUN_COMPILES_SHIFT;
 }
 
 /* Each EGL call is checked on its own: eglGetError reports the LAST call. */
@@ -546,6 +587,9 @@ static int animate(void)
 			ticks_done = due;
 		}
 		s_ui_clock_ms = s_seq.frame_ms[2] + (uint64_t)t; /* on from the checked frame */
+		s_frame.live = true;
+		s_frame.compiles0 = compiles_now();
+		s_frame.draw_ms = YK_RECORD_CHECK_RUN_DRAW_ABSENT;
 		if (!eglMakeCurrent(s_dpy, s_surf[half], s_surf[half], s_ctx)) {
 			ret = egl_fail("eglMakeCurrent");
 			run_fail(YK_RECORD_CHECK_RUN_EGL, drawn + 1, 0u);
@@ -555,6 +599,7 @@ static int animate(void)
 
 		ret = slint_cluster_draw_frame(get_proc, WIN_W, WIN_H);
 		ft.draw_us = us_since(c);
+		s_frame.draw_ms = ft.draw_us / 1000u;
 		if (ret) {
 			printk("cluster: animation frame %u: slint_cluster_draw_frame rc %d\n", drawn + 1, ret);
 			run_fail(YK_RECORD_CHECK_RUN_DRAW, drawn + 1, 0u);
@@ -608,6 +653,7 @@ static int animate(void)
 			next_report += REPORT_MS;
 		}
 	}
+	s_frame.live = false;
 	s_elapsed_ms = (uint32_t)(k_uptime_get() - t0);
 	/* the last frame in flight is presented, outside the counts */
 	if (pend.live) {
@@ -697,7 +743,8 @@ int main(void)
 
 				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN,
 						 ((uint32_t)rc & 0xffffu) | cause << 16 | (refused > 0xffu ? 0xffu : refused) << 24,
-						 s_run_fail.frame, keep_kib() << 16 | detail);
+						 check_run_w2(s_run_fail.frame, s_run_fail.draw_ms, s_run_fail.compiles),
+						 keep_kib() << 16 | detail);
 			}
 		}
 	}

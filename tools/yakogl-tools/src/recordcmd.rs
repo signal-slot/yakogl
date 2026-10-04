@@ -529,9 +529,11 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 51 blocks (45 + GLMARK2 on- and off-screen and with
-        // GLMARK2_SCENES + GPU_STOP + two CHECK), every kind of record.rs's table among them
-        assert_eq!(blocks, 51, "the golden file's block count changed: re-derive the pin");
+        // the population: the golden file's 53 blocks (45 + GLMARK2 on- and off-screen and with
+        // GLMARK2_SCENES + GPU_STOP + four CHECK: a probe, and CHECK_RUN with its frame's
+        // draw and compiles, with zeros, and not measured), every kind of record.rs's table
+        // among them
+        assert_eq!(blocks, 53, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }

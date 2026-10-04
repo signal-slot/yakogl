@@ -838,6 +838,26 @@ pub unsafe extern "C" fn shc_online_keep_stats(in_use: *mut usize, peak: *mut us
     0
 }
 
+/// How many compiles have run: every compile the cache could not answer,
+/// whatever its outcome ([`note_compile`]).
+static COMPILES: Global<u32> = Global::new(0);
+
+/// A compile the cache could not answer is starting.
+pub fn note_compile() {
+    // SAFETY: single-threaded by contract.
+    let n = unsafe { COMPILES.get() };
+    *n = n.wrapping_add(1);
+}
+
+/// `uint32_t shc_online_compiles(void)`: how many compiles have run so far
+/// (cache hits are not compiles), wrapping. A board run reads it around a
+/// frame to tell a frame that compiled from one that did not.
+#[no_mangle]
+pub extern "C" fn shc_online_compiles() -> u32 {
+    // SAFETY: single-threaded by contract.
+    *unsafe { COMPILES.get() }
+}
+
 /// Below this a region is refused outright: every shader would fail the same
 /// way and none of the failures would mean anything. 64 KiB is well under the
 /// smallest source the corpus compiles and well over the token buffer.
@@ -1295,6 +1315,38 @@ mod lend_tests {
         assert_eq!(keep_in_use(), 0);
         drop(_back);
         drop(mine);
+    }
+
+    /// shc_online_compiles counts a compile the cache could not answer, and
+    /// not one it answered.
+    #[test]
+    fn the_compile_count_counts_compiles_not_cache_hits() {
+        let _serial = test_lock();
+        let f = super::super::backend::SHC_ONLINE.compile.unwrap();
+        /* Text no other test compiles, so the first compile is a miss. */
+        let src = b"precision mediump float; void main(){ gl_FragColor = vec4(0.5); } // compile count\n\0";
+        let compile = || {
+            let mut sh = crate::shaderc::ShcShader::ZERO;
+            // SAFETY: a NUL-terminated source and a real output; no log.
+            let rc = unsafe {
+                f(
+                    crate::shaderc::SHC_STAGE_FRAGMENT,
+                    src.as_ptr() as *const core::ffi::c_char,
+                    &mut sh,
+                    core::ptr::null_mut(),
+                    0,
+                )
+            };
+            assert_eq!(rc, 0);
+            sh
+        };
+        let n0 = shc_online_compiles();
+        let a = compile();
+        assert_eq!(shc_online_compiles(), n0.wrapping_add(1), "a miss is one compile");
+        let b = compile();
+        assert_eq!(shc_online_compiles(), n0.wrapping_add(1), "a cache hit is not a compile");
+        crate::shaderc::release_shader(&b);
+        crate::shaderc::release_shader(&a);
     }
 
     /// An image that lent no keep region (its built-in one compiled out) has

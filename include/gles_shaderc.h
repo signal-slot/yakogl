@@ -461,6 +461,11 @@ const char *shc_shader_source_name(const struct shc_shader *sh);
  * points local, and nothing that loads the shared library needs it. */
 int shc_online_keep_stats(size_t *in_use, size_t *peak);
 
+/* How many compiles the in-process compiler has run (a cache hit is not one),
+ * wrapping: read around a frame, it says whether the frame compiled. Static
+ * archive only, like shc_online_keep_stats. */
+uint32_t shc_online_compiles(void);
+
 /* The in-process compiler's keep region, lent by the image before the first
  * compile (on Zephyr, zephyr_shaderc_scratch.c, sized by
  * CONFIG_YAKOGL_SHADERC_KEEP_BYTES). buf 8-byte aligned, len at least 64 KiB.

@@ -610,6 +610,7 @@ fn compile_and_publish_linked(
         retain(&hit.shader);
         return Ok(hit);
     }
+    store::note_compile();
     /* The compile's keep arena. Dropped on every failure below, which gives
      * back whatever the code generator had already put in it. */
     let txn = open_keep(end, stage, log)?;
@@ -1127,6 +1128,7 @@ fn link_program(vr: &Compiled, fr: &Compiled, zero: &ZeroList, fs: &mut ShcShade
         retain(&hit.shader);
         hit
     } else {
+        store::note_compile();
         /* The program's record: the bottom of the region (store::KeepEnd). */
         let txn = match open_keep(store::KeepEnd::Low, SHC_STAGE_FRAGMENT, log) {
             Ok(t) => t,
