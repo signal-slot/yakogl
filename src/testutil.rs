@@ -70,7 +70,7 @@
 //! was being recorded at the time completes (the Zephyr OSAL defers frees
 //! the same way).
 //!
-//! Run the unit tests with `cargo test --no-default-features --features host-test`.
+//! Run the unit tests with `cargo test --no-default-features --features host-test,gpu-powervr`.
 
 use core::ffi::{c_char, c_void};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1361,7 +1361,7 @@ unsafe fn reset_library_statics() {
         set_thread_ids(true); /* the owner itself is in context::reset_for_tests */
         /* the narrow luminance/alpha switch: tests start from the expanded
          * store and the narrow ones turn it on (the product default is on) */
-        #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+        #[cfg(feature = "gpu-powervr")]
         crate::pvr::backend::pvr_narrow_la(0);
         #[cfg(feature = "gpu-vivante")]
         crate::vivante::backend::gc_debug_set_narrow_la(0);

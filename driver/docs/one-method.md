@@ -411,8 +411,7 @@ recorder now drives the one sample's crate); nothing outside `gc_slint` used
 its ring or PERF modes, so they went with it (and gc_common's ring hook).
 `gl_slint/rust` stays, with `gl_slint/ui` a link to `slint/ui`: the SafeUI
 repository's Supervisor builds that crate by path (`gl_slint/README.md`); it
-goes once that user has moved. `slint/boards/verdin_am62p_am62p54_a53_direct.conf`
-carries gl_slint's direct-boot route (docs/direct-boot.md) to the one sample.
+goes once that user has moved.
 
 ### Step 1 acceptance run, 2026-10-03
 

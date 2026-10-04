@@ -1233,7 +1233,7 @@ leaves its entry in `Module::comps` at 0, "unrecorded", so `comps_of` answers it
 fallback 4 for `abs()` or `max()` of a `vec2`. A plain `u + u` records 2.
 
 - Repro:
-  `cargo test --no-default-features --features host-test,shaderc-online --lib -- a_builtin_on_a_vec2_records_two_lanes --ignored --nocapture`
+  `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --lib -- a_builtin_on_a_vec2_records_two_lanes --ignored --nocapture`
   prints `[(Fabs, Some(0), 4), (Fmax, Some(0), 4), (Fadd, Some(2), 2), ...]`
   (op, recorded width, `comps_of`).
 - Why it cannot draw wrong: `comps_of`'s contract is "an over-estimate, never a
@@ -1553,7 +1553,7 @@ and PowerVR owners):
   the `BackEndError` variants `Select`/`Alloc`/`Encode`/`Abi` and their `From`
   impls, `assemble_from_ir`, `abi_outputs`, `compile`/`compile_linked`, and the
   `chain_tests` and other `cfg(all(test, feature = "gpu-vivante"))` modules there.
-- **PowerVR**: the `not(any(gpu-vivante, gpu-v3d))` arm of `compile`/
+- **PowerVR**: the `gpu-powervr` arm of `compile`/
   `compile_linked` and `BackEndError::Usc` in `codegen.rs`, and its tests, into
   `online/powervr/`.
 - **cfg branches that go away**: in `codegen.rs` every per-GPU arm of
@@ -1571,7 +1571,7 @@ and PowerVR owners):
     (`tests/online_oracle.rs`, `tools/online_oracle.py`) with no source changing
     outcome, `tests/backend_differential.rs`, and gl_test on the i.MX8MP with the
     online compiler giving the same PASS set as before.
-  - PowerVR: `tools/check.sh` (the default rows), the online oracle on the PowerVR
+  - PowerVR: `tools/check.sh` (the `gpu-powervr` rows), the online oracle on the PowerVR
     table, the USC tests (`tests/usc_limits.rs`, `tests/usc1_triangle.rs`), and
     gl_test on the AM62P with the online compiler giving the same PASS set.
   - V3D: its gate rows, and the M6 board run again (`v3d_gl_triangle`, and gl_test

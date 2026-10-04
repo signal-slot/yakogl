@@ -74,7 +74,7 @@ pub fn group_text(w: &mut impl Write, off: usize, g: &Group) -> Result {
 
 /// gl_test case 150 (shprobe) arm B's vertex shader, compiled and listed:
 /// the shared registers it reads are the ones the probe names.
-#[cfg(all(test, not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#[cfg(all(test, feature = "gpu-powervr"))]
 mod shprobe_tests {
     use super::super::decode;
     use crate::shaderc::online::{store, SHC_ONLINE};

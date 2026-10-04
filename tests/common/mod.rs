@@ -135,6 +135,10 @@ pub fn run_mem(code: &[Instr], init: &[[u32; 4]], uniforms: &[[u32; 4]], mem: &[
             let reg = reg as usize;
             let base = match s.group {
                 0 => t.get(reg).copied().unwrap_or([0; 4]),
+                /* The internal register gl_FrontFacing is read from
+                 * (select.rs front_facing compares it with 0): a front face
+                 * here, the same for every run of a comparison. */
+                1 if reg == 0 => [1; 4],
                 2 => uniforms.get(reg).copied().unwrap_or([0; 4]),
                 3 => uniforms.get(reg + 256).copied().unwrap_or([0; 4]),
                 g => return Run::Unsupported(format!("register group {g}")),
@@ -303,10 +307,12 @@ pub fn run_mem(code: &[Instr], init: &[[u32; 4]], uniforms: &[[u32; 4]], mem: &[
              * (SRC1's first lane) too, so a program that moves it differs.
              * Only the lanes every look-up reads are hashed: a 2D
              * coordinate's z and w are whatever the register held. */
-            "texld" | "texldl" | "texldb" => {
+            /* txf (texelFetch): the same function of its integer
+             * coordinate and its level (SRC1, a float). */
+            "texld" | "texldl" | "texldb" | "txf" => {
                 let id = ins.get("TEX_ID").unwrap_or(0);
                 let sw = ins.get("TEX_SWIZ").unwrap_or(0xe4);
-                let mut h = 0xcbf2_9ce4_8422_2325u64 ^ id as u64;
+                let mut h = 0xcbf2_9ce4_8422_2325u64 ^ id as u64 ^ ((name == "txf") as u64) << 40;
                 let lod = (name != "texld").then_some(s1[0]);
                 for x in [s0[0], s0[1]].into_iter().chain(lod) {
                     h = (h ^ x as u64).wrapping_mul(0x100_0000_01b3);
@@ -314,6 +320,13 @@ pub fn run_mem(code: &[Instr], init: &[[u32; 4]], uniforms: &[[u32; 4]], mem: &[
                 let texel: [u32; 4] = core::array::from_fn(|l| ((h >> (l * 16)) & 0xffff) as f32 / 65535.0).map(b);
                 Some(core::array::from_fn(|l| texel[((sw >> (2 * l)) & 3) as usize]))
             }
+            /* A derivative needs the neighbouring pixels, which one
+             * invocation does not have: a fixed function of each lane of its
+             * source instead, different for dsx and dsy, which is all an
+             * equivalence of two allocations needs (the IR evaluator has no
+             * derivatives, so backend_differential skips these programs). */
+            "dsx" => Some(core::array::from_fn(|l| b(f(s0[l]) * 0.25))),
+            "dsy" => Some(core::array::from_fn(|l| b(f(s0[l]) * -0.5))),
             other => return Run::Unsupported(format!("operation `{other}`")),
         };
         if let (Some(r), Some(d)) = (result, ins.dst()) {

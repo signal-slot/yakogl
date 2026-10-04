@@ -56,15 +56,40 @@ Booted on the i.MX8MP: the online arm of `gc_gl_test` case 108 alone passed
 there on 2026-10-04 (e835c0dc, record `594b010e 006cff01 00000001 00000000`).
 The size figures above are still the 2026-09-22 ones.
 
-**Owed gap: `gl_VertexID` in the online vertex selector.** The online
-compiler refuses a vertex shader that reads `gl_VertexID` with
-"online shaderc: the code generator refused this vertex shader:
-Select(Unsupported("this built-in input is not selected yet"))"
-(`select.rs`, the built-in input match). In `gc_gl_test` that is
-`es300/vid.vert`, linked by cases 43, 44, 45, 49, 57 and 98, so those cases
-fail with status 3 in an online image (case 45 did on the i.MX8MP,
-2026-10-04, record `594b010e 002dff03 00000000 00000000`). Measured on the
-host the same at 3ce02914 and e835c0dc: not a regression.
+**`gl_VertexID` / `gl_InstanceID` on the GC7000 (online).** Both arrive in
+one register after the attribute registers, the vertex id in `.x` and the
+instance id in `.y`, reported as `vs_id_in_reg`; the driver feeds it as one
+more vertex input and programs `FE_HALTI5_ID_CONFIG` (`vivante/shader.rs`).
+This is Mesa's etnaviv (`etnaviv_nir.c`, `etnaviv_compiler_nir_ra.c`) and
+the reference compiler's choice for gl_test's `es300/vid.vert` (register 1
+after `pos` in register 0). Pinned by `codegen.rs` `lowered_ops`
+(`gl_vertex_id_is_x_of_the_register_after_the_attributes` and the two after
+it). Until this the online compiler refused the shader with "this built-in
+input is not selected yet" (GitHub issue #11), so gl_test cases 43, 44, 45,
+49, 57 and 98 failed in an online image. The PowerVR online selector had it
+already (`powervr/select.rs`, `vs_vertex_id_reg1`).
+
+**ES 3.00 look-ups on the GC7000 (online).** `texelFetch` on a 2D, 3D or
+2D array sampler is one `txf` (level as a float in SRC1, 0x1100 in SRC2),
+`texture()` / `textureLod()` on a 3D or 2D array sampler the 2D `texld` /
+`texldl` with a three-lane coordinate, and `textureSize(s, 0)` reads the
+`TEXTURE_WIDTH` / `_HEIGHT` / `_DEPTH` constants the driver fills for the
+sampler's unit. All three are Mesa's etnaviv and the reference compiler's
+choices for gl_test's `es300/array.frag`, `vol.frag` and `texsize.frag`
+(cases 42, 48, 46), pinned by `codegen.rs` `lowered_ops`
+(`texel_fetch_is_the_reference_txf` and the two after it). Not selected,
+refused by name: `textureSize` at another level, shadow samplers, integer
+results, gradients, offsets. `es300/texsize.frag` declared a
+`sampler2DArray` with no precision, which GLSL ES 3.00 4.5.4 does not
+allow; it now says `precision mediump sampler2DArray;`.
+
+**Derivatives and `%` on the GC7000 (online).** `dFdx` / `dFdy` are `dsx` /
+`dsy` with the source in SRC0 and SRC2, as the reference table and Mesa's
+etnaviv emit them; `dFdy`'s source is first scaled by the per-draw y scale
+`gl_FragCoord` takes (Mesa's nir_lower_wpos_ytransform `lower_ddy`).
+Integer `%` is the exact unsigned remainder of the magnitudes, negated for a
+negative dividend (Mesa's nir_lower_idiv); the machine's `imod` is never
+emitted, because no reference program contains one.
 
 ## Runtime flow (offline)
 
@@ -556,7 +581,7 @@ The generated table and `offline.rs` match `struct shc_shader` / `shc_varying` /
 
 ## The remote back end
 
-`cargo build --features shaderc-remote` compiles `remote.rs` in. The feature
+`cargo build --features gpu-powervr,shaderc-remote` compiles `remote.rs` in. The feature
 implies `std` and pulls in `serde_json`, both optional and both host-only: the
 no_std library, the Zephyr module and the bare-metal archive enable neither and
 are byte-for-byte unaffected (`shaderc-remote` on a `target_os = "none"` target
@@ -688,7 +713,7 @@ zero-length cache files that the next run serves as valid shaders with no code. 
 the cache directory if a regeneration was killed.
 
 Host tests (`tests/sha256.rs`, `tests/blob_table.rs`, `tests/shaderc_remote.rs`;
-`cargo test --no-default-features --features host-test`): SHA-256 known answers, every
+`cargo test --no-default-features --features host-test,gpu-powervr`): SHA-256 known answers, every
 source text in `SHC_SOURCE_TABLE` hashes to a blob row of the same name, the offline
 back end finds every source, and the table can be dumped as JSON
 (`YAKOGL_DUMP_BLOBS=out.json`) in the format of the dumper used when the table was

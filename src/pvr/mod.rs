@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The PowerVR BXS-4-64 backend. Not in a `gpu-vivante` build: that one has
 //! `vivante/` instead, and the shader ABI it compiles against is the GC7000's.
-#![cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#![cfg(feature = "gpu-powervr")]
 
 pub mod backend;
 pub mod blobs;

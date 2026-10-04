@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""UART capture and phase scan for the AM62P U-Boot netboot.
+"""UART capture and phase scan for the AM62P U-Boot one-shot boot (TFTP or eMMC).
 
     am62p_netboot_uart.py capture HOST:PORT RAW STAMPED
         Connects to the serial bridge (a raw TCP stream of the board's debug
@@ -35,6 +35,9 @@ lines are the ones driver/docs/am62p-netboot-plan.md installs):
   cleared    "yakogl-netboot: cleared"         ... and saved the env without it
              or "yakogl-netboot: typed"        (typed route: nothing to clear)
   fetched    "Bytes transferred = "            the TFTP fetch completed
+             or "<n> bytes read in "           (eMMC: U-Boot's ext4load completed; only
+                                               before the hook's failure line, after which
+                                               the normal bootcmd's own loads print it too)
   go         "## Starting application at"      U-Boot jumped to the image
   zephyr     "*** Booting Zephyr OS"           the image started
   rti_armed  "rti_arm: armed"                  the image armed the RTI (optional; NOT in
@@ -53,6 +56,9 @@ Verdicts, one per cause:
                 U-Boot did not boot the image (by design)
   fetch_failed  cleared, but no jump: U-Boot printed its fetch-failed line
                 (or an error this scan does not know; the log has it)
+  load_failed   cleared, but no jump, and U-Boot printed "yakogl-netboot: mmc
+                load failed": the eMMC route's ext4load failed (the file is
+                absent: the eMMC probe's expected end)
   no_zephyr     U-Boot jumped but the Zephyr banner never came
   no_reset      Zephyr started and the SoC never reset within the capture (a
                 hang no watchdog ended: the dangerous case, see the plan)
@@ -98,7 +104,7 @@ PHASES = [
     ("spl1", re.compile(r"^U-Boot SPL ")),
     ("hook", re.compile(r"^yakogl-netboot: once=(\S+)")),
     ("cleared", re.compile(r"^yakogl-netboot: (?:cleared|typed)")),
-    ("fetched", re.compile(r"^Bytes transferred = (\d+)")),
+    ("fetched", re.compile(r"^(?:Bytes transferred = (\d+)|(\d+) bytes read in )")),
     ("go", re.compile(r"^## Starting application at (0x[0-9a-fA-F]+)")),
     # the early boot markers ('H', 'K') can precede the banner on its line
     ("zephyr", re.compile(r"\*\*\* Booting Zephyr OS")),
@@ -112,6 +118,7 @@ SEQUENCE = [p for p in PHASES if p[0] not in UNORDERED]
 RTI_ARMED = dict(PHASES)["rti_armed"]
 HOOK = PHASES[1][1]
 FETCH_FAILED = re.compile(r"^yakogl-netboot: fetch failed")
+LOAD_FAILED = re.compile(r"^yakogl-netboot: mmc load failed")
 STAMP = re.compile(r"^(\d{9,}\.\d+) (.*)$")
 
 
@@ -136,7 +143,7 @@ def scan(lines, token=None):
     Zephyr banner): it counts after the jump and before the reset. Returns verdict, phases {name: time or True}, hooks
     (every once= token seen, in order), fetched_bytes and the line count."""
     got, hooks = {}, []
-    fetch_failed, fetched_bytes, idx = False, None, 0
+    fetch_failed, load_failed, fetched_bytes, idx = False, False, None, 0
     seen_spl, kernel_after_spl = False, False
     for t, line in lines:
         if PHASES[0][1].match(line):
@@ -148,15 +155,18 @@ def scan(lines, token=None):
             hooks.append(m.group(1))
         if FETCH_FAILED.match(line):
             fetch_failed = True
+        if LOAD_FAILED.match(line):
+            load_failed = True
         if "go" in got and "reset" not in got and "rti_armed" not in got and RTI_ARMED.search(line):
             got["rti_armed"] = t if t is not None else True
         if idx < len(SEQUENCE):
             name, rx = SEQUENCE[idx]
             mm = rx.search(line)
-            if mm:
+            # after the hook's own failure line, a load is the bootcmd's, not the image's
+            if mm and not (name == "fetched" and (fetch_failed or load_failed)):
                 got[name] = t if t is not None else True
                 if name == "fetched":
-                    fetched_bytes = int(mm.group(1))
+                    fetched_bytes = int(mm.group(1) or mm.group(2))
                 idx += 1
     nlines = sum(1 for _, line in lines if line.strip())
     if nlines == 0:
@@ -170,7 +180,7 @@ def scan(lines, token=None):
     elif "cleared" not in got:
         verdict = "not_cleared"
     elif "go" not in got:
-        verdict = "fetch_failed"
+        verdict = "load_failed" if load_failed else "fetch_failed"
     elif "zephyr" not in got:
         verdict = "no_zephyr"
     elif "reset" not in got:
@@ -183,7 +193,8 @@ def scan(lines, token=None):
         verdict = "done"
     back = kernel_after_spl and ("go" not in got or "linux" in got)
     return {"verdict": verdict, "phases": got, "hooks": hooks,
-            "fetch_failed_line": fetch_failed, "kernel_after_spl": kernel_after_spl, "back": back,
+            "fetch_failed_line": fetch_failed, "load_failed_line": load_failed,
+            "kernel_after_spl": kernel_after_spl, "back": back,
             "fetched_bytes": fetched_bytes, "lines": nlines}
 
 
@@ -769,6 +780,21 @@ def self_test(saved_log=None):
                                "yakogl-netboot: fetch failed, booting Linux\nStarting kernel ...\n")
     r = run(t)
     check(r["verdict"] == "fetch_failed" and r["fetch_failed_line"], "TFTP refused: fetch_failed")
+    # the eMMC route (yako_mmc): ext4load's line in place of TFTP's
+    mmc = FIXTURE_DONE.split("TFTP from")[0] + "16107024 bytes read in 352 ms (43.6 MiB/s)\n" + \
+        FIXTURE_DONE.split("Bytes transferred = 16107024 (f5c510 hex)\n")[1]
+    r = run(mmc, "glt-abc123")
+    check(r["verdict"] == "done" and r["fetched_bytes"] == 16107024, "eMMC cycle: done, 16107024 bytes read (%s)" % r["verdict"])
+    # the probe's end: the file absent, then the normal bootcmd (SafeUI's
+    # ext4load of its own files prints "bytes read" too: not the image's)
+    t = cut_at("TFTP from") + ("** File not found /ostree/deploy/torizon/var/yakogl/once-p.bin **\n"
+                               "yakogl-netboot: mmc load failed, booting Linux\n"
+                               "65536 bytes read in 4 ms (15.6 MiB/s)\nSafeUI images not found, booting Linux\n"
+                               "Starting kernel ...\n")
+    r = run(t)
+    check(r["verdict"] == "load_failed" and r["load_failed_line"] and r["fetched_bytes"] is None and r["back"],
+          "eMMC file absent: load_failed, the bootcmd's later load not counted, back (%s, %s)"
+          % (r["verdict"], r["fetched_bytes"]))
     check(run(cut_at("HK***"))["verdict"] == "no_zephyr", "jump, no banner: no_zephyr")
     check(run(cut_at("\x1b"))["verdict"] == "no_reset", "Zephyr, no reset: no_reset")
     check(run(FIXTURE_DONE.replace("Starting kernel ...\n", ""))["verdict"] == "no_linux", "reset, no Linux: no_linux")

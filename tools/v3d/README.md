@@ -296,7 +296,7 @@ words `OOB` instead of calling it.
 
 ### The tests
 
-Run them with `cargo test --no-default-features --features host-test,shaderc-online -- v3d::`.
+Run them with `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online -- v3d::`.
 
 - `golden`: the 45 ver 42 rows of Mesa's `tests/qpu_disasm.c`. Each row
   decodes to Mesa's exact text and encodes back to the same word. The 7

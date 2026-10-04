@@ -775,7 +775,7 @@ unsafe extern "C" fn online_link(vs: *const ShcShader, fs: *mut ShcShader, log: 
         }
     }
     // SAFETY: the caller's contract, passed straight through.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     return unsafe { crate::shaderc::link::link_shaders(vs, fs, log, log_sz, "online shaderc") };
     // SAFETY: as above.
     #[cfg(feature = "gpu-vivante")]
@@ -982,11 +982,11 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
          * fragment shader is then compiled without exact gradients, when it
          * has any (PowerVR, shaderc::pvr_proj_lod). Asked only then, so a
          * program pays the fragment front end again only when it gains. */
-        #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+        #[cfg(feature = "gpu-powervr")]
         let affine = vl.module.constant_position_w().is_some()
             && super::lower::compile_to_ir(a, Stage::Fragment, fsrc)
                 .is_ok_and(|fl| super::powervr::select::samples_with_plane_gradients(&fl.module));
-        #[cfg(any(feature = "gpu-vivante", feature = "gpu-v3d"))]
+        #[cfg(not(feature = "gpu-powervr"))]
         let affine = false;
         let written = |name: &str| {
             vl.module
@@ -1242,7 +1242,7 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// Does this build's compiler honour [`LodKey::sample_kill`]? The PowerVR's
 /// does (`powervr::select`); the GC7000 and the V3D take the sample state as
 /// pipeline state and never ask for the variant.
-const SAMPLE_KILL_VARIANTS: bool = !cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d"));
+const SAMPLE_KILL_VARIANTS: bool = !cfg!(not(feature = "gpu-powervr"));
 
 /// The [`LodKey`] sensitivity of a compiled record: its source through the
 /// front end again, and the look-ups whose code the key would change --
@@ -1296,7 +1296,7 @@ fn sensitivity_of(rec: &Compiled) -> LodKey {
          * context against its seamless reference, whose switch is at 0 (the
          * hardware's own), and the remap would fail those cases */
         let mag_switch = if switch && crate::REPORT_ES2 { super::lodkey::mag_switch_sensitivity(m) } else { 0 };
-        #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+        #[cfg(feature = "gpu-powervr")]
         let mip_free = if mip && rec.stage == SHC_STAGE_FRAGMENT {
             m.instrs.iter().fold(0u32, |acc, op| match *op {
                 ir::Op::Tex { sampler, .. }
@@ -1309,7 +1309,7 @@ fn sensitivity_of(rec: &Compiled) -> LodKey {
         } else {
             0
         };
-        #[cfg(any(feature = "gpu-vivante", feature = "gpu-v3d"))]
+        #[cfg(not(feature = "gpu-powervr"))]
         let mip_free = 0;
         let sample_kill = kill && !m.instrs.iter().any(|op| matches!(op, ir::Op::Discard));
         LodKey { mip_free, mag_switch, sample_kill, ret32: 0 }
@@ -1597,7 +1597,7 @@ mod tests {
     /// On the PowerVR a fragment shader the USC half cannot build yet (here
     /// an output written inside a kept loop) says so as -ENOTSUP naming the gap: "this build cannot" and
     /// "your shader is invalid" send a reader to different places.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn a_powervr_fragment_shader_the_back_end_cannot_build_is_a_named_gap_and_not_a_rejection() {
         let _serial = test_lock();
@@ -1620,7 +1620,7 @@ mod tests {
     /// (select.rs a_shadow_look_up_compares_the_reference_with_the_depth_by_the_samplers_function);
     /// this checks the whole chain takes it, down to the USC encoding.
     #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     // the PowerVR back end only: the GC7000 and V3D builds refuse the shadow look-up (main red in gpu-vivante,shaderc-online since 564c9479)
     #[test]
     fn a_powervr_shadow_look_up_compiles_as_deqp_builds_it() {
@@ -1649,7 +1649,7 @@ void main (void)
     /// reaches, and the link gives the fragment varying the vertex shader's
     /// output dword (a vec4 after gl_Position: 4) -- the number the driver's
     /// coefficient program reads.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn a_powervr_pair_with_a_varying_links() {
         let _serial = test_lock();
@@ -1687,7 +1687,7 @@ void main (void)
 
     /// And es100_drawstep's pair compiles, through the entry an application
     /// reaches by `glCompileShader`.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn the_powervr_drawstep_pair_compiles_through_the_public_entry_point() {
         let _serial = test_lock();
@@ -2204,11 +2204,11 @@ void main (void)
         }
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     const FS_SAMPLES_UV: &str =
         "precision mediump float; uniform sampler2D s; varying vec2 uv; void main(){ gl_FragColor = texture2D(s, uv); }";
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     fn code_of(sh: &ShcShader) -> Vec<u32> {
         // SAFETY: a compiled shader's code, `usc_dw` dwords in keep.
         unsafe { core::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) }.to_vec()
@@ -2218,7 +2218,7 @@ void main (void)
     /// fragment program `pvr_proj_lod = 0` compiles, dword for dword, and its
     /// blend variants likewise; a vertex shader whose W varies keeps the
     /// gradients (`shaderc::pvr_proj_lod`, `link_online`).
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn a_constant_w_program_samples_as_the_switch_off_does() {
         let _serial = test_lock();
@@ -2329,7 +2329,7 @@ void main (void)
          * state (`LodKey::sample_kill`) */
         let kill = SAMPLE_KILL_VARIANTS;
         assert_eq!(sensitivity(&plain), LodKey { sample_kill: kill, ..LodKey::NONE });
-        #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+        #[cfg(feature = "gpu-powervr")]
         {
             let fs = compile_out(SHC_STAGE_FRAGMENT, FS_SAMPLES_UV);
             assert_eq!(sensitivity(&fs), LodKey { mip_free: 1, mag_switch: 0, sample_kill: true, ret32: 0 });
@@ -2351,7 +2351,7 @@ void main (void)
     /// record says it discards and where its control word goes, and its
     /// blend variant keeps it. A shader that discards is not sensitive: it
     /// has the epilogue already.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn a_sample_kill_variant_carries_the_discard_epilogue() {
         let _serial = test_lock();
@@ -2392,7 +2392,7 @@ void main (void)
     /// mipmap filter is the program `pvr_proj_lod = 0` compiles, dword for
     /// dword, and so are its blend variant and its link; key 0 is the input
     /// itself. The variant keeps its interface (varyings, uniforms).
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn a_mip_free_variant_is_the_program_without_gradients() {
         let _serial = test_lock();

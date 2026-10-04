@@ -495,7 +495,7 @@ fn coverage_doc(
     let mut s = String::new();
     s.push_str("# What the offline table's USC actually uses\n\n");
     s.push_str(
-        "Counted by `cargo test --no-default-features --features host-test,shaderc-online \
+        "Counted by `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
          isa_coverage`, which regenerates this file with `YAKOGL_WRITE_ISA_COVERAGE=1`.\n\
          It is the code generator's target list: an instruction form or an operation that \
          is not here is one nothing in the table needs, and one that is here with a large \

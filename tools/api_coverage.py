@@ -16,7 +16,7 @@ Three name sets, all by symbol name:
                `declared` and never affect the exit status.
   exported     symbols the built library actually exports. Preferred source:
                `nm` on the yakogl-capi no_std staticlib check.sh already
-               builds (`cargo build -p yakogl-capi`,
+               builds (`cargo build -p yakogl-capi --features gpu-powervr`,
                <cargo target_directory>/debug/libyakogl_capi.a). When that
                archive is not there (the tool run standalone before a build),
                falls back to grepping every `pub extern "C" fn gl*`/`egl*` in
@@ -127,7 +127,7 @@ def parse_procs_table(text):
 
 def find_capi_archive():
     """(path, error) of the yakogl-capi no_std staticlib check.sh already
-    builds ('build yakogl-capi (no_std)': `cargo build -p yakogl-capi`,
+    builds ('build yakogl-capi (no_std)': `cargo build -p yakogl-capi --features gpu-powervr`,
     dev/debug profile, crate-type staticlib named yakogl_capi -- see
     capi/Cargo.toml). The archive's directory is asked of cargo, never
     assumed, for the reason tools/check.sh's own `table_symbols` gives: a
@@ -145,7 +145,7 @@ def find_capi_archive():
         return None, "cargo metadata output has no target_directory: %s" % e
     path = target_dir / "debug" / "libyakogl_capi.a"
     if not path.exists():
-        return None, "%s does not exist (run: cargo build -p yakogl-capi)" % path
+        return None, "%s does not exist (run: cargo build -p yakogl-capi --features gpu-powervr)" % path
     return path, None
 
 

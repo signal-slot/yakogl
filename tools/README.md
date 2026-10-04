@@ -37,7 +37,7 @@ Khronos CTS writes its shaders as it runs. So the board asks a host instead:
 PCO_SHC=/path/to/pco_shc tools/shaderc_server.py --host 0.0.0.0 --no-auth --cache ~/.cache/yakogl-shaderc
 
 # the application, built with the remote back end
-cargo build --features shaderc-remote        # or -p yakogl-capi --features ...
+cargo build --features gpu-powervr,shaderc-remote        # or -p yakogl-capi --features ...
 YAKOGL_SHADERC_SERVER=lab-host:7777 ./the-app
 ```
 

@@ -60,23 +60,6 @@ void pvr_sample_flush_dcache(void *addr, size_t size)
 	sys_cache_data_flush_and_invd_range(addr, size);
 }
 
-void pvr_sample_log_boot_time(const char *where)
-{
-#ifdef CONFIG_PVR_SAMPLE_BOOT_TIME
-	/* The architected counter, read directly: k_uptime starts at this
-	 * image's own boot, the counter at the boot loader's start of it. */
-	uint64_t cnt, frq;
-
-	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(cnt));
-	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
-	LOG_INF("system counter at %s: %llu us (%llu ticks at %llu Hz)", where,
-		(unsigned long long)(frq >= 1000000u ? cnt / (frq / 1000000u) : 0u),
-		(unsigned long long)cnt, (unsigned long long)frq);
-#else
-	ARG_UNUSED(where);
-#endif
-}
-
 #if defined(CONFIG_PVR_SAMPLE_SHOW_ON_DSS) && defined(AM62P_DSS_PLANE_VFLIP)
 #define PVR_SAMPLE_CAN_VFLIP 1
 #else

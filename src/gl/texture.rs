@@ -5773,7 +5773,7 @@ mod tests {
     }
 
     /* L8/A8/LA8 stored narrow (pvr_narrow_la): the PowerVR's opt-in */
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn narrow_luminance_alpha_uploads_are_packed_one_or_two_bytes_a_texel() {
         let gl = TestGl::new(4, 4);
@@ -5823,7 +5823,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn narrow_off_keeps_luminance_in_rgba8() {
         let gl = TestGl::new(4, 4);
@@ -5836,7 +5836,7 @@ mod tests {
         assert_eq!(&storage(&gl, name)[..8], [1, 1, 1, 255, 2, 2, 2, 255]);
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn generate_mipmap_of_a_narrow_la8_texture_averages_each_channel() {
         let gl = TestGl::new(4, 4);

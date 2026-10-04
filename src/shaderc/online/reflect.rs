@@ -571,7 +571,7 @@ pub fn reflect<'a>(a: &Arena<'a>, ast: &Ast<'a>) -> R<'a, Reflection<'a>> {
                      * uniforms move past it -- and only for a sampler the
                      * shader uses. The GC7000 samples arrays natively and has
                      * no such member. */
-                    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+                    #[cfg(feature = "gpu-powervr")]
                     if let BaseType::Sampler(st) = ty.base {
                         if matches!(st.dim, SamplerDim::D2Array | SamplerDim::D3) && mentions(ast, name) {
                             /* One hidden layer count per IMAGE, and glsl2usc's
@@ -1136,7 +1136,7 @@ pub fn uniform_rows<'a>(
 }
 
 /// `prefix` followed by `name`, in the arena.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 fn prefixed<'a>(a: &Arena<'a>, prefix: &str, name: &str) -> R<'a, &'a str> {
     let buf = a.alloc_filled::<u8>(prefix.len() + name.len(), 0)?;
     buf[..prefix.len()].copy_from_slice(prefix.as_bytes());

@@ -81,7 +81,7 @@ PVR_MESA_CFLAGS := -I$(HERE)/driver/compat -I$(HERE)/driver/src/pvr/generated \
            -I$(MESA)/src/imagination/vulkan -I$(MESA)/src/imagination/vulkan/pds \
            -I$(MESA)/src/imagination/vulkan/pds/pvr_pds_programs
 GPU_DEF := YAKOGL_GPU_POWERVR
-CARGO_FEATURES := osal-baremetal
+CARGO_FEATURES := osal-baremetal,gpu-powervr
 else ifeq ($(GPU),vivante)
 GPU_DEF := YAKOGL_GPU_VIVANTE
 CARGO_FEATURES := osal-baremetal,gpu-vivante

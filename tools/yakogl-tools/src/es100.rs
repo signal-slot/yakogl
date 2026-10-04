@@ -810,7 +810,7 @@ mod tests {
         let conf = limits_conf().expect("glslang -c");
         assert!(conf.contains("MaxVertexAttribs 16"), "src/gl/context.rs MAX_VERTEX_ATTRIBS: {conf}");
         assert!(conf.contains("MaxVaryingVectors 8"), "src/gl/state.rs GL_MAX_VARYING_VECTORS: {conf}");
-        /* this crate builds yakogl with no GPU feature: the PowerVR's 16 */
+        /* this crate builds yakogl with `gpu-powervr`: the PowerVR's 16 */
         assert!(conf.contains("MaxVertexTextureImageUnits 16"), "src/backend.rs GLES_VS_TEX_UNITS: {conf}");
         assert!(conf.contains("MaxDrawBuffers 3"), "src/gl/state.rs GL_MAX_DRAW_BUFFERS: {conf}");
         assert!(

@@ -35,7 +35,7 @@ generated file carries the MIT notice for the derived data.
 MESA=~/pvr-lab/mesa-build/mesa-26.2.1/src/imagination/pco      # a Mesa checkout
 tools/pco-isa/extract.py    "$MESA" build/isa.json
 tools/pco-isa/gen_tables.py build/isa.json src/shaderc/online/isa_tables.rs
-cargo test --no-default-features --features host-test,shaderc-online online::
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online online::
 ```
 
 The last line is the point. The round trip decodes all 2,042 blobs of the

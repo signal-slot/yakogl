@@ -767,7 +767,7 @@ pub unsafe extern "C" fn glGetString(name: GLenum) -> *const GLubyte {
         /* The GPU this build drives, not the one the project started on.
          * dEQP records it in every result file and a run on the wrong name is
          * a run that cannot be told apart later. */
-        #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+        #[cfg(feature = "gpu-powervr")]
         GL_RENDERER => b"PowerVR BXS-4-64 (YakoGL)\0",
         #[cfg(feature = "gpu-vivante")]
         GL_RENDERER => b"Vivante GC7000UL (YakoGL)\0",

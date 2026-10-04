@@ -1052,7 +1052,7 @@ tools/online_oracle.py --show 20        # the first 20 false rejects, in full
 #    The feature selects which table; each prints its refusals by construct.
 cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online \
       --test online_lowering -- --nocapture
-cargo test --no-default-features --features host-test,shaderc-online \
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
       --test online_lowering -- --nocapture
 
 # 3. The shipping pipeline, which must not move: >= 2787/2793.

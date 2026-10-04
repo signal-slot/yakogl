@@ -6790,7 +6790,7 @@ mod tests {
 
     /// Where more than one output is written (PowerVR); the GC7000 writes one
     /// until multiple render targets land, and refuses a second below.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn draw_buffers_says_which_attachment_an_output_writes() {
         /* upstream 6a1c6df: output n goes to the attachment glDrawBuffers

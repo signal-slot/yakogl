@@ -3524,7 +3524,7 @@ mod tests {
         ] {
             /* a 2D array needs its hidden pvr_layers_ uniform, which the
              * front end declares on a PowerVR build only (reflect.rs) */
-            if decl == "sampler2DArrayShadow" && cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")) {
+            if decl == "sampler2DArrayShadow" && cfg!(not(feature = "gpu-powervr")) {
                 continue;
             }
             store::with_scratch(|a| {

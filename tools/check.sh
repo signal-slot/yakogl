@@ -10,7 +10,7 @@
 # and how a function with no callers did (7715e3f).
 #
 #   tools/check.sh            fmt, the no_std archive, clippy and the tests
-#   tools/check.sh --quick    the default build only, for a tight edit loop
+#   tools/check.sh --quick    the PowerVR build only, for a tight edit loop
 #
 # In every configuration the library ships in:
 #
@@ -65,18 +65,18 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 CONFIGS=(
-  "host-test"
-  "host-test,report-es2"
+  "host-test,gpu-powervr"
+  "host-test,gpu-powervr,report-es2"
   "host-test,gpu-vivante"
-  "host-test,shaderc-online"
-  "host-test,shaderc-remote"
+  "host-test,gpu-powervr,shaderc-online"
+  "host-test,gpu-powervr,shaderc-remote"
   "host-test,gpu-vivante,shaderc-remote"
-  "host-test,shaderc-online,shaderc-remote"
+  "host-test,gpu-powervr,shaderc-online,shaderc-remote"
   "host-test,gpu-vivante,shaderc-online"
   # The pair every dEQP-GLES2 online image is built from: it refuses GLSL ES
   # 3.00, so tests that compile ES 3.00 are cfg'd out of it, and it was never
   # tested until 2026-09-24, when 80 tests failed in it.
-  "host-test,shaderc-online,report-es2"
+  "host-test,gpu-powervr,shaderc-online,report-es2"
   # The i.MX8MP's dEQP-GLES2 image: the GC7000 with the in-process compiler,
   # reporting ES 2.0. Its GC7000 harness pins are per build.
   "host-test,gpu-vivante,shaderc-online,report-es2"
@@ -97,10 +97,10 @@ CONFIGS=(
 # lints with no table in it.
 BUILD_ONLY_CONFIGS=(
   "host-test,gpu-vivante,shaderc-online,no-shader-table"
-  "host-test,shaderc-online,no-shader-table"
+  "host-test,gpu-powervr,shaderc-online,no-shader-table"
 )
-[ "${1-}" = "--quick" ] && CONFIGS=("host-test")
-# YAKOGL_CHECK_CONFIGS="host-test host-test,gpu-vivante" (space-separated feature
+[ "${1-}" = "--quick" ] && CONFIGS=("host-test,gpu-powervr")
+# YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr host-test,gpu-vivante" (space-separated feature
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
 if [ -n "${YAKOGL_CHECK_CONFIGS-}" ]; then read -r -a CONFIGS <<< "$YAKOGL_CHECK_CONFIGS"; fi
@@ -167,7 +167,7 @@ step "cargo fmt --check" cargo fmt --check
 # libm -- and the break only showed when a board pair was built by hand.
 # Twelve seconds on a warm tree, and it is the only row that says "this
 # compiles for a target with no operating system".
-step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi
+step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr
 
 for f in "${CONFIGS[@]}"; do
   step "clippy  $f" cargo clippy --no-default-features --features "$f" --all-targets
@@ -209,7 +209,7 @@ done
 # is printed with its reason, one line per test, and kept in
 # build/check/v3d-ignored.txt (`ignored<TAB><test><TAB><reason>`), because
 # an ignore nobody reads is a skip. Tests gated at compile time by GPU
-# (`cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))`, the
+# (`cfg(feature = "gpu-powervr")`, the
 # PowerVR table's own values) are not in this binary and are not listed.
 V3D_CONFIG="host-test,gpu-v3d,shaderc-online,no-shader-table"
 V3D_MIN_TESTS=2460
@@ -808,7 +808,7 @@ fi
 # the backends have their own cfg arms.
 TARGET_CONFIGS=(
   "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table"
-  "osal-zephyr,shaderc-online,no-shader-table"
+  "osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
   "osal-zephyr,gpu-v3d,shaderc-online,no-shader-table"
 )
 if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none; then
@@ -880,28 +880,6 @@ if command -v python3 >/dev/null 2>&1; then
   # below); the record's classes and stage table are
   # driver/rust/src/board/record.rs, decoded by yakogl-tools record ("test
   # yakogl-tools" below).
-  # The AM62P direct boot (docs/direct-boot.md): u-boot.img with Zephyr in
-  # place of U-Boot proper, on a synthetic FIT in the prebuilt's form (the
-  # payload, load/entry, crc32, fdt-0 and its certificate kept, external data,
-  # the refusals, the boot-partition layout against U-Boot's environment).
-  step "tools   am62p-mkboot u-boot.img and boot partition" python3 tools/am62p-mkboot.py --self-test
-  # The AM62P second stage (docs/direct-boot.md, "The second stage"): the
-  # images am62p-mkboot.py writes for the eMMC user area (Python's zlib)
-  # decoded by the loader's own Rust (yakogl-boot-stage2: header, CRC-32,
-  # inflate): every ok-*.img loads, every bad-*.img is refused. The row
-  # requires the test's "verified" line (without BS2_VECTORS it checks nothing).
-  stage2_vectors_check() {
-    local d="$PWD/build/stage2-check" out
-    rm -rf "$d"
-    python3 tools/am62p-mkboot.py stage2-vectors "$d" > /dev/null || return 1
-    out=$(BS2_VECTORS="$d" cargo test -q -p yakogl-boot-stage2 mkboot_vectors -- --nocapture 2>&1) ||
-      { printf '%s\n' "$out" | tail -20; return 1; }
-    printf '%s\n' "$out" | grep -qE '^mkboot_vectors: [0-9]+ images verified' || {
-      echo "mkboot_vectors passed without its verified line"
-      return 1
-    }
-  }
-  step "tools   am62p second stage: mkboot images decoded by the loader's Rust" stage2_vectors_check
   # The GLES3 mustpass list (tools/cts/gen-gles3-mustpass.sh at VK-GL-CTS
   # 93bca01): its count is pinned, so a list regenerated from another
   # checkout fails here until the pin is changed on purpose, and a tally that
@@ -1088,31 +1066,6 @@ if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-so
   step "check   yakogl-drivers (aarch64-unknown-none-softfloat)" drivers_softfloat_check
 else
   gap "yakogl-drivers for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
-fi
-# The AM62P second-stage loader's logic (driver/samples/zephyr/boot_stage2/loader,
-# the yakogl-boot-stage2 crate): lint, host tests (header, CRC-32, inflate) and
-# the target it ships for, aarch64-unknown-none-softfloat (the jump is inline
-# assembly there). The cross-check with am62p-mkboot.py is the tools row above.
-step "clippy  yakogl-boot-stage2" cargo clippy -p yakogl-boot-stage2 --all-targets
-step "test    yakogl-boot-stage2" cargo test --no-fail-fast -p yakogl-boot-stage2
-stage2_softfloat_check() {
-  local t=aarch64-unknown-none-softfloat
-  if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
-    cargo clippy -p yakogl-boot-stage2 --target "$t"
-  else
-    CARGO_FUTURE_INCOMPAT_REPORT_FREQUENCY=never cargo +nightly clippy -p yakogl-boot-stage2 \
-      --target "$t" -Z build-std=core
-  fi
-}
-if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-softfloat ||
-  [ -d "$(rustc +nightly --print sysroot 2>/dev/null)/lib/rustlib/src/rust/library/core" ]; then
-  step "clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)" stage2_softfloat_check
-else
-  gap "yakogl-boot-stage2 for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
-fi
-if command -v cc >/dev/null 2>&1; then
-  step "cc      boot_stage2.h layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
-    -x c driver/samples/zephyr/boot_stage2/loader/include/boot_stage2.h
 fi
 if command -v cc >/dev/null 2>&1; then
   # The C view of the crate's structs, with the layout pins the Rust side

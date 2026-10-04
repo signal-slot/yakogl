@@ -228,7 +228,7 @@ pub const GLES_VS_TEX_UNITS: usize = 16;
 /// records/am62p/shared-size), so the online compiler reads those through
 /// idx0 as pco does (`prepare::index_high_shared`). gl_test 149 vsunits
 /// checks it on the board (V samplers, one colour each).
-#[cfg(not(any(feature = "gpu-v3d", feature = "gpu-vivante")))]
+#[cfg(feature = "gpu-powervr")]
 pub const GLES_VS_TEX_UNITS: usize = 16;
 /// GC7000: 16 (vivante/backend.rs `gc_debug_vs_units16`, which says what
 /// Mesa gives this core), measured on the i.MX8MP: gl_test 149 with 9..16
@@ -255,7 +255,7 @@ pub const DEPTH_ONLY_TARGETS: bool = {
     {
         crate::v3d::backend::DRAWS_WITHOUT_COLOUR
     }
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     {
         crate::pvr::backend::DRAWS_WITHOUT_COLOUR
     }
@@ -886,7 +886,7 @@ unsafe impl Sync for YakoglBackend {}
 /// The GPU backend of this build (`extern const struct yakogl_backend
 /// *g_backend;`): the one the GPU feature selected, exactly one per build as
 /// in the C (`-DYAKOGL_GPU_VIVANTE`).
-#[cfg(all(not(feature = "host-test"), not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#[cfg(all(not(feature = "host-test"), feature = "gpu-powervr"))]
 #[no_mangle]
 pub static mut g_backend: *const YakoglBackend = &crate::pvr::backend::yakogl_backend_pvr;
 
@@ -1095,7 +1095,7 @@ pub fn masked_clear_applied() -> bool {
     {
         true
     }
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     {
         crate::pvr::backend::masked_clear_on()
     }
@@ -1116,7 +1116,7 @@ pub fn narrow_la_texels() -> bool {
     {
         true
     }
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     {
         crate::pvr::backend::narrow_la_on()
     }

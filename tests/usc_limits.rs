@@ -21,7 +21,7 @@
 //! A peak is only as good as the population it was taken over, so the
 //! population is printed and asserted.
 
-#![cfg(all(feature = "shaderc-online", not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#![cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
 
 use yakogl::shaderc::online::ir::{AluOp, IoDecl, IoKind, IoSlot};
 use yakogl::shaderc::online::powervr::abi::{assemble, attribs_read, vtxin_reg, UscProgram, USC_MAX_TEMPS};

@@ -21,8 +21,7 @@
 //! every struct that embeds it grows with it. A number every build agrees on
 //! is pinned once; where the builds differ, or where a field exists in some
 //! builds only, each GPU's number is pinned behind that GPU's cargo feature
-//! and C define (the PowerVR, the default build, has neither: its gate is
-//! "none of the others").
+//! and C define (the PowerVR's C gate is "none of the other defines").
 
 use crate::py::{self, g, re};
 use crate::{Error, R};
@@ -87,32 +86,25 @@ const INCLUDES: &[&str] = &[
     "\"pvr_render.h\"",
 ];
 
-/// One GPU a build can be for: its name, its C define and its cargo feature
-/// (`None` for the PowerVR, the build with none of the others).
+/// One GPU a build can be for: its name, its C define (`None` for the
+/// PowerVR, the C build with none of the others) and its cargo feature.
 pub struct Gpu {
     pub name: &'static str,
     pub define: Option<&'static str>,
-    pub feature: Option<&'static str>,
+    pub feature: &'static str,
 }
 
 /// Every GPU, in the order the pins are written.
 pub const GPUS: &[Gpu] = &[
-    Gpu { name: "powervr", define: None, feature: None },
-    Gpu { name: "vivante", define: Some("YAKOGL_GPU_VIVANTE"), feature: Some("gpu-vivante") },
-    Gpu { name: "v3d", define: Some("YAKOGL_GPU_V3D"), feature: Some("gpu-v3d") },
+    Gpu { name: "powervr", define: None, feature: "gpu-powervr" },
+    Gpu { name: "vivante", define: Some("YAKOGL_GPU_VIVANTE"), feature: "gpu-vivante" },
+    Gpu { name: "v3d", define: Some("YAKOGL_GPU_V3D"), feature: "gpu-v3d" },
 ];
 
 impl Gpu {
     /// The Rust `cfg` predicate that selects this GPU.
     fn rust_cfg(&self) -> String {
-        match self.feature {
-            Some(f) => format!("feature = \"{f}\""),
-            None => {
-                let others: Vec<String> =
-                    GPUS.iter().filter_map(|g| g.feature).map(|f| format!("feature = \"{f}\"")).collect();
-                format!("not(any({}))", others.join(", "))
-            }
-        }
+        format!("feature = \"{}\"", self.feature)
     }
 
     /// The C preprocessor condition that selects this GPU.
@@ -164,8 +156,7 @@ pub fn rust_fields(root: &str, path: &str, name: &str) -> R<Vec<Field>> {
     for line in body.lines() {
         let t = line.trim();
         if t.starts_with("#[cfg") {
-            let Some(f) = GPUS.iter().filter_map(|g| g.feature).find(|f| t == format!("#[cfg(feature = \"{f}\")]"))
-            else {
+            let Some(f) = GPUS.iter().map(|g| g.feature).find(|f| t == format!("#[cfg(feature = \"{f}\")]")) else {
                 return Err(Error::Exit(format!("{path}: a field of {name} is behind `{t}`, not one GPU's feature")));
             };
             gated = Some(f);
@@ -202,7 +193,7 @@ fn probe(root: &str, drv: &str, gpu: &Gpu, rows: &[(Row, Option<&'static str>)])
     let mut prog: Vec<String> = vec!["#include <stdio.h>".into(), "#include <stddef.h>".into()];
     prog.extend(INCLUDES.iter().map(|i| format!("#include {i}")));
     prog.push("int main(void) {".into());
-    let present: Vec<bool> = rows.iter().map(|(_, only)| only.is_none() || *only == gpu.feature).collect();
+    let present: Vec<bool> = rows.iter().map(|(_, only)| only.is_none() || *only == Some(gpu.feature)).collect();
     for ((row, _), _) in rows.iter().zip(&present).filter(|(_, p)| **p) {
         match &row.2 {
             None => prog.push(format!("printf(\"%zu\\n\", sizeof({}));", row.1)),

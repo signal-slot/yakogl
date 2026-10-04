@@ -34,8 +34,9 @@ osal-linux = ["yakogl/osal-linux"]
 osal-zephyr = ["yakogl/osal-zephyr"]
 osal-baremetal = ["yakogl/osal-baremetal"]
 # The GPU whose backend and offline shader table are compiled in (the yakogl
-# crate's own feature): the PowerVR BXS by default, the i.MX8MP's GC7000 with
-# this. Exactly one GPU is in a build, as in the C (-DYAKOGL_GPU_VIVANTE).
+# crate's own features): exactly one of the three. The AM62P's PowerVR BXS:
+gpu-powervr = ["yakogl/gpu-powervr"]
+# The i.MX8MP's GC7000:
 gpu-vivante = ["yakogl/gpu-vivante"]
 # The Raspberry Pi 4's V3D 4.2 (the yakogl crate's `gpu-v3d`): the in-process
 # compiler is its only shader back end, so it goes with `shaderc-online` and

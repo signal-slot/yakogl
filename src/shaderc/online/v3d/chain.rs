@@ -1344,7 +1344,7 @@ mod tests {
          * It must be what the chain produces now, or a board run would test
          * a compiler that no longer exists. Regenerate with
          *   V3D_WRITE_OURS_JSON=1 cargo test --no-default-features \
-         *     --features host-test,shaderc-online --lib samples_json */
+         *     --features host-test,gpu-powervr,shaderc-online --lib samples_json */
         sample_json_is_current(PASSTHROUGH_VS, INTERP_FS, OURS_JSON);
     }
 

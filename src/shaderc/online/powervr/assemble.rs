@@ -1581,7 +1581,7 @@ pub fn vertex_output_offsets(components: &[u8], interps: &[u8], offs: &mut [u8])
     Ok(at)
 }
 
-#[cfg(all(test, not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#[cfg(all(test, feature = "gpu-powervr"))]
 mod clear_attach_tests {
     use super::*;
 

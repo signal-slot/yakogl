@@ -9,7 +9,7 @@
 //! table's row holds, **field by field**, and prints a table of differences.
 //!
 //! ```sh
-//! cargo test --no-default-features --features host-test,shaderc-online \
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
 //!     --test online_oracle -- --nocapture
 //! ```
 //!

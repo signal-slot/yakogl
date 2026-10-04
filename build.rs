@@ -6,7 +6,7 @@
 //!   (`third_party/mesa-26.2.1/src/broadcom/qpu/{qpu_pack.c,qpu_instr.c}`,
 //!   unmodified) and its adapter `src/shaderc/online/v3d/qpu_mesa.c`
 //!   (docs/source-form.md, F1).
-//! * PowerVR (no `gpu-vivante`, no `gpu-v3d`): the backend's csbgen packers.
+//! * `gpu-powervr`: the backend's csbgen packers.
 //!   src/pvr/backend.rs packs its texture, PBE and fragment-register words
 //!   with Mesa 26.2.1's csbgen packers (driver/src/pvr/generated/csbgen/rogue/,
 //!   Mesa's generator over the vendored XML). Those are static inline C
@@ -41,12 +41,10 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    let v3d = env::var_os("CARGO_FEATURE_GPU_V3D").is_some();
-    let vivante = env::var_os("CARGO_FEATURE_GPU_VIVANTE").is_some();
-    if v3d {
+    if env::var_os("CARGO_FEATURE_GPU_V3D").is_some() {
         v3d_qpu();
     }
-    if !v3d && !vivante {
+    if env::var_os("CARGO_FEATURE_GPU_POWERVR").is_some() {
         pvr_csbgen();
     }
 }

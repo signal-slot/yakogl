@@ -15,7 +15,7 @@
 //!
 //! ```sh
 //! PCO_SHC=... tools/shaderc_server.py --cache ~/.cache/yakogl-shaderc &
-//! cargo test --no-default-features --features host-test,shaderc-remote \
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-remote \
 //!     --test shaderc_remote
 //! ```
 //!

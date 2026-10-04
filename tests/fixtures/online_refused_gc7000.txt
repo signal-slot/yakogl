@@ -1,0 +1,125 @@
+armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+interp_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+points.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+qt3d/0119aeb276db508c.frag: 0:98: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
+qt3d/0259850a5e89b258.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/03ea06cbd3d83ae7.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/0575aa74aca84d16.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/066cd45c08f5f3aa.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/07550a2d24026db1.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/0c90459f30c8a5a0.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/0d972b456ed599d1.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
+qt3d/0e5620f16999a984.frag: 0:98: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
+qt3d/1419e0d2080c245b.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/17ab2c1a8fb44f26.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/19cb724b4f3f33fa.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/1a7c7dce5e3a0651.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/218837958bb6f49e.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/22fd05500314a226.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/26489c6fd1c60382.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/29093d4e31dd5b24.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/2cd1d4a14483e38b.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/37f26e65d0a8b3c0.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/3f757c299ffaca97.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/406d87804c118db3.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/46fb3a49ad1099f8.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/4d310da2e4355d77.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/54d4e06ccc9820fc.vert: 0:28: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
+qt3d/5536659104efaa37.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/56105a9f4a2e536b.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
+qt3d/5da626e14b4ac041.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/5e3bb342fc72e89c.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/6c176045a2fca987.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/6e57b58e7ee87ce3.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/6efaf7b70e4d9f79.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/6fa0a3732b2f189b.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/76846167b80f2fec.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/7fda57c7b51cb2c3.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/8244b1b0e9e2c382.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/83a830e25f56fd85.vert: 0:28: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
+qt3d/89094c6246e91cca.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/928dc4e0891ab537.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
+qt3d/96bc0c44f5554256.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a cube fetch) is not selected yet"))
+qt3d/990c7cdf224401ce.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/99945b15d0a8bcb5.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/a18b722f8bcece7c.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/a9805e68997ed2ee.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
+qt3d/ab768c401deb5da2.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/aea2b6ccf67dfa6c.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/b6ff31ac27072713.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/c667c97598a82c1b.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
+qt3d/c75c300261394485.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/cc6edcdecf538a02.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/cd2407ecbbd0b91a.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/ce98d420235c52c3.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/d673606b285453fd.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 9, temps: 27, temps_max: 18 })
+qt3d/db6a67a14bb451a6.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/e7b6737b8d3280ff.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/ea8e9c0f79099986.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/ecfbc12c9457f930.vert: 0:28: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
+qt3d/ef89c93a37868015.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/f9909b4d7e0564d9.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/fa8d4c54f385e95b.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/fb9484e5be38c571.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/fe301b07239c8f58.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
+qt3d/grid_300.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("this output is not selected yet"))
+qt3d/qtparticleshaders_10.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_11.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_13.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_16.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_18.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_19.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_20.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_21.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 17, temps_max: 16 })
+qt3d/qtparticleshaders_22.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_23.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_29.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 17, temps_max: 16 })
+qt3d/qtparticleshaders_36.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_38.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 17, temps_max: 16 })
+qt3d/qtparticleshaders_39.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_40.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_41.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_42.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_44.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_45.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 17, temps_max: 16 })
+qt3d/qtparticleshaders_48.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_49.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_50.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_52.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_55.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_56.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_57.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_6.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_61.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_62.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_66.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_67.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_72.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_73.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_74.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_75.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_78.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_8.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_86.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 4, temps: 18, temps_max: 16 })
+qt3d/qtparticleshaders_87.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_88.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_9.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_91.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_92.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/qtparticleshaders_94.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
+qt3d/ssao_300.frag: online shaderc: out of compiler memory on this fragment shader (0 bytes left in the scratch arena); raise shaderc::online::store::SCRATCH_BYTES
+texture.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+texture2.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uniform_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

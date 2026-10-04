@@ -8,13 +8,18 @@
 #   tools/board.sh [--dry-run] <board> probe <logdir>
 #   tools/board.sh [--dry-run] <board> run <image> <logdir> [name]
 #   tools/board.sh [--dry-run] <board> tree <table> <outdir>
+#   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
-#      board = pi4 | am62p | imx8mp     BOARD_BOOT = tryboot | uboot-tftp | kexec-dev
+#      board = pi4 | am62p | imx8mp
+#      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
-# sequence. The backends: tryboot (pi4; the firmware boots the image once),
-# uboot-tftp (am62p, imx8mp, the default there; U-Boot fetches the image over
-# TFTP once: tools/uboot-netboot-lib.sh, tools/tftp_oneshot.py) and kexec-dev
+# sequence. The backends: tryboot (pi4; the firmware boots the image once
+# from the SD card), uboot-tftp (am62p, imx8mp, the default there; U-Boot
+# fetches the image over TFTP once: tools/uboot-netboot-lib.sh,
+# tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp; the same one-shot, but
+# U-Boot loads the image from the eMMC, where Linux staged it: the standalone
+# boot, docs/standalone-boot.md) and kexec-dev
 # (am62p, imx8mp; driver/tools/kexec-zephyr). A kexec-dev run is a development
 # run: its verdict line says DEV and it is never a row (a bootloader boot is
 # the bar). --dry-run prints every command that would touch a board, the TFTP
@@ -31,11 +36,13 @@
 #      ssh and sudo -n, no session on the board from another machine (`who`),
 #      nobody holds the console or the GPU device, and the backend's own
 #      (free space on /boot/firmware; the TFTP server and its log; the U-Boot
-#      hook installed, no one-shot pending, no kexec loaded; uptime, the M7,
-#      no client running, the crash window);
+#      hook installed, no one-shot pending, no default set, no kexec loaded;
+#      the staging directory on the eMMC partition U-Boot reads, its free
+#      space, no leftover; uptime, the M7, no client running, the crash window);
 #   3. clears the result sink (i.MX8MP: the SNVS record, plus SEL's selector);
 #   4. stages the image (/boot/firmware + tryboot.txt | the TFTP root |
-#      ~/kexec) and reads it back by sha256;
+#      /var/yakogl on the eMMC | ~/kexec) and reads it back by sha256 (the
+#      eMMC copy after dropping the page cache);
 #   5. starts the console capture (Pi 4 UART | AM62P serial bridge; the
 #      i.MX8MP has none, its TFTP log and SNVS record are read afterwards);
 #   6. boots (tryboot reboot | the U-Boot one-shot and a reboot | kexec);
@@ -45,6 +52,18 @@
 #      with `yakogl-tools record`;
 #   9. prints one verdict line (below) and writes the run's INDEX.txt;
 #  10. cleans up (the staged image, tryboot.txt, the one-shot: yako_once gone).
+#
+# "default <image> <boots|forever>" makes the image the board's boot (the
+# product form, docs/standalone-boot.md). am62p, imx8mp: it is staged as
+# /var/yakogl/default.bin and yako_default names it, so U-Boot loads it from
+# the eMMC at power-on. With a count (1-9) U-Boot boots it that many times and
+# then deletes the default and boots Linux: an image that ends in a watchdog
+# reset gives the board back by itself, so no person is needed. "forever" is
+# the product: only a person at the U-Boot prompt brings Linux back, so it
+# refuses unless BOARD_PERSON_PRESENT=1. pi4: config.txt names the image
+# (Linux's kept as config-linux.txt); the firmware has no boot count, so only
+# "forever", with a person. "default" prints the exact undo before it changes
+# anything, and reboots nothing. "nodefault" undoes it from Linux.
 #
 # The verdict line, one format on every board:
 #   board.sh <board> <name> rc=<rc> verdict=<v> boot=<backend> <row|DEV> boot_verdict=<bv>
@@ -112,9 +131,11 @@
 #                      read); am62p: host:port of the serial bridge (UART_ADDR
 #                      also read)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
+#   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
 #                      (AM62P env|typed), NETBOOT_NO_WATCHDOG, NETBOOT_BACKUP_DIR:
 #                      as driver/docs/am62p-netboot-plan.md and imx8mp-netboot-plan.md describe
+#                      (uboot-mmc needs no server, TFTP root, log or route)
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #                      (pi4 420/300, am62p U-Boot 420/180, imx8mp U-Boot 600
 #                      in all, am62p kexec-dev 1500/600, imx8mp kexec-dev 1500
@@ -138,7 +159,7 @@ done
 set -- "${args[@]+"${args[@]}"}"
 DRYFLAG=()
 [ "$DRY" = 1 ] && DRYFLAG=(--dry-run)
-usage() { sed -n '6,11p' "$SELF" >&2; exit 2; }
+usage() { sed -n '6,13p' "$SELF" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 BOARD=$1 VERB=$2
 shift 2
@@ -151,6 +172,7 @@ RESET_RE=
 case "$BOARD" in
 pi4)
     BOOTS="tryboot"
+    NB_MMC=-
     # driver/samples/zephyr/v3d_*/boards/rpi_4b.overlay: sram0 at 0x200000; the
     # largest window in the tree is v3d_deqp's 256 MiB (reg <0x200000 0x10000000>)
     YAKO_ADDR=0x200000; LOAD_END=0x10200000
@@ -166,7 +188,10 @@ pi4)
     TREE_RETRIES_DEFAULT=0
     ;;
 am62p)
-    BOOTS="uboot-tftp kexec-dev"
+    BOOTS="uboot-tftp uboot-mmc kexec-dev"
+    # the eMMC's first user-area partition (Torizon's ext4 root): U-Boot's
+    # "mmc 0:1" (SafeUI's bootcmd loads from it with ext4load), Linux's mmcblk0p1
+    NB_MMC=0:1; MMC_PART=/dev/mmcblk0p1
     # the SafeUI A53 board DTS: the image's link address up to the GPU carve-out (344 MiB)
     YAKO_ADDR=0x82000000; LOAD_END=0x97800000
     MARKER='rti_arm: armed'              # driver/zephyr/lib/board/am62p/rti_arm.c:235
@@ -183,7 +208,10 @@ am62p)
     TREE_RETRIES_DEFAULT=0
     ;;
 imx8mp)
-    BOOTS="uboot-tftp kexec-dev"
+    BOOTS="uboot-tftp uboot-mmc kexec-dev"
+    # the eMMC is U-Boot's mmc 2 (its env's "mmc dev 2 1"; the distro boot
+    # finds Torizon on partition 1) and Linux's mmcblk2
+    NB_MMC=2:1; MMC_PART=/dev/mmcblk2p1
     # driver/boards/toradex/verdin_imx8mp a53_ddr_section: 256 MiB at 0x60000000
     YAKO_ADDR=0x60000000; LOAD_END=0x70000000
     MARKER='gc_wdog_arm: armed'          # CONFIG_GC_BOARD_WDOG_SELF_ARM
@@ -418,7 +446,7 @@ verdict_line() {
         elif end_seen "$console"; then bv=complete
         else bv=no_end_line; fi
         ;;
-    uboot-tftp)
+    uboot-tftp | uboot-mmc)
         if [ "$BOARD" = am62p ]; then
             # the AM62P phase scan: tools/am62p_netboot_uart.py stays the one reader
             scan=$(python3 "$HERE/am62p_netboot_uart.py" scan "$dir/console.ts" --token "$(mget token "$dir")" 2>/dev/null)
@@ -426,10 +454,25 @@ verdict_line() {
             bv=${bv:-scan_failed}
             if [ "$probe" = 1 ]; then
                 # the probe passes on the failure path, and only with the evidence
-                # that each stage it exists to prove was reached
-                if [ -z "$rcc" ] && [ "$bv" = fetch_failed ] && grep -aq 'DHCP client bound' "$dir/console.ts" &&
+                # that each stage it exists to prove was reached: TFTP, the DHCP
+                # lease and the server's refusal; eMMC, U-Boot's own line that
+                # its ext4load of the absent file failed (the scan's load_failed)
+                if [ "$boot" = uboot-mmc ]; then
+                    if [ -z "$rcc" ] && [ "$bv" = load_failed ]; then verdict=probe_ok; else verdict=probe_failed; fi
+                elif [ -z "$rcc" ] && [ "$bv" = fetch_failed ] && grep -aq 'DHCP client bound' "$dir/console.ts" &&
                     grep -aq 'File not found' "$dir/console.ts"; then verdict=probe_ok; else verdict=probe_failed; fi
             fi
+        elif [ "$boot" = uboot-mmc ]; then
+            # no console and no server log: the board came back from a new boot
+            # with the one-shot cleared (rc_cycle 6 otherwise), and the record
+            rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
+            up=$(mget up "$dir")
+            if [ "$rcc" = 5 ]; then
+                if [ -n "$up" ]; then bv=no_reboot; else bv=no_answer; fi
+            elif [ "$probe" = 1 ]; then
+                if [ -z "$rcc" ] && [ "$rec" = "$rec0" ]; then bv=probe_ok; else bv=probe_failed; fi
+                verdict=$bv
+            else bv=cycled; fi
         else
             tl=$(cat "$dir/tftp.txt" 2>/dev/null)
             if grep -q " done " <<<"$tl"; then
@@ -468,7 +511,7 @@ verdict_line() {
     # sample's own result line
     if [ -z "$verdict" ]; then
         case "$bv" in
-        complete | done | fetched)
+        complete | done | fetched | cycled)
             if [ -n "$rec" ] && [ "$rec" = "$rec0" ]; then rec=""; fi
             if [ -z "$rec" ] && [ -s "$console" ] && grep -aq 'yk-record: ' "$console"; then
                 rec=$(ytools record --log "$console" | sed -n 's/^verdict record: //p')
@@ -536,6 +579,7 @@ verdict_line() {
     # what the run could not measure, its own outcome beside the verdict (kind GLMARK2)
     if [ -n "${unsup:-}" ] && [ "$unsup" != absent ]; then V_LINE+=" unsupported=$unsup"; fi
     if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-tftp ]; then V_LINE+=" tftp=$tftp uptime=${up:-?}s"; fi
+    if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-mmc ]; then V_LINE+=" uptime=${up:-?}s"; fi
     if [ "$ROW" = DEV ]; then V_LINE+=" (kexec-dev: a development run, never a row)"; fi
     V_SCAN=$scan
     return 0
@@ -727,29 +771,34 @@ pi4_prechecks() {
     meta boot_firmware_free "$avail"
     if [ "$DRY" = 1 ]; then
         b "test ! -e /boot/firmware/$STAGED   # a leftover of a run that did not clean up refuses"
+        b "test ! -e /boot/firmware/config-linux.txt   # a permanent default refuses"
     else
         b "test ! -e /boot/firmware/$STAGED" || die "/boot/firmware/$STAGED exists (a run that did not clean up): look at it first"
+        # after a tryboot the firmware boots config.txt: with a default set, that is not Linux
+        b "test ! -e /boot/firmware/config-linux.txt" ||
+            die "a permanent default is set (/boot/firmware/config-linux.txt exists): the board would not come back to Linux ('nodefault')"
+    fi
+}
+
+# pi4_config KERNEL: the configuration that boots KERNEL, the same lines for a
+# tryboot (tryboot.txt) and for the permanent default (config.txt)
+pi4_config() {
+    printf '%s\n' '[all]' "kernel=$1" arm_64bit=1 enable_uart=1 uart_2ndstage=1
+    if [ -n "$BOARD_HDMI_TIMINGS" ]; then
+        printf '%s\n' hdmi_group=2 hdmi_mode=87 "hdmi_timings=$BOARD_HDMI_TIMINGS"
     fi
 }
 
 pi4_undo() {
     b "sudo rm -f /boot/firmware/$STAGED"
-    printf '%s\n' "$PREV" | b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync'
+    b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$PREV"
 }
 
 pi4_stage() {
     local tmpd got gottry
     bget PREV 'cat /boot/firmware/tryboot.txt 2>/dev/null' '<the tryboot.txt read from the board>'
     TRY="# tools/board.sh: $NAME, one-shot boot (reboot \"0 tryboot\"); config.txt stays the Linux default
-[all]
-kernel=$STAGED
-arm_64bit=1
-enable_uart=1
-uart_2ndstage=1"
-    [ -n "$BOARD_HDMI_TIMINGS" ] && TRY+="
-hdmi_group=2
-hdmi_mode=87
-hdmi_timings=$BOARD_HDMI_TIMINGS"
+$(pi4_config "$STAGED")"
     # A fresh directory: a copy into a fixed /tmp name would write through a
     # symlink someone left there (tools/cts/README.md, "Deploying").
     bget tmpd 'mktemp -d' /tmp/DRY.board
@@ -757,7 +806,9 @@ hdmi_timings=$BOARD_HDMI_TIMINGS"
     b "cat > $tmpd/img" < "$IMG" || { b "rm -rf $tmpd"; die "copy to the board failed"; }
     b "sudo install -m 0755 $tmpd/img /boot/firmware/$STAGED; r=\$?; rm -rf $tmpd; sync; exit \$r" ||
         { pi4_undo; die "install into /boot/firmware failed (removed again)"; }
-    printf '%s\n' "$TRY" | b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' ||
+    # a here-string, not "printf | b": under pipefail a printf whose reader
+    # exits first (the dry run's b reads nothing) failed the step at random
+    b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$TRY" ||
         { pi4_undo; die "writing tryboot.txt failed (previous one put back)"; }
     bget got "sha256sum /boot/firmware/$STAGED" "$IMG_SHA  /boot/firmware/$STAGED"
     got=${got%% *}
@@ -840,7 +891,11 @@ run_tryboot() {
 uboot_on_exit() {
     if [ "${ARMED:-0}" = 1 ]; then
         b 'sudo -n fw_setenv yako_once' && note "disarmed after a failure before the reboot" >&2
-        rm -f "$NETBOOT_TFTP_ROOT/$UB_FILE"
+        [ "$BOOT" = uboot-tftp ] && rm -f "$NETBOOT_TFTP_ROOT/$UB_FILE"
+    fi
+    # an eMMC copy staged for a boot that never came is removed again
+    if [ -n "${MMC_STAGED:-}" ] && [ "${REBOOTED:-0}" = 0 ]; then
+        b "sudo -n rm -f $MMC_STAGED" && note "removed $MMC_STAGED (no reboot)" >&2
     fi
     stop_cap
     rm -rf "$TMP"
@@ -856,36 +911,92 @@ console_from_ts() {
         "$RD/console.ts" > "$RD/console.txt"
 }
 
-run_uboot() {
-    local file route typed_line net back left st pend kx rcc="" el up=""
+# ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------
+# Linux writes the image into STAGE_DIR on the eMMC's user-area filesystem;
+# U-Boot reads the same file with "ext4load mmc NB_MMC". On Torizon /var is a
+# bind mount of a directory of the root filesystem
+# (/ostree/deploy/<os>/var), so the path U-Boot sees is the mount's FSROOT
+# plus the path below the mount point, both read from the board (findmnt).
+STAGE_DIR=/var/yakogl
+
+# mmc_where: sets UB_DIR (STAGE_DIR as U-Boot names it) after checking that
+# STAGE_DIR is on MMC_PART, the partition NB_MMC names; and MMC_FREE.
+mmc_where() {
+    local m src tgt root rel
+    bget m "sudo -n mkdir -p $STAGE_DIR && set -- \$(findmnt -n -v -o SOURCE,TARGET,FSROOT -T $STAGE_DIR) && echo \$(readlink -f \$1) \$2 \$3" \
+        "$MMC_PART /var /ostree/deploy/torizon/var" || die "cannot read the mount of $STAGE_DIR on the board"
+    read -r src tgt root <<<"$m"
+    [ "$src" = "$MMC_PART" ] ||
+        die "$STAGE_DIR is on '$src', not $MMC_PART (U-Boot's mmc $NB_MMC): U-Boot would not find the image there"
+    [ -n "$root" ] && [ -n "$tgt" ] || die "findmnt gave no mount point or FSROOT for $STAGE_DIR ('$m')"
+    if [ "$tgt" = / ]; then rel=$STAGE_DIR; else rel=${STAGE_DIR#"$tgt"}; fi
+    UB_DIR=${root%/}$rel
+    meta mmc_where "$STAGE_DIR = mmc $NB_MMC $UB_DIR ($src)"
+    bget MMC_FREE "df -B1 --output=avail $STAGE_DIR | tail -1" 999999999999 || die "df on the board failed"
+    MMC_FREE=${MMC_FREE// /}
+    [[ $MMC_FREE =~ ^[0-9]+$ ]] || die "cannot read the free space of $STAGE_DIR ('$MMC_FREE')"
+    [ "$MMC_FREE" -ge $((2 * IMG_SIZE)) ] || die "$STAGE_DIR has $MMC_FREE bytes free, less than twice the image ($IMG_SIZE)"
+}
+
+# mmc_stage FILE: IMG copied to STAGE_DIR/FILE, read back from the eMMC (the
+# page cache dropped first) by sha256; sets MMC_STAGED. Removed on a mismatch.
+mmc_stage() {
+    local dst=$STAGE_DIR/$1 got
     if [ "$DRY" = 1 ]; then
-        BOARD_UART=${BOARD_UART:-BRIDGE:PORT}; NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
-        NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
+        echo "DRY board\$ sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync' < $IMG"
+    else
+        timeout 900 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync'" < "$IMG" ||
+            { b "sudo -n rm -f $dst.part $dst"; die "copying the image to $dst failed"; }
     fi
-    : "${NETBOOT_SERVER:?set NETBOOT_SERVER=the address of this host on the board LAN}"
-    : "${NETBOOT_TFTP_ROOT:?set NETBOOT_TFTP_ROOT=the root directory of the TFTP server}"
+    MMC_STAGED=$dst
+    bget got "echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null && sha256sum $dst" "$IMG_SHA  $dst"
+    got=${got%% *}
+    [ "$got" = "$IMG_SHA" ] || { b "sudo -n rm -f $dst"; MMC_STAGED=; die "the eMMC copy $dst reads back as '$got', not $IMG_SHA (removed)"; }
+    meta staged "$dst on the eMMC, read back equal"
+}
+
+run_uboot() {
+    local file route typed_line net back left st pend kx rcc="" el up="" src
+    # --dry-run stands in for what a real run would refuse without; only what
+    # the backend reads: a uboot-mmc dry run sees no NETBOOT_* (set -u catches
+    # a TFTP-only variable on the eMMC path, as on a board)
+    if [ "$DRY" = 1 ]; then
+        BOARD_UART=${BOARD_UART:-BRIDGE:PORT}
+        if [ "$BOOT" = uboot-tftp ]; then
+            NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
+            NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
+        fi
+    fi
+    if [ "$BOOT" = uboot-tftp ]; then
+        src=net
+        : "${NETBOOT_SERVER:?set NETBOOT_SERVER=the address of this host on the board LAN}"
+        : "${NETBOOT_TFTP_ROOT:?set NETBOOT_TFTP_ROOT=the root directory of the TFTP server}"
+    else
+        src=mmc
+    fi
     if [ "$BOARD" = am62p ]; then
         : "${BOARD_UART:?set BOARD_UART (or UART_ADDR)=host:port of the serial bridge}"
         RUN_BOUND=${RUN_BOUND:-420}; RETURN_BOUND=${RETURN_BOUND:-180}
         HOLD_MAX=${HOLD_MAX:-$((RUN_BOUND + RETURN_BOUND + 300))}
         route=${NETBOOT_ROUTE:-env}
         case "$route" in env | typed) ;; *) die "NETBOOT_ROUTE must be env or typed, not '$route'" 2 ;; esac
+        [ "$route" = env ] || [ "$src" = net ] || die "NETBOOT_ROUTE=typed is a TFTP route; uboot-mmc arms through the env" 2
     else
-        : "${NETBOOT_TFTP_LOG:?set NETBOOT_TFTP_LOG=the --log file of the TFTP server}"
+        [ "$src" = mmc ] || : "${NETBOOT_TFTP_LOG:?set NETBOOT_TFTP_LOG=the --log file of the TFTP server}"
         RUN_BOUND=${RUN_BOUND:-600}
         HOLD_MAX=${HOLD_MAX:-$((RUN_BOUND + 300))}
         route=env
     fi
     TOKEN=$(printf '%s' "$NAME-${IMG_SHA:0:16}-$(date +%s)" | tr -c 'A-Za-z0-9._-' '_')
-    file="yakogl/$TOKEN.bin"
+    if [ "$src" = net ]; then file="yakogl/$TOKEN.bin"; else file="once-$TOKEN.bin"; fi
     meta token "$TOKEN"
     meta route "$route"
-    note "$NAME: route $route token $TOKEN"
+    note "$NAME: route $route source $src token $TOKEN"
 
     # 2. the TFTP server answers on port 69 at the address U-Boot will use (on
     #    the i.MX8MP its log is the one given); then the board
-    nb_tftp_canary "$NETBOOT_SERVER" "$NETBOOT_TFTP_ROOT" "$TOKEN"
-    if [ "$BOARD" = imx8mp ]; then
+    [ "$src" = net ] && nb_tftp_canary "$NETBOOT_SERVER" "$NETBOOT_TFTP_ROOT" "$TOKEN"
+    if [ "$BOARD" = imx8mp ] && [ "$src" = net ]; then
         if [ "$DRY" = 1 ]; then
             echo "DRY host\$ grep 'done .*file=yakogl/canary-$TOKEN ' $NETBOOT_TFTP_LOG   # the canary must be in the log"
         else
@@ -902,22 +1013,44 @@ run_uboot() {
         [ "$kx" = 00 ] || die "a kexec image is loaded on the board (kexec_loaded, kexec_crash_loaded = '$kx'): someone else's jump is pending"
     fi
     if [ "$DRY" = 1 ]; then
-        b 'sudo -n fw_printenv   # env route: the install must match the library; yako_once must be absent'
+        b 'sudo -n fw_printenv   # env route: the install must match the library; yako_once and yako_default must be absent'
     else
         if [ "$route" = env ]; then
             st=$(check_install)
-            [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st)"
+            [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st; 'install' upgrades a stale one)"
         fi
         pend=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
         [ -z "$pend" ] || die "a one-shot is already pending (yako_once=$pend); find its owner, or 'disarm'"
+        # with a default set, the boot after the image is the default image, not Linux
+        pend=$(b 'sudo -n fw_printenv -n yako_default 2>/dev/null')
+        [ -z "$pend" ] || die "a permanent default is set (yako_default=$pend): the board would not come back to Linux ('nodefault')"
+    fi
+    if [ "$src" = mmc ]; then
+        mmc_where
+        if [ "$DRY" = 1 ]; then
+            b "ls $STAGE_DIR/once-*.bin 2>/dev/null   # must print nothing"
+        else
+            st=$(b "ls $STAGE_DIR/once-*.bin 2>/dev/null")
+            [ -z "$st" ] || die "$STAGE_DIR holds a one-shot image of a run that did not clean up ($st): look at it, or 'disarm'"
+        fi
     fi
 
     # 3. the i.MX8MP record: cleared (and the selector), read back
     [ "$BOARD" = imx8mp ] && snvs_clear
 
-    # 4. stage: served once, then renamed .served by the server; read back
+    # From here on any exit runs uboot_on_exit: it disarms an armed env and
+    # removes an eMMC copy whose boot never came (MMC_STAGED, REBOOTED).
+    ARMED=0
+    REBOOTED=0
+    UB_FILE=$file
+    trap uboot_on_exit EXIT
+
+    # 4. stage: served once, then renamed .served by the server (TFTP), or
+    #    written to the eMMC (mmc); read back
     if [ "$PROBE" = 1 ]; then
         note "probe: $file is deliberately not staged"
+    elif [ "$src" = mmc ]; then
+        mmc_stage "$file"
     else
         act cp "$IMG" "$NETBOOT_TFTP_ROOT/$file"
         if [ "$DRY" = 1 ]; then
@@ -931,12 +1064,15 @@ run_uboot() {
 
     # 5. the capture, before anything can print (AM62P; the i.MX8MP has no UART)
     if [ "$BOARD" = am62p ]; then
-        # the typed route's one command line: the installed hook's yako_net with
-        # its three variables written out, then "boot" when the fetch fails
-        net=${YAKO_NET//'${yako_addr}'/$YAKO_ADDR}
-        net=${net//'${yako_server}'/$NETBOOT_SERVER}
-        net=${net//'${yako_file}'/$file}
-        typed_line="echo yakogl-netboot: once=$TOKEN; echo yakogl-netboot: typed; $net; boot"
+        # the typed route's one command line (TFTP only): the installed hook's
+        # yako_net with its three variables written out, then "boot" when the
+        # fetch fails
+        if [ "$route" = typed ]; then
+            net=${YAKO_NET//'${yako_addr}'/$YAKO_ADDR}
+            net=${net//'${yako_server}'/$NETBOOT_SERVER}
+            net=${net//'${yako_file}'/$file}
+            typed_line="echo yakogl-netboot: once=$TOKEN; echo yakogl-netboot: typed; $net; boot"
+        fi
         if [ "$DRY" = 1 ] && [ "$route" = typed ]; then
             echo "DRY host\$ python3 tools/am62p_netboot_uart.py typed $BOARD_UART <rundir>/console.raw <rundir>/console.ts '<line>' 2> <rundir>/typed.log &"
             echo "    line (${#typed_line} bytes): $typed_line"
@@ -953,7 +1089,8 @@ run_uboot() {
             sleep 3
             if ! kill -0 "$CAP" 2>/dev/null; then
                 CAP=
-                rm -f "$NETBOOT_TFTP_ROOT/$file"
+                # (an eMMC copy is removed by uboot_on_exit)
+                [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
                 die "the UART capture ended at once (bridge busy or unreachable)"
             fi
         fi
@@ -961,11 +1098,12 @@ run_uboot() {
 
     # 6. arm: one env write, read back. Until the reboot is issued, any exit
     #    disarms, so an armed env never outlives this script.
-    ARMED=0
-    UB_FILE=$file
-    trap uboot_on_exit EXIT
     if [ "$route" = env ]; then
-        printf 'yako_once=%s\nyako_file=%s\nyako_server=%s\n' "$TOKEN" "$file" "$NETBOOT_SERVER" > "$TMP/arm"
+        if [ "$src" = net ]; then
+            printf 'yako_once=%s\nyako_src=net\nyako_file=%s\nyako_server=%s\n' "$TOKEN" "$file" "$NETBOOT_SERVER" > "$TMP/arm"
+        else
+            printf 'yako_once=%s\nyako_src=mmc\nyako_file=%s\n' "$TOKEN" "$UB_DIR/$file" > "$TMP/arm"
+        fi
         if [ "$DRY" = 0 ]; then ARMED=1; fi
         setenv_script "$TMP/arm" || die "fw_setenv (arm) failed" 5
         if [ "$DRY" = 0 ]; then
@@ -980,6 +1118,7 @@ run_uboot() {
     # 7. reboot; the ssh session ends with it
     b 'sync; sudo -n systemctl reboot' || true
     ARMED=0   # the board owns the one-shot now; U-Boot clears it
+    REBOOTED=1
     T_REBOOT=$(date +%s)
     meta t_reboot "$T_REBOOT"
     if [ "$DRY" = 1 ]; then
@@ -991,8 +1130,9 @@ run_uboot() {
         b 'sudo -n fw_printenv -n yako_once   # must print nothing'
         if [ "$BOARD" = imx8mp ]; then
             b "sudo -n od -A n -t x4 $NV"
-            echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
+            [ "$src" = net ] && echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
         fi
+        [ "$src" = mmc ] && [ "$PROBE" = 0 ] && b "sudo -n rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory (yakogl-tools record)"
         exit 0
     fi
@@ -1035,16 +1175,28 @@ run_uboot() {
     [ -n "$rcc" ] && meta rc_cycle "$rcc"
     stop_cap
     if [ "$BOARD" = imx8mp ]; then
-        grep -F " file=$file " "$NETBOOT_TFTP_LOG" > "$RD/tftp.txt" 2>/dev/null
-        [ -s "$RD/tftp.txt" ] || rm -f "$RD/tftp.txt"
+        if [ "$src" = net ]; then
+            grep -F " file=$file " "$NETBOOT_TFTP_LOG" > "$RD/tftp.txt" 2>/dev/null
+            [ -s "$RD/tftp.txt" ] || rm -f "$RD/tftp.txt"
+        fi
         snvs_read > "$RD/snvs.txt"
         [ -s "$RD/snvs.txt" ] && [ "$(wc -w < "$RD/snvs.txt")" = 4 ] || rm -f "$RD/snvs.txt"
     else
         console_from_ts
     fi
-    if [ -f "$NETBOOT_TFTP_ROOT/$file" ]; then
+    if [ "$src" = net ] && [ -f "$NETBOOT_TFTP_ROOT/$file" ]; then
         note "the image was never fetched; removed from the TFTP root" >&2
         rm -f "$NETBOOT_TFTP_ROOT/$file"
+    fi
+    if [ -n "${MMC_STAGED:-}" ]; then
+        if [ "$rcc" = 5 ]; then
+            meta cleanup "not done: Linux not back ($MMC_STAGED left on the eMMC)"
+        elif b "sudo -n rm -f $MMC_STAGED && ! test -e $MMC_STAGED"; then
+            meta cleanup "$MMC_STAGED removed (read back)"
+        else
+            meta cleanup "$MMC_STAGED NOT removed"
+            note "warning: $MMC_STAGED was not removed" >&2
+        fi
     fi
     finish
 }
@@ -1254,7 +1406,7 @@ cmd_run() {
     meta started "$(date '+%F %T')"
     note "$NAME: build $(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown) boot $BOOT ($ROW) image sha256 ${IMG_SHA:0:16} footprint ${footprint:-none}"
     note "$NAME: image build: $IMG_BUILD; zephyr: $IMG_ZEPHYR"
-    if [ "$PROBE" = 1 ] && [ "$BOOT" != uboot-tftp ]; then
+    if [ "$PROBE" = 1 ] && [ "${BOOT#uboot-}" = "$BOOT" ]; then
         # No image runs and the board is not rebooted: the pre-checks only.
         HOLD_MAX=${HOLD_MAX:-300}
         take_lock
@@ -1280,7 +1432,7 @@ cmd_run() {
         : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi}"
         run_tryboot
         ;;
-    uboot-tftp) run_uboot ;;
+    uboot-tftp | uboot-mmc) run_uboot ;;
     kexec-dev) run_kexec ;;
     esac
 }
@@ -1290,6 +1442,10 @@ cmd_status() {
     need_board
     case "$BOOT" in
     uboot-tftp) nb_status ;;
+    uboot-mmc)
+        nb_status
+        b "ls -l $STAGE_DIR 2>/dev/null; findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var"
+        ;;
     tryboot)
         b 'cat /proc/sys/kernel/random/boot_id; who; df -B1 --output=avail /boot/firmware | tail -1; ls -l /boot/firmware/yakogl-*.bin /boot/firmware/pi4run-*.bin 2>/dev/null; cat /boot/firmware/tryboot.txt 2>/dev/null'
         ;;
@@ -1306,9 +1462,12 @@ cmd_status() {
 cmd_setup() {
     need_board
     case "$BOOT:$VERB" in
-    uboot-tftp:install) nb_install ;;
-    uboot-tftp:uninstall) nb_uninstall ;;
+    uboot-*:install) nb_install ;;
+    uboot-*:uninstall) nb_uninstall ;;
     uboot-tftp:disarm) nb_disarm ;;
+    uboot-mmc:disarm)
+        b "sudo -n rm -f $STAGE_DIR/once-*.bin; ls $STAGE_DIR 2>/dev/null"
+        nb_disarm ;;
     tryboot:install | tryboot:uninstall)
         note "tryboot needs no install: config.txt stays the Linux default; each run writes tryboot.txt and puts it back" ;;
     tryboot:disarm)
@@ -1321,6 +1480,134 @@ cmd_setup() {
         b 'cat /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded'
         note "kexec-dev arms nothing that persists across a reboot; a loaded image (1 above) is someone's pending jump: find its owner" ;;
     esac
+}
+
+# ---- default / nodefault: the permanent boot (docs/standalone-boot.md) ---------------
+uboot_default() {
+    local st got w
+    if [ "$DRY" = 0 ]; then
+        st=$(check_install)
+        [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st): 'install' first"
+        st=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
+        [ -z "$st" ] || die "a one-shot is pending (yako_once=$st); find its owner, or 'disarm'"
+    else
+        b 'sudo -n fw_printenv   # the install must match the library; yako_once must be absent'
+    fi
+    mmc_where
+    mmc_stage default.bin
+    {
+        printf 'yako_default=%s\n' "$UB_DIR/default.bin"
+        # the count goes in the same write: never a moment with an unbounded default
+        if [ "$BOOTS_N" = forever ]; then printf 'yako_default_left=\n'; else printf 'yako_default_left=%s\n' "$BOOTS_N"; fi
+    } > "$TMP/default"
+    setenv_script "$TMP/default" || die "fw_setenv failed; the env is as it was (one write)" 5
+    w="$UB_DIR/default.bin"
+    [ "$BOOTS_N" = forever ] || w+=$'\n'"$BOOTS_N"
+    bget got 'sudo -n fw_printenv -n yako_default; sudo -n fw_printenv -n yako_default_left 2>/dev/null' "$w"
+    [ "$got" = "$w" ] || die "read-back of yako_default and its count: '$got', not '$w'" 5
+    if [ "$BOOTS_N" = forever ]; then
+        note "default set: from the next boot on, U-Boot loads $UB_DIR/default.bin from mmc $NB_MMC at every boot. Nothing was rebooted."
+    else
+        note "default set for $BOOTS_N boots: U-Boot loads $UB_DIR/default.bin at each of the next $BOOTS_N boots, then deletes the default and boots Linux. Nothing was rebooted."
+    fi
+}
+
+uboot_nodefault() {
+    local got
+    printf 'yako_default=\nyako_default_left=\n' > "$TMP/nodefault"
+    setenv_script "$TMP/nodefault" || die "fw_setenv failed" 5
+    bget got 'sudo -n fw_printenv -n yako_default 2>/dev/null' ''
+    [ -z "$got" ] || die "yako_default is still '$got'" 5
+    b "sudo -n rm -f $STAGE_DIR/default.bin"
+    note "no default: U-Boot boots the saved bootcmd (Linux) again"
+}
+
+pi4_default() {
+    local avail tmpd got cfg
+    STAGED=yakogl-default.bin
+    bget avail 'df -B1 --output=avail /boot/firmware | tail -1' 999999999999 || die "df on the board failed"
+    avail=${avail// /}
+    [[ $avail =~ ^[0-9]+$ ]] || die "cannot read the free space of /boot/firmware ('$avail')"
+    [ "$avail" -ge $((2 * IMG_SIZE)) ] || die "/boot/firmware has $avail bytes free, less than twice the image ($IMG_SIZE)"
+    if [ "$DRY" = 1 ]; then
+        b 'test ! -e /boot/firmware/config-linux.txt   # a default already set refuses'
+    else
+        b 'test ! -e /boot/firmware/config-linux.txt' || die "a default is already set (/boot/firmware/config-linux.txt exists): 'nodefault' first"
+    fi
+    bget tmpd 'mktemp -d' /tmp/DRY.board
+    [[ $tmpd == /tmp/* ]] || die "mktemp -d on the board failed"
+    b "cat > $tmpd/img" < "$IMG" || { b "rm -rf $tmpd"; die "copy to the board failed"; }
+    b "sudo install -m 0755 $tmpd/img /boot/firmware/$STAGED; r=\$?; rm -rf $tmpd; sync; exit \$r" ||
+        { b "sudo rm -f /boot/firmware/$STAGED"; die "install into /boot/firmware failed (removed again)"; }
+    bget got "sha256sum /boot/firmware/$STAGED" "$IMG_SHA  /boot/firmware/$STAGED"
+    [ "${got%% *}" = "$IMG_SHA" ] || { b "sudo rm -f /boot/firmware/$STAGED"; die "the copy reads back as '${got%% *}', not $IMG_SHA (removed)"; }
+    # Linux's config.txt is kept beside it, byte for byte, before config.txt changes
+    b 'sudo cp /boot/firmware/config.txt /boot/firmware/config-linux.txt && sync && cmp /boot/firmware/config.txt /boot/firmware/config-linux.txt' ||
+        { b "sudo rm -f /boot/firmware/$STAGED /boot/firmware/config-linux.txt"; die "keeping config.txt as config-linux.txt failed (nothing changed)"; }
+    cfg="# tools/board.sh: the permanent default (docs/standalone-boot.md); Linux's is config-linux.txt
+$(pi4_config "$STAGED")"
+    b 'sudo tee /boot/firmware/config.txt >/dev/null && sync' <<<"$cfg" ||
+        { pi4_nodefault; die "writing config.txt failed (Linux's put back)"; }
+    bget got 'cat /boot/firmware/config.txt' "$cfg"
+    [ "$got" = "$cfg" ] || { pi4_nodefault; die "config.txt reads back different (Linux's put back)"; }
+    note "default set: from the next boot on, the firmware boots /boot/firmware/$STAGED, every boot. Nothing was rebooted."
+}
+
+pi4_nodefault() {
+    if [ "$DRY" = 1 ]; then
+        b 'test -e /boot/firmware/config-linux.txt   # no default set: nothing to undo'
+    else
+        b 'test -e /boot/firmware/config-linux.txt' || { note "no default set (no /boot/firmware/config-linux.txt)"; return 0; }
+    fi
+    b 'sudo mv /boot/firmware/config-linux.txt /boot/firmware/config.txt && sudo rm -f /boot/firmware/yakogl-default.bin && sync' ||
+        die "restoring config.txt failed: look at /boot/firmware by hand" 5
+    note "no default: config.txt is Linux's again"
+}
+
+# default_undo: the exact undo of "default", printed before anything changes
+default_undo() {
+    note "UNDO, from Linux (before the reboot, or once Linux is back): tools/board.sh $BOARD nodefault"
+    case "$BOARD:$BOOTS_N" in
+    pi4:*)
+        note "UNDO, without Linux (a person): the SD card in a PC; on its FAT partition copy config-linux.txt over config.txt" ;;
+    *:forever)
+        note "UNDO, without Linux (a person at the U-Boot prompt$([ "$BOARD" = am62p ] && echo ", or the serial bridge: docs/standalone-boot.md")): setenv yako_default; saveenv; boot" ;;
+    *)
+        note "UNDO, without Linux: none needed: after $BOOTS_N boots that end in the image's watchdog reset, U-Boot deletes the default and boots Linux" ;;
+    esac
+}
+
+cmd_default() {
+    need_board
+    RD=$TMP   # meta() writes here; nothing of it is kept
+    if [ "$VERB" = default ]; then
+        [ $# -eq 2 ] || usage
+        IMG=$1 BOOTS_N=$2
+        case "$BOARD:$BOOTS_N" in
+        pi4:forever | am62p:forever | imx8mp:forever) ;;
+        pi4:*) die "pi4: the firmware has no boot count: 'forever' only, with a person (docs/standalone-boot.md)" 2 ;;
+        *:[1-9]) ;;
+        *) die "boots must be 1-9 or forever, not '$BOOTS_N'" 2 ;;
+        esac
+        if [ "$BOOTS_N" = forever ] && [ "${BOARD_PERSON_PRESENT:-0}" != 1 ]; then
+            die "'forever' makes the image every boot's: Linux comes back only through a person (docs/standalone-boot.md). Set BOARD_PERSON_PRESENT=1 when one is at the board$([ "$BOARD" != pi4 ] && echo ", or give a boot count (1-9): the board then returns to Linux by itself")."
+        fi
+        check_image "$IMG"
+        default_undo
+    else
+        [ $# -eq 0 ] || usage
+    fi
+    HOLD_MAX=${HOLD_MAX:-900}
+    take_lock
+    trap 'rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+    common_prechecks
+    case "$BOARD:$VERB" in
+    pi4:default) pi4_default ;;
+    pi4:nodefault) pi4_nodefault ;;
+    *:default) uboot_default ;;
+    *:nodefault) uboot_nodefault ;;
+    esac
+    exit 0
 }
 
 # ---- tree ----------------------------------------------------------------------------
@@ -1612,6 +1899,7 @@ case "$VERB" in
 status) cmd_status ;;
 install | uninstall | disarm) cmd_setup ;;
 probe | run) cmd_run "$@" ;;
+default | nodefault) cmd_default "$@" ;;
 tree) cmd_tree "$@" ;;
 tally) cmd_tally "$@" ;;
 diff) cmd_diff "$@" ;;
