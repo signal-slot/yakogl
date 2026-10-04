@@ -227,10 +227,16 @@ static void report_pending(const char *what)
 	       (unsigned int)(s_frees.held_peak_bytes >> 10));
 }
 
+void gc_backend_ds_report(char *buf, size_t cap); /* src/vivante/ds_cache.rs */
+
 /* osal_internal.h: the close record, every run; the OSAL stays up */
 void osal_zephyr_diag_print(void)
 {
+	char ds[160];
+
 	report_pending("");
+	gc_backend_ds_report(ds, sizeof(ds));
+	printk("osal(gc): %s\n", ds);
 }
 
 void osal_mem_line(char *buf, size_t n)
