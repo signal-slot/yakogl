@@ -83,6 +83,14 @@ results, gradients, offsets. `es300/texsize.frag` declared a
 `sampler2DArray` with no precision, which GLSL ES 3.00 4.5.4 does not
 allow; it now says `precision mediump sampler2DArray;`.
 
+**Derivatives and `%` on the GC7000 (online).** `dFdx` / `dFdy` are `dsx` /
+`dsy` with the source in SRC0 and SRC2, as the reference table and Mesa's
+etnaviv emit them; `dFdy`'s source is first scaled by the per-draw y scale
+`gl_FragCoord` takes (Mesa's nir_lower_wpos_ytransform `lower_ddy`).
+Integer `%` is the exact unsigned remainder of the magnitudes, negated for a
+negative dividend (Mesa's nir_lower_idiv); the machine's `imod` is never
+emitted, because no reference program contains one.
+
 ## Runtime flow (offline)
 
 ```

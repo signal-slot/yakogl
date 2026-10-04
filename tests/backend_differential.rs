@@ -287,6 +287,15 @@ fn a_loaded_element_keeps_its_components_whatever_lanes_are_read() {
     }
 }
 
+/// `%` over several divisors at once (see the source list below).
+const IMOD_FS: &str = "#version 300 es
+precision highp float;
+precision highp int;
+flat in ivec4 a;
+layout(location = 0) out vec4 c;
+void main() { c = vec4(a % ivec4(3, 4, 7, 1000)) + vec4(a.yzwx % ivec4(-5)); }
+";
+
 #[test]
 fn the_back_end_computes_what_the_ir_says() {
     let mut sources: Vec<(String, sema::Stage, String)> = SHC_SOURCE_TABLE
@@ -318,6 +327,10 @@ fn the_back_end_computes_what_the_ir_says() {
         ("es100/dynvec4.frag", sema::Stage::Fragment, include_str!("../tools/shaders/es100/dynvec4.frag")),
         ("es100/varyings15.vert", sema::Stage::Vertex, include_str!("../tools/shaders/es100/varyings15.vert")),
         ("es100/varyings15.frag", sema::Stage::Fragment, include_str!("../tools/shaders/es100/varyings15.frag")),
+        /* ES 3.00 `%` on signed integers, both signs: builtins::imod (the
+         * machine's own `imod` is not used; tests/encoding_vocabulary.rs).
+         * gl_test's es300/vid.vert takes gl_VertexID % 4. */
+        ("imod.frag", sema::Stage::Fragment, IMOD_FS),
     ] {
         sources.push((n.to_string(), st, t.to_string()));
     }
@@ -400,9 +413,11 @@ fn the_back_end_computes_what_the_ir_says() {
     /* +3 / +4 in both builds (2026-10-02): the six FemtoVG NO_SCISSOR programs
      * (tools/shaders/femtovg/<name>.nodiscard.noscissor.frag); 3 of them are compared and agree. */
     let es2 = cfg!(feature = "report-es2");
+    /* +1 in the ES 3.00 build (2026-10-04): imod.frag, `%` through
+     * builtins::imod, agrees (a mutation swapping its select arms differs). */
     assert_eq!(
         agreed + differed,
-        if es2 { 141 } else { 231 },
+        if es2 { 141 } else { 232 },
         "the compared population moved ({agreed} agree, {differed} differ)"
     );
     /* +18 with the cube level/bias arm (f3eeea0): the Quick 3D sources it lets
@@ -414,7 +429,11 @@ fn the_back_end_computes_what_the_ir_says() {
      * lightmapuvraster_300.frag and 16 qtparticleshaders_*.frag. */
     /* +3 in both builds (2026-10-02): the three FemtoVG NO_SCISSOR programs
      * that sample a texture (fill_image, fill_image_gradient and its conic). */
-    assert_eq!(skipped, if es2 { 28 } else { 93 }, "the skipped population moved: {skips:?}");
+    /* +11 skipped in the ES 3.00 build (2026-10-04), the table sources the
+     * GC7000 now selects (see above): textures (texelFetch, 3D and array
+     * look-ups), derivatives, gl_VertexID and gl_InstanceID, none of which
+     * the evaluator models or this harness supplies. */
+    assert_eq!(skipped, if es2 { 28 } else { 104 }, "the skipped population moved: {skips:?}");
     assert!(bad.is_empty(), "{} programs compute something other than their IR", bad.len());
 }
 

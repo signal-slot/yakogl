@@ -1725,6 +1725,35 @@ impl<'a> Sel<'a> {
         for (i, out) in sel.iter_mut().enumerate().take(n) {
             *out = Some(self.src(srcs[i])?);
         }
+        /* `dsx` and `dsy` read their one source from BOTH of their slots,
+         * SRC0 and SRC2: Mesa's etnaviv (MIT, etnaviv_compiler_nir.c,
+         * nir_intrinsic_ddx / ddy) sets `.src[0] = src, .src[1] = src`, and
+         * its second operand is the instruction's SRC2. With SRC2 empty the
+         * allocator refused every derivative (WrongSourceSlot(2)). */
+        /* `dFdy` is along GL's y, which the rasteriser counts the other way
+         * on a target this backend draws mirrored: the source is scaled by
+         * the same per-draw y scale `gl_FragCoord` takes (-1 there, 1
+         * elsewhere; `frag_coord`), as Mesa's nir_lower_wpos_ytransform
+         * turns `ddy(p)` into `ddy(p * transform.x)` (lower_ddy). */
+        if op == ir::AluOp::Fddy {
+            let mul = build::op_id("mul").ok_or(SelectError::Unsupported("the instruction set has no `mul`"))?;
+            let (reg, [ls, _]) = self.fragcoord_ytf_reg()?;
+            let mut scale = build::Src::reg(build::RGROUP_UNIFORM_0, reg);
+            scale.swizzle = [ls; 4];
+            let p = sel[0].ok_or(SelectError::Unsupported("a derivative with no operand"))?;
+            let v = VReg(self.next_vreg);
+            self.next_vreg += 1;
+            self.emit(
+                SelInstr::new(mul, OpType::F32)
+                    .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
+                    .operand(0, p)
+                    .operand(1, SelSrc::Physical(scale)),
+            )?;
+            sel[0] = Some(SelSrc::Virtual { v, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false });
+        }
+        if matches!(op, ir::AluOp::Fddx | ir::AluOp::Fddy) {
+            sel[1] = sel[0];
+        }
 
         /* The instruction's result is the value the instruction defines:
          * `instrs[i]` produces `ValueId(i)`, and `src` turns a use of it into
@@ -1786,7 +1815,7 @@ impl<'a> Sel<'a> {
         /* The unsigned divide's reciprocal scale is not an f20 immediate, so
          * it comes from the constant file (builtins::UDIV_RCP_SCALE_BITS). */
         let udiv_k = match op {
-            ir::AluOp::Udiv | ir::AluOp::Umod => {
+            ir::AluOp::Udiv | ir::AluOp::Umod | ir::AluOp::Imod => {
                 Some(self.const_file_src([builtins::UDIV_RCP_SCALE_BITS; 4], ir::SWIZZLE_IDENTITY)?)
             }
             _ => None,
@@ -1808,6 +1837,7 @@ impl<'a> Sel<'a> {
                 v
             };
             match udiv_k {
+                Some(k) if op == ir::AluOp::Imod => builtins::imod(dst, &flat[..n], k, &mut out, &mut fresh),
                 Some(k) => builtins::udiv(op == ir::AluOp::Umod, dst, &flat[..n], k, &mut out, &mut fresh),
                 None => builtins::lower(op, ty, dst, &flat[..n], &mut out, &mut fresh),
             }

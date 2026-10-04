@@ -2,7 +2,6 @@ armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES comp
 color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
-es100/deriv.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
 internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
@@ -12,20 +11,6 @@ mvp.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 mvp_color.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 passthrough.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 points.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
-qt/distancefieldoutlinetext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldoutlinetext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldshiftedtext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldshiftedtext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldtext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldtext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_cg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_lg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_rg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_tf_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapestroke_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapestroke_wireframe.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/wireframe.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
 qt3d/0119aeb276db508c.frag: 0:98: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
 qt3d/0259850a5e89b258.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
 qt3d/03ea06cbd3d83ae7.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
@@ -49,7 +34,6 @@ qt3d/3f757c299ffaca97.frag: online shaderc: the code generator refused this frag
 qt3d/406d87804c118db3.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
 qt3d/46fb3a49ad1099f8.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
 qt3d/4d310da2e4355d77.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
-qt3d/52660c1a3d65bec6.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
 qt3d/54d4e06ccc9820fc.vert: 0:28: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
 qt3d/5536659104efaa37.frag: online shaderc: the code generator refused this fragment shader: Alloc(OutOfRegisters(64))
 qt3d/56105a9f4a2e536b.vert: online shaderc: the code generator refused this vertex shader: Abi(LoadBalancingTempsUnmeasured { num_out: 5, temps: 24, temps_max: 16 })
@@ -133,7 +117,7 @@ qt3d/qtparticleshaders_9.vert: 0:2: 'GL_OVR_multiview2' : extension is not suppo
 qt3d/qtparticleshaders_91.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
 qt3d/qtparticleshaders_92.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
 qt3d/qtparticleshaders_94.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
-qt3d/ssao_300.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
+qt3d/ssao_300.frag: online shaderc: out of compiler memory on this fragment shader (0 bytes left in the scratch arena); raise shaderc::online::store::SCRATCH_BYTES
 texture.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 texture2.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 uniform_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

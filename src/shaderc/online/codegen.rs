@@ -1579,6 +1579,7 @@ mod lowered_ops {
         .expect("compiles")
     }
 
+    #[cfg(not(feature = "report-es2"))]
     fn compile_vs(src: &str) -> crate::shaderc::ShcShader {
         let _serial = super::super::store::test_lock();
         super::super::store::with_scratch(|s| {
@@ -1608,6 +1609,7 @@ mod lowered_ops {
     /// instruction writes `reg`? A source `t<reg>.<swizzle>` reads, for each
     /// lane the destination writes, the component its swizzle names there;
     /// the destination is the first operand after the opcode.
+    #[cfg(not(feature = "report-es2"))]
     fn read_before_written(lines: &[std::string::String], reg: u8, lane: char) -> bool {
         let name = std::format!("t{reg}.");
         for l in lines {
@@ -1634,6 +1636,7 @@ mod lowered_ops {
     }
 
     /// gl_test's `es300/vid.vert` (cases 43, 44, 45, 49, 57, 98).
+    #[cfg(not(feature = "report-es2"))]
     const VID_VS: &str = "#version 300 es\nlayout(location = 0) in vec4 pos;\nout vec4 v_col;\nvoid main()\n{\n    \
         int i = gl_VertexID % 4;\n    v_col = vec4(i == 0 || i == 3 ? 1.0 : 0.0, i == 1 || i == 3 ? 1.0 : 0.0, \
         i == 2 || i == 3 ? 1.0 : 0.0, 1.0);\n    gl_Position = pos;\n}\n";
@@ -1645,6 +1648,8 @@ mod lowered_ops {
     /// first instruction is `iabs.s32 t1._y__, void, void, t1.xxxx`). The
     /// online compiler refused it until this ("this built-in input is not
     /// selected yet", GitHub issue #11).
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn gl_vertex_id_is_x_of_the_register_after_the_attributes() {
         let _k = super::super::store::test_keep();
@@ -1662,6 +1667,8 @@ mod lowered_ops {
     /// `gl_InstanceID` is the `.y` of the same register (etnaviv_compiler_nir_ra.c
     /// pins load_instance_id to REG_TYPE_VIRT_SCALAR_Y, and the driver writes
     /// the instance id to `reg * 4 + 1`).
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn gl_instance_id_is_y_of_the_same_register() {
         let _k = super::super::store::test_keep();
@@ -1677,6 +1684,8 @@ mod lowered_ops {
     /// "After the attributes" counts locations, every column of a matrix
     /// attribute included: a vertex element feeds each column's register, so
     /// an id register below the last one would be overwritten by the fetch.
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn the_id_register_clears_every_attribute_column() {
         let _k = super::super::store::test_keep();
@@ -1694,14 +1703,23 @@ mod lowered_ops {
         assert_eq!(plain.viv.vs_id_in_reg, crate::shaderc::SHC_VIV_NO_REG, "absent stays absent");
     }
 
+    #[cfg(not(feature = "report-es2"))]
     const ARRAY_FS: &str = include_str!("../../../tools/shaders/es300/array.frag");
+    #[cfg(not(feature = "report-es2"))]
     const VOL_FS: &str = include_str!("../../../tools/shaders/es300/vol.frag");
+    #[cfg(not(feature = "report-es2"))]
     const TEXSIZE_FS: &str = include_str!("../../../tools/shaders/es300/texsize.frag");
 
     /// The fields of `ours` that differ from `reference`, leaving out the ones
     /// that name registers and lanes (the allocator's choice, not the
     /// encoding's).
+    #[cfg(not(feature = "report-es2"))]
     fn differing_fields(ours: &[u32; 4], reference: &[u32; 4]) -> std::vec::Vec<&'static str> {
+        differing_fields_but(ours, reference, &["DST", "TEX_SWIZ", "SRC0_REG", "SRC0"])
+    }
+
+    /// [`differing_fields`] leaving out `skip`.
+    fn differing_fields_but(ours: &[u32; 4], reference: &[u32; 4], skip: &[&str]) -> std::vec::Vec<&'static str> {
         let (a, b) =
             (decode_instr(ours).expect("ours decodes"), decode_instr(reference).expect("the reference decodes"));
         if a.op().name != b.op().name {
@@ -1711,7 +1729,7 @@ mod lowered_ops {
             .fields
             .iter()
             .enumerate()
-            .filter(|(_, f)| !matches!(f.name, "DST" | "TEX_SWIZ" | "SRC0_REG" | "SRC0"))
+            .filter(|(_, f)| !skip.contains(&f.name))
             .filter(|(k, _)| a.vals[*k] != b.vals[*k])
             .map(|(_, f)| f.name)
             .collect()
@@ -1729,6 +1747,8 @@ mod lowered_ops {
     /// table's for gl_test's `es300/array.frag` (case 42): `txf t2.___w,
     /// tex0.xxxw, t1.xyzw, 0.0:f20, 4352:s20`. Before this the online
     /// compiler refused the shader ("textureSize is not selected yet").
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn texel_fetch_is_the_reference_txf() {
         let _k = super::super::store::test_keep();
@@ -1750,6 +1770,8 @@ mod lowered_ops {
     /// coordinate: `texture()` a `texld`, `textureLod()` a `texldl`, as the
     /// reference compiled gl_test's `es300/vol.frag` (case 48) and
     /// `es300/array.frag` (case 42).
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn volume_and_array_lookups_are_the_2d_instructions() {
         let _k = super::super::store::test_keep();
@@ -1766,6 +1788,8 @@ mod lowered_ops {
     /// the unit), as the reference did for gl_test's `es300/texsize.frag`
     /// (case 46): u0 for `tex` on unit 0, u1 for `arr` on unit 1. Another
     /// level is refused by name.
+    /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn texture_size_reads_the_driver_constants_of_its_unit() {
         let _k = super::super::store::test_keep();
@@ -1794,6 +1818,53 @@ mod lowered_ops {
         assert!(
             std::format!("{err:?}").contains("textureSize at a level other than a literal 0 is not selected yet"),
             "{err:?}"
+        );
+    }
+
+    /// `dFdx` / `dFdy` are `dsx` / `dsy` with the source in SRC0 and SRC2
+    /// alike, as Mesa's etnaviv emits them (`.src[0] = src, .src[1] = src`)
+    /// and as the reference did in the GC7000 table (e.g. `dsx t8.xyz_,
+    /// t1.xyzw, void, t1.xyzw`, words below), and `dFdy`'s source is first
+    /// multiplied by the per-draw y scale `gl_FragCoord` takes (contents
+    /// 12), as nir_lower_wpos_ytransform's lower_ddy does (the reference,
+    /// etna_shc, runs no GL state tracker and has no such step). gl_test's
+    /// `es100/deriv.frag` (case 138) was refused with
+    /// Alloc(WrongSourceSlot(2)) before this, as were 14 Qt derivative
+    /// shaders.
+    #[test]
+    fn derivatives_fill_both_slots_and_dfdy_takes_the_y_scale() {
+        let _k = super::super::store::test_keep();
+        let sh = compile_fs(include_str!("../../../tools/shaders/es100/deriv.frag"));
+        let lines = listing(&sh);
+        let ds: std::vec::Vec<&std::string::String> =
+            lines.iter().filter(|l| l.starts_with("dsx") || l.starts_with("dsy")).collect();
+        assert_eq!(ds.len(), 4, "dFdx twice, dFdy twice: {lines:#?}");
+        for l in &ds {
+            let ops: std::vec::Vec<&str> = l.split_once(' ').map_or("", |(_, r)| r).split(',').map(str::trim).collect();
+            assert_eq!(ops.len(), 4, "{l}");
+            assert_eq!(ops[2], "void", "SRC1 stays empty: {l}");
+            assert_eq!(ops[1], ops[3], "the source in SRC0 and SRC2: {l}");
+        }
+        /* Decode-back: every field but the registers and lanes equals the
+         * reference's dsx and dsy (and a dsx is not a dsy). */
+        const REF_DSX: [u32; 4] = [0x0388_1007, 0x3900_1804, 0x0000_0000, 0x0039_0018];
+        const REF_DSY: [u32; 4] = [0x0381_1008, 0x3900_1804, 0x0000_0000, 0x0039_0018];
+        let regs = ["DST", "SRC0_REG", "SRC0", "SRC2_REG", "SRC2"];
+        let ws = words(&sh);
+        for (name, reference, other) in [("dsx", REF_DSX, REF_DSY), ("dsy", REF_DSY, REF_DSX)] {
+            let ours = ws.iter().find(|w| decode_instr(w).expect("decodes").op().name == name).expect("emitted");
+            assert_eq!(differing_fields_but(ours, &reference, &regs), std::vec::Vec::<&str>::new(), "{name}");
+            assert!(!differing_fields_but(ours, &other, &regs).is_empty(), "{name} is not the other one");
+        }
+        /* the y scale is in the constant file, and a mul reads it */
+        let scale = sh.viv.const_contents().iter().position(|c| *c == crate::shaderc::SHC_VIV_CONST_FRAGCOORD_Y_SCALE);
+        let scale = scale.expect("dFdy reads the y scale the driver fills");
+        let name = std::format!("u{}.{}", scale / 4, ['x', 'y', 'z', 'w'][scale % 4]);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("mul") && l.contains(&std::format!("{name}{0}{0}{0}", &name[name.len() - 1..]))),
+            "a mul by {name}: {lines:#?}"
         );
     }
 

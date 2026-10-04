@@ -170,7 +170,10 @@ pub fn native(op: AluOp, ty: OpType) -> Option<&'static str> {
          * 32-bit GLSL `*` means; `imulhi0` would be the other half. */
         Iadd => "add",
         Imul => "imullo0",
-        Imod => "imod",
+        /* No `Imod => "imod"`: neither the reference compiler nor Mesa's
+         * etnaviv emits `imod` (nir_lower_idiv lowers every integer
+         * remainder), so what it computes on this core is not established.
+         * [`imod`] lowers it through the exact unsigned remainder. */
         Iand => "and",
         Ior => "or",
         Ixor => "xor",
@@ -697,6 +700,54 @@ pub fn udiv(
     Ok(())
 }
 
+/// `a % b` on 32-bit signed integers, one lane at a time over the lanes
+/// `dst` writes: the exact unsigned remainder of the magnitudes ([`udiv`]),
+/// negated where `a` is negative.
+///
+/// Mesa `nir_lower_idiv.c` (MIT, read and transcribed), which etnaviv runs
+/// for every integer remainder: `emit_idiv` takes `irem` as
+/// `r = umod(|a|, |b|)` and `a < 0 ? -r : r`. GLSL ES 3.00 section 5.9
+/// leaves `%` undefined when either operand is negative, so the sign rule
+/// is Mesa's choice, not the language's. The machine's own `imod` is not
+/// used: no reference program contains one (`tests/encoding_vocabulary.rs`).
+pub fn imod(
+    dst: SelDst,
+    srcs: &[SelSrc],
+    k: SelSrc,
+    out: &mut dyn FnMut(SelInstr),
+    fresh: &mut dyn FnMut() -> VReg,
+) -> Result<(), LowerError> {
+    if srcs.len() != 2 {
+        return Err(LowerError::Arity { op: AluOp::Imod, want: 2, got: srcs.len() });
+    }
+    let lanes = match dst {
+        SelDst::Virtual { write_mask, .. } | SelDst::Fixed { write_mask, .. } => write_mask,
+        SelDst::Address { .. } => return Err(LowerError::Unsupported(AluOp::Imod)),
+    };
+    let x = |v: VReg| SelSrc::Virtual { v, swizzle: [0; 4], neg: false, abs: false };
+    let negx = |v: VReg| SelSrc::Virtual { v, swizzle: [0; 4], neg: true, abs: false };
+    let one = |v: VReg| SelDst::Virtual { v, write_mask: 0x1 };
+    let s32 = OpType::S32;
+    for c in 0..4usize {
+        if lanes & (1 << c) == 0 {
+            continue;
+        }
+        let (a, b) = (lane(srcs[0], c), lane(srcs[1], c));
+        let (va, vb, m, n, sa) = (fresh(), fresh(), fresh(), fresh(), fresh());
+        out(inst("iabs", s32)?.dst(one(va)).operand(0, a));
+        out(inst("iabs", s32)?.dst(one(vb)).operand(0, b));
+        udiv_lane(true, one(m), x(va), x(vb), lane(k, c), out, fresh)?;
+        out(inst("add", s32)?.dst(one(n)).operand(0, imm(Src::imm_s20(0))?).operand(1, negx(m)));
+        compare(Cond::Lt, s32, one(sa), a, imm(Src::imm_s20(0))?, out)?;
+        out(inst_c("select", OpType::U32, Cond::Nz)?
+            .dst(lane_dst(dst, c))
+            .operand(0, x(sa))
+            .operand(1, x(n))
+            .operand(2, x(m)));
+    }
+    Ok(())
+}
+
 /// One lane of [`udiv`]. Every scratch value is lane x, written with mask
 /// 0x1 and read `.xxxx`, because `imullo0` computes lane x only.
 fn udiv_lane(
@@ -717,9 +768,12 @@ fn udiv_lane(
     };
     /* b as a value of its own, so the negate below is a source modifier on a
      * register (Ineg's `ADD 0, -x`, which is the one transcribed assumption
-     * Ineg already names), whatever form `b` arrived in. */
+     * Ineg already names), whatever form `b` arrived in. The copy is the
+     * untyped `mov` every reference program copies integers with (`mov
+     * t1.xy__, void, void, u1.xxxx` in es300/vol.frag's): no reference
+     * program contains a `mov.u32` (tests/encoding_vocabulary.rs). */
     let (vb, db) = one(fresh);
-    out(inst("mov", u32_)?.dst(db).operand(0, b));
+    out(inst("mov", f32_)?.dst(db).operand(0, b));
     let (fb, dfb) = one(fresh);
     out(inst("i2f", u32_)?.dst(dfb).operand(0, x(vb)));
     let (rb, drb) = one(fresh);
@@ -947,7 +1001,7 @@ mod tests {
     /// The operations [`lower`] does not take because their sequence needs a
     /// constant-file source it cannot make: [`udiv`] takes it from the
     /// caller. Editing this list is the only way one can be added.
-    const TAKES_A_CONSTANT: [AluOp; 2] = [AluOp::Udiv, AluOp::Umod];
+    const TAKES_A_CONSTANT: [AluOp; 3] = [AluOp::Udiv, AluOp::Umod, AluOp::Imod];
 
     fn vsrc(v: u32) -> SelSrc {
         SelSrc::Virtual { v: VReg(v), swizzle: XYZW, neg: false, abs: false }
@@ -1069,18 +1123,17 @@ mod tests {
                     let k = SelSrc::Physical(Src::reg(super::super::build::RGROUP_UNIFORM_0, 0));
                     let mut n = 0usize;
                     let mut next = 100u32;
-                    udiv(
-                        op == AluOp::Umod,
-                        SelDst::Virtual { v: VReg(0), write_mask: 0xf },
-                        &srcs[..2],
-                        k,
-                        &mut |_| n += 1,
-                        &mut || {
-                            next += 1;
-                            VReg(next)
-                        },
-                    )
-                    .expect("udiv lowers it");
+                    let dst = SelDst::Virtual { v: VReg(0), write_mask: 0xf };
+                    let mut count = |_| n += 1;
+                    let mut fresh = || {
+                        next += 1;
+                        VReg(next)
+                    };
+                    if op == AluOp::Imod {
+                        imod(dst, &srcs[..2], k, &mut count, &mut fresh).expect("imod lowers it");
+                    } else {
+                        udiv(op == AluOp::Umod, dst, &srcs[..2], k, &mut count, &mut fresh).expect("udiv lowers it");
+                    }
                     assert!(n > 0, "{op:?} lowered to nothing");
                     with_constant += 1;
                 }

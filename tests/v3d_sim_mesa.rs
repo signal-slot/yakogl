@@ -2272,10 +2272,14 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     // refuses the corpus's GLSL ES 3.00 sources in the front end (pp.rs
     // out_of_scope), so fewer pairs are tried there; each build has its own
     // pins, both measured (2026-09-24, origin/main b96e77df plus this change).
+    // 2026-10-04 (work/online-only, ES 3 build): es300/texsize.frag now
+    // declares its sampler2DArray's precision (GLSL ES 3.00 4.5.4), so the
+    // front end takes it: tried +1, as unmodelled (uniform contents 47,
+    // Mesa's texture size), not tried -1.
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (pairs.len(), tried, agree.len(), n_un, n_nt),
-        if es2 { (141, 78, 78, 0, 63) } else { (141, 100, 98, 2, 41) },
+        if es2 { (141, 78, 78, 0, 63) } else { (141, 101, 98, 3, 40) },
         "the population moved; re-derive the pins"
     );
     assert_eq!(retried.len(), if es2 { 2 } else { 5 }, "the positive-input retries moved: {retried:?}");
@@ -2906,10 +2910,13 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // shaders.loops basic cases, and ret_dynloop_never (dEQP
     // return_in_dynamic_loop_never_fragment). All three disagreed with the IR before the
     // loop end's copies became one parallel copy (select.rs phi_copies).
+    // 2026-10-04 (work/online-only, ES 3 build): es300/texsize.frag's
+    // precision fix moves it from the front end's refusals to NotYet
+    // ("textureSize of a 3D or array sampler", the V3D's own gap).
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (reals.len(), front_end, n_not_yet, n_other, compiled.len()),
-        if es2 { (324, 126, 0, 0, 198) } else { (324, 65, 5, 0, 254) },
+        if es2 { (324, 126, 0, 0, 198) } else { (324, 64, 6, 0, 254) },
         "our compiler's coverage moved; re-derive the pins"
     );
     assert_eq!(

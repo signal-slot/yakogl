@@ -82,6 +82,7 @@ fn every_instruction_form_we_emit_is_one_the_reference_emits() {
         ("es100/intlit.frag", SHC_STAGE_FRAGMENT, include_str!("../tools/shaders/es100/intlit.frag")),
         ("es100/loopcarry.frag", SHC_STAGE_FRAGMENT, include_str!("../tools/shaders/es100/loopcarry.frag")),
         ("es100/ifoutput.frag", SHC_STAGE_FRAGMENT, include_str!("../tools/shaders/es100/ifoutput.frag")),
+        ("es100/deriv.frag", SHC_STAGE_FRAGMENT, include_str!("../tools/shaders/es100/deriv.frag")),
     ] {
         sources.push((n.to_string(), st, t.to_string()));
     }

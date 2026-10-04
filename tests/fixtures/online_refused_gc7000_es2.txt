@@ -2,7 +2,6 @@ armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES comp
 color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
-es100/deriv.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
 es300/array.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/bands.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 es300/cube.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
@@ -42,20 +41,6 @@ mvp.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 mvp_color.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 passthrough.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 points.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
-qt/distancefieldoutlinetext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldoutlinetext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldshiftedtext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldshiftedtext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldtext_a_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/distancefieldtext_fwidth.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_cg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_lg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_rg_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapecurve_tf_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapestroke_derivatives.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/shapestroke_wireframe.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
-qt/wireframe.frag: online shaderc: the code generator refused this fragment shader: Alloc(WrongSourceSlot(2))
 qt3d/0119aeb276db508c.frag: 0:98: 'sampler2DArray' : a GLSL ES 3.00 type, and this source is ES 1.00
 qt3d/01e095b49a4ca6d8.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 qt3d/0259850a5e89b258.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0

@@ -107,7 +107,11 @@ fn no_selected_instruction_reads_a_lane_nothing_writes() {
     /* +6 in both builds (2026-10-02): the six FemtoVG NO_SCISSOR programs
      * (tools/shaders/femtovg/<name>.nodiscard.noscissor.frag, appended to the
      * GC7000 table), 0 undefined reads among them. */
-    assert_eq!(checked, if es2 { 165 } else { 322 }, "the population moved: {checked} programs selected");
+    /* +9 in the ES 3.00 build (2026-10-04): the GC7000 now selects
+     * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
+     * dsy (SRC2) and `%` (builtins::imod), so more table sources get
+     * through; 0 undefined reads among them. */
+    assert_eq!(checked, if es2 { 165 } else { 331 }, "the population moved: {checked} programs selected");
     assert_eq!(source_undefined, 1, "the one source-level undefined lane (imageparticle_tabled's tt.y) moved");
     assert!(bad.is_empty(), "{} reads of lanes nothing computes", bad.len());
 }

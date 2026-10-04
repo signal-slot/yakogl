@@ -301,10 +301,14 @@ fn moving_a_value_to_another_lane_changes_no_output() {
      * reader. The report-es2 population is unchanged. */
     /* +3 / +4 in both builds (2026-10-02): the six FemtoVG NO_SCISSOR programs
      * (tools/shaders/femtovg/<name>.nodiscard.noscissor.frag); 4 of them move a lane. */
+    /* +8 in the ES 3.00 build (2026-10-04): the GC7000 now selects
+     * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
+     * dsy (SRC2) and `%` (builtins::imod), so more table sources get
+     * through; every one runs (the interpreter models txf, dsx, dsy and the front-facing register now) and matches. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         with_moves,
-        if es2 { 58 } else { 127 },
+        if es2 { 58 } else { 135 },
         "the population moved: {with_moves} programs move a lane; re-derive the pin"
     );
     assert_eq!(
