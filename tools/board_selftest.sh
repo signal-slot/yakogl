@@ -6,7 +6,8 @@
 #
 #   tools/board_selftest.sh
 #
-# 1. Every verb on every board and backend under --dry-run, against fake
+# 1. Every verb on every board and backend under --dry-run (uboot-mmc, and
+#    default/nodefault, included), against fake
 #    images, with ssh, scp, curl, ping, fuser, flock, stty, sudo and kexec
 #    replaced by stubs that only record that they were called: each verb must
 #    exit 0 and print its board commands as "DRY ..." lines (the boot command
@@ -39,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=151
+WANT_CHECKS=194
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -119,8 +120,10 @@ echo "== 1. every verb on every board under --dry-run (stubs record any board, T
 # board:backend:the backend's boot command, as the dry run prints it
 COMBOS='pi4:tryboot:sudo reboot "0 tryboot"
 am62p:uboot-tftp:sync; sudo -n systemctl reboot
+am62p:uboot-mmc:sync; sudo -n systemctl reboot
 am62p:kexec-dev:kexec_run.sh
 imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
+imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
 imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash'
 while IFS=: read -r board boot bootcmd; do
     img="$S/img/$board.bin"
@@ -157,6 +160,68 @@ check "the board layer's 'board: watchdog armed' marker is accepted" [ $? = 0 ]
 out=$(dry am62p run "$S/img/am62p.bin" "$S/logs" 2>&1; BOARD_BOOT=kexec-dev dry am62p status 2>&1)
 check "am62p: no /dev/pvrgpu command in run or kexec-dev status (pvrgpu.ko retired)" \
     eval '! grep -q "/dev/pvrgpu" <<<"$out" && grep -q "board_lock.sh" <<<"$out"'
+
+# uboot-mmc (docs/standalone-boot.md): U-Boot loads the image from the eMMC,
+# where Linux staged it; no TFTP server, no network
+for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1; do
+    IFS=: read -r board mdev mpart mlinux <<<"$bm"
+    out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
+    check "$board uboot-mmc run: staged in /var/yakogl on $mlinux, read back from the eMMC, no TFTP canary" \
+        eval 'grep -q "findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var/yakogl" <<<"$out" &&
+              grep -q "cat > /var/yakogl/once-.*\.bin\.part" <<<"$out" && grep -q "drop_caches.*sha256sum /var/yakogl/once-" <<<"$out" &&
+              grep -q "mmc_where\|mmc $mdev:$mpart\|$mlinux" <<<"$out$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)" &&
+              ! grep -q "curl\|canary\|TFTP_ROOT" <<<"$out"'
+    check "$board uboot-mmc run: armed yako_src=mmc with the file as U-Boot names it, removed after the cycle" \
+        eval 'grep -q "^    yako_src=mmc$" <<<"$out" && grep -q "^    yako_file=/ostree/deploy/torizon/var/yakogl/once-.*\.bin$" <<<"$out" &&
+              grep -q "rm -f /var/yakogl/once-" <<<"$out" && ! grep -q "yako_server" <<<"$out"'
+    out=$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)
+    check "$board install: yako_mmc loads with ext4load from mmc $mdev:$mpart; the hook runs yako_\${yako_src}, then the default" \
+        eval 'grep -qF "yako_mmc=if ext4load mmc $mdev:$mpart \${yako_addr} \${yako_file}; then" <<<"$out" &&
+              grep -qF "run yako_\${yako_src};" <<<"$out" && grep -qF "if test -n \"\${yako_default}\"; then" <<<"$out"'
+    out=$(BOARD_BOOT=uboot-mmc dry "$board" probe "$S/logs" 2>&1)
+    check "$board uboot-mmc probe: a real cycle, armed, nothing staged" \
+        eval 'grep -q "systemctl reboot" <<<"$out" && grep -q "^    yako_once=probe-" <<<"$out" && ! grep -q "cat > /var/yakogl" <<<"$out"'
+    out=$(dry "$board" default "$S/img/$board.bin" 2>&1)
+    rc=$?
+    check "$board default without BOARD_PERSON_PRESENT=1: rc 3, nothing done" \
+        eval '[ "$rc" = 3 ] && grep -q "BOARD_PERSON_PRESENT=1" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
+    out=$(BOARD_PERSON_PRESENT=1 dry "$board" default "$S/img/$board.bin" 2>&1)
+    rc=$?
+    check "$board default: rc 0, default.bin staged on the eMMC and read back, yako_default written and read back, no reboot" \
+        eval '[ "$rc" = 0 ] && grep -q "cat > /var/yakogl/default.bin.part" <<<"$out" && grep -q "sha256sum /var/yakogl/default.bin" <<<"$out" &&
+              grep -q "^    yako_default=/ostree/deploy/torizon/var/yakogl/default.bin$" <<<"$out" &&
+              grep -q "fw_printenv -n yako_default" <<<"$out" && ! grep -q "systemctl reboot" <<<"$out"'
+    out=$(dry "$board" nodefault 2>&1)
+    rc=$?
+    check "$board nodefault: yako_default removed and read back, default.bin removed" \
+        eval '[ "$rc" = 0 ] && grep -q "fw_setenv yako_default$" <<<"$out" && grep -q "rm -f /var/yakogl/default.bin" <<<"$out"'
+    out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1; BOARD_BOOT=uboot-tftp dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
+    check "$board run (both U-Boot backends) checks that no default is set" \
+        eval '[ "$(grep -c "yako_once and yako_default must be absent" <<<"$out")" = 2 ]'
+done
+out=$(NETBOOT_ROUTE=typed BOARD_BOOT=uboot-mmc dry am62p run "$S/img/am62p.bin" "$S/logs" 2>&1)
+rc=$?
+check "am62p uboot-mmc refuses the typed route (rc 2)" eval '[ "$rc" = 2 ] && grep -q "typed is a TFTP route" <<<"$out"'
+out=$(dry pi4 default "$S/img/pi4.bin" 2>&1)
+rc=$?
+check "pi4 default without BOARD_PERSON_PRESENT=1: rc 3" eval '[ "$rc" = 3 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
+out=$(BOARD_PERSON_PRESENT=1 BOARD_HDMI_TIMINGS="1 2 3" dry pi4 default "$S/img/pi4.bin" 2>&1)
+rc=$?
+check "pi4 default: rc 0, Linux's config.txt kept as config-linux.txt first, config.txt = the tryboot lines naming yakogl-default.bin, no reboot" \
+    eval '[ "$rc" = 0 ] && grep -q "cp /boot/firmware/config.txt /boot/firmware/config-linux.txt" <<<"$out" &&
+          grep -q "sha256sum /boot/firmware/yakogl-default.bin" <<<"$out" && grep -q "tee /boot/firmware/config.txt" <<<"$out" &&
+          ! grep -q "0 tryboot" <<<"$out"'
+# the default's config.txt and a tryboot's tryboot.txt are the same lines (pi4_config), past the comment
+eval "$(sed -n '/^pi4_config() {/,/^}/p' "$B")"
+BOARD_HDMI_TIMINGS="1 2 3"
+check "pi4_config: [all], the kernel, arm_64bit, the UART, and the panel's hdmi lines when set" \
+    eval '[ "$(pi4_config k.bin | tr "\n" "|")" = "[all]|kernel=k.bin|arm_64bit=1|enable_uart=1|uart_2ndstage=1|hdmi_group=2|hdmi_mode=87|hdmi_timings=1 2 3|" ]'
+out=$(dry pi4 nodefault 2>&1)
+rc=$?
+check "pi4 nodefault: config-linux.txt put back as config.txt, the image removed" \
+    eval '[ "$rc" = 0 ] && grep -q "mv /boot/firmware/config-linux.txt /boot/firmware/config.txt" <<<"$out"'
+out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
+check "pi4 tryboot run refuses when a default is set (config-linux.txt)" grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out"
 
 # tree: the three table forms
 mkdir -p "$S/pi4img/AA/zephyr" "$S/pi4img/BB/zephyr" "$S/amimg/img1-t/zephyr" "$S/amimg/img2-t/zephyr"
@@ -446,6 +511,39 @@ rtiproof rtiproof-691c3e985b1f068d-1791013366 0
 selfarm selfarmC-f047d34c0b11cb05-1791013634 0
 probe probe-none-1791009398 1
 CAPS
+
+# the same captures through the eMMC route: U-Boot's ext4load line in place of
+# the TFTP lines (the rest of each capture unchanged)
+d="$S/am62pm/20261003-1200-selfarm-0123abcd"
+mkrun "$d" board=am62p boot=uboot-mmc name=selfarm token=selfarmC-f047d34c0b11cb05-1791013634 probe=0 back=1 t_reboot=100 t_back=170
+# (lines 55-72: the network bring-up, DHCP and TFTP between "cleared" and the byte count)
+sed -E '55,72d; s/ Bytes transferred = ([0-9]+) .*/ \1 bytes read in 360 ms (43 MiB\/s)/' \
+    "$TD/am62p-netboot-selfarm-20261003.uart.ts" > "$d/console.ts"
+check "am62p uboot-mmc, the selfarm capture with ext4load's line: boot_verdict done, verdict failed (1 of 38), as over TFTP" \
+    eval 'grep -q " 16234368 bytes read in " "$d/console.ts" && ! grep -q "TFTP from" "$d/console.ts" &&
+          says am62p "$d" "rc=4 verdict=failed boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all"'
+d="$S/am62pm/20261003-1200-probe-probe"
+mkrun "$d" board=am62p boot=uboot-mmc name=probe token=probe-none-1791009398 probe=1 back=1 t_reboot=100 t_back=170
+sed -E '55,73d; s/yakogl-netboot: fetch failed, booting Linux/yakogl-netboot: mmc load failed, booting Linux/' \
+    "$TD/am62p-netboot-probe-20261003.uart.ts" > "$d/console.ts"
+check "am62p uboot-mmc probe: U-Boot's 'mmc load failed' line -> boot_verdict load_failed, probe_ok rc 0" \
+    eval 'grep -q "mmc load failed" "$d/console.ts" && ! grep -q "DHCP client" "$d/console.ts" &&
+          says am62p "$d" "rc=0 verdict=probe_ok boot=uboot-mmc row boot_verdict=load_failed"'
+sed -i 's/mmc load failed/fetch failed/' "$d/console.ts"
+check "am62p uboot-mmc probe without the 'mmc load failed' line: probe_failed (TFTP's line is not evidence for the eMMC)" \
+    says am62p "$d" "verdict=probe_failed"
+d="$S/imxm/20261003-1200-m1-0123abcd"
+mkrun "$d" board=imx8mp boot=uboot-mmc name=m1 probe=0 back=1 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000"
+echo "594b0202 00000001 00000001 00000000" > "$d/snvs.txt"
+check "imx8mp uboot-mmc: an APP pass record after the cycle -> done, a row, boot_verdict cycled, no tftp field" \
+    eval 'says imx8mp "$d" "rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:APP" && ! says imx8mp "$d" "tftp="'
+echo "00000000 00000000 00000000 00000000" > "$d/snvs.txt"
+check "imx8mp uboot-mmc: the record still the cleared one -> no_record rc 4" says imx8mp "$d" "rc=4 verdict=no_record"
+mkrun "$d" board=imx8mp boot=uboot-mmc name=probe probe=1 back=1 up=40 "rec0=00000000 00000000 00000000 00000000"
+check "imx8mp uboot-mmc probe: back, the one-shot cleared, the record untouched -> probe_ok rc 0" says imx8mp "$d" "rc=0 verdict=probe_ok"
+mkrun "$d" board=imx8mp boot=uboot-mmc name=probe probe=1 back=1 rc_cycle=6 up=40 "rec0=00000000 00000000 00000000 00000000"
+check "imx8mp uboot-mmc probe: yako_once still set after the cycle (the hook never ran) -> not ok, rc 6" \
+    says imx8mp "$d" "rc=6 verdict=probe_failed"
 
 # a live run derives console.txt from the bridge's console.ts (board.sh's own console_from_ts)
 eval "$(sed -n '/^console_from_ts() {/,/^}/p' "$B")"

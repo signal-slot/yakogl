@@ -23,9 +23,10 @@ One GPU per build:
 | Toradex Verdin iMX8M Plus | NXP i.MX 8M Plus | Vivante GC7000UL | `gpu-vivante` |
 | Raspberry Pi 4 | Broadcom BCM2711 | Broadcom V3D 4.2 | `gpu-v3d` |
 
-Each board boots a Zephyr image from its bootloader: U-Boot over TFTP on the two
-Verdin boards, the firmware's tryboot on the Raspberry Pi 4. Software rendering is out
-of scope: every result here comes from the real GPU.
+Tests boot a Zephyr image once from the bootloader: U-Boot over TFTP on the two Verdin
+boards, the firmware's tryboot on the Raspberry Pi 4. Each board also boots standalone,
+from its own eMMC or SD card with no host and no network, as `docs/standalone-boot.md`
+describes. Software rendering is out of scope: every result here comes from the real GPU.
 
 ## Status
 

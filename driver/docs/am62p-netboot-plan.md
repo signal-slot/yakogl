@@ -89,7 +89,9 @@ bootcmd           = run yako_hook; <the bootcmd as it was>
 Each value is one line in the env; the line breaks above are only for reading.
 `tools/uboot-netboot-lib.sh` (shared with the i.MX8MP runner,
 `imx8mp-netboot-plan.md`) holds the exact strings, and `tools/board.sh`
-checks the board's copy against them before every run.
+checks the board's copy against them before every run. The hook has since
+grown a second source and a permanent default (`yako_src`, `yako_mmc`,
+`yako_default`): `docs/standalone-boot.md` shows the current form.
 
 With `yako_once` empty, the hook does nothing and the old `bootcmd` runs as
 before. Install and uninstall each change `bootcmd` once. Uninstall writes

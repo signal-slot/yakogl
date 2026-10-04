@@ -1,38 +1,50 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# uboot-netboot-lib.sh - the U-Boot side of the one-shot netboot, sourced by
-# tools/board.sh (its uboot-tftp backend, and the primitives every backend
-# uses). SOURCE it, do not run it.
+# uboot-netboot-lib.sh - the U-Boot side of the one-shot boot, sourced by
+# tools/board.sh (its uboot-tftp and uboot-mmc backends, and the primitives
+# every backend uses). SOURCE it, do not run it.
 #
 # The design (the hook in front of bootcmd, the one-shot variable U-Boot
 # deletes and saves before it loads anything, the failure analysis) is
 # driver/docs/am62p-netboot-plan.md section 2; the i.MX8MP's differences are in
-# driver/docs/imx8mp-netboot-plan.md. The hook strings are the same on both
-# boards; only the load address differs. An installed hook is compared with
-# these strings byte for byte, so changing one means re-installing on every
-# board that has it.
+# driver/docs/imx8mp-netboot-plan.md; the eMMC source (yako_mmc) and the
+# permanent default (yako_default) are docs/standalone-boot.md. The hook
+# strings are the same on both boards; only the load address and the eMMC
+# partition differ. An installed hook is compared with these strings byte for
+# byte; "install" upgrades an older hook in place (one env write).
 #
 # The runner sets, before sourcing:
 #   NB_TAG        its name, the prefix of every message ("board.sh am62p")
 #   NB_RECORDS    where "install" saves the env, relative to the main
 #                 checkout ("records/am62p/netboot"); NETBOOT_BACKUP_DIR wins
 #   NB_WATCHDOG   what the image must arm, for the refusal text ("the RTI")
+#   NB_MMC        U-Boot's <dev>:<part> of the eMMC partition that holds the
+#                 staged image ("0:1"; "-" on a board without U-Boot)
 #   YAKO_ADDR     the load and entry address (the image's link address)
 #   DRY           1 for --dry-run: every board, TFTP-root and host action is
 #                 printed and none is run (board reads included)
 #   REPO          the repository root
-# and gets: YAKO_HOOK YAKO_NET HOOK_PREFIX SSH_OPTS TMP and the functions
-# die b act need_board env_get check_install setenv_script nb_status
+# and gets: YAKO_HOOK YAKO_NET YAKO_MMC HOOK_PREFIX SSH_OPTS TMP and the
+# functions die b act need_board env_get check_install setenv_script nb_status
 # nb_install nb_uninstall nb_disarm nb_check_image nb_tftp_canary.
 
-: "${NB_TAG:?}" "${NB_RECORDS:?}" "${NB_WATCHDOG:?}" "${YAKO_ADDR:?}" "${DRY:?}" "${REPO:?}"
+: "${NB_TAG:?}" "${NB_RECORDS:?}" "${NB_WATCHDOG:?}" "${NB_MMC:?}" "${YAKO_ADDR:?}" "${DRY:?}" "${REPO:?}"
 
 die() { echo "$NB_TAG: $1" >&2; exit "${2:-3}"; }
 
 # The U-Boot side, exactly as installed. fw_setenv stores ${...} literally;
 # U-Boot's shell expands it when the variable runs.
-YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-netboot: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-netboot: cleared; run yako_net; else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi'
+#  - yako_hook: the one-shot first. When yako_once is set, U-Boot clears it and
+#    saves the env BEFORE it loads anything, then runs yako_<yako_src> (net:
+#    TFTP, mmc: the eMMC; the same "run bootcmd_${target}" form as the distro
+#    boot). Then, whatever the one-shot did, the permanent default: when
+#    yako_default names a file, yako_mmc loads and starts it. A load that fails
+#    falls through to the bootcmd as it was (Linux).
+#  - yako_net / yako_mmc: load the image to yako_addr and "go" there, or print
+#    why not and return.
+YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-netboot: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src}; else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi; if test -n "${yako_default}"; then echo yakogl-netboot: default ${yako_default}; setenv yako_file ${yako_default}; run yako_mmc; fi'
 YAKO_NET='setenv autoload no; setenv netretry no; setenv tftptimeout 1000; setenv tftptimeoutcountmax 5; setenv tftpblocksize 1468; setenv tftpwindowsize 8; if dhcp && tftpboot ${yako_addr} ${yako_server}:${yako_file}; then echo yakogl-netboot: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-netboot: fetch failed, booting Linux'
+YAKO_MMC="if ext4load mmc $NB_MMC \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi; echo yakogl-netboot: mmc load failed, booting Linux"
 HOOK_PREFIX='run yako_hook; '
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes)
@@ -53,21 +65,26 @@ need_board() {
 # env_get NAME < fw_printenv output: the value of NAME, empty when absent.
 env_get() { sed -n "s/^$1=//p"; }
 
-# The installed state, read from the board: prints "ok", "absent" or a reason.
+# The installed state, read from the board: prints "ok", "absent",
+# "stale: <reason>" (bootcmd is ours, around the saved bootcmd, but a hook
+# string or the address is another version's: "install" upgrades it,
+# "uninstall" still restores bootcmd), or another reason (refused).
 check_install() {
     # --dry-run reads nothing: callers skip the verdict ("not read" is not "ok")
     if [ "$DRY" = 1 ]; then echo "not read (dry run)"; return; fi
-    local env hook net addr bc prev
+    local env hook net mmc addr bc prev
     env=$(b 'sudo -n fw_printenv' 2>/dev/null) || { echo "fw_printenv failed"; return; }
     hook=$(env_get yako_hook <<<"$env"); net=$(env_get yako_net <<<"$env")
+    mmc=$(env_get yako_mmc <<<"$env")
     addr=$(env_get yako_addr <<<"$env"); bc=$(env_get bootcmd <<<"$env")
     prev=$(env_get yako_bootcmd_prev <<<"$env")
-    if [ -z "$hook$net$addr$prev" ] && [ "${bc#"$HOOK_PREFIX"}" = "$bc" ]; then echo absent; return; fi
-    [ "$hook" = "$YAKO_HOOK" ] || { echo "yako_hook differs from this script's"; return; }
-    [ "$net" = "$YAKO_NET" ] || { echo "yako_net differs from this script's"; return; }
-    [ "$addr" = "$YAKO_ADDR" ] || { echo "yako_addr is '$addr', not $YAKO_ADDR"; return; }
+    if [ -z "$hook$net$mmc$addr$prev" ] && [ "${bc#"$HOOK_PREFIX"}" = "$bc" ]; then echo absent; return; fi
     [ -n "$prev" ] || { echo "yako_bootcmd_prev is empty"; return; }
     [ "$bc" = "$HOOK_PREFIX$prev" ] || { echo "bootcmd is not '$HOOK_PREFIX' + yako_bootcmd_prev"; return; }
+    [ "$hook" = "$YAKO_HOOK" ] || { echo "stale: yako_hook differs from this script's"; return; }
+    [ "$net" = "$YAKO_NET" ] || { echo "stale: yako_net differs from this script's"; return; }
+    [ "$mmc" = "$YAKO_MMC" ] || { echo "stale: yako_mmc differs from this script's"; return; }
+    [ "$addr" = "$YAKO_ADDR" ] || { echo "stale: yako_addr is '$addr', not $YAKO_ADDR"; return; }
     echo ok
 }
 # setenv_script FILE: one fw_setenv call = one env write (all or nothing).
@@ -82,8 +99,16 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 nb_status() {
     need_board
-    b 'sudo -n fw_printenv bootcmd bootdelay yako_hook yako_net yako_addr yako_server yako_file yako_once yako_bootcmd_prev 2>&1'
+    b 'sudo -n fw_printenv bootcmd bootdelay yako_hook yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_bootcmd_prev 2>&1'
     echo "install: $(check_install)"
+}
+
+# the hook's strings and the address, as install writes them
+nb_hook_vars() {
+    printf 'yako_addr=%s\n' "$YAKO_ADDR"
+    printf 'yako_hook=%s\n' "$YAKO_HOOK"
+    printf 'yako_net=%s\n' "$YAKO_NET"
+    printf 'yako_mmc=%s\n' "$YAKO_MMC"
 }
 
 nb_install() {
@@ -92,6 +117,15 @@ nb_install() {
     st=$(check_install)
     if [ "$DRY" = 0 ]; then
         [ "$st" = ok ] && { echo "$NB_TAG: already installed"; exit 0; }
+        if [ "${st#stale: }" != "$st" ]; then
+            # bootcmd and the saved bootcmd stay as they are: only the strings change
+            nb_hook_vars > "$TMP/upgrade"
+            setenv_script "$TMP/upgrade" || die "fw_setenv failed; the env is as it was (one write)" 5
+            prev=$(check_install)
+            [ "$prev" = ok ] || die "read-back after the upgrade: $prev" 5
+            echo "$NB_TAG: upgraded in place (was: ${st#stale: }); bootcmd unchanged"
+            exit 0
+        fi
         [ "$st" = absent ] || die "the board has a partial or foreign install ($st); inspect with 'status' and fix by hand"
     fi
     # The whole env is saved first: the bootcmd this replaces is the one
@@ -114,9 +148,7 @@ nb_install() {
     fi
     {
         printf 'yako_bootcmd_prev=%s\n' "$prev"
-        printf 'yako_addr=%s\n' "$YAKO_ADDR"
-        printf 'yako_hook=%s\n' "$YAKO_HOOK"
-        printf 'yako_net=%s\n' "$YAKO_NET"
+        nb_hook_vars
         printf 'bootcmd=%s%s\n' "$HOOK_PREFIX" "$prev"
     } > "$TMP/install"
     setenv_script "$TMP/install" || die "fw_setenv failed; the env is as it was (one write)" 5
@@ -132,7 +164,9 @@ nb_uninstall() {
     st=$(check_install)
     if [ "$DRY" = 0 ]; then
         [ "$st" = absent ] && { echo "$NB_TAG: not installed"; exit 0; }
-        [ "$st" = ok ] || die "the install is not this script's ($st); restore bootcmd by hand from the saved env"
+        # a stale hook is still ours: bootcmd is the saved one behind our prefix
+        [ "$st" = ok ] || [ "${st#stale: }" != "$st" ] ||
+            die "the install is not this script's ($st); restore bootcmd by hand from the saved env"
         prev=$(b 'sudo -n fw_printenv -n yako_bootcmd_prev') || die "cannot read yako_bootcmd_prev"
     else
         prev='<yako_bootcmd_prev read from the board>'
@@ -140,7 +174,7 @@ nb_uninstall() {
     # libubootenv's script mode: "name=" with an empty value removes the variable.
     {
         printf 'bootcmd=%s\n' "$prev"
-        for v in yako_bootcmd_prev yako_hook yako_net yako_addr yako_server yako_file yako_once; do
+        for v in yako_bootcmd_prev yako_hook yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default; do
             printf '%s=\n' "$v"
         done
     } > "$TMP/uninstall"
