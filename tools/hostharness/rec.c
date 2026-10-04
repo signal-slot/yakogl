@@ -460,6 +460,11 @@ static int r_free(struct osal_gpu_mem *m)
 		printf("free NULL\n");
 		return 0;
 	}
+	/* gles_osal.h: "Free `mem` (no-op for an empty one)"; zephyr.c does the same */
+	if (!m->impl && !m->gpu && !m->size) {
+		printf("free empty\n");
+		return 0;
+	}
 	i = rec_of(m);
 	if (i < 0 || !R[i].live) {
 		err("free of an unknown or already freed allocation gpu=%llx size=%zu (#%d)", (unsigned long long)m->gpu,
