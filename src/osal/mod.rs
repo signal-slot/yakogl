@@ -98,6 +98,11 @@ pub const OSAL_QUERY_V3D_TFU_RUN: u32 = 12;
 /// (`V3dState::s8_stencil`), read at init.
 pub const OSAL_QUERY_V3D_S8_STENCIL: u32 = 13;
 
+/// in = [`crate::draw_steps::OsalDrawStats`] through the out pointer: one
+/// timed scope's draw steps, added to the OSAL's totals; -ENOTSUP where the
+/// OSAL keeps none.
+pub const OSAL_QUERY_DRAW_STATS: u32 = 14;
+
 /// `struct osal_v3d_tfu` (osal_internal.h): one TFU job's registers, in
 /// `struct v3d_tfu_job`'s order, and its result and time.
 #[repr(C)]
@@ -396,6 +401,21 @@ pub fn clock_ns() -> Option<u64> {
     (rc == 0).then_some(ns)
 }
 
+/// Hand one timed scope's draw steps to the OSAL (OSAL_QUERY_DRAW_STATS),
+/// which adds them to its totals. The query's return: -ENOTSUP where the
+/// OSAL keeps none, -ENODEV without a query op.
+pub fn report_draw_stats(stats: &mut crate::draw_steps::OsalDrawStats) -> i32 {
+    let Some(query) = ops().and_then(|o| o.query) else { return -crate::util::ENODEV };
+    // SAFETY: the struct's C layout and size (draw_steps.rs pins it).
+    unsafe {
+        query(
+            OSAL_QUERY_DRAW_STATS,
+            stats as *mut crate::draw_steps::OsalDrawStats as *mut c_void,
+            core::mem::size_of::<crate::draw_steps::OsalDrawStats>(),
+        )
+    }
+}
+
 /// Holds the shared-state lock for a scope. An entry point starts with
 /// `let _lock = Lock::take();`, and the lock goes when it returns -- by any
 /// path, including a `?` or an early return in the middle of an error check.
@@ -510,5 +530,33 @@ mod tests {
         }
         let header = include_str!("osal_internal.h");
         assert!(header.contains("void osal_mem_line(char *buf, size_t n);"));
+    }
+
+    /// The clock and the draw stats: the header's numbers are these, and
+    /// every Zephyr OSAL hands both ids to zephyr_timing.c, so the three
+    /// answer them alike (a board without the route would report every
+    /// draw step as not measured).
+    #[test]
+    fn every_zephyr_osal_answers_the_clock_and_the_draw_stats_alike() {
+        let header = include_str!("osal_internal.h");
+        for line in [
+            format!("#define OSAL_QUERY_CLOCK_NS {}u\n", super::OSAL_QUERY_CLOCK_NS),
+            format!("#define OSAL_QUERY_DRAW_STATS {}u\n", super::OSAL_QUERY_DRAW_STATS),
+            format!("#define OSAL_DRAW_STEPS {}u\n", crate::draw_steps::STEPS),
+        ] {
+            assert!(header.contains(&line), "osal_internal.h has {line:?}");
+        }
+        for (name, src) in [
+            ("zephyr_v3d.c", include_str!("zephyr_v3d.c")),
+            ("zephyr.c", include_str!("zephyr.c")),
+            ("zephyr_gc.c", include_str!("zephyr_gc.c")),
+        ] {
+            let body = &src[src.find("static int z_query(").expect("a query op")..];
+            let body = &body[..body.find("\n}\n").expect("the function's end")];
+            for id in ["OSAL_QUERY_CLOCK_NS", "OSAL_QUERY_DRAW_STATS"] {
+                assert!(body.contains(id), "{name}'s z_query names {id}");
+            }
+            assert_eq!(body.matches("osal_zephyr_timing_query(what, out, out_sz)").count(), 1, "{name}");
+        }
     }
 }

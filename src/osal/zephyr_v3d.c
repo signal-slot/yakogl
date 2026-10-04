@@ -32,7 +32,7 @@
  *   completed   -> the same finish when FRDONE is already up, never blocking
  *   query       -> OSAL_QUERY_V3D_VPM_BYTES (the identified VPM), and the
  *                  others osal_internal.h names (OSAL_QUERY_CLOCK_NS: the
- *                  64-bit cycle counter in ns, zephyr_clock.h)
+ *                  64-bit cycle counter in ns, zephyr_timing.c)
  *
  * The board's display (the firmware framebuffer, through the mailbox) and its
  * bounded-lifetime watchdog are board support the application brings, as the
@@ -71,7 +71,6 @@
 #include "osal_internal.h"
 #include "osal_bounds.h"
 #include "osal_log.h"
-#include "zephyr_clock.h"
 #include "v3d_kick.h"
 #include "v3d.h"
 #include "v3d_job.h" /* v3d_job_pack_skip, v3d_job_pack_totals */
@@ -1371,8 +1370,8 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		return 0;
 	}
 #endif
-	if (what == OSAL_QUERY_CLOCK_NS)
-		return osal_zephyr_clock_ns(out, out_sz);
+	if (what == OSAL_QUERY_CLOCK_NS || what == OSAL_QUERY_DRAW_STATS)
+		return osal_zephyr_timing_query(what, out, out_sz);
 	return -ENOTSUP;
 }
 

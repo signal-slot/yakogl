@@ -198,15 +198,15 @@ static const char *const gt_name[GT_N] = { "glCompileShader", "glLinkProgram", "
 					   "glUniform*", "framebuffer", "glDelete*",
 					   "glGenerateMipmap", "glReadPixels", "glClear" };
 
-/* The library's draw steps (src/draw_steps.rs, STEPS): record.rs numbers
- * them from CHECK_RUN_STEP_GL_PROGRAM, after the two this file measures
- * (the other timed GL calls, glDraw* outside the steps). yakogl-tools
- * pins the library's order to record.rs; the count is checked here at
- * build time and against the library's answer at run time. */
+/* The library's draw steps, as the OSAL totals them (osal_internal.h
+ * osal_draw_stats, src/draw_steps.rs Step order): record.rs numbers them
+ * from CHECK_RUN_STEP_GL_PROGRAM, after the two this file measures (the
+ * other timed GL calls, glDraw* outside the steps). yakogl-tools pins the
+ * library's order to record.rs; the count is checked here. */
 #define DRAW_STEPS 12
 BUILD_ASSERT(YK_RECORD_CHECK_RUN_STEPS == YK_RECORD_CHECK_RUN_STEP_GL_PROGRAM + DRAW_STEPS,
 	     "record.rs CHECK_RUN_STEP_* follow src/draw_steps.rs");
-int yakogl_draw_steps(uint64_t *out, size_t n, uint32_t *untimed); /* src/draw_steps.rs */
+bool osal_draw_stats(uint64_t ns[DRAW_STEPS], uint32_t *untimed); /* osal_internal.h */
 static bool s_gl_timing;
 static uint32_t s_gt_calls[GT_N];
 static uint64_t s_gt_cycles[GT_N], s_gt_bytes[GT_N];
@@ -400,21 +400,21 @@ static uint32_t us_since(uint32_t c0)
 }
 
 /* The animation frame being built: the compiler-run count, the GPU counts
- * and the library's draw-step totals at its start (steps_ok false: the
- * library could not time them). Its GL calls are timed into s_gt_* (reset
- * at the frame's start). Outside the animation loop nothing is measured. */
+ * and the OSAL's draw-step totals and untimed laps at its start. Its GL
+ * calls are timed into s_gt_* (reset at the frame's start). Outside the
+ * animation loop nothing is measured. */
 static struct {
-	bool live, steps_ok;
-	uint32_t runs0, timeouts0;
+	bool live;
+	uint32_t runs0, timeouts0, untimed0;
 	uint64_t blocked_us0, busy_us0;
 	uint64_t steps0[DRAW_STEPS];
 } s_frame;
 
-/* The library's draw-step totals (ns) now; false when it has no clock or
- * another count of steps. */
-static bool steps_now(uint64_t ns[DRAW_STEPS])
+/* The OSAL's draw-step totals (ns) now and its untimed laps; false when
+ * nothing has been reported to it. */
+static bool steps_now(uint64_t ns[DRAW_STEPS], uint32_t *untimed)
 {
-	return yakogl_draw_steps(ns, DRAW_STEPS, NULL) == DRAW_STEPS;
+	return osal_draw_stats(ns, untimed);
 }
 
 /* The GC7000 OSAL's counts so far: the time blocked on the GPU (fence waits,
@@ -474,7 +474,10 @@ static void frame_slowest_step(uint32_t *step, uint32_t *ms)
 {
 	uint64_t ns[YK_RECORD_CHECK_RUN_STEPS] = { 0 };
 	uint64_t lib[DRAW_STEPS], lib_sum = 0;
-	const bool timed = s_frame.steps_ok && steps_now(lib);
+	uint32_t untimed = 0;
+	/* a lap the library could not time makes the frame's steps not
+	 * measured: their zeros would read as time not spent */
+	const bool timed = steps_now(lib, &untimed) && untimed == s_frame.untimed0;
 
 	for (int i = 0; i < GT_N; i++) {
 		if (i != GT_DRAW) {
@@ -798,7 +801,11 @@ static int animate(void)
 		s_frame.live = true;
 		s_frame.runs0 = runs_now();
 		(void)gpu_now(&s_frame.timeouts0, &s_frame.blocked_us0, &s_frame.busy_us0);
-		s_frame.steps_ok = steps_now(s_frame.steps0);
+		/* no report yet (the first frame's draws come after): zeros */
+		if (!steps_now(s_frame.steps0, &s_frame.untimed0)) {
+			memset(s_frame.steps0, 0, sizeof(s_frame.steps0));
+			s_frame.untimed0 = 0u;
+		}
 		gt_reset();
 		s_gl_timing = true;
 		if (!eglMakeCurrent(s_dpy, s_surf[half], s_surf[half], s_ctx)) {

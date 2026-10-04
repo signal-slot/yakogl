@@ -142,6 +142,7 @@ if(CONFIG_YAKOGL)
   zephyr_library_named(yakogl)
   zephyr_library_sources(
     "${_yakogl_osal_c}"
+    "${YAKOGL_SRC}/osal/zephyr_timing.c"   # the clock and draw stats every Zephyr OSAL answers
     "${YAKOGL_SRC}/abi_layout_check.c"
     ${_yakogl_shaderc_c}
     ${_yakogl_gpu_c})

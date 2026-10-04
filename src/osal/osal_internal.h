@@ -96,7 +96,7 @@ struct osal_v3d_cpu_of {
  * texture.size ran out of the carveout that way (tools/cts/RESULTS.md). */
 #define OSAL_QUERY_GC_FRAME_OPEN 9u
 /* out = uint64_t: a monotonic clock in nanoseconds (every Zephyr OSAL: the
- * 64-bit cycle counter, zephyr_clock.h). The V3D backend times its CPU
+ * 64-bit cycle counter, zephyr_timing.c). The V3D backend times its CPU
  * texture tiling with it (v3d_tiling_time), the GL core and the GC7000
  * backend the steps of a draw (src/draw_steps.rs); without an answer each
  * counts its time as not measured, never as zero. */
@@ -116,6 +116,20 @@ struct osal_v3d_cpu_of {
  * on Zephyr; the backend's V3dState::s8_stencil), read at init, with the
  * split halves only; 0 or no answer keeps D24S8. */
 #define OSAL_QUERY_V3D_S8_STENCIL 13u
+/* in = struct osal_draw_stats (passed through the out pointer): the time one
+ * timed scope of the library spent in each step of a draw
+ * (src/draw_steps.rs: the GL core's build of a draw, a backend's draw),
+ * added to the OSAL's totals, which an application reads with
+ * osal_draw_stats. -ENOTSUP where the OSAL keeps none. */
+#define OSAL_QUERY_DRAW_STATS 14u
+/* The steps, in src/draw_steps.rs Step order; record.rs numbers them from
+ * CHECK_RUN_STEP_GL_PROGRAM. */
+#define OSAL_DRAW_STEPS 12u
+struct osal_draw_stats {
+	uint64_t ns[OSAL_DRAW_STEPS];
+	uint32_t untimed; /* laps the clock could not time: not measured, not zero */
+	uint32_t reserved;
+};
 struct osal_v3d_tfu {
 	uint32_t icfg, iia, iis, ica, iua, ioa, ios, coef0;
 	int32_t rc;
@@ -185,6 +199,15 @@ void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, 
  * flight), and the driver's GPU busy time and completed kicks
  * (gc_render_perf), so far. */
 void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);
+/* The draw-step totals the library reported so far (OSAL_QUERY_DRAW_STATS;
+ * every Zephyr OSAL, zephyr_timing.c): ns per step and the laps it could not
+ * time, either pointer may be NULL. Read around a frame and take the
+ * difference. False when nothing has been reported (no clock, or no draw
+ * yet): not measured, never zero. */
+bool osal_draw_stats(uint64_t ns[OSAL_DRAW_STEPS], uint32_t *untimed);
+/* The answers zephyr_timing.c gives for each Zephyr OSAL's query op:
+ * OSAL_QUERY_CLOCK_NS and OSAL_QUERY_DRAW_STATS; -ENOTSUP for any other. */
+int osal_zephyr_timing_query(uint32_t what, void *out, size_t out_sz);
 /* One line naming this OSAL's GPU memory now, NUL-terminated into
  * buf[n]: what is allocated, the frees it holds, and how large an
  * allocation can still succeed. Each Zephyr OSAL its own wording and

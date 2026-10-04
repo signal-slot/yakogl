@@ -282,6 +282,8 @@ struct Mock {
     /// OSAL_QUERY_CLOCK_NS through [`MOCK_OSAL_CLOCK`]: (the next answer,
     /// the step each answer adds).
     clock: (u64, u64),
+    /// Every OSAL_QUERY_DRAW_STATS report through [`MOCK_OSAL_CLOCK`].
+    draw_stats: Vec<crate::draw_steps::OsalDrawStats>,
 }
 
 impl Default for Mock {
@@ -327,6 +329,7 @@ impl Default for Mock {
             budget: None,
             reclaim: false,
             clock: (0, 0),
+            draw_stats: Vec::new(),
         }
     }
 }
@@ -1030,12 +1033,22 @@ static MOCK_OSAL: OsalOps = OsalOps {
     thread_id: Some(m_thread_id),
 };
 
-/// [`MOCK_OSAL`] with a clock (OSAL_QUERY_CLOCK_NS) and nothing else to
-/// answer: [`TestGl::set_clock`] installs it, so every other test keeps an
-/// OSAL with no query at all.
+/// [`MOCK_OSAL`] with a clock (OSAL_QUERY_CLOCK_NS) that keeps the draw
+/// stats reported to it (OSAL_QUERY_DRAW_STATS) and answers nothing else:
+/// [`TestGl::set_clock`] installs it, so every other test keeps an OSAL
+/// with no query at all.
 static MOCK_OSAL_CLOCK: OsalOps = OsalOps { query: Some(m_query_clock), ..MOCK_OSAL };
 
 unsafe extern "C" fn m_query_clock(what: u32, out: *mut c_void, out_sz: usize) -> i32 {
+    if what == crate::osal::OSAL_QUERY_DRAW_STATS
+        && !out.is_null()
+        && out_sz == core::mem::size_of::<crate::draw_steps::OsalDrawStats>()
+    {
+        // SAFETY: the library's report of the size checked above.
+        let d = unsafe { *(out as *const crate::draw_steps::OsalDrawStats) };
+        with_mock(|m| m.draw_stats.push(d));
+        return 0;
+    }
     if what != crate::osal::OSAL_QUERY_CLOCK_NS || out.is_null() || out_sz != 8 {
         return -crate::util::ENOTSUP;
     }
@@ -1658,6 +1671,12 @@ impl TestGl {
         with_mock(|m| m.clock = clock.unwrap_or((0, 0)));
         // SAFETY: serialised by SERIAL (this TestGl holds it); the tables are statics.
         unsafe { crate::osal::osal_set_ops(if clock.is_some() { &MOCK_OSAL_CLOCK } else { &MOCK_OSAL }) };
+    }
+
+    /// The draw stats the OSAL received through [`TestGl::set_clock`]'s
+    /// query since the last call.
+    pub fn draw_stats_taken(&self) -> Vec<crate::draw_steps::OsalDrawStats> {
+        with_mock(|m| core::mem::take(&mut m.draw_stats))
     }
 
     /// Fresh allocations are zeroed (`true`) or filled with [`FILL`] (the default).

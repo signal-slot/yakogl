@@ -2,26 +2,29 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 
 //! Where a draw's CPU time goes, step by step, on the OSAL's clock
-//! (`osal::clock_ns`, OSAL_QUERY_CLOCK_NS).
+//! (`osal::clock_ns`, OSAL_QUERY_CLOCK_NS), reported to the OSAL.
 //!
 //! The question it answers: the i.MX8MP cluster's frame 2 spent about
 //! 2.75 s inside glDraw* with the online compiler, none of it compiling and
 //! about none of it waiting for the GPU (CHECK_RUN, 2026-10-05). The GL
 //! core's `build_common` and the GC7000 backend's `draw_one` each cut their
-//! work into [`Step`]s with a [`Timer`]; [`yakogl_draw_steps`] hands the
-//! running totals to the application, which reads them as differences over
-//! a frame and records the slowest (record.rs CHECK_RUN_STEP_*).
+//! work into [`Step`]s with a [`Timer`]. When the outermost timer of a
+//! scope ends, the scope's steps go to the OSAL in one
+//! OSAL_QUERY_DRAW_STATS ([`OsalDrawStats`]); the OSAL keeps the totals and
+//! an application reads them there (zephyr_timing.c `osal_draw_stats`), as
+//! it reads the OSAL's GPU waits. The library keeps no totals and exports
+//! nothing of its own for it.
 //!
 //! A step's time is exclusive: a draw nested inside another step (a
 //! pending clear the GL core draws on its own) is counted under its own
-//! steps and taken out of the outer step's. A lap that could not read the
-//! clock is counted in `untimed`, never as zero time; an OSAL without a
-//! clock makes [`yakogl_draw_steps`] return -ENOTSUP.
+//! steps and taken out of the outer step's, and the scope is reported once,
+//! by the outermost timer. A lap that could not read the clock is counted
+//! in `untimed`, never as zero time.
 
 use crate::osal;
 use crate::util::Global;
 
-/// One timed step. The numbering is the C view's ([`yakogl_draw_steps`]):
+/// One timed step. The numbering is `struct osal_draw_stats` ns index:
 /// record.rs's CHECK_RUN_STEP_* are these plus [`RECORD_STEP_BASE`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
@@ -63,25 +66,38 @@ pub const STEPS: usize = Step::GcEmit as usize + 1;
 /// itself (the other GL calls, and glDraw* outside these steps).
 pub const RECORD_STEP_BASE: u32 = 2;
 
-struct Totals {
-    ns: [u64; STEPS],
-    /// Every ns counted under any step, for [`Timer`]'s exclusive laps.
-    sum: u64,
+/// `struct osal_draw_stats` (osal_internal.h): one scope's time per step.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OsalDrawStats {
+    pub ns: [u64; STEPS],
     /// Laps either end of which the clock could not read.
-    untimed: u32,
+    pub untimed: u32,
+    pub reserved: u32,
+}
+/* zephyr_timing.c pins the C side to the same size: 8 * OSAL_DRAW_STEPS + 8 */
+const _: () = assert!(STEPS == 12 && core::mem::size_of::<OsalDrawStats>() == 8 * STEPS + 8);
+
+/// The scope being timed: its steps so far, the running sum the exclusive
+/// laps subtract from, and how many timers are live in it.
+struct Scope {
+    stats: OsalDrawStats,
+    sum: u64,
+    depth: u32,
 }
 
-static TOTALS: Global<Totals> = Global::new(Totals { ns: [0; STEPS], sum: 0, untimed: 0 });
+static SCOPE: Global<Scope> =
+    Global::new(Scope { stats: OsalDrawStats { ns: [0; STEPS], untimed: 0, reserved: 0 }, sum: 0, depth: 0 });
 
-fn totals() -> &'static mut Totals {
+fn scope() -> &'static mut Scope {
     // SAFETY: single-threaded by contract (the GL entry points); each
     // function here takes it once and lets go before it returns.
-    unsafe { TOTALS.get() }
+    unsafe { SCOPE.get() }
 }
 
 /// Times consecutive steps: each [`Timer::lap`] counts the time since the
 /// previous lap (or [`Timer::start`]) under a step, less what nested timers
-/// counted meanwhile.
+/// counted meanwhile. The outermost timer reports the scope when it ends.
 pub struct Timer {
     at: Option<u64>,
     counted: u64,
@@ -89,49 +105,39 @@ pub struct Timer {
 
 impl Timer {
     pub fn start() -> Timer {
-        Timer { at: osal::clock_ns(), counted: totals().sum }
+        let s = scope();
+        s.depth += 1;
+        Timer { at: osal::clock_ns(), counted: s.sum }
     }
 
     /// The time since the last lap, less any nested timer's, under `step`.
     pub fn lap(&mut self, step: Step) {
         let now = osal::clock_ns();
-        let t = totals();
+        let s = scope();
         match (self.at, now) {
             (Some(a), Some(b)) => {
-                let nested = t.sum.wrapping_sub(self.counted);
+                let nested = s.sum.wrapping_sub(self.counted);
                 let own = b.saturating_sub(a).saturating_sub(nested);
-                t.ns[step as usize] = t.ns[step as usize].wrapping_add(own);
-                t.sum = t.sum.wrapping_add(own);
+                s.stats.ns[step as usize] = s.stats.ns[step as usize].wrapping_add(own);
+                s.sum = s.sum.wrapping_add(own);
             }
-            _ => t.untimed = t.untimed.wrapping_add(1),
+            _ => s.stats.untimed = s.stats.untimed.wrapping_add(1),
         }
         self.at = now;
-        self.counted = t.sum;
+        self.counted = s.sum;
     }
 }
 
-/// The running totals, in ns, by [`Step`] number into `out` (`n` entries,
-/// at most [`STEPS`]) and the laps that could not be timed into `untimed`
-/// (may be null). Returns the number of entries written, or -ENOTSUP when
-/// the OSAL has no clock (nothing is written then: not measured, not zero).
-///
-/// # Safety
-/// `out` is writable for `n` u64s; `untimed` is null or writable.
-#[no_mangle]
-pub unsafe extern "C" fn yakogl_draw_steps(out: *mut u64, n: usize, untimed: *mut u32) -> i32 {
-    if osal::clock_ns().is_none() {
-        return -crate::util::ENOTSUP;
+impl Drop for Timer {
+    fn drop(&mut self) {
+        let s = scope();
+        s.depth -= 1;
+        if s.depth != 0 {
+            return;
+        }
+        let mut stats = core::mem::take(&mut s.stats);
+        s.sum = 0;
+        /* an OSAL that keeps no totals answers -ENOTSUP: nothing to do */
+        let _ = osal::report_draw_stats(&mut stats);
     }
-    if out.is_null() {
-        return -crate::util::EINVAL;
-    }
-    let t = totals();
-    let n = n.min(STEPS);
-    // SAFETY: the caller's contract; n is at most what it gave.
-    unsafe { core::ptr::copy_nonoverlapping(t.ns.as_ptr(), out, n) };
-    if !untimed.is_null() {
-        // SAFETY: as above.
-        unsafe { untimed.write(t.untimed) };
-    }
-    n as i32
 }

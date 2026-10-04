@@ -40,7 +40,6 @@
 #include "osal_internal.h"
 #include "osal_bounds.h"
 #include "osal_log.h"
-#include "zephyr_clock.h"
 #include "pvr_drv.h"
 #include "pvr_render.h"
 #include "pvr/pvr_backend.h"  /* pvr_backend_ds_report */
@@ -650,7 +649,8 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 			return -EINVAL;
 		return pvr_render_static_get((struct pvr_render_static *)out);
 	case OSAL_QUERY_CLOCK_NS:
-		return osal_zephyr_clock_ns(out, out_sz);
+	case OSAL_QUERY_DRAW_STATS:
+		return osal_zephyr_timing_query(what, out, out_sz);
 	default:
 		return -ENOTSUP;
 	}

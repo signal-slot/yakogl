@@ -54,7 +54,6 @@
 #include "osal_internal.h"
 #include "osal_bounds.h"
 #include "osal_log.h"
-#include "zephyr_clock.h"
 #include "gc_kick.h"
 #include "gc_render.h"
 #include "gc_frees.h"
@@ -520,8 +519,8 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		s_frees.frame_open = *(const uint32_t *)out != 0;
 		return 0;
 	}
-	if (what == OSAL_QUERY_CLOCK_NS)
-		return osal_zephyr_clock_ns(out, out_sz);
+	if (what == OSAL_QUERY_CLOCK_NS || what == OSAL_QUERY_DRAW_STATS)
+		return osal_zephyr_timing_query(what, out, out_sz);
 	/* OSAL_QUERY_RENDER_STATIC is a PowerVR firmware object. This GPU has
 	 * no firmware. */
 	LOG_DBG("osal(gc): query %u is not available on this GPU", what);

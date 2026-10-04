@@ -4359,29 +4359,23 @@ mod tests {
     }
 
     /// Each section of the GL core's draw is counted under its step
-    /// (draw_steps.rs): with a clock that moves 1000 ns a read, each
-    /// section's one lap is 1000 ns, and the mock backend times nothing.
+    /// (draw_steps.rs) and the build is reported to the OSAL once: with a
+    /// clock that moves 1000 ns a read, each section's one lap is 1000 ns,
+    /// and the mock backend times nothing.
     #[test]
-    fn a_draw_counts_each_gl_core_section_under_its_step() {
-        use crate::draw_steps::{Step, STEPS};
+    fn a_draw_reports_each_gl_core_section_under_its_step() {
         let gl = Gl::new(16, 16);
         basic(&gl);
         gl.set_clock(Some((1_000_000, 1000)));
-        let now = || {
-            let mut ns = [0u64; STEPS];
-            // SAFETY: STEPS u64s; no untimed out-parameter.
-            let n = unsafe { draw_steps::yakogl_draw_steps(ns.as_mut_ptr(), STEPS, core::ptr::null_mut()) };
-            assert_eq!(n as usize, STEPS, "the OSAL has a clock");
-            ns
-        };
-        let before = now();
+        gl.draw_stats_taken();
         let _ = draw_tri(&gl);
-        let after = now();
-        let delta: Vec<u64> = after.iter().zip(before.iter()).map(|(a, b)| a - b).collect();
+        let got = gl.draw_stats_taken();
+        assert_eq!(got.len(), 1, "one report for one draw: {got:?}");
         for s in [Step::GlProgram, Step::GlUniforms, Step::GlAttribs, Step::GlTextures, Step::GlState] {
-            assert_eq!(delta[s as usize], 1000, "{s:?}: {delta:?}");
+            assert_eq!(got[0].ns[s as usize], 1000, "{s:?}: {got:?}");
         }
-        assert_eq!(delta.iter().sum::<u64>(), 5000, "the mock backend times nothing: {delta:?}");
+        assert_eq!(got[0].ns.iter().sum::<u64>(), 5000, "the mock backend times nothing: {got:?}");
+        assert_eq!(got[0].untimed, 0);
         gl.set_clock(None);
     }
 
