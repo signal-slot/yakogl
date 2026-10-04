@@ -20,7 +20,7 @@
 # -DYAKOGL_RUSTUP_TOOLCHAIN=nightly`, or set() before find_package(Zephyr):
 #   YAKOGL_RUST_LINKAGE     staticlib (default) | external: the application
 #                           links the yakogl crate (features
-#                           ["osal-zephyr"]) into its own Rust staticlib,
+#                           ["osal-zephyr", "gpu-<name>"]) into its own Rust staticlib,
 #                           with its own panic handler; only the C parts are
 #                           built here.
 #   YAKOGL_CARGO            cargo executable (default: cargo on PATH, like the

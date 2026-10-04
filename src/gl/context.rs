@@ -123,7 +123,7 @@ const _: () = assert!(CAP_COMBINED_TEXTURE_UNITS <= 256);
 #[cfg(feature = "gpu-vivante")]
 pub const MAX_VARYING_VECTORS: usize = 15;
 /// PowerVR: 8, as before, until the USC's limit is measured (usc-backend).
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
 /// components), but nothing here has drawn with more than a few varyings on

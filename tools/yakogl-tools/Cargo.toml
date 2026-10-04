@@ -20,7 +20,7 @@ path = "src/main.rs"
 # `shaderc-online` brings in src/shaderc/online/, the in-process compiler, so
 # that `online-check` can measure it against the same dEQP corpus as the
 # shipping pipeline.
-yakogl = { path = "../..", default-features = false, features = ["host-test", "shaderc-online"] }
+yakogl = { path = "../..", default-features = false, features = ["host-test", "gpu-powervr", "shaderc-online"] }
 regex = "1"
 serde_json = "1"
 sha2 = "0.10"

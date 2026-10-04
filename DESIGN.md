@@ -126,7 +126,7 @@ yakogl/
   src/gl/{types,consts,egl_consts}.rs           GL types; tokens generated from include/
                                 (yakogl-tools gl-consts)
   src/backend.rs                the backend contract (C view: src/backend.h)
-  src/pvr/{backend,blobs,ffi}.rs  PowerVR backend, its internal USC blobs, the FFI to the
+  src/pvr/{backend,blobs,ffi}.rs  PowerVR backend (cargo feature gpu-powervr), its USC blobs, the FFI to the
                                 driver's command generators; ffi_layout_check.c pins it
   src/vivante/{backend,shader,texture,cmd,regs,state,kick,clear_shader}.rs
                                 the i.MX8MP's GC7000 backend (cargo feature gpu-vivante);
@@ -144,7 +144,7 @@ yakogl/
                                 and the command-stream diff against Mesa's
   src/abi_layout.rs  src/abi_layout_check.c     generated layout pins (yakogl-tools abi-layout)
   tools/hostharness/            host differential harness (compare.sh, run.sh)
-  tests/                        host tests (cargo test --no-default-features --features host-test)
+  tests/                        host tests (cargo test --no-default-features --features host-test,gpu-powervr)
   CMakeLists.txt / baremetal.mk / zephyr/       run cargo, assemble libyakogl.a (README "Linking")
 ```
 
@@ -185,9 +185,9 @@ own table and a shader back end (`docs/imx8mp-backend-plan.md`).
 
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from
 C to Rust: the crate `yakogl` at the repository root (`no_std`, no dependencies,
-an `rlib` without a panic handler; features `osal-linux` | `osal-zephyr` |
-`osal-baremetal` pick the compile-time default of `g_osal`, `host-test` for host tests
-only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
+an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
+`gpu-v3d` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
+compile-time default of `g_osal`, `host-test` for host tests only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
 panic handler. The C ABI is the product and did not
 change: `gl*`, `egl*`, `g_osal`, `g_backend`, `g_shaderc` and the structs in `include/`
 are `extern "C"` / `#[repr(C)]`.
@@ -249,7 +249,7 @@ byte-identical to the C library *up to those divergences*, and identical for the
 command stream wherever no fix applies — not byte-identical outright.
 
 Verification, all of it on the host: unit tests on the strict mocks of `src/testutil.rs`
-(`cargo test --no-default-features --features host-test`: 1427 crate tests plus 6
+(`cargo test --no-default-features --features host-test,gpu-powervr`: 1427 crate tests plus 6
 integration tests, none ignored, and 1341 in the `gpu-vivante` build; `cargo test -p
 yakogl-tools`: 34), and the host
 differential harness (`tools/hostharness/`, whose README lists what is and is not

@@ -218,7 +218,7 @@ library has not been run on silicon. Nor has the Zephyr module build itself been
 the crate compiles for `aarch64-unknown-none` with the `osal-zephyr` feature, but the
 `west build` that puts `zephyr.c`, the driver module and the cargo archive together is
 untested. On the host the port is checked two ways: unit tests on the strict mocks of
-`src/testutil.rs` (`cargo test --no-default-features --features host-test`), which model
+`src/testutil.rs` (`cargo test --no-default-features --features host-test,gpu-powervr`), which model
 this contract — a CPU view and device memory kept apart, synchronised only by
 `cache_flush` / `cache_invd` (both recorded, ranges checked against the live
 allocation), fresh memory filled with 0xA5, allocations that can come without a CPU

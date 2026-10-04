@@ -4,11 +4,11 @@
 //! source text hashes to a blob row of the same name (what glsl2usc hashed
 //! is what gles_offline_shader_source() hands the application).
 //!
-//!   cargo test --no-default-features --features host-test
+//!   cargo test --no-default-features --features host-test,gpu-powervr
 
 //! Both tables have the same shape, but this one names the PowerVR table:
 //! a `gpu-vivante` build compiles `vivante_blobs.rs` instead.
-#![cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#![cfg(feature = "gpu-powervr")]
 
 use std::ffi::{c_char, CStr};
 

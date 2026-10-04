@@ -1,6 +1,6 @@
 # What the offline table's USC actually uses
 
-Counted by `cargo test --no-default-features --features host-test,shaderc-online isa_coverage`, which regenerates this file with `YAKOGL_WRITE_ISA_COVERAGE=1`.
+Counted by `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online isa_coverage`, which regenerates this file with `YAKOGL_WRITE_ISA_COVERAGE=1`.
 It is the code generator's target list: an instruction form or an operation that is not here is one nothing in the table needs, and one that is here with a large count is one the generator has to get right first.
 
 Corpus: 2248 blobs of `SHC_BLOB_TABLE`, 673305 instruction groups.

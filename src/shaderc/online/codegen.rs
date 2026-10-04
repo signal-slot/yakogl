@@ -204,7 +204,7 @@ pub enum BackEndError {
 
 /// The PowerVR back half's refusals: where the USC chain stopped, which
 /// already names the stage (`chain::ChainError`).
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BackEndError {
     Usc(super::powervr::chain::ChainError),
@@ -894,7 +894,7 @@ pub fn link_sources<'s>(
 /// through selection, preparation, allocation, the builder and the record; a
 /// fragment shader too when it reads no varying and writes one colour, and
 /// is refused by name otherwise.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 pub fn compile(
     stage: u32,
     glsl: &[u8],
@@ -906,7 +906,7 @@ pub fn compile(
 }
 
 /// [`compile_linked`], and the shader's uniform-block table.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 pub fn compile_linked_blocks<'s>(
     stage: u32,
     glsl: &[u8],
@@ -920,7 +920,7 @@ pub fn compile_linked_blocks<'s>(
 
 /// A vertex shader compiled with the attribute locations the link decided
 /// (`ShcBackend::compile_vs_linked`), and its uniform-block table.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 pub fn compile_vs_mapped_blocks<'s>(
     glsl: &[u8],
     map: &crate::shaderc::ShcAttribMap,
@@ -982,7 +982,7 @@ fn deferred_vertex(
 
 /// The PowerVR's compile of one stage, with the zero-varying list and, for
 /// a vertex shader at link, the attribute locations.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 fn compile_powervr<'s>(
     stage: u32,
     glsl: &[u8],
@@ -1264,7 +1264,7 @@ mod chain_tests {
 }
 
 /// The PowerVR build's compile entry: what the GL core gets back.
-#[cfg(all(test, not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#[cfg(all(test, feature = "gpu-powervr"))]
 mod tests {
     use super::*;
     use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};

@@ -556,7 +556,7 @@ The generated table and `offline.rs` match `struct shc_shader` / `shc_varying` /
 
 ## The remote back end
 
-`cargo build --features shaderc-remote` compiles `remote.rs` in. The feature
+`cargo build --features gpu-powervr,shaderc-remote` compiles `remote.rs` in. The feature
 implies `std` and pulls in `serde_json`, both optional and both host-only: the
 no_std library, the Zephyr module and the bare-metal archive enable neither and
 are byte-for-byte unaffected (`shaderc-remote` on a `target_os = "none"` target
@@ -688,7 +688,7 @@ zero-length cache files that the next run serves as valid shaders with no code. 
 the cache directory if a regeneration was killed.
 
 Host tests (`tests/sha256.rs`, `tests/blob_table.rs`, `tests/shaderc_remote.rs`;
-`cargo test --no-default-features --features host-test`): SHA-256 known answers, every
+`cargo test --no-default-features --features host-test,gpu-powervr`): SHA-256 known answers, every
 source text in `SHC_SOURCE_TABLE` hashes to a blob row of the same name, the offline
 back end finds every source, and the table can be dumped as JSON
 (`YAKOGL_DUMP_BLOBS=out.json`) in the format of the dumper used when the table was

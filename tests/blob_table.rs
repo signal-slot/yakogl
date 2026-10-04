@@ -3,10 +3,10 @@
 //! Dumps the offline shader table as JSON (the format of the C table dumper
 //! used when the table was converted from the C shader_blobs.c), so the two can be
 //! diffed: `YAKOGL_DUMP_BLOBS=out.json cargo test --no-default-features
-//! --features host-test --test blob_table`.
+//! --features host-test,gpu-powervr --test blob_table`.
 //! Both tables have the same shape, but this one names the PowerVR table:
 //! a `gpu-vivante` build compiles `vivante_blobs.rs` instead.
-#![cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#![cfg(feature = "gpu-powervr")]
 
 use std::fmt::Write;
 use yakogl::shaderc::blobs::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};

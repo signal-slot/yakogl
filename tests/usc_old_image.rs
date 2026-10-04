@@ -15,7 +15,7 @@
 //! must say no, and on today's image for the same source must say yes -- an
 //! instrument that cannot tell the two apart vouches for neither.
 
-#![cfg(all(feature = "shaderc-online", not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#![cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
 
 mod usc_exec;
 

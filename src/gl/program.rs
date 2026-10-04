@@ -5730,7 +5730,7 @@ mod tests {
     /* ---- link ---- */
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn link_success_sets_status_and_an_empty_log() {
         let gl = fresh();
         let (p, _, _) = attached(&gl, "main.vert", "fill_color.frag");
@@ -5799,7 +5799,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn link_patches_the_fs_inputs_to_the_vs_outputs_by_name() {
         let gl = fresh();
         let p = gl.program("sprite.vert", "sprite.frag");
@@ -6034,7 +6034,7 @@ mod tests {
     /* ---- uniform locations ---- */
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn locations_number_vs_uniforms_first_then_fs_only_names() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");
@@ -6105,7 +6105,7 @@ mod tests {
     /// (blobs.rs): ubLights.lights[0].position vec3[16] @620 (64 dwords), .coneAngle float[16] @684,
     /// .pcfSamples int[16] @956, ubDirectionalLights.directionalLights[0].matrices mat4[16] @180 with inner 4
     /// (4 lights x 4 cascades), .direction vec3[4] @120, .shadowBias float[4] @136.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* only the PowerVR table has these shaders */
+    #[cfg(feature = "gpu-powervr")] /* only the PowerVR table has these shaders */
     fn lit_program(gl: &TestGl) -> GLuint {
         let p = gl.program("83a830e25f56fd85.vert", "0119aeb276db508c.frag");
         let c = gl.ctx();
@@ -6116,7 +6116,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn struct_array_member_location_carries_the_element_in_the_upper_bits() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6131,7 +6131,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn struct_array_member_with_an_inner_array_scales_the_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6144,7 +6144,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn set_vec3_member_of_struct_array_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6160,7 +6160,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn set_scalar_members_of_struct_array_elements() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6177,7 +6177,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn set_matrices_of_one_struct_array_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6192,7 +6192,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_struct_member_that_is_not_an_array_takes_count_one_only() {
         /* This test used to expect the write to run on into the following structs' members. GL ES 3.0 2.12.6:
          * "ubLights.lights[14].position" is a vec3, not an array, so count > 1 is GL_INVALID_OPERATION; the
@@ -6218,7 +6218,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn an_inner_array_write_is_clamped_to_the_inner_array() {
         /* matrices is mat4[4] per light: the location of light k's matrices addresses a 4-element array */
         let gl = fresh();
@@ -6237,7 +6237,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn an_inner_array_element_has_its_own_location() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6259,7 +6259,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn element_bits_beyond_the_array_write_nothing() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6270,7 +6270,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn get_uniform_reads_the_element_the_location_addresses() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6356,7 +6356,7 @@ mod tests {
     /* ---- uniform blocks sized at link time (upstream bcef68b) --------------------------------------- */
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn link_sizes_each_block_to_its_stage() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");
@@ -6464,7 +6464,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn femtovg_frag_array_reaches_the_draw_and_the_upload_keeps_the_table_size() {
         /* the Slint UI on the device: FemtoVG's fill shaders set frag[14] with one glUniform4fv; the upload is the
          * 52 dwords the shader reads, now holding the application's values */
@@ -6673,7 +6673,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn real_normal_matrix_is_strided_in_the_vs_block() {
         let gl = fresh();
         let p = gl.program("fd0c8a22ac0eef86.vert", "0119aeb276db508c.frag");
@@ -6835,7 +6835,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn real_int_uniform_in_both_stages() {
         let gl = fresh();
         let p = gl.program("visualization.vert", "visualization.frag");
@@ -7260,7 +7260,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn program_queries_write_through_misaligned_pointers() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");
@@ -7518,7 +7518,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn get_active_uniform_errors() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");
@@ -7763,7 +7763,7 @@ mod tests {
     /* ---- glGetProgramiv / glGetProgramInfoLog / glValidateProgram ---- */
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn get_programiv_max_lengths_cover_the_longest_names() {
         let gl = fresh();
         let p = gl.program("83a830e25f56fd85.vert", "0119aeb276db508c.frag");
@@ -8137,7 +8137,7 @@ mod tests {
     /// -- not the size of the buffer this implementation keeps names in. dEQP
     /// compares them against the names it declared, exactly.
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own shaders */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own shaders */
     fn the_max_name_lengths_are_the_longest_name_not_the_buffer() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");

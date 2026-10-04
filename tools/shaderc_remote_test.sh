@@ -77,7 +77,7 @@ echo "=== comparing the remote back end with the offline table (ROWS=$ROWS)"
 rc=0
 YAKOGL_SHADERC_SERVER="127.0.0.1:$PORT" YAKOGL_SHADERC_TEST_ROWS="$ROWS" \
 	cargo test --quiet --manifest-path "$ROOT/Cargo.toml" \
-	--no-default-features --features host-test,shaderc-remote \
+	--no-default-features --features host-test,gpu-powervr,shaderc-remote \
 	--test shaderc_remote -- --nocapture || rc=$?
 
 echo

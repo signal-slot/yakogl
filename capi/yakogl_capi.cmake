@@ -148,7 +148,7 @@ function(yakogl_rust_target_is_hosted triple out)
   endif()
 endfunction()
 
-# yakogl_add_capi_archive(OUTPUT <libyakogl.a> OSAL <name> [GPU <name>]
+# yakogl_add_capi_archive(OUTPUT <libyakogl.a> OSAL <name> GPU <name>
 #                         [SHADERC offline|remote|online]
 #                         TARGET_NAME <tgt> [C_OBJECT_LIBRARY <object library>])
 # Adds custom target <tgt> that builds OUTPUT: cargo builds yakogl-capi for
@@ -162,13 +162,11 @@ function(yakogl_add_capi_archive)
   if(A_OSAL)
     list(APPEND _features "osal-${A_OSAL}")
   endif()
-  # The GPU's backend and offline shader table (the crate's `gpu-vivante`);
-  # the PowerVR is the default and needs no feature.
-  if(A_GPU STREQUAL "vivante")
-    list(APPEND _features "gpu-vivante")
-  elseif(A_GPU STREQUAL "v3d")
-    list(APPEND _features "gpu-v3d")
+  # The GPU's backend and offline shader table: the crate's `gpu-<name>`.
+  if(NOT A_GPU MATCHES "^(powervr|vivante|v3d)$")
+    message(FATAL_ERROR "yakogl_add_capi_archive: GPU must be powervr|vivante|v3d (got '${A_GPU}')")
   endif()
+  list(APPEND _features "gpu-${A_GPU}")
   # The remote shader back end needs an OS (TCP sockets and a heap), so it is
   # a host build only; the offline table is the default and needs no feature.
   # The in-process compiler needs neither -- it is no_std -- so `online` is the

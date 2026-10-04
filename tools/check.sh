@@ -10,7 +10,7 @@
 # and how a function with no callers did (7715e3f).
 #
 #   tools/check.sh            fmt, the no_std archive, clippy and the tests
-#   tools/check.sh --quick    the default build only, for a tight edit loop
+#   tools/check.sh --quick    the PowerVR build only, for a tight edit loop
 #
 # In every configuration the library ships in:
 #
@@ -65,18 +65,18 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 CONFIGS=(
-  "host-test"
-  "host-test,report-es2"
+  "host-test,gpu-powervr"
+  "host-test,gpu-powervr,report-es2"
   "host-test,gpu-vivante"
-  "host-test,shaderc-online"
-  "host-test,shaderc-remote"
+  "host-test,gpu-powervr,shaderc-online"
+  "host-test,gpu-powervr,shaderc-remote"
   "host-test,gpu-vivante,shaderc-remote"
-  "host-test,shaderc-online,shaderc-remote"
+  "host-test,gpu-powervr,shaderc-online,shaderc-remote"
   "host-test,gpu-vivante,shaderc-online"
   # The pair every dEQP-GLES2 online image is built from: it refuses GLSL ES
   # 3.00, so tests that compile ES 3.00 are cfg'd out of it, and it was never
   # tested until 2026-09-24, when 80 tests failed in it.
-  "host-test,shaderc-online,report-es2"
+  "host-test,gpu-powervr,shaderc-online,report-es2"
   # The i.MX8MP's dEQP-GLES2 image: the GC7000 with the in-process compiler,
   # reporting ES 2.0. Its GC7000 harness pins are per build.
   "host-test,gpu-vivante,shaderc-online,report-es2"
@@ -97,10 +97,10 @@ CONFIGS=(
 # lints with no table in it.
 BUILD_ONLY_CONFIGS=(
   "host-test,gpu-vivante,shaderc-online,no-shader-table"
-  "host-test,shaderc-online,no-shader-table"
+  "host-test,gpu-powervr,shaderc-online,no-shader-table"
 )
-[ "${1-}" = "--quick" ] && CONFIGS=("host-test")
-# YAKOGL_CHECK_CONFIGS="host-test host-test,gpu-vivante" (space-separated feature
+[ "${1-}" = "--quick" ] && CONFIGS=("host-test,gpu-powervr")
+# YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr host-test,gpu-vivante" (space-separated feature
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
 if [ -n "${YAKOGL_CHECK_CONFIGS-}" ]; then read -r -a CONFIGS <<< "$YAKOGL_CHECK_CONFIGS"; fi
@@ -167,7 +167,7 @@ step "cargo fmt --check" cargo fmt --check
 # libm -- and the break only showed when a board pair was built by hand.
 # Twelve seconds on a warm tree, and it is the only row that says "this
 # compiles for a target with no operating system".
-step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi
+step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr
 
 for f in "${CONFIGS[@]}"; do
   step "clippy  $f" cargo clippy --no-default-features --features "$f" --all-targets
@@ -209,7 +209,7 @@ done
 # is printed with its reason, one line per test, and kept in
 # build/check/v3d-ignored.txt (`ignored<TAB><test><TAB><reason>`), because
 # an ignore nobody reads is a skip. Tests gated at compile time by GPU
-# (`cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))`, the
+# (`cfg(feature = "gpu-powervr")`, the
 # PowerVR table's own values) are not in this binary and are not listed.
 V3D_CONFIG="host-test,gpu-v3d,shaderc-online,no-shader-table"
 V3D_MIN_TESTS=2460
@@ -808,7 +808,7 @@ fi
 # the backends have their own cfg arms.
 TARGET_CONFIGS=(
   "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table"
-  "osal-zephyr,shaderc-online,no-shader-table"
+  "osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
   "osal-zephyr,gpu-v3d,shaderc-online,no-shader-table"
 )
 if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none; then

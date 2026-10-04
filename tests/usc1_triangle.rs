@@ -12,7 +12,7 @@
 //! Asserts almost nothing on purpose: this is a report for two other people,
 //! and a number pinned here would stop either of them improving it.
 
-#![cfg(all(feature = "shaderc-online", not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+#![cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
 
 use yakogl::shaderc::online::powervr::alloc::{allocate, boundary_of, Allocated, Limits};
 use yakogl::shaderc::online::powervr::sel::{Bank, SelDst, SelGroup, SelSrc, VReg};

@@ -340,7 +340,7 @@ fn vertex_inputs(sh: &ShcShader) -> ([ShcAttrib; MAX_DRAW_ATTRIBS], usize) {
          * PowerVR front end splits a matrix so pco_shc never sees one) is
          * taken as it is. */
         let split = rows.iter().filter(|r| r.name == whole.name).count() > 1;
-        let columns: u8 = if cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")) && !split {
+        let columns: u8 = if cfg!(not(feature = "gpu-powervr")) && !split {
             /* ES 2.0's matrices are square: a column is as tall as the
              * matrix is wide */
             match u32::from(whole.gl_type) {
@@ -2040,9 +2040,9 @@ fn clear_state(c: &GlContext) -> ClearState {
 /// halves (dEQP-GLES2 draw.draw_elements.indices.buffer.index_short, its
 /// "index offset 2" iteration). Such a draw stages the indices instead.
 /// The other GPUs keep reading in place at any 2-byte offset.
-#[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+#[cfg(feature = "gpu-powervr")]
 const INDEX_ADDR_ALIGN: u64 = 4;
-#[cfg(any(feature = "gpu-vivante", feature = "gpu-v3d"))]
+#[cfg(not(feature = "gpu-powervr"))]
 const INDEX_ADDR_ALIGN: u64 = 1;
 
 /// The colour targets a `glClear` issued now touches (`ClearState::
@@ -3345,7 +3345,7 @@ fn build_common(
              * by default that would hand a copy to a stacked program. The
              * PowerVR's alone: the GC7000 and the V3D sample cubes their own
              * way. */
-            #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+            #[cfg(feature = "gpu-powervr")]
             if tb.type_ == GLES_TEXTYPE_CUBE && sh.native_cube != 0 {
                 /* the kick that last rendered into it: GlesTextureBind's
                  * target_kick, filled above, which the GC7000's tiled copy
@@ -4250,7 +4250,7 @@ mod tests {
     /* ---- what the draw carries for a backend with fixed-function state ------ */
 
     #[test]
-    #[cfg(any(feature = "gpu-vivante", feature = "gpu-v3d"))] /* a PowerVR build refuses a draw whose variant it lacks */
+    #[cfg(not(feature = "gpu-powervr"))] /* a PowerVR build refuses a draw whose variant it lacks */
     fn the_draw_carries_the_blend_state_and_the_colour_mask() {
         /* The PowerVR blends in the fragment shader variant and reads none of
          * this; a GPU that blends in hardware (the Vivante PE) needs the
@@ -4555,7 +4555,7 @@ mod tests {
     /// A triangle the draw path refuses: no GL error, nothing reaches the
     /// backend. Returns how many refusals it counted. (The GPUs that blend
     /// in fixed function ask for no variant, so nothing there refuses.)
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     fn refused_tri(gl: &Gl) -> u32 {
         let before = crate::backend::draws_refused();
         // SAFETY: the arrays the fixtures set up are statics.
@@ -6548,7 +6548,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn unblended_draw_uses_the_programs_own_fragment_shader() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -6580,7 +6580,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn blended_draw_selects_the_precompiled_fbfetch_variant() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -6607,7 +6607,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_blend_variant_is_linked_to_the_vertex_shader_like_the_base_shader() {
         /* The variant is a fresh copy from the offline table and carries the
          * fragment shader's own varying packing; without the link it
@@ -6651,7 +6651,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn blend_variant_is_uploaded_once_and_dropped_when_blending_stops() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -6743,7 +6743,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* blends in the shader */
+    #[cfg(feature = "gpu-powervr")] /* blends in the shader */
     fn blend_state_without_a_variant_refuses_the_draw_and_logs_once() {
         /* Drawn with the plain FS, the draw would be a picture of another
          * blend state (the PowerVR's subtract variants, 2026-09-24): refused,
@@ -6774,7 +6774,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* blends in the shader */
+    #[cfg(feature = "gpu-powervr")] /* blends in the shader */
     fn a_refused_draw_leaves_its_pending_clear_for_the_next() {
         /* The glClear fused into a draw must not vanish with the draw. */
         let gl = Gl::new(16, 16);
@@ -6798,7 +6798,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn partial_colour_mask_selects_a_mask_variant() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -6823,7 +6823,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn fully_masked_discard_shader_runs_the_zero_one_variant_with_colour_write_on() {
         /* the stencil-only pass of a shader with `discard` (femtovg): the ISP
          * tag write must stay enabled or the stencil op never happens */
@@ -6845,7 +6845,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn constant_colour_variant_reads_glblendcolor_after_the_app_uniforms() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -6862,7 +6862,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn fifth_blend_state_recycles_the_first_variant_slot() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -6889,7 +6889,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* blends in the shader */
+    #[cfg(feature = "gpu-powervr")] /* blends in the shader */
     fn variant_upload_failure_refuses_the_draw() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -6906,7 +6906,7 @@ mod tests {
     /* ---- per-program GPU cache ---------------------------------------------------- */
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn usc_is_uploaded_to_the_shader_heap_on_the_first_draw() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -6966,7 +6966,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn relink_frees_the_cached_uploads_and_the_next_draw_uploads_again() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -7042,7 +7042,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn debug_usc_reports_the_uploads_of_a_drawn_program() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -7136,7 +7136,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn odd_sized_vs_block_pads_the_fs_block_to_16_bytes() {
         let gl = Gl::new(16, 16);
         /* femtovg main.vert: uniform vec2 viewSize (2 dwords) */
@@ -7601,7 +7601,7 @@ mod tests {
     /// glTexParameter, a sampler object and glUniform1i re-pointing the
     /// sampler at another unit, with no hook, and a variant is compiled
     /// and uploaded once.
-    #[cfg(all(feature = "shaderc-online", not(any(feature = "gpu-vivante", feature = "gpu-v3d"))))]
+    #[cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
     #[test]
     fn a_plain_texture_draws_the_fragment_shader_without_gradients() {
         const VS: &str = "attribute vec4 p; varying vec2 uv; void main(){ uv = p.xy; gl_Position = p; }";
@@ -7844,7 +7844,7 @@ mod tests {
             let (v, n) = vertex_inputs(&sh);
             v[..n].iter().map(|a| (a.location, a.components, a.vi_reg)).collect::<Vec<_>>()
         };
-        if cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")) {
+        if cfg!(not(feature = "gpu-powervr")) {
             let mat4 = [(0, 4, 0), (1, 4, 1), (2, 4, 2), (3, 4, 3), (4, 4, 4)];
             assert_eq!(rec(16, GL_FLOAT_MAT4), mat4, "etna_shc's record");
             assert_eq!(rec(4, GL_FLOAT_MAT4), mat4, "the in-process compiler's");
@@ -7859,7 +7859,7 @@ mod tests {
 
     /// Draws 3 vertices whose a_color comes from a 4-component client array of
     /// `type_`; returns the staged floats of a_color.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* only the PowerVR table has these shaders */
+    #[cfg(feature = "gpu-powervr")] /* only the PowerVR table has these shaders */
     fn staged_colour(gl: &Gl, type_: GLenum, normalized: bool, data: &[u8]) -> Vec<f32> {
         // SAFETY: `data` outlives the draw and holds 3 vertices.
         unsafe {
@@ -7876,7 +7876,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn unsigned_byte_normalized_array_is_staged_as_unit_floats() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -7888,7 +7888,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn unsigned_byte_unnormalized_array_is_staged_as_its_values() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -7898,7 +7898,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn byte_arrays_are_staged_signed() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -7913,7 +7913,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn short_arrays_are_staged_normalized_and_not() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -7927,7 +7927,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn unsigned_short_and_fixed_arrays_are_staged_as_floats() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -8013,7 +8013,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn disabled_array_reads_the_current_attribute_as_a_zero_stride_constant() {
         let gl = Gl::new(16, 16);
         basic(&gl);
@@ -8055,7 +8055,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn attributes_follow_glbindattriblocation() {
         let gl = Gl::new(16, 16);
         let vs = gl.shader(GL_VERTEX_SHADER, "passthrough.vert");
@@ -10268,7 +10268,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_blend_variant_that_failed_to_upload_is_retried() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
@@ -10443,7 +10443,7 @@ mod tests {
     /// the draw binds the TPU's twiddled copy for it by default, with no
     /// switch involved -- on the PowerVR only.
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))]
+    #[cfg(feature = "gpu-powervr")]
     fn the_tables_cube_program_is_native_and_gets_the_copy() {
         let gl = Gl::new(16, 16);
         gl.allow_uninit_reads(true);
@@ -10482,7 +10482,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR's native cube */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR's native cube */
     fn a_native_cube_is_copied_again_after_a_render_into_it_without_a_rebind() {
         /* gl::native_cube: the copy's staleness is asked at every draw. A
          * cube bound once, rendered into through a framebuffer and sampled
@@ -10831,7 +10831,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn an_array_sampler_gets_its_layer_count_in_the_same_draw() {
         let gl = Gl::new(16, 16);
         /* glTexStorage leaves the texels undefined: the test checks the binding only */
@@ -10865,7 +10865,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_vertex_stage_array_sampler_gets_its_layer_count_too() {
         /* Qt Quick 3D's morph targets are a sampler2DArray read in the
          * VERTEX shader (texelFetch indexed by gl_VertexID): its block needs
@@ -10904,7 +10904,7 @@ mod tests {
 
     /// array.frag with its sampler reported as a sampler3D: what the translator makes of vol.frag (a sampler2D
     /// plus the hidden pvr_layers_ count), which upstream's committed table does not carry.
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* only the PowerVR table has these shaders */
+    #[cfg(feature = "gpu-powervr")] /* only the PowerVR table has these shaders */
     fn vol_prog(gl: &Gl) -> GLuint {
         let prog = es3_prog(gl, "array.frag");
         let p = &mut gl.ctx().objs().programs[obj_index(prog)];
@@ -10918,7 +10918,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_sampler3d_reads_the_3d_binding_as_its_grid() {
         let gl = Gl::new(16, 16);
         gl.allow_uninit_reads(true); /* glTexStorage leaves the texels undefined */
@@ -10947,7 +10947,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_3d_texture_is_not_sampled_by_a_2d_array_sampler() {
         let gl = Gl::new(16, 16);
         gl.allow_uninit_reads(true);
@@ -10982,7 +10982,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn layer_uniform_name_is_matched_on_the_raw_bytes() {
         let gl = Gl::new(16, 16);
         let prog = es3_prog(&gl, "array.frag");
@@ -10999,7 +10999,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_float_render_target_selects_the_variant_packed_for_its_class() {
         let gl = Gl::new(16, 16);
         let prog = es3_prog(&gl, "cube.frag");
@@ -11048,7 +11048,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_vertex_shader_reading_gl_vertexid_carries_its_register() {
         let gl = Gl::new(16, 16);
         let prog = gl.program("vid.vert", "vcolor.frag");
@@ -11225,7 +11225,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's own values */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
     fn a_blend_variants_constants_reach_the_snapshot_inside_the_array() {
         /* upstream 98f7331 puts glBlendColor in the host-side array; the C
          * array is fs_uniform_cap dwords long and the DMA reads four more,

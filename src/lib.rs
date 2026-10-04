@@ -59,7 +59,9 @@ compile_error!(
 );
 
 #[cfg(all(test, not(feature = "host-test")))]
-compile_error!("unit tests need the host-test feature: cargo test --no-default-features --features host-test");
+compile_error!(
+    "unit tests need the host-test feature: cargo test --no-default-features --features host-test,gpu-powervr"
+);
 
 /// True in the host-test build (std linked, null `g_backend`). The C archive
 /// crate (capi/) refuses to build against it.
@@ -95,7 +97,7 @@ pub mod backend;
 /// a buffer may be let go.
 pub mod ds_retention;
 pub mod gl;
-/// The PowerVR BXS-4-64 backend (not in a `gpu-vivante` or `gpu-v3d` build).
+/// The PowerVR BXS-4-64 backend (only in a `gpu-powervr` build).
 pub mod pvr;
 pub mod shaderc;
 /// The Raspberry Pi 4's V3D 4.2 backend (only in a `gpu-v3d` build).
@@ -117,13 +119,21 @@ mod test_rules;
 #[cfg(all(feature = "no-shader-table", not(feature = "shaderc-online")))]
 compile_error!("feature \"no-shader-table\" needs a back end that needs no table: enable \"shaderc-online\"");
 
-/* One GPU per build. The V3D's only shader back end is the in-process
- * compiler (no offline table, no remote path: docs/online-shaderc/v3d-backend.md),
- * so a `gpu-v3d` build without it, or with a table or a server, is refused here
- * by name rather than built into a library that cannot compile a shader or
- * that compiles for the wrong GPU. */
-#[cfg(all(feature = "gpu-v3d", feature = "gpu-vivante"))]
-compile_error!("features \"gpu-v3d\" and \"gpu-vivante\" select two GPUs: a build has exactly one");
+/* Exactly one GPU per build: one of the three features, never none and never
+ * two. */
+#[cfg(not(any(
+    all(feature = "gpu-powervr", not(feature = "gpu-vivante"), not(feature = "gpu-v3d")),
+    all(not(feature = "gpu-powervr"), feature = "gpu-vivante", not(feature = "gpu-v3d")),
+    all(not(feature = "gpu-powervr"), not(feature = "gpu-vivante"), feature = "gpu-v3d"),
+)))]
+compile_error!(
+    "enable exactly one GPU feature: \"gpu-powervr\" (AM62P), \"gpu-vivante\" (i.MX8MP) or \"gpu-v3d\" (Raspberry Pi 4)"
+);
+
+/* The V3D's only shader back end is the in-process compiler (no offline
+ * table, no remote path: docs/online-shaderc/v3d-backend.md), so a `gpu-v3d`
+ * build without it, or with a table or a server, is refused here by name
+ * rather than built into a library that cannot compile a shader. */
 #[cfg(all(feature = "gpu-v3d", not(feature = "shaderc-online")))]
 compile_error!(
     "feature \"gpu-v3d\" needs \"shaderc-online\": the in-process compiler is the V3D's only shader back end"

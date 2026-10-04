@@ -641,7 +641,7 @@ plan is to capture in the GL core, on the CPU, and leave rasterisation as it is:
   fusion, attribute resolution, uniforms, textures, indexed + client-side draws, cull
   mapping, error paths) and run on silicon. The Rust core is checked on the host only,
   two ways. **Unit tests on strict mocks** live next to the code and run with
-  `cargo test --no-default-features --features host-test` (1350 crate tests plus the 6
+  `cargo test --no-default-features --features host-test,gpu-powervr` (1350 crate tests plus the 6
   in `tests/`: SHA-256 known answers and the shader table's invariants; none ignored).
   The mocks in `src/testutil.rs` model a non-coherent platform and fail the test on a
   double free, a cache range outside its allocation, a read of memory the library never

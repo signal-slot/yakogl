@@ -3745,11 +3745,7 @@ mod tests {
     #[test]
     fn valid_configs_are_the_three_handles() {
         assert!(valid_config(CONFIG_1X) && valid_config(CONFIG_565));
-        assert_eq!(
-            valid_config(CONFIG_4X),
-            !cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")),
-            "4x only where multisampling works"
-        );
+        assert_eq!(valid_config(CONFIG_4X), !cfg!(not(feature = "gpu-powervr")), "4x only where multisampling works");
         assert!(!valid_config(core::ptr::null_mut()));
         assert!(!valid_config(4 as EGLConfig));
     }
@@ -4112,13 +4108,12 @@ mod tests {
 
     /// An 8888 config other than CONFIG_1X where the build has one, for tests
     /// that only need "an RGBA8888 config", not a multisampled one.
-    const CONFIG_4X_OR_1X: EGLConfig =
-        if cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")) { CONFIG_1X } else { CONFIG_4X };
+    const CONFIG_4X_OR_1X: EGLConfig = if cfg!(not(feature = "gpu-powervr")) { CONFIG_1X } else { CONFIG_4X };
 
     /// The GC7000 build offers no config it cannot honour: its backend has
     /// multisampling off, so there is no 4x config to list, choose or make a
     /// surface on. The V3D build neither: its backend does not multisample.
-    #[cfg(any(feature = "gpu-vivante", feature = "gpu-v3d"))]
+    #[cfg(not(feature = "gpu-powervr"))]
     #[test]
     fn the_gc7000_offers_no_multisampled_config() {
         let gl = TestGl::new(8, 8);
@@ -4228,7 +4223,7 @@ mod tests {
         assert_eq!(a(EGL_CONFIG_ID), 1);
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the GC7000 build has no 4x config */
+    #[cfg(feature = "gpu-powervr")] /* the GC7000 build has no 4x config */
     #[test]
     fn config_attribs_of_the_multisampled_config() {
         let gl = TestGl::new(8, 8);
@@ -4367,7 +4362,7 @@ mod tests {
         assert_eq!(choose(egl.dpy, &[EGL_STENCIL_SIZE, 9, EGL_NONE]), Ok(std::vec![]));
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the GC7000 build has no 4x config */
+    #[cfg(feature = "gpu-powervr")] /* the GC7000 build has no 4x config */
     #[test]
     fn choose_config_samples_select_the_multisampled_config() {
         let gl = TestGl::new(8, 8);
@@ -4980,7 +4975,7 @@ mod tests {
         assert_eq!(q(EGL_VG_COLORSPACE), Ok(EGL_VG_COLORSPACE_sRGB));
     }
 
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the GC7000 build has no 4x config */
+    #[cfg(feature = "gpu-powervr")] /* the GC7000 build has no 4x config */
     #[test]
     fn query_surface_config_id_of_a_multisampled_surface() {
         let gl = TestGl::new(8, 8);
@@ -5647,7 +5642,7 @@ mod tests {
     /// the MMU parameters -- so it is not the firmware fault the fence
     /// timeouts were. This pins where the program state is lost.
     #[test]
-    #[cfg(not(any(feature = "gpu-vivante", feature = "gpu-v3d")))] /* the PowerVR table's shader names */
+    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's shader names */
     fn a_program_survives_rebinding_the_context_to_another_surface() {
         const TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0, -1.0, 3.0, 0.0, 1.0];
         let gl = TestGl::new(8, 8);

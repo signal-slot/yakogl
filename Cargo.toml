@@ -69,15 +69,19 @@ osal-baremetal = []
 # it is talking to ES 3 whatever the version string said. Off by default,
 # because Qt's RHI takes the ES 3.0 path from that string.
 report-es2 = []
-# The GPU whose backend and offline shader table are compiled in. The default
-# is the PowerVR BXS (`pvr/`); `gpu-vivante` selects the i.MX8MP's GC7000
-# (`vivante/`), which changes the shader ABI (`struct shc_shader` grows its
-# GC7000 half) and the table the shader back end looks shaders up in. Exactly
-# one GPU is in a build, as in the C (-DYAKOGL_GPU_VIVANTE).
+# The GPU whose backend and offline shader table are compiled in. Exactly one
+# of `gpu-powervr`, `gpu-vivante` and `gpu-v3d` is in a build (src/lib.rs
+# refuses none and two), so `default` names none: every build says its GPU.
+#
+# The AM62P's PowerVR BXS-4-64 (`pvr/`).
+gpu-powervr = []
+# The i.MX8MP's Vivante GC7000 (`vivante/`), which changes the shader ABI
+# (`struct shc_shader` grows its GC7000 half) and the table the shader back
+# end looks shaders up in.
 gpu-vivante = []
 # The Raspberry Pi 4's Broadcom V3D 4.2 (`v3d/`): the GL core draws through
 # the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
-# "M6"). Mutually exclusive with `gpu-vivante`. The only shader back end for
+# "M6"). The only shader back end for
 # this GPU is the in-process compiler: there is no offline table and no remote
 # path, so it needs `shaderc-online` and `no-shader-table` and refuses
 # `shaderc-remote` (src/lib.rs says so at compile time rather than building a
@@ -91,7 +95,7 @@ vivante-depth-guard = ["gpu-vivante"]
 # Host tests only: links std so the test harness can unwind, and starts with a
 # null `g_backend` (the tests install mocks). Never enable it in a product:
 # it is a compile error on bare-metal targets and in the C archive.
-#   cargo test --no-default-features --features host-test
+#   cargo test --no-default-features --features host-test,gpu-powervr
 host-test = []
 # The remote shader back end (src/shaderc/remote.rs): compile a shader on a
 # host over TCP instead of looking it up in the offline table, which is what
@@ -138,7 +142,7 @@ serde_json = { version = "1", optional = true, default-features = false, feature
 
 # build.rs compiles Mesa's QPU packer (third_party/mesa-26.2.1/src/broadcom/qpu)
 # for a `gpu-v3d` build and the PowerVR backend's csbgen packer wrappers
-# (driver/src/pvr/generated/csbgen_wrap.c) for a PowerVR build; the GC7000
+# (driver/src/pvr/generated/csbgen_wrap.c) for a `gpu-powervr` build; the GC7000
 # build compiles no C here.
 [build-dependencies]
 cc = "1.2"

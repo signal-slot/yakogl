@@ -158,7 +158,7 @@ Two rules keep the parse honest:
 
 ### What M1 is measured by
 
-`cargo test --no-default-features --features host-test,shaderc-online` over
+`cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online` over
 the whole offline blob table:
 
 * `round_trip_every_blob_in_the_offline_table` — 2,042 of 2,042 blobs,
