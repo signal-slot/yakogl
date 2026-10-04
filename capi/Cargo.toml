@@ -42,15 +42,8 @@ gpu-vivante = ["yakogl/gpu-vivante"]
 # compiler is its only shader back end, so it goes with `shaderc-online` and
 # `no-shader-table` (the yakogl crate refuses it otherwise).
 gpu-v3d = ["yakogl/gpu-v3d"]
-# The remote shader back end, for a host build (dEQP-GLES2 writes its shaders
-# as it runs, so no table can serve it). It links std, which brings its own
-# panic handler and unwinder, so this crate must not define one: see the
-# cfg in src/lib.rs.
-shaderc-remote = ["yakogl/shaderc-remote"]
-# The in-process compiler. Unlike the remote back end it is no_std: it needs no
-# server, no std and no table, so it is the one of the three that ships in a
-# product and the only one a Zephyr image can take. This crate keeps its own
-# panic handler for it, as it does for an offline build.
+# The in-process compiler: no_std, it needs no table, and it is the only back
+# end a Zephyr image can take.
 shaderc-online = ["yakogl/shaderc-online"]
 # No offline blob table in the image (the yakogl crate's own feature). What a
 # Zephyr or bare-metal build takes on top of `shaderc-online`; a host build

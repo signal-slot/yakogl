@@ -210,7 +210,7 @@ tempting move was to treat the table as wrong.
 - Only **5 of 102 variants** are exercised: `main` header, `sngl`,
   `uvsw_write_imm`, `uvsw_write_emit_endtask_imm`, `emitpix`. The other 97 are
   transcribed and unverified. M1's round-trip over the 2,042 table blobs
-  (shaderc-remote) is what will exercise the rest, and the coverage list it
+  is what will exercise the rest, and the coverage list it
   produces belongs next to this section.
 - The **operand areas decode, but are not yet split automatically.** See
   "Operands" below: the first source and the destination of both test programs
@@ -571,7 +571,7 @@ section means decoding the variant-dependent bank and index fields, which is
 the legalise/encode work rather than a measurement that can precede it. So
 these three arrive with the encoder.
 
-Until then `Limits` stays what shaderc-remote made it, a caller parameter, and
+Until then `Limits` stays a caller parameter, and
 a caller that does not know passes a bound it can defend.
 
 ## The pinned registers, per stage

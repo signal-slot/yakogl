@@ -27,7 +27,7 @@
 //! `is_immediate()` IS `group == RGROUP_IMMED`, so the disjunction tests one
 //! thing twice. I read a second encoding into it and was wrong.
 //!
-//! shaderc-remote measured the immediate case (two per instruction 328 times
+//! An independent count measured the immediate case (two per instruction 328 times
 //! in the reference, three never). This asks the same question of every group,
 //! because **`src()` already folds uniform reads into consumers today** -- so
 //! if this machine limits constant-file operands per instruction, the limit is
@@ -62,7 +62,7 @@
 //! the check for that rule; this one says only how many operands of a group
 //! an instruction may hold.
 //!
-//! The immediate column reproduces shaderc-remote's independent count
+//! The immediate column reproduces that independent count
 //! exactly, which is what says the reader here is right.
 //!
 //! ```sh
@@ -171,7 +171,7 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
              * for it, not when `SRC{n}_USE` says so.
              *
              * Measured, after the first version of this file disagreed with
-             * shaderc-remote by a factor of 34: `SRC0_USE` is ABSENT from
+             * the independent count by a factor of 34: `SRC0_USE` is ABSENT from
              * 13,830 of the 13,908 instructions, including every `mad`,
              * `mul`, `mov`, `add`, `select` and `sqrt` -- the ordinary ALU
              * operations, which is to say almost all of them. `SRC0_RGROUP`
@@ -208,7 +208,7 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
 
     /* THE GUARD THAT WOULD HAVE CAUGHT THE FIRST VERSION OF THIS FILE.
      *
-     * shaderc-remote measured the immediate column independently and by a
+     * An independent count measured the immediate column and by a
      * different route: 12,100 instructions with none, 1,480 with one, 328
      * with two, never three. Pinning it here means a reader that silently
      * stops counting -- which is exactly what gating on `SRC{n}_USE` did --

@@ -31,7 +31,6 @@ use std::process::{Command, Stdio};
 use yakogl::shaderc as abi;
 
 /// The blend key's render-target class field (`shc_blend_key_rt`).
-const SHC_BLEND_KEY_RT_SHIFT: u32 = abi::SHC_BLEND_KEY_RT_SHIFT;
 
 /// SHC_NO_META: a shader that needs no ISP-feedback meta word.
 pub const SHC_NO_META: i64 = abi::SHC_NO_META as i64;
@@ -204,52 +203,6 @@ pub fn blend_key(spec: &str) -> R<u32> {
         exit!("glsl2usc: --blend {spec} is the plain replace the base shader already is");
     }
     Ok(key)
-}
-
-/// The blend key a compiled variant carries -> the `--blend` spec that built
-/// it: the inverse of [`blend_key`], for the remote back end (the GL core
-/// sends the key it computed from the draw state, and `shaderc-compile` has
-/// to reach the same variant). The factor and equation names stay in one
-/// place, the tables above.
-pub fn spec_from_key(key: u32) -> R<String> {
-    if key == 0 {
-        return Ok(String::new());
-    }
-    let name = |table: &[(&str, u32)], code: u32, what: &str| -> R<String> {
-        match table.iter().find(|(_, v)| *v == code) {
-            Some((n, _)) => Ok(n.to_string()),
-            None => exit!("glsl2usc: blend key {}: unknown {what} code {code}", py::hex(key as i128, true)),
-        }
-    };
-    let factors: Vec<String> =
-        [0u32, 5, 10, 15].iter().map(|s| name(BLEND_FACTORS, (key >> s) & 0x1f, "factor")).collect::<R<_>>()?;
-    let eq = name(BLEND_FUNCS, (key >> 20) & 7, "equation")?;
-    let eqa = name(BLEND_FUNCS, (key >> 23) & 7, "equation")?;
-    let mask_off = (key >> 26) & 0xf;
-    let rt = (key >> SHC_BLEND_KEY_RT_SHIFT) & 3;
-
-    let mut spec = if factors == ["one", "zero", "one", "zero"] && eq == "add" && eqa == "add" {
-        "replace".to_string()
-    } else {
-        let mut parts = factors;
-        parts.push(eq);
-        parts.push(eqa);
-        parts.join(",")
-    };
-    if mask_off != 0 {
-        if mask_off == 0xf {
-            /* --blend takes the channels that stay ON, and an empty set reads
-             * as "no mask at all", so no spec can say this. The GL core asks
-             * for 'zero,one' instead, which writes the destination back. */
-            exit!("glsl2usc: blend key {}: no spec turns every colour channel off", py::hex(key as i128, true));
-        }
-        let on: String = COLORMASK_BITS.iter().filter(|(_, b)| mask_off & b == 0).map(|(c, _)| *c).collect();
-        spec += &format!(":{on}");
-    }
-    if rt != 0 {
-        spec += &format!("@{}", name(RT_CLASSES, rt, "render target class")?);
-    }
-    Ok(spec)
 }
 
 /// The environment the compiler runs with for a variant (PCO_SHC_OUT,
@@ -546,11 +499,10 @@ pub fn parse_pco_meta(meta: &str, stage: &str) -> R<Shader> {
 /// A compiler binary that is not there.
 ///
 /// `Error::Fatal`, never `Error::Exit`: this is the service being broken, not
-/// a verdict on the shader. An `Exit` reaches `shaderc-compile`'s caller as
+/// a verdict on the shader. An `Exit` reaches `shader-check`'s caller as
 /// `{"ok": false}` -- "your shader is bad" -- which on a host with no
-/// `pco_shc` would tell an application that every shader it owns is invalid,
-/// and the remote back end's cache would remember it. `--skip-failures` must
-/// not quietly drop shaders for this reason either.
+/// `pco_shc` would call every shader invalid. `--skip-failures` must not
+/// quietly drop shaders for this reason either.
 fn not_found(prog: &str) -> Error {
     Error::Fatal(format!(
         "tool not found: [Errno 2] No such file or directory: {} (set PCO_SHC / GLSLANG)",
@@ -1634,11 +1586,10 @@ mod tests {
 
     #[test]
     fn a_missing_compiler_is_the_service_failing_not_a_bad_shader() {
-        /* Error::Exit reaches `shaderc-compile`'s caller as {"ok": false} --
-         * a verdict on the application's shader. A host with no pco_shc would
-         * then tell every application its shaders are invalid, and the remote
-         * back end would cache that. It has to be Fatal, which comes back as
-         * {"error": ...} with no "ok" and is never cached. */
+        /* Error::Exit reaches `shader-check`'s caller as {"ok": false} --
+         * a verdict on the shader. A host with no pco_shc would then call
+         * every shader invalid. It has to be Fatal, which comes back as
+         * {"error": ...} with no "ok". */
         match not_found("/nonexistent/pco_shc") {
             Error::Fatal(m) => assert!(m.contains("tool not found"), "{m}"),
             other => panic!("a missing compiler must be Fatal, got {other:?}"),

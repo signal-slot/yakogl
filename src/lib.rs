@@ -28,7 +28,7 @@
 //! driver's command generators).
 // Bare-metal targets stay no_std even with host-test, so that its
 // compile_error below is what the build reports.
-#![cfg_attr(any(not(any(feature = "host-test", feature = "std")), target_os = "none"), no_std)]
+#![cfg_attr(any(not(feature = "host-test"), target_os = "none"), no_std)]
 #![allow(non_upper_case_globals)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
@@ -51,12 +51,6 @@ compile_error!(
 
 #[cfg(all(feature = "host-test", target_os = "none"))]
 compile_error!("the host-test feature is for host unit tests only (it links std and starts without a GPU backend)");
-
-#[cfg(all(feature = "shaderc-remote", target_os = "none"))]
-compile_error!(
-    "the shaderc-remote feature needs an operating system (TCP sockets): a bare-metal or Zephyr \
-     build uses the offline shader table"
-);
 
 #[cfg(all(test, not(feature = "host-test")))]
 compile_error!(
@@ -131,8 +125,8 @@ compile_error!(
 );
 
 /* The V3D's only shader back end is the in-process compiler (no offline
- * table, no remote path: docs/online-shaderc/v3d-backend.md), so a `gpu-v3d`
- * build without it, or with a table or a server, is refused here by name
+ * table: docs/online-shaderc/v3d-backend.md), so a `gpu-v3d` build without
+ * it, or with a table, is refused here by name
  * rather than built into a library that cannot compile a shader. */
 #[cfg(all(feature = "gpu-v3d", not(feature = "shaderc-online")))]
 compile_error!(
@@ -140,5 +134,3 @@ compile_error!(
 );
 #[cfg(all(feature = "gpu-v3d", not(feature = "no-shader-table")))]
 compile_error!("feature \"gpu-v3d\" needs \"no-shader-table\": there is no offline table for the V3D");
-#[cfg(all(feature = "gpu-v3d", feature = "shaderc-remote"))]
-compile_error!("feature \"gpu-v3d\" excludes \"shaderc-remote\": the shader server has no V3D path");

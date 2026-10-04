@@ -367,11 +367,11 @@ pub extern "C" fn gc_debug_set_msaa(on: i32) {
 }
 
 /// Flat shading for a program with a flat varying: ON. Measured on silicon
-/// (imx8mp2, d617907, Linux path, remote pair): gl_test 89 read the first
+/// (imx8mp2, d617907, Linux path, the reference compiler's shaders): gl_test 89 read the first
 /// vertex, 0x400000ff, with it off and the last, 0xbfff0000 -- GL's -- with
 /// it on. 0 turns it off again, for an A/B.
 ///
-/// gl_test 89 on the remote pair (imx8mp2, 6b51e24, Linux path) read the
+/// gl_test 89 with the reference compiler's shaders (imx8mp2, 6b51e24, Linux path) read the
 /// FIRST vertex's flat colour and uint at every pixel although
 /// PA_SYSTEM_MODE carries PROVOKING_VERTEX_LAST, as Mesa's does (the golden
 /// diff agrees, 0x11). What Mesa does and this backend did not: "if shader

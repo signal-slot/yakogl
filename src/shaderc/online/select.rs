@@ -13,7 +13,7 @@
 //!
 //! ```text
 //!   ir::Module --(this file)--> [SelInstr] --(allocator)--> [Instr] --(abi)--> ShcShader
-//!   es100-frontend               gles2-core   shaderc-remote        gles2-core
+//!   front end                    selection    allocation            ABI
 //! ```
 //!
 //! Two register kinds are **pre-coloured**, and an allocator must not move
@@ -226,7 +226,7 @@ const MOV_OPERAND: usize = 0;
 /// Where the copies this file emits come from, for the program most recently
 /// selected.
 ///
-/// shaderc-remote's allocator partitions the emitted `mov`s by what they MOVE
+/// The allocator partitions the emitted `mov`s by what they MOVE
 /// (coalescable, live-across, seed, io, `vivante::alloc::last_mov_breakdown`).
 /// That says whose work each copy is but not which construct wrote it, and
 /// the construct is visible only here. The two instruments answer the two
@@ -2206,7 +2206,7 @@ impl<'a> Sel<'a> {
                  * already somewhere: `gl_FragColor = v_col` is the commonest
                  * fragment shader there is, and the reference compiler gives
                  * the colour that varying's own register and emits NO
-                 * instructions. Measured through the remote back end for
+                 * instructions. Measured with the reference compiler for
                  * gl_test's interp_color.frag and for the varying rung's
                  * fragment shader: four zero dwords, ps_color_out_reg 1,
                  * which is the varying's register.
@@ -2257,7 +2257,7 @@ impl<'a> Sel<'a> {
                  * "harmless": for `gl_Position = a_pos` it emits ALL-ZERO
                  * code, and so it does for gl_test's passthrough.vert,
                  * uv.vert, color_uv.vert and interp_color.frag -- measured
-                 * through the remote back end, whose output draws correctly on
+                 * with the reference compiler, whose output draws correctly on
                  * the board. Fifteen rows of the offline table are exactly
                  * this and I mistook them for placeholders.
                  *
@@ -2713,7 +2713,7 @@ impl<'a> Sel<'a> {
          * 73), none anything else. We fed the identity: a loop's exit test
          * read `t8.xyzw` where only x held the comparison, the other three
          * lanes decided too, and gl_test case 70 drew black on the board
-         * where the remote pair drew the answer (imx8mp-board, feecc50). */
+         * where the reference compiler's program drew the answer (imx8mp-board, feecc50). */
         let cond_src = splat_first_lane(self.src(cond)?);
         let br_un =
             build::op_id("branch_unary").ok_or(SelectError::Unsupported("the machine has no `branch_unary`"))?;
@@ -3158,7 +3158,7 @@ impl<'a> Sel<'a> {
     /// Delete instructions nothing reads.
     ///
     /// **25 of the corpus's 305 immediate seeds are never read at all**
-    /// (shaderc-remote, `last_seed_breakdown`): a literal materialised into a
+    /// (`last_seed_breakdown`): a literal materialised into a
     /// register that no later instruction names. They are not a folding
     /// problem, they are dead code, and this is the cheapest item on either of
     /// our lists because it needs no reasoning about the instruction set at
@@ -4322,7 +4322,7 @@ mod tests {
          * The reference compiler agrees, and not by accident -- its blob for
          * this exact source is four zero dwords, and so are its blobs for
          * gl_test's passthrough.vert, uv.vert, color_uv.vert and
-         * interp_color.frag. Measured through the remote back end, whose
+         * interp_color.frag. Measured with the reference compiler, whose
          * output draws the triangle correctly on the board.
          *
          * We used to emit `mov t0, t0` here. That is one instruction the
@@ -5118,7 +5118,7 @@ mod tests {
     /// An arm that writes nothing still needs the slot's value, or the join
     /// selects a register nobody wrote.
     ///
-    /// THE DEFECT THIS PINS, found by asking shaderc-remote's question "why
+    /// THE DEFECT THIS PINS, found by asking the allocator survey's question "why
     /// are 40 virtual registers read and never written":
     ///
     /// ```glsl

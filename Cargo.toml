@@ -79,11 +79,10 @@ gpu-powervr = []
 gpu-vivante = []
 # The Raspberry Pi 4's Broadcom V3D 4.2 (`v3d/`): the GL core draws through
 # the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
-# "M6"). The only shader back end for
-# this GPU is the in-process compiler: there is no offline table and no remote
-# path, so it needs `shaderc-online` and `no-shader-table` and refuses
-# `shaderc-remote` (src/lib.rs says so at compile time rather than building a
-# library that cannot compile a shader). Like the GC7000, `struct shc_shader`
+# "M6"). The only shader back end for this GPU is the in-process compiler:
+# there is no offline table, so it needs `shaderc-online` and
+# `no-shader-table` (src/lib.rs says so at compile time rather than building
+# a library that cannot compile a shader). Like the GC7000, `struct shc_shader`
 # grows a V3D half (`ShcShader::v3d`).
 gpu-v3d = []
 # The Vivante depth canary (the C's CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD): a
@@ -95,15 +94,6 @@ vivante-depth-guard = ["gpu-vivante"]
 # it is a compile error on bare-metal targets and in the C archive.
 #   cargo test --no-default-features --features host-test,gpu-powervr
 host-test = []
-# The remote shader back end (src/shaderc/remote.rs): compile a shader on a
-# host over TCP instead of looking it up in the offline table, which is what
-# dEQP-GLES2 needs (it writes its shaders as it runs). It is sockets and a
-# heap, so it implies `std`; the Zephyr and bare-metal builds enable neither
-# and are unchanged by it. With the feature in, `remote` is the default back
-# end and YAKOGL_SHADERC=offline forces the table back.
-shaderc-remote = ["std", "dep:serde_json"]
-# Link std. Set by `shaderc-remote`; not for a product build on its own.
-std = []
 # The in-process ("online") shader compiler: src/shaderc/online/, a GLSL ES
 # 1.00 front end and a PowerVR USC back end that run on the target, so a
 # Zephyr or bare-metal image can compile a shader an application hands it
@@ -113,18 +103,16 @@ std = []
 # decoder, encoder and disassembler, gated by a byte-exact round trip over
 # every blob of the offline table (docs/online-shaderc/design.md). It is the
 # only back end that needs neither a build-time table (offline) nor a host on
-# the network (remote), so it is the one a product can ship with an application
-# that writes its shaders at run time; with the feature in it registers as
-# `g_shaderc`, and YAKOGL_SHADERC=remote or =offline picks one of the others on
-# a host build.
+# the network, so it is the one a product can ship with an application that
+# writes its shaders at run time; with the feature in it registers as
+# `g_shaderc`.
 shaderc-online = []
 # Leave the offline blob table OUT of the build entirely.
 #
 # `shaderc-online` says a build CAN compile a shader; this says it carries no
-# table to fall back on. They are separate because a host build wants both --
-# `YAKOGL_SHADERC=offline` against the same binary is how the three back ends
-# are compared on one board in one session -- while an image wants neither the
-# bytes nor the fallback: the GC7000 table is 258,000 bytes of instruction
+# table. They are separate because the host tests compare the compiler with
+# the table in one process, while an image wants neither the bytes nor the
+# table: the GC7000 table is 258,000 bytes of instruction
 # words and the PowerVR one 6,278,960, and nothing links them out on its own,
 # because `g_shaderc`'s static initialiser names the offline back end and so
 # keeps the whole table reachable whatever the features say.
@@ -134,9 +122,6 @@ shaderc-online = []
 no-shader-table = []
 
 [dependencies]
-# Only ever compiled for `shaderc-remote` (a host build): the wire format of
-# tools/shaderc_server.py. The no_std library has no dependencies.
-serde_json = { version = "1", optional = true, default-features = false, features = ["std"] }
 
 # build.rs compiles Mesa's QPU packer (third_party/mesa-26.2.1/src/broadcom/qpu)
 # for a `gpu-v3d` build and the PowerVR backend's csbgen packer wrappers

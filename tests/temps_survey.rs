@@ -203,8 +203,7 @@ fn temps_against_the_table() {
     /* A vacuity guard, because the assertion below passes on an empty list.
      * `shaderc::table` aliases the PowerVR blobs in a non-vivante build, and a
      * corpus that produced nothing would make every check here succeed while
-     * measuring nothing at all. shaderc-remote hit exactly that in
-     * `es100_twins.rs` this morning; the guard is cheaper than the argument. */
+     * measuring nothing at all. `es100_twins.rs` hit exactly that; the guard is cheaper than the argument. */
     assert!(!rows.is_empty() || delta.len() == 1, "no source compiled: this measured nothing");
 
     /* The one real contract in this file. A shader that writes a register it
@@ -233,7 +232,7 @@ fn temps_against_the_table() {
 ///   before its first read, so `live - sunk` is what better placement could
 ///   still buy.
 /// * `cpy` / `coal` -- virtual-to-virtual copies, and how many of them
-///   coalescing could delete. shaderc-remote measured one, across all of
+///   coalescing could delete. An independent count measured one, across all of
 ///   them, which is why the copies this file emits are this file's to remove.
 ///
 /// Printed, never asserted. Every number here is a quality.

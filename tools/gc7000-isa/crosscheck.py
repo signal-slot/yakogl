@@ -16,8 +16,8 @@
 #   cd <mesa>/build-etnaviv && ninja src/etnaviv/isa/etnaviv-disasm
 #
 # Scope: this compares the OPCODE per instruction, which both tools print
-# today. The operand rendering (register, write mask, swizzle) is
-# shaderc-remote's listing work; when it lands this grows a second column.
+# today. The operand rendering (register, write mask, swizzle) is not
+# compared yet; when it is, this grows a second column.
 # Reporting an opcode-only agreement as if it covered operands would be the
 # kind of overclaim this file exists to avoid, so the output says which it is.
 
@@ -143,7 +143,7 @@ def main():
         print(f'  MISSING  {m[0]}[{m[1]}] ours={m[2]!r}')
     print()
     print('Scope: opcode only. Operand rendering is compared once '
-          'shaderc-remote\'s listing packs registers and write masks.')
+          'the listing packs registers and write masks.')
     sys.exit(1 if (disagree or missing or extra) else 0)
 
 

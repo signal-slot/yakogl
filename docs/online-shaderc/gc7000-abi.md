@@ -261,21 +261,16 @@ instruction. A shader whose `usc_dw` is not a multiple of four is malformed and
       offline pair @ HEAD 9329c68, 32/32 pool   case 1 uniform: PASS (exit 0)
       offline pair @ HEAD 9329c68, 2/4 pool     case 1 uniform: PASS
       board binary @ Sep 21 23:32 vintage       case 1 uniform: PASS
-      remote pair  @ a51616c                    VOID - link fails before any draw
+      reference pair @ a51616c                  VOID - link fails before any draw
 
   The first row is the one that matters: **same generation as the failing
-  remote pair, same board, minutes apart, only the shader path differs**. So
+  reference-compiler pair, same board, minutes apart, only the shader path differs**. So
   the earlier "it passes on the old binary" was not a vintage artefact, and
   passing at both context-pool sizes rules the pool out too. All ten checks
   pass, including the surface-kept and redraw-with-its-program pair that the
   defect would have broken, and `active uniforms 2; [0] = u_mvp` is reported.
 
-  **What is still open.** The remote (run-time shader) path cannot be measured
-  yet: it dies at link on `push_constant` before any draw, a regression in the
-  new GC7000 link check. Until that run exists, "the defect is gone" and "the
-  defect is specific to the run-time shader path" are not distinguished. Either
-  way it is **not** `emit_uniforms` — see the six eliminations below, which
-  stand regardless.
+  It is **not** `emit_uniforms` — see the six eliminations below.
 
   **The earlier reading, for the record.** Measured 2026-09-21
   (`src/vivante/shader.rs:280-290`): gl_test case 1 failed while a vertex
@@ -286,8 +281,7 @@ instruction. A shader whose `usc_dw` is not a multiple of four is malformed and
   **For M3**: a literal folded into the constant file
   (`SHC_VIV_CONST_LITERAL`) remains the safe choice for the first triangle
   because it does not touch the uniform path at all, but it is no longer
-  known to be *necessary*. gles2-core should not plan around a uniform working
-  on the online path until the remote capture exists.
+  known to be *necessary*.
 
   **An instrument mistake of mine belongs here too.** The first run of the
   instrument was reported by cts-runner as void, correctly: my prediction said

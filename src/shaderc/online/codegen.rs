@@ -138,7 +138,7 @@ pub enum Stage {
     FrontEnd,
     /// IR -> USC instructions (M3, this file).
     CodeGen,
-    /// Instructions -> dwords (M1, shaderc-remote).
+    /// Instructions -> dwords (M1).
     Encode,
     /// Instructions + reflection -> `ShcShader` (M3, `abi.rs`).
     Abi,
@@ -469,8 +469,8 @@ pub fn assemble_from_ir_keyed(
          * This is not a guess. The reference compiler emits exactly these
          * four zeros for `gl_Position = a_pos`, and for gl_test's
          * passthrough.vert, uv.vert, color_uv.vert and interp_color.frag,
-         * measured through the remote back end whose output draws correctly
-         * on the board. Every output in those shaders already sits in the
+         * measured with the reference compiler (etna_shc), whose output draws
+         * correctly on the board. Every output in those shaders already sits in the
          * register its source occupies, so there is no work to do, and
          * `select` emits no instruction.
          *
@@ -1095,7 +1095,7 @@ mod chain_tests {
         /* All zeros: a `nop`. The attribute arrives in the register the
          * position is read from, so the shader has nothing to do -- and the
          * reference compiler emits exactly these four zeros for this source,
-         * measured through the remote back end whose output draws on the
+         * measured with the reference compiler, whose output draws on the
          * board. We used to emit `mov t0, t0` here -- one instruction the
          * reference does not emit, and removing it is what makes this
          * byte-identical. It was not the silicon defect; that was the
@@ -1226,7 +1226,7 @@ mod chain_tests {
     /// The encoded words must decode back to the instruction that was built.
     ///
     /// Without this the chain could produce plausible dwords that are not the
-    /// program: the encoder is shaderc-remote's and round-trips the whole
+    /// program: the encoder round-trips the whole
     /// offline table, but nothing yet checked that *this* path feeds it what
     /// it thinks it does.
     #[test]

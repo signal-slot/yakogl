@@ -1369,13 +1369,13 @@ mod tests {
 
     /* ---- a back end that refuses a shader, as a compiler does ----
      *
-     * The remote back end (src/shaderc/remote.rs) answers a shader the
-     * compiler rejected with -EINVAL and the glslang/pco_shc log. That must
+     * A compiling back end (the in-process compiler) answers a shader it
+     * rejects with -EINVAL and its log. That must
      * reach the application as GL_COMPILE_STATUS false with the log, which is
      * how dEQP-GLES2 reads a negative shader case -- and it must not be
      * confused with the offline table's -ENOENT "not in offline table", which
      * is a *missing* shader (status true, refused at link). These two tests
-     * pin that difference without needing a compile server. */
+     * pin that difference with a back end of their own. */
 
     unsafe extern "C" fn refusing_compile(
         _stage: u32,

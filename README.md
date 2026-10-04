@@ -62,14 +62,12 @@ the development history before this repository was published.
 
 ## Shader compilers
 
-Three back ends, chosen at build time:
+Two back ends, chosen at build time:
 
 - **online**: our own `no_std` GLSL ES compiler running on the board
   (`src/shaderc/online/`, feature `shaderc-online`).
 - **offline**: a table of shaders compiled on the host, looked up by the SHA-256 of
   the GLSL text (`src/shaderc/offline.rs`).
-- **remote**: the board asks a compile server on the host
-  (`tools/shaderc_server.py`, feature `shaderc-remote`, for development).
 
 ## The PowerVR firmware
 
@@ -260,33 +258,28 @@ noticed either way.
 module) and run on the host with
 
 ```sh
-tools/check.sh          # <- before pushing: fmt, clippy and the tests, all five builds
+tools/check.sh          # <- before pushing: fmt, clippy and the tests, every build
 tools/check.sh --quick  #    the PowerVR build only, for a tight edit loop
 
 cargo test --no-default-features --features host-test,gpu-powervr   # 1492 + 6 tests, 2 ignored
 cargo test --no-default-features --features host-test,gpu-powervr,report-es2   # the ES 2.0 report
 cargo test --no-default-features --features host-test,gpu-vivante  # the GC7000 build
-# The conformance pair. --lib: tests/shaderc_remote.rs needs a shader server.
-cargo test --no-default-features --features host-test,gpu-powervr,shaderc-remote --lib
-cargo test --no-default-features --features host-test,gpu-vivante,shaderc-remote --lib
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online   # the compiler
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online
 cargo test -p yakogl-tools                              # 74 tests, the host tools
 ```
 
 **Run `tools/check.sh` before pushing; a red `cargo fmt --check` or a single
 warning is a defect, not a matter of taste.** There is no CI here, so that
 script is the gate: the formatter, clippy with `--all-targets`, and the suite
-in all five configurations, exiting non-zero on any of them, in about 17
-seconds on a warm tree. A build that already prints one warning is a build
+in every configuration of its CONFIGS list, exiting non-zero on any of them. A build that already prints one warning is a build
 where the next real warning is invisible -- which is how three
 `unused_unsafe` and a function with no callers survived here -- and `main`
 has arrived unformatted twice.
 
-The five are three single features and the two the boards run for
-conformance, `shaderc-remote` on each GPU, because a feature *pair* can be
-broken while every single feature is green: `gpu-vivante,shaderc-remote` did
-not compile its tests at all for as long as both features existed, since no
-configuration anyone ran had both. A feature the gate never combines is a
-feature the gate does not cover.
+The configurations include feature pairs, because a pair can be broken while
+every single feature is green. A feature the gate never combines is a feature
+the gate does not cover.
 
 YakoGL reports ES 2.0 by default in the CMake, `baremetal.mk` and Zephyr builds (they
 turn the `report-es2` feature on); a build that needs ES 3.0 says so explicitly (see

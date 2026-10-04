@@ -144,9 +144,7 @@ prints every command and does nothing. `common-tally.py --self-test` runs in
 `tools/check.sh`; `tools/board_selftest.sh` checks the three boards' dry runs.
 
 The board images compile shaders in the image (the online compiler) or look
-them up in the offline table; the remote back end (`YAKOGL_SHADERC=remote`,
-`tools/shaderc_server.py`) is host-only. A shader info log that contains
-`remote shaderc:` is a transport failure, never a YakoGL result.
+them up in the offline table.
 
 ### Seeing the pixels behind a failure
 

@@ -923,7 +923,7 @@ fn generated_code_against_the_table_structurally() {
         /* A blob of four zero dwords decodes as one `nop`. 15 of the table's
          * rows are exactly that -- full reflection, no instructions -- so a
          * difference against one of them says nothing about our compiler.
-         * Reported to shaderc-remote, whose table it is; labelled here so
+         * Labelled here so
          * nobody reads a "difference" off a row that has no program in it. */
         let placeholder = theirs.as_ref().is_ok_and(|t| t.len() == 1 && t.get("nop") == Some(&1));
         if placeholder {

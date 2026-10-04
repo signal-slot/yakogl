@@ -33,16 +33,12 @@ pub use vivante_blobs as table;
 #[cfg(all(test, not(feature = "no-shader-table")))]
 mod es100_twins;
 pub mod link;
-pub mod names;
 #[cfg(not(feature = "no-shader-table"))]
 pub mod offline;
 /// The in-process compiler, when this build has one (`shaderc-online`).
 #[cfg(feature = "shaderc-online")]
 pub mod online;
 pub mod packing;
-/// The host-compile back end, when this build has one (`shaderc-remote`).
-#[cfg(feature = "shaderc-remote")]
-pub mod remote;
 pub mod sha256;
 
 /* enum shc_stage */
@@ -472,7 +468,7 @@ pub const SHC_DEPTH_RANGE_ROWS: [&str; 3] = ["gl_DepthRange.near", "gl_DepthRang
 /// [`ShcBlocks::members`].
 ///
 /// Rust-only, deliberately: only the online compiler produces blocks (the
-/// offline tables and the remote tool never do), so the table lives in the
+/// offline tables never do), so the table lives in the
 /// online back end's own record behind `priv_` and the GL core reads it
 /// through [`uniform_blocks`]. `struct shc_shader`, its C header and the
 /// generated tables are unchanged (team-lead, 2026-09-24).
@@ -511,7 +507,7 @@ pub struct ShcBlocks {
     /// The uniform table rows (`ShcShader::uniform_table` indices) whose
     /// declaration is an array, whatever its length: `float f[1]` is an
     /// array that `array_len` (1) cannot tell from `float f`. Known only for
-    /// an online-compiled shader; empty for a table or remote shader, where
+    /// an online-compiled shader; empty for a table shader, where
     /// the GL core falls back to `array_len > 1`.
     pub arrays: &'static [u16],
 }
@@ -532,7 +528,7 @@ impl ShcBlocks {
 }
 
 /// The uniform blocks of `sh`: empty -- never an error -- for a shader of
-/// the offline tables or the remote tool, and in a build without the online
+/// the offline tables, and in a build without the online
 /// compiler.
 pub fn uniform_blocks(sh: &ShcShader) -> ShcBlocks {
     #[cfg(feature = "shaderc-online")]
@@ -1126,8 +1122,7 @@ pub struct ShcBackend {
     /// ([`ShcAttribMap`]), at glLinkProgram; 0 and `*out` filled (its
     /// `attribs` rows at the map's locations), or < 0 and a log. Called when
     /// the compile set `layout_at_link` or the bindings alias. `None`: the
-    /// back end has no such path (the offline table cannot recompile; the
-    /// remote compiler has none yet), and such a program links as before or,
+    /// back end has no such path (the offline table cannot recompile), and such a program links as before or,
     /// with `layout_at_link`, fails to link.
     pub compile_vs_linked: Option<
         unsafe extern "C" fn(
@@ -1142,7 +1137,7 @@ pub struct ShcBackend {
     /// a [`LodKey`] (`uint64_t`, [`LodKey::bits`]); 0 for a shader that
     /// depends on none or is not this back end's. Asked once per program,
     /// the first time it is drawn after its link. `None`: no variants (the
-    /// offline table and the remote compiler).
+    /// offline table).
     pub lod_sensitivity: Option<unsafe extern "C" fn(sh: *const ShcShader) -> u64>,
     /// The shader compiled again for `key` (a [`LodKey`], within its
     /// sensitivity), everything else as the input was compiled (the attribute
@@ -1168,21 +1163,10 @@ pub static mut g_shaderc: *const ShcBackend = &online::SHC_ONLINE;
 
 /// The active shader back end.
 ///
-/// With `shaderc-remote` or `shaderc-online` compiled in, the first call
-/// applies `YAKOGL_SHADERC` (see [`remote::select_once`] and
-/// [`online::select_once`]), so a build that can compile a shader does so
-/// unless the environment asks for the table. Without either feature this is
-/// the load it always was.
-///
-/// The order below is the tie-break when both are compiled in and the
-/// environment names neither: the in-process compiler wins, because it is the
-/// one a product ships with. `YAKOGL_SHADERC=remote` still picks the server,
-/// and `=offline` the table, which is what an A/B between the three back ends
-/// on one binary needs.
+/// With `shaderc-online` compiled in, the first call installs the in-process
+/// compiler ([`online::select_once`]). Without it this is the table.
 #[inline]
 pub fn backend() -> Option<&'static ShcBackend> {
-    #[cfg(feature = "shaderc-remote")]
-    remote::select_once();
     #[cfg(feature = "shaderc-online")]
     online::select_once();
     // SAFETY: g_shaderc is null or points at a static table.
@@ -1193,18 +1177,14 @@ pub fn backend() -> Option<&'static ShcBackend> {
 /// a program's snapshot at link, or a blend variant's.
 ///
 /// Every copy the GL core keeps is paired with one [`release_shader`]. The
-/// back ends that allocate count them: the in-process compiler, whose output
-/// lives in a bounded region that must be given back, and the remote one,
-/// whose records are heap memory freed when the last holder lets go. Each
-/// recognises its own shaders by where `priv` points, so this is safe to call
-/// on any back end's shader and whichever back end is current: the table's
-/// live in the image and own nothing.
+/// in-process compiler counts them: its output lives in a bounded region
+/// that must be given back. It recognises its own shaders by where `priv`
+/// points, so this is safe to call on any shader whichever back end is
+/// current: the table's live in the image and own nothing.
 #[inline]
 pub fn retain_shader(sh: &ShcShader) {
     #[cfg(feature = "shaderc-online")]
     online::backend::retain(sh);
-    #[cfg(feature = "shaderc-remote")]
-    remote::retain(sh);
     let _ = sh;
 }
 
@@ -1214,8 +1194,6 @@ pub fn retain_shader(sh: &ShcShader) {
 pub fn release_shader(sh: &ShcShader) {
     #[cfg(feature = "shaderc-online")]
     online::backend::release(sh);
-    #[cfg(feature = "shaderc-remote")]
-    remote::release(sh);
     let _ = sh;
 }
 

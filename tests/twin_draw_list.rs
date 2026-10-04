@@ -69,7 +69,7 @@ fn twinnable_corpus() {
         // it after about 65 at ~8 KiB each, and every source after that is
         // refused with Abi(OutOfMemory) -- which I reported as "the online
         // compiler cannot build 14 of the 16 FemtoVG vertex shaders", a
-        // product claim that was false. shaderc-remote named the resource
+        // product claim that was false. The keep arena is the resource
         // (2e6914b): conicalgradient.vert and lineargradient.vert both
         // compile, and 69 of the 71 refused compile once the arena is reset.
         //

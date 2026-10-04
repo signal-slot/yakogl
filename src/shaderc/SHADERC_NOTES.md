@@ -1,17 +1,13 @@
 # Shader back ends — flow, ABI mapping, and how to add shaders
 
 This directory holds the shader back ends (layer 5a of `yakogl/DESIGN.md`). There
-are two, and a build has exactly one of them as `g_shaderc`:
+are two, and a build has one of them as `g_shaderc`:
 
-- **offline** (`offline.rs`), the one used on Zephyr / bare-metal, where the
-  PCO+glslang toolchain is too large to run on-target. App shaders are
-  precompiled at build time and looked up at runtime by the SHA-256 of their
-  GLSL source. This is the product path, and most of this document is about it.
-- **remote** (`remote.rs`, the cargo feature `shaderc-remote`), for the Linux
-  host build only. It sends the GLSL to `tools/shaderc_server.py`, which runs
-  the *same* pipeline the table was generated with. It exists because
-  dEQP-GLES2 writes its shaders as it runs: there is nothing to precompile, so
-  the table can never serve the CTS. See "The remote back end" below.
+- **offline** (`offline.rs`): app shaders precompiled at build time and looked
+  up at run time by the SHA-256 of their GLSL source.
+- **online** (`online/`, the cargo feature `shaderc-online`): our own compiler,
+  no_std and allocation-free, running in the image; it compiles the shaders an
+  application writes as it runs (dEQP-GLES2 does).
 
 ## Files
 
@@ -20,14 +16,10 @@ are two, and a build has exactly one of them as `g_shaderc`:
 | `mod.rs` | the shader ABI of `include/gles_shaderc.h` as `#[repr(C)]` (`ShcShader`, `ShcVarying`, `ShcAttrib`, `ShcUniform`, `ShcBackend`); defines `g_shaderc` (initially the offline back end); the table's row types `ShcBlob` (sha, name, stage, `blend_key`, shader; the name is NUL-terminated so `shc_shader_source_name()` can hand C a pointer into the table, and `ShcBlob::source_name()` drops the NUL) and `ShcSource` (name, GLSL text) |
 | `offline.rs` | implements `struct shc_backend` (`compile`, `link`, `blend_variant`) as `SHC_OFFLINE`; `shc_offline_register()`; `gles_offline_shader_source()` (`include/gles_offline.h`) |
 | `link.rs` | the PowerVR link rule itself (pair the FS inputs with the VS outputs by name, bounds-check them against the VS output vector), shared by both back ends: it is about the `ShcShader` pair, not about where the shaders came from. Only the prefix the log carries differs, so the caller passes it. This is the port's `shc_link.c` |
-| `remote.rs` | the remote back end as `SHC_REMOTE` (`shaderc-remote` only); `shc_remote_register()`; the `YAKOGL_SHADERC` selection |
 | `sha256.rs` | self-contained SHA-256 (no dependency) — links on Zephyr/baremetal |
 | `blobs.rs` | **generated** by `yakogl-tools glsl2usc` (`tools/glsl2usc.sh`): `SHC_BLOB_TABLE` (USC + metadata per shader and blend variant) and `SHC_SOURCE_TABLE` (the source texts) |
 
-All of it is part of the Rust crate `yakogl`. There is now a third back end,
-**online** (`online/`, the cargo feature `shaderc-online`): our own compiler,
-no_std and allocation-free, running in the image. `remote.rs` remains the
-host-only path that puts a compiler on another machine instead.
+All of it is part of the Rust crate `yakogl`.
 
 ### The online back end in an image (M5)
 
@@ -118,7 +110,7 @@ Before any of this project's own translation runs, a GLSL ES source goes through
 the front end an OpenGL ES 2.0 implementation owes it. It lives in one place,
 `es100.rs`, and both the offline table generator (`glsl2usc::frontend_text`,
 called once per shader by `resolve_shader`) and the batch service
-(`yakogl-tools shader-check`, which a run-time compile server wraps) go through
+(`yakogl-tools shader-check`) go through
 it, so the two cannot disagree about whether a shader compiles.
 
 | Step | What runs | Why |
@@ -169,7 +161,7 @@ the same change.
 
 **The validation means different things to its two callers**
 (`glsl2usc::Strictness`). To an application's `glCompileShader` — the path
-`yakogl-tools shaderc-compile` and the remote back end take — the GLSL ES
+`yakogl-tools shader-check` takes — the GLSL ES
 rules are the contract: a text they reject fails to compile, with the log.
 That is what dEQP's `shaders.*.invalid.*` cases check, and until the split
 existed those two cases compiled on the board because the generator's lenient
@@ -306,11 +298,6 @@ row; this does not. Each class is fed from where its types are known:
   `reflect::varying_budget` for the varyings statically used in both stages
   plus the fragment built-ins the fragment shader references, against
   `MAX_VARYING_VECTORS`.
-- Varyings, remote back end: the host front end's link
-  (`tools/yakogl-tools/src/es100.rs` `varying_budget`) runs the same
-  `reflect::varying_budget` on the two texts; the client sends its
-  `MAX_VARYING_VECTORS` in the link request (`max_varying_vectors`), because
-  the host tool is built for no GPU.
 - Attributes are not in the appendix: 2.10.4 counts generic attribute
   locations, which the link's attribute layout does (`attrib_layout`,
   aliasing allowed: dEQP `bind_aliasing.max_cond_*` binds twice
@@ -437,8 +424,7 @@ offline table moves.
 
 ## `link()` validation and its limit
 
-`link()` is `link.rs`, which both back ends call (the remote one runs the ES
-source-level rules on the server first). It checks every FS varying lands
+`link()` is `link.rs`, which both back ends call. It checks every FS varying lands
 inside the VS output vector:
 `VS_POS_DWORDS (4) ≤ vtxout_off` and `vtxout_off + components ≤ vs_output_size`.
 
@@ -579,108 +565,15 @@ The generated table and `offline.rs` match `struct shc_shader` / `shc_varying` /
    program's FS copy; unnamed (explicit-location) varyings keep the
    location-based layout.
 
-## The remote back end
-
-`cargo build --features gpu-powervr,shaderc-remote` compiles `remote.rs` in. The feature
-implies `std` and pulls in `serde_json`, both optional and both host-only: the
-no_std library, the Zephyr module and the bare-metal archive enable neither and
-are byte-for-byte unaffected (`shaderc-remote` on a `target_os = "none"` target
-is a compile error rather than a silent surprise).
-
-```
-  glShaderSource(text) + glCompileShader
-        └─▶ SHC_REMOTE.compile
-               sha256(text) → the process cache, keyed by {digest, stage, blend key}
-               miss → {"gpu":"pvr","op":"compile","stage":…,"source":…,"blend_key":N}
-                      over TCP to tools/shaderc_server.py, which runs
-                      `yakogl-tools shaderc-compile` = resolve_shader() → the
-                      very functions that write blobs.rs
-               reply ok    → the USC dwords (base64, little-endian) and a
-                             reflection whose keys are the ShcShader field names
-               reply error → cached with its log; GL_COMPILE_STATUS false and
-                             glGetShaderInfoLog carries the glslang/pco_shc text
-  glLinkProgram
-        └─▶ SHC_REMOTE.link
-               {"op":"link","vert":…,"frag":…}: the ES link rules the compiled
-               shaders no longer carry (a varying or uniform whose type or
-               precision differs between the stages, a read varying the vertex
-               shader does not write), then `link::by_name()`, the same wiring
-               check the offline back end runs
-```
-
-| Environment | |
-|---|---|
-| `YAKOGL_SHADERC` | `offline` forces the table, `remote` the server. A host build defaults to `remote`; the `host-test` unit-test harness defaults to `offline`, because it has no server |
-| `YAKOGL_SHADERC_SERVER` | `host:port` (a bare host takes port 7777); default `127.0.0.1:7777` |
-| `YAKOGL_SHADERC_TIMEOUT` | seconds to wait for a reply (default 120) |
-
-Return codes carry the distinction the GL core needs, and there are three
-outcomes, not two:
-
-| | the wire | the back end | remembered? |
-|---|---|---|---|
-| the shader compiled | `{"ok":true,...}` | 0 | yes |
-| the compiler refused the shader | `{"ok":false,"error":"<log>"}` | `-EINVAL`, `GL_COMPILE_STATUS` false with that log | yes |
-| the host could not compile at all | `{"error":"<what broke>"}`, or no reply | `-EIO` | **no** |
-
-The difference on the wire is whether `"ok"` is there at all. It matters: a
-host with no `pco_shc`, or a server that is not running, must not tell the
-application its shader is bad — dEQP-GLES2 would record thousands of bogus
-compile failures — and must not be remembered, because it may work in a
-minute. A refusal **is** remembered, so a suite that recompiles the same broken
-source asks once. (`"log"` is accepted beside `"error"` for the log text, so
-either name the pipeline side uses arrives.)
-
-`-EINVAL` is also not the offline back end's `-ENOENT` "not in offline table",
-which `gl/shader.rs` treats as a *missing* shader (status true, refused at
-link).
-
-What a down server looks like, which is the thing to be able to recognise in a
-CTS log: `glGetShaderInfoLog` returns
-
-```
-remote shaderc: cannot reach the compile server at <shader-host>:7777
-(Connection refused (os error 111)); set YAKOGL_SHADERC_SERVER, and start
-tools/shaderc_server.py
-```
-
-and the same text goes to the OSAL log as `glCompileShader(N): ...`. Grep for
-**`cannot reach the compile server`**; a genuine YakoGL failure never says it.
-
-Compiled shaders are leaked on purpose: a `ShcShader` the GL core copied holds
-raw pointers into the record, and the C ABI has nowhere to put a lifetime. The
-count is bounded by the shaders an application compiles.
-
-**Verification** is `tests/shaderc_remote.rs`: for table rows, the remote path
-must return the same USC dwords and the same `ShcShader` fields the table holds,
-blend variants included. Without a server it skips, so the default suite stays
-green. `tools/shaderc_remote_test.sh` starts a server and sweeps (`ROWS=all` for
-the whole table). When a row disagrees the test runs the pipeline on that host
-to decide which side is right, because a `blobs.rs` generated with a different
-`pco_shc` looks exactly like a broken transport from the table's side.
-
-The full sweep, run on the lab host with the `pco_shc` under `~/pvr-lab`
-(2026-09-22, 2037 compiles, 8 minutes cold):
-
-| | rows |
-|---|---|
-| identical to `blobs.rs`, field for field | **1735** |
-| differ from `blobs.rs`, and the offline pipeline **here** reproduces what the server sent | 307 |
-| differ from `blobs.rs` and from the pipeline here (a remote-path bug) | **0** |
-
-1508 of the 2042 rows were reached as blend variants rather than plain
-compiles. So the transport is faithful, and the 307 are the next paragraph's
-problem, not this back end's.
-
 ### The 307: `blobs.rs` and this host's `pco_shc` disagree
 
-Every one of the 307 is a *fragment* shader, and the remote USC is always the
-shorter: 62 are plain shaders (`blend 0x0`), the rest are the float
+Rebuilt with this host's `pco_shc`, 307 rows of the table differ. Every one
+is a *fragment* shader, and the rebuilt USC is always the shorter: 62 are plain shaders (`blend 0x0`), the rest are the float
 render-target variants (`@f16x4`, `@f16`, `@f32` = keys `0x4…`, `0x8…`,
 `0xc0088621`) and `one,inv_src_alpha` (`0x98661`). Spot-checked by hand:
-`es300/array.frag @f32` is 272 dwords in the table and 262 from both the server
-**and** `yakogl-tools glsl2usc --blend replace@f32` run here;
-`qt3d/db6a67a14bb451a6.frag` plain is 6256 in the table and 6218 from both.
+`es300/array.frag @f32` is 272 dwords in the table and 262 from
+`yakogl-tools glsl2usc --blend replace@f32` run here;
+`qt3d/db6a67a14bb451a6.frag` plain is 6256 in the table and 6218 rebuilt.
 
 This was chased down and it is **not** a stale table. The committed table is the
 silicon-verified one; what this host is missing is
@@ -693,11 +586,6 @@ recompiles `pco_shc.c` and relinks. `tools/README.md`, "The pco_shc this host
 has", records the full evidence. **Do not regenerate `blobs.rs` to close the
 gap**: that would drop the patch and bring back the `textureSize()` bug on
 mipmapped linear textures it exists to fix.
-
-Not done: `gpu=vivante` exists in the server (it drives
-`tools/vivante/gen_shader_table.py`'s `reflect()`), but `remote.rs` asks for
-`gpu=pvr` only — the GC7000 reflection is the `ShcViv` half, which a
-`gpu-vivante` build would have to decode as well.
 
 ## Regenerating `blobs.rs`
 
@@ -712,7 +600,7 @@ Writes to `GLSL2USC_CACHE` are not atomic: an interrupted regeneration leaves
 zero-length cache files that the next run serves as valid shaders with no code. Delete
 the cache directory if a regeneration was killed.
 
-Host tests (`tests/sha256.rs`, `tests/blob_table.rs`, `tests/shaderc_remote.rs`;
+Host tests (`tests/sha256.rs`, `tests/blob_table.rs`;
 `cargo test --no-default-features --features host-test,gpu-powervr`): SHA-256 known answers, every
 source text in `SHC_SOURCE_TABLE` hashes to a blob row of the same name, the offline
 back end finds every source, and the table can be dumped as JSON

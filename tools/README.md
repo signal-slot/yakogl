@@ -10,7 +10,6 @@ never compiles it or its dependencies) with a subcommand per generator:
 | `yakogl-tools femtovg-shaders [<femtovg dir> [outdir]]` | the FemtoVG 0.26 sources in `tools/shaders/femtovg/` |
 | `yakogl-tools gl-consts` | `src/gl/consts.rs`, `src/gl/egl_consts.rs` |
 | `yakogl-tools abi-layout <driver src>` | `src/abi_layout.rs`, `src/abi_layout_check.c` |
-| `yakogl-tools shaderc-compile` | nothing: one shader compiled on demand, a JSON request on stdin and a JSON reply on stdout (see "Compiling at run time" below) |
 | `yakogl-tools shader-check [--codegen]` | nothing; answers JSON compile/link requests on stdin |
 
 Run it with `cargo run -p yakogl-tools -- <command> ...` (or build it once with
@@ -28,64 +27,9 @@ entries, text and messages (the port and how it was verified:
 # Compiling at run time (dEQP-GLES2)
 
 The offline table can only hold shaders that existed at build time, and the
-Khronos CTS writes its shaders as it runs. So the board asks a host instead:
-
-```sh
-# on a host that has pco_shc and glslangValidator
-# (127.0.0.1 by default; a board needs --host 0.0.0.0 and a token or
-# --no-auth: see the header of tools/shaderc_server.py)
-PCO_SHC=/path/to/pco_shc tools/shaderc_server.py --host 0.0.0.0 --no-auth --cache ~/.cache/yakogl-shaderc
-
-# the application, built with the remote back end
-cargo build --features gpu-powervr,shaderc-remote        # or -p yakogl-capi --features ...
-YAKOGL_SHADERC_SERVER=lab-host:7777 ./the-app
-```
-
-`tools/shaderc_server.py` is transport, cache and routing; it holds no pipeline
-of its own. A request names the GPU, and each pipeline is the generator that
-writes that GPU's table:
-
-| `"gpu"` | the pipeline | state |
-|---|---|---|
-| `"pvr"` (default) | `yakogl-tools shaderc-compile` → `resolve_shader()` → glslang → `pco_shc` | complete: a compiled shader is byte-identical to its `blobs.rs` row |
-| `"vivante"` | `tools/vivante/gen_shader_table.py`'s `reflect()` → glslang `-G` → `etna_shc` | the server answers; no Rust client asks yet (`remote.rs` is PowerVR-only) |
-
-Protocol: a 4-byte big-endian byte count, then that many bytes of UTF-8 JSON,
-one request per connection, both directions. `"op":"compile"` takes a stage, the
-GLSL and a blend key; `"op":"link"` takes both stages' sources and applies the
-ES link rules the compiled shaders no longer carry (a varying or uniform whose
-type or precision differs between the stages, a varying the fragment shader
-reads and the vertex shader does not write).
-
-A reply says one of three things, and the third is not the second:
-
-```
-{"ok": true,  "blob": "<base64>", "usc_dw": N, "reflection": {...}}   compiled
-{"ok": false, "error": "<the compiler's log>"}                        the SHADER is bad
-{"error": "<what broke>"}                                             the SERVICE is broken
-```
-
-The compiler's log is what `glGetShaderInfoLog` hands the application. A
-service error (no `pco_shc`, the tool missing, a timeout) is reported to the
-application as an internal failure instead, and is never cached: a host that
-cannot compile for a minute must not poison the rest of the run.
-`src/shaderc/SHADERC_NOTES.md` documents the client side.
-
-Probe it by hand, and check it against the table:
-
-```sh
-tools/shaderc_server.py --client --stage frag tools/shaders/es100/hello.frag
-tools/shaderc_server.py --client --link vertex.vert fragment.frag
-PCO_SHC=... ROWS=all tools/shaderc_remote_test.sh    # the whole table
-```
-
-`yakogl-tools shaderc-compile` can also be driven directly, which is what the
-server does:
-
-```sh
-echo '{"stage":"frag","source":"void main(){gl_FragColor=vec4(1.0);}"}' \
-    | yakogl-tools shaderc-compile
-```
+Khronos CTS writes its shaders as it runs. A build with the cargo feature
+`shaderc-online` compiles them in the library itself (`src/shaderc/online/`,
+`src/shaderc/SHADERC_NOTES.md`).
 
 # The pco_shc this host has, and what it is missing
 
@@ -427,7 +371,7 @@ they require an error that an ES 3.0 context does not raise. Check which one a
 built library is, rather than trusting the command line:
 
 ```sh
-strings libGLESv2.so.2.0.0 | grep -E 'OpenGL ES [23]\.0 YakoGL|YAKOGL_SHADERC_SERVER'
+strings libGLESv2.so.2.0.0 | grep -E 'OpenGL ES [23]\.0 YakoGL'
 ```
 # shader-check — the front end as a batch service
 

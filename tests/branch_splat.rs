@@ -4,7 +4,7 @@
 //! lane, splatted -- the only form in the reference table (208 of 208
 //! `branch_unary`). The identity swizzle made the lanes nobody computed part
 //! of the test: gl_test case 70's loop drew black on the GC7000 where the
-//! remote pair drew the answer (imx8mp-board on feecc50, 2026-09-23).
+//! reference compiler's program drew the answer (imx8mp-board on feecc50, 2026-09-23).
 //!
 //! Over the whole corpus plus the gl_test shapes that branch, on the bytes the
 //! product emits. One test in this binary: it resets the keep arena.

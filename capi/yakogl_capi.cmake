@@ -149,7 +149,7 @@ function(yakogl_rust_target_is_hosted triple out)
 endfunction()
 
 # yakogl_add_capi_archive(OUTPUT <libyakogl.a> OSAL <name> GPU <name>
-#                         [SHADERC offline|remote|online]
+#                         [SHADERC offline|online]
 #                         TARGET_NAME <tgt> [C_OBJECT_LIBRARY <object library>])
 # Adds custom target <tgt> that builds OUTPUT: cargo builds yakogl-capi for
 # YAKOGL_RUST_TARGET_RESOLVED, capi/assemble.cmake post-processes it and
@@ -167,14 +167,9 @@ function(yakogl_add_capi_archive)
     message(FATAL_ERROR "yakogl_add_capi_archive: GPU must be powervr|vivante|v3d (got '${A_GPU}')")
   endif()
   list(APPEND _features "gpu-${A_GPU}")
-  # The remote shader back end needs an OS (TCP sockets and a heap), so it is
-  # a host build only; the offline table is the default and needs no feature.
-  # The in-process compiler needs neither -- it is no_std -- so `online` is the
-  # one of the three a product can ship: it compiles where it is used, which is
-  # also why it is the only one a Zephyr image can take.
-  if(A_SHADERC STREQUAL "remote")
-    list(APPEND _features "shaderc-remote")
-  elseif(A_SHADERC STREQUAL "online")
+  # The offline table is the default and needs no feature; `online` is the
+  # in-process compiler (no_std), the only back end a Zephyr image can take.
+  if(A_SHADERC STREQUAL "online")
     list(APPEND _features "shaderc-online")
   endif()
   # An image carrying a compiler does not also need the table it replaces.

@@ -422,15 +422,15 @@ struct shc_backend {
 			     struct shc_shader *out);
 	/* Compile a vertex shader with the program's attribute layout, at
 	 * glLinkProgram (when the compile set layout_at_link, or the bindings
-	 * alias). NULL: no such path -- the offline table cannot recompile and
-	 * the remote compiler has none yet; with layout_at_link the link fails. */
+	 * alias). NULL: no such path -- the offline table cannot recompile;
+	 * with layout_at_link the link fails. */
 	int (*compile_vs_linked)(const char *glsl, const struct shc_attrib_map *map,
 				 struct shc_shader *out, char *log, size_t log_sz);
 	/* Sampler-state variants (src/shaderc/mod.rs LodKey): which texture
 	 * bindings' filter state the shader's code depends on, one bit per
 	 * binding -- low 32 bits "no mipmap filter" (PowerVR exact gradients not
 	 * needed), high 32 bits "mag LINEAR with min NEAREST_MIPMAP_*" (the
-	 * c = 0.5 switch remapped). 0: none. NULL: no variants (offline, remote). */
+	 * c = 0.5 switch remapped). 0: none. NULL: no variants (offline). */
 	uint64_t (*lod_sensitivity)(const struct shc_shader *sh);
 	/* The shader compiled again for one such key; 0 and *out filled, or <0.
 	 * Key 0 copies the input. */
@@ -440,18 +440,12 @@ struct shc_backend {
 
 extern const struct shc_backend *g_shaderc;
 
-/* Select a backend explicitly, before the first GL call. A build has the
- * offline one (the table compiled into the image) and, when it was built with
- * the cargo feature `shaderc-remote`, the remote one (GLSL sent to
- * tools/shaderc_server.py on a host; the only way to run dEQP-GLES2, which
- * writes its shaders as it runs). Each returns the backend it selected.
- *
- * A build that has both selects one from the environment on its own --
- * YAKOGL_SHADERC=offline|remote, remote by default -- so an application needs
- * these only to override that. shc_remote_register() is not linked into a
- * build without the feature. */
+/* Select a backend explicitly, before the first GL call: the offline one
+ * (the table compiled into the image), or the in-process compiler (only in a
+ * build with the cargo feature `shaderc-online`, which selects it on its
+ * own). Each returns the backend it selected. */
 const struct shc_backend *shc_offline_register(void);
-const struct shc_backend *shc_remote_register(void);
+const struct shc_backend *shc_online_register(void);
 
 /* Debug: the source basename behind a compiled shader ("" if unknown). */
 const char *shc_shader_source_name(const struct shc_shader *sh);

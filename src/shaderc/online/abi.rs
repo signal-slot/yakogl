@@ -310,7 +310,7 @@ pub enum AbiError {
     /// Only a loop's back edge may point backwards, and this back end has no
     /// loop node yet, so any backward target is a defect -- a mis-resolved
     /// forward branch or a target remapped wrongly after an instruction was
-    /// deleted. shaderc-remote's corpus work makes it diagnostic as well as
+    /// deleted. The corpus makes it diagnostic as well as
     /// illegal: targets are absolute in both stages, and only 4 of the 303
     /// branches in the shipped table point backwards at all.
     BranchTargetBackwards { at: usize, target: u16 },
@@ -640,7 +640,7 @@ mod tests {
     }
 
     /// The passthrough vertex shader's *shape*: the real words are
-    /// shaderc-remote's builder's to produce, and this asserts about the
+    /// the builder's to produce, and this asserts about the
     /// assembly, not about any instruction.
     fn vs<'a>(code: &'a [u32], io_in: &'a [IoReg<'a>], io_out: &'a [IoReg<'a>]) -> VivProgram<'a> {
         VivProgram {
@@ -778,7 +778,7 @@ mod tests {
 
     #[test]
     fn temps_must_cover_every_io_register_because_they_share_one_file() {
-        /* shaderc-remote's point, and the sharpest risk in the whole
+        /* The sharpest risk in the whole
          * interface: on this machine attributes and outputs are reservations
          * INSIDE the temporary file, not a separate space. gc_shaders.h has
          * the bring-up triangle at aPos r0, aColor r1, NUM_TEMPS 2. So a
@@ -848,7 +848,7 @@ mod tests {
          * reach its shader on this part, citing a 2026-09-21 measurement.
          * **That premise is withdrawn.** cts-runner re-measured it on
          * 2026-09-22 across every path -- offline at HEAD on both pools, the
-         * Sep-21 binary, and the remote pair a51616c -- and gl_test case 1
+         * Sep-21 binary, and the reference compiler's pair a51616c -- and gl_test case 1
          * passes all ten checks on each. Nothing since has touched
          * emit_uniforms, const_value or take_uniforms. So a fragment uniform
          * does arrive, and anything held back "for that defect" is held back
@@ -1054,7 +1054,7 @@ mod tests {
     /// Both halves matter. Asserting only that a real program passes would
     /// hold on a validator that never looks at anything, so the backward case
     /// is the control that the check can fail at all -- the same shape
-    /// shaderc-remote used for the r0 reservation, where a fragment-stage test
+    /// as the r0 reservation's control, where a fragment-stage test
     /// could not have failed because r0 was already reserved there.
     #[test]
     fn a_backward_branch_is_refused_and_a_forward_one_is_not() {

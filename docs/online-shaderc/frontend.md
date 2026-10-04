@@ -29,25 +29,22 @@ is the most useful section in this file.
 
 ## Why a front end at all
 
-A shader reaches the GPU one of two ways today, and neither works on the
-product target:
+Without it a shader reaches the GPU one way, which does not work for every
+application:
 
 | back end | how | why it is not enough |
 |---|---|---|
 | `src/shaderc/offline.rs` | SHA-256 of the GLSL text looked up in `blobs.rs`, a table built on a host | an application that writes a shader at run time is not in the table, and dEQP-GLES2 writes one on every case |
-| `src/shaderc/remote.rs` | asks `tools/shaderc_server.py` over TCP to run `glslangValidator` and `pco_shc` | needs `std`, sockets and a host; a Zephyr or bare-metal image has none of them |
 
-So the third way is the compiler itself, in the library. This document covers
-its front half. The USC encoder is M1 (`shaderc-remote`'s work) and the code
-generator is M3 (`gles2-core`).
+So the other way is the compiler itself, in the library. This document covers
+its front half. The USC encoder is M1 and the code generator is M3.
 
 ## The two constraints that shaped everything
 
 ### 1. There is no allocator
 
 The `yakogl` crate is `no_std` with no dependencies. `grep -rn "use alloc::"
-src/` finds nothing, and `Cargo.toml` pulls `std` in only for
-`shaderc-remote`, a host build. The GL core's one heap use is the copy
+src/` finds nothing, and `Cargo.toml` pulls no `std` in. The GL core's one heap use is the copy
 `glShaderSource` keeps, through the OSAL.
 
 The front end therefore **allocates nothing**. The caller lends it a
@@ -71,8 +68,7 @@ USC is mechanical; the GC7000 encoder uses it as it stands.
 
 ## The IR
 
-Proposed to `shaderc-remote` and `gles2-core` on 2026-09-22. Recorded here as
-proposed; this section is updated when they answer.
+Proposed on 2026-09-22.
 
 ```rust
 pub struct ValueId(pub u32);   // SSA: 1..4 components of one scalar type
@@ -303,9 +299,9 @@ matrix strides, and row-major flag. The online back end copies that table
 into the shader's own keep record, behind `priv_`, next to the shader, and
 the GL core reads it through `shaderc::uniform_blocks`. It is not a field
 of `struct shc_shader`, for two reasons. Only the online compiler produces
-blocks, because the offline tables and the remote tool never do. And a new
+blocks, because the offline tables never do. And a new
 field in the C record would force every generated table row to be
-regenerated. The accessor answers empty for a table or remote shader
+regenerated. The accessor answers empty for a table shader
 (team-lead, 2026-09-24).
 
 Deliberate: `shared` and `packed` are laid out as `std140`. Section 4.3.8.3
