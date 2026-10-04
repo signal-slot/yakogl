@@ -161,6 +161,17 @@ kinds! {
          service's stop, gpu::pvr::freelist::stop); a failure. tag = the cause (GPU_STOP_*); \
          w1 = the fence a wait found it on (0: a submit did); w2 = GPU recoveries so far; \
          w3 = freelist ID << 24 | KiB the cause names (saturating at 24 bits)";
+    CHECK = 21, Tag,
+        "why an application's checked frame or run failed; a failure, written after \
+         PROBES as the run's verdict. tag = what failed first (CHECK_*). CHECK_PROBES: \
+         w1 = the first failing probe's index << 24 | x << 12 | y (window pixels, y down), \
+         w2 = its R << 16 | G << 8 | B in memory | probes failing << 24 (saturating), \
+         w3 = the reference's R << 16 | G << 8 | B | that probe's largest channel \
+         difference << 24. CHECK_UNDRAWN, _ALPHA, _GUARD, _READPIXELS: w1 = how many pixels \
+         (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
+         failed later; w1 = the run's return code as int32, w2 = draws the GL core refused \
+         (yakogl_draws_refused), w3 = the online compiler's keep high-water in KiB << 16 | \
+         its keep region in KiB (0 without the online compiler), 16 bits each, saturating";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -310,6 +321,26 @@ values! {
     GPU_STOP_AT_MAXIMUM = 2;
     GPU_STOP_GROW_TABLE_FULL = 3;
     GPU_STOP_KICK_TIMEOUT = 4;
+    // kind CHECK: the tag, in the check's order (cluster/check Failure).
+    CHECK_PROBES = 1;
+    CHECK_UNDRAWN = 2;
+    CHECK_ALPHA = 3;
+    CHECK_GUARD = 4;
+    CHECK_READPIXELS = 5;
+    CHECK_NO_REFERENCE = 6;
+    CHECK_RUN = 7;
+}
+
+/// kind CHECK's w1..w3 for a failing probe: its index, window position, the
+/// colour read and the reference's, how many probes failed and its largest
+/// channel difference. Fields wider than their bits saturate.
+pub fn check_probe_words(index: u32, x: u32, y: u32, got: [u8; 3], want: [u8; 3], failing: u32, diff: u8) -> [u32; 3] {
+    let rgb = |c: [u8; 3]| (c[0] as u32) << 16 | (c[1] as u32) << 8 | c[2] as u32;
+    [
+        index.min(0xff) << 24 | x.min(0xfff) << 12 | y.min(0xfff),
+        rgb(got) | failing.min(0xff) << 24,
+        rgb(want) | (diff as u32) << 24,
+    ]
 }
 
 /// w0 for a kind and a low byte.
@@ -974,6 +1005,36 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             w3 >> 24,
             w3 & 0xff_ffff
         ),
+        kind::CHECK if low as u32 == CHECK_PROBES => write!(
+            out,
+            "probes: probe {} at ({},{}) reads {},{},{}, the reference {},{},{} (diff {}); {} probes failing",
+            w1 >> 24,
+            (w1 >> 12) & 0xfff,
+            w1 & 0xfff,
+            (w2 >> 16) & 0xff,
+            (w2 >> 8) & 0xff,
+            w2 & 0xff,
+            (w3 >> 16) & 0xff,
+            (w3 >> 8) & 0xff,
+            w3 & 0xff,
+            w3 >> 24,
+            w2 >> 24
+        ),
+        kind::CHECK => match low as u32 {
+            CHECK_UNDRAWN => write!(out, "undrawn: {w1} pixels keep the sentinel"),
+            CHECK_ALPHA => write!(out, "alpha: {w1} pixels with alpha != 255"),
+            CHECK_GUARD => write!(out, "guard: {w1} guard-row pixels changed"),
+            CHECK_READPIXELS => write!(out, "readpixels: glReadPixels differs from memory at {w1} probes"),
+            CHECK_NO_REFERENCE => out.write_str("no reference: no probe table for this window size"),
+            CHECK_RUN => write!(
+                out,
+                "run: the check passed, the run failed later (rc {}); draws refused {w2}; keep high-water {} of {} KiB",
+                w1 as i32,
+                w3 >> 16,
+                w3 & 0xffff
+            ),
+            _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
+        },
         _ => Ok(()),
     }
 }
@@ -1058,18 +1119,19 @@ mod tests {
     }
 
     #[test]
-    fn kinds_are_one_to_twenty_and_the_tag_list_is_the_formats() {
-        // 1..=20 in order, each number once, defined here or reserved
-        let mut want = (1..=20u8).filter(|v| !RESERVED_KINDS.contains(v));
+    fn kinds_are_one_to_twenty_one_and_the_tag_list_is_the_formats() {
+        // 1..=21 in order, each number once, defined here or reserved
+        let mut want = (1..=21u8).filter(|v| !RESERVED_KINDS.contains(v));
         for k in KINDS {
             assert_eq!(Some(k.value), want.next(), "{}", k.name);
         }
         assert_eq!(want.next(), None, "a kind is missing");
-        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 20);
+        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 21);
         assert_eq!(kind::STAGE, 14);
         assert_eq!(kind::FINGERPRINT, 15);
         assert_eq!(kind::GLMARK2, 18);
         assert_eq!(kind::GPU_STOP, 20);
+        assert_eq!(kind::CHECK, 21);
         // one-method.md section 3's list, plus STAGE and FAULT's tag.
         let tags = [
             kind::FAULT,
@@ -1082,6 +1144,7 @@ mod tests {
             kind::WDOG,
             kind::STAGE,
             kind::GPU_STOP,
+            kind::CHECK,
         ];
         for k in KINDS {
             assert_eq!(k.low == Low::Tag, tags.contains(&k.value), "{}", k.name);

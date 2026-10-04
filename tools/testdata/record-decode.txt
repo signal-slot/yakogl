@@ -184,3 +184,9 @@ GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported
 ### 594b1402 00007897 00000000 01000000
 GPU_STOP (20) tag 2: cause 2 (out of memory with the freelist at its maximum) fence 30871 GPU recoveries 0 list 1 KiB 0
 ### classify verdict
+### 594b1501 0724814f 01002533 14001133
+CHECK (21) tag 1: probes: probe 7 at (584,335) reads 0,37,51, the reference 0,17,51 (diff 20); 1 probes failing
+### classify verdict
+### 594b1507 fffffffb 00000c1a 02020200
+CHECK (21) tag 7: run: the check passed, the run failed later (rc -5); draws refused 3098; keep high-water 514 of 512 KiB
+### classify verdict

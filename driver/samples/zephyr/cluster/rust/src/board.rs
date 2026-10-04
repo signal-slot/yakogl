@@ -52,6 +52,10 @@ pub struct CheckResult {
     pub status: u32,
     pub probes: [u32; 3],
     pub fingerprint: [u32; 3],
+    /// The CHECK record of a failed check (record.rs): its tag (CHECK_*),
+    /// 0 for a pass, and w1..w3.
+    pub check_tag: u32,
+    pub check: [u32; 3],
 }
 
 /// main.c's `struct cluster_frame_times`, in microseconds.
@@ -72,7 +76,7 @@ pub struct RunRecords {
 }
 
 const _: () = assert!(core::mem::size_of::<Sequence>() == 32);
-const _: () = assert!(core::mem::size_of::<CheckResult>() == 28);
+const _: () = assert!(core::mem::size_of::<CheckResult>() == 44);
 const _: () = assert!(core::mem::size_of::<CFrameTimes>() == 20);
 const _: () = assert!(core::mem::size_of::<RunRecords>() == 24);
 
@@ -127,7 +131,7 @@ pub unsafe extern "C" fn cluster_board_check(
 ) -> i32 {
     // SAFETY: the caller's contract.
     let out = unsafe { &mut *out };
-    *out = CheckResult { status: record::STATUS_FAIL, probes: [0; 3], fingerprint: [0; 3] };
+    *out = CheckResult { status: record::STATUS_FAIL, probes: [0; 3], fingerprint: [0; 3], check_tag: 0, check: [0; 3] };
     let n = (h as usize + guard_rows as usize) * w as usize;
     // SAFETY: the caller's contract.
     let pixels = unsafe { core::slice::from_raw_parts(cpu, n) };
@@ -203,6 +207,10 @@ pub unsafe extern "C" fn cluster_board_check(
     out.status = if verdict.is_none() { record::STATUS_PASS } else { record::STATUS_FAIL };
     out.probes = o.probes_words();
     out.fingerprint = o.fingerprint_words(w, h);
+    if let Some((tag, words)) = o.check_words() {
+        out.check_tag = tag as u32;
+        out.check = words;
+    }
     verdict.is_some() as i32
 }
 
