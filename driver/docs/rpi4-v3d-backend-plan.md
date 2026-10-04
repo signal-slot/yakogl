@@ -151,7 +151,7 @@ correct by construction and checked instruction by instruction.
 
 `tools/v3d/v3d_shc.c` (Mesa's v3d compiler, built inside the Mesa 26.2.1 tree) is an
 **instrument, not a product path**: the reference our output is compared with on the same
-source, as the online-vs-remote diff is for the other two GPUs.
+source, as the reference compilers' words are for the other two GPUs.
 - 2026-09-24: 1896 of 2699 corpus program pairs compile through it (`tools/v3d/glsl2v3d.py`;
   every failure is glslang: 547 `gl_FragData` in the shared translator, 256 qt3d particle
   VS needing extensions). Its front half follows Mesa's GL path (glspirv.c,

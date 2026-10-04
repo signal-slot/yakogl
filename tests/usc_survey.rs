@@ -103,7 +103,7 @@ fn the_powervr_corpus_through_selection() {
 /// `hello.vert` is `gl_Position = transformationMatrix * myVertex` and
 /// `hello.frag` is a literal colour -- the pair the PowerVR table has a
 /// shipped blob for, and the one the milestone diffs against. Printing the
-/// groups here gives shaderc-remote's allocator and pvrgpu-platform's builder
+/// groups here gives the allocator and the builder
 /// the exact input they have to consume, rather than a description of it.
 ///
 /// It asserts only that both stages select. What the groups ARE is the

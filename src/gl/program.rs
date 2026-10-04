@@ -854,7 +854,7 @@ fn location_ref<'a>(p: &'a GlProgram, l: &ProgLocation) -> &'a ShcUniform {
 /// Is the (not flattened) row a location refers to declared as an array?
 /// `array_len > 1` says so for every array but one of ONE element, which
 /// `array_len` (1) cannot tell from a lone value; the online compiler's record
-/// knows (`ShcBlocks::arrays`). A table or remote shader's rows fall back to
+/// knows (`ShcBlocks::arrays`). A table shader's rows fall back to
 /// `array_len > 1`. dEQP-GLES2 uniform_api.random 2 8 12 13 18 31 38 43 46
 /// 47 90 99 failed on the Pi 4 and the i.MX8MP because `float f[1]` was
 /// reported as `f`: dEQP names every array `f[0]`.
@@ -1063,7 +1063,7 @@ fn check_sampler_counts_against(
 }
 
 /// Whether uniform-table row `name` of `stage` is a flattened member of an
-/// array of structs: the offline and remote tables keep ONE row per member,
+/// array of structs: the offline tables keep ONE row per member,
 /// named "A.B[0].C", whose `array_len` counts that member in every element
 /// and `inner` in one. The online compiler's rows can carry the same "[0]."
 /// (`s[0].b[0].b`, a member's own array) and are never flattened. Read as
@@ -1110,7 +1110,7 @@ fn uniform_vars(stage: &ShcShader) -> impl Iterator<Item = packing::Var> + Clone
 /// utilize more than the space available".
 ///
 /// The rows counted are those the back end's reflection lists, which is the
-/// storage it gives them: the offline and remote tables list what pco keeps,
+/// storage it gives them: the offline tables list what pco keeps,
 /// the online compiler every declared uniform. Literal constants are not
 /// counted, although the appendix counts them: its algorithm is the minimum
 /// an implementation must support ("The implementation is allowed to support

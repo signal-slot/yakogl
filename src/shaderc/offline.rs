@@ -163,7 +163,7 @@ unsafe extern "C" fn offline_link(vs: *const ShcShader, fs: *mut ShcShader, log:
 
 /* ---- link: validate FS varyings against the VS output vector ----
  *
- * The rule itself is `super::link::by_name()`, which the remote back end
+ * The rule itself is `super::link::by_name()`, which the in-process compiler
  * applies to the same ShcShader pair; only the name the log is prefixed with
  * differs. */
 

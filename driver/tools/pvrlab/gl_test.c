@@ -171,8 +171,7 @@
  *               to see whether the copies reversed the rows. A measurement
  *  89 flatlast a flat vec4 and a flat uint across one triangle whose three
  *               vertices differ: every pixel takes the LAST vertex's values (GL's
- *               provoking vertex). GLSL ES 3.00: the remote pair now, the online
- *               one once the ES 3.00 front end lands
+ *               provoking vertex). GLSL ES 3.00
  *  97 varyings15 fifteen vec4 varyings, each a distinct constant, checked in the
  *               fragment shader: green when all arrive, else blue names the first
  *               wrong one. GL_MAX_VARYING_VECTORS 15 on the GC7000; skipped by
@@ -463,7 +462,7 @@
  *               plain over, one per half, read back at a quarter scale. The
  *               online PowerVR path blends in the shader as pco does: the pixel
  *               read as two dwords of halves, no clamp, two dwords written.
- *               ES 1.00 sources; online and remote (the offline table has no
+ *               ES 1.00 sources; online only (the offline table has no
  *               RGBA16F blend row for them)
  *  98 uniloop   a loop bounded by a uniform (Qt Quick 3D's light loop), counts
  *               0, 1, 7 and 4097 in four quadrants: kept as one loop, and 4097
@@ -600,8 +599,8 @@ static inline void gl_test_prim_budget(unsigned int budget)
 /*
  * The shader set. The GLSL 450 set exists for one reader: the PowerVR offline
  * table, which knows a shader by the SHA-256 of its text and holds the 450
- * texts, not their ES 1.00 twins. Every compiler -- the online one, the remote
- * server, the GC7000 and V3D paths -- is an ES compiler that refuses
+ * texts, not their ES 1.00 twins. Every compiler -- the online one on the
+ * three GPUs -- is an ES compiler that refuses
  * "#version 450" at the version line, which says nothing about it. So a build
  * that compiles its shaders takes the ES 1.00 set: asked for (GL_TEST_ES100,
  * which the Linux user build.sh sets from the archive it links), or a Zephyr
@@ -6227,17 +6226,13 @@ static int case_es3dyn(void)
 }
 
 /* ---- case 46: what textureSize() reports -------------------------------- */
-/* es300/texsize.frag declares `uniform sampler2DArray arr;` with no precision,
- * and GLSL ES 3.00 (rev 6, section 4.5.4, p.55) gives sampler2DArray none:
- * "there is no default precision qualifier for the following sampler types
- * in either the vertex or fragment language: sampler3D; samplerCubeShadow;
- * sampler2DShadow; sampler2DArray; ...". So the shader is INVALID, and the
- * online front end refuses it at compile on every GPU ("this sampler type
- * has no default precision (section 4.5.4)"): this case fails there by
- * design. The offline table and the remote server accept it, a leniency.
- * The fix (a highp qualifier) changes the text the offline tables key by
- * SHA-256, so it is folded into the next regeneration of both tables with
- * its board runs (the lead's decision (c), 2026-09-26). */
+/* es300/texsize.frag declares `precision mediump sampler2DArray;`: GLSL ES
+ * 3.00 (rev 6, section 4.5.4, p.55) gives sampler2DArray no default
+ * precision ("there is no default precision qualifier for the following
+ * sampler types in either the vertex or fragment language: sampler3D;
+ * samplerCubeShadow; sampler2DShadow; sampler2DArray; ..."), and the online
+ * front end refuses a shader without one ("this sampler type has no default
+ * precision (section 4.5.4)"). */
 static int case_es3size(void)
 {
 	static uint8_t texels[8 * 24 * 4];
@@ -9130,7 +9125,7 @@ static int case_deadloop(void)
  *
  * The offline arm needs a blob for intlit.frag, which the shader table does
  * not have until it is rebuilt (yakogl task 39); until then this is an
- * online/remote case, out of the regression set like case 68.
+ * online case, out of the regression set like case 68.
  * ------------------------------------------------------------------------- */
 static int case_intlit(void)
 {
@@ -16756,7 +16751,7 @@ static int case_flatlast(void)
  * gl_test_case_91_blends_into_rgba16f_on_the_host (the byte model, the same
  * variant the GL core asks for, the same bytes).
  *
- * Online and remote only: the offline table's RGBA16F blend rows are Quick
+ * Online only: the offline table's RGBA16F blend rows are Quick
  * 3D's shaders, not this one.
  * ------------------------------------------------------------------------- */
 static int case_hdrblend(void)

@@ -366,19 +366,13 @@ pub extern "C" fn gc_debug_set_msaa(on: i32) {
     unsafe { core::ptr::addr_of_mut!(gc_debug_msaa).write(on) }
 }
 
-/// Flat shading for a program with a flat varying: ON. Measured on silicon
-/// (imx8mp2, d617907, Linux path, remote pair): gl_test 89 read the first
-/// vertex, 0x400000ff, with it off and the last, 0xbfff0000 -- GL's -- with
-/// it on. 0 turns it off again, for an A/B.
-///
-/// gl_test 89 on the remote pair (imx8mp2, 6b51e24, Linux path) read the
-/// FIRST vertex's flat colour and uint at every pixel although
-/// PA_SYSTEM_MODE carries PROVOKING_VERTEX_LAST, as Mesa's does (the golden
-/// diff agrees, 0x11). What Mesa does and this backend did not: "if shader
-/// has flat varyings, switch to flat shading" -- PA_CONFIG's SHADE_MODEL
-/// goes FLAT whenever a fragment input is flat (etnaviv_shader.c, MIT).
-/// The prediction: the provoking-vertex bit governs the PA's flat model
-/// only, and the smooth model takes the first vertex for a flat varying.
+/// Flat shading for a program with a flat varying: ON. PA_CONFIG's
+/// SHADE_MODEL goes FLAT whenever a fragment input is flat, as Mesa's
+/// etnaviv does ("if shader has flat varyings, switch to flat shading",
+/// etnaviv_shader.c, MIT): PA_SYSTEM_MODE's PROVOKING_VERTEX_LAST governs
+/// only the flat model, and the smooth one takes the first vertex for a flat
+/// varying. gl_test 89 (flatlast) reads GL's last vertex with it on. 0 turns
+/// it off again, for an A/B.
 #[no_mangle]
 pub static mut gc_debug_flat_shade: i32 = 1;
 

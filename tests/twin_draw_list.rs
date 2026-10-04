@@ -62,19 +62,9 @@ fn twinnable_corpus() {
         let stage = if e.name.contains(".vert") { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
         // Reset the compiler's keep arena between sources.
         //
-        // WITHOUT THIS the harness measured itself. The arena is 512 KiB of
-        // .bss holding every compiled shader's code, reflection and names for
-        // the life of the process, never reset because the GL core's
-        // ShcShader points into it. Walking 324 sources in one process fills
-        // it after about 65 at ~8 KiB each, and every source after that is
-        // refused with Abi(OutOfMemory) -- which I reported as "the online
-        // compiler cannot build 14 of the 16 FemtoVG vertex shaders", a
-        // product claim that was false. shaderc-remote named the resource
-        // (2e6914b): conicalgradient.vert and lineargradient.vert both
-        // compile, and 69 of the 71 refused compile once the arena is reset.
-        //
-        // A board rung sized from the un-reset count would have tested a
-        // fraction of what the compiler covers.
+        // The keep arena holds every compiled shader for the life of the
+        // process; walking the whole table in one process fills it, so every
+        // source starts from an empty arena.
         yakogl::shaderc::online::backend::forget_compiled();
         let txt = e.text.strip_suffix('\0').unwrap_or(e.text);
         let digest = yakogl::shaderc::sha256::sha256(txt.as_bytes());

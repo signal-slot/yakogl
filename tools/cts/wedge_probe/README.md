@@ -3,11 +3,11 @@
 # Two vertex shaders that separate "registers" from "instruction count"
 
 The online pair hangs the GC7000 on `dEQP-GLES2.functional.shaders.algorithm`
-`hsl_to_rgb_vertex` and `rgb_to_hsl_vertex`; the remote pair passes the same
+`hsl_to_rgb_vertex` and `rgb_to_hsl_vertex`; the reference compiler's pair passes the same
 four cases on the same driver, and the `*_fragment` twins pass on both.
 
 Our output for the wedging shader is **153 instructions, temps 41**, and five
-explanations have been removed by measurement (`tests/wedge_probe.rs`): there
+explanations have been removed by measurement: there
 are no branches in it at all, the same code as a fragment shader never wedges,
 41 temps is inside the shipped vertex range, nothing over-runs its declared
 temps, and the largest shipped vertex blob is 950 instructions.

@@ -20,16 +20,13 @@
 #
 # The configurations are not interchangeable. `gpu-vivante` compiles a
 # different backend and a different shader table, `report-es2` changes which
-# GL version's rules apply, `shaderc-remote` compiles the wire decode,
-# `shaderc-online` compiles the in-process compiler, and each has caught
+# GL version's rules apply, `shaderc-online` compiles the in-process
+# compiler, and each has caught
 # defects the others could not: a zero-byte allocation only the GC7000
 # reached, an ES 3.0-only attachment query, a helper compiled for nobody.
 #
-# The last two are the pair that ships to the boards for conformance
-# (YAKOGL_SHADERC=remote), and they are here because a feature PAIR can be
-# broken while every single feature is green: `gpu-vivante,shaderc-remote`
-# did not compile its tests at all for as long as both existed, since no
-# configuration anyone ran had both. A feature the gate never combines is a
+# Feature PAIRS are rows of their own because a pair can be broken while
+# every single feature is green. A feature the gate never combines is a
 # feature the gate does not cover.
 #
 # `shaderc-online` is the in-process compiler (src/shaderc/online/). It is
@@ -48,14 +45,6 @@
 # The two tables were built by two different generators, so agreeing with one
 # says nothing about the other.
 #
-# It appears a third time paired with `shaderc-remote`, because those two are
-# the back ends that can fight: both register as `g_shaderc`, the tie-break is
-# in `shaderc::backend()`, and no single-feature row can exercise it. That row
-# is a HOST TEST and not a conformance pair -- cts-runner's pair guard refuses
-# a pair binary carrying both markers, deliberately, because then nothing in a
-# result row says which compiler produced it. One back end per pair; both in
-# the gate.
-#
 # Wall clock on a warm tree, measured: 17 s for the five that existed before
 # `shaderc-online` was added, 5 s for --quick. A cold tree pays for a build
 # of the crate and its dev-dependencies per configuration, which is minutes;
@@ -69,9 +58,6 @@ CONFIGS=(
   "host-test,gpu-powervr,report-es2"
   "host-test,gpu-vivante"
   "host-test,gpu-powervr,shaderc-online"
-  "host-test,gpu-powervr,shaderc-remote"
-  "host-test,gpu-vivante,shaderc-remote"
-  "host-test,gpu-powervr,shaderc-online,shaderc-remote"
   "host-test,gpu-vivante,shaderc-online"
   # The pair every dEQP-GLES2 online image is built from: it refuses GLSL ES
   # 3.00, so tests that compile ES 3.00 are cfg'd out of it, and it was never
@@ -171,22 +157,11 @@ step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-po
 
 for f in "${CONFIGS[@]}"; do
   step "clippy  $f" cargo clippy --no-default-features --features "$f" --all-targets
-  # `tests/shaderc_remote.rs` needs a shader server on the network, so the
-  # remote configurations run their unit tests only: an offline gate cannot
-  # depend on a host being up, and a gate people learn to see fail is no gate.
-  # `--all-targets` above still COMPILES that test, which is what catches the
-  # defects this pair hides (its `Compiled` initializer was missing two
-  # `gpu-vivante` fields). Run the server-backed rows yourself with
-  # `tools/cts/cts-shaderc-check.sh`.
-  #
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
-  case "$f" in
-  *shaderc-remote*) step "test    $f (--lib)" cargo test --no-fail-fast --no-default-features --features "$f" --lib ;;
-  *) step "test    $f" cargo test --no-fail-fast --no-default-features --features "$f" ;;
-  esac
+  step "test    $f" cargo test --no-fail-fast --no-default-features --features "$f"
 done
 
 for f in "${BUILD_ONLY_CONFIGS[@]}"; do
@@ -863,11 +838,6 @@ if command -v python3 >/dev/null 2>&1; then
   # The .qpa rebuilt from a CONFIG_DEQP_ECHO_QPA console: a case whose end
   # or an image the bridge lost is named, never read as a picture.
   step "tools   qpa-from-uart rebuild verdicts" python3 tools/cts/qpa-from-uart.py --self-test
-  # The shader compile server's exposure and limits: the token, --jobs,
-  # --max-connections, the request size cap, the cache cap, and the refusal
-  # to bind a non-loopback address without a token or --no-auth. A fake
-  # compiler stands in for pco_shc, so it needs no GPU tools (about 2 s).
-  step "tools   shaderc server limits" python3 tools/shaderc_server.py --self-test
   # The AM62P netboot (driver/docs/am62p-netboot-plan.md): the one-shot TFTP
   # server on loopback (a 16 MiB transfer with windows, lost packets, block
   # number wrap, one-shot rename, paths outside the root), about 5 s; and the

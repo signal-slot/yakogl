@@ -384,9 +384,8 @@ pub fn link(scratch: &Scratch, vs_text: &str, fs_text: &str) -> R<Result<(), Dia
 }
 
 /// [`link`] for a GPU that reports `max_varying_vectors` as
-/// GL_MAX_VARYING_VECTORS. The shader server answers for more than one GPU
-/// and this binary is built for none (its constant is the PowerVR's), so the
-/// client says its own value in the request (`src/shaderc/remote.rs`).
+/// GL_MAX_VARYING_VECTORS: this binary is built for no GPU (its constant is
+/// the PowerVR's), so a caller checking for another GPU passes its value.
 pub fn link_for(scratch: &Scratch, vs_text: &str, fs_text: &str, max_varying_vectors: usize) -> R<Result<(), Diag>> {
     let vs = scratch.put("link.vert", vs_text)?;
     let fs = scratch.put("link.frag", fs_text)?;
@@ -743,7 +742,7 @@ mod tests {
     }
 
     /// GLSL ES 1.00 section 4.5.4: GL_FRAGMENT_PRECISION_HIGH is defined to 1,
-    /// in both stages, on a system with fragment highp. The remote path does
+    /// in both stages, on a system with fragment highp. This pipeline does
     /// not define it itself: glslang's ES preamble does (glslang 16.4.0
     /// defines it in both stages). This pins that glslang's answer is the
     /// library's own fact (yakogl::backend::FRAGMENT_HIGHP, which

@@ -162,7 +162,7 @@ decides that, at M3.
 
 ### Two independent readings of the XML agree
 
-shaderc-remote wrote a second extractor (`tools/etna-isa/extract.py`) over the
+A second extractor (`tools/etna-isa/extract.py`) was written over the
 same `etnaviv.xml`, independently, before this one landed. Rather than pick one
 and move on, the two were diffed — which turns a duplication into the best
 structural evidence available, because two people reading the same description
@@ -307,8 +307,8 @@ what the table held:
 |---|---|---|---|
 | `<param>` children of a field (246 entries) | pvrgpu-platform | diffing two independent extractions | which fields accompany an operand — the decoder never asks |
 | `displayname`, so the mnemonic fell back to the bitset name | pvrgpu-platform | the corpus cross-check against `etnaviv-disasm`, which produced 208 false disagreements | every instruction whose printed name differs from its bitset's |
-| `display` and `override` | shaderc-remote | building a listing that had to render an instruction at all | the rendering template, and the per-variant overrides of it |
-| the six `<template>` fragments and the `derived` expressions | shaderc-remote | a listing that had to render a modifier suffix and compose `TYPE` | the suffixes, in order, and any field the table computes rather than stores |
+| `display` and `override` | the listing | building a listing that had to render an instruction at all | the rendering template, and the per-variant overrides of it |
+| the six `<template>` fragments and the `derived` expressions | the listing | a listing that had to render a modifier suffix and compose `TYPE` | the suffixes, in order, and any field the table computes rather than stores |
 
 The pattern is the same each time: a decoder consumes a table by asking "which
 bits mean what", and never notices that a name, a companion field or a

@@ -13,7 +13,7 @@
 //!
 //! ```text
 //!   ir::Module --(this file)--> [SelInstr] --(allocator)--> [Instr] --(abi)--> ShcShader
-//!   es100-frontend               gles2-core   shaderc-remote        gles2-core
+//!   front end                    selection    allocation            ABI
 //! ```
 //!
 //! Two register kinds are **pre-coloured**, and an allocator must not move
@@ -226,7 +226,7 @@ const MOV_OPERAND: usize = 0;
 /// Where the copies this file emits come from, for the program most recently
 /// selected.
 ///
-/// shaderc-remote's allocator partitions the emitted `mov`s by what they MOVE
+/// The allocator partitions the emitted `mov`s by what they MOVE
 /// (coalescable, live-across, seed, io, `vivante::alloc::last_mov_breakdown`).
 /// That says whose work each copy is but not which construct wrote it, and
 /// the construct is visible only here. The two instruments answer the two
@@ -2203,13 +2203,9 @@ impl<'a> Sel<'a> {
             ir::Op::StoreOutput { slot, src } => {
                 let s = self.src(src)?;
                 /* The fragment colour goes wherever it already is, when it is
-                 * already somewhere: `gl_FragColor = v_col` is the commonest
-                 * fragment shader there is, and the reference compiler gives
-                 * the colour that varying's own register and emits NO
-                 * instructions. Measured through the remote back end for
-                 * gl_test's interp_color.frag and for the varying rung's
-                 * fragment shader: four zero dwords, ps_color_out_reg 1,
-                 * which is the varying's register.
+                 * already somewhere: `gl_FragColor = v_col` gives the colour
+                 * that varying's own register (ps_color_out_reg 1) and emits
+                 * no instruction, as the reference program does.
                  *
                  * Safe without liveness because the varying is the value
                  * being stored: whatever it held is exactly what the colour
@@ -2246,31 +2242,13 @@ impl<'a> Sel<'a> {
                         *r = Some(reg);
                     }
                 }
-                /* A copy from a register to itself is not an optimisation to
-                 * skip -- it is WRONG to emit.
-                 *
-                 * On this machine an input arrives in the same temporary file
-                 * the outputs are read from, so when the code generator gives
-                 * an output the register its source already occupies, the
-                 * value is in place and the program needs no instruction at
-                 * all. The reference compiler agrees and goes further than
-                 * "harmless": for `gl_Position = a_pos` it emits ALL-ZERO
-                 * code, and so it does for gl_test's passthrough.vert,
-                 * uv.vert, color_uv.vert and interp_color.frag -- measured
-                 * through the remote back end, whose output draws correctly on
-                 * the board. Fifteen rows of the offline table are exactly
-                 * this and I mistook them for placeholders.
-                 *
-                 * **This is not what broke the vertex stage on silicon**, and
-                 * I said it was. cts-runner measured afterwards that all three
-                 * rungs already passed at 6c458b2, which contains the
-                 * fragment-colour fix (cad7cba) and NOT this one: the
-                 * one-pixel draw is explained by `ps_color_out_reg` alone, and
-                 * `mov t0, t0` evidently copies faithfully enough on this
-                 * part. Kept because matching the reference byte for byte is
-                 * worth having on its own terms -- an instruction the
-                 * reference does not emit is one more thing that can differ --
-                 * but not on a silicon claim it does not carry. */
+                /* No copy of a register onto itself: an input arrives in the
+                 * same temporary file the outputs are read from, so an output
+                 * given the register its source occupies is already in place
+                 * and the program needs no instruction, as the reference
+                 * program does (`gl_Position = a_pos` is four zero dwords:
+                 * codegen chain_tests
+                 * `the_passthrough_vertex_shader_becomes_a_real_shcshader`). */
                 if self.is_already_in_place(reg, &s) && self.single_store(slot) {
                     return Ok(());
                 }
@@ -2708,12 +2686,9 @@ impl<'a> Sel<'a> {
     /// branch goes straight to the end.
     fn branch_convert(&mut self, cond: ir::Src, then_: ir::Range, else_: ir::Range) -> Result<(), SelectError> {
         /* The condition is ONE lane, and the branch is fed that lane in all
-         * four swizzle positions. All 208 `branch_unary` instructions in the
-         * reference table read a splat (.xxxx 49, .yyyy 27, .zzzz 59, .wwww
-         * 73), none anything else. We fed the identity: a loop's exit test
-         * read `t8.xyzw` where only x held the comparison, the other three
-         * lanes decided too, and gl_test case 70 drew black on the board
-         * where the remote pair drew the answer (imx8mp-board, feecc50). */
+         * four swizzle positions: a branch reading other lanes decides on
+         * them too. Every `branch_unary` of the reference programs reads a
+         * splat (tests/branch_splat.rs pins ours). */
         let cond_src = splat_first_lane(self.src(cond)?);
         let br_un =
             build::op_id("branch_unary").ok_or(SelectError::Unsupported("the machine has no `branch_unary`"))?;
@@ -3158,7 +3133,7 @@ impl<'a> Sel<'a> {
     /// Delete instructions nothing reads.
     ///
     /// **25 of the corpus's 305 immediate seeds are never read at all**
-    /// (shaderc-remote, `last_seed_breakdown`): a literal materialised into a
+    /// (`last_seed_breakdown`): a literal materialised into a
     /// register that no later instruction names. They are not a folding
     /// problem, they are dead code, and this is the cheapest item on either of
     /// our lists because it needs no reasoning about the instruction set at
@@ -4317,19 +4292,8 @@ mod tests {
     fn a_passthrough_vertex_shader_needs_no_instruction_at_all() {
         /* `gl_Position = a_pos` with the attribute at register 0 and the
          * position read from register 0 is already done before it starts: the
-         * value arrives in the register the output is taken from.
-         *
-         * The reference compiler agrees, and not by accident -- its blob for
-         * this exact source is four zero dwords, and so are its blobs for
-         * gl_test's passthrough.vert, uv.vert, color_uv.vert and
-         * interp_color.frag. Measured through the remote back end, whose
-         * output draws the triangle correctly on the board.
-         *
-         * We used to emit `mov t0, t0` here. That is one instruction the
-         * reference does not emit, and removing it is what makes this
-         * byte-identical -- but it was NOT the silicon defect: cts-runner
-         * measured the rungs passing at 6c458b2, which has the
-         * fragment-colour fix and not this one. */
+         * value arrives in the register the output is taken from, and the
+         * reference program for this source is four zero dwords. */
         let _s = store::test_lock();
         let instrs = [
             ir::Op::LoadInput { slot: ir::IoSlot::Attrib(0), comps: 4 },
@@ -5118,8 +5082,7 @@ mod tests {
     /// An arm that writes nothing still needs the slot's value, or the join
     /// selects a register nobody wrote.
     ///
-    /// THE DEFECT THIS PINS, found by asking shaderc-remote's question "why
-    /// are 40 virtual registers read and never written":
+    /// THE DEFECT THIS PINS (tests/read_before_write.rs counts the class):
     ///
     /// ```glsl
     /// v = a;

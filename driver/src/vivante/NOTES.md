@@ -232,7 +232,7 @@ read-back check read the way the picture looks.
 ## Recovery: what the wedge of 2026-09-22 was, and what is now done about it
 
 A dEQP sweep stopped the GPU after 1,431 cases. The numbers, from the run that
-saw it (`tools/cts/RESULTS.md`, "The remote control sweep wedged the GPU"):
+saw it (`tools/cts/RESULTS.md`, "The remote control sweep wedged the GPU", a sweep with the reference compiler's shaders):
 twelve events in flight, fences 25341..25352 unsignalled, a fresh
 `es100_triangle` opening `/dev/gcgpu` and then hanging, and the shader server
 on 7779 still alive — so the GPU, not the harness.
@@ -355,7 +355,7 @@ belongs.
 if the hand-off theory were right, because the GPU would merely have missed a
 LINK. It is not right. On the leading theory the GPU is genuinely executing a
 program that will not stop, and a core reset is the only thing that ends it.
-The wedge also happened on the **remote** pair, so the shader was not produced
+The wedge also happened with the **reference compiler's** shaders, so the shader was not produced
 by the online compiler.
 
 **What the next dump carries, and why each line exists.** All of this is now

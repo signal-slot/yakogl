@@ -3021,7 +3021,7 @@ words at the frame's colour targets, `isp_zlsctl` :5957, the EOT data
   - a PDS program that DMAs its texture/buffer state and kicks it.
 - Mesa generates the USC shader at run time with pco, and we have no pco on
   the target. **Proposed:** generate it once on the host with the same
-  Mesa pco the shader server already uses (tools/shaderc_server.py ->
+  Mesa pco the table generator uses (tools/glsl2usc.sh ->
   pco_shc), for our one configuration (1 output dword, 1 sample, no tile
   buffers). Commit it as a table entry beside the offline shader table
   (src/shaderc/blobs.rs's form), with the generator script and its Mesa

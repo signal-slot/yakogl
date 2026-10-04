@@ -27,12 +27,10 @@
 //!
 //! ## Selection
 //!
-//! `g_shaderc` starts as the offline table, as it always has. [`select_once`]
-//! makes this back end the current one on the first `shaderc::backend()` call.
-//! On a `std` build `YAKOGL_SHADERC` overrides it (`online`, `remote`,
-//! `offline`), which is how one binary runs an A/B across the three; with no
-//! `std` there is no environment to read, so the feature is the selection. A
-//! `host-test` build never auto-selects: its tests install their own back ends.
+//! `g_shaderc` starts as the table, or as this back end in a build without
+//! one. [`select_once`] makes this back end the current one on the first
+//! `shaderc::backend()` call: the feature is the selection. A `host-test`
+//! build never auto-selects: its tests install their own back ends.
 
 use core::ffi::{c_char, c_void};
 use core::fmt::Write as _;
@@ -375,7 +373,7 @@ fn keep_blocks(
 }
 
 /// The uniform blocks behind a shader: the online back end's record's, or
-/// none (a table or remote shader, or no record).
+/// none (a table shader, or no record).
 pub fn blocks_of(sh: &ShcShader) -> crate::shaderc::ShcBlocks {
     base_of(sh).map_or(crate::shaderc::ShcBlocks::EMPTY, |c| c.blocks)
 }
@@ -413,7 +411,7 @@ fn base_of(sh: &ShcShader) -> Option<&'static Compiled> {
 /// The GL core keeps one more copy of `sh`.
 ///
 /// Nothing for a shader this back end did not compile: the table's live in
-/// the image, and the remote back end counts its own (`remote::retain`).
+/// the image.
 pub fn retain(sh: &ShcShader) {
     /* test builds: serialised with every compile and release (store::KeepTxn) */
     #[cfg(test)]
@@ -1498,9 +1496,8 @@ static SELECTED: Global<bool> = Global::new(false);
 
 /// Apply the selection once, on the first `shaderc::backend()` call.
 ///
-/// See the module note: the feature is the selection, `YAKOGL_SHADERC`
-/// overrides it where there is an environment to read, and a `host-test` build
-/// never auto-selects.
+/// See the module note: the feature is the selection, and a `host-test`
+/// build never auto-selects.
 pub fn select_once() {
     // SAFETY: single-threaded by contract; the flag is written only here.
     let done = unsafe { SELECTED.get() };
@@ -1508,53 +1505,14 @@ pub fn select_once() {
         return;
     }
     *done = true;
-    refuse_a_back_end_this_build_does_not_have();
     if wanted() {
         // SAFETY: a plain store; no reference to the static is formed.
         unsafe { crate::shaderc::g_shaderc = &SHC_ONLINE };
     }
 }
 
-/// A build with no table cannot serve `YAKOGL_SHADERC=offline`, and says so
-/// here rather than anywhere else.
-///
-/// The two quiet alternatives are both worse than stopping. Falling back to
-/// the compiler would run an A/B whose two arms are the same back end and
-/// report a difference of zero, which is the reassuring wrong answer. Failing
-/// at the first shader would blame whatever that shader happened to be, a
-/// long way from the environment variable that caused it. So: at start-up,
-/// once, naming the feature that removed the table.
-#[cfg(all(feature = "std", feature = "no-shader-table"))]
-fn refuse_a_back_end_this_build_does_not_have() {
-    if let Some(v) = std::env::var("YAKOGL_SHADERC").ok().filter(|v| !v.is_empty()) {
-        assert!(
-            v == "online",
-            "YAKOGL_SHADERC={v}, but this build carries no offline table and no remote client \
-             (cargo feature \"no-shader-table\"): the in-process compiler is the only back end \
-             in it. Build without that feature for an offline or remote arm."
-        );
-    }
-}
-
-/// No environment to read, or a table to fall back to: nothing to refuse.
-#[cfg(not(all(feature = "std", feature = "no-shader-table")))]
-fn refuse_a_back_end_this_build_does_not_have() {}
-
-#[cfg(feature = "std")]
-fn wanted() -> bool {
-    /* With no table there is nothing else to be, so the usual "a host-test
-     * build installs its own back end" exemption does not apply. */
-    if cfg!(feature = "no-shader-table") {
-        return true;
-    }
-    match std::env::var("YAKOGL_SHADERC").ok().filter(|v| !v.is_empty()).as_deref() {
-        Some("online") => true,
-        Some(_) => false,
-        None => !cfg!(feature = "host-test"),
-    }
-}
-
-#[cfg(not(feature = "std"))]
+/// Whether to install this back end: always, except in a `host-test` build,
+/// whose tests install their own back ends.
 fn wanted() -> bool {
     !cfg!(feature = "host-test")
 }

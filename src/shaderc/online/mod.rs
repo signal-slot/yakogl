@@ -3,13 +3,10 @@
 //! The in-process ("online") shader compiler: a GLSL ES 1.00 front end that
 //! runs on the target.
 //!
-//! Today a shader reaches the GPU one of two ways: [`super::offline`] looks
-//! its text up by SHA-256 in a table built on a host, and `super::remote`
-//! (feature `shaderc-remote`, a host build) asks a server to run
-//! `glslangValidator` and `pco_shc` over TCP. Neither can compile a shader an
-//! application writes at run time on a Zephyr or bare-metal image, which is
-//! what dEQP-GLES2 does on every case and what any real ES 2.0 application
-//! may do. This module is the third way: the compiler itself, in the library.
+//! [`super::offline`] looks a shader's text up by SHA-256 in a table built on
+//! a host, which cannot serve a shader an application writes at run time, as
+//! dEQP-GLES2 does on every case and any real ES 2.0 application may. This
+//! module is the compiler itself, in the library.
 //!
 //! # What lives here
 //!

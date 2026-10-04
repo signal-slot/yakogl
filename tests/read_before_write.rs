@@ -20,8 +20,6 @@
 //! Nothing caught it. Every host test passed, `gl_test` returned 25/29 with
 //! the same four failures on every board run, and the suite was silent rather
 //! than right: not one `gl_test` ES 1.00 shader contains an `if` at all.
-//! shaderc-remote's allocator survey saw it as "40 virtual registers read and
-//! never written" and asked what they were.
 //!
 //! So this is the check that would have caught it, phrased as the property
 //! rather than as the symptom, and it runs in `check.sh`.
@@ -36,13 +34,11 @@
 //!
 //! # TWO QUESTIONS, and they have different answers
 //!
-//! Do not read the two counts as one number, which is how this file and
-//! shaderc-remote's allocator survey briefly disagreed:
+//! Do not read the two counts as one number:
 //!
 //! * **"read and never written at all"** -- a register that appears as no
-//!   instruction's destination anywhere in the program. That is shaderc-
-//!   remote's count: 40 before `fce851e`, **0 after**, and it is asserted
-//!   here so that one instrument speaks for it.
+//!   instruction's destination anywhere in the program. It is asserted to
+//!   be 0.
 //! * **"read before anything wrote it, in emitted order"** -- this file's
 //!   walk. 608 on the GC7000 and 294 on the USC, because a slot's register IS
 //!   written, later, by the join. Those are the seeds described below.
@@ -129,11 +125,8 @@ fn vivante_half() {
             branchy.push(e.name);
         }
 
-        /* shaderc-remote's question, which is NOT this file's: a register
-         * that never appears as a destination ANYWHERE in the program. Their
-         * allocator survey counted 40 of these before fce851e and 0 after, so
-         * it is pinned at 0 here rather than left to two instruments
-         * disagreeing about what they measure. */
+        /* The other question: a register that never appears as a
+         * destination ANYWHERE in the program. Pinned at 0. */
         for ins in s.instrs.iter() {
             for r in ins.srcs.iter().flatten() {
                 if let SelSrc::Virtual { v, .. } = r {
@@ -217,7 +210,7 @@ fn vivante_half() {
     );
     assert!(
         never_written.is_empty(),
-        "registers read and never written at all (shaderc-remote's count, 0 since fce851e):\n{}",
+        "registers read and never written at all (must be 0):\n{}",
         never_written.join("\n")
     );
 }

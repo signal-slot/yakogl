@@ -315,7 +315,7 @@ fn refuse_fetch(app: usize, pa: &GlesAttrib, count: u32, extent: u64, avail: u64
 /// each column is its own vertex element, read into register vi_reg + k --
 /// both compilers read it there (matattr4.vert: etna_shc and ours read
 /// t1..t4). The shader's record lists the matrix once, and not the same way
-/// twice: etna_shc (the offline and remote tables) as rows x columns
+/// twice: etna_shc (the offline table) as rows x columns
 /// components, 16 for a mat4, and ours as one column's, 4. Taken as it
 /// stood, the 16 went into the element's byte extent and into a per-vertex
 /// staging stride of 64 bytes over a copy the backend sized at 16, so the
@@ -1303,7 +1303,7 @@ fn fs_variant_for(
  * textures bound there, a sampler object's filters -- so glTexParameter,
  * glBindTexture, glBindSampler and glUniform1i need no hook: a changed state
  * is a different key at the next draw. A program with no sensitive binding
- * (every offline-table and remote shader, most programs) costs one compare. */
+ * (every offline-table shader, most programs) costs one compare. */
 
 /// Logged once: a variant a draw asked for could not be had.
 static LOD_VARIANT_LOGGED: AtomicBool = AtomicBool::new(false);
@@ -3337,7 +3337,7 @@ fn build_common(
              * into the cube in the frame being recorded (a feedback loop,
              * undefined in GL) keeps the stacked image. */
             /* The program decides, and only the program: one the online
-             * compiler built with the native cube, or a table / remote row
+             * compiler built with the native cube, or a table row
              * pco compiled from a real samplerCube (glsl2usc since step C;
              * emit.rs sets the flag), samples the TPU's own cube and gets
              * the copy; a stacked-cube program (pvr_native_cube off) must

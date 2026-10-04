@@ -45,7 +45,7 @@ fn count(w: &[u32], total: &mut usize, movs: &mut usize, mut hist: Option<&mut B
 }
 
 fn how_many_instructions_and_how_many_are_copies() {
-    /* coalescable, live-across, seed, io -- shaderc-remote's partition. */
+    /* coalescable, live-across, seed, io -- the allocator's partition. */
     let mut part = (0usize, 0usize, 0usize, 0usize);
     /* Of the coalescable copies: takeable by a rename, blocked by a swizzle,
      * blocked by a modifier or a condition, and not a join at all. */
@@ -188,7 +188,7 @@ fn how_many_instructions_and_how_many_are_copies() {
      * coalescable and io are the allocator's, a seed is a value materialised
      * that an operand could have named, and LIVE-ACROSS is neither -- both
      * values are live past the copy, so it is a value needed in two places,
-     * which is a shape selection chose. shaderc-remote's partition (d89db01),
+     * which is a shape selection chose. The allocator's partition (d89db01),
      * summed here so a change to selection is measured in the same run as the
      * instruction count it moves. */
     println!(

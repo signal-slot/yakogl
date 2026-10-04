@@ -11,11 +11,10 @@
 //! current header (noted in `SHADERC_NOTES.md`); when that field is added this
 //! check can be tightened.
 //!
-//! It lives here rather than in `offline.rs` because the remote back end runs
-//! the identical rule on the identical structs — it compiles the shaders on a
-//! host instead of reading them from a table, which changes nothing about how
-//! the two stages are wired together. Only the name the log is prefixed with
-//! differs, so the caller passes it. (This module is this port's `shc_link.c`.)
+//! It lives here rather than in `offline.rs` because the in-process compiler
+//! runs the identical rule on the identical structs: where a shader came from
+//! changes nothing about how the two stages are wired together. Only the name
+//! the log is prefixed with differs, so the caller passes it.
 
 use core::ffi::c_char;
 use core::fmt::Write;
@@ -123,7 +122,7 @@ fn reject_duplicate(log: &mut CStrWriter, who: &str, what: &str, dup: &[u8]) -> 
 }
 
 /// Pair the FS inputs with the VS outputs and bounds-check them. `who` names
-/// the back end in the log (`"offline shaderc"`, `"remote shaderc"`).
+/// the back end in the log (`"offline shaderc"`, `"online shaderc"`).
 pub fn by_name(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter, who: &str) -> i32 {
     let vs_outputs: &[ShcVarying] = &vs.varyings[..(vs.num_varyings as usize).min(vs.varyings.len())];
     let num_inputs = (fs.num_varyings as usize).min(fs.varyings.len());
@@ -293,11 +292,10 @@ pub unsafe fn link_shaders_v3d(
  * the register that feeds it. Matching is by GLSL name (what `varying` means
  * in GLSL ES 1.00), falling back to the slot when a shader carries none.
  *
- * It lives beside `by_name` for the reason that module doc gives: both back
- * ends must apply one rule. The offline back end had this arm and the remote
- * one did not, so a `gpu-vivante` build with `YAKOGL_SHADERC=remote` ran the
- * PowerVR check instead -- and since `vs_output_size` is unused on this GPU
- * and always 0, *every* program failed to link with "VS emits no gl_Position".
+ * It lives beside `by_name` for the reason that module doc gives: every back
+ * end must apply one rule. A back end that ran the PowerVR check instead on
+ * this GPU would fail every link with "VS emits no gl_Position", since
+ * `vs_output_size` is unused here and always 0.
  */
 #[cfg(feature = "gpu-vivante")]
 pub fn by_register(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter, who: &str) -> i32 {

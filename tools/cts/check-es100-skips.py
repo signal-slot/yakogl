@@ -90,7 +90,7 @@ def main():
         if u:
             uses[n] = (fn, u)
 
-    # The suite's own skip list. It is NOT an array: shaderc-remote's hunk
+    # The suite's own skip list. It is NOT an array: the generator
     # declares it as GL_TEST_SHADERS_SKIP_REASON(c) in the generated ES 1.00
     # header, a chain of `(c) == N ||` returning the reason string.
     #

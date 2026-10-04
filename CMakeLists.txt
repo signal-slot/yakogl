@@ -16,7 +16,7 @@
 # Options (see also capi/yakogl_capi.cmake for the cargo ones):
 #   -DYAKOGL_OSAL=zephyr|baremetal|linux  (default: linux)
 #   -DYAKOGL_GPU=powervr|vivante           (default: powervr)
-#   -DYAKOGL_SHADERC=offline|remote|online (default: offline)
+#   -DYAKOGL_SHADERC=offline|online        (default: offline)
 #   -DYAKOGL_PVR_DRIVER_DIR=<powervr-bxs-am62p/src>
 #   -DYAKOGL_SHARED=ON|OFF                 (also build libEGL.so.1 +
 #                                           libGLESv2.so.2; default: OFF)
@@ -45,19 +45,13 @@ set(YAKOGL_OSAL "linux" CACHE STRING "OSAL backend: zephyr|baremetal|linux")
 set_property(CACHE YAKOGL_OSAL PROPERTY STRINGS zephyr baremetal linux)
 set(YAKOGL_GPU "powervr" CACHE STRING "GPU backend: powervr|vivante")
 set_property(CACHE YAKOGL_GPU PROPERTY STRINGS powervr vivante)
-# The shader back end. `offline` is the compiled-in table and is the product
-# path; `remote` additionally compiles src/shaderc/remote.rs in, which sends a
-# shader to tools/shaderc_server.py on a host -- the only way to run
-# dEQP-GLES2, which writes its shaders as it runs. A `remote` build still obeys
-# YAKOGL_SHADERC=offline in the environment at run time. `online` compiles
-# src/shaderc/online/ in instead: the in-process compiler, which needs no server
-# and is the one a product ships with. It is no_std, unlike `remote`, so it does
-# not pull std into the link.
-set(YAKOGL_SHADERC "offline" CACHE STRING "Shader back end: offline|remote|online")
-set_property(CACHE YAKOGL_SHADERC PROPERTY STRINGS offline remote online)
-if(NOT YAKOGL_SHADERC STREQUAL "offline" AND NOT YAKOGL_SHADERC STREQUAL "remote"
-   AND NOT YAKOGL_SHADERC STREQUAL "online")
-  message(FATAL_ERROR "YAKOGL_SHADERC must be offline|remote|online (got '${YAKOGL_SHADERC}')")
+# The shader back end. `offline` is the compiled-in table; `online` compiles
+# src/shaderc/online/ in: the in-process compiler, which compiles the shaders
+# an application writes as it runs (dEQP-GLES2 does).
+set(YAKOGL_SHADERC "offline" CACHE STRING "Shader back end: offline|online")
+set_property(CACHE YAKOGL_SHADERC PROPERTY STRINGS offline online)
+if(NOT YAKOGL_SHADERC STREQUAL "offline" AND NOT YAKOGL_SHADERC STREQUAL "online")
+  message(FATAL_ERROR "YAKOGL_SHADERC must be offline|online (got '${YAKOGL_SHADERC}')")
 endif()
 if(NOT YAKOGL_GPU STREQUAL "powervr" AND NOT YAKOGL_GPU STREQUAL "vivante")
   message(FATAL_ERROR "YAKOGL_GPU must be powervr|vivante (got '${YAKOGL_GPU}')")
@@ -142,20 +136,10 @@ if(YAKOGL_GPU STREQUAL "powervr")
 else()
   set(YAKOGL_GPU_DEF "YAKOGL_GPU_VIVANTE")
 endif()
-# Features that make the crate link std (shaderc-remote needs TCP sockets).
-# std carries its own rust_eh_personality, and capi/assemble.cmake renames the
-# Rust side's definition to yakogl_rust_eh_personality - which is exactly the
-# name the C forwarder below defines. Compiling both is a duplicate symbol the
-# moment something pulls the whole archive in, as the shared objects do. The
-# forwarder exists only so that a *no_std* crate's unwind tables, which name
-# rust_eh_personality although YakoGL never unwinds, resolve at all; with std
-# in the build there is nothing for it to fix.
-set(_rust_links_std OFF)
-if(YAKOGL_SHADERC STREQUAL "remote")
-  set(_rust_links_std ON)
-endif()
-
-if(_hosted AND NOT _rust_links_std
+# The C forwarder of rust_eh_personality: a no_std crate's unwind tables name
+# it although YakoGL never unwinds, and capi/assemble.cmake renames the Rust
+# side's definition to yakogl_rust_eh_personality, which the forwarder defines.
+if(_hosted
    AND (YAKOGL_RUST_LINKAGE STREQUAL "staticlib" OR YAKOGL_EH_PERSONALITY))
   list(APPEND _c_sources "${YAKOGL_DIR}/capi/eh_personality.c")
 endif()
@@ -166,7 +150,7 @@ else()
   # libyakogl_c.a: what a Rust application that links the yakogl crate
   # itself needs from this build.
   add_library(yakogl_c STATIC ${_c_sources})
-  if(_hosted AND NOT _rust_links_std)
+  if(_hosted)
     set_source_files_properties("${YAKOGL_DIR}/capi/eh_personality.c" PROPERTIES
       COMPILE_DEFINITIONS "YAKOGL_EH_PERSONALITY=rust_eh_personality")
   endif()
@@ -253,13 +237,6 @@ if(YAKOGL_SHARED)
       "-Wl,--whole-archive" "${YAKOGL_ARCHIVE}" "-Wl,--no-whole-archive"
       "-Wl,--version-script=${YAKOGL_VERSION_SCRIPT}")
   target_link_libraries(GLESv2_shared PRIVATE m)
-  if(_rust_links_std)
-    # std's net/thread/dynamic-loading support. Merged into libc since glibc
-    # 2.34, so these are usually no-ops; naming them keeps an older sysroot
-    # (and a musl or non-glibc target) linking.
-    find_package(Threads REQUIRED)
-    target_link_libraries(GLESv2_shared PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
-  endif()
 
   # The forwarder needs one translation unit (a shared library cannot be built
   # from nothing) and one reference into libGLESv2, so that --as-needed keeps

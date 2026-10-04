@@ -7,7 +7,6 @@
 //!     yakogl-tools femtovg-shaders [<dir> [out]]   FemtoVG 0.26 shader sources
 //!     yakogl-tools gl-consts                       src/gl/consts.rs, src/gl/egl_consts.rs
 //!     yakogl-tools abi-layout <driver src>         src/abi_layout.rs, src/abi_layout_check.c
-//!     yakogl-tools shaderc-compile                 one shader for the remote back end (JSON in/out)
 //!     yakogl-tools shader-check [--codegen]        the GLSL ES front end, JSON in/JSON out
 //!     yakogl-tools online-check                    the in-process front end, same protocol
 //!     yakogl-tools online-eval                     run a compiled pair with the IR evaluator
@@ -28,7 +27,6 @@ mod glconsts;
 mod glsl;
 mod glsl2usc;
 mod irdump;
-mod link;
 mod onlinecheck;
 mod onlineeval;
 mod py;
@@ -39,7 +37,6 @@ mod py;
 #[path = "../../../driver/rust/src/board/record.rs"]
 mod record;
 mod recordcmd;
-mod shaderc;
 mod shadercheck;
 mod uscblob;
 mod uscdis;
@@ -77,7 +74,6 @@ commands:
   femtovg-shaders   write the FemtoVG 0.26 shader sources into tools/shaders/femtovg
   gl-consts         regenerate src/gl/consts.rs and src/gl/egl_consts.rs
   abi-layout        regenerate src/abi_layout.rs and src/abi_layout_check.c
-  shaderc-compile   compile one shader for the remote back end (JSON request on stdin)
   shader-check      the GLSL ES front end as a batch service (JSON on stdin/stdout)
   online-check      the same, for the in-process front end (src/shaderc/online/)
   online-eval       compile a vertex/fragment pair online and RUN it with the IR evaluator
@@ -99,7 +95,6 @@ fn main() {
         "femtovg-shaders" => femtovg::main(rest),
         "gl-consts" => glconsts::main(rest),
         "abi-layout" => abilayout::main(rest),
-        "shaderc-compile" => shaderc::main(rest),
         "shader-check" => shadercheck::main(rest),
         "online-check" => onlinecheck::main(rest),
         "online-eval" => onlineeval::main(rest),

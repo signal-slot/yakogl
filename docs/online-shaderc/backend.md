@@ -11,24 +11,22 @@ Everything in this file is GPU-neutral unless it says otherwise, and where the
 two GPUs differ the difference is named -- the biggest one being where the
 reflection lives, below.
 
-The milestone split (task #55): **M1** the USC decoder/encoder
-(shaderc-remote), **M2** the GLSL ES 1.00 front end and reflection
+The milestone split (task #55): **M1** the USC decoder/encoder,
+**M2** the GLSL ES 1.00 front end and reflection
 (es100-frontend), **M3** this — the back-end module, the `ShcShader` assembly
 and the oracle harness (gles2-core), **M4** `gl_test` 24/24 through the online
 path, **M5** a Zephyr image with no table.
 
-## Why a third back end
+## Why a back end on the target
 
 | | compiles where | needs | can ship |
 |---|---|---|---|
 | `offline.rs` | on the build host | every shader known at build time | yes, for a fixed shader set |
-| `remote.rs` | on another machine | `std`, a TCP host, `tools/shaderc_server.py` | no |
 | `online/` | on the target | nothing | yes |
 
 `offline` cannot serve an application that writes its shaders as it runs —
-dEQP-GLES2 does, Qt's RHI does, any content pipeline does — and `remote` was
-built for exactly that gap but puts the compiler on the network, which a
-product cannot do. This one closes it.
+dEQP-GLES2 does, Qt's RHI does, any content pipeline does. This one closes
+that gap on the target.
 
 ## Status
 
@@ -38,7 +36,7 @@ product cannot do. This one closes it.
 | `ir.rs` — the front end / code generator contract | **agreed** and implemented; `ir.md` is the contract |
 | `backend.rs` — `ShcBackend`, cache, selection, blend variants | **done** |
 | the front end (M2, es100-frontend) | **running**: preprocessor, parser, sema, lowering to IR, reflection |
-| the encoder and allocator (M1, shaderc-remote) | **done**: round-trip over the table's blobs, `allocate_and_build` |
+| the encoder and allocator (M1) | **done**: round-trip over the table's blobs, `allocate_and_build` |
 | `select.rs` — instruction selection | io, literals, uniforms, and the `native` arithmetic; `lower` blocked, below |
 | `abi.rs` — the `ShcShader` assembly | **done**, eight named refusals |
 | `codegen.rs` — the chain | **closed end to end**: GLSL text in, `ShcShader` out |
@@ -63,18 +61,15 @@ definition. Nothing needed by the first programs is affected, because all of
 `mul`, `mad`, `add` and the dot products are `native`, and `native` returns a
 name, which both sides agree on.
 
-`tools/check.sh` runs `shaderc-online` in three rows: alone, with
-`shaderc-remote` (the two back ends that can fight -- both register as
-`g_shaderc` and the tie-break is in `shaderc::backend()`), and with
-`gpu-vivante` (the GPU it is being built for first, where the oracle harness
+`tools/check.sh` runs `shaderc-online` with each GPU, alone and with
+`report-es2`: with `gpu-vivante` (the GPU it is being built for first, where the oracle harness
 compares a different set of fields). By the gate's own rule, a feature it never
 combines is a feature it does not cover.
 
 ## Memory: two arenas, no allocator
 
-The crate has no `alloc` dependency and no global allocator; `remote.rs` gets
-`Box::leak` only because it is `std`-only by construction. The online back end
-must run on Zephyr and bare metal, so it takes two bump arenas in `.bss`:
+The crate has no `alloc` dependency and no global allocator. The online back
+end must run on Zephyr and bare metal, so it takes two bump arenas in `.bss`:
 
 - **`with_scratch`** — reset at the top of every compile. Tokens, AST, IR, SSA,
   register allocation. Nothing in it outlives the call, and `reset` takes
@@ -474,7 +469,7 @@ nesting**: each level saves and restores every slot its whole subtree writes,
 and `hsl_to_rgb` is six `if`s deep over nineteen slots. Each save and each
 then-value is also a fresh register whose live range spans the arm, so the
 same nesting produced the 60 temps -- which is above the 21 its
-load-balancing band was measured over, and at 67 (before shaderc-remote's
+load-balancing band was measured over, and at 67 (before the allocator's
 sinking) above the six bits the driver puts the count on the wire in.
 
 Three arms, measured over the wedge pair and the whole corpus:
@@ -709,7 +704,7 @@ written (`tests/operand_banks.rs`).
   thread         13908      0      0      0    0
 ```
 
-The immediate column reproduces shaderc-remote's independent count exactly,
+The immediate column reproduces an independent count exactly,
 which is what says the reader is right; the first version of that reader was
 wrong by 34x and its only guard (`instrs > 0`) passed anyway, so the test now
 also carries a control blob whose two operands are read off the disassembly.
