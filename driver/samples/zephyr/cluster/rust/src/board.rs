@@ -76,7 +76,7 @@ pub struct RunRecords {
 }
 
 const _: () = assert!(core::mem::size_of::<Sequence>() == 32);
-const _: () = assert!(core::mem::size_of::<CheckResult>() == 28);
+const _: () = assert!(core::mem::size_of::<CheckResult>() == 44);
 const _: () = assert!(core::mem::size_of::<CFrameTimes>() == 20);
 const _: () = assert!(core::mem::size_of::<RunRecords>() == 24);
 
