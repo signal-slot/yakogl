@@ -36,8 +36,9 @@ use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
-/// Surfaces kept at once: the default framebuffer's, and a few FBOs'.
-pub const ENTRIES: usize = 8;
+/// Surfaces kept at once: the default framebuffer's and the FBOs'
+/// ([`ds_retention::DS_SLOTS`], shared by every backend).
+pub const ENTRIES: usize = ds_retention::DS_SLOTS;
 
 /// Parked planes: two a surface.
 const PARKED: usize = 2 * ENTRIES;

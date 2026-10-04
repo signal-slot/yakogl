@@ -1348,7 +1348,8 @@ fn a_depth_surface_the_open_frame_uses_is_not_reused() {
     let rig = Rig::new();
     let d = rig.draw(3);
     let mut refused = None;
-    for id in 1..=9u32 {
+    let past = ds_cache::ENTRIES as u32 + 1;
+    for id in 1..=past {
         set_key_override(Some(DsKey { depth_id: id, depth_gen: 1, stencil_id: id, stencil_gen: 1, scale: 1 }));
         // SAFETY: `d` is a live draw for the length of the call.
         let rc = unsafe { gc_draw(&d) };
@@ -1358,9 +1359,9 @@ fn a_depth_surface_the_open_frame_uses_is_not_reused() {
         }
     }
     set_key_override(None);
-    assert_eq!(refused, Some(9), "eight surfaces are in the open frame; the ninth identity waits");
+    assert_eq!(refused, Some(past), "every surface is in the open frame; the identity past them waits");
     assert_eq!(gc_flush(), 0);
-    set_key_override(Some(DsKey { depth_id: 9, depth_gen: 1, stencil_id: 9, stencil_gen: 1, scale: 1 }));
+    set_key_override(Some(DsKey { depth_id: past, depth_gen: 1, stencil_id: past, stencil_gen: 1, scale: 1 }));
     // SAFETY: as above.
     let rc = unsafe { gc_draw(&d) };
     set_key_override(None);
@@ -3071,10 +3072,10 @@ fn gc_ds_line() -> String {
     unsafe { core::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
 }
 
-/// Nine pairs on eight surfaces: when the eight hold nothing GL keeps
-/// (depth tested, nothing written), the ninth takes one and the line counts
-/// it as given up; when they all hold a plane, the ninth is refused and
-/// counted as all live. Where the peak alone reads 8/8, the given-up count
+/// One pair more than there are surfaces: when they all hold nothing GL keeps
+/// (depth tested, nothing written), the one past them takes one and the line
+/// counts it as given up; when they all hold a plane, it is refused and
+/// counted as all live. Where the peak alone reads full, the given-up count
 /// is what says an application uses more pairs than there are surfaces.
 #[test]
 fn the_gc_ds_line_counts_surfaces_given_up_and_refusals() {
@@ -3088,24 +3089,25 @@ fn the_gc_ds_line_counts_surfaces_given_up_and_refusals() {
         d.stencil = false;
         d
     };
-    for i in 0..ds_cache::ENTRIES as u32 {
+    for i in 0..E {
         rig.submit(&quiet(i));
     }
-    let eight = gc_ds_line();
-    assert!(eight.starts_with("ds surfaces peak 8/8, ds bytes peak "), "{eight}");
-    assert!(eight.ends_with(", ds given up 0, ds refused 0 (all live 0, no surface 0)"), "{eight}");
-    rig.submit(&quiet(8));
+    let full = gc_ds_line();
+    let peak = format!("ds surfaces peak {E}/{E}, ds bytes peak ");
+    assert!(full.starts_with(&peak), "{full}");
+    assert!(full.ends_with(", ds given up 0, ds refused 0 (all live 0, no surface 0)"), "{full}");
+    rig.submit(&quiet(E));
     assert!(gc_ds_line().ends_with(", ds given up 1, ds refused 0 (all live 0, no surface 0)"), "{}", gc_ds_line());
 
     ds_cache::release_all();
     ds_cache::reset_counts();
-    for i in 0..ds_cache::ENTRIES as u32 {
+    for i in 0..E {
         rig.submit(&cycled(&rig, 10 + i));
     }
-    let mut ninth = cycled(&rig, 10 + ds_cache::ENTRIES as u32);
-    ninth.do_clear = false;
+    let mut past = cycled(&rig, 10 + E);
+    past.do_clear = false;
     // SAFETY: a live draw for the call.
-    assert_eq!(unsafe { gc_draw(&ninth) }, -ENOMEM, "all eight hold a plane GL keeps: refused");
+    assert_eq!(unsafe { gc_draw(&past) }, -ENOMEM, "all eight hold a plane GL keeps: refused");
     assert!(gc_ds_line().ends_with(", ds given up 0, ds refused 1 (all live 1, no surface 0)"), "{}", gc_ds_line());
 }
 
@@ -3157,58 +3159,62 @@ fn depth_resolve_reads_the_linear_depth_as_floats() {
     assert!(rig.faults().is_empty());
 }
 
-/// Draw pairs 0..8, each writing depth and stencil into a surface of its
-/// own, and mark pair 0's.
-fn eight_pairs_drawn(rig: &Rig) {
-    for i in 0..ds_cache::ENTRIES as u32 {
+/// The table's size, as a pair index: the first pair past it.
+const E: u32 = ds_cache::ENTRIES as u32;
+
+/// Draw pairs 0..E (the table's size), each writing depth and stencil into
+/// a surface of its own, and mark pair 0's.
+fn full_table_drawn(rig: &Rig) {
+    for i in 0..E {
         rig.submit(&cycled(rig, i));
     }
     ds_words(ds_key((100, 1), (100, 1))).fill(0x5a5a_5a07);
 }
 
 /// The refusal (src/ds_retention.rs): with every surface holding a live
-/// plane, a ninth pair's first depth-tested draw is refused (-ENOMEM, which
+/// plane, the first pair past the table's first depth-tested draw is refused (-ENOMEM, which
 /// the GL core reports as GL_OUT_OF_MEMORY) with one named line, and pair
 /// 0's depth and stencil are intact and drawn with again.
 ///
-/// Revert check: with the old least-recently-used replacement the ninth
-/// draw returns 0 and pair 0's surface is gone.
+/// Revert check: with the old least-recently-used replacement the draw past
+/// the table returns 0 and pair 0's surface is gone.
 #[test]
-fn a_ninth_pair_is_refused_and_the_first_keeps_its_depth_and_stencil() {
+fn a_pair_past_the_table_is_refused_and_the_first_keeps_its_depth_and_stencil() {
     let rig = Rig::new();
-    eight_pairs_drawn(&rig);
+    full_table_drawn(&rig);
     let first = ds_key((100, 1), (100, 1));
     let first_addr = ds_cache::memory_of(first).map(|(m, _)| m.gpu);
     // SAFETY: a live draw for the call.
-    assert_eq!(unsafe { gc_draw(&cycled(&rig, 8)) }, -ENOMEM, "the ninth is refused");
+    assert_eq!(unsafe { gc_draw(&cycled(&rig, E)) }, -ENOMEM, "the pair past the table is refused");
     let logs = rig._gl.logs();
     let refused: Vec<_> = logs.iter().filter(|l| l.contains(ds_retention::REFUSED)).collect();
     assert_eq!(refused.len(), 1, "{logs:?}");
-    assert!(refused[0].contains("object 0x6c") && refused[0].contains("all 8"), "{refused:?}");
+    let (object, all) = (format!("object {:#x}", 100 + E), format!("all {E}"));
+    assert!(refused[0].contains(&object) && refused[0].contains(&all), "{refused:?}");
     assert!(ds_words(first).iter().all(|&w| w == 0x5a5a_5a07), "pair 0's depth and stencil are intact");
     rig.submit(&cycled(&rig, 0));
     assert_eq!(ds_cache::memory_of(first).map(|(m, _)| m.gpu), first_addr, "pair 0 draws with its own surface");
     assert!(rig.faults().is_empty());
 }
 
-/// Deleting pair 0's object frees its surface for the ninth; a whole clear
+/// Deleting pair 0's object frees its surface for the pair past the table; a whole clear
 /// of pair 1 with no draw after it lets its surface go too (the clear
 /// values parked), and when pair 1 is drawn again its new surface gets them
 /// back through a clear recorded before the draw.
 #[test]
 fn a_deleted_or_cleared_pair_lets_its_surface_go() {
     let rig = Rig::new();
-    eight_pairs_drawn(&rig);
+    full_table_drawn(&rig);
     gc_attachment_gone(100);
     assert!(ds_cache::memory_of(ds_key((100, 1), (100, 1))).is_none(), "object 100's surface is freed");
-    rig.submit(&cycled(&rig, 8));
+    rig.submit(&cycled(&rig, E));
     let mut clear = cycled(&rig, 1);
     (clear.index_count, clear.do_clear_depth, clear.clear_depth) = (0, true, 0.25);
     (clear.do_clear_stencil, clear.clear_stencil) = (true, 3);
     rig.submit(&clear);
     let cleared = [Plane::cleared(0.25f32.to_bits()), Plane::cleared(3)];
     assert_eq!(ds_cache::planes_of(ds_key((101, 1), (101, 1))), Some(cleared));
-    rig.submit(&cycled(&rig, 9)); /* takes pair 1's surface */
+    rig.submit(&cycled(&rig, E + 1)); /* takes pair 1's surface */
     assert_eq!(ds_cache::parked_len(), 2, "pair 1's depth and stencil clear values");
     gc_attachment_gone(102);
     let mut test_only = cycled(&rig, 1);
