@@ -417,6 +417,13 @@
  *               abs, under floor), each in a fragment and a vertex shader,
  *               from uniforms, read back. All three GPUs (skipped by name in a
  *               table build: no rows for its own sources); in the set
+ * 183 unipad    500 draws of a program whose two stages each read a vec2
+ *               uniform (femtovg's viewSize; the constant file's last register
+ *               half empty), timed: under 250 ms, and the colour read back.
+ *               The i.MX8MP cluster's frame 2 spent 2.7 s in the GC7000
+ *               command stream this way, online only (2026-10-05): every draw
+ *               logged the padding dwords as missing uniforms. All three GPUs
+ *               (skipped by name in a table build); in the set
  * 176 mapbuf    GL_OES_mapbuffer: the slice-A triangle drawn from a VBO,
  *               then glMapBufferOES(WRITE_ONLY_OES): written nothing (the
  *               triangle is still there: unwritten bytes keep their
@@ -638,7 +645,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181)
+	if (c == 181 || c == 183)
 		return "its own sources: a table build has no rows for them";
 #endif
 	(void)c; /* the default set's reason ignores it */
@@ -7673,7 +7680,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [183] = "unipad",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15289,6 +15296,82 @@ static int case_fusemad(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 183: a half-empty last constant register, drawn often (unipad) --
+ *
+ * femtovg's programs read `uniform vec2 viewSize` in the vertex shader and
+ * end their fragment block on a vec2 too, so the last vec4 register of each
+ * stage's constant file holds two dwords of uniform and two of padding. The
+ * GC7000's online compile named the padding as uniform dwords past the
+ * block, and the backend logged each as missing on every draw: four log
+ * lines a draw, 2.7 s of the i.MX8MP cluster's frame 2 in the command-stream
+ * step (records/imx8mp/drawstats-2026-10-05; the host reproduction: 800
+ * lines in 200 draws of fill_color.frag, 0 for the table's program).
+ *
+ * 500 small quads of one such program, then glFinish, timed. A draw costs
+ * tens of microseconds; the defect costs about a millisecond a log line, so
+ * 250 ms tells the two apart by an order of magnitude on every board (it is
+ * not a performance target). The colour is read back so the time is the
+ * time of draws that drew: (0.25, 0.75, 0, 1) from the two vec2 uniforms.
+ * ------------------------------------------------------------------------- */
+static const char unipad_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"uniform vec2 u_scale;\n"
+	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
+static const char unipad_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform vec2 u_rg;\n"
+	"void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n";
+
+#define UNIPAD_DRAWS 500
+#define UNIPAD_BOUND_MS 250u
+
+static int case_unipad(void)
+{
+	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
+	GLuint prog = link_program(unipad_vs_src, unipad_fs_src);
+	GLint pos;
+	uint32_t t0, ms;
+	bool ok = true;
+
+	if (!prog)
+		return -1;
+	pos = glGetAttribLocation(prog, "a_pos");
+	if (pos < 0) {
+		pr_err("gl_test: unipad: no a_pos\n");
+		return -1;
+	}
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(prog);
+	/* the quad covers the middle half of the target */
+	glUniform2f(glGetUniformLocation(prog, "u_scale"), 0.5f, 0.5f);
+	glUniform2f(glGetUniformLocation(prog, "u_rg"), 0.25f, 0.75f);
+	glVertexAttribPointer((GLuint)pos, 2, GL_FLOAT, GL_FALSE, 0, quad);
+	glEnableVertexAttribArray((GLuint)pos);
+	glFinish();
+	t0 = now_ms();
+	for (int i = 0; i < UNIPAD_DRAWS; i++)
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	ms = now_ms() - t0;
+	glDisableVertexAttribArray((GLuint)pos);
+	pr_info("gl_test: unipad: %d draws in %u ms (%u us a draw)\n", UNIPAD_DRAWS, ms,
+		ms * 1000u / UNIPAD_DRAWS);
+	if (!check_gl_error("unipad"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("the quad", TW / 2, TH / 2, fma_rgba(0.25f, 0.75f, 0.0f, 1.0f), 1);
+	ok &= expect_px("outside the quad", 2, 2, fma_rgba(0.0f, 0.0f, 0.0f, 1.0f), 1);
+	ok &= expect_int("500 draws under 250 ms", ms < UNIPAD_BOUND_MS, 1);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -18288,6 +18371,7 @@ static int run_case(int c, int pretransform, int debug)
 		break;
 	case 180: rc = case_teardown(); break;
 	case 181: rc = case_fusemad(); break;
+	case 183: rc = case_unipad(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
@@ -18756,7 +18840,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		int fails = 0;
 		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 183, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce
