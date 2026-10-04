@@ -197,7 +197,9 @@ enum Step {
 }
 
 /// The groups one channel's blend takes, into `out`; returns how many.
-/// `fuse`: a product term and the other term as one `fmad` ([`fused`]).
+/// `fuse`: a product term and the other term as one `fmad` ([`fused`]);
+/// the tail always fuses, and only the test that checks the fused form
+/// against the separate terms builds a channel without it.
 fn channel(b: &Blend, r: &Regs, k: u16, fuse: bool, out: &mut [Step; 8]) -> usize {
     let mut n = 0;
     let mut push = |s: Step| {
@@ -258,8 +260,7 @@ fn channel(b: &Blend, r: &Regs, k: u16, fuse: bool, out: &mut [Step; 8]) -> usiz
     for st in steps.iter().take(m).flatten() {
         push(*st);
     }
-    /* With multiply-add fusion asked for (crate::shaderc::fuse_mul_add), a
-     * sum or difference of the two terms where one is a product is one
+    /* A sum or difference of the two terms where one is a product is one
      * `fmad`, as pco's variants are (nir_lower_blend, then
      * nir_opt_algebraic's ffma): the other term first, the product in it.
      * The negations go where `fmad` carries one: on its first source (the
@@ -431,7 +432,7 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
     }
     let mut buf = [Step::PixRead(0, 0); 8];
     for k in 0..b.channels() {
-        let n = channel(b, r, k, crate::shaderc::fuse_mul_add(), &mut buf);
+        let n = channel(b, r, k, true, &mut buf);
         if i < n {
             return fixed(buf[i]);
         }

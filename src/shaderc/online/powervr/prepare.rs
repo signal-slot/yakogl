@@ -294,6 +294,8 @@ pub struct PrepareStats {
     pub mod_split: u32,
     /// gl_PointSize values clamped to the part's range.
     pub point_size: u32,
+    /// Sums of a product made one `fmad` ([`fusion_pairs`]).
+    pub fused: u32,
 }
 
 struct Prep<'a> {
@@ -477,6 +479,27 @@ pub fn prepare_counted<'a>(
     sel: &Selected<'a>,
     arena: &'a Arena<'a>,
 ) -> Result<(Selected<'a>, PrepareStats), PrepareError> {
+    prepare_with(sel, arena, &[])
+}
+
+/// [`prepare_counted`] with each sum of a product it alone reads made one
+/// `fmad` ([`fusion_pairs`]): in the copy prepare makes anyway, so the
+/// fusion costs no second copy of the program.
+pub fn prepare_fused<'a>(
+    sel: &Selected<'a>,
+    arena: &'a Arena<'a>,
+) -> Result<(Selected<'a>, PrepareStats), PrepareError> {
+    let pairs = fusion_pairs(sel, arena)?;
+    prepare_with(sel, arena, pairs)
+}
+
+/// [`prepare_counted`], with `pairs` applied as it copies: each pair's
+/// product is left out and its sum replaced by the pair's `fmad`.
+fn prepare_with<'a>(
+    sel: &Selected<'a>,
+    arena: &'a Arena<'a>,
+    pairs: &[(u32, u32, SelGroup)],
+) -> Result<(Selected<'a>, PrepareStats), PrepareError> {
     /* Above every value anything names: the groups, the outputs, the inputs
      * and selection's own count. Two passes that each took "the highest the
      * groups name" would collide on an output-only value. */
@@ -512,8 +535,27 @@ pub fn prepare_counted<'a>(
      * the program (femtovg's filter_image: 1,500 groups in, 1,504 out). */
     let out = AVec::with_capacity(arena, sel.groups.len() + sel.groups.len() / 2)?;
     let mut p = Prep { arena, out, next, stats: PrepareStats::default() };
+    p.stats.fused = pairs.len() as u32;
+    /* The products the pairs consume, sorted for the look-up. */
+    let products = arena.alloc_filled(pairs.len(), 0u32)?;
+    for (d, q) in products.iter_mut().zip(pairs) {
+        *d = q.0;
+    }
+    products.sort_unstable();
+    let mut next_pair = 0usize;
 
-    for g in sel.groups {
+    for (idx, g0) in sel.groups.iter().enumerate() {
+        if products.binary_search(&(idx as u32)).is_ok() {
+            continue;
+        }
+        let gr = match pairs.get(next_pair) {
+            Some(q) if q.1 as usize == idx => {
+                next_pair += 1;
+                q.2
+            }
+            _ => *g0,
+        };
+        let g = &gr;
         /* `sqrt(x)` is `frcp(frsq(x))`, which is what pco emits for it (NIR
          * `lower_fsqrt`; measured on a `sqrt(u)` shader with pco_shc
          * build-new, 2026-09-23). Both halves go round this loop again, so
@@ -911,65 +953,111 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
 /// the modifier sets as for any `fmad`. Returns the program and how many
 /// pairs were fused.
 pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Selected<'a>, u32), PrepareError> {
+    let pairs = fusion_pairs(sel, arena)?;
+    if pairs.is_empty() {
+        return Ok((Selected { ..*sel }, 0));
+    }
+    let gone = |i: usize| pairs.iter().any(|p| p.0 as usize == i);
+    let out = arena.alloc_filled(sel.groups.len() - pairs.len(), sel.groups[0])?;
+    let (mut n, mut next) = (0usize, 0usize);
+    for (i, g) in sel.groups.iter().enumerate() {
+        if gone(i) {
+            continue;
+        }
+        out[n] = match pairs.get(next) {
+            Some(p) if p.1 as usize == i => {
+                next += 1;
+                p.2
+            }
+            _ => *g,
+        };
+        n += 1;
+    }
+    Ok((Selected { groups: out, ..*sel }, pairs.len() as u32))
+}
+
+/// The pairs [`fuse_mul_add`] fuses, as (product's index, sum's index, the
+/// `fmad`), in the sums' program order: what [`prepare_fused`] applies as it
+/// copies.
+pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a [(u32, u32, SelGroup)], PrepareError> {
+    /* Per value, one byte: how often it is defined (bits 0..1) and read
+     * (bits 2..3), each saturating at 3: "once" is all either question asks.
+     * A byte, not two counts: a large program has tens of thousands of
+     * values, and what this pass allocates comes out of the scratch the
+     * rest of the compile has left. */
     let n = sel.vregs as usize;
-    let defs = arena.alloc_filled(n, 0u16)?;
-    let uses = arena.alloc_filled(n, 0u16)?;
-    let count = |v: VReg, t: &mut [u16]| {
+    let seen = arena.alloc_filled(n, 0u8)?;
+    let bump = |v: VReg, shift: u8, t: &mut [u8]| {
         if let Some(c) = t.get_mut(v.0 as usize) {
-            *c = c.saturating_add(1);
+            if (*c >> shift) & 3 < 3 {
+                *c += 1 << shift;
+            }
         }
     };
+    let (def, read) = (0u8, 2u8);
     for g in sel.groups {
         if let Some(SelDst::Virtual(v)) = g.dst {
-            count(v, defs);
+            bump(v, def, seen);
             if matches!(g.op, SelOp::Sample { .. }) {
                 for k in 1..4 {
-                    count(VReg(v.0 + k), defs);
+                    bump(VReg(v.0 + k), def, seen);
                 }
             }
         }
         for s in g.srcs.iter().flatten() {
             if let SelSrc::Virtual { v, .. } = s {
-                count(*v, uses);
+                bump(*v, read, seen);
             }
         }
     }
     let side = sel.outputs.iter().flat_map(|(_, c)| c.iter().flatten()).chain(sel.discard.iter());
     for s in side.chain(sel.alpha_to_one.iter().flat_map(|(x, f)| [x, f])) {
         if let SelSrc::Virtual { v, .. } = s {
-            count(*v, uses);
+            bump(*v, read, seen);
         }
     }
     for (_, comps) in sel.inputs {
         for v in comps.iter().flatten() {
-            count(*v, defs);
+            bump(*v, def, seen);
         }
     }
-    let (defs, uses): (&[u16], &[u16]) = (defs, uses);
-    let get = |t: &[u16], v: VReg| t.get(v.0 as usize).copied().unwrap_or(u16::MAX);
+    let seen: &[u8] = seen;
+    let once = |v: VReg, shift: u8| seen.get(v.0 as usize).is_some_and(|c| (c >> shift) & 3 == 1);
     let steady = |s: &SelSrc| match s {
-        SelSrc::Virtual { v, .. } => get(defs, *v) == 1,
+        SelSrc::Virtual { v, .. } => once(*v, def),
         SelSrc::Fixed { bank, .. } => matches!(bank, Bank::Shared | Bank::Special | Bank::VtxIn),
         SelSrc::Imm(_) => true,
     };
     let barrier = |g: &SelGroup| matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Machine(_));
-    /* Where each candidate product is defined, by its value. */
-    let def_at = arena.alloc_filled(n, u32::MAX)?;
+    /* The candidate products, (value, where it is defined), sorted by value
+     * for the look-up below: only the products, not a slot per value. */
+    let candidate = |g: &SelGroup| match (g.op, g.ty, g.dst) {
+        (SelOp::Alu(AluOp::Fmul), OpType::F32, Some(SelDst::Virtual(v))) => {
+            (once(v, def) && once(v, read) && g.srcs[..2].iter().flatten().all(steady)).then_some(v)
+        }
+        _ => None,
+    };
+    let n_cand = sel.groups.iter().filter(|g| candidate(g).is_some()).count();
+    if n_cand == 0 {
+        return Ok(&[]);
+    }
+    let def_at = arena.alloc_filled(n_cand, (0u32, 0u32))?;
+    let mut c = 0;
     for (i, g) in sel.groups.iter().enumerate() {
-        if let (SelOp::Alu(AluOp::Fmul), OpType::F32, Some(SelDst::Virtual(v))) = (g.op, g.ty, g.dst) {
-            if get(defs, v) == 1 && get(uses, v) == 1 && g.srcs[..2].iter().flatten().all(steady) {
-                if let Some(d) = def_at.get_mut(v.0 as usize) {
-                    *d = i as u32;
-                }
-            }
+        if let Some(v) = candidate(g) {
+            def_at[c] = (v.0, i as u32);
+            c += 1;
         }
     }
-    let gone = arena.alloc_filled(sel.groups.len(), false)?;
-    let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, sel.groups.len())?;
-    let mut fused = 0u32;
-    /* The last barrier seen, so "none between" is one comparison. */
+    def_at.sort_unstable_by_key(|e| e.0);
+    let def_at: &[(u32, u32)] = def_at;
+    let product_at = |v: VReg| def_at.binary_search_by_key(&v.0, |e| e.0).ok().map(|k| def_at[k].1);
+    /* The pairs to fuse, (product, sum) indices in program order of the
+     * sum; decided before anything is copied, so a program with none is
+     * handed back as it is, and one with some is copied once, at its final
+     * size (the scratch a big program has left is what this spends). */
+    let mut pairs: AVec<'a, (u32, u32, SelGroup)> = AVec::new();
     let mut last_barrier: Option<usize> = None;
-    let rewritten = arena.alloc_copy(sel.groups)?;
     for (j, g) in sel.groups.iter().enumerate() {
         if barrier(g) {
             last_barrier = Some(j);
@@ -982,41 +1070,35 @@ pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Sel
             if mods.abs || mods.flr {
                 continue;
             }
-            let Some(&i) = def_at.get(v.0 as usize) else { continue };
-            if i == u32::MAX || (i as usize) >= j || last_barrier.is_some_and(|b| b > i as usize) {
+            let Some(i) = product_at(v) else { continue };
+            if (i as usize) >= j || last_barrier.is_some_and(|b| b > i as usize) {
                 continue;
             }
             let m = sel.groups[i as usize];
             let (Some(a), Some(b)) = (m.srcs[0], m.srcs[1]) else { continue };
-            let ma = mods_of(&Some(a));
-            let a = with_mods(a, Mods { neg: ma.neg != mods.neg, ..ma });
-            rewritten[j] = SelGroup {
+            /* -(a * b) is (-a) * b. An immediate carries no modifier
+             * (`with_mods` leaves it as it is), so its sign bit is flipped
+             * instead, which negates a float exactly; dropping the
+             * negation there made `-(2.0 * q)` into `2.0 * q`. */
+            let a = match a {
+                SelSrc::Imm(v) if mods.neg => SelSrc::Imm(v ^ 0x8000_0000),
+                SelSrc::Imm(v) => SelSrc::Imm(v),
+                _ => {
+                    let ma = mods_of(&Some(a));
+                    with_mods(a, Mods { neg: ma.neg != mods.neg, ..ma })
+                }
+            };
+            let fma = SelGroup {
                 op: SelOp::Alu(AluOp::Ffma),
                 ty: OpType::F32,
                 dst: g.dst,
                 srcs: [Some(a), Some(b), g.srcs[1 - k]],
             };
-            gone[i as usize] = true;
-            fused += 1;
+            pairs.push(arena, (i, j as u32, fma))?;
             break;
         }
     }
-    for (i, g) in rewritten.iter().enumerate() {
-        if !gone[i] {
-            out.push(arena, *g)?;
-        }
-    }
-    Ok((
-        Selected {
-            groups: out.into_slice(),
-            vregs: sel.vregs,
-            outputs: sel.outputs,
-            inputs: sel.inputs,
-            discard: sel.discard,
-            alpha_to_one: sel.alpha_to_one,
-        },
-        fused,
-    ))
+    Ok(pairs.into_slice())
 }
 
 /// The first shared register a source can NOT name directly: 256.
@@ -1234,6 +1316,24 @@ mod tests {
             f[0].srcs,
             [Some(fixed(Bank::VtxIn, 0, NEG)), Some(fixed(Bank::Shared, 1, NONE)), Some(fixed(Bank::Shared, 2, NONE))]
         );
+        assert!(same, "the fused program computes what the pair did");
+    }
+
+    /// A negated product whose first factor is an immediate: the sign goes
+    /// into the immediate's bits (an immediate carries no modifier).
+    /// `y = sh2 - 2.0 * vtx0` is `fmad(-2.0, vtx0, sh2)`, the same bits. The
+    /// shape that miscompiled shapestroke.vert's `c` (the negation dropped:
+    /// usc_limits' execution check, 12 runs disagreed).
+    #[test]
+    fn a_negated_product_of_an_immediate_negates_the_immediate() {
+        let two = 2.0f32.to_bits();
+        let groups = [
+            g(SelOp::Alu(AluOp::Fmul), 1, [Some(SelSrc::Imm(two)), Some(fixed(Bank::VtxIn, 0, NONE)), None]),
+            g(SelOp::Alu(AluOp::Fadd), 2, [Some(virt(1, NEG)), Some(fixed(Bank::Shared, 2, NONE)), None]),
+        ];
+        let (f, n, same) = fused(&groups, [Some(virt(2, NONE)), None, None, None]);
+        assert_eq!((n, f.len()), (1, 1), "{f:?}");
+        assert_eq!(f[0].srcs[0], Some(SelSrc::Imm((-2.0f32).to_bits())), "{f:?}");
         assert!(same, "the fused program computes what the pair did");
     }
 

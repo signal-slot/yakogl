@@ -208,23 +208,6 @@ pub fn fs_w_constant() -> bool {
     FS_W_CONSTANT.load(core::sync::atomic::Ordering::Relaxed)
 }
 
-/// Whether the PowerVR compile fuses `fadd(fmul(a, b), c)` into one `fmad`
-/// (`online::powervr::prepare::fuse_mul_add`). Off by default: it changes
-/// the instructions every program with that shape is compiled to, and ships
-/// opt-in until the regression set has run with it
-/// (`shc_online_set_fuse_mul_add`).
-static FUSE_MUL_ADD: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// Set [`FUSE_MUL_ADD`]; returns the old value.
-pub fn set_fuse_mul_add(on: bool) -> bool {
-    FUSE_MUL_ADD.swap(on, core::sync::atomic::Ordering::Relaxed)
-}
-
-/// Is [`FUSE_MUL_ADD`] set?
-pub fn fuse_mul_add() -> bool {
-    FUSE_MUL_ADD.load(core::sync::atomic::Ordering::Relaxed)
-}
-
 /* ---- sampler-state variants (ShcBackend::lod_sensitivity) ------------------ */
 
 /// The draw-time facts about the samplers a shader reads that its code

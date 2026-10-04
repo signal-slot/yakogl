@@ -47,9 +47,6 @@ static int parse_list(const char *s, int *out, unsigned max)
 
 #ifdef CONFIG_YAKOGL_GPU_POWERVR
 #include "pvr_backend.h"   /* pvr_backend_set_option, PVR_BACKEND_OPT_DBIAS_INT */
-#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
-#include "gles_shaderc.h"  /* shc_online_set_fuse_mul_add */
-#endif
 void pvr_debug_set_masked_clear(int on);
 #endif
 
@@ -67,11 +64,6 @@ int main(void)
 	       CONFIG_GL_TEST_PVR_DBIAS_INT >= 0 ? "set" : "-1: untouched");
 	pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN, (uint32_t)CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
 	printk("gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=%d\n", CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
-#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
-	/* before the first compile: the setting is part of each record's key */
-	(void)shc_online_set_fuse_mul_add(IS_ENABLED(CONFIG_GL_TEST_SHC_FUSE_MUL_ADD));
-	printk("gl_test: shc_online_set_fuse_mul_add=%d\n", IS_ENABLED(CONFIG_GL_TEST_SHC_FUSE_MUL_ADD));
-#endif
 	/* on by default; CONFIG_GL_TEST_PVR_KEEP_ZS is the opt-out */
 	pvr_backend_set_option(PVR_BACKEND_OPT_SWAP_DROPS_ZS, !IS_ENABLED(CONFIG_GL_TEST_PVR_KEEP_ZS));
 	printk("gl_test: PVR_BACKEND_OPT_SWAP_DROPS_ZS=%d\n", !IS_ENABLED(CONFIG_GL_TEST_PVR_KEEP_ZS));

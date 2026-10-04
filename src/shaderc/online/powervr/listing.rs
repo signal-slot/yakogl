@@ -196,14 +196,24 @@ mod shprobe_tests {
     /// offsets 0x19a and 0x1a6 (records/am62p/sh-index). The direct form this
     /// replaces, `35 82 00 87 80 08 01 00 00 45`, read sh0 on the board; the
     /// test above asserts no direct read past sh255 is left.
+    ///
+    /// The mbyp's last byte is its destination, the temporary the allocator
+    /// chose (pco's r5; ours moves with the program, r1 since the multiply-add
+    /// fusion): every byte before it is compared, and the destination is
+    /// checked to be a temporary.
     #[test]
     fn shprobe_sh256_read_is_pcos_pair() {
         let (_, _, bytes) = listing(70);
-        const PAIR: [u8; 22] = [
+        const PAIR: [u8; 21] = [
             0x86, 0x92, 0x40, 0x13, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x85, 0x0c, //
-            0x35, 0x82, 0x00, 0x87, 0x83, 0x0c, 0x00, 0x00, 0x00, 0x45,
+            0x35, 0x82, 0x00, 0x87, 0x83, 0x0c, 0x00, 0x00, 0x00,
         ];
-        assert!(bytes.windows(PAIR.len()).any(|w| w == PAIR), "the sh256 read is pco's movi32 + mbyp pair");
+        let at = bytes.windows(PAIR.len()).position(|w| w == PAIR);
+        let at = at.expect("the sh256 read is pco's movi32 + mbyp pair, up to the mbyp's destination");
+        let g = decode::decode_group(&bytes, at + 12).expect("the mbyp decodes");
+        let mut t = String::new();
+        super::group_text(&mut t, at + 12, &g).expect("listing");
+        assert!(t.contains("dbN=temp"), "the mbyp writes a temporary:\n{t}");
     }
 
     /// A fragment shader sampling 14 textures: descriptor 13's image state
