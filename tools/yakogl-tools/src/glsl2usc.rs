@@ -30,8 +30,6 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use yakogl::shaderc as abi;
 
-/// The blend key's render-target class field (`shc_blend_key_rt`).
-
 /// SHC_NO_META: a shader that needs no ISP-feedback meta word.
 pub const SHC_NO_META: i64 = abi::SHC_NO_META as i64;
 /// Image 4 + image meta 4 + sampler 4 + sampler meta 4 + gather 4.
