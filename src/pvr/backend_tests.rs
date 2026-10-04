@@ -815,6 +815,36 @@ fn draw(d: &GlesDraw) -> i32 {
 
 /* ---- tests ------------------------------------------------------------------ */
 
+/// The lines a run logged, and whether any repeats: the per-draw log rule
+/// (osal `glog_once!`): at most one line per cause, however many draws.
+fn repeated_lines(lines: &[String]) -> Vec<(String, usize)> {
+    let mut seen: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for l in lines {
+        *seen.entry(l.as_str()).or_default() += 1;
+    }
+    seen.into_iter().filter(|(_, n)| *n > 1).map(|(l, n)| (l.to_string(), n)).collect()
+}
+
+/// 100 draws the backend refuses (an attribute of no components) log at
+/// most one line per cause: a line per draw on the draw path is seconds on
+/// a board that logs to its panel (the i.MX8MP cluster, 2026-10-05). The
+/// repeats are counted, which shows the refusal ran each time.
+#[test]
+fn a_draw_refused_100_times_logs_each_cause_once() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.attribs[0].components = 0;
+    let _ = rig.logs();
+    let (_, repeats0) = crate::osal::log_repeats();
+    for _ in 0..100 {
+        assert!(draw(&d) < 0, "refused");
+    }
+    let lines = rig.logs();
+    assert_eq!(repeated_lines(&lines), [], "{lines:?}");
+    assert!(lines.len() <= 3, "a few causes, not a line per draw: {lines:?}");
+    assert!(crate::osal::log_repeats().1.wrapping_sub(repeats0) >= 99, "the refusal ran 100 times: {lines:?}");
+}
+
 #[test]
 fn a_draw_and_a_flush_submit_one_terminated_kick() {
     let rig = Rig::new();

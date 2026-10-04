@@ -199,6 +199,10 @@ void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, 
  * flight), and the driver's GPU busy time and completed kicks
  * (gc_render_perf), so far. */
 void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);
+/* The library's glog_once! counts (src/osal/mod.rs) into buf[cap],
+ * NUL-terminated: "log: C causes logged once, R repeats not printed". Each
+ * Zephyr OSAL's close print prints it. */
+void yakogl_log_repeats_report(char *buf, size_t cap);
 /* The draw-step totals the library reported so far (OSAL_QUERY_DRAW_STATS;
  * every Zephyr OSAL, zephyr_timing.c): ns per step and the laps it could not
  * time, either pointer may be NULL. Read around a frame and take the

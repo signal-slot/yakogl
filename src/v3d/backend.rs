@@ -1426,7 +1426,7 @@ fn ms_buf(g: &mut V3dState, target: u64, w: u32, h: u32) -> Option<usize> {
     let bytes = l.size as usize + 4096;
     let mut mem = OsalGpuMem::ZERO;
     if !laid_out || osal::gpu_alloc(V3D_HEAP_DATA, bytes, OSAL_MEM_DATA, &mut mem) != 0 {
-        glog!("yakogl/v3d: no 4x colour buffer for the {}x{} target: its samples are not kept between jobs", w, h);
+        glog_once!("yakogl/v3d: no 4x colour buffer for the {}x{} target: its samples are not kept between jobs", w, h);
         return None;
     }
     let Some(address) = gpu32(mem.gpu.next_multiple_of(4096)) else {
@@ -1507,7 +1507,7 @@ pub extern "C" fn v3d_split_zs(on: bool) -> bool {
         return was;
     }
     if g.inited && flush_job(g) < 0 {
-        glog!("yakogl/v3d: the job open when depth and stencil were switched failed");
+        glog_once!("yakogl/v3d: the job open when depth and stencil were switched failed");
     }
     for b in g.zsbufs.iter_mut() {
         if b.live() {
@@ -1517,7 +1517,7 @@ pub extern "C" fn v3d_split_zs(on: bool) -> bool {
     }
     g.zs_parked.clear();
     g.split_zs = on;
-    glog!("yakogl/v3d: depth and stencil {}", if on { "apart (by renderbuffer)" } else { "in one buffer" });
+    glog_once!("yakogl/v3d: depth and stencil {}", if on { "apart (by renderbuffer)" } else { "in one buffer" });
     was
 }
 
@@ -1721,7 +1721,7 @@ fn flush_job(g: &mut V3dState) -> i32 {
     let j = &mut g.j;
     // SAFETY: the job was begun on these lists, which are still live.
     if !unsafe { v3d_job_end(&mut j.job, &j.clear, core::ptr::null_mut(), core::ptr::null_mut()) } {
-        glog!("yakogl/v3d: a job's lists did not end cleanly; the job is dropped");
+        glog_once!("yakogl/v3d: a job's lists did not end cleanly; the job is dropped");
         job_open_to_osal(false); /* dropped: it references nothing now */
         free_spills(g, 0);
         return -EIO;
@@ -1818,7 +1818,7 @@ fn wait_in_flight(g: &mut V3dState) -> i32 {
     let rc = unsafe { wait(f.fence, JOB_TIMEOUT_US) };
     g.waits += 1;
     if rc != 0 {
-        glog!("yakogl/v3d: job {} did not complete ({})", f.kick, rc);
+        glog_once!("yakogl/v3d: job {} did not complete ({})", f.kick, rc);
         if rc == -EFAULT {
             fault_record(g);
         }
@@ -2103,7 +2103,7 @@ fn submit_job(g: &mut V3dState) -> i32 {
     // SAFETY: `kick` is a live V3dKick of the size passed.
     let fence = unsafe { submit(&kick as *const V3dKick as *const c_void, core::mem::size_of::<V3dKick>()) };
     if fence < 0 {
-        glog!("yakogl/v3d: submit failed ({})", fence);
+        glog_once!("yakogl/v3d: submit failed ({})", fence);
         return -EIO;
     }
     g.kicks += 1;
@@ -2144,7 +2144,7 @@ fn spill(g: &mut V3dState, src: *const c_void, n: usize) -> Option<u32> {
     }
     let mut mem = OsalGpuMem::ZERO;
     if osal::gpu_alloc(V3D_HEAP_DATA, n, OSAL_MEM_DATA, &mut mem) != 0 || mem.cpu.is_null() {
-        glog!("yakogl/v3d: no GPU memory for {} bytes of a draw's client data", n);
+        glog_once!("yakogl/v3d: no GPU memory for {} bytes of a draw's client data", n);
         return None;
     }
     let Some(gpu) = gpu32(mem.gpu) else {
@@ -3064,7 +3064,7 @@ fn tiled_copy(
         g.kept_no_memory += 1;
         /* the numbers the refusal's static text cannot carry; the OSAL's
          * own line adds the frees it holds for the open job */
-        glog!(
+        glog_once!(
             "yakogl/v3d: no GPU memory for a tiled copy of {} bytes ({} of {} bytes of copies live, a job {})",
             bytes,
             g.tiled_live_bytes,
@@ -3292,7 +3292,7 @@ pub extern "C" fn v3d_attachment_gone(id: u32) {
     if open_uses {
         let rc = flush_job(g);
         if rc < 0 {
-            glog!("yakogl/v3d: the job drawing into object 0x{:x} failed ({}) before it went", id, rc);
+            glog_once!("yakogl/v3d: the job drawing into object 0x{:x} failed ({}) before it went", id, rc);
         }
     }
     for b in g.zsbufs.iter_mut().filter(|b| b.live() && b.owners.contains(&id)) {
@@ -3932,7 +3932,7 @@ fn draw_in_job(g: &mut V3dState, target: Target, d: &GlesDraw, st: &V3dJobState,
             Err(Attempt::NoMemory(why)) => return refuse(g, why),
         }
     }
-    glog!("yakogl/v3d: a draw does not fit an empty job ({} indices)", d.index_count);
+    glog_once!("yakogl/v3d: a draw does not fit an empty job ({} indices)", d.index_count);
     /* lost, by this backend's limits: a refusal to count (a harness scores
      * it as not drawn, not as a wrong picture); still -E2BIG for the core */
     count_refusal(g, "no empty job holds the draw (its lists, or its client data with no memory of its own)");

@@ -255,6 +255,8 @@ void osal_zephyr_diag_print(void)
 #endif
 	pvr_backend_ds_report(ds, sizeof(ds));
 	printk("osal(zephyr): %s\n", ds);
+	yakogl_log_repeats_report(ds, sizeof(ds));
+	printk("osal(zephyr): %s\n", ds);
 }
 
 /* What the queue holds now: memory no allocation can reuse until its fence

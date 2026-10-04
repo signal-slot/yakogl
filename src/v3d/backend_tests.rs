@@ -2558,6 +2558,37 @@ fn a_full_job_is_submitted_and_the_draw_goes_into_the_next() {
     assert_eq!(rig.logs_with("does not fit an empty job"), 1);
 }
 
+/// The lines a run logged, and whether any repeats: the per-draw log rule
+/// (osal `glog_once!`): at most one line per cause, however many draws.
+fn repeated_lines(lines: &[String]) -> Vec<(String, usize)> {
+    let mut seen: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for l in lines {
+        *seen.entry(l.as_str()).or_default() += 1;
+    }
+    seen.into_iter().filter(|(_, n)| *n > 1).map(|(l, n)| (l.to_string(), n)).collect()
+}
+
+/// 100 draws no empty job holds (-E2BIG) log at most one line per cause,
+/// the repeats counted: the per-draw log rule (osal `glog_once!`).
+#[test]
+fn a_draw_refused_100_times_logs_each_cause_once() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    assert_eq!(draw(&d), 0);
+    d.do_clear = false;
+    let _ = rig.gl.logs();
+    let (_, repeats0) = crate::osal::log_repeats();
+    for _ in 0..100 {
+        rig.answer(&[V3D_JOB_FULL, V3D_JOB_FULL]);
+        assert_eq!(draw(&d), -E2BIG);
+    }
+    let lines = rig.gl.logs();
+    assert_eq!(repeated_lines(&lines), [], "{lines:?}");
+    assert!(lines.len() <= 3, "a few causes, not a line per draw: {lines:?}");
+    assert!(crate::osal::log_repeats().1.wrapping_sub(repeats0) >= 99, "the refusal ran 100 times: {lines:?}");
+}
+
 #[test]
 fn staged_data_larger_than_the_arena_gets_memory_of_its_own_or_is_too_big() {
     let rig = Rig::new();
@@ -5485,6 +5516,7 @@ fn a_kept_copy_that_fits_only_after_the_open_job_runs_is_made_after_it() {
     assert!(bytes(&c) + 4096 <= 16 << 20 && bytes(&c) > b_bytes + (1 << 20) + 4096);
     with_platform(|p| p.capacity = Some(p.used() + (1 << 20)));
     let kicks = rig.kicks().len();
+    let (_, repeats0) = crate::osal::log_repeats();
     assert_eq!(draw(&sampling(&rig, c)), -EINVAL);
     assert_eq!(rig.kicks().len(), kicks + 1, "the open job ran once, not again");
     assert_eq!(
@@ -5496,7 +5528,11 @@ fn a_kept_copy_that_fits_only_after_the_open_job_runs_is_made_after_it() {
     let logs = rig.gl.logs();
     let count = |w: &str| logs.iter().filter(|l| l.contains(w)).count();
     assert_eq!(count("the job runs first, and the draw is tried in a new one (retry 2)"), 1, "{logs:?}");
-    assert_eq!(count("no GPU memory for a tiled copy of"), 2, "both attempts: {logs:?}");
+    /* the line is glog_once!'s (it repeats on every draw while memory is
+     * short): logged at B's attempt above, so both of C's attempts are
+     * repeats, counted instead of printed */
+    assert_eq!(count("no GPU memory for a tiled copy of"), 0, "logged once, at the first attempt: {logs:?}");
+    assert!(crate::osal::log_repeats().1.wrapping_sub(repeats0) >= 2, "both attempts reached the line");
     assert_eq!(count("no GPU memory for the texture's tiled copy"), 1, "refused with the reason: {logs:?}");
     with_platform(|p| p.capacity = None);
 }

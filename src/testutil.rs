@@ -1490,6 +1490,8 @@ impl TestGl {
     pub fn new(w: u32, h: u32) -> TestGl {
         let serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         HOLDS_SERIAL.with(|c| c.set(true));
+        /* a line another test logged first through glog_once! logs again */
+        crate::osal::new_log_epoch();
         *MOCK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Mock::default());
         // SAFETY: tests are serialised by SERIAL; the tables are statics.
         let ctx = unsafe {

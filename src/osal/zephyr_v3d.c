@@ -907,6 +907,12 @@ void osal_v3d_diag_print(void)
 		       "each size's 1st, 10th, 100th, ... refusal)\n", oom_refused_total, sizes);
 	}
 	printk("UIFCFG 0x%08x (read at init)\n", diag_uifcfg);
+	{
+		char line[96];
+
+		yakogl_log_repeats_report(line, sizeof(line));
+		printk("%s\n", line);
+	}
 }
 
 /* A stage did not end (its registers already recorded): reset the GPU, which

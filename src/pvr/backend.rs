@@ -1472,7 +1472,7 @@ pub extern "C" fn pvr_split_zs(on: bool) -> bool {
     // SAFETY: single-threaded by contract; a plain store of an int.
     unsafe { core::ptr::addr_of_mut!(pvr_split_zs_on).write(i32::from(on)) }
     if was != on {
-        glog!("pvr_backend: depth and stencil {}", if on { "apart (pvr_split_zs)" } else { "in one buffer" });
+        glog_once!("pvr_backend: depth and stencil {}", if on { "apart (pvr_split_zs)" } else { "in one buffer" });
     }
     was
 }
@@ -1838,7 +1838,7 @@ impl Backend {
         let rc = unsafe { wait(fence, WAIT_MS as i64 * 1000) };
         if rc != 0 {
             self.wait_timeouts = self.wait_timeouts.wrapping_add(1);
-            glog!("pvr_backend: kick {} did not complete ({})", fence, rc);
+            glog_once!("pvr_backend: kick {} did not complete ({})", fence, rc);
             return if rc > 0 { -ETIMEDOUT } else { rc };
         }
         0
@@ -2076,7 +2076,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
             )
         } != 0
         {
-            glog!("pvr_backend: the background kick program for the one-dword clear was refused");
+            glog_once!("pvr_backend: the background kick program for the one-dword clear was refused");
             return -EINVAL;
         }
         /* the generator's counts, clamped to what the buffers hold (the
@@ -2101,7 +2101,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
             )
         } != 0
         {
-            glog!("pvr_backend: the background kick program for the two-dword clear was refused");
+            glog_once!("pvr_backend: the background kick program for the two-dword clear was refused");
             return -EINVAL;
         }
         (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
@@ -2123,7 +2123,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
             )
         } != 0
         {
-            glog!("pvr_backend: the background kick program for the three-dword clear was refused");
+            glog_once!("pvr_backend: the background kick program for the three-dword clear was refused");
             return -EINVAL;
         }
         (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
@@ -2151,7 +2151,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
             )
         } != 0
         {
-            glog!("pvr_backend: the background colour DMA program was refused");
+            glog_once!("pvr_backend: the background colour DMA program was refused");
             return -EINVAL;
         }
         let (dn, cn) = (ci.data_size_dw.min(cd.len() as u32), ci.code_size_dw.min(cc.len() as u32));
@@ -3065,7 +3065,7 @@ fn ds_lost_mark(b: &mut Backend, key: DsKey) {
     }
     if n == DS_LOST_MAX {
         let old = b.ds_lost[0].key;
-        glog!(
+        glog_once!(
             "yakogl/pvr: {} depth/stencil attachments lost at once: target {}/{}/{} is forgotten, and a draw that tests \
              it is no longer refused",
             DS_LOST_MAX,
@@ -3305,7 +3305,7 @@ pub extern "C" fn pvr_backend_attachment_gone(id: u32) {
     if p.b.frame_open && p.b.frame_ds.buf().is_some() && (depth_id == id || stencil_id == id) {
         let rc = flush(p);
         if rc != 0 {
-            glog!("pvr_backend: the frame drawing into object 0x{:x} did not submit ({}) before it went", id, rc);
+            glog_once!("pvr_backend: the frame drawing into object 0x{:x} did not submit ({}) before it went", id, rc);
         }
     }
     for s in p.b.ds.iter_mut().filter(|s| !s.mem.impl_.is_null() && s.owners.contains(&id)) {
@@ -3542,7 +3542,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     note_arena_hw(b);
     b.cur = (b.cur + 1) % b.nsets;
     if b.wait_fence(b.sets[b.cur].fence) != 0 {
-        glog!("pvr_backend: reusing frame set {} before its kick completed", b.cur);
+        glog_once!("pvr_backend: reusing frame set {} before its kick completed", b.cur);
     }
     b.frame_set_activate(b.cur);
     b.pds.bump = 0;
@@ -4041,11 +4041,11 @@ fn draw_one(p: &mut Pvr, d: &GlesDraw) -> i32 {
         return 0; /* clear-only: the frame carries the clear */
     }
     if d.vs.is_null() || d.fs.is_null() || d.vs_usc_gpu == 0 || d.fs_usc_gpu == 0 {
-        glog!("pvr_backend: draw without linked shaders");
+        glog_once!("pvr_backend: draw without linked shaders");
         return -EINVAL;
     }
     if !draw_is_well_formed(d) {
-        glog!("pvr_backend: malformed draw ({} attributes, {} indices)", d.num_attribs, d.index_count);
+        glog_once!("pvr_backend: malformed draw ({} attributes, {} indices)", d.num_attribs, d.index_count);
         return -EINVAL;
     }
     public_rc(draw_sized(p, d))
@@ -4610,7 +4610,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
      * passes draw their full-screen triangle that way). The vertex-fetch
      * program is then just the id registers and the USC launch. */
     if d.num_attribs as u32 > PVR_PDS_VERTEX_MAX_STREAMS {
-        glog!("pvr_backend: {} attributes not supported", d.num_attribs);
+        glog_once!("pvr_backend: {} attributes not supported", d.num_attribs);
         return -EINVAL;
     }
     let attribs = &d.attribs[..d.num_attribs as usize];
@@ -4627,7 +4627,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
 
         for (i, a) in attribs.iter().enumerate() {
             if a.format != 0 || a.components == 0 || a.components > 4 {
-                glog!("pvr_backend: only float32 vec1..4 attributes are supported");
+                glog_once!("pvr_backend: only float32 vec1..4 attributes are supported");
                 return -EINVAL;
             }
             order[i] = i as u8;
@@ -4696,7 +4696,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         )
     } != 0
     {
-        glog!(
+        glog_once!(
             "yakogl/pvr: draw refused: the vertex fetch program was refused ({} streams, {} temps)",
             nstreams,
             vs.temps
@@ -4894,7 +4894,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             )
         } != 0
         {
-            glog!(
+            glog_once!(
                 "yakogl/pvr: draw refused: the fragment kick program was refused ({} temps, max {})",
                 temps,
                 PVR_PDS_DOUTU_MAX_TEMPS
@@ -4982,7 +4982,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             )
         } != 0
         {
-            glog!("yakogl/pvr: draw refused: the varying coefficient program was refused ({} varyings)", nv);
+            glog_once!("yakogl/pvr: draw refused: the varying coefficient program was refused ({} varyings)", nv);
             return -EINVAL;
         }
         if coeff.code_size_dw != 0 {
@@ -5185,7 +5185,10 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             pvr_pds_render_dma_program(s.kicks.as_ptr(), nkicks as u32, 0, ud.as_mut_ptr(), uc.as_mut_ptr(), &mut ui)
         } != 0
         {
-            glog!("yakogl/pvr: draw refused: the fragment common-store DMA program was refused ({} kicks)", nkicks);
+            glog_once!(
+                "yakogl/pvr: draw refused: the fragment common-store DMA program was refused ({} kicks)",
+                nkicks
+            );
             return -EINVAL;
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
@@ -5641,7 +5644,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
                 pvr_pds_render_dma_program(vk.as_ptr(), nvk as u32, 0, ud.as_mut_ptr(), uc.as_mut_ptr(), &mut ui)
             } != 0
         {
-            glog!("yakogl/pvr: draw refused: the vertex common-store DMA program was refused ({} kicks)", nvk);
+            glog_once!("yakogl/pvr: draw refused: the vertex common-store DMA program was refused ({} kicks)", nvk);
             return -EINVAL;
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
@@ -5797,7 +5800,7 @@ fn flush(p: &mut Pvr) -> i32 {
         if unsafe { pvr_ppp_build_terminate_block(b.target_w, b.target_h, term.as_mut_ptr(), &mut why) } < 0 {
             /* a frame that cannot be closed is dropped, as below */
             let rc = vdm_field_refused(&why);
-            glog!("pvr_backend: the frame's terminate block was refused: frame dropped");
+            glog_once!("pvr_backend: the frame's terminate block was refused: frame dropped");
             b.frame_open = false;
             return rc;
         }
@@ -5808,7 +5811,7 @@ fn flush(p: &mut Pvr) -> i32 {
         if rc != 0 {
             /* a frame that cannot be closed is dropped, not kept open (every
              * later draw and flush would fail on it again) */
-            glog!("pvr_backend: no room for the frame's terminate block ({}): frame dropped", rc);
+            glog_once!("pvr_backend: no room for the frame's terminate block ({}): frame dropped", rc);
             b.frame_open = false;
             return rc;
         }
@@ -5827,7 +5830,7 @@ fn flush(p: &mut Pvr) -> i32 {
         let n = unsafe { pvr_vdm_emit_ppp_state(base.add(dw), term_gpu, 3, &mut why) };
         if n < 0 {
             let rc = vdm_field_refused(&why);
-            glog!("pvr_backend: the frame's trailing PPP state update was refused: frame dropped");
+            glog_once!("pvr_backend: the frame's trailing PPP state update was refused: frame dropped");
             b.frame_open = false;
             return rc;
         }
@@ -5995,7 +5998,7 @@ fn flush(p: &mut Pvr) -> i32 {
         } != 0
         {
             /* a frame without its end-of-tile program cannot be closed */
-            glog!("pvr_backend: the frame's end-of-tile pixel event program was refused: frame dropped");
+            glog_once!("pvr_backend: the frame's end-of-tile pixel event program was refused: frame dropped");
             b.frame_open = false;
             return -EINVAL;
         }
@@ -6237,7 +6240,7 @@ fn flush(p: &mut Pvr) -> i32 {
     // SAFETY: the OSAL's submit takes the kick descriptor and its size.
     let fence = unsafe { submit(&b.kick as *const PvrRenderKick as *const c_void, size_of::<PvrRenderKick>()) };
     if fence < 0 {
-        glog!("pvr_backend: submit failed ({})", fence as i32);
+        glog_once!("pvr_backend: submit failed ({})", fence as i32);
         return fence as i32;
     }
     /* The kick runs while the application records the next frame; the GPU
@@ -6350,7 +6353,7 @@ pub extern "C" fn pvr_backend_finish_previous() -> i32 {
     };
     let rc = b.wait_fence(target);
     if rc != 0 && one {
-        glog!("pvr_backend: one kick in flight: the swap's own kick {} did not complete ({})", target, rc);
+        glog_once!("pvr_backend: one kick in flight: the swap's own kick {} did not complete ({})", target, rc);
     }
     rc
 }

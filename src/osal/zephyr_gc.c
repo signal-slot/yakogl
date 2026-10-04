@@ -237,6 +237,8 @@ void osal_zephyr_diag_print(void)
 	report_pending("");
 	gc_backend_ds_report(ds, sizeof(ds));
 	printk("osal(gc): %s\n", ds);
+	yakogl_log_repeats_report(ds, sizeof(ds));
+	printk("osal(gc): %s\n", ds);
 }
 
 void osal_mem_line(char *buf, size_t n)

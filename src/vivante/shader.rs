@@ -85,7 +85,7 @@ pub fn check_temp_limits(d: &GcDraw, vs_temps: u32, fs_temps: u32) -> bool {
     let mut ok = true;
     for (stage, n) in [("vertex", vs_temps), ("fragment", fs_temps)] {
         if n > GC_MAX_TEMPS {
-            glog!(
+            glog_once!(
                 "yakogl/vivante: the {} shader needs {} temporary registers; this part has {} \
                  (NUM_TEMPS is 6 bits). Refusing the draw: programming it would wrap to {} and \
                  the shader would write registers the hardware has not reserved.",
@@ -161,7 +161,7 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
      * Refused rather than clamped, because the vendor driver's own comment
      * says the failure is a crash and not a wrong picture. */
     if vs.num_in as usize > d.num_elems as usize {
-        glog!(
+        glog_once!(
             "yakogl/vivante: the vertex shader declares {} inputs but the draw binds {} vertex \
              elements; the hardware requires one input per element. Refusing the draw.",
             vs.num_in,
@@ -391,15 +391,6 @@ pub fn emit_prefetch(c: &mut GcCmd) {
     c.state(GC_PS_ICACHE_PREFETCH, 0);
 }
 
-/// A constant named a uniform dword past its block (logged the first time).
-static MISSING_UNIFORM_LOGGED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// Log the next missing uniform dword again (a test that counts the line).
-#[cfg(test)]
-pub(crate) fn forget_missing_uniform_logged() {
-    MISSING_UNIFORM_LOGGED.store(false, core::sync::atomic::Ordering::Relaxed);
-}
-
 /// Resolve one constant register: a literal the compiler folded in, a dword
 /// of the stage's uniform block, or a property of a bound texture.
 fn const_value(d: &GcDraw, contents: u8, data: u32, block: &[u32], fragment: bool) -> u32 {
@@ -443,14 +434,12 @@ fn const_value(d: &GcDraw, contents: u8, data: u32, block: &[u32], fragment: boo
                      * line per draw was 2.7 s of the i.MX8MP cluster's frame
                      * 2 (padding lanes the compiler described as uniform
                      * dwords, tests/gc_const_map.rs). */
-                    if !MISSING_UNIFORM_LOGGED.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                        glog!(
-                            "yakogl/vivante: {} uniform dword {} missing, block holds {} (reading 0; logged once)",
-                            if fragment { "fragment" } else { "vertex" },
-                            data,
-                            block.len()
-                        );
-                    }
+                    glog_once!(
+                        "yakogl/vivante: {} uniform dword {} missing, block holds {} (reading 0; logged once)",
+                        if fragment { "fragment" } else { "vertex" },
+                        data,
+                        block.len()
+                    );
                     0
                 }
             };

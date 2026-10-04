@@ -1292,7 +1292,7 @@ fn fs_variant_for(
         return no_room(v, &log);
     }
     if rc != 0 {
-        glog!(
+        glog_once!(
             "yakogl: no fragment shader variant for blend key 0x{:x} ({}); its draws are refused",
             key,
             log_text(&log)
@@ -1314,7 +1314,7 @@ fn fs_variant_for(
             return no_room(v, &log);
         }
         if rc != 0 {
-            glog!(
+            glog_once!(
                 "yakogl: fragment shader variant for key 0x{:x} does not link ({}); its draws are refused",
                 key,
                 log_text(&log)

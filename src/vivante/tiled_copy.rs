@@ -284,7 +284,7 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
         }
     }
     let Some(slot) = victim(c, kick_pending) else {
-        crate::glog!("vivante: no free tiled-copy slot (every one in flight)");
+        crate::glog_once!("vivante: no free tiled-copy slot (every one in flight)");
         return -1;
     };
     if let Some(mut old) = c.entries[slot].take() {
@@ -292,7 +292,7 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
     }
     let mut mem = OsalGpuMem::ZERO;
     if total == 0 || osal::gpu_alloc(super::backend::heap_data(), total, OSAL_MEM_DATA, &mut mem) != 0 {
-        crate::glog!("vivante: no GPU memory for a {total}-byte tiled copy");
+        crate::glog_once!("vivante: no GPU memory for a {total}-byte tiled copy");
         return -1;
     }
     if mem.cpu.is_null() {

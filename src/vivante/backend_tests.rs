@@ -461,12 +461,48 @@ impl Drop for Rig {
     }
 }
 
+/// The lines a run logged, and whether any repeats: the per-draw log rule
+/// (osal `glog_once!`): at most one line per cause, however many draws.
+fn repeated_lines(lines: &[String]) -> Vec<(String, usize)> {
+    let mut seen: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for l in lines {
+        *seen.entry(l.as_str()).or_default() += 1;
+    }
+    seen.into_iter().filter(|(_, n)| *n > 1).map(|(l, n)| (l.to_string(), n)).collect()
+}
+
+/// 100 draws the backend refuses (a vertex shader with more inputs than
+/// the draw binds elements) log at most one line per cause, the repeats
+/// counted: the per-draw log rule (osal `glog_once!`).
+#[test]
+fn a_draw_refused_100_times_logs_each_cause_once() {
+    let rig = Rig::new();
+    let mut vs = *rig.vs;
+    vs.viv.num_in = 2;
+    vs.viv.in_[1] = ShcVivIo { reg: 3, slot: 1, components: 4, interp: 0, name: [0; 32] };
+    let mut d = rig.draw(3);
+    d.vs = &vs;
+    rig._gl.logs();
+    let (_, repeats0) = crate::osal::log_repeats();
+    for _ in 0..100 {
+        // SAFETY: a live draw for the length of the call.
+        assert!(unsafe { gc_draw(&d) } < 0, "refused");
+    }
+    let _ = gc_flush();
+    let lines = rig._gl.logs();
+    assert_eq!(repeated_lines(&lines), [], "{lines:?}");
+    assert!(lines.len() <= 3, "a few causes, not a line per draw: {lines:?}");
+    assert!(crate::osal::log_repeats().1.wrapping_sub(repeats0) >= 99, "the refusal ran 100 times: {lines:?}");
+}
+
 /* ---- the constant file ------------------------------------------------- */
 
 /// A constant that names a uniform dword past its stage's block reads 0 and
 /// is logged once, not on every draw: a line per draw was 2.7 s of the
 /// i.MX8MP cluster's frame 2 (the online compiler described a register's
 /// padding lanes that way; tests/gc_const_map.rs pins the compiler side).
+/// At most one line in 100 draws, and the other draws counted as repeats
+/// (which shows the line's site was reached: zero lines alone would not).
 #[test]
 fn a_constant_past_the_block_is_logged_once_not_per_draw() {
     static CONTENTS: [u8; 4] = [
@@ -487,16 +523,20 @@ fn a_constant_past_the_block_is_logged_once_not_per_draw() {
     d.fs = &fs;
     d.fs_uniform_cpu = block.as_ptr() as _;
     d.fs_uniform_dwords = 2;
-    super::shader::forget_missing_uniform_logged();
     rig._gl.logs();
-    for _ in 0..50 {
+    let (_, repeats0) = crate::osal::log_repeats();
+    for _ in 0..100 {
         // SAFETY: a live draw for the length of the call.
         assert_eq!(unsafe { gc_draw(&d) }, 0);
     }
     assert_eq!(gc_flush(), 0);
     let lines: Vec<String> = rig._gl.logs().into_iter().filter(|l| l.contains("uniform dword")).collect();
-    assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(lines[0].contains("fragment uniform dword 7 missing, block holds 2"), "{lines:?}");
+    let (_, repeats) = crate::osal::log_repeats();
+    assert!(lines.len() <= 1, "{lines:?}");
+    assert!(repeats.wrapping_sub(repeats0) >= 99, "the line's site was reached 100 times: {}", repeats - repeats0);
+    if let Some(l) = lines.first() {
+        assert!(l.contains("fragment uniform dword 7 missing, block holds 2"), "{lines:?}");
+    }
 }
 
 /* ---- the draw's steps (draw_steps.rs) ------------------------------------ */

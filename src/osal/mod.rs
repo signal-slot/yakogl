@@ -493,6 +493,80 @@ macro_rules! glog {
     }};
 }
 
+/// glog! for a line on a path a draw can run (the draw, its state, the
+/// command stream, a submit or wait): each call site logs its first
+/// occurrence and counts every later one in [`log_repeats`], whose total the
+/// close record prints ([`yakogl_log_repeats_report`]). A line per draw is
+/// never right there: the i.MX8MP logs to its panel, and four lines a draw
+/// were 2.7 s of the cluster's frame 2 (2026-10-05).
+#[macro_export]
+macro_rules! glog_once {
+    ($($arg:tt)*) => {{
+        /* the epoch this site last logged in ([`log_epoch`]) */
+        static SEEN: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        let epoch = $crate::osal::log_epoch();
+        if SEEN.swap(epoch, core::sync::atomic::Ordering::Relaxed) == epoch {
+            $crate::osal::note_log_repeat();
+        } else {
+            $crate::osal::note_log_cause();
+            $crate::glog!($($arg)*);
+        }
+    }};
+}
+
+/// [`glog_once!`]'s epoch: 1 for the life of a product; a test starts a new
+/// one ([`new_log_epoch`]) so a line another test logged first is logged
+/// again in it.
+static LOG_EPOCH: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1);
+
+#[doc(hidden)]
+pub fn log_epoch() -> u32 {
+    LOG_EPOCH.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// Every [`glog_once!`] site logs again (each test rig starts with this).
+#[cfg(test)]
+pub fn new_log_epoch() {
+    LOG_EPOCH.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Call sites of [`glog_once!`] that have logged, and the lines they did not
+/// print since.
+static LOG_CAUSES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static LOG_REPEATS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[doc(hidden)]
+pub fn note_log_cause() {
+    LOG_CAUSES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+#[doc(hidden)]
+pub fn note_log_repeat() {
+    LOG_REPEATS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// (causes logged once, repeats not printed) so far, both wrapping at 2^32.
+pub fn log_repeats() -> (u32, u32) {
+    (LOG_CAUSES.load(core::sync::atomic::Ordering::Relaxed), LOG_REPEATS.load(core::sync::atomic::Ordering::Relaxed))
+}
+
+/// The close record's line of [`glog_once!`]'s counts into `buf` (`cap`
+/// bytes, NUL-terminated, truncated to fit): "log: C causes logged once, R
+/// repeats not printed". Each Zephyr OSAL's close print calls it, as it
+/// calls the backend's depth/stencil report.
+///
+/// # Safety
+/// `buf` is null or writable for `cap` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn yakogl_log_repeats_report(buf: *mut c_char, cap: usize) {
+    use core::fmt::Write as _;
+    // SAFETY: the caller's contract.
+    let mut w = unsafe { crate::util::CStrWriter::new(buf, cap) };
+    let (c, r) = log_repeats();
+    /* CStrWriter never fails: it truncates */
+    let _ = write!(w, "log: {c} causes logged once, {r} repeats not printed");
+}
+
 #[cfg(test)]
 mod tests {
     /// glog!'s buffer and the C header's OSAL_LOG_LINE_MAX (which the Zephyr
@@ -530,6 +604,30 @@ mod tests {
         }
         let header = include_str!("osal_internal.h");
         assert!(header.contains("void osal_mem_line(char *buf, size_t n);"));
+    }
+
+    /// The close record's line counts glog_once!'s causes and repeats: a
+    /// site logs its first line and counts the rest, and the line says how
+    /// many there were.
+    #[test]
+    fn the_close_line_counts_glog_once_causes_and_repeats() {
+        let (c0, r0) = super::log_repeats();
+        for _ in 0..5 {
+            crate::glog_once!("a test line nothing else logs");
+        }
+        let (c, r) = super::log_repeats();
+        /* other tests run in parallel and may add their own */
+        assert!(c.wrapping_sub(c0) >= 1 && r.wrapping_sub(r0) >= 4, "{c0}/{r0} -> {c}/{r}");
+        let mut buf = [0 as core::ffi::c_char; 96];
+        // SAFETY: a buffer of the size given.
+        unsafe { super::yakogl_log_repeats_report(buf.as_mut_ptr(), buf.len()) };
+        let line: String = buf.iter().take_while(|b| **b != 0).map(|b| *b as u8 as char).collect();
+        assert!(
+            line.starts_with("log: ")
+                && line.contains(" causes logged once, ")
+                && line.ends_with(" repeats not printed"),
+            "{line}"
+        );
     }
 
     /// The clock and the draw stats: the header's numbers are these, and

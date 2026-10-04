@@ -1085,11 +1085,11 @@ fn rs_flip_study(c: &mut GcCmd) {
         return; /* no colour target: nothing to copy */
     }
     if w == 0 || h == 0 || w % 16 != 0 {
-        glog!("yakogl/vivante: flip study: {}x{} is not a resolve-engine size; no copies", w, h);
+        glog_once!("yakogl/vivante: flip study: {}x{} is not a resolve-engine size; no copies", w, h);
         return;
     }
     if ensure_msaa(w, h, 4) != 0 {
-        glog!("yakogl/vivante: flip study: no scratch surface for {}x{}", w, h);
+        glog_once!("yakogl/vivante: flip study: no scratch surface for {}x{}", w, h);
         return;
     }
     let scratch = g.msaa.gpu as u32;
@@ -2038,7 +2038,7 @@ fn frame_submit() -> i32 {
     frame_open_to_osal(false);
     let f = &mut g.frames[g.cur];
     if f.w.overflow {
-        glog!("yakogl/vivante: command buffer full; the frame is truncated");
+        glog_once!("yakogl/vivante: command buffer full; the frame is truncated");
     }
 
     /* A multisampled frame rasterised into the scratch surface: average it
@@ -2079,7 +2079,7 @@ fn frame_submit() -> i32 {
     // SAFETY: `kick` is a live GcKick of the size passed.
     let fence = unsafe { submit(&kick as *const GcKick as *const c_void, core::mem::size_of::<GcKick>()) };
     if fence < 0 {
-        glog!("yakogl/vivante: submit failed ({})", fence as i32);
+        glog_once!("yakogl/vivante: submit failed ({})", fence as i32);
         return -1;
     }
     f.fence = fence;
@@ -2417,7 +2417,7 @@ unsafe fn take_uniforms(cpu: *const c_void, dwords: u16, vertex: bool) -> &'stat
         /* the constant registers are command-stream words, so the block has
          * to be readable by the CPU */
         block[..n].fill(0);
-        glog!("yakogl/vivante: {} uniforms have no CPU mapping", if vertex { "vertex" } else { "fragment" });
+        glog_once!("yakogl/vivante: {} uniforms have no CPU mapping", if vertex { "vertex" } else { "fragment" });
     } else {
         // SAFETY: the caller's contract.
         unsafe { core::ptr::copy_nonoverlapping(cpu as *const u32, block.as_mut_ptr(), n) };
@@ -2510,7 +2510,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     }
     let ms = ms_scale(gl);
     if msaa_on() && gl.samples > 1 && ms == 1 {
-        glog!(
+        glog_once!(
             "yakogl/vivante: a {}x{} target is not a resolve size (width a multiple of 16, height of 4); drawing single-sampled",
             gl.target_w,
             gl.target_h
@@ -2648,7 +2648,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         rc = record_all(&mut clock);
         if g().frames[g().cur].w.overflow {
             again.restore();
-            glog!("yakogl/vivante: a draw does not fit an empty command buffer ({} words)", GC_CMD_WORDS);
+            glog_once!("yakogl/vivante: a draw does not fit an empty command buffer ({} words)", GC_CMD_WORDS);
             return -ENOMEM;
         }
     }
@@ -2703,7 +2703,7 @@ fn ensure_extra(need: usize) -> i32 {
     f.extra_used = 0;
     if osal::gpu_alloc(GC_HEAP_COMMAND, want, OSAL_MEM_DATA, &mut f.extra) != 0 {
         f.extra = OsalGpuMem::ZERO;
-        glog!("vivante: no {want} bytes for a draw's client arrays and indices; the draw is refused");
+        glog_once!("vivante: no {want} bytes for a draw's client arrays and indices; the draw is refused");
         return -ENOMEM;
     }
     0

@@ -294,7 +294,7 @@ pub fn select(
             let i = match victim(c, &pending) {
                 Victim::Slot(i) => i,
                 Victim::AllPending => {
-                    crate::glog!("vivante: every depth/stencil surface is in use by a pending kick");
+                    crate::glog_once!("vivante: every depth/stencil surface is in use by a pending kick");
                     c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                     return Err(-1);
                 }
@@ -419,7 +419,7 @@ fn copy_plane(
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
     if s.stride != d.stride {
-        crate::glog!(
+        crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a surface of another row stride ({} against {} bytes): not \
              copied, the draw is refused",
             if p == DEPTH { "depth" } else { "stencil" },
@@ -438,7 +438,7 @@ fn copy_plane(
     // SAFETY: two live allocations of this cache (distinct surfaces), each
     // guard + stride * rows + guard bytes; the GPU is idle (finish above).
     let (Some(sb), Some(db)) = (unsafe { src.bytes_mut() }, unsafe { dst.bytes_mut() }) else {
-        crate::glog!("vivante: a depth/stencil surface has no CPU mapping: the plane is not copied");
+        crate::glog_once!("vivante: a depth/stencil surface has no CPU mapping: the plane is not copied");
         return Err(-1);
     };
     // SAFETY: the whole CPU mappings, as above.

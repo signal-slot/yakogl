@@ -363,7 +363,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
          * what this did, and it renders black with no GL error. No run has
          * ever been seen to reach this path -- it is here so that if one ever
          * does, it says so instead of quietly drawing the wrong picture. */
-        crate::glog!(
+        crate::glog_once!(
             "vivante: no room in the frame arena for unit {slot}'s {GC_TEXDESC_BYTES}-byte texture descriptor"
         );
         return -ENOMEM;
