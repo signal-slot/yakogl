@@ -196,7 +196,19 @@ pub const PVR_BACKEND_OPT_ONE_IN_FLIGHT: PvrBackendOption = 13;
 /// glmark2 315 -> 550, gl_test 37/38 in both arms). The value lives in
 /// [`pvr_swap_drops_zs`]; setting this option writes it.
 pub const PVR_BACKEND_OPT_SWAP_DROPS_ZS: PvrBackendOption = 14;
-pub const PVR_BACKEND_OPT_COUNT: usize = 15;
+/// MEASUREMENT: the fragment kick declares at least this many temporaries
+/// per instance (`max(fs.temps, value)`, capped at [`FS_TEMPS_MIN_CAP`]); 0
+/// (the default) declares the shader's own count. The program is unchanged:
+/// only the per-instance allocation the PDS kick asks the USC for grows, so
+/// a run with it set separates the cost of a larger temporary allocation
+/// (fewer resident instances) from the cost of the instructions. Never a
+/// default: it exists for the online-vs-table A/B of the FemtoVG programs
+/// (the online ones declare about twice the table's temporaries).
+pub const PVR_BACKEND_OPT_FS_TEMPS_MIN: PvrBackendOption = 15;
+pub const PVR_BACKEND_OPT_COUNT: usize = 16;
+/// The largest count [`PVR_BACKEND_OPT_FS_TEMPS_MIN`] declares: the online
+/// compiler's own bound on a program's temporaries (`USC_MAX_TEMPS`).
+pub const FS_TEMPS_MIN_CAP: u32 = 252;
 
 /* ---- this GPU's device-VA heap configuration (pvr_rogue_heap_config.h;
  * mirrors the driver's src/pvr_internal.h). The OSAL bump-allocates inside
@@ -4829,7 +4841,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         unsafe {
             pvr_pds_render_kick_usc_program(
                 heap_off_of(d.fs_usc_gpu) as u64,
-                fs.temps as u32,
+                (fs.temps as u32).max(b.opt(PVR_BACKEND_OPT_FS_TEMPS_MIN).min(FS_TEMPS_MIN_CAP)),
                 fs_sample_rate(b.samples, d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0),
                 k_prog.as_mut_ptr(),
                 k_prog.as_mut_ptr().add(8),
