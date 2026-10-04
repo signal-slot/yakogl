@@ -411,6 +411,12 @@
  * 173 splitzs   a window frame split by glFinish keeps its depth: red at 0.25
  *               on the left, glFinish, green at 0.5 LESS: left stays red,
  *               before and after a swap. All three GPUs; in the set
+ * 181 fusemad   a * b + c as one fmad (the PowerVR's fuse_mul_add): x - 2.0 * q
+ *               (a negated immediate factor), x - a * b, 2.0 * q + b, and the
+ *               controls it must leave alone (a product read twice, under
+ *               abs, under floor), each in a fragment and a vertex shader,
+ *               from uniforms, read back. All three GPUs (skipped by name in a
+ *               table build: no rows for its own sources); in the set
  * 176 mapbuf    GL_OES_mapbuffer: the slice-A triangle drawn from a VBO,
  *               then glMapBufferOES(WRITE_ONLY_OES): written nothing (the
  *               triangle is still there: unwritten bytes keep their
@@ -629,6 +635,12 @@ static const char *shader_skip_reason(int c)
 	const char *why = GL_TEST_SHADERS_SKIP_REASON(c);
 	const char *v;
 
+#ifndef GL_TEST_ES100_SET
+	/* the desktop set is a table build's, and the table has no rows for a
+	 * case's own sources */
+	if (c == 181)
+		return "its own sources: a table build has no rows for them";
+#endif
 	(void)c; /* the default set's reason ignores it */
 	if (!why)
 		return (const char *)0;
@@ -7661,7 +7673,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15146,6 +15158,137 @@ static int case_splitzs(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 181: a * b + c as one fmad (fusemad) -----------------------------
+ *
+ * The PowerVR compile makes a sum of a product the sum alone reads one fmad
+ * (src/shaderc/online/powervr/prepare.rs fuse_mul_add, blend.rs); the GC7000
+ * and the V3D compile the same text without it, and check the case itself.
+ * Four quads, every value from a uniform so nothing folds at compile time:
+ *   top-left     the fragment shader computes the fused shapes:
+ *                x - 2.0 * q (an immediate factor, negated: the shape whose
+ *                sign the first fusion dropped, x + 2.0 * q), x - a * b (a
+ *                register factor), 2.0 * q + b;
+ *   top-right    the vertex shader computes the same into a varying, the
+ *                fragment shader writes it;
+ *   bottom-left  the controls the fusion must leave alone, in the fragment
+ *                shader: a product read twice (x - p and p * 2.0), a product
+ *                under abs (x - abs(a * b)), a product under floor at the
+ *                sum (floor(a * b * 4.0) + 0.25);
+ *   bottom-right the controls in the vertex shader.
+ * With x = 0.75, q = 0.125, a = 0.5, b = 0.25 every channel is exact in
+ * 8 bits; a dropped negation reads 1.0 where 0.5 is right.
+ * ------------------------------------------------------------------------- */
+static const char fma_vs_plain_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"void main() { gl_Position = a_pos; }\n";
+static const char fma_fs_fused_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
+static const char fma_fs_ctrl_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float p = u_a * u_b;\n"
+	"  gl_FragColor = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
+	"}\n";
+static const char fma_vs_fused_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
+static const char fma_vs_ctrl_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  float p = u_a * u_b;\n"
+	"  v = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
+	"}\n";
+static const char fma_fs_varying_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_FragColor = v; }\n";
+
+/* Draw `prog` over the rectangle (x0, y0)-(x1, y1) in NDC, its four
+ * uniforms set; false when the program has no a_pos to draw with. */
+static bool fma_quad(GLuint prog, float x0, float y0, float x1, float y1)
+{
+	const float v[12] = { x0, y0, x1, y0, x0, y1, x0, y1, x1, y0, x1, y1 };
+	const char *names[4] = { "u_x", "u_q", "u_a", "u_b" };
+	const float vals[4] = { 0.75f, 0.125f, 0.5f, 0.25f };
+	const GLint pos = glGetAttribLocation(prog, "a_pos");
+
+	if (pos < 0) {
+		pr_err("gl_test: fusemad: program %u has no a_pos\n", prog);
+		return false;
+	}
+	glUseProgram(prog);
+	for (int i = 0; i < 4; i++)
+		glUniform1f(glGetUniformLocation(prog, names[i]), vals[i]);
+	glVertexAttribPointer((GLuint)pos, 2, GL_FLOAT, GL_FALSE, 0, v);
+	glEnableVertexAttribArray((GLuint)pos);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glDisableVertexAttribArray((GLuint)pos);
+	return true;
+}
+
+/* A colour of four values in 0..1 as expect_px reads it (R in the low byte). */
+static uint32_t fma_rgba(float r, float g, float b, float a)
+{
+	const float c[4] = { r, g, b, a };
+	uint32_t out = 0;
+
+	for (int i = 0; i < 4; i++)
+		out |= (uint32_t)(c[i] * 255.0f + 0.5f) << (8 * i);
+	return out;
+}
+
+static int case_fusemad(void)
+{
+	const float x = 0.75f, q = 0.125f, a = 0.5f, b = 0.25f, p = a * b;
+	const uint32_t fused = fma_rgba(x - 2.0f * q, x - a * b, 2.0f * q + b, 1.0f);
+	const uint32_t ctrl = fma_rgba(x - p, p * 2.0f, x - p, (float)(int)(p * 4.0f) + 0.25f);
+	GLuint fs_fused, vs_fused, fs_ctrl, vs_ctrl;
+	bool ok = true;
+
+	fs_fused = link_program(fma_vs_plain_src, fma_fs_fused_src);
+	vs_fused = link_program(fma_vs_fused_src, fma_fs_varying_src);
+	fs_ctrl = link_program(fma_vs_plain_src, fma_fs_ctrl_src);
+	vs_ctrl = link_program(fma_vs_ctrl_src, fma_fs_varying_src);
+	if (!fs_fused || !vs_fused || !fs_ctrl || !vs_ctrl)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	/* top is +y in NDC; read_topdown's row 0 is the top */
+	if (!fma_quad(fs_fused, -1.0f, 0.0f, 0.0f, 1.0f) || !fma_quad(vs_fused, 0.0f, 0.0f, 1.0f, 1.0f) ||
+	    !fma_quad(fs_ctrl, -1.0f, -1.0f, 0.0f, 0.0f) || !fma_quad(vs_ctrl, 0.0f, -1.0f, 1.0f, 0.0f))
+		return -1;
+	if (!check_gl_error("fusemad"))
+		return -1;
+	read_topdown();
+	dump_map(s_px, TW, TH);
+	ok &= expect_px("fused shapes, fragment", TW / 4, TH / 4, fused, 1);
+	ok &= expect_px("fused shapes, vertex", 3 * TW / 4, TH / 4, fused, 1);
+	ok &= expect_px("controls, fragment", TW / 4, 3 * TH / 4, ctrl, 1);
+	ok &= expect_px("controls, vertex", 3 * TW / 4, 3 * TH / 4, ctrl, 1);
+	glDeleteProgram(fs_fused);
+	glDeleteProgram(vs_fused);
+	glDeleteProgram(fs_ctrl);
+	glDeleteProgram(vs_ctrl);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -18144,6 +18287,7 @@ static int run_case(int c, int pretransform, int debug)
 			return -3; /* skipped by name: the V3D, or an ES 2.0 library without the extensions */
 		break;
 	case 180: rc = case_teardown(); break;
+	case 181: rc = case_fusemad(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
@@ -18612,7 +18756,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		int fails = 0;
 		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce
