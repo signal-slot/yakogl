@@ -2263,6 +2263,7 @@ static const char gl_test_es300_texsize_fs_src[] =
 	"precision highp float;\n"
 	"precision highp int;\n"
 	"uniform sampler2D tex;\n"
+	"precision mediump sampler2DArray;\n"
 	"uniform sampler2DArray arr;\n"
 	"in vec2 v_xy;\n"
 	"layout(location = 0) out vec4 fragColor;\n"

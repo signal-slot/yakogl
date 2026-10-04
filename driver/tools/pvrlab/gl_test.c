@@ -16139,8 +16139,9 @@ static int case_unibranch(void)
  * dFdy taken along the target's rows without the window flip reads green 0.25
  * = 64 and blue 0.5 = 128 on exactly one of the two targets (the default
  * framebuffer is stored top-down, an FBO is not); no derivative reads 128 in
- * red and green. The V3D's FDX/FDY are measured only here: the host
- * interpreter does not model a quad's lanes. Online-path only, like 68.
+ * red and green. Each GPU's derivatives (the V3D's FDX/FDY, the GC7000's
+ * dsx/dsy, the PowerVR's) are measured only here: the host interpreters do
+ * not model a quad's lanes. Online-path only, like 68.
  * ------------------------------------------------------------------------- */
 static int case_deriv(void)
 {
@@ -18079,6 +18080,9 @@ static int run_case(int c, int pretransform, int debug)
 	case 105: rc = case_pointcoordvary(); break;
 	case 107: rc = case_clearload(); break;
 	case 108: rc = case_uniidx(); break;
+	/* dFdx / dFdy read back: plain GL, every GPU (the GC7000's dsx/dsy and
+	 * the PowerVR's derivatives are measured here as the V3D's are). */
+	case 138: rc = case_deriv(); break;
 #ifdef GL_TEST_V3D
 	case 109: rc = case_texlinear(); break;
 	case 110: rc = case_psizvpm(); break;
@@ -18090,7 +18094,6 @@ static int run_case(int c, int pretransform, int debug)
 	case 136: rc = case_psizmax(); break;
 	case 135: rc = case_texnarrow(); break;
 	case 137: rc = case_psizmin(); break;
-	case 138: rc = case_deriv(); break;
 	case 140: rc = case_tfuprobe(); break;
 	case 142: rc = case_unibranch(); break;
 	case 148: rc = case_texbranch(); break;

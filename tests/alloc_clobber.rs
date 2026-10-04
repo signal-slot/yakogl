@@ -402,8 +402,12 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
     /* +6 in both builds (2026-10-02): the six FemtoVG NO_SCISSOR programs
      * (tools/shaders/femtovg/<name>.nodiscard.noscissor.frag, appended to the
      * GC7000 table); none loops, none clobbers. */
-    assert_eq!(checked, if es2 { 151 } else { 306 }, "the population moved: {checked} programs reached the check");
-    assert_eq!(looped, if es2 { 7 } else { 12 }, "the loop population moved: {looped} programs with a back edge");
+    /* +10 in the ES 3.00 build (2026-10-04): the GC7000 now selects
+     * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
+     * dsy (SRC2) and `%` (builtins::imod), so more table sources get
+     * through; one more loops, none clobbers. */
+    assert_eq!(checked, if es2 { 151 } else { 316 }, "the population moved: {checked} programs reached the check");
+    assert_eq!(looped, if es2 { 7 } else { 13 }, "the loop population moved: {looped} programs with a back edge");
     assert!(bad.is_empty(), "{} programs overwrite a live register", bad.len());
 }
 

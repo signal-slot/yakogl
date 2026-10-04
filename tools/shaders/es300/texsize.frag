@@ -2,6 +2,7 @@
 precision highp float;
 precision highp int;
 uniform sampler2D tex;
+precision mediump sampler2DArray;
 uniform sampler2DArray arr;
 in vec2 v_xy;
 layout(location = 0) out vec4 fragColor;

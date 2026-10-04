@@ -62,6 +62,11 @@ pub struct Selected<'a> {
     pub ps_color_out_reg: Option<u8>,
     /// The register `gl_PointSize` was written to, when the shader writes it.
     pub vs_pointsize_out_reg: Option<u8>,
+    /// The input register `gl_VertexID` (`.x`) and `gl_InstanceID` (`.y`)
+    /// arrive in, when the vertex shader reads either; see
+    /// `Sel::vs_id_reg`. Not an io row: the driver programs it through
+    /// `FE_HALTI5_ID_CONFIG`, as Mesa's etnaviv does.
+    pub vs_id_in_reg: Option<u8>,
     /// The shader's inputs with the registers this file assigned them, ready
     /// for `abi::assemble`. Produced here rather than recomputed there, so
     /// that the numbering the instructions read from and the numbering the
@@ -629,6 +634,7 @@ impl<'a> Sel<'a> {
              * table's. */
             ir::IoSlot::FrontFacing => Err(SelectError::Unsupported("gl_FrontFacing is not selected yet")),
             ir::IoSlot::PointCoord => self.pntc_reg(),
+            ir::IoSlot::VertexId | ir::IoSlot::InstanceId if self.m.stage == SHC_STAGE_VERTEX => self.vs_id_reg(),
             _ => Err(SelectError::Unsupported("this built-in input is not selected yet")),
         }
     }
@@ -862,6 +868,40 @@ impl<'a> Sel<'a> {
             return Err(SelectError::TooManyIo { got: rows + 1, max: MAX_IO });
         }
         Ok((rows + 1) as u8)
+    }
+
+    /// The vertex input register `gl_VertexID` and `gl_InstanceID` arrive
+    /// in: the one after every attribute register, the vertex id in `.x` and
+    /// the instance id in `.y`, both as integers.
+    ///
+    /// This is Mesa's etnaviv (MIT; etnaviv_nir.c sets `vs_id_in_reg =
+    /// infile.num_reg`, and etnaviv_compiler_nir_ra.c pins load_vertex_id to
+    /// `num_reg`.x and load_instance_id to `num_reg`.y), and it is what the
+    /// reference compiler emitted for gl_test's `es300/vid.vert`:
+    /// `vs_id_in_reg` 1 after the attribute in register 0, read as
+    /// `iabs.s32 t1._y__, void, void, t1.xxxx`. The driver feeds it as one
+    /// more vertex input and sets `FE_HALTI5_ID_CONFIG` to `reg * 4` and
+    /// `reg * 4 + 1` (`vivante/shader.rs`, from etnaviv_shader.c).
+    ///
+    /// Attribute registers are their locations here, not a compacted count,
+    /// so "after every attribute" is one past the highest location a used
+    /// attribute (every column of a matrix one) occupies. A register below
+    /// that may be one a vertex element writes.
+    fn vs_id_reg(&self) -> Result<u8, SelectError> {
+        let mut end = 0usize;
+        let mut rows = 0usize;
+        for d in self.m.inputs.iter().filter(|d| d.kind == ir::IoKind::Attribute && self.decl_is_used(d, true)) {
+            let cols = usize::from(varying_columns(self.m.inputs, d));
+            end = end.max(usize::from(d.location) + cols);
+            rows += cols;
+        }
+        /* The ids are one more vertex input (vivante/shader.rs appends it
+         * after the elements), so they and the attributes share the 16. */
+        let max = crate::vivante::state::GC_MAX_VERTEX_ELEMENTS;
+        if rows + 1 > max {
+            return Err(SelectError::TooManyIo { got: rows + 1, max });
+        }
+        Ok(end as u8)
     }
 
     fn used_varying_index(&self, decls: &[ir::IoDecl<'a>], location: u8, input: bool) -> Option<usize> {
@@ -1512,6 +1552,12 @@ impl<'a> Sel<'a> {
             ir::Op::LoadInput { slot: ir::IoSlot::FragCoord | ir::IoSlot::PointCoord, .. } => {
                 Ok(SelSrc::Virtual { v: VReg(s.val.0), swizzle: s.swizzle, neg: false, abs: false })
             }
+            /* gl_InstanceID is the `.y` of the id register; its one lane is
+             * component 0 of the IR value, so every lane reads `.y`. */
+            ir::Op::LoadInput { slot: ir::IoSlot::InstanceId, .. } => {
+                let reg = self.input_reg(ir::IoSlot::InstanceId)?;
+                Ok(SelSrc::Input { reg, swizzle: [1; 4], neg: false, abs: false })
+            }
             ir::Op::LoadInput { slot, .. } => {
                 let reg = self.input_reg(slot)?;
                 Ok(SelSrc::Input { reg, swizzle: s.swizzle, neg: false, abs: false })
@@ -1679,6 +1725,35 @@ impl<'a> Sel<'a> {
         for (i, out) in sel.iter_mut().enumerate().take(n) {
             *out = Some(self.src(srcs[i])?);
         }
+        /* `dsx` and `dsy` read their one source from BOTH of their slots,
+         * SRC0 and SRC2: Mesa's etnaviv (MIT, etnaviv_compiler_nir.c,
+         * nir_intrinsic_ddx / ddy) sets `.src[0] = src, .src[1] = src`, and
+         * its second operand is the instruction's SRC2. With SRC2 empty the
+         * allocator refused every derivative (WrongSourceSlot(2)). */
+        /* `dFdy` is along GL's y, which the rasteriser counts the other way
+         * on a target this backend draws mirrored: the source is scaled by
+         * the same per-draw y scale `gl_FragCoord` takes (-1 there, 1
+         * elsewhere; `frag_coord`), as Mesa's nir_lower_wpos_ytransform
+         * turns `ddy(p)` into `ddy(p * transform.x)` (lower_ddy). */
+        if op == ir::AluOp::Fddy {
+            let mul = build::op_id("mul").ok_or(SelectError::Unsupported("the instruction set has no `mul`"))?;
+            let (reg, [ls, _]) = self.fragcoord_ytf_reg()?;
+            let mut scale = build::Src::reg(build::RGROUP_UNIFORM_0, reg);
+            scale.swizzle = [ls; 4];
+            let p = sel[0].ok_or(SelectError::Unsupported("a derivative with no operand"))?;
+            let v = VReg(self.next_vreg);
+            self.next_vreg += 1;
+            self.emit(
+                SelInstr::new(mul, OpType::F32)
+                    .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
+                    .operand(0, p)
+                    .operand(1, SelSrc::Physical(scale)),
+            )?;
+            sel[0] = Some(SelSrc::Virtual { v, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false });
+        }
+        if matches!(op, ir::AluOp::Fddx | ir::AluOp::Fddy) {
+            sel[1] = sel[0];
+        }
 
         /* The instruction's result is the value the instruction defines:
          * `instrs[i]` produces `ValueId(i)`, and `src` turns a use of it into
@@ -1740,7 +1815,7 @@ impl<'a> Sel<'a> {
         /* The unsigned divide's reciprocal scale is not an f20 immediate, so
          * it comes from the constant file (builtins::UDIV_RCP_SCALE_BITS). */
         let udiv_k = match op {
-            ir::AluOp::Udiv | ir::AluOp::Umod => {
+            ir::AluOp::Udiv | ir::AluOp::Umod | ir::AluOp::Imod => {
                 Some(self.const_file_src([builtins::UDIV_RCP_SCALE_BITS; 4], ir::SWIZZLE_IDENTITY)?)
             }
             _ => None,
@@ -1762,6 +1837,7 @@ impl<'a> Sel<'a> {
                 v
             };
             match udiv_k {
+                Some(k) if op == ir::AluOp::Imod => builtins::imod(dst, &flat[..n], k, &mut out, &mut fresh),
                 Some(k) => builtins::udiv(op == ir::AluOp::Umod, dst, &flat[..n], k, &mut out, &mut fresh),
                 None => builtins::lower(op, ty, dst, &flat[..n], &mut out, &mut fresh),
             }
@@ -1823,6 +1899,113 @@ impl<'a> Sel<'a> {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+
+    /// `texelFetch(s, p, lod)`: `builtins::texel_fetch`, with the level
+    /// turned into a float first as Mesa's etnaviv does
+    /// (`legalize_txf_lod`). A literal level is folded into the f20
+    /// immediate the reference carries (`0.0:f20` for `texelFetch(.., 0)`);
+    /// any other is one `i2f`.
+    fn tex_fetch(&mut self, id: ir::InstrId, sampler: u8, coord: ir::Src, lod: ir::Src) -> Result<(), SelectError> {
+        let dst = SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL };
+        let c = self.src(coord)?;
+        let literal = match self.m.def(lod.val) {
+            Some(ir::Op::ConstI32(bits)) => {
+                build::Src::imm_f32(bits[usize::from(lod.swizzle[0])] as f32).ok().map(SelSrc::Physical)
+            }
+            _ => None,
+        };
+        let level = match literal {
+            Some(imm) => imm,
+            None => {
+                let i2f = build::op_id("i2f").ok_or(SelectError::Unsupported("the instruction set has no `i2f`"))?;
+                let l = self.src(lod)?;
+                let v = VReg(self.next_vreg);
+                self.next_vreg += 1;
+                self.emit(
+                    SelInstr::new(i2f, OpType::S32)
+                        .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
+                        .operand(0, l),
+                )?;
+                SelSrc::Virtual { v, swizzle: ir::SWIZZLE_SPLAT0, neg: false, abs: false }
+            }
+        };
+        let arena = self.arena;
+        let mov = self.mov;
+        let instrs = &mut self.instrs;
+        let next = core::cell::Cell::new(self.next_vreg);
+        let mut push_err = None;
+        let r = {
+            let mut out = |i: SelInstr| {
+                if push_err.is_none() {
+                    push_err = push_one_constant_register(instrs, arena, &next, mov, i).err();
+                }
+            };
+            builtins::texel_fetch(sampler, dst, c, level, &mut out)
+        };
+        self.next_vreg = next.get();
+        r?;
+        match push_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    /// `textureSize(s, 0)`: the bound texture's width, height and depth (the
+    /// layers of an array, the slices of a volume), which the driver puts in
+    /// the constant file per draw (`SHC_VIV_CONST_TEXTURE_WIDTH` / `_HEIGHT` /
+    /// `_DEPTH`, data = the sampler's unit; `vivante/shader.rs const_value`).
+    /// Mesa's etnaviv lowers the query the same way (etnaviv_nir_lower_texture.c
+    /// `lower_txs`: `load_texture_size_etna`), and the reference read
+    /// `es300/texsize.frag`'s sizes straight from such a register (contents
+    /// 5, 6, 7 with the unit as data).
+    ///
+    /// Only level 0: another level is `max(size >> lod, 1)` per lane with the
+    /// layer count unshifted (Mesa leaves it to nir_lower_tex's
+    /// `lower_txs_lod`), which nothing in the corpus asks for and nothing has
+    /// measured, so it is refused by name.
+    fn tex_size(&mut self, id: ir::InstrId, sampler: u8, lod: ir::Src) -> Result<(), SelectError> {
+        let zero = match self.m.def(lod.val) {
+            Some(ir::Op::ConstI32(bits)) => bits[usize::from(lod.swizzle[0])] == 0,
+            _ => false,
+        };
+        if !zero {
+            return Err(SelectError::Unsupported("textureSize at a level other than a literal 0 is not selected yet"));
+        }
+        let kinds = [
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_WIDTH,
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_HEIGHT,
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_DEPTH,
+        ];
+        let (reg, lanes) = self.driver_reg(kinds.map(|k| ConstSlot { contents: k, data: u32::from(sampler) }))?;
+        let mut p = build::Src::reg(build::RGROUP_UNIFORM_0, reg);
+        p.swizzle = [lanes[0], lanes[1], lanes[2], lanes[2]];
+        self.emit(
+            SelInstr::new(self.mov, OpType::F32)
+                .dst(SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL })
+                .operand(MOV_OPERAND, SelSrc::Physical(p)),
+        )
+    }
+
+    /// The constant register holding these three driver-filled dwords, and
+    /// the lane of each: the one already placed, or a new register after
+    /// everything else.
+    fn driver_reg(&mut self, want: [ConstSlot; 3]) -> Result<(u16, [u8; 3]), SelectError> {
+        let n = self.consts.len();
+        for base in (0..n).step_by(4) {
+            let lane_of = |w: ConstSlot| (base..(base + 4).min(n)).position(|i| self.consts[i] == w);
+            if let (Some(a), Some(b), Some(c)) = (lane_of(want[0]), lane_of(want[1]), lane_of(want[2])) {
+                return Ok(((base / 4) as u16, [a as u8, b as u8, c as u8]));
+            }
+        }
+        while !self.consts.len().is_multiple_of(4) {
+            self.consts.push(self.arena, ConstSlot::UNUSED)?;
+        }
+        let reg = (self.consts.len() / 4) as u16;
+        for c in [want[0], want[1], want[2], ConstSlot::UNUSED] {
+            self.consts.push(self.arena, c)?;
+        }
+        Ok((reg, [0, 1, 2]))
     }
 
     /// `gl_FrontFacing` as the reference computes it: internal register 0
@@ -2378,14 +2561,18 @@ impl<'a> Sel<'a> {
             /* IR v1's look-ups: the five ES 1.00 shapes select as before, one
              * to one (`Op::es100_tex`); every other shape is refused by name
              * until this back end selects it. */
-            op @ ir::Op::Tex { sampler, coord, .. } => match (op.es100_tex(), cube_level(&op)) {
-                (Some((kind, extra)), _) | (None, Some((kind, extra))) => self.tex(id, kind, sampler, coord, extra),
-                (None, None) => Err(SelectError::Unsupported(
-                    "an ES 3.00 texture look-up (a 3D, array or shadow sampler, an integer result, a gradient, \
-                     a fetch or an offset) is not selected yet",
+            op @ ir::Op::Tex { sampler, coord, .. } => match (op.es100_tex(), three_lane_lookup(&op), fetch_level(&op))
+            {
+                (Some((kind, extra)), _, _) | (None, Some((kind, extra)), _) => {
+                    self.tex(id, kind, sampler, coord, extra)
+                }
+                (None, None, Some(lod)) => self.tex_fetch(id, sampler, coord, lod),
+                (None, None, None) => Err(SelectError::Unsupported(
+                    "an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a \
+                     cube fetch) is not selected yet",
                 )),
             },
-            ir::Op::TexSize { .. } => Err(SelectError::Unsupported("textureSize is not selected yet")),
+            ir::Op::TexSize { sampler, lod, .. } => self.tex_size(id, sampler, lod),
             /* `discard` is one `texkill`, with no operands and no
              * destination. Measured against the reference:
              *
@@ -3757,6 +3944,11 @@ pub fn select_keyed<'a>(
     }
 
     let vs_pos_out_reg = (m.stage == SHC_STAGE_VERTEX).then_some(VS_POS_REG);
+    let reads_ids = m
+        .instrs
+        .iter()
+        .any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::VertexId | ir::IoSlot::InstanceId, .. }));
+    let vs_id_in_reg = if m.stage == SHC_STAGE_VERTEX && reads_ids { Some(s.vs_id_reg()?) } else { None };
     /* Named only when the shader writes it: an unwritten gl_PointSize must
      * stay NO_REG, or the driver reads a register the code never set. */
     let vs_pointsize_out_reg = m.outputs.iter().any(|d| d.kind == ir::IoKind::PointSize).then(|| s.vs_pointsize_reg());
@@ -3770,6 +3962,7 @@ pub fn select_keyed<'a>(
         vs_pos_out_reg,
         ps_color_out_reg,
         vs_pointsize_out_reg,
+        vs_id_in_reg,
         io_in,
         io_out,
         back_edges: s.back_edges.into_slice(),
@@ -3852,35 +4045,59 @@ fn legal_copy(consumer: OpType, s: SelSrc) -> (OpType, SelSrc) {
     }
 }
 
-/// A cube look-up with an explicit level or a bias -- ES 1.00's
-/// textureCubeLod and textureCube(s, c, bias), and ES 3.00's textureLod and
-/// texture(samplerCube, c, bias), which the front end lowers to one shape --
-/// as the instruction the 2D form already selects.
+/// A look-up whose coordinate has three lanes and that the 2D instructions
+/// already serve: a cube with an explicit level or a bias, and a 3D or 2D
+/// array sampler with an implicit level, a bias or an explicit level.
 ///
-/// The instruction does not know it is a cube: cube-ness is the sampler's
-/// descriptor (src/vivante/texture.rs), and the reference compiler's 78
-/// texldl all carry the level in SRC1 beside a coordinate that may be three
-/// lanes (its first is `mad t1.xyz_` then `texldl t1, tex0, t1.xyzw,
-/// 0.0:f20`). So {Cube, Lod} is texldl and {Cube, Bias} texldb, the coordinate
-/// in SRC0 with its three lanes, exactly as `builtins::texture` emits for the
-/// 2D kinds this maps to. 98 of dEQP-GLES2's 180 compile gaps on this GPU
-/// (host run at ac11728) were these two.
-fn cube_level(op: &ir::Op) -> Option<(ir::Es100Tex, Option<ir::Src>)> {
-    let ir::Op::Tex {
-        dim: ir::TexDim::Cube,
-        shadow: false,
-        proj: false,
-        ret: ir::ScalarType::F32,
-        lod,
-        offset: None,
-        ..
-    } = *op
-    else {
+/// The instruction does not know the sampler's shape: cube-ness, depth and
+/// layers are the sampler's descriptor (src/vivante/texture.rs), and the
+/// reference compiler's 78 texldl all carry the level in SRC1 beside a
+/// coordinate that may be three lanes (its first is `mad t1.xyz_` then
+/// `texldl t1, tex0, t1.xyzw, 0.0:f20`). So a `Lod` is texldl, a `Bias`
+/// texldb and an implicit level texld, the coordinate in SRC0 with its three
+/// lanes, exactly as `builtins::texture` emits for the 2D kinds this maps to.
+///
+/// - Cube {Lod, Bias}: ES 1.00's textureCubeLod and textureCube(s, c, bias),
+///   ES 3.00's textureLod and texture(samplerCube, c, bias). 98 of
+///   dEQP-GLES2's 180 compile gaps on this GPU (host run at ac11728) were
+///   these two.
+/// - D3 and D2Array: ES 3.00's texture() and textureLod(). The reference did
+///   the same for gl_test's `es300/vol.frag` (`texldl t2._y__, tex0.xxxx,
+///   t1.xyzw, 0.0:f20` and `texld t2.x___, tex0.xxxx, t1.xyzw`) and
+///   `es300/array.frag` (`texld t2.xyz_, tex0.xyzx, t2.xyzw`, the layer in z
+///   as the shader computed it), as Mesa's etnaviv does: it passes an array
+///   coordinate to the instruction unchanged.
+fn three_lane_lookup(op: &ir::Op) -> Option<(ir::Es100Tex, Option<ir::Src>)> {
+    let ir::Op::Tex { dim, shadow: false, proj: false, ret: ir::ScalarType::F32, lod, offset: None, .. } = *op else {
         return None;
     };
-    match lod {
-        ir::TexLod::Lod(l) => Some((ir::Es100Tex::Tex2DLod, Some(l))),
-        ir::TexLod::Bias(b) => Some((ir::Es100Tex::Tex2DBias, Some(b))),
+    match (dim, lod) {
+        (ir::TexDim::Cube | ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Lod(l)) => {
+            Some((ir::Es100Tex::Tex2DLod, Some(l)))
+        }
+        (ir::TexDim::Cube | ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Bias(b)) => {
+            Some((ir::Es100Tex::Tex2DBias, Some(b)))
+        }
+        /* texld, as TexCube already is: the coordinate's lanes are the
+         * instruction's whatever the shape */
+        (ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Implicit) => Some((ir::Es100Tex::TexCube, None)),
+        _ => None,
+    }
+}
+
+/// A `texelFetch` the GC7000 selects: a 2D, 3D or 2D array sampler with a
+/// float result and no offset. Its level.
+fn fetch_level(op: &ir::Op) -> Option<ir::Src> {
+    match *op {
+        ir::Op::Tex {
+            dim: ir::TexDim::D2 | ir::TexDim::D3 | ir::TexDim::D2Array,
+            shadow: false,
+            proj: false,
+            ret: ir::ScalarType::F32,
+            lod: ir::TexLod::Fetch(l),
+            offset: None,
+            ..
+        } => Some(l),
         _ => None,
     }
 }
