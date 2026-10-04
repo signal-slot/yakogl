@@ -957,9 +957,15 @@ mmc_stage() {
 
 run_uboot() {
     local file route typed_line net back left st pend kx rcc="" el up="" src
+    # --dry-run stands in for what a real run would refuse without; only what
+    # the backend reads: a uboot-mmc dry run sees no NETBOOT_* (set -u catches
+    # a TFTP-only variable on the eMMC path, as on a board)
     if [ "$DRY" = 1 ]; then
-        BOARD_UART=${BOARD_UART:-BRIDGE:PORT}; NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
-        NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
+        BOARD_UART=${BOARD_UART:-BRIDGE:PORT}
+        if [ "$BOOT" = uboot-tftp ]; then
+            NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
+            NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
+        fi
     fi
     if [ "$BOOT" = uboot-tftp ]; then
         src=net
@@ -1032,6 +1038,13 @@ run_uboot() {
     # 3. the i.MX8MP record: cleared (and the selector), read back
     [ "$BOARD" = imx8mp ] && snvs_clear
 
+    # From here on any exit runs uboot_on_exit: it disarms an armed env and
+    # removes an eMMC copy whose boot never came (MMC_STAGED, REBOOTED).
+    ARMED=0
+    REBOOTED=0
+    UB_FILE=$file
+    trap uboot_on_exit EXIT
+
     # 4. stage: served once, then renamed .served by the server (TFTP), or
     #    written to the eMMC (mmc); read back
     if [ "$PROBE" = 1 ]; then
@@ -1051,12 +1064,15 @@ run_uboot() {
 
     # 5. the capture, before anything can print (AM62P; the i.MX8MP has no UART)
     if [ "$BOARD" = am62p ]; then
-        # the typed route's one command line: the installed hook's yako_net with
-        # its three variables written out, then "boot" when the fetch fails
-        net=${YAKO_NET//'${yako_addr}'/$YAKO_ADDR}
-        net=${net//'${yako_server}'/$NETBOOT_SERVER}
-        net=${net//'${yako_file}'/$file}
-        typed_line="echo yakogl-netboot: once=$TOKEN; echo yakogl-netboot: typed; $net; boot"
+        # the typed route's one command line (TFTP only): the installed hook's
+        # yako_net with its three variables written out, then "boot" when the
+        # fetch fails
+        if [ "$route" = typed ]; then
+            net=${YAKO_NET//'${yako_addr}'/$YAKO_ADDR}
+            net=${net//'${yako_server}'/$NETBOOT_SERVER}
+            net=${net//'${yako_file}'/$file}
+            typed_line="echo yakogl-netboot: once=$TOKEN; echo yakogl-netboot: typed; $net; boot"
+        fi
         if [ "$DRY" = 1 ] && [ "$route" = typed ]; then
             echo "DRY host\$ python3 tools/am62p_netboot_uart.py typed $BOARD_UART <rundir>/console.raw <rundir>/console.ts '<line>' 2> <rundir>/typed.log &"
             echo "    line (${#typed_line} bytes): $typed_line"
@@ -1073,7 +1089,8 @@ run_uboot() {
             sleep 3
             if ! kill -0 "$CAP" 2>/dev/null; then
                 CAP=
-                rm -f "$NETBOOT_TFTP_ROOT/$file"
+                # (an eMMC copy is removed by uboot_on_exit)
+                [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
                 die "the UART capture ended at once (bridge busy or unreachable)"
             fi
         fi
@@ -1081,10 +1098,6 @@ run_uboot() {
 
     # 6. arm: one env write, read back. Until the reboot is issued, any exit
     #    disarms, so an armed env never outlives this script.
-    ARMED=0
-    REBOOTED=0
-    UB_FILE=$file
-    trap uboot_on_exit EXIT
     if [ "$route" = env ]; then
         if [ "$src" = net ]; then
             printf 'yako_once=%s\nyako_src=net\nyako_file=%s\nyako_server=%s\n' "$TOKEN" "$file" "$NETBOOT_SERVER" > "$TMP/arm"

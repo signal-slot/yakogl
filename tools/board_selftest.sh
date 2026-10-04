@@ -40,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=201
+WANT_CHECKS=203
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -212,6 +212,20 @@ for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1; do
     out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1; BOARD_BOOT=uboot-tftp dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
     check "$board run (both U-Boot backends) checks that no default is set" \
         eval '[ "$(grep -c "yako_once and yako_default must be absent" <<<"$out")" = 2 ]'
+done
+# a real uboot-mmc user sets no NETBOOT_* at all (the dry run fills them in
+# only for uboot-tftp): every verb of the backend must run under set -u
+# without them (2026-10-04: the AM62P probe died on NETBOOT_SERVER)
+for board in am62p imx8mp; do
+    out=$(for v in "probe $S/logs" "run $S/img/$board.bin $S/logs" status install uninstall disarm nodefault "default $S/img/$board.bin 2"; do
+        # shellcheck disable=SC2086  # the verb and its arguments
+        env -u NETBOOT_SERVER -u NETBOOT_TFTP_ROOT -u NETBOOT_TFTP_LOG -u NETBOOT_ROUTE BOARD_BOOT=uboot-mmc \
+            PATH="$S/stub:$PATH" "$B" --dry-run "$board" $v > "$S/mmc-noenv.out" 2>&1
+        echo "rc=$? $v"
+        grep -E "unbound variable|NETBOOT" "$S/mmc-noenv.out"
+    done)
+    check "$board uboot-mmc, every verb with no NETBOOT_* set: rc 0 each, no unbound variable, no NETBOOT name printed" \
+        eval '[ "$(grep -c "^rc=0 " <<<"$out")" = 8 ] && ! grep -q "unbound variable\|NETBOOT" <<<"$out"'
 done
 out=$(NETBOOT_ROUTE=typed BOARD_BOOT=uboot-mmc dry am62p run "$S/img/am62p.bin" "$S/logs" 2>&1)
 rc=$?
