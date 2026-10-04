@@ -173,10 +173,11 @@ kinds! {
          draws the GL core refused (yakogl_draws_refused) << 12 | compiler runs in the \
          failing frame << 20 (6 bits) | its slowest GL call class (CHECK_RUN_GL_*) << 26 \
          (4 bits) | its iteration's GPU waits that timed out << 30 (2 bits), w2 = the animation frame (1 = the first after the check; 0 none; 8 \
-         bits) | that frame's draw in ms << 8 (12 bits) | the ms of it spent in the timed \
-         GL calls << 20 (12 bits), w3 = the online compiler's keep high-water in KiB (11 \
+         bits) | that frame's draw in ms << 8 (12 bits) | the GPU's busy ms over its \
+         iteration << 20 (12 bits), w3 = the online compiler's keep high-water in KiB (11 \
          bits) | the cause's detail in ms << 11 (13 bits: how long the wait or the frame \
-         took) | the time its iteration waited for the GPU, 16 ms units, << 24; every field \
+         took) | the time its iteration was blocked on the GPU (fence waits and submits \
+         waiting for an event), 16 ms units, << 24; every field \
          saturates one below its largest value, which means not measured";
 }
 
@@ -360,14 +361,14 @@ values! {
     CHECK_RUN_FRAME_MAX = 0xff;
     CHECK_RUN_DRAW_SHIFT = 8;
     CHECK_RUN_DRAW_MAX = 0xfff;
-    CHECK_RUN_GLMS_SHIFT = 20;
-    CHECK_RUN_GLMS_MAX = 0xfff;
+    CHECK_RUN_BUSY_SHIFT = 20;
+    CHECK_RUN_BUSY_MAX = 0xfff;
     // w3:
     CHECK_RUN_KEEP_MAX = 0x7ff;
     CHECK_RUN_DETAIL_SHIFT = 11;
     CHECK_RUN_DETAIL_MAX = 0x1fff;
-    CHECK_RUN_WAIT_SHIFT = 24;
-    CHECK_RUN_WAIT_MAX = 0xff;
+    CHECK_RUN_BLOCKED_SHIFT = 24;
+    CHECK_RUN_BLOCKED_MAX = 0xff;
     // the timed GL call classes (cluster main.c enum gl_timed)
     CHECK_RUN_GL_COMPILE = 0;
     CHECK_RUN_GL_LINK = 1;
@@ -422,11 +423,14 @@ pub struct CheckRun {
     pub class: u32,
     pub frame: u32,
     pub draw_ms: u32,
-    pub gl_ms: u32,
+    /// The GPU's busy time over the frame's iteration (the driver's per-kick
+    /// submit-to-done time, gc_render_perf).
+    pub busy_ms: u32,
     pub keep_kib: u32,
     pub detail_ms: u32,
-    /// The time the frame's iteration waited for the GPU, in 16 ms units.
-    pub wait_16ms: u32,
+    /// The time the frame's iteration was blocked on the GPU (fence waits
+    /// and submits waiting for an event), in 16 ms units.
+    pub blocked_16ms: u32,
     /// The waits for a kick that timed out (the OSAL's 2 s bound).
     pub timeouts: u32,
 }
@@ -443,10 +447,10 @@ pub const fn check_run_words(r: &CheckRun) -> [u32; 3] {
             | check_run_field(r.timeouts, CHECK_RUN_TIMEOUTS_MAX) << CHECK_RUN_TIMEOUTS_SHIFT,
         check_run_field(r.frame, CHECK_RUN_FRAME_MAX)
             | check_run_field(r.draw_ms, CHECK_RUN_DRAW_MAX) << CHECK_RUN_DRAW_SHIFT
-            | check_run_field(r.gl_ms, CHECK_RUN_GLMS_MAX) << CHECK_RUN_GLMS_SHIFT,
+            | check_run_field(r.busy_ms, CHECK_RUN_BUSY_MAX) << CHECK_RUN_BUSY_SHIFT,
         check_run_field(r.keep_kib, CHECK_RUN_KEEP_MAX)
             | check_run_field(r.detail_ms, CHECK_RUN_DETAIL_MAX) << CHECK_RUN_DETAIL_SHIFT
-            | check_run_field(r.wait_16ms, CHECK_RUN_WAIT_MAX) << CHECK_RUN_WAIT_SHIFT,
+            | check_run_field(r.blocked_16ms, CHECK_RUN_BLOCKED_MAX) << CHECK_RUN_BLOCKED_SHIFT,
     ]
 }
 
@@ -1167,21 +1171,21 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
                     CHECK_RUN_DRAW_MAX => out.write_str("not measured")?,
                     ms => write!(out, "{ms} ms")?,
                 }
-                match f(w2, CHECK_RUN_GLMS_SHIFT, CHECK_RUN_GLMS_MAX) {
-                    CHECK_RUN_GLMS_MAX => out.write_str(", GL calls not timed")?,
-                    ms => write!(out, ", {ms} ms in GL calls")?,
-                }
                 match f(w1, CHECK_RUN_CLASS_SHIFT, CHECK_RUN_CLASS_MAX) {
                     CHECK_RUN_CLASS_MAX => {}
                     c => write!(out, ", most in {}", CHECK_RUN_GL_NAMES.get(c as usize).copied().unwrap_or("?"))?,
                 }
+                match f(w2, CHECK_RUN_BUSY_SHIFT, CHECK_RUN_BUSY_MAX) {
+                    CHECK_RUN_BUSY_MAX => out.write_str(", GPU busy not measured")?,
+                    ms => write!(out, ", GPU busy {ms} ms")?,
+                }
                 match (
-                    f(w3, CHECK_RUN_WAIT_SHIFT, CHECK_RUN_WAIT_MAX),
+                    f(w3, CHECK_RUN_BLOCKED_SHIFT, CHECK_RUN_BLOCKED_MAX),
                     f(w1, CHECK_RUN_TIMEOUTS_SHIFT, CHECK_RUN_TIMEOUTS_MAX),
                 ) {
-                    (CHECK_RUN_WAIT_MAX, _) => out.write_str(", GPU waits not measured")?,
-                    (w, CHECK_RUN_TIMEOUTS_MAX) => write!(out, ", about {} ms waiting for the GPU", w * 16)?,
-                    (w, t) => write!(out, ", about {} ms waiting for the GPU, {t} waits timed out", w * 16)?,
+                    (CHECK_RUN_BLOCKED_MAX, _) => out.write_str(", blocked on the GPU not measured")?,
+                    (w, CHECK_RUN_TIMEOUTS_MAX) => write!(out, ", about {} ms blocked on the GPU", w * 16)?,
+                    (w, t) => write!(out, ", about {} ms blocked on the GPU, {t} waits timed out", w * 16)?,
                 }
                 match f(w1, CHECK_RUN_RUNS_SHIFT, CHECK_RUN_RUNS_MAX) {
                     CHECK_RUN_RUNS_MAX => out.write_str(", compiler runs not counted")?,
@@ -1265,10 +1269,10 @@ mod tests {
             class: CHECK_RUN_GL_DRAW,
             frame: 2,
             draw_ms: 2782,
-            gl_ms: 2600,
+            busy_ms: 2600,
             keep_kib: 464,
             detail_ms: 2787,
-            wait_16ms: 170,
+            blocked_16ms: 170,
             timeouts: 1,
         };
         let w = check_run_words(&r);
@@ -1283,12 +1287,12 @@ mod tests {
             runs: CHECK_RUN_RUNS_MAX,
             class: CHECK_RUN_CLASS_MAX,
             draw_ms: CHECK_RUN_DRAW_MAX,
-            gl_ms: CHECK_RUN_GLMS_MAX,
-            wait_16ms: CHECK_RUN_WAIT_MAX,
+            busy_ms: CHECK_RUN_BUSY_MAX,
+            blocked_16ms: CHECK_RUN_BLOCKED_MAX,
             timeouts: CHECK_RUN_TIMEOUTS_MAX,
             ..r
         });
-        assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_DRAW_MAX, CHECK_RUN_GLMS_MAX));
+        assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_DRAW_MAX, CHECK_RUN_BUSY_MAX));
         assert_eq!(((none[0] >> 20) & 0x3f, (none[0] >> 26) & 0xf, none[0] >> 30, none[2] >> 24), (0x3f, 0xf, 3, 0xff));
     }
 

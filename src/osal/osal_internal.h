@@ -180,6 +180,10 @@ void osal_zephyr_diag_print(void);
  * timed out (the 2 s bound), and the time spent in them and in the longest
  * one. Read around a frame to tell GPU time from CPU time. */
 void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us);
+/* The GC7000 OSAL's time inside submits (which block while every event is in
+ * flight), and the driver's GPU busy time and completed kicks
+ * (gc_render_perf), so far. */
+void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);
 /* One line naming this OSAL's GPU memory now, NUL-terminated into
  * buf[n]: what is allocated, the frees it holds, and how large an
  * allocation can still succeed. Each Zephyr OSAL its own wording and

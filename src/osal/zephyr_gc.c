@@ -363,6 +363,9 @@ static void z_cache_invd(void *cpu, size_t n)
 }
 
 /* ---- submit + completion ------------------------------------------ */
+/* Time spent inside gc_render_submit (z_submit), in cycles. */
+static uint64_t s_submit_cycles;
+
 static int64_t z_submit(const void *kick_desc, size_t kick_desc_len)
 {
 	const struct gc_kick *k = kick_desc;
@@ -396,7 +399,14 @@ static int64_t z_submit(const void *kick_desc, size_t kick_desc_len)
 	 * an error. gc_render.h names this "no flush bit set". */
 	sub.flags     = GC_SUBMIT_FLUSH_ALL;
 
-	rc = gc_render_submit(&sub, &fence);
+	{
+		/* A submit blocks while every event is in flight (gc_event_alloc,
+		 * up to 1 s): time the GPU holds the CPU that no fence wait shows. */
+		const uint64_t c0 = k_cycle_get_64();
+
+		rc = gc_render_submit(&sub, &fence);
+		s_submit_cycles += k_cycle_get_64() - c0;
+	}
 	if (rc)
 		return rc;
 	s_last_submitted = fence;
@@ -443,6 +453,19 @@ static int timed_wait(uint32_t fence, uint32_t ms)
 	if (rc == -ETIMEDOUT)
 		s_waits.timeouts++;
 	return rc;
+}
+
+void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks)
+{
+	struct gc_render_perf p;
+
+	gc_render_perf(&p);
+	if (submit_us)
+		*submit_us = k_cyc_to_us_floor64(s_submit_cycles);
+	if (gpu_busy_us)
+		*gpu_busy_us = p.gpu_busy_ns / 1000u;
+	if (kicks)
+		*kicks = p.kicks_done;
 }
 
 void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us)
