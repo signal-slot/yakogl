@@ -289,6 +289,10 @@ unsafe extern "C" fn pvr_pds_render_kick_usc_program(
 ) -> i32 {
     with_platform(|p| p.kick_usc_rates.push((fs_usc_exec_offset, sample_rate)));
     with_platform(|p| p.kick_usc_temps.push((fs_usc_exec_offset, fs_temps)));
+    /* the generator's own refusal (driver/src/pvr_pds_render_gen.c) */
+    if fs_temps > PVR_PDS_DOUTU_MAX_TEMPS {
+        return -1;
+    }
     unsafe {
         for i in 0..8 {
             *data_out.add(i) = 0x4B00_0000 | i as u32;
@@ -321,7 +325,7 @@ unsafe extern "C" fn pvr_pds_render_color_upload_program(
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
     _vs_usc_exec_offset: u64,
-    _vs_temps: u32,
+    vs_temps: u32,
     streams: *const PvrPdsVertexStream,
     num_streams: u32,
     _has_slc_mcu_cache_controls: i32,
@@ -331,6 +335,10 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
     code_out: *mut u32,
     info: *mut PvrPdsRenderVertexInfo,
 ) -> i32 {
+    /* the generator's own refusals (driver/src/pvr_pds_render_gen.c) */
+    if vs_temps > PVR_PDS_DOUTU_MAX_TEMPS || num_streams > PVR_PDS_VERTEX_MAX_STREAMS {
+        return -1;
+    }
     let st = unsafe { core::slice::from_raw_parts(streams, num_streams as usize) }.to_vec();
     let n = num_streams as usize;
     unsafe {
@@ -2254,6 +2262,27 @@ fn the_fs_temps_floor_raises_only_the_kick_allocation() {
     assert_eq!(declared(2), [3], "a floor below the shader's count changes nothing");
     assert_eq!(declared(30), [30]);
     assert_eq!(declared(1000), [FS_TEMPS_MIN_CAP], "capped");
+}
+
+/// A shader that declares more temporaries than a DOUTU word can hold is
+/// refused by the PDS generator; the draw is refused by name instead of
+/// uploading the empty program the generator left behind.
+#[test]
+fn a_shader_past_the_doutu_temps_bound_is_refused_by_name() {
+    let mut rig = Rig::new();
+    rig.ffs.temps = PVR_PDS_DOUTU_MAX_TEMPS as u16;
+    assert_eq!(draw(&rig.draw(3)), 0, "the bound itself fits: {:?}", rig.logs());
+
+    rig.ffs.temps = PVR_PDS_DOUTU_MAX_TEMPS as u16 + 1;
+    assert_eq!(draw(&rig.draw(3)), -EINVAL);
+    let want = "yakogl/pvr: draw refused: the fragment kick program was refused (253 temps, max 252)";
+    assert!(rig.logs().iter().any(|l| l.contains(want)), "{want} not in {:?}", rig.logs());
+
+    rig.ffs.temps = 3;
+    rig.fvs.temps = PVR_PDS_DOUTU_MAX_TEMPS as u16 + 1;
+    assert_eq!(draw(&rig.draw(3)), -EINVAL);
+    let want = "yakogl/pvr: draw refused: the vertex fetch program was refused (1 streams, 253 temps)";
+    assert!(rig.logs().iter().any(|l| l.contains(want)), "{want} not in {:?}", rig.logs());
 }
 
 /* ---- the sync to upstream e6c449c ------------------------------------------ */
