@@ -449,7 +449,7 @@ pub fn assemble_from_ir_keyed(
             words,
             stage,
             fixed[..n_fixed].iter().copied(),
-            sel.io_in.iter().map(|io| io.reg),
+            sel.io_in.iter().map(|io| io.reg).chain(sel.vs_id_in_reg),
             &placeable[..n_placeable],
             &mut placed,
         )?
@@ -520,7 +520,7 @@ pub fn assemble_from_ir_keyed(
         back_edges,
         vs_pos_out_reg: sel.vs_pos_out_reg.map(place),
         vs_pointsize_out_reg: sel.vs_pointsize_out_reg.map(place),
-        vs_id_in_reg: None,
+        vs_id_in_reg: sel.vs_id_in_reg,
         ps_color_out_reg: sel.ps_color_out_reg.map(place),
         ps_depth_out_reg: None,
         /* Copied, never chosen: gc7000-abi.md lists both as not understood,
@@ -1577,6 +1577,121 @@ mod lowered_ops {
         })
         .expect("the scratch region is free")
         .expect("compiles")
+    }
+
+    fn compile_vs(src: &str) -> crate::shaderc::ShcShader {
+        let _serial = super::super::store::test_lock();
+        super::super::store::with_scratch(|s| {
+            compile(crate::shaderc::SHC_STAGE_VERTEX, src.as_bytes(), 0, s, super::super::store::keep())
+        })
+        .expect("the scratch region is free")
+        .expect("compiles")
+    }
+
+    /// The program as listing lines (`yakogl-tools etna-dis` text, without
+    /// the index and the words).
+    fn listing(sh: &crate::shaderc::ShcShader) -> std::vec::Vec<std::string::String> {
+        // SAFETY: as in `opcodes`.
+        let dw = unsafe { core::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) };
+        dw.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| {
+                let mut s = std::string::String::new();
+                super::super::vivante::listing::body_text(&mut s, &decode_instr(w).expect("decodes")).expect("text");
+                s
+            })
+            .collect()
+    }
+
+    /// Is component `lane` ('x', 'y', ...) of register `reg` read before any
+    /// instruction writes `reg`? A source `t<reg>.<swizzle>` reads, for each
+    /// lane the destination writes, the component its swizzle names there;
+    /// the destination is the first operand after the opcode.
+    fn read_before_written(lines: &[std::string::String], reg: u8, lane: char) -> bool {
+        let name = std::format!("t{reg}.");
+        for l in lines {
+            let mut ops = l.split_once(' ').map_or("", |(_, r)| r).split(',').map(str::trim);
+            let dst = ops.next().unwrap_or("");
+            /* the lanes written: "t1.x_z_" names them, a bare "t1" is all four */
+            let mask: std::vec::Vec<bool> = match dst.split_once('.') {
+                Some((_, m)) => m.chars().map(|c| c != '_').collect(),
+                None => std::vec![true; 4],
+            };
+            let reads = ops.any(|o| {
+                o.trim_start_matches('-')
+                    .strip_prefix(name.as_str())
+                    .is_some_and(|swz| swz.chars().zip(&mask).any(|(c, w)| *w && c == lane))
+            });
+            if reads {
+                return true;
+            }
+            if dst.starts_with(&name) {
+                return false;
+            }
+        }
+        false
+    }
+
+    /// gl_test's `es300/vid.vert` (cases 43, 44, 45, 49, 57, 98).
+    const VID_VS: &str = "#version 300 es\nlayout(location = 0) in vec4 pos;\nout vec4 v_col;\nvoid main()\n{\n    \
+        int i = gl_VertexID % 4;\n    v_col = vec4(i == 0 || i == 3 ? 1.0 : 0.0, i == 1 || i == 3 ? 1.0 : 0.0, \
+        i == 2 || i == 3 ? 1.0 : 0.0, 1.0);\n    gl_Position = pos;\n}\n";
+
+    /// `gl_VertexID` is the `.x` of the register after the attributes, as
+    /// Mesa's etnaviv puts it and as the reference compiler did for this
+    /// very source: `vs_id_in_reg` 1 after `pos` in register 0, and the
+    /// program reads `t1.xxxx` before anything writes t1 (the reference's
+    /// first instruction is `iabs.s32 t1._y__, void, void, t1.xxxx`). The
+    /// online compiler refused it until this ("this built-in input is not
+    /// selected yet", GitHub issue #11).
+    #[test]
+    fn gl_vertex_id_is_x_of_the_register_after_the_attributes() {
+        let _k = super::super::store::test_keep();
+        let sh = compile_vs(VID_VS);
+        assert_eq!(sh.viv.vs_id_in_reg, 1, "the reference's register: one past `pos` in t0");
+        assert_eq!(sh.viv.num_in, 1, "the id register is not an io row: the driver programs it by ID_CONFIG");
+        assert_eq!(sh.viv.in_[0].reg, 0, "pos stays in t0");
+        assert!(sh.temps > 1, "temps covers the id register: {}", sh.temps);
+        let lines = listing(&sh);
+        assert!(read_before_written(&lines, 1, 'x'), "t1.x is read as the vertex id before t1 is written: {lines:#?}");
+        /* The instrument tells the lanes apart: the instance id is not read. */
+        assert!(!read_before_written(&lines, 1, 'y'), "nothing reads t1.y here: {lines:#?}");
+    }
+
+    /// `gl_InstanceID` is the `.y` of the same register (etnaviv_compiler_nir_ra.c
+    /// pins load_instance_id to REG_TYPE_VIRT_SCALAR_Y, and the driver writes
+    /// the instance id to `reg * 4 + 1`).
+    #[test]
+    fn gl_instance_id_is_y_of_the_same_register() {
+        let _k = super::super::store::test_keep();
+        let sh = compile_vs(
+            "#version 300 es\nlayout(location = 0) in vec4 pos;\nvoid main() { gl_Position = pos + vec4(float(gl_InstanceID)); }\n",
+        );
+        assert_eq!(sh.viv.vs_id_in_reg, 1);
+        let lines = listing(&sh);
+        assert!(read_before_written(&lines, 1, 'y'), "t1.y is read as the instance id: {lines:#?}");
+        assert!(!read_before_written(&lines, 1, 'x'), "and not the vertex id in t1.x: {lines:#?}");
+    }
+
+    /// "After the attributes" counts locations, every column of a matrix
+    /// attribute included: a vertex element feeds each column's register, so
+    /// an id register below the last one would be overwritten by the fetch.
+    #[test]
+    fn the_id_register_clears_every_attribute_column() {
+        let _k = super::super::store::test_keep();
+        let sh = compile_vs(
+            "#version 300 es\nlayout(location = 0) in vec4 pos;\nlayout(location = 1) in mat2 m;\n\
+             void main() { gl_Position = pos + vec4(m[0], m[1]) * float(gl_VertexID); }\n",
+        );
+        assert_eq!(sh.viv.vs_id_in_reg, 3, "pos in t0, m's columns in t1 and t2, the ids in t3");
+        let lines = listing(&sh);
+        assert!(read_before_written(&lines, 3, 'x'), "t3.x is the vertex id: {lines:#?}");
+        /* A shader that reads neither has no id register, so the driver
+         * turns ID_CONFIG off (vivante/shader.rs writes it on every draw). */
+        let plain =
+            compile_vs("#version 300 es\nlayout(location = 0) in vec4 pos;\nvoid main() { gl_Position = pos; }\n");
+        assert_eq!(plain.viv.vs_id_in_reg, crate::shaderc::SHC_VIV_NO_REG, "absent stays absent");
     }
 
     /// `gl_PointSize` is clamped to the reported range: two `select`s (the

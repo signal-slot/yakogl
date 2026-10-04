@@ -62,6 +62,11 @@ pub struct Selected<'a> {
     pub ps_color_out_reg: Option<u8>,
     /// The register `gl_PointSize` was written to, when the shader writes it.
     pub vs_pointsize_out_reg: Option<u8>,
+    /// The input register `gl_VertexID` (`.x`) and `gl_InstanceID` (`.y`)
+    /// arrive in, when the vertex shader reads either; see
+    /// `Sel::vs_id_reg`. Not an io row: the driver programs it through
+    /// `FE_HALTI5_ID_CONFIG`, as Mesa's etnaviv does.
+    pub vs_id_in_reg: Option<u8>,
     /// The shader's inputs with the registers this file assigned them, ready
     /// for `abi::assemble`. Produced here rather than recomputed there, so
     /// that the numbering the instructions read from and the numbering the
@@ -629,6 +634,7 @@ impl<'a> Sel<'a> {
              * table's. */
             ir::IoSlot::FrontFacing => Err(SelectError::Unsupported("gl_FrontFacing is not selected yet")),
             ir::IoSlot::PointCoord => self.pntc_reg(),
+            ir::IoSlot::VertexId | ir::IoSlot::InstanceId if self.m.stage == SHC_STAGE_VERTEX => self.vs_id_reg(),
             _ => Err(SelectError::Unsupported("this built-in input is not selected yet")),
         }
     }
@@ -862,6 +868,40 @@ impl<'a> Sel<'a> {
             return Err(SelectError::TooManyIo { got: rows + 1, max: MAX_IO });
         }
         Ok((rows + 1) as u8)
+    }
+
+    /// The vertex input register `gl_VertexID` and `gl_InstanceID` arrive
+    /// in: the one after every attribute register, the vertex id in `.x` and
+    /// the instance id in `.y`, both as integers.
+    ///
+    /// This is Mesa's etnaviv (MIT; etnaviv_nir.c sets `vs_id_in_reg =
+    /// infile.num_reg`, and etnaviv_compiler_nir_ra.c pins load_vertex_id to
+    /// `num_reg`.x and load_instance_id to `num_reg`.y), and it is what the
+    /// reference compiler emitted for gl_test's `es300/vid.vert`:
+    /// `vs_id_in_reg` 1 after the attribute in register 0, read as
+    /// `iabs.s32 t1._y__, void, void, t1.xxxx`. The driver feeds it as one
+    /// more vertex input and sets `FE_HALTI5_ID_CONFIG` to `reg * 4` and
+    /// `reg * 4 + 1` (`vivante/shader.rs`, from etnaviv_shader.c).
+    ///
+    /// Attribute registers are their locations here, not a compacted count,
+    /// so "after every attribute" is one past the highest location a used
+    /// attribute (every column of a matrix one) occupies. A register below
+    /// that may be one a vertex element writes.
+    fn vs_id_reg(&self) -> Result<u8, SelectError> {
+        let mut end = 0usize;
+        let mut rows = 0usize;
+        for d in self.m.inputs.iter().filter(|d| d.kind == ir::IoKind::Attribute && self.decl_is_used(d, true)) {
+            let cols = usize::from(varying_columns(self.m.inputs, d));
+            end = end.max(usize::from(d.location) + cols);
+            rows += cols;
+        }
+        /* The ids are one more vertex input (vivante/shader.rs appends it
+         * after the elements), so they and the attributes share the 16. */
+        let max = crate::vivante::state::GC_MAX_VERTEX_ELEMENTS;
+        if rows + 1 > max {
+            return Err(SelectError::TooManyIo { got: rows + 1, max });
+        }
+        Ok(end as u8)
     }
 
     fn used_varying_index(&self, decls: &[ir::IoDecl<'a>], location: u8, input: bool) -> Option<usize> {
@@ -1511,6 +1551,12 @@ impl<'a> Sel<'a> {
              * gl_PointCoord its row with its t transformed (`point_coord`). */
             ir::Op::LoadInput { slot: ir::IoSlot::FragCoord | ir::IoSlot::PointCoord, .. } => {
                 Ok(SelSrc::Virtual { v: VReg(s.val.0), swizzle: s.swizzle, neg: false, abs: false })
+            }
+            /* gl_InstanceID is the `.y` of the id register; its one lane is
+             * component 0 of the IR value, so every lane reads `.y`. */
+            ir::Op::LoadInput { slot: ir::IoSlot::InstanceId, .. } => {
+                let reg = self.input_reg(ir::IoSlot::InstanceId)?;
+                Ok(SelSrc::Input { reg, swizzle: [1; 4], neg: false, abs: false })
             }
             ir::Op::LoadInput { slot, .. } => {
                 let reg = self.input_reg(slot)?;
@@ -3757,6 +3803,11 @@ pub fn select_keyed<'a>(
     }
 
     let vs_pos_out_reg = (m.stage == SHC_STAGE_VERTEX).then_some(VS_POS_REG);
+    let reads_ids = m
+        .instrs
+        .iter()
+        .any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::VertexId | ir::IoSlot::InstanceId, .. }));
+    let vs_id_in_reg = if m.stage == SHC_STAGE_VERTEX && reads_ids { Some(s.vs_id_reg()?) } else { None };
     /* Named only when the shader writes it: an unwritten gl_PointSize must
      * stay NO_REG, or the driver reads a register the code never set. */
     let vs_pointsize_out_reg = m.outputs.iter().any(|d| d.kind == ir::IoKind::PointSize).then(|| s.vs_pointsize_reg());
@@ -3770,6 +3821,7 @@ pub fn select_keyed<'a>(
         vs_pos_out_reg,
         ps_color_out_reg,
         vs_pointsize_out_reg,
+        vs_id_in_reg,
         io_in,
         io_out,
         back_edges: s.back_edges.into_slice(),

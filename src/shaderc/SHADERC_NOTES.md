@@ -56,15 +56,18 @@ Booted on the i.MX8MP: the online arm of `gc_gl_test` case 108 alone passed
 there on 2026-10-04 (e835c0dc, record `594b010e 006cff01 00000001 00000000`).
 The size figures above are still the 2026-09-22 ones.
 
-**Owed gap: `gl_VertexID` in the online vertex selector.** The online
-compiler refuses a vertex shader that reads `gl_VertexID` with
-"online shaderc: the code generator refused this vertex shader:
-Select(Unsupported("this built-in input is not selected yet"))"
-(`select.rs`, the built-in input match). In `gc_gl_test` that is
-`es300/vid.vert`, linked by cases 43, 44, 45, 49, 57 and 98, so those cases
-fail with status 3 in an online image (case 45 did on the i.MX8MP,
-2026-10-04, record `594b010e 002dff03 00000000 00000000`). Measured on the
-host the same at 3ce02914 and e835c0dc: not a regression.
+**`gl_VertexID` / `gl_InstanceID` on the GC7000 (online).** Both arrive in
+one register after the attribute registers, the vertex id in `.x` and the
+instance id in `.y`, reported as `vs_id_in_reg`; the driver feeds it as one
+more vertex input and programs `FE_HALTI5_ID_CONFIG` (`vivante/shader.rs`).
+This is Mesa's etnaviv (`etnaviv_nir.c`, `etnaviv_compiler_nir_ra.c`) and
+the reference compiler's choice for gl_test's `es300/vid.vert` (register 1
+after `pos` in register 0). Pinned by `codegen.rs` `lowered_ops`
+(`gl_vertex_id_is_x_of_the_register_after_the_attributes` and the two after
+it). Until this the online compiler refused the shader with "this built-in
+input is not selected yet" (GitHub issue #11), so gl_test cases 43, 44, 45,
+49, 57 and 98 failed in an online image. The PowerVR online selector had it
+already (`powervr/select.rs`, `vs_vertex_id_reg1`).
 
 ## Runtime flow (offline)
 
