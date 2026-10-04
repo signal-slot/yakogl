@@ -8,7 +8,7 @@
 #   tools/board.sh [--dry-run] <board> probe <logdir>
 #   tools/board.sh [--dry-run] <board> run <image> <logdir> [name]
 #   tools/board.sh [--dry-run] <board> tree <table> <outdir>
-#   tools/board.sh [--dry-run] <board> default <image> | nodefault
+#   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
 #      board = pi4 | am62p | imx8mp
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
@@ -53,15 +53,17 @@
 #   9. prints one verdict line (below) and writes the run's INDEX.txt;
 #  10. cleans up (the staged image, tryboot.txt, the one-shot: yako_once gone).
 #
-# "default <image>" makes the image the board's permanent boot (the product
-# form, docs/standalone-boot.md): pi4 config.txt names it (Linux's config.txt
-# kept as config-linux.txt); am62p and imx8mp: it is staged as
-# /var/yakogl/default.bin and yako_default names it, so U-Boot loads it from the
-# eMMC on every boot. It reboots nothing, and it refuses unless
-# BOARD_PERSON_PRESENT=1: once the board has rebooted into the image, only a
-# person (or, on the AM62P, a line typed over the serial bridge) brings Linux
-# back. "nodefault" undoes it from Linux (before that reboot, or after a person
-# brought Linux back).
+# "default <image> <boots|forever>" makes the image the board's boot (the
+# product form, docs/standalone-boot.md). am62p, imx8mp: it is staged as
+# /var/yakogl/default.bin and yako_default names it, so U-Boot loads it from
+# the eMMC at power-on. With a count (1-9) U-Boot boots it that many times and
+# then deletes the default and boots Linux: an image that ends in a watchdog
+# reset gives the board back by itself, so no person is needed. "forever" is
+# the product: only a person at the U-Boot prompt brings Linux back, so it
+# refuses unless BOARD_PERSON_PRESENT=1. pi4: config.txt names the image
+# (Linux's kept as config-linux.txt); the firmware has no boot count, so only
+# "forever", with a person. "default" prints the exact undo before it changes
+# anything, and reboots nothing. "nodefault" undoes it from Linux.
 #
 # The verdict line, one format on every board:
 #   board.sh <board> <name> rc=<rc> verdict=<v> boot=<backend> <row|DEV> boot_verdict=<bv>
@@ -129,7 +131,7 @@
 #                      read); am62p: host:port of the serial bridge (UART_ADDR
 #                      also read)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
-#   BOARD_PERSON_PRESENT  1: a person is at the board ("default" refuses without)
+#   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
 #                      (AM62P env|typed), NETBOOT_NO_WATCHDOG, NETBOOT_BACKUP_DIR:
 #                      as driver/docs/am62p-netboot-plan.md and imx8mp-netboot-plan.md describe
@@ -789,7 +791,7 @@ pi4_config() {
 
 pi4_undo() {
     b "sudo rm -f /boot/firmware/$STAGED"
-    printf '%s\n' "$PREV" | b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync'
+    b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$PREV"
 }
 
 pi4_stage() {
@@ -804,7 +806,9 @@ $(pi4_config "$STAGED")"
     b "cat > $tmpd/img" < "$IMG" || { b "rm -rf $tmpd"; die "copy to the board failed"; }
     b "sudo install -m 0755 $tmpd/img /boot/firmware/$STAGED; r=\$?; rm -rf $tmpd; sync; exit \$r" ||
         { pi4_undo; die "install into /boot/firmware failed (removed again)"; }
-    printf '%s\n' "$TRY" | b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' ||
+    # a here-string, not "printf | b": under pipefail a printf whose reader
+    # exits first (the dry run's b reads nothing) failed the step at random
+    b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$TRY" ||
         { pi4_undo; die "writing tryboot.txt failed (previous one put back)"; }
     bget got "sha256sum /boot/firmware/$STAGED" "$IMG_SHA  /boot/firmware/$STAGED"
     got=${got%% *}
@@ -1467,7 +1471,7 @@ cmd_setup() {
 
 # ---- default / nodefault: the permanent boot (docs/standalone-boot.md) ---------------
 uboot_default() {
-    local st got
+    local st got w
     if [ "$DRY" = 0 ]; then
         st=$(check_install)
         [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st): 'install' first"
@@ -1478,21 +1482,27 @@ uboot_default() {
     fi
     mmc_where
     mmc_stage default.bin
-    printf 'yako_default=%s\n' "$UB_DIR/default.bin" > "$TMP/default"
+    {
+        printf 'yako_default=%s\n' "$UB_DIR/default.bin"
+        # the count goes in the same write: never a moment with an unbounded default
+        if [ "$BOOTS_N" = forever ]; then printf 'yako_default_left=\n'; else printf 'yako_default_left=%s\n' "$BOOTS_N"; fi
+    } > "$TMP/default"
     setenv_script "$TMP/default" || die "fw_setenv failed; the env is as it was (one write)" 5
-    bget got 'sudo -n fw_printenv -n yako_default' "$UB_DIR/default.bin"
-    [ "$got" = "$UB_DIR/default.bin" ] || die "read-back of yako_default: '$got', not '$UB_DIR/default.bin'" 5
-    note "default set: from the next boot on, U-Boot loads $UB_DIR/default.bin from mmc $NB_MMC and starts it, every boot. Nothing was rebooted."
-    if [ "$BOARD" = am62p ]; then
-        note "undo without Linux: at the U-Boot prompt (the serial bridge; docs/standalone-boot.md) 'setenv yako_default; saveenv; boot'"
+    w="$UB_DIR/default.bin"
+    [ "$BOOTS_N" = forever ] || w+=$'\n'"$BOOTS_N"
+    bget got 'sudo -n fw_printenv -n yako_default; sudo -n fw_printenv -n yako_default_left 2>/dev/null' "$w"
+    [ "$got" = "$w" ] || die "read-back of yako_default and its count: '$got', not '$w'" 5
+    if [ "$BOOTS_N" = forever ]; then
+        note "default set: from the next boot on, U-Boot loads $UB_DIR/default.bin from mmc $NB_MMC at every boot. Nothing was rebooted."
     else
-        note "undo without Linux needs a person: a UART cable at the U-Boot prompt, 'setenv yako_default; saveenv; boot' (docs/standalone-boot.md)"
+        note "default set for $BOOTS_N boots: U-Boot loads $UB_DIR/default.bin at each of the next $BOOTS_N boots, then deletes the default and boots Linux. Nothing was rebooted."
     fi
 }
 
 uboot_nodefault() {
     local got
-    b 'sudo -n fw_setenv yako_default' || die "fw_setenv failed" 5
+    printf 'yako_default=\nyako_default_left=\n' > "$TMP/nodefault"
+    setenv_script "$TMP/nodefault" || die "fw_setenv failed" 5
     bget got 'sudo -n fw_printenv -n yako_default 2>/dev/null' ''
     [ -z "$got" ] || die "yako_default is still '$got'" 5
     b "sudo -n rm -f $STAGE_DIR/default.bin"
@@ -1523,12 +1533,11 @@ pi4_default() {
         { b "sudo rm -f /boot/firmware/$STAGED /boot/firmware/config-linux.txt"; die "keeping config.txt as config-linux.txt failed (nothing changed)"; }
     cfg="# tools/board.sh: the permanent default (docs/standalone-boot.md); Linux's is config-linux.txt
 $(pi4_config "$STAGED")"
-    printf '%s\n' "$cfg" | b 'sudo tee /boot/firmware/config.txt >/dev/null && sync' ||
+    b 'sudo tee /boot/firmware/config.txt >/dev/null && sync' <<<"$cfg" ||
         { pi4_nodefault; die "writing config.txt failed (Linux's put back)"; }
     bget got 'cat /boot/firmware/config.txt' "$cfg"
     [ "$got" = "$cfg" ] || { pi4_nodefault; die "config.txt reads back different (Linux's put back)"; }
     note "default set: from the next boot on, the firmware boots /boot/firmware/$STAGED, every boot. Nothing was rebooted."
-    note "undo needs a person: the SD card in a PC, on its FAT partition copy config-linux.txt over config.txt"
 }
 
 pi4_nodefault() {
@@ -1542,15 +1551,36 @@ pi4_nodefault() {
     note "no default: config.txt is Linux's again"
 }
 
+# default_undo: the exact undo of "default", printed before anything changes
+default_undo() {
+    note "UNDO, from Linux (before the reboot, or once Linux is back): tools/board.sh $BOARD nodefault"
+    case "$BOARD:$BOOTS_N" in
+    pi4:*)
+        note "UNDO, without Linux (a person): the SD card in a PC; on its FAT partition copy config-linux.txt over config.txt" ;;
+    *:forever)
+        note "UNDO, without Linux (a person at the U-Boot prompt$([ "$BOARD" = am62p ] && echo ", or the serial bridge: docs/standalone-boot.md")): setenv yako_default; saveenv; boot" ;;
+    *)
+        note "UNDO, without Linux: none needed: after $BOOTS_N boots that end in the image's watchdog reset, U-Boot deletes the default and boots Linux" ;;
+    esac
+}
+
 cmd_default() {
     need_board
     RD=$TMP   # meta() writes here; nothing of it is kept
     if [ "$VERB" = default ]; then
-        [ $# -eq 1 ] || usage
-        IMG=$1
-        [ "${BOARD_PERSON_PRESENT:-0}" = 1 ] ||
-            die "default makes the image every boot's: once the board reboots, Linux comes back only through a person (docs/standalone-boot.md). Set BOARD_PERSON_PRESENT=1 when one is at the board."
+        [ $# -eq 2 ] || usage
+        IMG=$1 BOOTS_N=$2
+        case "$BOARD:$BOOTS_N" in
+        pi4:forever | am62p:forever | imx8mp:forever) ;;
+        pi4:*) die "pi4: the firmware has no boot count: 'forever' only, with a person (docs/standalone-boot.md)" 2 ;;
+        *:[1-9]) ;;
+        *) die "boots must be 1-9 or forever, not '$BOOTS_N'" 2 ;;
+        esac
+        if [ "$BOOTS_N" = forever ] && [ "${BOARD_PERSON_PRESENT:-0}" != 1 ]; then
+            die "'forever' makes the image every boot's: Linux comes back only through a person (docs/standalone-boot.md). Set BOARD_PERSON_PRESENT=1 when one is at the board$([ "$BOARD" != pi4 ] && echo ", or give a boot count (1-9): the board then returns to Linux by itself")."
+        fi
         check_image "$IMG"
+        default_undo
     else
         [ $# -eq 0 ] || usage
     fi

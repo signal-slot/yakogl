@@ -2,209 +2,230 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Standalone boot from eMMC or SD
 
-The rule (user, 2026-10-04): tests may boot Zephyr through U-Boot over TFTP
-(the two Verdin boards) or through the firmware's tryboot (Raspberry Pi 4).
-But every board must also be able to boot a Zephyr image from its own eMMC or
-SD card, with no host and no network.
+A product powers on and boots Zephyr from its own storage: the eMMC on the
+two Verdin boards, the SD card on the Raspberry Pi 4. No host, no network.
+This file is that design for each board, and how we test it on the shared
+boards without leaving a board that needs a person to come back.
 
-Status (2026-10-04): the code is in `tools/board.sh` (backend `uboot-mmc`,
-verbs `default` and `nodefault`) and checked without a board
-(`tools/board_selftest.sh`). **No step below has run on a board yet.** The
-section "On the boards" lists the steps and what each must print.
+Tests of everything else boot an image once from the host: U-Boot over TFTP
+on the Verdin boards (`BOARD_BOOT=uboot-tftp`), the firmware's tryboot on the
+Pi 4. Those are development runners; the TFTP side is in
+`driver/docs/am62p-netboot-plan.md` and `driver/docs/imx8mp-netboot-plan.md`.
 
-This file replaces `driver/docs/rpi4-zephyr-default-boot.md`.
+State: the code is in `tools/board.sh` (backend `uboot-mmc`, verbs `default`
+and `nodefault`) and in `tools/uboot-netboot-lib.sh`, and
+`tools/board_selftest.sh` checks it without a board. **No step of this file
+has run on a board.** "On the boards" lists the steps and what each must
+print.
 
 ## Summary
 
 | | Verdin AM62P | Verdin iMX8M Plus | Raspberry Pi 4 |
 |---|---|---|---|
-| Where the image lives | a file on the eMMC's first user-area partition (ext4) | the same | a file on the SD card's FAT boot partition |
-| What loads it | U-Boot: `ext4load mmc 0:1`, then `go 0x82000000` | U-Boot: `ext4load mmc 2:1`, then `go 0x60000000` | the Pi firmware: `kernel=` in `config.txt` |
-| Test, unattended | `BOARD_BOOT=uboot-mmc tools/board.sh am62p run` (one boot, then Linux) | `BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run` | `tools/board.sh pi4 run` (tryboot: the same card, files and lines) |
-| Make it every boot's | `tools/board.sh am62p default <image>` | `tools/board.sh imx8mp default <image>` | `tools/board.sh pi4 default <image>` |
-| Undo without Linux | at the U-Boot prompt: `setenv yako_default; saveenv; boot` (over the serial bridge) | the same, but the board has no UART: **a person** with a UART cable | **a person**: the SD card in a PC, copy `config-linux.txt` over `config.txt` |
+| The image | a file on the eMMC's user-area partition 1 (ext4) | the same | a file on the SD card's FAT boot partition |
+| What loads it | U-Boot: `ext4load mmc 0:1`, `go 0x82000000` | U-Boot: `ext4load mmc 2:1`, `go 0x60000000` | the firmware: `kernel=` in `config.txt` |
+| One boot, then Linux | `BOARD_BOOT=uboot-mmc board.sh am62p run` | `BOARD_BOOT=uboot-mmc board.sh imx8mp run` | `board.sh pi4 run` (tryboot) |
+| Default for N boots, then Linux by itself | `board.sh am62p default <image> N` | `board.sh imx8mp default <image> N` | not possible (no boot count in the firmware) |
+| Default forever (the product) | `default <image> forever`, a person present | the same | the same |
+| Undo of "forever" without Linux | at the U-Boot prompt: `setenv yako_default; saveenv; boot` (serial bridge or a person) | the same; no UART on the board, so **a person** with a cable | **a person**: the SD card in a PC, `config-linux.txt` over `config.txt` |
 
-`default` reboots nothing. It refuses unless `BOARD_PERSON_PRESENT=1`,
-because after the next reboot the board no longer comes back to Linux by
-itself. `nodefault` undoes it from Linux.
+(`board.sh` is `tools/board.sh`.) `default` reboots nothing. It prints the
+exact undo before it changes anything. `forever` refuses unless
+`BOARD_PERSON_PRESENT=1`. `nodefault` undoes any default from Linux.
 
 ## Verdin AM62P and Verdin iMX8M Plus
 
-### Why a file, and not the eMMC boot partition
+### Where the image lives
 
-Each eMMC boot partition on both modules is 4 MiB (8192 sectors in
-`/sys/block/mmcblk*boot*/size`; AM62P in `docs/direct-boot.md`, i.MX8MP in
-`driver/docs/imx8mp-netboot-plan.md` section 1). boot0 holds the boot loader
-and U-Boot's environment. Our images are larger: `gl_triangle` 15.7 MB,
-`gl_slint` 18.9 MB, a `gl_test` image up to 106 MiB in memory. They do not
-fit. (The AM62P direct-boot route in `docs/direct-boot.md` needs a second-stage
-loader for exactly this reason.)
+U-Boot already reads the eMMC's user area: it loads Linux from there. So the
+image is a plain file there, and U-Boot loads it with `ext4load`, as it
+loads a kernel.
 
-The eMMC user area has room, and U-Boot can already read it: it loads Linux
-from there. So the image is a plain file there, and U-Boot loads it with
-`ext4load`, the way it loads a kernel.
+The eMMC boot partitions do not fit. Each is 4 MiB (8192 sectors in
+`/sys/block/mmcblk*boot*/size` on both modules), and boot0 already holds the
+boot loader and U-Boot's environment. Our images are 15.7 MB (`gl_triangle`)
+to 106 MiB in memory (`gl_test`).
 
 ### The product form
 
-A product without Linux puts `zephyr.bin` on an eMMC partition and sets one
-U-Boot variable. On the AM62P:
+`zephyr.bin` on an eMMC partition, and one U-Boot variable. AM62P:
 
 ```
 setenv bootcmd 'ext4load mmc 0:1 0x82000000 /zephyr.bin && dcache off && icache off && go 0x82000000'
 saveenv
 ```
 
-On the i.MX8MP the same with `mmc 2:1` and `0x60000000`. Why `go` and not
-`booti`, and why the caches go off first: `driver/docs/am62p-netboot-plan.md`
-section 3 (measured on this board by SafeUI). The image is the same
-`zephyr.bin` as for TFTP and kexec. It must arm its own watchdog (RTI on the
-AM62P, WDOG1 on the i.MX8MP), because U-Boot does not.
+i.MX8MP: the same with `mmc 2:1` and `0x60000000`. `go`, not `booti`, with
+both caches off: `driver/docs/am62p-netboot-plan.md` section 3 says why. The
+image is the same `zephyr.bin` the other routes boot (an AArch64 Image header,
+linked at the load address). U-Boot runs no watchdog for it, so the image arms
+its own (the RTI on the AM62P, WDOG1 on the i.MX8MP); `board.sh` refuses an
+image without that.
 
-### On our shared boards
+### On the shared boards
 
-The boards run Torizon, and other people use them. So we keep Torizon's
-`bootcmd` and add one hook in front of it, the same hook the TFTP one-shot
-already uses (`tools/uboot-netboot-lib.sh`; design in
-`driver/docs/am62p-netboot-plan.md` section 2).
-
-Where the file goes. Torizon's root file system is the ext4 on the eMMC's
-partition 1. It is mounted read-only, but `/var` is writable: it is a bind
-mount of the directory `/ostree/deploy/torizon/var` of the same file system
-([Toradex: OSTree](https://developer.toradex.com/torizon/in-depth/ostree/),
-[Toradex: Torizon technical overview](https://developer.toradex.com/torizon/torizoncore/torizoncore-technical-overview/)).
-Linux writes the image to `/var/yakogl/`. U-Boot sees the same file as
-`/ostree/deploy/torizon/var/yakogl/<file>`. `board.sh` does not assume this
-path: it reads it on the board (`findmnt -T /var/yakogl`: the source device,
-the mount point and the FSROOT), and it refuses unless the device is the
-partition U-Boot reads (`/dev/mmcblk0p1` = `mmc 0:1` on the AM62P,
-`/dev/mmcblk2p1` = `mmc 2:1` on the i.MX8MP).
-
-The hook (one line each in the env; the exact strings are in
-`tools/uboot-netboot-lib.sh`):
+The boards run Torizon, and Torizon's `bootcmd` stays. One hook goes in front
+of it (`tools/uboot-netboot-lib.sh` has the exact strings; each value is one
+line in the env):
 
 ```
+bootcmd   = run yako_hook; <Torizon's bootcmd>
 yako_hook = if test -n "${yako_once}"; then
               echo yakogl-netboot: once=${yako_once}; setenv yako_once;
               if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src};
               else echo yakogl-netboot: saveenv failed, booting Linux; fi;
             fi;
-            if test -n "${yako_default}"; then
-              echo yakogl-netboot: default ${yako_default};
-              setenv yako_file ${yako_default}; run yako_mmc;
-            fi
-yako_net  = (unchanged: DHCP, TFTP, go)
+            if test -n "${yako_default}"; then run yako_dflt; fi
+yako_dflt = if test -n "${yako_default_left}"; then
+              if test ${yako_default_left} -gt 0; then
+                setexpr yako_default_left ${yako_default_left} - 1;
+                if saveenv; then echo yakogl-netboot: default ${yako_default}, boots left ${yako_default_left};
+                  setenv yako_file ${yako_default}; run yako_mmc;
+                else echo yakogl-netboot: saveenv failed, booting Linux; fi;
+              else echo yakogl-netboot: default used up, booting Linux;
+                setenv yako_default; setenv yako_default_left; saveenv; fi;
+            else echo yakogl-netboot: default ${yako_default};
+              setenv yako_file ${yako_default}; run yako_mmc; fi
 yako_mmc  = if ext4load mmc 0:1 ${yako_addr} ${yako_file}; then
               echo yakogl-netboot: go ${yako_addr}; dcache off; icache off; go ${yako_addr};
             fi; echo yakogl-netboot: mmc load failed, booting Linux
-bootcmd   = run yako_hook; <Torizon's bootcmd, as it was>
+yako_net  = DHCP, TFTP and go (the TFTP runner)
 ```
 
-- **The one-shot** (`yako_once`, set from Linux by `board.sh run`): U-Boot
-  deletes it and saves the env **before** it loads anything. Then it runs
-  `yako_net` or `yako_mmc`, as `yako_src` says. `run yako_${yako_src}` is the
-  same form as the distro boot's `run bootcmd_${target}` in the i.MX8MP's
-  environment (`distro_bootcmd`).
-- **The default** (`yako_default`, set by `board.sh default`): every boot loads
-  that file. It writes nothing to the env, so it wears nothing.
-- **Any load that fails** falls through to Torizon's `bootcmd`: Linux.
+- **One boot** (`yako_once`, written from Linux by `board.sh run`): U-Boot
+  deletes it and saves the env before it loads anything, then runs `yako_mmc`
+  (or `yako_net`, as `yako_src` says).
+- **The default** (`yako_default`, written by `board.sh default`): with a
+  count in `yako_default_left`, U-Boot saves the count less one before each
+  load. At 0 it deletes the default and boots Linux. Without a count it boots
+  the default every time: the product form.
+- **Any load that fails** falls through to Torizon's `bootcmd`, that is, Linux.
 
-`tools/board.sh <board> install` writes all of this in one env write. On a
-board that has the older hook (TFTP only), the same command upgrades the
-strings in place; `bootcmd` is not touched. `uninstall` restores `bootcmd`
-from both versions.
+Where the file goes. Torizon's root file system, the ext4 on partition 1, is
+mounted read-only, but `/var` is writable: a bind mount of the directory
+`/ostree/deploy/torizon/var` of the same file system
+([Toradex: OSTree](https://developer.toradex.com/torizon/in-depth/ostree/)).
+Linux writes `/var/yakogl/<file>`; U-Boot reads
+`/ostree/deploy/torizon/var/yakogl/<file>`. `board.sh` reads this path on the
+board (`findmnt -T /var/yakogl`: device, mount point, FSROOT) instead of
+assuming it, and refuses unless the device is the partition U-Boot reads
+(`/dev/mmcblk0p1` = `mmc 0:1` on the AM62P, `/dev/mmcblk2p1` = `mmc 2:1` on
+the i.MX8MP).
 
-### What a test run does (`BOARD_BOOT=uboot-mmc`)
+`board.sh <board> install` writes the hook in one env write and saves the
+whole env first. If a board has a hook of another version, `install` replaces
+the strings in one write and leaves `bootcmd` as it is. `uninstall` restores
+Torizon's `bootcmd`.
 
-The same sequence as the TFTP run (`tools/board.sh`, header), with these
-differences:
+### Why the default counts its own boots
 
-1. No TFTP server, no `NETBOOT_*` variables.
-2. Pre-checks: the hook is installed, no one-shot pending, **no default set**
-   (with one, the boot after the image would not be Linux), `/var/yakogl` on
-   the right partition, twice the image's size free, no leftover
+The default must not be the step that strands a board. A test image ends in
+its watchdog reset, so a default with a count of N boots the image N times
+and then gives the board back to Linux, with no person and no host. Only the
+product form (`forever`) needs a person to undo, and it asks for one.
+
+The count is our own variable, not U-Boot's `bootcount`. On these boards
+`bootcount`, `bootlimit` and `altbootcmd` belong to Torizon's update
+rollback: `altbootcmd` is `env set rollback 1; run bootcmd`, and on the
+i.MX8MP the count only runs while `upgrade_available` is set (both env
+records). Borrowing them would tell Torizon to roll back its deployment.
+
+The count is 1 to 9. `setexpr` computes in hexadecimal and `test -gt` reads
+decimal; for one digit they agree. Both boards' own environments use
+`setexpr` (`update_tiboot3`, `update_uboot`).
+
+### A test run (`BOARD_BOOT=uboot-mmc board.sh <board> run <image> <logdir>`)
+
+The `board.sh` sequence (its header) with the eMMC as the source:
+
+1. Pre-checks: the hook installed, no one-shot pending, no default set (with
+   one, the boot after the image would not be Linux), `/var/yakogl` on the
+   right partition with twice the image's size free, no leftover
    `once-*.bin`.
-3. Stage: the image goes to `/var/yakogl/once-<token>.bin` (written as
-   `.part`, synced, renamed, synced). Then the page cache is dropped and the
-   file is read back from the eMMC by sha256.
-4. Arm: `yako_once=<token>`, `yako_src=mmc`, `yako_file=<the path U-Boot
+2. Stage: `/var/yakogl/once-<token>.bin`, written as `.part`, synced, renamed,
+   synced. The page cache is dropped and the file read back from the eMMC by
+   sha256.
+3. Arm: `yako_once=<token>`, `yako_src=mmc`, `yako_file=<the path U-Boot
    sees>`, read back. Reboot.
-5. U-Boot clears the one-shot, loads the file, starts it. The image ends in a
-   watchdog reset; the next boot has no one-shot and boots Linux.
-6. Back in Linux: `yako_once` must be gone (exit 6 otherwise), the file is
-   removed, the record is read (AM62P console through the serial bridge;
-   i.MX8MP SNVS record).
+4. U-Boot clears the one-shot, loads the file, starts it. The image ends in
+   its watchdog reset; the next boot has no one-shot and boots Linux.
+5. In Linux: `yako_once` must be gone (exit 6 otherwise), the file is
+   removed, the record is read (AM62P: the console through the serial bridge;
+   i.MX8MP: the SNVS record).
 
-The verdict line says `boot=uboot-mmc row`. A `uboot-mmc` run is a row, like a
-TFTP run: the bootloader starts the image.
+The verdict line says `boot=uboot-mmc row`: the boot loader started the image
+from the board's own storage.
 
 `probe` arms a file that does not exist. On the AM62P it passes only when the
-console shows U-Boot's own `yakogl-netboot: mmc load failed` line
-(`boot_verdict=load_failed`). On the i.MX8MP it passes when the board came
-back from a new boot with the one-shot cleared and the record untouched. That
+console has U-Boot's `yakogl-netboot: mmc load failed` line
+(`boot_verdict=load_failed`). On the i.MX8MP it passes when the board came back
+from a new boot with the one-shot cleared and the record untouched. That
 proves the hook ran; it cannot tell a missing file from a missing `ext4load`
-command. The first real run settles that.
+command. A real run tells.
 
-### Why none of this can strand the board
+### Why no step strands the board
 
 | What fails | What happens |
 |---|---|
-| Staging or the read-back | the file is removed; nothing is armed; no reboot |
-| `saveenv` in the hook | the image is not loaded (by design); Linux boots |
-| `ext4load` (no file, wrong path, a journal not yet written back) | `mmc load failed, booting Linux`; Linux boots |
-| The image hangs | its own watchdog resets the SoC; the one-shot is already gone; Linux boots |
+| Staging or its read-back | the file is removed; nothing is armed; no reboot |
+| `saveenv` in the hook | nothing is loaded; Linux boots |
+| `ext4load` (no file, wrong path) | `mmc load failed, booting Linux` |
+| The image hangs | its watchdog resets the SoC; the one-shot is already gone, or the count already lower; Linux boots, at the latest after N boots |
 | The host dies after the reboot | nothing on the boot path needs the host |
 
-Linux reboots through systemd, which unmounts and remounts the file system
-read-only, so the ext4 journal is written back before U-Boot reads the file.
-If Linux crashes instead, U-Boot may not find the file: the load fails and
-Linux boots.
-
-The default is different on purpose. A reset boots the default image again,
-so each boot of it must end, and getting Linux back needs the U-Boot prompt.
+Linux reboots through systemd, which unmounts the file system or remounts it
+read-only, so the ext4 journal is on the disk before U-Boot reads the file. If
+Linux crashes instead, the load can fail, and Linux boots.
 
 ### Facts and sources
 
-- AM62P: `ext4load mmc 0:1 0x82000000 ... && dcache off && icache off && go
-  0x82000000` is in the board's own `bootcmd` today (SafeUI's persistent boot,
-  env record `records/am62p/netboot/env-before-install-*.txt`, main checkout),
-  and it booted Zephyr there (`driver/docs/am62p-netboot-plan.md` section 1).
+- AM62P: the board's own `bootcmd` loads SafeUI's Zephyr with
+  `ext4load mmc 0:1 0x82000000 ... && dcache off && icache off && go 0x82000000`
+  (env record `records/am62p/netboot/env-before-install-*.txt`, main checkout,
+  not in git), a path measured on this board
+  (`driver/docs/am62p-netboot-plan.md` sections 1 and 3).
 - i.MX8MP: the eMMC is U-Boot's `mmc 2` (its env's `update_uboot`: `mmc dev 2
-  1`), and the distro boot finds Torizon on partition 1
-  (`distro_bootpart_uuid=8725ec00-01`; env record
-  `records/imx8mp/netboot/env-before-install-*.txt`).
-- `ext4load` in U-Boot: both boards' mainline defconfigs set
-  `CONFIG_CMD_EXT4_WRITE=y`, which depends on `CMD_EXT4`
+  1`); Torizon is on partition 1 (`distro_bootpart_uuid=8725ec00-01`); the
+  env's `distro_bootcmd` runs `run bootcmd_${target}`, the form of `run
+  yako_${yako_src}` (env record `records/imx8mp/netboot/env-before-install-*.txt`).
+- Boot partitions: AM62P `docs/direct-boot.md`; i.MX8MP
+  `driver/docs/imx8mp-netboot-plan.md` section 1.
+- `ext4load`: both boards' mainline defconfigs set `CONFIG_CMD_EXT4_WRITE=y`,
+  which needs `CMD_EXT4`
   ([verdin-am62p_a53_defconfig](https://github.com/u-boot/u-boot/blob/master/configs/verdin-am62p_a53_defconfig),
   [verdin-imx8mp_defconfig](https://github.com/u-boot/u-boot/blob/master/configs/verdin-imx8mp_defconfig)).
-  The boards run Toradex builds of 2024.04 (TI) and 2024.07; mainline is a
-  reference, not a byte match. **On the i.MX8MP `ext4load` is unmeasured.**
-- The `load` family and its output line (`<n> bytes read in <t> ms`), which
-  the AM62P phase scan reads:
+  The boards run Toradex's 2024.04 (TI tree) and 2024.07 builds; mainline is a
+  reference, not a byte match.
+- The `load` family, `filesize`, and the line `<n> bytes read in <t> ms` that
+  the AM62P console scan reads:
   [U-Boot: load](https://docs.u-boot.org/en/latest/usage/cmd/load.html).
-- Saving the env from Linux, and `setenv` changing only RAM until `saveenv`:
-  [Toradex: U-Boot](https://developer.toradex.com/linux-bsp/os-development/boot/u-boot/).
+- The env from Linux (`fw_setenv`), and `setenv` changing only RAM until
+  `saveenv`: [Toradex: U-Boot](https://developer.toradex.com/linux-bsp/os-development/boot/u-boot/).
+
+Unmeasured: `ext4load` and `setexpr` in the i.MX8MP's U-Boot build; the hook's
+nested `if` in both builds (the one-shot hook already nests two levels and ran
+on both boards); the load time of a 100 MB file.
 
 ## Raspberry Pi 4
 
 ### The product form
 
-The Pi 4 boots from the SD card with no U-Boot. Its boot loader is in the SPI
-EEPROM; it reads the first FAT partition of the card
+The Pi 4 boots from the SD card without U-Boot. Its boot loader is in the SPI
+EEPROM and reads the card's first FAT partition
 ([boot EEPROM flow](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#eeprom-boot-flow)).
-In our tryboot runs the firmware read these files
-(`uart_2ndstage=1` log, 2026-10-03):
+The firmware reads these files (the `uart_2ndstage=1` log of our tryboot runs):
 
 | file | from | what it is |
 |---|---|---|
 | `start4.elf`, `fixup4.dat` | Raspberry Pi OS boot partition | the firmware and its memory fix-up ([boot options](https://www.raspberrypi.com/documentation/computers/config_txt.html#boot-options)) |
-| `config.txt` (`tryboot.txt` in a tryboot) | below | the configuration |
+| `config.txt` | below | the configuration |
 | `bcm2711-rpi-4-b.dtb`, `overlays/overlay_map.dtb`, `cmdline.txt` | Raspberry Pi OS boot partition | read by the firmware; Zephyr uses none of them |
 | `zephyr.bin` | the build | the kernel, loaded at 0x200000 |
 
-This is the set the firmware read, not a proven minimum: keep all of it until
+That is the set the firmware read, not a proven minimum: keep all of it until
 a card without one of them has booted.
 
-`config.txt` for Zephyr on every boot:
+`config.txt`:
 
 ```ini
 [all]
@@ -220,105 +241,106 @@ hdmi_timings=1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1
 | key | what it does |
 |---|---|
 | `kernel=` | the file to boot ([kernel](https://www.raspberrypi.com/documentation/computers/config_txt.html#kernel)) |
-| `arm_64bit=1` | 64-bit (the Pi 4 default; kept explicit) ([arm_64bit](https://www.raspberrypi.com/documentation/computers/config_txt.html#arm_64bit)) |
+| `arm_64bit=1` | 64-bit, the Pi 4 default, kept explicit ([arm_64bit](https://www.raspberrypi.com/documentation/computers/config_txt.html#arm_64bit)) |
 | `enable_uart=1` | the UART on GPIO 14/15, Zephyr's console ([enable_uart](https://www.raspberrypi.com/documentation/computers/config_txt.html#enable_uart)) |
 | `uart_2ndstage=1` | the firmware's own log on the UART; optional ([uart_2ndstage](https://www.raspberrypi.com/documentation/computers/config_txt.html#uart_2ndstage)) |
-| `hdmi_*` | the 1920x720 bar panel as a custom mode; only the firmware's display path reads these, which is ours (Zephyr asks the firmware for a frame buffer) ([legacy video options](https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#legacy-video-options)) |
+| `hdmi_*` | the 1920x720 bar panel as a custom mode, for the firmware's display path, which Zephyr uses through the property mailbox ([legacy video options](https://www.raspberrypi.com/documentation/computers/legacy_config_txt.html#legacy-video-options)) |
 
-To make such a card from Raspberry Pi OS Lite (64-bit): one FAT32 partition;
-copy the files of the table; add `zephyr.bin` and this `config.txt`. No
-kernel, initramfs or root file system. Record the sha256 of every file next to
-the build.
+A card from Raspberry Pi OS Lite (64-bit): one FAT32 partition, the files of
+the table, `zephyr.bin` and this `config.txt`. No kernel, initramfs or root
+file system. Record the sha256 of every file next to the build.
 
-### The test is the product path
+### The test is the product's boot
 
 A tryboot reads `tryboot.txt` instead of `config.txt`, once
 ([tryboot](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#fail-safe-os-updates-tryboot)).
-Everything else is the same: the same card, the same firmware files, the same
-lines. `tools/board.sh` writes both files from one function (`pi4_config`), so
-a tryboot run that passes has booted the product's configuration from the SD
-card. Only the file name differs. So every `tools/board.sh pi4 run` is
-already the unattended test.
+Everything else is the same card, the same firmware files and the same lines:
+`board.sh` writes both files from one function (`pi4_config`). So each
+`board.sh pi4 run` boots the product's configuration from the SD card; only
+the file name differs.
 
-### Making it permanent
+### Default: forever only, with a person
 
-`BOARD_PERSON_PRESENT=1 tools/board.sh pi4 default <image>` copies the image
+`BOARD_PERSON_PRESENT=1 board.sh pi4 default <image> forever` copies the image
 to `/boot/firmware/yakogl-default.bin`, keeps Linux's `config.txt` as
-`config-linux.txt` (byte for byte), writes `config.txt` with the lines above,
-and reads everything back. It does not reboot. `nodefault` (from Linux)
-puts `config-linux.txt` back. A tryboot run refuses while `config-linux.txt`
-exists.
+`config-linux.txt` byte for byte, writes `config.txt`, and reads everything
+back. It does not reboot. `nodefault` (from Linux) puts `config-linux.txt`
+back. A tryboot run refuses while `config-linux.txt` exists.
 
-After the reboot only a person can undo it: take the card out, copy
-`config-linux.txt` over `config.txt` on a PC, put it back. The EEPROM is never
-touched, so a bad image cannot make the board unbootable.
+The firmware has no boot count, so after the reboot only a person brings
+Linux back: the card in a PC, `config-linux.txt` over `config.txt`. The EEPROM
+is never written, so no image can make the board unbootable.
 
-Watchdog: `rpi_wdog.c` arms the PM watchdog with a deadline
-(`RPI_WDOG_HOLD_S`). With a tryboot, the reset returns to Linux. As the
-default, the reset boots the same image again, in a loop. A product image
-needs a watchdog without a deadline, fed only while the application is
-healthy. That change is not made.
+A count would need Zephyr to set the firmware's tryboot flag at start
+(property `0x00038064`, as Linux's `drivers/firmware/raspberrypi.c` does for
+`reboot "0 tryboot"`), so that its watchdog reset boots a Linux `tryboot.txt`.
+There is no such code, and whether the flag survives our watchdog's reset is
+unmeasured; until both are, the Pi 4 default is a person's step.
 
-Not built: an unattended test of `config.txt` itself. Zephyr would have to set
-the firmware's tryboot flag at start (property `0x00038064`, as Linux's
-`drivers/firmware/raspberrypi.c` does for `reboot "0 tryboot"`), so that its
-reset boots a Linux `tryboot.txt`. No code for it exists, and if the flag did
-not survive the watchdog reset, the board would loop until a person came. The
-tryboot run above already covers everything but the file name.
+Watchdog: `rpi_wdog.c` resets the SoC at a deadline (`RPI_WDOG_HOLD_S`).
+As the default, that reset boots the same image again. A product image needs
+a watchdog without a deadline, fed only while the application is healthy;
+the board layer does not have that mode.
 
 ## On the boards
 
-Each step in order; stop at the first that prints something else. The run
-directories and verdict lines are as for any `board.sh` run.
+In order; stop at the first step that prints something else.
 
 ### Verdin AM62P
 
-1. `tools/board.sh am62p status` prints the hook variables and `install: ok`,
-   `install: absent`, or (a board that has the TFTP-only hook)
-   `install: stale: yako_hook differs from this script's`.
-2. `tools/board.sh am62p install`: `installed; ...` (absent) or
-   `upgraded in place (was: yako_hook differs from this script's); bootcmd
-   unchanged` (stale). Then `status` again: `install: ok`. From now on an
-   older `board.sh` refuses to run on this board ("yako_hook differs"): it
-   must be this commit or later.
-3. `BOARD_BOOT=uboot-mmc tools/board.sh am62p probe <logdir>`: the verdict line
-   `rc=0 verdict=probe_ok boot=uboot-mmc row boot_verdict=load_failed`; the
-   console has `yakogl-netboot: mmc load failed, booting Linux` and then
-   Torizon's boot.
-4. `BOARD_BOOT=uboot-mmc tools/board.sh am62p run <zephyr.bin> <logdir>` with an
-   image that already has a TFTP row: `boot_verdict=done`, the console has
-   `<n> bytes read in` with n = the image's size, and the same verdict as its
-   TFTP row. Then `status`: no `once-*.bin` left in `/var/yakogl`.
-5. Only with someone watching (it takes the board away from everyone):
-   `BOARD_PERSON_PRESENT=1 tools/board.sh am62p default <zephyr.bin>`, reboot,
-   see the image start twice (its reset boots it again), then undo:
+1. `tools/board.sh am62p status`: the hook variables, then `install: ok`,
+   `install: absent`, or `install: stale: yako_hook differs from this
+   script's` (a hook of another version).
+2. `tools/board.sh am62p install`: `installed; ...` or `upgraded in place
+   (...); bootcmd unchanged`. `status` again: `install: ok`. From here on a
+   `board.sh` older than this commit refuses to run on the board.
+3. `BOARD_BOOT=uboot-mmc tools/board.sh am62p probe <logdir>`: `rc=0
+   verdict=probe_ok boot=uboot-mmc row boot_verdict=load_failed`; the console
+   has `yakogl-netboot: mmc load failed, booting Linux`, then Torizon's boot.
+4. `BOARD_BOOT=uboot-mmc tools/board.sh am62p run <zephyr.bin> <logdir>`, with
+   an image that has a TFTP row: `boot_verdict=done`; the console has
+   `<n> bytes read in` with n = the image's size; the same verdict as the TFTP
+   row. `status`: no `once-*.bin` in `/var/yakogl`.
+5. `tools/board.sh am62p default <zephyr.bin> 2` (no person needed): it prints
+   the undo, stages `default.bin`, writes `yako_default` and
+   `yako_default_left=2`. Then reboot the board from Linux
+   (`sudo systemctl reboot`). The console shows `default ..., boots left 1`,
+   the image, its reset, `boots left 0`, the image, its reset,
+   `default used up, booting Linux`, Torizon. `status`: no `yako_default`,
+   no `yako_default_left`. `tools/board.sh am62p nodefault` removes the file.
+6. `forever` only with someone watching (it takes the board from everyone):
+   `BOARD_PERSON_PRESENT=1 tools/board.sh am62p default <zephyr.bin> forever`,
+   reboot, the image runs at every boot. Undo over the bridge:
    `python3 tools/am62p_netboot_uart.py typed $BOARD_UART raw.log ts.log
    'setenv yako_default; saveenv; boot'` stops the next autoboot and types the
-   line. It waits only 120 s for U-Boot SPL (`typed: EXPIRED` otherwise), so
-   start it again until it prints `echo exact: CR sent` (stderr); then stop it
-   (it keeps capturing). Linux comes back; `tools/board.sh am62p nodefault`
-   removes the file. If the bridge fails, a person resets the board at the
-   prompt.
+   line. It waits 120 s for U-Boot SPL (`typed: EXPIRED` otherwise), so start
+   it again until it prints `echo exact: CR sent` (stderr), then stop it (it
+   keeps capturing). Then `nodefault` from Linux.
 
 ### Verdin iMX8M Plus
 
 1. and 2. as on the AM62P.
 3. `BOARD_BOOT=uboot-mmc tools/board.sh imx8mp probe <logdir>`: `rc=0
    verdict=probe_ok boot=uboot-mmc row boot_verdict=probe_ok`. `rc=6` means the
-   hook never cleared the one-shot (board.sh disarmed it).
+   hook did not clear the one-shot (`board.sh` cleared it).
 4. `BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run <zephyr.bin> <logdir>`:
-   `boot_verdict=cycled` and the image's own record, e.g. `verdict=done ...
-   result=record:APP`. A cleared record (`verdict=no_record`) means the image
-   did not run: `ext4load` may be missing from this U-Boot (unmeasured), or
-   the path is wrong.
-5. **Needs a person** with a UART cable on the board: `default`, the reboot,
-   and the undo at the U-Boot prompt (`setenv yako_default; saveenv; boot`).
-   Without a UART the fallback is USB recovery mode and Toradex Easy Installer.
+   `boot_verdict=cycled` and the image's record, e.g. `verdict=done ...
+   result=record:APP`. A record still cleared (`verdict=no_record`) means the
+   image did not run: `ext4load` may be missing from this U-Boot build
+   (unmeasured), or the path is wrong.
+5. `tools/board.sh imx8mp default <zephyr.bin> 2`, reboot from Linux. No
+   console: Linux must answer again within about two image runs plus three
+   boots; then `status` shows no `yako_default` and no `yako_default_left`,
+   and the SNVS record holds the second run's result. `nodefault` removes the
+   file.
+6. `forever`: **a person** with a UART cable at the U-Boot prompt is the only
+   way back (`setenv yako_default; saveenv; boot`); without one, USB recovery
+   mode and Toradex Easy Installer.
 
 ### Raspberry Pi 4
 
-1. Nothing to install. `tools/board.sh pi4 run <zephyr.bin> <logdir>` (tryboot)
-   is the test, as today.
-2. **Needs a person** at the board: `BOARD_PERSON_PRESENT=1 tools/board.sh pi4
-   default <zephyr.bin>`, reboot, watch the panel or the UART, then the undo
-   with the SD card in a PC.
+1. Nothing to install. `tools/board.sh pi4 run <zephyr.bin> <logdir>`
+   (tryboot) is the test.
+2. `forever`: **a person** at the board.
+   `BOARD_PERSON_PRESENT=1 tools/board.sh pi4 default <zephyr.bin> forever`,
+   reboot, watch the panel or the UART; undo with the card in a PC.

@@ -40,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=194
+WANT_CHECKS=201
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -177,24 +177,38 @@ for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1; do
     out=$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)
     check "$board install: yako_mmc loads with ext4load from mmc $mdev:$mpart; the hook runs yako_\${yako_src}, then the default" \
         eval 'grep -qF "yako_mmc=if ext4load mmc $mdev:$mpart \${yako_addr} \${yako_file}; then" <<<"$out" &&
-              grep -qF "run yako_\${yako_src};" <<<"$out" && grep -qF "if test -n \"\${yako_default}\"; then" <<<"$out"'
+              grep -qF "run yako_\${yako_src};" <<<"$out" && grep -qF "if test -n \"\${yako_default}\"; then run yako_dflt; fi" <<<"$out" &&
+              grep -qF "setexpr yako_default_left \${yako_default_left} - 1; if saveenv; then" <<<"$out"'
     out=$(BOARD_BOOT=uboot-mmc dry "$board" probe "$S/logs" 2>&1)
     check "$board uboot-mmc probe: a real cycle, armed, nothing staged" \
         eval 'grep -q "systemctl reboot" <<<"$out" && grep -q "^    yako_once=probe-" <<<"$out" && ! grep -q "cat > /var/yakogl" <<<"$out"'
     out=$(dry "$board" default "$S/img/$board.bin" 2>&1)
     rc=$?
-    check "$board default without BOARD_PERSON_PRESENT=1: rc 3, nothing done" \
-        eval '[ "$rc" = 3 ] && grep -q "BOARD_PERSON_PRESENT=1" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
-    out=$(BOARD_PERSON_PRESENT=1 dry "$board" default "$S/img/$board.bin" 2>&1)
+    check "$board default without a boot count: usage, rc 2" eval '[ "$rc" = 2 ] && ! grep -q "^DRY board" <<<"$out"'
+    out=$(dry "$board" default "$S/img/$board.bin" forever 2>&1)
     rc=$?
-    check "$board default: rc 0, default.bin staged on the eMMC and read back, yako_default written and read back, no reboot" \
-        eval '[ "$rc" = 0 ] && grep -q "cat > /var/yakogl/default.bin.part" <<<"$out" && grep -q "sha256sum /var/yakogl/default.bin" <<<"$out" &&
-              grep -q "^    yako_default=/ostree/deploy/torizon/var/yakogl/default.bin$" <<<"$out" &&
-              grep -q "fw_printenv -n yako_default" <<<"$out" && ! grep -q "systemctl reboot" <<<"$out"'
+    check "$board default forever without BOARD_PERSON_PRESENT=1: rc 3, nothing done, a count offered" \
+        eval '[ "$rc" = 3 ] && grep -q "BOARD_PERSON_PRESENT=1" <<<"$out" && grep -q "give a boot count" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
+    out=$(dry "$board" default "$S/img/$board.bin" 2 2>&1)
+    rc=$?
+    check "$board default 2 (no person needed): rc 0, the undo printed before any board command, staged and read back, yako_default and yako_default_left=2 in one write, no reboot" \
+        eval '[ "$rc" = 0 ] && [ "$(grep -n "UNDO" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "^DRY board" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+              grep -q "UNDO, without Linux: none needed: after 2 boots" <<<"$out" &&
+              grep -q "cat > /var/yakogl/default.bin.part" <<<"$out" && grep -q "sha256sum /var/yakogl/default.bin" <<<"$out" &&
+              grep -A2 "fw_setenv -s" <<<"$out" | grep -q "^    yako_default=/ostree/deploy/torizon/var/yakogl/default.bin$" &&
+              grep -A3 "fw_setenv -s" <<<"$out" | grep -q "^    yako_default_left=2$" &&
+              grep -q "fw_printenv -n yako_default_left" <<<"$out" && ! grep -q "systemctl reboot" <<<"$out"'
+    out=$(BOARD_PERSON_PRESENT=1 dry "$board" default "$S/img/$board.bin" forever 2>&1)
+    rc=$?
+    check "$board default forever with a person: rc 0, the count cleared, the U-Boot prompt undo printed" \
+        eval '[ "$rc" = 0 ] && grep -q "^    yako_default_left=$" <<<"$out" && grep -q "UNDO, without Linux (a person at the U-Boot prompt.*setenv yako_default; saveenv; boot" <<<"$out"'
+    out=$(dry "$board" default "$S/img/$board.bin" 10 2>&1)
+    rc=$?
+    check "$board default 10: rc 2 (1-9: U-Boot's setexpr counts in hex, test -gt in decimal)" eval '[ "$rc" = 2 ]'
     out=$(dry "$board" nodefault 2>&1)
     rc=$?
-    check "$board nodefault: yako_default removed and read back, default.bin removed" \
-        eval '[ "$rc" = 0 ] && grep -q "fw_setenv yako_default$" <<<"$out" && grep -q "rm -f /var/yakogl/default.bin" <<<"$out"'
+    check "$board nodefault: yako_default and its count removed in one write and read back, default.bin removed" \
+        eval '[ "$rc" = 0 ] && grep -q "^    yako_default=$" <<<"$out" && grep -q "^    yako_default_left=$" <<<"$out" && grep -q "rm -f /var/yakogl/default.bin" <<<"$out"'
     out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1; BOARD_BOOT=uboot-tftp dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
     check "$board run (both U-Boot backends) checks that no default is set" \
         eval '[ "$(grep -c "yako_once and yako_default must be absent" <<<"$out")" = 2 ]'
@@ -202,13 +216,17 @@ done
 out=$(NETBOOT_ROUTE=typed BOARD_BOOT=uboot-mmc dry am62p run "$S/img/am62p.bin" "$S/logs" 2>&1)
 rc=$?
 check "am62p uboot-mmc refuses the typed route (rc 2)" eval '[ "$rc" = 2 ] && grep -q "typed is a TFTP route" <<<"$out"'
-out=$(dry pi4 default "$S/img/pi4.bin" 2>&1)
+out=$(dry pi4 default "$S/img/pi4.bin" 2 2>&1)
 rc=$?
-check "pi4 default without BOARD_PERSON_PRESENT=1: rc 3" eval '[ "$rc" = 3 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
-out=$(BOARD_PERSON_PRESENT=1 BOARD_HDMI_TIMINGS="1 2 3" dry pi4 default "$S/img/pi4.bin" 2>&1)
+check "pi4 default with a boot count: rc 2 (the firmware has none)" eval '[ "$rc" = 2 ] && grep -q "forever. only" <<<"$out"'
+out=$(dry pi4 default "$S/img/pi4.bin" forever 2>&1)
 rc=$?
-check "pi4 default: rc 0, Linux's config.txt kept as config-linux.txt first, config.txt = the tryboot lines naming yakogl-default.bin, no reboot" \
-    eval '[ "$rc" = 0 ] && grep -q "cp /boot/firmware/config.txt /boot/firmware/config-linux.txt" <<<"$out" &&
+check "pi4 default forever without BOARD_PERSON_PRESENT=1: rc 3" eval '[ "$rc" = 3 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
+out=$(BOARD_PERSON_PRESENT=1 BOARD_HDMI_TIMINGS="1 2 3" dry pi4 default "$S/img/pi4.bin" forever 2>&1)
+rc=$?
+check "pi4 default forever: rc 0, the SD-card undo printed first, config.txt kept as config-linux.txt, config.txt names yakogl-default.bin, no reboot" \
+    eval '[ "$rc" = 0 ] && grep -q "UNDO, without Linux (a person): the SD card" <<<"$out" &&
+          grep -q "cp /boot/firmware/config.txt /boot/firmware/config-linux.txt" <<<"$out" &&
           grep -q "sha256sum /boot/firmware/yakogl-default.bin" <<<"$out" && grep -q "tee /boot/firmware/config.txt" <<<"$out" &&
           ! grep -q "0 tryboot" <<<"$out"'
 # the default's config.txt and a tryboot's tryboot.txt are the same lines (pi4_config), past the comment

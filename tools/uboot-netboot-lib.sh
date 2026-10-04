@@ -5,13 +5,13 @@
 # every backend uses). SOURCE it, do not run it.
 #
 # The design (the hook in front of bootcmd, the one-shot variable U-Boot
-# deletes and saves before it loads anything, the failure analysis) is
-# driver/docs/am62p-netboot-plan.md section 2; the i.MX8MP's differences are in
-# driver/docs/imx8mp-netboot-plan.md; the eMMC source (yako_mmc) and the
-# permanent default (yako_default) are docs/standalone-boot.md. The hook
+# deletes and saves before it loads anything, the eMMC source, the default
+# and its boot count) is docs/standalone-boot.md; the TFTP source is
+# driver/docs/am62p-netboot-plan.md and imx8mp-netboot-plan.md. The hook
 # strings are the same on both boards; only the load address and the eMMC
 # partition differ. An installed hook is compared with these strings byte for
-# byte; "install" upgrades an older hook in place (one env write).
+# byte; "install" brings an installed hook of another version to these
+# strings in one env write, bootcmd untouched.
 #
 # The runner sets, before sourcing:
 #   NB_TAG        its name, the prefix of every message ("board.sh am62p")
@@ -24,7 +24,7 @@
 #   DRY           1 for --dry-run: every board, TFTP-root and host action is
 #                 printed and none is run (board reads included)
 #   REPO          the repository root
-# and gets: YAKO_HOOK YAKO_NET YAKO_MMC HOOK_PREFIX SSH_OPTS TMP and the
+# and gets: YAKO_HOOK YAKO_DFLT YAKO_NET YAKO_MMC HOOK_PREFIX SSH_OPTS TMP and the
 # functions die b act need_board env_get check_install setenv_script nb_status
 # nb_install nb_uninstall nb_disarm nb_check_image nb_tftp_canary.
 
@@ -40,9 +40,16 @@ die() { echo "$NB_TAG: $1" >&2; exit "${2:-3}"; }
 #    boot). Then, whatever the one-shot did, the permanent default: when
 #    yako_default names a file, yako_mmc loads and starts it. A load that fails
 #    falls through to the bootcmd as it was (Linux).
+#  - yako_dflt: the default. With yako_default_left unset it boots the default
+#    every time (the product form). With a count it boots it only while the
+#    count is above 0, saving the count less one BEFORE the load; at 0 it
+#    deletes yako_default and the count and boots Linux. So an image that ends
+#    in a watchdog reset returns the board to Linux by itself after that many
+#    boots.
 #  - yako_net / yako_mmc: load the image to yako_addr and "go" there, or print
 #    why not and return.
-YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-netboot: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src}; else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi; if test -n "${yako_default}"; then echo yakogl-netboot: default ${yako_default}; setenv yako_file ${yako_default}; run yako_mmc; fi'
+YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-netboot: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src}; else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi; if test -n "${yako_default}"; then run yako_dflt; fi'
+YAKO_DFLT='if test -n "${yako_default_left}"; then if test ${yako_default_left} -gt 0; then setexpr yako_default_left ${yako_default_left} - 1; if saveenv; then echo yakogl-netboot: default ${yako_default}, boots left ${yako_default_left}; setenv yako_file ${yako_default}; run yako_mmc; else echo yakogl-netboot: saveenv failed, booting Linux; fi; else echo yakogl-netboot: default used up, booting Linux; setenv yako_default; setenv yako_default_left; saveenv; fi; else echo yakogl-netboot: default ${yako_default}; setenv yako_file ${yako_default}; run yako_mmc; fi'
 YAKO_NET='setenv autoload no; setenv netretry no; setenv tftptimeout 1000; setenv tftptimeoutcountmax 5; setenv tftpblocksize 1468; setenv tftpwindowsize 8; if dhcp && tftpboot ${yako_addr} ${yako_server}:${yako_file}; then echo yakogl-netboot: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-netboot: fetch failed, booting Linux'
 YAKO_MMC="if ext4load mmc $NB_MMC \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi; echo yakogl-netboot: mmc load failed, booting Linux"
 HOOK_PREFIX='run yako_hook; '
@@ -72,16 +79,17 @@ env_get() { sed -n "s/^$1=//p"; }
 check_install() {
     # --dry-run reads nothing: callers skip the verdict ("not read" is not "ok")
     if [ "$DRY" = 1 ]; then echo "not read (dry run)"; return; fi
-    local env hook net mmc addr bc prev
+    local env hook dflt net mmc addr bc prev
     env=$(b 'sudo -n fw_printenv' 2>/dev/null) || { echo "fw_printenv failed"; return; }
     hook=$(env_get yako_hook <<<"$env"); net=$(env_get yako_net <<<"$env")
-    mmc=$(env_get yako_mmc <<<"$env")
+    mmc=$(env_get yako_mmc <<<"$env"); dflt=$(env_get yako_dflt <<<"$env")
     addr=$(env_get yako_addr <<<"$env"); bc=$(env_get bootcmd <<<"$env")
     prev=$(env_get yako_bootcmd_prev <<<"$env")
-    if [ -z "$hook$net$mmc$addr$prev" ] && [ "${bc#"$HOOK_PREFIX"}" = "$bc" ]; then echo absent; return; fi
+    if [ -z "$hook$dflt$net$mmc$addr$prev" ] && [ "${bc#"$HOOK_PREFIX"}" = "$bc" ]; then echo absent; return; fi
     [ -n "$prev" ] || { echo "yako_bootcmd_prev is empty"; return; }
     [ "$bc" = "$HOOK_PREFIX$prev" ] || { echo "bootcmd is not '$HOOK_PREFIX' + yako_bootcmd_prev"; return; }
     [ "$hook" = "$YAKO_HOOK" ] || { echo "stale: yako_hook differs from this script's"; return; }
+    [ "$dflt" = "$YAKO_DFLT" ] || { echo "stale: yako_dflt differs from this script's"; return; }
     [ "$net" = "$YAKO_NET" ] || { echo "stale: yako_net differs from this script's"; return; }
     [ "$mmc" = "$YAKO_MMC" ] || { echo "stale: yako_mmc differs from this script's"; return; }
     [ "$addr" = "$YAKO_ADDR" ] || { echo "stale: yako_addr is '$addr', not $YAKO_ADDR"; return; }
@@ -99,7 +107,7 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 nb_status() {
     need_board
-    b 'sudo -n fw_printenv bootcmd bootdelay yako_hook yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_bootcmd_prev 2>&1'
+    b 'sudo -n fw_printenv bootcmd bootdelay yako_hook yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left yako_bootcmd_prev 2>&1'
     echo "install: $(check_install)"
 }
 
@@ -107,6 +115,7 @@ nb_status() {
 nb_hook_vars() {
     printf 'yako_addr=%s\n' "$YAKO_ADDR"
     printf 'yako_hook=%s\n' "$YAKO_HOOK"
+    printf 'yako_dflt=%s\n' "$YAKO_DFLT"
     printf 'yako_net=%s\n' "$YAKO_NET"
     printf 'yako_mmc=%s\n' "$YAKO_MMC"
 }
@@ -174,7 +183,7 @@ nb_uninstall() {
     # libubootenv's script mode: "name=" with an empty value removes the variable.
     {
         printf 'bootcmd=%s\n' "$prev"
-        for v in yako_bootcmd_prev yako_hook yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default; do
+        for v in yako_bootcmd_prev yako_hook yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left; do
             printf '%s=\n' "$v"
         done
     } > "$TMP/uninstall"

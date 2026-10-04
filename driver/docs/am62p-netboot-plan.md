@@ -72,9 +72,10 @@ yako_addr         = 0x82000000
 yako_hook         = if test -n "${yako_once}"; then
                       echo yakogl-netboot: once=${yako_once};
                       setenv yako_once;
-                      if saveenv; then echo yakogl-netboot: cleared; run yako_net;
+                      if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src};
                       else echo yakogl-netboot: saveenv failed, booting Linux; fi;
-                    fi
+                    fi;
+                    <the default: docs/standalone-boot.md>
 yako_net          = setenv autoload no; setenv netretry no;
                     setenv tftptimeout 1000; setenv tftptimeoutcountmax 5;
                     setenv tftpblocksize 1468; setenv tftpwindowsize 8;
@@ -89,9 +90,10 @@ bootcmd           = run yako_hook; <the bootcmd as it was>
 Each value is one line in the env; the line breaks above are only for reading.
 `tools/uboot-netboot-lib.sh` (shared with the i.MX8MP runner,
 `imx8mp-netboot-plan.md`) holds the exact strings, and `tools/board.sh`
-checks the board's copy against them before every run. The hook has since
-grown a second source and a permanent default (`yako_src`, `yako_mmc`,
-`yako_default`): `docs/standalone-boot.md` shows the current form.
+checks the board's copy against them before every run. The hook also loads
+from the eMMC and boots a default (`yako_src`, `yako_mmc`, `yako_dflt`):
+`docs/standalone-boot.md` has its whole form; the block above is the TFTP
+part.
 
 With `yako_once` empty, the hook does nothing and the old `bootcmd` runs as
 before. Install and uninstall each change `bootcmd` once. Uninstall writes
@@ -100,7 +102,8 @@ exactly. So U-Boot never has to copy the old `bootcmd` through its shell's
 quoting (which would expand `${filesize}` and split on `;`).
 
 **Arm (every run, one env write from Linux):** `yako_once=<token>`,
-`yako_file=yakogl/<token>.bin`, `yako_server=<this host>`, then read back.
+`yako_src=net`, `yako_file=yakogl/<token>.bin`, `yako_server=<this host>`,
+then read back.
 
 **One cycle:** reboot -> SPL -> U-Boot -> the hook sees `yako_once` -> deletes it
 -> `saveenv` -> only if that succeeded: DHCP, TFTP, `go` -> Zephyr -> Zephyr ends in

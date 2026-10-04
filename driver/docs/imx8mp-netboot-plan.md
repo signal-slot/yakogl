@@ -90,8 +90,9 @@ reasoning is `am62p-netboot-plan.md` section 2). Only `yako_addr` differs:
 yako_bootcmd_prev = run cm_boot; run distro_bootcmd
 yako_addr         = 0x60000000
 yako_hook         = if test -n "${yako_once}"; then echo ...; setenv yako_once;
-                      if saveenv; then echo ...; run yako_net;
-                      else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi
+                      if saveenv; then echo ...; run yako_${yako_src};
+                      else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi;
+                    <the default: docs/standalone-boot.md>
 yako_net          = setenv autoload no; setenv netretry no; setenv tftptimeout 1000;
                     setenv tftptimeoutcountmax 5; setenv tftpblocksize 1468;
                     setenv tftpwindowsize 8;
