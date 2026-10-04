@@ -470,6 +470,11 @@ int shc_online_keep_stats(size_t *in_use, size_t *peak);
  * archive only, like shc_online_keep_stats. */
 uint32_t shc_online_compiles(void);
 
+/* Whether the PowerVR compiles that follow fuse a * b + c into one fmad
+ * (off by default; a measurement knob until the regression set has run with
+ * it). Returns the old setting. Static archive only. */
+int shc_online_set_fuse_mul_add(int on);
+
 /* The in-process compiler's keep region, lent by the image before the first
  * compile (on Zephyr, zephyr_shaderc_scratch.c, sized by
  * CONFIG_YAKOGL_SHADERC_KEEP_BYTES). buf 8-byte aligned, len at least 64 KiB.

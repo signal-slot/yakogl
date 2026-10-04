@@ -61,6 +61,15 @@ pub struct Built<'a> {
     pub sampled: &'a [u8],
 }
 
+/// [`super::prepare::fuse_mul_add`] when the switch asks for it
+/// ([`crate::shaderc::fuse_mul_add`]), else `sel` as it is.
+fn fuse_if_asked<'a>(sel: Selected<'a>, a: &'a Arena<'a>) -> Result<Selected<'a>, ChainError> {
+    if !crate::shaderc::fuse_mul_add() {
+        return Ok(sel);
+    }
+    super::prepare::fuse_mul_add(&sel, a).map(|(s, _)| s).map_err(ChainError::Prepare)
+}
+
 /// Build `m` into `buf`.
 pub fn build_vertex<'a>(
     m: &'a ir::Module<'a>,
@@ -77,6 +86,7 @@ pub fn build_vertex<'a>(
      * temporaries (from 0: a vertex shader pins no iterated input), the
      * uniform block moved past the descriptors. */
     let (sel, sampled) = expand_samples(sel, 0, m.uniforms, a)?;
+    let sel = fuse_if_asked(sel, a)?;
     let (sel, prep): (Selected<'a>, PrepareStats) = prepare_counted(&sel, a).map_err(ChainError::Prepare)?;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
     let sel = index_high_shared(&sel, a).map_err(ChainError::Prepare)?;
@@ -432,6 +442,7 @@ pub fn build_fragment_for<'a>(
     let (sel, sampled) = expand_samples(sel, pinned_n, m.uniforms, a)?;
     let native_cube = sel.groups.iter().any(|g| matches!(g.op, super::sel::SelOp::Sample { cube: true, .. }));
 
+    let sel = fuse_if_asked(sel, a)?;
     let sel: Selected<'a> = prepare_counted(&sel, a).map_err(ChainError::Prepare)?.0;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
     /* The front-face op only when the program still reads it: a
