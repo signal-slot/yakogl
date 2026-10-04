@@ -122,7 +122,9 @@ Torizon's `bootcmd`.
 The default must not be the step that strands a board. A test image ends in
 its watchdog reset, so a default with a count of N boots the image N times
 and then gives the board back to Linux, with no person and no host. Only the
-product form (`forever`) needs a person to undo, and it asks for one.
+product form (`forever`) needs a person to undo, and it asks for one. The
+product form has no fallback on purpose: a product has no Linux to fall back
+to, so a "good boot" mark that returns to Linux would serve only the lab.
 
 The count is our own variable, not U-Boot's `bootcount`. On these boards
 `bootcount`, `bootlimit` and `altbootcmd` belong to Torizon's update
