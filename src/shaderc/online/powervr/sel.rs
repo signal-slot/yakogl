@@ -375,6 +375,12 @@ pub enum MachineOp {
     MovS1,
     /// `|x|` as a signed integer (`iadd32` with `s0abs`).
     Iabs,
+    /// `clamp(x, 0.0, 1.0)`: `fadd(x, 0.0)` saturated (`fadd sat=1`), the
+    /// one group pco makes of NIR's `fsat`, which nir_opt_algebraic forms
+    /// from `fmin(fmax(x, 0.0), 1.0)` (prepare.rs [`fusion_pairs`]).
+    ///
+    /// [`fusion_pairs`]: super::prepare::fusion_pairs
+    Fsat,
     /// A u32 to float, and a float to u32 rounding toward zero.
     U2f,
     F2u,
@@ -417,7 +423,7 @@ impl SelOp {
             SelOp::Machine(MachineOp::Ubfe) => 3,
             SelOp::Machine(MachineOp::PckCov | MachineOp::LoopTest | MachineOp::Tstz | MachineOp::MovS1) => 1,
             SelOp::Machine(MachineOp::Ushr | MachineOp::Uge | MachineOp::UmulHi) => 2,
-            SelOp::Machine(MachineOp::Iabs | MachineOp::U2f | MachineOp::F2u) => 1,
+            SelOp::Machine(MachineOp::Iabs | MachineOp::U2f | MachineOp::F2u | MachineOp::Fsat) => 1,
             SelOp::Machine(MachineOp::SavMsk) => 0,
             SelOp::Machine(MachineOp::FredA(_) | MachineOp::Fsinc(_)) => 1,
             SelOp::Machine(MachineOp::FredB(_) | MachineOp::PselTrig) => 2,

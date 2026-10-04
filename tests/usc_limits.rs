@@ -1123,6 +1123,7 @@ fn run_selected_from(
             SelOp::Machine(MachineOp::Tstz) => "tstz",
             SelOp::Machine(MachineOp::MovS1) => "mbyp",
             SelOp::Machine(MachineOp::Iabs) => "iabs",
+            SelOp::Machine(MachineOp::Fsat) => "fsat",
             SelOp::Machine(MachineOp::U2f) => "u2f",
             SelOp::Machine(MachineOp::F2u) => "f2u",
             SelOp::Machine(MachineOp::Uge) => "uge",
@@ -1254,6 +1255,12 @@ fn run_selected_from(
             "inot" => !a[0],
             "tstz" => b(a[0] == 0),
             "iabs" => (a[0] as i32).wrapping_abs() as u32,
+            /* clamp(x, 0.0, 1.0) as min(max(x, 0.0), 1.0), with "min" and
+             * "max" above (a NaN comes out 0.0, as there) */
+            "fsat" => {
+                let lo = if f(0) > 0.0 { f(0) } else { 0.0 };
+                (if lo < 1.0 { lo } else { 1.0 }).to_bits()
+            }
             "u2f" => (a[0] as f32).to_bits(),
             "f2u" => f(0) as u32,
             "uge" => b(a[0] >= a[1]),
@@ -3170,6 +3177,91 @@ fn gl_test_case_8_blends_on_the_host() {
             let got = *out.get(&0).expect("a colour");
             let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 2);
             assert!(close, "{what}: {got:#010x}, case 8 wants {want:#010x}");
+        }
+    })
+    .unwrap();
+}
+
+/// gl_test case 182's two fragment shaders, on the host: the folded clamps
+/// (`clamp`, `min(max())`, `max(min())` of -2.25, 0.4 and 1.5, each through
+/// `* 0.5 + 0.25`) are four saturating adds besides the output's own and
+/// give the colour the case expects; the controls (the inner bound read
+/// twice, an upper bound of 0.8, a lower bound of 0.2) are none, and give
+/// theirs. Case 182 on the
+/// AM62P is the deciding check; this is the same arithmetic without it.
+#[test]
+fn gl_test_case_182_clamps_on_the_host() {
+    use yakogl::shaderc::*;
+    let folded = "#version 100\n\
+        precision highp float;\n\
+        uniform float u_x, u_q, u_a, u_b;\n\
+        vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n\
+        void main() {\n\
+          gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n\
+                                min(1.0, max(0.0, u_a - 1.1))));\n\
+        }\n";
+    let ctrl = "#version 100\n\
+        precision highp float;\n\
+        uniform float u_x, u_q, u_a, u_b;\n\
+        void main() {\n\
+          float t = max(u_q, 0.0);\n\
+          gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n\
+                              min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n\
+        }\n";
+    /* the case's own text, so the two cannot drift apart */
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    for line in ["min(1.0, max(0.0, u_a - 1.1))", "min(max(u_x, 0.2), 1.0) * 0.5 + 0.25"] {
+        assert!(suite.contains(line), "gl_test.c case 182 has {line:?}");
+    }
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    /* the RGBA8 output's pack saturates its four channels first (four
+     * `fadd sat=1` before the `pck` in every such program): the folds are
+     * the rest */
+    const OUTPUT_SATS: usize = 4;
+    let cases = [
+        ("folded", folded, rgba([0.25, 0.45, 0.75, 0.45]), 4usize + OUTPUT_SATS),
+        ("controls", ctrl, rgba([0.45, 0.2, 0.65, 0.35]), OUTPUT_SATS),
+    ];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        for (what, src, want, sats) in cases {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                SHC_BLEND_KEY_REPLACE,
+            )
+            .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut listing = String::new();
+            yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+                yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+                Ok(())
+            })
+            .unwrap();
+            let n = listing.lines().filter(|l| l.contains("instr: fadd") && l.contains("sat=1")).count();
+            assert_eq!(n, sats, "{what}: saturating adds\n{listing}");
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, _k: u32| {
+                match n {
+                    "u_x" => -2.25f32,
+                    "u_q" => 0.4,
+                    "u_a" => 1.5,
+                    "u_b" => 0.0, /* declared, unread: case 182 sets it 0 */
+                    other => panic!("{what}: a uniform {other:?}"),
+                }
+                .to_bits()
+            });
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got = *out.get(&0).expect("a colour");
+            let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
+            assert!(close, "{what}: {got:#010x}, case 182 wants {want:#010x}");
         }
     })
     .unwrap();

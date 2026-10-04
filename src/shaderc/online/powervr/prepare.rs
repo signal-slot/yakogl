@@ -37,7 +37,7 @@
 use super::builtins::{shape, Shape};
 use super::instr::{instr_region, NoForm};
 use super::isa::PH_0;
-use super::sel::{Bank, Mods, OpType, SelDst, SelGroup, SelOp, SelSrc, VReg};
+use super::sel::{Bank, MachineOp, Mods, OpType, SelDst, SelGroup, SelOp, SelSrc, VReg};
 use super::select::Selected;
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{AluOp, IoSlot};
@@ -296,6 +296,8 @@ pub struct PrepareStats {
     pub point_size: u32,
     /// Sums of a product made one `fmad` ([`fusion_pairs`]).
     pub fused: u32,
+    /// Clamps to [0, 1] made one `fsat` ([`fusion_pairs`]).
+    pub saturated: u32,
 }
 
 struct Prep<'a> {
@@ -535,7 +537,8 @@ fn prepare_with<'a>(
      * the program (femtovg's filter_image: 1,500 groups in, 1,504 out). */
     let out = AVec::with_capacity(arena, sel.groups.len() + sel.groups.len() / 2)?;
     let mut p = Prep { arena, out, next, stats: PrepareStats::default() };
-    p.stats.fused = pairs.len() as u32;
+    p.stats.fused = pairs.iter().filter(|q| q.2.op == SelOp::Alu(AluOp::Ffma)).count() as u32;
+    p.stats.saturated = pairs.iter().filter(|q| q.2.op == SelOp::Machine(MachineOp::Fsat)).count() as u32;
     /* The products the pairs consume, sorted for the look-up. */
     let products = arena.alloc_filled(pairs.len(), 0u32)?;
     for (d, q) in products.iter_mut().zip(pairs) {
@@ -950,8 +953,9 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
 /// (a virtual value defined once, or a shared, special or vertex-input
 /// register). A `neg` on the product moves onto its first factor
 /// (`-(a * b) == (-a) * b`, exactly). [`prepare_counted`] then legalises
-/// the modifier sets as for any `fmad`. Returns the program and how many
-/// pairs were fused.
+/// the modifier sets as for any `fmad`. A clamp to [0, 1] becomes one
+/// `fsat` the same way ([`fusion_pairs`]). Returns the program and how many
+/// pairs were applied, of both kinds.
 pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Selected<'a>, u32), PrepareError> {
     let pairs = fusion_pairs(sel, arena)?;
     if pairs.is_empty() {
@@ -976,9 +980,15 @@ pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Sel
     Ok((Selected { groups: out, ..*sel }, pairs.len() as u32))
 }
 
-/// The pairs [`fuse_mul_add`] fuses, as (product's index, sum's index, the
-/// `fmad`), in the sums' program order: what [`prepare_fused`] applies as it
-/// copies.
+/// The bounds of a clamp [`fusion_pairs`] makes one `fsat`: +0.0 and 1.0.
+const SAT_LO: u32 = 0;
+const SAT_HI: u32 = 0x3f80_0000;
+
+/// The pairs [`fuse_mul_add`] fuses, as (inner group's index, outer group's
+/// index, the group that replaces the outer), in the outer groups' program
+/// order: what [`prepare_fused`] applies as it copies. A product and the
+/// sum that alone reads it become one `fmad`; the two bounds of a clamp to
+/// [0, 1] become one `fsat` (`MachineOp::Fsat`).
 pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a [(u32, u32, SelGroup)], PrepareError> {
     /* Per value, one byte: how often it is defined (bits 0..1) and read
      * (bits 2..3), each saturating at 3: "once" is all either question asks.
@@ -1029,11 +1039,29 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
         SelSrc::Imm(_) => true,
     };
     let barrier = |g: &SelGroup| matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Machine(_));
-    /* The candidate products, (value, where it is defined), sorted by value
-     * for the look-up below: only the products, not a slot per value. */
+    /* `fmax(x, 0.0)` or `fmin(x, 1.0)`, either operand order: the bound
+     * (+0.0 or 1.0 exactly, as bits) and `x`. */
+    let bounded = |g: &SelGroup| -> Option<(u32, SelSrc)> {
+        let want = match g.op {
+            SelOp::Alu(AluOp::Fmax) => SAT_LO,
+            SelOp::Alu(AluOp::Fmin) => SAT_HI,
+            _ => return None,
+        };
+        match (g.srcs[0]?, g.srcs[1]?) {
+            (SelSrc::Imm(k), x) | (x, SelSrc::Imm(k)) if k == want && !matches!(x, SelSrc::Imm(_)) => Some((k, x)),
+            _ => None,
+        }
+    };
+    /* The candidate inner values, (value, where it is defined), sorted by
+     * value for the look-up below: only those, not a slot per value. A
+     * product for a sum's `fmad`; a bound of a clamp to [0, 1] for its
+     * `fsat`. */
     let candidate = |g: &SelGroup| match (g.op, g.ty, g.dst) {
         (SelOp::Alu(AluOp::Fmul), OpType::F32, Some(SelDst::Virtual(v))) => {
             (once(v, def) && once(v, read) && g.srcs[..2].iter().flatten().all(steady)).then_some(v)
+        }
+        (SelOp::Alu(AluOp::Fmax | AluOp::Fmin), OpType::F32, Some(SelDst::Virtual(v))) => {
+            (once(v, def) && once(v, read) && bounded(g).is_some_and(|(_, x)| steady(&x))).then_some(v)
         }
         _ => None,
     };
@@ -1062,6 +1090,39 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
         if barrier(g) {
             last_barrier = Some(j);
         }
+        /* A clamp to [0, 1]: `fmin(fmax(x, 0.0), 1.0)` or `fmax(fmin(x,
+         * 1.0), 0.0)`, the inner bound read by the outer alone and with no
+         * modifier, is one `fsat` of x (nir_opt_algebraic forms `fsat`
+         * from both). The inner group goes; the outer becomes the `fsat`.
+         * An inner group that is itself the outer of an earlier pair stays
+         * (each group takes part in one pair). */
+        if let Some((k, inner)) = bounded(g) {
+            if g.ty != OpType::F32 {
+                continue;
+            }
+            let SelSrc::Virtual { v, mods } = inner else { continue };
+            if mods != Mods::default() {
+                continue;
+            }
+            let Some(i) = product_at(v) else { continue };
+            if (i as usize) >= j || last_barrier.is_some_and(|b| b > i as usize) {
+                continue;
+            }
+            let m = sel.groups[i as usize];
+            let Some((ki, x)) = bounded(&m) else { continue };
+            /* the other bound: max inside min, or min inside max */
+            if ki == k || pairs.as_slice().iter().any(|p| p.1 == i) {
+                continue;
+            }
+            let fsat = SelGroup {
+                op: SelOp::Machine(MachineOp::Fsat),
+                ty: OpType::F32,
+                dst: g.dst,
+                srcs: [Some(x), None, None],
+            };
+            pairs.push(arena, (i, j as u32, fsat))?;
+            continue;
+        }
         if !(g.op == SelOp::Alu(AluOp::Fadd) && g.ty == OpType::F32) {
             continue;
         }
@@ -1075,6 +1136,10 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
                 continue;
             }
             let m = sel.groups[i as usize];
+            /* the look-up holds the clamps' bounds too */
+            if m.op != SelOp::Alu(AluOp::Fmul) {
+                continue;
+            }
             let (Some(a), Some(b)) = (m.srcs[0], m.srcs[1]) else { continue };
             /* -(a * b) is (-a) * b. An immediate carries no modifier
              * (`with_mods` leaves it as it is), so its sign bit is flipped
@@ -1260,6 +1325,9 @@ mod tests {
                 SelOp::Alu(AluOp::Frsq) => 1.0 / a[0].sqrt(),
                 SelOp::Alu(AluOp::Frcp) => 1.0 / a[0],
                 SelOp::Alu(AluOp::Fsqrt) => a[0].sqrt(),
+                SelOp::Alu(AluOp::Fmin) => a[0].min(a[1]),
+                SelOp::Alu(AluOp::Fmax) => a[0].max(a[1]),
+                SelOp::Machine(MachineOp::Fsat) => a[0].clamp(0.0, 1.0),
                 SelOp::Alu(o) => panic!("{o:?} is not in this evaluator"),
                 o @ (SelOp::Sample { .. }
                 | SelOp::WaitData
@@ -1294,6 +1362,84 @@ mod tests {
         let straight = groups.iter().all(|g| !matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd));
         let same = straight && eval(f.groups, f.outputs) == eval(groups, &outputs);
         (f.groups.to_vec(), n, same)
+    }
+
+    /// `clamp(x, 0.0, 1.0)` in either nesting (`fmin(fmax(x, 0), 1)`,
+    /// `fmax(fmin(x, 1), 0)`) and either operand order is one `fsat(x)`,
+    /// computing the same value for an x below 0 (sh1, -2.25), inside
+    /// (sh6, 0.3) and above 1 (sh0, 1.5): what pco makes of NIR's `fsat`,
+    /// and what the table's fill_color.frag carries (`fadd sat=1`).
+    #[test]
+    fn a_clamp_to_0_1_is_one_fsat_in_either_nesting_and_order() {
+        let (zero, one) = (SelSrc::Imm(0), SelSrc::Imm(1.0f32.to_bits()));
+        let (max, min) = (SelOp::Alu(AluOp::Fmax), SelOp::Alu(AluOp::Fmin));
+        for reg in [1u16, 6, 0] {
+            let x = fixed(Bank::Shared, reg, NONE);
+            let forms = [
+                [g(max, 1, [Some(x), Some(zero), None]), g(min, 2, [Some(virt(1, NONE)), Some(one), None])],
+                [g(max, 1, [Some(zero), Some(x), None]), g(min, 2, [Some(one), Some(virt(1, NONE)), None])],
+                [g(min, 1, [Some(x), Some(one), None]), g(max, 2, [Some(virt(1, NONE)), Some(zero), None])],
+                [g(min, 1, [Some(one), Some(x), None]), g(max, 2, [Some(zero), Some(virt(1, NONE)), None])],
+            ];
+            for (k, groups) in forms.iter().enumerate() {
+                let (f, n, same) = fused(groups, [Some(virt(2, NONE)), None, None, None]);
+                assert_eq!((n, f.len()), (1, 1), "sh{reg} form {k}: {f:?}");
+                assert_eq!(f[0].op, SelOp::Machine(MachineOp::Fsat), "sh{reg} form {k}");
+                assert_eq!(f[0].srcs, [Some(x), None, None], "sh{reg} form {k}");
+                assert!(same, "sh{reg} form {k}: the fsat computes what the clamp did");
+            }
+        }
+    }
+
+    /// A clamp of a clamp is two: the second clamp's inner bound is the
+    /// first's outer, already replaced, so it pairs with the next bound
+    /// instead, and each group takes part in one pair.
+    #[test]
+    fn a_clamp_of_a_clamp_is_two_fsats() {
+        let (zero, one) = (SelSrc::Imm(0), SelSrc::Imm(1.0f32.to_bits()));
+        let (max, min) = (SelOp::Alu(AluOp::Fmax), SelOp::Alu(AluOp::Fmin));
+        let groups = [
+            g(max, 1, [Some(fixed(Bank::Shared, 0, NONE)), Some(zero), None]),
+            g(min, 2, [Some(virt(1, NONE)), Some(one), None]),
+            g(max, 3, [Some(virt(2, NONE)), Some(zero), None]),
+            g(min, 4, [Some(virt(3, NONE)), Some(one), None]),
+        ];
+        let (f, n, same) = fused(&groups, [Some(virt(4, NONE)), None, None, None]);
+        assert_eq!((n, f.len()), (2, 2), "{f:?}");
+        assert_eq!(f[1].srcs[0], Some(virt(2, NONE)), "the second reads the first: {f:?}");
+        assert!(same, "{f:?}");
+    }
+
+    /// Not a clamp to [0, 1], each for its own reason, and so left as it
+    /// is: the inner bound read twice, read negated, the same bound twice,
+    /// another upper bound (0.5), the bound -0.0, a loop boundary between,
+    /// and x defined twice.
+    #[test]
+    fn what_is_not_a_clamp_to_0_1_is_left_as_it_is() {
+        let (zero, one) = (SelSrc::Imm(0), SelSrc::Imm(1.0f32.to_bits()));
+        let (max, min) = (SelOp::Alu(AluOp::Fmax), SelOp::Alu(AluOp::Fmin));
+        let x = fixed(Bank::Shared, 6, NONE);
+        let inner = g(max, 1, [Some(x), Some(zero), None]);
+        let outer = |m: Mods, hi: SelSrc| g(min, 2, [Some(virt(1, m)), Some(hi), None]);
+        let out2 = [Some(virt(2, NONE)), None, None, None];
+        let (_, n, _) = fused(&[inner, outer(NONE, one)], [Some(virt(2, NONE)), Some(virt(1, NONE)), None, None]);
+        assert_eq!(n, 0, "the inner bound read twice");
+        let (_, n, _) = fused(&[inner, outer(NEG, one)], out2);
+        assert_eq!(n, 0, "the inner bound read negated");
+        let (_, n, _) = fused(&[inner, g(max, 2, [Some(virt(1, NONE)), Some(zero), None])], out2);
+        assert_eq!(n, 0, "the same bound twice");
+        let (_, n, _) = fused(&[inner, outer(NONE, SelSrc::Imm(0.5f32.to_bits()))], out2);
+        assert_eq!(n, 0, "an upper bound of 0.5");
+        let neg_zero = g(max, 1, [Some(x), Some(SelSrc::Imm(0x8000_0000)), None]);
+        let (_, n, _) = fused(&[neg_zero, outer(NONE, one)], out2);
+        assert_eq!(n, 0, "a lower bound of -0.0");
+        let top = SelGroup { op: SelOp::LoopBegin, ty: OpType::F32, dst: None, srcs: [None; 3] };
+        let (_, n, _) = fused(&[inner, top, outer(NONE, one)], out2);
+        assert_eq!(n, 0, "a loop boundary between");
+        let def = |v: u32| g(SelOp::Copy, v, [Some(fixed(Bank::Shared, 3, NONE)), None, None]);
+        let inner5 = g(max, 1, [Some(virt(5, NONE)), Some(zero), None]);
+        let (_, n, _) = fused(&[def(5), inner5, def(5), outer(NONE, one)], out2);
+        assert_eq!(n, 0, "x defined twice");
     }
 
     /// `x = vtx0 * sh1; y = sh2 - x` is one `fmad(-vtx0, sh1, sh2)`: the
