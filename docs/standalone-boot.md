@@ -190,8 +190,9 @@ Linux crashes instead, the load can fail, and Linux boots.
   1`); Torizon is on partition 1 (`distro_bootpart_uuid=8725ec00-01`); the
   env's `distro_bootcmd` runs `run bootcmd_${target}`, the form of `run
   yako_${yako_src}` (env record `records/imx8mp/netboot/env-before-install-*.txt`).
-- Boot partitions: AM62P `docs/direct-boot.md`; i.MX8MP
-  `driver/docs/imx8mp-netboot-plan.md` section 1.
+- Boot partitions: 8192 sectors each, read on both boards
+  (`/sys/block/mmcblk0boot*/size` on the AM62P, `mmcblk2boot*` on the i.MX8MP:
+  `driver/docs/imx8mp-netboot-plan.md` section 1).
 - `ext4load`: both boards' mainline defconfigs set `CONFIG_CMD_EXT4_WRITE=y`,
   which needs `CMD_EXT4`
   ([verdin-am62p_a53_defconfig](https://github.com/u-boot/u-boot/blob/master/configs/verdin-am62p_a53_defconfig),

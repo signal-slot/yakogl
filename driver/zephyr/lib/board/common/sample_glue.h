@@ -40,10 +40,6 @@ int pvr_sample_flip_window(uintptr_t phys, uint32_t width, uint32_t height,
  * which a Rust application cannot reach; this is that call by another name. */
 void pvr_sample_flush_dcache(void *addr, size_t size);
 
-/* Log "system counter at <where>: N us" (CNTPCT_EL0 over CNTFRQ_EL0) when
- * CONFIG_PVR_SAMPLE_BOOT_TIME is set; nothing otherwise. */
-void pvr_sample_log_boot_time(const char *where);
-
 /* Keep the picture for CONFIG_PVR_SAMPLE_HOLD_SECONDS, then reset the SoC
  * when CONFIG_PVR_SAMPLE_REBOOT is set. Returns rc otherwise. */
 int pvr_sample_finish(int rc);

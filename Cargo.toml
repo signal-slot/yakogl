@@ -4,9 +4,7 @@
 # The workspace: the library crate `yakogl` (this directory), the C-ABI
 # archive crate `yakogl-capi` (capi/) and the display/SoC driver archive
 # `yakogl-drivers` (driver/rust/; its path is also named once in
-# driver/zephyr/CMakeLists.txt, YAKOGL_DRIVERS_CRATE_DIR), the AM62P
-# second-stage loader's logic `yakogl-boot-stage2`
-# (driver/samples/zephyr/boot_stage2/loader/). Host tools join as further members:
+# driver/zephyr/CMakeLists.txt, YAKOGL_DRIVERS_CRATE_DIR). Host tools join as further members:
 # adding one is one line in `members`. `default-members` is the library only,
 # so a plain `cargo build` / `cargo test` / `cargo check` here never builds the
 # archive crate or a host tool; the C builds (CMakeLists.txt, baremetal.mk,
@@ -17,7 +15,6 @@ members = [
     ".",
     "capi",
     "driver/rust",
-    "driver/samples/zephyr/boot_stage2/loader",
     "driver/samples/zephyr/slint/check",
     "driver/samples/zephyr/cluster/check",
     "driver/samples/zephyr/triangle/check",

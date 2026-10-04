@@ -184,7 +184,6 @@ int main(void)
 	int rc;
 
 	LOG_INF("gl_triangle: %ux%u window at 0x%lx", FB_W, FB_H, (unsigned long)FB_PHYS);
-	pvr_sample_log_boot_time("main()");
 #if CONFIG_GL_TRIANGLE_WINDOW_PHYS == 0
 	/* Start from a CPU-drawn pattern (dark blue, a white bar at the top) so
 	 * the display path can be judged even when the GPU draw fails; the GPU
@@ -198,6 +197,5 @@ int main(void)
 	if (pvr_sample_show_window(FB_PHYS, FB_W, FB_H, FB_STRIDE, WIN_FORMAT) && rc == 0) {
 		rc = -EIO;
 	}
-	pvr_sample_log_boot_time("the first frame");
 	return pvr_sample_finish(rc);
 }
