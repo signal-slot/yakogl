@@ -2,7 +2,7 @@
 
 One file, because three people write against it: the front end (M2,
 es100-frontend) builds it, the code generator (M3, gles2-core) reads it, and
-the instruction encoders (M1, shaderc-remote) are what the code generator emits
+the instruction encoders (M1) are what the code generator emits
 through. `src/shaderc/online/ir.rs` implements exactly this and nothing else.
 
 Status: **agreed**. es100-frontend proposed it, gles2-core proposed a scalar

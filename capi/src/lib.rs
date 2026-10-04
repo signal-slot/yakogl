@@ -12,12 +12,7 @@
 //! compiler_builtins' `memcpy`, `sin`, ...) are made local afterwards by
 //! `capi/assemble.cmake`, so the archive links next to other Rust staticlibs
 //! and leaves the platform's libc/libm in charge.
-//!
-//! One build is different: `shaderc-remote` (the host build that compiles its
-//! shaders over TCP) links std into `yakogl`, and std already owns the panic
-//! handler and the unwinder. This crate then defines neither -- two panic
-//! handlers in one image is a link error -- and is plain `std` itself.
-#![cfg_attr(not(feature = "shaderc-remote"), no_std)]
+#![no_std]
 
 // Linked for its `#[no_mangle]` exports.
 use yakogl as _;
@@ -25,9 +20,7 @@ use yakogl as _;
 const _: () = assert!(!yakogl::HOST_TEST, "libyakogl.a must not be built with the yakogl host-test feature");
 
 /// Every panic is fatal (panic = "abort"): log it through the OSAL's log hook
-/// and call the platform's `abort()`. std brings its own, so a
-/// `shaderc-remote` build leaves this out.
-#[cfg(not(feature = "shaderc-remote"))]
+/// and call the platform's `abort()`.
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     yakogl::glog!("yakogl: panic: {}", info);

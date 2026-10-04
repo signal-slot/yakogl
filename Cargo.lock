@@ -439,7 +439,6 @@ name = "yakogl"
 version = "0.1.0"
 dependencies = [
  "cc",
- "serde_json",
 ]
 
 [[package]]

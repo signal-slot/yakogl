@@ -78,31 +78,11 @@ fn compile(stage: u32, src: &str) -> Result<(u16, usize), String> {
     }
 }
 
-/// The same compile through the REMOTE back end, which has no
-/// VS_LOAD_BALANCING ceiling: it is the only path that can still report a
-/// temps number in the band the online path refuses.
-#[cfg(feature = "shaderc-remote")]
-fn compile_remote(src: &str) -> Result<(u16, usize), String> {
-    let mut out = ShcShader::ZERO;
-    let mut log = [0 as c_char; 512];
-    let mut s = String::from(src);
-    s.push('\0');
-    let f = yakogl::shaderc::remote::SHC_REMOTE.compile.unwrap();
-    let rc = unsafe { f(SHC_STAGE_VERTEX, s.as_ptr() as *const c_char, &mut out, log.as_mut_ptr(), log.len()) };
-    if rc == 0 {
-        Ok((out.temps, out.usc_words().len() / 4))
-    } else {
-        let m: Vec<u8> = log.iter().take_while(|c| **c != 0).map(|c| *c as u8).collect();
-        Err(String::from_utf8_lossy(&m).into_owned())
-    }
-}
-
 /// ONE test in this binary, deliberately.
 ///
 /// The compiler's scratch arena is global and not reentrant, so two `#[test]`s
 /// in one binary run concurrently and one of them fails with "a compile was
-/// started inside a compile". shaderc-remote's `test_rules.rs` enforces this;
-/// this file hit it on its first gate run, with both halves as separate tests.
+/// started inside a compile". This file hit it on its first gate run, with both halves as separate tests.
 /// They are one test now, and the shape check runs first because the table is
 /// only meaningful if the generator really forces liveness.
 #[test]
@@ -119,12 +99,8 @@ fn rederive_ladder_tables() {
         [("n4", 4usize, false), ("n2", 2usize, false), ("n3", 3usize, false), ("vec3-n1", 1usize, true)]
     {
         println!("\n== ladder {label} (num_out {num_out}, {}) ==", if vec3 { "vec3" } else { "vec4" });
-        println!("   k  online            remote");
+        println!("   k  online");
         let mut seen: Vec<(usize, u16)> = Vec::new();
-        // Only the remote arm fills this; without that feature the table's
-        // remote column reads "(not built)" and the straddle line says so too.
-        #[allow(unused_mut)]
-        let mut seen_remote: Vec<(usize, u16)> = Vec::new();
         for k in 2..=40 {
             let src = gen(k, num_out, vec3);
             let online = match compile(SHC_STAGE_VERTEX, &src) {
@@ -139,23 +115,12 @@ fn rederive_ladder_tables() {
                 Err(e) if e.contains("LoadBalancingTempsUnmeasured") => "REFUSED BY CEILING".to_string(),
                 Err(e) => format!("REFUSED: {}", e.trim()),
             };
-            #[cfg(feature = "shaderc-remote")]
-            let remote = match compile_remote(&src) {
-                Ok((t, w)) => {
-                    seen_remote.push((k, t));
-                    format!("temps {t:3}, {w:4} words")
-                }
-                Err(e) => format!("REFUSED: {}", e.trim()),
-            };
-            #[cfg(not(feature = "shaderc-remote"))]
-            let remote = "(not built)".to_string();
-            println!("  {k:2}   {online:26}  {remote}");
+            println!("  {k:2}   {online}");
         }
-        // Name the rungs that straddle the two boundaries on THIS pair, PER
-        // BACK END. The same source is a different rung on each: the remote
-        // allocator runs about four temps lower than the online one on this
-        // shape, so a file name is not a rung and never was.
-        for (path, rows) in [("online", &seen), ("remote", &seen_remote)] {
+        // Name the rungs that straddle the two boundaries on THIS pair: the
+        // same source is a different rung on another compiler, so a file name
+        // is not a rung and never was.
+        for (path, rows) in [("online", &seen)] {
             for target in [26u16, 28] {
                 let lo = rows.iter().find(|(_, t)| *t == target);
                 let hi = rows.iter().find(|(_, t)| *t == target + 1);

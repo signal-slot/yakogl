@@ -476,7 +476,7 @@ pub fn assemble(p: &UscProgram<'_>) -> Result<ShcShader, UscAbiError> {
          * consecutive locations), each row carrying the matrix's own name and
          * type at its column's location -- the convention the GL core reads
          * back as one attribute (gl/program.rs attrib_base_location) and the
-         * remote path's records already follow (glsl2usc splits the matrix
+         * table's records already follow (glsl2usc splits the matrix
          * into columns for pco, which cannot take a matrix input). The front
          * end reads column c from location + c. A matrix is listed whole when
          * any column is read, so its first location is always there for

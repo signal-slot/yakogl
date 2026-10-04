@@ -24,10 +24,6 @@ Reading the numbers:
   InternalError     that run: the next case starts a new process.
   not executed      no result in any log. With the runner's restart loop this
                     should only ever be cases it never reached.
-
-A case whose log carries a "remote shaderc:" transport error is reported
-separately and loudly: the shader compiler was unreachable, so that case says
-nothing about YakoGL.
 """
 import argparse
 import glob
@@ -42,16 +38,6 @@ from log_parser import BatchResultParser, StatusCode  # noqa: E402
 # Outcomes that mean the implementation is wrong or took the process down.
 FAILING = {StatusCode.FAIL, StatusCode.CRASH, StatusCode.TIMEOUT,
            StatusCode.INTERNAL_ERROR, StatusCode.RESOURCE_ERROR}
-
-# A shader that failed to compile because the *toolchain* was not reachable is not
-# a YakoGL result, and it fails in exactly the same way a real bug does: a failed
-# glLinkProgram. The remote shader back end prefixes every transport failure with
-# "remote shaderc:", which a genuine failure never contains, so the two can be told
-# apart -- and a table that quietly counted them as failures would be a lie.
-TRANSPORT_MARKERS = (
-    b"remote shaderc:",
-    b"cannot reach the compile server",
-)
 
 # Where a shader toolchain says what actually went wrong. dEQP puts it in the
 # case log, not in the one-line status detail, and compiler messages are usually
@@ -173,21 +159,6 @@ def main():
                 else:
                     ot += 1
             print("%-52s %6d %6d %6d %6d %6d %6d %6d" % (g, n, p, f, ns, cr, ot, ne))
-
-    # Loud, and before the failure list: nobody should read the numbers above
-    # without knowing some of them are about the host, not about YakoGL.
-    poisoned = sorted(n for n, r in result_of.items()
-                      if r.log and any(m in r.log for m in TRANSPORT_MARKERS))
-    if poisoned:
-        print()
-        print("*** %d case(s) failed because the shader compiler was not reachable."
-              % len(poisoned))
-        print("*** These are NOT YakoGL results. Fix the host server or the board's")
-        print("*** YAKOGL_SHADERC_SERVER and re-run them; see README section 2.")
-        for name in poisoned[:5]:
-            print("      %s" % name)
-        if len(poisoned) > 5:
-            print("      ... and %d more" % (len(poisoned) - 5))
 
     failures = [(n, r.statusCode, r.statusDetails)
                 for n, r in sorted(result_of.items()) if r.statusCode in FAILING]

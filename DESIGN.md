@@ -80,15 +80,9 @@ run offline (`pco_shc`, silicon-verified via F1). Two backends behind one interf
   on-target. At build time, app shaders are compiled to USC+metadata blobs and embedded; at
   runtime `glShaderSource` hashes the source and looks it up. Fits the SafeUI model (apps are
   known and signed). A build tool (`glsl2usc`, wrapping `pco_shc`) produces the blob table.
-- **`shaderc_remote` (Linux host / dev, the cargo feature `shaderc-remote`):** send the GLSL
-  over TCP to `tools/shaderc_server.py` on a machine that has the toolchain, and get the same
-  USC+metadata back. This is what makes arbitrary-shader source compatibility real today:
-  dEQP-GLES2 writes thousands of shaders as it runs, so nothing can be precompiled for it.
-  The server runs the very pipeline that generates the blob table, so a shader compiled at
-  run time is identical to the one a build would have embedded (`tests/shaderc_remote.rs`).
-- **`shaderc_online` (Linux / PX5 / dev):** link the PCO compiler into the process and compile
-  in-process. Not written; `shaderc_remote` covers the same need without putting a compiler
-  in the image.
+- **`shaderc_online` (every OSAL, the cargo feature `shaderc-online`):** our own `no_std`,
+  allocation-free GLSL ES compiler in the library (`src/shaderc/online/`), so a shader an
+  application writes at run time compiles on the board; dEQP-GLES2 writes thousands of them.
 
 Both emit the same **shader ABI** the backend consumes: USC dwords, temp count, the DOUTI
 coefficient layout for varyings (w iterator @cf0..3 then VAR0.., per the toolchain), the
@@ -134,7 +128,7 @@ yakogl/
   src/osal/mod.rs               g_osal + osal_set_ops; render.rs the kick descriptor types
   src/osal/{zephyr,zephyr_gc,baremetal,linux}.c the OSALs (C; zephyr_gc is the GC7000's)
   src/shaderc/{mod,offline,link,sha256}.rs      offline shader back end + the shared link rule
-  src/shaderc/remote.rs                         the host-compile back end (`shaderc-remote`)
+  src/shaderc/online/                           the in-process compiler (`shaderc-online`)
   src/shaderc/{blobs,vivante_blobs}.rs          the generated table of each GPU (one per build)
   src/{gl_internal,gl_context,backend}.h, src/pvr/pvr_backend.h, src/osal/osal_internal.h
                                 C view of the crate's #[repr(C)] structs / #[no_mangle] helpers

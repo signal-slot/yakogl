@@ -543,8 +543,8 @@ Without the variable the test measures nothing and says so. First run
   (`a_matrix_varying_is_recorded_as_its_columns_as_pco_records_it`).
 - `link::by_name` skipped unnamed fragment inputs, leaving the later columns
   of a pco-recorded matrix at the fragment shader's own packing -- wrong
-  whenever the vertex shader packs anything before the matrix (the remote
-  pair). An unnamed input with one to four components now follows the one
+  whenever the vertex shader packs anything before the matrix (the
+  reference compiler's pair). An unnamed input with one to four components now follows the one
   before it (`a_matrix_varyings_later_columns_follow_its_first`).
 
     dEQP vertex variants: 859 of 861 through, all agreeing with the IR
@@ -710,7 +710,7 @@ were added for it (`USHR`, `TSTZ`, `MOVS1`), each a group pco emits in
 fill_gradient.frag (0x5e, 0x68, 0x7a); the prologue selects them once at the
 program's start (`Sel::frag_coord_prologue`).
 
-gl_test case 82 on the AM62P (remote pair, 63b50b3): the +0.5 is already in
+gl_test case 82 on the AM62P (the reference compiler's pair, 63b50b3): the +0.5 is already in
 the registers on both targets, and only y is mirrored on the window. So y
 goes through a pair the driver writes per draw, `y' = y * scale + offset`,
 (-1, height) on a flipped target and (1, 0) otherwise: an `ffma` against
@@ -719,8 +719,7 @@ control word moves two dwords later when a shader has both).
 
 The record names the pair: `uint16_t fragcoord_ytf_off1` at offset 1244
 of `shc_shader` (padding before; no field moved), ONE-BASED so that every
-zero-initialised record -- pco's table rows, the remote reflection without
-the key, `ShcShader::ZERO` -- means "no pair" rather than "a pair at sh0".
+zero-initialised record -- pco's table rows, `ShcShader::ZERO` -- means "no pair" rather than "a pair at sh0".
 The backend DMAs the pair per draw, keyed on the draw's `flip_y` (the GL
 core's `fb_flip_y`: today the window surface, on Zephyr and Linux alike):
 (-1, target height) when set, (1, 0) otherwise. When the AM62P's Zephyr
@@ -754,7 +753,7 @@ holds four shapes against pco_shc build-new's programs field by field
 (coefficient, W offset, count, mode); no table program can, because the
 table's 32 readers of .z are Qt particle shaders with two colour outputs.
 
-### gl_PointCoord, and why case 83 reads 1.0 on the remote pair
+### gl_PointCoord, and why case 83 read 1.0 with the reference compiler's shaders
 
 pco iterates `gl_PointCoord` with `ditr` (no W divide), two components, in
 the eight coefficients straight after W's four -- from 0 when nothing
@@ -764,16 +763,15 @@ coefficients with a DOUTI of its own (`pvr_arch_pipeline.c`: GOURAUD, 2D,
 `pointsprite = true`, after W/Z and before the varyings).
 
 Ours does not, and cannot know to: `pco_shc` reports `pntc=` on its `uses:`
-line, `glsl2usc` parses only `w` and `discard`, so neither the remote
-reflection, the offline table nor `ShcShader` says the shader needs it, and
+line, `glsl2usc` parses only `w` and `discard`, so neither the offline
+table nor `ShcShader` says the shader needs it, and
 the coefficient program (`backend.rs`) has no point-sprite iterator. The
 shader iterates coefficients nobody wrote -- gl_test case 83's constant 1.0 --
 and a varying beside it would be iterated eight coefficients early.
 
 The record now carries it: `uint8_t uses_pntc` at offset 1242 (padding that
 was there; no field moved, sizeof unchanged), parsed from pco_shc's `uses:`
-line by `glsl2usc` into the offline table, the remote reflection and
-`remote.rs`. The table's four gl_PointCoord rows (imageparticle_coloredpoint
+line by `glsl2usc` into the offline table. The table's four gl_PointCoord rows (imageparticle_coloredpoint
 and _simplepoint, blend keys 0x0 and 0x98661), regenerated with pco_shc
 build-new, are their old rows to the dword but for `uses_pntc: 1`; every
 other row gained `uses_pntc: 0` and nothing else. The driver's point-sprite
