@@ -1386,9 +1386,16 @@ impl<'a> Sel<'a> {
     /// with two uniform dwords, and a literal's register number is what
     /// [`Sel::const_reg`] hands out.
     fn uniform_block(&mut self) -> Result<(), SelectError> {
-        let dwords = (self.m.uniform_dwords as usize).div_ceil(4) * 4;
+        let used = self.m.uniform_dwords as usize;
+        let dwords = used.div_ceil(4) * 4;
+        /* The last register's lanes past the block are padding, which no
+         * read reaches (`uniform_src` refuses one): described as uniform
+         * dwords they named dwords the block does not have, and the backend
+         * logged each one as missing on every draw (the i.MX8MP cluster's
+         * 2.7 s frame, tests/gc_const_map.rs). */
         for d in 0..dwords {
-            self.consts.push(self.arena, ConstSlot::uniform(d as u32))?;
+            let slot = if d < used { ConstSlot::uniform(d as u32) } else { ConstSlot::UNUSED };
+            self.consts.push(self.arena, slot)?;
         }
         /* A dynamically indexed array needs nothing more here: it is read
          * with `load` from the block's copy in memory (LoadUniformIdx), not
@@ -1400,7 +1407,7 @@ impl<'a> Sel<'a> {
 
     /// A read of `comps` dwords of the uniform block starting at `dword_off`.
     fn uniform_src(&self, dword_off: u16, comps: u8, sw: [u8; 4]) -> Result<SelSrc, SelectError> {
-        if usize::from(dword_off) >= self.consts.len() {
+        if dword_off >= self.m.uniform_dwords {
             return Err(SelectError::Unsupported("a uniform read past the block the module declares"));
         }
         let reg = dword_off / 4;

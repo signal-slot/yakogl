@@ -391,6 +391,15 @@ pub fn emit_prefetch(c: &mut GcCmd) {
     c.state(GC_PS_ICACHE_PREFETCH, 0);
 }
 
+/// A constant named a uniform dword past its block (logged the first time).
+static MISSING_UNIFORM_LOGGED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Log the next missing uniform dword again (a test that counts the line).
+#[cfg(test)]
+pub(crate) fn forget_missing_uniform_logged() {
+    MISSING_UNIFORM_LOGGED.store(false, core::sync::atomic::Ordering::Relaxed);
+}
+
 /// Resolve one constant register: a literal the compiler folded in, a dword
 /// of the stage's uniform block, or a property of a bound texture.
 fn const_value(d: &GcDraw, contents: u8, data: u32, block: &[u32], fragment: bool) -> u32 {
@@ -430,12 +439,18 @@ fn const_value(d: &GcDraw, contents: u8, data: u32, block: &[u32], fragment: boo
             return match block.get(data as usize) {
                 Some(v) => *v,
                 None => {
-                    glog!(
-                        "yakogl/vivante: {} uniform dword {} missing, block holds {} (reading 0)",
-                        if fragment { "fragment" } else { "vertex" },
-                        data,
-                        block.len()
-                    );
+                    /* Once: this runs for every constant of every draw, and a
+                     * line per draw was 2.7 s of the i.MX8MP cluster's frame
+                     * 2 (padding lanes the compiler described as uniform
+                     * dwords, tests/gc_const_map.rs). */
+                    if !MISSING_UNIFORM_LOGGED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                        glog!(
+                            "yakogl/vivante: {} uniform dword {} missing, block holds {} (reading 0; logged once)",
+                            if fragment { "fragment" } else { "vertex" },
+                            data,
+                            block.len()
+                        );
+                    }
                     0
                 }
             };

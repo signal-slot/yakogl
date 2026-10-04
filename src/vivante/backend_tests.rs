@@ -461,6 +461,44 @@ impl Drop for Rig {
     }
 }
 
+/* ---- the constant file ------------------------------------------------- */
+
+/// A constant that names a uniform dword past its stage's block reads 0 and
+/// is logged once, not on every draw: a line per draw was 2.7 s of the
+/// i.MX8MP cluster's frame 2 (the online compiler described a register's
+/// padding lanes that way; tests/gc_const_map.rs pins the compiler side).
+#[test]
+fn a_constant_past_the_block_is_logged_once_not_per_draw() {
+    static CONTENTS: [u8; 4] = [
+        crate::shaderc::SHC_VIV_CONST_UNIFORM,
+        crate::shaderc::SHC_VIV_CONST_UNIFORM,
+        0,
+        crate::shaderc::SHC_VIV_CONST_UNIFORM,
+    ];
+    static DATA: [u32; 4] = [0, 1, 0, 7];
+    let rig = Rig::new();
+    let mut fs = *rig.fs;
+    fs.viv.const_contents = CONTENTS.as_ptr();
+    fs.viv.const_data = DATA.as_ptr();
+    fs.viv.const_count = 4;
+    fs.uniform_dwords = 2;
+    let block = [1.0f32.to_bits(), 2.0f32.to_bits()];
+    let mut d = rig.draw(3);
+    d.fs = &fs;
+    d.fs_uniform_cpu = block.as_ptr() as _;
+    d.fs_uniform_dwords = 2;
+    super::shader::forget_missing_uniform_logged();
+    rig._gl.logs();
+    for _ in 0..50 {
+        // SAFETY: a live draw for the length of the call.
+        assert_eq!(unsafe { gc_draw(&d) }, 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    let lines: Vec<String> = rig._gl.logs().into_iter().filter(|l| l.contains("uniform dword")).collect();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains("fragment uniform dword 7 missing, block holds 2"), "{lines:?}");
+}
+
 /* ---- the draw's steps (draw_steps.rs) ------------------------------------ */
 
 /// The draw-stats reports the OSAL received since the last call.
