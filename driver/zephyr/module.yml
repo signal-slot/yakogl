@@ -1,0 +1,12 @@
+# Zephyr module manifest for the GPU drivers (src/). Add this directory
+# (driver/) to ZEPHYR_EXTRA_MODULES, and the repository root for YakoGL.
+# It also carries the Verdin AM62P and Verdin iMX8M Plus Cortex-A53 board
+# support (boards/, soc/, dts/, drivers/, lib/), hence the three roots.
+name: powervr-bxs
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig
+  settings:
+    dts_root: .
+    board_root: .
+    soc_root: .

@@ -1,0 +1,21 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Pins the A53 side of the Verdin iMX8M Plus uses. UART3 is Verdin UART_1
+ * (SODIMM 147/149), the Linux console on Torizon.
+ */
+
+#include <nxp/nxp_imx/mimx8ml8dvnlz-pinctrl.dtsi>
+
+&pinctrl {
+	uart3_default: uart3_default {
+		group0 {
+			bias-pull-up;
+			drive-strength = "x1";
+			pinmux = <&iomuxc_uart3_rxd_uart_rx_uart3_rx>,
+				 <&iomuxc_uart3_txd_uart_tx_uart3_tx>;
+			slew-rate = "slow";
+		};
+	};
+};

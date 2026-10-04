@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Where gl_triangle draws and what it does afterwards.
+
+# The in-process shader compiler (CONFIG_YAKOGL_SHADERC_ONLINE) runs on the
+# thread that calls glCompileShader, here main, and needs about 74 KiB of stack
+# on the PowerVR build (host measurement). With 64 KiB it overflowed into the
+# idle threads' stacks, which sit right below main's in .bss, and the next
+# switch to idle faulted at ELR 0x0/0x2; 256 KiB ran clean (AM62P, 2026-09-23).
+# So the online build gets 256 KiB; the table build keeps its old size.
+config MAIN_STACK_SIZE
+	default 262144 if YAKOGL_SHADERC_ONLINE
+	default 32768
+
+menu "gl_triangle"
+
+config GL_TRIANGLE_WINDOW_PHYS
+	hex "Physical address of the window buffer (0 = a buffer in the image)"
+	default 0
+	help
+	  Set this to a panel's scan-out buffer to draw on the display, e.g.
+	  the framebuffer the previous OS left behind. 0 renders into a small
+	  RGBA8888 buffer owned by the program and only reads pixels back.
+
+config GL_TRIANGLE_WINDOW_WIDTH
+	int "Window width in pixels"
+	default 64
+
+config GL_TRIANGLE_WINDOW_HEIGHT
+	int "Window height in pixels"
+	default 64
+
+config GL_TRIANGLE_WINDOW_STRIDE
+	int "Window row pitch in bytes (0 = width * 4)"
+	default 0
+
+endmenu
+
+rsource "../common/Kconfig"
+source "Kconfig.zephyr"

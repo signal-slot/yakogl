@@ -1,0 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The display chain nodes, so that the GPIO and I2C drivers can be probed on
+ * their own (CONFIG_GPIO / CONFIG_I2C / CONFIG_PINCTRL) without the display
+ * driver (CONFIG_SAFEUI_DISPLAY_IMX8MP stays off in prj.conf). */
+#include "../../gc_common/verdin_imx8mp_display.dtsi"

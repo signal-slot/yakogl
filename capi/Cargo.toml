@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The C-ABI archive: `yakogl` + the panic handler, as one staticlib. The C
+# builds (../CMakeLists.txt, ../baremetal.mk, ../zephyr/) build it with
+# `-p yakogl-capi`, post-process it with assemble.cmake (the Rust runtime and
+# compiler_builtins' libc/libm symbols made local) and append the C parts:
+# the result is libyakogl.a. Rust applications do not use this crate; they
+# depend on `yakogl` and provide their own panic handler.
+[package]
+name = "yakogl-capi"
+description = "libyakogl.a: the YakoGL C ABI as a static library"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND MIT"
+publish.workspace = true
+
+[lib]
+# Not `yakogl`: the library crate's rlib already has that file stem. The build
+# systems install the post-processed archive as libyakogl.a.
+name = "yakogl_capi"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+# A no_std staticlib with a panic handler cannot be a test harness.
+test = false
+doctest = false
+bench = false
+
+[features]
+# At most one: the OSAL whose ops table is the default `g_osal` (see the
+# yakogl crate). None leaves `g_osal` null (osal_set_ops() first).
+osal-linux = ["yakogl/osal-linux"]
+osal-zephyr = ["yakogl/osal-zephyr"]
+osal-baremetal = ["yakogl/osal-baremetal"]
+# The GPU whose backend and offline shader table are compiled in (the yakogl
+# crate's own feature): the PowerVR BXS by default, the i.MX8MP's GC7000 with
+# this. Exactly one GPU is in a build, as in the C (-DYAKOGL_GPU_VIVANTE).
+gpu-vivante = ["yakogl/gpu-vivante"]
+# The Raspberry Pi 4's V3D 4.2 (the yakogl crate's `gpu-v3d`): the in-process
+# compiler is its only shader back end, so it goes with `shaderc-online` and
+# `no-shader-table` (the yakogl crate refuses it otherwise).
+gpu-v3d = ["yakogl/gpu-v3d"]
+# The remote shader back end, for a host build (dEQP-GLES2 writes its shaders
+# as it runs, so no table can serve it). It links std, which brings its own
+# panic handler and unwinder, so this crate must not define one: see the
+# cfg in src/lib.rs.
+shaderc-remote = ["yakogl/shaderc-remote"]
+# The in-process compiler. Unlike the remote back end it is no_std: it needs no
+# server, no std and no table, so it is the one of the three that ships in a
+# product and the only one a Zephyr image can take. This crate keeps its own
+# panic handler for it, as it does for an offline build.
+shaderc-online = ["yakogl/shaderc-online"]
+# No offline blob table in the image (the yakogl crate's own feature). What a
+# Zephyr or bare-metal build takes on top of `shaderc-online`; a host build
+# does not, so `YAKOGL_SHADERC=offline` still works there for an A/B.
+no-shader-table = ["yakogl/no-shader-table"]
+# Report OpenGL ES 2.0 rather than ES 3.0 (the yakogl crate's own feature);
+# what a conformance build of the library needs.
+report-es2 = ["yakogl/report-es2"]
+
+[dependencies]
+yakogl = { path = "..", default-features = false }

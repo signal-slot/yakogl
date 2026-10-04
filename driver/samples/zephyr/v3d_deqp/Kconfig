@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+menu "v3d_deqp"
+config V3D_DEQP_LIFETIME_S
+	int "Seconds from boot to the watchdog reset (run and photo)"
+	default 240
+	help
+	  The PM watchdog (driver/zephyr/lib/board/rpi4/rpi_wdog.c) is fed until this many
+	  seconds after boot, and resets the board at most 10 s later. The case
+	  list must finish inside it with V3D_DEQP_PHOTO_S to spare; a list that
+	  does not is split over more images (docs/online-shaderc/v3d-backend.md,
+	  "M8").
+config V3D_DEQP_PHOTO_S
+	int "Seconds the record stays on screen before the reset, at least"
+	default 30
+	help
+	  At V3D_DEQP_LIFETIME_S minus this, a run that has not finished prints
+	  the record it has so far, marked INCOMPLETE, and the screen stops
+	  scrolling, so there is always a record to photograph.
+config V3D_DEQP_QPA_UART
+	bool "Copy dEQP's whole test log (QPA) to the UART"
+	default n
+	help
+	  The deqp sample's log stream keeps only one line per case. With this
+	  on, every character dEQP writes to its QPA log also goes to the UART:
+	  the shader sources, the values, the result, reference and error-mask
+	  images (the deqp sample's command line turns images and shader
+	  sources off; this option turns them back on). The images make it slow (the UART is 115200 baud), so it is
+	  meant for a filter of a few cases, where one case's pixels decide a
+	  question. Off for every sweep image.
+endmenu
+# DEQP_CASE and DEQP_SURFACE_SIZE, the options the deqp sample's main.cpp
+# reads (that file also brings the common glue's menu and Zephyr's).
+rsource "../deqp/Kconfig"

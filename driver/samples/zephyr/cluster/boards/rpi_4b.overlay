@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The board's sram0 is 512 KiB at 0x200000 (dts/arm64/broadcom/bcm2711.dtsi).
+ * This image carries the V3D's 64 MiB carve-out, the compiler's 2 MiB
+ * scratch, the 48 MiB UI heap and the cluster's embedded images and glyphs
+ * (about 7.5 MB) as statics (the window is the firmware's framebuffer), so
+ * it gets v3d_gl_cluster's 176 MiB from 0x200000, to 0xb200000. DRAM starts
+ * at 0 on the Pi 4 and the firmware keeps its own memory at the top of the
+ * first GiB (the framebuffer is at 0x3c100000), so this is ARM memory on
+ * every Pi 4.
+ */
+#include "../../common/rpi_4b_sram.dtsi"
+
+&sram0 {
+	reg = <0x200000 0xb000000>;
+};

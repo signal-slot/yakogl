@@ -1,0 +1,289 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_gl_test"
+
+config GC_GL_TEST_CASE
+	int "Which gl_test case to run (7 = the regression set)"
+	default 7
+	help
+	  The case numbers are tools/pvrlab/gl_test.c's own; its header
+	  comment lists them. 7 runs the regression set, whose order[] is in
+	  gl_test_run().
+
+config GC_GL_TEST_SWEEP
+	bool "Sweep 48 case numbers in one run, each result in the SNVS record"
+	help
+	  Runs cases GC_GL_TEST_SWEEP_FIRST .. +47 (7, the regression set,
+	  counts as skipped) through gl_test's list walker on one context,
+	  and after every case rewrites a SWEEP record (gc_result.h) with two
+	  bits per case. Cases named in GC_GL_TEST_SKIP report as skipped.
+	  GC_GL_TEST_CASE is ignored.
+
+config GC_GL_TEST_SWEEP_FIRST
+	int "First case number of the sweep"
+	default 0
+	depends on GC_GL_TEST_SWEEP
+
+config GC_GL_TEST_SWEEP_LISTS
+	string "Case lists a run-time selector can pick (';'-separated)"
+	default ""
+	depends on GC_GL_TEST_SWEEP
+	help
+	  Selector 0x200 + k (gc_result.h) runs the k-th list of this table
+	  instead of the sweep's range, in the order written, on one context,
+	  and ends with the sweep's counters record. A list is comma-separated
+	  case numbers and ranges, all inside the sweep's 48: "10-18,19". For
+	  finding the earliest case whose presence makes a later one fail.
+
+config GC_GL_TEST_SETTLE_SECONDS
+	int "Seconds from boot before the verdict is given"
+	default 0
+	help
+	  0: the verdict is the result record, and the image resets the SoC
+	  right after writing it (gc_sample_finish_recorded), so a one-case
+	  run costs its boot and its case.
+
+	  Only for the diagnostic knobs that still answer in the return time
+	  (REPORT_COUNTERS, REPORT_CHECK, DEPTH_VALUE, DEPTH_PROBE; README
+	  "Reading a run"): set it longer than the suite takes, 100 as in the
+	  README's readings, so the suite's own duration is not a second
+	  unknown in the total. It logs its duration.
+
+config GC_GL_TEST_DEADLINE_SECONDS
+	int "Seconds before the supervisor gives up on the suite"
+	default 200
+	help
+	  The watchdog Linux left armed fires at about 128 s and the suite
+	  takes longer than that, so a thread of its own feeds it. Past this
+	  deadline that thread stops waiting, writes the case it was in as an
+	  UNFINISHED record and resets the SoC, so a hung suite is a reading
+	  rather than two silent minutes.
+
+config GC_GL_TEST_REPORT_CHECK
+	bool "A single case reports the check inside it that failed first"
+	help
+	  A case is one bit on a board with no console: PASS or FAIL. That is
+	  enough to see a fix land and not enough to find one, because a case
+	  makes twenty-odd checks and they fail for different reasons. With
+	  this the hold carries the first failing check instead: 1 when the
+	  case passed, 1 + the check's number when one failed, 63 when it
+	  failed without any check saying so (a GL error, or a check past 61).
+	  Off by default, so the plain PASS/FAIL holds keep their meaning.
+
+config GC_GL_TEST_REPORT_CHECK_COLOUR
+	bool "...and reports the colour it read rather than its number"
+	depends on GC_GL_TEST_REPORT_CHECK
+	help
+	  Once the failing check is known its number is not news any more, but
+	  what it read still is: a mip level that comes back green where blue
+	  was wanted says the LOD stopped one level short, while black says
+	  nothing was drawn at all. The hold then carries the colour as 32 plus
+	  one bit per channel at half scale, so 32 is black, 33 blue, 34 green,
+	  36 red and 39 white.
+
+config GC_GL_TEST_REPORT_COUNTERS
+	bool "Report what the run waited on, rather than how far it got"
+	help
+	  Every case of the suite finishes in seconds on its own, and the
+	  regression set does not finish inside its deadline, so something
+	  accumulates across the cases. There are exactly two waits in the path
+	  long enough to account for it: the 2 s a fence wait gives up after,
+	  and the 1 s a submit waits for one of the thirty hardware events to
+	  come free. This puts both in the hold instead of the case number: bit
+	  5 is set when a submit ever found every event in flight, and the low
+	  five bits are the number of fence timeouts, saturating at 31. So a
+	  hold code of 0 says the time went somewhere else entirely.
+
+config GC_GL_TEST_COUNTER_SELECT
+	int "Which number GC_GL_TEST_REPORT_COUNTERS puts in the hold"
+	depends on GC_GL_TEST_REPORT_COUNTERS
+	default 0
+	help
+	  0 packs both flags: bit 5 when a submit ever found all thirty events
+	  in flight, the low five bits the fence timeouts, saturating at 31.
+	  1 reports instead the seconds spent inside the two waits, saturating
+	  at 63, which is the question the flags only stand in for --
+	  gc_event_alloc loops rather than giving up, so a submit can wait a
+	  long time for an event without the starvation flag ever being set.
+	  3 reports the case the suite was in when a kick first failed to
+	  complete, or 63 when none did. A kick that never completes costs two
+	  seconds and leaks its hardware event for good, so thirty of them slow
+	  every submit that follows: without this, a hang reads from outside as
+	  the suite merely being slow, which is how it read for a while.
+	  2 reports the same time in units of eight seconds, so the scale
+	  reaches the whole deadline a regression set is given: a set saturates
+	  select 1 a sixteenth of the way in, and "63 or more" does not say
+	  whether the waits are a sixth of the run or all of it.
+
+config GC_GL_TEST_ZPROBE_MILLI
+	int "The depth case 53 clears to, in thousandths"
+	default 500
+	range 0 1000
+	help
+	  Case 53 clears depth to this value and does nothing else, so that
+	  GC_GL_TEST_DEPTH_VALUE can read back what the hardware stored. 500
+	  is the 0.5 that gl_test case 13's first check asks for.
+
+	  Set it to 250 to tell a code of 63 meaning "the clear value was
+	  ignored" from a code of 63 meaning "the surface is not uniform": a
+	  quarter reads back as 15 or 16, and only the first reading moves.
+
+config GC_GL_TEST_DEPTH_VALUE
+	bool "Report the value a depth clear actually stored"
+	depends on YAKOGL_VIVANTE_DEPTH_GUARD
+	help
+	  Reads the word the depth surface mostly holds after the case and
+	  holds its top six bits, so a run of case 53 -- which clears depth to
+	  0.5 and does nothing else -- says what the hardware stored.
+
+	  The code is the stored D24S8 word shifted right by 26. A value near
+	  the top of a code's range rounds either way, so each expected value
+	  spans two codes: 0.5 reads back as 31 **or** 32, 0.25 as 15 or 16,
+	  1.0 as 63 and 0.0 as 0. Reading 31 as a failure because 32 was
+	  written down would be the obvious mistake here.
+
+	  62 means the surface holds no single value: the clear did not cover
+	  it, and no stored depth can be reported. (62 is also depth
+	  0.969..0.984, which nothing in the suite clears to.)
+
+	  So 31 or 32 means the clear landed; 0 means it landed at the near end
+	  of the range instead; 63 means the clear value was ignored and the
+	  buffer still holds 1.0. 63 also stands for "the surface is not
+	  uniform", which is a different finding; to tell the two apart, build
+	  again with GC_GL_TEST_ZPROBE_MILLI=250 and see whether the code
+	  becomes 15 or 16.
+
+	  41 is the depth guard's own canary, 0xa5a5a5a5, which means the GPU
+	  wrote none of the surface -- a different fault again, and one the
+	  guard build makes readable for free.
+
+config GC_GL_TEST_DEPTH_PROBE
+	bool "Report whether the depth write stayed inside its surface"
+	depends on YAKOGL_VIVANTE_DEPTH_GUARD
+	help
+	  Reads back the canary the guard build lays down around the depth
+	  surface and puts the answer in the hold: 0 when nothing was written
+	  at all, 1 when the write stayed inside, 2..62 when it ran outside by
+	  (code - 1) * 4 KiB, 63 when there was no depth buffer. Turns "may a
+	  depth surface be linear on this part" into a reading.
+
+config GC_GL_TEST_SKIP
+	string "Cases the regression set leaves out (decimal, comma separated)"
+	default ""
+	help
+	  A case that hangs a kick costs every later case the two seconds each
+	  hung kick waits, so one unfixed case can stop the set finishing at
+	  all and hide the state of the thirty after it. Listing it here keeps
+	  the rest readable while it is worked on. A skipped case counts as
+	  neither a pass nor a failure, so the pass count stays honest.
+
+config GC_GL_TEST_MSAA
+	bool "Turn the GC7000's 4x MSAA on (a measurement, off in products)"
+	default n
+	help
+	  Calls gc_debug_set_msaa(1) at startup: the backend's 4x resolve
+	  (vivante/backend.rs gc_debug_msaa) and with it the EGL 4x config,
+	  which the GC7000 build otherwise does not offer. Case 16 then runs
+	  against a real 4x surface. Off by default until the board has
+	  measured it (tools/cts/RESULTS.md, "GC7000 4x MSAA via the resolve
+	  engine").
+
+config GC_GL_TEST_MASKED_CLEAR
+	bool "Colour clears honour glColorMask"
+	default y
+	help
+	  Passed to gc_debug_set_masked_clear at startup: a colour clear writes
+	  only the channels glColorMask had on at the glClear
+	  (vivante/backend.rs gc_debug_masked_clear). On by default since case
+	  102 maskclear measured it; n is the off arm, where 102 fails by
+	  design.
+
+config GC_GL_TEST_UNIIDX_NO_CLAMP
+	bool "gl_test 108: no clamp before the movar (a measurement)"
+	depends on YAKOGL_SHADERC_ONLINE
+	default n
+	help
+	  shc_debug_set_uniidx bit 0: a run-time-indexed uniform read uses its
+	  index unclamped in the offset multiply, as Mesa's etnaviv does
+	  (select.rs shc_debug_uniidx). Never a default: the clamp is an ir.md
+	  rule.
+
+config GC_GL_TEST_MRT
+	bool "Draw buffers: every colour attachment is written (a measurement)"
+	default n
+	help
+	  Calls gc_debug_set_mrt(1) at startup (vivante/backend.rs
+	  gc_debug_mrt): a draw writes every render target the GL core gives
+	  it, and GL_MAX_DRAW_BUFFERS answers every colour attachment (3)
+	  instead of 1. Off until the MRT case has measured it.
+
+config GC_GL_TEST_VS_UNITS16
+	bool "Sixteen texture units in the vertex stage"
+	default y
+	help
+	  Calls gc_debug_set_vs_units16(y ? 1 : 0) at startup
+	  (vivante/backend.rs gc_debug_vs_units16): with y, the library's
+	  default since 2026-10-01 (case 149 measured it),
+	  GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS and gl_MaxVertexTextureImageUnits
+	  answer 16 and the link and the draw take that many vertex samplers;
+	  n selects the earlier 8, and case 149 then skips.
+
+config GL_TEST_VSU_UNITS
+	int "Case 149 (vsunits): vertex-stage samplers the shader declares"
+	range 1 16
+	default 16
+	help
+	  Case 149 declares and draws with this many vertex samplers
+	  (u_s0..u_s<N-1>); cells N..15 are not drawn and must stay blue.
+	  The same option as the PowerVR gl_test's.
+
+config GL_TEST_VSU_FS_UNITS
+	int "Case 149 (vsunits): fragment-stage samplers beside the vertex ones"
+	range 0 16
+	default 0
+	help
+	  The fragment shader also declares and samples this many samplers
+	  (u_f0.., magenta 1x1 textures on units 16..) with a zero weight, so
+	  the picture is unchanged. On the GC7000 the vertex slots start after
+	  the fragment ones: 16 puts vertex sampler k in slot 16 + k. 0 is the
+	  case as it was.
+
+config GC_GL_TEST_NO_FIRST_COMPONENT_USE
+	bool "Leave GL_VARYING_COMPONENT_USE unwritten on the first draw (an A/B)"
+	default n
+	help
+	  Calls gc_debug_set_first_component_use(0) at startup: the process's
+	  first draw does not write GL_VARYING_COMPONENT_USE GENERIC, as before
+	  02fc8b79. One arm of gl_test 37's A/B (it fails alone since 726e26ce).
+
+config GC_GL_TEST_NO_BLACK_UNBOUND
+	bool "No black texel for a declared sampler with nothing bound (an A/B)"
+	default n
+	help
+	  Calls gc_debug_set_black_unbound(0) at startup: the texture stream
+	  before 00d8b62f (gl_test 61). The other arm of gl_test 37's A/B; with
+	  it on, case 61's "nothing bound" check is expected to fail.
+
+config GC_GL_TEST_DESC_SEQ
+	int "Texture descriptor write sequence bits (an A/B)"
+	range 0 15
+	default 1
+	help
+	  Passed to gc_debug_set_desc_seq at startup (vivante/backend.rs
+	  gc_debug_desc_seq, the Linux harness's YAKOGL_GC_DESC_SEQ): 1 = all
+	  descriptor addresses then all invalidates (Mesa's order, the
+	  library's default), 2 = texture cache flushes + RA-PE stall after
+	  the writes, 4 = descriptor cache flush after, 8 = FE-PE stall
+	  after. 0 is the old order (each invalidate right after its own
+	  address), the control arm of the A/B.
+
+config GC_GL_TEST_WIDTH
+	int "Render target width in pixels"
+	default 1280
+
+config GC_GL_TEST_HEIGHT
+	int "Render target height in pixels"
+	default 800
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

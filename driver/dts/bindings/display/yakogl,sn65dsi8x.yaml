@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  TI SN65DSI83 / SN65DSI84 MIPI DSI to LVDS bridge on I2C, one DSI input and
+  one LVDS link (channel A) in use. The register logic is
+  driver/rust/src/ip/sn65dsi8x.rs (from TI SLLSEC2H / SLLSEC1I); the device
+  shim is driver/drivers/display/bridge_sn65dsi8x.c, its API
+  include/safeui/sn65dsi8x.h.
+
+  With a dsi-host and a mode (pixel-clock-hz and the timings) the device
+  starts itself at init: it attaches the DSI host, brings the bridge up and
+  checks the link. Without a dsi-host it touches nothing until the display
+  controller that owns the chain calls it (sn65dsi8x_claim_enable / _start /
+  _check_link / _stop), with the mode and the DSI lane rate it runs.
+
+  Everything here is a fact of the board, the adapter or the panel; what the
+  bridge needs to know about the DSI side (its clock) comes from the host.
+
+compatible: "yakogl,sn65dsi8x"
+
+include: [i2c-device.yaml]
+
+properties:
+  enable-gpios:
+    type: phandle-array
+    description: The bridge's EN pin (active high at the pin).
+
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The display adapter's own reset, where it has one (the Verdin AM62P
+      DSI-LVDS adapter's global reset). Held asserted at init by a
+      self-starting node and released before EN rises.
+
+  backlight-gpios:
+    type: phandle-array
+    description: |
+      A backlight enable line a self-starting node drives high once the link
+      is up (the panel's, not the bridge's; carried here because this node
+      is the panel's only device on the AM62P).
+
+  data-lanes:
+    type: int
+    default: 4
+    enum: [1, 2, 3, 4]
+    description: DSI data lanes wired (CHA_DSI_LANES).
+
+  lvds-24bpp:
+    type: boolean
+    description: Drive the fourth LVDS data lane (CHA_24BPP_MODE); 18 bpp without it.
+
+  lvds-jeida:
+    type: boolean
+    description: |
+      24 bpp format 1, the two LSB per colour on Y3 (CHA_24BPP_FORMAT1,
+      "JEIDA"); without it format 2, the two MSB on Y3 ("SPWG/VESA").
+
+  lvds-termination-ohms:
+    type: int
+    default: 200
+    enum: [100, 200]
+    description: |
+      Near-end differential termination of LVDS channel A (CHA_LVDS_TERM).
+      200 is the part's reset value and what the i.MX8MP board runs; the
+      AM62P adapter's driver has always set 100.
+
+  hsync-active-low:
+    type: boolean
+    description: |
+      Drive HS negative on the LVDS side (HS_NEG_POLARITY). This is the
+      board's choice of what the panel gets, not necessarily the panel's
+      stated timing: on the i.MX8MP board Linux runs the bridge with HS/VS
+      positive into a DE-driven panel whose timing says active low.
+
+  vsync-active-low:
+    type: boolean
+    description: VS_NEG_POLARITY, as hsync-active-low.
+
+  de-active-low:
+    type: boolean
+    description: DE_NEG_POLARITY (driven 0 during active pixels).
+
+  dsi-host:
+    type: phandle
+    description: |
+      The MIPI DSI host to attach at init. Present: the node starts itself
+      (and needs the mode below). Absent: a display controller drives it.
+
+  pixel-clock-hz:
+    type: int
+  width:
+    type: int
+  height:
+    type: int
+  hfront-porch:
+    type: int
+  hback-porch:
+    type: int
+  hsync-len:
+    type: int
+  vfront-porch:
+    type: int
+  vback-porch:
+    type: int
+  vsync-len:
+    type: int

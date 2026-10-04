@@ -1,0 +1,103 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try YakoGL</title>
+<meta name="description" content="What you need and the exact steps to run the YakoGL demos on a board.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="name" href="index.html">YakoGL</a>
+  <nav><a href="index.html">Home</a><a href="try-it.html" aria-current="page">Try it</a><a href="demos.html">Demos</a><a href="status.html">Status</a></nav>
+</header>
+<main>
+<h1>Try it</h1>
+<p class="lead">The steps as they work today. They are not yet checked on a clean machine.</p>
+
+<h2>What you need</h2>
+<div class="scroll"><table>
+<tr><th></th><th>Raspberry Pi 4</th><th>Verdin AM62P</th><th>Verdin iMX8M Plus</th></tr>
+<tr><td>Board</td><td>Raspberry Pi 4 with Raspberry Pi OS</td><td>Verdin AM62P on a Dahlia carrier, with its Linux and U-Boot</td><td>Verdin iMX8M Plus on a carrier, with its Linux and U-Boot</td></tr>
+<tr><td>Panel</td><td>HDMI, 1920x720 used here</td><td>1024x600</td><td>1280x800</td></tr>
+<tr><td>Cable to the PC</td><td>network (ssh); a serial adapter on the UART for the log</td><td>network (ssh + TFTP); the serial console for the log</td><td>network (ssh + TFTP); no console: results come back in a register that survives the reset</td></tr>
+<tr><td>Extra</td><td>&mdash;</td><td>the PowerVR firmware file from TI's Processor SDK (see step 3)</td><td>&mdash;</td></tr>
+</table></div>
+<p>On the PC: Linux, Python 3, the Zephyr SDK (1.0.1 was used), a nightly Rust
+toolchain, and Noto Sans fonts (the Slint compiler draws the text at build time).</p>
+
+<h2>1. The workspace</h2>
+<pre>python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install west
+west init -m https://github.com/signal-slot/yakogl --mr main yakogl-ws
+cd yakogl-ws &amp;&amp; west update
+pip install -r zephyr/scripts/requirements-base.txt</pre>
+
+<h2>2. The no_std Slint</h2>
+<p>Slint, femtovg and glow are patched to run without an OS. You make these trees once,
+from upstream sources plus the patches in
+<code>driver/samples/zephyr/slint/nostd/</code>. Its <code>README.md</code> has the exact
+commands (a Slint commit, then <code>patch -p1</code>). Call the results
+<code>$SLINT_NOSTD</code> and <code>$NOSTD</code>.</p>
+
+<h2>3. Build the Slint demo</h2>
+<pre># pick one board:  rpi_4b | verdin_am62p/am62p54/a53 | verdin_imx8mp/mimx8ml8/a53
+west build -p always -b rpi_4b -d build/slint yakogl/driver/samples/zephyr/slint -- \
+    -DSLINT_NOSTD_DIR=$SLINT_NOSTD -DNOSTD_PATCH_DIR=$NOSTD</pre>
+<p><strong>AM62P only:</strong> first make the firmware header. You get the firmware
+yourself. This repository does not distribute it: it belongs to TI and Imagination.</p>
+<ol>
+<li>Take the firmware file from TI's Processor SDK for the AM62P. The file is named
+<code>rgx.fw.36.53.104.796</code> (36.53.104.796 is the GPU version, BVNC).
+<span class="tbd">[TBD: the file's path inside the SDK is not documented here yet]</span></li>
+<li>Run the script on that file:
+<pre>yakogl/driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796</pre></li>
+<li>The script writes <code>driver/src/fw/pvr_fw_blob.h</code>. The build needs this header.
+Never commit it.</li>
+</ol>
+<p><strong>Cluster demo:</strong> one sample for all three boards,
+<code>driver/samples/zephyr/cluster</code> (it also needs a clone of agl-slint-cluster).
+<span class="tbd">[TBD: build command]</span></p>
+
+<h2>4. Run it on the board</h2>
+<p>One runner for all three boards. It copies the image, boots it once, collects the
+log and the result, and waits until Linux is back.</p>
+<pre>export BOARD_HOST=user@your-board      # ssh login of the board's Linux
+export BOARD_UART=...                  # Pi 4: serial device; AM62P: serial bridge host:port
+export NETBOOT_SERVER=... NETBOOT_TFTP_ROOT=...   # Verdins: your TFTP server
+tools/board.sh &lt;board&gt; status                     # board = pi4 | am62p | imx8mp
+tools/board.sh &lt;board&gt; install                    # Verdins only: one U-Boot hook, once
+tools/board.sh &lt;board&gt; run build/slint/zephyr/zephyr.bin logs/</pre>
+<p>Add <code>--dry-run</code> to see every command first; it touches nothing.
+<code>tools/board.sh &lt;board&gt; uninstall</code> removes the hook again.</p>
+
+<h2>How the board boots the demo</h2>
+<ul>
+<li><strong>Raspberry Pi 4:</strong> the Pi firmware's <em>tryboot</em> starts the image
+once. The next boot is Raspberry Pi OS again.</li>
+<li><strong>Verdin AM62P and iMX8M Plus:</strong> a small hook in U-Boot. Linux sets a
+"run once" flag. U-Boot clears the flag first, then loads the image over TFTP and starts
+it. The next boot sees no flag and starts Linux.</li>
+</ul>
+
+<div class="note"><strong>The board always comes back to Linux.</strong> Every image
+arms a hardware watchdog before the demo starts (Pi 4: the PM watchdog; AM62P: the RTI;
+iMX8M Plus: WDOG1). The demo runs for a fixed time, then the board resets. If the demo
+hangs, the watchdog resets the board. Either way the next boot is Linux. The runner
+writes only the U-Boot hook and the run-once flag (Verdins), or the image and
+<code>tryboot.txt</code> on the boot partition (Pi 4), and removes the staged image after the run.</div>
+
+<h2>What is still missing</h2>
+<ul>
+<li>A ready-made image to download, so you do not need to build.</li>
+<li>The no_std Slint trees as one download, not a patch recipe.</li>
+<li>The path of the PowerVR firmware file inside TI's Processor SDK (step 3).</li>
+<li>These steps checked on a clean machine.</li>
+</ul>
+</main>
+<footer>Sources: driver/samples/zephyr/README.md, slint/nostd/README.md, tools/board.sh,
+driver/tools/mkfwblob.sh, driver/README.md, driver/docs/am62p-netboot-plan.md, imx8mp-netboot-plan.md, rpi4-zephyr-default-boot.md.</footer>
+</body>
+</html>

@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The workspace: the library crate `yakogl` (this directory), the C-ABI
+# archive crate `yakogl-capi` (capi/) and the display/SoC driver archive
+# `yakogl-drivers` (driver/rust/; its path is also named once in
+# driver/zephyr/CMakeLists.txt, YAKOGL_DRIVERS_CRATE_DIR), the AM62P
+# second-stage loader's logic `yakogl-boot-stage2`
+# (driver/samples/zephyr/boot_stage2/loader/). Host tools join as further members:
+# adding one is one line in `members`. `default-members` is the library only,
+# so a plain `cargo build` / `cargo test` / `cargo check` here never builds the
+# archive crate or a host tool; the C builds (CMakeLists.txt, baremetal.mk,
+# zephyr/) always name their package (`-p yakogl-capi`), so feature
+# unification never mixes a host tool's features into the no_std archive.
+[workspace]
+members = [
+    ".",
+    "capi",
+    "driver/rust",
+    "driver/samples/zephyr/boot_stage2/loader",
+    "driver/samples/zephyr/slint/check",
+    "driver/samples/zephyr/cluster/check",
+    "driver/samples/zephyr/triangle/check",
+    "tools/yakogl-tools",
+]
+default-members = ["."]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# 1.88: slice::as_chunks (1.88), statics in constants (1.83), `&raw const`
+# and Option::is_none_or (1.82). Checked: 1.88 builds, 1.79 does not.
+rust-version = "1.88"
+license = "Apache-2.0"
+publish = false
+
+[package]
+name = "yakogl"
+description = "Portable OpenGL ES + EGL for GPUs with no operating system driver (PowerVR BXS-4-64)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND MIT"
+publish.workspace = true
+
+# The library is an rlib only: it has no panic handler and is never a
+# staticlib itself. C applications link the archive built from capi/
+# (libyakogl.a); a Rust application depends on this crate directly and brings
+# its own panic handler (README.md, "Linking").
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["osal-linux"]
+# The OSAL whose ops table is the compile-time default of `g_osal`. At most
+# one (several are a compile error). With none, `g_osal` starts null and the
+# application calls `osal_set_ops()` before the first GL call. The OSALs are C
+# (src/osal/<name>.c) and are linked by the build system, not by cargo.
+osal-linux = []
+osal-zephyr = []
+osal-baremetal = []
+# Report OpenGL ES 2.0 instead of ES 3.0: glGetString(GL_VERSION) says
+# "OpenGL ES 2.0", GL_SHADING_LANGUAGE_VERSION "OpenGL ES GLSL ES 1.00", the
+# ES 3.0-only queries (GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_NUM_EXTENSIONS)
+# are GL_INVALID_ENUM, and the rules ES 2.0 has and ES 3.0 dropped apply (a
+# non-power-of-two texture has no mip chain, 3.7.10). A conformance run must
+# have this: a client that reads GL_MAJOR_VERSION and gets an answer concludes
+# it is talking to ES 3 whatever the version string said. Off by default,
+# because Qt's RHI takes the ES 3.0 path from that string.
+report-es2 = []
+# The GPU whose backend and offline shader table are compiled in. The default
+# is the PowerVR BXS (`pvr/`); `gpu-vivante` selects the i.MX8MP's GC7000
+# (`vivante/`), which changes the shader ABI (`struct shc_shader` grows its
+# GC7000 half) and the table the shader back end looks shaders up in. Exactly
+# one GPU is in a build, as in the C (-DYAKOGL_GPU_VIVANTE).
+gpu-vivante = []
+# The Raspberry Pi 4's Broadcom V3D 4.2 (`v3d/`): the GL core draws through
+# the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
+# "M6"). Mutually exclusive with `gpu-vivante`. The only shader back end for
+# this GPU is the in-process compiler: there is no offline table and no remote
+# path, so it needs `shaderc-online` and `no-shader-table` and refuses
+# `shaderc-remote` (src/lib.rs says so at compile time rather than building a
+# library that cannot compile a shader). Like the GC7000, `struct shc_shader`
+# grows a V3D half (`ShcShader::v3d`).
+gpu-v3d = []
+# The Vivante depth canary (the C's CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD): a
+# guard either side of the depth surface, filled with a pattern, so what the
+# pixel engine writes outside the surface can be read back. Bring-up only.
+vivante-depth-guard = ["gpu-vivante"]
+# Host tests only: links std so the test harness can unwind, and starts with a
+# null `g_backend` (the tests install mocks). Never enable it in a product:
+# it is a compile error on bare-metal targets and in the C archive.
+#   cargo test --no-default-features --features host-test
+host-test = []
+# The remote shader back end (src/shaderc/remote.rs): compile a shader on a
+# host over TCP instead of looking it up in the offline table, which is what
+# dEQP-GLES2 needs (it writes its shaders as it runs). It is sockets and a
+# heap, so it implies `std`; the Zephyr and bare-metal builds enable neither
+# and are unchanged by it. With the feature in, `remote` is the default back
+# end and YAKOGL_SHADERC=offline forces the table back.
+shaderc-remote = ["std", "dep:serde_json"]
+# Link std. Set by `shaderc-remote`; not for a product build on its own.
+std = []
+# The in-process ("online") shader compiler: src/shaderc/online/, a GLSL ES
+# 1.00 front end and a PowerVR USC back end that run on the target, so a
+# Zephyr or bare-metal image can compile a shader an application hands it
+# instead of looking the text up in the offline table. It is no_std and
+# heap-free (the crate has no allocator): the caller lends it a scratch
+# buffer and owns the output. It also owns the instruction set itself - the USC
+# decoder, encoder and disassembler, gated by a byte-exact round trip over
+# every blob of the offline table (docs/online-shaderc/design.md). It is the
+# only back end that needs neither a build-time table (offline) nor a host on
+# the network (remote), so it is the one a product can ship with an application
+# that writes its shaders at run time; with the feature in it registers as
+# `g_shaderc`, and YAKOGL_SHADERC=remote or =offline picks one of the others on
+# a host build.
+shaderc-online = []
+# Leave the offline blob table OUT of the build entirely.
+#
+# `shaderc-online` says a build CAN compile a shader; this says it carries no
+# table to fall back on. They are separate because a host build wants both --
+# `YAKOGL_SHADERC=offline` against the same binary is how the three back ends
+# are compared on one board in one session -- while an image wants neither the
+# bytes nor the fallback: the GC7000 table is 258,000 bytes of instruction
+# words and the PowerVR one 6,278,960, and nothing links them out on its own,
+# because `g_shaderc`'s static initialiser names the offline back end and so
+# keeps the whole table reachable whatever the features say.
+#
+# Requires a back end that needs no table (`shaderc-online`); the build stops
+# otherwise, rather than producing a library that cannot compile anything.
+no-shader-table = []
+
+[dependencies]
+# Only ever compiled for `shaderc-remote` (a host build): the wire format of
+# tools/shaderc_server.py. The no_std library has no dependencies.
+serde_json = { version = "1", optional = true, default-features = false, features = ["std"] }
+
+# build.rs compiles Mesa's QPU packer (third_party/mesa-26.2.1/src/broadcom/qpu)
+# for a `gpu-v3d` build and the PowerVR backend's csbgen packer wrappers
+# (driver/src/pvr/generated/csbgen_wrap.c) for a PowerVR build; the GC7000
+# build compiles no C here.
+[build-dependencies]
+cc = "1.2"
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+# The C archive's dev build (YAKOGL_CARGO_PROFILE=dev): dev semantics
+# (overflow checks, debug assertions) but one LTO object, which the archive
+# post-processing (capi/assemble.cmake) needs to hide the Rust runtime symbols.
+[profile.dev-lto]
+inherits = "dev"
+lto = true
+codegen-units = 1
+incremental = false
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+lto = true
+codegen-units = 1
+debug = true

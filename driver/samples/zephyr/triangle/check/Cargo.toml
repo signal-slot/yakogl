@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The triangle and its check, the one definition for the one triangle sample
+# (driver/samples/zephyr/triangle, driver/docs/one-method.md section 5,
+# step 3): the vertices, the clear colour and the shader texts the sample
+# draws, v3d_gl_triangle's whole-window classification of the result, and
+# the PICTURE record's words. no_std, no dependencies: the sample's
+# staticlib (../rust) links it for aarch64-unknown-none, and
+# `cargo test -p yakogl-triangle-check` runs it on the host against
+# synthetic frames.
+[package]
+name = "yakogl-triangle-check"
+description = "The triangle sample's scene and frame check, the same on every board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+
+[lib]
+name = "triangle_check"
+path = "src/lib.rs"
+doctest = false
+bench = false

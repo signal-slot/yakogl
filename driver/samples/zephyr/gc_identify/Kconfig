@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_identify"
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

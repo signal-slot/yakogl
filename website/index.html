@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YakoGL</title>
+<meta name="description" content="Zephyr + Slint + YakoGL on a real GPU, on three boards.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="name" href="index.html">YakoGL</a>
+  <nav><a href="index.html" aria-current="page">Home</a><a href="try-it.html">Try it</a><a href="demos.html">Demos</a><a href="status.html">Status</a></nav>
+</header>
+<main>
+<h1>Zephyr + Slint + YakoGL on a real GPU</h1>
+<p class="lead">YakoGL is an OpenGL ES 2.0 + EGL library written in Rust. It drives the GPU
+directly, with no Linux GPU driver underneath. So a small real-time OS like Zephyr can
+draw a Slint user interface on the real GPU.</p>
+
+<p>The same application source runs on three boards with three different GPUs.
+Each board boots the demo from its own bootloader. When the demo ends, a watchdog
+resets the board, and it comes back to Linux.</p>
+
+<h2>The three boards</h2>
+<div class="cards">
+  <div class="card">
+    <h3>Raspberry Pi 4</h3>
+    <p>GPU: Broadcom V3D 4.2<br>Panel: 1920x720<br>Boot: the Pi firmware (tryboot)</p>
+    <figure><div class="photo">PHOTO SLOT</div>
+    <figcaption>Photo: the Raspberry Pi 4 and its 1920x720 bar panel showing the
+    cluster demo, taken during the 60 s run. Include the board in the frame.</figcaption></figure>
+  </div>
+  <div class="card">
+    <h3>Toradex Verdin AM62P</h3>
+    <p>GPU: Imagination PowerVR BXS-4-64<br>Panel: 1024x600<br>Boot: U-Boot (one-shot TFTP)</p>
+    <figure><div class="photo">PHOTO SLOT</div>
+    <figcaption>Photo: the Verdin AM62P on its Dahlia carrier with the 1024x600 panel
+    showing the cluster demo.</figcaption></figure>
+  </div>
+  <div class="card">
+    <h3>Toradex Verdin iMX8M Plus</h3>
+    <p>GPU: Vivante GC7000UL<br>Panel: 1280x800<br>Boot: U-Boot (one-shot TFTP)</p>
+    <figure><div class="photo">PHOTO SLOT</div>
+    <figcaption>Photo: the Verdin iMX8M Plus on its carrier with the 1280x800 panel
+    showing the Slint demo (this board has no serial console; the photo is the
+    visible proof).</figcaption></figure>
+  </div>
+</div>
+
+<h2>Try it in 10 minutes</h2>
+<p>This is our goal: you have a board and a Linux PC, you follow one page, and ten
+minutes later the demo runs on your screen. Then the board goes back to Linux by itself.</p>
+<div class="note"><strong>Not there yet.</strong> Today you build the image yourself, and
+some steps need tools from outside this repository. The <a href="try-it.html">Try it</a>
+page lists the exact steps as they work today, and what is still missing.</div>
+
+<h2>What you see</h2>
+<ul>
+  <li><strong>Slint demo</strong>: a car dashboard drawn by Slint, the same picture on all three boards.</li>
+  <li><strong>Cluster demo</strong>: a full instrument cluster that animates for 60 seconds and reports its frame rate.</li>
+  <li><strong>Same source, same picture</strong>: one triangle test gives the same picture record on three different GPUs.</li>
+</ul>
+<p><a href="demos.html">See the demos and the numbers &rarr;</a></p>
+
+<div class="box">
+<h2>Open points</h2>
+<p><strong>The PowerVR firmware (AM62P).</strong> The AM62P image needs the GPU firmware.
+It belongs to TI and Imagination, so it is not in this repository. You take it from TI's
+Processor SDK yourself and make a header with one script. See <a href="try-it.html">Try it</a>, step 3.
+<span class="tbd">[TBD: the file's path inside the SDK]</span></p>
+<p><strong>Touch input.</strong> No demo takes touch input yet. All demos run by
+themselves. <span class="tbd">[TBD: decision pending]</span></p>
+</div>
+</main>
+<footer>YakoGL is Apache-2.0. Draft site, 2026-10-04. Numbers on these pages are copied
+from the project's run records; anything we could not source is marked [TBD].</footer>
+</body>
+</html>

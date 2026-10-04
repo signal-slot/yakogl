@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The display chain, so the panel console can turn the panel on itself
+ * when Linux left it off. Shared with every other gc_* sample. */
+#include "../../gc_common/verdin_imx8mp_display.dtsi"

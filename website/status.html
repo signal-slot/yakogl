@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YakoGL Status</title>
+<meta name="description" content="What is proven on the boards today, with the honest caveats.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="name" href="index.html">YakoGL</a>
+  <nav><a href="index.html">Home</a><a href="try-it.html">Try it</a><a href="demos.html">Demos</a><a href="status.html" aria-current="page">Status</a></nav>
+</header>
+<main>
+<h1>Status</h1>
+<p class="lead">What is proven on the boards today, and what is not.</p>
+
+<h2>OpenGL ES 2.0 conformance</h2>
+<p>We run the Khronos conformance tests (dEQP-GLES2, the 17,165 cases of the
+"mustpass" list) on Zephyr, on the real GPU.</p>
+<div class="scroll"><table>
+<tr><th>Board</th><th>Date</th><th>Boot</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Not supported</th><th class="num">Warning</th></tr>
+<tr><td>Verdin AM62P</td><td>2026-10-02</td><td>kexec</td><td class="num">17,141</td><td class="num">0</td><td class="num">19</td><td class="num">5</td></tr>
+<tr><td>Verdin iMX8M Plus</td><td>2026-10-01</td><td>kexec</td><td class="num">17,112&ndash;17,116</td><td class="num">0</td><td class="num">30&ndash;34</td><td class="num">19</td></tr>
+<tr><td>Raspberry Pi 4</td><td>2026-10-01</td><td>firmware tryboot</td><td class="num">17,075</td><td class="num">25</td><td class="num">62</td><td class="num">3</td></tr>
+</table></div>
+<ul>
+<li><strong>The two Verdin rows were measured with kexec</strong> (Zephyr started from
+the running Linux). That is a development path, not a bootloader boot. They are being
+measured again from U-Boot.</li>
+<li><strong>Raspberry Pi 4:</strong> all 25 failures are cube cases where the picture
+differs from the ES 2.0 reference. No other case fails.</li>
+<li><strong>iMX8M Plus:</strong> the run covered 17,371 cases, more than the mustpass
+list. Limited to the list, some pass and not-supported counts are known only as a range.</li>
+<li>"Not supported" cases need a feature we do not offer yet (for example 4x
+multisampling in some images, or clip control).</li>
+</ul>
+
+<h2>Booted from the bootloader</h2>
+<ul>
+<li>The one Slint sample passes its picture check on all three boards, booted from
+U-Boot (Verdins) or the Pi firmware (Pi 4).</li>
+<li>Verdin AM62P: the GL test suite gives the same result per case from U-Boot as from
+kexec: 37 of 38 cases pass on both; the one failing case is a known ES 3 case.</li>
+<li>The one triangle sample draws a bit-identical picture on all three boards, booted
+from U-Boot (Verdins) or the Pi firmware (Pi 4).</li>
+<li>Verdin iMX8M Plus: the triangle gives the same picture record from U-Boot as from kexec.</li>
+<li>The watchdog brings each board back to Linux, proven on each board.</li>
+</ul>
+
+<h2>Not yet</h2>
+<ul>
+<li>Full dEQP-GLES2 runs on the Verdins from U-Boot.</li>
+<li>The cluster demo on the iMX8M Plus.</li>
+<li>On the AM62P, splitting the GPU's fragment phase further needs the firmware's own
+timestamps (HWPerf); see <a href="demos.html">Demos</a>, "Where the PowerVR's frame time goes".</li>
+<li>On the iMX8M Plus, finding the per-frame floor of about 24 ms in glmark2-es2.</li>
+<li>Touch input.</li>
+<li>A board that boots Zephyr by default, without Linux (written down for the Pi 4, not done).</li>
+<li><strong>OpenGL ES 3.x</strong>: later. ES 2.0 comes first. One early run of
+dEQP-GLES3 on the AM62P (2026-09-26) passed 31,278 of 42,810 cases (73.1%).</li>
+</ul>
+
+<h2>Known issues</h2>
+<ul>
+<li>iMX8M Plus: in one GL test case, a 1 px point draw sometimes never reaches the
+surface (about half the runs of that case). It is being investigated.</li>
+</ul>
+
+<div class="box">
+<h2>Open points</h2>
+<p><strong>The PowerVR firmware (AM62P).</strong> It belongs to TI and Imagination and is
+not in this repository. A script makes the header from the firmware file
+(<code>driver/tools/mkfwblob.sh</code>).
+Decided: the visitor takes the firmware from TI's Processor SDK and runs that script
+(see <a href="try-it.html">Try it</a>, step 3). <span class="tbd">[TBD: the file's path inside the SDK]</span></p>
+<p><strong>Touch input.</strong> None yet; every demo runs by itself. Do we add it before
+the site goes public? <span class="tbd">[TBD: decision pending]</span></p>
+</div>
+</main>
+<footer>Sources: tools/cts/STATUS.md (dEQP-GLES2 table, dEQP-GLES3 line),
+driver/docs/glmark2.md, driver/docs/pvr-fence-wait.md, driver/docs/one-method.md, am62p-netboot-plan.md section 10, imx8mp-netboot-plan.md,
+rpi4-zephyr-default-boot.md.</footer>
+</body>
+</html>

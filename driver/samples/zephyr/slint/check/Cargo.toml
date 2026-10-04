@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The check of the one Slint sample (driver/samples/zephyr/slint,
+# driver/docs/one-method.md section 5, step 1): the cluster's first frame
+# against the AM62P's reference points, the sentinel, alpha, the guard rows
+# and glReadPixels against memory, plus the window's CRC-32 (FINGERPRINT).
+# no_std, no dependencies: the sample's staticlib (../rust) links it for
+# aarch64-unknown-none, and `cargo test -p yakogl-slint-check` runs it on
+# the host against synthetic frames.
+[package]
+name = "yakogl-slint-check"
+description = "The Slint sample's frame check, the same on every board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+
+[lib]
+name = "slint_check"
+path = "src/lib.rs"
+doctest = false
+bench = false

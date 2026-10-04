@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The board glue options that lived here (PVR_SAMPLE_*, YAKOGL_AM62P_*) are
+# the driver module's now: driver/zephyr/lib/board/am62p/Kconfig, sourced for
+# every image. This file stays until the last sample that sources it has
+# moved to the board layer (driver/docs/one-method.md, section 5).

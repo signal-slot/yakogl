@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+menu "deqp"
+config DEQP_CASE
+	string "dEQP case filter (--deqp-case)"
+	default "dEQP-GLES2.info.*"
+config DEQP_CASE_TABLE
+	string "Case filters a run-time selector can pick (';'-separated)"
+	default ""
+	help
+	  On a board with the SNVS record (CONFIG_GC_COMMON_RESULT_SNVS), the
+	  reader can write a selector before the jump (gc_result.h): index i
+	  runs the i-th filter of this list instead of DEQP_CASE, so one image
+	  serves many groups or single cases. An empty table, no selector, or
+	  an index past the end runs DEQP_CASE.
+
+config DEQP_REPORT_ES2
+	bool "YakoGL reports OpenGL ES 2.0 (the dEQP-GLES2 image)"
+	default y
+	select YAKOGL_REPORT_ES2
+	help
+	  dEQP-GLES2 applies the rules of the version the context reports:
+	  a context reporting ES 3.0 makes an NPOT texture with REPEAT
+	  complete and a transposed glUniformMatrix legal, so the GLES2
+	  module judges ES 3.0 behaviour. Every other GLES2 run (the Linux
+	  pair, check.sh's row) uses report-es2; this is the same for the
+	  Zephyr image. Say n only for a future dEQP-GLES3 image.
+config DEQP_GL_CONFIG_NAME
+	string "dEQP render config name (--deqp-gl-config-name), empty = not passed"
+	default "$(DEQP_GL_CONFIG_NAME)"
+	help
+	  Passed to dEQP as --deqp-gl-config-name=<name> when not empty, for
+	  example "rgba8888d24s8ms4" to run on YakoGL's 4x multisampled EGL
+	  config (the pbuffer is created on it). Empty leaves dEQP's default,
+	  which picks the single-sampled config; dEQP-GLES2.functional.
+	  multisample.* then reports NotSupported ("No multisample buffers").
+	  The default is the environment variable DEQP_GL_CONFIG_NAME (empty
+	  when unset), so tools/cts/am62p-deqp-images.sh can build such an
+	  image: DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4 tools/cts/am62p-deqp-images.sh ...
+config DEQP_SURFACE_SIZE
+	int "pbuffer width and height"
+	default 256
+config DEQP_GC_MASKED_CLEAR
+	bool "GC7000: colour clears honour glColorMask (gc_debug_masked_clear)"
+	depends on YAKOGL_GPU_VIVANTE
+	default y
+	help
+	  Passed to gc_debug_set_masked_clear before the run: a clear writes
+	  only the channels glColorMask had on at the glClear instead of all
+	  four. On by default since the i.MX8MP measured it (gl_test 102,
+	  functional.color_clear 18/19, fbo.render rbo_rgb5_a1 clears); n is
+	  the off arm.
+config DEQP_GC_MRT
+	bool "GC7000: draw buffers, every colour attachment written (gc_debug_mrt)"
+	depends on YAKOGL_GPU_VIVANTE
+	help
+	  Calls gc_debug_set_mrt(1) before the run: GL_MAX_DRAW_BUFFERS answers
+	  every colour attachment (3) and a draw writes them all. Off by
+	  default until the board has measured it; with it on, the ES 3.0
+	  draw_buffers and fragment_out cases can run.
+
+config DEQP_GC_VS_TILED
+	bool "GC7000: vertex-stage 2D textures sampled from a tiled copy (gc_debug_vs_tiled)"
+	depends on YAKOGL_GPU_VIVANTE
+	help
+	  Calls gc_debug_set_vs_tiled(1) before the run: a 2D texture the
+	  vertex stage samples is read from a 4x4-tiled copy, the layout Mesa
+	  gives every texture on this core (tools/vivante golden mode 26),
+	  instead of its linear storage. Off by default until the board has
+	  measured it; texture.vertex.2d.* is the group it is for.
+
+config DEQP_GC_VS_UNITS16
+	bool "GC7000: sixteen vertex texture units (gc_debug_vs_units16)"
+	depends on YAKOGL_GPU_VIVANTE
+	default y
+	help
+	  Calls gc_debug_set_vs_units16(y ? 1 : 0) before the run: with y
+	  (the library's default since 2026-10-01, board-verified by gl_test
+	  149 and uniform_api 1,267 / 1,267) GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+	  answers 16 and the link and the draw take that many vertex
+	  samplers; n selects the earlier 8, under which uniform_api's 15
+	  "N vertex texture units required, 8 supported" cases are
+	  NotSupported.
+
+config DEQP_GC_INT_FILTER
+	bool "GC7000: INT_FILTER on UNORM samplers (gc_debug_int_filter)"
+	depends on YAKOGL_GPU_VIVANTE
+	help
+	  Calls gc_debug_set_int_filter(1) before the run: every sampler of a
+	  UNORM texture that is not 3D sets SAMP_CTRL0 INT_FILTER, as Mesa
+	  does (tools/vivante golden mode 26). In both stages, so it can move
+	  fragment-stage results too. Off by default until the board has
+	  measured it.
+
+config DEQP_GC_NARROW_LA
+	bool "GC7000: GL_LUMINANCE / GL_ALPHA / GL_LUMINANCE_ALPHA stored narrow (gc_debug_narrow_la)"
+	depends on YAKOGL_GPU_VIVANTE
+	help
+	  Calls gc_debug_set_narrow_la(1) before the run: L8, A8 and LA8
+	  textures are stored one or two bytes a texel and sampled with the
+	  texture unit's own formats instead of expanded into RGBA8 (a quarter
+	  of the memory). Off by default until gl_test 132 has measured it on
+	  the board.
+
+config DEQP_PVR_MASKED_CLEAR
+	bool "PowerVR: colour clears honour glColorMask (pvr_debug_masked_clear)"
+	depends on YAKOGL_GPU_POWERVR
+	default y
+	help
+	  Passed to pvr_debug_set_masked_clear before the run: a colour clear
+	  writes only the channels glColorMask had on at the glClear, and a
+	  fragment shader that reads the pixel runs TRANSLUCENT. On by default
+	  since the AM62P A/B (functional.color_clear 8 -> 14 of 19); n is the
+	  off arm.
+config DEQP_ECHO_QPA
+	bool "Echo the whole test log (QPA) to the console, shader sources and images included"
+	default n
+	help
+	  A measurement image: every line of dEQP's log goes to the console
+	  as "qpa: <line>" ("qpa+ " continues a line longer than 511 bytes),
+	  and the log carries the shader sources and the result, reference
+	  and error-mask images. tools/cts/qpa-from-uart.py rebuilds the .qpa
+	  from a captured console, for tools/cts/cts-images.py. For a short
+	  case filter only: the images take seconds each at the console's
+	  baud rate. Used first to read the source dEQP generated on the
+	  board for a case whose host source differs
+	  (random.texture.vertex.41, 2026-09-25). The V3D image has its own
+	  raw tee (v3d_deqp CONFIG_V3D_DEQP_QPA_UART).
+
+config DEQP_PVR_NATIVE_CUBE
+	int "PowerVR: the native cube (pvr_native_cube): -1 the library's default, 0 off, 1 on"
+	depends on YAKOGL_GPU_POWERVR
+	range -1 1
+	default -1
+	help
+	  Passed to pvr_set_native_cube before the run when it is 0 or 1; -1
+	  leaves the library's default (on since step C). Read when a shader
+	  compiles: 0 makes the online compiler sample a samplerCube as the
+	  stacked image again. One image per arm is the A/B of a cube case.
+
+config DEQP_PVR_DBIAS_INT
+	int "PowerVR: glPolygonOffset's constant in integer depth units (PVR_BACKEND_OPT_DBIAS_INT): -1 untouched, 0, 1"
+	depends on YAKOGL_GPU_POWERVR
+	range -1 1
+	default -1
+	help
+	  Passed to pvr_backend_set_option(PVR_BACKEND_OPT_DBIAS_INT) before
+	  the run when it is 0 or 1 (ISP_CTL.dbias_is_int); -1 leaves the
+	  backend's default. The Zephyr arm of the Linux client's
+	  YAKOGL_PVR_DBIAS_INT, for the polygon_offset *_with_units A/B.
+
+config DEQP_PROBE_POINTS
+	string "The 0x4000 probe's five points, GL coordinates (\"x,y;x,y;...\"), empty = the centre and quarters"
+	default ""
+	depends on GC_COMMON_RESULT_SNVS
+	help
+	  Selector GC_RESULT_DEQP_SEL_PROBE (gc_result.h) reads five pixels of
+	  the first failing case's picture. By default they are the centre and
+	  the four quarter points of the CONFIG_DEQP_SURFACE_SIZE square; this
+	  names them instead, in GL window coordinates (rows bottom-up) of
+	  whatever framebuffer is bound when the result is logged. A missing
+	  point keeps its default.
+
+config DEQP_SNVS_ADDRESS
+	bool "The kind-9 record's w3 carries the target's address bits and the lost work"
+	depends on GC_COMMON_RESULT_SNVS && YAKOGL_GPU_VIVANTE
+	help
+	  For an address A/B (CONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN x
+	  CONFIG_YAKOGL_GC_POOL_NO_REUSE): w3 becomes the default target's GPU
+	  address, low 12 bits, << 20 | lost GPU work (4 bits) << 16 | GPU
+	  resets (4 bits) << 12 | fence timeouts (4 bits) << 8 | what the
+	  no-reuse pool leaked, in MiB (8 bits); each field saturates. Off
+	  (the default), w3 carries the first failing case's name check and
+	  index with the counters (gc_result.h), which is what every run
+	  should be read by.
+endmenu
+rsource "../common/Kconfig"
+source "Kconfig.zephyr"

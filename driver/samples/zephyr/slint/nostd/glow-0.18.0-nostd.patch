@@ -1,0 +1,692 @@
+--- a/Cargo.toml	2006-07-24 10:21:28.000000000 +0900
++++ b/Cargo.toml	2026-09-14 17:14:05.780365497 +0900
+@@ -50,7 +50,11 @@
+ 
+ [dependencies.log]
+ version = "0.4.16"
+-optional = true
++
++[dependencies.hashbrown]
++version = "0.15"
++default-features = false
++features = ["default-hasher"]
+ 
+ [target.'cfg(all(target_arch = "wasm64", not(target_os = "emscripten")))'.dependencies.js-sys]
+ version = "~0.3.100"
+--- a/src/gl46.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/src/gl46.rs	2026-09-14 17:14:49.918509018 +0900
+@@ -117,16 +117,14 @@
+ //! * Individual GL commands are generally safe to use once they've been properly loaded for the current context, but this crate doesn't attempt to sort out what is safe and what's not. All GL commands are blanket marked as being `unsafe`.
+ //! It's up to you to try and manage this unsafety! Sorry, but this crate just does what you tell it to.
+ 
+-#[cfg(any(
+-    all(
+-        not(feature = "log"),
+-        any(feature = "debug_trace_calls", feature = "debug_automatic_glGetError")
+-    ),
+-    not(feature = "chlorine"),
++// no_std: std is only needed by the println/eprintln debug macros below.
++#[cfg(all(
++    not(feature = "log"),
++    any(feature = "debug_trace_calls", feature = "debug_automatic_glGetError")
+ ))]
+ extern crate std;
+ 
+-use std::os::raw::*;
++use core::ffi::*;
+ 
+ #[cfg(feature = "log")]
+ #[allow(unused)]
+--- a/src/lib.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/src/lib.rs	2026-09-14 17:13:43.634143768 +0900
+@@ -1,3 +1,4 @@
++#![no_std]
+ #![allow(non_upper_case_globals)]
+ #![allow(clippy::too_many_arguments)]
+ #![allow(clippy::trivially_copy_pass_by_ref)]
+@@ -5,9 +6,16 @@
+ #![allow(clippy::missing_safety_doc)]
+ #![allow(clippy::pedantic)] // For anyone using pedantic and a source dep, this is needed
+ 
++#[macro_use]
++extern crate alloc;
++use alloc::boxed::Box;
++use alloc::string::{String, ToString};
++use alloc::vec::Vec;
++use alloc::borrow::ToOwned;
++
+ use core::fmt::Debug;
+ use core::hash::Hash;
+-use std::collections::HashSet;
++use hashbrown::HashSet;
+ 
+ mod version;
+ pub use version::Version;
+--- a/src/native.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/src/native.rs	2026-09-14 17:13:43.634526559 +0900
+@@ -1,8 +1,14 @@
++use alloc::boxed::Box;
++use alloc::string::{String, ToString};
++use alloc::vec::Vec;
++use alloc::borrow::ToOwned;
+ use super::*;
+ use crate::{gl46 as native_gl, version::Version};
+-use std::ffi::CStr;
+-use std::ptr;
+-use std::{collections::HashSet, ffi::CString, num::NonZeroU32};
++use core::ffi::CStr;
++use core::ptr;
++use hashbrown::HashSet;
++use alloc::ffi::CString;
++use core::num::NonZeroU32;
+ 
+ macro_rules! khr_fallback {
+     ($gl:ident . $is_loaded:ident, $gl2:ident . $khr:ident, $gl3:ident . $core:ident ($($arg:expr),* $(,)?) $(,)?) => {
+@@ -26,7 +32,7 @@
+ /// guarantee that it's not undefined behavior to keep a `Box` here while it's used as a raw
+ /// pointer in the C API.
+ struct DebugCallbackRawPtr {
+-    callback: *mut std::os::raw::c_void,
++    callback: *mut core::ffi::c_void,
+ }
+ 
+ unsafe impl Send for DebugCallbackRawPtr {}
+@@ -54,12 +60,12 @@
+ impl Context {
+     pub unsafe fn from_loader_function_cstr<F>(mut loader_function: F) -> Self
+     where
+-        F: FnMut(&CStr) -> *const std::os::raw::c_void,
++        F: FnMut(&CStr) -> *const core::ffi::c_void,
+     {
+         let raw: native_gl::GlFns =
+-            native_gl::GlFns::load_with(|p: *const std::os::raw::c_char| {
+-                let c_str = std::ffi::CStr::from_ptr(p);
+-                loader_function(c_str) as *mut std::os::raw::c_void
++            native_gl::GlFns::load_with(|p: *const core::ffi::c_char| {
++                let c_str = core::ffi::CStr::from_ptr(p);
++                loader_function(c_str) as *mut core::ffi::c_void
+             });
+ 
+         // Retrieve and parse `GL_VERSION`
+@@ -69,7 +75,7 @@
+             panic!("Reading GL_VERSION failed. Make sure there is a valid GL context currently active.")
+         }
+ 
+-        let raw_version = std::ffi::CStr::from_ptr(raw_string as *const native_gl::GLchar)
++        let raw_version = core::ffi::CStr::from_ptr(raw_string as *const native_gl::GLchar)
+             .to_str()
+             .unwrap()
+             .to_owned();
+@@ -116,7 +122,7 @@
+ 
+     pub unsafe fn from_loader_function<F>(mut loader_function: F) -> Self
+     where
+-        F: FnMut(&str) -> *const std::os::raw::c_void,
++        F: FnMut(&str) -> *const core::ffi::c_void,
+     {
+         Self::from_loader_function_cstr(move |name| loader_function(name.to_str().unwrap()))
+     }
+@@ -149,8 +155,8 @@
+     }
+ }
+ 
+-impl std::fmt::Debug for Context {
+-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
++impl core::fmt::Debug for Context {
++    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+         write!(f, "Native_GL_Context")
+     }
+ }
+@@ -366,7 +372,7 @@
+         gl.GetShaderiv(shader.0.get(), INFO_LOG_LENGTH, &mut length);
+         if length > 0 {
+             let mut log = String::with_capacity(length as usize);
+-            log.extend(std::iter::repeat('\0').take(length as usize));
++            log.extend(core::iter::repeat('\0').take(length as usize));
+             gl.GetShaderInfoLog(
+                 shader.0.get(),
+                 length,
+@@ -425,8 +431,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelPackData::BufferOffset(offset) => offset as *mut std::ffi::c_void,
+-                PixelPackData::Slice(Some(data)) => data.as_mut_ptr() as *mut std::ffi::c_void,
++                PixelPackData::BufferOffset(offset) => offset as *mut core::ffi::c_void,
++                PixelPackData::Slice(Some(data)) => data.as_mut_ptr() as *mut core::ffi::c_void,
+                 PixelPackData::Slice(None) => ptr::null_mut(),
+             },
+         );
+@@ -503,7 +509,7 @@
+         gl.GetProgramiv(program.0.get(), INFO_LOG_LENGTH, &mut length);
+         if length > 0 {
+             let mut log = String::with_capacity(length as usize);
+-            log.extend(std::iter::repeat('\0').take(length as usize));
++            log.extend(core::iter::repeat('\0').take(length as usize));
+             gl.GetProgramInfoLog(
+                 program.0.get(),
+                 length,
+@@ -1158,7 +1164,7 @@
+         );
+ 
+         let mut name = String::with_capacity(uniform_max_size as usize);
+-        name.extend(std::iter::repeat('\0').take(uniform_max_size as usize));
++        name.extend(core::iter::repeat('\0').take(uniform_max_size as usize));
+         let mut length = 0;
+         let mut size = 0;
+         let mut utype = 0;
+@@ -1433,12 +1439,12 @@
+ 
+     unsafe fn buffer_data_size(&self, target: u32, size: i32, usage: u32) {
+         let gl = &self.raw;
+-        gl.BufferData(target, size as isize, std::ptr::null(), usage);
++        gl.BufferData(target, size as isize, core::ptr::null(), usage);
+     }
+ 
+     unsafe fn named_buffer_data_size(&self, buffer: Self::Buffer, size: i32, usage: u32) {
+         let gl = &self.raw;
+-        gl.NamedBufferData(buffer.0.get(), size as isize, std::ptr::null(), usage);
++        gl.NamedBufferData(buffer.0.get(), size as isize, core::ptr::null(), usage);
+     }
+ 
+     unsafe fn buffer_data_u8_slice(&self, target: u32, data: &[u8], usage: u32) {
+@@ -1446,7 +1452,7 @@
+         gl.BufferData(
+             target,
+             data.len() as isize,
+-            data.as_ptr() as *const std::ffi::c_void,
++            data.as_ptr() as *const core::ffi::c_void,
+             usage,
+         );
+     }
+@@ -1456,7 +1462,7 @@
+         gl.NamedBufferData(
+             buffer.0.get(),
+             data.len() as isize,
+-            data.as_ptr() as *const std::ffi::c_void,
++            data.as_ptr() as *const core::ffi::c_void,
+             usage,
+         );
+     }
+@@ -1467,7 +1473,7 @@
+             target,
+             offset as isize,
+             src_data.len() as isize,
+-            src_data.as_ptr() as *const std::ffi::c_void,
++            src_data.as_ptr() as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -1482,7 +1488,7 @@
+             buffer.0.get(),
+             offset as isize,
+             src_data.len() as isize,
+-            src_data.as_ptr() as *const std::ffi::c_void,
++            src_data.as_ptr() as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -1492,7 +1498,7 @@
+             target,
+             offset as isize,
+             dst_data.len() as isize,
+-            dst_data.as_mut_ptr() as *mut std::ffi::c_void,
++            dst_data.as_mut_ptr() as *mut core::ffi::c_void,
+         );
+     }
+ 
+@@ -1508,7 +1514,7 @@
+     unsafe fn buffer_storage(&self, target: u32, size: i32, data: Option<&[u8]>, flags: u32) {
+         let gl = &self.raw;
+         let size = size as isize;
+-        let data = data.map(|p| p.as_ptr()).unwrap_or(std::ptr::null()) as *const std::ffi::c_void;
++        let data = data.map(|p| p.as_ptr()).unwrap_or(core::ptr::null()) as *const core::ffi::c_void;
+         if gl.BufferStorage_is_loaded() {
+             gl.BufferStorage(target, size, data, flags);
+         } else {
+@@ -1523,7 +1529,7 @@
+         flags: u32,
+     ) {
+         let gl = &self.raw;
+-        let data = data.map(|p| p.as_ptr()).unwrap_or(std::ptr::null()) as *const std::ffi::c_void;
++        let data = data.map(|p| p.as_ptr()).unwrap_or(core::ptr::null()) as *const core::ffi::c_void;
+         gl.NamedBufferStorage(buffer.0.get(), size as isize, data, flags);
+     }
+ 
+@@ -1848,7 +1854,7 @@
+ 
+     unsafe fn draw_arrays_indirect_offset(&self, mode: u32, offset: i32) {
+         let gl = &self.raw;
+-        gl.DrawArraysIndirect(mode, offset as *const std::ffi::c_void);
++        gl.DrawArraysIndirect(mode, offset as *const core::ffi::c_void);
+     }
+ 
+     unsafe fn draw_buffer(&self, draw_buffer: u32) {
+@@ -1889,7 +1895,7 @@
+             mode as u32,
+             count,
+             element_type as u32,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -1906,7 +1912,7 @@
+             mode as u32,
+             count,
+             element_type as u32,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+             base_vertex,
+         );
+     }
+@@ -1924,7 +1930,7 @@
+             mode as u32,
+             count,
+             element_type as u32,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+             instance_count,
+         );
+     }
+@@ -1943,7 +1949,7 @@
+             mode as u32,
+             count,
+             element_type as u32,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+             instance_count,
+             base_vertex,
+         );
+@@ -1964,7 +1970,7 @@
+             mode as u32,
+             count,
+             element_type as u32,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+             instance_count,
+             base_vertex,
+             base_instance,
+@@ -1973,7 +1979,7 @@
+ 
+     unsafe fn draw_elements_indirect_offset(&self, mode: u32, element_type: u32, offset: i32) {
+         let gl = &self.raw;
+-        gl.DrawElementsIndirect(mode, element_type, offset as *const std::ffi::c_void);
++        gl.DrawElementsIndirect(mode, element_type, offset as *const core::ffi::c_void);
+     }
+ 
+     unsafe fn enable(&self, parameter: u32) {
+@@ -2300,7 +2306,7 @@
+     unsafe fn get_parameter_indexed_string(&self, parameter: u32, index: u32) -> String {
+         let gl = &self.raw;
+         let raw_ptr = gl.GetStringi(parameter, index);
+-        std::ffi::CStr::from_ptr(raw_ptr as *const native_gl::GLchar)
++        core::ffi::CStr::from_ptr(raw_ptr as *const native_gl::GLchar)
+             .to_str()
+             .unwrap()
+             .to_owned()
+@@ -2315,7 +2321,7 @@
+                 parameter
+             )
+         }
+-        std::ffi::CStr::from_ptr(raw_ptr as *const native_gl::GLchar)
++        core::ffi::CStr::from_ptr(raw_ptr as *const native_gl::GLchar)
+             .to_str()
+             .unwrap()
+             .to_owned()
+@@ -2474,7 +2480,7 @@
+             &mut attribute_max_size,
+         );
+         let mut name = String::with_capacity(attribute_max_size as usize);
+-        name.extend(std::iter::repeat('\0').take(attribute_max_size as usize));
++        name.extend(core::iter::repeat('\0').take(attribute_max_size as usize));
+         let mut length = 0;
+         let mut size = 0;
+         let mut atype = 0;
+@@ -2605,8 +2611,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -2630,7 +2636,7 @@
+             width,
+             border,
+             image_size,
+-            pixels.as_ptr() as *const std::ffi::c_void,
++            pixels.as_ptr() as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -2657,8 +2663,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -2704,7 +2710,7 @@
+             height,
+             border,
+             image_size,
+-            pixels.as_ptr() as *const std::ffi::c_void,
++            pixels.as_ptr() as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -2733,8 +2739,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -2762,7 +2768,7 @@
+             depth,
+             border,
+             image_size,
+-            pixels.as_ptr() as *const std::ffi::c_void,
++            pixels.as_ptr() as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -3415,8 +3421,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -3445,8 +3451,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -3466,11 +3472,11 @@
+         let gl = &self.raw;
+         let (data, image_size) = match pixels {
+             CompressedPixelUnpackData::BufferRange(ref range) => (
+-                range.start as *const std::ffi::c_void,
++                range.start as *const core::ffi::c_void,
+                 (range.end - range.start) as i32,
+             ),
+             CompressedPixelUnpackData::Slice(data) => {
+-                (data.as_ptr() as *const std::ffi::c_void, data.len() as i32)
++                (data.as_ptr() as *const core::ffi::c_void, data.len() as i32)
+             }
+         };
+ 
+@@ -3506,8 +3512,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -3540,8 +3546,8 @@
+             format,
+             ty,
+             match pixels {
+-                PixelUnpackData::BufferOffset(offset) => offset as *const std::ffi::c_void,
+-                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const std::ffi::c_void,
++                PixelUnpackData::BufferOffset(offset) => offset as *const core::ffi::c_void,
++                PixelUnpackData::Slice(Some(data)) => data.as_ptr() as *const core::ffi::c_void,
+                 PixelUnpackData::Slice(None) => ptr::null(),
+             },
+         );
+@@ -3563,11 +3569,11 @@
+         let gl = &self.raw;
+         let (data, image_size) = match pixels {
+             CompressedPixelUnpackData::BufferRange(ref range) => (
+-                range.start as *const std::ffi::c_void,
++                range.start as *const core::ffi::c_void,
+                 (range.end - range.start) as i32,
+             ),
+             CompressedPixelUnpackData::Slice(data) => {
+-                (data.as_ptr() as *const std::ffi::c_void, data.len() as i32)
++                (data.as_ptr() as *const core::ffi::c_void, data.len() as i32)
+             }
+         };
+ 
+@@ -3727,7 +3733,7 @@
+             data_type,
+             normalized as u8,
+             stride,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -3745,7 +3751,7 @@
+             size,
+             data_type,
+             stride,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -3763,7 +3769,7 @@
+             size,
+             data_type,
+             stride,
+-            offset as *const std::ffi::c_void,
++            offset as *const core::ffi::c_void,
+         );
+     }
+ 
+@@ -3986,7 +3992,7 @@
+         let gl = &self.raw;
+ 
+         let ids_ptr = if ids.is_empty() {
+-            std::ptr::null()
++            core::ptr::null()
+         } else {
+             ids.as_ptr()
+         };
+@@ -4043,7 +4049,7 @@
+             None => {
+                 let trait_object: DebugCallback = Box::new(callback);
+                 let thin_ptr = Box::new(trait_object);
+-                let raw_ptr = Box::into_raw(thin_ptr) as *mut _ as *mut std::ffi::c_void;
++                let raw_ptr = Box::into_raw(thin_ptr) as *mut _ as *mut core::ffi::c_void;
+ 
+                 let gl = &self.raw;
+ 
+@@ -4095,7 +4101,7 @@
+         let mut offset = 0;
+         for i in 0..received {
+             let message =
+-                std::ffi::CStr::from_ptr(message_log[offset..].as_ptr()).to_string_lossy();
++                core::ffi::CStr::from_ptr(message_log[offset..].as_ptr()).to_string_lossy();
+             offset += lengths[i] as usize;
+             entries.push(DebugMessageLogEntry {
+                 source: sources[i],
+@@ -4157,7 +4163,7 @@
+                 khr_fallback!(
+                     gl.ObjectLabel_is_loaded,
+                     gl.ObjectLabelKHR,
+-                    gl.ObjectLabel(identifier, name, 0, std::ptr::null()),
++                    gl.ObjectLabel(identifier, name, 0, core::ptr::null()),
+                 );
+             }
+         }
+@@ -4179,7 +4185,7 @@
+             ),
+         );
+         label_buf.set_len(len as usize);
+-        std::ffi::CStr::from_ptr(label_buf.as_ptr())
++        core::ffi::CStr::from_ptr(label_buf.as_ptr())
+             .to_str()
+             .unwrap()
+             .to_owned()
+@@ -4199,7 +4205,7 @@
+                     gl.ObjectPtrLabel_is_loaded,
+                     gl.ObjectPtrLabelKHR,
+                     gl.ObjectPtrLabel(
+-                        sync.0 as *mut std::ffi::c_void,
++                        sync.0 as *mut core::ffi::c_void,
+                         length,
+                         lbl.as_ptr() as *const native_gl::GLchar,
+                     ),
+@@ -4209,7 +4215,7 @@
+                 khr_fallback!(
+                     gl.ObjectPtrLabel_is_loaded,
+                     gl.ObjectPtrLabelKHR,
+-                    gl.ObjectPtrLabel(sync.0 as *mut std::ffi::c_void, 0, std::ptr::null()),
++                    gl.ObjectPtrLabel(sync.0 as *mut core::ffi::c_void, 0, core::ptr::null()),
+                 );
+             }
+         }
+@@ -4223,14 +4229,14 @@
+             gl.GetObjectPtrLabel_is_loaded,
+             gl.GetObjectPtrLabelKHR,
+             gl.GetObjectPtrLabel(
+-                sync.0 as *mut std::ffi::c_void,
++                sync.0 as *mut core::ffi::c_void,
+                 self.constants.max_label_length,
+                 &mut len,
+                 label_buf.as_mut_ptr(),
+             ),
+         );
+         label_buf.set_len(len as usize);
+-        std::ffi::CStr::from_ptr(label_buf.as_ptr())
++        core::ffi::CStr::from_ptr(label_buf.as_ptr())
+             .to_str()
+             .unwrap()
+             .to_owned()
+@@ -4343,8 +4349,8 @@
+             format,
+             gltype,
+             match pixels {
+-                PixelPackData::BufferOffset(offset) => offset as *mut std::ffi::c_void,
+-                PixelPackData::Slice(Some(data)) => data.as_mut_ptr() as *mut std::ffi::c_void,
++                PixelPackData::BufferOffset(offset) => offset as *mut core::ffi::c_void,
++                PixelPackData::Slice(Some(data)) => data.as_mut_ptr() as *mut core::ffi::c_void,
+                 PixelPackData::Slice(None) => ptr::null_mut(),
+             },
+         );
+@@ -4502,7 +4508,7 @@
+             program.0.get(),
+             index,
+             name_bytes.len() as i32,
+-            std::ptr::null_mut(),
++            core::ptr::null_mut(),
+             &mut size,
+             &mut tftype,
+             name_bytes.as_mut_ptr(),
+@@ -4607,18 +4613,18 @@
+ 
+         if length > 0 {
+             assert_eq!(
+-                std::mem::size_of::<u8>(),
+-                std::mem::size_of::<native_gl::GLchar>(),
++                core::mem::size_of::<u8>(),
++                core::mem::size_of::<native_gl::GLchar>(),
+                 "This operation is only safe in systems in which the length of \
+                 a GLchar is the same as that of an u8"
+             );
+             assert_eq!(
+-                std::mem::align_of::<u8>(),
+-                std::mem::align_of::<native_gl::GLchar>(),
++                core::mem::align_of::<u8>(),
++                core::mem::align_of::<native_gl::GLchar>(),
+                 "This operation is only safe in systems in which the alignment \
+                 of a GLchar is the same as that of an u8"
+             );
+-            let buffer = std::slice::from_raw_parts(
++            let buffer = core::slice::from_raw_parts(
+                 buffer.as_ptr() as *const u8,
+                 (length as usize + 1).min(buffer.len()),
+             );
+@@ -4680,9 +4686,9 @@
+                 unsafe {
+                     let gl = &self.raw;
+                     if gl.DebugMessageCallback_is_loaded() {
+-                        gl.DebugMessageCallback(None, std::ptr::null());
++                        gl.DebugMessageCallback(None, core::ptr::null());
+                     } else {
+-                        gl.DebugMessageCallbackKHR(None, std::ptr::null());
++                        gl.DebugMessageCallbackKHR(None, core::ptr::null());
+                     }
+                 }
+             }
+@@ -4698,14 +4704,15 @@
+     severity: u32,
+     length: i32,
+     message: *const native_gl::GLchar,
+-    user_param: *mut std::ffi::c_void,
++    user_param: *mut core::ffi::c_void,
+ ) {
+-    let _result = std::panic::catch_unwind(move || unsafe {
++    // no_std: catch_unwind is unavailable; call the closure directly.
++    unsafe {
+         let callback: &DebugCallback = &*(user_param as *const DebugCallback);
+-        let slice = std::slice::from_raw_parts(message as *const u8, length as usize);
++        let slice = core::slice::from_raw_parts(message as *const u8, length as usize);
+         let msg = String::from_utf8_lossy(slice);
+         (callback)(source, gltype, id, severity, &msg);
+-    });
++    }
+ }
+ 
+ #[cfg(test)]
+--- a/src/version.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/src/version.rs	2026-09-14 17:13:43.634673844 +0900
+@@ -1,3 +1,7 @@
++use alloc::boxed::Box;
++use alloc::string::{String, ToString};
++use alloc::vec::Vec;
++use alloc::borrow::ToOwned;
+ /// A version number for a specific component of an OpenGL implementation
+ #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+ pub struct Version {
+@@ -121,8 +125,8 @@
+     }
+ }
+ 
+-impl std::fmt::Debug for Version {
+-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
++impl core::fmt::Debug for Version {
++    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+         match (
+             self.major,
+             self.minor,
+--- a/src/web_sys.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/src/web_sys.rs	2026-09-14 17:12:32.669349273 +0900
+@@ -6281,7 +6281,7 @@
+ /// This function reinterprets the byte data into the correct type for the texture.
+ /// The lookup is generated from this table: https://www.khronos.org/registry/webgl/specs/latest/2.0/#TEXTURE_PIXELS_TYPE_TABLE
+ unsafe fn texture_data_view(ty: u32, bytes: &[u8]) -> js_sys::Object {
+-    use std::mem::size_of;
++    use core::mem::size_of;
+     use std::slice::from_raw_parts;
+ 
+     match ty {

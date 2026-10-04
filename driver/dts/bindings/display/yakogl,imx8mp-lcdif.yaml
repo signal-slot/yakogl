@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  An i.MX 8M Plus LCDIFv3 (LCDIF1 0x32e80000, LCDIF2 0x32e90000, LCDIF3
+  0x32fc6000: one IP) as a Zephyr display device, register logic in Rust
+  (driver/rust/src/ip/lcdifv3.rs, written from IMX8MPRM Rev. 3 13.3):
+  driver/drivers/display/display_yakogl_imx8mp_lcdif.c. One linear XRGB8888
+  layer; Zephyr's display write() of a whole frame flips to that buffer by
+  address (no copy), blanking on/off stops and restarts the scan-out, the
+  vertical-blanking interrupt gives a semaphore.
+
+  Two uses:
+   - Driven by a chain owner (safeui,imx8mp-display names it in `lcdif`):
+     the owner configures and enables it in the chain's order; this node only
+     states the LCDIF's own facts (output polarity, panic thresholds).
+   - adopt-only: a layer the previous kernel left scanning is taken over
+     (re-pointed at our buffers, given back on blanking) and never
+     configured; the node then also provides the imx8mp_display_* API when
+     no safeui,imx8mp-display node is enabled. The old
+     safeui,imx8mp-lcdif-adopt nodes are served the same way.
+
+  The LCDIF registers sit inside a power domain (MEDIAMIX, HDMIMIX) this
+  device does not own: its init maps them and reads nothing.
+
+  Design and board plan: driver/docs/imx8mp-display-cold.md.
+
+compatible: "yakogl,imx8mp-lcdif"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    description: |
+      The LCDIF interrupt (LCDIF1: SPI 5, IMX8MPRM Table 7-1). Without it
+      flips still wait for the shadow load by polling; only
+      yakogl_imx8mp_lcdif_wait_vblank() needs it. LCDIF3's interrupt goes
+      through the HDMI block's steering and is not supported here.
+
+  hactive:
+    type: int
+    required: true
+    description: |
+      The layer's width: what an adopt-only node expects to find running (and
+      reports as geometry before it has adopted), and the display API's
+      resolution.
+
+  vactive:
+    type: int
+    required: true
+
+  adopt-only:
+    type: boolean
+    description: |
+      Never configure the controller: adopt what runs, or fail with -ENODEV.
+
+  pixclk-rising:
+    type: boolean
+    description: |
+      CTRL[INV_PXCK] = 1: the consumer samples data on the rising edge
+      (13.3.3.1.2.4). The Verdin's DSIM needs it (the board's Linux has CTRL
+      = 0x08; with the bit clear the PLLs lock and no picture comes).
+
+  hsync-active-low:
+    type: boolean
+  vsync-active-low:
+    type: boolean
+  de-active-low:
+    type: boolean
+
+  desc3-extra:
+    type: int
+    default: 0
+    description: |
+      Bits OR-ed into CTRLDESCL0_3 above PITCH, which IMX8MPRM 13.3.3.1.13.4
+      marks reserved (risk R1). 0, as NXP's SDK driver writes, unless a
+      board run shows underruns; the replaced C driver wrote 0x220000.
+
+  panic-thresholds:
+    type: array
+    description: |
+      PANIC0_THRES low and high, in 128-bit units of the 512-entry input
+      FIFO (13.3.3.1.24); with them the panic-driven NoC priority boost is
+      enabled (INT_ENABLE_D1). NXP's SDK suggests 1/3 and 2/3: <170 340>.
+
+  dsi-host:
+    type: phandle
+    description: |
+      The yakogl,samsung-dsim this LCDIF feeds. blanking_off() releases its
+      data lanes after the layer is on (risk R5: Zephyr's MIPI-DSI API has no
+      "start video" step; see the design note).

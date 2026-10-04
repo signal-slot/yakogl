@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The i.MX 8M Plus HDMI output as one display device: LCDIF3 -> HTX_PVI ->
+  DesignWare HDMI TX controller -> HDMI PHY, in the HDMIMIX power domain,
+  for one fixed mode (no EDID, no HDCP, no audio; the sink is assumed
+  connected). Brought up from cold by Zephyr, so a board that boots Zephyr
+  from power-on gets a picture; on the kexec crash route a chain the
+  previous kernel left scanning is adopted instead unless force-cold is set.
+
+  The register logic is Rust (driver/rust/src/soc/imx8mp/hdmi_chain.rs and
+  the modules it calls, written from IMX8MPRM Rev. 3); the device is
+  driver/drivers/display/display_yakogl_imx8mp_hdmi.c. The design, the
+  sequence with its RM citations and what the RM leaves open:
+  driver/docs/x2-hdmi-cold.md. The properties marked "board dump" carry
+  values the RM does not state; they come from the registers of the board's
+  running Linux, and are left at the hardware's reset values when absent.
+
+compatible: "yakogl,imx8mp-hdmi"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true
+  reg-names:
+    required: true
+    description: |
+      "hdmi" (the TX controller, 0x32fd8000), "lcdif" (LCDIF3, 0x32fc6000),
+      "phy" (0x32fdff00), "blk" (HDMI TX block control, 0x32fc0000), "pvi"
+      (0x32fc4000), "gpc" (0x303a0000), "ccm" (0x30380000), in that order.
+
+  clock-frequency:
+    type: int
+    required: true
+    description: |
+      Pixel clock in Hz. The PHY's PLL is programmed in integer mode; the
+      nearest rate within max-ppm is used (154 MHz -> 154.286 MHz).
+  hactive:
+    type: int
+    required: true
+  vactive:
+    type: int
+    required: true
+  hfront-porch:
+    type: int
+    required: true
+  hback-porch:
+    type: int
+    required: true
+  hsync-len:
+    type: int
+    required: true
+  vfront-porch:
+    type: int
+    required: true
+  vback-porch:
+    type: int
+    required: true
+  vsync-len:
+    type: int
+    required: true
+  hsync-active:
+    type: int
+    default: 0
+    description: 1 = HSYNC active high at the connector, 0 = active low.
+  vsync-active:
+    type: int
+    default: 0
+  de-active:
+    type: int
+    default: 1
+
+  max-ppm:
+    type: int
+    default: 5000
+    description: Largest pixel clock error accepted (HDMI allows 0.5 %).
+
+  force-cold:
+    type: boolean
+    description: |
+      Bring the chain up from cold even when LCDIF3 is found scanning (the
+      crash route leaves Linux's chain running). Without it such a chain is
+      adopted: only the layer is re-pointed.
+  power-cycle:
+    type: boolean
+    description: |
+      With force-cold, power HDMIMIX and the HDMI PHY off before the bring-up
+      when they are found on, so it starts from the same state as a cold boot.
+  stop-after:
+    type: int
+    default: 0
+    description: |
+      Bisection aid: stop after stage N (1 start, 2 power, 3 block control,
+      4 PHY PLL, 5 controller, 6 PVI, 7 LCDIF3, 8 video check), 0 = never.
+  test-picture:
+    type: string
+    default: "none"
+    enum: ["none", "hdmi-forced", "lcdif-background"]
+    description: |
+      Staging: "hdmi-forced" makes the controller send its fixed debug video
+      (fc_dbgforce) after stage 5; "lcdif-background" puts LCDIF3 in its
+      background-colour test mode (test-rgb) after stage 7.
+  test-rgb:
+    type: int
+    default: 0x00ff00
+    description: The lcdif-background colour, 0xRRGGBB.
+
+  lcdif-pixclk-rising:
+    type: boolean
+    description: LCDIF CTRL[INV_PXCK] (board dump).
+  lcdif-desc3-extra:
+    type: int
+    default: 0
+    description: |
+      CTRLDESCL0_3 bits above PITCH that the RM marks reserved (board dump;
+      risk R1 of docs/source-form.md group E). 0 = RM only.
+  lcdif-panic-thresholds:
+    type: array
+    description: |
+      PANIC0_THRES <low high> in 128-bit units of the LCDIF input FIFO
+      (0..511). Absent: not written.
+  lcdif-noc-hurry:
+    type: int
+    default: 0
+    description: TX_CONTROL0[LCDIF_NOC_HURRY], 0..7 (board dump).
+  htx-pipe-clk-sel:
+    type: int
+    description: |
+      RTX_CLK_CTL1[HTX_PIPE_CLK_SEL], 0 or 1 (board dump: the RM does not say
+      which value selects the PHY's pixel clock). Absent: reset value.
+  htxphy-clk-sel:
+    type: int
+    description: |
+      RTX_CLK_CTL1[HTXPHY_CLK_SEL], 0 or 1 (board dump). Absent: reset value.
+  dw-phy-conf0:
+    type: int
+    description: |
+      The controller's phy_conf0 (board dump; the RM refers to a Synopsys PHY
+      databook this SoC's PHY is not covered by). Absent: reset value 0x06.
+  dw-phy-rstz:
+    type: int
+    description: |
+      The controller's mc_phyrstz (board dump). Absent: reset value.

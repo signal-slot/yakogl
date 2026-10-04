@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The AM62P GPU for a TI K3 A53 target. Register block, TISCI ids and the
+ * clock are the AM62P's (docs/gpu-recipes/gpu-bringup-spec.md); the carveout
+ * is a reserved 64 MiB of DDR that the Zephyr image and every other user
+ * (R5F, OP-TEE, shared memory) leave alone. The dmsc/secure-proxy nodes are
+ * the A53's TISCI channel (host id 12).
+ */
+
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		gpu_carveout: gpu-carveout@a0000000 {
+			reg = <0xa0000000 0x4000000>;
+			no-map;
+		};
+	};
+
+	soc {
+		secure_proxy_main: mailbox@4d000000 {
+			compatible = "ti,secure-proxy";
+			reg-names = "target_data", "rt", "scfg";
+			reg = <0x4d000000 0x80000>, <0x4a600000 0x80000>, <0x4a400000 0x80000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "rx_012";
+			#mbox-cells = <1>;
+			status = "okay";
+		};
+
+		dmsc: system-controller@44043000 {
+			compatible = "ti,k2g-sci";
+			reg-names = "debug_messages";
+			reg = <0x44043000 0xfe0>;
+			mbox-names = "rx", "tx";
+			mboxes = <&secure_proxy_main 12>, <&secure_proxy_main 13>;
+			ti,host-id = <12>;
+			status = "okay";
+		};
+
+		gpu: gpu@fd00000 {
+			compatible = "img,img-rogue";
+			reg = <0x0fd00000 0x20000>;
+			tisci = <&dmsc>;
+			tisci-power-domain-ids = <237 242>;
+			tisci-clock-dev-id = <237>;
+			tisci-clock-id = <3>;
+			clock-frequency = <800000000>;
+			memory-region = <&gpu_carveout>;
+			status = "okay";
+		};
+	};
+};
+
+/* the Zephyr image: room for the firmware blob and the GL tables */
+&ddr0 {
+	reg = <0x82000000 DT_SIZE_M(16)>;
+};

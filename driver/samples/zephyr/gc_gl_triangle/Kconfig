@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_gl_triangle"
+
+config GC_GL_TRIANGLE_WIDTH
+	int "Render target width in pixels"
+	default 256
+	help
+	  Kept a multiple of 16 so the row pitch (width * 4) is a multiple of
+	  the 64 bytes the pixel engine wants a linear colour surface aligned
+	  to. EGL also requires the pitch to be exactly width * 4.
+
+config GC_GL_TRIANGLE_HEIGHT
+	int "Render target height in pixels"
+	default 128
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

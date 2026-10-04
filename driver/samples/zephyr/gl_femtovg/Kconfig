@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Where gl_femtovg draws and what it does afterwards (mirrors gl_triangle).
+
+menu "gl_femtovg"
+
+config GL_FEMTOVG_WINDOW_PHYS
+	hex "Physical address of the window buffer (0 = a buffer in the image)"
+	default 0
+	help
+	  Set this to a panel's scan-out buffer to draw on the display, e.g.
+	  the framebuffer the previous OS left behind. 0 renders into an
+	  XRGB8888/RGBA8888 buffer owned by the program.
+
+config GL_FEMTOVG_WINDOW_WIDTH
+	int "Window width in pixels"
+	default 256
+
+config GL_FEMTOVG_WINDOW_HEIGHT
+	int "Window height in pixels"
+	default 256
+
+config GL_FEMTOVG_WINDOW_STRIDE
+	int "Window row pitch in bytes (0 = width * 4)"
+	default 0
+
+endmenu
+
+rsource "../common/Kconfig"
+source "Kconfig.zephyr"

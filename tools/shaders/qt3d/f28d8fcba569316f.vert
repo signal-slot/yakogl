@@ -1,0 +1,48 @@
+#version 300 es
+
+struct cbMain
+{
+    vec3 qt_cameraPosition;
+    vec4 qt_lightAndShadowCounts;
+    vec3 qt_light_ambient_total;
+    vec4 qt_material_base_color;
+    float qt_material_clearcoat_fresnel_power;
+    float qt_material_clearcoat_normal_strength;
+    vec3 qt_material_emissive_color;
+    vec4 qt_material_properties;
+    vec4 qt_material_properties2;
+    vec4 qt_material_properties3;
+    vec4 qt_material_specular;
+    mat4 qt_modelMatrix;
+    mat4 qt_modelViewProjection;
+    mat3 qt_normalMatrix;
+    vec4 qt_rhi_properties;
+    mat4 qt_viewMatrix;
+    mat4 qt_viewProjectionMatrix;
+};
+
+uniform cbMain _39;
+
+uniform highp sampler2D qt_screenTexture;
+uniform highp sampler2D qt_shadowmap_blue_noise_texture;
+uniform highp sampler2DArray qt_shadowmap_texture;
+
+layout(location = 1) in vec3 attr_pos;
+layout(location = 0) in vec3 attr_norm;
+out vec3 qt_varWorldPos;
+out vec3 qt_varNormal;
+
+void main()
+{
+    vec4 qt_vertPosition = vec4(attr_pos, 1.0);
+    vec3 qt_vertNormal = vec3(0.0);
+    vec3 qt_vertTangent = vec3(0.0);
+    vec3 qt_vertBinormal = vec3(0.0);
+    qt_vertNormal = attr_norm;
+    gl_Position = _39.qt_modelViewProjection * qt_vertPosition;
+    vec3 qt_local_model_world_position = (_39.qt_modelMatrix * qt_vertPosition).xyz;
+    qt_varWorldPos = qt_local_model_world_position;
+    vec3 qt_world_normal = normalize(_39.qt_normalMatrix * qt_vertNormal);
+    qt_varNormal = qt_world_normal;
+}
+

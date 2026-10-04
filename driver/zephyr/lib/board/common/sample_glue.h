@@ -1,0 +1,51 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* Board glue shared by the Zephyr samples (samples/zephyr/common). */
+#ifndef PVR_SAMPLE_GLUE_H
+#define PVR_SAMPLE_GLUE_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/* Scan an XRGB8888 buffer out as the DSS application plane
+ * (CONFIG_PVR_SAMPLE_SHOW_ON_DSS); without the DSS driver it returns 0 and
+ * does nothing. */
+int pvr_sample_show_on_dss(uintptr_t phys, uint32_t width, uint32_t height,
+			   uint32_t stride_bytes);
+
+/* Re-point the application plane at another buffer of the same geometry
+ * (double buffering: call after the frame in `phys` is complete). */
+/* Vertical syncs seen by the display so far (0 without a display): a plane
+ * flip takes effect at the next one, so a buffer flipped away is on screen
+ * until the count advances. */
+uint32_t pvr_sample_vsync_count(void);
+int pvr_sample_flip_app_buffer(uintptr_t phys, uint32_t width, uint32_t height,
+			       uint32_t stride_bytes);
+/* What to OR into a GL window's format (struct gles_native_window.format):
+ * GLES_NATIVE_WINDOW_BOTTOM_UP when the display can scan the buffer bottom row
+ * first (the SafeUI DSS driver with AM62P_DSS_PLANE_VFLIP), so GL draws the
+ * window y-up as it draws an FBO; 0 otherwise. */
+uint32_t pvr_sample_window_flags(void);
+/* pvr_sample_show_on_dss / pvr_sample_flip_app_buffer for a GL window: the
+ * scan order follows the window's own format (its GLES_NATIVE_WINDOW_BOTTOM_UP
+ * bit), so the plane and the GL surface cannot disagree. -ENOTSUP for a
+ * bottom-up window on a display that cannot scan one. */
+int pvr_sample_show_window(uintptr_t phys, uint32_t width, uint32_t height,
+			   uint32_t stride_bytes, uint32_t window_format);
+int pvr_sample_flip_window(uintptr_t phys, uint32_t width, uint32_t height,
+			   uint32_t stride_bytes, uint32_t window_format);
+
+/* Clean a buffer out of the CPU's data cache, so the GPU and the display
+ * controller see what the CPU wrote. Zephyr's own cache calls are inline C,
+ * which a Rust application cannot reach; this is that call by another name. */
+void pvr_sample_flush_dcache(void *addr, size_t size);
+
+/* Log "system counter at <where>: N us" (CNTPCT_EL0 over CNTFRQ_EL0) when
+ * CONFIG_PVR_SAMPLE_BOOT_TIME is set; nothing otherwise. */
+void pvr_sample_log_boot_time(const char *where);
+
+/* Keep the picture for CONFIG_PVR_SAMPLE_HOLD_SECONDS, then reset the SoC
+ * when CONFIG_PVR_SAMPLE_REBOOT is set. Returns rc otherwise. */
+int pvr_sample_finish(int rc);
+
+#endif

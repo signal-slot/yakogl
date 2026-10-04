@@ -1,0 +1,18 @@
+# Toradex Verdin AM62P on the Dahlia carrier, Cortex-A53 cluster.
+#   verdin_am62p/am62p54/a53         an image kexec'd out of Torizon, or
+#                                    started by U-Boot proper ("go 0x82000000")
+#                                    (verdin_am62p_am62p54_a53.dts)
+#   verdin_am62p/am62p54/a53/direct  the same image type started by the A53
+#                                    U-Boot SPL at power-on in place of U-Boot
+#                                    proper, no Linux; it drives the panel
+#                                    itself (verdin_am62p_am62p54_a53_direct.dts,
+#                                    docs/direct-boot.md)
+board:
+  name: verdin_am62p
+  full_name: Verdin AM62P
+  vendor: toradex
+  socs:
+  - name: am62p54
+    variants:
+    - name: direct
+      cpucluster: a53

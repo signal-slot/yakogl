@@ -1,0 +1,125 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YakoGL Demos</title>
+<meta name="description" content="The Slint and cluster demos on three GPUs, and the same picture from three GPUs.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="name" href="index.html">YakoGL</a>
+  <nav><a href="index.html">Home</a><a href="try-it.html">Try it</a><a href="demos.html" aria-current="page">Demos</a><a href="status.html">Status</a></nav>
+</header>
+<main>
+<h1>Demos</h1>
+<p class="lead">Each result here is one run on the board, booted from its bootloader,
+on 2026-10-03 or 2026-10-04.</p>
+
+<h2>The cluster demo</h2>
+<p>A full instrument cluster (from agl-slint-cluster) drawn by Slint through YakoGL. It
+fills the whole panel and animates a drive cycle for 60 seconds. Then it checks fixed
+points of the picture against a reference made on the PC.</p>
+<figure><div class="photo">VIDEO / PHOTO SLOT</div>
+<figcaption>A 10 s phone video of the three panels side by side, all running the cluster
+demo. Until then: one photo per panel during the 60 s run.</figcaption></figure>
+<div class="scroll"><table>
+<tr><th>Board</th><th>Panel</th><th class="num">Frames / time</th><th class="num">fps</th><th class="num">Mpx/s</th><th>Smooth?</th><th>Picture check</th></tr>
+<tr><td>Raspberry Pi 4 (V3D 4.2)</td><td>1920x720</td><td class="num">8395 / 60012 ms</td><td class="num">139.8</td><td class="num">193.4</td><td>yes</td><td>PASS, 34/34 points</td></tr>
+<tr><td>Verdin AM62P (PowerVR BXS-4-64)</td><td>1024x600</td><td class="num">6177 / 60015 ms</td><td class="num">102.9</td><td class="num">63.2</td><td>yes</td><td>PASS, 15/15 points</td></tr>
+<tr><td>Verdin iMX8M Plus (GC7000UL)</td><td>1280x800</td><td class="num tbd">[TBD]</td><td class="num tbd">[TBD]</td><td class="num tbd">[TBD]</td><td class="tbd">[TBD]</td><td class="tbd">[TBD] run queued</td></tr>
+</table></div>
+<p><small class="src">"Smooth" means at least 60 frames per second for the whole run.
+These frame rates are not a benchmark: they depend on this demo, and the panels differ
+in size. To compare boards, use the pixels per second (Mpx/s: frames x panel pixels /
+time), never the fps. The cluster sample for all three boards is on a branch, not on main yet.</small></p>
+
+<h2>The Slint demo</h2>
+<p>One Slint dashboard, one source, a 1024x600 window on every board. Each board checks
+five points against one reference table, with a tolerance of 1 per colour channel.</p>
+<div class="scroll"><table>
+<tr><th>Board</th><th>Boot</th><th>Check</th><th class="num">Animation frames / time</th></tr>
+<tr><td>Verdin AM62P</td><td>U-Boot, TFTP</td><td>PASS</td><td class="num">708 / 10011 ms</td></tr>
+<tr><td>Verdin iMX8M Plus</td><td>U-Boot, TFTP</td><td>PASS (result record only; no console)</td><td class="num tbd">not read</td></tr>
+<tr><td>Raspberry Pi 4</td><td>firmware tryboot</td><td>PASS</td><td class="num">651 / 10008 ms</td></tr>
+</table></div>
+<p><small class="src">The two Verdins left the same five-point record, bit for bit. The
+Pi 4 differs at one point by one step of green, inside the tolerance.</small></p>
+<figure><div class="photo">PHOTO SLOT</div>
+<figcaption>Photo: the Slint demo on the three panels, the same picture in the top-left
+1024x600 of each screen.</figcaption></figure>
+
+<h2>Same source, same picture</h2>
+<p>A triangle test draws one coloured triangle and packs the picture into a short
+record. Three different GPUs, and the picture part of the record is the same:</p>
+<pre>Raspberry Pi 4  (V3D 4.2)       ... ff403f80 35706c4e 04000258
+Verdin AM62P    (PowerVR)       ... ff403f80 35706c4e 04000258
+Verdin iMX8MP   (GC7000UL)      ... ff403f80 35706c4e 04000258</pre>
+<p>All three ran the same triangle sample, booted from the bootloader (U-Boot over TFTP
+on the two Verdins, tryboot on the Pi 4), and the three picture words are bit for bit
+the same. On the Pi 4 and the AM62P the check also compared every pixel of the window:
+none wrong, largest difference one step per channel. The AM62P compiled the shaders on
+the board with YakoGL's own compiler.</p>
+<figure><div class="photo">SCREENSHOT SLOT</div>
+<figcaption>Three photos of the triangle, one per panel, side by side, with the
+record line under each.</figcaption></figure>
+
+<h2>Performance</h2>
+<p>We measure performance with the standard benchmark glmark2-es2, never with the demo
+frame rates above. Every run is on-screen, in an 800x600 window, booted from the
+bootloader, on 2026-10-03 or 2026-10-04. All boards draw the same 800x600 window, so per
+pixel the scores compare directly. The last column is a public score of the same board
+under Linux. The conditions differ, so do not read the two columns as a contest.</p>
+<div class="scroll"><table>
+<tr><th>Board</th><th>GPU</th><th>Window</th><th>Boot</th><th class="num">glmark2 score</th><th>Scenes</th><th>Public reference</th></tr>
+<tr><td>Raspberry Pi 4</td><td>V3D 4.2</td><td>800x600</td><td>firmware tryboot</td><td class="num">201</td><td>29 ran, 0 failed, 4 not supported</td><td rowspan="2">697 (Mesa 23.2.1, 800x600 windowed, 2023-01)</td></tr>
+<tr><td>Raspberry Pi 4, with the scan-out view</td><td>V3D 4.2</td><td>800x600</td><td>firmware tryboot</td><td class="num">842</td><td>29 ran, 0 failed, 4 not supported</td></tr>
+<tr><td>Verdin AM62P</td><td>PowerVR BXS-4-64</td><td>800x600</td><td>U-Boot, TFTP</td><td class="num">303</td><td>29 ran, 2 failed, 2 not supported</td><td rowspan="2">306.4 (TI SDK 12.01, DRM; size not stated)</td></tr>
+<tr><td>Verdin AM62P, with the 20 &micro;s fence wait</td><td>PowerVR BXS-4-64</td><td>800x600</td><td>U-Boot, TFTP</td><td class="num">316</td><td>29 ran, 2 failed, 2 not supported</td></tr>
+<tr><td>Verdin AM62P, with the 20 &micro;s fence wait and the swap dropping depth/stencil</td><td>PowerVR BXS-4-64</td><td>800x600</td><td>U-Boot, TFTP</td><td class="num">550</td><td>29 ran, 2 failed, 2 not supported</td></tr>
+<tr><td>Verdin iMX8M Plus</td><td>Vivante GC7000UL</td><td>800x600</td><td>U-Boot, TFTP</td><td class="num">39</td><td>30 ran, 1 failed, 2 not supported</td><td rowspan="2">382 (Vivante driver 6.4.11, off-screen, 800x600)</td></tr>
+<tr><td>Verdin iMX8M Plus, with the scan-out view</td><td>Vivante GC7000UL</td><td>800x600</td><td>U-Boot, TFTP</td><td class="num">46</td><td>30 ran, 1 failed, 2 not supported</td></tr>
+</table></div>
+<ul>
+<li><strong>Pi 4:</strong> the first row copies each frame with the CPU. The copy takes
+91-99% of the frame in the 23 scenes where the GL work takes under 0.5 ms. In the
+second row the window is a view into the framebuffer, so there is no copy. The copy time
+is 0 in all 29 scenes, and the frame time is the V3D's own time.</li>
+<li><strong>Pi 4 not supported:</strong> two scenes need the buffer-map extension, which we do not
+offer. Two (shadow, refract) need the depth-texture extension, which the V3D driver
+does not offer.</li>
+<li><strong>AM62P failed scenes:</strong> shadow asks for a framebuffer with only a depth
+attachment, and we refuse it. Refract runs out of render pool memory.</li>
+<li><strong>AM62P not supported:</strong> two scenes need the buffer-map extension.</li>
+<li><strong>AM62P, the fence wait (316):</strong> the first row checks once per
+millisecond whether the GPU is done, so a frame waits up to 1 ms too long. Checking
+every 20 &micro;s took about 100 &micro;s off the light frames. The 20 &micro;s wait is
+a build option, off by default.</li>
+<li><strong>AM62P, the swap drops depth/stencil (550):</strong> after a swap the window's
+depth and stencil buffers are undefined (EGL 1.5, section 3.10.1), so the frame no longer
+writes them out and the next frame no longer reads them back. That is about two thirds
+of the memory a light frame moved. This is the default for window surfaces.</li>
+<li><strong>iMX8M Plus:</strong> the first run. The scan-out view removes the copy of
+each frame to the panel (39 to 46), but every frame still costs about 24 ms, and that
+floor is not the copy. Finding it is the next item. The board has no console, so the
+score comes back in the result record and per-scene numbers are not read.</li>
+<li>The public numbers differ in size, window system, driver and OS. TI's size is not
+stated. The score also leaves out scenes that do not run.</li>
+</ul>
+<h3>Where the PowerVR's frame time goes</h3>
+<p>On the AM62P, the GPU's fragment phase costs about 121 &micro;s per frame plus
+0.37 &micro;s per 16x16 tile, measured over four window sizes (200x150 to 1600x900).
+A frame that draws nothing but the clear still costs about 0.26 &micro;s per tile, about
+1 ns per pixel: most of one full-screen pass. There is no cheaper clear to switch to: like Mesa's driver, YakoGL clears with
+the GPU's background object, not with a drawn quad. Splitting the rest needs the GPU
+firmware's own timestamps (HWPerf), which is the next instrument.</p>
+</main>
+<footer>Sources: the performance table is driver/docs/glmark2.md, sections 4, 5b and 5c.
+The two scan-out-view and fence-wait rows are driver/docs/glmark2.md section 5d, driver/docs/pvr-fence-wait.md and tools/cts/RESULTS.md. The Slint table is driver/docs/one-method.md, "Step 1 acceptance run".
+The cluster and triangle rows are the 2026-10-03 board runs (to be replaced by the
+committed rows); the triangle value for the iMX8MP is driver/docs/imx8mp-netboot-plan.md.</footer>
+</body>
+</html>

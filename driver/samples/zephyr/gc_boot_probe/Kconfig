@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_boot_probe"
+
+config GC_BOOT_PROBE_STAGE
+	int "Reset the SoC as soon as this boot stage is reached"
+	default 0
+	help
+	  0 = soc_early_init_hook (arch init done, no kernel yet)
+	  1 = PRE_KERNEL_1 priority 0
+	  2 = POST_KERNEL priority 0 (every PRE_KERNEL driver ran)
+	  3 = main() (all drivers, the scheduler runs)
+	  4 = main() after a 5 s k_sleep (the timer interrupt works)
+	  A board with no console answers "how far does a kexec'd image get"
+	  by when Linux comes back: about 15 s after the jump when the stage
+	  was reached, the watchdog's two minutes when it was not.
+
+config GC_BOOT_PROBE_WDOG
+	bool "Service WDOG1 once in main() (the samples' service routine)"
+
+config GC_BOOT_PROBE_SLEEPS
+	int "k_sleep(1 s) this many times in main() before resetting (0 = no)"
+	default 0
+
+config GC_BOOT_PROBE_FEED_SECONDS
+	int "Feed WDOG1 every second for this long before resetting (0 = no)"
+	default 0
+
+config GC_BOOT_PROBE_PRINTK
+	bool "Call printk() once in main()"
+
+config GC_BOOT_PROBE_FATAL_CODE
+	int "What the fatal handler encodes in its delay: 0 reason+kind, 1 ESR EC"
+	default 0
+
+config GC_BOOT_PROBE_SYS_REBOOT
+	bool "Reset through sys_reboot() (the PSCI driver) instead of a raw SMC"
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

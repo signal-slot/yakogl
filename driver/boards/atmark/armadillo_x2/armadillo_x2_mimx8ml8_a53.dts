@@ -1,0 +1,141 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Atmark Techno Armadillo-X2 (i.MX8M Plus), Cortex-A53 cluster: an image
+ * kexec'd out of Armadillo Base OS on the kernel's crash route.
+ *
+ * Memory map, from the board's /proc/iomem and reserved-memory (2026-09-23):
+ *   0x40000000  352 MiB   Linux
+ *   0x56000000   32 MiB   OP-TEE (optee_core, optee_shm), never touched
+ *   0x58000000  640 MiB   Linux. 0x60000000 + 256 MiB of it is the
+ *                         crashkernel=256M@0x60000000 reservation the image
+ *                         is loaded into, and is this image's RAM.
+ *   0x80000000  256 MiB   galcore's "gcContMem", no-map for Linux. The first
+ *                         128 MiB are the GPU carveout here. 64 MiB, the
+ *                         Verdin's figure, ran out at 1920x1200: gc_slint's
+ *                         first animated frame wanted 9 MB more with 58 of
+ *                         64 MiB in use (2026-10-01, GL_OUT_OF_MEMORY on
+ *                         every frame after the first). galcore is built
+ *                         into that kernel; on the crash route it stops with
+ *                         the rest of Linux, and milestone 1 resets the GPU.
+ *   0x90000000            Linux, and the DSP and rpmsg reservations
+ *
+ * Display: LCDIF3 -> PVI -> DW-HDMI -> HDMI PHY, 1920x1200 under Linux. Two
+ * nodes describe it: safeui,imx8mp-lcdif-adopt re-points the layer the crash
+ * route leaves running, yakogl,imx8mp-hdmi brings the chain up from cold
+ * (driver/docs/x2-hdmi-cold.md). The adopt driver is the default until the
+ * cold path is proven on the board; CONFIG_SAFEUI_DISPLAY_IMX8MP_HDMI=y
+ * chooses the cold one.
+ */
+
+/dts-v1/;
+
+#include <nxp/nxp_mimx8mp_a53.dtsi>
+#include "armadillo_x2-pinctrl.dtsi"
+
+/ {
+	model = "Atmark Techno Armadillo-X2 A53";
+	compatible = "atmark,armadillo-x2", "fsl,imx8mp";
+
+	chosen {
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
+		zephyr,sram = &a53_ddr_section;
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	ddr0: memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 DT_SIZE_M(1024)>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		a53_ddr_section: memory@60000000 {
+			reg = <0x60000000 DT_SIZE_M(256)>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		gpu_carveout: gpu-carveout@80000000 {
+			reg = <0x80000000 DT_SIZE_M(128)>;
+			no-map;
+		};
+	};
+
+	soc {
+		/* Vivante GC7000UL, the same block as on the Verdin. */
+		gpu3d: gpu@38000000 {
+			compatible = "vivante,gc";
+			reg = <0x38000000 DT_SIZE_K(32)>,
+			      <0x303a0000 DT_SIZE_K(64)>,
+			      <0x30380000 DT_SIZE_K(64)>;
+			reg-names = "gpu", "gpc", "ccm";
+			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			interrupt-parent = <&gic>;
+			clock-frequency = <800000000>;
+			memory-region = <&gpu_carveout>;
+			status = "okay";
+		};
+
+		/* LCDIF3, feeding HDMI: adopted, never configured. */
+		display0: display@32fc6000 {
+			compatible = "safeui,imx8mp-lcdif-adopt";
+			reg = <0x32fc6000 DT_SIZE_K(64)>;
+			hactive = <1920>;
+			vactive = <1200>;
+			status = "okay";
+		};
+
+		/*
+		 * The same chain from cold. The monitor on CON8 is 1920x1200 at
+		 * 60 Hz, reduced blanking (VESA CVT 1.2, 154 MHz, +H -V); the
+		 * PHY's integer PLL makes 154.286 MHz of it (60.06 Hz). The
+		 * properties the RM leaves open (htx-pipe-clk-sel, dw-phy-conf0,
+		 * ...) are left out until the Linux register dump states them.
+		 */
+		hdmi: display@32fd8000 {
+			compatible = "yakogl,imx8mp-hdmi";
+			reg = <0x32fd8000 0x7f00>,
+			      <0x32fc6000 0x1000>,
+			      <0x32fdff00 0x100>,
+			      <0x32fc0000 0x1000>,
+			      <0x32fc4000 0x800>,
+			      <0x303a0000 DT_SIZE_K(64)>,
+			      <0x30380000 DT_SIZE_K(64)>;
+			reg-names = "hdmi", "lcdif", "phy", "blk", "pvi", "gpc", "ccm";
+			clock-frequency = <154000000>;
+			hactive = <1920>;
+			hfront-porch = <48>;
+			hsync-len = <32>;
+			hback-porch = <80>;
+			vactive = <1200>;
+			vfront-porch = <3>;
+			vsync-len = <6>;
+			vback-porch = <26>;
+			hsync-active = <1>;
+			vsync-active = <0>;
+			de-active = <1>;
+			force-cold;
+			power-cycle;
+			lcdif-panic-thresholds = <170 340>;
+			lcdif-noc-hurry = <7>;
+			status = "okay";
+		};
+	};
+};
+
+&uart2 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart2_default>;
+	pinctrl-names = "default";
+};

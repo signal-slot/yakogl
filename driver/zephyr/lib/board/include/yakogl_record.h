@@ -1,0 +1,111 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* GENERATED from driver/rust/src/board/record.rs by its crate's test
+ * (YK_RECORD_BLESS=1 cargo test -p yakogl-drivers board). DO NOT EDIT.
+ *
+ * The result record (driver/docs/one-method.md, section 3): four words,
+ * w0 = YK_RECORD_MAGIC | kind << 8 | low, then w1..w3 as the kind
+ * defines them (record.rs, KINDS). `low` is a sequence number, or the
+ * kind's own value for the kinds marked "tag" below. Each stored record
+ * is printed as YK_RECORD_LINE_FMT. */
+#ifndef YAKOGL_RECORD_H
+#define YAKOGL_RECORD_H
+
+#define YK_RECORD_MAGIC 0x594b0000u
+#define YK_RECORD_SELECTOR_MAGIC 0x53450000u
+#define YK_RECORD_LINE_PREFIX "yk-record: "
+#define YK_RECORD_LINE_FMT YK_RECORD_LINE_PREFIX "%08x %08x %08x %08x\n"
+
+/* kinds */
+#define YK_RECORD_KIND_CASE 1u /* low byte: seq */
+#define YK_RECORD_KIND_APP 2u /* low byte: seq */
+#define YK_RECORD_KIND_FAULT 3u /* low byte: tag */
+#define YK_RECORD_KIND_PICTURE 4u /* low byte: seq */
+#define YK_RECORD_KIND_PROGRESS 5u /* low byte: seq */
+#define YK_RECORD_KIND_PROBES 6u /* low byte: tag */
+#define YK_RECORD_KIND_SWEEP 7u /* low byte: tag */
+#define YK_RECORD_KIND_DEQP 8u /* low byte: seq */
+#define YK_RECORD_KIND_DEQP_CASES 9u /* low byte: tag */
+#define YK_RECORD_KIND_DEQP_FAILS 10u /* low byte: tag */
+#define YK_RECORD_KIND_DEQP_STATUS 11u /* low byte: tag */
+#define YK_RECORD_KIND_PERF 12u /* low byte: tag */
+#define YK_RECORD_KIND_WDOG 13u /* low byte: tag */
+#define YK_RECORD_KIND_STAGE 14u /* low byte: tag */
+#define YK_RECORD_KIND_FINGERPRINT 15u /* low byte: seq */
+#define YK_RECORD_KIND_GLMARK2 18u /* low byte: seq */
+#define YK_RECORD_KIND_GPU_STOP 20u /* low byte: tag */
+
+/* kind STAGE: the stage in the low byte */
+#define YK_RECORD_STAGE_GPU_POWER 0x30u /* + gpu::vivante::power::step */
+#define YK_RECORD_STAGE_MEDIA_EARLY_CLOCKS 0x11u
+#define YK_RECORD_STAGE_CCM 0x12u
+#define YK_RECORD_STAGE_CONSOLE_ENTER 0x13u
+#define YK_RECORD_STAGE_CONSOLE_DONE 0x14u
+#define YK_RECORD_STAGE_PRE_KERNEL_1_DONE 0x15u
+#define YK_RECORD_STAGE_SYS_CLOCK 0x16u
+#define YK_RECORD_STAGE_POST_KERNEL 0x20u
+#define YK_RECORD_STAGE_GPIO 0x21u
+#define YK_RECORD_STAGE_PWM_I2C 0x22u
+#define YK_RECORD_STAGE_MEDIA 0x23u
+#define YK_RECORD_STAGE_BRIDGE 0x24u
+#define YK_RECORD_STAGE_DISPLAY 0x25u
+#define YK_RECORD_STAGE_CONSOLE_COLD 0x26u
+#define YK_RECORD_STAGE_CONSOLE_COLD_DONE 0x27u
+#define YK_RECORD_STAGE_GPU_INIT 0x30u
+#define YK_RECORD_STAGE_GPU_IDENTIFY 0x38u
+#define YK_RECORD_STAGE_GPU_RESET 0x39u
+#define YK_RECORD_STAGE_GPU_INIT_DONE 0x3au
+#define YK_RECORD_STAGE_MAIN 0x40u
+#define YK_RECORD_STAGE_GPU_READY 0x41u
+#define YK_RECORD_STAGE_RENDER_INIT_DONE 0x43u
+#define YK_RECORD_STAGE_ALLOC_DONE 0x44u
+#define YK_RECORD_STAGE_DRAW 0x45u
+#define YK_RECORD_STAGE_EGL_CURRENT 0x46u
+#define YK_RECORD_STAGE_PROGRAM 0x47u
+#define YK_RECORD_STAGE_SWAPPED 0x48u
+#define YK_RECORD_STAGE_DISPLAY_ON 0x4eu
+#define YK_RECORD_STAGE_ENDED 0x4fu
+
+#define YK_RECORD_CASE_PASS 0x1u
+#define YK_RECORD_CASE_CHECK 0x2u
+#define YK_RECORD_CASE_NO_CHECK 0x3u
+#define YK_RECORD_CASE_UNFINISHED 0x4u
+#define YK_RECORD_CASE_NO_DEVICE 0x5u
+#define YK_RECORD_CASE_SET_FAIL 0x6u
+#define YK_RECORD_STATUS_PASS 0x1u
+#define YK_RECORD_STATUS_FAIL 0x2u
+#define YK_RECORD_APP_SHOWN_BY_COPY 0x10000u
+#define YK_RECORD_WDOG_ARMED 0x1u
+#define YK_RECORD_WDOG_REFUSED 0x2u
+#define YK_RECORD_WDOG_PROOF 0x3u
+#define YK_RECORD_WDOG_PROOF_ALIVE 0x4u
+#define YK_RECORD_WHERE_IMAGE 0xa0u
+#define YK_RECORD_WHERE_KERNEL 0xa1u
+#define YK_RECORD_WHERE_GPU_STEP 0x100u
+#define YK_RECORD_WHERE_STAGE 0x200u
+#define YK_RECORD_PICTURE_ROWS 0x18u
+#define YK_RECORD_PICTURE_FIRST 0x3u
+#define YK_RECORD_PICTURE_LAST 0x15u
+#define YK_RECORD_SWEEP_CASES 0x30u
+#define YK_RECORD_SWEEP_SEL_LEAKS 0x100u
+#define YK_RECORD_SWEEP_SEL_LIST 0x200u
+#define YK_RECORD_SWEEP_TAG_LEAKS 0xffu
+#define YK_RECORD_DEQP_CASES_MAX 0x20u
+#define YK_RECORD_DEQP_SEL_FAILS 0x8000u
+#define YK_RECORD_DEQP_SEL_PROBE 0x4000u
+#define YK_RECORD_DEQP_SEL_STATUS 0x2000u
+#define YK_RECORD_DEQP_FAILS_PER_PAGE 0x6u
+#define YK_RECORD_PERF_SEL 0x1000u
+#define YK_RECORD_GLMARK2_OFFSCREEN 0x1u
+#define YK_RECORD_GLMARK2_SCENES 0x2u
+#define YK_RECORD_GLMARK2_ENTRY_NONE 0x3fu
+#define YK_RECORD_GLMARK2_WHY_NO_ERROR 0x0u
+#define YK_RECORD_GLMARK2_WHY_VERTEX_SHADER 0x1u
+#define YK_RECORD_GLMARK2_WHY_FRAGMENT_SHADER 0x2u
+#define YK_RECORD_GLMARK2_WHY_LINK 0x3u
+#define YK_RECORD_GLMARK2_WHY_FILE 0x4u
+#define YK_RECORD_GLMARK2_WHY_OTHER 0xfu
+#define YK_RECORD_GPU_STOP_AT_MAXIMUM 0x2u
+#define YK_RECORD_GPU_STOP_GROW_TABLE_FULL 0x3u
+#define YK_RECORD_GPU_STOP_KICK_TIMEOUT 0x4u
+
+#endif /* YAKOGL_RECORD_H */

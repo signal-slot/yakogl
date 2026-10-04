@@ -1,0 +1,162 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The i.MX8MP display pipeline as one device: LCDIFv3 -> MIPI DSIM + D-PHY
+  -> TI SN65DSI8x DSI-to-LVDS bridge -> LVDS panel. The media power domains
+  are yakogl,imx8mp-media-pd devices (power-domains), driven through
+  include/safeui/imx8mp_media.h; the backlight is a PWM device of its own
+  (pwms), driven through Zephyr's PWM API, and the bridge a
+  yakogl,sn65dsi8x device (bridge), driven through include/safeui/sn65dsi8x.h.
+
+  It is one node rather than a chain of drivers because the bring-up order
+  is fixed and every step needs the numbers of the one before it (the CCM
+  pixel clock decides the DSIM PLL, which decides the bridge's clock range).
+
+compatible: "safeui,imx8mp-display"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true
+  reg-names:
+    required: true
+    description: |
+      "lcdif" and "dsim", in that order.
+
+  power-domains:
+    required: true
+    description: |
+      The yakogl,imx8mp-media-pd domains of the LCDIF and of the DSIM, in
+      that order ("lcdif1", "mipi-dsi1"). The display drives them itself on
+      its cold path (on, clock plan, reset pulse) and reads the pixel clock
+      back through them on the adopt path.
+
+  bridge:
+    type: phandle
+    required: true
+    description: |
+      The SN65DSI8x on its I2C bus, a yakogl,sn65dsi8x device without a
+      dsi-host: this display drives it (claims its EN pin at init, starts it
+      on the cold path, never touches it on the adopt path). Its EN pin and
+      the LVDS-side format, termination and polarities are its own
+      properties.
+
+  lcdif:
+    type: phandle
+    description: |
+      The yakogl,imx8mp-lcdif of this chain. With
+      CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST the display configures, enables
+      and stops the LCDIF through that device (driver/rust ip::lcdifv3)
+      instead of src/display/imx8mp_lcdif.c; reads (running, scan-out, flip
+      of a running layer) stay on this node's own "lcdif" mapping.
+
+  dsi:
+    type: phandle
+    description: |
+      The yakogl,samsung-dsim of this chain. With CONFIG_SAFEUI_DSIM_RUST the
+      display attaches it (mipi_dsi_attach), releases its data lanes after
+      the bridge and the LCDIF are up (yakogl_samsung_dsim_video_start) and
+      detaches it, instead of src/display/imx8mp_dsim.c. Its
+      pll-ref-frequency must equal this node's.
+
+  backlight-enable-gpios:
+    type: phandle-array
+    description: |
+      Optional backlight enable pin. The Verdin DSI backlight has none; the
+      mezzanine and Dahlia ones do.
+
+  dsi-lanes:
+    type: int
+    default: 4
+    description: |
+      DSI data lanes wired to the bridge (the DSIM side; the bridge node's
+      data-lanes must say the same, which the driver checks at build time).
+
+  esc-clock-frequency:
+    type: int
+    default: 20000000
+    description: |
+      Target DSIM escape clock; the driver picks the prescaler that stays at
+      or below it. 20 MHz is the value the i.MX8MP EVK device trees use for
+      samsung,esc-clock-frequency.
+
+  burst-clock-frequency:
+    type: int
+    default: 0
+    description: |
+      The DSI HS clock to run, as mainline's samsung,burst-clock-frequency.
+      0 derives it as pixel clock * 24 / lanes, which leaves burst mode no
+      margin for packet overhead; a panel that works under Linux should state
+      the rate Linux runs (the DSIM's PLLCTRL decoded).
+
+  video-pll1-frequency:
+    type: int
+    default: 0
+    description: |
+      Program VIDEO_PLL1 to this rate and offer it as a parent of the LCDIF
+      pixel clock, so the pixel clock can be the one Linux uses. 0 leaves the
+      PLL alone; the pixel clock then comes from whichever of VIDEO_PLL1 (if
+      it runs), SYS_PLL2, SYS_PLL1 and the oscillator gets nearest.
+
+  pll-ref-frequency:
+    type: int
+    default: 24000000
+    description: |
+      MEDIA_MIPI_PHY1_REF, the DSIM PLL input. Mainline imx8mp.dtsi assigns
+      24 MHz from the crystal and states the same in
+      samsung,pll-clock-frequency.
+
+  pwms:
+    type: phandle-array
+    required: true
+    description: |
+      The backlight PWM: <&pwm channel period-ns flags>. 6667179 ns (150 Hz)
+      is what the board's Linux device tree gives backlight-verdin-dsi.
+
+  backlight-brightness-percent:
+    type: int
+    default: 100
+    description: Duty cycle of the backlight PWM.
+
+  clock-frequency:
+    type: int
+    required: true
+    description: Panel pixel clock in Hz.
+
+  hactive:
+    type: int
+    required: true
+  vactive:
+    type: int
+    required: true
+  hfront-porch:
+    type: int
+    required: true
+  hback-porch:
+    type: int
+    required: true
+  hsync-len:
+    type: int
+    required: true
+  vfront-porch:
+    type: int
+    required: true
+  vback-porch:
+    type: int
+    required: true
+  vsync-len:
+    type: int
+    required: true
+
+  hsync-active:
+    type: int
+    default: 0
+    description: 1 = HSYNC active high at the panel, 0 = active low.
+  vsync-active:
+    type: int
+    default: 0
+  de-active:
+    type: int
+    default: 1

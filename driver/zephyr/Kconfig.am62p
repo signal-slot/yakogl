@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Verdin AM62P Cortex-A53 display path and TISCI helpers, split out of the
+# SafeUI module's Kconfig (signal-slot/slint-safe-ui-zephyr eb1a48e): the
+# DSS and Cadence DSI drivers, the safeui_tisci_* API on Zephyr's
+# TISCI driver, the TISCI power-on list and the register calculations they
+# share. Each driver turns itself on from an enabled device tree node.
+# The DSS and DSI drivers' register logic is Rust (driver/rust, written from
+# TI SPRUJ83D; driver/docs/am62p-display-cold.md), behind C shims; the
+# GPL-derived C drivers it replaced were deleted after the board run of
+# 2026-10-02.
+
+config SAFEUI_MBOX_TI_SECURE_PROXY_TAIL_FIX
+	bool "Send the trailing bytes of a TI secure proxy message in order"
+	default y
+	depends on MBOX_TI_SECURE_PROXY
+	help
+	  Zephyr's TI secure proxy driver (drivers/mbox/mbox_ti_secproxy.c,
+	  unchanged on its main branch as of 2026-09-30) writes the last 2-3
+	  bytes of a message whose length is not a multiple of four in reverse
+	  order. Every 14-byte TISCI request reaches the firmware with its last
+	  two fields swapped: SET_CLOCK_STATE with clk_id and request_state
+	  exchanged, SET_CLOCK_PARENT with clk_id and parent_id. The firmware
+	  then NACKs the request ("TISCI Response in NACK", -19) or, when the
+	  swapped values happen to be valid, acts on the wrong clock. This
+	  compiles the same source with the tail packed little endian, like
+	  the full words before it, in place of Zephyr's copy.
+
+config SAFEUI_TISCI_ZEPHYR
+	bool "safeui_tisci_* API on Zephyr's TISCI driver"
+	default y
+	depends on TISCI
+	help
+	  Implements include/safeui/tisci_poll.h on top of the interrupt-driven
+	  TISCI driver (ti,k2g-sci), so the display drivers run unchanged on the
+	  A53. (The SafeUI MCU R5F firmware uses a polling client instead.)
+
+config SAFEUI_TISCI_POWER_ON
+	bool "Power on a list of TISCI devices at boot"
+	default y
+	depends on DT_HAS_SAFEUI_TISCI_POWER_ON_ENABLED
+	depends on SAFEUI_TISCI_ZEPHYR
+
+if SAFEUI_TISCI_POWER_ON
+config SAFEUI_TISCI_POWER_ON_INIT_PRIORITY
+	int "Init priority (after TISCI, before GPIO and I2C)"
+	default 46
+module = SAFEUI_TISCI_POWER_ON
+module-str = tisci_power_on
+source "subsys/logging/Kconfig.template.log_config"
+endif
+
+config SAFEUI_DSS_AM62P
+	bool "AM62P DSS driver (safety layer + application plane, VP -> DSI)"
+	default y
+	depends on DT_HAS_SAFEUI_AM62P_DSS_ENABLED
+	depends on ARM64
+	select SAFEUI_DISPLAY_RUST
+	select DISPLAY
+	help
+	  driver/drivers/display/display_am62p_dss_rust.c: the binding, the
+	  safeui/am62p_dss.h API, the interrupt and the TISCI requests in C,
+	  every DSS register access in driver/rust/src/soc/am62p/dss.rs and
+	  ip/ti_dss7.rs.
+
+if SAFEUI_DSS_AM62P
+
+config SAFEUI_DSS_AM62P_INIT_PRIORITY
+	int "Init priority"
+	default 80
+module = SAFEUI_DSS
+module-str = dss
+source "subsys/logging/Kconfig.template.log_config"
+endif
+
+config SAFEUI_DSI_CDNS_J721E
+	bool "Cadence DSI host + D-PHY as found on TI K3 (J721E/AM62P)"
+	default y
+	depends on DT_HAS_SAFEUI_CDNS_DSI_J721E_ENABLED
+	depends on ARM64
+	select SAFEUI_DISPLAY_RUST
+	select MIPI_DSI
+	help
+	  driver/drivers/mipi_dsi/dsi_cdns_rust.c: the binding, the mipi_dsi
+	  API and the TISCI requests in C, every register access in
+	  driver/rust/src/ip/cdns_dsi.rs and ip/cdns_dphy.rs, written from TI
+	  SPRUJ83D and, where the TRM is silent, from TI's vendored Zephyr
+	  driver (third_party/zephyr-pr114866-2026-07-29-2473da6b).
+
+if SAFEUI_DSI_CDNS_J721E
+
+config SAFEUI_DSI_CDNS_J721E_INIT_PRIORITY
+	int "Init priority"
+	default 70
+module = SAFEUI_DSI
+module-str = dsi
+source "subsys/logging/Kconfig.template.log_config"
+endif
+
+# The SN65DSI8x bridge behind the DSI host is yakogl,sn65dsi8x
+# (SAFEUI_SN65DSI8X in Kconfig, register logic in driver/rust).

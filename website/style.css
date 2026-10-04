@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* YakoGL site draft: one stylesheet, no build step, no external files. */
+:root {
+  --bg: #fbfaf7; --fg: #1d1f24; --muted: #5b616b; --line: #d9d6cf;
+  --accent: #2f6f6a; --box: #f0ede6; --warn: #8a5a00; --warn-bg: #fff4dc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --fg: #e6e4df; --muted: #a0a4ab; --line: #34373d;
+    --accent: #7cc4bb; --box: #1e2126; --warn: #f0c062; --warn-bg: #2a2416;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, main, footer { max-width: 920px; margin: 0 auto; padding: 0 16px; }
+header { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline;
+  padding-top: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+header .name { font-weight: 700; font-size: 1.25rem; color: var(--fg); text-decoration: none; }
+nav a { margin-right: 14px; color: var(--accent); text-decoration: none; }
+nav a[aria-current="page"] { font-weight: 700; text-decoration: underline; }
+h1 { font-size: 1.9rem; line-height: 1.25; margin: 28px 0 8px; }
+h2 { font-size: 1.3rem; margin: 32px 0 8px; }
+p.lead { font-size: 1.1rem; color: var(--muted); margin-top: 0; }
+a { color: var(--accent); }
+code, pre { font: 0.9rem/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+pre { background: var(--box); padding: 12px 14px; overflow-x: auto; border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.95rem; }
+th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.card h3 { margin: 4px 0; font-size: 1.05rem; }
+.photo {
+  aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--line); border-radius: 6px; background: var(--box);
+  color: var(--muted); font-size: 0.85rem; text-align: center; padding: 10px;
+}
+figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+figure { margin: 0; }
+.box { border: 1px solid var(--line); background: var(--box); border-radius: 8px; padding: 4px 16px; margin: 20px 0; }
+.note { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 8px 14px; margin: 16px 0; }
+.tbd { color: var(--warn); font-weight: 600; }
+small.src { color: var(--muted); }
+footer { margin-top: 40px; padding-top: 12px; padding-bottom: 32px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }

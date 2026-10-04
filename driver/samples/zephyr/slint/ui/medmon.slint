@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//
+// The medical monitor for the GPU: the Slint port of the SafeUI medmon
+// application (apps/medmon/main.c), same layout (include/safeui/ui_layout.h,
+// "medical"), drawn as vector geometry. One design, two owners: the safe core
+// draws the current heart rate, SpO2 and respiration values, the alarm state
+// and the lead-off / signal messages into its overlay plane; this panel draws
+// the history around them -- five waveform channels (ECG I/II/III, SpO2 pleth,
+// respiration), the patient bar, the alarm limits. `standalone` also draws the
+// safe core's values so a GPU-only demo shows the complete picture.
+//
+// The waveforms arrive as SVG path commands per channel (built by the C side
+// from the 250 Hz ECG stream, one sample per design pixel), in a viewbox of
+// Layout.md-wave-cmd-w x md-wave-cmd-h whose origin is the channel's top-left
+// corner. That viewbox is the same on every panel, so a wider panel shows the
+// same curve larger and the producer needs no change.
+import { Layout } from "safeui-layout.slint";
+import { Theme } from "theme.slint";
+
+component LText inherits Text {
+    in property <length> lx;
+    in property <length> ty;
+    x: root.lx;
+    y: root.ty;
+    vertical-alignment: top;
+    font-family: Theme.font;
+}
+
+component RText inherits Text {
+    in property <length> rx;
+    in property <length> ty;
+    width: 320 * Layout.u;
+    x: root.rx - self.width;
+    y: root.ty;
+    horizontal-alignment: right;
+    vertical-alignment: top;
+    font-family: Theme.font;
+}
+
+// One waveform channel: label, scale note, hairline, the trace.
+component WaveChannel inherits Rectangle {
+    in property <int> index;
+    in property <string> name;
+    in property <string> scale;
+    in property <color> colour;
+    in property <string> commands;
+    in property <bool> configured: true;
+    in property <int> cursor-x: -1;
+    x: Layout.md-wave-x;
+    y: Layout.md-wave-y + root.index * Layout.md-wave-ch-h;
+    width: Layout.md-wave-w;
+    height: Layout.md-wave-ch-h;
+    LText { lx: 6 * Layout.u; ty: Layout.md-wave-label-dy; text: root.name; color: root.colour; font-size: Layout.small; font-weight: Layout.regular; }
+    if !root.configured: LText { lx: 120 * Layout.u; ty: Layout.md-wave-label-dy; text: "not configured"; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+    RText { rx: parent.width - 6 * Layout.u; ty: Layout.md-wave-label-dy; text: root.scale; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+    Rectangle { x: 0; y: parent.height - 1 * Layout.u; width: parent.width; height: 1 * Layout.u; background: #1AFFFFFF; }
+    Path {
+        x: 0; y: 0; width: parent.width; height: parent.height;
+        viewbox-x: 0; viewbox-y: 0;
+        viewbox-width: Layout.md-wave-cmd-w; viewbox-height: Layout.md-wave-cmd-h;
+        commands: root.commands;
+        stroke: root.colour;
+        stroke-width: 1.6 * Layout.u;
+    }
+    // the sweep cursor: the producer's x is in the command viewbox's pixels
+    if root.cursor-x >= 0: Rectangle {
+        x: (root.cursor-x + 5) * parent.width / Layout.md-wave-cmd-w;
+        y: parent.height * 2 / 5; width: 1 * Layout.u; height: parent.height * 2 / 5;
+        background: #1E3C28;
+    }
+}
+
+export component MedicalPanel inherits Rectangle {
+    in property <bool> standalone: false;
+    in property <int> hr: 0;
+    in property <bool> hr_valid: false;
+    in property <int> spo2: 0;
+    in property <bool> spo2_valid: false;
+    in property <int> resp: 0;
+    in property <bool> resp_valid: false;
+    in property <bool> lead_off: false;
+    in property <bool> signal_invalid: false;
+    in property <bool> hr_limit: false;
+    in property <bool> spo2_low: false;
+    in property <bool> blink: false;
+    in property <int> lead_mask: 7;       // leads configured at the app's start
+    in property <string> wave0;           // ECG I
+    in property <string> wave1;           // ECG II
+    in property <string> wave2;           // ECG III
+    in property <string> wave3;           // SpO2 pleth
+    in property <string> wave4;           // respiration
+    in property <int> cursor-x: -1;
+    in property <int> uptime_secs: 0;
+    in property <int> frame: 0;
+    x: 0; y: 0; width: Layout.w; height: Layout.h;
+    background: #000000;
+
+    property <int> clock-h: Math.mod(Math.floor(root.uptime_secs / 3600), 24);
+    property <int> clock-m: Math.mod(Math.floor(root.uptime_secs / 60), 60);
+    property <int> clock-s: Math.mod(root.uptime_secs, 60);
+    property <string> clock: Math.floor(root.clock-h / 10) + "" + Math.mod(root.clock-h, 10) + ":"
+        + Math.floor(root.clock-m / 10) + "" + Math.mod(root.clock-m, 10) + ":"
+        + Math.floor(root.clock-s / 10) + "" + Math.mod(root.clock-s, 10);
+
+    // patient bar (MD_TOPBAR_H)
+    LText { lx: Layout.md-wave-x; ty: 10 * Layout.u; text: "BED 12"; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold; }
+    LText { lx: Layout.md-wave-x + 96 * Layout.u; ty: 10 * Layout.u; text: "SAFEUI, Taro"; color: Layout.text2; font-size: Layout.label; font-weight: Layout.semibold; }
+    LText { lx: Layout.md-wave-x + 260 * Layout.u; ty: 14 * Layout.u; text: "ADULT"; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+    RText { rx: Layout.w - 24 * Layout.u; ty: 10 * Layout.u; text: root.clock; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold; }
+    Rectangle { x: 0; y: Layout.md-topbar-h; width: Layout.w; height: 1 * Layout.u; background: Layout.hairline; }
+
+    // waveform channels (MD_WAVE_*)
+    WaveChannel { index: 0; name: "ECG I";   scale: "1 mV  25 mm/s"; colour: Layout.md-hr; commands: root.wave0; configured: Math.mod(root.lead_mask, 2) == 1; cursor-x: root.cursor-x; }
+    WaveChannel { index: 1; name: "ECG II";  scale: "1 mV  25 mm/s"; colour: Layout.md-hr; commands: root.wave1; configured: Math.mod(Math.floor(root.lead_mask / 2), 2) == 1; cursor-x: root.cursor-x; }
+    WaveChannel { index: 2; name: "ECG III"; scale: "1 mV  25 mm/s"; colour: Layout.md-hr; commands: root.wave2; configured: Math.mod(Math.floor(root.lead_mask / 4), 2) == 1; cursor-x: root.cursor-x; }
+    WaveChannel { index: 3; name: "SpO2 PLETH"; scale: "auto  25 mm/s"; colour: Layout.md-spo2; commands: root.wave3; }
+    WaveChannel { index: 4; name: "RESP";    scale: "x1  6.25 mm/s";  colour: Layout.md-resp; commands: root.wave4; }
+
+    // alarm limits under the unit of each tile (MD_LIMITS_DY): application-owned
+    for limit[i] in ["150 / 50", "100 / 90", "30 / 8"]: LText {
+        lx: Layout.md-label-x; ty: Layout.md-tile-y + i * Layout.md-tile-h + Layout.md-limits-dy;
+        text: limit; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular;
+    }
+    LText { lx: Layout.md-wave-x; ty: Layout.footer-y; text: "frame " + root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+
+    // --------------------------------------------- safe-core elements
+    if root.standalone: Rectangle {
+        Rectangle { x: Layout.md-col-x; y: Layout.md-tile-y; width: 1 * Layout.u; height: Layout.h - Layout.md-tile-y; background: Layout.hairline; }
+        for i in 4: Rectangle { x: Layout.md-rule-x; y: Layout.md-tile-y + i * Layout.md-tile-h; width: Layout.md-rule-w; height: 1 * Layout.u; background: Layout.hairline; }
+        for tile[i] in [
+            { label: "HR", unit: "bpm", colour: Layout.md-hr, value: root.hr, valid: root.hr_valid, alarm: root.hr_limit },
+            { label: "SpO2", unit: "%", colour: Layout.md-spo2, value: root.spo2, valid: root.spo2_valid, alarm: root.spo2_low },
+            { label: "RESP", unit: "/min", colour: Layout.md-resp, value: root.resp, valid: root.resp_valid, alarm: false },
+        ]: Rectangle {
+            x: Layout.md-col-x; y: Layout.md-tile-y + i * Layout.md-tile-h;
+            width: Layout.w - Layout.md-col-x; height: Layout.md-tile-h;
+            background: tile.alarm && root.blink ? #FF443830 : transparent;
+            LText { lx: 16 * Layout.u; ty: 10 * Layout.u; text: tile.label; color: tile.colour; font-size: Layout.label; font-weight: Layout.semibold; }
+            LText { lx: 16 * Layout.u; ty: Layout.md-unit-dy; text: tile.unit; color: tile.colour.with-alpha(0.63); font-size: Layout.small; font-weight: Layout.regular; }
+            RText { rx: Layout.md-value-rx - Layout.md-col-x; ty: Layout.md-value-dy; text: tile.valid ? tile.value : "--"; color: tile.alarm ? Layout.red : tile.colour; font-size: Layout.vitals; font-weight: Layout.semibold; }
+        }
+        if root.lead_off: Rectangle {
+            x: Layout.md-pill-x; y: Layout.md-pill-y; width: Layout.md-pill-w; height: Layout.md-pill-h;
+            border-radius: Layout.md-pill-h / 2; background: Layout.red;
+            Text { text: "LEAD OFF"; color: #000000; font-size: Layout.small; font-weight: Layout.regular; horizontal-alignment: center; vertical-alignment: center; width: Layout.md-pill-w; height: Layout.md-pill-h; }
+        }
+        if root.signal_invalid: Rectangle {
+            x: Layout.md-pill-x + (root.lead_off ? Layout.md-pill-dx : 0px); y: Layout.md-pill-y;
+            width: Layout.md-pill-w; height: Layout.md-pill-h;
+            border-radius: Layout.md-pill-h / 2; background: Layout.amber;
+            Text { text: "SIGNAL"; color: #000000; font-size: Layout.small; font-weight: Layout.regular; horizontal-alignment: center; vertical-alignment: center; width: Layout.md-pill-w; height: Layout.md-pill-h; }
+        }
+    }
+}

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_fence"
+
+config GC_FENCE_ROUNDS
+	int "How many fences to submit"
+	default 8
+	help
+	  Each round is one empty command buffer and one wait. More than one
+	  round is the point: it proves the ring re-arms and that events are
+	  recycled, which a single submit does not.
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

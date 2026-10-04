@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "gc_triangle"
+
+config GC_TRIANGLE_WIDTH
+	int "Render target width in pixels"
+	default 256
+	help
+	  Must be a multiple of 16: the resolve engine, which is what performs
+	  the clear on this core, refuses any other width.
+
+config GC_TRIANGLE_HEIGHT
+	int "Render target height in pixels"
+	default 128
+
+source "$(GC_SAMPLE_COMMON_KCONFIG)"
+source "Kconfig.zephyr"

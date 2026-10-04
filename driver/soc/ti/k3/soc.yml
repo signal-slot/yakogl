@@ -1,0 +1,8 @@
+family:
+- name: ti_k3
+  series:
+  - name: am62px
+    socs:
+    - name: am62p54
+      cpuclusters:
+      - name: a53

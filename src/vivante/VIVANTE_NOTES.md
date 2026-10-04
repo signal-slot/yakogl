@@ -1,0 +1,1103 @@
+# The Vivante GC7000 backend: what is implemented, and what the hardware has to answer
+
+*This is the Rust port's copy of the notes the C library carries
+(`src/vivante/VIVANTE_NOTES.md` on `main`). Everything measured here was
+measured with the C on the board; the port translates that backend module for
+module, and the file names below are the Rust ones. Where the port diverges
+from the C the commit that diverges says so, and the two places it does are
+the ones the C's structure forced: `emit_draw` is handed the depth surface's
+stride and address rather than reading the backend's state while the frame is
+borrowed, and the texture emitters take the frame whole.*
+
+This is the sibling of `src/pvr/` for the i.MX8MP's **GC7000UL** (model `0x7000`,
+revision `0x6204`, product `0x70003`, HALTI5: 2 shader cores, 1 pixel pipe,
+16 varyings, 320 constant registers, 512 instructions and 64 temporaries per
+shader). It turns the resolved draw `gl/draw.rs` produces (``GlesDraw``)
+into a command stream the GPU's front end fetches.
+
+**Most of this has since run on hardware.** It was written before there was a
+board, and the encodings still come from Mesa's etnaviv driver and its register
+descriptions (`driver/docs/imx8mp-draw-state.md` is the map) — but an i.MX8MP
+has been in the lab since 2026-09-20 and this backend draws on it through
+`/dev/gcgpu`: `gl_test` stands at 31 of 38 in one process and 49 of 58 with one
+process per case (2026-09-22). So read a claim here as unverified only where the
+text says so, and take the numbered questions at the end as the ones that were
+open when this was written; several are answered in the dated board sections of
+`driver/docs/imx8mp-backend-plan.md`, which is the current record.
+
+## The shape of the thing
+
+The GC7000 has no firmware and does not tile. The host writes `LOAD_STATE`
+commands into a buffer, the front end fetches them, and a `DRAW_INSTANCED`
+command runs the pipeline with whatever register state is loaded. A frame is
+one command stream; it ends with a write to `GL_EVENT`, whose interrupt is the
+fence. That removes most of what the PowerVR backend spends its code on --
+parameter buffers, freelists, region headers, a firmware handshake -- and moves
+the work into per-draw register translation instead.
+
+Files:
+
+| file | what it does |
+| --- | --- |
+| `regs.rs` | the registers and command words this backend writes, in address order |
+| `cmd.rs` | writing commands into a CPU-mapped buffer (`LOAD_STATE`, stall, draw, event) |
+| `state.rs` | what the backend's modules share: the resolved draw and the frame |
+| `backend.rs` | frames, the render target, the rasteriser and pixel engine, the clear quad |
+| `shader.rs` | the register wiring of the two stages, the instruction cache, the uniforms |
+| `texture.rs` | texture descriptors and sampler state |
+| `kick.rs` | the descriptor the OSAL's `submit()` takes |
+| `clear_shader.rs` | generated: the clear quad's two shaders |
+
+## Implemented
+
+- **Frames.** Two command streams in flight. A draw opens a frame if none is
+  open; a new render target, a full command buffer, `glFlush`/`glFinish` or a
+  swap closes it. Each frame has an arena for everything its stream points at
+  (converted attributes, staged indices, texture descriptors, the clear quad),
+  so the GL core's staging buffers can be reused by the next draw while the
+  GPU is still reading this one.
+- **Render target.** `PE_COLOR_FORMAT` / `PE_COLOR_STRIDE` /
+  `PE_PIPE_COLOR_ADDR`, linear, with `PE_LOGIC_OP.SINGLE_BUFFER(1)`, which is
+  what a linear surface needs on a part with `LINEAR_PE`. RGB565, XRGB8888 and
+  RGBA8888 window and FBO surfaces, plus the three float classes
+  (RGBA16F, R16F, R32F) through the extended format field.
+- **Depth and stencil.** One D24S8 buffer in memory, grown to the largest
+  target seen, with `PE_DEPTH_CONFIG` (test, function, write, early Z),
+  `PE_DEPTH_NEAR/FAR/NORMALIZE`, two-sided `PE_STENCIL_OP`,
+  `PE_STENCIL_CONFIG` and the `EXT`/`EXT2` registers for the back face, and
+  `RA_EARLY_DEPTH` for the rasteriser's early test.
+- **Blending and the colour mask as state**, not as shader variants: the GL
+  factors and equations go into `PE_ALPHA_CONFIG`, `glBlendColor` into
+  `PE_ALPHA_BLEND_COLOR` and the two half-float `PE_ALPHA_COLOR_EXT`
+  registers, `glColorMask` into `PE_COLOR_FORMAT.COMPONENTS`. The shader table
+  therefore has one binary per fragment shader, not one per blend state. The
+  one thing that does take a second binary is `gl_FrontFacing`, whose sense is
+  compiled in here (see "gl_FrontFacing needs a second compiled variant"
+  below).
+- **Rasteriser.** Cull face and winding (mirrored for a top-down target),
+  line width, the viewport in 16.16 fixed point, the scissor intersected with
+  the viewport and the target, and `SE_DEPTH_SCALE`/`SE_DEPTH_BIAS` for
+  `glPolygonOffset`.
+- **Vertex input.** `NFE_GENERIC_ATTRIB_CONFIG0/1` and
+  `NFE_VERTEX_STREAMS_*`, one stream per attribute. Byte, short and fixed
+  arrays are fetched in their own format: the backend advertises them in
+  `yakogl_backend.native_attrib_formats`, and the GL core stops converting
+  them to float32. Instanced arrays use the stream divisor.
+- **Index buffers.** `FE_INDEX_STREAM_BASE_ADDR`/`CONTROL`, with the width
+  taken from `gles_draw.index_size` (u8, u16 and u32 all encode).
+- **Shaders.** The two stages' code is fetched from memory through the
+  instruction cache (`VS_INST_ADDR`/`PS_INST_ADDR`, the range and count
+  registers, `SH_ICACHE_CONTROL`, the prefetch). The varying map
+  (`VS_HALTI5_OUTPUT`, `PA_VARYING_NUM_COMPONENTS`,
+  `GL_HALTI5_SHADER_ATTRIBUTES`, `GL_VARYING_TOTAL_COMPONENTS`) is built from
+  the link, and the vertex input map (`VS_HALTI5_INPUT`) from the vertex
+  elements. `gl_VertexID`/`gl_InstanceID` go through `FE_HALTI5_ID_CONFIG`.
+- **Uniforms.** Written straight into the unified constant register file as
+  command-stream words, from the per-draw uniform snapshot, using the mapping
+  the offline tool reports (below). `textureSize()` and the sampler LOD
+  queries are resolved from the bound texture at draw time.
+- **Textures.** A 256-byte descriptor per bound texture, built into the frame
+  arena, plus the per-slot sampler registers and the descriptor-cache
+  invalidate. RGBA8, RGB565, the ETC formats and the three float formats;
+  wrap, min/mag/mip filters and the mip chain. The two stages share the slot
+  array with `VS_SAMPLER_BASE` naming where the vertex stage's start.
+- **Clears** are a full-screen quad drawn with the backend's own two shaders
+  (`clear_shader.rs`), which clears colour, depth and stencil in one draw:
+  depth test always with write, stencil replace with the clear value, the
+  colour mask off for the parts the GL did not ask to clear. Mesa's tile-status
+  fast clear is an optimisation left out on purpose.
+- **Cache maintenance.** `GL_FLUSH_CACHE` (colour, depth, texture, shader) and
+  a `TS_FLUSH_CACHE` before each draw's state, a RA/PE stall after them, and
+  the FE/PE stall the shader and sampler state needs because it stopped being
+  self-synchronising at HALTI0.
+
+## Not implemented (and why)
+
+- **MSAA and the tile status.** Out of scope for this step: multisampling
+  needs the tile-status buffers and a resolve, which is also where fast clear
+  and framebuffer compression live. `GL_MULTI_SAMPLE_CONFIG` is written as
+  single-sampled and `TS_MEM_CONFIG`/`PE_MEM_CONFIG` as zero.
+- **Tiled and supertiled surfaces.** Every colour surface YakoGL renders to or
+  samples is linear. Tiling is a bandwidth optimisation that needs the layout
+  code and the descriptor's addressing mode to agree.
+- **Dithering, logic ops, the alpha test.** The registers are written with the
+  values that disable them (ES 2.0 has no logic op or alpha test anyway).
+- **Multiple render targets.** One colour target; `PS_CONTROL.RT_COUNT` is 0
+  and the `PE_RT_*` and `PE_HALTI5_RT_*` banks are untouched.
+- **Anisotropy, LOD bias, depth compare, seamless cube filtering.** The fields
+  exist in `regs.rs` and nothing sets them. Cube, 3D and array textures are no
+  longer on this list: the descriptor carries the type, the layer stride and
+  the volume depth, and the GL core stacks the layers for it (see "Layered
+  textures" below).
+- **Primitive restart.** `FE_PRIMITIVE_RESTART_INDEX` is written as zero with
+  the restart bit clear.
+- **Per-draw dirty tracking.** Every draw writes the whole state block. That
+  is deliberate for a first backend: the order the registers are written in
+  matters more than the number of them, and a state cache is easy to add once
+  something on silicon is known to be correct.
+- **32-bit indices end to end.** The backend encodes them, but `gl/draw.rs`
+  still widens u8 and u32 index arrays into u16 (and fails a draw whose
+  indices exceed 65535), so `index_size` is always 2 today.
+- **`GlesDraw::target_alpha_bits`** is honoured for 0 bits only (2026-09-25): a draw
+  into a colour format with no alpha (GL_RGB, GL_RGB565) leaves the alpha byte of its
+  RGBA8 storage alone, so it keeps the 1 the clear wrote there (the GL core rounds a
+  clear's alpha to the format's 0 bits). A 1-bit alpha (RGB5_A1) and a 4-bit one
+  (RGBA4) are still stored at 8 bits, not rounded; a fresh storage never cleared
+  holds 0 in that byte.
+
+## The shader ABI
+
+The offline path is the same one the PowerVR uses: an application's GLSL text
+is hashed and looked up in a build-time table (`src/shaderc/offline.rs`,
+`vivante_blobs.rs`). What changes is what a table entry holds.
+
+``ShcShader`` keeps the reflection the GL core needs -- attributes,
+uniforms with their std430 dword offsets, samplers with their bindings. Its
+`usc`/`usc_dw` fields hold the GC7000 instruction words instead of PowerVR USC
+(the GL core uploads the binary the same way for both GPUs, which is why the
+field keeps its name), and a ``ShcViv`` holds the rest:
+
+- `in[]` / `out[]`: the shader's input and output registers, each with its
+  `gl_varying_slot`, component count, interpolation mode and GLSL name. A
+  vertex shader's inputs are its attributes; a fragment shader's inputs are its
+  varyings, which the compiler always places in registers 1..N.
+- `vs_reg_of_in[]`: filled by `link()`, the vertex-shader output register that
+  feeds each fragment-shader input. The match is by name, which is what
+  `varying` means in GLSL ES 1.00, so a VS and FS that declare their varyings
+  in different orders still link.
+- `vs_pos_out_reg`, `vs_pointsize_out_reg`, `vs_id_in_reg`,
+  `ps_color_out_reg`, `ps_depth_out_reg`: the special registers, or
+  `SHC_VIV_NO_REG`.
+- `vs_load_balancing` and `input_count_unk8`: two words the compiler chooses
+  that the driver has to hand back to the hardware.
+- `const_contents[]` / `const_data[]`: the constant register file, one entry
+  per dword. An entry is a literal the compiler folded in, a dword of the
+  stage's uniform block, or a query about a bound texture. The generator
+  rewrites the compiler's uniform references from its vec4-slot numbering into
+  the std430 block offsets the GL core stores `glUniform*` values at, so the
+  backend only has to index the block.
+
+`tools/vivante/gen_shader_table.py` produces the table (and the clear quad's
+two shaders) from `tools/shaders` with Mesa's etnaviv compiler; its README has
+the invocation. Blend states are not a dimension of the table here.
+
+## The OSAL contract
+
+`submit()` takes a ``GcKick`` (`kick.rs`):
+
+```c
+`GcKick` {
+    uint32_t magic;        /* GC_KICK_MAGIC, so another GPU's OSAL rejects it */
+    uint32_t stream_bytes; /* length of the command stream, a multiple of 8 */
+    uint64_t stream_gpu;   /* GPU address of the first command word */
+};
+```
+
+The backend has already written the whole stream and flushed it out of the CPU
+cache. The OSAL runs it -- by pointing the front end at it
+(`FE_COMMAND_ADDRESS`) or by linking it into a ring of its own -- and returns a
+fence. `completed()` is the highest fence that has finished, which is how the
+backend knows a frame's command buffer and arena are free to reuse.
+
+**The OSAL owns the EVENT, not the backend.** This used to be the other way
+round: the backend appended the `EVENT` command itself and named the event id
+in the kick. That does not survive contact with a real driver. The GC7000 has
+30 events and recycles them, so only the side that knows which are in flight
+can allocate one; the Zephyr driver's render service therefore appends the
+whole epilogue -- the cache flushes, the FE/PE semaphore pair and the `EVENT` --
+and maps the event to a monotonic fence the caller can compare and store. The
+backend must not emit an `EVENT`, an `END` or a `LINK`.
+
+One consequence reaches into the command buffer: an OSAL that links the stream
+instead of copying it writes that `LINK` into the eight bytes just past the
+stream. `GC_KICK_TAIL_BYTES` in `kick.rs` reserves them, and `frame_open()`
+takes them off the writer's capacity. Nothing else about the GPU crosses the
+OSAL boundary.
+
+Device-VA heaps: `0x40000000` data (buffers, textures, render targets),
+`0x50000000` shader code, `0x60000000` command streams and frame arenas. They
+are 32-bit because the GC7000's MMU is.
+
+## What the hardware said, once the test was right
+
+**Retracted, 2026-09-21:** an earlier version of this section said that only
+the first kick of a run draws, and that the blender swallowed every draw. Both
+were wrong, and both were the test's fault, not the hardware's: the self-test
+in `samples/zephyr/gc_slint` deleted its program and its vertex buffer
+immediately after its first frame, so every frame after that drew with no
+program bound and no attribute arrays enabled. Nothing was drawn because
+nothing was asked for. Anyone who went looking for a driver bug on the
+strength of that section was sent the wrong way; the apology is this
+paragraph, and the lesson is that a test which reports on the hardware has to
+be the one thing above suspicion.
+
+With the program and the buffer kept alive for every frame, all of this
+**passes on silicon** (2026-09-21, read back out of the window buffer through
+the carveout's CPU view rather than through `glReadPixels`, so a read-back bug
+cannot be mistaken for a rendering one):
+
+- a plain triangle, and the **same triangle again in a second frame**, and a
+  third frame that draws without clearing first;
+- the blender, in four stages: `ONE`/`ZERO` opaque, `ONE`/`ONE` opaque,
+  `ONE`/`ONE_MINUS_SRC_ALPHA` opaque, and the same premultiplied at half
+  alpha, which is the blend FemtoVG uses for everything it draws;
+- the stencil, both halves of stencil-then-cover: a test that must reject on a
+  zeroed buffer, and a write pass followed by a cover pass that must draw.
+
+So repeated kicks, hardware blending and the stencil are all good, and the
+open questions below about them are answered as far as those cases go.
+
+Textures, framebuffer objects, `glDrawElements` with an index buffer and the
+scissor were added to the self-test afterwards and **all pass** as well.
+
+## The fragment-uniform bug, and what it really was
+
+**Found 2026-09-21.** A fragment uniform never reached its shader while a
+vertex uniform always did. Every case of `gl_test` that sets one failed, and
+Slint's picture was black.
+
+It was not a register, a window, or steering. **The value was already zero in
+the command stream**, before the GPU ever saw it:
+
+```
+ours:   LOAD_STATE SH_HALTI5_UNIFORMS[0] count=4  0x00000000 0x00000000 0x00000000 0x00000000
+Mesa's: LOAD_STATE SH_HALTI5_UNIFORMS[0] count=4  0x3f800000 0x3f000000 0x00000000 0x3f800000
+```
+
+The cause is one field the Vivante shader table never filled in.
+``ShcShader`.blend_consts_off` says where a fragment shader reserves four
+dwords of its uniform block for `glBlendColor`, and `SHC_NO_BLEND_CONSTS`
+(0xff) means "it does not". This GPU has no blend-constant variant at all --
+`glBlendColor` is pixel-engine state here -- so every entry should say
+`SHC_NO_BLEND_CONSTS`. `gen_shader_table.py` did not emit the field, so every
+entry got C's default of **0**, which does not read as "none": it reads as "the
+blend constants are at dword 0". `gl/draw.rs` therefore wrote `glBlendColor`
+(all zeros unless the app sets it) over the first four dwords of every
+fragment uniform block, on every draw, immediately after copying the app's
+values in.
+
+That accounts for the whole symptom exactly:
+
+- a fragment uniform is overwritten; a vertex uniform lives in the other block
+  and is untouched, which is why one stage always worked and the other never
+  did;
+- the PowerVR table sets `blend_consts_off` on all 1828 of its entries, so the
+  same GL core is correct there and the bug looked GPU-specific when it was
+  not;
+- FemtoVG's `frag[14]` block starts with the scissor matrix, so the whole UI
+  went transparent black.
+
+The fix is in the generator, not the driver: emit the field. A table entry
+that omits it is not neutral.
+
+### Three guesses were spent before this, and one tool ended it
+
+Ruled out, so nobody repeats them:
+
+1. Rounding the fragment window's start up to a whole register (3d20deb) --
+   correct in itself, but latent: every vertex shader in the table already has
+   a multiple of four.
+2. Writing the fragment stage's values through the vertex stage's window at the
+   offset `PS_UNIFORM_BASE` names. Tried on silicon; case 1 still failed.
+3. Reading this part as HALTI1 and programming `SH_CONTROL` steering by hand.
+   **This one is wrong on the facts**: NXP's own feature database entry for
+   model `0x7000` revision `0x6204` product `0x70003` -- the board's -- sets
+   `REG_Halti5`, so Mesa classifies it halti 5, uses the `0x34000`/`0x36000`
+   windows, and `need_steering` (`halti < 5`) is false. The comment in Mesa's
+   `etnaviv_gpu.c` that lists "GC7000UL" beside halti 1 describes the original
+   part, not this revision. Do not go back to it.
+
+What ended it was not a fourth guess but a tool: `tools/vivante/cs_golden.c`
+runs Mesa's etnaviv driver on the host against its drm-shim and keeps the
+command stream it produces, and `tools/vivante/cs_ours.c` does the same for
+this backend through the host OSAL. Both dumps decode with the same
+`cs_decode.py`, so the two streams can simply be diffed. The diff showed the
+zeros in our own stream in about a minute, and pointed at the GL core rather
+than the GPU. `tools/vivante/README.md` has the recipe; reach for it before
+guessing at a register.
+
+### One ordering fact established on the way
+
+The shader block Mesa emits for this part ends with the two `ICACHE_PREFETCH`
+writes **after** the constants, not before them:
+
+```
+VS icache block, PS icache block, VS_UNIFORM_BASE, PS_UNIFORM_BASE,
+the constants, VS_ICACHE_PREFETCH, PS_ICACHE_PREFETCH, stall RA/PE
+```
+
+This backend had the prefetches inside `shader::emit_shader_code`, before the
+uniforms. That is now `shader::emit_prefetch()`, called where Mesa calls it. Mesa
+marks this sequence "do not change ordering unless necessary" because of
+auto-steering, so matching it is worth doing -- but note that it was **not**
+what fixed the uniform bug, and on its own it changed nothing (gl_test case 1
+still returned the FAIL hold: `kernel started 45 s after the jump`).
+
+## The texture path, and the half of it a stream diff cannot see
+
+**Found 2026-09-21, chasing `gl_test` case 2.**
+
+A command stream is half of what the GPU reads. The 256-byte texture
+descriptor is a block in memory that the stream only points at, so the
+golden-stream diff never compared it, and every register around it matched
+while the descriptor itself was wrong. `tools/vivante/README.md` has the
+recipe now: both harnesses dump their memory beside the stream in one format,
+and `cs_decode.py --tex-desc` follows each `NTE_DESCRIPTOR_ADDR` into it and
+prints the block named from Mesa's own `texdesc_3d.xml.h`. Reach for that
+before reading somebody's source about a texture.
+
+Two things it settled straight away, both of which look like disagreements
+with Mesa and are not:
+
+- **The format.** Ours is `A8B8G8R8` (9) where Mesa's is `A8R8G8B8` (7).
+  Mesa stores an `R8G8B8A8_UNORM` resource byte-swapped, in the pixel engine's
+  own B,G,R,A order (`translate_pe_internal_format`), and picks the hardware
+  format to match. Our texels are in memory as the GL core wrote them, R,G,B,A,
+  and `A8B8G8R8` is that. Both are right for their own layout.
+- **The addressing mode.** Ours is `LINEAR` (3), Mesa's `TILED` (0), because
+  Mesa tiles and we do not. Its `LINEAR_STRIDE` of 0x100 for a 16x16 texture
+  is the 64-texel super-tile width it pads to, not a disagreement about
+  stride.
+
+### One stride covers the whole mip chain
+
+The descriptor names all sixteen level addresses but carries a **single**
+`LINEAR_STRIDE`. The GL core used to pack each level at its own width, so for
+a 4x4 RGBA texture level 1's two rows were 8 bytes apart while the sampler
+stepped 16 -- and 16 bytes into level 1 is level 2. A minified draw that
+should have fetched green fetched blue.
+
+Mesa never meets this: it pads every level of a mipmapped texture to the same
+64-texel width, which makes its one stride true for all of them.
+
+### And a level starts on a 64-byte boundary
+
+The next check along, 23, wanted level 2 of that chain and the board said what
+it read: hold code 34, which is green, and green is level 1. So the fetch was
+landing a level short rather than drawing nothing. Mesa's
+`etnaviv_resource.c` says why:
+
+```c
+/* align levels to 64 bytes to be able to render to them */
+size += align(mip->size, ETNA_PE_ALIGNMENT) * depth;   /* 64 */
+```
+
+Level 2 of a 4x4 chain sat at `+0x60`. Round that down to a 64-byte boundary,
+which is what a part fetching from one does, and you get `+0x40` -- which is
+level 1, which is green.
+
+Both are one statement about how this GPU reads a chain, so they are one
+capability: `yakogl_backend.mip_level_align`, a byte alignment rather than a
+bool. Zero keeps the packed layout the PowerVR walks itself from one base and
+one stride; non-zero pads every level to level 0's pitch and starts each level
+on that boundary. The GC7000 asks for 64. It costs some memory in the tail
+levels, which is the whole price.
+
+Readings, with the first failing check reported:
+
+```
+kernel started 216 s after the jump   code 23: check 22, the level 1 fetch
+kernel started 222 s after the jump   code 24: 22 passes, 23 fails
+kernel started 283 s after the jump   code 34: check 23 read green
+kernel started  85 s after the jump   code 1: the case passed
+```
+
+**Case 2 passes.** All twenty-nine checks.
+
+### A guess spent on it, so nobody spends it twice
+
+`SAMP_LOD_MINMAX` held the chain length, `(levels - 1) << 8`. That is wrong
+about what the register is -- it is `GL_TEXTURE_MIN_LOD` and
+`GL_TEXTURE_MAX_LOD`, which ES 2.0 cannot set, so it is always 0 and 0xfff --
+and it was a second clamp on something `BASELOD` already says, sitting exactly
+on the LOD a minified draw of the last level asks for. It now says what Mesa
+says. **It did not change the board's answer**: 221 s against 222 s, the same
+hold code. Check 23 fails for some other reason.
+
+### Reading a failing case now costs one run, not several
+
+`gl_test` numbers every `expect_*()` within its case and remembers the first
+that failed, and what it read.
+`samples/zephyr/gc_gl_test` puts that in the hold with
+`CONFIG_GC_GL_TEST_REPORT_CHECK=y` (the check) and
+`CONFIG_GC_GL_TEST_REPORT_CHECK_COLOUR=y` (the colour it read). A board run on
+a shared board is minutes; six bits out of it instead of one is what turned
+"case 2 fails" into "check 22, the mip level-1 fetch" in a single run.
+
+## Layered textures: what Mesa's cube descriptor does and does not prove
+
+Read on the host 2026-09-21 with mode 11 of the two harnesses (six 8x8 faces,
+one flat colour each, `textureCube`). Ours against Mesa's, same draw:
+
+```
+              ours         Mesa
+CONFIG0       0x00312005   0x0000e005    TYPE 5 both; LINEAR vs TILED
+SIZE          0x00080008   0x00080008    match, one face
+LINEAR_STRIDE 0x00000020   0x00000100    8 px tight vs 64 px padded
+CONFIG1       0x00321000   0x08321000    HALIGN 0 vs 2
+SLICE         0x00000100   0x00004000    stride * 8 vs stride * 64
+3D_CONFIG     0x00000001   0x00000001    match
+LOG_SIZE_EXT  0x03000300   0x03000300    match
+```
+
+**The type and the sizes agree, and the rest is layout, not disagreement.**
+Mesa's resource for this texture came out `ETNA_LAYOUT_SUPER_TILED`, whose
+`etna_layout_multiple` pads both axes to 64 and sets `halign =
+TEXTURE_HALIGN_SUPER_TILED` (2) -- so the 256-byte stride, the 16 KiB slice and
+the HALIGN all follow from that one choice. Ours is linear and tight, and every
+one of our numbers is consistent with that.
+
+**Linear is not forbidden for a cube.** `etnaviv_texture_desc.c:181` picks the
+addressing mode from `res->layout` alone:
+
+```c
+COND(res->layout == ETNA_LAYOUT_LINEAR && !util_format_is_compressed(...),
+     VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_LINEAR))
+```
+
+There is no clause anywhere that makes the mode depend on the texture target,
+so TYPE 5 with linear addressing is a combination Mesa would emit for a
+linear-layout cube. It is still the one thing here that only silicon can
+confirm, because Mesa never happens to emit it.
+
+**HALIGN 0 is right for our layout, not a missing value.** The enum is FOUR 0,
+SIXTEEN 1, SUPER_TILED 2, and `etna_layout_multiple` gives a linear layout
+`halign = rs_align ? SIXTEEN : FOUR` with `paddingX` 16 or 4. Our stride is
+`tex_pitch(w)`, which is a multiple of 4 for every width these cases use, so
+FOUR describes it. The same function says a compressed resource is always
+linear with padding 1 and `TEXTURE_HALIGN_FOUR`, and Mesa's ETC1 descriptor
+does read HALIGN 0 -- which is exactly what we write.
+
+**One real gap, which does not affect case 41.** We never set
+`CONFIG1_SEAMLESS_CUBE_MAP` (0x02000000). GL ES 3.0 filters cube maps
+seamlessly and we do not ask the hardware to. Mesa does not set it here either,
+because `cs_golden` runs an ES 2.0 context. Case 41 samples with NEAREST at the
+face centre and at NDC -0.5, both well inside the face -- its own comment says
+0.8 at the corner would flip the major axis -- so nothing it checks can tell
+the difference. Set it when something filters a cube across an edge.
+
+## A uniform array at a run-time index is a load from memory, not `u[a.x]` (2026-09-25)
+
+gl_test 108 and dEQP indexing.uniform_array read element 0 on the i.MX8MP
+whatever the index. The compiler read the array through the constant file's
+relative addressing: `movar a.x, index` then `mov v, u[base][a.x]`, from a
+per-array copy laid out one element per register. Every variant read element 0:
+108 A-D, 116, 117, 120-122, 128. So did the image where program D was
+etna_shc's own words byte for byte (the two `shc_debug_uniidx` knobs,
+255c53e4).
+
+etna_shc runs no GL state tracker, so those were never the words Mesa ships.
+The drm-shim golden (tools/vivante cs_golden mode 25; Mesa 26.2.1 answering as
+the GC7000 rev 6204 through `ETNA_SHIM_GPU=GC7000UL`) shows Mesa's GL path
+lowers every uniform to UBO 0 and turns only constant-offset loads back into
+constant-file reads (etnaviv_nir_lower_ubo_to_uniform). A run-time index stays
+a load, and 108 D ships as:
+
+```text
+imullo0.s32 t1.x___, u0.xxxx, u0.yyyy     ; fidx * 16 (the element stride, bytes)
+load.u32    t1, t1.xxxx, u0.zxxx          ; from the uniform block's GPU address
+```
+
+Its constant file is `{fidx, 16, the address, 0}`, with no copy of fcols.
+Mesa's CI passes the GLES2 mustpass on this GPU with that path.
+
+select.rs LoadUniformIdx does the same now. The index is clamped (ir.md), multiplied by
+the stride in bytes, the array's byte offset added, and loaded from a
+`SHC_VIV_CONST_UBO_ADDR` constant (kind 11). The backend copies each stage's
+uniform block into the frame arena per draw, when its table has that slot,
+with 16 zeroed bytes past it for the last element's four-dword fetch, and
+fills the slot with the copy's address (backend.rs `ubo_copy`). The per-array
+constant copy is gone.
+
+Why `u[a.x]` returned element 0 is not known. gl_test 100 idxtex, whose
+fragment stage reads `u5[a.x]` the same way, passes, and that stays
+unexplained. The fix follows the path Mesa has proven on this silicon rather
+than a theory of the relative read. `movar` is still emitted nowhere else.
+
+## A mipmapped cube cannot be linear here: the face step is the tile-padded size
+
+**Measured (gl_test 113, Zephyr i.MX8MP, 2163f271).** A 16x16 RGBA8 cube, 5
+levels, every texel fingerprinted with its face, level and position, fetched
+once per face per level with NEAREST `textureCubeLod`. Face 0 reads right at
+every level; faces 1-5 read right at levels 0 and 4 and wrong at 1-3 (mask
+0x1ce739c0). The GL core stores level l at `level_off[l]`, its six faces
+back to back with 64-byte rows (level 0's pitch, one per chain), so face k
+starts `k * 64 * h_l` bytes in: 1024 / 512 / 256 / 128 / 64.
+
+A host simulation of the case's own arithmetic (every candidate's predicted
+wrong-fetch mask against that storage) leaves one candidate that gives
+exactly 0x1ce739c0: **rows at LINEAR_STRIDE, faces stepped by the level's
+4x4-tile-padded size**, `align4(w) * align4(h) * bpp` = 1024 / 256 / 64 / 64 /
+64 here. Tight rows with that step would read face 0 wrong at levels 1-2
+(0x1ce739c6); level 0's SLICE at every level, or SLICE >> 2l, both give
+0x3def7bc0. 113 now records "which candidates fit every fetch" first, and the
+prediction for its next run is 0x2 (that candidate alone).
+
+**What follows.** At levels 1-3 that face step is shorter than one face of
+chain-pitch rows (level 1: 256 bytes against 8 rows of 64), so no LINEAR
+layout holds a mipmapped cube: its faces would overlap. The texture unit
+sizes a face the way a tiled image is sized. Mesa never meets this: its
+sampler resources are tiled or super-tiled (the table above: SUPER_TILED,
+SLICE 16 KiB). A one-level cube works linear, because at level 0 the tile-
+padded size of a 4-aligned face IS its linear size -- which is why the
+vertex-stage texturecube (one level) passed while every mipmapped cube case
+failed (texture_functions 3, mipmap.cube 28, filtering.cube, specification
+*cube*, completeness.cube: ~190 on the i.MX8MP). 2D arrays and 3D textures
+take the same layer step; nothing measures them with mips yet, and they are
+assumed to share it.
+
+### Two ways to give the texture unit a tiled cube
+
+**A. A derived tiled sampler copy (the backend's).** The GL core keeps every
+texture LINEAR and level-major, for every GPU, exactly as today. At draw time
+the GC7000 backend keeps, per mipmapped cube (and array/3D), a copy in the
+4x4-tiled order: level l at a 64-byte boundary, each face `align4(w_l) *
+align4(h_l) * bpp` bytes, faces back to back, descriptor addressing TILED. It
+is rebuilt when the texture's `content_gen` (every CPU write, `stamp_texels`)
+or its render-into stamp (`framebuffer.rs` `TARGET_USE`, a kick that drew into
+it) is newer than the copy's.
+  - Memory: about 2x for a mipmapped cube (the tiled copy pads levels below
+    4x4 to one tile: +64 bytes a face at the smallest levels).
+  - Cost on change: one pass over the texels. On the CPU after an upload
+    (cheap: the rows are in hand); after a render into a face the GPU must
+    have finished before the CPU reads, so the first draw after an FBO pass
+    into the cube waits for that kick. The resolve engine can do the linear
+    -> tiled conversion on the GPU instead (Mesa uses RS for tiling blits),
+    with no wait -- a second step once the CPU version works.
+  - What does NOT change: uploads, glTexSubImage, glReadPixels and
+    glCopyTexImage from a cube face, and an FBO with a cube face attached --
+    all keep reading and writing the linear storage.
+  - Same mechanism as usc-backend's PowerVR native cube (its option A: a
+    derived twiddled copy, same staleness rule), so one rule and one set of
+    tests serves both GPUs.
+
+**B. Tiled storage in the GL core.** The GL core stores a GC7000 mipmapped
+cube tiled from the start.
+  - Memory: 1x.
+  - Cost: every path that touches the texels learns tiling -- upload and
+    sub-image (tile on write), glReadPixels / glCopyTexImage / glGetTexImage
+    style reads (untile), glGenerateMipmap, and an FBO with a cube face
+    attached, where the pixel engine must render into a tiled surface (it
+    can: Mesa renders to tiled targets; our PE path is linear today) and the
+    fused clear, blits and read-backs of that target follow.
+  - A second layout inside the GL core, per backend, where today there is
+    one.
+
+**Recommendation: A for the first step**, with the CPU conversion. It is
+contained in the backend, leaves every GL path untouched, shares the PowerVR's
+mechanism and staleness rule, and its cost falls on cubes only (Qt Quick 3D's
+IBL cube is built once at load; dEQP's cubes are 8-64 texels). B is the
+optimisation to take if the copy shows up in a profile: it removes the 2x
+memory and the post-render wait, at the price of tiling awareness through the
+GL core. Before either: 113's next record (predicted 0x2) confirms the rule,
+and the copy's first board check is 113 itself -- with the copy, every fetch
+reads its own texel.
+
+## PROVOKING_VERTEX_LAST, and the cases that would have caught it (none)
+
+`PA_SYSTEM_MODE` bit 0 says which vertex of a primitive a flat-shaded varying
+takes its value from. GL's provoking vertex is the **last** one, Mesa sets the
+bit unconditionally, and we never did: the golden diff read `0x00000010`
+against Mesa's `0x00000011`. Found by vivante-frag2. Now `0x00000011` on both
+sides.
+
+**Which of cases 41-49 would have shown it: none of them.** That is worth
+stating rather than leaving implied. Provoking vertex only decides the value of
+a *flat* varying, and:
+
+- GLSL ES 1.00 has no `flat` qualifier at all, so no ES 2.0 case can reach it;
+- none of the ES 3.00 shaders `gl_test` uses declares one either. `grep -n
+  "flat "` over `tools/shaders/es300/` returns nothing.
+
+The sixteen flat fragment inputs in the generated table (`interp = 2`) are all
+Qt3D's. So this is a correctness fix with no failing case behind it, which is
+exactly why it was worth landing now: the suite cannot tell us when it starts
+mattering.
+
+Cases 43 (`gl_VertexID`) and 47 (instancing) look like candidates and are not.
+`vid.vert` and `inst.vert` both interpolate their colour smoothly; case 43's
+own comment reasons about a pixel being "nearly green" near one corner, which
+is a smooth varying by construction. A flat one would make those checks read a
+single vertex's colour across the whole triangle.
+
+## gl_FrontFacing needs a second compiled variant, and why one key bit is enough
+
+Not yet confirmed on silicon; this is what reading settles, written down so the
+board run only has to answer one question.
+
+**The hardware's facing has no sense of its own.** Mesa lowers
+`gl_FrontFacing` in `etnaviv_nir.c:87-101`: the hardware value is 0.0/1.0
+rather than a bool, so it compares against zero -- and it picks the comparison
+from a *shader key*:
+
+```c
+nir_def *ssa = nir_ine_imm(&b, &intr->def, 0);
+if (v->key.front_ccw)
+   nir_def_as_alu(ssa)->op = nir_op_ieq;
+```
+
+`ine` for one winding, `ieq` for the other. So `glFrontFace` is not a register
+on this part as far as the shader is concerned; it is a recompile. The cull
+register does take `front_ccw` (`etnaviv_rasterizer.c:49`, folded into
+CULL_FACE), but that decides which triangles survive, not what the surviving
+fragment reads.
+
+**Our table had no variants at all** when this was written.
+`gen_shader_table.py` said so in its own header: blending and colour masks are
+PE state on this GPU, so every fragment shader appeared exactly once with
+`blend_key` 0. The field exists, shared with the PowerVR table which does use
+it, and was always zero here. The section below is the reading that decided
+what to do about that; the generator now emits the second binary, and its
+header says so.
+
+**So case 49 cannot pass as things stand.** It draws the same quad with the
+same program twice, changing only `glFrontFace(GL_CCW)` then `GL_CW`, and
+wants green then red. One binary computes one answer; one of the two checks
+must fail.
+
+**One key bit is enough, and it is not simply glFrontFace.** The case draws
+each winding twice over, once to the window and once to an FBO, and an FBO
+target is y-flipped relative to the window -- the same asymmetry case 4 turned
+out to need (window raw, FBO inverted). A flip reverses the winding the
+rasteriser sees, so what the shader has to be compiled for is
+
+    front_ccw_effective = (glFrontFace == GL_CCW) XOR target_is_flipped
+
+which is one bit, computed per draw. Two binaries per shader that reads
+`gl_FrontFacing`, and nothing extra for the shaders that do not -- which is all
+of them but `facing.frag`.
+
+**Answered on silicon, 2026-09-22: this part samples a TYPE 5 cube with linear
+addressing.** `gl_test` case 41 passes outright -- `kernel started 180 s`, code
+1 -- all fifteen checks, six faces sampled at two points each plus the three
+that re-sample after a face has been rendered into through an FBO. So the
+linear, tightly packed cube below is a layout the hardware accepts, and nothing
+needs to be tiled to make a cube work. That could only ever come from the
+board, because Mesa never emits the combination.
+
+## Case 41's second half is host-clean too, and the descriptor is not where it shows
+
+Mode 17 of both harnesses: render into the +Y cube face through an FBO, then
+sample the cube again -- gl_test case 41's "after FBO" checks, which mode 11
+cannot reach because the interesting state is *between* two kicks rather than
+inside one. One submit per frame, the shape mode 14 uses for case 3.
+
+Three things it settles, all of them negative, which is what makes them worth
+writing down:
+
+**The descriptor does not change.** Ours after the render-to-face is identical
+to ours before it, and Mesa's likewise -- `0x0000e005 / 0x00080008 / 0x100 /
+0x08321000 / SLICE 0x4000` both times on its side, `0x00312005 / 0x00080008 /
+0x20 / 0x00321000 / SLICE 0x100` on ours. **Neither driver re-describes a cube
+whose face has just been a render target.** So if case 41's later checks fail,
+the descriptor is not the place to look, and the difference between the two
+sides is the same layout difference mode 11 already documented -- Mesa
+super-tiled and padded to 64, ours linear and tight -- not anything the FBO
+round trip introduced.
+
+**We do not under-flush between the kicks; we over-flush.** Mesa emits one
+`GL_FLUSH_CACHE 0x03` with a semaphore and a stall. We emit `0x27`, `0x10`, a
+`TS_FLUSH_CACHE` and two stalls. Whatever else is true, a stale texture read
+after the render-to-face is not a likely cause on our side. (This is the
+"how much flushing a draw really needs" question below, seen from the other
+end: the answer so far is "more than Mesa", never less.)
+
+**The render target lands where the descriptor says the face is.**
+`gl/framebuffer.rs` computes an attached face's offset as `layer * lh *
+GL_TEX_LEVEL_PITCH(t, lw) * bytes`, which for an 8x8 RGBA8 cube is `layer *
+256` -- and 256 is exactly the `SLICE` the descriptor declares, because both
+are `pitch * height * bpp`. The two agree by construction rather than by
+coincidence, so a face rendered into is the same memory the sampler later
+reads.
+
+So everything the host can check about case 41 is now consistent, both halves.
+What remains is the one hardware question mode 11 already isolated: whether
+this part samples a **TYPE 5 cube with linear addressing** at all. Only the
+board answers that.
+
+## ETC2 RGBA8 EAC: host-clean, and why it has no golden
+
+Case 20's checks are 1-3 format queries, **4-11 the eight ETC1 blocks**,
+**12-15 the four ETC2 RGBA8 EAC blocks**, 16-17 the error cases. The ETC1 half
+is settled -- descriptor and blocks byte-identical to Mesa (mode 10). This is
+the other half, mode 16 of `cs_ours` (it was 15 until mode 15 turned out to be
+claimed twice; the mode list at the top of that file is now the registry).
+
+**There is no golden side for it, and the reason is worth writing down so the
+next person does not spend the hour I did.** ETC2 is core in ES 3.00 and is not
+exposed at all in Mesa's ES 2.0 context: `cs_golden` gets
+
+```
+Mesa: error: GL_INVALID_ENUM in glCompressedTexImage2D(internalFormat=GL_COMPRESSED_RGBA8_ETC2_EAC)
+```
+
+and then emits a descriptor for the default 1x1 texture it was left with --
+`SIZE 0x00010001`, `FORMAT 7` (A8R8G8B8), no compression anywhere. That is the
+dangerous part: it looks like a perfectly good golden descriptor and describes
+nothing. Asking for an ES 3.0 context does not rescue it, because the drm-shim
+GC7000UL offers no ES3 config and `eglChooseConfig` fails outright. So mode 16
+compares our descriptor against Mesa's *rules*, read out of
+`etnaviv_texture_desc.c`, rather than against a stream.
+
+**By those rules ours is right.** Mesa's `DESC_SET(CONFIG0, ...)` writes the
+FORMAT field only `COND(!ext && !astc)` -- so an extended format leaves CONFIG0
+FORMAT at **0** and puts the code in CONFIG1's FORMAT_EXT, which is exactly
+what we do. Compressed also keeps the tiled addressing mode, because the LINEAR
+clause is `COND(layout == LINEAR && !util_format_is_compressed(...))`. Ours:
+
+```
+CONFIG0       0x00000002   TYPE 2, FORMAT 0, addressing TILED
+SIZE          0x00080008   8x8
+LINEAR_STRIDE 0x00000020   two blocks of 16 bytes
+CONFIG1       0x00321002   FORMAT_EXT 2 = RGBA8_ETC2_EAC, swizzle RGBA, HALIGN 0
+SLICE         0x00000040   32 * 2 block rows = the whole 4-block image
+```
+
+and the sixty-four bytes it points at are the four blocks in raster order, EAC
+alpha half then colour half, verified against what the case uploads:
+
+```
+block 0: EAC ff .. | colour ff 00 00 ..  -> alpha 255, rgb4 (15, 0, 0)
+block 1: EAC 80 .. | colour 00 ff 00 ..  -> alpha 128, rgb4 ( 0,15, 0)
+block 2: EAC 40 .. | colour 00 00 ff ..  -> alpha  64, rgb4 ( 0, 0,15)
+block 3: EAC 00 .. | colour ff ff ff ..  -> alpha   0, rgb4 (15,15,15)
+```
+
+The alpha swizzle is right too: `no_alpha` is set for ETC2 RGB, which has no
+alpha to read, and not for this format, which has.
+
+**So if the board fails checks 12-15, it is not a layout bug.** Everything the
+host can check is correct, which narrows the next question to whether this part
+decodes RGBA8_ETC2_EAC at all -- a feature question rather than a register one.
+Start there rather than re-reading the descriptor.
+
+## The two units that decide a face, and why they disagree
+
+**Measured 2026-09-21/22, chasing `gl_test` case 12.**
+
+This pixel engine has no front-face register. The FRONT fields of
+`PE_STENCIL_OP`, `PE_STENCIL_CONFIG` and `PE_STENCIL_CONFIG_EXT`/`EXT2` apply
+to one fixed winding, and a driver says what GL means by "front" by putting
+the right half of the state in them -- Mesa keeps an unswapped and a swapped
+copy and picks one.
+
+The question is what the swap depends on, and the obvious answer is wrong.
+Case 4 had already measured the **cull** test on silicon and found it reads
+the **clip-space** winding: mirroring the culled winding for a top-down target
+made a front-facing triangle disappear, and not mirroring it is what makes
+case 4 pass. Facing looks like one determinant computed in one place, so the
+same ought to hold for the stencil.
+
+It does not. With the swap as `glFrontFace` alone, case 12's first check --
+a triangle wound counter-clockwise in GL window space, with CCW fronts, which
+must take the front reference of 1 and come out red -- read **blue**, the back
+reference:
+
+```
+kernel started 372 s after the jump   code 33 (REPORT_CHECK_COLOUR): blue
+kernel started 180 s after the jump   code 1, once the flip term was restored
+```
+
+So the two are two units, and the honest description is:
+
+| test | the winding it reads |
+| --- | --- |
+| the rasteriser's cull (`PA_CONFIG`) | clip space, before the viewport transform |
+| the pixel engine's front/back | window space, after it |
+
+A top-down window has a negative `PA_VIEWPORT_SCALE_Y` and reaches the pixel
+engine wound the other way, so `swap = front_cw != flip_y` there, while the
+cull face is emitted with no mirror at all. An FBO is not flipped and both
+agree.
+
+**Mesa cannot settle this and it is worth knowing why**, because its stream
+looks like a confirmation and is not: it renders bottom-up and never flips, so
+its answer is the unflipped one for both units. Matching its registers proves
+only that ours are well-formed. Case 23's fill (`INCR_WRAP` front,
+`DECR_WRAP` back) passes on the same term.
+
+## The alpha a read-back threw away
+
+**Found 2026-09-22, chasing `gl_test` case 8.** Not a Vivante bug at all: the
+GL core's `glReadPixels`.
+
+Case 8 failed at its first check and the board said what it read -- hold code
+38 with `REPORT_CHECK_COLOUR`, which is red and green both at or above half
+and blue below. That is the signature of the value the check *wanted*,
+`0xbf008080`. All three colour channels were right and the check still failed,
+which leaves the one channel the colour code does not carry.
+
+`gl/framebuffer.rs` has a branch for a target stored B,G,R,A, entered for a
+scan-out XRGB8888 surface and -- through `rt_rgba8888_is_bgra`, which only
+this backend sets -- for an RGBA8888 target too. It swapped red and blue and
+then wrote `0xff` over the fourth byte. Right for the scan-out surface, whose
+fourth byte is an X; wrong for the RGBA8888 target, whose fourth byte is the
+alpha the pixel engine blended and stored.
+
+It hid because **every `gl_test` case that passes on this backend wants alpha
+`0xff`**, so forcing it is invisible to all of them. Case 8 is the first to
+read back a blended alpha (`0.5 * 0.5 + 0.5 * 1 = 0.75`), and four of its
+checks want a fractional one. PowerVR is untouched: there the branch is
+XRGB8888-only.
+
+## This toolchain does not compact samplers, and two guesses were spent on it
+
+**Settled 2026-09-22 by reading the instruction, after `gl_test` case 24 had
+been black through two wrong fixes.**
+
+The compiler drops a sampler nothing reads -- that much is true, and it is why
+a sampler the shader dropped must be left out of the table, so
+`glGetUniformLocation` answers -1 for it. What it does **not** do here is
+renumber the survivors. `nir_lower_samplers` compacts samplers into a dense
+set in general, and `compact.frag` -- two declared, only binding 1 sampled --
+is exactly the shader that should demonstrate it. It does not:
+
+```
+texture.frag   (binding 0, sampled)   0x07811018
+compact.frag   (binding 1, sampled)   0x0f811018
+texture2.frag  (both sampled)         0x07821018 then 0x0f811018
+```
+
+Bit 27 of the first word is the sampler index, and `texture2.frag` pins it
+down: its `u_tex0` load has the bit clear, its `u_tex1` load has it set.
+`compact.frag`'s single load has it **set**, so the surviving sampler still
+reads register 1 -- the number it was declared with. A descriptor placed in
+slot 0 leaves the shader sampling an empty slot, which on this part reads
+black.
+
+**So the binding in the table is the declared one.** Two other readings were
+tried first and both put the descriptor in slot 0:
+
+1. `etna_shc`'s `"unit"` field, read as the compacted register. It is not: the
+   tool reports 0 for *every* sampler it lists, so `texture2.frag` came back
+   with both of its samplers claiming binding 0 -- two samplers sharing one
+   descriptor slot, which would have broken case 2's two-texture-unit check.
+2. Deriving the dense renumbering ourselves -- survivors ordered by declared
+   binding, numbered from zero. Correct about `nir_lower_samplers` in general,
+   wrong about what comes out of this tool.
+
+The instruction was the thing that settled it, and it cost less than either
+guess: three shaders compiled on the host, one bit compared.
+
+## What the hardware has to answer
+
+1. **Channel order of a colour target read back by the CPU.** The pixel engine
+   writes 32-bit pixels in B,G,R,A order. That is exactly the window surface
+   (XRGB8888), and a texture sampled out of a render target is corrected by
+   the descriptor's format, but `glReadPixels` on an RGBA8888 FBO would see R
+   and B swapped. Mesa's answer is a fragment-shader swap
+   (`key.frag_rb_swap`); ours would be a second shader-table dimension or a
+   flag from the GL core. Decide once a target can be read back on silicon.
+2. **The depth buffer's layout.** *Half answered on the host, 2026-09-21,
+   with mode 8 of the two harnesses -- a depth-tested draw against a D24S8
+   surface, which no other mode reaches.* Against Mesa on the same 64x64
+   surface:
+
+   ```
+   RA_EARLY_DEPTH      ours 0x05000031   Mesa 0x05000031   match
+   PE_DEPTH_NORMALIZE  ours 0x4b7fffff   Mesa 0x4b7fffff   match
+   PE_DEPTH_STRIDE     ours 0x00000100   Mesa 0x00000100   match
+   PE_DEPTH_CONFIG     ours 0x00041111   Mesa 0x05051111   differ
+   ```
+
+   So the stride and the normalise are right, which is what this question was
+   really about. `PE_DEPTH_CONFIG` agrees on every field that says what the
+   test is -- mode Z, format D24S8, func LESS, write enable -- and differs in
+   three bits above it, of which one matters:
+
+   - `SUPER_TILED` (0x04000000): Mesa's depth surface is super-tiled, ours is
+     linear, so *not* setting it is consistent with our own layout. Whether
+     this pixel engine will address a depth buffer linearly at all is the part
+     still unanswered, and it is the one worth testing: if it will not, the
+     depth is written with tiled addressing to a linear allocation.
+   - `EARLY_Z` (0x00010000): Mesa enables early Z here and we do not. A
+     performance bit, until a shader discards.
+   - `DISABLE_ZS` (0x01000000): Mesa sets it. Neither driver uses the depth
+     tile status, so this is likely the bit that says so, and ours probably
+     should be set too.
+
+   Note the stride was only compared at a width of 64, where
+   `align(width,64) * 4` and `width * 4` are the same number. A width that is
+   not a multiple of 64 has not been compared.
+3. **`PE_PIPE_COLOR_ADDR(1)` with one pixel pipe.** The backend writes the same
+   address to both pipe registers. Mesa leaves the second one's relocation
+   unset on a single-pipe part; whether that matters is unknown.
+4. **`PE_LOGIC_OP.SINGLE_BUFFER(1)` for a linear target.** This is what Mesa
+   selects for a linear surface, but it is one of the registers whose meaning
+   is least documented.
+5. ~~**`NORMALIZE_SIGN_EXTEND` for a normalised array.**~~ *Answered by
+   reading, 2026-09-21, not by silicon.* Mesa's
+   `translate_vertex_format_normalize` returns `SIGN_EXTEND` for every unorm,
+   snorm and pure-signed-integer format, with the comment saying so in as many
+   words. The field's name reads oddly against that and the code is what
+   matters; ours already matches. (`gl_test` case 10 draws a normalised
+   `GL_UNSIGNED_BYTE` colour array, so silicon will confirm it in passing.)
+6. **The two magic shader words**: `VS_HALTI5_OUTPUT_COUNT`'s second field
+   (`count * 0x10`) and `VS_HALTI5_UNK008A0`'s `0x110 / count`. Copied from
+   Mesa; the hardware may be more or less forgiving.
+7. **How much flushing a draw really needs.** Every draw currently flushes
+   colour, depth, texture and shader caches and stalls twice. Getting this
+   wrong is the likeliest first class of bug: the picture is right but stale.
+   Bisect on silicon, then narrow.
+8. **The unified sampler split.** `VS_SAMPLER_BASE` is set to the number of
+   fragment samplers, and vertex-stage descriptors go in the slots above them.
+   Confirm with a vertex-shader texture read.
+9. **Descriptor-cache invalidation.** Descriptors are rebuilt in the frame
+   arena every draw, so their addresses change every draw and every slot is
+   invalidated. Whether the invalidate is needed per slot or once per stream is
+   a performance question with a correctness trap behind it.
+10. **The clear quad's depth.** The quad is drawn in clip space with
+    `z = clear_depth * 2 - 1`, so it depends on the viewport z transform
+    (`PA_VIEWPORT_SCALE_Z` / `OFFSET_Z`) being GL's. Check a `glClear` with a
+    non-default `glDepthRangef`.
+11. ~~**Event ids.**~~ *Settled by the driver, not by silicon.* The render
+    service (`src/vivante/gc_render.h` in the driver repository) allocates the
+    hardware event, appends the `EVENT` command and hands back a monotonic
+    fence; the backend no longer names an id. See "The OSAL contract" above.
+12. **ETC2 through `TEXTURE_FORMAT_ETC1`.** RGB ETC2 is decoded as the ETC1
+    superset here, and compressed textures keep the tiled addressing mode
+    because their blocks are not rows. Both need a real texture to confirm.
+    *Half answered on the host, 2026-09-22, by mode 10 of the two harnesses
+    (a 16x8 ETC1 texture, eight flat blocks).* The descriptor this port
+    writes for it reads `CONFIG0 0x0003c002`, `LINEAR_STRIDE 0x20`,
+    `SLICE 0x40` and `CONFIG1 0x00521000`, which is Mesa's descriptor for the
+    same texture field for field, alpha swizzle included; the memory dump
+    shows the eight blocks in raster order, four then four, eight bytes
+    apart. So the layout and the format agree with Mesa. What no host run can
+    say is whether the hardware decodes those blocks into the right colours,
+    which is still case 20's to answer.
+
+## The per-draw state audit against etnaviv (2026-09-22)
+
+Every register etnaviv writes on HALTI5, against what this backend writes, the
+shader-dependent fields first. The occasion was the GC7000 wedge (task #52g):
+the corpus holds vendor-driver vertex blobs at 42 temporaries, so a *working*
+driver state exists at a register pressure that wedges us, and the difference
+has to be in what the driver programmes around the shader.
+
+Neither of the two defects it found is a wedge candidate -- the wedging shaders
+have one attribute and draw to the window -- so the wedge is still open. They
+are recorded here because the audit found them, not because they explain it.
+
+**Two rules we had written as constants, both wrong outside the corpus:**
+
+1. `VS_INPUT_COUNT.UNK8`. etnaviv computes `DIV_ROUND_UP(num_in + 4, 16)`
+   (`etnaviv_compiler_nir.c:1157`) and overwrites it with 31 for the fragment
+   stage only (`:1389`). We wrote a per-stage constant, 1 for vertex, measured
+   over the whole offline table "with no exceptions". The measurement was true;
+   the conclusion was not. The table's 179 vertex blobs have 1 to 10 inputs, and
+   the formula is 1 for every count up to 12 -- **the corpus cannot tell the two
+   rules apart.** The first count where it can is 13, and 13 is reachable:
+   `MAX_VERTEX_ATTRIBS` is 16, the chip's own `stream_count`. Fixed in
+   `shaderc/online/abi.rs`; the test pins the step the corpus cannot see.
+
+2. `PS_CONTROL_EXT.OUTPUT_MODE0`. etnaviv's `translate_output_mode`
+   (`etnaviv_translate.h:446`) tests the component width *before* the
+   pure-integer test, so a 32-bit float target takes `UIF32` and everything
+   narrower `NORMAL`. We wrote `NORMAL` for every format. Of the formats
+   `pe_color_format` renders to, only `R32F` is affected, and it is reachable
+   through a `GL_R32F` FBO colour attachment (`gl/framebuffer.rs:352`). Fixed in
+   `shader.rs`; **transcribed, not measured** -- no R32F draw has run on this
+   part.
+
+**Checked and identical** (recorded so nobody re-derives them): the temporary
+count in all three places it is used; `SH_CONFIG` (`RTNE_ROUNDING`, 0x2 both
+sides); `PS_CONTROL`'s `SATURATE_RT0` -- our `rt_class == RGBA8` test is exactly
+etnaviv's `util_format_is_unorm` over the formats this backend supports -- and
+its `RT_COUNT`, 0 for the single target both sides; the `UNK8` and
+`OUTPUT_MODE0` field widths against rnndb (5 bits at shift 8; 3 bits, stride 4).
+
+Also identical: the **uniform bases** -- `VS_UNIFORM_BASE = 0` and
+`PS_UNIFORM_BASE` = the vertex stage's constant count in vec4 registers, where
+ours rounds up and etnaviv divides exactly because its count is already a vec4
+multiple -- and the **prefetch ordering**, both stages' icache blocks, then both
+`UNIFORM_BASE` registers, then the constants, then the two prefetches, then
+`stall(RA, PE)` (`etnaviv_emit.c:850-853` against `backend.rs:1016-1019`).
+
+The four `PE_HALTI5_RT_*` blend registers, which the presence pass listed as the
+only registers etnaviv writes and this backend does not, turn out **not to be a
+gap**: all four loops that write them start at `i = 1`
+(`etnaviv_emit.c:164-181`), so they carry render targets 1..7 and a
+single-target draw writes none of them on either side. Render target 0's colour
+mask and alpha config go through the unextended registers, which this backend
+writes.
+
+So the audit is complete for every register in the per-draw path, and the wedge
+is not in any of them.
+
+## Draw buffers (MRT): GL_MAX_DRAW_BUFFERS 1 -> 4, the plan (2026-09-24)
+
+ES 3.0 step 3 on this GPU. Reference: Mesa etnaviv (MIT) at mesa 4550a8d,
+`src/gallium/drivers/etnaviv/`; register addresses from this tree's
+`driver/src/vivante/hw/state_3d.xml.h`. Step 1 is done (below); steps 2-5 are
+not, and nothing here is measured on silicon.
+
+**What the core allows.** HALTI5 (`REG_Halti5`, so Mesa classifies it halti
+5 -- said above, where the `0x34000`/`0x36000` windows are), one pixel
+pipe (the hwdb row, now galcore's `gc7000UL_6200` entry in
+driver/rust/src/gpu/vivante/hw.rs). `etna_determine_num_rts` (etnaviv_screen.c:803)
+gives `num_rts = 8` for HALTI2+, so the **8-RT register bank** applies
+(etnaviv_emit.c picks it on `num_rts == 8`), and `max_render_targets =
+num_rts / 2 = 4` (etnaviv_screen.c:330): half the RTs are kept for 128-bit
+formats, which take two planes. 4 is Mesa's number for this core and the ES 3.0
+minimum. Independent blend exists (halti >= 5); ES 3.0 does not need it.
+
+**The state per render target** (etnaviv_state.c:250-420, etnaviv_emit.c,
+etnaviv_blend.c:150-200). RT0 keeps what this backend programs today; RT n >= 1
+uses index n - 1 in the 8-banks:
+
+| what | RT0 | RT n >= 1 |
+|---|---|---|
+| address (one pipe) | PE_PIPE_COLOR_ADDR(0) 0x1460 | PE_RT_ADDR_8_PIPE(n-1, 0) 0x14800 + 0x20(n-1) |
+| format, stride, tiling | PE_COLOR_FORMAT 0x142c, PE_COLOR_STRIDE 0x1434 | PE_RT_CONFIG_8(n-1) 0x14900 |
+| colour mask, overwrite | PE_COLOR_FORMAT COMPONENTS / OVERWRITE | PE_HALTI5_RT_COLORMASK(n-1) 0x14920 |
+| blend | PE_ALPHA_CONFIG 0x1428 | PE_HALTI5_RT_ALPHA_CONFIG(n-1) 0x14960 |
+| blend colour | PE_ALPHA_COLOR_EXT0/1 0x14b0.. | PE_HALTI5_RT_ALPHA_COLOR_EXT0/1(n-1) 0x14980 / 0x149a0 |
+| shader register | PS_OUTPUT_REG 0x1004 byte 0 | PS_OUTPUT_REG byte n |
+| unorm saturate | PS_CONTROL SATURATE_RT0 | SATURATE_RT0 << n |
+| output mode | PS_CONTROL_EXT 0x1030 OUTPUT_MODE0 | bits 4n..4n+3 |
+| how many | PS_CONTROL RT_COUNT(0) | RT_COUNT(num_rt - 1) |
+
+RT_COUNT(0) is what disables the extra targets (etnaviv_state.c:405-406), so a
+single-target draw after a multi-target one needs no clean-up of the bank. No
+TS here, so the RT_TS_* registers stay untouched. etnaviv never writes
+PE_HALTI4_UNK014C0 in etnaviv_emit.c or etnaviv_state.c.
+
+**Step 1, done: the compiler's half.** A fragment colour output at location
+n in 1..3 (`layout(location = n) out`, an output array's element) gets a
+register of its own and is placed like any written output. A shader writing
+more than the first colour lists every colour it writes as an `out` row by
+location, `slot = FRAG_RESULT_DATA0 (4) + n`, row 0's register equal to
+`ps_color_out_reg`; a shader writing one colour lists none, as every shader
+did before, so no record or layout changed (`ShcViv` has one byte of padding
+where three more registers would have had to go, and the table spells every
+field). Location 4 and up is refused by name. 19 table sources that were
+refused ("this output is not selected yet") now compile -- among them 16
+Quick 3D order-independent-transparency shaders (`fragOutput` at 0,
+`revealageOutput` at 1) -- and all 322 that compiled before are byte-identical.
+Until step 2 the driver programs RT0 only, which draws location 0 as GL does
+for an output with no draw buffer.
+
+**Steps 2-5.** 2: the backend programs the table for `d.num_targets` targets
+from the rows (host tests pin every register for 1, 2 and 4 targets, and
+RT_COUNT(0) after). 3: caps -- GC7000 MAX_DRAW_BUFFERS 1 -> 4 and
+CAP_COLOR_ATTACHMENTS 3 -> 4, per GPU (the PowerVR stays 3) -- and clears: the
+clear quad writes every attached draw buffer (PS_OUTPUT_REG names the clear
+shader's colour for every RT), and `glClearBuffer*(GL_COLOR, i)`, refused for
+i != 0 today (es3.rs), becomes a clear quad with only RT i's mask on. 4:
+gl_test case 106 -- four RGBA8 attachments written with four colours in one
+draw, then glClearBuffer on RT 2, every pixel of every attachment read back. 5:
+opt-in until measured, MAX_DRAW_BUFFERS reporting 4 only with the switch on.
+128-bit formats (two planes in Mesa) with more than one draw buffer are refused
+as GL_FRAMEBUFFER_UNSUPPORTED in the first cut.
+
+**Predictions** (for the board, once steps 2-5 run): case 106 passes with the
+switch on and skips with it off; dEQP-GLES3 `functional.fragment_out.array.*`
+and `.random.*` pass for formats up to 64 bits, 128-bit MRT cases report
+unsupported, `fragment_out.basic.*` does not move; single-target draws are
+byte-identical in the command stream.
+
+**Open for the board:** whether RT1..3 take a linear surface as RT0 does
+(etnaviv_state.c:268-269 asserts a render target is tiled or the core has
+LINEAR_PE; RT_CONFIG has no linear bit -- linear is the absence of
+SUPER_TILED).

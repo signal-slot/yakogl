@@ -1,0 +1,520 @@
+diff -ruN orig_bevy_render/src/globals.rs bevy_render/src/globals.rs
+--- a/bevy_render-0.19.1/src/globals.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_render-0.19.1/src/globals.rs	2026-09-24 20:49:49.079547542 +0900
+@@ -51,7 +51,7 @@
+     /// It wraps to zero when it reaches the maximum value of a u32.
+     frame_count: u32,
+     /// WebGL2 structs must be 16 byte aligned.
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding: f32,
+ }
+ 
+diff -ruN orig_bevy_render/src/render_resource/batched_uniform_buffer.rs bevy_render/src/render_resource/batched_uniform_buffer.rs
+--- a/bevy_render-0.19.1/src/render_resource/batched_uniform_buffer.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_render-0.19.1/src/render_resource/batched_uniform_buffer.rs	2026-09-24 20:49:49.086403398 +0900
+@@ -17,7 +17,6 @@
+ // dynamic offset.
+ #[cfg(any(
+     not(feature = "webgl"),
+-    not(target_arch = "wasm32"),
+     feature = "webgpu"
+ ))]
+ const MAX_REASONABLE_UNIFORM_BUFFER_BINDING_SIZE: u64 = 1 << 20;
+@@ -27,7 +26,7 @@
+ // This is due to older shader compilers/GPUs that don't support dynamically
+ // indexing uniform buffers, and instead emulate it with large switch statements
+ // over buffer indices that take a long time to compile.
+-#[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++#[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+ const MAX_REASONABLE_UNIFORM_BUFFER_BINDING_SIZE: u64 = 1 << 12;
+ 
+ /// Similar to [`DynamicUniformBuffer`], except every N elements (depending on size)
+diff -ruN orig_bevy_render/src/render_resource/pipeline_cache.rs bevy_render/src/render_resource/pipeline_cache.rs
+--- a/bevy_render-0.19.1/src/render_resource/pipeline_cache.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_render-0.19.1/src/render_resource/pipeline_cache.rs	2026-09-24 20:49:49.088411316 +0900
+@@ -234,7 +234,7 @@
+         synchronous_pipeline_compilation: bool,
+     ) -> Self {
+         let mut global_shader_defs = Vec::new();
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         {
+             global_shader_defs.push("NO_ARRAY_TEXTURES_SUPPORT".into());
+             global_shader_defs.push("NO_CUBE_ARRAY_TEXTURES_SUPPORT".into());
+diff -ruN orig_bevy_pbr/src/deferred/mod.rs bevy_pbr/src/deferred/mod.rs
+--- a/bevy_pbr-0.19.1/src/deferred/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/deferred/mod.rs	2026-09-24 20:49:49.164934184 +0900
+@@ -39,11 +39,11 @@
+ pub struct PbrDeferredLightingDepthId {
+     depth_id: u32,
+ 
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_0: f32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_1: f32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_2: f32,
+ }
+ 
+@@ -52,11 +52,11 @@
+         PbrDeferredLightingDepthId {
+             depth_id: value as u32,
+ 
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_0: 0.0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_1: 0.0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_2: 0.0,
+         }
+     }
+@@ -75,11 +75,11 @@
+         PbrDeferredLightingDepthId {
+             depth_id: DEFAULT_PBR_DEFERRED_LIGHTING_PASS_ID as u32,
+ 
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_0: 0.0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_1: 0.0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_2: 0.0,
+         }
+     }
+@@ -202,7 +202,7 @@
+         // Let the shader code know that it's running in a deferred pipeline.
+         shader_defs.push("DEFERRED_LIGHTING_PIPELINE".into());
+ 
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         shader_defs.push("WEBGL2".into());
+ 
+         if key.contains(MeshPipelineKey::TONEMAP_IN_SHADER) {
+@@ -323,7 +323,7 @@
+         #[cfg(feature = "experimental_pbr_pcss")]
+         shader_defs.push("PCSS_SAMPLERS_AVAILABLE".into());
+ 
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         shader_defs.push("SIXTEEN_BYTE_ALIGNMENT".into());
+ 
+         if cfg!(feature = "bluenoise_texture") {
+diff -ruN orig_bevy_pbr/src/light_probe/irradiance_volume.rs bevy_pbr/src/light_probe/irradiance_volume.rs
+--- a/bevy_pbr-0.19.1/src/light_probe/irradiance_volume.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/light_probe/irradiance_volume.rs	2026-09-24 20:49:49.165851130 +0900
+@@ -158,7 +158,7 @@
+ /// On WebGL and WebGPU, we must disable irradiance volumes, as otherwise we can
+ /// overflow the number of texture bindings when deferred rendering is in use
+ /// (see issue #11885).
+-pub(crate) const IRRADIANCE_VOLUMES_ARE_USABLE: bool = cfg!(not(target_arch = "wasm32"));
++pub(crate) const IRRADIANCE_VOLUMES_ARE_USABLE: bool = cfg!(not(feature = "webgl"));
+ 
+ /// All the bind group entries necessary for PBR shaders to access the
+ /// irradiance volumes exposed to a view.
+diff -ruN orig_bevy_pbr/src/prepass/mod.rs bevy_pbr/src/prepass/mod.rs
+--- a/bevy_pbr-0.19.1/src/prepass/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/prepass/mod.rs	2026-09-24 20:49:49.169344710 +0900
+@@ -433,7 +433,7 @@
+                     .clone(),
+             );
+         }
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         shader_defs.push("WEBGL2".into());
+         shader_defs.push("VERTEX_OUTPUT_INSTANCE_INDEX".into());
+         let view_projection = mesh_key.intersection(MeshPipelineKey::VIEW_PROJECTION_RESERVED_BITS);
+diff -ruN orig_bevy_pbr/src/render/light.rs bevy_pbr/src/render/light.rs
+--- a/bevy_pbr-0.19.1/src/render/light.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/render/light.rs	2026-09-24 20:49:49.172508280 +0900
+@@ -212,21 +212,19 @@
+ 
+ // NOTE: When running bevy on Adreno GPU chipsets in WebGL, any value above 1 will result in a crash
+ // when loading the wgsl "pbr_functions.wgsl" in the function apply_fog.
+-#[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++#[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+ pub const MAX_DIRECTIONAL_LIGHTS: usize = 1;
+ #[cfg(any(
+     not(feature = "webgl"),
+-    not(target_arch = "wasm32"),
+     feature = "webgpu"
+ ))]
+ pub const MAX_DIRECTIONAL_LIGHTS: usize = 10;
+ #[cfg(any(
+     not(feature = "webgl"),
+-    not(target_arch = "wasm32"),
+     feature = "webgpu"
+ ))]
+ pub const MAX_CASCADES_PER_LIGHT: usize = 4;
+-#[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++#[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+ pub const MAX_CASCADES_PER_LIGHT: usize = 1;
+ 
+ pub const MAX_RECT_LIGHTS: usize = 8;
+@@ -1114,19 +1112,17 @@
+ 
+     #[cfg(any(
+         not(feature = "webgl"),
+-        not(target_arch = "wasm32"),
+         feature = "webgpu"
+     ))]
+     let max_texture_array_layers = render_device.limits().max_texture_array_layers as usize;
+     #[cfg(any(
+         not(feature = "webgl"),
+-        not(target_arch = "wasm32"),
+         feature = "webgpu"
+     ))]
+     let max_texture_cubes = max_texture_array_layers / 6;
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     let max_texture_array_layers = 1;
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     let max_texture_cubes = 1;
+ 
+     if !*max_directional_lights_warning_emitted
+@@ -1425,14 +1421,13 @@
+                     not(target_abi = "sim"),
+                     any(
+                         not(feature = "webgl"),
+-                        not(target_arch = "wasm32"),
+                         feature = "webgpu"
+                     )
+                 ))]
+                 dimension: Some(TextureViewDimension::CubeArray),
+                 #[cfg(any(
+                     target_abi = "sim",
+-                    all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu"))
++                    all(feature = "webgl", not(feature = "webgpu"))
+                 ))]
+                 dimension: Some(TextureViewDimension::Cube),
+                 usage: None,
+@@ -1473,11 +1468,10 @@
+                 format: None,
+                 #[cfg(any(
+                     not(feature = "webgl"),
+-                    not(target_arch = "wasm32"),
+                     feature = "webgpu"
+                 ))]
+                 dimension: Some(TextureViewDimension::D2Array),
+-                #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++                #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+                 dimension: Some(TextureViewDimension::D2),
+                 usage: None,
+                 aspect: TextureAspect::DepthOnly,
+diff -ruN orig_bevy_pbr/src/render/mesh.rs bevy_pbr/src/render/mesh.rs
+--- a/bevy_pbr-0.19.1/src/render/mesh.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/render/mesh.rs	2026-09-24 20:49:49.175234388 +0900
+@@ -3477,7 +3477,7 @@
+             shader_defs.push("VIEW_PROJECTION_ORTHOGRAPHIC".into());
+         }
+ 
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         shader_defs.push("WEBGL2".into());
+ 
+         #[cfg(feature = "experimental_pbr_pcss")]
+diff -ruN orig_bevy_pbr/src/render/mesh_view_bindings.rs bevy_pbr/src/render/mesh_view_bindings.rs
+--- a/bevy_pbr-0.19.1/src/render/mesh_view_bindings.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/render/mesh_view_bindings.rs	2026-09-24 20:49:49.176230927 +0900
+@@ -62,7 +62,7 @@
+     CLUSTERED_FORWARD_STORAGE_BUFFER_COUNT,
+ };
+ 
+-#[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++#[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+ use bevy_render::render_resource::binding_types::texture_cube;
+ 
+ #[cfg(debug_assertions)]
+@@ -265,14 +265,13 @@
+                     not(target_abi = "sim"),
+                     any(
+                         not(feature = "webgl"),
+-                        not(target_arch = "wasm32"),
+                         feature = "webgpu"
+                     )
+                 ))]
+                 texture_cube_array(TextureSampleType::Depth),
+                 #[cfg(any(
+                     target_abi = "sim",
+-                    all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu"))
++                    all(feature = "webgl", not(feature = "webgpu"))
+                 ))]
+                 texture_cube(TextureSampleType::Depth),
+             ),
+@@ -286,11 +285,10 @@
+                 5,
+                 #[cfg(any(
+                     not(feature = "webgl"),
+-                    not(target_arch = "wasm32"),
+                     feature = "webgpu"
+                 ))]
+                 texture_2d_array(TextureSampleType::Depth),
+-                #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++                #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+                 texture_2d(TextureSampleType::Depth),
+             ),
+             // Directional Shadow Texture Array Comparison Sampler
+@@ -397,7 +395,7 @@
+     }
+ 
+     // Prepass
+-    if cfg!(any(feature = "webgpu", not(target_arch = "wasm32")))
++    if cfg!(any(feature = "webgpu", not(feature = "webgl")))
+         || !layout_key.contains(MeshPipelineViewLayoutKey::MULTISAMPLED)
+     {
+         for (entry, binding) in prepass::get_bind_group_layout_entries(layout_key)
+@@ -879,7 +877,7 @@
+             // When using WebGL, we can't have a multisampled texture with `TEXTURE_BINDING`
+             // See https://github.com/gfx-rs/wgpu/issues/5263
+             let prepass_bindings;
+-            if cfg!(any(feature = "webgpu", not(target_arch = "wasm32"))) || msaa.samples() == 1 {
++            if cfg!(any(feature = "webgpu", not(feature = "webgl"))) || msaa.samples() == 1 {
+                 prepass_bindings = prepass::get_bindings(prepass_textures);
+                 for (binding, index) in prepass_bindings
+                     .iter()
+diff -ruN orig_bevy_pbr/src/wireframe.rs bevy_pbr/src/wireframe.rs
+--- a/bevy_pbr-0.19.1/src/wireframe.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_pbr-0.19.1/src/wireframe.rs	2026-09-24 20:49:49.162469033 +0900
+@@ -353,7 +353,7 @@
+     color: [f32; 4],
+     line_width: f32,
+     smoothing: f32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _padding: [f32; 2],
+ }
+ 
+@@ -388,7 +388,7 @@
+             } else {
+                 1.0
+             },
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _padding: [0.0; 2],
+         };
+         pass.set_immediates(0, bytemuck::bytes_of(&push));
+diff -ruN orig_bevy_core_pipeline/src/core_2d/main_transparent_pass_2d_node.rs bevy_core_pipeline/src/core_2d/main_transparent_pass_2d_node.rs
+--- a/bevy_core_pipeline-0.19.1/src/core_2d/main_transparent_pass_2d_node.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_core_pipeline-0.19.1/src/core_2d/main_transparent_pass_2d_node.rs	2026-09-24 20:49:49.203660661 +0900
+@@ -74,7 +74,7 @@
+ 
+     // WebGL2 quirk: if ending with a render pass with a custom viewport, the viewport isn't
+     // reset for the next render pass so add an empty render pass without a custom viewport
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     if camera.viewport.is_some() {
+         #[cfg(feature = "trace")]
+         let _reset_viewport_pass_2d = info_span!("reset_viewport_pass_2d").entered();
+diff -ruN orig_bevy_core_pipeline/src/core_3d/main_transparent_pass_3d_node.rs bevy_core_pipeline/src/core_3d/main_transparent_pass_3d_node.rs
+--- a/bevy_core_pipeline-0.19.1/src/core_3d/main_transparent_pass_3d_node.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_core_pipeline-0.19.1/src/core_3d/main_transparent_pass_3d_node.rs	2026-09-24 20:49:49.204069233 +0900
+@@ -101,7 +101,7 @@
+ 
+     // WebGL2 quirk: if ending with a render pass with a custom viewport, the viewport isn't
+     // reset for the next render pass so add an empty render pass without a custom viewport
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     if camera.viewport.is_some() {
+         #[cfg(feature = "trace")]
+         let _reset_viewport_pass_3d = info_span!("reset_viewport_pass_3d").entered();
+diff -ruN orig_bevy_core_pipeline/src/core_3d/mod.rs bevy_core_pipeline/src/core_3d/mod.rs
+--- a/bevy_core_pipeline-0.19.1/src/core_3d/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_core_pipeline-0.19.1/src/core_3d/mod.rs	2026-09-24 20:49:49.204530046 +0900
+@@ -14,7 +14,7 @@
+ ///
+ /// To read depth texture on WebGL 2, we can only use `ViewDepthTexture` with `Msaa::Off` and bind depth texture as unfilterable `texture_2d<f32>`.
+ /// Therefore we disable depth of field and screen space reflections entirely on WebGL 2.
+-#[cfg(not(any(feature = "webgpu", not(target_arch = "wasm32"))))]
++#[cfg(not(any(feature = "webgpu", not(feature = "webgl"))))]
+ pub const DEPTH_PREPASS_TEXTURE_SUPPORTED: bool = false;
+ 
+ /// True if multisampled depth textures are supported on this platform.
+@@ -27,7 +27,7 @@
+ ///
+ /// To read depth texture on WebGL 2, we can only use `ViewDepthTexture` with `Msaa::Off` and bind depth texture as unfilterable `texture_2d<f32>`.
+ /// Therefore we disable depth of field and screen space reflections entirely on WebGL 2.
+-#[cfg(any(feature = "webgpu", not(target_arch = "wasm32")))]
++#[cfg(any(feature = "webgpu", not(feature = "webgl")))]
+ pub const DEPTH_PREPASS_TEXTURE_SUPPORTED: bool = true;
+ 
+ use core::{f32, ops::Range};
+diff -ruN orig_bevy_core_pipeline/src/deferred/node.rs bevy_core_pipeline/src/deferred/node.rs
+--- a/bevy_core_pipeline-0.19.1/src/deferred/node.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_core_pipeline-0.19.1/src/deferred/node.rs	2026-09-24 20:49:49.204931608 +0900
+@@ -152,7 +152,7 @@
+     // Firefox: WebGL warning: clearBufferu?[fi]v: This attachment is of type FLOAT, but this function is of type UINT.
+     // Appears to be unsupported: https://registry.khronos.org/webgl/specs/latest/2.0/#3.7.9
+     // For webgl2 we fallback to manually clearing
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     if !is_late {
+         if let Some(deferred_texture) = &view_prepass_textures.deferred {
+             ctx.command_encoder().clear_texture(
+@@ -170,7 +170,7 @@
+                 if is_late {
+                     deferred_texture.get_attachment()
+                 } else {
+-                    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++                    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+                     {
+                         bevy_render::render_resource::RenderPassColorAttachment {
+                             view: &deferred_texture.texture.default_view,
+@@ -184,7 +184,6 @@
+                     }
+                     #[cfg(any(
+                         not(feature = "webgl"),
+-                        not(target_arch = "wasm32"),
+                         feature = "webgpu"
+                     ))]
+                     deferred_texture.get_attachment()
+diff -ruN orig_bevy_core_pipeline/src/skybox/mod.rs bevy_core_pipeline/src/skybox/mod.rs
+--- a/bevy_core_pipeline-0.19.1/src/skybox/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_core_pipeline-0.19.1/src/skybox/mod.rs	2026-09-24 20:49:49.206551124 +0900
+@@ -78,11 +78,11 @@
+         let uniforms = SkyboxUniforms {
+             brightness: skybox.brightness * exposure,
+             transform: Transform::from_rotation(skybox.rotation.inverse()).to_matrix(),
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_8b: 0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_12b: 0,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding_16b: 0,
+         };
+         values.push((entity, (skybox.clone(), uniforms)));
+@@ -96,11 +96,11 @@
+ pub struct SkyboxUniforms {
+     brightness: f32,
+     transform: Mat4,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_8b: u32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_12b: u32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     _webgl2_padding_16b: u32,
+ }
+ 
+diff -ruN orig_bevy_post_process/src/bloom/mod.rs bevy_post_process/src/bloom/mod.rs
+--- a/bevy_post_process-0.19.1/src/bloom/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_post_process-0.19.1/src/bloom/mod.rs	2026-09-24 20:49:49.225616000 +0900
+@@ -279,12 +279,11 @@
+     // First mip is half the screen resolution, successive mips are half the previous
+     #[cfg(any(
+         not(feature = "webgl"),
+-        not(target_arch = "wasm32"),
+         feature = "webgpu"
+     ))]
+     texture: CachedTexture,
+     // WebGL does not support binding specific mip levels for sampling, fallback to separate textures instead
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     texture: Vec<CachedTexture>,
+     mip_count: u32,
+ }
+@@ -292,7 +291,6 @@
+ impl BloomTexture {
+     #[cfg(any(
+         not(feature = "webgl"),
+-        not(target_arch = "wasm32"),
+         feature = "webgpu"
+     ))]
+     fn view(&self, base_mip_level: u32) -> TextureView {
+@@ -302,7 +300,7 @@
+             ..Default::default()
+         })
+     }
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     fn view(&self, base_mip_level: u32) -> TextureView {
+         self.texture[base_mip_level as usize]
+             .texture
+@@ -347,11 +345,10 @@
+ 
+             #[cfg(any(
+                 not(feature = "webgl"),
+-                not(target_arch = "wasm32"),
+                 feature = "webgpu"
+             ))]
+             let texture = texture_cache.get(&render_device, texture_descriptor);
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             let texture: Vec<CachedTexture> = (0..mip_count)
+                 .map(|mip| {
+                     texture_cache.get(
+@@ -380,11 +377,10 @@
+ pub struct BloomBindGroups {
+     #[cfg(any(
+         not(feature = "webgl"),
+-        not(target_arch = "wasm32"),
+         feature = "webgpu"
+     ))]
+     cache_key: (TextureId, BufferId),
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     cache_key: (Vec<TextureId>, BufferId),
+     downsampling_bind_groups: Box<[BindGroup]>,
+     upsampling_bind_groups: Box<[BindGroup]>,
+@@ -405,14 +401,13 @@
+     for (entity, bloom_texture, bloom_bind_groups) in &views {
+         #[cfg(any(
+             not(feature = "webgl"),
+-            not(target_arch = "wasm32"),
+             feature = "webgpu"
+         ))]
+         let cache_key = (
+             bloom_texture.texture.texture.id(),
+             uniforms.buffer().unwrap().id(),
+         );
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         let cache_key = (
+             bloom_texture
+                 .texture
+diff -ruN orig_bevy_post_process/src/motion_blur/mod.rs bevy_post_process/src/motion_blur/mod.rs
+--- a/bevy_post_process-0.19.1/src/motion_blur/mod.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_post_process-0.19.1/src/motion_blur/mod.rs	2026-09-24 20:49:49.227068371 +0900
+@@ -128,7 +128,7 @@
+         Some(MotionBlurUniform {
+             shutter_angle: item.shutter_angle,
+             samples: item.samples,
+-            #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++            #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+             _webgl2_padding: Default::default(),
+         })
+     }
+@@ -139,7 +139,7 @@
+ pub struct MotionBlurUniform {
+     shutter_angle: f32,
+     samples: u32,
+-    #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++    #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+     // WebGL2 structs must be 16 byte aligned.
+     _webgl2_padding: bevy_math::Vec2,
+ }
+diff -ruN orig_bevy_post_process/src/motion_blur/pipeline.rs bevy_post_process/src/motion_blur/pipeline.rs
+--- a/bevy_post_process-0.19.1/src/motion_blur/pipeline.rs	2006-07-24 10:21:28.000000000 +0900
++++ b/bevy_post_process-0.19.1/src/motion_blur/pipeline.rs	2026-09-24 20:49:49.227285458 +0900
+@@ -130,7 +130,7 @@
+             shader_defs.push(ShaderDefVal::from("MULTISAMPLED"));
+         }
+ 
+-        #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]
++        #[cfg(all(feature = "webgl", not(feature = "webgpu")))]
+         {
+             shader_defs.push("SIXTEEN_BYTE_ALIGNMENT".into());
+         }

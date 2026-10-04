@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Shared options of the i.MX8MP GPU bring-up samples; source this from a
+# sample's own Kconfig, before Kconfig.zephyr.
+#
+# The board support every sample shares -- watchdog, fatal handler, interrupt
+# guard, SNVS record, panel console -- is the driver module's yakogl_gc_board
+# library now (driver/zephyr/lib/board/imx8mp), so an application outside this
+# repository can link it too. Its options keep their GC_SAMPLE_* / GC_COMMON_*
+# names. What stays here is only what the samples alone use.
+
+config YAKOGL_GC_BOARD
+	default y
+

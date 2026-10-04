@@ -1,0 +1,11 @@
+identifier: verdin_imx8mp/mimx8ml8/a53
+name: Toradex Verdin iMX8M Plus A53
+type: mcu
+arch: arm64
+toolchain:
+  - zephyr
+  - cross-compile
+ram: 262144
+supported:
+  - uart
+vendor: toradex

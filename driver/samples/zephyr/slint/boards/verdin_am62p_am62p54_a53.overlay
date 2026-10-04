@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The display path of the Verdin AM62P, driven by this image. */
+#include "../../common/verdin_am62p_display.dtsi"

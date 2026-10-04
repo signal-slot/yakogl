@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits of the Verdin AM62P display registers that may differ between the
+# Rust drivers (the model's image after dss_init + output_enable and
+# cdns_dsi::init + attach, driver/rust/src/{soc/am62p/dss.rs,ip/cdns_dsi.rs})
+# and the Linux dump the follow-up board task takes
+# (driver/docs/am62p-display-dump-linux.txt; the read list is in
+# driver/docs/am62p-display-cold.md, "Board plan").
+# Format: ADDRESS MASK REASON (hex, hex, text), as x2-hdmi-allow.txt.
+#
+# Seeded before the dump exists: the entries below follow from what the
+# registers are or from a TRM rule the drivers apply on purpose, not from a
+# comparison. Entries the first comparison finds are added below them with
+# the SPRUJ83D section that explains each, or the driver changes instead.
+
+# DSS1 common (SPRUJ83D 14.8.9.1.2.4-.16): event and status bits sampled at
+# an arbitrary time, write-1-to-clear.
+0x3022002c 0xffffffff DISPC_IRQSTATUS: pending events
+0x30220058 0xffffffff VID_IRQSTATUS_0: pending events
+0x3022005c 0xffffffff VID_IRQSTATUS_1: pending events
+0x3022007c 0xffffffff VP_IRQSTATUS_0: pending events
+0x30220080 0xffffffff VP_IRQSTATUS_1: pending events
+0x30220020 0x00000200 DSS_SYSSTATUS DISPC_IDLE_STATUS: idle depends on the moment
+
+# DSS1 pipelines (14.8.9.1.2.39-.88, .89-.251): the buffers are Linux's
+# against ours; the FIFO thresholds are the TRM's rule (12.9.1.4.1.6.2)
+# against tidss's choice; MFLAG thresholds ours.
+0x30226028 0xffffffff VID_BA_0: Linux's buffer against ours
+0x3022602c 0xffffffff VID_BA_1: likewise
+0x3022622c 0x0000ffff VID_BA_EXT_0: likewise
+0x30226230 0x0000ffff VID_BA_EXT_1: likewise
+0x3022603c 0xffffffff VID_BUF_THRESHOLD: size-1 / size-8 (TRM) against Linux's
+0x30226218 0x00000fff VID_PRELOAD: = low threshold (TRM) against Linux's
+0x30226208 0xffffffff VID_MFLAG_THRESHOLD: 1/2, 1/4 (ours) against Linux's
+0x30222028 0xffffffff VIDL1_BA_0: likewise
+0x3022202c 0xffffffff VIDL1_BA_1: likewise
+0x3022222c 0x0000ffff VIDL1_BA_EXT_0: likewise
+0x30222230 0x0000ffff VIDL1_BA_EXT_1: likewise
+0x3022203c 0xffffffff VIDL1_BUF_THRESHOLD: likewise
+0x30222218 0x00000fff VIDL1_PRELOAD: likewise
+0x30222208 0xffffffff VIDL1_MFLAG_THRESHOLD: likewise
+
+# DSS1 VP2 (14.8.9.1.2.271): GO may be set at the moment of the dump.
+0x3022b004 0x00000020 VP2_CONTROL GOBIT: a commit in flight
+
+# DSI controller (14.8.9.2.2): TRM rules the Rust driver applies where the
+# replaced C driver did otherwise (driver/docs/am62p-display-cold.md,
+# "Differences"); Linux may well match neither.
+0x305000b4 0x000fffff VID_VSIZE1: VSA/VBP/VFP per 12.9.2.7.9.1
+0x305000dc 0x0fffffff VID_DPHY_TIME: REG_LINE_DURATION per 12.9.2.7.9.3, REG_WAKEUP_TIME ours
+0x30500008 0x00003c00 MCTL_MAIN_PHY_CTL WAIT_BURST_TIME: 100 ns of byte clocks (12.9.2.7.2.1)
+0x30500014 0x003fffff MCTL_DPHY_TIMEOUT1: units not stated, written at the maximum
+0x30500018 0x0003ffff MCTL_DPHY_TIMEOUT2: likewise
+0x3050001c 0x0003ffff MCTL_ULPOUT_TIME: ULP never used, written at the maximum
+0x30500024 0x000007c0 MCTL_MAIN_STS error bits: sampled at an arbitrary time
+0x305000f0 0x000007fe VID_MODE_STS error bits: likewise
+0x30500088 0xffffffff DIRECT_CMD_STS: the last command's status (Linux sends none, we neither)
+
+# D-PHY TX (14.8.6.3.2): the PLL's lock and ready are analog status.
+0x301c0f08 0x00000006 WIZ_STATUS O_SUPPLY_*_PG: supply-good flags
+
+# Found by the first comparison with the Linux dump (2026-10-02, Torizon
+# 6.6.138-7.6.1 driving the panel; driver/docs/am62p-display-dump-linux.txt).
+# Each is a status bit, a revision field or a choice of this project, so the
+# drivers are not changed for them.
+#
+# Status sampled at an arbitrary moment (SPRUJ83D 14.8.9.1.2.5, 14.8.9.2.2).
+0x30220028 0xffffffff DISPC_IRQSTATUS_RAW: raw events, sampled at an arbitrary time
+0x3050002c 0xffffffff MCTL_LANE_STS: lane state machines, live
+0x305000e8 0xffffffff VID_VPOS: the line being sent, live
+0x305000ec 0xffffffff VID_HPOS: the position in the line, live
+0x305000f0 0x00000001 VID_MODE_STS bit 0: video stream in progress, live
+0x30500170 0xffffffff MCTL_MAIN_STS_FLAG: sticky status flags since Linux started
+0x30500180 0xffffffff VID_MODE_STS_FLAG: likewise
+0x305001ac 0x0000ffff DPI_CFG DPI_CFG_FIFO_LEVEL: the DPI FIFO's fill, live (14.8.9.2.2.99)
+#
+# Revision fields: silicon against the TRM's reset value.
+0x301c0f00 0x0000ffff WIZ MOD_VER: the silicon reads 69924881h, the TRM's reset is 69924001h; MODULE_ID 992h agrees (this is what finds the WIZ at +F00h)
+#
+# Choices of this project's drivers against tidss's.
+0x30220074 0x00000003 VP_IRQENABLE_1: ours VSYNC (the GO latch, the two-plane protocol), Linux FRAMEDONE; both SYNCLOST
+0x3022009c 0xffffffff DSS_CBA_CFG: secure host only (12.9.1.4.1.6.6), never written by us; reads what the secure side or Linux left (1), the model holds the TRM's reset Ch
+0x30222020 0x10000040 VIDL1_ATTRIBUTES: the safety layer is ARGB8888 (07h) straight alpha; Linux's console plane XRGB8888 (27h) premultiplied
+0x30228020 0x00000003 OVR2_ATTRIBUTES_0: our layer 0 is VID (the application plane, off until used); Linux puts VIDL1 there
+0x30228024 0x00000003 OVR2_ATTRIBUTES_1: our layer 1 is VIDL1 (the safety layer); Linux uses one layer
+0x3022b000 0x00000004 VP2_CONFIG GAMMAENABLE: Linux loads a gamma table, we bypass the CLUT (no table to load)
+#
+# Not documented as a PHY register: read to test where the WIZ is (the TRM's
+# WIZ_CONFIG_PLLRES would be here with the WIZ at 0h; at +F00h it reads 0).
+0x301c00f8 0xffffffff D-PHY +F8h: undocumented PHY register, not written by either driver; its value is the PHY's

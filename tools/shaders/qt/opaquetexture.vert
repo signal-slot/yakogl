@@ -1,0 +1,19 @@
+#version 100
+
+struct buf
+{
+    mat4 qt_Matrix;
+};
+
+uniform buf _25;
+
+varying vec2 qt_TexCoord;
+attribute vec2 qt_VertexTexCoord;
+attribute vec4 qt_VertexPosition;
+
+void main()
+{
+    qt_TexCoord = qt_VertexTexCoord;
+    gl_Position = _25.qt_Matrix * qt_VertexPosition;
+}
+

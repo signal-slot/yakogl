@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+[package]
+name = "yakogl-tools"
+description = "YakoGL host tools: offline shader table, internal USC blobs, FemtoVG sources, GL constants, ABI layout pins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "yakogl-tools"
+path = "src/main.rs"
+
+[dependencies]
+# The shader ABI structs come from the library itself (one source of truth):
+# `host-test` gives the host build with std and no backend; the OSALs are C
+# and linked by the C builds only, so nothing C reaches this binary.
+# `shaderc-online` brings in src/shaderc/online/, the in-process compiler, so
+# that `online-check` can measure it against the same dEQP corpus as the
+# shipping pipeline.
+yakogl = { path = "../..", default-features = false, features = ["host-test", "shaderc-online"] }
+regex = "1"
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+# `csbgen-bindings`: regenerates src/pvr/csbgen.rs and its wrapper C from
+# driver/compat/pvr_mesa.h (a host tool only: the library never runs bindgen,
+# so no build of it needs libclang).
+bindgen = { version = "0.72", default-features = false, features = ["runtime"] }

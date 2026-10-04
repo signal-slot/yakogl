@@ -1,0 +1,481 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# yakogl/zephyr/Kconfig
+#
+# Kconfig for the YakoGL Zephyr module: the portable OpenGL ES core, one GPU
+# backend (PowerVR BXS-4-64 or the i.MX8MP's Vivante GC7000) and the Zephyr
+# OSAL.
+
+config YAKOGL
+	bool "YakoGL (OpenGL ES 2.0 on PowerVR BXS-4-64)"
+	help
+	  Build and link YakoGL: a source-compatible OpenGL ES 2.0 implementation
+	  for the PowerVR BXS-4-64, using the Zephyr OSAL backend which wraps the
+	  silicon-proven PowerVR bring-up driver (GPU memory + MMU, firmware boot,
+	  KCCB submit/doorbell, completion wait, cache maintenance).
+
+	  Requires the PowerVR bring-up driver (src/pvr_*.c) to be present in the
+	  same build so the OSAL's driver-glue symbols resolve.
+
+	  The GL/EGL core is Rust, built by cargo when the module is configured
+	  (see zephyr/CMakeLists.txt for the CMake variables: cargo command,
+	  RUSTUP_TOOLCHAIN, -Z build-std, target triple and CPU, and
+	  YAKOGL_RUST_LINKAGE=external for applications that link the yakogl
+	  crate into their own Rust static library).
+
+	  FPU: the Rust code is built for aarch64-unknown-none, a hard-float
+	  target that uses the FP/SIMD registers anywhere, so CONFIG_FPU=y is
+	  required (the build stops without it), and CONFIG_FPU_SHARING=y is
+	  needed as soon as more than one thread uses the FPU (any thread that
+	  calls GL/EGL does).
+
+	  C library: YakoGL calls malloc, free, abort, memcpy, memmove, memset,
+	  memcmp, strlen and snprintf: any Zephyr libc with a heap, e.g.
+	  CONFIG_COMMON_LIBC_MALLOC with a large enough
+	  CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE (shader sources and staging
+	  buffers are on this heap). Floating-point printf (e.g.
+	  CONFIG_PICOLIBC_IO_FLOAT) is only needed for the backend's debug
+	  attribute dump. A Rust panic (a bounds or overflow check) logs the
+	  message and calls abort().
+
+if YAKOGL
+
+choice YAKOGL_GPU
+	prompt "GPU backend"
+	default YAKOGL_GPU_POWERVR
+	help
+	  Which GPU YakoGL generates command streams for. One backend and one
+	  offline shader table are compiled into a build.
+
+config YAKOGL_GPU_POWERVR
+	bool "PowerVR BXS-4-64 (Rogue XE, AM62P)"
+	help
+	  The PowerVR backend (src/pvr). Needs the PowerVR bring-up driver
+	  (src/pvr_*.c) in the same build for the OSAL's driver glue and the
+	  command generators the backend calls.
+
+config YAKOGL_GPU_VIVANTE
+	bool "Vivante GC7000UL (i.MX8MP)"
+	help
+	  The Vivante backend (src/vivante): LOAD_STATE command streams for the
+	  GC7000's front end, with no firmware. See src/vivante/VIVANTE_NOTES.md
+	  for what is implemented and what the hardware still has to answer.
+
+config YAKOGL_GPU_V3D
+	bool "Broadcom V3D 4.2 (Raspberry Pi 4)"
+	depends on YAKOGL_SHADERC_ONLINE
+	help
+	  The V3D backend (src/v3d): binning and render control lists built by
+	  the job builder in driver/src/v3d, submitted by the OSAL in
+	  src/osal/zephyr_v3d.c, which drives the V3D itself (power, MMU,
+	  submit) through driver/src/v3d/v3d_hw.c. The in-process compiler is
+	  this GPU's only shader back end: there is no offline table for it.
+	  docs/online-shaderc/v3d-backend.md, "M6", says what is drawn and what
+	  is refused by name.
+
+endchoice
+
+config YAKOGL_PVR_POOL_RECLAIM
+	bool "PowerVR: reuse freed GPU memory as soon as no kick can read it"
+	depends on YAKOGL_GPU_POWERVR
+	default y
+	help
+	  The Zephyr OSAL holds every freed block until the kick after the
+	  last one submitted completes, even when nothing is being recorded:
+	  memory an application deletes between two scenes cannot be reused
+	  while it sets up the next one (glmark2's terrain,
+	  driver/docs/pvr-render-pool.md, mechanism 2). With this, a free made
+	  while no frame is open waits only for the last submitted kick
+	  (pvr_backend_free_fence). An allocation the pool refuses first gets
+	  back, without waiting, what completed kicks held, and is tried again.
+	  If it is still refused, it waits for the submitted kicks (bounded by
+	  the backend's own submit wait; the allocating GL call blocks for
+	  it), gets back what they held, and is tried once more. On by
+	  default: without it glmark2's shadow depth texture (1600x1200) was
+	  refused beside 23932 KiB of held frees and its framebuffer read
+	  GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT (AM62P, 2026-10-04; gl_test 178
+	  heldfree reproduces it). n keeps the old hold, for measurement.
+
+config YAKOGL_PVR_FRAME_SETS
+	int "PowerVR: frame sets (kicks recorded ahead of the GPU)"
+	depends on YAKOGL_GPU_POWERVR
+	range 1 4
+	default 4
+	help
+	  How many sets of per-kick resources the backend builds: each is a
+	  GENERAL arena, a PDS arena, a 64 KiB VDM stream and small tables,
+	  and the next kick is recorded into one while the GPU reads the
+	  others. At the defaults, 4 x (1024 KiB GENERAL + 768 KiB PDS), this is
+	  7488 KiB of the render pool: the arenas are 2.0 and 2.4 times
+	  glmark2's largest frame on the AM62P, measured
+	  (driver/docs/pvr-render-pool.md; 4 x (4096 + 1024) took 20800 KiB).
+	  Another configuration is a measurement until the regression set has
+	  run with it; judge it by "pool owner backend frame arenas high-water"
+	  (YAKOGL_PVR_POOL_OWNERS). A frame that overflows an arena is split,
+	  and a draw that does not fit an empty frame is refused, naming the
+	  arena.
+
+config YAKOGL_PVR_ARENA_GEN_KB
+	int "PowerVR: each frame set's GENERAL arena, KiB"
+	depends on YAKOGL_GPU_POWERVR
+	range 16 4096
+	default 1024
+
+config YAKOGL_PVR_ARENA_PDS_KB
+	int "PowerVR: each frame set's PDS arena, KiB"
+	depends on YAKOGL_GPU_POWERVR
+	range 8 1024
+	default 768
+
+config YAKOGL_PVR_POOL_OWNERS
+	bool "PowerVR: print the render pool's live memory by owner at run end (a measurement)"
+	depends on YAKOGL_GPU_POWERVR
+	default n
+	help
+	  At the end of a run (osal_zephyr_diag_print()), one line per owner
+	  of live pool memory: "pool owner <name>: N blocks, K KiB (heaps)" for
+	  the driver (render statics, freelists, render context, HWRT sets),
+	  the backend (frame sets with their arenas' high-water marks, statics,
+	  depth/stencil) and the GL core (buffers, textures, renderbuffers,
+	  default surfaces, programs, draw staging). Then one balance line
+	  against the pool's live bytes, with what no owner claims printed as
+	  "unaccounted" (driver/docs/pvr-render-pool.md, the fixed ~36 MiB).
+	  Off by default; it walks every table once, at the end.
+
+config YAKOGL_GC_POOL_NO_REUSE
+	bool "GC7000: never reuse freed GPU memory (a measurement; leaks)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  A freed block never goes back to the pool: every allocation comes
+	  from the bump, at clean ascending addresses, as gcgpu.ko's
+	  pool_no_reuse does on Linux. The pool's block reuse has an open
+	  defect inside a single client's run (gc_render.c, above
+	  gc_render_pool_reset). It leaks everything freed;
+	  gc_osal_no_reuse_leaked_kib() says how much, so a run that ran the
+	  carveout dry is recognisable.
+
+config YAKOGL_GC_LOG_BIG_ALLOCS
+	bool "GC7000: log the callers of the first 16 allocations of 1 MiB or more (a measurement)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  printk's the size and the two return addresses of each, so
+	  addr2line on zephyr.elf names who allocates a whole-screen buffer.
+
+config YAKOGL_GC_ALLOC_PAGE_ALIGN
+	bool "GC7000: page-align GPU allocations of 4 KiB or more (a measurement)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  Every GC7000 allocation is otherwise 64-byte aligned (GC_OSAL_ALIGN),
+	  render targets and pbuffers included, while every colour target
+	  Mesa's etnaviv hands this GPU is a page-aligned GEM buffer, and the
+	  core's PE cache lines are 256 bytes (CACHE128B256BPERLINE). This
+	  aligns every allocation of 4 KiB or more to 4 KiB, which is what a
+	  GEM buffer would be. Off until measured: dEQP color_clear on the
+	  i.MX8MP fails 8 of 19 in the group image and not in a single-case
+	  one, deterministically, which points at an address; two images from
+	  one commit, this off and on, are the A/B.
+
+config YAKOGL_GC_CARVEOUT_FILL
+	bool "GC7000: fill the GPU pool with a fixed byte at boot (a measurement)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  kexec does not clear the carveout, so memory the GPU reads without
+	  our having written it holds whatever the previous boot left there.
+	  Every pool allocation is zeroed when it is handed out
+	  (gc_render_alloc), so this only reaches reads OUTSIDE every live
+	  allocation: past an allocation's end, or past the bump. With it on,
+	  the whole pool (GC_OFF_POOL to the carveout's end; the MMU tables
+	  below it are left alone) is set to YAKOGL_GC_CARVEOUT_FILL_BYTE
+	  before the GPU starts, so such a read gives the same answer on every
+	  boot. A result that flips between runs and stops flipping with this
+	  on is an out-of-allocation read; one that still flips is not.
+
+config YAKOGL_GC_CARVEOUT_FILL_BYTE
+	hex "The byte YAKOGL_GC_CARVEOUT_FILL writes"
+	depends on YAKOGL_GC_CARVEOUT_FILL
+	range 0x0 0xff
+	default 0xa5
+	help
+	  0xa5a5a5a5 is -2.87e-16 as a float and not a plausible colour, depth
+	  or command word; 0x00 is the other arm (a read that passes on zeros).
+
+config YAKOGL_V3D_DRAWS_PER_JOB
+	int "V3D draws one job holds"
+	depends on YAKOGL_GPU_V3D
+	default 1024
+	range 64 8192
+	help
+	  The draw budget the V3D backend sizes one job's lists for: the
+	  binning list (4 KiB + 129 bytes a draw), the indirect buffer (8 KiB +
+	  440 bytes a draw; both 15 % over Slint's measured 112 and 382) and
+	  the binner's tile pool (Mesa's rule, capped at 512 KiB). A frame with
+	  more draws is split into more jobs, which is correct but costs a load
+	  and store of the whole target per extra job.
+
+config YAKOGL_V3D_BIN_OVERFLOW_BLOCKS
+	int "V3D binner overflow blocks (256 KiB each)"
+	depends on YAKOGL_GPU_V3D
+	default 2
+	range 0 64
+	help
+	  Memory the OSAL gives the binner when a job's tile pool runs out
+	  (the OUTOMEM interrupt), one 256 KiB block per request, as the Linux
+	  driver does. The blocks are taken from the carve-out once, at init,
+	  and serve every job again. Slint's 493 draws used 282,624 bytes of
+	  the 663,552-byte pool, so two blocks cover about 1,024 draws twice
+	  over. When the blocks run dry, the job fails by name ("binner out of
+	  memory") and is not retried.
+
+config YAKOGL_V3D_SPLIT_ZS
+	bool "V3D: depth and stencil kept apart by renderbuffer"
+	depends on YAKOGL_GPU_V3D
+	default y
+	help
+	  Keep an FBO's depth and stencil each under its own renderbuffer,
+	  loaded and stored apart (the backend's v3d_split_zs), instead of one
+	  buffer per pair of names. Two FBOs sharing a depth renderbuffer then
+	  share its depth whatever their stencils (dEQP
+	  fbo.render.shared_depthbuffer), and an FBO whose stencil is replaced
+	  keeps its depth (recreate_stencilbuffer). On since the board
+	  measured it: gl_test 123 zsapart passes both halves, and dEQP FB2
+	  on 41719f83 went from 301 to 314 of 319 with it, 13 cases moved and
+	  none regressed (2026-09-25). n keeps one buffer per pair of names.
+
+config YAKOGL_V3D_S8_STENCIL
+	bool "V3D: stencil halves in S8 buffers (1 byte a pixel)"
+	depends on YAKOGL_GPU_V3D && YAKOGL_V3D_SPLIT_ZS
+	default n
+	help
+	  Keep each stencil half (a stencil-only framebuffer's stencil, and
+	  the stencil of a framebuffer whose depth and stencil renderbuffers
+	  differ) in an S8 buffer of its own, loaded and stored as buffer
+	  STENCIL with image format S8, as Mesa's v3d does for the separate
+	  stencil of a Z32F_S8X24 zsbuf (v3dx_rcl.c:72-160), instead of a
+	  D24S8 buffer: a quarter of the memory. Mesa never makes a
+	  stencil-only S8 zsbuf, so this job shape is ours; opt-in until the
+	  board has measured it (the cluster's femtovg layers, gl_test 123,
+	  162, 167). Single-sampled only; needs YAKOGL_V3D_SPLIT_ZS.
+
+config YAKOGL_V3D_PACK_SKIP
+	bool "V3D: write a draw's state packets only when their inputs changed"
+	depends on YAKOGL_GPU_V3D
+	default y
+	help
+	  The job builder (driver/src/v3d/v3d_job.h "Packet skip") packs and
+	  writes a group of state packets only when it was not written yet in
+	  the job or its inputs differ from the ones it was last written with,
+	  as Mesa's v3dX(emit_state) does with its dirty flags. POINT_SIZE and
+	  the draw's own packets are written on every draw. Off: every state
+	  packet on every draw, as before. On by default since the Pi 4
+	  regression set ran with it (job_check part 15 pins both states;
+	  GTPACK gl_test 18/18; PACKA/PACKB frame-300 emit 4.40 -> 3.07 us/draw
+	  with 79.7% of packets skipped and equal crc; knob-on dEQP
+	  fragment_ops.blend 1060/0, fragment_ops.depth_stencil 621/0,
+	  rasterization 49/0 (matching the knob-off control)); the counts are
+	  printed in the OSAL's close record and the cluster demo's periodic
+	  lines. Turn it off (n) to compare against the old always-write path.
+
+config YAKOGL_V3D_TFU
+	bool "V3D: tile large textures with the texture formatting unit"
+	depends on YAKOGL_GPU_V3D
+	default n
+	help
+	  Tiled copies of at least YAKOGL_V3D_TFU_MIN_BYTES are made by the
+	  V3D's texture formatting unit from the GL core's storage instead of
+	  by the CPU: 2.2 ms against 145 ms for a 1920x720 RGBA8 image on the
+	  Pi 4 (gl_test case 140, records/pi4/record_TFU140_gl_test_tfu140_9b55d8df.txt).
+	  RGBA8, L8/A8 (R8) and LA8 (RG8), one level. A job the TFU does not
+	  take, or that fails, is tiled on the CPU as before. Off by default
+	  until a DEMO has measured it.
+
+config YAKOGL_V3D_TFU_MIN_BYTES
+	int "V3D: the smallest tiled image the TFU makes (bytes)"
+	depends on YAKOGL_V3D_TFU
+	default 65536
+	range 4096 268435456
+	help
+	  Below this the CPU tiles, which costs no job. The default is a
+	  placeholder until case 140's small-size timing measures the TFU's
+	  fixed cost per job.
+
+config YAKOGL_V3D_TILED_COPIES_BYTES
+	int "V3D tiled texture copies kept across jobs (bytes)"
+	depends on YAKOGL_GPU_V3D
+	default 8388608
+	range 1048576 268435456
+	help
+	  The most the V3D backend keeps of textures tiled for its texture unit,
+	  across jobs (the least recently sampled copy goes first). A texture
+	  whose tiled image is larger than this, and larger than the per-job
+	  texture arena (8 MiB), is refused by name: a 2048x2048 RGBA8 texture
+	  tiles to about 16.8 MiB, so an image that samples one needs about
+	  24 MiB here, and a carve-out that holds it.
+
+config YAKOGL_V3D_CARVEOUT_BYTES
+	int "V3D carve-out (bytes)"
+	depends on YAKOGL_GPU_V3D
+	default 50331648
+	help
+	  The memory the V3D draws from: a static of the image, mapped Normal
+	  non-cacheable, with the GPU's page table (512 KiB) at its front. It
+	  holds every buffer, texture, shader, control list and the binner's
+	  tile memory (about 1.4 MiB of the backend's own). The image's RAM
+	  (the board's sram0 node) must hold it besides the kernel.
+
+config YAKOGL_V3D_CARVEOUT_TOP_BELOW
+	int "V3D: carve-out blocks below this size come from the top (bytes, 0 = off)"
+	depends on YAKOGL_GPU_V3D
+	default 0
+	range 0 268435456
+	help
+	  The carve-out's allocator (src/osal/v3d_granules.h) places a block
+	  smaller than this (rounded down to whole 256-byte granules) by last
+	  fit, the highest free block, and larger ones by first fit from the
+	  bottom. Small short-lived blocks (glyph and upload tiled copies,
+	  vertex buffers) then gather at the top and leave one long free run
+	  in the middle for a large block. The host replay of STRESS1D
+	  (tools/v3d/osal_granules_check.c) at 1048576: the longest free run
+	  after the upload steps 6,189,056 bytes against 3,862,528 with first
+	  fit, and fewer map reads a call. Alignment, capacity and the
+	  refusal are unchanged. 0: first fit for every block, as before.
+	  Opt-in until the regression set has run with it; the close record's
+	  "carve-out find" line prints the setting, the free runs and the
+	  longest.
+
+choice YAKOGL_SHADERC
+	prompt "shader back end"
+	default YAKOGL_SHADERC_OFFLINE
+	help
+	  Where a shader's machine code comes from. The GL core asks the back
+	  end named here; only one is in a build.
+
+config YAKOGL_SHADERC_OFFLINE
+	bool "offline table"
+	help
+	  The precompiled table (src/shaderc/blobs.rs or vivante_blobs.rs):
+	  glShaderSource text is matched by SHA-256 against shaders compiled on
+	  a host before the image was built. An application whose shader is not
+	  in the table cannot draw with it.
+
+	  The table is the largest single thing in the library: 258,000 bytes of
+	  GC7000 instruction words, 6,278,960 of PowerVR, before the reflection
+	  rows.
+
+config YAKOGL_SHADERC_ONLINE
+	bool "in-process compiler"
+	help
+	  Compile the shader on the target, from the GLSL ES 1.00 text the
+	  application passes to glShaderSource, with no table and no host.
+
+	  This links no offline table at all (the crate's `no-shader-table`),
+	  which is the point: an image carrying a compiler does not also need
+	  the bytes it was meant to replace.
+
+	  The compiler is no_std and allocation-free; it works in the region
+	  sized by YAKOGL_SHADERC_SCRATCH_BYTES below.
+
+	  STACK: the compiler runs on the thread that calls glCompileShader or
+	  glLinkProgram, and that thread needs 256 KiB of stack
+	  (docs/online-shaderc/frontend.md, "Stack"). Measured on the host at
+	  104 KiB for the worst compile, almost all of it the code generator;
+	  a 64 KiB main-thread stack overflowed into the idle thread on the
+	  AM62P. Size CONFIG_MAIN_STACK_SIZE, or the stack of whichever thread
+	  compiles, accordingly.
+
+endchoice
+
+config YAKOGL_SHADERC_SCRATCH_BYTES
+	int "compiler scratch region (bytes)"
+	depends on YAKOGL_SHADERC_ONLINE
+	range 65536 268435456
+	default 4194304
+	help
+	  Bytes the in-process compiler works in: tokens, the AST, the IR, the
+	  register allocation. The region is CALLER-LENT -- this Kconfig sizes a
+	  static in the OSAL and lends it to the compiler -- so a shader needing
+	  more than it holds is REFUSED BY NAME, with the shader and both
+	  numbers in the message. That is a diagnosable failure rather than an
+	  image that does not boot, which is why the size is a policy here and
+	  not a constant in the compiler.
+
+	  The lower bound of the range mirrors MIN_SCRATCH_BYTES in
+	  src/shaderc/online/store.rs, which is the authority: the compiler
+	  refuses a smaller region outright, so this range only moves the
+	  refusal from boot to configure time. A mismatch is not silent -- the
+	  lend fails and the OSAL logs both numbers and stops the init.
+
+	  4 MiB (since 2026-09-25; 2 MiB before) is the size proven on the
+	  host: at 2 MiB dEQP-GLES2 light_amount.16omni's vertex shader (3 MiB)
+	  and uniform_api.random.23's fragment shader (4 MiB) were refused on
+	  the PowerVR online back end. It is not a bound derived from
+	  any measurement, and no measurement can give one: the corpus is what
+	  WE compile, not what an application will.
+
+	  What is measured is how deep the corpus has gone. At the time of
+	  writing (2026-09-22, commit d52dda5) tests/scratch_survey.rs reports a
+	  peak of 504,400 bytes over the GC7000 corpus, set by
+	  fill_image_gradient_conic.glyph.nodiscard.frag.
+
+	  That number moves, in both directions, and quickly. Readings taken the
+	  same day: 931,496, then 447,496 when the front end's lowering was
+	  rewritten, then 515,472 when if-conversion let more sources reach the
+	  allocator, then 504,400 when a larger MAX_VREGS let the deepest of
+	  them compile instead of being refused. Treat any single figure as
+	  "what the compiler did that hour", not as a requirement.
+
+	  To re-measure:
+
+	    cargo test --no-default-features \
+	        --features host-test,gpu-vivante,shaderc-online \
+	        --test scratch_survey -- --nocapture
+
+	  Lower this knowingly on a constrained image: the failure it buys is
+	  named and reported, but it is still a shader that will not compile.
+
+config YAKOGL_SHADERC_KEEP_BYTES
+	int "compiled shader region (bytes)"
+	depends on YAKOGL_SHADERC_ONLINE
+	range 65536 268435456
+	default 524288
+	help
+	  Bytes the in-process compiler keeps compiled shaders and programs
+	  in: their code, uniform tables and sources, for as long as the
+	  application holds them. CALLER-LENT like the scratch region above:
+	  this sizes a static in the OSAL. A compile that does not fit is
+	  refused by name ("out of compiler memory ... in the keep arena").
+
+	  It must hold every shader and program the application keeps alive
+	  AT ONCE, not every one it ever compiled: glDeleteShader and
+	  glDeleteProgram give the memory back. femtovg (Slint's renderer)
+	  keeps 30 programs, 388,544 bytes on the Pi 4's V3D (2026-09-24,
+	  with records placed by lifetime, src/shaderc/online/store.rs
+	  KeepEnd). The default, 512 KiB, leaves about 135 KB for everything
+	  else such an application builds; raise it for more.
+
+	  The lower bound mirrors MIN_KEEP_BYTES in store.rs, which is the
+	  authority: a smaller region is refused at boot with both numbers.
+
+config YAKOGL_REPORT_ES2
+	bool "report OpenGL ES 2.0 rather than ES 3.0"
+	default y
+	help
+	  glGetString(GL_VERSION) says "OpenGL ES 2.0" and
+	  GL_SHADING_LANGUAGE_VERSION "OpenGL ES GLSL ES 1.00", the ES 3.0-only
+	  queries are GL_INVALID_ENUM, and the ES 2.0 rules that ES 3.0 dropped
+	  apply (a non-power-of-two texture has no mip chain). This is what a
+	  conformance build needs.
+
+	  On by default: YakoGL reports OpenGL ES 2.0 until the ES 3.0 work has
+	  progressed far enough to make 3.0 the default. A build that needs an
+	  ES 3.0 context (Qt Quick 3D's RHI, a dEQP-GLES3 image, gl_test's
+	  "#version 300 es" cases, Slint/FemtoVG) says CONFIG_YAKOGL_REPORT_ES2=n.
+
+module = YAKOGL
+module-str = YakoGL
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # YAKOGL

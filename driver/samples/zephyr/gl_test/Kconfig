@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+menu "gl_test"
+
+config GL_TEST_CASE
+	int "gl_test case to run (7 = every case, 0..6 and 8..20 single cases)"
+	default 7
+
+config GL_TEST_CASES
+	string "Cases to run in order on one context, comma-separated (overrides GL_TEST_CASE)"
+	default ""
+	help
+	  When set, the listed case numbers of driver/tools/pvrlab/gl_test.c
+	  are walked through gl_test_set_list on one context, as the
+	  i.MX8MP's and the Pi 4's samples do, so one image runs a chosen set
+	  (for example "169,162,167,168,123"). Empty: GL_TEST_CASE alone.
+
+config GL_TEST_FWCCB_LOSS_SECONDS
+	int "Case 174 (fwccbloss): seconds of frames"
+	default 25
+	help
+	  Case 174 reproduces the lost FWCCB command (the AM62P glmark2
+	  cell): frames of full-screen quads into a 1024x1024 target, more
+	  each phase, so the firmware keeps asking for grows, for this many
+	  seconds. Build it with SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND (every
+	  grow served) and SAFEUI_GPU_PVR_FWCCB_CHECK, and
+	  GL_TEST_CASES="174".
+
+config GL_TEST_FWCCB_LOSS_MAX_LAYERS
+	int "Case 174 (fwccbloss): layers a frame at most"
+	default 1024
+	help
+	  The ramp's cap. 30 on the AM62P (v8): v7's held runs survived 47-53
+	  phases at 30 layers, and 33 hangs a frame alone (cause 4); a run
+	  whose request count missed v7's hold rose to 33 and hung. With 30
+	  every run holds at the same load.
+
+config GL_TEST_FWCCB_LOSS_HOLD_GROWS
+	int "Case 174 (fwccbloss): served grows after which the load stops rising"
+	default 10
+	help
+	  10 keeps the list below its maximum (v3). The load also stops
+	  rising at the first refused grow: with
+	  SAFEUI_GPU_PVR_FL_PROBE_SERVE_MAX=3, three grows are served, the
+	  fourth request is refused, and from then on each overlap asks and
+	  is refused: glmark2's sequence before its lost command (v5).
+
+config GL_TEST_VSU_UNITS
+	int "Case 149 (vsunits): vertex-stage samplers the shader declares"
+	range 1 16
+	default 16
+	help
+	  Case 149 declares and draws with this many vertex samplers
+	  (u_s0..u_s<N-1>); cells N..15 are not drawn and must stay blue.
+	  Used to find the smallest count that faults the GPU (RESULTS 1t).
+
+config GL_TEST_VSU_FS_UNITS
+	int "Case 149 (vsunits): fragment-stage samplers beside the vertex ones"
+	range 0 16
+	default 0
+	help
+	  The fragment shader also declares and samples this many samplers
+	  (u_f0.., magenta 1x1 textures on units 16..) with a zero weight, so
+	  the picture is unchanged. On the GC7000 the vertex slots start after
+	  the fragment ones: 16 puts vertex sampler k in slot 16 + k. 0 is the
+	  case as it was.
+
+config GL_TEST_PANEL
+	int "Draw on the panel instead: 1 = demo scene, 2 = spinning MSAA cube (0 = run the case)"
+	default 0
+	range 0 2
+
+config GL_TEST_DEBUG
+	int "Backend debug: 1 = command-stream dumps, 2 = depth/stencil dumps"
+	default 0
+	range 0 2
+
+config GL_TEST_PRETRANSFORM
+	bool "Case 0 feeds screen-space vertices (TA viewport transform off)"
+
+config GL_TEST_PVR_MASKED_CLEAR
+	bool "PowerVR: colour clears honour glColorMask (pvr_debug_masked_clear)"
+	default y
+	help
+	  Passed to pvr_debug_set_masked_clear at startup: a colour clear writes
+	  only the channels glColorMask had on at the glClear (the masked clear
+	  programs), and a fragment shader that reads the pixel runs TRANSLUCENT.
+	  On by default since the AM62P A/B (gl_test 102 and 103 pass only with
+	  it, dEQP color_clear 8 -> 14 of 19); n is the off arm.
+
+config GL_TEST_PVR_DBIAS_INT
+	int "PowerVR: glPolygonOffset's constant in integer depth units (PVR_BACKEND_OPT_DBIAS_INT): -1 untouched, 0, 1"
+	depends on YAKOGL_GPU_POWERVR
+	range -1 1
+	default -1
+	help
+	  Passed to pvr_backend_set_option(PVR_BACKEND_OPT_DBIAS_INT) at
+	  startup when it is 0 or 1 (ISP_CTL.dbias_is_int); -1 leaves the
+	  backend's default. The Zephyr arm of gl_test_user's
+	  GL_TEST_DBIAS_INT, for the polygon-offset A/B (cases 3 and 65).
+
+config GL_TEST_PVR_KEEP_ZS
+	bool "PowerVR: keep the window's depth/stencil across a swap (opt-out of PVR_BACKEND_OPT_SWAP_DROPS_ZS)"
+	depends on YAKOGL_GPU_POWERVR
+	help
+	  Clears PVR_BACKEND_OPT_SWAP_DROPS_ZS at startup. By default the
+	  frame swapped into a window stores no depth/stencil (EGL 1.5 3.10.1:
+	  they are undefined after eglSwapBuffers) and the next frame
+	  initialises them; with this the window keeps them, as before
+	  (driver/docs/pvr-fence-wait.md). Case 172 asserts whichever is set.
+
+endmenu
+
+rsource "../common/Kconfig"
+source "Kconfig.zephyr"

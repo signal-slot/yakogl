@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# What the glmark2 image runs (driver/docs/glmark2.md).
+
+menu "glmark2"
+
+config GLMARK2_SIZE
+	string "Window size, WxH"
+	default "800x600"
+	help
+	  The size of the board window, handed to glmark2 as --size. 800x600
+	  is glmark2's own default (options.cpp:37) and the size of most
+	  published glmark2-es2 runs on these boards; it fits all three panels
+	  (1024x600, 1280x800, 1920x720). A window larger than the board can
+	  give is refused by board_window() at the start of the run.
+
+config GLMARK2_ARGS
+	string "More glmark2 arguments, separated by spaces"
+	default ""
+	help
+	  Appended after --size, e.g. "--off-screen" or
+	  "-b build:use-vbo=true -b texture". Empty: the default benchmark
+	  list (default-benchmarks.h, 33 scenes of 10 s each). --size and
+	  --fullscreen here are refused (the window is sized from
+	  GLMARK2_SIZE); --results-file needs a file system and is refused.
+
+config GLMARK2_PVR_ONE_KICK_IN_FLIGHT
+	bool "PowerVR: one kick in flight (measurement)"
+	depends on SAFEUI_GPU_PVR
+	help
+	  Sets the PowerVR backend's PVR_BACKEND_OPT_ONE_IN_FLIGHT before the
+	  first scene: each swap waits for its own frame's kick, not only for
+	  the ones before it, so every kick starts on an idle GPU. With
+	  CONFIG_SAFEUI_GPU_PVR_KICK_TIMES the kick line then shows the alone
+	  cost of a frame's kick (driver/docs/pvr-fence-wait.md, "The next
+	  experiment"). A measurement knob: off for a score.
+
+config GLMARK2_PVR_KEEP_ZS
+	bool "PowerVR: keep the window's depth/stencil across a swap (opt-out)"
+	depends on SAFEUI_GPU_PVR
+	help
+	  Clears the PowerVR backend's PVR_BACKEND_OPT_SWAP_DROPS_ZS (on by
+	  default) before the first scene: the swapped frame stores its
+	  depth/stencil and the next loads them, as before
+	  (driver/docs/pvr-fence-wait.md). The arm that measures what the
+	  default saves.
+
+endmenu
+
+source "Kconfig.zephyr"

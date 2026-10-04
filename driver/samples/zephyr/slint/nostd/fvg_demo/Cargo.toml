@@ -1,0 +1,23 @@
+[package]
+name = "fvg_demo"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[features]
+# When set, the integrator (e.g. Zephyr) provides the global allocator and
+# panic handler; the crate omits its standalone placeholders.
+external_rt = []
+
+[dependencies]
+femtovg = { path = "../femtovg", default-features = false, features = ["swash"] }
+glow = { path = "../glow", default-features = false }
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"

@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//
+// agl-slint-cluster's AppWindow, re-exported unchanged, for the Zephyr image.
+//
+// The cluster sets font weights 200 and 300 only through component
+// properties, which the Slint compiler cannot read, so it would embed the 400
+// face alone and every light text would draw as Regular. FontWeights carries
+// those weights as literals; it is exported so the compiler scans it (as a
+// Window: an exported non-window component is deprecated), and nothing
+// instantiates it. (A component that inherits AppWindow and adds the
+// texts does not work: the generated API of the derived component does not
+// carry AppWindow's properties.)
+//
+// "app-window.slint" resolves through the include path build.rs sets: the
+// cluster's own ui/ directory (AGL_SLINT_CLUSTER_UI_DIR).
+import { AppWindow } from "app-window.slint";
+
+export { AppWindow }
+
+export component FontWeights inherits Window {
+    Text { text: " "; font-weight: 200; }
+    Text { text: " "; font-weight: 300; }
+}

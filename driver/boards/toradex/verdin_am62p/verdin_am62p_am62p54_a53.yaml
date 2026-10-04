@@ -1,0 +1,11 @@
+identifier: verdin_am62p/am62p54/a53
+name: Toradex Verdin AM62P A53
+type: mcu
+arch: arm64
+toolchain:
+  - zephyr
+  - cross-compile
+ram: 425984
+supported:
+  - uart
+vendor: toradex

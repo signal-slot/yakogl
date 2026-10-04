@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "v3d_gl_test"
+
+config V3D_GL_TEST_CASES
+	string "The gl_test cases to run, in order, on one context"
+	default "5,58,59,66,67,102,3,9,11,12,13,4"
+	help
+	  Comma-separated case numbers of driver/tools/pvrlab/gl_test.c,
+	  walked through gl_test_set_list as the i.MX8MP's lists are. The
+	  default is M6 step B's evidence (the clears the TLB cannot do) and
+	  step C's (3 depth, 9 stencil, 11 persist, 12 stencil2, 13 zls:
+	  depth and stencil kept across jobs), and 4 cull (glCullFace and
+	  glFrontFace, which no V3D list ran until the winding was found
+	  inverted by 12); docs/online-shaderc/v3d-backend.md.
+	  Ignored when V3D_GL_TEST_CASE is set.
+
+config V3D_GL_TEST_CASE
+	int "Run this one case alone instead of the list (-1: the list)"
+	default -1
+	help
+	  One case, on a fresh context, so its lines are the only ones on the
+	  screen. 7 is gl_test's own regression set.
+
+config V3D_GL_TEST_MSAA
+	bool "Offer the 4x EGL config (a measurement, off in products)"
+	default n
+	help
+	  Calls v3d_debug_set_msaa(1) at startup: the EGL 4x config, which
+	  the V3D build otherwise does not offer (src/v3d/backend.rs
+	  v3d_debug_msaa). Case 16 then runs against a real 4x surface, and
+	  case 145 (sample coverage) has one to draw on. Off by default until
+	  the board has measured it (docs/online-shaderc/v3d-backend.md,
+	  "Multisampling").
+
+config V3D_GL_TEST_VTL_PASSES
+	int "Case 129 (vstexlod): run only its first N passes (0: all)"
+	default 0
+	range 0 11
+	help
+	  The case's passes go lightest first; a faulting pass prints the
+	  OSAL's fault dump (records, uniform streams, vertex arrays, code),
+	  and on the screen record every pass after it scrolls the dump away
+	  (the UART keeps all of it). 1 runs the constant look-up alone, 2
+	  adds the one-level control.
+
+config V3D_GL_TEST_RECORD
+	bool "One frozen record at the end of the run"
+	default y
+	help
+	  The console scrolls and the board's watchdog ends the image, so the
+	  first failure of a run can scroll off. With this, every printk line
+	  is also kept in a ring, and at the end of the run (or at
+	  V3D_GL_TEST_RECORD_AT_S after boot if the run has not ended) the
+	  screen is cleared and one record is printed and frozen: the last
+	  lines of the run, the OSAL's job record (the registers after the
+	  first completed and the first failed job, the timeouts, UIFCFG), and
+	  the verdicts.
+
+config V3D_GL_TEST_RECORD_AT_S
+	int "The record's deadline, seconds after boot"
+	default 75
+	depends on V3D_GL_TEST_RECORD
+
+config V3D_GL_TEST_RECORD_LINES
+	int "Lines of the run the record replays"
+	default 22
+	range 0 30
+	depends on V3D_GL_TEST_RECORD
+	help
+	  The 1280x720 console has 44 rows; the job record takes about 10 and
+	  the verdicts one per case, so a long case list wants fewer.
+
+config V3D_GL_TEST_HOLD_S
+	int "The watchdog's hold, seconds after boot"
+	default 200
+	range 30 300
+	help
+	  rpi_wdog resets the board this long after boot (bounded, as every
+	  board image is): the run plus the time the record stays readable.
+
+source "Kconfig.zephyr"

@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The AM62P second-stage loader (docs/direct-boot.md, "The second stage").
+# The defaults are the Verdin AM62P's: keep them in step with the overlay
+# (boards/verdin_am62p_am62p54_a53.overlay) and tools/am62p-mkboot.py.
+
+menu "boot_stage2"
+
+config BOOT_STAGE2_DISK
+	string "Disk name of the eMMC (the zephyr,mmc-disk node's disk-name)"
+	default "emmc"
+
+config BOOT_STAGE2_SECTOR
+	int "User-area sector of the image header"
+	default 64
+	help
+	  The header sector; the stored payload follows it. 64 (32 KiB) leaves
+	  sector 0 (the DOS partition table) and the room a GPT would take
+	  (sectors 1-33) alone. am62p-mkboot.py STAGE2_SECTOR.
+
+config BOOT_STAGE2_END_SECTOR
+	int "First user-area sector the image must not reach"
+	default 8192
+	help
+	  The start of the first partition on the board's eMMC (Torizon:
+	  mmcblk0p1 at 8192, read with "sfdisk -d /dev/mmcblk0" on 2026-10-02).
+	  am62p-mkboot.py STAGE2_END_SECTOR.
+
+config BOOT_STAGE2_LOAD
+	hex "Load address of the image"
+	default 0x82000000
+	help
+	  The only load address the loader serves: the direct images are
+	  linked there (verdin_am62p/am62p54/a53/direct).
+
+config BOOT_STAGE2_STAGING
+	hex "Where a compressed payload is read before it is inflated"
+	default 0x90000000
+	help
+	  Inside the mapped region (the overlay's stage2_payload node), above
+	  the largest image (it bounds the image: STAGING - LOAD bytes) and
+	  below the region's end with room for the largest payload the
+	  user-area range holds.
+
+config BOOT_STAGE2_REGION_END
+	hex "End of the mapped region (exclusive)"
+	default 0x97800000
+	help
+	  The overlay's stage2_payload node ends here (the GPU carveout).
+
+config BOOT_STAGE2_CHUNK_SECTORS
+	int "Sectors per disk read"
+	default 2048
+
+endmenu
+
+source "Kconfig.zephyr"

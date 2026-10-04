@@ -1,0 +1,9 @@
+build/
+__pycache__/
+*.pyc
+/target
+.claude/
+/work/
+records/*
+!records/README.md
+driver/tools/kexec-zephyr/kexec_zephyr

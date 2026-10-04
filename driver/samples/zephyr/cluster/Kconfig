@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+mainmenu "cluster"
+
+config CLUSTER_PANEL_WIDTH
+	int "The panel's width: the window's"
+	default 0
+	help
+	  The window is the panel's own size; the cluster scales itself to it
+	  (app-window.slint fit-width). Set by boards/<board>.conf: 1024 on
+	  the Verdin AM62P, 1280 on the Verdin iMX8M Plus (Mallow), 1920 on
+	  the Raspberry Pi 4 (the 1920x720 bar panel). The check needs a host
+	  reference for the size (check/src/references.rs); 0 does not build.
+
+config CLUSTER_PANEL_HEIGHT
+	int "The panel's height: the window's"
+	default 0
+	help
+	  See CLUSTER_PANEL_WIDTH: 600, 800 and 720.
+
+source "Kconfig.zephyr"

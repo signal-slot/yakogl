@@ -1,0 +1,51 @@
+# Sources a generator lists but no table can hold: the compiler refuses them.
+#
+# check_gl_test_blobs.py needs this list to tell the two absences apart. A
+# source listed in a generator's inputs with no row in that generator's table
+# is normally STALENESS -- somebody added it and never regenerated -- and that
+# is what the check exists to catch, because it does not fail at build time, it
+# fails on a board as a missing blob. These are the other thing: the source is
+# listed, the generator ran, and the compiler would not build it.
+#
+# Established on 2026-09-22, not assumed: every entry here was also refused by
+# the Vivante generator, which is a different compiler on a different tree
+# (etna_shc/glslang vs pco_shc). All 32 of the qt/qt3d sources absent from the
+# PowerVR table failed there too; the four es100/matattr* sources, absent from
+# BOTH tables at that date, compiled cleanly for Vivante -- which is how they
+# were identified as staleness rather than as members of this list.
+#
+# An entry here that gains a row is also an error: the list has rotted and the
+# check says so, so this cannot quietly become a list of excused failures.
+
+qt3d/qtparticleshaders_11.vert
+qt3d/qtparticleshaders_13.vert
+qt3d/qtparticleshaders_16.vert
+qt3d/qtparticleshaders_18.vert
+qt3d/qtparticleshaders_19.vert
+qt3d/qtparticleshaders_20.vert
+qt3d/qtparticleshaders_22.vert
+qt3d/qtparticleshaders_23.vert
+qt3d/qtparticleshaders_39.vert
+qt3d/qtparticleshaders_40.vert
+qt3d/qtparticleshaders_41.vert
+qt3d/qtparticleshaders_42.vert
+qt3d/qtparticleshaders_44.vert
+qt3d/qtparticleshaders_48.vert
+qt3d/qtparticleshaders_49.vert
+qt3d/qtparticleshaders_50.vert
+qt3d/qtparticleshaders_52.vert
+qt3d/qtparticleshaders_55.vert
+qt3d/qtparticleshaders_57.vert
+qt3d/qtparticleshaders_6.vert
+qt3d/qtparticleshaders_62.vert
+qt3d/qtparticleshaders_66.vert
+qt3d/qtparticleshaders_67.vert
+qt3d/qtparticleshaders_72.vert
+qt3d/qtparticleshaders_75.vert
+qt3d/qtparticleshaders_8.vert
+qt3d/qtparticleshaders_87.vert
+qt3d/qtparticleshaders_88.vert
+qt3d/qtparticleshaders_9.vert
+qt3d/qtparticleshaders_91.vert
+qt3d/qtparticleshaders_92.vert
+qt3d/qtparticleshaders_94.vert
