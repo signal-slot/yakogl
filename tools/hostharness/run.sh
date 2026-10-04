@@ -26,6 +26,9 @@
 #   HH_TIMEOUT      seconds per run (default 1200)
 #   HH_SIZE=small   shorter sweeps (development)
 #   CARGO_NIGHTLY   toolchain for the sanitizer build (default: nightly)
+#   HH_FEATURES     cargo features of a workspace-layout Rust build (default:
+#                   osal-linux,gpu-powervr); with shaderc-online added, the
+#                   gltest job takes HH_SHADERC=offline for the table arm
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -106,7 +109,7 @@ build() {
         # build is the dev-lto profile (dev semantics, one object)
         pkg=(-p yakogl-capi)
         staticlib=libyakogl_capi.a
-        features=osal-linux,gpu-powervr
+        features="${HH_FEATURES:-osal-linux,gpu-powervr}"
         if [ "$profile" != release ]; then
           pargs=(--profile dev-lto)
           pdir="${pdir%debug}dev-lto"
@@ -160,6 +163,10 @@ build() {
   local hflags=(-g -O1 -std=gnu11 $csan -DPVR_HEAP_GENERAL=GLES_HEAP_DATA -I"$HERE" -I"$HERE/shim"
                 "${cinc[@]}" -I"$drv/tools/pvrlab")
   grep -q isp_scissor_base "$drv/src/pvr_render.h" && hflags+=(-DHH_KICK_SCISSOR)
+  # A build with the in-process compiler takes gl_test's GLSL ES 1.00 shader
+  # set, as a board image with it does (gl_test.c GL_TEST_ES100): the
+  # compiler refuses the desktop #version 450 set, and the table holds both.
+  case "${HH_FEATURES-}" in *shaderc-online*) hflags+=(-DGL_TEST_ES100) ;; esac
   : > "$out/hcc.log"
   gcc "${hflags[@]}" -Wall -c "$HERE/rec.c" -o "$out/obj/rec.o" 2>> "$out/hcc.log"
   gcc "${hflags[@]}" -Wall -c "$HERE/wrap_rt.c" -o "$out/obj/wrap_rt.o" 2>> "$out/hcc.log"

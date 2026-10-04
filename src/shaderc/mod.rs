@@ -1251,15 +1251,30 @@ impl ShcBlob {
 // SAFETY: the raw pointers in `shader` point at immutable statics.
 unsafe impl Sync for ShcBlob {}
 
-/// The source basename behind a compiled shader ("" when the backend tracks
-/// none): the offline table's row is the shader's `priv`.
-pub fn shader_source_name(sh: &ShcShader) -> &'static str {
-    // SAFETY: the offline backend sets `priv` to a &'static ShcBlob of the
-    // table (see offline.rs); another backend leaves it null.
-    match unsafe { (sh.priv_ as *const ShcBlob).as_ref() } {
-        Some(b) => b.source_name(),
-        None => "",
+/// The offline table's row behind a compiled shader: `Some` only when its
+/// `priv` points at a row of this build's table (what the offline back end
+/// sets). Another back end's `priv` is its own: the in-process compiler's
+/// points at its record in the keep region, which read as a table row gave
+/// a name pointer of whatever bytes were there (a crash in the backend's
+/// debug log, the first draw of an online image with `gl_debug=1`).
+pub fn table_row_of(sh: &ShcShader) -> Option<&'static ShcBlob> {
+    #[cfg(not(feature = "no-shader-table"))]
+    {
+        let rows: &'static [ShcBlob] = &table::SHC_BLOB_TABLE[..];
+        let size = core::mem::size_of::<ShcBlob>();
+        let off = (sh.priv_ as usize).checked_sub(rows.as_ptr() as usize)?;
+        if off % size == 0 {
+            return rows.get(off / size);
+        }
     }
+    let _ = sh;
+    None
+}
+
+/// The source basename behind a compiled shader ("" when it is not a row of
+/// the offline table: see [`table_row_of`]).
+pub fn shader_source_name(sh: &ShcShader) -> &'static str {
+    table_row_of(sh).map_or("", |b| b.source_name())
 }
 
 /// `shc_shader_source_name()`: the same for C, as a `const char *` into the
@@ -1279,8 +1294,7 @@ pub unsafe extern "C" fn shc_shader_source_name(sh: *const ShcShader) -> *const 
 
 /// The NUL-terminated table name behind `sh` ("\0" when there is none).
 fn shader_source_name_c(sh: &ShcShader) -> &'static str {
-    // SAFETY: as in `shader_source_name`.
-    match unsafe { (sh.priv_ as *const ShcBlob).as_ref() } {
+    match table_row_of(sh) {
         Some(b) if b.name.as_bytes().last() == Some(&0) => b.name,
         _ => "\0",
     }

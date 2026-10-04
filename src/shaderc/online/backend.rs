@@ -1560,25 +1560,43 @@ pub static SHC_ONLINE: ShcBackend = ShcBackend {
 /// Single-threaded by contract, like the other back ends' registration hooks.
 #[no_mangle]
 pub unsafe extern "C" fn shc_online_register() -> *const ShcBackend {
+    selection_made();
     // SAFETY: a plain store; no reference to the static is formed.
     unsafe { crate::shaderc::g_shaderc = &SHC_ONLINE };
     &SHC_ONLINE
 }
 
+/// Set once a back end is in place: by the first `shaderc::backend()` call
+/// ([`select_once`]), or by an explicit registration before it.
 static SELECTED: Global<bool> = Global::new(false);
+
+/// An explicit registration (`shc_online_register`, `shc_offline_register`)
+/// is the selection: the first `shaderc::backend()` call keeps it instead of
+/// installing this back end over it (gles_shaderc.h: "select a backend
+/// explicitly, before the first GL call").
+pub fn selection_made() {
+    // SAFETY: single-threaded by contract.
+    *unsafe { SELECTED.get() } = true;
+}
 
 /// Apply the selection once, on the first `shaderc::backend()` call.
 ///
 /// See the module note: the feature is the selection, and a `host-test`
 /// build never auto-selects.
 pub fn select_once() {
-    // SAFETY: single-threaded by contract; the flag is written only here.
+    select(wanted());
+}
+
+/// [`select_once`] with the build's answer to "install this back end?"
+/// passed in, so a test can run the product's path.
+fn select(install: bool) {
+    // SAFETY: single-threaded by contract.
     let done = unsafe { SELECTED.get() };
     if *done {
         return;
     }
     *done = true;
-    if wanted() {
+    if install {
         // SAFETY: a plain store; no reference to the static is formed.
         unsafe { crate::shaderc::g_shaderc = &SHC_ONLINE };
     }
@@ -1649,6 +1667,63 @@ mod tests {
         for sh in [&again, &flipped, &fs, &vs] {
             release(sh);
         }
+    }
+
+    /// A shader this compiler made is not a row of the offline table: its
+    /// `priv` points at its record in the keep region, and the table's
+    /// reader answers None for it (and "" for its name) instead of reading
+    /// the record as a row. A real row is found; a pointer into a row is not.
+    #[test]
+    #[cfg(not(feature = "no-shader-table"))]
+    fn a_compiled_shader_is_not_read_as_a_table_row() {
+        let _serial = test_lock();
+        let src = b"precision mediump float; void main(){ gl_FragColor = vec4(0.75); } // not a row\n\0";
+        let mut sh = ShcShader::ZERO;
+        // SAFETY: a NUL-terminated source and a real output; no log.
+        let rc = unsafe {
+            online_compile(SHC_STAGE_FRAGMENT, src.as_ptr() as *const c_char, &mut sh, core::ptr::null_mut(), 0)
+        };
+        assert_eq!(rc, 0);
+        assert!(!sh.priv_.is_null() && store::in_keep(sh.priv_ as *const u8), "the record is in the keep region");
+        assert!(crate::shaderc::table_row_of(&sh).is_none());
+        assert_eq!(crate::shaderc::shader_source_name(&sh), "");
+        release(&sh);
+        let row = &crate::shaderc::table::SHC_BLOB_TABLE[0];
+        let mut t = row.shader;
+        t.priv_ = row as *const crate::shaderc::ShcBlob as *const core::ffi::c_void;
+        assert!(core::ptr::eq(crate::shaderc::table_row_of(&t).expect("a row"), row));
+        t.priv_ = (t.priv_ as usize + 8) as *const core::ffi::c_void;
+        assert!(crate::shaderc::table_row_of(&t).is_none(), "inside a row is not a row");
+    }
+
+    /// A back end registered before the first `shaderc::backend()` call is
+    /// kept: the selection that installs this back end runs only when
+    /// nothing was registered. Without the registration counting, an image
+    /// with this compiler could not select the table at all (the first GL
+    /// call put this back end over it), which the host harness's A/B hit.
+    #[test]
+    #[cfg(not(feature = "no-shader-table"))]
+    fn an_explicit_registration_survives_the_first_selection() {
+        let _serial = test_lock();
+        // SAFETY: single-threaded under the test lock; both put back below.
+        let (was_selected, was) = unsafe { (*SELECTED.get(), crate::shaderc::g_shaderc) };
+        // SAFETY: as above.
+        unsafe { *SELECTED.get() = false };
+        // SAFETY: as above.
+        unsafe { crate::shaderc::offline::shc_offline_register() };
+        select(true);
+        // SAFETY: as above.
+        let kept = unsafe { crate::shaderc::g_shaderc };
+        assert!(core::ptr::eq(kept, &crate::shaderc::offline::SHC_OFFLINE), "the registered table is kept");
+        /* the control: nothing registered, the selection installs this one */
+        // SAFETY: as above.
+        unsafe { *SELECTED.get() = false };
+        select(true);
+        // SAFETY: as above.
+        let installed = unsafe { crate::shaderc::g_shaderc };
+        assert!(core::ptr::eq(installed, &SHC_ONLINE), "with no registration the compiler is installed");
+        // SAFETY: as above.
+        unsafe { (*SELECTED.get(), crate::shaderc::g_shaderc) = (was_selected, was) };
     }
 
     /// Run `online_compile` on `text`; the code and the log come back.
