@@ -51,10 +51,12 @@ header:</p>
 <code>build/slint/zephyr/zephyr.bin</code>.</p>
 
 <h2>5. Boot it from the board's storage</h2>
-<p><strong>Verdin boards.</strong> Copy <code>zephyr.bin</code> to the root of the eMMC's
-first partition, then at the U-Boot prompt:</p>
-<pre># Verdin AM62P
-setenv bootcmd 'ext4load mmc 0:1 0x82000000 /zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x82000000'
+<p><strong>Verdin boards</strong> (Torizon OS). Copy the image to <code>/var</code>, which is
+on the eMMC's first partition, then set U-Boot to load it:</p>
+<pre>scp build/slint/zephyr/zephyr.bin torizon@&lt;board&gt;:/tmp/
+ssh torizon@&lt;board&gt; 'sudo cp /tmp/zephyr.bin /var/zephyr.bin &amp;&amp; sync'
+# at the U-Boot prompt, Verdin AM62P:
+setenv bootcmd 'ext4load mmc 0:1 0x82000000 /ostree/deploy/torizon/var/zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x82000000'
 saveenv
 # Verdin iMX8M Plus: mmc 2:1 and 0x60000000</pre>
 <p>To go back to Linux, restore the previous <code>bootcmd</code> at the U-Boot prompt
