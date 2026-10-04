@@ -169,9 +169,11 @@ kinds! {
          w3 = the reference's R << 16 | G << 8 | B | that probe's largest channel \
          difference << 24. CHECK_UNDRAWN, _ALPHA, _GUARD, _READPIXELS: w1 = how many pixels \
          (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
-         failed later; w1 = the run's return code as int32, w2 = draws the GL core refused \
-         (yakogl_draws_refused), w3 = the online compiler's keep high-water in KiB << 16 | \
-         its keep region in KiB (0 without the online compiler), 16 bits each, saturating";
+         failed later; w1 = the run's return code as int16 | the cause (CHECK_RUN_*) << 16 | \
+         draws the GL core refused (yakogl_draws_refused, saturating) << 24, w2 = the \
+         animation frame it happened in (1 = the first after the check; 0 none), w3 = the \
+         online compiler's keep high-water in KiB << 16 | the cause's detail in ms (how long \
+         the wait or the frame took), 16 bits each, saturating";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -329,6 +331,14 @@ values! {
     CHECK_READPIXELS = 5;
     CHECK_NO_REFERENCE = 6;
     CHECK_RUN = 7;
+    // kind CHECK, tag CHECK_RUN: the cause in w1 bits 16..23.
+    CHECK_RUN_FENCE_TIMEOUT = 1;
+    CHECK_RUN_OVER_BUDGET = 2;
+    CHECK_RUN_DRAW = 3;
+    CHECK_RUN_EGL = 4;
+    CHECK_RUN_GL_ERROR = 5;
+    CHECK_RUN_NO_FRAME = 6;
+    CHECK_RUN_OTHER = 7;
 }
 
 /// kind CHECK's w1..w3 for a failing probe: its index, window position, the
@@ -1028,10 +1038,22 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             CHECK_NO_REFERENCE => out.write_str("no reference: no probe table for this window size"),
             CHECK_RUN => write!(
                 out,
-                "run: the check passed, the run failed later (rc {}); draws refused {w2}; keep high-water {} of {} KiB",
-                w1 as i32,
-                w3 >> 16,
-                w3 & 0xffff
+                "run: the check passed, the run failed later: {} at frame {w2} ({} ms), rc {}; draws refused {}; \
+                 keep high-water {} KiB",
+                match (w1 >> 16) & 0xff {
+                    CHECK_RUN_FENCE_TIMEOUT => "the frame's fence did not signal",
+                    CHECK_RUN_OVER_BUDGET => "a frame over the budget",
+                    CHECK_RUN_DRAW => "the UI's draw failed",
+                    CHECK_RUN_EGL => "an EGL call failed",
+                    CHECK_RUN_GL_ERROR => "a GL error",
+                    CHECK_RUN_NO_FRAME => "no frame presented",
+                    CHECK_RUN_OTHER => "another failure",
+                    _ => "?",
+                },
+                w3 & 0xffff,
+                (w1 & 0xffff) as u16 as i16,
+                w1 >> 24,
+                w3 >> 16
             ),
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
