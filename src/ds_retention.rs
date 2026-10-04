@@ -36,6 +36,20 @@
 
 use crate::backend::GlesDraw;
 
+/// The depth/stencil buffers each backend keeps at once (the PowerVR's
+/// `ds`, the GC7000's `ds_cache`, the V3D's `zsbufs`).
+///
+/// 32, so that GPU memory, not the slot count, is what runs out: a buffer
+/// memory cannot give is refused by name like a full table (`refuse_no_memory`
+/// on the V3D, "no buffer" / "no surface" on the PowerVR and the GC7000).
+/// The largest measured demand is the AGL cluster's on the V3D, one
+/// stencil renderbuffer per layer image: 13 in its first frame, which 8
+/// slots refused (records/pi4/record_DEMOG1_cluster_demog1.txt). On the
+/// AM62P the render pool ends first: 600x600 layers exhaust its client
+/// share at 3 (gl_test 168). Each backend's exit line prints its peak of
+/// these and the buffers it gave up for another target.
+pub const DS_SLOTS: usize = 32;
+
 /// The depth plane's index in the `[_; 2]` arrays below; the stencil's is 1.
 pub const DEPTH: usize = 0;
 /// The stencil plane's index.

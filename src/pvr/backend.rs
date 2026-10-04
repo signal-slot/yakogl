@@ -582,12 +582,12 @@ const FRAG_FLAGS_DEPTHBUFFER: u32 = 0x0000_0080;
 /// from DDK capture; to be derived per Mesa (step 3). Not derivable from
 /// Mesa, as FRAG_FLAGS_DEPTHBUFFER.
 const FRAG_FLAGS_STENCILBUFFER: u32 = 0x0000_0100;
-/// Depth/stencil buffers kept at once: a window surface and every framebuffer
-/// object with a depth or stencil attachment wants one, and a deferred
-/// renderer (Qt Quick 3D's userpasses) has several passes live at a time.
-/// A buffer that holds contents is never given to another target: past this
-/// many, a draw is refused (`ds_make_room`, src/ds_retention.rs).
-const PVR_BACKEND_MAX_DS: usize = 8;
+/// Depth/stencil buffers kept at once ([`ds_retention::DS_SLOTS`], shared by
+/// every backend): a window surface and every framebuffer object with a
+/// depth or stencil attachment wants one. A buffer that holds contents is
+/// never given to another target: past this many, or when GPU memory runs
+/// out first, a draw is refused by name (`ds_make_room`, `ds_get`).
+const PVR_BACKEND_MAX_DS: usize = ds_retention::DS_SLOTS;
 /* Depth bias (glPolygonOffset): ISP_DBIAS_BASE points at a table of
  * {constant, slope, clamp} float triples that STATE_ISPDBSC indexes per
  * object. With the 24-bit ZLS format the ISP adds the constant as-is
@@ -1044,6 +1044,9 @@ struct DsBuf {
     /// `attachment_gone` of one undefines its plane, and a buffer left
     /// holding nothing is freed.
     owners: [u32; 2],
+    /// [`Backend::ds_clock`] when a frame last asked for it: the least
+    /// recently used buffer that may go is the one given up.
+    used: u32,
 }
 
 impl DsBuf {
@@ -1056,6 +1059,7 @@ impl DsBuf {
         mem: OsalGpuMem::ZERO,
         planes: [Plane::UNDEFINED; 2],
         owners: [0; 2],
+        used: 0,
     };
 
     /// The planes a buffer of this kind keeps.
@@ -1305,6 +1309,8 @@ struct Backend {
     /// the frames says the application uses more targets than there are
     /// slots.
     ds_given_up: u32,
+    /// Depth/stencil buffer requests ([`ds_get`]): the buffers' age.
+    ds_clock: u32,
     /// The frame arenas' high-water marks over every kick recorded so far,
     /// bytes: [GENERAL arena, PDS arena, VDM stream] (the owner report).
     arena_hw: [u32; 3],
@@ -2923,12 +2929,15 @@ fn ds_get(b: &mut Backend, id: DsKey, w: u32, h: u32, samples: u32) -> Option<us
      * a size whose buffer bytes do not fit a usize gets no buffer (the C
      * code wrapped and allocated a buffer smaller than the ISP writes) */
     let bytes = ds_bytes(w, h, samples);
+    b.ds_clock = b.ds_clock.wrapping_add(1);
+    let now = b.ds_clock;
 
     for i in 0..PVR_BACKEND_MAX_DS {
         let s = &mut b.ds[i];
 
         if !s.mem.impl_.is_null() && s.id == id {
             if s.w == w && s.h == h && s.samples == samples {
+                s.used = now;
                 return Some(i);
             }
             /* resized under the same id: the old buffer goes back */
@@ -2967,6 +2976,7 @@ fn ds_get(b: &mut Backend, id: DsKey, w: u32, h: u32, samples: u32) -> Option<us
     s.h = h;
     s.samples = samples;
     s.valid = false;
+    s.used = now;
     ds_note_peak(b);
     Some(slot)
 }
@@ -3228,7 +3238,10 @@ fn ds_make_room(b: &mut Backend, d: &GlesDraw) -> i32 {
                 && !s.holds_contents()
                 && (!cleared || b.ds_parked.has_room())
         };
-        let Some(i) = (0..PVR_BACKEND_MAX_DS).find(|&i| can_go(i)) else {
+        /* the least recently used of the buffers that may go */
+        let now = b.ds_clock;
+        let Some(i) = (0..PVR_BACKEND_MAX_DS).filter(|&i| can_go(i)).max_by_key(|&i| now.wrapping_sub(b.ds[i].used))
+        else {
             let id = if d.depth_id != 0 && !held(b, depth_key) { d.depth_id } else { d.stencil_id };
             b.ds_full_refused = b.ds_full_refused.wrapping_add(1);
             return ds_retention::refuse("pvr", id, PVR_BACKEND_MAX_DS);

@@ -2961,9 +2961,12 @@ fn ds_of(rig: &Rig, id: u32) -> Option<DsBuf> {
     rig.b().ds.iter().copied().find(|s| !s.mem.impl_.is_null() && s.owners.contains(&id))
 }
 
-/// Draw framebuffers 0..8, each into its own depth buffer, and write a mark
+/// The table's size, as a framebuffer index: the first one past it.
+const N: u32 = PVR_BACKEND_MAX_DS as u32;
+
+/// Draw framebuffers 0..N (the table's size), each into its own depth buffer, and write a mark
 /// into framebuffer 0's (as the ISP's store would).
-fn eight_fbos_drawn(rig: &Rig) -> DsBuf {
+fn full_table_drawn(rig: &Rig) -> DsBuf {
     for i in 0..PVR_BACKEND_MAX_DS as u32 {
         assert_eq!(draw(&fbo_draw(rig, i)), 0, "framebuffer {i}: {:?}", rig.logs());
         assert_eq!(pvr_backend_flush(), 0);
@@ -2977,24 +2980,25 @@ fn eight_fbos_drawn(rig: &Rig) -> DsBuf {
     first
 }
 
-/// The refusal: with all eight buffers holding depth a
-/// draw wrote, a ninth framebuffer's first depth-tested draw is refused
+/// The refusal: with every buffer holding depth a
+/// draw wrote, the first framebuffer past the table's first depth-tested draw is refused
 /// (-ENOMEM, which the GL core reports as GL_OUT_OF_MEMORY) with one named
 /// line, and framebuffer 0's depth is still there: not freed, its bytes
 /// unchanged, and loaded by its next kick.
 ///
-/// Revert check: with the old eviction the ninth draw returns 0 and
+/// Revert check: with the old eviction the draw past the table returns 0 and
 /// framebuffer 0's buffer is in `frees()`.
 #[test]
-fn a_ninth_framebuffer_with_depth_is_refused_and_the_first_keeps_its_depth() {
+fn a_framebuffer_past_the_table_with_depth_is_refused_and_the_first_keeps_its_depth() {
     let rig = Rig::new();
-    let first = eight_fbos_drawn(&rig);
-    assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "the ninth is refused");
+    let first = full_table_drawn(&rig);
+    assert_eq!(draw(&fbo_draw(&rig, N)), -ENOMEM, "the one past the table is refused");
     let logs = rig.logs();
     let refused: Vec<_> = logs.iter().filter(|l| l.contains(ds_retention::REFUSED)).collect();
     assert_eq!(refused.len(), 1, "{logs:?}");
-    assert!(refused[0].contains("object 0x6c") && refused[0].contains("all 8"), "{refused:?}");
-    assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "still refused");
+    let (object, all) = (format!("object {:#x}", 100 + N), format!("all {N}"));
+    assert!(refused[0].contains(&object) && refused[0].contains(&all), "{refused:?}");
+    assert_eq!(draw(&fbo_draw(&rig, N)), -ENOMEM, "still refused");
     assert!(rig.logs().is_empty(), "the same refusal is not logged again");
     assert!(rig.frees().is_empty(), "no buffer was given up");
     assert_eq!(rig.gpu_u32(first.mem.gpu), 0x5a5a_1234, "framebuffer 0's depth bytes are intact");
@@ -3041,13 +3045,13 @@ fn the_ds_line_says_none_allocated_when_no_buffer_ever_was() {
     );
 }
 
-/// One, eight and nine framebuffers with depth: the peak counts buffers
+/// One framebuffer, a full table and one past it with depth: the peak counts buffers
 /// held at once (of PVR_BACKEND_MAX_DS), the bytes are the sum of their
 /// allocations (the rig's 64x64 target: two 32-pixel ZLS tiles each way, 4
 /// bytes a pixel),
-/// and the ninth is refused with the slots full, counted once per draw.
+/// and the one past it is refused with the slots full, counted once per draw.
 #[test]
-fn the_ds_line_counts_one_eight_and_nine_framebuffers() {
+fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     let rig = Rig::new();
     let line = ds_line_from_zero(&rig);
     let one = ds_bytes(64, 64, 1).expect("fits");
@@ -3057,7 +3061,7 @@ fn the_ds_line_counts_one_eight_and_nine_framebuffers() {
     assert_eq!(ds_of(&rig, 100).expect("framebuffer 0's buffer").mem.size, one);
     assert_eq!(
         line(),
-        "ds slots peak 1/8, ds bytes peak 16384, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+        format!("ds slots peak 1/{N}, ds bytes peak 16384, ds given up 0, ds refused 0 (slots full 0, no buffer 0)")
     );
     for i in 1..PVR_BACKEND_MAX_DS as u32 {
         assert_eq!(draw(&fbo_draw(&rig, i)), 0, "framebuffer {i}: {:?}", rig.logs());
@@ -3065,30 +3069,42 @@ fn the_ds_line_counts_one_eight_and_nine_framebuffers() {
     }
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+            N as usize * 16384
+        )
     );
-    assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "the ninth is refused");
+    assert_eq!(draw(&fbo_draw(&rig, N)), -ENOMEM, "the one past the table is refused");
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 1 (slots full 1, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 1 (slots full 1, no buffer 0)",
+            N as usize * 16384
+        )
     );
-    assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "and again");
+    assert_eq!(draw(&fbo_draw(&rig, N)), -ENOMEM, "and again");
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 2 (slots full 2, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0)",
+            N as usize * 16384
+        )
     );
     /* a freed slot lowers what is held, never the peak */
     pvr_backend_attachment_gone(100);
-    assert_eq!(draw(&fbo_draw(&rig, 8)), 0, "the ninth takes the freed slot: {:?}", rig.logs());
+    assert_eq!(draw(&fbo_draw(&rig, N)), 0, "the one past the table takes the freed slot: {:?}", rig.logs());
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 2 (slots full 2, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0)",
+            N as usize * 16384
+        )
     );
 }
 
 /// A buffer that holds nothing GL keeps (depth tested, never written) is
-/// given up for a ninth target, and the line counts it: the count that says
+/// given up for a target past the table, and the line counts it: the count that says
 /// an application uses more targets than there are slots, where the peak
 /// alone reads 8/8 and nothing refused.
 #[test]
@@ -3106,15 +3122,49 @@ fn the_ds_line_counts_a_buffer_given_up_for_another_target() {
     }
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+            N as usize * 16384
+        )
     );
-    assert_eq!(draw(&no_write(8)), 0, "the ninth takes a buffer that held nothing: {:?}", rig.logs());
+    assert_eq!(draw(&no_write(N)), 0, "the one past the table takes a buffer that held nothing: {:?}", rig.logs());
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(rig.frees().len(), 1, "one buffer was given up");
     assert_eq!(
         line(),
-        "ds slots peak 8/8, ds bytes peak 131072, ds given up 1, ds refused 0 (slots full 0, no buffer 0)"
+        format!(
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 1, ds refused 0 (slots full 0, no buffer 0)",
+            N as usize * 16384
+        )
     );
+}
+
+/// The buffer given up for a target past the table is the least recently
+/// used of those that may go, not the lowest slot: with framebuffer 0 used
+/// again after the table filled, framebuffer 1's buffer is the one given up.
+///
+/// Revert check: picking the lowest slot frees framebuffer 0's buffer.
+#[test]
+fn the_buffer_given_up_is_the_least_recently_used() {
+    let rig = Rig::new();
+    let no_write = |i: u32| {
+        let mut d = fbo_draw(&rig, i);
+        d.depth_write = false;
+        d
+    };
+    for i in 0..N {
+        assert_eq!(draw(&no_write(i)), 0, "framebuffer {i}: {:?}", rig.logs());
+        assert_eq!(pvr_backend_flush(), 0);
+    }
+    assert_eq!(draw(&no_write(0)), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let second = ds_of(&rig, 101).expect("framebuffer 1 keeps a buffer").mem.gpu;
+    rig.reset_records();
+    with_platform(|p| p.frees.clear());
+    assert_eq!(draw(&no_write(N)), 0, "{:?}", rig.logs());
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.frees(), [second], "framebuffer 1's buffer, the least recently used");
+    assert!(ds_of(&rig, 100).is_some(), "framebuffer 0, used last, keeps its buffer");
 }
 
 /// A buffer that could not be allocated is counted apart from a full table.
@@ -3195,33 +3245,33 @@ fn depth_resolve_reads_the_packed_depth_as_floats() {
 }
 
 /// The GL core deleting framebuffer 0's depth renderbuffer frees its
-/// buffer exactly, and the ninth framebuffer gets that slot.
+/// buffer exactly, and the framebuffer past the table gets that slot.
 #[test]
-fn a_deleted_depth_object_gives_its_buffer_to_the_ninth() {
+fn a_deleted_depth_object_gives_its_buffer_to_the_one_past_the_table() {
     let rig = Rig::new();
-    let first = eight_fbos_drawn(&rig);
+    let first = full_table_drawn(&rig);
     pvr_backend_attachment_gone(100);
     assert_eq!(rig.frees(), [first.mem.gpu], "object 100's buffer, and only it");
-    assert_eq!(draw(&fbo_draw(&rig, 8)), 0, "{:?}", rig.logs());
+    assert_eq!(draw(&fbo_draw(&rig, N)), 0, "{:?}", rig.logs());
     assert_eq!(pvr_backend_flush(), 0);
-    assert!(ds_of(&rig, 108).is_some());
+    assert!(ds_of(&rig, 100 + N).is_some());
 }
 
 /// A whole depth clear with no draw after it leaves one value in the
-/// buffer: its slot may go to the ninth framebuffer, and the value is kept
+/// buffer: its slot may go to the framebuffer past the table, and the value is kept
 /// (parked). When framebuffer 0 draws again (after another object is
 /// deleted, for room) its new buffer starts from that clear value, not
 /// loaded and not 1.0.
 #[test]
 fn a_whole_depth_clear_frees_the_slot_and_the_clear_value_comes_back() {
     let rig = Rig::new();
-    let first = eight_fbos_drawn(&rig);
+    let first = full_table_drawn(&rig);
     let mut clear = fbo_draw(&rig, 0);
     (clear.index_count, clear.do_clear_depth, clear.clear_depth) = (0, true, 0.25);
     assert_eq!(draw(&clear), 0);
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(ds_of(&rig, 100).map(|s| s.planes[DEPTH]), Some(Plane::cleared(0.25f32.to_bits())));
-    assert_eq!(draw(&fbo_draw(&rig, 8)), 0, "the cleared buffer's slot is free: {:?}", rig.logs());
+    assert_eq!(draw(&fbo_draw(&rig, N)), 0, "the cleared buffer's slot is free: {:?}", rig.logs());
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(rig.frees(), [first.mem.gpu]);
     assert_eq!(rig.b().ds_parked.len(), 1, "framebuffer 0's clear value is kept");

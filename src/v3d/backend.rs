@@ -288,7 +288,8 @@ struct ZsEntry {
 /// contents is never given to another id: with every slot holding some, a
 /// draw that needs a new one is refused (`zs_buf`, src/ds_retention.rs).
 ///
-/// 32, so that memory, not the slot count, is what runs out. The cluster
+/// [`ds_retention::DS_SLOTS`] (32), so that memory, not the slot count, is
+/// what runs out. The cluster
 /// (agl-slint-cluster through femtovg) keeps one stencil renderbuffer per
 /// layer image and fills concave paths through it, so each holds stencil GL
 /// keeps: frame 1 made 13 of them, and with 8 slots the 9th to 13th were
@@ -299,7 +300,7 @@ struct ZsEntry {
 /// boards/rpi_4b.conf), so the carve-out is the real bound, and a buffer it
 /// cannot give is refused by name (`ds_retention::refuse_no_memory`), never
 /// kept on-chip.
-pub const ZS_BUFS: usize = 32;
+pub const ZS_BUFS: usize = ds_retention::DS_SLOTS;
 /// Buffer requests (`V3dState::zs_clock`, which `zs_buf` and `ms_buf`
 /// advance) a refused depth/stencil allocation is not asked for again; they are refused meanwhile. Counted in
 /// requests, not jobs or swaps: a conformance run may never swap, and with

@@ -14489,8 +14489,8 @@ static int case_fragcoord(void)
 
 /* ---- case 162: depth kept across framebuffers (dskeep) ---------------------
  *
- * A backend keeps DSK_SLOTS depth/stencil buffers (src/ds_retention.rs;
- * 32 on the V3D, src/v3d/backend.rs ZS_BUFS, eight on the others). They
+ * A backend keeps DSK_SLOTS depth/stencil buffers (src/ds_retention.rs
+ * DS_SLOTS, the same on every GPU). They
  * hold GL-visible contents: a renderbuffer's image persists across
  * framebuffer switches (ES 2.0 4.4.3). One more used to give up the oldest
  * with no error, and the first framebuffer's depth was gone. Now the draw
@@ -14511,11 +14511,7 @@ static int case_fragcoord(void)
  * framebuffer holds it and it is freed), and the refused framebuffer's
  * clear and quad draw, read back green.
  * ------------------------------------------------------------------------- */
-#ifdef GL_TEST_V3D
-#define DSK_SLOTS 32 /* src/v3d/backend.rs ZS_BUFS */
-#else
-#define DSK_SLOTS 8 /* the PowerVR's and the GC7000's tables */
-#endif
+#define DSK_SLOTS 32 /* src/ds_retention.rs DS_SLOTS */
 #define DSK_MAX (DSK_SLOTS + 1)
 
 static const char dsk_vs_src[] =
@@ -14658,7 +14654,8 @@ static int case_dskeep(void)
  * cluster's frame 1 made 13 of them; with eight depth/stencil buffers the
  * 9th to 13th layers' draws were GL_OUT_OF_MEMORY and the layers were
  * missing (records/pi4/record_DEMOG1_cluster_demog1.txt, crc32 0xc63336bf
- * instead of 0xf59828d6).
+ * instead of 0xf59828d6). Every GPU keeps DSK_SLOTS now, so the case makes
+ * the cluster's 13 on all of them.
  *
  * Each framebuffer i: clear (black, stencil 0, scissor = the whole image),
  * a stencil pass (colour masked, INCR where drawn) over a triangle, lower
@@ -14669,11 +14666,7 @@ static int case_dskeep(void)
  * triangle only. A lost stencil leaves that triangle red; a stencil from
  * another framebuffer paints the other half green.
  * ------------------------------------------------------------------------- */
-#ifdef GL_TEST_V3D
 #define STC_LAYERS 13 /* the cluster's frame 1 */
-#else
-#define STC_LAYERS (DSK_SLOTS - 1) /* the window's buffer may be the eighth */
-#endif
 #define STC_RED 0xff0000ffu
 
 /* The triangle of framebuffer i: lower left (even) or upper right (odd). */
@@ -14804,9 +14797,9 @@ static int case_stcycle(void)
  * triangle green, the other half black).
  *
  * The number of layers refused (GL_OUT_OF_MEMORY) is a measurement, not a
- * pass condition: a backend keeps DSK_SLOTS depth/stencil buffers, so with
- * nothing reclaimable 13 - DSK_SLOTS (or one more, when the window holds a
- * buffer) are expected on the PowerVR and the GC7000, and 0 on the V3D. The
+ * pass condition: a backend keeps DSK_SLOTS depth/stencil buffers, more
+ * than 13, so a refusal says GPU memory ran out first (the AM62P's render
+ * pool held 3 of these layers in 2026-09-29's run). The
  * case passes when every error is GL_OUT_OF_MEMORY (the backend's named
  * refusal; its line is in the run's log), every layer drawn on the first
  * pass draws again and reads back its own stencil, and no layer refused on

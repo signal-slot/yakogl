@@ -279,8 +279,11 @@ core tells it when they are gone (`backend::attachment_gone`, in the form of
 `free_texture`, the share group's end), when its storage is specified again
 (`context::respecified`), and when a surface is destroyed. A whole clear with
 no draw after it leaves one value, which the backend keeps without a buffer.
-With all eight buffers holding contents, a draw that needs another is
-`GL_OUT_OF_MEMORY` with one line naming it (gl_test 162). `glReadPixels` accepts only
+Each backend keeps `ds_retention::DS_SLOTS` (32) buffers, so that GPU memory,
+not the slot count, is what runs out. With every one holding contents, or no
+memory for the buffer, a draw that needs another is `GL_OUT_OF_MEMORY` with one
+line naming it (gl_test 162); a buffer that held nothing given to another
+target is counted on the exit line ("ds given up"). `glReadPixels` accepts only
 RGBA/UNSIGNED_BYTE (`GL_IMPLEMENTATION_COLOR_READ_*`) and flushes the frame first.
 
 Stack budget: the GL core runs on kernel/RTOS thread stacks (16 KiB in the Linux
