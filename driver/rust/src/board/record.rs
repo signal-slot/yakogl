@@ -169,13 +169,15 @@ kinds! {
          w3 = the reference's R << 16 | G << 8 | B | that probe's largest channel \
          difference << 24. CHECK_UNDRAWN, _ALPHA, _GUARD, _READPIXELS: w1 = how many pixels \
          (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
-         failed later; w1 = the run's return code as int16 | the cause (CHECK_RUN_*) << 16 | \
-         draws the GL core refused (yakogl_draws_refused, saturating) << 24, w2 = the \
-         animation frame it happened in (1 = the first after the check; 0 none; bits 0..9) | \
-         that frame's draw in ms << 10 (12 bits) | the compiles the online compiler ran in \
-         it << 22 (10 bits), each field's largest value meaning not measured, w3 = the \
-         online compiler's keep high-water in KiB << 16 | the cause's detail in ms (how long \
-         the wait or the frame took), 16 bits each, saturating";
+         failed later; w1 = the run's return code as int8 | the cause (CHECK_RUN_*) << 8 | \
+         draws the GL core refused (yakogl_draws_refused) << 12 | compiler runs in the \
+         failing frame << 20 (6 bits) | its slowest GL call class (CHECK_RUN_GL_*) << 26 \
+         (4 bits), w2 = the animation frame (1 = the first after the check; 0 none; 8 \
+         bits) | that frame's draw in ms << 8 (12 bits) | the ms of it spent in the timed \
+         GL calls << 20 (12 bits), w3 = the online compiler's keep high-water in KiB (11 \
+         bits) | the cause's detail in ms << 11 (13 bits: how long the wait or the frame \
+         took) | the slowest class's share of the GL ms in % << 24; every field \
+         saturates one below its largest value, which means not measured";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -341,25 +343,105 @@ values! {
     CHECK_RUN_GL_ERROR = 5;
     CHECK_RUN_NO_FRAME = 6;
     CHECK_RUN_OTHER = 7;
-    // kind CHECK, tag CHECK_RUN, w2: the frame in bits 0..9, the frame's draw
-    // in ms in bits 10..21, the compiles it ran in bits 22..31; the largest
-    // value of a field means "not measured", one below it saturates.
-    CHECK_RUN_FRAME_MAX = 0x3ff;
-    CHECK_RUN_DRAW_SHIFT = 10;
-    CHECK_RUN_DRAW_ABSENT = 0xfff;
-    CHECK_RUN_COMPILES_SHIFT = 22;
-    CHECK_RUN_COMPILES_ABSENT = 0x3ff;
+    // kind CHECK, tag CHECK_RUN: each field's shift and width as its largest
+    // value, which means "not measured"; one below it saturates
+    // (check_run_words). w1:
+    CHECK_RUN_CAUSE_SHIFT = 8;
+    CHECK_RUN_CAUSE_MAX = 0xf;
+    CHECK_RUN_REFUSED_SHIFT = 12;
+    CHECK_RUN_REFUSED_MAX = 0xff;
+    CHECK_RUN_RUNS_SHIFT = 20;
+    CHECK_RUN_RUNS_MAX = 0x3f;
+    CHECK_RUN_CLASS_SHIFT = 26;
+    CHECK_RUN_CLASS_MAX = 0xf;
+    // w2:
+    CHECK_RUN_FRAME_MAX = 0xff;
+    CHECK_RUN_DRAW_SHIFT = 8;
+    CHECK_RUN_DRAW_MAX = 0xfff;
+    CHECK_RUN_GLMS_SHIFT = 20;
+    CHECK_RUN_GLMS_MAX = 0xfff;
+    // w3:
+    CHECK_RUN_KEEP_MAX = 0x7ff;
+    CHECK_RUN_DETAIL_SHIFT = 11;
+    CHECK_RUN_DETAIL_MAX = 0x1fff;
+    CHECK_RUN_SHARE_SHIFT = 24;
+    CHECK_RUN_SHARE_MAX = 0xff;
+    // the timed GL call classes (cluster main.c enum gl_timed)
+    CHECK_RUN_GL_COMPILE = 0;
+    CHECK_RUN_GL_LINK = 1;
+    CHECK_RUN_GL_TEXIMAGE = 2;
+    CHECK_RUN_GL_TEXSUB = 3;
+    CHECK_RUN_GL_BUFFER = 4;
+    CHECK_RUN_GL_DRAW = 5;
+    CHECK_RUN_GL_UNIFORM = 6;
+    CHECK_RUN_GL_FBO = 7;
+    CHECK_RUN_GL_DELETE = 8;
+    CHECK_RUN_GL_MIPMAP = 9;
+    CHECK_RUN_GL_READ = 10;
+    CHECK_RUN_GL_CLEAR = 11;
+    CHECK_RUN_GL_CLASSES = 12;
 }
 
-/// kind CHECK, tag CHECK_RUN's w2: the animation frame (saturating), the
-/// draw of that frame's iteration in ms and the compiles the online compiler
-/// ran in it, each saturating one below its "not measured" value, which is
-/// passed through as given.
-pub fn check_run_w2(frame: u32, draw_ms: u32, compiles: u32) -> u32 {
-    let field = |v: u32, absent: u32| if v == absent { absent } else { v.min(absent - 1) };
-    frame.min(CHECK_RUN_FRAME_MAX)
-        | field(draw_ms, CHECK_RUN_DRAW_ABSENT) << CHECK_RUN_DRAW_SHIFT
-        | field(compiles, CHECK_RUN_COMPILES_ABSENT) << CHECK_RUN_COMPILES_SHIFT
+/// The GL call class names, by CHECK_RUN_GL_* number.
+pub const CHECK_RUN_GL_NAMES: [&str; CHECK_RUN_GL_CLASSES as usize] = [
+    "glCompileShader",
+    "glLinkProgram",
+    "glTexImage2D",
+    "glTexSubImage2D",
+    "glBufferData",
+    "glDraw*",
+    "glUniform*",
+    "framebuffer",
+    "glDelete*",
+    "glGenerateMipmap",
+    "glReadPixels",
+    "glClear",
+];
+
+/// One CHECK_RUN field: `v` saturated one below `max`, `max` itself (not
+/// measured) passed through.
+const fn check_run_field(v: u32, max: u32) -> u32 {
+    if v == max {
+        max
+    } else if v < max - 1 {
+        v
+    } else {
+        max - 1
+    }
+}
+
+/// What a failed run's CHECK_RUN carries (record.rs's doc of kind CHECK).
+/// A field the run did not measure is its CHECK_RUN_*_MAX.
+pub struct CheckRun {
+    pub rc: i32,
+    pub cause: u32,
+    pub refused: u32,
+    pub runs: u32,
+    pub class: u32,
+    pub frame: u32,
+    pub draw_ms: u32,
+    pub gl_ms: u32,
+    pub keep_kib: u32,
+    pub detail_ms: u32,
+    pub share: u32,
+}
+
+/// kind CHECK, tag CHECK_RUN's w1..w3 (the C side packs the same with the
+/// header's constants, cluster main.c).
+pub const fn check_run_words(r: &CheckRun) -> [u32; 3] {
+    [
+        (r.rc as u32 & 0xff)
+            | check_run_field(r.cause, CHECK_RUN_CAUSE_MAX) << CHECK_RUN_CAUSE_SHIFT
+            | check_run_field(r.refused, CHECK_RUN_REFUSED_MAX) << CHECK_RUN_REFUSED_SHIFT
+            | check_run_field(r.runs, CHECK_RUN_RUNS_MAX) << CHECK_RUN_RUNS_SHIFT
+            | check_run_field(r.class, CHECK_RUN_CLASS_MAX) << CHECK_RUN_CLASS_SHIFT,
+        check_run_field(r.frame, CHECK_RUN_FRAME_MAX)
+            | check_run_field(r.draw_ms, CHECK_RUN_DRAW_MAX) << CHECK_RUN_DRAW_SHIFT
+            | check_run_field(r.gl_ms, CHECK_RUN_GLMS_MAX) << CHECK_RUN_GLMS_SHIFT,
+        check_run_field(r.keep_kib, CHECK_RUN_KEEP_MAX)
+            | check_run_field(r.detail_ms, CHECK_RUN_DETAIL_MAX) << CHECK_RUN_DETAIL_SHIFT
+            | check_run_field(r.share, CHECK_RUN_SHARE_MAX) << CHECK_RUN_SHARE_SHIFT,
+    ]
 }
 
 /// kind CHECK's w1..w3 for a failing probe: its index, window position, the
@@ -1058,7 +1140,8 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             CHECK_READPIXELS => write!(out, "readpixels: glReadPixels differs from memory at {w1} probes"),
             CHECK_NO_REFERENCE => out.write_str("no reference: no probe table for this window size"),
             CHECK_RUN => {
-                let cause = match (w1 >> 16) & 0xff {
+                let f = |w: u32, shift: u32, max: u32| (w >> shift) & max;
+                let cause = match f(w1, CHECK_RUN_CAUSE_SHIFT, CHECK_RUN_CAUSE_MAX) {
                     CHECK_RUN_FENCE_TIMEOUT => "the frame's fence did not signal",
                     CHECK_RUN_OVER_BUDGET => "a frame over the budget",
                     CHECK_RUN_DRAW => "the UI's draw failed",
@@ -1071,24 +1154,44 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
                 write!(
                     out,
                     "run: the check passed, the run failed later: {cause} at frame {} ({} ms; its draw ",
-                    w2 & CHECK_RUN_FRAME_MAX,
-                    w3 & 0xffff
+                    f(w2, 0, CHECK_RUN_FRAME_MAX),
+                    f(w3, CHECK_RUN_DETAIL_SHIFT, CHECK_RUN_DETAIL_MAX)
                 )?;
-                match (w2 >> CHECK_RUN_DRAW_SHIFT) & CHECK_RUN_DRAW_ABSENT {
-                    CHECK_RUN_DRAW_ABSENT => out.write_str("not measured")?,
+                match f(w2, CHECK_RUN_DRAW_SHIFT, CHECK_RUN_DRAW_MAX) {
+                    CHECK_RUN_DRAW_MAX => out.write_str("not measured")?,
                     ms => write!(out, "{ms} ms")?,
                 }
-                match w2 >> CHECK_RUN_COMPILES_SHIFT {
-                    CHECK_RUN_COMPILES_ABSENT => out.write_str(", compiles not counted")?,
-                    n => write!(out, ", {n} compiles")?,
+                match f(w2, CHECK_RUN_GLMS_SHIFT, CHECK_RUN_GLMS_MAX) {
+                    CHECK_RUN_GLMS_MAX => out.write_str(", GL calls not timed")?,
+                    ms => write!(out, ", {ms} ms in GL calls")?,
+                }
+                match (
+                    f(w1, CHECK_RUN_CLASS_SHIFT, CHECK_RUN_CLASS_MAX),
+                    f(w3, CHECK_RUN_SHARE_SHIFT, CHECK_RUN_SHARE_MAX),
+                ) {
+                    (CHECK_RUN_CLASS_MAX, _) => {}
+                    (c, pct) => {
+                        let name = CHECK_RUN_GL_NAMES.get(c as usize).copied().unwrap_or("?");
+                        match pct {
+                            CHECK_RUN_SHARE_MAX => write!(out, ", most in {name}")?,
+                            p => write!(out, ", {p}% of it in {name}")?,
+                        }
+                    }
+                }
+                match f(w1, CHECK_RUN_RUNS_SHIFT, CHECK_RUN_RUNS_MAX) {
+                    CHECK_RUN_RUNS_MAX => out.write_str(", compiler runs not counted")?,
+                    n => write!(out, ", {n} compiler runs")?,
                 }
                 write!(
                     out,
-                    "), rc {}; draws refused {}; keep high-water {} KiB",
-                    (w1 & 0xffff) as u16 as i16,
-                    w1 >> 24,
-                    w3 >> 16
-                )
+                    "), rc {}; draws refused {}; ",
+                    (w1 & 0xff) as u8 as i8,
+                    f(w1, CHECK_RUN_REFUSED_SHIFT, CHECK_RUN_REFUSED_MAX)
+                )?;
+                match f(w3, 0, CHECK_RUN_KEEP_MAX) {
+                    CHECK_RUN_KEEP_MAX => out.write_str("no keep region"),
+                    k => write!(out, "keep high-water {k} KiB"),
+                }
             }
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
@@ -1145,16 +1248,41 @@ pub fn write_c_header(out: &mut impl fmt::Write) -> fmt::Result {
 mod tests {
     use super::*;
 
-    /// CHECK_RUN's w2: each field lands at its bits, saturates one below its
+    /// CHECK_RUN: each field lands at its bits, saturates one below its
     /// "not measured" value, and that value passes through unchanged.
     #[test]
-    fn check_run_w2_keeps_not_measured_apart_from_saturated() {
-        let w = check_run_w2(2, 2700, 12);
-        assert_eq!((w & 0x3ff, (w >> 10) & 0xfff, w >> 22), (2, 2700, 12));
-        let big = check_run_w2(5000, 9000, 5000);
-        assert_eq!((big & 0x3ff, (big >> 10) & 0xfff, big >> 22), (0x3ff, 0xffe, 0x3fe), "saturated, not absent");
-        let none = check_run_w2(1, CHECK_RUN_DRAW_ABSENT, CHECK_RUN_COMPILES_ABSENT);
-        assert_eq!(((none >> 10) & 0xfff, none >> 22), (CHECK_RUN_DRAW_ABSENT, CHECK_RUN_COMPILES_ABSENT));
+    fn check_run_words_keep_not_measured_apart_from_saturated() {
+        let r = CheckRun {
+            rc: -116,
+            cause: CHECK_RUN_OVER_BUDGET,
+            refused: 0,
+            runs: 0,
+            class: CHECK_RUN_GL_DRAW,
+            frame: 2,
+            draw_ms: 2782,
+            gl_ms: 2600,
+            keep_kib: 464,
+            detail_ms: 2787,
+            share: 91,
+        };
+        let w = check_run_words(&r);
+        assert_eq!(w[0] & 0xff, (-116i32 as u32) & 0xff);
+        assert_eq!(((w[0] >> 8) & 0xf, (w[0] >> 20) & 0x3f, (w[0] >> 26) & 0xf), (2, 0, 5));
+        assert_eq!((w[1] & 0xff, (w[1] >> 8) & 0xfff, w[1] >> 20), (2, 2782, 2600));
+        assert_eq!((w[2] & 0x7ff, (w[2] >> 11) & 0x1fff, w[2] >> 24), (464, 2787, 91));
+        let big = check_run_words(&CheckRun { frame: 900, draw_ms: 9000, runs: 500, keep_kib: 5000, ..r });
+        assert_eq!((big[1] & 0xff, (big[1] >> 8) & 0xfff), (0xfe, 0xffe), "saturated, not absent");
+        assert_eq!(((big[0] >> 20) & 0x3f, big[2] & 0x7ff), (0x3e, 0x7fe));
+        let none = check_run_words(&CheckRun {
+            runs: CHECK_RUN_RUNS_MAX,
+            class: CHECK_RUN_CLASS_MAX,
+            draw_ms: CHECK_RUN_DRAW_MAX,
+            gl_ms: CHECK_RUN_GLMS_MAX,
+            share: CHECK_RUN_SHARE_MAX,
+            ..r
+        });
+        assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_DRAW_MAX, CHECK_RUN_GLMS_MAX));
+        assert_eq!(((none[0] >> 20) & 0x3f, (none[0] >> 26) & 0xf, none[2] >> 24), (0x3f, 0xf, 0xff));
     }
 
     /// A fixed buffer for `fmt::Write` (the crate has no allocator).

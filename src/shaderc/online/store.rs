@@ -592,6 +592,9 @@ pub fn with_scratch<R>(f: impl FnOnce(&Arena<'_>) -> R) -> Option<R> {
         return None;
     }
     *busy = true;
+    // SAFETY: single-threaded by contract.
+    let runs = unsafe { RUNS.get() };
+    *runs = runs.wrapping_add(1);
     /* Cleared by dropping, so that a panic inside `f` releases the region
      * instead of marking it busy for the rest of the process.
      *
@@ -859,24 +862,19 @@ pub unsafe extern "C" fn shc_online_keep_stats(in_use: *mut usize, peak: *mut us
     0
 }
 
-/// How many compiles have run: every compile the cache could not answer,
-/// whatever its outcome ([`note_compile`]).
-static COMPILES: Global<u32> = Global::new(0);
+/// How many times the compiler has run ([`with_scratch`], which every run
+/// goes through: a whole compile, or the front end alone for a link's source
+/// check or a draw's sampler-state question). A cache hit does not run it.
+static RUNS: Global<u32> = Global::new(0);
 
-/// A compile the cache could not answer is starting.
-pub fn note_compile() {
-    // SAFETY: single-threaded by contract.
-    let n = unsafe { COMPILES.get() };
-    *n = n.wrapping_add(1);
-}
-
-/// `uint32_t shc_online_compiles(void)`: how many compiles have run so far
-/// (cache hits are not compiles), wrapping. A board run reads it around a
-/// frame to tell a frame that compiled from one that did not.
+/// `uint32_t shc_online_compiler_runs(void)`: how many times the compiler
+/// has run so far ([`RUNS`]), wrapping. A board run reads it around a frame:
+/// counted where the compiler takes its scratch arena, so no path that runs
+/// it can be missed.
 #[no_mangle]
-pub extern "C" fn shc_online_compiles() -> u32 {
+pub extern "C" fn shc_online_compiler_runs() -> u32 {
     // SAFETY: single-threaded by contract.
-    *unsafe { COMPILES.get() }
+    *unsafe { RUNS.get() }
 }
 
 /// Below this a region is refused outright: every shader would fail the same
@@ -1338,10 +1336,10 @@ mod lend_tests {
         drop(mine);
     }
 
-    /// shc_online_compiles counts a compile the cache could not answer, and
-    /// not one it answered.
+    /// shc_online_compiler_runs counts a compile the cache could not answer,
+    /// and not one it answered.
     #[test]
-    fn the_compile_count_counts_compiles_not_cache_hits() {
+    fn the_compiler_run_count_counts_compiles_not_cache_hits() {
         let _serial = test_lock();
         let f = super::super::backend::SHC_ONLINE.compile.unwrap();
         /* Text no other test compiles, so the first compile is a miss. */
@@ -1361,11 +1359,11 @@ mod lend_tests {
             assert_eq!(rc, 0);
             sh
         };
-        let n0 = shc_online_compiles();
+        let n0 = shc_online_compiler_runs();
         let a = compile();
-        assert_eq!(shc_online_compiles(), n0.wrapping_add(1), "a miss is one compile");
+        assert_eq!(shc_online_compiler_runs(), n0.wrapping_add(1), "a miss is one run");
         let b = compile();
-        assert_eq!(shc_online_compiles(), n0.wrapping_add(1), "a cache hit is not a compile");
+        assert_eq!(shc_online_compiler_runs(), n0.wrapping_add(1), "a cache hit is not a run");
         crate::shaderc::release_shader(&b);
         crate::shaderc::release_shader(&a);
     }

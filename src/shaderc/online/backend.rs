@@ -652,7 +652,6 @@ fn compile_and_publish_keyed(
     end: store::KeepEnd,
     log: &mut CStrWriter,
 ) -> Result<&'static Compiled, i32> {
-    store::note_compile();
     /* The compile's keep arena. Dropped on every failure below, which gives
      * back whatever the code generator had already put in it. */
     let txn = open_keep(end, stage, log)?;
@@ -1211,7 +1210,6 @@ fn link_program(vr: &Compiled, fr: &Compiled, zero: &ZeroList, fs: &mut ShcShade
         retain(&hit.shader);
         hit
     } else {
-        store::note_compile();
         /* The program's record: the bottom of the region (store::KeepEnd). */
         let txn = match open_keep(store::KeepEnd::Low, SHC_STAGE_FRAGMENT, log) {
             Ok(t) => t,
@@ -1599,6 +1597,59 @@ mod tests {
     use std::vec::Vec;
 
     use super::store::test_lock;
+
+    /// The known positive for the compiler-run counter on the GC7000, every
+    /// path a draw can take to the compiler: a stage compile, the link's
+    /// source check, the sampler-state question and a front-face variant each
+    /// move it; the same variant asked for again is a cache hit and does not.
+    /// A board record's "0 compiler runs" means none of these ran.
+    #[test]
+    #[cfg(feature = "gpu-vivante")]
+    fn every_draw_time_compiler_path_moves_the_run_counter_on_the_gc7000() {
+        let _serial = test_lock();
+        let runs = store::shc_online_compiler_runs;
+        /* Text no other test compiles, so nothing is a cache hit by accident. */
+        let vs_src = b"attribute vec4 p; varying vec2 t; void main(){ t = p.xy; gl_Position = p; } // runs vs\n\0";
+        let fs_src = b"precision mediump float; uniform sampler2D s; varying vec2 t;\n\
+            void main(){ gl_FragColor = gl_FrontFacing ? texture2D(s, t) : vec4(0.0); } // runs fs\n\0";
+        let mut vs = ShcShader::ZERO;
+        let mut fs = ShcShader::ZERO;
+        let n0 = runs();
+        // SAFETY: NUL-terminated sources, real outputs, no logs.
+        unsafe {
+            assert_eq!(
+                online_compile(SHC_STAGE_VERTEX, vs_src.as_ptr() as *const c_char, &mut vs, core::ptr::null_mut(), 0),
+                0
+            );
+            assert_eq!(
+                online_compile(SHC_STAGE_FRAGMENT, fs_src.as_ptr() as *const c_char, &mut fs, core::ptr::null_mut(), 0),
+                0
+            );
+        }
+        assert_eq!(runs().wrapping_sub(n0), 2, "two stage compiles");
+        let n1 = runs();
+        // SAFETY: two shaders this back end compiled; no log.
+        assert_eq!(unsafe { online_link(&vs, &mut fs, core::ptr::null_mut(), 0) }, 0);
+        assert!(runs().wrapping_sub(n1) >= 1, "the link's source check runs the front end");
+        let n2 = runs();
+        // SAFETY: a shader this back end compiled.
+        let _ = unsafe { online_lod_sensitivity(&fs) };
+        assert_eq!(runs().wrapping_sub(n2), 1, "the sampler-state question runs the front end");
+        let n3 = runs();
+        let mut flipped = ShcShader::ZERO;
+        let key = crate::shaderc::SHC_VIV_KEY_FRONT_FLIPPED;
+        // SAFETY: a shader this back end compiled, a real output, no log.
+        assert_eq!(unsafe { online_blend_variant(&fs, key, &mut flipped, core::ptr::null_mut(), 0) }, 0);
+        assert_eq!(runs().wrapping_sub(n3), 1, "the front-face variant is a compile");
+        let n4 = runs();
+        let mut again = ShcShader::ZERO;
+        // SAFETY: as above.
+        assert_eq!(unsafe { online_blend_variant(&fs, key, &mut again, core::ptr::null_mut(), 0) }, 0);
+        assert_eq!(runs(), n4, "asked again it is a cache hit");
+        for sh in [&again, &flipped, &fs, &vs] {
+            release(sh);
+        }
+    }
 
     /// Run `online_compile` on `text`; the code and the log come back.
     fn compile(stage: u32, text: &[u8]) -> (i32, String) {
