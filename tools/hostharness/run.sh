@@ -106,9 +106,7 @@ build() {
         # build is the dev-lto profile (dev semantics, one object)
         pkg=(-p yakogl-capi)
         staticlib=libyakogl_capi.a
-        features=osal-linux
-        # a tree with the explicit PowerVR feature (the others build it implicitly)
-        grep -q '^gpu-powervr' "$src/Cargo.toml" && features=osal-linux,gpu-powervr
+        features=osal-linux,gpu-powervr
         if [ "$profile" != release ]; then
           pargs=(--profile dev-lto)
           pdir="${pdir%debug}dev-lto"

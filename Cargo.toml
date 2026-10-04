@@ -71,7 +71,8 @@ osal-baremetal = []
 report-es2 = []
 # The GPU whose backend and offline shader table are compiled in. Exactly one
 # of `gpu-powervr`, `gpu-vivante` and `gpu-v3d` is in a build (src/lib.rs
-# refuses none and two), so `default` names none: every build says its GPU.
+# refuses none and two). `default` names none: a default GPU would be wrong on
+# two boards of three and would make `--features gpu-vivante` a two-GPU build.
 #
 # The AM62P's PowerVR BXS-4-64 (`pvr/`).
 gpu-powervr = []
