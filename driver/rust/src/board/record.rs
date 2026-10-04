@@ -172,11 +172,11 @@ kinds! {
          failed later; w1 = the run's return code as int8 | the cause (CHECK_RUN_*) << 8 | \
          draws the GL core refused (yakogl_draws_refused) << 12 | compiler runs in the \
          failing frame << 20 (6 bits) | its slowest GL call class (CHECK_RUN_GL_*) << 26 \
-         (4 bits), w2 = the animation frame (1 = the first after the check; 0 none; 8 \
+         (4 bits) | its iteration's GPU waits that timed out << 30 (2 bits), w2 = the animation frame (1 = the first after the check; 0 none; 8 \
          bits) | that frame's draw in ms << 8 (12 bits) | the ms of it spent in the timed \
          GL calls << 20 (12 bits), w3 = the online compiler's keep high-water in KiB (11 \
          bits) | the cause's detail in ms << 11 (13 bits: how long the wait or the frame \
-         took) | the slowest class's share of the GL ms in % << 24; every field \
+         took) | the time its iteration waited for the GPU, 16 ms units, << 24; every field \
          saturates one below its largest value, which means not measured";
 }
 
@@ -354,6 +354,8 @@ values! {
     CHECK_RUN_RUNS_MAX = 0x3f;
     CHECK_RUN_CLASS_SHIFT = 26;
     CHECK_RUN_CLASS_MAX = 0xf;
+    CHECK_RUN_TIMEOUTS_SHIFT = 30;
+    CHECK_RUN_TIMEOUTS_MAX = 0x3;
     // w2:
     CHECK_RUN_FRAME_MAX = 0xff;
     CHECK_RUN_DRAW_SHIFT = 8;
@@ -364,8 +366,8 @@ values! {
     CHECK_RUN_KEEP_MAX = 0x7ff;
     CHECK_RUN_DETAIL_SHIFT = 11;
     CHECK_RUN_DETAIL_MAX = 0x1fff;
-    CHECK_RUN_SHARE_SHIFT = 24;
-    CHECK_RUN_SHARE_MAX = 0xff;
+    CHECK_RUN_WAIT_SHIFT = 24;
+    CHECK_RUN_WAIT_MAX = 0xff;
     // the timed GL call classes (cluster main.c enum gl_timed)
     CHECK_RUN_GL_COMPILE = 0;
     CHECK_RUN_GL_LINK = 1;
@@ -423,7 +425,10 @@ pub struct CheckRun {
     pub gl_ms: u32,
     pub keep_kib: u32,
     pub detail_ms: u32,
-    pub share: u32,
+    /// The time the frame's iteration waited for the GPU, in 16 ms units.
+    pub wait_16ms: u32,
+    /// The waits for a kick that timed out (the OSAL's 2 s bound).
+    pub timeouts: u32,
 }
 
 /// kind CHECK, tag CHECK_RUN's w1..w3 (the C side packs the same with the
@@ -434,13 +439,14 @@ pub const fn check_run_words(r: &CheckRun) -> [u32; 3] {
             | check_run_field(r.cause, CHECK_RUN_CAUSE_MAX) << CHECK_RUN_CAUSE_SHIFT
             | check_run_field(r.refused, CHECK_RUN_REFUSED_MAX) << CHECK_RUN_REFUSED_SHIFT
             | check_run_field(r.runs, CHECK_RUN_RUNS_MAX) << CHECK_RUN_RUNS_SHIFT
-            | check_run_field(r.class, CHECK_RUN_CLASS_MAX) << CHECK_RUN_CLASS_SHIFT,
+            | check_run_field(r.class, CHECK_RUN_CLASS_MAX) << CHECK_RUN_CLASS_SHIFT
+            | check_run_field(r.timeouts, CHECK_RUN_TIMEOUTS_MAX) << CHECK_RUN_TIMEOUTS_SHIFT,
         check_run_field(r.frame, CHECK_RUN_FRAME_MAX)
             | check_run_field(r.draw_ms, CHECK_RUN_DRAW_MAX) << CHECK_RUN_DRAW_SHIFT
             | check_run_field(r.gl_ms, CHECK_RUN_GLMS_MAX) << CHECK_RUN_GLMS_SHIFT,
         check_run_field(r.keep_kib, CHECK_RUN_KEEP_MAX)
             | check_run_field(r.detail_ms, CHECK_RUN_DETAIL_MAX) << CHECK_RUN_DETAIL_SHIFT
-            | check_run_field(r.share, CHECK_RUN_SHARE_MAX) << CHECK_RUN_SHARE_SHIFT,
+            | check_run_field(r.wait_16ms, CHECK_RUN_WAIT_MAX) << CHECK_RUN_WAIT_SHIFT,
     ]
 }
 
@@ -1165,18 +1171,17 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
                     CHECK_RUN_GLMS_MAX => out.write_str(", GL calls not timed")?,
                     ms => write!(out, ", {ms} ms in GL calls")?,
                 }
+                match f(w1, CHECK_RUN_CLASS_SHIFT, CHECK_RUN_CLASS_MAX) {
+                    CHECK_RUN_CLASS_MAX => {}
+                    c => write!(out, ", most in {}", CHECK_RUN_GL_NAMES.get(c as usize).copied().unwrap_or("?"))?,
+                }
                 match (
-                    f(w1, CHECK_RUN_CLASS_SHIFT, CHECK_RUN_CLASS_MAX),
-                    f(w3, CHECK_RUN_SHARE_SHIFT, CHECK_RUN_SHARE_MAX),
+                    f(w3, CHECK_RUN_WAIT_SHIFT, CHECK_RUN_WAIT_MAX),
+                    f(w1, CHECK_RUN_TIMEOUTS_SHIFT, CHECK_RUN_TIMEOUTS_MAX),
                 ) {
-                    (CHECK_RUN_CLASS_MAX, _) => {}
-                    (c, pct) => {
-                        let name = CHECK_RUN_GL_NAMES.get(c as usize).copied().unwrap_or("?");
-                        match pct {
-                            CHECK_RUN_SHARE_MAX => write!(out, ", most in {name}")?,
-                            p => write!(out, ", {p}% of it in {name}")?,
-                        }
-                    }
+                    (CHECK_RUN_WAIT_MAX, _) => out.write_str(", GPU waits not measured")?,
+                    (w, CHECK_RUN_TIMEOUTS_MAX) => write!(out, ", about {} ms waiting for the GPU", w * 16)?,
+                    (w, t) => write!(out, ", about {} ms waiting for the GPU, {t} waits timed out", w * 16)?,
                 }
                 match f(w1, CHECK_RUN_RUNS_SHIFT, CHECK_RUN_RUNS_MAX) {
                     CHECK_RUN_RUNS_MAX => out.write_str(", compiler runs not counted")?,
@@ -1263,13 +1268,14 @@ mod tests {
             gl_ms: 2600,
             keep_kib: 464,
             detail_ms: 2787,
-            share: 91,
+            wait_16ms: 170,
+            timeouts: 1,
         };
         let w = check_run_words(&r);
         assert_eq!(w[0] & 0xff, (-116i32 as u32) & 0xff);
-        assert_eq!(((w[0] >> 8) & 0xf, (w[0] >> 20) & 0x3f, (w[0] >> 26) & 0xf), (2, 0, 5));
+        assert_eq!(((w[0] >> 8) & 0xf, (w[0] >> 20) & 0x3f, (w[0] >> 26) & 0xf, w[0] >> 30), (2, 0, 5, 1));
         assert_eq!((w[1] & 0xff, (w[1] >> 8) & 0xfff, w[1] >> 20), (2, 2782, 2600));
-        assert_eq!((w[2] & 0x7ff, (w[2] >> 11) & 0x1fff, w[2] >> 24), (464, 2787, 91));
+        assert_eq!((w[2] & 0x7ff, (w[2] >> 11) & 0x1fff, w[2] >> 24), (464, 2787, 170));
         let big = check_run_words(&CheckRun { frame: 900, draw_ms: 9000, runs: 500, keep_kib: 5000, ..r });
         assert_eq!((big[1] & 0xff, (big[1] >> 8) & 0xfff), (0xfe, 0xffe), "saturated, not absent");
         assert_eq!(((big[0] >> 20) & 0x3f, big[2] & 0x7ff), (0x3e, 0x7fe));
@@ -1278,11 +1284,12 @@ mod tests {
             class: CHECK_RUN_CLASS_MAX,
             draw_ms: CHECK_RUN_DRAW_MAX,
             gl_ms: CHECK_RUN_GLMS_MAX,
-            share: CHECK_RUN_SHARE_MAX,
+            wait_16ms: CHECK_RUN_WAIT_MAX,
+            timeouts: CHECK_RUN_TIMEOUTS_MAX,
             ..r
         });
         assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_DRAW_MAX, CHECK_RUN_GLMS_MAX));
-        assert_eq!(((none[0] >> 20) & 0x3f, (none[0] >> 26) & 0xf, none[2] >> 24), (0x3f, 0xf, 0xff));
+        assert_eq!(((none[0] >> 20) & 0x3f, (none[0] >> 26) & 0xf, none[0] >> 30, none[2] >> 24), (0x3f, 0xf, 3, 0xff));
     }
 
     /// A fixed buffer for `fmt::Write` (the crate has no allocator).

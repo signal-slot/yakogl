@@ -69,6 +69,9 @@
 int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
 uint32_t shc_online_compiler_runs(void);                  /* gles_shaderc.h */
 #endif
+#ifdef CONFIG_YAKOGL_GPU_VIVANTE
+void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us); /* osal_internal.h */
+#endif
 
 #define WIN_W CONFIG_CLUSTER_PANEL_WIDTH
 #define WIN_H CONFIG_CLUSTER_PANEL_HEIGHT
@@ -171,7 +174,8 @@ void cluster_board_finish(uint32_t w, uint32_t h, uint8_t stage, uint32_t status
  * calls not listed here. FemtoVG resolves its GL entry points once, at the
  * first frame, so the wrappers stay in place in the animation, where each
  * iteration is timed afresh and a failed run's record carries the failing
- * frame's GL ms, its slowest class and that class's share (CHECK_RUN). */
+ * frame's GL ms and its slowest class, beside the GPU waits the GC7000 OSAL
+ * counts (CHECK_RUN). */
 enum gl_timed {
 	GT_COMPILE,
 	GT_LINK,
@@ -394,8 +398,23 @@ static uint32_t us_since(uint32_t c0)
  * frame's start). Outside the animation loop nothing is measured. */
 static struct {
 	bool live;
-	uint32_t runs0, draw_ms;
+	uint32_t runs0, draw_ms, timeouts0;
+	uint64_t wait_us0;
 } s_frame;
+
+/* The GC7000 OSAL's kick waits so far: false where the OSAL does not count
+ * them (the PowerVR's and the V3D's do not yet). */
+static bool waits_now(uint32_t *timeouts, uint64_t *wait_us)
+{
+#ifdef CONFIG_YAKOGL_GPU_VIVANTE
+	osal_gc_wait_stats(NULL, timeouts, wait_us, NULL);
+	return true;
+#else
+	*timeouts = 0u;
+	*wait_us = 0u;
+	return false;
+#endif
+}
 
 /* The online compiler's run count; 0 without it (never read then). */
 static uint32_t runs_now(void)
@@ -417,10 +436,11 @@ static void gt_reset(void)
 /* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
  * first cause only, with the animation frame it happened in, a detail in ms
  * (how long the wait or the frame took), that frame's draw time, the ms of
- * it in the timed GL calls, the slowest class and its share, and the
+ * it in the timed GL calls and the slowest class, the time its iteration
+ * waited for the GPU (16 ms units) and the waits that timed out, and the
  * compiler runs; each its CHECK_RUN_*_MAX ("not measured") when it was not. */
 static struct {
-	uint32_t cause, frame, detail_ms, draw_ms, gl_ms, cls, share, runs;
+	uint32_t cause, frame, detail_ms, draw_ms, gl_ms, cls, wait16, timeouts, runs;
 } s_run_fail;
 
 static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
@@ -434,7 +454,8 @@ static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 	s_run_fail.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
 	s_run_fail.gl_ms = YK_RECORD_CHECK_RUN_GLMS_MAX;
 	s_run_fail.cls = YK_RECORD_CHECK_RUN_CLASS_MAX;
-	s_run_fail.share = YK_RECORD_CHECK_RUN_SHARE_MAX;
+	s_run_fail.wait16 = YK_RECORD_CHECK_RUN_WAIT_MAX;
+	s_run_fail.timeouts = YK_RECORD_CHECK_RUN_TIMEOUTS_MAX;
 	s_run_fail.runs = YK_RECORD_CHECK_RUN_RUNS_MAX;
 	if (!s_frame.live) {
 		return;
@@ -450,8 +471,13 @@ static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 		}
 	}
 	s_run_fail.gl_ms = (uint32_t)(k_cyc_to_us_floor64(total) / 1000u);
-	if (total != 0u) {
-		s_run_fail.share = (uint32_t)(top * 100u / total);
+	(void)top;
+	uint32_t timeouts;
+	uint64_t wait_us;
+
+	if (waits_now(&timeouts, &wait_us)) {
+		s_run_fail.wait16 = (uint32_t)((wait_us - s_frame.wait_us0) / 16000u);
+		s_run_fail.timeouts = timeouts - s_frame.timeouts0;
 	}
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
 	s_run_fail.runs = runs_now() - s_frame.runs0;
@@ -473,13 +499,14 @@ static void check_run_words(int rc, uint32_t refused, uint32_t keep_kib, uint32_
 	w[0] = ((uint32_t)rc & 0xffu) | check_run_field(cause, YK_RECORD_CHECK_RUN_CAUSE_MAX) << YK_RECORD_CHECK_RUN_CAUSE_SHIFT |
 	       check_run_field(refused, YK_RECORD_CHECK_RUN_REFUSED_MAX) << YK_RECORD_CHECK_RUN_REFUSED_SHIFT |
 	       check_run_field(s_run_fail.runs, YK_RECORD_CHECK_RUN_RUNS_MAX) << YK_RECORD_CHECK_RUN_RUNS_SHIFT |
-	       check_run_field(s_run_fail.cls, YK_RECORD_CHECK_RUN_CLASS_MAX) << YK_RECORD_CHECK_RUN_CLASS_SHIFT;
+	       check_run_field(s_run_fail.cls, YK_RECORD_CHECK_RUN_CLASS_MAX) << YK_RECORD_CHECK_RUN_CLASS_SHIFT |
+	       check_run_field(s_run_fail.timeouts, YK_RECORD_CHECK_RUN_TIMEOUTS_MAX) << YK_RECORD_CHECK_RUN_TIMEOUTS_SHIFT;
 	w[1] = check_run_field(s_run_fail.frame, YK_RECORD_CHECK_RUN_FRAME_MAX) |
 	       check_run_field(s_run_fail.draw_ms, YK_RECORD_CHECK_RUN_DRAW_MAX) << YK_RECORD_CHECK_RUN_DRAW_SHIFT |
 	       check_run_field(s_run_fail.gl_ms, YK_RECORD_CHECK_RUN_GLMS_MAX) << YK_RECORD_CHECK_RUN_GLMS_SHIFT;
 	w[2] = check_run_field(keep_kib, YK_RECORD_CHECK_RUN_KEEP_MAX) |
 	       check_run_field(s_run_fail.detail_ms, YK_RECORD_CHECK_RUN_DETAIL_MAX) << YK_RECORD_CHECK_RUN_DETAIL_SHIFT |
-	       check_run_field(s_run_fail.share, YK_RECORD_CHECK_RUN_SHARE_MAX) << YK_RECORD_CHECK_RUN_SHARE_SHIFT;
+	       check_run_field(s_run_fail.wait16, YK_RECORD_CHECK_RUN_WAIT_MAX) << YK_RECORD_CHECK_RUN_WAIT_SHIFT;
 }
 
 /* Each EGL call is checked on its own: eglGetError reports the LAST call. */
@@ -726,6 +753,7 @@ static int animate(void)
 		s_ui_clock_ms = s_seq.frame_ms[2] + (uint64_t)t; /* on from the checked frame */
 		s_frame.live = true;
 		s_frame.runs0 = runs_now();
+		(void)waits_now(&s_frame.timeouts0, &s_frame.wait_us0);
 		s_frame.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
 		gt_reset();
 		s_gl_timing = true;
