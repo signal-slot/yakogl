@@ -279,6 +279,9 @@ struct Mock {
     /// kick (src/pvr/backend.rs `pvr_backend_free_fence`), and an allocation
     /// past the budget waits for the submitted kicks and is tried once more.
     reclaim: bool,
+    /// OSAL_QUERY_CLOCK_NS through [`MOCK_OSAL_CLOCK`]: (the next answer,
+    /// the step each answer adds).
+    clock: (u64, u64),
 }
 
 impl Default for Mock {
@@ -323,6 +326,7 @@ impl Default for Mock {
             held: BTreeMap::new(),
             budget: None,
             reclaim: false,
+            clock: (0, 0),
         }
     }
 }
@@ -1026,6 +1030,25 @@ static MOCK_OSAL: OsalOps = OsalOps {
     thread_id: Some(m_thread_id),
 };
 
+/// [`MOCK_OSAL`] with a clock (OSAL_QUERY_CLOCK_NS) and nothing else to
+/// answer: [`TestGl::set_clock`] installs it, so every other test keeps an
+/// OSAL with no query at all.
+static MOCK_OSAL_CLOCK: OsalOps = OsalOps { query: Some(m_query_clock), ..MOCK_OSAL };
+
+unsafe extern "C" fn m_query_clock(what: u32, out: *mut c_void, out_sz: usize) -> i32 {
+    if what != crate::osal::OSAL_QUERY_CLOCK_NS || out.is_null() || out_sz != 8 {
+        return -crate::util::ENOTSUP;
+    }
+    let ns = with_mock(|m| {
+        let now = m.clock.0;
+        m.clock.0 += m.clock.1;
+        now
+    });
+    // SAFETY: a u64 out-parameter of the size given.
+    unsafe { *(out as *mut u64) = ns };
+    0
+}
+
 /// Register a map_phys-style mapping of `size` bytes of the test's own
 /// memory at `cpu` (null: no CPU view) at device address `gpu`. It is
 /// coherent (no cache model), may be freed once, and bounds draws that
@@ -1626,6 +1649,15 @@ impl TestGl {
     /// OSAL with a full pending-free queue does; 0 accepts again.
     pub fn set_free_result(&self, code: i32) {
         with_mock(|m| m.free_result = code);
+    }
+
+    /// The OSAL answers OSAL_QUERY_CLOCK_NS from now on, starting at
+    /// `start` ns and moving `step` ns a read (`None`: the OSAL has no query
+    /// again, the default).
+    pub fn set_clock(&self, clock: Option<(u64, u64)>) {
+        with_mock(|m| m.clock = clock.unwrap_or((0, 0)));
+        // SAFETY: serialised by SERIAL (this TestGl holds it); the tables are statics.
+        unsafe { crate::osal::osal_set_ops(if clock.is_some() { &MOCK_OSAL_CLOCK } else { &MOCK_OSAL }) };
     }
 
     /// Fresh allocations are zeroed (`true`) or filled with [`FILL`] (the default).

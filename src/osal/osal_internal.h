@@ -95,11 +95,12 @@ struct osal_v3d_cpu_of {
  * the next kick, which never comes while nothing draws: the i.MX8MP's dEQP
  * texture.size ran out of the carveout that way (tools/cts/RESULTS.md). */
 #define OSAL_QUERY_GC_FRAME_OPEN 9u
-/* out = uint64_t: a monotonic clock in nanoseconds (Zephyr: the 64-bit cycle
- * counter, k_cycle_get_64). The V3D backend times its CPU texture tiling with
- * it (v3d_tiling_time); without an answer it counts each tiling as untimed,
- * never as zero time. */
-#define OSAL_QUERY_V3D_CLOCK_NS 10u
+/* out = uint64_t: a monotonic clock in nanoseconds (every Zephyr OSAL: the
+ * 64-bit cycle counter, zephyr_clock.h). The V3D backend times its CPU
+ * texture tiling with it (v3d_tiling_time), the GL core and the GC7000
+ * backend the steps of a draw (src/draw_steps.rs); without an answer each
+ * counts its time as not measured, never as zero. */
+#define OSAL_QUERY_CLOCK_NS 10u
 /* out = uint32_t: the smallest tiled image, in bytes, the V3D backend hands
  * to the texture formatting unit instead of tiling it on the CPU
  * (CONFIG_YAKOGL_V3D_TFU_MIN_BYTES on Zephyr), read at init. Answered only

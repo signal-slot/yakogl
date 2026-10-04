@@ -175,8 +175,9 @@ void cluster_board_finish(uint32_t w, uint32_t h, uint8_t stage, uint32_t status
  * calls not listed here. FemtoVG resolves its GL entry points once, at the
  * first frame, so the wrappers stay in place in the animation, where each
  * iteration is timed afresh and a failed run's record carries the failing
- * frame's GL ms and its slowest class, beside the GPU waits the GC7000 OSAL
- * counts (CHECK_RUN). */
+ * frame's slowest step (the other GL calls, or a step of glDraw* the
+ * library times, src/draw_steps.rs) and its ms, beside the GPU waits the
+ * GC7000 OSAL counts (CHECK_RUN). */
 enum gl_timed {
 	GT_COMPILE,
 	GT_LINK,
@@ -192,15 +193,20 @@ enum gl_timed {
 	GT_CLEAR,
 	GT_N
 };
-/* The class numbers are record.rs CHECK_RUN_GL_* (the record names the
- * slowest class of a failed frame); BUILD_ASSERT below keeps them equal. */
 static const char *const gt_name[GT_N] = { "glCompileShader", "glLinkProgram", "glTexImage2D",
 					   "glTexSubImage2D", "glBufferData", "glDraw*",
 					   "glUniform*", "framebuffer", "glDelete*",
 					   "glGenerateMipmap", "glReadPixels", "glClear" };
-BUILD_ASSERT(GT_COMPILE == YK_RECORD_CHECK_RUN_GL_COMPILE && GT_CLEAR == YK_RECORD_CHECK_RUN_GL_CLEAR &&
-		     GT_N == YK_RECORD_CHECK_RUN_GL_CLASSES,
-	     "record.rs CHECK_RUN_GL_* follow enum gl_timed");
+
+/* The library's draw steps (src/draw_steps.rs, STEPS): record.rs numbers
+ * them from CHECK_RUN_STEP_GL_PROGRAM, after the two this file measures
+ * (the other timed GL calls, glDraw* outside the steps). yakogl-tools
+ * pins the library's order to record.rs; the count is checked here at
+ * build time and against the library's answer at run time. */
+#define DRAW_STEPS 12
+BUILD_ASSERT(YK_RECORD_CHECK_RUN_STEPS == YK_RECORD_CHECK_RUN_STEP_GL_PROGRAM + DRAW_STEPS,
+	     "record.rs CHECK_RUN_STEP_* follow src/draw_steps.rs");
+int yakogl_draw_steps(uint64_t *out, size_t n, uint32_t *untimed); /* src/draw_steps.rs */
 static bool s_gl_timing;
 static uint32_t s_gt_calls[GT_N];
 static uint64_t s_gt_cycles[GT_N], s_gt_bytes[GT_N];
@@ -393,15 +399,23 @@ static uint32_t us_since(uint32_t c0)
 	return (uint32_t)k_cyc_to_us_floor64(k_cycle_get_32() - c0);
 }
 
-/* The animation frame being built: the compiler-run count at its start,
- * and how long its draw took (YK_RECORD_CHECK_RUN_DRAW_MAX, "not measured",
- * until it is known). Its GL calls are timed into s_gt_* (reset at the
- * frame's start). Outside the animation loop nothing is measured. */
+/* The animation frame being built: the compiler-run count, the GPU counts
+ * and the library's draw-step totals at its start (steps_ok false: the
+ * library could not time them). Its GL calls are timed into s_gt_* (reset
+ * at the frame's start). Outside the animation loop nothing is measured. */
 static struct {
-	bool live;
-	uint32_t runs0, draw_ms, timeouts0;
+	bool live, steps_ok;
+	uint32_t runs0, timeouts0;
 	uint64_t blocked_us0, busy_us0;
+	uint64_t steps0[DRAW_STEPS];
 } s_frame;
+
+/* The library's draw-step totals (ns) now; false when it has no clock or
+ * another count of steps. */
+static bool steps_now(uint64_t ns[DRAW_STEPS])
+{
+	return yakogl_draw_steps(ns, DRAW_STEPS, NULL) == DRAW_STEPS;
+}
 
 /* The GC7000 OSAL's counts so far: the time blocked on the GPU (fence waits,
  * and submits waiting for a free event), the waits that timed out, and the
@@ -443,14 +457,45 @@ static void gt_reset(void)
 
 /* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
  * first cause only, with the animation frame it happened in, a detail in ms
- * (how long the wait or the frame took), that frame's draw time and its
- * slowest timed GL class, the GPU's busy time over the iteration, the time
+ * (how long the wait or the frame took), that frame's slowest step and its
+ * ms (frame_slowest_step), the GPU's busy time over the iteration, the time
  * it was blocked on the GPU (fence waits and submits, 16 ms units) and the
  * waits that timed out, and the compiler runs; each its CHECK_RUN_*_MAX
  * ("not measured") when it was not. */
 static struct {
-	uint32_t cause, frame, detail_ms, draw_ms, busy_ms, cls, blocked16, timeouts, runs;
+	uint32_t cause, frame, detail_ms, step, step_ms, busy_ms, blocked16, timeouts, runs;
 } s_run_fail;
+
+/* The frame's slowest step (CHECK_RUN_STEP_*) into *step and its ms into
+ * *ms: the timed GL calls other than glDraw* together, glDraw* less the
+ * library's steps, and each of those steps. Without the library's steps
+ * the glDraw* step is the whole of glDraw*, which is what its name says. */
+static void frame_slowest_step(uint32_t *step, uint32_t *ms)
+{
+	uint64_t ns[YK_RECORD_CHECK_RUN_STEPS] = { 0 };
+	uint64_t lib[DRAW_STEPS], lib_sum = 0;
+	const bool timed = s_frame.steps_ok && steps_now(lib);
+
+	for (int i = 0; i < GT_N; i++) {
+		if (i != GT_DRAW) {
+			ns[YK_RECORD_CHECK_RUN_STEP_GL_CALLS] += k_cyc_to_ns_floor64(s_gt_cycles[i]);
+		}
+	}
+	for (int i = 0; timed && i < DRAW_STEPS; i++) {
+		ns[YK_RECORD_CHECK_RUN_STEP_GL_PROGRAM + i] = lib[i] - s_frame.steps0[i];
+		lib_sum += lib[i] - s_frame.steps0[i];
+	}
+	const uint64_t draw_ns = k_cyc_to_ns_floor64(s_gt_cycles[GT_DRAW]);
+
+	ns[YK_RECORD_CHECK_RUN_STEP_GL_DRAW_REST] = draw_ns > lib_sum ? draw_ns - lib_sum : 0u;
+	*step = 0u;
+	for (uint32_t i = 1; i < YK_RECORD_CHECK_RUN_STEPS; i++) {
+		if (ns[i] > ns[*step]) {
+			*step = i;
+		}
+	}
+	*ms = (uint32_t)(ns[*step] / 1000000u);
+}
 
 static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 {
@@ -460,27 +505,16 @@ static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 	s_run_fail.cause = cause;
 	s_run_fail.frame = frame;
 	s_run_fail.detail_ms = detail_ms;
-	s_run_fail.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
+	s_run_fail.step = YK_RECORD_CHECK_RUN_STEP_MAX;
+	s_run_fail.step_ms = YK_RECORD_CHECK_RUN_STEP_MS_MAX;
 	s_run_fail.busy_ms = YK_RECORD_CHECK_RUN_BUSY_MAX;
-	s_run_fail.cls = YK_RECORD_CHECK_RUN_CLASS_MAX;
 	s_run_fail.blocked16 = YK_RECORD_CHECK_RUN_BLOCKED_MAX;
 	s_run_fail.timeouts = YK_RECORD_CHECK_RUN_TIMEOUTS_MAX;
 	s_run_fail.runs = YK_RECORD_CHECK_RUN_RUNS_MAX;
 	if (!s_frame.live) {
 		return;
 	}
-	s_run_fail.draw_ms = s_frame.draw_ms;
-	uint64_t total = 0, top = 0;
-
-	for (int i = 0; i < GT_N; i++) {
-		total += s_gt_cycles[i];
-		if (s_gt_cycles[i] > top) {
-			top = s_gt_cycles[i];
-			s_run_fail.cls = (uint32_t)i;
-		}
-	}
-	(void)total;
-	(void)top;
+	frame_slowest_step(&s_run_fail.step, &s_run_fail.step_ms);
 	uint32_t timeouts;
 	uint64_t blocked_us, busy_us;
 
@@ -509,10 +543,10 @@ static void check_run_words(int rc, uint32_t refused, uint32_t keep_kib, uint32_
 	w[0] = ((uint32_t)rc & 0xffu) | check_run_field(cause, YK_RECORD_CHECK_RUN_CAUSE_MAX) << YK_RECORD_CHECK_RUN_CAUSE_SHIFT |
 	       check_run_field(refused, YK_RECORD_CHECK_RUN_REFUSED_MAX) << YK_RECORD_CHECK_RUN_REFUSED_SHIFT |
 	       check_run_field(s_run_fail.runs, YK_RECORD_CHECK_RUN_RUNS_MAX) << YK_RECORD_CHECK_RUN_RUNS_SHIFT |
-	       check_run_field(s_run_fail.cls, YK_RECORD_CHECK_RUN_CLASS_MAX) << YK_RECORD_CHECK_RUN_CLASS_SHIFT |
+	       check_run_field(s_run_fail.step, YK_RECORD_CHECK_RUN_STEP_MAX) << YK_RECORD_CHECK_RUN_STEP_SHIFT |
 	       check_run_field(s_run_fail.timeouts, YK_RECORD_CHECK_RUN_TIMEOUTS_MAX) << YK_RECORD_CHECK_RUN_TIMEOUTS_SHIFT;
 	w[1] = check_run_field(s_run_fail.frame, YK_RECORD_CHECK_RUN_FRAME_MAX) |
-	       check_run_field(s_run_fail.draw_ms, YK_RECORD_CHECK_RUN_DRAW_MAX) << YK_RECORD_CHECK_RUN_DRAW_SHIFT |
+	       check_run_field(s_run_fail.step_ms, YK_RECORD_CHECK_RUN_STEP_MS_MAX) << YK_RECORD_CHECK_RUN_STEP_MS_SHIFT |
 	       check_run_field(s_run_fail.busy_ms, YK_RECORD_CHECK_RUN_BUSY_MAX) << YK_RECORD_CHECK_RUN_BUSY_SHIFT;
 	w[2] = check_run_field(keep_kib, YK_RECORD_CHECK_RUN_KEEP_MAX) |
 	       check_run_field(s_run_fail.detail_ms, YK_RECORD_CHECK_RUN_DETAIL_MAX) << YK_RECORD_CHECK_RUN_DETAIL_SHIFT |
@@ -764,7 +798,7 @@ static int animate(void)
 		s_frame.live = true;
 		s_frame.runs0 = runs_now();
 		(void)gpu_now(&s_frame.timeouts0, &s_frame.blocked_us0, &s_frame.busy_us0);
-		s_frame.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
+		s_frame.steps_ok = steps_now(s_frame.steps0);
 		gt_reset();
 		s_gl_timing = true;
 		if (!eglMakeCurrent(s_dpy, s_surf[half], s_surf[half], s_ctx)) {
@@ -777,7 +811,6 @@ static int animate(void)
 		ret = slint_cluster_draw_frame(get_proc, WIN_W, WIN_H);
 		ft.draw_us = us_since(c);
 		s_gl_timing = false;
-		s_frame.draw_ms = ft.draw_us / 1000u;
 		if (ret) {
 			printk("cluster: animation frame %u: slint_cluster_draw_frame rc %d\n", drawn + 1, ret);
 			run_fail(YK_RECORD_CHECK_RUN_DRAW, drawn + 1, 0u);

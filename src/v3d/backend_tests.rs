@@ -304,7 +304,7 @@ struct Platform {
     split_zs: Option<u32>,
     /// What OSAL_QUERY_V3D_S8_STENCIL answers; `None`: no answer.
     s8_stencil: Option<u32>,
-    /// OSAL_QUERY_V3D_CLOCK_NS: (the next answer, the step each answer
+    /// OSAL_QUERY_CLOCK_NS: (the next answer, the step each answer
     /// advances it by); `None`: no answer.
     clock: Option<(u64, u64)>,
     /// The OSAL of the async swap: `submit` returns with the job running,
@@ -541,7 +541,7 @@ unsafe extern "C" fn p_query(what: u32, out: *mut c_void, out_sz: usize) -> i32 
             0
         });
     }
-    if what == crate::osal::OSAL_QUERY_V3D_CLOCK_NS && out_sz == 8 {
+    if what == crate::osal::OSAL_QUERY_CLOCK_NS && out_sz == 8 {
         return match with_platform(|p| p.clock.as_mut().map(|c| (c.0, c.0 += c.1).0)) {
             Some(ns) => {
                 // SAFETY: a u64 out-parameter.

@@ -87,6 +87,8 @@ pub mod util;
 pub mod osal;
 mod abi_layout;
 pub mod backend;
+/// Where a draw's CPU time goes, step by step (the GL core and the GC7000).
+pub mod draw_steps;
 /// The depth/stencil contents every backend keeps between kicks, and when
 /// a buffer may be let go.
 pub mod ds_retention;

@@ -31,8 +31,8 @@
  *                  older fence, its result
  *   completed   -> the same finish when FRDONE is already up, never blocking
  *   query       -> OSAL_QUERY_V3D_VPM_BYTES (the identified VPM), and the
- *                  others osal_internal.h names (OSAL_QUERY_V3D_CLOCK_NS: the
- *                  64-bit cycle counter in ns, for the backend's tiling time)
+ *                  others osal_internal.h names (OSAL_QUERY_CLOCK_NS: the
+ *                  64-bit cycle counter in ns, zephyr_clock.h)
  *
  * The board's display (the firmware framebuffer, through the mailbox) and its
  * bounded-lifetime watchdog are board support the application brings, as the
@@ -71,6 +71,7 @@
 #include "osal_internal.h"
 #include "osal_bounds.h"
 #include "osal_log.h"
+#include "zephyr_clock.h"
 #include "v3d_kick.h"
 #include "v3d.h"
 #include "v3d_job.h" /* v3d_job_pack_skip, v3d_job_pack_totals */
@@ -1370,19 +1371,8 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		return 0;
 	}
 #endif
-#ifdef CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
-	if (what == OSAL_QUERY_V3D_CLOCK_NS && out && out_sz == sizeof(uint64_t)) {
-		/* whole seconds and the remainder apart: the counter times 1e9
-		 * overflows 64 bits after about 341 s at the Pi 4's 54 MHz */
-		const uint64_t hz = (uint64_t)sys_clock_hw_cycles_per_sec();
-		const uint64_t cyc = k_cycle_get_64();
-
-		if (hz == 0)
-			return -ENOTSUP;
-		*(uint64_t *)out = cyc / hz * 1000000000ull + cyc % hz * 1000000000ull / hz;
-		return 0;
-	}
-#endif
+	if (what == OSAL_QUERY_CLOCK_NS)
+		return osal_zephyr_clock_ns(out, out_sz);
 	return -ENOTSUP;
 }
 

@@ -33,6 +33,7 @@ use super::context::{
 use super::framebuffer;
 use super::types::*;
 use crate::backend::{self, *};
+use crate::draw_steps::{self, Step};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::shaderc::{self, *};
 use crate::util::{self, Bytes, FmtBuf, Global};
@@ -2816,6 +2817,8 @@ fn build_common(
     const FUNC: &str = "build_common";
 
     *d = GlesDraw::ZERO;
+    /* each section below is a step of draw_steps.rs */
+    let mut clock = draw_steps::Timer::start();
 
     if obj_index(program) < MAX_PROGRAMS {
         resolve_sampled_depth(c, program);
@@ -2964,6 +2967,8 @@ fn build_common(
     }
     resolve_ds_storage(c, d);
 
+    clock.lap(Step::GlProgram);
+
     /* uniforms: upload each stage's block (VS at 0, FS after it, 16-byte
      * aligned for the DMA) and point the stage at its block. The FS block
      * is the variant's: a CONSTANT_* blend variant reads glBlendColor from
@@ -3065,6 +3070,8 @@ fn build_common(
             return Err((GL_OUT_OF_MEMORY, FUNC));
         }
     }
+
+    clock.lap(Step::GlUniforms);
 
     /* attributes: each VS input, resolved through the VS attrib map */
     let mut na = 0usize;
@@ -3282,6 +3289,8 @@ fn build_common(
     }
     d.num_attribs = na as u8;
 
+    clock.lap(Step::GlAttribs);
+
     /* Textures: each sampler binding of a stage reads the texture bound to
      * the unit its glUniform1i named; GlesTextureBind::unit is the sampler
      * binding (the descriptor slot), not the GL unit. The vertex stage has
@@ -3487,6 +3496,8 @@ fn build_common(
         }
     }
 
+    clock.lap(Step::GlTextures);
+
     /* fixed-function render state */
     d.depth_range = c.depth_range;
     d.viewport = c.viewport;
@@ -3542,6 +3553,7 @@ fn build_common(
         (d.color_write, d.color_mask) = (false, 0);
     }
 
+    clock.lap(Step::GlState);
     Ok(())
 }
 
@@ -4344,6 +4356,33 @@ mod tests {
         assert_eq!(d.blend_eq_alpha as u32, SHC_BLEND_ADD);
         assert_eq!(d.blend_color, [0.25, 0.5, 0.75, 1.0]);
         assert_eq!(d.color_mask, 0b0101, "bit 0 R, 1 G, 2 B, 3 A");
+    }
+
+    /// Each section of the GL core's draw is counted under its step
+    /// (draw_steps.rs): with a clock that moves 1000 ns a read, each
+    /// section's one lap is 1000 ns, and the mock backend times nothing.
+    #[test]
+    fn a_draw_counts_each_gl_core_section_under_its_step() {
+        use crate::draw_steps::{Step, STEPS};
+        let gl = Gl::new(16, 16);
+        basic(&gl);
+        gl.set_clock(Some((1_000_000, 1000)));
+        let now = || {
+            let mut ns = [0u64; STEPS];
+            // SAFETY: STEPS u64s; no untimed out-parameter.
+            let n = unsafe { draw_steps::yakogl_draw_steps(ns.as_mut_ptr(), STEPS, core::ptr::null_mut()) };
+            assert_eq!(n as usize, STEPS, "the OSAL has a clock");
+            ns
+        };
+        let before = now();
+        let _ = draw_tri(&gl);
+        let after = now();
+        let delta: Vec<u64> = after.iter().zip(before.iter()).map(|(a, b)| a - b).collect();
+        for s in [Step::GlProgram, Step::GlUniforms, Step::GlAttribs, Step::GlTextures, Step::GlState] {
+            assert_eq!(delta[s as usize], 1000, "{s:?}: {delta:?}");
+        }
+        assert_eq!(delta.iter().sum::<u64>(), 5000, "the mock backend times nothing: {delta:?}");
+        gl.set_clock(None);
     }
 
     #[test]

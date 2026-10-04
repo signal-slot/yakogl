@@ -171,9 +171,9 @@ kinds! {
          (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
          failed later; w1 = the run's return code as int8 | the cause (CHECK_RUN_*) << 8 | \
          draws the GL core refused (yakogl_draws_refused) << 12 | compiler runs in the \
-         failing frame << 20 (6 bits) | its slowest GL call class (CHECK_RUN_GL_*) << 26 \
+         failing frame << 20 (6 bits) | its slowest step (CHECK_RUN_STEP_*) << 26 \
          (4 bits) | its iteration's GPU waits that timed out << 30 (2 bits), w2 = the animation frame (1 = the first after the check; 0 none; 8 \
-         bits) | that frame's draw in ms << 8 (12 bits) | the GPU's busy ms over its \
+         bits) | that step's ms in the frame << 8 (12 bits) | the GPU's busy ms over its \
          iteration << 20 (12 bits), w3 = the online compiler's keep high-water in KiB (11 \
          bits) | the cause's detail in ms << 11 (13 bits: how long the wait or the frame \
          took) | the time its iteration was blocked on the GPU (fence waits and submits \
@@ -353,14 +353,14 @@ values! {
     CHECK_RUN_REFUSED_MAX = 0xff;
     CHECK_RUN_RUNS_SHIFT = 20;
     CHECK_RUN_RUNS_MAX = 0x3f;
-    CHECK_RUN_CLASS_SHIFT = 26;
-    CHECK_RUN_CLASS_MAX = 0xf;
+    CHECK_RUN_STEP_SHIFT = 26;
+    CHECK_RUN_STEP_MAX = 0xf;
     CHECK_RUN_TIMEOUTS_SHIFT = 30;
     CHECK_RUN_TIMEOUTS_MAX = 0x3;
     // w2:
     CHECK_RUN_FRAME_MAX = 0xff;
-    CHECK_RUN_DRAW_SHIFT = 8;
-    CHECK_RUN_DRAW_MAX = 0xfff;
+    CHECK_RUN_STEP_MS_SHIFT = 8;
+    CHECK_RUN_STEP_MS_MAX = 0xfff;
     CHECK_RUN_BUSY_SHIFT = 20;
     CHECK_RUN_BUSY_MAX = 0xfff;
     // w3:
@@ -369,37 +369,48 @@ values! {
     CHECK_RUN_DETAIL_MAX = 0x1fff;
     CHECK_RUN_BLOCKED_SHIFT = 24;
     CHECK_RUN_BLOCKED_MAX = 0xff;
-    // the timed GL call classes (cluster main.c enum gl_timed)
-    CHECK_RUN_GL_COMPILE = 0;
-    CHECK_RUN_GL_LINK = 1;
-    CHECK_RUN_GL_TEXIMAGE = 2;
-    CHECK_RUN_GL_TEXSUB = 3;
-    CHECK_RUN_GL_BUFFER = 4;
-    CHECK_RUN_GL_DRAW = 5;
-    CHECK_RUN_GL_UNIFORM = 6;
-    CHECK_RUN_GL_FBO = 7;
-    CHECK_RUN_GL_DELETE = 8;
-    CHECK_RUN_GL_MIPMAP = 9;
-    CHECK_RUN_GL_READ = 10;
-    CHECK_RUN_GL_CLEAR = 11;
-    CHECK_RUN_GL_CLASSES = 12;
+    // the steps of a frame, the slowest of which CHECK_RUN names: the
+    // GL calls the cluster times other than glDraw*, glDraw* outside the
+    // steps the library times, and those steps (src/draw_steps.rs Step,
+    // numbered from CHECK_RUN_STEP_GL_PROGRAM)
+    CHECK_RUN_STEP_GL_CALLS = 0;
+    CHECK_RUN_STEP_GL_DRAW_REST = 1;
+    CHECK_RUN_STEP_GL_PROGRAM = 2;
+    CHECK_RUN_STEP_GL_UNIFORMS = 3;
+    CHECK_RUN_STEP_GL_ATTRIBS = 4;
+    CHECK_RUN_STEP_GL_TEXTURES = 5;
+    CHECK_RUN_STEP_GL_STATE = 6;
+    CHECK_RUN_STEP_GC_REST = 7;
+    CHECK_RUN_STEP_GC_DS = 8;
+    CHECK_RUN_STEP_GC_TILED_COPY = 9;
+    CHECK_RUN_STEP_GC_FRAME = 10;
+    CHECK_RUN_STEP_GC_UNIFORMS = 11;
+    CHECK_RUN_STEP_GC_VERTEX = 12;
+    CHECK_RUN_STEP_GC_EMIT = 13;
+    CHECK_RUN_STEPS = 14;
 }
 
-/// The GL call class names, by CHECK_RUN_GL_* number.
-pub const CHECK_RUN_GL_NAMES: [&str; CHECK_RUN_GL_CLASSES as usize] = [
-    "glCompileShader",
-    "glLinkProgram",
-    "glTexImage2D",
-    "glTexSubImage2D",
-    "glBufferData",
-    "glDraw*",
-    "glUniform*",
-    "framebuffer",
-    "glDelete*",
-    "glGenerateMipmap",
-    "glReadPixels",
-    "glClear",
+/// The step names, by CHECK_RUN_STEP_* number.
+pub const CHECK_RUN_STEP_NAMES: [&str; CHECK_RUN_STEPS as usize] = [
+    "the other timed GL calls",
+    "glDraw* outside the timed steps",
+    "the GL core's program and variants",
+    "the GL core's uniforms",
+    "the GL core's attributes",
+    "the GL core's textures",
+    "the GL core's fixed-function state",
+    "the GC7000 draw's bookkeeping",
+    "the GC7000 depth/stencil surface",
+    "the GC7000 tiled copies",
+    "the GC7000 frame submit and open",
+    "the GC7000 uniforms",
+    "the GC7000 vertex input and indices",
+    "the GC7000 command stream",
 ];
+
+/* every step number (0..CHECK_RUN_STEPS) stays below the saturated value,
+ * CHECK_RUN_STEP_MAX - 1 */
+const _: () = assert!(CHECK_RUN_STEPS < CHECK_RUN_STEP_MAX);
 
 /// One CHECK_RUN field: `v` saturated one below `max`, `max` itself (not
 /// measured) passed through.
@@ -420,9 +431,11 @@ pub struct CheckRun {
     pub cause: u32,
     pub refused: u32,
     pub runs: u32,
-    pub class: u32,
+    /// The frame's slowest step (CHECK_RUN_STEP_*).
+    pub step: u32,
     pub frame: u32,
-    pub draw_ms: u32,
+    /// That step's time in the frame.
+    pub step_ms: u32,
     /// The GPU's busy time over the frame's iteration (the driver's per-kick
     /// submit-to-done time, gc_render_perf).
     pub busy_ms: u32,
@@ -443,10 +456,10 @@ pub const fn check_run_words(r: &CheckRun) -> [u32; 3] {
             | check_run_field(r.cause, CHECK_RUN_CAUSE_MAX) << CHECK_RUN_CAUSE_SHIFT
             | check_run_field(r.refused, CHECK_RUN_REFUSED_MAX) << CHECK_RUN_REFUSED_SHIFT
             | check_run_field(r.runs, CHECK_RUN_RUNS_MAX) << CHECK_RUN_RUNS_SHIFT
-            | check_run_field(r.class, CHECK_RUN_CLASS_MAX) << CHECK_RUN_CLASS_SHIFT
+            | check_run_field(r.step, CHECK_RUN_STEP_MAX) << CHECK_RUN_STEP_SHIFT
             | check_run_field(r.timeouts, CHECK_RUN_TIMEOUTS_MAX) << CHECK_RUN_TIMEOUTS_SHIFT,
         check_run_field(r.frame, CHECK_RUN_FRAME_MAX)
-            | check_run_field(r.draw_ms, CHECK_RUN_DRAW_MAX) << CHECK_RUN_DRAW_SHIFT
+            | check_run_field(r.step_ms, CHECK_RUN_STEP_MS_MAX) << CHECK_RUN_STEP_MS_SHIFT
             | check_run_field(r.busy_ms, CHECK_RUN_BUSY_MAX) << CHECK_RUN_BUSY_SHIFT,
         check_run_field(r.keep_kib, CHECK_RUN_KEEP_MAX)
             | check_run_field(r.detail_ms, CHECK_RUN_DETAIL_MAX) << CHECK_RUN_DETAIL_SHIFT
@@ -1163,17 +1176,22 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
                 };
                 write!(
                     out,
-                    "run: the check passed, the run failed later: {cause} at frame {} ({} ms; its draw ",
+                    "run: the check passed, the run failed later: {cause} at frame {} ({} ms; ",
                     f(w2, 0, CHECK_RUN_FRAME_MAX),
                     f(w3, CHECK_RUN_DETAIL_SHIFT, CHECK_RUN_DETAIL_MAX)
                 )?;
-                match f(w2, CHECK_RUN_DRAW_SHIFT, CHECK_RUN_DRAW_MAX) {
-                    CHECK_RUN_DRAW_MAX => out.write_str("not measured")?,
-                    ms => write!(out, "{ms} ms")?,
-                }
-                match f(w1, CHECK_RUN_CLASS_SHIFT, CHECK_RUN_CLASS_MAX) {
-                    CHECK_RUN_CLASS_MAX => {}
-                    c => write!(out, ", most in {}", CHECK_RUN_GL_NAMES.get(c as usize).copied().unwrap_or("?"))?,
+                match (
+                    f(w1, CHECK_RUN_STEP_SHIFT, CHECK_RUN_STEP_MAX),
+                    f(w2, CHECK_RUN_STEP_MS_SHIFT, CHECK_RUN_STEP_MS_MAX),
+                ) {
+                    (CHECK_RUN_STEP_MAX, _) => out.write_str("its steps not measured")?,
+                    (st, ms) => {
+                        let name = CHECK_RUN_STEP_NAMES.get(st as usize).copied().unwrap_or("step ?");
+                        match ms {
+                            CHECK_RUN_STEP_MS_MAX => write!(out, "most in {name}, its time not measured")?,
+                            ms => write!(out, "most in {name}, {ms} ms")?,
+                        }
+                    }
                 }
                 match f(w2, CHECK_RUN_BUSY_SHIFT, CHECK_RUN_BUSY_MAX) {
                     CHECK_RUN_BUSY_MAX => out.write_str(", GPU busy not measured")?,
@@ -1266,9 +1284,9 @@ mod tests {
             cause: CHECK_RUN_OVER_BUDGET,
             refused: 0,
             runs: 0,
-            class: CHECK_RUN_GL_DRAW,
+            step: CHECK_RUN_STEP_GC_FRAME,
             frame: 2,
-            draw_ms: 2782,
+            step_ms: 2782,
             busy_ms: 2600,
             keep_kib: 464,
             detail_ms: 2787,
@@ -1277,22 +1295,22 @@ mod tests {
         };
         let w = check_run_words(&r);
         assert_eq!(w[0] & 0xff, (-116i32 as u32) & 0xff);
-        assert_eq!(((w[0] >> 8) & 0xf, (w[0] >> 20) & 0x3f, (w[0] >> 26) & 0xf, w[0] >> 30), (2, 0, 5, 1));
+        assert_eq!(((w[0] >> 8) & 0xf, (w[0] >> 20) & 0x3f, (w[0] >> 26) & 0xf, w[0] >> 30), (2, 0, 10, 1));
         assert_eq!((w[1] & 0xff, (w[1] >> 8) & 0xfff, w[1] >> 20), (2, 2782, 2600));
         assert_eq!((w[2] & 0x7ff, (w[2] >> 11) & 0x1fff, w[2] >> 24), (464, 2787, 170));
-        let big = check_run_words(&CheckRun { frame: 900, draw_ms: 9000, runs: 500, keep_kib: 5000, ..r });
+        let big = check_run_words(&CheckRun { frame: 900, step_ms: 9000, runs: 500, keep_kib: 5000, ..r });
         assert_eq!((big[1] & 0xff, (big[1] >> 8) & 0xfff), (0xfe, 0xffe), "saturated, not absent");
         assert_eq!(((big[0] >> 20) & 0x3f, big[2] & 0x7ff), (0x3e, 0x7fe));
         let none = check_run_words(&CheckRun {
             runs: CHECK_RUN_RUNS_MAX,
-            class: CHECK_RUN_CLASS_MAX,
-            draw_ms: CHECK_RUN_DRAW_MAX,
+            step: CHECK_RUN_STEP_MAX,
+            step_ms: CHECK_RUN_STEP_MS_MAX,
             busy_ms: CHECK_RUN_BUSY_MAX,
             blocked_16ms: CHECK_RUN_BLOCKED_MAX,
             timeouts: CHECK_RUN_TIMEOUTS_MAX,
             ..r
         });
-        assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_DRAW_MAX, CHECK_RUN_BUSY_MAX));
+        assert_eq!(((none[1] >> 8) & 0xfff, none[1] >> 20), (CHECK_RUN_STEP_MS_MAX, CHECK_RUN_BUSY_MAX));
         assert_eq!(((none[0] >> 20) & 0x3f, (none[0] >> 26) & 0xf, none[0] >> 30, none[2] >> 24), (0x3f, 0xf, 3, 0xff));
     }
 

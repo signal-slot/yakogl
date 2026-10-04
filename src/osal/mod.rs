@@ -85,9 +85,10 @@ pub const OSAL_QUERY_V3D_SPLIT_ZS: u32 = 8;
 /// frame, 0 once it has submitted it; without an open frame the OSAL holds a
 /// free only for the last submitted kick (osal_internal.h).
 pub const OSAL_QUERY_GC_FRAME_OPEN: u32 = 9;
-/// out = `u64`: a monotonic clock in nanoseconds; the V3D backend times its
-/// CPU texture tiling with it (`v3d_tiling_time`).
-pub const OSAL_QUERY_V3D_CLOCK_NS: u32 = 10;
+/// out = `u64`: a monotonic clock in nanoseconds ([`clock_ns`]); the V3D
+/// backend times its CPU texture tiling with it (`v3d_tiling_time`), the GL
+/// core and the GC7000 backend the steps of a draw (`draw_steps`).
+pub const OSAL_QUERY_CLOCK_NS: u32 = 10;
 /// out = `u32`: the smallest tiled image the V3D backend hands to the TFU
 /// (0 or no answer: none; the CPU tiles everything).
 pub const OSAL_QUERY_V3D_TFU_MIN_BYTES: u32 = 11;
@@ -383,6 +384,16 @@ pub fn thread_id() -> u32 {
         Some(f) => unsafe { f() },
         None => 0,
     }
+}
+
+/// The OSAL's monotonic clock in ns ([`OSAL_QUERY_CLOCK_NS`]), or `None`
+/// where the OSAL has none: a caller counts that time as not measured.
+pub fn clock_ns() -> Option<u64> {
+    let query = ops().and_then(|o| o.query)?;
+    let mut ns = 0u64;
+    // SAFETY: a u64 out-parameter of the size passed.
+    let rc = unsafe { query(OSAL_QUERY_CLOCK_NS, &mut ns as *mut u64 as *mut c_void, 8) };
+    (rc == 0).then_some(ns)
 }
 
 /// Holds the shared-state lock for a scope. An entry point starts with

@@ -28,9 +28,9 @@ use crate::backend::*;
 use crate::ds_retention::{self, Parked};
 use crate::osal::{
     self, OsalGpuMem, OsalV3dBinPool, OsalV3dCpuOf, OsalV3dTfu, OSAL_MEM_DATA, OSAL_QUERY_V3D_BIN_POOL,
-    OSAL_QUERY_V3D_CLOCK_NS, OSAL_QUERY_V3D_CPU_OF_GPU, OSAL_QUERY_V3D_DRAWS_PER_JOB, OSAL_QUERY_V3D_JOB_OPEN,
-    OSAL_QUERY_V3D_S8_STENCIL, OSAL_QUERY_V3D_SPLIT_ZS, OSAL_QUERY_V3D_TFU_MIN_BYTES, OSAL_QUERY_V3D_TFU_RUN,
-    OSAL_QUERY_V3D_TILED_BUDGET, OSAL_QUERY_V3D_VPM_BYTES,
+    OSAL_QUERY_V3D_CPU_OF_GPU, OSAL_QUERY_V3D_DRAWS_PER_JOB, OSAL_QUERY_V3D_JOB_OPEN, OSAL_QUERY_V3D_S8_STENCIL,
+    OSAL_QUERY_V3D_SPLIT_ZS, OSAL_QUERY_V3D_TFU_MIN_BYTES, OSAL_QUERY_V3D_TFU_RUN, OSAL_QUERY_V3D_TILED_BUDGET,
+    OSAL_QUERY_V3D_VPM_BYTES,
 };
 use crate::shaderc::online::v3d::decode::decode as qpu_decode;
 use crate::shaderc::online::v3d::isa::Instr as QpuInstr;
@@ -984,7 +984,7 @@ struct V3dState {
     samplers_packed: u32,
     samplers_reused: u32,
     /// The CPU time of the tilings, since init (`v3d_tiling_time`), in ns
-    /// of the OSAL's clock (OSAL_QUERY_V3D_CLOCK_NS), by where it was spent
+    /// of the OSAL's clock (OSAL_QUERY_CLOCK_NS), by where it was spent
     /// (`TILE_AT_UPLOAD`, `TILE_KEPT_AT_DRAW`, `TILE_ARENA`); and the
     /// tilings the clock could not time (no answer), which have no time in
     /// `tile_ns` rather than a time of zero.
@@ -2800,20 +2800,11 @@ fn tfu_count(g: &mut V3dState, t: Tfu, bytes: usize) {
     }
 }
 
-/// The OSAL's clock in ns (OSAL_QUERY_V3D_CLOCK_NS), or `None` without one.
-fn clock_ns() -> Option<u64> {
-    let query = osal::ops().and_then(|o| o.query)?;
-    let mut ns = 0u64;
-    // SAFETY: a u64 out-parameter of the size passed.
-    let rc = unsafe { query(OSAL_QUERY_V3D_CLOCK_NS, &mut ns as *mut u64 as *mut c_void, 8) };
-    (rc == 0).then_some(ns)
-}
-
-/// Count a tiling that started at `t0` (`clock_ns()` before it) as ended
+/// Count a tiling that started at `t0` (`osal::clock_ns()` before it) as ended
 /// now, under `at`; a tiling either end of which the clock could not read is
 /// counted as untimed.
 fn tile_timed(g: &mut V3dState, at: usize, t0: Option<u64>) {
-    match (t0, clock_ns()) {
+    match (t0, osal::clock_ns()) {
         (Some(a), Some(b)) => g.tile_ns[at] += b.saturating_sub(a),
         _ => g.tile_untimed += 1,
     }
@@ -2953,7 +2944,7 @@ fn tex_state_for(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u
             // `src` covers the sampled levels of every layer (gl_bytes), as
             // the OSAL confirmed.
             unsafe { canary_set(image.add(image_bytes), CANARY_BYTES) };
-            let t0 = clock_ns();
+            let t0 = osal::clock_ns();
             // SAFETY: as above.
             unsafe { texture::tile(b, &layout, image, src) };
             tile_timed(g, TILE_ARENA, t0);
@@ -3095,7 +3086,7 @@ fn tiled_copy(
     let slack = (bytes - pad - image_bytes).min(CANARY_BYTES);
     // SAFETY: `slack` bytes after the image, inside `mem`.
     unsafe { canary_set(image.add(image_bytes), slack) };
-    let t0 = clock_ns();
+    let t0 = osal::clock_ns();
     if !fill(image, image_gpu) {
         tile_timed(g, at, t0);
         osal::gpu_free(&mut mem);
@@ -3590,7 +3581,7 @@ pub unsafe extern "C" fn v3d_tiled_misses(no_memory: *mut u32, kept_refused: *mu
 /// GL core's storage, `ns[2]` copies tiled into the job's arena at a draw;
 /// each is the store into the tiled layout (v3d_tex_store_level/_box), and
 /// for a kept copy the cache flush of its image. `untimed`: tilings the clock
-/// could not time (the OSAL has no OSAL_QUERY_V3D_CLOCK_NS); while it is not
+/// could not time (the OSAL has no OSAL_QUERY_CLOCK_NS); while it is not
 /// zero the times are short by those tilings and are not a measurement.
 /// Either pointer is null or writable (`ns` for three values). Counters
 /// since init; read differences.

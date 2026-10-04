@@ -49,6 +49,9 @@ struct Platform {
     /// Every OSAL_QUERY_GC_FRAME_OPEN the backend sent, with the kicks
     /// submitted when it sent it: (open, kicks so far).
     frame_open: Vec<(u32, usize)>,
+    /// OSAL_QUERY_CLOCK_NS: (the next answer, the step each answer adds);
+    /// `None` answers -ENOTSUP, as an OSAL without a clock does.
+    clock: Option<(u64, u64)>,
 }
 
 static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
@@ -163,6 +166,16 @@ unsafe extern "C" fn p_completed() -> i64 {
 }
 
 unsafe extern "C" fn p_query(what: u32, out: *mut c_void, out_sz: usize) -> i32 {
+    if what == crate::osal::OSAL_QUERY_CLOCK_NS && !out.is_null() && out_sz == 8 {
+        return match with_platform(|p| p.clock.as_mut().map(|c| (c.0, c.0 += c.1).0)) {
+            Some(ns) => {
+                // SAFETY: a u64 out-parameter of the size given.
+                unsafe { *(out as *mut u64) = ns };
+                0
+            }
+            None => -crate::util::ENOTSUP,
+        };
+    }
     if what != crate::osal::OSAL_QUERY_GC_FRAME_OPEN || out.is_null() || out_sz != 4 {
         return -EINVAL;
     }
@@ -434,6 +447,98 @@ impl Drop for Rig {
         unsafe { crate::osal::osal_set_ops(self.prev_osal) };
         *PLATFORM.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
+}
+
+/* ---- the draw's steps (draw_steps.rs) ------------------------------------ */
+
+/// The running totals by step, through the C view.
+fn draw_steps_now() -> Option<[u64; crate::draw_steps::STEPS]> {
+    let mut ns = [0u64; crate::draw_steps::STEPS];
+    // SAFETY: STEPS u64s; no untimed out-parameter.
+    let n = unsafe { crate::draw_steps::yakogl_draw_steps(ns.as_mut_ptr(), ns.len(), core::ptr::null_mut()) };
+    (n >= 0).then(|| {
+        assert_eq!(n as usize, ns.len());
+        ns
+    })
+}
+
+/// Each part of a GC7000 draw is counted under its step: with a clock that
+/// moves 1000 ns a read, every lap is 1000 ns, so a step's total is its
+/// laps. The i.MX8MP cluster's frame 2 spent 2.75 s inside glDraw* with
+/// about none of it on the GPU (2026-10-05); this is the instrument that
+/// names the step.
+#[test]
+fn a_gc_draw_counts_each_of_its_parts_under_its_step() {
+    use crate::draw_steps::Step::*;
+    let rig = Rig::new();
+    with_platform(|p| p.clock = Some((1_000_000, 1000)));
+    let d = rig.draw(3);
+    let before = draw_steps_now().expect("a clock");
+    // SAFETY: a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&d) }, 0);
+    let after = draw_steps_now().expect("a clock");
+    let delta: Vec<u64> = after.iter().zip(before.iter()).map(|(a, b)| a - b).collect();
+    let want = |s: crate::draw_steps::Step| delta[s as usize];
+    /* GcRest: before the surface, before the tiled copies, at the end;
+     * GcEmit: the (absent) clear and the draw; GcUniforms: the blocks and
+     * the UBO copies; GcVertex: the vertex input and the indices */
+    for (s, laps) in
+        [(GcRest, 3), (GcDs, 1), (GcTiledCopy, 1), (GcFrame, 1), (GcUniforms, 2), (GcVertex, 2), (GcEmit, 2)]
+    {
+        assert_eq!(want(s), laps * 1000, "{s:?}: {delta:?}");
+    }
+    for s in [GlProgram, GlUniforms, GlAttribs, GlTextures, GlState] {
+        assert_eq!(want(s), 0, "{s:?}: the GL core did not run: {delta:?}");
+    }
+    assert_eq!(gc_flush(), 0);
+}
+
+/// A step's time is its own: a draw timed inside another timer's step is
+/// taken out of that step, so the steps of a frame add up to its time once
+/// (a pending clear the GL core draws on its own nests that way).
+#[test]
+fn a_nested_draw_is_not_counted_twice() {
+    use crate::draw_steps::{Step, Timer};
+    let rig = Rig::new();
+    with_platform(|p| p.clock = Some((1_000_000, 1000)));
+    let d = rig.draw(3);
+    let before = draw_steps_now().expect("a clock");
+    let mut outer = Timer::start();
+    // SAFETY: a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&d) }, 0);
+    outer.lap(Step::GlState);
+    let after = draw_steps_now().expect("a clock");
+    let delta: Vec<u64> = after.iter().zip(before.iter()).map(|(a, b)| a - b).collect();
+    /* after the outer start the clock is read 14 times: the draw's start,
+     * its 12 laps, and the outer lap; the draw's own 12 laps are 12000 ns
+     * of the 14000 the outer lap spans */
+    assert_eq!(delta[Step::GlState as usize], 2000, "{delta:?}");
+    let total: u64 = delta.iter().sum();
+    assert_eq!(total, 14 * 1000, "the outer span counted once: {delta:?}");
+    assert_eq!(gc_flush(), 0);
+}
+
+/// Without a clock nothing is measured: the C view says so (-ENOTSUP)
+/// instead of totals of zero, and each lap is counted as untimed.
+#[test]
+fn without_a_clock_the_steps_are_not_measured() {
+    let rig = Rig::new();
+    with_platform(|p| p.clock = None);
+    assert_eq!(draw_steps_now(), None);
+    let mut ns = [0u64; crate::draw_steps::STEPS];
+    let mut untimed0 = 0u32;
+    with_platform(|p| p.clock = Some((0, 1)));
+    // SAFETY: STEPS u64s and one u32.
+    assert!(unsafe { crate::draw_steps::yakogl_draw_steps(ns.as_mut_ptr(), ns.len(), &mut untimed0) } > 0);
+    with_platform(|p| p.clock = None);
+    // SAFETY: a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&rig.draw(3)) }, 0);
+    with_platform(|p| p.clock = Some((0, 1)));
+    let mut untimed = 0u32;
+    // SAFETY: as above.
+    assert!(unsafe { crate::draw_steps::yakogl_draw_steps(ns.as_mut_ptr(), ns.len(), &mut untimed) } > 0);
+    assert_eq!(untimed - untimed0, 12, "every lap of the draw is counted as untimed");
+    assert_eq!(gc_flush(), 0);
 }
 
 /* ---- the frame arena ---------------------------------------------------- */

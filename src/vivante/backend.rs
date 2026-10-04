@@ -18,6 +18,7 @@
 use core::ffi::c_void;
 
 use crate::backend::*;
+use crate::draw_steps::{Step, Timer};
 use crate::ds_retention;
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::shaderc::{
@@ -2468,6 +2469,8 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     if !g().inited {
         return -1;
     }
+    /* each part below is a step of draw_steps.rs */
+    let mut clock = Timer::start();
     /* one instance of an instanced draw the GL core draws instance by
      * instance: the FE starts the instance ID at 0 for every draw, so a
      * program that reads gl_InstanceID is refused (counted by gc_draw) */
@@ -2520,6 +2523,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     /* sized for the larger of the storage GL gave and the target: ES 3.0 lets
      * them differ, and the pixel engine addresses it in target pixels */
     let (ds_w, ds_h) = (gl.ds_w.max(gl.target_w), gl.ds_h.max(gl.target_h));
+    clock.lap(Step::GcRest);
     let selected = match super::ds_cache::select(
         key,
         ds_w * ms,
@@ -2532,6 +2536,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         Ok(s) => s,
         Err(rc) => return rc,
     };
+    clock.lap(Step::GcDs);
     if gl.target_gpu == 0 && ensure_no_colour_surface() != 0 {
         return -ENOMEM;
     }
@@ -2560,9 +2565,11 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * (tiled_copy.rs), made or refreshed now, before this draw records
      * anything: a render into the texture still in flight is finished first.
      * Without its copy the draw would read the wrong faces, so it is refused. */
+    clock.lap(Step::GcRest);
     if super::tiled_copy::prepare(gl, |k| gc_kick_pending(k), || gc_finish()) != 0 {
         return -1;
     }
+    clock.lap(Step::GcTiledCopy);
 
     /* a new target, a stream with no room left, or an arena that cannot take
      * this draw's copies ends the frame */
@@ -2587,6 +2594,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     if big && ensure_extra(need) != 0 {
         return -ENOMEM;
     }
+    clock.lap(Step::GcFrame);
 
     /* The stream has no room check before a draw, and a draw's size is not
      * known until it is written (its state, uniforms and descriptors), so a
@@ -2612,19 +2620,19 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         clear_stencil_write_mask: 0xff,
         ..*gl
     });
-    let record_all = || {
+    let record_all = |clock: &mut Timer| {
         // SAFETY: the caller's contract, passed on; `restore` is a copy of
         // the draw with only its clear fields changed.
-        let rc = restore.as_ref().map_or(0, |r| unsafe { record(r) });
+        let rc = restore.as_ref().map_or(0, |r| unsafe { record(r, clock) });
         // SAFETY: as above.
         if rc != 0 {
             rc
         } else {
-            unsafe { record(gl) }
+            unsafe { record(gl, clock) }
         }
     };
     let mark = Mark::take();
-    let mut rc = record_all();
+    let mut rc = record_all(&mut clock);
     if g().frames[g().cur].w.overflow {
         mark.restore();
         frame_submit();
@@ -2634,9 +2642,10 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         if big && ensure_extra(need) != 0 {
             return -ENOMEM;
         }
+        clock.lap(Step::GcFrame);
         mark.restore_ms_dest();
         let again = Mark::take();
-        rc = record_all();
+        rc = record_all(&mut clock);
         if g().frames[g().cur].w.overflow {
             again.restore();
             glog!("yakogl/vivante: a draw does not fit an empty command buffer ({} words)", GC_CMD_WORDS);
@@ -2648,6 +2657,7 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
          * never given to another pair (ds_cache.rs) */
         super::ds_cache::drawn(key, ds_retention::draw_writes(gl), ds_retention::draw_clears(gl));
     }
+    clock.lap(Step::GcRest);
     rc
 }
 
@@ -2746,11 +2756,12 @@ impl Mark {
     }
 }
 
-/// Record one draw into the open frame: its clear, then its geometry.
+/// Record one draw into the open frame: its clear, then its geometry, each
+/// part timed under its step on `clock` (draw_steps.rs).
 ///
 /// # Safety
 /// `draw_one`'s contract; a frame is open.
-unsafe fn record(gl: &GlesDraw) -> i32 {
+unsafe fn record(gl: &GlesDraw, clock: &mut Timer) -> i32 {
     let g = g();
     let code = (g.clear_vs_code.gpu, g.clear_ps_code.gpu);
     let depth = (g.depth_stride, g.depth.gpu as u32 + g.depth_surface_off);
@@ -2760,6 +2771,7 @@ unsafe fn record(gl: &GlesDraw) -> i32 {
     {
         return -1;
     }
+    clock.lap(Step::GcEmit);
     if gl.index_count == 0 {
         return 0; /* a clear-only kick has no geometry */
     }
@@ -2784,11 +2796,13 @@ unsafe fn record(gl: &GlesDraw) -> i32 {
         // SAFETY: as above.
         d.fs_uniforms = unsafe { take_uniforms(gl.fs_uniform_cpu, gl.fs_uniform_dwords, false) };
     }
+    clock.lap(Step::GcUniforms);
 
     let f = &mut g.frames[cur];
     if build_vertex_input(f, &mut d, gl) != 0 {
         return -1;
     }
+    clock.lap(Step::GcVertex);
     /* a stage that reads a uniform array at a run-time index loads it from a
      * copy of its block in memory (select.rs LoadUniformIdx) */
     if reads_ubo(vs) {
@@ -2803,6 +2817,7 @@ unsafe fn record(gl: &GlesDraw) -> i32 {
             return -1;
         }
     }
+    clock.lap(Step::GcUniforms);
 
     if gl.index_buf_gpu != 0 || !gl.index_cpu.is_null() {
         d.indexed = true;
@@ -2820,8 +2835,10 @@ unsafe fn record(gl: &GlesDraw) -> i32 {
             }
         }
     }
-
-    emit_draw(f, &d, depth.0, depth.1)
+    clock.lap(Step::GcVertex);
+    let rc = emit_draw(f, &d, depth.0, depth.1);
+    clock.lap(Step::GcEmit);
+    rc
 }
 
 pub extern "C" fn gc_flush() -> i32 {

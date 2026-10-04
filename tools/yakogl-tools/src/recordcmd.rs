@@ -501,6 +501,36 @@ mod tests {
         CaseList::from_text(&py::read_text(&py::join(&repo_root(), "tools/cts/gles2-mustpass.txt")).unwrap())
     }
 
+    /// The library's draw steps (src/draw_steps.rs) are record.rs's
+    /// CHECK_RUN_STEP_* from CHECK_RUN_STEP_GL_PROGRAM, in order and all of
+    /// them: the cluster copies the library's totals into the record by
+    /// number, so a step added or moved on one side only would be named
+    /// as another step on the board.
+    #[test]
+    fn the_librarys_draw_steps_are_the_records() {
+        use yakogl::draw_steps::{Step, RECORD_STEP_BASE, STEPS};
+        let pairs = [
+            (Step::GlProgram, record::CHECK_RUN_STEP_GL_PROGRAM),
+            (Step::GlUniforms, record::CHECK_RUN_STEP_GL_UNIFORMS),
+            (Step::GlAttribs, record::CHECK_RUN_STEP_GL_ATTRIBS),
+            (Step::GlTextures, record::CHECK_RUN_STEP_GL_TEXTURES),
+            (Step::GlState, record::CHECK_RUN_STEP_GL_STATE),
+            (Step::GcRest, record::CHECK_RUN_STEP_GC_REST),
+            (Step::GcDs, record::CHECK_RUN_STEP_GC_DS),
+            (Step::GcTiledCopy, record::CHECK_RUN_STEP_GC_TILED_COPY),
+            (Step::GcFrame, record::CHECK_RUN_STEP_GC_FRAME),
+            (Step::GcUniforms, record::CHECK_RUN_STEP_GC_UNIFORMS),
+            (Step::GcVertex, record::CHECK_RUN_STEP_GC_VERTEX),
+            (Step::GcEmit, record::CHECK_RUN_STEP_GC_EMIT),
+        ];
+        assert_eq!(RECORD_STEP_BASE, record::CHECK_RUN_STEP_GL_PROGRAM);
+        assert_eq!(pairs.len(), STEPS, "every library step is paired");
+        assert_eq!(record::CHECK_RUN_STEPS as usize, RECORD_STEP_BASE as usize + STEPS, "and no record step is left");
+        for (s, c) in pairs {
+            assert_eq!(s as u32 + RECORD_STEP_BASE, c, "{s:?}");
+        }
+    }
+
     /// Every block of tools/testdata/record-decode.txt: the decode and the
     /// classify of one record. The classify lines are the old Python decoder's
     /// tokens at 7924b635 for the same records (so record.rs's classify is
@@ -531,7 +561,7 @@ mod tests {
         }
         // the population: the golden file's 53 blocks (45 + GLMARK2 on- and off-screen and with
         // GLMARK2_SCENES + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
-        // timeout, a frame over the budget with its draw split, and nothing measured),
+        // timeout, a frame over the budget with its slowest step, and nothing measured),
         // every kind of record.rs's table among them
         assert_eq!(blocks, 53, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
