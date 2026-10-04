@@ -65,6 +65,9 @@
 
 #include <yakogl_board.h>
 #include <yakogl_record.h>
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
+#endif
 
 #define WIN_W CONFIG_CLUSTER_PANEL_WIDTH
 #define WIN_H CONFIG_CLUSTER_PANEL_HEIGHT
@@ -598,6 +601,24 @@ static int animate(void)
 	return ret;
 }
 
+uint32_t yakogl_draws_refused(void); /* src/backend.rs */
+
+/* CHECK_RUN's w3 (record.rs): the online compiler's keep high-water and its
+ * region, KiB, 16 bits each; 0 in an image without the compiler. */
+static uint32_t keep_word(void)
+{
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	size_t peak = 0;
+	uint32_t hi, size = (uint32_t)(CONFIG_YAKOGL_SHADERC_KEEP_BYTES / 1024);
+
+	(void)shc_online_keep_stats(NULL, &peak);
+	hi = (uint32_t)((peak + 1023u) / 1024u);
+	return (hi > 0xffffu ? 0xffffu : hi) << 16 | (size > 0xffffu ? 0xffffu : size);
+#else
+	return 0u;
+#endif
+}
+
 int main(void)
 {
 	struct cluster_run_records rec = { 0 };
@@ -645,7 +666,8 @@ int main(void)
 				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)s_check.check_tag, s_check.check[0],
 						 s_check.check[1], s_check.check[2]);
 			else
-				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN, (uint32_t)rc, 0u, 0u);
+				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN, (uint32_t)rc,
+						 yakogl_draws_refused(), keep_word());
 		}
 	}
 	board_finish("cluster", rc);

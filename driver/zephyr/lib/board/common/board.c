@@ -13,6 +13,13 @@
 #include "yakogl_record.h"
 #include "board_internal.h"
 
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
+#endif
+#ifdef CONFIG_YAKOGL
+uint32_t yakogl_draws_refused(void); /* src/backend.rs */
+#endif
+
 /* Uptime in ms of the last board_watchdog_feed(); -1 until the first call.
  * One 64-bit store, read by the feeders' timer handlers. */
 static volatile int64_t s_alive_ms = -1;
@@ -132,6 +139,20 @@ FUNC_NORETURN void board_finish(const char *name, int rc)
 	 * driver/docs/pvr-render-pool.md); gl_test ends elsewhere and prints its
 	 * own */
 	osal_zephyr_diag_print();
+#endif
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	/* every arena prints its high-water every run (CLAUDE.md): the online
+	 * compiler's keep region, which refuses a compile when it is full */
+	{
+		size_t keep_now = 0, keep_peak = 0;
+
+		(void)shc_online_keep_stats(&keep_now, &keep_peak);
+		printk("shaderc: keep high-water %zu of %u bytes (%zu held now)\n", keep_peak,
+		       (unsigned int)CONFIG_YAKOGL_SHADERC_KEEP_BYTES, keep_now);
+	}
+#endif
+#ifdef CONFIG_YAKOGL
+	printk("yakogl: draws refused %u\n", yakogl_draws_refused());
 #endif
 	bool pass = rc == 0 && resets == 0u;
 	int hold = pass ? CONFIG_YAKOGL_BOARD_HOLD_S : CONFIG_YAKOGL_BOARD_HOLD_FAIL_S;

@@ -169,7 +169,9 @@ kinds! {
          w3 = the reference's R << 16 | G << 8 | B | that probe's largest channel \
          difference << 24. CHECK_UNDRAWN, _ALPHA, _GUARD, _READPIXELS: w1 = how many pixels \
          (or probes, for _READPIXELS), w2 = w3 = 0. CHECK_RUN: the check passed and the run \
-         failed later; w1 = the run's return code as int32";
+         failed later; w1 = the run's return code as int32, w2 = draws the GL core refused \
+         (yakogl_draws_refused), w3 = the online compiler's keep high-water in KiB << 16 | \
+         its keep region in KiB (0 without the online compiler), 16 bits each, saturating";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -1024,7 +1026,13 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             CHECK_GUARD => write!(out, "guard: {w1} guard-row pixels changed"),
             CHECK_READPIXELS => write!(out, "readpixels: glReadPixels differs from memory at {w1} probes"),
             CHECK_NO_REFERENCE => out.write_str("no reference: no probe table for this window size"),
-            CHECK_RUN => write!(out, "run: the check passed, the run failed later (rc {})", w1 as i32),
+            CHECK_RUN => write!(
+                out,
+                "run: the check passed, the run failed later (rc {}); draws refused {w2}; keep high-water {} of {} KiB",
+                w1 as i32,
+                w3 >> 16,
+                w3 & 0xffff
+            ),
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
         _ => Ok(()),
