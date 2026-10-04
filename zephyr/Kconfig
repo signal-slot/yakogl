@@ -440,21 +440,23 @@ config YAKOGL_SHADERC_KEEP_BYTES
 	int "compiled shader region (bytes)"
 	depends on YAKOGL_SHADERC_ONLINE
 	range 65536 268435456
-	default 524288
+	default 1048576
 	help
 	  Bytes the in-process compiler keeps compiled shaders and programs
-	  in: their code, uniform tables and sources, for as long as the
-	  application holds them. CALLER-LENT like the scratch region above:
-	  this sizes a static in the OSAL. A compile that does not fit is
-	  refused by name ("out of compiler memory ... in the keep arena").
+	  in: their code, uniform tables and sources, and the draw-time
+	  variants, for as long as the application holds them. CALLER-LENT
+	  like the scratch region above: this sizes a static in the OSAL. A
+	  compile that does not fit is refused by name ("online shaderc: keep
+	  full on this ... shader: N bytes free in its largest run, U of S
+	  bytes in use; raise ..."), and every board run prints the region's
+	  high-water ("shaderc: keep high-water ...").
 
 	  It must hold every shader and program the application keeps alive
 	  AT ONCE, not every one it ever compiled: glDeleteShader and
-	  glDeleteProgram give the memory back. femtovg (Slint's renderer)
-	  keeps 30 programs, 388,544 bytes on the Pi 4's V3D (2026-09-24,
-	  with records placed by lifetime, src/shaderc/online/store.rs
-	  KeepEnd). The default, 512 KiB, leaves about 135 KB for everything
-	  else such an application builds; raise it for more.
+	  glDeleteProgram give the memory back. The largest measured is the
+	  AGL cluster (Slint with femtovg) on the AM62P: 564,544 bytes at its
+	  high-water, nothing refused. The default, 1 MiB, holds that with
+	  484 KB to spare; raise it for an application that keeps more.
 
 	  The lower bound mirrors MIN_KEEP_BYTES in store.rs, which is the
 	  authority: a smaller region is refused at boot with both numbers.
