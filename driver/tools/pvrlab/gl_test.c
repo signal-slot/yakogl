@@ -417,6 +417,14 @@
  *               abs, under floor), each in a fragment and a vertex shader,
  *               from uniforms, read back. All three GPUs (skipped by name in a
  *               table build: no rows for its own sources); in the set
+ * 182 fsat      clamp(x, 0.0, 1.0) as one saturating add (the PowerVR's fsat,
+ *               prepare.rs fusion_pairs): clamp(), min(max()) and max(min())
+ *               of x below 0, inside and above 1, and the controls it must
+ *               leave alone (the inner bound read twice, an upper bound of
+ *               0.8, a lower bound of 0.2), each in a fragment and a vertex
+ *               shader, from uniforms, through * 0.5 + 0.25 so a missing
+ *               saturate shows past the RGBA8 write's own clamp, read back.
+ *               All three GPUs (skipped by name in a table build); in the set
  * 183 unipad    500 draws of a program whose two stages each read a vec2
  *               uniform (femtovg's viewSize; the constant file's last register
  *               half empty), timed: under 250 ms, and the colour read back.
@@ -645,7 +653,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 183)
+	if (c == 181 || c == 182 || c == 183)
 		return "its own sources: a table build has no rows for them";
 #endif
 	(void)c; /* the default set's reason ignores it */
@@ -7680,7 +7688,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [183] = "unipad",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15225,16 +15233,17 @@ static const char fma_fs_varying_src[] =
 	"void main() { gl_FragColor = v; }\n";
 
 /* Draw `prog` over the rectangle (x0, y0)-(x1, y1) in NDC, its four
- * uniforms set; false when the program has no a_pos to draw with. */
-static bool fma_quad(GLuint prog, float x0, float y0, float x1, float y1)
+ * uniforms u_x, u_q, u_a, u_b set to vals[0..3] (a uniform the program does
+ * not use has location -1, which glUniform ignores); false when the
+ * program has no a_pos to draw with. */
+static bool fma_quad_vals(GLuint prog, float x0, float y0, float x1, float y1, const float vals[4])
 {
 	const float v[12] = { x0, y0, x1, y0, x0, y1, x0, y1, x1, y0, x1, y1 };
 	const char *names[4] = { "u_x", "u_q", "u_a", "u_b" };
-	const float vals[4] = { 0.75f, 0.125f, 0.5f, 0.25f };
 	const GLint pos = glGetAttribLocation(prog, "a_pos");
 
 	if (pos < 0) {
-		pr_err("gl_test: fusemad: program %u has no a_pos\n", prog);
+		pr_err("gl_test: program %u has no a_pos\n", prog);
 		return false;
 	}
 	glUseProgram(prog);
@@ -15245,6 +15254,14 @@ static bool fma_quad(GLuint prog, float x0, float y0, float x1, float y1)
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 	glDisableVertexAttribArray((GLuint)pos);
 	return true;
+}
+
+/* fma_quad_vals with case 181's values: x = 0.75, q = 0.125, a = 0.5, b = 0.25. */
+static bool fma_quad(GLuint prog, float x0, float y0, float x1, float y1)
+{
+	static const float vals[4] = { 0.75f, 0.125f, 0.5f, 0.25f };
+
+	return fma_quad_vals(prog, x0, y0, x1, y1, vals);
 }
 
 /* A colour of four values in 0..1 as expect_px reads it (R in the low byte). */
@@ -15291,6 +15308,109 @@ static int case_fusemad(void)
 	ok &= expect_px("controls, vertex", 3 * TW / 4, 3 * TH / 4, ctrl, 1);
 	glDeleteProgram(fs_fused);
 	glDeleteProgram(vs_fused);
+	glDeleteProgram(fs_ctrl);
+	glDeleteProgram(vs_ctrl);
+	return ok ? 0 : -1;
+}
+
+/* ---- case 182: clamp(x, 0.0, 1.0) as one saturating add (fsat) ------------
+ *
+ * The PowerVR compile makes a clamp to [0, 1] whose inner bound nothing else
+ * reads one `fadd x, 0.0` with the saturate bit, as pco builds NIR's fsat
+ * (src/shaderc/online/powervr/prepare.rs fusion_pairs); the GC7000 and the
+ * V3D compile the same text their own way, and check the case itself. Four
+ * quads, every value from a uniform so nothing folds at compile time:
+ *   top-left     the fragment shader computes the folded shapes:
+ *                clamp(lo, 0, 1), min(max(in, 0), 1), max(min(hi, 1), 0),
+ *                min(1, max(0, hi - 1.1)) (the bounds first);
+ *   top-right    the vertex shader computes the same into a varying;
+ *   bottom-left  the controls the fold must leave alone, in the fragment
+ *                shader: the inner bound read twice (t = max(in, 0) in
+ *                min(t, 1) and t * 0.5), an upper bound of 0.8, a lower
+ *                bound of 0.2;
+ *   bottom-right the controls in the vertex shader.
+ * lo = -2.25, in = 0.4, hi = 1.5. Each clamp is written as c * 0.5 + 0.25:
+ * an RGBA8 target clamps what the fragment shader writes, so a saturate the
+ * fold lost would not show in the clamp itself (-2.25 would read 0 where
+ * 0.25 is right, 1.5 would read 1.0 where 0.75 is).
+ * ------------------------------------------------------------------------- */
+static const char fsat_fs_folded_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
+	"void main() {\n"
+	"  gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
+	"                        min(1.0, max(0.0, u_a - 1.1))));\n"
+	"}\n";
+static const char fsat_fs_ctrl_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float t = max(u_q, 0.0);\n"
+	"  gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
+	"                      min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
+	"}\n";
+static const char fsat_vs_folded_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  v = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
+	"             min(1.0, max(0.0, u_a - 1.1))));\n"
+	"}\n";
+static const char fsat_vs_ctrl_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  float t = max(u_q, 0.0);\n"
+	"  v = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
+	"           min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
+	"}\n";
+
+static int case_fsat(void)
+{
+	/* fma_quad sets u_x, u_q, u_a, u_b; these are lo, in, hi (u_b unused) */
+	static const float vals[4] = { -2.25f, 0.4f, 1.5f, 0.0f };
+	const uint32_t folded = fma_rgba(0.25f, 0.4f * 0.5f + 0.25f, 0.75f, 0.4f * 0.5f + 0.25f);
+	const uint32_t ctrl = fma_rgba(0.4f * 0.5f + 0.25f, 0.2f, 0.8f * 0.5f + 0.25f, 0.2f * 0.5f + 0.25f);
+	GLuint fs_folded, vs_folded, fs_ctrl, vs_ctrl;
+	bool ok = true;
+
+	fs_folded = link_program(fma_vs_plain_src, fsat_fs_folded_src);
+	vs_folded = link_program(fsat_vs_folded_src, fma_fs_varying_src);
+	fs_ctrl = link_program(fma_vs_plain_src, fsat_fs_ctrl_src);
+	vs_ctrl = link_program(fsat_vs_ctrl_src, fma_fs_varying_src);
+	if (!fs_folded || !vs_folded || !fs_ctrl || !vs_ctrl)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	/* top is +y in NDC; read_topdown's row 0 is the top */
+	if (!fma_quad_vals(fs_folded, -1.0f, 0.0f, 0.0f, 1.0f, vals) ||
+	    !fma_quad_vals(vs_folded, 0.0f, 0.0f, 1.0f, 1.0f, vals) ||
+	    !fma_quad_vals(fs_ctrl, -1.0f, -1.0f, 0.0f, 0.0f, vals) ||
+	    !fma_quad_vals(vs_ctrl, 0.0f, -1.0f, 1.0f, 0.0f, vals))
+		return -1;
+	if (!check_gl_error("fsat"))
+		return -1;
+	read_topdown();
+	dump_map(s_px, TW, TH);
+	ok &= expect_px("folded clamps, fragment", TW / 4, TH / 4, folded, 1);
+	ok &= expect_px("folded clamps, vertex", 3 * TW / 4, TH / 4, folded, 1);
+	ok &= expect_px("controls, fragment", TW / 4, 3 * TH / 4, ctrl, 1);
+	ok &= expect_px("controls, vertex", 3 * TW / 4, 3 * TH / 4, ctrl, 1);
+	glDeleteProgram(fs_folded);
+	glDeleteProgram(vs_folded);
 	glDeleteProgram(fs_ctrl);
 	glDeleteProgram(vs_ctrl);
 	return ok ? 0 : -1;
@@ -18371,6 +18491,7 @@ static int run_case(int c, int pretransform, int debug)
 		break;
 	case 180: rc = case_teardown(); break;
 	case 181: rc = case_fusemad(); break;
+	case 182: rc = case_fsat(); break;
 	case 183: rc = case_unipad(); break;
 	case 179:
 		rc = case_retile();
@@ -18840,7 +18961,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		int fails = 0;
 		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 183, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce

@@ -275,7 +275,8 @@ pub const INEG: Template = Template {
 
 /// `fsat`: `fadd(x, 0.0)` with the result saturated to [0, 1], as pco
 /// clamps a blend's source colour (its blend variants' first groups:
-/// `fadd sat=1`, s1 special 0).
+/// `fadd sat=1`, s1 special 0) and builds NIR's `fsat` (`clamp(x, 0.0,
+/// 1.0)` in a shader: `MachineOp::Fsat`).
 pub const FSAT: Template = Template {
     name: "fsat",
     bitwise: false,
@@ -739,6 +740,7 @@ pub fn template_for(op: SelOp) -> Option<&'static Template> {
         SelOp::Machine(MachineOp::Tstz) => Some(&TSTZ),
         SelOp::Machine(MachineOp::MovS1) => Some(&MOVS1),
         SelOp::Machine(MachineOp::Iabs) => Some(&IABS),
+        SelOp::Machine(MachineOp::Fsat) => Some(&FSAT),
         SelOp::Machine(MachineOp::U2f) => Some(&U2F),
         SelOp::Machine(MachineOp::F2u) => Some(&F2U),
         SelOp::Machine(MachineOp::Uge) => Some(&UGE),
