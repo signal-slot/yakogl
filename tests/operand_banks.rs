@@ -27,8 +27,8 @@
 //! `is_immediate()` IS `group == RGROUP_IMMED`, so the disjunction tests one
 //! thing twice. I read a second encoding into it and was wrong.
 //!
-//! An independent count measured the immediate case (two per instruction 328 times
-//! in the reference, three never). This asks the same question of every group,
+//! The reference programs hold up to two immediates per instruction (two in
+//! 328, three never). This asks the same question of every group,
 //! because **`src()` already folds uniform reads into consumers today** -- so
 //! if this machine limits constant-file operands per instruction, the limit is
 //! one we may already be exceeding, and nothing in the pipeline would say so.
@@ -62,8 +62,8 @@
 //! the check for that rule; this one says only how many operands of a group
 //! an instruction may hold.
 //!
-//! The immediate column reproduces that independent count
-//! exactly, which is what says the reader here is right.
+//! The immediate column reproduces those counts exactly, which is what says
+//! the reader here is right.
 //!
 //! ```sh
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online \
@@ -170,8 +170,7 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
             /* A source slot is present when the operation HAS a group field
              * for it, not when `SRC{n}_USE` says so.
              *
-             * Measured, after the first version of this file disagreed with
-             * the independent count by a factor of 34: `SRC0_USE` is ABSENT from
+             * `SRC0_USE` is ABSENT from
              * 13,830 of the 13,908 instructions, including every `mad`,
              * `mul`, `mov`, `add`, `select` and `sqrt` -- the ordinary ALU
              * operations, which is to say almost all of them. `SRC0_RGROUP`
@@ -208,9 +207,8 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
 
     /* THE GUARD THAT WOULD HAVE CAUGHT THE FIRST VERSION OF THIS FILE.
      *
-     * An independent count measured the immediate column and by a
-     * different route: 12,100 instructions with none, 1,480 with one, 328
-     * with two, never three. Pinning it here means a reader that silently
+     * The reference programs' immediate column: 12,100 instructions with
+     * none, 1,480 with one, 328 with two, never three. Pinning it here means a reader that silently
      * stops counting -- which is exactly what gating on `SRC{n}_USE` did --
      * fails instead of printing a healthy-looking table of zeros.
      *

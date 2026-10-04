@@ -464,15 +464,11 @@ pub fn assemble_from_ir_keyed(
     let n = if kept == 0 {
         /* A shader with nothing to do is still a program, and its program is
          * one `nop` -- four zero dwords, which is exactly how a `nop` with a
-         * void destination and no sources encodes.
-         *
-         * This is not a guess. The reference compiler emits exactly these
-         * four zeros for `gl_Position = a_pos`, and for gl_test's
-         * passthrough.vert, uv.vert, color_uv.vert and interp_color.frag,
-         * measured with the reference compiler (etna_shc), whose output draws
-         * correctly on the board. Every output in those shaders already sits in the
-         * register its source occupies, so there is no work to do, and
-         * `select` emits no instruction.
+         * void destination and no sources encodes. It happens when every
+         * output already sits in the register its source occupies (`gl_Position
+         * = a_pos`), so `select` emits no instruction; the reference program is
+         * the same four zeros (chain_tests
+         * `the_passthrough_vertex_shader_becomes_a_real_shcshader`).
          *
          * Written here rather than as a `nop` through the allocator because
          * `SelInstr` cannot say "this operation has a DST field and it is
@@ -1093,13 +1089,8 @@ mod chain_tests {
         assert_eq!(sh.usc_dw, 4, "one 128-bit instruction is four dwords");
         assert_eq!(sh.usc_words().len(), 4);
         /* All zeros: a `nop`. The attribute arrives in the register the
-         * position is read from, so the shader has nothing to do -- and the
-         * reference compiler emits exactly these four zeros for this source,
-         * measured with the reference compiler, whose output draws on the
-         * board. We used to emit `mov t0, t0` here -- one instruction the
-         * reference does not emit, and removing it is what makes this
-         * byte-identical. It was not the silicon defect; that was the
-         * fragment colour register. */
+         * position is read from, so the shader has nothing to do, and the
+         * reference program for this source is the same four zeros. */
         assert!(sh.usc_words().iter().all(|&w| w == 0), "a shader with no work is a nop");
         assert_eq!(sh.viv.num_in, 1);
         assert_eq!(sh.viv.vs_pos_out_reg, 0);
