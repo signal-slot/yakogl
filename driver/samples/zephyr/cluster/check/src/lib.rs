@@ -278,6 +278,36 @@ impl Outcome {
         record::probes_words(&rgb)
     }
 
+    /// The CHECK record for a failed check (record.rs, kind CHECK): its tag
+    /// and w1..w3, naming what failed first; None for a pass. For the probes,
+    /// the first probe beyond [`TOLERANCE`] in table order, so a board with no
+    /// console still says which point failed and what it read.
+    pub fn check_words(&self) -> Option<(u8, [u32; 3])> {
+        let t = |v: u32| v as u8;
+        Some(match self.verdict()? {
+            Failure::NoReference => (t(record::CHECK_NO_REFERENCE), [0; 3]),
+            Failure::Probes => {
+                let r = self.reference?;
+                let i = (0..self.n).find(|&i| self.diff[i] > TOLERANCE)?;
+                let (p, got) = (r.probes[i], self.points[i]);
+                let words = record::check_probe_words(
+                    i as u32,
+                    p.x as u32,
+                    p.y as u32,
+                    [got[0], got[1], got[2]],
+                    p.rgb,
+                    self.probes_bad,
+                    self.diff[i],
+                );
+                (t(record::CHECK_PROBES), words)
+            }
+            Failure::Undrawn => (t(record::CHECK_UNDRAWN), [self.sentinel_left, 0, 0]),
+            Failure::Alpha => (t(record::CHECK_ALPHA), [self.alpha_bad, 0, 0]),
+            Failure::Guard => (t(record::CHECK_GUARD), [self.guard_bad, 0, 0]),
+            Failure::ReadPixels => (t(record::CHECK_READPIXELS), [self.reads_bad, 0, 0]),
+        })
+    }
+
     /// FINGERPRINT's w1..w3 for a `w` x `h` window.
     pub fn fingerprint_words(&self, w: u32, h: u32) -> [u32; 3] {
         [self.crc32, FRAMES, record::size_word(w, h)]
@@ -618,6 +648,41 @@ mod tests {
         let o = check(&fr, |x, y| fr.at(x, y));
         assert_eq!(o.verdict(), Some(Failure::ReadPixels));
         assert!(o.reads_bad > 0);
+    }
+
+    /// A failed check names what failed first in the CHECK record: a probe
+    /// that is not one of PROBES' five record points (7 of the 1280x800
+    /// table) comes back with its index, position and both colours; every
+    /// other failure with its count; a pass writes none.
+    #[test]
+    fn the_check_record_names_the_first_failure() {
+        let r = Reference::for_size(1280, 800).unwrap();
+        assert!(!r.record_points().contains(&7), "probe 7 is not in PROBES' five");
+        let f = FORMAT_XRGB8888;
+        assert_eq!(run(&frame(r, f, 0, 0, 0), r, f).check_words(), None, "a pass writes no CHECK");
+
+        let p = r.probes[7];
+        let delta = if p.rgb[1] <= 235 { 20i16 } else { -20 };
+        let o = run(&frame(r, f, 7, 1, delta), r, f);
+        let (tag, w) = o.check_words().expect("a failure");
+        assert_eq!(tag as u32, record::CHECK_PROBES);
+        let mut got = p.rgb;
+        got[1] = (got[1] as i16 + delta) as u8;
+        assert_eq!(w, record::check_probe_words(7, p.x as u32, p.y as u32, got, p.rgb, 1, 20));
+        let rec = [record::w0(record::kind::CHECK, tag), w[0], w[1], w[2]];
+        let mut text = String::new();
+        record::describe(&mut text, rec).unwrap();
+        assert!(
+            text.contains(&format!("probe 7 at ({},{}) reads", p.x, p.y))
+                && text.contains("(diff 20); 1 probes failing"),
+            "{text}"
+        );
+        /* PROBES' five words cannot say it: they are the pass's words */
+        assert_eq!(o.probes_words(), run(&frame(r, f, 0, 0, 0), r, f).probes_words());
+
+        let mut px = frame(r, f, 0, 0, 0);
+        px[123] = SENTINEL;
+        assert_eq!(run(&px, r, f).check_words(), Some((record::CHECK_UNDRAWN as u8, [1, 0, 0])));
     }
 
     /// The fingerprint is the CRC of the rows as the eye sees them, and

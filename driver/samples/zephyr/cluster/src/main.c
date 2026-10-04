@@ -25,7 +25,9 @@
  *   board_show(half 0)
  *   CONFIG_YAKOGL_BOARD_ANIMATE_S of the drive cycle, unpaced, pipelined
  *   board_result: FINGERPRINT, PERF, APP (with YK_RECORD_APP_SHOWN_BY_COPY
- *   when board_show copied), then PROBES (the verdict)
+ *   when board_show copied), then PROBES (the verdict), and after it, when
+ *   the run failed, CHECK (why: the first failing probe, or the part of the
+ *   check, or the run after a passing check)
  *   board_finish()
  *
  * The animation runs whenever the checked frame was drawn and checked, also
@@ -46,8 +48,10 @@
  * remove it).
  *
  * The records are stored after the animation: a run that dies in it must
- * not leave a PASS as its last record. PROBES is stored last because the
- * last record of a run is its verdict; its status is the whole run's.
+ * not leave a PASS as its last record. PROBES is stored last on a pass
+ * because the last record of a run is its verdict; its status is the whole
+ * run's. A failed run ends with CHECK instead, so a board that keeps only
+ * the last record (the i.MX8MP's SNVS) still says what failed.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -130,6 +134,8 @@ struct cluster_check_result {
 	uint32_t status; /* YK_RECORD_STATUS_PASS / _FAIL: the check alone */
 	uint32_t probes[3];
 	uint32_t fingerprint[3];
+	uint32_t check_tag; /* YK_RECORD_CHECK_* of a failed check, 0 for a pass */
+	uint32_t check[3];
 };
 struct cluster_frame_times {
 	uint32_t draw_us, wait_us, show_us, swap_us, frame_us;
@@ -139,7 +145,7 @@ struct cluster_run_records {
 	uint32_t perf[3];
 };
 BUILD_ASSERT(sizeof(struct cluster_sequence) == 32, "rust/src/board.rs Sequence");
-BUILD_ASSERT(sizeof(struct cluster_check_result) == 28, "rust/src/board.rs CheckResult");
+BUILD_ASSERT(sizeof(struct cluster_check_result) == 44, "rust/src/board.rs CheckResult");
 BUILD_ASSERT(sizeof(struct cluster_frame_times) == 20, "rust/src/board.rs CFrameTimes");
 BUILD_ASSERT(sizeof(struct cluster_run_records) == 24, "rust/src/board.rs RunRecords");
 void cluster_board_sequence(struct cluster_sequence *out);
@@ -631,6 +637,16 @@ int main(void)
 		board_result(YK_RECORD_KIND_APP, rec.app[0], rec.app[1], rec.app[2]);
 		board_result_tag(YK_RECORD_KIND_PROBES, (uint8_t)status, s_check.probes[0], s_check.probes[1],
 				 s_check.probes[2]);
+		/* A failed run's verdict says why (record.rs, kind CHECK): the i.MX8MP
+		 * keeps only the last record, and PROBES' five points need not be
+		 * the ones that failed, nor the check the part of the run that did. */
+		if (status != YK_RECORD_STATUS_PASS) {
+			if (s_check.check_tag != 0u)
+				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)s_check.check_tag, s_check.check[0],
+						 s_check.check[1], s_check.check[2]);
+			else
+				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN, (uint32_t)rc, 0u, 0u);
+		}
 	}
 	board_finish("cluster", rc);
 }

@@ -163,8 +163,8 @@ impl Status {
 
 /// The record's status: APP (w1's low byte) and PROBES (the tag) carry
 /// STATUS_PASS / STATUS_FAIL; CASE carries CASE_PASS or one of the CASE_*
-/// failures (w1's low byte); FAULT (the fatal handler ran) is a failure
-/// whatever its words; GLMARK2 carries STATUS_PASS / STATUS_FAIL in w2 bits
+/// failures (w1's low byte); FAULT (the fatal handler ran) and CHECK are
+/// failures whatever their words; GLMARK2 carries STATUS_PASS / STATUS_FAIL in w2 bits
 /// 24..27. Every other kind is n/a (record.rs, KINDS).
 pub fn status(w: &[u32; 4]) -> Status {
     if !magic(w) {
@@ -188,6 +188,8 @@ pub fn status(w: &[u32; 4]) -> Status {
             _ => Status::Invalid,
         },
         (kind::FAULT, _) => Status::Fail,
+        /* a failure whatever its words (record.rs, CHECK) */
+        (kind::CHECK, _) => Status::Fail,
         /* glmark2's own verdict, w2 bits 24..27 (record.rs, glmark2_w2) */
         (kind::GLMARK2, _) => pass_fail((w[2] >> 24) & 0xf),
         _ => Status::NotApplicable,
@@ -527,9 +529,9 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 49 blocks (45 + GLMARK2 on- and off-screen and with
-        // GLMARK2_SCENES + GPU_STOP), every kind of record.rs's table among them
-        assert_eq!(blocks, 49, "the golden file's block count changed: re-derive the pin");
+        // the population: the golden file's 51 blocks (45 + GLMARK2 on- and off-screen and with
+        // GLMARK2_SCENES + GPU_STOP + two CHECK), every kind of record.rs's table among them
+        assert_eq!(blocks, 51, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }
@@ -680,13 +682,14 @@ mod tests {
     /// rest (a fail must never read as a pass: board.sh's verdict=failed).
     #[test]
     fn status_per_kind() {
-        let cases: [([u32; 4], Status); 17] = [
+        let cases: [([u32; 4], Status); 18] = [
             ([0x594b0202, 0x0000_0001, 1, 0], Status::Pass),    // APP pass
             ([0x594b0202, 0x0000_0602, 1, 0], Status::Fail),    // APP fail, stage 6
             ([0x594b0202, 0x0000_0003, 1, 0], Status::Invalid), // APP status 3
             ([0x594b0601, 0x08420882, 0x00210842, 0x98080883], Status::Pass), // PROBES tag 1
             ([0x594b0602, 0x08420882, 0x00210842, 0x98080883], Status::Fail), // PROBES tag 2
             ([0x594b0600, 0, 0, 0], Status::Invalid),           // PROBES tag 0
+            ([0x594b1501, 0x0724814f, 0x01002533, 0x14001133], Status::Fail), // CHECK: a failure always
             ([0x594b0101, 0x000aff01, 12, 0], Status::Pass),    // CASE 10 pass
             ([0x594b0101, 0x000a0302, 0xff, 0xfe], Status::Fail), // CASE 10 check 3
             ([0x594b0101, 0x000aff06, 3, 4], Status::Fail),     // CASE_SET_FAIL
