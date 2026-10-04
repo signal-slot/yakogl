@@ -131,8 +131,7 @@ unsafe extern "C" fn offline_blend_variant(
     }
     // SAFETY: fs is non-null and points at a shc_shader; read by value because out may be the same object.
     let fs = unsafe { fs.read() };
-    // SAFETY: priv is null or the table row offline_compile()/offline_blend_variant() stored.
-    let Some(base) = (unsafe { (fs.priv_ as *const ShcBlob).as_ref() }) else {
+    let Some(base) = super::table_row_of(&fs) else {
         let _ = log.write_str("offline shaderc: a blend variant of a shader not from the table");
         return -EINVAL;
     };
@@ -203,6 +202,8 @@ pub static SHC_OFFLINE: ShcBackend = ShcBackend {
 /// callers can also use it directly.
 #[no_mangle]
 pub unsafe extern "C" fn shc_offline_register() -> *const ShcBackend {
+    #[cfg(feature = "shaderc-online")]
+    super::online::backend::selection_made();
     // SAFETY: single-threaded by contract; a plain store, no reference to the static is formed.
     unsafe { super::g_shaderc = &SHC_OFFLINE };
     &SHC_OFFLINE
