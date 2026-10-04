@@ -1871,6 +1871,113 @@ impl<'a> Sel<'a> {
         }
     }
 
+    /// `texelFetch(s, p, lod)`: `builtins::texel_fetch`, with the level
+    /// turned into a float first as Mesa's etnaviv does
+    /// (`legalize_txf_lod`). A literal level is folded into the f20
+    /// immediate the reference carries (`0.0:f20` for `texelFetch(.., 0)`);
+    /// any other is one `i2f`.
+    fn tex_fetch(&mut self, id: ir::InstrId, sampler: u8, coord: ir::Src, lod: ir::Src) -> Result<(), SelectError> {
+        let dst = SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL };
+        let c = self.src(coord)?;
+        let literal = match self.m.def(lod.val) {
+            Some(ir::Op::ConstI32(bits)) => {
+                build::Src::imm_f32(bits[usize::from(lod.swizzle[0])] as f32).ok().map(SelSrc::Physical)
+            }
+            _ => None,
+        };
+        let level = match literal {
+            Some(imm) => imm,
+            None => {
+                let i2f = build::op_id("i2f").ok_or(SelectError::Unsupported("the instruction set has no `i2f`"))?;
+                let l = self.src(lod)?;
+                let v = VReg(self.next_vreg);
+                self.next_vreg += 1;
+                self.emit(
+                    SelInstr::new(i2f, OpType::S32)
+                        .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
+                        .operand(0, l),
+                )?;
+                SelSrc::Virtual { v, swizzle: ir::SWIZZLE_SPLAT0, neg: false, abs: false }
+            }
+        };
+        let arena = self.arena;
+        let mov = self.mov;
+        let instrs = &mut self.instrs;
+        let next = core::cell::Cell::new(self.next_vreg);
+        let mut push_err = None;
+        let r = {
+            let mut out = |i: SelInstr| {
+                if push_err.is_none() {
+                    push_err = push_one_constant_register(instrs, arena, &next, mov, i).err();
+                }
+            };
+            builtins::texel_fetch(sampler, dst, c, level, &mut out)
+        };
+        self.next_vreg = next.get();
+        r?;
+        match push_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    /// `textureSize(s, 0)`: the bound texture's width, height and depth (the
+    /// layers of an array, the slices of a volume), which the driver puts in
+    /// the constant file per draw (`SHC_VIV_CONST_TEXTURE_WIDTH` / `_HEIGHT` /
+    /// `_DEPTH`, data = the sampler's unit; `vivante/shader.rs const_value`).
+    /// Mesa's etnaviv lowers the query the same way (etnaviv_nir_lower_texture.c
+    /// `lower_txs`: `load_texture_size_etna`), and the reference read
+    /// `es300/texsize.frag`'s sizes straight from such a register (contents
+    /// 5, 6, 7 with the unit as data).
+    ///
+    /// Only level 0: another level is `max(size >> lod, 1)` per lane with the
+    /// layer count unshifted (Mesa leaves it to nir_lower_tex's
+    /// `lower_txs_lod`), which nothing in the corpus asks for and nothing has
+    /// measured, so it is refused by name.
+    fn tex_size(&mut self, id: ir::InstrId, sampler: u8, lod: ir::Src) -> Result<(), SelectError> {
+        let zero = match self.m.def(lod.val) {
+            Some(ir::Op::ConstI32(bits)) => bits[usize::from(lod.swizzle[0])] == 0,
+            _ => false,
+        };
+        if !zero {
+            return Err(SelectError::Unsupported("textureSize at a level other than a literal 0 is not selected yet"));
+        }
+        let kinds = [
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_WIDTH,
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_HEIGHT,
+            crate::shaderc::SHC_VIV_CONST_TEXTURE_DEPTH,
+        ];
+        let (reg, lanes) = self.driver_reg(kinds.map(|k| ConstSlot { contents: k, data: u32::from(sampler) }))?;
+        let mut p = build::Src::reg(build::RGROUP_UNIFORM_0, reg);
+        p.swizzle = [lanes[0], lanes[1], lanes[2], lanes[2]];
+        self.emit(
+            SelInstr::new(self.mov, OpType::F32)
+                .dst(SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL })
+                .operand(MOV_OPERAND, SelSrc::Physical(p)),
+        )
+    }
+
+    /// The constant register holding these three driver-filled dwords, and
+    /// the lane of each: the one already placed, or a new register after
+    /// everything else.
+    fn driver_reg(&mut self, want: [ConstSlot; 3]) -> Result<(u16, [u8; 3]), SelectError> {
+        let n = self.consts.len();
+        for base in (0..n).step_by(4) {
+            let lane_of = |w: ConstSlot| (base..(base + 4).min(n)).position(|i| self.consts[i] == w);
+            if let (Some(a), Some(b), Some(c)) = (lane_of(want[0]), lane_of(want[1]), lane_of(want[2])) {
+                return Ok(((base / 4) as u16, [a as u8, b as u8, c as u8]));
+            }
+        }
+        while !self.consts.len().is_multiple_of(4) {
+            self.consts.push(self.arena, ConstSlot::UNUSED)?;
+        }
+        let reg = (self.consts.len() / 4) as u16;
+        for c in [want[0], want[1], want[2], ConstSlot::UNUSED] {
+            self.consts.push(self.arena, c)?;
+        }
+        Ok((reg, [0, 1, 2]))
+    }
+
     /// `gl_FrontFacing` as the reference computes it: internal register 0
     /// compared against the integer 0 with COND 6 (`ne`), true written as
     /// all ones -- the boolean mask every other comparison here makes, so a
@@ -2424,14 +2531,18 @@ impl<'a> Sel<'a> {
             /* IR v1's look-ups: the five ES 1.00 shapes select as before, one
              * to one (`Op::es100_tex`); every other shape is refused by name
              * until this back end selects it. */
-            op @ ir::Op::Tex { sampler, coord, .. } => match (op.es100_tex(), cube_level(&op)) {
-                (Some((kind, extra)), _) | (None, Some((kind, extra))) => self.tex(id, kind, sampler, coord, extra),
-                (None, None) => Err(SelectError::Unsupported(
-                    "an ES 3.00 texture look-up (a 3D, array or shadow sampler, an integer result, a gradient, \
-                     a fetch or an offset) is not selected yet",
+            op @ ir::Op::Tex { sampler, coord, .. } => match (op.es100_tex(), three_lane_lookup(&op), fetch_level(&op))
+            {
+                (Some((kind, extra)), _, _) | (None, Some((kind, extra)), _) => {
+                    self.tex(id, kind, sampler, coord, extra)
+                }
+                (None, None, Some(lod)) => self.tex_fetch(id, sampler, coord, lod),
+                (None, None, None) => Err(SelectError::Unsupported(
+                    "an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a \
+                     cube fetch) is not selected yet",
                 )),
             },
-            ir::Op::TexSize { .. } => Err(SelectError::Unsupported("textureSize is not selected yet")),
+            ir::Op::TexSize { sampler, lod, .. } => self.tex_size(id, sampler, lod),
             /* `discard` is one `texkill`, with no operands and no
              * destination. Measured against the reference:
              *
@@ -3904,35 +4015,59 @@ fn legal_copy(consumer: OpType, s: SelSrc) -> (OpType, SelSrc) {
     }
 }
 
-/// A cube look-up with an explicit level or a bias -- ES 1.00's
-/// textureCubeLod and textureCube(s, c, bias), and ES 3.00's textureLod and
-/// texture(samplerCube, c, bias), which the front end lowers to one shape --
-/// as the instruction the 2D form already selects.
+/// A look-up whose coordinate has three lanes and that the 2D instructions
+/// already serve: a cube with an explicit level or a bias, and a 3D or 2D
+/// array sampler with an implicit level, a bias or an explicit level.
 ///
-/// The instruction does not know it is a cube: cube-ness is the sampler's
-/// descriptor (src/vivante/texture.rs), and the reference compiler's 78
-/// texldl all carry the level in SRC1 beside a coordinate that may be three
-/// lanes (its first is `mad t1.xyz_` then `texldl t1, tex0, t1.xyzw,
-/// 0.0:f20`). So {Cube, Lod} is texldl and {Cube, Bias} texldb, the coordinate
-/// in SRC0 with its three lanes, exactly as `builtins::texture` emits for the
-/// 2D kinds this maps to. 98 of dEQP-GLES2's 180 compile gaps on this GPU
-/// (host run at ac11728) were these two.
-fn cube_level(op: &ir::Op) -> Option<(ir::Es100Tex, Option<ir::Src>)> {
-    let ir::Op::Tex {
-        dim: ir::TexDim::Cube,
-        shadow: false,
-        proj: false,
-        ret: ir::ScalarType::F32,
-        lod,
-        offset: None,
-        ..
-    } = *op
-    else {
+/// The instruction does not know the sampler's shape: cube-ness, depth and
+/// layers are the sampler's descriptor (src/vivante/texture.rs), and the
+/// reference compiler's 78 texldl all carry the level in SRC1 beside a
+/// coordinate that may be three lanes (its first is `mad t1.xyz_` then
+/// `texldl t1, tex0, t1.xyzw, 0.0:f20`). So a `Lod` is texldl, a `Bias`
+/// texldb and an implicit level texld, the coordinate in SRC0 with its three
+/// lanes, exactly as `builtins::texture` emits for the 2D kinds this maps to.
+///
+/// - Cube {Lod, Bias}: ES 1.00's textureCubeLod and textureCube(s, c, bias),
+///   ES 3.00's textureLod and texture(samplerCube, c, bias). 98 of
+///   dEQP-GLES2's 180 compile gaps on this GPU (host run at ac11728) were
+///   these two.
+/// - D3 and D2Array: ES 3.00's texture() and textureLod(). The reference did
+///   the same for gl_test's `es300/vol.frag` (`texldl t2._y__, tex0.xxxx,
+///   t1.xyzw, 0.0:f20` and `texld t2.x___, tex0.xxxx, t1.xyzw`) and
+///   `es300/array.frag` (`texld t2.xyz_, tex0.xyzx, t2.xyzw`, the layer in z
+///   as the shader computed it), as Mesa's etnaviv does: it passes an array
+///   coordinate to the instruction unchanged.
+fn three_lane_lookup(op: &ir::Op) -> Option<(ir::Es100Tex, Option<ir::Src>)> {
+    let ir::Op::Tex { dim, shadow: false, proj: false, ret: ir::ScalarType::F32, lod, offset: None, .. } = *op else {
         return None;
     };
-    match lod {
-        ir::TexLod::Lod(l) => Some((ir::Es100Tex::Tex2DLod, Some(l))),
-        ir::TexLod::Bias(b) => Some((ir::Es100Tex::Tex2DBias, Some(b))),
+    match (dim, lod) {
+        (ir::TexDim::Cube | ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Lod(l)) => {
+            Some((ir::Es100Tex::Tex2DLod, Some(l)))
+        }
+        (ir::TexDim::Cube | ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Bias(b)) => {
+            Some((ir::Es100Tex::Tex2DBias, Some(b)))
+        }
+        /* texld, as TexCube already is: the coordinate's lanes are the
+         * instruction's whatever the shape */
+        (ir::TexDim::D3 | ir::TexDim::D2Array, ir::TexLod::Implicit) => Some((ir::Es100Tex::TexCube, None)),
+        _ => None,
+    }
+}
+
+/// A `texelFetch` the GC7000 selects: a 2D, 3D or 2D array sampler with a
+/// float result and no offset. Its level.
+fn fetch_level(op: &ir::Op) -> Option<ir::Src> {
+    match *op {
+        ir::Op::Tex {
+            dim: ir::TexDim::D2 | ir::TexDim::D3 | ir::TexDim::D2Array,
+            shadow: false,
+            proj: false,
+            ret: ir::ScalarType::F32,
+            lod: ir::TexLod::Fetch(l),
+            offset: None,
+            ..
+        } => Some(l),
         _ => None,
     }
 }

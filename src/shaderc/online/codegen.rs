@@ -1694,6 +1694,109 @@ mod lowered_ops {
         assert_eq!(plain.viv.vs_id_in_reg, crate::shaderc::SHC_VIV_NO_REG, "absent stays absent");
     }
 
+    const ARRAY_FS: &str = include_str!("../../../tools/shaders/es300/array.frag");
+    const VOL_FS: &str = include_str!("../../../tools/shaders/es300/vol.frag");
+    const TEXSIZE_FS: &str = include_str!("../../../tools/shaders/es300/texsize.frag");
+
+    /// The fields of `ours` that differ from `reference`, leaving out the ones
+    /// that name registers and lanes (the allocator's choice, not the
+    /// encoding's).
+    fn differing_fields(ours: &[u32; 4], reference: &[u32; 4]) -> std::vec::Vec<&'static str> {
+        let (a, b) =
+            (decode_instr(ours).expect("ours decodes"), decode_instr(reference).expect("the reference decodes"));
+        if a.op().name != b.op().name {
+            return std::vec!["the operation"];
+        }
+        a.op()
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| !matches!(f.name, "DST" | "TEX_SWIZ" | "SRC0_REG" | "SRC0"))
+            .filter(|(k, _)| a.vals[*k] != b.vals[*k])
+            .map(|(_, f)| f.name)
+            .collect()
+    }
+
+    fn words(sh: &crate::shaderc::ShcShader) -> std::vec::Vec<[u32; 4]> {
+        // SAFETY: as in `opcodes`.
+        let dw = unsafe { core::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) };
+        dw.as_chunks::<4>().0.to_vec()
+    }
+
+    /// `texelFetch` is the reference's `txf` in every field but the
+    /// registers: the level 0 as the f20 immediate 0.0 in SRC1 and 0x1100 in
+    /// SRC2, as Mesa's etnaviv emits it. The reference words are the GC7000
+    /// table's for gl_test's `es300/array.frag` (case 42): `txf t2.___w,
+    /// tex0.xxxw, t1.xyzw, 0.0:f20, 4352:s20`. Before this the online
+    /// compiler refused the shader ("textureSize is not selected yet").
+    #[test]
+    fn texel_fetch_is_the_reference_txf() {
+        let _k = super::super::store::test_keep();
+        const REF_TXF: [u32; 4] = [0x0402_1009, 0x3900_1e00, 0x0001_0040, 0x7402_100f];
+        const REF_TEXLD: [u32; 4] = [0x0382_1018, 0x3900_2920, 0x0000_0000, 0x0000_0000];
+        for (name, src) in [("array.frag", ARRAY_FS), ("vol.frag", VOL_FS)] {
+            let sh = compile_fs(src);
+            let ws = words(&sh);
+            let txf: std::vec::Vec<&[u32; 4]> =
+                ws.iter().filter(|w| decode_instr(w).expect("decodes").op().name == "txf").collect();
+            assert_eq!(txf.len(), 1, "{name}: one texelFetch, one txf: {:#?}", listing(&sh));
+            assert_eq!(differing_fields(txf[0], &REF_TXF), std::vec::Vec::<&str>::new(), "{name}: {:#?}", listing(&sh));
+            /* The comparison can fail: a txf is not the reference's texld. */
+            assert!(!differing_fields(txf[0], &REF_TEXLD).is_empty());
+        }
+    }
+
+    /// A 3D or 2D array look-up is the 2D instruction with a three-lane
+    /// coordinate: `texture()` a `texld`, `textureLod()` a `texldl`, as the
+    /// reference compiled gl_test's `es300/vol.frag` (case 48) and
+    /// `es300/array.frag` (case 42).
+    #[test]
+    fn volume_and_array_lookups_are_the_2d_instructions() {
+        let _k = super::super::store::test_keep();
+        let vol = opcodes(&compile_fs(VOL_FS));
+        for want in ["texld", "texldl", "txf"] {
+            assert_eq!(vol.iter().filter(|o| **o == want).count(), 1, "vol.frag: one {want}: {vol:?}");
+        }
+        let array = opcodes(&compile_fs(ARRAY_FS));
+        assert_eq!(array.iter().filter(|o| **o == "texld").count(), 1, "array.frag: {array:?}");
+    }
+
+    /// `textureSize(s, 0)` reads the width, height and depth the driver puts
+    /// in the constant file for the sampler's unit (contents 5, 6, 7, data =
+    /// the unit), as the reference did for gl_test's `es300/texsize.frag`
+    /// (case 46): u0 for `tex` on unit 0, u1 for `arr` on unit 1. Another
+    /// level is refused by name.
+    #[test]
+    fn texture_size_reads_the_driver_constants_of_its_unit() {
+        let _k = super::super::store::test_keep();
+        let sh = compile_fs(TEXSIZE_FS);
+        let mut got: std::vec::Vec<(u8, u32)> = sh
+            .viv
+            .const_contents()
+            .iter()
+            .zip(sh.viv.const_data())
+            .filter(|(c, _)| (5..=7).contains(*c))
+            .map(|(c, d)| (*c, *d))
+            .collect();
+        got.sort_unstable();
+        assert_eq!(got, [(5, 0), (5, 1), (6, 0), (6, 1), (7, 0), (7, 1)], "{:#?}", listing(&sh));
+        let level1 = "#version 300 es\nprecision mediump float;\nuniform sampler2D tex;\nout vec4 c;\n\
+                      void main() { c = vec4(float(textureSize(tex, 1).x)); }\n";
+        let err = {
+            let _serial = super::super::store::test_lock();
+            super::super::store::with_scratch(|s| {
+                compile(SHC_STAGE_FRAGMENT, level1.as_bytes(), 0, s, super::super::store::keep())
+            })
+            .expect("the scratch region is free")
+            .err()
+            .expect("a level other than 0 is refused")
+        };
+        assert!(
+            std::format!("{err:?}").contains("textureSize at a level other than a literal 0 is not selected yet"),
+            "{err:?}"
+        );
+    }
+
     /// `gl_PointSize` is clamped to the reported range: two `select`s (the
     /// max against 1, the min against 64) before the output register. The
     /// GC7000 draws a larger point than GL_ALIASED_POINT_SIZE_RANGE says

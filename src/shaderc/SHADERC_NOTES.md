@@ -69,6 +69,20 @@ input is not selected yet" (GitHub issue #11), so gl_test cases 43, 44, 45,
 49, 57 and 98 failed in an online image. The PowerVR online selector had it
 already (`powervr/select.rs`, `vs_vertex_id_reg1`).
 
+**ES 3.00 look-ups on the GC7000 (online).** `texelFetch` on a 2D, 3D or
+2D array sampler is one `txf` (level as a float in SRC1, 0x1100 in SRC2),
+`texture()` / `textureLod()` on a 3D or 2D array sampler the 2D `texld` /
+`texldl` with a three-lane coordinate, and `textureSize(s, 0)` reads the
+`TEXTURE_WIDTH` / `_HEIGHT` / `_DEPTH` constants the driver fills for the
+sampler's unit. All three are Mesa's etnaviv and the reference compiler's
+choices for gl_test's `es300/array.frag`, `vol.frag` and `texsize.frag`
+(cases 42, 48, 46), pinned by `codegen.rs` `lowered_ops`
+(`texel_fetch_is_the_reference_txf` and the two after it). Not selected,
+refused by name: `textureSize` at another level, shadow samplers, integer
+results, gradients, offsets. `es300/texsize.frag` declared a
+`sampler2DArray` with no precision, which GLSL ES 3.00 4.5.4 does not
+allow; it now says `precision mediump sampler2DArray;`.
+
 ## Runtime flow (offline)
 
 ```

@@ -532,6 +532,34 @@ pub fn texture(
     Ok(())
 }
 
+/// `texelFetch`: one `txf`, the integer coordinate in SRC0, the level as a
+/// float in SRC1 and the immediate 0x1100 in SRC2.
+///
+/// Mesa's etnaviv (MIT), read and transcribed: etna_emit_tex maps
+/// `nir_texop_txf` to `ISA_OPC_TXF` with `src[2] = etna_immediate_int(0x1100)`,
+/// and etnaviv_nir_lower_texture.c `legalize_txf_lod` turns the level into a
+/// float (`nir_i2f32`) before it. The reference compiler emitted exactly that
+/// for gl_test's `es300/array.frag`: `txf t2.___w, tex0.xxxw, t1.xyzw,
+/// 0.0:f20, 4352:s20`. What 0x1100 means is not established; it is copied.
+/// The caller hands `lod` already a float.
+pub fn texel_fetch(
+    sampler: u8,
+    dst: SelDst,
+    coord: SelSrc,
+    lod: SelSrc,
+    out: &mut dyn FnMut(SelInstr),
+) -> Result<(), LowerError> {
+    if sampler > 31 {
+        return Err(LowerError::Sampler(sampler));
+    }
+    let t = Tex { id: sampler, swizzle: Tex::IDENTITY };
+    out(inst("txf", OpType::F32)?.tex(t).dst(dst).src(0, coord).src(1, lod).src(2, imm(Src::imm_s20(TXF_SRC2))?));
+    Ok(())
+}
+
+/// The immediate in a `txf`'s SRC2 (Mesa's etnaviv, `etna_emit_tex`).
+pub const TXF_SRC2: i32 = 0x1100;
+
 /// `dst` narrowed to lane `c`.
 fn lane_dst(dst: SelDst, c: usize) -> SelDst {
     match dst {
