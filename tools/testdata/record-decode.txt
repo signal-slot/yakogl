@@ -187,12 +187,12 @@ GPU_STOP (20) tag 2: cause 2 (out of memory with the freelist at its maximum) fe
 ### 594b1501 0724814f 01002533 14001133
 CHECK (21) tag 1: probes: probe 7 at (584,335) reads 0,37,51, the reference 0,17,51 (diff 20); 1 probes failing
 ### classify verdict
-### 594b1507 5400018c 00c028fe 7d3e89d0
-CHECK (21) tag 7: run: the check passed, the run failed later: the frame's fence did not signal at frame 254 (2001 ms; its draw 40 ms, 12 ms in GL calls, most in glDraw*, about 2000 ms waiting for the GPU, 1 waits timed out, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
+### 594b1507 5400018c 7c6028fe 7d3e89d0
+CHECK (21) tag 7: run: the check passed, the run failed later: the frame's fence did not signal at frame 254 (2001 ms; its draw 40 ms, most in glDraw*, GPU busy 1990 ms, about 2000 ms blocked on the GPU, 1 waits timed out, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
 ### classify verdict
-### 594b1507 5400028c ad2ada02 ab56f1d0
-CHECK (21) tag 7: run: the check passed, the run failed later: a frame over the budget at frame 2 (2782 ms; its draw 2778 ms, 2770 ms in GL calls, most in glDraw*, about 2736 ms waiting for the GPU, 1 waits timed out, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
+### 594b1507 1400028c 028ab902 0155f1d0
+CHECK (21) tag 7: run: the check passed, the run failed later: a frame over the budget at frame 2 (2750 ms; its draw 2745 ms, most in glDraw*, GPU busy 40 ms, about 16 ms blocked on the GPU, 0 waits timed out, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
 ### classify verdict
 ### 594b1507 fff004ea ffffff02 ff0007ff
-CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call failed at frame 2 (0 ms; its draw not measured, GL calls not timed, GPU waits not measured, compiler runs not counted), rc -22; draws refused 0; no keep region
+CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call failed at frame 2 (0 ms; its draw not measured, GPU busy not measured, blocked on the GPU not measured, compiler runs not counted), rc -22; draws refused 0; no keep region
 ### classify verdict
