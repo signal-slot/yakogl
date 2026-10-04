@@ -116,14 +116,24 @@ pub unsafe extern "C" fn gles_offline_shader_source(name: *const c_char) -> *con
 
 /* ---- blend variants: the same source, compiled for one blend state ---- */
 
-unsafe extern "C" fn offline_blend_variant(fs: *const ShcShader, blend_key: u32, out: *mut ShcShader) -> i32 {
+unsafe extern "C" fn offline_blend_variant(
+    fs: *const ShcShader,
+    blend_key: u32,
+    out: *mut ShcShader,
+    log: *mut c_char,
+    log_sz: usize,
+) -> i32 {
+    // SAFETY: the caller passes a null log, or one valid for log_sz bytes.
+    let mut log = unsafe { CStrWriter::new(log, log_sz) };
     if fs.is_null() || out.is_null() {
+        let _ = log.write_str("offline shaderc: NULL shader or output");
         return -EINVAL;
     }
     // SAFETY: fs is non-null and points at a shc_shader; read by value because out may be the same object.
     let fs = unsafe { fs.read() };
     // SAFETY: priv is null or the table row offline_compile()/offline_blend_variant() stored.
     let Some(base) = (unsafe { (fs.priv_ as *const ShcBlob).as_ref() }) else {
+        let _ = log.write_str("offline shaderc: a blend variant of a shader not from the table");
         return -EINVAL;
     };
 
@@ -145,6 +155,8 @@ unsafe extern "C" fn offline_blend_variant(fs: *const ShcShader, blend_key: u32,
         unsafe { out.write(sh) };
         return 0;
     }
+    let _ =
+        write!(log, "offline shaderc: {} has no variant for blend key {blend_key:#x} in the table", base.source_name());
     -ENOENT /* not precompiled: add a --blend variant to glsl2usc.sh */
 }
 
@@ -525,8 +537,8 @@ mod tests {
         fs.priv_ = blob_priv(table_row("uniform_color.frag", 0));
         // SAFETY: deliberately null arguments.
         unsafe {
-            assert_eq!(offline_blend_variant(core::ptr::null(), 1, &mut out), -EINVAL);
-            assert_eq!(offline_blend_variant(&fs, 1, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(offline_blend_variant(core::ptr::null(), 1, &mut out, core::ptr::null_mut(), 0), -EINVAL);
+            assert_eq!(offline_blend_variant(&fs, 1, core::ptr::null_mut(), core::ptr::null_mut(), 0), -EINVAL);
         }
     }
 
@@ -539,7 +551,7 @@ mod tests {
         fs.priv_ = blob_priv(base);
         let mut out = ShcShader::ZERO;
         // SAFETY: valid shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, var.blend_key, &mut out) }, 0);
+        assert_eq!(unsafe { offline_blend_variant(&fs, var.blend_key, &mut out, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(out.usc, var.shader.usc);
         assert_eq!(out.blend_key, var.blend_key);
         assert!(core::ptr::eq(out.priv_ as *const ShcBlob, var));
@@ -557,7 +569,7 @@ mod tests {
         fs.priv_ = blob_priv(a);
         let mut out = ShcShader::ZERO;
         // SAFETY: valid shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, b.blend_key, &mut out) }, 0);
+        assert_eq!(unsafe { offline_blend_variant(&fs, b.blend_key, &mut out, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(out.usc, b.shader.usc);
     }
 
@@ -569,7 +581,7 @@ mod tests {
         fs.temps = 0x1234; /* marks the caller's copy */
         let p: *mut ShcShader = &mut fs;
         // SAFETY: in == out is allowed (the input is read by value first).
-        assert_eq!(unsafe { offline_blend_variant(p, 0, p) }, 0);
+        assert_eq!(unsafe { offline_blend_variant(p, 0, p, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(fs.temps, 0x1234);
         assert_eq!(fs.usc, base.shader.usc);
     }
@@ -581,14 +593,14 @@ mod tests {
         let mut fs = ShcShader::ZERO;
         fs.priv_ = blob_priv(table_row("uniform_color.frag", 0));
         // SAFETY: valid shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, 0x3fff_ffff, &mut out) }, -ENOENT);
+        assert_eq!(unsafe { offline_blend_variant(&fs, 0x3fff_ffff, &mut out, core::ptr::null_mut(), 0) }, -ENOENT);
         assert_eq!(out.temps, 0x4321, "out is untouched on failure");
 
         /* a vertex row has no fragment variants */
         let key = SHC_BLOB_TABLE.iter().find(|b| b.blend_key != 0).unwrap().blend_key;
         fs.priv_ = blob_priv(table_row("passthrough.vert", 0));
         // SAFETY: valid shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, key, &mut out) }, -ENOENT);
+        assert_eq!(unsafe { offline_blend_variant(&fs, key, &mut out, core::ptr::null_mut(), 0) }, -ENOENT);
     }
 }
 
@@ -636,7 +648,10 @@ mod viv_front_facing_tests {
         fs.priv_ = blob_priv(base);
         let mut out = ShcShader::ZERO;
         // SAFETY: valid distinct shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, SHC_VIV_KEY_FRONT_FLIPPED, &mut out) }, 0);
+        assert_eq!(
+            unsafe { offline_blend_variant(&fs, SHC_VIV_KEY_FRONT_FLIPPED, &mut out, core::ptr::null_mut(), 0) },
+            0
+        );
         assert_eq!(out.usc, row("es300/facing.frag @front_cw", SHC_VIV_KEY_FRONT_FLIPPED).shader.usc);
     }
 
@@ -648,6 +663,9 @@ mod viv_front_facing_tests {
         fs.priv_ = blob_priv(base);
         let mut out = ShcShader::ZERO;
         // SAFETY: valid distinct shaders.
-        assert_eq!(unsafe { offline_blend_variant(&fs, SHC_VIV_KEY_FRONT_FLIPPED, &mut out) }, -ENOENT);
+        assert_eq!(
+            unsafe { offline_blend_variant(&fs, SHC_VIV_KEY_FRONT_FLIPPED, &mut out, core::ptr::null_mut(), 0) },
+            -ENOENT
+        );
     }
 }

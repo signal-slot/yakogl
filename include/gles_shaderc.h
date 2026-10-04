@@ -416,10 +416,13 @@ struct shc_backend {
 	int (*link)(const struct shc_shader *vs, struct shc_shader *fs,
 		    char *log, size_t log_sz);
 	/* The variant of a compiled fragment shader for one blend state
-	 * (SHC_BLEND_KEY). Returns 0 and fills *out, or -ENOENT when the backend
-	 * has no such variant (offline: not precompiled). */
+	 * (SHC_BLEND_KEY). Returns 0 and fills *out; -ENOMEM when the compiler
+	 * had no room for it now (it may succeed once something is freed); any
+	 * other value < 0 when the variant cannot be had (-ENOENT: the offline
+	 * table has no such variant). On failure, if `log` is non-NULL, writes
+	 * why. */
 	int (*blend_variant)(const struct shc_shader *fs, uint32_t blend_key,
-			     struct shc_shader *out);
+			     struct shc_shader *out, char *log, size_t log_sz);
 	/* Compile a vertex shader with the program's attribute layout, at
 	 * glLinkProgram (when the compile set layout_at_link, or the bindings
 	 * alias). NULL: no such path -- the offline table cannot recompile;
@@ -432,10 +435,11 @@ struct shc_backend {
 	 * needed), high 32 bits "mag LINEAR with min NEAREST_MIPMAP_*" (the
 	 * c = 0.5 switch remapped). 0: none. NULL: no variants (offline). */
 	uint64_t (*lod_sensitivity)(const struct shc_shader *sh);
-	/* The shader compiled again for one such key; 0 and *out filled, or <0.
-	 * Key 0 copies the input. */
+	/* The shader compiled again for one such key; 0 and *out filled, or <0
+	 * with the meaning blend_variant gives it (-ENOMEM: no room now) and,
+	 * if `log` is non-NULL, why. Key 0 copies the input. */
 	int (*sampler_variant)(const struct shc_shader *sh, uint64_t key,
-			       struct shc_shader *out);
+			       struct shc_shader *out, char *log, size_t log_sz);
 };
 
 extern const struct shc_backend *g_shaderc;

@@ -2254,7 +2254,9 @@ fn run_variants(text: &str, diffs: &mut Vec<String>, fir: &mut FsIr) {
         fir.variants += 1;
         let mut v = yakogl::shaderc::ShcShader::ZERO;
         // SAFETY: `base` came from this back end; `v` is a valid out.
-        let rc = unsafe { (backend.blend_variant.expect("online blend_variant"))(&base, bk, &mut v) };
+        let rc = unsafe {
+            (backend.blend_variant.expect("online blend_variant"))(&base, bk, &mut v, core::ptr::null_mut(), 0)
+        };
         if rc != 0 {
             fir.variants_unmeasured.push(format!("{bk:#x} ours refused ({rc})"));
             continue;

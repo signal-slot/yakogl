@@ -158,7 +158,8 @@ compiled a smaller shader. The failures stay apart in the errno too:
 | errno | means |
 |---|---|
 | `-ENOTSUP` | the compiler cannot do this yet; the log names the milestone |
-| `-ENOMEM` | out of compiler memory; the log names the constant to raise |
+| `-ENOMEM` | the keep region has no room now (it may have once something is freed); the log names the constant to raise |
+| `-ENOSPC` | the program does not fit the scratch arena, which is reset for every compile, so it never will; the log names the constant to raise |
 | `-EINVAL` | the shader is wrong (the front end's diagnostic is in the log) |
 
 An application, and a conformance run, act differently on each. A build that

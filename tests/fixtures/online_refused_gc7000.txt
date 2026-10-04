@@ -117,7 +117,7 @@ qt3d/qtparticleshaders_9.vert: 0:2: 'GL_OVR_multiview2' : extension is not suppo
 qt3d/qtparticleshaders_91.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
 qt3d/qtparticleshaders_92.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
 qt3d/qtparticleshaders_94.vert: 0:2: 'GL_OVR_multiview2' : extension is not supported
-qt3d/ssao_300.frag: online shaderc: out of compiler memory on this fragment shader (0 bytes left in the scratch arena); raise shaderc::online::store::SCRATCH_BYTES
+qt3d/ssao_300.frag: online shaderc: this fragment shader does not fit the scratch arena (0 bytes left); raise shaderc::online::store::SCRATCH_BYTES
 texture.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 texture2.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 uniform_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

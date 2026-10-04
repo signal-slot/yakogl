@@ -118,7 +118,8 @@ pub const SCRATCH_BYTES: usize = 4 * 1024 * 1024;
 ///
 /// This is the size of the BUILT-IN region, which a host build uses. An
 /// image has none: its OSAL lends the region ([`shc_online_lend_keep`]),
-/// sized by `CONFIG_YAKOGL_SHADERC_KEEP_BYTES` (default 512 KiB, the same),
+/// sized by `CONFIG_YAKOGL_SHADERC_KEEP_BYTES` (default 1 MiB, which holds
+/// the largest application measured with room to spare; see its help text),
 /// so an application that keeps more sets more.
 pub const KEEP_BYTES: usize = 512 * 1024;
 
@@ -171,6 +172,10 @@ static LAST_SCRATCH_PEAK: Global<usize> = Global::new(0);
 /// The most the keep region has held at once, across resets and frees: the
 /// number a product's region has to be sized from.
 static KEEP_PEAK: Global<usize> = Global::new(0);
+/// How many times keep granules have been given back ([`free_keep`],
+/// [`reset_keep`]): a compile that found no room can only find room after
+/// this has moved.
+static KEEP_FREES: Global<u64> = Global::new(0);
 
 /// The keep region's allocation unit. Every compiled shader owns a whole
 /// number of these, so a shader freed out of order leaves a hole the next
@@ -522,6 +527,20 @@ pub fn free_keep(ext: KeepExtent) {
         core::ptr::write_bytes(region().base.add(s * KEEP_GRANULE), KEEP_POISON, n * KEEP_GRANULE)
     };
     mark(s, n, false);
+    // SAFETY: single-threaded by contract.
+    *unsafe { KEEP_FREES.get() } += 1;
+}
+
+/// The count [`free_keep`] and [`reset_keep`] advance: equal across two
+/// calls means nothing was given back in between.
+pub fn keep_frees() -> u64 {
+    // SAFETY: single-threaded by contract.
+    *unsafe { KEEP_FREES.get() }
+}
+
+/// The keep region's size in bytes (0 when none was lent).
+pub fn keep_size() -> usize {
+    region().granules * KEEP_GRANULE
 }
 
 /// The byte test builds write over a freed extent ([`free_keep`]); a word of
@@ -644,6 +663,8 @@ pub fn reset_keep() {
     // SAFETY: single-threaded by contract, as everywhere in this file.
     unsafe { KEEP_OPEN.get() }.take();
     map().fill(0);
+    // SAFETY: as above.
+    *unsafe { KEEP_FREES.get() } += 1;
 }
 
 /// The arena a compile keeps its output in: the one [`begin_keep`] opened.
@@ -1293,6 +1314,90 @@ mod lend_tests {
         free_keep(hi);
         free_keep(lo);
         assert_eq!(keep_in_use(), 0);
+        drop(_back);
+        drop(mine);
+    }
+
+    /// A draw's variant refused because the keep region is full is refused
+    /// again AT ONCE, without a compile, until something is freed; then it is
+    /// compiled again and, with room, succeeds. The two refusals say which
+    /// they are, so a log tells "compiled and did not fit" from "known full".
+    #[test]
+    #[cfg(feature = "gpu-powervr")] /* blend variants are this GPU's */
+    fn a_variant_refused_for_room_is_not_compiled_again_until_something_is_freed() {
+        use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, VARIANT_NO_ROOM};
+        let _serial = test_lock();
+        let mut mine = std::vec![0u64; (MIN_KEEP_BYTES * 2) / 8];
+        // SAFETY: an aligned buffer this test owns for its whole length.
+        let r = unsafe { carve_keep(mine.as_mut_ptr() as *mut u8, mine.len() * 8) };
+        close_keeping(); /* as in a_lent_keep_region_is_the_one_shaders_are_kept_in */
+        // SAFETY: single-threaded under the test lock; put back by `_back`.
+        let _back = KeepLendBack(unsafe { KEEP_LENT.get() }.replace(r));
+        let be = &super::super::backend::SHC_ONLINE;
+        let compile = |tag: usize| {
+            /* Text no other test compiles, so the cache cannot answer instead. */
+            let src = std::format!(
+                "precision mediump float; uniform vec4 u[8]; varying vec4 v;\n\
+                 void main(){{ vec4 a = v * u[0] + u[1]; a = a * u[2] + sin(a) * u[3]; a = a * u[4] + cos(a) * u[5];\n\
+                 gl_FragColor = a * u[6] + u[7]; }} // variant-room {tag}\n\0"
+            );
+            let mut sh = ShcShader::ZERO;
+            // SAFETY: a NUL-terminated source and a real output; no log.
+            let rc = unsafe {
+                be.compile.unwrap()(SHC_STAGE_FRAGMENT, src.as_ptr() as *const _, &mut sh, core::ptr::null_mut(), 0)
+            };
+            (rc, sh)
+        };
+        let variant = |fs: &ShcShader, key: u32| {
+            let mut out = ShcShader::ZERO;
+            let mut log = [0 as core::ffi::c_char; 256];
+            // SAFETY: a shader this back end compiled, a real output and log.
+            let rc = unsafe { be.blend_variant.unwrap()(fs, key, &mut out, log.as_mut_ptr(), log.len()) };
+            // SAFETY: the writer NUL-terminated the log.
+            let text =
+                std::string::String::from_utf8_lossy(unsafe { crate::util::cstr_bytes(log.as_ptr()) }).into_owned();
+            (rc, out, text)
+        };
+        let key = crate::shaderc::shc_blend_key(
+            crate::shaderc::SHC_BF_SRC_ALPHA,
+            crate::shaderc::SHC_BF_INVERT | crate::shaderc::SHC_BF_SRC_ALPHA,
+            crate::shaderc::SHC_BF_ONE,
+            crate::shaderc::SHC_BF_INVERT | crate::shaderc::SHC_BF_SRC_ALPHA,
+            crate::shaderc::SHC_BLEND_ADD,
+            crate::shaderc::SHC_BLEND_ADD,
+        );
+        let (rc, base) = compile(0);
+        assert_eq!(rc, 0);
+        /* fill the region with shader records until one does not fit */
+        let mut held = std::vec::Vec::new();
+        loop {
+            let (rc, sh) = compile(held.len() + 1);
+            if rc != 0 {
+                assert_eq!(rc, VARIANT_NO_ROOM, "the fill ends on a full keep");
+                break;
+            }
+            held.push(sh);
+            assert!(held.len() < 1000, "the region never filled");
+        }
+        let (rc, _, first) = variant(&base, key);
+        assert_eq!(rc, VARIANT_NO_ROOM, "{first}");
+        assert!(first.contains("keep full on this fragment shader"), "compiled and did not fit: {first}");
+        let frees = keep_frees();
+        let (rc, _, second) = variant(&base, key);
+        assert_eq!(rc, VARIANT_NO_ROOM, "{second}");
+        assert!(second.contains("nothing freed since a variant was last refused for room"), "known full: {second}");
+        assert_eq!(keep_frees(), frees);
+        /* two records' worth freed: the next ask compiles, and fits */
+        for sh in held.drain(..2) {
+            crate::shaderc::release_shader(&sh);
+        }
+        let (rc, v, third) = variant(&base, key);
+        assert_eq!(rc, 0, "room again: {third}");
+        crate::shaderc::release_shader(&v);
+        for sh in held.iter().chain([&base]) {
+            crate::shaderc::release_shader(sh);
+        }
+        assert_eq!(keep_in_use(), 0, "every record this test compiled is freed, so none stays cached");
         drop(_back);
         drop(mine);
     }
