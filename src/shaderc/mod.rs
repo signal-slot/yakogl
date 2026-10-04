@@ -1116,8 +1116,20 @@ pub struct ShcBackend {
     /// Match the FS inputs to the VS outputs; patches the FS copy's vtxout_off.
     pub link:
         Option<unsafe extern "C" fn(vs: *const ShcShader, fs: *mut ShcShader, log: *mut c_char, log_sz: usize) -> i32>,
-    /// The variant of a compiled FS for one blend key; -ENOENT when absent.
-    pub blend_variant: Option<unsafe extern "C" fn(fs: *const ShcShader, blend_key: u32, out: *mut ShcShader) -> i32>,
+    /// The variant of a compiled FS for one blend key; 0 and `*out` filled,
+    /// [`VARIANT_NO_ROOM`] when the compiler had no room for it now (it may
+    /// succeed once something is freed), any other value < 0 when the
+    /// variant cannot be had (-ENOENT: the offline table has none). On
+    /// failure the log, if not null, says why.
+    pub blend_variant: Option<
+        unsafe extern "C" fn(
+            fs: *const ShcShader,
+            blend_key: u32,
+            out: *mut ShcShader,
+            log: *mut c_char,
+            log_sz: usize,
+        ) -> i32,
+    >,
     /// Compile a vertex shader with the program's attribute layout
     /// ([`ShcAttribMap`]), at glLinkProgram; 0 and `*out` filled (its
     /// `attribs` rows at the map's locations), or < 0 and a log. Called when
@@ -1144,9 +1156,22 @@ pub struct ShcBackend {
     /// map, the constant W); 0 and `*out` filled, which the caller releases
     /// like a blend variant, or < 0. A fragment result is linked by the
     /// caller (`link`) as a blend variant is; its blend variants inherit the
-    /// key. Key 0 copies the input.
-    pub sampler_variant: Option<unsafe extern "C" fn(sh: *const ShcShader, key: u64, out: *mut ShcShader) -> i32>,
+    /// key. Key 0 copies the input. Failures as for `blend_variant`.
+    pub sampler_variant: Option<
+        unsafe extern "C" fn(
+            sh: *const ShcShader,
+            key: u64,
+            out: *mut ShcShader,
+            log: *mut c_char,
+            log_sz: usize,
+        ) -> i32,
+    >,
 }
+
+/// What `blend_variant` and `sampler_variant` return when the compiler had no
+/// room for the variant now: the caller may ask again once something has been
+/// freed. Every other failure is final for that key.
+pub const VARIANT_NO_ROOM: i32 = -crate::util::ENOMEM;
 
 /// The shader back end of this build (`extern const struct shc_backend *g_shaderc;`).
 /* The initialiser decides what the linker must keep. Naming the offline back

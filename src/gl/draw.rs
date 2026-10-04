@@ -155,6 +155,8 @@ struct ProgFsVariant {
     lod_key: u64,
     /// Looked up and not available.
     missing: bool,
+    /// [`ProgGpu::fs_clock`] at its last use.
+    stamp: u32,
     sh: ShcShader,
     usc: OsalGpuMem,
 }
@@ -167,6 +169,8 @@ struct ProgGpu {
     /// The frame that last read `uniforms` (see [`staging_reserve`]).
     uniforms_kick: u32,
     fs_var: [ProgFsVariant; PROG_MAX_FS_VARIANTS],
+    /// Draws that asked for a blend variant: the variants' age.
+    fs_clock: u32,
     /// Which texture bindings' filter state each stage's code depends on
     /// (`ShcBackend::lod_sensitivity`, `shaderc::LodKey` bits; [vertex,
     /// fragment]), asked once after the link ([`draw_lod_key`]).
@@ -521,6 +525,16 @@ static DRAW_INSTANCE_ID: AtomicU32 = AtomicU32::new(0);
 
 /// A blend variant could not be uploaded (logged once).
 static VARIANT_OOM_LOGGED: AtomicBool = AtomicBool::new(false);
+/// A blend variant was refused for want of compiler room (logged once).
+static VARIANT_NO_ROOM_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// What a back end's variant or link call wrote into `log`, for a message.
+fn log_text(log: &[core::ffi::c_char]) -> &str {
+    let n = log.iter().position(|&c| c == 0).unwrap_or(log.len());
+    // SAFETY: `log` is `n` initialised bytes before its NUL.
+    let b = unsafe { core::slice::from_raw_parts(log.as_ptr() as *const u8, n) };
+    core::str::from_utf8(b).unwrap_or("(a log that is not UTF-8)")
+}
 
 /// Log lines left for attribute ranges that leave their buffer.
 static ATTRIB_RANGE_LOGS: AtomicI32 = AtomicI32::new(8);
@@ -1205,13 +1219,15 @@ pub unsafe extern "C" fn gl_draw_debug_usc(program: GLuint, fragment: i32) -> *c
 }
 
 /// The FS variant for blend key `key`: looked up in the shader backend once
-/// per (program, key) and its USC uploaded once. Returns the slot in
-/// `pg.fs_var`, `Ok(None)` when the draw needs none (key 0), and the reason
-/// when it needs one it cannot have -- the variant does not exist or does
-/// not build (the offline table has no --blend entry for that state, the
-/// online compiler refused it), does not link, or does not fit in memory.
-/// The draw is then refused (`build_common`), never drawn with the plain
-/// shader.
+/// per (program, key) and its USC uploaded once, in one of
+/// [`PROG_MAX_FS_VARIANTS`] slots per program (a new key takes a free slot
+/// or the least recently used one). Returns the slot in `pg.fs_var`,
+/// `Ok(None)` when the draw needs none (key 0), and the reason when it needs
+/// one it cannot have. The draw is then refused (`build_common`), never
+/// drawn with the plain shader. A variant that does not exist, does not
+/// build or does not link is remembered as missing; one refused for want of
+/// room (the compiler's [`VARIANT_NO_ROOM`], or GPU memory for its USC)
+/// leaves the slot free, so a later draw asks again.
 ///
 /// `lod_key` is the fragment key of the sampler-state variant `rfs` is (0:
 /// the program's own): a blend variant is of one fragment shader, so the
@@ -1223,20 +1239,21 @@ fn fs_variant_for(
     key: u32,
     lod_key: u64,
 ) -> Result<Option<usize>, &'static str> {
-    let mut slot = None;
-
     if key == 0 {
         return Ok(None);
     }
-    for (i, v) in pg.fs_var.iter().enumerate() {
-        if v.blend_key == key && v.lod_key == lod_key {
-            return if v.missing { Err("no fragment shader variant for its blend key") } else { Ok(Some(i)) };
-        }
-        if slot.is_none() && v.blend_key == 0 {
-            slot = Some(i);
-        }
+    pg.fs_clock = pg.fs_clock.wrapping_add(1);
+    let now = pg.fs_clock;
+    if let Some(i) = pg.fs_var.iter().position(|v| v.blend_key == key && v.lod_key == lod_key) {
+        pg.fs_var[i].stamp = now;
+        return if pg.fs_var[i].missing { Err("no fragment shader variant for its blend key") } else { Ok(Some(i)) };
     }
-    let slot = slot.unwrap_or(0); /* table full: recycle the oldest slot */
+    /* A free slot, or the least recently used one. Its USC goes back through
+     * the OSAL's deferred free, which holds it until the frames that may
+     * still read it have completed. */
+    let slot = pg.fs_var.iter().position(|v| v.blend_key == 0).unwrap_or_else(|| {
+        (0..PROG_MAX_FS_VARIANTS).max_by_key(|&i| now.wrapping_sub(pg.fs_var[i].stamp)).unwrap_or(0)
+    });
     let v = &mut pg.fs_var[slot];
     if !v.usc.impl_.is_null() {
         osal::gpu_free(&mut v.usc);
@@ -1246,17 +1263,43 @@ fn fs_variant_for(
     unsafe { core::ptr::write_bytes(v as *mut ProgFsVariant, 0, 1) };
     v.blend_key = key;
     v.lod_key = lod_key;
-    let found = match shaderc::backend().and_then(|b| b.blend_variant) {
-        // SAFETY: `rfs` and `v.sh` are valid for the call.
-        Some(f) => unsafe { f(rfs, key, &mut v.sh) == 0 },
-        None => false,
+    v.stamp = now;
+    let mut log = [0 as core::ffi::c_char; 192];
+    let rc = match shaderc::backend().and_then(|b| b.blend_variant) {
+        // SAFETY: `rfs` and `v.sh` are valid for the call; the log is as long as said.
+        Some(f) => unsafe { f(rfs, key, &mut v.sh, log.as_mut_ptr(), log.len()) },
+        None => {
+            // SAFETY: the log is valid for its length.
+            let _ = unsafe { util::CStrWriter::new(log.as_mut_ptr(), log.len()) }
+                .write_str("the shader back end has no blend variants");
+            -util::ENOENT
+        }
     };
-    if !found {
-        glog!("yakogl: no fragment shader variant for blend key 0x{:x}; its draws are refused", key);
+    /* No room in the compiler now is not a property of the blend state: the
+     * slot is freed, so a draw after something was freed tries again (the
+     * back end refuses at once until then). This draw is refused. */
+    let no_room = |v: &mut ProgFsVariant, log: &[core::ffi::c_char]| {
+        if !VARIANT_NO_ROOM_LOGGED.swap(true, Ordering::Relaxed) {
+            glog!("yakogl: no room for the blend key 0x{:x} variant ({}); the draw is refused", key, log_text(log));
+        }
+        shaderc::release_shader(&v.sh);
+        // SAFETY: every field of ProgFsVariant is valid when all-zero.
+        unsafe { core::ptr::write_bytes(v as *mut ProgFsVariant, 0, 1) };
+        Err("no room for its blend key's fragment shader variant")
+    };
+    if rc == VARIANT_NO_ROOM {
+        return no_room(v, &log);
+    }
+    if rc != 0 {
+        glog!(
+            "yakogl: no fragment shader variant for blend key 0x{:x} ({}); its draws are refused",
+            key,
+            log_text(&log)
+        );
         v.missing = true;
         return Err("no fragment shader variant for its blend key");
     }
-    /* The variant is a fresh copy from the offline table, so its varyings
+    /* The variant is a fresh copy from the shader back end, so its varyings
      * carry the offsets the fragment shader was compiled with -- its own
      * packing, which is not the vertex shader's whenever the fragment stage
      * reads fewer varyings than the vertex stage writes. Link it the same way
@@ -1264,9 +1307,17 @@ fn fs_variant_for(
      * customeffect's floor read its transformed UV out of the slot holding
      * the tangent, and every draw into an RGBA16F target takes a variant. */
     if let Some(link) = shaderc::backend().and_then(|b| b.link) {
-        // SAFETY: `rvs` and `v.sh` are valid shaders and distinct; a null log.
-        if unsafe { link(rvs, &mut v.sh, core::ptr::null_mut(), 0) } != 0 {
-            glog!("yakogl: fragment shader variant for key 0x{:x} does not link; its draws are refused", key);
+        // SAFETY: `rvs` and `v.sh` are valid shaders and distinct; the log is as long as said.
+        let rc = unsafe { link(rvs, &mut v.sh, log.as_mut_ptr(), log.len()) };
+        if rc == VARIANT_NO_ROOM {
+            return no_room(v, &log);
+        }
+        if rc != 0 {
+            glog!(
+                "yakogl: fragment shader variant for key 0x{:x} does not link ({}); its draws are refused",
+                key,
+                log_text(&log)
+            );
             v.missing = true;
             return Err("its blend key's fragment shader variant does not link");
         }
@@ -1456,7 +1507,9 @@ fn free_lod_variant(pg: &mut ProgGpu, i: usize) {
 /// such back end entry, a compile, link or upload failure: the draw then
 /// takes the program's own shaders, which is what every draw did before
 /// (the TPU's quad level, or the hardware's switch at 0), never a refusal.
-/// A failure is remembered in the slot, so it is not retried every draw.
+/// A failure is remembered in the slot, so it is not retried every draw,
+/// except a compile refused for want of room ([`VARIANT_NO_ROOM`]), which
+/// frees the slot so a later draw asks again.
 fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64; 2]) -> Option<usize> {
     pg.lod_clock = pg.lod_clock.wrapping_add(1);
     let now = pg.lod_clock;
@@ -1472,13 +1525,15 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
     v.used = true;
     v.key = key;
     v.stamp = now;
-    let fail = |v: &mut ProgLodVariant, why: &str| -> Option<usize> {
+    let mut log = [0 as core::ffi::c_char; 192];
+    let fail = |v: &mut ProgLodVariant, why: &str, log: &[core::ffi::c_char], rc: i32| -> Option<usize> {
         if !LOD_VARIANT_LOGGED.swap(true, Ordering::Relaxed) {
             glog!(
-                "yakogl: no sampler-state variant for key {:#x}/{:#x} ({}); its draws take the program's own shaders",
+                "yakogl: no sampler-state variant for key {:#x}/{:#x} ({}: {}); its draws take the program's own shaders",
                 v.key[0],
                 v.key[1],
-                why
+                why,
+                log_text(log)
             );
         }
         for m in [&mut v.vs_usc, &mut v.fs_usc] {
@@ -1490,19 +1545,27 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
         shaderc::release_shader(&v.fs);
         v.vs = ShcShader::ZERO;
         v.fs = ShcShader::ZERO;
-        v.missing = true;
+        if rc == VARIANT_NO_ROOM {
+            /* not a property of the key: the slot is free again */
+            // SAFETY: every field of ProgLodVariant is valid when all-zero.
+            unsafe { core::ptr::write_bytes(v as *mut ProgLodVariant, 0, 1) };
+        } else {
+            v.missing = true;
+        }
         None
     };
     let Some(variant) = shaderc::backend().and_then(|b| b.sampler_variant) else {
-        return fail(v, "the shader back end has none");
+        return fail(v, "the shader back end has none", &log, -util::ENOENT);
     };
-    // SAFETY: the program's shaders and the slot's outputs, all valid.
-    if unsafe { variant(rvs, key[0], &mut v.vs) } != 0 {
-        return fail(v, "the vertex shader does not compile");
+    // SAFETY: the program's shaders and the slot's outputs, all valid; the log is as long as said.
+    let rc = unsafe { variant(rvs, key[0], &mut v.vs, log.as_mut_ptr(), log.len()) };
+    if rc != 0 {
+        return fail(v, "the vertex shader does not compile", &log, rc);
     }
     // SAFETY: as above.
-    if unsafe { variant(rfs, key[1], &mut v.fs) } != 0 {
-        return fail(v, "the fragment shader does not compile");
+    let rc = unsafe { variant(rfs, key[1], &mut v.fs, log.as_mut_ptr(), log.len()) };
+    if rc != 0 {
+        return fail(v, "the fragment shader does not compile", &log, rc);
     }
     /* A fragment variant is compiled from the source, with its own varying
      * packing: linked to the vertex shader as glLinkProgram linked the
@@ -1510,9 +1573,10 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
      * own, linked already. */
     if key[1] != 0 {
         if let Some(link) = shaderc::backend().and_then(|b| b.link) {
-            // SAFETY: two distinct valid shaders; a null log.
-            if unsafe { link(&v.vs, &mut v.fs, core::ptr::null_mut(), 0) } != 0 {
-                return fail(v, "the fragment shader does not link");
+            // SAFETY: two distinct valid shaders; the log is as long as said.
+            let rc = unsafe { link(&v.vs, &mut v.fs, log.as_mut_ptr(), log.len()) };
+            if rc != 0 {
+                return fail(v, "the fragment shader does not link", &log, rc);
             }
         }
     }
@@ -1529,7 +1593,7 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
         }
     }
     if !uploaded {
-        return fail(v, "out of shader memory");
+        return fail(v, "out of shader memory", &[0], -util::ENOMEM);
     }
     Some(slot)
 }
@@ -4205,6 +4269,7 @@ pub(crate) fn reset_for_tests(also_programs: bool) {
         core::ptr::write_bytes(INSTANCED.as_ptr(), 0, 1); /* valid when all-zero */
         DRAW_INSTANCES.store(1, Ordering::Relaxed);
         VARIANT_OOM_LOGGED.store(false, Ordering::Relaxed);
+        VARIANT_NO_ROOM_LOGGED.store(false, Ordering::Relaxed);
         ATTRIB_RANGE_LOGS.store(8, Ordering::Relaxed);
         CLIENT_ARRAY_LOGS.store(3, Ordering::Relaxed);
         core::ptr::write_bytes(CUBES.as_ptr(), 0, 1); /* valid when all-zero: nothing seen */
@@ -6673,6 +6738,173 @@ mod tests {
         assert_eq!(unsafe { (*plain.fs).blend_key }, 0);
     }
 
+    /* ---- blend-variant slots: least recently used, and what a refusal means ---- */
+
+    #[cfg(feature = "gpu-powervr")]
+    /// The blend keys the fake back end was asked for, in order.
+    static FAKE_CALLS: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
+    #[cfg(feature = "gpu-powervr")]
+    /// Calls left that the fake answers with VARIANT_NO_ROOM.
+    static FAKE_NO_ROOM: AtomicU32 = AtomicU32::new(0);
+    #[cfg(feature = "gpu-powervr")]
+    /// A key the fake refuses for good (-ENOENT); 0 = none.
+    static FAKE_REFUSED: AtomicU32 = AtomicU32::new(0);
+
+    #[cfg(feature = "gpu-powervr")]
+    /// A blend variant that is the program's own fragment shader marked with
+    /// the key, or the refusal the statics above script.
+    unsafe extern "C" fn fake_blend_variant(
+        fs: *const ShcShader,
+        key: u32,
+        out: *mut ShcShader,
+        log: *mut core::ffi::c_char,
+        log_sz: usize,
+    ) -> i32 {
+        FAKE_CALLS.lock().unwrap().push(key);
+        // SAFETY: the caller's log, valid for log_sz bytes.
+        let mut w = unsafe { util::CStrWriter::new(log, log_sz) };
+        if FAKE_NO_ROOM.load(Ordering::Relaxed) != 0 {
+            FAKE_NO_ROOM.fetch_sub(1, Ordering::Relaxed);
+            let _ = w.write_str("fake: keep full");
+            return VARIANT_NO_ROOM;
+        }
+        if key == FAKE_REFUSED.load(Ordering::Relaxed) {
+            let _ = w.write_str("fake: refused for good");
+            return -util::ENOENT;
+        }
+        // SAFETY: both point at shc_shaders the caller holds.
+        unsafe {
+            let mut v = fs.read();
+            v.blend_key = key;
+            out.write(v);
+        }
+        0
+    }
+
+    #[cfg(feature = "gpu-powervr")]
+    /// Put the fake in as the shader back end's blend variants for one test
+    /// (the back end in place compiles and links); put it back on drop.
+    #[cfg(feature = "gpu-powervr")]
+    struct FakeVariants(*const ShcBackend);
+    #[cfg(feature = "gpu-powervr")]
+    impl FakeVariants {
+        fn install() -> Self {
+            FAKE_CALLS.lock().unwrap().clear();
+            FAKE_NO_ROOM.store(0, Ordering::Relaxed);
+            FAKE_REFUSED.store(0, Ordering::Relaxed);
+            // SAFETY: the tests are serialised; the back end in place is a static.
+            unsafe {
+                let prev = crate::shaderc::g_shaderc;
+                let fake: &'static ShcBackend =
+                    Box::leak(Box::new(ShcBackend { blend_variant: Some(fake_blend_variant), ..*prev }));
+                crate::shaderc::g_shaderc = fake;
+                FakeVariants(prev)
+            }
+        }
+        fn calls(&self) -> Vec<u32> {
+            FAKE_CALLS.lock().unwrap().clone()
+        }
+    }
+    #[cfg(feature = "gpu-powervr")]
+    impl Drop for FakeVariants {
+        fn drop(&mut self) {
+            // SAFETY: as in install.
+            unsafe { crate::shaderc::g_shaderc = self.0 };
+        }
+    }
+
+    #[cfg(feature = "gpu-powervr")]
+    /// Five blend states with five different keys.
+    const FIVE_BLENDS: [(GLenum, GLenum); 5] = [
+        (GL_ONE, GL_ONE),
+        (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA),
+        (GL_ONE, GL_ONE_MINUS_SRC_ALPHA),
+        (GL_ZERO, GL_SRC_COLOR),
+        (GL_DST_COLOR, GL_ZERO),
+    ];
+
+    #[cfg(feature = "gpu-powervr")]
+    /// Draw with blend state `i` of [`FIVE_BLENDS`]; the draw, or None when
+    /// it was refused.
+    fn draw_blended(gl: &Gl, i: usize) -> Option<RecordedDraw> {
+        // SAFETY: plain GL calls; the arrays basic() set up are statics.
+        unsafe {
+            glEnable(GL_BLEND);
+            glBlendFunc(FIVE_BLENDS[i].0, FIVE_BLENDS[i].1);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        gl.draws().pop()
+    }
+
+    #[test]
+    #[cfg(feature = "gpu-powervr")] /* blend variants are this GPU's */
+    fn a_fifth_blend_state_evicts_the_least_recently_used_variant() {
+        let gl = Gl::new(16, 16);
+        let fake = FakeVariants::install();
+        basic(&gl);
+        assert_eq!(PROG_MAX_FS_VARIANTS, 4, "the test fills the slots with four keys");
+        for i in 0..4 {
+            assert!(draw_blended(&gl, i).is_some());
+        }
+        let keys = fake.calls();
+        assert_eq!(keys.len(), 4);
+        assert!(keys.iter().all(|&k| k != 0) && keys.windows(2).all(|w| w[0] != w[1]), "{keys:x?}");
+        assert!(draw_blended(&gl, 0).is_some(), "state 0 used again: state 1 is now the oldest");
+        assert_eq!(fake.calls().len(), 4, "a cached variant is not asked for again");
+        let d = draw_blended(&gl, 4).expect("the fifth state draws");
+        // SAFETY: the variant lives in the draw path's cache.
+        assert_eq!(unsafe { (*d.draw.fs).blend_key }, fake.calls()[4]);
+        for i in [0, 2, 3] {
+            assert!(draw_blended(&gl, i).is_some());
+        }
+        assert_eq!(fake.calls().len(), 5, "states 0, 2 and 3 kept their variants: {:x?}", fake.calls());
+        assert!(draw_blended(&gl, 1).is_some());
+        assert_eq!(fake.calls()[5], keys[1], "state 1 was the one evicted");
+    }
+
+    #[test]
+    #[cfg(feature = "gpu-powervr")]
+    fn a_variant_refused_for_room_is_asked_for_again_by_the_next_draw() {
+        let gl = Gl::new(16, 16);
+        let fake = FakeVariants::install();
+        basic(&gl);
+        FAKE_NO_ROOM.store(1, Ordering::Relaxed);
+        gl.logs();
+        assert!(draw_blended(&gl, 0).is_none(), "no room: the draw is refused");
+        let logs = gl.logs();
+        assert!(
+            logs.iter().any(|l| l.contains("no room for the blend key") && l.contains("fake: keep full")),
+            "{logs:?}"
+        );
+        let d = draw_blended(&gl, 0).expect("room again: the next draw asks again and draws");
+        let calls = fake.calls();
+        assert_eq!(calls.len(), 2, "{calls:x?}");
+        assert_eq!(calls[0], calls[1]);
+        // SAFETY: the variant lives in the draw path's cache.
+        assert_eq!(unsafe { (*d.draw.fs).blend_key }, calls[0]);
+    }
+
+    #[test]
+    #[cfg(feature = "gpu-powervr")]
+    fn a_variant_refused_for_good_is_not_asked_for_again_and_says_why() {
+        let gl = Gl::new(16, 16);
+        let fake = FakeVariants::install();
+        basic(&gl);
+        assert!(draw_blended(&gl, 1).is_some());
+        let key = fake.calls()[0];
+        /* a second program, so its slot table starts empty */
+        basic(&gl);
+        FAKE_REFUSED.store(key, Ordering::Relaxed);
+        gl.logs();
+        assert!(draw_blended(&gl, 1).is_none());
+        let logs = gl.logs();
+        let want = format!("no fragment shader variant for blend key {key:#x} (fake: refused for good)");
+        assert!(logs.iter().any(|l| l.contains(&want)), "{want} not in {logs:?}");
+        assert!(draw_blended(&gl, 1).is_none());
+        assert_eq!(fake.calls().len(), 2, "remembered: {:x?}", fake.calls());
+    }
+
     /* ---- gl_FrontFacing as a shader variant ------------------------------------------------------- */
 
     /// basic(), with the fragment shader marked as reading gl_FrontFacing, and
@@ -6700,7 +6932,8 @@ mod tests {
         match line {
             Some(l) => {
                 let hex = l.split("blend key 0x").nth(1).unwrap();
-                u32::from_str_radix(hex.split(';').next().unwrap(), 16).unwrap()
+                let digits: String = hex.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                u32::from_str_radix(&digits, 16).unwrap()
             }
             None => 0,
         }

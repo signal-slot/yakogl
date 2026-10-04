@@ -159,17 +159,17 @@ fn offline_backend_logs() {
         assert_eq!(fs.varyings[0].vtxout_off, 4);
 
         /* blend variants: keyed by the base row's digest */
-        assert_eq!(blend_variant(&fs, 1, &mut out), -22); /* no priv */
+        assert_eq!(blend_variant(&fs, 1, &mut out, core::ptr::null_mut(), 0), -22); /* no priv */
         let var = SHC_BLOB_TABLE.iter().find(|b| b.blend_key != 0).unwrap();
         let base = SHC_BLOB_TABLE.iter().find(|b| b.blend_key == 0 && b.sha256 == var.sha256).unwrap();
         let src = SHC_SOURCE_TABLE.iter().find(|s| s.name == base.source_name()).unwrap();
         let mut f = ShcShader::ZERO;
         assert_eq!(compile(SHC_STAGE_FRAGMENT, src.text.as_ptr() as *const c_char, &mut f, log.as_mut_ptr(), 256), 0);
-        assert_eq!(blend_variant(&f, var.blend_key, &mut out), 0);
+        assert_eq!(blend_variant(&f, var.blend_key, &mut out, core::ptr::null_mut(), 0), 0);
         assert_eq!(out.usc, var.shader.usc);
         assert_eq!(out.blend_key, var.blend_key);
-        assert_eq!(blend_variant(&f, 0, &mut out), 0);
+        assert_eq!(blend_variant(&f, 0, &mut out, core::ptr::null_mut(), 0), 0);
         assert_eq!(out.usc, f.usc);
-        assert_eq!(blend_variant(&f, 0x3fff_ffff, &mut out), -2);
+        assert_eq!(blend_variant(&f, 0x3fff_ffff, &mut out, core::ptr::null_mut(), 0), -2);
     }
 }

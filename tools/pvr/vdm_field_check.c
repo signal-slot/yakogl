@@ -69,6 +69,14 @@
  * vertex PDS program the backend builds uses 2 temps for any stream count
  * and any USC temp count, so its field is 1 (pinned against the generator).
  *
+ * The fragment kick-USC PDS program (pvr_pds_render_kick_usc_program) declares
+ * the USC temps per instance in its DOUTU src0, the first two data dwords:
+ * the temps field is bits [35:40] in 4-temp blocks (Mesa 26.2.1
+ * pvr_rogue_pds_defs.h:1145,1172,1176, pvr_pds.c pvr_pds_setup_doutu), so a
+ * count lands as DIV_ROUND_UP(temps, 4) and one past PVR_PDS_DOUTU_MAX_TEMPS
+ * is refused with nothing written. PVR_BACKEND_OPT_FS_TEMPS_MIN reaches the
+ * hardware through this word only.
+ *
  * pvr_isp_build_scissor_word checks the same way: the frag kick's
  * ISP_SCISSOR_BASE table (a memory table the IPF reads, not a PPP/VDM
  * stream word, but built by a checked emitter here too) is two dwords of
@@ -94,7 +102,7 @@
 #include "pvr_pds_render_gen.h"
 #include "pvr_vdm_ppp_gen.h"
 
-#define PLANNED 457
+#define PLANNED 459
 
 static int checks, failures;
 
@@ -405,6 +413,27 @@ static void vdm_temp_units(void)
 		check(field_ok, "vertex PDS program: VDM_STATE5.vs_pds_temp_size 1");
 		check(info_ok, "vertex PDS program: info.vdm_pds_temp_size_units 1 (the same rule)");
 	}
+}
+
+static void kick_usc_temps(void)
+{
+	static const uint32_t temps[] = { 0, 3, 15, 16, 17, 30, 120, PVR_PDS_DOUTU_MAX_TEMPS };
+	uint32_t data[8], code[1];
+	struct pvr_pds_render_kick_usc_info info;
+	bool ok = true;
+
+	for (unsigned i = 0; i < sizeof(temps) / sizeof(temps[0]); i++) {
+		memset(&info, 0, sizeof(info));
+		ok &= pvr_pds_render_kick_usc_program(0x200000, temps[i], 0, data, code, &info) == 0 &&
+		      info.doutu_offset == 0 && data[0] == 0x200000u && ((data[1] >> 3) & 0x3fu) == (temps[i] + 3u) / 4u;
+	}
+	check(ok, "kick USC DOUTU temps field = DRU(temps, 4): 0 3 15 16 17 30 120 252 -> 0 1 4 4 5 8 30 63");
+
+	poison(data, 8);
+	poison(code, 1);
+	check(pvr_pds_render_kick_usc_program(0x200000, PVR_PDS_DOUTU_MAX_TEMPS + 1u, 0, data, code, &info) != 0 &&
+		      untouched(data, 8) && untouched(code, 1),
+	      "kick USC: PVR_PDS_DOUTU_MAX_TEMPS + 1 temps refused, nothing written");
 }
 
 /* The PPP block's size fields. */
@@ -1092,6 +1121,7 @@ int main(void)
 	pds_state();
 	vdm_state();
 	vdm_temp_units();
+	kick_usc_temps();
 	ppp_block();
 	ppp_nonsize_fields();
 	vdm_nonsize_fields();

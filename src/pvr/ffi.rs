@@ -89,6 +89,9 @@ pub const PVR_PPP_PASSTYPE_TRANSLUCENT: u32 = 1;
 pub const PVR_PPP_PASSTYPE_PUNCH_THROUGH: u32 = 2;
 
 pub const PVR_PDS_VERTEX_MAX_STREAMS: u32 = 16;
+/// The most USC temporaries a DOUTU word declares (six bits of four-temp
+/// blocks); every PDS program generator refuses more.
+pub const PVR_PDS_DOUTU_MAX_TEMPS: u32 = 252;
 /// `pvr_pds_render_vertex_program_ids`: no vertex / instance id register.
 pub const PVR_PDS_NO_ID_REG: u32 = 0xff;
 

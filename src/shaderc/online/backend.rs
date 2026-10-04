@@ -40,7 +40,7 @@ use super::ir;
 use super::store;
 use crate::shaderc::sha256::sha256;
 use crate::shaderc::{LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
-use crate::util::{cstr_bytes, CStrWriter, Global, EINVAL, ENOENT, ENOMEM, ENOTSUP};
+use crate::util::{cstr_bytes, CStrWriter, Global, EINVAL, ENOMEM, ENOSPC, ENOTSUP};
 
 /// One compiled shader in the `keep` region, owning everything the
 /// [`ShcShader`] handed out points at.
@@ -476,8 +476,9 @@ fn stage_name(stage: u32) -> &'static str {
 /// Write `err` into the compile log and give the errno it maps to.
 ///
 /// The failures are kept apart on purpose. `-ENOTSUP` says the compiler cannot
-/// do this yet, `-ENOMEM` says it ran out of room and which constant to raise,
-/// and `-EINVAL` says the shader is wrong. An application, and a conformance
+/// do this yet; `-ENOMEM` says the keep region had no room now and
+/// `-ENOSPC` that the program does not fit the scratch arena, each with the
+/// constant to raise; and `-EINVAL` says the shader is wrong. An application, and a conformance
 /// run, act differently on each; a build that reported all three the same way
 /// would make "not implemented" indistinguishable from "your source is
 /// invalid".
@@ -492,16 +493,31 @@ fn report(log: &mut CStrWriter, stage: u32, err: CompileError) -> i32 {
             );
             -ENOTSUP
         }
-        CompileError::OutOfMemory { which, left } => {
+        /* The keep region holds every compiled shader until it is deleted:
+         * full now, it may have room once something is freed (-ENOMEM). The
+         * scratch arena is reset for every compile, so a program that does not
+         * fit it never will (-ENOSPC). */
+        CompileError::OutOfMemory { which: Which::Keep, left } => {
             let _ = write!(
                 log,
-                "online shaderc: out of compiler memory on this {} shader ({} bytes left in the {} arena); raise {}",
+                "online shaderc: keep full on this {} shader: {} bytes free in its largest run, {} of {} bytes in use; raise {}",
                 stage_name(stage),
                 left,
-                which.name(),
-                which.knob()
+                store::keep_in_use(),
+                store::keep_size(),
+                Which::Keep.knob()
             );
             -ENOMEM
+        }
+        CompileError::OutOfMemory { which: Which::Scratch, left } => {
+            let _ = write!(
+                log,
+                "online shaderc: this {} shader does not fit the scratch arena ({} bytes left); raise {}",
+                stage_name(stage),
+                left,
+                Which::Scratch.knob()
+            );
+            -ENOSPC
         }
         CompileError::Reentered => {
             let _ = log.write_str(
@@ -584,6 +600,20 @@ fn compile_and_publish_linked(
     end: store::KeepEnd,
     log: &mut CStrWriter,
 ) -> Result<&'static Compiled, i32> {
+    let sha = record_key(glsl, zero, map, facts);
+    if let Some(hit) = cache_find(&sha, stage, blend_key) {
+        /* The caller gets a copy, so it is a holder like any other. */
+        retain(&hit.shader);
+        return Ok(hit);
+    }
+    compile_and_publish_keyed(sha, stage, glsl, blend_key, zero, map, facts, end, log)
+}
+
+/// The cache key of a record: the source's SHA-256, chained with everything
+/// else the compile reads (the zeroed varyings, the attribute map, the
+/// constant W, the sampler-state key). The blend key and the stage are the
+/// cache's other two keys.
+fn record_key(glsl: &[u8], zero: &ZeroList, map: Option<&crate::shaderc::ShcAttribMap>, facts: Facts) -> [u8; 32] {
     let mut sha = sha256(glsl);
     let mut chain = |extra: &[u8]| {
         let mut both = [0u8; 64];
@@ -605,11 +635,23 @@ fn compile_and_publish_linked(
         k[8..].copy_from_slice(&facts.lod_key.bits().to_le_bytes());
         chain(&k);
     }
-    if let Some(hit) = cache_find(&sha, stage, blend_key) {
-        /* The caller gets a copy, so it is a holder like any other. */
-        retain(&hit.shader);
-        return Ok(hit);
-    }
+    sha
+}
+
+/// [`compile_and_publish_linked`] past its cache look-up, for the key
+/// [`record_key`] gave.
+#[allow(clippy::too_many_arguments)]
+fn compile_and_publish_keyed(
+    sha: [u8; 32],
+    stage: u32,
+    glsl: &[u8],
+    blend_key: u32,
+    zero: &ZeroList,
+    map: Option<&crate::shaderc::ShcAttribMap>,
+    facts: Facts,
+    end: store::KeepEnd,
+    log: &mut CStrWriter,
+) -> Result<&'static Compiled, i32> {
     store::note_compile();
     /* The compile's keep arena. Dropped on every failure below, which gives
      * back whatever the code generator had already put in it. */
@@ -684,6 +726,51 @@ unsafe extern "C" fn online_compile(
     }
 }
 
+/// The keep-free count ([`store::keep_frees`]) at which a draw's variant was
+/// last refused for want of keep room. While the count has not moved,
+/// nothing has been given back and the same compile would be refused again,
+/// so a variant compile is refused at once instead of compiled in full on
+/// every draw that asks for it.
+static VARIANT_NO_ROOM_AT: Global<Option<u64>> = Global::new(None);
+
+/// A draw's variant of `glsl` (at the program's end of the keep region):
+/// from the cache, or compiled, or refused at once with
+/// [`crate::shaderc::VARIANT_NO_ROOM`] while the keep region is known to be
+/// full (see [`VARIANT_NO_ROOM_AT`]).
+fn variant_of(
+    stage: u32,
+    glsl: &[u8],
+    blend_key: u32,
+    map: Option<&crate::shaderc::ShcAttribMap>,
+    facts: Facts,
+    log: &mut CStrWriter,
+) -> Result<&'static Compiled, i32> {
+    let sha = record_key(glsl, &ZeroList::EMPTY, map, facts);
+    if let Some(hit) = cache_find(&sha, stage, blend_key) {
+        retain(&hit.shader);
+        return Ok(hit);
+    }
+    let frees = store::keep_frees();
+    // SAFETY: single-threaded by contract.
+    let no_room_at = unsafe { VARIANT_NO_ROOM_AT.get() };
+    if *no_room_at == Some(frees) {
+        let _ = write!(
+            log,
+            "online shaderc: keep full: nothing freed since a variant was last refused for room ({} of {} bytes in use); raise {}",
+            store::keep_in_use(),
+            store::keep_size(),
+            Which::Keep.knob()
+        );
+        return Err(crate::shaderc::VARIANT_NO_ROOM);
+    }
+    let r =
+        compile_and_publish_keyed(sha, stage, glsl, blend_key, &ZeroList::EMPTY, map, facts, store::KeepEnd::Low, log);
+    if r.err() == Some(crate::shaderc::VARIANT_NO_ROOM) {
+        *no_room_at = Some(frees);
+    }
+    r
+}
+
 /// The variant of a compiled fragment shader for one blend state.
 ///
 /// Blending and colour masks are lowered into the fragment shader on this GPU,
@@ -692,12 +779,21 @@ unsafe extern "C" fn online_compile(
 /// ahead of time whether a draw ever asks for it or not. Here there is no
 /// list: the source is still in the `keep` arena, so whatever key a draw
 /// actually asks for is compiled on demand and cached under that key.
-unsafe extern "C" fn online_blend_variant(fs: *const ShcShader, blend_key: u32, out: *mut ShcShader) -> i32 {
+unsafe extern "C" fn online_blend_variant(
+    fs: *const ShcShader,
+    blend_key: u32,
+    out: *mut ShcShader,
+    log: *mut c_char,
+    log_sz: usize,
+) -> i32 {
     /* test builds: the cache is read before any keep transaction opens, so
      * the whole entry is serialised (store::KeepTxn) */
     #[cfg(test)]
     let _serial = store::test_lock();
+    // SAFETY: the caller passes a null log, or one valid for log_sz bytes.
+    let mut log = unsafe { CStrWriter::new(log, log_sz) };
     if fs.is_null() || out.is_null() {
+        let _ = log.write_str("online shaderc: NULL shader or output");
         return -EINVAL;
     }
     // SAFETY: fs is non-null and points at a shc_shader; read by value because
@@ -711,33 +807,20 @@ unsafe extern "C" fn online_blend_variant(fs: *const ShcShader, blend_key: u32, 
         return 0;
     }
     let Some(base) = base_of(&fs) else {
-        return -EINVAL; /* not a shader this back end compiled */
+        let _ = log.write_str("online shaderc: a blend variant of a shader this back end did not compile");
+        return -EINVAL;
     };
     if base.stage != SHC_STAGE_FRAGMENT {
+        let _ = log.write_str("online shaderc: a blend variant of a vertex shader");
         return -EINVAL;
     }
-    // SAFETY: a null buffer of length 0 is what CStrWriter takes for "no log".
-    let mut sink = unsafe { CStrWriter::new(core::ptr::null_mut(), 0) };
-    /* A variant a draw of a program asks for: the program's end. */
-    match compile_and_publish_linked(
-        SHC_STAGE_FRAGMENT,
-        base.source,
-        blend_key,
-        &ZeroList::EMPTY,
-        None,
-        Facts::of(base),
-        store::KeepEnd::Low,
-        &mut sink,
-    ) {
+    match variant_of(SHC_STAGE_FRAGMENT, base.source, blend_key, None, Facts::of(base), &mut log) {
         Ok(rec) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
             unsafe { out.write(rec.shader) };
             0
         }
-        /* -ENOENT is what the GL core expects for "no such variant": it is
-         * what the offline back end answers when the key was not
-         * precompiled. */
-        Err(_) => -ENOENT,
+        Err(rc) => rc,
     }
 }
 
@@ -1391,10 +1474,19 @@ pub(crate) fn v3d_sampler_variants_add(built: u32, refused: u32) {
 /// variant, so at the program's end of the keep region; cached under the
 /// source and the key like a blend variant. The caller links a fragment
 /// result (`link`), which keeps the key.
-unsafe extern "C" fn online_sampler_variant(sh: *const ShcShader, key: u64, out: *mut ShcShader) -> i32 {
+unsafe extern "C" fn online_sampler_variant(
+    sh: *const ShcShader,
+    key: u64,
+    out: *mut ShcShader,
+    log: *mut c_char,
+    log_sz: usize,
+) -> i32 {
     #[cfg(test)]
     let _serial = store::test_lock();
+    // SAFETY: the caller passes a null log, or one valid for log_sz bytes.
+    let mut log = unsafe { CStrWriter::new(log, log_sz) };
     if sh.is_null() || out.is_null() {
+        let _ = log.write_str("online shaderc: NULL shader or output");
         return -EINVAL;
     }
     // SAFETY: sh is non-null and points at a shc_shader; read by value
@@ -1407,6 +1499,7 @@ unsafe extern "C" fn online_sampler_variant(sh: *const ShcShader, key: u64, out:
         return 0;
     }
     let Some(base) = base_of(&sh) else {
+        let _ = log.write_str("online shaderc: a sampler-state variant of a shader this back end did not compile");
         return -EINVAL;
     };
     /* The V3D: the program record's variant is its fragment stage compiled
@@ -1419,55 +1512,35 @@ unsafe extern "C" fn online_sampler_variant(sh: *const ShcShader, key: u64, out:
         let k = LodKey::from_bits(key);
         if k.mip_free != 0 || k.mag_switch != 0 || k.sample_kill {
             V3D_VARIANTS_REFUSED.fetch_add(1, Relaxed);
+            let _ = write!(log, "online shaderc: the V3D has no sampler-state variant for key {key:#x}");
             return -EINVAL;
         }
-        // SAFETY: a null buffer of length 0 is what CStrWriter takes for "no log".
-        let mut sink = unsafe { CStrWriter::new(core::ptr::null_mut(), 0) };
         let facts = Facts { w_constant: false, lod_key: k };
-        return match compile_and_publish_linked(
-            SHC_STAGE_FRAGMENT,
-            base.source,
-            0,
-            &ZeroList::EMPTY,
-            None,
-            facts,
-            store::KeepEnd::Low,
-            &mut sink,
-        ) {
+        return match variant_of(SHC_STAGE_FRAGMENT, base.source, 0, None, facts, &mut log) {
             Ok(rec) => {
                 V3D_VARIANTS_BUILT.fetch_add(1, Relaxed);
                 // SAFETY: out is non-null and points at the caller's shc_shader.
                 unsafe { out.write(rec.shader) };
                 0
             }
-            Err(_) => {
+            Err(rc) => {
                 V3D_VARIANTS_REFUSED.fetch_add(1, Relaxed);
-                -ENOENT
+                rc
             }
         };
     }
     if base.blend_key != 0 || !(base.stage == SHC_STAGE_VERTEX || base.stage == SHC_STAGE_FRAGMENT) {
+        let _ = log.write_str("online shaderc: a sampler-state variant of a blend variant");
         return -EINVAL; /* a variant of the plain shader only; blending comes after */
     }
-    // SAFETY: a null buffer of length 0 is what CStrWriter takes for "no log".
-    let mut sink = unsafe { CStrWriter::new(core::ptr::null_mut(), 0) };
     let facts = Facts { w_constant: base.w_constant, lod_key: LodKey::from_bits(key) };
-    match compile_and_publish_linked(
-        base.stage,
-        base.source,
-        0,
-        &ZeroList::EMPTY,
-        base.attrib_map,
-        facts,
-        store::KeepEnd::Low,
-        &mut sink,
-    ) {
+    match variant_of(base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
         Ok(rec) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
             unsafe { out.write(rec.shader) };
             0
         }
-        Err(_) => -ENOENT,
+        Err(rc) => rc,
     }
 }
 
@@ -1711,7 +1784,7 @@ void main (void)
         let fs = ShcShader::ZERO;
         let mut out = ShcShader::ZERO;
         // SAFETY: two valid distinct shaders.
-        let rc = unsafe { online_blend_variant(&fs, 0x1234, &mut out) };
+        let rc = unsafe { online_blend_variant(&fs, 0x1234, &mut out, core::ptr::null_mut(), 0) };
         assert_eq!(rc, -EINVAL);
     }
 
@@ -1724,7 +1797,7 @@ void main (void)
         fs.temps = 7;
         let mut out = ShcShader::ZERO;
         // SAFETY: two valid distinct shaders.
-        let rc = unsafe { online_blend_variant(&fs, 0, &mut out) };
+        let rc = unsafe { online_blend_variant(&fs, 0, &mut out, core::ptr::null_mut(), 0) };
         assert_eq!((rc, out.temps), (0, 7));
     }
 
@@ -1918,7 +1991,7 @@ void main (void)
         let mut var = ShcShader::ZERO;
         let (built, refused) = v3d_sampler_variants();
         // SAFETY: the program record and a real output.
-        assert_eq!(unsafe { online_sampler_variant(&prog, key.bits(), &mut var) }, 0);
+        assert_eq!(unsafe { online_sampler_variant(&prog, key.bits(), &mut var, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(v3d_sampler_variants(), (built + 1, refused), "the variant is counted built");
         let (rc, text, keyed) = link(vs, var);
         assert_eq!(rc, 0, "link of the variant: {text}");
@@ -1929,7 +2002,11 @@ void main (void)
             [LodKey { mip_free: 1, ..key }, LodKey { mag_switch: 1, ..key }, LodKey { sample_kill: true, ..key }]
         {
             // SAFETY: as above.
-            assert_eq!(unsafe { online_sampler_variant(&prog, other.bits(), &mut bad) }, -EINVAL, "{other:?}");
+            assert_eq!(
+                unsafe { online_sampler_variant(&prog, other.bits(), &mut bad, core::ptr::null_mut(), 0) },
+                -EINVAL,
+                "{other:?}"
+            );
         }
         assert_eq!(v3d_sampler_variants(), (built + 1, refused + 3), "each refused key is counted refused");
         release(&keyed);
@@ -1966,7 +2043,7 @@ void main (void)
         assert_eq!(holders(&a), Some(2));
         let mut c = ShcShader::ZERO;
         // SAFETY: two valid distinct shaders.
-        assert_eq!(unsafe { online_blend_variant(&a, 0, &mut c) }, 0);
+        assert_eq!(unsafe { online_blend_variant(&a, 0, &mut c, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(holders(&a), Some(3), "key 0 hands out a copy, and counts it");
         retain(&a);
         assert_eq!(holders(&a), Some(4));
@@ -2186,7 +2263,7 @@ void main (void)
         let variant = |fs: &ShcShader| {
             let mut v = ShcShader::ZERO;
             // SAFETY: a compiled shader and a real output.
-            assert_eq!(unsafe { online_blend_variant(fs, key, &mut v) }, 0);
+            assert_eq!(unsafe { online_blend_variant(fs, key, &mut v, core::ptr::null_mut(), 0) }, 0);
             v
         };
         /* the switch-off programs, released so the cache (keyed by the text)
@@ -2263,7 +2340,7 @@ void main (void)
     fn sampler_variant(sh: &ShcShader, key: LodKey) -> ShcShader {
         let mut v = ShcShader::ZERO;
         // SAFETY: a compiled shader and a real output.
-        assert_eq!(unsafe { online_sampler_variant(sh, key.bits(), &mut v) }, 0, "{key:?}");
+        assert_eq!(unsafe { online_sampler_variant(sh, key.bits(), &mut v, core::ptr::null_mut(), 0) }, 0, "{key:?}");
         v
     }
 
@@ -2333,7 +2410,7 @@ void main (void)
         );
         let mut vb = ShcShader::ZERO;
         // SAFETY: a compiled shader and a real output.
-        assert_eq!(unsafe { online_blend_variant(&v, key, &mut vb) }, 0);
+        assert_eq!(unsafe { online_blend_variant(&v, key, &mut vb, core::ptr::null_mut(), 0) }, 0);
         assert_eq!(vb.uses_discard, 1, "the blend variant inherits the key");
         release(&vb);
         release(&v);
@@ -2360,7 +2437,7 @@ void main (void)
         let blend = |fs: &ShcShader| {
             let mut v = ShcShader::ZERO;
             // SAFETY: a compiled shader and a real output.
-            assert_eq!(unsafe { online_blend_variant(fs, key, &mut v) }, 0);
+            assert_eq!(unsafe { online_blend_variant(fs, key, &mut v, core::ptr::null_mut(), 0) }, 0);
             v
         };
         crate::shaderc::pvr_set_proj_lod(0);

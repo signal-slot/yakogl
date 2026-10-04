@@ -206,9 +206,9 @@ pub const PVR_BACKEND_OPT_SWAP_DROPS_ZS: PvrBackendOption = 14;
 /// (the online ones declare about twice the table's temporaries).
 pub const PVR_BACKEND_OPT_FS_TEMPS_MIN: PvrBackendOption = 15;
 pub const PVR_BACKEND_OPT_COUNT: usize = 16;
-/// The largest count [`PVR_BACKEND_OPT_FS_TEMPS_MIN`] declares: the online
-/// compiler's own bound on a program's temporaries (`USC_MAX_TEMPS`).
-pub const FS_TEMPS_MIN_CAP: u32 = 252;
+/// The largest count [`PVR_BACKEND_OPT_FS_TEMPS_MIN`] declares: the most a
+/// DOUTU word can declare.
+pub const FS_TEMPS_MIN_CAP: u32 = PVR_PDS_DOUTU_MAX_TEMPS;
 
 /* ---- this GPU's device-VA heap configuration (pvr_rogue_heap_config.h;
  * mirrors the driver's src/pvr_internal.h). The OSAL bump-allocates inside
@@ -2054,7 +2054,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
         let mut kc = [0u32; 1];
 
         // SAFETY: kd/kc have the sizes the generator documents (8 / 1 dwords).
-        unsafe {
+        if unsafe {
             pvr_pds_render_kick_usc_program(
                 heap_off_of(b.clear_fs.gpu) as u64,
                 PVR_USC_CLEAR_FS_TEMPS,
@@ -2062,7 +2062,11 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
                 kd.as_mut_ptr(),
                 kc.as_mut_ptr(),
                 &mut ki,
-            );
+            )
+        } != 0
+        {
+            glog!("pvr_backend: the background kick program for the one-dword clear was refused");
+            return -EINVAL;
         }
         /* the generator's counts, clamped to what the buffers hold (the
          * offsets below are derived from them) */
@@ -2075,7 +2079,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
         /* the same for the two-dword clear (RGBA16F targets) */
         off = (end + 63) & !63;
         // SAFETY: as above.
-        unsafe {
+        if unsafe {
             pvr_pds_render_kick_usc_program(
                 heap_off_of(b.clear_fs2.gpu) as u64,
                 PVR_USC_CLEAR_FS2_TEMPS,
@@ -2083,7 +2087,11 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
                 kd.as_mut_ptr(),
                 kc.as_mut_ptr(),
                 &mut ki,
-            );
+            )
+        } != 0
+        {
+            glog!("pvr_backend: the background kick program for the two-dword clear was refused");
+            return -EINVAL;
         }
         (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
         mem_write(&b.pds_static, off, &kd[..dn as usize]);
@@ -2093,7 +2101,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
         /* and for three (three 8-bit attachments) */
         off = (end + 63) & !63;
         // SAFETY: as above.
-        unsafe {
+        if unsafe {
             pvr_pds_render_kick_usc_program(
                 heap_off_of(b.clear_fs3.gpu) as u64,
                 PVR_USC_CLEAR_FS3_TEMPS,
@@ -2101,7 +2109,11 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
                 kd.as_mut_ptr(),
                 kc.as_mut_ptr(),
                 &mut ki,
-            );
+            )
+        } != 0
+        {
+            glog!("pvr_backend: the background kick program for the three-dword clear was refused");
+            return -EINVAL;
         }
         (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
         mem_write(&b.pds_static, off, &kd[..dn as usize]);
@@ -2116,7 +2128,7 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
         let mut cc = [0u32; 2];
 
         // SAFETY: cd/cc have the sizes the generator documents (3 / 2 dwords).
-        unsafe {
+        if unsafe {
             pvr_pds_render_color_upload_program(
                 b.bg_color.gpu,
                 CLEAR_ATTACH_DWORDS,
@@ -2125,7 +2137,11 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
                 cd.as_mut_ptr(),
                 cc.as_mut_ptr(),
                 &mut ci,
-            );
+            )
+        } != 0
+        {
+            glog!("pvr_backend: the background colour DMA program was refused");
+            return -EINVAL;
         }
         let (dn, cn) = (ci.data_size_dw.min(cd.len() as u32), ci.code_size_dw.min(cc.len() as u32));
         off = (end + PDS_ALIGN - 1) & !(PDS_ALIGN - 1);
@@ -4657,6 +4673,11 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         )
     } != 0
     {
+        glog!(
+            "yakogl/pvr: draw refused: the vertex fetch program was refused ({} streams, {} temps)",
+            nstreams,
+            vs.temps
+        );
         return -EINVAL;
     }
     let vdata = &s.vdata[..(vinfo.data_size_dw as usize).min(VDATA_DWORDS)];
@@ -4837,16 +4858,25 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
     {
         let mut ki = PvrPdsRenderKickUscInfo::default();
 
+        let temps = (fs.temps as u32).max(b.opt(PVR_BACKEND_OPT_FS_TEMPS_MIN).min(FS_TEMPS_MIN_CAP));
         // SAFETY: k_prog holds the 8 data dwords followed by the 1 code dword.
-        unsafe {
+        if unsafe {
             pvr_pds_render_kick_usc_program(
                 heap_off_of(d.fs_usc_gpu) as u64,
-                (fs.temps as u32).max(b.opt(PVR_BACKEND_OPT_FS_TEMPS_MIN).min(FS_TEMPS_MIN_CAP)),
+                temps,
                 fs_sample_rate(b.samples, d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0),
                 k_prog.as_mut_ptr(),
                 k_prog.as_mut_ptr().add(8),
                 &mut ki,
+            )
+        } != 0
+        {
+            glog!(
+                "yakogl/pvr: draw refused: the fragment kick program was refused ({} temps, max {})",
+                temps,
+                PVR_PDS_DOUTU_MAX_TEMPS
             );
+            return -EINVAL;
         }
         let n = ((ki.data_size_dw + ki.code_size_dw) as usize).min(k_prog.len());
         rc = arena_put_words(&mut b.pds, &k_prog[..n], PDS_ALIGN, Some(&mut k_pds_data), None);
@@ -4929,6 +4959,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             )
         } != 0
         {
+            glog!("yakogl/pvr: draw refused: the varying coefficient program was refused ({} varyings)", nv);
             return -EINVAL;
         }
         if coeff.code_size_dw != 0 {
@@ -5131,6 +5162,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             pvr_pds_render_dma_program(s.kicks.as_ptr(), nkicks as u32, 0, ud.as_mut_ptr(), uc.as_mut_ptr(), &mut ui)
         } != 0
         {
+            glog!("yakogl/pvr: draw refused: the fragment common-store DMA program was refused ({} kicks)", nkicks);
             return -EINVAL;
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
@@ -5586,6 +5618,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
                 pvr_pds_render_dma_program(vk.as_ptr(), nvk as u32, 0, ud.as_mut_ptr(), uc.as_mut_ptr(), &mut ui)
             } != 0
         {
+            glog!("yakogl/pvr: draw refused: the vertex common-store DMA program was refused ({} kicks)", nvk);
             return -EINVAL;
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
@@ -5925,7 +5958,7 @@ fn flush(p: &mut Pvr) -> i32 {
         };
         // SAFETY: PVR_BACKEND_MAX_RT render targets: emit holds 2 * that
         // dwords, ed/ec the documented 3N+1 / N+1.
-        unsafe {
+        if unsafe {
             pvr_pds_generate_pixel_event_tq(
                 doutu,
                 emit.as_ptr(),
@@ -5935,7 +5968,13 @@ fn flush(p: &mut Pvr) -> i32 {
                 ec.as_mut_ptr(),
                 &mut dsz,
                 &mut csz,
-            );
+            )
+        } != 0
+        {
+            /* a frame without its end-of-tile program cannot be closed */
+            glog!("pvr_backend: the frame's end-of-tile pixel event program was refused: frame dropped");
+            b.frame_open = false;
+            return -EINVAL;
         }
         mem_write(&b.pds_static, b.eot_data_local, &ed[..(dsz as usize).min(ed.len())]);
         cache_flush(&b.pds_static, 0, PDS_STATIC_BYTES);

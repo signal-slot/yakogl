@@ -214,6 +214,7 @@ _Static_assert(PVR_PDS_COEFF_SMOOTH == 0u, "PVR_PDS_COEFF_SMOOTH");
 _Static_assert(PVR_PDS_COEFF_NPC == 1u, "PVR_PDS_COEFF_NPC");
 _Static_assert(PVR_PDS_COEFF_FLAT == 2u, "PVR_PDS_COEFF_FLAT");
 _Static_assert(PVR_PDS_COEFF_MAX_VARYINGS == 16u, "PVR_PDS_COEFF_MAX_VARYINGS");
+_Static_assert(PVR_PDS_DOUTU_MAX_TEMPS == 252u, "PVR_PDS_DOUTU_MAX_TEMPS");
 _Static_assert(PVR_PDS_DMA_MAX_KICKS == 8u, "PVR_PDS_DMA_MAX_KICKS");
 
 /* ---- function prototypes as ffi.rs declares them --------------------------

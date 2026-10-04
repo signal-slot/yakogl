@@ -634,7 +634,7 @@ mod tests {
         std::println!("one end: {n1} programs; {failure}");
         assert!(gaps.starts_with(&gaps1), "the same gaps, as far as the pass got: {gaps1:?}");
         assert!(
-            failure.contains("keep arena"),
+            failure.contains("keep full on this"),
             "the negative control (one end) runs out, by the keep region: {failure}"
         );
         assert!(n1 < n);
