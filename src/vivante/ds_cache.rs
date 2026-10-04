@@ -107,13 +107,80 @@ struct Cache {
     /// Planes whose surface went to another pair while they held a clear
     /// value only (src/ds_retention.rs).
     parked: Parked<PlaneKey, Plane, PARKED>,
+    /// For the line a run ends with ([`report`]); they survive
+    /// [`release_all`], so a process-wide line counts the whole run.
+    counts: Counts,
+}
+
+/// What [`report`] prints: the most surfaces and bytes held at once, the
+/// surfaces given up for another pair's, and the draws refused.
+#[derive(Clone, Copy)]
+struct Counts {
+    peak: u32,
+    bytes_peak: usize,
+    given_up: u32,
+    /// Every surface held a live plane ([`Victim::AllLive`]).
+    full: u32,
+    /// No surface could be had for another reason: its memory was not
+    /// there, or every one that could go was in use by a pending kick.
+    no_surface: u32,
 }
 
 static CACHE: Global<Cache> = Global::new(Cache {
     entries: [const { None }; ENTRIES],
     clock: 0,
     parked: Parked::new(PlaneKey { id: 0, gen: 0, scale: 0, plane: 0 }, Plane::UNDEFINED),
+    counts: Counts { peak: 0, bytes_peak: 0, given_up: 0, full: 0, no_surface: 0 },
 });
+
+/// After an allocation: the surfaces held now, against the peaks.
+fn note_peak(c: &mut Cache) {
+    let (n, bytes) = c.entries.iter().flatten().fold((0u32, 0usize), |(n, b), e| (n + 1, b.saturating_add(e.mem.size)));
+    c.counts.peak = c.counts.peak.max(n);
+    c.counts.bytes_peak = c.counts.bytes_peak.max(bytes);
+}
+
+/// The depth/stencil line a run ends with, the GC7000's counterpart of the
+/// PowerVR's (`pvr_backend_ds_report`): the most surfaces held at once of
+/// [`ENTRIES`], the most bytes, the surfaces given up for another pair's,
+/// and the draws refused (all live: every surface held a plane GL keeps; no
+/// surface: memory, or every candidate in use by a pending kick). A run
+/// that never allocated a surface says so instead of a peak of 0.
+pub fn report(out: &mut impl core::fmt::Write) -> core::fmt::Result {
+    let k = cache().counts;
+    if k.peak == 0 {
+        out.write_str("ds surfaces: none allocated")?;
+    } else {
+        write!(out, "ds surfaces peak {}/{}, ds bytes peak {}", k.peak, ENTRIES, k.bytes_peak)?;
+    }
+    write!(
+        out,
+        ", ds given up {}, ds refused {} (all live {}, no surface {})",
+        k.given_up,
+        k.full.wrapping_add(k.no_surface),
+        k.full,
+        k.no_surface
+    )
+}
+
+/// [`report`]'s line into `buf` (`cap` bytes, NUL-terminated, truncated to
+/// fit), for the OSAL's record at close.
+///
+/// # Safety
+/// `buf` is null or writable for `cap` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn gc_backend_ds_report(buf: *mut core::ffi::c_char, cap: usize) {
+    // SAFETY: the caller's contract.
+    let mut w = unsafe { crate::util::CStrWriter::new(buf, cap) };
+    /* CStrWriter never fails: it truncates */
+    let _ = report(&mut w);
+}
+
+/// The counts back to zero (tests that read the line from a clean start).
+#[cfg(test)]
+pub fn reset_counts() {
+    cache().counts = Counts { peak: 0, bytes_peak: 0, given_up: 0, full: 0, no_surface: 0 };
+}
 
 fn cache() -> &'static mut Cache {
     // SAFETY: single-threaded by contract; each entry point takes it once.
@@ -213,9 +280,11 @@ pub fn select(
                 osal::gpu_free(&mut e.mem);
                 if alloc(&mut e.mem, s, r, guard) != 0 {
                     c.entries[i] = None;
+                    c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                     return Err(-1);
                 }
                 (e.stride, e.rows, e.planes) = (s, r, [Plane::UNDEFINED; 2]);
+                note_peak(c);
                 fresh = true;
             }
             i
@@ -225,23 +294,28 @@ pub fn select(
                 Victim::Slot(i) => i,
                 Victim::AllPending => {
                     crate::glog!("vivante: every depth/stencil surface is in use by a pending kick");
+                    c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                     return Err(-1);
                 }
                 Victim::AllLive => {
                     let who = if key.depth_id != 0 { key.depth_id } else { key.stencil_id };
+                    c.counts.full = c.counts.full.wrapping_add(1);
                     return Err(ds_retention::refuse("vivante", who, ENTRIES));
                 }
             };
             if let Some(mut old) = c.entries[i].take() {
                 park(&mut c.parked, &old);
                 osal::gpu_free(&mut old.mem);
+                c.counts.given_up = c.counts.given_up.wrapping_add(1);
             }
             let mut mem = OsalGpuMem::ZERO;
             if alloc(&mut mem, stride, rows, guard) != 0 {
+                c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                 return Err(-1);
             }
             c.entries[i] =
                 Some(Surface { key, mem, stride, rows, used_by: 0, stamp: 0, planes: [Plane::UNDEFINED; 2] });
+            note_peak(c);
             fresh = true;
             i
         }

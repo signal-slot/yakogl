@@ -1300,6 +1300,11 @@ struct Backend {
     /// backend never allocated one.
     ds_slots_peak: u32,
     ds_bytes_peak: usize,
+    /// Buffers given up to make room for another target's ([`ds_make_room`]):
+    /// each one is a free and a new allocation, and a count that grows with
+    /// the frames says the application uses more targets than there are
+    /// slots.
+    ds_given_up: u32,
     /// The frame arenas' high-water marks over every kick recorded so far,
     /// bytes: [GENERAL arena, PDS arena, VDM stream] (the owner report).
     arena_hw: [u32; 3],
@@ -2343,6 +2348,7 @@ pub extern "C" fn pvr_backend_init() -> i32 {
         let ds_refused = b.ds_refused;
         let ds_full_refused = b.ds_full_refused;
         let (ds_slots_peak, ds_bytes_peak) = (b.ds_slots_peak, b.ds_bytes_peak);
+        let ds_given_up = b.ds_given_up;
         let arena_hw = b.arena_hw;
 
         // SAFETY: all-zero is a valid Backend (see PVR); b is exclusive.
@@ -2360,6 +2366,7 @@ pub extern "C" fn pvr_backend_init() -> i32 {
         b.ds_refused = ds_refused;
         b.ds_full_refused = ds_full_refused;
         (b.ds_slots_peak, b.ds_bytes_peak) = (ds_slots_peak, ds_bytes_peak);
+        b.ds_given_up = ds_given_up;
         b.arena_hw = arena_hw;
         /* Bring-up budgets. The C keeps these in function-local statics, so
          * they survive an init; here they are part of the state init resets,
@@ -2973,7 +2980,8 @@ fn ds_note_peak(b: &mut Backend) {
 }
 
 /// The depth/stencil line a run ends with: the most buffers held at once of
-/// PVR_BACKEND_MAX_DS, the most bytes they held at once, and the draws
+/// PVR_BACKEND_MAX_DS, the most bytes they held at once, the buffers given
+/// up to make room for another target's, and the draws
 /// refused (slots full: every buffer held contents GL keeps; no buffer: one
 /// could not be allocated, or its contents were lost that way). A backend
 /// that never allocated a buffer says so instead of a peak of 0, which
@@ -2986,7 +2994,8 @@ fn ds_report(b: &Backend, out: &mut impl core::fmt::Write) -> core::fmt::Result 
     }
     write!(
         out,
-        ", ds refused {} (slots full {}, no buffer {})",
+        ", ds given up {}, ds refused {} (slots full {}, no buffer {})",
+        b.ds_given_up,
         b.ds_full_refused.wrapping_add(b.ds_refused),
         b.ds_full_refused,
         b.ds_refused
@@ -3230,6 +3239,7 @@ fn ds_make_room(b: &mut Backend, d: &GlesDraw) -> i32 {
         }
         osal::gpu_free(&mut b.ds[i].mem);
         b.ds[i] = DsBuf::ZERO;
+        b.ds_given_up = b.ds_given_up.wrapping_add(1);
         free += 1;
     }
     let new_keys = want.map(|k| k.filter(|&k| !held(b, k)));

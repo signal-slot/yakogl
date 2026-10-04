@@ -3061,6 +3061,54 @@ fn cycled(rig: &Rig, i: u32) -> GlesDraw {
     d
 }
 
+/// The depth/stencil line the OSAL prints at close
+/// (`gc_backend_ds_report`), counted from a clean start.
+fn gc_ds_line() -> String {
+    let mut buf = [0 as core::ffi::c_char; 160];
+    // SAFETY: buf is writable for its length.
+    unsafe { ds_cache::gc_backend_ds_report(buf.as_mut_ptr(), buf.len()) };
+    // SAFETY: the report NUL-terminates inside buf.
+    unsafe { core::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
+}
+
+/// Nine pairs on eight surfaces: when the eight hold nothing GL keeps
+/// (depth tested, nothing written), the ninth takes one and the line counts
+/// it as given up; when they all hold a plane, the ninth is refused and
+/// counted as all live. Where the peak alone reads 8/8, the given-up count
+/// is what says an application uses more pairs than there are surfaces.
+#[test]
+fn the_gc_ds_line_counts_surfaces_given_up_and_refusals() {
+    let rig = Rig::new();
+    ds_cache::release_all();
+    ds_cache::reset_counts();
+    assert_eq!(gc_ds_line(), "ds surfaces: none allocated, ds given up 0, ds refused 0 (all live 0, no surface 0)");
+    let quiet = |i: u32| {
+        let mut d = cycled(&rig, i);
+        d.depth_write = false;
+        d.stencil = false;
+        d
+    };
+    for i in 0..ds_cache::ENTRIES as u32 {
+        rig.submit(&quiet(i));
+    }
+    let eight = gc_ds_line();
+    assert!(eight.starts_with("ds surfaces peak 8/8, ds bytes peak "), "{eight}");
+    assert!(eight.ends_with(", ds given up 0, ds refused 0 (all live 0, no surface 0)"), "{eight}");
+    rig.submit(&quiet(8));
+    assert!(gc_ds_line().ends_with(", ds given up 1, ds refused 0 (all live 0, no surface 0)"), "{}", gc_ds_line());
+
+    ds_cache::release_all();
+    ds_cache::reset_counts();
+    for i in 0..ds_cache::ENTRIES as u32 {
+        rig.submit(&cycled(&rig, 10 + i));
+    }
+    let mut ninth = cycled(&rig, 10 + ds_cache::ENTRIES as u32);
+    ninth.do_clear = false;
+    // SAFETY: a live draw for the call.
+    assert_eq!(unsafe { gc_draw(&ninth) }, -ENOMEM, "all eight hold a plane GL keeps: refused");
+    assert!(gc_ds_line().ends_with(", ds given up 0, ds refused 1 (all live 1, no surface 0)"), "{}", gc_ds_line());
+}
+
 /// `depth_resolve` reads the depth a kick left for an object as the
 /// texture's floats: bits 31..8 of each D24S8 word (the stencil byte
 /// ignored), row-linear at the surface's row stride (measured, ds_cache.rs

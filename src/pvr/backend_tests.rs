@@ -3012,7 +3012,7 @@ fn a_ninth_framebuffer_with_depth_is_refused_and_the_first_keeps_its_depth() {
 /// report), so each test zeroes them first.
 fn ds_line_from_zero(rig: &Rig) -> impl Fn() -> String {
     let b = rig.b();
-    (b.ds_slots_peak, b.ds_bytes_peak, b.ds_full_refused, b.ds_refused) = (0, 0, 0, 0);
+    (b.ds_slots_peak, b.ds_bytes_peak, b.ds_full_refused, b.ds_refused, b.ds_given_up) = (0, 0, 0, 0, 0);
     || {
         let mut buf = [0 as c_char; 160];
         // SAFETY: buf is writable for its length.
@@ -3028,12 +3028,17 @@ fn ds_line_from_zero(rig: &Rig) -> impl Fn() -> String {
 fn the_ds_line_says_none_allocated_when_no_buffer_ever_was() {
     let rig = Rig::new();
     let line = ds_line_from_zero(&rig);
-    assert_eq!(line(), "ds slots: none allocated, ds refused 0 (slots full 0, no buffer 0)");
+    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0)");
     let mut d = rig.draw(3);
     d.ds_persist = false;
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
-    assert_eq!(line(), "ds slots: none allocated, ds refused 0 (slots full 0, no buffer 0)", "{:?}", rig.logs());
+    assert_eq!(
+        line(),
+        "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+        "{:?}",
+        rig.logs()
+    );
 }
 
 /// One, eight and nine framebuffers with depth: the peak counts buffers
@@ -3050,21 +3055,66 @@ fn the_ds_line_counts_one_eight_and_nine_framebuffers() {
     assert_eq!(draw(&fbo_draw(&rig, 0)), 0);
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(ds_of(&rig, 100).expect("framebuffer 0's buffer").mem.size, one);
-    assert_eq!(line(), "ds slots peak 1/8, ds bytes peak 16384, ds refused 0 (slots full 0, no buffer 0)");
+    assert_eq!(
+        line(),
+        "ds slots peak 1/8, ds bytes peak 16384, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+    );
     for i in 1..PVR_BACKEND_MAX_DS as u32 {
         assert_eq!(draw(&fbo_draw(&rig, i)), 0, "framebuffer {i}: {:?}", rig.logs());
         assert_eq!(pvr_backend_flush(), 0);
     }
-    assert_eq!(line(), "ds slots peak 8/8, ds bytes peak 131072, ds refused 0 (slots full 0, no buffer 0)");
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+    );
     assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "the ninth is refused");
-    assert_eq!(line(), "ds slots peak 8/8, ds bytes peak 131072, ds refused 1 (slots full 1, no buffer 0)");
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 1 (slots full 1, no buffer 0)"
+    );
     assert_eq!(draw(&fbo_draw(&rig, 8)), -ENOMEM, "and again");
-    assert_eq!(line(), "ds slots peak 8/8, ds bytes peak 131072, ds refused 2 (slots full 2, no buffer 0)");
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 2 (slots full 2, no buffer 0)"
+    );
     /* a freed slot lowers what is held, never the peak */
     pvr_backend_attachment_gone(100);
     assert_eq!(draw(&fbo_draw(&rig, 8)), 0, "the ninth takes the freed slot: {:?}", rig.logs());
     assert_eq!(pvr_backend_flush(), 0);
-    assert_eq!(line(), "ds slots peak 8/8, ds bytes peak 131072, ds refused 2 (slots full 2, no buffer 0)");
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 2 (slots full 2, no buffer 0)"
+    );
+}
+
+/// A buffer that holds nothing GL keeps (depth tested, never written) is
+/// given up for a ninth target, and the line counts it: the count that says
+/// an application uses more targets than there are slots, where the peak
+/// alone reads 8/8 and nothing refused.
+#[test]
+fn the_ds_line_counts_a_buffer_given_up_for_another_target() {
+    let rig = Rig::new();
+    let line = ds_line_from_zero(&rig);
+    let no_write = |i: u32| {
+        let mut d = fbo_draw(&rig, i);
+        d.depth_write = false;
+        d
+    };
+    for i in 0..PVR_BACKEND_MAX_DS as u32 {
+        assert_eq!(draw(&no_write(i)), 0, "framebuffer {i}: {:?}", rig.logs());
+        assert_eq!(pvr_backend_flush(), 0);
+    }
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 0, ds refused 0 (slots full 0, no buffer 0)"
+    );
+    assert_eq!(draw(&no_write(8)), 0, "the ninth takes a buffer that held nothing: {:?}", rig.logs());
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.frees().len(), 1, "one buffer was given up");
+    assert_eq!(
+        line(),
+        "ds slots peak 8/8, ds bytes peak 131072, ds given up 1, ds refused 0 (slots full 0, no buffer 0)"
+    );
 }
 
 /// A buffer that could not be allocated is counted apart from a full table.
@@ -3074,7 +3124,7 @@ fn the_ds_line_counts_a_refusal_for_no_buffer_apart() {
     let line = ds_line_from_zero(&rig);
     with_platform(|p| p.fail_alloc_in = 1);
     assert_eq!(draw(&fbo_draw(&rig, 0)), -ENOMEM, "{:?}", rig.logs());
-    assert_eq!(line(), "ds slots: none allocated, ds refused 1 (slots full 0, no buffer 1)");
+    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 1 (slots full 0, no buffer 1)");
 }
 
 /// `depth_resolve` reads the depth a kick left for an object as the
