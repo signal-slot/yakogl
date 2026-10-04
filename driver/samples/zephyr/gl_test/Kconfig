@@ -100,6 +100,18 @@ config GL_TEST_PVR_DBIAS_INT
 	  backend's default. The Zephyr arm of gl_test_user's
 	  GL_TEST_DBIAS_INT, for the polygon-offset A/B (cases 3 and 65).
 
+config GL_TEST_PVR_FS_TEMPS_MIN
+	int "PowerVR: declare at least this many fragment temporaries (PVR_BACKEND_OPT_FS_TEMPS_MIN, a measurement)"
+	depends on YAKOGL_GPU_POWERVR
+	range 0 252
+	default 0
+	help
+	  Passed to pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN) at
+	  startup: every fragment kick allocates max(the shader's temps, this)
+	  temporaries per instance, the program unchanged. 0 is the shader's
+	  own count. For the A/B of case 39 perf between the online compiler
+	  and the offline table: never a default.
+
 config GL_TEST_PVR_KEEP_ZS
 	bool "PowerVR: keep the window's depth/stencil across a swap (opt-out of PVR_BACKEND_OPT_SWAP_DROPS_ZS)"
 	depends on YAKOGL_GPU_POWERVR

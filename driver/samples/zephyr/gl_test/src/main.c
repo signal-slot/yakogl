@@ -62,6 +62,8 @@ int main(void)
 		pvr_backend_set_option(PVR_BACKEND_OPT_DBIAS_INT, (uint32_t)CONFIG_GL_TEST_PVR_DBIAS_INT);
 	printk("gl_test: PVR_BACKEND_OPT_DBIAS_INT=%d (%s)\n", CONFIG_GL_TEST_PVR_DBIAS_INT,
 	       CONFIG_GL_TEST_PVR_DBIAS_INT >= 0 ? "set" : "-1: untouched");
+	pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN, (uint32_t)CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
+	printk("gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=%d\n", CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
 	/* on by default; CONFIG_GL_TEST_PVR_KEEP_ZS is the opt-out */
 	pvr_backend_set_option(PVR_BACKEND_OPT_SWAP_DROPS_ZS, !IS_ENABLED(CONFIG_GL_TEST_PVR_KEEP_ZS));
 	printk("gl_test: PVR_BACKEND_OPT_SWAP_DROPS_ZS=%d\n", !IS_ENABLED(CONFIG_GL_TEST_PVR_KEEP_ZS));

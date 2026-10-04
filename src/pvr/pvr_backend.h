@@ -131,6 +131,9 @@ enum pvr_backend_option {
 	/* 1 = the swap drops the window's depth/stencil: the swapped frame's
 	 * kick stores none (backend.rs PVR_BACKEND_OPT_SWAP_DROPS_ZS). */
 	PVR_BACKEND_OPT_SWAP_DROPS_ZS,
+	/* MEASUREMENT: the fragment kick declares at least this many temps
+	 * (backend.rs PVR_BACKEND_OPT_FS_TEMPS_MIN); 0 = the shader's own. */
+	PVR_BACKEND_OPT_FS_TEMPS_MIN,
 	PVR_BACKEND_OPT_COUNT
 };
 

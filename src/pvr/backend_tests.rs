@@ -288,6 +288,7 @@ unsafe extern "C" fn pvr_pds_render_kick_usc_program(
     info: *mut PvrPdsRenderKickUscInfo,
 ) -> i32 {
     with_platform(|p| p.kick_usc_rates.push((fs_usc_exec_offset, sample_rate)));
+    with_platform(|p| p.kick_usc_temps.push((fs_usc_exec_offset, fs_temps)));
     unsafe {
         for i in 0..8 {
             *data_out.add(i) = 0x4B00_0000 | i as u32;
@@ -461,6 +462,8 @@ struct Platform {
     faults: Vec<String>,
     /// Every fragment kick-USC program built: (USC offset, sample rate).
     kick_usc_rates: Vec<(u64, u32)>,
+    /// The temporaries every fragment kick program declared, in order.
+    kick_usc_temps: Vec<(u64, u32)>,
     /// false: every kick completes at its submit (`completed` = the last
     /// fence). true: a kick completes only when a wait names it or a later
     /// one, so the waits the backend makes are seen.
@@ -2231,6 +2234,26 @@ fn the_per_draw_debug_line_names_each_shaders_usc_size() {
     let line = logs.iter().find(|l| l.starts_with("pvr_backend: draw ")).expect("the per-draw line");
     assert!(line.contains("vs usc off 0x100000 dw 7 temps 2"), "{line}");
     assert!(line.contains("fs usc off 0x200000 dw 9 temps 3"), "{line}");
+}
+
+/// PVR_BACKEND_OPT_FS_TEMPS_MIN raises the temporaries the fragment kick
+/// declares to at least its value, capped at FS_TEMPS_MIN_CAP, and leaves a
+/// larger count alone; 0 declares the shader's own count.
+#[test]
+fn the_fs_temps_floor_raises_only_the_kick_allocation() {
+    let rig = Rig::new();
+    let declared = |floor: u32| {
+        pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN, floor);
+        with_platform(|p| p.kick_usc_temps.clear());
+        assert_eq!(draw(&rig.draw(3)), 0);
+        pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN, 0);
+        let off = heap_off_of(rig.draw(3).fs_usc_gpu) as u64;
+        with_platform(|p| p.kick_usc_temps.iter().filter(|k| k.0 == off).map(|k| k.1).collect::<Vec<u32>>())
+    };
+    assert_eq!(declared(0), [3], "the shader's own 3 temps (the rig's fs)");
+    assert_eq!(declared(2), [3], "a floor below the shader's count changes nothing");
+    assert_eq!(declared(30), [30]);
+    assert_eq!(declared(1000), [FS_TEMPS_MIN_CAP], "capped");
 }
 
 /* ---- the sync to upstream e6c449c ------------------------------------------ */
