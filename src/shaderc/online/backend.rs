@@ -630,6 +630,10 @@ fn record_key(glsl: &[u8], zero: &ZeroList, map: Option<&crate::shaderc::ShcAttr
     if facts.w_constant {
         chain(b"w-constant");
     }
+    /* the fusion switch decides the program, so it is part of the record's key */
+    if crate::shaderc::fuse_mul_add() {
+        chain(b"fuse-mul-add");
+    }
     if !facts.lod_key.is_none() {
         let mut k = *b"lod-key:        ";
         k[8..].copy_from_slice(&facts.lod_key.bits().to_le_bytes());
@@ -1553,6 +1557,15 @@ pub static SHC_ONLINE: ShcBackend = ShcBackend {
     lod_sensitivity: Some(online_lod_sensitivity),
     sampler_variant: Some(online_sampler_variant),
 };
+
+/// `int shc_online_set_fuse_mul_add(int on)`: whether the PowerVR compiles
+/// that follow fuse `a * b + c` into one `fmad` ([`crate::shaderc::fuse_mul_add`]);
+/// returns the old setting. Before the first compile, as a board image's
+/// knob: the setting is part of each record's cache key.
+#[no_mangle]
+pub extern "C" fn shc_online_set_fuse_mul_add(on: i32) -> i32 {
+    crate::shaderc::set_fuse_mul_add(on != 0) as i32
+}
 
 /// `shc_online_register()`: make this the current back end.
 ///

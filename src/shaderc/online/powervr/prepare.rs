@@ -890,6 +890,135 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
     Ok(Selected { groups: out.into_slice(), vregs: sel.vregs, outputs, inputs: sel.inputs, discard, alpha_to_one })
 }
 
+/// `sel` with each `fadd` of a product it alone reads made one `fmad`:
+/// `fadd(fmul(a, b), c)` is `fmad(a, b, c)`. GLSL ES 1.00 lets an
+/// implementation evaluate `a * b + c` either way (no `precise` in ES 1.00;
+/// 4.6.1's `invariant` asks the same computation of every program, which a
+/// pass that always fuses the same shape gives); Mesa fuses the same shape
+/// (nir_opt_algebraic's `fadd(fmul(a, b), c) -> ffma`), and the offline
+/// table's programs carry the fused form where ours carried the pair.
+///
+/// Fused only where the result is the same value the pair would compute
+/// from the same inputs: the product is a virtual value defined once and
+/// read by this one `fadd` alone (no output, discard or alpha-to-one reads
+/// it), carries no `abs` or `floor` at the `fadd`, both are F32 operations,
+/// no loop boundary or machine operation (a loop test among them) sits
+/// between them, and
+/// each of the product's own sources is a value nothing rewrites in between
+/// (a virtual value defined once, or a shared, special or vertex-input
+/// register). A `neg` on the product moves onto its first factor
+/// (`-(a * b) == (-a) * b`, exactly). [`prepare_counted`] then legalises
+/// the modifier sets as for any `fmad`. Returns the program and how many
+/// pairs were fused.
+pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Selected<'a>, u32), PrepareError> {
+    let n = sel.vregs as usize;
+    let defs = arena.alloc_filled(n, 0u16)?;
+    let uses = arena.alloc_filled(n, 0u16)?;
+    let count = |v: VReg, t: &mut [u16]| {
+        if let Some(c) = t.get_mut(v.0 as usize) {
+            *c = c.saturating_add(1);
+        }
+    };
+    for g in sel.groups {
+        if let Some(SelDst::Virtual(v)) = g.dst {
+            count(v, defs);
+            if matches!(g.op, SelOp::Sample { .. }) {
+                for k in 1..4 {
+                    count(VReg(v.0 + k), defs);
+                }
+            }
+        }
+        for s in g.srcs.iter().flatten() {
+            if let SelSrc::Virtual { v, .. } = s {
+                count(*v, uses);
+            }
+        }
+    }
+    let side = sel.outputs.iter().flat_map(|(_, c)| c.iter().flatten()).chain(sel.discard.iter());
+    for s in side.chain(sel.alpha_to_one.iter().flat_map(|(x, f)| [x, f])) {
+        if let SelSrc::Virtual { v, .. } = s {
+            count(*v, uses);
+        }
+    }
+    for (_, comps) in sel.inputs {
+        for v in comps.iter().flatten() {
+            count(*v, defs);
+        }
+    }
+    let (defs, uses): (&[u16], &[u16]) = (defs, uses);
+    let get = |t: &[u16], v: VReg| t.get(v.0 as usize).copied().unwrap_or(u16::MAX);
+    let steady = |s: &SelSrc| match s {
+        SelSrc::Virtual { v, .. } => get(defs, *v) == 1,
+        SelSrc::Fixed { bank, .. } => matches!(bank, Bank::Shared | Bank::Special | Bank::VtxIn),
+        SelSrc::Imm(_) => true,
+    };
+    let barrier = |g: &SelGroup| matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Machine(_));
+    /* Where each candidate product is defined, by its value. */
+    let def_at = arena.alloc_filled(n, u32::MAX)?;
+    for (i, g) in sel.groups.iter().enumerate() {
+        if let (SelOp::Alu(AluOp::Fmul), OpType::F32, Some(SelDst::Virtual(v))) = (g.op, g.ty, g.dst) {
+            if get(defs, v) == 1 && get(uses, v) == 1 && g.srcs[..2].iter().flatten().all(steady) {
+                if let Some(d) = def_at.get_mut(v.0 as usize) {
+                    *d = i as u32;
+                }
+            }
+        }
+    }
+    let gone = arena.alloc_filled(sel.groups.len(), false)?;
+    let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, sel.groups.len())?;
+    let mut fused = 0u32;
+    /* The last barrier seen, so "none between" is one comparison. */
+    let mut last_barrier: Option<usize> = None;
+    let rewritten = arena.alloc_copy(sel.groups)?;
+    for (j, g) in sel.groups.iter().enumerate() {
+        if barrier(g) {
+            last_barrier = Some(j);
+        }
+        if !(g.op == SelOp::Alu(AluOp::Fadd) && g.ty == OpType::F32) {
+            continue;
+        }
+        for k in 0..2 {
+            let Some(SelSrc::Virtual { v, mods }) = g.srcs[k] else { continue };
+            if mods.abs || mods.flr {
+                continue;
+            }
+            let Some(&i) = def_at.get(v.0 as usize) else { continue };
+            if i == u32::MAX || (i as usize) >= j || last_barrier.is_some_and(|b| b > i as usize) {
+                continue;
+            }
+            let m = sel.groups[i as usize];
+            let (Some(a), Some(b)) = (m.srcs[0], m.srcs[1]) else { continue };
+            let ma = mods_of(&Some(a));
+            let a = with_mods(a, Mods { neg: ma.neg != mods.neg, ..ma });
+            rewritten[j] = SelGroup {
+                op: SelOp::Alu(AluOp::Ffma),
+                ty: OpType::F32,
+                dst: g.dst,
+                srcs: [Some(a), Some(b), g.srcs[1 - k]],
+            };
+            gone[i as usize] = true;
+            fused += 1;
+            break;
+        }
+    }
+    for (i, g) in rewritten.iter().enumerate() {
+        if !gone[i] {
+            out.push(arena, *g)?;
+        }
+    }
+    Ok((
+        Selected {
+            groups: out.into_slice(),
+            vregs: sel.vregs,
+            outputs: sel.outputs,
+            inputs: sel.inputs,
+            discard: sel.discard,
+            alpha_to_one: sel.alpha_to_one,
+        },
+        fused,
+    ))
+}
+
 /// The first shared register a source can NOT name directly: 256.
 ///
 /// The source forms carry an 11-bit register index (`3b11i`), but the
@@ -1069,6 +1198,75 @@ mod tests {
             .iter()
             .flat_map(|(_, c)| c.iter().flatten().map(|s| read(s, &v).to_bits()).collect::<Vec<_>>())
             .collect()
+    }
+
+    /// `fuse_mul_add` on `groups` with output `out`: the program, how many
+    /// pairs fused, and whether the result means what the input meant.
+    fn fused(groups: &[SelGroup], out: [Option<SelSrc>; 4]) -> (Vec<SelGroup>, u32, bool) {
+        let outputs = [(IoSlot::Position, out)];
+        let sel = Selected { groups, vregs: 16, outputs: &outputs, inputs: &[], discard: None, alpha_to_one: None };
+        let mut buf = std::vec![0u8; 64 << 10];
+        let arena = Arena::new(&mut buf);
+        let (f, n) = fuse_mul_add(&sel, &arena).expect("fuses");
+        /* the evaluator runs straight-line programs only */
+        let straight = groups.iter().all(|g| !matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd));
+        let same = straight && eval(f.groups, f.outputs) == eval(groups, &outputs);
+        (f.groups.to_vec(), n, same)
+    }
+
+    /// `x = vtx0 * sh1; y = sh2 - x` is one `fmad(-vtx0, sh1, sh2)`: the
+    /// product's negation moves onto its first factor, the `fmul` goes, and
+    /// the program computes the same bits.
+    #[test]
+    fn a_sum_of_a_product_it_alone_reads_is_one_fmad() {
+        let groups = [
+            g(
+                SelOp::Alu(AluOp::Fmul),
+                1,
+                [Some(fixed(Bank::VtxIn, 0, NONE)), Some(fixed(Bank::Shared, 1, NONE)), None],
+            ),
+            g(SelOp::Alu(AluOp::Fadd), 2, [Some(virt(1, NEG)), Some(fixed(Bank::Shared, 2, NONE)), None]),
+        ];
+        let (f, n, same) = fused(&groups, [Some(virt(2, NONE)), None, None, None]);
+        assert_eq!((n, f.len()), (1, 1), "{f:?}");
+        assert_eq!(f[0].op, SelOp::Alu(AluOp::Ffma));
+        assert_eq!(
+            f[0].srcs,
+            [Some(fixed(Bank::VtxIn, 0, NEG)), Some(fixed(Bank::Shared, 1, NONE)), Some(fixed(Bank::Shared, 2, NONE))]
+        );
+        assert!(same, "the fused program computes what the pair did");
+    }
+
+    /// Not fused, each for its own reason: the product read twice, read
+    /// with `abs`, a loop boundary between the two, a factor defined twice.
+    #[test]
+    fn a_product_read_twice_or_through_abs_or_a_loop_boundary_is_not_fused() {
+        let mul = g(
+            SelOp::Alu(AluOp::Fmul),
+            1,
+            [Some(fixed(Bank::VtxIn, 0, NONE)), Some(fixed(Bank::Shared, 1, NONE)), None],
+        );
+        let add = |m: Mods| g(SelOp::Alu(AluOp::Fadd), 2, [Some(virt(1, m)), Some(fixed(Bank::Shared, 2, NONE)), None]);
+        let out2 = [Some(virt(2, NONE)), None, None, None];
+        /* read twice: by the add and by the output */
+        let (_, n, _) = fused(&[mul, add(NONE)], [Some(virt(2, NONE)), Some(virt(1, NONE)), None, None]);
+        assert_eq!(n, 0, "read twice");
+        /* through abs */
+        let abs = Mods { abs: true, ..NONE };
+        let (_, n, _) = fused(&[mul, add(abs)], out2);
+        assert_eq!(n, 0, "abs at the add");
+        /* a loop boundary between them */
+        let top = SelGroup { op: SelOp::LoopBegin, ty: OpType::F32, dst: None, srcs: [None; 3] };
+        let (_, n, _) = fused(&[mul, top, add(NONE)], out2);
+        assert_eq!(n, 0, "a loop boundary between");
+        /* a factor defined twice (a loop-carried value) */
+        let def = |v: u32| g(SelOp::Copy, v, [Some(fixed(Bank::Shared, 3, NONE)), None, None]);
+        let mul_v = g(SelOp::Alu(AluOp::Fmul), 1, [Some(virt(5, NONE)), Some(fixed(Bank::Shared, 1, NONE)), None]);
+        let (_, n, _) = fused(&[def(5), def(5), mul_v, add(NONE)], out2);
+        assert_eq!(n, 0, "a factor defined twice");
+        /* the control: the same program with the factor defined once fuses */
+        let (_, n, same) = fused(&[def(5), mul_v, add(NONE)], out2);
+        assert_eq!((n, same), (1, true), "defined once");
     }
 
     /// Prepare `groups`, check the rewrite named by `fired` happened, that

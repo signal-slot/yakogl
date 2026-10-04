@@ -112,6 +112,17 @@ config GL_TEST_PVR_FS_TEMPS_MIN
 	  own count. For the A/B of case 39 perf between the online compiler
 	  and the offline table: never a default.
 
+config GL_TEST_SHC_FUSE_MUL_ADD
+	bool "PowerVR: compile a * b + c as one fmad (shc_online_set_fuse_mul_add, a measurement)"
+	depends on YAKOGL_GPU_POWERVR && YAKOGL_SHADERC_ONLINE
+	default n
+	help
+	  Calls shc_online_set_fuse_mul_add(1) before the first compile: the
+	  in-process compiler fuses a sum of a product it alone reads into
+	  one fmad, in the program and in the blend tail, as the offline
+	  table's programs are. Off by default until the regression set has
+	  run with it; on is the other arm of case 39's A/B.
+
 config GL_TEST_PVR_KEEP_ZS
 	bool "PowerVR: keep the window's depth/stencil across a swap (opt-out of PVR_BACKEND_OPT_SWAP_DROPS_ZS)"
 	depends on YAKOGL_GPU_POWERVR

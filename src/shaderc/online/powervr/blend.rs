@@ -197,7 +197,8 @@ enum Step {
 }
 
 /// The groups one channel's blend takes, into `out`; returns how many.
-fn channel(b: &Blend, r: &Regs, k: u16, out: &mut [Step; 8]) -> usize {
+/// `fuse`: a product term and the other term as one `fmad` ([`fused`]).
+fn channel(b: &Blend, r: &Regs, k: u16, fuse: bool, out: &mut [Step; 8]) -> usize {
     let mut n = 0;
     let mut push = |s: Step| {
         out[n] = s;
@@ -257,6 +258,18 @@ fn channel(b: &Blend, r: &Regs, k: u16, out: &mut [Step; 8]) -> usize {
     for st in steps.iter().take(m).flatten() {
         push(*st);
     }
+    /* With multiply-add fusion asked for (crate::shaderc::fuse_mul_add), a
+     * sum or difference of the two terms where one is a product is one
+     * `fmad`, as pco's variants are (nir_lower_blend, then
+     * nir_opt_algebraic's ffma): the other term first, the product in it.
+     * The negations go where `fmad` carries one: on its first source (the
+     * product's factor) or its third (the other term). */
+    if fuse {
+        if let Some(g) = fused(eq, s, fs, d, fd, r, dst, &mut push) {
+            push(Step::Group(g));
+            return n;
+        }
+    }
     /* The two terms: s * Fs and d * Fd, skipped for a ZERO factor and taken
      * as they are for ONE. */
     let term = |x: SelSrc, f: Option<SelSrc>, into: u16, push: &mut dyn FnMut(Step)| -> Option<SelSrc> {
@@ -298,6 +311,59 @@ fn channel(b: &Blend, r: &Regs, k: u16, out: &mut [Step; 8]) -> usize {
     };
     push(Step::Group(g));
     n
+}
+
+/// One channel's `s * Fs (op) d * Fd` as one `fmad` when one term is a
+/// product and the other is there, for ADD, SUBTRACT and REVERSE_SUBTRACT;
+/// the other term, when it is a product too, is computed into its
+/// temporary first. `None` when the expression has no such form (a ZERO
+/// factor on either side, or no product): the caller builds it as before.
+fn fused(
+    eq: u32,
+    s: SelSrc,
+    fs: Option<SelSrc>,
+    d: SelSrc,
+    fd: Option<SelSrc>,
+    r: &Regs,
+    dst: u16,
+    push: &mut dyn FnMut(Step),
+) -> Option<SelGroup> {
+    let one = |f: &SelSrc| matches!(f, SelSrc::Fixed { bank: Bank::Special, reg: SR_ONE, .. });
+    let (fs, fd) = (fs?, fd?);
+    if one(&fs) && one(&fd) {
+        return None;
+    }
+    /* The product the fmad takes: the destination term's when it is one. */
+    let (px, pf, other, prod_is_d) = if !one(&fd) {
+        let other = if one(&fs) {
+            s
+        } else {
+            push(Step::Group(alu(AluOp::Fmul, r.t(2), s, Some(fs))));
+            temp(r.t(2))
+        };
+        (d, fd, other, true)
+    } else {
+        (s, fs, d, false)
+    };
+    let neg_prod = match (eq, prod_is_d) {
+        (SHC_BLEND_ADD, _) => false,
+        /* s - d: the product negated when it is d's */
+        (SHC_BLEND_SUBTRACT, true) => true,
+        (SHC_BLEND_SUBTRACT, false) => false,
+        /* d - s */
+        (SHC_BLEND_REVERSE_SUBTRACT, true) => false,
+        (SHC_BLEND_REVERSE_SUBTRACT, false) => true,
+        _ => return None,
+    };
+    let neg_other = matches!((eq, prod_is_d), (SHC_BLEND_SUBTRACT, false) | (SHC_BLEND_REVERSE_SUBTRACT, true));
+    let x = if neg_prod { neg(px) } else { px };
+    let o = if neg_other { neg(other) } else { other };
+    Some(SelGroup {
+        op: SelOp::Alu(AluOp::Ffma),
+        ty: OpType::F32,
+        dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: dst }),
+        srcs: [Some(x), Some(pf), Some(o)],
+    })
 }
 
 /// Step `i` of the blend tail, `None` past the end. Built one at a time: the
@@ -365,7 +431,7 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
     }
     let mut buf = [Step::PixRead(0, 0); 8];
     for k in 0..b.channels() {
-        let n = channel(b, r, k, &mut buf);
+        let n = channel(b, r, k, crate::shaderc::fuse_mul_add(), &mut buf);
         if i < n {
             return fixed(buf[i]);
         }
@@ -382,4 +448,109 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
         }));
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// Run one channel's groups on temporaries holding `s` (source), `d`
+    /// (pixel) and `c` (blend colour), every channel the same; the channel's
+    /// result.
+    fn run(b: &Blend, fuse: bool, s: [f32; 4], d: [f32; 4], c: [f32; 4], k: u16) -> f32 {
+        let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None };
+        let mut t: BTreeMap<u16, f32> = BTreeMap::new();
+        for i in 0..4u16 {
+            t.insert(r.s(i), s[i as usize]);
+            t.insert(r.d(i), d[i as usize]);
+            t.insert(r.c(i), c[i as usize]);
+        }
+        let mut out = [Step::Group(mov(0, special(SR_ZERO))); 8];
+        let n = channel(b, &r, k, fuse, &mut out);
+        let read = |x: &SelSrc, t: &BTreeMap<u16, f32>| -> f32 {
+            let (v, m) = match *x {
+                SelSrc::Fixed { bank: Bank::Temp, reg, mods } => (t[&reg], mods),
+                SelSrc::Fixed { bank: Bank::Special, reg: SR_ONE, mods } => (1.0, mods),
+                SelSrc::Fixed { bank: Bank::Special, reg: SR_ZERO, mods } => (0.0, mods),
+                other => panic!("an operand this test does not model: {other:?}"),
+            };
+            let v = if m.abs { v.abs() } else { v };
+            if m.neg {
+                -v
+            } else {
+                v
+            }
+        };
+        for st in out.iter().take(n) {
+            let Step::Group(g) = st else { panic!("a channel builds groups only") };
+            let a: Vec<f32> = g.srcs.iter().flatten().map(|x| read(x, &t)).collect();
+            let v = match g.op {
+                SelOp::Copy => a[0],
+                SelOp::Alu(AluOp::Fadd) => a[0] + a[1],
+                SelOp::Alu(AluOp::Fmul) => a[0] * a[1],
+                SelOp::Alu(AluOp::Ffma) => a[0] * a[1] + a[2],
+                SelOp::Alu(AluOp::Fmin) => a[0].min(a[1]),
+                SelOp::Alu(AluOp::Fmax) => a[0].max(a[1]),
+                other => panic!("an operation this test does not model: {other:?}"),
+            };
+            let Some(SelDst::Fixed { reg, .. }) = g.dst else { panic!("a fixed destination") };
+            t.insert(reg, v);
+        }
+        t[&k]
+    }
+
+    /// Every equation and every pair of a set of factors (both inverted and
+    /// plain, the constant and the alpha-saturate among them), on values
+    /// where a misplaced negation shows: the fused channel computes what the
+    /// pair of terms computes, bit for bit (the model rounds `fmad` as a
+    /// product then a sum, so equal bits mean the same expression).
+    #[test]
+    fn a_fused_channel_computes_the_same_blend_as_the_terms() {
+        let factors = [
+            SHC_BF_ONE,
+            SHC_BF_ZERO,
+            SHC_BF_SRC_COLOR,
+            SHC_BF_SRC_ALPHA,
+            SHC_BF_DST_ALPHA,
+            SHC_BF_DST_COLOR,
+            SHC_BF_CONST_ALPHA,
+            SHC_BF_SRC_ALPHA_SATURATE,
+            SHC_BF_INVERT | SHC_BF_SRC_ALPHA,
+            SHC_BF_INVERT | SHC_BF_DST_COLOR,
+            SHC_BF_INVERT | SHC_BF_CONST_COLOR,
+        ];
+        let eqs = [SHC_BLEND_ADD, SHC_BLEND_SUBTRACT, SHC_BLEND_REVERSE_SUBTRACT, SHC_BLEND_MIN, SHC_BLEND_MAX];
+        let vals = [([0.75, 0.25, 0.5, 0.6], [0.125, 0.9, 0.3, 0.2]), ([0.1, 0.8, 0.0, 1.0], [0.6, 0.05, 1.0, 0.45])];
+        let c = [0.2, 0.4, 0.7, 0.35];
+        let (mut checked, mut fused_seen) = (0, 0);
+        for &eq in &eqs {
+            for &fs in &factors {
+                for &fd in &factors {
+                    let b = Blend { src: [fs, fs], dst: [fd, fd], eq: [eq, eq], masked: 0, class: SHC_RT_RGBA8 };
+                    for (s, d) in vals {
+                        for k in 0..4u16 {
+                            let plain = run(&b, false, s, d, c, k);
+                            let fusedv = run(&b, true, s, d, c, k);
+                            assert_eq!(
+                                plain.to_bits(),
+                                fusedv.to_bits(),
+                                "eq {eq} fs {fs:#x} fd {fd:#x} ch {k}: {plain} vs {fusedv}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                    let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None };
+                    let mut out = [Step::Group(mov(0, special(SR_ZERO))); 8];
+                    let n = channel(&b, &r, 0, true, &mut out);
+                    if out.iter().take(n).any(|st| matches!(st, Step::Group(g) if g.op == SelOp::Alu(AluOp::Ffma))) {
+                        fused_seen += 1;
+                    }
+                }
+            }
+        }
+        /* the population: the comparisons made, and the cases that fused */
+        assert_eq!(checked, eqs.len() * factors.len() * factors.len() * vals.len() * 4);
+        assert!(fused_seen > 100, "only {fused_seen} factor pairs fused: the check did not see the fmad");
+    }
 }
