@@ -187,12 +187,12 @@ GPU_STOP (20) tag 2: cause 2 (out of memory with the freelist at its maximum) fe
 ### 594b1501 0724814f 01002533 14001133
 CHECK (21) tag 1: probes: probe 7 at (584,335) reads 0,37,51, the reference 0,17,51 (diff 20); 1 probes failing
 ### classify verdict
-### 594b1507 0001ff8c 000001f4 01d007d1
-CHECK (21) tag 7: run: the check passed, the run failed later: the frame's fence did not signal at frame 500 (2001 ms; its draw 0 ms, 0 compiles), rc -116; draws refused 0; keep high-water 464 KiB
+### 594b1507 1400018c 00c028fe 463e89d0
+CHECK (21) tag 7: run: the check passed, the run failed later: the frame's fence did not signal at frame 254 (2001 ms; its draw 40 ms, 12 ms in GL calls, 70% of it in glDraw*, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
 ### classify verdict
-### 594b1507 0002ff8c 032a3002 01d00abc
-CHECK (21) tag 7: run: the check passed, the run failed later: a frame over the budget at frame 2 (2748 ms; its draw 2700 ms, 12 compiles), rc -116; draws refused 0; keep high-water 464 KiB
+### 594b1507 1400028c 08cade02 3e5719d0
+CHECK (21) tag 7: run: the check passed, the run failed later: a frame over the budget at frame 2 (2787 ms; its draw 2782 ms, 140 ms in GL calls, 62% of it in glDraw*, 0 compiler runs), rc -116; draws refused 0; keep high-water 464 KiB
 ### classify verdict
-### 594b1507 0004ffea fffffc02 01d00000
-CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call failed at frame 2 (0 ms; its draw not measured, compiles not counted), rc -22; draws refused 0; keep high-water 464 KiB
+### 594b1507 3ff004ea ffffff02 ff0007ff
+CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call failed at frame 2 (0 ms; its draw not measured, GL calls not timed, compiler runs not counted), rc -22; draws refused 0; no keep region
 ### classify verdict

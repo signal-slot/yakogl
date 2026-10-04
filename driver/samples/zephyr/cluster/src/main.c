@@ -67,7 +67,7 @@
 #include <yakogl_record.h>
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
 int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
-uint32_t shc_online_compiles(void);                       /* gles_shaderc.h */
+uint32_t shc_online_compiler_runs(void);                  /* gles_shaderc.h */
 #endif
 
 #define WIN_W CONFIG_CLUSTER_PANEL_WIDTH
@@ -169,11 +169,33 @@ void cluster_board_finish(uint32_t w, uint32_t h, uint8_t stage, uint32_t status
  * uploads and draws. The rest of slint_cluster_draw_frame is Slint and
  * FemtoVG on the CPU (item tree, layout, glyph and path work) and the GL
  * calls not listed here. FemtoVG resolves its GL entry points once, at the
- * first frame, so the wrappers stay in place in the animation; they time
- * nothing there. */
-enum gl_timed { GT_COMPILE, GT_LINK, GT_TEXIMAGE, GT_TEXSUB, GT_BUFFER, GT_DRAW, GT_N };
+ * first frame, so the wrappers stay in place in the animation, where each
+ * iteration is timed afresh and a failed run's record carries the failing
+ * frame's GL ms, its slowest class and that class's share (CHECK_RUN). */
+enum gl_timed {
+	GT_COMPILE,
+	GT_LINK,
+	GT_TEXIMAGE,
+	GT_TEXSUB,
+	GT_BUFFER,
+	GT_DRAW,
+	GT_UNIFORM,
+	GT_FBO,
+	GT_DELETE,
+	GT_MIPMAP,
+	GT_READ,
+	GT_CLEAR,
+	GT_N
+};
+/* The class numbers are record.rs CHECK_RUN_GL_* (the record names the
+ * slowest class of a failed frame); BUILD_ASSERT below keeps them equal. */
 static const char *const gt_name[GT_N] = { "glCompileShader", "glLinkProgram", "glTexImage2D",
-					   "glTexSubImage2D", "glBufferData", "glDraw*" };
+					   "glTexSubImage2D", "glBufferData", "glDraw*",
+					   "glUniform*", "framebuffer", "glDelete*",
+					   "glGenerateMipmap", "glReadPixels", "glClear" };
+BUILD_ASSERT(GT_COMPILE == YK_RECORD_CHECK_RUN_GL_COMPILE && GT_CLEAR == YK_RECORD_CHECK_RUN_GL_CLEAR &&
+		     GT_N == YK_RECORD_CHECK_RUN_GL_CLASSES,
+	     "record.rs CHECK_RUN_GL_* follow enum gl_timed");
 static bool s_gl_timing;
 static uint32_t s_gt_calls[GT_N];
 static uint64_t s_gt_cycles[GT_N], s_gt_bytes[GT_N];
@@ -223,6 +245,73 @@ static void GL_APIENTRY t_DrawElements(GLenum m, GLsizei n, GLenum t, const void
 {
 	GT_TIMED(GT_DRAW, 0, glDrawElements(m, n, t, i));
 }
+static void GL_APIENTRY t_BufferSubData(GLenum t, GLintptr off, GLsizeiptr n, const void *d)
+{
+	GT_TIMED(GT_BUFFER, (uint64_t)n, glBufferSubData(t, off, n, d));
+}
+static void GL_APIENTRY t_Uniform1i(GLint l, GLint v)
+{
+	GT_TIMED(GT_UNIFORM, 0, glUniform1i(l, v));
+}
+static void GL_APIENTRY t_Uniform2fv(GLint l, GLsizei n, const GLfloat *v)
+{
+	GT_TIMED(GT_UNIFORM, 0, glUniform2fv(l, n, v));
+}
+static void GL_APIENTRY t_Uniform4fv(GLint l, GLsizei n, const GLfloat *v)
+{
+	GT_TIMED(GT_UNIFORM, 0, glUniform4fv(l, n, v));
+}
+static void GL_APIENTRY t_BindFramebuffer(GLenum t, GLuint f)
+{
+	GT_TIMED(GT_FBO, 0, glBindFramebuffer(t, f));
+}
+static void GL_APIENTRY t_FramebufferTexture2D(GLenum t, GLenum a, GLenum tt, GLuint tex, GLint l)
+{
+	GT_TIMED(GT_FBO, 0, glFramebufferTexture2D(t, a, tt, tex, l));
+}
+static void GL_APIENTRY t_FramebufferRenderbuffer(GLenum t, GLenum a, GLenum rt, GLuint rb)
+{
+	GT_TIMED(GT_FBO, 0, glFramebufferRenderbuffer(t, a, rt, rb));
+}
+static void GL_APIENTRY t_RenderbufferStorage(GLenum t, GLenum f, GLsizei w, GLsizei h)
+{
+	GT_TIMED(GT_FBO, 0, glRenderbufferStorage(t, f, w, h));
+}
+static GLenum GL_APIENTRY t_CheckFramebufferStatus(GLenum t)
+{
+	GLenum r = 0;
+
+	GT_TIMED(GT_FBO, 0, r = glCheckFramebufferStatus(t));
+	return r;
+}
+static void GL_APIENTRY t_DeleteTextures(GLsizei n, const GLuint *v)
+{
+	GT_TIMED(GT_DELETE, 0, glDeleteTextures(n, v));
+}
+static void GL_APIENTRY t_DeleteFramebuffers(GLsizei n, const GLuint *v)
+{
+	GT_TIMED(GT_DELETE, 0, glDeleteFramebuffers(n, v));
+}
+static void GL_APIENTRY t_DeleteRenderbuffers(GLsizei n, const GLuint *v)
+{
+	GT_TIMED(GT_DELETE, 0, glDeleteRenderbuffers(n, v));
+}
+static void GL_APIENTRY t_DeleteBuffers(GLsizei n, const GLuint *v)
+{
+	GT_TIMED(GT_DELETE, 0, glDeleteBuffers(n, v));
+}
+static void GL_APIENTRY t_GenerateMipmap(GLenum t)
+{
+	GT_TIMED(GT_MIPMAP, 0, glGenerateMipmap(t));
+}
+static void GL_APIENTRY t_ReadPixels(GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum ty, void *px)
+{
+	GT_TIMED(GT_READ, (uint64_t)w * (uint64_t)h * 4u, glReadPixels(x, y, w, h, f, ty, px));
+}
+static void GL_APIENTRY t_Clear(GLbitfield m)
+{
+	GT_TIMED(GT_CLEAR, 0, glClear(m));
+}
 
 static const struct {
 	const char *name;
@@ -231,7 +320,17 @@ static const struct {
 	{ "glCompileShader", (const void *)t_CompileShader }, { "glLinkProgram", (const void *)t_LinkProgram },
 	{ "glTexImage2D", (const void *)t_TexImage2D },       { "glTexSubImage2D", (const void *)t_TexSubImage2D },
 	{ "glBufferData", (const void *)t_BufferData },       { "glDrawArrays", (const void *)t_DrawArrays },
-	{ "glDrawElements", (const void *)t_DrawElements },
+	{ "glDrawElements", (const void *)t_DrawElements },   { "glBufferSubData", (const void *)t_BufferSubData },
+	{ "glUniform1i", (const void *)t_Uniform1i },         { "glUniform2fv", (const void *)t_Uniform2fv },
+	{ "glUniform4fv", (const void *)t_Uniform4fv },       { "glBindFramebuffer", (const void *)t_BindFramebuffer },
+	{ "glFramebufferTexture2D", (const void *)t_FramebufferTexture2D },
+	{ "glFramebufferRenderbuffer", (const void *)t_FramebufferRenderbuffer },
+	{ "glRenderbufferStorage", (const void *)t_RenderbufferStorage },
+	{ "glCheckFramebufferStatus", (const void *)t_CheckFramebufferStatus },
+	{ "glDeleteTextures", (const void *)t_DeleteTextures }, { "glDeleteFramebuffers", (const void *)t_DeleteFramebuffers },
+	{ "glDeleteRenderbuffers", (const void *)t_DeleteRenderbuffers },
+	{ "glDeleteBuffers", (const void *)t_DeleteBuffers },  { "glGenerateMipmap", (const void *)t_GenerateMipmap },
+	{ "glReadPixels", (const void *)t_ReadPixels },        { "glClear", (const void *)t_Clear },
 };
 
 static const void *get_proc(const char *name)
@@ -289,60 +388,98 @@ static uint32_t us_since(uint32_t c0)
 	return (uint32_t)k_cyc_to_us_floor64(k_cycle_get_32() - c0);
 }
 
-/* The animation frame being built: when it started counting compiles, and
- * how long its draw took (YK_RECORD_CHECK_RUN_DRAW_ABSENT until it is
- * known). Outside the animation loop nothing is measured. */
+/* The animation frame being built: the compiler-run count at its start,
+ * and how long its draw took (YK_RECORD_CHECK_RUN_DRAW_MAX, "not measured",
+ * until it is known). Its GL calls are timed into s_gt_* (reset at the
+ * frame's start). Outside the animation loop nothing is measured. */
 static struct {
 	bool live;
-	uint32_t compiles0, draw_ms;
+	uint32_t runs0, draw_ms;
 } s_frame;
 
-/* The online compiler's compile count; 0 without it (never read then). */
-static uint32_t compiles_now(void)
+/* The online compiler's run count; 0 without it (never read then). */
+static uint32_t runs_now(void)
 {
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
-	return shc_online_compiles();
+	return shc_online_compiler_runs();
 #else
 	return 0u;
 #endif
 }
 
+static void gt_reset(void)
+{
+	memset(s_gt_calls, 0, sizeof(s_gt_calls));
+	memset(s_gt_cycles, 0, sizeof(s_gt_cycles));
+	memset(s_gt_bytes, 0, sizeof(s_gt_bytes));
+}
+
 /* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
  * first cause only, with the animation frame it happened in, a detail in ms
- * (how long the wait or the frame took), and that frame's draw time and the
- * compiles it ran, each its own ABSENT value when not measured. */
+ * (how long the wait or the frame took), that frame's draw time, the ms of
+ * it in the timed GL calls, the slowest class and its share, and the
+ * compiler runs; each its CHECK_RUN_*_MAX ("not measured") when it was not. */
 static struct {
-	uint32_t cause, frame, detail_ms, draw_ms, compiles;
+	uint32_t cause, frame, detail_ms, draw_ms, gl_ms, cls, share, runs;
 } s_run_fail;
 
 static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
 {
-	if (s_run_fail.cause == 0u) {
-		s_run_fail.cause = cause;
-		s_run_fail.frame = frame;
-		s_run_fail.detail_ms = detail_ms;
-		s_run_fail.draw_ms = s_frame.live ? s_frame.draw_ms : YK_RECORD_CHECK_RUN_DRAW_ABSENT;
-		s_run_fail.compiles = YK_RECORD_CHECK_RUN_COMPILES_ABSENT;
-#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
-		if (s_frame.live) {
-			s_run_fail.compiles = compiles_now() - s_frame.compiles0;
-		}
-#endif
+	if (s_run_fail.cause != 0u) {
+		return;
 	}
+	s_run_fail.cause = cause;
+	s_run_fail.frame = frame;
+	s_run_fail.detail_ms = detail_ms;
+	s_run_fail.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
+	s_run_fail.gl_ms = YK_RECORD_CHECK_RUN_GLMS_MAX;
+	s_run_fail.cls = YK_RECORD_CHECK_RUN_CLASS_MAX;
+	s_run_fail.share = YK_RECORD_CHECK_RUN_SHARE_MAX;
+	s_run_fail.runs = YK_RECORD_CHECK_RUN_RUNS_MAX;
+	if (!s_frame.live) {
+		return;
+	}
+	s_run_fail.draw_ms = s_frame.draw_ms;
+	uint64_t total = 0, top = 0;
+
+	for (int i = 0; i < GT_N; i++) {
+		total += s_gt_cycles[i];
+		if (s_gt_cycles[i] > top) {
+			top = s_gt_cycles[i];
+			s_run_fail.cls = (uint32_t)i;
+		}
+	}
+	s_run_fail.gl_ms = (uint32_t)(k_cyc_to_us_floor64(total) / 1000u);
+	if (total != 0u) {
+		s_run_fail.share = (uint32_t)(top * 100u / total);
+	}
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	s_run_fail.runs = runs_now() - s_frame.runs0;
+#endif
 }
 
-/* CHECK_RUN's w2 (record.rs check_run_w2): each field saturates one below
- * its "not measured" value, which passes through. */
-static uint32_t check_run_field(uint32_t v, uint32_t absent)
+/* One CHECK_RUN field (record.rs check_run_field): saturated one below its
+ * largest value, which ("not measured") passes through. */
+static uint32_t check_run_field(uint32_t v, uint32_t max)
 {
-	return v == absent ? absent : (v < absent - 1u ? v : absent - 1u);
+	return v == max ? max : (v < max - 1u ? v : max - 1u);
 }
 
-static uint32_t check_run_w2(uint32_t frame, uint32_t draw_ms, uint32_t compiles)
+/* CHECK_RUN's w1..w3 (record.rs check_run_words). */
+static void check_run_words(int rc, uint32_t refused, uint32_t keep_kib, uint32_t w[3])
 {
-	return (frame < YK_RECORD_CHECK_RUN_FRAME_MAX ? frame : YK_RECORD_CHECK_RUN_FRAME_MAX) |
-	       check_run_field(draw_ms, YK_RECORD_CHECK_RUN_DRAW_ABSENT) << YK_RECORD_CHECK_RUN_DRAW_SHIFT |
-	       check_run_field(compiles, YK_RECORD_CHECK_RUN_COMPILES_ABSENT) << YK_RECORD_CHECK_RUN_COMPILES_SHIFT;
+	const uint32_t cause = s_run_fail.cause ? s_run_fail.cause : YK_RECORD_CHECK_RUN_OTHER;
+
+	w[0] = ((uint32_t)rc & 0xffu) | check_run_field(cause, YK_RECORD_CHECK_RUN_CAUSE_MAX) << YK_RECORD_CHECK_RUN_CAUSE_SHIFT |
+	       check_run_field(refused, YK_RECORD_CHECK_RUN_REFUSED_MAX) << YK_RECORD_CHECK_RUN_REFUSED_SHIFT |
+	       check_run_field(s_run_fail.runs, YK_RECORD_CHECK_RUN_RUNS_MAX) << YK_RECORD_CHECK_RUN_RUNS_SHIFT |
+	       check_run_field(s_run_fail.cls, YK_RECORD_CHECK_RUN_CLASS_MAX) << YK_RECORD_CHECK_RUN_CLASS_SHIFT;
+	w[1] = check_run_field(s_run_fail.frame, YK_RECORD_CHECK_RUN_FRAME_MAX) |
+	       check_run_field(s_run_fail.draw_ms, YK_RECORD_CHECK_RUN_DRAW_MAX) << YK_RECORD_CHECK_RUN_DRAW_SHIFT |
+	       check_run_field(s_run_fail.gl_ms, YK_RECORD_CHECK_RUN_GLMS_MAX) << YK_RECORD_CHECK_RUN_GLMS_SHIFT;
+	w[2] = check_run_field(keep_kib, YK_RECORD_CHECK_RUN_KEEP_MAX) |
+	       check_run_field(s_run_fail.detail_ms, YK_RECORD_CHECK_RUN_DETAIL_MAX) << YK_RECORD_CHECK_RUN_DETAIL_SHIFT |
+	       check_run_field(s_run_fail.share, YK_RECORD_CHECK_RUN_SHARE_MAX) << YK_RECORD_CHECK_RUN_SHARE_SHIFT;
 }
 
 /* Each EGL call is checked on its own: eglGetError reports the LAST call. */
@@ -588,8 +725,10 @@ static int animate(void)
 		}
 		s_ui_clock_ms = s_seq.frame_ms[2] + (uint64_t)t; /* on from the checked frame */
 		s_frame.live = true;
-		s_frame.compiles0 = compiles_now();
-		s_frame.draw_ms = YK_RECORD_CHECK_RUN_DRAW_ABSENT;
+		s_frame.runs0 = runs_now();
+		s_frame.draw_ms = YK_RECORD_CHECK_RUN_DRAW_MAX;
+		gt_reset();
+		s_gl_timing = true;
 		if (!eglMakeCurrent(s_dpy, s_surf[half], s_surf[half], s_ctx)) {
 			ret = egl_fail("eglMakeCurrent");
 			run_fail(YK_RECORD_CHECK_RUN_EGL, drawn + 1, 0u);
@@ -599,6 +738,7 @@ static int animate(void)
 
 		ret = slint_cluster_draw_frame(get_proc, WIN_W, WIN_H);
 		ft.draw_us = us_since(c);
+		s_gl_timing = false;
 		s_frame.draw_ms = ft.draw_us / 1000u;
 		if (ret) {
 			printk("cluster: animation frame %u: slint_cluster_draw_frame rc %d\n", drawn + 1, ret);
@@ -654,6 +794,7 @@ static int animate(void)
 		}
 	}
 	s_frame.live = false;
+	s_gl_timing = false;
 	s_elapsed_ms = (uint32_t)(k_uptime_get() - t0);
 	/* the last frame in flight is presented, outside the counts */
 	if (pend.live) {
@@ -674,8 +815,8 @@ static int animate(void)
 
 uint32_t yakogl_draws_refused(void); /* src/backend.rs */
 
-/* The online compiler's keep high-water in KiB (saturating at 16 bits); 0 in
- * an image without the compiler. */
+/* The online compiler's keep high-water in KiB; YK_RECORD_CHECK_RUN_KEEP_MAX
+ * ("not measured") in an image without the compiler. */
 static uint32_t keep_kib(void)
 {
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
@@ -684,9 +825,9 @@ static uint32_t keep_kib(void)
 
 	(void)shc_online_keep_stats(NULL, &peak);
 	hi = (uint32_t)((peak + 1023u) / 1024u);
-	return hi > 0xffffu ? 0xffffu : hi;
+	return hi < YK_RECORD_CHECK_RUN_KEEP_MAX ? hi : YK_RECORD_CHECK_RUN_KEEP_MAX - 1u;
 #else
-	return 0u;
+	return YK_RECORD_CHECK_RUN_KEEP_MAX;
 #endif
 }
 
@@ -737,14 +878,10 @@ int main(void)
 				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)s_check.check_tag, s_check.check[0],
 						 s_check.check[1], s_check.check[2]);
 			} else {
-				uint32_t refused = yakogl_draws_refused();
-				uint32_t cause = s_run_fail.cause ? s_run_fail.cause : YK_RECORD_CHECK_RUN_OTHER;
-				uint32_t detail = s_run_fail.detail_ms > 0xffffu ? 0xffffu : s_run_fail.detail_ms;
+				uint32_t w[3];
 
-				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN,
-						 ((uint32_t)rc & 0xffffu) | cause << 16 | (refused > 0xffu ? 0xffu : refused) << 24,
-						 check_run_w2(s_run_fail.frame, s_run_fail.draw_ms, s_run_fail.compiles),
-						 keep_kib() << 16 | detail);
+				check_run_words(rc, yakogl_draws_refused(), keep_kib(), w);
+				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN, w[0], w[1], w[2]);
 			}
 		}
 	}
