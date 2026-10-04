@@ -288,6 +288,22 @@ static uint32_t us_since(uint32_t c0)
 	return (uint32_t)k_cyc_to_us_floor64(k_cycle_get_32() - c0);
 }
 
+/* Why the run failed after a passing check, for CHECK_RUN (record.rs): the
+ * first cause only, with the animation frame it happened in and a detail in
+ * ms (how long the wait or the frame took). */
+static struct {
+	uint32_t cause, frame, detail_ms;
+} s_run_fail;
+
+static void run_fail(uint32_t cause, uint32_t frame, uint32_t detail_ms)
+{
+	if (s_run_fail.cause == 0u) {
+		s_run_fail.cause = cause;
+		s_run_fail.frame = frame;
+		s_run_fail.detail_ms = detail_ms;
+	}
+}
+
 /* Each EGL call is checked on its own: eglGetError reports the LAST call. */
 static int egl_fail(const char *call)
 {
@@ -467,7 +483,7 @@ struct pending {
 };
 
 /* Wait for the frame in flight, then show it: 0, or -ETIMEDOUT / -EIO. */
-static int complete(struct pending *p, uint32_t *wait_us, uint32_t *show_us, int *shown)
+static int complete(struct pending *p, uint32_t frame, uint32_t *wait_us, uint32_t *show_us, int *shown)
 {
 	EGLAttrib status = 0;
 	uint32_t c0 = k_cycle_get_32(), polls = 0;
@@ -476,14 +492,16 @@ static int complete(struct pending *p, uint32_t *wait_us, uint32_t *show_us, int
 	for (;;) {
 		if (!eglGetSyncAttrib(s_dpy, p->fence, EGL_SYNC_STATUS, &status)) {
 			ret = egl_fail("eglGetSyncAttrib");
+			run_fail(YK_RECORD_CHECK_RUN_EGL, frame, 0u);
 			break;
 		}
 		if (status == EGL_SIGNALED) {
 			break;
 		}
 		if (us_since(c0) > FENCE_WAIT_MAX_US) {
-			printk("cluster: the frame in flight (half %d) not done after %u polls in %u us\n",
-			       p->half, polls, us_since(c0));
+			printk("cluster: the frame in flight (frame %u, half %d) not done after %u polls in %u us\n",
+			       frame, p->half, polls, us_since(c0));
+			run_fail(YK_RECORD_CHECK_RUN_FENCE_TIMEOUT, frame, us_since(c0) / 1000u);
 			ret = -ETIMEDOUT;
 			break;
 		}
@@ -530,6 +548,7 @@ static int animate(void)
 		s_ui_clock_ms = s_seq.frame_ms[2] + (uint64_t)t; /* on from the checked frame */
 		if (!eglMakeCurrent(s_dpy, s_surf[half], s_surf[half], s_ctx)) {
 			ret = egl_fail("eglMakeCurrent");
+			run_fail(YK_RECORD_CHECK_RUN_EGL, drawn + 1, 0u);
 			break;
 		}
 		uint32_t c = k_cycle_get_32();
@@ -538,11 +557,12 @@ static int animate(void)
 		ft.draw_us = us_since(c);
 		if (ret) {
 			printk("cluster: animation frame %u: slint_cluster_draw_frame rc %d\n", drawn + 1, ret);
+			run_fail(YK_RECORD_CHECK_RUN_DRAW, drawn + 1, 0u);
 			ret = -EIO;
 			break;
 		}
 		if (pend.live) {
-			ret = complete(&pend, &ft.wait_us, &ft.show_us, &shown);
+			ret = complete(&pend, drawn, &ft.wait_us, &ft.show_us, &shown);
 			if (ret) {
 				break;
 			}
@@ -550,16 +570,19 @@ static int animate(void)
 		c = k_cycle_get_32();
 		if (!eglSwapBuffers(s_dpy, s_surf[half])) {
 			ret = egl_fail("eglSwapBuffers");
+			run_fail(YK_RECORD_CHECK_RUN_EGL, drawn + 1, 0u);
 			break;
 		}
 		ft.swap_us = us_since(c);
 		ret = gl_clean("during an animation frame");
 		if (ret) {
+			run_fail(YK_RECORD_CHECK_RUN_GL_ERROR, drawn + 1, 0u);
 			break;
 		}
 		pend.fence = eglCreateSync(s_dpy, EGL_SYNC_FENCE, NULL);
 		if (pend.fence == EGL_NO_SYNC) {
 			ret = egl_fail("eglCreateSync");
+			run_fail(YK_RECORD_CHECK_RUN_EGL, drawn + 1, 0u);
 			break;
 		}
 		pend.live = true;
@@ -572,6 +595,7 @@ static int animate(void)
 			if (cluster_board_frame(&ft)) {
 				printk("cluster: animation frame %u took %u us, over the budget\n", drawn,
 				       ft.frame_us);
+				run_fail(YK_RECORD_CHECK_RUN_OVER_BUDGET, drawn, ft.frame_us / 1000u);
 				ret = -ETIMEDOUT;
 				break;
 			}
@@ -588,13 +612,14 @@ static int animate(void)
 	/* the last frame in flight is presented, outside the counts */
 	if (pend.live) {
 		uint32_t w = 0, s = 0;
-		int drain = complete(&pend, &w, &s, &shown);
+		int drain = complete(&pend, drawn, &w, &s, &shown);
 
 		ret = ret ? ret : drain;
 	}
 	/* an animation that presented nothing measured nothing: not a pass */
 	if (ret == 0 && bound_ms > 0 && counted == 0) {
 		printk("cluster: animation: no frame presented in %u ms\n", s_elapsed_ms);
+		run_fail(YK_RECORD_CHECK_RUN_NO_FRAME, 0u, s_elapsed_ms);
 		ret = -ENODATA;
 	}
 	stage(STAGE_ANIMATED);
@@ -603,17 +628,17 @@ static int animate(void)
 
 uint32_t yakogl_draws_refused(void); /* src/backend.rs */
 
-/* CHECK_RUN's w3 (record.rs): the online compiler's keep high-water and its
- * region, KiB, 16 bits each; 0 in an image without the compiler. */
-static uint32_t keep_word(void)
+/* The online compiler's keep high-water in KiB (saturating at 16 bits); 0 in
+ * an image without the compiler. */
+static uint32_t keep_kib(void)
 {
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
 	size_t peak = 0;
-	uint32_t hi, size = (uint32_t)(CONFIG_YAKOGL_SHADERC_KEEP_BYTES / 1024);
+	uint32_t hi;
 
 	(void)shc_online_keep_stats(NULL, &peak);
 	hi = (uint32_t)((peak + 1023u) / 1024u);
-	return (hi > 0xffffu ? 0xffffu : hi) << 16 | (size > 0xffffu ? 0xffffu : size);
+	return hi > 0xffffu ? 0xffffu : hi;
 #else
 	return 0u;
 #endif
@@ -662,12 +687,18 @@ int main(void)
 		 * keeps only the last record, and PROBES' five points need not be
 		 * the ones that failed, nor the check the part of the run that did. */
 		if (status != YK_RECORD_STATUS_PASS) {
-			if (s_check.check_tag != 0u)
+			if (s_check.check_tag != 0u) {
 				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)s_check.check_tag, s_check.check[0],
 						 s_check.check[1], s_check.check[2]);
-			else
-				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN, (uint32_t)rc,
-						 yakogl_draws_refused(), keep_word());
+			} else {
+				uint32_t refused = yakogl_draws_refused();
+				uint32_t cause = s_run_fail.cause ? s_run_fail.cause : YK_RECORD_CHECK_RUN_OTHER;
+				uint32_t detail = s_run_fail.detail_ms > 0xffffu ? 0xffffu : s_run_fail.detail_ms;
+
+				board_result_tag(YK_RECORD_KIND_CHECK, (uint8_t)YK_RECORD_CHECK_RUN,
+						 ((uint32_t)rc & 0xffffu) | cause << 16 | (refused > 0xffu ? 0xffu : refused) << 24,
+						 s_run_fail.frame, keep_kib() << 16 | detail);
+			}
 		}
 	}
 	board_finish("cluster", rc);
