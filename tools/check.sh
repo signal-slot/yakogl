@@ -880,28 +880,6 @@ if command -v python3 >/dev/null 2>&1; then
   # below); the record's classes and stage table are
   # driver/rust/src/board/record.rs, decoded by yakogl-tools record ("test
   # yakogl-tools" below).
-  # The AM62P direct boot (docs/direct-boot.md): u-boot.img with Zephyr in
-  # place of U-Boot proper, on a synthetic FIT in the prebuilt's form (the
-  # payload, load/entry, crc32, fdt-0 and its certificate kept, external data,
-  # the refusals, the boot-partition layout against U-Boot's environment).
-  step "tools   am62p-mkboot u-boot.img and boot partition" python3 tools/am62p-mkboot.py --self-test
-  # The AM62P second stage (docs/direct-boot.md, "The second stage"): the
-  # images am62p-mkboot.py writes for the eMMC user area (Python's zlib)
-  # decoded by the loader's own Rust (yakogl-boot-stage2: header, CRC-32,
-  # inflate): every ok-*.img loads, every bad-*.img is refused. The row
-  # requires the test's "verified" line (without BS2_VECTORS it checks nothing).
-  stage2_vectors_check() {
-    local d="$PWD/build/stage2-check" out
-    rm -rf "$d"
-    python3 tools/am62p-mkboot.py stage2-vectors "$d" > /dev/null || return 1
-    out=$(BS2_VECTORS="$d" cargo test -q -p yakogl-boot-stage2 mkboot_vectors -- --nocapture 2>&1) ||
-      { printf '%s\n' "$out" | tail -20; return 1; }
-    printf '%s\n' "$out" | grep -qE '^mkboot_vectors: [0-9]+ images verified' || {
-      echo "mkboot_vectors passed without its verified line"
-      return 1
-    }
-  }
-  step "tools   am62p second stage: mkboot images decoded by the loader's Rust" stage2_vectors_check
   # The GLES3 mustpass list (tools/cts/gen-gles3-mustpass.sh at VK-GL-CTS
   # 93bca01): its count is pinned, so a list regenerated from another
   # checkout fails here until the pin is changed on purpose, and a tally that
@@ -1088,31 +1066,6 @@ if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-so
   step "check   yakogl-drivers (aarch64-unknown-none-softfloat)" drivers_softfloat_check
 else
   gap "yakogl-drivers for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
-fi
-# The AM62P second-stage loader's logic (driver/samples/zephyr/boot_stage2/loader,
-# the yakogl-boot-stage2 crate): lint, host tests (header, CRC-32, inflate) and
-# the target it ships for, aarch64-unknown-none-softfloat (the jump is inline
-# assembly there). The cross-check with am62p-mkboot.py is the tools row above.
-step "clippy  yakogl-boot-stage2" cargo clippy -p yakogl-boot-stage2 --all-targets
-step "test    yakogl-boot-stage2" cargo test --no-fail-fast -p yakogl-boot-stage2
-stage2_softfloat_check() {
-  local t=aarch64-unknown-none-softfloat
-  if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
-    cargo clippy -p yakogl-boot-stage2 --target "$t"
-  else
-    CARGO_FUTURE_INCOMPAT_REPORT_FREQUENCY=never cargo +nightly clippy -p yakogl-boot-stage2 \
-      --target "$t" -Z build-std=core
-  fi
-}
-if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-softfloat ||
-  [ -d "$(rustc +nightly --print sysroot 2>/dev/null)/lib/rustlib/src/rust/library/core" ]; then
-  step "clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)" stage2_softfloat_check
-else
-  gap "yakogl-boot-stage2 for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
-fi
-if command -v cc >/dev/null 2>&1; then
-  step "cc      boot_stage2.h layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
-    -x c driver/samples/zephyr/boot_stage2/loader/include/boot_stage2.h
 fi
 if command -v cc >/dev/null 2>&1; then
   # The C view of the crate's structs, with the layout pins the Rust side

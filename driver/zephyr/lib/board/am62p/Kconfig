@@ -21,18 +21,6 @@ config PVR_SAMPLE_REBOOT
 config PVR_SAMPLE_BOOT_TRACE
 	bool "Print a line per POST_KERNEL init priority band (locates a hang in a driver init)"
 
-config PVR_SAMPLE_BOOT_TIME
-	bool "Print the system counter (CNTPCT_EL0) at main() and at the first frame"
-	depends on ARM64
-	help
-	  For the direct-boot routes (docs/direct-boot.md): nothing restarts
-	  the counter between the boot loader that starts it and this image,
-	  so the value is the time since that start. What that start is depends
-	  on the board: on the Verdin AM62P the R5 SPL enables the GTC just
-	  before it starts the A53 cluster (so ROM, R5 SPL and DDR training
-	  are not in it); on the Armadillo-X2 SPL starts it early. After a
-	  kexec entry it is Linux's uptime and means little.
-
 config YAKOGL_AM62P_WDT_SECONDS
 	int "AM62P: seconds the image keeps the RTI watchdog fed, whichever feeder runs"
 	depends on SOC_SERIES_AM62PX_A53
