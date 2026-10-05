@@ -45,6 +45,18 @@ AM62P, the fill shader from femtovg (`fill_color`), 3D busy per frame:
 The table column comes from an earlier image. No table image of `81c53c61`
 was run.
 
+Case 193 `offarm` (`7dada1ff`): 186 arm 1 with the never-run arm grown by N
+groups, 3D busy per frame (record `20261005-2118-case193-7dada1ff-ad3d86cf`
+online, `20261005-2119-case193-table-7dada1ff-ed2efe33` table; pixels equal
+at every N):
+
+| Added groups N | Run-time compiler | Table |
+|---|---|---|
+| 0 | 54564 us | 54851 us |
+| 8 | 55415 us | 56008 us |
+| 32 | 59323 us | 60633 us |
+| 128 | 91142 us | 91745 us |
+
 The offline PowerVR table (`src/shaderc/blobs.rs`) records, since `0fe778f6`,
 the toolchain that reproduces it byte for byte: a `pco_shc` built by
 `tools/pco_shc/build_pco_shc.sh` with the patched usclib
@@ -67,18 +79,17 @@ for the first time.
    unchanged (first failure case 16). What is left of its board run is
    Slint and cluster on the AM62P; they wait for a Rust nightly with
    rust-src and the Slint no_std workspace on the build host.
-2. **Does a predicated-off instruction group cost time?** Measure it on the
-   AM62P. Grow the off arm of the same program by N groups, once compiled by
-   our compiler and once from the table, and read the 3D busy time.
-   The old gap of about 5.5 ms in case 186 arm 1 is closed: on `81c53c61`
-   it is 54.56 ms against the table's 54.9 ms. What is left is only whether
-   a predicated-off group costs time. gl_test 193 `offarm` is that
-   experiment: 186 arm 1 with the arm radius 0 never runs grown by N = 0,
-   8, 32, 128 dependent steps (`tools/shaders/offarm/`). Both programs
-   predicate the arm at every N and run the same 73 groups at radius 0:
-   online 104 to 234 groups, the table (rows in `blobs.rs`) 105 to 235.
-   Board run needed, on the AM62P: case 193 in an online image and in a
-   table image.
+2. **Branch or predicate: choose by the never-run arm's size.** A
+   predicated-off group costs time (gl_test 193, above). Per added group per
+   frame: run-time compiler +0.107 ms at N = 8, +0.149 ms at N = 32,
+   +0.286 ms at N = 128; table +0.145, +0.181, +0.288 ms. An executed group
+   costs about 0.8 ms a frame (184, 185), so 14 to 36 %. The cost per group
+   rises with N; the cause is not measured (instruction fetch is a
+   candidate). Both paths have the same slope at N = 128. Predicating both
+   arms as pco does (`afa12e9b`) therefore loses to a branch once the
+   never-run arm is large enough. Open: a finer N series to characterise the
+   rise per group; the cost of a branch, so that the compiler can choose by
+   arm size. Where the crossover lies is not known.
 3. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

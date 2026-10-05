@@ -16444,3 +16444,57 @@ passes: the earlier table-image runs of this log read 37/38 with case 46
 refused ("invalid shader (4.5.4)"), the key drift the re-key fixed. So the table
 image went from 37/38 with 46 refused to 39/40 with 46 passing. Case 63 matattr
 is served from the table for the first time; it is not in the 40-case set.
+
+## AM62P: gl_test 193 offarm, does a predicated-off group cost time (origin/main `7dada1ff`, 2026-10-05)
+
+Case 193 draws 16 full-screen quads into 1024x600 with `fill_color.nodiscard`
+(186 arm 1: femtovg's blend, scissorRadius 0, so the arm never runs) whose
+never-run arm is grown by N dependent steps, five timed frames per N. Host
+group counts: online 104 / 114 / 138 / 234 for N = 0 / 8 / 32 / 128, table 105
+to 235. An executed group costs about 0.8 ms a frame (cases 184, 185).
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, images built
+from `7dada1ff`, `CONFIG_GL_TEST_CASES="193"`; the second with
+`CONFIG_YAKOGL_SHADERC_OFFLINE=y`. Records in `records/am62p/` of the main
+checkout (gitignored).
+
+| image | record | verdict line |
+|---|---|---|
+| online | `20261005-2118-case193-7dada1ff-ad3d86cf` | `board.sh am62p case193-7dada1ff rc=0 verdict=done boot=uboot-mmc ... resets=0 ... back_after=77s` |
+| table | `20261005-2119-case193-table-7dada1ff-ed2efe33` | `board.sh am62p case193-table-7dada1ff rc=0 verdict=done boot=uboot-mmc ... resets=0 ... back_after=64s` |
+
+Console, online:
+
+    gl_test: offarm 0: off arm +0 groups: best 55 ms; per frame 3D busy 54564 us, TA busy 225 us
+    gl_test: offarm 1: off arm +8 groups: best 56 ms; per frame 3D busy 55415 us, TA busy 225 us
+    gl_test: offarm 2: off arm +32 groups: best 60 ms; per frame 3D busy 59323 us, TA busy 225 us
+    gl_test: offarm 3: off arm +128 groups: best 92 ms; per frame 3D busy 91142 us, TA busy 225 us
+    gl_test: offarm pixels: ff000099 ff000099 ff000099 ff000099
+    gl_test: case 193 offarm: PASS
+
+Console, table:
+
+    gl_test: offarm 0: off arm +0 groups: best 55 ms; per frame 3D busy 54851 us, TA busy 224 us
+    gl_test: offarm 1: off arm +8 groups: best 57 ms; per frame 3D busy 56008 us, TA busy 224 us
+    gl_test: offarm 2: off arm +32 groups: best 61 ms; per frame 3D busy 60633 us, TA busy 225 us
+    gl_test: offarm 3: off arm +128 groups: best 92 ms; per frame 3D busy 91745 us, TA busy 224 us
+    gl_test: offarm pixels: ff000099 ff000099 ff000099 ff000099
+    gl_test: case 193 offarm: PASS
+
+Both ran `gl_test: all: 0 of 1 cases failed (1 passed; ...)`, `gl_test: OK (rc=0)`.
+
+| N | online, per added group | table, per added group |
+|---|---|---|
+| 8 | (55415 - 54564) / 8 = 0.107 ms | (56008 - 54851) / 8 = 0.145 ms |
+| 32 | (59323 - 54564) / 32 = 0.149 ms | (60633 - 54851) / 32 = 0.181 ms |
+| 128 | (91142 - 54564) / 128 = 0.286 ms | (91745 - 54851) / 128 = 0.288 ms |
+
+Read: a predicated-off group costs time, 0.11 to 0.29 ms a frame, 14 to 36 %
+of an executed group's 0.8 ms. The cost per group rises with N, so it is not
+linear; the cause is not measured (instruction fetch is a candidate, to be
+checked with a finer N series). Online and table have the same slope at
+N = 128 and the online compiler is faster at every N. The TA busy time does
+not move (224-225 us). The open question for the compiler: predicating both
+arms as pco does (`afa12e9b`) loses to a branch once the never-run arm is
+large enough; where the crossover lies needs the cost of a branch, not yet
+measured.
