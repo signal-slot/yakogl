@@ -23,10 +23,10 @@
 #![cfg(all(feature = "shaderc-online", not(feature = "no-shader-table")))]
 
 use std::collections::BTreeMap;
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::powervr::select::{select, SelectError};
 use yakogl::shaderc::online::{lower, sema};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 /// Its own arena rather than `store`'s: this walks the whole corpus and has
 /// no interest in the product's budgets, and `store`'s scratch is shared with

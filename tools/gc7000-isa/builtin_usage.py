@@ -31,8 +31,8 @@ from collections import Counter
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 TABLES = {
-    'gc7000': os.path.join(REPO, 'src/shaderc/vivante_blobs.rs'),
-    'powervr': os.path.join(REPO, 'src/shaderc/blobs.rs'),
+    'gc7000': os.path.join(REPO, 'tests/reference/vivante_blobs.rs'),
+    'powervr': os.path.join(REPO, 'tests/reference/blobs.rs'),
 }
 
 # The callable builtins of GLSL ES 1.00 plus the GLSL 450 spellings the

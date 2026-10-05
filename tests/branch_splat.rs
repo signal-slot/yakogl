@@ -11,7 +11,7 @@
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
 use core::ffi::c_char;
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 #[test]

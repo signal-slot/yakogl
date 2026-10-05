@@ -16,7 +16,7 @@
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
 use core::ffi::c_char;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// (instructions, instructions reading more than one distinct constant register)

@@ -9,7 +9,7 @@
 #![cfg(feature = "gpu-powervr")]
 
 use std::fmt::Write;
-use yakogl::shaderc::blobs::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::util::name_bytes;
 
 fn jstr(out: &mut String, s: &[u8]) {

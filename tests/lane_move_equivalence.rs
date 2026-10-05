@@ -22,11 +22,11 @@
 
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::vivante::alloc::{self, SelInstr, Stage};
 use yakogl::shaderc::online::vivante::isa::{Instr, MAX_FIELDS};
 use yakogl::shaderc::online::{lower, select, sema};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 mod common;
 use common::{run_mem, Rng, Run};

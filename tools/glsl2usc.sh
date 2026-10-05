@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# glsl2usc.sh - regenerate the offline shader table (src/shaderc/blobs.rs) from
+# glsl2usc.sh - regenerate the offline shader table (tests/reference/blobs.rs) from
 # the whole tools/shaders/ starter set, and the internal framebuffer-load
 # blobs in src/pvr/blobs.rs.
 #
@@ -16,7 +16,7 @@
 #   GLSLANG         glslangValidator (default: PATH)
 #   GLSL2USC_CACHE  directory caching the compiler output (a rerun takes seconds)
 #   YAKOGL_TOOLS    a prebuilt yakogl-tools binary (default: cargo run)
-#   GLSL2USC_OUT    write the table here instead of src/shaderc/blobs.rs and
+#   GLSL2USC_OUT    write the table here instead of tests/reference/blobs.rs and
 #                   stop there, leaving src/pvr/blobs.rs alone: the
 #                   reproduction tools/check.sh compares with the committed
 #                   table
@@ -29,7 +29,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SHADERS="$HERE/shaders"
-OUT="${GLSL2USC_OUT:-$HERE/../src/shaderc/blobs.rs}"
+OUT="${GLSL2USC_OUT:-$HERE/../tests/reference/blobs.rs}"
 PVR_BLOBS="$HERE/../src/pvr/blobs.rs"
 if [ -n "${YAKOGL_TOOLS:-}" ]; then
   TOOL=("$YAKOGL_TOOLS")

@@ -162,20 +162,24 @@ function(yakogl_add_capi_archive)
   if(A_OSAL)
     list(APPEND _features "osal-${A_OSAL}")
   endif()
-  # The GPU's backend and offline shader table: the crate's `gpu-<name>`.
+  # The GPU's backend: the crate's `gpu-<name>`.
   if(NOT A_GPU MATCHES "^(powervr|vivante|v3d)$")
     message(FATAL_ERROR "yakogl_add_capi_archive: GPU must be powervr|vivante|v3d (got '${A_GPU}')")
   endif()
   list(APPEND _features "gpu-${A_GPU}")
-  # The offline table is the default and needs no feature; `online` is the
-  # in-process compiler (no_std), the only back end a Zephyr image can take.
+  # `online` is the in-process compiler (no_std). `offline` (the default) is
+  # the Mesa reference table behind the offline back end: the crate's
+  # `mesa-reference-table`, which a measurement image takes on purpose (the
+  # "table image" of the gl_test comparisons) and no other build links. It
+  # will be replaced by the table our own compiler precompiles.
   if(A_SHADERC STREQUAL "online")
     list(APPEND _features "shaderc-online")
+  else()
+    list(APPEND _features "mesa-reference-table")
   endif()
-  # An image carrying a compiler does not also need the table it replaces.
-  # Separate from the back-end choice on purpose: a host build keeps the table
-  # so `YAKOGL_SHADERC=offline` can still pick it for an A/B, and only a board
-  # image asks for it to be gone. See the crate's `no-shader-table`.
+  # An image carrying a compiler carries no table: the online choice already
+  # leaves the Mesa reference out, and a board image says so as well (the
+  # crate's `no-shader-table`).
   if(A_NO_SHADER_TABLE)
     if(NOT A_SHADERC STREQUAL "online")
       message(FATAL_ERROR

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! The offline shader table writer (`src/shaderc/blobs.rs`).
+//! The offline shader table writer (`tests/reference/blobs.rs`).
 //!
 //! The ABI has one source of truth, the library's `#[repr(C)]` structs: every
 //! entry is first built as a real [`ShcShader`] (with [`ShcVarying`],

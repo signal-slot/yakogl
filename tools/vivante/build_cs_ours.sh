@@ -36,7 +36,8 @@
 # D; left off, every mode keeps compiling through the table as the board's
 # offline image does). The archive has no `std`, so YAKOGL_SHADERC cannot pick
 # the table back at run time: an online build runs mode 25 (and the ES 1.00
-# shapes), a default build every other mode.
+# shapes), a default build every other mode, with the Mesa reference as its
+# table (the crate's `mesa-reference-table`).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -65,7 +66,7 @@ pargs=(--release); pdir=release
 echo "build_cs_ours.sh: cargo ($PROFILE)"
 cargo build --manifest-path "$ROOT/Cargo.toml" --target-dir "$OUT/cargo" \
   -p yakogl-capi --no-default-features \
-  --features "osal-linux,gpu-vivante${SHADERC_ONLINE:+,shaderc-online}" "${pargs[@]}"
+  --features "osal-linux,gpu-vivante,${SHADERC_ONLINE:+shaderc-online}${SHADERC_ONLINE:-mesa-reference-table}" "${pargs[@]}"
 cp "$OUT/cargo/$pdir/libyakogl_capi.a" "$OUT/libyakogl.a"
 
 # 2. the C parts of the library, appended to the archive. src/pvr/ffi_layout_check.c

@@ -25,6 +25,10 @@
 # Needs: cargo and the Rust target (rustup target add aarch64-unknown-none),
 # or a nightly toolchain with rust-src and BUILD_STD=1; cmake (for
 # capi/assemble.cmake); objcopy/nm for the target (the cross binutils or llvm).
+# Shaders: the bare-metal build has no in-process compiler yet, so its shader
+# table is the Mesa reference (the crate's `mesa-reference-table`), a
+# measurement-only stand-in until the table our own compiler precompiles
+# (tools/precompile) replaces it.
 # Output: $(BUILD)/libyakogl.a, or with RUST_LINKAGE=external only
 # $(BUILD)/libyakogl_c.a (the C parts; the application's own Rust staticlib
 # links the yakogl crate, README.md "Linking").
@@ -81,10 +85,10 @@ PVR_MESA_CFLAGS := -I$(HERE)/driver/compat -I$(HERE)/driver/src/pvr/generated \
            -I$(MESA)/src/imagination/vulkan -I$(MESA)/src/imagination/vulkan/pds \
            -I$(MESA)/src/imagination/vulkan/pds/pvr_pds_programs
 GPU_DEF := YAKOGL_GPU_POWERVR
-CARGO_FEATURES := osal-baremetal,gpu-powervr
+CARGO_FEATURES := osal-baremetal,gpu-powervr,mesa-reference-table
 else ifeq ($(GPU),vivante)
 GPU_DEF := YAKOGL_GPU_VIVANTE
-CARGO_FEATURES := osal-baremetal,gpu-vivante
+CARGO_FEATURES := osal-baremetal,gpu-vivante,mesa-reference-table
 else
 $(error GPU must be powervr or vivante)
 endif

@@ -67,7 +67,12 @@ Two back ends, chosen at build time:
 - **online**: our own `no_std` GLSL ES compiler running on the board
   (`src/shaderc/online/`, feature `shaderc-online`).
 - **offline**: a table of shaders compiled on the host, looked up by the SHA-256 of
-  the GLSL text (`src/shaderc/offline.rs`).
+  the GLSL text (`src/shaderc/offline.rs`). Its only table today is the Mesa
+  reference (`tests/reference/`, what Mesa's pco_shc / etna_shc made of
+  `tools/shaders/precompiled.list`), host-test material that a product build
+  links only when it asks for it (feature `mesa-reference-table`, Kconfig
+  `YAKOGL_SHADERC_OFFLINE`): a measurement-only choice, to be replaced by the
+  table our compiler precompiles (`tools/precompile`).
 
 ## The PowerVR firmware
 
@@ -97,8 +102,10 @@ turn it into a header with `driver/tools/mkfwblob.sh`.
   generators (C, in the driver repository) through the FFI declared in `ffi.rs`;
   `ffi_layout_check.c` holds only `_Static_assert`s that pin the driver structs,
   constants and prototypes `ffi.rs` mirrors, so driver header drift fails the build.
-- `src/shaderc/` the shader backend: `offline.rs` looks shaders up by the hash of
-  their GLSL in a table compiled on the host (`blobs.rs`, generated).
+- `src/shaderc/` the shader backend: `online/` the compiler; `offline.rs` looks
+  shaders up by the hash of their GLSL in a table compiled on the host, the Mesa
+  reference (`shaderc::mesa_reference`, from `tests/reference/blobs.rs` and
+  `vivante_blobs.rs`, generated; host tests and `mesa-reference-table` only).
 - `src/osal/` the OS abstraction: `mod.rs` (`g_osal`, `osal_set_ops`) and the three
   OSALs, which stay C because they are thin glue over C APIs: `zephyr.c` (the
   driver's render service), `baremetal.c`, `linux.c` (a host build with no GPU, for AddressSanitizer runs

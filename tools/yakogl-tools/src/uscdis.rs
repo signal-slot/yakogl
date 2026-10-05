@@ -14,8 +14,8 @@
 //!     yakogl-tools usc-dis --list                            what the table holds
 
 use crate::{Error, R};
+use yakogl::shaderc::mesa_reference::SHC_BLOB_TABLE;
 use yakogl::shaderc::online::powervr::{decode, listing};
-use yakogl::shaderc::table::SHC_BLOB_TABLE;
 
 const USAGE: &str = "usage: yakogl-tools usc-dis [--table <name> [--nth N] | --index <N> | <file>]
                             [--list]";

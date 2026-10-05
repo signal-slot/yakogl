@@ -21,9 +21,9 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-vivante"))]
 
 use std::collections::BTreeMap;
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::lower::compile_to_ir;
 use yakogl::shaderc::online::{arena::Arena, ir, sema::Stage};
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 
 /// Generous, so "out of scratch" can never be read as a missing feature.
 const SCRATCH: usize = 4 << 20;

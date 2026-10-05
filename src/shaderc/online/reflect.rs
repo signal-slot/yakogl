@@ -4,7 +4,7 @@
 //! the offline table's own field shapes.
 //!
 //! This is the half of the front end that has an exact right answer. The
-//! table (`src/shaderc/vivante_blobs.rs`, `blobs.rs`) already holds a row per
+//! table (`tests/reference/vivante_blobs.rs`, `blobs.rs`) already holds a row per
 //! uniform for every shader in the set, and those rows are observable through
 //! `glGetActiveUniform`, `glGetActiveAttrib` and `glGetAttribLocation` -- so
 //! "equal to the table's row" is the acceptance test, not a nice-to-have.

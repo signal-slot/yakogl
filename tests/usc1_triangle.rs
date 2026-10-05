@@ -14,12 +14,12 @@
 
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
 
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::powervr::alloc::{allocate, boundary_of, Allocated, Limits};
 use yakogl::shaderc::online::powervr::sel::{Bank, SelDst, SelGroup, SelSrc, VReg};
 use yakogl::shaderc::online::powervr::select;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 thread_local! {
     /// Counted inside the arena closure, read after it: `with_scratch` hands
@@ -404,13 +404,13 @@ fn the_triangle_pair_through_the_allocator() {
 /// first version of this report said "29 decode back" while every
 /// destination was a special register.
 fn usc2_the_builder_against_the_shipped_blob() {
+    use yakogl::shaderc::mesa_reference::SHC_BLOB_TABLE;
     use yakogl::shaderc::online::powervr::chain::build_vertex;
     use yakogl::shaderc::online::powervr::decode::{decode_group, Group};
     use yakogl::shaderc::online::powervr::isa::ops_for;
     use yakogl::shaderc::online::powervr::isa_tables::ENUMS;
     use yakogl::shaderc::online::powervr::operands::{dsts, srcs};
     use yakogl::shaderc::online::powervr::verify::skeleton;
-    use yakogl::shaderc::table::SHC_BLOB_TABLE;
 
     const NAME: &str = "texturefill.batchable.vert";
     let Some(row) = SHC_SOURCE_TABLE.iter().find(|r| r.name == NAME) else {

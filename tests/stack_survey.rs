@@ -28,8 +28,8 @@
 
 #![cfg(all(feature = "shaderc-online", not(feature = "no-shader-table")))]
 
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::{arena::Arena, codegen, lower, parser, pp, reflect, sema, sema::Stage, store};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 use yakogl::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// The measuring window. Every phase must stay inside it, or it is reported

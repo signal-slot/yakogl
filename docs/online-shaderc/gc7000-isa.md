@@ -130,7 +130,7 @@ all occur in the corpus below and are separated correctly there.
 exists to test the table; the shipping decoder and encoder are Rust, in
 `src/shaderc/online/`.
 
-It reads every shader in `src/shaderc/vivante_blobs.rs` and
+It reads every shader in `tests/reference/vivante_blobs.rs` and
 `src/vivante/clear_shader.rs` — the offline table this library ships and draws
 with today — and decodes each 128-bit instruction. Run of 2026-09-22:
 

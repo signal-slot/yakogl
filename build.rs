@@ -41,11 +41,27 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    mesa_reference();
     if env::var_os("CARGO_FEATURE_GPU_V3D").is_some() {
         v3d_qpu();
     }
     if env::var_os("CARGO_FEATURE_GPU_POWERVR").is_some() {
         pvr_csbgen();
+    }
+}
+
+/// `cfg(mesa_reference)`: the Mesa reference table (`tests/reference/`) is
+/// compiled into this build. Two builds take it: one that asks for it as its
+/// shader table (`mesa-reference-table`, the measurement images), and the host
+/// tests (`host-test`), which compare our compiler with it, unless they ask
+/// for no table (`no-shader-table`). No other build compiles it, so no other
+/// product build can link a Mesa-built row (tools/check.sh, "no Mesa
+/// reference in the artefact").
+fn mesa_reference() {
+    println!("cargo::rustc-check-cfg=cfg(mesa_reference)");
+    let on = |f: &str| env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
+    if on("MESA_REFERENCE_TABLE") || (on("HOST_TEST") && !on("NO_SHADER_TABLE")) {
+        println!("cargo:rustc-cfg=mesa_reference");
     }
 }
 

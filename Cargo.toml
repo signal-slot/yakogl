@@ -81,8 +81,8 @@ gpu-vivante = []
 # The Raspberry Pi 4's Broadcom V3D 4.2 (`v3d/`): the GL core draws through
 # the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
 # "M6"). The only shader back end for this GPU is the in-process compiler:
-# there is no offline table, so it needs `shaderc-online` and
-# `no-shader-table` (src/lib.rs says so at compile time rather than building
+# there is no offline table, so it needs `shaderc-online` and takes no
+# table (`no-shader-table` in the host tests; src/lib.rs says so at compile time rather than building
 # a library that cannot compile a shader). Like the GC7000, `struct shc_shader`
 # grows a V3D half (`ShcShader::v3d`).
 gpu-v3d = []
@@ -108,15 +108,28 @@ host-test = []
 # writes its shaders at run time; with the feature in it registers as
 # `g_shaderc`.
 shaderc-online = []
-# Leave the offline blob table OUT of the build entirely.
+# MEASUREMENT IMAGES ONLY: link the Mesa reference table
+# (tests/reference/blobs.rs, PowerVR, from pco_shc; vivante_blobs.rs, GC7000,
+# from etna_shc) as this build's shader table, behind the offline back end
+# (src/shaderc/offline.rs, `g_shaderc` = `SHC_OFFLINE`). It exists so that an
+# image can still be built with Mesa's code for an A/B against our compiler
+# (gl_test 193..195's "table image"; Kconfig YAKOGL_SHADERC_OFFLINE, the C
+# builds' SHADERC offline, select it). It will be replaced by the precompiled
+# table our own compiler makes (tools/precompile, docs/HANDOFF.md open work
+# item 2). Off by default: without it no product build links a Mesa-built
+# row (tools/check.sh, "no Mesa reference in the artefact"), and a build
+# with neither this nor `shaderc-online` has no shader back end and is
+# refused (src/lib.rs). The host tests compile the reference without it
+# (`host-test`), to compare our compiler with it.
+mesa-reference-table = []
+# Leave the Mesa reference table OUT of a host-test build too.
 #
-# `shaderc-online` says a build CAN compile a shader; this says it carries no
-# table. They are separate because the host tests compare the compiler with
-# the table in one process, while an image wants neither the bytes nor the
-# table: the GC7000 table is 258,000 bytes of instruction
-# words and the PowerVR one 6,278,960, and nothing links them out on its own,
-# because `g_shaderc`'s static initialiser names the offline back end and so
-# keeps the whole table reachable whatever the features say.
+# Outside the host tests the table is only ever in a build that asks for it
+# (`mesa-reference-table`); `host-test` compiles it, because the tests
+# compare the compiler with it in one process, and this takes it out again:
+# the build-only image configurations of tools/check.sh and the V3D, which
+# has no table. A product build may pass it as well (the C builds do with
+# the in-process compiler); it changes nothing there.
 #
 # Requires a back end that needs no table (`shaderc-online`); the build stops
 # otherwise, rather than producing a library that cannot compile anything.

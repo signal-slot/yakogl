@@ -12,7 +12,7 @@
 //!
 //! The gate is the same as the PowerVR one and is in [`roundtrip`]: every
 //! shader the driver ships - the GC7000 offline table
-//! (`src/shaderc/vivante_blobs.rs`) and the backend's two internal clear
+//! (`tests/reference/vivante_blobs.rs`) and the backend's two internal clear
 //! shaders - decodes into instructions and re-encodes byte for byte.
 //!
 //! [`build`] is the other direction, the one a code generator needs: an

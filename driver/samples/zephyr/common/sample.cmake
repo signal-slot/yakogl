@@ -16,7 +16,7 @@ execute_process(
 if(NOT _pvr_git_rc EQUAL 0 OR PVR_SAMPLE_TREE STREQUAL "")
   set(PVR_SAMPLE_TREE "unknown")
 endif()
-set(_pvr_blobs "${PVR_SAMPLE_REPO}/src/shaderc/blobs.rs")
+set(_pvr_blobs "${PVR_SAMPLE_REPO}/tests/reference/blobs.rs")
 if(EXISTS "${_pvr_blobs}")
   file(SHA256 "${_pvr_blobs}" _pvr_blobs_sha)
   string(SUBSTRING "${_pvr_blobs_sha}" 0 8 PVR_SAMPLE_TABLE)

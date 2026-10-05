@@ -73,8 +73,8 @@
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
 use std::collections::BTreeMap;
+use yakogl::shaderc::mesa_reference::SHC_BLOB_TABLE;
 use yakogl::shaderc::online::vivante::decode::decode_instr;
-use yakogl::shaderc::table::SHC_BLOB_TABLE;
 
 /// The groups `vivante/build.rs` names, by their encoded value.
 fn group_name(g: u32) -> &'static str {
@@ -307,8 +307,8 @@ fn which_operations_the_reference_gives_a_non_temporary_operand() {
 /// day a picture is wrong for no visible reason.
 fn where_we_give_an_operand_the_reference_never_gives_that_operation() {
     use core::ffi::c_char;
+    use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
     use yakogl::shaderc::online::vivante::build::op_id;
-    use yakogl::shaderc::table::SHC_SOURCE_TABLE;
     use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
     let mut odd: BTreeMap<(String, u32), usize> = BTreeMap::new();

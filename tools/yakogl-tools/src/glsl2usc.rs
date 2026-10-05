@@ -6,7 +6,7 @@
 //!     glslangValidator -V -S <stage> in -> SPIR-V
 //!     pco_shc <vs|fs> in.spv           -> USC dwords (stdout) + metadata (stderr)
 //! parses pco_shc's metadata, computes the SHA-256 of the GLSL source text,
-//! and emits `src/shaderc/blobs.rs`, the table the offline shader backend
+//! and emits `tests/reference/blobs.rs`, the table the offline shader backend
 //! (src/shaderc/offline.rs) looks shaders up in by source. A port of
 //! upstream's tools/glsl2usc.py (7e76640) that produces entry-for-entry the
 //! same table; see tools/README.md.
@@ -1156,7 +1156,7 @@ const USAGE: &str = "usage: yakogl-tools glsl2usc [-h] [-o OUTPUT] [--list] [--b
                              [--skip-failures] [--sources LIST] [inputs ...]";
 
 const HELP: &str = "
-GLSL-ES -> PowerVR USC blob table (src/shaderc/blobs.rs)
+GLSL-ES -> PowerVR USC blob table (tests/reference/blobs.rs)
 
 positional arguments:
   inputs                GLSL *.vert / *.frag files (required without --sources)

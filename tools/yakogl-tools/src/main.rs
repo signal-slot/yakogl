@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! YakoGL host tools (they replaced the Python generators; see tools/README.md).
 //!
-//!     yakogl-tools glsl2usc [options] inputs...    offline shader table (src/shaderc/blobs.rs)
+//!     yakogl-tools glsl2usc [options] inputs...    offline shader table (tests/reference/blobs.rs)
 //!     yakogl-tools usc-blob <src> <file> <SYM> [VARIANT]   internal USC blobs (src/pvr/blobs.rs)
 //!     yakogl-tools femtovg-shaders [<dir> [out]]   FemtoVG 0.26 shader sources
 //!     yakogl-tools gl-consts                       src/gl/consts.rs, src/gl/egl_consts.rs
@@ -77,7 +77,7 @@ pub fn repo_root() -> String {
 const USAGE: &str = "usage: yakogl-tools <command> [args...]
 
 commands:
-  glsl2usc          GLSL ES -> PowerVR USC table (src/shaderc/blobs.rs); --help for options
+  glsl2usc          GLSL ES -> PowerVR USC table (tests/reference/blobs.rs); --help for options
   usc-blob          one internal shader's USC block in src/pvr/blobs.rs
   femtovg-shaders   write the FemtoVG 0.26 shader sources into tools/shaders/femtovg
   gl-consts         regenerate src/gl/consts.rs and src/gl/egl_consts.rs

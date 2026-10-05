@@ -12,7 +12,7 @@ use super::decode::{decode_instr, DecodeError};
 use super::encode::encode_instr;
 use super::isa::{coverage, MAX_FIELDS};
 use super::isa_tables::OPS;
-use crate::shaderc::table::SHC_BLOB_TABLE;
+use crate::shaderc::mesa_reference::SHC_BLOB_TABLE;
 use crate::vivante::clear_shader::{GC_CLEAR_PS, GC_CLEAR_VS};
 use std::collections::BTreeMap;
 

@@ -27,8 +27,8 @@
 
 use core::ffi::c_char;
 use std::collections::BTreeSet;
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::store;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// Compile one source and say what happened, resetting nothing: the arena's

@@ -14764,7 +14764,7 @@ mod relocate_tests {
     fn nothing_reads_the_front_ends_memory_after_it_is_given_back() {
         let _serial = store::test_lock();
         let (mut compared, mut differ) = (0usize, std::vec::Vec::new());
-        for e in crate::shaderc::table::SHC_SOURCE_TABLE.iter() {
+        for e in crate::shaderc::mesa_reference::SHC_SOURCE_TABLE.iter() {
             let text = e.text.trim_end_matches('\0');
             let stage = if e.name.contains(".vert") {
                 crate::shaderc::SHC_STAGE_VERTEX

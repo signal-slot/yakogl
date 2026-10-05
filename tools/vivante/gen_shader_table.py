@@ -4,12 +4,12 @@
 """gen_shader_table.py - the offline shader table for the Vivante GC7000 backend.
 
 Runs glsl2vivante.py's translation + etna_shc over every shader under
-yakogl/tools/shaders and writes src/shaderc/vivante_blobs.rs: the same table
+yakogl/tools/shaders and writes tests/reference/vivante_blobs.rs: the same table
 type the PowerVR offline path uses (ShcBlob, looked up by the SHA-256 of the
 GLSL source text), with the GC7000 instruction words and the register wiring
 (ShcViv) in place of USC and its PowerVR metadata.
 
-Two differences from the PowerVR table (src/shaderc/blobs.rs, written by
+Two differences from the PowerVR table (tests/reference/blobs.rs, written by
 `yakogl-tools glsl2usc`):
   - no blend variants: blending and colour masks are PE state on this GPU, so
     a fragment shader has one binary (blend_key 0), and a second one only if
@@ -26,7 +26,7 @@ This is the Rust port of the C generator this branch syncs from (upstream
 tools/vivante/gen_shader_table.py, which wrote vivante_shader_blobs.c and
 src/vivante/gc_clear_shader.h). The reflection half is unchanged; only the
 emitters below the "Rust emitters" banner differ, and they follow the
-conventions of the generated PowerVR table, src/shaderc/blobs.rs.
+conventions of the generated PowerVR table, tests/reference/blobs.rs.
 
 Usage:
   ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc \\
@@ -266,7 +266,7 @@ def _self_test():
 # and 1 collides with nothing.
 READS_FRONT_FACING = "gl_FrontFacing"
 KEY_FRONT_FLIPPED = 1
-OUT_TABLE = os.path.join(HERE, "..", "..", "src", "shaderc", "vivante_blobs.rs")
+OUT_TABLE = os.path.join(HERE, "..", "..", "tests", "reference", "vivante_blobs.rs")
 OUT_CLEAR = os.path.join(HERE, "..", "..", "src", "vivante", "clear_shader.rs")
 
 SHC_UNIFORM_NO_BLOCK = 0xffff
@@ -612,7 +612,7 @@ def reflect(path, text=None, sha_text=None):
 
 # ---- Rust emitters ---------------------------------------------------------
 #
-# The shape of src/shaderc/blobs.rs, the generated PowerVR table: `static`
+# The shape of tests/reference/blobs.rs, the generated PowerVR table: `static`
 # arrays per shader, one ShcBlob per table row with every field written out,
 # names through `cname()`, source texts as a `concat!` of one line each with a
 # trailing NUL. Fields the C table left to its zero initialiser are written
@@ -860,7 +860,7 @@ def stage_const(stage):
 
 
 def emit_table(shaders):
-    """The whole of src/shaderc/vivante_blobs.rs, as text."""
+    """The whole of tests/reference/vivante_blobs.rs, as text."""
     out = [TABLE_HEADER]
     # Which toolchain built these bytes, in the same shape the PowerVR
     # generator records (`// toolchain: pco_shc=... glslang=...`). The

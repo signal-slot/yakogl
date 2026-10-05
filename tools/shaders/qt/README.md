@@ -7,7 +7,7 @@ build (`qt6-for-zephyr/build-qt-zephyr-am62p.sh`) with
 
 ```sh
 qsb2glsl -o yakogl/tools/shaders/qt build-qt-zephyr-am62p/qtdeclarative
-tools/glsl2usc.sh        # regenerates src/shaderc/blobs.rs with them
+tools/glsl2usc.sh        # regenerates tests/reference/blobs.rs with them
 ```
 
 `<name>.vert` / `<name>.frag` are the Standard variants, `<name>.batchable.vert`

@@ -21,9 +21,9 @@
 
 use core::ffi::c_char;
 use std::collections::BTreeMap;
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::vivante::alloc;
 use yakogl::shaderc::online::vivante::decode::decode_instr;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// Count real instructions and copies, ignoring the `nop` that an empty

@@ -15,9 +15,9 @@
 
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::{lower, select, sema, vivante::alloc};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 #[test]
 fn no_selected_instruction_reads_a_lane_nothing_writes() {

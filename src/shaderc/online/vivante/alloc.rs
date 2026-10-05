@@ -3470,7 +3470,7 @@ mod branch_target_tests {
     /// The corpus count beside the field, so the shape is not invented: the
     /// shipped table's branches are what this has to be able to express.
     ///
-    /// GC7000 builds only. `shaderc::table` aliases the PowerVR blobs
+    /// GC7000 builds only. `shaderc::mesa_reference` aliases the PowerVR blobs
     /// otherwise, and those are USC — decoding them with this machine's
     /// decoder measures nothing about this machine. The vacuity guard below
     /// is what caught that: it found no TARGET at all in the PowerVR table
@@ -3491,7 +3491,7 @@ mod branch_target_tests {
          * to the end of the program would land past the last instruction. */
         let mut to_end = [0usize; 2];
         let mut branches = [0usize; 2];
-        for blob in crate::shaderc::table::SHC_BLOB_TABLE.iter() {
+        for blob in crate::shaderc::mesa_reference::SHC_BLOB_TABLE.iter() {
             let code = unsafe { core::slice::from_raw_parts(blob.shader.usc, blob.shader.usc_dw as usize) };
             let quads = code.as_chunks::<4>().0;
             let ninstr = quads.len();
@@ -3683,7 +3683,7 @@ mod address_register_tests {
     }
 
     /// The corpus beside the type, so its shape is not invented. GC7000
-    /// builds only: `shaderc::table` aliases the PowerVR blobs otherwise and
+    /// builds only: `shaderc::mesa_reference` aliases the PowerVR blobs otherwise and
     /// those are USC. The `n > 0` guard is what catches that alias -- twice
     /// already in this file's history.
     #[cfg(feature = "gpu-vivante")]
@@ -3691,7 +3691,7 @@ mod address_register_tests {
     fn every_corpus_address_write_has_the_shape_this_builds() {
         let mut n = 0usize;
         let mut masks = 0u8;
-        for blob in crate::shaderc::table::SHC_BLOB_TABLE.iter() {
+        for blob in crate::shaderc::mesa_reference::SHC_BLOB_TABLE.iter() {
             let code = unsafe { core::slice::from_raw_parts(blob.shader.usc, blob.shader.usc_dw as usize) };
             for quad in code.as_chunks::<4>().0 {
                 let Ok(i) = decode_instr(quad) else { continue };
@@ -3871,7 +3871,7 @@ mod unused_destination_tests {
         let mut names: [&str; 64] = [""; 64];
         let mut counts = [(0usize, 0usize); 64];
         let mut k = 0usize;
-        for blob in crate::shaderc::table::SHC_BLOB_TABLE.iter() {
+        for blob in crate::shaderc::mesa_reference::SHC_BLOB_TABLE.iter() {
             let code = unsafe { core::slice::from_raw_parts(blob.shader.usc, blob.shader.usc_dw as usize) };
             for quad in code.as_chunks::<4>().0 {
                 let Ok(i) = decode_instr(quad) else { continue };
@@ -4008,7 +4008,7 @@ mod temp_bound_tests {
     fn no_shipped_blob_exceeds_the_bound() {
         let mut n = 0usize;
         let mut top = 0u16;
-        for blob in crate::shaderc::table::SHC_BLOB_TABLE.iter() {
+        for blob in crate::shaderc::mesa_reference::SHC_BLOB_TABLE.iter() {
             n += 1;
             top = top.max(blob.shader.temps);
             assert!(
@@ -5156,7 +5156,7 @@ mod sink_tests {
     #[cfg(feature = "gpu-vivante")]
     #[test]
     fn the_corpus_survives_the_reordering() {
-        use crate::shaderc::table::SHC_SOURCE_TABLE;
+        use crate::shaderc::mesa_reference::SHC_SOURCE_TABLE;
         let mut n = 0usize;
         for row in SHC_SOURCE_TABLE.iter() {
             // Selection is not reachable from here, so this checks the

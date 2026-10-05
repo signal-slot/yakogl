@@ -53,7 +53,7 @@ at every N):
 | 32 | 59323 us | 60633 us |
 | 128 | 91142 us | 91745 us |
 
-The offline PowerVR table (`src/shaderc/blobs.rs`) records, since `0fe778f6`,
+The offline PowerVR table (`tests/reference/blobs.rs`) records, since `0fe778f6`,
 the toolchain that reproduces it byte for byte: a `pco_shc` built by
 `tools/pco_shc/build_pco_shc.sh` with the patched usclib
 (`// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514`). That commit also
@@ -88,8 +88,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    Done so far: the one source list every table generator reads
    (`tools/shaders/precompiled.list`) and `yakogl-precompile`, which
    compiles it with our compiler on the host into `build/precompiled/`
-   (tools/README.md); next, an image carries that table, and the Mesa
-   tables become host-test reference material only.
+   (tools/README.md); the Mesa tables are host-test reference material
+   (`tests/reference/`, `shaderc::mesa_reference`) that a product links only
+   as a measurement image's table (`mesa-reference-table`, Kconfig
+   `YAKOGL_SHADERC_OFFLINE`); next, an image carries the precompiled table.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

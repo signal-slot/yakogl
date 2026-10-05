@@ -4,7 +4,7 @@
  * gles_offline.h - the offline shader table's source texts.
  *
  * On an offline-only target (Zephyr, bare metal) glShaderSource accepts only
- * the GLSL the table in src/shaderc/blobs.rs was built from, byte for byte. An
+ * the GLSL the table in tests/reference/blobs.rs was built from, byte for byte. An
  * application that wants one of those shaders asks for it by its source
  * basename instead of carrying a copy that can drift:
  *

@@ -29,13 +29,13 @@
 mod common;
 
 use common::{run_mem, Rng, Run};
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::eval;
 use yakogl::shaderc::online::ir::{self, IoSlot};
 use yakogl::shaderc::online::vivante::alloc::{self, SelDst, SelInstr, Stage};
 use yakogl::shaderc::online::vivante::isa::{Instr, MAX_FIELDS};
 use yakogl::shaderc::online::{lower, select, sema};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 /// One comparison's outcome.
 #[derive(Debug)]

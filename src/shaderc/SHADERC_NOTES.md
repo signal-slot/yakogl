@@ -4,7 +4,9 @@ This directory holds the shader back ends (layer 5a of `yakogl/DESIGN.md`). Ther
 are two, and a build has one of them as `g_shaderc`:
 
 - **offline** (`offline.rs`): app shaders precompiled at build time and looked
-  up at run time by the SHA-256 of their GLSL source.
+  up at run time by the SHA-256 of their GLSL source. Its table is the Mesa
+  reference (`tests/reference/`), which only a measurement build links
+  (`mesa-reference-table`).
 - **online** (`online/`, the cargo feature `shaderc-online`): our own compiler,
   no_std and allocation-free, running in the image; it compiles the shaders an
   application writes as it runs (dEQP-GLES2 does).
@@ -13,11 +15,11 @@ are two, and a build has one of them as `g_shaderc`:
 
 | File | Role |
 |---|---|
-| `mod.rs` | the shader ABI of `include/gles_shaderc.h` as `#[repr(C)]` (`ShcShader`, `ShcVarying`, `ShcAttrib`, `ShcUniform`, `ShcBackend`); defines `g_shaderc` (initially the offline back end); the table's row types `ShcBlob` (sha, name, stage, `blend_key`, shader; the name is NUL-terminated so `shc_shader_source_name()` can hand C a pointer into the table, and `ShcBlob::source_name()` drops the NUL) and `ShcSource` (name, GLSL text) |
+| `mod.rs` | the shader ABI of `include/gles_shaderc.h` as `#[repr(C)]` (`ShcShader`, `ShcVarying`, `ShcAttrib`, `ShcUniform`, `ShcBackend`); defines `g_shaderc` (initially the offline back end in a build with the Mesa reference, the compiler otherwise); the table's row types `ShcBlob` (sha, name, stage, `blend_key`, shader; the name is NUL-terminated so `shc_shader_source_name()` can hand C a pointer into the table, and `ShcBlob::source_name()` drops the NUL) and `ShcSource` (name, GLSL text) |
 | `offline.rs` | implements `struct shc_backend` (`compile`, `link`, `blend_variant`) as `SHC_OFFLINE`; `shc_offline_register()`; `gles_offline_shader_source()` (`include/gles_offline.h`) |
 | `link.rs` | the PowerVR link rule itself (pair the FS inputs with the VS outputs by name, bounds-check them against the VS output vector), shared by both back ends: it is about the `ShcShader` pair, not about where the shaders came from. Only the prefix the log carries differs, so the caller passes it. This is the port's `shc_link.c` |
 | `sha256.rs` | self-contained SHA-256 (no dependency) — links on Zephyr/baremetal |
-| `blobs.rs` | **generated** by `yakogl-tools glsl2usc` (`tools/glsl2usc.sh`): `SHC_BLOB_TABLE` (USC + metadata per shader and blend variant) and `SHC_SOURCE_TABLE` (the source texts) |
+| `tests/reference/blobs.rs` | **generated** by `yakogl-tools glsl2usc` (`tools/glsl2usc.sh`): `SHC_BLOB_TABLE` (USC + metadata per shader and blend variant) and `SHC_SOURCE_TABLE` (the source texts). The Mesa reference, `shaderc::mesa_reference`: compiled into the host tests and into a build with `mesa-reference-table` (a measurement image), never into another product build |
 
 All of it is part of the Rust crate `yakogl`.
 

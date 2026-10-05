@@ -29,7 +29,7 @@ treating one as the other is how a real defect gets excused:
 
 Usage:
   python3 tools/vivante/check_gl_test_blobs.py           # both tables
-  python3 tools/vivante/check_gl_test_blobs.py --table src/shaderc/blobs.rs
+  python3 tools/vivante/check_gl_test_blobs.py --table tests/reference/blobs.rs
 
 Exit status is 1 if any source a generator lists has no row it should have.
 """
@@ -174,7 +174,7 @@ def check_powervr_inputs(have):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--table", default=os.path.join(REPO, "src", "shaderc", "vivante_blobs.rs"))
+    ap.add_argument("--table", default=os.path.join(REPO, "tests", "reference", "vivante_blobs.rs"))
     args = ap.parse_args()
 
     have = table_digests(args.table)
@@ -208,7 +208,7 @@ def main():
             rc = 1
 
     # The PowerVR arm reads its own table, whichever one was asked for above.
-    pvr = os.path.join(REPO, "src", "shaderc", "blobs.rs")
+    pvr = os.path.join(REPO, "tests", "reference", "blobs.rs")
     if os.path.exists(pvr):
         rc = max(rc, check_powervr_inputs(table_digests(pvr)))
     return rc

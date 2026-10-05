@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(pvr_sample, LOG_LEVEL_INF);
  *
  * A row from a board run has to say which tree and which shader table
  * produced it. The commit alone does not: an image for a table-rebuild window
- * is built from a worktree whose src/shaderc/blobs.rs is deliberately
+ * is built from a worktree whose tests/reference/blobs.rs is deliberately
  * uncommitted, so two images from the same commit can hold different tables.
  * sample.cmake captures both at configure time (`git describe --always
  * --dirty` and the first eight hex digits of the table's SHA-256); printk

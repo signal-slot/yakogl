@@ -25,7 +25,7 @@
 #![cfg(all(test, feature = "gpu-vivante"))]
 
 use super::decode::decode_instr;
-use crate::shaderc::table::SHC_BLOB_TABLE;
+use crate::shaderc::mesa_reference::SHC_BLOB_TABLE;
 
 /// Every bit this operation accounts for: each field's span, plus the bits the
 /// opcode match itself tested. Anything outside is a bit the decoder ignores --

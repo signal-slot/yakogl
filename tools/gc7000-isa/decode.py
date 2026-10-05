@@ -23,7 +23,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 DEFAULT_TABLE = os.path.join(REPO, 'docs/online-shaderc/isa/gc7000-isa.json')
-BLOBS = os.path.join(REPO, 'src/shaderc/vivante_blobs.rs')
+BLOBS = os.path.join(REPO, 'tests/reference/vivante_blobs.rs')
 CLEAR = os.path.join(REPO, 'src/vivante/clear_shader.rs')
 
 

@@ -153,8 +153,11 @@ step "cargo fmt --check" cargo fmt --check
 # src/gl/framebuffer.rs did exactly that on 2026-09-22 -- the crate has no
 # libm -- and the break only showed when a board pair was built by hand.
 # Twelve seconds on a warm tree, and it is the only row that says "this
-# compiles for a target with no operating system".
-step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr
+# compiles for a target with no operating system". Built as the offline
+# images take it (the Mesa reference as the table, `mesa-reference-table`),
+# the configuration with the most exported entry points, which
+# tools/api_coverage.py reads from this archive.
+step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table
 
 for f in "${CONFIGS[@]}"; do
   step "clippy  $f" cargo clippy --no-default-features --features "$f" --all-targets
@@ -914,7 +917,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 #
 # A `#[cfg]` that compiles is not evidence: the point of `no-shader-table` is
 # bytes that are not in the image, so the check reads the built archive. The
-# pattern is the table MODULE (`blobs` / `vivante_blobs`), not "CODE_": the
+# pattern is the table MODULE (`mesa_reference`), not "CODE_": the
 # driver's own clear shaders are CODE_CLEAR_VS/PS in `vivante::clear_shader`
 # and belong in every image, so a looser pattern reports two symbols and
 # invites someone to decide they are close enough to zero.
@@ -932,7 +935,7 @@ table_symbols() {
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
   nm --defined-only "$dir/release/libyakogl.rlib" 2>/dev/null |
-    grep -cE '13vivante_blobs|5blobs|SHC_BLOB_TABLE' || true
+    grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true
 }
 
 check_table_absent() {
@@ -952,6 +955,70 @@ check_table_absent() {
 }
 
 step "no table in the artefact" check_table_absent
+
+# No Mesa reference in a product artefact. The Mesa-built tables
+# (tests/reference/, `shaderc::mesa_reference`) are host-test material; the
+# one product build that may link them is a measurement image that asks for
+# them as its table (`mesa-reference-table`: Kconfig YAKOGL_SHADERC_OFFLINE,
+# the C builds' SHADERC offline). This builds the archive an image links
+# (yakogl-capi, release, as capi/yakogl_capi.cmake does) for the product
+# configurations and counts the reference's symbols in it: the module
+# (`14mesa_reference`, v0 mangling) and the two tables. The control is the
+# same command on a measurement build, which must find them. Every OSAL,
+# every GPU, the in-process compiler with and without `no-shader-table`, on
+# the image target; the host target once (osal-linux). --quick builds the
+# control and the AM62P image only; the full matrix (20 archives and two controls) took 863 s here.
+mesa_reference_symbols() {
+  local dir target="$1" features="$2" lib
+  dir=$(cargo metadata --no-deps --format-version 1 |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
+  if [ "$target" = host ]; then
+    cargo build -q -p yakogl-capi --release --no-default-features --features "$features" >/dev/null 2>&1 || return 1
+    lib="$dir/release/libyakogl_capi.a"
+  else
+    cargo build -q -p yakogl-capi --release --target "$target" --no-default-features --features "$features" \
+      >/dev/null 2>&1 || return 1
+    lib="$dir/$target/release/libyakogl_capi.a"
+  fi
+  nm "$lib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
+}
+
+check_no_mesa_reference() {
+  local t=aarch64-unknown-none n f configs=()
+  if ! rustup target list --installed 2>/dev/null | grep -qx "$t"; then
+    echo "$t is not installed (rustup target add $t): the image archives were NOT built"
+    return 1
+  fi
+  for f in "osal-zephyr,gpu-powervr,mesa-reference-table" "osal-zephyr,gpu-vivante,mesa-reference-table"; do
+    n=$(mesa_reference_symbols "$t" "$f") || { echo "the control build [$f] failed"; return 1; }
+    if [ "$n" -eq 0 ]; then
+      echo "the control [$f] links no reference symbol: the pattern no longer matches, so 0 below means nothing"
+      return 1
+    fi
+    echo "control $f: $n reference symbols"
+    [ "$QUICK" -eq 1 ] && break
+  done
+  if [ "$QUICK" -eq 1 ]; then
+    configs=("$t osal-zephyr,gpu-powervr,shaderc-online,no-shader-table")
+  else
+    for osal in zephyr baremetal linux; do
+      for gpu in powervr vivante v3d; do
+        configs+=("$t osal-$osal,gpu-$gpu,shaderc-online,no-shader-table" "$t osal-$osal,gpu-$gpu,shaderc-online")
+      done
+    done
+    configs+=("host osal-linux,gpu-powervr,shaderc-online" "host osal-linux,gpu-vivante,shaderc-online")
+  fi
+  for c in "${configs[@]}"; do
+    n=$(mesa_reference_symbols "${c%% *}" "${c#* }") || { echo "the product build [$c] failed"; return 1; }
+    if [ "$n" -ne 0 ]; then
+      echo "the product archive [$c] links $n Mesa reference symbol(s)"
+      return 1
+    fi
+  done
+  echo "${#configs[@]} product archive(s), 0 reference symbols each"
+}
+
+step "no Mesa reference in the artefact" check_no_mesa_reference
 
 # The rows above name THIS package's features, so they never build the
 # workspace's other crates. `yakogl-tools` links the library and calls into it,
@@ -1106,7 +1173,7 @@ fi
 #
 # Then the Mesa table from the same list: tools/glsl2usc.sh, which reads its
 # inputs and variants from tools/shaders/precompiled.list, regenerates
-# src/shaderc/blobs.rs byte for byte with the toolchain the table records
+# tests/reference/blobs.rs byte for byte with the toolchain the table records
 # (PCO_SHC; GLSLANG; GLSL2USC_CACHE keeps a rerun at about 3.5 minutes).
 # Without PCO_SHC the row is a gap: the list's PowerVR half was not shown to
 # be the committed table's.
@@ -1117,8 +1184,8 @@ mesa_table_repro() {
     tail -20 "$log"
     return 1
   fi
-  cmp "$out" src/shaderc/blobs.rs || {
-    echo "the table glsl2usc.sh makes from precompiled.list is not src/shaderc/blobs.rs (log: $log)"
+  cmp "$out" tests/reference/blobs.rs || {
+    echo "the table glsl2usc.sh makes from precompiled.list is not tests/reference/blobs.rs (log: $log)"
     return 1
   }
   echo "$(grep -c '^    ShcBlob {$' "$out") rows, byte for byte"
@@ -1129,9 +1196,9 @@ if [ "$QUICK" -eq 0 ]; then
       tools/precompile/prove.sh "$f"
   done
   if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
-    step "gen     src/shaderc/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
+    step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
   else
-    gap "src/shaderc/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
+    gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
   fi
 fi
 

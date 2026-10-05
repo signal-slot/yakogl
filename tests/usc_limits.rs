@@ -23,6 +23,7 @@
 
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
 
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::ir::{AluOp, IoDecl, IoKind, IoSlot};
 use yakogl::shaderc::online::powervr::abi::{assemble, attribs_read, vtxin_reg, UscProgram, USC_MAX_TEMPS};
 use yakogl::shaderc::online::powervr::alloc::Limits;
@@ -37,7 +38,6 @@ use yakogl::shaderc::online::powervr::verify::{check_group, check_write, skeleto
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
 use yakogl::shaderc::sha256::sha256;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::SHC_STAGE_VERTEX;
 
 use std::collections::{BTreeMap, BTreeSet};

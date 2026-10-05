@@ -10,13 +10,13 @@
 pub mod ir;
 
 use std::collections::{BTreeMap, BTreeSet};
+use yakogl::shaderc::mesa_reference::SHC_BLOB_TABLE;
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
 use yakogl::shaderc::online::powervr::isa_tables::ENUMS;
 use yakogl::shaderc::online::powervr::operands::{dsts, srcs, Operand};
 use yakogl::shaderc::online::powervr::prepare::CONST_REGS;
 use yakogl::shaderc::online::powervr::verify::skeleton;
-use yakogl::shaderc::table::SHC_BLOB_TABLE;
 
 /// The inputs one execution reads: the uniform file and the attributes.
 #[derive(Clone)]

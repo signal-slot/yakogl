@@ -12,7 +12,7 @@
 
 use std::ffi::{c_char, CStr};
 
-use yakogl::shaderc::blobs::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::offline::{gles_offline_shader_source, shc_offline_register, SHC_OFFLINE};
 use yakogl::shaderc::sha256::{sha256, Sha256};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};

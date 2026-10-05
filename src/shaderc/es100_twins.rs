@@ -56,7 +56,7 @@
 //! GC7000 question of the PowerVR table is how the first version of this file
 //! failed: it read "0 of 13 twins" from a table that should never have any.
 
-use super::table::SHC_BLOB_TABLE;
+use super::mesa_reference::SHC_BLOB_TABLE;
 #[cfg(feature = "gpu-vivante")]
 use super::{ShcAttrib, ShcShader, ShcUniform, ShcVarying};
 

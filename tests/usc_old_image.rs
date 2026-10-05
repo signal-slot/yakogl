@@ -21,6 +21,7 @@ mod usc_exec;
 
 use std::collections::BTreeSet;
 use usc_exec::{run_binary, Inputs};
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::powervr::chain::{build_vertex, LIMITS};
 use yakogl::shaderc::online::powervr::decode::{decode_group, Group};
 use yakogl::shaderc::online::powervr::isa::ops_for;
@@ -29,7 +30,6 @@ use yakogl::shaderc::online::powervr::operands::dsts;
 use yakogl::shaderc::online::powervr::verify::skeleton;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 
 const NAME: &str = "texturefill.batchable.vert";
 

@@ -19,7 +19,7 @@
 //! had counted.
 use core::ffi::c_char;
 use std::collections::BTreeMap;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 fn online(stage: u32, src: &str) -> Result<ShcShader, String> {

@@ -3,7 +3,7 @@
 //! The shader ABI as Rust source: the leaf printers of every generated table.
 //!
 //! Two emitters write tables of [`ShcShader`] rows -- `emit.rs` (the PowerVR
-//! table from Mesa's pco_shc, src/shaderc/blobs.rs) and `yakogl-precompile`
+//! table from Mesa's pco_shc, tests/reference/blobs.rs) and `yakogl-precompile`
 //! (the table our own compiler builds, tools/precompile, which compiles this
 //! file in with `#[path]`). Both follow the idiom `emit.rs` describes: a row
 //! is a real library struct, printed by destructuring it with a FULL

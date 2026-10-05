@@ -5,7 +5,7 @@ never compiles it or its dependencies) with a subcommand per generator:
 
 | Command | Writes |
 |---|---|
-| `yakogl-tools glsl2usc [options] inputs...` | the offline shader table `src/shaderc/blobs.rs` |
+| `yakogl-tools glsl2usc [options] inputs...` | the offline shader table `tests/reference/blobs.rs` |
 | `yakogl-tools usc-blob <src> <file> <SYMBOL> [VARIANT]` | one internal shader's block in `src/pvr/blobs.rs` |
 | `yakogl-tools femtovg-shaders [<femtovg dir> [outdir]]` | the FemtoVG 0.26 sources in `tools/shaders/femtovg/` |
 | `yakogl-tools gl-consts` | `src/gl/consts.rs`, `src/gl/egl_consts.rs` |
@@ -34,6 +34,21 @@ Khronos CTS writes its shaders as it runs. A build with the cargo feature
 `shaderc-online` compiles them in the library itself (`src/shaderc/online/`,
 `src/shaderc/SHADERC_NOTES.md`).
 
+# The Mesa reference
+
+`tests/reference/blobs.rs` (PowerVR, `tools/glsl2usc.sh`, pco_shc) and
+`tests/reference/vivante_blobs.rs` (GC7000, `tools/vivante/gen_shader_table.py`,
+etna_shc) are what Mesa's compilers made of the source list below. They are the
+reference our compiler is measured against, compiled as `shaderc::mesa_reference`
+into the host tests (`host-test`) and into one kind of product build only: a
+measurement image that takes the reference as its shader table (cargo feature
+`mesa-reference-table`, which Kconfig `YAKOGL_SHADERC_OFFLINE` and the C builds'
+`SHADERC offline` select; the bare-metal build, which has no compiler yet). No
+other build links a Mesa-built row: `tools/check.sh` builds the image archive for
+every OSAL and GPU with the compiler and counts the reference's symbols ("no Mesa
+reference in the artefact"). The precompiled table below will replace the
+measurement use.
+
 # The source list and the precompiler
 
 `tools/shaders/precompiled.list` is the one list of the shaders compiled ahead of
@@ -48,9 +63,10 @@ app femtovg                           # the programs an application links:
 pair femtovg/main.vert femtovg/fill_color.frag
 ```
 
-Three generators read it: `tools/glsl2usc.sh` (the PowerVR table from Mesa's
+Three generators read it: `tools/glsl2usc.sh` (the PowerVR Mesa reference from
 pco_shc: `src`, `blend`, `for`, `skip-failures`, through `yakogl-tools glsl2usc
---sources`, which regenerates the committed `src/shaderc/blobs.rs` byte for byte),
+--sources`, which regenerates the committed `tests/reference/blobs.rs` byte for
+byte),
 `tools/vivante/gen_shader_table.py` (the GC7000 table from etna_shc: its directory
 allowlist is the `dir` lines with the `gc7000` role, and a directory with no line
 fails it) and `yakogl-precompile`, which reads all of it. The list's Rust reader
@@ -129,7 +145,7 @@ texture type against `ROGUE_TEXSTATE_TEXTYPE_STRIDE` (it disassembles
 directory it was built in: two builds in two directories gave the same bytes.
 It prints the path and the content id `yakogl-tools glsl2usc` will report.
 
-That binary reproduces **every one of the 2248 rows** `src/shaderc/blobs.rs`
+That binary reproduces **every one of the 2248 rows** `tests/reference/blobs.rs`
 held before it was regenerated with it, byte for byte (built 2026-10-05 with
 LLVM/clang/libclc 23.1.2, SPIRV-LLVM-Translator 23.1.1, gcc 16.2.1, and
 `glslangValidator` 16.4.0). The table now names that toolchain in its header:
@@ -159,7 +175,7 @@ silently bring the `textureSize()` bug back.
 # glsl2usc — build-time GLSL-ES → PowerVR USC blob generator
 
 `glsl2usc` compiles GLSL shaders to PowerVR **USC** machine code + the driver
-wiring metadata, and emits the Rust table (`src/shaderc/blobs.rs`) the *offline*
+wiring metadata, and emits the Rust table (`tests/reference/blobs.rs`) the *offline*
 shader backend (`src/shaderc/offline.rs`) looks shaders up in by source hash. This is the
 offline half of the shader strategy in `yakogl/DESIGN.md` (§ Shaders): on
 Zephyr / bare-metal the PCO+glslang toolchain is too big to run on-target, so app
@@ -180,7 +196,7 @@ shaders are precompiled here and embedded.
   USC dwords (stdout) + metadata (stderr)
         │  parse metadata → ShcShader; sha256(source)
         ▼
-  src/shaderc/blobs.rs   (one entry per shader)
+  tests/reference/blobs.rs   (one entry per shader)
 ```
 
 The first two steps are the GLSL ES front end (`tools/yakogl-tools/src/es100.rs`):
@@ -224,7 +240,7 @@ GLSL2USC_CACHE=~/.cache/glsl2usc tools/glsl2usc.sh   # reruns take seconds
 Or drive the tool directly:
 
 ```sh
-cargo run -p yakogl-tools -- glsl2usc -o src/shaderc/blobs.rs \
+cargo run -p yakogl-tools -- glsl2usc -o tests/reference/blobs.rs \
     tools/shaders/uniform_color.frag tools/shaders/passthrough.vert \
     tools/shaders/interp_color.frag tools/shaders/color_uv.vert \
     tools/shaders/color_uv.frag tools/shaders/mvp.vert tools/shaders/texture.frag
@@ -269,7 +285,7 @@ options may be abbreviated.
    - Attributes → `layout(location=N) in …` (→ `vi` regs in order).
 2. Add a `src` line for it to `tools/shaders/precompiled.list` (or pass it on the
    command line), and a `pair` line for each program an application links it into.
-3. `tools/glsl2usc.sh` — regenerates `src/shaderc/blobs.rs`.
+3. `tools/glsl2usc.sh` — regenerates `tests/reference/blobs.rs`.
 4. The app must `glShaderSource()` the **exact same source bytes**; the offline
    backend matches by SHA-256 of that text. The table's copy of the text
    (`SHC_SOURCE_TABLE`) always ends in a newline, so a source must end in one too.
@@ -401,7 +417,7 @@ plus the reflection the shader table needs; `glsl2vivante.py` rewrites GLSL ES 1
 and 3.00 into the GLSL 4.60 it expects and reports what compiled. Its ES 1.00 parser
 pieces live in `tools/vivante/es100.py`, a verbatim copy of the former Python
 glsl2usc's. `gen_shader_table.py` turns that output into the generated table
-(`src/shaderc/vivante_blobs.rs` and `src/vivante/clear_shader.rs`).
+(`tests/reference/vivante_blobs.rs` and `src/vivante/clear_shader.rs`).
 
 **The command-stream differ**: what does a working driver actually tell this part?
 Mesa's etnaviv runs on the host against its own drm-shim, patched by

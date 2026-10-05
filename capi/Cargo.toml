@@ -33,8 +33,8 @@ bench = false
 osal-linux = ["yakogl/osal-linux"]
 osal-zephyr = ["yakogl/osal-zephyr"]
 osal-baremetal = ["yakogl/osal-baremetal"]
-# The GPU whose backend and offline shader table are compiled in (the yakogl
-# crate's own features): exactly one of the three. The AM62P's PowerVR BXS:
+# The GPU whose backend is compiled in (the yakogl crate's own features):
+# exactly one of the three. The AM62P's PowerVR BXS:
 gpu-powervr = ["yakogl/gpu-powervr"]
 # The i.MX8MP's GC7000:
 gpu-vivante = ["yakogl/gpu-vivante"]
@@ -45,10 +45,15 @@ gpu-v3d = ["yakogl/gpu-v3d"]
 # The in-process compiler: no_std, it needs no table, and it is the only back
 # end a Zephyr image can take.
 shaderc-online = ["yakogl/shaderc-online"]
-# No offline blob table in the image (the yakogl crate's own feature). What a
-# Zephyr or bare-metal build takes on top of `shaderc-online`; a host build
-# does not, so `YAKOGL_SHADERC=offline` still works there for an A/B.
+# No table in the image (the yakogl crate's own feature): what a Zephyr build
+# with the in-process compiler passes. Outside the host tests the table is
+# only ever in a build that asks for it, below, so this changes nothing there.
 no-shader-table = ["yakogl/no-shader-table"]
+# MEASUREMENT IMAGES ONLY: the Mesa reference table as this build's shader
+# table (the yakogl crate's own feature; `SHADERC offline` in the C builds,
+# Kconfig YAKOGL_SHADERC_OFFLINE). It will be replaced by the table our own
+# compiler precompiles (tools/precompile).
+mesa-reference-table = ["yakogl/mesa-reference-table"]
 # Report OpenGL ES 2.0 rather than ES 3.0 (the yakogl crate's own feature);
 # what a conformance build of the library needs.
 report-es2 = ["yakogl/report-es2"]

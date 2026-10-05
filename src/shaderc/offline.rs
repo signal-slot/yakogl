@@ -16,8 +16,8 @@
 use core::ffi::{c_char, c_void};
 use core::fmt::Write;
 
+use super::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use super::sha256::sha256;
-use super::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use super::{ShcBackend, ShcBlob, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::util::{cstr_bytes, CStrWriter, EINVAL, ENOENT};
 
@@ -85,7 +85,7 @@ unsafe extern "C" fn offline_compile(
     let _ = write!(
         log,
         /* the generator is `yakogl-tools glsl2usc` (tools/glsl2usc.sh runs it
-         * over the starter set) and its output is src/shaderc/blobs.rs */
+         * over the starter set) and its output is tests/reference/blobs.rs */
         "offline shaderc: {} shader not in offline table (sha256={}); \
          add it to the glsl2usc inputs and regenerate blobs.rs (yakogl-tools glsl2usc)",
         stage_name(stage),

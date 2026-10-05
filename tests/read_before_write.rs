@@ -78,9 +78,9 @@
 
 use std::string::String;
 use std::vec::Vec;
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::{lower, sema};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 /// Generous, so "out of scratch" cannot be read as a refusal.
 const SCRATCH: usize = 4 << 20;

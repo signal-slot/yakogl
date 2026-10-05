@@ -354,16 +354,22 @@ choice YAKOGL_SHADERC
 	  end named here; only one is in a build.
 
 config YAKOGL_SHADERC_OFFLINE
-	bool "offline table"
+	bool "offline table (Mesa reference; measurement images only)"
 	help
-	  The precompiled table (src/shaderc/blobs.rs or vivante_blobs.rs):
-	  glShaderSource text is matched by SHA-256 against shaders compiled on
-	  a host before the image was built. An application whose shader is not
-	  in the table cannot draw with it.
+	  MEASUREMENT ONLY. The Mesa reference table (tests/reference/blobs.rs
+	  or vivante_blobs.rs: what Mesa's pco_shc / etna_shc made of the
+	  source list), linked as the image's shader table: glShaderSource
+	  text is matched by SHA-256 against it. It exists for A/B images
+	  against the in-process compiler (gl_test 193..195's "table image")
+	  and for the samples not yet moved to the compiler; it selects the
+	  crate's `mesa-reference-table`, which no other build links. It will
+	  be replaced by the table our own compiler precompiles at build time
+	  (tools/precompile). An application whose shader is not in the table
+	  cannot draw with it.
 
-	  The table is the largest single thing in the library: 258,000 bytes of
-	  GC7000 instruction words, 6,278,960 of PowerVR, before the reflection
-	  rows.
+	  The table is the largest single thing the library can carry: 258,000
+	  bytes of GC7000 instruction words, about 6.9 MB of PowerVR, before
+	  the reflection rows.
 
 config YAKOGL_SHADERC_ONLINE
 	bool "in-process compiler"
@@ -371,9 +377,9 @@ config YAKOGL_SHADERC_ONLINE
 	  Compile the shader on the target, from the GLSL ES 1.00 text the
 	  application passes to glShaderSource, with no table and no host.
 
-	  This links no offline table at all (the crate's `no-shader-table`),
-	  which is the point: an image carrying a compiler does not also need
-	  the bytes it was meant to replace.
+	  This links no table at all (no `mesa-reference-table`; the crate's
+	  `no-shader-table` as well), which is the point: an image carrying a
+	  compiler does not also need the bytes it was meant to replace.
 
 	  The compiler is no_std and allocation-free; it works in the region
 	  sized by YAKOGL_SHADERC_SCRATCH_BYTES below.

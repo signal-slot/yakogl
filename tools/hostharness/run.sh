@@ -109,7 +109,7 @@ build() {
         # build is the dev-lto profile (dev semantics, one object)
         pkg=(-p yakogl-capi)
         staticlib=libyakogl_capi.a
-        features="${HH_FEATURES:-osal-linux,gpu-powervr}"
+        features="${HH_FEATURES:-osal-linux,gpu-powervr,mesa-reference-table}"
         if [ "$profile" != release ]; then
           pargs=(--profile dev-lto)
           pdir="${pdir%debug}dev-lto"

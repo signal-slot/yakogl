@@ -19,8 +19,8 @@
 
 use core::ffi::c_char;
 use std::collections::BTreeMap;
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::vivante::decode::for_each_instr;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// `SRCn_RGROUP` for a temporary register, from `vivante/build.rs`.
@@ -201,7 +201,7 @@ fn temps_against_the_table() {
     }
 
     /* A vacuity guard, because the assertion below passes on an empty list.
-     * `shaderc::table` aliases the PowerVR blobs in a non-vivante build, and a
+     * `shaderc::mesa_reference` aliases the PowerVR blobs in a non-vivante build, and a
      * corpus that produced nothing would make every check here succeed while
      * measuring nothing at all. */
     assert!(!rows.is_empty() || delta.len() == 1, "no source compiled: this measured nothing");

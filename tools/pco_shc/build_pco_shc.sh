@@ -24,7 +24,7 @@
 # Last built (2026-10-05, Gentoo, gcc 16.2.1) with LLVM/clang/libclc 23.1.2,
 # SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0: pco_usclib.spv md5
 # 15eca99efcf1f20d9124abf5cdffd4ab, pco_shc id f537fc86b41f -- the id
-# src/shaderc/blobs.rs records -- the same from two different work dirs.
+# tests/reference/blobs.rs records -- the same from two different work dirs.
 # LLVM_DIR (default /usr/lib/llvm/23) selects the LLVM.
 #
 # Meson options: -Dbuildtype=debug -Dvulkan-drivers=imagination

@@ -33,9 +33,9 @@
 
 use std::collections::BTreeMap;
 
+use yakogl::shaderc::mesa_reference as table;
 use yakogl::shaderc::online::lower::compile_to_ir;
 use yakogl::shaderc::online::{arena::Arena, sema::Stage};
-use yakogl::shaderc::table;
 
 /// Scratch for one compile: generous, so "out of scratch" can never be read
 /// as a missing language feature.

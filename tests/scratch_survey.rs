@@ -30,9 +30,9 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-vivante"))]
 
 use core::ffi::c_char;
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::online::lower::compile_to_ir;
 use yakogl::shaderc::online::{arena::Arena, sema::Stage, store};
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 fn row_for(text: &str) -> Option<&'static yakogl::shaderc::ShcBlob> {

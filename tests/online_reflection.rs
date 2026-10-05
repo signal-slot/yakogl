@@ -44,7 +44,7 @@
 
 use yakogl::shaderc::online::{arena::Arena, parser, pp, reflect};
 use yakogl::shaderc::sha256::sha256;
-use yakogl::shaderc::{table, ShcBlob};
+use yakogl::shaderc::{mesa_reference as table, ShcBlob};
 use yakogl::util::name_bytes;
 
 /// Scratch for one compile. The largest source in the table is a few

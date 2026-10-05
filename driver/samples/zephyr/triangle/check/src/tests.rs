@@ -367,7 +367,7 @@ fn the_shader_texts_are_glsl_es_100() {
 /// boards conf). This assertion flips when the table gains them.
 #[test]
 fn which_offline_table_holds_the_shader_texts() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../../src/shaderc/");
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../../tests/reference/");
     let entries = [("vs", VS_SRC.strip_suffix('\0').unwrap()), ("fs", FS_SRC.strip_suffix('\0').unwrap())];
     let has = |table: &str, stage: &str, src: &str| {
         let text = std::fs::read_to_string(format!("{root}{table}")).unwrap();

@@ -1766,7 +1766,7 @@ mod tests {
         assert!(crate::shaderc::table_row_of(&sh).is_none());
         assert_eq!(crate::shaderc::shader_source_name(&sh), "");
         release(&sh);
-        let row = &crate::shaderc::table::SHC_BLOB_TABLE[0];
+        let row = &crate::shaderc::mesa_reference::SHC_BLOB_TABLE[0];
         let mut t = row.shader;
         t.priv_ = row as *const crate::shaderc::ShcBlob as *const core::ffi::c_void;
         assert!(core::ptr::eq(crate::shaderc::table_row_of(&t).expect("a row"), row));
@@ -2287,7 +2287,7 @@ void main (void)
     #[cfg(not(feature = "no-shader-table"))]
     #[test]
     fn a_table_shader_has_no_blocks() {
-        let row = &crate::shaderc::table::SHC_BLOB_TABLE[0];
+        let row = &crate::shaderc::mesa_reference::SHC_BLOB_TABLE[0];
         let mut sh = row.shader;
         sh.priv_ = row as *const _ as *const core::ffi::c_void;
         let t = crate::shaderc::uniform_blocks(&sh);

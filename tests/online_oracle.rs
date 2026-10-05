@@ -37,7 +37,7 @@
 //! It is es100-frontend's M2 scoreboard as much as gles2-core's M3
 //! deliverable: it needs no code generator, no encoder and no board, so it can
 //! run the day the front end first produces reflection. It reads
-//! `shaderc::table` rather than either GPU's table by name, so the same
+//! `shaderc::mesa_reference` rather than either GPU's table by name, so the same
 //! harness scores a PowerVR build and a GC7000 build.
 // The corpus lives in the offline table, so this measures nothing in a build
 // that carries none (`no-shader-table`, the image configuration).
@@ -48,8 +48,8 @@ use std::collections::BTreeMap;
 use std::ffi::c_char;
 use std::fmt::Write as _;
 
+use yakogl::shaderc::mesa_reference::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::sha256::sha256;
-use yakogl::shaderc::table::{SHC_BLOB_TABLE, SHC_SOURCE_TABLE};
 use yakogl::shaderc::{ShcBlob, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use yakogl::util::{cstr_bytes, name_bytes};
 

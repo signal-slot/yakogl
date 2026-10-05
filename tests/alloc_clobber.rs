@@ -25,11 +25,11 @@
 #![cfg(all(feature = "gpu-vivante", feature = "shaderc-online", not(feature = "no-shader-table")))]
 
 use std::collections::{BTreeMap, BTreeSet};
+use yakogl::shaderc::mesa_reference::SHC_SOURCE_TABLE;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::vivante::alloc::{self, Cond, SelDst, SelInstr, SelSrc, Stage};
 use yakogl::shaderc::online::vivante::isa::{Instr, MAX_FIELDS};
 use yakogl::shaderc::online::{lower, select, sema};
-use yakogl::shaderc::table::SHC_SOURCE_TABLE;
 
 /// A value the check follows: a virtual register, an io input register, or a
 /// fixed (output) register.

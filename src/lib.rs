@@ -115,6 +115,16 @@ mod test_rules;
 #[cfg(all(feature = "no-shader-table", not(feature = "shaderc-online")))]
 compile_error!("feature \"no-shader-table\" needs a back end that needs no table: enable \"shaderc-online\"");
 
+/* A build has a shader back end: the in-process compiler, or the Mesa
+ * reference as its table (`mesa-reference-table`, measurement images only;
+ * build.rs sets `mesa_reference`), or both in the host tests. */
+#[cfg(all(not(mesa_reference), not(feature = "shaderc-online")))]
+compile_error!(
+    "no shader back end: enable \"shaderc-online\" (or, for a measurement image only, \"mesa-reference-table\")"
+);
+#[cfg(all(feature = "mesa-reference-table", feature = "no-shader-table"))]
+compile_error!("features \"mesa-reference-table\" and \"no-shader-table\" contradict each other");
+
 /* Exactly one GPU per build: one of the three features, never none and never
  * two. */
 #[cfg(not(any(
@@ -134,5 +144,7 @@ compile_error!(
 compile_error!(
     "feature \"gpu-v3d\" needs \"shaderc-online\": the in-process compiler is the V3D's only shader back end"
 );
-#[cfg(all(feature = "gpu-v3d", not(feature = "no-shader-table")))]
-compile_error!("feature \"gpu-v3d\" needs \"no-shader-table\": there is no offline table for the V3D");
+#[cfg(all(feature = "gpu-v3d", mesa_reference))]
+compile_error!(
+    "feature \"gpu-v3d\" takes no table (\"no-shader-table\" in the host tests, no \"mesa-reference-table\"): there is no Mesa reference for the V3D"
+);

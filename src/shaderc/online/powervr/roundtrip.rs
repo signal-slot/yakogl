@@ -14,7 +14,7 @@
 use super::decode::{decode_group, DecodeError, ALU_BITWISE, ALU_MAIN};
 use super::encode::encode_group;
 use super::isa::{PH_0, PH_1, PH_2, PH_2_MOV, PH_2_PCK, PH_2_TST, PH_BACKEND};
-use crate::shaderc::table::SHC_BLOB_TABLE;
+use crate::shaderc::mesa_reference::SHC_BLOB_TABLE;
 use std::collections::BTreeMap;
 
 /// The USC of one table row, as bytes. The table stores dwords; the
@@ -2349,7 +2349,7 @@ fn the_widest_operand_each_bank_can_reach_in_each_source_slot() {
 /// say, not mine.
 #[test]
 fn where_the_shipped_blobs_put_position_and_the_varyings_in_the_vertex_output() {
-    use crate::shaderc::table::SHC_BLOB_TABLE;
+    use crate::shaderc::mesa_reference::SHC_BLOB_TABLE;
     use crate::shaderc::SHC_STAGE_VERTEX;
     let mut shapes: std::collections::BTreeMap<std::string::String, usize> = std::collections::BTreeMap::new();
     let (mut vs, mut with_varyings) = (0usize, 0usize);
