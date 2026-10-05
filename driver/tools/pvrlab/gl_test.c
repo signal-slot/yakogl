@@ -468,6 +468,12 @@
  *               arms compute; on a uniform each way and on gl_FragCoord.x
  *               either side of 32, read back. All three GPUs (skipped by
  *               name in a table build); in the set
+ * 193 offarm    does a predicated-off group cost time? 186's arm 1
+ *               (fill_color.nodiscard, femtovg's blend, scissorRadius 0) with
+ *               the scissor arm radius 0 never runs grown by N = 0, 8, 32 and
+ *               128 dependent steps (tools/shaders/offarm/), 3D busy logged per
+ *               N, every N the same picture. Run in an online image and in a
+ *               table image. A measurement; all three GPUs, not in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -7752,7 +7758,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16304,6 +16310,162 @@ static int case_predlive(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 193: a predicated-off arm grown by N groups (offarm) -----------
+ *
+ * 186/187 suggest that a group no instance runs costs about nothing on the
+ * table's fill_color, and leave an old gap of about 5.5 ms in 186 arm 1 (on
+ * afa12e9b) that the group counts do not explain. This asks the question
+ * directly: 186's arm 1 (fill_color.nodiscard, femtovg's blend, case 39's
+ * uniforms, scissorRadius 0) with scissorMask's `if (scissorRadius > 0.0)`
+ * arm -- the one radius 0 never runs -- grown by N dependent steps
+ * `distance = distance * frag[13].y + frag[13].z` (tools/shaders/offarm/;
+ * N = 0 is fill_color.nodiscard itself). The arm the pixels run is the
+ * same in every program. Host count, online compile, blend key 0x98661
+ * (tests/usc_limits.rs gl_test_case_193_off_arm_groups_on_the_host):
+ *   N      0    8   32  128
+ *   groups 104  114  138  234   (30 temps each)
+ *   off arm 31   41   65  161   (under if(!p0); the taken arm 23)
+ * the off arm grows by the N fmad and two copies of the steps' uniforms,
+ * and every group outside it is N = 0's. The table's rows (pco_shc):
+ *   groups 105  115  139  235   (14 temps each)
+ *   off arm 32   42   66  162   (predicated too, no branch; taken arm 22)
+ * the off arm grows by the N fmad alone; both programs run 73 groups
+ * outside it.
+ *   3D busy flat in N: an off group costs nothing (the old gap is
+ *   elsewhere); rising with N: the slope is what one costs, against an
+ *   executed group's (184/185: about 0.8 ms a frame here).
+ * Run in an online image and in a table image (rows from
+ * tools/glsl2usc.sh with tools/shaders/offarm/): a program without a
+ * shader is logged by name and fails the case after the others are timed.
+ * frag[13].y = 1, .z = 0: the steps are the identity, so a positive radius
+ * would draw what fill_color.nodiscard draws.
+ * ------------------------------------------------------------------------- */
+static int case_offarm(void)
+{
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5, ARMS = 4 };
+	struct fvg_vertex { float xy[2]; float uv[2]; };
+	static struct fvg_vertex quads[OVER * 6];
+	static const float xs[6] = { 0, W, W, 0, W, 0 }, ys[6] = { 0, 0, H, 0, H, H };
+	static const struct {
+		int n;
+		const char *file, *fs;
+	} arm[ARMS] = {
+		{ 0, "femtovg/fill_color.nodiscard.frag", gl_test_fvg_fill_color_nodiscard_fs_src },
+		{ 8, "offarm/fill_color.nodiscard.offarm8.frag", gl_test_offarm8_fs_src },
+		{ 32, "offarm/fill_color.nodiscard.offarm32.frag", gl_test_offarm32_fs_src },
+		{ 128, "offarm/fill_color.nodiscard.offarm128.frag", gl_test_offarm128_fs_src },
+	};
+	float frag[56] = { 0 };
+	uint32_t got[ARMS] = { 0 };
+	bool ran[ARMS] = { false };
+	GLuint tex, fbo, vbo, vs;
+	int missing = 0;
+	bool ok = true;
+
+	for (int i = 0; i < OVER * 6; i++) {
+		quads[i].xy[0] = xs[i % 6];
+		quads[i].xy[1] = ys[i % 6];
+		quads[i].uv[0] = 0.5f;
+		quads[i].uv[1] = 1.0f;
+	}
+	/* case 39's uniforms (186's at radius 0), and the steps' identity */
+	frag[6 * 4 + 0] = 0.3f; frag[6 * 4 + 3] = 0.5f;
+	frag[8 * 4 + 0] = 1.0f; frag[8 * 4 + 1] = 1.0f;
+	frag[8 * 4 + 2] = 1.0f; frag[8 * 4 + 3] = 1.0f;
+	frag[10 * 4 + 0] = 1.0f;
+	frag[10 * 4 + 1] = -1.0f;
+	frag[10 * 4 + 3] = 5.0f;
+	frag[13 * 4 + 1] = 1.0f;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: offarm: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, W, H);
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	vbo = upload_vbo(quads, sizeof(quads));
+	vs = compile(GL_VERTEX_SHADER, gl_test_fvg_main_vs_src);
+	if (!vs)
+		return -1;
+	for (int a = 0; a < ARMS; a++) {
+		GLuint fs = compile(GL_FRAGMENT_SHADER, arm[a].fs);
+		GLuint prog;
+		GLint linked = 0;
+		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
+		uint8_t px[4];
+
+		if (!fs) {
+			/* a table image without the variant's rows: time the rest */
+			pr_err("gl_test: offarm %d: no shader for %s (+%d groups)\n", a, arm[a].file, arm[a].n);
+			missing++;
+			continue;
+		}
+		prog = glCreateProgram();
+		glAttachShader(prog, vs);
+		glAttachShader(prog, fs);
+		glBindAttribLocation(prog, 0, "vertex");
+		glBindAttribLocation(prog, 1, "tcoord");
+		glLinkProgram(prog);
+		glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+		if (!linked)
+			return -1;
+		glUseProgram(prog);
+		glUniform2f(glGetUniformLocation(prog, "viewSize"), (float)W, (float)H);
+		glUniform4fv(glGetUniformLocation(prog, "frag"), 14, frag);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)0);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)8);
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		for (int r = 0; r < REPS + 1; r++) {
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			if (r == 1)
+				gl_test_perf_read(pc0);
+			t0 = now_ms();
+			glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+			glFinish();
+			if (r != 0 && now_ms() - t0 < best)
+				best = now_ms() - t0;
+		}
+		gl_test_perf_read(pc1);
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		pr_info("gl_test: offarm %d: off arm +%d groups: best %u ms; per frame 3D busy %u us, TA busy %u us\n", a,
+			arm[a].n, best, (pc1[1] - pc0[1]) / 800u / REPS, (pc1[0] - pc0[0]) / 800u / REPS);
+		glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		got[a] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 | (uint32_t)px[3] << 24;
+		ran[a] = true;
+		glDeleteProgram(prog);
+		glDeleteShader(fs);
+	}
+	glDisable(GL_BLEND);
+	if (!check_gl_error("offarm"))
+		return -1;
+	pr_info("gl_test: offarm pixels: %08x %08x %08x %08x\n", got[0], got[1], got[2], got[3]);
+	ok &= expect_int("every program has its shader", missing, 0);
+	/* the off arm never runs, so every N draws N = 0's picture: innerCol's
+	 * red 0.3 under the blend, 16 layers stacked past one layer's 0x4c */
+	for (int a = 1; a < ARMS; a++)
+		if (ran[0] && ran[a])
+			ok &= expect_int("the off arm leaves the picture as N = 0 draws it", got[a] == got[0], 1);
+	if (ran[0])
+		ok &= expect_int("the blend stacks the layers (red past 0x4c)", (got[0] & 0xff) > 0x4c, 1);
+	glDeleteShader(vs);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19320,6 +19482,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 190: rc = case_blendonce(); break;
 	case 191: rc = case_varyfma(); break;
 	case 192: rc = case_predlive(); break;
+	case 193: rc = case_offarm(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

@@ -114,6 +114,12 @@ INPUTS=(
   "$SHADERS/es300/cubelodv.frag"
   "$SHADERS/es300/cubelodf.vert"
   "$SHADERS/es300/cubelodf.frag"
+  # gl_test 193 offarm: fill_color.nodiscard with 8, 32 and 128 dependent
+  # steps in the scissor arm a zero radius never runs (N = 0 is the femtovg
+  # row above). The table image times them against the online compile.
+  "$SHADERS/offarm/fill_color.nodiscard.offarm8.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm32.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm128.frag"
 )
 
 # Blend / colour-mask variants precompiled for every fragment shader (both

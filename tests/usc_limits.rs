@@ -2496,8 +2496,9 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
      * That is exactly the `uvsw.write` the epilogue used to emit (is4 = ft0
      * where every reference write has fte), so a set that could not tell the
      * two apart would have passed it. */
-    // 651_369 before the 20 matattr rows (+399 groups).
-    assert_eq!(corpus_groups, 651_768, "the reference corpus changed size; re-derive this gate's pins");
+    // 651_369 before the 20 matattr rows (+399 groups), 651_768 before the
+    // 48 offarm rows of gl_test 193 (+7_266).
+    assert_eq!(corpus_groups, 659_034, "the reference corpus changed size; re-derive this gate's pins");
     let real = corpus
         .iter()
         .find(|k| k.contains("uvsw.write :uvsw_write_imm") && k.contains("is4=3"))
@@ -3713,6 +3714,233 @@ fn gl_test_case_192_values_live_across_the_arms_on_the_host() {
         }
     })
     .unwrap();
+}
+
+/// gl_test case 193's four programs, on the host: fill_color.nodiscard
+/// with femtovg's blend (key 0x98661, case 186 arm 1) and the same source
+/// with N = 8, 32, 128 dependent steps added to scissorMask's
+/// `if (scissorRadius > 0.0)` arm (tools/shaders/offarm/, each byte for byte
+/// the base with the steps inserted). The `if` runs predicated; the arm
+/// under if(!p0) -- the one radius 0 never runs -- grows by the N steps'
+/// fmad and the two copies of their uniforms, and every group outside it
+/// is N = 0's. In the byte model each program draws N = 0's colour at
+/// radius 0 (the arm off) and at radius 4 (the arm on; the steps are the
+/// identity with frag[13].y = 1, .z = 0). The table's rows for the same
+/// sources (pco_shc) are predicated the same way, their off arm grown by
+/// the N fmad alone, and run the same 73 groups at radius 0. Case 193 on
+/// the AM62P measures what the off groups cost; this pins that they are
+/// there and off, in both programs.
+#[test]
+fn gl_test_case_193_off_arm_groups_on_the_host() {
+    use yakogl::shaderc::*;
+    let base = include_str!("../tools/shaders/femtovg/fill_color.nodiscard.frag");
+    let anchor = "        float distance = sdroundrect(pt, scissorExt, scissorRadius);\n";
+    assert_eq!(base.matches(anchor).count(), 1, "fill_color.nodiscard's scissor arm");
+    let padded = |n: usize| {
+        let steps = format!(
+            "        // gl_test 193 offarm: {n} dependent steps in the arm a zero scissorRadius never runs\n{}",
+            "        distance = distance * frag[13].y + frag[13].z;\n".repeat(n)
+        );
+        base.replacen(anchor, &format!("{anchor}{steps}"), 1)
+    };
+    let variants: [(usize, &str); 4] = [
+        (0, base),
+        (8, include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm8.frag")),
+        (32, include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm32.frag")),
+        (128, include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm128.frag")),
+    ];
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    for (n, src) in variants {
+        if n != 0 {
+            assert!(src == padded(n), "offarm{n}: tools/shaders/offarm is the base with {n} steps, nothing else");
+            let row = format!("{{ {n}, \"offarm/fill_color.nodiscard.offarm{n}.frag\", gl_test_offarm{n}_fs_src }},");
+            assert!(suite.contains(&row), "case 193 runs offarm{n}: {row}");
+        }
+    }
+    let key =
+        shc_blend_key(SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BLEND_ADD, SHC_BLEND_ADD);
+    assert_eq!(key, 0x98661, "femtovg's blend, case 39's key");
+    /* (N, groups, the off arm (if(!p0)), the taken arm (if(p0)), temps) */
+    let want = [
+        (0usize, 104usize, 31usize, 23usize, 30u16),
+        (8, 114, 41, 23, 30),
+        (32, 138, 65, 23, 30),
+        (128, 234, 161, 23, 30),
+    ];
+    let name_of =
+        |n: &[core::ffi::c_char]| -> String { n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect() };
+    /* N = 0's groups outside the off arm, its off arm's fmad, its colours */
+    let mut base_rest: Vec<String> = Vec::new();
+    let mut base_fmads = 0usize;
+    let mut base_colours = [0u32; 2];
+    let _scratch = scratch_lock();
+    for ((n, src), (wn, total, off, on, temps)) in variants.iter().zip(want) {
+        assert_eq!(*n, wn);
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                .unwrap_or_else(|e| panic!("offarm{n}: {e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            /* each group's text without its offset line, and its condition */
+            let mut groups: Vec<(char, String)> = Vec::new();
+            yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+                let mut t = String::new();
+                yakogl::shaderc::online::powervr::listing::group_text(&mut t, off, g).unwrap();
+                let cc = if t.contains("cc=if(!p0)") {
+                    'T'
+                } else if t.contains("cc=if(p0)") {
+                    'E'
+                } else {
+                    '.'
+                };
+                /* the alignment padding (and the length it adds) follows the
+                 * program's size, not what a group does */
+                let body = t
+                    .lines()
+                    .skip(1)
+                    .filter(|l| !l.trim_start().starts_with("pad:"))
+                    .map(|l| l.split(' ').filter(|w| !w.starts_with("length=")).collect::<Vec<_>>().join(" "))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                groups.push((cc, body));
+                Ok(())
+            })
+            .unwrap();
+            let shape: String = groups.iter().map(|g| g.0).collect();
+            let listing = || groups.iter().map(|g| format!("{} {}", g.0, g.1)).collect::<Vec<_>>().join("\n");
+            /* the `if`'s arms: the run under if(!p0) that the run under
+             * if(p0) follows (the iteration's branches before them come in
+             * pairs, one group each) */
+            let start = shape
+                .find("TTE")
+                .expect("the scissor `if` runs predicated: an arm under if(!p0), then one under if(p0)");
+            let start = shape[..=start].rfind(|c| c != 'T').map_or(0, |i| i + 1);
+            let then_len = shape[start..].find('E').unwrap();
+            let else_len = shape[start + then_len..].find(|c| c != 'E').unwrap_or(shape.len() - start - then_len);
+            assert_eq!(
+                (groups.len(), then_len, else_len, rec.temps),
+                (total, off, on, temps),
+                "offarm{n}: groups, off arm, taken arm, temps ({shape})\n{}",
+                listing()
+            );
+            let fmads = |r: &[(char, String)]| r.iter().filter(|g| g.1.contains("phase0 fmad\n")).count();
+            let arm = &groups[start..start + then_len];
+            let rest: Vec<String> =
+                groups[..start].iter().chain(&groups[start + then_len..]).map(|g| format!("{} {}", g.0, g.1)).collect();
+            if *n == 0 {
+                base_rest = rest;
+                base_fmads = fmads(arm);
+            } else {
+                assert_eq!(fmads(arm), base_fmads + n, "offarm{n}: the steps are {n} fmad in the off arm");
+                assert!(rest == base_rest, "offarm{n}: every group outside the off arm is N = 0's\n{}", listing());
+            }
+            /* the byte model: case 39's uniforms, the pixel the clear left */
+            let mut out = [0u32; 2];
+            for (i, radius) in [0.0f32, 4.0].into_iter().enumerate() {
+                let mut frag = [0f32; 56];
+                frag[24] = 0.3; /* innerCol */
+                frag[27] = 0.5;
+                frag[32..36].copy_from_slice(&[1.0; 4]); /* scissorExt, scissorScale */
+                frag[40] = 1.0; /* strokeMult */
+                frag[41] = -1.0; /* strokeThr */
+                frag[43] = 5.0; /* shaderType */
+                frag[51] = radius; /* scissorRadius */
+                frag[53] = 1.0; /* the steps' factor */
+                let mut inp = sentinel_inputs(1.0e30);
+                place_shared(&mut inp, rows, &|u: &str, k: u32| match u {
+                    "frag" => frag[k as usize].to_bits(),
+                    "viewSize" => [1024.0f32, 600.0][k as usize].to_bits(), /* declared; read by no fill */
+                    other => panic!("offarm{n}: a uniform {other:?}"),
+                });
+                let (_, mut at) = coeff_layout(rec.uses_z, rec.uses_w, rec.uses_pntc);
+                for v in &rec.varyings[..rec.num_varyings as usize] {
+                    let vals: [f32; 2] = match name_of(&v.name).as_str() {
+                        "ftcoord" => [0.5, 1.0],
+                        "fpos" => [512.5, 300.5],
+                        other => panic!("offarm{n}: a varying {other:?}"),
+                    };
+                    for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+                        inp.coeff[at + 4 * c] = x.to_bits();
+                        inp.coeff[at + 4 * c + 2] = x.to_bits();
+                    }
+                    at += 4 * v.components as usize;
+                }
+                inp.pixout = 0xff00_0000;
+                let got = run_binary(&image, &inp, true).unwrap_or_else(|e| panic!("offarm{n}: {e}"));
+                out[i] = *got.get(&0).expect("a colour");
+            }
+            if *n == 0 {
+                /* one layer of innerCol's red over opaque black */
+                let close =
+                    (0..4).all(|k| ((out[0] >> (8 * k)) & 0xff).abs_diff((0xff00_004cu32 >> (8 * k)) & 0xff) <= 1);
+                assert!(close, "radius 0: {:#010x}, one layer of 0.3 red wants 0xff00004c", out[0]);
+                assert_ne!(out[1], out[0], "radius 4 runs the sdroundrect arm, which scales the mask");
+                base_colours = out;
+            } else {
+                assert_eq!(out, base_colours, "offarm{n}: N = 0's colours at radius 0 and 4");
+            }
+        })
+        .unwrap();
+    }
+    /* The table's rows for the same four sources and key (pco_shc,
+     * blobs.rs): pco predicates the arm too at every N, with no branch over
+     * it, and its off arm grows by exactly the N fmad. The groups radius 0
+     * runs, outside the off arm, are 73 in pco's program and in ours. The
+     * survey's pco comparison (what_the_usc_path_asks...) runs the same rows
+     * against ours on every input. */
+    /* (N, groups, off arm, taken arm, temps) */
+    let pco_want = [
+        (0usize, 105usize, 32usize, 22usize, 14u16),
+        (8, 115, 42, 22, 14),
+        (32, 139, 66, 22, 14),
+        (128, 235, 162, 22, 14),
+    ];
+    for (((n, src), (_, total, off, on, temps)), (_, ours_total, ours_off, _, _)) in
+        variants.iter().zip(pco_want).zip(want)
+    {
+        let sha = sha256(src.as_bytes());
+        let row = SHC_BLOB_TABLE
+            .iter()
+            .find(|r| r.sha256 == sha && r.blend_key == key)
+            .unwrap_or_else(|| panic!("offarm{n}: no table row for blend {key:#x} (tools/glsl2usc.sh)"));
+        // SAFETY: `usc` points at a `[u32; usc_dw]` static of the generated table.
+        let code = unsafe { core::slice::from_raw_parts(row.shader.usc, row.shader.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut groups: Vec<(char, bool, bool)> = Vec::new();
+        yakogl::shaderc::online::powervr::decode::for_each_group(&image, |o, g| {
+            let mut t = String::new();
+            yakogl::shaderc::online::powervr::listing::group_text(&mut t, o, g).unwrap();
+            let cc = if t.contains("cc=if(!p0)") {
+                'T'
+            } else if t.contains("cc=if(p0)") {
+                'E'
+            } else {
+                '.'
+            };
+            groups.push((cc, t.contains("phase0 fmad\n"), t.contains("phase0 br")));
+            Ok(())
+        })
+        .unwrap();
+        let shape: String = groups.iter().map(|g| g.0).collect();
+        let start = shape.find("TTE").expect("pco's `if` runs predicated: an arm under if(!p0), then one under if(p0)");
+        let start = shape[..=start].rfind(|c| c != 'T').map_or(0, |i| i + 1);
+        let then_len = shape[start..].find('E').unwrap();
+        let else_len = shape[start + then_len..].find(|c| c != 'E').unwrap_or(shape.len() - start - then_len);
+        assert_eq!(
+            (groups.len(), then_len, else_len, row.shader.temps),
+            (total, off, on, temps),
+            "offarm{n}, pco: groups, off arm, taken arm, temps ({shape})"
+        );
+        assert!(!groups[start..].iter().any(|g| g.2), "offarm{n}, pco: a branch at or after the arms ({shape})");
+        let fmads = groups[start..start + then_len].iter().filter(|g| g.1).count();
+        assert_eq!(fmads, 6 + n, "offarm{n}, pco: the off arm's fmad are its 6 and the {n} steps");
+        assert_eq!((total - off, ours_total - ours_off), (73, 73), "offarm{n}: the groups radius 0 runs");
+    }
 }
 
 /// gl_test case 91's two blends, on the host: the case's own fragment

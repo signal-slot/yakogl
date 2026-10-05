@@ -80,7 +80,7 @@ fn every_corpus_source_compiles_online_or_is_a_listed_refusal() {
     println!("{GPU}: {} sources, {} compiled, {n_refused} refused", files.len(), files.len() - n_refused);
     print!("{refused}");
     /* The population first: an empty walk would make "nothing refused" true. */
-    assert_eq!(files.len(), 718, "tools/shaders holds 718 .vert/.frag sources; re-derive the pin if it changed");
+    assert_eq!(files.len(), 721, "tools/shaders holds 721 .vert/.frag sources; re-derive the pin if it changed");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/online_refused_{GPU}.txt"));
     if std::env::var_os("ONLINE_CORPUS_WRITE").is_some() {
         std::fs::write(&fixture, &refused).expect("the fixture is writable");

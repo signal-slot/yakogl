@@ -71,7 +71,10 @@ TABLE_DIRS = {
     "qt3d",
 }
 # Compiled into the backend rather than the table: the clear shaders.
-NOT_TABLE_DIRS = {"internal"}
+# Not GC7000 table rows: the PowerVR measurement series of gl_test 193
+# (fill_color.nodiscard with its predicated-off arm grown by N; the PowerVR
+# table holds them, the GC7000 runs 193 in an online image only).
+NOT_TABLE_DIRS = {"internal", "offarm"}
 
 
 def tool_identity():

@@ -75,9 +75,13 @@ has not run on a board yet (open work 2).
    our compiler and once from the table, and read the 3D busy time.
    The old gap of about 5.5 ms in case 186 arm 1 is closed: on `81c53c61`
    it is 54.56 ms against the table's 54.9 ms. What is left is only whether
-   a predicated-off group costs time. gl_test 193 `offarm` (branch
-   `work/pvr-offarm-cost`, commit `a84a285d`, not landed) is the prepared
-   measurement.
+   a predicated-off group costs time. gl_test 193 `offarm` is that
+   experiment: 186 arm 1 with the arm radius 0 never runs grown by N = 0,
+   8, 32, 128 dependent steps (`tools/shaders/offarm/`). Both programs
+   predicate the arm at every N and run the same 73 groups at radius 0:
+   online 104 to 234 groups, the table (rows in `blobs.rs`) 105 to 235.
+   Board run needed, on the AM62P: case 193 in an online image and in a
+   table image.
 4. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
