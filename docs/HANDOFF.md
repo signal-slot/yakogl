@@ -18,18 +18,14 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-Results are from main `81c53c61`, except the Pi 4. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
+Results are from main `81c53c61` (gl_test) and `7dada1ff` (Slint, cluster, table image), except the Pi 4. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
 `docs/standalone-boot.md` has the procedure.
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
-| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | not run on `81c53c61`; pass on `39bd6983` | not run on `81c53c61`; 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx on `39bd6983` |
+| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | pass on `7dada1ff` (705 frames in 10007 ms) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (`39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
 | i.MX8MP | fails: first failure case 16 check 255 (4x MSAA), the same as on `39bd6983`, where it was 45 / 47 | not run on `81c53c61` | not run on `81c53c61` |
 | Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
-
-Slint and cluster are not run on `81c53c61`: their images need a Rust
-nightly with rust-src and the Slint no_std workspace, which the build host
-does not have yet.
 
 AM62P, the fill shader from femtovg (`fill_color`), 3D busy per frame:
 
@@ -71,16 +67,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
 
 ## Open work, in order
 
-1. **Slint and cluster on the AM62P for the join removal.** The join
-   removal landed as `81c53c61`: when both arms of a predicated `if`
-   compute a value, each arm writes one register, as Mesa's pco does, so no
-   select follows the `if`. It adds gl_test 192 `predlive`. The full gate
-   is clean (96 ok, 0 failed, 0 gaps). Board results on `81c53c61`: AM62P
-   gl_test 48 / 48, case 39 and cases 186 + 187 pass, i.MX8MP gl_test
-   unchanged (first failure case 16). What is left of its board run is
-   Slint and cluster on the AM62P; they wait for a Rust nightly with
-   rust-src and the Slint no_std workspace on the build host.
-2. **Branch or predicate: choose by the never-run arm's size.** A
+1. **Branch or predicate: choose by the never-run arm's size.** A
    predicated-off group costs time (gl_test 193, above). Per added group per
    frame: run-time compiler +0.107 ms at N = 8, +0.149 ms at N = 32,
    +0.286 ms at N = 128; table +0.145, +0.181, +0.288 ms. An executed group
@@ -91,7 +78,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    never-run arm is large enough. Open: a finer N series to characterise the
    rise per group; the cost of a branch, so that the compiler can choose by
    arm size. Where the crossover lies is not known.
-3. **Compile shaders at build time with our own compiler.** Shaders known
+2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
@@ -99,7 +86,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
    offline and remote go away.
-4. **Design clean-up**:
+3. **Design clean-up**:
    - `DESIGN.md` and `docs/` describe the current design, not its history.
    - About 50 debug and experiment globals in product code are removed or
      moved out.
@@ -107,7 +94,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    - The bare-metal claim is made true, or it is removed.
    - The `SAFEUI_*` and `powervr-bxs` names are removed.
    - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
-5. **Known defects.** Each has a GitHub issue; what remains is the fixes:
+4. **Known defects.** Each has a GitHub issue; what remains is the fixes:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found) (#9);
    - i.MX8MP case 16 (4x MSAA) fails (#8);

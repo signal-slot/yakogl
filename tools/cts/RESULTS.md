@@ -16498,3 +16498,38 @@ not move (224-225 us). The open question for the compiler: predicating both
 arms as pco does (`afa12e9b`) loses to a branch once the never-run arm is
 large enough; where the crossover lies needs the cost of a branch, not yet
 measured.
+
+## AM62P: Slint and cluster after the join removal (origin/main `7dada1ff`, 2026-10-05)
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, images built
+from `7dada1ff` (code identical to `7ae9e764` for these samples), samples
+`driver/samples/zephyr/slint` and `driver/samples/zephyr/cluster`. Records in
+`records/am62p/` of the main checkout (gitignored). This completes the board run
+of the join removal (`81c53c61`) that the gl_test, case 39 and 186 + 187 rows
+above began.
+
+| sample | record | verdict line |
+|---|---|---|
+| slint | `20261005-2251-slint-7dada1ff-82cb9e17` | `board.sh am62p slint-7dada1ff rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:PROBES resets=0 record=594b0601,08420862,00210842,c5920883 back_after=128s` |
+| cluster | `20261005-2254-cluster-7dada1ff-8ad4f9ab` | `board.sh am62p cluster-7dada1ff rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:PROBES resets=0 record=594b0601,008510c4,19050085,110c6d5f back_after=180s` |
+
+Decoded, Slint: `PROBES (6) tag 1: status pass p0 0862 p1 0842 p2 0842 p3 0021 p4 0883 crc16 c592 (RGB565)`;
+`FINGERPRINT (15) seq 8: window crc32 0x3b10b032 frames 2 size 1024x600`;
+console `slint: animation: 705 frames in 10007 ms`.
+
+Decoded, cluster: `PROBES (6) tag 1: status pass p0 10c4 p1 0085 p2 0085 p3 1905 p4 6d5f crc16 110c (RGB565)`;
+`APP (2) seq 9: stage 7 status 1 (pass) frames 5508 app 0x0000ea74`; console
+
+    cluster: animation: 5508 frames presented in 60020 ms, 91.7 fps; ms mean / worst: draw 10.0 / 23.9 wait 0.7 / 2.0 show 0.0 / 0.0 swap 0.0 / 8.0 frame 10.8 / 24.1
+    cluster: throughput: 1024x600: 5508 frames in 60020 ms, 91.8 fps, 56.4 Mpx/s; draw 10.0 ms mean, 16.28 ms/Mpx
+
+On `39bd6983` the cluster read 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx.
+
+Build host: the Slint no_std workspace was recreated per
+`driver/samples/zephyr/slint/nostd/README.md` (Slint `1007c032c` + patch,
+femtovg 0.26.0 and glow 0.18.0 from crates.io + patches, all hunks clean) with
+Rust nightly 1.101.0 (2026-10-04) with rust-src. Two host-side build problems
+were found, being fixed on branch `work/build-robustness` (not landed):
+`capi/assemble.cmake` fails when the copied Rust archive is read-only (a
+rustc-wrapper cache); and the cluster's `host/check_ui.py` does not find the
+generated file under cargo's new `build/<crate>/<hash>/` layout.
