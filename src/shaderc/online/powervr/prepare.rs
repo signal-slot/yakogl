@@ -1053,10 +1053,29 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
             bump(*v, def, seen);
         }
     }
+    /* The fixed temporaries a group writes. A fragment shader's iterated
+     * inputs reach this pass in the temporaries the iteration pins them to
+     * (chain.rs rewrites them before), which no group writes: those hold
+     * one value all program long, as a uniform does, and a product of one
+     * (fill_color's `ftcoord.x * 2.0 - 1.0`) fuses as pco's does. */
+    let mut written = [0u64; 4];
+    for g in sel.groups {
+        if let Some(SelDst::Fixed { bank: Bank::Temp, reg }) = g.dst {
+            /* a group that writes more than its register: every one past it */
+            let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+            for r in reg..reg.saturating_add(width) {
+                if let Some(w) = written.get_mut(usize::from(r / 64)) {
+                    *w |= 1 << (r % 64);
+                }
+            }
+        }
+    }
+    let unwritten = |r: u16| written.get(usize::from(r / 64)).is_some_and(|w| w & (1 << (r % 64)) == 0);
     let seen: &[u8] = seen;
     let once = |v: VReg, shift: u8| seen.get(v.0 as usize).is_some_and(|c| (c >> shift) & 3 == 1);
     let steady = |s: &SelSrc| match s {
         SelSrc::Virtual { v, .. } => once(*v, def),
+        SelSrc::Fixed { bank: Bank::Temp, reg, .. } => unwritten(*reg),
         SelSrc::Fixed { bank, .. } => matches!(bank, Bank::Shared | Bank::Special | Bank::VtxIn),
         SelSrc::Imm(_) => true,
     };
@@ -1391,6 +1410,51 @@ mod tests {
         let straight = groups.iter().all(|g| !matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd));
         let same = straight && eval(f.groups, f.outputs) == eval(groups, &outputs);
         (f.groups.to_vec(), n, same)
+    }
+
+    /// A product of a fixed temporary fuses with its sum when no group
+    /// writes that temporary (a fragment shader's pinned iterated input:
+    /// fill_color's `ftcoord.x * 2.0 - 1.0`, gl_test 191), and stays a
+    /// product when one does: the fmad would read the temporary where the
+    /// sum is, after the write. (No corpus program reads a written fixed
+    /// temporary in a product -- sample results are moved to values first
+    /// -- so this case is the only one that sees the second side.)
+    #[test]
+    fn a_product_of_a_fixed_temporary_fuses_only_when_nothing_writes_it() {
+        let t = |r: u16| fixed(Bank::Temp, r, NONE);
+        let k = Some(SelSrc::Imm(2.0f32.to_bits()));
+        let mul = g(SelOp::Alu(AluOp::Fmul), 1, [Some(t(4)), k, None]);
+        let add = g(SelOp::Alu(AluOp::Fadd), 2, [Some(virt(1, NONE)), Some(fixed(Bank::Shared, 0, NONE)), None]);
+        let outputs = [(IoSlot::Position, [Some(virt(2, NONE)), None, None, None])];
+        /* the pairs `prepare_fused` would apply (the evaluator `fused` uses
+         * models no fixed temporary) */
+        let pairs = |groups: &[SelGroup]| -> Vec<SelOp> {
+            let sel = Selected { groups, vregs: 16, outputs: &outputs, inputs: &[], discard: None, alpha_to_one: None };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let arena = Arena::new(&mut buf);
+            fusion_pairs(&sel, &arena).expect("pairs").iter().map(|q| q.2.op).collect()
+        };
+        assert_eq!(pairs(&[mul, add]), [SelOp::Alu(AluOp::Ffma)], "t4 is written by nothing");
+        /* t4 written between the product and the sum: fusing would read
+         * the new t4 */
+        let write = |op: SelOp, reg: u16| SelGroup {
+            op,
+            ty: OpType::F32,
+            dst: Some(SelDst::Fixed { bank: Bank::Temp, reg }),
+            srcs: [Some(fixed(Bank::Shared, 1, NONE)), None, None],
+        };
+        assert_eq!(pairs(&[mul, write(SelOp::Copy, 4), add]), [], "t4 is written");
+        /* a sample writes four from its destination: t4 among t2..t5 */
+        let sample = SelOp::Sample {
+            binding: 0,
+            proj: false,
+            lod: super::super::sel::SmpLod::Implicit,
+            fetch: false,
+            offset: None,
+            cube: false,
+        };
+        assert_eq!(pairs(&[mul, write(sample, 2), add]), [], "t4 is written by the sample");
+        assert_eq!(pairs(&[mul, write(sample, 5), add]), [SelOp::Alu(AluOp::Ffma)], "t5..t8: t4 is not");
     }
 
     fn marker(m: super::super::sel::PredArm) -> SelGroup {

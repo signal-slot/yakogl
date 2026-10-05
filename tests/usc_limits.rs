@@ -3524,6 +3524,66 @@ fn gl_test_case_190_blend_factors_once_on_the_host() {
     .unwrap();
 }
 
+/// gl_test case 191's fragment shader, on the host, from gl_test.c's text:
+/// each product of the varying and the sum that alone reads it are one
+/// `fmad` (the varying is in its pinned temporary, which no group writes),
+/// as in pco's program, and the colour is the case's
+/// (0.5, 0.5, 0.625, 1) with v = (0.75, 0.5, 0, 0).
+#[test]
+fn gl_test_case_191_varying_products_fuse_on_the_host() {
+    use yakogl::shaderc::*;
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    let (_, t) = suite.split_once("static const char varyfma_fs_src[] =").expect("case 191's shader");
+    let src = t.split_once(";\n").unwrap().0.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n");
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let want = rgba([0.5, 0.5, 0.625, 1.0]);
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(&src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+            &l.module,
+            &l.reflection,
+            a,
+            SHC_BLEND_KEY_REPLACE,
+        )
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut listing = String::new();
+        yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+            yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let ops = |op: &str| listing.matches(&format!("phase0 {op}\n")).count();
+        /* the colour's clamps to [0, 1] for the RGBA8 target are `fadd.sat
+         * x, 0`, one per channel: the sums are the others */
+        let clamps = listing.matches("instr: fadd [1B] sat=1").count();
+        assert_eq!(
+            (ops("fmad"), ops("fmul"), ops("fadd") - clamps, clamps),
+            (3, 0, 0, 4),
+            "three fused products, four clamps\n{listing}"
+        );
+        let mut inp = sentinel_inputs(1.0e30);
+        let mut at = 4usize;
+        for v in &rec.varyings[..rec.num_varyings as usize] {
+            for (c, x) in [0.75f32, 0.5, 0.0, 0.0].iter().enumerate().take(v.components as usize) {
+                inp.coeff[at + 4 * c] = x.to_bits();
+                inp.coeff[at + 4 * c + 2] = x.to_bits();
+            }
+            at += 4 * v.components as usize;
+        }
+        let out = run_binary(&image, &inp, true).expect("runs");
+        let got = *out.get(&0).expect("a colour");
+        let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
+        assert!(close, "{got:#010x}, case 191 wants {want:#010x}\n{listing}");
+    })
+    .unwrap();
+}
+
 /// gl_test case 91's two blends, on the host: the case's own fragment
 /// shader (es100/hdrcolor.frag) with u_color = (0.5, 1.5,
 /// 0, 0.5), built as the RGBA16F variant the GL core asks for (the target's
