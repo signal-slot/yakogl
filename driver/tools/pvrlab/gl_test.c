@@ -433,6 +433,14 @@
  *               read back. A measurement (like 39): the arms decide whether
  *               the online fill_color's 56 back-to-back pairs (the table's
  *               48) are worth a scheduler. All three GPUs; not in the set
+ * 185 kindcost  the PowerVR's cost per instruction group by kind, the next
+ *               fill_color measurement after 184: arms of one kind each at
+ *               fixed counts (host count in the case's comment): fmul,
+ *               fmul + tst/movc pairs, fmul + mbyp moves, tst/movc + mbyp,
+ *               fadd, and fmad with femtovg's blend (the ordered tail). 16
+ *               full-screen quads into 1024x600 per arm, 3D busy logged,
+ *               the colour read back. A measurement (like 39 and 184); all
+ *               three GPUs, not in the set
  * 183 unipad    500 draws of a program whose two stages each read a vec2
  *               uniform (femtovg's viewSize; the constant file's last register
  *               half empty), timed: under 250 ms, and the colour read back.
@@ -661,7 +669,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 182 || c == 183 || c == 184)
+	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185)
 		return "its own sources: a table build has no rows for them";
 #endif
 	(void)c; /* the default set's reason ignores it */
@@ -7696,7 +7704,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15611,6 +15619,131 @@ static int case_depchain(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 185: what a group costs by kind (kindcost) ---------------------
+ *
+ * After 184 (the cost scales with the group count, a dependency at
+ * distance 1 is not stalled: 811, 821, 821 us of 3D busy per group per
+ * frame), the next question for the fill_color gap: does a group's cost
+ * depend on its kind? Each arm repeats one shape, every chain held at 0.5
+ * by its uniforms so the colour reads about 0x80:
+ *   0 fmul       x = x * u_b; x = x * u_c (u_b 2, u_c 0.5): fmul groups
+ *   1 maxmul     x = max(x * u_b, u_c) (0.5, 0.5): fmul + mbyp/mbyp/tst/movc
+ *   2 mulneg     x = -x * u_b (u_b 1): fmul, and an mbyp for the negation
+ *   3 maxneg     x = max(-x, u_c) (0.5): mbyp/mbyp/tst/movc and an mbyp
+ *   4 fadd       x = x + u_c; x = x - u_d (equal): fadd groups
+ *   5 fmad blend 184's one chain with femtovg's blend (ONE,
+ *                ONE_MINUS_SRC_ALPHA): its ordered tail against arm 6
+ *   6 fmad       184's one chain, blend off
+ * Host counts, online PowerVR compile of these texts, are in the commit
+ * that adds the case. Per arm: 16 full-screen quads into 1024x600, five
+ * timed frames, 3D busy logged as 184 logs it.
+ * ------------------------------------------------------------------------- */
+#define KC_X2(s) s s
+#define KC_X24(s) DEP_X4(DEP_X4(s)) DEP_X4(KC_X2(s))
+#define KC_HEAD                                       \
+	"#version 100\n"                              \
+	"precision highp float;\n"                    \
+	"uniform float u_a, u_b, u_c, u_d;\n"         \
+	"void main() {\n"                             \
+	"  float x = u_a;\n"
+#define KC_TAIL "  gl_FragColor = vec4(x, x, x, 1.0);\n}\n"
+static const char kc_fmul_fs_src[] = KC_HEAD KC_X24("  x = x * u_b;\n  x = x * u_c;\n") KC_TAIL;
+static const char kc_maxmul_fs_src[] = KC_HEAD KC_X24("  x = max(x * u_b, u_c);\n") KC_TAIL;
+static const char kc_mulneg_fs_src[] = KC_HEAD KC_X24("  x = -x * u_b;\n  x = -x * u_b;\n") KC_TAIL;
+static const char kc_maxneg_fs_src[] = KC_HEAD KC_X24("  x = max(-x, u_c);\n  x = max(-x, u_c);\n") KC_TAIL;
+static const char kc_fadd_fs_src[] = KC_HEAD KC_X24("  x = x + u_c;\n  x = x - u_d;\n") KC_TAIL;
+
+static int case_kindcost(void)
+{
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5, ARMS = 7 };
+	static float quads[OVER * 12];
+	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
+	static const struct {
+		const char *name, *fs;
+		float u[4]; /* u_a, u_b, u_c, u_d */
+		bool blend;
+	} arm[ARMS] = {
+		{ "fmul", kc_fmul_fs_src, { 0.5f, 2.0f, 0.5f, 0.0f }, false },
+		{ "maxmul (fmul + tst/movc)", kc_maxmul_fs_src, { 0.5f, 0.5f, 0.5f, 0.0f }, false },
+		{ "mulneg (fmul + mbyp)", kc_mulneg_fs_src, { 0.5f, 1.0f, 0.0f, 0.0f }, false },
+		{ "maxneg (tst/movc + mbyp)", kc_maxneg_fs_src, { 0.5f, 0.0f, 0.5f, 0.0f }, false },
+		{ "fadd", kc_fadd_fs_src, { 0.5f, 0.0f, 0.25f, 0.25f }, false },
+		{ "fmad, femtovg's blend", dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, true },
+		{ "fmad, blend off", dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, false },
+	};
+	static const char *const uname[4] = { "u_a", "u_b", "u_c", "u_d" };
+	GLuint tex, fbo, vbo;
+	bool ok = true;
+
+	for (int i = 0; i < OVER * 12; i++)
+		quads[i] = quad[i % 12];
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: kindcost: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, W, H);
+	glDisable(GL_DEPTH_TEST);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	vbo = upload_vbo(quads, sizeof(quads));
+	for (int a = 0; a < ARMS; a++) {
+		GLuint prog = link_program(dep_vs_src, arm[a].fs);
+		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
+		uint8_t px[4];
+		GLint pos;
+
+		if (!prog)
+			return -1;
+		pos = glGetAttribLocation(prog, "a_pos");
+		if (pos < 0)
+			return -1;
+		glUseProgram(prog);
+		/* a uniform an arm does not read has location -1, which glUniform ignores */
+		for (int k = 0; k < 4; k++)
+			glUniform1f(glGetUniformLocation(prog, uname[k]), arm[a].u[k]);
+		if (arm[a].blend)
+			glEnable(GL_BLEND);
+		else
+			glDisable(GL_BLEND);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glVertexAttribPointer((GLuint)pos, 2, GL_FLOAT, GL_FALSE, 0, (const void *)0);
+		glEnableVertexAttribArray((GLuint)pos);
+		for (int r = 0; r < REPS + 1; r++) {
+			/* black, alpha 0: the blend arm's ONE_MINUS_SRC_ALPHA leaves the
+			 * opaque source as it is, so every arm reads its chain's 0.5 */
+			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			if (r == 1)
+				gl_test_perf_read(pc0);
+			t0 = now_ms();
+			glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+			glFinish();
+			if (r != 0 && now_ms() - t0 < best)
+				best = now_ms() - t0;
+		}
+		gl_test_perf_read(pc1);
+		glDisableVertexAttribArray((GLuint)pos);
+		pr_info("gl_test: kindcost %d: %s: best %u ms; per frame 3D busy %u us, TA busy %u us\n", a, arm[a].name,
+			best, (pc1[1] - pc0[1]) / 800u / REPS, (pc1[0] - pc0[0]) / 800u / REPS);
+		glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		ok &= expect_int("the colour is the chain's 0.5 (0x7f..0x81)", px[0] >= 0x7f && px[0] <= 0x81, 1);
+		glDeleteProgram(prog);
+	}
+	glDisable(GL_BLEND);
+	if (!check_gl_error("kindcost"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -18619,6 +18752,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 182: rc = case_fsat(); break;
 	case 183: rc = case_unipad(); break;
 	case 184: rc = case_depchain(); break;
+	case 185: rc = case_kindcost(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
