@@ -425,6 +425,14 @@
  *               shader, from uniforms, through * 0.5 + 0.25 so a missing
  *               saturate shows past the RGBA8 write's own clamp, read back.
  *               All three GPUs (skipped by name in a table build); in the set
+ * 184 depchain  the PowerVR's cost of a back-to-back dependency: 48 fmads as one
+ *               dependent chain, as two interleaved chains and as four (the
+ *               online compile keeps the order: 49, 48 and 49 groups at
+ *               dependency distance 1, 2 and 4), 16 full-screen quads into
+ *               a 1024x600 target each, 3D busy logged per arm, the colour
+ *               read back. A measurement (like 39): the arms decide whether
+ *               the online fill_color's 56 back-to-back pairs (the table's
+ *               48) are worth a scheduler. All three GPUs; not in the set
  * 183 unipad    500 draws of a program whose two stages each read a vec2
  *               uniform (femtovg's viewSize; the constant file's last register
  *               half empty), timed: under 250 ms, and the colour read back.
@@ -653,7 +661,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 182 || c == 183)
+	if (c == 181 || c == 182 || c == 183 || c == 184)
 		return "its own sources: a table build has no rows for them";
 #endif
 	(void)c; /* the default set's reason ignores it */
@@ -7688,7 +7696,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15492,6 +15500,117 @@ static int case_unipad(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 184: what a back-to-back dependency costs (depchain) ----------
+ *
+ * 48 `x = x * u_b + u_c` steps, written as one chain (each step reads the
+ * one before), as two chains interleaved (x, y, x, y: each step reads the
+ * one two before) and as four (x, y, z, w). The online compile keeps the
+ * order (host count of these texts: 49, 48 and 49 groups at
+ * nearest-producer distance 1, 2 and 4; 58, 61 and 66 groups, 48 fmads
+ * each; 9, 10 and 12 temps). Each arm draws 16
+ * full-screen quads into a 1024x600 target, blend off, five timed frames,
+ * and logs its 3D busy time. If the one chain costs more per group than the
+ * interleaved ones, the USC stalls on a dependency at distance 1 and a
+ * scheduler is worth writing (the online fill_color has 56 such pairs, the
+ * table's 48); if not, the gap is elsewhere. Values: u_a = u_b = 0.5, u_c =
+ * 0.25, so every chain tends to 0.5 and the colour reads about 0x80.
+ * ------------------------------------------------------------------------- */
+#define DEP_STEP(v) "  " v " = " v " * u_b + u_c;\n"
+#define DEP_X4(s) s s s s
+#define DEP1_12 DEP_X4(DEP_STEP("x")) DEP_X4(DEP_STEP("x")) DEP_X4(DEP_STEP("x"))
+#define DEP2_STEP DEP_STEP("x") DEP_STEP("y")
+#define DEP2_12 DEP_X4(DEP2_STEP) DEP_X4(DEP2_STEP) DEP_X4(DEP2_STEP)
+#define DEP4_STEP DEP_STEP("x") DEP_STEP("y") DEP_STEP("z") DEP_STEP("w")
+#define DEP_HEAD                                     \
+	"#version 100\n"                             \
+	"precision highp float;\n"                   \
+	"uniform float u_a, u_b, u_c;\n"             \
+	"void main() {\n"
+static const char dep1_fs_src[] = DEP_HEAD "  float x = u_a;\n" DEP1_12 DEP1_12 DEP1_12 DEP1_12
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n}\n";
+static const char dep2_fs_src[] = DEP_HEAD "  float x = u_a;\n  float y = u_a + u_c;\n" DEP2_12 DEP2_12
+	"  float r = (x + y) * 0.5;\n  gl_FragColor = vec4(r, r, r, 1.0);\n}\n";
+static const char dep4_fs_src[] = DEP_HEAD
+	"  float x = u_a;\n  float y = u_a + u_c;\n  float z = u_a - u_c;\n  float w = u_a * u_b;\n"
+	DEP_X4(DEP4_STEP) DEP_X4(DEP4_STEP) DEP_X4(DEP4_STEP)
+	"  float r = (x + y + z + w) * 0.25;\n  gl_FragColor = vec4(r, r, r, 1.0);\n}\n";
+static const char dep_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+
+static int case_depchain(void)
+{
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5 };
+	static float quads[OVER * 12];
+	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
+	const char *const fs[3] = { dep1_fs_src, dep2_fs_src, dep4_fs_src };
+	const char *const name[3] = { "one chain (distance 1)", "two chains (distance 2)", "four chains (distance 4)" };
+	GLuint tex, fbo, vbo;
+	bool ok = true;
+
+	for (int i = 0; i < OVER * 12; i++)
+		quads[i] = quad[i % 12];
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: depchain: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, W, H);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	vbo = upload_vbo(quads, sizeof(quads));
+	for (int a = 0; a < 3; a++) {
+		GLuint prog = link_program(dep_vs_src, fs[a]);
+		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
+		uint8_t px[4];
+		GLint pos;
+
+		if (!prog)
+			return -1;
+		pos = glGetAttribLocation(prog, "a_pos");
+		if (pos < 0)
+			return -1;
+		glUseProgram(prog);
+		glUniform1f(glGetUniformLocation(prog, "u_a"), 0.5f);
+		glUniform1f(glGetUniformLocation(prog, "u_b"), 0.5f);
+		glUniform1f(glGetUniformLocation(prog, "u_c"), 0.25f);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glVertexAttribPointer((GLuint)pos, 2, GL_FLOAT, GL_FALSE, 0, (const void *)0);
+		glEnableVertexAttribArray((GLuint)pos);
+		for (int r = 0; r < REPS + 1; r++) {
+			glClear(GL_COLOR_BUFFER_BIT);
+			if (r == 1)
+				gl_test_perf_read(pc0);
+			t0 = now_ms();
+			glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+			glFinish();
+			if (r != 0 && now_ms() - t0 < best)
+				best = now_ms() - t0;
+		}
+		gl_test_perf_read(pc1);
+		glDisableVertexAttribArray((GLuint)pos);
+		pr_info("gl_test: depchain %d: %s: best %u ms; per frame 3D busy %u us, TA busy %u us\n", a, name[a],
+			best, (pc1[1] - pc0[1]) / 800u / REPS, (pc1[0] - pc0[0]) / 800u / REPS);
+		glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		/* every chain ends at 0.5 to within a bit (0x80) */
+		ok &= expect_int("the colour is the chains' 0.5 (0x7f..0x81)", px[0] >= 0x7f && px[0] <= 0x81, 1);
+		glDeleteProgram(prog);
+	}
+	if (!check_gl_error("depchain"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -18493,6 +18612,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 181: rc = case_fusemad(); break;
 	case 182: rc = case_fsat(); break;
 	case 183: rc = case_unipad(); break;
+	case 184: rc = case_depchain(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
