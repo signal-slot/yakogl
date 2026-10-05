@@ -91,7 +91,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    (tools/README.md); the Mesa tables are host-test reference material
    (`tests/reference/`, `shaderc::mesa_reference`) that a product links only
    as a measurement image's table (`mesa-reference-table`, Kconfig
-   `YAKOGL_SHADERC_OFFLINE`); next, an image carries the precompiled table.
+   `YAKOGL_SHADERC_OFFLINE`); the compiler is the default back end in Kconfig
+   and CMake, and only `baremetal.mk` still takes the reference (its OSAL
+   lends the compiler no region); next, an image carries the precompiled
+   table.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

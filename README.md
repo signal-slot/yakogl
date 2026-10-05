@@ -64,8 +64,10 @@ the development history before this repository was published.
 
 Two back ends, chosen at build time:
 
-- **online**: our own `no_std` GLSL ES compiler running on the board
-  (`src/shaderc/online/`, feature `shaderc-online`).
+- **online** (the default everywhere but the bare-metal make build): our own
+  `no_std` GLSL ES compiler running on the board (`src/shaderc/online/`,
+  feature `shaderc-online`; Kconfig `YAKOGL_SHADERC_ONLINE`, CMake
+  `YAKOGL_SHADERC=online`).
 - **offline**: a table of shaders compiled on the host, looked up by the SHA-256 of
   the GLSL text (`src/shaderc/offline.rs`). Its only table today is the Mesa
   reference (`tests/reference/`, what Mesa's pco_shc / etna_shc made of
@@ -170,6 +172,7 @@ has the make variables in parentheses):
 | Option | Default | |
 |---|---|---|
 | `YAKOGL_OSAL` | `linux` (Zephyr and make: fixed, `zephyr` / `baremetal`) | the OSAL |
+| `YAKOGL_SHADERC` (Zephyr `CONFIG_YAKOGL_SHADERC_ONLINE` / `_OFFLINE`) | `online` (make: the Mesa reference, see `baremetal.mk`) | the shader back end: our compiler, or `offline`, the Mesa reference as the table (measurement images only) |
 | `YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) | `../src` | the driver repository's `src/` |
 | `YAKOGL_RUST_LINKAGE` (`RUST_LINKAGE`) | `staticlib` | `external`: C parts only (`libyakogl_c.a`), see "Linking" |
 | `YAKOGL_RUST_TARGET` (`RUST_TARGET`) | host / derived; Zephyr and make: `aarch64-unknown-none` | Rust target triple (64-bit only) |

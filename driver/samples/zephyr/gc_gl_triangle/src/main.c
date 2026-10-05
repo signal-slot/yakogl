@@ -140,18 +140,52 @@ static bool check_vertex_colours(void)
 	return ok;
 }
 
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+/* The in-process compiler (the default back end) compiles GLSL ES, so the
+ * sample hands it the ES 1.00 twins of the two shaders, byte for byte
+ * tools/shaders/gl_test_es100/passthrough.vert and interp_color.frag (the
+ * table's own texts are #version 450, which only Mesa compiled). A
+ * measurement image that links the Mesa reference as its table
+ * (CONFIG_YAKOGL_SHADERC_OFFLINE) takes the table's texts by name instead. */
+static const char es100_vs_src[] =
+	"#version 100\n"
+	"/* Passthrough VS: position + one colour varying. ES 1.00 twin of\n"
+	" * gl_test_passthrough_vs_src. Declaration order is the twin's location\n"
+	" * order (a_pos 0, a_color 1). */\n"
+	"attribute vec4 a_pos;\n"
+	"attribute vec4 a_color;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    gl_Position = a_pos;\n"
+	"    v_color = a_color;\n"
+	"}\n";
+
+static const char es100_fs_src[] =
+	"#version 100\n"
+	"/* Interpolated-colour FS: consumes the passthrough VS's v_color varying.\n"
+	" * ES 1.00 twin of gl_test_interp_fs_src. */\n"
+	"precision mediump float;\n"
+	"varying vec4 v_color;\n"
+	"void main() { gl_FragColor = v_color; }\n";
+#endif
+
 /* The offline shader table only accepts the GLSL it was built from, byte for
  * byte; the library hands the text out by name (passthrough.vert: position and
  * colour through, interp_color.frag: the interpolated colour). */
 static GLuint build_program(void)
 {
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	const char *v = es100_vs_src;
+	const char *f = es100_fs_src;
+#else
 	const char *v = gles_offline_shader_source("passthrough.vert");
 	const char *f = gles_offline_shader_source("interp_color.frag");
+#endif
 	GLuint vs, fs, prog;
 	GLint ok = 0;
 
 	if (!v || !f) {
-		LOG_ERR("shader sources missing from the offline table");
+		LOG_ERR("shader sources missing from the Mesa reference table");
 		return 0;
 	}
 	vs = glCreateShader(GL_VERTEX_SHADER);

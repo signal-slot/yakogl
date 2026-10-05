@@ -25,10 +25,14 @@
 # Needs: cargo and the Rust target (rustup target add aarch64-unknown-none),
 # or a nightly toolchain with rust-src and BUILD_STD=1; cmake (for
 # capi/assemble.cmake); objcopy/nm for the target (the cross binutils or llvm).
-# Shaders: the bare-metal build has no in-process compiler yet, so its shader
-# table is the Mesa reference (the crate's `mesa-reference-table`), a
-# measurement-only stand-in until the table our own compiler precompiles
-# (tools/precompile) replaces it.
+# Shaders: this build still links the Mesa reference as its table (the
+# crate's `mesa-reference-table`), explicitly, unlike every other build. The
+# in-process compiler is not wired here yet: the bare-metal OSAL lends it no
+# scratch or keep region (Zephyr's comes from
+# src/osal/zephyr_shaderc_scratch.c, 4 MiB + 1 MiB), and it needs 256 KiB of
+# stack on the thread that compiles, which is the application's here. Moving
+# it (or onto the precompiled table, tools/precompile) is open
+# (docs/HANDOFF.md, open work item 2).
 # Output: $(BUILD)/libyakogl.a, or with RUST_LINKAGE=external only
 # $(BUILD)/libyakogl_c.a (the C parts; the application's own Rust staticlib
 # links the yakogl crate, README.md "Linking").

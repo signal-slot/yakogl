@@ -348,7 +348,7 @@ config YAKOGL_V3D_CARVEOUT_TOP_BELOW
 
 choice YAKOGL_SHADERC
 	prompt "shader back end"
-	default YAKOGL_SHADERC_OFFLINE
+	default YAKOGL_SHADERC_ONLINE
 	help
 	  Where a shader's machine code comes from. The GL core asks the back
 	  end named here; only one is in a build.
@@ -360,8 +360,8 @@ config YAKOGL_SHADERC_OFFLINE
 	  or vivante_blobs.rs: what Mesa's pco_shc / etna_shc made of the
 	  source list), linked as the image's shader table: glShaderSource
 	  text is matched by SHA-256 against it. It exists for A/B images
-	  against the in-process compiler (gl_test 193..195's "table image")
-	  and for the samples not yet moved to the compiler; it selects the
+	  against the in-process compiler (gl_test 193..195's "table image");
+	  it selects the
 	  crate's `mesa-reference-table`, which no other build links. It will
 	  be replaced by the table our own compiler precompiles at build time
 	  (tools/precompile). An application whose shader is not in the table
@@ -374,8 +374,8 @@ config YAKOGL_SHADERC_OFFLINE
 config YAKOGL_SHADERC_ONLINE
 	bool "in-process compiler"
 	help
-	  Compile the shader on the target, from the GLSL ES 1.00 text the
-	  application passes to glShaderSource, with no table and no host.
+	  The default. Compile the shader on the target, from the GLSL ES text
+	  the application passes to glShaderSource, with no table and no host.
 
 	  This links no table at all (no `mesa-reference-table`; the crate's
 	  `no-shader-table` as well), which is the point: an image carrying a
