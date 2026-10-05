@@ -433,6 +433,11 @@
  *               read back. A measurement (like 39): the arms decide whether
  *               the online fill_color's 56 back-to-back pairs (the table's
  *               48) are worth a scheduler. All three GPUs; not in the set
+ * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
+ *               table predicates the two arms (32 and 22 groups) and ours
+ *               computes both; the table should cost about 10 groups more
+ *               than at radius 0, ours the same. A measurement; all three
+ *               GPUs, not in the set
  * 186 fcsplit   case 39's fill_color split by feature: fill_color and its twin
  *               without the discard (femtovg/fill_color.nodiscard.frag),
  *               each with femtovg's blend and with blend off, 16 full-screen
@@ -7712,7 +7717,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15770,7 +15775,10 @@ static int case_kindcost(void)
  *   it stays about 1.2 in all four: the common body (the next split is
  *   inside it).
  * ------------------------------------------------------------------------- */
-static int case_fcsplit(void)
+/* Case 186's body, with scissorRadius = `radius` (frag[12].w) and its log
+ * lines tagged `tag`: 0 takes fill_color's simpler scissor arm (case 39's),
+ * a positive radius the sdroundrect arm (case 187). */
+static int fcsplit_run(float radius, const char *tag)
 {
 	enum { W = 1024, H = 600, OVER = 16, REPS = 5, ARMS = 4 };
 	struct fvg_vertex { float xy[2]; float uv[2]; };
@@ -15804,6 +15812,7 @@ static int case_fcsplit(void)
 	frag[10 * 4 + 0] = 1.0f;
 	frag[10 * 4 + 1] = -1.0f;
 	frag[10 * 4 + 3] = 5.0f;
+	frag[12 * 4 + 3] = radius;
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -15811,7 +15820,7 @@ static int case_fcsplit(void)
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		pr_err("gl_test: fcsplit: FBO incomplete\n");
+		pr_err("gl_test: %s: FBO incomplete\n", tag);
 		return -1;
 	}
 	glViewport(0, 0, W, H);
@@ -15865,7 +15874,7 @@ static int case_fcsplit(void)
 		gl_test_perf_read(pc1);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
-		pr_info("gl_test: fcsplit %d: %s: best %u ms; per frame 3D busy %u us, TA busy %u us\n", a, arm[a].name,
+		pr_info("gl_test: %s %d: %s: best %u ms; per frame 3D busy %u us, TA busy %u us\n", tag, a, arm[a].name,
 			best, (pc1[1] - pc0[1]) / 800u / REPS, (pc1[0] - pc0[0]) / 800u / REPS);
 		glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
 		got[a] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 | (uint32_t)px[3] << 24;
@@ -15873,14 +15882,16 @@ static int case_fcsplit(void)
 		glDeleteShader(fs);
 	}
 	glDisable(GL_BLEND);
-	if (!check_gl_error("fcsplit"))
+	if (!check_gl_error(tag))
 		return -1;
-	pr_info("gl_test: fcsplit pixels: %08x %08x %08x %08x\n", got[0], got[1], got[2], got[3]);
+	pr_info("gl_test: %s pixels: %08x %08x %08x %08x\n", tag, got[0], got[1], got[2], got[3]);
 	/* the discard never fires, so each pair draws one picture; blend off
-	 * leaves innerCol's red, 0.3 (0x4c), and the blend stacks 16 of them */
+	 * leaves innerCol's red, 0.3 (0x4c), where the scissor mask is 1 (radius
+	 * 0; the sdroundrect arm scales it), and the blend stacks 16 of them */
 	ok &= expect_int("fill_color and its nodiscard twin agree, blended", got[0] == got[1], 1);
 	ok &= expect_int("fill_color and its nodiscard twin agree, blend off", got[2] == got[3], 1);
-	ok &= expect_int("blend off: innerCol's red (0x4b..0x4d)", (got[2] & 0xff) >= 0x4b && (got[2] & 0xff) <= 0x4d, 1);
+	if (radius == 0.0f)
+		ok &= expect_int("blend off: innerCol's red (0x4b..0x4d)", (got[2] & 0xff) >= 0x4b && (got[2] & 0xff) <= 0x4d, 1);
 	ok &= expect_int("the blend stacks the layers (red past blend off's)", (got[0] & 0xff) > (got[2] & 0xff), 1);
 	glDeleteShader(vs);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -15888,6 +15899,30 @@ static int case_fcsplit(void)
 	glDeleteTextures(1, &tex);
 	glDeleteBuffers(1, &vbo);
 	return ok ? 0 : -1;
+}
+
+static int case_fcsplit(void)
+{
+	return fcsplit_run(0.0f, "fcsplit");
+}
+
+/* ---- case 187: 186 with the other scissor arm (predarm) --------------------
+ *
+ * 186 found the table's fill_color groups about 30% cheaper than ours at an
+ * equal count (105 each, nodiscard + blend: 54854 against 77650 us). The
+ * table (pco_cf.c lower_if_pred_exec) runs scissorMask's
+ * `if (scissorRadius > 0.0)` as two predicated arms: groups 32..63 under
+ * if(!p0) (the sdroundrect arm, 32 groups) and 64..85 under if(p0) (the
+ * plain arm, 22) of the nodiscard + blend program; ours computes both arms and selects (89 unconditional
+ * groups). If a predicated-off group costs about nothing, the table runs
+ * about 73 groups of its 105 at radius 0, which is what 186 measured (74
+ * at our per-group cost). The same case with scissorRadius 4 takes the
+ * 32-group arm: the table should then cost about 10 groups more (about
+ * +7 ms on the nodiscard + blend arm), ours the same as at radius 0.
+ * ------------------------------------------------------------------------- */
+static int case_predarm(void)
+{
+	return fcsplit_run(4.0f, "predarm");
 }
 
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
@@ -18900,6 +18935,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 184: rc = case_depchain(); break;
 	case 185: rc = case_kindcost(); break;
 	case 186: rc = case_fcsplit(); break;
+	case 187: rc = case_predarm(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
