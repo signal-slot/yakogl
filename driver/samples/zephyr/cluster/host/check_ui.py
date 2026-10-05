@@ -68,7 +68,11 @@ def main():
             print("check_ui: a variant with no text sizes at all: the scan cannot be told from a blind one")
     want = sorted({int(s) for s in sizes})
 
-    outs = glob.glob(os.path.join(target, "*", "release", "build", "slint_cluster-*", "out", "zephyr-cluster.rs"))
+    # cargo puts a build script's output in build/<crate>-<hash>/out, or (cargo
+    # 1.101 nightly 2026-09-29 on) in build/<crate>/<hash>/out
+    build = os.path.join(target, "*", "release", "build")
+    outs = (glob.glob(os.path.join(build, "slint_cluster-*", "out", "zephyr-cluster.rs"))
+            + glob.glob(os.path.join(build, "slint_cluster", "*", "out", "zephyr-cluster.rs")))
     if not outs:
         print(f"check_ui: no generated zephyr-cluster.rs under {target}")
         return 1
