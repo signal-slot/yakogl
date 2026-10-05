@@ -476,6 +476,65 @@ pub(crate) fn holders(sh: &ShcShader) -> Option<u32> {
     record_of(sh).map(|p| unsafe { (*p).refs })
 }
 
+/// One record of the cache as the build-time precompiler reads it
+/// (`tools/precompile`): what a precompiled row carries besides the shader
+/// itself -- the cache key the record is found by, and the facts the compile
+/// read that are not in its source.
+///
+/// A copy, not the record: [`Compiled`] stays private. The references in it
+/// point into the record's keep extent, so they are good until its last
+/// holder releases it, as the shader's own pointers are.
+pub struct RecordView {
+    /// The cache key: the source's SHA-256 chained with the zeroed varyings,
+    /// the attribute map and the facts, the `if` lowering among them when it
+    /// is not the default ([`record_key`]).
+    pub key: [u8; 32],
+    pub stage: u32,
+    pub blend_key: u32,
+    /// The source, without its NUL.
+    pub source: &'static [u8],
+    /// `Compiled::w_constant`.
+    pub w_constant: bool,
+    /// `Compiled::lod_key`.
+    pub lod_key: LodKey,
+    /// `Compiled::if_lowering`.
+    pub if_lowering: IfLowering,
+    /// `Compiled::attrib_map`.
+    pub attrib_map: Option<&'static crate::shaderc::ShcAttribMap>,
+    /// The shader as this back end hands it out (`priv_` points at the record).
+    pub shader: ShcShader,
+    pub blocks: crate::shaderc::ShcBlocks,
+}
+
+/// Every record the cache indexes now, in slot order (not the order they
+/// were compiled in: a freed record's slot takes the last one).
+///
+/// For the precompiler, which drives the entry points as the GL core would
+/// and then reads back what they made. The cache indexes [`CACHE_SLOTS`]
+/// records at most; one that did not fit is counted in [`stats`] (the second
+/// value) and is not visited, so a caller that must see every record checks
+/// that count.
+pub fn each_record(mut f: impl FnMut(&RecordView)) {
+    // SAFETY: single-threaded by contract.
+    let c = unsafe { CACHE.get() };
+    for &p in c.slots[..c.used].iter().filter(|p| !p.is_null()) {
+        // SAFETY: an indexed record is live (release takes it out first).
+        let r = unsafe { &*p };
+        f(&RecordView {
+            key: r.sha,
+            stage: r.stage,
+            blend_key: r.blend_key,
+            source: r.source,
+            w_constant: r.w_constant,
+            lod_key: r.lod_key,
+            if_lowering: r.if_lowering,
+            attrib_map: r.attrib_map,
+            shader: r.shader,
+            blocks: r.blocks,
+        });
+    }
+}
+
 fn stage_name(stage: u32) -> &'static str {
     if stage == SHC_STAGE_VERTEX {
         "vertex"
@@ -793,7 +852,7 @@ fn variant_of(
 ///
 /// Blending and colour masks are lowered into the fragment shader on this GPU,
 /// so a blend state is a different binary from the same source — which is what
-/// the offline table's `BLENDS` list precompiles, one variant per state named
+/// the offline table's `blend` list precompiles, one variant per state named
 /// ahead of time whether a draw ever asks for it or not. Here there is no
 /// list: the source is still in the `keep` arena, so whatever key a draw
 /// actually asks for is compiled on demand and cached under that key.

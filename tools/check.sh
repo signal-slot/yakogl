@@ -819,6 +819,11 @@ if command -v python3 >/dev/null 2>&1; then
   # exercised against the committed table so that a parser which has drifted
   # from the emitted shape fails here rather than reporting "nothing changed".
   step "tools   shader-table generator guards" python3 tools/vivante/gen_shader_table.py --self-test
+  # The source list's gl_test programs (tools/shaders/precompiled.list, apps
+  # gl_test and gl_test_es100) are what gl_test.c links, read out of its text
+  # by glsl2v3d.py's reader: a case that links a new program and a list that
+  # was not told fail here, not as a miss on a board.
+  step "tools   precompiled.list gl_test pairs == what gl_test.c links" python3 tools/precompile/gl_test_pairs.py --check
   # The PowerVR driver's USC blobs (driver/src/pvr_usc_*_blob.h) are the
   # rendering of tools/pco_shc/usc_blobs.txt, the list of what Mesa's pco
   # made for each program, and src/pvr/blobs.rs carries the listed
@@ -958,6 +963,17 @@ step "clippy  yakogl-tools" cargo clippy -p yakogl-tools --all-targets
 # (6874c8ee) changed the GLSL prelude and three glsl::tests stayed red on main
 # under a clean gate.
 step "test    yakogl-tools" cargo test -p yakogl-tools
+# yakogl-precompile (tools/precompile), the build-time precompiler of the
+# source list: it links the library as an image does -- the in-process
+# compiler, no table, no `host-test` -- so no row above builds that
+# configuration with std around it. Lint it for every build it makes a table
+# for, and run its tests for both GPUs (the GC7000 one has the link-time
+# attribute layout; about 15 s and 1 s).
+for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
+  step "clippy  yakogl-precompile $f" cargo clippy -p yakogl-precompile --features "$f" --all-targets
+done
+step "test    yakogl-precompile gpu-powervr" cargo test -p yakogl-precompile --features gpu-powervr
+step "test    yakogl-precompile gpu-vivante" cargo test -p yakogl-precompile --features gpu-vivante
 # tools/board.sh, the one runner for the three boards (driver/docs/one-method.md
 # section 4), without a board: every verb on every board and backend under
 # --dry-run with ssh/scp/curl/ping/flock/stty/sudo stubbed (none may run), the
@@ -1076,6 +1092,46 @@ if [ "$QUICK" -eq 0 ]; then
     step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
+  fi
+fi
+
+# The precompiled tables (yakogl-precompile, tools/precompile/prove.sh): for
+# each build, the whole list's table made twice is the same bytes, each of
+# its rows is what the compiler makes for that row alone in a fresh cache,
+# its row and code-byte counts and those of two applications' sublists
+# (femtovg; gl_test's ES 1.00 build) are tests/fixtures/precompile_counts.txt's,
+# and it compiles against the library. Measured on a warm tree, the tool's
+# build for each feature set included: 51 s (PowerVR), 164 s (GC7000), 35 s
+# and 5 s (their ES 2.0 builds), so not in --quick.
+#
+# Then the Mesa table from the same list: tools/glsl2usc.sh, which reads its
+# inputs and variants from tools/shaders/precompiled.list, regenerates
+# src/shaderc/blobs.rs byte for byte with the toolchain the table records
+# (PCO_SHC; GLSLANG; GLSL2USC_CACHE keeps a rerun at about 3.5 minutes).
+# Without PCO_SHC the row is a gap: the list's PowerVR half was not shown to
+# be the committed table's.
+mesa_table_repro() {
+  local out=build/mesa-repro/blobs.rs log=build/mesa-repro/glsl2usc.log
+  mkdir -p build/mesa-repro && rm -f "$out"
+  if ! env -u GLSL2USC_NEW_REFERENCE GLSL2USC_OUT="$PWD/$out" tools/glsl2usc.sh >"$log" 2>&1; then
+    tail -20 "$log"
+    return 1
+  fi
+  cmp "$out" src/shaderc/blobs.rs || {
+    echo "the table glsl2usc.sh makes from precompiled.list is not src/shaderc/blobs.rs (log: $log)"
+    return 1
+  }
+  echo "$(grep -c '^    ShcBlob {$' "$out") rows, byte for byte"
+}
+if [ "$QUICK" -eq 0 ]; then
+  for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
+    step "gen     precompiled table $f: deterministic, rows == fresh compiles, counts pinned, compiles" \
+      tools/precompile/prove.sh "$f"
+  done
+  if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
+    step "gen     src/shaderc/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
+  else
+    gap "src/shaderc/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
   fi
 fi
 

@@ -19,6 +19,7 @@ members = [
     "driver/samples/zephyr/cluster/check",
     "driver/samples/zephyr/triangle/check",
     "tools/yakogl-tools",
+    "tools/precompile",
 ]
 default-members = ["."]
 resolver = "2"

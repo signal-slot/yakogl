@@ -457,6 +457,13 @@ name = "yakogl-drivers"
 version = "0.1.0"
 
 [[package]]
+name = "yakogl-precompile"
+version = "0.1.0"
+dependencies = [
+ "yakogl",
+]
+
+[[package]]
 name = "yakogl-slint-check"
 version = "0.1.0"
 

@@ -211,8 +211,9 @@ task list, `glGetError`/`glGetString`/`glGetIntegerv`, and the full draw path
   twiddled block layout (`docs/gpu-recipes/mesa_texture_layout.md`); one
   level per texture, no PVRTC (its TPU format is not documented in Mesa).
 - Blend states and partial colour masks are limited to what `glsl2usc.sh`
-  precompiled (`BLENDS`, `SPEC[:MASK]`); CONSTANT_* factors work when their
-  variant exists (`const_color,inv_const_color` is in the default list).
+  precompiled (the `blend` lines of `tools/shaders/precompiled.list`,
+  `SPEC[:MASK]`); CONSTANT_* factors work when their variant exists
+  (`const_color,inv_const_color` is in the default list).
 - Attribute arrays with a packed type (BYTE/UNSIGNED_BYTE/SHORT/UNSIGNED_SHORT,
   normalised or not), or narrower than the shader input (a vec3 array for a
   vec4 input reads w = 1 as GL specifies), are converted to float32 of the

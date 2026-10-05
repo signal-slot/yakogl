@@ -22,6 +22,7 @@
 use crate::emit;
 use crate::es100;
 use crate::glsl::{self, exit, GlNames, Uniform, NO_BLOCK};
+use crate::list::{self, SpecError, COLORMASK_BITS};
 use crate::py::{self, g, pint, re};
 use crate::{Error, R};
 use sha2::{Digest, Sha256};
@@ -35,44 +36,22 @@ pub const SHC_NO_META: i64 = abi::SHC_NO_META as i64;
 /// Image 4 + image meta 4 + sampler 4 + sampler meta 4 + gather 4.
 const COMBINED_IMG_SMP_DWORDS: i64 = 20;
 
-/// Blend factor codes (Mesa pipe_blendfactor == enum shc_blend_factor).
-const BLEND_FACTORS: &[(&str, u32)] = &[
-    ("one", abi::SHC_BF_ONE),
-    ("src_color", abi::SHC_BF_SRC_COLOR),
-    ("src_alpha", abi::SHC_BF_SRC_ALPHA),
-    ("dst_alpha", abi::SHC_BF_DST_ALPHA),
-    ("dst_color", abi::SHC_BF_DST_COLOR),
-    ("src_alpha_saturate", abi::SHC_BF_SRC_ALPHA_SATURATE),
-    ("const_color", abi::SHC_BF_CONST_COLOR),
-    ("const_alpha", abi::SHC_BF_CONST_ALPHA),
-    ("zero", abi::SHC_BF_ZERO),
-    ("inv_src_color", abi::SHC_BF_INV_SRC_COLOR),
-    ("inv_src_alpha", abi::SHC_BF_INV_SRC_ALPHA),
-    ("inv_dst_alpha", abi::SHC_BF_INV_DST_ALPHA),
-    ("inv_dst_color", abi::SHC_BF_INV_DST_COLOR),
-    ("inv_const_color", abi::SHC_BF_INV_CONST_COLOR),
-    ("inv_const_alpha", abi::SHC_BF_INV_CONST_ALPHA),
-];
-const BLEND_FUNCS: &[(&str, u32)] = &[
-    ("add", abi::SHC_BLEND_ADD),
-    ("sub", abi::SHC_BLEND_SUBTRACT),
-    ("rsub", abi::SHC_BLEND_REVERSE_SUBTRACT),
-    ("min", abi::SHC_BLEND_MIN),
-    ("max", abi::SHC_BLEND_MAX),
-];
-const COLORMASK_BITS: &[(char, u32)] = &[('r', 1), ('g', 2), ('b', 4), ('a', 8)];
-/// Render-target classes a fragment shader can be compiled for (the colour
-/// output packed for the target's texel format, pco_shc PCO_SHC_OUT).
-const RT_CLASSES: &[(&str, u32)] = &[
-    ("", abi::SHC_RT_RGBA8),
-    ("rgba8", abi::SHC_RT_RGBA8),
-    ("f16x4", abi::SHC_RT_F16X4),
-    ("f16", abi::SHC_RT_F16),
-    ("f32", abi::SHC_RT_F32),
-];
+/* The variant spec syntax (FACTORS[:MASK][@RT]) is parsed by the source
+ * list's reader, tools/precompile/src/list.rs, so that the list's `blend`
+ * and `for` lines and this tool's --blend/--for read it one way; the
+ * wrappers below keep this tool's messages. */
 
-fn lookup(table: &[(&str, u32)], k: &str) -> Option<u32> {
-    table.iter().find(|(n, _)| *n == k).map(|(_, v)| *v)
+/// A spec error in this tool's words (pinned by `tests::blend_keys`).
+fn spec_error(spec: &str, e: SpecError) -> Error {
+    Error::Exit(match e {
+        SpecError::RtClass { rt } => {
+            format!("glsl2usc: --blend '{spec}': render target class '{rt}' is not one of {}", list::rt_class_names())
+        }
+        SpecError::Mask { mask } => format!("glsl2usc: --blend mask '{mask}': channels are r g b a"),
+        SpecError::TooFewFactors => "glsl2usc: --blend needs at least srgb,drgb".into(),
+        SpecError::Unknown(e) => format!("glsl2usc: unknown blend factor/equation {}", py::repr(&e)),
+        SpecError::PlainReplace => format!("glsl2usc: --blend {spec} is the plain replace the base shader already is"),
+    })
 }
 
 /// Where `pco_shc` has been found, in order. The first that EXISTS wins.
@@ -147,60 +126,17 @@ pub fn stage_of(path: &str) -> R<&'static str> {
 
 /// 'BLENDSPEC[@rt]' -> (blendspec, rt).
 pub fn split_rt(spec: &str) -> R<(&str, &str)> {
-    let (blend, rt) = py::partition(spec, "@");
-    if lookup(RT_CLASSES, rt).is_none() {
-        let names: Vec<&str> = RT_CLASSES.iter().map(|(n, _)| *n).filter(|n| !n.is_empty()).collect();
-        exit!("glsl2usc: --blend '{spec}': render target class '{rt}' is not one of {}", names.join(", "));
-    }
-    Ok((blend, rt))
+    list::split_rt(spec).map_err(|e| spec_error(spec, e))
 }
 
 /// 'FACTORS[:MASK][@rt]' -> (factors, mask bits).
 pub fn split_variant_spec(spec: &str) -> R<(String, u32)> {
-    let (spec, _) = split_rt(spec)?;
-    let (factors, mask) = py::partition(spec, ":");
-    let factors = if factors == "replace" { "one,zero" } else { factors };
-    let mut mask_bits = 0xf;
-    if !mask.is_empty() {
-        mask_bits = 0;
-        for ch in mask.chars() {
-            match COLORMASK_BITS.iter().find(|(c, _)| *c == ch) {
-                Some((_, b)) => mask_bits |= b,
-                None => exit!("glsl2usc: --blend mask '{mask}': channels are r g b a"),
-            }
-        }
-    }
-    Ok((factors.to_string(), mask_bits))
+    list::split_variant_spec(spec).map_err(|e| spec_error(spec, e))
 }
 
 /// Variant spec -> the blend key (SHC_BLEND_KEY | MASK_OFF | RT).
 pub fn blend_key(spec: &str) -> R<u32> {
-    let (factors, mask_bits) = split_variant_spec(spec)?;
-    let t: Vec<&str> = factors.split(',').collect();
-    if t.len() < 2 {
-        exit!("glsl2usc: --blend needs at least srgb,drgb");
-    }
-    let bf = |k: &str| lookup(BLEND_FACTORS, k).ok_or_else(|| k.to_string());
-    let bq = |k: &str| lookup(BLEND_FUNCS, k).ok_or_else(|| k.to_string());
-    let parsed = (|| -> Result<u32, String> {
-        let srgb = bf(t[0])?;
-        let drgb = bf(t[1])?;
-        let sa = if t.len() > 2 { bf(t[2])? } else { srgb };
-        let da = if t.len() > 3 { bf(t[3])? } else { drgb };
-        let eq = if t.len() > 4 { bq(t[4])? } else { abi::SHC_BLEND_ADD };
-        let eqa = if t.len() > 5 { bq(t[5])? } else { eq };
-        Ok(abi::shc_blend_key(srgb, drgb, sa, da, eq, eqa))
-    })();
-    let mut key = match parsed {
-        Ok(k) => k,
-        Err(e) => exit!("glsl2usc: unknown blend factor/equation {}", py::repr(&e)),
-    };
-    key |= abi::shc_blend_key_mask_off(!mask_bits & 0xf);
-    key |= abi::shc_blend_key_rt(lookup(RT_CLASSES, split_rt(spec)?.1).unwrap_or(0));
-    if key == abi::SHC_BLEND_KEY_REPLACE {
-        exit!("glsl2usc: --blend {spec} is the plain replace the base shader already is");
-    }
-    Ok(key)
+    list::blend_key(spec).map_err(|e| spec_error(spec, e))
 }
 
 /// The environment the compiler runs with for a variant (PCO_SHC_OUT,
@@ -1217,13 +1153,13 @@ fn pco_debug_for(scoped: &[(String, String)], path: &str) -> String {
 
 const USAGE: &str = "usage: yakogl-tools glsl2usc [-h] [-o OUTPUT] [--list] [--blend SPEC[:MASK]]
                              [--for GLOB=SPEC[;SPEC...]] [--pco-debug GLOB=FLAGS]
-                             [--skip-failures] inputs [inputs ...]";
+                             [--skip-failures] [--sources LIST] [inputs ...]";
 
 const HELP: &str = "
 GLSL-ES -> PowerVR USC blob table (src/shaderc/blobs.rs)
 
 positional arguments:
-  inputs                GLSL *.vert / *.frag files
+  inputs                GLSL *.vert / *.frag files (required without --sources)
 
 options:
   -h, --help            show this help message and exit
@@ -1249,6 +1185,10 @@ options:
   --skip-failures       a shader the compiler cannot build is reported and left
                         out of the table (glShaderSource fails for it at runtime)
                         instead of aborting; the skipped names are listed at the end
+  --sources LIST        read the inputs, --blend, --for and --skip-failures from
+                        LIST (tools/shaders/precompiled.list: its `src`, `blend`,
+                        `for` and `skip-failures` lines, paths relative to LIST's
+                        directory) before those given here
 ";
 
 struct Args {
@@ -1259,6 +1199,8 @@ struct Args {
     scoped: Vec<String>,
     pco_debug: Vec<String>,
     skip_failures: bool,
+    /// `--sources`: the source list the rest is read from first.
+    sources: Option<String>,
     /// hidden: print the translated GLSL + reflection instead of compiling
     dump_translation: bool,
 }
@@ -1270,8 +1212,17 @@ fn usage_error(msg: &str) -> Error {
 /// argparse-compatible parsing (long-option prefixes, `--opt=value`,
 /// `-oVALUE`, one contiguous run of positional arguments).
 fn parse_args(argv: &[String]) -> R<Args> {
-    let longs =
-        ["--output", "--list", "--blend", "--for", "--pco-debug", "--skip-failures", "--help", "--dump-translation"];
+    let longs = [
+        "--output",
+        "--list",
+        "--blend",
+        "--for",
+        "--pco-debug",
+        "--skip-failures",
+        "--sources",
+        "--help",
+        "--dump-translation",
+    ];
     let mut a = Args {
         inputs: Vec::new(),
         output: "-".into(),
@@ -1280,6 +1231,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
         scoped: Vec::new(),
         pco_debug: Vec::new(),
         skip_failures: false,
+        sources: None,
         dump_translation: false,
     };
     let mut runs: Vec<Vec<String>> = Vec::new();
@@ -1336,7 +1288,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
                 _ => return Err(usage_error(&format!("unrecognized arguments: {arg}"))),
             }
         };
-        let takes_value = matches!(opt.as_str(), "--output" | "--blend" | "--for" | "--pco-debug");
+        let takes_value = matches!(opt.as_str(), "--output" | "--blend" | "--for" | "--pco-debug" | "--sources");
         let value = if takes_value {
             match inline {
                 Some(v) => Some(v),
@@ -1367,6 +1319,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
             "--blend" => a.blend.push(value.unwrap()),
             "--for" => a.scoped.push(value.unwrap()),
             "--pco-debug" => a.pco_debug.push(value.unwrap()),
+            "--sources" => a.sources = value,
             "--list" => a.list = true,
             "--skip-failures" => a.skip_failures = true,
             "--dump-translation" => a.dump_translation = true,
@@ -1379,6 +1332,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
     let mut runs = runs.into_iter();
     match runs.next() {
         Some(r) => a.inputs = r,
+        None if a.sources.is_some() => {}
         None => return Err(usage_error("the following arguments are required: inputs")),
     }
     let extra: Vec<String> = runs.flatten().collect();
@@ -1388,8 +1342,26 @@ fn parse_args(argv: &[String]) -> R<Args> {
     Ok(a)
 }
 
+/// `--sources LIST`: what the list says, as the command line said it before
+/// the list existed -- its `src` paths and `for` globs under LIST's
+/// directory, so that names, globs and the rows they make are what
+/// tools/glsl2usc.sh's inline arrays made -- ahead of the command line's own.
+fn with_sources(mut a: Args) -> R<Args> {
+    let Some(path) = a.sources.take() else {
+        return Ok(a);
+    };
+    let l = list::List::read(&path).map_err(|e| Error::Exit(format!("glsl2usc: --sources {e}")))?;
+    let inputs: Vec<String> = l.srcs.iter().map(|r| l.abs(r)).collect();
+    a.inputs = inputs.into_iter().chain(a.inputs).collect();
+    a.blend = l.blends.iter().cloned().chain(a.blend).collect();
+    let scoped: Vec<String> = l.rules.iter().map(|(g, specs)| format!("{}={}", l.abs(g), specs.join(";"))).collect();
+    a.scoped = scoped.into_iter().chain(a.scoped).collect();
+    a.skip_failures |= l.skip_failures;
+    Ok(a)
+}
+
 pub fn main(argv: &[String]) -> R<()> {
-    let args = parse_args(argv)?;
+    let args = with_sources(parse_args(argv)?)?;
     /* Before anything is compiled: may this run replace the reference? */
     let ident = tool_identity();
     check_reference(&args.output, &ident)?;

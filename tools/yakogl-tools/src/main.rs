@@ -27,6 +27,12 @@ mod glconsts;
 mod glsl;
 mod glsl2usc;
 mod irdump;
+// tools/shaders/precompiled.list and the blend-variant spec syntax: the one
+// reader, shared with yakogl-precompile (`glsl2usc --sources`). Its
+// generator half (dirs, pairs, apps) is unused here.
+#[allow(dead_code)]
+#[path = "../../precompile/src/list.rs"]
+mod list;
 mod onlinecheck;
 mod onlineeval;
 mod py;
@@ -38,6 +44,8 @@ mod py;
 mod record;
 mod recordcmd;
 mod shadercheck;
+// The leaf printers of the shader ABI, shared with yakogl-precompile.
+mod shc_print;
 mod uscblob;
 mod uscdis;
 

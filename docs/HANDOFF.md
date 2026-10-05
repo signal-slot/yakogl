@@ -130,6 +130,11 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
+   Done so far: the one source list every table generator reads
+   (`tools/shaders/precompiled.list`) and `yakogl-precompile`, which
+   compiles it with our compiler on the host into `build/precompiled/`
+   (tools/README.md); next, an image carries that table, and the Mesa
+   tables become host-test reference material only.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
@@ -153,8 +158,12 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
 - The gate is `tools/check.sh`. Run it from a clean detached checkout of
   the exact commit, with `driver/src/fw/pvr_fw_blob.h` copied in, and with
   `ZEPHYR_WS=<west workspace>` and `HAL_NXP_DIR=<hal_nxp>` set. Without
-  them the Zephyr and hal_nxp rows are gaps and the gate is red. It takes
-  about 45 minutes.
+  them the Zephyr and hal_nxp rows are gaps and the gate is red. The
+  Mesa-table reproduction row also needs `PCO_SHC=<pco_shc from
+  tools/pco_shc/build_pco_shc.sh, content id f537fc86b41f>`,
+  `GLSLANG=<glslangValidator>` and, for speed, `GLSL2USC_CACHE=<dir>`;
+  without them that row is a gap and the gate is red. It takes about 45
+  minutes.
 - Board runs use `tools/board.sh <board> run <zephyr.bin> <record dir>
   <label>`. Run them from a detached checkout of main, and only with images
   built from commits on origin/main. Use `BOARD_BOOT=uboot-mmc` on the

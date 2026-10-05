@@ -609,10 +609,10 @@ converted from `shader_blobs.c`, so the two can be diffed.
 
 ## Current table
 
-`tools/glsl2usc.sh` compiles every GLSL file under `tools/shaders/` — the starter set
-below, the FemtoVG and `fvgtest_*` sources, and the Qt Quick, Qt Quick 3D and ES 3.00
-sets — once plain and once per blend/mask/render-target variant its `BLENDS` and `--for`
-lists name. The committed `blobs.rs` holds **554 source texts and 2476 table entries**
+`tools/glsl2usc.sh` compiles the `src` lines of `tools/shaders/precompiled.list` — the
+starter set below, the FemtoVG and `fvgtest_*` sources, and the Qt Quick, Qt Quick 3D and
+ES 3.00 sets — once plain and once per blend/mask/render-target variant the list's `blend`
+and `for` lines name. The committed `blobs.rs` holds **554 source texts and 2476 table entries**
 (`SHC_SOURCE_TABLE`, `SHC_BLOB_TABLE`; a fragment shader typically has 18 rows, one plain
 and one per `--blend` spec). `yakogl-tools glsl2usc --list <files>` prints each shader's
 stage and SHA-256 without emitting the table. Qt shaders `pco_shc` cannot build are left
@@ -686,7 +686,7 @@ none away from it:
 | `texture2.frag` | FS | 112 | 22 | two samplers: binding 0 at sh0..19, binding 1 at sh20..39; 0.5 * tex0 + 0.25 * tex1 |
 | `points.vert` | VS | 20 | 2 | pos, colour, per-vertex `gl_PointSize` (vtxout 8), vs_output_size=9; pairs with `interp_color.frag` |
 
-All ten are compiled by the real `pco_shc`. The `BLENDS` list in `tools/glsl2usc.sh`
-has grown to seventeen specs (the six original ones, `zero,one` for the all-channels-off
+All ten are compiled by the real `pco_shc`. The `blend` lines of
+`tools/shaders/precompiled.list` have grown to seventeen specs (the six original ones, `zero,one` for the all-channels-off
 mask a discarding shader needs, and the FemtoVG composite operations), so each of these
 fragment shaders carries eighteen rows, not six.

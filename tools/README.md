@@ -12,6 +12,9 @@ never compiles it or its dependencies) with a subcommand per generator:
 | `yakogl-tools abi-layout <driver src>` | `src/abi_layout.rs`, `src/abi_layout_check.c` |
 | `yakogl-tools shader-check [--codegen]` | nothing; answers JSON compile/link requests on stdin |
 
+`tools/precompile` is a second, separate program, `yakogl-precompile`: the source
+list compiled with our own compiler ("The source list and the precompiler" below).
+
 Run it with `cargo run -p yakogl-tools -- <command> ...` (or build it once with
 `cargo build -p yakogl-tools` and call `target/debug/yakogl-tools`); its tests are
 `cargo test -p yakogl-tools`. The tools find their default inputs and outputs
@@ -30,6 +33,81 @@ The offline table can only hold shaders that existed at build time, and the
 Khronos CTS writes its shaders as it runs. A build with the cargo feature
 `shaderc-online` compiles them in the library itself (`src/shaderc/online/`,
 `src/shaderc/SHADERC_NOTES.md`).
+
+# The source list and the precompiler
+
+`tools/shaders/precompiled.list` is the one list of the shaders compiled ahead of
+time, for every table; its head documents the syntax. A line is one directive:
+
+```text
+dir es100 gc7000                      # a directory, and what it is for
+src femtovg/fill_color.frag           # an input of the PowerVR table, in row order
+blend one,inv_src_alpha               # a variant every fragment shader gets ...
+for qt3d/*.frag one,inv_src_alpha;replace@f16x4   # ... unless a glob picks others
+app femtovg                           # the programs an application links:
+pair femtovg/main.vert femtovg/fill_color.frag
+```
+
+Three generators read it: `tools/glsl2usc.sh` (the PowerVR table from Mesa's
+pco_shc: `src`, `blend`, `for`, `skip-failures`, through `yakogl-tools glsl2usc
+--sources`, which regenerates the committed `src/shaderc/blobs.rs` byte for byte),
+`tools/vivante/gen_shader_table.py` (the GC7000 table from etna_shc: its directory
+allowlist is the `dir` lines with the `gc7000` role, and a directory with no line
+fails it) and `yakogl-precompile`, which reads all of it. The list's Rust reader
+(`tools/precompile/src/list.rs`) and the variant spec parser are compiled into both
+Rust tools. The `gl_test` and `gl_test_es100` apps are what `gl_test.c` links,
+read out of its text: `tools/precompile/gl_test_pairs.py` prints them and
+`--check`s the list against them.
+
+**`yakogl-precompile`** (`tools/precompile`, a workspace member that depends on
+nothing but the library) compiles the list with our own compiler, on the host, into
+the table an image will carry (docs/HANDOFF.md, open work item 2; no image reads
+it yet). It links the library as an image does -- `shaderc-online`,
+`no-shader-table`, and not `host-test`, which changes code the compiler runs -- and
+drives `SHC_ONLINE`, the back end an image installs, through its own entry points
+in the GL core's order: each listed program's sources compiled, linked (so the
+link's own records are made: a fragment shader compiled again with a varying the
+vertex shader never writes read as 0, or for a constant `gl_Position.w`; a vertex
+shader laid out with the program's attribute locations), and the variants a draw
+asks for asked of the linked fragment shader (the list's specs on the PowerVR; the
+opposite winding of a `gl_FrontFacing` reader on the GC7000); each source no
+program links compiled alone. Every record the compiler's cache held is a row.
+
+```sh
+cargo run -p yakogl-precompile --features gpu-powervr -- [-o OUT] [--app NAME]...
+cargo run -p yakogl-precompile --features gpu-vivante,report-es2 -- ...
+```
+
+| Option | Default | |
+|---|---|---|
+| `-o OUT` | `build/precompiled/<gpu>[-es2].rs` | the table (Rust; never committed) |
+| `--list LIST` | `tools/shaders/precompiled.list` | |
+| `--app NAME` | every app and every listed source | one application's programs only (repeatable) |
+| `--refusals FILE` | `tests/fixtures/online_refused_<gpu>[_es2].txt` | the sources the compiler refuses (`tests/online_corpus.rs` pins them message for message): left out with their pairs; a refusal not listed, or a listed source that compiles, fails the run |
+| `--refused-steps FILE` | `tests/fixtures/precompile_refused_<gpu>[_es2].txt` | the links and variants it refuses (a program the GL will not link, a blend state whose draws it refuses): the whole list's run must refuse exactly these; `PRECOMPILE_REFUSED_WRITE=1` writes them |
+| `--verify TABLE` | | TABLE must be the regeneration, and each of its rows what the compiler makes for that row alone in a fresh cache |
+| `--pin COUNTS` | | the run's row and code-byte counts must be COUNTS' line (`tests/fixtures/precompile_counts.txt`; `PRECOMPILE_PIN_WRITE=1` writes it) |
+
+The GPU is a feature, exactly one (`gpu-powervr`, `gpu-vivante`), and
+`report-es2` builds the compiler of an image that reports ES 2.0. The table is the
+`ShcBlob` table `emit.rs` writes, sharing its printers (`shc_print.rs`) and its
+idiom (each row a library struct printed with a full destructuring pattern), with
+the columns our rows need beside it: the record key the compiler's cache finds a
+row by (the source's SHA-256 chained with the zeroed varyings, the attribute map
+and the facts), the source as an index into `SHC_PRECOMPILED_SOURCES`, the facts
+(`w_constant`, the sampler-state key, the attribute map) and the uniform blocks. Its
+header carries the toolchain mark, which says which compiler made it:
+
+```text
+// toolchain: yakogl=<crate version> commit=<git sha>[+dirty] gpu=<powervr|gc7000> es2=<0|1>
+```
+
+The internal shaders (`internal/`: fbload, clear; GLSL 450 that the back ends carry
+themselves) are out of its scope for now and skipped by count. `tools/check.sh`
+lints and tests it per build, and `tools/precompile/prove.sh FEATURES` runs its
+proofs: the table made twice is the same bytes, `--verify`, the counts of the whole
+list and of the `femtovg` and `gl_test_es100` sublists pinned, and the table
+compiled against the library (`rustc -D warnings`).
 
 # Building the pco_shc that reproduces the table
 
@@ -134,8 +212,9 @@ a field added to those structs fails the tool's build until the emitter handles 
 
 ## Usage
 
-Regenerate `blobs.rs` (and the fbload blocks of `src/pvr/blobs.rs`) from the whole
-starter set (canonical, deterministic):
+Regenerate `blobs.rs` (and the fbload blocks of `src/pvr/blobs.rs`) from the
+source list `tools/shaders/precompiled.list` (canonical, deterministic; the list
+is below, "The source list and the precompiler"):
 
 ```sh
 tools/glsl2usc.sh
@@ -165,8 +244,10 @@ the shaders whose path matches GLOB, first match wins: `no_pred_cf` builds an `i
 under the execution mask with a branch over each arm instead of predicating it;
 the setting is part of the cache key and each such row says so in the table, on
 its header line and above its USC), `--skip-failures` (a shader the compiler cannot
-build is reported and left out of the table instead of aborting). Long options may
-be abbreviated.
+build is reported and left out of the table instead of aborting), `--sources LIST`
+(the inputs, `--blend`, `--for` and `--skip-failures` read from the list's `src`,
+`blend`, `for` and `skip-failures` lines first; inputs are then optional). Long
+options may be abbreviated.
 
 ### Config (env vars)
 
@@ -178,6 +259,7 @@ be abbreviated.
 | `GLSL2USC_KEEP` | unset | keep the temporary directories; if it names a directory, the rewritten GLSL (`.es100to450.glsl`) and the metadata (`.meta.txt`) are written there |
 | `GLSL2USC_UNROLL` | unset | unroll `for` loops over uniform arrays (the old text; a different table key) |
 | `YAKOGL_TOOLS` | unset | `glsl2usc.sh`: a prebuilt `yakogl-tools` instead of `cargo run` |
+| `GLSL2USC_OUT` | unset | `glsl2usc.sh`: write the table here and stop, leaving `src/` alone (the reproduction `tools/check.sh` compares with the committed table) |
 
 ## Adding a shader
 
@@ -185,7 +267,8 @@ be abbreviated.
    - Uniforms → `layout(push_constant) uniform { … };` (→ `sh0..`, DOUTD).
    - Varyings → `layout(location=N) in/out …` (→ `VARYING_SLOT_VAR0+N`).
    - Attributes → `layout(location=N) in …` (→ `vi` regs in order).
-2. Add it to the `INPUTS` list in `glsl2usc.sh` (or pass on the command line).
+2. Add a `src` line for it to `tools/shaders/precompiled.list` (or pass it on the
+   command line), and a `pair` line for each program an application links it into.
 3. `tools/glsl2usc.sh` — regenerates `src/shaderc/blobs.rs`.
 4. The app must `glShaderSource()` the **exact same source bytes**; the offline
    backend matches by SHA-256 of that text. The table's copy of the text
@@ -214,7 +297,8 @@ order. Code outside comments must be ASCII (GLSL's character set).
 
 Blending and per-channel colour masks are lowered into the fragment shader on
 this GPU, so `glsl2usc.sh` also compiles every fragment shader once per
-`--blend SPEC[:MASK][@RT]` entry in its `BLENDS` list. `SPEC` is
+`blend SPEC[:MASK][@RT]` line of `tools/shaders/precompiled.list` (or per spec of
+the first `for GLOB ...` line whose glob matches its path). `SPEC` is
 `srgb,drgb[,sa,da[,eqrgb[,eqa]]]` (names as `pco_shc`'s `PCO_SHC_BLEND`) or
 `replace` (no blending); `MASK` is the channels `glColorMask` leaves on, a
 subset of `rgba` (default all), e.g. `src_alpha,inv_src_alpha:rgb` or

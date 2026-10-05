@@ -47,7 +47,7 @@ import glsl2vivante as v     # noqa: E402  (the translation + etna_shc driver)
 SHADERS = os.path.join(HERE, "..", "shaders")
 
 # Directories under tools/shaders/ whose shaders belong in the SHIPPED table,
-# plus the one that is deliberately not a table row.
+# and the ones that are deliberately not table rows.
 #
 # An allowlist and not a denylist, because the failure it prevents is silent
 # in both directions. The walk in main() takes every .vert and .frag it finds,
@@ -59,22 +59,45 @@ SHADERS = os.path.join(HERE, "..", "shaders")
 # would have shipped. Found 2026-09-22 while the rebuild was being prepared,
 # before any of them reached a table.
 #
-# So a new directory FAILS rather than being guessed either way: add it here
-# to ship it, and the failure says so.
-TABLE_DIRS = {
-    "",                 # tools/shaders itself
-    "es100",
-    "es300",
-    "femtovg",
-    "gl_test_es100",
-    "qt",
-    "qt3d",
-}
-# Compiled into the backend rather than the table: the clear shaders.
-# Not GC7000 table rows: the PowerVR measurement series of gl_test 193
-# (fill_color.nodiscard with its predicated-off arm grown by N; the PowerVR
-# table holds them, the GC7000 runs 193 in an online image only).
-NOT_TABLE_DIRS = {"internal", "offarm"}
+# So a new directory FAILS rather than being guessed either way. The
+# allowlist is the `dir` lines of tools/shaders/precompiled.list, the source
+# list every table generator reads: a directory with the `gc7000` role ships
+# here; one with any other (`internal`: the clear shaders, compiled into the
+# backend; `-`: offarm/, the PowerVR measurement series of gl_test 193, which
+# the GC7000 runs in an online image only) is accounted for and not a row;
+# one with no line fails, and the failure says to add it there.
+SOURCE_LIST = os.path.join(SHADERS, "precompiled.list")
+
+
+def parse_dirs(lines, where):
+    """{directory: [roles]} from the `dir DIR ROLE...` lines among `lines`
+    ("" for tools/shaders itself, which the list spells `.`). The list's
+    syntax is at its head; its Rust reader (tools/precompile/src/list.rs)
+    checks the rest of it."""
+    out = {}
+    for n, line in enumerate(lines, 1):
+        fields = line.split("#", 1)[0].split()
+        if not fields or fields[0] != "dir":
+            continue
+        if len(fields) < 3:
+            raise SystemExit("%s:%d: `dir DIR ROLE...` needs a directory and a role" % (where, n))
+        d = "" if fields[1] == "." else fields[1].rstrip("/")
+        if d in out:
+            raise SystemExit("%s:%d: dir '%s' is listed twice" % (where, n, fields[1]))
+        out[d] = [r for r in fields[2:] if r != "-"]
+    if not out:
+        raise SystemExit("%s: no `dir` lines; the allowlist would be empty" % where)
+    return out
+
+
+def list_dirs(path=SOURCE_LIST):
+    with open(path) as f:
+        return parse_dirs(f, path)
+
+
+_LIST_DIRS = list_dirs()
+TABLE_DIRS = {d for d, roles in _LIST_DIRS.items() if "gc7000" in roles}
+NOT_TABLE_DIRS = set(_LIST_DIRS) - TABLE_DIRS
 
 
 def tool_identity():
@@ -170,6 +193,17 @@ def _self_test():
     allowed = {"": ["a.vert"], "es100": ["b.frag"], "internal": ["clear.vert"]}
     assert stray_dirs(allowed) == [], "a known directory was flagged"
 
+    # The allowlist is read from the list: its two directories that are not
+    # rows must be read as such (a list line that lost its role would ship
+    # the clear shaders or the PowerVR-only series), and a synthetic list must
+    # be read role by role.
+    assert {"internal", "offarm"} <= NOT_TABLE_DIRS and not ({"internal", "offarm"} & TABLE_DIRS), \
+        "the list's internal/ and offarm/ read as table directories: %r" % sorted(TABLE_DIRS)
+    assert {"", "es100", "qt3d"} <= TABLE_DIRS, "the list's table directories read wrong: %r" % sorted(TABLE_DIRS)
+    synth = ["dir . gc7000  # root", "dir a gc7000", "dir b -", "dir c internal", "src x.vert"]
+    assert parse_dirs(synth, "synthetic") == {"": ["gc7000"], "a": ["gc7000"], "b": [], "c": ["internal"]}, \
+        "a synthetic list's dir lines read wrong: %r" % parse_dirs(synth, "synthetic")
+
     with_probe = dict(allowed)
     with_probe["wedge_probe"] = ["a_many_temps.vert"]
     with_probe["wedge_probe/steps"] = ["s08.vert"]
@@ -188,8 +222,8 @@ def _self_test():
     real = stray_dirs(on_disk)
     if real:
         raise SystemExit("gen_shader_table --self-test: unaccounted directory(s) on disk: %s\n"
-                         "The generator would refuse a rebuild. Add them to TABLE_DIRS or "
-                         "NOT_TABLE_DIRS, or move test material out of tools/shaders/."
+                         "The generator would refuse a rebuild. Give them a `dir` line in "
+                         "tools/shaders/precompiled.list, or move test material out of tools/shaders/."
                          % ", ".join(real))
     print("gen_shader_table: allowlist self-test ok (%d directories accounted for)" % len(on_disk))
 
@@ -1075,10 +1109,11 @@ def main():
             names = found_dirs[s]
             lines.append("    %-24s %d shader(s), e.g. %s" % (s + "/", len(names), names[0]))
         lines.append("")
-        lines.append("Everything walked here becomes a row in the SHIPPED table. Add the")
-        lines.append("directory to TABLE_DIRS to ship its shaders, or to NOT_TABLE_DIRS if")
-        lines.append("the backend compiles them itself. If it holds test material, it does")
-        lines.append("not belong under tools/shaders/ at all.")
+        lines.append("Everything walked here becomes a row in the SHIPPED table. Give the")
+        lines.append("directory a `dir` line in tools/shaders/precompiled.list: role gc7000")
+        lines.append("to ship its shaders here, another role if no GC7000 table row should")
+        lines.append("come of it. If it holds test material, it does not belong under")
+        lines.append("tools/shaders/ at all.")
         raise SystemExit("\n".join(lines))
     internal = [p for p in paths if os.path.basename(os.path.dirname(p)) == "internal"]
     paths = [p for p in paths if p not in internal]

@@ -39,10 +39,11 @@
 use crate::glsl::Uniform;
 use crate::glsl2usc::{Attrib, Shader, Varying};
 use crate::py;
+use crate::shc_print::{emit_u32_array, print_array, print_uniform, rs_comment, rs_str, ARRAY_ATTRIBS, ARRAY_VARYINGS};
 use crate::{Error, R};
 use core::ffi::c_char;
 use yakogl::shaderc::{ShcAttrib, ShcShader, ShcUniform, ShcVarying, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
-use yakogl::util::{cname, name_bytes};
+use yakogl::util::cname;
 
 /// A value that must fit its ABI field.
 fn fit<T: TryFrom<i64>>(v: i64, what: &str, shader: &str) -> R<T> {
@@ -196,110 +197,6 @@ impl Row {
     }
 }
 
-/// `text` as the body of a Rust string literal. Everything outside printable
-/// ASCII is escaped, so control and bidi code points in a shader's comments
-/// cannot break (or disguise) the generated source.
-pub fn rs_str(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for ch in text.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            ' '..='~' => out.push(ch),
-            _ => out.push_str(&format!("\\u{{{:x}}}", ch as u32)),
-        }
-    }
-    out
-}
-
-fn name_str(field: &[c_char]) -> String {
-    rs_str(&String::from_utf8_lossy(name_bytes(field)))
-}
-
-fn print_varying(v: &ShcVarying) -> String {
-    let ShcVarying { location, components, interp, vtxout_off, name } = *v;
-    format!(
-        "ShcVarying {{ location: {location}, components: {components}, interp: {interp}, vtxout_off: {vtxout_off}, name: cname(\"{}\") }}",
-        name_str(&name)
-    )
-}
-
-fn print_attrib(a: &ShcAttrib) -> String {
-    let ShcAttrib { location, components, vi_reg, format, name, gl_type } = *a;
-    format!(
-        "ShcAttrib {{ location: {location}, components: {components}, vi_reg: {vi_reg}, format: {format}, name: cname(\"{}\"), gl_type: 0x{gl_type:04x} }}",
-        name_str(&name)
-    )
-}
-
-fn print_uniform(u: &ShcUniform) -> String {
-    let ShcUniform { name, dword_off, dwords, gl_type, array_len, binding, inner } = *u;
-    format!(
-        "ShcUniform {{ name: cname(\"{}\"), dword_off: {dword_off}, dwords: {dwords}, gl_type: 0x{gl_type:04x}, array_len: {array_len}, binding: {binding}, inner: {inner} }}",
-        name_str(&name)
-    )
-}
-
-fn is_zero(name: &[c_char]) -> bool {
-    name.iter().all(|&c| c == 0)
-}
-
-fn varying_is_zero(v: &ShcVarying) -> bool {
-    let ShcVarying { location, components, interp, vtxout_off, name } = *v;
-    location == 0 && components == 0 && interp == 0 && vtxout_off == 0 && is_zero(&name)
-}
-
-fn attrib_is_zero(a: &ShcAttrib) -> bool {
-    let ShcAttrib { location, components, vi_reg, format, name, gl_type } = *a;
-    location == 0 && components == 0 && vi_reg == 0 && format == 0 && gl_type == 0 && is_zero(&name)
-}
-
-/// Print a fixed array: the used prefix through the library's pad helper,
-/// asserting that the rest is zero (what the helper fills in).
-struct ArrayField<T> {
-    field: &'static str,
-    pad: &'static str,
-    zero: &'static str,
-    is_zero: fn(&T) -> bool,
-    print: fn(&T) -> String,
-}
-
-const ARRAY_VARYINGS: ArrayField<ShcVarying> = ArrayField {
-    field: "varyings",
-    pad: "pad_varyings",
-    zero: "ShcVarying::ZERO",
-    is_zero: varying_is_zero,
-    print: print_varying,
-};
-
-const ARRAY_ATTRIBS: ArrayField<ShcAttrib> = ArrayField {
-    field: "attribs",
-    pad: "pad_attribs",
-    zero: "ShcAttrib::ZERO",
-    is_zero: attrib_is_zero,
-    print: print_attrib,
-};
-
-fn print_array<T>(out: &mut Vec<String>, a: &ArrayField<T>, items: &[T], used: usize) -> R<()> {
-    let ArrayField { field, pad, zero, is_zero, print } = a;
-    if items[used.min(items.len())..].iter().any(|x| !is_zero(x)) {
-        return Err(Error::Fatal(format!("{field}: non-zero entries past the count")));
-    }
-    if used == 0 {
-        out.push(format!("            {field}: [{zero}; {}],", items.len()));
-        return Ok(());
-    }
-    out.push(format!("            {field}: {pad}(["));
-    for x in &items[..used] {
-        out.push(format!("                {},", print(x)));
-    }
-    out.push("            ]),".into());
-    Ok(())
-}
-
 fn print_shader(out: &mut Vec<String>, s: &ShcShader, ident: &str) -> R<()> {
     let ShcShader {
         usc,
@@ -344,7 +241,7 @@ fn print_shader(out: &mut Vec<String>, s: &ShcShader, ident: &str) -> R<()> {
     out.push(format!("            usc: {ident}_USC.as_ptr(),"));
     out.push(format!("            usc_dw: {usc_dw},"));
     out.push(format!("            temps: {temps},"));
-    print_array(out, &ARRAY_VARYINGS, &varyings, num_varyings as usize)?;
+    print_array(out, "            ", &ARRAY_VARYINGS, &varyings, num_varyings as usize).map_err(Error::Fatal)?;
     out.push(format!("            num_varyings: {num_varyings},"));
     out.push(format!("            uses_w: {uses_w},"));
     out.push(format!("            uses_discard: {uses_discard},"));
@@ -354,7 +251,7 @@ fn print_shader(out: &mut Vec<String>, s: &ShcShader, ident: &str) -> R<()> {
     out.push(format!("            num_outputs: {num_outputs},"));
     out.push(format!("            num_tile_buffers: {num_tile_buffers},"));
     out.push(format!("            tile_buffer_sh: {tile_buffer_sh},"));
-    print_array(out, &ARRAY_ATTRIBS, &attribs, num_attribs as usize)?;
+    print_array(out, "            ", &ARRAY_ATTRIBS, &attribs, num_attribs as usize).map_err(Error::Fatal)?;
     out.push(format!("            num_attribs: {num_attribs},"));
     out.push(format!("            vs_output_size: {vs_output_size},"));
     out.push(format!("            vs_psize_off: 0x{vs_psize_off:x},"));
@@ -390,24 +287,6 @@ fn c_ident(basename: &str) -> String {
         ident.insert(0, '_');
     }
     ident
-}
-
-fn emit_usc_array(out: &mut Vec<String>, ident: &str, usc: &[u32]) {
-    out.push(format!("static {ident}_USC: [u32; {}] = [", usc.len()));
-    let mut line = String::from("    ");
-    for dw in usc {
-        let tok = format!("0x{dw:08x},");
-        if line.len() + tok.len() + 1 > 96 {
-            out.push(line.trim_end().to_string());
-            line = "    ".into();
-        }
-        line.push_str(&tok);
-        line.push(' ');
-    }
-    if !py::strip(&line).is_empty() {
-        out.push(line.trim_end().to_string());
-    }
-    out.push("];".into());
 }
 
 pub fn emit(shaders: &[Shader], toolchain: &str) -> R<String> {
@@ -493,7 +372,7 @@ pub fn emit(shaders: &[Shader], toolchain: &str) -> R<String> {
         if !sh.pco_debug.is_empty() {
             out.push(rs_comment(&format!("// {} built by pco_shc under PCO_DEBUG={}", sh.name, sh.pco_debug)));
         }
-        emit_usc_array(&mut out, &ident, row.usc());
+        emit_u32_array(&mut out, &format!("{ident}_USC"), row.usc());
         if !row.uniforms.is_empty() {
             out.push(format!("static {ident}_UNIFORMS: [ShcUniform; {}] = [", row.uniforms.len()));
             for u in &row.uniforms {
@@ -555,32 +434,10 @@ pub fn emit(shaders: &[Shader], toolchain: &str) -> R<String> {
     Ok(out.join("\n"))
 }
 
-/// A `//` comment line whose text may hold newlines or odd code points.
-fn rs_comment(line: &str) -> String {
-    let mut s = String::new();
-    for (i, part) in line.split('\n').enumerate() {
-        if i > 0 {
-            s.push_str("\n// ");
-        }
-        for ch in part.chars() {
-            if ch == '\r' || (ch.is_control() && ch != '\t') || is_bidi(ch) {
-                s.push_str(&format!("\\u{{{:x}}}", ch as u32));
-            } else {
-                s.push(ch);
-            }
-        }
-    }
-    s
-}
-
-/// Code points rustc's `text_direction_codepoint_in_comment` lint rejects.
-fn is_bidi(c: char) -> bool {
-    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{061C}')
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shc_print::name_str;
 
     fn u(name: &str, dword_off: i64) -> Uniform {
         Uniform { name: name.into(), dword_off, dwords: 4, gl_type: 0x8B52, array_len: 0, binding: 0, inner: 0 }

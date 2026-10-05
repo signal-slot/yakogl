@@ -190,7 +190,8 @@ each side of it, is in `ir.md`.
 
 Blending and colour masks are lowered into the fragment shader on this GPU, so
 a blend state is a different binary from the same source. The offline table
-precompiles one variant per state in `glsl2usc.sh`'s `BLENDS` list — every
+precompiles one variant per state in the `blend` lines of
+`tools/shaders/precompiled.list` — every
 state named ahead of time, whether a draw ever asks for it or not.
 
 The online back end has no list. The source is still in the `keep` arena, so

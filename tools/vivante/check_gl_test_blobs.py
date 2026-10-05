@@ -18,9 +18,9 @@ hashes each one, and looks the digest up in the Rust table -- no list of
 expected shaders to fall out of date, because the headers ARE the list.
 
 Usage:
-It asks the same question of the other direction too: glsl2usc.sh lists its
-inputs explicitly, so every source in that list must have a row in the PowerVR
-table. Absences there fall into two kinds and the check separates them, because
+It asks the same question of the other direction too: glsl2usc.sh compiles
+the source list's `src` lines (tools/shaders/precompiled.list), so every
+source in that list must have a row in the PowerVR table. Absences there fall into two kinds and the check separates them, because
 treating one as the other is how a real defect gets excused:
 
   staleness      the source compiles, nobody regenerated -- what this catches
@@ -113,18 +113,21 @@ def empty_rows(path):
 
 
 def glsl2usc_inputs():
-    """The sources glsl2usc.sh compiles: its INPUTS array plus the qt/qt3d globs."""
-    sh = open(os.path.join(REPO, "tools", "glsl2usc.sh")).read()
-    block = sh[sh.index("INPUTS=(") :]
-    block = block[: block.index("\n)")]
-    listed = ["tools/shaders/" + m for m in re.findall(r'"\$SHADERS/([^"]+)"', block)]
-    globbed = sorted(
-        g
-        for d in ("qt", "qt3d")
-        for ext in ("vert", "frag")
-        for g in glob.glob(os.path.join(REPO, "tools", "shaders", d, "*." + ext))
-    )
-    return listed + [os.path.relpath(g, REPO) for g in globbed]
+    """The sources glsl2usc.sh compiles: the `src` lines of the source list
+    (tools/shaders/precompiled.list; a glob in a file name expands in byte
+    order), as tools/precompile/src/list.rs reads them for it."""
+    shaders = os.path.join(REPO, "tools", "shaders")
+    out = []
+    for line in open(os.path.join(shaders, "precompiled.list")):
+        f = line.split("#", 1)[0].split()
+        if len(f) != 2 or f[0] != "src":
+            continue
+        if "*" in f[1] or "?" in f[1]:
+            found = [g for g in glob.glob(os.path.join(shaders, f[1])) if os.path.isfile(g)]
+            out.extend(sorted(os.path.relpath(g, REPO) for g in found))
+        else:
+            out.append("tools/shaders/" + f[1])
+    return out
 
 
 def known_uncompilable():
