@@ -189,7 +189,10 @@ number below is printed by that test on each run.
      -- must be one pco emitted somewhere in the 576,296 reference groups;
   3. execution: a host interpreter (`tests/usc_exec`) runs our bytes against
      selection's program, and against **pco's bytes for the same source**
-     with inputs placed by name through each program's own interface.
+     with inputs placed by name through each program's own interface
+     (a matrix attribute column by column, each column's values its own:
+     ours at every location it occupies, pco's from its record's row per
+     column).
      61 of 63 agree with pco on every output dword, one within 1 ulp
      (operation order), one reference is not runnable (it moves an
      immediate to `idx0`), none differs.

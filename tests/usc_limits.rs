@@ -630,13 +630,7 @@ fn run_one(text: &str, stage: Stage, corpus: &BTreeSet<String>) -> Result<(Peak,
                      * `dword_off`). */
                     let mut mine = sentinel_inputs(1.0e30);
                     let placed = yakogl::shaderc::online::powervr::abi::attribs_placed(&l.module).unwrap_or(0);
-                    for at in
-                        l.reflection.attribs.iter().filter(|at| at.location < 32 && placed & (1 << at.location) != 0)
-                    {
-                        for c in 0..at.components as u32 {
-                            mine.vtxin[vtxin_reg(placed, at.location, c) as usize] = named(seed, at.name, c);
-                        }
-                    }
+                    place_attribs_ours(&mut mine, l.reflection.attribs, placed, seed);
                     /* the shared file by name through each record's rows:
                      * descriptors (a sampler's model image) first, the block
                      * after them (`place_shared`) */
@@ -651,12 +645,7 @@ fn run_one(text: &str, stage: Stage, corpus: &BTreeSet<String>) -> Result<(Peak,
                     }
                     let sh = &blob.shader;
                     let mut theirs_in = sentinel_inputs(-3.0e30);
-                    for at in &sh.attribs[..sh.num_attribs as usize] {
-                        let n: String = at.name.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
-                        for c in 0..at.components as u32 {
-                            theirs_in.vtxin[at.vi_reg as usize + c as usize] = named(seed, &n, c);
-                        }
-                    }
+                    place_attribs_pco(&mut theirs_in, &sh.attribs[..sh.num_attribs as usize], seed);
                     /* gl_VertexID / gl_InstanceID: one small integer each, at
                      * each program's own register (ours `abi::vs_id_regs`,
                      * pco's from its record's `vs_*_id_reg1`). */
@@ -797,6 +786,54 @@ fn run_one(text: &str, stage: Stage, corpus: &BTreeSet<String>) -> Result<(Peak,
 /// then the end of task. The walk is driven by the MEANING (the groups and
 /// writes the chain says it emitted) and each step decodes the bytes at the
 /// current offset, so a group lost, gained or mis-sized breaks the walk.
+/// The value of component `c` of column `column` of the attribute `name`
+/// (column 0 for anything but a matrix): distinct per column, so a column
+/// read from another column's registers shows. Column 0 keeps the value a
+/// plain attribute always had.
+fn attrib_value(seed: u32, name: &str, column: u32, c: u32) -> u32 {
+    named(seed, name, 4 * column + c)
+}
+
+/// Our program's vertex inputs, as selection reads them: every location
+/// an attribute occupies (one per matrix column, `abi::matrix_columns`) at
+/// its rank among the placed locations (`abi::vtxin_reg`). A location the
+/// program does not place has no register and is not filled, or it would
+/// land on another's.
+fn place_attribs_ours(
+    inp: &mut Inputs,
+    attribs: &[yakogl::shaderc::online::reflect::AttribRow<'_>],
+    placed: u32,
+    seed: u32,
+) {
+    for at in attribs {
+        let cols = yakogl::shaderc::online::powervr::abi::matrix_columns(at.gl_type).unwrap_or(1);
+        for k in 0..cols {
+            let loc = at.location as u32 + k as u32;
+            if loc >= 32 || placed & (1 << loc) == 0 {
+                continue;
+            }
+            for c in 0..at.components as u32 {
+                inp.vtxin[vtxin_reg(placed, loc as u8, c) as usize] = attrib_value(seed, at.name, k as u32, c);
+            }
+        }
+    }
+}
+
+/// pco's vertex inputs, as its record says: one row per location (a
+/// matrix is a row per column, each with its own `vi_reg`), the column
+/// being the row's location past the name's first.
+fn place_attribs_pco(inp: &mut Inputs, rows: &[yakogl::shaderc::ShcAttrib], seed: u32) {
+    let name_of =
+        |n: &[core::ffi::c_char]| -> String { n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect() };
+    for at in rows {
+        let n = name_of(&at.name);
+        let first = rows.iter().filter(|r| name_of(&r.name) == n).map(|r| r.location).min().unwrap_or(at.location);
+        for c in 0..at.components as u32 {
+            inp.vtxin[at.vi_reg as usize + c as usize] = attrib_value(seed, &n, u32::from(at.location - first), c);
+        }
+    }
+}
+
 fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
     let mut g = Gate::default();
     let mut off = 0usize;
@@ -5799,6 +5836,67 @@ fn a_matrix_attribute_is_one_record_row_per_column() {
         assert_eq!(rows, [("a_pos".to_string(), 0, 4, 0, 0x8B52), m(1), m(2), m(3)], "one row per column");
     })
     .unwrap();
+}
+
+/// The comparison with pco places a matrix attribute's every column, keyed
+/// by column, on both sides. gl_test case 63's three shaders (no table rows
+/// yet): our inputs (`place_attribs_ours`, by the module's placed locations)
+/// and pco's (`place_attribs_pco`, by record rows -- here our own record's,
+/// which are pco's shape: one row per column with its `vi_reg`) put the same
+/// value in the same register, every column's values differ, and our program
+/// run on them computes the shader's sums and first row from those values.
+/// With column 0 alone placed (the old filling) the sums read the sentinel:
+/// 1e30, 4e30 and 9e30, one per unfilled element they add.
+#[test]
+fn a_matrix_attribute_is_placed_column_by_column_for_the_pco_comparison() {
+    let _scratch = scratch_lock();
+    for (src, cols) in [
+        (include_str!("../tools/shaders/es100/matattr2.vert"), 2u32),
+        (include_str!("../tools/shaders/es100/matattr3.vert"), 3),
+        (include_str!("../tools/shaders/es100/matattr4.vert"), 4),
+    ] {
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_vertex(&l.module, &l.reflection, a)
+                .unwrap_or_else(|e| panic!("mat{cols}: {e:?}"));
+            let placed = yakogl::shaderc::online::powervr::abi::attribs_placed(&l.module).unwrap();
+            let seed = 2;
+            let mut ours = sentinel_inputs(1.0e30);
+            place_attribs_ours(&mut ours, l.reflection.attribs, placed, seed);
+            let v = |k: u32, c: u32| f32::from_bits(attrib_value(seed, "a_xf", k, c));
+            let columns: BTreeSet<u32> = (0..cols).map(|k| v(k, 1).to_bits()).collect();
+            assert_eq!(columns.len(), cols as usize, "mat{cols}: every column its own values");
+            /* matattr2: [0][1] + [1][1]; matattr3: rows 1 and 2 of every
+             * column; matattr4: rows 1..3 of every column */
+            let off: f32 = match cols {
+                2 => v(0, 1) + v(1, 1),
+                3 => v(0, 1) + v(1, 1) + v(2, 1) + v(0, 2) + v(1, 2) + v(2, 2),
+                _ => (1..4).map(|r| (0..4).map(|k| v(k, r)).sum::<f32>()).sum(),
+            };
+            let p = |c: u32| f32::from_bits(attrib_value(seed, "a_pos", 0, c));
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let out = run_binary(&image, &ours, true).unwrap_or_else(|e| panic!("mat{cols}: {e}"));
+            let got = |d: u32| f32::from_bits(*out.get(&d).expect("an output"));
+            for (d, want) in [(0, p(0) + off), (1, p(1) + off), (4, v(0, 0)), (5, v(1, 0))] {
+                assert!(
+                    (got(d) - want).abs() <= 1.0e-4 * want.abs().max(1.0),
+                    "mat{cols} dword {d}: {} want {want}",
+                    got(d)
+                );
+            }
+            if cols >= 3 {
+                assert_eq!(got(6), v(2, 0), "mat{cols}: the third column's first row");
+            }
+            let mut by_rows = sentinel_inputs(1.0e30);
+            place_attribs_pco(&mut by_rows, &rec.attribs[..rec.num_attribs as usize], seed);
+            assert!(ours.vtxin == by_rows.vtxin, "mat{cols}: the two placements put different values in vtxin");
+        })
+        .unwrap();
+    }
 }
 
 /// dEQP-GLES2.functional.light_amount.14omni, vertex shader: fourteen
