@@ -16533,3 +16533,79 @@ were found, being fixed on branch `work/build-robustness` (not landed):
 `capi/assemble.cmake` fails when the copied Rust archive is read-only (a
 rustc-wrapper cache); and the cluster's `host/check_ui.py` does not find the
 generated file under cargo's new `build/<crate>/<hash>/` layout.
+
+## AM62P: gl_test 194 offarmn, the never-run arm's cost against its size (origin/main `e34ba09b`, 2026-10-06)
+
+Case 194 repeats case 193 (186 arm 1, `fill_color.nodiscard`, the never-run arm
+grown by N dependent steps, 16 full-screen quads into 1024x600) at 14 values of
+N: 0, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256 (online 104 to 362
+groups, table 105 to 363, 73 groups outside the off arm at every N).
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, images built from
+`e34ba09b`, the second with `CONFIG_YAKOGL_SHADERC_OFFLINE=y`. Records in
+`records/am62p/` of the main checkout (gitignored).
+
+| image | record | verdict line |
+|---|---|---|
+| online | `20261006-0021-case194-e34ba09b-bf2afe0b` | `board.sh am62p case194-e34ba09b rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=82s` |
+| table | `20261006-0023-case194-table-e34ba09b-5c92d5c1` | `board.sh am62p case194-table-e34ba09b rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=75s` |
+
+Console, online (the time stamps dropped):
+
+    gl_test: offarmn 0: off arm +0 groups: best 55 ms; per frame 3D busy 54563 us, TA busy 225 us
+    gl_test: offarmn 1: off arm +2 groups: best 56 ms; per frame 3D busy 54861 us, TA busy 226 us
+    gl_test: offarmn 2: off arm +4 groups: best 56 ms; per frame 3D busy 55031 us, TA busy 225 us
+    gl_test: offarmn 3: off arm +8 groups: best 56 ms; per frame 3D busy 55422 us, TA busy 225 us
+    gl_test: offarmn 4: off arm +12 groups: best 57 ms; per frame 3D busy 55873 us, TA busy 225 us
+    gl_test: offarmn 5: off arm +16 groups: best 57 ms; per frame 3D busy 56402 us, TA busy 225 us
+    gl_test: offarmn 6: off arm +24 groups: best 59 ms; per frame 3D busy 57696 us, TA busy 225 us
+    gl_test: offarmn 7: off arm +32 groups: best 60 ms; per frame 3D busy 59328 us, TA busy 226 us
+    gl_test: offarmn 8: off arm +48 groups: best 64 ms; per frame 3D busy 63441 us, TA busy 225 us
+    gl_test: offarmn 9: off arm +64 groups: best 69 ms; per frame 3D busy 68355 us, TA busy 225 us
+    gl_test: offarmn 10: off arm +96 groups: best 80 ms; per frame 3D busy 79417 us, TA busy 225 us
+    gl_test: offarmn 11: off arm +128 groups: best 92 ms; per frame 3D busy 91149 us, TA busy 225 us
+    gl_test: offarmn 12: off arm +192 groups: best 116 ms; per frame 3D busy 115325 us, TA busy 225 us
+    gl_test: offarmn 13: off arm +256 groups: best 141 ms; per frame 3D busy 139873 us, TA busy 225 us
+    gl_test: offarmn pixels: ff000099 (14 times)
+    gl_test: case 194 offarmn: PASS
+
+Console, table:
+
+    gl_test: offarmn 0: off arm +0 groups: best 55 ms; per frame 3D busy 54849 us, TA busy 224 us
+    gl_test: offarmn 1: off arm +2 groups: best 56 ms; per frame 3D busy 55315 us, TA busy 224 us
+    gl_test: offarmn 2: off arm +4 groups: best 56 ms; per frame 3D busy 55537 us, TA busy 224 us
+    gl_test: offarmn 3: off arm +8 groups: best 57 ms; per frame 3D busy 56101 us, TA busy 225 us
+    gl_test: offarmn 4: off arm +12 groups: best 57 ms; per frame 3D busy 56680 us, TA busy 225 us
+    gl_test: offarmn 5: off arm +16 groups: best 58 ms; per frame 3D busy 57396 us, TA busy 225 us
+    gl_test: offarmn 6: off arm +24 groups: best 60 ms; per frame 3D busy 58812 us, TA busy 224 us
+    gl_test: offarmn 7: off arm +32 groups: best 61 ms; per frame 3D busy 60520 us, TA busy 225 us
+    gl_test: offarmn 8: off arm +48 groups: best 65 ms; per frame 3D busy 64732 us, TA busy 224 us
+    gl_test: offarmn 9: off arm +64 groups: best 70 ms; per frame 3D busy 69369 us, TA busy 224 us
+    gl_test: offarmn 10: off arm +96 groups: best 81 ms; per frame 3D busy 80142 us, TA busy 225 us
+    gl_test: offarmn 11: off arm +128 groups: best 92 ms; per frame 3D busy 91711 us, TA busy 225 us
+    gl_test: offarmn 12: off arm +192 groups: best 116 ms; per frame 3D busy 115759 us, TA busy 225 us
+    gl_test: offarmn 13: off arm +256 groups: best 141 ms; per frame 3D busy 140311 us, TA busy 224 us
+    gl_test: offarmn pixels: ff000099 (14 times)
+    gl_test: case 194 offarmn: PASS
+
+Marginal cost per added off-arm group between consecutive N, online:
+
+| N | (3D busy difference) / groups |
+|---|---|
+| 0 to 8 | (55422 - 54563) / 8 = 0.107 ms |
+| 8 to 16 | (56402 - 55422) / 8 = 0.122 ms |
+| 16 to 24 | (57696 - 56402) / 8 = 0.162 ms |
+| 24 to 32 | (59328 - 57696) / 8 = 0.204 ms |
+| 32 to 48 | (63441 - 59328) / 16 = 0.257 ms |
+| 48 to 64 | (68355 - 63441) / 16 = 0.307 ms |
+| 64 to 96 | (79417 - 68355) / 32 = 0.346 ms |
+| 96 to 128 | (91149 - 79417) / 32 = 0.367 ms |
+| 128 to 192 | (115325 - 91149) / 64 = 0.378 ms |
+| 192 to 256 | (139873 - 115325) / 64 = 0.384 ms |
+
+Read: a small never-run arm costs about 0.11 ms per group; the marginal cost
+rises with the arm's size and levels off near 0.38 ms per group beyond
+N = 128, about half an executed group (0.8 ms, cases 184 and 185). The table
+image has the same shape, 0.3 to 1.3 ms above the online image at every N. TA
+busy stays 224-226 us. The cause of the rise is not measured; instruction
+fetch remains a candidate.

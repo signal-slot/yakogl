@@ -76,11 +76,19 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    candidate). Both paths have the same slope at N = 128. Predicating both
    arms as pco does (`afa12e9b`) therefore loses to a branch once the
    never-run arm is large enough. Where the crossover lies is not known.
-   - The finer N series is gl_test 194 `offarmn` (N = 0, 2, 4, 8, 12, 16,
-     24, 32, 48, 64, 96, 128, 192, 256; online 104 to 362 groups, the
-     table 105 to 363, both predicated, 73 groups outside the off arm at
-     every N). Board run needed, on the AM62P: case 194 in an online image
-     and in a table image.
+   - The finer N series, gl_test 194 `offarmn` (`e34ba09b`, 14 values of N,
+     pixels equal at every N; records `20261006-0021-case194-e34ba09b-bf2afe0b`
+     online, `20261006-0023-case194-table-e34ba09b-5c92d5c1` table), 3D busy
+     per frame (online / table, ms): N = 0 54.56 / 54.85; 8 55.42 / 56.10;
+     16 56.40 / 57.40; 32 59.33 / 60.52; 64 68.36 / 69.37; 128 91.15 / 91.71;
+     256 139.87 / 140.31. Marginal cost per added off-arm group, online
+     (difference / group step): 0 to 8 0.107 ms, 16 to 24 0.162, 32 to 48
+     0.257, 64 to 96 0.346, 128 to 192 0.378, 192 to 256 0.384. A small
+     never-run arm costs about 0.11 ms a group, the marginal cost rises with
+     the arm's size and levels off near 0.38 ms a group beyond N = 128, about
+     half an executed group (0.8 ms, 184 / 185). The table image has the
+     same shape, 0.3 to 1.3 ms above the online image at every N. The cause
+     of the rise is not measured; instruction fetch is a candidate.
    - The cost of a branch: pco's `PCO_DEBUG=no_pred_cf` compiles the same
      source with the arm under the execution mask and `br allp` over it
      (6 control groups more); our compiler needs a lowering of its own
