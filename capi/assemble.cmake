@@ -80,6 +80,12 @@ file(MAKE_DIRECTORY "${_work}")
 set(_tmp "rust.a")
 execute_process(COMMAND "${CMAKE_COMMAND}" -E copy "${RUST_LIB}" "${_work}/${_tmp}"
   COMMAND_ERROR_IS_FATAL ANY)
+# The copy keeps the source's mode, and objcopy and ar rewrite it in place
+# below. A rustc-wrapper cache (kache) hands cargo read-only hardlinks, so the
+# copy was read-only too and objcopy refused it ("unable to copy file
+# 'rust.a'"): make it writable, whatever the source's mode. (file(CHMOD):
+# CMake 3.19, this script needs 3.20.)
+file(CHMOD "${_work}/${_tmp}" FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 # nm -A prints "<archive>:<member>:<value> <type> <name>" (GNU) or with a
 # space before the value (llvm-nm). The archive is named relative to _work so
