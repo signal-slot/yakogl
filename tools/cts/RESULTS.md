@@ -16609,3 +16609,46 @@ N = 128, about half an executed group (0.8 ms, cases 184 and 185). The table
 image has the same shape, 0.3 to 1.3 ms above the online image at every N. TA
 busy stays 224-226 us. The cause of the rise is not measured; instruction
 fetch remains a candidate.
+
+## AM62P: gl_test 195 ifbranch, a branched if against a predicated one (origin/main `97ba03d4`, 2026-10-06)
+
+Case 195 times case 193's programs (186 arm 1, `fill_color.nodiscard`, the
+never-run arm grown by N = 0, 8, 32, 128 groups) twice on one context: with the
+`if` predicated (the default) and branched (`PVR_BACKEND_OPT_IF_LOWERING`, pco's
+`lower_if_cond_exec`: six control groups, the arm skipped by a branch).
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, online image
+built from `97ba03d4`, `CONFIG_GL_TEST_CASES="195"`. Record
+`20261006-0140-case195-97ba03d4-d4863a05` in `records/am62p/` of the main
+checkout (gitignored). Verdict line: `board.sh am62p case195-97ba03d4 rc=0
+verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all
+resets=0 record=absent back_after=87s`.
+
+Console (time stamps dropped):
+
+    gl_test: ifbranch 0 predicate: off arm +0 groups: best 55 ms; per frame 3D busy 54562 us, TA busy 225 us
+    gl_test: ifbranch 0 branch: off arm +0 groups: best 56 ms; per frame 3D busy 55337 us, TA busy 225 us
+    gl_test: ifbranch 1 predicate: off arm +8 groups: best 56 ms; per frame 3D busy 55420 us, TA busy 225 us
+    gl_test: ifbranch 1 branch: off arm +8 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 225 us
+    gl_test: ifbranch 2 predicate: off arm +32 groups: best 60 ms; per frame 3D busy 59331 us, TA busy 225 us
+    gl_test: ifbranch 2 branch: off arm +32 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 226 us
+    gl_test: ifbranch 3 predicate: off arm +128 groups: best 92 ms; per frame 3D busy 91144 us, TA busy 225 us
+    gl_test: ifbranch 3 branch: off arm +128 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 225 us
+    gl_test: ifbranch pixels: ff000099 (8 times)
+    gl_test: case 195 ifbranch: PASS
+
+Arithmetic, 3D busy per frame:
+- the branched form is 55337 / 55338 / 55338 / 55338 us at N = 0 / 8 / 32 / 128:
+  the same at every N, 55.34 ms; the never-run arm is skipped;
+- at N = 0 it costs 55337 - 54562 = 775 us (+0.78 ms) more than the predicated
+  form: the six control groups and the branch, less the 31 base groups of the
+  arm it no longer issues;
+- the predicated form grows by 0.107 ms per group at small N (case 194), so the
+  branch wins from N = 0.78 / 0.107 = 7.2, N = 7 on, that is once the never-run
+  arm exceeds about 38 groups (31 + 7);
+- at N = 128 the branch saves 91144 - 55338 = 35806 us (35.8 ms).
+
+Read: `fill_color`'s own scissor arm (31 groups) is right to stay predicated,
+the default. Not measured: the branched form's cost when the arm is taken
+(radius > 0), which the compiler needs to choose by arm size; gl_test 195 is
+being extended for it.

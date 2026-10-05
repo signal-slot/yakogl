@@ -89,12 +89,23 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      half an executed group (0.8 ms, 184 / 185). The table image has the
      same shape, 0.3 to 1.3 ms above the online image at every N. The cause
      of the rise is not measured; instruction fetch is a candidate.
-   - The cost of a branch: pco's `PCO_DEBUG=no_pred_cf` compiles the same
-     source with the arm under the execution mask and `br allp` over it
-     (6 control groups more). The branched form exists behind
-     `PVR_BACKEND_OPT_IF_LOWERING` (pco's `lower_if_cond_exec`, the same six
-     control groups, the default still predicates), and gl_test 195
-     `ifbranch` times 193's programs both ways on one context.
+   - The cost of a branch, gl_test 195 `ifbranch` (`97ba03d4`; record
+     `20261006-0140-case195-97ba03d4-d4863a05`, 8 pixels equal): 193's
+     programs both ways on one context, the branched form behind
+     `PVR_BACKEND_OPT_IF_LOWERING` (pco's `lower_if_cond_exec`, six control
+     groups; the default still predicates). 3D busy per frame, predicate /
+     branch: N = 0 54562 / 55337 us; 8 55420 / 55338; 32 59331 / 55338;
+     128 91144 / 55338. The branched form costs 55.34 ms at every N: the
+     never-run arm is skipped. Against the predicated form it costs +0.78 ms
+     at N = 0 (55337 - 54562 = 775 us: the six control groups and the
+     branch, less the 31 base groups it no longer issues), and wins from
+     N = 7 on (0.78 / 0.107 ms per group), that is, for this program, once
+     the never-run arm exceeds about 38 groups (31 + 7). At N = 128 it saves
+     35.8 ms (91144 - 55338 us). `fill_color`'s own scissor arm (31 groups)
+     therefore stays predicated, which is the default.
+   - Still open: the branched form's cost when the arm IS taken (radius > 0),
+     which the compiler needs before it can choose by arm size (gl_test 195
+     is being extended for it), and the choice rule in the compiler.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
