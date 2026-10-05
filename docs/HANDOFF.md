@@ -75,9 +75,17 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    rises with N; the cause is not measured (instruction fetch is a
    candidate). Both paths have the same slope at N = 128. Predicating both
    arms as pco does (`afa12e9b`) therefore loses to a branch once the
-   never-run arm is large enough. Open: a finer N series to characterise the
-   rise per group; the cost of a branch, so that the compiler can choose by
-   arm size. Where the crossover lies is not known.
+   never-run arm is large enough. Where the crossover lies is not known.
+   - The finer N series is gl_test 194 `offarmn` (N = 0, 2, 4, 8, 12, 16,
+     24, 32, 48, 64, 96, 128, 192, 256; online 104 to 362 groups, the
+     table 105 to 363, both predicated, 73 groups outside the off arm at
+     every N). Board run needed, on the AM62P: case 194 in an online image
+     and in a table image.
+   - The cost of a branch: pco's `PCO_DEBUG=no_pred_cf` compiles the same
+     source with the arm under the execution mask and `br allp` over it
+     (6 control groups more); our compiler needs a lowering of its own
+     (cndst / br / cndef / br / cndend, `cf.rs`) before gl_test 195 can
+     time both.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

@@ -120,7 +120,7 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
     /* a build that reports ES 2.0 refuses every `#version 300 es` source
      * (online_corpus.rs keeps its own fixture for it), so each arm has its
      * own count */
-    let pin = if cfg!(feature = "report-es2") { (723, 370) } else { (723, 598) };
+    let pin = if cfg!(feature = "report-es2") { (733, 380) } else { (733, 608) };
     assert_eq!((all.len(), compiled), pin, "sources and programs compiled: re-derive the pin");
     assert!(partial >= 2, "no block ends part way through a register: the rule is not exercised");
     assert!(bad.is_empty(), "{} programs name uniform dwords past their block (the first: {})", bad.len(), bad[0]);

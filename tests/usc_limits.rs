@@ -2497,8 +2497,9 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
      * where every reference write has fte), so a set that could not tell the
      * two apart would have passed it. */
     // 651_369 before the 20 matattr rows (+399 groups), 651_768 before the
-    // 48 offarm rows of gl_test 193 (+7_266).
-    assert_eq!(corpus_groups, 659_034, "the reference corpus changed size; re-derive this gate's pins");
+    // 48 offarm rows of gl_test 193 (+7_266), 659_034 before the 160 of
+    // gl_test 194 (+26_530).
+    assert_eq!(corpus_groups, 685_564, "the reference corpus changed size; re-derive this gate's pins");
     let real = corpus
         .iter()
         .find(|k| k.contains("uvsw.write :uvsw_write_imm") && k.contains("is4=3"))
@@ -3726,8 +3727,9 @@ fn gl_test_case_192_values_live_across_the_arms_on_the_host() {
 /// is N = 0's. In the byte model each program draws N = 0's colour at
 /// radius 0 (the arm off) and at radius 4 (the arm on; the steps are the
 /// identity with frag[13].y = 1, .z = 0). The table's rows for the same
-/// sources (pco_shc) are predicated the same way, their off arm grown by
-/// the N fmad alone, and run the same 73 groups at radius 0. Case 193 on
+/// sources (pco_shc) are predicated the same way, their off arm grown the
+/// same way (the N fmad and two mbyp), and run the same 73 groups at
+/// radius 0. Case 193 on
 /// the AM62P measures what the off groups cost; this pins that they are
 /// there and off, in both programs.
 #[test]
@@ -3941,6 +3943,121 @@ fn gl_test_case_193_off_arm_groups_on_the_host() {
         assert_eq!(fmads, 6 + n, "offarm{n}, pco: the off arm's fmad are its 6 and the {n} steps");
         assert_eq!((total - off, ours_total - ours_off), (73, 73), "offarm{n}: the groups radius 0 runs");
     }
+}
+
+/// One fragment program's scissor `if` as the series reads it: groups, the
+/// run under if(!p0) that the run under if(p0) follows (the off arm, then
+/// the taken arm), the fmad in the off arm, and whether any group from the
+/// arms on is a branch. None when the `if` is not predicated.
+fn offarm_shape(image: &[u8]) -> Option<(usize, usize, usize, usize, bool)> {
+    let mut groups: Vec<(char, bool, bool)> = Vec::new();
+    yakogl::shaderc::online::powervr::decode::for_each_group(image, |o, g| {
+        let mut t = String::new();
+        yakogl::shaderc::online::powervr::listing::group_text(&mut t, o, g).unwrap();
+        let cc = if t.contains("cc=if(!p0)") {
+            'T'
+        } else if t.contains("cc=if(p0)") {
+            'E'
+        } else {
+            '.'
+        };
+        groups.push((cc, t.contains("phase0 fmad\n"), t.contains("phase0 br")));
+        Ok(())
+    })
+    .unwrap();
+    let shape: String = groups.iter().map(|g| g.0).collect();
+    let start = shape.find("TTE").or_else(|| shape.find("TE"))?;
+    let start = shape[..=start].rfind(|c| c != 'T').map_or(0, |i| i + 1);
+    let off = shape[start..].find('E')?;
+    let on = shape[start + off..].find(|c| c != 'E').unwrap_or(shape.len() - start - off);
+    let fmads = groups[start..start + off].iter().filter(|g| g.1).count();
+    Some((groups.len(), off, on, fmads, groups[start..].iter().any(|g| g.2)))
+}
+
+/// gl_test case 194's fourteen programs, on the host: fill_color.nodiscard
+/// with femtovg's blend (key 0x98661) and N = 0, 2, 4, 8, 12, 16, 24, 32,
+/// 48, 64, 96, 128, 192, 256 dependent steps in the scissor arm radius 0
+/// never runs (tools/gen_offarm.py; 193's 8, 32 and 128 among them). Ours
+/// and the table's (pco_shc) program each: the `if` predicated, no branch
+/// over the arm, the counts below, the off arm's fmad its 6 and the N, and
+/// the groups outside the off arm the same at every N (73 in both
+/// programs). The largest compiles in the target's scratch region
+/// (CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES, the default `store::SCRATCH_BYTES`).
+#[test]
+fn gl_test_case_194_off_arm_series_on_the_host() {
+    use yakogl::shaderc::*;
+    let key =
+        shc_blend_key(SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BLEND_ADD, SHC_BLEND_ADD);
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    let gen = include_str!("../tools/gen_offarm.py");
+    let series = [0usize, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
+    let listed = series.iter().skip(1).map(|n| n.to_string()).collect::<Vec<_>>().join(", ");
+    assert!(gen.contains(&format!("SERIES = [{listed}]")), "tools/gen_offarm.py writes the series");
+    for n in &series[1..] {
+        assert!(suite.contains(&format!("OFFARMN({n})")), "case 194 runs N = {n}");
+    }
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders");
+    let src = |n: usize| {
+        let p = if n == 0 {
+            format!("{dir}/femtovg/fill_color.nodiscard.frag")
+        } else {
+            format!("{dir}/offarm/fill_color.nodiscard.offarm{n}.frag")
+        };
+        std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))
+    };
+    /* (N, ours: groups, off arm, taken arm, temps; table: the same) */
+    let mut got = Vec::new();
+    let _scratch = scratch_lock();
+    for &n in &series {
+        let text = src(n);
+        let (ours, peak) = store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let t = a.alloc_str(&text).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, t).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                .unwrap_or_else(|e| panic!("offarm{n}: {e:?}"));
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let s = offarm_shape(&image).unwrap_or_else(|| panic!("offarm{n}, ours: the `if` is not predicated"));
+            ((s, rec.temps), store::last_scratch_peak())
+        })
+        .unwrap();
+        /* this binary lends four times the product's region (`scratch_lock`) */
+        assert!(
+            peak <= store::SCRATCH_BYTES,
+            "offarm{n}: needs {peak} bytes of scratch, the target has {}",
+            store::SCRATCH_BYTES
+        );
+        let sha = sha256(text.as_bytes());
+        let row = SHC_BLOB_TABLE
+            .iter()
+            .find(|r| r.sha256 == sha && r.blend_key == key)
+            .unwrap_or_else(|| panic!("offarm{n}: no table row for blend {key:#x} (tools/glsl2usc.sh)"));
+        // SAFETY: `usc` points at a `[u32; usc_dw]` static of the generated table.
+        let code = unsafe { core::slice::from_raw_parts(row.shader.usc, row.shader.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let pco = offarm_shape(&image).unwrap_or_else(|| panic!("offarm{n}, pco: the `if` is not predicated"));
+        for (who, (total, off, _, fmads, branch)) in [("ours", ours.0), ("pco", pco)] {
+            assert!(!branch, "offarm{n}, {who}: a branch at or after the arms");
+            assert_eq!(fmads, 6 + n, "offarm{n}, {who}: the off arm's fmad are its 6 and the {n} steps");
+            assert_eq!(total - off, 73, "offarm{n}, {who}: the groups outside the off arm");
+        }
+        got.push((n, ours.0 .0, ours.0 .1, ours.0 .2, ours.1, pco.0, pco.1, pco.2, row.shader.temps));
+    }
+    let counts = got;
+    /* the off arm is 31 groups online and 32 in the table; steps add their
+     * N fmad and, in both programs, two mbyp (the steps' two uniforms copied
+     * once) */
+    let want: Vec<_> = series
+        .iter()
+        .map(|&n| {
+            let ours_off = 31 + n + if n > 0 { 2 } else { 0 };
+            let pco_off = ours_off + 1;
+            (n, 73 + ours_off, ours_off, 23usize, 30u16, 73 + pco_off, pco_off, 22usize, 14u16)
+        })
+        .collect();
+    assert_eq!(counts, want, "(N, ours groups, off, taken, temps, pco groups, off, taken, temps)");
 }
 
 /// gl_test case 91's two blends, on the host: the case's own fragment

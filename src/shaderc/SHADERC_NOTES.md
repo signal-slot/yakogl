@@ -612,7 +612,7 @@ converted from `shader_blobs.c`, so the two can be diffed.
 `tools/glsl2usc.sh` compiles every GLSL file under `tools/shaders/` — the starter set
 below, the FemtoVG and `fvgtest_*` sources, and the Qt Quick, Qt Quick 3D and ES 3.00
 sets — once plain and once per blend/mask/render-target variant its `BLENDS` and `--for`
-lists name. The committed `blobs.rs` holds **544 source texts and 2316 table entries**
+lists name. The committed `blobs.rs` holds **554 source texts and 2476 table entries**
 (`SHC_SOURCE_TABLE`, `SHC_BLOB_TABLE`; a fragment shader typically has 18 rows, one plain
 and one per `--blend` spec). `yakogl-tools glsl2usc --list <files>` prints each shader's
 stage and SHA-256 without emitting the table. Qt shaders `pco_shc` cannot build are left

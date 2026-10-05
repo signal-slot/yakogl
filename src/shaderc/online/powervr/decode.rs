@@ -23,8 +23,8 @@
 //!
 //! Every parse is required to be unique: a group that decodes two ways is a
 //! decoder defect, and [`decode_group`] returns [`DecodeError::Ambiguous`]
-//! rather than picking one. Over the 2,316 blobs of the offline table
-//! (659,034 groups) every group decodes exactly one way.
+//! rather than picking one. Over the 2,476 blobs of the offline table
+//! (685,564 groups) every group decodes exactly one way.
 
 use super::isa::*;
 use super::isa_tables::CTRLOP_VARIANTS;

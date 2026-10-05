@@ -276,9 +276,12 @@ fn the_group_length_and_da_rules_hold_for_every_group() {
     // The 48 offarm rows (gl_test 193: offarm/fill_color.nodiscard.offarm{8,32,128}
     // .frag, plain and 15 blend variants each) add 6_681 main, 45 bitwise
     // and 540 control groups to 540_044 / 68_997 / 42_727.
-    assert_eq!(main_groups, 546_725, "main groups");
-    assert_eq!(bitwise_groups, 69_042, "bitwise groups");
-    assert_eq!(control_groups, 43_267, "control groups");
+    // The 160 rows of gl_test 194's finer series (offarm2, 4, 12, 16, 24, 48,
+    // 64, 96, 192, 256, 16 rows each) add 24_580 main, 150 bitwise and 1_800
+    // control groups to 546_725 / 69_042 / 43_267.
+    assert_eq!(main_groups, 571_305, "main groups");
+    assert_eq!(bitwise_groups, 69_192, "bitwise groups");
+    assert_eq!(control_groups, 45_067, "control groups");
     assert!(control_da_zero > 0, "no control group took the da == 0 branch");
     assert!(aligned_groups > 0, "no group carries alignment padding; that branch is untested");
     std::println!(
@@ -663,8 +666,9 @@ fn every_destination_in_the_corpus_is_fully_written() {
         partial.len(),
         partial[..partial.len().min(5)].join("\n")
     );
-    // 49_718 before the 48 offarm rows (gl_test 193), which add 405.
-    assert_eq!(movc, 50_123, "the movc population changed; re-read the assumption above");
+    // 49_718 before the 48 offarm rows (gl_test 193), which add 405, and the
+    // 160 of gl_test 194, which add 1_350.
+    assert_eq!(movc, 51_473, "the movc population changed; re-read the assumption above");
 }
 
 /// Three questions the corpus can answer, now that the operands can be read.
@@ -2258,7 +2262,8 @@ fn pcos_own_groups_rebuilt_through_the_builder_are_byte_identical() {
      * name. */
     assert!(skipped.is_empty(), "groups the harness did not rebuild: {skipped:?}");
     // 651_369 + 399 (the 20 matattr rows) + 7_266 (the 48 offarm rows, gl_test 193)
-    assert_eq!(rebuilt, 659_034, "the gate no longer covers the whole corpus");
+    // + 26_530 (the 160 offarm rows, gl_test 194)
+    assert_eq!(rebuilt, 685_564, "the gate no longer covers the whole corpus");
     assert_eq!(rebuilt - same, 0, "groups whose bytes our builder does not reproduce from pco's own content");
     assert!(rebuilt > 1000, "only {rebuilt} groups went through the builder");
 }
@@ -2559,7 +2564,8 @@ fn every_attested_bank_occurs_in_the_corpus() {
         }
     }
     // 651_369 + 399 (the 20 matattr rows) + 7_266 (the 48 offarm rows, gl_test 193)
-    assert_eq!(groups, 659_034, "the corpus changed size");
+    // + 26_530 (the 160 offarm rows, gl_test 194)
+    assert_eq!(groups, 685_564, "the corpus changed size");
     let all = [Bank::Temp, Bank::Special, Bank::VtxIn, Bank::Coeff, Bank::Shared];
     for op in ops {
         for slot in 0..3 {
@@ -2615,7 +2621,8 @@ fn every_attested_modifier_set_occurs_in_the_corpus() {
         }
     }
     // 651_369 + 399 (the 20 matattr rows) + 7_266 (the 48 offarm rows, gl_test 193)
-    assert_eq!(groups, 659_034, "the corpus changed size");
+    // + 26_530 (the 160 offarm rows, gl_test 194)
+    assert_eq!(groups, 685_564, "the corpus changed size");
     for op in ops {
         let corpus: BTreeSet<u16> = seen.iter().filter(|(o, _)| *o == op).map(|(_, m)| *m).collect();
         let table: BTreeSet<u16> = attested_mods(op).iter().copied().collect();

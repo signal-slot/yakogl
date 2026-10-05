@@ -3,35 +3,35 @@
 Counted by `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online isa_coverage`, which regenerates this file with `YAKOGL_WRITE_ISA_COVERAGE=1`.
 It is the code generator's target list: an instruction form or an operation that is not here is one nothing in the table needs, and one that is here with a large count is one the generator has to get right first.
 
-Corpus: 2316 blobs of `SHC_BLOB_TABLE`, 659034 instruction groups.
+Corpus: 2476 blobs of `SHC_BLOB_TABLE`, 685564 instruction groups.
 
 ## Operations
 
 | | count |
 |---|---:|
-| `mbyp` | 232366 |
-| `fmad` | 120092 |
-| `fmul` | 107023 |
-| `tst` | 56849 |
-| `fadd` | 54254 |
-| `movc` | 48715 |
-| `bbyp0bm_imm32` | 38403 |
-| `imadd32` | 31233 |
+| `mbyp` | 239986 |
+| `fmad` | 133042 |
+| `fmul` | 108623 |
+| `tst` | 58799 |
+| `fadd` | 56654 |
+| `movc` | 50065 |
+| `bbyp0bm_imm32` | 38553 |
+| `imadd32` | 31833 |
 | `bbyp0bm` | 29446 |
 | `bbyp0s1` | 29446 |
 | `shift` | 25144 |
-| `pck` | 22058 |
-| `br` | 20326 |
-| `br.skip_next` | 20326 |
-| `br.next` | 16948 |
-| `frcp` | 15622 |
-| `wdf` | 10777 |
-| `frsq` | 10431 |
+| `pck` | 22518 |
+| `br` | 21526 |
+| `br.skip_next` | 21526 |
+| `br.next` | 18148 |
+| `frcp` | 15772 |
+| `wdf` | 11077 |
+| `frsq` | 10581 |
 | `logical` | 6676 |
 | `smp` | 6442 |
-| `ditrp` | 3871 |
+| `ditrp` | 4171 |
 | `cndst` | 3327 |
-| `unpck` | 2977 |
+| `unpck` | 3127 |
 | `cndend` | 2212 |
 | `movwm` | 1408 |
 | `fexp` | 1260 |
@@ -62,27 +62,27 @@ Corpus: 2316 blobs of `SHC_BLOB_TABLE`, 659034 instruction groups.
 
 | | count |
 |---|---:|
-| `main.sngl` | 257263 |
-| `main.fmad` | 120064 |
-| `main.fmul` | 107023 |
-| `main.tst_ext` | 55960 |
-| `main.fadd` | 54254 |
-| `main.movc_ext` | 50123 |
-| `bitwise.phase0_imm32` | 38403 |
+| `main.sngl` | 265033 |
+| `main.fmad` | 133014 |
+| `main.fmul` | 108623 |
+| `main.tst_ext` | 57910 |
+| `main.fadd` | 56654 |
+| `main.movc_ext` | 51473 |
+| `bitwise.phase0_imm32` | 38553 |
 | `bitwise.phase0_src` | 30639 |
 | `bitwise.phase2` | 25144 |
 | `main.int32_64` | 22668 |
-| `main.pck` | 22058 |
-| `ctrl.branch` | 20326 |
-| `ctrl.wdf` | 10777 |
-| `main.int32_64_ext` | 9214 |
+| `main.pck` | 22518 |
+| `ctrl.branch` | 21526 |
+| `ctrl.wdf` | 11077 |
+| `main.int32_64_ext` | 9814 |
 | `ctrl.cnd` | 8077 |
 | `bitwise.phase1` | 6676 |
-| `ctrl.ditr` | 4067 |
+| `ctrl.ditr` | 4367 |
+| `main.sngl_ext` | 3565 |
 | `backend.smp_exta` | 3445 |
-| `main.sngl_ext` | 3415 |
+| `main.upck` | 3127 |
 | `backend.smp_brief` | 2997 |
-| `main.upck` | 2977 |
 | `main.tst` | 889 |
 | `backend.uvsw_write_imm` | 798 |
 | `main.fred` | 794 |
@@ -98,29 +98,29 @@ Corpus: 2316 blobs of `SHC_BLOB_TABLE`, 659034 instruction groups.
 
 | | count |
 |---|---:|
-| `main` | 546725 |
-| `bitwise` | 69042 |
-| `control` | 43267 |
+| `main` | 571305 |
+| `bitwise` | 69192 |
+| `control` | 45067 |
 
 ## Sections and padding
 
 | | count |
 |---|---:|
-| `upper_src.1up_1b6i` | 583368 |
-| `dst.1_1b6i` | 555363 |
-| `iss.iss` | 546725 |
-| `pad.word` | 356590 |
-| `lower_src.1lo_1b6i` | 175120 |
-| `lower_src.3lo_2b7i_2b7i_2b6i_2m` | 142359 |
-| `lower_src.2lo_1b6i_1b5i` | 99840 |
-| `lower_src.2lo_2b7i_2b7i_2m` | 83391 |
-| `lower_src.1lo_3b11i_2m` | 63704 |
+| `upper_src.1up_1b6i` | 608098 |
+| `dst.1_1b6i` | 579343 |
+| `iss.iss` | 571305 |
+| `pad.word` | 375400 |
+| `lower_src.1lo_1b6i` | 177420 |
+| `lower_src.3lo_2b7i_2b7i_2b6i_2m` | 155459 |
+| `lower_src.2lo_1b6i_1b5i` | 103590 |
+| `lower_src.2lo_2b7i_2b7i_2m` | 83641 |
+| `lower_src.1lo_3b11i_2m` | 68124 |
 | `dst.1_3b11i` | 49024 |
-| `lower_src.2lo_3b11i_2b8i_3m` | 31712 |
+| `lower_src.2lo_3b11i_2b8i_3m` | 32012 |
 | `upper_src.2up_1b6i_1b5i` | 29728 |
-| `lower_src.3lo_3b8i_2b8i_3b8i_3m` | 27718 |
+| `lower_src.3lo_3b8i_2b8i_3b8i_3m` | 28328 |
 | `upper_src.1up_3b11i` | 8407 |
 | `upper_src.2up_2b7i_2b7i` | 2341 |
-| `pad.align` | 1717 |
+| `pad.align` | 1827 |
 | `dst.2_1b7i_1b6i` | 12 |
 

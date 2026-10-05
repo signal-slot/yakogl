@@ -120,6 +120,17 @@ INPUTS=(
   "$SHADERS/offarm/fill_color.nodiscard.offarm8.frag"
   "$SHADERS/offarm/fill_color.nodiscard.offarm32.frag"
   "$SHADERS/offarm/fill_color.nodiscard.offarm128.frag"
+  # gl_test 194 offarmn: the finer series (tools/gen_offarm.py writes them all)
+  "$SHADERS/offarm/fill_color.nodiscard.offarm2.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm4.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm12.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm16.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm24.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm48.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm64.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm96.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm192.frag"
+  "$SHADERS/offarm/fill_color.nodiscard.offarm256.frag"
 )
 
 # Blend / colour-mask variants precompiled for every fragment shader (both
