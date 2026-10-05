@@ -208,6 +208,79 @@ pub fn fs_w_constant() -> bool {
     FS_W_CONSTANT.load(core::sync::atomic::Ordering::Relaxed)
 }
 
+/* ---- how an `if` with arithmetic arms is lowered (PowerVR online) -------- */
+
+/// How the PowerVR online compiler lowers an `if` whose two arms are
+/// straight-line arithmetic (`powervr::select`, `predicable`). Both forms
+/// are pco's (Mesa `src/imagination/pco/pco_cf.c`): the arms run
+/// predicated, every arm group issued under `if(!p0)` / `if(p0)`
+/// (`lower_if_pred_exec`), or under the execution mask with a branch past
+/// each arm no instance runs (`lower_if_cond_exec`). The values are
+/// `PVR_IF_LOWERING_*` in `pvr_backend.h` (`PVR_BACKEND_OPT_IF_LOWERING`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IfLowering {
+    /// The compiler chooses. Today it predicates, as pco does by default;
+    /// a choice by the never-run arm's size waits for the branch's cost to
+    /// be measured (docs/HANDOFF.md, open work 2).
+    Default,
+    /// Always predicate.
+    Predicate,
+    /// Always branch (pco's `PCO_DEBUG=no_pred_cf`).
+    Branch,
+}
+
+impl IfLowering {
+    /// From the option's value; anything but 1 and 2 is the default.
+    pub const fn from_u32(v: u32) -> IfLowering {
+        match v {
+            1 => IfLowering::Predicate,
+            2 => IfLowering::Branch,
+            _ => IfLowering::Default,
+        }
+    }
+
+    /// The option's value.
+    pub const fn as_u32(self) -> u32 {
+        match self {
+            IfLowering::Default => 0,
+            IfLowering::Predicate => 1,
+            IfLowering::Branch => 2,
+        }
+    }
+}
+
+/// The user's switch (`PVR_BACKEND_OPT_IF_LOWERING`): read when a shader is
+/// compiled from its source, and kept by everything compiled again from it
+/// (a blend variant, a link's substitution, a sampler-state variant), so
+/// the same source can be compiled both ways on one context.
+static IF_LOWERING: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Set the user's [`IfLowering`] (a value from `PVR_IF_LOWERING_*`).
+pub fn set_if_lowering(v: u32) {
+    IF_LOWERING.store(IfLowering::from_u32(v).as_u32(), core::sync::atomic::Ordering::Relaxed);
+}
+
+/// The user's [`IfLowering`].
+pub fn if_lowering() -> IfLowering {
+    IfLowering::from_u32(IF_LOWERING.load(core::sync::atomic::Ordering::Relaxed))
+}
+
+/// The [`IfLowering`] the online compile in progress was asked for; set by
+/// the online back end around a compile, like [`FS_W_CONSTANT`]. Not a user
+/// switch.
+static COMPILE_IF_LOWERING: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Set the compile's [`IfLowering`]; returns the old one for the caller to
+/// put back.
+pub fn set_compile_if_lowering(l: IfLowering) -> IfLowering {
+    IfLowering::from_u32(COMPILE_IF_LOWERING.swap(l.as_u32(), core::sync::atomic::Ordering::Relaxed))
+}
+
+/// The compile's [`IfLowering`].
+pub fn compile_if_lowering() -> IfLowering {
+    IfLowering::from_u32(COMPILE_IF_LOWERING.load(core::sync::atomic::Ordering::Relaxed))
+}
+
 /* ---- sampler-state variants (ShcBackend::lod_sensitivity) ------------------ */
 
 /// The draw-time facts about the samplers a shader reads that its code

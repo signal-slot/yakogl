@@ -670,6 +670,10 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
                         Some("anyp") => pe,
                         _ => return Err("a branch predicated other than by its condition".into()),
                     };
+                    /* a forward skip (a branched `if`'s arm): which way */
+                    if fname(r, "bpred") == Some("allp") && (o as i32) > 0 {
+                        LAST_SKIPS.with(|c| c.borrow_mut().push((off, taken)));
+                    }
                     if taken {
                         jump = Some(i64::from(o as i32));
                     }
@@ -986,6 +990,7 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
 std::thread_local! {
     static LAST_STEPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static LAST_GRADIENTS: std::cell::RefCell<Vec<Vec<u32>>> = const { std::cell::RefCell::new(Vec::new()) };
+    static LAST_SKIPS: std::cell::RefCell<Vec<(usize, bool)>> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST_LEVELS: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -1010,6 +1015,15 @@ pub fn last_steps() -> usize {
 /// taking them clears the list.
 pub fn take_gradients() -> Vec<Vec<u32>> {
     LAST_GRADIENTS.with(|c| std::mem::take(&mut *c.borrow_mut()))
+}
+
+/// The forward `br` taken when no instance is active (`bpred` allp: a
+/// branched `if` skipping an arm) that this thread has run since the last
+/// call, in order: the branch group's byte offset and whether it was taken
+/// (the one modelled instance does not run the arm). Taking them clears the
+/// list.
+pub fn take_skips() -> Vec<(usize, bool)> {
+    LAST_SKIPS.with(|c| std::mem::take(&mut *c.borrow_mut()))
 }
 
 /// A deterministic value for component `k` of the input called `name`:

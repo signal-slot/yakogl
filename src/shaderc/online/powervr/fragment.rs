@@ -125,8 +125,9 @@ fn br_next(cc: &str) -> Result<Group, BuildError> {
 /// A loop's back edge: `br` under `if(p0)` by `offset` bytes from the branch
 /// group's own start, backward. pco's own back edge has this form
 /// (filter_image.frag: `cc=if(p0)`, `bpred=cc`, offset -648 from 0x524 to
-/// 0x29c, its body's first group). A forward or zero offset is refused: this
-/// is the only branch the builder emits, and it only ever goes back.
+/// 0x29c, its body's first group). A forward or zero offset is refused: a
+/// back edge only ever goes back (the forward branches past a branched
+/// `if`'s arm are `cf::branch_none_active`'s).
 pub fn branch_back(offset: i64) -> Result<Group, BuildError> {
     if offset >= 0 {
         return Err(BuildError::Unsupported("a back edge that does not go back"));

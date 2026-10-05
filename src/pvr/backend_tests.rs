@@ -2274,6 +2274,25 @@ fn the_per_draw_debug_line_names_each_shaders_usc_size() {
     assert!(line.contains("fs usc off 0x200000 dw 9 temps 3"), "{line}");
 }
 
+/// PVR_BACKEND_OPT_IF_LOWERING reaches the compiler's switch
+/// (`shaderc::if_lowering`) with its three values; any other value is the
+/// default, and the rig's reset (every option 0) puts the default back.
+#[test]
+fn the_if_lowering_option_sets_the_compilers_switch() {
+    use crate::shaderc::{if_lowering, IfLowering};
+    let _rig = Rig::new();
+    for (v, want) in [
+        (PVR_IF_LOWERING_BRANCH, IfLowering::Branch),
+        (PVR_IF_LOWERING_PREDICATE, IfLowering::Predicate),
+        (7, IfLowering::Default),
+        (PVR_IF_LOWERING_BRANCH, IfLowering::Branch),
+        (PVR_IF_LOWERING_DEFAULT, IfLowering::Default),
+    ] {
+        pvr_backend_set_option(PVR_BACKEND_OPT_IF_LOWERING, v);
+        assert_eq!(if_lowering(), want, "value {v}");
+    }
+}
+
 /// PVR_BACKEND_OPT_FS_TEMPS_MIN raises the temporaries the fragment kick
 /// declares to at least its value, capped at FS_TEMPS_MIN_CAP, and leaves a
 /// larger count alone; 0 declares the shader's own count.

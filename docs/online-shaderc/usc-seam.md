@@ -701,6 +701,80 @@ materials reach allocation and need 504-537 temporaries where pco's
 programs use about 53 (register pressure across a kept loop: every local
 the body stores is carried), and 22 still exhaust the scratch arena.
 
+### An `if` with arithmetic arms: predicated, or a branch past each arm
+
+An `if` whose two arms are straight-line arithmetic (`select::predicable`:
+no nested `if`, loop or jump, no look-up, varying read, derivative,
+sine/cosine, discard or indexed uniform read) is lowered one of two ways,
+both pco's (Mesa `src/imagination/pco/pco_cf.c`, MIT):
+
+- **predicated** (`lower_if_pred_exec`, the default, `afa12e9b`): the
+  condition's `tstz.p0`, the then arm's groups under `if(!p0)`, the else
+  arm's under `if(p0)`;
+- **branched** (`lower_if_cond_exec`, pco's `PCO_DEBUG=no_pred_cf`): the
+  arms under the execution mask (`powervr::cf`), each skipped by a `br`
+  taken when no instance is active (`bpred = allp`), the arms carrying no
+  condition.
+
+```text
+  CndInit     cndst 1 always (from special 0)   once per program, before the test
+  LoopTest c  tstz.p0
+  CndIf       cndst 1 p0_false                  the then arm's instances stay
+Pred(Then)    br allp -> the cndef              (none for an empty arm)
+  ...then arm...
+Pred(Else)
+  CndElse     cndef 1                           (none without an else arm)
+              br allp -> the cndend
+  ...else arm...
+Pred(End)
+  CndIfEnd    cndend 1
+  ...the joins, as predicated...
+```
+
+Selection emits the mask groups around the predicated form's markers and
+arms; the joins (`one_register_from_both_arms`, or a select) are the
+predicated form's, since an instance the mask leaves out writes nothing,
+exactly as one a condition leaves out. Dead-code elimination keeps the
+mask groups as effects, and `drop_idle_masks` takes out the `cndef` before
+an else arm left with no groups and all of the mask of an `if` with none in
+either arm. The assembler (`assemble::Arithmetic`) tells the forms apart by
+the group before the then marker (the test, or the `cndst`), places each
+`br` by building the arm ahead to measure it, and refuses the form out of
+order. An `if` whose then arm alone is empty keeps its `cndst p0_false`
+and `cndef` and loses the then arm's branch: pco would invert the condition
+(`cndst p0_true`), a form no program of pco's table or of its no_pred_cf
+output has (NIR inverts such an `if` itself), so it is not emitted.
+
+**The choice** is `PVR_BACKEND_OPT_IF_LOWERING`: `PVR_IF_LOWERING_DEFAULT`
+(0, the compiler's choice: today it predicates), `_PREDICATE` (1) or
+`_BRANCH` (2), set through `pvr_backend_set_option`
+(`shaderc::IfLowering`). It is read when a shader is compiled from its
+source; the online back end keys the record by it (`backend::Facts`), and
+its blend, link and sampler-state variants keep it, so one source compiles
+both ways on one context. The size threshold HANDOFF item 2 asks for is not
+in: the crossover waits for the branch's cost (gl_test 195).
+
+Host evidence (`tests/usc_limits.rs`):
+
+- `a_predicable_if_branches_as_pcos_no_pred_cf_does`: fill_color.nodiscard
+  and 193's offarm twins (N = 8, 32, 128) at femtovg's blend 0x98661.
+  Ours branched is ours predicated plus six control groups (104 -> 110,
+  114 -> 120, 138 -> 144, 234 -> 240, the emc one more temporary), as
+  pco's no_pred_cf programs (`tests/fixtures/pco_no_pred_cf_98661.txt`, the
+  table's toolchain) are its predicated rows plus the same six (105 -> 111
+  ... 235 -> 241). The six sit where pco's do, skeleton for skeleton, and
+  each is what our builders build from its own operands (the emc and the
+  offsets differ); the branches land on the `cndef` and the `cndend`; the
+  byte model gives the predicated pixel at radius 0 and 4, pco's branched
+  program the same, the branches taken the way the radius says; at radius
+  0 the branched program issues 79 groups at every N.
+- The survey (`what_the_usc_path_asks...`) compiles every source whose
+  program has such an `if` again branched and requires its own verdict
+  unchanged: 94 programs (42 vertex), 168 `if`s, every group attested,
+  ours against selection's program, the IR and pco's.
+
+Not run on silicon; gl_test 195 is the board's measurement.
+
 ### gl_FragCoord.xy, and the flip pair
 
 pco reads `gl_FragCoord.x`/`.y` from the special registers `x_p`/`y_p` (97,

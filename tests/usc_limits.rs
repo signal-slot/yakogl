@@ -846,15 +846,61 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
             }
         }
     };
-    /* The predicated `if` arm open here: every group in it must carry its
-     * condition (the then arm if(!p0), the else arm if(p0)). */
+    /* The `if` arm open here. Predicated, every group in it must carry
+     * its condition (the then arm if(!p0), the else arm if(p0)); branched
+     * (after a `cndst` of `MachineOp::CndIf`), none, and a `br` taken when
+     * no instance is active goes past each arm with groups -- after the
+     * then arm's marker, after the else arm's `cndef` (or its marker when
+     * it has none), landing on the group after the arm. */
     let mut arm: Option<PredArm> = None;
-    for sg in b.groups {
+    let mut branched = false;
+    let mut land: Option<usize> = None;
+    let skip_here = |off: &mut usize, g: &mut Gate, land: &mut Option<usize>| -> bool {
+        g.groups += 1;
+        let Ok(d) = decode_group(&image[*off..], 0) else { return false };
+        let name = |e: &str, v: Option<u32>| {
+            let e = yakogl::shaderc::online::powervr::isa_tables::ENUMS.iter().find(|x| x.name == e)?;
+            e.name_of(v?).map(str::to_string)
+        };
+        let Some((_, ph, x)) = d.instrs().next() else { return false };
+        let br = yakogl::shaderc::online::powervr::isa::ops_for(x, ph).any(|o| o.name == "br")
+            && d.instrs().count() == 1
+            && name("bpred", x.get("bpred")).as_deref() == Some("allp")
+            && name("cc", d.hdr.get("cc")).as_deref() == Some("e1_zx")
+            && x.get("link") == Some(0)
+            && x.get("abs") == Some(0);
+        let Some(o) = x.get("offset").filter(|o| br && *o as usize > d.total) else { return false };
+        g.checked += 1;
+        skel(&image[*off..], "br", g);
+        *land = Some(*off + o as usize);
+        *off += d.total;
+        true
+    };
+    for (i, sg) in b.groups.iter().enumerate() {
+        let next_op = b.groups.get(i + 1).map(|x| x.op);
+        let arm_follows = !matches!(next_op, Some(SelOp::Pred(_)) | None);
         /* A loop's top is an address, not a group; its back edge is one
          * `br` (its offset is the byte model's to follow). */
         match sg.op {
             SelOp::Pred(m) => {
+                if m == PredArm::Then {
+                    branched = i > 0 && matches!(b.groups[i - 1].op, SelOp::Machine(MachineOp::CndIf));
+                }
                 arm = if m == PredArm::End { None } else { Some(m) };
+                if !branched {
+                    continue;
+                }
+                if let Some(t) = land.take() {
+                    if t != off {
+                        g.mismatches.push(format!("a branch past an `if` arm lands at {t}, the arm ends at {off}"));
+                        return g;
+                    }
+                }
+                let cndef_follows = next_op == Some(SelOp::Machine(MachineOp::CndElse));
+                if m != PredArm::End && arm_follows && !cndef_follows && !skip_here(&mut off, &mut g, &mut land) {
+                    g.mismatches.push(format!("group {}: no branch past the `if` arm", g.groups - 1));
+                    return g;
+                }
                 continue;
             }
             SelOp::LoopBegin => continue,
@@ -903,17 +949,10 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
                     e.name_of(d.hdr.get("cc")?).map(str::to_string)
                 });
                 let want_cc = match arm {
+                    _ if matches!(sg.op, SelOp::Machine(m) if m.is_cnd()) => "(ignorepe)",
+                    Some(_) if branched => "e1_zx",
                     Some(PredArm::Then) => "if(!p0)",
                     Some(_) => "if(p0)",
-                    None if matches!(
-                        sg.op,
-                        SelOp::Machine(
-                            MachineOp::CndInit | MachineOp::CndEnter | MachineOp::CndLeave | MachineOp::CndLoopEnd
-                        )
-                    ) =>
-                    {
-                        "(ignorepe)"
-                    }
                     None => "e1_zx",
                 };
                 if cc.as_deref() != Some(want_cc) {
@@ -923,6 +962,12 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
                 g.checked += 1;
                 skel(&image[off..], want, &mut g);
                 off += n;
+                /* the branch past the else arm, after the `cndef` */
+                if sg.op == SelOp::Machine(MachineOp::CndElse) && arm_follows && !skip_here(&mut off, &mut g, &mut land)
+                {
+                    g.mismatches.push(format!("group {}: no branch past the else arm", g.groups - 1));
+                    return g;
+                }
             }
             Err(e) => {
                 g.mismatches.push(format!("group {} ({want}): {e:?}", g.groups - 1));
@@ -1060,7 +1105,10 @@ fn run_selected_from(
             arm = if m == PredArm::End { None } else { Some(m) };
             continue;
         }
-        if matches!((arm, p0), (Some(PredArm::Then), true) | (Some(PredArm::Else), false)) {
+        /* (a branched `if`'s `cndef`, right after the else marker, runs in
+         * every instance) */
+        let mask = matches!(g.op, SelOp::Machine(m) if m.is_cnd());
+        if !mask && matches!((arm, p0), (Some(PredArm::Then), true) | (Some(PredArm::Else), false)) {
             continue;
         }
         match g.op {
@@ -1085,13 +1133,28 @@ fn run_selected_from(
             /* The execution mask, one instance, as the byte model runs it:
              * the emc in srcs[0] (special 0 for the set-up) and dst. No group
              * of selection's sits between an instance leaving and the loop's
-             * end, so being inactive never skips one here. */
-            SelOp::Machine(
-                op @ (MachineOp::CndInit | MachineOp::CndEnter | MachineOp::CndLeave | MachineOp::CndLoopEnd),
-            ) => {
+             * end, so being inactive never skips one here; a branched `if`'s
+             * arms are skipped by their markers above, as a predicated
+             * one's. */
+            SelOp::Machine(op) if op.is_cnd() => {
                 let c = read(g.srcs[0].as_ref()?, &v)?;
                 let next = match op {
                     MachineOp::CndInit => 0,
+                    MachineOp::CndIf => {
+                        if c != 0 {
+                            c + 1
+                        } else if !p0 {
+                            0
+                        } else {
+                            1
+                        }
+                    }
+                    MachineOp::CndElse => match c {
+                        0 => 1,
+                        1 => 0,
+                        c => c,
+                    },
+                    MachineOp::CndIfEnd => c.saturating_sub(1),
                     MachineOp::CndEnter => {
                         if c != 0 {
                             c + 2
@@ -1101,14 +1164,15 @@ fn run_selected_from(
                     }
                     MachineOp::CndLeave if c == 0 && !p0 => 2,
                     MachineOp::CndLeave => c,
-                    _ if c == 0 => {
+                    MachineOp::CndLoopEnd if c == 0 => {
                         p0 = true;
                         0
                     }
-                    _ => {
+                    MachineOp::CndLoopEnd => {
                         p0 = false;
                         c.saturating_sub(2)
                     }
+                    _ => return None,
                 };
                 let SelDst::Virtual(d) = g.dst? else { return None };
                 v.insert(d.0, next);
@@ -1187,7 +1251,10 @@ fn run_selected_from(
                 | MachineOp::CndInit
                 | MachineOp::CndEnter
                 | MachineOp::CndLeave
-                | MachineOp::CndLoopEnd,
+                | MachineOp::CndLoopEnd
+                | MachineOp::CndIf
+                | MachineOp::CndElse
+                | MachineOp::CndIfEnd,
             ) => return None,
             SelOp::Machine(MachineOp::Ubfe) => "ubfe",
             SelOp::Machine(MachineOp::PckCov) => "pckcov",
@@ -2534,6 +2601,21 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
     let mut beyond: Vec<String> = Vec::new();
     let (mut variants, mut variants_same) = (0usize, 0usize);
     let mut variants_unmeasured: BTreeMap<String, usize> = BTreeMap::new();
+    /* every program with an `if` to branch, again with IfLowering::Branch */
+    let (mut br_programs, mut br_vertex, mut br_ifs, mut br_taken, mut br_not) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
+    let mut br_failures: Vec<String> = Vec::new();
+    let mut branched = |name: &str, stage: Stage, r: Option<Result<(usize, usize, usize), String>>| match r {
+        None => {}
+        Some(Ok((n, t, f))) => {
+            br_programs += 1;
+            br_vertex += usize::from(stage == Stage::Vertex);
+            br_ifs += n;
+            br_taken += t;
+            br_not += f;
+        }
+        Some(Err(e)) => br_failures.push(format!("{name}: {e}")),
+    };
 
     for row in SHC_SOURCE_TABLE.iter() {
         let text = row.text.trim_end_matches('\0');
@@ -2542,6 +2624,7 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
         if stage == Stage::Fragment {
             match run_fragment(text, &corpus) {
                 Ok((d, fir)) => {
+                    branched(row.name, stage, branched_verdict(text, stage, &corpus, &fs_verdict(&d, &fir)));
                     /* An if the IR model could not run is not half measured
                      * but unmeasured, and is counted with the unrunnable. */
                     let ifs_run = if fir.unrun.is_none() { fir.ifs } else { 0 };
@@ -2596,6 +2679,7 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
         }
         match run_one(text, stage, &corpus) {
             Ok((p, g)) => {
+                branched(row.name, stage, branched_verdict(text, stage, &corpus, &vs_verdict(&g)));
                 gate_groups += g.groups;
                 gate_checked += g.checked;
                 for m in g.mismatches {
@@ -2675,6 +2759,27 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
         }
     }
 
+    println!(
+        "  branched (IfLowering::Branch, gl_test 195's other form): {br_programs} programs ({br_vertex} vertex) with \
+         {br_ifs} ifs, the survey's verdict unchanged; the byte model's branches past an arm: {br_taken} taken, \
+         {br_not} not"
+    );
+    for f in &br_failures {
+        println!("    BRANCHED {f}");
+    }
+    assert!(
+        br_failures.is_empty(),
+        "branched, {} sources: {:?}",
+        br_failures.len(),
+        &br_failures[..br_failures.len().min(4)]
+    );
+    /* (a report-es2 build refuses the ES 3.00 sources) */
+    let (want_programs, want_ifs) = if cfg!(feature = "report-es2") { (66, 95) } else { (94, 168) };
+    assert!(
+        br_programs >= want_programs && br_ifs >= want_ifs && br_taken > 0 && br_not > 0,
+        "the branched population: {br_programs} programs (it was {want_programs}), {br_ifs} ifs ({want_ifs}), \
+         {br_taken}/{br_not} branches"
+    );
     println!("=== what the USC path asks of the machine ===");
     println!("  sources {total}, through the whole chain {ok}");
     for (why, n) in &refused {
@@ -3769,8 +3874,6 @@ fn gl_test_case_193_off_arm_groups_on_the_host() {
         (32, 138, 65, 23, 30),
         (128, 234, 161, 23, 30),
     ];
-    let name_of =
-        |n: &[core::ffi::c_char]| -> String { n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect() };
     /* N = 0's groups outside the off arm, its off arm's fmad, its colours */
     let mut base_rest: Vec<String> = Vec::new();
     let mut base_fmads = 0usize;
@@ -3844,35 +3947,7 @@ fn gl_test_case_193_off_arm_groups_on_the_host() {
             /* the byte model: case 39's uniforms, the pixel the clear left */
             let mut out = [0u32; 2];
             for (i, radius) in [0.0f32, 4.0].into_iter().enumerate() {
-                let mut frag = [0f32; 56];
-                frag[24] = 0.3; /* innerCol */
-                frag[27] = 0.5;
-                frag[32..36].copy_from_slice(&[1.0; 4]); /* scissorExt, scissorScale */
-                frag[40] = 1.0; /* strokeMult */
-                frag[41] = -1.0; /* strokeThr */
-                frag[43] = 5.0; /* shaderType */
-                frag[51] = radius; /* scissorRadius */
-                frag[53] = 1.0; /* the steps' factor */
-                let mut inp = sentinel_inputs(1.0e30);
-                place_shared(&mut inp, rows, &|u: &str, k: u32| match u {
-                    "frag" => frag[k as usize].to_bits(),
-                    "viewSize" => [1024.0f32, 600.0][k as usize].to_bits(), /* declared; read by no fill */
-                    other => panic!("offarm{n}: a uniform {other:?}"),
-                });
-                let (_, mut at) = coeff_layout(rec.uses_z, rec.uses_w, rec.uses_pntc);
-                for v in &rec.varyings[..rec.num_varyings as usize] {
-                    let vals: [f32; 2] = match name_of(&v.name).as_str() {
-                        "ftcoord" => [0.5, 1.0],
-                        "fpos" => [512.5, 300.5],
-                        other => panic!("offarm{n}: a varying {other:?}"),
-                    };
-                    for (c, x) in vals.iter().enumerate().take(v.components as usize) {
-                        inp.coeff[at + 4 * c] = x.to_bits();
-                        inp.coeff[at + 4 * c + 2] = x.to_bits();
-                    }
-                    at += 4 * v.components as usize;
-                }
-                inp.pixout = 0xff00_0000;
+                let inp = offarm_inputs(rows, &rec, radius);
                 let got = run_binary(&image, &inp, true).unwrap_or_else(|e| panic!("offarm{n}: {e}"));
                 out[i] = *got.get(&0).expect("a colour");
             }
@@ -4058,6 +4133,602 @@ fn gl_test_case_194_off_arm_series_on_the_host() {
         })
         .collect();
     assert_eq!(counts, want, "(N, ours groups, off, taken, temps, pco groups, off, taken, temps)");
+}
+
+/// The byte model's inputs for gl_test 193's and 195's programs
+/// (fill_color.nodiscard and its offarm twins, femtovg's blend): case 39's
+/// uniforms with `scissorRadius` = `radius` and the steps' identity
+/// (frag[13].y = 1), placed by `rows` (a record's uniform rows, ours or the
+/// table's), the varyings by `rec`'s list, the pixel the clear left (opaque
+/// black). Radius 0 never runs scissorMask's `if (scissorRadius > 0.0)`
+/// arm; 4 runs it.
+fn offarm_inputs(rows: &[yakogl::shaderc::ShcUniform], rec: &yakogl::shaderc::ShcShader, radius: f32) -> Inputs {
+    let name_of =
+        |n: &[core::ffi::c_char]| -> String { n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect() };
+    let mut frag = [0f32; 56];
+    frag[24] = 0.3; /* innerCol */
+    frag[27] = 0.5;
+    frag[32..36].copy_from_slice(&[1.0; 4]); /* scissorExt, scissorScale */
+    frag[40] = 1.0; /* strokeMult */
+    frag[41] = -1.0; /* strokeThr */
+    frag[43] = 5.0; /* shaderType */
+    frag[51] = radius; /* scissorRadius */
+    frag[53] = 1.0; /* the steps' factor */
+    let mut inp = sentinel_inputs(1.0e30);
+    place_shared(&mut inp, rows, &|u: &str, k: u32| match u {
+        "frag" => frag[k as usize].to_bits(),
+        "viewSize" => [1024.0f32, 600.0][k as usize].to_bits(), /* declared; read by no fill */
+        other => panic!("a uniform {other:?}"),
+    });
+    let (_, mut at) = coeff_layout(rec.uses_z, rec.uses_w, rec.uses_pntc);
+    for v in &rec.varyings[..rec.num_varyings as usize] {
+        let vals: [f32; 2] = match name_of(&v.name).as_str() {
+            "ftcoord" => [0.5, 1.0],
+            "fpos" => [512.5, 300.5],
+            other => panic!("a varying {other:?}"),
+        };
+        for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+            inp.coeff[at + 4 * c] = x.to_bits();
+            inp.coeff[at + 4 * c + 2] = x.to_bits();
+        }
+        at += 4 * v.components as usize;
+    }
+    inp.pixout = 0xff00_0000;
+    inp
+}
+
+/// The `if` lowering a compile in this binary asks for
+/// (`shaderc::set_compile_if_lowering`), put back when dropped -- also when
+/// the test holding it panics, so no other test compiles the wrong way.
+/// Held under [`scratch_lock`], which serialises every compile here.
+struct IfLoweringFor(yakogl::shaderc::IfLowering);
+
+impl IfLoweringFor {
+    fn set(l: yakogl::shaderc::IfLowering) -> Self {
+        IfLoweringFor(yakogl::shaderc::set_compile_if_lowering(l))
+    }
+}
+
+impl Drop for IfLoweringFor {
+    fn drop(&mut self) {
+        yakogl::shaderc::set_compile_if_lowering(self.0);
+    }
+}
+
+/// One group of a program as the `if` tests read it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum IfPart {
+    /// `cndst 1 always` from special 0: the execution mask set up.
+    Init,
+    /// `cndst 1 p0_false`: a branched `if` entered, the then arm's
+    /// instances kept.
+    Enter,
+    /// `cndef 1`: the other arm.
+    Else,
+    /// `cndend 1`: the `if` left.
+    Leave,
+    /// `br` taken when no instance is active, landing at this byte.
+    Skip(usize),
+    /// A loop's execution-mask group (`cndst 2`, `cndsm`, `cndlt 2`).
+    Loop,
+    /// Anything else: its execution condition ('T' if(!p0), 'E' if(p0), '.'
+    /// e1_zx) and whether it is a `tstz.p0` (mbyp pck tst movc with no
+    /// destination: an `if`'s test).
+    Op(char, bool),
+}
+
+/// The name `v` has in the ISA table's enum `e`.
+fn enum_name(e: &str, v: Option<u32>) -> Option<&'static str> {
+    yakogl::shaderc::online::powervr::isa_tables::ENUMS.iter().find(|x| x.name == e)?.name_of(v?)
+}
+
+/// Each group of `image`: where it starts, what it is to an `if`, and its
+/// skeleton (`verify::skeleton`: no registers, no branch offset, and
+/// if(p0)/if(!p0) read as e1_zx). Any other execution-mask group, a
+/// backward branch, or a mask group not run in every instance panics.
+fn if_parts(image: &[u8]) -> Vec<(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)> {
+    use yakogl::shaderc::online::powervr::isa::ops_for;
+    use yakogl::shaderc::online::powervr::operands::srcs;
+    let mut out = Vec::new();
+    let mut off = 0usize;
+    while off < image.len() {
+        let g = decode_group(image, off).unwrap_or_else(|e| panic!("decodes at {off:#x}: {e:?}"));
+        let names: Vec<&str> =
+            g.instrs().map(|(_, ph, x)| ops_for(x, ph).next().map(|o| o.name).unwrap_or("<unknown>")).collect();
+        let (_, _, x) = g.instrs().next().expect("a group with an operation");
+        let cc = enum_name("cc", g.hdr.get("cc"));
+        let pcnd = enum_name("pcnd", x.get("pcnd"));
+        let lo = g.lower.as_ref().map(srcs).unwrap_or([None; 6]);
+        let special0 = lo[0].is_some_and(|o| enum_name("regbank", Some(o.bank)) == Some("special") && o.index == 0);
+        let part = match names.as_slice() {
+            [op @ ("cndst" | "cndef" | "cndsm" | "cndlt" | "cndend")] => {
+                assert_eq!(cc, Some("(ignorepe)"), "{op} at {off:#x} runs in every instance");
+                match (*op, x.get("adjust"), pcnd) {
+                    ("cndst", Some(1), Some("always")) if special0 => IfPart::Init,
+                    ("cndst", Some(1), Some("p0_false")) => IfPart::Enter,
+                    ("cndef", Some(1), Some("always")) => IfPart::Else,
+                    ("cndend", Some(1), _) => IfPart::Leave,
+                    ("cndst", Some(2), Some("always")) | ("cndsm", ..) | ("cndlt", Some(2), _) => IfPart::Loop,
+                    other => panic!("an execution-mask group no `if` makes at {off:#x}: {other:?}"),
+                }
+            }
+            ["br"] if enum_name("bpred", x.get("bpred")) == Some("allp") => {
+                let o = x.get("offset").expect("an offset") as usize;
+                assert!(o > g.total && cc == Some("e1_zx"), "a forward skip at {off:#x}");
+                IfPart::Skip(off + o)
+            }
+            _ => IfPart::Op(
+                match cc {
+                    Some("if(!p0)") => 'T',
+                    Some("if(p0)") => 'E',
+                    _ => '.',
+                },
+                names == ["mbyp", "pck", "tst", "movc"] && g.dst.is_none(),
+            ),
+        };
+        let mut k = String::new();
+        skeleton(&mut k, &g).unwrap();
+        out.push((off, part, k, g));
+        off += g.total;
+    }
+    out
+}
+
+/// One branched `if` read out of [`if_parts`]: the indices of its six
+/// control groups in program order -- the mask's set-up (or `None` where an
+/// earlier `if` made it), the `cndst`, the branch past the then arm, the
+/// `cndef`, the branch past the else arm, the `cndend` -- and the arms'
+/// group counts. Checks pco's shape (lower_if_cond_exec): the set-up right
+/// before the test, the `cndst` and its branch right after it, the
+/// `cndef` and its branch right after the then arm, the `cndend` right
+/// after the else arm, each branch landing on the group after its arm, and
+/// no condition on any group of either arm.
+fn branched_if(parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)]) -> [usize; 8] {
+    let at = |want: IfPart| parts.iter().position(|p| p.1 == want).unwrap_or_else(|| panic!("no {want:?}"));
+    let enter = at(IfPart::Enter);
+    let (els, leave) = (at(IfPart::Else), at(IfPart::Leave));
+    assert!(matches!(parts[enter - 1].1, IfPart::Op('.', true)), "the test right before the `cndst`");
+    let init = at(IfPart::Init);
+    assert_eq!(init, enter - 2, "the mask set up right before the test, as pco_emc_ref does");
+    let (IfPart::Skip(to_else), IfPart::Skip(to_leave)) = (parts[enter + 1].1, parts[els + 1].1) else {
+        panic!("a branch right after the `cndst` and right after the `cndef`")
+    };
+    assert_eq!(to_else, parts[els].0, "the branch past the then arm lands on the `cndef`");
+    assert_eq!(to_leave, parts[leave].0, "the branch past the else arm lands on the `cndend`");
+    for (i, p) in parts.iter().enumerate().take(leave).skip(enter + 2) {
+        if i != els && i != els + 1 {
+            assert!(matches!(p.1, IfPart::Op('.', false)), "an arm group under a condition at {:#x}: {:?}", p.0, p.1);
+        }
+    }
+    [init, enter, enter + 1, els, els + 1, leave, els - enter - 2, leave - els - 2]
+}
+
+/// The predicated `if`'s two arms in [`if_parts`]: the run of groups under
+/// if(!p0) that a run under if(p0) follows (the iteration's `br.next`
+/// pairs before them alternate, one group each), as gl_test 193's test
+/// finds them.
+fn predicated_arms(
+    parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
+) -> (usize, usize) {
+    let shape: String = parts.iter().map(|p| if let IfPart::Op(c, _) = p.1 { c } else { '.' }).collect();
+    let start = shape.find("TTE").expect("an arm under if(!p0), then one under if(p0)");
+    let start = shape[..=start].rfind(|c| c != 'T').map_or(0, |i| i + 1);
+    let then_len = shape[start..].find('E').unwrap();
+    let else_len = shape[start + then_len..].find(|c| c != 'E').unwrap_or(shape.len() - start - then_len);
+    (then_len, else_len)
+}
+
+/// pco's programs with predication off (`PCO_DEBUG=no_pred_cf`), from
+/// `tests/fixtures/pco_no_pred_cf_98661.txt`: (source, the source text's
+/// SHA-256, temporaries, the image).
+fn pco_no_pred_cf() -> Vec<(String, String, u16, Vec<u8>)> {
+    let mut out: Vec<(String, String, u16, Vec<u8>)> = Vec::new();
+    for l in include_str!("fixtures/pco_no_pred_cf_98661.txt").lines() {
+        if l.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = l.strip_prefix("program ") {
+            let f: Vec<&str> = rest.split(' ').collect();
+            let field = |k: &str| f.iter().find_map(|x| x.strip_prefix(k)).expect("a program field").to_string();
+            out.push((f[0].to_string(), field("sha256="), field("temps=").parse().unwrap(), Vec::new()));
+            let dw: usize = field("dw=").parse().unwrap();
+            out.last_mut().unwrap().3.reserve(dw * 4);
+            continue;
+        }
+        let p = out.last_mut().expect("words after a program line");
+        for w in l.split(' ') {
+            p.3.extend(u32::from_str_radix(w, 16).expect("a hex word").to_le_bytes());
+        }
+    }
+    out
+}
+
+/// A predicable `if` lowered as a branch (`shaderc::IfLowering::Branch`,
+/// `PVR_BACKEND_OPT_IF_LOWERING`), against pco's `no_pred_cf` programs and
+/// our predicated ones, on gl_test 193's and 195's sources
+/// (fill_color.nodiscard and its offarm twins, N = 0, 8, 32, 128 steps in
+/// the arm radius 0 never runs; femtovg's blend 0x98661):
+///
+/// - ours branched is ours predicated plus six control groups (104 -> 110,
+///   114 -> 120, 138 -> 144, 234 -> 240), skeleton for skeleton the same
+///   program around them, as pco's no_pred_cf is pco's predicated row plus
+///   the same six (105 -> 111 ... 235 -> 241);
+/// - the six sit where pco's do (`branched_if`): `cndst 1` set-up, the test,
+///   `cndst 1 p0_false`, `br` past the then arm, `cndef 1`, `br` past the
+///   else arm, `cndend 1`; the branches land on the `cndef` and the
+///   `cndend`; no arm group carries a condition; the arms are the
+///   predicated ones (ours then 31, 41, 65, 161 and else 23, pco's 32, 42,
+///   66, 162 and 22);
+/// - the six are pco's six skeleton for skeleton, and byte for byte but for
+///   the emc's temporary and the branches' offsets: each of pco's, and each
+///   of ours, is what our builders (`cf::cnd`, `cf::branch_none_active`)
+///   build from its own operands;
+/// - every group of ours is a skeleton pco emits (the gate's attestation,
+///   over the table and pco's no_pred_cf programs);
+/// - in the byte model, at radius 0 (the then arm skipped, the else arm
+///   run) and 4 (the other way), ours branched gives ours predicated's
+///   pixel and pco's branched program the same, with the two branches taken
+///   the way the radius says.
+#[test]
+fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
+    use yakogl::shaderc::online::powervr::cf::{branch_none_active, cnd, Cnd};
+    use yakogl::shaderc::online::powervr::operands::{dsts, srcs};
+    use yakogl::shaderc::*;
+    let key =
+        shc_blend_key(SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_INV_SRC_ALPHA, SHC_BLEND_ADD, SHC_BLEND_ADD);
+    assert_eq!(key, 0x98661, "femtovg's blend, case 39's key");
+    let sources: [(usize, &str, &str); 4] = [
+        (0, "femtovg/fill_color.nodiscard.frag", include_str!("../tools/shaders/femtovg/fill_color.nodiscard.frag")),
+        (
+            8,
+            "offarm/fill_color.nodiscard.offarm8.frag",
+            include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm8.frag"),
+        ),
+        (
+            32,
+            "offarm/fill_color.nodiscard.offarm32.frag",
+            include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm32.frag"),
+        ),
+        (
+            128,
+            "offarm/fill_color.nodiscard.offarm128.frag",
+            include_str!("../tools/shaders/offarm/fill_color.nodiscard.offarm128.frag"),
+        ),
+    ];
+    /* (ours predicated, ours branched, pco predicated, pco branched): groups;
+     * then (ours, pco's): the then arm (radius 0 never runs it), as gl_test
+     * 193 counts it; the else arm is 23 in ours and 22 in pco's at every N */
+    let counts =
+        [(104usize, 110usize, 105usize, 111usize), (114, 120, 115, 121), (138, 144, 139, 145), (234, 240, 235, 241)];
+    let then_arms = [(31usize, 32usize), (41, 42), (65, 66), (161, 162)];
+    /* gl_test 195 times these four programs, each compiled both ways */
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    let case = &suite[suite.find("static int case_ifbranch(void)").expect("case 195")..];
+    let case = &case[..case.find("\n}\n").expect("its end")];
+    assert!(suite.contains("case 195: rc = case_ifbranch(); break;"), "case 195 dispatched");
+    for (n, file, _) in &sources {
+        let fs = if *n == 0 {
+            "gl_test_fvg_fill_color_nodiscard_fs_src".to_string()
+        } else {
+            format!("gl_test_offarm{n}_fs_src")
+        };
+        let row = format!("{{ {n}, \"{file}\", {fs} }},");
+        assert!(case.contains(&row), "case 195 runs {file}: {row}");
+    }
+    for form in ["{ GL_TEST_IF_PREDICATE, \"predicate\" }", "{ GL_TEST_IF_BRANCH, \"branch\" }"] {
+        assert!(case.contains(form), "case 195 compiles each program {form}");
+    }
+    let pco = pco_no_pred_cf();
+    assert_eq!(pco.len(), 4, "the fixture's four programs");
+    let (mut attested_by, _) = corpus_skeletons();
+    let in_table = |k: &str| attested_by.contains(k);
+    let mut only_no_pred_cf: BTreeSet<String> = BTreeSet::new();
+    for p in &pco {
+        for g in if_parts(&p.3) {
+            if !in_table(&g.2) {
+                only_no_pred_cf.insert(g.2.clone());
+            }
+        }
+    }
+    attested_by.extend(only_no_pred_cf.iter().cloned());
+    let control =
+        |p: IfPart| matches!(p, IfPart::Init | IfPart::Enter | IfPart::Else | IfPart::Leave | IfPart::Skip(_));
+    let _scratch = scratch_lock();
+    for (((n, file, src), (ours_p, ours_b, pco_p, pco_b)), (ours_then, pco_then)) in
+        sources.into_iter().zip(counts).zip(then_arms)
+    {
+        /* pco's: the fixture's program for this source, against the table's predicated row */
+        let (pfile, psha, ptemps, pimage) = &pco[[0, 8, 32, 128].iter().position(|x| *x == n).unwrap()];
+        assert_eq!(pfile, file, "the fixture's programs in 193's order");
+        let sha = sha256(src.as_bytes());
+        let hex: String = sha.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(&hex, psha, "{file}: the fixture was built from this text");
+        let row = SHC_BLOB_TABLE.iter().find(|r| r.sha256 == sha && r.blend_key == key).expect("the table's row");
+        // SAFETY: `usc` points at a `[u32; usc_dw]` static of the generated table.
+        let row_dw = unsafe { core::slice::from_raw_parts(row.shader.usc, row.shader.usc_dw as usize) };
+        let row_image: Vec<u8> = row_dw.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let (pp, pb) = (if_parts(&row_image), if_parts(pimage));
+        assert_eq!((pp.len(), pb.len()), (pco_p, pco_b), "{file}, pco: predicated and no_pred_cf groups");
+        assert_eq!(*ptemps, row.shader.temps + 1, "{file}, pco: the emc is one more temporary");
+        let pco_six = branched_if(&pb);
+        let pco_rest: Vec<&String> = pb.iter().filter(|p| !control(p.1)).map(|p| &p.2).collect();
+        assert!(
+            pco_rest == pp.iter().map(|p| &p.2).collect::<Vec<_>>(),
+            "{file}, pco: no_pred_cf is the predicated row plus the six, skeleton for skeleton"
+        );
+        let pco_arms = predicated_arms(&pp);
+        assert_eq!((pco_six[6], pco_six[7]), pco_arms, "{file}, pco: the arms are the predicated ones");
+        assert_eq!(pco_arms, (pco_then, 22), "{file}, pco: the arms (gl_test 193)");
+
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let build = |lw: IfLowering| {
+                let _l = IfLoweringFor::set(lw);
+                let rec =
+                    yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                        .unwrap_or_else(|e| panic!("{file} {lw:?}: {e:?}"));
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+                (rec, code.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>())
+            };
+            let (prec, pimg) = build(IfLowering::Predicate);
+            let (brec, bimg) = build(IfLowering::Branch);
+            let (_, dimg) = build(IfLowering::Default);
+            assert!(dimg == pimg, "{file}: the default predicates");
+            let (op, ob) = (if_parts(&pimg), if_parts(&bimg));
+            assert_eq!((op.len(), ob.len()), (ours_p, ours_b), "{file}: ours predicated and branched");
+            assert_eq!(brec.temps, prec.temps + 1, "{file}: the emc is one more temporary, as in pco's");
+            assert!(op.iter().all(|p| !control(p.1)), "{file}: predicated, no mask and no branch");
+            let six = branched_if(&ob);
+            let arms = predicated_arms(&op);
+            assert_eq!((six[6], six[7]), arms, "{file}: the arms are the predicated ones");
+            assert_eq!(arms, (ours_then, 23), "{file}: the arms (gl_test 193)");
+            let rest: Vec<&String> = ob.iter().filter(|p| !control(p.1)).map(|p| &p.2).collect();
+            assert!(
+                rest == op.iter().map(|p| &p.2).collect::<Vec<_>>(),
+                "{file}: branched is the predicated program plus the six, skeleton for skeleton"
+            );
+            /* the six, against pco's: skeletons, and the bytes each builder makes */
+            let rebuilt = |parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
+                           i: usize| {
+                let g = &parts[i].3;
+                let emc = g.dst.as_ref().map(dsts).and_then(|d| d[0]);
+                let s0 = g.lower.as_ref().map(srcs).and_then(|s| s[0]);
+                match parts[i].1 {
+                    IfPart::Init => cnd(Cnd::St, 1, "always", &[s0.unwrap()], emc.unwrap()),
+                    IfPart::Enter => cnd(Cnd::St, 1, "p0_false", &[s0.unwrap()], emc.unwrap()),
+                    IfPart::Else => cnd(Cnd::Ef, 1, "always", &[s0.unwrap()], emc.unwrap()),
+                    IfPart::Leave => cnd(Cnd::End, 1, "always", &[s0.unwrap()], emc.unwrap()),
+                    IfPart::Skip(to) => branch_none_active((to - parts[i].0) as i64),
+                    other => panic!("not a control group: {other:?}"),
+                }
+                .expect("our builder builds it")
+            };
+            let bytes_of =
+                |img: &[u8],
+                 parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
+                 i: usize| { img[parts[i].0..parts[i].0 + parts[i].3.total].to_vec() };
+            for (k, (&i, &j)) in six[..6].iter().zip(&pco_six[..6]).enumerate() {
+                assert_eq!(ob[i].2, pb[j].2, "{file}: control group {k}'s skeleton is pco's");
+                for (img, parts, x, who) in [(&bimg, &ob, i, "ours"), (pimage, &pb, j, "pco's")] {
+                    let g = rebuilt(parts, x);
+                    let mut buf = [0u8; 64];
+                    let len = yakogl::shaderc::online::powervr::encode::encode_group(&g, &mut buf, 0).unwrap();
+                    assert_eq!(&buf[..len], &bytes_of(img, parts, x)[..], "{file}: {who} control group {k}, rebuilt");
+                }
+            }
+            /* attested, as the gate attests every group it builds */
+            for p in &ob {
+                assert!(attested(&attested_by, &p.2), "{file}: a group pco never emits: {}", p.2);
+            }
+            /* the byte model: the radius picks the arm, and the branches go the way it says */
+            let prow: &[ShcUniform] = unsafe { core::slice::from_raw_parts(prec.uniforms, prec.num_uniforms as usize) };
+            let brow: &[ShcUniform] = unsafe { core::slice::from_raw_parts(brec.uniforms, brec.num_uniforms as usize) };
+            // SAFETY: the table's rows are statics.
+            let trow: &[ShcUniform] =
+                unsafe { core::slice::from_raw_parts(row.shader.uniforms, row.shader.num_uniforms as usize) };
+            let skips =
+                |parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
+                 s: &[usize; 8],
+                 taken: [bool; 2]| { vec![(parts[s[2]].0, taken[0]), (parts[s[4]].0, taken[1])] };
+            for (radius, taken) in [(0.0f32, [true, false]), (4.0, [false, true])] {
+                let _ = usc_exec::take_skips();
+                let want = run_binary(&pimg, &offarm_inputs(prow, &prec, radius), true).expect("ours predicated runs");
+                assert!(usc_exec::take_skips().is_empty(), "{file}: predicated, nothing skipped");
+                let got = run_binary(&bimg, &offarm_inputs(brow, &brec, radius), true).expect("ours branched runs");
+                assert_eq!(usc_exec::take_skips(), skips(&ob, &six, taken), "{file}, radius {radius}: our branches");
+                assert_eq!(got, want, "{file}, radius {radius}: branched gives the predicated pixel");
+                /* the groups issued: all of the predicated program's; the
+                 * branched one's but the arm its branch skips */
+                let issued = usc_exec::last_steps();
+                let skipped = if radius == 0.0 { six[6] } else { six[7] };
+                assert_eq!(issued, ob.len() - skipped, "{file}, radius {radius}: groups the branched program issues");
+                if radius == 0.0 {
+                    assert_eq!(issued, 79, "{file}: radius 0 issues 79 branched groups at every N");
+                }
+                let theirs = run_binary(pimage, &offarm_inputs(trow, &row.shader, radius), false).expect("pco's runs");
+                assert_eq!(
+                    usc_exec::take_skips(),
+                    skips(&pb, &pco_six, taken),
+                    "{file}, radius {radius}: pco's branches"
+                );
+                let px = |m: &BTreeMap<u32, u32>| *m.get(&0).expect("a colour");
+                let close =
+                    (0..4).all(|c| ((px(&theirs) >> (8 * c)) & 0xff).abs_diff((px(&want) >> (8 * c)) & 0xff) <= 1);
+                assert!(
+                    close,
+                    "{file}, radius {radius}: pco's branched {:#010x}, ours {:#010x}",
+                    px(&theirs),
+                    px(&want)
+                );
+            }
+        })
+        .unwrap();
+    }
+    println!("  skeletons only pco's no_pred_cf programs emit (not in the table): {only_no_pred_cf:?}");
+}
+
+/// The branched `if`s in a program, read out of [`if_parts`] whatever
+/// their number: each `cndst 1 p0_false` right after its test, with the
+/// mask set up before the first; a branch past each arm with groups, the
+/// then arm's right after the `cndst`, the else arm's right after the
+/// `cndef` (none without an else arm), each landing on the group after its
+/// arm (the `cndef`, or the `cndend`); no `if` inside another; no condition
+/// on any arm group. Returns how many, or what breaks the shape.
+fn branched_ifs(
+    parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
+) -> Result<usize, String> {
+    let mut n = 0usize;
+    let mut init = false;
+    let mut open = false;
+    let mut land: Option<usize> = None;
+    for (i, p) in parts.iter().enumerate() {
+        let next = parts.get(i + 1).map(|x| x.1);
+        if land == Some(p.0) {
+            land = None;
+            if !matches!(p.1, IfPart::Else | IfPart::Leave) {
+                return Err(format!("a branch lands at {:#x} on {:?}", p.0, p.1));
+            }
+        }
+        match p.1 {
+            IfPart::Init => {
+                if init {
+                    return Err("the mask set up twice".into());
+                }
+                init = true;
+            }
+            IfPart::Enter => {
+                if open || !init || !matches!(parts[i - 1].1, IfPart::Op('.', true)) {
+                    return Err(format!("a `cndst` at {:#x} not right after its test, or nested", p.0));
+                }
+                open = true;
+                n += 1;
+            }
+            IfPart::Else if !open || land.is_some() => return Err(format!("a `cndef` at {:#x} out of place", p.0)),
+            IfPart::Leave if !open || land.is_some() => return Err(format!("a `cndend` at {:#x} out of place", p.0)),
+            IfPart::Leave => open = false,
+            IfPart::Else => {}
+            IfPart::Skip(to) => {
+                let after = i > 0 && matches!(parts[i - 1].1, IfPart::Enter | IfPart::Else);
+                if !open || !after || land.is_some() || to <= p.0 {
+                    return Err(format!("a branch at {:#x} not right after a `cndst` or `cndef`", p.0));
+                }
+                land = Some(to);
+            }
+            IfPart::Op(c, _) if open && c != '.' => {
+                return Err(format!("an arm group at {:#x} under a condition", p.0))
+            }
+            IfPart::Op(..) => {}
+            IfPart::Loop if open => return Err(format!("a loop's mask group at {:#x} inside an `if` arm", p.0)),
+            IfPart::Loop => {}
+        }
+        if matches!(p.1, IfPart::Enter | IfPart::Else) && next.is_some_and(|x| matches!(x, IfPart::Op(..))) {
+            /* an arm with groups and no branch past it */
+            return Err(format!("no branch past the arm after {:#x}", p.0));
+        }
+    }
+    if open || land.is_some() {
+        return Err("an `if` left open".into());
+    }
+    Ok(n)
+}
+
+/// The survey's verdict on one fragment shader (`run_fragment`'s), as one
+/// string to compare between two compiles of it.
+fn fs_verdict(d: &[String], f: &FsIr) -> String {
+    format!("{d:?} agreed {} undefined {} variants {}/{}", f.agreed, f.undefined, f.variants_same, f.variants)
+}
+
+/// The survey's verdict on one vertex shader (`run_one`'s gate), as one
+/// string to compare between two compiles of it.
+fn vs_verdict(g: &Gate) -> String {
+    format!(
+        "read back whole {} {:?} exec {} {:?} pco {:?} records {:?} unattested {:?} IR {} {:?} {:?}",
+        g.checked == g.groups,
+        g.mismatches,
+        g.executed,
+        g.exec_failures,
+        g.pco,
+        g.record_diffs,
+        g.unattested,
+        g.ir_agreed,
+        g.ir_failures,
+        g.ir_unrun
+    )
+}
+
+/// A source the survey has just judged (`want`, [`fs_verdict`] or
+/// [`vs_verdict`]), compiled again with `IfLowering::Branch` (gl_test 195's
+/// other form) when that changes its program: the program is the default
+/// one plus the branched `if`s' control groups (`branched_ifs`'s shape,
+/// skeleton for skeleton the same program around them but for a vertex
+/// shader's output writes, which the emc's temporary can regroup), and the
+/// survey's own per-source checks give the same verdict -- for a fragment
+/// shader `run_fragment`'s (every group attested, aligned, the record pco's,
+/// ours against selection's program, pco's and the IR, the blend variants
+/// against pco's), for a vertex shader `run_one`'s (every group read back to
+/// its meaning, a `br` past each arm landing on its end, ours against
+/// selection's program, the IR and pco's). `None` when the program has no
+/// `if` to branch; else the `if`s and how often the byte model took the
+/// branches past an arm (taken, not).
+fn branched_verdict(
+    text: &str,
+    stage: Stage,
+    corpus: &BTreeSet<String>,
+    want: &str,
+) -> Option<Result<(usize, usize, usize), String>> {
+    use yakogl::shaderc::IfLowering;
+    let image_of = |l: IfLowering| -> Option<Vec<u8>> {
+        let _l = IfLoweringFor::set(l);
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep()?;
+            let text = a.alloc_str(text).ok()?;
+            let lw = lower::compile_to_ir(a, stage, text).ok()?;
+            let rec = match stage {
+                Stage::Fragment => compile_fragment(&lw.module, &lw.reflection, a).ok()?,
+                _ => yakogl::shaderc::online::powervr::chain::compile_vertex(&lw.module, &lw.reflection, a).ok()?,
+            };
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            Some(code.iter().flat_map(|w| w.to_le_bytes()).collect())
+        })
+        .flatten()
+    };
+    let pred = image_of(IfLowering::Default)?;
+    let Some(branch) = image_of(IfLowering::Branch) else {
+        return Some(Err("refused branched, built predicated".into()));
+    };
+    if branch == pred {
+        return None;
+    }
+    let (pp, bp) = (if_parts(&pred), if_parts(&branch));
+    let n = match branched_ifs(&bp) {
+        Ok(n) if n > 0 => n,
+        Ok(_) => return Some(Err("differs from the predicated program with no branched `if`".into())),
+        Err(e) => return Some(Err(e)),
+    };
+    let control =
+        |p: IfPart| matches!(p, IfPart::Init | IfPart::Enter | IfPart::Else | IfPart::Leave | IfPart::Skip(_));
+    let body = |parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)]| -> Vec<String> {
+        parts.iter().filter(|p| !control(p.1) && !p.2.contains(" uvsw.write")).map(|p| p.2.clone()).collect()
+    };
+    if body(&bp) != body(&pp) {
+        return Some(Err("not the predicated program plus the control groups".into()));
+    }
+    let _l = IfLoweringFor::set(IfLowering::Branch);
+    let _ = usc_exec::take_skips();
+    let got = match stage {
+        Stage::Fragment => run_fragment(text, corpus).map(|(d, f)| fs_verdict(&d, &f)),
+        _ => run_one(text, stage, corpus).map(|(_, g)| vs_verdict(&g)),
+    };
+    let skips = usc_exec::take_skips();
+    let taken = skips.iter().filter(|s| s.1).count();
+    if got.as_deref() != Ok(want) {
+        return Some(Err(format!("the survey's verdict changed\n      predicated {want}\n      branched   {got:?}")));
+    }
+    Some(Ok((n, taken, skips.len() - taken)))
 }
 
 /// gl_test case 91's two blends, on the host: the case's own fragment

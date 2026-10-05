@@ -335,7 +335,9 @@ pub enum SelOp {
     LoopBegin,
     /// The back edge: `br if(p0)` to the matching [`SelOp::LoopBegin`].
     ///
-    /// The ONLY branch the builder emits. It must directly follow the
+    /// The only BACKWARD branch the builder emits (the other branches go
+    /// forward past a branched `if`'s arm, [`SelOp::Pred`], where the
+    /// execution mask decides). It must directly follow the
     /// [`MachineOp::LoopTest`] of the loop's own counter, which is the only
     /// thing that sets p0 for it: the counter is the same in every instance,
     /// so every instance takes the branch or none does. A data-dependent
@@ -353,6 +355,17 @@ pub enum SelOp {
     /// on the same condition, so an arm that does not run leaves only
     /// values nothing reads; a group where the condition holds in no
     /// instance costs about nothing (gl_test 186/187 on the AM62P).
+    ///
+    /// The same markers delimit the arms of a BRANCHED `if` (pco_cf.c
+    /// `lower_if_cond_exec`), told apart by the group before
+    /// [`PredArm::Then`]: [`MachineOp::CndIf`] rather than the test. Its
+    /// arms run under the execution mask and carry no condition; the
+    /// assembler puts a `br` taken when no instance is active
+    /// (`cf::branch_none_active`) before each arm that has groups, past it,
+    /// and [`MachineOp::CndElse`] (right after `Else`) and
+    /// [`MachineOp::CndIfEnd`] (right after `End`) switch the mask. The
+    /// joins are the predicated form's: an instance the mask leaves out
+    /// writes nothing, exactly as under a condition.
     Pred(PredArm),
 }
 
@@ -423,6 +436,34 @@ pub enum MachineOp {
     /// The loop's end: p0 set while the instance is still in (`cndlt 2`),
     /// for the back edge.
     CndLoopEnd,
+    /// A branched `if` entered (`cndst 1`): the instances whose p0 is
+    /// clear -- the condition held, the then arm's -- stay active
+    /// (`pcnd p0_false`).
+    CndIf,
+    /// The branched `if`'s other arm (`cndef 1`): the active instances and
+    /// the inactive ones of this level change places.
+    CndElse,
+    /// The branched `if` left (`cndend 1`): every instance active again
+    /// that was before it.
+    CndIfEnd,
+}
+
+impl MachineOp {
+    /// An execution-mask operation (`powervr::cf`): it reads the emc in
+    /// `srcs[0]` (special 0 for [`MachineOp::CndInit`]), writes it back to
+    /// `dst`, and runs in every instance whatever the mask.
+    pub fn is_cnd(self) -> bool {
+        matches!(
+            self,
+            MachineOp::CndInit
+                | MachineOp::CndEnter
+                | MachineOp::CndLeave
+                | MachineOp::CndLoopEnd
+                | MachineOp::CndIf
+                | MachineOp::CndElse
+                | MachineOp::CndIfEnd
+        )
+    }
 }
 
 /// Which function a `fred` reduces for.
@@ -450,7 +491,15 @@ impl SelOp {
             SelOp::Machine(MachineOp::FredA(_) | MachineOp::Fsinc(_)) => 1,
             SelOp::Machine(MachineOp::FredB(_) | MachineOp::PselTrig) => 2,
             /* the emc (special 0 for the set-up) */
-            SelOp::Machine(MachineOp::CndInit | MachineOp::CndEnter | MachineOp::CndLeave | MachineOp::CndLoopEnd) => 1,
+            SelOp::Machine(
+                MachineOp::CndInit
+                | MachineOp::CndEnter
+                | MachineOp::CndLeave
+                | MachineOp::CndLoopEnd
+                | MachineOp::CndIf
+                | MachineOp::CndElse
+                | MachineOp::CndIfEnd,
+            ) => 1,
         }
     }
 

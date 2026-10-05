@@ -1564,21 +1564,7 @@ impl<'a> Sel<'a> {
          * the execution mask (pco's construction, `powervr::cf`): the mask
          * set up once, a loop level entered before the body. */
         let emc = if divergent {
-            let emc = match self.emc {
-                Some(e) => e,
-                None => {
-                    let e = VReg(self.next_vreg);
-                    self.next_vreg += 1;
-                    self.emit(SelGroup {
-                        op: SelOp::Machine(MachineOp::CndInit),
-                        ty: OpType::U32,
-                        dst: Some(SelDst::Virtual(e)),
-                        srcs: [Some(SelSrc::Fixed { bank: Bank::Special, reg: 0, mods: Mods::default() }), None, None],
-                    })?;
-                    self.emc = Some(e);
-                    e
-                }
-            };
+            let emc = self.emc_reg()?;
             self.emit(SelGroup {
                 op: SelOp::Machine(MachineOp::CndEnter),
                 ty: OpType::U32,
@@ -1713,6 +1699,83 @@ impl<'a> Sel<'a> {
         }
     }
 
+    /// The execution mask counter (`powervr::cf`), set up where it is first
+    /// needed (`cndst 1` from special 0, every instance active), as pco's
+    /// `pco_emc_ref` does: one temporary for the whole program.
+    fn emc_reg(&mut self) -> Result<VReg, SelectError> {
+        if let Some(e) = self.emc {
+            return Ok(e);
+        }
+        let e = VReg(self.next_vreg);
+        self.next_vreg += 1;
+        self.emit(SelGroup {
+            op: SelOp::Machine(MachineOp::CndInit),
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(e)),
+            srcs: [Some(SelSrc::Fixed { bank: Bank::Special, reg: 0, mods: Mods::default() }), None, None],
+        })?;
+        self.emc = Some(e);
+        Ok(e)
+    }
+
+    /// A branched `if`'s mask where an arm ended with no groups, once dead
+    /// code is gone (an arm of copies alone leaves none): pco builds no
+    /// interlogue for an `if` without an else body, so the `cndef` before
+    /// an empty else arm goes; an `if` with no groups in either arm has
+    /// nothing to branch past and keeps none of its mask (the predicated
+    /// form's markers stay); and the set-up goes with the last group that
+    /// used it. (An `if` whose then arm alone is empty keeps its `cndst
+    /// p0_false` and `cndef` and loses only the then arm's branch, which
+    /// the assembler leaves out: pco would invert the condition instead
+    /// (`lower_if`, `invert_cond`, `cndst p0_true`), a form no program of
+    /// its table or of its no_pred_cf output has -- NIR inverts such an
+    /// `if` itself -- so it stays out, unattested.)
+    fn drop_idle_masks(&mut self) {
+        let op_at = |g: &AVec<'a, SelGroup>, i: usize| g.as_slice().get(i).map(|x| x.op);
+        let mut i = 0;
+        while i < self.groups.len() {
+            if op_at(&self.groups, i) != Some(SelOp::Machine(MachineOp::CndIf)) {
+                i += 1;
+                continue;
+            }
+            /* CndIf, Pred(Then), then arm, Pred(Else), CndElse, else arm,
+             * Pred(End), CndIfEnd (`if_convert`) */
+            let at = |m: PredArm, from: usize| {
+                (from..self.groups.len()).find(|&k| op_at(&self.groups, k) == Some(SelOp::Pred(m)))
+            };
+            let (Some(els), Some(end)) = (at(PredArm::Else, i), at(PredArm::End, i)) else { return };
+            let then_empty = els == i + 2;
+            let else_empty = end == els + 2;
+            if else_empty && op_at(&self.groups, els + 1) == Some(SelOp::Machine(MachineOp::CndElse)) {
+                vec_remove(&mut self.groups, els + 1);
+                if then_empty {
+                    /* Pred(End) now at els + 1, its CndIfEnd after it */
+                    vec_remove(&mut self.groups, els + 2);
+                    vec_remove(&mut self.groups, i);
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        let used = self.groups.as_slice().iter().filter(|g| matches!(g.op, SelOp::Machine(m) if m.is_cnd())).count();
+        if used == 1 {
+            if let Some(k) = self.groups.as_slice().iter().position(|g| g.op == SelOp::Machine(MachineOp::CndInit)) {
+                vec_remove(&mut self.groups, k);
+                self.emc = None;
+            }
+        }
+    }
+
+    /// One execution-mask group on `emc` (`powervr::cf`).
+    fn cnd(&mut self, op: MachineOp, emc: VReg) -> Result<(), SelectError> {
+        self.emit(SelGroup {
+            op: SelOp::Machine(op),
+            ty: OpType::U32,
+            dst: Some(SelDst::Virtual(emc)),
+            srcs: [Some(SelSrc::Virtual { v: emc, mods: Mods::default() }), None, None],
+        })
+    }
+
     /// An `if` without a branch: the then arm writes its own registers and a
     /// `movc` picks at the join.
     ///
@@ -1735,9 +1798,10 @@ impl<'a> Sel<'a> {
     /// between its arms, so an inner join's result is what the outer join
     /// sees. The cost is a select per written component per level -- the
     /// GC7000 measured 60 temps against the reference's 10 on one shader this
-    /// way and branches instead; here there is no branch yet (`SelGroup`
-    /// carries no target), and the one corpus program that outgrows the temps
-    /// file is refused by the allocator by name. A loop or a jump inside an
+    /// way and branches instead; here a level whose arms are arithmetic
+    /// runs them predicated or, asked to, under a branch (below), and the
+    /// one corpus program that outgrows the temps file is refused by the
+    /// allocator by name. A loop or a jump inside an
     /// arm still refuses. Outputs stored in an arm are joined the same way.
     ///
     /// **A seed copy refuses** rather than being invented. An arm that reads
@@ -1781,14 +1845,27 @@ impl<'a> Sel<'a> {
          * hardware passes over its groups at about no cost where no
          * instance runs them (gl_test 186/187: the whole fill_color gap). */
         let pred = self.predicable(then_) && self.predicable(else_);
+        /* Or, asked to (`shaderc::IfLowering::Branch`), the same arms
+         * under the execution mask, as pco_cf.c lower_if_cond_exec builds
+         * them (pco's `no_pred_cf`): the emc set up where first needed, the
+         * test, `cndst 1` keeping the then arm's instances, the then arm,
+         * `cndef 1`, the else arm, `cndend 1`; the assembler puts a `br`
+         * taken when no instance is active before each arm, past it. The
+         * arms and the joins are the predicated form's: an instance the
+         * mask leaves out writes nothing, as one a condition leaves out. */
+        let branch = pred && crate::shaderc::compile_if_lowering() == crate::shaderc::IfLowering::Branch;
         if pred {
             let c = self.src(cond, 0)?;
+            let emc = if branch { Some(self.emc_reg()?) } else { None };
             self.emit(SelGroup {
                 op: SelOp::Machine(MachineOp::LoopTest),
                 ty: OpType::U32,
                 dst: None,
                 srcs: [Some(c), None, None],
             })?;
+            if let Some(emc) = emc {
+                self.cnd(MachineOp::CndIf, emc)?;
+            }
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Then), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
         let then_at = self.groups.len();
@@ -1805,10 +1882,19 @@ impl<'a> Sel<'a> {
         if pred {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Else), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
+        /* The other arm's mask (`drop_idle_masks` takes it out again where
+         * the else arm ends with no groups). */
+        let emc = self.emc.filter(|_| branch);
+        if let Some(emc) = emc {
+            self.cnd(MachineOp::CndElse, emc)?;
+        }
         self.nodes(else_)?;
         let end_at = self.groups.len();
         if pred {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::End), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+        }
+        if let Some(emc) = emc {
+            self.cnd(MachineOp::CndIfEnd, emc)?;
         }
 
         /* The condition is a value from before the `if`, so the arms cannot
@@ -3318,6 +3404,21 @@ impl<'a> Sel<'a> {
                     continue;
                 }
             }
+            /* The execution mask's groups decide which instances run what
+             * follows: effects, whether or not a later one reads the emc
+             * they write (the `cndend` closing a branched `if` is read by
+             * nothing). */
+            if let (SelOp::Machine(m), Some(SelDst::Virtual(v))) = (g.op, g.dst) {
+                if m.is_cnd() {
+                    mark(live, v, false);
+                    for s in g.srcs.iter().flatten() {
+                        if let SelSrc::Virtual { v, .. } = s {
+                            mark(live, *v, true);
+                        }
+                    }
+                    continue;
+                }
+            }
             if let Some(SelDst::Virtual(v0)) = g.dst {
                 /* A sample defines FOUR registers from its destination
                  * (`SelOp::Sample`); a shader reading only `.w` of a fetch
@@ -3387,6 +3488,12 @@ impl<'a> Sel<'a> {
     fn result_lanes(&self, id: ir::InstrId) -> u32 {
         u32::from(self.m.comps_of(ir::ValueId(id.0))).clamp(1, LANES)
     }
+}
+
+/// Take group `i` out of `groups`, keeping the order of the rest.
+fn vec_remove(groups: &mut AVec<'_, SelGroup>, i: usize) {
+    groups.as_mut_slice().copy_within(i + 1.., i);
+    groups.pop();
 }
 
 /// A source read through an outer swizzle: lane *i* of the result takes the
@@ -3520,13 +3627,18 @@ fn verify_loops(groups: &[SelGroup]) -> Result<(), SelectError> {
                     return Err(bad());
                 }
             }
-            /* A test sets p0 for the back edge, the masked leave, or a
-             * predicated `if`'s arms (`if_convert`); the loop's own test
+            /* A test sets p0 for the back edge, the masked leave, or an
+             * `if`'s arms, predicated or entered under the mask
+             * (`if_convert`); the loop's own test
              * right before its back edge sets p0 again after any `if`. */
             SelOp::Machine(MachineOp::LoopTest)
                 if !matches!(
                     groups.get(i + 1).map(|x| x.op),
-                    Some(SelOp::LoopEnd | SelOp::Machine(MachineOp::CndLeave) | SelOp::Pred(PredArm::Then))
+                    Some(
+                        SelOp::LoopEnd
+                            | SelOp::Machine(MachineOp::CndLeave | MachineOp::CndIf)
+                            | SelOp::Pred(PredArm::Then)
+                    )
                 ) =>
             {
                 return Err(bad());
@@ -3603,6 +3715,7 @@ pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selecte
     s.forward_copies()?;
     s.merge_nested_selects()?;
     s.eliminate_dead()?;
+    s.drop_idle_masks();
     s.prune_frag_zw();
     verify_loops(s.groups.as_slice())?;
     /* Unchanged by the deletion: `vregs` is the bound the allocator sizes its
@@ -3633,8 +3746,21 @@ mod tests {
     /// `verify_loops` takes that.
     /// The groups `src`'s fragment shader selects to.
     fn selected_fs(src: &str) -> std::vec::Vec<SelGroup> {
+        selected_fs_with(src, crate::shaderc::IfLowering::Default)
+    }
+
+    /// [`selected_fs`] with an `if` lowering asked for (put back after,
+    /// under the lock every compile here takes).
+    fn selected_fs_with(src: &str, lowering: crate::shaderc::IfLowering) -> std::vec::Vec<SelGroup> {
         use crate::shaderc::online::{lower, sema::Stage};
         let _l = store::test_lock();
+        struct Put(crate::shaderc::IfLowering);
+        impl Drop for Put {
+            fn drop(&mut self) {
+                crate::shaderc::set_compile_if_lowering(self.0);
+            }
+        }
+        let _put = Put(crate::shaderc::set_compile_if_lowering(lowering));
         let mut out = std::vec::Vec::new();
         store::with_scratch(|a| {
             let text = a.alloc_str(src).unwrap();
@@ -3757,6 +3883,76 @@ mod tests {
         let then_dst = g[then_ + 1..else_].last().and_then(|x| x.dst).expect("the then value");
         assert!(g[else_ + 1..end].iter().any(|x| x.dst == Some(then_dst)), "c written by both arms: {g:?}");
         assert_eq!(g[end + 1..].iter().filter(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)).count(), 0, "{g:?}");
+    }
+
+    /// Asked to branch (`IfLowering::Branch`), the same `if` runs its arms
+    /// under the execution mask, as pco_cf.c lower_if_cond_exec builds it:
+    /// the emc set up right before the test, `cndst` (CndIf) right after
+    /// it, the then arm, `cndef` (CndElse) right after the else marker, the
+    /// else arm, `cndend` (CndIfEnd) right after the end, all on one emc;
+    /// the arms and the joins are the predicated form's. An `if` with no
+    /// else arm has no `cndef`; one with no groups in either arm takes no
+    /// mask at all; a second `if` reuses the emc. The default and
+    /// `Predicate` give the predicated program.
+    #[test]
+    fn a_predicable_if_asked_to_branch_runs_its_arms_under_the_mask() {
+        use crate::shaderc::IfLowering;
+        let both = "precision mediump float; uniform vec4 u; void main() { vec4 c; \
+                    if (u.x > 0.0) { c = u * 2.0; } else { c = u + 1.0; } gl_FragColor = c; }";
+        let pred = selected_fs_with(both, IfLowering::Predicate);
+        assert_eq!(pred, selected_fs(both), "the default predicates");
+        let g = selected_fs_with(both, IfLowering::Branch);
+        let at =
+            |g: &[SelGroup], op: SelOp| g.iter().position(|x| x.op == op).unwrap_or_else(|| panic!("{op:?}: {g:?}"));
+        let m = |op| SelOp::Machine(op);
+        let (init, test, enter) =
+            (at(&g, m(MachineOp::CndInit)), at(&g, m(MachineOp::LoopTest)), at(&g, m(MachineOp::CndIf)));
+        let (then_, else_, end) =
+            (at(&g, SelOp::Pred(PredArm::Then)), at(&g, SelOp::Pred(PredArm::Else)), at(&g, SelOp::Pred(PredArm::End)));
+        let (ef, leave) = (at(&g, m(MachineOp::CndElse)), at(&g, m(MachineOp::CndIfEnd)));
+        assert_eq!([test, enter, then_, ef, leave], [init + 1, init + 2, init + 3, else_ + 1, end + 1], "{g:?}");
+        let emc = g[init].dst;
+        for i in [enter, ef, leave] {
+            assert_eq!(g[i].dst, emc, "one emc: {g:?}");
+            assert_eq!(
+                g[i].srcs[0],
+                emc.map(|d| match d {
+                    SelDst::Virtual(v) => SelSrc::Virtual { v, mods: Mods::default() },
+                    SelDst::Fixed { .. } => unreachable!(),
+                })
+            );
+        }
+        let mask = |x: &SelGroup| matches!(x.op, SelOp::Machine(o) if o.is_cnd());
+        /* (the emc takes the first fresh register, so the arms' are one on) */
+        let ops = |g: &[SelGroup]| g.iter().filter(|x| !mask(x)).map(|x| x.op).collect::<std::vec::Vec<_>>();
+        assert_eq!(ops(&g), ops(&pred), "the predicated program around the mask: {g:?}");
+        /* no else arm: no `cndef` */
+        let no_else = "precision mediump float; uniform vec4 u; void main() { vec4 c = u + 0.5; \
+                       if (u.x > 0.0) { c = u * 2.0; } gl_FragColor = c; }";
+        let g = selected_fs_with(no_else, IfLowering::Branch);
+        let count = |g: &[SelGroup], op| g.iter().filter(|x| x.op == m(op)).count();
+        assert_eq!(
+            [MachineOp::CndInit, MachineOp::CndIf, MachineOp::CndElse, MachineOp::CndIfEnd].map(|o| count(&g, o)),
+            [1, 1, 0, 1],
+            "{g:?}"
+        );
+        /* no groups in either arm (a select of two values from before it):
+         * the predicated form, no mask */
+        let empty = "precision mediump float; uniform vec4 u; void main() { vec4 a = u * 2.0; vec4 c; \
+                     if (u.x > 0.0) { c = a; } else { c = u; } gl_FragColor = c; }";
+        let g = selected_fs_with(empty, IfLowering::Branch);
+        assert!(g.iter().any(|x| x.op == SelOp::Pred(PredArm::Then)), "an `if` there: {g:?}");
+        assert!(!g.iter().any(mask), "no mask: {g:?}");
+        assert_eq!(ops(&g), ops(&selected_fs_with(empty, IfLowering::Predicate)), "nothing to branch past");
+        /* two `if`s: one emc, set up once */
+        let two = "precision mediump float; uniform vec4 u; void main() { vec4 c = u; \
+                   if (u.x > 0.0) { c = u * 2.0; } if (u.y > 0.0) { c = c * 3.0; } gl_FragColor = c; }";
+        let g = selected_fs_with(two, IfLowering::Branch);
+        assert_eq!(
+            [MachineOp::CndInit, MachineOp::CndIf, MachineOp::CndIfEnd].map(|o| count(&g, o)),
+            [1, 2, 2],
+            "{g:?}"
+        );
     }
 
     /// Arms that read or write p0 or need every instance -- a look-up, a

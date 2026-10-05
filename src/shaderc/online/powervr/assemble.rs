@@ -275,12 +275,7 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
         /* The execution mask (`powervr::cf`), on the emc the allocator gave
          * a temporary: each reads it (special 0 for the set-up) and writes it
          * back. */
-        SelOp::Machine(
-            op @ (super::sel::MachineOp::CndInit
-            | super::sel::MachineOp::CndEnter
-            | super::sel::MachineOp::CndLeave
-            | super::sel::MachineOp::CndLoopEnd),
-        ) => {
+        SelOp::Machine(op) if op.is_cnd() => {
             use super::cf::{cnd, Cnd};
             use super::sel::{Bank, MachineOp};
             const SPECIAL: u32 = 0;
@@ -304,7 +299,12 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
                 MachineOp::CndEnter => cnd(Cnd::St, 2, "always", &[src], emc),
                 /* by 2: out of this loop's level (pco_cf.c, `break`) */
                 MachineOp::CndLeave => cnd(Cnd::Sm, 0, "p0_false", &[src, special(0), special(2)], emc),
-                _ => cnd(Cnd::Lt, 2, "always", &[src], emc),
+                MachineOp::CndLoopEnd => cnd(Cnd::Lt, 2, "always", &[src], emc),
+                /* a branched `if` (pco_cf.c lower_if_cond_exec), each by 1 */
+                MachineOp::CndIf => cnd(Cnd::St, 1, "p0_false", &[src], emc),
+                MachineOp::CndElse => cnd(Cnd::Ef, 1, "always", &[src], emc),
+                MachineOp::CndIfEnd => cnd(Cnd::End, 1, "always", &[src], emc),
+                _ => Err(BuildError::Unsupported("an execution-mask operation the builder does not know")),
             };
         }
         _ => {}
@@ -855,6 +855,9 @@ pub fn pad_group(g: &mut Group, pad: usize) -> Result<(), BuildError> {
 /// branch sound here: the back edge must directly follow its loop's own
 /// `LoopTest`, the only group that sets p0 for it (`select::verify_loops`
 /// checks that the test reads the loop's counter). Anything else is refused.
+/// The other branches are forward, past an arm of a branched `if` that no
+/// instance runs (`bpred = allp`, [`super::cf::branch_none_active`]), where
+/// the mask decides and every instance agrees by construction.
 struct Arithmetic<'s> {
     groups: &'s [super::sel::SelGroup],
     next: usize,
@@ -863,45 +866,130 @@ struct Arithmetic<'s> {
     depth: usize,
     /// The group just built was a `LoopTest`.
     after_test: bool,
-    /// Inside a predicated `if` arm ([`SelOp::Pred`](super::sel::SelOp::Pred)):
-    /// the arm, whose `cc` every group built until the next marker takes.
-    arm: Option<super::sel::PredArm>,
+    /// The group just built entered a branched `if` (`CndIf`).
+    after_cnd_if: bool,
+    /// Inside an `if` arm ([`SelOp::Pred`](super::sel::SelOp::Pred)): the
+    /// arm, and whether the `if` is branched. A predicated arm's groups take
+    /// its `cc` until the next marker; a branched arm's take none.
+    arm: Option<(super::sel::PredArm, bool)>,
+    /// A group built ahead of its turn: the branch past the else arm, after
+    /// the `cndef` that switched the mask to it.
+    pending: Option<Group>,
 }
 
 impl<'s> Arithmetic<'s> {
     fn new(groups: &'s [super::sel::SelGroup]) -> Self {
-        Arithmetic { groups, next: 0, open: [0; 4], depth: 0, after_test: false, arm: None }
+        Arithmetic {
+            groups,
+            next: 0,
+            open: [0; 4],
+            depth: 0,
+            after_test: false,
+            after_cnd_if: false,
+            arm: None,
+            pending: None,
+        }
+    }
+
+    /// The branch past the arm that starts at group `from`, when it has
+    /// groups: `br` taken when no instance is active
+    /// ([`super::cf::branch_none_active`]), landing on the group after the
+    /// arm's last, the arm's own groups measured by building them here
+    /// (each is built again in its turn; an arm holds no marker, so neither
+    /// build depends on where it lands).
+    fn skip_arm(&self, from: usize) -> Result<Option<Group>, BuildError> {
+        use super::sel::SelOp;
+        let mut bytes = 0usize;
+        for g in &self.groups[from..] {
+            if matches!(g.op, SelOp::Pred(_)) {
+                break;
+            }
+            bytes += build_group(g)?.total;
+        }
+        if bytes == 0 {
+            return Ok(None);
+        }
+        /* The branch's own length does not depend on the offset's value
+         * (a fixed field): built once to measure, then with the offset. */
+        let probe = super::cf::branch_none_active(bytes as i64)?;
+        let br = super::cf::branch_none_active((bytes + probe.total) as i64)?;
+        if br.total != probe.total {
+            return Err(BuildError::Unsupported("a branch whose length depends on its offset"));
+        }
+        Ok(Some(br))
     }
 
     /// The next group, to be placed at byte `at`; `None` after the last.
     fn group(&mut self, at: usize) -> Result<Option<Group>, BuildError> {
-        use super::sel::{MachineOp, SelOp};
+        use super::sel::{MachineOp, PredArm, SelOp};
+        if let Some(br) = self.pending.take() {
+            return Ok(Some(br));
+        }
         while let Some(g) = self.groups.get(self.next) {
             self.next += 1;
             match g.op {
-                /* A predicated `if` (pco_cf.c lower_if_pred_exec): the then
-                 * arm right after the condition's tstz.p0, the else arm
-                 * after it, then the end; never nested, never across a
-                 * loop edge, and no group in an arm touches p0 (selection's
-                 * `predicable` holds that; this refuses what slips past). */
+                /* An `if` with arithmetic arms: the then arm, the else arm
+                 * after it, then the end; never nested, never across a loop
+                 * edge, and no group in an arm touches p0 or the mask
+                 * (selection's `predicable` holds that; this refuses what
+                 * slips past). Predicated (pco_cf.c lower_if_pred_exec): the
+                 * then arm right after the condition's tstz.p0. Branched
+                 * (lower_if_cond_exec): right after the `cndst` that keeps
+                 * its instances, a `br` past each arm with groups, the else
+                 * arm's after the `cndef` right after its marker, and the
+                 * `cndend` right after the end. */
                 SelOp::Pred(m) => {
-                    use super::sel::PredArm;
-                    self.arm = match (self.arm, m) {
-                        (None, PredArm::Then) if self.after_test => Some(PredArm::Then),
-                        (Some(PredArm::Then), PredArm::Else) => Some(PredArm::Else),
-                        (Some(PredArm::Then | PredArm::Else), PredArm::End) => None,
+                    let branched = match (self.arm, m) {
+                        (None, PredArm::Then) if self.after_test => false,
+                        (None, PredArm::Then) if self.after_cnd_if => true,
+                        (Some((PredArm::Then, b)), PredArm::Else) => b,
+                        (Some((PredArm::Then | PredArm::Else, b)), PredArm::End) => b,
                         _ => return Err(BuildError::Unsupported("an `if` arm marker out of order")),
                     };
+                    self.arm = (m != PredArm::End).then_some((m, branched));
                     self.after_test = false;
+                    self.after_cnd_if = false;
+                    if !branched {
+                        continue;
+                    }
+                    let next = self.groups.get(self.next).map(|x| x.op);
+                    match m {
+                        PredArm::Then => {
+                            if let Some(br) = self.skip_arm(self.next)? {
+                                return Ok(Some(br));
+                            }
+                        }
+                        /* the mask switched to the else arm, then the branch
+                         * past it; an `if` with an empty arm has no `cndef` */
+                        PredArm::Else => {
+                            let from = self.next + usize::from(next == Some(SelOp::Machine(MachineOp::CndElse)));
+                            let br = self.skip_arm(from)?;
+                            if from > self.next {
+                                let ef = build_group(&self.groups[self.next])?;
+                                self.next += 1;
+                                self.pending = br;
+                                return Ok(Some(ef));
+                            }
+                            if let Some(br) = br {
+                                return Ok(Some(br));
+                            }
+                        }
+                        PredArm::End => {
+                            if next != Some(SelOp::Machine(MachineOp::CndIfEnd)) {
+                                return Err(BuildError::Unsupported("a branched `if` that does not leave its mask"));
+                            }
+                        }
+                    }
                 }
                 SelOp::LoopBegin
                 | SelOp::LoopEnd
-                | SelOp::Machine(MachineOp::LoopTest | MachineOp::Fsinc(_))
-                | SelOp::Machine(MachineOp::PselTrig | MachineOp::CndInit | MachineOp::CndEnter)
-                | SelOp::Machine(MachineOp::CndLeave | MachineOp::CndLoopEnd)
+                | SelOp::Machine(MachineOp::LoopTest | MachineOp::Fsinc(_) | MachineOp::PselTrig)
                     if self.arm.is_some() =>
                 {
-                    return Err(BuildError::Unsupported("a loop edge or a p0 user inside a predicated `if` arm"));
+                    return Err(BuildError::Unsupported("a loop edge or a p0 user inside an `if` arm"));
+                }
+                SelOp::Machine(m) if m.is_cnd() && self.arm.is_some() => {
+                    return Err(BuildError::Unsupported("an execution-mask operation inside an `if` arm"));
                 }
                 SelOp::LoopBegin => {
                     let slot =
@@ -919,16 +1007,22 @@ impl<'s> Arithmetic<'s> {
                     self.after_test = false;
                     return super::fragment::branch_back(self.open[self.depth] as i64 - at as i64).map(Some);
                 }
+                SelOp::Machine(MachineOp::CndIf)
+                    if self.groups.get(self.next).map(|x| x.op) != Some(SelOp::Pred(PredArm::Then)) =>
+                {
+                    return Err(BuildError::Unsupported("a branched `if`'s mask with no arm after it"));
+                }
                 _ => {
                     /* The p0 the back edge reads: the loop's test, or under
                      * the execution mask the loop's end (`cndlt`). */
                     self.after_test = matches!(g.op, SelOp::Machine(MachineOp::LoopTest | MachineOp::CndLoopEnd));
+                    self.after_cnd_if = matches!(g.op, SelOp::Machine(MachineOp::CndIf));
                     let mut built = build_group(g)?;
-                    if let Some(arm) = self.arm {
+                    if let Some((arm, false)) = self.arm {
                         /* the then arm runs where the condition held: p0, set
                          * by the tstz where it is zero, is clear there */
                         let cc = match arm {
-                            super::sel::PredArm::Then => "if(!p0)",
+                            PredArm::Then => "if(!p0)",
                             _ => "if(p0)",
                         };
                         let v = super::shapes::value(super::isa::BitSetId::IgrpHdr, "cc", cc)?;
@@ -1752,5 +1846,108 @@ mod loop_tests {
         assert!(place(&[test(), m(Then), test(), m(Else), m(End)]).is_err(), "a p0 write in an arm");
         assert!(place(&[test(), m(Then), marker(SelOp::LoopBegin), m(Else), m(End)]).is_err(), "a loop edge in an arm");
         assert!(place(&[test(), m(Then), m(Else), m(End)]).is_ok(), "empty arms are fine");
+    }
+
+    fn mask(op: MachineOp) -> SelGroup {
+        SelGroup {
+            op: SelOp::Machine(op),
+            ty: OpType::U32,
+            dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: 9 }),
+            srcs: [Some(temp(9)), None, None],
+        }
+    }
+
+    /// The name of `g`'s execution condition, operation and (a branch's)
+    /// landing byte, placed at `at`.
+    fn read(at: usize, g: &Group) -> (&'static str, &'static str, Option<usize>) {
+        let e = super::super::isa_tables::ENUMS.iter().find(|e| e.name == "cc").unwrap();
+        let (_, ph, r) = g.instrs().next().unwrap();
+        let op = super::super::isa::ops_for(r, ph).next().unwrap().name;
+        let to = (op == "br").then(|| at + r.get("offset").unwrap() as usize);
+        (e.name_of(g.hdr.get("cc").unwrap()).unwrap(), op, to)
+    }
+
+    /// A branched `if` (pco_cf.c lower_if_cond_exec): after the `cndst`, a
+    /// `br` past the then arm landing on the `cndef`; after the `cndef`, a
+    /// `br` past the else arm landing on the `cndend`; the arms' groups
+    /// carry no condition, the mask's run in every instance.
+    #[test]
+    fn a_branched_if_puts_a_branch_past_each_arm() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let g = [
+            test(),
+            mask(MachineOp::CndIf),
+            marker(SelOp::Pred(Then)),
+            mov(1, 2),
+            mov(2, 1),
+            marker(SelOp::Pred(Else)),
+            mask(MachineOp::CndElse),
+            mov(4, 0),
+            marker(SelOp::Pred(End)),
+            mask(MachineOp::CndIfEnd),
+            mov(5, 4),
+        ];
+        let placed = place(&g).expect("builds");
+        let parts: std::vec::Vec<_> = placed.iter().map(|(at, g)| read(*at, g)).collect();
+        let at = |i: usize| Some(placed[i].0);
+        assert_eq!(parts.len(), 10, "eight groups and two branches");
+        assert_eq!(
+            parts[1..],
+            [
+                ("(ignorepe)", "cndst", None),
+                ("e1_zx", "br", at(5)),
+                ("e1_zx", "mbyp", None),
+                ("e1_zx", "mbyp", None),
+                ("(ignorepe)", "cndef", None),
+                ("e1_zx", "br", at(8)),
+                ("e1_zx", "mbyp", None),
+                ("(ignorepe)", "cndend", None),
+                ("e1_zx", "mbyp", None),
+            ]
+        );
+    }
+
+    /// An arm with no groups gets no branch: an `if` with no else arm has
+    /// no `cndef` (selection leaves it out) and one branch, and one whose
+    /// then arm is empty branches only past its else arm.
+    #[test]
+    fn a_branched_if_skips_only_the_arms_it_has() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let m = |a| marker(SelOp::Pred(a));
+        let no_else = [test(), mask(MachineOp::CndIf), m(Then), mov(1, 2), m(Else), m(End), mask(MachineOp::CndIfEnd)];
+        let placed = place(&no_else).expect("builds");
+        let ops: std::vec::Vec<_> = placed.iter().map(|(at, g)| read(*at, g)).map(|x| (x.1, x.2)).collect();
+        assert_eq!(ops[1..], [("cndst", None), ("br", Some(placed[4].0)), ("mbyp", None), ("cndend", None)]);
+        let no_then = [
+            test(),
+            mask(MachineOp::CndIf),
+            m(Then),
+            m(Else),
+            mask(MachineOp::CndElse),
+            mov(1, 2),
+            m(End),
+            mask(MachineOp::CndIfEnd),
+        ];
+        let placed = place(&no_then).expect("builds");
+        let ops: std::vec::Vec<_> = placed.iter().map(|(at, g)| read(*at, g)).map(|x| (x.1, x.2)).collect();
+        assert_eq!(
+            ops[1..],
+            [("cndst", None), ("cndef", None), ("br", Some(placed[5].0)), ("mbyp", None), ("cndend", None)]
+        );
+    }
+
+    /// The branched form's order is held: the `cndst` right before the then
+    /// marker, the `cndend` right after the end, no mask group inside an
+    /// arm.
+    #[test]
+    fn a_branched_if_out_of_shape_is_refused() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let m = |a| marker(SelOp::Pred(a));
+        let (st, ef, end) = (mask(MachineOp::CndIf), mask(MachineOp::CndElse), mask(MachineOp::CndIfEnd));
+        assert!(place(&[test(), st, mov(1, 2), m(Then), m(Else), m(End), end]).is_err(), "a group after the cndst");
+        assert!(place(&[test(), st, m(Then), mov(1, 2), m(Else), m(End), mov(2, 1), end]).is_err(), "no cndend");
+        assert!(place(&[test(), st, m(Then), ef, m(Else), m(End), end]).is_err(), "a cndef in the then arm");
+        assert!(place(&[test(), st, m(Then), m(Else), ef, ef, mov(1, 2), m(End), end]).is_err(), "two cndef");
+        assert!(place(&[test(), st, m(Then), mov(1, 2), m(Else), m(End), end]).is_ok(), "the shape");
     }
 }

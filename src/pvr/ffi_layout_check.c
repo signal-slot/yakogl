@@ -44,7 +44,10 @@ _Static_assert(PVR_BACKEND_OPT_PBE_TWIDDLE == 12, "backend.rs PVR_BACKEND_OPT_PB
 _Static_assert(PVR_BACKEND_OPT_ONE_IN_FLIGHT == 13, "backend.rs PVR_BACKEND_OPT_ONE_IN_FLIGHT");
 _Static_assert(PVR_BACKEND_OPT_SWAP_DROPS_ZS == 14, "backend.rs PVR_BACKEND_OPT_SWAP_DROPS_ZS");
 _Static_assert(PVR_BACKEND_OPT_FS_TEMPS_MIN == 15, "backend.rs PVR_BACKEND_OPT_FS_TEMPS_MIN");
-_Static_assert(PVR_BACKEND_OPT_COUNT == 16, "backend.rs PVR_BACKEND_OPT_COUNT");
+_Static_assert(PVR_BACKEND_OPT_IF_LOWERING == 16, "backend.rs PVR_BACKEND_OPT_IF_LOWERING");
+_Static_assert(PVR_IF_LOWERING_DEFAULT == 0 && PVR_IF_LOWERING_PREDICATE == 1 && PVR_IF_LOWERING_BRANCH == 2,
+	       "backend.rs PVR_IF_LOWERING_*");
+_Static_assert(PVR_BACKEND_OPT_COUNT == 17, "backend.rs PVR_BACKEND_OPT_COUNT");
 
 _Static_assert(sizeof(struct pvr_ppp_frag_inputs) == 36, "struct pvr_ppp_frag_inputs");
 _Static_assert(offsetof(struct pvr_ppp_frag_inputs, pixel_program_code_offset) == 0, "pvr_ppp_frag_inputs.pixel_program_code_offset");

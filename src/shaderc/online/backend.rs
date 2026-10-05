@@ -39,7 +39,7 @@ use super::codegen::{self, CompileError, Which};
 use super::ir;
 use super::store;
 use crate::shaderc::sha256::sha256;
-use crate::shaderc::{LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
+use crate::shaderc::{IfLowering, LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::util::{cstr_bytes, CStrWriter, Global, EINVAL, ENOMEM, ENOSPC, ENOTSUP};
 
 /// One compiled shader in the `keep` region, owning everything the
@@ -79,6 +79,10 @@ struct Compiled {
     /// ([`online_sampler_variant`]); its blend variants and its link keep
     /// it. [`LodKey::NONE`] for every other compile.
     lod_key: LodKey,
+    /// How the compile lowered an `if` with arithmetic arms (the user's
+    /// switch when the source was compiled, `shaderc::if_lowering`); every
+    /// record compiled again from this one keeps it.
+    if_lowering: IfLowering,
     shader: ShcShader,
     /// The shader's uniform blocks, in this record's keep extent
     /// ([`keep_blocks`]).
@@ -218,7 +222,7 @@ fn publish(
     shader: ShcShader,
     blocks: crate::shaderc::ShcBlocks,
 ) -> Result<&'static Compiled, usize> {
-    publish_as(txn, sha, stage, blend_key, source, map, Facts::PLAIN, shader, blocks)
+    publish_as(txn, sha, stage, blend_key, source, map, Facts::plain(), shader, blocks)
 }
 
 /// What a compile was asked for beyond its source, stage, blend key, zero
@@ -231,14 +235,20 @@ struct Facts {
     w_constant: bool,
     /// A sampler-state variant (`Compiled::lod_key`).
     lod_key: LodKey,
+    /// The `if` lowering (`Compiled::if_lowering`).
+    if_lowering: IfLowering,
 }
 
 impl Facts {
-    const PLAIN: Facts = Facts { w_constant: false, lod_key: LodKey::NONE };
+    /// A shader compiled from its source alone: nothing beyond it but the
+    /// user's `if` lowering switch as it stands now.
+    fn plain() -> Facts {
+        Facts { w_constant: false, lod_key: LodKey::NONE, if_lowering: crate::shaderc::if_lowering() }
+    }
 
     /// The facts `rec` was compiled with.
     fn of(rec: &Compiled) -> Facts {
-        Facts { w_constant: rec.w_constant, lod_key: rec.lod_key }
+        Facts { w_constant: rec.w_constant, lod_key: rec.lod_key, if_lowering: rec.if_lowering }
     }
 }
 
@@ -281,6 +291,7 @@ fn publish_as(
                 source: src,
                 w_constant: facts.w_constant,
                 lod_key: facts.lod_key,
+                if_lowering: facts.if_lowering,
                 shader: ShcShader::ZERO,
                 blocks,
                 attrib_map,
@@ -578,7 +589,7 @@ fn compile_and_publish(
     end: store::KeepEnd,
     log: &mut CStrWriter,
 ) -> Result<&'static Compiled, i32> {
-    compile_and_publish_linked(stage, glsl, blend_key, &ZeroList::EMPTY, None, Facts::PLAIN, end, log)
+    compile_and_publish_linked(stage, glsl, blend_key, &ZeroList::EMPTY, None, Facts::plain(), end, log)
 }
 
 /// [`compile_and_publish`] with the varyings in `zero` read as 0 (see
@@ -611,7 +622,8 @@ fn compile_and_publish_linked(
 
 /// The cache key of a record: the source's SHA-256, chained with everything
 /// else the compile reads (the zeroed varyings, the attribute map, the
-/// constant W, the sampler-state key). The blend key and the stage are the
+/// constant W, the sampler-state key, an `if` lowering other than the
+/// default). The blend key and the stage are the
 /// cache's other two keys.
 fn record_key(glsl: &[u8], zero: &ZeroList, map: Option<&crate::shaderc::ShcAttribMap>, facts: Facts) -> [u8; 32] {
     let mut sha = sha256(glsl);
@@ -633,6 +645,11 @@ fn record_key(glsl: &[u8], zero: &ZeroList, map: Option<&crate::shaderc::ShcAttr
     if !facts.lod_key.is_none() {
         let mut k = *b"lod-key:        ";
         k[8..].copy_from_slice(&facts.lod_key.bits().to_le_bytes());
+        chain(&k);
+    }
+    if facts.if_lowering != IfLowering::Default {
+        let mut k = *b"if-lowering:    ";
+        k[12..].copy_from_slice(&facts.if_lowering.as_u32().to_le_bytes());
         chain(&k);
     }
     sha
@@ -658,16 +675,18 @@ fn compile_and_publish_keyed(
     let mut names = [""; MAX_ZERO];
     let names = zero.names(&mut names);
     /* the switches the code generator reads, put back after the compile */
-    struct Restore(bool, LodKey);
+    struct Restore(bool, LodKey, IfLowering);
     impl Drop for Restore {
         fn drop(&mut self) {
             crate::shaderc::set_fs_w_constant(self.0);
             crate::shaderc::set_compile_lod_key(self.1);
+            crate::shaderc::set_compile_if_lowering(self.2);
         }
     }
     let _restore = Restore(
         crate::shaderc::set_fs_w_constant(facts.w_constant),
         crate::shaderc::set_compile_lod_key(facts.lod_key),
+        crate::shaderc::set_compile_if_lowering(facts.if_lowering),
     );
     let built = store::with_scratch(|scratch| {
         let compiled = match map {
@@ -1145,7 +1164,7 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
 #[cfg(not(feature = "gpu-v3d"))]
 fn link_substituted(fr: &Compiled, zero: &ZeroList, w_constant: bool, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
     /* a sampler-state variant stays one (`Compiled::lod_key`) */
-    let facts = Facts { w_constant, lod_key: fr.lod_key };
+    let facts = Facts { w_constant, ..Facts::of(fr) };
     if zero.n == 0 && !w_constant {
         return 0;
     }
@@ -1305,7 +1324,7 @@ unsafe extern "C" fn online_compile_vs_linked(
         0,
         &ZeroList::EMPTY,
         Some(map),
-        Facts::PLAIN,
+        Facts::plain(),
         store::KeepEnd::Low,
         &mut log,
     ) {
@@ -1513,7 +1532,7 @@ unsafe extern "C" fn online_sampler_variant(
             let _ = write!(log, "online shaderc: the V3D has no sampler-state variant for key {key:#x}");
             return -EINVAL;
         }
-        let facts = Facts { w_constant: false, lod_key: k };
+        let facts = Facts { w_constant: false, lod_key: k, if_lowering: base.if_lowering };
         return match variant_of(SHC_STAGE_FRAGMENT, base.source, 0, None, facts, &mut log) {
             Ok(rec) => {
                 V3D_VARIANTS_BUILT.fetch_add(1, Relaxed);
@@ -1531,7 +1550,7 @@ unsafe extern "C" fn online_sampler_variant(
         let _ = log.write_str("online shaderc: a sampler-state variant of a blend variant");
         return -EINVAL; /* a variant of the plain shader only; blending comes after */
     }
-    let facts = Facts { w_constant: base.w_constant, lod_key: LodKey::from_bits(key) };
+    let facts = Facts { lod_key: LodKey::from_bits(key), ..Facts::of(base) };
     match variant_of(base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
         Ok(rec) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
@@ -1984,6 +2003,69 @@ void main (void)
         out
     }
 
+    /// The `if` lowering switch (`PVR_BACKEND_OPT_IF_LOWERING`) is read
+    /// when a source is compiled and keys the record: the same text
+    /// compiled after the switch changed is a second record with its own
+    /// program (here six control groups longer: gl_test 195's two forms on
+    /// one context), compiled again it is a cache hit, and a blend variant
+    /// of each keeps its base's lowering whatever the switch says when the
+    /// draw asks for it.
+    #[test]
+    #[cfg(feature = "gpu-powervr")]
+    fn the_if_lowering_switch_keys_the_record_and_its_variants_keep_it() {
+        use crate::shaderc::{set_if_lowering, IfLowering};
+        let _serial = test_lock();
+        struct Put;
+        impl Drop for Put {
+            fn drop(&mut self) {
+                set_if_lowering(IfLowering::Default.as_u32());
+            }
+        }
+        let _put = Put;
+        let src = "precision mediump float; uniform vec4 u; void main() { vec4 c; \
+                   if (u.x > 0.0) { c = u * 2.0; } else { c = u + 1.0; } gl_FragColor = c; } // if lowering";
+        let words = |sh: &ShcShader| -> Vec<u32> {
+            // SAFETY: a record's code, `usc_dw` dwords.
+            unsafe { core::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) }.to_vec()
+        };
+        set_if_lowering(IfLowering::Default.as_u32());
+        let pred = compile_out(SHC_STAGE_FRAGMENT, src);
+        set_if_lowering(IfLowering::Branch.as_u32());
+        let branch = compile_out(SHC_STAGE_FRAGMENT, src);
+        assert_ne!(pred.priv_, branch.priv_, "two records");
+        assert_eq!(base_of(&branch).unwrap().if_lowering, IfLowering::Branch);
+        assert!(branch.usc_dw > pred.usc_dw, "the branched program is longer");
+        let again = compile_out(SHC_STAGE_FRAGMENT, src);
+        assert_eq!(again.priv_, branch.priv_, "the same switch, the same record");
+        set_if_lowering(IfLowering::Predicate.as_u32());
+        let forced = compile_out(SHC_STAGE_FRAGMENT, src);
+        assert_eq!(words(&forced), words(&pred), "forced predication is today's default");
+        /* the variants, asked for with the switch on the other form */
+        let key = crate::shaderc::shc_blend_key(
+            crate::shaderc::SHC_BF_ONE,
+            crate::shaderc::SHC_BF_INV_SRC_ALPHA,
+            crate::shaderc::SHC_BF_ONE,
+            crate::shaderc::SHC_BF_INV_SRC_ALPHA,
+            crate::shaderc::SHC_BLEND_ADD,
+            crate::shaderc::SHC_BLEND_ADD,
+        );
+        let variant = |sh: &ShcShader| {
+            let mut out = ShcShader::ZERO;
+            // SAFETY: a shader this back end compiled, a real output, no log.
+            assert_eq!(unsafe { online_blend_variant(sh, key, &mut out, core::ptr::null_mut(), 0) }, 0);
+            out
+        };
+        let bv = variant(&branch);
+        set_if_lowering(IfLowering::Branch.as_u32());
+        let pv = variant(&pred);
+        assert_eq!(base_of(&bv).unwrap().if_lowering, IfLowering::Branch, "the branched base's variant branches");
+        assert_eq!(base_of(&pv).unwrap().if_lowering, IfLowering::Default, "the default base's variant does not");
+        assert_eq!(bv.usc_dw - pv.usc_dw, branch.usc_dw - pred.usc_dw, "the same six groups in the variants");
+        for sh in [&bv, &pv, &forced, &again, &branch, &pred] {
+            release(sh);
+        }
+    }
+
     /// THE product defect this pins: a process that compiles and frees for
     /// ever runs in a bounded region. Before the free path every compile in
     /// the process was refused with `Abi(OutOfMemory { left: 0 })` after
@@ -2222,6 +2304,7 @@ void main (void)
                     source: b"",
                     w_constant: false,
                     lod_key: LodKey::NONE,
+                    if_lowering: IfLowering::Default,
                     shader: ShcShader::ZERO,
                     blocks: crate::shaderc::ShcBlocks::EMPTY,
                     attrib_map: None,

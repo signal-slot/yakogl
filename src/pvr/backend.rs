@@ -205,7 +205,21 @@ pub const PVR_BACKEND_OPT_SWAP_DROPS_ZS: PvrBackendOption = 14;
 /// default: it exists for the online-vs-table A/B of the FemtoVG programs
 /// (the online ones declare about twice the table's temporaries).
 pub const PVR_BACKEND_OPT_FS_TEMPS_MIN: PvrBackendOption = 15;
-pub const PVR_BACKEND_OPT_COUNT: usize = 16;
+/// MEASUREMENT: how the online compiler lowers an `if` whose arms are
+/// straight-line arithmetic ([`crate::shaderc::IfLowering`]):
+/// [`PVR_IF_LOWERING_DEFAULT`] (0, the compiler chooses: today it
+/// predicates), [`PVR_IF_LOWERING_PREDICATE`] or [`PVR_IF_LOWERING_BRANCH`]
+/// (pco's `lower_if_cond_exec`, the arms under the execution mask with a
+/// branch past each). Read when a shader is compiled from its source; the
+/// cache keys a shader by it, and its blend and sampler-state variants keep
+/// it, so the same source compiles both ways on one context (gl_test 195).
+/// Any other value is the default. The table path ignores it.
+pub const PVR_BACKEND_OPT_IF_LOWERING: PvrBackendOption = 16;
+/// [`PVR_BACKEND_OPT_IF_LOWERING`]'s values.
+pub const PVR_IF_LOWERING_DEFAULT: u32 = 0;
+pub const PVR_IF_LOWERING_PREDICATE: u32 = 1;
+pub const PVR_IF_LOWERING_BRANCH: u32 = 2;
+pub const PVR_BACKEND_OPT_COUNT: usize = 17;
 /// The largest count [`PVR_BACKEND_OPT_FS_TEMPS_MIN`] declares: the most a
 /// DOUTU word can declare.
 pub const FS_TEMPS_MIN_CAP: u32 = PVR_PDS_DOUTU_MAX_TEMPS;
@@ -2013,6 +2027,10 @@ pub extern "C" fn pvr_backend_set_option(opt: PvrBackendOption, value: u32) {
     }
     if opt == PVR_BACKEND_OPT_SWAP_DROPS_ZS {
         pvr_set_swap_drops_zs(value);
+    }
+    /* read by the compiler, which knows nothing of this array */
+    if opt == PVR_BACKEND_OPT_IF_LOWERING {
+        crate::shaderc::set_if_lowering(value);
     }
     /* The per-draw dump costs ~30 console lines a draw: switching it on
      * gives it a budget of draws, so a first frame that takes seconds to

@@ -479,6 +479,14 @@
  *               3D busy logged per N, every N the same picture. Run in an
  *               online image and in a table image. A measurement; all three
  *               GPUs, not in the set
+ * 195 ifbranch  what does a branch over an `if` arm cost? 193's programs
+ *               (N = 0, 8, 32, 128 steps in the arm radius 0 never runs),
+ *               each compiled with its arms predicated and with a branch
+ *               past each arm (PVR_BACKEND_OPT_IF_LOWERING) on one context,
+ *               3D busy logged per program and form, every one the same
+ *               picture. The run-time compiler only (skipped by name in a
+ *               table build); all three GPUs, the option the PowerVR's. A
+ *               measurement, not in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -685,11 +693,24 @@ void *gl_test_v3d_osal_arg(void);
 #if defined(GL_TEST_VIVANTE) || defined(GL_TEST_V3D)
 static inline void gl_test_perf_read(uint32_t *out) { memset(out, 0, 7 * sizeof(*out)); }
 static inline void gl_test_prim_budget(unsigned int budget) { (void)budget; }
+/* how the run-time compiler lowers an `if` with arithmetic arms: the
+ * PowerVR's option only (case 195); elsewhere both forms are one program */
+#define GL_TEST_IF_DEFAULT   0u
+#define GL_TEST_IF_PREDICATE 1u
+#define GL_TEST_IF_BRANCH    2u
+static inline void gl_test_if_lowering(unsigned int v) { (void)v; }
 #else
 static inline void gl_test_perf_read(uint32_t *out) { pvr_render_perf_read(out); }
 static inline void gl_test_prim_budget(unsigned int budget)
 {
 	pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, budget);
+}
+#define GL_TEST_IF_DEFAULT   PVR_IF_LOWERING_DEFAULT
+#define GL_TEST_IF_PREDICATE PVR_IF_LOWERING_PREDICATE
+#define GL_TEST_IF_BRANCH    PVR_IF_LOWERING_BRANCH
+static inline void gl_test_if_lowering(unsigned int v)
+{
+	pvr_backend_set_option(PVR_BACKEND_OPT_IF_LOWERING, v);
 }
 #endif
 /*
@@ -730,6 +751,9 @@ static const char *shader_skip_reason(int c)
 	 * case's own sources */
 	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192)
 		return "its own sources: a table build has no rows for them";
+	/* one program per source in a table: nothing to lower two ways */
+	if (c == 195)
+		return "the if lowering is the run-time compiler's: a table build has one program per source";
 #endif
 	(void)c; /* the default set's reason ignores it */
 	if (!why)
@@ -7763,7 +7787,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16515,6 +16539,169 @@ static int case_offarmn(void)
 	return offarm_run(arm, (int)(sizeof(arm) / sizeof(arm[0])), "offarmn");
 }
 
+/* ---- case 195: an `if` arm predicated or branched past (ifbranch) --------
+ *
+ * Case 193 measured what a predicated-off group costs: 0.11 to 0.29 ms a
+ * frame on the AM62P, rising with N (RESULTS.md, 2026-10-05). The other
+ * side of the choice is a branch: pco's lower_if_cond_exec (its
+ * `PCO_DEBUG=no_pred_cf`) runs the arms under the execution mask, a `br`
+ * taken when no instance is active past each arm, at the price of six
+ * control groups (the mask's set-up, `cndst`, two `br`, `cndef`, `cndend`).
+ * This times both on one context: 193's four programs (the same sources,
+ * key 0x98661, case 39's uniforms, scissorRadius 0, so the then arm --
+ * 31, 41, 65, 161 groups -- never runs and the else arm, 23, always does),
+ * each compiled with PVR_BACKEND_OPT_IF_LOWERING = PREDICATE and = BRANCH
+ * (the option is read at compile and kept by the blend variant the draw
+ * builds). Host counts (tests/usc_limits.rs
+ * a_predicable_if_branches_as_pcos_no_pred_cf_does):
+ *   N           0    8   32  128
+ *   predicated  104  114  138  234
+ *   branched    110  120  144  240
+ * At radius 0 the predicated program issues all its groups, the never-run
+ * off arm among them; the branched one issues 79 at every N (the 73
+ * groups outside the off arm and the six control groups: the then arm is
+ * skipped by its branch).
+ * Logged per program and form: best, 3D busy and TA busy per frame. Every
+ * sub-run must draw N = 0's predicated picture. Read against 193: if the
+ * branched rows are flat in N, the skipped arm costs nothing and the
+ * crossover is where N predicated-off groups cost more than the six.
+ * ------------------------------------------------------------------------- */
+static int case_ifbranch(void)
+{
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5, PROGS = 4, FORMS = 2 };
+	struct fvg_vertex { float xy[2]; float uv[2]; };
+	static struct fvg_vertex quads[OVER * 6];
+	static const float xs[6] = { 0, W, W, 0, W, 0 }, ys[6] = { 0, 0, H, 0, H, H };
+	static const struct {
+		int n;
+		const char *file, *fs;
+	} prog_src[PROGS] = {
+		{ 0, "femtovg/fill_color.nodiscard.frag", gl_test_fvg_fill_color_nodiscard_fs_src },
+		{ 8, "offarm/fill_color.nodiscard.offarm8.frag", gl_test_offarm8_fs_src },
+		{ 32, "offarm/fill_color.nodiscard.offarm32.frag", gl_test_offarm32_fs_src },
+		{ 128, "offarm/fill_color.nodiscard.offarm128.frag", gl_test_offarm128_fs_src },
+	};
+	static const struct {
+		unsigned int v;
+		const char *name;
+	} form[FORMS] = {
+		{ GL_TEST_IF_PREDICATE, "predicate" },
+		{ GL_TEST_IF_BRANCH, "branch" },
+	};
+	float frag[56] = { 0 };
+	uint32_t got[PROGS][FORMS];
+	GLuint tex, fbo, vbo, vs;
+	bool ok = true;
+
+	for (int i = 0; i < OVER * 6; i++) {
+		quads[i].xy[0] = xs[i % 6];
+		quads[i].xy[1] = ys[i % 6];
+		quads[i].uv[0] = 0.5f;
+		quads[i].uv[1] = 1.0f;
+	}
+	/* case 39's uniforms (186's at radius 0), and the steps' identity */
+	frag[6 * 4 + 0] = 0.3f; frag[6 * 4 + 3] = 0.5f;
+	frag[8 * 4 + 0] = 1.0f; frag[8 * 4 + 1] = 1.0f;
+	frag[8 * 4 + 2] = 1.0f; frag[8 * 4 + 3] = 1.0f;
+	frag[10 * 4 + 0] = 1.0f;
+	frag[10 * 4 + 1] = -1.0f;
+	frag[10 * 4 + 3] = 5.0f;
+	frag[13 * 4 + 1] = 1.0f;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: ifbranch: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, W, H);
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	vbo = upload_vbo(quads, sizeof(quads));
+	vs = compile(GL_VERTEX_SHADER, gl_test_fvg_main_vs_src);
+	if (!vs)
+		return -1;
+	for (int p = 0; p < PROGS; p++) {
+		for (int f = 0; f < FORMS; f++) {
+			GLuint fs, prog;
+			GLint linked = 0;
+			uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
+			uint8_t px[4];
+
+			/* read when the source compiles; the record keeps it for
+			 * the blend variant the first draw compiles */
+			gl_test_if_lowering(form[f].v);
+			fs = compile(GL_FRAGMENT_SHADER, prog_src[p].fs);
+			gl_test_if_lowering(GL_TEST_IF_DEFAULT);
+			if (!fs) {
+				pr_err("gl_test: ifbranch %d %s: %s does not compile\n", p, form[f].name, prog_src[p].file);
+				return -1;
+			}
+			prog = glCreateProgram();
+			glAttachShader(prog, vs);
+			glAttachShader(prog, fs);
+			glBindAttribLocation(prog, 0, "vertex");
+			glBindAttribLocation(prog, 1, "tcoord");
+			glLinkProgram(prog);
+			glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+			if (!linked)
+				return -1;
+			glUseProgram(prog);
+			glUniform2f(glGetUniformLocation(prog, "viewSize"), (float)W, (float)H);
+			glUniform4fv(glGetUniformLocation(prog, "frag"), 14, frag);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo);
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)0);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)8);
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			for (int r = 0; r < REPS + 1; r++) {
+				glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+				glClear(GL_COLOR_BUFFER_BIT);
+				if (r == 1)
+					gl_test_perf_read(pc0);
+				t0 = now_ms();
+				glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+				glFinish();
+				if (r != 0 && now_ms() - t0 < best)
+					best = now_ms() - t0;
+			}
+			gl_test_perf_read(pc1);
+			glDisableVertexAttribArray(0);
+			glDisableVertexAttribArray(1);
+			pr_info("gl_test: ifbranch %d %s: off arm +%d groups: best %u ms; per frame 3D busy %u us, TA busy %u us\n",
+				p, form[f].name, prog_src[p].n, best, (pc1[1] - pc0[1]) / 800u / REPS,
+				(pc1[0] - pc0[0]) / 800u / REPS);
+			glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+			got[p][f] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 | (uint32_t)px[3] << 24;
+			glDeleteProgram(prog);
+			glDeleteShader(fs);
+		}
+	}
+	glDisable(GL_BLEND);
+	if (!check_gl_error("ifbranch"))
+		return -1;
+	pr_info("gl_test: ifbranch pixels: %08x %08x %08x %08x %08x %08x %08x %08x\n", got[0][0], got[0][1], got[1][0],
+		got[1][1], got[2][0], got[2][1], got[3][0], got[3][1]);
+	/* the arm never runs, so every program and form draws N = 0's
+	 * predicated picture: innerCol's red 0.3 under the blend, 16 layers */
+	for (int p = 0; p < PROGS; p++)
+		for (int f = 0; f < FORMS; f++)
+			if (p != 0 || f != 0)
+				ok &= expect_int("every program and form draws N = 0's predicated picture",
+						 got[p][f] == got[0][0], 1);
+	ok &= expect_int("the blend stacks the layers (red past 0x4c)", (got[0][0] & 0xff) > 0x4c, 1);
+	glDeleteShader(vs);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19533,6 +19720,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 192: rc = case_predlive(); break;
 	case 193: rc = case_offarm(); break;
 	case 194: rc = case_offarmn(); break;
+	case 195: rc = case_ifbranch(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

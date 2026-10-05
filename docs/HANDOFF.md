@@ -91,9 +91,10 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      of the rise is not measured; instruction fetch is a candidate.
    - The cost of a branch: pco's `PCO_DEBUG=no_pred_cf` compiles the same
      source with the arm under the execution mask and `br allp` over it
-     (6 control groups more); our compiler needs a lowering of its own
-     (cndst / br / cndef / br / cndend, `cf.rs`) before gl_test 195 can
-     time both.
+     (6 control groups more). The branched form exists behind
+     `PVR_BACKEND_OPT_IF_LOWERING` (pco's `lower_if_cond_exec`, the same six
+     control groups, the default still predicates), and gl_test 195
+     `ifbranch` times 193's programs both ways on one context.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

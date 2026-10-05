@@ -143,7 +143,8 @@ fn only_op(g: &Group) -> Result<(&'static str, &Region), Mismatch> {
 
 /// An execution-mask group (`powervr::cf`) read back: the operation and the
 /// fields `assemble` builds for it (cndst 1 / cndst 2 / cndsm p0_false by
-/// special 2 / cndlt 2), the emc's temporary as its first source and its
+/// special 2 / cndlt 2 for a loop; cndst 1 p0_false / cndef 1 /
+/// cndend 1 for a branched `if`), the emc's temporary as its first source and its
 /// destination (special 0 as the source of the set-up), and the group run in
 /// every instance (`cc` ignorepe).
 fn check_cnd(meant: &SelGroup, m: MachineOp, g: &Group) -> Result<usize, Mismatch> {
@@ -152,6 +153,9 @@ fn check_cnd(meant: &SelGroup, m: MachineOp, g: &Group) -> Result<usize, Mismatc
         MachineOp::CndInit => ("cndst", 1, "always"),
         MachineOp::CndEnter => ("cndst", 2, "always"),
         MachineOp::CndLeave => ("cndsm", 0, "p0_false"),
+        MachineOp::CndIf => ("cndst", 1, "p0_false"),
+        MachineOp::CndElse => ("cndef", 1, "always"),
+        MachineOp::CndIfEnd => ("cndend", 1, "always"),
         _ => ("cndlt", 2, "always"),
     };
     if op != want {
@@ -194,11 +198,10 @@ pub fn check_group(meant: &SelGroup, want_op: &'static str, bytes: &[u8]) -> Res
     if let SelOp::Sample { proj, lod, fetch, offset, .. } = meant.op {
         return check_smp(meant, (proj, lod, fetch, offset.is_some()), &g);
     }
-    if let SelOp::Machine(
-        m @ (MachineOp::CndInit | MachineOp::CndEnter | MachineOp::CndLeave | MachineOp::CndLoopEnd),
-    ) = meant.op
-    {
-        return check_cnd(meant, m, &g);
+    if let SelOp::Machine(m) = meant.op {
+        if m.is_cnd() {
+            return check_cnd(meant, m, &g);
+        }
     }
     if let Some(t) = super::shapes::template_for(meant.op) {
         return check_template(t, meant, &g);

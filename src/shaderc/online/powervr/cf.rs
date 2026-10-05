@@ -110,7 +110,9 @@ pub fn cnd(c: Cnd, adjust: u32, pcnd: &str, srcs: &[Operand], emc: Operand) -> R
 
 /// A forward branch taken when no instance is active (`bpred = allp`), by
 /// `offset` bytes from the branch group's own start: past a section no
-/// instance runs (the loop's body when none enters, as pco's prologue does).
+/// instance runs (the loop's body when none enters, as pco's prologue does;
+/// a branched `if`'s arm, as pco's lower_if_cond_exec does, placed by
+/// `assemble::Arithmetic`).
 pub fn branch_none_active(offset: i64) -> Result<Group, BuildError> {
     if offset <= 0 {
         return Err(BuildError::Unsupported("a skip that does not go forward"));
