@@ -1002,6 +1002,7 @@ fn run_selected_from(
         Some(apply_mods(raw, m.neg, m.abs, m.flr))
     };
     let mut p0 = false;
+    let mut arm: Option<PredArm> = None;
     /* A loop kept as a loop: where each open one's body starts, and a step
      * budget so a program that never ends fails rather than hangs. */
     let mut tops: Vec<usize> = Vec::new();
@@ -1013,12 +1014,19 @@ fn run_selected_from(
         if steps > 1 << 22 {
             return None;
         }
+        /* Inside a predicated `if` arm, as the machine runs it: the then
+         * arm where p0 is clear, the else arm where it is set; a group of
+         * the arm that does not run writes nothing (a value it would have
+         * written reads as never written, and a register both arms write
+         * keeps the running arm's value). */
+        if let SelOp::Pred(m) = g.op {
+            arm = if m == PredArm::End { None } else { Some(m) };
+            continue;
+        }
+        if matches!((arm, p0), (Some(PredArm::Then), true) | (Some(PredArm::Else), false)) {
+            continue;
+        }
         match g.op {
-            /* A predicated `if` arm's edge: this model runs both arms (the
-             * join selects between them), the byte model only the one p0
-             * picks, so a value read from an arm that did not run shows as
-             * a difference. */
-            SelOp::Pred(_) => continue,
             SelOp::LoopBegin => {
                 tops.push(pc);
                 continue;
@@ -3580,6 +3588,91 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
         let got = *out.get(&0).expect("a colour");
         let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
         assert!(close, "{got:#010x}, case 191 wants {want:#010x}\n{listing}");
+    })
+    .unwrap();
+}
+
+/// gl_test case 192's two fragment shaders, on the host: values from
+/// before a predicated `if` read in both arms and after it, beside two the
+/// arms compute into one register each from both arms (no select after the
+/// `if`: no `movc` in the program), on a uniform each way and on
+/// gl_FragCoord.x either side of 32. Case 192 on the AM62P is the deciding
+/// check; this is the same arithmetic in the byte model.
+#[test]
+fn gl_test_case_192_values_live_across_the_arms_on_the_host() {
+    use yakogl::shaderc::*;
+    let fs = |cond: &str| {
+        format!(
+            "#version 100\nprecision highp float;\nuniform float u_x, u_q, u_a, u_b;\nvoid main() {{\n  \
+             float a = u_q * 3.0;\n  float b = u_a + 0.125;\n  float r, s;\n  if ({cond}) {{ r = a * 2.0; s = b - a; }} \
+             else {{ r = b * 0.5; s = a + b; }}\n  gl_FragColor = vec4(r, s, a, b);\n}}\n"
+        )
+    };
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    for line in [
+        "\"  float a = u_q * 3.0;\\n\"",
+        "\"  if (\" cond \") { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\\n\"",
+        "PREDLIVE_FS(\"gl_FragCoord.x < 32.0\")",
+    ] {
+        assert!(suite.contains(line), "case 192's text: {line}");
+    }
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let (then_c, else_c) = (rgba([0.75, 0.25, 0.375, 0.625]), rgba([0.3125, 1.0, 0.375, 0.625]));
+    let runs = [
+        (fs("u_x > 0.0"), 1.0f32, 10.5f32, then_c),
+        (fs("u_x > 0.0"), -1.0, 10.5, else_c),
+        (fs("gl_FragCoord.x < 32.0"), 0.0, 31.5, then_c),
+        (fs("gl_FragCoord.x < 32.0"), 0.0, 32.5, else_c),
+    ];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        for (src, ux, fx, want) in &runs {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                SHC_BLEND_KEY_REPLACE,
+            )
+            .unwrap_or_else(|e| panic!("{e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut listing = String::new();
+            yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+                yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+                Ok(())
+            })
+            .unwrap();
+            for cc in ["cc=if(!p0)", "cc=if(p0)"] {
+                assert!(listing.contains(cc), "the arms run predicated: no {cc}\n{listing}");
+            }
+            /* a select is a `movc`; so is the condition's compare, before
+             * the arms: none after them */
+            let groups: Vec<&str> = listing.split("\n[").collect();
+            let last_arm = groups.iter().rposition(|g| g.contains("cc=if(")).expect("an arm");
+            assert!(!groups[last_arm + 1..].iter().any(|g| g.contains("movc")), "no select joins the arms\n{listing}");
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, _k: u32| {
+                match n {
+                    "u_x" => *ux,
+                    "u_q" => 0.125,
+                    "u_a" => 0.5,
+                    "u_b" => 0.0,
+                    other => panic!("a uniform {other:?}"),
+                }
+                .to_bits()
+            });
+            inp.frag_xy[0] = fx.to_bits();
+            inp.frag_xy[1] = fx.to_bits();
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got = *out.get(&0).expect("a colour");
+            let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
+            assert!(close, "u_x {ux}, x {fx}: {got:#010x}, case 192 wants {want:#010x}\n{listing}");
+        }
     })
     .unwrap();
 }

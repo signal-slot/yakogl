@@ -1791,6 +1791,7 @@ impl<'a> Sel<'a> {
             })?;
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Then), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
+        let then_at = self.groups.len();
         self.nodes(then_)?;
         let mut then_map: AVec<'a, VReg> = AVec::new();
         then_map.extend_from_slice(self.arena, self.locals_in)?;
@@ -1800,10 +1801,12 @@ impl<'a> Sel<'a> {
          * starts from the outputs as they stood before */
         let outputs_then = core::mem::replace(&mut self.outputs, outputs_before);
 
+        let else_at = self.groups.len();
         if pred {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::Else), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
         self.nodes(else_)?;
+        let end_at = self.groups.len();
         if pred {
             self.emit(SelGroup { op: SelOp::Pred(PredArm::End), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
         }
@@ -1818,6 +1821,14 @@ impl<'a> Sel<'a> {
             }
             let d = VReg(self.next_vreg);
             self.next_vreg += 1;
+            /* Predicated arms that each compute the slot's new value write
+             * one register, as pco's program does, and no select joins
+             * them: an instance runs one arm, so the register holds what
+             * that arm wrote (`one_register_from_both_arms`). */
+            if pred && self.one_register_from_both_arms(t, e, d, [then_at, else_at, end_at], &then_map, &outputs_then) {
+                self.locals_in[k] = d;
+                continue;
+            }
             self.emit(SelGroup {
                 op: SelOp::Alu(ir::AluOp::Bcsel),
                 ty: OpType::U32,
@@ -1874,6 +1885,90 @@ impl<'a> Sel<'a> {
         then_map.release(self.arena);
         outputs_then.release(self.arena);
         Ok(())
+    }
+
+    /// Join a slot's two arm values `t` (then) and `e` (else) of a
+    /// predicated `if` in register `d` by writing `d` in both arms: the
+    /// group that computes `t` in the then arm (`arms[0]..arms[1]`) and the
+    /// one that computes `e` in the else arm (`arms[1] + 1..arms[2]`) write
+    /// `d`, and the arms' reads of them read `d`. The hardware runs one arm
+    /// per instance (pco_cf.c lower_if_pred_exec writes the arms' values to
+    /// one register the same way), so `d` holds the arm's value where it
+    /// ran. Only when each value is written only in its own arm (more than
+    /// once is a sum built in place, a dot product's fmul then ffma), by
+    /// single-register groups, and read nowhere else: not after the `if`
+    /// (another slot or an output holding the same value would read the
+    /// other arm's value there). Returns whether it rewrote.
+    fn one_register_from_both_arms(
+        &mut self,
+        t: VReg,
+        e: VReg,
+        d: VReg,
+        arms: [usize; 3],
+        then_map: &AVec<'a, VReg>,
+        outputs_then: &AVec<'a, (ir::IoSlot, [Option<SelSrc>; 4])>,
+    ) -> bool {
+        let [then_at, else_at, end_at] = arms;
+        let groups = self.groups.as_slice();
+        let reads = |v: VReg, g: &SelGroup| {
+            g.srcs.iter().flatten().any(|s| matches!(s, SelSrc::Virtual { v: x, .. } if *x == v))
+        };
+        /* the first group writing `v`, when every group writing it is
+         * inside `range`; each writes one register (a sample writes four) */
+        let arm_defs = |v: VReg, range: core::ops::Range<usize>| -> Option<usize> {
+            let mut first = None;
+            for (i, g) in groups.iter().enumerate() {
+                if g.dst == Some(SelDst::Virtual(v)) {
+                    if !range.contains(&i) || matches!(g.op, SelOp::Sample { .. }) {
+                        return None;
+                    }
+                    first = first.or(Some(i));
+                }
+            }
+            first
+        };
+        let Some(ti) = arm_defs(t, then_at..else_at) else { return false };
+        let Some(ei) = arm_defs(e, else_at + 1..end_at) else { return false };
+        /* read only inside its own arm */
+        let outside = |v: VReg, range: core::ops::Range<usize>| {
+            groups.iter().enumerate().any(|(i, g)| !range.contains(&i) && reads(v, g))
+        };
+        if outside(t, then_at..else_at) || outside(e, else_at + 1..end_at) {
+            return false;
+        }
+        /* held by this slot alone, and by no output: the other holders' joins
+         * would read `d` */
+        let holds = |map: &[VReg], v: VReg| map.iter().filter(|x| **x == v).count();
+        let in_outputs = |list: &[(ir::IoSlot, [Option<SelSrc>; 4])], v: VReg| {
+            list.iter()
+                .flat_map(|(_, c)| c.iter().flatten())
+                .any(|s| matches!(s, SelSrc::Virtual { v: x, .. } if *x == v))
+        };
+        if holds(then_map.as_slice(), t) != 1
+            || holds(self.locals_in, e) != 1
+            || in_outputs(outputs_then.as_slice(), t)
+            || in_outputs(self.outputs.as_slice(), e)
+            || self.discard.is_some_and(|s| matches!(s, SelSrc::Virtual { v, .. } if v == t || v == e))
+        {
+            return false;
+        }
+        let rename = |s: &mut SelSrc, from: VReg| {
+            if let SelSrc::Virtual { v, .. } = s {
+                if *v == from {
+                    *v = d;
+                }
+            }
+        };
+        let groups = self.groups.as_mut_slice();
+        for (from, arm) in [(t, ti..else_at), (e, ei..end_at)] {
+            for g in &mut groups[arm] {
+                g.srcs.iter_mut().flatten().for_each(|s| rename(s, from));
+                if g.dst == Some(SelDst::Virtual(from)) {
+                    g.dst = Some(SelDst::Virtual(d));
+                }
+            }
+        }
+        true
     }
 
     /// A shader that discards: pco's fragment epilogue in full mode, which
@@ -3145,6 +3240,37 @@ impl<'a> Sel<'a> {
                 mark(live, v, true);
             }
         }
+        /* A register both arms of a predicated `if` write
+         * (`one_register_from_both_arms`): the else arm's write is a write
+         * where the else arm runs only, so the then arm's write before it
+         * is still read after the `if`; its life ends at the then arm's
+         * write. Exactly those: a group of an else arm whose register the
+         * same `if`'s then arm writes. (A register written twice in one
+         * arm -- a dot product's sum, fmul then ffma into it -- is an
+         * ordinary rewrite.) */
+        let partial = self.arena.alloc_filled(n, false)?;
+        {
+            let groups = self.groups.as_slice();
+            let mut then_from = None;
+            let mut else_from = None;
+            for (i, g) in groups.iter().enumerate() {
+                match g.op {
+                    SelOp::Pred(PredArm::Then) => then_from = Some(i + 1),
+                    SelOp::Pred(PredArm::Else) => else_from = Some(i + 1),
+                    SelOp::Pred(PredArm::End) => {
+                        let (Some(t), Some(e)) = (then_from, else_from) else {
+                            return Err(SelectError::Unsupported("a predicated arm's end with no then or else"));
+                        };
+                        for k in e..i {
+                            partial[k] =
+                                groups[k].dst.is_some_and(|d| groups[t..e - 1].iter().any(|x| x.dst == Some(d)));
+                        }
+                        (then_from, else_from) = (None, None);
+                    }
+                    _ => {}
+                }
+            }
+        }
         for i in (0..n).rev() {
             let g = self.groups.as_slice()[i];
             /* The end of a loop: the next iteration reads whatever the body
@@ -3205,7 +3331,7 @@ impl<'a> Sel<'a> {
                     dead[i] = true;
                     continue;
                 }
-                for r in regs {
+                for r in regs.filter(|_| !partial[i]) {
                     mark(live, VReg(r), false);
                 }
             }
@@ -3602,9 +3728,35 @@ mod tests {
             assert!(matches!(x.op, SelOp::Alu(_) | SelOp::Copy), "only arithmetic in an arm: {x:?}");
         }
         assert!(else_ > then_ + 1 && end > else_ + 1, "both arms compute: {g:?}");
+        /* Each component of c, computed in both arms, is one register both
+         * arms write (pco's form): no select after the end. */
         let joins = g[end + 1..].iter().filter(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)).count();
-        assert_eq!(joins, 4, "a select per component of c after the end: {g:?}");
+        assert_eq!(joins, 0, "no select after the end: {g:?}");
+        let dsts = |r: core::ops::Range<usize>| g[r].iter().map(|x| x.dst).collect::<std::vec::Vec<_>>();
+        assert_eq!(dsts(then_ + 1..else_), dsts(else_ + 1..end), "the arms write the same registers: {g:?}");
         assert_eq!(g.iter().filter(|x| matches!(x.op, SelOp::Pred(_))).count(), 3, "one `if`");
+        /* An arm that leaves c as it was before the `if`: that value is not
+         * the arm's to write, so a select per component joins them. */
+        let g = selected_fs(
+            "precision mediump float; uniform vec4 u; void main() { vec4 c = u + 0.5; \
+             if (u.x > 0.0) { c = u * 2.0; } gl_FragColor = c; }",
+        );
+        let end = g.iter().position(|x| x.op == SelOp::Pred(PredArm::End)).expect("predicated, the end");
+        let joins = g[end + 1..].iter().filter(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)).count();
+        assert_eq!(joins, 4, "a select per component, the else side from before the `if`: {g:?}");
+        /* An arm whose sum rewrites its own register (a dot product: fmul,
+         * then ffma into the same register) beside a value both arms write:
+         * that rewrite is not a both-arms write, so nothing is read before
+         * it is written (qt/smoothcolor.vert's `scale` was refused so). */
+        let g = selected_fs(
+            "precision mediump float; uniform vec4 u; void main() { float c; \
+             if (u.x > 0.0) { c = u.w * 2.0; } else { c = dot(u.yz, u.yz); } gl_FragColor = vec4(c); }",
+        );
+        let at = |m: PredArm| g.iter().position(|x| x.op == SelOp::Pred(m)).expect("predicated");
+        let (then_, else_, end) = (at(PredArm::Then), at(PredArm::Else), at(PredArm::End));
+        let then_dst = g[then_ + 1..else_].last().and_then(|x| x.dst).expect("the then value");
+        assert!(g[else_ + 1..end].iter().any(|x| x.dst == Some(then_dst)), "c written by both arms: {g:?}");
+        assert_eq!(g[end + 1..].iter().filter(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)).count(), 0, "{g:?}");
     }
 
     /// Arms that read or write p0 or need every instance -- a look-up, a
