@@ -16704,3 +16704,19 @@ the rule that never loses is: branch when both arms' masked cost exceeds the
 fixed cost. For `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms)
 predicating, the default, is right; for a symmetric `if` the crossover is about
 38 groups an arm. Left: the rule in the compiler and its board proof.
+
+## Correction (2026-10-06): an executed group costs 0.79 ms, not 0.98
+
+The 2026-10-06 entry "gl_test 195 ifbranch with the arm taken" divides
+(66907 - 59046) by 8 and reads 0.98 ms per executed group. Going from N = 0 to
+N = 8 adds 10 groups to the then arm (the 8 fmad and two uniform copies), so the
+figure is (66907 - 59046) / 10 = 786 us, about 0.79 ms; cases 184 and 185
+measured about 0.8. The branch's fixed cost is then about 6.8 executed groups
+(5336 / 786), 5.2 with the arm off (4092 / 786), not "about six". Only this
+division changes; the measurements above stand. Source: the message of
+`5f4d3677`, which also sets the default rule: branch an `if` iff the masked
+cost of each arm exceeds `BRANCH_FIXED_US` = 5336 us (arm taken 2875 + 23 x 107;
+arm off 775 + 31 x 107 = 4092, the larger taken), crossed at 49 groups an arm;
+on the corpus 0 of 168 `if`s branch. The off arm of case 193 grows by N + 2
+(N fmad and two copies), as ours does, not by the N fmad alone. Board run of
+the rule: pending.

@@ -112,23 +112,43 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      more than the predicated form by 2.88 ms at N = 0 (61921 - 59046), 2.80
      at N = 8, 2.32 at N = 32, and 0.65 ms less at N = 128 (the predicated
      form then pays the 23-group else arm masked at the large-arm rate). An
-     executed group costs about 0.98 ms here ((66907 - 59046) / 8; 184 / 185
-     agree). The branch's fixed cost, the six control groups plus the taken
+     executed group costs about 0.79 ms here ((66907 - 59046) / 10 = 786 us:
+     N = 0 to 8 adds 10 groups to the then arm, the 8 fmad and two uniform
+     copies, not 8; 184 / 185 measured about 0.8). The branch's fixed cost, the six control groups plus the taken
      branch, comes out at about 4 to 5 ms a frame either way: radius 0 gives
      0.78 ms net plus the 31 masked groups it no longer issues (about 3.3 ms
      at 0.107 ms each), radius 4 gives 2.88 ms net plus the 23 masked groups
-     (about 2.5 ms); about six executed groups. Branching saves the masked
+     (about 2.5 ms); 6.8 executed groups (5.2 with the arm off). Branching saves the masked
      cost of the arm it skips (194's curve, 0.107 to 0.38 ms a group). The
      skipped arm is not known at compile time, so the rule that never loses
      is: branch when both arms' masked cost exceeds the fixed cost. For
      `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms) predicating, the
      default, is right; for a symmetric `if` the crossover is about 38
-     groups an arm.
-   - The rule is in the compiler (`select::branch_pays`: masked cost of
-     each arm past 5336 us, so 49 groups an arm) and branches no `if` of the
-     corpus (0 of 168: no `if` has two arms that long); still open: an input
-     that says which arm runs (a per-draw hint or a profile), without which
-     195's 36 ms at N = 128 stays out of reach.
+     groups an arm by this estimate (49 in the rule below, which uses the
+     larger fixed cost).
+   - The rule as landed (`5f4d3677`, `select::branch_pays`): the default
+     lowering branches an `if` iff the masked cost of EACH arm exceeds
+     `BRANCH_FIXED_US` = 5336 us; otherwise it predicates (the options
+     PREDICATE and BRANCH still force a form). The branch's fixed cost is
+     the larger of 195's two readings: arm taken 2875 + 23 x 107 = 5336 us,
+     arm off 775 + 31 x 107 = 4092 us. The masked cost of an arm is a table
+     of 194's marginal costs by arm size (107 us a group up to 41 groups,
+     122 to 49, 162 to 57, 204 to 65, 257 to 81, 307 to 97, 346 to 129, 367
+     to 161, 378 to 225, 384 beyond). The rule is crossed at 49 groups an
+     arm. On the corpus 0 of 168 `if`s branch (the largest smaller arm of
+     any `if` is 36 groups); `fill_color` (31 / 23) and the offarm sources
+     (else arm 23) stay predicated, and the one-armed `if`s have nothing to
+     save when the arm runs. The 36 ms saved at N = 128 needs knowing which
+     arm runs. Not modelled: 195 at N = 128 with the arm taken, where the
+     branch is 652 us cheaper than the model's +2875.
+     Board run of the rule: the corpus bytes are unchanged, and the gl_test
+     full set on the AM62P passes 48 / 48, 0 resets (record
+     20261006-0403-gt-5f4d3677-ecce9b75).
+   - Next, proposed (not done): a per-draw variant chosen by the GL core from
+     the uniform condition's value, like the blend and sampler-state
+     variants: predicated when the long arm runs, branched when it is
+     skipped. `fill_color` at N = 128: 91.1 to 55.3 ms with the arm off, no
+     loss with it on.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
