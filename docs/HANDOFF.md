@@ -103,10 +103,29 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      the never-run arm exceeds about 38 groups (31 + 7). At N = 128 it saves
      35.8 ms (91144 - 55338 us). `fill_color`'s own scissor arm (31 groups)
      therefore stays predicated, which is the default.
-   - Still open: the branched form's cost when the arm IS taken (radius > 0),
-     which the compiler needs before it can choose by arm size, and the
-     choice rule in the compiler. 195 now times the taken arm too
-     (scissorRadius 4, 16 sub-runs); its board run is pending.
+   - The branched form with the arm taken (scissorRadius 4), gl_test 195
+     again on `39a5dc39` (record `20261006-0209-case195-39a5dc39-b665ee9b`;
+     pixels ff000099 with the arm off, ff000088 taken). 3D busy per frame,
+     us, predicate off / on, branch off / on: N = 0 54563 / 59046, 55338 /
+     61921; 8 55415 / 66907, 55338 / 69702; 32 59342 / 86005, 55338 / 88325;
+     128 91133 / 163104, 55338 / 162452. With the arm taken the branch costs
+     more than the predicated form by 2.88 ms at N = 0 (61921 - 59046), 2.80
+     at N = 8, 2.32 at N = 32, and 0.65 ms less at N = 128 (the predicated
+     form then pays the 23-group else arm masked at the large-arm rate). An
+     executed group costs about 0.98 ms here ((66907 - 59046) / 8; 184 / 185
+     agree). The branch's fixed cost, the six control groups plus the taken
+     branch, comes out at about 4 to 5 ms a frame either way: radius 0 gives
+     0.78 ms net plus the 31 masked groups it no longer issues (about 3.3 ms
+     at 0.107 ms each), radius 4 gives 2.88 ms net plus the 23 masked groups
+     (about 2.5 ms); about six executed groups. Branching saves the masked
+     cost of the arm it skips (194's curve, 0.107 to 0.38 ms a group). The
+     skipped arm is not known at compile time, so the rule that never loses
+     is: branch when both arms' masked cost exceeds the fixed cost. For
+     `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms) predicating, the
+     default, is right; for a symmetric `if` the crossover is about 38
+     groups an arm.
+   - Still open: the rule in the compiler (the default lowering chosen by
+     arm size from these constants) and its board proof.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

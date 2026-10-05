@@ -16652,3 +16652,55 @@ Read: `fill_color`'s own scissor arm (31 groups) is right to stay predicated,
 the default. Not measured: the branched form's cost when the arm is taken
 (radius > 0), which the compiler needs to choose by arm size; gl_test 195 is
 being extended for it.
+
+## AM62P: gl_test 195 ifbranch with the arm taken (origin/main `39a5dc39`, 2026-10-06)
+
+Case 195 now also runs each program with the arm taken (scissorRadius 4): 16
+sub-runs on one context, N = 0, 8, 32, 128 added groups, predicated and
+branched, arm off and arm taken. Instrument: `tools/board.sh am62p run`,
+`BOARD_BOOT=uboot-mmc`, online image built from `39a5dc39`,
+`CONFIG_GL_TEST_CASES="195"`. Record `20261006-0209-case195-39a5dc39-b665ee9b`
+in `records/am62p/` of the main checkout (gitignored). Verdict line:
+`board.sh am62p case195-39a5dc39 rc=0 verdict=done boot=uboot-mmc row
+boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=88s`.
+
+Console (time stamps dropped):
+
+    gl_test: ifbranch 0 predicate: off arm +0 groups: best 55 ms; per frame 3D busy 54563 us, TA busy 225 us
+    gl_test: ifbranch 0 predicate on: taken arm +0 groups: best 60 ms; per frame 3D busy 59046 us, TA busy 225 us
+    gl_test: ifbranch 0 branch: off arm +0 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 225 us
+    gl_test: ifbranch 0 branch on: taken arm +0 groups: best 63 ms; per frame 3D busy 61921 us, TA busy 225 us
+    gl_test: ifbranch 1 predicate: off arm +8 groups: best 56 ms; per frame 3D busy 55415 us, TA busy 225 us
+    gl_test: ifbranch 1 predicate on: taken arm +8 groups: best 68 ms; per frame 3D busy 66907 us, TA busy 225 us
+    gl_test: ifbranch 1 branch: off arm +8 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 225 us
+    gl_test: ifbranch 1 branch on: taken arm +8 groups: best 71 ms; per frame 3D busy 69702 us, TA busy 225 us
+    gl_test: ifbranch 2 predicate: off arm +32 groups: best 60 ms; per frame 3D busy 59342 us, TA busy 226 us
+    gl_test: ifbranch 2 predicate on: taken arm +32 groups: best 87 ms; per frame 3D busy 86005 us, TA busy 225 us
+    gl_test: ifbranch 2 branch: off arm +32 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 225 us
+    gl_test: ifbranch 2 branch on: taken arm +32 groups: best 89 ms; per frame 3D busy 88325 us, TA busy 225 us
+    gl_test: ifbranch 3 predicate: off arm +128 groups: best 92 ms; per frame 3D busy 91133 us, TA busy 225 us
+    gl_test: ifbranch 3 predicate on: taken arm +128 groups: best 164 ms; per frame 3D busy 163104 us, TA busy 225 us
+    gl_test: ifbranch 3 branch: off arm +128 groups: best 56 ms; per frame 3D busy 55338 us, TA busy 226 us
+    gl_test: ifbranch 3 branch on: taken arm +128 groups: best 163 ms; per frame 3D busy 162452 us, TA busy 225 us
+    gl_test: ifbranch pixels: ff000099 (8 times)
+    gl_test: ifbranch pixels on: ff000088 (8 times)
+    gl_test: case 195 ifbranch: PASS
+
+Arithmetic, 3D busy per frame (branch on - predicate on):
+- N = 0: 61921 - 59046 = 2875 us (+2.88 ms); N = 8: 69702 - 66907 = 2795 us
+  (+2.80 ms); N = 32: 88325 - 86005 = 2320 us (+2.32 ms); N = 128:
+  162452 - 163104 = -652 us (0.65 ms less: the predicated form then pays the
+  23-group else arm masked at the large-arm rate);
+- an executed group: (66907 - 59046) / 8 = 0.98 ms per added group, consistent
+  with cases 184 and 185;
+- the branch's fixed cost, the six control groups plus the taken branch: radius
+  0, 0.78 ms net plus the 31 masked groups it no longer issues (31 x 0.107 =
+  3.3 ms); radius 4, 2.88 ms net plus the 23 masked groups (23 x 0.107 = 2.5
+  ms); about 4 to 5 ms a frame either way, about six executed groups.
+
+Read: branching saves the masked cost of the arm it skips (case 194's curve,
+0.107 to 0.38 ms a group). Which arm is skipped is unknown at compile time, so
+the rule that never loses is: branch when both arms' masked cost exceeds the
+fixed cost. For `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms)
+predicating, the default, is right; for a symmetric `if` the crossover is about
+38 groups an arm. Left: the rule in the compiler and its board proof.
