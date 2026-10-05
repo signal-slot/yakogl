@@ -428,7 +428,15 @@ pub fn emit(shaders: &[Shader], toolchain: &str) -> R<String> {
     ];
     for sh in shaders {
         let bl = if sh.blend_spec.is_empty() { String::new() } else { format!("  blend={}", sh.blend_spec) };
-        out.push(rs_comment(&format!("//   {} {}  sha256={}{}", py::ljust(&sh.name, 20), sh.stage, sh.sha_hex(), bl)));
+        let dbg = if sh.pco_debug.is_empty() { String::new() } else { format!("  pco_debug={}", sh.pco_debug) };
+        out.push(rs_comment(&format!(
+            "//   {} {}  sha256={}{}{}",
+            py::ljust(&sh.name, 20),
+            sh.stage,
+            sh.sha_hex(),
+            bl,
+            dbg
+        )));
     }
     out.extend(
         [
@@ -481,6 +489,9 @@ pub fn emit(shaders: &[Shader], toolchain: &str) -> R<String> {
                 "// {} compiled for blending: {} (fb-fetch + blend in the FS)",
                 sh.name, sh.blend_spec
             )));
+        }
+        if !sh.pco_debug.is_empty() {
+            out.push(rs_comment(&format!("// {} built by pco_shc under PCO_DEBUG={}", sh.name, sh.pco_debug)));
         }
         emit_usc_array(&mut out, &ident, row.usc());
         if !row.uniforms.is_empty() {

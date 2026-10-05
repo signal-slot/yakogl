@@ -306,6 +306,11 @@ pub struct Shader {
     pub descs: Vec<Desc>,
     pub note: String,
     pub source: String,
+    /// `PCO_DEBUG` the row was built with (`--pco-debug`; empty: none). The
+    /// table records it (emit.rs), so it says which rows pco built some
+    /// other way than its default -- `no_pred_cf`: an `if` under the
+    /// execution mask with a branch over each arm instead of predicated.
+    pub pco_debug: String,
 }
 
 impl Shader {
@@ -344,6 +349,7 @@ impl Shader {
             descs: Vec::new(),
             note: String::new(),
             source: String::new(),
+            pco_debug: String::new(),
         }
     }
 
@@ -727,6 +733,18 @@ pub fn run_pco(src_path: &str, stage: &str, blend_spec: &str) -> R<(Vec<u32>, St
 /// which also reflects the source runs the front end once, not twice, and
 /// reflects exactly the text that was compiled).
 pub fn run_pco_text(text: &str, src_path: &str, stage: &str, blend_spec: &str) -> R<(Vec<u32>, String)> {
+    run_pco_text_debug(text, src_path, stage, blend_spec, "")
+}
+
+/// [`run_pco_text`] with pco_shc run under `PCO_DEBUG=pco_debug` (empty: the
+/// environment's own `PCO_DEBUG`, if any, as before).
+pub fn run_pco_text_debug(
+    text: &str,
+    src_path: &str,
+    stage: &str,
+    blend_spec: &str,
+    pco_debug: &str,
+) -> R<(Vec<u32>, String)> {
     let base = std::env::temp_dir();
     let tmpd = tempfile::Builder::new()
         .prefix("glsl2usc.")
@@ -734,14 +752,33 @@ pub fn run_pco_text(text: &str, src_path: &str, stage: &str, blend_spec: &str) -
         .tempdir_in(&base)
         .map_err(|e| Error::Fatal(format!("mkdtemp: {e}")))?;
     let dir = tmpd.path().to_string_lossy().into_owned();
-    let r = run_pco_in(&dir, text, src_path, stage, blend_spec);
+    let r = run_pco_in(&dir, text, src_path, stage, blend_spec, pco_debug);
     if py::env_set("GLSL2USC_KEEP").is_some() {
         let _ = tmpd.keep();
     }
     r
 }
 
-fn run_pco_in(tmpd: &str, fe_text: &str, src_path: &str, stage: &str, blend_spec: &str) -> R<(Vec<u32>, String)> {
+/// What a cache entry is keyed by, besides the compiled text: the stage,
+/// the variant, the compiler binary, the file name, the optimiser pass and
+/// the `PCO_DEBUG` pco_shc runs under. The last is appended only when set, so
+/// every entry made without it keeps its key.
+fn cache_key_material(stage: &str, blend_spec: &str, tool_id: &str, base: &str, opt: bool, pco_debug: &str) -> String {
+    let mut m = format!("{}|{}|{}|{}|opt{}|", stage, blend_spec, tool_id, base, if opt { "1" } else { "0" });
+    if !pco_debug.is_empty() {
+        m.push_str(&format!("pco_debug={pco_debug}|"));
+    }
+    m
+}
+
+fn run_pco_in(
+    tmpd: &str,
+    fe_text: &str,
+    src_path: &str,
+    stage: &str,
+    blend_spec: &str,
+    pco_debug: &str,
+) -> R<(Vec<u32>, String)> {
     let glslang_stage = if stage == "vs" { "vert" } else { "frag" };
     let keep = py::env_set("GLSL2USC_KEEP");
     let spv = py::join(tmpd, "s.spv");
@@ -757,15 +794,21 @@ fn run_pco_in(tmpd: &str, fe_text: &str, src_path: &str, stage: &str, blend_spec
         }
     }
     let env = variant_env(blend_spec)?;
+    /* The PCO_DEBUG pco_shc runs under: --pco-debug's, else the caller's
+     * environment's (inherited, as it always was). Either way it is in the
+     * cache key: an entry built under one must not be served for another. */
+    let pco_debug =
+        if pco_debug.is_empty() { py::env_set("PCO_DEBUG").unwrap_or_default() } else { pco_debug.to_string() };
     // GLSL2USC_CACHE=<dir>: the compiler's raw output keyed by the text it
     // compiled, the stage, the variant and the compiler binary itself.
     let cache_dir = py::env_set("GLSL2USC_CACHE");
     let mut cache_key = None;
     if let Some(dir) = &cache_dir {
         let tool_id = stat_tool_id(&pco_shc_path());
-        let opt_id = if opt_pass() { "1" } else { "0" };
         let mut h = Sha256::new();
-        h.update(format!("{}|{}|{}|{}|opt{}|", stage, blend_spec, tool_id, py::basename(&src_path), opt_id).as_bytes());
+        h.update(
+            cache_key_material(stage, blend_spec, &tool_id, py::basename(&src_path), opt_pass(), &pco_debug).as_bytes(),
+        );
         h.update(text.as_bytes());
         let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
         let key = py::join(dir, &hex);
@@ -802,6 +845,9 @@ fn run_pco_in(tmpd: &str, fe_text: &str, src_path: &str, stage: &str, blend_spec
     let pco = pco_shc_path();
     let mut cmd = Command::new(&pco);
     cmd.args([stage, &spv]);
+    if !pco_debug.is_empty() {
+        cmd.env("PCO_DEBUG", &pco_debug);
+    }
     for (k, v) in &env {
         match v {
             Some(v) => cmd.env(k, v),
@@ -1015,12 +1061,15 @@ pub fn reflect_source(glsl_bytes: &[u8], stage: &str) -> R<Reflection> {
 }
 
 /// Build one table entry: Ok(Err(reason)) when the variant is skipped.
-pub fn resolve_shader(src_path: &str, blend_spec: &str) -> R<Result<(Shader, String), String>> {
-    resolve_shader_mode(src_path, blend_spec, Strictness::TableBuild)
-}
-
-/// [`resolve_shader`] for a named caller (see [`Strictness`]).
-pub fn resolve_shader_mode(src_path: &str, blend_spec: &str, how: Strictness) -> R<Result<(Shader, String), String>> {
+/// `how` names the caller (see [`Strictness`]); pco_shc runs under
+/// `PCO_DEBUG=pco_debug` (`--pco-debug`; empty: none), and a prebuilt
+/// sidecar, which is not compiled, is refused with one.
+pub fn resolve_shader(
+    src_path: &str,
+    blend_spec: &str,
+    how: Strictness,
+    pco_debug: &str,
+) -> R<Result<(Shader, String), String>> {
     let src_bytes = py::read_bytes(src_path)?;
     let name = py::basename(src_path).to_string();
     let stage = stage_of(src_path)?;
@@ -1030,6 +1079,12 @@ pub fn resolve_shader_mode(src_path: &str, blend_spec: &str, how: Strictness) ->
     if has_sidecar {
         if !blend_spec.is_empty() {
             return Ok(Err("prebuilt: no blend variants".into()));
+        }
+        if !pco_debug.is_empty() {
+            exit!(
+                "glsl2usc: {}: --pco-debug {pco_debug} on a prebuilt sidecar, which is not compiled",
+                py::basename(src_path)
+            );
         }
         sh = load_prebuilt(src_path, &sidecar)?;
         origin = format!("prebuilt ({})", py::basename(&sidecar));
@@ -1044,10 +1099,15 @@ pub fn resolve_shader_mode(src_path: &str, blend_spec: &str, how: Strictness) ->
          * and the reflection below work on its result: a reflection of
          * different text than was compiled would disagree with the binary. */
         fe_text = frontend_text_mode(&comp_path, stage, how)?;
-        let (usc, meta) = run_pco_text(&fe_text, &comp_path, stage, blend_spec)?;
+        let (usc, meta) = run_pco_text_debug(&fe_text, &comp_path, stage, blend_spec, pco_debug)?;
         sh = parse_pco_meta(&meta, stage)?;
         sh.usc = usc;
-        origin = format!("pco_shc{}", if comp_path != src_path { " override" } else { "" });
+        sh.pco_debug = pco_debug.to_string();
+        origin = format!(
+            "pco_shc{}{}",
+            if comp_path != src_path { " override" } else { "" },
+            if pco_debug.is_empty() { String::new() } else { format!(" PCO_DEBUG={pco_debug}") }
+        );
     }
     sh.name = name.clone();
     sh.path = py::abspath(src_path);
@@ -1131,9 +1191,33 @@ pub fn resolve_shader_mode(src_path: &str, blend_spec: &str, how: Strictness) ->
 
 /* ---- the command -------------------------------------------------------------- */
 
+/// `--pco-debug GLOB=FLAGS` items as (glob, flags): FLAGS a comma list of
+/// Mesa pco debug option names (lower case, digits and `_`).
+fn parse_pco_debug(items: &[String]) -> R<Vec<(String, String)>> {
+    let mut out = Vec::new();
+    for item in items {
+        let (glob, flags) = py::partition(item, "=");
+        let ok = !glob.is_empty()
+            && !flags.is_empty()
+            && flags
+                .split(',')
+                .all(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'));
+        if !ok {
+            exit!("glsl2usc: --pco-debug expects GLOB=FLAGS (e.g. '*/offarm/*.branch.frag=no_pred_cf'), got '{item}'");
+        }
+        out.push((glob.to_string(), flags.to_string()));
+    }
+    Ok(out)
+}
+
+/// The `PCO_DEBUG` for `path`: the first matching glob's flags, or empty.
+fn pco_debug_for(scoped: &[(String, String)], path: &str) -> String {
+    scoped.iter().find(|(glob, _)| py::fnmatch(path, glob)).map(|(_, f)| f.clone()).unwrap_or_default()
+}
+
 const USAGE: &str = "usage: yakogl-tools glsl2usc [-h] [-o OUTPUT] [--list] [--blend SPEC[:MASK]]
-                             [--for GLOB=SPEC[;SPEC...]] [--skip-failures]
-                             inputs [inputs ...]";
+                             [--for GLOB=SPEC[;SPEC...]] [--pco-debug GLOB=FLAGS]
+                             [--skip-failures] inputs [inputs ...]";
 
 const HELP: &str = "
 GLSL-ES -> PowerVR USC blob table (src/shaderc/blobs.rs)
@@ -1155,6 +1239,13 @@ options:
                         blend states for the fragment shaders whose path matches
                         GLOB (fnmatch) INSTEAD of the --blend list; repeatable,
                         first match wins
+  --pco-debug GLOB=FLAGS
+                        run pco_shc under PCO_DEBUG=FLAGS (Mesa's pco debug
+                        options, e.g. no_pred_cf: an `if` under the execution
+                        mask with a branch over each arm, not predicated) for
+                        every variant of the shaders whose path matches GLOB;
+                        repeatable, first match wins. The setting is part of
+                        the cache key and is recorded in the table's rows
   --skip-failures       a shader the compiler cannot build is reported and left
                         out of the table (glShaderSource fails for it at runtime)
                         instead of aborting; the skipped names are listed at the end
@@ -1166,6 +1257,7 @@ struct Args {
     list: bool,
     blend: Vec<String>,
     scoped: Vec<String>,
+    pco_debug: Vec<String>,
     skip_failures: bool,
     /// hidden: print the translated GLSL + reflection instead of compiling
     dump_translation: bool,
@@ -1178,13 +1270,15 @@ fn usage_error(msg: &str) -> Error {
 /// argparse-compatible parsing (long-option prefixes, `--opt=value`,
 /// `-oVALUE`, one contiguous run of positional arguments).
 fn parse_args(argv: &[String]) -> R<Args> {
-    let longs = ["--output", "--list", "--blend", "--for", "--skip-failures", "--help", "--dump-translation"];
+    let longs =
+        ["--output", "--list", "--blend", "--for", "--pco-debug", "--skip-failures", "--help", "--dump-translation"];
     let mut a = Args {
         inputs: Vec::new(),
         output: "-".into(),
         list: false,
         blend: Vec::new(),
         scoped: Vec::new(),
+        pco_debug: Vec::new(),
         skip_failures: false,
         dump_translation: false,
     };
@@ -1242,7 +1336,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
                 _ => return Err(usage_error(&format!("unrecognized arguments: {arg}"))),
             }
         };
-        let takes_value = matches!(opt.as_str(), "--output" | "--blend" | "--for");
+        let takes_value = matches!(opt.as_str(), "--output" | "--blend" | "--for" | "--pco-debug");
         let value = if takes_value {
             match inline {
                 Some(v) => Some(v),
@@ -1272,6 +1366,7 @@ fn parse_args(argv: &[String]) -> R<Args> {
             "--output" => a.output = value.unwrap(),
             "--blend" => a.blend.push(value.unwrap()),
             "--for" => a.scoped.push(value.unwrap()),
+            "--pco-debug" => a.pco_debug.push(value.unwrap()),
             "--list" => a.list = true,
             "--skip-failures" => a.skip_failures = true,
             "--dump-translation" => a.dump_translation = true,
@@ -1306,6 +1401,8 @@ pub fn main(argv: &[String]) -> R<()> {
         }
         scoped.push((glob.to_string(), specs.split(';').filter(|x| !x.is_empty()).map(String::from).collect()));
     }
+    let debug_scoped = parse_pco_debug(&args.pco_debug)?;
+    let debug_for = |path: &str| -> String { pco_debug_for(&debug_scoped, path) };
     let blends_for = |path: &str| -> Vec<String> {
         for (glob, specs) in &scoped {
             if py::fnmatch(path, glob) {
@@ -1341,7 +1438,7 @@ pub fn main(argv: &[String]) -> R<()> {
         }
         for spec in &specs {
             let bl = if spec.is_empty() { String::new() } else { format!(" blend={spec}") };
-            let (sh, origin) = match resolve_shader(path, spec) {
+            let (sh, origin) = match resolve_shader(path, spec, Strictness::TableBuild, &debug_for(path)) {
                 Ok(Ok(x)) => x,
                 Ok(Err(why)) => {
                     eprintln!("glsl2usc: {} skip blend '{}' ({})", py::ljust(py::basename(path), 20), spec, why);
@@ -1424,6 +1521,28 @@ mod tests {
             Err(Error::Exit(m)) => assert_eq!(m, "glsl2usc: --blend needs at least srgb,drgb"),
             _ => panic!(),
         }
+    }
+
+    /// `--pco-debug`: parsed, matched first-wins per path, refused malformed,
+    /// and part of the cache key only when set (so the shared cache's
+    /// existing entries keep their keys).
+    #[test]
+    fn pco_debug_is_scoped_keyed_and_validated() {
+        let a = parse_args(&s(&["--pco-debug", "*/x/*.frag=no_pred_cf", "--pco-d=*.frag=val_skip", "a.frag"])).unwrap();
+        let sc = parse_pco_debug(&a.pco_debug).unwrap();
+        assert_eq!(pco_debug_for(&sc, "t/x/b.frag"), "no_pred_cf", "first match wins");
+        assert_eq!(pco_debug_for(&sc, "t/y/b.frag"), "val_skip");
+        assert_eq!(pco_debug_for(&sc, "t/y/b.vert"), "");
+        for bad in ["no_pred_cf", "*.frag=", "=no_pred_cf", "*.frag=NO PRED", "*.frag=a,,b"] {
+            match parse_pco_debug(&s(&[bad])) {
+                Err(Error::Exit(m)) => assert!(m.contains("--pco-debug expects GLOB=FLAGS"), "{bad}: {m}"),
+                _ => panic!("{bad} accepted"),
+            }
+        }
+        let plain = cache_key_material("fs", "one,one", "id", "a.frag", false, "");
+        assert_eq!(plain, "fs|one,one|id|a.frag|opt0|", "the key without PCO_DEBUG is the one entries already have");
+        let dbg = cache_key_material("fs", "one,one", "id", "a.frag", false, "no_pred_cf");
+        assert_eq!(dbg, "fs|one,one|id|a.frag|opt0|pco_debug=no_pred_cf|");
     }
 
     #[test]

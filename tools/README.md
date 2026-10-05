@@ -160,8 +160,13 @@ cargo run -p yakogl-tools -- glsl2usc --list tools/shaders/*.vert tools/shaders/
 Options: `-o FILE` (default: stdout), `--list`, `--blend SPEC` (repeatable, see
 below), `--for GLOB=SPEC[;SPEC...]` (the variant list for the fragment shaders whose
 path matches GLOB, instead of the `--blend` list; first match wins),
-`--skip-failures` (a shader the compiler cannot build is reported and left out of
-the table instead of aborting). Long options may be abbreviated.
+`--pco-debug GLOB=FLAGS` (pco_shc runs under `PCO_DEBUG=FLAGS` for every variant of
+the shaders whose path matches GLOB, first match wins: `no_pred_cf` builds an `if`
+under the execution mask with a branch over each arm instead of predicating it;
+the setting is part of the cache key and each such row says so in the table, on
+its header line and above its USC), `--skip-failures` (a shader the compiler cannot
+build is reported and left out of the table instead of aborting). Long options may
+be abbreviated.
 
 ### Config (env vars)
 
@@ -169,7 +174,7 @@ the table instead of aborting). Long options may be abbreviated.
 |---|---|---|
 | `PCO_SHC` | `../scratchpad/.../pco_shc` (relative to the repository) | pco_shc binary |
 | `GLSLANG` | `glslangValidator` (PATH) | GLSL→SPIR-V compiler |
-| `GLSL2USC_CACHE` | unset | directory caching the compiler's output, keyed by the compiled text, stage, variant and the pco_shc binary (size, mtime). Writes are not atomic: an interrupted run leaves zero-length entries the next run serves as shaders with no code — delete the directory after a kill |
+| `GLSL2USC_CACHE` | unset | directory caching the compiler's output, keyed by the compiled text, stage, variant, the pco_shc binary (size, mtime) and the `PCO_DEBUG` it runs under (`--pco-debug`'s or the environment's; only when set). Writes are not atomic: an interrupted run leaves zero-length entries the next run serves as shaders with no code — delete the directory after a kill |
 | `GLSL2USC_KEEP` | unset | keep the temporary directories; if it names a directory, the rewritten GLSL (`.es100to450.glsl`) and the metadata (`.meta.txt`) are written there |
 | `GLSL2USC_UNROLL` | unset | unroll `for` loops over uniform arrays (the old text; a different table key) |
 | `YAKOGL_TOOLS` | unset | `glsl2usc.sh`: a prebuilt `yakogl-tools` instead of `cargo run` |
