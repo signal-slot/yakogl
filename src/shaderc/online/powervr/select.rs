@@ -2942,6 +2942,25 @@ impl<'a> Sel<'a> {
                 })(),
                 _ => None,
             };
+            /* `x * 1.0` is x on every input (-0.0 and NaN included): the
+             * group becomes a copy of x, which `forward_copies` then lets
+             * its readers read through. NIR folds `fmul(a, 1.0)` the same
+             * way; a matrix times a vector with a 1.0 component made one a
+             * lane (fill_color's `scissorMat * vec3(p, 1.0)`, gl_test 186). */
+            if folded.is_none() && g.op == SelOp::Alu(Fmul) && g.ty == OpType::F32 {
+                let one = 1.0f32.to_bits();
+                let other = if val(g.srcs[1]) == Some(one) {
+                    g.srcs[0]
+                } else if val(g.srcs[0]) == Some(one) {
+                    g.srcs[1]
+                } else {
+                    None
+                };
+                if let Some(x) = other {
+                    groups[i] = SelGroup { op: SelOp::Copy, ty: OpType::F32, dst: g.dst, srcs: [Some(x), None, None] };
+                    continue;
+                }
+            }
             let Some(k) = folded else { continue };
             known[d.0 as usize] = Some(k);
             let unit =
@@ -2959,6 +2978,100 @@ impl<'a> Sel<'a> {
         inexact_v.release(self.arena);
         known_v.release(self.arena);
         def_at_v.release(self.arena);
+        defs_v.release(self.arena);
+        Ok(())
+    }
+
+    /// Readers of a copy read its source instead, where the source is a
+    /// value nothing rewrites: a virtual register written once (or a
+    /// declared input), a uniform, a special register or vertex input, or
+    /// an immediate one of the constant registers holds. A uniform or
+    /// another immediate is forwarded only to a copy's single reader:
+    /// `prepare` moves an operand a form cannot take, one move per reader,
+    /// so a copy read twice is kept as the one move. A reader's modifiers
+    /// and the copy's compose when one of the two sets is empty; otherwise
+    /// the reader keeps reading the copy. The copy itself stays and
+    /// `eliminate_dead` drops it once nothing reads it.
+    ///
+    /// fill_color's `mat3(frag[0].xyz, ...)` and `vec3(p, 1.0)` went
+    /// through local copies, and `x * 1.0` (`fold_constants`) is one: the
+    /// table's program has none of those moves (gl_test 186).
+    fn forward_copies(&mut self) -> Result<(), SelectError> {
+        let n = self.next_vreg as usize;
+        let mut defs_v = filled_vec(self.arena, n, 0u8)?;
+        let mut reads_v = filled_vec(self.arena, n, 0u8)?;
+        let mut to_v = filled_vec(self.arena, n, None::<SelSrc>)?;
+        let (defs, reads, to) = (defs_v.as_mut_slice(), reads_v.as_mut_slice(), to_v.as_mut_slice());
+        let bump = |t: &mut [u8], v: VReg, by: u8| {
+            if let Some(c) = t.get_mut(v.0 as usize) {
+                *c = c.saturating_add(by);
+            }
+        };
+        for g in self.groups.as_slice() {
+            if let Some(SelDst::Virtual(v)) = g.dst {
+                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                for k in 0..width {
+                    bump(defs, VReg(v.0 + k), 1);
+                }
+            }
+            for s in g.srcs.iter().flatten() {
+                if let SelSrc::Virtual { v, .. } = s {
+                    bump(reads, *v, 1);
+                }
+            }
+        }
+        for v in self.inputs.as_slice().iter().flat_map(|(_, lanes)| lanes.iter().flatten()) {
+            bump(defs, *v, 1);
+        }
+        /* outputs, the discard and alpha-to-one read too: never forwarded
+         * into (`prepare` places what they read), so they count as two */
+        let side = self.outputs.as_slice().iter().flat_map(|(_, c)| c.iter().flatten().copied());
+        for s in side.chain(self.discard).chain(self.alpha_to_one.iter().flat_map(|(x, f)| [*x, *f])) {
+            if let SelSrc::Virtual { v, .. } = s {
+                bump(reads, v, 2);
+            }
+        }
+        let compose = |s: SelSrc, outer: Mods| -> Option<SelSrc> {
+            match s {
+                SelSrc::Virtual { v, mods } if mods == Mods::default() => Some(SelSrc::Virtual { v, mods: outer }),
+                SelSrc::Virtual { .. } if outer == Mods::default() => Some(s),
+                SelSrc::Fixed { bank, reg, mods } if mods == Mods::default() => {
+                    Some(SelSrc::Fixed { bank, reg, mods: outer })
+                }
+                SelSrc::Fixed { .. } if outer == Mods::default() => Some(s),
+                SelSrc::Imm(k) if outer == Mods::default() => Some(SelSrc::Imm(k)),
+                _ => None,
+            }
+        };
+        for g in self.groups.as_mut_slice().iter_mut() {
+            for s in g.srcs.iter_mut().flatten() {
+                if let SelSrc::Virtual { v, mods } = *s {
+                    if let Some(f) = to.get(v.0 as usize).copied().flatten().and_then(|f| compose(f, mods)) {
+                        *s = f;
+                    }
+                }
+            }
+            if g.op != SelOp::Copy {
+                continue;
+            }
+            let (Some(SelDst::Virtual(d)), Some(src)) = (g.dst, g.srcs[0]) else { continue };
+            if defs.get(d.0 as usize) != Some(&1) {
+                continue;
+            }
+            let one_reader = reads.get(d.0 as usize) == Some(&1);
+            let stable = match src {
+                SelSrc::Virtual { v, .. } => defs.get(v.0 as usize) == Some(&1),
+                SelSrc::Fixed { bank: Bank::Special | Bank::VtxIn, .. } => true,
+                SelSrc::Fixed { bank: Bank::Shared, .. } => one_reader,
+                SelSrc::Fixed { .. } => false,
+                SelSrc::Imm(k) => super::prepare::const_reg(k).is_some() || one_reader,
+            };
+            if stable {
+                to[d.0 as usize] = Some(src);
+            }
+        }
+        to_v.release(self.arena);
+        reads_v.release(self.arena);
         defs_v.release(self.arena);
         Ok(())
     }
@@ -3022,12 +3135,14 @@ impl<'a> Sel<'a> {
                 *x = on;
             }
         }
-        /* The outputs and the discard flag are read by the builder, after
-         * the last group. */
-        for s in self.outputs.as_slice().iter().flat_map(|(_, comps)| comps.iter().flatten()).chain(self.discard.iter())
-        {
+        /* The outputs, the discard flag and alpha-to-one's pair (a blend
+         * variant blends that alpha) are read by the builder, after the last
+         * group. */
+        let a2one = self.alpha_to_one.iter().flat_map(|(x, f)| [*x, *f]);
+        let side = self.outputs.as_slice().iter().flat_map(|(_, comps)| comps.iter().flatten().copied());
+        for s in side.chain(self.discard).chain(a2one) {
             if let SelSrc::Virtual { v, .. } = s {
-                mark(live, *v, true);
+                mark(live, v, true);
             }
         }
         for i in (0..n).rev() {
@@ -3359,6 +3474,7 @@ pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selecte
     s.discard_epilogue()?;
     s.zero_unwritten_locals()?;
     s.fold_constants()?;
+    s.forward_copies()?;
     s.merge_nested_selects()?;
     s.eliminate_dead()?;
     s.prune_frag_zw();
@@ -3401,6 +3517,65 @@ mod tests {
         })
         .unwrap();
         out
+    }
+
+    /// `x * 1.0` is x: a matrix times a vector with a 1.0 lane keeps the
+    /// products of the other lanes and reads that column as it is
+    /// (fill_color's `scissorMat * vec3(p, 1.0)`; gl_test 189), and a
+    /// negated column lane reaches its reader as the modifier. A lane that
+    /// is not 1.0 keeps its product.
+    #[test]
+    fn a_product_by_one_is_read_as_its_other_operand() {
+        let fs = |v: &str| {
+            selected_fs(&format!(
+                "precision highp float; uniform vec3 a, b, c; void main() {{ \
+                 gl_FragColor = vec4(mat3(a, b, -c) * vec3({v}), 1.0); }}"
+            ))
+        };
+        let count = |g: &[SelGroup], op: ir::AluOp| g.iter().filter(|x| x.op == SelOp::Alu(op)).count();
+        let (with_one, without) = (fs("0.5, 0.25, 1.0"), fs("0.5, 0.25, 2.0"));
+        /* 2.0: a product per row, then two fused products on it */
+        assert_eq!((count(&without, ir::AluOp::Fmul), count(&without, ir::AluOp::Ffma)), (3, 6), "{without:?}");
+        /* 1.0: the column is the first fused product's addend, as pco's */
+        assert_eq!((count(&with_one, ir::AluOp::Fmul), count(&with_one, ir::AluOp::Ffma)), (0, 6), "{with_one:?}");
+        let negated_addend = |x: &&SelGroup| {
+            x.op == SelOp::Alu(ir::AluOp::Ffma)
+                && matches!(x.srcs[2], Some(SelSrc::Fixed { bank: Bank::Shared, mods, .. }) if mods.neg)
+        };
+        assert_eq!(with_one.iter().filter(negated_addend).count(), 3, "-c read as the addends: {with_one:?}");
+    }
+
+    /// What the builder reads after the last group -- the outputs, the
+    /// discard flag and alpha-to-one's alpha and flag -- keeps its
+    /// definition. With a constant colour, alpha-to-one's alpha is the copy
+    /// of 1.0 whose group readers `forward_copies` sends to the immediate:
+    /// nothing but the builder reads it then, and stencil.frag's blend
+    /// variants blended an undefined alpha (`tests/usc_limits.rs`, 14 of
+    /// them against pco) until `eliminate_dead` counted the pair.
+    #[test]
+    fn the_values_the_builder_reads_keep_their_definitions() {
+        use crate::shaderc::online::{lower, sema::Stage};
+        /* through a local, as stencil.frag's `result`: the local's copy */
+        let src = "precision mediump float; uniform float u; void main() { \
+                   vec4 r; if (u < 0.5) discard; r = vec4(1.0); gl_FragColor = r; }";
+        let _l = store::test_lock();
+        store::with_scratch(|a| {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let s = select(&l.module, a).expect("selects");
+            let defined = |x: SelSrc| match x {
+                SelSrc::Virtual { v, .. } => s.groups.iter().any(|g| g.dst == Some(SelDst::Virtual(v))),
+                _ => true,
+            };
+            let (alpha, flag) = s.alpha_to_one.expect("a shader that discards has alpha-to-one's pair");
+            assert!(defined(alpha), "alpha-to-one's alpha {alpha:?} has no group: {:?}", s.groups);
+            assert!(defined(flag), "alpha-to-one's flag {flag:?} has no group");
+            assert!(defined(s.discard.expect("discards")), "the discard flag has no group");
+            for c in s.outputs.iter().flat_map(|(_, c)| c.iter().flatten()) {
+                assert!(defined(*c), "an output {c:?} has no group");
+            }
+        })
+        .unwrap();
     }
 
     /// An `if` on a uniform whose arms are arithmetic runs predicated, as
@@ -4191,14 +4366,16 @@ mod tests {
             assert_eq!(sels, 4, "one select per component of the one written slot");
             /* Each select takes the then arm's register (the stored value's
              * own: a store moves the slot, it does not copy) and, as its
-             * false operand, the slot's register from before the `if` (the
+             * false operand, the slot's value from before the `if` (the
              * else arm left it), into a fresh register -- nothing is
              * written twice. */
             for (lane, g) in s.groups.iter().filter(|g| g.op == SelOp::Alu(ir::AluOp::Bcsel)).enumerate() {
                 let lane = lane as u32;
                 let v = |r: u32| Some(SelSrc::Virtual { v: VReg(r), mods: Mods::default() });
                 assert_eq!(g.srcs[1], v(LANES + lane), "the then arm's value, value 1 lane {lane}");
-                assert_eq!(g.srcs[2], v(instrs.len() as u32 * LANES + lane), "the slot before the `if`");
+                /* nothing stored to the slot before the `if`: its zero
+                 * fill, read through the fill's copy (`forward_copies`) */
+                assert_eq!(g.srcs[2], Some(SelSrc::Imm(0)), "the slot before the `if`");
                 let Some(SelDst::Virtual(d)) = g.dst else { panic!("a select writes a register") };
                 assert!(d.0 >= s.vregs - 16, "a fresh register");
             }

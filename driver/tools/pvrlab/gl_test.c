@@ -440,6 +440,13 @@
  *               false, and on gl_FragCoord.x, so instances of one draw take
  *               different arms. All three GPUs (skipped by name in a table
  *               build); in the set
+ * 189 mulone    a product by the constant 1.0 (the PowerVR compile reads x
+ *               for `x * 1.0`, no group): a uniform mat3 times
+ *               vec3(0.5, 0.5, 1.0), a negated uniform among its columns;
+ *               the same matrix times vec3(0.5) (no lane is 1.0: every
+ *               product is kept); abs() and a negation multiplied by 1.0.
+ *               Each read back. All three GPUs (skipped by name in a table
+ *               build); in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -689,7 +696,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188)
+	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189)
 		return "its own sources: a table build has no rows for them";
 #endif
 	(void)c; /* the default set's reason ignores it */
@@ -7724,7 +7731,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16020,6 +16027,76 @@ static int case_predif(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 189: a product by the constant 1.0 (mulone) ---------------------
+ *
+ * `x * 1.0` is x on every input, so the PowerVR compile reads x where the
+ * product is read and spends no group on it (fill_color's
+ * `scissorMat * vec3(p, 1.0)`). This reads back each side:
+ *   top row     M * vec3(0.5, 0.5, 1.0): the third column read as it is,
+ *               one of its lanes a negated uniform;
+ *   middle row  M * vec3(0.5): no lane is 1.0, every product is kept;
+ *   bottom row  abs(), a negation and a plain uniform, each times 1.0.
+ * M = (u_q, u_a, 0 | u_a, u_a, u_q | u_b, -u_q, u_x); u_x = 0.25,
+ * u_q = 0.125, u_a = 0.25, u_b = 0.25: top (0.4375, 0.125, 0.3125), middle
+ * (0.3125, 0.1875, 0.1875), bottom (0.25, 0.125, 0.25).
+ * ------------------------------------------------------------------------- */
+#define MULONE_MAT "mat3(vec3(u_q, u_a, 0.0), vec3(u_a, u_a, u_q), vec3(u_b, -u_q, u_x))"
+static const char mulone_fs_one_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5, 0.5, 1.0), 1.0); }\n";
+static const char mulone_fs_half_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5), 1.0); }\n";
+static const char mulone_fs_mods_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  gl_FragColor = vec4(abs(u_x - 2.0 * u_a) * 1.0, 1.0 * -(u_q - u_a),\n"
+	"                      (u_b * 1.0) * u_q * 8.0, 1.0);\n"
+	"}\n";
+
+static int case_mulone(void)
+{
+	static const float vals[4] = { 0.25f, 0.125f, 0.25f, 0.25f };
+	const uint32_t one_c = fma_rgba(0.4375f, 0.125f, 0.3125f, 1.0f);
+	const uint32_t half_c = fma_rgba(0.3125f, 0.1875f, 0.1875f, 1.0f);
+	const uint32_t mods_c = fma_rgba(0.25f, 0.125f, 0.25f, 1.0f);
+	GLuint one, half, mods;
+	bool ok = true;
+
+	one = link_program(fma_vs_plain_src, mulone_fs_one_src);
+	half = link_program(fma_vs_plain_src, mulone_fs_half_src);
+	mods = link_program(fma_vs_plain_src, mulone_fs_mods_src);
+	if (!one || !half || !mods)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	/* rows in NDC, top is +y: [1/3, 1], [-1/3, 1/3], [-1, -1/3] */
+	if (!fma_quad_vals(one, -1.0f, 1.0f / 3.0f, 1.0f, 1.0f, vals) ||
+	    !fma_quad_vals(half, -1.0f, -1.0f / 3.0f, 1.0f, 1.0f / 3.0f, vals) ||
+	    !fma_quad_vals(mods, -1.0f, -1.0f, 1.0f, -1.0f / 3.0f, vals))
+		return -1;
+	if (!check_gl_error("mulone"))
+		return -1;
+	read_topdown();
+	dump_map(s_px, TW, TH);
+	ok &= expect_px("M * vec3(0.5, 0.5, 1.0)", TW / 2, TH / 6, one_c, 1);
+	ok &= expect_px("M * vec3(0.5), no lane 1.0", TW / 2, TH / 2, half_c, 1);
+	ok &= expect_px("abs, negation, uniform, each * 1.0", TW / 2, 5 * TH / 6, mods_c, 1);
+	glDeleteProgram(one);
+	glDeleteProgram(half);
+	glDeleteProgram(mods);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19032,6 +19109,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 186: rc = case_fcsplit(); break;
 	case 187: rc = case_predarm(); break;
 	case 188: rc = case_predif(); break;
+	case 189: rc = case_mulone(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
@@ -19500,7 +19578,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		int fails = 0;
 		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce

@@ -3382,6 +3382,69 @@ fn gl_test_case_188_arms_on_the_host() {
     .unwrap();
 }
 
+/// gl_test case 189's three fragment shaders, on the host, from the suite's
+/// own text: a product by the constant 1.0 read as its other operand (a
+/// uniform mat3 times vec3(0.5, 0.5, 1.0), one column lane negated), the
+/// same matrix times vec3(0.5) where every product stays, and abs() and a
+/// negation times 1.0. Each must give the colour the case expects. Case 189
+/// on the AM62P is the deciding check; this is the same arithmetic in the
+/// byte model.
+#[test]
+fn gl_test_case_189_products_by_one_on_the_host() {
+    use yakogl::shaderc::*;
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    /* `name`'s C literals joined, `" MULONE_MAT "` spliced to the macro's
+     * text, `\n` undone */
+    let mat = suite.split_once("#define MULONE_MAT \"").and_then(|(_, t)| t.split_once("\"\n")).expect("MULONE_MAT").0;
+    let source = |name: &str| -> String {
+        let (_, t) = suite.split_once(&format!("static const char {name}[] =")).unwrap_or_else(|| panic!("{name}"));
+        let body = t.split_once(";\n").unwrap().0.replace("\" MULONE_MAT \"", mat);
+        body.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n")
+    };
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let runs = [
+        ("mulone_fs_one_src", rgba([0.4375, 0.125, 0.3125, 1.0])),
+        ("mulone_fs_half_src", rgba([0.3125, 0.1875, 0.1875, 1.0])),
+        ("mulone_fs_mods_src", rgba([0.25, 0.125, 0.25, 1.0])),
+    ];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        for (name, want) in &runs {
+            let src = source(name);
+            let text = a.alloc_str(&src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                SHC_BLEND_KEY_REPLACE,
+            )
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, _k: u32| {
+                match n {
+                    "u_x" => 0.25f32,
+                    "u_q" => 0.125,
+                    "u_a" => 0.25,
+                    "u_b" => 0.25,
+                    other => panic!("a uniform {other:?}"),
+                }
+                .to_bits()
+            });
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got = *out.get(&0).expect("a colour");
+            let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
+            assert!(close, "{name}: {got:#010x}, case 189 wants {want:#010x}\n{src}");
+        }
+    })
+    .unwrap();
+}
+
 /// gl_test case 91's two blends, on the host: the case's own fragment
 /// shader (es100/hdrcolor.frag) with u_color = (0.5, 1.5,
 /// 0, 0.5), built as the RGBA16F variant the GL core asks for (the target's
