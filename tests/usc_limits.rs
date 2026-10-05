@@ -2496,7 +2496,8 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
      * That is exactly the `uvsw.write` the epilogue used to emit (is4 = ft0
      * where every reference write has fte), so a set that could not tell the
      * two apart would have passed it. */
-    assert_eq!(corpus_groups, 651_369, "the reference corpus changed size; re-derive this gate's pins");
+    // 651_369 before the 20 matattr rows (+399 groups).
+    assert_eq!(corpus_groups, 651_768, "the reference corpus changed size; re-derive this gate's pins");
     let real = corpus
         .iter()
         .find(|k| k.contains("uvsw.write :uvsw_write_imm") && k.contains("is4=3"))

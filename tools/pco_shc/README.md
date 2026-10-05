@@ -19,17 +19,16 @@ ever changed by the two patches):
   reads the STRIDE image layout (the reason is in the patch)
 - `gen_usc_blobs.py`, `usc_blobs.txt`: the driver's USC blobs (below)
 
-Build (laptop: LLVM 23; setup and build took 151 s from a fresh tree on 22 threads),
-always in a fresh build directory (an old `build` once compiled MRT shaders
-to nothing):
+Build with `build_pco_shc.sh` (tarball check, the patches, the meson options,
+the usclib check; the packages it needs are in its header; about a minute on
+8 threads):
 
-    tar xf mesa-26.2.1.tar.xz && cd mesa-26.2.1      # sha256 c47e81bd...4442
-    cp <yakogl>/tools/pco_shc/{pco_shc.c,capture_usc.c,capture_smp_fs.c} src/imagination/vulkan/
-    patch -p1 < <yakogl>/tools/pco_shc/meson-vulkan.patch
-    patch -p1 < <yakogl>/tools/pco_shc/usclib-tex.cl.patch
-    PKG_CONFIG_PATH=/usr/lib/llvm/23/lib64/pkgconfig meson setup build \
-        -Dvulkan-drivers=imagination -Dgallium-drivers= -Dplatforms=
-    ninja -C build src/imagination/vulkan/pco_shc src/imagination/vulkan/capture_usc
+    tools/pco_shc/build_pco_shc.sh mesa-26.2.1.tar.xz [<work dir>]
+
+It builds `pco_shc` only; `capture_usc` and `capture_smp_fs` are one more
+`ninja -C <work dir>/mesa-26.2.1/build src/imagination/vulkan/capture_usc`
+away. Always in a fresh build directory (an old `build` once compiled MRT
+shaders to nothing): the script deletes and re-extracts the tree.
 
 ## The driver's USC blobs
 

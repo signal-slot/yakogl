@@ -271,9 +271,11 @@ fn the_group_length_and_da_rules_hold_for_every_group() {
     // table, which is derived independently. Without this a run where every
     // group looked like one type would pass the da check trivially -- which
     // is exactly what happened once.
-    assert_eq!(main_groups, 539_747, "main groups");
+    // The 20 matattr rows (es100/matattr*.vert, matattr.frag and its 16 blend
+    // variants) added 297 main and 102 control groups to 539_747 / 42_625.
+    assert_eq!(main_groups, 540_044, "main groups");
     assert_eq!(bitwise_groups, 68_997, "bitwise groups");
-    assert_eq!(control_groups, 42_625, "control groups");
+    assert_eq!(control_groups, 42_727, "control groups");
     assert!(control_da_zero > 0, "no control group took the da == 0 branch");
     assert!(aligned_groups > 0, "no group carries alignment padding; that branch is untested");
     std::println!(
@@ -2225,7 +2227,8 @@ fn pcos_own_groups_rebuilt_through_the_builder_are_byte_identical() {
      * printout, a later table change could quietly remove the ground under
      * the pin and the gate would still read 0. */
     assert!(uvsw_variants.contains_key("1lo_1b6i"), "the backend phase would then be the axis, not the operation");
-    assert_eq!(uvsw_ops.get("uvsw.write"), Some(&792), "the population the pin was measured over changed");
+    // 792 before the 20 matattr rows; matattr2/3/4.vert write 6 more.
+    assert_eq!(uvsw_ops.get("uvsw.write"), Some(&798), "the population the pin was measured over changed");
     assert_eq!(
         uvsw_variants.get("1lo_3b11i_2m").copied(),
         Some(uvsw_ops["uvsw.write"] + uvsw_ops["uvsw.write.emit.endtask"]),
@@ -2250,7 +2253,7 @@ fn pcos_own_groups_rebuilt_through_the_builder_are_byte_identical() {
      * pinned to the corpus size, and any skip at all fails the gate by
      * name. */
     assert!(skipped.is_empty(), "groups the harness did not rebuild: {skipped:?}");
-    assert_eq!(rebuilt, 651_369, "the gate no longer covers the whole corpus");
+    assert_eq!(rebuilt, 651_768, "the gate no longer covers the whole corpus"); // 651_369 + 399 (matattr)
     assert_eq!(rebuilt - same, 0, "groups whose bytes our builder does not reproduce from pco's own content");
     assert!(rebuilt > 1000, "only {rebuilt} groups went through the builder");
 }
@@ -2550,7 +2553,7 @@ fn every_attested_bank_occurs_in_the_corpus() {
             off += g.total;
         }
     }
-    assert_eq!(groups, 651_369, "the corpus changed size");
+    assert_eq!(groups, 651_768, "the corpus changed size"); // 651_369 + 399 (the 20 matattr rows)
     let all = [Bank::Temp, Bank::Special, Bank::VtxIn, Bank::Coeff, Bank::Shared];
     for op in ops {
         for slot in 0..3 {
@@ -2605,7 +2608,7 @@ fn every_attested_modifier_set_occurs_in_the_corpus() {
             off += g.total;
         }
     }
-    assert_eq!(groups, 651_369, "the corpus changed size");
+    assert_eq!(groups, 651_768, "the corpus changed size"); // 651_369 + 399 (the 20 matattr rows)
     for op in ops {
         let corpus: BTreeSet<u16> = seen.iter().filter(|(o, _)| *o == op).map(|(_, m)| *m).collect();
         let table: BTreeSet<u16> = attested_mods(op).iter().copied().collect();

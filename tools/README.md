@@ -31,50 +31,52 @@ Khronos CTS writes its shaders as it runs. A build with the cargo feature
 `shaderc-online` compiles them in the library itself (`src/shaderc/online/`,
 `src/shaderc/SHADERC_NOTES.md`).
 
-# The pco_shc this host has, and what it is missing
+# Building the pco_shc that reproduces the table
 
-`PCO_SHC` must point at a `pco_shc` built from `tools/pco_shc/pco_shc.c` inside a
-Mesa 26.2.1 tree **with `tools/pco_shc/usclib-tex.cl.patch` applied and the
-usclib regenerated**. On the lab host:
+`PCO_SHC` must point at a `pco_shc` built by `tools/pco_shc/build_pco_shc.sh`:
+Mesa 26.2.1 from the release tarball, `tools/pco_shc/pco_shc.c` dropped in,
+`tools/pco_shc/usclib-tex.cl.patch` applied **and the usclib compiled from it in
+the same build** (the script builds Mesa's `mesa_clc` for that, so the host needs
+clang/LLVM, libclc and SPIRV-LLVM-Translator; the package list is in the
+script's header):
 
-    PCO_SHC=~/pvr-lab/mesa-build/mesa-26.2.1/build2/src/imagination/vulkan/pco_shc
+    tools/pco_shc/build_pco_shc.sh ~/mesa-26.2.1.tar.xz ~/mesa-build
+    PCO_SHC=~/mesa-build/mesa-26.2.1/build/src/imagination/vulkan/pco_shc tools/glsl2usc.sh
 
-That binary reproduces **1735 of the 2042 rows** of `src/shaderc/blobs.rs` byte
-for byte. It does not reproduce the other 307, and the reason is recorded here
-so that nobody re-derives it:
+The script checks the tarball against `third_party/mesa-26.2.1/UPSTREAM`, and
+refuses a usclib whose `usclib_tex_state_base_level` does not test the
+texture type against `ROGUE_TEXSTATE_TEXTYPE_STRIDE` (it disassembles
+`pco_usclib.spv` with `spirv-dis`). It builds with
+`-ffile-prefix-map=<tree>=/mesa`, so the binary does not depend on the
+directory it was built in: two builds in two directories gave the same bytes.
+It prints the path and the content id `yakogl-tools glsl2usc` will report.
 
-- its `pco_shc.c` is byte-identical to `tools/pco_shc/pco_shc.c`, the PCO backend
-  sources in that tree are untouched since the tarball (2026-08-20), and
-  `glslangValidator` (1.4.357.0) has not changed since 2026-08-23 — none of
-  those is the variable;
-- the variable is the **usclib**. `src/imagination/pco/usclib/tex.cl` in that
-  tree does carry `usclib-tex.cl.patch`, but the built
-  `src/imagination/pco/usclib/pco_usclib.spv` (md5 `32d677f94ad9`, 2026-09-20
-  04:50, byte-identical in `build/` and `build2/`) does **not**: disassembled,
-  its `usclib_tex_state_base_level` unpacks no `ROGUE_TEXSTATE_IMAGE_WORD0`, and
-  has no `OpIEqual` and no `OpBranchConditional`, where the patched source
-  compares `textype` against `ROGUE_TEXSTATE_TEXTYPE_STRIDE` and returns 0
-  early;
-- it cannot be regenerated on that host. `~/pvr-lab/mesa-build/build_pco_shc.sh`
-  says so in its own header: the Mesa build dir was configured elsewhere because
-  its build graph needs an LLVM this host lacks, so the script only recompiles
-  `pco_shc.c` and relinks. `libclc` is absent too. Every local rebuild has
-  therefore reused the same stale usclib blob.
+That binary reproduces **every one of the 2248 rows** `src/shaderc/blobs.rs`
+held before it was regenerated with it, byte for byte (built 2026-10-05 with
+LLVM/clang/libclc 23.1.2, SPIRV-LLVM-Translator 23.1.1, gcc 16.2.1, and
+`glslangValidator` 16.4.0). The table now names that toolchain in its header:
 
-The 307 are exactly the shaders that inline a usclib texture routine
-(`samplerCube`, `sampler2DArray`, `sampler3D`, `textureSize`, `texelFetch`) and
-their blend/render-target variants; the patch costs 10..62 USC dwords in each,
-which is the whole difference (`es300/array.frag` 284 in the table and 272 here,
-`es300/texsize.frag` 230 and 206, `qt3d/db6a67a14bb451a6.frag` 6256 and 6218).
-Every shader that does not inline one matches exactly (`color_uv.frag` 52,
-`texture2.frag` 112, `femtovg/fill_image.frag` 460).
+    // toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514
 
-**Do not regenerate `blobs.rs` to make this go away.** The committed table is the
-one verified on silicon (34/34 `gl_test` cases on the AM62P); regenerating it
-from a `pco_shc` without the patch would silently reintroduce the
-`textureSize()` bug on mipmapped linear textures that the patch exists to fix.
-The fix is one usclib rebuild on a host that has the LLVM and libclc the Mesa
-build graph needs, after which a relink here should reproduce all 2042 rows.
+and `glsl2usc` refuses to overwrite the table with a different one unless
+`GLSL2USC_NEW_REFERENCE=1` says so. A different compiler or library version
+may give a different id for the same output; check the rows with a comparison
+before you accept a new reference.
+
+**Never use a `pco_shc` whose usclib was not rebuilt from the patched
+`tex.cl`.** History: the patch makes `textureSize()` and
+`textureQueryLevels()` skip `baselevel` for a STRIDE (linear) image, whose
+word-1 bits 60..63 are `num_mip_levels`; without it every size came out
+halved that many times, and YakoGL samples every texture this way. A
+development host once had the patched `tex.cl` but could not rebuild the
+usclib (no LLVM/libclc for the build graph), so its `pco_shc` carried a stale
+`pco_usclib.spv` (md5 `32d677f94ad9`, no `OpIEqual`/`OpBranchConditional` in
+that function) and reproduced only 1735 of the 2042 rows the table held then:
+the 307 others were exactly the shaders inlining a usclib texture routine
+(`samplerCube`, `sampler2DArray`, `sampler3D`, `textureSize`, `texelFetch`),
+10..62 dwords shorter. The committed table was verified on silicon (34/34
+`gl_test` cases on the AM62P) with the patch; a table from such a binary would
+silently bring the `textureSize()` bug back.
 
 # glsl2usc — build-time GLSL-ES → PowerVR USC blob generator
 
@@ -123,8 +125,9 @@ a field added to those structs fails the tool's build until the emitter handles 
 ## Requirements
 
 - `glslangValidator` on `PATH` (GLSL → SPIR-V).
-- `pco_shc` built from the Mesa tree (`src/imagination/vulkan/pco_shc.c` there is
-  the project's own harness, not upstream). Default path points at the scratchpad
+- `pco_shc` built from the Mesa tree by `tools/pco_shc/build_pco_shc.sh` (see
+  above; `src/imagination/vulkan/pco_shc.c` there is the project's own harness,
+  not upstream). Default path points at the scratchpad
   build: `../scratchpad/mesa-build/mesa-26.2.1/build/src/imagination/vulkan/pco_shc`
   relative to the repository (set `PCO_SHC` otherwise).
 - A Rust toolchain (the tool is built by cargo).

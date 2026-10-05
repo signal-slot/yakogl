@@ -35,7 +35,7 @@
 # `std` import or an accidental `alloc` dependency in the front end passes
 # every other row and fails on Zephyr, where nobody would see it until the
 # image did not link. It is also the only row that runs the USC round trip,
-# which decodes all 2,042 blobs of the offline table and re-encodes them byte
+# which decodes all 2,268 blobs of the offline table and re-encodes them byte
 # for byte -- the gate on the instruction-set tables. It appears twice,
 # because each GPU has its own instruction set and its own table of blobs:
 # `shaderc-online` alone runs the PowerVR round trip, and paired with
