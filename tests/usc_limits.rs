@@ -29,7 +29,9 @@ use yakogl::shaderc::online::powervr::alloc::Limits;
 use yakogl::shaderc::online::powervr::builtins::{shape, Shape};
 use yakogl::shaderc::online::powervr::chain::{build_vertex, compile_fragment, Built, ChainError};
 use yakogl::shaderc::online::powervr::decode::decode_group;
-use yakogl::shaderc::online::powervr::sel::{Bank, MachineOp, Mods, SelDst, SelOp, SelSrc, SmpLod, Trig, IDX_SELF};
+use yakogl::shaderc::online::powervr::sel::{
+    Bank, MachineOp, Mods, PredArm, SelDst, SelOp, SelSrc, SmpLod, Trig, IDX_SELF,
+};
 use yakogl::shaderc::online::powervr::select::{select, Selected};
 use yakogl::shaderc::online::powervr::verify::{check_group, check_write, skeleton};
 use yakogl::shaderc::online::sema::Stage;
@@ -807,10 +809,17 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
             }
         }
     };
+    /* The predicated `if` arm open here: every group in it must carry its
+     * condition (the then arm if(!p0), the else arm if(p0)). */
+    let mut arm: Option<PredArm> = None;
     for sg in b.groups {
         /* A loop's top is an address, not a group; its back edge is one
          * `br` (its offset is the byte model's to follow). */
         match sg.op {
+            SelOp::Pred(m) => {
+                arm = if m == PredArm::End { None } else { Some(m) };
+                continue;
+            }
             SelOp::LoopBegin => continue,
             SelOp::LoopEnd => {
                 g.groups += 1;
@@ -835,7 +844,7 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
         }
         g.groups += 1;
         let want = match sg.op {
-            SelOp::LoopBegin | SelOp::LoopEnd => unreachable!("placed above"),
+            SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Pred(_) => unreachable!("placed above"),
             SelOp::Copy => "mbyp",
             SelOp::Sample { .. } => "smp",
             SelOp::WaitData => "wdf",
@@ -851,6 +860,29 @@ fn read_back(b: &Built<'_>, image: &[u8], corpus: &BTreeSet<String>) -> Gate {
         };
         match check_group(sg, want, &image[off..]) {
             Ok(n) => {
+                /* the execution condition the arm gives it, nothing else */
+                let cc = decode_group(&image[off..], 0).ok().and_then(|d| {
+                    let e = yakogl::shaderc::online::powervr::isa_tables::ENUMS.iter().find(|e| e.name == "cc")?;
+                    e.name_of(d.hdr.get("cc")?).map(str::to_string)
+                });
+                let want_cc = match arm {
+                    Some(PredArm::Then) => "if(!p0)",
+                    Some(_) => "if(p0)",
+                    None if matches!(
+                        sg.op,
+                        SelOp::Machine(
+                            MachineOp::CndInit | MachineOp::CndEnter | MachineOp::CndLeave | MachineOp::CndLoopEnd
+                        )
+                    ) =>
+                    {
+                        "(ignorepe)"
+                    }
+                    None => "e1_zx",
+                };
+                if cc.as_deref() != Some(want_cc) {
+                    g.mismatches.push(format!("group {} ({want}): cc {cc:?}, the arm asks {want_cc}", g.groups - 1));
+                    return g;
+                }
                 g.checked += 1;
                 skel(&image[off..], want, &mut g);
                 off += n;
@@ -982,6 +1014,11 @@ fn run_selected_from(
             return None;
         }
         match g.op {
+            /* A predicated `if` arm's edge: this model runs both arms (the
+             * join selects between them), the byte model only the one p0
+             * picks, so a value read from an arm that did not run shows as
+             * a difference. */
+            SelOp::Pred(_) => continue,
             SelOp::LoopBegin => {
                 tops.push(pc);
                 continue;
@@ -1099,6 +1136,7 @@ fn run_selected_from(
             | SelOp::WaitData
             | SelOp::LoopBegin
             | SelOp::LoopEnd
+            | SelOp::Pred(_)
             | SelOp::Machine(
                 MachineOp::LoopTest
                 | MachineOp::CndInit
@@ -2710,7 +2748,11 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
     for (k, v) in &fs_ir_unrun {
         println!("    {:4}  {k}: {v:?}", v.len());
     }
-    assert!(fs_diffs.is_empty(), "a fragment shader we build differs from pco's");
+    assert!(
+        fs_diffs.is_empty(),
+        "a fragment shader we build differs from pco's: {:?}",
+        &fs_diffs[..fs_diffs.len().min(8)]
+    );
     println!("  pco alone differs, ours agreeing with the IR (PCO_ALONE_DIFFERS): {pco_alone:?}");
     for name in PCO_ALONE_DIFFERS {
         assert!(
@@ -3262,6 +3304,79 @@ fn gl_test_case_182_clamps_on_the_host() {
             let got = *out.get(&0).expect("a colour");
             let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
             assert!(close, "{what}: {got:#010x}, case 182 wants {want:#010x}");
+        }
+    })
+    .unwrap();
+}
+
+/// gl_test case 188's two fragment shaders, on the host: an `if`/else with
+/// arithmetic arms runs predicated (groups under if(!p0) and if(p0)), and
+/// gives the arm the condition picks, on a uniform each way and on
+/// gl_FragCoord.x either side of 32. Case 188 on the AM62P is the deciding
+/// check; this is the same arithmetic in the byte model.
+#[test]
+fn gl_test_case_188_arms_on_the_host() {
+    use yakogl::shaderc::*;
+    let arms = |cond: &str| {
+        format!(
+            "#version 100\nprecision highp float;\nuniform float u_x, u_q, u_a, u_b;\nvoid main() {{\n  vec4 c;\n  if ({cond}) {{\n    c = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n  }} else {{\n    c = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n  }}\n  gl_FragColor = c;\n}}\n"
+        )
+    };
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    assert!(suite.contains("PREDIF_ARMS(\"gl_FragCoord.x < 32.0\", \"c\")"), "case 188's text");
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let (then_c, else_c) = (rgba([0.5, 0.625, 0.25, 1.0]), rgba([0.125, 0.125, 0.75, 1.0]));
+    /* (source, u_x, fragment x, the colour) */
+    let runs = [
+        (arms("u_x > 0.0"), 1.0f32, 10.5f32, then_c),
+        (arms("u_x > 0.0"), -1.0, 10.5, else_c),
+        (arms("gl_FragCoord.x < 32.0"), 0.0, 31.5, then_c),
+        (arms("gl_FragCoord.x < 32.0"), 0.0, 32.5, else_c),
+    ];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        for (src, ux, fx, want) in &runs {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                SHC_BLEND_KEY_REPLACE,
+            )
+            .unwrap_or_else(|e| panic!("{e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut listing = String::new();
+            yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+                yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+                Ok(())
+            })
+            .unwrap();
+            for cc in ["cc=if(!p0)", "cc=if(p0)"] {
+                assert!(listing.contains(cc), "the arms run predicated: no {cc}\n{listing}");
+            }
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, _k: u32| {
+                match n {
+                    "u_x" => *ux,
+                    "u_q" => 0.125,
+                    "u_a" => 0.25,
+                    "u_b" => 0.0,
+                    other => panic!("a uniform {other:?}"),
+                }
+                .to_bits()
+            });
+            /* x_p and x_s: the pixel's x, its centre */
+            inp.frag_xy[0] = fx.to_bits();
+            inp.frag_xy[1] = fx.to_bits();
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got = *out.get(&0).expect("a colour");
+            let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
+            assert!(close, "u_x {ux}, x {fx}: {got:#010x}, case 188 wants {want:#010x}");
         }
     })
     .unwrap();

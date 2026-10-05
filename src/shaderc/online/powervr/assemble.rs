@@ -352,8 +352,8 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
         SelOp::PlaneCoeff { .. } => return Err(BuildError::Unsupported("a plane coefficient that was not resolved")),
         /* The program builder places these: a label, and the branch to it,
          * whose offset only it knows (`Loops`). */
-        SelOp::LoopBegin | SelOp::LoopEnd => {
-            return Err(BuildError::Unsupported("a loop marker outside the program builder"))
+        SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Pred(_) => {
+            return Err(BuildError::Unsupported("a loop or `if` marker outside the program builder"))
         }
         SelOp::Machine(_) => unreachable!("every machine operation is a template"),
         SelOp::Alu(a) => match shape(a) {
@@ -863,11 +863,14 @@ struct Arithmetic<'s> {
     depth: usize,
     /// The group just built was a `LoopTest`.
     after_test: bool,
+    /// Inside a predicated `if` arm ([`SelOp::Pred`](super::sel::SelOp::Pred)):
+    /// the arm, whose `cc` every group built until the next marker takes.
+    arm: Option<super::sel::PredArm>,
 }
 
 impl<'s> Arithmetic<'s> {
     fn new(groups: &'s [super::sel::SelGroup]) -> Self {
-        Arithmetic { groups, next: 0, open: [0; 4], depth: 0, after_test: false }
+        Arithmetic { groups, next: 0, open: [0; 4], depth: 0, after_test: false, arm: None }
     }
 
     /// The next group, to be placed at byte `at`; `None` after the last.
@@ -876,6 +879,30 @@ impl<'s> Arithmetic<'s> {
         while let Some(g) = self.groups.get(self.next) {
             self.next += 1;
             match g.op {
+                /* A predicated `if` (pco_cf.c lower_if_pred_exec): the then
+                 * arm right after the condition's tstz.p0, the else arm
+                 * after it, then the end; never nested, never across a
+                 * loop edge, and no group in an arm touches p0 (selection's
+                 * `predicable` holds that; this refuses what slips past). */
+                SelOp::Pred(m) => {
+                    use super::sel::PredArm;
+                    self.arm = match (self.arm, m) {
+                        (None, PredArm::Then) if self.after_test => Some(PredArm::Then),
+                        (Some(PredArm::Then), PredArm::Else) => Some(PredArm::Else),
+                        (Some(PredArm::Then | PredArm::Else), PredArm::End) => None,
+                        _ => return Err(BuildError::Unsupported("an `if` arm marker out of order")),
+                    };
+                    self.after_test = false;
+                }
+                SelOp::LoopBegin
+                | SelOp::LoopEnd
+                | SelOp::Machine(MachineOp::LoopTest | MachineOp::Fsinc(_))
+                | SelOp::Machine(MachineOp::PselTrig | MachineOp::CndInit | MachineOp::CndEnter)
+                | SelOp::Machine(MachineOp::CndLeave | MachineOp::CndLoopEnd)
+                    if self.arm.is_some() =>
+                {
+                    return Err(BuildError::Unsupported("a loop edge or a p0 user inside a predicated `if` arm"));
+                }
                 SelOp::LoopBegin => {
                     let slot =
                         self.open.get_mut(self.depth).ok_or(BuildError::Unsupported("loops nested too deeply"))?;
@@ -896,12 +923,28 @@ impl<'s> Arithmetic<'s> {
                     /* The p0 the back edge reads: the loop's test, or under
                      * the execution mask the loop's end (`cndlt`). */
                     self.after_test = matches!(g.op, SelOp::Machine(MachineOp::LoopTest | MachineOp::CndLoopEnd));
-                    return build_group(g).map(Some);
+                    let mut built = build_group(g)?;
+                    if let Some(arm) = self.arm {
+                        /* the then arm runs where the condition held: p0, set
+                         * by the tstz where it is zero, is clear there */
+                        let cc = match arm {
+                            super::sel::PredArm::Then => "if(!p0)",
+                            _ => "if(p0)",
+                        };
+                        let v = super::shapes::value(super::isa::BitSetId::IgrpHdr, "cc", cc)?;
+                        built.hdr.set("cc", v).map_err(|_| {
+                            BuildError::Unsupported("a group whose header takes no execution condition")
+                        })?;
+                    }
+                    return Ok(Some(built));
                 }
             }
         }
         if self.depth != 0 {
             return Err(BuildError::Unsupported("a loop with no back edge"));
+        }
+        if self.arm.is_some() {
+            return Err(BuildError::Unsupported("a predicated `if` arm with no end"));
         }
         Ok(None)
     }
@@ -1673,5 +1716,41 @@ mod loop_tests {
         let stray = [mov(1, 2), test(), marker(SelOp::LoopEnd)];
         assert!(place(&stray).is_err(), "a back edge with no loop");
         assert!(super::super::fragment::branch_back(0).is_err() && super::super::fragment::branch_back(8).is_err());
+    }
+
+    /// A predicated `if`: the then arm's groups carry if(!p0), the else
+    /// arm's if(p0), everything else e1_zx; the markers take no bytes.
+    #[test]
+    fn an_if_arm_s_groups_carry_its_execution_condition() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let g = [
+            mov(0, 1),
+            test(),
+            marker(SelOp::Pred(Then)),
+            mov(1, 2),
+            mov(2, 1),
+            marker(SelOp::Pred(Else)),
+            mov(4, 0),
+            marker(SelOp::Pred(End)),
+            mov(5, 4),
+        ];
+        let placed = place(&g).expect("builds");
+        let e = super::super::isa_tables::ENUMS.iter().find(|e| e.name == "cc").unwrap();
+        let cc: std::vec::Vec<_> = placed.iter().map(|(_, g)| e.name_of(g.hdr.get("cc").unwrap()).unwrap()).collect();
+        assert_eq!(cc, ["e1_zx", "e1_zx", "if(!p0)", "if(!p0)", "if(p0)", "e1_zx"]);
+    }
+
+    /// The arm markers out of order are refused, as is anything in an arm
+    /// that would read or write p0: the arms' condition.
+    #[test]
+    fn if_arm_markers_out_of_order_are_refused() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let m = |a| marker(SelOp::Pred(a));
+        assert!(place(&[mov(0, 1), m(Then), mov(1, 2), m(Else), m(End)]).is_err(), "a then arm not after its test");
+        assert!(place(&[test(), m(Then), mov(1, 2)]).is_err(), "an arm with no end");
+        assert!(place(&[test(), m(Else), m(End)]).is_err(), "an else with no then");
+        assert!(place(&[test(), m(Then), test(), m(Else), m(End)]).is_err(), "a p0 write in an arm");
+        assert!(place(&[test(), m(Then), marker(SelOp::LoopBegin), m(Else), m(End)]).is_err(), "a loop edge in an arm");
+        assert!(place(&[test(), m(Then), m(Else), m(End)]).is_ok(), "empty arms are fine");
     }
 }

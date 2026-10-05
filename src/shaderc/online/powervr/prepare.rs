@@ -255,7 +255,8 @@ fn single_op(g: &SelGroup) -> Option<&'static str> {
         | SelOp::PlaneCoeff { .. }
         | SelOp::Machine(_)
         | SelOp::LoopBegin
-        | SelOp::LoopEnd => None,
+        | SelOp::LoopEnd
+        | SelOp::Pred(_) => None,
         SelOp::Alu(a) => match shape(a) {
             Shape::Group(steps) if steps.len() == 1 && steps[0].phase == PH_0 => Some(steps[0].op),
             _ => None,
@@ -900,7 +901,28 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
     let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, sel.groups.len())?;
     /* Indices into `out` of the groups a later one may reuse. */
     let mut kept: AVec<'a, u32> = AVec::with_capacity(arena, sel.groups.len())?;
+    /* How many of `kept` were before the open predicated `if` arm: a value
+     * an arm computes exists only where the arm runs, so it is offered to
+     * nothing past the arm's end (the other arm included); a value from
+     * before the `if` is offered inside either arm. */
+    let mut before_arm: Option<usize> = None;
     for g in sel.groups {
+        if let SelOp::Pred(m) = g.op {
+            match m {
+                super::sel::PredArm::Then => before_arm = Some(kept.len()),
+                super::sel::PredArm::Else | super::sel::PredArm::End => {
+                    let n = before_arm.ok_or(PrepareError::Unsupported("an `if` arm marker out of order"))?;
+                    while kept.len() > n {
+                        kept.pop();
+                    }
+                    if m == super::sel::PredArm::End {
+                        before_arm = None;
+                    }
+                }
+            }
+            out.push(arena, *g)?;
+            continue;
+        }
         let mut g = *g;
         for s in g.srcs.iter_mut().flatten() {
             *s = rename(*s, to);
@@ -1038,7 +1060,9 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
         SelSrc::Fixed { bank, .. } => matches!(bank, Bank::Shared | Bank::Special | Bank::VtxIn),
         SelSrc::Imm(_) => true,
     };
-    let barrier = |g: &SelGroup| matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Machine(_));
+    /* a predicated `if` arm's edges too: a pair across one would compute
+     * in one place what the arm computes only where it runs */
+    let barrier = |g: &SelGroup| matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd | SelOp::Machine(_) | SelOp::Pred(_));
     /* `fmax(x, 0.0)` or `fmin(x, 1.0)`, either operand order: the bound
      * (+0.0 or 1.0 exactly, as bits) and `x`. */
     let bounded = |g: &SelGroup| -> Option<(u32, SelSrc)> {
@@ -1316,6 +1340,10 @@ mod tests {
             x
         };
         for gr in groups {
+            /* an arm's edge: this evaluator runs both arms */
+            if matches!(gr.op, SelOp::Pred(_)) {
+                continue;
+            }
             let a: Vec<f32> = gr.srcs.iter().take(gr.op.arity()).map(|s| read(s.as_ref().unwrap(), &v)).collect();
             let r = match gr.op {
                 SelOp::Copy => a[0],
@@ -1337,7 +1365,8 @@ mod tests {
                 | SelOp::PlaneCoeff { .. }
                 | SelOp::Machine(_)
                 | SelOp::LoopBegin
-                | SelOp::LoopEnd) => {
+                | SelOp::LoopEnd
+                | SelOp::Pred(_)) => {
                     panic!("{o:?} is not in this evaluator")
                 }
             };
@@ -1362,6 +1391,64 @@ mod tests {
         let straight = groups.iter().all(|g| !matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd));
         let same = straight && eval(f.groups, f.outputs) == eval(groups, &outputs);
         (f.groups.to_vec(), n, same)
+    }
+
+    fn marker(m: super::super::sel::PredArm) -> SelGroup {
+        SelGroup { op: SelOp::Pred(m), ty: OpType::U32, dst: None, srcs: [None; 3] }
+    }
+
+    /// A value a predicated `if` arm computes exists only where the arm
+    /// runs, so `share_common` offers it to nothing past the arm's end --
+    /// a recomputation after the `if` keeps its own group -- while a value
+    /// from before the `if` is shared inside an arm.
+    #[test]
+    fn an_arm_value_is_not_shared_past_the_arm() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let mul = |d: u32| {
+            g(
+                SelOp::Alu(AluOp::Fmul),
+                d,
+                [Some(fixed(Bank::Shared, 0, NONE)), Some(fixed(Bank::Shared, 1, NONE)), None],
+            )
+        };
+        let add = |d: u32, a: u32| {
+            g(SelOp::Alu(AluOp::Fadd), d, [Some(virt(a, NONE)), Some(fixed(Bank::Shared, 2, NONE)), None])
+        };
+        let outputs = [(IoSlot::Position, [Some(virt(4, NONE)), Some(virt(5, NONE)), Some(virt(6, NONE)), None])];
+        let run = |groups: &[SelGroup]| -> Vec<SelGroup> {
+            let sel = Selected { groups, vregs: 16, outputs: &outputs, inputs: &[], discard: None, alpha_to_one: None };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let arena = Arena::new(&mut buf);
+            share_common(&sel, &arena).expect("shares").groups.to_vec()
+        };
+        /* computed in the then arm (1), again after the end (2): kept */
+        let after = run(&[marker(Then), mul(1), add(4, 1), marker(Else), marker(End), mul(2), add(5, 2), add(6, 2)]);
+        assert_eq!(after.iter().filter(|x| x.op == SelOp::Alu(AluOp::Fmul)).count(), 2, "{after:?}");
+        /* in the then arm and again in the else arm: kept too */
+        let other = run(&[marker(Then), mul(1), add(4, 1), marker(Else), mul(2), add(5, 2), marker(End), add(6, 2)]);
+        assert_eq!(other.iter().filter(|x| x.op == SelOp::Alu(AluOp::Fmul)).count(), 2, "{other:?}");
+        /* before the `if` (0) and in an arm (1): the arm reads 0's */
+        let before = run(&[mul(0), add(6, 0), marker(Then), mul(1), add(4, 1), marker(Else), marker(End), add(5, 0)]);
+        assert_eq!(before.iter().filter(|x| x.op == SelOp::Alu(AluOp::Fmul)).count(), 1, "{before:?}");
+    }
+
+    /// A product in an arm and a sum after the `if` are not one `fmad`:
+    /// the pair would compute where the arm does not run.
+    #[test]
+    fn no_fmad_across_an_arm_edge() {
+        use super::super::sel::PredArm::{Else, End, Then};
+        let mul = g(
+            SelOp::Alu(AluOp::Fmul),
+            1,
+            [Some(fixed(Bank::VtxIn, 0, NONE)), Some(fixed(Bank::Shared, 1, NONE)), None],
+        );
+        let add = g(SelOp::Alu(AluOp::Fadd), 2, [Some(virt(1, NONE)), Some(fixed(Bank::Shared, 2, NONE)), None]);
+        let (_, n, _) =
+            fused(&[marker(Then), mul, marker(Else), marker(End), add], [Some(virt(2, NONE)), None, None, None]);
+        assert_eq!(n, 0, "across the end");
+        let (_, n, _) =
+            fused(&[marker(Then), mul, add, marker(Else), marker(End)], [Some(virt(2, NONE)), None, None, None]);
+        assert_eq!(n, 1, "inside one arm it fuses");
     }
 
     /// `clamp(x, 0.0, 1.0)` in either nesting (`fmin(fmax(x, 0), 1)`,

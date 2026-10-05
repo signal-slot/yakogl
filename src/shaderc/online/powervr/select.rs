@@ -45,7 +45,7 @@
 //! A refusal that names the open question is worth more than code written
 //! against a guess: the refusal is a gap somebody can see.
 
-use super::sel::{Bank, MachineOp, Mods, OpType, SelDst, SelGroup, SelOp, SelSrc, SmpLod, Trig, VReg};
+use super::sel::{Bank, MachineOp, Mods, OpType, PredArm, SelDst, SelGroup, SelOp, SelSrc, SmpLod, Trig, VReg};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir;
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -1773,6 +1773,24 @@ impl<'a> Sel<'a> {
          * written once); the join selects between the two mappings. */
         let mut saved: AVec<'a, VReg> = AVec::new();
         saved.extend_from_slice(self.arena, self.locals_in)?;
+        /* pco predicates an `if` it can (pco_cf.c can_pred_exec): a
+         * tstz.p0 of the condition, the then arm's groups run where p0 is
+         * clear, the else arm's where it is set. The arms' values are fresh
+         * registers joined by the selects below on the same condition, so
+         * an arm that does not run leaves only values nothing reads, and the
+         * hardware passes over its groups at about no cost where no
+         * instance runs them (gl_test 186/187: the whole fill_color gap). */
+        let pred = self.predicable(then_) && self.predicable(else_);
+        if pred {
+            let c = self.src(cond, 0)?;
+            self.emit(SelGroup {
+                op: SelOp::Machine(MachineOp::LoopTest),
+                ty: OpType::U32,
+                dst: None,
+                srcs: [Some(c), None, None],
+            })?;
+            self.emit(SelGroup { op: SelOp::Pred(PredArm::Then), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+        }
         self.nodes(then_)?;
         let mut then_map: AVec<'a, VReg> = AVec::new();
         then_map.extend_from_slice(self.arena, self.locals_in)?;
@@ -1782,7 +1800,13 @@ impl<'a> Sel<'a> {
          * starts from the outputs as they stood before */
         let outputs_then = core::mem::replace(&mut self.outputs, outputs_before);
 
+        if pred {
+            self.emit(SelGroup { op: SelOp::Pred(PredArm::Else), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+        }
         self.nodes(else_)?;
+        if pred {
+            self.emit(SelGroup { op: SelOp::Pred(PredArm::End), ty: OpType::U32, dst: None, srcs: [None; 3] })?;
+        }
 
         /* The condition is a value from before the `if`, so the arms cannot
          * have changed what it reads. */
@@ -2615,6 +2639,31 @@ impl<'a> Sel<'a> {
     /// loop kept as a loop? Such a loop runs whichever arm it is in, as the
     /// arm's instructions do, and the join keeps or drops what it computed:
     /// it stores no output (`loop_` refuses one) and ends at its count.
+    /// May this arm of an `if` run predicated (pco_cf.c can_pred_exec)? Only
+    /// straight-line arithmetic: no nested `if` or loop, no jump, and no
+    /// operation whose groups read or write p0 or need every instance of
+    /// the quad -- a look-up (its data fence takes no condition), a varying
+    /// read (the iteration), a derivative, sine and cosine (`fsinc` writes
+    /// p0, `psel_trig` reads it), a discard, an indexed uniform read.
+    fn predicable(&self, r: ir::Range) -> bool {
+        use ir::AluOp::{Fcos, Fddx, Fddy, Fsin};
+        self.m.nodes_of(r).iter().all(|n| match *n {
+            ir::Node::Instr(id) => match self.m.instr(id) {
+                Some(ir::Op::Alu(Fsin | Fcos | Fddx | Fddy, _)) => false,
+                Some(
+                    ir::Op::Tex { .. }
+                    | ir::Op::TexSize { .. }
+                    | ir::Op::Discard
+                    | ir::Op::LoadInput { .. }
+                    | ir::Op::LoadUniformIdx { .. },
+                ) => false,
+                Some(_) => true,
+                None => false,
+            },
+            _ => false,
+        })
+    }
+
     fn arm_has_non_if_flow(&self, r: ir::Range) -> bool {
         self.m.nodes_of(r).iter().any(|n| match n {
             ir::Node::Instr(_) => false,
@@ -3230,9 +3279,14 @@ fn verify_loops(groups: &[SelGroup]) -> Result<(), SelectError> {
                     return Err(bad());
                 }
             }
+            /* A test sets p0 for the back edge, the masked leave, or a
+             * predicated `if`'s arms (`if_convert`); the loop's own test
+             * right before its back edge sets p0 again after any `if`. */
             SelOp::Machine(MachineOp::LoopTest)
-                if groups.get(i + 1).map(|x| x.op) != Some(SelOp::LoopEnd)
-                    && groups.get(i + 1).map(|x| x.op) != Some(SelOp::Machine(MachineOp::CndLeave)) =>
+                if !matches!(
+                    groups.get(i + 1).map(|x| x.op),
+                    Some(SelOp::LoopEnd | SelOp::Machine(MachineOp::CndLeave) | SelOp::Pred(PredArm::Then))
+                ) =>
             {
                 return Err(bad());
             }
@@ -3335,6 +3389,75 @@ mod tests {
     /// the back edge also reads the loop's break flag (unroll.rs: a counted
     /// loop leaves early on a uniform break), `leave = (7 <= c) | flag`, and
     /// `verify_loops` takes that.
+    /// The groups `src`'s fragment shader selects to.
+    fn selected_fs(src: &str) -> std::vec::Vec<SelGroup> {
+        use crate::shaderc::online::{lower, sema::Stage};
+        let _l = store::test_lock();
+        let mut out = std::vec::Vec::new();
+        store::with_scratch(|a| {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            out = select(&l.module, a).expect("selects").groups.to_vec();
+        })
+        .unwrap();
+        out
+    }
+
+    /// An `if` on a uniform whose arms are arithmetic runs predicated, as
+    /// pco runs it (pco_cf.c lower_if_pred_exec): the condition's tstz.p0,
+    /// the then arm, the else arm, the end, and only then the joins: the
+    /// selects on the same condition, one per component that differs. The
+    /// arms hold arithmetic only. (gl_test 186/187: the table's predicated
+    /// arms were the whole of the fill_color gap.)
+    #[test]
+    fn a_uniform_if_with_arithmetic_arms_runs_them_predicated() {
+        let g = selected_fs(
+            "precision mediump float; uniform vec4 u; void main() { vec4 c; \
+             if (u.x > 0.0) { c = u * 2.0; } else { c = u + 1.0; } gl_FragColor = c; }",
+        );
+        let at = |m: PredArm| g.iter().position(|x| x.op == SelOp::Pred(m)).expect("the marker");
+        let (then_, else_, end) = (at(PredArm::Then), at(PredArm::Else), at(PredArm::End));
+        assert!(then_ < else_ && else_ < end, "in order: {g:?}");
+        assert_eq!(
+            g[then_ - 1].op,
+            SelOp::Machine(MachineOp::LoopTest),
+            "the condition's test right before the then arm"
+        );
+        for x in g[then_ + 1..else_].iter().chain(&g[else_ + 1..end]) {
+            assert!(matches!(x.op, SelOp::Alu(_) | SelOp::Copy), "only arithmetic in an arm: {x:?}");
+        }
+        assert!(else_ > then_ + 1 && end > else_ + 1, "both arms compute: {g:?}");
+        let joins = g[end + 1..].iter().filter(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)).count();
+        assert_eq!(joins, 4, "a select per component of c after the end: {g:?}");
+        assert_eq!(g.iter().filter(|x| matches!(x.op, SelOp::Pred(_))).count(), 3, "one `if`");
+    }
+
+    /// Arms that read or write p0 or need every instance -- a look-up, a
+    /// sine, a derivative -- are if-converted as before (no marker), and of
+    /// two nested `if`s only the inner one, whose arms are arithmetic, runs
+    /// predicated (pco_cf.c can_pred_exec skips nesting).
+    #[test]
+    fn arms_that_cannot_run_predicated_are_if_converted() {
+        for (what, body) in [
+            ("a look-up", "c = texture2D(t, u.xy);"),
+            ("a sine", "c = vec4(sin(u.x));"),
+            ("a derivative", "c = vec4(dFdx(v.x));"),
+        ] {
+            let g = selected_fs(&format!(
+                "#extension GL_OES_standard_derivatives : enable\nprecision mediump float; uniform vec4 u; \
+                 uniform sampler2D t; varying vec4 v; void main() {{ vec4 c = u; if (u.x > 0.0) {{ {body} }} \
+                 gl_FragColor = c; }}"
+            ));
+            assert!(!g.iter().any(|x| matches!(x.op, SelOp::Pred(_))), "{what}: if-converted");
+            assert!(g.iter().any(|x| x.op == SelOp::Alu(ir::AluOp::Bcsel)), "{what}: the `if` is there, as selects");
+        }
+        let g = selected_fs(
+            "precision mediump float; uniform vec4 u; void main() { vec4 c = u; \
+             if (u.x > 0.0) { c = u * 3.0; if (u.y > 0.0) { c = u * 2.0; } } gl_FragColor = c; }",
+        );
+        assert_eq!(g.iter().filter(|x| x.op == SelOp::Pred(PredArm::Then)).count(), 1, "the inner `if` alone: {g:?}");
+    }
+
     #[test]
     fn the_back_edge_is_driven_by_the_loop_counter_and_nothing_else() {
         use crate::shaderc::online::{lower, sema::Stage};

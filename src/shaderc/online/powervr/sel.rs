@@ -343,6 +343,28 @@ pub enum SelOp {
     /// what pco's `cnd*` execution-mask machinery exists for, and this path
     /// does not use it (`verify_loops` holds the rule).
     LoopEnd,
+    /// An `if` arm's edge, as pco predicates an `if` (Mesa
+    /// `src/imagination/pco/pco_cf.c`, `lower_if_pred_exec`, MIT, read and
+    /// transcribed): after the `tstz.p0` of the condition
+    /// ([`MachineOp::LoopTest`], p0 set where the condition is false), the
+    /// groups up to [`PredArm::Else`] run `if(!p0)` (the then arm), those up
+    /// to [`PredArm::End`] `if(p0)` (the else arm). Emits nothing. The arms'
+    /// values are joined after `End` by the selects an if-conversion makes,
+    /// on the same condition, so an arm that does not run leaves only
+    /// values nothing reads; a group where the condition holds in no
+    /// instance costs about nothing (gl_test 186/187 on the AM62P).
+    Pred(PredArm),
+}
+
+/// Which edge of a predicated `if` a [`SelOp::Pred`] marks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PredArm {
+    /// The then arm starts: its groups run where p0 is clear.
+    Then,
+    /// The else arm starts: its groups run where p0 is set.
+    Else,
+    /// Both arms are over: what follows runs everywhere.
+    End,
 }
 
 /// The machine operations [`SelOp::Machine`] carries. Each is a template in
@@ -416,7 +438,7 @@ impl SelOp {
         match self {
             SelOp::Copy => 1,
             SelOp::Sample { .. } => 3,
-            SelOp::WaitData | SelOp::LoopBegin | SelOp::LoopEnd | SelOp::TexWord { .. } => 0,
+            SelOp::WaitData | SelOp::LoopBegin | SelOp::LoopEnd | SelOp::TexWord { .. } | SelOp::Pred(_) => 0,
             SelOp::SampleZ | SelOp::PlaneCoeff { .. } => 1,
             SelOp::SampleGrad => 2,
             SelOp::Alu(op) => SelGroup::arity(op),
@@ -440,7 +462,8 @@ impl SelOp {
             | SelOp::WaitData
             | SelOp::Machine(_)
             | SelOp::LoopBegin
-            | SelOp::LoopEnd => true,
+            | SelOp::LoopEnd
+            | SelOp::Pred(_) => true,
             SelOp::Alu(op) => SelGroup::is_buildable(op),
             SelOp::TexWord { .. } | SelOp::SampleZ | SelOp::SampleGrad | SelOp::PlaneCoeff { .. } => false,
         }

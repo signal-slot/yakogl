@@ -354,6 +354,17 @@ fn region_skeleton(w: &mut impl Write, label: &str, r: &Region, with_variant: bo
         if u.name == "is0" && r.vals[i] == 0 {
             continue;
         }
+        /* A main or bitwise group's execution condition is a gate on the
+         * whole group, not part of what its operations are: pco puts one on
+         * any instruction that takes it (every ALU operation's OM_EXEC_CND,
+         * set by pco_cf.c lower_if_pred_exec for a predicated `if`). So
+         * if(p0) and if(!p0) read as e1_zx here, and a skeleton attested
+         * unconditionally is attested under either. `(ignorepe)` stays its
+         * own value: it is what makes a `cnd*` group one. */
+        if u.name == "cc" && label == "hdr" && matches!(r.vals[i], 1 | 3) {
+            write!(w, " cc=0")?;
+            continue;
+        }
         write!(w, " {}={}", u.name, set.fields[u.field].xform.decode(r.vals[i]))?;
     }
     Ok(())
