@@ -3445,6 +3445,85 @@ fn gl_test_case_189_products_by_one_on_the_host() {
     .unwrap();
 }
 
+/// gl_test case 190's four columns, on the host: the case's own fragment
+/// shader (from gl_test.c's text) writing (0.75, 0.5, 0.25, 0.25), built as
+/// the blend variant each column's state asks for, run in the byte model
+/// over the case's pixel (0.25, 0.5, 0.75, 0.5) as it reads back in RGBA8.
+/// A factor the same in every channel is computed once (blend.rs
+/// `computed_earlier`); each column is one side of that: every channel
+/// sharing it, red masked, MIN on the colour, both factors shared. The
+/// groups that compute `1 - x` are counted too: one per shared factor.
+#[test]
+fn gl_test_case_190_blend_factors_once_on_the_host() {
+    use yakogl::shaderc::*;
+    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
+    let (_, t) = suite.split_once("static const char blendonce_fs_src[] =").expect("case 190's shader");
+    let src = t.split_once(";\n").unwrap().0.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n");
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let over = shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 0, 0);
+    /* (what, key, the colour, the groups computing 1 - x) */
+    let cases = [
+        ("1 - As in every channel", over, rgba([0.375, 0.5, 0.625, 0.4375]), 1),
+        ("red masked", over | shc_blend_key_mask_off(0b0001), rgba([0.25, 0.5, 0.625, 0.4375]), 1),
+        (
+            "MIN on colour",
+            shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 3, 0),
+            rgba([0.25, 0.5, 0.25, 0.4375]),
+            1,
+        ),
+        (
+            "1 - Ad and 1 - As",
+            shc_blend_key(SHC_BF_INV_DST_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_ZERO, 0, 0),
+            rgba([0.5625, 0.625, 0.6875, 0.25]),
+            2,
+        ),
+    ];
+    let pixel = rgba([0.25, 0.5, 0.75, 0.5]);
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(&src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        for (what, key, want, inverts) in cases {
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            /* `1 - x`: an fadd of a negated source and special 64 (1.0) */
+            let mut listing = String::new();
+            yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+                yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+                Ok(())
+            })
+            .unwrap();
+            let one_minus = listing
+                .split("\n[")
+                .filter(|g| g.contains("phase0 fadd") && g.contains("s0neg=1") && g.contains("sb1=special s1=64"))
+                .count();
+            assert_eq!(one_minus, inverts, "{what}: the groups computing 1 - x\n{listing}");
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, _k: u32| {
+                match n {
+                    "u_x" => 0.75f32,
+                    "u_q" => 0.5,
+                    "u_a" => 0.25,
+                    "u_b" => 0.25,
+                    other => panic!("a uniform {other:?}"),
+                }
+                .to_bits()
+            });
+            inp.pixout = pixel;
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got = *out.get(&0).expect("a colour");
+            let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 2);
+            assert!(close, "{what}: {got:#010x}, case 190 wants {want:#010x}");
+        }
+    })
+    .unwrap();
+}
+
 /// gl_test case 91's two blends, on the host: the case's own fragment
 /// shader (es100/hdrcolor.frag) with u_color = (0.5, 1.5,
 /// 0, 0.5), built as the RGBA16F variant the GL core asks for (the target's

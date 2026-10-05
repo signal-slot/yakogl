@@ -221,8 +221,15 @@ fn channel(b: &Blend, r: &Regs, k: u16, fuse: bool, out: &mut [Step; 8]) -> usiz
         return n;
     }
     /* A factor's value, computed into temporary `into` when it is not a
-     * register already; `None` for ZERO. */
+     * register already; `None` for ZERO. A factor that is the same value
+     * in every channel and that an earlier channel already computed into
+     * `into` is read there (`computed_earlier`): pco's variants compute
+     * `1 - As` once for the four channels. */
     let factor = |f: u32, into: u16, push: &mut dyn FnMut(Step)| -> Option<SelSrc> {
+        let side = if into == r.t(0) { Side::Src } else { Side::Dst };
+        if computed_earlier(b, k, side, f) {
+            return Some(temp(into));
+        }
         let base = match f & !SHC_BF_INVERT {
             SHC_BF_ONE => special(SR_ONE),
             SHC_BF_SRC_COLOR => temp(r.s(k)),
@@ -312,6 +319,35 @@ fn channel(b: &Blend, r: &Regs, k: u16, fuse: bool, out: &mut [Step; 8]) -> usiz
     };
     push(Step::Group(g));
     n
+}
+
+/// Which factor of a channel: the source's (computed into `t(0)`) or the
+/// destination's (`t(1)`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Src,
+    Dst,
+}
+
+/// Whether factor `f` of channel `k` is already in its temporary: it is
+/// computed (an inverted alpha, or SRC_ALPHA_SATURATE on a colour channel),
+/// its value is the same in every channel that has it (it reads alpha
+/// only), and an earlier channel computed the same factor on the same side.
+/// Nothing between writes that temporary: a channel writes `t(0)` and
+/// `t(1)` only with its factors, every colour channel's factor is the same,
+/// and the alpha channel is the last.
+fn computed_earlier(b: &Blend, k: u16, side: Side, f: u32) -> bool {
+    let alpha_only = matches!(f & !SHC_BF_INVERT, SHC_BF_SRC_ALPHA | SHC_BF_DST_ALPHA | SHC_BF_CONST_ALPHA);
+    let shared = (alpha_only && f & SHC_BF_INVERT != 0) || (f == SHC_BF_SRC_ALPHA_SATURATE && k < 3);
+    if !shared {
+        return false;
+    }
+    (0..k).any(|j| {
+        let ch = usize::from(j == 3);
+        let computes = b.masked & (1 << j) == 0 && b.eq[ch] != SHC_BLEND_MIN && b.eq[ch] != SHC_BLEND_MAX;
+        let fj = if side == Side::Src { b.src[ch] } else { b.dst[ch] };
+        computes && fj == f
+    })
 }
 
 /// One channel's `s * Fs (op) d * Fd` as one `fmad` when one term is a
@@ -456,9 +492,10 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    /// Run one channel's groups on temporaries holding `s` (source), `d`
-    /// (pixel) and `c` (blend colour), every channel the same; the channel's
-    /// result.
+    /// Run the channels' groups up to channel `k`, in the tail's order, on
+    /// temporaries holding `s` (source), `d` (pixel) and `c` (blend colour);
+    /// channel `k`'s result. In order because a channel reads a factor an
+    /// earlier channel computed (`computed_earlier`).
     fn run(b: &Blend, fuse: bool, s: [f32; 4], d: [f32; 4], c: [f32; 4], k: u16) -> f32 {
         let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None };
         let mut t: BTreeMap<u16, f32> = BTreeMap::new();
@@ -467,8 +504,6 @@ mod tests {
             t.insert(r.d(i), d[i as usize]);
             t.insert(r.c(i), c[i as usize]);
         }
-        let mut out = [Step::Group(mov(0, special(SR_ZERO))); 8];
-        let n = channel(b, &r, k, fuse, &mut out);
         let read = |x: &SelSrc, t: &BTreeMap<u16, f32>| -> f32 {
             let (v, m) = match *x {
                 SelSrc::Fixed { bank: Bank::Temp, reg, mods } => (t[&reg], mods),
@@ -483,7 +518,12 @@ mod tests {
                 v
             }
         };
-        for st in out.iter().take(n) {
+        let mut out = [Step::Group(mov(0, special(SR_ZERO))); 8];
+        let steps = (0..=k).flat_map(|j| {
+            let n = channel(b, &r, j, fuse, &mut out);
+            out[..n].to_vec()
+        });
+        for st in steps.collect::<Vec<_>>() {
             let Step::Group(g) = st else { panic!("a channel builds groups only") };
             let a: Vec<f32> = g.srcs.iter().flatten().map(|x| read(x, &t)).collect();
             let v = match g.op {
@@ -499,6 +539,41 @@ mod tests {
             t.insert(reg, v);
         }
         t[&k]
+    }
+
+    /// GL's blend of channel `k` (ES 2.0 4.1.6, table 4.1 and 4.2) in f32,
+    /// rounded as the channel's separate groups round it: each product,
+    /// then the sum; `1 - x` as one subtraction.
+    fn reference(b: &Blend, s: [f32; 4], d: [f32; 4], c: [f32; 4], k: u16) -> f32 {
+        let (k, ch) = (k as usize, usize::from(k == 3));
+        let f = |f: u32| -> f32 {
+            let base = match f & !SHC_BF_INVERT {
+                SHC_BF_ONE => 1.0,
+                SHC_BF_SRC_COLOR => s[k],
+                SHC_BF_SRC_ALPHA => s[3],
+                SHC_BF_DST_ALPHA => d[3],
+                SHC_BF_DST_COLOR => d[k],
+                SHC_BF_CONST_COLOR => c[k],
+                SHC_BF_CONST_ALPHA => c[3],
+                SHC_BF_SRC_ALPHA_SATURATE if k == 3 => 1.0,
+                SHC_BF_SRC_ALPHA_SATURATE => s[3].min(1.0 - d[3]),
+                other => panic!("a factor this test does not model: {other:#x}"),
+            };
+            match f {
+                SHC_BF_ZERO => 0.0,
+                _ if f & SHC_BF_INVERT != 0 => 1.0 - base,
+                _ => base,
+            }
+        };
+        let (ts, td) = (s[k] * f(b.src[ch]), d[k] * f(b.dst[ch]));
+        match b.eq[ch] {
+            SHC_BLEND_ADD => ts + td,
+            SHC_BLEND_SUBTRACT => ts - td,
+            SHC_BLEND_REVERSE_SUBTRACT => td - ts,
+            SHC_BLEND_MIN => s[k].min(d[k]),
+            SHC_BLEND_MAX => s[k].max(d[k]),
+            other => panic!("an equation {other}"),
+        }
     }
 
     /// Every equation and every pair of a set of factors (both inverted and
@@ -518,6 +593,8 @@ mod tests {
             SHC_BF_CONST_ALPHA,
             SHC_BF_SRC_ALPHA_SATURATE,
             SHC_BF_INVERT | SHC_BF_SRC_ALPHA,
+            SHC_BF_INVERT | SHC_BF_DST_ALPHA,
+            SHC_BF_INVERT | SHC_BF_CONST_ALPHA,
             SHC_BF_INVERT | SHC_BF_DST_COLOR,
             SHC_BF_INVERT | SHC_BF_CONST_COLOR,
         ];
@@ -533,6 +610,12 @@ mod tests {
                         for k in 0..4u16 {
                             let plain = run(&b, false, s, d, c, k);
                             let fusedv = run(&b, true, s, d, c, k);
+                            let want = reference(&b, s, d, c, k);
+                            assert_eq!(
+                                plain.to_bits(),
+                                want.to_bits(),
+                                "eq {eq} fs {fs:#x} fd {fd:#x} ch {k}: {plain}, GL's formula {want}"
+                            );
                             assert_eq!(
                                 plain.to_bits(),
                                 fusedv.to_bits(),
@@ -550,6 +633,49 @@ mod tests {
                 }
             }
         }
+        /* A factor computed once and read by the later channels: the
+         * colour and alpha factors differing, channels masked, and MIN/MAX
+         * (which compute no factor) on the colour equation. */
+        let (mut shared_checked, mut shared_seen) = (0, 0);
+        let alpha_factors = [SHC_BF_ONE, SHC_BF_INVERT | SHC_BF_SRC_ALPHA, SHC_BF_INVERT | SHC_BF_DST_ALPHA];
+        for &(eq_rgb, eq_a) in
+            &[(SHC_BLEND_ADD, SHC_BLEND_ADD), (SHC_BLEND_MIN, SHC_BLEND_ADD), (SHC_BLEND_ADD, SHC_BLEND_MAX)]
+        {
+            for &fs in &factors {
+                for &fd in &factors {
+                    for (fsa, fda) in alpha_factors.iter().flat_map(|a| alpha_factors.iter().map(move |b| (*a, *b))) {
+                        for masked in [0u32, 0b0001, 0b0101, 0b0111] {
+                            let b = Blend {
+                                src: [fs, fsa],
+                                dst: [fd, fda],
+                                eq: [eq_rgb, eq_a],
+                                masked,
+                                class: SHC_RT_RGBA8,
+                            };
+                            for (s, d) in vals {
+                                for k in (0..4u16).filter(|k| masked & (1 << k) == 0) {
+                                    let got = run(&b, true, s, d, c, k);
+                                    let plain = run(&b, false, s, d, c, k);
+                                    let want = reference(&b, s, d, c, k);
+                                    assert_eq!(plain.to_bits(), want.to_bits(), "{b:?} ch {k}: {plain}, GL's {want}");
+                                    assert_eq!(got.to_bits(), plain.to_bits(), "{b:?} ch {k}: fused {got}");
+                                    shared_checked += 1;
+                                    let side = |f: u32, x: Side| computed_earlier(&b, k, x, f);
+                                    let ch = usize::from(k == 3);
+                                    if side(b.src[ch], Side::Src) || side(b.dst[ch], Side::Dst) {
+                                        shared_seen += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        /* the population: every unmasked channel compared, and the reuse
+         * exercised (not a check that never saw a shared factor) */
+        assert_eq!(shared_checked, 3 * factors.len() * factors.len() * 9 * vals.len() * (4 + 3 + 2 + 1));
+        assert!(shared_seen > 1000, "only {shared_seen} channels read an earlier channel's factor");
         /* the population: the comparisons made, and the cases that fused */
         assert_eq!(checked, eqs.len() * factors.len() * factors.len() * vals.len() * 4);
         assert!(fused_seen > 100, "only {fused_seen} factor pairs fused: the check did not see the fmad");
