@@ -67,6 +67,7 @@ On the AM62P (`60ffeec8`, table image) the regression set passes 39 / 40,
 table images. Case 46 `es3size` (it uses `texsize.frag`) passes now; it was
 refused before the re-key. Case 63 `matattr` passes, served from the table
 for the first time.
+The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
 
 ## Open work, in order
 
@@ -106,11 +107,11 @@ for the first time.
    - The bare-metal claim is made true, or it is removed.
    - The `SAFEUI_*` and `powervr-bxs` names are removed.
    - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
-5. **Known defects**, each with a GitHub issue:
+5. **Known defects.** Each has a GitHub issue; what remains is the fixes:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
-     cause is not found);
-   - i.MX8MP case 16 (4x MSAA) fails;
-   - the Pi 4 differs from the ES 2.0 reference in 25 cube cases.
+     cause is not found) (#9);
+   - i.MX8MP case 16 (4x MSAA) fails (#8);
+   - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12).
 
 ## How to work here
 
