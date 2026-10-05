@@ -49,8 +49,12 @@ The offline PowerVR table (`src/shaderc/blobs.rs`) records, since `0fe778f6`,
 the toolchain that reproduces it byte for byte: a `pco_shc` built by
 `tools/pco_shc/build_pco_shc.sh` with the patched usclib
 (`// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514`). That commit also
-adds `matattr`'s 20 rows and re-keys `texsize.frag` to its current text; it
-has not run on a board yet (open work 2).
+adds `matattr`'s 20 rows and re-keys `texsize.frag` to its current text.
+On the AM62P (`60ffeec8`, table image) the regression set passes 39 / 40,
+0 resets; the one failure is case 48 `es3vol`, which was already failing in
+table images. Case 46 `es3size` (it uses `texsize.frag`) passes now; it was
+refused before the re-key. Case 63 `matattr` passes, served from the table
+for the first time.
 
 ## Open work, in order
 
@@ -63,14 +67,7 @@ has not run on a board yet (open work 2).
    unchanged (first failure case 16). What is left of its board run is
    Slint and cluster on the AM62P; they wait for a Rust nightly with
    rust-src and the Slint no_std workspace on the build host.
-2. **Board run for the table that records its toolchain (`0fe778f6`).** The
-   table gl_test image (`CONFIG_YAKOGL_SHADERC_OFFLINE=y`) on the AM62P: the
-   full set, with case 63 `matattr` served from the table for the first time
-   and the `texsize.frag` rows under their corrected key.
-   `tools/cts/RESULTS.md` ("the PowerVR table lags its generator's input
-   list") promised this run with the rows; it shows that the regenerated
-   table is the same table on silicon.
-3. **Does a predicated-off instruction group cost time?** Measure it on the
+2. **Does a predicated-off instruction group cost time?** Measure it on the
    AM62P. Grow the off arm of the same program by N groups, once compiled by
    our compiler and once from the table, and read the 3D busy time.
    The old gap of about 5.5 ms in case 186 arm 1 is closed: on `81c53c61`
@@ -82,7 +79,7 @@ has not run on a board yet (open work 2).
    online 104 to 234 groups, the table (rows in `blobs.rs`) 105 to 235.
    Board run needed, on the AM62P: case 193 in an online image and in a
    table image.
-4. **Compile shaders at build time with our own compiler.** Shaders known
+3. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
@@ -90,7 +87,7 @@ has not run on a board yet (open work 2).
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
    offline and remote go away.
-5. **Design clean-up**:
+4. **Design clean-up**:
    - `DESIGN.md` and `docs/` describe the current design, not its history.
    - About 50 debug and experiment globals in product code are removed or
      moved out.
@@ -98,7 +95,7 @@ has not run on a board yet (open work 2).
    - The bare-metal claim is made true, or it is removed.
    - The `SAFEUI_*` and `powervr-bxs` names are removed.
    - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
-6. **Known defects**, each with a GitHub issue:
+5. **Known defects**, each with a GitHub issue:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found);
    - i.MX8MP case 16 (4x MSAA) fails;

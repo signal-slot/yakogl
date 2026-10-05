@@ -16417,3 +16417,30 @@ gitignored, redacted, `INDEX.txt`); the plan carries the real lines.
 Read: the cold-entry death was the panel console's unguarded LCDIF read with MEDIAMIX
 powered down. The PICTURE equals the 2026-09-23 gc_gl_triangle parity baseline rows
 above on both entries.
+
+## AM62P: the table that records its toolchain, on the board (origin/main `60ffeec8`, 2026-10-05)
+
+Commit `0fe778f6` regenerated the PowerVR table (`src/shaderc/blobs.rs`) with a
+toolchain it now records in its header: `// toolchain: pco_shc=f537fc86b41f
+glslang=9e007f4bf514`. The `pco_shc` is built by `tools/pco_shc/build_pco_shc.sh`
+with the patched usclib. All 2248 existing rows are reproduced byte for byte.
+It adds `matattr`'s 20 rows and re-keys `texsize.frag`, whose rows were keyed by
+the shader text before `f36c176b`. This is the "separate commit with its own
+board run" the row "AM62P (table path)" above promised (line 994).
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, images built from
+`60ffeec8` with `CONFIG_YAKOGL_SHADERC_OFFLINE=y` (the table image). Records:
+`records/am62p/` of the main checkout (gitignored).
+
+| run | record | verdict line | console |
+|---|---|---|---|
+| table image, the regression set (`GL_TEST_CASE` 7, 40 cases) | `20261005-2028-gt-table-60ffeec8-c0b09575` | `board.sh am62p gt-table-60ffeec8 rc=4 verdict=failed boot=uboot-mmc ... resets=0 ... back_after=80s` | `gl_test: case 46 es3size: PASS`; `gl_test: case 48 es3vol: FAIL`; `gl_test: all: 1 of 40 cases failed (39 passed; 0 timed out; first failure case 48 at index 31)` |
+| table image, `CONFIG_GL_TEST_CASES="63"` | `20261005-2036-case63-table-60ffeec8-b7e11f25` | `board.sh am62p case63-table-60ffeec8 rc=0 verdict=done boot=uboot-mmc ... resets=0 ... back_after=68s` | `gl_test: case 63 matattr: PASS`; `gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out; first failure case -1 at index -1)`; `gl_test: OK (rc=0)` |
+
+Read: the only failure in the table image is case 48 es3vol, which is
+pre-existing in table images (the 2026-10-03 netboot step C row: "1 of 38 cases
+failed", case 48 es3vol). Case 46 es3size, which uses `es300/texsize.frag`, now
+passes: the earlier table-image runs of this log read 37/38 with case 46
+refused ("invalid shader (4.5.4)"), the key drift the re-key fixed. So the table
+image went from 37/38 with 46 refused to 39/40 with 46 passing. Case 63 matattr
+is served from the table for the first time; it is not in the 40-case set.

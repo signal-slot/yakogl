@@ -37,7 +37,8 @@ Slint とクラスタを 81c53c61 で走らせていないのは、そのイメ�
 - 10/5 に入った PowerVR の計測と最適化（コミットの件名）: gl_test 184 depchain（依存の連鎖の費用）、185 kindcost（命令グループの種類ごとの費用）、186 fcsplit（case 39 の fill_color を機能ごとに分け、実行時コンパイラを表と比べる）、187 predarm（186 に fill_color の別の scissor の腕を足して、述語化の発見を確かめる）。afa12e9b で、腕が算術の `if` は腕を述語化して走らせる（pco と同じ）。続けて実行時コンパイラに ecd341d5（`x * 1.0` は x を読む、189 mulone）、7010bd2e（全チャンネル同じ係数のブレンドは 1 回だけ計算、190 blendonce）、39bd6983（varying の積を和と融合、191 varyfma）。
 - **結合の削除が着地した（81c53c61）**: `if` の両方の腕が値を計算するとき、各腕が 1 つのレジスタに書き、`if` のあとの select が要らない（pco と同じ）。gl_test 192 predlive を追加。フルゲートは 96 ok / 0 failed / 0 gaps。ホストの数え方で fill_color.nodiscard は 105 → 104 グループ、実行される経路は 69 グループ（表も 69）。ボード（tools/board.sh、BOARD_BOOT=uboot-mmc）の結果は上の表。残りは AM62P の Slint とクラスタ。
 - 古い差が閉じた: afa12e9b の 186 の腕 1 の約 5.5 ms の差は、81c53c61 で 54.56 ms となり表の 54.9 ms と並んだ。
-- 次の測定: 述語で外れた命令グループが時間を食うかを AM62P で測る。用意済みの測定は gl_test 193 offarm（ブランチ work/pvr-offarm-cost、a84a285d、未着地）（HANDOFF.md「Open work」2）。
+- **ツールチェーンを記録するテーブルが AM62P で走った（60ffeec8、テーブルのコミット 0fe778f6）**: PowerVR のテーブルが再生成に使った道具を記録する（`// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514`）。matattr の 20 行を足し、texsize.frag を現在のテキストの鍵に付け直した。ボード（テーブルのイメージ）: 回帰セット 40 件中 39 合格、リセット 0（記録 20261005-2028-gt-table-60ffeec8-c0b09575）。失敗は以前からテーブルのイメージで失敗している 48 番 es3vol だけで、46 番 es3size（texsize.frag を使う）は鍵のずれで拒否されていたのが合格になった（以前は 38 件中 37 合格）。matattr（63 番）は初めてテーブルから出て合格（記録 20261005-2036-case63-table-60ffeec8-b7e11f25）。
+- 次の測定: 述語で外れた命令グループが時間を食うかを AM62P で測る。用意済みの測定は gl_test 193 offarm（着地済み。online と表の両方のイメージで AM62P で測るところまでが残り）（HANDOFF.md「Open work」2）。
 
 **既知の不具合**（それぞれ GitHub の issue あり、HANDOFF.md「Open work」5）:
 - i.MX8MP の gl_test 10 番は約 3 回に 1 回失敗する（実行ごとに変わる。原因は未特定）。
