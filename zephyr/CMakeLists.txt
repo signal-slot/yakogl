@@ -147,6 +147,11 @@ if(CONFIG_YAKOGL)
     ${_yakogl_shaderc_c}
     ${_yakogl_gpu_c})
   zephyr_library_compile_definitions(YAKOGL_OSAL_ZEPHYR ${YAKOGL_GPU_DEF})
+  # tools/check.sh builds the samples with -DYAKOGL_WERROR=ON: the OSAL
+  # and the layout pins compile without a warning (off by default).
+  if(YAKOGL_WERROR)
+    zephyr_library_compile_options(-Werror)
+  endif()
 
   # Public Khronos headers for apps; private OSAL/driver includes.
   zephyr_include_directories("${YAKOGL_DIR}/include")

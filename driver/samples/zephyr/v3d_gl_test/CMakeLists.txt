@@ -42,6 +42,13 @@ target_include_directories(app PRIVATE
 # shader back end and takes GLSL ES 1.00 (and 3.00); the default GLSL 450 set
 # exists for the offline table, which this GPU does not have.
 target_compile_definitions(app PRIVATE GL_TEST_ES100=1)
+
+# Zero warnings in our C files is the rule: tools/check.sh builds this
+# sample with -DYAKOGL_WERROR=ON (the "zephyr" rows). Off by default, so an
+# application built with another toolchain is not stopped by a new warning.
+if(YAKOGL_WERROR)
+  target_compile_options(app PRIVATE -Werror)
+endif()
 target_compile_definitions(app PRIVATE GL_TEST_VTL_PASSES=${CONFIG_V3D_GL_TEST_VTL_PASSES})
 
 # The bounded-lifetime watchdog, on by default: every board image carries it.

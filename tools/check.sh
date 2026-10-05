@@ -85,7 +85,8 @@ BUILD_ONLY_CONFIGS=(
   "host-test,gpu-vivante,shaderc-online,no-shader-table"
   "host-test,gpu-powervr,shaderc-online,no-shader-table"
 )
-[ "${1-}" = "--quick" ] && CONFIGS=("host-test,gpu-powervr")
+QUICK=0
+[ "${1-}" = "--quick" ] && { CONFIGS=("host-test,gpu-powervr"); QUICK=1; }
 # YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr host-test,gpu-vivante" (space-separated feature
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
@@ -1043,6 +1044,41 @@ if command -v cc >/dev/null 2>&1; then
   step "cc      yakogl_drivers.h layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
     -x c driver/rust/include/yakogl_drivers.h
 fi
+# One Zephyr image per GPU, built with -DYAKOGL_WERROR=ON: our C files (the
+# gl_test suite, the samples' main.c, the OSAL and the layout pins) compile
+# without a warning. The cargo rows never compile them, so the i.MX8MP and
+# AM62P gl_test images carried three unused-function warnings (cases 142,
+# 145, 148, dispatched only on the V3D) that nothing reported. Zephyr's own
+# files stay outside -Werror (tisci.c warns). ZEPHYR_WS is the west
+# workspace; without one the rows are gaps. About 1 min an image on a warm
+# host (56, 58 and 46 s measured), so not in --quick.
+zephyr_werror_image() {
+  local board="$1" sample="$2" dir="build/zephyr-werror/$3"
+  shift 3
+  local mods log="$dir.log" root="$PWD"
+  mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || return 1
+  mkdir -p build/zephyr-werror
+  if ! (cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
+    west build -p always -b "$board" -d "$root/$dir" "$root/driver/samples/zephyr/$sample" -- \
+    "-DZEPHYR_MODULES=$mods" "-DYAKOGL_DIR=$root" -DYAKOGL_WERROR=ON "$@") >"$log" 2>&1 </dev/null; then
+    grep -E 'error:|Error ' "$log" | head -20
+    echo "(the whole log: $log)"
+    return 1
+  fi
+}
+if [ "$QUICK" -eq 0 ]; then
+  if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
+    step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
+      verdin_am62p/am62p54/a53 gl_test am62p \
+      -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
+    step "zephyr  imx8mp gc_gl_test image, -Werror on our C files" zephyr_werror_image \
+      verdin_imx8mp/mimx8ml8/a53 gc_gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+    step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4
+  else
+    gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
+  fi
+fi
+
 # driver/rust/src/soc/imx8mp/regs.rs is generated from NXP's BSD-3 hal_nxp
 # headers (tools/hal-nxp/gen_regs.py), never edited: regenerate and compare.
 # The generator itself refuses inputs whose sha256 is not the pinned one (hal_nxp

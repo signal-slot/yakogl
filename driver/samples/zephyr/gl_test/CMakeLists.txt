@@ -14,6 +14,13 @@ project(gl_test)
 # the same source runs here (printk instead of pr_info). It reaches into the
 # GL core, the backend and the OSAL, hence the private include directories.
 target_sources(app PRIVATE src/main.c "${PVR_REPO}/tools/pvrlab/gl_test.c")
+
+# Zero warnings in our C files is the rule: tools/check.sh builds this
+# sample with -DYAKOGL_WERROR=ON (the "zephyr" rows). Off by default, so an
+# application built with another toolchain is not stopped by a new warning.
+if(YAKOGL_WERROR)
+  target_compile_options(app PRIVATE -Werror)
+endif()
 target_include_directories(app PRIVATE
   "${PVR_REPO}/tools/pvrlab"
   "${YAKOGL_DIR}/include"

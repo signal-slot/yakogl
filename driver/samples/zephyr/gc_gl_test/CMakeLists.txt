@@ -17,6 +17,13 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../gc_common/gc_sample.cmake")
 # this is, and they are behind CONFIG_YAKOGL_GPU_VIVANTE. Running it here is
 # the point: a triangle proves a pipe, this proves the backend.
 target_sources(app PRIVATE src/main.c "${PVR_REPO}/tools/pvrlab/gl_test.c")
+
+# Zero warnings in our C files is the rule: tools/check.sh builds this
+# sample with -DYAKOGL_WERROR=ON (the "zephyr" rows). Off by default, so an
+# application built with another toolchain is not stopped by a new warning.
+if(YAKOGL_WERROR)
+  target_compile_options(app PRIVATE -Werror)
+endif()
 target_include_directories(app PRIVATE
   "${PVR_REPO}/tools/pvrlab"
   "${YAKOGL_DIR}/include"

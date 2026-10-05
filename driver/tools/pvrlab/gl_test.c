@@ -18536,6 +18536,19 @@ static int run_case(int c, int pretransform, int debug)
 	/* dFdx / dFdy read back: plain GL, every GPU (the GC7000's dsx/dsy and
 	 * the PowerVR's derivatives are measured here as the V3D's are). */
 	case 138: rc = case_deriv(); break;
+	/* Plain GL, written for the V3D, run on every GPU: a uniform branch
+	 * with both arms read back, look-ups inside uniform branches, and
+	 * glSampleCoverage, which skips by name where the build offers no 4x
+	 * config (the V3D's v3d_debug_msaa, the GC7000's gc_debug_msaa off).
+	 * Their dispatch sat in the V3D block below, so the other GPUs compiled
+	 * the three functions and never called them (-Wunused-function). */
+	case 142: rc = case_unibranch(); break;
+	case 148: rc = case_texbranch(); break;
+	case 145:
+		rc = case_samplecov();
+		if (rc == -3)
+			return -3; /* skipped by name: no 4x config in this build */
+		break;
 #ifdef GL_TEST_V3D
 	case 109: rc = case_texlinear(); break;
 	case 110: rc = case_psizvpm(); break;
@@ -18548,13 +18561,6 @@ static int run_case(int c, int pretransform, int debug)
 	case 135: rc = case_texnarrow(); break;
 	case 137: rc = case_psizmin(); break;
 	case 140: rc = case_tfuprobe(); break;
-	case 142: rc = case_unibranch(); break;
-	case 148: rc = case_texbranch(); break;
-	case 145:
-		rc = case_samplecov();
-		if (rc == -3)
-			return -3; /* skipped by name: no 4x config in this build */
-		break;
 	case 124: rc = case_binovf(); break;
 	case 125: rc = case_texsubfbo(); break;
 	case 129: rc = case_vstexlod(); break;
