@@ -80,6 +80,8 @@ pub fn build_vertex<'a>(
     let (sel, prep): (Selected<'a>, PrepareStats) = prepare_fused(&sel, a).map_err(ChainError::Prepare)?;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
     let sel = index_high_shared(&sel, a).map_err(ChainError::Prepare)?;
+    /* the default's branch-or-predicate, on the arms' final groups */
+    let sel = super::select::choose_if_lowering(sel, a).map_err(ChainError::Select)?;
     let bbuf =
         a.alloc_filled(4 * (sel.inputs.len() + sel.outputs.len()), VReg(0)).map_err(|_| ChainError::OutOfScratch)?;
     let boundary = boundary_of(&sel, bbuf).map_err(ChainError::Alloc)?;
@@ -449,6 +451,8 @@ pub fn build_fragment_for<'a>(
     let ytf_live = super::select::ytf_dword(m).filter(|&d| read_at(d));
     /* After the two scans above: they look for direct reads of those words. */
     let sel = index_high_shared(&sel, a).map_err(ChainError::Prepare)?;
+    /* the default's branch-or-predicate, on the arms' final groups */
+    let sel = super::select::choose_if_lowering(sel, a).map_err(ChainError::Select)?;
     /* A shader that writes nothing (qtappshaders_0.frag computes locals
      * and stores none): pco's program is one control `nop` that ends it.
      * Everything else it computed is dead. */

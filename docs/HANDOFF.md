@@ -124,8 +124,11 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms) predicating, the
      default, is right; for a symmetric `if` the crossover is about 38
      groups an arm.
-   - Still open: the rule in the compiler (the default lowering chosen by
-     arm size from these constants) and its board proof.
+   - The rule is in the compiler (`select::branch_pays`: masked cost of
+     each arm past 5336 us, so 49 groups an arm) and branches no `if` of the
+     corpus (0 of 168: no `if` has two arms that long); still open: an input
+     that says which arm runs (a per-draw hint or a profile), without which
+     195's 36 ms at N = 128 stays out of reach.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

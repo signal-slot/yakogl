@@ -1853,7 +1853,11 @@ impl<'a> Sel<'a> {
          * taken when no instance is active before each arm, past it. The
          * arms and the joins are the predicated form's: an instance the
          * mask leaves out writes nothing, as one a condition leaves out. */
-        let branch = pred && crate::shaderc::compile_if_lowering() == crate::shaderc::IfLowering::Branch;
+        /* The default builds the branched form too and lets
+         * `choose_if_lowering` take the mask out again, once the arms'
+         * groups are final (after `prepare`), where `branch_pays` says the
+         * branch cannot win. */
+        let branch = pred && crate::shaderc::compile_if_lowering() != crate::shaderc::IfLowering::Predicate;
         if pred {
             let c = self.src(cond, 0)?;
             let emc = if branch { Some(self.emc_reg()?) } else { None };
@@ -3490,6 +3494,133 @@ impl<'a> Sel<'a> {
     }
 }
 
+/// The masked cost of an `if` arm, by arm size: what one group of an arm
+/// no instance runs costs a frame when it is issued predicated, in
+/// microseconds on gl_test 194's AM62P workload (16 full-screen quads at
+/// 1024x600, femtovg's fill_color; tools/cts/RESULTS.md, 2026-10-06). Each
+/// row is (the arm's last group, the cost of each group up to it): 194's
+/// marginal costs between its N, at the arm sizes those N give (31 groups
+/// at N = 0, 31 + N + 2 above: the N fmad and two copies). The first rate,
+/// 0.107 ms from N = 0 to 8, stands for the arm's own 31 groups too, which
+/// 194 does not separate. Only ratios to [`BRANCH_FIXED_US`] matter, which
+/// was measured on the same workload.
+const MASKED_US_PER_GROUP: [(usize, u32); 10] = [
+    (41, 107),
+    (49, 122),
+    (57, 162),
+    (65, 204),
+    (81, 257),
+    (97, 307),
+    (129, 346),
+    (161, 367),
+    (225, 378),
+    (usize::MAX, 384),
+];
+
+/// The masked cost of an arm of `n` groups ([`MASKED_US_PER_GROUP`]).
+pub fn masked_cost_us(n: usize) -> u32 {
+    let (mut cost, mut from) = (0u32, 0usize);
+    for &(to, rate) in &MASKED_US_PER_GROUP {
+        if n <= from {
+            break;
+        }
+        cost = cost.saturating_add((n.min(to) - from) as u32 * rate);
+        from = to;
+    }
+    cost
+}
+
+/// What a branched `if` costs a frame over the same `if` predicated, before
+/// what it saves: the six control groups and the branch taken (gl_test 195
+/// on the AM62P, 2026-10-06, N = 0, fill_color.nodiscard's 31-group then
+/// arm and 23-group else arm, 3D busy per frame):
+///
+/// - arm off (radius 0): branch - predicate = 55338 - 54563 = 775 us, and
+///   the branch no longer issues the 31 masked groups, 31 x 107 = 3317 us:
+///   fixed cost 4092 us;
+/// - arm taken (radius 4): 61921 - 59046 = 2875 us, plus the 23 masked
+///   groups of the else arm, 23 x 107 = 2461 us: 5336 us.
+///
+/// The larger, so that the rule never loses whichever arm runs. An executed
+/// group costs about 786 us on the same workload (radius 4, predicated,
+/// N = 0 to 8 adds 10 executed groups: (66907 - 59046) / 10), so this is
+/// about 6.8 executed groups (5.2 with the arm off).
+pub const BRANCH_FIXED_US: u32 = 5336;
+
+/// May the default branch an `if` whose arms are `then_groups` and
+/// `else_groups` groups long? Only when skipping EITHER arm saves more than
+/// the branch costs: which arm a uniform `if` skips is not known when the
+/// shader compiles, and this rule never loses to predication whichever it
+/// is. It is crossed at 49 groups an arm (48 x the rates: 5240 us, 49:
+/// 5362 us).
+pub fn branch_pays(then_groups: usize, else_groups: usize) -> bool {
+    masked_cost_us(then_groups) > BRANCH_FIXED_US && masked_cost_us(else_groups) > BRANCH_FIXED_US
+}
+
+/// The default's choice for every branched `if` of `sel` (`if_convert`
+/// builds the branched form under `IfLowering::Default`), once its arms are
+/// final: run after `prepare`, whose copies, moves and fusions change the
+/// arms' group counts, and before allocation. An `if` where
+/// [`branch_pays`] says no loses its mask groups (`cndst`, `cndef`,
+/// `cndend`), which leaves exactly the predicated form; the mask's set-up
+/// moves to where its first remaining user wants it, or goes. `IfLowering::Branch` keeps every
+/// branched `if`, and `IfLowering::Predicate` built none.
+pub fn choose_if_lowering<'a>(sel: Selected<'a>, arena: &'a Arena<'a>) -> Result<Selected<'a>, SelectError> {
+    if crate::shaderc::compile_if_lowering() != crate::shaderc::IfLowering::Default {
+        return Ok(sel);
+    }
+    let g = sel.groups;
+    if !g.iter().any(|x| x.op == SelOp::Machine(MachineOp::CndIf)) {
+        return Ok(sel);
+    }
+    let mut gone_v = filled_vec(arena, g.len(), false)?;
+    let pos = |from: usize, op: SelOp| (from..g.len()).find(|&k| g[k].op == op);
+    for i in (0..g.len()).filter(|&i| g[i].op == SelOp::Machine(MachineOp::CndIf)) {
+        let (Some(els), Some(end)) = (pos(i, SelOp::Pred(PredArm::Else)), pos(i, SelOp::Pred(PredArm::End))) else {
+            return Err(SelectError::Unsupported("a branched `if` with no else marker or end"));
+        };
+        let cndef = g[els + 1].op == SelOp::Machine(MachineOp::CndElse);
+        /* CndIf, Pred(Then), the then arm, Pred(Else), [CndElse], the
+         * else arm, Pred(End), CndIfEnd */
+        let then_groups = els - i - 2;
+        let else_groups = end - els - 1 - usize::from(cndef);
+        if branch_pays(then_groups, else_groups) {
+            continue;
+        }
+        if g.get(end + 1).map(|x| x.op) != Some(SelOp::Machine(MachineOp::CndIfEnd)) {
+            return Err(SelectError::Unsupported("a branched `if` with no `cndend` after its end"));
+        }
+        let d = gone_v.as_mut_slice();
+        d[i] = true;
+        d[end + 1] = true;
+        if cndef {
+            d[els + 1] = true;
+        }
+    }
+    let d = gone_v.as_slice();
+    /* The mask's set-up goes where selection would have put it for the
+     * first group still using it -- right before a loop's `cndst 2`, or
+     * before a kept `if`'s test -- or nowhere when none is left, so a
+     * program whose `if`s all stay predicated is the one
+     * `IfLowering::Predicate` builds. */
+    let init = g.iter().position(|x| x.op == SelOp::Machine(MachineOp::CndInit));
+    let first_user =
+        (0..g.len()).find(|&k| !d[k] && matches!(g[k].op, SelOp::Machine(m) if m.is_cnd() && m != MachineOp::CndInit));
+    let init_at = first_user.map(|k| if g[k].op == SelOp::Machine(MachineOp::CndIf) { k - 1 } else { k });
+    let mut out: AVec<'a, SelGroup> = AVec::with_capacity(arena, g.len())?;
+    for (k, (x, gone)) in g.iter().zip(d).enumerate() {
+        if let (Some(i), Some(at)) = (init, init_at) {
+            if k == at {
+                out.push(arena, g[i])?;
+            }
+        }
+        if !*gone && Some(k) != init {
+            out.push(arena, *x)?;
+        }
+    }
+    Ok(Selected { groups: out.into_slice(), ..sel })
+}
+
 /// Take group `i` out of `groups`, keeping the order of the rest.
 fn vec_remove(groups: &mut AVec<'_, SelGroup>, i: usize) {
     groups.as_mut_slice().copy_within(i + 1.., i);
@@ -3745,8 +3876,11 @@ mod tests {
     /// loop leaves early on a uniform break), `leave = (7 <= c) | flag`, and
     /// `verify_loops` takes that.
     /// The groups `src`'s fragment shader selects to.
+    /// Selection's program for a fragment shader, its `if`s predicated
+    /// (under the default, selection builds the branched form and
+    /// `choose_if_lowering` decides after `prepare`).
     fn selected_fs(src: &str) -> std::vec::Vec<SelGroup> {
-        selected_fs_with(src, crate::shaderc::IfLowering::Default)
+        selected_fs_with(src, crate::shaderc::IfLowering::Predicate)
     }
 
     /// [`selected_fs`] with an `if` lowering asked for (put back after,
@@ -3892,16 +4026,17 @@ mod tests {
     /// else arm, `cndend` (CndIfEnd) right after the end, all on one emc;
     /// the arms and the joins are the predicated form's. An `if` with no
     /// else arm has no `cndef`; one with no groups in either arm takes no
-    /// mask at all; a second `if` reuses the emc. The default and
-    /// `Predicate` give the predicated program.
+    /// mask at all; a second `if` reuses the emc. The default selects the
+    /// branched form too (`choose_if_lowering` decides after `prepare`);
+    /// `Predicate` selects the predicated one.
     #[test]
     fn a_predicable_if_asked_to_branch_runs_its_arms_under_the_mask() {
         use crate::shaderc::IfLowering;
         let both = "precision mediump float; uniform vec4 u; void main() { vec4 c; \
                     if (u.x > 0.0) { c = u * 2.0; } else { c = u + 1.0; } gl_FragColor = c; }";
         let pred = selected_fs_with(both, IfLowering::Predicate);
-        assert_eq!(pred, selected_fs(both), "the default predicates");
         let g = selected_fs_with(both, IfLowering::Branch);
+        assert_eq!(selected_fs_with(both, IfLowering::Default), g, "the default selects the branched form");
         let at =
             |g: &[SelGroup], op: SelOp| g.iter().position(|x| x.op == op).unwrap_or_else(|| panic!("{op:?}: {g:?}"));
         let m = |op| SelOp::Machine(op);
@@ -3953,6 +4088,78 @@ mod tests {
             [1, 2, 2],
             "{g:?}"
         );
+    }
+
+    /// The default's rule, with gl_test 194/195's constants: the masked
+    /// cost by arm size is 194's curve (0.107 ms a group for a small arm,
+    /// 0.384 past 225 groups), the branch's fixed cost 5336 us, and the
+    /// default branches only when skipping either arm would pay for it: at
+    /// 49 groups an arm and up (fill_color's 31 and 23 stay predicated, and
+    /// so does an arm of any size beside a 23-group one).
+    #[test]
+    fn the_default_branches_only_when_skipping_either_arm_pays() {
+        assert_eq!(masked_cost_us(0), 0);
+        assert_eq!(masked_cost_us(31), 31 * 107);
+        assert_eq!(masked_cost_us(41), 41 * 107);
+        assert_eq!(masked_cost_us(49), 41 * 107 + 8 * 122);
+        assert_eq!(masked_cost_us(300), masked_cost_us(225) + 75 * 384);
+        /* gl_test 195 at N = 0: the fixed cost from both radii */
+        assert_eq!(BRANCH_FIXED_US, (61921 - 59046) + 23 * 107);
+        assert!((55338 - 54563) + masked_cost_us(31) <= BRANCH_FIXED_US, "the arm-off estimate is the smaller");
+        assert!(masked_cost_us(48) <= BRANCH_FIXED_US && masked_cost_us(49) > BRANCH_FIXED_US, "49 groups");
+        assert!(branch_pays(49, 49) && !branch_pays(48, 400) && !branch_pays(400, 48));
+        assert!(!branch_pays(31, 23), "fill_color's scissor `if`");
+        assert!(!branch_pays(161, 23), "gl_test 193/195's N = 128: the 23-group else arm decides");
+    }
+
+    /// Through the whole chain, the default gives the predicated program
+    /// for an `if` with short arms and the branched one where both arms are
+    /// past the crossover (15 vec4 steps each: 60 groups an arm).
+    #[test]
+    fn the_default_lowering_is_chosen_on_the_arms_final_groups() {
+        use crate::shaderc::online::{lower, sema::Stage};
+        use crate::shaderc::IfLowering;
+        let image = |src: &str, l: IfLowering| -> std::vec::Vec<u32> {
+            let _l = store::test_lock();
+            struct Put(IfLowering);
+            impl Drop for Put {
+                fn drop(&mut self) {
+                    crate::shaderc::set_compile_if_lowering(self.0);
+                }
+            }
+            let _put = Put(crate::shaderc::set_compile_if_lowering(l));
+            store::with_scratch(|a| {
+                let _keep = store::begin_keep().expect("keep");
+                let text = a.alloc_str(src).unwrap();
+                let lw = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let rec = super::super::chain::compile_fragment(&lw.module, &lw.reflection, a).expect("compiles");
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) }.to_vec()
+            })
+            .unwrap()
+        };
+        let steps = |k: usize, c: &str| std::format!("c = c * u.{c} + u.w; ").repeat(k);
+        let src = |k: usize| {
+            std::format!(
+                "precision mediump float; uniform vec4 u; void main() {{ vec4 c; \
+                 if (u.x > 0.0) {{ c = u * 2.0; {} }} else {{ c = u + 1.0; {} }} gl_FragColor = c; }}",
+                steps(k, "y"),
+                steps(k, "z")
+            )
+        };
+        let short = src(1);
+        let (d, p, b) = (
+            image(&short, IfLowering::Default),
+            image(&short, IfLowering::Predicate),
+            image(&short, IfLowering::Branch),
+        );
+        assert_eq!(d, p, "short arms: predicated");
+        assert_ne!(p, b);
+        let long = src(15);
+        let (d, p, b) =
+            (image(&long, IfLowering::Default), image(&long, IfLowering::Predicate), image(&long, IfLowering::Branch));
+        assert_eq!(d, b, "60-group arms: branched");
+        assert_ne!(p, b);
     }
 
     /// Arms that read or write p0 or need every instance -- a look-up, a

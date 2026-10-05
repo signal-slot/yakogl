@@ -207,8 +207,8 @@ pub const PVR_BACKEND_OPT_SWAP_DROPS_ZS: PvrBackendOption = 14;
 pub const PVR_BACKEND_OPT_FS_TEMPS_MIN: PvrBackendOption = 15;
 /// MEASUREMENT: how the online compiler lowers an `if` whose arms are
 /// straight-line arithmetic ([`crate::shaderc::IfLowering`]):
-/// [`PVR_IF_LOWERING_DEFAULT`] (0, the compiler chooses: today it
-/// predicates), [`PVR_IF_LOWERING_PREDICATE`] or [`PVR_IF_LOWERING_BRANCH`]
+/// [`PVR_IF_LOWERING_DEFAULT`] (0, the compiler chooses by the arms'
+/// sizes, `select::branch_pays`), [`PVR_IF_LOWERING_PREDICATE`] or [`PVR_IF_LOWERING_BRANCH`]
 /// (pco's `lower_if_cond_exec`, the arms under the execution mask with a
 /// branch past each). Read when a shader is compiled from its source; the
 /// cache keys a shader by it, and its blend and sampler-state variants keep

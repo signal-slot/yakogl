@@ -2605,14 +2605,17 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
     let (mut br_programs, mut br_vertex, mut br_ifs, mut br_taken, mut br_not) =
         (0usize, 0usize, 0usize, 0usize, 0usize);
     let mut br_failures: Vec<String> = Vec::new();
-    let mut branched = |name: &str, stage: Stage, r: Option<Result<(usize, usize, usize), String>>| match r {
+    /* the default's choice per program: (name, arm sizes, which branch) */
+    let mut br_default: Vec<(String, IfChoices)> = Vec::new();
+    let mut branched = |name: &str, stage: Stage, r: Option<Result<Branched, String>>| match r {
         None => {}
-        Some(Ok((n, t, f))) => {
+        Some(Ok(b)) => {
             br_programs += 1;
             br_vertex += usize::from(stage == Stage::Vertex);
-            br_ifs += n;
-            br_taken += t;
-            br_not += f;
+            br_ifs += b.arms.len();
+            br_taken += b.taken;
+            br_not += b.not_taken;
+            br_default.push((name.to_string(), b.arms.into_iter().zip(b.pays).collect()));
         }
         Some(Err(e)) => br_failures.push(format!("{name}: {e}")),
     };
@@ -2773,6 +2776,23 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
         br_failures.len(),
         &br_failures[..br_failures.len().min(4)]
     );
+    /* The default's choice (select::branch_pays: each arm's masked cost
+     * past the branch's fixed cost, 49 groups an arm and up), program by
+     * program, with the arm sizes it went by. */
+    let default_branches: usize = br_default.iter().map(|(_, c)| c.iter().filter(|x| x.1).count()).sum();
+    println!("  the default's lowering ({default_branches} of {br_ifs} ifs branch), arms (then, else) in groups:");
+    for (name, choices) in &br_default {
+        let each: Vec<String> =
+            choices.iter().map(|((t, e), p)| format!("{t}/{e} {}", if *p { "BRANCH" } else { "predicate" })).collect();
+        println!("    {name}: {}", each.join(", "));
+    }
+    let largest_both = br_default.iter().flat_map(|(_, c)| c.iter().map(|((t, e), _)| (*t).min(*e))).max().unwrap_or(0);
+    println!("  the largest smaller arm of any `if`: {largest_both} groups (the rule branches from 49)");
+    /* No `if` of the corpus has two arms past the crossover: the default
+     * predicates every one, as before the rule (the offarm sources' then
+     * arms pass it from N = 16, 49 groups, but their else arm is 23). */
+    assert_eq!(default_branches, 0, "the default now branches {default_branches} ifs");
+    assert!(largest_both < 49, "an `if` with both arms past the crossover: {largest_both}");
     /* (a report-es2 build refuses the ES 3.00 sources) */
     let (want_programs, want_ifs) = if cfg!(feature = "report-es2") { (66, 95) } else { (94, 168) };
     assert!(
@@ -4598,11 +4618,14 @@ fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
 /// then arm's right after the `cndst`, the else arm's right after the
 /// `cndef` (none without an else arm), each landing on the group after its
 /// arm (the `cndef`, or the `cndend`); no `if` inside another; no condition
-/// on any arm group. Returns how many, or what breaks the shape.
+/// on any arm group. Returns each `if`'s then and else arm sizes in groups,
+/// or what breaks the shape.
 fn branched_ifs(
     parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)],
-) -> Result<usize, String> {
-    let mut n = 0usize;
+) -> Result<Vec<(usize, usize)>, String> {
+    /* each `if`'s then and else arm, in groups */
+    let mut arms: Vec<(usize, usize)> = Vec::new();
+    let mut in_else = false;
     let mut init = false;
     let mut open = false;
     let mut land: Option<usize> = None;
@@ -4626,12 +4649,13 @@ fn branched_ifs(
                     return Err(format!("a `cndst` at {:#x} not right after its test, or nested", p.0));
                 }
                 open = true;
-                n += 1;
+                in_else = false;
+                arms.push((0, 0));
             }
             IfPart::Else if !open || land.is_some() => return Err(format!("a `cndef` at {:#x} out of place", p.0)),
             IfPart::Leave if !open || land.is_some() => return Err(format!("a `cndend` at {:#x} out of place", p.0)),
             IfPart::Leave => open = false,
-            IfPart::Else => {}
+            IfPart::Else => in_else = true,
             IfPart::Skip(to) => {
                 let after = i > 0 && matches!(parts[i - 1].1, IfPart::Enter | IfPart::Else);
                 if !open || !after || land.is_some() || to <= p.0 {
@@ -4641,6 +4665,14 @@ fn branched_ifs(
             }
             IfPart::Op(c, _) if open && c != '.' => {
                 return Err(format!("an arm group at {:#x} under a condition", p.0))
+            }
+            IfPart::Op(..) if open => {
+                let a = arms.last_mut().expect("an open `if`");
+                if in_else {
+                    a.1 += 1;
+                } else {
+                    a.0 += 1;
+                }
             }
             IfPart::Op(..) => {}
             IfPart::Loop if open => return Err(format!("a loop's mask group at {:#x} inside an `if` arm", p.0)),
@@ -4654,7 +4686,7 @@ fn branched_ifs(
     if open || land.is_some() {
         return Err("an `if` left open".into());
     }
-    Ok(n)
+    Ok(arms)
 }
 
 /// The survey's verdict on one fragment shader (`run_fragment`'s), as one
@@ -4693,14 +4725,18 @@ fn vs_verdict(g: &Gate) -> String {
 /// against pco's), for a vertex shader `run_one`'s (every group read back to
 /// its meaning, a `br` past each arm landing on its end, ours against
 /// selection's program, the IR and pco's). `None` when the program has no
-/// `if` to branch; else the `if`s and how often the byte model took the
-/// branches past an arm (taken, not).
+/// `if` to branch; else what [`Branched`] says. The default's choice
+/// (`select::choose_if_lowering`) is checked against these arm sizes, read
+/// independently out of the branched program's bytes: each `if` the default
+/// keeps branched is one where `select::branch_pays`, and the default's
+/// program is the predicated one when none is, the branched one when all
+/// are.
 fn branched_verdict(
     text: &str,
     stage: Stage,
     corpus: &BTreeSet<String>,
     want: &str,
-) -> Option<Result<(usize, usize, usize), String>> {
+) -> Option<Result<Branched, String>> {
     use yakogl::shaderc::IfLowering;
     let image_of = |l: IfLowering| -> Option<Vec<u8>> {
         let _l = IfLoweringFor::set(l);
@@ -4718,19 +4754,30 @@ fn branched_verdict(
         })
         .flatten()
     };
-    let pred = image_of(IfLowering::Default)?;
-    let Some(branch) = image_of(IfLowering::Branch) else {
-        return Some(Err("refused branched, built predicated".into()));
+    let pred = image_of(IfLowering::Predicate)?;
+    let (Some(branch), Some(dflt)) = (image_of(IfLowering::Branch), image_of(IfLowering::Default)) else {
+        return Some(Err("refused branched or by default, built predicated".into()));
     };
     if branch == pred {
-        return None;
+        return (dflt != pred).then(|| Err("the default differs, with no `if` to branch".into()));
     }
     let (pp, bp) = (if_parts(&pred), if_parts(&branch));
-    let n = match branched_ifs(&bp) {
-        Ok(n) if n > 0 => n,
+    let arms = match branched_ifs(&bp) {
+        Ok(a) if !a.is_empty() => a,
         Ok(_) => return Some(Err("differs from the predicated program with no branched `if`".into())),
         Err(e) => return Some(Err(e)),
     };
+    let pays: Vec<bool> =
+        arms.iter().map(|&(t, e)| yakogl::shaderc::online::powervr::select::branch_pays(t, e)).collect();
+    let chosen = match branched_ifs(&if_parts(&dflt)) {
+        Ok(a) => a,
+        Err(e) => return Some(Err(format!("the default's program: {e}"))),
+    };
+    let want_chosen: Vec<(usize, usize)> = arms.iter().zip(&pays).filter(|(_, p)| **p).map(|(a, _)| *a).collect();
+    if chosen != want_chosen || (pays.iter().all(|p| !p) && dflt != pred) || (pays.iter().all(|p| *p) && dflt != branch)
+    {
+        return Some(Err(format!("the default branched {chosen:?}; the rule says {want_chosen:?} of {arms:?}")));
+    }
     let control =
         |p: IfPart| matches!(p, IfPart::Init | IfPart::Enter | IfPart::Else | IfPart::Leave | IfPart::Skip(_));
     let body = |parts: &[(usize, IfPart, String, yakogl::shaderc::online::powervr::decode::Group)]| -> Vec<String> {
@@ -4750,7 +4797,22 @@ fn branched_verdict(
     if got.as_deref() != Ok(want) {
         return Some(Err(format!("the survey's verdict changed\n      predicated {want}\n      branched   {got:?}")));
     }
-    Some(Ok((n, taken, skips.len() - taken)))
+    Some(Ok(Branched { arms, pays, taken, not_taken: skips.len() - taken }))
+}
+
+/// Each `if` of a program: its then and else arm sizes, and whether the
+/// default branches it.
+type IfChoices = Vec<((usize, usize), bool)>;
+
+/// A program [`branched_verdict`] compiled both ways.
+struct Branched {
+    /// Each `if`'s then and else arm, in groups.
+    arms: Vec<(usize, usize)>,
+    /// Which the default branches (`select::branch_pays`).
+    pays: Vec<bool>,
+    /// The byte model's branches past an arm, taken and not.
+    taken: usize,
+    not_taken: usize,
 }
 
 /// gl_test case 91's two blends, on the host: the case's own fragment

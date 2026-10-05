@@ -219,9 +219,10 @@ pub fn fs_w_constant() -> bool {
 /// `PVR_IF_LOWERING_*` in `pvr_backend.h` (`PVR_BACKEND_OPT_IF_LOWERING`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IfLowering {
-    /// The compiler chooses. Today it predicates, as pco does by default;
-    /// a choice by the never-run arm's size waits for the branch's cost to
-    /// be measured (docs/HANDOFF.md, open work 2).
+    /// The compiler chooses by the arms' sizes: it branches only when
+    /// skipping either arm saves more than the branch costs
+    /// (`powervr::select::branch_pays`, gl_test 194/195's constants), and
+    /// predicates otherwise, as pco does.
     Default,
     /// Always predicate.
     Predicate,

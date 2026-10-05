@@ -746,13 +746,37 @@ and `cndef` and loses the then arm's branch: pco would invert the condition
 output has (NIR inverts such an `if` itself), so it is not emitted.
 
 **The choice** is `PVR_BACKEND_OPT_IF_LOWERING`: `PVR_IF_LOWERING_DEFAULT`
-(0, the compiler's choice: today it predicates), `_PREDICATE` (1) or
-`_BRANCH` (2), set through `pvr_backend_set_option`
-(`shaderc::IfLowering`). It is read when a shader is compiled from its
-source; the online back end keys the record by it (`backend::Facts`), and
-its blend, link and sampler-state variants keep it, so one source compiles
-both ways on one context. The size threshold HANDOFF item 2 asks for is not
-in: the crossover waits for the branch's cost (gl_test 195).
+(0, the compiler's choice, below), `_PREDICATE` (1) or `_BRANCH` (2), set
+through `pvr_backend_set_option` (`shaderc::IfLowering`). It is read when a
+shader is compiled from its source; the online back end keys the record by
+it (`backend::Facts`), and its blend, link and sampler-state variants keep
+it, so one source compiles both ways on one context.
+
+**The default's rule** (`select::branch_pays`, applied by
+`select::choose_if_lowering` after `prepare`, on the arms' final groups):
+branch only when skipping EITHER arm saves more than the branch costs. A
+uniform `if`'s taken arm is not known when the shader compiles, and this is
+the rule that never loses to predication whichever arm runs. Both sides in
+microseconds a frame on gl_test 194/195's AM62P workload (only their ratio
+matters):
+
+- the masked cost of an arm of n groups, 194's curve as a table by arm size:
+  0.107 ms a group up to 41 groups (standing for the arm's own 31 too),
+  then 0.122, 0.162, 0.204, 0.257, 0.307, 0.346, 0.367, 0.378 and 0.384 ms
+  past 225 groups (`MASKED_US_PER_GROUP`);
+- the branch's fixed cost, 5336 us (`BRANCH_FIXED_US`): 195 at N = 0 with
+  the arm taken, 61921 - 59046 = 2875 us net plus the 23 masked else-arm
+  groups no longer issued (2461 us). With the arm off it is 775 + 31 x 107 =
+  4092 us; the larger is taken. An executed group costs about 786 us here
+  ((66907 - 59046) / 10 groups), so 5336 us is about 6.8 executed groups.
+
+The rule is crossed at 49 groups an arm. No `if` of the corpus has two such
+arms (the largest smaller arm is 36 groups; one-armed `if`s have none), so
+the default still predicates every one: the survey prints each program's
+arms and choice and pins 0 of 168. fill_color's 31/23 stays predicated, and
+so do the offarm sources at every N: their then arm passes 49 groups from
+N = 16, their else arm is 23. The 36 ms that 195 saves at N = 128 is
+reachable only by knowing the then arm is skipped.
 
 Host evidence (`tests/usc_limits.rs`):
 

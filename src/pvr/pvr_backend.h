@@ -150,8 +150,8 @@ enum pvr_backend_option {
 #define PVR_DEPTH_CLIP_FRONT_REAR        1u  /* near and far, GL's volume */
 #define PVR_DEPTH_CLIP_FRONT_REAR_DEPTH  2u  /* clips nothing on its own (measured) */
 #define PVR_DEPTH_CLIP_OFF               3u  /* no near/far clipping; bring-up only */
-/* PVR_BACKEND_OPT_IF_LOWERING values: the compiler's choice (today it
- * predicates), the arms predicated (pco_cf.c lower_if_pred_exec), the arms
+/* PVR_BACKEND_OPT_IF_LOWERING values: the compiler's choice (by the arms'
+ * sizes: select.rs branch_pays), the arms predicated (pco_cf.c lower_if_pred_exec), the arms
  * under the execution mask with a branch past each (lower_if_cond_exec,
  * pco's PCO_DEBUG=no_pred_cf). Any other value is the default. */
 #define PVR_IF_LOWERING_DEFAULT    0u
