@@ -16557,18 +16557,25 @@ static int case_offarmn(void)
  *   N           0    8   32  128
  *   predicated  104  114  138  234
  *   branched    110  120  144  240
- * At radius 0 the predicated program issues all its groups, the never-run
- * off arm among them; the branched one issues 79 at every N (the 73
- * groups outside the off arm and the six control groups: the then arm is
- * skipped by its branch).
- * Logged per program and form: best, 3D busy and TA busy per frame. Every
- * sub-run must draw N = 0's predicated picture. Read against 193: if the
- * branched rows are flat in N, the skipped arm costs nothing and the
- * crossover is where N predicated-off groups cost more than the six.
+ * Each program is drawn at scissorRadius 0 (the arm off) and 4 (the arm
+ * taken: its steps are the identity), 16 sub-runs in all. Groups issued
+ * (the host byte model):
+ *   N                        0    8   32  128
+ *   predicated, either       104  114  138  234   (every group)
+ *   branched, radius 0        79   79   79   79   (the then arm skipped)
+ *   branched, radius 4        87   97  121  217   (the else arm's 23 skipped)
+ * Logged per program, form and radius: best, 3D busy and TA busy per
+ * frame; radius 0 in the line the first run (97ba03d4, 2026-10-06) logged,
+ * "ifbranch <i> <form>: off arm ...", radius 4 as "ifbranch <i> <form> on:
+ * taken arm ...". At radius 0 every sub-run must draw N = 0's predicated
+ * picture, at radius 4 N = 0's predicated radius-4 picture. The first run:
+ * the branched rows flat in N (55.34 ms), +0.78 ms at N = 0, so for this
+ * program a branch wins past about 7 steps (a never-run arm of about 38
+ * groups); radius 4 asks what the branch costs where the arm runs.
  * ------------------------------------------------------------------------- */
 static int case_ifbranch(void)
 {
-	enum { W = 1024, H = 600, OVER = 16, REPS = 5, PROGS = 4, FORMS = 2 };
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5, PROGS = 4, FORMS = 2, ARMS = 2 };
 	struct fvg_vertex { float xy[2]; float uv[2]; };
 	static struct fvg_vertex quads[OVER * 6];
 	static const float xs[6] = { 0, W, W, 0, W, 0 }, ys[6] = { 0, 0, H, 0, H, H };
@@ -16589,7 +16596,9 @@ static int case_ifbranch(void)
 		{ GL_TEST_IF_BRANCH, "branch" },
 	};
 	float frag[56] = { 0 };
-	uint32_t got[PROGS][FORMS];
+	/* scissorRadius: 0 never runs the arm the steps grow, 4 runs it */
+	static const float radius[ARMS] = { 0.0f, 4.0f };
+	uint32_t got[PROGS][FORMS][ARMS];
 	GLuint tex, fbo, vbo, vs;
 	bool ok = true;
 
@@ -16629,8 +16638,6 @@ static int case_ifbranch(void)
 		for (int f = 0; f < FORMS; f++) {
 			GLuint fs, prog;
 			GLint linked = 0;
-			uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
-			uint8_t px[4];
 
 			/* read when the source compiles; the record keeps it for
 			 * the blend variant the first draw compiles */
@@ -16652,31 +16659,45 @@ static int case_ifbranch(void)
 				return -1;
 			glUseProgram(prog);
 			glUniform2f(glGetUniformLocation(prog, "viewSize"), (float)W, (float)H);
-			glUniform4fv(glGetUniformLocation(prog, "frag"), 14, frag);
 			glBindBuffer(GL_ARRAY_BUFFER, vbo);
 			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)0);
 			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)8);
 			glEnableVertexAttribArray(0);
 			glEnableVertexAttribArray(1);
-			for (int r = 0; r < REPS + 1; r++) {
-				glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-				glClear(GL_COLOR_BUFFER_BIT);
-				if (r == 1)
-					gl_test_perf_read(pc0);
-				t0 = now_ms();
-				glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
-				glFinish();
-				if (r != 0 && now_ms() - t0 < best)
-					best = now_ms() - t0;
+			for (int a = 0; a < ARMS; a++) {
+				uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu, busy3d, busyta;
+				uint8_t px[4];
+
+				frag[12 * 4 + 3] = radius[a]; /* scissorRadius */
+				glUniform4fv(glGetUniformLocation(prog, "frag"), 14, frag);
+				for (int r = 0; r < REPS + 1; r++) {
+					glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+					glClear(GL_COLOR_BUFFER_BIT);
+					if (r == 1)
+						gl_test_perf_read(pc0);
+					t0 = now_ms();
+					glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+					glFinish();
+					if (r != 0 && now_ms() - t0 < best)
+						best = now_ms() - t0;
+				}
+				gl_test_perf_read(pc1);
+				busy3d = (pc1[1] - pc0[1]) / 800u / REPS;
+				busyta = (pc1[0] - pc0[0]) / 800u / REPS;
+				/* radius 0: the 97ba03d4 record's line, unchanged */
+				if (a == 0)
+					pr_info("gl_test: ifbranch %d %s: off arm +%d groups: best %u ms; per frame 3D busy %u us, TA busy %u us\n",
+						p, form[f].name, prog_src[p].n, best, busy3d, busyta);
+				else
+					pr_info("gl_test: ifbranch %d %s on: taken arm +%d groups: best %u ms; per frame 3D busy %u us, TA busy %u us\n",
+						p, form[f].name, prog_src[p].n, best, busy3d, busyta);
+				glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+				got[p][f][a] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 |
+					       (uint32_t)px[3] << 24;
 			}
-			gl_test_perf_read(pc1);
+			frag[12 * 4 + 3] = 0.0f;
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(1);
-			pr_info("gl_test: ifbranch %d %s: off arm +%d groups: best %u ms; per frame 3D busy %u us, TA busy %u us\n",
-				p, form[f].name, prog_src[p].n, best, (pc1[1] - pc0[1]) / 800u / REPS,
-				(pc1[0] - pc0[0]) / 800u / REPS);
-			glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-			got[p][f] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 | (uint32_t)px[3] << 24;
 			glDeleteProgram(prog);
 			glDeleteShader(fs);
 		}
@@ -16684,16 +16705,22 @@ static int case_ifbranch(void)
 	glDisable(GL_BLEND);
 	if (!check_gl_error("ifbranch"))
 		return -1;
-	pr_info("gl_test: ifbranch pixels: %08x %08x %08x %08x %08x %08x %08x %08x\n", got[0][0], got[0][1], got[1][0],
-		got[1][1], got[2][0], got[2][1], got[3][0], got[3][1]);
-	/* the arm never runs, so every program and form draws N = 0's
-	 * predicated picture: innerCol's red 0.3 under the blend, 16 layers */
-	for (int p = 0; p < PROGS; p++)
-		for (int f = 0; f < FORMS; f++)
-			if (p != 0 || f != 0)
-				ok &= expect_int("every program and form draws N = 0's predicated picture",
-						 got[p][f] == got[0][0], 1);
-	ok &= expect_int("the blend stacks the layers (red past 0x4c)", (got[0][0] & 0xff) > 0x4c, 1);
+	pr_info("gl_test: ifbranch pixels: %08x %08x %08x %08x %08x %08x %08x %08x\n", got[0][0][0], got[0][1][0],
+		got[1][0][0], got[1][1][0], got[2][0][0], got[2][1][0], got[3][0][0], got[3][1][0]);
+	pr_info("gl_test: ifbranch pixels on: %08x %08x %08x %08x %08x %08x %08x %08x\n", got[0][0][1], got[0][1][1],
+		got[1][0][1], got[1][1][1], got[2][0][1], got[2][1][1], got[3][0][1], got[3][1][1]);
+	/* Radius 0: the arm never runs, so every program and form draws N = 0's
+	 * predicated picture: innerCol's red 0.3 under the blend, 16 layers.
+	 * Radius 4: the arm runs, its steps the identity, so every program and
+	 * form draws N = 0's predicated radius-4 picture. */
+	for (int a = 0; a < ARMS; a++)
+		for (int p = 0; p < PROGS; p++)
+			for (int f = 0; f < FORMS; f++)
+				if (p != 0 || f != 0)
+					ok &= expect_int(a == 0 ? "every program and form draws N = 0's predicated picture"
+								: "with the arm taken, every program and form draws N = 0's",
+							 got[p][f][a] == got[0][0][a], 1);
+	ok &= expect_int("the blend stacks the layers (red past 0x4c)", (got[0][0][0] & 0xff) > 0x4c, 1);
 	glDeleteShader(vs);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glDeleteFramebuffers(1, &fbo);

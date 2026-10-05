@@ -104,8 +104,9 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
      35.8 ms (91144 - 55338 us). `fill_color`'s own scissor arm (31 groups)
      therefore stays predicated, which is the default.
    - Still open: the branched form's cost when the arm IS taken (radius > 0),
-     which the compiler needs before it can choose by arm size (gl_test 195
-     is being extended for it), and the choice rule in the compiler.
+     which the compiler needs before it can choose by arm size, and the
+     choice rule in the compiler. 195 now times the taken arm too
+     (scissorRadius 4, 16 sub-runs); its board run is pending.
 2. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.

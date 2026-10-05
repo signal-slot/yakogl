@@ -767,7 +767,8 @@ Host evidence (`tests/usc_limits.rs`):
   offsets differ); the branches land on the `cndef` and the `cndend`; the
   byte model gives the predicated pixel at radius 0 and 4, pco's branched
   program the same, the branches taken the way the radius says; at radius
-  0 the branched program issues 79 groups at every N.
+  0 the branched program issues 79 groups at every N, at radius 4 87, 97,
+  121, 217 (the else arm's 23 skipped), the predicated one all of its.
 - The survey (`what_the_usc_path_asks...`) compiles every source whose
   program has such an `if` again branched and requires its own verdict
   unchanged: 94 programs (42 vertex), 168 `if`s, every group attested,

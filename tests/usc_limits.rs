@@ -4368,9 +4368,17 @@ fn pco_no_pred_cf() -> Vec<(String, String, u16, Vec<u8>)> {
 /// - in the byte model, at radius 0 (the then arm skipped, the else arm
 ///   run) and 4 (the other way), ours branched gives ours predicated's
 ///   pixel and pco's branched program the same, with the two branches taken
-///   the way the radius says.
+///   the way the radius says; the pixel is N = 0's at every N (one layer:
+///   0xff00004d at radius 0, 0xff000014 at 4); the predicated program
+///   issues all its groups, the branched one 79 at radius 0 (the then arm
+///   skipped) and 87, 97, 121, 217 at radius 4 (the else arm's 23 skipped,
+///   the taken arm and the six issued) -- gl_test 195's sub-runs.
 #[test]
 fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
+    /* one layer of the blend over opaque black, as gl_test 193's test
+     * computes them: radius 0 (innerCol's red 0.3) and 4 (the arm's mask) */
+    const RADIUS0_PIXEL: u32 = 0xff00_004d;
+    const RADIUS4_PIXEL: u32 = 0xff00_0014;
     use yakogl::shaderc::online::powervr::cf::{branch_none_active, cnd, Cnd};
     use yakogl::shaderc::online::powervr::operands::{dsts, srcs};
     use yakogl::shaderc::*;
@@ -4415,6 +4423,7 @@ fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
         let row = format!("{{ {n}, \"{file}\", {fs} }},");
         assert!(case.contains(&row), "case 195 runs {file}: {row}");
     }
+    assert!(case.contains("radius[ARMS] = { 0.0f, 4.0f };"), "case 195 draws each at radius 0 and 4");
     for form in ["{ GL_TEST_IF_PREDICATE, \"predicate\" }", "{ GL_TEST_IF_BRANCH, \"branch\" }"] {
         assert!(case.contains(form), "case 195 compiles each program {form}");
     }
@@ -4537,6 +4546,7 @@ fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
                 let _ = usc_exec::take_skips();
                 let want = run_binary(&pimg, &offarm_inputs(prow, &prec, radius), true).expect("ours predicated runs");
                 assert!(usc_exec::take_skips().is_empty(), "{file}: predicated, nothing skipped");
+                assert_eq!(usc_exec::last_steps(), op.len(), "{file}, radius {radius}: predicated issues every group");
                 let got = run_binary(&bimg, &offarm_inputs(brow, &brec, radius), true).expect("ours branched runs");
                 assert_eq!(usc_exec::take_skips(), skips(&ob, &six, taken), "{file}, radius {radius}: our branches");
                 assert_eq!(got, want, "{file}, radius {radius}: branched gives the predicated pixel");
@@ -4545,9 +4555,21 @@ fn a_predicable_if_branches_as_pcos_no_pred_cf_does() {
                 let issued = usc_exec::last_steps();
                 let skipped = if radius == 0.0 { six[6] } else { six[7] };
                 assert_eq!(issued, ob.len() - skipped, "{file}, radius {radius}: groups the branched program issues");
-                if radius == 0.0 {
-                    assert_eq!(issued, 79, "{file}: radius 0 issues 79 branched groups at every N");
-                }
+                /* radius 0: the 73 groups outside the off arm and the six;
+                 * radius 4: the taken arm too, the else arm's 23 skipped */
+                let want_issued = if radius == 0.0 { 79 } else { ours_b - 23 };
+                assert_eq!(issued, want_issued, "{file}, radius {radius}: groups the branched program issues");
+                /* the steps are the identity: N = 0's pixel at every N */
+                let colour = *want.get(&0).expect("a colour");
+                println!(
+                    "  {file} radius {radius}: pixel {colour:#010x}, issued predicated {} branched {issued}",
+                    op.len()
+                );
+                assert_eq!(
+                    colour,
+                    if radius == 0.0 { RADIUS0_PIXEL } else { RADIUS4_PIXEL },
+                    "{file}, radius {radius}"
+                );
                 let theirs = run_binary(pimage, &offarm_inputs(trow, &row.shader, radius), false).expect("pco's runs");
                 assert_eq!(
                     usc_exec::take_skips(),
