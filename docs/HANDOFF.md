@@ -18,45 +18,67 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-Results are from main `39bd6983`. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
+Results are from main `81c53c61`, except the Pi 4. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
 `docs/standalone-boot.md` has the procedure.
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
-| AM62P | 47 / 47, 0 resets | pass | 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx |
-| i.MX8MP | 45 / 47 (first failure case 16; the second is not named in the record) | not run on `39bd6983` | not run on `39bd6983` |
-| Pi 4 | 12 / 12 on `afa12e9b` (not run on `39bd6983`) | not run on `39bd6983` | not run on `39bd6983` |
+| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | not run on `81c53c61`; pass on `39bd6983` | not run on `81c53c61`; 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx on `39bd6983` |
+| i.MX8MP | fails: first failure case 16 check 255 (4x MSAA), the same as on `39bd6983`, where it was 45 / 47 | not run on `81c53c61` | not run on `81c53c61` |
+| Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
 
-AM62P, the fill shader from femtovg (`fill_color`):
+Slint and cluster are not run on `81c53c61`: their images need a Rust
+nightly with rust-src and the Slint no_std workspace, which the build host
+does not have yet.
 
-| Measurement | Run-time compiler (`39bd6983`) | Mesa table (`afa12e9b`) |
-|---|---|---|
-| gl_test case 39, perf 2 (16 full-screen quads), 3D busy | 81.1 ms | 83.4 ms |
-| case 186 arm 0 | 80.9 ms | 83.4 ms |
-| case 186 arm 1 | 55.3 ms | 54.9 ms |
-| case 186 arm 2 | 69.8 ms | 71.6 ms |
+AM62P, the fill shader from femtovg (`fill_color`), 3D busy per frame:
 
-The table column comes from an earlier image. No table image of `39bd6983` was run.
+| Measurement | Run-time compiler `81c53c61` | `39bd6983` | Mesa table (`afa12e9b`) |
+|---|---|---|---|
+| gl_test case 39, perf 2 (16 full-screen quads) | 77.19 ms | 81.1 ms | 83.4 ms |
+| case 186 arm 0 (blend) | 76.98 ms | 80.9 ms | 83.4 ms |
+| case 186 arm 1 (nodiscard, blend) | 54.56 ms | 55.3 ms | 54.9 ms |
+| case 186 arm 2 (blend off) | 68.93 ms | 69.8 ms | 71.6 ms |
+| case 186 arm 3 (nodiscard, blend off) | 44.00 ms | | |
+| case 187 arms 0 / 1 / 2 / 3 | 81.02 / 59.05 / 72.52 / 47.94 ms | | |
+
+The table column comes from an earlier image. No table image of `81c53c61`
+was run.
+
+The offline PowerVR table (`src/shaderc/blobs.rs`) records, since `0fe778f6`,
+the toolchain that reproduces it byte for byte: a `pco_shc` built by
+`tools/pco_shc/build_pco_shc.sh` with the patched usclib
+(`// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514`). That commit also
+adds `matattr`'s 20 rows and re-keys `texsize.frag` to its current text; it
+has not run on a board yet (open work 2).
 
 ## Open work, in order
 
-1. **Land the join removal**: branch `work/pvr-blend-factor-once`, commit
-   `c685c549`. When both arms of a predicated `if` compute a value, each arm
-   writes one register, as Mesa's pco does, so no select follows the `if`.
-   It adds gl_test 192 `predlive`. The full gate is clean (96 ok, 0 failed,
-   0 gaps). It has not run on a board.
-   Host count for `fill_color.nodiscard`: 105 -> 104 groups, with 69 groups
-   on the executed path (the table also has 69).
-   Board run after landing:
-   - AM62P: GT, case 39, cases 186 + 187, Slint, cluster;
-   - i.MX8MP: GT.
-2. **Does a predicated-off instruction group cost time?** Measure it on the
+1. **Slint and cluster on the AM62P for the join removal.** The join
+   removal landed as `81c53c61`: when both arms of a predicated `if`
+   compute a value, each arm writes one register, as Mesa's pco does, so no
+   select follows the `if`. It adds gl_test 192 `predlive`. The full gate
+   is clean (96 ok, 0 failed, 0 gaps). Board results on `81c53c61`: AM62P
+   gl_test 48 / 48, case 39 and cases 186 + 187 pass, i.MX8MP gl_test
+   unchanged (first failure case 16). What is left of its board run is
+   Slint and cluster on the AM62P; they wait for a Rust nightly with
+   rust-src and the Slint no_std workspace on the build host.
+2. **Board run for the table that records its toolchain (`0fe778f6`).** The
+   table gl_test image (`CONFIG_YAKOGL_SHADERC_OFFLINE=y`) on the AM62P: the
+   full set, with case 63 `matattr` served from the table for the first time
+   and the `texsize.frag` rows under their corrected key.
+   `tools/cts/RESULTS.md` ("the PowerVR table lags its generator's input
+   list") promised this run with the rows; it shows that the regenerated
+   table is the same table on silicon.
+3. **Does a predicated-off instruction group cost time?** Measure it on the
    AM62P. Grow the off arm of the same program by N groups, once compiled by
    our compiler and once from the table, and read the 3D busy time.
-   An old gap of about 5.5 ms in case 186 arm 1 (on `afa12e9b`) is not
-   explained by the group counts. Re-measure it on main first: the
-   `39bd6983` numbers above may have closed it.
-3. **Compile shaders at build time with our own compiler.** Shaders known
+   The old gap of about 5.5 ms in case 186 arm 1 is closed: on `81c53c61`
+   it is 54.56 ms against the table's 54.9 ms. What is left is only whether
+   a predicated-off group costs time. gl_test 193 `offarm` (branch
+   `work/pvr-offarm-cost`, commit `a84a285d`, not landed) is the prepared
+   measurement.
+4. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
@@ -64,7 +86,7 @@ The table column comes from an earlier image. No table image of `39bd6983` was r
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
    offline and remote go away.
-4. **Design clean-up**:
+5. **Design clean-up**:
    - `DESIGN.md` and `docs/` describe the current design, not its history.
    - About 50 debug and experiment globals in product code are removed or
      moved out.
@@ -72,13 +94,11 @@ The table column comes from an earlier image. No table image of `39bd6983` was r
    - The bare-metal claim is made true, or it is removed.
    - The `SAFEUI_*` and `powervr-bxs` names are removed.
    - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
-5. **Known defects**, each with a GitHub issue:
+6. **Known defects**, each with a GitHub issue:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found);
    - i.MX8MP case 16 (4x MSAA) fails;
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases.
-6. `tools/cts/STATUS.md` was last updated on 2026-10-04 and needs to catch
-   up with the results above.
 
 ## How to work here
 
