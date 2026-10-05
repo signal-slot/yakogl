@@ -433,6 +433,14 @@
  *               read back. A measurement (like 39): the arms decide whether
  *               the online fill_color's 56 back-to-back pairs (the table's
  *               48) are worth a scheduler. All three GPUs; not in the set
+ * 186 fcsplit   case 39's fill_color split by feature: fill_color and its twin
+ *               without the discard (femtovg/fill_color.nodiscard.frag),
+ *               each with femtovg's blend and with blend off, 16 full-screen
+ *               quads into 1024x600 per arm, 3D busy logged; each pair must
+ *               draw the same picture. Run in an online image and in a table
+ *               image, the ratio per arm says which feature carries the
+ *               online program's 22% (184 and 185: not the group count, not
+ *               the kind). A measurement; all three GPUs, not in the set
  * 185 kindcost  the PowerVR's cost per instruction group by kind, the next
  *               fill_color measurement after 184: arms of one kind each at
  *               fixed counts (host count in the case's comment): fmul,
@@ -7704,7 +7712,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -15744,6 +15752,144 @@ static int case_kindcost(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 186: case 39's fill_color split by feature (fcsplit) ----------
+ *
+ * 184 and 185 showed a group costs about the same whatever its dependency
+ * distance or kind, so the online fill_color (136 groups) should not be
+ * slower than the table's (140), yet it is (101.6 against 83.4 ms in case
+ * 39). What those cases lack and fill_color has: the discard, femtovg's
+ * blend (the ordered tail reading the pixel), the varying iteration and
+ * the uniform block. This splits two of them off with programs the table
+ * holds rows for: fill_color and fill_color.nodiscard (the same source
+ * without its `discard`), each blended (key 0x98661, case 39's) and with
+ * blend off (key 0). Uniforms as case 39's: strokeThr -1, so the discard
+ * never fires, and both programs draw the same picture.
+ * Read in an online image against a table image, per arm:
+ *   the ratio falls to about 1 without the discard: the discard path;
+ *   it falls with blend off: the ordered tail / the pixel read;
+ *   it stays about 1.2 in all four: the common body (the next split is
+ *   inside it).
+ * ------------------------------------------------------------------------- */
+static int case_fcsplit(void)
+{
+	enum { W = 1024, H = 600, OVER = 16, REPS = 5, ARMS = 4 };
+	struct fvg_vertex { float xy[2]; float uv[2]; };
+	static struct fvg_vertex quads[OVER * 6];
+	static const float xs[6] = { 0, W, W, 0, W, 0 }, ys[6] = { 0, 0, H, 0, H, H };
+	static const struct {
+		const char *name;
+		bool nodiscard, blend;
+	} arm[ARMS] = {
+		{ "fill_color, femtovg's blend", false, true },
+		{ "fill_color.nodiscard, femtovg's blend", true, true },
+		{ "fill_color, blend off", false, false },
+		{ "fill_color.nodiscard, blend off", true, false },
+	};
+	float frag[56] = { 0 };
+	uint32_t got[ARMS];
+	GLuint tex, fbo, vbo, vs;
+	bool ok = true;
+
+	for (int i = 0; i < OVER * 6; i++) {
+		quads[i].xy[0] = xs[i % 6];
+		quads[i].xy[1] = ys[i % 6];
+		quads[i].uv[0] = 0.5f;
+		quads[i].uv[1] = 1.0f;
+	}
+	/* case 39's uniforms: innerCol translucent red, the scissor open, the
+	 * stroke at full coverage, strokeThr -1 (the discard never fires) */
+	frag[6 * 4 + 0] = 0.3f; frag[6 * 4 + 3] = 0.5f;
+	frag[8 * 4 + 0] = 1.0f; frag[8 * 4 + 1] = 1.0f;
+	frag[8 * 4 + 2] = 1.0f; frag[8 * 4 + 3] = 1.0f;
+	frag[10 * 4 + 0] = 1.0f;
+	frag[10 * 4 + 1] = -1.0f;
+	frag[10 * 4 + 3] = 5.0f;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: fcsplit: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, W, H);
+	glDisable(GL_DEPTH_TEST);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	vbo = upload_vbo(quads, sizeof(quads));
+	vs = compile(GL_VERTEX_SHADER, gl_test_fvg_main_vs_src);
+	if (!vs)
+		return -1;
+	for (int a = 0; a < ARMS; a++) {
+		GLuint fs = compile(GL_FRAGMENT_SHADER,
+				    arm[a].nodiscard ? gl_test_fvg_fill_color_nodiscard_fs_src : gl_test_fvg_fill_color_fs_src);
+		GLuint prog = glCreateProgram();
+		GLint linked = 0;
+		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
+		uint8_t px[4];
+
+		if (!fs)
+			return -1;
+		glAttachShader(prog, vs);
+		glAttachShader(prog, fs);
+		glBindAttribLocation(prog, 0, "vertex");
+		glBindAttribLocation(prog, 1, "tcoord");
+		glLinkProgram(prog);
+		glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+		if (!linked)
+			return -1;
+		glUseProgram(prog);
+		glUniform2f(glGetUniformLocation(prog, "viewSize"), (float)W, (float)H);
+		glUniform4fv(glGetUniformLocation(prog, "frag"), 14, frag);
+		if (arm[a].blend)
+			glEnable(GL_BLEND);
+		else
+			glDisable(GL_BLEND);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)0);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(struct fvg_vertex), (const void *)8);
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		for (int r = 0; r < REPS + 1; r++) {
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			if (r == 1)
+				gl_test_perf_read(pc0);
+			t0 = now_ms();
+			glDrawArrays(GL_TRIANGLES, 0, OVER * 6);
+			glFinish();
+			if (r != 0 && now_ms() - t0 < best)
+				best = now_ms() - t0;
+		}
+		gl_test_perf_read(pc1);
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		pr_info("gl_test: fcsplit %d: %s: best %u ms; per frame 3D busy %u us, TA busy %u us\n", a, arm[a].name,
+			best, (pc1[1] - pc0[1]) / 800u / REPS, (pc1[0] - pc0[0]) / 800u / REPS);
+		glReadPixels(W / 2, H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		got[a] = (uint32_t)px[0] | (uint32_t)px[1] << 8 | (uint32_t)px[2] << 16 | (uint32_t)px[3] << 24;
+		glDeleteProgram(prog);
+		glDeleteShader(fs);
+	}
+	glDisable(GL_BLEND);
+	if (!check_gl_error("fcsplit"))
+		return -1;
+	pr_info("gl_test: fcsplit pixels: %08x %08x %08x %08x\n", got[0], got[1], got[2], got[3]);
+	/* the discard never fires, so each pair draws one picture; blend off
+	 * leaves innerCol's red, 0.3 (0x4c), and the blend stacks 16 of them */
+	ok &= expect_int("fill_color and its nodiscard twin agree, blended", got[0] == got[1], 1);
+	ok &= expect_int("fill_color and its nodiscard twin agree, blend off", got[2] == got[3], 1);
+	ok &= expect_int("blend off: innerCol's red (0x4b..0x4d)", (got[2] & 0xff) >= 0x4b && (got[2] & 0xff) <= 0x4d, 1);
+	ok &= expect_int("the blend stacks the layers (red past blend off's)", (got[0] & 0xff) > (got[2] & 0xff), 1);
+	glDeleteShader(vs);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -18753,6 +18899,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 183: rc = case_unipad(); break;
 	case 184: rc = case_depchain(); break;
 	case 185: rc = case_kindcost(); break;
+	case 186: rc = case_fcsplit(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

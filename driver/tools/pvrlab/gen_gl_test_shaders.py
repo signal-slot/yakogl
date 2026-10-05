@@ -145,6 +145,8 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                  'Scalar operations applied to vectors (case 77).'),
                 ('gl_test_es100_tex_vs_src', 'es100/textured.vert'), ('gl_test_es100_tex_fs_src', 'es100/textured.frag'),
                 ('gl_test_fvg_main_vs_src', 'femtovg/main.vert'), ('gl_test_fvg_fill_color_fs_src', 'femtovg/fill_color.frag'),
+                ('gl_test_fvg_fill_color_nodiscard_fs_src', 'femtovg/fill_color.nodiscard.frag',
+                 'fill_color without its discard: case 186 times it against fill_color, table and online.'),
                 ('gl_test_fvg_conic_fs_src', 'femtovg/fill_gradient_conic.frag'),
                 ('gl_test_fvg_gradient_fs_src', 'femtovg/fill_gradient.frag'),
                 ('gl_test_fvg_imgconic_fs_src', 'femtovg/fill_image_gradient_conic.frag'),
