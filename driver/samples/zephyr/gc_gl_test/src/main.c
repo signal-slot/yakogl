@@ -362,8 +362,9 @@ int main(void)
 		extern void gc_debug_set_msaa(int on);
 
 		/* the 4x resolve and the EGL 4x config, for the measurement */
-		gc_debug_set_msaa(1);
-		LOG_INF("gc_gl_test: gc_debug_msaa=1 (4x MSAA and its EGL config on)");
+		gc_debug_set_msaa(CONFIG_GC_GL_TEST_MSAA_BITS);
+		LOG_INF("gc_gl_test: gc_debug_msaa=%d (4x MSAA and its EGL config on)",
+			CONFIG_GC_GL_TEST_MSAA_BITS);
 	}
 #endif
 #ifdef CONFIG_GC_GL_TEST_UNIIDX_NO_CLAMP

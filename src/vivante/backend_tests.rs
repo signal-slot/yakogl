@@ -4004,3 +4004,46 @@ fn a_frame_flushes_and_stalls_as_etnaviv_does() {
     want.extend_from_slice(&per_draw); /* the draw */
     assert_eq!(got, want, "the clear, then the draw, each behind its flushes; nothing after the last draw");
 }
+
+/// gc_debug_msaa bit 3 (9): the 4x draw's viewport and clip are in the
+/// scratch surface's samples, twice the target on each axis. Without it they
+/// stay in target pixels (the board has not said which this core wants, issue
+/// #8); a single-sampled draw is never scaled.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    let single = rig.submit(&rig.draw(3));
+
+    gc_debug_set_msaa(1);
+    let plain = rig.submit(&d);
+    gc_debug_set_msaa(9);
+    let scaled = rig.submit(&d);
+    let scaled_single = rig.submit(&rig.draw(3));
+    gc_debug_set_msaa(0);
+
+    let scaled_regs = [
+        GC_PA_VIEWPORT_SCALE_X,
+        GC_PA_VIEWPORT_SCALE_Y,
+        GC_PA_VIEWPORT_OFFSET_X,
+        GC_PA_VIEWPORT_OFFSET_Y,
+        GC_SE_SCISSOR_RIGHT,
+        GC_SE_SCISSOR_BOTTOM,
+        GC_SE_CLIP_RIGHT,
+        GC_SE_CLIP_BOTTOM,
+    ];
+    for r in scaled_regs {
+        assert_eq!(plain.reg(r), single.reg(r), "bit 0 alone leaves register {r:#x} in target pixels");
+        assert_eq!(scaled_single.reg(r), single.reg(r), "a single-sampled draw is never scaled ({r:#x})");
+    }
+    for r in [GC_PA_VIEWPORT_SCALE_X, GC_PA_VIEWPORT_SCALE_Y, GC_PA_VIEWPORT_OFFSET_X, GC_PA_VIEWPORT_OFFSET_Y] {
+        assert_eq!(scaled.reg(r) as i32, 2 * plain.reg(r) as i32, "viewport register {r:#x} is twice as large");
+    }
+    for r in [GC_SE_CLIP_RIGHT, GC_SE_CLIP_BOTTOM] {
+        let (p, s) = (plain.reg(r) - GC_SE_CLIP_MARGIN, scaled.reg(r) - GC_SE_CLIP_MARGIN);
+        assert_eq!(s, 2 * p, "clip register {r:#x} is twice as far from the origin");
+    }
+    assert_eq!(scaled.reg(GC_SE_SCISSOR_LEFT), plain.reg(GC_SE_SCISSOR_LEFT), "the origin stays at 0");
+}

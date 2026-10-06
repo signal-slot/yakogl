@@ -453,6 +453,37 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
     ms_scale(gl) > 1 && msaa_bits() & 2 != 0
 }
 
+/// The factor the window-space state (viewport, scissor, clip) is scaled by
+/// on a 4x draw: 2 with `gc_debug_msaa` bit 3 (a value of 8), else 1. The
+/// scratch surface is twice the target on each axis and the rasteriser works
+/// in its samples, so a viewport, scissor and clip left in target pixels
+/// cover only the scratch's top-left quarter: a clear fills that quarter and
+/// the triangle lands in it, which the resolve then shows as a picture a
+/// quarter of its size in the corner (gl_test 16's "x4 inside" reads the
+/// clear colour). etnaviv's msaa_xscale / msaa_yscale (etnaviv_state.c,
+/// from memory; not in third_party) does this scaling; whether this core
+/// wants it from the driver is the board's to say (VIVANTE_NOTES.md,
+/// "4x MSAA, issue #8").
+fn vp_scale(gl: &GlesDraw) -> u32 {
+    if ms_scale(gl) > 1 && msaa_bits() & 8 != 0 {
+        ms_scale(gl)
+    } else {
+        1
+    }
+}
+
+/// `vp_scale` applied to the viewport's half sizes and centre.
+fn vp_scaled(gl: &GlesDraw, half_w: f32, half_h: f32, cx: f32, cy: f32) -> (f32, f32, f32, f32) {
+    let k = vp_scale(gl) as f32;
+    (half_w * k, half_h * k, cx * k, cy * k)
+}
+
+/// `vp_scale` applied to a clip rectangle [x0, y0, x1, y1].
+fn clip_scaled(gl: &GlesDraw, clip: [i32; 4]) -> [i32; 4] {
+    let k = vp_scale(gl) as i32;
+    clip.map(|v| v * k)
+}
+
 /// What the multisampled scratch surface holds, for the board: `out[0..4]`
 /// = its bytes, how many of its dwords are non-zero, the index of the first
 /// that is and its value. Read after the frame has finished (the resolve
@@ -1134,6 +1165,7 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
         cy = gl.target_h as f32 - cy;
         half_h = -half_h;
     }
+    let (half_w, half_h, cx, cy) = vp_scaled(gl, half_w, half_h, cx, cy);
     c.state_fixp(GC_PA_VIEWPORT_SCALE_X, f2fixp(half_w));
     c.state_fixp(GC_PA_VIEWPORT_SCALE_Y, f2fixp(half_h));
     /* The GPU maps clip z 0..1 to the depth range, GL maps -1..1: fold the
@@ -1216,6 +1248,7 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
     c.state(GC_PA_WIDE_LINE_WIDTH1, (gl.line_width * 0.5).to_bits());
 
     let clip = if d.is_clear { clear_clip_rect(gl) } else { clip_rect(gl) };
+    let clip = clip_scaled(gl, clip);
     c.state_fixp(GC_SE_SCISSOR_LEFT, (clip[0] as u32) << 16);
     c.state_fixp(GC_SE_SCISSOR_TOP, (clip[1] as u32) << 16);
     c.state_fixp(GC_SE_SCISSOR_RIGHT, ((clip[2] as u32) << 16) + GC_SE_SCISSOR_MARGIN_RIGHT);

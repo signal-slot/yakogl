@@ -3033,17 +3033,37 @@ static int case_msaa(void)
 
 	if (!eglInitialize(dpy, NULL, NULL))
 		return -1;
-	ok &= expect_int("eglChooseConfig samples 4", eglChooseConfig(dpy, cfg4, &cfg, 1, &n) && n == 1, 1);
-	eglGetConfigAttrib(dpy, cfg, EGL_SAMPLES, &v);
-	ok &= expect_int("config EGL_SAMPLES", v, 4);
-	if (!ok || case_msaa_at(dpy, cfg, 4, &ok) != 0)
-		return -1;
+#if defined(GL_TEST_VIVANTE) || defined(GL_TEST_V3D)
+	/* These two backends offer the 4x config only while their MSAA switch is
+	 * on (vivante::backend::msaa_on, CONFIG_GC_GL_TEST_MSAA; the V3D's
+	 * CONFIG_V3D_GL_TEST_MSAA), off in products and in the default image.
+	 * Without it "eglChooseConfig samples 4" can only read 0, which says
+	 * nothing about the draw (#8's "check 255" is the record's none marker,
+	 * not a check): the case runs its 1x half and is skipped (neither a
+	 * pass nor a failure), as case 145 is. The PowerVR always offers 4x,
+	 * so there a missing config stays a failure. */
+	const bool have_4x = eglChooseConfig(dpy, cfg4, &cfg, 1, &n) && n == 1;
+#else
+	const bool have_4x = true;
+#endif
+
+	if (have_4x) {
+		ok &= expect_int("eglChooseConfig samples 4", eglChooseConfig(dpy, cfg4, &cfg, 1, &n) && n == 1, 1);
+		eglGetConfigAttrib(dpy, cfg, EGL_SAMPLES, &v);
+		ok &= expect_int("config EGL_SAMPLES", v, 4);
+		if (!ok || case_msaa_at(dpy, cfg, 4, &ok) != 0)
+			return -1;
+	}
 	ok &= expect_int("eglChooseConfig default", eglChooseConfig(dpy, cfg1, &cfg, 1, &n) && n == 1, 1);
 	eglGetConfigAttrib(dpy, cfg, EGL_SAMPLES, &v);
 	ok &= expect_int("default config is single-sampled", v, 0);
 	if (!ok || case_msaa_at(dpy, cfg, 1, &ok) != 0)
 		return -1;
 	eglTerminate(dpy);
+	if (!have_4x) {
+		pr_info("gl_test: case 16 msaa: 1x half done; SKIP the 4x half (no 4x EGL config offered)\n");
+		return ok ? -3 : -1;
+	}
 	return ok ? 0 : -1;
 }
 
@@ -19548,7 +19568,11 @@ static int run_case(int c, int pretransform, int debug)
 	case 13: rc = case_zls(); break;
 	case 14: rc = case_api(); break;
 	case 15: rc = case_egl(); break;
-	case 16: rc = case_msaa(); break;
+	case 16:
+		rc = case_msaa();
+		if (rc == -3)
+			return -3; /* skipped by name: the 1x half passed, no 4x config in this build */
+		break;
 	case 17: rc = case_ctx2(); break;
 	case 18: rc = case_image(); break;
 	case 19: rc = case_es100(); break;
