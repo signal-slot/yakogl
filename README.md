@@ -67,7 +67,13 @@ Two back ends, chosen at build time:
 - **online** (the default everywhere but the bare-metal make build): our own
   `no_std` GLSL ES compiler running on the board (`src/shaderc/online/`,
   feature `shaderc-online`; Kconfig `YAKOGL_SHADERC_ONLINE`, CMake
-  `YAKOGL_SHADERC=online`).
+  `YAKOGL_SHADERC=online`). In front of it, optionally, the **precompiled
+  tier**: the source list (`tools/shaders/precompiled.list`) compiled by the
+  same compiler while the image is built (`yakogl-precompile`), looked up by
+  the compiler's own record key before anything compiles; a hit runs no
+  compile (feature `precompiled-shaders`; Kconfig `YAKOGL_PRECOMPILED_SHADERS`
+  and `YAKOGL_PRECOMPILED_APPS`, CMake `YAKOGL_PRECOMPILED_SHADERS` and
+  `YAKOGL_PRECOMPILED_APPS`).
 - **offline**: a table of shaders compiled on the host, looked up by the SHA-256 of
   the GLSL text (`src/shaderc/offline.rs`). Its only table today is the Mesa
   reference (`tests/reference/`, what Mesa's pco_shc / etna_shc made of
@@ -173,6 +179,8 @@ has the make variables in parentheses):
 |---|---|---|
 | `YAKOGL_OSAL` | `linux` (Zephyr and make: fixed, `zephyr` / `baremetal`) | the OSAL |
 | `YAKOGL_SHADERC` (Zephyr `CONFIG_YAKOGL_SHADERC_ONLINE` / `_OFFLINE`) | `online` (make: the Mesa reference, see `baremetal.mk`) | the shader back end: our compiler, or `offline`, the Mesa reference as the table (measurement images only) |
+| `YAKOGL_PRECOMPILED_SHADERS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_SHADERS`) | `OFF` (`n`) | the precompiled tier in front of the compiler: the build runs `yakogl-precompile` on the source list first and links its table |
+| `YAKOGL_PRECOMPILED_APPS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_APPS`) | empty: the whole list | the list's apps to precompile, e.g. `gl_test_es100`, `femtovg` (Zephyr also `CONFIG_YAKOGL_PRECOMPILED_LIST`, another list) |
 | `YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) | `../src` | the driver repository's `src/` |
 | `YAKOGL_RUST_LINKAGE` (`RUST_LINKAGE`) | `staticlib` | `external`: C parts only (`libyakogl_c.a`), see "Linking" |
 | `YAKOGL_RUST_TARGET` (`RUST_TARGET`) | host / derived; Zephyr and make: `aarch64-unknown-none` | Rust target triple (64-bit only) |

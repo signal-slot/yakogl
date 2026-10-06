@@ -45,6 +45,10 @@ gpu-v3d = ["yakogl/gpu-v3d"]
 # The in-process compiler: no_std, it needs no table, and it is the only back
 # end a Zephyr image can take.
 shaderc-online = ["yakogl/shaderc-online"]
+# The precompiled tier in front of the compiler (the yakogl crate's own
+# feature; capi/yakogl_capi.cmake's PRECOMPILED generates the table and
+# points YAKOGL_PRECOMPILED_TABLE at it).
+precompiled-shaders = ["yakogl/precompiled-shaders"]
 # No table in the image (the yakogl crate's own feature): what a Zephyr build
 # with the in-process compiler passes. Outside the host tests the table is
 # only ever in a build that asks for it, below, so this changes nothing there.

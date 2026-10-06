@@ -79,6 +79,8 @@ fn keep_now() -> usize {
 
 #[test]
 fn the_resource_that_runs_out_is_the_keep_arena_and_whether_it_is_cumulative() {
+    /* this measures the compiler's keep: no precompiled row may answer */
+    yakogl::shaderc::online::precompiled::shc_precompiled_set_enabled(0);
     /* Pass one: the table in its own order, which is what the twin-draw
      * harness does, so the refusal set is reproduced rather than described. */
     let mut refused_oom: Vec<&str> = Vec::new();

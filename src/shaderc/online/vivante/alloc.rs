@@ -651,12 +651,12 @@ std::thread_local! {
 }
 
 #[cfg(feature = "host-test")]
-fn lane_moves_disabled() -> bool {
+pub(crate) fn lane_moves_disabled() -> bool {
     LANE_MOVES_OFF.with(|c| c.get())
 }
 
 #[cfg(not(feature = "host-test"))]
-fn lane_moves_disabled() -> bool {
+pub(crate) fn lane_moves_disabled() -> bool {
     false
 }
 

@@ -295,8 +295,27 @@ impl Plan {
     }
 }
 
-/// The rows a run made, by identity.
-type Made = BTreeMap<drive::Id, Row>;
+/// What a run made: the rows by identity, and every link by its two
+/// shaders' identities (the vertex shader's key, the fragment shader's key
+/// and blend key) to the fragment shader's key after it.
+#[derive(Default)]
+struct Made {
+    rows: BTreeMap<drive::Id, Row>,
+    links: BTreeMap<([u8; 32], [u8; 32], u32), [u8; 32]>,
+}
+
+impl Made {
+    /// Record a link; one recorded before must have come out the same.
+    fn link(&mut self, l: drive::Link) -> Result<(), String> {
+        let k = (l.vs, l.fs, l.fs_blend_key);
+        match self.links.insert(k, l.linked_fs) {
+            Some(had) if had != l.linked_fs => {
+                Err(format!("the link of {} and {} came out two ways", drive::hex(&l.vs[..8]), drive::hex(&l.fs[..8])))
+            }
+            _ => Ok(()),
+        }
+    }
+}
 
 /// Run `job` -- or, with `only`, the part of it that makes one step's
 /// records -- capturing every record into `made` (the first step to make a
@@ -354,7 +373,10 @@ fn run_held(
             take(plan, made, origin(Step::Compile))?;
             /* a program the GL refuses to link: no draw asks it for a variant */
             let (rvs, rfs) = match drive::link(h, plan.text(vs), &vsh, &fsh) {
-                Ok(p) => p,
+                Ok((rvs, rfs, link)) => {
+                    made.link(link)?;
+                    (rvs, rfs)
+                }
                 Err(m) => {
                     refused.push(format!("pair {vs} {fs}: link: {m}"));
                     return Ok(());
@@ -365,7 +387,10 @@ fn run_held(
              * GL refuses (gl::draw::fs_variant_for); the others still come */
             for k in plan.keys(fs, &rfs)?.into_iter().filter(|&k| wants(Step::Variant(k))) {
                 match drive::variant(h, &rvs, &rfs, k) {
-                    Ok(()) => take(plan, made, origin(Step::Variant(k)))?,
+                    Ok(link) => {
+                        made.link(link)?;
+                        take(plan, made, origin(Step::Variant(k)))?
+                    }
                     Err(m) => refused.push(format!("pair {vs} {fs}: variant 0x{k:x}: {m}")),
                 }
             }
@@ -383,6 +408,7 @@ fn take(plan: &Plan, made: &mut Made, origin: (Origin, Step)) -> Result<(), Stri
         return Err(format!("the compiler's cache overflowed ({overflowed} records not indexed)"));
     }
     let mut err = None;
+    let mut new: Vec<(drive::Id, yakogl::shaderc::ShcShader)> = Vec::new();
     yakogl::shaderc::online::backend::each_record(|r| {
         if err.is_some() {
             return;
@@ -398,12 +424,16 @@ fn take(plan: &Plan, made: &mut Made, origin: (Origin, Step)) -> Result<(), Stri
             err = Some(format!("record {} has a source this run did not compile", drive::hex(&r.key)));
             return;
         };
-        let row = Row::of(r, src, origin.clone());
-        match made.get(&id) {
+        let mut row = Row::of(r, src, origin.clone());
+        match made.rows.get(&id) {
             None => {
-                made.insert(id, row);
+                new.push((id, r.shader));
+                made.rows.insert(id, row);
             }
             Some(had) => {
+                /* the sensitivity is asked once per identity (below); `--verify`
+                 * asks it again of the row made alone */
+                row.sensitivity = had.sensitivity;
                 let (x, y) = (table::fingerprint(had, &plan.sources), table::fingerprint(&row, &plan.sources));
                 if x.is_err() || x != y {
                     err = Some(format!("record {} came out of two jobs different", row.ident()));
@@ -411,15 +441,26 @@ fn take(plan: &Plan, made: &mut Made, origin: (Origin, Step)) -> Result<(), Stri
             }
         }
     });
-    err.map_or(Ok(()), Err)
+    if let Some(e) = err {
+        return Err(e);
+    }
+    /* each new row's sampler-state sensitivity, asked of the live record as
+     * a program's first draw asks it (after the walk: the question runs the
+     * front end, which must not run inside the cache's iteration) */
+    for (id, sh) in new {
+        if let Some(row) = made.rows.get_mut(&id) {
+            row.sensitivity = drive::sensitivity(&sh);
+        }
+    }
+    Ok(())
 }
 
 /// The rows in table order, re-indexed onto the sources they use.
 fn finish(plan: &Plan, made: Made) -> (Vec<Row>, Vec<Source>) {
-    let mut used: Vec<usize> = made.values().map(|r| r.source).collect();
+    let mut used: Vec<usize> = made.rows.values().map(|r| r.source).collect();
     used.sort_unstable();
     used.dedup();
-    let mut rows: Vec<Row> = made.into_values().collect();
+    let mut rows: Vec<Row> = made.rows.into_values().collect();
     for r in &mut rows {
         r.source = used.binary_search(&r.source).unwrap_or(usize::MAX);
     }
@@ -440,13 +481,13 @@ fn fresh(plan: &Plan, rows: &[Row], sources: &[Source]) -> Result<Vec<Row>, Stri
             Origin::Pair { vs, fs } => Job::Pair { vs: vs.clone(), fs: fs.clone() },
             Origin::Alone { src } => Job::Alone { src: src.clone() },
         };
-        let mut made = Made::new();
+        let mut made = Made::default();
         let mut refused = Vec::new();
         run(plan, &job, Some((r.stage, *step)), &mut made, &mut refused)?;
         if !refused.is_empty() {
             return Err(format!("{}: made alone, a step was refused: {}", r.ident(), refused.join("; ")));
         }
-        let Some(mut row) = made.remove(&r.id()) else {
+        let Some(mut row) = made.rows.remove(&r.id()) else {
             return Err(format!("{}: made alone, its step made no such record", r.ident()));
         };
         /* the table's numbering of its source, and the origin it is listed with */
@@ -520,6 +561,7 @@ fn check_pin(path: &str, key: &str, value: &str) -> Result<(), String> {
 struct Generated {
     plan: Plan,
     rows: Vec<Row>,
+    links: Vec<yakogl::shaderc::ShcPrecompiledLink>,
     sources: Vec<Source>,
     about: Vec<String>,
     text: String,
@@ -528,13 +570,30 @@ struct Generated {
 /// Make the table `a` asks for (the compiler's regions lent already).
 fn generate(a: &Args, mark: &str) -> Result<Generated, String> {
     let plan = Plan::new(a)?;
-    let mut made = Made::new();
+    let mut made = Made::default();
     let mut refused = Vec::new();
     for job in &plan.jobs {
         run(&plan, job, None, &mut made, &mut refused)?;
     }
     check_refused_steps(a, &refused)?;
+    let links: Vec<yakogl::shaderc::ShcPrecompiledLink> = made
+        .links
+        .iter()
+        .map(|(&(vs, fs, fs_blend_key), &linked_fs)| yakogl::shaderc::ShcPrecompiledLink {
+            vs,
+            fs,
+            fs_blend_key,
+            linked_fs,
+        })
+        .collect();
     let (rows, sources) = finish(&plan, made);
+    for l in &links {
+        for (key, blend) in [(l.vs, 0), (l.fs, l.fs_blend_key), (l.linked_fs, l.fs_blend_key)] {
+            if !rows.iter().any(|r| r.key == key && r.blend_key == blend) {
+                return Err(format!("a link names {} (blend 0x{blend:x}), which is no row", drive::hex(&key[..8])));
+            }
+        }
+    }
     let about = vec![
         format!(
             "Apps: {}.",
@@ -554,8 +613,13 @@ fn generate(a: &Args, mark: &str) -> Result<Generated, String> {
             a.refused_steps.rsplit('/').next().unwrap_or("")
         ),
     ];
-    let text = table::emit(&rows, &sources, &table::Header { toolchain: mark, about: &about })?;
-    Ok(Generated { plan, rows, sources, about, text })
+    let text = table::emit(
+        &rows,
+        &sources,
+        &links,
+        &table::Header { toolchain: mark, gpu: GPU, es2: ES2 == 1, about: &about },
+    )?;
+    Ok(Generated { plan, rows, links, sources, about, text })
 }
 
 /// `--verify`: every row of `g` made again alone, and the table they make
@@ -567,7 +631,13 @@ fn verify(g: &Generated, mark: &str, had: &str, path: &str) -> Result<(), String
             return Err(format!("{}: the row is not what the compiler makes for it alone", r.ident()));
         }
     }
-    if table::emit(&again, &g.sources, &table::Header { toolchain: mark, about: &g.about })? != g.text {
+    if table::emit(
+        &again,
+        &g.sources,
+        &g.links,
+        &table::Header { toolchain: mark, gpu: GPU, es2: ES2 == 1, about: &g.about },
+    )? != g.text
+    {
         return Err("the table of fresh rows is not the regenerated table".into());
     }
     if had != g.text {
@@ -620,8 +690,14 @@ fn main_r(argv: &[String]) -> Result<(), String> {
         if let Some(d) = std::path::Path::new(&a.output).parent() {
             std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
         }
-        std::fs::write(&a.output, &g.text).map_err(|e| format!("{}: {e}", a.output))?;
-        println!("yakogl-precompile: wrote {}", a.output);
+        /* an image build runs this every time: a table that did not change
+         * is not touched, so the library that includes it is not rebuilt */
+        if std::fs::read_to_string(&a.output).ok().as_deref() == Some(g.text.as_str()) {
+            println!("yakogl-precompile: {} is unchanged", a.output);
+        } else {
+            std::fs::write(&a.output, &g.text).map_err(|e| format!("{}: {e}", a.output))?;
+            println!("yakogl-precompile: wrote {}", a.output);
+        }
     }
     if let Some(path) = &a.pin {
         check_pin(path, &pin_key(&a.apps), &format!("rows={} code_bytes={bytes}", rows.len()))?;

@@ -66,6 +66,14 @@ CONFIGS=(
   # The i.MX8MP's dEQP-GLES2 image: the GC7000 with the in-process compiler,
   # reporting ES 2.0. Its GC7000 harness pins are per build.
   "host-test,gpu-vivante,shaderc-online,report-es2"
+  # The precompiled tier in front of the compiler (`precompiled-shaders`),
+  # with the table of the gl_test_es100 app that the step below generates
+  # into build/precompiled/ for each GPU: the whole suite with the tier on
+  # (every look-up of a source the table holds a hit), and its own tests --
+  # a hit runs no compile and is what the compiler makes, the table's
+  # programs replayed run no compiler at all.
+  "host-test,gpu-powervr,shaderc-online,precompiled-shaders"
+  "host-test,gpu-vivante,shaderc-online,precompiled-shaders"
 )
 
 # The image configuration: the in-process compiler and no offline table at all.
@@ -159,13 +167,35 @@ step "cargo fmt --check" cargo fmt --check
 # tools/api_coverage.py reads from this archive.
 step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table
 
+# The tables of the tier configurations: yakogl-precompile on the gl_test_es100
+# app for each GPU (about 5 s each warm). A configuration with the tier reads
+# its GPU's through YAKOGL_PRECOMPILED_TABLE (build.rs).
+tier_tables() {
+  local gpu feature
+  for gpu in powervr gc7000; do
+    feature=gpu-powervr
+    [ "$gpu" = gc7000 ] && feature=gpu-vivante
+    cargo run -q -p yakogl-precompile --features "$feature" -- --app gl_test_es100 \
+      -o "build/precompiled/check-$gpu.rs" || return 1
+  done
+}
+tier=()
 for f in "${CONFIGS[@]}"; do
-  step "clippy  $f" cargo clippy --no-default-features --features "$f" --all-targets
+  case "$f" in *precompiled-shaders*) step "gen     precompiled tables for the tier configurations" tier_tables; break ;; esac
+done
+for f in "${CONFIGS[@]}"; do
+  tier=()
+  case "$f" in
+  *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
+    tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
+  *precompiled-shaders*) tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
+  esac
+  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" --all-targets
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
-  step "test    $f" cargo test --no-fail-fast --no-default-features --features "$f"
+  step "test    $f" "${tier[@]}" cargo test --no-fail-fast --no-default-features --features "$f"
 done
 
 for f in "${BUILD_ONLY_CONFIGS[@]}"; do

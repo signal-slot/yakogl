@@ -472,6 +472,20 @@ int shc_online_keep_stats(size_t *in_use, size_t *peak);
  * archive only, like shc_online_keep_stats. */
 uint32_t shc_online_compiler_runs(void);
 
+/* The precompiled tier (cargo feature precompiled-shaders, Kconfig
+ * YAKOGL_PRECOMPILED_SHADERS): the table yakogl-precompile made of the source
+ * list at image-build time, looked up before the compiler runs.
+ * shc_precompiled_hits: look-ups it answered since boot, wrapping (each a
+ * compile that did not run). shc_precompiled_rows: its rows, 0 in a build
+ * without one. shc_precompiled_toolchain: its toolchain mark ("yakogl=...
+ * commit=... gpu=... es2=..."), "" without one. shc_precompiled_set_enabled:
+ * 0 compiles everything as without it (a measurement), 1 (the default)
+ * consults it. Static archive only, like shc_online_keep_stats. */
+uint32_t shc_precompiled_hits(void);
+size_t shc_precompiled_rows(void);
+const char *shc_precompiled_toolchain(void);
+void shc_precompiled_set_enabled(int on);
+
 /* The in-process compiler's keep region, lent by the image before the first
  * compile (on Zephyr, zephyr_shaderc_scratch.c, sized by
  * CONFIG_YAKOGL_SHADERC_KEEP_BYTES). buf 8-byte aligned, len at least 64 KiB.

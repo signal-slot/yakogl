@@ -181,6 +181,16 @@ if(CONFIG_YAKOGL)
   else()
     set(_yakogl_no_table_arg "")
   endif()
+  # The precompiled tier (Kconfig YAKOGL_PRECOMPILED_SHADERS): the table
+  # yakogl-precompile writes into this build directory, for these apps.
+  set(_yakogl_precompiled_args "")
+  if(CONFIG_YAKOGL_PRECOMPILED_SHADERS)
+    separate_arguments(_yakogl_apps UNIX_COMMAND "${CONFIG_YAKOGL_PRECOMPILED_APPS}")
+    set(_yakogl_precompiled_args PRECOMPILED PRECOMPILED_APPS ${_yakogl_apps})
+    if(NOT CONFIG_YAKOGL_PRECOMPILED_LIST STREQUAL "")
+      list(APPEND _yakogl_precompiled_args PRECOMPILED_LIST "${CONFIG_YAKOGL_PRECOMPILED_LIST}")
+    endif()
+  endif()
   if(YAKOGL_RUST_LINKAGE STREQUAL "staticlib")
     set(_yakogl_rust_archive "${CMAKE_CURRENT_BINARY_DIR}/libyakogl_rust.a")
     yakogl_add_capi_archive(
@@ -189,6 +199,7 @@ if(CONFIG_YAKOGL)
       GPU "${YAKOGL_GPU}"
       SHADERC "${YAKOGL_SHADERC}"
       ${_yakogl_no_table_arg}
+      ${_yakogl_precompiled_args}
       TARGET_NAME yakogl_rust)
     add_library(yakogl_rust_lib STATIC IMPORTED GLOBAL)
     set_target_properties(yakogl_rust_lib PROPERTIES IMPORTED_LOCATION "${_yakogl_rust_archive}")

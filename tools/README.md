@@ -77,8 +77,8 @@ read out of its text: `tools/precompile/gl_test_pairs.py` prints them and
 
 **`yakogl-precompile`** (`tools/precompile`, a workspace member that depends on
 nothing but the library) compiles the list with our own compiler, on the host, into
-the table an image will carry (docs/HANDOFF.md, open work item 2; no image reads
-it yet). It links the library as an image does -- `shaderc-online`,
+the table an image carries in front of the compiler (the precompiled tier,
+below). It links the library as an image does -- `shaderc-online`,
 `no-shader-table`, and not `host-test`, which changes code the compiler runs -- and
 drives `SHC_ONLINE`, the back end an image installs, through its own entry points
 in the GL core's order: each listed program's sources compiled, linked (so the
@@ -124,6 +124,40 @@ lints and tests it per build, and `tools/precompile/prove.sh FEATURES` runs its
 proofs: the table made twice is the same bytes, `--verify`, the counts of the whole
 list and of the `femtovg` and `gl_test_es100` sublists pinned, and the table
 compiled against the library (`rustc -D warnings`).
+
+Beside the rows the table carries every link the generator made, by record key
+(`SHC_PRECOMPILED_LINKS`: the verdict a link takes without the front end), every
+row's sampler-state sensitivity (what a program's first draw asks), and the
+toolchain mark as constants (`SHC_PRECOMPILED_GPU`, `_ES2`, `_TOOLCHAIN`).
+
+## The precompiled tier
+
+With the crate feature `precompiled-shaders` (Kconfig
+`YAKOGL_PRECOMPILED_SHADERS`, CMake `YAKOGL_PRECOMPILED_SHADERS`; off by
+default) the library includes a table this tool made and looks every shader up
+in it before compiling (`src/shaderc/online/precompiled.rs`). The order, at each
+of the compiler's entry points (compile, a blend variant, a link's substitution,
+the vertex shader laid out at link, a sampler-state variant): the keep cache,
+then the table, by the same record key and stage and blend key, then the
+compiler. A hit runs no compile; a link the table recorded takes its verdict
+from it and a row's sensitivity is read, not computed, so a program made only of
+rows runs the compiler not once (`shc_precompiled_hits()` against
+`shc_online_compiler_runs()`; on the host the gl_test_es100 app's 100 PowerVR
+programs replay with 0 runs, against 3240 without the table). The table is
+consulted only while the compiler's switches stand at their boot values, and
+`shc_precompiled_set_enabled(0)` turns it off for a measurement. The image logs
+the table's mark at the first look-up, and a table made for another GPU or ES
+level does not build.
+
+```sh
+cargo run -p yakogl-precompile --features gpu-powervr -- --app gl_test_es100 -o build/precompiled/t.rs
+YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/t.rs \
+  cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,precompiled-shaders
+```
+
+An image build does the first line itself (capi/yakogl_capi.cmake, `PRECOMPILED`,
+into its build directory; `YAKOGL_PRECOMPILED_APPS` picks the apps) on every
+build; the table is rewritten only when it changed.
 
 # Building the pco_shc that reproduces the table
 

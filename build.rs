@@ -42,6 +42,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     mesa_reference();
+    precompiled_table();
     if env::var_os("CARGO_FEATURE_GPU_V3D").is_some() {
         v3d_qpu();
     }
@@ -63,6 +64,32 @@ fn mesa_reference() {
     if on("MESA_REFERENCE_TABLE") || (on("HOST_TEST") && !on("NO_SHADER_TABLE")) {
         println!("cargo:rustc-cfg=mesa_reference");
     }
+}
+
+/// `precompiled-shaders`: the table yakogl-precompile wrote, named by
+/// YAKOGL_PRECOMPILED_TABLE, compiled in as `shaderc::online::precompiled::
+/// table` through `$OUT_DIR/precompiled_table.rs` (one `#[path]` module line:
+/// the table is a module file with inner attributes, which `include!` cannot
+/// take). Rebuilt when the variable or the file changes.
+fn precompiled_table() {
+    println!("cargo:rerun-if-env-changed=YAKOGL_PRECOMPILED_TABLE");
+    if env::var_os("CARGO_FEATURE_PRECOMPILED_SHADERS").is_none() {
+        return;
+    }
+    let Some(path) = env::var_os("YAKOGL_PRECOMPILED_TABLE") else {
+        panic!(
+            "feature `precompiled-shaders` needs YAKOGL_PRECOMPILED_TABLE: the table yakogl-precompile wrote \
+             (cargo run -p yakogl-precompile --features gpu-<gpu> -- -o <file>; tools/README.md)"
+        );
+    };
+    let path = PathBuf::from(path);
+    let abs = path.canonicalize().unwrap_or_else(|e| panic!("YAKOGL_PRECOMPILED_TABLE={}: {e}", path.display()));
+    let text = abs.to_str().unwrap_or_else(|| panic!("YAKOGL_PRECOMPILED_TABLE={}: not UTF-8", abs.display()));
+    assert!(!text.contains('"'), "YAKOGL_PRECOMPILED_TABLE={text}: a path with a quote");
+    println!("cargo:rerun-if-changed={text}");
+    let out = PathBuf::from(env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("precompiled_table.rs");
+    std::fs::write(&out, format!("#[path = \"{text}\"]\nmod table;\n"))
+        .unwrap_or_else(|e| panic!("{}: {e}", out.display()));
 }
 
 fn root() -> PathBuf {

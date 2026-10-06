@@ -149,7 +149,8 @@ function(yakogl_rust_target_is_hosted triple out)
 endfunction()
 
 # yakogl_add_capi_archive(OUTPUT <libyakogl.a> OSAL <name> GPU <name>
-#                         [SHADERC offline|online]
+#                         [SHADERC offline|online] [NO_SHADER_TABLE]
+#                         [PRECOMPILED [PRECOMPILED_APPS <app>...] [PRECOMPILED_LIST <list>]]
 #                         TARGET_NAME <tgt> [C_OBJECT_LIBRARY <object library>])
 # Adds custom target <tgt> that builds OUTPUT: cargo builds yakogl-capi for
 # YAKOGL_RUST_TARGET_RESOLVED, capi/assemble.cmake post-processes it and
@@ -157,7 +158,8 @@ endfunction()
 # function's; the cargo + assemble steps are yakogl_add_rust_archive().
 function(yakogl_add_capi_archive)
   set(YAKOGL_CAPI_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
-  cmake_parse_arguments(A "NO_SHADER_TABLE" "OUTPUT;OSAL;GPU;SHADERC;TARGET_NAME;C_OBJECT_LIBRARY" "" ${ARGN})
+  cmake_parse_arguments(A "NO_SHADER_TABLE;PRECOMPILED" "OUTPUT;OSAL;GPU;SHADERC;TARGET_NAME;C_OBJECT_LIBRARY;PRECOMPILED_LIST"
+    "PRECOMPILED_APPS" ${ARGN})
   set(_features "")
   if(A_OSAL)
     list(APPEND _features "osal-${A_OSAL}")
@@ -196,6 +198,54 @@ function(yakogl_add_capi_archive)
   if(A_C_OBJECT_LIBRARY)
     set(_c_objs C_OBJECT_LIBRARY "${A_C_OBJECT_LIBRARY}")
   endif()
+  # The precompiled tier: yakogl-precompile (tools/precompile, a host
+  # program) compiles the source list with this tree's compiler into this
+  # build directory before the crate is built, and the crate includes the
+  # table (`precompiled-shaders`, YAKOGL_PRECOMPILED_TABLE). It runs on
+  # every build -- the compiler's sources are cargo's to track, not CMake's
+  # -- and leaves the table untouched when nothing changed, so the crate is
+  # not rebuilt for nothing.
+  set(_precompiled "")
+  if(A_PRECOMPILED)
+    if(NOT A_SHADERC STREQUAL "online" OR A_GPU STREQUAL "v3d")
+      message(FATAL_ERROR "PRECOMPILED needs SHADERC online and a PowerVR or GC7000 GPU")
+    endif()
+    set(_table "${CMAKE_CURRENT_BINARY_DIR}/precompiled/table.rs")
+    set(_gen_features "gpu-${A_GPU}")
+    if(YAKOGL_REPORT_ES2)
+      string(APPEND _gen_features ",report-es2")
+    endif()
+    set(_gen_args -o "${_table}")
+    foreach(_app ${A_PRECOMPILED_APPS})
+      list(APPEND _gen_args --app "${_app}")
+    endforeach()
+    if(A_PRECOMPILED_LIST)
+      list(APPEND _gen_args --list "${A_PRECOMPILED_LIST}")
+    endif()
+    set(_gen_env --unset=RUSTFLAGS --unset=CARGO_BUILD_TARGET)
+    if(YAKOGL_RUSTUP_TOOLCHAIN)
+      list(APPEND _gen_env "RUSTUP_TOOLCHAIN=${YAKOGL_RUSTUP_TOOLCHAIN}")
+    endif()
+    if(YAKOGL_CARGO)
+      set(_gen_cargo "${YAKOGL_CARGO}")
+    else()
+      find_program(YAKOGL_CARGO_FOUND cargo REQUIRED)
+      set(_gen_cargo "${YAKOGL_CARGO_FOUND}")
+    endif()
+    get_filename_component(_gen_root "${YAKOGL_CAPI_DIR}/.." ABSOLUTE)
+    add_custom_target(${A_TARGET_NAME}_precompiled
+      COMMAND ${CMAKE_COMMAND} -E env ${_gen_env} "${_gen_cargo}" run -q -p yakogl-precompile
+              --manifest-path "${_gen_root}/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/precompile-cargo"
+              --features "${_gen_features}" -- ${_gen_args}
+      BYPRODUCTS "${_table}"
+      WORKING_DIRECTORY "${_gen_root}"
+      COMMENT "yakogl-precompile: the precompiled table (apps: ${A_PRECOMPILED_APPS})"
+      USES_TERMINAL
+      VERBATIM)
+    list(APPEND _features "precompiled-shaders")
+    set(_precompiled ENV "YAKOGL_PRECOMPILED_TABLE=${_table}" DEPENDS "${_table}"
+        DEPENDS_TARGET ${A_TARGET_NAME}_precompiled)
+  endif()
   yakogl_add_rust_archive(
     CRATE yakogl-capi
     MANIFEST "${YAKOGL_CAPI_DIR}/Cargo.toml"
@@ -206,6 +256,7 @@ function(yakogl_add_capi_archive)
     RUSTUP_TOOLCHAIN "${YAKOGL_RUSTUP_TOOLCHAIN}"
     OUTPUT "${A_OUTPUT}"
     TARGET_NAME "${A_TARGET_NAME}"
+    ${_precompiled}
     ${_c_objs})
 endfunction()
 
@@ -214,7 +265,9 @@ endfunction()
 #                         [FEATURES <feature>...] [TARGET <triple>] [TARGET_CPU <cpu>]
 #                         [RUSTUP_TOOLCHAIN <toolchain>] [CARGO_TARGET_DIR <dir>]
 #                         OUTPUT <archive> TARGET_NAME <tgt>
-#                         [C_OBJECT_LIBRARY <object library>])
+#                         [C_OBJECT_LIBRARY <object library>]
+#                         [ENV <VAR=value>...] [DEPENDS <file>...]
+#                         [DEPENDS_TARGET <target>])
 # One no_std staticlib crate of this workspace as a post-processed archive:
 # cargo builds <package> (--no-default-features, the given features, the
 # workspace's release or dev-lto profile) for TARGET (empty: the host), and
@@ -226,7 +279,8 @@ endfunction()
 # YAKOGL_CARGO_BUILD_STD for this archive's toolchain and target.
 function(yakogl_add_rust_archive)
   set(YAKOGL_CAPI_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
-  cmake_parse_arguments(A "" "CRATE;MANIFEST;LIB_NAME;TARGET;TARGET_CPU;RUSTUP_TOOLCHAIN;CARGO_TARGET_DIR;OUTPUT;TARGET_NAME;C_OBJECT_LIBRARY" "FEATURES" ${ARGN})
+  cmake_parse_arguments(A "" "CRATE;MANIFEST;LIB_NAME;TARGET;TARGET_CPU;RUSTUP_TOOLCHAIN;CARGO_TARGET_DIR;OUTPUT;TARGET_NAME;C_OBJECT_LIBRARY;DEPENDS_TARGET"
+    "FEATURES;ENV;DEPENDS" ${ARGN})
   foreach(_req CRATE MANIFEST LIB_NAME OUTPUT TARGET_NAME)
     if(NOT A_${_req})
       message(FATAL_ERROR "yakogl_add_rust_archive: ${_req} is required")
@@ -245,7 +299,7 @@ function(yakogl_add_rust_archive)
     endif()
     set(_cargo "${YAKOGL_CARGO_FOUND}")
   endif()
-  set(_env "YAKOGL_MAX_CONTEXTS=${YAKOGL_MAX_CONTEXTS}" "YAKOGL_MAX_SURFACES=${YAKOGL_MAX_SURFACES}")
+  set(_env "YAKOGL_MAX_CONTEXTS=${YAKOGL_MAX_CONTEXTS}" "YAKOGL_MAX_SURFACES=${YAKOGL_MAX_SURFACES}" ${A_ENV})
   if(A_RUSTUP_TOOLCHAIN)
     list(APPEND _env "RUSTUP_TOOLCHAIN=${A_RUSTUP_TOOLCHAIN}")
   endif()
@@ -347,7 +401,7 @@ function(yakogl_add_rust_archive)
   add_custom_command(OUTPUT "${_rust_lib}"
     COMMAND ${CMAKE_COMMAND} -E env ${_env} "${_cargo}" ${_args}
     DEPFILE "${_target_dir}/${_pdir}/lib${A_LIB_NAME}.d"
-    DEPENDS "${_root}/Cargo.toml" "${A_MANIFEST}"
+    DEPENDS "${_root}/Cargo.toml" "${A_MANIFEST}" ${A_DEPENDS}
     WORKING_DIRECTORY "${_root}"
     COMMENT "cargo build ${A_CRATE} (${_rustc_v}; target ${_triple_note})"
     USES_TERMINAL
@@ -375,6 +429,9 @@ function(yakogl_add_rust_archive)
     VERBATIM
     COMMENT "assemble ${A_OUTPUT}")
   add_custom_target(${A_TARGET_NAME} ALL DEPENDS "${A_OUTPUT}")
+  if(A_DEPENDS_TARGET)
+    add_dependencies(${A_TARGET_NAME} ${A_DEPENDS_TARGET})
+  endif()
 
   set(_bs "")
   if(_build_std)

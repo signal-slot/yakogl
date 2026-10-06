@@ -196,7 +196,7 @@ thread_local! {
 
 /// Whether a loop with an exact count also leaves on its uniform break
 /// flag: always, except in a test that switched it off.
-fn early_exit_on() -> bool {
+pub(crate) fn early_exit_on() -> bool {
     #[cfg(test)]
     {
         !EARLY_EXIT_OFF.with(|h| h.get())

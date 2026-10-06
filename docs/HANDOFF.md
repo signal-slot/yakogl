@@ -99,8 +99,11 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    as a measurement image's table (`mesa-reference-table`, Kconfig
    `YAKOGL_SHADERC_OFFLINE`); the compiler is the default back end in Kconfig
    and CMake, and only `baremetal.mk` still takes the reference (its OSAL
-   lends the compiler no region); next, an image carries the precompiled
-   table.
+   lends the compiler no region); and the precompiled tier in front of it
+   (`precompiled-shaders`, Kconfig `YAKOGL_PRECOMPILED_SHADERS`, off by
+   default): the table looked up by the compiler's record key before any
+   compile, a hit running none. Next: a board run of it (the AM62P gl_test
+   set, Slint, the cluster), then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

@@ -3990,6 +3990,13 @@ pub extern "C" fn shc_debug_set_uniidx(bits: i32) {
     unsafe { core::ptr::addr_of_mut!(shc_debug_uniidx).write(bits) }
 }
 
+/// [`shc_debug_uniidx`]'s bits as they stand (the precompiled tier stands
+/// aside while any is set: its rows were compiled with none).
+pub(crate) fn uniidx_knobs() -> i32 {
+    // SAFETY: as above; a plain read.
+    unsafe { core::ptr::addr_of!(shc_debug_uniidx).read() }
+}
+
 fn uniidx_knob(bit: i32) -> bool {
     // SAFETY: as above; a plain read.
     (unsafe { core::ptr::addr_of!(shc_debug_uniidx).read() }) & bit != 0

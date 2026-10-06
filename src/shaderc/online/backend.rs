@@ -247,7 +247,7 @@ impl Facts {
     }
 
     /// The facts `rec` was compiled with.
-    fn of(rec: &Compiled) -> Facts {
+    fn of(rec: &Base) -> Facts {
         Facts { w_constant: rec.w_constant, lod_key: rec.lod_key, if_lowering: rec.if_lowering }
     }
 }
@@ -389,9 +389,10 @@ pub fn blocks_of(sh: &ShcShader) -> crate::shaderc::ShcBlocks {
     base_of(sh).map_or(crate::shaderc::ShcBlocks::EMPTY, |c| c.blocks)
 }
 
-/// Whether this back end made `sh` (a live record of ours behind it).
+/// Whether this back end made `sh`: a live record of ours behind it, or a
+/// row of the precompiled table (our compiler made it at build time).
 pub fn is_ours(sh: &ShcShader) -> bool {
-    record_of(sh).is_some()
+    base_of(sh).is_some()
 }
 
 /// The live record behind a shader this back end handed out.
@@ -412,11 +413,46 @@ fn record_of(sh: &ShcShader) -> Option<*mut Compiled> {
     (unsafe { (*p).magic } == MAGIC).then_some(p)
 }
 
-/// The record behind a shader this back end handed out.
-fn base_of(sh: &ShcShader) -> Option<&'static Compiled> {
+/// What the back end reads of a shader it handed out, whichever tier made
+/// it: a keep record ([`Compiled`]) or a row of the precompiled table
+/// (`super::precompiled`). A variant, a link's substitution and a
+/// sampler-state question are asked of either the same way: the record key,
+/// the source, the facts and the blocks come from here. A copy; its
+/// references live as long as the record (or, for a row, the image).
+#[derive(Clone, Copy)]
+pub(crate) struct Base {
+    pub(crate) sha: [u8; 32],
+    pub(crate) stage: u32,
+    pub(crate) blend_key: u32,
+    pub(crate) source: &'static [u8],
+    pub(crate) w_constant: bool,
+    pub(crate) lod_key: LodKey,
+    pub(crate) if_lowering: IfLowering,
+    pub(crate) attrib_map: Option<&'static crate::shaderc::ShcAttribMap>,
+    pub(crate) blocks: crate::shaderc::ShcBlocks,
+}
+
+impl Base {
+    fn of_record(r: &Compiled) -> Base {
+        Base {
+            sha: r.sha,
+            stage: r.stage,
+            blend_key: r.blend_key,
+            source: r.source,
+            w_constant: r.w_constant,
+            lod_key: r.lod_key,
+            if_lowering: r.if_lowering,
+            attrib_map: r.attrib_map,
+            blocks: r.blocks,
+        }
+    }
+}
+
+/// The record or precompiled row behind a shader this back end handed out.
+fn base_of(sh: &ShcShader) -> Option<Base> {
     // SAFETY: a live record is valid until its last holder releases it, and
     // the caller holds `sh`.
-    record_of(sh).map(|p| unsafe { &*p })
+    record_of(sh).map(|p| Base::of_record(unsafe { &*p })).or_else(|| super::precompiled::base(sh))
 }
 
 /// The GL core keeps one more copy of `sh`.
@@ -647,7 +683,7 @@ fn compile_and_publish(
     blend_key: u32,
     end: store::KeepEnd,
     log: &mut CStrWriter,
-) -> Result<&'static Compiled, i32> {
+) -> Result<ShcShader, i32> {
     compile_and_publish_linked(stage, glsl, blend_key, &ZeroList::EMPTY, None, Facts::plain(), end, log)
 }
 
@@ -669,14 +705,24 @@ fn compile_and_publish_linked(
     facts: Facts,
     end: store::KeepEnd,
     log: &mut CStrWriter,
-) -> Result<&'static Compiled, i32> {
+) -> Result<ShcShader, i32> {
     let sha = record_key(glsl, zero, map, facts);
-    if let Some(hit) = cache_find(&sha, stage, blend_key) {
-        /* The caller gets a copy, so it is a holder like any other. */
-        retain(&hit.shader);
+    if let Some(hit) = cached_or_precompiled(&sha, stage, blend_key) {
         return Ok(hit);
     }
-    compile_and_publish_keyed(sha, stage, glsl, blend_key, zero, map, facts, end, log)
+    compile_and_publish_keyed(sha, stage, glsl, blend_key, zero, map, facts, end, log).map(|rec| rec.shader)
+}
+
+/// The look-up in front of every compile, in order: the keep cache (a copy
+/// the caller holds, so it is retained), then the precompiled table (a row,
+/// which nobody holds).
+fn cached_or_precompiled(sha: &[u8; 32], stage: u32, blend_key: u32) -> Option<ShcShader> {
+    if let Some(hit) = cache_find(sha, stage, blend_key) {
+        /* The caller gets a copy, so it is a holder like any other. */
+        retain(&hit.shader);
+        return Some(hit.shader);
+    }
+    super::precompiled::find(sha, stage, blend_key)
 }
 
 /// The cache key of a record: the source's SHA-256, chained with everything
@@ -794,9 +840,9 @@ unsafe extern "C" fn online_compile(
     let text = unsafe { cstr_bytes(glsl) };
     /* A shader object's record: the top of the region (store::KeepEnd). */
     match compile_and_publish(stage, text, 0, store::KeepEnd::High, &mut log) {
-        Ok(rec) => {
+        Ok(sh) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
-            unsafe { out.write(rec.shader) };
+            unsafe { out.write(sh) };
             0
         }
         Err(rc) => rc,
@@ -821,10 +867,9 @@ fn variant_of(
     map: Option<&crate::shaderc::ShcAttribMap>,
     facts: Facts,
     log: &mut CStrWriter,
-) -> Result<&'static Compiled, i32> {
+) -> Result<ShcShader, i32> {
     let sha = record_key(glsl, &ZeroList::EMPTY, map, facts);
-    if let Some(hit) = cache_find(&sha, stage, blend_key) {
-        retain(&hit.shader);
+    if let Some(hit) = cached_or_precompiled(&sha, stage, blend_key) {
         return Ok(hit);
     }
     let frees = store::keep_frees();
@@ -842,10 +887,10 @@ fn variant_of(
     }
     let r =
         compile_and_publish_keyed(sha, stage, glsl, blend_key, &ZeroList::EMPTY, map, facts, store::KeepEnd::Low, log);
-    if r.err() == Some(crate::shaderc::VARIANT_NO_ROOM) {
+    if r.as_ref().err() == Some(&crate::shaderc::VARIANT_NO_ROOM) {
         *no_room_at = Some(frees);
     }
-    r
+    r.map(|rec| rec.shader)
 }
 
 /// The variant of a compiled fragment shader for one blend state.
@@ -891,10 +936,10 @@ unsafe extern "C" fn online_blend_variant(
         let _ = log.write_str("online shaderc: a blend variant of a vertex shader");
         return -EINVAL;
     }
-    match variant_of(SHC_STAGE_FRAGMENT, base.source, blend_key, None, Facts::of(base), &mut log) {
-        Ok(rec) => {
+    match variant_of(SHC_STAGE_FRAGMENT, base.source, blend_key, None, Facts::of(&base), &mut log) {
+        Ok(sh) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
-            unsafe { out.write(rec.shader) };
+            unsafe { out.write(sh) };
             0
         }
         Err(rc) => rc,
@@ -1049,6 +1094,34 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
         #[cfg(not(feature = "gpu-v3d"))]
         return 0;
     };
+    /* The verdict the precompiled table recorded for this link, when it has
+     * one: what the source-level rules below decided when the generator ran
+     * them on the same two records, and the fragment shader the link left
+     * in the program. The table-level rules still run (shaderc::link). */
+    #[cfg(not(feature = "gpu-v3d"))]
+    if let Some(linked) = super::precompiled::linked(&vr.sha, &fr.sha, fr.blend_key) {
+        if linked != fr.sha {
+            match super::precompiled::find(&linked, SHC_STAGE_FRAGMENT, fr.blend_key) {
+                Some(sh) => {
+                    let old = *fs;
+                    *fs = sh;
+                    release(&old);
+                }
+                /* a verdict whose row is gone: decide it again below */
+                None => return link_by_sources(vs, &vr, &fr, fs, log),
+            }
+        }
+        return link_checked(vs, fs, log);
+    }
+    link_by_sources(vs, &vr, &fr, fs, log)
+}
+
+/// [`link_online`] past the precompiled verdict: the rules decided from the
+/// two sources (the front end runs).
+fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
+    /* the V3D's program link reads the two records, not the shaders */
+    #[cfg(feature = "gpu-v3d")]
+    let _ = vs;
     let (vsrc, fsrc) = (vr.source, fr.source);
     let fs_copy = *fs;
     let verdict = store::with_scratch(|a| -> Result<(ZeroList, bool), i32> {
@@ -1197,23 +1270,31 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
     #[cfg(not(feature = "gpu-v3d"))]
     {
         let rc = link_substituted(fr, &zero, affine, fs, log);
-        /* The GC7000's two stages share one constant file, and the literals
-         * a stage folds into it count as well as its uniforms: a program
-         * whose two files do not fit would draw with registers missing. */
-        #[cfg(feature = "gpu-vivante")]
-        if rc == 0 {
-            if let Err((v, f)) = crate::vivante::shader::constant_files_fit(vs, fs) {
-                let _ = write!(
-                    log,
-                    "online shaderc: link error: the constant registers the two stages need (vertex {v}, \
-                     fragment {f}: uniforms and literals) exceed the {} this GPU has",
-                    crate::vivante::regs::GC_NUM_CONSTANTS
-                );
-                return -EINVAL;
-            }
+        if rc != 0 {
+            return rc;
         }
-        rc
+        link_checked(vs, fs, log)
     }
+}
+
+/// The program-level check after the fragment shader is final: the GC7000's
+/// two stages share one constant file, and the literals a stage folds into
+/// it count as well as its uniforms, so a program whose two files do not fit
+/// would draw with registers missing.
+#[cfg(not(feature = "gpu-v3d"))]
+fn link_checked(vs: &ShcShader, fs: &ShcShader, log: &mut CStrWriter) -> i32 {
+    #[cfg(feature = "gpu-vivante")]
+    if let Err((v, f)) = crate::vivante::shader::constant_files_fit(vs, fs) {
+        let _ = write!(
+            log,
+            "online shaderc: link error: the constant registers the two stages need (vertex {v}, \
+             fragment {f}: uniforms and literals) exceed the {} this GPU has",
+            crate::vivante::regs::GC_NUM_CONSTANTS
+        );
+        return -EINVAL;
+    }
+    let _ = (vs, fs, &log);
+    0
 }
 
 /// The fragment shader recompiled with the varyings in `zero` read as 0,
@@ -1221,7 +1302,7 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
 /// [`link_online`]). Not on the V3D, where the program compile applies the
 /// list.
 #[cfg(not(feature = "gpu-v3d"))]
-fn link_substituted(fr: &Compiled, zero: &ZeroList, w_constant: bool, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
+fn link_substituted(fr: &Base, zero: &ZeroList, w_constant: bool, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
     /* a sampler-state variant stays one (`Compiled::lod_key`) */
     let facts = Facts { w_constant, ..Facts::of(fr) };
     if zero.n == 0 && !w_constant {
@@ -1237,9 +1318,9 @@ fn link_substituted(fr: &Compiled, zero: &ZeroList, w_constant: bool, fs: &mut S
         store::KeepEnd::Low,
         log,
     ) {
-        Ok(rec) => {
+        Ok(sh) => {
             let old = *fs;
-            *fs = rec.shader;
+            *fs = sh;
             release(&old);
             0
         }
@@ -1268,7 +1349,7 @@ const V3D_PROGRAM_KEY: u32 = u32::MAX;
 /// starts empty in every process, so every record in it was built by the
 /// compiler of this binary.
 #[cfg(feature = "gpu-v3d")]
-fn link_program(vr: &Compiled, fr: &Compiled, zero: &ZeroList, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
+fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
     let mut key = [0u8; 32 * 3 + 8 + 8];
     key[..32].copy_from_slice(&vr.sha);
     key[32..64].copy_from_slice(&fr.sha);
@@ -1387,9 +1468,9 @@ unsafe extern "C" fn online_compile_vs_linked(
         store::KeepEnd::Low,
         &mut log,
     ) {
-        Ok(rec) => {
+        Ok(sh) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
-            unsafe { out.write(rec.shader) };
+            unsafe { out.write(sh) };
             0
         }
         Err(rc) => rc,
@@ -1417,7 +1498,7 @@ const SAMPLE_KILL_VARIANTS: bool = !cfg!(not(feature = "gpu-powervr"));
 /// else on the V3D is (a vertex look-up of a depth texture is refused at the
 /// draw, `v3d::texture::refusal_for`). [`LodKey::NONE`] for a source the
 /// front end cannot run again here.
-fn sensitivity_of(rec: &Compiled) -> LodKey {
+fn sensitivity_of(rec: &Base) -> LodKey {
     #[cfg(feature = "gpu-v3d")]
     if rec.blend_key == V3D_PROGRAM_KEY && rec.stage == SHC_STAGE_FRAGMENT {
         return v3d_ret32_sensitivity(rec.source);
@@ -1513,7 +1594,11 @@ unsafe extern "C" fn online_lod_sensitivity(sh: *const ShcShader) -> u64 {
     }
     // SAFETY: sh is non-null and points at a shc_shader.
     let sh = unsafe { sh.read() };
-    base_of(&sh).map_or(0, |rec| sensitivity_of(rec).bits())
+    /* a precompiled row's was recorded with it (the front end need not run) */
+    if let Some(bits) = super::precompiled::sensitivity(&sh) {
+        return bits;
+    }
+    base_of(&sh).map_or(0, |rec| sensitivity_of(&rec).bits())
 }
 
 /// The V3D programs' draw-time sampler variants asked for, built and
@@ -1593,10 +1678,10 @@ unsafe extern "C" fn online_sampler_variant(
         }
         let facts = Facts { w_constant: false, lod_key: k, if_lowering: base.if_lowering };
         return match variant_of(SHC_STAGE_FRAGMENT, base.source, 0, None, facts, &mut log) {
-            Ok(rec) => {
+            Ok(sh) => {
                 V3D_VARIANTS_BUILT.fetch_add(1, Relaxed);
                 // SAFETY: out is non-null and points at the caller's shc_shader.
-                unsafe { out.write(rec.shader) };
+                unsafe { out.write(sh) };
                 0
             }
             Err(rc) => {
@@ -1609,11 +1694,11 @@ unsafe extern "C" fn online_sampler_variant(
         let _ = log.write_str("online shaderc: a sampler-state variant of a blend variant");
         return -EINVAL; /* a variant of the plain shader only; blending comes after */
     }
-    let facts = Facts { lod_key: LodKey::from_bits(key), ..Facts::of(base) };
+    let facts = Facts { lod_key: LodKey::from_bits(key), ..Facts::of(&base) };
     match variant_of(base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
-        Ok(rec) => {
+        Ok(sh) => {
             // SAFETY: out is non-null and points at the caller's shc_shader.
-            unsafe { out.write(rec.shader) };
+            unsafe { out.write(sh) };
             0
         }
         Err(rc) => rc,
@@ -2552,7 +2637,8 @@ void main (void)
         let t0 = std::time::Instant::now();
         let (rc, log, linked) =
             link("attribute vec2 p; varying vec2 uv; void main(){ uv = p; gl_Position = vec4(p, 0.0, 1.0); }", fs);
-        let bytes = base_of(&linked).map_or(0, |r| r.extent.bytes());
+        // SAFETY: a live record.
+        let bytes = record_of(&linked).map_or(0, |r| unsafe { (*r).extent.bytes() });
         std::println!("  constant-W link: a record of {bytes} keep bytes, {:?} (host)", t0.elapsed());
         assert_eq!(rc, 0, "{log}");
         assert_eq!(code_of(&linked), off_code, "constant W: the switch-off program");

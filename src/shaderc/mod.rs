@@ -1380,6 +1380,22 @@ fn shader_source_name_c(sh: &ShcShader) -> &'static str {
     }
 }
 
+/// One link a precompiled table recorded (`SHC_PRECOMPILED_LINKS`,
+/// yakogl-precompile): the program's vertex shader and fragment shader by
+/// record key, and the record key of the fragment shader the link left in the
+/// program -- the same as `fs` when it substituted nothing, another row when
+/// it compiled the fragment shader again (a varying the vertex shader never
+/// writes read as 0, or for a constant `gl_Position.w`). The link verdict
+/// without the front end: `online::precompiled`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ShcPrecompiledLink {
+    pub vs: [u8; 32],
+    pub fs: [u8; 32],
+    /// The fragment shader's blend key (a variant is linked as its base).
+    pub fs_blend_key: u32,
+    pub linked_fs: [u8; 32],
+}
+
 /// The GLSL text a blob was built from, by source basename: what an
 /// application must pass to glShaderSource byte for byte on an offline-only
 /// target (`gles_offline_shader_source`). `text` ends in a NUL.

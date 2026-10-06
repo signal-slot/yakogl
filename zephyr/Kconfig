@@ -394,6 +394,41 @@ config YAKOGL_SHADERC_ONLINE
 
 endchoice
 
+config YAKOGL_PRECOMPILED_SHADERS
+	bool "precompiled shaders in front of the compiler"
+	depends on YAKOGL_SHADERC_ONLINE && !YAKOGL_GPU_V3D
+	help
+	  Compile the source list (tools/shaders/precompiled.list, or
+	  YAKOGL_PRECOMPILED_LIST) with this tree's own compiler while the
+	  image is built (yakogl-precompile, a host program cargo builds into
+	  the build directory first), and link the table it writes in front of
+	  the in-process compiler: a shader the application compiles is looked
+	  up there, by the key the compiler's cache uses, before it is
+	  compiled, and a hit runs no compile (shc_precompiled_hits() counts
+	  them; shc_online_compiler_runs() does not move). A miss compiles as
+	  without the table. The table's toolchain mark is logged at the first
+	  look-up; a table for another GPU or ES level does not build. The
+	  crate's `precompiled-shaders`. Adds the table's rows to the image
+	  (the whole list on the PowerVR is about 3.8 MB of code; one app's
+	  much less, YAKOGL_PRECOMPILED_APPS).
+
+config YAKOGL_PRECOMPILED_APPS
+	string "the list's apps to precompile (space-separated; empty: the whole list)"
+	depends on YAKOGL_PRECOMPILED_SHADERS
+	default ""
+	help
+	  `app` names of the source list, e.g. "gl_test_es100" or "femtovg":
+	  only those programs and their sources go into the table
+	  (yakogl-precompile --app). Empty: every listed source and program.
+
+config YAKOGL_PRECOMPILED_LIST
+	string "the source list (empty: tools/shaders/precompiled.list)"
+	depends on YAKOGL_PRECOMPILED_SHADERS
+	default ""
+	help
+	  A source list in tools/shaders/precompiled.list's syntax, its paths
+	  relative to its own directory.
+
 config YAKOGL_SHADERC_SCRATCH_BYTES
 	int "compiler scratch region (bytes)"
 	depends on YAKOGL_SHADERC_ONLINE

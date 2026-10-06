@@ -108,6 +108,16 @@ host-test = []
 # writes its shaders at run time; with the feature in it registers as
 # `g_shaderc`.
 shaderc-online = []
+# The precompiled tier in front of the in-process compiler: a table our own
+# compiler made of tools/shaders/precompiled.list at image-build time
+# (yakogl-precompile, tools/precompile), looked up by the same record key the
+# compiler's cache uses before anything is compiled. A hit runs no compile;
+# a miss compiles as without it. The table is a file build.rs is pointed at
+# with YAKOGL_PRECOMPILED_TABLE (the C builds generate it into their build
+# directory: Kconfig YAKOGL_PRECOMPILED_SHADERS, CMake
+# YAKOGL_PRECOMPILED_SHADERS); its toolchain mark must name this build's GPU
+# and ES level or the build stops. Off by default.
+precompiled-shaders = ["shaderc-online"]
 # MEASUREMENT IMAGES ONLY: link the Mesa reference table
 # (tests/reference/blobs.rs, PowerVR, from pco_shc; vivante_blobs.rs, GC7000,
 # from etna_shc) as this build's shader table, behind the offline back end

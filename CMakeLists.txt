@@ -17,6 +17,9 @@
 #   -DYAKOGL_OSAL=zephyr|baremetal|linux  (default: linux)
 #   -DYAKOGL_GPU=powervr|vivante           (default: powervr)
 #   -DYAKOGL_SHADERC=offline|online        (default: online)
+#   -DYAKOGL_PRECOMPILED_SHADERS=ON|OFF    the precompiled tier in front of the
+#                                          compiler (default: OFF); its apps:
+#   -DYAKOGL_PRECOMPILED_APPS="<app>..."   (default: the whole source list)
 #   -DYAKOGL_PVR_DRIVER_DIR=<powervr-bxs-am62p/src>
 #   -DYAKOGL_SHARED=ON|OFF                 (also build libEGL.so.1 +
 #                                           libGLESv2.so.2; default: OFF)
@@ -54,6 +57,15 @@ set(YAKOGL_SHADERC "online" CACHE STRING "Shader back end: online|offline (offli
 set_property(CACHE YAKOGL_SHADERC PROPERTY STRINGS offline online)
 if(NOT YAKOGL_SHADERC STREQUAL "offline" AND NOT YAKOGL_SHADERC STREQUAL "online")
   message(FATAL_ERROR "YAKOGL_SHADERC must be offline|online (got '${YAKOGL_SHADERC}')")
+endif()
+# The precompiled tier (the crate's `precompiled-shaders`): the source list
+# compiled at build time by yakogl-precompile, looked up before compiling.
+option(YAKOGL_PRECOMPILED_SHADERS "Precompile the source list in front of the compiler" OFF)
+set(YAKOGL_PRECOMPILED_APPS "" CACHE STRING "The source list's apps to precompile (empty: all)")
+set(_yakogl_precompiled_args "")
+if(YAKOGL_PRECOMPILED_SHADERS)
+  separate_arguments(_yakogl_apps UNIX_COMMAND "${YAKOGL_PRECOMPILED_APPS}")
+  set(_yakogl_precompiled_args PRECOMPILED PRECOMPILED_APPS ${_yakogl_apps})
 endif()
 if(NOT YAKOGL_GPU STREQUAL "powervr" AND NOT YAKOGL_GPU STREQUAL "vivante")
   message(FATAL_ERROR "YAKOGL_GPU must be powervr|vivante (got '${YAKOGL_GPU}')")
@@ -188,6 +200,7 @@ if(YAKOGL_RUST_LINKAGE STREQUAL "staticlib")
     OSAL "${YAKOGL_OSAL}"
     GPU "${YAKOGL_GPU}"
     SHADERC "${YAKOGL_SHADERC}"
+    ${_yakogl_precompiled_args}
     TARGET_NAME yakogl_archive
     C_OBJECT_LIBRARY yakogl_c)
   add_library(GLES2 STATIC IMPORTED GLOBAL)

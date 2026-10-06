@@ -33,6 +33,37 @@ use yakogl::shaderc::{
 /// A record's identity in the cache: its key, stage and blend key.
 pub type Id = ([u8; 32], u32, u32);
 
+/// One link the generator made, by record key (`ShcPrecompiledLink`): the
+/// program's vertex shader, the fragment shader it was linked with (and its
+/// blend key), and the fragment shader the link left in the program.
+pub struct Link {
+    pub vs: [u8; 32],
+    pub fs: [u8; 32],
+    pub fs_blend_key: u32,
+    pub linked_fs: [u8; 32],
+}
+
+/// The record key of the live record behind `sh`.
+fn key_of(sh: &ShcShader) -> Result<[u8; 32], String> {
+    let mut key = None;
+    backend::each_record(|r| {
+        if core::ptr::eq(r.shader.priv_, sh.priv_) {
+            key = Some(r.key);
+        }
+    });
+    key.ok_or_else(|| "a shader the compiler handed out has no record in its cache".to_string())
+}
+
+/// `lod_sensitivity(sh)`: what a program's first draw asks of each of its
+/// shaders (`LodKey::bits`).
+pub fn sensitivity(sh: &ShcShader) -> u64 {
+    match SHC_ONLINE.lod_sensitivity {
+        // SAFETY: a shader this back end made, alive (its holders hold it).
+        Some(f) => unsafe { f(sh) },
+        None => 0,
+    }
+}
+
 /// The bytes of the keep region lent for one run: far more than an image
 /// lends (the product sizes its own, CONFIG_YAKOGL_SHADERC_KEEP_BYTES), so
 /// that no job here is refused for room. The keep size changes no code the
@@ -122,7 +153,12 @@ pub fn compile(h: &mut Holders, stage: u32, text: &str) -> Result<ShcShader, Str
 /// layout first when the vertex shader's compile left it to the link
 /// (`gl::program::link_attrib_layout`), then `link`. Returns the program's
 /// two shaders, held; the shader objects keep theirs.
-pub fn link(h: &mut Holders, vs_text: &str, vs: &ShcShader, fs: &ShcShader) -> Result<(ShcShader, ShcShader), String> {
+pub fn link(
+    h: &mut Holders,
+    vs_text: &str,
+    vs: &ShcShader,
+    fs: &ShcShader,
+) -> Result<(ShcShader, ShcShader, Link), String> {
     /* the program's copies of the shader objects' shaders */
     retain_shader(vs);
     retain_shader(fs);
@@ -160,7 +196,9 @@ pub fn link(h: &mut Holders, vs_text: &str, vs: &ShcShader, fs: &ShcShader) -> R
     let linked = link_into(&rvs, &mut rfs);
     h.keep(rvs);
     h.keep(rfs);
-    linked.map(|()| (rvs, rfs))
+    linked?;
+    let link = Link { vs: key_of(&rvs)?, fs: key_of(fs)?, fs_blend_key: 0, linked_fs: key_of(&rfs)? };
+    Ok((rvs, rfs, link))
 }
 
 /// `link(vs, fs)`, the program's fragment copy updated in place.
@@ -179,7 +217,7 @@ fn link_into(vs: &ShcShader, fs: &mut ShcShader) -> Result<(), String> {
 /// fragment shader, then linked to the program's vertex shader, as
 /// `gl::draw::fs_variant_for` does. The variant is held, as the program's
 /// variant slot holds it.
-pub fn variant(h: &mut Holders, vs: &ShcShader, fs: &ShcShader, key: u32) -> Result<(), String> {
+pub fn variant(h: &mut Holders, vs: &ShcShader, fs: &ShcShader, key: u32) -> Result<Link, String> {
     let mut v = ShcShader::ZERO;
     let mut log = [0 as c_char; 1024];
     let f = SHC_ONLINE.blend_variant.ok_or("the back end has no blend_variant")?;
@@ -188,11 +226,14 @@ pub fn variant(h: &mut Holders, vs: &ShcShader, fs: &ShcShader, key: u32) -> Res
     if rc != 0 {
         return Err(log_text(&log));
     }
+    /* the variant's key before the link, which may release it */
+    let before = key_of(&v);
     /* the slot holds what the link left in it (a variant compiled again
      * replaces the one it was given, which the link releases) */
     let linked = link_into(vs, &mut v);
     h.keep(v);
-    linked
+    linked?;
+    Ok(Link { vs: key_of(vs)?, fs: before?, fs_blend_key: key, linked_fs: key_of(&v)? })
 }
 
 /// A variant of a fragment shader no listed program links: what a draw asks

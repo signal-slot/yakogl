@@ -17,6 +17,13 @@
 //! | `SHC_PRECOMPILED_W_CONSTANT: [bool; N]` | compiled for a program whose vertex shader writes a constant W |
 //! | `SHC_PRECOMPILED_LOD_KEY: [u64; N]` | the sampler-state key (`LodKey::bits`) |
 //! | `SHC_PRECOMPILED_IF_LOWERING: [u32; N]` | how an `if` with arithmetic arms was lowered (`IfLowering::as_u32`; the key covers it when not the default) |
+//! | `SHC_PRECOMPILED_SENSITIVITY: [u64; N]` | the sampler-state sensitivity a program's first draw asks of it (`lod_sensitivity`, `LodKey::bits`) |
+//!
+//! Beside the rows: `SHC_PRECOMPILED_LINKS` (`ShcPrecompiledLink`), every
+//! link the generator made by record key, the verdict a link takes without
+//! the front end; and the toolchain mark as constants
+//! (`SHC_PRECOMPILED_TOOLCHAIN`, `_TOOLCHAIN_C`, `_GPU`, `_ES2`), which the
+//! library checks against its own GPU and ES level at build time.
 //! | `SHC_PRECOMPILED_ATTRIB_MAP: [Option<&ShcAttribMap>; N]` | the link's attribute locations a vertex shader was compiled with |
 //! | `SHC_PRECOMPILED_BLOCKS: [ShcBlocks; N]` | its uniform blocks |
 //!
@@ -67,6 +74,9 @@ pub struct Row {
     pub lod_key: u64,
     /// `IfLowering::as_u32` of the record.
     pub if_lowering: u32,
+    /// `lod_sensitivity` of the record (set by the caller, which asks it of
+    /// the live record).
+    pub sensitivity: u64,
     pub map: Option<Box<ShcAttribMap>>,
     /// The shader, its pointers at the vectors below.
     pub shader: ShcShader,
@@ -130,6 +140,7 @@ impl Row {
             w_constant: r.w_constant,
             lod_key: r.lod_key.bits(),
             if_lowering: r.if_lowering.as_u32(),
+            sensitivity: 0,
             map: r.attrib_map.map(|m| Box::new(*m)),
             shader: sh,
             blocks,
@@ -194,6 +205,9 @@ pub struct Source {
 pub struct Header<'a> {
     /// `// toolchain: ...`, the line after the mark.
     pub toolchain: &'a str,
+    /// The GPU and ES level the mark names, as constants the library checks.
+    pub gpu: &'a str,
+    pub es2: bool,
     /// What the table was made from, one comment line each.
     pub about: &'a [String],
 }
@@ -475,13 +489,14 @@ fn column_entries(r: &Row) -> [String; COLUMNS.len()] {
         r.w_constant.to_string(),
         format!("0x{:016x}", r.lod_key),
         r.if_lowering.to_string(),
+        format!("0x{:016x}", r.sensitivity),
         if r.map.is_some() { format!("Some(&{id}_ATTRIB_MAP)") } else { "None".into() },
         blocks,
     ]
 }
 
 /// The column statics: name, element type, what one entry is.
-const COLUMNS: [(&str, &str, &str); 7] = [
+const COLUMNS: [(&str, &str, &str); 8] = [
     (
         "SHC_PRECOMPILED_KEYS",
         "[u8; 32]",
@@ -500,6 +515,11 @@ const COLUMNS: [(&str, &str, &str); 7] = [
         "How an `if` with arithmetic arms was lowered (`IfLowering::as_u32`, `PVR_IF_LOWERING_*`;\n/// 0: the default, which the key does not chain).",
     ),
     (
+        "SHC_PRECOMPILED_SENSITIVITY",
+        "u64",
+        "The sampler-state sensitivity a program's first draw asks of the row (`LodKey::bits`).",
+    ),
+    (
         "SHC_PRECOMPILED_ATTRIB_MAP",
         "Option<&ShcAttribMap>",
         "The link's attribute locations a vertex shader was compiled with.",
@@ -515,7 +535,12 @@ pub fn fingerprint(r: &Row, sources: &[Source]) -> Result<String, String> {
 }
 
 /// The whole table as Rust source.
-pub fn emit(rows: &[Row], sources: &[Source], h: &Header<'_>) -> Result<String, String> {
+pub fn emit(
+    rows: &[Row],
+    sources: &[Source],
+    links: &[yakogl::shaderc::ShcPrecompiledLink],
+    h: &Header<'_>,
+) -> Result<String, String> {
     let mut out: Vec<String> = vec![
         "// SPDX-License-Identifier: Apache-2.0".into(),
         "//".into(),
@@ -576,7 +601,8 @@ pub fn emit(rows: &[Row], sources: &[Source], h: &Header<'_>) -> Result<String, 
             "#[allow(unused_imports)]",
             "use super::{",
             "    pad_attribs, pad_varyings, ShcAttrib, ShcAttribBinding, ShcAttribMap, ShcBlob, ShcBlock, ShcBlockMember,",
-            "    ShcBlocks, ShcShader, ShcSource, ShcUniform, ShcVarying, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX,",
+            "    ShcBlocks, ShcPrecompiledLink, ShcShader, ShcSource, ShcUniform, ShcVarying, SHC_STAGE_FRAGMENT,",
+            "    SHC_STAGE_VERTEX,",
             "};",
         ]
         .map(String::from),
@@ -586,6 +612,14 @@ pub fn emit(rows: &[Row], sources: &[Source], h: &Header<'_>) -> Result<String, 
         ["#[allow(unused_imports)]", "use super::{pad_io, ShcViv, ShcVivIo, SHC_VIV_MAX_IO};"].map(String::from),
     );
     out.extend(["#[allow(unused_imports)]", "use crate::util::cname;", ""].map(String::from));
+    out.push("/// The toolchain mark: which compiler made this table, for which build.".into());
+    out.push(format!("pub const SHC_PRECOMPILED_TOOLCHAIN: &str = \"{}\";", rs_str(h.toolchain)));
+    out.push("/// The same, NUL-terminated (`shc_precompiled_toolchain()`).".into());
+    out.push(format!("pub const SHC_PRECOMPILED_TOOLCHAIN_C: &str = \"{}\\0\";", rs_str(h.toolchain)));
+    out.push("/// The GPU and ES level the rows were compiled for (the library refuses a table for another).".into());
+    out.push(format!("pub const SHC_PRECOMPILED_GPU: &str = \"{}\";", rs_str(h.gpu)));
+    out.push(format!("pub const SHC_PRECOMPILED_ES2: bool = {};", h.es2));
+    out.push(String::new());
 
     out.push(format!("pub static SHC_PRECOMPILED_SOURCES: [ShcSource; {}] = [", sources.len()));
     for s in sources {
@@ -626,6 +660,20 @@ pub fn emit(rows: &[Row], sources: &[Source], h: &Header<'_>) -> Result<String, 
         }
         out.push("];".into());
     }
+    out.push(String::new());
+    out.push("/// Every link the generator made: the verdict a link takes without the front end.".into());
+    out.push(format!("pub static SHC_PRECOMPILED_LINKS: [ShcPrecompiledLink; {}] = [", links.len()));
+    let key = |k: &[u8; 32]| format!("[{}]", k.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", "));
+    for l in links {
+        let yakogl::shaderc::ShcPrecompiledLink { vs, fs, fs_blend_key, linked_fs } = l;
+        out.push(format!(
+            "    ShcPrecompiledLink {{ vs: {}, fs: {}, fs_blend_key: 0x{fs_blend_key:x}, linked_fs: {} }},",
+            key(vs),
+            key(fs),
+            key(linked_fs)
+        ));
+    }
+    out.push("];".into());
     out.push(String::new());
     Ok(out.join("\n"))
 }
