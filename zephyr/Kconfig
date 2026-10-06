@@ -375,11 +375,14 @@ config YAKOGL_SHADERC_ONLINE
 	bool "in-process compiler"
 	help
 	  The default. Compile the shader on the target, from the GLSL ES text
-	  the application passes to glShaderSource, with no table and no host.
+	  the application passes to glShaderSource, with no Mesa table and no host.
 
-	  This links no table at all (no `mesa-reference-table`; the crate's
+	  This links no Mesa reference table (no `mesa-reference-table`; the crate's
 	  `no-shader-table` as well), which is the point: an image carrying a
-	  compiler does not also need the bytes it was meant to replace.
+	  compiler does not also need the bytes it was meant to replace. The
+	  precompiled table our own compiler makes (YAKOGL_PRECOMPILED_SHADERS) is
+	  not that table: it is a tier in front of this compiler, and
+	  `no-shader-table` says only that the Mesa one is absent.
 
 	  The compiler is no_std and allocation-free; it works in the region
 	  sized by YAKOGL_SHADERC_SCRATCH_BYTES below.
@@ -419,7 +422,19 @@ config YAKOGL_PRECOMPILED_SHADERS
 	bool "precompiled shaders in front of the compiler"
 	depends on (YAKOGL_SHADERC_ONLINE || YAKOGL_SHADERC_PRECOMPILED_ONLY) && !YAKOGL_GPU_V3D
 	help
-	  With the in-process compiler (YAKOGL_SHADERC_ONLINE): compile the source list (tools/shaders/precompiled.list, or
+	  Off by default, measured 2026-10-07 rather than assumed: the table is
+	  4,881,999 bytes of .rodata for one app (gl_test_es100, 176 sources,
+	  1888 rows) on the AM62P gl_test image, where the in-process compiler it
+	  sits in front of is 712,704 bytes of .text and 171,497 of .rodata. The
+	  table is 5.5x the compiler's flash for one app's shaders, and it grows
+	  with the app's shader set while the compiler does not. What makes the
+	  table dear is not its code (1,447,864 of those bytes) but its
+	  reflection: about 1.67 KB per row, the same source's reflection written
+	  once per variant (docs/HANDOFF.md, open work item 1). Turning this on by
+	  default is the step after that, not before it.
+
+	  With the in-process compiler (YAKOGL_SHADERC_ONLINE):
+	  compile the source list (tools/shaders/precompiled.list, or
 	  YAKOGL_PRECOMPILED_LIST) with this tree's own compiler while the
 	  image is built (yakogl-precompile, a host program cargo builds into
 	  the build directory first), and link the table it writes in front of
@@ -429,20 +444,48 @@ config YAKOGL_PRECOMPILED_SHADERS
 	  them; shc_online_compiler_runs() does not move). A miss compiles as
 	  without the table. The table's toolchain mark is logged at the first
 	  look-up; a table for another GPU or ES level does not build. The
-	  crate's `precompiled-shaders`. Adds the table's rows to the image
-	  (the whole list on the PowerVR is about 3.8 MB of code; one app's
-	  much less, YAKOGL_PRECOMPILED_APPS). Without a compiler
+	  crate's `precompiled-shaders`. Without a compiler
 	  (YAKOGL_SHADERC_PRECOMPILED_ONLY, which selects this) the table is
 	  the whole back end.
 
+	  The table is bytes in the image and seconds in the build, so an image
+	  names the apps it runs (YAKOGL_PRECOMPILED_APPS); with the tier on and
+	  nothing named the build stops rather than carrying everything. Measured
+	  on this tree, 2026-10-07, on the AM62P gl_test image (verdin_am62p,
+	  aarch64-unknown-none, release): zephyr.bin is 2,427,152 bytes with the
+	  tier off, 7,309,584 with gl_test_es100's rows in front of the compiler,
+	  6,424,520 with those rows and no compiler at all
+	  (YAKOGL_SHADERC_PRECOMPILED_ONLY), and 14,154,000 with the whole list.
+	  The compiler-less image gives back 5,244,035 bytes of .bss -- the scratch
+	  and keep regions YAKOGL_SHADERC_SCRATCH_BYTES lends the compiler -- so
+	  the compiler costs RAM as well as flash, and that is the side of it the
+	  table has to beat. The whole list is 3346 rows and 4,044,672 code bytes
+	  (595 rows and 741,968 on the GC7000), and it is every shader this
+	  repository lists -- Qt's and Qt3D's and the test suite's among them -- so
+	  an image that runs one app and names nothing carries the others' bytes
+	  for nothing.
+
+	  Sources the compiler refuses are left out and named
+	  (tools/shaders/known-uncompilable.txt): 104 of the whole list on the
+	  PowerVR, 121 on the GC7000. A draw of one of those compiles at run time
+	  when the image has a compiler, and is refused by name when it has none.
+
 config YAKOGL_PRECOMPILED_APPS
-	string "the list's apps to precompile (space-separated; empty: the whole list)"
+	string "the list's apps to precompile (space-separated)"
 	depends on YAKOGL_PRECOMPILED_SHADERS
 	default ""
 	help
 	  `app` names of the source list, e.g. "gl_test_es100" or "femtovg":
 	  only those programs and their sources go into the table
-	  (yakogl-precompile --app). Empty: every listed source and program.
+	  (yakogl-precompile --app). The names are the `app` lines of
+	  tools/shaders/precompiled.list.
+
+	  Empty is a build error, not the whole list: the whole list is 14,154,000
+	  bytes on the AM62P gl_test image against 2,427,152 with the tier off
+	  (YAKOGL_PRECOMPILED_SHADERS above), and an image that runs one app has
+	  no use for the rest. Name every app the image runs. The whole list stays
+	  what yakogl-precompile itself does with no --app, which is what the table
+	  generators and the gate's tier rows use.
 
 config YAKOGL_PRECOMPILED_LIST
 	string "the source list (empty: tools/shaders/precompiled.list)"

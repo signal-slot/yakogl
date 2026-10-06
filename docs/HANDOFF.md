@@ -119,25 +119,91 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    records, cluster 91.8 fps. Earlier: the tier on `17605c36` with
    `gl_test_es100`'s 1291 rows, 48 / 48; Slint and the cluster with
    `femtovg`'s 583 rows, same pictures.
-   Parked: branch `work/pco-driver-programs` (`f5e4aa57`): the driver's five
-   end-of-tile programs, the boot self-test's vertex shader and the
-   VDM-sync program come from our encoder, byte-identical to pco's, so pco
-   compiles nothing for a product image. The full gate passed before a
-   HANDOFF amend. It needs a rebase onto origin/main and a `--quick` run,
-   then landing and an AM62P gl_test, Slint and cluster board run.
-   Open points: the list's gl_test app misses the inline shader sources of
-   cases 181, 182, 183 and 188 to 192 (`tools/precompile/gl_test_pairs.py`
-   does not follow the measurement cases' inline tables); sampler-state
-   (lod-key) variants are not precompiled (`gl_test_es100/texture.frag has
-   no variant for sampler key 0x1`; the draw takes the base program);
-   `YAKOGL_PRECOMPILED_SHADERS` is still off by default.
-   Remaining steps: 6 the default turns on (after the points above); 7
-   rename to "precompiled shaders" and "shader compiler" (features
-   `precompiled-shaders` and `shader-compiler` for `shaderc-online` and
-   `shaderc-offline`; Kconfig symbols, the C ABI, log prefixes); 8 the
-   source moves from `src/shaderc/online` to `src/shaderc/compiler` and
-   `docs/online-shaderc` to `docs/shader-compiler`; 9 optionally, V3D rows.
-   The words online, offline and remote go away.
+   Open, not parked: the driver's five end-of-tile programs, the boot
+   self-test's vertex shader and the VDM-sync program are still Mesa's text --
+   `driver/src/pvr_render.c:56` says "Static VDM_SYNC USC program (Mesa
+   static_data_areas: pco_usclib ...)" -- so pco compiles them for a product
+   image. A branch `work/pco-driver-programs` (`f5e4aa57`) that made them come
+   from our encoder, byte-identical to pco's, was recorded here as parked; it
+   is not in this repository (no branch of that name, and `f5e4aa57` is not an
+   object -- checked 2026-10-07). The work is open.
+   Closed: the list's gl_test app missed the inline shader sources of cases
+   181, 182, 183 and 188 to 192. gl_test.c's 61 GLSL string literals became
+   `tools/shaders/gltest/` -- 55 files, four texts appearing twice or three
+   times -- named in `gen_gl_test_shaders.py`'s ENTRIES, and both generated
+   headers carry them (`88246148`). The pair reader gained the two rules the
+   moved sources showed it needed: a link call whose other half a case fills
+   with GLSL while it runs names no program, and a table holding both halves
+   names its programs by its rows, not by its vertex shaders times its
+   fragment shaders. The list's gl_test apps now hold 145 + 145 pairs (101 +
+   101 before), and `tools/precompile/gl_test_pairs.py` refuses to generate a
+   list from a gl_test.c that writes a GLSL literal of its own. Four sites
+   stay unresolved and are named by case -- 149 case_vsunits, 150 shprobe and
+   166 fshprobe's shp_arm, 166's fshp_arm_units: each links a named source
+   beside a buffer it fills with GLSL while it runs, so no pair names that
+   program and none can. Those cases need the in-process compiler.
+   Open: the GC7000 has no row for a gltest source (138 of the 184 gl_test
+   sources have no Vivante row, 123 of them before the move); a `gc7000` role
+   for `dir gltest` needs `gen_shader_table.py --append` with etna_shc, then
+   an i.MX8MP run with no compiler. `tools/v3d/glsl2v3d.py` and
+   `tools/v3d/sim_fixture.py` fail on any unresolved site, and the reader had
+   two at `b2e0144f` (case_psizvpm, offarm_run), so the V3D table cannot be
+   regenerated as it stands.
+   Open, and a limit rather than a gap: sampler-state (lod-key) variants are
+   not precompiled (`gl_test_es100/texture.frag has no variant for sampler key
+   0x1`). A variant is a fact about a draw, not about a program: the key is the
+   sampler and texture state of the draw that asks for the program
+   (`src/gl/draw.rs`, `stage_lod_key`), and `gl_test_es100`'s 1888 rows carry
+   1705 non-zero sensitivities, 1586 of them the sample-kill bit alone.
+   Enumerating them is 2^k rows per program on a table that is already 11.4 MB
+   of Rust for one app. A missing variant is never a refusal:
+   `lod_variant_for()` gives the draw the program's own shaders -- the TPU's
+   quad level, or the hardware's switch at 0 -- which is what every draw did
+   before the tier existed. So an image with a compiler loses only a compile,
+   and an image without one draws at the base level; what the compiler-less
+   image cannot do is pick a mip-free or a switch-at-N variant.
+   Step 6 (the default turns on) was measured, and the measurement reversed it:
+   the default stays off. The AM62P gl_test image (verdin_am62p,
+   aarch64-unknown-none, release), built four ways on 2026-10-07: 2,427,152
+   bytes with the tier off (13 s), 7,309,584 with `gl_test_es100`'s rows in
+   front of the compiler (66 s), 6,424,520 with those rows and no compiler at
+   all (47 s), 14,154,000 with the whole list (44 s). `size -A` says where the
+   bytes are. The compiler is 712,704 of .text and 171,497 of .rodata -- 884,201
+   of flash -- and 5,244,035 of .bss, the scratch and keep regions
+   `YAKOGL_SHADERC_SCRATCH_BYTES` lends it. The table is 4,881,999 of .rodata
+   for one app's 176 sources: 1,447,864 instruction words, 274,923 the GLSL text
+   the table keeps for compiler-less targets, and 3,159,212 -- about 1.67 KB per
+   row over 1888 rows -- reflection.
+   Open, and the reason the tier is not the default: that reflection is written
+   once per variant row. Every row carries its own `ShcShader` -- varyings,
+   uniforms, attribute map, blocks -- although all the variants of one source
+   share one reflection, so the same 176 sources' reflection appears about 10.7
+   times. Storing it per source instead of per row takes ~3.16 MB off this
+   table, and that is what the tier needs to beat: 884,201 bytes of flash and
+   5,244,035 of RAM for a compiler that serves any shader, while the table
+   serves only the apps it names and grows with them. Until then the tier is
+   what an image chooses when it wants no compiler, not what every image pays.
+   Open: an image that turns the tier on must name its apps. With the tier on
+   and `YAKOGL_PRECOMPILED_APPS` empty the build stops (CMakeLists.txt,
+   zephyr/CMakeLists.txt) instead of linking the whole list -- 14,154,000 bytes
+   against 2,427,152 -- which is every shader this repository lists, Qt's and
+   Qt3D's and the test suite's among them, for an image that runs one app.
+   `yakogl-precompile` with no `--app` still means the whole list, and that is
+   what the table generators and the gate's tier rows use.
+   Open: three kinds of shader no table can serve. gl_triangle
+   (`driver/samples/zephyr/gl_triangle/src/main.c:71`) and gc_gl_triangle
+   (`.../gc_gl_triangle/src/main.c:170`) write their GLSL as C literals in the
+   sample's own main.c -- the class of defect gl_test had -- so the list has no
+   app for them and a compiler-less image cannot draw them. glmark2 and dEQP
+   take their shaders from outside this repository, so no list names them
+   either. Those images need the compiler.
+   Remaining steps: 6 the default turns on, after the reflection is stored per
+   source (the measurement above); 7 rename to "precompiled shaders" and
+   "shader compiler" (features `precompiled-shaders` and `shader-compiler` for
+   `shaderc-online` and `shaderc-offline`; Kconfig symbols, the C ABI, log
+   prefixes); 8 the source moves from `src/shaderc/online` to
+   `src/shaderc/compiler` and `docs/online-shaderc` to `docs/shader-compiler`;
+   9 optionally, V3D rows. The words online, offline and remote go away.
 2. **Design clean-up.** Decided 2026-10-06; the measured inventory is in
    parentheses.
    - Done: clean-up 1 (`260711b9`, the GC7000's debug statics: 4 removed, 5

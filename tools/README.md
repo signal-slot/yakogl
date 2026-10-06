@@ -173,9 +173,10 @@ precompiled shaders: program <vs>/<fs> was not linked at build time
 (`<list>` is the list the table was made from, `SHC_PRECOMPILED_LIST`.) gl_test's
 closing line ends `precompiled hits <n>, compiler runs <n>`.
 
-An image build does the first line itself (capi/yakogl_capi.cmake, `PRECOMPILED`,
-into its build directory; `YAKOGL_PRECOMPILED_APPS` picks the apps) on every
-build; the table is rewritten only when it changed.
+An image build with the tier on does the first line itself (capi/yakogl_capi.cmake,
+`PRECOMPILED`, into its build directory; `YAKOGL_PRECOMPILED_APPS` names the apps
+and is required -- empty is a build error, not the whole list); the table is
+rewritten only when it changed.
 
 # Building the pco_shc that reproduces the table
 

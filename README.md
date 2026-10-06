@@ -195,9 +195,9 @@ has the make variables in parentheses):
 | Option | Default | |
 |---|---|---|
 | `YAKOGL_OSAL` | `linux` (Zephyr and make: fixed, `zephyr` / `baremetal`) | the OSAL |
-| `YAKOGL_SHADERC` (Zephyr `CONFIG_YAKOGL_SHADERC_ONLINE` / `_OFFLINE`) | `online` (make: the Mesa reference, see `baremetal.mk`) | the shader back end: our compiler, or `offline`, the Mesa reference as the table (measurement images only) |
-| `YAKOGL_PRECOMPILED_SHADERS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_SHADERS`) | `OFF` (`n`) | the precompiled tier in front of the compiler: the build runs `yakogl-precompile` on the source list first and links its table |
-| `YAKOGL_PRECOMPILED_APPS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_APPS`) | empty: the whole list | the list's apps to precompile, e.g. `gl_test_es100`, `femtovg` (Zephyr also `CONFIG_YAKOGL_PRECOMPILED_LIST`, another list) |
+| `YAKOGL_SHADERC` (Zephyr `CONFIG_YAKOGL_SHADERC_ONLINE` / `_OFFLINE` / `_PRECOMPILED_ONLY`) | `online` (make: the Mesa reference, see `baremetal.mk`) | the shader back end: our compiler, or `offline`, the Mesa reference as the table (measurement images only), or `precompiled`, the table alone with no compiler |
+| `YAKOGL_PRECOMPILED_SHADERS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_SHADERS`) | `OFF` (`n`) | the precompiled tier in front of the compiler: the build runs `yakogl-precompile` on the named apps first and links its table (`zephyr/Kconfig` records what the table costs) |
+| `YAKOGL_PRECOMPILED_APPS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_APPS`) | empty, and empty with the tier on is a build error | the list's apps to precompile, e.g. `gl_test_es100`, `femtovg` (Zephyr also `CONFIG_YAKOGL_PRECOMPILED_LIST`, another list) |
 | `YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) | `../src` | the driver repository's `src/` |
 | `YAKOGL_RUST_LINKAGE` (`RUST_LINKAGE`) | `staticlib` | `external`: C parts only (`libyakogl_c.a`), see "Linking" |
 | `YAKOGL_RUST_TARGET` (`RUST_TARGET`) | host / derived; Zephyr and make: `aarch64-unknown-none` | Rust target triple (64-bit only) |
