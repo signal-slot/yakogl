@@ -110,6 +110,11 @@ bool imx8mp_display_is_running(void);
 #define IMX8MP_DISPLAY_HEALTH_BACKLIGHT_PWM   BIT(5)
 unsigned int imx8mp_display_health(void);
 
+/* The SN65DSI84's IRQ_STAT (0xE5) as it stands, read only: the link errors
+ * latched since the bring-up's check cleared it (0 a clean link). 0..255, or
+ * a negative errno (no bridge, not answering, or no full display driver). */
+int imx8mp_display_bridge_irq_stat(void);
+
 /* The panel geometry the device tree describes, for a caller that has to
  * size a framebuffer before the display is up. */
 void imx8mp_display_geometry(uint32_t *width, uint32_t *height);

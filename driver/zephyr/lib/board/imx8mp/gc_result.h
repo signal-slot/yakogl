@@ -50,6 +50,7 @@ enum gc_result_kind {
 	GC_RESULT_WDOG = YK_RECORD_KIND_WDOG,       /* the WDOG1 self-arm: what it found and did */
 	GC_RESULT_STAGE = YK_RECORD_KIND_STAGE,      /* a boot or sample stage reached (a breadcrumb) */
 	GC_RESULT_FINGERPRINT = YK_RECORD_KIND_FINGERPRINT, /* the window's CRC-32 (record.rs) */
+	GC_RESULT_DISPLAY = YK_RECORD_KIND_DISPLAY, /* the display chain scanning a window (record.rs) */
 };
 
 /* kind WDOG (gc_wdog_arm.c, CONFIG_GC_BOARD_WDOG_SELF_ARM): w0's low byte is

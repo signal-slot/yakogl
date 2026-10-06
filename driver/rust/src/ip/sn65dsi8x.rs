@@ -614,6 +614,13 @@ impl<'a, E: Env> Bridge<'a, E> {
         Ok(())
     }
 
+    /// IRQ_STAT (0xE5) as it stands, writing nothing: what latched since the
+    /// last clear ([`Bridge::check_link`] clears it once the video runs), so
+    /// a read seconds later says whether the link stayed clean.
+    pub fn irq_stat(&self) -> Result<u8, i32> {
+        self.read(csr::IRQ_STAT)
+    }
+
     /// Read the part's state, writing nothing: a running bridge someone else
     /// configured can be asked too. Bits as [`health`]; a part that does not
     /// answer reports 0.
@@ -884,6 +891,18 @@ mod tests {
         // an error that keeps coming is reported
         m.set_irq_source(0x40);
         assert_eq!(Bridge::new(&m).check_link(), Ok(0x40));
+    }
+
+    #[test]
+    fn irq_stat_reads_what_latched_and_writes_nothing() {
+        let m = BridgeModel::new();
+        start(&m, IMX8MP).unwrap();
+        Bridge::new(&m).check_link().unwrap();
+        m.clear_events();
+        assert_eq!(Bridge::new(&m).irq_stat(), Ok(0));
+        m.latch_irq(0x88); // a sync error and a long-packet length error since the check
+        assert_eq!(Bridge::new(&m).irq_stat(), Ok(0x88));
+        assert!(!m.events().iter().any(|e| matches!(e, Ev::Write(..) | Ev::Gpio(..))));
     }
 
     #[test]

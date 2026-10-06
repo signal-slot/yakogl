@@ -298,6 +298,12 @@ unsigned int imx8mp_display_health(void)
 	return hdmi_data0.mapped ? yd_imx8mp_hdmi_health(&hdmi_data0.yd) : 0u;
 }
 
+/* No SN65DSI84 is this driver's to ask. */
+int imx8mp_display_bridge_irq_stat(void)
+{
+	return -ENODEV;
+}
+
 void imx8mp_display_geometry(uint32_t *width, uint32_t *height)
 {
 	*width = hdmi_cfg0.yd.hactive;

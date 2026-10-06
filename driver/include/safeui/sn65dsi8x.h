@@ -47,6 +47,10 @@ int sn65dsi8x_stop(const struct device *dev);
  * that is not a ready yakogl,sn65dsi8x. */
 uint32_t sn65dsi8x_health(const struct device *dev);
 
+/* IRQ_STAT (0xE5) as it stands, read only: what latched since
+ * sn65dsi8x_check_link() cleared it. 0..255, or a negative errno. */
+int sn65dsi8x_irq_stat(const struct device *dev);
+
 /* What the last start found and wrote; NULL as above. */
 const struct yd_sn65dsi8x_data *sn65dsi8x_data(const struct device *dev);
 

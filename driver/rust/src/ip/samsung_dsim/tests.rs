@@ -105,14 +105,30 @@ fn bad_links_are_refused_by_the_plan() {
     ] {
         assert!(plan(&l).is_err(), "{l:?}");
     }
-    // no rate given: pixel x 24 / lanes (415.8 Mbit/s, which the PLL makes
-    // exactly: 12 MHz x 693 / 20), no margin
+    // no rate given: pixel x 24 / lanes with the margin, 415.8 x 1.025 =
+    // 426.195 Mbit/s; the slowest the PLL makes at or above that is
+    // 12 MHz x 853 / (6 x 4) = 426.5
+    assert_eq!(min_lane_rate(69_300_000, 4), 426_195_000);
     let p = plan(&Link { lane_rate_hz: 0, ..LINK }).unwrap();
-    assert_eq!(p.pms.fout_hz, 415_800_000);
-    // the R4 plan's 71.43 MHz needs 428.57 Mbit/s: the board's fixed 426.6
-    // cannot carry it, the derived rate is the next the PLL makes above
+    assert_eq!(p.pms.fout_hz, 426_500_000);
+    // the R4 plan's 71.43 MHz needs 439.29 Mbit/s with the margin: the
+    // board's fixed 426.6 cannot carry it, the derived rate is 439.5
     let r4 = VideoMode { pixel_clock_hz: 71_428_571, ..RIVERDI };
     assert_eq!(plan(&Link { mode: r4, ..LINK }), Err(-EINVAL));
     let p = plan(&Link { mode: r4, lane_rate_hz: 0, ..LINK }).unwrap();
-    assert!(p.pms.fout_hz >= 428_571_426 && p.pms.fout_hz < 428_571_426 + 600_000, "{:?}", p.pms);
+    assert_eq!((p.pms.p, p.pms.m, p.pms.s, p.pms.fout_hz), (2, 293, 2, 439_500_000));
+}
+
+/// The margin, at the three points it was measured at (LINK_MARGIN_PERMILLE).
+#[test]
+fn a_link_without_the_margin_is_refused() {
+    // 69.3 MHz on 426.6 Mbit/s: 25.97 per mille, the plan the panel showed right
+    assert!(plan(&LINK).is_ok());
+    // 71.1 MHz on 426.6 (2026-10-06) and 71.43 MHz on 428.6 (2026-09-23): none
+    let at = |hz, lane| Link { mode: VideoMode { pixel_clock_hz: hz, ..RIVERDI }, lane_rate_hz: lane, ..LINK };
+    assert_eq!(plan(&at(71_100_000, 426_600_000)), Err(-EINVAL));
+    assert_eq!(plan(&at(71_428_571, 428_600_000)), Err(-EINVAL));
+    // the boundary at 426.6 Mbit/s: 426.6 / 24 x 4 / 1.025 = 69.37 MHz
+    assert!(plan(&at(69_365_000, 426_600_000)).is_ok());
+    assert_eq!(plan(&at(69_370_000, 426_600_000)), Err(-EINVAL));
 }

@@ -179,6 +179,16 @@ kinds! {
          took) | the time its iteration was blocked on the GPU (fence waits and submits \
          waiting for an event), 16 ms units, << 24; every field \
          saturates one below its largest value, which means not measured";
+    DISPLAY = 22, Seq,
+        "the i.MX8MP display chain as it scans the window (gc_gl_triangle, \
+         CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD), written after PICTURE once the window has \
+         been scanned about a second, so it replaces PICTURE as the run's record. w1 = the \
+         pixel clock in kHz (the CCM root as read back when adopted) | DISPLAY_ADOPTED; \
+         w2 = the DSI lane rate in kHz (the DSIM PLL as programmed; 0 unknown); w3 = the \
+         SN65DSI84's IRQ_STAT (0xE5) now, latched since the link check (0xff not read) | \
+         IRQ_STAT one ms after the video started << 8 (0xff the check failed) | the \
+         display health (IMX8MP_DISPLAY_HEALTH_*) << 16 | the LCDIF's CTRLDESCL0_5 BPP code \
+         << 24 | its pitch in KiB << 28 (saturating at 15)";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -328,6 +338,14 @@ values! {
     GPU_STOP_AT_MAXIMUM = 2;
     GPU_STOP_GROW_TABLE_FULL = 3;
     GPU_STOP_KICK_TIMEOUT = 4;
+    // kind DISPLAY: w1's flag (the LCDIF was already scanning: the window was
+    // flipped onto a running chain).
+    DISPLAY_ADOPTED = 0x8000_0000;
+    // kind DISPLAY: w3's fields.
+    DISPLAY_IRQ_NOT_READ = 0xff;
+    DISPLAY_HEALTH_SHIFT = 16;
+    DISPLAY_BPP_SHIFT = 24;
+    DISPLAY_PITCH_SHIFT = 28;
     // kind CHECK: the tag, in the check's order (cluster/check Failure).
     CHECK_PROBES = 1;
     CHECK_UNDRAWN = 2;
@@ -509,6 +527,111 @@ pub fn probes_words(p: &[[u8; 3]; 5]) -> [u32; 3] {
 /// `W << 16 | H`, the size word of PICTURE and FINGERPRINT.
 pub const fn size_word(w: u32, h: u32) -> u32 {
     (w & 0xffff) << 16 | (h & 0xffff)
+}
+
+/// What kind DISPLAY carries ([`display_words`]); `struct yd_record_display`
+/// in yakogl_drivers.h, which the C writer fills.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Display {
+    /// 1: the LCDIF was already scanning when the window was put on it.
+    pub adopted: u32,
+    pub pixel_clock_hz: u32,
+    /// The DSI lane rate (0 unknown).
+    pub lane_rate_hz: u32,
+    /// The bridge's IRQ_STAT read now; [`DISPLAY_IRQ_NOT_READ`] when it
+    /// could not be read.
+    pub irq_now: u32,
+    /// IRQ_STAT one ms after the video started (0xff: the check failed).
+    pub irq_at_start: u32,
+    /// IMX8MP_DISPLAY_HEALTH_* bits.
+    pub health: u32,
+    /// CTRLDESCL0_5 bits 27:24.
+    pub bpp_code: u32,
+    /// CTRLDESCL0_3's pitch, bytes.
+    pub pitch: u32,
+}
+
+/// kind DISPLAY's w1..w3.
+pub const fn display_words(d: &Display) -> [u32; 3] {
+    let pitch_kib = if d.pitch >> 10 > 15 { 15 } else { d.pitch >> 10 };
+    [
+        ((d.pixel_clock_hz / 1000) & !DISPLAY_ADOPTED) | if d.adopted != 0 { DISPLAY_ADOPTED } else { 0 },
+        d.lane_rate_hz / 1000,
+        (d.irq_now & 0xff)
+            | (d.irq_at_start & 0xff) << 8
+            | (d.health & 0xff) << DISPLAY_HEALTH_SHIFT
+            | (d.bpp_code & 0xf) << DISPLAY_BPP_SHIFT
+            | pitch_kib << DISPLAY_PITCH_SHIFT,
+    ]
+}
+
+/// The SN65DSI84's IRQ_STAT bits (data sheet Table 7-10), named.
+fn write_irq_stat(out: &mut impl fmt::Write, v: u32) -> fmt::Result {
+    const BITS: [(u32, &str); 7] = [
+        (7, "SYNCH_ERR"),
+        (6, "CRC_ERR"),
+        (5, "UNC_ECC_ERR"),
+        (4, "COR_ECC_ERR"),
+        (3, "LLP_ERR"),
+        (2, "SOT_BIT_ERR"),
+        (0, "PLL_UNLOCK"),
+    ];
+    write!(out, "0x{v:02x}")?;
+    if v == 0 {
+        return out.write_str(" (clean)");
+    }
+    let mut first = true;
+    for (b, n) in BITS {
+        if v & (1 << b) != 0 {
+            out.write_str(if first { " (" } else { " " })?;
+            out.write_str(n)?;
+            first = false;
+        }
+    }
+    if !first {
+        out.write_str(")")?;
+    }
+    Ok(())
+}
+
+fn describe_display(out: &mut impl fmt::Write, w1: u32, w2: u32, w3: u32) -> fmt::Result {
+    let pix = w1 & !DISPLAY_ADOPTED;
+    write!(
+        out,
+        "{}: pixel clock {pix} kHz, DSI lane rate {w2} kHz",
+        if w1 & DISPLAY_ADOPTED != 0 { "adopted" } else { "cold bring-up" }
+    )?;
+    // the headroom over pixel x 24 / 4 lanes (the Verdin's link), per mille
+    // (ip::samsung_dsim::LINK_MARGIN_PERMILLE: 25 needed, 0 broke the picture)
+    if pix != 0 && w2 != 0 {
+        let tenths = (i64::from(w2) * 4 * 10_000 / (i64::from(pix) * 24)) - 10_000;
+        write!(out, " (headroom {}.{} per mille at 4 lanes)", tenths / 10, (tenths % 10).abs())?;
+    }
+    out.write_str("; bridge IRQ_STAT now ")?;
+    match w3 & 0xff {
+        DISPLAY_IRQ_NOT_READ => out.write_str("not read")?,
+        v => write_irq_stat(out, v)?,
+    }
+    out.write_str(", at the start ")?;
+    match (w3 >> 8) & 0xff {
+        0xff => out.write_str("not checked")?,
+        v => write_irq_stat(out, v)?,
+    }
+    let bpp = (w3 >> DISPLAY_BPP_SHIFT) & 0xf;
+    write!(
+        out,
+        "; health 0x{:02x}; LCDIF format {bpp} ({}) pitch {} KiB",
+        (w3 >> DISPLAY_HEALTH_SHIFT) & 0xff,
+        match bpp {
+            4 => "RGB565",
+            8 => "RGB888",
+            9 => "ARGB8888",
+            10 => "ABGR8888",
+            _ => "?",
+        },
+        w3 >> DISPLAY_PITCH_SHIFT
+    )
 }
 
 /// A glmark2 run's outcome, as kind GLMARK2 stores it ([`glmark2_words`]).
@@ -1222,6 +1345,7 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             }
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
+        kind::DISPLAY => describe_display(out, w1, w2, w3),
         _ => Ok(()),
     }
 }
@@ -1274,6 +1398,40 @@ pub fn write_c_header(out: &mut impl fmt::Write) -> fmt::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// DISPLAY: the record the fixed Verdin image should leave (69.3 MHz,
+    /// window flipped onto the chain the panel console brought up, a clean
+    /// link) and the 71.1 MHz control, both decoded.
+    #[test]
+    fn display_words_and_their_decode() {
+        let fixed = Display {
+            adopted: 1,
+            pixel_clock_hz: 69_300_000,
+            lane_rate_hz: 426_600_000,
+            irq_now: 0,
+            irq_at_start: 0,
+            health: 0x3f,
+            bpp_code: 9,
+            pitch: 5120,
+        };
+        assert_eq!(display_words(&fixed), [0x8001_0eb4, 0x0006_8268, 0x593f_0000]);
+        let b = text(|b| describe(b, [w0(kind::DISPLAY, 0x0f), 0x8001_0eb4, 0x0006_8268, 0x593f_0000]));
+        assert_eq!(
+            b.as_str(),
+            "DISPLAY (22) seq 15: adopted: pixel clock 69300 kHz, DSI lane rate 426600 kHz (headroom 25.9 per \
+             mille at 4 lanes); bridge IRQ_STAT now 0x00 (clean), at the start 0x00 (clean); health 0x3f; LCDIF \
+             format 9 (ARGB8888) pitch 5 KiB"
+        );
+        let control = Display { pixel_clock_hz: 71_100_000, irq_now: 0x88, ..fixed };
+        let w = display_words(&control);
+        let b = text(|b| describe(b, [w0(kind::DISPLAY, 0x0f), w[0], w[1], w[2]]));
+        assert!(b.as_str().contains("(headroom 0.0 per mille at 4 lanes)"), "{}", b.as_str());
+        assert!(b.as_str().contains("now 0x88 (SYNCH_ERR LLP_ERR)"), "{}", b.as_str());
+        // the fields saturate and an unread IRQ_STAT is its own value
+        let w = display_words(&Display { irq_now: DISPLAY_IRQ_NOT_READ, irq_at_start: 0xff, pitch: 1 << 20, ..fixed });
+        assert_eq!((w[2] & 0xff, (w[2] >> 8) & 0xff, w[2] >> 28), (0xff, 0xff, 15));
+        assert_eq!(classify([w0(kind::DISPLAY, 1), w[0], w[1], w[2]]), Class::Verdict);
+    }
 
     /// CHECK_RUN: each field lands at its bits, saturates one below its
     /// "not measured" value, and that value passes through unchanged.
@@ -1345,19 +1503,20 @@ mod tests {
     }
 
     #[test]
-    fn kinds_are_one_to_twenty_one_and_the_tag_list_is_the_formats() {
-        // 1..=21 in order, each number once, defined here or reserved
-        let mut want = (1..=21u8).filter(|v| !RESERVED_KINDS.contains(v));
+    fn kinds_are_one_to_twenty_two_and_the_tag_list_is_the_formats() {
+        // 1..=22 in order, each number once, defined here or reserved
+        let mut want = (1..=22u8).filter(|v| !RESERVED_KINDS.contains(v));
         for k in KINDS {
             assert_eq!(Some(k.value), want.next(), "{}", k.name);
         }
         assert_eq!(want.next(), None, "a kind is missing");
-        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 21);
+        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 22);
         assert_eq!(kind::STAGE, 14);
         assert_eq!(kind::FINGERPRINT, 15);
         assert_eq!(kind::GLMARK2, 18);
         assert_eq!(kind::GPU_STOP, 20);
         assert_eq!(kind::CHECK, 21);
+        assert_eq!(kind::DISPLAY, 22);
         // one-method.md section 3's list, plus STAGE and FAULT's tag.
         let tags = [
             kind::FAULT,

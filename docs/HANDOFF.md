@@ -181,10 +181,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      cause is not found) (#9);
    - i.MX8MP case 16 (4x MSAA) fails (#8);
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12);
-   - i.MX8MP: the panel showed one and a half copies of the frame per line at
-     a 71.1 MHz pixel clock (#23); the fix (the clock back to 69.3 MHz, a
-     margin rule, `e372545f`) is in flight and needs someone looking at the
-     panel.
+   - the i.MX8MP panel showed one and a half copies of the frame per line at
+     the 71.1 MHz pixel clock (no DSI margin); the device tree is back at
+     69.3 MHz and the margin is a checked limit (`e372545f`), awaiting a
+     viewing with the DISPLAY record (#23).
 
 ## How to work here
 

@@ -196,3 +196,7 @@ CHECK (21) tag 7: run: the check passed, the run failed later: a frame over the 
 ### 594b1507 fff004ea ffffff02 ff0007ff
 CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call failed at frame 2 (0 ms; its steps not measured, GPU busy not measured, blocked on the GPU not measured, compiler runs not counted), rc -22; draws refused 0; no keep region
 ### classify verdict
+# DISPLAY: the fixed Verdin image's expected record (69.3 MHz, a clean link), not a run
+### 594b160f 80010eb4 00068268 593f0000
+DISPLAY (22) seq 15: adopted: pixel clock 69300 kHz, DSI lane rate 426600 kHz (headroom 25.9 per mille at 4 lanes); bridge IRQ_STAT now 0x00 (clean), at the start 0x00 (clean); health 0x3f; LCDIF format 9 (ARGB8888) pitch 5 KiB
+### classify verdict

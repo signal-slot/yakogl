@@ -14,5 +14,18 @@ config GC_GL_TRIANGLE_HEIGHT
 	int "Render target height in pixels"
 	default 128
 
+config GC_GL_TRIANGLE_DISPLAY_RECORD
+	bool "Record the display chain's state after the picture (kind DISPLAY)"
+	depends on SAFEUI_DISPLAY_IMX8MP && DT_HAS_SAFEUI_IMX8MP_DISPLAY_ENABLED
+	help
+	  Once the window has been on the panel for about a second, write a
+	  DISPLAY record (driver/rust/src/board/record.rs): the pixel clock
+	  and the DSI lane rate as the driver has them, the SN65DSI84's
+	  IRQ_STAT (0xE5) then and at the start, the health bits, and the
+	  LCDIF's format and pitch. It is the last record, so on the i.MX8MP
+	  it replaces PICTURE in the SNVS (the PICTURE line is still printed
+	  first). A diagnostic for issue #23 (a picture the record could not
+	  see); off by default.
+
 source "$(GC_SAMPLE_COMMON_KCONFIG)"
 source "Kconfig.zephyr"

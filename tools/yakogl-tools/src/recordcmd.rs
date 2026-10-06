@@ -559,11 +559,11 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 53 blocks (45 + GLMARK2 on- and off-screen and with
+        // the population: the golden file's 54 blocks (45 + GLMARK2 on- and off-screen and with
         // GLMARK2_SCENES + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
-        // timeout, a frame over the budget with its slowest step, and nothing measured),
-        // every kind of record.rs's table among them
-        assert_eq!(blocks, 53, "the golden file's block count changed: re-derive the pin");
+        // timeout, a frame over the budget with its slowest step, and nothing measured
+        // + DISPLAY), every kind of record.rs's table among them
+        assert_eq!(blocks, 54, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }
@@ -714,7 +714,7 @@ mod tests {
     /// rest (a fail must never read as a pass: board.sh's verdict=failed).
     #[test]
     fn status_per_kind() {
-        let cases: [([u32; 4], Status); 18] = [
+        let cases: [([u32; 4], Status); 19] = [
             ([0x594b0202, 0x0000_0001, 1, 0], Status::Pass),    // APP pass
             ([0x594b0202, 0x0000_0602, 1, 0], Status::Fail),    // APP fail, stage 6
             ([0x594b0202, 0x0000_0003, 1, 0], Status::Invalid), // APP status 3
@@ -733,6 +733,7 @@ mod tests {
             ([0x594b1201, 0x0000_0132, 0x1121_0000, 0x0780_0438], Status::Pass), // GLMARK2 pass, off-screen
             ([0x594b1201, 0x0000_0132, 0x0021_0000, 0x0780_0438], Status::Invalid), // GLMARK2 status 0
             ([0x594b040e, 0xff403f80, 0x35706c4e, 0x04000258], Status::NotApplicable), // PICTURE
+            ([0x594b160f, 0x80010eb4, 0x00068268, 0x593f0000], Status::NotApplicable), // DISPLAY
             ([0x594b0811, 0x00020064, 0x00010003, 0x94050067], Status::NotApplicable), // DEQP
             ([0x12345678, 0, 0, 0], Status::NotApplicable),                      // no magic
         ];

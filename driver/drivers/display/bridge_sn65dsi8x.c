@@ -130,6 +130,21 @@ uint32_t sn65dsi8x_health(const struct device *dev)
 	return h;
 }
 
+int sn65dsi8x_irq_stat(const struct device *dev)
+{
+	struct sn_data *d;
+	int rc;
+
+	if (!is_sn(dev)) {
+		return -ENODEV;
+	}
+	d = dev->data;
+	k_mutex_lock(&d->lock, K_FOREVER);
+	rc = yd_sn65dsi8x_irq_stat(&d->env);
+	k_mutex_unlock(&d->lock);
+	return rc;
+}
+
 const struct yd_sn65dsi8x_data *sn65dsi8x_data(const struct device *dev)
 {
 	return is_sn(dev) ? &((struct sn_data *)dev->data)->yd : NULL;

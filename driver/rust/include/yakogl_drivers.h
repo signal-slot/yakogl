@@ -113,6 +113,21 @@ struct yd_glmark2_outcome {
 void yd_record_glmark2_words(const struct yd_glmark2_outcome *o, uint32_t out[3]);
 uint32_t yd_record_glmark2_why(const char *line, size_t n);
 
+/* kind DISPLAY's w1..w3 (record.rs display_words, Display): the i.MX8MP
+ * display chain while it scans a window. */
+struct yd_record_display {
+	uint32_t adopted;        /* 1: the LCDIF was already scanning */
+	uint32_t pixel_clock_hz;
+	uint32_t lane_rate_hz;   /* the DSI lane rate, 0 unknown */
+	uint32_t irq_now;        /* the bridge's 0xE5 now, YK_RECORD_DISPLAY_IRQ_NOT_READ */
+	uint32_t irq_at_start;   /* 0xE5 one ms after the video started, 0xff unchecked */
+	uint32_t health;         /* IMX8MP_DISPLAY_HEALTH_* */
+	uint32_t bpp_code;       /* CTRLDESCL0_5 bits 27:24 */
+	uint32_t pitch;          /* bytes */
+};
+
+void yd_record_display_words(const struct yd_record_display *d, uint32_t out[3]);
+
 /* The i.MX8MP samples' hold before the SoC reset (src/board/imx8mp.rs,
  * through src/ffi/board.rs), for driver/zephyr/lib/board/imx8mp/gc_sample.c.
  * Returns the seconds; *code (may be NULL) the code the hold carries, -1 none. */
@@ -232,6 +247,8 @@ int yd_sn65dsi8x_stop(const struct yd_sn65dsi8x_config *cfg, struct yd_sn65dsi8x
 		      const struct yd_env *env);
 /* Reads only. */
 uint32_t yd_sn65dsi8x_health(const struct yd_env *env);
+/* IRQ_STAT (0xE5) as it stands, read only: 0..255, or a negative errno. */
+int yd_sn65dsi8x_irq_stat(const struct yd_env *env);
 
 /* ---- PowerVR rgxlayer (gpu::pvr::rgxlayer) ------------------------------ *
  * The TI/Img DDK 25.2's rgxlayer.h, implemented in Rust under the vendored
@@ -854,6 +871,13 @@ uint32_t yd_lcdif_isr(struct yd_lcdif_data *data);
 
 #define YD_SAMSUNG_DSIM_BURST (1u << 0)
 
+/* ip::samsung_dsim::LINK_MARGIN_PERMILLE: the lane rate must be at least
+ * pixel clock x 24 / lanes x (1000 + this) / 1000, the room for every line's
+ * packet overhead (the board's measured bound: 0 broke the picture twice,
+ * 25.97 per mille is the plan it was seen right at). A compile-time figure
+ * so a devicetree plan can be checked with BUILD_ASSERT. */
+#define YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE 25u
+
 /* yd_samsung_dsim_health() bits */
 #define YD_SAMSUNG_DSIM_H_PLL_STABLE (1u << 0)
 #define YD_SAMSUNG_DSIM_H_HS_CLOCK   (1u << 1)
@@ -1120,6 +1144,9 @@ _Static_assert(offsetof(struct yd_glmark2_outcome, failed_entry) == 24, "yd_glma
 _Static_assert(offsetof(struct yd_glmark2_outcome, unsupported_entries) == 32,
 	       "yd_glmark2_outcome.unsupported_entries");
 _Static_assert(offsetof(struct yd_glmark2_outcome, h) == 44, "yd_glmark2_outcome.h");
+_Static_assert(sizeof(struct yd_record_display) == 32, "struct yd_record_display");
+_Static_assert(offsetof(struct yd_record_display, irq_now) == 12, "yd_record_display.irq_now");
+_Static_assert(offsetof(struct yd_record_display, pitch) == 28, "yd_record_display.pitch");
 _Static_assert(sizeof(struct yd_imx_wdog_arm) == 20, "struct yd_imx_wdog_arm");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, wcr_found) == 0, "yd_imx_wdog_arm.wcr_found");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, wmcr_found) == 2, "yd_imx_wdog_arm.wmcr_found");

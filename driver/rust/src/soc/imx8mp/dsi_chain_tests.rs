@@ -19,8 +19,8 @@ use crate::ip::sn65dsi8x::{self, Board, Bridge};
 use crate::model::{Access, BridgeModel, Faults, Model, TestEnv, BRIDGE_SOFT_RESET, CCM, DSIM, LCDIF1};
 use crate::video::VideoMode;
 
-/// The panel's timing at the board's Linux pixel clock (the golden dump's);
-/// the devicetree has since raised the clock ([`verdin_60hz`]).
+/// The panel's timing at the board's Linux pixel clock (the golden dump's),
+/// which is the devicetree's plan too ([`verdin_dt`]).
 const RIVERDI: VideoMode = VideoMode {
     pixel_clock_hz: 69_300_000,
     hactive: 1280,
@@ -246,8 +246,8 @@ const ALLOWED: &[(u32, &str)] = &[
 /// pixel clock.
 const ALLOWED_R4: &[(u32, &str)] = &[(
     0x32e6_0094,
-    "PLLCTRL p 1 m 143 s 2 = 429 MHz: the slowest the PLL makes at or above the 428.57 Mbit/s a 71.43 MHz \
-     stream needs over four lanes (the devicetree's 426.6 cannot carry it)",
+    "PLLCTRL p 2 m 293 s 2 = 439.5 MHz: the slowest the PLL makes at or above the 439.29 Mbit/s a 71.43 MHz \
+     stream needs over four lanes with LINK_MARGIN_PERMILLE (the devicetree's 426.6 cannot carry it)",
 )];
 
 fn compare(m: &Model, allowed: &[(u32, &str)]) {
@@ -283,9 +283,8 @@ fn golden_cold_chain_matches_linux_except_the_allow_list() {
 fn golden_r4_plan_without_video_pll1() {
     let r = up(0);
     assert_eq!(r.pixel_hz, 71_428_571);
-    // at 429 MHz / 71.43 MHz the blanking word counts come out as Linux's
-    // (HFP 21, HBP 42, HSA 12): MHPORCH is not a difference in this plan
-    let mut all: Vec<_> = ALLOWED.iter().copied().filter(|a| a.0 != 0x32e6_0028).collect();
+    // at 439.5 MHz / 71.43 MHz HBP comes out 43, as at 69.3 MHz on 426.6
+    let mut all: Vec<_> = ALLOWED.to_vec();
     all.extend_from_slice(ALLOWED_R4);
     compare(&r.m, &all);
 }
@@ -370,10 +369,10 @@ fn disable_holds_the_lanes_and_stops_the_pll() {
 }
 
 /// The devicetree's clock plan for the Verdin
-/// (samples/zephyr/gc_common/verdin_imx8mp_display.dtsi): the panel at its
-/// typical 71.1 MHz, 60.29 Hz. Read from the file, so a change there is
-/// checked here against the three limits it must satisfy.
-mod verdin_60hz {
+/// (samples/zephyr/gc_common/verdin_imx8mp_display.dtsi): the board's Linux
+/// plan, 69.3 MHz on a 426.6 Mbit/s link, 58.76 Hz. Read from the file, so a
+/// change there is checked here against the four limits it must satisfy.
+mod verdin_dt {
     use super::*;
     use crate::errno::EINVAL;
     use crate::model::ANATOP;
@@ -411,6 +410,7 @@ mod verdin_60hz {
         pixel_hz: u32,
         video_pll1_hz: u32,
         lane_hz: u32,
+        lanes: u32,
         mode: VideoMode,
     }
 
@@ -420,6 +420,7 @@ mod verdin_60hz {
         let pixel_hz = prop(d, "clock-frequency");
         assert_eq!(prop(dsi, "pixel-clock-frequency"), pixel_hz, "the DSIM node repeats display0's clock");
         assert_eq!(prop(dsi, "burst-clock-frequency"), prop(d, "burst-clock-frequency"));
+        assert_eq!(prop(dsi, "data-lanes"), prop(d, "dsi-lanes"));
         assert_eq!(prop(d, "pll-ref-frequency"), 12_000_000);
         let mode = VideoMode {
             pixel_clock_hz: pixel_hz,
@@ -434,19 +435,34 @@ mod verdin_60hz {
             ..RIVERDI
         };
         assert_eq!(mode, VideoMode { pixel_clock_hz: pixel_hz, ..RIVERDI }, "the panel timing itself is unchanged");
-        Dt { pixel_hz, video_pll1_hz: prop(d, "video-pll1-frequency"), lane_hz: prop(d, "burst-clock-frequency"), mode }
+        Dt {
+            pixel_hz,
+            video_pll1_hz: prop(d, "video-pll1-frequency"),
+            lane_hz: prop(d, "burst-clock-frequency"),
+            lanes: prop(d, "dsi-lanes"),
+            mode,
+        }
+    }
+
+    fn link(d: &Dt, pixel_clock_hz: u32) -> Link {
+        Link {
+            mode: VideoMode { pixel_clock_hz, ..d.mode },
+            lanes: d.lanes,
+            pll_ref_hz: 12_000_000,
+            lane_rate_hz: d.lane_hz,
+            esc_max_hz: 20_000_000,
+            burst: true,
+        }
     }
 
     #[test]
-    fn the_plan_is_71_1_mhz_and_60_29_hz() {
+    fn the_plan_is_linux_s_69_3_mhz_and_58_76_hz() {
         let d = dt();
-        assert_eq!((d.pixel_hz, d.video_pll1_hz, d.lane_hz), (71_100_000, 1_066_500_000, 426_600_000));
+        assert_eq!((d.pixel_hz, d.video_pll1_hz, d.lane_hz), (69_300_000, 1_039_500_000, 426_600_000));
         let total = (d.mode.hactive + d.mode.hfront + d.mode.hsync + d.mode.hback)
             * (d.mode.vactive + d.mode.vfront + d.mode.vsync + d.mode.vback);
         assert_eq!(total, 1404 * 840);
-        // the refresh in mHz: 60.286 Hz, where the Linux plan's 69.3 MHz is 58.761
-        assert_eq!(u64::from(d.pixel_hz) * 1000 / u64::from(total), 60_286);
-        assert_eq!(69_300_000u64 * 1000 / u64::from(total), 58_760); // 58.7607
+        assert_eq!(u64::from(d.pixel_hz) * 1000 / u64::from(total), 58_760); // 58.7607 Hz
     }
 
     #[test]
@@ -455,26 +471,42 @@ mod verdin_60hz {
     }
 
     #[test]
-    fn limit_2_the_dsi_link_carries_it_and_nothing_faster() {
+    fn limit_2_the_dsi_link_carries_it() {
         let d = dt();
-        let link = |pixel_clock_hz| Link {
-            mode: VideoMode { pixel_clock_hz, ..d.mode },
-            lanes: 4,
-            pll_ref_hz: 12_000_000,
-            lane_rate_hz: d.lane_hz,
-            esc_max_hz: 20_000_000,
-            burst: true,
-        };
-        // pixel x 24 / 4 = 426.6 Mbit/s: exactly the lane rate
-        assert_eq!(u64::from(d.pixel_hz) * 24 / 4, u64::from(d.lane_hz));
-        let p = dsim::plan(&link(d.pixel_hz)).unwrap();
+        let p = dsim::plan(&link(&d, d.pixel_hz)).unwrap();
         assert_eq!((p.pms.p, p.pms.m, p.pms.s, p.pms.fout_hz), (5, 711, 2, 426_600_000));
         assert_eq!((p.byte_hz, p.esc_div, p.esc_hz), (53_325_000, 3, 17_775_000));
-        // the blanking word counts are the board's Linux's (MHPORCH 0x0015002a, HSA 12)
-        assert_eq!((p.hfp, p.hbp, p.hsa), (21, 42, 12));
-        // one hertz more and the link cannot carry the stream; 71.43 MHz neither
-        assert_eq!(dsim::plan(&link(d.pixel_hz + 1)), Err(-EINVAL));
-        assert_eq!(dsim::plan(&link(71_428_571)), Err(-EINVAL));
+        // HFP and HSA are Linux's (MHPORCH 0x0015002a, HSA 12); HBP is 43
+        // at 69.3 MHz, Linux's 42 being a 71.1 MHz figure (ran 2026-09-24)
+        assert_eq!((p.hfp, p.hbp, p.hsa), (21, 43, 12));
+    }
+
+    /// The fourth limit: the lane rate carries the pixel stream AND every
+    /// line's packet overhead (ip::samsung_dsim::LINK_MARGIN_PERMILLE, the
+    /// board's measured bound). A devicetree with no margin -- 71.1 MHz on
+    /// 426.6 Mbit/s, the 2026-10-06 picture with 1.5 copies a line -- fails
+    /// here by name.
+    #[test]
+    fn limit_4_the_dsi_link_has_the_packet_overhead_margin() {
+        let d = dt();
+        let need = dsim::min_lane_rate(d.pixel_hz, d.lanes);
+        assert!(
+            u64::from(d.lane_hz) >= need,
+            "the DSI link has no margin for packet overhead: {} Hz x 24 / {} lanes needs a lane rate of at least \
+             {need} Hz with LINK_MARGIN_PERMILLE = {} (ip::samsung_dsim), burst-clock-frequency is {} Hz \
+             (71.1 MHz on 426.6 Mbit/s broke the picture on 2026-10-06, 71.43 on 428.6 on 2026-09-23)",
+            d.pixel_hz,
+            d.lanes,
+            dsim::LINK_MARGIN_PERMILLE,
+            d.lane_hz,
+        );
+        assert!(dsim::plan(&link(&d, d.pixel_hz)).is_ok());
+        // the headroom the board was seen right at: 426.6 / 415.8 = 25.97 per mille
+        let headroom = (u64::from(d.lane_hz) * 100_000 / (u64::from(d.pixel_hz) * 24 / u64::from(d.lanes))) - 100_000;
+        assert_eq!(headroom, 2597);
+        // and the two plans that broke it are refused on this link
+        assert_eq!(dsim::plan(&link(&d, 71_100_000)), Err(-EINVAL), "71.1 MHz: no margin");
+        assert_eq!(dsim::plan(&link(&d, 71_428_571)), Err(-EINVAL), "71.43 MHz: over the link");
     }
 
     #[test]
@@ -484,22 +516,21 @@ mod verdin_60hz {
         assert_eq!(p.dsi_clk_hz, 213_300_000);
         assert_eq!(p.dsi_clk_range, 42); // 210 <= f < 215 MHz
         assert_eq!(p.divider, 3);
-        // the LVDS clock is now the pixel clock exactly (at 69.3 MHz it was 71.1 as well)
-        assert_eq!(p.lvds_clk_hz, d.pixel_hz);
+        // the LVDS clock is the DSI clock / 3 = 71.1 MHz, not the pixel
+        // clock: Linux's bridge has the same (0x0a = 0x85, 0x0b = 0x10)
+        assert_eq!(p.lvds_clk_hz, 71_100_000);
         assert_eq!(p.lvds_clk_range, 2);
-        let old = sn65dsi8x::plan(&BOARD, &bridge_mode(&RIVERDI), d.lane_hz).unwrap();
-        assert_eq!(p.csrs, old.csrs, "the bridge is programmed exactly as at 69.3 MHz");
     }
 
     #[test]
     fn limit_3_video_pll1_makes_it_exactly() {
         let d = dt();
         let divs = anatop::video_pll1_divs(d.video_pll1_hz).unwrap();
-        // m + k / 65536 = 1066.5 MHz x 2 x 2 / 24 MHz = 177.75, k folded to signed
-        assert_eq!((divs.m, divs.p, divs.s, divs.k), (178, 2, 1, -16384));
+        // m + k / 65536 = 1039.5 MHz x 2 x 2 / 24 MHz = 173.25: Linux's
+        // FDIV_CTL0 0x000ad021, FDIV_CTL1 0x4000 (golden dump)
+        assert_eq!((divs.m, divs.p, divs.s, divs.k), (173, 2, 1, 16384));
         assert_eq!(divs.rate_hz(), u64::from(d.video_pll1_hz));
-        // the VCO, FIN / p x (m + k / 65536) = 2133 MHz (Linux's 1039.5 MHz plan: 2079)
-        assert_eq!(divs.rate_hz() << divs.s, 2_133_000_000);
+        assert_eq!(divs.rate_hz() << divs.s, 2_079_000_000);
         // the pixel root takes VIDEO_PLL1 / 15 over every other running parent
         let parents = [
             (mux::DISP1_PIX_VIDEO_PLL1, d.video_pll1_hz),
@@ -508,7 +539,7 @@ mod verdin_60hz {
             (mux::OSC_24M, 24_000_000),
         ];
         let (setting, hz) = plan_root(d.pixel_hz, &parents, root::MEDIA_DISP1_PIX_MAX_HZ).unwrap();
-        assert_eq!((setting.mux, setting.pre, setting.post, hz), (mux::DISP1_PIX_VIDEO_PLL1, 1, 15, 71_100_000));
+        assert_eq!((setting.mux, setting.pre, setting.post, hz), (mux::DISP1_PIX_VIDEO_PLL1, 1, 15, 69_300_000));
     }
 
     #[test]
@@ -518,13 +549,11 @@ mod verdin_60hz {
             Ok(r) => r,
             Err((_, f)) => panic!("{f:?}"),
         };
-        assert_eq!(r.pixel_hz, 71_100_000);
-        // VIDEO_PLL1 as programmed: FDIV_CTL0 m 178 p 2 s 1, DSM -16384
-        assert_eq!(r.m.peek(ANATOP, 0x2c), 178 << 12 | 2 << 4 | 1);
-        assert_eq!(r.m.peek(ANATOP, 0x30) & 0xffff, 0xc000);
-        // at 71.1 MHz MHPORCH is no longer a difference: HBP 42 is Linux's
-        let all: Vec<_> = ALLOWED.iter().copied().filter(|a| a.0 != 0x32e6_0028).collect();
-        compare(&r.m, &all);
+        assert_eq!(r.pixel_hz, 69_300_000);
+        // VIDEO_PLL1 as Linux has it: FDIV_CTL0 0x000ad021, DSM 0x4000
+        assert_eq!(r.m.peek(ANATOP, 0x2c), 0x000a_d021);
+        assert_eq!(r.m.peek(ANATOP, 0x30) & 0xffff, 0x4000);
+        compare(&r.m, ALLOWED);
         assert_eq!(r.held_at_bridge_reset, Some(true));
     }
 }

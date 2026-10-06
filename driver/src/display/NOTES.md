@@ -115,37 +115,59 @@ candidate parents (Table 5-1, slice 124) are VIDEO_PLL1, SYSTEM_PLL2_CLK,
 SYSTEM_PLL1_CLK and the 24 MHz oscillator, each offered only when it reads
 back as running; the search takes the nearest rate at or below 250 MHz.
 
-The device tree now asks for the panel's typical **71.1 MHz** with
-`video-pll1-frequency = <1066500000>`: 1066.5 MHz / 15 = 71.1 MHz exactly,
-**60.286 Hz** (2026-10-02, the user's decision to run the panel at 60 Hz or
-more). It is the highest clock that satisfies all three limits:
+The device tree asks for the board's Linux plan, **69.3 MHz**:
+`video-pll1-frequency = <1039500000>` (golden dump `0x3036002c = 0x000ad021`,
+`0x30360030 = 0x4000`), 1039.5 MHz / 15 = 69.3 MHz, **58.761 Hz**. It
+satisfies four limits:
 
-1. the panel: 66.3 <= 71.1 <= 78.9 MHz;
-2. the DSI link: pixel x 24 bpp / 4 lanes <= the 426.6 Mbit/s lane rate
-   (`burst-clock-frequency`, DSIM PLL p 5 m 711 s 2 from 12 MHz), i.e. pixel
-   <= 71.1 MHz exactly; `ip::samsung_dsim::plan` refuses anything faster. The
-   SN65DSI84's fields do not change: DSI clock 213.3 MHz (`CHA_DSI_CLK_RANGE`
-   42), divider 213.3 / 71.1 = 3, LVDS clock 71.1 MHz -- the same LVDS clock
-   it already made from the 69.3 MHz plan, whose integer divider is also 3;
-3. VIDEO_PLL1: m + k/65536 = 1066.5 x 2 x 2 / 24 = 177.75, so m 178,
-   k -16384 (exact; the PLL's step is 91.6 Hz, 6.1 Hz at the pixel clock).
-   The VCO is 2133 MHz against Linux's 2079 at 1039.5 MHz.
+1. the panel: 66.3 <= 69.3 <= 78.9 MHz;
+2. the DSI link carries the pixels: pixel x 24 bpp / 4 lanes = 415.8 Mbit/s
+   <= the 426.6 Mbit/s lane rate (`burst-clock-frequency`, DSIM PLL p 5 m 711
+   s 2 from 12 MHz). The SN65DSI84's fields do not depend on the pixel clock:
+   DSI clock 213.3 MHz (`CHA_DSI_CLK_RANGE` 42), divider 213.3 / 69.3 = 3,
+   LVDS clock 71.1 MHz, as Linux has them (0x0a 0x85, 0x0b 0x10, 0x12 0x2a);
+3. VIDEO_PLL1: m + k/65536 = 1039.5 x 2 x 2 / 24 = 173.25, so m 173, k 16384;
+4. **the DSI link has room for the packet overhead.** The lane rate must
+   exceed pixel x 24 / lanes by `ip::samsung_dsim::LINK_MARGIN_PERMILLE` (25
+   per mille): every line also carries the headers and checksums of its sync,
+   blanking and pixel packets and the HS exit and entry of burst mode. The
+   figure is measured, not derived (how `MHPORCH`'s word counts map onto the
+   line has no RM basis): no margin broke the picture twice -- 71.43 MHz on
+   428.6 Mbit/s (2026-09-23, "disturbed, flickers, as if not in sync") and
+   71.1 MHz on 426.6 Mbit/s (2026-10-06, issue #23: one and a half copies of
+   the frame across each line, on gc_gl_triangle's window and on the panel
+   console of gc_gl_test alike) -- and 69.3 MHz on 426.6, 25.97 per mille, is
+   the plan the panel was seen right at (2026-09-24, and under Linux).
 
-The DSIM's blanking word counts at 71.1 MHz are HFP 21, HBP 42, HSA 12:
-exactly the board's Linux's (golden MHPORCH 0x0015002a). Linux sets its DSIM
-up for the 71.1 MHz mode and its CCM then gives the LCDIF 1039.5 / 15 =
-69.3 MHz (58.761 Hz), which is why the cold path's HBP used to differ (43).
-`soc::imx8mp::dsi_chain_tests::verdin_60hz` reads the device tree and checks
-all of this. The adopt path keeps whatever the previous owner programmed
-(Linux: 69.3 MHz, 58.76 Hz); the SafeUI M7 firmware re-tunes VIDEO_PLL1 to
-the same 71.1 MHz when it adopts the panel (its `src/pixclk_m7.c`).
+`soc::imx8mp::dsi_chain_tests::verdin_dt` reads the device tree and checks
+all four (`limit_4_the_dsi_link_has_the_packet_overhead_margin` names the
+margin when it fails), `ip::samsung_dsim::plan` refuses a link without the
+margin, and `imx8mp_display.c` has the same rule as a `BUILD_ASSERT` on the
+node (`YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE` in yakogl_drivers.h, which a
+test holds equal to the Rust constant). A device tree asking for 71.1 MHz on
+this link no longer builds.
 
-Before, `video-pll1-frequency = <1039500000>` (the rate the board's Linux
-runs, golden dump `0x3036002c = 0x000ad021`, `0x30360030 = 0x4000`) gave
-1039.5 MHz / 15 = 69.3 MHz, Linux's plan. Without the property (risk R4 in
-docs/source-form.md) the nearest is SYSTEM_PLL2_CLK / 14 = 71.43 MHz, above
-the link's 71.1 MHz cap; run on a 428 MHz link it broke the picture up
-(2026-09-23).
+The DSIM's blanking word counts at 69.3 MHz are HFP 21, HBP 43, HSA 12. Linux
+has HBP 42: its DSIM is set up for the 71.1 MHz mode while its CCM gives the
+LCDIF 69.3 MHz. 43 is what ran on 2026-09-24 (the cold path seen right). The
+adopt path keeps whatever the previous owner programmed (Linux: 69.3 MHz).
+
+**The 60 Hz plan, withdrawn (2026-10-02 to 2026-10-06).** The device tree
+asked for the panel's typical 71.1 MHz (VIDEO_PLL1 1066.5 MHz, m 178,
+k -16384; 60.286 Hz) on the same 426.6 Mbit/s link: 71.1 x 24 / 4 = 426.6
+exactly, no margin. Its runs measured the refresh (60.28 Hz) and PASS records,
+but nobody looked at the panel until 2026-10-06, which showed the defect of
+issue #23. A 60 Hz plan needs a faster link: the bridge's divider 4 (DSI
+clock 284.4 MHz, 568.8 Mbit/s a lane, `CHA_DSI_CLK_RANGE` 56, DSIM PLL p 5
+m 474 s 1) would give 33 % -- unmeasured. **The SafeUI M7 still re-tunes
+VIDEO_PLL1 to 71.1 MHz when it adopts the panel** (its `src/pixclk_m7.c`,
+`CONFIG_SAFEUI_M7_PIXEL_CLOCK_HZ`): on this 426.6 Mbit/s link that is the same
+no-margin plan, and route 3 is exposed to issue #23 until that repository
+sets it to 0 or to 69.3 MHz.
+
+Without `video-pll1-frequency` (risk R4 in docs/source-form.md) the nearest is
+SYSTEM_PLL2_CLK / 14 = 71.43 MHz, above the 426.6 Mbit/s link; on a 428 MHz
+link it broke the picture up (2026-09-23).
 
 VIDEO_PLL1 is a fractional PLL: `FOUT = (m + k/65536) x 24 MHz / (p x 2^s)`
 (5.1.5.4.4, with 1 <= p <= 63, 64 <= m <= 1023, 0 <= s <= 6,
@@ -156,11 +178,11 @@ for `PLL_LOCK`, then the output gate) and the 1 ms lock bound are not in the
 RM; they are the order that ran on this board.
 
 With htotal 1404 (1280 + 36 + 24 + 64) and vtotal 840 (800 + 8 + 8 + 24),
-71.1 MHz is **60.286 fps** (69.3 MHz: 58.761).
+69.3 MHz is **58.761 fps** (71.1 MHz: 60.286).
 
 Measured on the Verdin (2026-10-02, gc_slint PERF page 7, which times 60 vblanks
-after the run): the cold path (FORCE_COLD) at the device tree's plan **60.28 Hz,
-16 587 us** a frame; the adopt path at Linux's 69.3 MHz 58.76 Hz, 17 018 us. A
+after the run): the cold path (FORCE_COLD) at the then device tree's 71.1 MHz
+**60.28 Hz, 16 587 us** a frame (the refresh; the picture was not looked at); the adopt path at Linux's 69.3 MHz 58.76 Hz, 17 018 us. A
 script polling LCDIF1's VSYNC bit from Linux counted 58.756 Hz before the SafeUI
 M7 started and 60.284 Hz after its re-tune.
 
@@ -529,8 +551,18 @@ earlier bring-up.
 ## Open questions only the hardware can answer
 
 1. **Does the panel light up at 71.43 MHz?** Answered: the picture broke up
-   (2026-09-23); 71.43 MHz is also above the DSI link's 71.1 MHz cap. The
-   device tree now programs VIDEO_PLL1 for 71.1 MHz ("Pixel clock" above).
+   (2026-09-23): a lane rate of exactly pixel x 24 / 4 leaves no room for the
+   packet overhead. **Sequel (2026-10-06, issue #23):** the 71.1 MHz plan of
+   2026-10-02 was the same condition on the 426.6 Mbit/s link (71.1 x 24 / 4
+   = 426.6) and the panel showed 1.5 copies of the frame across each line,
+   while the LCDIF, DSIM and bridge registers matched Linux's register for
+   register (Linux read back that day: XR24 1280x800 pitch 5120, CTRLDESCL0_5
+   0x89000000, CONFIG 0x0600707f, bridge 0x18 = 0x18, 0x20/0x21 = 1280, 0xE5
+   = 0) -- the one difference was the pixel clock, 71.1 against Linux's 69.3
+   MHz. The device tree is back at 69.3 MHz and the margin is a checked limit
+   ("Pixel clock", limit 4). gc_gl_triangle's `GC_GL_TRIANGLE_DISPLAY_RECORD`
+   writes a DISPLAY record (pixel clock, lane rate, the bridge's IRQ_STAT a
+   second into the picture) so the next viewing has numbers beside it.
 2. **Is `sys_pll2_1000m` really running when Zephyr arrives?** Everything
    assumes the boot loader left SYS_PLL2 on. A dark panel with the GPC and
    BLK_CTRL logs looking healthy would point here first; read CCM

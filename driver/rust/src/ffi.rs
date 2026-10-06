@@ -241,6 +241,20 @@ mod sn65dsi8x {
         }
     }
 
+    /// IRQ_STAT (0xE5) as it stands, read only (0..=255), or a negative
+    /// errno when the part does not answer.
+    ///
+    /// # Safety
+    /// `env` valid for the call.
+    #[no_mangle]
+    pub unsafe extern "C" fn yd_sn65dsi8x_irq_stat(env: *const YdEnv) -> i32 {
+        // SAFETY: the caller's contract.
+        match Bridge::new(unsafe { &*env }).irq_stat() {
+            Ok(v) => i32::from(v),
+            Err(e) => e,
+        }
+    }
+
     /// The part's health bits (ip::sn65dsi8x::health), from reads only.
     ///
     /// # Safety

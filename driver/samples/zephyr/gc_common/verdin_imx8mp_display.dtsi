@@ -166,7 +166,7 @@
 			burst-clock-frequency = <426600000>;
 			esc-clock-frequency = <20000000>;
 			data-lanes = <4>;
-			pixel-clock-frequency = <71100000>;
+			pixel-clock-frequency = <69300000>;
 			burst-mode;
 			status = "okay";
 		};
@@ -184,21 +184,34 @@
 			dsi-lanes = <4>;
 
 			/* Riverdi RVT101HVDWC00-B (min 66.3 MHz, typ 71.1 MHz,
-			 * max 78.9 MHz) at its typical clock: VIDEO_PLL1
-			 * 1066.5 MHz (m 178, k -16384) / 15 = 71.1 MHz exactly,
-			 * 71.1e6 / (1404 x 840) = 60.29 Hz. DSIM reference 24 MHz
-			 * / 2, DSI burst clock 426.6 MHz (PLL p 5 m 711 s 2) =
-			 * 71.1 x 24 / 4: the highest pixel clock the link
-			 * carries, and the plan the board's Linux sets the DSIM
-			 * up for (its porches are 71.1 MHz ones) while its CCM
-			 * gives the LCDIF 1039.5 / 15 = 69.3 MHz (58.76 Hz). The
-			 * bridge's LVDS clock is 213.3 / 3 = 71.1 MHz either way.
-			 * 1000 / 14 = 71.43 MHz is above that cap (run on a
-			 * 428 MHz link on 2026-09-23, the picture broke up).
-			 * NOTES.md, "Pixel clock"; dsi_chain_tests.rs checks
-			 * these numbers against the three limits. */
-			clock-frequency = <71100000>;
-			video-pll1-frequency = <1066500000>;
+			 * max 78.9 MHz) at the board's Linux plan: VIDEO_PLL1
+			 * 1039.5 MHz (m 173, k 16384) / 15 = 69.3 MHz, 69.3e6 /
+			 * (1404 x 840) = 58.76 Hz. DSIM reference 24 MHz / 2, DSI
+			 * burst clock 426.6 MHz (PLL p 5 m 711 s 2).
+			 *
+			 * The rule: the lane rate must exceed pixel x 24 / lanes
+			 * by a margin, for the packet overhead of every line (the
+			 * headers and checksums of the blanking and pixel packets,
+			 * the HS entry and exit). 69.3 MHz leaves 426.6 / 415.8 =
+			 * 2.6 %, and is the plan the panel was seen right at
+			 * (2026-09-24). A clock with no margin breaks the picture:
+			 * 71.43 MHz on a 428.6 Mbit/s link (2026-09-23) and 71.1
+			 * MHz on 426.6 Mbit/s (71.1 x 24 / 4 exactly; the panel
+			 * showed 1.5 copies of the frame a line, 2026-10-06,
+			 * issue #23). ip::samsung_dsim::LINK_MARGIN_PERMILLE pins
+			 * the margin; dsi_chain_tests.rs (verdin_dt) reads this
+			 * node and refuses a plan without it, and imx8mp_display.c
+			 * has the same check as a BUILD_ASSERT.
+			 *
+			 * The DSIM's HBP word count is 43 at 69.3 MHz (64 x
+			 * 53.325 / 69.3 - 6), Linux's 42 being computed for its
+			 * 71.1 MHz mode; 43 is what ran on 2026-09-24. The bridge
+			 * CSRs do not depend on the pixel clock: DSI clock 213.3 MHz
+			 * (CHA_DSI_CLK_RANGE 42), divider 3, LVDS clock 71.1 MHz,
+			 * as Linux has them (0x0b = 0x10, 0x12 = 0x2a). NOTES.md,
+			 * "Pixel clock". */
+			clock-frequency = <69300000>;
+			video-pll1-frequency = <1039500000>;
 			pll-ref-frequency = <12000000>;
 			burst-clock-frequency = <426600000>;
 			hactive = <1280>;

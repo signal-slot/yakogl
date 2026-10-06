@@ -684,6 +684,15 @@ mod tests {
     }
 
     #[test]
+    fn the_c_header_has_the_link_margin() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let pre = "#define YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE ";
+        let l = H.lines().find(|l| l.starts_with(pre)).expect("YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE");
+        let v: String = l[pre.len()..].chars().take_while(char::is_ascii_digit).collect();
+        assert_eq!(v.parse::<u64>().unwrap(), dsim::LINK_MARGIN_PERMILLE);
+    }
+
+    #[test]
     fn the_c_header_names_the_same_bits() {
         const H: &str = include_str!("../../include/yakogl_drivers.h");
         let bit = |name: &str| -> u32 {

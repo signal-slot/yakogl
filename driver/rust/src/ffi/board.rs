@@ -6,7 +6,7 @@
 //! the writer (`struct yd_record_writer`, include/yakogl_drivers.h), calls
 //! one of these, and stores `out` in its sink when the call returns 1.
 
-use crate::board::record::{self, Glmark2Outcome, Writer};
+use crate::board::record::{self, Display, Glmark2Outcome, Writer};
 use crate::board::{imx8mp, rpi4};
 use core::mem::{offset_of, size_of};
 
@@ -121,6 +121,22 @@ pub unsafe extern "C" fn yd_record_glmark2_why(line: *const u8, n: usize) -> u32
     }
     // SAFETY: the caller's contract.
     record::glmark2_why(unsafe { core::slice::from_raw_parts(line, n) })
+}
+
+// ---- kind DISPLAY (driver/samples/zephyr/gc_gl_triangle) -------------------
+
+const _: () = assert!(size_of::<Display>() == 32);
+const _: () = assert!(offset_of!(Display, irq_now) == 12);
+const _: () = assert!(offset_of!(Display, pitch) == 28);
+
+/// kind DISPLAY's w1..w3 for the display chain's state ([`record::display_words`]).
+///
+/// # Safety
+/// `d` is readable and `out` writable.
+#[no_mangle]
+pub unsafe extern "C" fn yd_record_display_words(d: *const Display, out: *mut [u32; 3]) {
+    // SAFETY: the caller's contract.
+    unsafe { *out = record::display_words(&*d) };
 }
 
 // ---- the i.MX8MP samples' end (driver/zephyr/lib/board/imx8mp) ------------

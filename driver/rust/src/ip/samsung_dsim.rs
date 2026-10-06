@@ -234,9 +234,9 @@ pub struct Link {
     /// The PLL's reference (MEDIA_MIPI_PHY1_REF).
     pub pll_ref_hz: u32,
     /// The lane bit rate to run (the nearest the PLL makes); 0 = the slowest
-    /// rate the PLL makes at or above pixel clock x 24 / lanes (no margin
-    /// beyond the PLL's step). Either way a rate that cannot carry the
-    /// stream is refused.
+    /// rate the PLL makes at or above [`min_lane_rate`]. Either way a rate
+    /// without [`LINK_MARGIN_PERMILLE`] of headroom over pixel clock x 24 /
+    /// lanes is refused.
     pub lane_rate_hz: u32,
     /// The escape clock not to exceed (capped at 20 MHz).
     pub esc_max_hz: u32,
@@ -261,6 +261,35 @@ pub struct Plan {
 /// A long packet's header and checksum, bytes (DSI: 4 + 2).
 const PACKET_OVERHEAD: u32 = 6;
 
+/// The headroom a video-mode link needs above the bare pixel stream, per
+/// mille of pixel clock x 24 / lanes: the room for every line's packet
+/// overhead (the headers and checksums of the sync, blanking and pixel
+/// packets, and the HS exit and entry around the low-power stretch of a
+/// burst-mode line).
+///
+/// Not derived: how `MHPORCH` / `MSYNC`'s blanking word counts map onto the
+/// line has no RM basis (module text), so the line's real overhead cannot
+/// be summed from the data sheet. The figure is the board's, measured on the
+/// Verdin's SN65DSI84 link at four lanes:
+///
+/// | pixel clock | lane rate     | headroom   | panel                          |
+/// |-------------|---------------|------------|--------------------------------|
+/// | 71.43 MHz   | 428.6 Mbit/s  | 0          | broke up (2026-09-23)          |
+/// | 71.1 MHz    | 426.6 Mbit/s  | 0          | 1.5 copies a line (2026-10-06) |
+/// | 69.3 MHz    | 426.6 Mbit/s  | 25.97 ‰    | right (2026-09-24, and Linux)  |
+///
+/// 25 is the working figure rounded down to the per mille. Between 0 and
+/// 25.97 nothing is measured, so a plan in there is refused rather than
+/// guessed at.
+pub const LINK_MARGIN_PERMILLE: u64 = 25;
+
+/// The lowest lane rate that carries `pixel_clock_hz` over `lanes` lanes with
+/// [`LINK_MARGIN_PERMILLE`] of headroom: pixel x 24 / lanes x 1.025, rounded
+/// up.
+pub fn min_lane_rate(pixel_clock_hz: u32, lanes: u32) -> u64 {
+    (u64::from(pixel_clock_hz) * 24 * (1000 + LINK_MARGIN_PERMILLE)).div_ceil(u64::from(lanes.max(1)) * 1000)
+}
+
 fn blank_wc(pixels: u32, byte_hz: u32, pixel_hz: u32) -> u32 {
     let bytes = u64::from(pixels) * u64::from(byte_hz) / u64::from(pixel_hz);
     (bytes as u32).saturating_sub(PACKET_OVERHEAD)
@@ -277,7 +306,8 @@ pub fn plan(l: &Link) -> Result<Plan, i32> {
     if m.vback > 0x7ff || m.vfront > 0x7ff || m.vsync > 0x3ff {
         return Err(-EINVAL);
     }
-    let need = (u64::from(m.pixel_clock_hz) * 24).div_ceil(u64::from(l.lanes));
+    // 24 bits a pixel over `lanes` lanes, and the packet overhead's margin
+    let need = min_lane_rate(m.pixel_clock_hz, l.lanes);
     let pms = if l.lane_rate_hz != 0 {
         pll_pms(l.pll_ref_hz, l.lane_rate_hz)?
     } else {
@@ -290,7 +320,7 @@ pub fn plan(l: &Link) -> Result<Plan, i32> {
     if esc_div == 0 || esc_div > 0xffff {
         return Err(-EINVAL);
     }
-    // the link must carry the pixels: 24 bits a pixel over `lanes` lanes
+    // the link must carry the pixels and every line's packet overhead
     if u64::from(pms.fout_hz) < need {
         return Err(-EINVAL);
     }

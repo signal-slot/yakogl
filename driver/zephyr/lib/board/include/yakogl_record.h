@@ -34,6 +34,7 @@
 #define YK_RECORD_KIND_GLMARK2 18u /* low byte: seq */
 #define YK_RECORD_KIND_GPU_STOP 20u /* low byte: tag */
 #define YK_RECORD_KIND_CHECK 21u /* low byte: tag */
+#define YK_RECORD_KIND_DISPLAY 22u /* low byte: seq */
 
 /* kind STAGE: the stage in the low byte */
 #define YK_RECORD_STAGE_GPU_POWER 0x30u /* + gpu::vivante::power::step */
@@ -108,6 +109,11 @@
 #define YK_RECORD_GPU_STOP_AT_MAXIMUM 0x2u
 #define YK_RECORD_GPU_STOP_GROW_TABLE_FULL 0x3u
 #define YK_RECORD_GPU_STOP_KICK_TIMEOUT 0x4u
+#define YK_RECORD_DISPLAY_ADOPTED 0x80000000u
+#define YK_RECORD_DISPLAY_IRQ_NOT_READ 0xffu
+#define YK_RECORD_DISPLAY_HEALTH_SHIFT 0x10u
+#define YK_RECORD_DISPLAY_BPP_SHIFT 0x18u
+#define YK_RECORD_DISPLAY_PITCH_SHIFT 0x1cu
 #define YK_RECORD_CHECK_PROBES 0x1u
 #define YK_RECORD_CHECK_UNDRAWN 0x2u
 #define YK_RECORD_CHECK_ALPHA 0x3u

@@ -197,6 +197,11 @@ unsigned int imx8mp_display_health(void)
 	return h;
 }
 
+int imx8mp_display_bridge_irq_stat(void)
+{
+	return g_mapped ? sn65dsi8x_irq_stat(g_ctx.bridge) : -ENODEV;
+}
+
 void imx8mp_display_geometry(uint32_t *width, uint32_t *height)
 {
 	if (width != NULL) {
@@ -600,6 +605,14 @@ static int display_init(const struct device *dev)
 	BUILD_ASSERT(DT_INST_PROP(inst, dsi_lanes) ==                                  \
 		     DT_PROP(DT_INST_PHANDLE(inst, bridge), data_lanes),               \
 		     "dsi-lanes and the bridge's data-lanes disagree");                \
+	BUILD_ASSERT((uint64_t)DT_INST_PROP(inst, burst_clock_frequency) *              \
+			     DT_INST_PROP(inst, dsi_lanes) * 1000u >=                          \
+		     (uint64_t)DT_INST_PROP(inst, clock_frequency) * 24u *                     \
+			     (1000u + YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE),                   \
+		     "burst-clock-frequency leaves the DSI link no margin for packet overhead: " \
+		     "it must be at least clock-frequency x 24 / dsi-lanes x 1.025 "            \
+		     "(YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE; 71.1 MHz on 426.6 Mbit/s broke "   \
+		     "the picture, issue #23)");                                               \
 	BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_INST_PHANDLE(inst, bridge), yakogl_sn65dsi8x) && \
 		     !DT_NODE_HAS_PROP(DT_INST_PHANDLE(inst, bridge), dsi_host),       \
 		     "bridge: a yakogl,sn65dsi8x without a dsi-host");                 \
@@ -647,6 +660,7 @@ const struct imx8mp_display_info *imx8mp_display_info(void)
 }
 bool imx8mp_display_is_running(void) { return false; }
 unsigned int imx8mp_display_health(void) { return 0; }
+int imx8mp_display_bridge_irq_stat(void) { return -ENODEV; }
 uint32_t imx8mp_display_layer_control(void) { return 0u; }
 void imx8mp_display_geometry(uint32_t *w, uint32_t *h)
 {

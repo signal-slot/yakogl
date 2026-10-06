@@ -44,31 +44,32 @@ and were not read.
                                v                                     v
  DDR --AXI--> LCDIF1 ==RGB888, HS/VS/DE==> MIPI DSIM ----PPI----> D-PHY master --4 lanes + clk--> SN65DSI84 --LVDS--> panel
               0x32E80000  pixel clock      0x32E60000              PLL: 12 MHz x 711 / (5 x 4)      I2C2 0x2C            1280x800
-              13.3        71.1 MHz         13.6                    = 426.6 Mbit/s a lane, 13.7      SLLSEC2H             Riverdi
+              13.3        69.3 MHz         13.6                    = 426.6 Mbit/s a lane, 13.7      SLLSEC2H             Riverdi
               IRQ 5       INV_PXCK=1       video, burst, 24 bpp    byte clock 53.325 MHz            DSI clock 213.3 MHz  RVT101HVDWC00-B
                                            esc 17.775 MHz (/3)
  power: MEDIAMIX (GPC PU10) + MIPI_PHY1 (PU0), MEDIA_BLK_CTRL clocks/resets: soc::imx8mp::media (step 4)
 ```
 
-The clock plan is the devicetree's (`verdin_imx8mp_display.dtsi`): pixel
-clock VIDEO_PLL1 1066.5 MHz (m 178, k -16384) / 15 = 71.1 MHz, the panel's
-typical, 60.286 Hz with the 1404 x 840 total; DSIM reference 12 MHz, lane
-rate 426.6 Mbit/s (`burst-clock-frequency`, golden PLLCTRL 0x00816C74). 71.1
-MHz is the highest pixel clock the link carries (71.1 x 24 / 4 = 426.6) and
-inside the panel's 66.3-78.9 MHz; the SN65DSI84's DSI clock range (42) and
-divider (3) are those of the 69.3 MHz plan, its LVDS clock 71.1 MHz in both.
-Until 2026-10-02 the plan was the board's Linux's VIDEO_PLL1 1039.5 MHz / 15
-= 69.3 MHz (58.761 Hz), which the adopt path still inherits from Linux; the
-DSIM's blanking word counts at 71.1 MHz equal Linux's (its DSIM is set up for
-the 71.1 MHz mode). NOTES.md "Pixel clock" has the arithmetic,
-`dsi_chain_tests::verdin_60hz` checks it against the devicetree. Note for the record: the task brief's "DSI
+The clock plan is the devicetree's (`verdin_imx8mp_display.dtsi`): the board's
+Linux plan, pixel clock VIDEO_PLL1 1039.5 MHz (m 173, k 16384) / 15 = 69.3
+MHz, 58.761 Hz with the 1404 x 840 total; DSIM reference 12 MHz, lane rate
+426.6 Mbit/s (`burst-clock-frequency`, golden PLLCTRL 0x00816C74), 2.6 %
+above the 415.8 Mbit/s of the pixels -- the room the packet overhead needs
+(`ip::samsung_dsim::LINK_MARGIN_PERMILLE`, measured: a link with no margin
+broke the picture on 2026-09-23 and, at 71.1 MHz, on 2026-10-06, issue #23).
+The SN65DSI84's DSI clock range (42) and divider (3) give an LVDS clock of
+71.1 MHz, as on Linux. The 71.1 MHz plan of 2026-10-02 to 2026-10-06
+(VIDEO_PLL1 1066.5 MHz, 60.286 Hz) had no margin and is withdrawn. NOTES.md
+"Pixel clock" has the arithmetic, `dsi_chain_tests::verdin_dt` checks it
+against the devicetree. Note for the record: the task brief's "DSI
 153.6 MHz per the bridge logs" is the AM62P's SN65DSI83 (RESULTS, "up, DSI
 153600 kHz"); on this board the bridge sees 213.3 MHz (CHA_DSI_CLK_RANGE 42 in
 the golden dump). The R4 plan (no `video-pll1-frequency`: SYS_PLL2 / 14 =
 71.43 MHz) cannot run on 426.6 Mbit/s at all: 71.43 MHz x 24 / 4 =
 428.57 Mbit/s. The new DSIM refuses such a link (`-EINVAL` in the plan
 step); with `burst-clock-frequency = <0>` it takes the slowest rate the PLL
-makes above it, 12 MHz x 143 / 4 = 429 MHz. The old C driver ran it with no
+makes above 428.57 Mbit/s with the margin (439.29), 12 MHz x 293 / (2 x 4) =
+439.5 MHz (429 MHz before the margin was a limit). The old C driver ran it with no
 check, which is the "picture broke up" of 2026-09-23.
 
 ## What the RM documents, and what it does not
@@ -282,8 +283,7 @@ display0 (safeui,imx8mp-display): ... lcdif = <&lcdif1>; dsi = <&mipi_dsi>;
 Golden allow-list (`dsi_chain_tests::ALLOWED`; every other owned LCDIF1 /
 DSIM register equals the board's Linux): TIMEOUT (reset value kept),
 MHPORCH (HBP 43 vs 42), PLLTMR (250 000 vs 0x8000), PHYTIMING x 3 (the table
-above). R4 adds PLLCTRL (429 MHz) and drops MHPORCH (at 429 / 71.43 the word
-counts equal Linux's).
+above). R4 adds PLLCTRL (439.5 MHz; HBP is 43 there too).
 
 ## Board plan (a follow-up task; the Verdin is busy today)
 

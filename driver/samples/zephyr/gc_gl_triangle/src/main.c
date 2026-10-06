@@ -39,6 +39,9 @@
 #ifdef CONFIG_SAFEUI_DISPLAY_IMX8MP
 #include "imx8mp_display.h"
 #endif
+#ifdef CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD
+#include <yakogl_drivers.h>
+#endif
 
 LOG_MODULE_REGISTER(gc_gl_triangle, LOG_LEVEL_INF);
 
@@ -357,6 +360,42 @@ static const char *run(void)
 	return draw(win.phys);
 }
 
+#ifdef CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD
+/* The DISPLAY record (record.rs, kind DISPLAY): the chain as it scans the
+ * window, after a second of it, so the bridge's IRQ_STAT has had 60 frames
+ * to latch a link error. Issue #23: the panel showed 1.5 copies of the frame
+ * a line while every record said PASS. */
+static void record_display(void)
+{
+	const struct imx8mp_display_info *info = imx8mp_display_info();
+	int irq;
+	struct yd_record_display d;
+	uint32_t w[3];
+
+	for (int i = 0; i < 10; i++) {
+		k_msleep(100);
+		gc_sample_service_wdog();
+	}
+	irq = imx8mp_display_bridge_irq_stat();
+	d = (struct yd_record_display){
+		.adopted = info->adopted ? 1u : 0u,
+		.pixel_clock_hz = info->pixel_clock_hz,
+		.lane_rate_hz = info->dsi_hs_clock_hz,
+		.irq_now = irq >= 0 ? (uint32_t)irq : YK_RECORD_DISPLAY_IRQ_NOT_READ,
+		.irq_at_start = info->bridge_irq_stat,
+		.health = imx8mp_display_health(),
+		.bpp_code = (imx8mp_display_layer_control() >> 24) & 0xfu,
+		.pitch = info->pitch,
+	};
+	yd_record_display_words(&d, w);
+	LOG_INF("display: %s, pixel clock %u Hz, DSI %u Hz, IRQ_STAT 0x%02x (start 0x%02x), "
+		"health 0x%02x, CTRLDESCL0_5 0x%08x, pitch %u",
+		info->adopted ? "adopted" : "cold", info->pixel_clock_hz, info->dsi_hs_clock_hz,
+		d.irq_now, d.irq_at_start, d.health, imx8mp_display_layer_control(), d.pitch);
+	gc_result_write(GC_RESULT_DISPLAY, w[0], w[1], w[2]);
+}
+#endif
+
 /* Microseconds on the SoC's system counter. On the direct-boot route
  * (docs/direct-boot.md) U-Boot SPL starts that counter early in its own
  * start-up and nothing restarts it, so this is close to "time since power-on"
@@ -389,6 +428,11 @@ int main(void)
 
 		gc_result_stage(GC_RESULT_STAGE_DISPLAY_ON, (uint32_t)drc);
 		LOG_INF("display: imx8mp_display_on(window) = %d", drc);
+#ifdef CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD
+		if (drc == 0) {
+			record_display();
+		}
+#endif
 	}
 #endif
 	LOG_INF("system counter at the verdict: %llu us", (unsigned long long)syscnt_us());

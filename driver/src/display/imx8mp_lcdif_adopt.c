@@ -95,6 +95,12 @@ unsigned int imx8mp_display_health(void)
 	return imx8mp_display_is_running() ? IMX8MP_DISPLAY_HEALTH_LCDIF_RUNNING : 0u;
 }
 
+/* No SN65DSI84 is this driver's to ask. */
+int imx8mp_display_bridge_irq_stat(void)
+{
+	return -ENODEV;
+}
+
 uint64_t imx8mp_display_scanout(void)
 {
 	uint32_t w, h, pitch, bpp;

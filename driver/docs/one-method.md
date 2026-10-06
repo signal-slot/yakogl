@@ -256,6 +256,15 @@ host's table; 1 is not used), w1 the fence, w2 the GPU recoveries so far (the ru
 `resets`), and w3 is `list << 24 | KiB`. 19 is KICK_DIFF on
 `vivante/gc-ab-knobs` and is reserved here.
 
+**Added:** kind 22 DISPLAY, the i.MX8MP display chain while it scans a
+window (gc_gl_triangle, `CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD`, default n;
+issue #23). w1 is the pixel clock in kHz with bit 31 set when the LCDIF was
+already scanning, w2 the DSI lane rate in kHz, w3 the SN65DSI84's IRQ_STAT a
+second into the picture and at the start, the display health and the
+LCDIF's format and pitch (record.rs has the bits; `yd_record_display_words`
+packs them). It is written after PICTURE, so on the i.MX8MP it is the
+record the SNVS keeps; its status is n/a, like PICTURE's.
+
 **Defined once, in Rust:** `driver/rust/src/board/record.rs` (no_std) holds
 the kinds, the packing (`case`, `probes`, `picture`, ...), the CRC-16 used
 by PROBES and DEQP, and the decoder. The C shim `common/record.c` calls
