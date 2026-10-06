@@ -185,9 +185,6 @@ pub enum Role {
     Gc7000,
     /// The back ends' own shaders: no table holds them.
     Internal,
-    /// Our own precompiler's input on every GPU (through the `pair` lines);
-    /// no Mesa table holds them (gl_test_own/).
-    Precompiled,
 }
 
 #[derive(Clone, Debug)]
@@ -307,12 +304,9 @@ impl List {
                         match *r {
                             "gc7000" => roles.push(Role::Gc7000),
                             "internal" => roles.push(Role::Internal),
-                            "precompiled" => roles.push(Role::Precompiled),
                             "-" if args.len() == 2 => {}
                             other => {
-                                return Err(format!(
-                                    "{n}: dir role '{other}' is not gc7000, internal, precompiled or a lone -"
-                                ))
+                                return Err(format!("{n}: dir role '{other}' is not gc7000, internal or a lone -"))
                             }
                         }
                     }

@@ -235,62 +235,7 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                  ' * across the whole +X face (case 114).'),
                 ('gl_test_es300_cubelodv_fs_src', 'es300/cubelodv.frag'),
                 ('gl_test_es300_cubelodf_vs_src', 'es300/cubelodf.vert'),
-                ('gl_test_es300_cubelodf_fs_src', 'es300/cubelodf.frag'),
-                # gl_test's own shaders (tools/shaders/gl_test_own/, its README):
-                # the sources of cases 181 to 183 and 188 to 192, which were C
-                # literals in gl_test.c and so rows no table could hold.
-                ('gl_test_fma_plain_vs_src', 'gl_test_own/fma_plain.vert',
-                 'A position and nothing else: the vertex shader under every\n'
-                 ' * fragment-shader shape of cases 181, 182, 188 to 190 and 192.'),
-                ('gl_test_fma_fused_fs_src', 'gl_test_own/fma_fused.frag',
-                 'x - 2.0 * q, x - a * b, 2.0 * q + b: the shapes fuse_mul_add fuses (case 181).'),
-                ('gl_test_fma_ctrl_fs_src', 'gl_test_own/fma_ctrl.frag',
-                 'The controls it must leave alone: a product read twice, under abs,\n'
-                 ' * under floor (case 181).'),
-                ('gl_test_fma_fused_varying_vs_src', 'gl_test_own/fma_fused_varying.vert',
-                 'The fused shapes computed in the vertex shader into a varying (case 181).'),
-                ('gl_test_fma_ctrl_varying_vs_src', 'gl_test_own/fma_ctrl_varying.vert',
-                 'The controls in the vertex shader (case 181).'),
-                ('gl_test_fma_varying_fs_src', 'gl_test_own/fma_varying.frag',
-                 'The varying `v` as the colour: the fragment shader under every\n'
-                 ' * vertex-shader shape of cases 181, 182 and 188.'),
-                ('gl_test_fsat_folded_fs_src', 'gl_test_own/fsat_folded.frag',
-                 'clamp(), min(max()) and max(min()) to [0, 1], each one saturating add (case 182).'),
-                ('gl_test_fsat_ctrl_fs_src', 'gl_test_own/fsat_ctrl.frag',
-                 'The controls the fold must leave alone: the inner bound read twice,\n'
-                 ' * bounds of 0.8 and 0.2 (case 182).'),
-                ('gl_test_fsat_folded_varying_vs_src', 'gl_test_own/fsat_folded_varying.vert',
-                 'The folded clamps in the vertex shader (case 182).'),
-                ('gl_test_fsat_ctrl_varying_vs_src', 'gl_test_own/fsat_ctrl_varying.vert',
-                 'The controls in the vertex shader (case 182).'),
-                ('gl_test_unipad_vs_src', 'gl_test_own/unipad.vert',
-                 'A vec2 uniform in each stage: 500 draws timed against the uniform\n'
-                 ' * padding defect (case 183).'),
-                ('gl_test_unipad_fs_src', 'gl_test_own/unipad.frag'),
-                ('gl_test_predif_uni_fs_src', 'gl_test_own/predif_uni.frag',
-                 'An if/else with arithmetic arms on a uniform, run predicated (case 188).'),
-                ('gl_test_predif_uni_varying_vs_src', 'gl_test_own/predif_uni_varying.vert',
-                 'The same arms in the vertex shader, into a varying (case 188).'),
-                ('gl_test_predif_coord_fs_src', 'gl_test_own/predif_coord.frag',
-                 'The same arms on gl_FragCoord.x < 32: one draw takes both (case 188).'),
-                ('gl_test_mulone_one_fs_src', 'gl_test_own/mulone_one.frag',
-                 'A uniform mat3 times vec3(0.5, 0.5, 1.0): products by 1.0 read as their\n'
-                 ' * other operand (case 189).'),
-                ('gl_test_mulone_half_fs_src', 'gl_test_own/mulone_half.frag',
-                 'The same matrix times vec3(0.5): every product kept (case 189).'),
-                ('gl_test_mulone_mods_fs_src', 'gl_test_own/mulone_mods.frag',
-                 'abs(), a negation and a plain uniform, each times 1.0 (case 189).'),
-                ('gl_test_blendonce_fs_src', 'gl_test_own/blendonce.frag',
-                 'The four uniforms as the colour, blended four ways by the case (case 190).'),
-                ('gl_test_varyfma_vs_src', 'gl_test_own/varyfma.vert',
-                 'v = (u_x, u_q, u_a, u_b) at every vertex (case 191).'),
-                ('gl_test_varyfma_fs_src', 'gl_test_own/varyfma.frag',
-                 'Products of the varying fused with their sums: one fmad each (case 191).'),
-                ('gl_test_predlive_uni_fs_src', 'gl_test_own/predlive_uni.frag',
-                 'Values live across a predicated if on a uniform, joined without a\n'
-                 ' * select (case 192).'),
-                ('gl_test_predlive_coord_fs_src', 'gl_test_own/predlive_coord.frag',
-                 'The same if on gl_FragCoord.x < 32 (case 192).')
+                ('gl_test_es300_cubelodf_fs_src', 'es300/cubelodf.frag')
 ]
 
 # The thirteen GLSL 450 sources and the ES 1.00 twin of each. The twins keep every

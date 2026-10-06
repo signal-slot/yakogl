@@ -215,14 +215,11 @@ impl Plan {
         }
         let refusals = read_refusals(&a.refusals)?;
         let internal = |rel: &str| list.dir(rel).is_some_and(|d| d.roles.contains(&Role::Internal));
-        /* the GC7000's sources are its directories' and the `precompiled`
-         * ones' (offarm/ is the PowerVR's) */
+        /* the GC7000's sources are its directories' (offarm/ is the PowerVR's) */
         let this_gpu = |rel: &str| {
             !internal(rel)
                 && (cfg!(not(feature = "gpu-vivante"))
-                    || list
-                        .dir(rel)
-                        .is_some_and(|d| d.roles.contains(&Role::Gc7000) || d.roles.contains(&Role::Precompiled)))
+                    || list.dir(rel).is_some_and(|d| d.roles.contains(&Role::Gc7000)))
         };
         /* the programs: the selected apps', each once, on this GPU's sources */
         let mut pairs: Vec<(String, String)> = Vec::new();
