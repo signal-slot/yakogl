@@ -28,6 +28,9 @@
  *   when board_show copied), then PROBES (the verdict), and after it, when
  *   the run failed, CHECK (why: the first failing probe, or the part of the
  *   check, or the run after a passing check)
+ *   mem_report: at every stage, one line (rust/src/board.rs) naming what each
+ *   heap actually holds then — the memory the run uses, not the image's
+ *   static reservation
  *   board_finish()
  *
  * The animation runs whenever the checked frame was drawn and checked, also
@@ -73,6 +76,13 @@ uint32_t shc_online_compiler_runs(void);                  /* gles_shaderc.h */
 void osal_gc_wait_stats(uint32_t *waits, uint32_t *timeouts, uint64_t *wait_us, uint64_t *max_us); /* osal_internal.h */
 void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);              /* osal_internal.h */
 #endif
+#ifdef CONFIG_YAKOGL_GPU_V3D
+void osal_v3d_mem_used(uint32_t *used, uint32_t *high, uint32_t *total); /* zephyr_v3d.h */
+void osal_v3d_frees_held(uint32_t *n, uint32_t *bytes);                 /* zephyr_v3d.h */
+#endif
+/* libc's malloc arena (CONFIG_COMMON_LIBC_MALLOC), under CONFIG_SYS_HEAP_RUNTIME_STATS
+ * (zephyr/lib/libc/common/source/stdlib/malloc.c; its header is not on a sample's include path). */
+int malloc_runtime_stats_get(struct sys_memory_stats *stats);
 
 #define WIN_W CONFIG_CLUSTER_PANEL_WIDTH
 #define WIN_H CONFIG_CLUSTER_PANEL_HEIGHT
@@ -100,7 +110,7 @@ enum stage {
 /* ---- what the Rust archive needs from C ---------------------------------- */
 
 /* The UI heap (Slint, femtovg, the glyph textures): 48 MiB, a sys_heap over a
- * static arena; its high-water mark is printed at the end. */
+ * static arena; what it holds is read by mem_report at every stage. */
 #define UI_HEAP_BYTES (48u * 1024u * 1024u)
 static uint8_t s_ui_heap_mem[UI_HEAP_BYTES] __noinit __aligned(64);
 static struct sys_heap s_ui_heap;
@@ -163,6 +173,80 @@ int cluster_board_frame(const struct cluster_frame_times *t);
 void cluster_board_report(uint32_t t_ms, uint32_t interval_ms);
 void cluster_board_finish(uint32_t w, uint32_t h, uint8_t stage, uint32_t status, bool shown_by_copy,
 			  uint32_t elapsed_ms, struct cluster_run_records *out);
+
+/* ---- memory actually in use ----------------------------------------------
+ *
+ * The image's statics are resident whether a run uses them or not (the GL
+ * state pools are fixed tables; the arenas are statics too), so what a run
+ * adds to them is what its allocators actually hold. Each heap gives its live
+ * bytes and the most it held at once since init (CONFIG_SYS_HEAP_RUNTIME_STATS);
+ * the V3D OSAL gives the granules its carve-out allocator holds, held frees
+ * included (src/osal/zephyr_v3d.h). rust/src/board.rs prints the line, at
+ * every stage() point, so a run that dies partway still says how far its
+ * memory got. A group this build has no counter for is named missing on the
+ * line, never printed as 0.
+ */
+struct cluster_mem {
+	uint32_t stage;        /* enum stage, as PROGRESS's where */
+	uint32_t window_bytes; /* the window the board gave: stride * rows, 0 before it */
+	uint32_t ui[3];        /* main.c's UI heap: now, most, of */
+	uint32_t malloc[3];    /* libc's malloc arena: now, most, of */
+	uint32_t keep[3];      /* the online compiler's keep region: now, most, of */
+	uint32_t gpu[4];       /* the V3D carve-out: now, most, of, held by frees */
+	uint32_t missing;      /* MEM_MISSING_*: a group this build has no counter for */
+};
+#define MEM_MISSING_UI (1u << 0)
+#define MEM_MISSING_MALLOC (1u << 1)
+#define MEM_MISSING_KEEP (1u << 2)
+#define MEM_MISSING_GPU (1u << 3)
+BUILD_ASSERT(sizeof(struct cluster_mem) == 64, "rust/src/board.rs Mem");
+void cluster_board_mem(const struct cluster_mem *m);
+
+/* The window's bytes, known once board_window has answered (window()). */
+static uint32_t s_window_bytes;
+
+static void mem_report(uint32_t stage)
+{
+	struct cluster_mem m = { .stage = stage, .window_bytes = s_window_bytes };
+	struct sys_memory_stats hs;
+
+	if (sys_heap_runtime_stats_get(&s_ui_heap, &hs) == 0) {
+		m.ui[0] = (uint32_t)hs.allocated_bytes;
+		m.ui[1] = (uint32_t)hs.max_allocated_bytes;
+	} else {
+		m.missing |= MEM_MISSING_UI;
+	}
+	m.ui[2] = UI_HEAP_BYTES;
+	if (malloc_runtime_stats_get(&hs) == 0) {
+		m.malloc[0] = (uint32_t)hs.allocated_bytes;
+		m.malloc[1] = (uint32_t)hs.max_allocated_bytes;
+	} else {
+		m.missing |= MEM_MISSING_MALLOC;
+	}
+	m.malloc[2] = CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE;
+#ifdef CONFIG_YAKOGL_SHADERC_ONLINE
+	size_t keep_now = 0, keep_peak = 0;
+
+	if (shc_online_keep_stats(&keep_now, &keep_peak) == 0) {
+		m.keep[0] = (uint32_t)keep_now;
+		m.keep[1] = (uint32_t)keep_peak;
+	} else {
+		m.missing |= MEM_MISSING_KEEP;
+	}
+	m.keep[2] = CONFIG_YAKOGL_SHADERC_KEEP_BYTES;
+#else
+	m.missing |= MEM_MISSING_KEEP;
+#endif
+#ifdef CONFIG_YAKOGL_GPU_V3D
+	uint32_t held_n = 0;
+
+	osal_v3d_mem_used(&m.gpu[0], &m.gpu[1], &m.gpu[2]);
+	osal_v3d_frees_held(&held_n, &m.gpu[3]);
+#else
+	m.missing |= MEM_MISSING_GPU;
+#endif
+	cluster_board_mem(&m);
+}
 
 /* ---- where the checked frames' time goes ---------------------------------
  *
@@ -392,6 +476,7 @@ static void stage(enum stage s)
 {
 	s_stage = s;
 	board_progress(YK_RECORD_WHERE_STAGE | s);
+	mem_report((uint32_t)s);
 }
 
 static uint32_t us_since(uint32_t c0)
@@ -599,6 +684,7 @@ static int window(void)
 		s_half[k].phys = full.phys + off;
 		s_half[k].cpu = (uint8_t *)full.cpu + off;
 	}
+	s_window_bytes = full.stride * full.h;
 	printk("cluster: window %ux%u, two halves at phys 0x%lx and 0x%lx, format 0x%x, stride %u\n", WIN_W,
 	       WIN_H, (unsigned long)s_half[0].phys, (unsigned long)s_half[1].phys, full.format, full.stride);
 	return 0;
@@ -912,7 +998,6 @@ static uint32_t keep_kib(void)
 int main(void)
 {
 	struct cluster_run_records rec = { 0 };
-	struct sys_memory_stats hs;
 	int rc;
 
 	sys_heap_init(&s_ui_heap, s_ui_heap_mem, sizeof(s_ui_heap_mem));
@@ -932,10 +1017,6 @@ int main(void)
 		int arc = animate();
 
 		rc = rc ? rc : arc;
-	}
-	if (sys_heap_runtime_stats_get(&s_ui_heap, &hs) == 0) {
-		printk("cluster: UI heap %zu bytes now, %zu at most (high-water), of %u\n", hs.allocated_bytes,
-		       hs.max_allocated_bytes, UI_HEAP_BYTES);
 	}
 	if (s_checked) {
 		const uint32_t status = rc == 0 ? YK_RECORD_STATUS_PASS : YK_RECORD_STATUS_FAIL;
