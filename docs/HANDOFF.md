@@ -145,9 +145,16 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      (`72d16864`) 46 / 48, first failure case 16 (#8), the same as the
      `81c53c61` baseline, with MRT on by default so cases 106 `mrt3` and 163
      `drawbuf0` run instead of being skipped (record
-     `20261006-1543-gt-72d16864-a5bad906`). The dEQP texture / fbo /
-     uniform_api rows against `tools/cts/imx8mp-full-tree-29460f96.results.tsv`
-     are owed.
+     `20261006-1543-gt-72d16864-a5bad906`). dEQP on `72d16864`
+     (12 rows of `tools/cts/imx8mp-full-tree.txt` against
+     `imx8mp-full-tree-29460f96.results.tsv`): 10 of 12 identical, two
+     regressions of `72d16864`, fixes in flight: `fbo.completeness.renderable.
+     renderbuffer.depth.depth_component24` fails (the verdict for a
+     DEPTH_COMPONENT24 renderbuffer), and one `shaders.fragdata.*` case is
+     NotSupported (`es2fShaderFragDataTests.cpp:175`, "Dynamic indexing of
+     gl_FragData[] not supported": with GL_MAX_DRAW_BUFFERS 3 the test writes
+     `gl_FragData[i]` and the compiler refuses the indexed write).
+     texture.* and uniform_api (1267 / 1267) are unchanged.
    - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
      `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
      `ONE_IN_FLIGHT` stay product options. The measurement infrastructure
@@ -183,8 +190,9 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12);
    - the i.MX8MP panel showed one and a half copies of the frame per line at
      the 71.1 MHz pixel clock (no DSI margin); the device tree is back at
-     69.3 MHz and the margin is a checked limit (`e372545f`), awaiting a
-     viewing with the DISPLAY record (#23).
+     69.3 MHz and the margin is a checked limit (`e372545f`), the DISPLAY record on `c1f0e2a6` shows the
+     link at 69.3 MHz (lane rate 426600 kHz, headroom 25.9 per mille, bridge
+     IRQ_STAT clean, health 0x3f); the viewing by eye is still pending (#23).
 
 ## How to work here
 

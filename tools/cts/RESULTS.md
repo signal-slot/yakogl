@@ -16855,3 +16855,47 @@ commit `e372545f`: the dtsi back to 69.3 MHz, a 25 per mille margin rule in
 `ip::samsung_dsim::plan` with the dtsi host test and a `BUILD_ASSERT`, and an
 opt-in DISPLAY record kind 22. It is in the gate; the proof is the panel viewed
 after it lands. The host gate cannot see scanout: only eyes or a camera can.
+
+## i.MX8MP: dEQP subset on the GC7000 defaults flip (origin/main `72d16864`, 2026-10-06)
+
+Instrument: `tools/board.sh imx8mp tree`, image `/home/tasuku/org/yakogl-cts/imx8mp-out/c2-72d16864`,
+12 rows of `tools/cts/imx8mp-full-tree.txt` (the shaders tail row 2, texture rows
+10-18, fbo 21, uniform_api 24), baseline
+`tools/cts/imx8mp-full-tree-29460f96.results.tsv` renumbered to the same order.
+Records: `records/imx8mp-tree/c2-72d16864/` of the main checkout (gitignored;
+`results.tsv`, `rows.md`); the verdict lines are in that checkout's
+`build/imx8mp-tree-c2.log`:
+
+    TALLY (12 entries): begun 4346 passed 4330 failed 1 notsup 1 other 14 noresult 0
+    DIFF against /home/tasuku/org/yakogl-cts/baseline-c2:
+      10 of 12 entries identical
+
+The two entries that differ: entry 0 (the shaders tail) 1512 -> 1511 pass + 1
+NotSupported; entry 10 (fbo) 711 -> 710 pass, with
+`dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component24`
+failing. Both are regressions of `72d16864` relative to the baseline; fixes are in
+flight (the fbo completeness verdict for a DEPTH_COMPONENT24 renderbuffer, and the
+compiler's indexed `gl_FragData[]` write). The 14 "other" are the cube
+mipmap-generate quality warnings of entry 5, as in the baseline. texture.* and
+uniform_api (1267 / 1267) are unchanged.
+
+The NotSupported was localised with a per-group image
+(`records/imx8mp-tree/c3-shaders-72d16864`, 20 rows; `TALLY (20 entries): begun
+1512 passed 1511 failed 0 notsup 1`): it is in
+`dEQP-GLES2.functional.shaders.fragdata.*`, `es2fShaderFragDataTests.cpp:175`
+"Dynamic indexing of gl_FragData[] not supported": with GL_MAX_DRAW_BUFFERS now 3
+the test writes `gl_FragData[i]` with a constant-index expression and our
+compiler refuses it.
+
+## i.MX8MP: the DISPLAY record at 69.3 MHz (origin/main `c1f0e2a6`, issue #23, 2026-10-06)
+
+`gc_gl_triangle` with `CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD=y`, `tools/board.sh imx8mp`,
+record `20261006-1630-gc_gl_triangle-c1f0e2a6-5292be8b` (two more runs of the same
+image beside it, `1633` and `1638`, same words):
+
+    board.sh imx8mp gc_gl_triangle-c1f0e2a6 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:DISPLAY resets=absent record=594b160f,80010eb4,00068268,593f0000 back_after=90s uptime=21s
+    DISPLAY (22) seq 15: adopted: pixel clock 69300 kHz, DSI lane rate 426600 kHz (headroom 25.9 per mille at 4 lanes); bridge IRQ_STAT now 0x00 (clean), at the start 0x00 (clean); health 0x3f; LCDIF format 9 (ARGB8888) pitch 5 KiB
+
+Exactly the predicted words: the link runs at Linux's 69.3 MHz with a 25.9 per mille
+margin. The viewing by eye is still pending (the user was not at the panel); the
+record shows the link state, not the picture.
