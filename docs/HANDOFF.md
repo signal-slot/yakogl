@@ -64,6 +64,9 @@ table images. Case 46 `es3size` (it uses `texsize.frag`) passes now; it was
 refused before the re-key. Case 63 `matattr` passes, served from the table
 for the first time.
 The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
+Since `84b5761e` no product image links a Mesa-built row: the reference lives
+in `tests/reference/` for the host gate, and the measurement table image opts
+in with `mesa-reference-table`.
 
 A never-run arm of a predicated `if` still costs time (gl_test 193, 194 on the
 AM62P): 0.11 ms a group for a small arm, rising to 0.38 ms a group beyond
@@ -85,7 +88,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
-   Done so far: the one source list every table generator reads
+   Done so far (commits 1, 2 and 2b: `dea95deb`, `84b5761e`; board proof:
+   on `84b5761e` both default-config triangles, i.MX8MP `gc_gl_triangle` and
+   AM62P `gl_triangle`, compile their ES 1.00 shaders in process and draw):
+   the one source list every table generator reads
    (`tools/shaders/precompiled.list`) and `yakogl-precompile`, which
    compiles it with our compiler on the host into `build/precompiled/`
    (tools/README.md); the Mesa tables are host-test reference material

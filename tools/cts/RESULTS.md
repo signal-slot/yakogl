@@ -16720,3 +16720,40 @@ arm off 775 + 31 x 107 = 4092, the larger taken), crossed at 49 groups an arm;
 on the corpus 0 of 168 `if`s branch. The off arm of case 193 grows by N + 2
 (N fmad and two copies), as ours does, not by the N fmad alone. Board run of
 the rule: pending.
+
+## Both triangles on the in-process compiler, no Mesa row in the image (origin/main `84b5761e`, 2026-10-06)
+
+Commits `dea95deb` (the Mesa reference leaves product code) and `84b5761e` (the
+in-process compiler is the default back end in Kconfig and CMake; the
+default-config samples move onto it). Both samples now compile their ES 1.00
+shaders with the in-process compiler; no Mesa table is in the image.
+Instrument: `tools/board.sh run`, `BOARD_BOOT=uboot-mmc`, images built from
+`84b5761e`. Records in `records/<board>/` of the main checkout (gitignored).
+
+| board | record | verdict line |
+|---|---|---|
+| i.MX8MP gc_gl_triangle | `20261006-1039-gc_gl_triangle-84b5761e-6c05cda7` | `board.sh imx8mp gc_gl_triangle-84b5761e rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:PICTURE resets=absent record=594b040e,ff404080,e7284c58,05000320 back_after=96s uptime=29s` |
+| AM62P gl_triangle | `20261006-1039-gl_triangle-84b5761e-01c78713` | `board.sh am62p gl_triangle-84b5761e rc=4 verdict=no_record boot=uboot-mmc row boot_verdict=done result=none resets=absent record=absent back_after=97s` |
+
+i.MX8MP, INDEX: `PICTURE (4) seq 14: centre 0xff404080 crc32 0xe7284c58 size 1280x800`.
+This is the 1280x800 window; the baseline rows in this log (crc32 0x35706c4e) are
+1024x600 windows, so the two are not compared here.
+
+AM62P, console:
+
+    I: gl_triangle: 1024x600 window at 0x83cc6000
+    I: triangle drawn; centre pixel r=128 g=63 b=64 a=255 (GL error 0x0)
+    I: gl_triangle: record 594b0400 ff403f80 35706c4e 04000258
+    I: gl_triangle: done
+
+The image ran and drew. Its record (centre 0xff403f80, crc32 0x35706c4e,
+1024x600) is byte-identical to the one the earlier Mesa-table gl_triangle image
+holds (the AM62P row of the 2026-10-03 unified-triangle table, build
+`b09de57d`, `594b0407 ff403f80 35706c4e 04000258`; same words at the
+`594b0400` kind line of the step-4 image above): the compiler-default image
+draws the same picture. The runner's `rc=4 verdict=no_record result=none` is
+the scan's, not the board's: this sample still prints its record with the
+legacy `gl_triangle: record` prefix, which board.sh's console scan (it looks for
+`yk-record:`) does not read; `tools/yakogl-tools`' recordcmd knows the legacy
+prefix. `gl_triangle` is scheduled for removal in the design clean-up (samples
+stage 2), so the sample is not changed.
