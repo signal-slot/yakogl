@@ -717,6 +717,9 @@ fn env(u: &Uniforms, stage: &str, st: &Stage, texs: &[sim::Texture]) -> sim::Env
     sim::Env {
         memory: vec![sim::Region { base: UNIFORM_BASE, words }],
         textures: texs.to_vec(),
+        // no sampler entries: NEAREST, the texture's minification filter,
+        // CLAMP_TO_EDGE, as the harness textures were always sampled
+        samplers: Vec::new(),
         thread: threads.map_or(0, |t| t.max(1) - 1),
         threads: threads.unwrap_or(0),
     }

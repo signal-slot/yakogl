@@ -153,26 +153,39 @@
 //!   v3d_packet_v42_pack.h. LDTMU takes the next returned word, to its
 //!   signal address one instruction later. The caller describes each
 //!   texture ([`Texture`]: 2D or cube, its levels, its minification
-//!   filter); the sampler is ASSUMED to be NEAREST (magnification),
-//!   NEAREST or NEAREST_MIPMAP_NEAREST (minification), CLAMP_TO_EDGE,
-//!   normalised coordinates (the texture and sampler states are the
-//!   driver's, not the program's). The level and the cube face are
-//!   dEQP's, through the model the IR evaluator shares
+//!   filter) and, by the sampler index P1's bits 24..31 carry, the
+//!   sampler state ([`Env::samplers`]: the magnification and minification
+//!   filters and the wrap modes; a lookup whose index names no entry
+//!   samples NEAREST with the texture's own minification filter and
+//!   CLAMP_TO_EDGE, as every program did before the sampler state was
+//!   modelled); the coordinates are normalised (the texture and sampler
+//!   states are the driver's, not the program's). The level and the cube
+//!   face are dEQP's, through the model the IR evaluator shares
 //!   ([`crate::shaderc::online::texref`], pinned bit for bit against
 //!   v3d-tex's C ports): the level of detail is TMUB's when the lookup is
 //!   retired by TMUSLOD or carries P2's disable_autolod (v3d_tex.c:137-153,
 //!   370-379), else the derivatives' (and TMUB a bias), which is not
 //!   modelled and so read only on a texture of one level; a cube lookup
-//!   is S by TMUSCM with T and R, the face chosen from the direction.
-//!   LINEAR, which the Slint path uses, is not modelled here; it is
-//!   measured on the board (gl_test case 109, docs/online-shaderc/
-//!   v3d-backend.md "LINEAR on the board"). Refused: a coordinate within
-//!   1e-3 of a texel edge (the hardware's rounding there is not known), a
-//!   level of detail within dEQP's LOD precision of a level boundary, a
-//!   cube direction within 1e-3 of a face edge, R without TMUSCM (3D),
-//!   I/DREF/OFF (arrays, shadow, offsets), a P2 that is not a regular
-//!   lookup, TMUSF (texel fetch), unnormalised coordinates, and
-//!   conditional texture writes.
+//!   is S by TMUSCM with T and R, the face chosen from the direction, and
+//!   filtered SEAMLESSLY whatever the wrap modes, as the V3D 4.2 filters
+//!   every cube (docs/v3d-noseamless-cube.md); a 2D-array lookup is S by
+//!   TMUS or TMUSLOD with T and the layer in TMUI (Mesa's `is_array` write,
+//!   v3d_tex.c), which on a cube texture reads one face as an independent
+//!   2D texture with the sampler's wrap modes (the non-seamless emulation's
+//!   path; a 2D texture has layer 0 only, and the layer is clamped as GL
+//!   clamps it). TMUI is ASSUMED to take a float, like the other
+//!   coordinates of a sampled lookup, rounded to the nearest layer (GL ES
+//!   3.0 3.8.9: floor(layer + 0.5)); a lookup whose layer is not finite is
+//!   refused. LINEAR is dEQP's bilinear rule in f32 (`texref`); the TMU's
+//!   fixed-point weights were measured on the board instead (gl_test case
+//!   109, docs/online-shaderc/v3d-backend.md "LINEAR on the board"), so a
+//!   comparison with hardware allows dEQP's LINEAR tolerance. Refused: a
+//!   NEAREST coordinate within 1e-3 of a texel edge (the hardware's
+//!   rounding there is not known), a level of detail within dEQP's LOD
+//!   precision of a level boundary, a cube direction within 1e-3 of a face
+//!   edge, R without TMUSCM (3D), I with TMUSCM (a cube array), DREF/OFF
+//!   (shadow, offsets), a P2 that is not a regular lookup, TMUSF (texel
+//!   fetch), unnormalised coordinates, and conditional texture writes.
 //! * **General memory through the TMU**, as Mesa's spills and fills and
 //!   its scratch arrays use it (`vir_register_allocate.c:426-611`): TMUD
 //!   gives a lane's word, and the write to TMUA or TMUAU (which takes its
@@ -240,6 +253,8 @@ pub enum Inputs {
     Vertex(VsInputs),
 }
 
+/// A sampler's state ([`Env::samplers`]).
+pub use crate::shaderc::online::texref::Sampler;
 /// A texture the TMU reads: 2D or cube, its levels and its minification
 /// filter ([`crate::shaderc::online::texref`], the model the IR evaluator
 /// shares). Values should be exactly representable as f16 when the program
@@ -248,12 +263,16 @@ pub enum Inputs {
 pub use crate::shaderc::online::texref::Texture;
 
 /// What a run may read besides its inputs: LDUNIFA's memory and the
-/// textures, by the index P0 carries; and the QPU thread it runs as, which
-/// TIDX reads (the spill base, vir_register_allocate.c:443-446).
+/// textures, by the index P0 carries, and the samplers, by the index P1
+/// carries (a texture with no sampler entry samples NEAREST, its own
+/// minification filter, CLAMP_TO_EDGE: `Sampler::of`); and the QPU thread
+/// it runs as, which TIDX reads (the spill base,
+/// vir_register_allocate.c:443-446).
 #[derive(Clone, Debug, Default)]
 pub struct Env {
     pub memory: Vec<Region>,
     pub textures: Vec<Texture>,
+    pub samplers: Vec<Sampler>,
     pub thread: u32,
     /// The program's thread count (1, 2 or 4): the TMU output FIFO holds
     /// 16 / threads words per thread. 0 = not given, and a TMU look-up then
@@ -817,9 +836,10 @@ impl Machine<'_> {
             }
             // TMUA, TMUAU: the address, which retires a general access.
             12 | 13 => self.tmu_general(waddr, vals, mask, what),
-            // TMUT, TMUR (a cube's third coordinate), TMUB (a bias, or an
-            // explicit LOD with TMUSLOD or P2's disable_autolod).
-            34 | 35 | 37 => {
+            // TMUT, TMUR (a cube's third coordinate), TMUI (a 2D array's
+            // layer), TMUB (a bias, or an explicit LOD with TMUSLOD or P2's
+            // disable_autolod).
+            34..=37 => {
                 self.tmu_coords.retain(|(w, _)| *w != waddr);
                 self.tmu_coords.push((waddr, vals));
                 Ok(())
@@ -944,6 +964,12 @@ impl Machine<'_> {
                 }
             ));
         }
+        // TMUI: a 2D array's layer (Mesa's `is_array` write); with TMUSCM
+        // it would be a cube array, which GL ES 2.0 and 3.0 have not.
+        let layer = coord(36);
+        if cube && layer.is_some() {
+            return unmodelled(format!("{what}: a cube lookup with an array index (TMUI)"));
+        }
         // The level of detail: TMUSLOD takes it from TMUB (and implies
         // disable_autolod); so does a cube lookup with disable_autolod
         // (v3d_tex.c:137-153, 375-379). Otherwise it comes from the
@@ -957,13 +983,23 @@ impl Machine<'_> {
         let Some(tex) = self.env.textures.get(idx) else {
             return unmodelled(format!("{what}: texture {idx} not supplied"));
         };
-        if tex.cube != cube {
+        // A cube texture is also six layers (the V3D record is the same):
+        // a cube lookup needs a cube texture, a 2D lookup a 2D one, and a
+        // 2D-array lookup reads a face of a cube or layer 0 of a 2D texture.
+        if cube != tex.cube && layer.is_none() {
             return unmodelled(format!(
                 "{what}: a {} lookup on {} texture {idx}",
                 if cube { "cube" } else { "2D" },
                 if tex.cube { "cube" } else { "2D" }
             ));
         }
+        // The sampler P1 names (bits 24..31), or the texture's own
+        // NEAREST / CLAMP_TO_EDGE one.
+        let sampler = config
+            .get(1)
+            .and_then(|p1| self.env.samplers.get((p1 >> 24) as usize))
+            .copied()
+            .unwrap_or_else(|| Sampler::of(tex));
         let mask = p0 & 0xf;
         let mut words: Vec<[u32; LANES]> = Vec::new();
         for k in 0..4 {
@@ -981,15 +1017,32 @@ impl Machine<'_> {
                 _ => Lod::Implicit,
             };
             let refused = |e: texref::Refusal| format!("{what}: {e}");
-            let level = texref::level(tex, lod).map_err(refused)?;
+            let (level, second) = texref::levels(tex, sampler.min, lod).map_err(refused)?;
             self.out.levels |= 1 << level;
-            let texel = match r {
-                Some(r) => {
-                    let (v, face) = texref::sample_cube(tex, fl(s[l]), fl(t[l]), fl(r[l]), lod).map_err(refused)?;
+            if let Some((l1, _)) = second {
+                self.out.levels |= 1 << l1;
+            }
+            let texel = match (r, layer) {
+                (Some(r), _) => {
+                    let (v, face) = texref::sample_cube_filtered(tex, &sampler, fl(s[l]), fl(t[l]), fl(r[l]), lod)
+                        .map_err(refused)?;
                     self.out.cube_faces |= 1 << face.index();
                     v
                 }
-                None => texref::sample_2d(tex, fl(s[l]), fl(t[l]), lod).map_err(refused)?,
+                (None, Some(i)) => {
+                    let f = fl(i[l]);
+                    if !f.is_finite() {
+                        return Err(refused(texref::Refusal::LayerNotFinite));
+                    }
+                    /* floor(layer + 0.5), clamped to the layers there are */
+                    let faces = tex.levels.first().map_or(1, |lv| lv.faces.len());
+                    let layer = ((f + 0.5).floor().max(0.0) as usize).min(faces - 1);
+                    if tex.cube {
+                        self.out.cube_faces |= 1 << layer;
+                    }
+                    texref::sample_layer(tex, &sampler, layer, fl(s[l]), fl(t[l]), lod).map_err(refused)?
+                }
+                (None, None) => texref::sample_layer(tex, &sampler, 0, fl(s[l]), fl(t[l]), lod).map_err(refused)?,
             };
             let mut n = 0;
             for k in 0..4 {
@@ -2015,12 +2068,23 @@ mod undefined_lane_tests {
             varyings: Vec::new(),
         };
         let tex = Texture::flat(1, 1, vec![[0.5, 0.25, 0.125, 1.0]]);
-        let env = Env { memory: Vec::new(), textures: vec![tex], thread: 0, threads };
+        let env = Env { textures: vec![tex], threads, ..Env::default() };
         run(&words, uniforms, &Inputs::Fragment(Box::new(inputs)), &env)
     }
 
     /// `body` as a fragment program with `tex` at index 0, one thread.
     fn fs_with(body: &[Alu], uniforms: &[u32], tex: Texture) -> Result<Outcome, String> {
+        fs_with_sampler(body, uniforms, tex, None)
+    }
+
+    /// [`fs_with`] with sampler 0's state given (`None`: the texture's
+    /// NEAREST / CLAMP_TO_EDGE default).
+    fn fs_with_sampler(
+        body: &[Alu],
+        uniforms: &[u32],
+        tex: Texture,
+        sampler: Option<Sampler>,
+    ) -> Result<Outcome, String> {
         let mut code = vec![thrsw(Alu::nop()), thrsw(Alu::nop())];
         code.extend_from_slice(body);
         code.extend([thrsw(Alu::nop()), Alu::nop(), Alu::nop()]);
@@ -2035,7 +2099,7 @@ mod undefined_lane_tests {
             back_facing: [false; LANES],
             varyings: Vec::new(),
         };
-        let env = Env { memory: Vec::new(), textures: vec![tex], thread: 0, threads: 1 };
+        let env = Env { textures: vec![tex], samplers: sampler.into_iter().collect(), threads: 1, ..Env::default() };
         run(&words, uniforms, &Inputs::Fragment(Box::new(inputs)), &env)
     }
 
@@ -2044,6 +2108,20 @@ mod undefined_lane_tests {
     /// P2 = disable_autolod when `p2`) when `b`, S by `retire`; the one
     /// result word (R) to the TLB. Returns the program and its uniforms.
     fn tex_program(retire: u8, t: f32, r: Option<f32>, b: Option<f32>, p2: bool, s: f32) -> (Vec<Alu>, Vec<u32>) {
+        tex_program_layer(retire, t, r, None, b, p2, s)
+    }
+
+    /// [`tex_program`] with a 2D array's layer written to TMUI when `i`
+    /// (after R, before TMUB: Mesa's coordinate order).
+    fn tex_program_layer(
+        retire: u8,
+        t: f32,
+        r: Option<f32>,
+        i: Option<f32>,
+        b: Option<f32>,
+        p2: bool,
+        s: f32,
+    ) -> (Vec<Alu>, Vec<u32>) {
         let mut ld = Alu::nop();
         ld.sig.ldunif = true; // r5
         let mut wrtmuc = Alu::nop();
@@ -2056,6 +2134,10 @@ mod undefined_lane_tests {
         if let Some(r) = r {
             code.extend([ld, mov_mul(35, true, Mux::R5)]); // TMUR
             unif.push(r.to_bits());
+        }
+        if let Some(i) = i {
+            code.extend([ld, mov_mul(36, true, Mux::R5)]); // TMUI
+            unif.push(i.to_bits());
         }
         if let Some(b) = b {
             let mut mb = mov_mul(37, true, Mux::R5); // TMUB
@@ -2142,6 +2224,103 @@ mod undefined_lane_tests {
         let (code, unif) = tex_program(33, 0.3, Some(0.2), None, false, 1.0);
         let e = fs_with(&code, &unif, mip_texture(true)).unwrap_err();
         assert!(e.contains("a 3D lookup (an R coordinate without TMUSCM)"), "{e}");
+    }
+
+    /// A 4x4 cube of one level: face +X's texel (i, j) is (1, i/4, j/4, 1),
+    /// face -Z (which adjoins +X's s = 1 edge) is flat (0, 0, 1, 1), the
+    /// other faces flat (f/8, f/8, f/8, 1). Every blend of these is exact in
+    /// f16.
+    fn edge_cube() -> Texture {
+        use crate::shaderc::online::texref::{Level, MinFilter};
+        let n = 4usize;
+        let faces: Vec<Vec<[f32; 4]>> = (0..6)
+            .map(|f| match f {
+                0 => (0..n * n).map(|k| [1.0, (k % n) as f32 / 4.0, (k / n) as f32 / 4.0, 1.0]).collect(),
+                5 => vec![[0.0, 0.0, 1.0, 1.0]; n * n],
+                _ => vec![[f as f32 / 8.0; 4]; n * n],
+            })
+            .collect();
+        Texture { cube: true, min: MinFilter::Linear, levels: vec![Level { width: 4, height: 4, faces }] }
+    }
+
+    /// The four f16 channels of the first TLB write's lane 0 (two words).
+    fn tlb_rgba16(o: &Outcome) -> [f32; 4] {
+        let w = |k: usize| o.tlb[k].value[0].expect("a defined value");
+        let h = |x: u32| half_to_f32(x as u16);
+        [h(w(0) & 0xffff), h(w(0) >> 16), h(w(1) & 0xffff), h(w(1) >> 16)]
+    }
+
+    /// A LINEAR look-up near +X's s = 1 edge, (1, 0, -0.875): on the +X face
+    /// u = 3.75, so the taps are columns 3 and 4 weighed 3:1, and rows 1 and
+    /// 2 equally. By TMUSCM (a cube lookup) the column-4 tap reads -Z's edge
+    /// column, whatever the wrap mode: the seamless blend (0.75, 0.5625,
+    /// 0.53125, 1). By TMUS with TMUI = 0 (a 2D-array lookup of face 0 on
+    /// the same texture) the tap wraps as the sampler says: CLAMP (1, 0.75,
+    /// 0.375, 1), REPEAT (1, 0.5625, 0.375, 1), MIRROR as CLAMP. A P1
+    /// naming no sampler entry is NEAREST: the texel (3, 2), (1, 0.75, 0.5, 1).
+    /// This is the seam the non-seamless emulation removes
+    /// (docs/v3d-noseamless-cube.md; tests/v3d_cube_noseamless.rs drives the
+    /// compiler's own code through the same model).
+    #[test]
+    fn a_cube_lookup_is_seamless_and_an_array_lookup_of_its_face_is_not() {
+        use crate::shaderc::online::texref::{Filter, MinFilter, Wrap};
+        let sampler = |wrap: Wrap| Sampler { mag: Filter::Linear, min: MinFilter::Linear, wrap_s: wrap, wrap_t: wrap };
+        /* P0 word mask 0x3: two f16 words, 16-bit output (P1 without bit 0) */
+        let rgba16 = |unif: &mut Vec<u32>| {
+            unif[1] = 0x3;
+            unif[2] = 0x0;
+        };
+        let (t, s) = (0.0f32, 1.0f32);
+        let z = -0.875f32;
+        for wrap in [Wrap::ClampToEdge, Wrap::Repeat, Wrap::MirroredRepeat] {
+            let (mut code, mut unif) = tex_program(40, t, Some(z), Some(0.0), true, s);
+            rgba16(&mut unif);
+            /* the second word (b, a) to the TLB too */
+            code.extend([ldtmu_r1(), mov_mul(7, true, Mux::R1)]);
+            let o = fs_with_sampler(&code, &unif, edge_cube(), Some(sampler(wrap))).expect("runs");
+            assert_eq!(tlb_rgba16(&o), [0.75, 0.5625, 0.53125, 1.0], "seamless under {wrap:?}");
+            assert_eq!(o.cube_faces, 1 << 0, "+X selected");
+            /* the same direction's face coordinates, as a 2D-array lookup of
+             * layer 0: s = (sc / ma + 1) / 2 with sc = -z, t = 0.5 */
+            let (mut code, mut unif) = tex_program_layer(33, 0.5, None, Some(0.0), None, false, (-z + 1.0) / 2.0);
+            rgba16(&mut unif);
+            code.extend([ldtmu_r1(), mov_mul(7, true, Mux::R1)]);
+            let o = fs_with_sampler(&code, &unif, edge_cube(), Some(sampler(wrap))).expect("runs");
+            let want = match wrap {
+                Wrap::Repeat => [1.0, 0.5625, 0.375, 1.0],
+                _ => [1.0, 0.75, 0.375, 1.0],
+            };
+            assert_eq!(tlb_rgba16(&o), want, "non-seamless under {wrap:?}");
+            assert_eq!(o.cube_faces, 1 << 0, "face 0 read as a layer");
+        }
+        /* layer 5.4 rounds to -Z, flat blue */
+        let (code, unif) = tex_program_layer(33, 0.5, None, Some(5.4), None, false, 0.9375);
+        let o = fs_with_sampler(&code, &unif, edge_cube(), Some(sampler(Wrap::Repeat))).expect("runs");
+        assert_eq!((tlb_r(&o), o.cube_faces), (0.0, 1 << 5), "the 32-bit R word of -Z");
+        /* no sampler entry: NEAREST on the texel (3, 2), at t = 0.625 (t =
+         * 0.5 is the edge of rows 1 and 2, refused under NEAREST) */
+        let (mut code, mut unif) = tex_program_layer(33, 0.625, None, Some(0.0), None, false, 0.9375);
+        rgba16(&mut unif);
+        code.extend([ldtmu_r1(), mov_mul(7, true, Mux::R1)]);
+        let o = fs_with_sampler(&code, &unif, edge_cube(), None).expect("runs");
+        assert_eq!(tlb_rgba16(&o), [1.0, 0.75, 0.5, 1.0]);
+        /* a cube lookup with a layer is a cube array: refused */
+        let (code, unif) = tex_program_layer(40, t, Some(z), Some(0.0), Some(0.0), true, s);
+        let e = fs_with(&code, &unif, edge_cube()).unwrap_err();
+        assert!(e.contains("a cube lookup with an array index (TMUI)"), "{e}");
+        /* a layer that is not finite */
+        let (code, unif) = tex_program_layer(33, 0.5, None, Some(f32::NAN), None, false, 0.5);
+        let e = fs_with(&code, &unif, edge_cube()).unwrap_err();
+        assert!(e.contains("a 2D-array layer that is not finite"), "{e}");
+    }
+
+    /// An LDTMU of the next word into r1.
+    fn ldtmu_r1() -> Alu {
+        let mut ldtmu = Alu::nop();
+        ldtmu.sig.ldtmu = true;
+        ldtmu.sig_addr = 1;
+        ldtmu.sig_magic = true;
+        ldtmu
     }
 
     /// A 2D look-up: WRTMUC takes P0 (then P1), T and S from r5 (0.3),
@@ -2279,7 +2458,7 @@ mod undefined_lane_tests {
                 varyings: Vec::new(),
             };
             let tex = Texture::flat(1, 1, vec![[0.5, 0.25, 0.125, 1.0]]);
-            let env = Env { memory: Vec::new(), textures: vec![tex], thread: 0, threads: 4 };
+            let env = Env { textures: vec![tex], threads: 4, ..Env::default() };
             run(&words, &unif, &Inputs::Fragment(Box::new(inputs)), &env)
         };
         let switched = program(thrsw(Alu::nop())).expect("runs");
