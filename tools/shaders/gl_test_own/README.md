@@ -16,10 +16,11 @@ headers (`gl_test_<name>_vs_src` / `_fs_src`, byte-identical to these files),
 precompiled table. The host tests of the same cases (`tests/usc_limits.rs`)
 compile these files too, so the board and the host see one text.
 
-The directory has no table role (`dir gl_test_own -` in the list): neither
-Mesa reference table holds these sources. They are ES 1.00 already, so both
-the `gl_test` and the `gl_test_es100` apps link the same files; there are no
-twins.
+The directory's role is `precompiled` (`dir gl_test_own precompiled` in the
+list): our own precompiler compiles its sources for every GPU's table, and
+neither Mesa reference table holds them (the `gc7000` role would put them in
+the etna_shc table). They are ES 1.00 already, so both the `gl_test` and the
+`gl_test_es100` apps link the same files; there are no twins.
 
 Several cases share `fma_plain.vert` (position only) and `fma_varying.frag`
 (the varying `v` as the colour): a case's fragment-shader shape runs under

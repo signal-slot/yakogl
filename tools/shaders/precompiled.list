@@ -27,7 +27,12 @@
 #                         shader in it; `internal`, the back ends' own shaders,
 #                         which no table holds (the `internal` lines name the
 #                         ones our compiler builds the back ends' programs from);
-#                         `-`, neither. Every directory under tools/shaders/
+#                         `precompiled`, sources only our own precompiler
+#                         compiles, through the `pair` lines, for every GPU's
+#                         table (no Mesa table holds them); `-`, none of these
+#                         (the PowerVR precompiler still takes its `src` and
+#                         `pair` lines; the GC7000's does not). Every
+#                         directory under tools/shaders/
 #                         that holds a .vert or .frag must have a line, and a
 #                         `src` or `pair` path must lie in a listed directory:
 #                         a directory nobody was told about fails every reader
@@ -102,7 +107,7 @@ dir gl_test_es100  gc7000
 dir qt             gc7000
 dir qt3d           gc7000
 dir offarm         -          # PowerVR-only: gl_test 193/194's predicated-off arm, grown by N
-dir gl_test_own    -          # gl_test's own sources (cases 181-183, 188-192; its README): in no Mesa table, linked by the `pair` lines below
+dir gl_test_own    precompiled # gl_test's own sources (cases 181-183, 188-192; its README): every GPU's precompiled table, no Mesa table
 dir internal       internal   # fbload.*, clear.*: Mesa's reference programs (tools/glsl2usc.sh, gen_shader_table.py)
 dir internal/es    internal   # their GLSL ES twins: the `internal` lines
 

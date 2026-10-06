@@ -64,8 +64,10 @@ SHADERS = os.path.join(HERE, "..", "shaders")
 # allowlist is the `dir` lines of tools/shaders/precompiled.list, the source
 # list every table generator reads: a directory with the `gc7000` role ships
 # here; one with any other (`internal`: the clear shaders, compiled into the
-# backend; `-`: offarm/, the PowerVR measurement series of gl_test 193, which
-# the GC7000 runs in an online image only) is accounted for and not a row;
+# backend; `precompiled`: gl_test_own/, sources only our own precompiler
+# compiles, for every GPU; `-`: offarm/, the PowerVR measurement series of
+# gl_test 193, which the GC7000 runs in an online image only) is accounted for
+# and not a row;
 # one with no line fails, and the failure says to add it there.
 SOURCE_LIST = os.path.join(SHADERS, "precompiled.list")
 
