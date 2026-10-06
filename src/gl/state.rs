@@ -1034,7 +1034,7 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS => CAP_COMBINED_TEXTURE_UNITS as GLint,
         /* the vertex stage has its own descriptors (Qt Quick 3D reads bone
          * matrices and morph targets from a texture in the vertex shader) */
-        GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS => crate::backend::vs_tex_units() as GLint,
+        GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS => crate::backend::GLES_VS_TEX_UNITS as GLint,
         GL_MAX_TEXTURE_SIZE => 4096,
         GL_MAX_CUBE_MAP_TEXTURE_SIZE => 4096,
         GL_MAX_RENDERBUFFER_SIZE => 4096,
@@ -2981,23 +2981,15 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
-    /// The GC7000's sixteen-vertex-unit switch (vivante/backend.rs
-    /// gc_debug_vs_units16) moves the vertex limit alone: on (the default),
-    /// 16 + 16 within the combined 32; off, the earlier 8, and the fragment
-    /// and combined limits do not move.
+    /// The GC7000's texture unit limits: sixteen vertex units, 16 + 16
+    /// within the combined 32.
     #[test]
     #[cfg(feature = "gpu-vivante")]
-    fn the_gc7000_vertex_unit_switch_answers_sixteen() {
+    fn the_gc7000_answers_sixteen_vertex_texture_units() {
         let gl = TestGl::new(8, 8);
         let limits =
             [GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, GL_MAX_TEXTURE_IMAGE_UNITS, GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS];
-        let on = limits.map(geti1);
-        crate::vivante::backend::set_vs_units16_for_this_thread(false);
-        let off = limits.map(geti1);
-        crate::vivante::backend::set_vs_units16_for_this_thread(true);
-        assert_eq!(on, [16, 16, 32], "the default");
-        assert_eq!(off, [8, 16, 32]);
-        assert_eq!(geti1(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), 16, "on again");
+        assert_eq!(limits.map(geti1), [16, 16, 32]);
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 

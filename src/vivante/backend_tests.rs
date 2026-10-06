@@ -1067,13 +1067,17 @@ fn a_view_window_puts_its_pitch_into_the_pixel_engines_and_the_resolves_stride()
     let s = rig.submit(&d);
     assert_eq!(s.reg(GC_PE_COLOR_STRIDE), 1280 * 4, "the view's pitch, not 800 * 4");
 
-    d.samples = 4;
-    gc_debug_set_msaa(1);
-    let on = rig.submit(&d);
-    gc_debug_set_msaa(0);
-    let ms_pitch = (2 * 800u32).div_ceil(64) * 64 * 4;
-    assert_eq!(on.reg(GC_PE_COLOR_STRIDE), ms_pitch, "the scratch surface's own pitch");
-    assert_eq!(on.reg(GC_RS_DEST_STRIDE), 1280 * 4, "the resolve writes the view at its pitch");
+    /* 4x is a test knob (gc_debug_msaa) */
+    #[cfg(feature = "test-knobs")]
+    {
+        d.samples = 4;
+        gc_debug_set_msaa(1);
+        let on = rig.submit(&d);
+        gc_debug_set_msaa(0);
+        let ms_pitch = (2 * 800u32).div_ceil(64) * 64 * 4;
+        assert_eq!(on.reg(GC_PE_COLOR_STRIDE), ms_pitch, "the scratch surface's own pitch");
+        assert_eq!(on.reg(GC_RS_DEST_STRIDE), 1280 * 4, "the resolve writes the view at its pitch");
+    }
 
     /* the same target packed */
     d.samples = 1;
@@ -1255,11 +1259,10 @@ fn the_scissor_margin_is_the_scissors_and_not_the_clips() {
 }
 
 /// Flat shading as Mesa selects it: PA_CONFIG's SHADE_MODEL is FLAT when a
-/// fragment input is flat and the switch is on (its default); smooth
-/// otherwise, and always for a program with no flat input (every ES 1.00
-/// one).
+/// fragment input is flat; smooth for a program with no flat input (every
+/// ES 1.00 one).
 #[test]
-fn a_flat_varying_selects_the_flat_shade_model_only_when_on() {
+fn a_flat_varying_selects_the_flat_shade_model() {
     let rig = Rig::new();
     let mut flat_fs = *rig.fs;
     flat_fs.viv.in_[0].interp = GC_INTERP_FLAT as u8;
@@ -1267,16 +1270,11 @@ fn a_flat_varying_selects_the_flat_shade_model_only_when_on() {
     d.fs = &flat_fs;
     let model = |r: &Stream| r.reg(GC_PA_CONFIG) & GC_PA_CONFIG_SHADE_MODEL_SMOOTH;
 
-    let default = rig.submit(&d);
-    gc_debug_set_flat_shade(0);
-    assert_eq!(model(&rig.submit(&d)), GC_PA_CONFIG_SHADE_MODEL_SMOOTH, "off: smooth, as before");
-    gc_debug_set_flat_shade(1);
-    let on_flat = rig.submit(&d);
-    let on_smooth = rig.submit(&rig.draw(3));
-    assert_eq!(model(&default), GC_PA_CONFIG_SHADE_MODEL_FLAT, "on by default: measured on silicon (case 89)");
-    assert_eq!(model(&on_flat), GC_PA_CONFIG_SHADE_MODEL_FLAT, "on, with a flat input: flat");
-    assert_eq!(model(&on_smooth), GC_PA_CONFIG_SHADE_MODEL_SMOOTH, "on, no flat input: smooth");
-    assert_ne!(on_flat.reg(GC_PA_SYSTEM_MODE) & GC_PA_SYSTEM_MODE_PROVOKING_VERTEX_LAST, 0, "still the last vertex");
+    let flat = rig.submit(&d);
+    let smooth = rig.submit(&rig.draw(3));
+    assert_eq!(model(&flat), GC_PA_CONFIG_SHADE_MODEL_FLAT, "a flat input: flat (measured on silicon, case 89)");
+    assert_eq!(model(&smooth), GC_PA_CONFIG_SHADE_MODEL_SMOOTH, "no flat input: smooth");
+    assert_ne!(flat.reg(GC_PA_SYSTEM_MODE) & GC_PA_SYSTEM_MODE_PROVOKING_VERTEX_LAST, 0, "still the last vertex");
 }
 
 /// Fifteen vec4 varyings -- all a vertex shader's 16 io rows carry beside
@@ -2970,56 +2968,6 @@ fn a_declared_sampler_with_nothing_bound_reads_the_black_texel() {
     walk(&unbound.0, |r, _, _| wrote |= r == desc0);
     assert!(wrote, "slot 0 gets a descriptor");
     assert_eq!(unbound.reg(GC_VS_SAMPLER_BASE), 1, "the vertex slots after the declared one");
-
-    /* gc_debug_black_unbound 0: the stream before 00d8b62f, for gl_test 37's A/B */
-    gc_debug_set_black_unbound(0);
-    let off = rig.submit(&d);
-    gc_debug_set_black_unbound(1);
-    let mut wrote = false;
-    walk(&off.0, |r, _, _| wrote |= r == desc0);
-    assert!(!wrote, "off: no descriptor for the unbound slot");
-    assert_eq!(off.reg(GC_VS_SAMPLER_BASE), 0, "off: counted from the bound textures, as before");
-}
-
-/// gc_debug_first_component_use 0: a fresh backend's first draw leaves
-/// GL_VARYING_COMPONENT_USE alone, as before 02fc8b79 (gl_test 37's A/B),
-/// and a point-coordinate program and the draw after it still write it.
-#[test]
-fn the_first_component_use_write_can_be_switched_off() {
-    let uses = [
-        GC_GL_VARYING_COMPONENT_USE0,
-        GC_GL_VARYING_COMPONENT_USE1,
-        GC_GL_VARYING_COMPONENT_USE2,
-        GC_GL_VARYING_COMPONENT_USE3,
-    ];
-    let written = |st: &Stream| {
-        let mut v = std::vec::Vec::new();
-        walk(&st.0, |r, w, _| {
-            if uses.contains(&r) {
-                v.push((r, w));
-            }
-        });
-        v
-    };
-    let rig = Rig::new(); /* holds the test lock: the switch is global */
-    gc_debug_set_first_component_use(0);
-    gc_shutdown();
-    assert_eq!(gc_init(), 0, "a fresh backend, as a new process has");
-    let first = rig.submit(&rig.draw(3));
-    let mut fs = *rig.fs;
-    fs.viv.num_in = 1;
-    fs.viv.in_[0].components = 2;
-    crate::util::set_name(&mut fs.viv.in_[0].name, crate::shaderc::SHC_VIV_POINT_COORD.as_bytes());
-    fs.viv.vs_reg_of_in[0] = SHC_VIV_NO_REG;
-    let mut d = rig.draw(3);
-    d.fs = &fs;
-    d.prim = GLES_PRIM_POINTS;
-    let pntc = rig.submit(&d);
-    let after = rig.submit(&rig.draw(3));
-    gc_debug_set_first_component_use(1);
-    assert!(written(&first).is_empty(), "off: the first draw writes nothing: {:x?}", written(&first));
-    assert_eq!(written(&pntc).len(), 4, "a point-coordinate program still writes all four");
-    assert_eq!(written(&after), uses.map(|r| (r, 0)), "and the draw after it goes back to GENERIC");
 }
 
 /// Draw buffers (MRT step 2). With gc_debug_mrt off a draw given four targets
@@ -3477,12 +3425,10 @@ fn a_fused_stencil_clear_uses_its_own_write_mask() {
 }
 
 /// A colour clear writes the channels of its own glClear's mask, through the
-/// same PE_COLOR_FORMAT COMPONENTS field a masked draw uses, with the switch
-/// on (the default); all four with it off (the behaviour before it, which
-/// dEQP's masked color_clear cases fail). One test, because the switch is
-/// process-global.
+/// same PE_COLOR_FORMAT COMPONENTS field a masked draw uses (all four, the
+/// behaviour before it, is what dEQP's masked color_clear cases fail).
 #[test]
-fn a_masked_clear_writes_only_its_channels_when_switched_on() {
+fn a_masked_clear_writes_only_its_channels() {
     let rig = Rig::new();
     let mut d = rig.draw(0);
     d.do_clear = true;
@@ -3491,11 +3437,6 @@ fn a_masked_clear_writes_only_its_channels_when_switched_on() {
     let overwrite = |s: &Stream| s.reg(GC_PE_COLOR_FORMAT) & GC_PE_COLOR_FORMAT_OVERWRITE;
 
     let on = rig.submit(&d);
-    gc_debug_set_masked_clear(0);
-    let off = rig.submit(&d);
-    gc_debug_set_masked_clear(1);
-    assert_eq!(comps(&off), 0xf, "the off arm: every channel, as before");
-    assert_ne!(overwrite(&off), 0);
 
     let mut whole = d;
     whole.clear_color_mask = 0xf;
@@ -3510,7 +3451,7 @@ fn a_masked_clear_writes_only_its_channels_when_switched_on() {
     fused.color_mask = 0xf;
     let on_fused = rig.submit(&fused);
 
-    assert_eq!(comps(&on), 0b1001, "on by default: R and A only");
+    assert_eq!(comps(&on), 0b1001, "R and A only");
     assert_eq!(overwrite(&on), 0, "a masked clear keeps the other channels");
     assert_eq!(comps(&on_whole), 0xf);
     assert_ne!(overwrite(&on_whole), 0, "an unmasked clear keeps the fast path");
@@ -3724,6 +3665,7 @@ fn a_matrix_attributes_columns_are_elements_into_their_own_registers() {
 /// stride, and the viewport and scissor are GL's, unmirrored -- the state an
 /// FBO gets. With the switch off, the same draw is the mirrored viewport it
 /// always was (the test above), so nothing changes unless a test asks.
+#[cfg(feature = "test-knobs")]
 #[test]
 fn the_flip_study_draws_a_top_down_target_bottom_up_only_when_asked() {
     let rig = Rig::new();
@@ -3761,6 +3703,7 @@ fn the_flip_study_draws_a_top_down_target_bottom_up_only_when_asked() {
 /// The flip study's arm (ii), off by default: a frame ends with 100
 /// resolve-engine copies of its target into the scratch surface with
 /// RS_CONFIG_FLIP, then one plain copy back.
+#[cfg(feature = "test-knobs")]
 #[test]
 fn the_flip_study_ends_a_frame_with_flipped_resolve_copies_only_when_asked() {
     let rig = Rig::new();
@@ -3795,6 +3738,7 @@ fn the_flip_study_ends_a_frame_with_flipped_resolve_copies_only_when_asked() {
 /// make -- PE_LOGIC_OP UNK24 = 5, one more fragment input and temporary --
 /// and 1 does not, so the board can run the two as arms of one session. The
 /// scratch probe answers only once a scratch surface exists.
+#[cfg(feature = "test-knobs")]
 #[test]
 fn msaa_bit_one_adds_etnaviv_s_small_msaa_settings_and_the_probe_reads_the_scratch() {
     let rig = Rig::new();
@@ -3831,6 +3775,7 @@ fn msaa_bit_one_adds_etnaviv_s_small_msaa_settings_and_the_probe_reads_the_scrat
 /// coverage 16/16, the sample mask enabled with all four samples, their
 /// write masks cleared -- and 3 leaves the context word's, which writes none
 /// of those fields.
+#[cfg(feature = "test-knobs")]
 #[test]
 fn msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does() {
     let rig = Rig::new();
@@ -3858,6 +3803,7 @@ fn msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does() {
     assert_eq!(seven & GC_PS_MSAA_SAMPLE_COVERAGE_INVERT, 0, "not inverted");
 }
 
+#[cfg(feature = "test-knobs")]
 #[test]
 fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
     let rig = Rig::new();

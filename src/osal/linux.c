@@ -111,13 +111,10 @@ static int heap_index_of(uint64_t gpu)
 }
 
 extern unsigned g_gl_error_log_limit;   /* gl/context.rs */
-/* vivante/backend.rs; absent from a PowerVR or V3D library, hence weak. */
-extern void gc_debug_set_vs_units16(int on) __attribute__((weak));
 
 static int l_init(void *platform_arg)
 {
 	const char *lim = getenv("YAKOGL_ERROR_LOG");
-	const char *vsu = getenv("YAKOGL_GC_VS_UNITS16");
 
 	(void)platform_arg;
 	memset(&l, 0, sizeof(l));
@@ -125,11 +122,6 @@ static int l_init(void *platform_arg)
 	 * run wants to see which entry point raised every error it collects. */
 	if (lim && *lim)
 		g_gl_error_log_limit = (unsigned)strtoul(lim, NULL, 0);
-	/* YAKOGL_GC_VS_UNITS16=0|1: the GC7000's vertex texture unit count,
-	 * 8 or 16 (vivante/backend.rs gc_debug_vs_units16); unset keeps the
-	 * library's default. Only a Vivante library has the switch. */
-	if (vsu && (vsu[0] == '0' || vsu[0] == '1') && vsu[1] == '\0' && gc_debug_set_vs_units16)
-		gc_debug_set_vs_units16(vsu[0] - '0');
 	l.inited = true;
 	return 0;
 }

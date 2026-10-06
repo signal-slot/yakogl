@@ -122,21 +122,6 @@ fn wanted_vs(t: &GlesTextureBind) -> bool {
             && !super::texture::is_block_format(t.format))
 }
 
-/// A plain 2D texture of at least 256 x 256 texels the fragment stage
-/// samples, under `gc_debug_fs_tiled` (backend.rs): an experiment on the
-/// texture unit's read rate. Small textures stay linear: a copy of every
-/// text texture, refilled each frame, ran the GPU heap out (GL_OUT_OF_MEMORY
-/// in gc_slint route 3).
-fn wanted_fs(t: &GlesTextureBind) -> bool {
-    wanted(t)
-        || (super::backend::fs_tiled_on()
-            && t.width * t.height >= 256 * 256
-            && t.type_ == GLES_TEXTYPE_2D
-            && t.incomplete == 0
-            && !t.cpu.is_null()
-            && !super::texture::is_block_format(t.format))
-}
-
 fn key_of(t: &GlesTextureBind) -> Key {
     Key {
         base_gpu: t.base_gpu,
@@ -238,7 +223,7 @@ unsafe fn tile(t: &GlesTextureBind, src: *const u8, dst: *mut u8, bpp: u32) {
 pub fn prepare(d: &GlesDraw, kick_pending: impl Fn(u32) -> bool, finish: impl Fn() -> i32) -> i32 {
     let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
     let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
-    for t in fs.iter().filter(|t| wanted_fs(t)).chain(vs.iter().filter(|t| wanted_vs(t))) {
+    for t in fs.iter().filter(|t| wanted(t)).chain(vs.iter().filter(|t| wanted_vs(t))) {
         if refresh(t, &kick_pending, &finish) != 0 {
             return -1;
         }
@@ -350,7 +335,7 @@ fn busy(e: &Entry, kick_pending: &impl Fn(u32) -> bool) -> bool {
 /// fragment stage then samples the same copy, which is as current as the
 /// storage (the key carries `content_gen` and `target_kick`).
 pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32)> {
-    if !wanted_vs(t) && !wanted_fs(t) {
+    if !wanted_vs(t) {
         return None;
     }
     let key = key_of(t);

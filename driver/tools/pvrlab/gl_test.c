@@ -166,9 +166,10 @@
  *               it as one loop with a backward branch on a counter every
  *               instance shares, the exits as flags. Eight bands by two
  *               halves read back. Online only
- *  88 rsflip   the flip study's arm (ii), GC7000 only: a 1280x800 FBO frame
- *               timed with and without 100 RS_CONFIG_FLIP copies, and read back
- *               to see whether the copies reversed the rows. A measurement
+ *  88 rsflip   the flip study's arm (ii), GC7000 only, with the test knobs: a
+ *               1280x800 FBO frame timed with and without 100 RS_CONFIG_FLIP
+ *               copies, and read back to see whether the copies reversed the
+ *               rows. A measurement
  *  89 flatlast a flat vec4 and a flat uint across one triangle whose three
  *               vertices differ: every pixel takes the LAST vertex's values (GL's
  *               provoking vertex). GLSL ES 3.00
@@ -247,9 +248,7 @@
  *               a 1x1 texture of its own colour on unit k, and draw k (a
  *               one-hot uniform weight) puts sampler k's colour in cell k
  *               of a 4x4 grid; every cell's centre judged. dEQP-GLES2
- *               uniform_api wants 9..14 vertex units. On the GC7000 with
- *               CONFIG_GC_GL_TEST_VS_UNITS16 (gc_debug_vs_units16, on by default);
- *               with it off the limit is 8 and the case skips
+ *               uniform_api wants 9..14 vertex units
  * 150 shprobe   which vertex shared registers a shader reads: a uniform
  *               array of colours that name their own index, read cell by
  *               cell through one-hot selectors below sh256; arm A sh0..255,
@@ -313,8 +312,9 @@
  *               (black) and with coverage off (full red), read back at
  *               three pixels each. SKIPs where the build offers no 4x
  *               config (the V3D's v3d_debug_msaa, the GC7000's
- *               gc_debug_msaa off). Written for the V3D (MSAA step 3); the
- *               PowerVR offers 4x but no backend there takes the mask
+ *               gc_debug_msaa off or not built in). Written for the V3D
+ *               (MSAA step 3); the PowerVR offers 4x but no backend there
+ *               takes the mask
  * 148 texbranch look-ups inside uniform branches (es100/texbranch.frag): a
  *               two-armed `if` sampling texture A or B (red), a one-armed
  *               `if` with a look-up (green, 0 when not taken) and femtovg
@@ -558,9 +558,8 @@
  *               per pixel; every pixel must be the level's flat +X colour (a
  *               face clamp taken at level 0 blends in -X at high levels)
  * 102 maskclear colour clears under a partial glColorMask: full screen R+A,
- *               scissored G, and B fused into a draw; every pixel checked. GC7000
- *               with gc_debug_masked_clear on; the PowerVR fails until its clear
- *               shader has a masked variant
+ *               scissored G, and B fused into a draw; every pixel checked. The
+ *               PowerVR fails until its clear shader has a masked variant
  *  91 hdrblend  two blends into an RGBA16F target cleared above 1.0, with a
  *               source above 1.0: Quick 3D's premultiplied SourceOver and the
  *               plain over, one per half, read back at a quarter scale. The
@@ -682,6 +681,14 @@ void *gl_test_v3d_osal_arg(void);
 #include "pvr_render.h"
 #endif
 #include "osal_internal.h"
+/* The library's test knobs (the crate's `test-knobs` feature): a Zephyr
+ * image that selects them has CONFIG_YAKOGL_TEST_KNOBS, a CMake or host
+ * build passes YAKOGL_TEST_KNOBS. Every call of a knob is under
+ * GL_TEST_KNOBS; without it the case runs the library's default arm only,
+ * or skips when the knob is the case. */
+#if defined(CONFIG_YAKOGL_TEST_KNOBS) || defined(YAKOGL_TEST_KNOBS)
+#define GL_TEST_KNOBS 1
+#endif
 
 /*
  * Two things only one of the two GPUs has. Neither changes what a case
@@ -2805,7 +2812,7 @@ static int case_egl(void)
  * pixel on it is exactly half covered. With 4 samples at (6,2) (14,6) (2,10)
  * (10,14)/16, two samples fall on each side, so the resolved pixel is half
  * magenta; single-sampled it is either full or empty. */
-#ifdef GL_TEST_VIVANTE
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 /* Which 256-byte chunks of the 4x scratch surface a frame wrote, 64 to a
  * line ('#' written, '.' not), so where the writes landed is visible. */
 static void msaa_print_map(const char *what)
@@ -2869,7 +2876,7 @@ static int case_msaa_at(EGLDisplay dpy, EGLConfig cfg, int samples, bool *ok)
 	out = s_px[(TH - 1 - 40) * TW + 20];
 	edge = s_px[(TH - 1 - 32) * TW + 32];
 	pr_info("gl_test:   x%d: inside 0x%08x outside 0x%08x edge 0x%08x\n", samples, in, out, edge);
-#ifdef GL_TEST_VIVANTE
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 	/* Which half of a failed 4x frame failed: samples in the scratch and a
 	 * blank target is the resolve's; an empty scratch is the draw's. The
 	 * resolve leaves the samples in place, so this reads after it. */
@@ -8691,16 +8698,6 @@ static int case_vsunits(void)
 	glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &maxv);
 	pr_info("gl_test: vsunits: GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS = %d; drawing with %d, %d fragment samplers beside\n",
 		maxv, VSU_USED, VSU_FS_USED);
-#ifdef GL_TEST_VIVANTE
-	/* The GC7000 answers 8 with gc_debug_vs_units16 off
-	 * (CONFIG_GC_GL_TEST_VS_UNITS16); the link would refuse the program, so
-	 * a count past the limit is a skip here, not a result. */
-	if (maxv < VSU_USED) {
-		pr_info("gl_test: vsunits: skipped on the GC7000 (%d vertex texture units, %d wanted; "
-			"CONFIG_GC_GL_TEST_VS_UNITS16=y, the default, raises it)\n", maxv, VSU_USED);
-		return -3;
-	}
-#endif
 	vsunits_vs_src(vs_src, sizeof(vs_src), VSU_USED);
 	if (VSU_FS_USED > 0)
 		vsunits_fs_samplers_src(fs_src, sizeof(fs_src), VSU_FS_USED);
@@ -12872,15 +12869,16 @@ static int case_uniidx_tex(int which)
  * the narrow store's level offsets. On the PowerVR the case runs every arm of
  * pvr_narrow_la itself -- 0 (expanded into RGBA8), 1 (narrow, pack info
  * 0x140), 2 (narrow, 0x11f) -- a texture keeping the layout it was created
- * with; on the GC7000 both arms of gc_debug_narrow_la (0 expanded, 1 the
- * unit's L8/A8/A8L8); elsewhere the one arm there is. One check: a fail
+ * with; on the GC7000 with the test knobs both arms of gc_debug_narrow_la
+ * (0 expanded, 1 the unit's L8/A8/A8L8); elsewhere, and on a GC7000 build
+ * without them, the one arm there is. One check: a fail
  * mask, four bits an arm (L8, A8, LA8, mip). */
 #if !defined(GL_TEST_VIVANTE) && !defined(GL_TEST_V3D)
 extern int pvr_narrow_la(int mode);
 #define NARROWLA_ARMS 3
-#elif defined(GL_TEST_VIVANTE)
-/* the GC7000's opt-in (vivante/backend.rs gc_debug_narrow_la): arm 0
- * expanded into RGBA8, arm 1 narrow with the unit's L8 / A8 / A8L8 */
+#elif defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
+/* the GC7000's opt-in (vivante/backend.rs gc_debug_narrow_la, a test knob):
+ * arm 0 expanded into RGBA8, arm 1 narrow with the unit's L8 / A8 / A8L8 */
 extern int gc_debug_set_narrow_la(int on);
 #define NARROWLA_ARMS 2
 #else
@@ -13014,7 +13012,7 @@ static int case_narrowla(void)
 	for (int arm = 0; arm < NARROWLA_ARMS; arm++) {
 #if !defined(GL_TEST_VIVANTE) && !defined(GL_TEST_V3D)
 		int was = pvr_narrow_la(arm);
-#elif defined(GL_TEST_VIVANTE)
+#elif defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 		int was = gc_debug_set_narrow_la(arm);
 #endif
 		pr_info("gl_test: narrowla arm %d (%s)\n", arm, NARROWLA_ARMS > 1 ? arm_name[arm] : "this GPU's store");
@@ -13024,7 +13022,7 @@ static int case_narrowla(void)
 		mask |= (narrowla_mip() ? 8u : 0u) << (arm * 4);
 #if !defined(GL_TEST_VIVANTE) && !defined(GL_TEST_V3D)
 		pvr_narrow_la(was);
-#elif defined(GL_TEST_VIVANTE)
+#elif defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 		gc_debug_set_narrow_la(was);
 #endif
 	}
@@ -18196,12 +18194,12 @@ static int case_databreak(void)
  * the bit reversed the rows (top green, bottom red) or was ignored (top red).
  * The case passes when the rows are reversed, and prints the cost either way.
  * ------------------------------------------------------------------------- */
-#if defined(YAKOGL_GPU_VIVANTE) || defined(CONFIG_YAKOGL_GPU_VIVANTE)
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 extern void gc_debug_set_flip_experiment(int mode);
 #endif
 static int case_rsflip(void)
 {
-#if defined(YAKOGL_GPU_VIVANTE) || defined(CONFIG_YAKOGL_GPU_VIVANTE)
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 	enum { W = 1280, H = 800 };
 	GLuint tex = 0, fbo = 0;
 	uint32_t t_off = 0, t_on = 0, px_top = 0, px_bottom = 0;
@@ -18253,6 +18251,9 @@ static int case_rsflip(void)
 	glDeleteTextures(1, &tex);
 	glViewport(0, 0, TW, TH);
 	return ok ? 0 : -1;
+#elif defined(GL_TEST_VIVANTE)
+	pr_info("gl_test: rsflip: the flip study is a test knob (CONFIG_YAKOGL_TEST_KNOBS)\n");
+	return -2;
 #else
 	pr_info("gl_test: rsflip: the resolve engine is the GC7000's\n");
 	return -2;
@@ -18807,11 +18808,10 @@ static int case_uniloop(void)
  *   3. fused into a draw: B only, the mask set back to all before a draw
  *      covering the bottom-left quadrant yellow; the clear keeps its own
  *      mask -> blue elsewhere, yellow in the quadrant
- * GC7000: needs gc_debug_masked_clear (GL_TEST_GC_MASKED_CLEAR=1, or
- * CONFIG_DEQP_GC_MASKED_CLEAR in the Zephyr dEQP image); with it off every
- * shape fails, which is the A/B. PowerVR: FAILS until its clear shader has a
- * masked variant (usc-backend) -- a known defect shows as a failure, with
- * the reason on the line after it.
+ * GC7000: passes (the clear quad programs the mask; with every channel
+ * written, the switch the clean-up removed, every shape failed). PowerVR:
+ * FAILS until its clear shader has a masked variant (usc-backend) -- a known
+ * defect shows as a failure, with the reason on the line after it.
  * ------------------------------------------------------------------------- */
 
 /* Every pixel of the last read_topdown(): `in` inside the top-down box
@@ -18908,12 +18908,7 @@ static int case_maskclear(void)
 	read_topdown();
 	ok &= expect_box("B, fused; quad yellow", 0, TH / 2, TW / 2, TH, 0xff00ffff, 0xffff0000, 0);
 	if (!ok) {
-#ifdef GL_TEST_VIVANTE
-		extern int gc_debug_masked_clear;
-
-		if (!gc_debug_masked_clear)
-			pr_info("gl_test:   maskclear: gc_debug_masked_clear is 0, so every clear writes all four channels: expected to fail\n");
-#elif defined(GL_TEST_PVR)
+#if defined(GL_TEST_PVR)
 		pr_info("gl_test:   maskclear: known defect: the PowerVR clear shader has no masked variant, so every clear writes all four channels (usc-backend)\n");
 #endif
 	}

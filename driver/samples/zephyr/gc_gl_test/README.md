@@ -41,6 +41,23 @@ has a node with that compatible, which stays true whether or not the driver is
 built, so the loose grep returns 1 on a perfectly clean image and reads like a
 failure.
 
+## The test knobs
+
+This image selects `CONFIG_YAKOGL_TEST_KNOBS` (`GC_GL_TEST_KNOBS`, Kconfig),
+the library's `test-knobs` feature: the GC7000 switches and probes the suite
+sets to run an experiment's arms. Today `gc_debug_set_msaa` and the 4x
+scratch probes (case 16, `CONFIG_GC_GL_TEST_MSAA`),
+`gc_debug_set_narrow_la` (case 132's two arms) and
+`gc_debug_set_flip_experiment` (case 88 rsflip). gl_test.c calls
+them only under that define, and a product image has none of them
+(tools/check.sh, "no test knob in the artefact").
+
+The A/B options for behaviour the board has settled are gone with their
+switches (2026-10-06): `GC_GL_TEST_MASKED_CLEAR`, `GC_GL_TEST_VS_UNITS16`,
+`GC_GL_TEST_NO_FIRST_COMPONENT_USE` and `GC_GL_TEST_NO_BLACK_UNBOUND`.
+Each image ran its default, which is now the only behaviour; a run script
+that still passes one of them stops at Kconfig.
+
 ## Reading a run
 
 **Since 2026-10-04 the reading is the result record**, the four words in the

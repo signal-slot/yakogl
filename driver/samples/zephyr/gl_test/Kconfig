@@ -16,6 +16,16 @@ config GL_TEST_CASES
 	  i.MX8MP's and the Pi 4's samples do, so one image runs a chosen set
 	  (for example "169,162,167,168,123"). Empty: GL_TEST_CASE alone.
 
+config GL_TEST_KNOBS
+	bool
+	default y
+	select YAKOGL_TEST_KNOBS
+	help
+	  The suite may set the library's test knobs
+	  (CONFIG_YAKOGL_TEST_KNOBS), as the i.MX8MP's gc_gl_test does; the
+	  PowerVR backend has none behind the feature today, so this image's
+	  library is the same either way.
+
 config GL_TEST_FWCCB_LOSS_SECONDS
 	int "Case 174 (fwccbloss): seconds of frames"
 	default 25

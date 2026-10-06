@@ -517,6 +517,19 @@ config YAKOGL_REPORT_ES2
 	  ES 3.0 context (Qt Quick 3D's RHI, a dEQP-GLES3 image, gl_test's
 	  "#version 300 es" cases, Slint/FemtoVG) says CONFIG_YAKOGL_REPORT_ES2=n.
 
+config YAKOGL_TEST_KNOBS
+	bool "the test knobs: C entry points a test suite sets (never in a product)"
+	default n
+	help
+	  The crate's `test-knobs` feature: the switches and probes an
+	  on-silicon suite sets to run an experiment's arms -- today the
+	  GC7000's gc_debug_set_msaa and its scratch probes,
+	  gc_debug_set_flip_experiment and gc_debug_set_narrow_la. Without it
+	  none of them is in the library and the backend behaves as each
+	  knob's default. The gl_test, gc_gl_test and deqp samples select it;
+	  a product image leaves it off (tools/check.sh, "no test knob in the
+	  artefact"). C that calls a knob tests CONFIG_YAKOGL_TEST_KNOBS.
+
 module = YAKOGL
 module-str = YakoGL
 source "subsys/logging/Kconfig.template.log_config"

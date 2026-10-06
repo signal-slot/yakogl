@@ -78,6 +78,9 @@ set(YAKOGL_RUST_TARGET_CPU "" CACHE STRING "Rust -C target-cpu (empty: the targe
 # default. Qt's RHI (Qt Quick 3D), dEQP-GLES3 and anything else that needs an
 # ES 3.0 context configures with -DYAKOGL_REPORT_ES2=OFF.
 option(YAKOGL_REPORT_ES2 "report OpenGL ES 2.0 (default) rather than ES 3.0 from glGetString/glGetIntegerv" ON)
+# The test knobs (the crate's `test-knobs` feature): the C entry points an
+# on-silicon suite sets to run an experiment's arms. OFF in a product build.
+option(YAKOGL_TEST_KNOBS "compile in the test knobs (gc_debug_set_msaa and the like); never in a product" OFF)
 option(YAKOGL_EH_PERSONALITY "external linkage, hosted: define rust_eh_personality in libyakogl_c.a" ON)
 include("${CMAKE_CURRENT_SOURCE_DIR}/capi/yakogl_capi.cmake")
 

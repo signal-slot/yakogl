@@ -203,6 +203,35 @@ for f in "${BUILD_ONLY_CONFIGS[@]}"; do
     cargo clippy --no-default-features --features "$f" --lib
 done
 
+# The test knobs (`test-knobs`, Cargo.toml): the C entry points the gl_test,
+# gc_gl_test and deqp images set, and the switches behind them. No row above
+# has the feature, so they test each knob's default, which is what a product
+# runs; this one lints the GC7000 with the knobs in and runs the library's
+# tests, the knob-driven ones among them. Those are named here, and each
+# must have run and passed: a knob test that stops being compiled would
+# otherwise leave the row green with one test fewer.
+KNOBS_CONFIG="host-test,gpu-vivante,shaderc-online,test-knobs"
+KNOBS_TESTS=(
+  vivante::backend::backend_tests::the_flip_study_draws_a_top_down_target_bottom_up_only_when_asked
+  vivante::backend::backend_tests::the_flip_study_ends_a_frame_with_flipped_resolve_copies_only_when_asked
+  vivante::backend::backend_tests::msaa_bit_one_adds_etnaviv_s_small_msaa_settings_and_the_probe_reads_the_scratch
+  vivante::backend::backend_tests::msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does
+  vivante::backend::backend_tests::a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on
+  gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
+  gl::texture::tests::under_the_gc7000_switch_luminance_alpha_uploads_are_stored_narrow
+)
+knobs_lib_tests() {
+  local out t
+  out=$(cargo test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --lib 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  for t in "${KNOBS_TESTS[@]}"; do
+    printf '%s\n' "$out" | grep -qxF "test $t ... ok" || { echo "knob test did not run and pass: $t"; return 1; }
+  done
+}
+step "clippy  $KNOBS_CONFIG" cargo clippy --no-default-features --features "$KNOBS_CONFIG" --all-targets
+step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knobs_lib_tests
+
 # The Raspberry Pi 4's V3D (`gpu-v3d`). Its only shader back end is the
 # in-process compiler and it has no offline table, so its one host
 # configuration is the image's feature set plus `host-test` (lib.rs refuses
@@ -750,7 +779,10 @@ if command -v cc >/dev/null 2>&1; then
   # Zephyr-only. gl_internal.h's assertion that the Khronos tokens keep their
   # values is checked here, where a header that shadowed GL_MAX_VERTEX_ATTRIBS
   # once went unseen (the query asked for pname 16 on every board).
-  for arm in "-DGL_TEST_HOST=1" "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1"; do
+  # The GC7000 arm twice: without the test knobs, as a product library has
+  # none, and with them (YAKOGL_TEST_KNOBS, the gc_gl_test image's arm).
+  for arm in "-DGL_TEST_HOST=1" "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1" \
+    "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1"; do
     step "cc      gl_test.c $arm" cc -std=gnu11 -fsyntax-only -Wall -Wextra -Werror \
       $arm -Iinclude -Isrc -Isrc/osal -Idriver/tools/pvrlab -Idriver/src \
       -Idriver/src/vivante driver/tools/pvrlab/gl_test.c
@@ -1049,6 +1081,51 @@ check_no_mesa_reference() {
 }
 
 step "no Mesa reference in the artefact" check_no_mesa_reference
+
+# No test knob in the artefact either, read the same way: the C archive a
+# GC7000 product image links (yakogl-capi with the Zephyr image's features,
+# the in-process compiler and no table) must define exactly the GC7000
+# switches still in product code -- the four the next clean-up commit
+# settles (the descriptor sequence, MRT, the vertex-stage tiled copy,
+# INT_FILTER), each with its setter -- and none of the test knobs. The
+# same archive with `test-knobs`, what gc_gl_test links, must define the
+# knobs as well, which is the control: a pattern that stopped matching would
+# find neither. Exact sets, so a new `#[no_mangle]` switch in product code
+# fails here until it is listed or moved behind the feature.
+KNOB_PRODUCT_SYMBOLS="gc_debug_desc_seq gc_debug_int_filter gc_debug_mrt gc_debug_set_desc_seq
+gc_debug_set_int_filter gc_debug_set_mrt gc_debug_set_vs_tiled gc_debug_vs_tiled"
+KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
+gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
+gc_debug_set_narrow_la"
+knob_symbols() {
+  local dir
+  dir=$(cargo metadata --no-deps --format-version 1 |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
+  cargo build -p yakogl-capi --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
+  nm --defined-only -g "$dir/release/libyakogl_capi.a" 2>/dev/null |
+    awk 'NF == 3 && $3 ~ /^gc_(debug|perf)_/ { print $3 }' | sort -u
+}
+
+check_knobs_absent() {
+  local product knobs want_product want_knobs
+  product=$(knob_symbols "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table") || return 1
+  knobs=$(knob_symbols "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table,test-knobs") || return 1
+  want_product=$(printf '%s\n' $KNOB_PRODUCT_SYMBOLS | sort -u)
+  want_knobs=$(printf '%s\n' $KNOB_PRODUCT_SYMBOLS $KNOB_TEST_SYMBOLS | sort -u)
+  if [ "$knobs" != "$want_knobs" ]; then
+    echo "the test-knobs archive's gc_debug_*/gc_perf_* symbols are not the expected set:"
+    diff <(printf '%s\n' "$want_knobs") <(printf '%s\n' "$knobs")
+    return 1
+  fi
+  if [ "$product" != "$want_product" ]; then
+    echo "the product archive's gc_debug_*/gc_perf_* symbols are not the expected set:"
+    diff <(printf '%s\n' "$want_product") <(printf '%s\n' "$product")
+    return 1
+  fi
+  echo "gc_debug_* symbols: $(printf '%s\n' "$product" | wc -l) in the product archive, $(printf '%s\n' "$knobs" | wc -l) with test-knobs"
+}
+
+step "no test knob in the artefact" check_knobs_absent
 
 # The rows above name THIS package's features, so they never build the
 # workspace's other crates. `yakogl-tools` links the library and calls into it,

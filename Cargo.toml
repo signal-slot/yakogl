@@ -90,6 +90,15 @@ gpu-v3d = []
 # guard either side of the depth surface, filled with a pattern, so what the
 # pixel engine writes outside the surface can be read back. Bring-up only.
 vivante-depth-guard = ["gpu-vivante"]
+# The test knobs: C entry points the on-silicon suites (gl_test.c, the dEQP
+# sample) set to run an experiment's arms or to probe the backend's state,
+# and the switches behind them. Without it none of them is in the build and
+# the backend behaves as each knob's default. Off by default; the gl_test,
+# gc_gl_test and deqp Zephyr images turn it on (CONFIG_YAKOGL_TEST_KNOBS),
+# a product image never does (tools/check.sh "no test knob in the
+# artefact"). Today the GC7000's: gc_debug_msaa and its scratch probes
+# (issue #8), gc_debug_flip_experiment, gc_debug_narrow_la.
+test-knobs = []
 # Host tests only: links std so the test harness can unwind, and starts with a
 # null `g_backend` (the tests install mocks). Never enable it in a product:
 # it is a compile error on bare-metal targets and in the C archive.

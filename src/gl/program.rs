@@ -1004,12 +1004,11 @@ const _: () =
 ///
 /// With today's limits the combined rule never refuses a program the two
 /// stage rules accepted: the vertex limit + CAP_TEXTURE_UNITS is 32 on the
-/// V3D, the PowerVR and the GC7000 (24 with the GC7000's sixteen-unit
-/// switch off), and CAP_COMBINED_TEXTURE_UNITS is 32. It stays because the spec
-/// states it; the unit tests drive it with a smaller combined limit
-/// ([`check_sampler_counts_against`]).
+/// V3D, the PowerVR and the GC7000, and CAP_COMBINED_TEXTURE_UNITS is 32. It
+/// stays because the spec states it; the unit tests drive it with a smaller
+/// combined limit ([`check_sampler_counts_against`]).
 fn check_sampler_counts(vs: &ShcShader, fs: &ShcShader, log: &mut [u8; INFO_LOG_SIZE]) -> Result<(), ()> {
-    check_sampler_counts_against(vs, fs, &sampler_limits(), log)
+    check_sampler_counts_against(vs, fs, &SAMPLER_LIMITS, log)
 }
 
 /// The three limits the link's sampler-count rule applies.
@@ -1022,18 +1021,12 @@ struct SamplerLimits {
     combined: usize,
 }
 
-/// The limits the queries report by default: one constant per limit.
+/// The limits the queries report: one constant per limit.
 const SAMPLER_LIMITS: SamplerLimits = SamplerLimits {
     vertex: crate::backend::GLES_VS_TEX_UNITS,
     fragment: CAP_TEXTURE_UNITS,
     combined: CAP_COMBINED_TEXTURE_UNITS,
 };
-
-/// The limits the queries report in this process: the vertex one is
-/// [`crate::backend::vs_tex_units`], which the GC7000's switch can lower to 8.
-fn sampler_limits() -> SamplerLimits {
-    SamplerLimits { vertex: crate::backend::vs_tex_units(), ..SAMPLER_LIMITS }
-}
 
 /// [`check_sampler_counts`] against the given limits.
 fn check_sampler_counts_against(
@@ -4910,7 +4903,7 @@ mod tests {
 
     /// Run the check on two hand-built stages; the log text on a refusal.
     fn sampler_check(vs: Vec<ShcUniform>, fs: Vec<ShcUniform>) -> Result<(), String> {
-        sampler_check_against(&sampler_limits(), vs, fs)
+        sampler_check_against(&SAMPLER_LIMITS, vs, fs)
     }
 
     /// The same, against other limits.
@@ -4960,26 +4953,20 @@ mod tests {
         );
     }
 
-    /// The GC7000 with sixteen vertex units (vivante/backend.rs
-    /// gc_debug_vs_units16, the default): the link takes 9..16 vertex
+    /// The GC7000 with sixteen vertex units: the link takes 9..16 vertex
     /// samplers, alone and beside sixteen fragment ones, and refuses the
-    /// 17th with the limit it reports. Switched off, the 9th is refused.
+    /// 17th with the limit it reports.
     #[test]
     #[cfg(feature = "gpu-vivante")]
-    fn sampler_counts_follow_the_gc7000_vertex_unit_switch() {
-        use crate::vivante::backend::set_vs_units16_for_this_thread;
+    fn sampler_counts_take_sixteen_gc7000_vertex_samplers() {
         const V: &str = "GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS";
-        let on: Vec<_> = (9..=17u8).map(|n| sampler_check(std::vec![samplers("v", 0, n)], std::vec![])).collect();
+        let results: Vec<_> = (9..=17u8).map(|n| sampler_check(std::vec![samplers("v", 0, n)], std::vec![])).collect();
         let both = sampler_check(std::vec![samplers("v", 0, 16)], std::vec![samplers("f", 0, CAP_TEXTURE_UNITS as u8)]);
-        set_vs_units16_for_this_thread(false);
-        let off = sampler_check(std::vec![samplers("v", 0, 9)], std::vec![]);
-        set_vs_units16_for_this_thread(true);
-        for (n, r) in (9..=16).zip(&on) {
-            assert_eq!(*r, Ok(()), "{n} vertex samplers with the switch on");
+        for (n, r) in (9..=16).zip(&results) {
+            assert_eq!(*r, Ok(()), "{n} vertex samplers");
         }
-        assert_eq!(on[8], Err(sampler_count_message("the vertex shader uses", 17, 16, V)));
+        assert_eq!(results[8], Err(sampler_count_message("the vertex shader uses", 17, 16, V)));
         assert_eq!(both, Ok(()), "16 + 16 is within the combined 32");
-        assert_eq!(off, Err(sampler_count_message("the vertex shader uses", 9, 8, V)));
     }
 
     #[test]

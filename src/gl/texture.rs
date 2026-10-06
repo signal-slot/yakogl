@@ -5799,8 +5799,8 @@ mod tests {
         assert_eq!(&storage(&gl, name)[..4], [1, 2, 3, 77]);
     }
 
-    /* the GC7000's opt-in (gc_debug_narrow_la): the same packed store */
-    #[cfg(feature = "gpu-vivante")]
+    /* the GC7000's opt-in (gc_debug_narrow_la, a test knob): the same packed store */
+    #[cfg(all(feature = "gpu-vivante", feature = "test-knobs"))]
     #[test]
     fn under_the_gc7000_switch_luminance_alpha_uploads_are_stored_narrow() {
         let gl = TestGl::new(4, 4);

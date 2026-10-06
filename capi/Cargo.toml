@@ -61,6 +61,9 @@ mesa-reference-table = ["yakogl/mesa-reference-table"]
 # Report OpenGL ES 2.0 rather than ES 3.0 (the yakogl crate's own feature);
 # what a conformance build of the library needs.
 report-es2 = ["yakogl/report-es2"]
+# The test knobs (the yakogl crate's own feature): what the gl_test, gc_gl_test
+# and deqp images take; a product image never does.
+test-knobs = ["yakogl/test-knobs"]
 
 [dependencies]
 yakogl = { path = "..", default-features = false }

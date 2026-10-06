@@ -1786,7 +1786,7 @@ fn resolve_targets(c: &GlContext, d: &mut GlesDraw) {
  * The fourth, a colour mask with some channels on and some off, travels in
  * `GlesDraw::clear_color_mask` and is the backend's to apply. The GC7000
  * writes it into the pixel engine's component mask, as it does for a draw
- * (behind `gc_debug_masked_clear` until the board has measured it). The
+ * (measured on the i.MX8MP: gl_test 102). The
  * PowerVR has no per-channel write mask (Mesa's pvr lowers one into the
  * fragment shader too, docs/gpu-recipes/blending_recipe.md): it draws the
  * clear with the masked clear program for the mask (`pvr::backend`,
@@ -3305,7 +3305,7 @@ fn build_common(
     let mut num_cube_bindings = 0usize;
     for stage in 0..2u8 {
         let (sh, units) = if stage == 1 { (&p.rfs, &p.fs_sampler_unit) } else { (&p.rvs, &p.vs_sampler_unit) };
-        let dst_max = if stage == 1 { GLES_MAX_TEX_BINDS } else { crate::backend::vs_tex_units() };
+        let dst_max = if stage == 1 { GLES_MAX_TEX_BINDS } else { crate::backend::GLES_VS_TEX_UNITS };
 
         /* One binding per sampler, and per ELEMENT of an array of samplers.
          * The link refused a stage with more than `dst_max` of them
@@ -9329,16 +9329,12 @@ mod tests {
         assert_eq!(by_binding(1).base_gpu, gl.ctx().objs().textures[b as usize].mem.gpu);
     }
 
-    /// The GC7000's sixteen-vertex-unit switch (vivante/backend.rs
-    /// gc_debug_vs_units16, on by default) at the draw: a vertex stage with a
-    /// sampler array of `n` (9..16) elements on units 0..n-1 carries all `n`
-    /// bindings, each its own texture; off, the draw wires the first 8 (the link refuses
-    /// such a program then, `check_sampler_counts`; this bypasses the link
-    /// to show the draw's own limit follows the switch too).
+    /// The GC7000's sixteen vertex units (`GLES_VS_TEX_UNITS`) at the draw:
+    /// a vertex stage with a sampler array of `n` (9..16) elements on units
+    /// 0..n-1 carries all `n` bindings, each its own texture.
     #[cfg(feature = "gpu-vivante")]
     #[test]
-    fn the_gc7000_vertex_stage_carries_up_to_sixteen_samplers_with_the_switch() {
-        use crate::vivante::backend::set_vs_units16_for_this_thread;
+    fn the_gc7000_vertex_stage_carries_up_to_sixteen_samplers() {
         let gl = Gl::new(16, 16);
         let prog = basic(&gl);
         let textures: Vec<GLuint> = (0..16u32)
@@ -9365,17 +9361,13 @@ mod tests {
                     p.vs_sampler_unit[k as usize] = k;
                 }
             }
-            let on = draw_tri(&gl).draw;
-            set_vs_units16_for_this_thread(false);
-            let off = draw_tri(&gl).draw;
-            set_vs_units16_for_this_thread(true);
-            assert_eq!(on.num_vs_textures, n, "{n} vertex samplers, switch on");
+            let d = draw_tri(&gl).draw;
+            assert_eq!(d.num_vs_textures, n, "{n} vertex samplers");
             for k in 0..n {
-                let t = on.vs_textures[..n as usize].iter().find(|t| t.unit == k).expect("sampler binding");
+                let t = d.vs_textures[..n as usize].iter().find(|t| t.unit == k).expect("sampler binding");
                 assert_eq!(t.base_gpu, gl.ctx().objs().textures[textures[k as usize] as usize].mem.gpu, "binding {k}");
                 assert_eq!(t.width, k as u32 + 1, "binding {k}");
             }
-            assert_eq!(off.num_vs_textures, 8, "{n} vertex samplers, switch off: the first 8");
         }
     }
 

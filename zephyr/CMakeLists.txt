@@ -128,6 +128,13 @@ if(CONFIG_YAKOGL)
   else()
     set(YAKOGL_REPORT_ES2 OFF)
   endif()
+  # The test knobs (the crate's `test-knobs` feature), which only a test
+  # image selects; yakogl_add_capi_archive() reads this variable too.
+  if(CONFIG_YAKOGL_TEST_KNOBS)
+    set(YAKOGL_TEST_KNOBS ON)
+  else()
+    set(YAKOGL_TEST_KNOBS OFF)
+  endif()
 
   # ---- the C part: the Zephyr OSAL + the ABI/FFI layout pins ---------------------
   # The in-process compiler is lent its working region by a static this file
@@ -207,5 +214,5 @@ if(CONFIG_YAKOGL)
     add_dependencies(yakogl yakogl_rust)
     zephyr_link_libraries(yakogl_rust_lib)
   endif()
-  message(STATUS "YakoGL: GPU=${YAKOGL_GPU} shaderc=${YAKOGL_SHADERC} no-table=${YAKOGL_NO_SHADER_TABLE} linkage=${YAKOGL_RUST_LINKAGE} rust-target=${YAKOGL_RUST_TARGET_RESOLVED} cpu='${YAKOGL_RUST_TARGET_CPU}'")
+  message(STATUS "YakoGL: GPU=${YAKOGL_GPU} shaderc=${YAKOGL_SHADERC} no-table=${YAKOGL_NO_SHADER_TABLE} test-knobs=${YAKOGL_TEST_KNOBS} linkage=${YAKOGL_RUST_LINKAGE} rust-target=${YAKOGL_RUST_TARGET_RESOLVED} cpu='${YAKOGL_RUST_TARGET_CPU}'")
 endif()

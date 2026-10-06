@@ -207,7 +207,9 @@ pub const GLES_MAX_TEX_BINDS: usize = 16;
 /// every GPU. What a GPU takes is [`GLES_VS_TEX_UNITS`].
 pub const GLES_MAX_VS_TEX_BINDS: usize = 16;
 /// Texture units the vertex stage samples (GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
-/// the shader's gl_MaxVertexTextureImageUnits), per GPU.
+/// the shader's gl_MaxVertexTextureImageUnits), per GPU. The query, the
+/// shader's constant, the link's sampler-count rule and the draw's vertex
+/// bindings all read this one constant, so they cannot disagree.
 ///
 /// V3D: 16. Mesa's v3d gives every stage V3D_MAX_TEXTURE_SAMPLERS
 /// (src/broadcom/common/v3d_limits.h:39, 24; v3d_screen.c:169-170
@@ -230,11 +232,24 @@ pub const GLES_VS_TEX_UNITS: usize = 16;
 /// checks it on the board (V samplers, one colour each).
 #[cfg(feature = "gpu-powervr")]
 pub const GLES_VS_TEX_UNITS: usize = 16;
-/// GC7000: 16 (vivante/backend.rs `gc_debug_vs_units16`, which says what
-/// Mesa gives this core), measured on the i.MX8MP: gl_test 149 with 9..16
-/// vertex samplers and dEQP-GLES2 uniform_api 1,267 / 1,267 (RESULTS). It was
-/// 8 until 2026-10-01; `gc_debug_set_vs_units16(0)` still selects 8. What a
-/// process answers is [`vs_tex_units`].
+/// GC7000: 16, what the hardware has, from Mesa (not measured here): etnaviv
+/// gives the vertex stage 16 samplers on every HALTI >= 1 core
+/// (etnaviv_screen.c:821-828 `etna_determine_sampler_limits`), and the
+/// i.MX8MP's GC7000UL r6204 (hwdb nxp/gc_feature_database.h, the two
+/// gc7000ULN_v123 entries at :18841 and :19735) has REG_Halti5 and
+/// REG_UnifiedSamplers. On such a core the two stages share one array of
+/// descriptor slots, the vertex shader's samplers are 0-based and
+/// VS_SAMPLER_BASE says where they start (etnaviv_texture.c:429-439
+/// `etna_vs_sampler_base`: after the fragment views;
+/// etnaviv_compiler_nir_emit.c:210-214). The backend does the same
+/// (vivante/texture.rs `emit_textures_inner`): the vertex slots start after
+/// every fragment slot, at most 16, so sixteen vertex samplers end at slot
+/// 31, inside the 32-slot INVALIDATE mask and NTE_DESCRIPTOR's array.
+/// Measured on the i.MX8MP: gl_test 149 with 9..16 vertex samplers beside 0
+/// and 16 fragment ones, and dEQP-GLES2 uniform_api 1,267 / 1,267 on Zephyr
+/// and on the Linux harness (RESULTS). It was 8 until 2026-10-01, and a
+/// switch (gc_debug_vs_units16) selected 8 again until the clean-up removed
+/// it.
 #[cfg(feature = "gpu-vivante")]
 pub const GLES_VS_TEX_UNITS: usize = 16;
 const _: () = assert!(GLES_VS_TEX_UNITS <= GLES_MAX_VS_TEX_BINDS);
@@ -261,19 +276,6 @@ pub const DEPTH_ONLY_TARGETS: bool = {
     }
 };
 
-/// GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS as this process answers it:
-/// [`GLES_VS_TEX_UNITS`], except on the GC7000 with the sixteen-unit switch
-/// turned off (`gc_debug_vs_units16` = 0), where it is the earlier 8. The
-/// query, the shader's gl_MaxVertexTextureImageUnits, the link's
-/// sampler-count rule and the draw's vertex bindings all ask here, so they
-/// cannot disagree.
-pub fn vs_tex_units() -> usize {
-    #[cfg(feature = "gpu-vivante")]
-    if !crate::vivante::backend::vs_units16_on() {
-        return crate::vivante::backend::VS_TEX_UNITS_SWITCHED_OFF;
-    }
-    GLES_VS_TEX_UNITS
-}
 /// Whether the fragment stage has highp floats (GLSL ES 1.00 section 4.5.4).
 /// Every GPU here computes every float as IEEE binary32 in every stage, which
 /// is what glGetShaderPrecisionFormat reports for GL_HIGH_FLOAT
@@ -1081,12 +1083,13 @@ pub fn kick_pending(id: u32) -> bool {
 
 /// Does this build's backend write only the channels `clear_color_mask`
 /// names? The GL core reports a partially masked clear once when it does not.
-/// The GC7000 does while `gc_debug_masked_clear` is on; the PowerVR while
-/// `pvr_debug_masked_clear` is (its masked clear programs, `CLEAR_MASKED`).
+/// The GC7000 always (its clear quad programs the mask, vivante/backend.rs
+/// `clear_components`); the PowerVR while `pvr_debug_masked_clear` is on (its
+/// masked clear programs, `CLEAR_MASKED`).
 pub fn masked_clear_applied() -> bool {
     #[cfg(feature = "gpu-vivante")]
     {
-        crate::vivante::backend::masked_clear_on()
+        true
     }
     /* The V3D's TLB clear writes every channel, so src/v3d draws a
      * partially masked colour clear as the clear quad, with the mask as its
@@ -1104,7 +1107,8 @@ pub fn masked_clear_applied() -> bool {
 /// Does this build's backend sample GL_LUMINANCE, GL_ALPHA and
 /// GL_LUMINANCE_ALPHA textures stored narrow ([`GLES_TEXFMT_L8`] and the
 /// others)? The PowerVR while `pvr_narrow_la` is on; the GC7000 while
-/// `gc_debug_narrow_la` is (opt-in until the board has measured it); the V3D
+/// `gc_debug_narrow_la` is (a `test-knobs` switch, off, until the board has
+/// measured it); the V3D
 /// always, as the TMU's R8 and RG8 with a swizzle (Mesa's L8_UNORM, A8_UNORM
 /// and L8A8_UNORM rows; the V3D's `texture::tmu_format`).
 pub fn narrow_la_texels() -> bool {

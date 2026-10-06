@@ -1396,10 +1396,11 @@ unsafe fn reset_library_statics() {
         crate::gl::egl::reset_for_tests(); /* the whole EGL state */
         set_thread_ids(true); /* the owner itself is in context::reset_for_tests */
         /* the narrow luminance/alpha switch: tests start from the expanded
-         * store and the narrow ones turn it on (the product default is on) */
+         * store and the narrow ones turn it on (the product default is on;
+         * the GC7000's is a test knob, off) */
         #[cfg(feature = "gpu-powervr")]
         crate::pvr::backend::pvr_narrow_la(0);
-        #[cfg(feature = "gpu-vivante")]
+        #[cfg(all(feature = "gpu-vivante", feature = "test-knobs"))]
         crate::vivante::backend::gc_debug_set_narrow_la(0);
         /* With no table there is nothing to fall back to and the online
          * back end is already the initialiser, so this is a no-op there. */

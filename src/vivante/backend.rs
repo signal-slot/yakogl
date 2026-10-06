@@ -94,8 +94,6 @@ pub(crate) struct GcState {
     /// for the vertex-id register). The next draw writes it back to all
     /// GENERIC (see `shader::emit_shader_state`). True from `gc_init`.
     component_use_marked: bool,
-    /// GL_VARYING_COMPONENT_USE has been written since gc_init.
-    component_use_written: bool,
     /// Draws refused since init ([`gc_refused_draws`]), and the return codes
     /// already logged.
     refused: u32,
@@ -155,7 +153,6 @@ impl GcState {
         waits: 0,
         swap_fence: 0,
         component_use_marked: false,
-        component_use_written: false,
         refused: 0,
         refused_logged: [0; 4],
         refused_nlogged: 0,
@@ -271,7 +268,7 @@ fn pe_color_format(surf_format: u8) -> (u32, bool) {
 /// Multisampling, and whether the rasteriser is told about it.
 ///
 /// 4x rasterises into a scratch surface twice the size on each axis and the
-/// resolve engine averages it back. OFF unless [`gc_debug_msaa`] asks, until
+/// resolve engine averages it back. OFF unless `gc_debug_msaa` asks, until
 /// the board has measured it: the first attempt never wrote the target, and
 /// set up the surface and the resolve unlike etnaviv in four ways (Mesa,
 /// MIT), which is what the switch now carries --
@@ -290,120 +287,37 @@ fn pe_color_format(surf_format: u8) -> (u32, bool) {
 const GC_MSAA_ENABLE: bool = false;
 const GC_MSAA_RASTERISE: bool = true;
 
-/// Performance experiments (gc_slint's perf selector), 0 in every product
-/// build: bit 0 clips every draw and clear to an 8x8 box (what is left is
-/// the GPU's per-draw cost without the fill), bit 1 leaves out the per-draw
-/// cache flushes and pipeline stalls (wrong pictures possible; it measures
-/// what they cost).
-#[no_mangle]
-pub static mut gc_debug_perf_exp: u32 = 0;
-
-/// [`gc_debug_perf_exp`] bit 0.
-pub const GC_PERF_EXP_TINY_CLIP: u32 = 1;
-/// [`gc_debug_perf_exp`] bit 1.
-pub const GC_PERF_EXP_NO_DRAW_SYNC: u32 = 2;
-
-/// [`gc_debug_perf_exp`] bit 2: every draw's fragment stage runs the clear
-/// shader's one instruction instead of its own (what is left is the fill
-/// without the fragment shader's cost).
-pub const GC_PERF_EXP_TRIVIAL_PS: u32 = 4;
-
-/// [`gc_debug_perf_exp`] bit 3: only the first `exp >> 5` draws of each
-/// frame (counted from the last swap) are clipped to 8x8 -- what the first
-/// few full-screen draws (the clear, the background) cost.
-pub const GC_PERF_EXP_CLIP_FIRST: u32 = 8;
-/// [`gc_debug_perf_exp`] bit 4: every clear (the full-screen quad a glClear
-/// becomes) is clipped to 8x8, the draws are not -- what the clears cost.
-pub const GC_PERF_EXP_CLIP_CLEARS: u32 = 16;
-
-/// Draws recorded since the last swap, for [`GC_PERF_EXP_CLIP_FIRST`].
-static mut PERF_FRAME_DRAWS: u32 = 0;
-
-fn perf_tiny(_d: &GlesDraw) -> bool {
-    if perf_exp(GC_PERF_EXP_TINY_CLIP) {
-        return true;
-    }
-    if !perf_exp(GC_PERF_EXP_CLIP_FIRST) {
-        return false;
-    }
-    // SAFETY: plain reads of ints only this thread writes.
-    unsafe { core::ptr::addr_of!(PERF_FRAME_DRAWS).read() < (core::ptr::addr_of!(gc_debug_perf_exp).read() >> 5) }
-}
-
-/// The clear's fragment code, when [`GC_PERF_EXP_TRIVIAL_PS`] is on.
-pub(super) fn perf_trivial_ps() -> Option<(u32, u32)> {
-    if !perf_exp(GC_PERF_EXP_TRIVIAL_PS) {
-        return None;
-    }
-    Some((g().clear_ps_code.gpu as u32, super::clear_shader::GC_CLEAR_PS.0.usc_dw / 4))
-}
-
-/// Set [`gc_debug_perf_exp`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_perf_exp(bits: u32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_perf_exp).write(bits) }
-}
-
-fn perf_exp(bit: u32) -> bool {
-    // SAFETY: a plain read of an int only the setter writes.
-    unsafe { core::ptr::addr_of!(gc_debug_perf_exp).read() & bit != 0 }
-}
-
-/// Command words submitted since start-up, for a measurement to read.
-#[no_mangle]
-pub static mut gc_perf_cmd_words: u64 = 0;
-
-/// Turns 4x multisampling on for measurement (gl_test_user
-/// `GL_TEST_GC_MSAA`), and with it the EGL 4x config (gl/egl.rs `offered_configs`).
-/// 0 in every product build until the board has run it.
+/// Turns 4x multisampling on for measurement (gl_test case 16,
+/// CONFIG_GC_GL_TEST_MSAA), and with it the EGL 4x config (gl/egl.rs
+/// `offered_configs`). Bit 1 adds etnaviv's SMALL_MSAA settings
+/// ([`msaa_extras`]), bit 2 its per-draw PS_MSAA_CONFIG. A test knob: it and
+/// its setter exist only with the `test-knobs` feature, and without it 4x is
+/// [`GC_MSAA_ENABLE`]'s, off, until the board has run it (issue #8).
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub static mut gc_debug_msaa: i32 = 0;
 
 /// Set [`gc_debug_msaa`].
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub extern "C" fn gc_debug_set_msaa(on: i32) {
     // SAFETY: single-threaded by contract; a plain store of an int.
     unsafe { core::ptr::addr_of_mut!(gc_debug_msaa).write(on) }
 }
 
-/// Flat shading for a program with a flat varying: ON. PA_CONFIG's
-/// SHADE_MODEL goes FLAT whenever a fragment input is flat, as Mesa's
-/// etnaviv does ("if shader has flat varyings, switch to flat shading",
-/// etnaviv_shader.c, MIT): PA_SYSTEM_MODE's PROVOKING_VERTEX_LAST governs
-/// only the flat model, and the smooth one takes the first vertex for a flat
-/// varying. gl_test 89 (flatlast) reads GL's last vertex with it on. 0 turns
-/// it off again, for an A/B.
-#[no_mangle]
-pub static mut gc_debug_flat_shade: i32 = 1;
-
-/// Set [`gc_debug_flat_shade`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_flat_shade(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_flat_shade).write(on) }
+/// `gc_debug_msaa`'s value; 0 in a build without `test-knobs`.
+fn msaa_bits() -> i32 {
+    #[cfg(feature = "test-knobs")]
+    {
+        // SAFETY: single-threaded by contract; a plain read of an int only
+        // the setter writes.
+        unsafe { core::ptr::addr_of!(gc_debug_msaa).read() }
+    }
+    #[cfg(not(feature = "test-knobs"))]
+    {
+        0
+    }
 }
-
-/// A colour clear writes only the channels glColorMask had on at the glClear
-/// (`GlesDraw::clear_color_mask`) instead of all four: the clear quad programs
-/// PE_COLOR_FORMAT's COMPONENTS from it, the field every draw already takes
-/// its colour mask from, and loses the OVERWRITE hint with any channel off,
-/// as a masked draw does. On by default since the i.MX8MP measured it:
-/// gl_test 102 maskclear off FAIL (80ffffff, the partially masked clear wrote
-/// all channels), on PASS; dEQP-GLES2 color_clear 18/19 with it on (the one
-/// left, long_masked_rgba, is its own row); fbo.render's rbo_rgb5_a1
-/// color_clear and stencil_clear end with an alpha-only masked clear and
-/// zeroed RGB with it off. 0 is the off arm of an A/B.
-///
-/// Found by reading the code against dEQP-GLES2.functional.color_clear, whose
-/// masked cases clear under random partial masks. The prediction that they
-/// were color_clear's eight failures on the i.MX8MP was REFUTED by the
-/// per-case record (Zephyr, dafa9962): all eight masked cases passed there,
-/// the failures were unmasked clears, and masked_rgb run alone failed. What
-/// the masked cases need is measured by gl_test 102 with this switch off and
-/// on, not predicted from dEQP.
-#[no_mangle]
-pub static mut gc_debug_masked_clear: i32 = 1;
 
 /// A plain 2D texture the vertex stage samples is sampled from a tiled copy
 /// (tiled_copy.rs `wanted_vs`) rather than its linear storage. Default 0,
@@ -455,115 +369,65 @@ pub fn vs_tiled_on() -> bool {
     (unsafe { core::ptr::addr_of!(gc_debug_vs_tiled).read() }) != 0
 }
 
-/// A plain 2D texture the fragment stage samples is sampled from a tiled
-/// copy too (tiled_copy.rs `wanted_fs`). Default 0: an experiment, whether
-/// the texture unit reads a linear texture slower than a tiled one (a
-/// full-screen 1:1 textured quad, gc_slint route 3's background, costs
-/// ~4.8 ms a frame at 1280x800 with a one-instruction shader).
-#[no_mangle]
-pub static mut gc_debug_fs_tiled: i32 = 0;
-
-/// Set [`gc_debug_fs_tiled`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_fs_tiled(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_fs_tiled).write(on) }
-}
-
-/// Is [`gc_debug_fs_tiled`] on?
-pub fn fs_tiled_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_fs_tiled).read() }) != 0
-}
-
 /// GL_LUMINANCE, GL_ALPHA and GL_LUMINANCE_ALPHA textures stored narrow (one
 /// and two bytes a texel: GLES_TEXFMT_L8 / A8 / LA8) and sampled with the
 /// texture unit's own L8 / A8 / A8L8 formats, as Mesa does, instead of
 /// expanded into RGBA8 -- a quarter of the memory for a 2048x2048 L8 chain
-/// (dEQP texture.size's 2048 cases, 22 MiB as RGBA8). Default 0 until the
-/// board has measured it: the linear pitch of a one- and two-byte texel
-/// (a 1-texel-wide level is a 2-byte row) is unmeasured on this core;
-/// gl_test 132 runs both arms.
+/// (dEQP texture.size's 2048 cases, 22 MiB as RGBA8). Off until the board
+/// has measured it: the linear pitch of a one- and two-byte texel (a
+/// 1-texel-wide level is a 2-byte row) is unmeasured on this core; gl_test
+/// 132 runs both arms. A test knob: it and its setter exist only with the
+/// `test-knobs` feature, and without it the store is always RGBA8.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub static mut gc_debug_narrow_la: i32 = 0;
 
 /// Set [`gc_debug_narrow_la`]; returns the previous value (gl_test 132 runs
 /// both arms and puts it back, as the PowerVR's `pvr_narrow_la`). A texture
 /// keeps the store it was specified with.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub extern "C" fn gc_debug_set_narrow_la(on: i32) -> i32 {
     // SAFETY: single-threaded by contract; plain loads and stores of an int.
     unsafe { core::ptr::addr_of_mut!(gc_debug_narrow_la).replace(on) }
 }
 
-/// Is [`gc_debug_narrow_la`] on?
+/// Is `gc_debug_narrow_la` on? Never in a build without `test-knobs`.
 pub fn narrow_la_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_narrow_la).read() }) != 0
+    #[cfg(feature = "test-knobs")]
+    {
+        // SAFETY: as for gc_debug_msaa; a plain read.
+        (unsafe { core::ptr::addr_of!(gc_debug_narrow_la).read() }) != 0
+    }
+    #[cfg(not(feature = "test-knobs"))]
+    {
+        false
+    }
 }
 
-/// Set [`gc_debug_masked_clear`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_masked_clear(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_masked_clear).write(on) }
-}
-
-/// Is [`gc_debug_masked_clear`] on?
-pub fn masked_clear_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_masked_clear).read() }) != 0
-}
-
-/// The channels a clear writes: its glClear's colour mask with the switch
-/// on, all four otherwise, none when it clears no colour. A mask of 0 with a
-/// colour clear is a producer that predates the field, and means all four.
+/// The channels a clear writes: its glClear's colour mask, all four when it
+/// has none, none when it clears no colour. A mask of 0 with a colour clear
+/// is a producer that predates the field, and means all four.
+///
+/// The clear quad programs PE_COLOR_FORMAT's COMPONENTS from it, the field
+/// every draw already takes its colour mask from, and loses the OVERWRITE
+/// hint with any channel off, as a masked draw does. The i.MX8MP measured
+/// both ways while this was a switch (gc_debug_masked_clear, removed by the
+/// clean-up): gl_test 102 maskclear FAIL with every channel written
+/// (80ffffff), PASS masked; dEQP-GLES2 color_clear 18/19 masked (the one
+/// left, long_masked_rgba, is its own row); fbo.render's rbo_rgb5_a1
+/// color_clear and stencil_clear end with an alpha-only masked clear and
+/// zeroed RGB with every channel written.
 fn clear_components(d: &GlesDraw, clear_color: bool) -> u32 {
     if !clear_color {
         return 0;
     }
     let m = u32::from(d.clear_color_mask) & 0xf;
-    if masked_clear_on() && m != 0 {
+    if m != 0 {
         m
     } else {
         0xf
     }
-}
-
-/// The process's first draw writes GL_VARYING_COMPONENT_USE GENERIC (ON,
-/// 02fc8b79). 0 leaves the registers at whatever they hold until a program
-/// needs them, as before 02fc8b79: an A/B for gl_test 37, which fails alone
-/// since 726e26ce and whose first draw differs from 5c014c9d's in exactly
-/// these four writes and the black texel ([`gc_debug_black_unbound`]).
-#[no_mangle]
-pub static mut gc_debug_first_component_use: i32 = 1;
-
-/// Set [`gc_debug_first_component_use`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_first_component_use(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_first_component_use).write(on) }
-}
-
-/// A sampler the shader declares with nothing bound reads the black texel,
-/// and the vertex stage's slots start after every declared fragment slot
-/// (ON, 00d8b62f, gl_test 61). 0 restores the stream before it: no
-/// descriptor for such a slot and VS_SAMPLER_BASE = the bound fragment
-/// textures -- the other half of gl_test 37's A/B.
-#[no_mangle]
-pub static mut gc_debug_black_unbound: i32 = 1;
-
-/// Set [`gc_debug_black_unbound`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_black_unbound(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_black_unbound).write(on) }
-}
-
-/// Is [`gc_debug_black_unbound`] on?
-pub(crate) fn black_unbound_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_black_unbound).read() }) != 0
 }
 
 /// How a draw's texture descriptor writes are ordered and fenced, as a
@@ -651,76 +515,6 @@ pub fn mrt_on() -> bool {
     (unsafe { core::ptr::addr_of!(gc_debug_mrt).read() }) != 0
 }
 
-/// Sixteen texture units in the vertex stage: with this on,
-/// GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS and gl_MaxVertexTextureImageUnits answer
-/// 16 and the link and the draw take that many vertex samplers
-/// ([`crate::backend::vs_tex_units`]); off, 8, as before.
-///
-/// What the hardware has, from Mesa (not measured here): etnaviv gives the
-/// vertex stage 16 samplers on every HALTI >= 1 core
-/// (etnaviv_screen.c:821-828 `etna_determine_sampler_limits`), and the
-/// i.MX8MP's GC7000UL r6204 (hwdb nxp/gc_feature_database.h, the two
-/// gc7000ULN_v123 entries at :18841 and :19735) has REG_Halti5 and
-/// REG_UnifiedSamplers. On such a core the two stages share one array of
-/// descriptor slots, the vertex shader's samplers are 0-based and
-/// VS_SAMPLER_BASE says where they start (etnaviv_texture.c:429-439
-/// `etna_vs_sampler_base`: after the fragment views;
-/// etnaviv_compiler_nir_emit.c:210-214). This backend does the same
-/// (texture.rs `emit_textures_inner`): the vertex slots start after every
-/// fragment slot, at most 16, so sixteen vertex samplers end at slot 31,
-/// inside the 32-slot INVALIDATE mask and NTE_DESCRIPTOR's array.
-///
-/// On by default since 2026-10-01, after the board measured it: gl_test 149
-/// with 9..16 vertex samplers beside 0 and 16 fragment ones, and dEQP-GLES2
-/// uniform_api 1,267 / 1,267 on Zephyr and on the Linux harness once the
-/// constant file reached the GPU whole (uniform_api.random.3, the first
-/// program with 13 vertex samplers, also had 275 constant registers). 0
-/// selects the earlier 8 ([`VS_TEX_UNITS_SWITCHED_OFF`]); the samples'
-/// Kconfig and YAKOGL_GC_VS_UNITS16 in the Linux OSALs set it. Set it before
-/// the first GL call: the limit is read at link and at compile.
-#[no_mangle]
-pub static mut gc_debug_vs_units16: i32 = 1;
-
-/// The vertex texture units with [`gc_debug_vs_units16`] at 0: the limit
-/// this backend had until 2026-10-01.
-pub const VS_TEX_UNITS_SWITCHED_OFF: usize = 8;
-
-/// Set [`gc_debug_vs_units16`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_vs_units16(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_vs_units16).write(on) }
-}
-
-/// Is [`gc_debug_vs_units16`] on?
-///
-/// A unit test reads its own thread's setting instead
-/// ([`set_vs_units16_for_this_thread`]): the limit is read by compiles and
-/// links in tests that do not take the GL lock, and a switch flipped by one
-/// test must not change the limit another test running beside it sees.
-pub fn vs_units16_on() -> bool {
-    #[cfg(test)]
-    {
-        VS_UNITS16_TEST.with(|c| c.get())
-    }
-    #[cfg(not(test))]
-    {
-        // SAFETY: as for gc_debug_msaa; a plain read.
-        (unsafe { core::ptr::addr_of!(gc_debug_vs_units16).read() }) != 0
-    }
-}
-
-#[cfg(test)]
-std::thread_local! {
-    static VS_UNITS16_TEST: core::cell::Cell<bool> = const { core::cell::Cell::new(true) };
-}
-
-/// Unit tests: [`vs_units16_on`] for the calling thread only.
-#[cfg(test)]
-pub(crate) fn set_vs_units16_for_this_thread(on: bool) {
-    VS_UNITS16_TEST.with(|c| c.set(on));
-}
-
 /// Does draw buffer `rt` take this draw's colour clear? `clear_target_mask`
 /// 0 is every target (glClear), bit n draw buffer n alone
 /// (glClearBuffer(GL_COLOR, n)), and 0x80 none at all (glClear with every
@@ -762,25 +556,24 @@ pub fn hw_targets(gl: &GlesDraw) -> ([u8; 4], usize) {
     (slots, n)
 }
 
-/// Does this draw select the flat shade model? Only with the switch on and
-/// a fragment input the program declares flat.
+/// Does this draw select the flat shade model? When a fragment input the
+/// program declares is flat, as Mesa's etnaviv does ("if shader has flat
+/// varyings, switch to flat shading", etnaviv_shader.c, MIT):
+/// PA_SYSTEM_MODE's PROVOKING_VERTEX_LAST governs only the flat model, and
+/// the smooth one takes the first vertex for a flat varying. gl_test 89
+/// (flatlast) reads GL's last vertex so.
 fn flat_shade_model(fs: &ShcShader) -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    let on = unsafe { core::ptr::addr_of!(gc_debug_flat_shade).read() } != 0;
-    on && fs.viv.in_[..(fs.viv.num_in as usize).min(fs.viv.in_.len())]
-        .iter()
-        .any(|io| u32::from(io.interp) == GC_INTERP_FLAT)
+    fs.viv.in_[..(fs.viv.num_in as usize).min(fs.viv.in_.len())].iter().any(|io| u32::from(io.interp) == GC_INTERP_FLAT)
 }
 
-/// With [`gc_debug_msaa`] bit 1 (a value of 3) as well: the three things
+/// With `gc_debug_msaa` bit 1 (a value of 3) as well: the three things
 /// etnaviv's 4x setup does that this backend did not, for a board run to
 /// try as one arm -- PE_LOGIC_OP UNK24 = 5 on a SMALL_MSAA core
 /// (etnaviv_state.c), and one more fragment input and temporary
 /// (PS_INPUT_COUNT_MSAA, PS_TEMP_REGISTER_CONTROL_MSAA: "MSAA adds another
 /// input", etnaviv_shader.c). Mesa, MIT; read and transcribed.
 pub fn msaa_extras(gl: &GlesDraw) -> bool {
-    // SAFETY: as in msaa_on; a plain read.
-    ms_scale(gl) > 1 && unsafe { core::ptr::addr_of!(gc_debug_msaa).read() } & 2 != 0
+    ms_scale(gl) > 1 && msaa_bits() & 2 != 0
 }
 
 /// What the multisampled scratch surface holds, for the board: `out[0..4]`
@@ -789,10 +582,12 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
 /// leaves the samples in place), it says which half of a failed 4x frame
 /// failed: a scratch with data and a blank target is the resolve's, an
 /// empty scratch the draw's. -1 when there is no scratch surface. Reads
-/// through the CPU view, which the harnesses map non-cacheable.
+/// through the CPU view, which the harnesses map non-cacheable. A test
+/// probe, like the two after it: only with the `test-knobs` feature.
 ///
 /// # Safety
 /// `out` is null or points at four writable `u32`s.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub unsafe extern "C" fn gc_debug_msaa_scratch(out: *mut u32) -> i32 {
     let g = g();
@@ -823,6 +618,7 @@ pub unsafe extern "C" fn gc_debug_msaa_scratch(out: *mut u32) -> i32 {
 ///
 /// # Safety
 /// `out` is null or points at `n` writable bytes.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub unsafe extern "C" fn gc_debug_msaa_scratch_map(out: *mut u8, n: u32) -> i32 {
     let g = g();
@@ -844,6 +640,7 @@ pub unsafe extern "C" fn gc_debug_msaa_scratch_map(out: *mut u8, n: u32) -> i32 
 
 /// Zero the multisampled scratch surface, so a probe can tell what one frame
 /// wrote from what an earlier one left. -1 when there is none.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub extern "C" fn gc_debug_msaa_scratch_zero() -> i32 {
     let g = g();
@@ -858,8 +655,7 @@ pub extern "C" fn gc_debug_msaa_scratch_zero() -> i32 {
 
 /// Is 4x multisampling on in this build/process?
 pub fn msaa_on() -> bool {
-    // SAFETY: as above; a plain read.
-    GC_MSAA_ENABLE || unsafe { core::ptr::addr_of!(gc_debug_msaa).read() } != 0
+    GC_MSAA_ENABLE || msaa_bits() != 0
 }
 
 /// Whether a 4x target of this size can be resolved: the resolve engine
@@ -987,8 +783,7 @@ fn emit_msaa_state(c: &mut GcCmd, gl: &GlesDraw) {
         return;
     }
     c.state(GC_GL_MULTI_SAMPLE_CONFIG, GC_MSAA_SAMPLES_4X | msaa_enables(0xf));
-    // SAFETY: as in msaa_on; a plain read.
-    if unsafe { core::ptr::addr_of!(gc_debug_msaa).read() } & 4 != 0 {
+    if msaa_bits() & 4 != 0 {
         c.state(GC_PS_MSAA_CONFIG, ps_msaa_config_written());
     }
     c.state(GC_RA_MULTISAMPLE_UNK00E04, 0);
@@ -1002,9 +797,10 @@ fn emit_msaa_state(c: &mut GcCmd, gl: &GlesDraw) {
 
 /* ---- the default-framebuffer flip study, OFF in every build ------------ */
 
-/// A debug switch for the gl_FragCoord flip study (tools/cts/RESULTS.md,
+/// A test knob for the gl_FragCoord flip study (tools/cts/RESULTS.md,
 /// "option (c)"), set by `gc_debug_set_flip_experiment` and 0 unless a test
-/// asks. Nothing in the product sets it.
+/// asks. It and its setter exist only with the `test-knobs` feature; without
+/// it the study is never on.
 ///
 /// 1, [`FLIP_STUDY_NEGATIVE_STRIDE`]: a top-down target (the default
 /// framebuffer, `flip_y`) is drawn BOTTOM-UP instead of through a mirrored
@@ -1018,10 +814,12 @@ fn emit_msaa_state(c: &mut GcCmd, gl: &GlesDraw) {
 /// copies of its target into the scratch surface with RS_CONFIG_FLIP set,
 /// then one plain copy back -- so the target reads back mirrored, and the
 /// frame's fence time over 100 copies is the cost of a flip at present.
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub static mut gc_debug_flip_experiment: i32 = 0;
 
 /// Set [`gc_debug_flip_experiment`] (gl_test's flip-study cases).
+#[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub extern "C" fn gc_debug_set_flip_experiment(mode: i32) {
     // SAFETY: single-threaded by contract; a plain store of an int.
@@ -1033,9 +831,18 @@ const FLIP_STUDY_RS_COPY: i32 = 2;
 /// Copies per frame in the RS arm: enough that the fence time is theirs.
 const FLIP_STUDY_COPIES: u32 = 100;
 
+/// `gc_debug_flip_experiment`'s value; 0 in a build without `test-knobs`.
 fn flip_mode() -> i32 {
-    // SAFETY: as above; a plain read.
-    unsafe { core::ptr::addr_of!(gc_debug_flip_experiment).read() }
+    #[cfg(feature = "test-knobs")]
+    {
+        // SAFETY: single-threaded by contract; a plain read of an int only
+        // the setter writes.
+        unsafe { core::ptr::addr_of!(gc_debug_flip_experiment).read() }
+    }
+    #[cfg(not(feature = "test-knobs"))]
+    {
+        0
+    }
 }
 
 /// Is this draw's y mirrored by the viewport? `flip_y`, unless the flip
@@ -1320,9 +1127,6 @@ fn prim_type(p: GlesPrim) -> u32 {
 /// with the scissor off and covers the target.
 fn clear_clip_rect(d: &GlesDraw) -> [i32; 4] {
     let (w, h) = (d.target_w as i32, d.target_h as i32);
-    if perf_tiny(d) || perf_exp(GC_PERF_EXP_CLIP_CLEARS) {
-        return [0, 0, w.min(8), h.min(8)];
-    }
     if !d.clear_quad || !d.scissor {
         return [0, 0, w, h];
     }
@@ -1375,10 +1179,6 @@ fn clip_rect(d: &GlesDraw) -> [i32; 4] {
     y0 = y0.clamp(0, h);
     x1 = x1.clamp(x0, w);
     y1 = y1.clamp(y0, h);
-    if perf_tiny(d) {
-        x1 = x1.min(x0 + 8);
-        y1 = y1.min(y0 + 8);
-    }
     [x0, y0, x1, y1]
 }
 
@@ -1885,9 +1685,6 @@ fn emit_ra_state(c: &mut GcCmd, d: &GcDraw) {
 /// so the flush is unconditional; narrowing it is an optimisation that needs
 /// hardware to verify.
 fn emit_flushes(c: &mut GcCmd) {
-    if perf_exp(GC_PERF_EXP_NO_DRAW_SYNC) {
-        return;
-    }
     c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1);
     c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTUREVS);
     c.stall(GC_SYNC_RA, GC_SYNC_PE);
@@ -1919,18 +1716,14 @@ fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
 
     /* The shader and sampler state is not self-synchronising: hold the front
      * end until the pixel engine has finished the draw already in flight. */
-    if !perf_exp(GC_PERF_EXP_NO_DRAW_SYNC) {
-        f.w.stall(GC_SYNC_FE, GC_SYNC_PE);
-    }
+    f.w.stall(GC_SYNC_FE, GC_SYNC_PE);
     if texture::emit_textures(f, d) != 0 {
         return -ENOMEM;
     }
     shader::emit_shader_code(&mut f.w, d);
     shader::emit_uniforms(&mut f.w, d);
     shader::emit_prefetch(&mut f.w);
-    if !perf_exp(GC_PERF_EXP_NO_DRAW_SYNC) {
-        f.w.stall(GC_SYNC_RA, GC_SYNC_PE);
-    }
+    f.w.stall(GC_SYNC_RA, GC_SYNC_PE);
 
     f.w.draw_instanced(d.indexed, d.prim, d.instance_count.max(1), d.vertex_count, d.first);
     0
@@ -2070,8 +1863,6 @@ fn frame_submit() -> i32 {
         }
     }
 
-    // SAFETY: a plain add to a counter only this thread writes.
-    unsafe { *core::ptr::addr_of_mut!(gc_perf_cmd_words) += f.w.used as u64 };
     let kick = GcKick { magic: GC_KICK_MAGIC, stream_bytes: f.w.used * 4, stream_gpu: f.cmd.gpu };
     let Some(submit) = osal::ops().and_then(|o| o.submit) else {
         return -1;
@@ -2194,17 +1985,11 @@ pub(crate) fn swap_component_use_marked(now: bool) -> bool {
 
 /// Must this draw write GL_VARYING_COMPONENT_USE? When it marks a component
 /// itself, and on the draw after one that did -- including the process's
-/// first draw, unless [`gc_debug_first_component_use`] is 0 and nothing has
-/// written the registers yet (read here, at draw time, so a Zephyr image can
-/// set it after gc_init).
+/// first draw (02fc8b79), which writes it GENERIC whatever an earlier client
+/// left.
 pub(crate) fn component_use_needs_write(marks: bool) -> bool {
     let was = swap_component_use_marked(marks);
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    let first = unsafe { core::ptr::addr_of!(gc_debug_first_component_use).read() } != 0;
-    let g = g();
-    let write = marks || (was && (first || g.component_use_written));
-    g.component_use_written |= write;
-    write
+    marks || was
 }
 
 pub extern "C" fn gc_init() -> i32 {
@@ -2217,7 +2002,6 @@ pub extern "C" fn gc_init() -> i32 {
     /* Unknown until written: the first draw of the process writes
      * GL_VARYING_COMPONENT_USE GENERIC, whatever an earlier client left. */
     g.component_use_marked = true;
-    g.component_use_written = false;
     for i in 0..GC_FRAMES {
         if osal::gpu_alloc(GC_HEAP_COMMAND, GC_CMD_WORDS * 4, OSAL_MEM_DATA, &mut g.frames[i].cmd) != 0
             || osal::gpu_alloc(GC_HEAP_COMMAND, GC_ARENA_BYTES, OSAL_MEM_DATA, &mut g.frames[i].arena) != 0
@@ -2430,8 +2214,6 @@ unsafe fn take_uniforms(cpu: *const c_void, dwords: u16, vertex: bool) -> &'stat
 pub unsafe extern "C" fn gc_draw(draw: *const GlesDraw) -> i32 {
     // SAFETY: the caller's contract, passed on.
     let rc = unsafe { draw_one(draw) };
-    // SAFETY: a plain add to an int only this thread writes.
-    unsafe { *core::ptr::addr_of_mut!(PERF_FRAME_DRAWS) += 1 };
     if rc != 0 && g().inited {
         /* Never silent: every refused draw is counted (`gc_refused_draws`),
          * and the first of each return code is logged. dEQP texture.vertex
@@ -2717,7 +2499,6 @@ struct Mark {
     arena_used: u32,
     extra_used: u32,
     component_use_marked: bool,
-    component_use_written: bool,
     ms_dest: (u64, u32, u32, u32, u32),
 }
 
@@ -2731,7 +2512,6 @@ impl Mark {
             arena_used: f.arena_used,
             extra_used: f.extra_used,
             component_use_marked: g.component_use_marked,
-            component_use_written: g.component_use_written,
             ms_dest: (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride),
         }
     }
@@ -2745,7 +2525,6 @@ impl Mark {
         f.arena_used = self.arena_used;
         f.extra_used = self.extra_used;
         g.component_use_marked = self.component_use_marked;
-        g.component_use_written = self.component_use_written;
     }
 
     /// Submitting the frame resolved and forgot the multisampled target;
@@ -2880,8 +2659,6 @@ pub extern "C" fn gc_finish() -> i32 {
 /// cluster, 1280x800): 68 ms a frame = 12.6 ms recording + 47.8 ms waiting
 /// for the GPU + 7.7 ms for the flip, in series.
 pub extern "C" fn gc_finish_previous() -> i32 {
-    // SAFETY: a plain store to an int only this thread writes.
-    unsafe { core::ptr::addr_of_mut!(PERF_FRAME_DRAWS).write(0) };
     let g = g();
     let newest = g.frames[(g.cur + GC_FRAMES - 1) % GC_FRAMES].fence;
     let prev = core::mem::replace(&mut g.swap_fence, newest);

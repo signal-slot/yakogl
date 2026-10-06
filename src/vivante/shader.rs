@@ -345,11 +345,7 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
 /// after the uniforms ([`emit_prefetch`] says why), and this block has to be
 /// the last thing written before them.
 pub fn emit_shader_code(c: &mut GcCmd, d: &GcDraw) {
-    let (vs_instr, mut fs_instr) = (d.vs.usc_dw / 4, d.fs.usc_dw / 4);
-    let mut fs_code = d.fs_code_gpu as u32;
-    if let Some((code, n)) = super::backend::perf_trivial_ps() {
-        (fs_code, fs_instr) = (code, n);
-    }
+    let (vs_instr, fs_instr) = (d.vs.usc_dw / 4, d.fs.usc_dw / 4);
 
     c.state(GC_VS_NEWRANGE_LOW, 0);
     c.state(GC_VS_HALTI5_RANGE_HIGH, vs_instr);
@@ -360,7 +356,7 @@ pub fn emit_shader_code(c: &mut GcCmd, d: &GcDraw) {
 
     c.state(GC_PS_NEWRANGE_LOW, 0);
     c.state(GC_PS_HALTI5_RANGE_HIGH, fs_instr);
-    c.state(GC_PS_INST_ADDR, fs_code);
+    c.state(GC_PS_INST_ADDR, d.fs_code_gpu as u32);
     c.state(GC_SH_CONFIG, GC_SH_CONFIG_RTNE_ROUNDING);
     c.state(GC_SH_ICACHE_CONTROL, GC_SH_ICACHE_ENABLE);
     c.state(GC_PS_ICACHE_COUNT, fs_instr.saturating_sub(1));

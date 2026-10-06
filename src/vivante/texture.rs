@@ -523,19 +523,14 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
      * draw binds and the ones the shader declares with nothing bound, which
      * get the black texel below -- counting only the bound ones put vertex
      * sampler 0 in the slot a declared-but-unbound fragment sampler takes. */
-    let black_unbound = super::backend::black_unbound_on();
-    let fs_slots = if black_unbound {
-        d.textures
-            .iter()
-            .map(|t| t.unit as u32 + 1)
-            .chain(declared_samplers(d.fs).map(|b| b as u32 + 1))
-            .max()
-            .unwrap_or(0)
-            .max(d.textures.len() as u32)
-    } else {
-        d.textures.len() as u32
-    };
-    let vs_base = fs_slots;
+    let vs_base = d
+        .textures
+        .iter()
+        .map(|t| t.unit as u32 + 1)
+        .chain(declared_samplers(d.fs).map(|b| b as u32 + 1))
+        .max()
+        .unwrap_or(0)
+        .max(d.textures.len() as u32);
 
     /* the fragment stage owns slots 0.., the vertex stage the ones after */
     f.w.state(GC_VS_SAMPLER_BASE, vs_base);
@@ -557,9 +552,6 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
      * texel. Before, nothing was written and the slot kept the previous
      * draw's descriptor: gl_test 61's "nothing bound" sampled the texture
      * bound before it (0xff0000ff where black was wanted, i.MX8MP). */
-    if !black_unbound {
-        return 0;
-    }
     let black = GlesTextureBind { incomplete: 1, ..GlesTextureBind::ZERO };
     for (sh, bound, base) in [(d.fs, d.textures, 0u32), (d.vs, d.vs_textures, vs_base)] {
         for binding in declared_samplers(sh) {

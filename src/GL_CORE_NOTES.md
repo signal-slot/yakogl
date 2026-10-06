@@ -151,7 +151,7 @@ task list, `glGetError`/`glGetString`/`glGetIntegerv`, and the full draw path
   frame's background object. A colour mask with some channels on and some off
   travels in `GlesDraw::clear_color_mask` (the mask at the glClear, not the
   next draw's) and is the backend's to apply: the GC7000 in its pixel
-  engine's component mask (behind `gc_debug_masked_clear`), the PowerVR
+  engine's component mask (always; gl_test 102 measured it), the PowerVR
   (behind `pvr_debug_masked_clear`, default off until the AM62P has measured
   it) -- which has no per-channel write mask; Mesa's pvr lowers one into the
   fragment shader too -- by drawing the clear with the masked clear program
@@ -506,9 +506,8 @@ own uniforms, which is a texture fetch from a nonsense address and a GPU fault
 and more, so `GLES_MAX_TEX_BINDS` is 16. The vertex stage has descriptors of
 its own (`GLES_MAX_VS_TEX_BINDS`, 16 slots in `GlesDraw`; the units a GPU
 takes are `GLES_VS_TEX_UNITS`: 16 on every GPU, from Mesa's v3d, pvr and
-etnaviv; the GC7000's was 8 until 2026-10-01 and `gc_debug_vs_units16` = 0 still
-selects it, and what a process answers is `backend::vs_tex_units()`): it lays its shared registers out the same way, descriptors
-first and the uniform block behind them.
+etnaviv; the GC7000's was 8 until 2026-10-01): it lays its shared registers
+out the same way, descriptors first and the uniform block behind them.
 
 The link counts each stage's active samplers (one per sampler and per element
 of a sampler array, `ShcShader::sampler_bindings`, the same list the draw wires)
@@ -534,7 +533,7 @@ fragment shader samples at most `CAP_TEXTURE_UNITS` (16,
 |---------|------------------------------|----------|----------|
 | V3D     | 16                           | 16       | 32       |
 | PowerVR | 16                           | 16       | 32       |
-| GC7000  | 16 (8 with `gc_debug_vs_units16` = 0) | 16 | 32  |
+| GC7000  | 16                           | 16       | 32       |
 
 So the combined rule of the link never refuses a program the two stage rules
 accepted; it stays because the spec states it. The combined limit was 16 (the

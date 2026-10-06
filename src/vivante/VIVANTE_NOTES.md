@@ -218,6 +218,40 @@ Device-VA heaps: `0x40000000` data (buffers, textures, render targets),
 `0x50000000` shader code, `0x60000000` command streams and frame arenas. They
 are 32-bit because the GC7000's MMU is.
 
+## The debug switches and the test knobs
+
+`backend.rs` exposes its switches to C as `gc_debug_*` statics and setters.
+Since 2026-10-06 (clean-up commit 1, HANDOFF item 2) they are in three
+groups, and `tools/check.sh` ("no test knob in the artefact") reads the
+GC7000 product archive (`yakogl-capi`, the Zephyr image's features) and
+requires exactly the first group's symbols in it:
+
+- **In product code, until the board settles them** (the next clean-up
+  commit): `gc_debug_desc_seq`, `gc_debug_mrt`, `gc_debug_vs_tiled`,
+  `gc_debug_int_filter`, each with its setter -- 8 symbols.
+- **Test knobs**, only with the crate's `test-knobs` feature
+  (`CONFIG_YAKOGL_TEST_KNOBS`, which the gl_test, gc_gl_test and deqp
+  samples select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch
+  probes `gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #8);
+  `gc_debug_flip_experiment` with its setter (case 88, the flip study);
+  `gc_debug_narrow_la` with its setter (case 132's arms, dEQP's
+  `DEQP_GC_NARROW_LA`). Without the feature each reads as its default, 0,
+  and none of the 9 symbols is in the archive.
+- **No longer a switch.** At their defaults, measured on the i.MX8MP, and
+  the only behaviour now: `gc_debug_flat_shade` (flat model for a flat
+  input, gl_test 89), `gc_debug_masked_clear` (a clear writes its mask,
+  gl_test 102), `gc_debug_first_component_use` (the first draw writes
+  GL_VARYING_COMPONENT_USE GENERIC, 02fc8b79), `gc_debug_black_unbound`
+  (the black texel for an unbound declared sampler, gl_test 61) and
+  `gc_debug_vs_units16` (16 vertex texture units, gl_test 149 and
+  uniform_api; `GLES_VS_TEX_UNITS`). Removed outright, never set by
+  anything in the tree: `gc_debug_perf_exp` (the per-draw cost
+  experiments) with its frame draw counter, `gc_perf_cmd_words`, and
+  `gc_debug_fs_tiled` (fragment-stage textures from a tiled copy).
+
+The archive defined 32 such symbols before (15 statics, 17 C functions);
+it defines 8 now (4 and 4), 17 with `test-knobs` (7 and 10).
+
 ## What the hardware said, once the test was right
 
 **Retracted, 2026-09-21:** an earlier version of this section said that only

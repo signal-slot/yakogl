@@ -194,6 +194,11 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_REPORT_ES2)
     list(APPEND _features "report-es2")
   endif()
+  # The test knobs (the crate's `test-knobs`), a global too: on only in a
+  # test image's build tree, never in a product's.
+  if(YAKOGL_TEST_KNOBS)
+    list(APPEND _features "test-knobs")
+  endif()
   set(_c_objs "")
   if(A_C_OBJECT_LIBRARY)
     set(_c_objs C_OBJECT_LIBRARY "${A_C_OBJECT_LIBRARY}")

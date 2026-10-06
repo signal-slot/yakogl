@@ -118,8 +118,21 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      PowerVR, then GL core / V3D, then the driver Kconfig instruments) ->
      samples cut -> gl_test Rust harness -> (after the shader-compiler
      rename, item 1) compiler knobs -> samples stage 2 -> bare metal ->
-     names -> OSALs to Rust -> docs. Commit 1, the Vivante debug statics,
-     is in progress.
+     names -> OSALs to Rust -> docs.
+   - Done so far (commit 1 of the series): the GC7000's debug statics. Of
+     its 16, 4 are removed (`gc_debug_perf_exp` with its frame draw
+     counter, `gc_perf_cmd_words`, `gc_debug_fs_tiled`), 5 are hard-coded
+     at the default every image ran (`flat_shade`, `masked_clear`,
+     `first_component_use`, `black_unbound`, `vs_units16`, with their
+     sample Kconfig rows and `YAKOGL_GC_VS_UNITS16`), and 3 with their 6 C
+     entry points are behind the new `test-knobs` feature
+     (`CONFIG_YAKOGL_TEST_KNOBS`, selected by the gl_test, gc_gl_test and
+     deqp samples): `gc_debug_msaa` and its scratch probes,
+     `gc_debug_flip_experiment`, `gc_debug_narrow_la`. The product archive's
+     `gc_debug_*`/`gc_perf_*` symbols went from 32 to 8, 17 with the knobs
+     (tools/check.sh, "no test knob in the artefact"). Next: the four left
+     in product code (`desc_seq`, `mrt`, `vs_tiled`, `int_filter`) take
+     their measured defaults with a board run.
    - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
      `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
      `ONE_IN_FLIGHT` stay product options. The measurement infrastructure

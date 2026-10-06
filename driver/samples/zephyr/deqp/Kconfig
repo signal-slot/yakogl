@@ -40,16 +40,15 @@ config DEQP_GL_CONFIG_NAME
 config DEQP_SURFACE_SIZE
 	int "pbuffer width and height"
 	default 256
-config DEQP_GC_MASKED_CLEAR
-	bool "GC7000: colour clears honour glColorMask (gc_debug_masked_clear)"
-	depends on YAKOGL_GPU_VIVANTE
+config DEQP_TEST_KNOBS
+	bool
 	default y
+	select YAKOGL_TEST_KNOBS
 	help
-	  Passed to gc_debug_set_masked_clear before the run: a clear writes
-	  only the channels glColorMask had on at the glClear instead of all
-	  four. On by default since the i.MX8MP measured it (gl_test 102,
-	  functional.color_clear 18/19, fbo.render rbo_rgb5_a1 clears); n is
-	  the off arm.
+	  The image may set the library's test knobs
+	  (CONFIG_YAKOGL_TEST_KNOBS): DEQP_GC_NARROW_LA below. Each stays at
+	  the library's default unless its own option says otherwise.
+
 config DEQP_GC_MRT
 	bool "GC7000: draw buffers, every colour attachment written (gc_debug_mrt)"
 	depends on YAKOGL_GPU_VIVANTE
@@ -69,19 +68,6 @@ config DEQP_GC_VS_TILED
 	  instead of its linear storage. Off by default until the board has
 	  measured it; texture.vertex.2d.* is the group it is for.
 
-config DEQP_GC_VS_UNITS16
-	bool "GC7000: sixteen vertex texture units (gc_debug_vs_units16)"
-	depends on YAKOGL_GPU_VIVANTE
-	default y
-	help
-	  Calls gc_debug_set_vs_units16(y ? 1 : 0) before the run: with y
-	  (the library's default since 2026-10-01, board-verified by gl_test
-	  149 and uniform_api 1,267 / 1,267) GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
-	  answers 16 and the link and the draw take that many vertex
-	  samplers; n selects the earlier 8, under which uniform_api's 15
-	  "N vertex texture units required, 8 supported" cases are
-	  NotSupported.
-
 config DEQP_GC_INT_FILTER
 	bool "GC7000: INT_FILTER on UNORM samplers (gc_debug_int_filter)"
 	depends on YAKOGL_GPU_VIVANTE
@@ -94,13 +80,13 @@ config DEQP_GC_INT_FILTER
 
 config DEQP_GC_NARROW_LA
 	bool "GC7000: GL_LUMINANCE / GL_ALPHA / GL_LUMINANCE_ALPHA stored narrow (gc_debug_narrow_la)"
-	depends on YAKOGL_GPU_VIVANTE
+	depends on YAKOGL_GPU_VIVANTE && YAKOGL_TEST_KNOBS
 	help
-	  Calls gc_debug_set_narrow_la(1) before the run: L8, A8 and LA8
-	  textures are stored one or two bytes a texel and sampled with the
-	  texture unit's own formats instead of expanded into RGBA8 (a quarter
-	  of the memory). Off by default until gl_test 132 has measured it on
-	  the board.
+	  Calls gc_debug_set_narrow_la(1), a test knob, before the run: L8,
+	  A8 and LA8 textures are stored one or two bytes a texel and sampled
+	  with the texture unit's own formats instead of expanded into RGBA8
+	  (a quarter of the memory). Off by default until gl_test 132 has
+	  measured it on the board.
 
 config DEQP_PVR_MASKED_CLEAR
 	bool "PowerVR: colour clears honour glColorMask (pvr_debug_masked_clear)"

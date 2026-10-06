@@ -366,15 +366,6 @@ int main(void)
 		LOG_INF("gc_gl_test: gc_debug_msaa=1 (4x MSAA and its EGL config on)");
 	}
 #endif
-	{
-		extern void gc_debug_set_masked_clear(int on);
-
-		/* colour clears write only the channels glColorMask lets through;
-		 * on by default (board-verified), n is the off arm of an A/B */
-		gc_debug_set_masked_clear(IS_ENABLED(CONFIG_GC_GL_TEST_MASKED_CLEAR));
-		LOG_INF("gc_gl_test: gc_debug_masked_clear=%d (clears honour glColorMask)",
-			(int)IS_ENABLED(CONFIG_GC_GL_TEST_MASKED_CLEAR));
-	}
 #ifdef CONFIG_GC_GL_TEST_UNIIDX_NO_CLAMP
 	{
 		extern void shc_debug_set_uniidx(int bits);
@@ -394,22 +385,6 @@ int main(void)
 	}
 #endif
 	{
-		extern void gc_debug_set_vs_units16(int on);
-		int on = IS_ENABLED(CONFIG_GC_GL_TEST_VS_UNITS16);
-
-		/* before the first GL call: the link and the compiler read it */
-		gc_debug_set_vs_units16(on);
-		LOG_INF("gc_gl_test: gc_debug_vs_units16=%d (%d vertex texture units)", on, on ? 16 : 8);
-	}
-#ifdef CONFIG_GC_GL_TEST_NO_FIRST_COMPONENT_USE
-	{
-		extern void gc_debug_set_first_component_use(int on);
-
-		gc_debug_set_first_component_use(0);
-		LOG_INF("gc_gl_test: gc_debug_first_component_use=0 (the first draw leaves GL_VARYING_COMPONENT_USE)");
-	}
-#endif
-	{
 		extern int gc_debug_set_desc_seq(uint32_t bits);
 
 		/* Kconfig's range keeps it to the four known bits; the setter
@@ -419,14 +394,6 @@ int main(void)
 		LOG_INF("gc_gl_test: gc_debug_desc_seq=0x%x%s (descriptor write sequence)",
 			(unsigned int)CONFIG_GC_GL_TEST_DESC_SEQ, rc ? " REFUSED" : "");
 	}
-#ifdef CONFIG_GC_GL_TEST_NO_BLACK_UNBOUND
-	{
-		extern void gc_debug_set_black_unbound(int on);
-
-		gc_debug_set_black_unbound(0);
-		LOG_INF("gc_gl_test: gc_debug_black_unbound=0 (no black texel for an unbound declared sampler)");
-	}
-#endif
 	gl_test_skip = CONFIG_GC_GL_TEST_SKIP;
 	LOG_INF("gc_gl_test: case %d on the GC7000UL%s%s", CONFIG_GC_GL_TEST_CASE,
 		CONFIG_GC_GL_TEST_SKIP[0] ? ", skipping " : "", CONFIG_GC_GL_TEST_SKIP);

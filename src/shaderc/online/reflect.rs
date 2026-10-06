@@ -1251,7 +1251,7 @@ pub fn builtin_constant(name: &str, es3: bool) -> Option<i64> {
         "gl_MaxVertexAttribs" => MAX_VERTEX_ATTRIBS as i64,
         "gl_MaxVertexUniformVectors" => MAX_VERTEX_UNIFORM_VECTORS as i64,
         "gl_MaxFragmentUniformVectors" => MAX_FRAGMENT_UNIFORM_VECTORS as i64,
-        "gl_MaxVertexTextureImageUnits" => crate::backend::vs_tex_units() as i64,
+        "gl_MaxVertexTextureImageUnits" => crate::backend::GLES_VS_TEX_UNITS as i64,
         "gl_MaxCombinedTextureImageUnits" => CAP_COMBINED_TEXTURE_UNITS as i64,
         "gl_MaxTextureImageUnits" => CAP_TEXTURE_UNITS as i64,
         "gl_MaxVaryingVectors" if !es3 => MAX_VARYING_VECTORS as i64,
@@ -1471,20 +1471,14 @@ mod tests {
         reflect(&a, &ast)
     }
 
-    /// gl_MaxVertexTextureImageUnits is the query's answer, also when the
-    /// GC7000's sixteen-vertex-unit switch has moved it (dEQP
-    /// builtin_variable.max_vertex_texture_image_units compares the two):
-    /// 16 by default, 8 with the switch off.
+    /// gl_MaxVertexTextureImageUnits is the query's answer on the GC7000,
+    /// 16 (dEQP builtin_variable.max_vertex_texture_image_units compares the
+    /// two), in either language version.
     #[cfg(feature = "gpu-vivante")]
     #[test]
-    fn the_vertex_unit_constant_follows_the_gc7000_switch() {
-        use crate::vivante::backend::set_vs_units16_for_this_thread;
-        let on = [false, true].map(|es3| builtin_constant("gl_MaxVertexTextureImageUnits", es3));
-        set_vs_units16_for_this_thread(false);
-        let off = builtin_constant("gl_MaxVertexTextureImageUnits", false);
-        set_vs_units16_for_this_thread(true);
-        assert_eq!(on, [Some(16), Some(16)], "the default");
-        assert_eq!(off, Some(8));
+    fn the_vertex_unit_constant_is_the_gc7000s_sixteen() {
+        let both = [false, true].map(|es3| builtin_constant("gl_MaxVertexTextureImageUnits", es3));
+        assert_eq!(both, [Some(16), Some(16)]);
     }
 
     fn ok<'a>(buf: &'a mut [u8], src: &'a str) -> Reflection<'a> {

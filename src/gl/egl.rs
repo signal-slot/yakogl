@@ -366,8 +366,8 @@ const NUM_CONFIGS: EGLint = ALL_CONFIGS.len() as EGLint;
 
 /// The configs this build offers now. On the GC7000 the 4x config is listed
 /// only while its backend multisamples (`vivante::backend::msaa_on`: off
-/// until the board has measured the resolve, `gc_debug_set_msaa` turns it
-/// on for that measurement).
+/// until the board has measured the resolve, `gc_debug_set_msaa`, a test
+/// knob, turns it on for that measurement).
 fn offered_configs() -> &'static [EGLConfig] {
     /* The V3D build offers the 4x config only while its backend's MSAA
      * switch is on (`v3d::backend::msaa_on`, off until the board has measured
@@ -4130,9 +4130,9 @@ mod tests {
     }
 
     /// ...and offers it again while the backend multisamples: the switch
-    /// the MSAA measurement turns on brings the config back with it, so a
-    /// 4x surface is one the draw can honour.
-    #[cfg(feature = "gpu-vivante")]
+    /// the MSAA measurement turns on (gc_debug_msaa, a test knob) brings the
+    /// config back with it, so a 4x surface is one the draw can honour.
+    #[cfg(all(feature = "gpu-vivante", feature = "test-knobs"))]
     #[test]
     fn the_gc7000_offers_the_multisampled_config_while_msaa_is_on() {
         let gl = TestGl::new(8, 8);

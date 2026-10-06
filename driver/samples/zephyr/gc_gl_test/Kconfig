@@ -177,26 +177,27 @@ config GC_GL_TEST_SKIP
 	  the rest readable while it is worked on. A skipped case counts as
 	  neither a pass nor a failure, so the pass count stays honest.
 
+config GC_GL_TEST_KNOBS
+	bool
+	default y
+	select YAKOGL_TEST_KNOBS
+	help
+	  The suite sets the library's test knobs (CONFIG_YAKOGL_TEST_KNOBS):
+	  case 16's 4x scratch probes, case 132's two narrow-L8 arms, case 88's
+	  flip study. gl_test.c calls them only under CONFIG_YAKOGL_TEST_KNOBS;
+	  a product image has none of them.
+
 config GC_GL_TEST_MSAA
 	bool "Turn the GC7000's 4x MSAA on (a measurement, off in products)"
+	depends on YAKOGL_TEST_KNOBS
 	default n
 	help
 	  Calls gc_debug_set_msaa(1) at startup: the backend's 4x resolve
-	  (vivante/backend.rs gc_debug_msaa) and with it the EGL 4x config,
-	  which the GC7000 build otherwise does not offer. Case 16 then runs
-	  against a real 4x surface. Off by default until the board has
-	  measured it (tools/cts/RESULTS.md, "GC7000 4x MSAA via the resolve
-	  engine").
-
-config GC_GL_TEST_MASKED_CLEAR
-	bool "Colour clears honour glColorMask"
-	default y
-	help
-	  Passed to gc_debug_set_masked_clear at startup: a colour clear writes
-	  only the channels glColorMask had on at the glClear
-	  (vivante/backend.rs gc_debug_masked_clear). On by default since case
-	  102 maskclear measured it; n is the off arm, where 102 fails by
-	  design.
+	  (vivante/backend.rs gc_debug_msaa, a test knob) and with it the EGL
+	  4x config, which the GC7000 build otherwise does not offer. Case 16
+	  then runs against a real 4x surface. Off by default until the board
+	  has measured it (tools/cts/RESULTS.md, "GC7000 4x MSAA via the
+	  resolve engine").
 
 config GC_GL_TEST_UNIIDX_NO_CLAMP
 	bool "gl_test 108: no clamp before the movar (a measurement)"
@@ -217,17 +218,6 @@ config GC_GL_TEST_MRT
 	  it, and GL_MAX_DRAW_BUFFERS answers every colour attachment (3)
 	  instead of 1. Off until the MRT case has measured it.
 
-config GC_GL_TEST_VS_UNITS16
-	bool "Sixteen texture units in the vertex stage"
-	default y
-	help
-	  Calls gc_debug_set_vs_units16(y ? 1 : 0) at startup
-	  (vivante/backend.rs gc_debug_vs_units16): with y, the library's
-	  default since 2026-10-01 (case 149 measured it),
-	  GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS and gl_MaxVertexTextureImageUnits
-	  answer 16 and the link and the draw take that many vertex samplers;
-	  n selects the earlier 8, and case 149 then skips.
-
 config GL_TEST_VSU_UNITS
 	int "Case 149 (vsunits): vertex-stage samplers the shader declares"
 	range 1 16
@@ -247,22 +237,6 @@ config GL_TEST_VSU_FS_UNITS
 	  the picture is unchanged. On the GC7000 the vertex slots start after
 	  the fragment ones: 16 puts vertex sampler k in slot 16 + k. 0 is the
 	  case as it was.
-
-config GC_GL_TEST_NO_FIRST_COMPONENT_USE
-	bool "Leave GL_VARYING_COMPONENT_USE unwritten on the first draw (an A/B)"
-	default n
-	help
-	  Calls gc_debug_set_first_component_use(0) at startup: the process's
-	  first draw does not write GL_VARYING_COMPONENT_USE GENERIC, as before
-	  02fc8b79. One arm of gl_test 37's A/B (it fails alone since 726e26ce).
-
-config GC_GL_TEST_NO_BLACK_UNBOUND
-	bool "No black texel for a declared sampler with nothing bound (an A/B)"
-	default n
-	help
-	  Calls gc_debug_set_black_unbound(0) at startup: the texture stream
-	  before 00d8b62f (gl_test 61). The other arm of gl_test 37's A/B; with
-	  it on, case 61's "nothing bound" check is expected to fail.
 
 config GC_GL_TEST_DESC_SEQ
 	int "Texture descriptor write sequence bits (an A/B)"

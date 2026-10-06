@@ -24,17 +24,11 @@ extern "C" {
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include "sample_glue.h"
-#ifdef CONFIG_YAKOGL_GPU_VIVANTE
-void gc_debug_set_masked_clear(int on);
-#endif
 #ifdef CONFIG_DEQP_GC_MRT
 void gc_debug_set_mrt(int on);
 #endif
 #ifdef CONFIG_DEQP_GC_VS_TILED
 void gc_debug_set_vs_tiled(int on);
-#endif
-#ifdef CONFIG_YAKOGL_GPU_VIVANTE
-void gc_debug_set_vs_units16(int on);
 #endif
 #ifdef CONFIG_DEQP_GC_INT_FILTER
 void gc_debug_set_int_filter(int on);
@@ -158,12 +152,6 @@ extern "C" int main(void)
 #else
     printk("deqp: case filter '%s'\n", CONFIG_DEQP_CASE);
 #endif
-#ifdef CONFIG_YAKOGL_GPU_VIVANTE
-    /* on by default (board-verified); n is the off arm of an A/B */
-    gc_debug_set_masked_clear(IS_ENABLED(CONFIG_DEQP_GC_MASKED_CLEAR));
-    printk("deqp: gc_debug_masked_clear=%d (clears honour glColorMask)\n",
-           (int)IS_ENABLED(CONFIG_DEQP_GC_MASKED_CLEAR));
-#endif
 #ifdef CONFIG_DEQP_GC_MRT
     gc_debug_set_mrt(1);
     printk("deqp: gc_debug_mrt=1 (every colour attachment is written)\n");
@@ -171,12 +159,6 @@ extern "C" int main(void)
 #ifdef CONFIG_DEQP_GC_VS_TILED
     gc_debug_set_vs_tiled(1);
     printk("deqp: gc_debug_vs_tiled=1 (vertex-stage 2D textures from a tiled copy)\n");
-#endif
-#ifdef CONFIG_YAKOGL_GPU_VIVANTE
-    /* on by default (board-verified 2026-10-01); n selects the earlier 8 */
-    gc_debug_set_vs_units16(IS_ENABLED(CONFIG_DEQP_GC_VS_UNITS16));
-    printk("deqp: gc_debug_vs_units16=%d (%d vertex texture units)\n", (int)IS_ENABLED(CONFIG_DEQP_GC_VS_UNITS16),
-           IS_ENABLED(CONFIG_DEQP_GC_VS_UNITS16) ? 16 : 8);
 #endif
 #ifdef CONFIG_DEQP_GC_INT_FILTER
     gc_debug_set_int_filter(1);
