@@ -300,8 +300,9 @@ pub fn compile_if_lowering() -> IfLowering {
 /// binding's state can change the code. The C ABI carries it as one
 /// `uint64_t` ([`LodKey::bits`]): `mip_free` in bits 0..15 and `ret32` in
 /// bits 16..31 (bindings 0..15 each: the GL core keys bindings below
-/// `CAP_SAMPLERS`, 16, and no other), `mag_switch` in bits 32..62,
-/// `sample_kill` in bit 63.
+/// `CAP_SAMPLERS`, 16, and no other), `mag_switch` in bits 32..47 (the same
+/// bindings), `cube_noseam` in bits 48..62 (bindings 0..14), `sample_kill`
+/// in bit 63.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct LodKey {
     /// PowerVR, fragment: the binding's sampler has no mipmap filter (or one
@@ -339,19 +340,28 @@ pub struct LodKey {
     /// per channel instead of two f16 channels a word (`online::v3d::select`).
     /// Bindings 0..15.
     pub ret32: u32,
+    /// V3D, ES 2.0 builds (`crate::REPORT_ES2`): the binding is a cube map
+    /// whose sampler state can differ between the hardware's seamless
+    /// filtering and GL ES 2.0 3.7.5's per-face rule (mag LINEAR, or min
+    /// LINEAR / LINEAR_MIPMAP_*): its look-ups are compiled as 2D-array
+    /// look-ups of the face the compiler selects, so the sampler's wrap
+    /// modes apply inside the face (docs/v3d-noseamless-cube.md). Bindings
+    /// 0..14: binding 15 of a stage stays seamless.
+    pub cube_noseam: u32,
 }
 
 /// [`LodKey::sample_kill`]'s bit in [`LodKey::bits`].
 pub const LOD_KEY_SAMPLE_KILL: u64 = 1 << 63;
 
 impl LodKey {
-    pub const NONE: LodKey = LodKey { mip_free: 0, mag_switch: 0, sample_kill: false, ret32: 0 };
+    pub const NONE: LodKey = LodKey { mip_free: 0, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 };
 
     /// The C ABI's `uint64_t`.
     pub const fn bits(self) -> u64 {
         (self.mip_free & 0xffff) as u64
             | ((self.ret32 & 0xffff) as u64) << 16
-            | ((self.mag_switch & 0x7fff_ffff) as u64) << 32
+            | ((self.mag_switch & 0xffff) as u64) << 32
+            | ((self.cube_noseam & 0x7fff) as u64) << 48
             | if self.sample_kill { LOD_KEY_SAMPLE_KILL } else { 0 }
     }
 
@@ -360,13 +370,14 @@ impl LodKey {
         LodKey {
             mip_free: b as u32 & 0xffff,
             ret32: (b >> 16) as u32 & 0xffff,
-            mag_switch: (b >> 32) as u32 & 0x7fff_ffff,
+            mag_switch: (b >> 32) as u32 & 0xffff,
+            cube_noseam: (b >> 48) as u32 & 0x7fff,
             sample_kill: b & LOD_KEY_SAMPLE_KILL != 0,
         }
     }
 
     pub const fn is_none(self) -> bool {
-        self.mip_free == 0 && self.mag_switch == 0 && !self.sample_kill && self.ret32 == 0
+        self.mip_free == 0 && self.mag_switch == 0 && !self.sample_kill && self.ret32 == 0 && self.cube_noseam == 0
     }
 }
 
@@ -415,6 +426,7 @@ static COMPILE_MIP_FREE: core::sync::atomic::AtomicU32 = core::sync::atomic::Ato
 static COMPILE_MAG_SWITCH: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 static COMPILE_SAMPLE_KILL: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 static COMPILE_RET32: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static COMPILE_CUBE_NOSEAM: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// Set the compile's [`LodKey`]; returns the old one for the caller to put
 /// back.
@@ -425,6 +437,7 @@ pub fn set_compile_lod_key(k: LodKey) -> LodKey {
         mag_switch: COMPILE_MAG_SWITCH.swap(k.mag_switch, Relaxed),
         sample_kill: COMPILE_SAMPLE_KILL.swap(k.sample_kill, Relaxed),
         ret32: COMPILE_RET32.swap(k.ret32, Relaxed),
+        cube_noseam: COMPILE_CUBE_NOSEAM.swap(k.cube_noseam, Relaxed),
     }
 }
 
@@ -436,6 +449,7 @@ pub fn compile_lod_key() -> LodKey {
         mag_switch: COMPILE_MAG_SWITCH.load(Relaxed),
         sample_kill: COMPILE_SAMPLE_KILL.load(Relaxed),
         ret32: COMPILE_RET32.load(Relaxed),
+        cube_noseam: COMPILE_CUBE_NOSEAM.load(Relaxed),
     }
 }
 

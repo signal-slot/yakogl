@@ -817,11 +817,15 @@ pub enum ProgramPrim {
 pub struct ProgramKey {
     pub prim: ProgramPrim,
     pub blend_key: u32,
+    /// The vertex stage's sampler-state key (the V3D's `cube_noseam`; the
+    /// fragment stage's is the compile's own, `shaderc::compile_lod_key`).
+    pub vs_lod: crate::shaderc::LodKey,
 }
 
 impl ProgramKey {
     /// The binary a link builds: triangles, no blend variant.
-    pub const LINK: ProgramKey = ProgramKey { prim: ProgramPrim::Triangles, blend_key: 0 };
+    pub const LINK: ProgramKey =
+        ProgramKey { prim: ProgramPrim::Triangles, blend_key: 0, vs_lod: crate::shaderc::LodKey::NONE };
 }
 
 /// THE back-end entry of a linked program: the two stages' IR (each an
@@ -842,7 +846,7 @@ pub fn compile_program(
     scratch: &Arena<'_>,
     keep: &'static Arena<'static>,
 ) -> Result<ShcShader, CompileError> {
-    use super::v3d::chain::{compile_program as chain_program, Prim, Target};
+    use super::v3d::chain::{compile_program_keyed as chain_program, Prim, Target};
     /* the TLB blends: no blend variant exists on this GPU */
     if key.blend_key != 0 {
         return Err(CompileError::NotImplemented(Stage::CodeGen));
@@ -855,7 +859,15 @@ pub fn compile_program(
     };
     let fs_stage =
         super::v3d_abi::stage_shader(crate::shaderc::SHC_STAGE_FRAGMENT, &fs.module, &fs.reflection, scratch, keep)?;
-    let prog = chain_program(&vs.module, &fs.module, prim, Target { vpm_size: V3D_VPM_BYTES }, scratch)?;
+    let prog = chain_program(
+        &vs.module,
+        &fs.module,
+        prim,
+        Target { vpm_size: V3D_VPM_BYTES },
+        key.vs_lod,
+        crate::shaderc::compile_lod_key(),
+        scratch,
+    )?;
     Ok(super::v3d_abi::program_shader(fs_stage, &prog, keep)?)
 }
 
@@ -864,7 +876,8 @@ pub fn compile_program(
 /// attributes at the locations in `vs_map` when its record was compiled
 /// with the link's layout ([`compile_vs_mapped_blocks`]), the fragment
 /// shader's varyings in `zero` read as 0 (`lower::zero_varyings`, inside
-/// `lower_source`), then [`compile_program`] with [`ProgramKey::LINK`].
+/// `lower_source`), then [`compile_program`] with [`ProgramKey::LINK`] and
+/// the vertex stage's sampler-state key `vs_key`.
 ///
 /// The program record replaces the program's fragment shader, and the GL
 /// core reads a program's uniform blocks from its two shaders
@@ -875,14 +888,22 @@ pub fn compile_program(
 pub fn link_sources<'s>(
     vs_glsl: &[u8],
     vs_map: Option<&crate::shaderc::ShcAttribMap>,
+    vs_key: crate::shaderc::LodKey,
     fs_glsl: &[u8],
     zero: &[&str],
     scratch: &'s Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
     let vs = lower_vertex_mapped(vs_glsl, vs_map, scratch)?;
+    /* the vertex stage's c = 0.5 remap (`lodkey`): in the vertex stage's key
+     * only, the fragment stage's explicit levels are not remapped */
+    let vs = super::lodkey::remap_mag_switch(scratch, vs, vs_key.mag_switch).map_err(|e| CompileError::Rejected {
+        line: e.line,
+        tok: Token::new(e.tok),
+        msg: e.msg,
+    })?;
     let fs = lower_source(crate::shaderc::SHC_STAGE_FRAGMENT, fs_glsl, zero, scratch)?;
-    let sh = compile_program(&vs, &fs, ProgramKey::LINK, scratch, keep)?;
+    let sh = compile_program(&vs, &fs, ProgramKey { vs_lod: vs_key, ..ProgramKey::LINK }, scratch, keep)?;
     Ok((sh, (fs.reflection.blocks, fs.reflection.block_members, [vs.reflection.uniforms, fs.reflection.uniforms])))
 }
 

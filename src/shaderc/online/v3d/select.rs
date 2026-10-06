@@ -121,6 +121,8 @@ pub const WADDR_TMUSCM: u8 = 40;
 /// Mesa's p2 for a txl on a cube (v3d_tex.c:146-149, 303-306, 367-368).
 pub const TMU_P2_CUBE_LOD: u32 = (15 << 20) | (1 << 1);
 pub const WADDR_TMUT: u8 = 34;
+/// A 2D-array look-up's layer (V3D_QPU_WADDR_TMUI).
+pub const WADDR_TMUI: u8 = 36;
 pub const WADDR_TMUB: u8 = 37;
 
 /// One entry of a uniform stream.
@@ -825,8 +827,8 @@ impl<'a> Sel<'a> {
                     }
                 }
             }
-            if let SOp::Tex { srcs, cube, bias, lod, .. } = *op {
-                for x in srcs.iter().take(super::prepare::tex_operands(cube, bias || lod)) {
+            if let SOp::Tex { srcs, cube, layer, bias, lod, .. } = *op {
+                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer, bias || lod)) {
                     as_value[x.0 as usize] = true;
                 }
             }
@@ -852,7 +854,7 @@ impl<'a> Sel<'a> {
                  * look-up (TMUSLOD for an explicit level: `txl`, v3d_tex.c:
                  * 374-375, which a vertex shader's every look-up is); then
                  * one ldtmu per word asked for. */
-                SOp::Tex { sampler, srcs, cube, bias, lod } => {
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod } => {
                     /* A binding the draw keyed for a 32-bit output
                      * (`LodKey::ret32`: an R32F texture, Mesa's return size
                      * 32): one word per channel, lane l is word l, instead
@@ -901,8 +903,14 @@ impl<'a> Sel<'a> {
                         let r = self.val(a, srcs[2])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUR), a: r, b: Operand::None })?;
                     }
+                    /* a 2D-array look-up's layer (Mesa's `is_array` write,
+                     * v3d_tex.c): the face of a cube record */
+                    if layer {
+                        let i = self.val(a, srcs[2])?;
+                        self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUI), a: i, b: Operand::None })?;
+                    }
                     if bias || lod {
-                        let b = self.val(a, srcs[2 + usize::from(cube)])?;
+                        let b = self.val(a, srcs[2 + usize::from(cube || layer)])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUB), a: b, b: Operand::None })?;
                     }
                     /* the retiring S write (v3d_tex.c:371-378): TMUSCM for a

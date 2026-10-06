@@ -4,7 +4,8 @@
 
 Item v3d-cube-design, 2026-10-07. The design and the host reproduction of
 the Raspberry Pi 4's 25 remaining dEQP-GLES2 failures; item v3d-cube-fix
-implements it. Status: designed, reproduced on the host, not implemented.
+(same day) implements it. Status: implemented and verified on the host; the
+Pi 4 run is open (section "As implemented").
 
 ## The defect
 
@@ -344,3 +345,93 @@ handoff after the fix):
 - A corner tap of a seamless LINEAR look-up is the mean of the other three
   taps in the model (dEQP's convention, ES 3.0's recommendation); the
   hardware's rule is not known, so no test samples a corner.
+
+## As implemented (item v3d-cube-fix)
+
+The design's code points 1-5 and 7, with these decisions:
+
+- **Key**: `LodKey::cube_noseam` (bits 48..62, bindings 0..14); `mag_switch`
+  narrowed to bits 32..47 (bindings 0..15, all the GL core ever keys).
+  `LodKey` gained a field, so the six `LodKey { .. }` literals of
+  backend.rs's tests were extended; the C ABI is one `uint64_t` as before.
+- **Compiler**: `prepare.rs` lowers a keyed cube `Op::Tex` to
+  `SOp::Tex { layer: true }` with the face and (s, t) of `Walk::cube_face`
+  (dEQP's `selectCubeFace` order, ties included, on the un-normalised
+  |x|, |y|, |z|); `select.rs` writes TMUI (`WADDR_TMUI` = 36) after TMUT and
+  before TMUB, retires TMUSLOD (explicit level) or TMUS, no P2 word;
+  `chain.rs` lists TMUI among the look-up writes of its TMU check. The
+  unkeyed path pushes the same operations in the same order as before.
+- **Two keys**: `chain::compile_program_keyed(vs, fs, prim, target, vs_key,
+  fs_key, a)`; `compile_program` is it with no vertex key and the compile's
+  own (`shaderc::compile_lod_key`) fragment key. `codegen::link_sources`
+  takes the vertex key (`ProgramKey::vs_lod`), applies
+  `lodkey::remap_mag_switch` to the vertex module with its `mag_switch`, and
+  `backend::link_program` builds the vertex record's key (`vr.lod_key`) into
+  the program's cache key. The vertex key reaches `link_program` because the
+  GL core links the vertex VARIANT (`lod_variant_for`) with the fragment one.
+- **Sensitivity** (`backend::v3d_sensitivity`, ES 2.0 builds only): the
+  fragment program record keeps `ret32` and gains the fragment cube
+  bindings; a vertex record is sensitive to its cube bindings and, of
+  those, to the explicit-level ones for `mag_switch` (cube only: 2D vertex
+  textures keep the hardware's switch, which they pass today).
+  `online_sampler_variant` accepts `cube_noseam` on the program record;
+  `mag_switch` stays refused there (it is the vertex record's key).
+- **GL core** (`gl/draw.rs`): `stage_lod_key` sets the bit for a
+  `GL_SAMPLER_CUBE` binding by `cube_filters_see_seams` (mag LINEAR, or min
+  LINEAR / LINEAR_MIPMAP_*); on the V3D a vertex key alone now rebuilds the
+  variant's program too (`fs_rebuilt`: the program holds both stages'
+  code, so the link and the code upload run for a vertex key as for a
+  fragment one).
+- Not done: a 16th cube sampler of a stage stays seamless (bit 15), and
+  the fragment-stage FDX / FDY level fallback is not written (board-gated,
+  above).
+
+### Host evidence
+
+- tests/v3d_cube_noseamless.rs (both builds, 7 tests): every wrap pair on
+  eight directions over all six faces, the CLAMP / MIRROR / REPEAT edge
+  case against the seamless value, explicit levels (-1, 0.25, 1, 1.5) with
+  LINEAR_MIPMAP_LINEAR / NEAREST_MIPMAP_LINEAR / LINEAR on a 3-level cube,
+  a projected direction (`a_dir.xyz / a_dir.w`), a fragment look-up with a
+  bias (TMUB, TMUI, TMUS) on a one-level texture (the interpreter cannot
+  derive an implicit level, so bias on a mipmapped cube is the board's), the
+  stage isolation, and `an_unkeyed_program_is_unchanged`: FNV-1a hashes of
+  the code and uniform streams of four cube programs (vertex textureCube,
+  fragment bias, vertex textureCubeLod, cube + 2D) taken at 0252e9d, before
+  the change, equal after it, with and without `report-es2` and with a key
+  naming a binding the program has no cube at. Every reference is computed
+  in the test (Table 3.21, dEQP's `sampleLinear2D`, `wrap`).
+- backend.rs `a_v3d_cube_program_has_a_non_seamless_variant` (both builds):
+  the sensitivities (none in an ES 3 build), the variants of both stages
+  linking into a program that has `tmui` where the base has `tmuscm`.
+- draw.rs `the_cube_key_follows_the_filters`.
+
+### Pi 4 verification (one session; ES 2.0 images, `CONFIG_YAKOGL_REPORT_ES2=y` is v3d_deqp's prj.conf)
+
+The 25 cases live in three images of tools/cts/pi4-full-tree.txt: **T1**
+(`texture.vertex.*`, 181 cases: the 18 `texture.vertex.cube.{filtering,wrap}`
+cases), **T3** (`texture.mipmap.*`, 304: the 6
+`texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}`)
+and **TF** (`shaders.texture_functions.*`, 17: `vertex.texturecubelod`).
+
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
+    tools/board.sh pi4 run <T1 image: the .bin/.img under $IMG/T1/, see $IMG/T1.built> $OUT/T1   # likewise T3, TF
+    tools/board.sh pi4 tally $OUT/T1                              # likewise T3, TF
+    # or the three at once: TREE_IMAGE_DIR=$IMG tools/board.sh pi4 tree <table with those 3 rows> $OUT
+
+(`$IMG`, `$OUT` of the operator's choosing; the image path under `$IMG/<LABEL>/`
+is what `pi4-deqp-images.sh` prints; ZEPHYR_WS / DEQP_WORK as its header says.)
+Expected: T1 181 pass (or its sweep-30 tally plus the 18), T3 304 pass-count
+plus the 6, TF 17 with the one cube case now passing; no other case moves, so
+the whole tree stays at sweep 30 with the 25 moved to pass (17,100 pass, 0 fail,
+62 not supported, 3 quality warnings as RESULTS.md's sweep 30). Then
+`v3d_gl_test` unchanged (21/21, or 12/12 on the older record): its cube
+cases use NEAREST and are never keyed.
+
+Reading a failure: all 25 failing = TMUI is not taken as a float (add one
+FTOIN of the face in `prepare.rs` `cube_face`'s caller); only the six
+`filtering.nearest_mipmap_*_linear_*` failing = the TMU's mag/min switch needs
+the `mag_switch` remap (it is wired: check the vertex key reaches the link,
+`V3D_VARIANTS_BUILT` in the back end's print); only the six `mipmap.cube`
+failing with bad pixels along face edges = the fragment stage's implicit
+level needs the FDX / FDY fallback (section "The level of detail").

@@ -1382,12 +1382,22 @@ fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, 
     Some((min, mag, t.levels > 1, t.texfmt))
 }
 
+/// Can a cube sampler with these filters read past a face's edge? A LINEAR
+/// tap can (seamless on the V3D, per face in ES 2.0: `LodKey::cube_noseam`);
+/// NEAREST and NEAREST_MIPMAP_NEAREST read the selected face's texel under
+/// both rules.
+fn cube_filters_see_seams(min: GLenum, mag: GLenum) -> bool {
+    mag == GL_LINEAR || matches!(min, GL_LINEAR | GL_LINEAR_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_LINEAR)
+}
+
 /// One stage's key for this draw: of the bindings in `sense`, those whose
 /// bound sampler has no mipmap filter in use (`mip_free`: a NEAREST or
 /// LINEAR minification, or a texture of one level, `sampling_fields`' rule),
-/// those with mag LINEAR and min NEAREST_MIPMAP_* (`mag_switch`), and those
+/// those with mag LINEAR and min NEAREST_MIPMAP_* (`mag_switch`), those
 /// whose texture is stored R32F (`ret32`: a depth texture, which the V3D's
-/// TMU returns at 32 bits a channel).
+/// TMU returns at 32 bits a channel), and the cube bindings whose filters
+/// make the V3D's seamless filtering differ from ES 2.0's per-face rule
+/// (`cube_noseam`: mag LINEAR, or min LINEAR / LINEAR_MIPMAP_*).
 fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAMPLERS]) -> u64 {
     if sense == 0 {
         return 0;
@@ -1396,7 +1406,7 @@ fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAM
     let mut k = shaderc::LodKey::NONE;
     for (binding, gl_type) in sh.sampler_bindings() {
         let bit = 1u32.checked_shl(u32::from(binding)).unwrap_or(0);
-        if (s.mip_free | s.mag_switch | s.ret32) & bit == 0 || binding as usize >= CAP_SAMPLERS {
+        if (s.mip_free | s.mag_switch | s.ret32 | s.cube_noseam) & bit == 0 || binding as usize >= CAP_SAMPLERS {
             continue;
         }
         let Some((min, mag, levels, texfmt)) = binding_filters(c, units[binding as usize] as usize, gl_type) else {
@@ -1404,6 +1414,9 @@ fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAM
         };
         if s.ret32 & bit != 0 && texfmt == GLES_TEXFMT_R32F {
             k.ret32 |= bit;
+        }
+        if s.cube_noseam & bit != 0 && gl_type == GL_SAMPLER_CUBE_T && cube_filters_see_seams(min, mag) {
+            k.cube_noseam |= bit;
         }
         let mipmapped = levels
             && matches!(
@@ -1503,6 +1516,14 @@ fn free_lod_variant(pg: &mut ProgGpu, i: usize) {
     }
 }
 
+/// Is the variant's fragment shader a program of its own (linked to the
+/// variant's vertex shader, its code uploaded)? When the fragment key is set
+/// it is; on the V3D the program holds both stages' code, so a vertex key
+/// (`cube_noseam`, `mag_switch`) rebuilds it too.
+fn fs_rebuilt(key: [u64; 2]) -> bool {
+    key[1] != 0 || (cfg!(feature = "gpu-v3d") && key[0] != 0)
+}
+
 /// The variant slot for `key` (not [0, 0]): found, or compiled into a free
 /// or the least recently used slot. `None` when it cannot be had -- no
 /// such back end entry, a compile, link or upload failure: the draw then
@@ -1572,7 +1593,7 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
      * packing: linked to the vertex shader as glLinkProgram linked the
      * program's (fs_variant_for, the same reason). Key 0 is the program's
      * own, linked already. */
-    if key[1] != 0 {
+    if fs_rebuilt(key) {
         if let Some(link) = shaderc::backend().and_then(|b| b.link) {
             // SAFETY: two distinct valid shaders; the log is as long as said.
             let rc = unsafe { link(&v.vs, &mut v.fs, log.as_mut_ptr(), log.len()) };
@@ -1582,8 +1603,8 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
         }
     }
     let mut uploaded = true;
-    for (k, sh, m) in [(key[0], &v.vs, &mut v.vs_usc), (key[1], &v.fs, &mut v.fs_usc)] {
-        if k == 0 || sh.usc_dw == 0 || sh.usc.is_null() {
+    for (k, sh, m) in [(key[0] != 0, &v.vs, &mut v.vs_usc), (fs_rebuilt(key), &v.fs, &mut v.fs_usc)] {
+        if !k || sh.usc_dw == 0 || sh.usc.is_null() {
             continue;
         }
         if osal::gpu_alloc(backend::heap_base(GLES_HEAP_SHADER), sh.usc_dw as usize * 4, OSAL_MEM_DATA, m) != 0
@@ -2860,7 +2881,7 @@ fn build_common(
         if v.key[0] != 0 {
             d.vs_usc_gpu = v.vs_usc.gpu;
         }
-        if v.key[1] != 0 {
+        if fs_rebuilt(v.key) {
             d.fs_usc_gpu = v.fs_usc.gpu;
         }
     }
@@ -7946,6 +7967,27 @@ mod tests {
         crate::shaderc::shc_set_lod_variants(1, -1);
         assert_eq!(stage_code(&gl, &d, true), own, "switch (a) off: the program's own");
         let _ = t1;
+    }
+
+    /// The cube key's filter rule (`cube_filters_see_seams`): any LINEAR tap
+    /// (mag LINEAR, or min LINEAR / LINEAR_MIPMAP_*) is keyed, NEAREST with
+    /// NEAREST or NEAREST_MIPMAP_NEAREST is not, and NEAREST_MIPMAP_LINEAR
+    /// is keyed only by a LINEAR mag filter (its taps are NEAREST texels).
+    #[test]
+    fn the_cube_key_follows_the_filters() {
+        for (min, mag, keyed) in [
+            (GL_NEAREST, GL_NEAREST, false),
+            (GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST, false),
+            (GL_NEAREST_MIPMAP_LINEAR, GL_NEAREST, false),
+            (GL_NEAREST_MIPMAP_LINEAR, GL_LINEAR, true),
+            (GL_NEAREST, GL_LINEAR, true),
+            (GL_LINEAR, GL_NEAREST, true),
+            (GL_LINEAR_MIPMAP_NEAREST, GL_NEAREST, true),
+            (GL_LINEAR_MIPMAP_LINEAR, GL_NEAREST, true),
+            (GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, true),
+        ] {
+            assert_eq!(cube_filters_see_seams(min, mag), keyed, "min {min:#x} mag {mag:#x}");
+        }
     }
 
     /// `LodKey::ret32` from the draw's state: of the bindings the
