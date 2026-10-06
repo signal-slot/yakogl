@@ -684,11 +684,10 @@ fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
 }
 
 /// ES 3.0 lets colour attachments differ in size (4.4.4.2); the render area
-/// is their intersection. The pixel engine clips to RT 0 alone, so with the
-/// MRT switch on a later target smaller than RT 0 in either dimension is
-/// refused by name (review R-02) and counted; one at least as large is
-/// drawn; with the switch off only RT 0 is written and nothing is refused.
-/// Revert check: without the refusal the first draw goes in.
+/// is their intersection. The pixel engine clips to RT 0 alone, so a later
+/// target smaller than RT 0 in either dimension is refused by name (review
+/// R-02) and counted; one at least as large is drawn. Revert check: without
+/// the refusal the first draw goes in.
 #[test]
 fn a_later_target_smaller_than_the_first_is_refused() {
     let rig = Rig::new();
@@ -696,7 +695,6 @@ fn a_later_target_smaller_than_the_first_is_refused() {
     let mut d = rig.draw(3);
     d.num_targets = 2;
     d.targets[1] = GlesDrawTarget { gpu: TARGET_GPU + 0x10_0000, w: 64, h: 32, format: d.target_format };
-    gc_debug_set_mrt(1);
     // SAFETY: a live draw.
     let smaller = unsafe { gc_draw(&d) };
     d.targets[1].h = 64;
@@ -705,11 +703,7 @@ fn a_later_target_smaller_than_the_first_is_refused() {
     d.targets[1].w = 128;
     // SAFETY: a live draw.
     let larger = unsafe { gc_draw(&d) };
-    gc_debug_set_mrt(0);
-    d.targets[1].w = 16;
-    // SAFETY: a live draw.
-    let off = unsafe { gc_draw(&d) };
-    assert_eq!((smaller, same, larger, off), (-crate::util::ENOTSUP, 0, 0, 0));
+    assert_eq!((smaller, same, larger), (-crate::util::ENOTSUP, 0, 0));
     assert_eq!(gc_refused_draws().wrapping_sub(base), 1);
     let logs = rig._gl.logs();
     assert!(logs.iter().any(|l| l.contains("smaller than the first")), "{logs:?}");
@@ -1982,21 +1976,12 @@ fn a_one_level_cube_and_a_mipmapped_2d_texture_are_sampled_as_they_are() {
     }
 }
 
-/// `gc_debug_vs_tiled`: a mipmapped 2D texture the VERTEX stage samples is
-/// read from a tiled copy (Mesa's layout for every sampler; golden mode 26),
-/// the same texture in the fragment stage alone keeps its linear storage, and
-/// with the switch off (the default) both are linear. Every dEQP
-/// texture.vertex.2d case fails on the i.MX8MP over linear storage.
+/// A mipmapped 2D texture the VERTEX stage samples is read from a tiled
+/// copy (Mesa's layout for every sampler; golden mode 26), and the same
+/// texture in the fragment stage alone keeps its linear storage.
 #[test]
-fn under_the_switch_a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
-    struct Off;
-    impl Drop for Off {
-        fn drop(&mut self) {
-            gc_debug_set_vs_tiled(0);
-        }
-    }
+fn a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
     let rig = Rig::new();
-    let _off = Off;
     let (mem2d, mut t) = linear_cube(0);
     t.type_ = GLES_TEXTYPE_2D;
     t.layers = 1;
@@ -2010,10 +1995,6 @@ fn under_the_switch_a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
         d
     };
 
-    let off = rig.submit(&vs_draw()).descriptor(0);
-    assert_eq!((addressing(&off), lod0(&off)), (GC_TEX_ADDRESSING_LINEAR, t.base_gpu), "off: as it is");
-
-    gc_debug_set_vs_tiled(1);
     let mut fs = rig.draw(3);
     fs.num_textures = 1;
     fs.textures[0] = t;
@@ -2021,11 +2002,11 @@ fn under_the_switch_a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
     assert_eq!(
         (addressing(&fs_only), lod0(&fs_only)),
         (GC_TEX_ADDRESSING_LINEAR, t.base_gpu),
-        "on, fragment stage only: no copy is made for it"
+        "fragment stage only: no copy is made for it"
     );
     let on = rig.submit(&vs_draw()).descriptor(0);
     assert_eq!(addressing(&on), GC_TEX_ADDRESSING_TILED, "CONFIG0 0x{:08x}", on[GC_TEXDESC_CONFIG0 as usize / 4]);
-    assert_ne!(lod0(&on), t.base_gpu, "on, vertex stage: the copy");
+    assert_ne!(lod0(&on), t.base_gpu, "vertex stage: the copy");
     /* level 0 of the copy holds texel (x, y) in its 4x4 tile: 16 wide is
      * four tiles across */
     let copy = gpu_bytes(lod0(&on), 16 * 16 * 4);
@@ -2036,20 +2017,12 @@ fn under_the_switch_a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
     }
 }
 
-/// `gc_debug_int_filter`: SAMP_CTRL0 bit 23 on a UNORM, non-3D texture's
-/// sampler in either stage, as Mesa's texture_use_int_filter sets it (golden
-/// mode 26), never on a float format or a 3D texture, and never with the
-/// switch off (the default).
+/// INT_FILTER (SAMP_CTRL0 bit 23) on a UNORM, non-3D texture's sampler in
+/// either stage, as Mesa's texture_use_int_filter sets it (golden mode 26),
+/// never on a float format or a 3D texture.
 #[test]
-fn under_the_switch_a_unorm_sampler_takes_int_filter() {
-    struct Off;
-    impl Drop for Off {
-        fn drop(&mut self) {
-            gc_debug_set_int_filter(0);
-        }
-    }
+fn a_unorm_sampler_takes_int_filter() {
     let rig = Rig::new();
-    let _off = Off;
     let ctrl0 = |t: GlesTextureBind, vs: bool| {
         let mut d = rig.draw(3);
         if vs {
@@ -2068,12 +2041,10 @@ fn under_the_switch_a_unorm_sampler_takes_int_filter() {
     vol.type_ = GLES_TEXTYPE_3D;
     vol.layers = 2;
 
-    assert_eq!(ctrl0(rgba, false) & GC_SAMP_INT_FILTER, 0, "off");
-    gc_debug_set_int_filter(1);
-    assert_ne!(ctrl0(rgba, false) & GC_SAMP_INT_FILTER, 0, "on, RGBA8, fragment stage");
-    assert_ne!(ctrl0(rgba, true) & GC_SAMP_INT_FILTER, 0, "on, RGBA8, vertex stage");
-    assert_eq!(ctrl0(half, false) & GC_SAMP_INT_FILTER, 0, "on, RGBA16F: not UNORM");
-    assert_eq!(ctrl0(vol, false) & GC_SAMP_INT_FILTER, 0, "on, a 3D texture");
+    assert_ne!(ctrl0(rgba, false) & GC_SAMP_INT_FILTER, 0, "RGBA8, fragment stage");
+    assert_ne!(ctrl0(rgba, true) & GC_SAMP_INT_FILTER, 0, "RGBA8, vertex stage");
+    assert_eq!(ctrl0(half, false) & GC_SAMP_INT_FILTER, 0, "RGBA16F: not UNORM");
+    assert_eq!(ctrl0(vol, false) & GC_SAMP_INT_FILTER, 0, "a 3D texture");
 }
 
 /// An ETC1 binding as the GL core makes one since 43f99f47: level-major,
@@ -2970,14 +2941,13 @@ fn a_declared_sampler_with_nothing_bound_reads_the_black_texel() {
     assert_eq!(unbound.reg(GC_VS_SAMPLER_BASE), 1, "the vertex slots after the declared one");
 }
 
-/// Draw buffers (MRT step 2). With gc_debug_mrt off a draw given four targets
-/// programs exactly what a one-target draw does. On, RT1..3 get the 8-RT
-/// bank as etnaviv programs it -- address, stride and format, the draw's
+/// Draw buffers (MRT step 2). A draw given four targets programs RT1..3 in
+/// the 8-RT bank as etnaviv does -- address, stride and format, the draw's
 /// colour mask and blend -- PS_OUTPUT_REG names each target's register from
 /// the shader's output rows, PS_CONTROL counts and saturates all four; and a
 /// one-target draw after it is back to RT_COUNT(0) with no bank write.
 #[test]
-fn draw_buffers_program_the_8_rt_bank_only_when_switched_on() {
+fn draw_buffers_program_the_8_rt_bank() {
     let rig = Rig::new();
     let bank = |st: &Stream| {
         let mut v = std::vec::Vec::new();
@@ -2986,11 +2956,6 @@ fn draw_buffers_program_the_8_rt_bank_only_when_switched_on() {
                 v.push((r, w));
             }
         });
-        v
-    };
-    let all = |st: &Stream| {
-        let mut v = std::vec::Vec::new();
-        walk(&st.0, |r, w, _| v.push((r, w)));
         v
     };
     let mut fs = *rig.fs;
@@ -3008,18 +2973,10 @@ fn draw_buffers_program_the_8_rt_bank_only_when_switched_on() {
     }
     let _ = rig.submit(&rig.draw(3)); /* past the first draw's one-off writes */
 
-    /* off: four targets given, one programmed -- the stream a one-target
-     * draw of the same shader has */
     let mut one = d;
     one.num_targets = 1;
-    let off = rig.submit(&d);
-    assert!(bank(&off).is_empty(), "no 8-RT bank write with the switch off: {:x?}", bank(&off));
-    assert_eq!(all(&off), all(&rig.submit(&one)), "off: exactly the one-target stream");
-
-    gc_debug_set_mrt(1);
     let on = rig.submit(&d);
     let after = rig.submit(&one);
-    gc_debug_set_mrt(0);
 
     let (fmt, _) = pe_color_format(d.target_format);
     let pitch = 64 * gles_surf_bytes_per_pixel(d.target_format);
@@ -3069,9 +3026,7 @@ fn a_draw_buffer_with_no_target_is_skipped_and_the_next_moves_down() {
     d.targets[2] = GlesDrawTarget { gpu: C_GPU, w: 128, h: 128, format: d.target_format };
     let _ = rig.submit(&rig.draw(3)); /* past the first draw's one-off writes */
 
-    gc_debug_set_mrt(1);
     let holed = rig.submit(&d);
-    gc_debug_set_mrt(0);
 
     let written = |st: &Stream, reg: u32| {
         let mut n = 0;
@@ -3376,14 +3331,12 @@ fn a_clear_writes_only_the_draw_buffers_its_mask_names() {
     d.targets[1] = GlesDrawTarget { gpu: TARGET_GPU + 0x10_0000, w: 63, h: 64, format: d.target_format };
     let rt0 = |s: &Stream| (s.reg(GC_PE_COLOR_FORMAT) >> 8) & 0xf;
     let rt1 = |s: &Stream| (s.reg(pe_halti5_rt_colormask(1)) >> 4) & 0xf;
-    gc_debug_set_mrt(1);
     let mut seen = std::vec::Vec::new();
     for mask in [0u8, 0b10, 0b01, 0x80] {
         d.clear_target_mask = mask;
         let st = rig.submit(&d);
         seen.push((mask, rt0(&st), rt1(&st), st.reg(pe_rt_config_8(1))));
     }
-    gc_debug_set_mrt(0);
     let (fmt, _) = pe_color_format(d.target_format);
     let cfg = rt_config_stride(64 * gles_surf_bytes_per_pixel(d.target_format)) | rt_config_format(fmt);
     assert_eq!(
@@ -3852,18 +3805,16 @@ fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
     assert_eq!(fallback.reg(GC_PE_COLOR_STRIDE), w * bpp);
 }
 
-/// YAKOGL_GC_DESC_SEQ: the default is bit 1 alone (every descriptor address
-/// of the draw, then every invalidate: Mesa's order, the i.MX8MP stale
-/// vertex descriptor fix); each bit puts its own sequence in the stream, in
-/// the documented place, and 0 is the old order (each invalidate right after
-/// its own address), the control arm. A draw with
-/// fragment units 0 and 1 and vertex unit 0 (slot 2) is recorded from its
-/// first NTE_DESCRIPTOR_ADDR write to the draw command, keeping only the
-/// registers the switch touches: the addresses, the invalidates, the
-/// descriptor flush, GL_FLUSH_CACHE and the stall tokens.
+/// A draw's descriptor writes are Mesa's order (the i.MX8MP stale vertex
+/// descriptor fix): every descriptor address of the draw, then every
+/// invalidate in slot order, then emit_draw's RA-PE stall before the draw --
+/// no flush or stall between them. A draw with fragment units 0 and 1 and
+/// vertex unit 0 (slot 2) is recorded from its first NTE_DESCRIPTOR_ADDR
+/// write to the draw command, keeping only the addresses, the invalidates,
+/// the descriptor flush, GL_FLUSH_CACHE and the stall tokens. A draw with no
+/// texture writes no invalidate.
 #[test]
-fn desc_seq_default_is_mesa_order_and_each_bit_emits_its_sequence() {
-    use super::texture::desc_seq_emits;
+fn descriptor_addresses_come_first_then_every_invalidate() {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Ev {
         Addr(u32),
@@ -3937,72 +3888,15 @@ fn desc_seq_default_is_mesa_order_and_each_bit_emits_its_sequence() {
     d.textures[1] = tex(1);
     d.num_vs_textures = 1;
     d.vs_textures[0] = tex(0);
-    let default = desc_seq();
-    let record = || {
-        let before = desc_seq_emits();
-        let ev = events(&rig.submit(&d));
-        let after = desc_seq_emits();
-        let counted: Vec<u32> = (0..4).map(|k| after[k] - before[k]).collect();
-        (ev, counted)
-    };
-    /* the default, as a process starts, before any setter ran */
-    let (untouched, untouched_n) = record();
-    let run = |bits: u32| {
-        assert_eq!(gc_debug_set_desc_seq(bits), 0);
-        let r = record();
-        assert_eq!(gc_debug_set_desc_seq(GC_DESC_SEQ_MESA_ORDER), 0);
-        r
-    };
+    let got = events(&rig.submit(&d));
+    assert_eq!(
+        got,
+        [Addr(0), Addr(1), Addr(2), Inval(0), Inval(1), Inval(2), Stall(GC_SYNC_RA, GC_SYNC_PE)],
+        "all addresses, then all invalidates, then emit_draw's stall"
+    );
 
-    /* 0: each slot's invalidate follows its address, as before */
-    let (off, n) = run(0);
-    let per_slot = [Addr(0), Inval(0), Addr(1), Inval(1), Addr(2), Inval(2)];
-    assert_eq!(off[..6], per_slot, "0: address then invalidate per slot: {off:?}");
-    assert_eq!(n, [0, 0, 0, 0], "0: no part of the sequence counted");
-    /* what emit_draw puts after the textures (its RA-PE stall before the
-     * draw), the same in every arm */
-    let tail = off[6..].to_vec();
-    assert_eq!(tail, [Stall(GC_SYNC_RA, GC_SYNC_PE)], "0: only emit_draw's stall before the draw: {off:?}");
-    let with = |mid: &[Ev]| -> Vec<Ev> { mid.iter().chain(tail.iter()).copied().collect() };
-
-    let mesa = [Addr(0), Addr(1), Addr(2), Inval(0), Inval(1), Inval(2)];
-    let desc = [DescFlush, Flush(GC_FLUSH_DESCRIPTOR)];
-    let texf = [Flush(GC_FLUSH_TEXTURE), Flush(GC_FLUSH_TEXTUREVS), Stall(GC_SYNC_RA, GC_SYNC_PE)];
-    let fepe = [Stall(GC_SYNC_FE, GC_SYNC_PE)];
-    let cases: [(u32, Vec<Ev>, [u32; 4]); 5] = [
-        (GC_DESC_SEQ_MESA_ORDER, with(&mesa), [1, 0, 0, 0]),
-        (GC_DESC_SEQ_TEX_FLUSH, with(&[&per_slot[..], &texf].concat()), [0, 1, 0, 0]),
-        (GC_DESC_SEQ_DESC_FLUSH, with(&[&per_slot[..], &desc].concat()), [0, 0, 1, 0]),
-        (GC_DESC_SEQ_FE_PE_STALL, with(&[&per_slot[..], &fepe].concat()), [0, 0, 0, 1]),
-        (GC_DESC_SEQ_ALL, with(&[&mesa[..], &desc, &texf, &fepe].concat()), [1, 1, 1, 1]),
-    ];
-    for (bits, want, counted) in cases {
-        let (got, n) = run(bits);
-        assert_eq!(got, want, "bits 0x{bits:x}");
-        assert_eq!(n, counted, "bits 0x{bits:x}: the counters of the parts emitted");
-    }
-    assert_eq!(run(0).0, off, "0 again: the old order");
-
-    /* the default is bit 1 alone: Mesa's order, counted */
-    assert_eq!(default, GC_DESC_SEQ_MESA_ORDER, "the default sequence");
-    assert_eq!(untouched, with(&mesa), "the default: all addresses, then all invalidates");
-    assert_eq!(untouched_n, [1, 0, 0, 0], "the default: the mesa-order counter moves");
-
-    /* a draw that writes no descriptor gets nothing from any bit */
-    let plain = rig.draw(3);
-    let words = |bits: u32| {
-        assert_eq!(gc_debug_set_desc_seq(bits), 0);
-        let before = desc_seq_emits();
-        let s = rig.submit(&plain);
-        assert_eq!(gc_debug_set_desc_seq(GC_DESC_SEQ_MESA_ORDER), 0);
-        assert_eq!(desc_seq_emits(), before, "bits 0x{bits:x}: nothing counted for a draw without a descriptor");
-        s.0
-    };
-    assert_eq!(words(GC_DESC_SEQ_ALL), words(0), "no descriptor written: the stream is unchanged");
-
-    /* a bit the switch does not know is refused and changes nothing */
-    assert_eq!(gc_debug_set_desc_seq(GC_DESC_SEQ_TEX_FLUSH), 0);
-    assert_eq!(gc_debug_set_desc_seq(0x10), -1);
-    assert_eq!(desc_seq(), GC_DESC_SEQ_TEX_FLUSH, "a refused value leaves the switch as it was");
-    assert_eq!(gc_debug_set_desc_seq(GC_DESC_SEQ_MESA_ORDER), 0);
+    /* a draw that writes no descriptor writes no invalidate either */
+    let mut invals = 0;
+    walk(&rig.submit(&rig.draw(3)).0, |r, _, _| invals += usize::from(r == GC_NTE_DESCRIPTOR_INVALIDATE));
+    assert_eq!(invals, 0);
 }

@@ -319,72 +319,21 @@ fn msaa_bits() -> i32 {
     }
 }
 
-/// A plain 2D texture the vertex stage samples is sampled from a tiled copy
-/// (tiled_copy.rs `wanted_vs`) rather than its linear storage. Default 0,
-/// the off arm, until the board has measured it: every dEQP
-/// texture.vertex.2d case fails on the i.MX8MP (55b849ec) while the cube
-/// cases, already sampled from the copy, pass, and Mesa resolves every
-/// texture into a TILED one before this core's vertex stage reads it
-/// (tools/vivante golden mode 26). texture_functions.vertex.texture2dlod
-/// passes over a linear 2D texture, so the layout is the hypothesis, not a
-/// finding; 1 is the arm that tests it.
-#[no_mangle]
-pub static mut gc_debug_vs_tiled: i32 = 0;
-
-/// SAMP_CTRL0's INT_FILTER on every sampler of a UNORM texel format that is
-/// not a 3D texture (texture.rs `int_filter_wanted`), as Mesa sets it
-/// (etnaviv_format.c texture_use_int_filter, reached from
-/// etnaviv_texture_desc.c; golden mode 26 carries it on the vertex-stage
-/// sampler, we never did). Default 0 until the board has measured it: it
-/// is in EVERY such sampler, fragment stage included, so it can move
-/// fragment-stage results too. The GL core stores a depth texture in RGBA8
-/// and the binding does not say so, so a depth texture gets the bit here
-/// where Mesa leaves it off.
-#[no_mangle]
-pub static mut gc_debug_int_filter: i32 = 0;
-
-/// Set [`gc_debug_int_filter`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_int_filter(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_int_filter).write(on) }
-}
-
-/// Is [`gc_debug_int_filter`] on?
-pub fn int_filter_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_int_filter).read() }) != 0
-}
-
-/// Set [`gc_debug_vs_tiled`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_vs_tiled(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_vs_tiled).write(on) }
-}
-
-/// Is [`gc_debug_vs_tiled`] on?
-pub fn vs_tiled_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_vs_tiled).read() }) != 0
-}
-
-/// GL_LUMINANCE, GL_ALPHA and GL_LUMINANCE_ALPHA textures stored narrow (one
-/// and two bytes a texel: GLES_TEXFMT_L8 / A8 / LA8) and sampled with the
-/// texture unit's own L8 / A8 / A8L8 formats, as Mesa does, instead of
+/// GL_LUMINANCE, GL_ALPHA and GL_LUMINANCE_ALPHA textures are stored narrow
+/// (one and two bytes a texel: GLES_TEXFMT_L8 / A8 / LA8) and sampled with
+/// the texture unit's own L8 / A8 / A8L8 formats, as Mesa does, instead of
 /// expanded into RGBA8 -- a quarter of the memory for a 2048x2048 L8 chain
-/// (dEQP texture.size's 2048 cases, 22 MiB as RGBA8). Off until the board
-/// has measured it: the linear pitch of a one- and two-byte texel (a
-/// 1-texel-wide level is a 2-byte row) is unmeasured on this core; gl_test
-/// 132 runs both arms. A test knob: it and its setter exist only with the
-/// `test-knobs` feature, and without it the store is always RGBA8.
+/// (dEQP texture.size's 2048 cases, 22 MiB as RGBA8). gl_test 132 draws both
+/// stores right on the i.MX8MP (RESULTS, 4f40f622 run 4). With the
+/// `test-knobs` feature, `gc_debug_set_narrow_la(0)` selects the RGBA8 store
+/// again, for case 132's second arm; a texture keeps the store it was
+/// specified with.
 #[cfg(feature = "test-knobs")]
 #[no_mangle]
-pub static mut gc_debug_narrow_la: i32 = 0;
+pub static mut gc_debug_narrow_la: i32 = 1;
 
 /// Set [`gc_debug_narrow_la`]; returns the previous value (gl_test 132 runs
-/// both arms and puts it back, as the PowerVR's `pvr_narrow_la`). A texture
-/// keeps the store it was specified with.
+/// both arms and puts it back, as the PowerVR's `pvr_narrow_la`).
 #[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub extern "C" fn gc_debug_set_narrow_la(on: i32) -> i32 {
@@ -392,16 +341,18 @@ pub extern "C" fn gc_debug_set_narrow_la(on: i32) -> i32 {
     unsafe { core::ptr::addr_of_mut!(gc_debug_narrow_la).replace(on) }
 }
 
-/// Is `gc_debug_narrow_la` on? Never in a build without `test-knobs`.
+/// Are L8 / A8 / LA8 stored narrow? Always, unless a `test-knobs` build has
+/// set `gc_debug_narrow_la` to 0.
 pub fn narrow_la_on() -> bool {
     #[cfg(feature = "test-knobs")]
     {
-        // SAFETY: as for gc_debug_msaa; a plain read.
+        // SAFETY: single-threaded by contract; a plain read of an int only
+        // the setter writes.
         (unsafe { core::ptr::addr_of!(gc_debug_narrow_la).read() }) != 0
     }
     #[cfg(not(feature = "test-knobs"))]
     {
-        false
+        true
     }
 }
 
@@ -430,91 +381,6 @@ fn clear_components(d: &GlesDraw, clear_color: bool) -> u32 {
     }
 }
 
-/// How a draw's texture descriptor writes are ordered and fenced, as a
-/// bitmask. texture.rs `emit_desc_seq` emits it, and each bit counts the draws
-/// it changed (`texture::desc_seq_emits`).
-///
-/// The default is [`GC_DESC_SEQ_MESA_ORDER`] alone: on the i.MX8MP (GC7000UL)
-/// a slot whose INVALIDATE followed its own ADDR write, interleaved with the
-/// next slot's, was sometimes read with the previous draw's descriptor; the
-/// vertex sampler sampled a stale texture and dEQP uniform_api's two
-/// sampler2D_samplerCube_both render cases hung the GPU. Mesa writes every
-/// address first and then every invalidate (etnaviv_texture_desc.c 605-610,
-/// Mesa main c8ce6c8bdfbb). With that order the board (gclab sampler_split)
-/// drew F3V1 240/240 and F4V1 150/150 right with 0 GPU recoveries, where the
-/// old order drew vec4w 0/5 right with 5 recoveries; dEQP uniform_api went
-/// from 1250 pass / 2 fail to 1252 / 0 (records/imx8mp/sampler-desc-seq/:
-/// table.txt sha256 83df2f1cf99ddc8e, regression-seq1.txt ae3588e340f0049f).
-/// 0 is the old order, kept as the control arm of that A/B
-/// (YAKOGL_GC_DESC_SEQ=0, CONFIG_GC_GL_TEST_DESC_SEQ=0).
-/// - [`GC_DESC_SEQ_MESA_ORDER`] (1): every NTE_DESCRIPTOR_ADDR write of the
-///   draw first, then every INVALIDATE in slot order; off, each slot's
-///   INVALIDATE follows its own ADDR write.
-/// - [`GC_DESC_SEQ_TEX_FLUSH`] (2): GL_FLUSH_CACHE TEXTURE, then TEXTUREVS,
-///   then an RA-PE stall, after the descriptor writes (Mesa emits this triple
-///   before them, etnaviv_emit.c 268-293, as our emit_flushes does).
-/// - [`GC_DESC_SEQ_DESC_FLUSH`] (4): NTE_DESCRIPTOR_FLUSH and GL_FLUSH_CACHE
-///   DESCRIPTOR after the descriptor writes (both sides emit the pair only at
-///   stream start: our emit_context_init).
-/// - [`GC_DESC_SEQ_FE_PE_STALL`] (8): an FE-PE stall after the descriptor
-///   writes (both sides stall before them: etnaviv_emit.c 727-731, our
-///   emit_draw).
-///
-/// Bits 2, 4 and 8 are A/B arms only: on the board bit 4 did not remove the
-/// stale descriptor, bit 8 did by stalling, bit 2 in part.
-#[no_mangle]
-pub static mut gc_debug_desc_seq: u32 = GC_DESC_SEQ_MESA_ORDER;
-
-/// [`gc_debug_desc_seq`] bit 1: all addresses, then all invalidates.
-pub const GC_DESC_SEQ_MESA_ORDER: u32 = 1;
-/// [`gc_debug_desc_seq`] bit 2: texture cache flushes + RA-PE stall after.
-pub const GC_DESC_SEQ_TEX_FLUSH: u32 = 2;
-/// [`gc_debug_desc_seq`] bit 4: descriptor cache flush after.
-pub const GC_DESC_SEQ_DESC_FLUSH: u32 = 4;
-/// [`gc_debug_desc_seq`] bit 8: FE-PE stall after.
-pub const GC_DESC_SEQ_FE_PE_STALL: u32 = 8;
-/// Every bit [`gc_debug_desc_seq`] knows.
-pub const GC_DESC_SEQ_ALL: u32 =
-    GC_DESC_SEQ_MESA_ORDER | GC_DESC_SEQ_TEX_FLUSH | GC_DESC_SEQ_DESC_FLUSH | GC_DESC_SEQ_FE_PE_STALL;
-
-/// Set [`gc_debug_desc_seq`]. -1, and the value is left as it was, when
-/// `bits` holds a bit outside [`GC_DESC_SEQ_ALL`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_desc_seq(bits: u32) -> i32 {
-    if bits & !GC_DESC_SEQ_ALL != 0 {
-        return -1;
-    }
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_desc_seq).write(bits) }
-    0
-}
-
-/// [`gc_debug_desc_seq`]'s value.
-pub(crate) fn desc_seq() -> u32 {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    unsafe { core::ptr::addr_of!(gc_debug_desc_seq).read() }
-}
-
-/// Draw buffers (MRT step 2): with this on, a draw writes every render target
-/// the GL core gives it (`GlesDraw::targets`, up to four), programming RT1..3
-/// in the 8-RT bank; off, RT0 only, as before. Off by default until the board
-/// has measured it (gl_test 106).
-#[no_mangle]
-pub static mut gc_debug_mrt: i32 = 0;
-
-/// Set [`gc_debug_mrt`].
-#[no_mangle]
-pub extern "C" fn gc_debug_set_mrt(on: i32) {
-    // SAFETY: single-threaded by contract; a plain store of an int.
-    unsafe { core::ptr::addr_of_mut!(gc_debug_mrt).write(on) }
-}
-
-/// Is [`gc_debug_mrt`] on?
-pub fn mrt_on() -> bool {
-    // SAFETY: as for gc_debug_msaa; a plain read.
-    (unsafe { core::ptr::addr_of!(gc_debug_mrt).read() }) != 0
-}
-
 /// Does draw buffer `rt` take this draw's colour clear? `clear_target_mask`
 /// 0 is every target (glClear), bit n draw buffer n alone
 /// (glClearBuffer(GL_COLOR, n)), and 0x80 none at all (glClear with every
@@ -524,14 +390,13 @@ fn clear_takes(gl: &GlesDraw, rt: usize) -> bool {
     m == 0 || (m & 0x80 == 0 && m & (1 << rt) != 0)
 }
 
-/// How many render targets this draw writes: the GL core's, up to the four
-/// this core drives, with [`gc_debug_mrt`] on; one otherwise.
+/// How many render targets this draw writes: every one the GL core gives it
+/// (`GlesDraw::targets`), up to the four this core drives. RT0 is the
+/// colour surface; RT1..3 are programmed in the 8-RT bank as Mesa's etnaviv
+/// does (address, stride, format, the draw's colour mask and blend), and
+/// PS_OUTPUT_REG names each target's register from the shader's output rows.
 pub fn mrt_targets(gl: &GlesDraw) -> usize {
-    if mrt_on() {
-        (gl.num_targets as usize).clamp(1, 4)
-    } else {
-        1
-    }
+    (gl.num_targets as usize).clamp(1, 4)
 }
 
 /// The draw buffers this draw programs as hardware render targets, in
@@ -1590,7 +1455,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     };
     c.state(GC_PE_COLOR_STRIDE, stride);
 
-    /* Render targets 1..3 (gc_debug_mrt): the 8-RT bank, index rt - 1, as
+    /* Render targets 1..3: the 8-RT bank, index rt - 1, as
      * etnaviv programs it for a HALTI2+ core (etnaviv_state.c:250-420,
      * etnaviv_emit.c, etnaviv_blend.c:150-200). ES 3.0 has one colour mask
      * and one blend state for every draw buffer, so each target takes RT0's.

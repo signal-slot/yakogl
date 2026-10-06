@@ -47,16 +47,18 @@ This image selects `CONFIG_YAKOGL_TEST_KNOBS` (`GC_GL_TEST_KNOBS`, Kconfig),
 the library's `test-knobs` feature: the GC7000 switches and probes the suite
 sets to run an experiment's arms. Today `gc_debug_set_msaa` and the 4x
 scratch probes (case 16, `CONFIG_GC_GL_TEST_MSAA`),
-`gc_debug_set_narrow_la` (case 132's two arms) and
+`gc_debug_set_narrow_la` (case 132's RGBA8 arm; the narrow store is the
+default) and
 `gc_debug_set_flip_experiment` (case 88 rsflip). gl_test.c calls
 them only under that define, and a product image has none of them
 (tools/check.sh, "no test knob in the artefact").
 
-The A/B options for behaviour the board has settled are gone with their
+The A/B options for behaviour that is now the design are gone with their
 switches (2026-10-06): `GC_GL_TEST_MASKED_CLEAR`, `GC_GL_TEST_VS_UNITS16`,
-`GC_GL_TEST_NO_FIRST_COMPONENT_USE` and `GC_GL_TEST_NO_BLACK_UNBOUND`.
-Each image ran its default, which is now the only behaviour; a run script
-that still passes one of them stops at Kconfig.
+`GC_GL_TEST_NO_FIRST_COMPONENT_USE`, `GC_GL_TEST_NO_BLACK_UNBOUND`,
+`GC_GL_TEST_MRT` (every colour attachment is written; case 106 no longer
+skips) and `GC_GL_TEST_DESC_SEQ` (Mesa's descriptor order, its default). A
+run script that still passes one of them stops at Kconfig.
 
 ## Reading a run
 

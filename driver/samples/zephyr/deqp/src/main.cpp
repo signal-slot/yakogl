@@ -24,18 +24,6 @@ extern "C" {
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include "sample_glue.h"
-#ifdef CONFIG_DEQP_GC_MRT
-void gc_debug_set_mrt(int on);
-#endif
-#ifdef CONFIG_DEQP_GC_VS_TILED
-void gc_debug_set_vs_tiled(int on);
-#endif
-#ifdef CONFIG_DEQP_GC_INT_FILTER
-void gc_debug_set_int_filter(int on);
-#endif
-#ifdef CONFIG_DEQP_GC_NARROW_LA
-int gc_debug_set_narrow_la(int on);
-#endif
 #ifdef CONFIG_YAKOGL_GPU_POWERVR
 #include "pvr/pvr_backend.h"   /* pvr_backend_set_option, PVR_BACKEND_OPT_* */
 void pvr_debug_set_masked_clear(int on);
@@ -151,22 +139,6 @@ extern "C" int main(void)
     printk("deqp: case filter '%s'\n", argv[1] + sizeof("--deqp-case=") - 1);
 #else
     printk("deqp: case filter '%s'\n", CONFIG_DEQP_CASE);
-#endif
-#ifdef CONFIG_DEQP_GC_MRT
-    gc_debug_set_mrt(1);
-    printk("deqp: gc_debug_mrt=1 (every colour attachment is written)\n");
-#endif
-#ifdef CONFIG_DEQP_GC_VS_TILED
-    gc_debug_set_vs_tiled(1);
-    printk("deqp: gc_debug_vs_tiled=1 (vertex-stage 2D textures from a tiled copy)\n");
-#endif
-#ifdef CONFIG_DEQP_GC_INT_FILTER
-    gc_debug_set_int_filter(1);
-    printk("deqp: gc_debug_int_filter=1 (INT_FILTER on UNORM samplers)\n");
-#endif
-#ifdef CONFIG_DEQP_GC_NARROW_LA
-    gc_debug_set_narrow_la(1);
-    printk("deqp: gc_debug_narrow_la=1 (L8/A8/LA8 stored narrow)\n");
 #endif
 #ifdef CONFIG_YAKOGL_GPU_POWERVR
     /* on by default (board-verified); n is the off arm of an A/B */

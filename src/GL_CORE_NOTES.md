@@ -489,7 +489,7 @@ entry keeps its ES 3.0 rules for whoever resolves it anyway.
   area that can fit in all of the attachments", so the default build
   calls it complete and each draw target carries its own size. The PowerVR
   clips every PBE target to its own size; the V3D refuses unequal sizes by
-  name; the GC7000's MRT path (behind `gc_debug_mrt`) clips once, to RT 0
+  name; the GC7000's MRT path clips once, to RT 0
   (`clip_rect`), so it refuses a later target smaller than RT 0 by name (`a
   colour attachment past the first is smaller than the first`, review R-02)
   and draws one at least as large. Its single SE scissor could clip to the

@@ -1259,7 +1259,7 @@ pub fn builtin_constant(name: &str, es3: bool) -> Option<i64> {
         /* Section 7.3 defines them from the component limits. */
         "gl_MaxVertexOutputVectors" if es3 => (crate::gl::context::MAX_VERTEX_OUTPUT_COMPONENTS / 4) as i64,
         "gl_MaxFragmentInputVectors" if es3 => (crate::gl::context::MAX_FRAGMENT_INPUT_COMPONENTS / 4) as i64,
-        "gl_MaxDrawBuffers" => crate::gl::context::max_draw_buffers() as i64,
+        "gl_MaxDrawBuffers" => crate::gl::context::MAX_DRAW_BUFFERS as i64,
         "gl_MinProgramTexelOffset" if es3 => crate::gl::context::MIN_PROGRAM_TEXEL_OFFSET as i64,
         "gl_MaxProgramTexelOffset" if es3 => crate::gl::context::MAX_PROGRAM_TEXEL_OFFSET as i64,
         _ => return None,

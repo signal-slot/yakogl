@@ -76,7 +76,7 @@ fn format_of(format: u8) -> GcTexfmt {
 
     match format {
         GLES_TEXFMT_RGB565 => f.format = GC_TEX_FORMAT_R5G6B5,
-        /* the GL core stores these narrow only under gc_debug_narrow_la */
+        /* the GL core's narrow store of L8 / A8 / LA8 */
         GLES_TEXFMT_L8 => f.format = GC_TEX_FORMAT_L8,
         GLES_TEXFMT_A8 => f.format = GC_TEX_FORMAT_A8,
         GLES_TEXFMT_LA8 => f.format = GC_TEX_FORMAT_A8L8,
@@ -288,15 +288,17 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
 /// Sampler state and the descriptor address for one hardware slot. Takes the
 /// whole frame rather than its command writer: the descriptor is built in the
 /// frame's arena first, and the two borrows are one after the other.
-/// Does `t`'s sampler take INT_FILTER, under `gc_debug_int_filter`? Mesa's
-/// rule (etnaviv_format.c texture_use_int_filter, the descriptor path): a
+/// Does `t`'s sampler take SAMP_CTRL0's INT_FILTER? Mesa's rule
+/// (etnaviv_format.c texture_use_int_filter, reached from
+/// etnaviv_texture_desc.c; tools/vivante golden mode 26 carries the bit): a
 /// UNORM, non-sRGB format that is not ASTC, R10G10B10A2 or ETC2 R11/RG11,
 /// on anything but a 3D texture, with no anisotropy. Of ours that is every
 /// 8-bit and 5/6-bit format and the ETC ones; the float ones are not UNORM.
+/// In both stages. The GL core stores a depth texture in RGBA8 and the
+/// binding does not say so, so a depth texture takes the bit where Mesa
+/// leaves it off.
 fn int_filter_wanted(t: &GlesTextureBind) -> bool {
-    super::backend::int_filter_on()
-        && t.type_ != GLES_TEXTYPE_3D
-        && !matches!(t.format, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
+    t.type_ != GLES_TEXTYPE_3D && !matches!(t.format, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
 }
 
 fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
@@ -401,119 +403,54 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
     0
 }
 
-/// A draw's descriptor writes under [`super::backend::gc_debug_desc_seq`]:
-/// how many NTE_DESCRIPTOR_ADDR writes the draw being emitted has made, the
-/// slots whose INVALIDATE waits for [`emit_desc_seq`], and how many draws got
-/// each part of the sequence since the process started, indexed bit 1, 2, 4,
-/// 8 (the switch's counters), and whether the first draw that wrote a
-/// descriptor has been logged.
-struct DescSeqState {
-    draw_addr_writes: u32,
-    inval_pending: u32,
-    seq_emits: [u32; 4],
-    logged: bool,
-}
+/// The slots whose INVALIDATE waits for the end of the draw's descriptor
+/// writes ([`emit_invalidates`]), one bit a slot.
+static INVAL_PENDING: Global<u32> = Global::new(0);
 
-static DESC_SEQ: Global<DescSeqState> =
-    Global::new(DescSeqState { draw_addr_writes: 0, inval_pending: 0, seq_emits: [0; 4], logged: false });
-
-/// How many draws have got each part of the
-/// [`super::backend::gc_debug_desc_seq`] sequence since the process started,
-/// indexed bit 1, 2, 4, 8.
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn desc_seq_emits() -> [u32; 4] {
-    // SAFETY: single-threaded by contract; read only.
-    unsafe { DESC_SEQ.get() }.seq_emits
-}
-
-/// Point `slot` at the descriptor at `addr` and invalidate the slot's cached
-/// copy. Under [`super::backend::GC_DESC_SEQ_MESA_ORDER`] (the default) the
-/// INVALIDATE waits for [`emit_desc_seq`], which emits every slot's after all
-/// of the draw's address writes, as Mesa does (etnaviv_texture_desc.c
-/// 605-610); otherwise it follows the address at once.
+/// Point `slot` at the descriptor at `addr`, and mark the slot's cached copy
+/// for invalidation once every address of the draw is written, as Mesa does
+/// (etnaviv_texture_desc.c 605-610, Mesa main c8ce6c8bdfbb): all addresses
+/// first, then all invalidates. On the i.MX8MP (GC7000UL) a slot whose
+/// INVALIDATE followed its own ADDR write, interleaved with the next slot's,
+/// was sometimes read with the previous draw's descriptor: the vertex sampler
+/// sampled a stale texture and dEQP uniform_api's two
+/// sampler2D_samplerCube_both render cases hung the GPU. In Mesa's order the
+/// board (gclab sampler_split) drew F3V1 240/240 and F4V1 150/150 right with
+/// 0 GPU recoveries, where the old order drew vec4w 0/5 right with 5
+/// recoveries, and uniform_api went from 1250 pass / 2 fail to 1252 / 0
+/// (records/imx8mp/sampler-desc-seq/). A slot past the 32-bit mask (none
+/// exists: GC_MAX_SAMPLERS slots a stage) is invalidated at once.
 fn write_desc_addr(c: &mut GcCmd, slot: u32, addr: u32) {
     c.state(nte_descriptor_addr(slot), addr);
-    // SAFETY: single-threaded by contract; no caller holds DESC_SEQ.
-    let st = unsafe { DESC_SEQ.get() };
-    st.draw_addr_writes = st.draw_addr_writes.saturating_add(1);
     let bit = 1u32.checked_shl(slot).unwrap_or(0);
-    if super::backend::desc_seq() & super::backend::GC_DESC_SEQ_MESA_ORDER != 0 && bit != 0 {
-        st.inval_pending |= bit;
+    if bit != 0 {
+        // SAFETY: single-threaded by contract; no caller holds INVAL_PENDING.
+        unsafe { *INVAL_PENDING.get() |= bit };
     } else {
         c.state(GC_NTE_DESCRIPTOR_INVALIDATE, GC_NTE_INVALIDATE_UNK29 | nte_invalidate_idx(slot));
     }
 }
 
-/// The end of a draw's descriptor writes under
-/// [`super::backend::gc_debug_desc_seq`], in this order: the deferred
-/// INVALIDATEs in slot order (bit 1), then NTE_DESCRIPTOR_FLUSH +
-/// GL_FLUSH_CACHE DESCRIPTOR (bit 4), then GL_FLUSH_CACHE TEXTURE, TEXTUREVS
-/// and an RA-PE stall (bit 2), then an FE-PE stall (bit 8), so the stall,
-/// when asked for, waits for everything before it. Nothing when the draw
-/// wrote no descriptor address. Each part counts itself in `seq_emits`.
-fn emit_desc_seq(c: &mut GcCmd) {
-    use super::backend::{GC_DESC_SEQ_DESC_FLUSH, GC_DESC_SEQ_FE_PE_STALL, GC_DESC_SEQ_TEX_FLUSH};
-    // SAFETY: single-threaded by contract; no caller holds DESC_SEQ.
-    let st = unsafe { DESC_SEQ.get() };
-    let seq = super::backend::desc_seq();
-    let pending = core::mem::take(&mut st.inval_pending);
-    let wrote = core::mem::take(&mut st.draw_addr_writes);
-    if pending != 0 {
-        for slot in 0..u32::BITS {
-            if pending & (1 << slot) != 0 {
-                c.state(GC_NTE_DESCRIPTOR_INVALIDATE, GC_NTE_INVALIDATE_UNK29 | nte_invalidate_idx(slot));
-            }
+/// The end of a draw's descriptor writes: the deferred INVALIDATEs, in slot
+/// order. Nothing when the draw wrote no descriptor.
+fn emit_invalidates(c: &mut GcCmd) {
+    // SAFETY: single-threaded by contract; no caller holds INVAL_PENDING.
+    let pending = core::mem::take(unsafe { INVAL_PENDING.get() });
+    for slot in 0..u32::BITS {
+        if pending & (1 << slot) != 0 {
+            c.state(GC_NTE_DESCRIPTOR_INVALIDATE, GC_NTE_INVALIDATE_UNK29 | nte_invalidate_idx(slot));
         }
-        st.seq_emits[0] = st.seq_emits[0].saturating_add(1);
-    }
-    if wrote == 0 {
-        return;
-    }
-    if seq & GC_DESC_SEQ_DESC_FLUSH != 0 {
-        c.state(GC_NTE_DESCRIPTOR_FLUSH, 0);
-        c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_DESCRIPTOR);
-        st.seq_emits[2] = st.seq_emits[2].saturating_add(1);
-    }
-    if seq & GC_DESC_SEQ_TEX_FLUSH != 0 {
-        c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTURE);
-        c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTUREVS);
-        c.stall(GC_SYNC_RA, GC_SYNC_PE);
-        st.seq_emits[1] = st.seq_emits[1].saturating_add(1);
-    }
-    if seq & GC_DESC_SEQ_FE_PE_STALL != 0 {
-        c.stall(GC_SYNC_FE, GC_SYNC_PE);
-        st.seq_emits[3] = st.seq_emits[3].saturating_add(1);
-    }
-    /* Once per process: the switch's counters after the first draw that
-     * wrote a descriptor, so a run's log shows the sequence was exercised
-     * (a counter at 0 there means the bit did nothing). */
-    if !st.logged {
-        st.logged = true;
-        let [mesa_order, tex_flush, desc_flush, fe_pe_stall] = st.seq_emits;
-        crate::glog!(
-            "yakogl/vivante: desc-seq 0x{:x} first textured draw: {} addresses, emits mesa-order {} tex-flush {} desc-flush {} fe-pe-stall {}",
-            seq,
-            wrote,
-            mesa_order,
-            tex_flush,
-            desc_flush,
-            fe_pe_stall
-        );
     }
 }
 
 /// `-ENOMEM` when a descriptor did not fit; the draw is then refused rather
 /// than emitted without its texture.
 pub fn emit_textures(f: &mut GcFrame, d: &GcDraw) -> i32 {
-    {
-        // SAFETY: single-threaded by contract; nothing else holds DESC_SEQ.
-        let st = unsafe { DESC_SEQ.get() };
-        st.draw_addr_writes = 0;
-        st.inval_pending = 0;
-    }
+    // SAFETY: single-threaded by contract; nothing else holds INVAL_PENDING.
+    unsafe { *INVAL_PENDING.get() = 0 };
     let rc = emit_textures_inner(f, d);
     if rc == 0 {
-        emit_desc_seq(&mut f.w);
+        emit_invalidates(&mut f.w);
     }
     rc
 }

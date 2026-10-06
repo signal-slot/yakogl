@@ -686,34 +686,6 @@ static int frag_mode(int mode)
 	return 0;
 }
 
-/* The backend's measurement switches, from the environment, so a mode can be
- * run with one on to see that it changes the stream at all before a board
- * image is built with it: an image whose switch changes nothing measures
- * nothing (texture.vertex.2d's four arms read bit-identical, 2026-09-25). */
-void gc_debug_set_vs_tiled(int on);
-void gc_debug_set_int_filter(int on);
-
-static void switches_from_env(void)
-{
-	static const struct {
-		const char *name;
-		void (*set)(int);
-	} sw[] = {
-		{ "GC_DEBUG_VS_TILED", gc_debug_set_vs_tiled },
-		{ "GC_DEBUG_INT_FILTER", gc_debug_set_int_filter },
-	};
-	size_t k;
-
-	for (k = 0; k < sizeof(sw) / sizeof(sw[0]); k++) {
-		const char *v = getenv(sw[k].name);
-
-		if (v != NULL) {
-			sw[k].set(atoi(v));
-			fprintf(stderr, "cs_ours: %s=%d\n", sw[k].name, atoi(v));
-		}
-	}
-}
-
 int main(int argc, char **argv)
 {
 	int mode = argc > 1 ? atoi(argv[1]) : 1;
@@ -760,7 +732,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "backend init failed\n");
 		return 1;
 	}
-	switches_from_env();
 	if (!gl_context_create(TW, TH) || !gl_default_surface()) {
 		fprintf(stderr, "context/surface creation failed\n");
 		return 1;

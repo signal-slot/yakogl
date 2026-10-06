@@ -5740,9 +5740,10 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
-    /* The V3D stores L8/A8/LA8 narrow, one or two bytes a texel (the TMU
-     * samples them as R8/RG8 with a swizzle; board cases 132 narrowla and 135
-     * texnarrow PASS): this test's RGBA8 storage bytes are not the V3D's. */
+    /* The V3D stores L8/A8/LA8 narrow and tiled for its TMU (board cases
+     * 132 narrowla and 135 texnarrow PASS), so its storage bytes are not
+     * these. The GC7000 stores them narrow and linear (`narrow_la_texels`),
+     * the PowerVR test build expanded into RGBA8: both are checked. */
     #[cfg(not(feature = "gpu-v3d"))]
     #[test]
     fn tex_image_half_float_luminance_alpha() {
@@ -5753,13 +5754,18 @@ mod tests {
         let name = new_tex();
         tex_image(0, 1, 1, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES, &u16_bytes(&[0x3C00, 0x3800]));
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_eq!(&storage(&gl, name)[..4], [255, 255, 255, 128]);
+        if crate::backend::narrow_la_texels() {
+            assert_eq!(&storage(&gl, name)[..2], [255, 128]);
+        } else {
+            assert_eq!(&storage(&gl, name)[..4], [255, 255, 255, 128]);
+        }
     }
 
-    /* The V3D stores L8/A8/LA8 narrow, one or two bytes a texel (the TMU
-     * samples them as R8/RG8 with a swizzle; board cases 132 narrowla and 135
-     * texnarrow PASS): this test's RGBA8 storage bytes are not the V3D's. */
-    #[cfg(not(feature = "gpu-v3d"))]
+    /* The V3D and the GC7000 store L8/A8/LA8 narrow, one or two bytes a texel
+     * (the V3D's TMU samples them as R8/RG8 with a swizzle, the GC7000's
+     * texture unit as L8/A8/A8L8; board case 132 narrowla PASSes on both):
+     * this test's RGBA8 storage bytes are the PowerVR's expanded store. */
+    #[cfg(feature = "gpu-powervr")]
     #[test]
     fn tex_image_alpha_and_luminance_rows() {
         let gl = TestGl::new(4, 4);
@@ -5799,17 +5805,13 @@ mod tests {
         assert_eq!(&storage(&gl, name)[..4], [1, 2, 3, 77]);
     }
 
-    /* the GC7000's opt-in (gc_debug_narrow_la, a test knob): the same packed store */
-    #[cfg(all(feature = "gpu-vivante", feature = "test-knobs"))]
+    /* the GC7000 stores them narrow, packed as the PowerVR's opt-in does */
+    #[cfg(feature = "gpu-vivante")]
     #[test]
-    fn under_the_gc7000_switch_luminance_alpha_uploads_are_stored_narrow() {
+    fn the_gc7000_stores_luminance_alpha_uploads_narrow() {
         let gl = TestGl::new(4, 4);
         // SAFETY: plain GL call.
         unsafe { glPixelStorei(GL_UNPACK_ALIGNMENT, 1) };
-        let name = new_tex();
-        tex_image(0, 2, 2, GL_LUMINANCE, GL_UNSIGNED_BYTE, &[1, 2, 3, 4]);
-        assert_eq!(gl.ctx().objs_ref().textures[name as usize].texfmt, GLES_TEXFMT_RGBA8, "off: expanded");
-        assert_eq!(crate::vivante::backend::gc_debug_set_narrow_la(1), 0, "off by default");
         for (format, texfmt, data) in [
             (GL_LUMINANCE, GLES_TEXFMT_L8, &[1u8, 2, 3, 4][..]),
             (GL_ALPHA, GLES_TEXFMT_A8, &[5, 6, 7, 8][..]),
@@ -5821,6 +5823,22 @@ mod tests {
             assert_eq!(gl.ctx().objs_ref().textures[name as usize].texfmt, texfmt, "0x{format:x}");
             assert_eq!(&storage(&gl, name)[..data.len()], data, "0x{format:x}");
         }
+    }
+
+    /* the GC7000's test knob (gc_debug_narrow_la 0, gl_test 132's other arm):
+     * the RGBA8 store again */
+    #[cfg(all(feature = "gpu-vivante", feature = "test-knobs"))]
+    #[test]
+    fn the_gc7000_narrow_la_knob_selects_the_rgba8_store() {
+        let gl = TestGl::new(4, 4);
+        // SAFETY: plain GL call.
+        unsafe { glPixelStorei(GL_UNPACK_ALIGNMENT, 1) };
+        assert_eq!(crate::vivante::backend::gc_debug_set_narrow_la(0), 1, "narrow by default");
+        let name = new_tex();
+        tex_image(0, 2, 2, GL_LUMINANCE, GL_UNSIGNED_BYTE, &[1, 2, 3, 4]);
+        crate::vivante::backend::gc_debug_set_narrow_la(1);
+        assert_eq!(gl.ctx().objs_ref().textures[name as usize].texfmt, GLES_TEXFMT_RGBA8, "0: expanded");
+        assert_eq!(&storage(&gl, name)[..16], [1, 1, 1, 255, 2, 2, 2, 255, 3, 3, 3, 255, 4, 4, 4, 255]);
     }
 
     #[cfg(feature = "gpu-powervr")]
@@ -6778,9 +6796,10 @@ mod tests {
         assert_eq!(gl.ctx().objs().textures[name as usize].format, GL_RGB);
     }
 
-    /* The V3D stores L8/A8/LA8 narrow, one or two bytes a texel (the TMU
-     * samples them as R8/RG8 with a swizzle; board cases 132 narrowla and 135
-     * texnarrow PASS): this test's RGBA8 storage bytes are not the V3D's. */
+    /* The V3D stores L8/A8/LA8 narrow and tiled for its TMU (board cases
+     * 132 narrowla and 135 texnarrow PASS), so its storage bytes are not
+     * these. The GC7000 stores them narrow and linear (`narrow_la_texels`),
+     * the PowerVR test build expanded into RGBA8: both are checked. */
     #[cfg(not(feature = "gpu-v3d"))]
     #[test]
     fn copy_tex_image_luminance_takes_red() {
@@ -6789,14 +6808,24 @@ mod tests {
         let name = new_tex();
         copy_tex_image(GL_LUMINANCE, 2, 3, 1, 1);
         let [r, _, _, a] = surf_texel(2, 0);
-        assert_eq!(storage(&gl, name)[..4], [r, r, r, 255]);
+        let narrow = crate::backend::narrow_la_texels();
+        if narrow {
+            assert_eq!(storage(&gl, name)[..1], [r]);
+        } else {
+            assert_eq!(storage(&gl, name)[..4], [r, r, r, 255]);
+        }
         copy_tex_image(GL_LUMINANCE_ALPHA, 2, 3, 1, 1);
-        assert_eq!(storage(&gl, name)[..4], [r, r, r, a]);
+        if narrow {
+            assert_eq!(storage(&gl, name)[..2], [r, a]);
+        } else {
+            assert_eq!(storage(&gl, name)[..4], [r, r, r, a]);
+        }
     }
 
-    /* The V3D stores L8/A8/LA8 narrow, one or two bytes a texel (the TMU
-     * samples them as R8/RG8 with a swizzle; board cases 132 narrowla and 135
-     * texnarrow PASS): this test's RGBA8 storage bytes are not the V3D's. */
+    /* The V3D stores L8/A8/LA8 narrow and tiled for its TMU (board cases
+     * 132 narrowla and 135 texnarrow PASS), so its storage bytes are not
+     * these. The GC7000 stores them narrow and linear (`narrow_la_texels`),
+     * the PowerVR test build expanded into RGBA8: both are checked. */
     #[cfg(not(feature = "gpu-v3d"))]
     #[test]
     fn copy_tex_image_alpha_keeps_alpha_only() {
@@ -6804,7 +6833,11 @@ mod tests {
         fill_surface(&gl, 4, 4);
         let name = new_tex();
         copy_tex_image(GL_ALPHA, 3, 0, 1, 1);
-        assert_eq!(storage(&gl, name)[..4], [0, 0, 0, surf_texel(3, 3)[3]]);
+        if crate::backend::narrow_la_texels() {
+            assert_eq!(storage(&gl, name)[..1], [surf_texel(3, 3)[3]]);
+        } else {
+            assert_eq!(storage(&gl, name)[..4], [0, 0, 0, surf_texel(3, 3)[3]]);
+        }
     }
 
     #[test]

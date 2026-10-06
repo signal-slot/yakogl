@@ -375,25 +375,6 @@ int main(void)
 		LOG_INF("gc_gl_test: shc_debug_uniidx=1 (no clamp before the offset multiply)");
 	}
 #endif
-#ifdef CONFIG_GC_GL_TEST_MRT
-	{
-		extern void gc_debug_set_mrt(int on);
-
-		/* before the first GL call: GL_MAX_DRAW_BUFFERS is read from it */
-		gc_debug_set_mrt(1);
-		LOG_INF("gc_gl_test: gc_debug_mrt=1 (every colour attachment is written)");
-	}
-#endif
-	{
-		extern int gc_debug_set_desc_seq(uint32_t bits);
-
-		/* Kconfig's range keeps it to the four known bits; the setter
-		 * refuses any other and leaves the sequence as it was */
-		int rc = gc_debug_set_desc_seq(CONFIG_GC_GL_TEST_DESC_SEQ);
-
-		LOG_INF("gc_gl_test: gc_debug_desc_seq=0x%x%s (descriptor write sequence)",
-			(unsigned int)CONFIG_GC_GL_TEST_DESC_SEQ, rc ? " REFUSED" : "");
-	}
 	gl_test_skip = CONFIG_GC_GL_TEST_SKIP;
 	LOG_INF("gc_gl_test: case %d on the GC7000UL%s%s", CONFIG_GC_GL_TEST_CASE,
 		CONFIG_GC_GL_TEST_SKIP[0] ? ", skipping " : "", CONFIG_GC_GL_TEST_SKIP);

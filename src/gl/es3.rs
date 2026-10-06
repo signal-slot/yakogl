@@ -1044,7 +1044,7 @@ fn clear_buffer_args_ok(c: &mut GlContext, buffer: GLenum, drawbuffer: GLint, ta
         return false;
     }
     let ok = if buffer == GL_COLOR {
-        (0..context::max_draw_buffers() as GLint).contains(&drawbuffer)
+        (0..context::MAX_DRAW_BUFFERS as GLint).contains(&drawbuffer)
     } else {
         drawbuffer == 0
     };

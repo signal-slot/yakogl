@@ -192,7 +192,7 @@
  * 122 uniidxi  the same with the texld before the movar
  * 106 mrt3     three draw buffers: a clear reaching all three, one draw writing
  *               each its own colour, and GL_NONE in the middle leaving it alone;
- *               SKIP below GL_MAX_DRAW_BUFFERS 3 (GC7000: gc_debug_mrt)
+ *               SKIP below GL_MAX_DRAW_BUFFERS 3
  * 128 uniidxj  108 D's fcols[fidx] in a fragment stage that also reads a
  *               varying (idxtex's shape): is a fragment stage with no varying
  *               input the class that reads element 0?
@@ -13351,8 +13351,7 @@ static int case_ctxclear(void)
 
 /* ---- case 106: three draw buffers (MRT step 3) ------------------------------
  *
- * GL_MAX_DRAW_BUFFERS is 1 on the GC7000 unless gc_debug_mrt is on
- * (GC_GL_TEST_MRT / DEQP_GC_MRT), and then every colour attachment (3); the
+ * GL_MAX_DRAW_BUFFERS is every colour attachment (3) on every GPU here; the
  * case SKIPs below 3. Three RGBA8 attachments, glDrawBuffers of all three:
  *   1. a clear to grey reaches all three (the clear quad writes every target);
  *   2. one draw writes red, green, blue to attachments 0, 1, 2 (each output
@@ -13492,7 +13491,7 @@ static int case_mrt3(void)
  *   stores slot 0; the PowerVR, V3D and GC7000 all do today) and attachment 1
  *   must stay grey.
  * Any other error fails. SKIP on an ES 2.0 library (glDrawBuffers is ES 3.0)
- * and below GL_MAX_DRAW_BUFFERS 2 (the GC7000 without gc_debug_mrt).
+ * and below GL_MAX_DRAW_BUFFERS 2.
  * ------------------------------------------------------------------------- */
 static int case_drawbuf0(void)
 {

@@ -220,37 +220,49 @@ are 32-bit because the GC7000's MMU is.
 
 ## The debug switches and the test knobs
 
-`backend.rs` exposes its switches to C as `gc_debug_*` statics and setters.
-Since 2026-10-06 (clean-up commit 1, HANDOFF item 2) they are in three
-groups, and `tools/check.sh` ("no test knob in the artefact") reads the
-GC7000 product archive (`yakogl-capi`, the Zephyr image's features) and
-requires exactly the first group's symbols in it:
+The backend has no `gc_debug_*` switch in product code since clean-up
+commits 1 and 2 (2026-10-06, HANDOFF item 2): `tools/check.sh` ("no test
+knob in the artefact") reads the GC7000 product archive (`yakogl-capi`, the
+Zephyr image's features) and requires that it defines none.
 
-- **In product code, until the board settles them** (the next clean-up
-  commit): `gc_debug_desc_seq`, `gc_debug_mrt`, `gc_debug_vs_tiled`,
-  `gc_debug_int_filter`, each with its setter -- 8 symbols.
-- **Test knobs**, only with the crate's `test-knobs` feature
-  (`CONFIG_YAKOGL_TEST_KNOBS`, which the gl_test, gc_gl_test and deqp
-  samples select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch
-  probes `gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #8);
-  `gc_debug_flip_experiment` with its setter (case 88, the flip study);
-  `gc_debug_narrow_la` with its setter (case 132's arms, dEQP's
-  `DEQP_GC_NARROW_LA`). Without the feature each reads as its default, 0,
-  and none of the 9 symbols is in the archive.
-- **No longer a switch.** At their defaults, measured on the i.MX8MP, and
-  the only behaviour now: `gc_debug_flat_shade` (flat model for a flat
-  input, gl_test 89), `gc_debug_masked_clear` (a clear writes its mask,
-  gl_test 102), `gc_debug_first_component_use` (the first draw writes
-  GL_VARYING_COMPONENT_USE GENERIC, 02fc8b79), `gc_debug_black_unbound`
-  (the black texel for an unbound declared sampler, gl_test 61) and
-  `gc_debug_vs_units16` (16 vertex texture units, gl_test 149 and
-  uniform_api; `GLES_VS_TEX_UNITS`). Removed outright, never set by
-  anything in the tree: `gc_debug_perf_exp` (the per-draw cost
-  experiments) with its frame draw counter, `gc_perf_cmd_words`, and
-  `gc_debug_fs_tiled` (fragment-stage textures from a tiled copy).
+**Test knobs**, only with the crate's `test-knobs` feature
+(`CONFIG_YAKOGL_TEST_KNOBS`, which the gl_test, gc_gl_test and deqp samples
+select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch probes
+`gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #8);
+`gc_debug_flip_experiment` with its setter (case 88, the flip study);
+`gc_debug_narrow_la` with its setter (case 132's RGBA8 arm). Without the
+feature each reads as its default (MSAA and the flip study off, the narrow
+store on) and none of the 9 symbols is in the archive.
 
-The archive defined 32 such symbols before (15 statics, 17 C functions);
-it defines 8 now (4 and 4), 17 with `test-knobs` (7 and 10).
+**What used to be a switch is the design now:**
+
+- *Tiled vertex-stage textures.* Every 2D texture the vertex stage samples
+  is read from a 4x4-tiled copy (`tiled_copy.rs` `wanted_vs`), refreshed
+  from the linear storage before the draw records, as Mesa never lets this
+  core's vertex stage read a linear texture (golden mode 26). A texture the
+  fragment stage alone samples stays linear.
+- *Multiple render targets.* A draw writes every colour attachment the GL
+  core gives it, up to four (`mrt_targets`): RT0 is the colour surface,
+  RT1..3 the 8-RT bank, PS_OUTPUT_REG names each target's shader register,
+  and GL_MAX_DRAW_BUFFERS is every colour attachment (3).
+- *The integer filter.* SAMP_CTRL0's INT_FILTER is set on every sampler of
+  a UNORM, non-3D texture, in both stages (`texture.rs` `int_filter_wanted`),
+  by Mesa's texture_use_int_filter rule.
+- *The narrow luminance/alpha store.* GL_LUMINANCE, GL_ALPHA and
+  GL_LUMINANCE_ALPHA are stored one or two bytes a texel and sampled with the
+  texture unit's L8 / A8 / A8L8 formats (`narrow_la_on`).
+- *Mesa's descriptor order.* A draw writes every NTE_DESCRIPTOR_ADDR first
+  and then every slot's INVALIDATE (`texture.rs` `write_desc_addr`); the old
+  per-slot order read a stale descriptor on the i.MX8MP.
+- Commit 1's: the flat shade model for a flat input (gl_test 89), the masked
+  clear (gl_test 102), the first draw's GL_VARYING_COMPONENT_USE (02fc8b79),
+  the black texel for an unbound declared sampler (gl_test 61), 16 vertex
+  texture units (gl_test 149, uniform_api; `GLES_VS_TEX_UNITS`). Removed,
+  never set by anything in the tree: `gc_debug_perf_exp` and its frame draw
+  counter, `gc_perf_cmd_words`, `gc_debug_fs_tiled`.
+
+The archive defined 32 `gc_debug_*`/`gc_perf_*` symbols before commit 1, 8
+after it; it defines none now, 9 with `test-knobs`.
 
 ## What the hardware said, once the test was right
 

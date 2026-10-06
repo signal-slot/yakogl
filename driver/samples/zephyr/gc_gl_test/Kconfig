@@ -209,15 +209,6 @@ config GC_GL_TEST_UNIIDX_NO_CLAMP
 	  (select.rs shc_debug_uniidx). Never a default: the clamp is an ir.md
 	  rule.
 
-config GC_GL_TEST_MRT
-	bool "Draw buffers: every colour attachment is written (a measurement)"
-	default n
-	help
-	  Calls gc_debug_set_mrt(1) at startup (vivante/backend.rs
-	  gc_debug_mrt): a draw writes every render target the GL core gives
-	  it, and GL_MAX_DRAW_BUFFERS answers every colour attachment (3)
-	  instead of 1. Off until the MRT case has measured it.
-
 config GL_TEST_VSU_UNITS
 	int "Case 149 (vsunits): vertex-stage samplers the shader declares"
 	range 1 16
@@ -237,19 +228,6 @@ config GL_TEST_VSU_FS_UNITS
 	  the picture is unchanged. On the GC7000 the vertex slots start after
 	  the fragment ones: 16 puts vertex sampler k in slot 16 + k. 0 is the
 	  case as it was.
-
-config GC_GL_TEST_DESC_SEQ
-	int "Texture descriptor write sequence bits (an A/B)"
-	range 0 15
-	default 1
-	help
-	  Passed to gc_debug_set_desc_seq at startup (vivante/backend.rs
-	  gc_debug_desc_seq, the Linux harness's YAKOGL_GC_DESC_SEQ): 1 = all
-	  descriptor addresses then all invalidates (Mesa's order, the
-	  library's default), 2 = texture cache flushes + RA-PE stall after
-	  the writes, 4 = descriptor cache flush after, 8 = FE-PE stall
-	  after. 0 is the old order (each invalidate right after its own
-	  address), the control arm of the A/B.
 
 config GC_GL_TEST_WIDTH
 	int "Render target width in pixels"

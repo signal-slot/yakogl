@@ -138,35 +138,18 @@ pub const CAP_SAMPLERS: usize = 16;
 /// end-of-tile programs support up to this many.
 pub const CAP_COLOR_ATTACHMENTS: usize = 3;
 /// GL_MAX_DRAW_BUFFERS: the colour outputs one draw WRITES, which is not the
-/// attachment points a framebuffer offers. PowerVR: all of them, through the
-/// end-of-tile programs. GC7000: 1 by default -- the part has 4 render
+/// attachment points a framebuffer offers; on every GPU here, all of them.
+/// PowerVR: through the end-of-tile programs. GC7000: the part has 4 render
 /// targets (etnaviv's num_rts, halved for 64-bit formats) and the backend
-/// programs every one the GL core gives it only with `gc_debug_mrt` on
-/// (MRT steps 1-2, unmeasured); [`max_draw_buffers`] is what is answered at
-/// run time. Reporting 3 while writing one promised writes it did not make.
-#[cfg(feature = "gpu-vivante")]
-pub const MAX_DRAW_BUFFERS: usize = 1;
-/// V3D: all of them too. The TLB takes four render targets, and since the
-/// MRT steps 1-3 (docs/online-shaderc/v3d-backend.md, "Multiple render
+/// programs every one the GL core gives it (vivante/backend.rs
+/// `mrt_targets`). V3D: the TLB takes four render targets, and since the MRT
+/// steps 1-3 (docs/online-shaderc/v3d-backend.md, "Multiple render
 /// targets": the compiler's TLB write per RT, the job builder's RTs, the
 /// backend's attachments up to four) every attachment a draw names is
-/// written. Before, it answered 1, and gl_test 106 skipped on the Pi 4
-/// (records/pi4/record_VIDMRT_gt_VIDMRT_227e5dec.txt).
-#[cfg(not(feature = "gpu-vivante"))]
+/// written. The query, glDrawBuffers, glClearBuffer and the shader's
+/// gl_MaxDrawBuffers all read this one constant; arrays are sized by
+/// [`CAP_COLOR_ATTACHMENTS`].
 pub const MAX_DRAW_BUFFERS: usize = CAP_COLOR_ATTACHMENTS;
-
-/// GL_MAX_DRAW_BUFFERS as this process answers it: [`MAX_DRAW_BUFFERS`],
-/// except on the GC7000 with draw buffers switched on (`gc_debug_mrt`, MRT
-/// steps 1-2, off until gl_test 106 has measured it), where every colour
-/// attachment is written. Everything that checks a draw-buffer count at run
-/// time asks here; arrays are sized by [`CAP_COLOR_ATTACHMENTS`].
-pub fn max_draw_buffers() -> usize {
-    #[cfg(feature = "gpu-vivante")]
-    if crate::vivante::backend::mrt_on() {
-        return CAP_COLOR_ATTACHMENTS;
-    }
-    MAX_DRAW_BUFFERS
-}
 /// GL_MAX_VERTEX_OUTPUT_COMPONENTS and GL_MAX_FRAGMENT_INPUT_COMPONENTS:
 /// four components per varying vector, per GPU with MAX_VARYING_VECTORS.
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are

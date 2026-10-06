@@ -2709,7 +2709,7 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
         unsafe { DEFAULT_DRAW_NONE.get()[c.index as usize % MAX_CONTEXTS] = buf(0) == GL_NONE };
         return;
     }
-    if n > context::max_draw_buffers() as GLsizei {
+    if n > context::MAX_DRAW_BUFFERS as GLsizei {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
@@ -5608,9 +5608,9 @@ mod tests {
         bound_fb();
         attach_tex(GL_COLOR_ATTACHMENT0, tex_with_storage(8, 8));
         attach_tex(GL_COLOR_ATTACHMENT1, tex_with_storage(8, 8));
-        /* GL_DRAW_BUFFER1 exists where GL_MAX_DRAW_BUFFERS is 2 or more (not
-         * the GC7000 with its MRT switch off) */
-        let two = context::max_draw_buffers() >= 2;
+        /* GL_DRAW_BUFFER1 exists where GL_MAX_DRAW_BUFFERS is 2 or more
+         * (every GPU here) */
+        let two = context::MAX_DRAW_BUFFERS >= 2;
         assert_eq!(draw_buffer_q(0), GL_COLOR_ATTACHMENT0);
         assert!(fb_target_n(gl.ctx(), 1).is_some(), "never set: output 1 writes attachment 1");
         if two {
@@ -6712,32 +6712,14 @@ mod tests {
         assert!(fb_target_n(c, 0).is_none() && fb_target_n(c, 3).is_none());
     }
 
-    /// The GC7000 writes one colour output (context::MAX_DRAW_BUFFERS = 1), so
-    /// a second draw buffer is refused rather than accepted and dropped: the
-    /// backend reads target 0 only, and outputs 1 and 2 used to go nowhere.
-    #[cfg(feature = "gpu-vivante")]
+    /// The V3D and the GC7000 write every colour attachment a draw names
+    /// (the V3D's MRT steps 1-3, docs/online-shaderc/v3d-backend.md; the
+    /// GC7000's 8-RT bank, vivante/backend.rs `mrt_targets`): three draw
+    /// buffers are taken, and a fourth is past GL_MAX_DRAW_BUFFERS
+    /// (CAP_COLOR_ATTACHMENTS, 3).
+    #[cfg(any(feature = "gpu-v3d", feature = "gpu-vivante"))]
     #[test]
-    fn the_gc7000_takes_one_draw_buffer_and_refuses_a_second() {
-        let gl = TestGl::new(8, 8);
-        bound_fb();
-        attach_tex(GL_COLOR_ATTACHMENT0, tex_with_storage(8, 8));
-        attach_tex(GL_COLOR_ATTACHMENT1, tex_with_storage(8, 8));
-        let one = [GL_COLOR_ATTACHMENT0];
-        // SAFETY: one readable enum.
-        unsafe { glDrawBuffers(1, one.as_ptr()) };
-        assert_eq!(gl.error(), GL_NO_ERROR);
-        let two = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
-        // SAFETY: two readable enums.
-        unsafe { glDrawBuffers(2, two.as_ptr()) };
-        assert_eq!(gl.error(), GL_INVALID_VALUE, "past GL_MAX_DRAW_BUFFERS = 1");
-    }
-
-    /// The V3D writes every colour attachment a draw names (MRT steps 1-3,
-    /// docs/online-shaderc/v3d-backend.md): three draw buffers are taken, and
-    /// a fourth is past GL_MAX_DRAW_BUFFERS (CAP_COLOR_ATTACHMENTS, 3).
-    #[cfg(feature = "gpu-v3d")]
-    #[test]
-    fn the_v3d_takes_every_draw_buffer() {
+    fn the_v3d_and_the_gc7000_take_every_draw_buffer() {
         let gl = TestGl::new(8, 8);
         bound_fb();
         let atts = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
@@ -6753,39 +6735,6 @@ mod tests {
         // SAFETY: four readable enums.
         unsafe { glDrawBuffers(4, four.as_ptr()) };
         assert_eq!(gl.error(), GL_INVALID_VALUE, "past GL_MAX_DRAW_BUFFERS = 3");
-    }
-
-    /// With draw buffers switched on (`gc_debug_mrt`, MRT steps 1-2), the
-    /// GC7000 answers GL_MAX_DRAW_BUFFERS with every colour attachment and
-    /// takes that many draw buffers; switched off it is one again, the query
-    /// and glDrawBuffers agreeing both ways.
-    #[cfg(feature = "gpu-vivante")]
-    #[test]
-    fn the_gc7000_takes_every_draw_buffer_with_mrt_switched_on() {
-        let gl = TestGl::new(8, 8);
-        bound_fb();
-        for (i, a) in [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2].iter().enumerate() {
-            attach_tex(*a, tex_with_storage(8, 8));
-            assert_eq!(gl.error(), GL_NO_ERROR, "attachment {i}");
-        }
-        let all = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
-        let mut max = 0;
-        crate::vivante::backend::gc_debug_set_mrt(1);
-        // SAFETY: a readable int; three readable enums.
-        unsafe {
-            super::super::state::glGetIntegerv(GL_MAX_DRAW_BUFFERS, &mut max);
-            glDrawBuffers(3, all.as_ptr());
-        }
-        let on = (max, gl.error());
-        crate::vivante::backend::gc_debug_set_mrt(0);
-        // SAFETY: as above.
-        unsafe {
-            super::super::state::glGetIntegerv(GL_MAX_DRAW_BUFFERS, &mut max);
-            glDrawBuffers(3, all.as_ptr());
-        }
-        let off = (max, gl.error());
-        assert_eq!(on, (CAP_COLOR_ATTACHMENTS as GLint, GL_NO_ERROR), "switched on: every attachment");
-        assert_eq!(off, (1, GL_INVALID_VALUE), "switched off: one, as before");
     }
 
     /// Where more than one output is written (PowerVR); the GC7000 writes one

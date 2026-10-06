@@ -303,8 +303,7 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
     c.state(GC_PS_TEMP_REGISTER_CONTROL, temp_register_num(fs_temps));
     /* The render targets, each one's output saturated for the unorm formats
      * and in its own output mode (etnaviv_state.c:364-392). RT_COUNT(0) is
-     * one target, and what disables the rest (etnaviv_state.c:405-406). With
-     * gc_debug_mrt off this is RT0 alone, exactly as before. */
+     * one target, and what disables the rest (etnaviv_state.c:405-406). */
     let mut ps_control = ps_control_rt_count(targets as u32 - 1);
     let mut ps_control_ext = 0;
     for (rt, &slot) in slots[..targets].iter().enumerate() {

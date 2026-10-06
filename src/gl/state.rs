@@ -1083,7 +1083,7 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         /* colour attachments one render writes: the end-of-tile programs and
          * the kick's PBE registers carry this many (a G-buffer pass asks for
          * three) */
-        GL_MAX_DRAW_BUFFERS => context::max_draw_buffers() as GLint,
+        GL_MAX_DRAW_BUFFERS => context::MAX_DRAW_BUFFERS as GLint,
         GL_MAX_COLOR_ATTACHMENTS => CAP_COLOR_ATTACHMENTS as GLint,
         GL_MAX_SAMPLES => 1,
         GL_NUM_PROGRAM_BINARY_FORMATS => 0,
@@ -1109,7 +1109,7 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         /* ES 3.0 4.2.1: the bound draw framebuffer's draw buffer i, i below
          * GL_MAX_DRAW_BUFFERS (only buffer 0 was answered, and always as
          * the default mapping, until 2026-09-29) */
-        p if (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::max_draw_buffers() as GLenum).contains(&p) => {
+        p if (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum).contains(&p) => {
             super::framebuffer::draw_buffer(c, (p - GL_DRAW_BUFFER0) as usize) as GLint
         }
         GL_READ_BUFFER => {
@@ -2932,9 +2932,8 @@ mod tests {
         for q in [GL_MAX_VARYING_COMPONENTS, GL_MAX_VERTEX_OUTPUT_COMPONENTS, GL_MAX_FRAGMENT_INPUT_COMPONENTS] {
             assert_eq!(geti1(q), vectors * 4, "{q:#x}");
         }
-        /* GC7000: one colour output until its MRT is measured; PowerVR and
-         * V3D: three (every colour attachment) */
-        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), if vivante { 1 } else { 3 });
+        /* every GPU: three (every colour attachment) */
+        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), 3);
         /* Uniform blocks, the same on both GPUs (flattened into the default
          * block): twelve a stage, 24 a program, 24 binding points, and one
@@ -2971,7 +2970,7 @@ mod tests {
         /* 16 on every GPU (backend.rs); the GC7000's was 8 until 2026-10-01 */
         assert_eq!(geti1(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), 16);
         /* colour outputs one draw writes, per GPU; attachment points below */
-        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::max_draw_buffers());
+        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::MAX_DRAW_BUFFERS);
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS) as usize, CAP_COLOR_ATTACHMENTS);
         /* the blocks are sized at link time, capped at this limit */
         assert_eq!(geti1(GL_MAX_VERTEX_UNIFORM_COMPONENTS) as usize, MAX_UNIFORM_DWORDS);

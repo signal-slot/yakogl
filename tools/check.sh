@@ -218,7 +218,7 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does
   vivante::backend::backend_tests::a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
-  gl::texture::tests::under_the_gc7000_switch_luminance_alpha_uploads_are_stored_narrow
+  gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
 )
 knobs_lib_tests() {
   local out t
@@ -1084,16 +1084,12 @@ step "no Mesa reference in the artefact" check_no_mesa_reference
 
 # No test knob in the artefact either, read the same way: the C archive a
 # GC7000 product image links (yakogl-capi with the Zephyr image's features,
-# the in-process compiler and no table) must define exactly the GC7000
-# switches still in product code -- the four the next clean-up commit
-# settles (the descriptor sequence, MRT, the vertex-stage tiled copy,
-# INT_FILTER), each with its setter -- and none of the test knobs. The
-# same archive with `test-knobs`, what gc_gl_test links, must define the
-# knobs as well, which is the control: a pattern that stopped matching would
-# find neither. Exact sets, so a new `#[no_mangle]` switch in product code
-# fails here until it is listed or moved behind the feature.
-KNOB_PRODUCT_SYMBOLS="gc_debug_desc_seq gc_debug_int_filter gc_debug_mrt gc_debug_set_desc_seq
-gc_debug_set_int_filter gc_debug_set_mrt gc_debug_set_vs_tiled gc_debug_vs_tiled"
+# the in-process compiler and no table) must define no gc_debug_* or
+# gc_perf_* symbol at all. The same archive with `test-knobs`, what
+# gc_gl_test links, must define exactly the knobs, which is the control: a
+# pattern that stopped matching would find neither. Exact sets, so a new
+# `#[no_mangle]` switch fails here until it is moved behind the feature and
+# listed.
 KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
 gc_debug_set_narrow_la"
@@ -1107,22 +1103,21 @@ knob_symbols() {
 }
 
 check_knobs_absent() {
-  local product knobs want_product want_knobs
+  local product knobs want_knobs
   product=$(knob_symbols "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table") || return 1
   knobs=$(knob_symbols "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table,test-knobs") || return 1
-  want_product=$(printf '%s\n' $KNOB_PRODUCT_SYMBOLS | sort -u)
-  want_knobs=$(printf '%s\n' $KNOB_PRODUCT_SYMBOLS $KNOB_TEST_SYMBOLS | sort -u)
+  want_knobs=$(printf '%s\n' $KNOB_TEST_SYMBOLS | sort -u)
   if [ "$knobs" != "$want_knobs" ]; then
     echo "the test-knobs archive's gc_debug_*/gc_perf_* symbols are not the expected set:"
     diff <(printf '%s\n' "$want_knobs") <(printf '%s\n' "$knobs")
     return 1
   fi
-  if [ "$product" != "$want_product" ]; then
-    echo "the product archive's gc_debug_*/gc_perf_* symbols are not the expected set:"
-    diff <(printf '%s\n' "$want_product") <(printf '%s\n' "$product")
+  if [ -n "$product" ]; then
+    echo "the product archive defines gc_debug_*/gc_perf_* symbols:"
+    printf '%s\n' "$product"
     return 1
   fi
-  echo "gc_debug_* symbols: $(printf '%s\n' "$product" | wc -l) in the product archive, $(printf '%s\n' "$knobs" | wc -l) with test-knobs"
+  echo "gc_debug_* symbols: 0 in the product archive, $(printf '%s\n' "$knobs" | wc -l) with test-knobs"
 }
 
 step "no test knob in the artefact" check_knobs_absent

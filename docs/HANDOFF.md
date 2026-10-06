@@ -130,9 +130,16 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      deqp samples): `gc_debug_msaa` and its scratch probes,
      `gc_debug_flip_experiment`, `gc_debug_narrow_la`. The product archive's
      `gc_debug_*`/`gc_perf_*` symbols went from 32 to 8, 17 with the knobs
-     (tools/check.sh, "no test knob in the artefact"). Next: the four left
-     in product code (`desc_seq`, `mrt`, `vs_tiled`, `int_filter`) take
-     their measured defaults with a board run.
+     (tools/check.sh, "no test knob in the artefact"). Commit 2: the last
+     four become the design and go -- `mrt` (every colour attachment,
+     GL_MAX_DRAW_BUFFERS 1 -> 3), `vs_tiled` (vertex-stage 2D textures from
+     the tiled copy), `int_filter` (INT_FILTER on UNORM samplers) and
+     `desc_seq` (Mesa's order, its experiment bits removed) -- with the
+     narrow L8/A8/LA8 store on by default (its RGBA8 arm stays a test knob
+     for case 132) and their sample Kconfig rows removed. The product
+     archive defines no `gc_debug_*` symbol, 9 with the knobs. The board
+     run of commit 2 (gl_test set, dEQP fbo / texture / vertex texture
+     groups) is owed.
    - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
      `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
      `ONE_IN_FLIGHT` stay product options. The measurement infrastructure

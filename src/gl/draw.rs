@@ -11367,14 +11367,10 @@ mod tests {
     /// glDrawBuffers(ATT0, NONE, ATT2): slot 2 draws into attachment 2 (ES
     /// 3.0 4.2.1), so the draw carries three slots, slot 1 with no target
     /// (gpu 0, which a backend skips). Before, the walk stopped at the NONE
-    /// slot and attachment 2 reached no backend. The GC7000 takes more than
-    /// one draw buffer only with its MRT switch on (context.rs
-    /// max_draw_buffers), set and reset under the test's serial lock.
+    /// slot and attachment 2 reached no backend.
     #[test]
     fn a_none_draw_buffer_keeps_its_slot_and_the_next_one_is_carried() {
         let gl = Gl::new(8, 8);
-        #[cfg(feature = "gpu-vivante")]
-        crate::vivante::backend::gc_debug_set_mrt(1);
         let (_, t0) = fbo_8x8();
         let (t1, t2) = (texture_rgba(8, 8), texture_rgba(8, 8));
         let bufs = [GL_COLOR_ATTACHMENT0, GL_NONE, GL_COLOR_ATTACHMENT2];
@@ -11386,8 +11382,6 @@ mod tests {
         }
         basic(&gl);
         let d = draw_tri(&gl).draw;
-        #[cfg(feature = "gpu-vivante")]
-        crate::vivante::backend::gc_debug_set_mrt(0);
         let gpu = |t: GLuint| gl.ctx().objs().textures[t as usize].mem.gpu;
         assert_eq!(d.num_targets, 3, "the NONE slot is kept and slot 2 carried");
         assert_eq!((d.targets[0].gpu, d.targets[1].gpu, d.targets[2].gpu), (gpu(t0), 0, gpu(t2)));
@@ -11402,8 +11396,6 @@ mod tests {
     #[test]
     fn a_none_draw_buffer_0_leaves_slot_0_without_a_target() {
         let gl = Gl::new(8, 8);
-        #[cfg(feature = "gpu-vivante")]
-        crate::vivante::backend::gc_debug_set_mrt(1);
         let (_, t0) = fbo_8x8();
         let t1 = texture_rgba(8, 8);
         // SAFETY: plain GL calls; two readable enums.
@@ -11424,8 +11416,6 @@ mod tests {
         // SAFETY: two readable enums.
         unsafe { glDrawBuffers(2, [GL_NONE, GL_NONE].as_ptr()) };
         let d = draw_tri(&gl).draw;
-        #[cfg(feature = "gpu-vivante")]
-        crate::vivante::backend::gc_debug_set_mrt(0);
         assert!(!d.color_write && d.color_mask == 0, "no colour written");
         assert_eq!((d.num_targets, d.targets[0].gpu), (1, gpu(t0)), "slot 0 kept under a zero mask");
     }

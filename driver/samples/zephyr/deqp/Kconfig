@@ -45,48 +45,9 @@ config DEQP_TEST_KNOBS
 	default y
 	select YAKOGL_TEST_KNOBS
 	help
-	  The image may set the library's test knobs
-	  (CONFIG_YAKOGL_TEST_KNOBS): DEQP_GC_NARROW_LA below. Each stays at
-	  the library's default unless its own option says otherwise.
-
-config DEQP_GC_MRT
-	bool "GC7000: draw buffers, every colour attachment written (gc_debug_mrt)"
-	depends on YAKOGL_GPU_VIVANTE
-	help
-	  Calls gc_debug_set_mrt(1) before the run: GL_MAX_DRAW_BUFFERS answers
-	  every colour attachment (3) and a draw writes them all. Off by
-	  default until the board has measured it; with it on, the ES 3.0
-	  draw_buffers and fragment_out cases can run.
-
-config DEQP_GC_VS_TILED
-	bool "GC7000: vertex-stage 2D textures sampled from a tiled copy (gc_debug_vs_tiled)"
-	depends on YAKOGL_GPU_VIVANTE
-	help
-	  Calls gc_debug_set_vs_tiled(1) before the run: a 2D texture the
-	  vertex stage samples is read from a 4x4-tiled copy, the layout Mesa
-	  gives every texture on this core (tools/vivante golden mode 26),
-	  instead of its linear storage. Off by default until the board has
-	  measured it; texture.vertex.2d.* is the group it is for.
-
-config DEQP_GC_INT_FILTER
-	bool "GC7000: INT_FILTER on UNORM samplers (gc_debug_int_filter)"
-	depends on YAKOGL_GPU_VIVANTE
-	help
-	  Calls gc_debug_set_int_filter(1) before the run: every sampler of a
-	  UNORM texture that is not 3D sets SAMP_CTRL0 INT_FILTER, as Mesa
-	  does (tools/vivante golden mode 26). In both stages, so it can move
-	  fragment-stage results too. Off by default until the board has
-	  measured it.
-
-config DEQP_GC_NARROW_LA
-	bool "GC7000: GL_LUMINANCE / GL_ALPHA / GL_LUMINANCE_ALPHA stored narrow (gc_debug_narrow_la)"
-	depends on YAKOGL_GPU_VIVANTE && YAKOGL_TEST_KNOBS
-	help
-	  Calls gc_debug_set_narrow_la(1), a test knob, before the run: L8,
-	  A8 and LA8 textures are stored one or two bytes a texel and sampled
-	  with the texture unit's own formats instead of expanded into RGBA8
-	  (a quarter of the memory). Off by default until gl_test 132 has
-	  measured it on the board.
+	  dEQP is a test image: it builds the library with its test knobs
+	  (CONFIG_YAKOGL_TEST_KNOBS). It sets none of them, so each stays at
+	  the library's default.
 
 config DEQP_PVR_MASKED_CLEAR
 	bool "PowerVR: colour clears honour glColorMask (pvr_debug_masked_clear)"

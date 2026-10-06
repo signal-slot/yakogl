@@ -20,7 +20,7 @@
 //! texture still in flight is finished first, and the CPU reads the storage
 //! after invalidating its cache. A texture with one level, a compressed one
 //! and a plain 2D one are sampled as they are -- except a 2D texture the
-//! vertex stage samples, under `gc_debug_vs_tiled` (see `wanted_vs`).
+//! vertex stage samples, which is copied too (see `wanted_vs`).
 
 use crate::backend::{
     gles_texfmt_bytes, GlesDraw, GlesTextureBind, GLES_TEXTYPE_2D, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
@@ -107,16 +107,13 @@ pub fn wanted(t: &GlesTextureBind) -> bool {
         && !super::texture::is_block_format(t.format)
 }
 
-/// A plain 2D texture the vertex stage samples, under `gc_debug_vs_tiled`
-/// (backend.rs): tiled like a layered one, because Mesa never lets this
-/// core's vertex stage read a linear texture (golden mode 26: every level is
-/// resolved into a TILED texture first) and every dEQP texture.vertex.2d
-/// case fails on the i.MX8MP over our linear storage while the cube cases,
-/// sampled from this copy, pass. Off until the board has measured it.
+/// A texture the vertex stage samples: a layered one as [`wanted`] says,
+/// and every plain 2D one too, tiled like a layered one, because Mesa never
+/// lets this core's vertex stage read a linear texture (tools/vivante golden
+/// mode 26: every level is resolved into a TILED texture first).
 fn wanted_vs(t: &GlesTextureBind) -> bool {
     wanted(t)
-        || (super::backend::vs_tiled_on()
-            && t.type_ == GLES_TEXTYPE_2D
+        || (t.type_ == GLES_TEXTYPE_2D
             && t.incomplete == 0
             && !t.cpu.is_null()
             && !super::texture::is_block_format(t.format))
