@@ -309,15 +309,22 @@ step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_test
 # compiler's own tests (roundtrip, mesa_ref, golden, qpu_ffi, chain, ...) and
 # v3d_sim_mesa again in a report-es2 build, whose pins differ (GLSL ES 3.00
 # refused). The ES 2.0 build's GL suite is not in that row: it never ran with
-# gpu-v3d before either.
+# gpu-v3d before either. tests/v3d_cube_noseamless.rs (the Pi 4's
+# non-seamless cube defect, docs/v3d-noseamless-cube.md) runs in both builds
+# too: it pins what the compiler's own cube look-up yields on the interpreter,
+# and in the ES 2.0 build carries the target test, ignored until v3d-cube-fix.
 step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
+step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --lib shaderc::online::v3d
 step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
+step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"
