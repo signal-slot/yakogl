@@ -194,6 +194,13 @@ const EXTENSION_COUNT: usize = EXTENSION_NAMES.len();
 /// warning is invisible.
 #[cfg(feature = "shaderc-online")]
 pub(crate) fn advertises(name: &str) -> bool {
+    extension_listed(name)
+}
+
+/// Is `name` in this build's extension list, the one `glGetString(GL_EXTENSIONS)`
+/// prints? For the GL core code that has to follow what the application was
+/// told; not gated, every build asks it.
+pub(crate) fn extension_listed(name: &str) -> bool {
     EXTENSION_NAMES.iter().any(|e| e.strip_suffix(b"\0").is_some_and(|e| e == name.as_bytes()))
 }
 macro_rules! base_extension_string {
@@ -1083,6 +1090,17 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         /* colour attachments one render writes: the end-of-tile programs and
          * the kick's PBE registers carry this many (a G-buffer pass asks for
          * three) */
+        /* ES 2.0 core has neither GL_MAX_DRAW_BUFFERS nor GL_DRAW_BUFFERi
+         * (they come with GL_EXT_draw_buffers, which is not claimed), so the
+         * ES 2.0 report refuses them, and gl_MaxDrawBuffers is 1 in the
+         * shader (reflect::builtin_constant). dEQP's fragdata cases read the
+         * query to learn whether more than one draw buffer exists; answering
+         * 3 sent them down the multiple-buffer path, which an ES 1.00
+         * compiler with one gl_FragData element cannot take. */
+        GL_MAX_DRAW_BUFFERS if crate::REPORT_ES2 => {
+            c.set_error(GL_INVALID_ENUM, "glGetIntegerv");
+            return 0;
+        }
         GL_MAX_DRAW_BUFFERS => context::MAX_DRAW_BUFFERS as GLint,
         GL_MAX_COLOR_ATTACHMENTS => CAP_COLOR_ATTACHMENTS as GLint,
         GL_MAX_SAMPLES => 1,
@@ -1109,7 +1127,9 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         /* ES 3.0 4.2.1: the bound draw framebuffer's draw buffer i, i below
          * GL_MAX_DRAW_BUFFERS (only buffer 0 was answered, and always as
          * the default mapping, until 2026-09-29) */
-        p if (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum).contains(&p) => {
+        p if !crate::REPORT_ES2
+            && (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum).contains(&p) =>
+        {
             super::framebuffer::draw_buffer(c, (p - GL_DRAW_BUFFER0) as usize) as GLint
         }
         GL_READ_BUFFER => {
@@ -2932,8 +2952,11 @@ mod tests {
         for q in [GL_MAX_VARYING_COMPONENTS, GL_MAX_VERTEX_OUTPUT_COMPONENTS, GL_MAX_FRAGMENT_INPUT_COMPONENTS] {
             assert_eq!(geti1(q), vectors * 4, "{q:#x}");
         }
-        /* every GPU: three (every colour attachment) */
-        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
+        /* every GPU: three (every colour attachment); the query itself is
+         * ES 3.0's (see es2_has_no_draw_buffer_queries) */
+        if !crate::REPORT_ES2 {
+            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), 3);
+        }
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), 3);
         /* Uniform blocks, the same on both GPUs (flattened into the default
          * block): twelve a stage, 24 a program, 24 binding points, and one
@@ -2948,6 +2971,38 @@ mod tests {
         assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), 1536);
         assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), 1536);
         assert_eq!(geti1(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT), 4);
+    }
+
+    /// ES 2.0 core has no GL_MAX_DRAW_BUFFERS and no GL_DRAW_BUFFERi: an ES
+    /// 2.0 report refuses both with GL_INVALID_ENUM and leaves the output
+    /// untouched (dEQP shaders.fragdata.* reads the first to learn how many
+    /// draw buffers exist), and an ES 3.0 build answers them. The shader's
+    /// gl_MaxDrawBuffers follows (lower.rs `the_implementation_constants`).
+    #[test]
+    fn draw_buffer_queries_are_es3_only() {
+        let gl = TestGl::new(8, 8);
+        let mut pnames = std::vec![GL_MAX_DRAW_BUFFERS];
+        pnames.extend((0..context::MAX_DRAW_BUFFERS as GLenum + 1).map(|i| GL_DRAW_BUFFER0 + i));
+        for p in pnames {
+            let mut v: GLint = -777;
+            // SAFETY: one GLint out.
+            unsafe { glGetIntegerv(p, &mut v) };
+            let in_range = p == GL_MAX_DRAW_BUFFERS || p < GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum;
+            if crate::REPORT_ES2 {
+                assert_eq!(gl.error(), GL_INVALID_ENUM, "0x{p:x} in an ES 2.0 report");
+                assert_eq!(v, -777, "0x{p:x}: nothing written");
+            } else if in_range {
+                assert_eq!(gl.error(), GL_NO_ERROR, "0x{p:x}");
+                assert_ne!(v, -777, "0x{p:x}");
+            } else {
+                /* the first name past the draw buffers is no pname at all */
+                assert_eq!(gl.error(), GL_INVALID_ENUM, "0x{p:x} past GL_MAX_DRAW_BUFFERS");
+            }
+        }
+        /* the attachment points stay: ES 2.0 reaches them through
+         * GL_NV_fbo_color_attachments, which the list claims */
+        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), CAP_COLOR_ATTACHMENTS as GLint);
+        assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
     #[test]
@@ -2970,7 +3025,9 @@ mod tests {
         /* 16 on every GPU (backend.rs); the GC7000's was 8 until 2026-10-01 */
         assert_eq!(geti1(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), 16);
         /* colour outputs one draw writes, per GPU; attachment points below */
-        assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::MAX_DRAW_BUFFERS);
+        if !crate::REPORT_ES2 {
+            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::MAX_DRAW_BUFFERS);
+        }
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS) as usize, CAP_COLOR_ATTACHMENTS);
         /* the blocks are sized at link time, capped at this limit */
         assert_eq!(geti1(GL_MAX_VERTEX_UNIFORM_COMPONENTS) as usize, MAX_UNIFORM_DWORDS);
@@ -3054,7 +3111,9 @@ mod tests {
     fn binding_queries_report_the_context_bindings() {
         let gl = TestGl::new(8, 8);
         assert_eq!(geti1(GL_ACTIVE_TEXTURE), GL_TEXTURE0 as GLint);
-        assert_eq!(geti1(GL_DRAW_BUFFER0), GL_BACK as GLint);
+        if !crate::REPORT_ES2 {
+            assert_eq!(geti1(GL_DRAW_BUFFER0), GL_BACK as GLint);
+        }
         assert_eq!(geti1(GL_READ_BUFFER), GL_BACK as GLint);
         for p in [
             GL_ARRAY_BUFFER_BINDING,
@@ -3088,7 +3147,9 @@ mod tests {
         assert_eq!(geti1(GL_READ_FRAMEBUFFER_BINDING), 6);
         assert_eq!(geti1(GL_RENDERBUFFER_BINDING), 7);
         assert_eq!(geti1(GL_VERTEX_ARRAY_BINDING), 8);
-        assert_eq!(geti1(GL_DRAW_BUFFER0), GL_COLOR_ATTACHMENT0 as GLint);
+        if !crate::REPORT_ES2 {
+            assert_eq!(geti1(GL_DRAW_BUFFER0), GL_COLOR_ATTACHMENT0 as GLint);
+        }
         assert_eq!(geti1(GL_READ_BUFFER), GL_COLOR_ATTACHMENT0 as GLint);
         /* undo the white-box bindings: destroy must not see objects that do not exist */
         let c = gl.ctx();

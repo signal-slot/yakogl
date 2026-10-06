@@ -10376,6 +10376,27 @@ mod frag_data_tests {
         assert!(msg.contains("one draw buffer"), "a constant past the first buffer: {msg}");
     }
 
+    /// dEQP's shaders.fragdata pattern (es2fShaderFragDataTests.cpp): a
+    /// uniform chooses the draw buffer and the shader is GLSL ES 1.00, which
+    /// is what the ES 2.0 report promises, whatever GL_MAX_DRAW_BUFFERS an
+    /// ES 3 build of the same compiler has (3 on the GC7000). One element
+    /// of gl_FragData exists, so the uniform index may only be 0 and the
+    /// shader must compile and write the one colour output.
+    #[test]
+    fn deqp_fragdata_uniform_index_compiles_in_an_es100_context() {
+        let src =
+            "#version 100\nprecision mediump float;\nuniform mediump int u_index;\nuniform mediump vec4 u_color;\n\
+                   void main() { gl_FragData[u_index] = u_color; }\n";
+        let mut buf = [0u8; 1 << 18];
+        let l = ir(&mut buf, src, Stage::Fragment);
+        assert!(
+            l.module.instrs.iter().any(|o| matches!(o, Op::StoreOutput { slot: ir::IoSlot::FragColor(0), .. })),
+            "the colour is written: {:?}",
+            l.module.instrs
+        );
+        assert_eq!(l.module.outputs.len(), 1, "one colour output: {:?}", l.module.outputs);
+    }
+
     /// In a vertex shader the name does not exist and sema says so before
     /// this lowering is reached, so there is no stage check here to duplicate
     /// it. Pinned, so that a stage check added later is recognised as the
