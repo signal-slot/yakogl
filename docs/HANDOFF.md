@@ -94,14 +94,41 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
    offline and remote go away.
-2. **Design clean-up**:
-   - `DESIGN.md` and `docs/` describe the current design, not its history.
-   - About 50 debug and experiment globals in product code are removed or
-     moved out.
-   - The 26 samples are cut to the few that are needed.
-   - The bare-metal claim is made true, or it is removed.
-   - The `SAFEUI_*` and `powervr-bxs` names are removed.
-   - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
+2. **Design clean-up.** Decided 2026-10-06; the measured inventory is in parentheses.
+   - Order: knobs (Vivante, then its defaults flipped on the board, then
+     PowerVR, then GL core / V3D, then the driver Kconfig instruments) ->
+     samples cut -> gl_test Rust harness -> (after the shader-compiler
+     rename, item 1) compiler knobs -> samples stage 2 -> bare metal ->
+     names -> OSALs to Rust -> docs. Commit 1, the Vivante debug statics,
+     is in progress.
+   - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
+     `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
+     `ONE_IN_FLIGHT` stay product options. The measurement infrastructure
+     (draw-step timing, `CHECK_RUN`, 3D-busy accounting) stays.
+   - Samples: 22 today -> triangle, gl_test (one sample, merged across the
+     GPUs), slint, cluster, deqp, plus glmark2 for measurement.
+   - Bare metal is made true, not removed. `src/osal/baremetal.c` is a
+     skeleton with three `TODO(board)`. It must lend the compiler its
+     scratch and keep regions as `zephyr_shaderc_scratch.c` does; the
+     application must provide the documented 256 KiB compile stack; a board
+     layer is needed (firmware boot, GPU MMU, cache maintenance, IRQ-less
+     waits); the gate must build `baremetal.mk`; one board boot must be
+     recorded. Today no gate row runs `baremetal.mk` and
+     `tools/cts/RESULTS.md` has no bare-metal boot. Design first, after the
+     rename.
+   - Names: `SAFEUI_*` -> `YAKOGL_DRV_*` (652 occurrences in 119 files, 48
+     Kconfig symbols), including the cross-core protocol names shared with
+     the M7 (`SAFEUI_FRAME_RING_*`, `SAFEUI_M7_PAGE_*`, `SAFEUI_LAYOUT_DIR`,
+     `samples/zephyr/safeui/`); `safeui,*` DT compatibles -> `yakogl,*`;
+     module `powervr-bxs` -> `yakogl-drivers`; `PVR_SAMPLE_*` ->
+     `YAKOGL_SAMPLE_*`. The external `slint-safe-ui-zephyr` references stay.
+   - Docs: the plans and bring-up diaries in `driver/docs` and
+     `docs/direct-boot.md` move to `tools/cts/log/` (the 35 code references
+     are updated in the same commits); `docs/` and `driver/docs` then
+     describe only the current design.
+   - Remaining C moves to Rust: the OSALs (3,740 lines), `gl_test.c` (20,291
+     lines: a Rust runner calls the C cases through `extern "C"`, ported in
+     batches), `driver/src` (about 16k lines).
 3. **Known defects.** Each has a GitHub issue; what remains is the fixes:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found) (#9);
