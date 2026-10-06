@@ -3,9 +3,14 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # Generate src/fw/pvr_fw_blob.h from a PowerVR firmware image.
 #
-# The firmware binary is not redistributed in this repo. Take rgx.fw from the
-# board's /lib/firmware (BVNC 36.53.104.796) or from the matching upstream
-# linux-firmware / Mesa open-firmware package, then:
+# The firmware binary is not redistributed in this repo. Take rgx.fw.36.53.104.796
+# (BVNC 36.53.104.796) from the board's /lib/firmware under TI's Linux, or from
+# TI's graphics binary release ti-img-rogue-umlibs (git.ti.com, branch
+# linuxws/scarthgap/k6.12/25.2.6850647:
+# targetfs/am62p_linux/lws-generic/release/lib/firmware/rgx.fw.36.53.104.796).
+# Do NOT take linux-firmware's powervr/rogue_36.53.104.796_v1.fw: that is Mesa's
+# open firmware, a different binary that this DDK-protocol loader cannot boot.
+# Then:
 #
 #   ./tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796
 #
