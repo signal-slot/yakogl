@@ -25,7 +25,12 @@
 # Needs: the variables of imx8mp-env.sh (Zephyr part) and DEQP_STAGE1 (from imx8mp-deqp-stage1.sh).
 # Output: $IMX8MP_OUT/<name>/zephyr/zephyr.bin, log $IMX8MP_OUT/<name>.log.
 set -u
-. "$(dirname "$0")/imx8mp-env.sh"
+# absolute, resolved before the cd to the Zephyr workspace below: the script
+# is documented as `tools/cts/imx8mp-deqp-build.sh ...` (a relative path that
+# stops resolving after that cd), and it runs tools/cts/check-deqp-images.py
+# after the build from here.
+HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/imx8mp-env.sh"
 [ $# -ge 2 ] || { echo "usage: $0 <name> <case filter> [<Kconfig fragment> | --table <table file>]" >&2; exit 2; }
 imx8mp_zephyr_env
 imx8mp_need DEQP_STAGE1
@@ -54,5 +59,5 @@ echo "rc=$rc"
 grep -E " error|Error" "$IMX8MP_OUT/$name.log" | head -10
 grep -E "DEQP_REPORT_ES2=y" "$IMX8MP_OUT/$name/zephyr/.config" 2>/dev/null || echo "imx8mp: warning: the image does not report ES 2.0"
 # conformance: the compiler, REPORT_ES2, no precompiled tier (a fragment that asks for another is a measurement image)
-python3 "$(dirname "$0")/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" 2>&1 || echo "imx8mp: warning: not a conformance image"
+python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" 2>&1 || echo "imx8mp: warning: not a conformance image"
 exit $rc

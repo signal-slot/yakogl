@@ -54,6 +54,54 @@ else
     bad "refusals: did NOT split by construct -- the token was lost again"
 fi
 
+echo
+# ---- 17: check-deqp-images.py --config on fixture .config files ------------
+#
+# The dEQP image builders (am62p-deqp-images.sh, pi4-deqp-images.sh,
+# imx8mp-deqp-build.sh) run check-deqp-images.py --config on the
+# zephyr/.config each build writes and mark an image that fails it
+# (rc=not-conformance). That post-build check had never run: the workers
+# have no Zephyr build. These fixtures are resolved configurations in the
+# form a build writes them -- CONFIG_X=value lines, a disabled bool as
+# "# CONFIG_X is not set", ints and strings always present -- one good per
+# board plus the ms4 image, and one bad per rule --config enforces. A bad
+# fixture must fail with a message naming the offending symbol, so a real
+# board failure reads as the config line that caused it.
+echo
+echo "== 17. check-deqp-images.py --config on fixture .config files (testdata/deqp-config)"
+CONF_DIR=$HERE/testdata/deqp-config
+conf_ok() { # <fixture> [extra args]: the resolved config must pass the check
+    local f=$1; shift
+    if cout=$(python3 "$HERE/check-deqp-images.py" --config "$CONF_DIR/$f" "$@" 2>&1); then
+        ok "config $f: a conformance image passes"
+    else
+        bad "config $f: should pass; the check said: $cout"
+    fi
+}
+conf_bad() { # <fixture> <symbol> [extra args]: must fail, naming the symbol
+    local f=$1 sym=$2; shift 2
+    cout=$(python3 "$HERE/check-deqp-images.py" --config "$CONF_DIR/$f" "$@" 2>&1)
+    if [ $? -eq 0 ]; then
+        bad "config $f: should FAIL, but the check passed it"
+    elif printf '%s\n' "$cout" | grep -q "$sym"; then
+        ok "config $f: refused, the message names $sym"
+    else
+        bad "config $f: failed but did not name $sym; said: $cout"
+    fi
+}
+conf_ok  am62p-sweep.config
+conf_ok  am62p-ms4.config --ms4
+conf_ok  imx8mp-sweep.config
+conf_ok  pi4-sweep.config
+conf_bad bad-compiler-missing.config YAKOGL_SHADERC_ONLINE
+conf_bad bad-shaderc-offline.config YAKOGL_SHADERC_OFFLINE
+conf_bad bad-precompiled-only.config YAKOGL_SHADERC_PRECOMPILED_ONLY
+conf_bad bad-precompiled-tier.config YAKOGL_PRECOMPILED_SHADERS
+conf_bad bad-report-es3.config YAKOGL_REPORT_ES2
+conf_bad bad-gles3-report.config DEQP_REPORT_ES2
+conf_bad bad-sweep-ms4-name.config DEQP_GL_CONFIG_NAME
+conf_bad bad-ms4-name-missing.config DEQP_GL_CONFIG_NAME --ms4
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
