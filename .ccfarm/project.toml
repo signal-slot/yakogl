@@ -85,8 +85,10 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 #   CC_aarch64_unknown_none  optional: a cross C compiler for the
 #                    aarch64-unknown-none rows (build.rs also reads
 #                    CC_aarch64-unknown-none and TARGET_CC); without one
-#                    build.rs uses clang, and a machine with neither fails
-#                    the aarch64 check rows and the "no Mesa reference" row
+#                    build.rs uses `clang`, and a machine with neither fails
+#                    the aarch64 check rows and the "no Mesa reference" row.
+#                    A machine with only a versioned clang (clang-23) sets
+#                    this to it.
 #   The board stages' image builds: GLMARK2_SRC, SLINT_NOSTD_DIR,
 #   NOSTD_PATCH_DIR, AGL_SLINT_CLUSTER_DIR, DEQP_WORK (tools/cts/common-images.sh,
 #   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
