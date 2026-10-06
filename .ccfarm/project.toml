@@ -82,6 +82,11 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 #   ZEPHYR_SDK_INSTALL_DIR, WEST_VENV  the Zephyr SDK (1.0.1 was used) and the
 #                    venv holding west, for every Zephyr image build
 #   RUSTUP_TOOLCHAIN the nightly the Slint / cluster / Pi 4 samples need
+#   CC_aarch64_unknown_none  optional: a cross C compiler for the
+#                    aarch64-unknown-none rows (build.rs also reads
+#                    CC_aarch64-unknown-none and TARGET_CC); without one
+#                    build.rs uses clang, and a machine with neither fails
+#                    the aarch64 check rows and the "no Mesa reference" row
 #   The board stages' image builds: GLMARK2_SRC, SLINT_NOSTD_DIR,
 #   NOSTD_PATCH_DIR, AGL_SLINT_CLUSTER_DIR, DEQP_WORK (tools/cts/common-images.sh,
 #   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
@@ -97,6 +102,7 @@ env_names = [
   "ZEPHYR_SDK_INSTALL_DIR",
   "WEST_VENV",
   "RUSTUP_TOOLCHAIN",
+  "CC_aarch64_unknown_none",
   "GLMARK2_SRC",
   "SLINT_NOSTD_DIR",
   "NOSTD_PATCH_DIR",
