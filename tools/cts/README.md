@@ -11,6 +11,8 @@ tools/cts/
   cts-build-zephyr.sh          stage 1: dEQP's sources and data for the Zephyr images
   am62p-deqp-images.sh         stage 2, AM62P: one image per line of a filter file
   am62p-full-tree.txt          the whole GLES2 tree for the AM62P, 17 images
+  am62p-ms4-tree.txt           the AM62P's 18th image: multisample.* on rgba8888d24s8ms4
+  check-deqp-images.py         do the image recipes still build what conformance needs (2d)
   imx8mp-deqp-build.sh         the i.MX8MP image with the 29-entry table
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   pi4-deqp-images.sh           stage 2, Pi 4
@@ -80,13 +82,18 @@ board's table (or, on the i.MX8MP, one image with the table and a selector).
 - **AM62P** (U-Boot TFTP):
 
   ```sh
-  ZEPHYR_WS=... DEQP_WORK=<stage 1> tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt <img-dir> > <img-dir>/build.out
-  TREE_IMAGE_DIR=<img-dir> tools/board.sh am62p tree tools/cts/am62p-full-tree.txt <outdir>
+  ZEPHYR_WS=... DEQP_WORK=<stage 1> tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt <img-dir> <tag> > <img-dir>/build.out
+  TREE_IMAGE_DIR=<img-dir> TREE_TAG=<tag> tools/board.sh am62p tree tools/cts/am62p-full-tree.txt <outdir>
   tools/board.sh am62p diff <earlier outdir> <outdir>
   ```
 
   The tree can start on image 1 while the later ones build (it waits for each
-  `img<N> rc=` line in `build.out`).
+  `img<N> rc=` line in `build.out`). `<tag>` names the image directories
+  (`img<N>-<tag>`) and must be the same in both commands: the builder's
+  default is the checkout's short hash, board.sh's is empty.
+  The multisample.* group needs dEQP's 4x multisampled config, a second image
+  (`tools/cts/am62p-ms4-tree.txt`, section 2d); the 17 images of the full tree
+  run on the single-sampled config, where those 16 cases are NotSupported.
 - **i.MX8M Plus**: section 2c.
 - **Raspberry Pi 4**: section 6.
 
@@ -192,6 +199,114 @@ SNVS record, reads the failing names from the DEQP_FAILS pages, and writes `resu
 index, filter, begun, passed, failed, notsup, other, noresult, names) and `rows.md`; `TREE_PREV=<an earlier
 outdir>` adds the per-entry diff. `BOARD_HOST=user@host` comes from the environment only; the variables are
 in `tools/board.sh`'s header. The 2026-10-03 run at 29460f96 is `imx8mp-full-tree-29460f96.results.tsv`.
+
+## 2d. The whole GLES2 tree from a detached checkout of main, per board
+
+What a conformance image is (checked on the host by
+`tools/cts/check-deqp-images.py`, which `tools/board_selftest.sh` runs, and on
+each built image's `.config` by the three builders): the in-process compiler
+(`CONFIG_YAKOGL_SHADERC_ONLINE=y`, the choice's default), no precompiled tier
+(`YAKOGL_PRECOMPILED_SHADERS`, `YAKOGL_SHADERC_PRECOMPILED_ONLY` off; the V3D
+cannot take them anyway), the context reporting ES 2.0
+(`CONFIG_YAKOGL_REPORT_ES2=y`, and `CONFIG_DEQP_REPORT_ES2=y`, which selects
+it), no test knob set (the sample selects `YAKOGL_TEST_KNOBS` and calls none),
+and the memory of the last passing sweeps: Pi 4 48 MiB carve-out with 16 MiB
+of tiled copies (image T5: `texture-2048.conf`, 64 / 24 MiB), i.MX8MP 160 MiB
+C heap, AM62P 256 MiB GPU carve-out (`boards/*.overlay`). A sweep image runs
+on dEQP's default single-sampled config; only the AM62P's MS4 image names
+`rgba8888d24s8ms4`. A builder whose image fails the check reports
+`rc=not-conformance` and the tree skips it.
+
+Common to all three (the scripts build the checkout they live in, so run them
+from the detached one):
+
+```sh
+git worktree add --detach <sweep> main        # or: git clone ... && git checkout --detach main
+SW=<sweep>; HEAD8=$(git -C $SW rev-parse --short=8 HEAD)
+export ZEPHYR_WS=<west workspace> WEST_VENV=$ZEPHYR_WS/.venv ZEPHYR_SDK_INSTALL_DIR=<zephyr sdk 1.0.1>
+export BOARD_HOST=<user@host>                 # tools/board.sh's header has the board variables
+$SW/tools/board.sh --dry-run <board> tree <table> <outdir>   # prints every command, touches nothing
+```
+
+Stage 1 (dEQP's libraries, about 1.9 GB, once per CTS revision and board
+family; no duration is recorded in this repository) is
+`ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_MODULES="$($SW/tools/cts/zephyr-modules.sh $ZEPHYR_WS)" WORK=<stage 1> BOARD=<zephyr board> CTS=<VK-GL-CTS> $SW/tools/cts/cts-build-zephyr.sh`.
+
+**AM62P** (`BOARD=verdin_am62p/am62p54/a53`; `BOARD_BOOT=uboot-tftp`, or
+`uboot-mmc` for the eMMC boot; `BOARD_UART=host:port` of the bridge). The
+checkout needs `driver/src/fw/pvr_fw_blob.h` (`driver/tools/mkfwblob.sh
+<rgx.fw>`, never committed).
+
+```sh
+export DEQP_WORK=<stage 1>
+$SW/tools/cts/am62p-deqp-images.sh $SW/tools/cts/am62p-full-tree.txt <img> $HEAD8 > <img>/build.out    # 17 images
+$SW/tools/cts/am62p-deqp-images.sh $SW/tools/cts/am62p-ms4-tree.txt <img-ms4> ms4 > <img-ms4>/build.out # 1 image
+TREE_IMAGE_DIR=<img> TREE_TAG=$HEAD8 $SW/tools/board.sh am62p tree $SW/tools/cts/am62p-full-tree.txt <rec>/full
+TREE_IMAGE_DIR=<img-ms4> TREE_TAG=ms4 $SW/tools/board.sh am62p tree $SW/tools/cts/am62p-ms4-tree.txt <rec>/ms4
+$SW/tools/board.sh am62p tally <rec>/full      # per image, the mustpass table, every case not Pass
+$SW/tools/board.sh am62p tally <rec>/ms4
+```
+
+Time: each image runs until dEQP is done or the 600 s watchdog feeder stops
+(`CONFIG_YAKOGL_AM62P_WDT_SECONDS`), plus the boot: at most about 11 min per
+image, 18 images, so under 3.3 h on the board with the builds overlapping the
+run; no full-tree wall time is recorded. Last sweep: RESULTS.md section 1z2
+(d60b9d76): 17,141 pass / 0 fail / 19 NotSupported / 5 warnings of 17,165, the
+multisample cases from the MS4 image. The tally of a new sweep is that table:
+17 image rows plus `ms4`, its `fail` column all 0, and
+`tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles2-mustpass.txt <console logs of both trees>`
+for the combined mustpass count (it keeps the last status of a case, so the
+MS4 log replaces image 17's NotSupported multisample rows when named last).
+
+**i.MX8M Plus** (`BOARD=verdin_imx8mp/mimx8ml8/a53`; `BOARD_BOOT=uboot-tftp`
+or `uboot-mmc`; no UART: the record is in the SNVS). One image carries all 29
+rows, picked by selector:
+
+```sh
+export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out> DEQP_STAGE1=<stage 1>
+$SW/tools/cts/imx8mp-deqp-stage1.sh                                   # stage 1, log $IMX8MP_OUT/deqp-stage1.log
+$SW/tools/cts/imx8mp-deqp-build.sh wt-$HEAD8 'dEQP-GLES2.info.*' --table $SW/tools/cts/imx8mp-full-tree.txt
+TREE_IMAGE=$IMX8MP_OUT/wt-$HEAD8/zephyr/zephyr.bin $SW/tools/board.sh imx8mp tree $SW/tools/cts/imx8mp-full-tree.txt <rec>/full
+$SW/tools/board.sh imx8mp tally <rec>/full                            # results.tsv, rows.md
+```
+
+The build prints `rc=0` and, for the image's `.config`, the
+`check-deqp-images.py` verdict. Time: 29 selector boots, each at most the
+600 s WDOG1 bound (`CONFIG_GC_BOARD_WDOG_SECONDS`) plus the boot, so at most
+about 5 h; not recorded as a whole. The tally is `results.tsv` (one line per
+row: index, filter, begun, passed, failed, notsup, other, noresult, names); the
+committed reference is `imx8mp-full-tree-29460f96.results.tsv`
+(2026-10-03), and RESULTS.md's i.MX8MP section at d8583f20 has the per-entry
+table. Compare with `diff <(cut -f1-8 <that file>) <(cut -f1-8 <rec>/full/results.tsv)`
+or `tools/board.sh imx8mp diff <earlier tree dir> <rec>/full` when the
+earlier tree's directory is kept. Known intermittent rows: see
+`docs/HANDOFF.md` (#25, #9, #8).
+
+**Raspberry Pi 4** (`BOARD=rpi_4b` for stage 1; backend tryboot, so no
+`BOARD_BOOT`; `BOARD_UART` the debug probe's by-id device,
+`BOARD_HDMI_TIMINGS` as the lab's; the environment values are in section 6).
+Needs `RUSTUP_TOOLCHAIN=nightly` as for any V3D sample, and the 256 MiB
+`dram0` overlay the sample already carries.
+
+```sh
+export DEQP_WORK=<stage 1 for rpi_4b>
+$SW/tools/cts/pi4-deqp-images.sh $SW/tools/cts/pi4-full-tree.txt <img>      # 29 images, <img>/<LABEL>.built
+TREE_IMAGE_DIR=<img> $SW/tools/board.sh pi4 tree $SW/tools/cts/pi4-full-tree.txt <rec>/full
+$SW/tools/board.sh pi4 tally <rec>/full
+$SW/tools/board.sh pi4 diff <earlier tree> <rec>/full
+```
+
+Time: measured, an image costs its 240 s lifetime plus the boots, about
+5.4 min (images D and E: 5 min 24 s and 5 min 21 s), so 29 images are about
+2 h 40 min on the board. Last sweep: RESULTS.md "Pi 4: sweep 30" (fe5e8e73,
+2026-10-01): 17,165 of 17,165 with a result, 17,075 pass / 25 fail / 62
+NotSupported / 3 QualityWarning; the 25 are the cube cases of #12. Any image
+whose tally says anything but those 25 is a regression.
+
+For all three, an image with no `deqp: summary` line, or fewer case lines than
+its summary counts, is a missing result, never a pass
+(`deqp-uart-tally.py`'s MISSING, INCOMPLETE and FATAL); rerun that image
+(`TREE_ROWS=<n>`; a finished run of the same image is skipped).
 
 ## 3. Reading the numbers
 

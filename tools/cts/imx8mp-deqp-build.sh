@@ -11,7 +11,10 @@
 #
 # <Kconfig fragment> usually holds CONFIG_DEQP_CASE_TABLE="filterA;filterB,filterC;..." (the run-time
 # selector picks entry i; a ';' inside a -D argument is eaten by CMake, hence a file) and any switches
-# (CONFIG_DEQP_GC_MASKED_CLEAR, CONFIG_DEQP_PROBE_POINTS, CONFIG_YAKOGL_GC_CARVEOUT_FILL, ...).
+# (CONFIG_DEQP_PROBE_POINTS, CONFIG_DEQP_SNVS_ADDRESS, CONFIG_YAKOGL_GC_CARVEOUT_FILL, ...; the
+# GC7000's masked clear is the library's default now, its image switch is gone). A
+# conformance image takes no switch: REPORT_ES2 on, the compiler, no precompiled table, as the
+# sample's prj.conf and boards/*.conf leave them (tools/cts/check-deqp-images.py checks that).
 # --table: one dEQP filter per line ('#' lines and blank lines skipped), the form of
 # tools/cts/imx8mp-full-tree.txt: the lines joined with ';' become CONFIG_DEQP_CASE_TABLE in
 # $IMX8MP_OUT/<name>.table.conf, the fragment then used. That image runs every row by its
@@ -40,6 +43,7 @@ if [ -n "$frag" ]; then
 	[ -f "$frag" ] || { echo "imx8mp: $frag not found" >&2; exit 2; }
 	extra=(-DEXTRA_CONF_FILE="$frag")
 fi
+unset DEQP_GL_CONFIG_NAME   # the Kconfig default reads it; a fragment says it explicitly
 cd "$ZEPHYR_WORKSPACE" || exit 1
 west build -p always -b "$BOARD" -d "$IMX8MP_OUT/$name" "$YAKOGL_DIR/driver/samples/zephyr/deqp" -- \
 	-DZEPHYR_MODULES="$ZEPHYR_MODULES" \
@@ -49,4 +53,6 @@ rc=$?
 echo "rc=$rc"
 grep -E " error|Error" "$IMX8MP_OUT/$name.log" | head -10
 grep -E "DEQP_REPORT_ES2=y" "$IMX8MP_OUT/$name/zephyr/.config" 2>/dev/null || echo "imx8mp: warning: the image does not report ES 2.0"
+# conformance: the compiler, REPORT_ES2, no precompiled tier (a fragment that asks for another is a measurement image)
+python3 "$(dirname "$0")/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" 2>&1 || echo "imx8mp: warning: not a conformance image"
 exit $rc
