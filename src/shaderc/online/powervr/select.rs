@@ -257,8 +257,13 @@ type Gradients = [[Option<SelSrc>; 2]; 3];
 struct Sel<'a> {
     m: &'a ir::Module<'a>,
     /// The attribute locations that get registers (`abi::attribs_placed`):
-    /// a location's vertex-input registers are its rank among them.
+    /// a location's vertex-input registers are its rank among them. Of the
+    /// module `select` was given, as the record's are, not of `m`, which
+    /// the unroller may have left with fewer loads.
     attribs_read: u32,
+    /// The registers `gl_VertexID` and `gl_InstanceID` are read from
+    /// (`abi::vs_id_regs`), of the same module.
+    id_regs: (Option<u16>, Option<u16>),
     arena: &'a Arena<'a>,
     /// The register each local slot's components currently live in.
     ///
@@ -669,7 +674,7 @@ impl<'a> Sel<'a> {
              * fetch writes it to (`abi::vs_id_regs`, the record's
              * vs_vertex_id_reg1 / vs_instance_id_reg1). */
             ir::IoSlot::VertexId | ir::IoSlot::InstanceId if self.m.stage != SHC_STAGE_FRAGMENT => {
-                let (vid, iid) = super::abi::vs_id_regs(self.m);
+                let (vid, iid) = self.id_regs;
                 let reg = if slot == ir::IoSlot::VertexId { vid } else { iid };
                 let reg = reg.ok_or(SelectError::Unsupported("a vertex built-in read the module does not load"))?;
                 Ok(SelSrc::Fixed { bank: Bank::VtxIn, reg, mods })
@@ -3798,6 +3803,15 @@ pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selecte
     if m.stage != SHC_STAGE_VERTEX && m.stage != SHC_STAGE_FRAGMENT {
         return Err(SelectError::Unsupported("a stage that is neither vertex nor fragment"));
     }
+    /* The vertex-input registers, from the module as it was given: the
+     * record ranks the attributes the SOURCE module reads (chain.rs,
+     * `abi::attribs_placed`, `abi::vs_id_regs`) and the vertex fetch follows
+     * the record. The unroller below resolves an `if` on a constant and
+     * drops the arm not taken with its loads, so ranked over what it
+     * leaves, an attribute read only there took no registers here and every
+     * attribute after it was read four registers early. */
+    let attribs_read = super::abi::attribs_placed(m).unwrap_or(0);
+    let id_regs = super::abi::vs_id_regs(m);
     /* Loops first: expanded into their iterations (`unroll.rs`), so
      * nothing below meets one. */
     let (m, trips) = match super::unroll::unroll(m, arena) {
@@ -3815,7 +3829,8 @@ pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selecte
     let loaded = arena.alloc_filled(m.instrs.len() * LANES as usize, UNLOADED)?;
     let mut s = Sel {
         m,
-        attribs_read: super::abi::attribs_placed(m).unwrap_or(0),
+        attribs_read,
+        id_regs,
         arena,
         locals_in,
         loaded,
