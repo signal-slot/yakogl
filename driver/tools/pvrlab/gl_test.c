@@ -15294,44 +15294,10 @@ static int case_splitzs(void)
  * With x = 0.75, q = 0.125, a = 0.5, b = 0.25 every channel is exact in
  * 8 bits; a dropped negation reads 1.0 where 0.5 is right.
  * ------------------------------------------------------------------------- */
-static const char fma_vs_plain_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"void main() { gl_Position = a_pos; }\n";
-static const char fma_fs_fused_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
-static const char fma_fs_ctrl_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  float p = u_a * u_b;\n"
-	"  gl_FragColor = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
-	"}\n";
-static const char fma_vs_fused_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_Position = a_pos; v = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
-static const char fma_vs_ctrl_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  float p = u_a * u_b;\n"
-	"  v = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
-	"}\n";
-static const char fma_fs_varying_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_FragColor = v; }\n";
+/* The sources of this case and of 182, 183 and 188 to 192 are files
+ * (tools/shaders/gl_test_own/, through gl_test_shaders*.h like every other
+ * case's), so the precompiled table can hold their programs: as C literals
+ * here, an image without the run-time compiler refused the cases by name. */
 
 /* Draw `prog` over the rectangle (x0, y0)-(x1, y1) in NDC, its four
  * uniforms u_x, u_q, u_a, u_b set to vals[0..3] (a uniform the program does
@@ -15384,10 +15350,10 @@ static int case_fusemad(void)
 	GLuint fs_fused, vs_fused, fs_ctrl, vs_ctrl;
 	bool ok = true;
 
-	fs_fused = link_program(fma_vs_plain_src, fma_fs_fused_src);
-	vs_fused = link_program(fma_vs_fused_src, fma_fs_varying_src);
-	fs_ctrl = link_program(fma_vs_plain_src, fma_fs_ctrl_src);
-	vs_ctrl = link_program(fma_vs_ctrl_src, fma_fs_varying_src);
+	fs_fused = link_program(gl_test_fma_plain_vs_src, gl_test_fma_fused_fs_src);
+	vs_fused = link_program(gl_test_fma_fused_varying_vs_src, gl_test_fma_varying_fs_src);
+	fs_ctrl = link_program(gl_test_fma_plain_vs_src, gl_test_fma_ctrl_fs_src);
+	vs_ctrl = link_program(gl_test_fma_ctrl_varying_vs_src, gl_test_fma_varying_fs_src);
 	if (!fs_fused || !vs_fused || !fs_ctrl || !vs_ctrl)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -15435,47 +15401,6 @@ static int case_fusemad(void)
  * fold lost would not show in the clamp itself (-2.25 would read 0 where
  * 0.25 is right, 1.5 would read 1.0 where 0.75 is).
  * ------------------------------------------------------------------------- */
-static const char fsat_fs_folded_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
-	"void main() {\n"
-	"  gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
-	"                        min(1.0, max(0.0, u_a - 1.1))));\n"
-	"}\n";
-static const char fsat_fs_ctrl_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  float t = max(u_q, 0.0);\n"
-	"  gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
-	"                      min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
-	"}\n";
-static const char fsat_vs_folded_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  v = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
-	"             min(1.0, max(0.0, u_a - 1.1))));\n"
-	"}\n";
-static const char fsat_vs_ctrl_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  float t = max(u_q, 0.0);\n"
-	"  v = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
-	"           min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
-	"}\n";
-
 static int case_fsat(void)
 {
 	/* fma_quad sets u_x, u_q, u_a, u_b; these are lo, in, hi (u_b unused) */
@@ -15485,10 +15410,10 @@ static int case_fsat(void)
 	GLuint fs_folded, vs_folded, fs_ctrl, vs_ctrl;
 	bool ok = true;
 
-	fs_folded = link_program(fma_vs_plain_src, fsat_fs_folded_src);
-	vs_folded = link_program(fsat_vs_folded_src, fma_fs_varying_src);
-	fs_ctrl = link_program(fma_vs_plain_src, fsat_fs_ctrl_src);
-	vs_ctrl = link_program(fsat_vs_ctrl_src, fma_fs_varying_src);
+	fs_folded = link_program(gl_test_fma_plain_vs_src, gl_test_fsat_folded_fs_src);
+	vs_folded = link_program(gl_test_fsat_folded_varying_vs_src, gl_test_fma_varying_fs_src);
+	fs_ctrl = link_program(gl_test_fma_plain_vs_src, gl_test_fsat_ctrl_fs_src);
+	vs_ctrl = link_program(gl_test_fsat_ctrl_varying_vs_src, gl_test_fma_varying_fs_src);
 	if (!fs_folded || !vs_folded || !fs_ctrl || !vs_ctrl)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -15534,24 +15459,13 @@ static int case_fsat(void)
  * not a performance target). The colour is read back so the time is the
  * time of draws that drew: (0.25, 0.75, 0, 1) from the two vec2 uniforms.
  * ------------------------------------------------------------------------- */
-static const char unipad_vs_src[] =
-	"#version 100\n"
-	"attribute vec2 a_pos;\n"
-	"uniform vec2 u_scale;\n"
-	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
-static const char unipad_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform vec2 u_rg;\n"
-	"void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n";
-
 #define UNIPAD_DRAWS 500
 #define UNIPAD_BOUND_MS 250u
 
 static int case_unipad(void)
 {
 	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
-	GLuint prog = link_program(unipad_vs_src, unipad_fs_src);
+	GLuint prog = link_program(gl_test_unipad_vs_src, gl_test_unipad_fs_src);
 	GLint pos;
 	uint32_t t0, ms;
 	bool ok = true;
@@ -16013,34 +15927,6 @@ static int case_predarm(void)
  * u_q = 0.125, u_a = 0.25: then (0.5, 0.625, 0.25, 1), else (0.125, 0.125,
  * 0.75, 1), exact in 8 bits.
  * ------------------------------------------------------------------------- */
-#define PREDIF_ARMS(cond, out)                                                     \
-	"  if (" cond ") {\n"                                                      \
-	"    " out " = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n"                    \
-	"  } else {\n"                                                             \
-	"    " out " = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n"                          \
-	"  }\n"
-static const char predif_fs_uni_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  vec4 c;\n" PREDIF_ARMS("u_x > 0.0", "c") "  gl_FragColor = c;\n"
-	"}\n";
-static const char predif_vs_uni_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n" PREDIF_ARMS("u_x > 0.0", "v") "}\n";
-static const char predif_fs_coord_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  vec4 c;\n" PREDIF_ARMS("gl_FragCoord.x < 32.0", "c") "  gl_FragColor = c;\n"
-	"}\n";
-
 static int case_predif(void)
 {
 	static const float then_vals[4] = { 1.0f, 0.125f, 0.25f, 0.0f };
@@ -16050,9 +15936,9 @@ static int case_predif(void)
 	GLuint fs_uni, vs_uni, fs_coord;
 	bool ok = true;
 
-	fs_uni = link_program(fma_vs_plain_src, predif_fs_uni_src);
-	vs_uni = link_program(predif_vs_uni_src, fma_fs_varying_src);
-	fs_coord = link_program(fma_vs_plain_src, predif_fs_coord_src);
+	fs_uni = link_program(gl_test_fma_plain_vs_src, gl_test_predif_uni_fs_src);
+	vs_uni = link_program(gl_test_predif_uni_varying_vs_src, gl_test_fma_varying_fs_src);
+	fs_coord = link_program(gl_test_fma_plain_vs_src, gl_test_predif_coord_fs_src);
 	if (!fs_uni || !vs_uni || !fs_coord)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16098,26 +15984,6 @@ static int case_predif(void)
  * u_q = 0.125, u_a = 0.25, u_b = 0.25: top (0.4375, 0.125, 0.3125), middle
  * (0.3125, 0.1875, 0.1875), bottom (0.25, 0.125, 0.25).
  * ------------------------------------------------------------------------- */
-#define MULONE_MAT "mat3(vec3(u_q, u_a, 0.0), vec3(u_a, u_a, u_q), vec3(u_b, -u_q, u_x))"
-static const char mulone_fs_one_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5, 0.5, 1.0), 1.0); }\n";
-static const char mulone_fs_half_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5), 1.0); }\n";
-static const char mulone_fs_mods_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  gl_FragColor = vec4(abs(u_x - 2.0 * u_a) * 1.0, 1.0 * -(u_q - u_a),\n"
-	"                      (u_b * 1.0) * u_q * 8.0, 1.0);\n"
-	"}\n";
-
 static int case_mulone(void)
 {
 	static const float vals[4] = { 0.25f, 0.125f, 0.25f, 0.25f };
@@ -16127,9 +15993,9 @@ static int case_mulone(void)
 	GLuint one, half, mods;
 	bool ok = true;
 
-	one = link_program(fma_vs_plain_src, mulone_fs_one_src);
-	half = link_program(fma_vs_plain_src, mulone_fs_half_src);
-	mods = link_program(fma_vs_plain_src, mulone_fs_mods_src);
+	one = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_one_fs_src);
+	half = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_half_fs_src);
+	mods = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_mods_fs_src);
 	if (!one || !half || !mods)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16174,19 +16040,13 @@ static int case_mulone(void)
  * (src/gl/state.rs glBlendEquationSeparate), so column 3 is always drawn
  * and a refusal is a GL error here.
  * ------------------------------------------------------------------------- */
-static const char blendonce_fs_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(u_x, u_q, u_a, u_b); }\n";
-
 static int case_blendonce(void)
 {
 	static const float src[4] = { 0.75f, 0.5f, 0.25f, 0.25f };
 	GLuint prog;
 	bool ok = true;
 
-	prog = link_program(fma_vs_plain_src, blendonce_fs_src);
+	prog = link_program(gl_test_fma_plain_vs_src, gl_test_blendonce_fs_src);
 	if (!prog)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16235,25 +16095,13 @@ static int case_blendonce(void)
  * exact: u_x = 0.75, u_q = 0.5 gives (0.75 * 2 - 1, 0.5 * 0.5 + 0.25,
  * 1 - 0.75 * 0.5, 1) = (0.5, 0.5, 0.625, 1).
  * ------------------------------------------------------------------------- */
-static const char varyfma_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
-static const char varyfma_fs_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_FragColor = vec4(v.x * 2.0 - 1.0, v.y * 0.5 + 0.25, 1.0 - v.x * v.y, 1.0); }\n";
-
 static int case_varyfma(void)
 {
 	static const float vals[4] = { 0.75f, 0.5f, 0.0f, 0.0f };
 	GLuint prog;
 	bool ok = true;
 
-	prog = link_program(varyfma_vs_src, varyfma_fs_src);
+	prog = link_program(gl_test_varyfma_vs_src, gl_test_varyfma_fs_src);
 	if (!prog)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16289,20 +16137,6 @@ static int case_varyfma(void)
  * on u_x drawn with u_x = 1 (left, then) and -1 (right, else), and the
  * `if` on gl_FragCoord.x < 32 (instances of one draw take both arms).
  * ------------------------------------------------------------------------- */
-#define PREDLIVE_FS(cond)                                                          \
-	"#version 100\n"                                                          \
-	"precision highp float;\n"                                                \
-	"uniform float u_x, u_q, u_a, u_b;\n"                                     \
-	"void main() {\n"                                                         \
-	"  float a = u_q * 3.0;\n"                                                \
-	"  float b = u_a + 0.125;\n"                                              \
-	"  float r, s;\n"                                                         \
-	"  if (" cond ") { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\n" \
-	"  gl_FragColor = vec4(r, s, a, b);\n"                                    \
-	"}\n"
-static const char predlive_fs_uni_src[] = PREDLIVE_FS("u_x > 0.0");
-static const char predlive_fs_coord_src[] = PREDLIVE_FS("gl_FragCoord.x < 32.0");
-
 static int case_predlive(void)
 {
 	static const float then_vals[4] = { 1.0f, 0.125f, 0.5f, 0.0f };
@@ -16312,8 +16146,8 @@ static int case_predlive(void)
 	GLuint uni, coord;
 	bool ok = true;
 
-	uni = link_program(fma_vs_plain_src, predlive_fs_uni_src);
-	coord = link_program(fma_vs_plain_src, predlive_fs_coord_src);
+	uni = link_program(gl_test_fma_plain_vs_src, gl_test_predlive_uni_fs_src);
+	coord = link_program(gl_test_fma_plain_vs_src, gl_test_predlive_coord_fs_src);
 	if (!uni || !coord)
 		return -1;
 	glViewport(0, 0, TW, TH);
