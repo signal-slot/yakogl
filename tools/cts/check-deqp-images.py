@@ -102,8 +102,7 @@ def conformance_rules(c, name, gles3=False, ms4=None):
     """Rules on one resolved configuration C (dict) -> list of problems."""
     bad = []
     if c.get('YAKOGL_SHADERC_ONLINE') != 'y':
-        bad.append('%s: YAKOGL_SHADERC_ONLINE is not y (the compiler is conformance'
-                   's back end)' % name)
+        bad.append("%s: YAKOGL_SHADERC_ONLINE is not y (the compiler is conformance's back end)" % name)
     for s in FORBIDDEN_ON:
         if c.get(s) == 'y':
             bad.append('%s: %s=y (conformance runs the in-process compiler, no table)' % (name, s))
@@ -291,6 +290,26 @@ def self_test():
         ok(check_dotconfig(p, False) == [], 'a built .config of a sweep image passes')
         open(p, 'w').write('CONFIG_YAKOGL_SHADERC_ONLINE=y\nCONFIG_DEQP_REPORT_ES2=y\n')
         ok(check_dotconfig(p, False), 'a .config without YAKOGL_REPORT_ES2 is refused')
+    # the fixture .config files under testdata/deqp-config/ (the form a Zephyr
+    # build writes): one good per board plus the ms4 image, one bad per rule.
+    # cts-selftest.sh check 17 runs the same matrix through the command line;
+    # this keeps it inside the script's own self-test, which
+    # tools/board_selftest.sh runs in the pre-landing gate.
+    fixtures = os.path.join(HERE, 'testdata', 'deqp-config')
+    for f, ms4 in (('am62p-sweep.config', False), ('am62p-ms4.config', True),
+                   ('imx8mp-sweep.config', False), ('pi4-sweep.config', False)):
+        ok(check_dotconfig(os.path.join(fixtures, f), ms4) == [],
+           'fixture %s: a conformance image passes' % f)
+    for f, ms4, sym in (('bad-compiler-missing.config', False, 'YAKOGL_SHADERC_ONLINE'),
+                        ('bad-shaderc-offline.config', False, 'YAKOGL_SHADERC_OFFLINE'),
+                        ('bad-precompiled-only.config', False, 'YAKOGL_SHADERC_PRECOMPILED_ONLY'),
+                        ('bad-precompiled-tier.config', False, 'YAKOGL_PRECOMPILED_SHADERS'),
+                        ('bad-report-es3.config', False, 'YAKOGL_REPORT_ES2'),
+                        ('bad-gles3-report.config', False, 'DEQP_REPORT_ES2'),
+                        ('bad-sweep-ms4-name.config', False, 'DEQP_GL_CONFIG_NAME'),
+                        ('bad-ms4-name-missing.config', True, 'DEQP_GL_CONFIG_NAME')):
+        bad = check_dotconfig(os.path.join(fixtures, f), ms4)
+        ok(any(sym in b for b in bad), 'fixture %s: refused, the message names %s' % (f, sym))
     rows = table_lines(os.path.join(HERE, 'am62p-ms4-tree.txt'))
     ok(rows == [('MS4', ' multisample.* (with DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4)', 'dEQP-GLES2.functional.multisample.*')],
        'the ms4 table is one labelled row with its render config')
