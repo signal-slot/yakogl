@@ -1965,6 +1965,16 @@ fn is_renderable_format(f: GLenum) -> bool {
     is_renderbuffer_color_format(f) || is_depth_format(f) || is_stencil_format(f)
 }
 
+/// Does this build's API surface name the format? ES 2.0 core has no 24-bit
+/// depth renderbuffer: GL_DEPTH_COMPONENT24 there is GL_DEPTH_COMPONENT24_OES
+/// of GL_OES_depth24, so an ES 2.0-reporting build takes it only when
+/// GL_EXTENSIONS lists that (decided from the list, not per GPU). dEQP
+/// `fbo.completeness.renderable.renderbuffer.depth.depth_component24` expects
+/// the refusal exactly then. ES 3.0 has the format in core.
+fn renderbuffer_format_advertised(f: GLenum) -> bool {
+    f != GL_DEPTH_COMPONENT24 || !crate::REPORT_ES2 || crate::gl::state::extension_listed("GL_OES_depth24")
+}
+
 /// glRenderbufferStorage's argument rules (ES 3.0 4.4.2), shared with the
 /// multisample form: the target, then the format, then the size.
 fn renderbuffer_storage_args_ok(
@@ -1979,7 +1989,7 @@ fn renderbuffer_storage_args_ok(
         c.set_error(GL_INVALID_ENUM, fn_name);
         return false;
     }
-    if !is_renderable_format(internalformat) {
+    if !is_renderable_format(internalformat) || !renderbuffer_format_advertised(internalformat) {
         c.set_error(GL_INVALID_ENUM, fn_name);
         return false;
     }
@@ -4565,6 +4575,9 @@ mod tests {
             GL_DEPTH24_STENCIL8,
             GL_DEPTH32F_STENCIL8,
         ] {
+            if !renderbuffer_format_advertised(format) {
+                continue; /* refused, see depth_component24_renderbuffer_follows_the_extension_list */
+            }
             let rb = rb_with_storage(format, 16, 16);
             assert_eq!(gl.error(), GL_NO_ERROR, "0x{format:x}");
             let r = &gl.ctx().objs_ref().renderbuffers[rb as usize];
@@ -4749,6 +4762,9 @@ mod tests {
             (GL_DEPTH_COMPONENT32F, 32, 0),
             (GL_DEPTH32F_STENCIL8, 32, 8),
         ] {
+            if !renderbuffer_format_advertised(format) {
+                continue; /* refused in an ES 2.0 report without GL_OES_depth24 */
+            }
             rb_with_storage(format, 4, 4);
             assert_eq!(rb_param(GL_RENDERBUFFER_DEPTH_SIZE), depth, "0x{format:x}");
             assert_eq!(rb_param(GL_RENDERBUFFER_STENCIL_SIZE), stencil, "0x{format:x}");
@@ -5559,12 +5575,11 @@ mod tests {
         }
     }
 
-    /// GL_DRAW_BUFFERi of the bound draw framebuffer.
+    /// GL_DRAW_BUFFERi of the bound draw framebuffer, read from the context:
+    /// the glGetIntegerv query is ES 3.0's and an ES 2.0 report refuses it
+    /// (state.rs), while the draw buffers are state in both.
     fn draw_buffer_q(i: GLenum) -> GLenum {
-        let mut v: GLint = -1;
-        // SAFETY: one GLint out.
-        unsafe { crate::gl::state::glGetIntegerv(GL_DRAW_BUFFER0 + i, &mut v) };
-        v as GLenum
+        draw_buffer(context::current().expect("a context"), i as usize)
     }
 
     /// n > 0 with no array, and n < 0 (review R-22): GL_INVALID_VALUE, and
@@ -7024,6 +7039,44 @@ mod tests {
             );
         }
         assert_eq!(unsafe { glGetError() }, GL_NO_ERROR, "GL_BGRA8_EXT as an internal format");
+    }
+
+    /// GL_DEPTH_COMPONENT24 as renderbuffer storage follows the extension
+    /// list (dEQP fbo.completeness.renderable.renderbuffer.depth.
+    /// depth_component24): an ES 2.0 report without GL_OES_depth24 refuses it
+    /// with GL_INVALID_ENUM, leaving the storage as it was; one that lists the
+    /// extension, and ES 3.0, take it and the framebuffer built on it is
+    /// complete. The decision reads the list, not the GPU: no GPU claims
+    /// GL_OES_depth24 here, so every ES 2.0 build refuses.
+    #[test]
+    fn depth_component24_renderbuffer_follows_the_extension_list() {
+        let gl = TestGl::new(8, 8);
+        let listed = crate::gl::state::extension_listed("GL_OES_depth24");
+        assert!(!listed || crate::REPORT_ES2, "only the ES 2.0 report lists the ES 2.0 extension");
+        let mut rb: GLuint = 0;
+        // SAFETY: room for one name; plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, 8, 8);
+            assert_eq!(gl.error(), GL_NO_ERROR, "the 16-bit depth is ES 2.0 core");
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 8, 8);
+        }
+        let accepted = !crate::REPORT_ES2 || listed;
+        assert_eq!(gl.error(), if accepted { GL_NO_ERROR } else { GL_INVALID_ENUM });
+        let mut f: GLint = 0;
+        // SAFETY: one GLint out.
+        unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_INTERNAL_FORMAT, &mut f) };
+        let want = if accepted { GL_DEPTH_COMPONENT24 } else { GL_DEPTH_COMPONENT16 };
+        assert_eq!(f as GLenum, want, "a refused call changes nothing");
+        if accepted {
+            bound_fb();
+            // SAFETY: plain GL calls on the bound framebuffer.
+            unsafe {
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb);
+                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            }
+        }
     }
 
     #[test]
