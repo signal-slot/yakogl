@@ -65,91 +65,23 @@ refused before the re-key. Case 63 `matattr` passes, served from the table
 for the first time.
 The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
 
+A never-run arm of a predicated `if` still costs time (gl_test 193, 194 on the
+AM62P): 0.11 ms a group for a small arm, rising to 0.38 ms a group beyond
+about 128 groups (an executed group is about 0.79 ms). A branch has a fixed
+cost of 5336 us a frame, about 6.8 executed groups (195). The default lowering
+(`select::branch_pays`, `5f4d3677`, board-proved: gl_test 48 / 48, record
+`20261006-0403-gt-5f4d3677-ecce9b75`) branches an `if` iff the masked cost of
+each arm exceeds that fixed cost, which is crossed at 49 groups an arm; 0 of
+168 corpus `if`s branch, and `fill_color` (31 / 23 groups) stays predicated.
+`PVR_BACKEND_OPT_IF_LOWERING` PREDICATE and BRANCH force a form. If a real
+shader ever shows a large arm under a uniform condition, the step is a per-draw
+variant chosen by the GL core from the condition's value (predicated when the
+long arm runs, branched when it is skipped; `fill_color` at N = 128 would go
+from 91.1 to 55.3 ms with the arm off); it is not planned now.
+
 ## Open work, in order
 
-1. **Branch or predicate: choose by the never-run arm's size.** A
-   predicated-off group costs time (gl_test 193, above). Per added group per
-   frame: run-time compiler +0.107 ms at N = 8, +0.149 ms at N = 32,
-   +0.286 ms at N = 128; table +0.145, +0.181, +0.288 ms. An executed group
-   costs about 0.8 ms a frame (184, 185), so 14 to 36 %. The cost per group
-   rises with N; the cause is not measured (instruction fetch is a
-   candidate). Both paths have the same slope at N = 128. Predicating both
-   arms as pco does (`afa12e9b`) therefore loses to a branch once the
-   never-run arm is large enough. Where the crossover lies is not known.
-   - The finer N series, gl_test 194 `offarmn` (`e34ba09b`, 14 values of N,
-     pixels equal at every N; records `20261006-0021-case194-e34ba09b-bf2afe0b`
-     online, `20261006-0023-case194-table-e34ba09b-5c92d5c1` table), 3D busy
-     per frame (online / table, ms): N = 0 54.56 / 54.85; 8 55.42 / 56.10;
-     16 56.40 / 57.40; 32 59.33 / 60.52; 64 68.36 / 69.37; 128 91.15 / 91.71;
-     256 139.87 / 140.31. Marginal cost per added off-arm group, online
-     (difference / group step): 0 to 8 0.107 ms, 16 to 24 0.162, 32 to 48
-     0.257, 64 to 96 0.346, 128 to 192 0.378, 192 to 256 0.384. A small
-     never-run arm costs about 0.11 ms a group, the marginal cost rises with
-     the arm's size and levels off near 0.38 ms a group beyond N = 128, about
-     half an executed group (0.8 ms, 184 / 185). The table image has the
-     same shape, 0.3 to 1.3 ms above the online image at every N. The cause
-     of the rise is not measured; instruction fetch is a candidate.
-   - The cost of a branch, gl_test 195 `ifbranch` (`97ba03d4`; record
-     `20261006-0140-case195-97ba03d4-d4863a05`, 8 pixels equal): 193's
-     programs both ways on one context, the branched form behind
-     `PVR_BACKEND_OPT_IF_LOWERING` (pco's `lower_if_cond_exec`, six control
-     groups; the default still predicates). 3D busy per frame, predicate /
-     branch: N = 0 54562 / 55337 us; 8 55420 / 55338; 32 59331 / 55338;
-     128 91144 / 55338. The branched form costs 55.34 ms at every N: the
-     never-run arm is skipped. Against the predicated form it costs +0.78 ms
-     at N = 0 (55337 - 54562 = 775 us: the six control groups and the
-     branch, less the 31 base groups it no longer issues), and wins from
-     N = 7 on (0.78 / 0.107 ms per group), that is, for this program, once
-     the never-run arm exceeds about 38 groups (31 + 7). At N = 128 it saves
-     35.8 ms (91144 - 55338 us). `fill_color`'s own scissor arm (31 groups)
-     therefore stays predicated, which is the default.
-   - The branched form with the arm taken (scissorRadius 4), gl_test 195
-     again on `39a5dc39` (record `20261006-0209-case195-39a5dc39-b665ee9b`;
-     pixels ff000099 with the arm off, ff000088 taken). 3D busy per frame,
-     us, predicate off / on, branch off / on: N = 0 54563 / 59046, 55338 /
-     61921; 8 55415 / 66907, 55338 / 69702; 32 59342 / 86005, 55338 / 88325;
-     128 91133 / 163104, 55338 / 162452. With the arm taken the branch costs
-     more than the predicated form by 2.88 ms at N = 0 (61921 - 59046), 2.80
-     at N = 8, 2.32 at N = 32, and 0.65 ms less at N = 128 (the predicated
-     form then pays the 23-group else arm masked at the large-arm rate). An
-     executed group costs about 0.79 ms here ((66907 - 59046) / 10 = 786 us:
-     N = 0 to 8 adds 10 groups to the then arm, the 8 fmad and two uniform
-     copies, not 8; 184 / 185 measured about 0.8). The branch's fixed cost, the six control groups plus the taken
-     branch, comes out at about 4 to 5 ms a frame either way: radius 0 gives
-     0.78 ms net plus the 31 masked groups it no longer issues (about 3.3 ms
-     at 0.107 ms each), radius 4 gives 2.88 ms net plus the 23 masked groups
-     (about 2.5 ms); 6.8 executed groups (5.2 with the arm off). Branching saves the masked
-     cost of the arm it skips (194's curve, 0.107 to 0.38 ms a group). The
-     skipped arm is not known at compile time, so the rule that never loses
-     is: branch when both arms' masked cost exceeds the fixed cost. For
-     `fill_color` (31 and 23 groups, about 3.3 and 2.5 ms) predicating, the
-     default, is right; for a symmetric `if` the crossover is about 38
-     groups an arm by this estimate (49 in the rule below, which uses the
-     larger fixed cost).
-   - The rule as landed (`5f4d3677`, `select::branch_pays`): the default
-     lowering branches an `if` iff the masked cost of EACH arm exceeds
-     `BRANCH_FIXED_US` = 5336 us; otherwise it predicates (the options
-     PREDICATE and BRANCH still force a form). The branch's fixed cost is
-     the larger of 195's two readings: arm taken 2875 + 23 x 107 = 5336 us,
-     arm off 775 + 31 x 107 = 4092 us. The masked cost of an arm is a table
-     of 194's marginal costs by arm size (107 us a group up to 41 groups,
-     122 to 49, 162 to 57, 204 to 65, 257 to 81, 307 to 97, 346 to 129, 367
-     to 161, 378 to 225, 384 beyond). The rule is crossed at 49 groups an
-     arm. On the corpus 0 of 168 `if`s branch (the largest smaller arm of
-     any `if` is 36 groups); `fill_color` (31 / 23) and the offarm sources
-     (else arm 23) stay predicated, and the one-armed `if`s have nothing to
-     save when the arm runs. The 36 ms saved at N = 128 needs knowing which
-     arm runs. Not modelled: 195 at N = 128 with the arm taken, where the
-     branch is 652 us cheaper than the model's +2875.
-     Board run of the rule: the corpus bytes are unchanged, and the gl_test
-     full set on the AM62P passes 48 / 48, 0 resets (record
-     20261006-0403-gt-5f4d3677-ecce9b75).
-   - Next, proposed (not done): a per-draw variant chosen by the GL core from
-     the uniform condition's value, like the blend and sampler-state
-     variants: predicated when the long arm runs, branched when it is
-     skipped. `fill_color` at N = 128: 91.1 to 55.3 ms with the arm off, no
-     loss with it on.
-2. **Compile shaders at build time with our own compiler.** Shaders known
+1. **Compile shaders at build time with our own compiler.** Shaders known
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
@@ -162,7 +94,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
    offline and remote go away.
-3. **Design clean-up**:
+2. **Design clean-up**:
    - `DESIGN.md` and `docs/` describe the current design, not its history.
    - About 50 debug and experiment globals in product code are removed or
      moved out.
@@ -170,7 +102,7 @@ The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
    - The bare-metal claim is made true, or it is removed.
    - The `SAFEUI_*` and `powervr-bxs` names are removed.
    - Our remaining C (the OSAL, `gl_test.c`) moves to Rust.
-4. **Known defects.** Each has a GitHub issue; what remains is the fixes:
+3. **Known defects.** Each has a GitHub issue; what remains is the fixes:
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found) (#9);
    - i.MX8MP case 16 (4x MSAA) fails (#8);
