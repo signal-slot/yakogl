@@ -696,7 +696,6 @@ impl<'m, 'a> Walk<'m, 'a> {
         })
     }
 
-    /// `op(x, y)`, a kernel operation of two operands.
     /// The face of a cube look-up and its coordinates, GL ES 2.0 3.7.5
     /// (Table 3.21), for the 2D-array emulation of a non-seamless cube
     /// ([`crate::shaderc::LodKey::cube_noseam`]). `abs` are |x|, |y|, |z| of
@@ -761,6 +760,7 @@ impl<'m, 'a> Walk<'m, 'a> {
         let t = self.op2(a, AluOp::Fadd, t, half)?;
         Ok((s, t, face))
     }
+    /// `op(x, y)`, a kernel operation of two operands.
     fn op2(&mut self, a: &Arena<'a>, op: AluOp, x: S, y: S) -> Result<S, PrepError> {
         self.push(a, SOp::Alu(op, [x, y, S(0)]))
     }

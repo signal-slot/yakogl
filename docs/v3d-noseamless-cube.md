@@ -405,33 +405,12 @@ The design's code points 1-5 and 7, with these decisions:
   the sensitivities (none in an ES 3 build), the variants of both stages
   linking into a program that has `tmui` where the base has `tmuscm`.
 - draw.rs `the_cube_key_follows_the_filters`.
-
-### Pi 4 verification (one session; ES 2.0 images, `CONFIG_YAKOGL_REPORT_ES2=y` is v3d_deqp's prj.conf)
-
-The 25 cases live in three images of tools/cts/pi4-full-tree.txt: **T1**
-(`texture.vertex.*`, 181 cases: the 18 `texture.vertex.cube.{filtering,wrap}`
-cases), **T3** (`texture.mipmap.*`, 304: the 6
-`texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}`)
-and **TF** (`shaders.texture_functions.*`, 17: `vertex.texturecubelod`).
-
-    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
-    tools/board.sh pi4 run <T1 image: the .bin/.img under $IMG/T1/, see $IMG/T1.built> $OUT/T1   # likewise T3, TF
-    tools/board.sh pi4 tally $OUT/T1                              # likewise T3, TF
-    # or the three at once: TREE_IMAGE_DIR=$IMG tools/board.sh pi4 tree <table with those 3 rows> $OUT
-
-(`$IMG`, `$OUT` of the operator's choosing; the image path under `$IMG/<LABEL>/`
-is what `pi4-deqp-images.sh` prints; ZEPHYR_WS / DEQP_WORK as its header says.)
-Expected: T1 181 pass (or its sweep-30 tally plus the 18), T3 304 pass-count
-plus the 6, TF 17 with the one cube case now passing; no other case moves, so
-the whole tree stays at sweep 30 with the 25 moved to pass (17,100 pass, 0 fail,
-62 not supported, 3 quality warnings as RESULTS.md's sweep 30). Then
-`v3d_gl_test` unchanged (21/21, or 12/12 on the older record): its cube
-cases use NEAREST and are never keyed.
-
-Reading a failure: all 25 failing = TMUI is not taken as a float (add one
-FTOIN of the face in `prepare.rs` `cube_face`'s caller); only the six
-`filtering.nearest_mipmap_*_linear_*` failing = the TMU's mag/min switch needs
-the `mag_switch` remap (it is wired: check the vertex key reaches the link,
-`V3D_VARIANTS_BUILT` in the back end's print); only the six `mipmap.cube`
-failing with bad pixels along face edges = the fragment stage's implicit
-level needs the FDX / FDY fallback (section "The level of detail").
+- backend.rs `a_vertex_key_alone_relinks_the_base_program`: the draw of the 18
+  `texture.vertex.cube` cases (key [k, 0]: the vertex variant linked to the
+  retained base program record) gives a program of its own with `tmui` and
+  no `tmuscm`, the base untouched, the records balanced.
+- v3d/backend_tests.rs (the black stand-in test): the 1x1 cube record has
+  `depth` 6, the layout's layer stride is 64 bytes (the C derives the
+  record's `array_stride_64` = 1 from it; that test module stubs the
+  derivation, so the field itself is not asserted) and six black faces sit at
+  that stride, so a TMUI look-up of an incomplete cube reads black.

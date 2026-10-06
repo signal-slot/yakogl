@@ -2448,6 +2448,64 @@ void main (void)
         assert_eq!(store::keep_in_use(), before, "the records went with their holders");
     }
 
+    /// The draw of the 18 `texture.vertex.cube` cases keys the VERTEX stage
+    /// only: the GL core (`lod_variant_for`, key [k, 0]) asks for the vertex
+    /// variant and for the fragment "variant" of key 0, which is the base
+    /// program record itself (retained), and links the two. That relinks a
+    /// program record with a keyed vertex record. The result is a program of
+    /// its own, whose look-up is the TMUI one; the base program is untouched
+    /// and the records balance. The mag_switch bit rides along as it does for
+    /// `textureCubeLod` (the remap is IR to IR).
+    #[cfg(feature = "gpu-v3d")]
+    #[test]
+    fn a_vertex_key_alone_relinks_the_base_program() {
+        let _serial = test_lock();
+        cache_clear();
+        let before = store::keep_in_use();
+        let vs = "attribute vec4 p;\nuniform samplerCube c;\nuniform float l;\nvarying vec4 v;\n\
+                  void main() { v = textureCubeLod(c, p.xyz, l); gl_Position = p; }";
+        let fs_src = "precision mediump float;\nvarying vec4 v;\nvoid main() { gl_FragColor = v; }";
+        let uses = |sh: &ShcShader, w: &str| {
+            sh.usc_words()
+                .chunks(2)
+                .filter_map(|c| crate::shaderc::online::v3d::decode::decode(c[0] as u64 | (c[1] as u64) << 32).ok())
+                .any(|i| {
+                    let mut s = String::new();
+                    crate::shaderc::online::v3d::listing::write_instr(&mut s, &i).unwrap();
+                    s.contains(w)
+                })
+        };
+        let (rc, text, prog) = link(vs, compile_out(SHC_STAGE_FRAGMENT, fs_src));
+        assert_eq!(rc, 0, "link: {text}");
+        assert!(uses(&prog, "tmuscm") && !uses(&prog, "tmui"));
+        let vsh = compile_out(SHC_STAGE_VERTEX, vs);
+        for vkey in
+            [LodKey { cube_noseam: 1, ..LodKey::NONE }, LodKey { cube_noseam: 1, mag_switch: 1, ..LodKey::NONE }]
+        {
+            let mut vvar = ShcShader::ZERO;
+            // SAFETY: a vertex record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&vsh, vkey.bits(), &mut vvar, core::ptr::null_mut(), 0) }, 0);
+            /* the fragment key 0: the base program record, retained */
+            let mut base = ShcShader::ZERO;
+            // SAFETY: the program record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&prog, 0, &mut base, core::ptr::null_mut(), 0) }, 0);
+            let mut log = [0 as c_char; 512];
+            // SAFETY: two distinct valid shaders and a log of the announced size.
+            let rc = unsafe { online_link(&vvar, &mut base, log.as_mut_ptr(), log.len()) };
+            // SAFETY: the writer NUL-terminated the log.
+            let text = String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned();
+            assert_eq!(rc, 0, "{vkey:?}: {text}");
+            assert_ne!(base.priv_, prog.priv_, "{vkey:?}: a program record of its own");
+            assert!(uses(&base, "tmui") && !uses(&base, "tmuscm"), "{vkey:?}: the face goes to TMUI");
+            assert!(uses(&prog, "tmuscm") && !uses(&prog, "tmui"), "the base program is untouched");
+            release(&base);
+            release(&vvar);
+        }
+        release(&vsh);
+        release(&prog);
+        assert_eq!(store::keep_in_use(), before, "the records went with their holders");
+    }
+
     /// A shader of the offline table has no record here, and the accessor
     /// answers empty for it rather than failing. (A build without the
     /// table, the V3D's, has no such shader to ask about.)
