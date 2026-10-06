@@ -23,7 +23,7 @@ Results are from main `81c53c61` (gl_test) and `7dada1ff` (Slint, cluster, table
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
-| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | pass on `7dada1ff` (705 frames in 10007 ms) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (`39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
+| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
 | i.MX8MP | fails: first failure case 16 check 255 (4x MSAA), the same as on `39bd6983`, where it was 45 / 47 | not run on `81c53c61` | not run on `81c53c61` |
 | Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
 
@@ -106,8 +106,9 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    default): the table looked up by the compiler's record key before any
    compile, a hit running none. Board proof (commit 3, `17605c36`): the AM62P gl_test
    image with the tier and `gl_test_es100`'s 1291 rows passes 48 / 48, 0
-   resets. Next: Slint and the cluster with the tier, the tier's hit count on
-   the board (commit 4), then the default.
+   resets; Slint and the cluster with the tier (`femtovg`, 583 rows) draw the
+   same pictures, cluster 91.8 fps. Next: the tier's hit count on the board
+   (commit 4), then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

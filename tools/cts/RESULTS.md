@@ -16784,3 +16784,31 @@ runs with the table, 3240 without (GC7000 88 programs, 177 shaders: 0 and 442).
 The board console does not yet print the tier's hit count and the compiler-run
 count; commit 4 adds them to gl_test's closing line, so the board hit count
 comes with it.
+
+## AM62P: Slint and the cluster from precompiled shaders (origin/main `17605c36`, 2026-10-06)
+
+The precompiled tier (see the entry above) with `CONFIG_YAKOGL_PRECOMPILED_SHADERS=y`
+and `CONFIG_YAKOGL_PRECOMPILED_APPS="femtovg"`; images built from `17605c36`:
+Slint 7,264,736 bytes, cluster 12,769,912. Instrument: `tools/board.sh am62p
+run`, `BOARD_BOOT=uboot-mmc`. Records in `records/am62p/` of the main checkout
+(gitignored).
+
+| sample | record | verdict line |
+|---|---|---|
+| slint | `20261006-1253-slint-precompiled-17605c36-81207642` | `board.sh am62p slint-precompiled-17605c36 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:PROBES resets=0 record=594b0601,08420862,00210842,c5920883 back_after=141s` |
+| cluster | `20261006-1256-cluster-precompiled-17605c36-771f77fb` | `board.sh am62p cluster-precompiled-17605c36 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:PROBES resets=0 record=594b0601,008510c4,19050085,110c6d5f back_after=170s` |
+
+Console, both images:
+
+    I: yakogl: precompiled shaders: 583 rows, 569 links; toolchain: yakogl=0.1.0 commit=17605c36f1a69748e37bd60a825d4c0896e0d64d gpu=powervr es2=1
+
+Slint: `slint: animation: 703 frames in 10002 ms`. Cluster:
+
+    cluster: throughput: 1024x600: 5509 frames in 60014 ms, 91.8 fps, 56.4 Mpx/s; draw 9.9 ms mean, 16.11 ms/Mpx
+
+Read: the PROBES record words are identical to the `7dada1ff` runs without the
+tier (Slint `20261005-2251-slint-7dada1ff-82cb9e17`, `594b0601,08420862,00210842,c5920883`;
+cluster `20261005-2254-cluster-7dada1ff-8ad4f9ab`, `594b0601,008510c4,19050085,110c6d5f`):
+the same pictures. The cluster throughput is the same, 91.8 fps and 56.4 Mpx/s
+(`7dada1ff`: draw 10.0 ms mean, 16.28 ms/Mpx; here draw 9.9 ms, 16.11 ms/Mpx).
+The tier's hit count and compiler-run count are not on the console yet (commit 4).
