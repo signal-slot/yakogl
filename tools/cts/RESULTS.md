@@ -16812,3 +16812,46 @@ cluster `20261005-2254-cluster-7dada1ff-8ad4f9ab`, `594b0601,008510c4,19050085,1
 the same pictures. The cluster throughput is the same, 91.8 fps and 56.4 Mpx/s
 (`7dada1ff`: draw 10.0 ms mean, 16.28 ms/Mpx; here draw 9.9 ms, 16.11 ms/Mpx).
 The tier's hit count and compiler-run count are not on the console yet (commit 4).
+
+## i.MX8MP: the GC7000 debug knobs leave the product, board runs (origin/main `260711b9`, `72d16864`, 2026-10-06)
+
+Commit `260711b9` ("vivante: the debug knobs leave the product") and `72d16864`
+("vivante: MRT, the vertex-stage tiled copy, INT_FILTER, the narrow L8 store and
+Mesa's descriptor order are the design"). Instrument: `tools/board.sh imx8mp run`,
+`BOARD_BOOT=uboot-mmc`, gc_gl_test default set and gc_gl_triangle, images built
+from each commit. Records in `records/imx8mp/` of the main checkout (gitignored).
+
+| image | record | verdict line |
+|---|---|---|
+| gc_gl_test `260711b9` | `20261006-1422-gt-260711b9-8c36f293` | `board.sh imx8mp gt-260711b9 rc=4 verdict=failed boot=uboot-mmc row boot_verdict=cycled result=record:CASE resets=absent record=594b010e,000aff06,0000002d,00000030 back_after=59s uptime=23s` |
+| gc_gl_triangle `260711b9` | `20261006-1424-gc_gl_triangle-260711b9-6c439ef6` | `board.sh imx8mp gc_gl_triangle-260711b9 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:PICTURE resets=absent record=594b040e,ff404080,e7284c58,05000320 back_after=89s uptime=22s` |
+| gc_gl_test `72d16864` | `20261006-1543-gt-72d16864-a5bad906` | `board.sh imx8mp gt-72d16864 rc=4 verdict=failed boot=uboot-mmc row boot_verdict=cycled result=record:CASE resets=absent record=594b010e,0010ff06,0000002e,00000030 back_after=60s uptime=22s` |
+
+INDEX decodes: `260711b9`: `CASE (1) seq 14: case 10 check 255 status 6 (set failed) got 0x0000002d want 0x00000030`
+(45 of 48; case 10 is issue #9, the failure that comes in about 1 run in 3);
+triangle `PICTURE (4) seq 14: centre 0xff404080 crc32 0xe7284c58 size 1280x800`,
+byte-identical to the `84b5761e` run above; `72d16864`: `CASE (1) seq 14: case 16
+check 255 status 6 (set failed) got 0x0000002e want 0x00000030` (46 of 48; case
+16 is issue #8, the same first failure as the `81c53c61` baseline). With MRT on by
+default cases 106 `mrt3` and 163 `drawbuf0` now run instead of being skipped and
+are not the first failure. Pending: the dEQP texture / fbo / uniform_api rows
+against `tools/cts/imx8mp-full-tree-29460f96.results.tsv` (the dEQP stage-1
+build is being set up on the host).
+
+## i.MX8MP: the panel showed one and a half copies of the frame per line (issue #23, 2026-10-06)
+
+Symptom: the user saw one and a half copies of the frame per line on the
+i.MX8MP panel (Toradex Capacitive Touch Display 10.1" DSI = Riverdi
+RVT101HVDWC00-B via the SN65DSI84, the devicetree's panel; Linux on the board
+uses the overlay `verdin-imx8mp_panel-cap-touch-10inch-dsi`). The rendered bytes
+are correct: the PICTURE crc32 is identical (0xe7284c58 above), and gl_test's
+"last frame" is the CPU-drawn panel console, so the display chain is at fault,
+not the GPU. A read-only comparison with the board's Linux showed every
+LCDIF / DSIM / SN65DSI84 register equal except the pixel clock: our dtsi asked
+71.1 MHz (the 2026-10-02 "60 Hz" change above), which puts the DSI lane rate at
+exactly pixel x 24 / 4 with no packet-overhead margin, the same condition that
+broke the picture on 2026-09-23; Linux runs 69.3 MHz (2.6 % headroom). The fix,
+commit `e372545f`: the dtsi back to 69.3 MHz, a 25 per mille margin rule in
+`ip::samsung_dsim::plan` with the dtsi host test and a `BUILD_ASSERT`, and an
+opt-in DISPLAY record kind 22. It is in the gate; the proof is the panel viewed
+after it lands. The host gate cannot see scanout: only eyes or a camera can.

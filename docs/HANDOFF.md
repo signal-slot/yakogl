@@ -137,9 +137,17 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      `desc_seq` (Mesa's order, its experiment bits removed) -- with the
      narrow L8/A8/LA8 store on by default (its RGBA8 arm stays a test knob
      for case 132) and their sample Kconfig rows removed. The product
-     archive defines no `gc_debug_*` symbol, 9 with the knobs. The board
-     run of commit 2 (gl_test set, dEQP fbo / texture / vertex texture
-     groups) is owed.
+     archive defines no `gc_debug_*` symbol, 9 with the knobs. Board
+     (i.MX8MP gc_gl_test default set): commit 1 (`260711b9`) 45 / 48,
+     first failure case 10 (#9, the nondeterministic one this time; record
+     `20261006-1422-gt-260711b9-8c36f293`), and `gc_gl_triangle` byte
+     identical to `84b5761e` (PICTURE crc32 0xe7284c58); commit 2
+     (`72d16864`) 46 / 48, first failure case 16 (#8), the same as the
+     `81c53c61` baseline, with MRT on by default so cases 106 `mrt3` and 163
+     `drawbuf0` run instead of being skipped (record
+     `20261006-1543-gt-72d16864-a5bad906`). The dEQP texture / fbo /
+     uniform_api rows against `tools/cts/imx8mp-full-tree-29460f96.results.tsv`
+     are owed.
    - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
      `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
      `ONE_IN_FLIGHT` stay product options. The measurement infrastructure
@@ -172,10 +180,16 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found) (#9);
    - i.MX8MP case 16 (4x MSAA) fails (#8);
-   - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12).
+   - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12);
+   - i.MX8MP: the panel showed one and a half copies of the frame per line at
+     a 71.1 MHz pixel clock (#23); the fix (the clock back to 69.3 MHz, a
+     margin rule, `e372545f`) is in flight and needs someone looking at the
+     panel.
 
 ## How to work here
 
+- The records prove the framebuffer, not the panel: a display change needs
+  someone looking at the panel (#23).
 - The gate is `tools/check.sh`. Run it from a clean detached checkout of
   the exact commit, with `driver/src/fw/pvr_fw_blob.h` copied in, and with
   `ZEPHYR_WS=<west workspace>` and `HAL_NXP_DIR=<hal_nxp>` set. Without
