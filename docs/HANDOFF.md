@@ -66,7 +66,9 @@ for the first time.
 The GC7000 table still lags on `matattr`: issue #22, not fixed by `0fe778f6`.
 Since `84b5761e` no product image links a Mesa-built row: the reference lives
 in `tests/reference/` for the host gate, and the measurement table image opts
-in with `mesa-reference-table`.
+in with `mesa-reference-table`. An image can now carry its app's shaders
+precompiled by our compiler (feature `precompiled-shaders`, Kconfig
+`YAKOGL_PRECOMPILED_SHADERS` and `_APPS`) in front of the compiler.
 
 A never-run arm of a predicated `if` still costs time (gl_test 193, 194 on the
 AM62P): 0.11 ms a group for a small arm, rising to 0.38 ms a group beyond
@@ -102,8 +104,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    lends the compiler no region); and the precompiled tier in front of it
    (`precompiled-shaders`, Kconfig `YAKOGL_PRECOMPILED_SHADERS`, off by
    default): the table looked up by the compiler's record key before any
-   compile, a hit running none. Next: a board run of it (the AM62P gl_test
-   set, Slint, the cluster), then the default.
+   compile, a hit running none. Board proof (commit 3, `17605c36`): the AM62P gl_test
+   image with the tier and `gl_test_es100`'s 1291 rows passes 48 / 48, 0
+   resets. Next: Slint and the cluster with the tier, the tier's hit count on
+   the board (commit 4), then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

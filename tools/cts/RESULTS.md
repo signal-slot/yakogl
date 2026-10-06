@@ -16757,3 +16757,30 @@ legacy `gl_triangle: record` prefix, which board.sh's console scan (it looks for
 `yk-record:`) does not read; `tools/yakogl-tools`' recordcmd knows the legacy
 prefix. `gl_triangle` is scheduled for removal in the design clean-up (samples
 stage 2), so the sample is not changed.
+
+## AM62P: the precompiled tier in front of the compiler (origin/main `17605c36`, 2026-10-06)
+
+Commit `17605c36` puts a table of programs precompiled by our compiler in front
+of it (`precompiled-shaders`, Kconfig `YAKOGL_PRECOMPILED_SHADERS`): the table is
+looked up by the compiler's record key before any compile, and a hit runs none.
+
+Instrument: `tools/board.sh am62p run`, `BOARD_BOOT=uboot-mmc`, gl_test image
+built from `17605c36` with `CONFIG_YAKOGL_PRECOMPILED_SHADERS=y` and
+`CONFIG_YAKOGL_PRECOMPILED_APPS="gl_test_es100"`: 5,921,040 bytes against
+2,378,000 without the tier. Record `20261006-1245-gt-precompiled-17605c36-75e00861`
+in `records/am62p/` of the main checkout (gitignored).
+
+Verdict line: `board.sh am62p gt-precompiled-17605c36 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=79s`
+
+Console:
+
+    I: yakogl: precompiled shaders: 1291 rows, 1470 links; toolchain: yakogl=0.1.0 commit=17605c36f1a69748e37bd60a825d4c0896e0d64d gpu=powervr es2=0
+    gl_test: all: 0 of 48 cases failed (48 passed; 0 timed out; first failure case -1 at index -1)
+    gl_test: OK (rc=0)
+
+On the host (from the message of `17605c36`): every program the table recorded,
+replayed in the GL core's order, PowerVR 100 programs, 1570 shaders: 0 compiler
+runs with the table, 3240 without (GC7000 88 programs, 177 shaders: 0 and 442).
+The board console does not yet print the tier's hit count and the compiler-run
+count; commit 4 adds them to gl_test's closing line, so the board hit count
+comes with it.
