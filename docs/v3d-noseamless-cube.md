@@ -275,14 +275,12 @@ no-shader-table` with and without `report-es2`):
   the emulation's output (TMUI + TMUS on the cube record) yields the
   non-seamless value for CLAMP, REPEAT and MIRROR, and a TMUSCM look-up the
   seamless one whatever the wrap.
-- tests/v3d_cube_noseamless.rs: our compiler's own `textureCube` vertex
-  program on the interpreter, against two references computed in the test
-  (not by the model): today a `tmuscm` look-up and the seamless value in
-  both builds (`the_compiled_cube_lookup_is_seamless_today`, which pins
-  the wrong-for-ES2 value on purpose), and the ES 2.0 target
-  (`an_es2_build_samples_a_cube_non_seamlessly`, `#[ignore]` naming
-  v3d-cube-fix; run with `--ignored` it fails today with the seamless
-  value on the left).
+- tests/v3d_cube_noseamless.rs: our compiler's own `textureCube` programs on
+  the interpreter, against references computed in the test (not by the
+  model). As designed it pinned the seamless value of the unkeyed program
+  and carried an ignored ES 2.0 target test that failed on the seamless
+  value; both were replaced by item v3d-cube-fix, see "As implemented /
+  Host evidence" below for what the file holds now.
 
 Cannot:
 
@@ -414,3 +412,51 @@ The design's code points 1-5 and 7, with these decisions:
   record's `array_stride_64` = 1 from it; that test module stubs the
   derivation, so the field itself is not asserted) and six black faces sit at
   that stride, so a TMUI look-up of an incomplete cube reads black.
+
+### Pi 4 verification (one session; ES 2.0 images: v3d_deqp's prj.conf has `CONFIG_YAKOGL_REPORT_ES2=y`)
+
+Where the 25 cases are, in tools/cts/pi4-full-tree.txt (row = its position
+among the non-comment lines, the `TREE_ROWS` number):
+
+| Image (row) | Filter | Cases | The cube cases in it |
+|---|---|---|---|
+| **T1** (20) | `texture.vertex.*` among others | 181 | 18: `texture.vertex.cube.filtering.*` 10, `texture.vertex.cube.wrap.*` 8 |
+| **T3** (22) | `texture.mipmap.*`, `texture.specification.*` | 304 | 6: `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` |
+| **TF** (25) | `shaders.texture_functions.*` | 17 | 1: `shaders.texture_functions.vertex.texturecubelod` |
+
+Build the three images (ZEPHYR_WS, DEQP_WORK, ZEPHYR_SDK_INSTALL_DIR as the
+header of tools/cts/pi4-deqp-images.sh says; `$IMG` must not exist yet) and
+run them, either with the tree runner, which waits for each image's
+`<label>.built` line and tallies at the end:
+
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
+    TREE_IMAGE_DIR=$IMG TREE_ROWS=20,22,25 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
+    tools/board.sh pi4 tally $OUT
+
+or image by image (`<image>` is `$IMG/<LABEL>/zephyr/zephyr.bin`):
+
+    tools/board.sh pi4 run $IMG/T1/zephyr/zephyr.bin $OUT/T1     # likewise T3, TF
+    tools/board.sh pi4 tally $OUT/T1                              # likewise T3, TF
+
+Expected: the 25 cases above are Pass (dEQP's "Passed"), and nothing else
+moves: T1, T3 and TF each equal their sweep-30 tally with those cases moved
+from Fail to Pass; for the whole tree (all 29 images,
+`TREE_PREV=<sweep 30's tree> tools/board.sh pi4 tree ...` diffs against it)
+17,100 pass, 0 fail, 62 not supported, 3 quality warnings. Then `v3d_gl_test`
+unchanged, 21/21 (12/12 on the older record): its cube cases use NEAREST,
+which the GL core never keys.
+
+Reading a failure:
+
+- All 25 fail: the TMU did not take TMUI as a float face index (the
+  assumption above). Add one FTOIN of the face in `prepare.rs`
+  (`Walk::cube_face`'s caller), rebuild, run T1 `texture.vertex.cube.wrap.clamp_clamp` alone.
+- Only the six `texture.vertex.cube.filtering.nearest_mipmap_{nearest,linear}_linear_*`
+  fail: the c = 0.5 switch is wrong for the TMU. The remap is wired
+  (`LodKey::mag_switch` in the vertex key); check the vertex key reaches the
+  link (`V3D_VARIANTS_BUILT` in the back end's print grows) before
+  suspecting the remap itself.
+- Only the six `texture.mipmap.cube.*` fail, with invalid pixels along face
+  edges in the QPA: the fragment stage's implicit level needs the FDX / FDY
+  fallback (section "The level of detail"); write it in `prepare.rs` for
+  fragment variants only.
