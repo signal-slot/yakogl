@@ -300,7 +300,9 @@ Cannot:
 ## Test plan
 
 Host, with the fix (all in the two V3D configurations; `tools/check.sh`
-runs them):
+runs them: the `--lib` rows for texref.rs and sim.rs, and a
+`--test v3d_cube_noseamless` row in each V3D build beside the
+`v3d_sim_mesa` rows):
 
 | What | Where | Expect |
 |---|---|---|
