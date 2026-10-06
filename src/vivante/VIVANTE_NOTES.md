@@ -1267,3 +1267,74 @@ The single-case form (`SEL=10`, the same images) ends with case 10's CASE
 record: the first failing check, what it read, and what it wanted. It costs
 one boot a run. Use it for the "first after boot" rate only: at 8/70 it
 needs about 40 runs to see any failure.
+
+## 4x MSAA, gl_test case 16 (#8): what "check 255" is, and the board recipe (2026-10-07)
+
+**"First failure case 16, check 255" is not a check.** `gc_result_case`
+(driver/zephyr/lib/board/imx8mp/gc_result.h) stores the first bad check in
+eight bits and writes 255 for "none"; a SET_FAIL record (the whole-set run)
+carries only the first failing *case* and has no check at all. The 255 in
+tools/cts/STATUS.md is that marker. So no record says which check of case 16
+failed.
+
+**What the default i.MX8MP image does.** `CONFIG_GC_GL_TEST_MSAA` is off
+(gc_gl_test/Kconfig), `gc_debug_msaa` is 0, `msaa_on()` is false, and
+`offered_configs()` (gl/egl.rs) leaves out the 4x config (host-tested:
+`gl::egl::tests::...4x...`, `valid_config(CONFIG_4X)` false). Case 16's first
+check, `eglChooseConfig samples 4 == 1`, therefore reads 0, then `config
+EGL_SAMPLES` reads garbage, and the case returns -1 before any draw. Case 16
+was failing by construction in every default image, the same as the V3D's
+(RESULTS: "Case 16 msaa FAILs by construction"). It is not evidence about the
+GC7000's multisampling, and it is the first failure of every i.MX8MP run.
+Fixed in the harness: on the GC7000 and V3D arms, case 16 runs its 1x half and
+returns the by-name skip (-3, neither pass nor failure, as case 145 does) when
+no 4x config is offered; with the knob on it is the full 4x case. The
+PowerVR arm still fails a missing 4x config (it always offers one).
+
+**What the 4x path does today, with the knob on** (`gc_debug_msaa`, bit 0 =
+1): the scratch is twice the target per axis, 64-padded, supertiled; PE colour
+format SUPER_TILED(+_NEW), no OVERWRITE; `GL_MULTI_SAMPLE_CONFIG` = 4X with
+enables 0xf; etnaviv's sample-position (`RA_MULTISAMPLE_UNK00E10`) and
+centroid (`RA_CENTROID_TABLE`) words; the resolve is an RS copy with
+DOWNSAMPLE_X/Y, a tiled source (stride << 2 | TILING | SUPER_TILED_NEW), a
+window in source samples, no tile status (`TS_MEM_CONFIG` 0, `PE_MEM_CONFIG`
+0). Bit 1 adds PE_LOGIC_OP UNK24 = 5 and PS_INPUT_COUNT / TEMP + 1; bit 2
+writes PS_MSAA_CONFIG per draw. (Mesa's etnaviv driver is not in third_party:
+this comparison is against the records of those four differences and from
+memory of etnaviv_state.c / etnaviv_rs.c, not against a copy.)
+
+**A difference nobody had listed, found on the host: window-space state is
+not scaled.** `emit_raster_state` writes PA_VIEWPORT_SCALE/OFFSET and
+SE_SCISSOR/SE_CLIP in target pixels while the draw rasterises into a scratch
+twice as large. Unless the core scales these itself, the clear quad and the
+triangle land in the scratch's top-left quarter and the resolve (which
+averages the whole scratch) shows the clear colour at "x4 inside" (40,20 of
+64x64): exactly "the resolve still writes nothing: 16 reads the target's
+previous contents where the triangle is", the symptom RESULTS recorded for
+the first attempt, and the scratch probes' "samples in the scratch, a blank
+target" reading. etnaviv's etna_set_framebuffer_state carries an
+msaa_xscale / msaa_yscale for this (from memory). It is behind
+`gc_debug_msaa` bit 3 (8): `vp_scale` in backend.rs, host test
+`msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples`
+(command-stream fields). Off by default: nothing proves yet that the core
+wants it from the driver.
+
+**Board recipe** (one session; i.MX8MP, `BOARD_BOOT=uboot-mmc`; image with
+CONFIG_GC_GL_TEST_MSAA=y, which calls `gc_debug_set_msaa(
+CONFIG_GC_GL_TEST_MSAA_BITS)`; the arms are that value: 1, 9 = bit 0 +
+bit 3, 11 = +bit 1, 13 = +bit 2). Single case: `tools/board.sh imx8mp run`
+with CONFIG_GC_GL_TEST_CASE=16 (the CASE record then names the first bad
+check, got and want). The log's "x4: inside / outside / edge", "x4 scratch",
+"x4 clear only" and "x4 draw only" lines say which half failed:
+
+| arm (gc_debug_msaa) | expected if hypothesis true | otherwise |
+|---|---|---|
+| 1 (today) | x4 inside 0xff000000 (clear colour), scratch non-zero, "clear only" map '#' in the top-left quarter only | inside 0xffff00ff and the case passes: the knob was never the problem, only the config |
+| 9 (viewport/clip scaled) | case 16 PASSES: inside 0xffff00ff, outside 0xff000000, edge 0xff800080 (+-2); clear map covers the whole scratch | still blank target with a full scratch map: the resolve (RS source, tiling) is wrong; scratch empty: the draw (PE supertiling) |
+| 9, scrambled in 64x64 blocks or 4x4 tiles | | supertile bits in PE or RS wrong |
+| 9, triangle at half/double scale | | window size / stride mismatch |
+| 11, 13 | only if 9 passes: they must not regress it | |
+
+A fence timeout or fault: dmesg, then tile status and RS_EXTRA_CONFIG are the
+next suspects. If arm 9 passes, make bit 3 the design (drop the knob bit),
+turn `GC_MSAA_ENABLE` on, and run dEQP multisample with the 4x config image.

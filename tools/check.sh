@@ -236,6 +236,7 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::msaa_bit_one_adds_etnaviv_s_small_msaa_settings_and_the_probe_reads_the_scratch
   vivante::backend::backend_tests::msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does
   vivante::backend::backend_tests::a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on
+  vivante::backend::backend_tests::msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
 )

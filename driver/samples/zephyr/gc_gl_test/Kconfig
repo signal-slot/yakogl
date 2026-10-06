@@ -199,6 +199,18 @@ config GC_GL_TEST_MSAA
 	  has measured it (tools/cts/RESULTS.md, "GC7000 4x MSAA via the
 	  resolve engine").
 
+config GC_GL_TEST_MSAA_BITS
+	int "gc_debug_msaa value case 16 runs with (1 = the 4x resolve)"
+	depends on GC_GL_TEST_MSAA
+	range 1 15
+	default 1
+	help
+	  The argument of gc_debug_set_msaa. Bit 0 is the 4x path, bit 1
+	  etnaviv's SMALL_MSAA extras, bit 2 its per-draw PS_MSAA_CONFIG, bit 3
+	  the viewport and clip scaled to the 2x scratch surface (9 = bit 0 + 3,
+	  the arm that should pass: src/vivante/VIVANTE_NOTES.md, "4x MSAA, gl_test
+	  case 16").
+
 config GC_GL_TEST_UNIIDX_NO_CLAMP
 	bool "gl_test 108: no clamp before the movar (a measurement)"
 	depends on YAKOGL_SHADERC_ONLINE
