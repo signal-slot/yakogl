@@ -1148,3 +1148,122 @@ byte-identical in the command stream.
 (etnaviv_state.c:268-269 asserts a render target is tiled or the core has
 LINEAR_PE; RT_CONFIG has no linear bit -- linear is the absence of
 SUPER_TILED).
+
+## Draw, resolve, read back: our sync sequence against etnaviv's (2026-10-07, #9 and #25)
+
+**The defect.** gl_test case 10 fails about one run in three on the i.MX8MP
+(#9): 14 of 30 runs after the 8 regression-set cases before it, 8 of 70 as
+the first case after boot. The failing check is 23 (frame 5, the 1 px point's
+centre reads the clear colour, `0xff000000`; tools/cts/RESULTS.md, the
+04a0e2c2 sweep). A KICK_DIFF record of a failing run (`vivante/gc-ab-knobs`,
+a branch that is **not in this repository**; tools/cts/STATUS.md) says the
+points were rasterised and their colour never reached memory: the write is
+short by exactly their 4 rows. Case 2 (#25) fails the same way since
+05f8f749, with the command streams of all 24 `cs_ours` modes byte-identical
+to 72d16864. The question here: does our draw -> read-back path miss a stall,
+a flush or a CPU cache operation that etnaviv has?
+
+**The answer, by reading: no.** Each etnaviv step has a counterpart in
+ours, at the same place or earlier, with the same flush set or a larger one.
+Nothing is reordered.
+
+etnaviv's side comes from the upstream sources. Mesa's are
+`src/gallium/drivers/etnaviv`. The kernel's are
+`drivers/gpu/drm/etnaviv/etnaviv_buffer.c` and `etnaviv_gem.c`. Neither is
+vendored here: the kernel's is GPL (third_party/README.md, rule 2), and only
+Mesa's V3D and PowerVR parts are vendored. So the etnaviv column names the
+upstream function. Two host tests now pin the "ours" column word for word:
+
+- `vivante::backend::backend_tests::a_frame_flushes_and_stalls_as_etnaviv_does`
+  (the backend's stream);
+- `gpu::vivante::tests::a_submit_flushes_and_stalls_before_its_event_as_etnaviv_does`
+  (the driver's prologue and epilogue, yakogl-drivers).
+
+The frame is case 10's frame 5: a clear, one draw, `glFinish`,
+`glReadPixels`.
+
+| # | step | etnaviv | ours | verdict |
+|---|---|---|---|---|
+| 1 | submit prologue | kernel `etnaviv_cmd_select_pipe`, on a pipe switch only: `GL_FLUSH_CACHE` DEPTH\|COLOR, SEMAPHORE FE->PE, STALL FE->PE, `PIPE_SELECT` 3D | `cmdbuf.rs` `ring_submit`, on every submit: the same words | same (ours on every submit) |
+| 2 | state at the head of a stream | Mesa `etna_reset_gpu_state` | `emit_context_init`: `PIPE_SELECT` 3D again, `GL_FLUSH_CACHE` DESCRIPTOR, icache invalidate | ours adds; nothing is in flight (step 1 stalled) |
+| 3 | before each draw's state | Mesa: no colour flush between draws; the texture caches only when the textures change | `emit_flushes`: `GL_FLUSH_CACHE` COLOR\|DEPTH\|TEXTURE\|SHADER_L1, then TEXTUREVS, SEMAPHORE+STALL RA->PE, `TS_FLUSH_CACHE` | ours flushes more |
+| 4 | shader and sampler state | the shader block ends with `stall(RA, PE)` (`etnaviv_emit.c`; the state audit above) | SEMAPHORE+STALL FE->PE before the textures and the code, SEMAPHORE+STALL RA->PE after the prefetch | the same RA->PE; ours adds FE->PE |
+| 5 | the draw | `DRAW_INSTANCED` | `DRAW_INSTANCED` | same |
+| 6 | clear -> draw | the clear is a resolve-engine fill. Before an `RS_KICKER`, `etna_try_rs_blit` emits `GL_FLUSH_CACHE` COLOR\|DEPTH, `stall(RA, PE)` and `TS_FLUSH_CACHE` | the clear is a quad through the same PE, then step 3 before the next draw | no PE->RS hand-off on our side, so nothing is missing |
+| 7 | end of the user stream | the last command Mesa recorded | the last `DRAW_INSTANCED`, then a pad (test 1: nothing after it) | same |
+| 8 | submit epilogue | kernel `etnaviv_buffer_queue`, 3D: `GL_FLUSH_CACHE` DEPTH\|COLOR, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK. The BLT steps are skipped: this core has no BLT engine (minor_features5 lacks BLT_ENGINE, tools/cts/RESULTS.md) | `ring_submit` with `GC_SUBMIT_FLUSH_ALL` (`zephyr_gc.c`): `GL_FLUSH_CACHE` DEPTH\|COLOR\|SHADER_L1, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK (test 2) | same, plus SHADER_L1 |
+| 9 | the interrupt | `irq_handler`: read `INTR_ACKNOWLEDGE` (read to clear), signal the event's fence | `irq.rs` `handle`: the same; `fence_done` only moves forward | same |
+| 10 | CPU wait | Mesa `etna_transfer_map` flushes the context, then `etna_bo_cpu_prep(READ)`; the kernel waits for the BO's fence | `glFinish` -> `gc_finish` submits, then waits for every frame's fence; `gc_render_wait` polls `fence_done`, which the ISR writes (volatile) | same |
+| 11 | CPU caches | BOs are write-combined (Normal non-cacheable) by default, so `cpu_prep` does no maintenance for them | the carveout and imported surfaces are mapped Normal non-cacheable (`gc_render.c` `map_carveout`, `gc_render_map_phys`); `gpu_read` invalidates anyway | same |
+| 12 | read-back | a tiled target is first resolved by the RS into linear memory (step 6's flush and stall come first); a linear one is read directly | the linear target is read through the non-cacheable view | same, for a linear target |
+
+**So the cause is not a missing sync step on the host side.** The
+differences from etnaviv that remain are in the surface, not in the
+synchronisation. Each one is a hypothesis, not a finding:
+
+- **(a) A linear PE target.** We render with `PE_LOGIC_OP.SINGLE_BUFFER(1)`
+  into linear memory. Mesa renders tiled or super-tiled, and keeps its
+  linear-PE path behind a debug flag. This is the least-travelled road in
+  the path.
+- **(b) The target's alignment.** Our targets are 64-byte aligned
+  (`GC_OSAL_ALIGN`). Every etnaviv target is a page-aligned GEM buffer, and
+  this core's PE cache lines are 256 bytes (CACHE128B256BPERLINE).
+- **(c) Placement that depends on history.** The pool reuses freed blocks,
+  so where a case's target and arenas land depends on the cases before it.
+  This fits the failure rate moving with the preceding cases (14/30 against
+  8/70). It does not explain the 8/70 as the first case after boot, so
+  (c) can only change the rate; something timing-dependent still has to
+  trigger it.
+
+No product code changes, because nothing above is proven. Every mode's
+command stream is unchanged: the commit adds tests and this section only.
+
+### Board recipe: one session separates (b), (c) and "neither"
+
+All of these are existing measurement knobs on main. Nothing is rebuilt from
+a branch.
+
+```sh
+# from a detached checkout of origin/main (HANDOFF "How to work here")
+# with ZEPHYR_WORKSPACE, ZEPHYR_VENV, ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT
+# exported (tools/cts/imx8mp-env.sh says what each one is)
+LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10"'   # list 0: the set's order up to case 10
+tools/cts/imx8mp-gltest-build.sh gc9-base   0 "$LIST"
+tools/cts/imx8mp-gltest-build.sh gc9-page   0 "$LIST" -DCONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN=y
+tools/cts/imx8mp-gltest-build.sh gc9-reuse0 0 "$LIST" -DCONFIG_YAKOGL_GC_POOL_NO_REUSE=y
+for arm in base page reuse0; do
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    SEL=512 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
+      "$IMX8MP_OUT/gc9-$arm/zephyr/zephyr.bin" build/gc9-imx8mp "$arm-$i"
+  done
+done
+```
+
+`SEL=512` is `GC_RESULT_SWEEP_SEL_LIST + 0`. It runs cases 1-6, 8, 9 and 10
+on one context, as the regression set does, and ends with the counters
+record (`gc_result.h`, kind SWEEP). Read w3, the bitmap of the cases that
+passed:
+
+- `0x0000077e`: every case passed;
+- `0x0000037e`: case 10 failed (#9);
+- bit 2 (`0x4`) clear: case 2 failed (#25), which this list also reaches.
+
+w1 must be 0 (no lost work, no resets, no fence timeouts), or the run is not
+a reading.
+
+The base arm should fail case 10 in about half its runs (14/30). With 10
+runs an arm and that rate, an arm with no failure has a chance of about
+0.2 % (0.53^10). The outcomes:
+
+| base | page | reuse0 | reading |
+|---|---|---|---|
+| ~5/10 fail | 0/10 | ~5/10 | (b): the alignment. Next: make page alignment the default for targets and re-measure dEQP color_clear (the same knob's other open question) |
+| ~5/10 | ~5/10 | 0/10 | (c): the pool's reuse. Next: the open reuse defect above `gc_render_pool_reset` |
+| ~5/10 | 0/10 | 0/10 | (b) through (c): reuse moves a target off a page boundary. Fix (b) |
+| ~5/10 | ~5/10 | ~5/10 | neither. (a) is left, and the next step is the KICK_DIFF instrument with a second read-back about 10 ms after the fence. If the pixels then appear, the event fired before the PE's write-back landed. If they never appear, the PE dropped the dirty lines |
+| 0/10 | - | - | the rate fell. Run 30 more on base before reading the others |
+
+The single-case form (`SEL=10`, the same images) ends with case 10's CASE
+record: the first failing check, what it read, and what it wanted. It costs
+one boot a run. Use it for the "first after boot" rate only: at 8/70 it
+needs about 40 runs to see any failure.

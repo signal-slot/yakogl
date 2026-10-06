@@ -3900,3 +3900,107 @@ fn descriptor_addresses_come_first_then_every_invalidate() {
     walk(&rig.submit(&rig.draw(3)).0, |r, _, _| invals += usize::from(r == GC_NTE_DESCRIPTOR_INVALIDATE));
     assert_eq!(invals, 0);
 }
+
+/// The synchronisation skeleton of a frame, step by step against etnaviv
+/// (issues #9 and #25, the GC7000's nondeterministic missing colour writes;
+/// the comparison is in VIVANTE_NOTES.md, "Draw, resolve, read back: our sync
+/// sequence against etnaviv's"). gl_test case 10's failing frame is a clear
+/// and then a draw in one stream, read back after glFinish; this records the
+/// same shape and keeps only the cache flushes, the semaphore/stall pairs and
+/// the draws:
+///
+/// - the stream opens with the descriptor-cache flush of the GPU state reset;
+/// - every draw, the clear quad included, flushes colour, depth, texture and
+///   shader L1, then the vertex texture cache on its own, then waits RA for
+///   PE, then flushes the tile-status cache -- so a draw never starts while
+///   the previous draw's colour is in the PE cache unflushed;
+/// - the shader and sampler state waits FE for PE, and the draw command
+///   waits RA for PE;
+/// - every SEMAPHORE_TOKEN is followed at once by its STALL for the same
+///   pair (FE: the STALL command; RA: the STALL_TOKEN state). A token with no
+///   stall would leave a semaphore pending that a later stall consumes early;
+/// - the stream ends with the last draw: the final colour flush, the FE/PE
+///   pair and the EVENT are the OSAL's epilogue (kick.rs), as in etnaviv,
+///   where the kernel appends them (etnaviv_buffer_queue).
+#[test]
+fn a_frame_flushes_and_stalls_as_etnaviv_does() {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Ev {
+        Flush(u32),
+        TsFlush,
+        Stall(u32, u32),
+        Draw,
+    }
+    use Ev::*;
+    let pair_of = |token: u32| {
+        [GC_SYNC_FE, GC_SYNC_RA]
+            .iter()
+            .flat_map(|&a| [GC_SYNC_PE].map(move |b| (a, b)))
+            .find(|&(a, b)| token == stall_token(a, b))
+            .expect("a semaphore pair this backend emits")
+    };
+    let events = |s: &Stream| -> Vec<Ev> {
+        let mut v = Vec::new();
+        let mut i = 0usize;
+        while i < s.0.len() {
+            let w = s.0[i];
+            match w & 0xf800_0000 {
+                GC_OP_LOAD_STATE if w == load_state(GC_GL_SEMAPHORE_TOKEN, 1, false) => {
+                    /* the token, and the stall for the same pair as the very
+                     * next command: one value, so no pad word between them */
+                    let token = s.0[i + 1];
+                    let (a, b) = pair_of(token);
+                    let stall = if a == GC_SYNC_FE { GC_OP_STALL } else { load_state(GC_GL_STALL_TOKEN, 1, false) };
+                    assert_eq!(
+                        s.0.get(i + 2..i + 4),
+                        Some(&[stall, token][..]),
+                        "the semaphore at word {i} has its stall"
+                    );
+                    v.push(Stall(a, b));
+                    i += 4;
+                }
+                GC_OP_LOAD_STATE => {
+                    let count = ((w >> 16) & 0x3ff) as usize;
+                    let base = (w & 0xffff) * 4;
+                    for k in 0..count {
+                        let (r, val) = (base + 4 * k as u32, s.0[i + 1 + k]);
+                        if r == GC_GL_FLUSH_CACHE {
+                            v.push(Flush(val));
+                        } else if r == GC_TS_FLUSH_CACHE {
+                            assert_eq!(val, GC_TS_FLUSH);
+                            v.push(TsFlush);
+                        } else if r == GC_GL_STALL_TOKEN || r == GC_GL_SEMAPHORE_TOKEN {
+                            panic!("a stall token at word {i} outside a semaphore/stall pair");
+                        }
+                    }
+                    i += 1 + count;
+                }
+                GC_OP_DRAW_INSTANCED => {
+                    v.push(Draw);
+                    i += 4;
+                }
+                GC_OP_STALL => panic!("a STALL command at word {i} with no semaphore before it"),
+                _ => i += 1, /* NOP and the pad words */
+            }
+        }
+        v
+    };
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.do_clear = true;
+    let got = events(&rig.submit(&d));
+
+    let per_draw = [
+        Flush(GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1),
+        Flush(GC_FLUSH_TEXTUREVS),
+        Stall(GC_SYNC_RA, GC_SYNC_PE),
+        TsFlush,
+        Stall(GC_SYNC_FE, GC_SYNC_PE),
+        Stall(GC_SYNC_RA, GC_SYNC_PE),
+        Draw,
+    ];
+    let mut want = vec![Flush(GC_FLUSH_DESCRIPTOR)];
+    want.extend_from_slice(&per_draw); /* the clear quad */
+    want.extend_from_slice(&per_draw); /* the draw */
+    assert_eq!(got, want, "the clear, then the draw, each behind its flushes; nothing after the last draw");
+}
