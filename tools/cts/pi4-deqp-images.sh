@@ -56,6 +56,7 @@ cmd_build() {
 	[ -d "$DEQP_WORK/cts" ] && [ -f "$DEQP_WORK/build/modules/gles2/libdeqp-gles2-package.a" ] || die "$DEQP_WORK is not a gles2 stage 1"
 	[ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
 	export ZEPHYR_BASE=$ZEPHYR_WS/zephyr
+	unset DEQP_GL_CONFIG_NAME   # the shared deqp Kconfig default reads it: no multisample config in a sweep image
 	local MODS
 	MODS=$("$HERE/zephyr-modules.sh" "$ZEPHYR_WS") || die "zephyr-modules.sh failed"
 	mkdir -p "$OUT"
@@ -73,6 +74,10 @@ cmd_build() {
 			"-DZEPHYR_MODULES=$MODS" "-DDEQP_SRC=$DEQP_WORK/cts" "-DDEQP_BUILD=$DEQP_WORK/build" \
 			"${extra[@]}" "-DCONFIG_DEQP_CASE=\"$f\"" && ninja -C "$B"; } > "$B.log" 2>&1 < /dev/null
 		local rc=$? sha=none build=none
+		# the resolved Kconfig must still be a conformance image (compiler, REPORT_ES2, no table)
+		if [ "$rc" = 0 ]; then
+			python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" >> "$B.log" 2>&1 || rc=not-conformance
+		fi
 		if [ -s "$B/zephyr/zephyr.bin" ]; then
 			sha=$(sha256sum "$B/zephyr/zephyr.bin" | cut -d' ' -f1)
 			build=$(grep -o 'V3D_BUILD=\\"[^\\]*' "$B/build.ninja" | head -1 | sed 's/.*"//')

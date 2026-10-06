@@ -18,6 +18,15 @@
 #                <out-dir>/<LABEL> and its verdict also goes to
 #                <out-dir>/<LABEL>.built ("<LABEL> rc=<rc> sha256=<prefix>"),
 #                which is what tools/board.sh looks for with such a label.
+#                A marker "(with DEQP_GL_CONFIG_NAME=<name>)" on that line
+#                builds the image with -DCONFIG_DEQP_GL_CONFIG_NAME="<name>",
+#                dEQP's --deqp-gl-config-name: tools/cts/am62p-ms4-tree.txt's
+#                MS4 row is rgba8888d24s8ms4, the 4x multisampled config the
+#                multisample.* group needs (the other groups run on the
+#                single-sampled one). Every other image gets an explicit empty
+#                name, so a DEQP_GL_CONFIG_NAME left in the environment
+#                (the Kconfig default reads it) cannot turn a sweep image
+#                into a multisample one.
 # <out-dir>      build directories go to <out-dir>/img<N>-<tag> (or <LABEL>)
 # [tag]          defaults to the checkout's short hash
 # --dry-run      print "<N> <dir name> <filter>" per image and build nothing
@@ -57,17 +66,22 @@ DRY=0
 [ $# -ge 2 ] || die "usage: $0 [--dry-run] <filters.txt> <out-dir> [tag]"
 FILTERS=$1; OUT=$2; TAG=${3:-$(git -C "$REPO" rev-parse --short=8 HEAD)}
 [ -f "$FILTERS" ] || die "no filter file $FILTERS"
-# rows FILTERS: "<N>\t<dir name>\t<labelled 0|1>\t<filter>" per image, the
-# label rule of tools/board.sh tree_rows (TREE_IMAGE_DIR)
+# rows FILTERS: "<N>\t<dir name>\t<labelled 0|1>\t<render config or ->\t<filter>"
+# per image, the label rule of tools/board.sh tree_rows (TREE_IMAGE_DIR)
 rows() {
     awk -v tag="$TAG" '
-        /^# image [A-Za-z0-9]+:/ { l = $3; sub(/:$/, "", l); next }
+        /^# image [A-Za-z0-9]+:/ { l = $3; sub(/:$/, "", l); c = ""
+          if (match($0, /\(with DEQP_GL_CONFIG_NAME=[A-Za-z0-9_]+\)/)) {
+              c = substr($0, RSTART + 6, RLENGTH - 7); sub(/^DEQP_GL_CONFIG_NAME=/, "", c) }
+          next }
         /^[[:space:]]*(#|$)/ { next }
         { n++; lab = (l != "") ? l : "img" n "-" tag
-          printf "%d\t%s\t%d\t%s\n", n, lab, (l != ""), $0; l = "" }' "$1"
+          printf "%d\t%s\t%d\t%s\t%s\n", n, lab, (l != ""), (c != "" ? c : "-"), $0; l = ""; c = "" }' "$1"
 }
 if [ "$DRY" = 1 ]; then
-    rows "$FILTERS" | while IFS=$'\t' read -r n lab _ filt; do echo "$n $lab $filt"; done
+    rows "$FILTERS" | while IFS=$'\t' read -r n lab _ conf filt; do
+        if [ "$conf" = - ]; then echo "$n $lab $filt"; else echo "$n $lab $filt [DEQP_GL_CONFIG_NAME=$conf]"; fi
+    done
     exit 0
 fi
 : "${ZEPHYR_WS:?set ZEPHYR_WS to the west workspace (it holds zephyr/ and modules/)}"
@@ -92,12 +106,21 @@ case "$DEQP_MODULE" in
 esac
 [ -f "$DEQP_WORK/build/modules/$DEQP_MODULE/libdeqp-$DEQP_MODULE-package.a" ] || die "$DEQP_WORK has no $DEQP_MODULE stage 1 (cts-build-zephyr.sh MODULE=$DEQP_MODULE)"
 
-rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled filt; do
+unset DEQP_GL_CONFIG_NAME
+rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
     B=$OUT/$lab
+    [ "$conf" = - ] && conf=
     (cd "$ZEPHYR_WS" && west build -p always -b verdin_am62p/am62p54/a53 -d "$B" \
         "$REPO/driver/samples/zephyr/deqp" -- "-DZEPHYR_MODULES=$MODS" \
         -DDEQP_SRC="$DEQP_WORK/cts" -DDEQP_BUILD="$DEQP_WORK/build" $MODARGS \
+        "-DCONFIG_DEQP_GL_CONFIG_NAME=\"$conf\"" \
         "-DCONFIG_DEQP_CASE=\"$filt\"") > "$B.log" 2>&1 < /dev/null && rc=0 || rc=$?
+    # the resolved Kconfig must still be a conformance image (the compiler, REPORT_ES2, no
+    # precompiled tier, the render config the row asks for); one that is not is not built
+    if [ "$rc" = 0 ] && [ "$DEQP_MODULE" = gles2 ]; then
+        python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" ${conf:+--ms4} >> "$B.log" 2>&1 \
+            || rc=not-conformance
+    fi
     bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16)
     echo "img$n rc=$rc bin=${bin:-none}"
     [ "$labelled" = 1 ] && echo "$lab rc=$rc sha256=${bin:-none}" > "$OUT/$lab.built"

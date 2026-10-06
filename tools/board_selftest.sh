@@ -40,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=203
+WANT_CHECKS=206
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -297,6 +297,12 @@ check "baseline table: the AM62P builder names the five rows by label (BI BP BN 
 out=$("$HERE/cts/am62p-deqp-images.sh" --dry-run "$HERE/cts/am62p-full-tree.txt" "$S/amb" t 2>&1)
 check "an unlabelled table keeps img<N>-<tag> (am62p-full-tree.txt, 17 rows)" \
     eval '[ "$(wc -l <<<"$out")" = 17 ] && [ "$(head -1 <<<"$out" | cut -d" " -f2)" = img1-t ] && [ "$(tail -1 <<<"$out" | cut -d" " -f2)" = img17-t ]'
+out=$("$HERE/cts/am62p-deqp-images.sh" --dry-run "$HERE/cts/am62p-ms4-tree.txt" "$S/amb" t 2>&1)
+check "the AM62P multisample table: one MS4 image carrying the rgba8888d24s8ms4 render config" \
+    eval '[ "$out" = "1 MS4 dEQP-GLES2.functional.multisample.* [DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4]" ]'
+check "dEQP image recipes: symbols, conformance options, carve-outs, tables (check-deqp-images.py)" \
+    python3 -I "$HERE/cts/check-deqp-images.py"
+check "check-deqp-images.py self-test" python3 -I "$HERE/cts/check-deqp-images.py" --self-test
 out=$(PATH="$S/stub:$PATH" "$CB" --dry-run am62p run "$S/amb" "$S/tree" 2>&1)
 rc=$?
 check "baseline am62p run: rc 0, the five labelled rows each booted" \

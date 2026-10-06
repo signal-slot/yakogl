@@ -35,8 +35,10 @@ config DEQP_GL_CONFIG_NAME
 	  which picks the single-sampled config; dEQP-GLES2.functional.
 	  multisample.* then reports NotSupported ("No multisample buffers").
 	  The default is the environment variable DEQP_GL_CONFIG_NAME (empty
-	  when unset), so tools/cts/am62p-deqp-images.sh can build such an
-	  image: DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4 tools/cts/am62p-deqp-images.sh ...
+	  when unset), for a direct west build. tools/cts/am62p-deqp-images.sh
+	  does not read it: it passes the name explicitly, empty for every row
+	  but one marked "(with DEQP_GL_CONFIG_NAME=<name>)", which is how
+	  tools/cts/am62p-ms4-tree.txt builds the multisample image.
 config DEQP_SURFACE_SIZE
 	int "pbuffer width and height"
 	default 256
