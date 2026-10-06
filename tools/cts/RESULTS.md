@@ -16939,3 +16939,27 @@ i.MX8MP: REGRESSION. `CASE (1) seq 14: case 2 check 255 status 6 (set failed) go
 44 of 48 with the first failure at case 2 `texture`, where every run today up to
 `72d16864` had first failure 16 (46 of 48). The cause is being diagnosed (commit 4's
 compiler-path changes on the GC7000 are the suspect); the fix is in flight.
+
+## i.MX8MP: gl_test case 2 is intermittent, not a regression of commits 4 and 5 (issue #25, 2026-10-06)
+
+`gc_gl_test` (compiler only) first read 44 / 48 with the first failure at case 2
+`texture` on `05f8f749`, where `72d16864` read 46 / 48. Three runs of the same
+`05f8f749` image and one of `112dd4fb` (the pixel-clock fix without commits 4 and 5),
+`tools/board.sh imx8mp`, `BOARD_BOOT=uboot-mmc`; records in `records/imx8mp/` of the
+main checkout (gitignored):
+
+| image | record | words | first failure |
+|---|---|---|---|
+| `05f8f749` run 1 | `20261006-1818-gt-05f8f749-b6323a5b` | `594b010e,0002ff06,0000002c,00000030` | case 2 (44 / 48) |
+| `05f8f749` run 2 | `20261006-1857-gt-05f8f749-b6323a5b` | `594b010e,0002ff06,0000002d,00000030` | case 2 (45 / 48) |
+| `05f8f749` run 3 | `20261006-1858-gt-05f8f749-b6323a5b` | `594b010e,0010ff06,0000002e,00000030` | case 16 (46 / 48) |
+| `112dd4fb` | `20261006-1900-gt-112dd4fb-5d3a2e9a` | `594b010e,0010ff06,0000002e,00000030` | case 16 (46 / 48) |
+
+Host evidence (the message of `bf8e51dd`): `cs_ours`' command streams for all 24
+modes that run are byte-identical between `72d16864` and `05f8f749`, shader code,
+textures and uniforms included; the two board images differ only in `record_key`,
+`gl_test_run` and the clear tables. Conclusion: the failure is intermittent, the
+nondeterminism class of #9, not a deterministic regression of commits 4 and 5.
+GitHub issue #25 ("i.MX8MP: gl_test 2 (texture) fails intermittently since
+05f8f749 (2 of 3 runs); GPU command streams unchanged"). This supersedes the
+"REGRESSION" reading of the entry above.

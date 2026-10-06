@@ -3,7 +3,7 @@
 # Handoff
 
 The state of the work and what comes next. Update this file in the same
-commit as any result that changes it. Last update: 2026-10-05.
+commit as any result that changes it. Last update: 2026-10-06.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
@@ -18,13 +18,13 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-Results are from main `81c53c61` (gl_test) and `7dada1ff` (Slint, cluster, table image), except the Pi 4. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
+Results are from main as of `186cbb56`: AM62P gl_test on `05f8f749`, Slint and cluster on `05f8f749` (`7dada1ff` for the fill_color figures), i.MX8MP gc_gl_test on `05f8f749`, the Pi 4 on `afa12e9b`. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
 `docs/standalone-boot.md` has the procedure.
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
 | AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`); 48 / 48 in the compiler-only and precompiled + compiler images (`05f8f749`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
-| i.MX8MP | fails: first failure case 16 check 255 (4x MSAA), the same as on `39bd6983`, where it was 45 / 47 | not run on `81c53c61` | not run on `81c53c61` |
+| i.MX8MP | 46 / 48 on `72d16864` and `112dd4fb`, first failure case 16 (#8). On `05f8f749`: 44 / 48 (first failure case 2), 45 / 48 (case 2), 46 / 48 (case 16): case 2 is intermittent (#25) | not run | not run |
 | Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
 
 AM62P, the fill shader from femtovg (`fill_color`), 3D busy per frame:
@@ -90,96 +90,77 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    at build time are compiled then; the run-time compiler runs only on a
    miss. An image without the run-time compiler refuses a miss by name.
    Mesa's `pco_shc` / `etna_shc` then compile nothing.
-   Done so far (commits 1, 2 and 2b: `dea95deb`, `84b5761e`; board proof:
-   on `84b5761e` both default-config triangles, i.MX8MP `gc_gl_triangle` and
-   AM62P `gl_triangle`, compile their ES 1.00 shaders in process and draw):
-   the one source list every table generator reads
-   (`tools/shaders/precompiled.list`) and `yakogl-precompile`, which
-   compiles it with our compiler on the host into `build/precompiled/`
-   (tools/README.md); the Mesa tables are host-test reference material
-   (`tests/reference/`, `shaderc::mesa_reference`) that a product links only
-   as a measurement image's table (`mesa-reference-table`, Kconfig
-   `YAKOGL_SHADERC_OFFLINE`); the compiler is the default back end in Kconfig
-   and CMake, and only `baremetal.mk` still takes the reference (its OSAL
-   lends the compiler no region); and the precompiled tier in front of it
-   (`precompiled-shaders`, Kconfig `YAKOGL_PRECOMPILED_SHADERS`, off by
-   default): the table looked up by the compiler's record key before any
-   compile, a hit running none. Board proof (commit 3, `17605c36`): the AM62P gl_test
-   image with the tier and `gl_test_es100`'s 1291 rows passes 48 / 48, 0
-   resets; Slint and the cluster with the tier (`femtovg`, 583 rows) draw the
-   same pictures, cluster 91.8 fps. And the image without a compiler (Kconfig
-   `YAKOGL_SHADERC_PRECOMPILED_ONLY`: the table the whole back end, a miss,
-   a variant or a program the table lacks refused by name, -ENOENT, gl_test's
-   closing line counting precompiled hits and compiler runs); and the back
-   ends' own programs from our compiler (the PowerVR's frame-load, masked
-   clear and clear-attach programs, the GC7000's clear pair: the list's
-   `internal` lines, `yakogl-precompile --internal` into the committed
-   `src/pvr/internal.rs` / `src/vivante/internal.rs`; Mesa's are
-   `tests/reference/` material that `tests/internal_programs.rs` runs ours
-   against), so `pco_shc` and `etna_shc` compile nothing for a product
-   image. Still Mesa's (pco, captured by `tools/pco_shc/capture_usc.c` into
-   `driver/src/pvr_usc_*_blob.h`): the driver's five end-of-tile programs
-   (`pvr_render.c`, every render) and the boot self-test's vertex shader
-   (`pvr_selftest.c`), which our encoder does not build yet. Board proof of both (`05f8f749`, AM62P):
-   gl_test 48 / 48 in the compiler-only image (precompiled hits 0, compiler
-   runs 197) and in the precompiled + compiler image (hits 111, compiler runs
-   65); the image without a compiler fails 8 of 48 (cases 181, 182, 183, 188
-   to 192; hits 111, compiler runs 0), each a refusal by name as designed;
-   Slint and the cluster rebuilt with our frame-load program (26 temps
-   against Mesa's 5) keep their records, cluster 91.8 fps. Open points:
-   the list's gl_test reader (`tools/precompile/gl_test_pairs.py`) does not
-   follow the measurement cases' inline shader tables, which is why those
-   cases are refused; sampler-state variants are not precompiled
-   (`gl_test_es100/texture.frag has no variant for sampler key 0x1`, the
-   draw takes the base program); and the i.MX8MP gc_gl_test regressed on
-   `05f8f749` (44 / 48, first failure case 2 `texture`, against 46 / 48 up
-   to `72d16864`), the fix in flight. Then the default.
-   Then rename the two paths to "precompiled shaders" and "shader compiler"
-   (features `precompiled-shaders` and `shader-compiler`; the source moves
-   from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
-   offline and remote go away.
-2. **Design clean-up.** Decided 2026-10-06; the measured inventory is in parentheses.
-   - Order: knobs (Vivante, then its defaults flipped on the board, then
-     PowerVR, then GL core / V3D, then the driver Kconfig instruments) ->
-     samples cut -> gl_test Rust harness -> (after the shader-compiler
-     rename, item 1) compiler knobs -> samples stage 2 -> bare metal ->
-     names -> OSALs to Rust -> docs.
-   - Done so far (commit 1 of the series): the GC7000's debug statics. Of
-     its 16, 4 are removed (`gc_debug_perf_exp` with its frame draw
-     counter, `gc_perf_cmd_words`, `gc_debug_fs_tiled`), 5 are hard-coded
-     at the default every image ran (`flat_shade`, `masked_clear`,
-     `first_component_use`, `black_unbound`, `vs_units16`, with their
-     sample Kconfig rows and `YAKOGL_GC_VS_UNITS16`), and 3 with their 6 C
-     entry points are behind the new `test-knobs` feature
-     (`CONFIG_YAKOGL_TEST_KNOBS`, selected by the gl_test, gc_gl_test and
-     deqp samples): `gc_debug_msaa` and its scratch probes,
-     `gc_debug_flip_experiment`, `gc_debug_narrow_la`. The product archive's
-     `gc_debug_*`/`gc_perf_*` symbols went from 32 to 8, 17 with the knobs
-     (tools/check.sh, "no test knob in the artefact"). Commit 2: the last
-     four become the design and go -- `mrt` (every colour attachment,
-     GL_MAX_DRAW_BUFFERS 1 -> 3), `vs_tiled` (vertex-stage 2D textures from
-     the tiled copy), `int_filter` (INT_FILTER on UNORM samplers) and
-     `desc_seq` (Mesa's order, its experiment bits removed) -- with the
-     narrow L8/A8/LA8 store on by default (its RGBA8 arm stays a test knob
-     for case 132) and their sample Kconfig rows removed. The product
-     archive defines no `gc_debug_*` symbol, 9 with the knobs. Board
-     (i.MX8MP gc_gl_test default set): commit 1 (`260711b9`) 45 / 48,
-     first failure case 10 (#9, the nondeterministic one this time; record
-     `20261006-1422-gt-260711b9-8c36f293`), and `gc_gl_triangle` byte
-     identical to `84b5761e` (PICTURE crc32 0xe7284c58); commit 2
-     (`72d16864`) 46 / 48, first failure case 16 (#8), the same as the
-     `81c53c61` baseline, with MRT on by default so cases 106 `mrt3` and 163
-     `drawbuf0` run instead of being skipped (record
-     `20261006-1543-gt-72d16864-a5bad906`). dEQP on `72d16864`
-     (12 rows of `tools/cts/imx8mp-full-tree.txt` against
-     `imx8mp-full-tree-29460f96.results.tsv`): 10 of 12 identical, two
-     regressions of `72d16864`, fixes in flight: `fbo.completeness.renderable.
-     renderbuffer.depth.depth_component24` fails (the verdict for a
-     DEPTH_COMPONENT24 renderbuffer), and one `shaders.fragdata.*` case is
-     NotSupported (`es2fShaderFragDataTests.cpp:175`, "Dynamic indexing of
-     gl_FragData[] not supported": with GL_MAX_DRAW_BUFFERS 3 the test writes
-     `gl_FragData[i]` and the compiler refuses the indexed write).
-     texture.* and uniform_api (1267 / 1267) are unchanged.
+   Done, in this order: `68563f54` the one source list every table generator
+   reads (`tools/shaders/precompiled.list`) and `yakogl-precompile`, which
+   compiles it with our compiler on the host (tools/README.md); `dea95deb`
+   the Mesa reference leaves product code (`tests/reference/`,
+   `shaderc::mesa_reference`; a product links it only as a measurement
+   image's table, `mesa-reference-table`, Kconfig `YAKOGL_SHADERC_OFFLINE`);
+   `84b5761e` the compiler is the default back end in Kconfig and CMake
+   (only `baremetal.mk` still takes the reference: its OSAL lends the
+   compiler no region); `17605c36` the precompiled tier in front of the
+   compiler (feature `precompiled-shaders`, Kconfig
+   `YAKOGL_PRECOMPILED_SHADERS` and `_APPS`: the table looked up by the
+   compiler's record key before any compile, a hit running none), with
+   `17e7d34c` the image without a compiler (`YAKOGL_SHADERC_PRECOMPILED_ONLY`:
+   a miss, a variant or a program the table lacks is refused by name,
+   -ENOENT; gl_test's closing line counts precompiled hits and compiler
+   runs); `05f8f749` the back ends' own programs from our compiler (the
+   PowerVR's frame-load, masked-clear and clear-attach programs, the
+   GC7000's clear pair: the list's `internal` lines, `yakogl-precompile
+   --internal` into `src/pvr/internal.rs` / `src/vivante/internal.rs`).
+   Board proof on the AM62P (`05f8f749`): gl_test 48 / 48 compiler-only
+   (hits 0, compiler runs 197) and precompiled + compiler (hits 111, runs
+   65); the image without a compiler 40 / 48 (cases 181, 182, 183, 188 to
+   192 refused by name, hits 111, runs 0); Slint and the cluster keep their
+   records, cluster 91.8 fps. Earlier: the tier on `17605c36` with
+   `gl_test_es100`'s 1291 rows, 48 / 48; Slint and the cluster with
+   `femtovg`'s 583 rows, same pictures.
+   Parked: branch `work/pco-driver-programs` (`f5e4aa57`): the driver's five
+   end-of-tile programs, the boot self-test's vertex shader and the
+   VDM-sync program come from our encoder, byte-identical to pco's, so pco
+   compiles nothing for a product image. The full gate passed before a
+   HANDOFF amend. It needs a rebase onto origin/main and a `--quick` run,
+   then landing and an AM62P gl_test, Slint and cluster board run.
+   Open points: the list's gl_test app misses the inline shader sources of
+   cases 181, 182, 183 and 188 to 192 (`tools/precompile/gl_test_pairs.py`
+   does not follow the measurement cases' inline tables); sampler-state
+   (lod-key) variants are not precompiled (`gl_test_es100/texture.frag has
+   no variant for sampler key 0x1`; the draw takes the base program);
+   `YAKOGL_PRECOMPILED_SHADERS` is still off by default.
+   Remaining steps: 6 the default turns on (after the points above); 7
+   rename to "precompiled shaders" and "shader compiler" (features
+   `precompiled-shaders` and `shader-compiler` for `shaderc-online` and
+   `shaderc-offline`; Kconfig symbols, the C ABI, log prefixes); 8 the
+   source moves from `src/shaderc/online` to `src/shaderc/compiler` and
+   `docs/online-shaderc` to `docs/shader-compiler`; 9 optionally, V3D rows.
+   The words online, offline and remote go away.
+2. **Design clean-up.** Decided 2026-10-06; the measured inventory is in
+   parentheses.
+   - Done: clean-up 1 (`260711b9`, the GC7000's debug statics: 4 removed, 5
+     hard-coded at the default every image ran, 3 with their C entry points
+     behind the new `test-knobs` feature, `CONFIG_YAKOGL_TEST_KNOBS`;
+     product archive `gc_debug_*`/`gc_perf_*` symbols 32 -> 8) and clean-up
+     2 (`72d16864`, `mrt`, `vs_tiled`, `int_filter` and `desc_seq` become
+     the design, the narrow L8/A8/LA8 store on by default; the product
+     archive defines no `gc_debug_*` symbol). Board, i.MX8MP gc_gl_test:
+     `260711b9` 45 / 48 (first failure case 10, #9), `gc_gl_triangle` byte
+     identical to `84b5761e`; `72d16864` 46 / 48 (first failure case 16,
+     #8), with MRT on cases 106 `mrt3` and 163 `drawbuf0` run. dEQP on
+     `72d16864`: 10 of 12 rows identical to the 29460f96 baseline; two
+     regressions, `fbo.completeness.renderable.renderbuffer.depth.
+     depth_component24` and `shaders.fragdata.*` (indexed `gl_FragData[]`
+     write refused).
+   - Awaiting the gate and landing, branch `work/cleanup-1-vivante-knobs`:
+     clean-up 3 (the PowerVR's switches leave the product: 5 hard-coded at
+     their measured defaults, 2 switches and 8 options behind test-knobs, 5
+     options retired; no image changes behaviour) and the two dEQP fixes (an
+     ES 2.0 surface refuses a DEPTH_COMPONENT24 renderbuffer and has no
+     GL_MAX_DRAW_BUFFERS / GL_DRAW_BUFFERi query).
+   - Order from here (4 to 15): GL core / V3D knobs; the driver Kconfig
+     instruments; samples cut; gl_test Rust harness; (after the shader-compiler
+     rename, item 1) compiler knobs; samples stage 2; bare metal; names;
+     OSALs to Rust; docs. Clean-up 1 to 3 are the Vivante and PowerVR knobs.
    - Globals: about 59 debug and experiment knobs (32 `static mut`, 16
      `PVR_BACKEND_OPT_*` slots, 11 others). Only `IF_LOWERING` and
      `ONE_IN_FLIGHT` stay product options. The measurement infrastructure
@@ -212,12 +193,20 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (nondeterminism; the
      cause is not found) (#9);
    - i.MX8MP case 16 (4x MSAA) fails (#8);
+   - i.MX8MP gl_test case 2 (`texture`) fails intermittently since
+     `05f8f749` (2 of 3 runs: 44 / 48 and 45 / 48 with case 2 first, 46 / 48
+     with case 16 first; `112dd4fb`, without commits 4 and 5, 46 / 48) (#25).
+     The command streams of 24 `cs_ours` modes are byte-identical between
+     `72d16864` and `05f8f749` and the two images differ only in
+     `record_key`, `gl_test_run` and the clear tables, so it is the
+     nondeterminism class of #9, not a deterministic regression;
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12);
    - the i.MX8MP panel showed one and a half copies of the frame per line at
      the 71.1 MHz pixel clock (no DSI margin); the device tree is back at
-     69.3 MHz and the margin is a checked limit (`e372545f`), the DISPLAY record on `c1f0e2a6` shows the
-     link at 69.3 MHz (lane rate 426600 kHz, headroom 25.9 per mille, bridge
-     IRQ_STAT clean, health 0x3f); the viewing by eye is still pending (#23).
+     69.3 MHz and the margin is a checked limit (`e372545f`); the DISPLAY
+     record on `c1f0e2a6` shows the link at 69.3 MHz (lane rate 426600 kHz,
+     headroom 25.9 per mille, bridge IRQ_STAT clean, health 0x3f); the
+     viewing by eye is still pending (#23).
 
 ## How to work here
 
@@ -236,4 +225,6 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
   <label>`. Run them from a detached checkout of main, and only with images
   built from commits on origin/main. Use `BOARD_BOOT=uboot-mmc` on the
   Verdins.
+- A dEQP image bakes its table in: splitting rows needs a rebuilt image
+  (`tools/cts/imx8mp-deqp-build.sh --table`; tools/cts/README.md).
 - One GL client per board. Check that a board is idle before you use it.
