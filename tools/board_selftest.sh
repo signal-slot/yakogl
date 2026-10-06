@@ -40,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=203
+WANT_CHECKS=206
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
