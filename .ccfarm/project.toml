@@ -1,0 +1,246 @@
+# ccfarm project file for yakogl.
+#
+# yakogl's cycle (README.md "Testing on the host", docs/HANDOFF.md "How to
+# work here", tools/check.sh's header): there is no CI on this repository, so
+# tools/check.sh IS the gate. Work happens on work/* branches; the full gate
+# (about 45 min warm) runs from a clean detached checkout of the exact commit
+# with driver/src/fw/pvr_fw_blob.h copied in and ZEPHYR_WS / HAL_NXP_DIR /
+# PCO_SHC / GLSLANG / GLSL2USC_CACHE set. A row the gate could not run is a
+# "gap", and a gap makes the gate red: without that environment the full gate
+# cannot be green. Landing is on main; board runs use only images built from
+# commits on origin/main, one GL client per board; docs/HANDOFF.md is updated
+# in the same commit as any result that changes it, tools/cts/RESULTS.md and
+# STATUS.md in the same push as the numbers they cite.
+#
+# Until ccfarm's review workspace has that environment (fw blob, Zephyr
+# workspace, hal_nxp, pco_shc, board access), the full gate is red on gaps
+# and ccfarm does NOT touch main: promotion stays off here (promote_to = "").
+# When the environment is there, set promote_to = "main" and the [landing]
+# push flag together.
+
+[project]
+name = "yakogl"
+
+[review]
+enabled = true
+# The full gate, exactly as a developer runs it before pushing (README.md:
+# "Run tools/check.sh before pushing"). It is one script: cargo fmt --check,
+# the no_std archive, clippy with zero warnings and the test suite in every
+# feature configuration and pair, the C host checks, the generated-file
+# reproductions (byte for byte against the committed files), the "no table /
+# no Mesa reference / no test knob in the artefact" symbol counts, the three
+# Zephyr -Werror images (ZEPHYR_WS), the precompiled-table proofs, the Mesa
+# table reproduction (PCO_SHC) and the hal_nxp regeneration (HAL_NXP_DIR).
+# `tools/check.sh --quick` is the PowerVR row only, for an edit loop, and is
+# never the landing gate.
+commands = ["tools/check.sh"]
+merge_into = "ccfarm/integration"
+promote_to = ""
+
+[permissions]
+allow = [
+  "Bash(tools/check.sh:*)",
+  "Bash(cargo test:*)",
+  "Bash(cargo build:*)",
+  "Bash(cargo check:*)",
+  "Bash(cargo clippy:*)",
+  "Bash(cargo fmt:*)",
+  "Bash(cargo run:*)",
+  "Bash(python3:*)",
+  "Bash(cc:*)",
+  "Bash(git status:*)",
+  "Bash(git diff:*)",
+  "Bash(git log:*)",
+  "Bash(git show:*)",
+  "Bash(git add:*)",
+  "Bash(git commit:*)",
+]
+
+[workspace]
+# A fresh clone builds everything through cargo (Cargo.lock is committed;
+# third_party/ vendors Mesa 26.2.1 and the DDK headers, so no Mesa tree is
+# needed). The gate generates its own tier tables into build/ as it runs.
+prepare = ["cargo fetch --locked"]
+
+# Fixed values the gate reads.
+env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
+
+# Values that differ per machine (paths of external workspaces and SDKs); the
+# repository deliberately defaults none of them to a path on one machine.
+#   ZEPHYR_WS        the west workspace ($ZEPHYR_WS/zephyr is ZEPHYR_BASE),
+#                    made from west.yml (driver/samples/zephyr/README.md); the
+#                    three Zephyr -Werror images of the gate are gaps without it
+#   HAL_NXP_DIR      Zephyr's modules/hal/nxp checkout (hal_nxp 1e91007b), for
+#                    the imx8mp regs.rs regeneration row
+#   PCO_SHC          the pco_shc of tools/pco_shc/build_pco_shc.sh (content id
+#                    f537fc86b41f), for the Mesa table reproduction row
+#   GLSL2USC_CACHE   a cache directory for that row (3.5 min with it, else long)
+#   MESA_V3D_TREE    optional: a built Mesa tree with build-v3d to compare the
+#                    V3D checks against instead of the vendored sources
+#   ZEPHYR_SDK_INSTALL_DIR, WEST_VENV  the Zephyr SDK (1.0.1 was used) and the
+#                    venv holding west, for every Zephyr image build
+#   RUSTUP_TOOLCHAIN the nightly the Slint / cluster / Pi 4 samples need
+#   The board stages' image builds: GLMARK2_SRC, SLINT_NOSTD_DIR,
+#   NOSTD_PATCH_DIR, AGL_SLINT_CLUSTER_DIR, DEQP_WORK (tools/cts/common-images.sh,
+#   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
+#   ZEPHYR_VENV, IMX8MP_OUT (tools/cts/imx8mp-env.sh). BOARD_HDMI_TIMINGS is
+#   the Pi 4 panel's hdmi_timings.
+env_names = [
+  "ZEPHYR_WS",
+  "HAL_NXP_DIR",
+  "PCO_SHC",
+  "GLSL2USC_CACHE",
+  "MESA_V3D_TREE",
+  "ZEPHYR_SDK_INSTALL_DIR",
+  "WEST_VENV",
+  "RUSTUP_TOOLCHAIN",
+  "GLMARK2_SRC",
+  "SLINT_NOSTD_DIR",
+  "NOSTD_PATCH_DIR",
+  "AGL_SLINT_CLUSTER_DIR",
+  "DEQP_WORK",
+  "ZEPHYR_WORKSPACE",
+  "ZEPHYR_VENV",
+  "IMX8MP_OUT",
+  "BOARD_HDMI_TIMINGS",
+]
+
+# The PowerVR firmware header: generated from TI's rgx.fw by
+# driver/tools/mkfwblob.sh, gitignored (driver/.gitignore: src/fw/), never
+# committed, and not reproducible without the firmware file. Every AM62P
+# Zephyr image (the gate's -Werror rows and all AM62P board images) needs it.
+copy_from_origin = ["driver/src/fw/pvr_fw_blob.h"]
+
+# Programs the gate needs that are not in the repository. A missing one is a
+# red row or a gap in tools/check.sh, never a silent pass.
+tools = [
+  { name = "cargo", version = ">=1.88", check = "cargo --version", install = "rustup (rust-version 1.88 in Cargo.toml; stable toolchain)" },
+  { name = "rustup target aarch64-unknown-none", check = "rustup target list --installed | grep -qx aarch64-unknown-none", install = "rustup target add aarch64-unknown-none" },
+  { name = "rustup target aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)" },
+  { name = "cc", check = "cc --version", install = "distro package gcc or clang (C11 host compiler; the gate also uses nm, objcopy, sha256sum, cmp, awk)" },
+  { name = "python3 with PyYAML", version = ">=3", check = "python3 -c 'import yaml'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML)" },
+  { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
+  { name = "libclang", check = "python3 -c 'import ctypes.util, sys; sys.exit(0 if ctypes.util.find_library(\"clang\") else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
+  { name = "expat and zlib development libraries", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
+  { name = "west", check = "west --version", install = "pip install west in a venv (WEST_VENV); the Zephyr SDK 1.0.1 at ZEPHYR_SDK_INSTALL_DIR; the workspace from west.yml at ZEPHYR_WS" },
+  { name = "pco_shc", check = "test -x \"$PCO_SHC\"", install = "tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> <build dir> (needs clang/LLVM, libclc, SPIRV-LLVM-Translator, spirv-dis; see the script's header), then PCO_SHC=<build dir>/mesa-26.2.1/build/src/imagination/vulkan/pco_shc; it must print content id f537fc86b41f", heavy = true },
+]
+
+# Steps after landing. Board runs are the project's proofs: every result in
+# docs/HANDOFF.md "State of main" and tools/cts/RESULTS.md comes from a real
+# GPU, booted from the board's own bootloader by tools/board.sh, and only from
+# an image built from a commit on origin/main, so every board stage is
+# `after = "promote"`. One GL client per board: tools/board.sh takes the board
+# lock and refuses a busy board (exit 3). Board addresses never go in files:
+# tools/board.sh reads BOARD_HOST (user@host of the board's Linux) and
+# BOARD_UART (pi4: the serial device; am62p: host:port of the serial bridge;
+# the i.MX8MP has none) from the environment only. Run directories are
+# written under records/<board>/ (gitignored, redacted); the numbers that
+# matter are copied into the docs by hand, which is why `record` is on.
+# Known defects make some rows fail by design (i.MX8MP cases 10, 16 and 2:
+# issues #9, #8, #25; the Pi 4's 25 cube cases: #12), so a failed board row is
+# reported and judged against HANDOFF.md, not auto-fixed.
+
+[[stages]]
+name = "board-common-am62p"
+after = "promote"
+# The common set (tools/cts/common-tree.txt: glmark2, slint, slint-view,
+# gl_test) on the Verdin AM62P, booted by U-Boot from the eMMC
+# (BOARD_BOOT=uboot-mmc, docs/HANDOFF.md). cts-common.sh build is
+# tools/cts/common-images.sh; run is tools/board.sh am62p tree and the tally.
+commands = [
+  "tools/cts/cts-common.sh am62p build build/common/am62p-$(git rev-parse --short=8 HEAD)",
+  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh am62p run build/common/am62p-$(git rev-parse --short=8 HEAD) records/am62p/common-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:am62p"]
+record = { enabled = true }
+on_fail = "report"
+
+[[stages]]
+name = "board-common-imx8mp"
+after = "promote"
+# The same four images on the Verdin iMX8M Plus (gc_gl_test for gl_test),
+# U-Boot from the eMMC. The board has no UART: its records come back in the
+# SNVS and are read over ssh afterwards.
+commands = [
+  "tools/cts/cts-common.sh imx8mp build build/common/imx8mp-$(git rev-parse --short=8 HEAD)",
+  "BOARD_HOST=${resource.imx8mp.user}@${resource.imx8mp.host} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh imx8mp run build/common/imx8mp-$(git rev-parse --short=8 HEAD) records/imx8mp/common-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:imx8mp"]
+record = { enabled = true }
+on_fail = "report"
+
+[[stages]]
+name = "board-common-pi4"
+after = "promote"
+# The same four images on the Raspberry Pi 4 (v3d_gl_test), booted once by
+# the firmware's tryboot from the SD card (board.sh's default for pi4).
+commands = [
+  "tools/cts/cts-common.sh pi4 build build/common/pi4-$(git rev-parse --short=8 HEAD)",
+  "BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device} tools/cts/cts-common.sh pi4 run build/common/pi4-$(git rev-parse --short=8 HEAD) records/pi4/common-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:pi4"]
+record = { enabled = true }
+on_fail = "report"
+
+[[stages]]
+name = "deqp-tree-am62p"
+after = "promote"
+# dEQP-GLES2, the whole mustpass tree on the AM62P: 17 images, one per line
+# of tools/cts/am62p-full-tree.txt (tools/cts/README.md section 2), then the
+# per-case tally and the diff against the earlier tree. Needs DEQP_WORK
+# (stage 1, tools/cts/cts-build-zephyr.sh) besides ZEPHYR_WS. Hours of
+# board time; the result rows go to tools/cts/RESULTS.md and README.md.
+commands = [
+  "mkdir -p build/deqp/am62p-$(git rev-parse --short=8 HEAD)",
+  "tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-$(git rev-parse --short=8 HEAD) > build/deqp/am62p-$(git rev-parse --short=8 HEAD)/build.out",
+  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc TREE_IMAGE_DIR=build/deqp/am62p-$(git rev-parse --short=8 HEAD) tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:am62p"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
+record = { enabled = true }
+on_fail = "report"
+
+[[stages]]
+name = "deqp-tree-imx8mp"
+after = "promote"
+# The whole tree on the i.MX8MP as one image carrying the 29-entry table
+# (tools/cts/README.md section 2c): imx8mp-deqp-build.sh needs
+# tools/cts/imx8mp-env.sh's ZEPHYR_WORKSPACE, ZEPHYR_VENV,
+# ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT; each entry is one boot with the
+# selector in SNVS word 1. results.tsv and rows.md are the outcome; the
+# 2026-10-03 baseline is tools/cts/imx8mp-full-tree-29460f96.results.tsv.
+commands = [
+  "tools/cts/imx8mp-deqp-build.sh deqp-$(git rev-parse --short=8 HEAD) 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt",
+  "BOARD_HOST=${resource.imx8mp.user}@${resource.imx8mp.host} BOARD_BOOT=uboot-mmc TREE_IMAGE=$IMX8MP_OUT/deqp-$(git rev-parse --short=8 HEAD)/zephyr/zephyr.bin tools/board.sh imx8mp tree tools/cts/imx8mp-full-tree.txt records/imx8mp/deqp-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:imx8mp"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
+record = { enabled = true }
+on_fail = "report"
+
+[[stages]]
+name = "deqp-tree-pi4"
+after = "promote"
+# The whole tree on the Pi 4: one v3d_deqp image per labelled block of
+# tools/cts/pi4-full-tree.txt (tools/cts/pi4-deqp-images.sh, DEQP_WORK built
+# with BOARD=rpi_4b), run and tallied by tools/board.sh pi4 tree.
+commands = [
+  "tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$(git rev-parse --short=8 HEAD)",
+  "BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device} TREE_IMAGE_DIR=build/deqp/pi4-$(git rev-parse --short=8 HEAD) tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/deqp-$(git rev-parse --short=8 HEAD)",
+]
+requires = ["target:pi4"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
+record = { enabled = true }
+on_fail = "report"
+
+[landing]
+conventions = "main is the landing branch and origin/main (github.com/signal-slot/yakogl) the truth: board images are built only from commits on origin/main, and HANDOFF.md names main's commit under test. Work happens on short topic branches, lately work/<topic> (work/pco-driver-programs, work/cleanup-1-vivante-knobs; earlier <area>/<topic> such as pvr/fl-grow-on-demand, unify/cluster), rebased onto origin/main and passed through the full tools/check.sh (green means 0 failed and 0 gaps) before landing; when a branch has merged main before, resolve conflicts against the newest common ancestor of the file, not git's merge base (tools/cts/RESULTS.md, 2026-10-04). Commit subjects are '<area>: <what changed, stated as a result>' in lower case with no type prefix ('shaderc: ...', 'pvr online: ...', 'vivante: ...', 'docs: ...'), the body explains the design and names the records and commits it rests on, and agent commits end with a Co-Authored-By trailer. Generated files that the gate reproduces byte for byte (src/pvr/internal.rs, src/vivante/internal.rs, tests/reference/*.rs, src/pvr/csbgen.rs, driver/rust/src/soc/imx8mp/regs.rs, the pinned count fixtures under tests/fixtures/) are regenerated in the same commit as the change that moves them, and a new feature or knob joins check.sh's lists in the same commit. docs/HANDOFF.md ('State of main', the open work in order, the known defects with their GitHub issue numbers) is updated in the same commit as any result that changes it; tools/cts/RESULTS.md (the measurement log, cells citing the commit and the record directory) and tools/cts/STATUS.md (the summary, in Japanese) in the same push as the numbers they describe; README.md's Status tables when a board's conformance or glmark2 figure changes. Records (records/<board>/<YYYYMMDD-HHMM>-<name>-<sha8>/) are gitignored and redacted; board addresses, UART paths and credentials come from the environment and never go in a file; driver/src/fw/pvr_fw_blob.h is never committed."
+# No stage runs after the merge into the integration branch: the whole
+# pre-landing proof is the review gate (tools/check.sh), and the board stages
+# above run only from the promoted branch.
+promote_requires = []
+# The project pushes main to GitHub by hand after a green gate, and board
+# runs need origin/main. ccfarm does not promote here yet (promote_to = ""),
+# so it pushes nothing; turn this on together with promote_to = "main".
+push = false
