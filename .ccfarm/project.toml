@@ -65,8 +65,10 @@ prepare = ["cargo fetch --locked"]
 # Fixed values the gate reads.
 env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 
-# Values that differ per machine (paths of external workspaces and SDKs); the
-# repository deliberately defaults none of them to a path on one machine.
+# Values that differ per machine (paths of external workspaces and SDKs). The
+# board and image scripts default none of them to a path on one machine;
+# check.sh alone falls back to $HOME/com/github/zephyrproject-rtos/modules/hal/nxp
+# for HAL_NXP_DIR, so set it explicitly anywhere else.
 #   ZEPHYR_WS        the west workspace ($ZEPHYR_WS/zephyr is ZEPHYR_BASE),
 #                    made from west.yml (driver/samples/zephyr/README.md); the
 #                    three Zephyr -Werror images of the gate are gaps without it
@@ -83,8 +85,9 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 #   The board stages' image builds: GLMARK2_SRC, SLINT_NOSTD_DIR,
 #   NOSTD_PATCH_DIR, AGL_SLINT_CLUSTER_DIR, DEQP_WORK (tools/cts/common-images.sh,
 #   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
-#   ZEPHYR_VENV, IMX8MP_OUT (tools/cts/imx8mp-env.sh). BOARD_HDMI_TIMINGS is
-#   the Pi 4 panel's hdmi_timings.
+#   ZEPHYR_VENV, IMX8MP_OUT (tools/cts/imx8mp-env.sh) and DEQP_STAGE1 (the
+#   output of tools/cts/imx8mp-deqp-stage1.sh, which imx8mp-deqp-build.sh
+#   requires). BOARD_HDMI_TIMINGS is the Pi 4 panel's hdmi_timings.
 env_names = [
   "ZEPHYR_WS",
   "HAL_NXP_DIR",
@@ -102,6 +105,7 @@ env_names = [
   "ZEPHYR_WORKSPACE",
   "ZEPHYR_VENV",
   "IMX8MP_OUT",
+  "DEQP_STAGE1",
   "BOARD_HDMI_TIMINGS",
 ]
 
@@ -115,13 +119,14 @@ copy_from_origin = ["driver/src/fw/pvr_fw_blob.h"]
 # red row or a gap in tools/check.sh, never a silent pass.
 tools = [
   { name = "cargo", version = ">=1.88", check = "cargo --version", install = "rustup (rust-version 1.88 in Cargo.toml; stable toolchain)" },
-  { name = "rustup target aarch64-unknown-none", check = "rustup target list --installed | grep -qx aarch64-unknown-none", install = "rustup target add aarch64-unknown-none" },
-  { name = "rustup target aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)" },
+  { name = "rustup-target-aarch64-unknown-none", check = "rustup target list --installed | grep -qx aarch64-unknown-none", install = "rustup target add aarch64-unknown-none" },
+  { name = "rustup-target-aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)" },
   { name = "cc", check = "cc --version", install = "distro package gcc or clang (C11 host compiler; the gate also uses nm, objcopy, sha256sum, cmp, awk)" },
-  { name = "python3 with PyYAML", version = ">=3", check = "python3 -c 'import yaml'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML)" },
+  { name = "clang", check = "clang --version", install = "distro package clang: build.rs compiles the C wrappers of the aarch64-unknown-none rows with clang unless CC_aarch64-unknown-none names another cross compiler, so the three aarch64 check rows and the 'no Mesa reference' control build fail without it" },
+  { name = "python3-pyyaml", version = ">=3", check = "python3 -c 'import yaml'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML)" },
   { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
   { name = "libclang", check = "python3 -c 'import ctypes.util, sys; sys.exit(0 if ctypes.util.find_library(\"clang\") else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
-  { name = "expat and zlib development libraries", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
+  { name = "expat-zlib-dev", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
   { name = "west", check = "west --version", install = "pip install west in a venv (WEST_VENV); the Zephyr SDK 1.0.1 at ZEPHYR_SDK_INSTALL_DIR; the workspace from west.yml at ZEPHYR_WS" },
   { name = "pco_shc", check = "test -x \"$PCO_SHC\"", install = "tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> <build dir> (needs clang/LLVM, libclc, SPIRV-LLVM-Translator, spirv-dis; see the script's header), then PCO_SHC=<build dir>/mesa-26.2.1/build/src/imagination/vulkan/pco_shc; it must print content id f537fc86b41f", heavy = true },
 ]
@@ -207,7 +212,8 @@ after = "promote"
 # The whole tree on the i.MX8MP as one image carrying the 29-entry table
 # (tools/cts/README.md section 2c): imx8mp-deqp-build.sh needs
 # tools/cts/imx8mp-env.sh's ZEPHYR_WORKSPACE, ZEPHYR_VENV,
-# ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT; each entry is one boot with the
+# ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT, and DEQP_STAGE1 from
+# imx8mp-deqp-stage1.sh; each entry is one boot with the
 # selector in SNVS word 1. results.tsv and rows.md are the outcome; the
 # 2026-10-03 baseline is tools/cts/imx8mp-full-tree-29460f96.results.tsv.
 commands = [
