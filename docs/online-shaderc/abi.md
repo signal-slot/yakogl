@@ -164,7 +164,7 @@ Fragment colour goes to the pixel-output registers, `po0..`
 
 **Measured**: `driver/src/pvr_usc_clear_fs_blob.h` is one group, phase p0, a
 `sngl`/`byp` — a move from `sh0` to `po0` — with `end=1`
-(`src/pvr/blobs.rs:127-144`, and `isa.md`'s decode). The two-dword variant is
+(the clear-attach block of `tests/reference/pvr_internal.rs`, then `src/pvr/blobs.rs`, and `isa.md`'s decode). The two-dword variant is
 the same group twice, `end` on the second only. That is the shape of a solid-
 colour fragment shader on this core, and it is M3's other half.
 

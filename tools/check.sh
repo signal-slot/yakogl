@@ -919,8 +919,9 @@ if command -v python3 >/dev/null 2>&1; then
   step "tools   precompiled.list gl_test pairs == what gl_test.c links" python3 tools/precompile/gl_test_pairs.py --check
   # The PowerVR driver's USC blobs (driver/src/pvr_usc_*_blob.h) are the
   # rendering of tools/pco_shc/usc_blobs.txt, the list of what Mesa's pco
-  # made for each program, and src/pvr/blobs.rs carries the listed
-  # clear-attach words. No Mesa build needed; that the list is what pco
+  # made for each program, and the clear-attach words are the listed ones
+  # in both copies (Mesa's, tests/reference/pvr_internal.rs; the backend's,
+  # our encoder's, src/pvr/internal.rs). No Mesa build needed; that the list is what pco
   # makes is `gen_usc_blobs.py capture <capture_usc> --check` against a
   # build (tools/pco_shc/README.md), which this row does not run.
   step "gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt" \
@@ -1007,10 +1008,11 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 #
 # A `#[cfg]` that compiles is not evidence: the point of `no-shader-table` is
 # bytes that are not in the image, so the check reads the built archive. The
-# pattern is the table MODULE (`mesa_reference`), not "CODE_": the
-# driver's own clear shaders are CODE_CLEAR_VS/PS in `vivante::clear_shader`
-# and belong in every image, so a looser pattern reports two symbols and
-# invites someone to decide they are close enough to zero.
+# pattern is the table MODULE (`mesa_reference`), not a row's name: the
+# driver's own programs (`pvr::internal`, `vivante::internal`, our
+# compiler's) are rows of the same shape and belong in every image, so a
+# looser pattern reports their symbols and invites someone to decide they
+# are close enough to zero.
 #
 # Both arms are built and counted, because "0 symbols" proves nothing unless
 # the same command finds them when the table IS there.
@@ -1052,8 +1054,9 @@ step "no table in the artefact" check_table_absent
 # them as its table (`mesa-reference-table`: Kconfig YAKOGL_SHADERC_OFFLINE,
 # the C builds' SHADERC offline). This builds the archive an image links
 # (yakogl-capi, release, as capi/yakogl_capi.cmake does) for the product
-# configurations and counts the reference's symbols in it: the module
-# (`14mesa_reference`, v0 mangling) and the two tables. The control is the
+# configurations and counts the reference's symbols in it: the modules
+# (`14mesa_reference`; the internal programs' `13mesa_internal` and
+# `17mesa_clear_shader`; v0 mangling) and the two tables. The control is the
 # same command on a measurement build, which must find them. Every OSAL,
 # every GPU, the in-process compiler with and without `no-shader-table`, on
 # the image target; the host target once (osal-linux). --quick builds the
@@ -1076,7 +1079,8 @@ mesa_reference_symbols() {
       --features "$features" >/dev/null 2>&1 || return 1
     lib="$dir/$target/release/libyakogl_capi.a"
   fi
-  nm "$lib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
+  nm "$lib" 2>/dev/null |
+    grep -cE '14mesa_reference|13mesa_internal|17mesa_clear_shader|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
 }
 
 check_no_mesa_reference() {
@@ -1184,6 +1188,16 @@ for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; 
 done
 step "test    yakogl-precompile gpu-powervr" cargo test -p yakogl-precompile --features gpu-powervr
 step "test    yakogl-precompile gpu-vivante" cargo test -p yakogl-precompile --features gpu-vivante
+# The back ends' own programs (the frame and clear quads' shaders; the list's
+# `internal` lines), committed as src/pvr/internal.rs and
+# src/vivante/internal.rs because every image binds them, compiler or not:
+# made again by our compiler and required to be the committed bytes, so a
+# compiler change that moves one of them moves the file in the same commit
+# (and tests/internal_programs.rs runs the new programs against Mesa's).
+step "gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler)" \
+  cargo run -q -p yakogl-precompile --features gpu-powervr -- --internal --verify src/pvr/internal.rs
+step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler)" \
+  cargo run -q -p yakogl-precompile --features gpu-vivante -- --internal --verify src/vivante/internal.rs
 # tools/board.sh, the one runner for the three boards (driver/docs/one-method.md
 # section 4), without a board: every verb on every board and backend under
 # --dry-run with ssh/scp/curl/ping/flock/stty/sudo stubbed (none may run), the

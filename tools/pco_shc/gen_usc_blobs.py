@@ -13,8 +13,9 @@ Two steps, so that the second needs no Mesa build:
 
   gen_usc_blobs.py render [--check]
       Writes the four headers from usc_blobs.txt (--check: compares them, and
-      compares the clear-attach words src/pvr/blobs.rs carries with the
-      captured ones). tools/check.sh runs this with --check.
+      compares the clear-attach words with the captured ones: Mesa's copy in
+      tests/reference/pvr_internal.rs and the backend's, our encoder's, in
+      src/pvr/internal.rs). tools/check.sh runs this with --check.
 
 Run from the repository root.
 """
@@ -321,10 +322,10 @@ HEADERS = [
 ]
 
 
-def rust_words(src, name):
+def rust_words(src, name, where):
     m = re.search(r"pub static " + name + r": \[u32; [^\]]+\] = \[(.*?)\];", src, re.S)
     if not m:
-        sys.exit(f"src/pvr/blobs.rs has no {name}")
+        sys.exit(f"{where} has no {name}")
     return [int(x, 16) for x in re.findall(r"0x[0-9a-fA-F]+", m.group(1))]
 
 
@@ -340,19 +341,23 @@ def render(check):
                 bad += 1
         else:
             open(path, "w").write(text)
-    # src/pvr/blobs.rs carries the clear-attach programs for the Rust backend;
-    # they must be the captured words (and the three-dword one, which our own
-    # encoder builds, is compared with Mesa's for the record).
-    rs = open(os.path.join(ROOT, "src/pvr/blobs.rs")).read()
-    for rname, pname in (("PVR_USC_CLEAR_FS_WORDS", "clear1"), ("PVR_USC_CLEAR_FS2_WORDS", "clear2"),
-                         ("PVR_USC_CLEAR_FS3_WORDS", "clear3")):
-        if rust_words(rs, rname) != p[pname][2]:
-            print(f"src/pvr/blobs.rs {rname} is not Mesa's {pname} (capture_usc {p[pname][0]})")
-            bad += 1
+    # The clear-attach programs: Mesa's copy (tests/reference/pvr_internal.rs)
+    # and the backend's (src/pvr/internal.rs, our encoder's, which
+    # yakogl-precompile --internal writes) must both be the captured words.
+    copies = (
+        ("tests/reference/pvr_internal.rs", ("PVR_USC_CLEAR_FS_WORDS", "PVR_USC_CLEAR_FS2_WORDS", "PVR_USC_CLEAR_FS3_WORDS")),
+        ("src/pvr/internal.rs", ("PVR_INTERNAL_CLEAR_ATTACH1", "PVR_INTERNAL_CLEAR_ATTACH2", "PVR_INTERNAL_CLEAR_ATTACH3")),
+    )
+    for where, names in copies:
+        rs = open(os.path.join(ROOT, where)).read()
+        for rname, pname in zip(names, ("clear1", "clear2", "clear3")):
+            if rust_words(rs, rname, where) != p[pname][2]:
+                print(f"{where} {rname} is not Mesa's {pname} (capture_usc {p[pname][0]})")
+                bad += 1
     if check:
         if bad:
             sys.exit(1)
-        print(f"gen_usc_blobs: {len(HEADERS)} headers and 3 blobs.rs programs = usc_blobs.txt")
+        print(f"gen_usc_blobs: {len(HEADERS)} headers and 2 x 3 clear-attach programs = usc_blobs.txt")
 
 
 def capture(capture_usc, check):

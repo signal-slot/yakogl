@@ -43,8 +43,9 @@ generator output, in two steps:
 `usc_blobs.txt` lists, per program, the `capture_usc` arguments (which of
 Mesa's generators, with which props) and what it printed: the temps count
 and the machine-code words. `tools/check.sh` runs `render --check` (the
-headers are the rendering of the list, and the clear-attach words
-`src/pvr/blobs.rs` carries are the listed ones); `capture --check` against
+headers are the rendering of the list, and the clear-attach words are the
+listed ones, in Mesa's copy `tests/reference/pvr_internal.rs` and in the
+backend's, our encoder's, `src/pvr/internal.rs`); `capture --check` against
 a build proves the list is what this Mesa's pco makes. Last full run
 (2026-10-01): every program reproduced, usc_blobs.txt sha256
 f9a0dc0adff79149a4b4cb713628631082c086ab63b5ec7555f6228e154701fc, identical

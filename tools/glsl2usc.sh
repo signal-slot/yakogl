@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # glsl2usc.sh - regenerate the offline shader table (tests/reference/blobs.rs) from
-# the whole tools/shaders/ starter set, and the internal framebuffer-load
-# blobs in src/pvr/blobs.rs.
+# the whole tools/shaders/ starter set, and Mesa's internal programs in
+# tests/reference/pvr_internal.rs (reference material: the backend binds our
+# compiler's, src/pvr/internal.rs, which `yakogl-precompile --internal` makes).
 #
 # The real tool is `yakogl-tools glsl2usc` (tools/yakogl-tools, built here with
 # cargo); this script fixes the canonical invocation (the source list
@@ -17,7 +18,7 @@
 #   GLSL2USC_CACHE  directory caching the compiler output (a rerun takes seconds)
 #   YAKOGL_TOOLS    a prebuilt yakogl-tools binary (default: cargo run)
 #   GLSL2USC_OUT    write the table here instead of tests/reference/blobs.rs and
-#                   stop there, leaving src/pvr/blobs.rs alone: the
+#                   stop there, leaving tests/reference/pvr_internal.rs alone: the
 #                   reproduction tools/check.sh compares with the committed
 #                   table
 #
@@ -30,7 +31,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SHADERS="$HERE/shaders"
 OUT="${GLSL2USC_OUT:-$HERE/../tests/reference/blobs.rs}"
-PVR_BLOBS="$HERE/../src/pvr/blobs.rs"
+PVR_BLOBS="$HERE/../tests/reference/pvr_internal.rs"
 if [ -n "${YAKOGL_TOOLS:-}" ]; then
   TOOL=("$YAKOGL_TOOLS")
 else
@@ -46,11 +47,12 @@ LIST="$SHADERS/precompiled.list"
 "${TOOL[@]}" glsl2usc -o "$OUT" --sources "$LIST" "$@"
 [ -n "${GLSL2USC_OUT:-}" ] && exit 0
 
-# Internal shaders the PowerVR backend binds itself (not app-facing): the
-# framebuffer-load background object (colour preservation across kicks).
-# fbload variants for the float targets (the load quad's FS packs what it read).
-# Each updates its block in src/pvr/blobs.rs in place (--after/--title: where
-# and under which heading a missing block is added).
+# Mesa's programs for the jobs the PowerVR backend does itself (not
+# app-facing), which tests/internal_programs.rs runs ours against: the
+# framebuffer-load background object (colour preservation across kicks), its
+# variants for the float targets (the load quad's FS packs what it read).
+# Each updates its block in tests/reference/pvr_internal.rs in place
+# (--after/--title: where and under which heading a missing block is added).
 FBLOAD_FS="$SHADERS/internal/fbload.frag"
 "${TOOL[@]}" usc-blob "$FBLOAD_FS" "$PVR_BLOBS" PVR_USC_FBLOAD_F16X4 replace@f16x4 \
   --after PVR_USC_FBLOAD --title "fbload.frag @f16x4: the load FS packing RGBA16F (four halves)"

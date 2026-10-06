@@ -40,8 +40,14 @@
 //!   for this GPU, ES level and app set (`PRECOMPILE_PIN_WRITE=1` writes the
 //!   line instead).
 //!
-//! The internal shaders (`internal/`: fbload, clear; GLSL 450 the back ends
-//! carry themselves) are out of scope and skipped, by count, in the report.
+//! * `--internal`: instead of a table, the programs a back end binds itself:
+//!   the list's `internal` lines for this GPU, compiled into the back end's
+//!   committed file (src/pvr/internal.rs, src/vivante/internal.rs; `-o`
+//!   elsewhere, `--verify FILE` to compare; [`internal`]).
+//!
+//! A table holds no internal source (`internal/`, Mesa's GLSL 450;
+//! `internal/es/`, the twins `--internal` compiles): they are skipped, by
+//! count, in the report.
 
 #[cfg(not(any(feature = "gpu-powervr", feature = "gpu-vivante")))]
 compile_error!("yakogl-precompile: enable exactly one GPU feature, gpu-powervr or gpu-vivante");
@@ -49,6 +55,7 @@ compile_error!("yakogl-precompile: enable exactly one GPU feature, gpu-powervr o
 compile_error!("yakogl-precompile: enable exactly one GPU feature, not both gpu-powervr and gpu-vivante");
 
 mod drive;
+mod internal;
 mod list;
 // The leaf printers of the shader ABI, shared with yakogl-tools' emit.rs.
 #[path = "../../yakogl-tools/src/shc_print.rs"]
@@ -80,10 +87,15 @@ struct Args {
     output: String,
     verify: Option<String>,
     pin: Option<String>,
+    /// `--internal`: the back end's own programs instead of a table.
+    internal: bool,
+    /// `-o` was given.
+    output_given: bool,
 }
 
 const USAGE: &str = "usage: yakogl-precompile [--list LIST] [--refusals FILE] [--refused-steps STEPS]
-                         [--app NAME]... [-o OUT] [--verify TABLE] [--pin COUNTS]";
+                         [--app NAME]... [-o OUT] [--verify TABLE] [--pin COUNTS]
+       yakogl-precompile --internal [--list LIST] [-o OUT] [--verify FILE]";
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
     let es2 = if ES2 == 1 { "_es2" } else { "" };
@@ -95,6 +107,8 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         output: format!("{}/build/precompiled/{GPU}{}.rs", repo(), if ES2 == 1 { "-es2" } else { "" }),
         verify: None,
         pin: None,
+        internal: false,
+        output_given: false,
     };
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
@@ -104,7 +118,11 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
             "--refusals" => a.refusals = value()?,
             "--refused-steps" => a.refused_steps = value()?,
             "--app" => a.apps.push(value()?),
-            "-o" | "--output" => a.output = value()?,
+            "-o" | "--output" => {
+                a.output = value()?;
+                a.output_given = true;
+            }
+            "--internal" => a.internal = true,
             "--verify" => a.verify = Some(value()?),
             "--pin" => a.pin = Some(value()?),
             "-h" | "--help" => {
@@ -223,15 +241,15 @@ impl Plan {
             (true, false) => list.srcs.clone(),
             (true, true) => list.sources_with(Role::Gc7000)?,
         };
-        /* internal/ is out of this tool's scope for now: its sources are GLSL 450
-         * the back ends carry themselves (src/pvr/blobs.rs, clear_shader.rs),
-         * and no list line asks for them; counted, so the report says so */
+        /* the internal directories hold no table's source: Mesa's GLSL 450
+         * (tests/reference/) and the twins `--internal` compiles into the
+         * back ends' own files; counted, so the report says so */
         let internal_n = list.sources_with(Role::Internal)?.len();
         let mut names: Vec<String> = Vec::new();
         for s in base.iter().chain(pairs.iter().flat_map(|(v, f)| [v, f])) {
             if internal(s) {
                 return Err(format!(
-                    "{s}: an internal source; the list asks for it, and this tool does not compile those"
+                    "{s}: an internal source; a table holds none (the `internal` lines are --internal's)"
                 ));
             }
             if !names.contains(s) {
@@ -363,7 +381,7 @@ fn run_held(
             if drive::stage_of(src) == SHC_STAGE_FRAGMENT {
                 for k in plan.keys(src, &sh)?.into_iter().filter(|&k| wants(Step::Variant(k))) {
                     match drive::variant_unlinked(h, &sh, k) {
-                        Ok(()) => take(plan, made, origin(Step::Variant(k)))?,
+                        Ok(_) => take(plan, made, origin(Step::Variant(k)))?,
                         Err(m) => refused.push(format!("{src}: variant 0x{k:x}: {m}")),
                     }
                 }
@@ -609,7 +627,7 @@ fn generate(a: &Args, mark: &str) -> Result<Generated, String> {
         ),
         format!(
             "Left out: {} source(s) the compiler refuses as {} lists them, {} pair(s) naming one or off this GPU, \
-             internal/ ({} sources: GLSL 450 the back ends carry themselves).",
+             the internal directories ({} sources: the back ends' own, --internal's).",
             plan.refused.len(),
             a.refusals.rsplit('/').next().unwrap_or(&a.refusals),
             plan.pairs_dropped,
@@ -661,9 +679,51 @@ fn verify(g: &Generated, mark: &str, had: &str, path: &str) -> Result<(), String
     Ok(())
 }
 
+/// The committed file of this GPU's internal programs.
+fn internal_path() -> String {
+    format!("{}/src/{}/internal.rs", repo(), if cfg!(feature = "gpu-vivante") { "vivante" } else { "pvr" })
+}
+
+/// `--internal`: write (or, with `--verify`, compare) the back end's file.
+fn main_internal(a: &Args) -> Result<(), String> {
+    if !a.apps.is_empty() || a.pin.is_some() {
+        return Err(format!("--internal takes no --app or --pin\n{USAGE}"));
+    }
+    let list = List::read(&a.list)?;
+    let text = internal::generate(&list, &list_name(&a.list))?;
+    let n = list.internal.iter().filter(|i| (i.gpu == list::Gpu::Gc7000) == cfg!(feature = "gpu-vivante")).count();
+    if let Some(path) = &a.verify {
+        let had = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        if had != text {
+            let at = had.lines().zip(text.lines()).position(|(x, y)| x != y);
+            let at = at.unwrap_or(had.lines().count().min(text.lines().count()));
+            return Err(format!(
+                "{path} is not what this list and compiler make (regenerate with --internal); first difference at \
+                 line {}\n    file: {}\n    made: {}",
+                at + 1,
+                had.lines().nth(at).unwrap_or("<end>"),
+                text.lines().nth(at).unwrap_or("<end>")
+            ));
+        }
+        println!("yakogl-precompile: --internal {GPU}: {path} is what the list's {n} lines make");
+        return Ok(());
+    }
+    let out = if a.output_given { a.output.clone() } else { internal_path() };
+    if std::fs::read_to_string(&out).ok().as_deref() == Some(text.as_str()) {
+        println!("yakogl-precompile: --internal {GPU}: {out} is unchanged ({n} programs)");
+    } else {
+        std::fs::write(&out, &text).map_err(|e| format!("{out}: {e}"))?;
+        println!("yakogl-precompile: --internal {GPU}: wrote {out} ({n} programs)");
+    }
+    Ok(())
+}
+
 fn main_r(argv: &[String]) -> Result<(), String> {
     let a = parse_args(argv)?;
     drive::lend()?;
+    if a.internal {
+        return main_internal(&a);
+    }
     let t0 = std::time::Instant::now();
     let mark = toolchain();
     let g = generate(&a, &mark)?;
@@ -673,7 +733,7 @@ fn main_r(argv: &[String]) -> Result<(), String> {
     let bytes: usize = rows.iter().map(Row::code_bytes).sum();
     println!(
         "yakogl-precompile: {GPU} es2={ES2} app={apps}: {} rows (vs {vs}, fs {}) of {} sources, {bytes} code bytes, \
-         table {} bytes; {} jobs, {:.1} s; refused as listed {}, pairs left out {}, internal/ skipped ({} sources)",
+         table {} bytes; {} jobs, {:.1} s; refused as listed {}, pairs left out {}, internal skipped ({} sources)",
         rows.len(),
         rows.len() - vs,
         g.sources.len(),

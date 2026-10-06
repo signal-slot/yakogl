@@ -44,6 +44,12 @@ pub struct Inputs {
     pub pixout: u32,
     /// An RGBA16F pixel's second dword (B and A), in pixel output 1.
     pub pixout1: u32,
+    /// The image descriptors' samplers filter NEAREST, as a caller that
+    /// built them says (the PowerVR's frame load samples its target with a
+    /// zeroed binding, nearest): a texelFetch coordinate anywhere in a texel
+    /// reads that texel, so a fetch at a texel's corner -- pco's integer
+    /// coordinate -- is no longer the ambiguity [`texel_coord`] refuses.
+    pub nearest: bool,
 }
 
 impl Inputs {
@@ -68,6 +74,7 @@ impl Inputs {
             samples: 4,
             pixout: 0,
             pixout1: 0,
+            nearest: false,
         }
     }
 
@@ -125,6 +132,7 @@ impl Inputs {
             samples: 4,
             pixout: 0,
             pixout1: 0,
+            nearest: false,
         }
     }
 
@@ -147,6 +155,7 @@ impl Inputs {
             samples: 4,
             pixout: 0,
             pixout1: 0,
+            nearest: false,
         }
     }
 }
@@ -884,8 +893,9 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
                  * 0.25*40), which this nearest-texel model cannot show, so it
                  * refuses the program instead of reading one of them. */
                 if r.get("nncoords") == Some(1) {
-                    u = texel_coord(f32::from_bits(u))?;
-                    v = texel_coord(f32::from_bits(v))?;
+                    let coord = |t: f32| if inp.nearest { texel_coord(t.floor() + 0.5) } else { texel_coord(t) };
+                    u = coord(f32::from_bits(u))?;
+                    v = coord(f32::from_bits(v))?;
                 }
                 /* textureOffset: the lookup word after the level, u in bits
                  * 0..5 and v in 6..11, each a signed field (rogue_hw_defs.h) */
@@ -1055,6 +1065,7 @@ pub fn sentinel_inputs(sentinel: f32) -> Inputs {
         samples: 4,
         pixout: 0,
         pixout1: 0,
+        nearest: false,
     }
 }
 

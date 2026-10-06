@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `yakogl-tools usc-blob`: compile one internal GLSL shader with pco_shc and
-//! (re)write its USC dwords in `src/pvr/blobs.rs` (shaders the backend binds
-//! itself, outside the app-facing table: the framebuffer-load shaders).
+//! (re)write its USC dwords in `tests/reference/pvr_internal.rs` (Mesa's
+//! programs for the jobs the backend does itself, the reference the
+//! backend's own -- our compiler's, src/pvr/internal.rs -- are run against).
 //!
 //! The block of SYMBOL (the "GENERATED from" comment lines, SYMBOL_TEMPS,
-//! SYMBOL_DWORDS and the SYMBOL static; see the header of src/pvr/blobs.rs)
+//! SYMBOL_DWORDS and the SYMBOL static; see the header of
+//! tests/reference/pvr_internal.rs)
 //! is replaced in place and the rest of the file is left alone. With
 //! `--after OTHER` a missing block is added after OTHER's block.
 
@@ -14,14 +16,15 @@ use crate::glsl2usc::{parse_pco_meta, run_pco, split_rt, stage_of, Shader};
 use crate::py;
 use crate::{Error, R};
 
-const USAGE: &str = "usage: yakogl-tools usc-blob <in.frag|in.vert> <src/pvr/blobs.rs> <SYMBOL> [VARIANT]
+const USAGE: &str =
+    "usage: yakogl-tools usc-blob <in.frag|in.vert> <tests/reference/pvr_internal.rs> <SYMBOL> [VARIANT]
                               [--after SYMBOL] [--title TEXT]
   VARIANT is a glsl2usc variant spec ('replace@f16x4': the colour output packed
   for an RGBA16F target). --after adds the block after SYMBOL's when the file
   has none yet; --title is the new block's section heading.
-  e.g. yakogl-tools usc-blob tools/shaders/internal/fbload.frag src/pvr/blobs.rs PVR_USC_FBLOAD";
+  e.g. yakogl-tools usc-blob tools/shaders/internal/fbload.frag tests/reference/pvr_internal.rs PVR_USC_FBLOAD";
 
-/// The generated block text (the format documented in src/pvr/blobs.rs).
+/// The generated block text (the format documented in tests/reference/pvr_internal.rs).
 pub fn render(sym: &str, rel_src: &str, sh: &Shader, usc: &[u32]) -> String {
     let descs: Vec<String> = sh.descs.iter().map(|d| d.repr()).collect();
     let mut lines = vec![

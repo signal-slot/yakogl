@@ -220,7 +220,8 @@ tempting move was to treat the table as wrong.
   `pco_map.py`. Until then the decoder reports the first source and leaves the
   rest as bytes.
 - A cross-check against Mesa's disassembler has been done for **one** program,
-  the clear FS, against the disassembly recorded in `src/pvr/blobs.rs` when the
+  the clear FS, against the disassembly recorded in `src/pvr/blobs.rs` (now
+  `tests/reference/pvr_internal.rs`) when the
   blob was captured (see "Operands" below). Running `pco_shc` over a table blob
   and diffing a full disassembly is still outstanding, and remains the widest
   form of this check.
@@ -259,7 +260,8 @@ encoder knows its op) or M3.
 
 ### Verified against the recorded disassembly
 
-`src/pvr/blobs.rs:136-138` records the clear FS's final IR, printed by Mesa's
+The clear-attach block of `src/pvr/blobs.rs` (now `tests/reference/pvr_internal.rs`,
+"PCO final IR") records the clear FS's final IR, printed by Mesa's
 own disassembler at the time the blob was captured:
 
     0000: { s0 = sh0, is4 = ft0 p0: mbyp ft0, s0; w0 = po0 }.olchk.end
@@ -276,7 +278,7 @@ line, gives:
 
 Four independent agreements, across the header, the instruction, the source and
 the destination. The source result is corroborated a second time by
-`src/pvr/blobs.rs:127-133`, which states in prose that this shader "reads the
+the same block's prose, which states that this shader "reads the
 clear colour from SHARED REGISTER 0 (sh0) and writes it to pixel-output
 register 0 (po0)" — a statement written for the PDS author, long before this
 table existed.

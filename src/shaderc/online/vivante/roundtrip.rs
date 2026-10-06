@@ -13,18 +13,18 @@ use super::encode::encode_instr;
 use super::isa::{coverage, MAX_FIELDS};
 use super::isa_tables::OPS;
 use crate::shaderc::mesa_reference::SHC_BLOB_TABLE;
-use crate::vivante::clear_shader::{GC_CLEAR_PS, GC_CLEAR_VS};
+use crate::vivante::mesa_clear_shader::{GC_CLEAR_PS, GC_CLEAR_VS};
 use std::collections::BTreeMap;
 
-/// The corpus: every row of the offline table, plus the two internal shaders
-/// the backend clears with. The clear pair is not in the table but is code
-/// this driver runs on silicon, and leaving it out would mean the gate
-/// covered less than the driver ships.
+/// The corpus: every row of the offline table, plus etna's two clear
+/// shaders, which the reference compiler made for the clear quad (the
+/// driver's own are now our compiler's, `vivante::internal`: built by the
+/// encoder this corpus measures, so they are not evidence for it).
 fn corpus() -> Vec<(String, Vec<u32>)> {
     let mut out: Vec<(String, Vec<u32>)> =
         (0..SHC_BLOB_TABLE.len()).map(|i| (format!("{} [{i}]", SHC_BLOB_TABLE[i].source_name()), code_of(i))).collect();
     for (name, sh) in [("clear.vert", &GC_CLEAR_VS.0), ("clear.frag", &GC_CLEAR_PS.0)] {
-        // SAFETY: `usc` points at a `[u32; usc_dw]` static of clear_shader.rs.
+        // SAFETY: `usc` points at a `[u32; usc_dw]` static of gc_clear_shader.rs.
         let dw = unsafe { core::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) };
         out.push((name.to_string(), dw.to_vec()));
     }

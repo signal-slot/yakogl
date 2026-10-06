@@ -110,8 +110,20 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    same pictures, cluster 91.8 fps. And the image without a compiler (Kconfig
    `YAKOGL_SHADERC_PRECOMPILED_ONLY`: the table the whole back end, a miss,
    a variant or a program the table lacks refused by name, -ENOENT, gl_test's
-   closing line counting precompiled hits and compiler runs). Next: a board
-   run of it and the tier's hit count on the board, then the default.
+   closing line counting precompiled hits and compiler runs); and the back
+   ends' own programs from our compiler (the PowerVR's frame-load, masked
+   clear and clear-attach programs, the GC7000's clear pair: the list's
+   `internal` lines, `yakogl-precompile --internal` into the committed
+   `src/pvr/internal.rs` / `src/vivante/internal.rs`; Mesa's are
+   `tests/reference/` material that `tests/internal_programs.rs` runs ours
+   against), so `pco_shc` and `etna_shc` compile nothing for a product
+   image. Still Mesa's (pco, captured by `tools/pco_shc/capture_usc.c` into
+   `driver/src/pvr_usc_*_blob.h`): the driver's five end-of-tile programs
+   (`pvr_render.c`, every render) and the boot self-test's vertex shader
+   (`pvr_selftest.c`), which our encoder does not build yet. Next: a board run
+   of the image without a compiler and of the internal programs (the AM62P
+   gl_test set and its clear/load cases, Slint, the cluster; the i.MX8MP
+   gl_test), the tier's hit count on the board, then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

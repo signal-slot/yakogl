@@ -1574,10 +1574,10 @@ pub fn build_fragment_shader_outputs(
 /// The background object's clear program for `dwords` output dwords: shared
 /// register k moved to pixel output register k, the last move ending the
 /// program. Mesa's pvr_uscgen_clear_attach with `.dword_count = dwords,
-/// .offset = 0` compiles to this; the driver's one- and two-dword programs
-/// (src/pvr/blobs.rs, captured from that generator) are what the test below
-/// holds this to, and the three-dword one is this builder's output, for
-/// three colour attachments.
+/// .offset = 0` compiles to this (the tests below hold it to Mesa's captures,
+/// tests/reference/pvr_internal.rs); the driver's three programs are this
+/// builder's output, which yakogl-precompile --internal writes into
+/// src/pvr/internal.rs.
 pub fn build_clear_attach(dwords: u16, buf: &mut [u8]) -> Result<usize, BuildError> {
     use super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc};
     if !(1..=4).contains(&dwords) {
@@ -1728,18 +1728,30 @@ mod clear_attach_tests {
         buf[..len].chunks(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
     }
 
-    /// One and two dwords: byte-identical to the programs captured from
-    /// Mesa's generator. Three: the driver's words, which nothing captured
-    /// -- this builder is their source, so a builder change that moves them
-    /// has to move the driver's copy with it.
+    /// The driver's three programs (src/pvr/internal.rs, which
+    /// yakogl-precompile --internal writes from this builder) are this
+    /// builder's words: a builder change that moves them moves the committed
+    /// file with it (tools/check.sh regenerates it).
     #[test]
     fn the_clear_attach_programs_are_the_drivers() {
-        use crate::pvr::blobs::*;
-        assert_eq!(words(1), PVR_USC_CLEAR_FS_WORDS, "one dword: the captured program");
-        assert_eq!(words(2), PVR_USC_CLEAR_FS2_WORDS, "two dwords: the captured program");
-        assert_eq!(words(3), PVR_USC_CLEAR_FS3_WORDS, "three dwords: the driver's copy");
+        use crate::pvr::internal::*;
+        assert_eq!(words(1), PVR_INTERNAL_CLEAR_ATTACH1, "one dword");
+        assert_eq!(words(2), PVR_INTERNAL_CLEAR_ATTACH2, "two dwords");
+        assert_eq!(words(3), PVR_INTERNAL_CLEAR_ATTACH3, "three dwords");
         let mut buf = [0u8; 256];
         assert!(build_clear_attach(0, &mut buf).is_err() && build_clear_attach(5, &mut buf).is_err());
+    }
+
+    /// And Mesa's: one and two dwords byte-identical to the programs
+    /// captured from pvr_uscgen_clear_attach, three to what it makes for
+    /// three dwords (usc_blobs.txt `clear3`).
+    #[test]
+    #[cfg(mesa_reference)]
+    fn the_clear_attach_programs_are_mesas() {
+        use crate::pvr::mesa_internal::*;
+        assert_eq!(words(1), PVR_USC_CLEAR_FS_WORDS, "one dword: the captured program");
+        assert_eq!(words(2), PVR_USC_CLEAR_FS2_WORDS, "two dwords: the captured program");
+        assert_eq!(words(3), PVR_USC_CLEAR_FS3_WORDS, "three dwords: Mesa's for three");
     }
 }
 

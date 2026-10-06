@@ -131,8 +131,10 @@ exists to test the table; the shipping decoder and encoder are Rust, in
 `src/shaderc/online/`.
 
 It reads every shader in `tests/reference/vivante_blobs.rs` and
-`src/vivante/clear_shader.rs` — the offline table this library ships and draws
-with today — and decodes each 128-bit instruction. Run of 2026-09-22:
+`tests/reference/gc_clear_shader.rs` (then `src/vivante/clear_shader.rs`) — the
+offline table this library shipped and drew with then; etna's clear pair is now
+reference material, the driver's own pair our compiler's (`src/vivante/internal.rs`),
+word for word the same — and decodes each 128-bit instruction. Run of 2026-09-22:
 
 ```
 shaders      309

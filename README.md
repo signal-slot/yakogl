@@ -81,13 +81,23 @@ Where a shader's machine code comes from, chosen at build time:
   `YAKOGL_SHADERC_OFFLINE`): a measurement-only choice, to be replaced by the
   table our compiler precompiles (`tools/precompile`).
 
+Every image also binds the back ends' own programs (the PowerVR's frame-load
+and clear quads' shaders, the GC7000's clear pair), which our compiler made
+once on the host from `tools/shaders/internal/es/` (`yakogl-precompile
+--internal`, committed as `src/pvr/internal.rs` and `src/vivante/internal.rs`),
+not Mesa's `pco_shc` or `etna_shc`. Two sets of the PowerVR driver's programs are
+still Mesa's pco output, captured into C headers (`driver/src/pvr_usc_*_blob.h`,
+`tools/pco_shc/`): the end-of-tile programs every render ends with
+(`pvr_render.c`) and the boot self-test render's vertex shader (`pvr_selftest.c`;
+its clear program is our encoder's words).
+
 A product image is one of three: the compiler only (the default); the precompiled shaders in
 front of the compiler (a hit runs no compile, a miss compiles); and the
 precompiled shaders only (Kconfig `YAKOGL_SHADERC_PRECOMPILED_ONLY`, CMake
 `YAKOGL_SHADERC=precompiled`: no compiler, no scratch region; a shader, a
 variant or a program the table lacks is refused by name, `-ENOENT`, with the
 line in the info log). For gl_test's ES 1.00 set on the AM62P they are
-2,382,096, 5,921,040 and 5,052,360 bytes (zephyr.bin).
+2,431,248, 5,970,192 and 5,101,512 bytes (zephyr.bin).
 
 ## The PowerVR firmware
 

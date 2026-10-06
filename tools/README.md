@@ -6,7 +6,7 @@ never compiles it or its dependencies) with a subcommand per generator:
 | Command | Writes |
 |---|---|
 | `yakogl-tools glsl2usc [options] inputs...` | the offline shader table `tests/reference/blobs.rs` |
-| `yakogl-tools usc-blob <src> <file> <SYMBOL> [VARIANT]` | one internal shader's block in `src/pvr/blobs.rs` |
+| `yakogl-tools usc-blob <src> <file> <SYMBOL> [VARIANT]` | one of Mesa's internal programs in `tests/reference/pvr_internal.rs` (reference) |
 | `yakogl-tools femtovg-shaders [<femtovg dir> [outdir]]` | the FemtoVG 0.26 sources in `tools/shaders/femtovg/` |
 | `yakogl-tools gl-consts` | `src/gl/consts.rs`, `src/gl/egl_consts.rs` |
 | `yakogl-tools abi-layout <driver src>` | `src/abi_layout.rs`, `src/abi_layout_check.c` |
@@ -280,7 +280,7 @@ a field added to those structs fails the tool's build until the emitter handles 
 
 ## Usage
 
-Regenerate `blobs.rs` (and the fbload blocks of `src/pvr/blobs.rs`) from the
+Regenerate `blobs.rs` (and Mesa's internal programs, `tests/reference/pvr_internal.rs`) from the
 source list `tools/shaders/precompiled.list` (canonical, deterministic; the list
 is below, "The source list and the precompiler"):
 
@@ -386,12 +386,43 @@ descriptors.
 
 ### Internal shaders
 
-`shaders/internal/` holds shaders the PowerVR backend binds itself (not looked up
-by apps): `fbload.vert/.frag`, the framebuffer-load quad. `glsl2usc.sh` compiles
-them with `yakogl-tools usc-blob` into `src/pvr/blobs.rs` (the `PVR_USC_FBLOAD*`
-blocks, including the float render-target variants): the tool replaces a symbol's
-block in place and leaves the rest of the file alone; with
-`--after OTHER --title TEXT` a missing block is added after OTHER's.
+The back ends bind some programs themselves (not looked up by apps): the
+PowerVR's frame-load quad (a frame that does not clear its target copies what is
+there, one program per render-target class), its masked clears (glColorMask
+lowered into the shader, 14 masks for RGBA8 and RGBA16F) and its background
+object's clear-attach programs; the GC7000's clear quad. Our compiler makes all of
+them: `shaders/internal/es/` holds GLSL ES twins (`quad.vert`, `clear.frag`, and
+`fbload.frag` in ES 3.00 for texelFetch), the list's `internal` lines name each
+program, its source and its variant, and
+
+```sh
+cargo run -p yakogl-precompile --features gpu-powervr -- --internal   # src/pvr/internal.rs
+cargo run -p yakogl-precompile --features gpu-vivante -- --internal   # src/vivante/internal.rs
+```
+
+writes them, committed because every image binds them (with a compiler, a
+precompiled table, both or neither); `tools/check.sh` makes both again and
+requires the committed bytes. The clear-attach programs (`attach:N`) are our USC
+encoder's (`assemble::build_clear_attach`): they move packed colour words, which
+no GLSL says.
+
+The frame load's twin reads `u_flip`, a uniform the backend sets to
+gl_FragCoord.y's own pair: our compiler hands the shader y in GL's orientation,
+mirrored on a flipped target, and the load must read the pixel's own memory row,
+so the shader applies the pair again (y * s + o twice is y).
+
+Mesa's programs for the same jobs are reference material: `shaders/internal/`
+(GLSL 450), which `glsl2usc.sh` compiles with `yakogl-tools usc-blob` into
+`tests/reference/pvr_internal.rs` (the tool replaces a symbol's block in place and
+leaves the rest of the file alone; with `--after OTHER --title TEXT` a missing
+block is added after OTHER's), and etna's clear pair,
+`tests/reference/gc_clear_shader.rs`. `tests/internal_programs.rs` runs each of
+ours beside Mesa's in the byte model on the inputs the backend gives it (the
+PowerVR's: every frame-load class flipped and not, single- and multisampled, at
+pixels across the target; every masked clear over several pixels and colours;
+the quad's vertex shader) and requires the same output registers; the GC7000's
+pair is etna's word for word. No product image compiles the reference
+(`cfg(mesa_reference)`, and the "no Mesa reference in the artefact" row).
 
 ### Shaders pco_shc can't compile (prebuilt sidecar)
 
@@ -469,7 +500,7 @@ plus the reflection the shader table needs; `glsl2vivante.py` rewrites GLSL ES 1
 and 3.00 into the GLSL 4.60 it expects and reports what compiled. Its ES 1.00 parser
 pieces live in `tools/vivante/es100.py`, a verbatim copy of the former Python
 glsl2usc's. `gen_shader_table.py` turns that output into the generated table
-(`tests/reference/vivante_blobs.rs` and `src/vivante/clear_shader.rs`).
+(`tests/reference/vivante_blobs.rs` and `tests/reference/gc_clear_shader.rs`).
 
 **The command-stream differ**: what does a working driver actually tell this part?
 Mesa's etnaviv runs on the host against its own drm-shim, patched by

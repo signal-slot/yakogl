@@ -3262,9 +3262,10 @@ fn gl_point_coord_is_iterated_where_pco_puts_it() {
     .unwrap();
 }
 
-/// The masked clear programs (src/pvr/blobs.rs PVR_USC_CLEAR_M*, pco's
-/// clear.frag with the colour mask lowered, which the backend draws a clear
-/// quad with when glColorMask leaves some channels off): in the byte model,
+/// The masked clear programs (src/pvr/internal.rs PVR_INTERNAL_CLEAR_M*, our
+/// compiler's internal/es/clear.frag with the colour mask lowered, which the
+/// backend draws a clear quad with when glColorMask leaves some channels
+/// off): in the byte model,
 /// over a pixel already in the output registers, every channel the mask
 /// writes takes the clear colour (from the four uniform dwords) and every
 /// other keeps the pixel -- for all fourteen partial masks, RGBA8 and
@@ -3280,7 +3281,11 @@ fn the_masked_clear_programs_keep_the_channels_the_mask_leaves_off() {
     for class in [SHC_RT_F16, SHC_RT_F32] {
         assert!(clear_masked_program(class, 0b0101).is_none(), "a one-channel target has no masked form");
     }
-    let program = |class: u32, m: u32| clear_masked_program(class, m as u8).expect("a partial mask's program");
+    let program = |class: u32, m: u32| {
+        let sh = clear_masked_program(class, m as u8).expect("a partial mask's program");
+        // SAFETY: a row of the generated table points at its `[u32; usc_dw]` static.
+        unsafe { std::slice::from_raw_parts(sh.usc, sh.usc_dw as usize) }
+    };
     let clear = [0.25f32, 0.5, 0.75, 1.0];
     let old = [0x10u32, 0x20, 0x40, 0x80];
     let old_f = [0.125f32, 1.5, 2.0, 0.375];
@@ -8692,15 +8697,15 @@ void main() { o3 = v.yxwz; o1 = a + v * 0.125; }
 }
 
 /// The background object's clear programs for one to three output dwords
-/// (src/pvr/blobs.rs; three is built by our encoder, not captured)
+/// (src/pvr/internal.rs, our encoder's clear-attach programs)
 /// on the byte model: pixel output k holds shared register k for every k
 /// below the count, nothing else is written, and the program ends at the
 /// end of its image. The shared file holds distinct values, so a move from
 /// the wrong register or to the wrong output shows.
 #[test]
 fn the_clear_programs_move_shared_k_to_pixel_output_k() {
-    use yakogl::pvr::blobs::*;
-    let programs: [&[u32]; 3] = [&PVR_USC_CLEAR_FS_WORDS, &PVR_USC_CLEAR_FS2_WORDS, &PVR_USC_CLEAR_FS3_WORDS];
+    use yakogl::pvr::internal::*;
+    let programs: [&[u32]; 3] = [&PVR_INTERNAL_CLEAR_ATTACH1, &PVR_INTERNAL_CLEAR_ATTACH2, &PVR_INTERNAL_CLEAR_ATTACH3];
     for (i, words) in programs.iter().enumerate() {
         let n = i as u32 + 1;
         let image: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();

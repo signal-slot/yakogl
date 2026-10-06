@@ -7,15 +7,17 @@
 # decided in one place:
 #
 #   tools/glsl2usc.sh              the PowerVR table from Mesa's pco_shc
-#                                  (src/shaderc/blobs.rs): the `src`, `blend`,
+#                                  (tests/reference/blobs.rs): the `src`, `blend`,
 #                                  `for` and `skip-failures` lines;
 #   tools/vivante/gen_shader_table.py
 #                                  the GC7000 table from Mesa's etna_shc
-#                                  (src/shaderc/vivante_blobs.rs): the `dir`
+#                                  (tests/reference/vivante_blobs.rs): the `dir`
 #                                  lines (its directory allowlist);
 #   yakogl-precompile              the table our own compiler builds at image
 #                                  build time (tools/precompile; into build/,
-#                                  never committed): all of it, `pair` included.
+#                                  never committed): all of it, `pair` included;
+#                                  with --internal, the back ends' own programs
+#                                  (committed): the `internal` lines.
 #
 # Paths are relative to tools/shaders/. A line is whitespace-separated fields;
 # `#` starts a comment, on a line of its own or after the fields.
@@ -23,7 +25,8 @@
 #   dir DIR ROLE...       DIR (`.` is tools/shaders itself) holds shaders, and
 #                         is for ROLE: `gc7000`, the GC7000 table takes every
 #                         shader in it; `internal`, the back ends' own shaders,
-#                         which they compile into themselves and no table holds;
+#                         which no table holds (the `internal` lines name the
+#                         ones our compiler builds the back ends' programs from);
 #                         `-`, neither. Every directory under tools/shaders/
 #                         that holds a .vert or .frag must have a line, and a
 #                         `src` or `pair` path must lie in a listed directory:
@@ -49,6 +52,20 @@
 #   skip-failures         pco_shc: a source it cannot build is reported and left
 #                         out of the table instead of failing the run.
 #   app NAME              the `pair` lines after it are one application's.
+#   internal GPU NAME SOURCE [SPEC]
+#                         a program a back end binds itself, not an
+#                         application's: GPU `powervr` or `gc7000`, NAME the
+#                         program's name in that back end's table, SOURCE a
+#                         .vert or .frag of an `internal` directory -- or, on
+#                         the PowerVR, `attach:N`, the clear-attach program of
+#                         N dwords our encoder builds (it moves packed colour
+#                         words, which no GLSL says) -- and SPEC, for a
+#                         fragment shader, the variant the back end binds (the
+#                         `blend` syntax). `yakogl-precompile --internal`
+#                         compiles a GPU's lines with our compiler into its
+#                         committed table, src/pvr/internal.rs or
+#                         src/vivante/internal.rs, in list order; the other
+#                         generators read none of them.
 #   pair VS FS            a program the application links. Our generator links
 #                         it as glLinkProgram does, so the records a link makes
 #                         (a fragment shader recompiled with a varying the
@@ -71,8 +88,11 @@
 # directory and the pair sources in them. A source our compiler refuses
 # (tests/fixtures/online_refused_<gpu>[_es2].txt, which tests/online_corpus.rs
 # pins message for message) is reported and left out, with every pair that
-# names it; any other failure fails the run. `internal/` is out of its scope
-# for now (GLSL 450; the back ends carry those shaders themselves).
+# names it; any other failure fails the run. The internal directories hold
+# no table's sources: `internal/` is GLSL 450 for Mesa (the reference
+# programs in tests/reference/, tools/glsl2usc.sh's usc-blob calls and
+# gen_shader_table.py's clear_shader), `internal/es/` the GLSL ES twins our
+# compiler builds the back ends' programs from (the `internal` lines below).
 
 dir .              gc7000
 dir es100          gc7000
@@ -82,7 +102,58 @@ dir gl_test_es100  gc7000
 dir qt             gc7000
 dir qt3d           gc7000
 dir offarm         -          # PowerVR-only: gl_test 193/194's predicated-off arm, grown by N
-dir internal       internal   # fbload.*, clear.*: tools/glsl2usc.sh's usc-blob calls, clear_shader.rs
+dir internal       internal   # fbload.*, clear.*: Mesa's reference programs (tools/glsl2usc.sh, gen_shader_table.py)
+dir internal/es    internal   # their GLSL ES twins: the `internal` lines
+
+# ---- the back ends' own programs (yakogl-precompile --internal) -------------
+# The PowerVR's: the quad every frame and clear quad draws with; the frame
+# load (a frame that does not clear its target copies what is there), one per
+# render-target class; the masked clears (glColorMask lowered into the shader:
+# M, bit 0 R .. 3 A, the channels written), RGBA8 and RGBA16F; the
+# background object's clear-attach programs for 1, 2 and 3 dwords.
+
+internal powervr quad_vs        internal/es/quad.vert
+internal powervr fbload         internal/es/fbload.frag
+internal powervr fbload_f16x4   internal/es/fbload.frag replace@f16x4
+internal powervr fbload_f16     internal/es/fbload.frag replace@f16
+internal powervr fbload_f32     internal/es/fbload.frag replace@f32
+internal powervr clear_m1       internal/es/clear.frag replace:r
+internal powervr clear_m1_f16x4 internal/es/clear.frag replace:r@f16x4
+internal powervr clear_m2       internal/es/clear.frag replace:g
+internal powervr clear_m2_f16x4 internal/es/clear.frag replace:g@f16x4
+internal powervr clear_m3       internal/es/clear.frag replace:rg
+internal powervr clear_m3_f16x4 internal/es/clear.frag replace:rg@f16x4
+internal powervr clear_m4       internal/es/clear.frag replace:b
+internal powervr clear_m4_f16x4 internal/es/clear.frag replace:b@f16x4
+internal powervr clear_m5       internal/es/clear.frag replace:rb
+internal powervr clear_m5_f16x4 internal/es/clear.frag replace:rb@f16x4
+internal powervr clear_m6       internal/es/clear.frag replace:gb
+internal powervr clear_m6_f16x4 internal/es/clear.frag replace:gb@f16x4
+internal powervr clear_m7       internal/es/clear.frag replace:rgb
+internal powervr clear_m7_f16x4 internal/es/clear.frag replace:rgb@f16x4
+internal powervr clear_m8       internal/es/clear.frag replace:a
+internal powervr clear_m8_f16x4 internal/es/clear.frag replace:a@f16x4
+internal powervr clear_m9       internal/es/clear.frag replace:ra
+internal powervr clear_m9_f16x4 internal/es/clear.frag replace:ra@f16x4
+internal powervr clear_ma       internal/es/clear.frag replace:ga
+internal powervr clear_ma_f16x4 internal/es/clear.frag replace:ga@f16x4
+internal powervr clear_mb       internal/es/clear.frag replace:rga
+internal powervr clear_mb_f16x4 internal/es/clear.frag replace:rga@f16x4
+internal powervr clear_mc       internal/es/clear.frag replace:ba
+internal powervr clear_mc_f16x4 internal/es/clear.frag replace:ba@f16x4
+internal powervr clear_md       internal/es/clear.frag replace:rba
+internal powervr clear_md_f16x4 internal/es/clear.frag replace:rba@f16x4
+internal powervr clear_me       internal/es/clear.frag replace:gba
+internal powervr clear_me_f16x4 internal/es/clear.frag replace:gba@f16x4
+internal powervr clear_attach1  attach:1
+internal powervr clear_attach2  attach:2
+internal powervr clear_attach3  attach:3
+
+# The GC7000's: its clear quad (blending and colour masks are pixel-engine
+# state there, so one fragment shader clears every mask).
+
+internal gc7000  clear_vs       internal/es/quad.vert
+internal gc7000  clear_ps       internal/es/clear.frag
 
 # ---- the PowerVR table's inputs (tools/glsl2usc.sh), in its row order -------
 

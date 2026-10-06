@@ -29,12 +29,24 @@ use crate::shaderc::{
 };
 use crate::util::{Global, ENOMEM};
 
-use super::clear_shader::{GC_CLEAR_PS, GC_CLEAR_VS};
 use super::cmd::GcCmd;
+use super::internal::{GC_INTERNAL_CLEAR_PS, GC_INTERNAL_CLEAR_VS, GC_INTERNAL_TABLE};
 use super::kick::{GcKick, GC_KICK_MAGIC, GC_KICK_TAIL_BYTES};
 use super::regs::*;
 use super::state::*;
 use super::{shader, texture};
+
+/// The clear quad's vertex shader (internal/es/quad.vert, our compiler's).
+fn clear_vs() -> &'static ShcShader {
+    &GC_INTERNAL_TABLE[GC_INTERNAL_CLEAR_VS].shader
+}
+
+/// The clear quad's fragment shader (internal/es/clear.frag): one uniform
+/// vec4, the colour, which every mask clears with (glColorMask is the pixel
+/// engine's on this GPU).
+fn clear_ps() -> &'static ShcShader {
+    &GC_INTERNAL_TABLE[GC_INTERNAL_CLEAR_PS].shader
+}
 
 /* Device-VA heaps. The GC7000's MMU addresses 32 bits, so the bases are low
  * and far enough apart for the pools the GL core allocates in. */
@@ -1770,7 +1782,7 @@ fn emit_clear(f: &mut GcFrame, gl: &GlesDraw, code: (u64, u64), depth: (u32, u32
     }
     let color = gl.clear_rgba;
 
-    let mut d = GcDraw::new(gl, &GC_CLEAR_VS.0, &GC_CLEAR_PS.0);
+    let mut d = GcDraw::new(gl, clear_vs(), clear_ps());
     d.vs_code_gpu = code.0;
     d.fs_code_gpu = code.1;
     // SAFETY: `color` is four floats on this stack frame, which outlives the
@@ -1786,7 +1798,7 @@ fn emit_clear(f: &mut GcFrame, gl: &GlesDraw, code: (u64, u64), depth: (u32, u32
         start: 0,
         end: 16,
         nonconsecutive: true,
-        vs_reg: GC_CLEAR_VS.0.viv.in_[0].reg,
+        vs_reg: clear_vs().viv.in_[0].reg,
     };
     d.num_elems = 1;
     d.vertex_count = 4;
@@ -1874,9 +1886,7 @@ pub extern "C" fn gc_init() -> i32 {
             return -1;
         }
     }
-    if upload_shader(&GC_CLEAR_VS.0, &mut g.clear_vs_code) != 0
-        || upload_shader(&GC_CLEAR_PS.0, &mut g.clear_ps_code) != 0
-    {
+    if upload_shader(clear_vs(), &mut g.clear_vs_code) != 0 || upload_shader(clear_ps(), &mut g.clear_ps_code) != 0 {
         return -1;
     }
     /* GL's incomplete texture: one opaque black RGBA8 texel (R=G=B=0, A=1) */

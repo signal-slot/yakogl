@@ -3,7 +3,7 @@
 //! YakoGL host tools (they replaced the Python generators; see tools/README.md).
 //!
 //!     yakogl-tools glsl2usc [options] inputs...    offline shader table (tests/reference/blobs.rs)
-//!     yakogl-tools usc-blob <src> <file> <SYM> [VARIANT]   internal USC blobs (src/pvr/blobs.rs)
+//!     yakogl-tools usc-blob <src> <file> <SYM> [VARIANT]   Mesa's internal USC blobs (tests/reference/pvr_internal.rs)
 //!     yakogl-tools femtovg-shaders [<dir> [out]]   FemtoVG 0.26 shader sources
 //!     yakogl-tools gl-consts                       src/gl/consts.rs, src/gl/egl_consts.rs
 //!     yakogl-tools abi-layout <driver src>         src/abi_layout.rs, src/abi_layout_check.c
@@ -78,7 +78,7 @@ const USAGE: &str = "usage: yakogl-tools <command> [args...]
 
 commands:
   glsl2usc          GLSL ES -> PowerVR USC table (tests/reference/blobs.rs); --help for options
-  usc-blob          one internal shader's USC block in src/pvr/blobs.rs
+  usc-blob          one internal shader's Mesa USC block in tests/reference/pvr_internal.rs
   femtovg-shaders   write the FemtoVG 0.26 shader sources into tools/shaders/femtovg
   gl-consts         regenerate src/gl/consts.rs and src/gl/egl_consts.rs
   abi-layout        regenerate src/abi_layout.rs and src/abi_layout_check.c

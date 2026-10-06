@@ -238,7 +238,8 @@ pub fn variant(h: &mut Holders, vs: &ShcShader, fs: &ShcShader, key: u32) -> Res
 
 /// A variant of a fragment shader no listed program links: what a draw asks
 /// of a program whose link substituted nothing, the plain record's variant.
-pub fn variant_unlinked(h: &mut Holders, fs: &ShcShader, key: u32) -> Result<(), String> {
+/// The variant, held.
+pub fn variant_unlinked(h: &mut Holders, fs: &ShcShader, key: u32) -> Result<ShcShader, String> {
     let mut v = ShcShader::ZERO;
     let mut log = [0 as c_char; 1024];
     let f = SHC_ONLINE.blend_variant.ok_or("the back end has no blend_variant")?;
@@ -247,8 +248,7 @@ pub fn variant_unlinked(h: &mut Holders, fs: &ShcShader, key: u32) -> Result<(),
     if rc != 0 {
         return Err(log_text(&log));
     }
-    h.keep(v);
-    Ok(())
+    Ok(h.keep(v))
 }
 
 /// The attribute locations glLinkProgram gives a vertex shader whose compile

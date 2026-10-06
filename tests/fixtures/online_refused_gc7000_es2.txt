@@ -34,6 +34,7 @@ es300/vid.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL
 es300/vol.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/es/fbload.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/fbload.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 interp_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

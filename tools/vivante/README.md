@@ -34,8 +34,11 @@ shows up as an assertion in the driver's liveness pass or an unhandled ALU op.
 shaders up in, `src/shaderc/vivante_shader_blobs.c`: one entry per shader under
 `yakogl/tools/shaders`, found by the SHA-256 of the GLSL text the application
 passes to `glShaderSource`, exactly as the PowerVR table works. It also writes
-`src/vivante/gc_clear_shader.h`, the two internal shaders the backend draws its
-clear quad with (`tools/shaders/internal/clear.vert` and `clear.frag`).
+`tests/reference/gc_clear_shader.rs`, etna's two shaders for the backend's
+clear quad (`tools/shaders/internal/clear.vert` and `clear.frag`): reference
+material. The backend draws with our compiler's pair, `src/vivante/internal.rs`
+(`yakogl-precompile --internal`, the list's `internal gc7000` lines), which
+`tests/internal_programs.rs` holds to etna's word for word.
 
 ```sh
 ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc \

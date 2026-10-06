@@ -202,6 +202,32 @@ pub struct Pair {
     pub fs: String,
 }
 
+/// The GPU an `internal` line is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Gpu {
+    Powervr,
+    Gc7000,
+}
+
+/// What an `internal` program is made from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InternalFrom {
+    /// A source under an `internal` directory, and for a fragment shader the
+    /// variant (`SPEC`'s blend key) the back end binds, 0 for the plain one.
+    Source { path: String, blend_key: u32, spec: Option<String> },
+    /// `attach:N`: the PowerVR's clear-attach program of N dwords
+    /// (`powervr::assemble::build_clear_attach`).
+    Attach(u32),
+}
+
+/// One `internal` line: a program a back end binds itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Internal {
+    pub gpu: Gpu,
+    pub name: String,
+    pub from: InternalFrom,
+}
+
 /// The list, read and checked against the tree it names.
 #[derive(Clone, Debug)]
 pub struct List {
@@ -216,6 +242,8 @@ pub struct List {
     pub rules: Vec<(String, Vec<String>)>,
     pub skip_failures: bool,
     pub pairs: Vec<Pair>,
+    /// The `internal` lines, in list order.
+    pub internal: Vec<Internal>,
 }
 
 /// The directory a relative path lies in ("" for the root).
@@ -247,6 +275,7 @@ impl List {
             rules: Vec::new(),
             skip_failures: false,
             pairs: Vec::new(),
+            internal: Vec::new(),
         };
         let mut app: Option<String> = None;
         let mut seen_src = HashSet::new();
@@ -348,6 +377,52 @@ impl List {
                         return Err(format!("{n}: pair {vs} {fs} is listed twice in app {app}"));
                     }
                     l.pairs.push(pair);
+                }
+                "internal" => {
+                    if !(3..=4).contains(&args.len()) {
+                        return Err(format!("{n}: `internal GPU NAME SOURCE [SPEC]` takes 3 or 4 fields"));
+                    }
+                    let gpu = match args[0] {
+                        "powervr" => Gpu::Powervr,
+                        "gc7000" => Gpu::Gc7000,
+                        other => return Err(format!("{n}: internal GPU '{other}' is not powervr or gc7000")),
+                    };
+                    let name = args[1];
+                    if name.is_empty()
+                        || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                    {
+                        return Err(format!("{n}: internal NAME '{name}' is not lower-case letters, digits and _"));
+                    }
+                    if l.internal.iter().any(|i| i.gpu == gpu && i.name == name) {
+                        return Err(format!("{n}: internal {} {name} is listed twice", args[0]));
+                    }
+                    let from = if let Some(k) = args[2].strip_prefix("attach:") {
+                        let k: u32 = k.parse().map_err(|_| format!("{n}: attach:{k}: not a dword count"))?;
+                        if gpu != Gpu::Powervr || args.len() != 3 || !(1..=3).contains(&k) {
+                            return Err(format!(
+                                "{n}: attach:N is the PowerVR's clear-attach program of 1 to 3 dwords, with no SPEC"
+                            ));
+                        }
+                        InternalFrom::Attach(k)
+                    } else {
+                        let path = args[2];
+                        if !std::path::Path::new(&l.abs(path)).is_file() {
+                            return Err(format!("{n}: {path}: no such file under {root}"));
+                        }
+                        if !l.dir(path).is_some_and(|d| d.roles.contains(&Role::Internal)) {
+                            return Err(format!("{n}: {path}: not in an `internal` directory"));
+                        }
+                        let spec = args.get(3).map(|s| s.to_string());
+                        if spec.is_some() && !path.ends_with(".frag") {
+                            return Err(format!("{n}: {path}: a variant SPEC is a fragment shader's"));
+                        }
+                        let blend_key = match &spec {
+                            Some(s) => blend_key(s).map_err(|e| format!("{n}: internal {}", spec_message(s, &e)))?,
+                            None => 0,
+                        };
+                        InternalFrom::Source { path: path.to_string(), blend_key, spec }
+                    };
+                    l.internal.push(Internal { gpu, name: name.to_string(), from });
                 }
                 other => return Err(format!("{n}: unknown line kind '{other}'")),
             }
@@ -542,6 +617,57 @@ mod tests {
             "every shader of the directory, as gen_shader_table.py's os.walk takes them"
         );
         assert_eq!(l.undeclared_dirs().unwrap(), Vec::<String>::new());
+    }
+
+    /// `internal` lines: a source of an internal directory and its variant,
+    /// or a clear-attach program; each refusal by line.
+    #[test]
+    fn internal_lines() {
+        let root = tree("int", &["a.vert", "int/q.vert", "int/c.frag"]);
+        let head = "dir . gc7000\ndir int internal\n";
+        let l = List::parse(
+            &format!(
+                "{head}internal powervr quad int/q.vert\ninternal powervr m1 int/c.frag replace:r@f16x4\n\
+                 internal powervr a2 attach:2\ninternal gc7000 quad int/q.vert\n"
+            ),
+            &root,
+        )
+        .unwrap();
+        let src = |path: &str, blend_key: u32, spec: Option<&str>| InternalFrom::Source {
+            path: path.into(),
+            blend_key,
+            spec: spec.map(String::from),
+        };
+        assert_eq!(
+            l.internal,
+            [
+                Internal { gpu: Gpu::Powervr, name: "quad".into(), from: src("int/q.vert", 0, None) },
+                Internal {
+                    gpu: Gpu::Powervr,
+                    name: "m1".into(),
+                    from: src("int/c.frag", blend_key("replace:r@f16x4").unwrap(), Some("replace:r@f16x4")),
+                },
+                Internal { gpu: Gpu::Powervr, name: "a2".into(), from: InternalFrom::Attach(2) },
+                Internal { gpu: Gpu::Gc7000, name: "quad".into(), from: src("int/q.vert", 0, None) },
+            ]
+        );
+        let refused = |text: &str, want: &str| {
+            let e = List::parse(&format!("{head}{text}"), &root).expect_err(text);
+            assert!(e.contains(want), "{text:?}: {e}");
+        };
+        refused("internal mali x int/q.vert\n", "3: internal GPU 'mali'");
+        refused("internal powervr X int/q.vert\n", "NAME 'X'");
+        refused(
+            "internal powervr x int/q.vert\ninternal powervr x int/c.frag\n",
+            "4: internal powervr x is listed twice",
+        );
+        refused("internal powervr x a.vert\n", "a.vert: not in an `internal` directory");
+        refused("internal powervr x int/none.frag\n", "no such file");
+        refused("internal powervr x int/q.vert replace:r\n", "a variant SPEC is a fragment shader's");
+        refused("internal powervr x int/c.frag replace\n", "the plain replace");
+        refused("internal gc7000 x attach:1\n", "the PowerVR's clear-attach program");
+        refused("internal powervr x attach:4\n", "1 to 3 dwords");
+        refused("internal powervr x\n", "takes 3 or 4 fields");
     }
 
     /// Each refusal, so that a reader that stopped checking one says so.

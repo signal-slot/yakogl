@@ -1427,7 +1427,7 @@ pub const fn pad_varyings<const N: usize>(v: [ShcVarying; N]) -> [ShcVarying; 16
 /// Pad a generated register list to the fixed array of [`ShcViv`].
 ///
 /// Beside `pad_attribs`/`pad_varyings` rather than in the generated table,
-/// because `src/vivante/clear_shader.rs` uses it and the clear shader must
+/// because `src/vivante/internal.rs` uses it and the clear shaders must
 /// exist in a build that carries no table at all.
 #[cfg(feature = "gpu-vivante")]
 pub const fn pad_io<const N: usize>(io: [ShcVivIo; N]) -> [ShcVivIo; SHC_VIV_MAX_IO] {

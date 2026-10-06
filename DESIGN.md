@@ -120,9 +120,10 @@ yakogl/
   src/gl/{types,consts,egl_consts}.rs           GL types; tokens generated from include/
                                 (yakogl-tools gl-consts)
   src/backend.rs                the backend contract (C view: src/backend.h)
-  src/pvr/{backend,blobs,ffi}.rs  PowerVR backend (cargo feature gpu-powervr), its USC blobs, the FFI to the
-                                driver's command generators; ffi_layout_check.c pins it
-  src/vivante/{backend,shader,texture,cmd,regs,state,kick,clear_shader}.rs
+  src/pvr/{backend,internal,ffi}.rs  PowerVR backend (cargo feature gpu-powervr), its own programs (our
+                                compiler's, yakogl-precompile --internal), the FFI to the driver's command
+                                generators; ffi_layout_check.c pins it
+  src/vivante/{backend,shader,texture,cmd,regs,state,kick,internal}.rs
                                 the i.MX8MP's GC7000 backend (cargo feature gpu-vivante);
                                 VIVANTE_NOTES.md; gc_kick.h is the OSAL's view of the kick
   src/osal/mod.rs               g_osal + osal_set_ops; render.rs the kick descriptor types
