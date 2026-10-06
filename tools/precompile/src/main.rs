@@ -128,6 +128,13 @@ fn read_refusals(path: &str) -> Result<HashMap<String, String>, String> {
     Ok(out)
 }
 
+/// The list's path as a refusal names it: relative to the repository when it
+/// is inside it (tools/shaders/precompiled.list), else as given.
+fn list_name(path: &str) -> String {
+    let abs = std::fs::canonicalize(path).map_or_else(|_| path.to_string(), |p| p.to_string_lossy().into_owned());
+    abs.strip_prefix(&format!("{}/", repo())).map_or(abs.clone(), str::to_string)
+}
+
 /// The toolchain mark: the crate version (the workspace's one version, which
 /// the library shares), the commit (`+dirty` when the tree is not that
 /// commit), and the build's GPU and ES level.
@@ -560,6 +567,7 @@ fn check_pin(path: &str, key: &str, value: &str) -> Result<(), String> {
 /// One run's table: its rows, its sources and its text.
 struct Generated {
     plan: Plan,
+    list: String,
     rows: Vec<Row>,
     links: Vec<yakogl::shaderc::ShcPrecompiledLink>,
     sources: Vec<Source>,
@@ -617,9 +625,9 @@ fn generate(a: &Args, mark: &str) -> Result<Generated, String> {
         &rows,
         &sources,
         &links,
-        &table::Header { toolchain: mark, gpu: GPU, es2: ES2 == 1, about: &about },
+        &table::Header { toolchain: mark, list: &list_name(&a.list), gpu: GPU, es2: ES2 == 1, about: &about },
     )?;
-    Ok(Generated { plan, rows, links, sources, about, text })
+    Ok(Generated { plan, list: list_name(&a.list), rows, links, sources, about, text })
 }
 
 /// `--verify`: every row of `g` made again alone, and the table they make
@@ -635,7 +643,7 @@ fn verify(g: &Generated, mark: &str, had: &str, path: &str) -> Result<(), String
         &again,
         &g.sources,
         &g.links,
-        &table::Header { toolchain: mark, gpu: GPU, es2: ES2 == 1, about: &g.about },
+        &table::Header { toolchain: mark, list: &g.list, gpu: GPU, es2: ES2 == 1, about: &g.about },
     )? != g.text
     {
         return Err("the table of fresh rows is not the regenerated table".into());

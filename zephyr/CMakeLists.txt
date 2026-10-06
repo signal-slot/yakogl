@@ -116,6 +116,10 @@ if(CONFIG_YAKOGL)
   if(CONFIG_YAKOGL_SHADERC_ONLINE)
     set(YAKOGL_SHADERC "online")
     set(YAKOGL_NO_SHADER_TABLE ON)
+  elseif(CONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY)
+    # the precompiled shaders alone: no compiler, no Mesa table
+    set(YAKOGL_SHADERC "precompiled")
+    set(YAKOGL_NO_SHADER_TABLE ON)
   else()
     set(YAKOGL_SHADERC "offline")
     set(YAKOGL_NO_SHADER_TABLE OFF)
@@ -138,7 +142,8 @@ if(CONFIG_YAKOGL)
 
   # ---- the C part: the Zephyr OSAL + the ABI/FFI layout pins ---------------------
   # The in-process compiler is lent its working region by a static this file
-  # owns; the offline build has no compiler to lend to. Same on both OSALs,
+  # owns; the offline and the precompiled-only builds have no compiler to
+  # lend to. Same on both OSALs,
   # so it lives beside them rather than inside either.
   if(CONFIG_YAKOGL_SHADERC_ONLINE)
     set(_yakogl_shaderc_c "${YAKOGL_SRC}/osal/zephyr_shaderc_scratch.c")

@@ -392,13 +392,34 @@ config YAKOGL_SHADERC_ONLINE
 	  AM62P. Size CONFIG_MAIN_STACK_SIZE, or the stack of whichever thread
 	  compiles, accordingly.
 
+config YAKOGL_SHADERC_PRECOMPILED_ONLY
+	bool "precompiled shaders only (no compiler)"
+	select YAKOGL_PRECOMPILED_SHADERS
+	help
+	  The image carries the shaders our compiler made of the source list
+	  at build time (YAKOGL_PRECOMPILED_SHADERS, which this selects) and
+	  no compiler: no front end, no scratch or keep region
+	  (zephyr_shaderc_scratch.c is not linked), no compile stack. A
+	  shader the table holds is looked up; anything else is refused by
+	  name, -ENOENT, with the line in the info log (and on the console
+	  once per cause):
+	    precompiled shaders: <vertex|fragment> shader sha256=<hex> is not
+	      in this image's precompiled shaders and the image has no shader
+	      compiler; add it to <list> and rebuild
+	    precompiled shaders: <name> has no variant for blend key <hex>
+	    precompiled shaders: program <vs>/<fs> was not linked at build time
+	  A program links when the table linked that pair (or when neither
+	  stage declares a uniform and the fragment shader reads no varying,
+	  so that no rule of the compiler's link could have said anything).
+	  Not on the V3D (its GPU choice needs the compiler).
+
 endchoice
 
 config YAKOGL_PRECOMPILED_SHADERS
 	bool "precompiled shaders in front of the compiler"
-	depends on YAKOGL_SHADERC_ONLINE && !YAKOGL_GPU_V3D
+	depends on (YAKOGL_SHADERC_ONLINE || YAKOGL_SHADERC_PRECOMPILED_ONLY) && !YAKOGL_GPU_V3D
 	help
-	  Compile the source list (tools/shaders/precompiled.list, or
+	  With the in-process compiler (YAKOGL_SHADERC_ONLINE): compile the source list (tools/shaders/precompiled.list, or
 	  YAKOGL_PRECOMPILED_LIST) with this tree's own compiler while the
 	  image is built (yakogl-precompile, a host program cargo builds into
 	  the build directory first), and link the table it writes in front of
@@ -410,7 +431,9 @@ config YAKOGL_PRECOMPILED_SHADERS
 	  look-up; a table for another GPU or ES level does not build. The
 	  crate's `precompiled-shaders`. Adds the table's rows to the image
 	  (the whole list on the PowerVR is about 3.8 MB of code; one app's
-	  much less, YAKOGL_PRECOMPILED_APPS).
+	  much less, YAKOGL_PRECOMPILED_APPS). Without a compiler
+	  (YAKOGL_SHADERC_PRECOMPILED_ONLY, which selects this) the table is
+	  the whole back end.
 
 config YAKOGL_PRECOMPILED_APPS
 	string "the list's apps to precompile (space-separated; empty: the whole list)"

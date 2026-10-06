@@ -107,8 +107,11 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    compile, a hit running none. Board proof (commit 3, `17605c36`): the AM62P gl_test
    image with the tier and `gl_test_es100`'s 1291 rows passes 48 / 48, 0
    resets; Slint and the cluster with the tier (`femtovg`, 583 rows) draw the
-   same pictures, cluster 91.8 fps. Next: the tier's hit count on the board
-   (commit 4), then the default.
+   same pictures, cluster 91.8 fps. And the image without a compiler (Kconfig
+   `YAKOGL_SHADERC_PRECOMPILED_ONLY`: the table the whole back end, a miss,
+   a variant or a program the table lacks refused by name, -ENOENT, gl_test's
+   closing line counting precompiled hits and compiler runs). Next: a board
+   run of it and the tier's hit count on the board, then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,

@@ -111,9 +111,6 @@ pub mod loop_count;
 pub mod lower;
 pub mod parser;
 pub mod pp;
-/// The precompiled tier in front of the compiler (`precompiled-shaders`): the
-/// table yakogl-precompile made at image-build time, found by the record key.
-pub mod precompiled;
 pub mod reflect;
 /// The two buffers the back end lends the compiler.
 /// Instruction selection: the IR to GC7000 instructions in virtual registers

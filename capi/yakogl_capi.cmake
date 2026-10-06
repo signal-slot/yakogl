@@ -149,7 +149,7 @@ function(yakogl_rust_target_is_hosted triple out)
 endfunction()
 
 # yakogl_add_capi_archive(OUTPUT <libyakogl.a> OSAL <name> GPU <name>
-#                         [SHADERC offline|online] [NO_SHADER_TABLE]
+#                         [SHADERC offline|online|precompiled] [NO_SHADER_TABLE]
 #                         [PRECOMPILED [PRECOMPILED_APPS <app>...] [PRECOMPILED_LIST <list>]]
 #                         TARGET_NAME <tgt> [C_OBJECT_LIBRARY <object library>])
 # Adds custom target <tgt> that builds OUTPUT: cargo builds yakogl-capi for
@@ -174,8 +174,14 @@ function(yakogl_add_capi_archive)
   # `mesa-reference-table`, which a measurement image takes on purpose (the
   # "table image" of the gl_test comparisons) and no other build links. It
   # will be replaced by the table our own compiler precompiles.
+  # `precompiled`: no compiler and no Mesa table, the precompiled shaders
+  # (PRECOMPILED, required) the whole back end.
   if(A_SHADERC STREQUAL "online")
     list(APPEND _features "shaderc-online")
+  elseif(A_SHADERC STREQUAL "precompiled")
+    if(NOT A_PRECOMPILED)
+      message(FATAL_ERROR "SHADERC precompiled needs PRECOMPILED: the precompiled shaders are its only back end")
+    endif()
   else()
     list(APPEND _features "mesa-reference-table")
   endif()
@@ -183,9 +189,9 @@ function(yakogl_add_capi_archive)
   # leaves the Mesa reference out, and a board image says so as well (the
   # crate's `no-shader-table`).
   if(A_NO_SHADER_TABLE)
-    if(NOT A_SHADERC STREQUAL "online")
+    if(NOT A_SHADERC STREQUAL "online" AND NOT A_SHADERC STREQUAL "precompiled")
       message(FATAL_ERROR
-        "NO_SHADER_TABLE needs SHADERC online: nothing else can compile a shader without a table")
+        "NO_SHADER_TABLE needs SHADERC online or precompiled: the Mesa table is the offline back end's")
     endif()
     list(APPEND _features "no-shader-table")
   endif()
@@ -212,8 +218,8 @@ function(yakogl_add_capi_archive)
   # not rebuilt for nothing.
   set(_precompiled "")
   if(A_PRECOMPILED)
-    if(NOT A_SHADERC STREQUAL "online" OR A_GPU STREQUAL "v3d")
-      message(FATAL_ERROR "PRECOMPILED needs SHADERC online and a PowerVR or GC7000 GPU")
+    if(A_SHADERC STREQUAL "offline" OR A_GPU STREQUAL "v3d")
+      message(FATAL_ERROR "PRECOMPILED needs SHADERC online or precompiled and a PowerVR or GC7000 GPU")
     endif()
     set(_table "${CMAKE_CURRENT_BINARY_DIR}/precompiled/table.rs")
     set(_gen_features "gpu-${A_GPU}")

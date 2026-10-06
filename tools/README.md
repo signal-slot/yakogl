@@ -135,7 +135,7 @@ toolchain mark as constants (`SHC_PRECOMPILED_GPU`, `_ES2`, `_TOOLCHAIN`).
 With the crate feature `precompiled-shaders` (Kconfig
 `YAKOGL_PRECOMPILED_SHADERS`, CMake `YAKOGL_PRECOMPILED_SHADERS`; off by
 default) the library includes a table this tool made and looks every shader up
-in it before compiling (`src/shaderc/online/precompiled.rs`). The order, at each
+in it before compiling (`src/shaderc/precompiled.rs`). The order, at each
 of the compiler's entry points (compile, a blend variant, a link's substitution,
 the vertex shader laid out at link, a sampler-state variant): the keep cache,
 then the table, by the same record key and stage and blend key, then the
@@ -154,6 +154,24 @@ cargo run -p yakogl-precompile --features gpu-powervr -- --app gl_test_es100 -o 
 YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/t.rs \
   cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,precompiled-shaders
 ```
+
+Without the compiler (`precompiled-shaders` alone; Kconfig
+`YAKOGL_SHADERC_PRECOMPILED_ONLY`, CMake `YAKOGL_SHADERC=precompiled`) the table is
+the whole back end, `SHC_PRECOMPILED`: a source is its row or a refusal, a
+variant is a row or a refusal, and a program links when the table linked that
+pair (or when neither stage declares a uniform and the fragment shader reads no
+varying, so that no rule of the compiler's link could decide anything), else it
+is refused. Each refusal is `-ENOENT` with one line in the info log, and on the
+console once per cause:
+
+```text
+precompiled shaders: <vertex|fragment> shader sha256=<hex> is not in this image's precompiled shaders and the image has no shader compiler; add it to <list> and rebuild
+precompiled shaders: <name> has no variant for blend key <hex>
+precompiled shaders: program <vs>/<fs> was not linked at build time
+```
+
+(`<list>` is the list the table was made from, `SHC_PRECOMPILED_LIST`.) gl_test's
+closing line ends `precompiled hits <n>, compiler runs <n>`.
 
 An image build does the first line itself (capi/yakogl_capi.cmake, `PRECOMPILED`,
 into its build directory; `YAKOGL_PRECOMPILED_APPS` picks the apps) on every

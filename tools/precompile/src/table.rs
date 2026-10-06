@@ -23,7 +23,8 @@
 //! link the generator made by record key, the verdict a link takes without
 //! the front end; and the toolchain mark as constants
 //! (`SHC_PRECOMPILED_TOOLCHAIN`, `_TOOLCHAIN_C`, `_GPU`, `_ES2`), which the
-//! library checks against its own GPU and ES level at build time.
+//! library checks against its own GPU and ES level at build time, and the
+//! list it was made from (`SHC_PRECOMPILED_LIST`, which a refusal names).
 //! | `SHC_PRECOMPILED_ATTRIB_MAP: [Option<&ShcAttribMap>; N]` | the link's attribute locations a vertex shader was compiled with |
 //! | `SHC_PRECOMPILED_BLOCKS: [ShcBlocks; N]` | its uniform blocks |
 //!
@@ -205,6 +206,8 @@ pub struct Source {
 pub struct Header<'a> {
     /// `// toolchain: ...`, the line after the mark.
     pub toolchain: &'a str,
+    /// The source list the table was made from, as a refusal names it.
+    pub list: &'a str,
     /// The GPU and ES level the mark names, as constants the library checks.
     pub gpu: &'a str,
     pub es2: bool,
@@ -619,6 +622,8 @@ pub fn emit(
     out.push("/// The GPU and ES level the rows were compiled for (the library refuses a table for another).".into());
     out.push(format!("pub const SHC_PRECOMPILED_GPU: &str = \"{}\";", rs_str(h.gpu)));
     out.push(format!("pub const SHC_PRECOMPILED_ES2: bool = {};", h.es2));
+    out.push("/// The source list the table was made from (what a refusal tells the reader to add to).".into());
+    out.push(format!("pub const SHC_PRECOMPILED_LIST: &str = \"{}\";", rs_str(h.list)));
     out.push(String::new());
 
     out.push(format!("pub static SHC_PRECOMPILED_SOURCES: [ShcSource; {}] = [", sources.len()));

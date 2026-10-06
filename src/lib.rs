@@ -112,15 +112,18 @@ mod test_rules;
 /* `no-shader-table` removes the fallback, so a build that takes it must have a
  * back end needing none. Saying so here turns a confusing pile of missing-item
  * errors into one sentence. */
-#[cfg(all(feature = "no-shader-table", not(feature = "shaderc-online")))]
-compile_error!("feature \"no-shader-table\" needs a back end that needs no table: enable \"shaderc-online\"");
-
-/* A build has a shader back end: the in-process compiler, or the Mesa
- * reference as its table (`mesa-reference-table`, measurement images only;
- * build.rs sets `mesa_reference`), or both in the host tests. */
-#[cfg(all(not(mesa_reference), not(feature = "shaderc-online")))]
+#[cfg(all(feature = "no-shader-table", not(feature = "shaderc-online"), not(feature = "precompiled-shaders")))]
 compile_error!(
-    "no shader back end: enable \"shaderc-online\" (or, for a measurement image only, \"mesa-reference-table\")"
+    "feature \"no-shader-table\" needs a back end that needs no Mesa table: enable \"shaderc-online\" or \"precompiled-shaders\""
+);
+
+/* A build has a shader back end: the in-process compiler, the precompiled
+ * shaders alone (`precompiled-shaders` without the compiler), or the Mesa
+ * reference as its table (`mesa-reference-table`, measurement images only;
+ * build.rs sets `mesa_reference`), or more than one in the host tests. */
+#[cfg(all(not(mesa_reference), not(feature = "shaderc-online"), not(feature = "precompiled-shaders")))]
+compile_error!(
+    "no shader back end: enable \"shaderc-online\" or \"precompiled-shaders\" (or, for a measurement image only, \"mesa-reference-table\")"
 );
 #[cfg(all(feature = "mesa-reference-table", feature = "no-shader-table"))]
 compile_error!("features \"mesa-reference-table\" and \"no-shader-table\" contradict each other");

@@ -728,9 +728,10 @@ static inline void gl_test_if_lowering(unsigned int v)
  * "#version 450" at the version line, which says nothing about it. So a build
  * that compiles its shaders takes the ES 1.00 set: asked for (GL_TEST_ES100,
  * which the Linux user build.sh sets from the archive it links), or a Zephyr
- * image with the in-process compiler.
+ * image with the in-process compiler or with the precompiled shaders (made by
+ * that compiler, of the ES 1.00 set: the list's gl_test_es100 app).
  */
-#if defined(GL_TEST_ES100) || defined(CONFIG_YAKOGL_SHADERC_ONLINE)
+#if defined(GL_TEST_ES100) || defined(CONFIG_YAKOGL_SHADERC_ONLINE) || defined(CONFIG_YAKOGL_PRECOMPILED_SHADERS)
 #include "gl_test_shaders_es100.h"
 #else
 #include "gl_test_shaders.h"
@@ -14294,6 +14295,10 @@ static int case_matdyn(void)
  * rather than pass on a region it could not see.
  * ------------------------------------------------------------------------- */
 extern int shc_online_keep_stats(size_t *in_use, size_t *peak) __attribute__((weak));
+/* gl_test's closing line: the shader back end's two counters, each in the
+ * image only with its tier (gles_shaderc.h), weak like the keep stats. */
+extern uint32_t shc_precompiled_hits(void) __attribute__((weak));
+extern uint32_t shc_online_compiler_runs(void) __attribute__((weak));
 
 static int case_churn(void)
 {
@@ -20273,9 +20278,14 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 			if (s_harness_ctx)
 				gl_context_set_current(s_harness_ctx);
 		}
-		pr_info("gl_test: all: %d of %u cases failed (%u passed; %u timed out; first failure case %d at index %d)\n",
+		/* what the run cost the shader back end: look-ups the precompiled
+		 * shaders answered and compiler runs (0 in an image without the
+		 * one or the other), so the console proves the tier */
+		pr_info("gl_test: all: %d of %u cases failed (%u passed; %u timed out; first failure case %d at index %d); "
+			"precompiled hits %u, compiler runs %u\n",
 			fails, gl_test_total, gl_test_passed, timed_out, gl_test_first_fail,
-			gl_test_first_fail_at);
+			gl_test_first_fail_at, shc_precompiled_hits ? shc_precompiled_hits() : 0u,
+			shc_online_compiler_runs ? shc_online_compiler_runs() : 0u);
 		rc = fails ? -1 : 0;
 	} else {
 		rc = run_case(gl_case, pretransform, debug);

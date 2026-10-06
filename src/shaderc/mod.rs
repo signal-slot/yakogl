@@ -44,6 +44,10 @@ pub mod offline;
 #[cfg(feature = "shaderc-online")]
 pub mod online;
 pub mod packing;
+/// The precompiled table (`precompiled-shaders`): the tier in front of the
+/// compiler, or, in an image without one, the whole back end.
+pub mod precompiled;
+pub mod record_key;
 pub mod sha256;
 
 /* enum shc_stage */
@@ -614,10 +618,10 @@ pub fn uniform_blocks(sh: &ShcShader) -> ShcBlocks {
     {
         online::backend::blocks_of(sh)
     }
+    /* without the compiler, a precompiled row's (the compiler made it) */
     #[cfg(not(feature = "shaderc-online"))]
     {
-        let _ = sh;
-        ShcBlocks::EMPTY
+        precompiled::view(sh).map_or(ShcBlocks::EMPTY, |r| r.blocks)
     }
 }
 
@@ -631,10 +635,11 @@ pub fn is_online(sh: &ShcShader) -> bool {
     {
         online::backend::is_ours(sh)
     }
+    /* without the compiler, a precompiled row: the compiler made it, at
+     * build time, with the same uniform rows */
     #[cfg(not(feature = "shaderc-online"))]
     {
-        let _ = sh;
-        false
+        precompiled::view(sh).is_some()
     }
 }
 
@@ -1265,6 +1270,10 @@ pub static mut g_shaderc: *const ShcBackend = &offline::SHC_OFFLINE;
 #[cfg(all(not(mesa_reference), feature = "shaderc-online"))]
 #[no_mangle]
 pub static mut g_shaderc: *const ShcBackend = &online::SHC_ONLINE;
+/// An image with neither: the precompiled shaders are the whole back end.
+#[cfg(all(not(mesa_reference), not(feature = "shaderc-online"), feature = "precompiled-shaders"))]
+#[no_mangle]
+pub static mut g_shaderc: *const ShcBackend = &precompiled::SHC_PRECOMPILED;
 
 /// The active shader back end.
 ///
@@ -1386,7 +1395,7 @@ fn shader_source_name_c(sh: &ShcShader) -> &'static str {
 /// program -- the same as `fs` when it substituted nothing, another row when
 /// it compiled the fragment shader again (a varying the vertex shader never
 /// writes read as 0, or for a constant `gl_Position.w`). The link verdict
-/// without the front end: `online::precompiled`.
+/// without the front end: `shaderc::precompiled`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ShcPrecompiledLink {
     pub vs: [u8; 32],

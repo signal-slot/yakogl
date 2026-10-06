@@ -67,9 +67,9 @@ fn mesa_reference() {
 }
 
 /// `precompiled-shaders`: the table yakogl-precompile wrote, named by
-/// YAKOGL_PRECOMPILED_TABLE, compiled in as `shaderc::online::precompiled::
-/// table` through `$OUT_DIR/precompiled_table.rs` (one `#[path]` module line:
-/// the table is a module file with inner attributes, which `include!` cannot
+/// YAKOGL_PRECOMPILED_TABLE, compiled in as `shaderc::precompiled::table`
+/// through `$OUT_DIR/precompiled_table.rs` (one `#[path]` module line: the
+/// table is a module file with inner attributes, which `include!` cannot
 /// take). Rebuilt when the variable or the file changes.
 fn precompiled_table() {
     println!("cargo:rerun-if-env-changed=YAKOGL_PRECOMPILED_TABLE");

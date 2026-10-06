@@ -62,18 +62,17 @@ the development history before this repository was published.
 
 ## Shader compilers
 
-Two back ends, chosen at build time:
+Where a shader's machine code comes from, chosen at build time:
 
 - **online** (the default everywhere but the bare-metal make build): our own
   `no_std` GLSL ES compiler running on the board (`src/shaderc/online/`,
   feature `shaderc-online`; Kconfig `YAKOGL_SHADERC_ONLINE`, CMake
-  `YAKOGL_SHADERC=online`). In front of it, optionally, the **precompiled
-  tier**: the source list (`tools/shaders/precompiled.list`) compiled by the
-  same compiler while the image is built (`yakogl-precompile`), looked up by
-  the compiler's own record key before anything compiles; a hit runs no
-  compile (feature `precompiled-shaders`; Kconfig `YAKOGL_PRECOMPILED_SHADERS`
-  and `YAKOGL_PRECOMPILED_APPS`, CMake `YAKOGL_PRECOMPILED_SHADERS` and
-  `YAKOGL_PRECOMPILED_APPS`).
+  `YAKOGL_SHADERC=online`).
+- **precompiled shaders**: the source list (`tools/shaders/precompiled.list`)
+  compiled by the same compiler while the image is built (`yakogl-precompile`),
+  looked up by the compiler's own record key (feature `precompiled-shaders`;
+  Kconfig `YAKOGL_PRECOMPILED_SHADERS` and `YAKOGL_PRECOMPILED_APPS`, CMake
+  `YAKOGL_PRECOMPILED_SHADERS` and `YAKOGL_PRECOMPILED_APPS`).
 - **offline**: a table of shaders compiled on the host, looked up by the SHA-256 of
   the GLSL text (`src/shaderc/offline.rs`). Its only table today is the Mesa
   reference (`tests/reference/`, what Mesa's pco_shc / etna_shc made of
@@ -81,6 +80,14 @@ Two back ends, chosen at build time:
   links only when it asks for it (feature `mesa-reference-table`, Kconfig
   `YAKOGL_SHADERC_OFFLINE`): a measurement-only choice, to be replaced by the
   table our compiler precompiles (`tools/precompile`).
+
+A product image is one of three: the compiler only (the default); the precompiled shaders in
+front of the compiler (a hit runs no compile, a miss compiles); and the
+precompiled shaders only (Kconfig `YAKOGL_SHADERC_PRECOMPILED_ONLY`, CMake
+`YAKOGL_SHADERC=precompiled`: no compiler, no scratch region; a shader, a
+variant or a program the table lacks is refused by name, `-ENOENT`, with the
+line in the info log). For gl_test's ES 1.00 set on the AM62P they are
+2,382,096, 5,921,040 and 5,052,360 bytes (zephyr.bin).
 
 ## The PowerVR firmware
 

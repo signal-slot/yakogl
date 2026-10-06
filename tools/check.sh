@@ -198,6 +198,25 @@ for f in "${CONFIGS[@]}"; do
   step "test    $f" "${tier[@]}" cargo test --no-fail-fast --no-default-features --features "$f"
 done
 
+# An image without the compiler: the precompiled shaders the whole back end
+# (`precompiled-shaders` without `shaderc-online`). Its host configuration
+# carries no compiler, so the GL suite, which compiles what it likes, is not
+# its test; linted with its unit tests, and run on the back end's own
+# (shaderc::precompiled: a source is its row or a refusal by name, a variant
+# or a program the table lacks is refused by name, what a GL client sees).
+if [ "$QUICK" -eq 0 ]; then
+  for gpu in powervr gc7000; do
+    feature=gpu-powervr
+    [ "$gpu" = gc7000 ] && feature=gpu-vivante
+    c="host-test,$feature,precompiled-shaders,no-shader-table"
+    alone=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-$gpu.rs")
+    step "clippy  $c (no compiler; lib and its tests)" "${alone[@]}" \
+      cargo clippy --no-default-features --features "$c" --lib --profile test
+    step "test    $c (no compiler: shaderc::precompiled)" "${alone[@]}" \
+      cargo test --no-default-features --features "$c" --lib shaderc::precompiled
+  done
+fi
+
 for f in "${BUILD_ONLY_CONFIGS[@]}"; do
   step "clippy  $f (no tests: see BUILD_ONLY_CONFIGS)" \
     cargo clippy --no-default-features --features "$f" --lib
@@ -852,12 +871,21 @@ TARGET_CONFIGS=(
   "osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
   "osal-zephyr,gpu-v3d,shaderc-online,no-shader-table"
 )
+# The compiler-less image (`precompiled-shaders` alone), with the PowerVR
+# gl_test_es100 table the tier rows use.
+target_precompiled() {
+  [ -f build/precompiled/check-powervr.rs ] || tier_tables || return 1
+  env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs" \
+    cargo check -p yakogl --no-default-features --features osal-zephyr,gpu-powervr,precompiled-shaders \
+    --target aarch64-unknown-none
+}
 if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none; then
   for f in "${TARGET_CONFIGS[@]}"; do
     step "check   $f (aarch64-unknown-none, no host-test)" \
       cargo check -p yakogl --no-default-features --features "$f" \
         --target aarch64-unknown-none
   done
+  step "check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)" target_precompiled
 else
   red "check.sh: aarch64-unknown-none is NOT installed -- the product arms were NOT compiled"
   red "          (rustup target add aarch64-unknown-none); this is a gap, not a pass"
@@ -1031,15 +1059,21 @@ step "no table in the artefact" check_table_absent
 # the image target; the host target once (osal-linux). --quick builds the
 # control and the AM62P image only; the full matrix (20 archives and two controls) took 863 s here.
 mesa_reference_symbols() {
-  local dir target="$1" features="$2" lib
+  local dir target="$1" features="$2" lib table=()
+  case "$features" in
+  *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
+    table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
+  *precompiled-shaders*) table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
+  esac
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   if [ "$target" = host ]; then
-    cargo build -q -p yakogl-capi --release --no-default-features --features "$features" >/dev/null 2>&1 || return 1
+    "${table[@]}" cargo build -q -p yakogl-capi --release --no-default-features --features "$features" \
+      >/dev/null 2>&1 || return 1
     lib="$dir/release/libyakogl_capi.a"
   else
-    cargo build -q -p yakogl-capi --release --target "$target" --no-default-features --features "$features" \
-      >/dev/null 2>&1 || return 1
+    "${table[@]}" cargo build -q -p yakogl-capi --release --target "$target" --no-default-features \
+      --features "$features" >/dev/null 2>&1 || return 1
     lib="$dir/$target/release/libyakogl_capi.a"
   fi
   nm "$lib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
@@ -1060,8 +1094,10 @@ check_no_mesa_reference() {
     echo "control $f: $n reference symbols"
     [ "$QUICK" -eq 1 ] && break
   done
+  [ -f build/precompiled/check-powervr.rs ] && [ -f build/precompiled/check-gc7000.rs ] || tier_tables || return 1
   if [ "$QUICK" -eq 1 ]; then
-    configs=("$t osal-zephyr,gpu-powervr,shaderc-online,no-shader-table")
+    configs=("$t osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
+      "$t osal-zephyr,gpu-powervr,precompiled-shaders")
   else
     for osal in zephyr baremetal linux; do
       for gpu in powervr vivante v3d; do
@@ -1069,6 +1105,11 @@ check_no_mesa_reference() {
       done
     done
     configs+=("host osal-linux,gpu-powervr,shaderc-online" "host osal-linux,gpu-vivante,shaderc-online")
+    # the precompiled shaders, alone and in front of the compiler
+    for gpu in powervr vivante; do
+      configs+=("$t osal-zephyr,gpu-$gpu,precompiled-shaders"
+        "$t osal-zephyr,gpu-$gpu,shaderc-online,no-shader-table,precompiled-shaders")
+    done
   fi
   for c in "${configs[@]}"; do
     n=$(mesa_reference_symbols "${c%% *}" "${c#* }") || { echo "the product build [$c] failed"; return 1; }
@@ -1251,11 +1292,31 @@ zephyr_werror_image() {
     return 1
   fi
 }
+# The image without a compiler (the precompiled shaders of gl_test's ES 1.00
+# set its whole back end): it builds, and neither the compiler nor the
+# scratch region the OSAL lends it (zephyr_shaderc_scratch.c) is in it.
+zephyr_precompiled_only_image() {
+  local elf=build/zephyr-werror/am62p-precompiled-only/zephyr/zephyr.elf syms
+  zephyr_werror_image verdin_am62p/am62p54/a53 gl_test am62p-precompiled-only \
+    -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n \
+    -DCONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY=y '-DCONFIG_YAKOGL_PRECOMPILED_APPS="gl_test_es100"' || return 1
+  syms=$(nm "$elf") || return 1
+  grep -q 'shaderc11precompiled5alone15SHC_PRECOMPILED' <<<"$syms" || {
+    echo "the image has no SHC_PRECOMPILED back end"
+    return 1
+  }
+  if grep -E 'yakogl_shaderc_scratch|shc_online_|7shaderc6online' <<<"$syms" | head -5 | grep .; then
+    echo "^ the compiler or its scratch region is in the image without a compiler"
+    return 1
+  fi
+}
 if [ "$QUICK" -eq 0 ]; then
   if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
     step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_am62p/am62p54/a53 gl_test am62p \
       -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
+    step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
+      zephyr_precompiled_only_image
     step "zephyr  imx8mp gc_gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gc_gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
     step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4

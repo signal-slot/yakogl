@@ -16,7 +16,8 @@
 # Options (see also capi/yakogl_capi.cmake for the cargo ones):
 #   -DYAKOGL_OSAL=zephyr|baremetal|linux  (default: linux)
 #   -DYAKOGL_GPU=powervr|vivante           (default: powervr)
-#   -DYAKOGL_SHADERC=offline|online        (default: online)
+#   -DYAKOGL_SHADERC=offline|online|precompiled (default: online; precompiled:
+#                                          no compiler, needs YAKOGL_PRECOMPILED_SHADERS)
 #   -DYAKOGL_PRECOMPILED_SHADERS=ON|OFF    the precompiled tier in front of the
 #                                          compiler (default: OFF); its apps:
 #   -DYAKOGL_PRECOMPILED_APPS="<app>..."   (default: the whole source list)
@@ -54,9 +55,9 @@ set_property(CACHE YAKOGL_GPU PROPERTY STRINGS powervr vivante)
 # (the crate's `mesa-reference-table`): measurement builds only, to be
 # replaced by the table our own compiler precompiles.
 set(YAKOGL_SHADERC "online" CACHE STRING "Shader back end: online|offline (offline: the Mesa reference, measurement only)")
-set_property(CACHE YAKOGL_SHADERC PROPERTY STRINGS offline online)
-if(NOT YAKOGL_SHADERC STREQUAL "offline" AND NOT YAKOGL_SHADERC STREQUAL "online")
-  message(FATAL_ERROR "YAKOGL_SHADERC must be offline|online (got '${YAKOGL_SHADERC}')")
+set_property(CACHE YAKOGL_SHADERC PROPERTY STRINGS offline online precompiled)
+if(NOT YAKOGL_SHADERC MATCHES "^(offline|online|precompiled)$")
+  message(FATAL_ERROR "YAKOGL_SHADERC must be offline|online|precompiled (got '${YAKOGL_SHADERC}')")
 endif()
 # The precompiled tier (the crate's `precompiled-shaders`): the source list
 # compiled at build time by yakogl-precompile, looked up before compiling.
@@ -66,6 +67,8 @@ set(_yakogl_precompiled_args "")
 if(YAKOGL_PRECOMPILED_SHADERS)
   separate_arguments(_yakogl_apps UNIX_COMMAND "${YAKOGL_PRECOMPILED_APPS}")
   set(_yakogl_precompiled_args PRECOMPILED PRECOMPILED_APPS ${_yakogl_apps})
+elseif(YAKOGL_SHADERC STREQUAL "precompiled")
+  message(FATAL_ERROR "YAKOGL_SHADERC=precompiled needs YAKOGL_PRECOMPILED_SHADERS=ON")
 endif()
 if(NOT YAKOGL_GPU STREQUAL "powervr" AND NOT YAKOGL_GPU STREQUAL "vivante")
   message(FATAL_ERROR "YAKOGL_GPU must be powervr|vivante (got '${YAKOGL_GPU}')")

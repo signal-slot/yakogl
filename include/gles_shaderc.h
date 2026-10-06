@@ -480,7 +480,11 @@ uint32_t shc_online_compiler_runs(void);
  * without one. shc_precompiled_toolchain: its toolchain mark ("yakogl=...
  * commit=... gpu=... es2=..."), "" without one. shc_precompiled_set_enabled:
  * 0 compiles everything as without it (a measurement), 1 (the default)
- * consults it. Static archive only, like shc_online_keep_stats. */
+ * consults it (an image without the compiler always does). Without the
+ * compiler (Kconfig YAKOGL_SHADERC_PRECOMPILED_ONLY) the table is g_shaderc:
+ * a shader, variant or program it lacks is refused by name, -ENOENT
+ * (tools/README.md has the lines). Static archive only, like
+ * shc_online_keep_stats. */
 uint32_t shc_precompiled_hits(void);
 size_t shc_precompiled_rows(void);
 const char *shc_precompiled_toolchain(void);

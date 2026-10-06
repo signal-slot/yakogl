@@ -38,6 +38,7 @@ use core::fmt::Write as _;
 use super::codegen::{self, CompileError, Which};
 use super::ir;
 use super::store;
+#[cfg(any(test, feature = "gpu-v3d"))]
 use crate::shaderc::sha256::sha256;
 use crate::shaderc::{IfLowering, LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::util::{cstr_bytes, CStrWriter, Global, EINVAL, ENOMEM, ENOSPC, ENOTSUP};
@@ -420,19 +421,34 @@ fn record_of(sh: &ShcShader) -> Option<*mut Compiled> {
 /// the source, the facts and the blocks come from here. A copy; its
 /// references live as long as the record (or, for a row, the image).
 #[derive(Clone, Copy)]
-pub(crate) struct Base {
-    pub(crate) sha: [u8; 32],
-    pub(crate) stage: u32,
-    pub(crate) blend_key: u32,
-    pub(crate) source: &'static [u8],
-    pub(crate) w_constant: bool,
-    pub(crate) lod_key: LodKey,
-    pub(crate) if_lowering: IfLowering,
-    pub(crate) attrib_map: Option<&'static crate::shaderc::ShcAttribMap>,
-    pub(crate) blocks: crate::shaderc::ShcBlocks,
+struct Base {
+    sha: [u8; 32],
+    stage: u32,
+    blend_key: u32,
+    source: &'static [u8],
+    w_constant: bool,
+    lod_key: LodKey,
+    if_lowering: IfLowering,
+    attrib_map: Option<&'static crate::shaderc::ShcAttribMap>,
+    blocks: crate::shaderc::ShcBlocks,
 }
 
 impl Base {
+    /// A precompiled row, read as a record.
+    fn of_row(r: crate::shaderc::precompiled::RowView) -> Base {
+        Base {
+            sha: r.sha,
+            stage: r.stage,
+            blend_key: r.blend_key,
+            source: r.source,
+            w_constant: r.w_constant,
+            lod_key: r.lod_key,
+            if_lowering: r.if_lowering,
+            attrib_map: r.attrib_map,
+            blocks: r.blocks,
+        }
+    }
+
     fn of_record(r: &Compiled) -> Base {
         Base {
             sha: r.sha,
@@ -452,7 +468,9 @@ impl Base {
 fn base_of(sh: &ShcShader) -> Option<Base> {
     // SAFETY: a live record is valid until its last holder releases it, and
     // the caller holds `sh`.
-    record_of(sh).map(|p| Base::of_record(unsafe { &*p })).or_else(|| super::precompiled::base(sh))
+    record_of(sh)
+        .map(|p| Base::of_record(unsafe { &*p }))
+        .or_else(|| crate::shaderc::precompiled::view(sh).map(Base::of_row))
 }
 
 /// The GL core keeps one more copy of `sh`.
@@ -722,7 +740,7 @@ fn cached_or_precompiled(sha: &[u8; 32], stage: u32, blend_key: u32) -> Option<S
         retain(&hit.shader);
         return Some(hit.shader);
     }
-    super::precompiled::find(sha, stage, blend_key)
+    crate::shaderc::precompiled::find(sha, stage, blend_key)
 }
 
 /// The cache key of a record: the source's SHA-256, chained with everything
@@ -731,33 +749,15 @@ fn cached_or_precompiled(sha: &[u8; 32], stage: u32, blend_key: u32) -> Option<S
 /// default). The blend key and the stage are the
 /// cache's other two keys.
 fn record_key(glsl: &[u8], zero: &ZeroList, map: Option<&crate::shaderc::ShcAttribMap>, facts: Facts) -> [u8; 32] {
-    let mut sha = sha256(glsl);
-    let mut chain = |extra: &[u8]| {
-        let mut both = [0u8; 64];
-        both[..32].copy_from_slice(&sha);
-        both[32..].copy_from_slice(&sha256(extra));
-        sha = sha256(&both);
-    };
-    if zero.n != 0 {
-        chain(&zero.key());
-    }
-    if let Some(map) = map {
-        chain(&map_key(map));
-    }
-    if facts.w_constant {
-        chain(b"w-constant");
-    }
-    if !facts.lod_key.is_none() {
-        let mut k = *b"lod-key:        ";
-        k[8..].copy_from_slice(&facts.lod_key.bits().to_le_bytes());
-        chain(&k);
-    }
-    if facts.if_lowering != IfLowering::Default {
-        let mut k = *b"if-lowering:    ";
-        k[12..].copy_from_slice(&facts.if_lowering.as_u32().to_le_bytes());
-        chain(&k);
-    }
-    sha
+    let zero_key = zero.key();
+    crate::shaderc::record_key::record_key(
+        glsl,
+        (zero.n != 0).then_some(&zero_key[..]),
+        map,
+        facts.w_constant,
+        facts.lod_key,
+        facts.if_lowering,
+    )
 }
 
 /// [`compile_and_publish_linked`] past its cache look-up, for the key
@@ -1099,9 +1099,9 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
      * them on the same two records, and the fragment shader the link left
      * in the program. The table-level rules still run (shaderc::link). */
     #[cfg(not(feature = "gpu-v3d"))]
-    if let Some(linked) = super::precompiled::linked(&vr.sha, &fr.sha, fr.blend_key) {
+    if let Some(linked) = crate::shaderc::precompiled::linked(&vr.sha, &fr.sha, fr.blend_key) {
         if linked != fr.sha {
-            match super::precompiled::find(&linked, SHC_STAGE_FRAGMENT, fr.blend_key) {
+            match crate::shaderc::precompiled::find(&linked, SHC_STAGE_FRAGMENT, fr.blend_key) {
                 Some(sh) => {
                     let old = *fs;
                     *fs = sh;
@@ -1420,22 +1420,6 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
     0
 }
 
-/// The bytes of a link's attribute map that decide the compile: each
-/// binding's name, location and column count, in order.
-fn map_key(map: &crate::shaderc::ShcAttribMap) -> [u8; crate::shaderc::SHC_MAX_DECLARED_ATTRIBS * 34 + 1] {
-    let mut k = [0u8; crate::shaderc::SHC_MAX_DECLARED_ATTRIBS * 34 + 1];
-    k[0] = map.count;
-    for (i, b) in map.b[..(map.count as usize).min(map.b.len())].iter().enumerate() {
-        let at = 1 + 34 * i;
-        for (d, c) in k[at..at + 32].iter_mut().zip(b.name.iter()) {
-            *d = *c as u8;
-        }
-        k[at + 32] = b.location;
-        k[at + 33] = b.columns;
-    }
-    k
-}
-
 /// `compile_vs_linked`: the vertex shader again, with the attribute
 /// locations glLinkProgram decided (SHADERC_NOTES.md, "Attribute registers
 /// decided at link"). A program's copy, so at the program's end of the keep
@@ -1595,7 +1579,7 @@ unsafe extern "C" fn online_lod_sensitivity(sh: *const ShcShader) -> u64 {
     // SAFETY: sh is non-null and points at a shc_shader.
     let sh = unsafe { sh.read() };
     /* a precompiled row's was recorded with it (the front end need not run) */
-    if let Some(bits) = super::precompiled::sensitivity(&sh) {
+    if let Some(bits) = crate::shaderc::precompiled::sensitivity(&sh) {
         return bits;
     }
     base_of(&sh).map_or(0, |rec| sensitivity_of(&rec).bits())
