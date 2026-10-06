@@ -62,24 +62,12 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
     let mut files = Vec::new();
     sources(&root, &mut files);
     files.sort();
-    /* gl_test case 183's two stages: the board's reproducer of this */
-    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    let case183 = [
-        (
-            "gl_test 183 vertex",
-            SHC_STAGE_VERTEX,
-            "#version 100\nattribute vec2 a_pos;\nuniform vec2 u_scale;\n\
-             void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n",
-        ),
-        (
-            "gl_test 183 fragment",
-            SHC_STAGE_FRAGMENT,
-            "#version 100\nprecision mediump float;\nuniform vec2 u_rg;\n\
-             void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n",
-        ),
-    ];
-    assert!(suite.contains("uniform vec2 u_scale;") && suite.contains("uniform vec2 u_rg;"), "case 183's text");
-    let mut all: Vec<(String, u32, String)> = files
+    /* gl_test case 183's two stages, the board's reproducer of this, are in
+     * the corpus (tools/shaders/gl_test_own/unipad.*) */
+    for f in ["gl_test_own/unipad.vert", "gl_test_own/unipad.frag"] {
+        assert!(files.iter().any(|p| p.ends_with(f)), "case 183's {f} is in tools/shaders");
+    }
+    let all: Vec<(String, u32, String)> = files
         .iter()
         .map(|p| {
             let stage = if p.extension().and_then(|x| x.to_str()) == Some("vert") {
@@ -91,7 +79,6 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
             (name, stage, std::fs::read_to_string(p).expect("readable"))
         })
         .collect();
-    all.extend(case183.iter().map(|(n, s, t)| (n.to_string(), *s, t.to_string())));
     let (mut compiled, mut partial, mut bad) = (0usize, 0usize, Vec::new());
     for (name, stage, text) in &all {
         let Some(sh) = compile(*stage, text) else { continue };
@@ -116,11 +103,13 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
      * starts or stops refusing a source, fails here so the pin is re-derived
      * (the refusals themselves are online_corpus.rs's); the rule is exercised
      * only by blocks that end part way through a register, and case 183 is
-     * two of them */
+     * two of them. 757: the 734 of before plus gl_test_own/'s 23 (cases 181
+     * to 183 and 188 to 192, which this test used to carry two of inline),
+     * every one of which compiles under both reports. */
     /* a build that reports ES 2.0 refuses every `#version 300 es` source
      * (online_corpus.rs keeps its own fixture for it), so each arm has its
      * own count */
-    let pin = if cfg!(feature = "report-es2") { (736, 382) } else { (736, 611) };
+    let pin = if cfg!(feature = "report-es2") { (757, 403) } else { (757, 632) };
     assert_eq!((all.len(), compiled), pin, "sources and programs compiled: re-derive the pin");
     assert!(partial >= 2, "no block ends part way through a register: the rule is not exercised");
     assert!(bad.is_empty(), "{} programs name uniform dwords past their block (the first: {})", bad.len(), bad[0]);

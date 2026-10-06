@@ -122,12 +122,19 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    compiles nothing for a product image. The full gate passed before a
    HANDOFF amend. It needs a rebase onto origin/main and a `--quick` run,
    then landing and an AM62P gl_test, Slint and cluster board run.
-   Open points: the list's gl_test app misses the inline shader sources of
-   cases 181, 182, 183 and 188 to 192 (`tools/precompile/gl_test_pairs.py`
-   does not follow the measurement cases' inline tables); sampler-state
-   (lod-key) variants are not precompiled (`gl_test_es100/texture.frag has
-   no variant for sampler key 0x1`; the draw takes the base program);
-   `YAKOGL_PRECOMPILED_SHADERS` is still off by default.
+   Open points: sampler-state (lod-key) variants are not precompiled
+   (`gl_test_es100/texture.frag has no variant for sampler key 0x1`; the
+   draw takes the base program); `YAKOGL_PRECOMPILED_SHADERS` is still off
+   by default. Closed on the host (no board run yet): the sources of cases
+   181, 182, 183 and 188 to 192, C literals in gl_test.c that no list
+   could name, are files in `tools/shaders/gl_test_own/` (its README),
+   carried by both gl_test headers through `gen_gl_test_shaders.py`'s
+   ENTRIES and listed as 19 pairs in each gl_test app; the host tests of
+   those cases (`tests/usc_limits.rs`) compile the same files. The
+   compiler-less image should now run them: an AM62P gl_test run of that
+   image is the proof, expected 48 / 48 with hits counted. Cases 184 and
+   185 (`depchain`, `kindcost`) and `psizvpm` keep their literals (not in
+   the set; the table images skip them by name).
    Remaining steps: 6 the default turns on (after the points above); 7
    rename to "precompiled shaders" and "shader compiler" (features
    `precompiled-shaders` and `shader-compiler` for `shaderc-online` and

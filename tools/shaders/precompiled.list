@@ -27,7 +27,12 @@
 #                         shader in it; `internal`, the back ends' own shaders,
 #                         which no table holds (the `internal` lines name the
 #                         ones our compiler builds the back ends' programs from);
-#                         `-`, neither. Every directory under tools/shaders/
+#                         `precompiled`, sources only our own precompiler
+#                         compiles, through the `pair` lines, for every GPU's
+#                         table (no Mesa table holds them); `-`, none of these
+#                         (the PowerVR precompiler still takes its `src` and
+#                         `pair` lines; the GC7000's does not). Every
+#                         directory under tools/shaders/
 #                         that holds a .vert or .frag must have a line, and a
 #                         `src` or `pair` path must lie in a listed directory:
 #                         a directory nobody was told about fails every reader
@@ -102,6 +107,7 @@ dir gl_test_es100  gc7000
 dir qt             gc7000
 dir qt3d           gc7000
 dir offarm         -          # PowerVR-only: gl_test 193/194's predicated-off arm, grown by N
+dir gl_test_own    precompiled # gl_test's own sources (cases 181-183, 188-192; its README): every GPU's precompiled table, no Mesa table
 dir internal       internal   # fbload.*, clear.*: Mesa's reference programs (tools/glsl2usc.sh, gen_shader_table.py)
 dir internal/es    internal   # their GLSL ES twins: the `internal` lines
 
@@ -337,7 +343,11 @@ skip-failures
 #     sources have no partner named at all.
 #   - gl_test's case_psizvpm links two vertex shaders written inline in
 #     gl_test.c (psizvpm_plain_vs_src, psizvpm_word_vs_src), and gl_test's
-#     other inline sources likewise: they are not files a list can name.
+#     other inline sources likewise (184 depchain and 185 kindcost among
+#     them): they are not files a list can name. The sources of 181 to 183
+#     and 188 to 192 were such literals until they moved to gl_test_own/
+#     (read by gen_gl_test_shaders.py like every other file), which is why
+#     those cases are listed.
 #   - glBindAttribLocation: a pair is linked with no bindings, so attributes
 #     take the lowest free locations in declaration order, as an application
 #     that binds none gets them.
@@ -462,7 +472,26 @@ pair passthrough.vert es100/matdyn.frag
 pair passthrough.vert es100/branchquad.frag
 pair es100/anyall.vert interp_color.frag
 pair passthrough.vert es100/fragcoord.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fma_fused.frag
+pair gl_test_own/fma_fused_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fma_ctrl.frag
+pair gl_test_own/fma_ctrl_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fsat_folded.frag
+pair gl_test_own/fsat_folded_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fsat_ctrl.frag
+pair gl_test_own/fsat_ctrl_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/unipad.vert gl_test_own/unipad.frag
 pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predif_uni.frag
+pair gl_test_own/predif_uni_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predif_coord.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_one.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_half.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_mods.frag
+pair gl_test_own/fma_plain.vert gl_test_own/blendonce.frag
+pair gl_test_own/varyfma.vert gl_test_own/varyfma.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predlive_uni.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predlive_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
@@ -565,7 +594,26 @@ pair gl_test_es100/passthrough.vert es100/matdyn.frag
 pair gl_test_es100/passthrough.vert es100/branchquad.frag
 pair es100/anyall.vert gl_test_es100/interp_color.frag
 pair gl_test_es100/passthrough.vert es100/fragcoord.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fma_fused.frag
+pair gl_test_own/fma_fused_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fma_ctrl.frag
+pair gl_test_own/fma_ctrl_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fsat_folded.frag
+pair gl_test_own/fsat_folded_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/fsat_ctrl.frag
+pair gl_test_own/fsat_ctrl_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/unipad.vert gl_test_own/unipad.frag
 pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predif_uni.frag
+pair gl_test_own/predif_uni_varying.vert gl_test_own/fma_varying.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predif_coord.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_one.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_half.frag
+pair gl_test_own/fma_plain.vert gl_test_own/mulone_mods.frag
+pair gl_test_own/fma_plain.vert gl_test_own/blendonce.frag
+pair gl_test_own/varyfma.vert gl_test_own/varyfma.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predlive_uni.frag
+pair gl_test_own/fma_plain.vert gl_test_own/predlive_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
