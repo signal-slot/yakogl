@@ -609,6 +609,79 @@ fn the_ring_commit_writes_the_address_before_the_header() {
     assert_eq!(w.iter().filter(|x| x.1 == regs::VIVS_MMUv2_SEC_COMMAND_CONTROL).count(), 1);
 }
 
+/// The words a submit puts around the caller's stream, against what the
+/// etnaviv kernel puts around a submitted buffer (issues #9 and #25; the
+/// step-by-step comparison is src/vivante/VIVANTE_NOTES.md, "Draw, resolve,
+/// read back: our sync sequence against etnaviv's"):
+///
+/// - prologue (etnaviv_cmd_select_pipe): flush colour and depth, FE waits
+///   for PE (semaphore, then the STALL command), PIPE_SELECT 3D, the LINK out;
+/// - epilogue (the tail of etnaviv_buffer_queue, 3D, no BLT engine on this
+///   part): GL_FLUSH_CACHE, TS_FLUSH_CACHE, FE waits for PE, then the EVENT
+///   raised by the PE -- so the fence cannot fire before the PE has taken the
+///   colour flush. Ours adds SHADER_L1 to the flush when the caller names no
+///   cache (`GC_SUBMIT_FLUSH_ALL`, what the Zephyr OSAL passes), and the
+///   texture caches when it names FLUSH_TEX.
+#[test]
+fn a_submit_flushes_and_stalls_before_its_event_as_etnaviv_does() {
+    use super::regs::*;
+    let ls = |reg: u32, v: u32| {
+        [
+            VIV_FE_LOAD_STATE_HEADER_OP_LOAD_STATE
+                | (1 << VIV_FE_LOAD_STATE_HEADER_COUNT__SHIFT)
+                | (reg >> VIV_FE_LOAD_STATE_HEADER_OFFSET__SHR),
+            v,
+        ]
+    };
+    let fe_pe = SYNC_RECIPIENT_FE | (SYNC_RECIPIENT_PE << VIV_FE_STALL_TOKEN_TO__SHIFT);
+    let (cd, l1) = (VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_DEPTH, VIVS_GL_FLUSH_CACHE_SHADER_L1);
+    let tex = VIVS_GL_FLUSH_CACHE_TEXTURE | VIVS_GL_FLUSH_CACHE_TEXTUREVS;
+
+    for (flags, flush) in [
+        (0, cd | l1),
+        (submit::FLUSH_COLOR, VIVS_GL_FLUSH_CACHE_COLOR),
+        (submit::FLUSH_COLOR | submit::FLUSH_DEPTH | submit::FLUSH_TEX, cd | tex),
+    ] {
+        let m = Model::new();
+        let e = TestEnv::default();
+        let mut co = Carveout::new(SMALL);
+        let mut c = core_over(&m, &mut co, SMALL);
+        mmu::init(&mut c, &e).unwrap();
+        cmdbuf::ring_init(&mut c, &m, &e, 800_000_000);
+        let w0 = c.wait_pos as usize;
+        let cmd_gpu = CARVEOUT_PHYS as u32 + OFF_POOL as u32;
+        let s = GcSubmit { cmd_gpu, cmd_bytes: 64, flags };
+        cmdbuf::ring_submit(&mut c, &e, &s, 5, 1, 800_000_000).unwrap();
+        let mem = c.mem();
+        let words = |gpu: u32, n: usize| -> Vec<u32> {
+            let off = OFF_RING + (gpu - c.ring_gpu) as usize;
+            (0..n).map(|k| mem.r32(off + 4 * k)).collect()
+        };
+
+        /* the old WAIT links to the prologue */
+        let prologue = words(mem.r32(OFF_RING + w0 * 4 + 4), 10);
+        let mut want = Vec::new();
+        want.extend(ls(VIVS_GL_FLUSH_CACHE, cd));
+        want.extend(ls(VIVS_GL_SEMAPHORE_TOKEN, fe_pe));
+        want.extend([VIV_FE_STALL_HEADER_OP_STALL, fe_pe]);
+        want.extend(ls(VIVS_GL_PIPE_SELECT, PIPE_ID_PIPE_3D));
+        assert_eq!(prologue[..8], want[..], "flags {flags:#x}: the pipe select");
+        assert_eq!(prologue[8] >> 27, 8, "then the LINK out");
+        assert_eq!(prologue[9], cmd_gpu, "to the caller's stream");
+
+        /* the caller's stream links back to the epilogue */
+        let epilogue = words(mem.r32(OFF_POOL + 64 + 4), 12);
+        let mut want = Vec::new();
+        want.extend(ls(VIVS_GL_FLUSH_CACHE, flush));
+        want.extend(ls(VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH));
+        want.extend(ls(VIVS_GL_SEMAPHORE_TOKEN, fe_pe));
+        want.extend([VIV_FE_STALL_HEADER_OP_STALL, fe_pe]);
+        want.extend(ls(VIVS_GL_EVENT, 5 | VIVS_GL_EVENT_FROM_PE));
+        assert_eq!(epilogue[..10], want[..], "flags {flags:#x}: flush, FE waits for PE, the PE's event");
+        assert_eq!(epilogue[10] >> 27, 7, "then the idle loop's WAIT");
+    }
+}
+
 #[test]
 fn events_run_out_and_a_corrupt_bitmap_is_refused() {
     let m = Model::new();
