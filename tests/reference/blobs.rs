@@ -8,7 +8,7 @@
 // The toolchain that built it. This table IS the reference: a rebuild by a
 // different toolchain is a NEW reference and the generator refuses it unless
 // GLSL2USC_NEW_REFERENCE=1 says so deliberately.
-// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514
+// toolchain: pco_shc=01aa62a069bb glslang=2e8c31daf6b2
 //
 // Shaders in this table:
 //   uniform_color.frag   fs  sha256=deaf82942bf40656ff84d42e9ccbe36bb5a4e186efc070adbf1609d85ff09658

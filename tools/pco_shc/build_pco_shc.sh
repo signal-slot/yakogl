@@ -14,17 +14,19 @@
 #
 # Needs (generic name -> Gentoo package):
 #   clang + LLVM (built against the same version) -> llvm-core/clang, llvm-core/llvm
-#   libclc                    -> llvm-runtimes/libclc
 #   SPIRV-LLVM-Translator     -> dev-util/spirv-llvm-translator
 #   SPIRV-Tools (+ spirv-dis) -> dev-util/spirv-tools, dev-util/spirv-headers
 #   glslang (glslangValidator, used by glsl2usc, not by this build) -> dev-util/glslang
 #   meson, ninja              -> dev-build/meson, dev-build/ninja
 #   python mako, pyyaml, packaging -> dev-python/mako, dev-python/pyyaml, dev-python/packaging
 #   libdrm, expat, zlib, zstd -> x11-libs/libdrm, dev-libs/expat, sys-libs/zlib, app-arch/zstd
-# Last built (2026-10-05, Gentoo, gcc 16.2.1) with LLVM/clang/libclc 23.1.2,
-# SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0: pco_usclib.spv md5
-# 15eca99efcf1f20d9124abf5cdffd4ab, pco_shc id f537fc86b41f -- the id
-# tests/reference/blobs.rs records -- the same from two different work dirs.
+# Last built (2026-10-07, Gentoo, gcc 16.2.1_p20260926) with LLVM/clang 23.1.2,
+# SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0 (no libclc: this Mesa
+# config builds mesa_clc without it): pco_usclib.spv md5
+# 15eca99efcf1f20d9124abf5cdffd4ab -- the same as the 2026-10-05 build --,
+# pco_shc id 01aa62a069bb, the id tests/reference/blobs.rs records. The id
+# differs from the 2026-10-05 build (f537fc86b41f, gcc 16.2.1) because the gcc
+# build differs; every USC row of the table is byte-identical between them.
 # LLVM_DIR (default /usr/lib/llvm/23) selects the LLVM.
 #
 # Meson options: -Dbuildtype=debug -Dvulkan-drivers=imagination

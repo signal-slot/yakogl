@@ -53,10 +53,13 @@ at every N):
 | 32 | 59323 us | 60633 us |
 | 128 | 91142 us | 91745 us |
 
-The offline PowerVR table (`tests/reference/blobs.rs`) records, since `0fe778f6`,
-the toolchain that reproduces it byte for byte: a `pco_shc` built by
-`tools/pco_shc/build_pco_shc.sh` with the patched usclib
-(`// toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514`). That commit also
+The offline PowerVR table (`tests/reference/blobs.rs`) records the toolchain
+that reproduces it byte for byte: a `pco_shc` built by
+`tools/pco_shc/build_pco_shc.sh` with the patched usclib. It was regenerated
+2026-10-07 on the lepton host (`// toolchain: pco_shc=01aa62a069bb
+glslang=2e8c31daf6b2`): all 2476 USC rows are byte-identical to the
+`0fe778f6` build, so the board results recorded against that table carry
+over. The `0fe778f6` commit also
 adds `matattr`'s 20 rows and re-keys `texsize.frag` to its current text.
 On the AM62P (`60ffeec8`, table image) the regression set passes 39 / 40,
 0 resets; the one failure is case 48 `es3vol`, which was already failing in
@@ -217,7 +220,7 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
   `ZEPHYR_WS=<west workspace>` and `HAL_NXP_DIR=<hal_nxp>` set. Without
   them the Zephyr and hal_nxp rows are gaps and the gate is red. The
   Mesa-table reproduction row also needs `PCO_SHC=<pco_shc from
-  tools/pco_shc/build_pco_shc.sh, content id f537fc86b41f>`,
+  tools/pco_shc/build_pco_shc.sh, content id 01aa62a069bb>`,
   `GLSLANG=<glslangValidator>` and, for speed, `GLSL2USC_CACHE=<dir>`;
   without them that row is a gap and the gate is red. It takes about 45
   minutes.
