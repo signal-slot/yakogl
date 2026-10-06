@@ -8783,3 +8783,829 @@ fn constants_the_approximate_units_would_round_fold_exactly() {
     );
     assert_eq!(px[0], 0xffff_80bf, "f.y = 3, int(t) = 1, y");
 }
+
+#[path = "common/deqp_style.rs"]
+mod deqp_style;
+
+/// What a program's bytes gave against its IR ([`fs_ir_check`],
+/// [`vs_ir_check`]).
+#[derive(Debug)]
+enum IrVerdict {
+    /// Every compared run agreed.
+    Agree(IrCheck),
+    /// A run did not: which, and the two values.
+    Differ(String),
+    /// The compiler refused the source, by its own name for why.
+    Refused(String),
+    /// One of the two models could not run it: not a pass.
+    Unrun(String),
+}
+
+#[derive(Default, Debug)]
+struct IrCheck {
+    /// Runs whose outputs were compared and agreed.
+    agreed: usize,
+    /// Of those, the runs the IR discarded (and ours did too).
+    discarded: usize,
+    /// Runs the IR leaves undefined, not compared.
+    undefined: usize,
+    /// The program's `if`s, and how many the runs took both ways.
+    ifs: usize,
+    ifs_both: usize,
+}
+
+/// GL_INT, GL_INT_VEC2..4 and GL_BOOL..GL_BOOL_VEC4: `Some(true)` for a
+/// boolean, `Some(false)` for an integer, `None` for a float.
+fn integer_uniform(gl_type: u16) -> Option<bool> {
+    match gl_type {
+        0x1404 | 0x8b53..=0x8b55 => Some(false),
+        0x8b56..=0x8b59 => Some(true),
+        _ => None,
+    }
+}
+
+/// The value run `run` gives component `k` of the input `name`: a small
+/// integer for an integer, 0 or 1 for a boolean, and for a float one of
+/// three draws by the run -- values a condition on a constant meets exactly
+/// (0, 1, 0.5, ...), the same with both signs, and a spread.
+fn deqp_style_value(run: u32, name: &str, k: u32, integer: Option<bool>) -> u32 {
+    let h = named(run + 21, name, k);
+    match integer {
+        Some(true) => h % 2,
+        Some(false) => [0u32, 0, 1, 2, 3, -1i32 as u32][(h % 6) as usize],
+        None => match run % 3 {
+            0 => [0.0f32, 0.0, 1.0, 0.5, 0.25, 0.75, 2.0][(h % 7) as usize].to_bits(),
+            1 => [-2.0f32, -1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0][(h % 12) as usize].to_bits(),
+            _ => (f32::from_bits(h) / 4.0).to_bits(),
+        },
+    }
+}
+
+/// A fragment shader through `chain::compile_fragment` and its bytes
+/// against the IR over `runs` inputs ([`deqp_style_value`], by name): the
+/// packed pixel within one step of the IR's colour, a discard where the IR
+/// discards. The same comparison as the survey's (`run_fragment`), for a
+/// source the table has no row for. The caller holds [`scratch_lock`].
+fn fs_ir_check(src: &str, runs: u32) -> IrVerdict {
+    store::with_scratch(|a| -> IrVerdict {
+        let Ok(text) = a.alloc_str(src) else { return IrVerdict::Refused("arena".into()) };
+        let Some(_keep) = store::begin_keep() else { return IrVerdict::Unrun("keep: a compile holds it".into()) };
+        let l = match lower::compile_to_ir(a, Stage::Fragment, text) {
+            Ok(l) => l,
+            Err(e) => return IrVerdict::Refused(format!("front end: {}", e.msg)),
+        };
+        let rec = match compile_fragment(&l.module, &l.reflection, a) {
+            Ok(r) => r,
+            Err(e) => return IrVerdict::Refused(format!("chain: {e:?}")),
+        };
+        if let Err(e) = within_product_scratch(a) {
+            return IrVerdict::Refused(e);
+        }
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let rows: &[yakogl::shaderc::ShcUniform] = if rec.num_uniforms == 0 {
+            &[]
+        } else {
+            // SAFETY: the record's uniform rows live in `keep`.
+            unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) }
+        };
+        let name_of = |n: &[core::ffi::c_char]| -> String {
+            n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect()
+        };
+        let integer =
+            |n: &str| l.reflection.uniforms.iter().find(|u| u.name == n).and_then(|u| integer_uniform(u.gl_type));
+        /* the byte model's shared file is `sentinel_inputs`' 512 dwords */
+        let shared = 20 * rows.iter().filter(|u| u.dword_off == NO_BLOCK).count() + rec.uniform_dwords as usize;
+        if shared > 512 {
+            return IrVerdict::Unrun(format!("the byte model: {shared} shared dwords, past its file of 512"));
+        }
+        let mut check = IrCheck { ifs: usc_exec::ir::if_count(&l.module), ..IrCheck::default() };
+        let mut taken: BTreeMap<u32, u8> = BTreeMap::new();
+        for run in 0..runs {
+            let unit = |n: &str, k: u32| deqp_style_value(run, n, k, integer(n));
+            let mut mine = sentinel_inputs(1.0e30);
+            place_shared(&mut mine, rows, &unit);
+            let (pntc_at, mut at) = coeff_layout(rec.uses_z, rec.uses_w, rec.uses_pntc);
+            place_point_coord(&mut mine, pntc_at, &|c| unit("gl_PointCoord", c));
+            place_frag_zw(&mut mine, &rec, &|c| unit("gl_FragCoord", c));
+            for rv in &rec.varyings[..rec.num_varyings as usize] {
+                let n = name_of(&rv.name);
+                for c in 0..rv.components as usize {
+                    let w = unit(&n, c as u32);
+                    mine.coeff[at + 4 * c] = w;
+                    mine.coeff[at + 4 * c + 2] = w;
+                }
+                at += 4 * rv.components as usize;
+            }
+            let by_binding: BTreeMap<u8, u32> = rows
+                .iter()
+                .filter(|u| u.dword_off == NO_BLOCK)
+                .map(|u| (u.binding, sampler_marker(&name_of(&u.name))))
+                .collect();
+            let uniform_name = |d: u16| -> Option<(&str, u32)> {
+                l.reflection
+                    .uniforms
+                    .iter()
+                    .filter(|u| u.dword_off != NO_BLOCK)
+                    .find(|u| (u.dword_off..u.dword_off + u.dwords).contains(&d))
+                    .map(|u| (u.name, (d - u.dword_off) as u32))
+            };
+            /* the face and the driver's op, as the survey sets them */
+            let (ccw, ff_op) = (run & 1, (run / 2) % 3);
+            let front = ff_op == 2 || ((ccw == 0) != (ff_op == 1));
+            if rec.fs_front_face_off1 != 0 {
+                mine.face_ccw = ccw;
+                mine.shared[rec.fs_front_face_off1 as usize - 1] = ff_op;
+            }
+            if rec.fragcoord_ytf_off1 != 0 {
+                let at = rec.fragcoord_ytf_off1 as usize - 1;
+                (mine.shared[at], mine.shared[at + 1]) = (1.0f32.to_bits(), 0);
+            }
+            let ir_in = usc_exec::ir::IrInputs {
+                input: &|slot, c| match slot {
+                    IoSlot::Varying(loc) => {
+                        l.module.inputs.iter().find(|io| io.location == loc).map_or(0, |io| unit(io.name, c))
+                    }
+                    IoSlot::PointCoord => unit("gl_PointCoord", c),
+                    IoSlot::FragCoord if c >= 2 => unit("gl_FragCoord", c),
+                    IoSlot::FrontFacing if front => u32::MAX,
+                    _ => 0,
+                },
+                uniform: &|d| uniform_name(d).map_or(0, |(n, k)| unit(n, k)),
+                marker: &|b| by_binding.get(&b).copied().unwrap_or(0),
+            };
+            let want = match usc_exec::ir::run_ir(&l.module, &ir_in) {
+                Ok(w) if w.undefined => {
+                    check.undefined += 1;
+                    continue;
+                }
+                Ok(w) => w,
+                Err(e) => return IrVerdict::Unrun(format!("the IR model: {e}")),
+            };
+            for (k, m) in &want.taken {
+                *taken.entry(*k).or_default() |= m;
+            }
+            let rec_meta = (rec.meta_off != yakogl::shaderc::SHC_NO_META).then_some(rec.meta_off as usize);
+            place_meta(&mut mine, rec_meta, 0);
+            let (ours, feedback) = match run_binary(&image, &mine, true) {
+                Ok(o) => (o.get(&0).copied(), o.contains_key(&usc_exec::FEEDBACK)),
+                Err(e) => return IrVerdict::Unrun(format!("the byte model: {e}")),
+            };
+            if rec_meta.is_some() && feedback == want.discarded {
+                return IrVerdict::Differ(format!(
+                    "run {run}: the IR {} the fragment, ours {}",
+                    if want.discarded { "discards" } else { "keeps" },
+                    if feedback { "keeps it" } else { "discards it" }
+                ));
+            }
+            if want.discarded {
+                if rec_meta.is_none() {
+                    return IrVerdict::Differ(format!("run {run}: the IR discards, ours has no control word"));
+                }
+                check.agreed += 1;
+                check.discarded += 1;
+                continue;
+            }
+            let Some((_, lanes)) = want.outputs.iter().find(|(s, _)| *s == IoSlot::FragColor(0)) else {
+                if ours.is_some() {
+                    return IrVerdict::Differ(format!("run {run}: the IR stores no colour, ours writes {ours:x?}"));
+                }
+                check.agreed += 1;
+                continue;
+            };
+            /* an undefined channel, or one the IR holds as NaN, is not
+             * compared (see the survey) */
+            let undefined = |l: &Option<(u32, bool)>| l.is_some_and(|(v, t)| t || f32::from_bits(v).is_nan());
+            if lanes.iter().all(undefined) {
+                check.undefined += 1;
+                continue;
+            }
+            let wanted: Vec<i32> = lanes
+                .iter()
+                .map(|l| (l.map_or(0.0, |(x, _)| f32::from_bits(x)).clamp(0.0, 1.0) * 255.0).round() as i32)
+                .collect();
+            let agrees = ours.is_some_and(|px| {
+                (0..4).all(|c| undefined(&lanes[c]) || (wanted[c] - ((px >> (8 * c)) & 0xff) as i32).abs() <= 1)
+            });
+            if !agrees {
+                return IrVerdict::Differ(format!(
+                    "run {run}: ours {ours:08x?}, the IR {:?} (bytes {wanted:?}, r g b a)",
+                    lanes.iter().map(|l| l.map(|(x, _)| f32::from_bits(x))).collect::<Vec<_>>()
+                ));
+            }
+            check.agreed += 1;
+        }
+        check.ifs_both = taken.values().filter(|m| **m == 3).count();
+        IrVerdict::Agree(check)
+    })
+    .expect("the scratch arena")
+}
+
+/// A vertex shader through `chain::build_vertex` and its bytes against the
+/// IR over `runs` inputs: every output dword the IR stores, to a relative
+/// 1e-4 ([`close`]). Attributes take [`Inputs`]' three draws by register;
+/// the integer and boolean uniforms are small integers. The caller holds
+/// [`scratch_lock`].
+fn vs_ir_check(src: &str, runs: u32) -> IrVerdict {
+    store::with_scratch(|a| -> IrVerdict {
+        let Ok(text) = a.alloc_str(src) else { return IrVerdict::Refused("arena".into()) };
+        let l = match lower::compile_to_ir(a, Stage::Vertex, text) {
+            Ok(l) => l,
+            Err(e) => return IrVerdict::Refused(format!("front end: {}", e.msg)),
+        };
+        /* Matrix varyings as their columns, as the chain and the record
+         * see them (`abi::with_matrix_varyings_split`). */
+        let outs = match yakogl::shaderc::online::powervr::abi::with_matrix_varyings_split(&l.module, a) {
+            Ok(m) => m.outputs,
+            Err(e) => return IrVerdict::Refused(format!("{e:?}")),
+        };
+        let mut image = vec![0u8; 65536];
+        let b = match build_vertex(&l.module, PLACEHOLDER, a, &mut image) {
+            Ok(b) => b,
+            Err(e) => return IrVerdict::Refused(format!("chain: {e:?}")),
+        };
+        if let Err(e) = within_product_scratch(a) {
+            return IrVerdict::Refused(e);
+        }
+        let ids = yakogl::shaderc::online::powervr::abi::vs_id_regs(&l.module);
+        let read = yakogl::shaderc::online::powervr::abi::attribs_placed(&l.module).unwrap_or(0);
+        /* the byte model's shared file is `Inputs`' 512 dwords */
+        let shared = l.module.uniform_dwords as usize;
+        if shared > 512 {
+            return IrVerdict::Unrun(format!("the byte model: {shared} shared dwords, past its file of 512"));
+        }
+        let mut check = IrCheck { ifs: usc_exec::ir::if_count(&l.module), ..IrCheck::default() };
+        let mut taken: BTreeMap<u32, u8> = BTreeMap::new();
+        for run in 0..runs {
+            let mut inp = match run % 3 {
+                0 => Inputs::small(run),
+                1 => Inputs::positive(run),
+                _ => Inputs::new(run + 1),
+            };
+            for u in l.reflection.uniforms.iter().filter(|u| u.dword_off != NO_BLOCK) {
+                let Some(boolean) = integer_uniform(u.gl_type) else { continue };
+                for k in 0..u.dwords {
+                    inp.shared[(u.dword_off + k) as usize] = deqp_style_value(run, u.name, k as u32, Some(boolean));
+                }
+            }
+            let ir_in = usc_exec::ir::IrInputs {
+                input: &|slot, c| match slot {
+                    IoSlot::Attrib(loc) => inp.vtxin[vtxin_reg(read, loc, c) as usize],
+                    IoSlot::VertexId => ids.0.map_or(0, |r| inp.vtxin[r as usize]),
+                    IoSlot::InstanceId => ids.1.map_or(0, |r| inp.vtxin[r as usize]),
+                    _ => 0,
+                },
+                uniform: &|d| inp.shared[d as usize],
+                marker: &|_| 0,
+            };
+            let want = match usc_exec::ir::run_ir(&l.module, &ir_in) {
+                Ok(w) if w.undefined => {
+                    check.undefined += 1;
+                    continue;
+                }
+                Ok(w) => w,
+                Err(e) => return IrVerdict::Unrun(format!("the IR model: {e}")),
+            };
+            for (k, m) in &want.taken {
+                *taken.entry(*k).or_default() |= m;
+            }
+            let got = match run_binary(&image[..b.len], &inp, true) {
+                Ok(g) => g,
+                Err(e) => return IrVerdict::Unrun(format!("the byte model: {e}")),
+            };
+            for (slot, lanes) in &want.outputs {
+                let comps = match slot {
+                    IoSlot::Position => 4,
+                    IoSlot::PointSize => 1,
+                    IoSlot::Varying(loc) => outs
+                        .iter()
+                        .find(|io| io.kind == IoKind::Varying && io.location == *loc)
+                        .map_or(4, |io| io.components),
+                    _ => 4,
+                };
+                for (lane, w) in lanes.iter().enumerate().take(comps as usize) {
+                    let Some((mut w, false)) = *w else { continue };
+                    if f32::from_bits(w).is_nan() {
+                        continue;
+                    }
+                    if *slot == IoSlot::PointSize {
+                        w = f32::from_bits(w).clamp(1.0, 511.0).to_bits();
+                    }
+                    let g = expected_dword(*slot, lane, outs, &l.module).and_then(|d| got.get(&d).copied());
+                    if !g.is_some_and(|g| close(g, w)) {
+                        return IrVerdict::Differ(format!(
+                            "run {run} {slot:?}.{lane}: ours {:?}, the IR {}",
+                            g.map(f32::from_bits),
+                            f32::from_bits(w)
+                        ));
+                    }
+                }
+            }
+            check.agreed += 1;
+        }
+        check.ifs_both = taken.values().filter(|m| **m == 3).count();
+        IrVerdict::Agree(check)
+    })
+    .expect("the scratch arena")
+}
+
+/// The tally of a population's [`IrVerdict`]s, printed by reason.
+#[derive(Default)]
+struct IrTally {
+    programs: usize,
+    agree: usize,
+    runs: usize,
+    discarded: usize,
+    undefined: usize,
+    ifs: usize,
+    ifs_both: usize,
+    differ: Vec<String>,
+    refused: BTreeMap<String, Vec<String>>,
+    unrun: BTreeMap<String, Vec<String>>,
+}
+
+impl IrTally {
+    fn add(&mut self, name: &str, text: &str, v: IrVerdict) {
+        self.programs += 1;
+        match v {
+            IrVerdict::Agree(c) => {
+                self.agree += 1;
+                self.runs += c.agreed;
+                self.discarded += c.discarded;
+                self.undefined += c.undefined;
+                self.ifs += c.ifs;
+                self.ifs_both += c.ifs_both;
+            }
+            IrVerdict::Differ(d) => self.differ.push(format!("{name}: {d}\n{text}")),
+            IrVerdict::Refused(e) => self.refused.entry(e).or_default().push(name.to_string()),
+            IrVerdict::Unrun(e) => self.unrun.entry(e).or_default().push(name.to_string()),
+        }
+    }
+
+    fn uncompared(&self) -> usize {
+        self.refused.values().chain(self.unrun.values()).map(Vec::len).sum()
+    }
+
+    fn print(&self, what: &str) {
+        println!("=== {what} ===");
+        println!(
+            "  {} programs: {} agree with the IR over {} runs ({} discarded; {} more undefined, not compared), {} differ",
+            self.programs,
+            self.agree,
+            self.runs,
+            self.discarded,
+            self.undefined,
+            self.differ.len()
+        );
+        println!("  {} ifs, {} taken both ways", self.ifs, self.ifs_both);
+        for (why, names) in &self.refused {
+            println!("    {:4}  refused: {why} {:?}", names.len(), &names[..names.len().min(3)]);
+        }
+        for (why, names) in &self.unrun {
+            println!("    {:4}  not run: {why} {:?}", names.len(), &names[..names.len().min(3)]);
+        }
+        for d in &self.differ {
+            println!("    DIFFERS {d}");
+        }
+    }
+}
+
+/// How many seeds of the generated dEQP-style population are compiled, each
+/// a vertex and a fragment shader (`DEQP_STYLE_SEEDS=<n>` for a soak).
+const DEQP_STYLE_SEEDS: u32 = 300;
+/// Runs per program: enough that most `if`s go both ways.
+const DEQP_STYLE_RUNS: u32 = 24;
+
+/// The PowerVR's later transformations -- a product by 1.0 read as its
+/// operand and copies forwarded (`fold_constants`, `forward_copies`), a
+/// product and its sum as one `fmad` and a clamp to [0, 1] as one
+/// saturating add (`prepare::fusion_pairs`), an `if`'s arms predicated into
+/// one register (`one_register_from_both_arms`) or branched over
+/// (`IfLowering::Branch`) -- were proved on the table's sources, which are
+/// applications' shaders, and on gl_test's own cases. dEQP-GLES2's
+/// `shaders.*` groups hand the compiler other shapes, and no test ran them
+/// against the IR without a VK-GL-CTS checkout (`DEQP_PROGRAMS`). This
+/// compiles `tests/common/deqp_style.rs`' population -- those shapes, from a
+/// seed -- in each lowering and requires every program's bytes to compute
+/// what its IR means: every varying dword of a vertex shader, the packed
+/// pixel of a fragment shader. The default lowering is the one a dEQP image
+/// runs: it predicates these arms (none reaches `branch_pays`' 49 groups),
+/// so the branched form, which a larger arm would take, is compiled by
+/// name as well.
+///
+/// The one refusal is the PowerVR's known one, by name: `floor(-x)` and
+/// `floor(abs(x))` have no source modifier set
+/// (`source_modifiers_compose_in_the_hardware_order_or_refuse`). Any other
+/// refusal fails the test.
+#[test]
+fn deqp_style_shaders_compute_what_the_ir_means_in_each_if_lowering() {
+    use yakogl::shaderc::IfLowering;
+    let _scratch = scratch_lock();
+    let shaders = deqp_style::population(deqp_style::seeds(DEQP_STYLE_SEEDS));
+    for (shape, n) in deqp_style::shape_counts(&shaders) {
+        println!("  {n:4} of {} sources have {shape}", shaders.len());
+        assert!(n >= shaders.len() / 50, "the population has too few sources with {shape}: {n}");
+    }
+    let mut failed = Vec::new();
+    for (form, name) in [(IfLowering::Default, "default"), (IfLowering::Branch, "branch")] {
+        let _form = IfLoweringFor::set(form);
+        let mut tally = IrTally::default();
+        for s in &shaders {
+            let v =
+                if s.fragment { fs_ir_check(&s.text, DEQP_STYLE_RUNS) } else { vs_ir_check(&s.text, DEQP_STYLE_RUNS) };
+            tally.add(&s.name, &s.text, v);
+        }
+        tally.print(&format!("dEQP-style shaders through the USC chain, if lowering {name}"));
+        if !tally.differ.is_empty() {
+            failed.push(format!("{name}: {} programs differ from their IR", tally.differ.len()));
+        }
+        for why in tally.refused.keys().chain(tally.unrun.keys()) {
+            if !why.contains("no source modifier set says it") {
+                failed.push(format!("{name}: not compared for a reason other than the known refusal: {why}"));
+            }
+        }
+        /* the check's own power: most of the population compared, and
+         * most `if`s driven both ways */
+        if tally.agree + tally.differ.len() < shaders.len() * 9 / 10 {
+            failed.push(format!(
+                "{name}: only {} of {} compared ({} refused or not run)",
+                tally.agree,
+                shaders.len(),
+                tally.uncompared()
+            ));
+        }
+        if tally.ifs_both * 2 < tally.ifs {
+            failed.push(format!("{name}: only {} of {} ifs taken both ways", tally.ifs_both, tally.ifs));
+        }
+    }
+    assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// The dEQP sources the repository keeps for the PowerVR -- the eleven
+/// `shaders.random` sources of tests/fixtures/deqp_random_dead_cube and the
+/// shaders this file holds as text -- were kept because they once would
+/// not COMPILE or fit. Here each is also run: its bytes against its IR
+/// ([`fs_ir_check`], [`vs_ir_check`]), in the default lowering. One the
+/// models cannot run is listed by reason, never passed.
+#[test]
+fn the_repositorys_deqp_sources_compute_what_the_ir_means() {
+    let _scratch = scratch_lock();
+    /* the look-ups at the TPU's implicit level, as the survey runs them:
+     * the IR model's samples have no per-pixel gradients */
+    struct Lod;
+    impl Drop for Lod {
+        fn drop(&mut self) {
+            yakogl::shaderc::pvr_set_proj_lod(yakogl::shaderc::PVR_PROJ_LOD_DEFAULT);
+        }
+    }
+    let _lod = Lod;
+    yakogl::shaderc::pvr_set_proj_lod(0);
+    let mut sources: Vec<(String, bool, String)> = [
+        ("light_amount.14omni (vertex)", false, DEQP_LIGHT_AMOUNT_14OMNI_VS),
+        ("indexing.tmp_array.vec3_const_write_static (fragment)", true, DEQP_TMP_ARRAY_VEC3_STATIC_FS),
+        ("loops.do_while_uniform_iterations.nested (fragment)", true, DEQP_LOOPS_NESTED_FS),
+        ("loops.while_dynamic_iterations.nested_sequence (vertex)", false, DEQP_LOOPS_NESTED_SEQUENCE_VS),
+        ("light_amount.16omni (vertex)", false, PRE_RUN_16OMNI_VS),
+        ("uniform_api.random.23 (fragment)", true, PRE_RUN_RANDOM23_FS),
+    ]
+    .into_iter()
+    .map(|(n, f, t)| (n.to_string(), f, t.to_string()))
+    .collect();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/deqp_random_dead_cube");
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("frag" | "vert")))
+        .collect();
+    files.sort();
+    for f in &files {
+        let fragment = f.extension().unwrap() == "frag";
+        sources.push((
+            f.file_name().unwrap().to_string_lossy().into_owned(),
+            fragment,
+            std::fs::read_to_string(f).unwrap(),
+        ));
+    }
+    assert_eq!(sources.len(), 17, "the population changed: re-derive the pins below");
+    let mut tally = IrTally::default();
+    for (n, fragment, text) in &sources {
+        let v = if *fragment { fs_ir_check(text, DEQP_STYLE_RUNS) } else { vs_ir_check(text, DEQP_STYLE_RUNS) };
+        tally.add(n, text, v);
+    }
+    tally.print("the repository's dEQP sources through the USC chain");
+    assert!(tally.differ.is_empty(), "{} programs differ from their IR", tally.differ.len());
+    /* 16 compared; uniform_api.random.23's 878 shared dwords are past the
+     * byte model's file */
+    let past = tally.unrun.keys().filter(|k| k.contains("past its file of 512")).count();
+    assert_eq!((tally.agree, past, tally.uncompared()), (16, 1, 1), "the compared population moved");
+}
+
+/// A blend factor by the name dEQP's case names give it.
+const DEQP_BLEND_FACTORS: [(&str, u32); 15] = [
+    ("zero", yakogl::shaderc::SHC_BF_ZERO),
+    ("one", yakogl::shaderc::SHC_BF_ONE),
+    ("src_color", yakogl::shaderc::SHC_BF_SRC_COLOR),
+    ("one_minus_src_color", yakogl::shaderc::SHC_BF_INV_SRC_COLOR),
+    ("dst_color", yakogl::shaderc::SHC_BF_DST_COLOR),
+    ("one_minus_dst_color", yakogl::shaderc::SHC_BF_INV_DST_COLOR),
+    ("src_alpha", yakogl::shaderc::SHC_BF_SRC_ALPHA),
+    ("one_minus_src_alpha", yakogl::shaderc::SHC_BF_INV_SRC_ALPHA),
+    ("dst_alpha", yakogl::shaderc::SHC_BF_DST_ALPHA),
+    ("one_minus_dst_alpha", yakogl::shaderc::SHC_BF_INV_DST_ALPHA),
+    ("constant_color", yakogl::shaderc::SHC_BF_CONST_COLOR),
+    ("one_minus_constant_color", yakogl::shaderc::SHC_BF_INV_CONST_COLOR),
+    ("constant_alpha", yakogl::shaderc::SHC_BF_CONST_ALPHA),
+    ("one_minus_constant_alpha", yakogl::shaderc::SHC_BF_INV_CONST_ALPHA),
+    ("src_alpha_saturate", yakogl::shaderc::SHC_BF_SRC_ALPHA_SATURATE),
+];
+
+/// `<a>_<b>` as two of `names`' values: the one split both halves of which
+/// are names (`src_alpha_saturate_one` is not `src_alpha` + `saturate_one`).
+fn two_names(s: &str, names: &[(&str, u32)]) -> Option<(u32, u32)> {
+    let mut found = None;
+    for (a, va) in names {
+        let Some(rest) = s.strip_prefix(a).and_then(|r| r.strip_prefix('_')) else { continue };
+        if let Some((_, vb)) = names.iter().find(|(b, _)| *b == rest) {
+            assert!(found.is_none(), "{s}: two ways to read it");
+            found = Some((*va, *vb));
+        }
+    }
+    found
+}
+
+/// The blend keys of dEQP-GLES2's `fragment_ops.blend` cases, each with
+/// its case's name, read from the mustpass list (tools/cts): one per
+/// `equation_src_func_dst_func` and `rgb_equation_alpha_equation` case,
+/// and two per `rgb_func_alpha_func` case -- its name gives one side's
+/// colour and alpha factor and not the other side's, so that side is taken
+/// as GL_ONE and as GL_ZERO.
+fn deqp_blend_keys() -> Vec<(String, u32)> {
+    use yakogl::shaderc::*;
+    let eqs =
+        [("add", SHC_BLEND_ADD), ("subtract", SHC_BLEND_SUBTRACT), ("reverse_subtract", SHC_BLEND_REVERSE_SUBTRACT)];
+    let mut out = Vec::new();
+    for line in include_str!("../tools/cts/gles2-mustpass.txt").lines() {
+        let Some(case) = line.strip_prefix("dEQP-GLES2.functional.fragment_ops.blend.") else { continue };
+        let (group, name) = case.split_once('.').expect("a group and a case");
+        match group {
+            "equation_src_func_dst_func" => {
+                let (eq, (src, dst)) = eqs
+                    .iter()
+                    .find_map(|(e, v)| {
+                        let rest = name.strip_prefix(e)?.strip_prefix('_')?;
+                        Some((*v, two_names(rest, &DEQP_BLEND_FACTORS)?))
+                    })
+                    .unwrap_or_else(|| panic!("{case}: not an equation and two factors"));
+                out.push((case.to_string(), shc_blend_key(src, dst, src, dst, eq, eq)));
+            }
+            "rgb_equation_alpha_equation" => {
+                let (rgb, a) = two_names(name, &eqs).unwrap_or_else(|| panic!("{case}: not two equations"));
+                out.push((case.to_string(), shc_blend_key(SHC_BF_ONE, SHC_BF_ONE, SHC_BF_ONE, SHC_BF_ONE, rgb, a)));
+            }
+            "rgb_func_alpha_func" => {
+                let (side, name) = name.split_once('.').expect("src or dst");
+                let (rgb, a) =
+                    two_names(name, &DEQP_BLEND_FACTORS).unwrap_or_else(|| panic!("{case}: not two factors"));
+                for (other, what) in [(SHC_BF_ONE, "one"), (SHC_BF_ZERO, "zero")] {
+                    let key = match side {
+                        "src" => shc_blend_key(rgb, other, a, other, SHC_BLEND_ADD, SHC_BLEND_ADD),
+                        "dst" => shc_blend_key(other, rgb, other, a, SHC_BLEND_ADD, SHC_BLEND_ADD),
+                        _ => panic!("{case}: neither src nor dst"),
+                    };
+                    out.push((format!("{case} (the other side {what})"), key));
+                }
+            }
+            other => panic!("{case}: a blend group {other:?} this test does not read"),
+        }
+    }
+    out
+}
+
+/// GL's blend of one RGBA8 pixel (ES 2.0 4.1.6, tables 4.1 and 4.2): the
+/// source clamped, the pixel as it reads back, the result clamped and
+/// written; each channel as the byte it rounds to.
+fn gl_blend(key: u32, src: [f32; 4], pixel: [u8; 4], constant: [f32; 4]) -> [i32; 4] {
+    use yakogl::shaderc::*;
+    let s = src.map(|x| x.clamp(0.0, 1.0));
+    let d = pixel.map(|x| f32::from(x) / 255.0);
+    let field = |sh: u32| (key >> sh) & 0x1f;
+    core::array::from_fn(|k| {
+        let alpha = k == 3;
+        let (fs, fd) = if alpha { (field(10), field(15)) } else { (field(0), field(5)) };
+        let eq = (key >> if alpha { 23 } else { 20 }) & 7;
+        let factor = |f: u32| -> f32 {
+            let base = match f & !SHC_BF_INVERT {
+                SHC_BF_ONE => 1.0,
+                SHC_BF_SRC_COLOR => s[k],
+                SHC_BF_SRC_ALPHA => s[3],
+                SHC_BF_DST_ALPHA => d[3],
+                SHC_BF_DST_COLOR => d[k],
+                SHC_BF_CONST_COLOR => constant[k],
+                SHC_BF_CONST_ALPHA => constant[3],
+                SHC_BF_SRC_ALPHA_SATURATE if alpha => 1.0,
+                SHC_BF_SRC_ALPHA_SATURATE => s[3].min(1.0 - d[3]),
+                other => panic!("a factor {other:#x}"),
+            };
+            if f & SHC_BF_INVERT != 0 {
+                1.0 - base
+            } else {
+                base
+            }
+        };
+        let (ts, td) = (s[k] * factor(fs), d[k] * factor(fd));
+        let x = match eq {
+            SHC_BLEND_ADD => ts + td,
+            SHC_BLEND_SUBTRACT => ts - td,
+            SHC_BLEND_REVERSE_SUBTRACT => td - ts,
+            other => panic!("an equation {other}"),
+        };
+        (x.clamp(0.0, 1.0) * 255.0).round() as i32
+    })
+}
+
+/// Every blend state dEQP-GLES2's `fragment_ops.blend` group sets, as the
+/// variant of `gl_FragColor = u_color` the draw would run: compiled
+/// through the whole chain and run in the byte model over three sources
+/// and pixels, each channel within one step of GL's formula
+/// ([`gl_blend`]). The blend tail is where two of the later
+/// transformations live -- `s * Fs (op) d * Fd` as one `fmad`, and a
+/// factor the same in every channel computed once
+/// (`blend::computed_earlier`) -- and its unit test runs the channels'
+/// groups before they are encoded, over 13 of the 15 factors; the table's
+/// variants are the keys applications use. This is dEQP's population, all
+/// 15 factors on either side with the colour and alpha factors differing,
+/// in the bytes a board would run. A variant that does not build fails
+/// here by its case's name (the AM62P's `*subtract*` cases once did not:
+/// ba0966d7).
+#[test]
+fn deqp_fragment_ops_blend_states_blend_as_gl_says_in_the_byte_model() {
+    use yakogl::shaderc::*;
+    let keys = deqp_blend_keys();
+    // 630 + 9 + 2 * 421 (tools/cts/gles2-mustpass.txt)
+    assert_eq!(keys.len(), 1481, "the mustpass list's blend cases changed: re-derive this pin");
+    let src = "precision mediump float;\nuniform vec4 u_color;\nvoid main() { gl_FragColor = u_color; }\n";
+    /* (the shader's colour, the pixel under it): in range, at the ends,
+     * and a colour the clamp must bring into range first */
+    let draws: [([f32; 4], [u8; 4]); 3] = [
+        ([0.75, 0.25, 0.5, 0.625], [32, 229, 77, 51]),
+        ([0.125, 1.0, 0.0, 0.25], [153, 13, 255, 115]),
+        ([1.5, -0.25, 0.375, 0.875], [64, 128, 191, 204]),
+    ];
+    let constant = [0.2f32, 0.4, 0.7, 0.35];
+    let _scratch = scratch_lock();
+    let (mut compared, mut fused, mut reading, mut failed) = (0usize, 0usize, 0usize, Vec::new());
+    for (case, key) in &keys {
+        let r = store::with_scratch(|a| -> Result<(bool, bool), String> {
+            let _keep = store::begin_keep().ok_or("keep: a compile holds it")?;
+            let text = a.alloc_str(src).map_err(|e| format!("{e:?}"))?;
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg.to_string())?;
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, *key)
+                .map_err(|e| format!("the variant does not build: {e:?}"))?;
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            // SAFETY: as above.
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            for (colour, pixel) in draws {
+                let mut inp = sentinel_inputs(1.0e30);
+                place_shared(&mut inp, rows, &|_: &str, k: u32| colour[k as usize].to_bits());
+                if rec.blend_consts_off != SHC_NO_BLEND_CONSTS {
+                    for (k, x) in constant.iter().enumerate() {
+                        inp.shared[rec.blend_consts_off as usize + k] = x.to_bits();
+                    }
+                }
+                inp.pixout = u32::from_le_bytes(pixel);
+                let out = run_binary(&image, &inp, true).map_err(|e| format!("the byte model: {e}"))?;
+                let got = out.get(&0).copied().ok_or("no colour written")?.to_le_bytes();
+                let want = gl_blend(*key, colour, pixel, constant);
+                if (0..4).any(|k| (i32::from(got[k]) - want[k]).abs() > 1) {
+                    return Err(format!("{colour:?} over {pixel:?}: {got:?}, GL's formula gives {want:?}"));
+                }
+            }
+            Ok((op_names(&image).contains(&"fmad"), rec.uses_fbfetch != 0))
+        })
+        .expect("the scratch arena");
+        match r {
+            Ok((f, p)) => {
+                compared += 1;
+                fused += usize::from(f);
+                reading += usize::from(p);
+            }
+            Err(e) => failed.push(format!("{case} (key {key:#x}): {e}")),
+        }
+    }
+    println!(
+        "=== dEQP fragment_ops.blend states in the byte model ===\n  {} states: {compared} blend as GL says over {} \
+         draws each ({fused} with an fmad, {reading} reading the pixel), {} do not",
+        keys.len(),
+        draws.len(),
+        failed.len()
+    );
+    for f in failed.iter().take(40) {
+        println!("    {f}");
+    }
+    assert!(failed.is_empty(), "{} of dEQP's blend states do not blend as GL says", failed.len());
+    /* the check saw what it is for: fused channels, and the pixel read */
+    assert!(fused > keys.len() / 2 && reading > keys.len() / 2, "{fused} fused, {reading} read the pixel");
+}
+
+/// An attribute keeps its vertex-input registers when its only read is in
+/// code the unroller drops. The record lists every attribute the source
+/// module reads, dead branches included (ES 2.0 2.10.4 counts static use),
+/// and the vertex fetch fills the registers the record names; selection
+/// ranked the attributes over the module the unroller left, which has lost
+/// the loads of an arm a constant condition does not take and of a loop of
+/// no trips. With any loop in the shader (the unroller rewrites the module
+/// only then), such an attribute took no registers in the program and
+/// every attribute after it was read four registers early: `a_s` from the
+/// registers the record gives `a_dead`. Found by the dEQP-style population
+/// (`deqp_style_shaders_compute_what_the_ir_means_in_each_if_lowering`, 3
+/// of 6,000 programs of a 3,000-seed soak).
+///
+/// Here each shape through the product's chain to its record, the
+/// attributes placed where the record's rows say, and the program run: it
+/// must compute `2 + a_s` and pass `a_position` through.
+#[test]
+fn an_attribute_read_only_where_the_unroller_drops_it_keeps_its_registers() {
+    let _scratch = scratch_lock();
+    for (what, dead) in [
+        ("an arm a constant condition does not take", "if (2 < 1) { f = a_dead.x; }"),
+        ("a loop of no trips", "for (int j = 0; j < 0; j++) { f += a_dead.y; }"),
+    ] {
+        let src = format!(
+            "attribute highp vec4 a_position;\nattribute mediump vec4 a_dead;\nattribute mediump float a_s;\n\
+             varying mediump float v;\nvoid main()\n{{\n    mediump float f = 0.0;\n    {dead}\n    \
+             for (int i = 0; i < 2; i++) {{ f += 1.0; }}\n    v = f + a_s;\n    gl_Position = a_position;\n}}\n"
+        );
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(&src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+            let rec = yakogl::shaderc::online::powervr::chain::compile_vertex(&l.module, &l.reflection, a)
+                .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+            let rows = &rec.attribs[..rec.num_attribs as usize];
+            let name_of = |n: &[core::ffi::c_char]| -> String {
+                n.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect()
+            };
+            let placed: Vec<(String, u8)> = rows.iter().map(|r| (name_of(&r.name), r.vi_reg)).collect();
+            assert_eq!(
+                placed,
+                [("a_position".to_string(), 0), ("a_dead".to_string(), 4), ("a_s".to_string(), 8)],
+                "{what}: the record's rows, the statically used attribute among them"
+            );
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            for seed in 1..=3u32 {
+                let mut inp = sentinel_inputs(1.0e30);
+                place_attribs_pco(&mut inp, rows, seed);
+                let out = run_binary(&image, &inp, true).expect("runs");
+                let got: Vec<Option<f32>> = (0..5).map(|d| out.get(&d).copied().map(f32::from_bits)).collect();
+                let pos: Vec<Option<f32>> =
+                    (0..4).map(|c| Some(f32::from_bits(attrib_value(seed, "a_position", 0, c)))).collect();
+                let v = 2.0 + f32::from_bits(attrib_value(seed, "a_s", 0, 0));
+                assert_eq!(got[..4], pos[..], "{what}, seed {seed}: gl_Position is a_position");
+                assert_eq!(got[4], Some(v), "{what}, seed {seed}: v is 2 + a_s, read where the record places a_s");
+            }
+        })
+        .unwrap();
+    }
+}
+
+/// dEQP's own ES 1.00 programs (`DEQP_PROGRAMS`, see
+/// [`deqp_style::deqp_programs`]) through the USC chain in each `if`
+/// lowering: a `_vertex` variant's vertex shader, which writes what the
+/// case computes to varyings, and a `_fragment` variant's fragment shader,
+/// which compares it with the case's reference and writes the verdict as
+/// its colour -- the bytes against the IR ([`vs_ir_check`],
+/// [`fs_ir_check`]). `deqp_vertex_shaders_compute_what_the_ir_means` is the
+/// vertex half in the default lowering; this adds the fragment half and
+/// the branched form. Absent the variable it measures nothing and says so.
+#[test]
+fn deqp_test_programs_compute_what_the_ir_means_in_each_if_lowering() {
+    use yakogl::shaderc::IfLowering;
+    let Some(programs) = deqp_style::deqp_programs() else {
+        println!("DEQP_PROGRAMS not set: nothing measured");
+        return;
+    };
+    let _scratch = scratch_lock();
+    let mut failed = Vec::new();
+    for (form, form_name) in [(IfLowering::Default, "default"), (IfLowering::Branch, "branch")] {
+        let _form = IfLoweringFor::set(form);
+        let mut tally = IrTally::default();
+        for (name, vert, frag) in &programs {
+            if name.ends_with("_vertex") {
+                tally.add(name, vert, vs_ir_check(vert, DEQP_STYLE_RUNS));
+            } else if name.ends_with("_fragment") {
+                tally.add(name, frag, fs_ir_check(frag, DEQP_STYLE_RUNS));
+            }
+        }
+        tally.print(&format!("dEQP .test programs through the USC chain, if lowering {form_name}"));
+        assert!(tally.programs > 0, "the programs file held no vertex or fragment variant");
+        if !tally.differ.is_empty() {
+            failed.push(format!("{form_name}: {} programs differ from their IR", tally.differ.len()));
+        }
+    }
+    assert!(failed.is_empty(), "{failed:#?}");
+}

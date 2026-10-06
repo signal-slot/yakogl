@@ -64,15 +64,27 @@ fn close(a: u32, b: u32) -> bool {
 
 fn compare(name: &str, stage: sema::Stage, text: &str, seed: u64) -> Option<Verdict> {
     let mut mem = vec![0u8; 8 << 20];
-    let a = Arena::new(&mut mem);
+    compare_in(&mut mem, name, stage, text, &[seed])
+}
+
+/// [`compare`] in an arena the caller keeps across its programs.
+fn compare_in(mem: &mut [u8], name: &str, stage: sema::Stage, text: &str, seeds: &[u64]) -> Option<Verdict> {
+    let a = Arena::new(mem);
     let src = a.alloc_str(text).ok()?;
     let l = lower::compile_to_ir(&a, stage, src).ok()?;
-    compare_module(name, stage, &l.module, &a, seed)
+    compare_module_seeds(name, stage, &l.module, &a, seeds)
 }
 
 /// [`compare`] from the IR on: for a module built by hand, when the
 /// operation to check has no front end yet (GLSL ES 3.00's integers).
 fn compare_module(name: &str, stage: sema::Stage, m: &ir::Module, a: &Arena, seed: u64) -> Option<Verdict> {
+    compare_module_seeds(name, stage, m, a, &[seed])
+}
+
+/// [`compare_module`] over several inputs of one build: the program is
+/// selected, passed and allocated once and run on each seed's inputs; the
+/// first verdict that is not an agreement is the answer.
+fn compare_module_seeds(name: &str, stage: sema::Stage, m: &ir::Module, a: &Arena, seeds: &[u64]) -> Option<Verdict> {
     let sel = select::select(m, a).ok()?;
 
     /* The product's passes and allocation (codegen.rs). */
@@ -117,152 +129,162 @@ fn compare_module(name: &str, stage: sema::Stage, m: &ir::Module, a: &Arena, see
     }
     let place = |r: u8| placed.get(r as usize).copied().filter(|p| *p != alloc::NOT_PLACED).unwrap_or(r);
 
-    /* Random inputs, the same for both sides. */
-    let mut rng = Rng(seed);
-    let is_fs = stage == sema::Stage::Fragment;
-    let mut io: Vec<(IoSlot, [u32; 4])> = Vec::new();
-    let mut regs = vec![[0u32; 4]; 128];
-    let base = |n: &str| n.split('[').next().unwrap_or(n).to_string();
-    for i in sel.io_in.iter() {
-        /* A matrix attribute is ONE row at its first column's register and
-         * location; its columns follow in both (GL_FLOAT_MAT2..4). A matrix
-         * VARYING arrives already split into one row per column (`m`,
-         * `m[1]`, front end 3beded7), each still typed as the matrix: taken
-         * as it is, or each column would be fed twice over the next one's
-         * register. */
-        let split = sel.io_in.iter().filter(|o| base(o.name) == base(i.name)).count() > 1;
-        let cols = match i.gl_type {
-            _ if split => 1,
-            0x8b5a => 2,
-            0x8b5b => 3,
-            0x8b5c => 4,
-            _ => 1,
-        };
-        for c in 0..cols {
-            let v: [u32; 4] = core::array::from_fn(|_| rng.float().to_bits());
-            let loc = i.slot + c;
-            io.push((if is_fs { IoSlot::Varying(loc) } else { IoSlot::Attrib(loc) }, v));
-            regs[(i.reg + c) as usize] = v;
-        }
-    }
-    /* Declared inputs selection dropped as unused still exist for the IR:
-     * give the evaluator a value for each (the program never reads them). */
-    for d in m.inputs.iter() {
-        let slot = match d.kind {
-            yakogl::shaderc::online::ir::IoKind::Attribute => IoSlot::Attrib(d.location),
-            yakogl::shaderc::online::ir::IoKind::Varying => IoSlot::Varying(d.location),
-            _ => continue,
-        };
-        if !io.iter().any(|(s, _)| *s == slot) {
-            io.push((slot, core::array::from_fn(|_| rng.float().to_bits())));
-        }
-    }
-    /* A matrix attribute is one declaration over several locations, one per
-     * column; selection lists each column in io_in, the IR reads each by its
-     * own location. Any location still missing gets a value too. */
-    for k in 0..16u8 {
-        let slot = if is_fs { IoSlot::Varying(k) } else { IoSlot::Attrib(k) };
-        if !io.iter().any(|(s, _)| *s == slot) {
-            io.push((slot, core::array::from_fn(|_| rng.float().to_bits())));
-        }
-    }
-    if is_fs {
-        let v: [u32; 4] = core::array::from_fn(|_| rng.float().to_bits());
-        io.push((IoSlot::FragCoord, v));
-        regs[0] = v;
-    }
-    let uniform_dwords = (m.uniform_dwords as usize).max(1);
-    let mut block: Vec<u32> = (0..uniform_dwords).map(|_| rng.float().to_bits()).collect();
-    /* An integer or bool uniform gets a small integer, 0..=3, from the same
-     * draw: it may be a loop count or an index (es300/dynidx.frag runs
-     * `i < n`), and float bits read as an int are about 10^9 -- a loop that
-     * never ends is measured as nothing. Float uniforms are unchanged. */
-    for u in m.uniforms.iter().filter(|u| matches!(u.gl_type, 0x1404 | 0x1405 | 0x8b53..=0x8b59 | 0x8dc6..=0x8dc8)) {
-        let (a, b) = (u.dword_off as usize, u.dword_off as usize + u.dwords as usize);
-        for d in block.iter_mut().take(b).skip(a) {
-            *d %= 4;
-        }
-    }
-    /* The constant file as the driver fills it: each dword a uniform-block
-     * dword or a compiler literal. */
-    let mut cfile = vec![[0u32; 4]; 512];
-    for (k, c) in sel.consts.iter().enumerate() {
-        /* gl_FragCoord's y transform (select.rs frag_coord) as on a target
-         * the backend does not mirror: scale 1, offset 0 -- y' is the IR's y. */
-        let v = match c.contents {
-            yakogl::shaderc::SHC_VIV_CONST_UNIFORM => block.get(c.data as usize).copied().unwrap_or(0),
-            yakogl::shaderc::SHC_VIV_CONST_FRAGCOORD_Y_SCALE => 1.0f32.to_bits(),
-            yakogl::shaderc::SHC_VIV_CONST_FRAGCOORD_Y_OFFSET => 0,
-            /* gl_PointCoord's t transform as on a mirrored target: identity */
-            yakogl::shaderc::SHC_VIV_CONST_PNTC_Y_SCALE => 1.0f32.to_bits(),
-            yakogl::shaderc::SHC_VIV_CONST_PNTC_Y_OFFSET => 0,
-            /* the stage's uniform block as the driver copies it to memory for
-             * a run-time-indexed read (select.rs LoadUniformIdx) */
-            yakogl::shaderc::SHC_VIV_CONST_UBO_ADDR => UBO_BASE,
-            _ => c.data,
-        };
-        if let Some(r) = cfile.get_mut(k / 4) {
-            r[k % 4] = v;
-        }
-    }
-
-    /* The reference: the IR evaluator. What it does not implement comes back
-     * as an error naming it; that is a skip, not a failure. */
-    let inputs_ev = eval::Inputs { io: &io, uniforms: &block };
-    let want = match eval::run(m, &inputs_ev) {
-        Ok(o) => o,
-        Err(why) => return Some(Verdict::Skip(format!("evaluator: {why}"))),
-    };
-
-    let mem = [(UBO_BASE, &block[..])];
-    let got = if built.is_empty() {
-        Run::Done { regs: regs.clone(), killed: false }
-    } else {
-        run_mem(&built, &regs, &cfile, &mem)
-    };
-    let (regs_out, killed) = match got {
-        Run::Done { regs, killed } => (regs, killed),
-        Run::Unsupported(why) => return Some(Verdict::Skip(format!("interpreter: {why}"))),
-    };
-    if killed != want.discarded {
-        return Some(Verdict::Differ(format!("{name}: discard {killed}, the IR says {}", want.discarded)));
-    }
-    if killed {
-        return Some(Verdict::Agree);
-    }
-
-    /* Every output the IR stored, against the register it was placed in. */
-    let mut rows: Vec<(IoSlot, u8, u8)> = Vec::new();
-    for o in sel.io_out.iter() {
-        rows.push((IoSlot::Varying(o.slot), place(o.reg), (1u8 << o.components.min(4)) - 1));
-    }
-    if let Some(r) = sel.vs_pos_out_reg {
-        rows.push((IoSlot::Position, place(r), 0xf));
-    }
-    if let Some(r) = sel.vs_pointsize_out_reg {
-        rows.push((IoSlot::PointSize, place(r), 0x1));
-    }
-    if let Some(r) = sel.ps_color_out_reg {
-        rows.push((IoSlot::FragColor(0), place(r), 0xf));
-    }
-    for (slot, reg, lanes) in rows {
-        let Some(mut w) = want.output(slot) else { continue };
-        /* The back end clamps gl_PointSize to the reported range, which the
-         * IR does not model (select.rs, POINT_SIZE_MIN/MAX). */
-        if slot == IoSlot::PointSize {
-            w[0] = f32::from_bits(w[0]).clamp(select::POINT_SIZE_MIN, select::POINT_SIZE_MAX).to_bits();
-        }
-        let g = regs_out[reg as usize];
-        for l in 0..4 {
-            if lanes & (1 << l) != 0 && !close(w[l], g[l]) {
-                return Some(Verdict::Differ(format!(
-                    "{name}: {slot:?} lane {l}: the IR says {} ({:#010x}), the program gives {} ({:#010x})",
-                    f32::from_bits(w[l]),
-                    w[l],
-                    f32::from_bits(g[l]),
-                    g[l]
-                )));
+    let trial = |seed: u64| -> Option<Verdict> {
+        /* Random inputs, the same for both sides. */
+        let mut rng = Rng(seed);
+        let is_fs = stage == sema::Stage::Fragment;
+        let mut io: Vec<(IoSlot, [u32; 4])> = Vec::new();
+        let mut regs = vec![[0u32; 4]; 128];
+        let base = |n: &str| n.split('[').next().unwrap_or(n).to_string();
+        for i in sel.io_in.iter() {
+            /* A matrix attribute is ONE row at its first column's register and
+             * location; its columns follow in both (GL_FLOAT_MAT2..4). A matrix
+             * VARYING arrives already split into one row per column (`m`,
+             * `m[1]`, front end 3beded7), each still typed as the matrix: taken
+             * as it is, or each column would be fed twice over the next one's
+             * register. */
+            let split = sel.io_in.iter().filter(|o| base(o.name) == base(i.name)).count() > 1;
+            let cols = match i.gl_type {
+                _ if split => 1,
+                0x8b5a => 2,
+                0x8b5b => 3,
+                0x8b5c => 4,
+                _ => 1,
+            };
+            for c in 0..cols {
+                let v: [u32; 4] = core::array::from_fn(|_| rng.float().to_bits());
+                let loc = i.slot + c;
+                io.push((if is_fs { IoSlot::Varying(loc) } else { IoSlot::Attrib(loc) }, v));
+                regs[(i.reg + c) as usize] = v;
             }
+        }
+        /* Declared inputs selection dropped as unused still exist for the IR:
+         * give the evaluator a value for each (the program never reads them). */
+        for d in m.inputs.iter() {
+            let slot = match d.kind {
+                yakogl::shaderc::online::ir::IoKind::Attribute => IoSlot::Attrib(d.location),
+                yakogl::shaderc::online::ir::IoKind::Varying => IoSlot::Varying(d.location),
+                _ => continue,
+            };
+            if !io.iter().any(|(s, _)| *s == slot) {
+                io.push((slot, core::array::from_fn(|_| rng.float().to_bits())));
+            }
+        }
+        /* A matrix attribute is one declaration over several locations, one per
+         * column; selection lists each column in io_in, the IR reads each by its
+         * own location. Any location still missing gets a value too. */
+        for k in 0..16u8 {
+            let slot = if is_fs { IoSlot::Varying(k) } else { IoSlot::Attrib(k) };
+            if !io.iter().any(|(s, _)| *s == slot) {
+                io.push((slot, core::array::from_fn(|_| rng.float().to_bits())));
+            }
+        }
+        if is_fs {
+            let v: [u32; 4] = core::array::from_fn(|_| rng.float().to_bits());
+            io.push((IoSlot::FragCoord, v));
+            regs[0] = v;
+        }
+        let uniform_dwords = (m.uniform_dwords as usize).max(1);
+        let mut block: Vec<u32> = (0..uniform_dwords).map(|_| rng.float().to_bits()).collect();
+        /* An integer or bool uniform gets a small integer, 0..=3, from the same
+         * draw: it may be a loop count or an index (es300/dynidx.frag runs
+         * `i < n`), and float bits read as an int are about 10^9 -- a loop that
+         * never ends is measured as nothing. Float uniforms are unchanged. */
+        for u in m.uniforms.iter().filter(|u| matches!(u.gl_type, 0x1404 | 0x1405 | 0x8b53..=0x8b59 | 0x8dc6..=0x8dc8))
+        {
+            let (a, b) = (u.dword_off as usize, u.dword_off as usize + u.dwords as usize);
+            for d in block.iter_mut().take(b).skip(a) {
+                *d %= 4;
+            }
+        }
+        /* The constant file as the driver fills it: each dword a uniform-block
+         * dword or a compiler literal. */
+        let mut cfile = vec![[0u32; 4]; 512];
+        for (k, c) in sel.consts.iter().enumerate() {
+            /* gl_FragCoord's y transform (select.rs frag_coord) as on a target
+             * the backend does not mirror: scale 1, offset 0 -- y' is the IR's y. */
+            let v = match c.contents {
+                yakogl::shaderc::SHC_VIV_CONST_UNIFORM => block.get(c.data as usize).copied().unwrap_or(0),
+                yakogl::shaderc::SHC_VIV_CONST_FRAGCOORD_Y_SCALE => 1.0f32.to_bits(),
+                yakogl::shaderc::SHC_VIV_CONST_FRAGCOORD_Y_OFFSET => 0,
+                /* gl_PointCoord's t transform as on a mirrored target: identity */
+                yakogl::shaderc::SHC_VIV_CONST_PNTC_Y_SCALE => 1.0f32.to_bits(),
+                yakogl::shaderc::SHC_VIV_CONST_PNTC_Y_OFFSET => 0,
+                /* the stage's uniform block as the driver copies it to memory for
+                 * a run-time-indexed read (select.rs LoadUniformIdx) */
+                yakogl::shaderc::SHC_VIV_CONST_UBO_ADDR => UBO_BASE,
+                _ => c.data,
+            };
+            if let Some(r) = cfile.get_mut(k / 4) {
+                r[k % 4] = v;
+            }
+        }
+
+        /* The reference: the IR evaluator. What it does not implement comes back
+         * as an error naming it; that is a skip, not a failure. */
+        let inputs_ev = eval::Inputs { io: &io, uniforms: &block };
+        let want = match eval::run(m, &inputs_ev) {
+            Ok(o) => o,
+            Err(why) => return Some(Verdict::Skip(format!("evaluator: {why}"))),
+        };
+
+        let mem = [(UBO_BASE, &block[..])];
+        let got = if built.is_empty() {
+            Run::Done { regs: regs.clone(), killed: false }
+        } else {
+            run_mem(&built, &regs, &cfile, &mem)
+        };
+        let (regs_out, killed) = match got {
+            Run::Done { regs, killed } => (regs, killed),
+            Run::Unsupported(why) => return Some(Verdict::Skip(format!("interpreter: {why}"))),
+        };
+        if killed != want.discarded {
+            return Some(Verdict::Differ(format!("{name}: discard {killed}, the IR says {}", want.discarded)));
+        }
+        if killed {
+            return Some(Verdict::Agree);
+        }
+
+        /* Every output the IR stored, against the register it was placed in. */
+        let mut rows: Vec<(IoSlot, u8, u8)> = Vec::new();
+        for o in sel.io_out.iter() {
+            rows.push((IoSlot::Varying(o.slot), place(o.reg), (1u8 << o.components.min(4)) - 1));
+        }
+        if let Some(r) = sel.vs_pos_out_reg {
+            rows.push((IoSlot::Position, place(r), 0xf));
+        }
+        if let Some(r) = sel.vs_pointsize_out_reg {
+            rows.push((IoSlot::PointSize, place(r), 0x1));
+        }
+        if let Some(r) = sel.ps_color_out_reg {
+            rows.push((IoSlot::FragColor(0), place(r), 0xf));
+        }
+        for (slot, reg, lanes) in rows {
+            let Some(mut w) = want.output(slot) else { continue };
+            /* The back end clamps gl_PointSize to the reported range, which the
+             * IR does not model (select.rs, POINT_SIZE_MIN/MAX). */
+            if slot == IoSlot::PointSize {
+                w[0] = f32::from_bits(w[0]).clamp(select::POINT_SIZE_MIN, select::POINT_SIZE_MAX).to_bits();
+            }
+            let g = regs_out[reg as usize];
+            for l in 0..4 {
+                if lanes & (1 << l) != 0 && !close(w[l], g[l]) {
+                    return Some(Verdict::Differ(format!(
+                        "{name}: {slot:?} lane {l}: the IR says {} ({:#010x}), the program gives {} ({:#010x})",
+                        f32::from_bits(w[l]),
+                        w[l],
+                        f32::from_bits(g[l]),
+                        g[l]
+                    )));
+                }
+            }
+        }
+        Some(Verdict::Agree)
+    };
+    for seed in seeds {
+        match trial(*seed) {
+            Some(Verdict::Agree) => {}
+            other => return other,
         }
     }
     Some(Verdict::Agree)
@@ -728,4 +750,183 @@ fn gl_fragcoord_through_its_y_transform_computes_what_the_ir_says() {
             None => panic!("es100/fragcoord.frag did not select"),
         }
     }
+}
+
+#[path = "common/deqp_style.rs"]
+mod deqp_style;
+
+/// Why [`compare`] had nothing to compare: the stage of the chain that
+/// refused the source, in its own words.
+fn refusal(stage: sema::Stage, text: &str) -> String {
+    let mut mem = vec![0u8; 8 << 20];
+    let a = Arena::new(&mut mem);
+    let Ok(src) = a.alloc_str(text) else { return "the arena".to_string() };
+    let l = match lower::compile_to_ir(&a, stage, src) {
+        Ok(l) => l,
+        Err(e) => return format!("front end: {}", e.msg),
+    };
+    match select::select(&l.module, &a) {
+        Err(e) => format!("selection: {e:?}"),
+        Ok(_) => "allocation".to_string(),
+    }
+}
+
+/// A population's verdicts: programs that agreed on every trial, the ones
+/// that differed (with their text), and the rest by reason.
+#[derive(Default)]
+struct Population {
+    agreed: usize,
+    differed: Vec<String>,
+    skipped: std::collections::BTreeMap<String, Vec<String>>,
+    refused: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl Population {
+    /// One source over `trials` seeds' inputs; the first that is not an
+    /// agreement decides.
+    fn add(&mut self, mem: &mut [u8], name: &str, stage: sema::Stage, text: &str, trials: u64) {
+        let seeds: Vec<u64> = (0..trials).map(|t| 0x5eed_0000 + t * 7919 + name.len() as u64).collect();
+        match compare_in(mem, name, stage, text, &seeds) {
+            None => self.refused.entry(refusal(stage, text)).or_default().push(name.to_string()),
+            Some(Verdict::Agree) => self.agreed += 1,
+            Some(Verdict::Differ(why)) => self.differed.push(format!("{why}\n{text}")),
+            Some(Verdict::Skip(why)) => self.skipped.entry(why).or_default().push(name.to_string()),
+        }
+    }
+
+    fn print(&self, what: &str) {
+        println!("=== {what} ===");
+        println!("  {} programs agree with the IR, {} differ", self.agreed, self.differed.len());
+        for (why, names) in &self.skipped {
+            println!("    {:4}  skipped: {why} {:?}", names.len(), &names[..names.len().min(3)]);
+        }
+        for (why, names) in &self.refused {
+            println!("    {:4}  refused: {why} {:?}", names.len(), &names[..names.len().min(3)]);
+        }
+        for d in &self.differed {
+            println!("    DIFFERS {d}");
+        }
+    }
+
+    fn uncompared(&self) -> usize {
+        self.skipped.values().chain(self.refused.values()).map(Vec::len).sum()
+    }
+}
+
+/// The table's sources are applications' shaders; dEQP-GLES2's `shaders.*`
+/// groups hand glShaderSource other shapes (an `if` whose arms assign
+/// locals read after it, operator chains over constructors and swizzles,
+/// constant loops, the random generator's `x * 1.0` and `float(int(..))`).
+/// `tests/common/deqp_style.rs` writes those shapes from a seed, with
+/// nothing the evaluator cannot run, and each program the product's passes
+/// and allocator build must compute what its IR says -- the population the
+/// PowerVR's `usc_limits.rs` runs through its own chain (300 seeds, a
+/// vertex and a fragment shader each; `DEQP_STYLE_SEEDS=<n>` for a soak).
+#[test]
+fn deqp_style_shaders_compute_what_the_ir_says() {
+    let shaders = deqp_style::population(deqp_style::seeds(300));
+    for (shape, n) in deqp_style::shape_counts(&shaders) {
+        assert!(n >= shaders.len() / 50, "the population has too few sources with {shape}: {n}");
+    }
+    let mut p = Population::default();
+    let mut mem = vec![0u8; 8 << 20];
+    for s in &shaders {
+        let stage = if s.fragment { sema::Stage::Fragment } else { sema::Stage::Vertex };
+        p.add(&mut mem, &s.name, stage, &s.text, 8);
+    }
+    p.print("dEQP-style shaders through the GC7000 back end");
+    assert!(p.differed.is_empty(), "{} programs compute something other than their IR", p.differed.len());
+    /* the check's own power: most of the population was compared */
+    assert!(
+        p.agreed >= shaders.len() * 9 / 10,
+        "only {} of {} compared ({} skipped or refused)",
+        p.agreed,
+        shaders.len(),
+        p.uncompared()
+    );
+}
+
+/// A `const NAME: &str` of tests/deqp_repro_shaders.rs, read from that
+/// file's text: the sources dEQP handed glShaderSource, kept there.
+fn repro_shader(name: &str) -> String {
+    let file = include_str!("deqp_repro_shaders.rs");
+    let (_, rest) = file.split_once(&format!("const {name}: &str = ")).unwrap_or_else(|| panic!("no const {name}"));
+    let text = match rest.strip_prefix("r#\"") {
+        Some(raw) => raw.split_once("\"#;").expect("a raw string's end").0,
+        None => rest.strip_prefix('"').expect("a string").split_once("\";").expect("a string's end").0,
+    };
+    assert!(text.contains("void main"), "{name}: not a shader: {text:?}");
+    text.to_string()
+}
+
+/// The dEQP sources the repository keeps -- the shaders of
+/// tests/deqp_repro_shaders.rs and the eleven `shaders.random` sources of
+/// tests/fixtures/deqp_random_dead_cube -- were kept because they once
+/// would not COMPILE. Here the ones the evaluator can run are run: the
+/// program must compute what its IR says. A source with a texture look-up
+/// is skipped by name (the evaluator has no textures), never passed.
+#[test]
+fn the_repositorys_deqp_sources_compute_what_the_ir_says() {
+    let mut sources: Vec<(String, sema::Stage, String)> = [
+        ("RANDOM_AF_FRAG64_VS", sema::Stage::Vertex),
+        ("RANDOM_AF_FRAG64_FS", sema::Stage::Fragment),
+        ("LOOPS_DO_WHILE_ONLY_CONTINUE_FS", sema::Stage::Fragment),
+        ("UNIFORM_API_RANDOM_23_FS", sema::Stage::Fragment),
+    ]
+    .into_iter()
+    .map(|(n, st)| (n.to_string(), st, repro_shader(n)))
+    .collect();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/deqp_random_dead_cube");
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("frag" | "vert")))
+        .collect();
+    files.sort();
+    for f in &files {
+        let stage = if f.extension().unwrap() == "frag" { sema::Stage::Fragment } else { sema::Stage::Vertex };
+        sources.push((
+            f.file_name().unwrap().to_string_lossy().into_owned(),
+            stage,
+            std::fs::read_to_string(f).unwrap(),
+        ));
+    }
+    assert_eq!(sources.len(), 15, "the population changed: re-derive the pins below");
+    let mut p = Population::default();
+    let mut mem = vec![0u8; 8 << 20];
+    for (name, stage, text) in &sources {
+        p.add(&mut mem, name, *stage, text, 8);
+    }
+    p.print("the repository's dEQP sources through the GC7000 back end");
+    assert!(p.differed.is_empty(), "{} programs compute something other than their IR", p.differed.len());
+    /* 2 compared (the random case's vertex shader and the `continue` loop);
+     * 13 skipped, each for a texture look-up */
+    let textures = p.skipped.get("evaluator: the evaluator has no textures").map_or(0, Vec::len);
+    assert_eq!((p.agreed, textures, p.uncompared()), (2, 13, 13), "the compared population moved");
+}
+
+/// dEQP's own ES 1.00 programs (`DEQP_PROGRAMS`, see
+/// [`deqp_style::deqp_programs`]) through the GC7000 back end: a `_vertex`
+/// variant's vertex shader, which writes what the case computes to
+/// varyings, and a `_fragment` variant's fragment shader, which writes its
+/// verdict as the colour. Absent the variable it measures nothing and says
+/// so.
+#[test]
+fn deqp_test_programs_compute_what_the_ir_says() {
+    let Some(programs) = deqp_style::deqp_programs() else {
+        println!("DEQP_PROGRAMS not set: nothing measured");
+        return;
+    };
+    let mut p = Population::default();
+    let mut mem = vec![0u8; 8 << 20];
+    for (name, vert, frag) in &programs {
+        if name.ends_with("_vertex") {
+            p.add(&mut mem, name, sema::Stage::Vertex, vert, 8);
+        } else if name.ends_with("_fragment") {
+            p.add(&mut mem, name, sema::Stage::Fragment, frag, 8);
+        }
+    }
+    p.print("dEQP .test programs through the GC7000 back end");
+    assert!(p.agreed + p.differed.len() + p.uncompared() > 0, "the programs file held no vertex or fragment variant");
+    assert!(p.differed.is_empty(), "{} programs compute something other than their IR", p.differed.len());
 }
