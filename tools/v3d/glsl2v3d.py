@@ -22,6 +22,10 @@ any, and only then the fallback:
      driver/tools/pvrlab/gen_gl_test_shaders.py, and each program also gets its
      GL_TEST_ES100 form through that file's ES100_TWINS (the ES 1.00 header
      swaps the sources and keeps the symbols, so the same call links the twins).
+     A call whose other half is a buffer the case fills with GLSL while it runs
+     (`static char src[2048]`) names no program, and the source beside it is
+     used up there: offering it to another call of the same function would
+     invent a program gl_test never links.
      A site this cannot resolve fails the run; it is never dropped.
   2. The file-name convention of the directories that document one:
      `<name>.vert` + `<name>.frag`, and `<name>.batchable.vert` + `<name>.frag`
@@ -135,8 +139,72 @@ def c_functions(text):
     return out
 
 
+def link_calls(body):
+    """The argument lists of the body's link_program / glLinkProgram calls.
+    Parentheses are balanced, so a call spanning lines or holding a ternary
+    reads as one call; a mention in a comment gives no arguments."""
+    out = []
+    for m in re.finditer(r"\blink_program\s*\(|\bglLinkProgram\s*\(", body):
+        i, depth = m.end(), 1
+        while i < len(body) and depth:
+            if body[i] == "(":
+                depth += 1
+            elif body[i] == ")":
+                depth -= 1
+            i += 1
+        args, depth, cur = [], 0, ""
+        for c in body[m.end():i - 1]:
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+            if c == "," and not depth:
+                args.append(cur)
+                cur = ""
+            else:
+                cur += c
+        out.append([a.strip() for a in args + [cur] if a.strip()])
+    return out
+
+
+def runtime_buffers(body):
+    """Names the function fills with GLSL while it runs: `static char src[2048]`.
+    A link call with one of them as an argument links a program whose other half
+    exists only after the case runs, so no pair can name that program."""
+    return set(re.findall(r"\bchar\s+(\w+)\s*\[", body))
+
+
+def program_rows(body):
+    """The rows of a table of programs: an initializer row naming both halves,
+    `{ "rsg's pair", gl_test_f3_vs_src, gl_test_f3_fs_src },`. gl_test links
+    such a table with link_program(t[p].vs, t[p].fs), so its rows are its
+    programs; pairing the table's vertex shaders with its fragment shaders
+    instead names programs the table does not hold."""
+    out = []
+    for m in re.finditer(r"\{[^{}]*\},", body):
+        syms = re.findall(r"\b%s\b" % SYM, m.group(0))
+        vs = [s for s in syms if s.endswith("_vs_src")]
+        fs = [s for s in syms if s.endswith("_fs_src")]
+        out += [(v, f) for v in vs for f in fs]
+    return out
+
+
 def gl_test_pairs():
-    """[(vs_file, fs_file, how)] and a list of sites that could not be resolved."""
+    """[(vs_file, fs_file, how)] and a list of sites that could not be resolved.
+
+    A program is named by the call that links it. Each argument of a link call
+    is one of:
+      - a source symbol: the pair, when both arguments are one;
+      - a variable or a table entry (fs[p], progs[p].fs): the sources the
+        function hands it, paired within the function;
+      - a parameter: the parameter's values at the call sites;
+      - a buffer the case fills at run time (runtime_buffers): no pair, and the
+        source beside it is used up by that call -- offering it to another call
+        of the same function invents a program gl_test never links, and an
+        invented program is a build failure, not a spare row.
+    A table that holds both halves names its programs by its rows
+    (program_rows), which the same rule asks for before pairing across it.
+    """
     sym2file, twins = gen_gl_test_tables()
     text = open(GL_TEST_C).read()
     sym_pairs = []          # (vs_sym, fs_sym, how)
@@ -144,15 +212,35 @@ def gl_test_pairs():
     for name, params, body in c_functions(text):
         if name == "link_program":
             continue
-        links = len(re.findall(r"\blink_program\s*\(|\bglLinkProgram\s*\(", body))
-        if not links:
+        calls = link_calls(body)
+        if not calls:
             continue
-        direct = re.findall(r"\blink_program\s*\(\s*(%s)\s*,\s*(%s)\s*\)" % (SYM, SYM), body)
+        buffers = runtime_buffers(body)
+        direct, runtime = [], []
+        for a in calls:
+            ids = [i for x in a for i in re.findall(r"\b\w+\b", x)]
+            named = [i for i in ids if re.fullmatch(SYM, i)]
+            built = [i for i in ids if i in buffers]
+            if len(a) == 2 and len(named) == 2:
+                direct.append((named[0], named[1]))
+            elif built:
+                runtime.append((named, built))
+        rows = program_rows(body)
         for vs, fs in direct:
             sym_pairs.append((vs, fs, "gl_test.c %s" % name))
-        if len(direct) == links:
+        for vs, fs in rows:
+            sym_pairs.append((vs, fs, "gl_test.c %s (a table of programs)" % name))
+        used = {s for p in direct + rows for s in p}
+        for named, built in runtime:
+            used.update(named)
+        if runtime:
+            unresolved.append("%s: links %d, direct %d, half built at run time: %s"
+                              % (name, len(calls), len(direct),
+                                 "; ".join("%s with %s"
+                                           % (", ".join(n) or "no named half", b[0])
+                                           for n, b in runtime)))
+        if len(direct) == len(calls):
             continue
-        used = {s for p in direct for s in p}
         syms = set(re.findall(r"\b%s\b" % SYM, body))
         left = {"vs": sorted(s for s in syms - used if s.endswith("_vs_src")),
                 "fs": sorted(s for s in syms - used if s.endswith("_fs_src"))}
@@ -166,7 +254,7 @@ def gl_test_pairs():
                                   if s.endswith("_%s_src" % side))
         if bool(left["vs"]) != bool(left["fs"]):
             unresolved.append("%s: links %d, direct %d, left over vs=%s fs=%s"
-                              % (name, links, len(direct), left["vs"], left["fs"]))
+                              % (name, len(calls), len(direct), left["vs"], left["fs"]))
             continue
         for vs in left["vs"]:
             for fs in left["fs"]:
