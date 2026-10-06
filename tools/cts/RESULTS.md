@@ -16899,3 +16899,43 @@ image beside it, `1633` and `1638`, same words):
 Exactly the predicted words: the link runs at Linux's 69.3 MHz with a 25.9 per mille
 margin. The viewing by eye is still pending (the user was not at the panel); the
 record shows the link state, not the picture.
+
+## Precompiled shaders on the AM62P without a compiler; the GC7000 regressed at case 2 (origin/main `05f8f749`, 2026-10-06)
+
+Commits `17e7d34c` (commit 4: an image without the compiler; a miss refused by
+name) and `05f8f749` (commit 5: the back ends' own programs come from our
+compiler). Instrument: `tools/board.sh run`, `BOARD_BOOT=uboot-mmc`, images built
+from `05f8f749`. Records in `records/<board>/` of the main checkout (gitignored).
+
+| image | record | verdict line and closing line |
+|---|---|---|
+| AM62P gl_test, compiler only | `am62p/20261006-1818-gt-05f8f749-4932fe20` | `board.sh am62p gt-05f8f749 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=88s`; `gl_test: all: 0 of 48 cases failed (48 passed; 0 timed out; first failure case -1 at index -1); precompiled hits 0, compiler runs 197` |
+| AM62P gl_test, precompiled + compiler (`APPS="gl_test_es100"`) | `am62p/20261006-1820-gt-precompiled-05f8f749-4e0361a4` | `board.sh am62p gt-precompiled-05f8f749 rc=0 verdict=done ... resets=0 ... back_after=88s`; `gl_test: all: 0 of 48 cases failed (48 passed; 0 timed out; first failure case -1 at index -1); precompiled hits 111, compiler runs 65` |
+| AM62P gl_test, precompiled only (no compiler) | `am62p/20261006-1822-gt-precompiled-only-05f8f749-2f330c44` | `board.sh am62p gt-precompiled-only-05f8f749 rc=4 verdict=failed ... resets=0 ... back_after=88s`; `gl_test: all: 8 of 48 cases failed (40 passed; 0 timed out; first failure case 181 at index 37); precompiled hits 111, compiler runs 0` |
+| AM62P Slint | `am62p/20261006-1828-slint-05f8f749-3f2302c7` | `board.sh am62p slint-05f8f749 rc=0 verdict=done ... result=record:PROBES resets=0 record=594b0601,08420862,00210842,c5920883 back_after=119s` |
+| AM62P cluster | `am62p/20261006-1830-cluster-05f8f749-fafc355a` | `board.sh am62p cluster-05f8f749 rc=0 verdict=done ... result=record:PROBES resets=0 record=594b0601,008510c4,19050085,110c6d5f back_after=176s` |
+| i.MX8MP gc_gl_test, compiler only | `imx8mp/20261006-1818-gt-05f8f749-b6323a5b` | `board.sh imx8mp gt-05f8f749 rc=4 verdict=failed boot=uboot-mmc row boot_verdict=cycled result=record:CASE resets=absent record=594b010e,0002ff06,0000002c,00000030 back_after=64s uptime=28s` |
+
+Console lines. Precompiled image:
+`I: yakogl: precompiled shaders: 1291 rows, 1470 links of tools/shaders/precompiled.list; toolchain: yakogl=0.1.0 commit=05f8f749dc4db595e53054143038b7ac2fd76a72 gpu=powervr es2=0`.
+Cluster: `cluster: throughput: 1024x600: 5507 frames in 60015 ms, 91.8 fps, 56.4 Mpx/s; draw 9.9 ms mean, 16.11 ms/Mpx`
+(no change against `17605c36`); the Slint and cluster PROBES words are unchanged
+with our frame-load program (26 temps against Mesa's 5).
+
+The precompiled-only image: the 8 failures are cases 181 fusemad, 182 fsat, 183
+unipad, 188 predif, 189 mulone, 190 blendonce, 191 varyfma and 192 predlive, each
+a refusal by name as designed, for example:
+
+    gl_test: shader 35633 compile failed: precompiled shaders: vertex shader sha256=c10b216b6ea4ea45bb34ee1375a5375534b3b44725b009e089082c218be50f24 is not in this image's precompiled shaders and the image has no shader compiler; add it to tools/shaders/precompiled.list and rebuild
+
+Known gaps: (1) those cases' sources are not in the list's gl_test app:
+`tools/precompile/gl_test_pairs.py`'s reader does not follow the measurement
+cases' inline shader tables (a follow-up for the list); (2) sampler-state variants
+are not precompiled: `I: yakogl: precompiled shaders: gl_test_es100/texture.frag has no variant for sampler key 0x1`,
+then `no sampler-state variant for key 0x0/0x1 (...); its draws take the program's own shaders`:
+the draw takes the base program as logged.
+
+i.MX8MP: REGRESSION. `CASE (1) seq 14: case 2 check 255 status 6 (set failed) got 0x0000002c want 0x00000030`:
+44 of 48 with the first failure at case 2 `texture`, where every run today up to
+`72d16864` had first failure 16 (46 of 48). The cause is being diagnosed (commit 4's
+compiler-path changes on the GC7000 are the suspect); the fix is in flight.

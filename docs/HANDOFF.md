@@ -23,7 +23,7 @@ Results are from main `81c53c61` (gl_test) and `7dada1ff` (Slint, cluster, table
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
-| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
+| AM62P | 48 / 48, 0 resets (the set now has 192 `predlive`); 48 / 48 in the compiler-only and precompiled + compiler images (`05f8f749`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
 | i.MX8MP | fails: first failure case 16 check 255 (4x MSAA), the same as on `39bd6983`, where it was 45 / 47 | not run on `81c53c61` | not run on `81c53c61` |
 | Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
 
@@ -120,10 +120,20 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    image. Still Mesa's (pco, captured by `tools/pco_shc/capture_usc.c` into
    `driver/src/pvr_usc_*_blob.h`): the driver's five end-of-tile programs
    (`pvr_render.c`, every render) and the boot self-test's vertex shader
-   (`pvr_selftest.c`), which our encoder does not build yet. Next: a board run
-   of the image without a compiler and of the internal programs (the AM62P
-   gl_test set and its clear/load cases, Slint, the cluster; the i.MX8MP
-   gl_test), the tier's hit count on the board, then the default.
+   (`pvr_selftest.c`), which our encoder does not build yet. Board proof of both (`05f8f749`, AM62P):
+   gl_test 48 / 48 in the compiler-only image (precompiled hits 0, compiler
+   runs 197) and in the precompiled + compiler image (hits 111, compiler runs
+   65); the image without a compiler fails 8 of 48 (cases 181, 182, 183, 188
+   to 192; hits 111, compiler runs 0), each a refusal by name as designed;
+   Slint and the cluster rebuilt with our frame-load program (26 temps
+   against Mesa's 5) keep their records, cluster 91.8 fps. Open points:
+   the list's gl_test reader (`tools/precompile/gl_test_pairs.py`) does not
+   follow the measurement cases' inline shader tables, which is why those
+   cases are refused; sampler-state variants are not precompiled
+   (`gl_test_es100/texture.frag has no variant for sampler key 0x1`, the
+   draw takes the base program); and the i.MX8MP gc_gl_test regressed on
+   `05f8f749` (44 / 48, first failure case 2 `texture`, against 46 / 48 up
+   to `72d16864`), the fix in flight. Then the default.
    Then rename the two paths to "precompiled shaders" and "shader compiler"
    (features `precompiled-shaders` and `shader-compiler`; the source moves
    from `src/shaderc/online` to `src/shaderc/compiler`). The words online,
