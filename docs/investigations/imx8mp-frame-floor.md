@@ -194,6 +194,9 @@ next limit after candidate 1 is fixed.
   upstream for this item:
   - `kernel/Kconfig`: `SYS_CLOCK_TICKS_PER_SEC` is `default 10000 if
     TICKLESS_KERNEL`; `TICKLESS_KERNEL` is `default y if TICKLESS_CAPABLE`.
+  - `soc/nxp/imx/imx8m/Kconfig`: `SOC_MIMX8ML8_A53` selects `ARM_ARCH_TIMER
+    if SYS_CLOCK_EXISTS`. No file of `soc/nxp/imx/imx8m/` sets the tick rate
+    or `TICKLESS_KERNEL`.
   - `drivers/timer/Kconfig.arm_arch`: `ARM_ARCH_TIMER` selects
     `TICKLESS_CAPABLE`.
   - `soc/nxp/imx/imx8m/Kconfig.defconfig.mimx8ml8_a53`: sets only
