@@ -184,6 +184,10 @@ inside `submit()`.
   times, on NPOT textures (800x600, 1600x1200) in this report-es2 build, and
   the textures then sample (0,0,0,1) for their mipmap min filter: the known
   black terrain and refraction, which the npot item fixes. No other GL error.
+  This run predates npot's merge (GL_OES_texture_npot in report-es2
+  builds); a run on a tree with it should show neither these errors nor
+  the incomplete-texture lines, and terrain's and refract's mip chains add
+  to their GPU-memory high-waters above.
 * **No depth-resolve line.** The PowerVR's `did not resolve its depth (-16)`
   in shadow and refract (FINDINGS.md) does not appear on the V3D.
 * **Sampler variants:** shadow and refract each build one sampler-key
