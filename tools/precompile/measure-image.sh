@@ -59,7 +59,9 @@ check_switches() {
     case $arg in -DCONFIG_*=*) ;; *) continue ;; esac
     arg=${arg#-D}; sym=${arg%%=*}; want=${arg#*=}
     got=$(grep -m1 -E "^$sym=" "$conf" | cut -d= -f2-)
-    got=${got#\"}; got=${got%\"}
+    # A string symbol is written "value" in .config and passed "value" here, so
+    # both sides lose their quotes before the comparison.
+    got=${got#\"}; got=${got%\"}; want=${want#\"}; want=${want%\"}
     [ -n "$got" ] || got=n          # a disabled bool reads `# CONFIG_X is not set`
     if [ "$got" != "$want" ]; then
       echo "  $name: $sym is '$got' in ${conf#"$ROOT/"}, but the arm asked for '$want'"
