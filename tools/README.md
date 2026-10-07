@@ -626,3 +626,15 @@ deterministic property of the shader, so it comes back as
 info log, and it is cached as a refusal; a service error (`{"error": ...}`, no
 `"ok"`) is reserved for the host being unable to answer at all (a missing
 compiler, an unreachable server) and is never cached.
+
+## land.sh — land one branch tip on main
+
+`tools/land.sh <name> <tip> <message-file>` is how a branch tip reaches
+`origin/main`: it merges the tip `--no-ff` into a detached worktree of
+`origin/main`, asserts `HEAD^2 == <tip>` (a merge that did not take the tip is a
+refusal, not a landing), runs `tools/check.sh` there — the gate that counts is
+the one run on the exact commit pushed — and pushes only on rc 0, then proves
+the *tip* is an ancestor of `origin/main` before removing the worktree. Exit
+codes name what stopped it: 1 gate red, 8 the merge did not take, 2 pushed but
+not proven, 9 a precondition. The merge message is a file because
+`git merge -F -` cannot read stdin.
