@@ -9,8 +9,10 @@ GL ES API and checks pixels read back with `glReadPixels`. The Zephyr samples
 
 - `gl_test_shaders.h`, `gl_test_shaders_es100.h`: the GLSL sources the cases
   use, generated from `tools/shaders/` by `gen_gl_test_shaders.py`. The offline
-  shader tables match sources by SHA-256, so never edit them by hand.
+  shader tables match sources by SHA-256, so never edit them by hand: change the
+  file under `tools/shaders/`, then regenerate.
 
 `tools/check.sh` compiles `gl_test.c` on the host for the PowerVR and GC7000
-arms. The directory name is historical: it once held a Linux kernel-module
-harness for the PowerVR, now removed.
+arms, and runs `gen_gl_test_shaders.py --check`, which regenerates both headers
+and refuses a drift against the committed ones. The directory name is historical:
+it once held a Linux kernel-module harness for the PowerVR, now removed.

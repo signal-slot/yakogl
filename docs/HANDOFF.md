@@ -142,6 +142,24 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    166 fshprobe's shp_arm, 166's fshp_arm_units: each links a named source
    beside a buffer it fills with GLSL while it runs, so no pair names that
    program and none can. Those cases need the in-process compiler.
+   The move moved the pinned counts, and the gate is what surfaced it. In
+   `tests/fixtures/precompile_counts.txt`, `powervr`'s whole-list rows are 3346
+   and 2651 (`es2=0`, `es2=1`) against 2749 and 2054, and `gl_test_es100`'s 1888
+   and 1785 against 1291 and 1188; the GC7000's did not move, because `dir gltest`
+   has role `-`. Measured per app on the `es2=1` build,
+   the growth is exactly the 44 pairs the move made nameable: `gl_test` 639 →
+   1234 rows, `gl_test_es100` 1188 → 1785, and the whole list 2054 → 2651 --
+   +597, the same as `gl_test_es100`'s, because the two apps list the same 44
+   pairs (42 of them the same lines; the two that differ pair a gltest vertex
+   shader with the root `interp_color.frag`, a `#version 450` source the compiler
+   refuses, so those pairs are left out and add nothing). The corpus pin moved
+   with the files: `tools/shaders/` holds 789 `.vert`/`.frag` sources, 734 before,
+   and none of the 55 new ones is refused -- all four
+   `tests/fixtures/online_refused_*.txt` are unchanged.
+   Closed by a gate row added with this commit: nothing compared the two
+   generated headers to the files they are made from. `gen_gl_test_shaders.py
+   --check` regenerates both in memory and refuses a drift, and `tools/check.sh`
+   runs it beside the rows that compile gl_test.c.
    Open: the GC7000 has no row for a gltest source (138 of the 184 gl_test
    sources have no Vivante row, 123 of them before the move); a `gc7000` role
    for `dir gltest` needs `gen_shader_table.py --append` with etna_shc, then

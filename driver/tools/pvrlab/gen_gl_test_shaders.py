@@ -16,8 +16,16 @@ shader table matches by SHA-256 of the text, so a stray byte here is a miss ther
 The ES 1.00 header also names the cases it cannot serve: a case whose GLSL is
 "#version 300 es" has no ES 1.00 form at all, so it is skipped BY NAME rather than
 left to fail at the version line (a failure there would say the compiler is broken
-when the truth is that the case is out of its scope)."""
+when the truth is that the case is out of its scope).
+
+  --check  write nothing: regenerate both headers and refuse a drift against the
+           committed ones. tools/check.sh runs this. The headers hold the only
+           copy of the GLSL gl_test.c compiles, while the source list, the offline
+           table and the host tests all name tools/shaders/ instead -- so a header
+           that is not that text is a suite drawing one program while everything
+           else checks another."""
 import os
+import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The driver tree lives inside the yakogl repository as driver/ since 62fd511;
 # before that it was a sibling checkout. Take whichever is there, so a script
@@ -353,6 +361,9 @@ def es300_cases_used():
     return used
 
 
+CHECK = '--check' in sys.argv[1:]
+
+
 def emit(path, sub, head):
     out = list(head)
     for entry in ENTRIES:
@@ -361,7 +372,25 @@ def emit(path, sub, head):
         out.append('%sstatic const char %s[] =\n%s;\n'
                    % ('/* %s */\n' % note if note else '', name,
                       cstr(os.path.join(SH, sub.get(f, f)))))
-    open(os.path.join(HERE, path), 'w').write('\n'.join(out) + '\n')
+    text = '\n'.join(out) + '\n'
+    if not CHECK:
+        open(os.path.join(HERE, path), 'w').write(text)
+        return
+    try:
+        have = open(os.path.join(HERE, path)).read()
+    except FileNotFoundError:
+        raise SystemExit('gen_gl_test_shaders: %s is not there to check; run without --check to write it' % path)
+    if have != text:
+        hl, tl = have.split('\n'), text.split('\n')
+        i = next((i for i, (a, b) in enumerate(zip(hl, tl)) if a != b), min(len(hl), len(tl)))
+        raise SystemExit('gen_gl_test_shaders: %s is not what this generator makes from %s '
+                         '(first difference at line %d):\n  committed: %s\n  generated: %s\n'
+                         'Fix the source under tools/shaders/ and regenerate: '
+                         'python3 driver/tools/pvrlab/gen_gl_test_shaders.py'
+                         % (path, SH, i + 1,
+                            hl[i] if i < len(hl) else '<no such line>',
+                            tl[i] if i < len(tl) else '<no such line>'))
+    print('gen_gl_test_shaders: %s is the generator\'s own output (%d sources)' % (path, len(ENTRIES)))
 
 
 emit('gl_test_shaders.h', {}, out)
