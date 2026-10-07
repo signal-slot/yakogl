@@ -61,8 +61,8 @@ osal-baremetal = []
 # Report OpenGL ES 2.0 instead of ES 3.0: glGetString(GL_VERSION) says
 # "OpenGL ES 2.0", GL_SHADING_LANGUAGE_VERSION "OpenGL ES GLSL ES 1.00", the
 # ES 3.0-only queries (GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_NUM_EXTENSIONS)
-# are GL_INVALID_ENUM, and the rules ES 2.0 has and ES 3.0 dropped apply (a
-# non-power-of-two texture has no mip chain, 3.7.10). A conformance run must
+# are GL_INVALID_ENUM, and GL_EXTENSIONS lists the ES 2.0 extensions ES 3.0
+# has in core (GL_OES_texture_npot and the depth-texture pair). A conformance run must
 # have this: a client that reads GL_MAJOR_VERSION and gets an answer concludes
 # it is talking to ES 3 whatever the version string said. Off by default,
 # because Qt's RHI takes the ES 3.0 path from that string.

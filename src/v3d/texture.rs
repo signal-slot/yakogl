@@ -47,9 +47,12 @@ pub fn gl_level(width: u32, height: u32, level: u32) -> (u32, u32, u32) {
 /// stacked, `max(h >> level, 1)` rows each, packed: the V3D walks the layers
 /// itself (native_layered_textures), so the GL core does not round the
 /// stacked height up to a power of two for it (the PowerVR's chain rule,
-/// `chain_layout`'s `pot_stack`). Only a power-of-two texture has more than
-/// level 0. Pinned against the GL core's own `level_off`, and the faces'
-/// places, by backend tests (with this backend's table installed).
+/// `chain_layout`'s `pot_stack`). A non-power-of-two texture has more than
+/// level 0 once glGenerateMipmap or a level above 0 asked for its chain
+/// (GL_OES_texture_npot; `texture.rs` `grow_npot_chain`), level `k` being
+/// `max(width >> k, 1)` wide as for any other size. Pinned against the GL
+/// core's own `level_off`, and the faces' places, by backend tests (with
+/// this backend's table installed).
 pub fn gl_level_layered(width: u32, height: u32, layers: u32, bpp: u32, level: u32) -> (u32, u32, u32) {
     let pitch = |lw: u32| if lw == 1 && width > 1 { 1 } else { tex_pitch(lw) };
     let mut off = 0u32;
@@ -118,9 +121,11 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
     if b.width == 0 || b.height == 0 || b.width >= 1 << 14 || b.height >= 1 << 14 {
         return Some("a texture size the TMU cannot address (0, or 16384 or more)");
     }
-    if levels_sampled(b) > 1 && !(b.width.is_power_of_two() && b.height.is_power_of_two()) {
-        return Some("a mip chain on a non-power-of-two texture");
-    }
+    /* A non-power-of-two chain is sampled (GL_OES_texture_npot): the GL
+     * core lays it out with this backend's table as `gl_level_layered` says
+     * and the tiled copy as Mesa's v3d_setup_slices does (levels 0 and 1 at
+     * their own size, the rest of the power-of-two-rounded level 1,
+     * driver/src/v3d/v3d_tex.c `layout`). */
     if b.stride_texels != tex_pitch(b.width) {
         return Some("a texture whose level 0 pitch is not the GL core's pair-padded width");
     }
@@ -447,11 +452,10 @@ mod tests {
     fn what_this_cut_does_not_sample_is_refused_by_name() {
         assert_eq!(refusal(&bind(64, 64)), None);
         type Case = (fn(&mut GlesTextureBind), &'static str);
-        let cases: [Case; 5] = [
+        let cases: [Case; 4] = [
             (|b| b.type_ = GLES_TEXTYPE_CUBE, "cube"),
             (|b| b.format = GLES_TEXFMT_RGBA16F, "RGBA8"),
             (|b| b.width = 16384, "16384"),
-            (|b| (b.width, b.stride_texels, b.mip_filter, b.mip_levels) = (12, 12, 1, 2), "non-power-of-two"),
             (|b| b.stride_texels = 70, "pitch"),
         ];
         let mut seen = std::vec::Vec::new();
