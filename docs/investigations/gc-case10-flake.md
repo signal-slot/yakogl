@@ -48,8 +48,9 @@ GC back end's render-target state, flushes and pool, the Zephyr OSAL, and the
 earlier sync audit (src/vivante/VIVANTE_NOTES.md:1152-1269, commit
 `8409419`).
 
-**Mesa could not be fetched on this machine.** `git clone`, `curl` and
-WebFetch of gitlab.freedesktop.org were all refused (permission). So the
+**Mesa could not be read on this machine.** `git clone` was refused, the
+web fetch of gitlab.freedesktop.org got its bot wall ("Access Denied"), and
+a file fetched with `curl` landed where it could not be read. So the
 Mesa line numbers below are the ones this repository already recorded
 from Mesa 26.2.1 (each with the place it is recorded). Where no line was
 recorded, the Mesa function is named and marked "(line not re-checked)".
@@ -102,10 +103,16 @@ With `CONFIG_YAKOGL_GC_POOL_NO_REUSE=y` it does **not** move: that knob changes
 only what happens after a free (zephyr_gc.c:259-296), and nothing is freed
 before the surface.
 
-How this was checked: by reading the code above and adding up the sizes.
-A small C program that runs the real `gc_render_pool.h` with these sizes
-compiled on the host, but running it was refused here. The sums are simple.
-No board record shows this address yet (see the end of the board recipe).
+How this was checked: a throwaway host program (not committed) included the
+real `driver/src/vivante/gc_render_pool.h`, called `gc_pool_init(0x60000)`
+and then `gc_pool_alloc` with the sizes and alignments above, in this order.
+It printed:
+
+    default surface 64x64 RGBA8  size 16384 align   64 -> +0x06600c0 (mod 256 = 0xc0)
+    default surface 64x64 RGBA8  size 16384 align 4096 -> +0x0661000 (page-align arm)
+
+The allocation order is read from the code, not traced on a board. No board
+record shows this address yet (see the end of the board recipe).
 
 ### F3. The pixel engine's view of that target
 
