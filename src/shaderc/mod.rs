@@ -1490,7 +1490,8 @@ pub struct ShcPrecompiledRow {
     pub viv: ShcViv,
 }
 
-// SAFETY: the raw pointers point at immutable statics.
+// SAFETY: the only pointers a row holds are `ShcViv`'s constant file, and a
+// generated table defines those as immutable statics the row points at.
 unsafe impl Sync for ShcPrecompiledRow {}
 
 /// Pad a generated varying list to the fixed array of [`ShcShader`].
