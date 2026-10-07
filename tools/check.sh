@@ -317,6 +317,12 @@ step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
+# glmark2's V3D allocations replayed through the OSAL's carve-out allocator
+# (src/osal/v3d_granules.h) and Mesa's layout (driver/src/v3d/v3d_tex.c), both
+# built from C by the test with `cc`: every large request fits the Pi 4's
+# 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
+step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
