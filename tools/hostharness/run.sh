@@ -28,7 +28,11 @@
 #   CARGO_NIGHTLY   toolchain for the sanitizer build (default: nightly)
 #   HH_FEATURES     cargo features of a workspace-layout Rust build (default:
 #                   osal-linux,gpu-powervr); with shaderc-online added, the
-#                   gltest job takes HH_SHADERC=offline for the table arm
+#                   gltest job takes HH_SHADERC=offline for the table arm.
+#                   With gpu-v3d (osal-linux,gpu-v3d,shaderc-online): the
+#                   Pi 4's V3D on linux.c's model of its carve-out
+#                   (YAKOGL_V3D_* there); no gltest jobs (gl_test.c's V3D
+#                   arm is the Zephyr image's)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -82,6 +86,18 @@ build() {
     mesa_parts=("$drv/compat/pvr_mesa_pds.c")
   fi
   local cflags=(-g "$opt" -std=gnu11 $csan -DYAKOGL_OSAL_LINUX)
+  # The V3D (HH_FEATURES with gpu-v3d): the job builder and what it shares
+  # instead of the PowerVR generators (CMakeLists.txt's v3d arm lists the
+  # same), its headers and the Mesa packers they use.
+  local v3d=0
+  case ",${HH_FEATURES-}," in *,gpu-v3d,*) v3d=1 ;; esac
+  if [ $v3d = 1 ]; then
+    [ "$kind" = rust ] || die "gpu-v3d: only a rust: library (the V3D backend is the crate's)"
+    local m3="$src/third_party/mesa-26.2.1"
+    cinc+=(-I"$src/src/v3d" -I"$drv/src/v3d" -I"$drv/src/v3d/generated"
+           -I"$m3/src/broadcom" -I"$m3/src" -I"$m3/include")
+    cflags+=(-DYAKOGL_GPU_V3D)
+  fi
 
   {
     echo "lib=$kind:$src"; echo "driver=$drv"; echo "profile=$profile"; echo "san=$san"
@@ -121,11 +137,17 @@ build() {
       cp "$out/cargo/$pdir/$staticlib" "$out/lib/libyakogl.a"
       local cparts=("$src/src/osal/linux.c" "$drv/src/pvr_vdm_ppp_gen.c" "$drv/src/pvr_pds_render_gen.c"
                     "$drv/src/pvr_pds_pixel_event_gen.c" "${mesa_parts[@]}")
+      if [ $v3d = 1 ]; then
+        cparts=("$src/src/osal/linux.c" "$drv/src/v3d/v3d_job.c" "$drv/src/v3d/v3d_tex.c"
+                "$drv/src/v3d/v3d_tiling_mesa.c" "$drv/src/v3d/v3d_frame.c")
+      fi
       # the archive is not post-processed here (capi/assemble.cmake renames the
       # personality); the harness links no other Rust code
       [ -f "$src/capi/eh_personality.c" ] && cparts+=("$src/capi/eh_personality.c")
       cflags+=(-DYAKOGL_EH_PERSONALITY=rust_eh_personality)
-      for f in "$src/src/abi_layout_check.c" "$src/src/pvr/ffi_layout_check.c"; do
+      local guards=("$src/src/abi_layout_check.c" "$src/src/pvr/ffi_layout_check.c")
+      [ $v3d = 1 ] && guards=("$src/src/abi_layout_check.c" "$src/src/v3d/ffi_layout_check.c")
+      for f in "${guards[@]}"; do
         [ -f "$f" ] && cparts+=("$f")
       done
       local objs=()
@@ -167,12 +189,29 @@ build() {
   # set, as a board image with it does (gl_test.c GL_TEST_ES100): the
   # compiler refuses the desktop #version 450 set, and the table holds both.
   case "${HH_FEATURES-}" in *shaderc-online*) hflags+=(-DGL_TEST_ES100) ;; esac
+  # the programs: gl_test.c's host arm is the PowerVR's (its V3D arm runs on
+  # the Zephyr image only), so a V3D build has scen and hostile
+  local progs=(gltest scen hostile)
+  if [ $v3d = 1 ]; then
+    hflags+=(-DYAKOGL_GPU_V3D)
+    progs=(scen hostile)
+  fi
   : > "$out/hcc.log"
   gcc "${hflags[@]}" -Wall -c "$HERE/rec.c" -o "$out/obj/rec.o" 2>> "$out/hcc.log"
   gcc "${hflags[@]}" -Wall -c "$HERE/wrap_rt.c" -o "$out/obj/wrap_rt.o" 2>> "$out/hcc.log"
   gcc "${hflags[@]}" -w -c "$out/gen/wrap_gen.c" -o "$out/obj/wrap_gen.o" 2>> "$out/hcc.log"
   gcc -c "$out/gen/wrap_asm.S" -o "$out/obj/wrap_asm.o"
-  python3 - "$drv/tools/pvrlab/gl_test.c" "$out/gen/gl_test_host.c" <<'PY'
+  local common=("$out/obj/rec.o" "$out/obj/wrap_rt.o" "$out/obj/wrap_gen.o" "$out/obj/wrap_asm.o"
+                "$out/lib/libyakogl.a" -lm -lpthread -ldl)
+  local p
+  for p in "${progs[@]}"; do
+    gcc "${hflags[@]}" -Wall -c "$HERE/$p.c" -o "$out/obj/$p.o" 2>> "$out/hcc.log" \
+      || { tail -30 "$out/hcc.log"; die "$p.c failed"; }
+    # route the programs' gl*/egl* calls through the interposer
+    objcopy --redefine-syms="$out/gen/redefine.txt" "$out/obj/$p.o" "$out/obj/$p.w.o"
+  done
+  if [ $v3d = 0 ]; then
+    python3 - "$drv/tools/pvrlab/gl_test.c" "$out/gen/gl_test_host.c" <<'PY'
 import sys
 s = open(sys.argv[1]).read()
 # no GPU: the pixel checks cannot pass; the harness compares the read-backs
@@ -181,21 +220,12 @@ i = s.index("static bool expect_px(")
 j = s.index("return ok;", i)
 open(sys.argv[2], "w").write(s[:j] + "(void)ok; return true;" + s[j + len("return ok;"):])
 PY
-  gcc "${hflags[@]}" -w -c "$out/gen/gl_test_host.c" -o "$out/obj/gl_test_host.o" 2>> "$out/hcc.log" \
-    || { tail -30 "$out/hcc.log"; die "gl_test.c does not build against this library's headers"; }
-  local p
-  for p in gltest scen hostile; do
-    gcc "${hflags[@]}" -Wall -c "$HERE/$p.c" -o "$out/obj/$p.o" 2>> "$out/hcc.log" \
-      || { tail -30 "$out/hcc.log"; die "$p.c failed"; }
-  done
-  # route the programs' gl*/egl* calls through the interposer
-  for o in gltest gl_test_host scen hostile; do
-    objcopy --redefine-syms="$out/gen/redefine.txt" "$out/obj/$o.o" "$out/obj/$o.w.o"
-  done
-  local common=("$out/obj/rec.o" "$out/obj/wrap_rt.o" "$out/obj/wrap_gen.o" "$out/obj/wrap_asm.o"
-                "$out/lib/libyakogl.a" -lm -lpthread -ldl)
-  gcc $csan -o "$out/bin/gltest" "$out/obj/gltest.w.o" "$out/obj/gl_test_host.w.o" "${common[@]}" 2>> "$out/hcc.log" \
-    || { tail -30 "$out/hcc.log"; die "link gltest failed"; }
+    gcc "${hflags[@]}" -w -c "$out/gen/gl_test_host.c" -o "$out/obj/gl_test_host.o" 2>> "$out/hcc.log" \
+      || { tail -30 "$out/hcc.log"; die "gl_test.c does not build against this library's headers"; }
+    objcopy --redefine-syms="$out/gen/redefine.txt" "$out/obj/gl_test_host.o" "$out/obj/gl_test_host.w.o"
+    gcc $csan -o "$out/bin/gltest" "$out/obj/gltest.w.o" "$out/obj/gl_test_host.w.o" "${common[@]}" 2>> "$out/hcc.log" \
+      || { tail -30 "$out/hcc.log"; die "link gltest failed"; }
+  fi
   gcc $csan -o "$out/bin/scen" "$out/obj/scen.w.o" "${common[@]}" 2>> "$out/hcc.log" \
     || { tail -30 "$out/hcc.log"; die "link scen failed"; }
   gcc $csan -o "$out/bin/hostile" "$out/obj/hostile.w.o" "${common[@]}" 2>> "$out/hcc.log" \
@@ -210,12 +240,14 @@ PY
   echo "shaders=$shaders" >> "$out/build-info.txt"
   local small=0; [ "${HH_SIZE:-}" = small ] && small=1
   {
-    echo "gltest.all||gltest 7 0"
-    echo "gltest.all-dsdump||gltest 7 2"
-    echo "gltest.all-pretransform|HH_PRETRANSFORM=1 HH_NOCOALESCE=1|gltest 7 0"
-    for c in $(sed -n '/^static int run_case(/,/^}/p' "$out/gen/gl_test_host.c" | grep -o 'case [0-9]*:' | grep -o '[0-9]*' | sort -n); do
-      echo "gltest.$c||gltest $c 1"
-    done
+    if [ $v3d = 0 ]; then
+      echo "gltest.all||gltest 7 0"
+      echo "gltest.all-dsdump||gltest 7 2"
+      echo "gltest.all-pretransform|HH_PRETRANSFORM=1 HH_NOCOALESCE=1|gltest 7 0"
+      for c in $(sed -n '/^static int run_case(/,/^}/p' "$out/gen/gl_test_host.c" | grep -o 'case [0-9]*:' | grep -o '[0-9]*' | sort -n); do
+        echo "gltest.$c||gltest $c 1"
+      done
+    fi
     local n1=400 n2=300 n3=3000 n4=400
     [ $small = 1 ] && { n1=60; n2=60; n3=300; n4=60; }
     echo "scen.state||scen state $n1 0"

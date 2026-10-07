@@ -13,15 +13,19 @@
 #                checkout, which is verified, or the GitHub archive of that
 #                commit, which cannot be)
 #   out          work directory (default: build/glmark2-host)
-#   gpu          powervr vivante (default: both). v3d is refused: the Linux
-#                OSAL cannot run it (README.md, "GPUs").
+#   gpu          powervr vivante v3d (default: all three)
 #
 # environment:
 #   GM2_FRAMES=3     frames per scene (glmark2's nframes option)
 #   GM2_SIZE=800x600 window size (glmark2's default, and the boards')
-#   GM2_WRITE=1      write tools/shaders/glmark2/ and FINDINGS.md from the run
+#   GM2_WRITE=1      write tools/shaders/glmark2/ and FINDINGS.md (powervr,
+#                    vivante) and FINDINGS-v3d.md (v3d) from the run
 #                    (default); 0 leaves the tree alone
 #   GM2_JOBS         parallel scene runs (default: nproc)
+#   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
+#                    one not set is taken from the Pi 4's glmark2 image,
+#                    driver/samples/zephyr/glmark2/boards/rpi_4b.conf (its
+#                    CONFIG_YAKOGL_V3D_* lines: the 96 MiB carve-out)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -30,12 +34,12 @@ VERSION=2023.01 # meson.build's project version at that commit
 
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { sed -n '3,25p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,29p' "$0"; exit 2; }
 GM_ROOT="$(cd "$1" && pwd)" || die "no directory $1"
 OUT="${2:-$ROOT/build/glmark2-host}"
 shift $(( $# >= 2 ? 2 : 1 ))
 GPUS=("$@")
-[ ${#GPUS[@]} -gt 0 ] || GPUS=(powervr vivante)
+[ ${#GPUS[@]} -gt 0 ] || GPUS=(powervr vivante v3d)
 FRAMES="${GM2_FRAMES:-3}"
 SIZE="${GM2_SIZE:-800x600}"
 
@@ -55,16 +59,29 @@ else
 fi
 for g in "${GPUS[@]}"; do
   case "$g" in
-    powervr | vivante) ;;
-    v3d) die "gpu v3d: src/osal/linux.c cannot run the V3D back end (README.md, \"GPUs\")" ;;
-    *) die "unknown gpu '$g' (powervr, vivante)" ;;
+    powervr | vivante | v3d) ;;
+    *) die "unknown gpu '$g' (powervr, vivante, v3d)" ;;
   esac
 done
+
+# The V3D's settings as the Pi 4's glmark2 image has them: each
+# CONFIG_YAKOGL_V3D_<NAME> of its board file becomes YAKOGL_V3D_<NAME> for
+# src/osal/linux.c (y = 1, n = 0), unless the environment sets it already.
+# The values are listed in v3d-settings.txt.
+PI4_CONF="$ROOT/driver/samples/zephyr/glmark2/boards/rpi_4b.conf"
+[ -f "$PI4_CONF" ] || die "no $PI4_CONF"
+while IFS='=' read -r name value; do
+  name="${name#CONFIG_}"
+  case "$value" in y) value=1 ;; n) value=0 ;; esac
+  [ -n "${!name+x}" ] || export "$name=$value"
+done < <(grep -E '^CONFIG_YAKOGL_V3D_[A-Z0-9_]+=' "$PI4_CONF")
+[ -n "${YAKOGL_V3D_CARVEOUT_BYTES:-}" ] || die "$PI4_CONF sets no CONFIG_YAKOGL_V3D_CARVEOUT_BYTES"
 
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 GM="$GM_ROOT/src"
 echo "glmark2: $provenance" | tee "$OUT/provenance.txt"
+env | grep -E '^YAKOGL_V3D_' | sort > "$OUT/v3d-settings.txt" || true
 
 # ---------------------------------------------------------------------------
 # glmark2: upstream's sources, unchanged (src/meson.build's common_sources,
@@ -190,9 +207,27 @@ export OUT SIZE FRAMES
 printf '%s\n' "${jobs[@]}" | xargs -P "${GM2_JOBS:-$(nproc)}" -L1 bash -c 'run_entry $0 $1'
 echo "glmark2: runs done in $OUT/logs"
 
-if [ "${GM2_WRITE:-1}" = 1 ]; then
-  python3 -I "$HERE/report.py" "$OUT" --commit "$COMMIT" --size "$SIZE" --frames "$FRAMES" \
-    --shaders "$ROOT/tools/shaders/glmark2" --findings "$HERE/FINDINGS.md" "${GPUS[@]}"
-else
-  python3 -I "$HERE/report.py" "$OUT" --commit "$COMMIT" --size "$SIZE" --frames "$FRAMES" "${GPUS[@]}"
+# Two reports: the PowerVR and the GC7000 in FINDINGS.md (with the shader
+# corpus), the V3D in FINDINGS-v3d.md (its run models the Pi 4's carve-out,
+# which the other two do not model for their boards).
+pvr_gc=() v3d=()
+for g in "${GPUS[@]}"; do
+  if [ "$g" = v3d ]; then v3d=(v3d); else pvr_gc+=("$g"); fi
+done
+report() {
+  python3 -I "$HERE/report.py" "$OUT" --commit "$COMMIT" --size "$SIZE" --frames "$FRAMES" "$@"
+}
+if [ ${#pvr_gc[@]} -gt 0 ]; then
+  if [ "${GM2_WRITE:-1}" = 1 ]; then
+    report --shaders "$ROOT/tools/shaders/glmark2" --findings "$HERE/FINDINGS.md" "${pvr_gc[@]}"
+  else
+    report "${pvr_gc[@]}"
+  fi
+fi
+if [ ${#v3d[@]} -gt 0 ]; then
+  if [ "${GM2_WRITE:-1}" = 1 ]; then
+    report --findings "$HERE/FINDINGS-v3d.md" --settings "$OUT/v3d-settings.txt" v3d
+  else
+    report --settings "$OUT/v3d-settings.txt" v3d
+  fi
 fi
