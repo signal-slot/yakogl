@@ -9,6 +9,12 @@ are at
 `tools/cts/pi4-deqp-images.sh`: `D rc=0`, conformance verdict passed, the
 test image was then deleted. No board was touched; nothing was flashed.
 
+All paths below are on the farm worker `Lepton-local` (64 cores, deps
+cache `/home/tasuku/.local/share/ccfarm-local/deps`), where this stage 1
+was built. Other workers do not have it; on `system76` the deps cache has
+no `deqp-stage1-rpi_4b/work` and its Zephyr SDK has no aarch64 toolchain
+(`zephyr-sdk-1.0.1/gnu/` is empty).
+
 ## Inputs, at their pinned revisions
 
 | input | revision | pinned by |
