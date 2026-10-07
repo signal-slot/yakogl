@@ -40,7 +40,8 @@ FRAMES="${GM2_FRAMES:-3}"
 SIZE="${GM2_SIZE:-800x600}"
 
 [ -f "$GM_ROOT/src/default-benchmarks.h" ] || die "$GM_ROOT is not a glmark2 tree (no src/default-benchmarks.h)"
-if git -C "$GM_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+# a git checkout of its own (not a directory inside another tree)
+if [ "$(git -C "$GM_ROOT" rev-parse --show-toplevel 2>/dev/null)" = "$GM_ROOT" ]; then
   head=$(git -C "$GM_ROOT" rev-parse HEAD)
   dirty=$(git -C "$GM_ROOT" status --porcelain --untracked-files=no)
   [ "$head" = "$COMMIT" ] && [ -z "$dirty" ] ||
@@ -146,11 +147,19 @@ gcc -O1 -g -Wall -std=gnu11 -I"$ROOT/include" -I"$HERE" -c "$HERE/shim.c" -o "$G
 # scene's once-per-process lines, e.g. the incomplete-texture warning, are
 # its own).
 # ---------------------------------------------------------------------------
+# capi/yakogl_capi.cmake takes the rustc next to cargo: the first cargo on
+# PATH that has one (a wrapper such as a build cache's shim may not)
+CARGO_BIN=""
+IFS=: read -r -a path_dirs <<< "$PATH"
+for d in "${path_dirs[@]}"; do
+  if [ -x "$d/cargo" ] && [ -x "$d/rustc" ]; then CARGO_BIN="$d/cargo"; break; fi
+done
+[ -n "$CARGO_BIN" ] || die "no cargo on PATH with a rustc next to it (capi/yakogl_capi.cmake needs one)"
 for g in "${GPUS[@]}"; do
   B="$OUT/lib-$g"
-  echo "glmark2: libyakogl.a for $g"
+  echo "glmark2: libyakogl.a for $g ($CARGO_BIN)"
   cmake -S "$ROOT" -B "$B" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$g" -DYAKOGL_SHADERC=online \
-    -DYAKOGL_REPORT_ES2=ON -DYAKOGL_CARGO_PROFILE=release > "$B.cmake.log" 2>&1 ||
+    -DYAKOGL_REPORT_ES2=ON -DYAKOGL_CARGO_PROFILE=release -DYAKOGL_CARGO="$CARGO_BIN" > "$B.cmake.log" 2>&1 ||
     { tail -20 "$B.cmake.log"; die "cmake ($g) failed"; }
   cmake --build "$B" --target yakogl_archive -j "$(nproc)" >> "$B.cmake.log" 2>&1 ||
     { tail -30 "$B.cmake.log"; die "building libyakogl.a ($g) failed"; }
