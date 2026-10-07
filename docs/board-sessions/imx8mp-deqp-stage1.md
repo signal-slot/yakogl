@@ -1,47 +1,68 @@
-# imx8mp-deqp-stage1b: i.MX8MP dEQP stage 1 (BLOCKED at the stage 1 command, nothing built)
+# imx8mp-deqp-stage1b: i.MX8MP dEQP stage 1 and the two-row mini-table image
 
-Date: 2026-10-08. Result: no stage 1 and no mini-table image yet. The stage 1
-command was refused, so there is no CTS revision, rc, time, disk use or image
-check output. No board was touched and nothing was run over ssh.
+Date: 2026-10-08, worker system76, yakogl `14d6c177` (integration tip). Result:
+stage 1 built (rc=0) and the two-row mini-table image built with
+`imx8mp-deqp-build.sh --table` (rc=0, image check passed). No board was touched
+and nothing was run over ssh.
 
-## State (worker system76)
+## Inputs (`D` = `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`)
 
-`D` = `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`.
+| Variable | Value |
+|---|---|
+| `ZEPHYR_WORKSPACE` (= `ZEPHYR_WS`) | `D/zephyr-ws`, zephyr `af17c0c8aa2a82a0b714a423915ad3610063ee68` (`west list`: fatfs `f4ead3bf`, hal_nxp `1e91007b`, hal_ti `d9d5b1c9`, picolibc `01254932`) |
+| `ZEPHYR_VENV` (= `WEST_VENV`) | `D/zephyr-ws/.venv` (west 1.5.0, requirements-base satisfied) |
+| `ZEPHYR_SDK_INSTALL_DIR` | `D/zephyr-sdk-1.0.1` (gcc 14.3.0 aarch64-zephyr-elf) |
+| `HAL_NXP_DIR` | `D/zephyr-ws/modules/hal/nxp` (from `west update`; not needed beyond the workspace) |
+| `DEQP_STAGE1` | `D/deqp-stage1-imx8mp` |
+| `IMX8MP_OUT` | `D/imx8mp-out` |
+| CTS revision | VK-GL-CTS `93bca01861b0e3ef3c387027a9791e6d065f900c` (`DEQP_STAGE1/cts` is a `--shared` clone of `D/VK-GL-CTS`) |
 
-- Workspace `D/zephyr-ws` (`ZEPHYR_WORKSPACE`, venv `D/zephyr-ws/.venv` =
-  `ZEPHYR_VENV`): `west update` done; `west list`: zephyr
-  `af17c0c8aa2a82a0b714a423915ad3610063ee68`, fatfs `f4ead3bf`, hal_nxp
-  `1e91007b` (`D/zephyr-ws/modules/hal/nxp` = `HAL_NXP_DIR`), hal_ti
-  `d9d5b1c9`, picolibc `01254932`. No zephyr-lang-rust project is listed.
-  `pip install -r zephyr/scripts/requirements-base.txt`: all satisfied
-  (west 1.5.0, Python 3.14).
-- SDK: `D/zephyr-sdk-1.0.1` exists (`sdk_version`, `gnu/aarch64-zephyr-elf`);
-  it was installed by someone else during my session.
-- `D/deqp-stage1-imx8mp` (`DEQP_STAGE1`) and `D/imx8mp-out` (`IMX8MP_OUT`) do
-  not exist yet.
+## Commands and results
 
-## Refused commands
+Two things the scripts did not do by themselves on this worker:
 
-```
-ZEPHYR_WORKSPACE=D/zephyr-ws ZEPHYR_VENV=D/zephyr-ws/.venv ZEPHYR_SDK_INSTALL_DIR=D/zephyr-sdk-1.0.1 IMX8MP_OUT=D/imx8mp-out DEQP_STAGE1=D/deqp-stage1-imx8mp tools/cts/imx8mp-deqp-stage1.sh
-```
-
-(with `D` written out as the full path; "This command requires approval"), also
-refused wrapped in `bash -c 'time ...'` with `HAL_NXP_DIR` and
-`RUSTUP_TOOLCHAIN=nightly` added. Stopped there.
-
-## Commands to run once permitted
+- `cts-build-zephyr.sh` reads `ZEPHYR_SDK` (default
+  `~/org/zephyrproject/zephyr-sdk-1.0.1`), not `ZEPHYR_SDK_INSTALL_DIR`; the
+  first run failed with "CMAKE_C_COMPILER is not a full path to an existing
+  compiler tool". Fix: export `ZEPHYR_SDK` too.
+- The libpng NEON file failed with `arm_neon.h: lane index must be a constant
+  immediate`: the toolchain file passes no `-O` (`CMAKE_C_FLAGS_RELEASE` is
+  empty), so the code is built at -O0. Fix without a repo change: `CFLAGS=-O2
+  CXXFLAGS=-O2` in the environment, and a fresh `DEQP_STAGE1/build`. Whether
+  the nuc builds carry an `-O` from elsewhere is not known; a permanent fix
+  would be an `-O2` in `cts-build-zephyr.sh`'s toolchain file (not done: out of
+  this item).
 
 ```sh
 D=/home/tasuku/.local/share/ccfarm/deps/yakogl
-export ZEPHYR_WORKSPACE=$D/zephyr-ws ZEPHYR_VENV=$D/zephyr-ws/.venv
-export ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1
-export IMX8MP_OUT=$D/imx8mp-out DEQP_STAGE1=$D/deqp-stage1-imx8mp
-export HAL_NXP_DIR=$D/zephyr-ws/modules/hal/nxp
-time tools/cts/imx8mp-deqp-stage1.sh        # about 1.9 GB; log $IMX8MP_OUT/deqp-stage1.log
-
+export CFLAGS=-O2 CXXFLAGS=-O2 ZEPHYR_WORKSPACE=$D/zephyr-ws ZEPHYR_VENV=$D/zephyr-ws/.venv
+export ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1 ZEPHYR_SDK=$D/zephyr-sdk-1.0.1
+export IMX8MP_OUT=$D/imx8mp-out DEQP_STAGE1=$D/deqp-stage1-imx8mp HAL_NXP_DIR=$D/zephyr-ws/modules/hal/nxp
+time tools/cts/imx8mp-deqp-stage1.sh        # rc=0, real 7m30s (user 22m40s); log $IMX8MP_OUT/deqp-stage1.log
+                                            # (an earlier part of the ninja build had run before: 417 steps in total)
 TBL=$IMX8MP_OUT/mini-table.txt
 grep -vE '^[[:space:]]*(#|$)' tools/cts/imx8mp-full-tree.txt | sed -n '3p;22p' > $TBL
-RUSTUP_TOOLCHAIN=nightly tools/cts/imx8mp-deqp-build.sh mini 'dEQP-GLES2.info.*' --table $TBL
-du -sh $DEQP_STAGE1 $IMX8MP_OUT
+RUSTUP_TOOLCHAIN=nightly time tools/cts/imx8mp-deqp-build.sh mini 'dEQP-GLES2.info.*' --table $TBL
 ```
+
+Mini table (row 1: the shaders tail incl. `shaders.fragdata.*`; row 2:
+`dEQP-GLES2.functional.fbo.*`).
+
+Image build output (`real 0m53s`):
+
+```
+imx8mp: 2 table rows -> /home/tasuku/.local/share/ccfarm/deps/yakogl/imx8mp-out/mini.table.conf
+rc=0
+CONFIG_DEQP_REPORT_ES2=y
+check-deqp-images: the dEQP image recipes build what conformance needs
+```
+
+Image: `IMX8MP_OUT/mini/zephyr/zephyr.bin`, 10,006,504 bytes.
+
+## Disk use
+
+`DEQP_STAGE1` 2.0 GB; `IMX8MP_OUT` 276 MB (stage 1 log, mini image).
+
+## Not done
+
+The image was not run (no board). The stage 1 is for this CTS revision only.
