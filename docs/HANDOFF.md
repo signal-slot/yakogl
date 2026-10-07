@@ -202,9 +202,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    Done: that reflection was written once per variant row. Every row carried its
    own `ShcShader` -- varyings, uniforms, attribute map, blocks -- although all
    the variants of one source share one reflection, so the same 176 sources'
-   reflection appeared about 10.7 times. The table stores it per source now: a
-   `ShcPrecompiledRow` points at a `ShcPrecompiledReflection`, and the generator
-   refuses a source whose rows disagree on a field the source owns. Measured on
+   reflection appeared about 10.7 times. The table stores it once per compile
+   (the next Done corrects what "per source" missed): a `ShcPrecompiledRow`
+   points at a `ShcPrecompiledReflection`, and the generator refuses a compile
+   whose rows disagree on a field stored once. Measured on
    the host, same list and same compiler, the old emitter against the new:
    `gl_test_es100` is 1888 rows of 176 sources and 10,798,308 -> 8,600,409 bytes
    of table (-2,197,899, -20.4%) with its 1,447,864 instruction words unchanged,
@@ -220,6 +221,27 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    compiler that serves any shader, against 2,173,648 bytes of flash for a
    table that serves one app and grows with it -- and the answer is the same
    one the first measurement gave: the default stays off.
+   Done: the reflection is stored once per compile, not per source -- the split
+   above was wrong for a vertex shader whose compile defers its attribute layout
+   to the link. Every back end that defers sets the same flag: the GC7000 and
+   the V3D at more than 16 attribute locations, the PowerVR when its 64
+   vertex-input registers run out (`deferred_vertex`). The deferred record is a
+   stub -- no code, no attribute list, the sentinel offsets
+   `meta_off = SHC_NO_META` and `vs_psize_off = SHC_NO_PSIZE` -- while the
+   record the link's map produces in its place has all of them, so the two are
+   not variants of one compile and cannot share a reflection. Both exist at
+   runtime: `src/gl/program.rs` reads `attribs`, `declared` and `layout_at_link`
+   per shader, and `shaderc::precompiled` serves both compiles from the table
+   (`compile` takes the stub row, `compile_vs_linked` the laid-out one). So the
+   three fields moved to `ShcPrecompiledRow`, and a reflection is named for its
+   compile -- `S_<sha256>_<VS|FS>`, plus `_DEFERRED` when the layout was left to
+   the link. The generator now refuses two variants of one compile that disagree
+   on a field stored once, naming every field it sees, and its own tests cover
+   the deferred case (the PowerVR deferral has no reproducer from attribute
+   locations alone: 17 attributes fit its 64 registers, and 17 mat4 attributes
+   exceed the front end's 32-location cap, so it is reached only under register
+   pressure). The real corpus is unchanged: powervr 1888 rows of 176 reflections,
+   gc7000 111 rows of 110, and neither has a deferred row.
    Open: an image that turns the tier on must name its apps. With the tier on
    and `YAKOGL_PRECOMPILED_APPS` empty the build stops (CMakeLists.txt,
    zephyr/CMakeLists.txt) instead of linking the whole list -- 14,154,000 bytes

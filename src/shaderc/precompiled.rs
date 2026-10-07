@@ -42,6 +42,8 @@ use crate::shaderc::ShcShader;
 #[cfg(all(feature = "precompiled-shaders", feature = "gpu-vivante"))]
 #[allow(unused_imports)]
 use crate::shaderc::{pad_io, ShcViv, ShcVivIo, SHC_VIV_MAX_IO};
+/* The table is a submodule of this one, and its own import list reads these
+ * names through `super`, so they are held here for it as well as for us. */
 #[cfg(feature = "precompiled-shaders")]
 #[allow(unused_imports)]
 use crate::shaderc::{
@@ -191,7 +193,7 @@ fn mark_once() {
     }
 }
 
-/// The shader a row is: its variant and its source's reflection, joined. The
+/// The shader a row is: its variant and its compile's reflection, joined. The
 /// only place a table's two halves become a [`ShcShader`], so the answer a
 /// look-up hands out and the test that compares a row against what the
 /// compiler makes of the same source read the same fields.
@@ -207,12 +209,13 @@ pub fn materialize(row: &ShcPrecompiledRow) -> ShcShader {
             v.as_ptr()
         }
     }
-    /* the source's own lists into the shader's fixed arrays: the generator
-     * refuses a source with more entries than an array, so the copy is exact */
+    /* the source's lists and the row's attribute layout into the shader's
+     * fixed arrays: the generator refuses a row with more entries than an
+     * array, so the copy is exact */
     let mut varyings = [ShcVarying::ZERO; 16];
     varyings[..r.varyings.len()].copy_from_slice(r.varyings);
     let mut attribs = [ShcAttrib::ZERO; 16];
-    attribs[..r.attribs.len()].copy_from_slice(r.attribs);
+    attribs[..row.attribs.len()].copy_from_slice(row.attribs);
     ShcShader {
         usc: ptr(row.usc),
         usc_dw: row.usc.len() as u32,
@@ -228,7 +231,7 @@ pub fn materialize(row: &ShcPrecompiledRow) -> ShcShader {
         num_tile_buffers: r.num_tile_buffers,
         tile_buffer_sh: r.tile_buffer_sh,
         attribs,
-        num_attribs: r.attribs.len() as u8,
+        num_attribs: row.attribs.len() as u8,
         vs_output_size: r.vs_output_size,
         vs_psize_off: r.vs_psize_off,
         vs_vertex_id_reg1: r.vs_vertex_id_reg1,
@@ -244,9 +247,9 @@ pub fn materialize(row: &ShcPrecompiledRow) -> ShcShader {
         uses_z: r.uses_z,
         fragcoord_ytf_off1: r.fragcoord_ytf_off1,
         native_cube: r.native_cube,
-        layout_at_link: r.layout_at_link,
-        declared: ptr(r.declared),
-        num_declared: r.declared.len() as u8,
+        layout_at_link: row.layout_at_link,
+        declared: ptr(row.declared),
+        num_declared: row.declared.len() as u8,
         /* no `v3d` field to name: a table and the V3D together is refused at
          * the top of this file */
         #[cfg(feature = "gpu-vivante")]
@@ -786,37 +789,49 @@ mod tests {
         crate::shaderc::release_shader(&sh);
     }
 
-    /// What the table is for, stated as a fact it must keep: a source's rows
-    /// all read one reflection, and no two sources read the same one. The
-    /// generator refuses a source whose rows disagree on a field stored here
-    /// once, and this is the same rule from the image's side: the reflection
-    /// is held per source, so a source with a hundred variants pays for its
-    /// varyings and attributes once.
+    /// What the table is for, stated as a fact it must keep: a compile's rows
+    /// all read one reflection, and no two compiles read the same one. A
+    /// compile is a source, its stage, and whether it left its attribute layout
+    /// to the link -- the same key the generator groups reflections by -- so a
+    /// source holds one reflection, or two when its vertex shader is compiled
+    /// both deferred and with the link's map. The generator refuses a compile
+    /// whose rows disagree on a field stored here once, and this is the same
+    /// rule from the image's side: the reflection is held per compile, so a
+    /// source with a hundred variants pays for its varyings and attributes once.
     #[test]
     #[cfg(feature = "precompiled-shaders")]
-    fn a_source_has_one_reflection_and_no_two_sources_share_one() {
+    fn a_compile_has_one_reflection_and_no_two_compiles_share_one() {
         let rows = &table::SHC_PRECOMPILED_TABLE;
-        let mut of = vec![core::ptr::null(); table::SHC_PRECOMPILED_SOURCES.len()];
-        for (i, r) in rows.iter().enumerate() {
-            let held = &mut of[usize::from(r.source)];
-            if *held == r.reflection {
-                continue;
-            }
+        /* (source, stage, deferred) -> the reflection it reads: the generator's key */
+        let mut seen: Vec<(u16, u32, u8, usize)> =
+            rows.iter().map(|r| (r.source, r.stage, r.layout_at_link, r.reflection as *const _ as usize)).collect();
+        seen.sort();
+        for w in seen.windows(2) {
+            let same_compile = w[0].0 == w[1].0 && w[0].1 == w[1].1 && w[0].2 == w[1].2;
             assert!(
-                held.is_null(),
-                "row {i}: source {} has rows that read different reflections",
-                table::SHC_PRECOMPILED_SOURCES[usize::from(r.source)].name
+                !same_compile || w[0].3 == w[1].3,
+                "source {} has rows of one compile that read different reflections",
+                table::SHC_PRECOMPILED_SOURCES[usize::from(w[0].0)].name
             );
-            *held = r.reflection;
         }
-        let held: Vec<*const ShcPrecompiledReflection> = of.iter().copied().filter(|p| !p.is_null()).collect();
-        assert_eq!(held.len(), of.len(), "a source of the list has no row");
-        let mut distinct = held.clone();
-        distinct.sort();
-        distinct.dedup();
-        assert_eq!(distinct.len(), held.len(), "two sources share one reflection");
-        let variants = rows.len() - held.len();
-        assert!(variants > 0, "the table has a source with more than one row to share a reflection");
+        let mut by_reflection = seen.clone();
+        by_reflection.sort_by_key(|k| k.3);
+        for w in by_reflection.windows(2) {
+            let same_reflection = w[0].3 == w[1].3;
+            assert!(
+                !same_reflection || (w[0].0 == w[1].0 && w[0].1 == w[1].1 && w[0].2 == w[1].2),
+                "two compiles read one reflection"
+            );
+        }
+        let mut sources: Vec<u16> = seen.iter().map(|k| k.0).collect();
+        sources.sort();
+        sources.dedup();
+        assert_eq!(sources.len(), table::SHC_PRECOMPILED_SOURCES.len(), "a source of the list has no row");
+        let mut compiles: Vec<(u16, u32, u8)> = seen.iter().map(|k| (k.0, k.1, k.2)).collect();
+        compiles.sort();
+        compiles.dedup();
+        let variants = rows.len() - compiles.len();
+        assert!(variants > 0, "the table has a compile with more than one row to share a reflection");
     }
 
     /// Every program the table recorded, replayed in the GL core's order --

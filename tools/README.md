@@ -110,10 +110,14 @@ The GPU is a feature, exactly one (`gpu-powervr`, `gpu-vivante`), and
 the compiler's cache finds a row by (the source's SHA-256 chained with the zeroed
 varyings, the attribute map and the facts), the source as an index into
 `SHC_PRECOMPILED_SOURCES`, and the facts (`w_constant`, the sampler-state key, the
-attribute map). What a row does not repeat is its source's reflection -- varyings,
-attribs, uniforms, declared bindings, uniform blocks -- which one
-`ShcPrecompiledReflection` per source holds, because no variant of a source changes
-it; a source whose rows disagree on one of those fields is a refusal. The printers
+attribute map). What a row does not repeat is its compile's reflection -- varyings,
+uniforms, uniform blocks, and the facts the compiler derived from the source --
+which one `ShcPrecompiledReflection` per compile holds. A compile is a source, its
+stage, and whether it left its attribute layout to the link; no variant of one
+changes those fields. The attribute layout itself is per row, because a vertex
+shader that defers its layout is compiled twice -- once with no layout, once with
+the link's map -- and the two records differ exactly there. A compile whose rows
+disagree on a field stored once is a refusal, naming every field it sees. The printers
 and the idiom are shared with `yakogl-tools`' `emit.rs` (`shc_print.rs`, the
 `ShcBlob` table of the Mesa reference and of `internal.rs`), whose rows keep the
 whole reflection in their shader. Its
