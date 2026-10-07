@@ -2366,15 +2366,15 @@ fn nine_to_sixteen_vertex_samplers_take_the_slots_after_the_fragment_ones() {
         for vs in 9..=16usize {
             let mut d = rig.draw(3);
             d.num_textures = fs as u8;
-            for k in 0..fs {
-                d.textures[k] = bind(rig.vbo.gpu, 4, 4, 1);
-                d.textures[k].unit = k as u8;
+            for (k, t) in d.textures.iter_mut().enumerate().take(fs) {
+                *t = bind(rig.vbo.gpu, 4, 4, 1);
+                t.unit = k as u8;
             }
             d.num_vs_textures = vs as u8;
-            for k in 0..vs {
+            for (k, t) in d.vs_textures.iter_mut().enumerate().take(vs) {
                 /* width k + 1: sampler k's descriptor is recognisable */
-                d.vs_textures[k] = bind(rig.vbo.gpu + 0x400 * k as u64, k as u32 + 1, 2, 1);
-                d.vs_textures[k].unit = k as u8;
+                *t = bind(rig.vbo.gpu + 0x400 * k as u64, k as u32 + 1, 2, 1);
+                t.unit = k as u8;
             }
             let s = rig.submit(&d);
             let what = std::format!("{fs} fragment + {vs} vertex samplers");
