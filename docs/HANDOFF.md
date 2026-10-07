@@ -182,16 +182,21 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    image cannot do is pick a mip-free or a switch-at-N variant.
    Step 6 (the default turns on) was measured, and the measurement reversed it:
    the default stays off. The AM62P gl_test image (verdin_am62p,
-   aarch64-unknown-none, release), built four ways on 2026-10-07: 2,427,152
-   bytes with the tier off (13 s), 7,309,584 with `gl_test_es100`'s rows in
-   front of the compiler (66 s), 6,424,520 with those rows and no compiler at
-   all (47 s), 14,154,000 with the whole list (44 s). `size -A` says where the
-   bytes are. The compiler is 712,704 of .text and 171,497 of .rodata -- 884,201
-   of flash -- and 5,244,035 of .bss, the scratch and keep regions
-   `YAKOGL_SHADERC_SCRATCH_BYTES` lends it. The table is 4,881,999 of .rodata
-   for one app's 176 sources: 1,447,864 instruction words, 274,923 the GLSL text
-   the table keeps for compiler-less targets, and 3,159,212 -- about 1.67 KB per
-   row over 1888 rows -- reflection.
+   aarch64-unknown-none, release), built four ways on 2026-10-07 by
+   `tools/precompile/measure-image.sh`, which also reads each arm's `size -A`
+   and refuses an arm whose built `zephyr/.config` is not the arm it names:
+   2,427,152 bytes with the tier off (11 s), 4,602,128 with `gl_test_es100`'s
+   rows in front of the compiler (52 s), 3,717,064 with those rows and no
+   compiler at all (28 s), 5,953,808 with every app the list names (74 s).
+   The compiler is 712,704 of .text and 171,497 of .rodata -- 884,201 of flash
+   -- and 5,244,035 of .bss, the scratch and keep regions
+   `YAKOGL_SHADERC_SCRATCH_BYTES` lends it; the compiler-less arm gives back
+   exactly those three numbers. The table for that one app's 176 sources is
+   2,173,648 of .rodata and 5 of .bss, of which 1,447,864 are instruction
+   words: 2.5x the compiler's flash, for one app, and it grows with the app's
+   shader set while the compiler does not. So the tier is not what every image
+   should pay -- it is what an image pays when it wants no compiler, and there
+   the trade is 1,289,912 bytes of flash for 5,244,035 bytes of RAM.
    Done: that reflection was written once per variant row. Every row carried its
    own `ShcShader` -- varyings, uniforms, attribute map, blocks -- although all
    the variants of one source share one reflection, so the same 176 sources'
@@ -203,20 +208,33 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    of table (-2,197,899, -20.4%) with its 1,447,864 instruction words unchanged,
    so the whole saving is reflection; the powervr whole list is 3346 rows of 613
    sources and 27,440,696 -> 21,455,420 bytes (-21.8%).
-   Open: the board's number. The 4,881,999 bytes of .rodata above was the old
-   layout, so the AM62P image has to be built with this table and `size -A` read
-   again before step 6 can be decided. What step 6 turns on is a comparison:
-   884,201 bytes of flash and 5,244,035 of RAM for a compiler that serves any
-   shader, against a table that serves only the apps it names and grows with
-   them. Until that is measured on the board the tier is what an image chooses
-   when it wants no compiler, not what every image pays.
+   Done: the board's number for the new table, which is what step 6 waited for.
+   The same image and the same list, measured above: that app's rows are
+   2,173,648 bytes of .rodata and 2,174,976 bytes of image where the per-row
+   layout cost 4,881,999 and 4,882,432 (-55% both ways). The image moves more
+   than the table's own source does (-20.4%) because the instruction words,
+   which did not change, are verbose as Rust source and compact as data. Both sides of the comparison step 6 turns on are now
+   measured on the board -- 884,201 bytes of flash and 5,244,035 of RAM for a
+   compiler that serves any shader, against 2,173,648 bytes of flash for a
+   table that serves one app and grows with it -- and the answer is the same
+   one the first measurement gave: the default stays off.
    Open: an image that turns the tier on must name its apps. With the tier on
    and `YAKOGL_PRECOMPILED_APPS` empty the build stops (CMakeLists.txt,
    zephyr/CMakeLists.txt) instead of linking the whole list -- 14,154,000 bytes
-   against 2,427,152 -- which is every shader this repository lists, Qt's and
-   Qt3D's and the test suite's among them, for an image that runs one app.
+   against 2,427,152, measured 2026-10-07 with the per-row layout, through the
+   empty value the build now refuses -- which is every shader this repository
+   lists, Qt's and Qt3D's and the test suite's among them, for an image that
+   runs one app.
    `yakogl-precompile` with no `--app` still means the whole list, and that is
    what the table generators and the gate's tier rows use.
+   Fact, from the arm that names every app: 407 of the source list's 613
+   sources belong to no app. An `app` line claims the `pair` lines after it
+   (tools/shaders/precompiled.list), so the list's `src`-only sources -- the
+   PowerVR table's inputs, in the table's row order -- reach an image only
+   through the whole list, which the build refuses for an image that names
+   nothing. Naming every app the list has is 2389 rows of 206 sources
+   (5,953,808 bytes on this image), not the list's 3346 rows of 613, so the
+   apps arm is the largest table a build can be told to carry.
    Open: three kinds of shader no table can serve. gl_triangle
    (`driver/samples/zephyr/gl_triangle/src/main.c:71`) and gc_gl_triangle
    (`.../gc_gl_triangle/src/main.c:170`) write their GLSL as C literals in the
@@ -224,8 +242,8 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    app for them and a compiler-less image cannot draw them. glmark2 and dEQP
    take their shaders from outside this repository, so no list names them
    either. Those images need the compiler.
-   Remaining steps: 6 the default turns on, after the AM62P image is measured
-   again with the per-source reflection (the numbers above); 7 rename to "precompiled shaders" and
+   Remaining steps: 6 measured and decided -- the default stays off (the board
+   numbers above); 7 rename to "precompiled shaders" and
    "shader compiler" (features `precompiled-shaders` and `shader-compiler` for
    `shaderc-online` and `shaderc-offline`; Kconfig symbols, the C ABI, log
    prefixes); 8 the source moves from `src/shaderc/online` to

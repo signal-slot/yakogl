@@ -422,20 +422,25 @@ config YAKOGL_PRECOMPILED_SHADERS
 	bool "precompiled shaders in front of the compiler"
 	depends on (YAKOGL_SHADERC_ONLINE || YAKOGL_SHADERC_PRECOMPILED_ONLY) && !YAKOGL_GPU_V3D
 	help
-	  Off by default, measured 2026-10-07 rather than assumed: the table was
-	  4,881,999 bytes of .rodata for one app (gl_test_es100, 176 sources,
-	  1888 rows) on the AM62P gl_test image, where the in-process compiler it
-	  sits in front of is 712,704 bytes of .text and 171,497 of .rodata -- 5.5x
-	  the compiler's flash for one app's shaders, and it grows with the app's
-	  shader set while the compiler does not. What made it dear was not its code
-	  (1,447,864 of those bytes) but its reflection: about 1.67 KB per row, the
-	  same source's reflection written once per variant. That is fixed -- a row
-	  now points at its source's one reflection -- and the same list through the
-	  same compiler emits 8,600,409 bytes of table where it emitted 10,798,308
-	  (-20.4%), and 21,455,420 where it emitted 27,440,696 for the whole list
-	  (-21.8%). The image's own number for the new table is what the default
-	  waits for (docs/HANDOFF.md, open work item 1;
-	  tools/precompile/measure-image.sh measures it).
+	  Off by default, measured 2026-10-07 rather than assumed, on the AM62P
+	  gl_test image with the per-source reflection below already in it: the table
+	  costs that image 2,173,648 bytes of .rodata for one app (gl_test_es100, 176
+	  sources, 1888 rows), where the in-process compiler it would sit in front of
+	  is 712,704 bytes of .text and 171,497 of .rodata -- 884,201 of flash. The
+	  table is 2.5x the compiler's flash for one app's shaders, and it grows with
+	  the app's shader set while the compiler does not, so the default stays off.
+	  What made the older table dear was not its code -- 1,447,864 of those
+	  bytes are instruction words, and they did not change -- but its
+	  reflection: about 1.67 KB per row, the same source's reflection written
+	  once per variant. That is fixed -- a row now points at its source's one
+	  reflection -- and it cut that app's table from 4,881,999 bytes of .rodata
+	  to 2,173,648 (-55%); the same list through the same compiler emits
+	  8,600,409 bytes of table where it emitted 10,798,308 (-20.4%), and
+	  21,455,420 where it emitted 27,440,696 for the whole list (-21.8%). The
+	  image moves more than the table's own source does because the instruction
+	  words, which did not change, are verbose as Rust source and compact as
+	  data. tools/precompile/measure-image.sh builds the arms and prints their
+	  `size -A` (docs/HANDOFF.md, open work item 1, keeps the numbers).
 
 	  With the in-process compiler (YAKOGL_SHADERC_ONLINE):
 	  compile the source list (tools/shaders/precompiled.list, or
@@ -456,19 +461,21 @@ config YAKOGL_PRECOMPILED_SHADERS
 	  names the apps it runs (YAKOGL_PRECOMPILED_APPS); with the tier on and
 	  nothing named the build stops rather than carrying everything. Measured
 	  on this tree, 2026-10-07, on the AM62P gl_test image (verdin_am62p,
-	  aarch64-unknown-none, release) with the reflection still written per row:
-	  zephyr.bin is 2,427,152 bytes with the
-	  tier off, 7,309,584 with gl_test_es100's rows in front of the compiler,
-	  6,424,520 with those rows and no compiler at all
-	  (YAKOGL_SHADERC_PRECOMPILED_ONLY), and 14,154,000 with the whole list.
-	  The compiler-less image gives back 5,244,035 bytes of .bss -- the scratch
-	  and keep regions YAKOGL_SHADERC_SCRATCH_BYTES lends the compiler -- so
-	  the compiler costs RAM as well as flash, and that is the side of it the
-	  table has to beat. The whole list is 3346 rows and 4,044,672 code bytes
+	  aarch64-unknown-none, release) with the per-source reflection: zephyr.bin
+	  is 2,427,152 bytes with the tier off, 4,602,128 with gl_test_es100's rows
+	  in front of the compiler, 3,717,064 with those rows and no compiler at all
+	  (YAKOGL_SHADERC_PRECOMPILED_ONLY), and 5,953,808 with every app the list
+	  names. The compiler-less image gives back 5,244,035 bytes of .bss -- the
+	  scratch and keep regions YAKOGL_SHADERC_SCRATCH_BYTES lends the compiler
+	  -- and 884,201 of flash, so it pays 1,289,912 bytes of flash to give back
+	  5,244,035 bytes of RAM: the tier is the choice of an image short of RAM,
+	  not of every image. The whole list is 3346 rows and 4,044,672 code bytes
 	  (595 rows and 741,968 on the GC7000), and it is every shader this
 	  repository lists -- Qt's and Qt3D's and the test suite's among them -- so
-	  an image that runs one app and names nothing carries the others' bytes
-	  for nothing.
+	  an image that runs one app and names nothing carries the others' bytes for
+	  nothing. Naming every app the list has is not the whole list either: an
+	  app claims the `pair` lines after it, so 206 of the list's 613 sources are
+	  in it and 407 belong to no app.
 
 	  Sources the compiler refuses are left out and named
 	  (tools/shaders/known-uncompilable.txt): 104 of the whole list on the
@@ -487,10 +494,14 @@ config YAKOGL_PRECOMPILED_APPS
 
 	  Empty is a build error, not the whole list: the whole list is 14,154,000
 	  bytes on the AM62P gl_test image against 2,427,152 with the tier off
-	  (YAKOGL_PRECOMPILED_SHADERS above), and an image that runs one app has
-	  no use for the rest. Name every app the image runs. The whole list stays
-	  what yakogl-precompile itself does with no --app, which is what the table
-	  generators and the gate's tier rows use.
+	  (YAKOGL_PRECOMPILED_SHADERS above -- that image was built before this guard
+	  existed, and with the reflection still written per row), and an image that
+	  runs one app has no use for the rest. Name every app the image runs: all
+	  three the list has is 5,953,808 bytes on that image, and it is not the
+	  whole list -- an app claims the `pair` lines after it, so 407 of the list's
+	  613 sources belong to no app. The whole list stays what yakogl-precompile
+	  itself does with no --app, which is what the table generators and the
+	  gate's tier rows use.
 
 config YAKOGL_PRECOMPILED_LIST
 	string "the source list (empty: tools/shaders/precompiled.list)"
