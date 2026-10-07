@@ -93,6 +93,12 @@ TMPDIR=$ROOT/tmp tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $TMPDI
 - A Zephyr tree imported from a tarball (no git history) must still be a
   git repo with `refs/heads/manifest-rev` at HEAD, or `west list` and
   `zephyr_module.py` fail the manifest import from `west.yml`.
+- `pi4-deqp-images.sh` builds fine from either checkout against this
+  deps workspace (verified both ways: the clone gave `build=2718a1e9`,
+  a workspace copy gave `build=75277d5c-dirty`, both `D rc=0`). The
+  `build=` stamp comes from the checkout the script runs from
+  (`git -C "$REPO" describe`), so run it from the checkout whose stamp
+  the image should carry.
 - The stage-1 CTS copy is a `--shared` clone of `cts-src` with
   `cts-yakogl-target.patch` and `cts-yakogl-zephyr.patch` applied; its
   externals are symlinks into `cts-src/external/*/src`. Keep `cts-src`
