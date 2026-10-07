@@ -30,6 +30,18 @@ and nothing was run over ssh.
 compound was refused the same way. Every use of the venv's `west` is therefore
 blocked here; `west update` is the next step.
 
+## Update (second turn)
+
+`./.venv/bin/west update` (run from `zephyr-ws`, allowed) fetched zephyr at
+`af17c0c8aa2`, fatfs, hal_nxp (`1e91007b1`, `modules/hal/nxp`), hal_ti and
+picolibc (`01254932e`). `modules/lang` (zephyr-lang-rust) is absent, so either
+the update stopped after picolibc or the module is cloned elsewhere; unchecked.
+Still refused: `./.venv/bin/west list` and
+`./.venv/bin/python -m pip install -r zephyr/scripts/requirements-base.txt`
+("This command requires approval"). No SDK exists, so stage 1 and the mini
+table are still not built. Re-run `west update` first to see whether
+zephyr-lang-rust completes.
+
 ## Commands to run once permitted
 
 ```sh
