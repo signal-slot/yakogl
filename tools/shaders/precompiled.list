@@ -102,6 +102,13 @@ dir gl_test_es100  gc7000
 dir qt             gc7000
 dir qt3d           gc7000
 dir offarm         -          # PowerVR-only: gl_test 193/194's predicated-off arm, grown by N
+dir gltest         -          # gl_test's own programs, moved out of its C string literals
+# gltest/ holds the sources gl_test.c used to write inline: gen_gl_test_shaders.py's ENTRIES
+# name them, and tools/precompile/gl_test_pairs.py turns them into the gl_test apps' pairs.
+# Role `-` because the GC7000 has no row for them -- and none for most gl_test sources today
+# either (tools/vivante/check_gl_test_blobs.py counts them, table by table). A gc7000 role is
+# an open item: it needs `gen_shader_table.py --append` with etna_shc, then an i.MX8MP run
+# with no compiler.
 dir internal       internal   # fbload.*, clear.*: Mesa's reference programs (tools/glsl2usc.sh, gen_shader_table.py)
 dir internal/es    internal   # their GLSL ES twins: the `internal` lines
 
@@ -335,9 +342,14 @@ skip-failures
 #     (<name>.vert or <name>.batchable.vert with <name>.frag), but nothing here
 #     records which programs Qt actually links, and the harvested qt3d/<sha>.*
 #     sources have no partner named at all.
-#   - gl_test's case_psizvpm links two vertex shaders written inline in
-#     gl_test.c (psizvpm_plain_vs_src, psizvpm_word_vs_src), and gl_test's
-#     other inline sources likewise: they are not files a list can name.
+#   - gl_test's three probe cases build one half of the program at run time
+#     with snprintf (case_vsunits 149, shp_arm for shprobe 150 and fshprobe
+#     166, fshp_arm_units for 166's arm C), so no pair names that half -- and
+#     none can name the program. Their named halves (gltest/fshp_vs.vert,
+#     gltest/vsunits_fs.frag) get no row: pairing them with each other names a
+#     program gl_test never links, and one that would not even compile (its
+#     fragment shader uses a varying its vertex shader does not declare).
+#     Those cases need the in-process compiler.
 #   - glBindAttribLocation: a pair is linked with no bindings, so attributes
 #     take the lowest free locations in declaration order, as an application
 #     that binds none gets them.
@@ -438,6 +450,23 @@ pair passthrough.vert es100/intlit.frag
 pair passthrough.vert es100/branchlane.frag
 pair passthrough.vert es100/ifoutput2.frag
 pair passthrough.vert es100/ifoutput.frag
+pair gltest/psizvpm_plain_vs.vert interp_color.frag
+pair gltest/psizvpm_word_vs.vert interp_color.frag
+pair gltest/texcube_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcubenorm_fs.frag
+pair gltest/position_only.vert gltest/uniform_color.frag
+pair gltest/position_only2.vert gltest/uniform_color.frag
+pair gltest/tsf_vs.vert gltest/tsf_fs.frag
+pair gltest/vtl_vs.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_const.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_grid.vert gltest/vtl_fs.frag
+pair gltest/deqp_position.vert gltest/f3_fs.frag
+pair gltest/deqp_position.vert gltest/f3_lit_fs.frag
+pair gltest/f3_var_vs.vert gltest/f3_var_fs.frag
+pair gltest/deqp_position.vert gltest/f1_edge_fs.frag
+pair gltest/deqp_position.vert gltest/f1_fs.frag
+pair gltest/deqp_position.vert gltest/f1_mid_fs.frag
 pair passthrough.vert es100/uniidx_a.frag
 pair passthrough.vert es100/uniidx_b.frag
 pair passthrough.vert es100/uniidx_c.frag
@@ -462,7 +491,34 @@ pair passthrough.vert es100/matdyn.frag
 pair passthrough.vert es100/branchquad.frag
 pair es100/anyall.vert interp_color.frag
 pair passthrough.vert es100/fragcoord.frag
+pair gltest/position_only.vert gltest/fma_fs_fused.frag
+pair gltest/fma_vs_fused.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fma_fs_ctrl.frag
+pair gltest/fma_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_folded.frag
+pair gltest/fsat_vs_folded.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_ctrl.frag
+pair gltest/fsat_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/unipad_vs.vert gltest/unipad_fs.frag
+pair gltest/position_only2.vert gltest/dep1_fs.frag
+pair gltest/position_only2.vert gltest/dep2_fs.frag
+pair gltest/position_only2.vert gltest/dep4_fs.frag
+pair gltest/position_only2.vert gltest/kc_fadd_fs.frag
+pair gltest/position_only2.vert gltest/kc_fmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxneg_fs.frag
+pair gltest/position_only2.vert gltest/kc_mulneg_fs.frag
 pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gltest/position_only.vert gltest/predif_fs_uni.frag
+pair gltest/predif_vs_uni.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/predif_fs_coord.frag
+pair gltest/position_only.vert gltest/mulone_fs_one.frag
+pair gltest/position_only.vert gltest/mulone_fs_half.frag
+pair gltest/position_only.vert gltest/mulone_fs_mods.frag
+pair gltest/position_only.vert gltest/blendonce_fs.frag
+pair gltest/varyfma_vs.vert gltest/varyfma_fs.frag
+pair gltest/position_only.vert gltest/predlive_fs_uni.frag
+pair gltest/position_only.vert gltest/predlive_fs_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
@@ -496,7 +552,6 @@ pair femtovg/main.vert offarm/fill_color.nodiscard.offarm64.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm96.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm192.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm256.frag
-
 app gl_test_es100
 pair gl_test_es100/color_uv.vert gl_test_es100/color_uv.frag
 pair gl_test_es100/passthrough.vert gl_test_es100/uniform_color.frag
@@ -541,6 +596,23 @@ pair gl_test_es100/passthrough.vert es100/intlit.frag
 pair gl_test_es100/passthrough.vert es100/branchlane.frag
 pair gl_test_es100/passthrough.vert es100/ifoutput2.frag
 pair gl_test_es100/passthrough.vert es100/ifoutput.frag
+pair gltest/psizvpm_plain_vs.vert gl_test_es100/interp_color.frag
+pair gltest/psizvpm_word_vs.vert gl_test_es100/interp_color.frag
+pair gltest/texcube_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcubenorm_fs.frag
+pair gltest/position_only.vert gltest/uniform_color.frag
+pair gltest/position_only2.vert gltest/uniform_color.frag
+pair gltest/tsf_vs.vert gltest/tsf_fs.frag
+pair gltest/vtl_vs.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_const.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_grid.vert gltest/vtl_fs.frag
+pair gltest/deqp_position.vert gltest/f3_fs.frag
+pair gltest/deqp_position.vert gltest/f3_lit_fs.frag
+pair gltest/f3_var_vs.vert gltest/f3_var_fs.frag
+pair gltest/deqp_position.vert gltest/f1_edge_fs.frag
+pair gltest/deqp_position.vert gltest/f1_fs.frag
+pair gltest/deqp_position.vert gltest/f1_mid_fs.frag
 pair gl_test_es100/passthrough.vert es100/uniidx_a.frag
 pair gl_test_es100/passthrough.vert es100/uniidx_b.frag
 pair gl_test_es100/passthrough.vert es100/uniidx_c.frag
@@ -565,7 +637,34 @@ pair gl_test_es100/passthrough.vert es100/matdyn.frag
 pair gl_test_es100/passthrough.vert es100/branchquad.frag
 pair es100/anyall.vert gl_test_es100/interp_color.frag
 pair gl_test_es100/passthrough.vert es100/fragcoord.frag
+pair gltest/position_only.vert gltest/fma_fs_fused.frag
+pair gltest/fma_vs_fused.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fma_fs_ctrl.frag
+pair gltest/fma_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_folded.frag
+pair gltest/fsat_vs_folded.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_ctrl.frag
+pair gltest/fsat_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/unipad_vs.vert gltest/unipad_fs.frag
+pair gltest/position_only2.vert gltest/dep1_fs.frag
+pair gltest/position_only2.vert gltest/dep2_fs.frag
+pair gltest/position_only2.vert gltest/dep4_fs.frag
+pair gltest/position_only2.vert gltest/kc_fadd_fs.frag
+pair gltest/position_only2.vert gltest/kc_fmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxneg_fs.frag
+pair gltest/position_only2.vert gltest/kc_mulneg_fs.frag
 pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gltest/position_only.vert gltest/predif_fs_uni.frag
+pair gltest/predif_vs_uni.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/predif_fs_coord.frag
+pair gltest/position_only.vert gltest/mulone_fs_one.frag
+pair gltest/position_only.vert gltest/mulone_fs_half.frag
+pair gltest/position_only.vert gltest/mulone_fs_mods.frag
+pair gltest/position_only.vert gltest/blendonce_fs.frag
+pair gltest/varyfma_vs.vert gltest/varyfma_fs.frag
+pair gltest/position_only.vert gltest/predlive_fs_uni.frag
+pair gltest/position_only.vert gltest/predlive_fs_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag

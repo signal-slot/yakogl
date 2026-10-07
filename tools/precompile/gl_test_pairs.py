@@ -28,9 +28,18 @@ only.
 One shape glsl2v3d's reader does not follow is followed here: fragment
 shaders handed to the linking function in a table of structs (gl_test 193
 and 194, offarm_run; `table_arms`). The sites still unresolved are printed
-(on stderr, and as the list's comments say): today one, case_psizvpm, whose
-two vertex shaders are written inline in gl_test.c and so are not files a
-list can name.
+(on stderr, and as the list's comments say): the three that link a named
+source beside a buffer the case fills with GLSL while it runs -- case_vsunits
+(149), shp_arm (150 shprobe, 166 fshprobe) and fshp_arm_units (166 arm C).
+No pair names those programs and none can: half of each exists only after the
+case runs, so an image with no shader compiler cannot build them at all.
+
+The generated headers are the only GLSL text gl_test compiles, and this
+script says so: it stops if gl_test.c declares a GLSL literal of its own,
+because a source the reader cannot see is a source no list can name. That is
+how gl_test 181, 182, 183 and 188 to 192 came to have no precompiled row --
+their sources were C strings inside gl_test.c until they became
+tools/shaders/gltest/.
 """
 import os
 import re
@@ -110,7 +119,39 @@ def listed():
     return out
 
 
+def inline_literals():
+    """Symbols gl_test.c declares as its own GLSL string literal.
+
+    A source written as a C literal is invisible to the reader, so it can
+    never become a `pair` line: the cases whose sources were literals had no
+    precompiled row, and a draw asked for a program the image never built.
+    Every GLSL source gl_test compiles is in a generated header instead.
+    """
+    lines = open(glsl2v3d.GL_TEST_C).read().split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        m = re.match(r"^static const char \*?(\w*_src)\[\]\s*=\s*(.*)$", lines[i])
+        if not m:
+            i += 1
+            continue
+        body, j = m.group(2), i
+        while not body.rstrip().endswith(";"):
+            j += 1
+            body += "\n" + lines[j]
+        if '"' in body:
+            out.append(m.group(1))
+        i = j + 1
+    return sorted(out)
+
+
 def main():
+    literals = inline_literals()
+    if literals:
+        print("gl_test_pairs: gl_test.c declares %d GLSL literal(s) of its own: %s; "
+              "a source the reader cannot see is a source no list can name -- move it to "
+              "tools/shaders/ and name it in gen_gl_test_shaders.py's ENTRIES"
+              % (len(literals), ", ".join(literals[:6])), file=sys.stderr)
+        return 1
     want, unresolved = derived()
     for u in unresolved:
         print("gl_test_pairs: unresolved: %s" % u, file=sys.stderr)

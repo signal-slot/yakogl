@@ -78,39 +78,43 @@ pub fn attrib_is_zero(a: &ShcAttrib) -> bool {
     location == 0 && components == 0 && vi_reg == 0 && format == 0 && gl_type == 0 && is_zero(&name)
 }
 
-/// Print a fixed array: the used prefix through the library's pad helper,
-/// asserting that the rest is zero (what the helper fills in).
-pub struct ArrayField<T> {
+/// An array field of the shader ABI: its name in the generated source, the
+/// Rust type of its entries, and how one entry is printed and recognised as
+/// empty. Every generated table prints these fields, and it prints them in
+/// one of two forms -- the fixed array a [`ShcShader`] holds ([`print_array`]),
+/// or a static a table's row or reflection points at (`print_list` in
+/// tools/precompile) -- so both forms are described by one value per field.
+/// The type belongs in the description because the fixed form pads with
+/// `<ty>::ZERO`: the entry a pad fills with is named by the type, so no
+/// emitter can pair a field with another type's zero.
+pub struct Field<T> {
     pub field: &'static str,
-    pub pad: &'static str,
-    pub zero: &'static str,
-    /// The array's length as the row writes it in `[ZERO; N]` (a constant's
-    /// name, or "" for the literal length).
-    pub len: &'static str,
+    pub ty: &'static str,
     pub is_zero: fn(&T) -> bool,
     pub print: fn(&T) -> String,
 }
 
-pub const ARRAY_VARYINGS: ArrayField<ShcVarying> = ArrayField {
-    field: "varyings",
-    pad: "pad_varyings",
-    zero: "ShcVarying::ZERO",
-    len: "",
-    is_zero: varying_is_zero,
-    print: print_varying,
-};
+/// A [`Field`] that is also written as a fixed array: the library's pad
+/// helper, and the array's length as the row writes it in `[ZERO; N]` (a
+/// constant's name, or "" for the literal length).
+pub struct ArrayField<T> {
+    pub kind: Field<T>,
+    pub pad: &'static str,
+    pub len: &'static str,
+}
 
-pub const ARRAY_ATTRIBS: ArrayField<ShcAttrib> = ArrayField {
-    field: "attribs",
-    pad: "pad_attribs",
-    zero: "ShcAttrib::ZERO",
-    len: "",
-    is_zero: attrib_is_zero,
-    print: print_attrib,
-};
+pub const VARYINGS: Field<ShcVarying> =
+    Field { field: "varyings", ty: "ShcVarying", is_zero: varying_is_zero, print: print_varying };
 
-/// `field: pad([...]),` (or `field: [ZERO; N],` when nothing is used), its
-/// lines indented by `ind`.
+pub const ATTRIBS: Field<ShcAttrib> =
+    Field { field: "attribs", ty: "ShcAttrib", is_zero: attrib_is_zero, print: print_attrib };
+
+pub const ARRAY_VARYINGS: ArrayField<ShcVarying> = ArrayField { kind: VARYINGS, pad: "pad_varyings", len: "" };
+
+pub const ARRAY_ATTRIBS: ArrayField<ShcAttrib> = ArrayField { kind: ATTRIBS, pad: "pad_attribs", len: "" };
+
+/// `field: pad([...]),` (or `field: [<ty>::ZERO; N],` when nothing is used),
+/// its lines indented by `ind`.
 pub fn print_array<T>(
     out: &mut Vec<String>,
     ind: &str,
@@ -118,13 +122,13 @@ pub fn print_array<T>(
     items: &[T],
     used: usize,
 ) -> Result<(), String> {
-    let ArrayField { field, pad, zero, len, is_zero, print } = a;
+    let ArrayField { kind: Field { field, ty, is_zero, print }, pad, len } = a;
     if items[used.min(items.len())..].iter().any(|x| !is_zero(x)) {
         return Err(format!("{field}: non-zero entries past the count"));
     }
     if used == 0 {
         let n = if len.is_empty() { items.len().to_string() } else { len.to_string() };
-        out.push(format!("{ind}{field}: [{zero}; {n}],"));
+        out.push(format!("{ind}{field}: [{ty}::ZERO; {n}],"));
         return Ok(());
     }
     out.push(format!("{ind}{field}: {pad}(["));

@@ -16,8 +16,16 @@ shader table matches by SHA-256 of the text, so a stray byte here is a miss ther
 The ES 1.00 header also names the cases it cannot serve: a case whose GLSL is
 "#version 300 es" has no ES 1.00 form at all, so it is skipped BY NAME rather than
 left to fail at the version line (a failure there would say the compiler is broken
-when the truth is that the case is out of its scope)."""
+when the truth is that the case is out of its scope).
+
+  --check  write nothing: regenerate both headers and refuse a drift against the
+           committed ones. tools/check.sh runs this. The headers hold the only
+           copy of the GLSL gl_test.c compiles, while the source list, the offline
+           table and the host tests all name tools/shaders/ instead -- so a header
+           that is not that text is a suite drawing one program while everything
+           else checks another."""
 import os
+import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The driver tree lives inside the yakogl repository as driver/ since 62fd511;
 # before that it was a sibling checkout. Take whichever is there, so a script
@@ -235,7 +243,68 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                  ' * across the whole +X face (case 114).'),
                 ('gl_test_es300_cubelodv_fs_src', 'es300/cubelodv.frag'),
                 ('gl_test_es300_cubelodf_vs_src', 'es300/cubelodf.vert'),
-                ('gl_test_es300_cubelodf_fs_src', 'es300/cubelodf.frag')
+                ('gl_test_es300_cubelodf_fs_src', 'es300/cubelodf.frag'),
+                ('gl_test_blendonce_fs_src', 'gltest/blendonce_fs.frag'),
+                ('gl_test_bov_fs_src', 'gltest/uniform_color.frag'),
+                ('gl_test_bov_vs_src', 'gltest/position_only2.vert'),
+                ('gl_test_dep1_fs_src', 'gltest/dep1_fs.frag'),
+                ('gl_test_dep2_fs_src', 'gltest/dep2_fs.frag'),
+                ('gl_test_dep4_fs_src', 'gltest/dep4_fs.frag'),
+                ('gl_test_dep_vs_src', 'gltest/position_only2.vert'),
+                ('gl_test_dsk_fs_src', 'gltest/uniform_color.frag'),
+                ('gl_test_dsk_vs_src', 'gltest/position_only.vert'),
+                ('gl_test_f1_edge_fs_src', 'gltest/f1_edge_fs.frag'),
+                ('gl_test_f1_fs_src', 'gltest/f1_fs.frag'),
+                ('gl_test_f1_mid_fs_src', 'gltest/f1_mid_fs.frag'),
+                ('gl_test_f1_vs_src', 'gltest/deqp_position.vert'),
+                ('gl_test_f3_fs_src', 'gltest/f3_fs.frag'),
+                ('gl_test_f3_lit_fs_src', 'gltest/f3_lit_fs.frag'),
+                ('gl_test_f3_var_fs_src', 'gltest/f3_var_fs.frag'),
+                ('gl_test_f3_var_vs_src', 'gltest/f3_var_vs.vert'),
+                ('gl_test_f3_vs_src', 'gltest/deqp_position.vert'),
+                ('gl_test_fma_ctrl_fs_src', 'gltest/fma_fs_ctrl.frag'),
+                ('gl_test_fma_fused_fs_src', 'gltest/fma_fs_fused.frag'),
+                ('gl_test_fma_varying_fs_src', 'gltest/fma_fs_varying.frag'),
+                ('gl_test_fma_ctrl_vs_src', 'gltest/fma_vs_ctrl.vert'),
+                ('gl_test_fma_fused_vs_src', 'gltest/fma_vs_fused.vert'),
+                ('gl_test_fma_plain_vs_src', 'gltest/position_only.vert'),
+                ('gl_test_fsat_ctrl_fs_src', 'gltest/fsat_fs_ctrl.frag'),
+                ('gl_test_fsat_folded_fs_src', 'gltest/fsat_fs_folded.frag'),
+                ('gl_test_fsat_ctrl_vs_src', 'gltest/fsat_vs_ctrl.vert'),
+                ('gl_test_fsat_folded_vs_src', 'gltest/fsat_vs_folded.vert'),
+                ('gl_test_fshp_vs_src', 'gltest/fshp_vs.vert'),
+                ('gl_test_kc_fadd_fs_src', 'gltest/kc_fadd_fs.frag'),
+                ('gl_test_kc_fmul_fs_src', 'gltest/kc_fmul_fs.frag'),
+                ('gl_test_kc_maxmul_fs_src', 'gltest/kc_maxmul_fs.frag'),
+                ('gl_test_kc_maxneg_fs_src', 'gltest/kc_maxneg_fs.frag'),
+                ('gl_test_kc_mulneg_fs_src', 'gltest/kc_mulneg_fs.frag'),
+                ('gl_test_mulone_half_fs_src', 'gltest/mulone_fs_half.frag'),
+                ('gl_test_mulone_mods_fs_src', 'gltest/mulone_fs_mods.frag'),
+                ('gl_test_mulone_one_fs_src', 'gltest/mulone_fs_one.frag'),
+                ('gl_test_predif_coord_fs_src', 'gltest/predif_fs_coord.frag'),
+                ('gl_test_predif_uni_fs_src', 'gltest/predif_fs_uni.frag'),
+                ('gl_test_predif_uni_vs_src', 'gltest/predif_vs_uni.vert'),
+                ('gl_test_predlive_coord_fs_src', 'gltest/predlive_fs_coord.frag'),
+                ('gl_test_predlive_uni_fs_src', 'gltest/predlive_fs_uni.frag'),
+                ('gl_test_psizvpm_plain_vs_src', 'gltest/psizvpm_plain_vs.vert'),
+                ('gl_test_psizvpm_word_vs_src', 'gltest/psizvpm_word_vs.vert'),
+                ('gl_test_texcube_fs_src', 'gltest/texcube_fs.frag'),
+                ('gl_test_texcube_vs_src', 'gltest/texcube_vs.vert'),
+                ('gl_test_texcubemip_vs_src', 'gltest/texcubemip_vs.vert'),
+                ('gl_test_texcubenorm_fs_src', 'gltest/texcubenorm_fs.frag'),
+                ('gl_test_tsf_fs_src', 'gltest/tsf_fs.frag'),
+                ('gl_test_tsf_vs_src', 'gltest/tsf_vs.vert'),
+                ('gl_test_unipad_fs_src', 'gltest/unipad_fs.frag'),
+                ('gl_test_unipad_vs_src', 'gltest/unipad_vs.vert'),
+                ('gl_test_varyfma_fs_src', 'gltest/varyfma_fs.frag'),
+                ('gl_test_varyfma_vs_src', 'gltest/varyfma_vs.vert'),
+                ('gl_test_vsunits_fs_src', 'gltest/vsunits_fs.frag'),
+                ('gl_test_vtl_fs_src', 'gltest/vtl_fs.frag'),
+                ('gl_test_vtl_const_vs_src', 'gltest/vtl_vs_const.vert'),
+                ('gl_test_vtl_grid_vs_src', 'gltest/vtl_vs_grid.vert'),
+                ('gl_test_vtl_vs_src', 'gltest/vtl_vs.vert'),
+                ('gl_test_zsa_fs_src', 'gltest/uniform_color.frag'),
+                ('gl_test_zsa_vs_src', 'gltest/position_only.vert'),
 ]
 
 # The thirteen GLSL 450 sources and the ES 1.00 twin of each. The twins keep every
@@ -292,6 +361,9 @@ def es300_cases_used():
     return used
 
 
+CHECK = '--check' in sys.argv[1:]
+
+
 def emit(path, sub, head):
     out = list(head)
     for entry in ENTRIES:
@@ -300,7 +372,25 @@ def emit(path, sub, head):
         out.append('%sstatic const char %s[] =\n%s;\n'
                    % ('/* %s */\n' % note if note else '', name,
                       cstr(os.path.join(SH, sub.get(f, f)))))
-    open(os.path.join(HERE, path), 'w').write('\n'.join(out) + '\n')
+    text = '\n'.join(out) + '\n'
+    if not CHECK:
+        open(os.path.join(HERE, path), 'w').write(text)
+        return
+    try:
+        have = open(os.path.join(HERE, path)).read()
+    except FileNotFoundError:
+        raise SystemExit('gen_gl_test_shaders: %s is not there to check; run without --check to write it' % path)
+    if have != text:
+        hl, tl = have.split('\n'), text.split('\n')
+        i = next((i for i, (a, b) in enumerate(zip(hl, tl)) if a != b), min(len(hl), len(tl)))
+        raise SystemExit('gen_gl_test_shaders: %s is not what this generator makes from %s '
+                         '(first difference at line %d):\n  committed: %s\n  generated: %s\n'
+                         'Fix the source under tools/shaders/ and regenerate: '
+                         'python3 driver/tools/pvrlab/gen_gl_test_shaders.py'
+                         % (path, SH, i + 1,
+                            hl[i] if i < len(hl) else '<no such line>',
+                            tl[i] if i < len(tl) else '<no such line>'))
+    print('gen_gl_test_shaders: %s is the generator\'s own output (%d sources)' % (path, len(ENTRIES)))
 
 
 emit('gl_test_shaders.h', {}, out)

@@ -1,0 +1,31 @@
+#version 100
+precision highp float;
+uniform float u_a, u_b, u_c, u_d;
+void main() {
+  float x = u_a;
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  x = max(x * u_b, u_c);
+  gl_FragColor = vec4(x, x, x, 1.0);
+}
