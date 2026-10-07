@@ -4180,6 +4180,18 @@ static int case_rgb565(void)
 #define VIEWWIN_PITCH (TW + 32u) /* 96 pixels: even, and 384 bytes, 64-byte aligned */
 #define VIEWWIN_PAD   0x5a5a5a5au
 
+/* The word a pixel of colour `rgba` (glReadPixels' R,G,B,A word) has in the
+ * window's memory. The window is RGBA8888, but a pixel engine without that
+ * render format (the GC7000: A8R8G8B8) stores it B,G,R,A, which
+ * rt_rgba8888_is_bgra says; the padding is raw fill and never goes through
+ * here. */
+static uint32_t viewwin_word(uint32_t rgba)
+{
+	if (!g_backend->rt_rgba8888_is_bgra)
+		return rgba;
+	return (rgba & 0xff00ff00u) | ((rgba & 0xffu) << 16) | ((rgba >> 16) & 0xffu);
+}
+
 static uint32_t viewwin_raw(struct osal_gpu_mem *m, uint32_t x, uint32_t row)
 {
 	uint32_t v = 0;
@@ -4264,10 +4276,10 @@ static int case_viewwin(void)
 
 	/* raw memory: the window's red at the view's pitch, the padding kept
 	 * (top-down rows: memory row 0 is the top) */
-	ok &= expect_int("raw: row 0, last pixel red", viewwin_raw(&wmem, TW - 1, 0), 0xff0000ff);
+	ok &= expect_int("raw: row 0, last pixel red", viewwin_raw(&wmem, TW - 1, 0), viewwin_word(0xff0000ff));
 	ok &= expect_int("raw: row 0, first padding pixel kept", viewwin_raw(&wmem, TW, 0), VIEWWIN_PAD);
 	ok &= expect_int("raw: row 0, last padding pixel kept", viewwin_raw(&wmem, VIEWWIN_PITCH - 1, 0), VIEWWIN_PAD);
-	ok &= expect_int("raw: last row, first pixel red", viewwin_raw(&wmem, 0, TH - 1), 0xff0000ff);
+	ok &= expect_int("raw: last row, first pixel red", viewwin_raw(&wmem, 0, TH - 1), viewwin_word(0xff0000ff));
 	ok &= expect_int("raw: last row, first padding pixel kept", viewwin_raw(&wmem, TW, TH - 1), VIEWWIN_PAD);
 
 	/* frame 2: no clear, a blue triangle in the bottom-left 12x12 corner;
