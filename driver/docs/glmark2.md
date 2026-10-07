@@ -167,11 +167,11 @@ scene's set-up, which is not timed (section 1, the score).
 |---|---|---|---|
 | Verdin AM62P | 12,755,176 B (sha256 `0ec6383ca936f803...` at e0eacc3e) | 156,311,552 B (incl. the 96 MiB heap, the 8100 KiB window buffer, the 1 MiB stack) | built, links |
 | Verdin iMX8M Plus | 12,256,088 B (sha256 `e8f4aa37562c67b7...` at e0eacc3e) | 156,192 KiB of the 256 MiB RAM region | built, links (no UART: the GLMARK2 record carries the numbers) |
-| Raspberry Pi 4 | 12,325,040 B (sha256 `8f72f7f52a98182c...` at e0eacc3e) | 194,192 KiB of the 224 MiB region (`boards/rpi_4b.overlay`, ends at 0x0e200000, below the firmware's 0x3c100000); kernel VM 512 MiB as v3d_deqp | built, links; `board.sh --dry-run pi4 run` rc 0 |
+| Raspberry Pi 4 | 12,325,040 B (sha256 `8f72f7f52a98182c...` at e0eacc3e) | 194,192 KiB of the 224 MiB region at the 48 MiB carve-out; the carve-out is now 96 MiB (refract's 56.2 MB peak, terrain's NPOT chains) and the region 288 MiB (`boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000), not rebuilt since; kernel VM 512 MiB as v3d_deqp | built, links; `board.sh --dry-run pi4 run` rc 0 |
 
 The whole set fits each board's RAM. The Pi 4's ~12 MB of free space was
 for an image that also carries the cluster demo; this image does not, and
-its region is 224 MiB (the decode buffers come from the 96 MiB heap inside
+its region is 288 MiB (the decode buffers come from the 96 MiB heap inside
 it). The Pi 4's boot partition must hold the 12.3 MB image (check `df`
 before staging). If a
 smaller set is ever needed, the default list does not use
