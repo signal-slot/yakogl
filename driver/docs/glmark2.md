@@ -446,11 +446,15 @@ of the main checkout (720 lines; the runner was the lead's).
      asks a chain for the 800x600 off-screen textures, which use
      `GL_LINEAR_MIPMAP_LINEAR`. ES 2.0.25 section 3.7.11 (extracted text line
      4119): "If either the width or height of the level zero array are not a
-     power or two, the error INVALID_OPERATION is generated." YakoGL reports
-     ES 2.0 without GL_OES_texture_npot and applies exactly that
-     (`src/gl/texture.rs:3095-3101`), so the error is right for what we
-     advertise. Those textures are then mipmap-incomplete for sampling. Mesa's
-     v3d reports ES 3.1, where the rule is gone.
+     power or two, the error INVALID_OPERATION is generated." YakoGL reported
+     ES 2.0 without GL_OES_texture_npot and applied exactly that, so the error
+     was right for what it advertised, and those textures were
+     mipmap-incomplete for sampling. Mesa's v3d reports ES 3.1, where the rule
+     is gone. Since 2026-10-07 (plan #2 item `npot`) every ES 2.0 build claims
+     GL_OES_texture_npot: the call succeeds and the texture is complete. The
+     V3D and the GC7000 hold the whole chain (box-filtered on the CPU after
+     the frame's render into level 0, every frame); the PowerVR keeps the
+     base level and samples it (`src/gl/texture.rs` `npot_mip_chains`).
 4. **`program 2 has no uniform 'ModelViewMatrix'` (gouraud, blinn-phong-inf) is
    correct**: neither shader declares it (`data/shaders/light-basic.vert:5-6` and
    `light-advanced.vert:4-5` declare only `ModelViewProjectionMatrix` and
