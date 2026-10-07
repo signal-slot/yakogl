@@ -128,12 +128,8 @@ pub const ATTRIBS: Field<ShcAttrib> =
 pub const UNIFORMS: Field<ShcUniform> =
     Field { field: "uniforms", ty: "ShcUniform", is_zero: uniform_is_zero, print: print_uniform };
 
-pub const DECLARED: Field<ShcAttribBinding> = Field {
-    field: "declared",
-    ty: "ShcAttribBinding",
-    is_zero: binding_is_zero,
-    print: print_binding,
-};
+pub const DECLARED: Field<ShcAttribBinding> =
+    Field { field: "declared", ty: "ShcAttribBinding", is_zero: binding_is_zero, print: print_binding };
 
 pub const ARRAY_VARYINGS: ArrayField<ShcVarying> =
     ArrayField { kind: VARYINGS, pad: "pad_varyings", zero: "ShcVarying::ZERO", len: "" };

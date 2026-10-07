@@ -51,8 +51,8 @@
 
 use crate::drive::hex;
 use crate::shc_print::{
-    binding_is_zero, emit_u32_array, print_array, print_binding, print_uniform, rs_comment, rs_str, ARRAY_ATTRIBS,
-    ARRAY_VARYINGS, ATTRIBS, DECLARED, Field, UNIFORMS, VARYINGS,
+    binding_is_zero, emit_u32_array, print_array, print_binding, print_uniform, rs_comment, rs_str, Field,
+    ARRAY_ATTRIBS, ARRAY_VARYINGS, ATTRIBS, DECLARED, UNIFORMS, VARYINGS,
 };
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -295,8 +295,7 @@ fn fact(name: &'static str, entry: String) -> ReflField {
 /// the same static name and fill it differently, and the reader of the refusal
 /// needs the names, not the first difference.
 fn disagreements(had: &[ReflField], new: &[ReflField]) -> Vec<String> {
-    had
-        .iter()
+    had.iter()
         .zip(new)
         .filter(|(x, y)| x != y)
         .map(|(x, y)| {
