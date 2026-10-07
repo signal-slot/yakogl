@@ -29,6 +29,12 @@ CLASSES = [
     # an allocation refused (the V3D's carve-out, src/osal/linux.c, as the
     # board prints it), or the backend's line about one it could not make
     ("GPU memory", re.compile(r"out of GPU memory|no GPU memory")),
+    # the V3D samples CPU-made tiled copies of each texture: their budget's
+    # high-water, and copies given back early
+    ("tiled copy", re.compile(r"^yakogl/v3d: (tiled copies high-water |a stale tiled copy )")),
+    # the V3D's sampler-key program variants ("N built, M refused"): before
+    # "refused draw", whose pattern its "0 refused (" would match
+    ("sampler variant", re.compile(r"^yakogl/v3d: sampler variants ")),
     ("GL error", re.compile(r"^GL error 0x[0-9a-f]+ in \S+")),
     ("compile failure", re.compile(r"^gm2: compile-failed ")),
     ("link failure", re.compile(r"^gm2: link-failed ")),
@@ -52,6 +58,11 @@ CLASSES = [
 NOISE = re.compile(
     r"^\s|^$|^=+$|FPS: \d|glmark2 Score:|^osal\(linux\): heap |^pvr_backend: init ok"
     r"|^osal\(linux\): v3d (carve-out|pending frees)"
+    # the V3D backend's start-up lines and its per-frame job-arena high-water
+    # (src/v3d/backend.rs); the binner pool is "not read" because the host
+    # has no binner (linux.c answers OSAL_QUERY_V3D_BIN_POOL with no data)
+    r"|^yakogl/v3d: (depth and stencil (apart|in one buffer)|job arenas for |two job arena sets"
+    r"|clear program built|job arenas high-water at frame |binner tile pool high-water at frame \d+: not read)"
     r"|^gm2: (shader|scene-begin|scene-end|egl-config) ")
 SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)$")
 # The V3D carve-out's line at exit (src/osal/linux.c report_heaps): one
