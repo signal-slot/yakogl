@@ -28,6 +28,11 @@ HANDOFF), confidence 0.98:
 - WEST_VENV=/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl/.venv
 - ZEPHYR_SDK_INSTALL_DIR=/home/tasuku/org/zephyrproject/zephyr-sdk-1.0.1
 
+After Read was allowed: none of the three nuc paths exist on this worker
+(sdk_version, .west/config, .venv/pyvenv.cfg all "File does not exist"), so
+they are node-local to nuc and cannot be used here. `pip install west` was
+asked again and again "requires approval".
+
 (Node Lepton reported a different tree, ~/org/zephyrproject/zephyrproject, Zephyr
 4.4.1, not the repo's pin.) These were NOT verified: `ls` and `Read` on those
 paths are outside this session's allowed directories ("blocked" / permission
