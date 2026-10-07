@@ -1660,6 +1660,92 @@ fn a_descriptor_names_every_level_on_a_64_byte_boundary_at_one_stride() {
     assert_eq!(s.reg(GC_NTE_DESCRIPTOR_INVALIDATE), GC_NTE_INVALIDATE_UNK29);
 }
 
+/// GL_OES_texture_npot on the GC7000, glmark2 terrain's case: glGenerateMipmap
+/// of an 800x600 RGBA texture under this backend's table lays out its ten
+/// levels (800x600 down to 1x1) at the chain's one 800-texel pitch, each on
+/// a 64-byte boundary, and the descriptor of the complete, REPEAT-wrapped,
+/// LINEAR_MIPMAP_LINEAR texture names exactly those levels: SIZE 800x600,
+/// BASELOD 0..9, LOD_ADDR i = the GL core's level i, the sampler REPEAT on
+/// both axes with a linear mip filter.
+///
+/// The hardware's own NPOT support (etnaviv asks for chipMinorFeatures1
+/// NON_POWER_OF_TWO, which this part's recorded words do not show) is not a
+/// host question: docs/es2-cts-failures.md says what the board must show.
+#[test]
+fn a_generated_npot_chain_is_named_level_by_level() {
+    use crate::gl::consts::*;
+    use crate::gl::texture::{
+        glBindTexture, glDeleteTextures, glGenTextures, glGenerateMipmap, glTexImage2D, glTexParameteri,
+    };
+    let rig = Rig::new();
+    /* the GL core reads this backend's layout flags and allocates through
+     * the rig's platform, as in the product; TestGl's drop resets the table */
+    // SAFETY: serialised by the rig's TestGl.
+    unsafe { crate::backend::g_backend = &yakogl_backend_vivante };
+    let (w, h) = (800u32, 600u32);
+    let texels = vec![0x40u8; (w * h * 4) as usize];
+    let mut name = 0;
+    // SAFETY: plain GL calls on the rig's context with live pointers.
+    unsafe {
+        glGenTextures(1, &mut name);
+        glBindTexture(GL_TEXTURE_2D, name);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA as i32,
+            w as i32,
+            h as i32,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            texels.as_ptr() as *const c_void,
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT as i32);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    let t = &rig._gl.ctx().objs().textures[name as usize];
+    assert_eq!(rig._gl.error(), GL_NO_ERROR, "glGenerateMipmap of 800x600");
+    assert_eq!((t.chain_levels, t.levels, t.level_defined, t.level_bad), (10, 10, 0x3ff, 0));
+    assert_eq!(t.level_pitch(1), 800, "one pitch for the chain");
+    /* level i starts after the rows of the levels above it, 3200 bytes each
+     * (a multiple of 64, so no padding) */
+    let heights = [600u32, 300, 150, 75, 37, 18, 9, 4, 2, 1];
+    let mut rows = 0;
+    for (i, lh) in heights.iter().enumerate() {
+        assert_eq!(t.level_off[i], rows * 3200, "level {i}");
+        assert_eq!((h >> i).max(1), *lh);
+        rows += lh;
+    }
+    let b = crate::gl::draw::texture_bind_2d(t);
+    assert_eq!((b.mip_levels, b.mip_filter, b.stride_texels), (10, 2, 800));
+    let mut d = rig.draw(3);
+    d.num_textures = 1;
+    d.textures[0] = b;
+    let s = rig.submit(&d);
+    let desc = s.descriptor(0);
+    assert_eq!(desc[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(800) | texdesc_size_height(600));
+    assert_eq!(desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4], 3200);
+    assert_eq!((desc[GC_TEXDESC_BASELOD as usize / 4] >> 8) & 0xf, 9, "ten levels: 0..9");
+    for i in 0..10u32 {
+        assert_eq!(
+            desc[texdesc_lod_addr(i) as usize / 4] as u64,
+            t.mem.gpu + t.level_off[i as usize] as u64,
+            "level {i}: the descriptor and the GL core agree"
+        );
+    }
+    let c0 = s.reg(nte_descriptor_samp_ctrl0(0));
+    assert_eq!(
+        c0 & (samp_uwrap(0xffff_ffff) | samp_vwrap(0xffff_ffff) | samp_mip(0xffff_ffff)),
+        samp_uwrap(GC_TEX_WRAP_REPEAT) | samp_vwrap(GC_TEX_WRAP_REPEAT) | samp_mip(GC_TEX_FILTER_LINEAR)
+    );
+    /* freed while the rig's OSAL, which allocated it, is the one installed */
+    // SAFETY: a live name.
+    unsafe { glDeleteTextures(1, &name) };
+}
+
 #[test]
 fn a_mipmapped_cubes_levels_are_where_the_gl_core_put_them() {
     /* dEQP's texturecube: a 256 x 256 cube with nine levels. The GL core

@@ -531,8 +531,9 @@ config YAKOGL_REPORT_ES2
 	help
 	  glGetString(GL_VERSION) says "OpenGL ES 2.0" and
 	  GL_SHADING_LANGUAGE_VERSION "OpenGL ES GLSL ES 1.00", the ES 3.0-only
-	  queries are GL_INVALID_ENUM, and the ES 2.0 rules that ES 3.0 dropped
-	  apply (a non-power-of-two texture has no mip chain). This is what a
+	  queries are GL_INVALID_ENUM, and GL_EXTENSIONS lists the ES 2.0
+	  extensions ES 3.0 has in core (GL_OES_texture_npot,
+	  GL_OES_depth_texture, GL_OES_packed_depth_stencil). This is what a
 	  conformance build needs.
 
 	  On by default: YakoGL reports OpenGL ES 2.0 until the ES 3.0 work has

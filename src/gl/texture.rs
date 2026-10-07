@@ -845,11 +845,73 @@ fn is_pot(v: u32) -> bool {
     v != 0 && (v & (v - 1)) == 0
 }
 
+/// ES 2.0's rules for a non-power-of-two texture apply -- a level above 0
+/// that is not a power of two is GL_INVALID_VALUE (3.7.1), such a texture is
+/// complete only clamped to the edge and without a mipmap filter (3.7.10),
+/// and glGenerateMipmap of one is GL_INVALID_OPERATION -- in a build that
+/// reports ES 2.0 without claiming GL_OES_texture_npot. None does since
+/// 2026-10-07 (`state::NPOT_EXTENSION`); the rules stay for a GPU that would
+/// have to leave the extension out. ES 3.0 has no such rules.
+pub(crate) const NPOT_RESTRICTED: bool = crate::REPORT_ES2 && !super::state::NPOT_EXTENSION;
+
+/// Does the backend hold the mip chain of a non-power-of-two texture? Where
+/// it places every level from the GL core's own offsets: the GC7000 names
+/// each level's address in its descriptor (vivante/texture.rs), the V3D
+/// tiles each level into a copy laid out by Mesa's v3d_setup_slices rules,
+/// which cover NPOT chains (driver/src/v3d/v3d_tex.c). Those are the two
+/// backends that walk a layered texture themselves. The PowerVR's TPU is
+/// handed level 0 alone and finds level i+1 by its own power-of-two
+/// arithmetic ([`chain_layout_npot`]), which no board has measured for a stride
+/// that is not a power of two: there a NPOT texture keeps its base level,
+/// GL's chain is recorded as present and the draw samples level 0.
+fn npot_mip_chains() -> bool {
+    backend::native_layered_textures()
+}
+
 /// Level-0 storage. A power-of-two texture gets room for its whole chain
 /// (levels consecutive, each tightly packed at its own size), so later
 /// glTexImage2D(level > 0) / glGenerateMipmap uploads need no reallocation.
+/// A non-power-of-two one gets one level, until glGenerateMipmap or a level
+/// above 0 asks for its chain ([`grow_npot_chain`]): a NPOT image nobody
+/// mipmaps (a UI image, a glyph atlas) costs no more than its level.
 fn texture_alloc_storage(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8) -> i32 {
-    texture_alloc_storage_ex(t, w, h, layers, texfmt, false)
+    texture_alloc_storage_ex(t, w, h, layers, texfmt, false, false)
+}
+
+/// Lay a one-level non-power-of-two 2D texture or cube map out again with
+/// room for its whole chain (GL_OES_texture_npot; ES 3.0), keeping level 0's
+/// texels and record and the texture's state, where the backend holds such
+/// a chain ([`npot_mip_chains`]). False when there is nothing to grow --
+/// the texture already has its chain, is a power of two, is an image, a
+/// block format, a 3D grid or has no CPU view, or the backend keeps one
+/// level -- or the storage could not be had (`oom`). The caller has
+/// settled the texture: no kick still writes the texels copied here.
+fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
+    *oom = false;
+    let (w, h) = (t.width, t.height);
+    if !npot_mip_chains()
+        || !(t.target == GL_TEXTURE_2D || t.target == GL_TEXTURE_CUBE_MAP)
+        || t.chain_levels != 1
+        || (is_pot(w) && is_pot(h))
+        || (w <= 1 && h <= 1)
+        || t.mem.cpu.is_null()
+        || t.block_bytes != 0
+        || t.external
+        || t.grid_cols != 0
+    {
+        return false;
+    }
+    let (faces_set, max_level, immutable, immutable_levels) =
+        (t.faces_set, t.max_level, t.immutable, t.immutable_levels);
+    // SAFETY: the whole CPU mapping of the allocation; the kicks writing it
+    // completed (the caller settled it).
+    unsafe { osal::cache_invd(t.mem.cpu, t.mem.size) };
+    if !relayout_keeping_levels(t, w, h, t.layers as u32, t.texfmt, true) {
+        *oom = true;
+        return false;
+    }
+    (t.faces_set, t.max_level, t.immutable, t.immutable_levels) = (faces_set, max_level, immutable, immutable_levels);
+    t.chain_levels > 1
 }
 
 /// Lay a chain out again for a level 0 of `w x h` while level 0 itself has
@@ -861,8 +923,10 @@ fn texture_alloc_storage(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt:
 /// first (read as 32x32), then level 2 as 8x1, which shows the chain is
 /// 32x4. Laying that out afresh lost level 5 (AM62P 2d_5 and 2d_7 until
 /// 2026-09-25). Only for storage with a CPU view; without one the levels go.
-/// False when the new storage could not be had.
-fn relayout_keeping_levels(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8) -> bool {
+/// False when the new storage could not be had. `npot_chain` as in
+/// [`texture_alloc_storage_ex`] ([`grow_npot_chain`] lays a level 0 that
+/// is specified out again this way).
+fn relayout_keeping_levels(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8, npot_chain: bool) -> bool {
     let bpp = gles_texfmt_bytes(t.texfmt) as usize;
     let keep = !t.mem.cpu.is_null() && t.texfmt == texfmt && t.layers as u32 == layers && t.block_bytes == 0;
     /* (level, offset, pitch bytes, row bytes, rows) of each level that fits */
@@ -906,7 +970,7 @@ fn relayout_keeping_levels(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfm
     /* the kept levels' bytes go back as they were: in the pixel engine's
      * order if the texture was (frontend4's review of ee1d5894) */
     let pe = t.pe_order;
-    let ok = texture_alloc_storage(t, w, h, layers, texfmt) == 0;
+    let ok = texture_alloc_storage_ex(t, w, h, layers, texfmt, false, npot_chain) == 0;
     t.level_defined = 0;
     if ok && !t.mem.cpu.is_null() {
         at = 0;
@@ -976,7 +1040,7 @@ fn texture_alloc_storage_3d(t: &mut GlTexture, w: u32, h: u32, depth: u32, texfm
         return -1; /* beyond the TPU's texture size */
     }
     /* one level of cols*w x rows*h: a single "layer" the size of the grid */
-    if texture_alloc_storage_ex(t, w.wrapping_mul(cols), h.wrapping_mul(rows), 1, texfmt, true) != 0 {
+    if texture_alloc_storage_ex(t, w.wrapping_mul(cols), h.wrapping_mul(rows), 1, texfmt, true, false) != 0 {
         return -1;
     }
     t.width = w;
@@ -986,11 +1050,9 @@ fn texture_alloc_storage_3d(t: &mut GlTexture, w: u32, h: u32, depth: u32, texfm
     0
 }
 
-/// The byte layout of a w x (h * layers) chain: (level offsets, levels,
-/// total bytes); None when it does not fit the u32 offsets (checked: the
-/// shipped profile has no overflow checks). `pot_stack`: the backend walks a
-/// stacked chain from level 0's address by the power-of-two-rounded height
-/// (the PowerVR TPU, see below); false lays every level out packed.
+/// [`chain_layout_npot`] without `npot_chain`: the layout a level-0 upload
+/// gets, a non-power-of-two size one level (the tests' name for it).
+#[cfg(test)]
 pub(crate) fn chain_layout(
     w: u32,
     h: u32,
@@ -1000,10 +1062,35 @@ pub(crate) fn chain_layout(
     lvl_align: u32,
     pot_stack: bool,
 ) -> Option<([u32; CAP_MIP_LEVELS], u8, u32, u32)> {
+    chain_layout_npot(w, h, layers, bpp, one_level, lvl_align, pot_stack, false)
+}
+
+/// The byte layout of a w x (h * layers) chain: (level offsets, levels,
+/// total bytes); None when it does not fit the u32 offsets (checked: the
+/// shipped profile has no overflow checks). `pot_stack`: the backend walks a
+/// stacked chain from level 0's address by the power-of-two-rounded height
+/// (the PowerVR TPU, see below); false lays every level out packed.
+///
+/// A non-power-of-two size gets one level, unless `npot_chain` asks for its
+/// whole chain on a backend that is not `pot_stack` ([`npot_mip_chains`]):
+/// level i is then max(w >> i, 1) x max(h >> i, 1) (ES 2.0 3.7.7 with
+/// GL_OES_texture_npot, floor at every step), laid out by the same rules as
+/// a power-of-two chain.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn chain_layout_npot(
+    w: u32,
+    h: u32,
+    layers: u32,
+    bpp: u32,
+    one_level: bool,
+    lvl_align: u32,
+    pot_stack: bool,
+    npot_chain: bool,
+) -> Option<([u32; CAP_MIP_LEVELS], u8, u32, u32)> {
     /* The layout the backend reads a chain with: one row pitch for every
      * level, and every level starting on a boundary it can fetch from. */
     let chain_pitch = if lvl_align != 0 { tex_pitch(w) } else { 0 };
-    let multi = !one_level && is_pot(w) && is_pot(h) && (w > 1 || h > 1);
+    let multi = !one_level && ((is_pot(w) && is_pot(h)) || (npot_chain && !pot_stack)) && (w > 1 || h > 1);
     /* GlTexture::level_pitch, which every reader and writer uses */
     let level_pitch = |lw: u32| if chain_pitch != 0 { chain_pitch } else { one_wide_level_pitch(w, lw, multi) };
     let mut off = [0u32; CAP_MIP_LEVELS];
@@ -1052,7 +1139,7 @@ pub(crate) fn chain_layout(
             let level = level_pitch(lw).checked_mul(rows)?.checked_mul(bpp)?;
             bytes = bytes.checked_add(level)?;
             levels += 1;
-            if one_level || !is_pot(w) || !is_pot(h) || (lw == 1 && lfh == 1) || levels as usize == CAP_MIP_LEVELS {
+            if !chain || (lw == 1 && lfh == 1) || levels as usize == CAP_MIP_LEVELS {
                 break;
             }
             lw = if lw > 1 { lw / 2 } else { 1 };
@@ -1067,11 +1154,28 @@ pub(crate) fn chain_layout(
 /// is cleared (see `context::clear_storage`); storage of the same texture
 /// is reused when it fits and no kick uses it (`last_use`, which
 /// `note_target_use` folds the render-target use into).
-fn texture_alloc_storage_ex(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt: u8, one_level: bool) -> i32 {
+/// `npot_chain`: a non-power-of-two size gets its whole chain too, where the
+/// backend holds one ([`chain_layout_npot`]).
+fn texture_alloc_storage_ex(
+    t: &mut GlTexture,
+    w: u32,
+    h: u32,
+    layers: u32,
+    texfmt: u8,
+    one_level: bool,
+    npot_chain: bool,
+) -> i32 {
     let bpp = gles_texfmt_bytes(texfmt);
-    let Some((level_off, levels, bytes, chain_pitch)) =
-        chain_layout(w, h, layers, bpp, one_level, backend::mip_level_align(), !backend::native_layered_textures())
-    else {
+    let Some((level_off, levels, bytes, chain_pitch)) = chain_layout_npot(
+        w,
+        h,
+        layers,
+        bpp,
+        one_level,
+        backend::mip_level_align(),
+        !backend::native_layered_textures(),
+        npot_chain && npot_mip_chains(),
+    ) else {
         glog!("texture {}x{} x{} fmt {}: too large", w, h, layers, texfmt);
         return -1;
     };
@@ -1864,7 +1968,7 @@ unsafe fn tex_image_2d(
             /* levels uploaded before any level 0 survive a level 0 that
              * shows the chain is another shape (relayout_keeping_levels) */
             let ok = if t.level_defined & 1 == 0 && !t.mem.impl_.is_null() && t.format == format {
-                relayout_keeping_levels(t, width as u32, height as u32, layers, texfmt)
+                relayout_keeping_levels(t, width as u32, height as u32, layers, texfmt, false)
             } else {
                 texture_alloc_storage(t, width as u32, height as u32, layers, texfmt) == 0
             };
@@ -1886,7 +1990,8 @@ unsafe fn tex_image_2d(
     } else {
         /* A mip level. ES 2.0 3.7.1 has ONE error for it: without
          * GL_OES_texture_npot, a level above 0 that is not a power of two
-         * (dEQP texture.completeness.2d.npot_size expects it). A level that
+         * (dEQP texture.completeness.2d.npot_size expects it; NPOT_RESTRICTED,
+         * which no build is any more). A level that
          * does not fit the chain the base level laid out is no error in
          * either version: it is recorded, gets no storage, and leaves the
          * texture incomplete while it stands (3.7.10 / ES 3.0 3.8.13). Until
@@ -1894,7 +1999,7 @@ unsafe fn tex_image_2d(
          * not_positive_level_0 (levels after a 0x0 level 0) and extra_level
          * (a 1x1 past the chain's last, which 3.7.10 ignores) on the error
          * alone. */
-        if crate::REPORT_ES2 && (!is_pot(width as u32) || !is_pot(height as u32)) {
+        if NPOT_RESTRICTED && (!is_pot(width as u32) || !is_pot(height as u32)) {
             c.set_error(GL_INVALID_VALUE, FUNC);
             return false;
         }
@@ -1942,13 +2047,49 @@ unsafe fn tex_image_2d(
             && w0 <= MAX_TEXTURE_SIZE as u32
             && h0 <= MAX_TEXTURE_SIZE as u32
         {
-            if !relayout_keeping_levels(t, w0, h0, layers, texfmt_of(internalformat)) {
+            if !relayout_keeping_levels(t, w0, h0, layers, texfmt_of(internalformat), false) {
                 c.set_error(GL_OUT_OF_MEMORY, FUNC);
                 return false;
             }
             fresh = true;
         }
+        /* A level of a non-power-of-two image's chain, at that level's size
+         * (GL_OES_texture_npot; ES 3.0): the store has one level of such an
+         * image and lays the chain out now where the backend holds one
+         * (grow_npot_chain), after the kicks using the texture. */
+        let npot_level = t.level_defined & 1 != 0
+            && t.level_bad & 1 == 0
+            && t.chain_levels == 1
+            && !(is_pot(t.width) && is_pot(t.height))
+            && (level as u32) < u32::from(context::gl_mip_levels(t.width, t.height))
+            && (width as u32, height as u32) == level_size(t, level as u32)
+            && t.format == format;
+        if npot_level && npot_mip_chains() {
+            if !settle_texture(c, ti) {
+                c.set_error(GL_OUT_OF_MEMORY, FUNC);
+                return false;
+            }
+            let mut oom = false;
+            fresh = grow_npot_chain(&mut c.objs().textures[ti], &mut oom);
+            if oom {
+                c.set_error(GL_OUT_OF_MEMORY, FUNC);
+                return false;
+            }
+        }
+        let t = &mut c.objs().textures[ti];
         let (lw, lh) = level_size(t, level as u32);
+        /* GL's level, which a backend that keeps one level of a NPOT image
+         * (the PowerVR, npot_mip_chains) cannot hold: recorded as there, its
+         * texels dropped, so the chain is complete and samples its base, as
+         * after glGenerateMipmap. */
+        if npot_level && t.chain_levels == 1 {
+            t.level_defined |= bit;
+            t.level_bad &= !bit;
+            if let Some(f) = t.level_faces.get_mut(level as usize) {
+                *f |= 1u8 << face;
+            }
+            return true;
+        }
         /* a level of another format over a compressed chain: held nowhere */
         if t.block_bytes != 0 {
             t.level_defined |= bit;
@@ -1957,8 +2098,9 @@ unsafe fn tex_image_2d(
         }
         if level as u32 >= t.chain_levels as u32 || width as u32 != lw || height as u32 != lh {
             /* past a chain that ran down to 1x1: 3.7.10 ignores such a level;
-             * NOT past a one-level NPOT chain, whose level 1 is real and
-             * cannot be held (recorded, so the texture reads incomplete) */
+             * NOT past a one-level NPOT chain, whose levels are real: one of
+             * another size or format than GL's chain is recorded, so the
+             * texture reads incomplete (the right one was taken above) */
             let past_the_chain =
                 level as u32 >= t.chain_levels as u32 && (lw, lh) == (1, 1) && (width, height) == (1, 1);
             if !past_the_chain {
@@ -1988,6 +2130,7 @@ unsafe fn tex_image_2d(
         }
     }
 
+    let t = &c.objs_ref().textures[ti]; /* the level's branch may have laid it out again */
     if pixels.is_null() || width == 0 || height == 0 || t.mem.impl_.is_null() {
         return true; /* storage allocated, cleared or kept */
     }
@@ -3095,9 +3238,10 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     }
     /* ES 2.0 without GL_OES_texture_npot: a level-0 image that is not a power
      * of two has no mip chain, so asking for one is an error rather than the
-     * no-op below. ES 3.0 dropped the rule, so this follows the version the
-     * build reports. */
-    if crate::REPORT_ES2 && (!is_pot(t.width) || !is_pot(t.height)) {
+     * no-op below (NPOT_RESTRICTED). With the extension, as in ES 3.0, it has
+     * one: glmark2's terrain asks for the chain of an 800x600 texture. */
+    let npot = !is_pot(t.width) || !is_pot(t.height);
+    if NPOT_RESTRICTED && npot {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
@@ -3109,15 +3253,43 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    if t.chain_levels < 2
-        || t.mem.cpu.is_null()
-        || !(matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
+    let filtered = !t.mem.cpu.is_null()
+        && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
             || is_narrow_la(t.texfmt))
-        || t.external
-    {
-        /* NPOT (no chain is laid out for it), no CPU view of the texels, a
-         * packed format, or an image (one level): the texture keeps its base
-         * level and samples without mipmaps */
+        && !t.external;
+    /* A NPOT image has one level until its chain is asked for: laid out now
+     * where the backend holds one (grow_npot_chain), after the kicks using
+     * the texture, whose texels are copied across. Elsewhere nothing is
+     * waited for: glmark2's terrain asks again every frame for a texture it
+     * has just rendered into. */
+    if npot && filtered && t.chain_levels < 2 && npot_mip_chains() {
+        if !settle_texture(c, ti) {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return;
+        }
+        let mut oom = false;
+        grow_npot_chain(&mut c.objs().textures[ti], &mut oom);
+        if oom {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return;
+        }
+    }
+    let t = &mut c.objs().textures[ti];
+    if t.chain_levels < 2 {
+        /* No chain in the store: a NPOT image where the backend keeps one
+         * level (the PowerVR, npot_mip_chains), or a 1x1. GL's chain exists
+         * all the same (ES 2.0 3.7.11), so the texture is complete under a
+         * mipmap filter and samples its base level. It was left incomplete,
+         * and an ES 3.0 build sampled such a texture black. */
+        t.level_defined = ((1u32 << u32::from(context::gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
+        t.level_bad = 0;
+        t.level_faces = [0x3f; CAP_MIP_LEVELS];
+        return;
+    }
+    if !filtered {
+        /* no CPU view of the texels, a packed format, or an image (one
+         * level): the texture keeps its base level and samples without
+         * mipmaps */
         return;
     }
     /* the chain is rewritten in place: no kick may still read or write it */
@@ -6347,21 +6519,27 @@ mod tests {
 
     /// ES 2.0 3.7.1 without GL_OES_texture_npot: a level above 0 that is not
     /// a power of two is GL_INVALID_VALUE (dEQP texture.completeness's
-    /// npot_size expects it). ES 3.0 has no such rule: the level is accepted
-    /// and, since this store keeps one level of a NPOT image, recorded as not
-    /// fitting. Pinned GL_INVALID_VALUE for both versions until 2026-09-24.
+    /// npot_size expects it; NPOT_RESTRICTED). With the extension, as in ES
+    /// 3.0, the level is accepted: on this PowerVR-shaped mock, which keeps
+    /// one level of a NPOT image, it is recorded as there and not held; one
+    /// of another size than GL's chain is recorded as not fitting. Pinned
+    /// GL_INVALID_VALUE for both versions until 2026-09-24.
     #[test]
     fn tex_image_level_on_npot_texture_follows_the_version() {
         let gl = TestGl::new(4, 4);
         let name = new_tex();
         tex_image(0, 6, 6, GL_RGBA, GL_UNSIGNED_BYTE, &[]);
         tex_image(1, 3, 3, GL_RGBA, GL_UNSIGNED_BYTE, &ramp(9));
-        if crate::REPORT_ES2 {
+        if NPOT_RESTRICTED {
             assert_eq!(gl.error(), GL_INVALID_VALUE);
         } else {
             assert_eq!(gl.error(), GL_NO_ERROR);
             let t = &gl.ctx().objs().textures[name as usize];
-            assert_eq!((t.level_defined, t.level_bad), (0b11, 0b10));
+            assert_eq!((t.level_defined, t.level_bad, t.chain_levels), (0b11, 0, 1), "GL's level 1, not held");
+            tex_image(2, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, &ramp(4));
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            let t = &gl.ctx().objs().textures[name as usize];
+            assert_eq!((t.level_defined, t.level_bad), (0b111, 0b100), "2x2 is not level 2 of 6x6 (1x1)");
         }
     }
 
@@ -7594,19 +7772,133 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "report-es2"))]
     fn generate_mipmap_on_npot_keeps_the_base_level_only() {
-        /* documented in the code: no chain is laid out for NPOT, the texture
-         * samples without mipmaps. ES 2.0 makes the same call an error
-         * instead (generate_mipmap_of_a_npot_texture_follows_the_reported_version). */
+        /* documented in the code: on this PowerVR-shaped mock no chain is
+         * laid out for NPOT (npot_mip_chains), and GL's chain is recorded
+         * as present, so the texture is complete and samples its base. In
+         * both versions: the ES 2.0 surface claims GL_OES_texture_npot. */
         let gl = TestGl::new(4, 4);
         let name = new_tex();
         tex_image(0, 6, 4, GL_RGBA, GL_UNSIGNED_BYTE, &ramp(24));
         // SAFETY: plain GL call.
         unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_eq!(gl.ctx().objs().textures[name as usize].levels, 1);
+        let t = &gl.ctx().objs().textures[name as usize];
+        assert_eq!((t.levels, t.chain_levels), (1, 1));
+        assert_eq!((t.level_defined, t.level_bad), (0b111, 0), "6x4, 3x2, 1x1: GL's chain recorded");
         assert_eq!(storage(&gl, name)[..96], ramp(24)[..]);
+    }
+
+    /// The level sizes of glmark2 terrain's 800x600 chain (GL_OES_texture_npot:
+    /// floor at every step, ten levels) and where each backend's layout puts
+    /// them. The GC7000's (`mip_level_align` 64): one 800-texel pitch, every
+    /// level 64-aligned, which 3200-byte rows already are. The V3D's
+    /// (packed, `native_layered_textures`): each level at its own pair-padded
+    /// pitch, a 1-wide level one texel a row. The PowerVR's (`pot_stack`):
+    /// one level, as without `npot_chain`.
+    #[test]
+    fn an_800x600_npot_chain_is_laid_out_per_backend() {
+        let sizes =
+            [(800, 600), (400, 300), (200, 150), (100, 75), (50, 37), (25, 18), (12, 9), (6, 4), (3, 2), (1, 1)];
+        assert_eq!(context::gl_mip_levels(800, 600), 10);
+        /* GC7000 */
+        let (off, levels, bytes, pitch) = chain_layout_npot(800, 600, 1, 4, false, 64, false, true).unwrap();
+        assert_eq!((levels, pitch), (10, 800));
+        let mut rows = 0;
+        for (i, &(_, h)) in sizes.iter().enumerate() {
+            assert_eq!(off[i], 3200 * rows, "GC7000 level {i}");
+            rows += h;
+        }
+        assert_eq!(bytes, 3200 * rows);
+        assert_eq!(rows, 1196);
+        /* V3D */
+        let (off, levels, bytes, pitch) = chain_layout_npot(800, 600, 1, 4, false, 0, false, true).unwrap();
+        assert_eq!((levels, pitch), (10, 0));
+        let mut at = 0;
+        for (i, &(w, h)) in sizes.iter().enumerate() {
+            assert_eq!(off[i], at, "V3D level {i}");
+            let p = if w == 1 { 1 } else { tex_pitch(w) };
+            at += p * h * 4;
+        }
+        assert_eq!(bytes, at);
+        assert_eq!(
+            at,
+            4 * (800 * 600 + 400 * 300 + 200 * 150 + 100 * 75 + 50 * 37 + 26 * 18 + 12 * 9 + 6 * 4 + 4 * 2 + 1)
+        );
+        /* PowerVR, and any backend without npot_chain */
+        assert_eq!(chain_layout_npot(800, 600, 1, 4, false, 0, true, true).unwrap().1, 1);
+        assert_eq!(chain_layout(800, 600, 1, 4, false, 64, false).unwrap().1, 1);
+        assert_eq!(chain_layout(800, 600, 1, 4, false, 0, false).unwrap().1, 1);
+        /* a power-of-two size is the chain it always was */
+        assert_eq!(chain_layout_npot(64, 32, 1, 4, false, 0, false, true), chain_layout(64, 32, 1, 4, false, 0, false));
+    }
+
+    /// On a backend that holds a NPOT chain (the GC7000's shape here; the
+    /// V3D's in v3d/backend_tests.rs): glGenerateMipmap of a 5x3 image lays
+    /// its chain out (5x3, 2x1, 1x1), keeps level 0's texels and
+    /// box-filters the rest from it; the texture's state survives.
+    #[test]
+    fn generate_mipmap_lays_a_npot_chain_out_where_the_backend_holds_one() {
+        let gl = TestGl::new(4, 4);
+        gl.backend_like_gc7000();
+        let name = new_tex();
+        let base: Vec<u8> = (0..15u8).flat_map(|i| [i * 10, 200 - i * 10, 7, 255]).collect();
+        tex_image(0, 5, 3, GL_RGBA, GL_UNSIGNED_BYTE, &base);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT as GLint);
+        }
+        assert_eq!(gl.ctx().objs().textures[name as usize].chain_levels, 1, "one level until asked");
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs().textures[name as usize];
+        assert_eq!((t.chain_levels, t.levels, t.levels_written), (3, 3, 3));
+        assert_eq!((t.level_defined, t.level_bad, t.max_level), (0b111, 0, MAX_LEVEL_DEFAULT));
+        assert_eq!((t.min_filter, t.wrap_s), (GL_NEAREST_MIPMAP_NEAREST, GL_MIRRORED_REPEAT));
+        let pitch = t.level_pitch(5) as usize * 4;
+        assert_eq!(pitch, 24, "the GC7000's one chain pitch, pair-padded");
+        let (l1, l2) = (t.level_off[1] as usize, t.level_off[2] as usize);
+        assert_eq!((l1 % 64, l2 % 64), (0, 0));
+        let s = storage(&gl, name);
+        for y in 0..3 {
+            assert_eq!(s[y * pitch..y * pitch + 20], base[y * 20..y * 20 + 20], "level 0 row {y} kept");
+        }
+        /* level 1 texel (x, 0): the 2x2 box at (2x, 0) of level 0 */
+        let px = |x: usize, y: usize| &base[(y * 5 + x) * 4..(y * 5 + x) * 4 + 4];
+        for x in 0..2 {
+            for c in 0..4 {
+                let sum: u32 =
+                    [px(2 * x, 0), px(2 * x + 1, 0), px(2 * x, 1), px(2 * x + 1, 1)].iter().map(|p| p[c] as u32).sum();
+                assert_eq!(s[l1 + x * 4 + c] as u32, (sum + 2) / 4, "level 1 ({x}, 0) channel {c}");
+            }
+        }
+        assert_eq!(s[l2 + 3], 255, "level 2's alpha");
+    }
+
+    /// The application's own levels of a NPOT image (GL_OES_texture_npot):
+    /// on a backend that holds the chain, level 1 at GL's size lays it out
+    /// and its texels land there; on the PowerVR's shape it is recorded and
+    /// not held (`tex_image_level_on_npot_texture_follows_the_version`).
+    #[test]
+    fn a_npot_level_above_0_grows_the_chain_where_the_backend_holds_one() {
+        let gl = TestGl::new(4, 4);
+        gl.backend_like_gc7000();
+        let name = new_tex();
+        tex_image(0, 6, 6, GL_RGBA, GL_UNSIGNED_BYTE, &ramp(36));
+        tex_image(1, 3, 3, GL_RGBA, GL_UNSIGNED_BYTE, &ramp(9));
+        tex_image(2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &[1, 2, 3, 4]);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs().textures[name as usize];
+        assert_eq!((t.chain_levels, t.levels, t.level_defined, t.level_bad), (3, 3, 0b111, 0));
+        let (pitch, l1, l2) = (t.level_pitch(3) as usize * 4, t.level_off[1] as usize, t.level_off[2] as usize);
+        let s = storage(&gl, name);
+        assert_eq!(s[..24], ramp(36)[..24], "level 0 kept across the new layout");
+        for y in 0..3 {
+            assert_eq!(s[l1 + y * pitch..l1 + y * pitch + 12], ramp(9)[y * 12..y * 12 + 12], "level 1 row {y}");
+        }
+        assert_eq!(s[l2..l2 + 4], [1, 2, 3, 4]);
     }
 
     #[test]
@@ -10565,7 +10857,9 @@ mod tests {
 
     /// `generatemipmap_npot_wdt_hgt`: ES 2.0 without GL_OES_texture_npot has
     /// no mip chain for a non-power-of-two image, so asking for one is an
-    /// error. ES 3.0 dropped the rule, and this build reports ES 3.0.
+    /// error (NPOT_RESTRICTED). ES 3.0 dropped the rule, and the ES 2.0
+    /// surface claims GL_OES_texture_npot, which drops it too (what dEQP's
+    /// case is predicted to do then: docs/es2-cts-failures.md).
     #[test]
     fn generate_mipmap_of_a_npot_texture_follows_the_reported_version() {
         let gl = TestGl::new(8, 8);
@@ -10575,7 +10869,7 @@ mod tests {
             assert_eq!(gl.error(), GL_NO_ERROR, "{w}x{h}");
             // SAFETY: plain GL call.
             unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
-            let want = if crate::REPORT_ES2 { GL_INVALID_OPERATION } else { GL_NO_ERROR };
+            let want = if NPOT_RESTRICTED { GL_INVALID_OPERATION } else { GL_NO_ERROR };
             assert_eq!(gl.error(), want, "{w}x{h}");
         }
     }
