@@ -139,7 +139,7 @@ build.
     tool/headers); `yakogl-drivers` clippy: 2 warnings and a `lib test`
     compile error in `src/` that this item does not own;
   * `tools board.sh dry-run matrix and replays`: `board_selftest: 207
-    checks, 1 failed` (the failing check was not identified; not looked into);
+    checks, 1 failed` (the failing check is `console_from_ts: one 'HH:MM:SS line' per console.ts row, the verdict unchanged with it`; board tooling, not looked into further);
   * gaps: `yakogl-drivers` for `aarch64-unknown-none-softfloat` (no target, no
     nightly rust-src) and the i.MX8MP `regs.rs` (`HAL_NXP_DIR` unset).
   The V3D rows that run tests passed (`host-test,gpu-v3d,...`: only clippy warns).
