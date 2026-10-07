@@ -181,20 +181,28 @@ next limit after candidate 1 is fixed.
 
 - `driver/src/vivante/gc_render.c:978`: the wait sleeps 1 ms between polls.
   A wait that is not already done at the swap ends up to about 1 ms after the
-  fence (plus one tick of Zephyr's rounding).
+  fence (plus one 0.1 ms tick of Zephyr's rounding).
 - This is the same class as the AM62P's 1 ms poll, which cost about 0.1 ms a
   frame there (303 -> 316 with a 20 us poll; commit `78c4c208`,
   `driver/docs/pvr-fence-wait.md`, "The fine-wait run").
 - At most about 1 ms a frame here. It matters only when it pushes a scene
   over T, and after candidate 1 is fixed.
-- The tick rate is not set in this repository (no `SYS_CLOCK_TICKS_PER_SEC`
-  in `driver/boards/toradex/verdin_imx8mp/verdin_imx8mp_mimx8ml8_a53_defconfig`
-  or the glmark2 confs). It comes from the pinned Zephyr `af17c0c8`
-  (`west.yml`). It was not read here (no network, no Zephyr tree on this
-  machine). Zephyr's usual default with a tickless ARM arch timer is 10 000
-  ticks a second, which makes 1 ms = 10 ticks. If it were 100, each sleep
-  would be 10-20 ms and this would be a large cause. The record below reports
-  the tick rate, so one run settles it.
+- The tick rate is 10 000 a second, so the sleep is not tick-rounded to a
+  large value. This repository does not set `SYS_CLOCK_TICKS_PER_SEC` (not in
+  `driver/boards/toradex/verdin_imx8mp/verdin_imx8mp_mimx8ml8_a53_defconfig`
+  or the glmark2 confs). The pinned Zephyr `af17c0c8` (`west.yml`), read
+  upstream for this item:
+  - `kernel/Kconfig`: `SYS_CLOCK_TICKS_PER_SEC` is `default 10000 if
+    TICKLESS_KERNEL`; `TICKLESS_KERNEL` is `default y if TICKLESS_CAPABLE`.
+  - `drivers/timer/Kconfig.arm_arch`: `ARM_ARCH_TIMER` selects
+    `TICKLESS_CAPABLE`.
+  - `soc/nxp/imx/imx8m/Kconfig.defconfig.mimx8ml8_a53`: sets only
+    `SYS_CLOCK_HW_CYCLES_PER_SEC` (8 MHz), not the tick rate.
+  - `kernel/timeout.c` `z_add_timeout`: a relative timeout of n ticks expires
+    after n + 1 ticks (`timeout.ticks + ticks_elapsed + 1`).
+
+  So `k_sleep(K_MSEC(1))` is 10 + 1 ticks: 1.0-1.1 ms. Page 2 of the record
+  below still reports the built value, as a check on the built image.
 
 ### 4. The copy in `board_show` (only without the view)
 
@@ -233,8 +241,8 @@ next limit after candidate 1 is fixed.
   is a pan without SET_VSYNC.
 - galcore / etnaviv: the WAIT/LINK ring, its WAIT length and the flushes
   follow galcore as the repo records (`cmdbuf.rs:1-29`). Mesa etnaviv and the
-  Linux etnaviv driver were not re-read in this item: this machine has no
-  network and no Mesa tree. They do not change the conclusion. Under Linux
+  Linux etnaviv driver were not re-read in this item: there is no Mesa tree
+  here and a clone was not possible. They do not change the conclusion. Under Linux
   the page flip belongs to KMS and the compositor, not to the GL driver; the
   published i.MX8MP scores (`driver/docs/glmark2.md:233-239`) are off-screen
   or Wayland runs, not a GL driver that spins on the LCDIF.
@@ -409,14 +417,16 @@ GPU busy and wait values then say whether candidate 2 (GPU busy close to the
 frame) or candidate 3 (sleeps per frame high, wait well above GPU busy) is
 the next limit.
 
-If page 2 v5 is 100 (not 10 000): candidate 3 is large too (10-20 ms per
-sleep). Then the poll is fixed before or with F1.
+If page 2 v5 is not 10 000, the image was built with a different tick rate
+than the pinned Zephyr's default (candidate 3): at 100, each sleep would be
+10-20 ms, and the poll would be fixed before or with F1.
 
 ## What this does not show
 
 - No board run was made. The per-scene split (18 / 10 / 9 scenes at one
   period) is inferred from the scores, not measured.
-- The Zephyr tick rate was not read (see candidate 3).
-- Mesa etnaviv was not re-read (no network here); nothing in the conclusion
-  rests on it.
+- The Zephyr tick rate was read from the pinned Zephyr's Kconfig files, not
+  from a built image's `.config` (no Zephyr workspace on this machine).
+- Mesa etnaviv was not re-read (no Mesa tree here, and cloning was not
+  possible); nothing in the conclusion rests on it.
 - The 46 (view) run has no row in RESULTS.md; its number is STATUS.md:92's.
