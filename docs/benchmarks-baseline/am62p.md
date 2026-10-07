@@ -2,54 +2,71 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P benchmark baseline (before plan #2): NOT MEASURED
 
-Status: **blocked before the board.** No image was built and nothing was run on
-the Verdin AM62P. Every row below is empty on purpose; no host-only number is
-presented as a board result.
+Status: **all five common-set images built; one (GT) ran on the board and its
+console capture was empty, so there is no benchmark number.** No host-only
+number is offered in place of a board result.
 
-- origin/main at the time: `16a53f8d` (read from the workspace's read-only copy
-  of `origin/main`).
-- `tools/cts/common-tree.txt` on that commit has four rows: GM (glmark2),
-  SO (slint), SV (slint-view), GT (gl_test). It has **no cluster (CL) row**;
-  the cluster-common item is merged only into `ccfarm/integration`.
+- origin/main: `8abeaabb` (HEAD8).
+- The images are **not unmodified origin/main builds**. Every image reads
+  `PVR_SAMPLE_TREE=8abeaabb-dirty` because the detached worktree's
+  `tools/cts/common-images.sh` was edited (not committed anywhere):
+  1. `export PATH=$HOME/.cargo/bin:$PATH` (the worker's `cargo` is a kache shim
+     with no `rustc` beside it, which stops capi's CMake);
+  2. a `cluster)` case for the CL row (see below).
+  The firmware header was copied into the worktree (gitignored). No source file
+  of the image differs from origin/main.
+- origin/main's `tools/cts/common-tree.txt` has **no CL row**
+  (GM, SO, SV, GT only). CL was built with the same script and a one-row table
+  `cluster`, on `driver/samples/zephyr/cluster` (present on origin/main), with
+  `AGL_SLINT_CLUSTER_DIR` (agl-slint-cluster clone), the Slint no_std tree and
+  Noto Sans Regular/Light/ExtraLight (googlefonts/noto-fonts) as the sample's
+  CMakeLists describes.
+- Inputs were fetched into the project's deps directory, outside the repo:
+  glmark2 at `22c527cb`, slint `1007c032` + `slint-nostd.patch`, femtovg 0.26.0
+  and glow 0.18.0 from crates.io + their patches.
 
-## Why nothing ran
+## Builds (`common-images.sh am62p`, `rc=0` each)
 
-`tools/cts/cts-common.sh am62p build` needs these node-local variables, and this
-worker has none of them: `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`,
-`GLMARK2_SRC`, `SLINT_NOSTD_DIR`, `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`,
-`NOTO_SANS_DIR`, `RUSTUP_TOOLCHAIN` (nightly). `env` on the worker showed all
-of them unset.
-Building the cluster sample by hand needs `AGL_SLINT_CLUSTER_DIR` as well.
+| Row | sha256 of zephyr.bin |
+|-----|----------------------|
+| GM glmark2 | `141d9eff487de9ba21beff017502f9acd7c7ef2303b4065de6055f5d8eae91b4` |
+| SO slint | `4a4a507f3bfba1f05fed7f7f2d30170cb4d1bfecca61dfe62de7ef3c2befa463` |
+| SV slint-view | same sha256 as SO (the AM62P board layer has no scan-out view) |
+| CL cluster | `ff3f7ac2efeda8c0587135ad81d87ccf5a3426ea0df0cbb80b39e6752f2b7950` |
+| GT gl_test | `4e7f122a8dd1617162b3812e215c123a5aba988b6c1e77d0531db054d1a99461` |
 
-Also missing: `driver/src/fw/pvr_fw_blob.h` is not in the checkout (the origin
-checkout is not reachable from this worker). It must never be committed.
+## Board runs
 
-## Rows
+Run as `bash -c 'export BOARD_HOST=... BOARD_UART=... BOARD_BOOT=uboot-mmc;
+tools/board.sh am62p run <zephyr.bin> <rec> <label>'` (the integration branch's
+`tools/board.sh`, `c658d8a4`; the images are origin/main). The board was idle
+(`who_sessions=0`), the image was staged on the eMMC and read back equal.
 
-| Row | Image | Record | `tools/board.sh` verdict line |
-|-----|-------|--------|-------------------------------|
-| GM  | glmark2 | none | not run (no image) |
-| SO  | slint, view off | none | not run (no image) |
-| SV  | slint-view | none | not run (no image; the AM62P ignores the view option, so SV is the copy path again) |
-| CL  | cluster | none | not run (no CL row on origin/main; needs `AGL_SLINT_CLUSTER_DIR`) |
-| GT  | gl_test | none | not run (no image) |
+| Row | Record | `tools/board.sh` verdict line |
+|-----|--------|-------------------------------|
+| GT | `20261007-1825-GT-4e7f122a` | `verdict: board.sh am62p GT rc=4 verdict=empty boot=uboot-mmc row boot_verdict=empty result=none resets=absent record=absent back_after=426s` |
+| GM | `20261007-1914-GM-141d9eff` | none: run interrupted (daemon restart) before the verdict; its console capture had only `busy: another client is connected` |
+| SO | `20261007-1929-SO-4a4a507f` | none: same |
+| SV | not run | interrupted before it started |
+| CL | not run | interrupted before it started |
 
-| Measurement | Value |
-|-------------|-------|
-| glmark2 score, ran/failed/unsupported | not measured |
-| terrain: GL error 0x502 lines, incomplete-texture lines | not measured |
-| refract: "draw refused" count | not measured |
-| Slint SO/SV verdicts and fingerprint | not measured |
-| cluster probes and fps | not measured |
-| gl_test pass count | not measured |
-| GPU resets | not measured |
+## Why there is no measurement
 
-## To redo
-
-Set the variables above (`ccfarm env set yakogl <NAME> <value>`), put
-`pvr_fw_blob.h` into the worktree, then in a detached worktree of `origin/main`
-run `tools/cts/cts-common.sh am62p build`, then `run`, then `tally`, with
-`BOARD_BOOT`, `BOARD_HOST` and `BOARD_UART` taken from the farm's resources.
-Build the cluster row by hand as RESULTS.md's 2026-10-05 "AM62P: Slint and
-cluster" section describes, and run it with
-`tools/board.sh am62p run <zephyr.bin> <rec> <label>`.
+- GT's console capture was empty (0 lines); the board returned to Linux after
+  426 s. `verdict=empty` means "no console output", not that gl_test failed.
+- The UART path is a single-client serial bridge. In the GM and SO runs
+  board.sh's capture was answered `busy: another client is connected`: the
+  task's own serial console lease (the MCP client) holds the connection, and
+  board.sh cannot capture while it does. In the GT run the capture was not
+  refused but got no bytes, and the lease's client saw none either; writing to
+  the console through it, and writing a line to Linux's console tty from the
+  board, produced nothing on it. So the console is silent in the session as
+  leased (adapter/wiring or the lease holding the bridge); this could not be
+  fixed from the task.
+- Therefore the glmark2 score and ran/failed/unsupported counts, terrain 0x502
+  and incomplete-texture lines, refract "draw refused" count, Slint SO/SV
+  verdict and fingerprint, cluster probes and fps, the gl_test pass count and
+  GPU resets are **not measured**. The next attempt should run with the serial
+  lease not connected (or board.sh pointed at a bridge no one else holds), and
+  needs only the five built images above (rebuild from a clean origin/main
+  worktree to get a non-dirty tree).
