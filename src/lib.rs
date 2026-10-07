@@ -76,9 +76,12 @@ pub const HOST_TEST: bool = cfg!(feature = "host-test");
 ///    and GLSL ES 1.00;
 ///  - the ES 3.0-only queries GL_MAJOR_VERSION, GL_MINOR_VERSION and
 ///    GL_NUM_EXTENSIONS are GL_INVALID_ENUM;
-///  - a non-power-of-two texture has no mip chain and samples as incomplete
-///    unless it is clamped to the edge and filtered without mipmaps (ES 2.0
-///    3.7.10, which needs GL_OES_texture_npot and this library has not got it).
+///  - GL_OES_texture_npot, GL_OES_depth_texture and
+///    GL_OES_packed_depth_stencil are listed in GL_EXTENSIONS (ES 3.0 has
+///    them in core). With the first, a non-power-of-two texture has a mip
+///    chain and any wrap mode, as in ES 3.0, rather than ES 2.0 3.7.10's
+///    "clamped to the edge and filtered without mipmaps"
+///    (`gl::texture::NPOT_RESTRICTED`).
 pub const REPORT_ES2: bool = cfg!(feature = "report-es2");
 
 #[macro_use]
