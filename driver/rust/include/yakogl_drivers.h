@@ -391,7 +391,16 @@ struct yd_pvr_km {
 	 * the firmware the uncached window for the host's objects */
 	uint32_t fw_uncached;
 	uint32_t fl_probe_serve_max;    /* probe: refuse grows after this many served (0: off) */
+	/* the render pool's top region (gpu::pvr::mem bo_alloc_top, gpu::pvr::pool):
+	 * GENERAL requests of more than pool_top_above bytes are placed from the
+	 * carveout's end downward (0: off); the bytes handed out from the top
+	 * now and at most */
+	uint32_t pool_top_above;
+	uint32_t pool_top, pool_top_hw;
+	uint32_t pad;
 };
+/* The driver's pool_top_above: 256 KiB (driver/docs/pvr-render-pool.md, the top region). */
+#define YD_PVR_POOL_TOP_ABOVE (256u * 1024u)
 
 /* What the driver chooses for the FWIF structures (gpu::pvr::fwinit). */
 #define YD_PVR_FWINIT_ASSERT_ON_HWR (1u << 0) /* halt, do not reset, on a HWR */
@@ -1227,8 +1236,11 @@ _Static_assert(offsetof(struct yd_pvr_km, fwccb_check) ==
 _Static_assert(offsetof(struct yd_pvr_km, fw_uncached) ==
 		       680 + 64 * YD_PVR_FL_MAX + 16 + 4 * YD_PVR_FL_GROWS_MAX * YD_PVR_FL_MAX + 4 * YD_PVR_FL_MAX + 80,
 	       "yd_pvr_km.fw_uncached");
-_Static_assert(sizeof(struct yd_pvr_km) ==
+_Static_assert(offsetof(struct yd_pvr_km, pool_top_above) ==
 		       680 + 64 * YD_PVR_FL_MAX + 16 + 4 * YD_PVR_FL_GROWS_MAX * YD_PVR_FL_MAX + 4 * YD_PVR_FL_MAX + 88,
+	       "yd_pvr_km.pool_top_above");
+_Static_assert(sizeof(struct yd_pvr_km) ==
+		       680 + 64 * YD_PVR_FL_MAX + 16 + 4 * YD_PVR_FL_GROWS_MAX * YD_PVR_FL_MAX + 4 * YD_PVR_FL_MAX + 104,
 	       "struct yd_pvr_km");
 _Static_assert(sizeof(struct yd_pvr_fwinit) == 24, "struct yd_pvr_fwinit");
 _Static_assert(sizeof(struct yd_pvr_hwrt) == 176, "struct yd_pvr_hwrt");

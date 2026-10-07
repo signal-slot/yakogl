@@ -11,7 +11,10 @@
 //!   its shared-data window, addressed by heap offset;
 //! - page-table pages ([`pt_alloc_page`], for [`super::mmu`]);
 //! - the render pool ([`bo_alloc`] and its variants): pages mapped into one of
-//!   the GPU heaps at a device-VA cursor the caller keeps per heap.
+//!   the GPU heaps at a device-VA cursor the caller keeps per heap. Its large
+//!   GENERAL blocks come from the other end ([`bo_alloc_top`]): the top
+//!   region grows down from the carveout's end, and its floor is the bump's
+//!   limit.
 //!
 //! Every allocation is zeroed and cleaned before it is handed out (the GPU
 //! reads it from memory). Nothing is ever freed here; the render service keeps
@@ -148,23 +151,56 @@ pub fn pt_alloc_page(k: &mut YdPvrKm) -> u32 {
 
 // ---- the render pool -------------------------------------------------------------
 
+/// The device-VA offset of the render pool's top region in its heap: the
+/// block at carveout offset `co` is mapped at heap offset `TOP_VA + co`, so
+/// two blocks are adjacent in VA exactly when they are in the carveout, and a
+/// page's mapping never changes. Above every offset the bump hands out (at
+/// most the carveout's size) and every placed span ([`bo_place`]: below
+/// 1 GiB).
+pub const TOP_VA: u32 = 0x4000_0000;
+
+impl YdPvrKm {
+    /// The carveout's end for the render pool (page aligned).
+    pub fn pool_end(&self) -> u64 {
+        self.size & !(PAGE - 1)
+    }
+
+    /// The top region's floor: the bump's limit (carveout offset).
+    pub fn pool_floor(&self) -> u64 {
+        self.pool_end().saturating_sub(u64::from(self.pool_top))
+    }
+
+    /// Bytes between the bump and the top region's floor: what either end
+    /// can still take.
+    pub fn pool_gap(&self) -> u64 {
+        self.pool_floor().saturating_sub(round_up(u64::from(self.pool_next), PAGE))
+    }
+
+    /// Whether the top region can be used: switched on, and every carveout
+    /// offset fits a heap offset above [`TOP_VA`].
+    pub fn pool_top_on(&self) -> bool {
+        self.pool_top_above != 0 && self.size <= u64::from(u32::MAX - TOP_VA) + 1
+    }
+}
+
 /// Bump-allocate `size` bytes (page rounded, zeroed, cleaned) from the render
 /// pool and map them at `heap_base + *heap_bump` (page rounded) with leaf
-/// flags `l0flags`; advances `*heap_bump`. The pool is the carveout's tail: a
-/// request past it fails ([`PvrGpuBo::NONE`], logged) rather than touching
-/// memory outside the carveout.
+/// flags `l0flags`; advances `*heap_bump`. The pool is the carveout's tail up
+/// to the top region's floor: a request past it fails ([`PvrGpuBo::NONE`],
+/// logged) rather than touching memory outside the carveout or a top block.
 pub fn bo_alloc(k: &mut YdPvrKm, heap_base: u64, heap_bump: &mut u32, size: u32, l0flags: u64) -> PvrGpuBo {
     let msz = round_up(u64::from(size), PAGE) as u32;
     let co = round_up(u64::from(k.pool_next), PAGE) as u32;
     let hb = round_up(u64::from(*heap_bump), PAGE) as u32;
+    let end = k.pool_floor();
 
-    if u64::from(msz) > k.size || u64::from(co) > k.size - u64::from(msz) {
+    if u64::from(msz) > end || u64::from(co) > end - u64::from(msz) {
         crate::km_log!(
             k,
             Err,
             "render pool exhausted: {} KiB requested, {} KiB left",
             msz / 1024,
-            (k.size.wrapping_sub(u64::from(co)) / 1024) as u32
+            (end.wrapping_sub(u64::from(co)) / 1024) as u32
         );
         return PvrGpuBo::NONE;
     }
@@ -176,6 +212,46 @@ pub fn bo_alloc(k: &mut YdPvrKm, heap_base: u64, heap_bump: &mut u32, size: u32,
     k.flush(p, msz as usize);
     mmu::map(k, heap_base + u64::from(hb), k.phys + u64::from(co), u64::from(msz), l0flags);
     PvrGpuBo { gpu: heap_base + u64::from(hb), cpu: p, heap_off: hb }
+}
+
+/// Allocate `size` bytes (page rounded, zeroed, cleaned) from the top of the
+/// render pool: right under the top region's floor, which moves down by it,
+/// mapped at `heap_base + TOP_VA + co` with [`L0_FLAGS_DATA`]. Only the pages
+/// below the region's high-water are mapped: those above it already map the
+/// same pages. [`PvrGpuBo::NONE`] when the gap to the bump is too small, with
+/// no line (the caller decides what to try next).
+pub fn bo_alloc_top(k: &mut YdPvrKm, heap_base: u64, size: u32) -> PvrGpuBo {
+    let msz = round_up(u64::from(size), PAGE);
+    if !k.pool_top_on() || msz == 0 || msz > k.pool_gap() {
+        return PvrGpuBo::NONE;
+    }
+    let co = k.pool_floor() - msz;
+    k.pool_top += msz as u32;
+    let mapped = k.pool_end() - u64::from(k.pool_top_hw);
+    if k.pool_top > k.pool_top_hw {
+        k.pool_top_hw = k.pool_top;
+    }
+    let p = k.cpu_at(co);
+    // SAFETY: [co, co + msz) is inside the carveout, between the bump and the
+    // top region (checked above).
+    unsafe { core::ptr::write_bytes(p, 0, msz as usize) };
+    k.flush(p, msz as usize);
+    let va = heap_base + u64::from(TOP_VA) + co;
+    if co < mapped {
+        mmu::map(k, va, k.phys + co, mapped.min(co + msz) - co, L0_FLAGS_DATA);
+    }
+    PvrGpuBo { gpu: va, cpu: p, heap_off: TOP_VA + co as u32 }
+}
+
+/// Give a top block back to the gap when it lies at the top region's floor
+/// (its heap offset is `TOP_VA` + the floor); true when given back.
+pub fn bo_top_rollback(k: &mut YdPvrKm, heap_off: u32, size: u32) -> bool {
+    let msz = round_up(u64::from(size), PAGE);
+    if heap_off < TOP_VA || u64::from(heap_off - TOP_VA) != k.pool_floor() || msz > u64::from(k.pool_top) {
+        return false;
+    }
+    k.pool_top -= msz as u32;
+    true
 }
 
 /// A PM-protected allocation (a freelist's PFN array, an MList): the DDK
@@ -244,7 +320,7 @@ pub fn bo_place(k: &mut YdPvrKm, heap_base: u64, start_off: u32, size: u32, l0fl
     k.place_n += 1;
 
     k.pool_next = co + span;
-    assert!(u64::from(k.pool_next) <= k.size, "place: pool overflow");
+    assert!(u64::from(k.pool_next) <= k.pool_floor(), "place: pool overflow");
     let p = k.cpu_at(u64::from(co));
     // SAFETY: inside the carveout (asserted).
     unsafe { core::ptr::write_bytes(p, 0, span as usize) };

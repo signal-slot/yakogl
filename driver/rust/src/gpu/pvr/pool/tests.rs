@@ -67,22 +67,29 @@ impl Rig {
     }
 
     fn with_mib(mib: usize) -> Rig {
+        Rig::with_layout(mib * 1024 * 1024, POOL_OFF, 0)
+    }
+
+    /// A carveout of `bytes` with the render pool from `pool_off` and the
+    /// top region's threshold `top_above` (0: off, the other rigs' setting).
+    fn with_layout(bytes: usize, pool_off: u32, top_above: u32) -> Rig {
         LOG.with(|l| l.borrow_mut().clear());
-        let mut mem = std::vec![0u64; mib * 1024 * 1024 / 8];
+        let mut mem = std::vec![0u64; bytes / 8];
         // SAFETY: both are plain data for which all-zero is the documented
         // "before the first call" state (null pointers, zero counters).
         let (mut k, pool): (Box<YdPvrKm>, Box<YdPvrPool>) =
             unsafe { (Box::new(core::mem::zeroed()), Box::new(core::mem::zeroed())) };
         k.cpu = mem.as_mut_ptr() as *mut u8;
         k.phys = 0x9000_0000;
-        k.size = (mib * 1024 * 1024) as u64;
+        k.size = bytes as u64;
         let ops = ops();
         k.ops = &*ops;
         k.pt_area_off = P;
-        k.pt_area_end = POOL_OFF;
+        k.pt_area_end = pool_off;
         k.pt_next = P;
-        k.pool_off = POOL_OFF;
-        k.pool_next = POOL_OFF;
+        k.pool_off = pool_off;
+        k.pool_next = pool_off;
+        k.pool_top_above = top_above;
         mmu::init(&mut k);
         Rig { _mem: mem, _ops: ops, k, pool, bumps: Box::new([0; POOL_HEAPS]) }
     }
@@ -117,7 +124,7 @@ impl Rig {
 
     /// Bytes the physical cursor has handed out.
     fn pool_used(&self) -> u32 {
-        self.k.pool_next - POOL_OFF
+        self.k.pool_next - self.k.pool_off
     }
 
     fn table_used(&self, heap: usize) -> usize {
@@ -145,7 +152,8 @@ impl Rig {
     fn conserve(&mut self, heap: usize, live: u64) {
         let f = self.free_of(heap);
         let dropped = u64::from(self.pool.dropped_kib[heap]) * 1024;
-        assert_eq!(live + f.bytes + dropped, u64::from(self.bumps[heap]), "heap {heap}: bytes not conserved");
+        let top = if heap == GEN { u64::from(self.k.pool_top) } else { 0 };
+        assert_eq!(live + f.bytes + dropped, u64::from(self.bumps[heap]) + top, "heap {heap}: bytes not conserved");
         let mut r: Vec<(u32, u32, usize)> =
             self.pool.free[heap].iter().filter(|s| s.size != 0).map(|s| (s.hb, s.size, s.cpu as usize)).collect();
         for c in self.chain(heap) {
@@ -180,8 +188,27 @@ fn holes(r: &mut Rig, n: usize) -> Vec<PvrGpuBo> {
 /// rollback counts.
 #[test]
 fn the_rust_pool_replays_the_c_pools_golden_trace() {
+    replay_the_golden_trace(0);
+}
+
+/// The same with the top region on at the driver's threshold: the trace's
+/// two GENERAL requests of more than 256 KiB (32 MiB, the whole carveout;
+/// 1 MiB once everything is free and merged) are refused and served as the
+/// C pool did, and nothing is ever placed in the top region.
+#[test]
+fn with_the_top_region_on_the_golden_trace_replays_to_equality() {
+    let top = replay_the_golden_trace(YD_PVR_POOL_TOP_ABOVE);
+    assert_eq!(top, (0, 0), "the top region's bytes now and at most");
+}
+
+/// `include/yakogl_drivers.h`'s `YD_PVR_POOL_TOP_ABOVE`, what the driver sets.
+const YD_PVR_POOL_TOP_ABOVE: u32 = 256 * 1024;
+
+/// Replay `golden::TRACE` with the top region's threshold `top_above`; the top
+/// region's bytes at the end, now and at most.
+fn replay_the_golden_trace(top_above: u32) -> (u32, u32) {
     use super::golden::TRACE;
-    let mut r = Rig::with_mib(GOLDEN_MIB);
+    let mut r = Rig::with_layout(GOLDEN_MIB * 1024 * 1024, POOL_OFF, top_above);
     let mut blk: Vec<PvrGpuBo> = Vec::new();
     let base = r.k.cpu as usize;
     let (mut allocs, mut frees, mut pokes) = (0, 0, 0);
@@ -241,6 +268,7 @@ fn the_rust_pool_replays_the_c_pools_golden_trace() {
     }
     /* the population: the trace is what the generator printed, all of it */
     assert_eq!((TRACE.len(), allocs, frees, pokes), (2769, 1384, 1384, 1), "the golden trace's population");
+    (r.k.pool_top, r.k.pool_top_hw)
 }
 
 /* ---- the C checks' shapes ------------------------------------------------- */
@@ -539,6 +567,163 @@ fn known_wrong_a_block_of_another_heap_in_between_splits_the_free_space_for_good
     assert_eq!(big.heap_off, 0x20_0000);
 }
 
+/* ---- the top region --------------------------------------------------------- */
+
+const MIB_B: u32 = 0x10_0000;
+
+/// Requests of more than 1 MiB less a page are large here.
+fn top_rig() -> Rig {
+    Rig::with_layout(MIB * 1024 * 1024, POOL_OFF, MIB_B - P)
+}
+
+/// A large GENERAL block comes from the carveout's end, mapped at
+/// `TOP_VA + co`; a small one and every PDS/USC block from the bump.
+#[test]
+fn a_large_general_block_comes_from_the_top_and_a_small_one_from_the_bump() {
+    let mut r = top_rig();
+    let small = r.alloc(GEN, MIB_B - P);
+    let big = r.alloc(GEN, MIB_B);
+    let usc = r.alloc(USC, 2 * MIB_B);
+    let end = (MIB * 1024 * 1024) as u32;
+    assert_eq!(small.heap_off, 0, "below the threshold: the bump");
+    assert_eq!(usc.heap_off, 0, "another heap: the bump");
+    assert_eq!(big.heap_off, TOP_VA + end - MIB_B, "the carveout's last MiB");
+    assert_eq!(big.cpu, r.k.cpu_at(u64::from(end - MIB_B)));
+    assert_eq!(big.gpu, GENERAL_HEAP_BASE + u64::from(TOP_VA) + u64::from(end - MIB_B));
+    assert_eq!((r.k.pool_top, r.k.pool_top_hw), (MIB_B, MIB_B));
+    for pg in [0, MIB_B / 2, MIB_B - P] {
+        let pte = mmu::lookup(&r.k, big.gpu + u64::from(pg));
+        assert_eq!(
+            pte & 0xFF_FFFF_F000,
+            r.k.phys + u64::from(end - MIB_B + pg),
+            "page +0x{pg:x} maps its own carveout page"
+        );
+    }
+    assert_eq!((r.pool.bumped[GEN], r.pool.reused[GEN]), (2, 0));
+    assert_eq!(r.pool_used(), MIB_B - P + 2 * MIB_B, "the bump took the small GENERAL block and the USC one");
+}
+
+/// The top region's blocks merge in both spaces, and a range that reaches
+/// the region's floor goes back to the gap: freed in any order, three large
+/// blocks leave the gap whole and no free range. Allocated again, the pages
+/// are mapped already: no page-table page is taken, no mapping changes.
+#[test]
+fn freed_top_blocks_merge_and_give_the_gap_back_whole() {
+    let mut r = top_rig();
+    let gap = r.k.pool_gap();
+    let a = r.alloc(GEN, MIB_B);
+    let b = r.alloc(GEN, 2 * MIB_B);
+    let c = r.alloc(GEN, MIB_B + P);
+    assert_eq!(r.k.pool_gap(), gap - u64::from(4 * MIB_B + P));
+    r.free(&a, MIB_B); /* the highest: a range on the list */
+    assert_eq!((r.free_of(GEN).ranges, r.k.pool_top), (1, 4 * MIB_B + P));
+    r.free(&c, MIB_B + P); /* at the floor: back to the gap */
+    assert_eq!((r.free_of(GEN).ranges, r.k.pool_top), (1, 3 * MIB_B));
+    r.free(&b, 2 * MIB_B); /* merges with a, reaches the floor */
+    assert_eq!((r.free_of(GEN).ranges, r.k.pool_top, r.k.pool_gap()), (0, 0, gap));
+    assert_eq!(r.k.pool_top_hw, 4 * MIB_B + P);
+    let pt = r.k.pt_next;
+    r.k.mmu_dirty = 0;
+    let again = r.alloc(GEN, 3 * MIB_B);
+    assert_eq!(again.heap_off, TOP_VA + (MIB * 1024 * 1024) as u32 - 3 * MIB_B);
+    assert_eq!((r.k.pt_next, r.k.mmu_dirty), (pt, 0), "no page mapped again");
+}
+
+/// A large request takes a free range of its size before it moves the
+/// floor: the next scene's large blocks reuse the last one's.
+#[test]
+fn a_large_request_reuses_a_freed_top_range_first() {
+    let mut r = top_rig();
+    let a = r.alloc(GEN, 2 * MIB_B);
+    let _keep = r.alloc(GEN, MIB_B);
+    r.free(&a, 2 * MIB_B);
+    let top = r.k.pool_top;
+    let b = r.alloc(GEN, 2 * MIB_B - P);
+    assert_eq!((b.heap_off, r.k.pool_top), (a.heap_off, top));
+    assert_eq!(r.pool.reused[GEN], 1);
+}
+
+/// The two ends share the gap: the bump stops at the top region's floor
+/// (its line says what is left), and a small request the bump cannot serve
+/// takes a free range of the top region rather than failing.
+#[test]
+fn the_bump_stops_at_the_floor_and_a_small_request_falls_back_to_a_top_range() {
+    let mut r = top_rig();
+    let pool = (MIB * 1024 * 1024) as u32 - POOL_OFF;
+    let big = r.alloc(GEN, pool / 2);
+    let _keep = r.alloc(GEN, MIB_B);
+    let rest = r.k.pool_gap() as u32;
+    let _fill = r.alloc(USC, rest);
+    assert_eq!(r.k.pool_gap(), 0);
+    assert!(r.try_alloc(USC, P).is_none(), "nothing between the bump and the floor");
+    assert!(r.logs().iter().any(|(_, l)| l == "render pool exhausted: 4 KiB requested, 0 KiB left"));
+    r.free(&big, pool / 2);
+    let small = r.alloc(GEN, P);
+    assert_eq!(small.heap_off, big.heap_off, "the freed top range served it");
+    r.conserve(GEN, u64::from(MIB_B + P));
+}
+
+/// Frees of ranges the top region never handed out are dropped and counted,
+/// as past the bump: an address below the floor belongs to no heap, and a
+/// size that runs past the carveout's end is GENERAL's.
+#[test]
+fn a_free_outside_the_top_region_is_dropped() {
+    let mut r = top_rig();
+    let big = r.alloc(GEN, MIB_B);
+    let below = PvrGpuBo {
+        gpu: big.gpu - u64::from(MIB_B),
+        cpu: big.cpu.wrapping_sub(MIB_B as usize),
+        heap_off: big.heap_off - MIB_B,
+    };
+    r.free(&below, MIB_B);
+    r.free(&big, 2 * MIB_B);
+    assert_eq!(r.pool.dropped_kib, [2048, 0, 0, 1024]);
+    assert_eq!(r.k.pool_top, MIB_B, "nothing given back");
+}
+
+/// Random large and small blocks with the top region on: every heap's bytes
+/// conserved (the top region's counted with the bump's), no overlap, nothing
+/// left unmerged; with everything freed, the top region is all back in the
+/// gap.
+#[test]
+fn a_random_run_with_the_top_region_conserves_and_ends_whole() {
+    const SIZES: [u32; 8] = [0x1000, 0x3000, 0x10000, 0x8_0000, 0x10_0000, 0x18_0000, 0x30_0000, 0x7_6000];
+    let mut r = Rig::with_layout(GOLDEN_MIB * 1024 * 1024, POOL_OFF, YD_PVR_POOL_TOP_ABOVE);
+    let mut live: Vec<(PvrGpuBo, u32, usize)> = Vec::new();
+    let mut seed = 0xD1B5_4A32_D192_ED03u64;
+    let mut rnd = |m: u64| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed % m
+    };
+    let mut tops = 0;
+    for _ in 0..8000 {
+        if live.len() < 60 && (live.is_empty() || rnd(2) == 0) {
+            let heap = if rnd(4) == 0 { USC } else { GEN };
+            let sz = SIZES[rnd(SIZES.len() as u64) as usize] - rnd(2) as u32 * 0x800;
+            if let Some(bo) = r.try_alloc(heap, sz) {
+                tops += usize::from(bo.heap_off >= TOP_VA);
+                live.push((bo, sz, heap));
+            }
+        } else {
+            let (bo, sz, _) = live.swap_remove(rnd(live.len() as u64) as usize);
+            r.free(&bo, sz);
+        }
+        for h in [GEN, USC] {
+            let held: u64 = live.iter().filter(|l| l.2 == h).map(|(_, s, _)| round_up(u64::from(*s), 0x1000)).sum();
+            r.conserve(h, held);
+        }
+    }
+    eprintln!("random run: {tops} blocks placed in the top region");
+    assert!(tops > 100, "the run placed only {tops} blocks in the top region");
+    for (bo, sz, _) in live.drain(..) {
+        r.free(&bo, sz);
+    }
+    assert_eq!(r.k.pool_top, 0, "the top region is all back in the gap");
+    assert_eq!((r.pool.dropped_kib, r.pool.double_frees, r.pool.ovf_bad), ([0; 4], 0, 0));
+}
+
 /* ---- the summary ---------------------------------------------------------- */
 
 /// An exhausted pool says so in the bump's line, then prints the summary at
@@ -581,3 +766,5 @@ fn the_run_end_report_is_the_summary_at_inf() {
     assert!(logs.iter().all(|(lvl, _)| *lvl == 3), "INF");
     assert_eq!(logs[0].1, "render pool summary: 7168 KiB, bump 0 KiB now, 0 KiB high-water");
 }
+
+mod replay;
