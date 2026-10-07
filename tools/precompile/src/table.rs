@@ -51,8 +51,8 @@
 
 use crate::drive::hex;
 use crate::shc_print::{
-    binding_is_zero, emit_u32_array, print_array, print_binding, print_uniform, rs_comment, rs_str, Field,
-    ARRAY_ATTRIBS, ARRAY_VARYINGS, ATTRIBS, DECLARED, UNIFORMS, VARYINGS,
+    emit_u32_array, is_zero, name_str, print_array, print_uniform, rs_comment, rs_str, Field, ARRAY_ATTRIBS,
+    ARRAY_VARYINGS, ATTRIBS, VARYINGS,
 };
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -257,7 +257,6 @@ mod viv {
     pub const IN: ArrayField<ShcVivIo> = ArrayField {
         kind: Field { field: "in_", ty: "ShcVivIo", is_zero: io_is_zero, print: print_io },
         pad: "pad_io",
-        zero: "ShcVivIo::ZERO",
         len: "SHC_VIV_MAX_IO",
     };
     pub const OUT: ArrayField<ShcVivIo> = ArrayField { kind: Field { field: "out", ..IN.kind }, ..IN };
@@ -309,6 +308,35 @@ fn disagreements(had: &[ReflField], new: &[ReflField]) -> Vec<String> {
         })
         .collect()
 }
+
+/* `uniforms` and `declared` are fields only our table has: a `ShcShader`
+ * holds neither as an array a pad fills, so the shared leaf printers
+ * (tools/yakogl-tools/src/shc_print.rs, which the Mesa emitter builds too)
+ * have no use for them and they live here. */
+
+fn print_binding(b: &ShcAttribBinding) -> String {
+    let ShcAttribBinding { name, location, columns, gl_type, active } = *b;
+    format!(
+        "ShcAttribBinding {{ name: cname(\"{}\"), location: {location}, columns: {columns}, gl_type: 0x{gl_type:04x}, active: {active} }}",
+        name_str(&name)
+    )
+}
+
+fn binding_is_zero(b: &ShcAttribBinding) -> bool {
+    let ShcAttribBinding { name, location, columns, gl_type, active } = *b;
+    is_zero(&name) && location == 0 && columns == 0 && gl_type == 0 && active == 0
+}
+
+fn uniform_is_zero(u: &ShcUniform) -> bool {
+    let ShcUniform { name, dword_off, dwords, gl_type, array_len, binding, inner } = *u;
+    is_zero(&name) && dword_off == 0 && dwords == 0 && gl_type == 0 && array_len == 0 && binding == 0 && inner == 0
+}
+
+const UNIFORMS: Field<ShcUniform> =
+    Field { field: "uniforms", ty: "ShcUniform", is_zero: uniform_is_zero, print: print_uniform };
+
+const DECLARED: Field<ShcAttribBinding> =
+    Field { field: "declared", ty: "ShcAttribBinding", is_zero: binding_is_zero, print: print_binding };
 
 /// `static {name}: [ty; n] = [...]` of the entries `f` describes (no padding:
 /// a [`ShcShader`] pads them at the look-up), and the `field: &{name},` line
