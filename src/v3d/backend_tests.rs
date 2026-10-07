@@ -1508,6 +1508,112 @@ fn a_mip_chain_is_tiled_level_by_level() {
     }
 }
 
+/// GL_OES_texture_npot on the V3D, glmark2 terrain's case: glGenerateMipmap
+/// of an 800x600 RGBA texture under this backend's table lays out its ten
+/// levels (800x600 down to 1x1, floor at every step) where
+/// `texture::gl_level` says, the binding of the complete, REPEAT-wrapped,
+/// LINEAR_MIPMAP_LINEAR texture is sampled whole (no refusal, ten levels,
+/// a linear mip filter, REPEAT on both axes), and a draw tiles every level
+/// from the GL core's generated texels.
+///
+/// Revert check: the refusal "a mip chain on a non-power-of-two texture"
+/// back in `texture::refusal_for` fails the refusal assert and the draw.
+#[test]
+fn a_generated_npot_chain_is_sampled_whole() {
+    use crate::gl::consts::*;
+    use crate::gl::texture::{
+        glBindTexture, glDeleteTextures, glGenTextures, glGenerateMipmap, glTexImage2D, glTexParameteri,
+    };
+    let rig = Rig::new();
+    rig.init();
+    /* the GL core reads this backend's layout flags, as in the product;
+     * TestGl's drop resets the table */
+    // SAFETY: serialised by the rig's TestGl.
+    unsafe { crate::backend::g_backend = &yakogl_backend_v3d };
+    let (w, h) = (800u32, 600u32);
+    let texels: Vec<u8> = (0..w * h).flat_map(|i| [(i % w) as u8, (i / w) as u8, 0x5a, 0xff]).collect();
+    let mut name = 0;
+    // SAFETY: plain GL calls on the rig's context with live pointers.
+    unsafe {
+        glGenTextures(1, &mut name);
+        glBindTexture(GL_TEXTURE_2D, name);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA as i32,
+            w as i32,
+            h as i32,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            texels.as_ptr() as *const c_void,
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT as i32);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT as i32);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    assert_eq!(rig.gl.error(), GL_NO_ERROR, "glGenerateMipmap of 800x600");
+    let t = &rig.gl.ctx().objs().textures[name as usize];
+    assert_eq!((t.chain_levels, t.levels, t.level_defined, t.level_bad), (10, 10, 0x3ff, 0));
+    let sizes = [(800, 600), (400, 300), (200, 150), (100, 75), (50, 37), (25, 18), (12, 9), (6, 4), (3, 2), (1, 1)];
+    for (level, &(lw, lh)) in sizes.iter().enumerate() {
+        let level = level as u32;
+        assert_eq!(((w >> level).max(1), (h >> level).max(1)), (lw, lh));
+        let (off, pitch, rows) = texture::gl_level(w, h, level);
+        assert_eq!(off, t.level_off[level as usize], "level {level}: offset");
+        assert_eq!(pitch, t.level_pitch(lw), "level {level}: pitch");
+        assert_eq!(rows, lh, "level {level}: rows");
+    }
+    let b = crate::gl::draw::texture_bind_2d(t);
+    assert_eq!(texture::refusal(&b), None);
+    assert_eq!((b.mip_levels, b.mip_filter, texture::levels_sampled(&b)), (10, 2, 10));
+    assert!(texture::gl_bytes(&b) as usize <= t.mem.size, "the sampled levels lie inside the storage");
+    let s = texture::sampler(&b);
+    assert_eq!((s.wrap_s, s.wrap_t), (V3D_WRAP_MODE_REPEAT, V3D_WRAP_MODE_REPEAT));
+    assert!(!s.mip_none && !s.mip_nearest && !s.min_nearest && !s.mag_nearest);
+    /* level 1 texel (1, 2): the box (2..3, 4..5) of level 0, R = x, G = y */
+    let (off1, pitch1, _) = texture::gl_level(w, h, 1);
+    // SAFETY: inside the texture's storage (level 1's offset and pitch above).
+    let gen =
+        unsafe { core::slice::from_raw_parts((t.mem.cpu as *const u8).add((off1 + (2 * pitch1 + 1) * 4) as usize), 4) };
+    assert_eq!(gen, [3, 5, 0x5a, 0xff], "level 1 (1, 2) averages level 0 (2..3, 4..5), rounding half up");
+
+    let mut d = rig.draw();
+    d.textures[0] = b;
+    d.num_textures = 1;
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    let u = rig.draws()[0].tmu[0];
+    let st = words(&rig, u.tex_state, 6);
+    assert_eq!((st[1], st[2]), (800, 600));
+    assert_eq!(st[3] & 0xffff, 9, "max level: ten levels");
+    /* the fake layout: the levels back to back, smallest first, rows packed
+     * at the level's width; level 0 (last) at st[0] */
+    let size = |i: u32| (w >> i).max(1) * (h >> i).max(1) * 4;
+    let image = st[0] - (1..10).map(size).sum::<u32>();
+    let level_base = |level: u32| image + (level + 1..10).map(size).sum::<u32>();
+    for level in [1u32, 4, 9] {
+        let (lw, lh) = ((w >> level).max(1), (h >> level).max(1));
+        let (off, pitch, _) = texture::gl_level(w, h, level);
+        let tiled = rig.gpu_bytes(level_base(level), (lw * lh * 4) as usize);
+        for y in 0..lh {
+            // SAFETY: inside the texture's storage (the level's rows).
+            let row = unsafe {
+                core::slice::from_raw_parts(
+                    (t.mem.cpu as *const u8).add((off + y * pitch * 4) as usize),
+                    (lw * 4) as usize,
+                )
+            };
+            let at = (y * lw * 4) as usize;
+            assert_eq!(tiled[at..at + (lw * 4) as usize], *row, "level {level} row {y}");
+        }
+    }
+    assert_eq!(v3d_finish(), 0);
+    /* freed while the rig's OSAL, which allocated it, is the one installed */
+    // SAFETY: a live name.
+    unsafe { glDeleteTextures(1, &name) };
+}
+
 fn sampler_counters() -> (u32, u32) {
     let (mut p, mut r) = (0, 0);
     // SAFETY: two writable counters.

@@ -127,8 +127,25 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * debug_marker group runs only when this is claimed
      * (es2fDebugMarkerTests.cpp:48). */
     b"GL_EXT_debug_marker\0",
-    /* The last DEPTH_TEXTURE_NAMES entries: listed only where
-     * DEPTH_TEXTURE_EXTENSIONS holds.
+    /* The last ES2_ONLY_NAMES entries: listed only on the ES 2.0 surface
+     * (NPOT_EXTENSION and DEPTH_TEXTURE_EXTENSIONS), whose core lacks them.
+     *
+     * GL_OES_texture_npot: a non-power-of-two texture may have a mip chain
+     * and wrap with GL_REPEAT or GL_MIRRORED_REPEAT, and glGenerateMipmap
+     * builds its chain (ES 2.0 3.7.10's NPOT completeness rule and 3.7.11's
+     * glGenerateMipmap error go; texture.rs NPOT_RESTRICTED). glmark2's
+     * terrain generates mipmaps of an 800x600 texture and sampled it black
+     * without it (tools/cts/RESULTS.md, 2026-10-04). Where the chain lives
+     * is the backend's: the V3D and the GC7000 place every level from the GL
+     * core's own offsets and get the whole chain (texture.rs
+     * npot_mip_chains); the PowerVR's TPU finds level i+1 by its own
+     * power-of-two arithmetic, unmeasured for a non-power-of-two stride, so
+     * there such a texture keeps its base level, complete, and is sampled
+     * from it (what an ES 3.0 build did on every GPU before 2026-10-07).
+     * That is the one way the PowerVR falls short of the extension: the
+     * picture is right at level 0 and aliases where it is minified. */
+    b"GL_OES_texture_npot\0",
+    /* GL_OES_depth_texture and GL_OES_packed_depth_stencil.
      *
      * GL_OES_depth_texture: glTexImage2D / glTexSubImage2D take
      * GL_DEPTH_COMPONENT with GL_UNSIGNED_SHORT or GL_UNSIGNED_INT on
@@ -161,8 +178,12 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
     b"GL_OES_depth_texture\0",
     b"GL_OES_packed_depth_stencil\0",
 ];
-/// How many names at the end of the list are the depth-texture pair.
-const DEPTH_TEXTURE_NAMES: usize = 2;
+/// How many names at the end of the list are the ES 2.0 surface's own:
+/// GL_OES_texture_npot and the depth-texture pair.
+const ES2_ONLY_NAMES: usize = 3;
+/// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU (the
+/// list above says how each backend holds the chain); ES 3.0 has it in core.
+pub(crate) const NPOT_EXTENSION: bool = crate::REPORT_ES2;
 /// GL_OES_depth_texture and GL_OES_packed_depth_stencil are claimed on the
 /// ES 2.0 surface of every GPU. ES 3.0 has them in core (and samples a depth
 /// texture as (d, 0, 0, 1), not the extension's luminance). The V3D samples
@@ -171,12 +192,14 @@ const DEPTH_TEXTURE_NAMES: usize = 2;
 /// CPU (`v3d_depth_resolve`); gl_test case 169 dstex passed on the Pi 4 with
 /// it (tools/cts/RESULTS.md, 2026-10-04).
 pub(crate) const DEPTH_TEXTURE_EXTENSIONS: bool = crate::REPORT_ES2;
+/* the ES 2.0-only tail is listed or left out whole */
+const _: () = assert!(NPOT_EXTENSION == DEPTH_TEXTURE_EXTENSIONS);
 /// The extension list of this build: [`ALL_EXTENSION_NAMES`] less the
-/// depth-texture pair where it is not claimed.
+/// ES 2.0-only names where they are not claimed.
 pub(crate) static EXTENSION_NAMES: &[&[u8]] = if DEPTH_TEXTURE_EXTENSIONS {
     ALL_EXTENSION_NAMES
 } else {
-    ALL_EXTENSION_NAMES.split_at(ALL_EXTENSION_NAMES.len() - DEPTH_TEXTURE_NAMES).0
+    ALL_EXTENSION_NAMES.split_at(ALL_EXTENSION_NAMES.len() - ES2_ONLY_NAMES).0
 };
 const EXTENSION_COUNT: usize = EXTENSION_NAMES.len();
 
@@ -215,7 +238,8 @@ GL_EXT_debug_marker"
     };
 }
 const EXTENSION_STRING: &[u8] = if DEPTH_TEXTURE_EXTENSIONS {
-    concat!(base_extension_string!(), " GL_OES_depth_texture GL_OES_packed_depth_stencil\0").as_bytes()
+    concat!(base_extension_string!(), " GL_OES_texture_npot GL_OES_depth_texture GL_OES_packed_depth_stencil\0")
+        .as_bytes()
 } else {
     concat!(base_extension_string!(), "\0").as_bytes()
 };
@@ -1402,7 +1426,21 @@ mod tests {
         for name in ["GL_OES_depth_texture", "GL_OES_packed_depth_stencil"] {
             assert_eq!(listed.contains(&name), want, "{name}");
         }
-        assert_eq!(listed.len() + if want { 0 } else { DEPTH_TEXTURE_NAMES }, ALL_EXTENSION_NAMES.len());
+        assert_eq!(listed.len() + if want { 0 } else { ES2_ONLY_NAMES }, ALL_EXTENSION_NAMES.len());
+    }
+
+    /// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU
+    /// (this test runs in each GPU's build) and not on ES 3.0, which has it
+    /// in core; the GL core's NPOT rules follow the claim.
+    #[test]
+    fn texture_npot_is_claimed_on_the_es2_surface() {
+        let s = core::str::from_utf8(EXTENSION_STRING.strip_suffix(b"\0").expect("NUL-terminated")).unwrap();
+        let listed: std::vec::Vec<&str> = s.split(' ').collect();
+        assert_eq!(NPOT_EXTENSION, crate::REPORT_ES2);
+        assert_eq!(listed.contains(&"GL_OES_texture_npot"), crate::REPORT_ES2);
+        assert_eq!(extension_listed("GL_OES_texture_npot"), crate::REPORT_ES2);
+        /* no build keeps ES 2.0's NPOT rules any more */
+        const { assert!(!super::super::texture::NPOT_RESTRICTED) };
     }
 
     /// Advertised means the online front end lets a shader require it.

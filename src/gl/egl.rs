@@ -3742,8 +3742,14 @@ mod tests {
         assert_eq!(config_samples(CONFIG_565), 1);
     }
 
+    /// Serialised with the tests that turn a backend's MSAA knob on
+    /// (`the_gc7000_offers_the_multisampled_config_while_msaa_is_on` holds
+    /// TestGl while the 4x config is offered): read without the lock, the
+    /// test-knobs row saw the 4x config and failed now and then (ccfarm
+    /// review of the npot item, 2026-10-07).
     #[test]
     fn valid_configs_are_the_three_handles() {
+        let _serial = TestGl::new(4, 4);
         assert!(valid_config(CONFIG_1X) && valid_config(CONFIG_565));
         assert_eq!(valid_config(CONFIG_4X), !cfg!(not(feature = "gpu-powervr")), "4x only where multisampling works");
         assert!(!valid_config(core::ptr::null_mut()));

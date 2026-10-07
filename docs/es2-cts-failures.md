@@ -431,3 +431,93 @@ Update rules for later items:
   evidence (test name, result) in a new column. Do not delete rows.
 - When a full tree runs on a board, replace that board's row in the summary
   table and in section A.
+
+## H. GL_OES_texture_npot: dEQP-GLES2 cases predicted to move (plan #2 `npot`, 2026-10-07)
+
+Every ES 2.0 build now lists `GL_OES_texture_npot` in `GL_EXTENSIONS`, on all
+three GPUs (`src/gl/state.rs`, `NPOT_EXTENSION`). Its rules replace ES 2.0's:
+a non-power-of-two texture may have a mip chain and wrap with `GL_REPEAT` or
+`GL_MIRRORED_REPEAT`, `glGenerateMipmap` of one succeeds, and a level above 0
+that is not a power of two is no error (`src/gl/texture.rs`,
+`NPOT_RESTRICTED` is now false in every build). This is what glmark2's
+terrain needed: 16 `GL error 0x502 in glGenerateMipmap` and a black 800x600
+texture on every board (`tools/cts/RESULTS.md`, 2026-10-04).
+
+How each GPU holds the chain (host-tested, not board-confirmed):
+
+| GPU | NPOT chain | Host tests |
+|---|---|---|
+| V3D (Pi 4) | whole chain; level i is max(w >> i, 1) x max(h >> i, 1), packed at its own pitch; the tiled copy follows Mesa's v3d_setup_slices (levels 0 and 1 at their size, the rest padded from the power-of-two level 1), which `tools/v3d/tex_check.c` already compares with Mesa for 13x7 x3, 37x61 x6 and 100x3 x2 | `v3d::backend::backend_tests::a_generated_npot_chain_is_sampled_whole` (800x600: ten levels, offsets, pitches, generated texels, binding, sampler, tiled levels) |
+| GC7000 (i.MX8MP) | whole chain at one 800-texel pitch, each level on 64 bytes; the descriptor names each level's address | `vivante::backend::backend_tests::a_generated_npot_chain_is_named_level_by_level` |
+| PowerVR (AM62P) | base level only, complete, sampled from level 0 (the TPU finds level i+1 by its own power-of-two arithmetic, unmeasured for a NPOT stride) | `gl::draw::tests::a_generated_npot_chain_is_complete_with_repeat`, `the_powervr_keeps_one_level_of_a_npot_image` |
+
+The GC7000 caveat: etnaviv uses NPOT textures with any wrap mode only when
+`chipMinorFeatures1_NON_POWER_OF_TWO` is set. This repository records the
+part's `features` and `minor0` words (driver/src/vivante/NOTES.md) and the
+feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs),
+not `minor_features[1]`. The part is HALTI5 (an ES 3.x-class core, whose ES
+3.0 needs NPOT repeat and mipmaps), and the ES 3.0 build has always sampled
+NPOT textures with REPEAT there. So the extension is claimed, and the board
+recipe below must confirm it.
+
+The dEQP-GLES2 mustpass cases (`tools/cts/gles2-mustpass.txt`) that test ES
+2.0's NPOT rules, 18, Pass on the three boards after plan #1:
+
+| Group | Cases | Without the extension they expect | Predicted with it, every board |
+|---|---|---|---|
+| `texture.completeness.2d` wrap | `npot_all_repeat`, `npot_mirrored_repeat`, `npot_s_repeat`, `npot_t_repeat`, `repeat_width_npot`, `repeat_height_npot` (6) | black (incomplete) | Pass -> NotSupported |
+| `texture.completeness.cube` wrap | `npot_all_repeat`, `npot_mirrored_repeat`, `npot_s_repeat`, `npot_t_repeat` (4) | black | Pass -> NotSupported |
+| `texture.completeness.2d` size | `npot_size`, `npot_size_level_0`, `npot_size_level_1` (3) | black | Pass -> NotSupported, or stays Pass |
+| `texture.completeness.cube` size | `npot_size_level_0`, `npot_size_level_0_pos_x`, `npot_size_level_1`, `npot_size_level_1_neg_x` (4) | black | Pass -> NotSupported, or stays Pass |
+| `negative_api.texture` | `generatemipmap_npot_wdt_hgt` (1) | `GL_INVALID_OPERATION` | Pass -> NotSupported |
+
+Reasoning, and how sure it is:
+
+- VK-GL-CTS was not reachable from the host this was written on (no network
+  for curl or WebFetch, and `DEQP_STAGE1` / `DEQP_WORK` unset), so the case
+  sources were not read. The prediction rests on (1) the recollection that
+  `es2fTextureCompletenessTests.cpp` skips its NPOT cases with
+  NotSupported when a "relaxing" extension (`GL_OES_texture_npot`,
+  `GL_NV_texture_npot_2D_mipmap`) is listed, and that
+  `es2fNegativeTextureApiTests.cpp`'s `generatemipmap_npot_wdt_hgt` throws
+  NotSupported ("GL_OES_texture_npot extension removes error code
+  validation"); and (2) the fact that these cases are in the mustpass every
+  Mesa ES 2.0 driver runs (the V3D on the Pi 4 among them), all of which
+  claim `GL_OES_texture_npot`. A case that failed whenever the extension is
+  listed would be failing on every such driver.
+- If the wrap cases were not guarded, they would fail on all three boards
+  (10 cases): with the extension a NPOT texture with REPEAT is complete and
+  samples its texels, not black. The host behaviour behind that is pinned by
+  `a_npot_texture_is_complete_only_where_the_version_allows_it`.
+- The size cases stay Pass even if they run, as long as each builds a chain
+  with a level of the wrong size or a missing level: such a texture is still
+  incomplete (`a_npot_level_above_0_follows_the_version`,
+  `tex_image_level_on_npot_texture_follows_the_version`). One that uploads a
+  whole consistent NPOT chain and expects black would fail like the wrap
+  cases.
+- Nothing else in the mustpass is predicted to move. The other `*_npot`
+  cases (`texture.format.*_npot`, `texture.filtering.{2d,cube}.*_clamp_*_npot`,
+  `texture.wrap.clamp_clamp_*_npot`, `fbo.render.*npot*`) use one level and
+  CLAMP_TO_EDGE, which were complete before and are unchanged. No ES 2.0
+  mustpass case samples a mipmapped NPOT texture, so the PowerVR's
+  base-level sampling is not visible to dEQP-GLES2 (it is visible in glmark2's
+  terrain as aliasing where the texture is minified, instead of black).
+
+Predicted totals if the prediction holds: Pass -18 and NotSupported +18 on
+each board (section C's NotSupported: AM62P 19 -> 37, i.MX8MP 34 -> 52, Pi 4
+62 -> 80); failures unchanged at 0.
+
+Board check (one run per board, the dEQP-GLES2 image of the commit):
+`dEQP-GLES2.functional.texture.completeness.*`,
+`dEQP-GLES2.functional.negative_api.texture.generatemipmap_npot_wdt_hgt`,
+`dEQP-GLES2.functional.texture.{wrap,format,filtering,size,mipmap}.*`; then
+glmark2 `-b terrain`: no `GL error 0x502`, no "texture on unit 0 is
+incomplete" line, and the terrain picture not black. If a wrap case Fails
+instead of NotSupported, the prediction was wrong: take the extension out
+(`NPOT_EXTENSION` false makes `NPOT_RESTRICTED` true again and restores the
+ES 2.0 rules; the extension list's ES 2.0-only tail then has to leave the
+name out on its own, which a const assert in `state.rs` points at) and record
+the case here. On the i.MX8MP, NXP's own driver
+(which claims the extension) running the same cases says what dEQP does with
+it, and a REPEAT-wrapped NPOT draw on our driver shows whether the GC7000
+honours the wrap.
