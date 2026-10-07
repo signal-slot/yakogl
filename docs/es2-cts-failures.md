@@ -43,6 +43,35 @@ Known regressions after the last full tree (not in the table above):
 The AM62P and the Pi 4 have not run a full tree since their last one. Their
 numbers are stale by up to 6 days of changes (section D).
 
+## Status after plan #1's fixes (docs-sync, 2026-10-07)
+
+Sections A to F below are the inventory as written before the fixes; their
+numbers are the last board records and do not change here. This section is
+the current state of each failure. "Fixed on the host" means a host test
+passes at that commit; no board has run any of these commits, so none of them
+is a board pass. The combined board recipe is `docs/HANDOFF.md`, "Next board
+session".
+
+| Failure (section B/C/E row) | State | Commit and evidence |
+|---|---|---|
+| i.MX8MP `fbo...renderbuffer.depth.depth_component24` (B row 1) | fixed on the host, awaiting board | `4e9397c` (`es2-gl-core`). In `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`, ungated; `advertises()` calls it, so a GPU that lists the extension later gets the format with no further code change). Host tests `depth_component24_renderbuffer_follows_the_extension_list` (`src/gl/framebuffer.rs`), `draw_buffer_queries_are_es3_only` (`src/gl/state.rs`). Board expectation: fbo row 711 pass, 0 fail (was 710 + 1 fail at `72d16864`). |
+| i.MX8MP `shaders.fragdata.*`, one NotSupported (B row 2) | fixed on the host, awaiting board | `4e9397c`. In `report-es2` builds `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1 (`src/shaderc/online/lower.rs`, host test `deqp_fragdata_uniform_index_compiles_in_an_es100_context`). Board expectation: shaders tail row 1512 pass, 0 NotSupported (was 1511 + 1). |
+| `shaders.fragdata.invalid_assign_to_1` on the AM62P and the Pi 4 (C) | expected pass, awaiting board | Same commit: the case needs exactly one draw buffer, which an ES 2.0 context now reports. It is a prediction from the dEQP message, not a measurement. |
+| Pi 4 25 cube cases (B rows 3 to 27, #12) | fixed on the host, awaiting board | design `c3e4146` (`docs/v3d-noseamless-cube.md`; failing-then-passing host test `tests/v3d_cube_noseamless.rs`), implementation `ec5ba4f`, review fixes `53ef6d7`, doc `d8ce931`. In ES 2.0 builds a cube look-up whose filters can see seams is compiled as a 2D-array look-up of the selected face (`LodKey::cube_noseam`; `LodKey::mag_switch` narrowed to bits 32..47). Host evidence: 7 tests in `tests/v3d_cube_noseamless.rs` on the QPU/TMU interpreter in both builds, `an_unkeyed_program_is_unchanged` (FNV-1a of the code and uniform streams equal to `0252e9d`), backend and draw unit tests. The owner's 2026-09-25 exclusion of these cases is replaced by this fix. Two things no host test can show: that the TMU takes TMUI as a float face index, and the fragment stage's implicit level (no FDX/FDY fallback written; board-gated). The recipe names how to read each failure pattern. |
+| i.MX8MP gl_test case 16 (#8) | harness fixed on the host; the 4x path itself open | `6bddfc5` (`gc-msaa`). It failed in the default image only because that image offers no 4x config: `CONFIG_GC_GL_TEST_MSAA` is off, `gc_debug_msaa` is 0, `eglChooseConfig samples 4` reads 0 and the case returns before any draw. "Check 255" is the record's none-marker (`gc_result_case` stores 255 for "no check"; a SET_FAIL record has no check). Case 16 now runs its 1x half and skips its 4x half by name (-3, not a failure) when no 4x config is offered. Separately the driver did not scale viewport, scissor and clip to the 2x scratch surface (found on the host; explains "the resolve writes nothing"): the fix is behind `gc_debug_msaa` bit 3, off by default, host test `msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples`. Nothing proves yet that the core wants it. Awaiting the 4x-config A/B (HANDOFF). |
+| i.MX8MP `multisample.*` NotSupported (C) | still open, acceptable at 1x | Depends on bit 3 passing, then the design change and a dEQP run on a 4x-config image. No board proof. |
+| i.MX8MP gl_test case 10 (#9) and case 2 (#25) | cause not found; diagnostic recipe, no product change | `8409419` (`gc-nondeterminism`). Reading our sync sequence against etnaviv's (12 steps; `src/vivante/VIVANTE_NOTES.md`, "Draw, resolve, read back") finds no missing stall, flush or CPU cache operation: each etnaviv step has a counterpart in ours, at the same place or earlier, with the same or a larger flush set. Two host tests pin our column word for word (`a_frame_flushes_and_stalls_as_etnaviv_does`, `a_submit_flushes_and_stalls_before_its_event_as_etnaviv_does`). Three surface hypotheses, none proven: (a) a linear PE target, (b) 64-byte target alignment against etnaviv's page-aligned buffers, (c) placement that depends on the pool's history. The board recipe (10 runs of each of three images, `CONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN`, `CONFIG_YAKOGL_GC_POOL_NO_REUSE`) separates (b), (c) and "neither". |
+| Compiler changes since the last full trees (D) | host check done; one wrong-code defect found and fixed; no board run | `c6aa6ba` (`compiler-regression-host`), see the paragraph under section D. |
+| dEQP image recipes against the current defaults (D risk list) | checked on the host | `e6e5f14`, `292310c`, `688a574` (`deqp-images-current`, `deqp-config-check-test`): `tools/cts/check-deqp-images.py` checks symbols, conformance options, carve-outs and table coverage, on the recipes and on each built image's `.config`; `board_selftest` pins 206 checks; fixture `.config` files in `tools/cts/testdata/deqp-config`. AM62P 4x image table `tools/cts/am62p-ms4-tree.txt`. |
+| Pi 4 27 `fbo...attachment_combinations` NotSupported (C) | still to verify on the board | No change in this plan. Expected to pass since the V3D claims `GL_OES_depth_texture` (STATUS.md 10/3); recorded in the Pi 4 session. |
+| #22 GC7000 `matattr` table, #23 panel | unchanged, outside this plan | |
+| Acceptable buckets of section C (compressedtexsubimage2d 9, clip_control 8, multisample at 1x, `multisampled_render_to_texture.readpixels`, the QualityWarnings) | acceptable, unchanged | Not touched. |
+
+No full tree has run on any board since the plan began. Every
+"awaiting board" row is confirmed in one session per board
+(HANDOFF "Next board session"); until then the summary table at the top is
+the last record, and the Pi 4's 25 failures stand as recorded.
+
 ## A. Per board: last full tree, counts, record names
 
 ### AM62P (PowerVR BXS-4-64)
@@ -303,6 +332,47 @@ an ES 2.0 context and accepting a DEPTH_COMPONENT24 renderbuffer) may apply
 to all three boards, not only the i.MX8MP, because it is in `src/gl`. Check
 this on the host with `es2-gl-core`.
 
+### Host check of the compiler changes (`compiler-regression-host`, `c6aa6ba`, 2026-10-07)
+
+The item's brief says no external CTS checkout, Zephyr workspace, `pco_shc`
+or glslang was available (`CTS`, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
+`GLSLANG` unset), so `tools/cts/host-deqp-run.sh` (the compile-and-link run
+of the whole mustpass list on the host) could not have run there. The commit
+message of `c6aa6ba` nevertheless reports such a run (17,165 of 17,165 cases
+began on both back ends, no chunk crashed, 877 compile refusals, all on
+negative cases dEQP passes; HOST-ONLY, compile and link outcomes, not
+rendering). Nothing of that run is committed, and this item could not check
+it, so it is a report, not a record: do not cite it as evidence until
+`host-deqp-run.sh` is run with a CTS checkout. What is committed and
+reproducible is the list below.
+
+- New host tests: a seeded generator of dEQP-style GLSL ES 1.00 shaders
+  (`tests/common/deqp_style.rs`); PowerVR: 300 seeds in both if-lowerings, 572
+  of 600 compared and agree, 28 refused by name by the known
+  `floor(-x)` / `floor(abs(x))` refusal; the 1,060 `fragment_ops.blend` cases
+  as 1,481 blend keys run through the encoded blend tail: 1,481 agree;
+  GC7000: 600 of 600 agree. 3,000- and 4,000-seed soaks agree after the fix.
+- **Defect found and fixed (PowerVR vertex shaders, wrong code).** The
+  attribute ranking ran over the module after the unroller, which drops loads
+  inside a constant `if` or a zero-trip loop. In a shader with any loop, an
+  attribute read only in such code took no registers and every later
+  attribute was read four registers early. `select()` now ranks over the
+  module it was given, before unrolling (test
+  `an_attribute_read_only_where_the_unroller_drops_it_keeps_its_registers`).
+  The code was in the first commit of the repository, not introduced since
+  the last full trees, and no dEQP-GLES2 case is known to reach it. It
+  changes AM62P vertex code, so the AM62P whole tree is re-run in the board
+  session.
+- Reported in the commit message, nothing committed (same caveat): `online_oracle.py` 0 false rejects of
+  1,778, 0 false accepts of 1,005; `online_eval_oracle.py` 0 wrong of
+  7,317; `es100_oracle.py` 2,787 of 2,793 (each its recorded figure).
+- With `DEQP_PROGRAMS` naming dEQP's own `.test` programs, 1,723 variants
+  agreed on both back ends (VK-GL-CTS `93bca0186`; the item names this as a
+  recipe, not a run in this environment's default).
+- Gate: `tools/check.sh --quick` 91 ok, 5 failed, each for a missing tool
+  (no clang: three aarch64-unknown-none checks and the Mesa-reference control
+  build; no libclang: the csbgen bindgen row).
+
 ### Tooling and tests (no GLES2 path risk)
 
 `e86958e`, `72f06c2`, `c1ca07b`, `45241db`, `45ba662` (boot and sample
@@ -347,7 +417,7 @@ Missing from the repository (so not in this file):
   only committed per-entry result file.
 - The exact name of the NotSupported case in `shaders.fragdata.*` on `72d16864`
   (it is in `records/imx8mp-tree/c3-shaders-72d16864`, gitignored).
-- Full trees at a current commit for the AM62P and the Pi 4. The first board
+- Full trees at a current commit for the AM62P and the Pi 4 (the plan's fixes are host-proved only; HANDOFF "Next board session" is the run that closes this). The first board
   session after the fixes should run all three.
 - A full-tree run on the i.MX8MP that repeats the same image several times to
   measure how often #9 and #25 flip a dEQP case.
