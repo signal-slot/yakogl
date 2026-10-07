@@ -1024,8 +1024,17 @@ mod tests {
     /// What a GL client sees of a refusal: COMPILE_STATUS false with the line
     /// in the info log, a program of it that does not link, and
     /// GL_INVALID_OPERATION when it is used.
+    ///
+    /// The build this describes is one whose only shader back end is the
+    /// precompiled table, so `not(mesa_reference)` is part of it: a host-test
+    /// build compiles the Mesa reference table in as well (build.rs,
+    /// `mesa_reference`), `g_shaderc` starts there (`shaderc/mod.rs`), and the
+    /// refused text is answered from Mesa's row instead. The gate's arm for the
+    /// build this test is about is
+    /// `host-test,gpu-<name>,precompiled-shaders,no-shader-table`, which is
+    /// what turns `mesa_reference` off.
     #[test]
-    #[cfg(all(feature = "precompiled-shaders", not(feature = "shaderc-online")))]
+    #[cfg(all(feature = "precompiled-shaders", not(feature = "shaderc-online"), not(mesa_reference)))]
     fn a_gl_client_sees_the_refusal() {
         use crate::gl::consts::*;
         use crate::gl::program::{glAttachShader, glCreateProgram, glGetProgramiv, glLinkProgram, glUseProgram};
