@@ -230,10 +230,11 @@ next limit after candidate 1 is fixed.
   waits only when it reuses one of the 4 stream slots
   (`:73`, `:1682-1694`).
 - The EGL vertical-sync loop: interval 0 from glmark2; and the hook is not
-  wired on the i.MX8MP, see "The frame path". Note: the hook's -ENOTSUP is
-  Zephyr's -134 and `egl.rs` compares with -95 (`src/osal/OSAL_NOTES.md:160-167`).
-  With interval 1 the loop calls the hook once and goes on: no wait, but a
-  latent bug for the fix below.
+  wired on the i.MX8MP, see "The frame path". With interval 1 the weak
+  default's -134 equals -ENOTSUP (`src/util.rs:17-29` reads Zephyr's
+  numbers in Zephyr builds; host test `zephyr_osal_reads_zephyr_numbers`,
+  `src/util.rs:376-384`), so the loop stops after its first call to the
+  hook and does not wait.
 
 ## Comparison with the other drivers
 
@@ -267,8 +268,7 @@ VSYNC (the LCDIF driver already has `yakogl_imx8mp_lcdif_wait_vblank`,
 `driver/drivers/display/display_yakogl_imx8mp_lcdif.c:178-188`; or a wait on
 the shadow-load bit). Then EGL's default swap interval 1 (`src/gl/egl.rs:276`)
 paces Slint and the cluster through EGL, and glmark2's interval 0 is honoured.
-Fix the -134 / -95 mismatch in the same change (`src/osal/OSAL_NOTES.md:160-167`),
-or "no vsync" is still misread. Check the Slint and cluster rows after F2:
+Check the Slint and cluster rows after F2:
 today they are paced by the wait in `board_show`.
 
 F3 (after F1, smaller). A fence wait woken by the interrupt instead of the
