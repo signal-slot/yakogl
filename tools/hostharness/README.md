@@ -94,8 +94,18 @@ carve-out, the board's allocator and free rule, `YAKOGL_V3D_*` settings), and
   goes to linux.c, which checks it as the board's OSAL does and gives back
   the frees it held for the job.
 
-Not compared yet: no V3D run has a reference log, and the `scen.progs-failat*`
-offsets were chosen for the PowerVR's start-up allocations.
+State (2026-10-07, dev, `HH_SAN=0`, all 62 jobs in all 12 modes): every job
+ends `ok` in 10 modes. In `l0nc` and `l2nc` (object storage without a CPU
+view) 21 jobs each panic, all with the same `ptr::write_bytes requires that
+the destination pointer is aligned and non-null`: the V3D backend writes
+through `mem.cpu` without checking it (one traced: the tiled copy's canary,
+`src/v3d/backend.rs`, the allocation in the upload hook that runs inside
+`glTexImage2D`, which `HH_NOCPU=1` counts as object storage).
+`gles_osal.h` allows a NULL `cpu`, so this is a backend defect, but no V3D
+OSAL hands one out (`zephyr_v3d.c` and `linux.c` always map), so it cannot
+happen on the Pi 4. Not compared yet: no V3D run has a reference log, and the
+`scen.progs-failat*` offsets were chosen for the PowerVR's start-up
+allocations.
 
 ## Sanitizers and profiles
 
