@@ -200,3 +200,58 @@ inside `submit()`.
   job arenas' sizes and per-frame high-water, the binner pool "not read",
   since the host has no binner) are counted as bookkeeping by `report.py`
   and left out of the table.
+
+## 48 MiB control
+
+The same run with the Pi 4's former carve-out: `YAKOGL_V3D_CARVEOUT_BYTES=50331648`
+(48 MiB; 49,803,264 allocatable bytes, against 100,134,912 at 96 MiB), every
+other setting as in `rpi_4b.conf`, `GM2_WRITE=0` (written by hand from its
+printed report, 2026-10-08; same glmark2 `22c527cb`, 3 frames, one process per
+entry). All 33 entries ran to their end; no compile or link failure; every
+entry except terrain and refract is byte-for-byte the 96 MiB run (no refusal,
+same high-water). Per scene, refusals (the report's `refused` column) and
+peaks (the most bytes allocated at once):
+
+| scene | 96 MiB: refused, peak | 48 MiB: refused, peak |
+|---|---|---|
+| 22 terrain | 0, 54,360,064 | 17, 49,501,184 |
+| 24 refract | 0, 55,527,424 | 2, 47,825,664 |
+| 23 shadow | 0, 40,908,544 | 0, 40,908,544 |
+| the other 30 entries | 0, at most 29,829,888 | 0, the same peaks |
+
+At 48 MiB the peaks of terrain and refract are what fitted before the
+allocator ran out, so they are not their demand (the 96 MiB peaks are).
+Shadow, the next largest, still fits with about 8.9 MB to spare.
+
+**The board failures reproduce, in both scenes.**
+
+* **refract:** `osal(linux): out of GPU memory for 7684096 bytes` and `yakogl/v3d:
+  no GPU memory for a tiled copy of 7684096 bytes (0 of 8388608 bytes of
+  copies live, a job open)`, the two lines of the board (`tools/cts/RESULTS.md`
+  near lines 464-488 and 830-854). Besides them: a 10,239,836 byte texture
+  (11 levels, height 1200) refused with `GL error 0x505 in glGenerateMipmap`,
+  `gl_fb_target: framebuffer <n> incomplete (status 0x8cd6)` 4 times, and
+  `GL error 0x506` in `current_drawable_program` and `resolve_target` 2 times
+  each. The 2 refused allocations are the 10.2 MB texture and the 7.7 MB tiled
+  copy.
+* **terrain:** `yakogl/v3d: no GPU memory for a tiled copy of 1404928 bytes`
+  (1,671,168 of the 8 MiB of copies live), three more `out of GPU memory`
+  lines (1,924,096, 1,404,928 and 2,784,256 bytes), and a refused 1,924,096
+  byte depth/stencil buffer: the draw is not recorded (`GL_OUT_OF_MEMORY`,
+  `GL error 0x505 in glDrawArrays` 3 times, in the pending clear 2 times,
+  3 + 2 frames missing a draw or clear). 17 refusals in all.
+
+The one that does not match the board's wording is the order of the sizes: the
+board's refract line names 7,684,096 bytes first, here the 10.2 MB texture is
+refused before it. I read both as the same exhaustion (the 96 MiB run shows
+the texture is not refused when memory is there), not as a second failure.
+
+**Caveat:** each scene starts from an empty carve-out here, one process per
+entry. The board runs the scenes one after another in one process, so what an
+earlier scene leaves held or fragmented makes its failures earlier or more
+frequent, never later: the host's 48 MiB failures are a lower bound on the
+board's. That the 96 MiB run has no refusal at all is host evidence for the
+carve-out increase, not board evidence (pi4-mem-replay replays the
+sequence). This run is also on the tree before npot's merge (see the notes
+above): the GL errors 0x502 of the NPOT `glGenerateMipmap` calls are in the
+refract run too (2 of them).
