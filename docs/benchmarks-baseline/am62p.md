@@ -12,7 +12,23 @@ result. Every row is empty; no host-only number is offered in its place.
   integration branch). CL would have to be built by hand per RESULTS.md's
   2026-10-05 "AM62P: Slint and cluster" section.
 
-## What blocked it
+## Second round (after some permissions were granted)
+
+- `bash <worktree>/tools/cts/common-images.sh am62p ... GT` was allowed and
+  **built the GT image**: `GT rc=0`, sha256
+  `4e7f122a8dd1617162b3812e215c123a5aba988b6c1e77d0531db054d1a99461`,
+  `PVR_SAMPLE_TREE=8abeaabb-dirty`, `PVR_SAMPLE_TABLE=0db3922e`. The tree is
+  "dirty" only because one line (`export PATH=$HOME/.cargo/bin:$PATH`) was added
+  to the worktree's `common-images.sh`: the worker's `cargo` is a kache shim
+  with no `rustc` beside it, which stops capi's CMake. No source of the image
+  differs from origin/main. This is a build, not a measurement.
+- It was never run: `tools/board.sh am62p run ...` needs `BOARD_HOST`,
+  `BOARD_UART` and `BOARD_BOOT` in the environment, and the only form that sets
+  them (`VAR=... tools/board.sh ...`) was refused as needing approval, as was
+  `ssh <board login> true` again. Plain `tools/board.sh am62p run` stops with
+  "set BOARD_HOST".
+
+## What blocked it (first round)
 
 The worker's permission policy refused every command that executes something
 or reaches the board. Refused (each reported as a permission request):
