@@ -2283,9 +2283,11 @@ fn live_texture(textures: &mut [GlTexture; TEXTURE_SLOTS], h: usize) -> Option<&
  *     minification filter that does not use mipmaps.
  *
  * The third is ES 2.0's alone -- ES 3.0 supports NPOT textures with any wrap
- * mode and with mipmaps -- so it applies only to a build that reports ES 2.0
- * (crate::REPORT_ES2). A build that does not, the default for Qt's RHI, keeps
- * taking the base level of such a texture.
+ * mode and with mipmaps, and so does ES 2.0 with GL_OES_texture_npot, which
+ * every build that reports ES 2.0 claims since 2026-10-07 -- so it applies
+ * only where texture::NPOT_RESTRICTED holds, which no build does any more.
+ * A backend that keeps one level of a NPOT image (the PowerVR) samples the
+ * base level of such a texture under a mipmap filter.
  *
  * This replaces demoting the filter and sampling level 0, which showed an
  * application's mistake as a picture rather than as black. */
@@ -2327,10 +2329,10 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
      * (dEQP texture.completeness.2d.missing_level_1) or a level of another
      * format (format_mismatch_*); the per-level record can. */
     if mips {
-        /* GL's chain, not the store's: a NPOT image is one level here, and
-         * GL still wants its whole chain (a NPOT level cannot be held, so a
-         * NPOT image with a mipmap filter is complete only when
-         * glGenerateMipmap or glTexStorage2D said every level exists) */
+        /* GL's chain, not the store's: where the backend keeps one level of
+         * a NPOT image (the PowerVR), GL still wants its whole chain, which
+         * glGenerateMipmap, glTexStorage2D or the application's own levels
+         * record as present without holding them */
         let chain = ((1u32 << u32::from(gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
         if t.level_defined & chain != chain {
             return Some("a mipmap min filter, but a level of the chain has no image");
@@ -2344,7 +2346,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
             return Some("a mipmap min filter, but a cube map face lacks a level of the chain, or has one of another size or format");
         }
     }
-    if crate::REPORT_ES2
+    if super::texture::NPOT_RESTRICTED
         && (!draw_is_pot(t.width) || !draw_is_pot(t.height))
         && !(!mips && t.wrap_s == GL_CLAMP_TO_EDGE && t.wrap_t == GL_CLAMP_TO_EDGE)
     {
@@ -12028,7 +12030,8 @@ mod tests {
 
     /// ES 2.0 without GL_OES_texture_npot: a non-power-of-two texture is
     /// complete only when it is clamped on both axes and filtered without
-    /// mipmaps. ES 3.0 dropped the rule, so this follows the version reported.
+    /// mipmaps. ES 3.0 dropped the rule, and so does the extension, which
+    /// the ES 2.0 surface claims (texture::NPOT_RESTRICTED).
     #[test]
     fn a_npot_texture_is_complete_only_where_the_version_allows_it() {
         let gl = Gl::new(16, 16);
@@ -12037,8 +12040,8 @@ mod tests {
         // SAFETY: plain GL calls.
         unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint) };
 
-        /* repeat on both axes: ES 2.0 says incomplete */
-        let want = u8::from(crate::REPORT_ES2);
+        /* repeat on both axes: ES 2.0 without the extension says incomplete */
+        let want = u8::from(super::super::texture::NPOT_RESTRICTED);
         assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, want, "NPOT, repeat");
 
         // SAFETY: plain GL calls.
@@ -12212,9 +12215,10 @@ mod tests {
     }
 
     /// A non-power-of-two base with a mipmap filter (npot_size): ES 2.0
-    /// 3.7.1 refuses a level above 0 that is not a power of two with
-    /// GL_INVALID_VALUE, and the texture is incomplete either way (this
-    /// store keeps one level of a NPOT image).
+    /// 3.7.1 without GL_OES_texture_npot refuses a level above 0 that is not
+    /// a power of two with GL_INVALID_VALUE. With the extension (and in ES
+    /// 3.0) the level is taken, and the texture is incomplete until its whole
+    /// chain is there (15x15: 7x7, 3x3, 1x1), then complete under REPEAT.
     #[test]
     fn a_npot_level_above_0_follows_the_version() {
         let gl = Gl::new(16, 16);
@@ -12225,8 +12229,79 @@ mod tests {
         level_image(0, 15, 15, GL_RGBA);
         assert_eq!(gl.error(), GL_NO_ERROR);
         level_image(1, 7, 7, GL_RGBA);
-        let want = if crate::REPORT_ES2 { GL_INVALID_VALUE } else { GL_NO_ERROR };
+        let restricted = super::super::texture::NPOT_RESTRICTED;
+        let want = if restricted { GL_INVALID_VALUE } else { GL_NO_ERROR };
         assert_eq!(gl.error(), want, "a NPOT level 1");
-        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 1);
+        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 1, "levels 2 and 3 missing");
+        level_image(2, 3, 3, GL_RGBA);
+        level_image(3, 1, 1, GL_RGBA);
+        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, u8::from(restricted), "the whole chain");
+    }
+
+    /// GL_OES_texture_npot, glmark2's terrain: an 800x600 RGBA texture,
+    /// glGenerateMipmap, LINEAR_MIPMAP_LINEAR and REPEAT (or MIRRORED_REPEAT)
+    /// on both axes is complete, with no GL error, in every build. What the
+    /// draw hands the backend follows the backend: one that holds the chain
+    /// (the GC7000's shape, the V3D's too: `npot_mip_chains`) samples all
+    /// ten levels with a linear mip filter; the PowerVR's shape samples the
+    /// base level (one level, no mip filter, min LINEAR). The wrap is the
+    /// application's either way.
+    ///
+    /// Revert check: put `crate::REPORT_ES2` back for NPOT_RESTRICTED in
+    /// texture.rs and the report-es2 builds fail here on the error and on
+    /// the incomplete flag.
+    #[test]
+    fn a_generated_npot_chain_is_complete_with_repeat() {
+        for holds_chain in [false, true] {
+            let gl = Gl::new(16, 16);
+            if holds_chain {
+                gl.backend_like_gc7000();
+            }
+            textured(&gl);
+            texture_rgba(800, 600);
+            // SAFETY: plain GL calls.
+            unsafe {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT as GLint);
+            }
+            assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 1, "{holds_chain}: no chain yet");
+            // SAFETY: plain GL call.
+            unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+            assert_eq!(gl.error(), GL_NO_ERROR, "{holds_chain}: glGenerateMipmap of 800x600");
+            let b = draw_tri(&gl).draw.textures[0];
+            assert_eq!(b.incomplete, 0, "{holds_chain}: complete, mipmapped, REPEAT");
+            assert_eq!((b.width, b.height), (800, 600));
+            assert_eq!((b.wrap_s, b.wrap_t), (GLES_WRAP_REPEAT, GLES_WRAP_REPEAT));
+            assert_eq!((b.linear_filter, b.min_linear), (1, 1));
+            let want = if holds_chain { (10, 2) } else { (1, 0) };
+            assert_eq!((b.mip_levels, b.mip_filter), want, "{holds_chain}: levels sampled, mip filter");
+            assert_eq!(b.stride_texels, 800);
+            // SAFETY: plain GL calls.
+            unsafe {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT as GLint);
+            }
+            let b = draw_tri(&gl).draw.textures[0];
+            assert_eq!(b.incomplete, 0, "{holds_chain}: MIRRORED_REPEAT");
+            assert_eq!((b.wrap_s, b.wrap_t), (GLES_WRAP_MIRRORED_REPEAT, GLES_WRAP_MIRRORED_REPEAT));
+        }
+    }
+
+    /// The PowerVR's table is the shape `a_generated_npot_chain_is_complete_
+    /// with_repeat` runs without a chain: the TPU walks the chain itself
+    /// (packed, not a layered texture unit), so the GL core keeps one level
+    /// of a NPOT image there and the draw samples the base level, whose
+    /// descriptor is the one-level STRIDE texture every NPOT texture already
+    /// was (dEQP texture.filtering.2d.*_npot, texture.wrap.clamp_clamp_*_npot).
+    #[cfg(feature = "gpu-powervr")]
+    #[test]
+    fn the_powervr_keeps_one_level_of_a_npot_image() {
+        let pvr = &crate::pvr::backend::yakogl_backend_pvr;
+        assert_eq!((pvr.mip_level_align, pvr.native_layered_textures), (0, false));
+        let (_, levels, bytes, _) =
+            super::super::texture::chain_layout_npot(800, 600, 1, 4, false, 0, true, true).unwrap();
+        assert_eq!((levels, bytes), (1, 800 * 600 * 4));
     }
 }
