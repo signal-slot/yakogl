@@ -23,6 +23,40 @@
 //! other host tests replace the two C checks and model the shared physical
 //! cursor, which they did not.
 //!
+//! # The top region
+//!
+//! A GENERAL request of more than `pool_top_above` bytes ([`YdPvrKm`],
+//! 256 KiB in the driver) is a large one: a render target, its depth buffer,
+//! a texture, a scene's vertex buffer. It is placed from the carveout's end
+//! downward ([`super::mem::bo_alloc_top`]), not from the bump. Small blocks
+//! (programs, uniforms, HWRT sets, the freelists) keep coming from the bump,
+//! below. Both ends draw on the one gap between them.
+//!
+//! Why: on the bump alone, a small block that outlives a scene lands between
+//! that scene's large ones, and after the scene they are free in pieces no
+//! later large request fits. glmark2's refract (a 7600 KiB depth buffer after
+//! shadow and terrain) met 11.6 MiB free with no range over 3936 KiB
+//! (driver/docs/pvr-render-pool.md, "the top region"). In the top region the
+//! large blocks lie only beside each other, so a scene's frees merge back into
+//! one range; a range that reaches the region's floor goes back to the gap at
+//! once, so the gap stays one piece for either end.
+//!
+//! A top block at carveout offset `co` is mapped at heap offset
+//! [`TOP_VA`]` + co`: adjacency in VA is adjacency in the carveout, so the
+//! merge rule (contiguous in both) holds for every pair, and a page's
+//! mapping never changes. The order:
+//! - a large request: best fit over the top region's ranges, then over the
+//!   ranges below, then the gap (the floor moves down), then the bump's
+//!   refusal (its line, the summary);
+//! - a small one: best fit over the ranges below the top region, then the
+//!   bump, then a range of the top region (only when the bump is out).
+//!
+//! With nothing in the top region both orders are the old one (best fit,
+//! then a cursor), so the C pool's golden trace replays to equality with
+//! the region on (its large requests: 1 MiB from a merged range, and a
+//! refused 32 MiB). Where the two differ, `pool/tests/replay.rs` replays
+//! glmark2's scenes on the AM62P's layout, both ways.
+//!
 //! # The table and the overflow chain
 //!
 //! Each heap has [`POOL_FREE_SLOTS`] table slots (the fast path). A free
@@ -50,7 +84,7 @@
 
 use super::fwif::{GENERAL_HEAP_BASE, PDSCODEDATA_HEAP_BASE, USCCODE_HEAP_BASE};
 use super::km::{km, YdPvrKm};
-use super::mem::{bo_alloc, bo_rollback, round_up, PvrGpuBo, L0_FLAGS_DATA};
+use super::mem::{bo_alloc, bo_alloc_top, bo_rollback, bo_top_rollback, round_up, PvrGpuBo, L0_FLAGS_DATA, TOP_VA};
 use core::fmt;
 
 /// The heaps the pool serves, in `enum pvr_render_heap` order.
@@ -165,6 +199,32 @@ struct OvfPos {
     h: OvfHdr,
 }
 
+/// Which free ranges a best fit may take: those of the top region, or those
+/// below it (every range, with the region off).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Region {
+    Below,
+    Top,
+}
+
+impl Region {
+    fn has(self, hb: u32) -> bool {
+        (hb >= TOP_VA) == (self == Region::Top)
+    }
+}
+
+/// Whether `[hb, hb + size)` of `heap` was handed out by this pool: under the
+/// heap's bump, or (GENERAL) inside the top region.
+fn in_heap(k: &YdPvrKm, b: &Bumps, heap: usize, hb: u32, size: u32) -> bool {
+    if heap == GENERAL && hb >= TOP_VA {
+        let co = u64::from(hb - TOP_VA);
+        return co >= k.pool_floor() && co + u64::from(size) <= k.pool_end();
+    }
+    u64::from(hb) + u64::from(size) <= u64::from(bump(b, heap))
+}
+
+const GENERAL: usize = 0;
+
 /// Free bytes, free ranges and the largest range, of one heap.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct FreeOf {
@@ -175,9 +235,11 @@ pub struct FreeOf {
 
 impl YdPvrPool {
     /// Which heap a device address belongs to (each heap is bounded by its
-    /// bump, and the heaps are far apart).
-    fn heap_of_gpu(&self, b: &Bumps, gpu: u64) -> Option<usize> {
-        (0..POOL_HEAPS).find(|&h| gpu >= HEAP_BASE[h] && gpu - HEAP_BASE[h] < u64::from(bump(b, h)))
+    /// bump, GENERAL also by its top region, and the heaps are far apart).
+    fn heap_of_gpu(k: &YdPvrKm, b: &Bumps, gpu: u64) -> Option<usize> {
+        (0..POOL_HEAPS).find(|&h| {
+            gpu >= HEAP_BASE[h] && gpu - HEAP_BASE[h] < 1 << 32 && in_heap(k, b, h, (gpu - HEAP_BASE[h]) as u32, 1)
+        })
     }
 
     fn relink(&mut self, heap: usize, prev: *mut u8, next: *mut u8) {
@@ -202,7 +264,7 @@ impl YdPvrPool {
             && h.size != 0
             && h.size & 0xFFF == 0
             && h.hb & 0xFFF == 0
-            && u64::from(h.hb) + u64::from(h.size) <= u64::from(bump(b, heap))
+            && in_heap(k, b, heap, h.hb, h.size)
         {
             return true;
         }
@@ -277,12 +339,13 @@ impl YdPvrPool {
         }
     }
 
-    /// Best fit from the table and the chain, zeroed and cleaned; the rest
-    /// of the range stays free. `msz` is page rounded.
-    fn take(&mut self, k: &YdPvrKm, b: &Bumps, heap: usize, msz: u32) -> Option<PvrGpuBo> {
+    /// Best fit from the table and the chain, among the ranges of `region`,
+    /// zeroed and cleaned; the rest of the range stays free. `msz` is page
+    /// rounded.
+    fn take(&mut self, k: &YdPvrKm, b: &Bumps, heap: usize, msz: u32, region: Region) -> Option<PvrGpuBo> {
         let mut best: Option<usize> = None;
         for (i, s) in self.free[heap].iter().enumerate() {
-            if s.size >= msz && best.is_none_or(|j| s.size < self.free[heap][j].size) {
+            if s.size >= msz && region.has(s.hb) && best.is_none_or(|j| s.size < self.free[heap][j].size) {
                 best = Some(i);
             }
         }
@@ -294,7 +357,7 @@ impl YdPvrPool {
                 Some(q) => p.h.size < q.h.size,
                 None => best.is_none_or(|j| p.h.size < self.free[heap][j].size),
             };
-            if p.h.size >= msz && better {
+            if p.h.size >= msz && region.has(p.h.hb) && better {
                 bestp = Some(p);
             }
             ok = self.next(k, b, heap, &mut p);
@@ -324,14 +387,34 @@ impl YdPvrPool {
     }
 
     /// `pvr_render_alloc`: a list first, the bump second (mapped with
-    /// [`L0_FLAGS_DATA`]). `None` for a bad heap or size, and when the pool is
-    /// exhausted: the bump's own line, then this pool's summary at ERR.
+    /// [`L0_FLAGS_DATA`]); a large GENERAL request from the top region
+    /// instead, and a small one from the top region's ranges when the bump
+    /// is out (the module's "top region", for the order). `None` for a bad
+    /// heap or size, and when the pool is exhausted: the bump's own line,
+    /// then this pool's summary at ERR.
     pub fn alloc(&mut self, k: &mut YdPvrKm, b: &Bumps, heap: usize, size: u32) -> Option<PvrGpuBo> {
         if heap >= POOL_HEAPS || size == 0 {
             return None;
         }
         let msz = round_up(u64::from(size), u64::from(PAGE)) as u32;
-        if let Some(bo) = self.take(k, b, heap, msz) {
+        let large = heap == GENERAL && k.pool_top_on() && msz > k.pool_top_above;
+        let got = if large {
+            let got = self.take(k, b, heap, msz, Region::Top).or_else(|| self.take(k, b, heap, msz, Region::Below));
+            if got.is_none() {
+                let bo = bo_alloc_top(k, HEAP_BASE[heap], size);
+                if !bo.cpu.is_null() {
+                    self.bumped[heap] += 1;
+                    return Some(bo);
+                }
+            }
+            got
+        } else {
+            match self.take(k, b, heap, msz, Region::Below) {
+                None if heap == GENERAL && u64::from(msz) > k.pool_gap() => self.take(k, b, heap, msz, Region::Top),
+                got => got,
+            }
+        };
+        if let Some(bo) = got {
             self.reused[heap] += 1;
             return Some(bo);
         }
@@ -355,7 +438,7 @@ impl YdPvrPool {
             return;
         }
         let msz = round_up(u64::from(size), u64::from(PAGE)) as u32;
-        let heap = self.heap_of_gpu(b, bo.gpu);
+        let heap = Self::heap_of_gpu(k, b, bo.gpu);
         /* A block with no CPU mapping came from pvr_render_map_phys(): only
          * its VA was ever ours. A heap_off that does not match the address
          * is not a block of ours at all. */
@@ -363,9 +446,10 @@ impl YdPvrPool {
             self.dropped_kib[heap.unwrap_or(POOL_HEAPS)] += msz / 1024;
             return;
         };
-        /* A range past the heap's bump was never handed out by this pool:
-         * taking it back would put unmapped VA on the list. */
-        if u64::from(bo.heap_off) + u64::from(msz) > u64::from(bump(b, heap)) {
+        /* A range past the heap's bump (or outside the top region) was never
+         * handed out by this pool: taking it back would put unmapped VA on
+         * the list. */
+        if !in_heap(k, b, heap, bo.heap_off, msz) {
             crate::km_log!(
                 k,
                 Wrn,
@@ -433,6 +517,12 @@ impl YdPvrPool {
         /* Offer the MERGED block to the bump first: a large free block just
          * under the bump is not pool for a slightly larger request. */
         self.pool_hw = self.pool_hw.max(k.pool_next);
+        /* A top range at the region's floor goes back to the gap, always:
+         * the gap is the one piece both ends draw on. */
+        if heap == GENERAL && nhb >= TOP_VA && bo_top_rollback(k, nhb, nsize) {
+            self.promote(k, b, heap);
+            return;
+        }
         // SAFETY: the C side's cursor, valid for the call.
         if rollback && bo_rollback(k, unsafe { &mut *b[heap] }, nhb, ncpu, nsize) {
             self.rolled_back_kib[heap] += nsize / 1024;
@@ -523,7 +613,11 @@ impl fmt::Display for Summary<'_> {
                     kib(k.size),
                     kib(now),
                     kib(now.max(u64::from(p.pool_hw)))
-                )
+                )?;
+                if k.pool_top_hw != 0 {
+                    write!(f, "; top {} KiB now, {} KiB high-water", k.pool_top / 1024, k.pool_top_hw / 1024)?;
+                }
+                Ok(())
             }
             Line::Heap(h) => {
                 let fr = self.free[h];
@@ -619,8 +713,9 @@ pub unsafe extern "C" fn yd_pvr_pool_report(pool: *mut YdPvrPool, k: *mut YdPvrK
 }
 
 /// The pool's usage for the owner report's balance: `out[0]` the bytes the
-/// physical cursor has handed out, `out[1]` the bytes free in every heap's
-/// list (the chain walked, a bad header cut and counted as anywhere).
+/// physical cursor and the top region have handed out, `out[1]` the bytes
+/// free in every heap's list (the chain walked, a bad header cut and counted
+/// as anywhere).
 ///
 /// # Safety
 /// See the section comment; `out` points at 2 words.
@@ -628,7 +723,7 @@ pub unsafe extern "C" fn yd_pvr_pool_report(pool: *mut YdPvrPool, k: *mut YdPvrK
 pub unsafe extern "C" fn yd_pvr_pool_usage(pool: *mut YdPvrPool, k: *mut YdPvrKm, bumps: *const Bumps, out: *mut u64) {
     // SAFETY: the caller's contract.
     let (pool, k, b, out) = unsafe { (&mut *pool, km(k), &*bumps, core::slice::from_raw_parts_mut(out, 2)) };
-    out[0] = u64::from(k.pool_next.saturating_sub(k.pool_off));
+    out[0] = u64::from(k.pool_next.saturating_sub(k.pool_off)) + u64::from(k.pool_top);
     out[1] = (0..POOL_HEAPS).map(|h| pool.free_of(k, b, h).bytes).sum();
 }
 

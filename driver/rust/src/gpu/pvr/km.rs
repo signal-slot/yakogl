@@ -173,6 +173,18 @@ pub struct YdPvrKm {
     /// command's sequence: three served, three refused, then the loss).
     /// 0: off.
     pub fl_probe_serve_max: u32,
+    // ---- the render pool's top region ([`super::mem::bo_alloc_top`], [`super::pool`])
+    /// GENERAL-heap requests of more than this many bytes are placed from
+    /// the carveout's end downward, away from the small blocks the bump
+    /// places from below (driver/docs/pvr-render-pool.md, "the top region").
+    /// 0: off, every block from the bump, as before.
+    pub pool_top_above: u32,
+    /// Bytes handed out from the top now: the region is `[size - pool_top,
+    /// size)` (page-rounded size), and the bump's limit is its floor.
+    pub pool_top: u32,
+    /// Its most: every page in `[size - pool_top_hw, size)` has been mapped.
+    pub pool_top_hw: u32,
+    pub pad: u32,
 }
 
 /// Grows a freelist can be served (the table [`YdPvrKm::fl_grow_pfn`]): the
@@ -254,7 +266,10 @@ const _: () = {
     assert!(offset_of!(YdPvrKm, stop_cause) == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 36);
     assert!(offset_of!(YdPvrKm, fwccb_check) == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 56);
     assert!(offset_of!(YdPvrKm, fw_uncached) == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 80);
-    assert!(size_of::<YdPvrKm>() == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 88);
+    assert!(
+        offset_of!(YdPvrKm, pool_top_above) == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 88
+    );
+    assert!(size_of::<YdPvrKm>() == 680 + 64 * FL_MAX + 16 + 4 * FL_GROWS_MAX * FL_MAX + 4 * FL_MAX + 104);
 };
 
 /// Log levels (Zephyr's numbering).
