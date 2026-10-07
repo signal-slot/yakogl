@@ -3661,7 +3661,7 @@ fn gl_test_case_190_blend_factors_once_on_the_host() {
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
-        let text = a.alloc_str(&src).unwrap();
+        let text = a.alloc_str(src).unwrap();
         let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
         for (what, key, want, inverts) in cases {
             let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
@@ -3722,7 +3722,7 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
-        let text = a.alloc_str(&src).unwrap();
+        let text = a.alloc_str(src).unwrap();
         let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
         let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
             &l.module,
