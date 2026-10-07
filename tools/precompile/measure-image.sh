@@ -21,11 +21,13 @@
 # what that guard refuses.
 #
 # Environment: PVR_FW_BLOB (the generated pvr_fw_blob.h the PowerVR loader
-# needs), GLSL2USC_CACHE, ZEPHYR_WS (default: the workspace this repository is
-# built in), BOARD and SAMPLE (the defaults above). Output goes to stdout; each
-# build's log is build/measure-<arm>.log, which the script creates. It exits
-# non-zero when an arm failed to build: a failed arm prints no numbers, so a
-# run that printed none is not a measurement.
+# needs; it is copied into this checkout when the checkout does not already
+# have it -- driver/src/fw/ is gitignored, so a fresh one never does, and it is
+# never committed), GLSL2USC_CACHE, ZEPHYR_WS (default: the workspace this
+# repository is built in), BOARD and SAMPLE (the defaults above). Output goes to
+# stdout; each build's log is build/measure-<arm>.log, which the script creates.
+# It exits non-zero when an arm failed to build: a failed arm prints no numbers,
+# so a run that printed none is not a measurement.
 set -u
 APP=${1:-gl_test_es100}
 cd "$(dirname "$0")/../.." || exit 9
@@ -34,7 +36,11 @@ mkdir -p "$ROOT/build" || exit 9
 WS=${ZEPHYR_WS:-/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl}
 BOARD=${BOARD:-verdin_am62p/am62p54/a53}
 SAMPLE=${SAMPLE:-gl_test}
-[ -r "${PVR_FW_BLOB:-}" ] || { echo "measure-image.sh: PVR_FW_BLOB is not readable (driver/src/fw/pvr_fw_blob.h)"; exit 9; }
+BLOB=${PVR_FW_BLOB:-$ROOT/driver/src/fw/pvr_fw_blob.h}
+[ -r "$BLOB" ] || { echo "measure-image.sh: no readable pvr_fw_blob.h (PVR_FW_BLOB, or $BLOB)"; exit 9; }
+if ! cmp -s "$BLOB" "$ROOT/driver/src/fw/pvr_fw_blob.h"; then
+  mkdir -p "$ROOT/driver/src/fw" && cp "$BLOB" "$ROOT/driver/src/fw/pvr_fw_blob.h" || exit 9
+fi
 [ -d "$WS/.venv" ] || { echo "measure-image.sh: no Zephyr workspace at $WS"; exit 9; }
 mods=$(PATH="$WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$WS") || exit 1
 
