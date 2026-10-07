@@ -23,11 +23,14 @@
 # Environment: PVR_FW_BLOB (the generated pvr_fw_blob.h the PowerVR loader
 # needs), GLSL2USC_CACHE, ZEPHYR_WS (default: the workspace this repository is
 # built in), BOARD and SAMPLE (the defaults above). Output goes to stdout; each
-# build's log is build/measure-<arm>.log.
+# build's log is build/measure-<arm>.log, which the script creates. It exits
+# non-zero when an arm failed to build: a failed arm prints no numbers, so a
+# run that printed none is not a measurement.
 set -u
 APP=${1:-gl_test_es100}
 cd "$(dirname "$0")/../.." || exit 9
 ROOT=$PWD
+mkdir -p "$ROOT/build" || exit 9
 WS=${ZEPHYR_WS:-/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl}
 BOARD=${BOARD:-verdin_am62p/am62p54/a53}
 SAMPLE=${SAMPLE:-gl_test}
@@ -53,6 +56,10 @@ run() {
   size -A "$elf" | grep -E '^\.(text|rodata|bss)\b|^Total' | awk -v n="$name" '{printf "  %-6s %-10s %s\n", n, $2, $1}'
 }
 
-run off   -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=n
-run app   "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\""
-run no-cc -DCONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\""
+fail=0
+run off   -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=n || fail=1
+run app   "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\"" || fail=1
+run no-cc -DCONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\"" || fail=1
+# An arm that did not build prints no numbers, so the exit code is what says
+# whether the run measured anything at all.
+exit $fail
