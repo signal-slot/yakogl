@@ -15,6 +15,24 @@ Status: **not built.** This worker session could not run the build.
 - Seen in `/home/tasuku/.local/share/ccfarm/deps/yakogl`: only
   `mesa-26.2.1-src` and `mesa-hwdb`. No CTS, Zephyr workspace or SDK there.
 
+## Second attempt (after env reads were allowed)
+
+- `CCFARM_DEPS_DIR=/home/tasuku/.local/share/ccfarm/deps/yakogl`; it holds
+  only `mesa-26.2.1-src` and `mesa-hwdb` (the latter empty). `ZEPHYR_*`,
+  `DEQP_*`, `WEST_VENV`, `CTS` are unset on this worker.
+- `ask_farm`: the Zephyr workspace (4.4.1), SDKs 0.17.4 and 1.0.1 and the
+  VK-GL-CTS checkout are on the node Lepton, under `~/org/zephyrproject/` and
+  `~/com/github/KhronosGroup/VK-GL-CTS`. This worker is another machine, and
+  listing `/home/tasuku/org` is refused here. The README's workspace
+  (`zephyr-ws-yakogl`, Zephyr af17c0c8) is not reachable either.
+- `pvr_fw_blob.h` is not in git; per ask_farm it comes from the board's
+  `/lib/firmware/rgx.fw.36.53.104.796` via `driver/tools/mkfwblob.sh`. Not
+  obtainable without the board, which this item must not touch.
+- Fetching the sources over the network (`git ls-remote` of VK-GL-CTS) needs
+  an approval nobody can give in this unattended run, so west workspace, SDK
+  and CTS could not be fetched either. The CTS revision the scripts pin is
+  "the checkout's HEAD"; no commit is named in the repository.
+
 ## What is needed (from tools/cts/README.md, cts-build-zephyr.sh)
 
 - `CTS`: a VK-GL-CTS checkout (the script clones `--shared` from its HEAD and
