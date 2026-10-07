@@ -55,6 +55,14 @@ Refused: `curl -sIL https://github.com/zephyrproject-rtos/sdk-ng/releases/downlo
 ("This command requires approval"). I did not fetch the SDK another way. With
 no `ZEPHYR_SDK_INSTALL_DIR`, stage 1 and the mini table are still not built.
 
+## Update (fourth turn)
+
+The `curl -sIL` header request was then allowed: the SDK URL resolves (HTTP
+200, 70,650,944 bytes). The download itself was refused:
+`curl -sSL -o $CCFARM_DEPS_DIR/sdk-dl/sdk.tar.xz https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64_minimal.tar.xz`
+("This command requires approval"). Stopped there; `sdk-dl/` is an empty
+directory in the deps dir. Allow that curl (and the tar/setup.sh steps) to go on.
+
 ## Commands to run once permitted
 
 ```sh
