@@ -24,10 +24,20 @@ Images:
 Honest status of each step. "Read" means I read the script or CMake file and
 copied the command. "Run" means I ran it.
 
-- **Run:** `tools/check.sh --quick` on this commit. It checks the host code,
-  not this guide. Its `cargo fmt`, build and test rows pass. Its clippy rows
-  fail with warnings (`needless_range_loop` and others) in code this file does
-  not touch; plan item `clippy-clean` owns that.
+- **Run, and red:** `tools/check.sh --quick` on this commit. It checks the host
+  code, not this guide. Result: `76 ok, 17 failed, 2 gap(s)`. The gate is not
+  green.
+  - 13 failures are clippy rows (warnings such as `needless_range_loop` in
+    code this file does not touch).
+  - 4 failures are other rows: "no table in the artefact", "no Mesa reference
+    in the artefact", "tools board.sh dry-run matrix and replays", and "gen
+    src/pvr/csbgen.rs + csbgen_wrap.c == bindgen". I did not investigate them.
+  - 2 gaps (not run, so not passes): no aarch64 target or nightly with
+    rust-src for `yakogl-drivers`, and `HAL_NXP_DIR` not set, so the i.MX8MP
+    generated registers were not checked.
+  - These look like workspace and toolchain problems. I did not run the gate
+    without this file, so I have not proved that. This change only adds a
+    markdown file.
 - **Read only, everything else.** In the session that wrote this file, network
   commands (`git ls-remote`, `git clone`) and scripts outside `tools/check.sh`
   were refused, so no fetch and no image build was run. No URL below was
