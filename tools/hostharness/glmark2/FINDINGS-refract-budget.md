@@ -132,6 +132,35 @@ predicted. Terrain: as above, with room for more kept copies.
   `src/v3d/**`); `pi4-refract-draw` should take the budget only if that does
   not remove the cause.
 
+## 4a. Host replay of refract's peak (pi4-refract-draw, measured)
+
+`cargo test --test v3d_glmark2_mem` (test
+`refract_with_the_colour_chain_copy_fits_the_96_mib_carve_out`, tree
+`e8648bac`) replays refract with the 11,005,952-byte colour copy through the
+OSAL's real pool under the 96 MiB carve-out (100,663,296), after base, terrain
+(npot chains) and shadow, in both orders. This is a pool replay, **not** the
+glmark2 harness: it shows the budget fits the carve-out, not that the draw
+stops being refused.
+
+| budget | depth copy | peak use (permanent set included) | of 100,663,296 | refused |
+|---|---|---|---|---|
+| 12 MiB | evicted before the colour copy | 51,883,808 | 51.5% | 0 |
+| 16 MiB | evicted before the colour copy | 51,883,808 | 51.5% | 0 |
+| 24 MiB | kept with it | 59,567,904 | 59.2% | 0 |
+
+The replay's peak is lower than the harness's 58 MB for refract (it models
+only the large allocations), so the harness rows below remain the authority.
+
+**Status of the section 3.2/3.3 predictions: still predictions.** The glmark2
+source (pinned commit 22c527cb) was not in the deps cache and the fetch of it
+was refused ("requires approval") in the pi4-refract-draw session, so the host
+harness runs of section 5 and the 48 MiB control row were **not made**. No
+config was changed (`rpi_4b.conf`, `zephyr/Kconfig` untouched): the rule of the
+item is to set a budget only from measured rows. Run section 5 on a machine
+with the source, add `YAKOGL_V3D_CARVEOUT_BYTES=50331648` with the 8 MiB budget
+for the control row (expected: "out of GPU memory" for refract), and give the
+harness `YAKOGL_V3D_CARVEOUT_BYTES=100663296` explicitly for the three budgets.
+
 ## 5. The runs still to make
 
 ```sh
