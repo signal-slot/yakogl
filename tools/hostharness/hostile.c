@@ -23,7 +23,9 @@
 #include "osal_internal.h"
 #include "gl_internal.h"
 #include "backend.h"
+#if !defined(YAKOGL_GPU_V3D)
 #include "pvr/pvr_backend.h"
+#endif
 #include "hh.h"
 
 static const char *SH;
@@ -64,7 +66,12 @@ static void up(void)
 {
 	struct osal_zephyr_init oi = { 0 };
 
+#if defined(YAKOGL_GPU_V3D)
+	/* the V3D build's backend, through the table (src/backend.h) */
+	if (g_osal->init(&oi) || yakogl_backend_init()) { printf("HH-ERROR bring-up failed\n"); exit(3); }
+#else
 	if (g_osal->init(&oi) || pvr_backend_init()) { printf("HH-ERROR bring-up failed\n"); exit(3); }
+#endif
 	hctx = gl_context_create(16, 16);
 	if (!hctx) { printf("HH-ERROR gl_context_create failed\n"); exit(3); }
 }

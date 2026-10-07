@@ -47,11 +47,26 @@
 #include "gles_osal.h"
 #include "osal_internal.h"
 #include "pvr_render.h"
+#if defined(YAKOGL_GPU_V3D)
+#include "v3d_kick.h"
+#endif
 #include "hh.h"
 
 #define HEAP_GENERAL 0x8000000000ULL
 #define HEAP_PDS     0xDA00000000ULL
 #define HEAP_USC     0xE000000000ULL
+#if defined(YAKOGL_GPU_V3D)
+/* The V3D backend's two heap labels (src/v3d/backend.rs V3D_HEAP_DATA,
+ * V3D_HEAP_SHADER). Its addresses are 32-bit, so this allocator's own VAs
+ * for them are two 32-bit ranges that never meet (the backend takes the
+ * labels as names only: one pool on the board). */
+#define V3D_HEAP_DATA      0x10000000ULL
+#define V3D_HEAP_SHADER    0x20000000ULL
+#define V3D_VA_DATA        0x10000000ULL
+#define V3D_VA_DATA_END    0xC0000000ULL
+#define V3D_VA_SHADER      0xD0000000ULL
+#define V3D_VA_SHADER_END  0xFFFFF000ULL
+#endif
 #define PAGE         4096u
 #define IMPL_TAG     0x4848000000000000ULL
 #define MAPPHYS_VA   0x40000000ULL
@@ -363,8 +378,14 @@ static int r_init(void *arg)
 	printf("init #%lu arg=%s%s\n", n_init, arg ? "set" : "NULL", inited ? " (again: state kept)" : "");
 	if (!inited) {
 		inited = 1;
+#if defined(YAKOGL_GPU_V3D)
+		/* every mode: linux.c answers the V3D's settings (r_query) */
+		if (base->init)
+			return base->init(arg);
+#else
 		if (use_base && base->init)
 			return base->init(arg);
+#endif
 	}
 	return 0;
 }
@@ -388,7 +409,12 @@ static void place(struct osal_gpu_mem *out, int i)
 
 static int do_alloc(uint64_t heap, size_t size, uint32_t flags, struct osal_gpu_mem *out, int kind)
 {
+#if defined(YAKOGL_GPU_V3D)
+	static const uint64_t va[2] = { V3D_VA_DATA, V3D_VA_SHADER }, va_end[2] = { V3D_VA_DATA_END, V3D_VA_SHADER_END };
+	int hi = heap == V3D_HEAP_DATA ? 0 : heap == V3D_HEAP_SHADER ? 1 : -1;
+#else
 	int hi = heap == HEAP_GENERAL ? 0 : heap == HEAP_PDS ? 1 : heap == HEAP_USC ? 2 : -1;
+#endif
 	int rc = 0, i;
 	struct osal_gpu_mem bm;
 
@@ -404,6 +430,11 @@ static int do_alloc(uint64_t heap, size_t size, uint32_t flags, struct osal_gpu_
 		rc = -22;
 	else if (size > (1ull << 32))
 		rc = -12;   /* a host run does not model more than 4 GiB of GPU memory */
+#if defined(YAKOGL_GPU_V3D)
+	/* nor more VA than the 32-bit range of the heap (VAs are never reused) */
+	else if (!(use_base && kind != K_MAPPHYS) && va[hi] + bump[hi] + size > va_end[hi])
+		rc = -12;
+#endif
 	if (rc) {
 		printf("alloc n%lu heap=%llx size=%zu flags=%u -> %d\n", n_alloc, (unsigned long long)heap, size, flags, rc);
 		return rc;
@@ -433,7 +464,11 @@ static int do_alloc(uint64_t heap, size_t size, uint32_t flags, struct osal_gpu_
 			printf("alloc n%lu heap=%llx size=%zu flags=%u -> -12 (host)\n", n_alloc, (unsigned long long)heap, size, flags);
 			return -12;
 		}
+#if defined(YAKOGL_GPU_V3D)
+		R[i].gpu = va[hi] + bump[hi];
+#else
 		R[i].gpu = heap + bump[hi];
+#endif
 		bump[hi] += (size + PAGE - 1) & ~(uint64_t)(PAGE - 1);
 		R[i].cpu = (nocpu == 2 || (nocpu == 1 && hh_storage_call())) ? NULL : R[i].host;
 	}
@@ -669,6 +704,16 @@ static void cache_op(const char *op, void *cpu, size_t n)
 static void r_cache_flush(void *cpu, size_t n) { cache_op("cache_flush", cpu, n); }
 static void r_cache_invd(void *cpu, size_t n) { cache_op("cache_invd", cpu, n); }
 
+#if defined(YAKOGL_GPU_V3D)
+static void decode_kick(const struct v3d_kick *k)
+{
+	printf("  kick v3d magic=%08x bcl=%x..%x rcl=%x..%x tile_alloc=%x+%u tile_state=%x+%u\n", k->magic,
+	       k->bcl_start, k->bcl_end, k->rcl_start, k->rcl_end, k->tile_alloc, k->tile_alloc_size,
+	       k->tile_state, k->tile_state_size);
+	if (k->magic != V3D_KICK_MAGIC)
+		err("submit: kick magic %08x is not V3D_KICK_MAGIC", k->magic);
+}
+#else
 static void decode_kick(const struct pvr_render_kick *k)
 {
 	const struct pvr_render_frag_regs *f = &k->frag;
@@ -696,6 +741,7 @@ static void decode_kick(const struct pvr_render_kick *k)
 #endif
 	printf("\n");
 }
+#endif
 
 static void dump_to_files(const void *k, size_t len)
 {
@@ -728,14 +774,33 @@ static int64_t r_submit(const void *k, size_t len)
 {
 	char tag[32];
 
+#if defined(YAKOGL_GPU_V3D)
+	const size_t need = sizeof(struct v3d_kick);
+#else
+	const size_t need = sizeof(struct pvr_render_kick);
+#endif
+
 	printf("submit #%lu len=%zu", n_submit, len);
-	if (!k || len < sizeof(struct pvr_render_kick)) {
+	if (!k || len < need) {
 		printf(" -> -22\n");
-		err("submit with a short or missing kick descriptor (len %zu < %zu)", len, sizeof(struct pvr_render_kick));
+		err("submit with a short or missing kick descriptor (len %zu < %zu)", len, need);
 		return -22;
 	}
 	printf(" kick=%016llx inflight=%lld\n", (unsigned long long)hh_hash(k, len), (long long)(last_fence - done_fence));
 	decode_kick(k);
+#if defined(YAKOGL_GPU_V3D)
+	/* HH_BASE: linux.c's carve-out holds the lists; its submit checks them
+	 * as the board's OSAL would and gives back what its frees held for the
+	 * job */
+	if (use_base) {
+		int64_t bf = base->submit(k, len);
+
+		if (bf < 0) {
+			printf("  -> %lld (base)\n", (long long)bf);
+			return bf;
+		}
+	}
+#endif
 	snprintf(tag, sizeof(tag), "submit#%lu", n_submit);
 	dump(tag, 0);
 	if (getenv("HH_DUMP") && strtoul(getenv("HH_DUMP"), NULL, 0) == n_submit)
@@ -788,6 +853,34 @@ static int r_query(uint32_t what, void *out, size_t sz)
 	 * through do_alloc, so record numbers and VAs match the other modes */
 	if (!out) {
 		rc = -22;
+#if defined(YAKOGL_GPU_V3D)
+	} else if (what == OSAL_QUERY_V3D_CPU_OF_GPU) {
+		/* from this allocator's records (in HH_BASE too, whose records hold
+		 * linux.c's addresses): the host copy, which exists even where the
+		 * library was given no CPU view (HH_NOCPU) */
+		struct osal_v3d_cpu_of *q = out;
+		int j;
+
+		rc = -22;
+		if (sz == sizeof(*q)) {
+			q->cpu = NULL;
+			for (j = live_head; j >= 0; j = R[j].next) {
+				if (R[j].host && q->gpu >= R[j].gpu && q->gpu - R[j].gpu + q->bytes <= R[j].size) {
+					q->cpu = R[j].host + (q->gpu - R[j].gpu);
+					rc = 0;
+					break;
+				}
+			}
+		}
+	} else if (what == OSAL_QUERY_CLOCK_NS) {
+		rc = -95;   /* no clock: a time in the log would differ between runs */
+	} else if (what == OSAL_QUERY_V3D_JOB_OPEN && !use_base) {
+		rc = 0;     /* frees are this allocator's: nothing held */
+	} else if (what != OSAL_QUERY_RENDER_STATIC) {
+		/* the V3D's settings (VPM, draws a job, ...), JOB_OPEN under
+		 * HH_BASE: linux.c's answers */
+		rc = base->query ? base->query(what, out, sz) : -95;
+#endif
 	} else if (what != OSAL_QUERY_RENDER_STATIC) {
 		rc = -95;
 	} else if (sz < sizeof(struct pvr_render_static)) {

@@ -102,7 +102,10 @@ POST = {
     "glGetActiveAttrib": [("length", "i32", "1"), ("size", "i32", "1"), ("type", "x32", "1"), ("name", "str", "bufSize")],
     "glGetTransformFeedbackVarying": [("length", "i32", "1"), ("size", "i32", "1"), ("type", "x32", "1"), ("name", "str", "bufSize")],
     "glGetActiveUniformBlockName": [("length", "i32", "1"), ("uniformBlockName", "str", "bufSize")],
-    "glGetAttachedShaders": [("count", "i32", "1"), ("shaders", "i32", "(count ? (*count > maxCount ? maxCount : *count) : 0)")],
+    # *count is the caller's own value when the call failed (nothing written):
+    # clamped to [0, maxCount], or a negative one would be read as a length
+    "glGetAttachedShaders": [("count", "i32", "1"),
+                             ("shaders", "i32", "(count ? (*count < 0 ? 0 : *count > maxCount ? maxCount : *count) : 0)")],
     "glGetUniformIndices": [("uniformIndices", "i32", "(uniformCount > 64 ? 64 : uniformCount)")],
     "glGetProgramBinary": [("length", "i32", "1"), ("binaryFormat", "x32", "1"), ("binary", "hash", "(length ? *length : 0)")],
     "glGenBuffers": [("buffers", "i32", "HH_CAP(n)")], "glGenTextures": [("textures", "i32", "HH_CAP(n)")],

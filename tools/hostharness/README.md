@@ -29,7 +29,7 @@ those before looking for a regression.
 
 | file | what it is |
 |---|---|
-| `rec.c`, `hh.h` | the recording OSAL: all 17 `struct osal_ops` entries |
+| `rec.c`, `hh.h` | the recording OSAL: all 17 `struct osal_ops` entries (PowerVR kicks, or the V3D's with `-DYAKOGL_GPU_V3D`) |
 | `gen_wrap.py`, `hh_wrap.h`, `wrap_rt.c` | generates and runs the entry-point interposer |
 | `gltest.c` | program 1: the driver repository's `tools/pvrlab/gl_test.c` (every case) |
 | `scen.c` | program 2: state / query / EGL / program-link / texture / buffer / FBO / stress / context / window sweeps |
@@ -67,7 +67,45 @@ that does not match the driver stops the build.
 
 Environment: `HH_SAN=0` (no sanitizers), `HH_MODES="l0 l2"`, `HH_SIZE=small`,
 `HH_JOBS`, `HH_TIMEOUT`, `HH_SHADERS` (use the same shader tree on both sides),
-`HH_PROFILES`, `HH_ALLOW`, `HH_SKIP_RUN=1`, `CARGO_NIGHTLY`.
+`HH_PROFILES`, `HH_ALLOW`, `HH_SKIP_RUN=1`, `CARGO_NIGHTLY`, `HH_FEATURES`
+(the cargo features of a `rust:` build; default the PowerVR's).
+
+### The V3D (Raspberry Pi 4)
+
+```sh
+HH_FEATURES=osal-linux,gpu-v3d,shaderc-online tools/hostharness/run.sh all out-v3d rust:. driver dev
+```
+
+A `gpu-v3d` build compiles the V3D job builder (`driver/src/v3d/v3d_job.c`,
+`v3d_tex.c`, `v3d_tiling_mesa.c`, `v3d_frame.c`) and its FFI guard instead of
+the PowerVR generators, and runs `scen` and `hostile` only: `gl_test.c`'s host
+arm is the PowerVR's (its V3D arm runs on the Zephyr image). `src/osal/linux.c`
+is then the host model of the Pi 4's OSAL (its section "the V3D": one
+carve-out, the board's allocator and free rule, `YAKOGL_V3D_*` settings), and
+`rec.c` answers the V3D's way:
+
+* its own allocator hands out 32-bit addresses (two ranges, data and shader,
+  that never meet; an allocation past its range is refused, -12);
+* `OSAL_QUERY_V3D_CPU_OF_GPU` from its records (the host copy, also under
+  `HH_NOCPU`); `OSAL_QUERY_CLOCK_NS` unanswered (a time would differ between
+  runs); the V3D's settings (VPM, draws a job, split depth/stencil, ...)
+  from linux.c, which `rec.c` initialises in every mode for that;
+* `submit` logs the `struct v3d_kick` fields; under `HH_BASE` the kick also
+  goes to linux.c, which checks it as the board's OSAL does and gives back
+  the frees it held for the job.
+
+State (2026-10-07, dev, `HH_SAN=0`, all 62 jobs in all 12 modes): every job
+ends `ok` in 10 modes. In `l0nc` and `l2nc` (object storage without a CPU
+view) 21 jobs each panic, all with the same `ptr::write_bytes requires that
+the destination pointer is aligned and non-null`: the V3D backend writes
+through `mem.cpu` without checking it (one traced: the tiled copy's canary,
+`src/v3d/backend.rs`, the allocation in the upload hook that runs inside
+`glTexImage2D`, which `HH_NOCPU=1` counts as object storage).
+`gles_osal.h` allows a NULL `cpu`, so this is a backend defect, but no V3D
+OSAL hands one out (`zephyr_v3d.c` and `linux.c` always map), so it cannot
+happen on the Pi 4. Not compared yet: no V3D run has a reference log, and the
+`scen.progs-failat*` offsets were chosen for the PowerVR's start-up
+allocations.
 
 ## Sanitizers and profiles
 
