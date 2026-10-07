@@ -17,7 +17,8 @@ presented as a board result.
 `tools/cts/cts-common.sh am62p build` needs these node-local variables, and this
 worker has none of them: `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`,
 `GLMARK2_SRC`, `SLINT_NOSTD_DIR`, `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`,
-`RUSTUP_TOOLCHAIN` (nightly). `NOTO_SANS_DIR` was not checked separately.
+`NOTO_SANS_DIR`, `RUSTUP_TOOLCHAIN` (nightly). `env` on the worker showed all
+of them unset.
 Building the cluster sample by hand needs `AGL_SLINT_CLUSTER_DIR` as well.
 
 Also missing: `driver/src/fw/pvr_fw_blob.h` is not in the checkout (the origin
