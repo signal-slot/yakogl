@@ -1,0 +1,11 @@
+10:00:01 glmark2: upstream abc (pinned), size 800x600, args ""
+10:00:02 glmark2-mem: entry 0 setup: osal(v3d) mem: 1024 KiB allocated, 0 frees held, largest 40000 KiB
+10:00:05 glmark2-frame: [build] use-vbo=true: 2764 frames; us per frame: gl 19, swap 16, show 3582, other 2, frame 3619
+10:00:06 glmark2-mem: entry 1 setup: osal(v3d) mem: 1024 KiB allocated, 0 frees held, largest 40000 KiB
+10:00:09 glmark2-frame: [jellyfish] <default>: 2094 frames; us per frame: gl 404, swap 28, show 4344, other 2, frame 4778
+10:00:10 glmark2-mem: entry 2 setup: osal(v3d) mem: 30000 KiB allocated, 1 frees held, largest 1200 KiB
+10:00:10 osal(v3d): out of GPU memory for 7684096 bytes (1 frees held)
+10:00:11 yakogl/v3d: no GPU memory for a tiled copy of 7684096 bytes (0 of 8388608 bytes of copies live, a job open)
+10:00:12 yakogl/v3d: no GPU memory for a tiled copy of 7684096 bytes (0 of 8388608 bytes of copies live, a job open)
+10:00:20 glmark2-frame: [refract] <default>: 39 frames; us per frame: gl 144, swap 3456, show 57804, other 1, frame 198168
+10:03:00 glmark2: glmark2 Score: 457

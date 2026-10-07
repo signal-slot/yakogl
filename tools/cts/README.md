@@ -146,7 +146,14 @@ layer has no scan-out view, so its SV row is the copy path again (the cluster
 sample's own `prj.conf` turns the view on where the board layer has one). `run` is
 `tools/board.sh <board> tree` on the table, then `tools/cts/common-tally.py`:
 per row the record words, board.sh's verdict recomputed from the files, the
-glmark2 score with its failed and unsupported scenes, the slint and cluster
+glmark2 score with its failed and unsupported scenes (and, from the GM row's
+console, a verdict per scene: a known-bad line — terrain's `GL error 0x502 in
+glGenerateMipmap` and incomplete-texture lines, a `draw refused` or `was not
+recorded` draw, `out of GPU memory` and `no GPU memory for a tiled copy` — in a
+scene makes the cell `amber` with the scene and the line count, unless the row
+is `failed` already; no console means `scenes not judged`; the patterns are
+`SCENE_PROBLEMS` at the top of the script, each citing its RESULTS.md section;
+the diff names per-scene changes), the slint and cluster
 probes (the cluster row also reports its throughput — frames, fps, Mpx/s and
 mean draw, from the console's FINGERPRINT, PERF and APP records, computed by
 `yakogl-tools record --log`, which rounds where the cluster's own console line
@@ -159,7 +166,8 @@ first: its CASE record carries no more), the GPU resets with their source
 from board.sh's count of the console's recovery lines, else `resets absent`) and the image's sha256
 and build ids; with an earlier common run, the row-by-row diff. `--dry-run`
 prints every command and does nothing. `common-tally.py --self-test` runs in
-`tools/check.sh` (it replays the cluster fixture in `tools/cts/testdata`);
+`tools/check.sh` (it replays the cluster fixture and the `glmark2-*.console` fixtures — clean,
+terrain 0x502, refract refused, Pi 4 out of memory — in `tools/cts/testdata`);
 `tools/board_selftest.sh` checks the three boards' dry runs.
 
 The board images compile shaders in the image (the online compiler) or look

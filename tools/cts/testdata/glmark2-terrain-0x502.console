@@ -1,0 +1,12 @@
+10:00:01 glmark2: upstream abc (pinned), size 800x600, args ""
+10:00:02 glmark2-mem: entry 0 setup: osal(v3d) mem: 1024 KiB allocated, 0 frees held, largest 40000 KiB
+10:00:05 glmark2-frame: [build] use-vbo=true: 2764 frames; us per frame: gl 19, swap 16, show 3582, other 2, frame 3619
+10:00:06 glmark2-mem: entry 1 setup: osal(v3d) mem: 1024 KiB allocated, 0 frees held, largest 40000 KiB
+10:00:09 glmark2-frame: [jellyfish] <default>: 2094 frames; us per frame: gl 404, swap 28, show 4344, other 2, frame 4778
+10:00:10 glmark2-mem: entry 2 setup: osal(v3d) mem: 1024 KiB allocated, 0 frees held, largest 40000 KiB
+10:00:10 yakogl: GL error 0x502 in glGenerateMipmap
+10:00:11 yakogl: a texture on unit 0 is incomplete and samples (0,0,0,1): a mipmap min filter, but a level of the chain has no image (target 0xde1, 800x600, levels 1 of 1)
+10:00:12 yakogl: GL error 0x502 in glGenerateMipmap
+10:00:13 yakogl: a texture on unit 0 is incomplete and samples (0,0,0,1): a mipmap min filter, but a level of the chain has no image (target 0xde1, 800x600, levels 1 of 1)
+10:00:20 glmark2-frame: [terrain] <default>: 51 frames; us per frame: gl 144, swap 3456, show 57804, other 1, frame 198168
+10:03:00 glmark2: glmark2 Score: 457

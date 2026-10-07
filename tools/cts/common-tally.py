@@ -20,7 +20,11 @@ with); a verdict that differs from the one INDEX.txt stored is printed beside
 it. This tool adds what board.sh's verdict line does not say, per kind:
 
   glmark2  the GLMARK2 record: score, scenes ran / failed / unsupported, and
-           the record's own status (pass or fail)
+           the record's own status (pass or fail); and, when the row's
+           console is there, a verdict per scene (see SCENE_PROBLEMS): a
+           known-bad console line in a scene makes the GM cell amber (unless
+           the row's verdict is failed already), naming the scene and the
+           line count; a run without a console is not judged per scene
   slint    the PROBES record's status (pass or fail)
   cluster  the PROBES record's status (pass or fail), and the run's throughput
            (frames, fps, Mpx/s, mean draw) that the FINGERPRINT, PERF and APP
@@ -45,7 +49,7 @@ build ids (meta.txt, as board.sh read them from the image's build.ninja).
 
 --prev compares with an earlier common run (a tree outdir, or --prev-row
 LABEL=<rundir> ...), row by row by label: the verdict, the record words, and
-the fields above (glmark2 score, cluster throughput, gl_test failing cases
+the fields above (glmark2 score, per-scene problems, cluster throughput, gl_test failing cases
 added and removed).
 
 The first line is this tool's own build (git describe of its checkout).
@@ -65,6 +69,30 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 BOARD_SH = os.path.join(REPO, "tools", "board.sh")
 BOARDS = ("am62p", "pi4", "imx8mp")
 RUN_RE = re.compile(r"^[0-9]{8}-[0-9]{4}-(.+)-([0-9a-f]{8}|probe)$")
+# glmark2's known-bad console lines, one per line of the table: (name, pattern, where it is
+# recorded). A line is attributed to the scene whose "glmark2-frame:" line (or "glmark2: entry N
+# <scene>: failed / unsupported" line) follows it: a scene prints them while it runs, and
+# its frame line closes it. A scene with any such line is amber, not green.
+SCENE_PROBLEMS = (
+    # tools/cts/RESULTS.md, Pi 4 round 4 (terrain "logs GL error 0x502 in glGenerateMipmap 16 times"):
+    # an ES 2.0 image refuses mipmaps of a non-power-of-two texture
+    ("glGenerateMipmap 0x502", re.compile(r"GL error 0x502 in glGenerateMipmap")),
+    # same section, and the AM62P's land192 round: "a texture on unit 0 is incomplete and samples
+    # (0,0,0,1) ... 800x600, levels 1 of 1": terrain samples black
+    ("incomplete texture", re.compile(r"a texture on unit \d+ is incomplete and samples \(0,0,0,1\)")),
+    # RESULTS.md, "AM62P: reclaim ... common round" (refract "draw refused" in every frame:
+    # "glDrawArrays was not recorded (-12); the frame is missing it", gl/draw.rs) and the
+    # backends' own "yakogl/<backend>: draw refused: ..." lines
+    ("draw refused", re.compile(r"draw refused|was not recorded \(-?\d+\); the frame is missing it")),
+    # RESULTS.md, Pi 4 rounds 3-4 (refract: "osal(v3d): out of GPU memory for 7684096 bytes")
+    ("out of GPU memory", re.compile(r"out of GPU memory for \d+ bytes")),
+    # same: "no GPU memory for a tiled copy of 7684096 bytes (0 of 8388608 bytes of copies live, a job open)"
+    ("no memory for a tiled copy", re.compile(r"no GPU memory for a tiled copy of \d+ bytes")),
+)
+# main.cpp's lines that close a scene: print_cost() and the setup status
+SCENE_END_RES = (re.compile(r"glmark2-frame: (.*?): \d+ frames; "),
+                 re.compile(r"glmark2: entry \d+ (.*?): (?:unsupported|failed, why)"))
+
 # the committed cluster fixture (tools/cts/testdata/README.md) and the throughput line its
 # records give, as `yakogl-tools record --log` computes it
 CLUSTER_FIXTURE = os.path.join(HERE, "testdata", "cluster-run", "20261004-0438-cluster-11236a24")
@@ -254,6 +282,53 @@ def detail_from_record(decoded, label=""):
     return {"kind": "other", "text": decoded.strip().replace("\n", " | ") or "record not decoded"}
 
 
+def scenes_from_console(text):
+    """{scene: {problem name: lines}} for every scene the console names (a scene without a
+    known-bad line has {}); the problems of lines no scene closes are under "(no scene)"
+    (before the first scene's line: the run's own start; after the last: its end)"""
+    scenes, pending = {}, {}
+    for line in plain_lines(text):
+        for name, rx in SCENE_PROBLEMS:
+            if rx.search(line):
+                pending[name] = pending.get(name, 0) + 1
+                break
+        for rx in SCENE_END_RES:
+            m = rx.search(line)
+            if m:
+                got = scenes.setdefault(m.group(1), {})
+                for k, n in pending.items():
+                    got[k] = got.get(k, 0) + n
+                pending = {}
+                break
+    if pending:
+        scenes["(no scene)"] = pending
+    return scenes
+
+
+def scene_problem_text(problems):
+    return ", ".join("%d x %s" % (n, k) for k, n in sorted(problems.items()))
+
+
+def judge_scenes(detail, verdict, console):
+    """add the per-scene verdict to a glmark2 detail: detail["scenes"], and "amber" (the
+    problem scenes) when the row's verdict is not failed already; a run without a console, or
+    one without any scene line, is not judged (absent, never green)"""
+    scenes = scenes_from_console(console) if console else {}
+    if not any(k != "(no scene)" for k in scenes):
+        detail["scenes"] = None
+        detail["text"] += "; scenes not judged (no glmark2 scene lines in a console)"
+        return
+    detail["scenes"] = scenes
+    bad = {k: v for k, v in sorted(scenes.items()) if v}
+    detail["text"] += "; scenes judged: %d, with a known-bad line: %d" % (
+        sum(k != "(no scene)" for k in scenes), len(bad))
+    if not bad:
+        return
+    detail["amber"] = verdict != "failed"
+    for k, v in bad.items():
+        detail["text"] += "\n    %s %s: %s" % ("amber" if detail["amber"] else "problem", k, scene_problem_text(v))
+
+
 THROUGHPUT_RE = re.compile(r"^throughput: (.*)$", re.M)
 
 
@@ -309,6 +384,8 @@ def row_summary(board, label, rundir):
         s["detail"] = gl_test_from_console(console)
     else:
         s["detail"] = {"kind": "none", "text": "no result (result=%s)" % s["result"]}
+    if s["detail"].get("kind") == "glmark2":
+        judge_scenes(s["detail"], s["verdict"], console)
     if label == "CL" and s["record"] != "absent":
         # the cluster row reports its rate too: the PERF words (fps and the
         # means) are only readable from the console, so the i.MX8MP row says
@@ -395,6 +472,18 @@ def diff(prev, now):
             for k in ("score", "ran", "failed", "unsupported", "status"):
                 if da[k] != db[k]:
                     ch.append("glmark2 %s %s -> %s" % (k, da[k], db[k]))
+        if da.get("kind") == db.get("kind") == "glmark2":
+            sa, sb = da.get("scenes"), db.get("scenes")
+            if (sa is None) != (sb is None):
+                ch.append("glmark2 scenes %s -> %s" % ("not judged" if sa is None else "judged",
+                                                      "not judged" if sb is None else "judged"))
+            elif sa is not None:
+                for sc in list(sb) + [x for x in sa if x not in sb]:
+                    pa, pb = sa.get(sc), sb.get(sc)
+                    if pa == pb:
+                        continue
+                    f = lambda p: "absent" if p is None else (scene_problem_text(p) or "clean")
+                    ch.append("scene %s: %s -> %s" % (sc, f(pa), f(pb)))
         if da.get("kind") == db.get("kind") == "cluster":
             if da.get("throughput") != db.get("throughput"):
                 ch.append("cluster throughput %s -> %s"
@@ -647,6 +736,53 @@ def self_test():
         p = subprocess.run([ytools(), "record"] + words, capture_output=True, text=True)
         r = detail_from_record(p.stdout)
         check("CASE " + what, (r.get("passed"), r.get("total"), r.get("failing")) == want, (p.stdout, r))
+
+    # 5. glmark2 per scene: the console fixtures (testdata/glmark2-*.console, lines in the formats
+    # of RESULTS.md's quotes and main.cpp) through scenes_from_console and, with a GM run, the cell
+    def fixture(name):
+        return read_text(os.path.join(HERE, "testdata", "glmark2-%s.console" % name))
+
+    want = {"clean": {}, "terrain-0x502": {"[terrain] <default>": {"glGenerateMipmap 0x502": 2, "incomplete texture": 2}},
+            "refract-refused": {"[refract] <default>": {"draw refused": 3}},
+            "pi4-oom": {"[refract] <default>": {"out of GPU memory": 1, "no memory for a tiled copy": 2}}}
+    for name, bad in want.items():
+        got = scenes_from_console(fixture(name))
+        check("scenes: %s names its three scenes, problems only %s" % (name, sorted(bad) or "none"),
+              {k: v for k, v in got.items() if v} == bad and len(got) == 3 and "(no scene)" not in got, got)
+    tmp = tempfile.mkdtemp(prefix="common-tally-")
+    try:
+        gmrun = make_run(tmp, "GM", "glmark2", ["594b120e", "00000030", "011e0002", "03200258"], "a" * 64)
+        cells = {}
+        for name in want:
+            with open(os.path.join(gmrun, "console.txt"), "w") as f:
+                f.write(fixture(name))
+            cells[name] = row_summary("imx8mp", "GM", gmrun)
+        check("GM with a clean console: green (no amber), three scenes judged",
+              not cells["clean"]["detail"].get("amber") and len(cells["clean"]["detail"]["scenes"]) == 3
+              and "amber" not in cells["clean"]["detail"]["text"], cells["clean"]["detail"])
+        for name in ("terrain-0x502", "refract-refused", "pi4-oom"):
+            d = cells[name]["detail"]
+            check("GM with the %s console: verdict %s stays, cell amber naming the scene"
+                  % (name, cells[name]["verdict"]),
+                  cells[name]["verdict"] == "done" and d.get("amber") is True and
+                  "amber %s: " % next(iter(want[name])) in d["text"], d["text"])
+        check("amber text carries the counts (terrain 2 x GL error 0x502, pi4 2 x tiled copy)",
+              "2 x glGenerateMipmap 0x502" in cells["terrain-0x502"]["detail"]["text"] and
+              "2 x no memory for a tiled copy" in cells["pi4-oom"]["detail"]["text"])
+        failed = dict(cells["pi4-oom"]["detail"], text="x")
+        judge_scenes(failed, "failed", fixture("pi4-oom"))
+        check("a failed row's verdict is not softened to amber: the problems are named, amber false",
+              failed["amber"] is False and "problem [refract] <default>" in failed["text"], failed)
+        nc = dict(cells["clean"]["detail"], text="x")
+        judge_scenes(nc, "done", None)
+        check("no console: scenes not judged (None), no amber", nc["scenes"] is None and "not judged" in nc["text"], nc)
+        dd = diff({"GM": cells["clean"]}, {"GM": cells["terrain-0x502"]})[0]
+        check("diff: a scene that went from clean to 0x502 is named per scene",
+              "scene [terrain] <default>: clean -> 2 x glGenerateMipmap 0x502, 2 x incomplete texture" in dd, dd)
+        t = cells["terrain-0x502"]
+        check("diff: the same scene problems are no scene change", "scene " not in diff({"GM": t}, {"GM": t})[0])
+    finally:
+        shutil.rmtree(tmp)
 
     print("common-tally self-test: %d checks failed" % len(fails))
     return 1 if fails else 0

@@ -63,3 +63,11 @@ probes pass", `resets (console count) 0`, and the throughput line
 `1920x720: 8395 frames in 60019 ms, 139.9 fps, 193.4 Mpx/s; draw 4.9 ms mean,
 3.54 ms/Mpx` — the tool rounds the fps where the cluster's console truncated
 it to 139.8.
+
+`glmark2-clean.console`, `glmark2-terrain-0x502.console`, `glmark2-refract-refused.console`,
+`glmark2-pi4-oom.console` — short GM consoles (three scenes each) in the line formats of
+main.cpp (`glmark2-frame:`, `glmark2-mem:`) and of the problem lines RESULTS.md quotes
+(terrain's 0x502 and incomplete texture, refract's `was not recorded (-12)`, the Pi 4's
+`out of GPU memory` / `no GPU memory for a tiled copy`). Counts and timings are
+illustrative; the line texts are the real ones. `common-tally.py --self-test` judges each
+per scene.
