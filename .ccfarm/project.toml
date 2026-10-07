@@ -202,12 +202,15 @@ after = "promote"
 # dEQP-GLES2, the whole mustpass tree on the AM62P: 17 images, one per line
 # of tools/cts/am62p-full-tree.txt (tools/cts/README.md section 2), then the
 # per-case tally and the diff against the earlier tree. Needs DEQP_WORK
-# (stage 1, tools/cts/cts-build-zephyr.sh) besides ZEPHYR_WS. Hours of
-# board time; the result rows go to tools/cts/RESULTS.md and README.md.
+# (stage 1, tools/cts/cts-build-zephyr.sh) besides ZEPHYR_WS. The tree's
+# lines carry no "# image" labels, so the builder names each row's directory
+# img<N>-<tag> and board.sh finds it as img<N>-$TREE_TAG: one explicit tag
+# (the short commit hash) goes to both. Hours of board time; the result
+# rows go to tools/cts/RESULTS.md and README.md.
 commands = [
   "mkdir -p build/deqp/am62p-$(git rev-parse --short=8 HEAD)",
-  "tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-$(git rev-parse --short=8 HEAD) > build/deqp/am62p-$(git rev-parse --short=8 HEAD)/build.out",
-  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc TREE_IMAGE_DIR=build/deqp/am62p-$(git rev-parse --short=8 HEAD) tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-$(git rev-parse --short=8 HEAD)",
+  "tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-$(git rev-parse --short=8 HEAD) $(git rev-parse --short=8 HEAD) > build/deqp/am62p-$(git rev-parse --short=8 HEAD)/build.out",
+  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc TREE_IMAGE_DIR=build/deqp/am62p-$(git rev-parse --short=8 HEAD) TREE_TAG=$(git rev-parse --short=8 HEAD) tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-$(git rev-parse --short=8 HEAD)",
 ]
 requires = ["target:am62p"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]

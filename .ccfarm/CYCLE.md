@@ -103,6 +103,9 @@ design and names the records and commits it rests on.
 
 **Secrets and machine facts.** Board addresses, UART paths, credentials and
 the paths of external workspaces are environment only (`BOARD_HOST`,
-`BOARD_UART`, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, ...); the repository
-defaults none of them to a path on one machine, and the PowerVR firmware
-header is generated locally from TI's firmware and never committed.
+`BOARD_UART`, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, ...). The board and
+image scripts default none of them to a path on one machine; the one
+exception is `tools/check.sh`, which falls back to
+`$HOME/com/github/zephyrproject-rtos/modules/hal/nxp` for `HAL_NXP_DIR`, so
+set it explicitly elsewhere. The PowerVR firmware header is generated
+locally from TI's firmware and never committed.
