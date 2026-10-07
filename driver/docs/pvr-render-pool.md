@@ -4881,3 +4881,172 @@ the run):
 - the descriptor and the render-target pitch: 0.5;
 - gl_test 181, the board run, a GM round: 1;
 - **about 2.5 days**, after stage 1.
+
+## The top region: large GENERAL blocks from the carveout's end (refract after shadow and terrain; host evidence, not yet on the board)
+
+**The problem, measured** (the reclaim round 8e7257f8, and 5af1f031 with
+grow on demand; tools/cts/RESULTS.md, "glmark2 cell AMBER"):
+- refract's depth pass needs a 1600x1216 depth/stencil buffer, 7600 KiB in
+  one piece; it was refused in 110 of 110 frames ("glDrawArrays was not
+  recorded (-12)");
+- "free 9712 KiB in 8 ranges, largest 3936 KiB", "1940 KiB left" above the
+  bump, nothing held ("pending frees now 0");
+- with grow on demand on: "free 10056 KiB in 9 ranges, largest 3792 KiB",
+  "5668 KiB left": 1932 KiB short.
+
+The bytes were there in both; one range was not. Scattering a buffer over
+pieces through the GPU MMU (the design section above, about 4.5 days) is
+out of scope for the benchmark plan. This is the smaller change.
+
+### The policy (`gpu::pvr::pool`, `gpu::pvr::mem`)
+
+- **Two ends.** A GENERAL request of more than `pool_top_above` bytes
+  (`struct yd_pvr_km`; the driver sets `YD_PVR_POOL_TOP_ABOVE`, 256 KiB,
+  in `pvr_fw_boot.c` `km_setup`) is a large one. It is placed from the
+  carveout's end downward (`mem.rs` `bo_alloc_top`). Everything else keeps
+  coming from the bump, as before: the freelists, the render statics, the
+  HWRT sets (all of them `bo_alloc` directly), programs, uniforms, the PDS
+  and USC heaps. The bump stops at the top region's floor (`bo_alloc`'s
+  limit is `pool_floor()`, not the carveout's end), so the two ends share
+  one gap.
+- **The order** (`pool.rs` `alloc`):
+  - large: best fit over the top region's free ranges, then over the ranges
+    below, then the gap (the floor moves down), then the bump's refusal
+    (its "render pool exhausted" line, "N KiB left" = the gap, and the
+    summary);
+  - small: best fit over the ranges below, then the bump, then a range of
+    the top region (only when the gap is too small).
+- **Merging.** A top block at carveout offset `co` is mapped at GENERAL heap
+  offset `TOP_VA + co` (`TOP_VA` = 0x4000_0000, above every bump offset and
+  every placed span). VA adjacency is carveout adjacency, so the existing
+  merge rule (adjacent in VA and in CPU space) holds for every pair of top
+  blocks. A page's mapping never changes: only pages below the region's
+  high-water are mapped (`pool_top_hw`), so reuse maps nothing and leaves
+  the MMU caches alone.
+- **Giving back.** A free that merges into a range reaching the floor moves
+  the floor up at once (`bo_top_rollback`, always, not opt-in like the
+  bump's rollback). So the top region never has a free range at its floor:
+  a scene's large blocks freed at teardown go back into the gap in one
+  piece.
+- **What the run prints.** The summary's head line gains "; top T KiB now,
+  H KiB high-water" once the region has been used. The owner report's
+  "handed out" (`yd_pvr_pool_usage`) counts the top's bytes.
+- **Off.** `pool_top_above` 0 is the old pool exactly. A build with
+  `-DPVR_POOL_TOP_ABOVE=0` (`pvr_fw_boot.c`) is the A/B arm.
+
+**Cost and limits:**
+- `struct yd_pvr_km` grows by 16 bytes (`pool_top_above`, `pool_top`,
+  `pool_top_hw`, `pad`), at its end; `include/yakogl_drivers.h` and the
+  Rust layout asserts move together.
+- Page-table pages: the top region's VA span equals its physical span, so
+  at most one 4 KiB table per 2 MiB of the carveout (32 for 64 MiB), plus
+  one directory for the VA above 1 GiB. The 2 MiB page-table area has 512.
+- Device addresses up to 0x80_7fff_ffff in GENERAL: inside the heap
+  (128 GiB, `rgxheapconfig.h`) and the 40-bit device address space. That
+  every field the backend writes takes such an address is the board run's
+  to show (a fault would name the address).
+- Large blocks of the PDS and USC heaps are not moved (their windows are
+  small, and their blocks are code).
+
+### Why 256 KiB, and the order
+
+The replay below decided both. At a 1 MiB threshold jellyfish's 32 caustic
+textures (344 KiB each, 11 MiB) stay below; they raise the bump for good,
+and refract's last block met a gap of 6596 KiB at the board's bytes. At
+256 KiB they go to the top and come back at jellyfish's teardown: the gap
+at refract's depth buffer is 11276 KiB. And with "the ranges below" tried
+before the gap, the C pool's golden trace replays to equality with the
+region on (its two GENERAL requests above 256 KiB: a refused 32 MiB, and
+1 MiB from a merged range). Tried the other way (the gap first), the
+glmark2 replay gave the same verdicts at 256 KiB in the variants tried (up
+to 8.5 MiB unnamed, below), and the golden trace would differ at its last
+1 MiB request. At 1 MiB, ranges below first was the weaker order: a large
+block in a hole below, once freed, is split by small ones.
+
+### The host replay (`pool/tests/replay.rs`)
+
+The real pool and bump on the AM62P's layout (64 MiB carveout, the pool
+its last 59200 KiB). The board prints no per-allocation trace, so the
+sequence is a reconstruction; the module's header says where each number
+comes from (the owner report's fixed part, jellyfish's 45 frees of 11576
+KiB, terrain's refused requests, shadow's and refract's 1600x1200 blocks,
+HWRT members by `render.rs`'s formulas, glmark2's default order). Frees
+come back at teardown, as with the reclaim (the board: "pending frees now
+0"). "Unnamed" is a number of 256 KiB blocks kept from shadow on: what the
+board held that the reconstruction does not name.
+
+| GENERAL (KiB) | top region off | on (256 KiB) |
+|---|---|---|
+| before refract, 0 unnamed: largest range, gap | 15100, 1784 | 684, **31908** |
+| at refract's depth buffer, 24 unnamed: free, gap | **9728, 1784** (board: 9712, 1940) | 236, 11276 |
+| refract's depth buffer served, unnamed 0..30 | yes | yes |
+| unnamed 31..38 (7.75..9.5 MiB) | **refused** ("largest" 7248 down to 5452) | yes (gap 9484 down to 7692) |
+| unnamed 39 | refused | refused (gap 7436: capacity) |
+
+- Without the region, no range before refract holds its three blocks
+  (7500 + 7500 + 7600 = 22600 KiB); the largest is shadow's two freed
+  blocks merged (15100). Refract's textures take it, and its depth buffer
+  lives on what terrain's teardown happened to leave.
+- At 24 unnamed blocks the reconstruction's bytes are the board's (free
+  9728 against 9712, left 1784 against 1940), but its largest range is 7600
+  where the board's was 3936: the board's free space was in smaller pieces
+  than the reconstruction can say. From 31 unnamed blocks on, the
+  reconstruction refuses the depth buffer as the board did, with the bytes
+  free in pieces, and nothing else.
+- With the region, before refract one range (the gap) holds all three of
+  its blocks for every unnamed count up to 38, and nothing in the run is
+  refused. At 39 the gap is short of refract's blocks (22436 KiB): that is
+  capacity, not placement.
+- **Slint (800x480) and the AGL cluster (1280x720)**, the boot plus the
+  application's objects, a glyph atlas that grows once, and 200 frames of
+  small buffers: every allocation served in both arms, and the largest
+  range left is the same (the gap: 27360 and 12696 KiB).
+- **The frame sets** (4 x (1 MiB GENERAL + 768 KiB PDS)): the four GENERAL
+  arenas are the top region's first blocks, at the carveout's end one after
+  another; the PDS arenas and the tables come from the bump as before.
+- **The golden trace** (2769 operations of the C pool): equal with the
+  region off and with it on at 256 KiB; the region is never used by it.
+- The top region's own tests (`pool/tests.rs`): placement and mapping,
+  merging and giving back in any order, reuse before the floor moves, the
+  bump stopping at the floor and a small request falling back to a top
+  range, frees outside the region dropped and counted, and a random run of
+  8000 steps with conservation per heap (1759 blocks placed in the top).
+
+**Not shown on the host:** the board's own placement. The replay says the
+gap before refract is at least 22600 KiB while the blocks the board holds
+beyond the reconstruction stay under 9.5 MiB; the board run says whether
+they do.
+
+### The other candidates
+
+- **Releasing scene resources at teardown:** already prompt. With the
+  reclaim on (the default since 8e7257f8) the board printed "pending frees
+  now 0" and "reclaim found nothing held" at refract; nothing to release.
+- **A bigger pool:** the carveout is the board's reserved-memory region,
+  64 MiB at 0x97800000 (SafeUI `boards/toradex/verdin_am62p/
+  verdin_am62p_am62p54_a53.dts:75`), ending where the MCU R5F's region
+  starts (0x9b800000). There is no Kconfig for its size: the driver takes
+  the memory-region's (`pvr_carveout_size`, at least
+  `PVR_GPU_MEM_MIN_SIZE`, 64 MiB, `driver/src/pvr_internal.h`). The deqp
+  sample moves it to 256 MiB at 0xa0000000 by an overlay
+  (`driver/samples/zephyr/deqp/boards/verdin_am62p_am62p54_a53.overlay`),
+  but its note relies on the image being kexec'ed; whether U-Boot (the
+  route of every glmark2 round since 10-04) leaves that DDR free is not
+  shown. Kept as the fallback if the board run below misses.
+
+### The board expectation (AM62P, glmark2 image from this commit)
+
+- refract: no "draw refused" line and no "render pool exhausted" line in
+  refract's part of the console; its frames are drawn whole;
+- "glmark2: 33 ran / 0 failed / 0 unsupported", GPU resets 0;
+- the summary at close has "; top T KiB now, H KiB high-water", with H at
+  least 22600 + 4096 (refract's blocks and the frame arenas);
+- the verdict is no longer amber for refract. (Terrain's black picture is
+  the npot item's, not this one's.)
+- If refract is still refused: the refusal's summary says which. "top 0"
+  in it means the image did not carry `pool_top_above`; a gap short of
+  7600 KiB with little free below means capacity (then the bigger pool
+  above); free ranges in the top region with a short gap mean a long-lived
+  large block in the middle, named by the owner lines.
+- The A/B arm is the same tree built with `-DPVR_POOL_TOP_ABOVE=0`: it must
+  reproduce the 110 refused draws.

@@ -177,6 +177,13 @@ static const struct yd_pvr_km_ops g_km_ops = {
 #define PVR_FWCCB_CHECK_DEFAULT 0
 #endif
 
+#ifndef PVR_POOL_TOP_ABOVE
+/* GENERAL render-pool requests of more than this many bytes come from the
+ * carveout's end downward (gpu::pvr::pool, the top region); -DPVR_POOL_TOP_ABOVE=0
+ * builds the arm without it, every block from the bump as before. */
+#define PVR_POOL_TOP_ABOVE YD_PVR_POOL_TOP_ABOVE
+#endif
+
 /* The context for a mapped carveout and register block (pvr_internal.h's
  * layout). */
 static void km_setup(uint8_t *cpu, mm_reg_t regs)
@@ -199,6 +206,7 @@ static void km_setup(uint8_t *cpu, mm_reg_t regs)
 		.fwccb_check = PVR_FWCCB_CHECK_DEFAULT,
 		.fw_uncached = PVR_FW_UNCACHED_DEFAULT,
 		.fl_probe_serve_max = PVR_FL_PROBE_SERVE_MAX,
+		.pool_top_above = PVR_POOL_TOP_ABOVE,
 	};
 }
 
