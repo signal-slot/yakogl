@@ -192,15 +192,24 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    for one app's 176 sources: 1,447,864 instruction words, 274,923 the GLSL text
    the table keeps for compiler-less targets, and 3,159,212 -- about 1.67 KB per
    row over 1888 rows -- reflection.
-   Open, and the reason the tier is not the default: that reflection is written
-   once per variant row. Every row carries its own `ShcShader` -- varyings,
-   uniforms, attribute map, blocks -- although all the variants of one source
-   share one reflection, so the same 176 sources' reflection appears about 10.7
-   times. Storing it per source instead of per row takes ~3.16 MB off this
-   table, and that is what the tier needs to beat: 884,201 bytes of flash and
-   5,244,035 of RAM for a compiler that serves any shader, while the table
-   serves only the apps it names and grows with them. Until then the tier is
-   what an image chooses when it wants no compiler, not what every image pays.
+   Done: that reflection was written once per variant row. Every row carried its
+   own `ShcShader` -- varyings, uniforms, attribute map, blocks -- although all
+   the variants of one source share one reflection, so the same 176 sources'
+   reflection appeared about 10.7 times. The table stores it per source now: a
+   `ShcPrecompiledRow` points at a `ShcPrecompiledReflection`, and the generator
+   refuses a source whose rows disagree on a field the source owns. Measured on
+   the host, same list and same compiler, the old emitter against the new:
+   `gl_test_es100` is 1888 rows of 176 sources and 10,798,308 -> 8,600,409 bytes
+   of table (-2,197,899, -20.4%) with its 1,447,864 instruction words unchanged,
+   so the whole saving is reflection; the powervr whole list is 3346 rows of 613
+   sources and 27,440,696 -> 21,455,420 bytes (-21.8%).
+   Open: the board's number. The 4,881,999 bytes of .rodata above was the old
+   layout, so the AM62P image has to be built with this table and `size -A` read
+   again before step 6 can be decided. What step 6 turns on is a comparison:
+   884,201 bytes of flash and 5,244,035 of RAM for a compiler that serves any
+   shader, against a table that serves only the apps it names and grows with
+   them. Until that is measured on the board the tier is what an image chooses
+   when it wants no compiler, not what every image pays.
    Open: an image that turns the tier on must name its apps. With the tier on
    and `YAKOGL_PRECOMPILED_APPS` empty the build stops (CMakeLists.txt,
    zephyr/CMakeLists.txt) instead of linking the whole list -- 14,154,000 bytes
@@ -215,8 +224,8 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    app for them and a compiler-less image cannot draw them. glmark2 and dEQP
    take their shaders from outside this repository, so no list names them
    either. Those images need the compiler.
-   Remaining steps: 6 the default turns on, after the reflection is stored per
-   source (the measurement above); 7 rename to "precompiled shaders" and
+   Remaining steps: 6 the default turns on, after the AM62P image is measured
+   again with the per-source reflection (the numbers above); 7 rename to "precompiled shaders" and
    "shader compiler" (features `precompiled-shaders` and `shader-compiler` for
    `shaderc-online` and `shaderc-offline`; Kconfig symbols, the C ABI, log
    prefixes); 8 the source moves from `src/shaderc/online` to

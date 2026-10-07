@@ -1413,6 +1413,86 @@ pub struct ShcSource {
     pub text: &'static str,
 }
 
+/* ---- the precompiled table's row types (yakogl-precompile writes them) ---- */
+
+/// What every record the compiler made from one source agrees on: its
+/// reflection. A precompiled table holds one per source, not one per row.
+///
+/// A [`ShcShader`] is one of these plus a [`ShcPrecompiledRow`], and
+/// [`precompiled::materialize`](precompiled::materialize) is the only thing
+/// that joins them, so the tier and the proof read the same fields. What
+/// proves the split loses nothing: `yakogl-precompile` refuses a source whose
+/// rows disagree on a field stored here (its own compile of the source says
+/// it once), and the library's test compares every row and every variant the
+/// table recorded against what the compiler makes of it with the table out of
+/// the way ([`precompiled::materialize`](precompiled::materialize) included).
+#[derive(Clone, Copy)]
+pub struct ShcPrecompiledReflection {
+    /// The lists below hold the source's own entries, unpadded; a
+    /// [`ShcShader`] gets the fixed array of [`ShcShader::varyings`] and
+    /// [`ShcShader::attribs`], and its counts are these lengths.
+    pub varyings: &'static [ShcVarying],
+    pub attribs: &'static [ShcAttrib],
+    pub uniforms: &'static [ShcUniform],
+    pub declared: &'static [ShcAttribBinding],
+    pub uses_w: u8,
+    pub uses_discard: u8,
+    pub reads_front_facing: u8,
+    pub meta_off: u16,
+    pub fs_front_face_off1: u16,
+    pub num_tile_buffers: u8,
+    pub tile_buffer_sh: u16,
+    pub vs_output_size: u8,
+    pub vs_psize_off: u8,
+    pub vs_vertex_id_reg1: u8,
+    pub vs_instance_id_reg1: u8,
+    pub uniform_sh_dwords: u16,
+    pub uses_pntc: u8,
+    pub uses_z: u8,
+    pub fragcoord_ytf_off1: u16,
+    pub native_cube: u8,
+    pub layout_at_link: u8,
+    /// The source's uniform blocks: what its `uniform` declarations are, which
+    /// no variant of it changes.
+    pub blocks: ShcBlocks,
+}
+
+/// One row of a precompiled table: the variant. Its code and the wiring that
+/// differs between a source's variants; everything else the source's
+/// [`ShcPrecompiledReflection`] already says.
+#[derive(Clone, Copy)]
+pub struct ShcPrecompiledRow {
+    /// Its source: an index into `SHC_PRECOMPILED_SOURCES` (what the table's
+    /// `SHC_PRECOMPILED_SOURCE` column used to be).
+    pub source: u16,
+    /// What the compiler made of that source, shared by all of its rows.
+    pub reflection: &'static ShcPrecompiledReflection,
+    pub stage: u32,
+    /// The identity [`precompiled::find`](precompiled::find) matches: FS, the
+    /// `shc_blend_key` this variant was built for (0 = none).
+    pub blend_key: u32,
+    /// What the compiler wrote in the shader it made ([`ShcShader::blend_key`]),
+    /// which [`precompiled::materialize`](precompiled::materialize) hands out.
+    /// Not always the number above: the PowerVR records the variant's key
+    /// there, the GC7000 leaves it 0 and puts the flip in its wiring, so a row
+    /// carries both.
+    pub shader_blend_key: u32,
+    pub usc: &'static [u32],
+    pub temps: u16,
+    pub num_outputs: u8,
+    pub uniform_dwords: u16,
+    pub uses_fbfetch: u8,
+    pub blend_consts_off: u8,
+    /// The GC7000 register wiring and constant file. Per row, not per source:
+    /// `ShcViv::vs_reg_of_in` is filled by a link, so it belongs to the
+    /// program the source was linked into.
+    #[cfg(feature = "gpu-vivante")]
+    pub viv: ShcViv,
+}
+
+// SAFETY: the raw pointers point at immutable statics.
+unsafe impl Sync for ShcPrecompiledRow {}
+
 /// Pad a generated varying list to the fixed array of [`ShcShader`].
 pub const fn pad_varyings<const N: usize>(v: [ShcVarying; N]) -> [ShcVarying; 16] {
     let mut out = [ShcVarying::ZERO; 16];

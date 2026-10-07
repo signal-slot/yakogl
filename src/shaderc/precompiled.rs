@@ -39,15 +39,16 @@
 
 use crate::shaderc::ShcShader;
 
-#[cfg(feature = "precompiled-shaders")]
-#[allow(unused_imports)]
-use crate::shaderc::{
-    pad_attribs, pad_varyings, ShcAttrib, ShcAttribBinding, ShcAttribMap, ShcBlob, ShcBlock, ShcBlockMember, ShcBlocks,
-    ShcPrecompiledLink, ShcSource, ShcUniform, ShcVarying, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX,
-};
 #[cfg(all(feature = "precompiled-shaders", feature = "gpu-vivante"))]
 #[allow(unused_imports)]
 use crate::shaderc::{pad_io, ShcViv, ShcVivIo, SHC_VIV_MAX_IO};
+#[cfg(feature = "precompiled-shaders")]
+#[allow(unused_imports)]
+use crate::shaderc::{
+    ShcAttrib, ShcAttribBinding, ShcAttribMap, ShcBlock, ShcBlockMember, ShcBlocks, ShcPrecompiledLink,
+    ShcPrecompiledReflection, ShcPrecompiledRow, ShcSource, ShcUniform, ShcVarying, SHC_STAGE_FRAGMENT,
+    SHC_STAGE_VERTEX,
+};
 
 /* the table: `#[path = "<YAKOGL_PRECOMPILED_TABLE>"] mod table;` (build.rs) */
 #[cfg(feature = "precompiled-shaders")]
@@ -190,6 +191,70 @@ fn mark_once() {
     }
 }
 
+/// The shader a row is: its variant and its source's reflection, joined. The
+/// only place a table's two halves become a [`ShcShader`], so the answer a
+/// look-up hands out and the test that compares a row against what the
+/// compiler makes of the same source read the same fields.
+#[cfg(feature = "precompiled-shaders")]
+pub fn materialize(row: &ShcPrecompiledRow) -> ShcShader {
+    let r = row.reflection;
+    /* a source with no entries of one kind is a null pointer and a zero count,
+     * as the compiler's own records are */
+    fn ptr<T>(v: &[T]) -> *const T {
+        if v.is_empty() {
+            core::ptr::null()
+        } else {
+            v.as_ptr()
+        }
+    }
+    /* the source's own lists into the shader's fixed arrays: the generator
+     * refuses a source with more entries than an array, so the copy is exact */
+    let mut varyings = [ShcVarying::ZERO; 16];
+    varyings[..r.varyings.len()].copy_from_slice(r.varyings);
+    let mut attribs = [ShcAttrib::ZERO; 16];
+    attribs[..r.attribs.len()].copy_from_slice(r.attribs);
+    ShcShader {
+        usc: ptr(row.usc),
+        usc_dw: row.usc.len() as u32,
+        temps: row.temps,
+        varyings,
+        num_varyings: r.varyings.len() as u8,
+        uses_w: r.uses_w,
+        uses_discard: r.uses_discard,
+        reads_front_facing: r.reads_front_facing,
+        meta_off: r.meta_off,
+        fs_front_face_off1: r.fs_front_face_off1,
+        num_outputs: row.num_outputs,
+        num_tile_buffers: r.num_tile_buffers,
+        tile_buffer_sh: r.tile_buffer_sh,
+        attribs,
+        num_attribs: r.attribs.len() as u8,
+        vs_output_size: r.vs_output_size,
+        vs_psize_off: r.vs_psize_off,
+        vs_vertex_id_reg1: r.vs_vertex_id_reg1,
+        vs_instance_id_reg1: r.vs_instance_id_reg1,
+        uniform_dwords: row.uniform_dwords,
+        uniform_sh_dwords: r.uniform_sh_dwords,
+        uniforms: ptr(r.uniforms),
+        num_uniforms: r.uniforms.len() as u8,
+        blend_key: row.shader_blend_key,
+        uses_fbfetch: row.uses_fbfetch,
+        blend_consts_off: row.blend_consts_off,
+        uses_pntc: r.uses_pntc,
+        uses_z: r.uses_z,
+        fragcoord_ytf_off1: r.fragcoord_ytf_off1,
+        native_cube: r.native_cube,
+        layout_at_link: r.layout_at_link,
+        declared: ptr(r.declared),
+        num_declared: r.declared.len() as u8,
+        /* no `v3d` field to name: a table and the V3D together is refused at
+         * the top of this file */
+        #[cfg(feature = "gpu-vivante")]
+        viv: row.viv,
+        priv_: core::ptr::null(),
+    }
+}
+
 /// The row with this identity, as the shader a look-up hands out (its
 /// `priv` the row), counted as a hit; `None` when the table has none or
 /// is not consulted ([`applies`]).
@@ -202,8 +267,8 @@ pub fn find(key: &[u8; 32], stage: u32, blend_key: u32) -> Option<ShcShader> {
             rows[i].stage == stage && rows[i].blend_key == blend_key && &table::SHC_PRECOMPILED_KEYS[i] == key
         })?;
         HITS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        let mut sh = rows[i].shader;
-        sh.priv_ = &rows[i] as *const ShcBlob as *const core::ffi::c_void;
+        let mut sh = materialize(&rows[i]);
+        sh.priv_ = &rows[i] as *const ShcPrecompiledRow as *const core::ffi::c_void;
         return Some(sh);
     }
     let _ = (key, stage, blend_key);
@@ -215,7 +280,7 @@ fn row_of(sh: &ShcShader) -> Option<usize> {
     #[cfg(feature = "precompiled-shaders")]
     {
         let rows = &table::SHC_PRECOMPILED_TABLE;
-        let size = core::mem::size_of::<ShcBlob>();
+        let size = core::mem::size_of::<ShcPrecompiledRow>();
         let off = (sh.priv_ as usize).checked_sub(rows.as_ptr() as usize)?;
         if off % size == 0 && off / size < rows.len() {
             return Some(off / size);
@@ -251,9 +316,9 @@ pub fn view(sh: &ShcShader) -> Option<RowView> {
 /// Row `i` as a back end reads a record.
 #[cfg(feature = "precompiled-shaders")]
 fn row_view(i: usize) -> Option<RowView> {
-    let src = &table::SHC_PRECOMPILED_SOURCES[usize::from(table::SHC_PRECOMPILED_SOURCE[i])];
-    let source = src.text.as_bytes().strip_suffix(b"\0").unwrap_or(src.text.as_bytes());
     let row = &table::SHC_PRECOMPILED_TABLE[i];
+    let src = &table::SHC_PRECOMPILED_SOURCES[usize::from(row.source)];
+    let source = src.text.as_bytes().strip_suffix(b"\0").unwrap_or(src.text.as_bytes());
     Some(RowView {
         sha: table::SHC_PRECOMPILED_KEYS[i],
         stage: row.stage,
@@ -264,7 +329,7 @@ fn row_view(i: usize) -> Option<RowView> {
         lod_key: crate::shaderc::LodKey::from_bits(table::SHC_PRECOMPILED_LOD_KEY[i]),
         if_lowering: crate::shaderc::IfLowering::from_u32(table::SHC_PRECOMPILED_IF_LOWERING[i]),
         attrib_map: table::SHC_PRECOMPILED_ATTRIB_MAP[i],
-        blocks: table::SHC_PRECOMPILED_BLOCKS[i],
+        blocks: row.reflection.blocks,
     })
 }
 
@@ -676,7 +741,7 @@ mod tests {
     /// The table's own text of row `i`, without its NUL.
     #[cfg(feature = "precompiled-shaders")]
     fn text_of(i: usize) -> &'static str {
-        let t = table::SHC_PRECOMPILED_SOURCES[usize::from(table::SHC_PRECOMPILED_SOURCE[i])].text;
+        let t = table::SHC_PRECOMPILED_SOURCES[usize::from(table::SHC_PRECOMPILED_TABLE[i].source)].text;
         t.strip_suffix('\0').unwrap_or(t)
     }
 
@@ -700,7 +765,11 @@ mod tests {
             let (hit, runs) = compile(stage, text_of(i));
             assert_eq!(runs, 0, "row {i}: a hit runs no compile");
             assert_eq!(shc_precompiled_hits(), hits.wrapping_add(1), "and is counted");
-            assert!(core::ptr::eq(hit.priv_, &table::SHC_PRECOMPILED_TABLE[i] as *const ShcBlob as *const _));
+            assert!(
+                core::ptr::eq(hit.priv_, &table::SHC_PRECOMPILED_TABLE[i] as *const ShcPrecompiledRow as *const _),
+                "row {i}: the hit is row {:?}",
+                row_of(&hit)
+            );
             assert!(crate::shaderc::online::backend::is_ours(&hit), "a row is the compiler's");
             shc_precompiled_set_enabled(0);
             let (made, runs) = compile(stage, text_of(i));
@@ -715,6 +784,39 @@ mod tests {
         let (sh, runs) = compile(SHC_STAGE_FRAGMENT, miss);
         assert_eq!((runs, shc_precompiled_hits()), (1, hits), "a miss compiles");
         crate::shaderc::release_shader(&sh);
+    }
+
+    /// What the table is for, stated as a fact it must keep: a source's rows
+    /// all read one reflection, and no two sources read the same one. The
+    /// generator refuses a source whose rows disagree on a field stored here
+    /// once, and this is the same rule from the image's side: the reflection
+    /// is held per source, so a source with a hundred variants pays for its
+    /// varyings and attributes once.
+    #[test]
+    #[cfg(feature = "precompiled-shaders")]
+    fn a_source_has_one_reflection_and_no_two_sources_share_one() {
+        let rows = &table::SHC_PRECOMPILED_TABLE;
+        let mut of = vec![core::ptr::null(); table::SHC_PRECOMPILED_SOURCES.len()];
+        for (i, r) in rows.iter().enumerate() {
+            let held = &mut of[usize::from(r.source)];
+            if *held == r.reflection {
+                continue;
+            }
+            assert!(
+                held.is_null(),
+                "row {i}: source {} has rows that read different reflections",
+                table::SHC_PRECOMPILED_SOURCES[usize::from(r.source)].name
+            );
+            *held = r.reflection;
+        }
+        let held: Vec<*const ShcPrecompiledReflection> = of.iter().copied().filter(|p| !p.is_null()).collect();
+        assert_eq!(held.len(), of.len(), "a source of the list has no row");
+        let mut distinct = held.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), held.len(), "two sources share one reflection");
+        let variants = rows.len() - held.len();
+        assert!(variants > 0, "the table has a source with more than one row to share a reflection");
     }
 
     /// Every program the table recorded, replayed in the GL core's order --
@@ -837,7 +939,7 @@ mod tests {
             .expect("a plain row");
         let (rc, sh, log) = alone_compile(table::SHC_PRECOMPILED_TABLE[i].stage, text_of(i));
         assert_eq!((rc, log.as_str()), (0, ""));
-        assert!(core::ptr::eq(sh.priv_, &table::SHC_PRECOMPILED_TABLE[i] as *const ShcBlob as *const _));
+        assert!(core::ptr::eq(sh.priv_, &table::SHC_PRECOMPILED_TABLE[i] as *const ShcPrecompiledRow as *const _));
         assert!(crate::shaderc::is_online(&sh), "a row is the compiler's work (its uniform rows are)");
         let miss = "precision mediump float; void main(){ gl_FragColor = vec4(0.4375); } // no row has me\n";
         let (rc, _, log) = alone_compile(SHC_STAGE_FRAGMENT, miss);
@@ -901,7 +1003,7 @@ mod tests {
         let other = (0..rows()).find(|&i| {
             plain(i)
                 && table::SHC_PRECOMPILED_TABLE[i].stage == SHC_STAGE_FRAGMENT
-                && table::SHC_PRECOMPILED_TABLE[i].shader.num_uniforms != 0
+                && !table::SHC_PRECOMPILED_TABLE[i].reflection.uniforms.is_empty()
                 && !table::SHC_PRECOMPILED_LINKS.iter().any(|x| x.vs == l.vs && x.fs == table::SHC_PRECOMPILED_KEYS[i])
         });
         let other = other.expect("a fragment shader the table never linked to this vertex shader");
