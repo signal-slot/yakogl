@@ -120,7 +120,10 @@ the link's map -- and the two records differ exactly there. A compile whose rows
 disagree on a field stored once is a refusal, naming every field it sees. The printers
 and the idiom are shared with `yakogl-tools`' `emit.rs` (`shc_print.rs`, the
 `ShcBlob` table of the Mesa reference and of `internal.rs`), whose rows keep the
-whole reflection in their shader. Its
+whole reflection in their shader. `shc_print.rs` is built into both tools --
+`emit.rs`, and `yakogl-precompile` through `#[path]` -- so it holds only what both
+print: a printer or a struct field that one of them needs and the other does not is
+dead code in the other, and every gate row that builds `yakogl-tools` reports it. Its
 header carries the toolchain mark, which says which compiler made it:
 
 ```text
