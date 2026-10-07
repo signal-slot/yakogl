@@ -18,7 +18,7 @@
 # turns on: what a compiler that serves any shader costs -- its .text and
 # .rodata in flash, its .bss in RAM -- against a table that serves only the apps
 # it names and grows with them. `apps` is what an image that runs all of them
-# pays, and the largest table a build can be told to carry: an image with the
+# pays, and the largest table this list lets an image name: an image with the
 # tier on and no app named is a configure error (CMakeLists.txt,
 # zephyr/CMakeLists.txt), and naming every app is not the whole list -- an app
 # claims the `pair` lines after it, so the list's `src`-only sources belong to

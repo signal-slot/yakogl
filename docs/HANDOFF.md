@@ -234,7 +234,7 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    through the whole list, which the build refuses for an image that names
    nothing. Naming every app the list has is 2389 rows of 206 sources
    (5,953,808 bytes on this image), not the list's 3346 rows of 613, so the
-   apps arm is the largest table a build can be told to carry.
+   apps arm is the largest table this list lets an image name.
    Open: three kinds of shader no table can serve. gl_triangle
    (`driver/samples/zephyr/gl_triangle/src/main.c:71`) and gc_gl_triangle
    (`.../gc_gl_triangle/src/main.c:170`) write their GLSL as C literals in the
