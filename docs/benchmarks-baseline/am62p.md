@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P benchmark baseline (before plan #2): NOT MEASURED (third attempt)
 
-Status: **no image was built and nothing ran on the board.** This is not a
-result. Every row is empty; no host-only number is offered in its place.
+Status: **one image (GT) ran on the board, with an empty console, so there is
+no measurement.** The other rows were not built. No host-only number is offered
+in place of a board result.
 
 - origin/main at the time: `8abeaabb` (HEAD8; a detached worktree of it was
   created, and `driver/src/fw/pvr_fw_blob.h` was copied into it, never staged).
@@ -22,11 +23,22 @@ result. Every row is empty; no host-only number is offered in its place.
   to the worktree's `common-images.sh`: the worker's `cargo` is a kache shim
   with no `rustc` beside it, which stops capi's CMake. No source of the image
   differs from origin/main. This is a build, not a measurement.
-- It was never run: `tools/board.sh am62p run ...` needs `BOARD_HOST`,
-  `BOARD_UART` and `BOARD_BOOT` in the environment, and the only form that sets
-  them (`VAR=... tools/board.sh ...`) was refused as needing approval, as was
-  `ssh <board login> true` again. Plain `tools/board.sh am62p run` stops with
-  "set BOARD_HOST".
+- Third step: `bash -c 'export BOARD_HOST=... BOARD_UART=... BOARD_BOOT=uboot-mmc;
+  tools/board.sh am62p run ...'` was allowed, and the board was reached. The GT
+  image was staged on the eMMC (read back equal), the board rebooted into it and
+  came back to Linux 426 s later, with no other session on the board. The run
+  record is `20261007-1825-GT-4e7f122a` (runner `tools/board.sh` at
+  `c658d8a4`, i.e. the integration branch's copy; the image is origin/main).
+  The verdict line:
+
+  `verdict: board.sh am62p GT rc=4 verdict=empty boot=uboot-mmc row boot_verdict=empty result=none resets=absent record=absent back_after=426s`
+
+  **The console capture is empty** (0 lines in `console.txt`; the serial
+  adapter's own client also saw 0 bytes during that window), so the run has no
+  gl_test pass count, no GPU-reset count and no record. `verdict=empty` means
+  "no console output", not that gl_test failed. Whether the image ran is
+  unknown; the cause of the silent UART (adapter, wiring, or the image) was not
+  investigated.
 
 ## What blocked it (first round)
 
@@ -59,7 +71,7 @@ nightly `RUSTUP_TOOLCHAIN` were present; `GLMARK2_SRC`, `SLINT_NOSTD_DIR`,
 | SO slint | not built | none | not run |
 | SV slint-view | not built | none | not run |
 | CL cluster | not built (no row in origin/main's table) | none | not run |
-| GT gl_test | not built | none | not run |
+| GT gl_test | built, 4e7f122a, 8abeaabb-dirty | `20261007-1825-GT-4e7f122a` | `board.sh am62p GT rc=4 verdict=empty boot=uboot-mmc row ... back_after=426s` (empty console; see above) |
 
 glmark2 score / ran-failed-unsupported, terrain 0x502 and incomplete-texture
 lines, refract "draw refused" count, Slint fingerprint, cluster probes and fps,
