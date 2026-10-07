@@ -40,7 +40,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=206
+WANT_CHECKS=207
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -316,12 +316,12 @@ rc=$?
 check "baseline imx8mp run: rc 0, one image, rows e00..e04 by selector, none past e04" \
     eval '[ "$rc" = 0 ] && grep -q "^=== e00 " <<<"$out" && grep -q "^=== e04 .*selector 4" <<<"$out" && ! grep -q "^=== e05" <<<"$out"'
 check "the baseline dry runs wrote nothing on the host" [ ! -e "$S/tree" ]
-# The common set (tools/cts/cts-common.sh, tools/cts/common-tree.txt): four
+# The common set (tools/cts/cts-common.sh, tools/cts/common-tree.txt): five
 # labelled rows, one image each, on every board through the same tree runner.
 CC="$HERE/cts/cts-common.sh"
 CT="$HERE/cts/common-tree.txt"
 for b in am62p pi4 imx8mp; do
-    for lab in GM SO SV GT; do
+    for lab in GM SO SV CL GT; do
         mkdir -p "$S/cm-$b/$lab/zephyr"
         # each row its own bytes, so its run directory's sha8 names the image it booted
         { cat "$S/img/$b.bin"; printf '%s' "$lab"; } > "$S/cm-$b/$lab/zephyr/zephyr.bin"
@@ -329,15 +329,18 @@ for b in am62p pi4 imx8mp; do
     done
 done
 out=$("$HERE/cts/common-images.sh" --dry-run pi4 "$CT" "$S/cmb" 2>&1)
-check "common table: the builder names GM SO SV GT, the scan-out view on SV only, GT is v3d_gl_test on the Pi 4" \
-    eval '[ "$(cut -d" " -f1 <<<"$out" | tr "\n" " ")" = "GM SO SV GT " ] && [ "$(grep -c SCANOUT_VIEW=y <<<"$out")" = 1 ] &&
+check "common table: the builder names GM SO SV CL GT, the scan-out view on SV only, GT is v3d_gl_test on the Pi 4" \
+    eval '[ "$(cut -d" " -f1 <<<"$out" | tr "\n" " ")" = "GM SO SV CL GT " ] && [ "$(grep -c SCANOUT_VIEW=y <<<"$out")" = 1 ] &&
           grep -q "^SV slint .*SCANOUT_VIEW=y" <<<"$out" && grep -q "^GT v3d_gl_test " <<<"$out"'
 out=$("$HERE/cts/common-images.sh" --dry-run am62p "$CT" "$S/cmb" 2>&1)
 check "common builder: every AM62P row self-arms the RTI without the inherited feeder; GT is gl_test" \
-    eval '[ "$(grep -c "RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n" <<<"$out")" = 4 ] && grep -q "^GT gl_test " <<<"$out"'
+    eval '[ "$(grep -c "RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n" <<<"$out")" = 5 ] && grep -q "^GT gl_test " <<<"$out"'
 out=$("$HERE/cts/common-images.sh" --dry-run imx8mp "$CT" "$S/cmb" 2>&1)
 check "common builder: every i.MX8MP row self-arms WDOG1; GT is gc_gl_test" \
-    eval '[ "$(grep -c "GC_BOARD_WDOG_SELF_ARM=y" <<<"$out")" = 4 ] && grep -q "^GT gc_gl_test " <<<"$out"'
+    eval '[ "$(grep -c "GC_BOARD_WDOG_SELF_ARM=y" <<<"$out")" = 5 ] && grep -q "^GT gc_gl_test " <<<"$out"'
+check "common builder: the CL row builds the cluster sample with its UI and Slint inputs named" \
+    eval 'grep -q "^CL cluster " <<<"$out" && grep -q "\-DAGL_SLINT_CLUSTER_DIR=" <<<"$out" &&
+          grep -q "\-DSLINT_NOSTD_DIR=" <<<"$out"'
 printf '# image XX: x\nfoo\n' > "$S/cm-bad.txt"
 printf 'glmark2\n' > "$S/cm-nolabel.txt"
 out=$("$HERE/cts/common-images.sh" --dry-run pi4 "$S/cm-bad.txt" "$S/cmb" 2>&1)
@@ -348,9 +351,9 @@ check "common builder: an unknown row is named, an unlabelled row refused (rc 2)
 for b in am62p pi4 imx8mp; do
     out=$(PATH="$S/stub:$PATH" "$CC" --dry-run "$b" run "$S/cm-$b" "$S/tree" 2>&1)
     rc=$?
-    check "common $b run: rc 0, the four labelled rows each booted from their own directory" \
-        eval '[ "$rc" = 0 ] && [ "$(grep -cE "^=== (GM|SO|SV|GT) \\(zephyr.bin" <<<"$out")" = 4 ] &&
-              [ "$(for l in GM SO SV GT; do grep -c "^DRY host\$ mkdir -p .*-$l-$(sha256sum "$S/cm-$b/$l/zephyr/zephyr.bin" | cut -c1-8) " <<<"$out"; done | tr "\n" " ")" = "1 1 1 1 " ]'
+    check "common $b run: rc 0, the five labelled rows each booted from their own directory" \
+        eval '[ "$rc" = 0 ] && [ "$(grep -cE "^=== (GM|SO|SV|CL|GT) \\(zephyr.bin" <<<"$out")" = 5 ] &&
+              [ "$(for l in GM SO SV CL GT; do grep -c "^DRY host\$ mkdir -p .*-$l-$(sha256sum "$S/cm-$b/$l/zephyr/zephyr.bin" | cut -c1-8) " <<<"$out"; done | tr "\n" " ")" = "1 1 1 1 1 " ]'
 done
 check "the common dry runs wrote nothing on the host" eval '[ ! -e "$S/tree" ] && [ ! -e "$S/cmb" ]'
 # board.sh refuses an AM62P image without "rti_arm: armed"; the dEQP sample's

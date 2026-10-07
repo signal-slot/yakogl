@@ -39,3 +39,27 @@ fixtures are its only host evidence:
   (`bad-sweep-ms4-name`), and the multisample image without it
   (`bad-ms4-name-missing`); the check must fail each with a message naming
   the offending symbol
+
+`cluster-run/20261004-0438-cluster-11236a24/` — a board.sh run directory
+replaying the Pi 4 cluster row of 2026-10-04 (the view run, tree `031de9a2`,
+`tools/cts/RESULTS.md`), so `common-tally.py`'s CL row can be checked without
+a board. `cts-selftest.sh` check 18 and `common-tally.py --self-test` both
+replay it. What is real and what is scaffolding:
+
+- `console.txt`'s four `yk-record:` lines are the cluster's record sequence:
+  FINGERPRINT, PERF, APP, PROBES (the verdict). The APP and PROBES words are
+  verbatim from RESULTS.md; the PERF words carry that run's printed numbers
+  (139.8 fps, frame 7.1 / 30.6 ms mean / worst, draw 3.54 ms/Mpx, show 0.1 ms)
+  packed as `check/src/lib.rs` packs them; the FINGERPRINT line is the Pi 4
+  cluster console form pinned in `recordcmd.rs`'s `throughput_from_a_log`
+  (its crc32 is that earlier run's — RESULTS.md does not record the view run's)
+- `meta.txt` is scaffolding: the real run's sha is `11236a247d72bdf0...`
+  (truncated in RESULTS.md; the fixture pads the tail with zeros), the build
+  ids are the run's console build line (`tree=031de9a2 table=1449eb0f`), and
+  the times only carry the run's "back after 179 s"
+
+The tally must read from it: verdict `done` from the PROBES record, "cluster
+probes pass", `resets (console count) 0`, and the throughput line
+`1920x720: 8395 frames in 60019 ms, 139.9 fps, 193.4 Mpx/s; draw 4.9 ms mean,
+3.54 ms/Mpx` — the tool rounds the fps where the cluster's console truncated
+it to 139.8.
