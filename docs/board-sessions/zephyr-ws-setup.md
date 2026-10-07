@@ -56,8 +56,9 @@ cd zephyr-ws && $D/zephyr-ws/.venv/bin/west update
 $D/zephyr-ws/.venv/bin/python -m pip install -r zephyr/scripts/requirements-base.txt
 # SDK 1.0.1, x86_64 linux, aarch64 toolchain only -> $D/zephyr-sdk-1.0.1
 #   download the zephyr-sdk-1.0.1_linux-x86_64 minimal bundle from the Zephyr SDK
-#   releases, extract it into $D, run ./setup.sh -t aarch64-zephyr-elf (add -h only if
-#   you need the host tools; it also may write ~/.cmake packages: pass -c off or skip it).
+#   releases, extract it into $D, run ./setup.sh -t aarch64-zephyr-elf. setup.sh can
+#   register the SDK in ~/.cmake/packages (outside the deps dir): do not pass its
+#   -c option; ZEPHYR_SDK_INSTALL_DIR is enough.
 export ZEPHYR_WS=$D/zephyr-ws ZEPHYR_WORKSPACE=$D/zephyr-ws
 export WEST_VENV=$D/zephyr-ws/.venv ZEPHYR_VENV=$D/zephyr-ws/.venv
 export ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1
