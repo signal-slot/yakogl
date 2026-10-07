@@ -49,7 +49,8 @@ use crate::shc_print::{
     attrib_is_zero, emit_u32_array, name_str, print_array, print_attrib, print_uniform, print_varying, rs_comment,
     rs_str, varying_is_zero, ARRAY_ATTRIBS, ARRAY_VARYINGS,
 };
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use yakogl::shaderc::online::backend::RecordView;
 use yakogl::shaderc::{
@@ -906,29 +907,32 @@ pub fn emit(
 
     let mut entries = Vec::with_capacity(rows.len());
     let mut named: HashSet<String> = HashSet::new();
-    let mut source: Option<(usize, u32, String)> = None;
+    /* One reflection per (source, stage). The rows of one source are not
+     * necessarily neighbours -- a compile, a link and a variant are separate
+     * jobs -- so a reflection is remembered by what it belongs to, not by the
+     * last group seen. */
+    let mut refl_of: HashMap<(usize, u32), String> = HashMap::new();
     for r in rows {
         let (row, refl, lists) = print_row_and_reflection(r, sources)?;
         let refl = refl.join("\n");
-        match &source {
-            /* another variant of the source already emitted: its reflection
-             * must be the same, or the field belongs in the row, not here */
-            Some((s, st, had)) if (*s, *st) == (r.source, r.stage) => {
-                if *had != refl {
-                    let at = had.lines().zip(refl.lines()).position(|(x, y)| x != y).unwrap_or(0);
-                    return Err(format!(
-                        "{}: source {} [{}] has rows that disagree on its reflection, which the table stores \
-                         once per source (move the field to the row); first difference at line {}\n    {}\n    {}",
-                        r.ident(),
-                        sources[r.source].name,
-                        if r.stage == SHC_STAGE_FRAGMENT { "fs" } else { "vs" },
-                        at + 1,
-                        had.lines().nth(at).unwrap_or("<end>"),
-                        refl.lines().nth(at).unwrap_or("<end>")
-                    ));
-                }
+        match refl_of.entry((r.source, r.stage)) {
+            /* another variant of this source: its reflection must be the same,
+             * or the field belongs in the row, not here */
+            Entry::Occupied(had) if *had.get() != refl => {
+                let had = had.get();
+                let at = had.lines().zip(refl.lines()).position(|(x, y)| x != y).unwrap_or(0);
+                return Err(format!(
+                    "{}: source {} [{}] has rows that disagree on its reflection, which the table stores \
+                     once per source (move the field to the row); first difference at line {}\n    {}\n    {}",
+                    r.ident(),
+                    sources[r.source].name,
+                    if r.stage == SHC_STAGE_FRAGMENT { "fs" } else { "vs" },
+                    at + 1,
+                    had.lines().nth(at).unwrap_or("<end>"),
+                    refl.lines().nth(at).unwrap_or("<end>")
+                ));
             }
-            _ => {
+            Entry::Vacant(e) => {
                 let id = reflection_ident(r);
                 if !named.insert(id.clone()) {
                     return Err(format!(
@@ -939,8 +943,9 @@ pub fn emit(
                 out.extend(lists);
                 out.extend(refl.lines().map(String::from));
                 out.push(String::new());
-                source = Some((r.source, r.stage, refl));
+                e.insert(refl);
             }
+            Entry::Occupied(_) => {}
         }
         out.extend(row_statics(r)?);
         out.push(String::new());
