@@ -90,4 +90,10 @@ No file was added, changed or removed.
   the constant-colour-blend variant 0xb9ee7 ("a constant-colour blend in a shader that
   discards or reads gl_FragCoord or gl_FrontFacing"); that is the existing, owned list,
   not changed here.
-- `tools/check.sh --quick`: see the item report.
+- `tools/check.sh --quick` (twice, same result): 76 ok, 17 failed, 2 gaps. The failures are
+  not shader-corpus rows: 13 `clippy` warning rows (needless_range_loop and others; item
+  clippy-clean), `no table in the artefact`, `no Mesa reference in the artefact`,
+  `board.sh dry-run matrix and replays` (board_selftest 207 checks, 1 failed),
+  `gen src/pvr/csbgen.rs + csbgen_wrap.c == bindgen`. Gaps: `aarch64-unknown-none` target
+  not installed, `HAL_NXP_DIR` unset. This change adds only a `.md` and a `.py` that
+  nothing in the gate reads, so none of these can come from it.
