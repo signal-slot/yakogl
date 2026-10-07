@@ -12,17 +12,19 @@
 #   off    the tier off: the in-process compiler is the back end (the control)
 #   app    the tier on, this app's rows in front of the compiler
 #   no-cc  the tier on, this app's rows and no compiler at all
-#   whole  the tier on, every app the source list names
+#   apps   the tier on, every app the source list names
 #
 # The first three are the comparison step 6 of docs/HANDOFF.md (open work item 1)
 # turns on: what a compiler that serves any shader costs -- its .text and
 # .rodata in flash, its .bss in RAM -- against a table that serves only the apps
-# it names and grows with them. `whole` is what the guard's alternative costs:
-# an image with the tier on and no app named is a configure error
-# (CMakeLists.txt, zephyr/CMakeLists.txt), and naming every app is the same
-# shader set by the route the build allows -- the number the Kconfig help cites
-# when it says why empty is an error. The app names come from the list itself,
-# so the arm follows it.
+# it names and grows with them. `apps` is what an image that runs all of them
+# pays, and the largest table a build can be told to carry: an image with the
+# tier on and no app named is a configure error (CMakeLists.txt,
+# zephyr/CMakeLists.txt), and naming every app is not the whole list -- an app
+# claims the `pair` lines after it, so the list's `src`-only sources belong to
+# no app and no APPS value reaches them (measured: 206 of the list's 613
+# sources, 2389 of its 3346 rows). The app names come from the list itself, so
+# the arm follows it.
 #
 # Environment: PVR_FW_BLOB (the generated pvr_fw_blob.h the PowerVR loader
 # needs; it is copied into this checkout when the checkout does not already
@@ -50,11 +52,11 @@ if ! cmp -s "$BLOB" "$ROOT/driver/src/fw/pvr_fw_blob.h"; then
 fi
 [ -d "$WS/.venv" ] || { echo "measure-image.sh: no Zephyr workspace at $WS"; exit 9; }
 mods=$(PATH="$WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$WS") || exit 1
-# The `whole` arm names every app the list has, read from the list itself.
+# The `apps` arm names every app the list has, read from the list itself.
 LIST=${YAKOGL_PRECOMPILED_LIST:-tools/shaders/precompiled.list}
 all_apps=$(awk '$1 == "app" {printf "%s ", $2}' "$LIST")
 all_apps=${all_apps% }
-[ -n "$all_apps" ] || { echo "measure-image.sh: $LIST names no app, so the whole arm has nothing to name"; exit 9; }
+[ -n "$all_apps" ] || { echo "measure-image.sh: $LIST names no app, so the apps arm has nothing to name"; exit 9; }
 
 # check_switches <arm> <.config> <cmake args...>: every CONFIG_* switch the arm
 # passed is a switch the built image has. A Kconfig symbol whose dependency is
@@ -107,5 +109,5 @@ fail=0
 run off   -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=n || fail=1
 run app   -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\"" || fail=1
 run no-cc -DCONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY=y -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$APP\"" || fail=1
-run whole -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$all_apps\"" || fail=1
+run apps -DCONFIG_YAKOGL_PRECOMPILED_SHADERS=y "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"$all_apps\"" || fail=1
 exit $fail
