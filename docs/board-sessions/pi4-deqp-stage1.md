@@ -72,6 +72,8 @@ TMPDIR=$ROOT/tmp tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $TMPDI
 
   Image links at RAM 155444 KB of 256 MB (59.30 %). Cold build 59.8 s,
   warm (ccache) 16.1 s. The test directory was deleted after the check.
+  A second run rebuilt D with the identical sha256: the image build is
+  reproducible.
 
 ## Notes for the next session
 
