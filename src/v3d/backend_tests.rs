@@ -5317,9 +5317,16 @@ fn a_cube_sampler_with_nothing_bound_samples_a_cube_stand_in() {
     /* the stand-in: depth 6, and six black faces */
     let b = black_cube_binding();
     let layout = texture::layout(&b).unwrap();
-    assert_eq!(texture::state(&b, &layout, 0).depth, 6);
+    let st = texture::state(&b, &layout, 0);
+    assert_eq!(st.depth, 6);
+    /* a 2D-array look-up of a face (`LodKey::cube_noseam`, TMUI) reads these
+     * six layers, `array_stride_64` apart. (This module stubs
+     * v3d_tex_state_from_layout, so the record's own stride is not what is
+     * checked here: the layout's layer stride, which the C derives it from
+     * as align(offset + size, 64) / 64 = 1, is, and the faces below.) */
     // SAFETY: a live layout.
     let stride = unsafe { v3d_tex_layer_stride(&layout) } as usize;
+    assert_eq!(stride, 64, "the layer stride the record's array stride is made of");
     // SAFETY: the stand-ins' 8192 bytes, written at init.
     let mem = unsafe { core::slice::from_raw_parts(g().black.cpu as *const u8, 8192) };
     for f in 0..6 {

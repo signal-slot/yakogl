@@ -4,7 +4,8 @@
 
 Item v3d-cube-design, 2026-10-07. The design and the host reproduction of
 the Raspberry Pi 4's 25 remaining dEQP-GLES2 failures; item v3d-cube-fix
-implements it. Status: designed, reproduced on the host, not implemented.
+(same day) implements it. Status: implemented and verified on the host; the
+Pi 4 run is open (section "As implemented").
 
 ## The defect
 
@@ -274,14 +275,12 @@ no-shader-table` with and without `report-es2`):
   the emulation's output (TMUI + TMUS on the cube record) yields the
   non-seamless value for CLAMP, REPEAT and MIRROR, and a TMUSCM look-up the
   seamless one whatever the wrap.
-- tests/v3d_cube_noseamless.rs: our compiler's own `textureCube` vertex
-  program on the interpreter, against two references computed in the test
-  (not by the model): today a `tmuscm` look-up and the seamless value in
-  both builds (`the_compiled_cube_lookup_is_seamless_today`, which pins
-  the wrong-for-ES2 value on purpose), and the ES 2.0 target
-  (`an_es2_build_samples_a_cube_non_seamlessly`, `#[ignore]` naming
-  v3d-cube-fix; run with `--ignored` it fails today with the seamless
-  value on the left).
+- tests/v3d_cube_noseamless.rs: our compiler's own `textureCube` programs on
+  the interpreter, against references computed in the test (not by the
+  model). As designed it pinned the seamless value of the unkeyed program
+  and carried an ignored ES 2.0 target test that failed on the seamless
+  value; both were replaced by item v3d-cube-fix, see "As implemented /
+  Host evidence" below for what the file holds now.
 
 Cannot:
 
@@ -344,3 +343,120 @@ handoff after the fix):
 - A corner tap of a seamless LINEAR look-up is the mean of the other three
   taps in the model (dEQP's convention, ES 3.0's recommendation); the
   hardware's rule is not known, so no test samples a corner.
+
+## As implemented (item v3d-cube-fix)
+
+The design's code points 1-5 and 7, with these decisions:
+
+- **Key**: `LodKey::cube_noseam` (bits 48..62, bindings 0..14); `mag_switch`
+  narrowed to bits 32..47 (bindings 0..15, all the GL core ever keys).
+  `LodKey` gained a field, so the six `LodKey { .. }` literals of
+  backend.rs's tests were extended; the C ABI is one `uint64_t` as before.
+- **Compiler**: `prepare.rs` lowers a keyed cube `Op::Tex` to
+  `SOp::Tex { layer: true }` with the face and (s, t) of `Walk::cube_face`
+  (dEQP's `selectCubeFace` order, ties included, on the un-normalised
+  |x|, |y|, |z|); `select.rs` writes TMUI (`WADDR_TMUI` = 36) after TMUT and
+  before TMUB, retires TMUSLOD (explicit level) or TMUS, no P2 word;
+  `chain.rs` lists TMUI among the look-up writes of its TMU check. The
+  unkeyed path pushes the same operations in the same order as before.
+- **Two keys**: `chain::compile_program_keyed(vs, fs, prim, target, vs_key,
+  fs_key, a)`; `compile_program` is it with no vertex key and the compile's
+  own (`shaderc::compile_lod_key`) fragment key. `codegen::link_sources`
+  takes the vertex key (`ProgramKey::vs_lod`), applies
+  `lodkey::remap_mag_switch` to the vertex module with its `mag_switch`, and
+  `backend::link_program` builds the vertex record's key (`vr.lod_key`) into
+  the program's cache key. The vertex key reaches `link_program` because the
+  GL core links the vertex VARIANT (`lod_variant_for`) with the fragment one.
+- **Sensitivity** (`backend::v3d_sensitivity`, ES 2.0 builds only): the
+  fragment program record keeps `ret32` and gains the fragment cube
+  bindings; a vertex record is sensitive to its cube bindings and, of
+  those, to the explicit-level ones for `mag_switch` (cube only: 2D vertex
+  textures keep the hardware's switch, which they pass today).
+  `online_sampler_variant` accepts `cube_noseam` on the program record;
+  `mag_switch` stays refused there (it is the vertex record's key).
+- **GL core** (`gl/draw.rs`): `stage_lod_key` sets the bit for a
+  `GL_SAMPLER_CUBE` binding by `cube_filters_see_seams` (mag LINEAR, or min
+  LINEAR / LINEAR_MIPMAP_*); on the V3D a vertex key alone now rebuilds the
+  variant's program too (`fs_rebuilt`: the program holds both stages'
+  code, so the link and the code upload run for a vertex key as for a
+  fragment one).
+- Not done: a 16th cube sampler of a stage stays seamless (bit 15), and
+  the fragment-stage FDX / FDY level fallback is not written (board-gated,
+  above).
+
+### Host evidence
+
+- tests/v3d_cube_noseamless.rs (both builds, 7 tests): every wrap pair on
+  eight directions over all six faces, the CLAMP / MIRROR / REPEAT edge
+  case against the seamless value, explicit levels (-1, 0.25, 1, 1.5) with
+  LINEAR_MIPMAP_LINEAR / NEAREST_MIPMAP_LINEAR / LINEAR on a 3-level cube,
+  a projected direction (`a_dir.xyz / a_dir.w`), a fragment look-up with a
+  bias (TMUB, TMUI, TMUS) on a one-level texture (the interpreter cannot
+  derive an implicit level, so bias on a mipmapped cube is the board's), the
+  stage isolation, and `an_unkeyed_program_is_unchanged`: FNV-1a hashes of
+  the code and uniform streams of four cube programs (vertex textureCube,
+  fragment bias, vertex textureCubeLod, cube + 2D) taken at 0252e9d, before
+  the change, equal after it, with and without `report-es2` and with a key
+  naming a binding the program has no cube at. Every reference is computed
+  in the test (Table 3.21, dEQP's `sampleLinear2D`, `wrap`).
+- backend.rs `a_v3d_cube_program_has_a_non_seamless_variant` (both builds):
+  the sensitivities (none in an ES 3 build), the variants of both stages
+  linking into a program that has `tmui` where the base has `tmuscm`.
+- draw.rs `the_cube_key_follows_the_filters`.
+- backend.rs `a_vertex_key_alone_relinks_the_base_program`: the draw of the 18
+  `texture.vertex.cube` cases (key [k, 0]: the vertex variant linked to the
+  retained base program record) gives a program of its own with `tmui` and
+  no `tmuscm`, the base untouched, the records balanced.
+- v3d/backend_tests.rs (the black stand-in test): the 1x1 cube record has
+  `depth` 6, the layout's layer stride is 64 bytes (the C derives the
+  record's `array_stride_64` = 1 from it; that test module stubs the
+  derivation, so the field itself is not asserted) and six black faces sit at
+  that stride, so a TMUI look-up of an incomplete cube reads black.
+
+### Pi 4 verification (one session; ES 2.0 images: v3d_deqp's prj.conf has `CONFIG_YAKOGL_REPORT_ES2=y`)
+
+Where the 25 cases are, in tools/cts/pi4-full-tree.txt (row = its position
+among the non-comment lines, the `TREE_ROWS` number):
+
+| Image (row) | Filter | Cases | The cube cases in it |
+|---|---|---|---|
+| **T1** (20) | `texture.vertex.*` among others | 181 | 18: `texture.vertex.cube.filtering.*` 10, `texture.vertex.cube.wrap.*` 8 |
+| **T3** (22) | `texture.mipmap.*`, `texture.specification.*` | 304 | 6: `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` |
+| **TF** (25) | `shaders.texture_functions.*` | 17 | 1: `shaders.texture_functions.vertex.texturecubelod` |
+
+Build the three images (ZEPHYR_WS, DEQP_WORK, ZEPHYR_SDK_INSTALL_DIR as the
+header of tools/cts/pi4-deqp-images.sh says; `$IMG` must not exist yet) and
+run them, either with the tree runner, which waits for each image's
+`<label>.built` line and tallies at the end:
+
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
+    TREE_IMAGE_DIR=$IMG TREE_ROWS=20,22,25 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
+    tools/board.sh pi4 tally $OUT
+
+or image by image (`<image>` is `$IMG/<LABEL>/zephyr/zephyr.bin`):
+
+    tools/board.sh pi4 run $IMG/T1/zephyr/zephyr.bin $OUT/T1     # likewise T3, TF
+    tools/board.sh pi4 tally $OUT/T1                              # likewise T3, TF
+
+Expected: the 25 cases above are Pass (dEQP's "Passed"), and nothing else
+moves: T1, T3 and TF each equal their sweep-30 tally with those cases moved
+from Fail to Pass; for the whole tree (all 29 images,
+`TREE_PREV=<sweep 30's tree> tools/board.sh pi4 tree ...` diffs against it)
+17,100 pass, 0 fail, 62 not supported, 3 quality warnings. Then `v3d_gl_test`
+unchanged, 21/21 (12/12 on the older record): its cube cases use NEAREST,
+which the GL core never keys.
+
+Reading a failure:
+
+- All 25 fail: the TMU did not take TMUI as a float face index (the
+  assumption above). Add one FTOIN of the face in `prepare.rs`
+  (`Walk::cube_face`'s caller), rebuild, run T1 `texture.vertex.cube.wrap.clamp_clamp` alone.
+- Only the six `texture.vertex.cube.filtering.nearest_mipmap_{nearest,linear}_linear_*`
+  fail: the c = 0.5 switch is wrong for the TMU. The remap is wired
+  (`LodKey::mag_switch` in the vertex key); check the vertex key reaches the
+  link (`V3D_VARIANTS_BUILT` in the back end's print grows) before
+  suspecting the remap itself.
+- Only the six `texture.mipmap.cube.*` fail, with invalid pixels along face
+  edges in the QPA: the fragment stage's implicit level needs the FDX / FDY
+  fallback (section "The level of detail"); write it in `prepare.rs` for
+  fragment variants only.

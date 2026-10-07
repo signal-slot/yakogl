@@ -360,12 +360,33 @@ fn vs_prog<'a>(
     })
 }
 
-/// Compile the GL program `vs` + `fs` for `prim` on `target`.
+/// Compile the GL program `vs` + `fs` for `prim` on `target`, with the
+/// fragment stage's sampler-state key the compile in progress carries
+/// ([`crate::shaderc::compile_lod_key`]) and no vertex key.
 pub fn compile_program<'a>(
     vs: &'a ir::Module<'a>,
     fs: &'a ir::Module<'a>,
     prim: Prim,
     target: Target,
+    a: &'a Arena<'a>,
+) -> Result<V3dProgram<'a>, V3dError> {
+    compile_program_keyed(vs, fs, prim, target, crate::shaderc::LodKey::NONE, crate::shaderc::compile_lod_key(), a)
+}
+
+/// [`compile_program`] with each stage's [`crate::shaderc::LodKey`]: what a
+/// draw's bound samplers ask of the stage's code. The V3D's keys are
+/// `cube_noseam` (both stages: the cube look-ups of those bindings are
+/// emulated per face, docs/v3d-noseamless-cube.md) and, of the fragment
+/// key, `ret32` (read by select.rs from the compile's key). The `mag_switch`
+/// remap is IR to IR and applied to the vertex module by the caller
+/// (`codegen::link_sources`).
+pub fn compile_program_keyed<'a>(
+    vs: &'a ir::Module<'a>,
+    fs: &'a ir::Module<'a>,
+    prim: Prim,
+    target: Target,
+    vs_key: crate::shaderc::LodKey,
+    fs_key: crate::shaderc::LodKey,
     a: &'a Arena<'a>,
 ) -> Result<V3dProgram<'a>, V3dError> {
     match prim {
@@ -383,7 +404,7 @@ pub fn compile_program<'a>(
     let (fs, fs_trips) = unrolled(fs, a)?;
 
     /* The fragment shader, and the order of its inputs. */
-    let fsp = prepare_fragment_with(fs, fs_trips, a)?;
+    let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a)?;
     let inputs = fragment_inputs(&fsp, a)?;
     /* Bit i: input i is flat (Mesa emit_fragment_varying: BITSET_SET of
      * flat_shade_flags at the input's index). The job builder reads word 0
@@ -421,8 +442,8 @@ pub fn compile_program<'a>(
         *w = (vs_loc, comp);
     }
 
-    let vsp = prepare_vertex_with(vs, wanted, vs_trips, a)?;
-    let csp = prepare_vertex_with(vs, &[], vs_trips, a)?;
+    let vsp = prepare_vertex_with(vs, wanted, vs_trips, vs_key.cube_noseam, a)?;
+    let csp = prepare_vertex_with(vs, &[], vs_trips, vs_key.cube_noseam, a)?;
 
     /* The attribute records: every attribute the vertex shader reads, in
      * ascending location (the coordinate shader reads a subset). */
@@ -782,8 +803,9 @@ mod tests {
         let tmu = |magic: bool, w: u8| magic && ((11..=13).contains(&w) || (32..=46).contains(&w));
         /* a look-up's writes: TMUS, TMUSLOD (a 2D explicit level, every
          * vertex-stage 2D look-up) or TMUSCM (a cube) retires it; TMUT, TMUR
-         * (a cube's r) and TMUB (bias or level) */
-        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 37 | 40 | 42);
+         * (a cube's r), TMUI (an array look-up's layer) and TMUB (bias or
+         * level) */
+        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 42);
         for (n, i) in instrs.iter().enumerate() {
             if let Instr::Alu(a) = i {
                 for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
@@ -3229,7 +3251,7 @@ mod tests {
              * is the value loaded from the y-scale word. */
             use crate::shaderc::online::v3d::isa::{AddOp, MulOp};
             use crate::shaderc::online::v3d::select::{select_fragment, Dst, Operand, Pressure, VOp};
-            let fsp = prepare_fragment_with(&fr.module, &[], a).expect("prepares");
+            let fsp = prepare_fragment_with(&fr.module, &[], 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
             let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
             let def = |v: Operand| {
@@ -3319,7 +3341,7 @@ mod tests {
             let _ = lower::compile_to_ir(a, Stage::Vertex, vsrc).map_err(|e| e.msg).unwrap();
             let fr = lower::compile_to_ir(a, Stage::Fragment, fsrc).map_err(|e| e.msg).unwrap();
             let (fm, trips) = unrolled(&fr.module, a).expect("the loop's trip count");
-            let fsp = prepare_fragment_with(fm, trips, a).expect("prepares");
+            let fsp = prepare_fragment_with(fm, trips, 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
             let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
             let head = sel.ops.iter().position(|o| *o == VOp::LoopHead).expect("a loop");

@@ -27,7 +27,8 @@ fn text(src: &'static str) -> &'static [u8] {
 fn the_triangle_sample_program_builds() {
     let _k = store::test_keep();
     let r = store::with_scratch(|s| {
-        codegen::link_sources(text(VS_SRC), None, text(FS_SRC), &[], s, store::keep()).map(|(sh, _)| sh.usc_dw)
+        codegen::link_sources(text(VS_SRC), None, crate::shaderc::LodKey::NONE, text(FS_SRC), &[], s, store::keep())
+            .map(|(sh, _)| sh.usc_dw)
     })
     .expect("the scratch region is free");
     assert!(matches!(r, Ok(n) if n > 0), "{r:?}");

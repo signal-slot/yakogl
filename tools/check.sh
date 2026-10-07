@@ -311,8 +311,8 @@ step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_test
 # refused). The ES 2.0 build's GL suite is not in that row: it never ran with
 # gpu-v3d before either. tests/v3d_cube_noseamless.rs (the Pi 4's
 # non-seamless cube defect, docs/v3d-noseamless-cube.md) runs in both builds
-# too: it pins what the compiler's own cube look-up yields on the interpreter,
-# and in the ES 2.0 build carries the target test, ignored until v3d-cube-fix.
+# too: the keyed (cube_noseam) programs against a non-seamless reference
+# computed in the test, and the unkeyed ones as golden hashes.
 step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \

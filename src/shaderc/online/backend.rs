@@ -1350,7 +1350,7 @@ const V3D_PROGRAM_KEY: u32 = u32::MAX;
 /// compiler of this binary.
 #[cfg(feature = "gpu-v3d")]
 fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
-    let mut key = [0u8; 32 * 3 + 8 + 8];
+    let mut key = [0u8; 32 * 3 + 8 + 8 + 8];
     key[..32].copy_from_slice(&vr.sha);
     key[32..64].copy_from_slice(&fr.sha);
     key[64..96].copy_from_slice(&sha256(&zero.key()));
@@ -1360,6 +1360,8 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
      * the program compiled with it (`fr.sha` covers it too; kept here so the
      * record's own key says it) */
     key[104..112].copy_from_slice(&fr.lod_key.bits().to_le_bytes());
+    /* and the vertex record's (`cube_noseam`, `mag_switch`: its own look-ups) */
+    key[112..120].copy_from_slice(&vr.lod_key.bits().to_le_bytes());
     /* `vr.sha` of a vertex shader compiled with the link's attribute
      * locations covers the map too (compile_and_publish_linked chains
      * map_key into it), so two layouts of one source are two programs. */
@@ -1384,13 +1386,15 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
         }
         let _restore = Restore(crate::shaderc::set_compile_lod_key(fr.lod_key));
         let built = store::with_scratch(|a| {
-            codegen::link_sources(vr.source, vr.attrib_map, fr.source, names, a, store::keep()).and_then(|(sh, b)| {
-                /* Copied out of the scratch while it is still lent, as in
-                 * `compile_and_publish_linked`. */
-                let kept = keep_blocks(&sh, b, store::keep())
-                    .ok_or(CompileError::OutOfMemory { which: Which::Keep, left: store::keep().left() })?;
-                Ok((sh, kept))
-            })
+            codegen::link_sources(vr.source, vr.attrib_map, vr.lod_key, fr.source, names, a, store::keep()).and_then(
+                |(sh, b)| {
+                    /* Copied out of the scratch while it is still lent, as in
+                     * `compile_and_publish_linked`. */
+                    let kept = keep_blocks(&sh, b, store::keep())
+                        .ok_or(CompileError::OutOfMemory { which: Which::Keep, left: store::keep().left() })?;
+                    Ok((sh, kept))
+                },
+            )
         });
         let (shader, blocks) = match built {
             Some(Ok(sb)) => sb,
@@ -1478,14 +1482,21 @@ const SAMPLE_KILL_VARIANTS: bool = !cfg!(not(feature = "gpu-powervr"));
 /// the two switches say.
 /// On the V3D a program record ([`link_program`]) is sensitive to the
 /// format of every fragment binding below 16 a look-up reads
-/// ([`LodKey::ret32`]: an R32F texture needs the 32-bit TMU output); nothing
-/// else on the V3D is (a vertex look-up of a depth texture is refused at the
-/// draw, `v3d::texture::refusal_for`). [`LodKey::NONE`] for a source the
-/// front end cannot run again here.
+/// ([`LodKey::ret32`]: an R32F texture needs the 32-bit TMU output) (a vertex
+/// look-up of a depth texture is refused at the draw,
+/// `v3d::texture::refusal_for`), and in a build that reports ES 2.0 both
+/// stages to their cube bindings ([`LodKey::cube_noseam`]) and the vertex
+/// stage's explicit-level cube look-ups to the c = 0.5 switch
+/// ([`LodKey::mag_switch`]). [`LodKey::NONE`] for a source the front end
+/// cannot run again here.
 fn sensitivity_of(rec: &Base) -> LodKey {
     #[cfg(feature = "gpu-v3d")]
     if rec.blend_key == V3D_PROGRAM_KEY && rec.stage == SHC_STAGE_FRAGMENT {
-        return v3d_ret32_sensitivity(rec.source);
+        return v3d_sensitivity(rec.source, super::sema::Stage::Fragment);
+    }
+    #[cfg(feature = "gpu-v3d")]
+    if rec.blend_key == 0 && rec.stage == SHC_STAGE_VERTEX {
+        return v3d_sensitivity(rec.source, super::sema::Stage::Vertex);
     }
     let (mip, switch) = crate::shaderc::lod_variants_enabled();
     let kill = SAMPLE_KILL_VARIANTS && rec.stage == SHC_STAGE_FRAGMENT;
@@ -1536,15 +1547,18 @@ fn sensitivity_of(rec: &Base) -> LodKey {
         #[cfg(not(feature = "gpu-powervr"))]
         let mip_free = 0;
         let sample_kill = kill && !m.instrs.iter().any(|op| matches!(op, ir::Op::Discard));
-        LodKey { mip_free, mag_switch, sample_kill, ret32: 0 }
+        LodKey { mip_free, mag_switch, sample_kill, ret32: 0, cube_noseam: 0 }
     })
     .unwrap_or(LodKey::NONE)
 }
 
-/// The fragment bindings below 16 that `fs` reads with a look-up: the
-/// program record's [`LodKey::ret32`] sensitivity.
+/// A V3D stage's [`LodKey`] sensitivity (see [`sensitivity_of`]): of the
+/// fragment stage, the bindings below 16 it reads with a look-up
+/// ([`LodKey::ret32`]), and in an ES 2.0 build the cube bindings below 15
+/// ([`LodKey::cube_noseam`]); of the vertex stage the same cube bindings, and
+/// those among them read at an explicit level ([`LodKey::mag_switch`]).
 #[cfg(feature = "gpu-v3d")]
-fn v3d_ret32_sensitivity(fs: &[u8]) -> LodKey {
+fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
     struct Restore(LodKey);
     impl Drop for Restore {
         fn drop(&mut self) {
@@ -1552,18 +1566,28 @@ fn v3d_ret32_sensitivity(fs: &[u8]) -> LodKey {
         }
     }
     let _restore = Restore(crate::shaderc::set_compile_lod_key(LodKey::NONE));
+    let fragment = stage == super::sema::Stage::Fragment;
+    let (_, switch) = crate::shaderc::lod_variants_enabled();
     store::with_scratch(|a| {
-        let Some(text) = core::str::from_utf8(fs).ok().and_then(|s| a.alloc_str(s).ok()) else {
+        let Some(text) = core::str::from_utf8(source).ok().and_then(|s| a.alloc_str(s).ok()) else {
             return LodKey::NONE;
         };
-        let Ok(l) = super::lower::compile_to_ir(a, super::sema::Stage::Fragment, text) else {
+        let Ok(l) = super::lower::compile_to_ir(a, stage, text) else {
             return LodKey::NONE;
         };
-        let ret32 = l.module.instrs.iter().fold(0u32, |acc, op| match *op {
-            ir::Op::Tex { sampler, .. } if sampler < 16 => acc | 1 << sampler,
-            _ => acc,
-        });
-        LodKey { ret32, ..LodKey::NONE }
+        let (mut ret32, mut cube) = (0u32, 0u32);
+        for op in l.module.instrs.iter() {
+            if let ir::Op::Tex { sampler, dim, .. } = *op {
+                if fragment && sampler < 16 {
+                    ret32 |= 1 << sampler;
+                }
+                if dim == ir::TexDim::Cube && sampler < 15 && crate::REPORT_ES2 {
+                    cube |= 1 << sampler;
+                }
+            }
+        }
+        let mag_switch = if !fragment && switch { super::lodkey::mag_switch_sensitivity(&l.module) & cube } else { 0 };
+        LodKey { ret32, cube_noseam: cube, mag_switch, ..LodKey::NONE }
     })
     .unwrap_or(LodKey::NONE)
 }
@@ -2350,6 +2374,138 @@ void main (void)
         assert_eq!(store::keep_in_use(), before, "the records went with their holders");
     }
 
+    /// `LodKey::cube_noseam` on the V3D (docs/v3d-noseamless-cube.md): in a
+    /// build that reports ES 2.0 a cube binding is a sensitivity of both stages
+    /// (the vertex stage's explicit-level cube look-up also of `mag_switch`),
+    /// a 2D sampler of neither; in any other build nothing is, so the GL core
+    /// never keys one and the program stays the hardware's seamless cube.
+    /// The variant of either stage links into a program of its own: its
+    /// look-up retires by TMUS / TMUSLOD with the face in TMUI instead of
+    /// TMUSCM, and the program is cached under the vertex key too.
+    #[cfg(feature = "gpu-v3d")]
+    #[test]
+    fn a_v3d_cube_program_has_a_non_seamless_variant() {
+        let _serial = test_lock();
+        cache_clear();
+        let before = store::keep_in_use();
+        let vs = "attribute vec4 p;\nuniform samplerCube c;\nuniform float l;\nvarying vec4 v;\n\
+                  void main() { v = textureCubeLod(c, p.xyz, l); gl_Position = p; }";
+        let fs_src = "precision mediump float;\nvarying vec4 v;\nuniform samplerCube s;\n\
+                      void main() { gl_FragColor = v + textureCube(s, v.xyz); }";
+        let vs2d = "attribute vec4 p;\nuniform sampler2D c;\nuniform float l;\nvarying vec4 v;\n\
+                    void main() { v = texture2DLod(c, p.xy, l); gl_Position = p; }";
+        let es2 = crate::REPORT_ES2;
+        let sense = |src: &str, stage| {
+            let sh = compile_out(stage, src);
+            // SAFETY: a compiled record.
+            let k = LodKey::from_bits(unsafe { online_lod_sensitivity(&sh) });
+            release(&sh);
+            k
+        };
+        assert_eq!(
+            sense(vs, SHC_STAGE_VERTEX),
+            LodKey { cube_noseam: u32::from(es2), mag_switch: u32::from(es2), ..LodKey::NONE },
+            "the vertex stage, binding 0"
+        );
+        assert_eq!(sense(vs2d, SHC_STAGE_VERTEX), LodKey::NONE, "a 2D vertex sampler is never keyed");
+        let (rc, text, prog) = link(vs, compile_out(SHC_STAGE_FRAGMENT, fs_src));
+        assert_eq!(rc, 0, "link: {text}");
+        // SAFETY: a linked program record.
+        let fsense = LodKey::from_bits(unsafe { online_lod_sensitivity(&prog) });
+        assert_eq!(fsense, LodKey { ret32: 1, cube_noseam: u32::from(es2), ..LodKey::NONE });
+        let uses = |sh: &ShcShader, w: &str| {
+            /* the program's code: fragment, vertex and coordinate programs */
+            sh.usc_words()
+                .chunks(2)
+                .filter_map(|w| crate::shaderc::online::v3d::decode::decode(w[0] as u64 | (w[1] as u64) << 32).ok())
+                .any(|i| {
+                    let mut s = String::new();
+                    crate::shaderc::online::v3d::listing::write_instr(&mut s, &i).unwrap();
+                    s.contains(w)
+                })
+        };
+        assert!(uses(&prog, "tmuscm") && !uses(&prog, "tmui"), "the base program: the hardware's cube look-up");
+        let key = LodKey { cube_noseam: 1, ..LodKey::NONE };
+        /* the fragment key */
+        let mut fvar = ShcShader::ZERO;
+        // SAFETY: the program record and a real output.
+        assert_eq!(unsafe { online_sampler_variant(&prog, key.bits(), &mut fvar, core::ptr::null_mut(), 0) }, 0);
+        let vsh = compile_out(SHC_STAGE_VERTEX, vs);
+        let mut vvar = ShcShader::ZERO;
+        // SAFETY: a vertex record and a real output.
+        let vkey = LodKey { cube_noseam: 1, mag_switch: 1, ..LodKey::NONE };
+        assert_eq!(unsafe { online_sampler_variant(&vsh, vkey.bits(), &mut vvar, core::ptr::null_mut(), 0) }, 0);
+        let mut linked = fvar;
+        let mut log = [0 as c_char; 512];
+        // SAFETY: two distinct valid shaders and a log of the announced size.
+        let rc = unsafe { online_link(&vvar, &mut linked, log.as_mut_ptr(), log.len()) };
+        assert_eq!(rc, 0, "link of the variants");
+        assert_ne!(linked.priv_, prog.priv_, "a program record of its own");
+        assert!(uses(&linked, "tmui"), "the keyed program looks the face up as a layer");
+        for sh in [&linked, &vvar, &vsh, &prog] {
+            release(sh);
+        }
+        assert_eq!(store::keep_in_use(), before, "the records went with their holders");
+    }
+
+    /// The draw of the 18 `texture.vertex.cube` cases keys the VERTEX stage
+    /// only: the GL core (`lod_variant_for`, key [k, 0]) asks for the vertex
+    /// variant and for the fragment "variant" of key 0, which is the base
+    /// program record itself (retained), and links the two. That relinks a
+    /// program record with a keyed vertex record. The result is a program of
+    /// its own, whose look-up is the TMUI one; the base program is untouched
+    /// and the records balance. The mag_switch bit rides along as it does for
+    /// `textureCubeLod` (the remap is IR to IR).
+    #[cfg(feature = "gpu-v3d")]
+    #[test]
+    fn a_vertex_key_alone_relinks_the_base_program() {
+        let _serial = test_lock();
+        cache_clear();
+        let before = store::keep_in_use();
+        let vs = "attribute vec4 p;\nuniform samplerCube c;\nuniform float l;\nvarying vec4 v;\n\
+                  void main() { v = textureCubeLod(c, p.xyz, l); gl_Position = p; }";
+        let fs_src = "precision mediump float;\nvarying vec4 v;\nvoid main() { gl_FragColor = v; }";
+        let uses = |sh: &ShcShader, w: &str| {
+            sh.usc_words()
+                .chunks(2)
+                .filter_map(|c| crate::shaderc::online::v3d::decode::decode(c[0] as u64 | (c[1] as u64) << 32).ok())
+                .any(|i| {
+                    let mut s = String::new();
+                    crate::shaderc::online::v3d::listing::write_instr(&mut s, &i).unwrap();
+                    s.contains(w)
+                })
+        };
+        let (rc, text, prog) = link(vs, compile_out(SHC_STAGE_FRAGMENT, fs_src));
+        assert_eq!(rc, 0, "link: {text}");
+        assert!(uses(&prog, "tmuscm") && !uses(&prog, "tmui"));
+        let vsh = compile_out(SHC_STAGE_VERTEX, vs);
+        for vkey in
+            [LodKey { cube_noseam: 1, ..LodKey::NONE }, LodKey { cube_noseam: 1, mag_switch: 1, ..LodKey::NONE }]
+        {
+            let mut vvar = ShcShader::ZERO;
+            // SAFETY: a vertex record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&vsh, vkey.bits(), &mut vvar, core::ptr::null_mut(), 0) }, 0);
+            /* the fragment key 0: the base program record, retained */
+            let mut base = ShcShader::ZERO;
+            // SAFETY: the program record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&prog, 0, &mut base, core::ptr::null_mut(), 0) }, 0);
+            let mut log = [0 as c_char; 512];
+            // SAFETY: two distinct valid shaders and a log of the announced size.
+            let rc = unsafe { online_link(&vvar, &mut base, log.as_mut_ptr(), log.len()) };
+            // SAFETY: the writer NUL-terminated the log.
+            let text = String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned();
+            assert_eq!(rc, 0, "{vkey:?}: {text}");
+            assert_ne!(base.priv_, prog.priv_, "{vkey:?}: a program record of its own");
+            assert!(uses(&base, "tmui") && !uses(&base, "tmuscm"), "{vkey:?}: the face goes to TMUI");
+            assert!(uses(&prog, "tmuscm") && !uses(&prog, "tmui"), "the base program is untouched");
+            release(&base);
+            release(&vvar);
+        }
+        release(&vsh);
+        release(&prog);
+        assert_eq!(store::keep_in_use(), before, "the records went with their holders");
+    }
+
     /// A shader of the offline table has no record here, and the accessor
     /// answers empty for it rather than failing. (A build without the
     /// table, the V3D's, has no such shader to ask about.)
@@ -2649,7 +2805,7 @@ void main (void)
     /* ---- sampler-state variants (shaderc::LodKey) ---- */
 
     /// The C ABI's `uint64_t` of a [`LodKey`]: `mip_free` bits 0..15,
-    /// `ret32` 16..31, `mag_switch` 32..62, `sample_kill` 63. Bindings 16
+    /// `ret32` 16..31, `mag_switch` 32..47, `cube_noseam` 48..62, `sample_kill` 63. Bindings 16
     /// and up of `mip_free` and `ret32` are not carried: the GL core keys
     /// bindings below CAP_SAMPLERS, 16, which this test also pins (a larger
     /// CAP_SAMPLERS needs another layout).
@@ -2660,8 +2816,12 @@ void main (void)
         assert_eq!(LodKey { ret32: 1, ..n }.bits(), 1 << 16);
         assert_eq!(LodKey { ret32: 0x8000, ..n }.bits(), 1 << 31);
         assert_eq!(LodKey { mag_switch: 1, ..n }.bits(), 1 << 32);
+        assert_eq!(LodKey { mag_switch: 0x8000, ..n }.bits(), 1 << 47);
+        assert_eq!(LodKey { cube_noseam: 1, ..n }.bits(), 1 << 48);
+        assert_eq!(LodKey { cube_noseam: 0x4000, ..n }.bits(), 1 << 62);
+        assert_eq!(LodKey { cube_noseam: 0x8000, ..n }.bits(), 0, "binding 15 is not keyed for the cube rule");
         assert_eq!(LodKey { sample_kill: true, ..n }.bits(), 1 << 63);
-        let k = LodKey { mip_free: 0x8001, ret32: 0x4002, mag_switch: 0x7fff_ffff, sample_kill: true };
+        let k = LodKey { mip_free: 0x8001, ret32: 0x4002, mag_switch: 0x8003, sample_kill: true, cube_noseam: 0x4005 };
         assert_eq!(LodKey::from_bits(k.bits()), k);
         assert_eq!(LodKey { mip_free: 1 << 16, ret32: 1 << 16, ..n }.bits(), 0, "bindings 16 and up are not keyed");
         assert!(!LodKey { ret32: 1, ..n }.is_none() && n.is_none());
@@ -2698,7 +2858,10 @@ void main (void)
         let vs = compile_out(SHC_STAGE_VERTEX, VS_CUBE_LOD);
         /* the remap is for an ES 2.0 report only (`sensitivity_of`) */
         let es2 = u32::from(crate::REPORT_ES2);
-        assert_eq!(sensitivity(&vs), LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0 });
+        assert_eq!(
+            sensitivity(&vs),
+            LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0, cube_noseam: 0 }
+        );
         let plain = compile_out(SHC_STAGE_FRAGMENT, FS_READS_V);
         /* the PowerVR's fragment shaders are all sensitive to the sample
          * state (`LodKey::sample_kill`) */
@@ -2707,7 +2870,10 @@ void main (void)
         #[cfg(feature = "gpu-powervr")]
         {
             let fs = compile_out(SHC_STAGE_FRAGMENT, FS_SAMPLES_UV);
-            assert_eq!(sensitivity(&fs), LodKey { mip_free: 1, mag_switch: 0, sample_kill: true, ret32: 0 });
+            assert_eq!(
+                sensitivity(&fs),
+                LodKey { mip_free: 1, mag_switch: 0, sample_kill: true, ret32: 0, cube_noseam: 0 }
+            );
             crate::shaderc::shc_set_lod_variants(0, -1);
             assert_eq!(sensitivity(&fs), LodKey { sample_kill: true, ..LodKey::NONE }, "switch (a) off");
             crate::shaderc::shc_set_lod_variants(1, -1);
@@ -2791,7 +2957,8 @@ void main (void)
         let same = sampler_variant(&fs, LodKey::NONE);
         assert_eq!(same.usc, fs.usc, "key 0: the input");
         release(&same);
-        let v = sampler_variant(&fs, LodKey { mip_free: 1, mag_switch: 0, sample_kill: false, ret32: 0 });
+        let v =
+            sampler_variant(&fs, LodKey { mip_free: 1, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 });
         assert_eq!(code_of(&v), off_code, "mip-free: the switch-off program");
         assert_eq!(v.num_varyings, fs.num_varyings);
         assert_eq!(v.uniform_dwords, fs.uniform_dwords);
@@ -2806,7 +2973,8 @@ void main (void)
         assert_eq!(code_of(&linked), off_code, "the link keeps the key");
         release(&linked);
         /* a key for a binding the shader does not read: the gradients stay */
-        let other = sampler_variant(&fs, LodKey { mip_free: 2, mag_switch: 0, sample_kill: false, ret32: 0 });
+        let other =
+            sampler_variant(&fs, LodKey { mip_free: 2, mag_switch: 0, sample_kill: false, ret32: 0, cube_noseam: 0 });
         assert_eq!(code_of(&other), code_of(&fs));
         release(&other);
         release(&fs);
@@ -2822,7 +2990,8 @@ void main (void)
     fn a_mag_switch_variant_remaps_the_level_and_keeps_the_layout() {
         let _serial = test_lock();
         let vs = compile_out(SHC_STAGE_VERTEX, VS_CUBE_LOD);
-        let v = sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0 });
+        let v =
+            sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 });
         assert_ne!(v.usc_words(), vs.usc_words(), "the remap is code");
         /* what it costs this GPU (--nocapture) */
         std::println!(
@@ -2836,7 +3005,8 @@ void main (void)
         assert_eq!(v.uniform_dwords, vs.uniform_dwords);
         assert_eq!(v.num_attribs, vs.num_attribs);
         /* the same key twice: the cached record */
-        let again = sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0 });
+        let again =
+            sampler_variant(&vs, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 });
         assert_eq!(again.usc, v.usc);
         release(&again);
         release(&v);
@@ -2857,7 +3027,10 @@ void main (void)
             online_compile_vs_linked(src.as_ptr() as *const c_char, &map, &mut linked, log.as_mut_ptr(), log.len())
         };
         assert_eq!(rc, 0);
-        let lv = sampler_variant(&linked, LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0 });
+        let lv = sampler_variant(
+            &linked,
+            LodKey { mip_free: 0, mag_switch: 1, sample_kill: false, ret32: 0, cube_noseam: 0 },
+        );
         let loc = |s: &ShcShader| s.attribs[..s.num_attribs as usize].iter().map(|a| a.location).collect::<Vec<_>>();
         assert_eq!(loc(&lv), loc(&linked), "the map's locations");
         assert!(loc(&linked).contains(&3));

@@ -87,8 +87,10 @@ pub enum SOp {
     /// A 2D look-up of the texture at sampler binding `sampler` (the
     /// reflection binding, what P0/P1's bits 24..31 carry): `srcs` are s and
     /// t, and the bias when `bias`, or the explicit level when `lod` (never
-    /// both). Its result is read through [`SOp::TexLane`].
-    Tex { sampler: u8, srcs: [S; 4], cube: bool, bias: bool, lod: bool },
+    /// both). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
+    /// (the face of a cube record, `cube_noseam`) follows t, written to TMUI;
+    /// never with `cube`. Its result is read through [`SOp::TexLane`].
+    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`.
     TexLane { tex: [S; 1], lane: u8 },
     /// The width (`lane` 0) or height (1) of the base level of the texture at
@@ -154,7 +156,7 @@ impl SOp {
         match self {
             SOp::Alu(op, s) => &s[..op.arity()],
             SOp::Fsub(s) => s,
-            SOp::Tex { srcs, cube, bias, lod, .. } => &srcs[..tex_operands(*cube, *bias || *lod)],
+            SOp::Tex { srcs, cube, layer, bias, lod, .. } => &srcs[..tex_operands(*cube || *layer, *bias || *lod)],
             SOp::TexLane { tex, .. } => tex,
             SOp::Phi { init } => init,
             SOp::PhiNext { ops } => ops,
@@ -381,6 +383,9 @@ struct Walk<'m, 'a> {
     psiz: Option<S>,
     /// The loops the unroller kept, each with its pass count (`Trip`).
     trips: &'m [Trip],
+    /// [`crate::shaderc::LodKey::cube_noseam`]: the cube bindings whose
+    /// look-ups are emulated per face (0 = none: the hardware's cube look-up).
+    cube_noseam: u32,
     /// The break flags of the counted loops the walk is inside that have
     /// one, outermost first.
     enclosing_exits: AVec<'a, ir::LocalId>,
@@ -691,6 +696,70 @@ impl<'m, 'a> Walk<'m, 'a> {
         })
     }
 
+    /// The face of a cube look-up and its coordinates, GL ES 2.0 3.7.5
+    /// (Table 3.21), for the 2D-array emulation of a non-seamless cube
+    /// ([`crate::shaderc::LodKey::cube_noseam`]). `abs` are |x|, |y|, |z| of
+    /// the direction as given and `d` the direction divided by its major
+    /// axis; the face is chosen on `abs` by dEQP's `selectCubeFace` rule
+    /// (texref::select_cube_face), ties included. Returns s and t in [0, 1]
+    /// and the face (+X -X +Y -Y +Z -Z = 0..5) as a float, the layer.
+    fn cube_face(&mut self, a: &Arena<'a>, abs: [S; 3], d: [S; 3]) -> Result<(S, S, S), PrepError> {
+        let [ax, ay, az] = abs;
+        let [x, y, z] = d;
+        let k = |w: &mut Self, v: f32| w.push(a, SOp::Const(v.to_bits()));
+        let (t_, f_) = (self.push(a, SOp::Const(!0))?, self.push(a, SOp::Const(0))?);
+        let lt = |w: &mut Self, p: S, q: S| w.op2(a, AluOp::Flt, p, q);
+        let le = |w: &mut Self, p: S, q: S| w.op2(a, AluOp::Fle, p, q);
+        let eq = |w: &mut Self, p: S, q: S| w.op2(a, AluOp::Feq, p, q);
+        /* strictly largest */
+        let (c, d1) = (lt(self, ay, ax)?, lt(self, az, ax)?);
+        let xs = self.op2(a, AluOp::Iand, c, d1)?;
+        let (c, d1) = (lt(self, ax, ay)?, lt(self, az, ay)?);
+        let ys = self.op2(a, AluOp::Iand, c, d1)?;
+        let (c, d1) = (lt(self, ax, az)?, lt(self, ay, az)?);
+        let zs = self.op2(a, AluOp::Iand, c, d1)?;
+        /* equal components: x, y or z by dEQP's order of tests */
+        let (exy, exz, eyz) = (eq(self, ax, ay)?, eq(self, ax, az)?, eq(self, ay, az)?);
+        let (a_x, b_y) = (le(self, az, ax)?, lt(self, ay, ax)?);
+        let inner = self.sel(a, eyz, b_y, t_)?;
+        let inner = self.sel(a, exz, f_, inner)?;
+        let tie_x = self.sel(a, exy, a_x, inner)?;
+        let (c_y, d_y) = (lt(self, az, ay)?, le(self, ax, ay)?);
+        let inner = self.sel(a, eyz, d_y, f_)?;
+        let inner = self.sel(a, exz, c_y, inner)?;
+        let tie_y = self.sel(a, exy, f_, inner)?;
+        let inner = self.sel(a, zs, f_, tie_x)?;
+        let inner = self.sel(a, ys, f_, inner)?;
+        let is_x = self.sel(a, xs, t_, inner)?;
+        let inner = self.sel(a, zs, f_, tie_y)?;
+        let inner = self.sel(a, ys, t_, inner)?;
+        let is_y = self.sel(a, xs, f_, inner)?;
+        /* Table 3.21 */
+        let zero = k(self, 0.0)?;
+        let (nx, ny, nz) = (lt(self, x, zero)?, lt(self, y, zero)?, lt(self, z, zero)?);
+        let (mx, my, mz) = (self.op1(a, AluOp::Fneg, x)?, self.op1(a, AluOp::Fneg, y)?, self.op1(a, AluOp::Fneg, z)?);
+        let (f0, f1, f2) = (k(self, 0.0)?, k(self, 1.0)?, k(self, 2.0)?);
+        let (f3, f4, f5) = (k(self, 3.0)?, k(self, 4.0)?, k(self, 5.0)?);
+        let fx = self.sel(a, nx, f1, f0)?;
+        let fy = self.sel(a, ny, f3, f2)?;
+        let fz = self.sel(a, nz, f5, f4)?;
+        let sx = self.sel(a, nx, z, mz)?;
+        let sz = self.sel(a, nz, mx, x)?;
+        let ty = self.sel(a, ny, mz, z)?;
+        let pick = |w: &mut Self, vx: S, vy: S, vz: S| -> Result<S, PrepError> {
+            let inner = w.sel(a, is_y, vy, vz)?;
+            w.sel(a, is_x, vx, inner)
+        };
+        let face = pick(self, fx, fy, fz)?;
+        let sc = pick(self, sx, x, sz)?;
+        let tc = pick(self, my, ty, my)?;
+        let half = k(self, 0.5)?;
+        let s = self.op2(a, AluOp::Fmul, sc, half)?;
+        let s = self.op2(a, AluOp::Fadd, s, half)?;
+        let t = self.op2(a, AluOp::Fmul, tc, half)?;
+        let t = self.op2(a, AluOp::Fadd, t, half)?;
+        Ok((s, t, face))
+    }
     /// `op(x, y)`, a kernel operation of two operands.
     fn op2(&mut self, a: &Arena<'a>, op: AluOp, x: S, y: S) -> Result<S, PrepError> {
         self.push(a, SOp::Alu(op, [x, y, S(0)]))
@@ -1168,6 +1237,7 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * texture_functions' directions (1.01) passed. The host's
                  * cube model (texref::project_to_face) divides by the major
                  * axis itself, so it cannot see the difference. */
+                let mut layer = None;
                 if let Some(z) = r {
                     let abs = |w: &mut Self, x: S| w.push(a, SOp::Alu(AluOp::Fabs, [x, S(0), S(0)]));
                     let (ax, ay, az) = (abs(self, s)?, abs(self, t)?, abs(self, z)?);
@@ -1176,14 +1246,33 @@ impl<'m, 'a> Walk<'m, 'a> {
                     let inv = self.push(a, SOp::Alu(AluOp::Frcp, [m, S(0), S(0)]))?;
                     s = self.push(a, SOp::Alu(AluOp::Fmul, [s, inv, S(0)]))?;
                     t = self.push(a, SOp::Alu(AluOp::Fmul, [t, inv, S(0)]))?;
-                    r = Some(self.push(a, SOp::Alu(AluOp::Fmul, [z, inv, S(0)]))?);
+                    let z = self.push(a, SOp::Alu(AluOp::Fmul, [z, inv, S(0)]))?;
+                    if sampler < 15 && self.cube_noseam & (1 << sampler) != 0 {
+                        /* GL ES 2.0 3.7.5: the face and its (s, t), looked
+                         * up as a layer of the cube's 2D-array record
+                         * (docs/v3d-noseamless-cube.md) */
+                        let (fs, ft, face) = self.cube_face(a, [ax, ay, az], [s, t, z])?;
+                        (s, t, layer) = (fs, ft, Some(face));
+                        r = None;
+                    } else {
+                        r = Some(z);
+                    }
                 }
                 let mut srcs = [s, t, S(0), S(0)];
-                for (slot, x) in srcs[2..].iter_mut().zip([r, third].into_iter().flatten()) {
+                for (slot, x) in srcs[2..].iter_mut().zip([r.or(layer), third].into_iter().flatten()) {
                     *slot = x;
                 }
-                let tex =
-                    self.push(a, SOp::Tex { sampler, srcs, cube, bias: third.is_some() && !is_lod, lod: is_lod })?;
+                let tex = self.push(
+                    a,
+                    SOp::Tex {
+                        sampler,
+                        srcs,
+                        cube: cube && layer.is_none(),
+                        layer: layer.is_some(),
+                        bias: third.is_some() && !is_lod,
+                        lod: is_lod,
+                    },
+                )?;
                 for (lane, o) in out.iter_mut().enumerate() {
                     *o = Some(self.push(a, SOp::TexLane { tex: [tex], lane: lane as u8 })?);
                 }
@@ -1846,7 +1935,12 @@ impl<'m, 'a> Walk<'m, 'a> {
 }
 
 /// Walk `m`'s body: straight-line code, with every `if` converted.
-fn walk<'m, 'a>(m: &'m Module<'m>, trips: &'m [Trip], a: &Arena<'a>) -> Result<Walk<'m, 'a>, PrepError> {
+fn walk<'m, 'a>(
+    m: &'m Module<'m>,
+    trips: &'m [Trip],
+    cube_noseam: u32,
+    a: &Arena<'a>,
+) -> Result<Walk<'m, 'a>, PrepError> {
     if m.locals.iter().any(|l| l.array_len > 1) {
         return Err(PrepError::NotYet("local array"));
     }
@@ -1861,6 +1955,7 @@ fn walk<'m, 'a>(m: &'m Module<'m>, trips: &'m [Trip], a: &Arena<'a>) -> Result<W
         discard: None,
         psiz: None,
         trips,
+        cube_noseam,
         enclosing_exits: AVec::new(),
         loop_of: AVec::new(),
         open_loops: AVec::new(),
@@ -1950,11 +2045,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, bias, lod } => {
-                for x in srcs.iter_mut().take(tex_operands(cube, bias || lod)) {
+            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod } => {
+                for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, bias, lod }
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane },
@@ -2002,23 +2097,28 @@ fn refuse_undef(ops: &[SOp]) -> Result<(), PrepError> {
     Ok(())
 }
 
-/// How many of [`SOp::Tex`]'s `srcs` it reads: s and t, r for a cube, and
-/// the bias or level.
-pub(super) fn tex_operands(cube: bool, third: bool) -> usize {
-    2 + usize::from(cube) + usize::from(third)
+/// How many of [`SOp::Tex`]'s `srcs` it reads: s and t, r for a cube or the
+/// layer of an array look-up (`third_coord`), and the bias or level.
+pub(super) fn tex_operands(third_coord: bool, third: bool) -> usize {
+    2 + usize::from(third_coord) + usize::from(third)
 }
 
 /// Prepare a fragment shader: `gl_FragColor` and what it needs.
 pub fn prepare_fragment<'a>(m: &Module<'_>, a: &Arena<'a>) -> Result<Prepared<'a>, PrepError> {
-    prepare_fragment_with(m, &[], a)
+    prepare_fragment_with(m, &[], 0, a)
 }
 
 /// [`prepare_fragment`] of a module the unroller made, with the loops it kept.
-pub fn prepare_fragment_with<'a>(m: &Module<'_>, trips: &[Trip], a: &Arena<'a>) -> Result<Prepared<'a>, PrepError> {
+pub fn prepare_fragment_with<'a>(
+    m: &Module<'_>,
+    trips: &[Trip],
+    cube_noseam: u32,
+    a: &Arena<'a>,
+) -> Result<Prepared<'a>, PrepError> {
     if m.stage != SHC_STAGE_FRAGMENT {
         return Err(PrepError::WrongStage);
     }
-    let mut w = walk(m, trips, a)?;
+    let mut w = walk(m, trips, cube_noseam, a)?;
     /* A shader that writes no colour at all (legal GLSL: a depth pre-pass)
      * writes only the pass-through Z (select.rs, emit_frag_end, nir_to_vir.c:
      * 2113-2129). A lane of gl_FragColor never written is undefined: 0. */
@@ -2078,7 +2178,7 @@ pub fn fragment_inputs<'a>(p: &Prepared<'_>, a: &Arena<'a>) -> Result<&'a [(u8, 
 /// `wanted` (VERTEX-shader locations), in that order. The coordinate shader
 /// is this with `wanted` empty.
 pub fn prepare_vertex<'a>(m: &Module<'_>, wanted: &[(u8, u8)], a: &Arena<'a>) -> Result<Prepared<'a>, PrepError> {
-    prepare_vertex_with(m, wanted, &[], a)
+    prepare_vertex_with(m, wanted, &[], 0, a)
 }
 
 /// [`prepare_vertex`] of a module the unroller made, with the loops it kept.
@@ -2086,12 +2186,13 @@ pub fn prepare_vertex_with<'a>(
     m: &Module<'_>,
     wanted: &[(u8, u8)],
     trips: &[Trip],
+    cube_noseam: u32,
     a: &Arena<'a>,
 ) -> Result<Prepared<'a>, PrepError> {
     if m.stage != SHC_STAGE_VERTEX {
         return Err(PrepError::WrongStage);
     }
-    let w = walk(m, trips, a)?;
+    let w = walk(m, trips, cube_noseam, a)?;
     let psiz = w.psiz;
     let vary = a.alloc_filled(wanted.len(), None::<S>)?;
     for (v, &(loc, comp)) in vary.iter_mut().zip(wanted) {
@@ -2178,7 +2279,7 @@ mod tests {
                 Some(u) => (u.module, u.trips),
                 None => (&f.module, &[][..]),
             };
-            let p = prepare_fragment_with(m, trips, a).expect("prepares");
+            let p = prepare_fragment_with(m, trips, 0, a).expect("prepares");
             p.ops
                 .iter()
                 .filter(|o| show(p.ops, S(p.ops.iter().position(|x| x == *o).unwrap() as u32)) == "Fmul(v0.1, v0.2)")
@@ -2296,7 +2397,7 @@ mod tests {
                 let u =
                     crate::shaderc::online::powervr::unroll::unroll(&f.module, a).expect("unrolls").expect("a loop");
                 assert_eq!(u.trips.len(), 1, "the loop is kept");
-                let p = prepare_fragment_with(u.module, u.trips, a).expect("prepares");
+                let p = prepare_fragment_with(u.module, u.trips, 0, a).expect("prepares");
                 let count = |f: fn(&SOp) -> bool| p.ops.iter().filter(|o| f(o)).count();
                 let has_exit = p.ops.iter().any(|o| matches!(o, SOp::LoopEnd { has_exit: true, .. }));
                 (count(|o| matches!(o, SOp::IfBranch { .. })), count(|o| matches!(o, SOp::LoopBreak { .. })), has_exit)
