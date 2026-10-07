@@ -512,6 +512,57 @@ fn the_48_mib_control_reproduces_the_recorded_refusals() {
     assert!(refused.iter().filter(|r| r.1 == 7_684_096).all(|r| r.0 == "refract"));
 }
 
+/// refract after npot: the colour render target has its whole 11-level chain, so
+/// its tiled copy is 11,005,952 bytes (FINDINGS-refract-budget.md section 2).
+/// `budget` is CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES, an LRU cap on the copies
+/// kept across jobs: when the depth copy and the colour copy together exceed
+/// it, the depth copy is evicted before the colour copy is made. Returns the
+/// peak use of the carve-out, permanent set included.
+fn refract_npot(p: &mut Pool, budget: u64) -> u64 {
+    p.scene = "refract";
+    p.alloc("depth R32F storage 1600x1200", 7_680_000);
+    p.alloc("colour storage 1600x1200", 7_680_000);
+    p.alloc("depth D24S8 1600x1200", 7_700_000);
+    let depth = copy_request(1600, 1200, 1);
+    let colour = copy_request(1600, 1200, chain_levels(1600, 1200));
+    assert_eq!(colour, 11_005_952, "the colour chain's tiled copy");
+    assert!(colour <= budget, "the budget keeps the colour copy");
+    let d = p.alloc("depth tiled copy", depth).expect("the depth copy fits");
+    if depth + colour > budget {
+        p.free(d);
+    }
+    p.alloc("colour tiled copy", colour).expect("the colour copy fits");
+    let used = p.live.iter().map(|b| b.1).sum::<u64>() + PERMANENT;
+    p.end_scene();
+    used
+}
+
+#[test]
+fn refract_with_the_colour_chain_copy_fits_the_96_mib_carve_out() {
+    let carve = 96 * MIB;
+    assert_eq!(carve, 100_663_296);
+    for budget in [12 * MIB, 16 * MIB, 24 * MIB] {
+        for order in [Order::Recorded, Order::ShadowFirst] {
+            let mut p = Pool::new(carve);
+            base(&mut p);
+            match order {
+                Order::Recorded => {
+                    terrain(&mut p, true, 4);
+                    shadow(&mut p);
+                }
+                Order::ShadowFirst => {
+                    shadow(&mut p);
+                    terrain(&mut p, true, 4);
+                }
+            }
+            let peak = refract_npot(&mut p, budget);
+            println!("refract, budget {budget}: peak {peak} of {carve}");
+            assert!(peak <= carve, "refract's peak {peak} fits {carve}");
+            assert!(p.refused().is_empty(), "nothing refused: {:?}", p.refused());
+        }
+    }
+}
+
 #[test]
 fn every_large_allocation_fits_the_96_mib_carve_out() {
     for order in [Order::Recorded, Order::ShadowFirst] {
