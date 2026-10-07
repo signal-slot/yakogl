@@ -27,9 +27,10 @@
  *                   HH_FAIL_AFTER, default 48) gpu_alloc fail with -12.
  *                   The skip clears the library's own start-up, whose
  *                   allocations are not what these jobs mean to fail: the
- *                   PowerVR backend alone takes 37 of them (four frame sets
- *                   since upstream 11a728d), and failing one there stops the
- *                   backend instead of exercising a GL object's error path.
+ *                   PowerVR backend alone takes 67 of them and the V3D's 15,
+ *                   and failing one there stops the backend instead of
+ *                   exercising a GL object's error path (run.sh sets the
+ *                   skip and the offsets per GPU).
  *   HH_WAIT_FAIL=k  every k-th wait() on a pending fence times out (-110)
  *   HH_VERBOSE=1    print every allocation's hash at every dump (default:
  *                   only the ones that changed since the last dump)

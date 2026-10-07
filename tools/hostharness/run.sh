@@ -135,6 +135,7 @@ build() {
         --no-default-features --features "$features" "${pargs[@]}" "${tgt[@]}" 2> "$out/cargo.log" \
         || { tail -20 "$out/cargo.log"; die "cargo build failed"; }
       cp "$out/cargo/$pdir/$staticlib" "$out/lib/libyakogl.a"
+      chmod u+w "$out/lib/libyakogl.a"   # the cargo artifact can be read-only; ar appends to the copy
       local cparts=("$src/src/osal/linux.c" "$drv/src/pvr_vdm_ppp_gen.c" "$drv/src/pvr_pds_render_gen.c"
                     "$drv/src/pvr_pds_pixel_event_gen.c" "${mesa_parts[@]}")
       if [ $v3d = 1 ]; then
@@ -174,6 +175,7 @@ build() {
     prebuilt)
       [ -f "$lib" ] || die "no archive $lib"
       cp "$lib" "$out/lib/libyakogl.a"
+      chmod u+w "$out/lib/libyakogl.a"
       ;;
   esac
 
@@ -271,13 +273,19 @@ PY
     echo "scen.ctx2||scen ctx2"
     echo "scen.inst0||scen inst0"
     echo "scen.win||scen win"
-    echo "scen.tex-fail|HH_FAIL_EVERY=5|scen tex $((n2 / 2)) 2"
-    echo "scen.buf-fail|HH_FAIL_EVERY=3|scen buf $((n1 / 2)) 2"
-    echo "scen.fbo-fail|HH_FAIL_EVERY=4|scen fbo $((n2 / 2)) 5"
-    # 40 and up: past the library's start-up (the PowerVR backend alone takes
-    # 37 allocations, four frame sets since upstream 11a728d), so each of
-    # these fails a program's own allocation and not pvr_backend_init
-    for k in 40 45 50 60 80 120; do echo "scen.progs-failat$k|HH_FAIL_AT=$k|scen progs . 0 0"; done
+    # Failures have to start past the library's own start-up, which is not
+    # what these jobs mean to fail. Measured (2026-10-08): the PowerVR
+    # backend takes 67 allocations (it was 37; with the old 48 and 40..60 every
+    # fail job stopped in pvr_backend_init, exit 3), the V3D backend 15, and
+    # scen progs / buf / fbo make 80 to 134 (PowerVR) and 35 to 80 (V3D) in
+    # all (progs: 80 and 35). HH_FAIL_AFTER (default 48) would inject nothing on the V3D.
+    local fa="HH_FAIL_AFTER=72 " fats="68 70 72 75 78 80"
+    [ $v3d = 1 ] && { fa="HH_FAIL_AFTER=16 "; fats="17 20 24 28 32 34"; }
+    echo "scen.tex-fail|${fa}HH_FAIL_EVERY=5|scen tex $((n2 / 2)) 2"
+    echo "scen.buf-fail|${fa}HH_FAIL_EVERY=3|scen buf $((n1 / 2)) 2"
+    echo "scen.fbo-fail|${fa}HH_FAIL_EVERY=4|scen fbo $((n2 / 2)) 5"
+    # each of these fails a program's own allocation and not the backend's
+    for k in $fats; do echo "scen.progs-failat$k|HH_FAIL_AT=$k|scen progs . 0 0"; done
     for t in $("$out/bin/hostile" list); do echo "hostile.$t||hostile $t"; done
   } > "$out/jobs.txt"
   echo "shaders $shaders" > "$out/shaders.txt"
