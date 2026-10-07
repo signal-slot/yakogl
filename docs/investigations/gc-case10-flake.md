@@ -16,14 +16,17 @@ of plan #2. No code is changed. The open row is tools/cts/RESULTS.md:930
   address is fixed.
 - **(b) 64-byte alignment: unlikely to be the trigger.** The target is 64-byte
   aligned and not 256-byte aligned (`0xC0` mod 256), so each 256-byte row
-  spans two 256-byte PE cache lines. Mesa never has this: its targets are
-  page-aligned GEM buffers. But the address is the same in every run, and
-  the failure is random. So (b) can at most be a condition that a timing
+  spans two 256-byte PE cache lines. Mesa's buffers start on a page, but
+  Mesa renders to mip levels at 64-byte offsets inside them, so 64 bytes is
+  the PE alignment Mesa relies on too. And the address is the same in every
+  run, while the failure is random. So (b) can at most be a condition that a timing
   race needs. It cannot be the random part.
 - **(a) the linear PE path: the most likely place, as a race.** No placement
   differs between a passing and a failing first-after-boot run, so the cause
-  must be timing. Both failing cases have one shape that Mesa never sends
-  to this core: a full-surface PE quad clear, then a per-draw colour flush,
+  must be timing. Mesa also renders linear window buffers on this core, but
+  with tile status and fast clears. Both failing cases have one shape that
+  Mesa never sends to this core: a full-surface PE quad clear, then a
+  per-draw colour flush,
   then a draw of 1 to 4 pixels that partly writes the same 256-byte lines.
   All of this is in one linear target, in one kick. The lost pixels read back
   as the clear colour. The best fitting story: the flush still writes back
@@ -48,14 +51,15 @@ GC back end's render-target state, flushes and pool, the Zephyr OSAL, and the
 earlier sync audit (src/vivante/VIVANTE_NOTES.md:1152-1269, commit
 `8409419`).
 
-**Mesa could not be read on this machine.** `git clone` was refused, the
-web fetch of gitlab.freedesktop.org got its bot wall ("Access Denied"), and
-a file fetched with `curl` landed where it could not be read. So the
-Mesa line numbers below are the ones this repository already recorded
-from Mesa 26.2.1 (each with the place it is recorded). Where no line was
-recorded, the Mesa function is named and marked "(line not re-checked)".
-To re-check them, put a Mesa 26.2.1 checkout at `$CCFARM_DEPS_DIR/mesa` and
-read the named functions.
+**Mesa: only one file was read directly.** `git clone` was refused, and the
+web fetch of gitlab.freedesktop.org got its bot wall ("Access Denied"). One
+file came through `curl`: `src/gallium/drivers/etnaviv/etnaviv_resource.c`
+from Mesa **main** as of 2026-10-08 (commit not recorded). Lines marked
+"(main)" are from that file. The other Mesa line numbers are the ones this
+repository already recorded from Mesa 26.2.1 (each with the place it is
+recorded). Where no line was recorded, the Mesa function is named and marked
+"(line not re-checked)". To re-check them, put a Mesa 26.2.1 checkout at
+`$CCFARM_DEPS_DIR/mesa` and read the named functions.
 
 ## The facts the host can show
 
@@ -152,20 +156,26 @@ record shows this address yet (see the end of the board recipe).
 
 For:
 
-- Mesa lays out a render target tiled or super-tiled (`etna_resource_create`
-  and `etna_layout_multiple`, etnaviv_resource.c, line not re-checked). It
-  uses a linear target only on a core with LINEAR_PE, and then asserts it
-  (etnaviv_state.c:268-269, recorded at VIVANTE_NOTES.md:1148). Mesa reaches
-  the linear PE path only through a debug flag (VIVANTE_NOTES.md:1204-1207).
-  So our path is the least tested one on this core.
-- Mesa clears a target that has no tile status with the resolve engine: an
-  RS fill (`etna_clear` / `etna_blit_clear_color_rs`, etnaviv_clear_blit.c and
-  etnaviv_rs.c, line not re-checked). Our clear is a PE quad
-  (VIVANTE_NOTES.md:1192). And Mesa does not flush the colour cache between
-  draws (VIVANTE_NOTES.md:1189). We flush before every draw (F3). So the
-  order "PE writes the whole surface, colour flush, PE writes a few pixels
-  of the same lines, all in one kick" never comes from Mesa on this core.
-  Our two failing cases are made of exactly this order (F4).
+- Mesa does render into linear targets on this core, but not the way we do.
+  Its default layout is tiled or super-tiled (etnaviv_resource.c:658,
+  674-683 (main)). A resource bound LINEAR or SCANOUT becomes linear
+  (:698-703 (main)), and a linear resource is render-compatible only on a
+  core with LINEAR_PE (:104-106 (main); the assert is etnaviv_state.c:268-269,
+  recorded at VIVANTE_NOTES.md:1148). So a linear window buffer is a normal
+  Mesa path on this core. This corrects VIVANTE_NOTES.md:1204-1207, which
+  says Mesa uses linear PE only behind a debug flag.
+- But such a Mesa target gets **tile status**. On a FAST_CLEAR core, a
+  render-compatible linear target whose stride is a multiple of the TS tile
+  size gets a TS buffer (:108-113, 154-181, 605-612 (main)), and with
+  CACHE128B256BPERLINE a 128 B or 256 B TS mode (:216-232 (main)). Its clear
+  is then a fast clear in the tile status, and the memory is written only
+  when the tiles are resolved. Our target has no tile status (F3), and our
+  clear is a PE quad that writes every byte (VIVANTE_NOTES.md:1192). Mesa
+  also does not flush the colour cache between draws
+  (VIVANTE_NOTES.md:1189). We flush before every draw (F3). So the order "PE
+  writes the whole surface, colour flush, PE writes a few pixels of the same
+  lines, all in one kick" never comes from Mesa on this core. Our two
+  failing cases are made of exactly this order (F4).
 - The lost writes are at the start of the draw after the flush. The 5 px
   point, the last primitive, survives. A write-back of the clear's lines that
   is still running when the next draw starts writing would lose exactly the
@@ -208,6 +218,11 @@ Against:
 
 - The address is the same in every run (F1, F2), and the result is not. So
   alignment cannot be the random part.
+- Mesa itself renders to 64-byte offsets. It places each mip level at a
+  64-byte boundary inside the buffer, "to be able to render to them"
+  (`ETNA_PE_ALIGNMENT`, etnaviv_resource.c:351-352 (main)). So 64 bytes is
+  the PE alignment Mesa relies on, and level 1 and up of a render target are
+  usually not 256-byte aligned there either.
 - The 2026-10 color_clear A/B ran the 48-case chunk with the page-align knob.
   Case 10 flipped both with and without the knob (RESULTS.md:8818-8830).
   That was 1 run per arm, so it is weak.
@@ -278,7 +293,12 @@ an A/B knob first:
 2. **K2, etnaviv's clear.** Clear a whole unmasked, unscissored target with an
    RS fill, as `etna_blit_clear_color_rs` does. Use etnaviv's flush and
    RA->PE stall before the next draw (VIVANTE_NOTES.md:1192). Keep the quad
-   for masked or scissored clears.
+   for masked or scissored clears. This is the clear Mesa uses for a target
+   with no tile status. Mesa's own linear window buffer goes further: it
+   gets tile status and a fast clear (etnaviv_resource.c:104-113, 605-612
+   (main)). Tile status for our targets is a larger change and a later step;
+   it would also cut the clear's memory writes (the frame-floor item,
+   imx8mp-floor, may want it for speed).
 3. A `dmb ishld` (or a load-acquire) after `fence_done` is seen in
    `gc_render_wait` (driver/src/vivante/, not held). This is cheap and right
    either way.
