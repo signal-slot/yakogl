@@ -21,6 +21,12 @@ approval, and the approval was not available in an unattended run. In detail:
 - `printenv`/`env`, `ssh torizon@verdin-am62p` (idle check), `cp` of
   `pvr_fw_blob.h` from the origin checkout and `mcp__ccfarm__ask_farm` were
   all refused.
+- Retry after the commands were allowed: `ask_farm` named the node's Zephyr
+  workspace, venv and SDK directories (not `DEQP_WORK`), but they are outside
+  this session's allowed directories and cannot be listed or used. The
+  idle-check `ssh` to the board answered `Permission denied
+  (publickey,password)`: no working login from this worker. The serial bridge
+  is connected (no bytes read).
 - Hence `tools/cts/am62p-deqp-images.sh` could not be started, and no UART or
   board command was issued. The board and the serial console were not touched.
 
