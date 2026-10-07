@@ -15,7 +15,8 @@
 #
 # Options (see also capi/yakogl_capi.cmake for the cargo ones):
 #   -DYAKOGL_OSAL=zephyr|baremetal|linux  (default: linux)
-#   -DYAKOGL_GPU=powervr|vivante           (default: powervr)
+#   -DYAKOGL_GPU=powervr|vivante|v3d       (default: powervr; v3d: OSAL linux
+#                                          only, the host model of the Pi 4)
 #   -DYAKOGL_SHADERC=offline|online|precompiled (default: online; precompiled:
 #                                          no compiler, needs YAKOGL_PRECOMPILED_SHADERS)
 #   -DYAKOGL_PRECOMPILED_SHADERS=ON|OFF    the precompiled tier in front of the
@@ -47,8 +48,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(YAKOGL_OSAL "linux" CACHE STRING "OSAL backend: zephyr|baremetal|linux")
 set_property(CACHE YAKOGL_OSAL PROPERTY STRINGS zephyr baremetal linux)
-set(YAKOGL_GPU "powervr" CACHE STRING "GPU backend: powervr|vivante")
-set_property(CACHE YAKOGL_GPU PROPERTY STRINGS powervr vivante)
+set(YAKOGL_GPU "powervr" CACHE STRING "GPU backend: powervr|vivante|v3d (v3d: OSAL linux only)")
+set_property(CACHE YAKOGL_GPU PROPERTY STRINGS powervr vivante v3d)
 # The shader back end. `online` (the default) compiles src/shaderc/online/
 # in: the in-process compiler, which compiles the shaders an application
 # writes as it runs. `offline` links the Mesa reference as the table
@@ -70,8 +71,13 @@ if(YAKOGL_PRECOMPILED_SHADERS)
 elseif(YAKOGL_SHADERC STREQUAL "precompiled")
   message(FATAL_ERROR "YAKOGL_SHADERC=precompiled needs YAKOGL_PRECOMPILED_SHADERS=ON")
 endif()
-if(NOT YAKOGL_GPU STREQUAL "powervr" AND NOT YAKOGL_GPU STREQUAL "vivante")
-  message(FATAL_ERROR "YAKOGL_GPU must be powervr|vivante (got '${YAKOGL_GPU}')")
+if(NOT YAKOGL_GPU MATCHES "^(powervr|vivante|v3d)$")
+  message(FATAL_ERROR "YAKOGL_GPU must be powervr|vivante|v3d (got '${YAKOGL_GPU}')")
+endif()
+# The Pi 4's V3D outside Zephyr: only the Linux OSAL's host model of it
+# (src/osal/linux.c, "the V3D"); the bare-metal OSAL does not drive one.
+if(YAKOGL_GPU STREQUAL "v3d" AND NOT YAKOGL_OSAL STREQUAL "linux")
+  message(FATAL_ERROR "YAKOGL_GPU=v3d needs YAKOGL_OSAL=linux here (the board build is zephyr/)")
 endif()
 set(YAKOGL_RUST_TARGET "" CACHE STRING "Rust target triple (empty: host, or derived from the cross C toolchain)")
 set(YAKOGL_RUST_TARGET_CPU "" CACHE STRING "Rust -C target-cpu (empty: the target's default)")
@@ -153,6 +159,17 @@ if(YAKOGL_GPU STREQUAL "powervr")
   include("${YAKOGL_DIR}/driver/compat/pvr_mesa.cmake")
   list(APPEND _c_sources ${PVR_MESA_SOURCES})
   set(YAKOGL_GPU_DEF "YAKOGL_GPU_POWERVR")
+elseif(YAKOGL_GPU STREQUAL "v3d")
+  # The V3D: the job builder the backend calls through FFI and what it
+  # shares (zephyr/CMakeLists.txt lists the same, with the hardware steps
+  # v3d_hw.c, which the Linux OSAL does not call), and the FFI's pins.
+  list(APPEND _c_sources
+      "${PVR_DRIVER_SRC}/v3d/v3d_job.c"
+      "${PVR_DRIVER_SRC}/v3d/v3d_tex.c"
+      "${PVR_DRIVER_SRC}/v3d/v3d_tiling_mesa.c"
+      "${PVR_DRIVER_SRC}/v3d/v3d_frame.c"
+      "${YAKOGL_SRC}/v3d/ffi_layout_check.c")
+  set(YAKOGL_GPU_DEF "YAKOGL_GPU_V3D")
 else()
   set(YAKOGL_GPU_DEF "YAKOGL_GPU_VIVANTE")
 endif()
@@ -183,6 +200,16 @@ target_include_directories(yakogl_c PRIVATE
     "${PVR_DRIVER_SRC}")
 if(YAKOGL_GPU STREQUAL "powervr")
   target_include_directories(yakogl_c PRIVATE ${PVR_MESA_INCLUDE_DIRS})
+elseif(YAKOGL_GPU STREQUAL "v3d")
+  # v3d_kick.h, the job builder's headers, and the Mesa packers they use
+  # (vendored unmodified, as zephyr/CMakeLists.txt includes them)
+  target_include_directories(yakogl_c PRIVATE
+      "${YAKOGL_SRC}/v3d"
+      "${PVR_DRIVER_SRC}/v3d"
+      "${PVR_DRIVER_SRC}/v3d/generated"
+      "${YAKOGL_DIR}/third_party/mesa-26.2.1/src/broadcom"
+      "${YAKOGL_DIR}/third_party/mesa-26.2.1/src"
+      "${YAKOGL_DIR}/third_party/mesa-26.2.1/include")
 endif()
 # GL_MAX_CONTEXTS and the crate's YAKOGL_MAX_CONTEXTS are the same setting
 # (capi/yakogl_capi.cmake passes it to cargo), so the C headers describe the

@@ -41,7 +41,11 @@
 #include <EGL/eglext.h>
 #include "gles_osal.h"
 #include "osal_internal.h"
+#if defined(YAKOGL_GPU_V3D)
+#include "backend.h"
+#else
 #include "pvr/pvr_backend.h"
+#endif
 #include "hh.h"
 
 static const char *SH;
@@ -124,7 +128,12 @@ static void backend_up(void)
 	struct osal_zephyr_init oi = { 0 };
 
 	if (g_osal->init(&oi)) exit(3);
+#if defined(YAKOGL_GPU_V3D)
+	/* the V3D build's backend, through the table (src/backend.h) */
+	if (yakogl_backend_init()) { printf("backend init failed\n"); exit(3); }
+#else
 	if (pvr_backend_init()) { printf("backend init failed\n"); exit(3); }
+#endif
 }
 
 static void gl_up(int samples, int es)
@@ -1148,9 +1157,11 @@ int main(int argc, char **argv)
 	SH = getenv("HH_SHADERS");
 	if (!SH) { printf("HH-ERROR HH_SHADERS is not set\n"); return 2; }
 	inrange = getenv("HH_INRANGE") && atoi(getenv("HH_INRANGE"));
+#if !defined(YAKOGL_GPU_V3D)   /* the PowerVR backend's options; the V3D has none */
 	pvr_backend_set_option(PVR_BACKEND_OPT_DEBUG, getenv("HH_DEBUG") ? atoi(getenv("HH_DEBUG")) : 0);
 	if (getenv("HH_PRETRANSFORM")) pvr_backend_set_option(PVR_BACKEND_OPT_PRETRANSFORM, 1);
 	if (getenv("HH_NOCOALESCE")) pvr_backend_set_option(PVR_BACKEND_OPT_NO_COALESCE, 1);
+#endif
 	if (argc > 3 && strcmp(sc, "progs") && strcmp(sc, "state") && strcmp(sc, "stress")) rs = (uint32_t)atoi(argv[3]);
 	if (!strcmp(sc, "egl")) { sc_egl(); goto done; }
 	if (!strcmp(sc, "win")) { sc_win(); goto done; }
