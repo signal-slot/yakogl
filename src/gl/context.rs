@@ -217,13 +217,62 @@ impl GlTexture {
     /// pitch = cpp * width), so pair-padded rows put every other row of a
     /// cube's 1x6 tail, or a 32x64 chain's 1x2, in the padding
     /// ([`one_wide_level_pitch`]).
+    ///
+    /// A PowerVR chain of a non-power-of-two image (`pot_chain`) is laid out
+    /// as the chain of its power-of-two extent, so a level's pitch is not a
+    /// function of its own width: `lw` names the first level that wide.
+    /// Only a 1-wide level past the first one is ambiguous, and its readers
+    /// and writers ask [`GlTexture::level_pitch_at`].
     pub const fn level_pitch(&self, lw: u32) -> u32 {
         if self.chain_pitch != 0 {
             self.chain_pitch
+        } else if self.pot_chain {
+            let mut l = 0;
+            while l + 1 < CAP_MIP_LEVELS as u32 && pot_level_side(self.width, l) > lw {
+                l += 1;
+            }
+            self.level_pitch_at(l)
         } else {
             one_wide_level_pitch(self.width, lw, self.chain_levels > 1)
         }
     }
+
+    /// The row pitch of level `level`, in texels: [`GlTexture::level_pitch`]
+    /// of that level's width, or, for a `pot_chain`, the pitch of that
+    /// level of the power-of-two chain it is laid out in
+    /// ([`pot_chain_level_pitch`]).
+    pub const fn level_pitch_at(&self, level: u32) -> u32 {
+        if self.pot_chain && self.chain_pitch == 0 {
+            pot_chain_level_pitch(self.width, level)
+        } else {
+            self.level_pitch(pot_level_side(self.width, level))
+        }
+    }
+}
+
+/// GL's side of level `l` of a level 0 `side` long: max(side >> l, 1).
+#[inline]
+pub const fn pot_level_side(side: u32, l: u32) -> u32 {
+    let s = if l < 32 { side >> l } else { 0 };
+    if s == 0 {
+        1
+    } else {
+        s
+    }
+}
+
+/// The row pitch, in texels, of level `l` of a PowerVR chain whose level 0
+/// is `w` wide and not a power of two (`GlTexture::pot_chain`): the pitch
+/// level `l` has in the chain of the power-of-two width (Mesa 26.2.1 pvr,
+/// `pvr_image_plane_init_physical_extent` rounds a multi-level image's
+/// extent up with `util_next_power_of_two`, and
+/// `pvr_image_plane_setup_mip_levels` gives level `l` the pitch
+/// `cpp * u_minify(physical_width, l)`), at the pitch a power-of-two chain of
+/// that width has here ([`one_wide_level_pitch`]).
+#[inline]
+pub const fn pot_chain_level_pitch(w: u32, l: u32) -> u32 {
+    let p = if w <= 1 { 1 } else { w.next_power_of_two() };
+    one_wide_level_pitch(p, pot_level_side(p, l), true)
 }
 
 #[repr(C)]
@@ -390,6 +439,13 @@ pub struct GlTexture {
     /// the first render need not convert them (`texture::take_pe_order`).
     /// Conservative: storage reused rather than cleared counts as written.
     pub cpu_wrote: bool,
+    /// The chain of a non-power-of-two 2D image laid out for the PowerVR's
+    /// TPU: as the chain of the image's power-of-two extent (Mesa pvr's
+    /// physical extent), level l's GL image in the top-left of that level.
+    /// Level 0's pitch is then the power-of-two width, which the descriptor
+    /// states and a render into it uses ([`GlTexture::level_pitch_at`];
+    /// `texture.rs` `chain_layout_npot`). It sits in what was padding.
+    pub pot_chain: bool,
 }
 
 /// A number no object serial or storage generation has had (never 0): one

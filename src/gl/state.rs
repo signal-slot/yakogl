@@ -139,11 +139,12 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * is the backend's: the V3D and the GC7000 place every level from the GL
      * core's own offsets and get the whole chain (texture.rs
      * npot_mip_chains); the PowerVR's TPU finds level i+1 by its own
-     * power-of-two arithmetic, unmeasured for a non-power-of-two stride, so
-     * there such a texture keeps its base level, complete, and is sampled
-     * from it (what an ES 3.0 build did on every GPU before 2026-10-07).
-     * That is the one way the PowerVR falls short of the extension: the
-     * picture is right at level 0 and aliases where it is minified. */
+     * power-of-two arithmetic, so a 2D chain there is laid out as the chain
+     * of its power-of-two extent, as Mesa's pvr driver lays one out
+     * (texture.rs pot_chain_layout). A stacked NPOT cube map on the PowerVR
+     * keeps its base level, complete, and is sampled from it: the one way
+     * the PowerVR falls short of the extension, right at level 0 and
+     * aliased where minified. */
     b"GL_OES_texture_npot\0",
     /* GL_OES_depth_texture and GL_OES_packed_depth_stencil.
      *

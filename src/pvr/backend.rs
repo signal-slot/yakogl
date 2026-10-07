@@ -3619,7 +3619,10 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
         );
     }
     /* the mip chain the sampler may walk: levels consecutive in memory
-     * (Mesa pvr_image_plane_setup_mip_levels) */
+     * (Mesa pvr_image_plane_setup_mip_levels). A non-power-of-two chain is
+     * laid out as its power-of-two extent's (gl::texture pot_chain_layout):
+     * the stride is that width, word 0 keeps the API extent, as Mesa's
+     * image view states them. */
     let mut levels: u32 = if t.mip_filter != 0 && t.mip_levels > 1 && !force_mip0 { t.mip_levels as u32 } else { 1 };
 
     if t.format == GLES_TEXFMT_RGBA8 {
@@ -7183,6 +7186,63 @@ mod tests {
         assert_eq!(desc_maxlod(&desc(&GlesTextureBind { mip_levels: 16, ..base })), TEX_SAMPLER_MAXLOD_MAX);
         /* one level: no LOD range at all */
         assert_eq!(desc_maxlod(&desc(&GlesTextureBind { mip_levels: 1, ..base })), 0);
+    }
+
+    /// glmark2 terrain's 800x600 RGBA8 chain, as the GL core binds it (gl::
+    /// draw a_generated_npot_chain_is_complete_with_repeat: ten levels,
+    /// LINEAR_MIPMAP_LINEAR, stride 1024): laid out as the 1024x1024 chain
+    /// (gl::texture pot_chain_layout, Mesa pvr's physical extent), it is
+    /// described as Mesa's pvr_arch_tex_state.c describes a linear image:
+    /// - TEXSTATE_IMAGE_WORD0 (texstate.xml:272-291): textype STRIDE (4),
+    ///   texformat U8U8U8U8 (12) at [27:33], the API extent minus one,
+    ///   width 799 at [34:47] and height 599 at [48:61];
+    /// - TEXSTATE_STRIDE_IMAGE_WORD1 (texstate.xml:315-329): stride 1023 at
+    ///   [0:14] (the physical width, Mesa's `u_minify(physical_extent.width,
+    ///   base_level)`), mipmaps_present at [15], texaddr at [16:53],
+    ///   alpha_msb at [59], num_mip_levels 10 at [60:63];
+    /// - the sampler's maxlod 9 levels (u4.6: 576).
+    ///
+    /// The TPU finds level l at the offset Mesa's pvr_image_plane_setup_mip_
+    /// levels gives it from that stride and the power-of-two height; the GL
+    /// core put it there (gl::texture the_powervr_800x600_chain_has_mesas_
+    /// offsets).
+    #[test]
+    fn an_800x600_npot_chain_is_a_stride_texture_of_the_power_of_two_pitch() {
+        let base_gpu = HEAP_GENERAL_BASE + 0x40_0000;
+        let t = GlesTextureBind {
+            format: GLES_TEXFMT_RGBA8,
+            type_: GLES_TEXTYPE_2D,
+            layers: 1,
+            base_gpu,
+            width: 800,
+            height: 600,
+            stride_texels: 1024,
+            bytes: 1024 * 600 * 4,
+            linear_filter: 1,
+            min_linear: 1,
+            mip_filter: 2,
+            mip_levels: 10,
+            ..GlesTextureBind::ZERO
+        };
+        let w = desc(&t);
+        let iw0 = w[0] as u64 | (w[1] as u64) << 32;
+        let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+        assert_eq!(iw0 & 7, 4, "textype STRIDE");
+        assert_eq!((iw0 >> 27) & 0x7f, 12, "texformat U8U8U8U8");
+        assert_eq!(((iw0 >> 34) & 0x3fff, (iw0 >> 48) & 0x3fff), (799, 599), "the API extent, minus one");
+        assert_eq!(iw0, 0x0257_0C7C_6000_0A64, "IMAGE_WORD0");
+        assert_eq!(iw1 & 0x7fff, 1023, "stride: the power-of-two width, minus one");
+        assert_eq!((iw1 >> 15) & 1, 1, "mipmaps_present");
+        assert_eq!((iw1 >> 16) & 0x3F_FFFF_FFFF, base_gpu >> 2, "texaddr: level 0");
+        assert_eq!((iw1 >> 59) & 1, 1, "alpha_msb");
+        assert_eq!(iw1 >> 60, 10, "num_mip_levels: GL's ten");
+        assert_eq!(iw1, 0xA800_0000_0000_83FF | (base_gpu >> 2) << 16, "STRIDE_IMAGE_WORD1");
+        assert_eq!(desc_maxlod(&w), 9 * 64, "the LOD range stops at level 9 (1x1)");
+        /* the same chain without a mipmap filter samples level 0 alone, at
+         * the same stride */
+        let w = desc(&GlesTextureBind { mip_filter: 0, ..t });
+        let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+        assert_eq!((iw1 & 0x7fff, (iw1 >> 15) & 1, iw1 >> 60), (1023, 0, 1));
     }
 
     #[test]
