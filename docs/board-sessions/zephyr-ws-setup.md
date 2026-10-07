@@ -19,6 +19,23 @@ image was built, so there is no rc=0, no time and no disk use to report.
 - The repository pins Zephyr only as commit `af17c0c8` (tools/cts/README.md);
   there is no west.yml in the repo.
 
+## Update after the farm answered (second turn)
+
+`ask_farm` was then allowed. Node nuc answered (sources: ccfarm env, ccfarm
+HANDOFF), confidence 0.98:
+
+- ZEPHYR_WS=/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl
+- WEST_VENV=/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl/.venv
+- ZEPHYR_SDK_INSTALL_DIR=/home/tasuku/org/zephyrproject/zephyr-sdk-1.0.1
+
+(Node Lepton reported a different tree, ~/org/zephyrproject/zephyrproject, Zephyr
+4.4.1, not the repo's pin.) These were NOT verified: `ls` and `Read` on those
+paths are outside this session's allowed directories ("blocked" / permission
+not granted), so `west --version`, `west list` and the SDK version file were
+not run. `git ls-remote git@github.com:zephyrproject-rtos/zephyr.git HEAD`
+now works (SSH to GitHub is reachable). `pip install west` was denied
+("nobody decided in time"), so the deps-cache build was not attempted.
+
 ## Refused commands (exact)
 
 1. `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws/.venv/bin/python -m pip install west`
