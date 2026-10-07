@@ -185,9 +185,11 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    aarch64-unknown-none, release), built four ways on 2026-10-07 by
    `tools/precompile/measure-image.sh`, which also reads each arm's `size -A`
    and refuses an arm whose built `zephyr/.config` is not the arm it names:
-   2,427,152 bytes with the tier off (11 s), 4,602,128 with `gl_test_es100`'s
-   rows in front of the compiler (52 s), 3,717,064 with those rows and no
-   compiler at all (28 s), 5,953,808 with every app the list names (74 s).
+   2,427,152 bytes with the tier off, 4,602,128 with `gl_test_es100`'s rows in
+   front of the compiler, 3,717,064 with those rows and no compiler at all,
+   5,953,808 with every app the list names. A repeat run built all four
+   byte-identically. The seconds are not a property of an arm: the same four
+   arms took 11, 52, 28 and 74 s one run and 11, 17, 15 and 19 s the next.
    The compiler is 712,704 of .text and 171,497 of .rodata -- 884,201 of flash
    -- and 5,244,035 of .bss, the scratch and keep regions
    `YAKOGL_SHADERC_SCRATCH_BYTES` lends it; the compiler-less arm gives back
