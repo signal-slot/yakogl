@@ -42,6 +42,19 @@ Still refused: `./.venv/bin/west list` and
 table are still not built. Re-run `west update` first to see whether
 zephyr-lang-rust completes.
 
+## Update (third turn)
+
+`west list` and the pip install were then allowed and ran. `west list`:
+zephyr `af17c0c8aa2a82a0b714a423915ad3610063ee68`, fatfs `f4ead3bf`, hal_nxp
+`1e91007b` (`modules/hal/nxp`), hal_ti `d9d5b1c9`, picolibc `01254932`; no
+zephyr-lang-rust project is listed. `pip install -r
+zephyr/scripts/requirements-base.txt`: every requirement already satisfied
+(west 1.5.0, Python 3.14 venv). The workspace is complete except the SDK.
+
+Refused: `curl -sIL https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64_minimal.tar.xz`
+("This command requires approval"). I did not fetch the SDK another way. With
+no `ZEPHYR_SDK_INSTALL_DIR`, stage 1 and the mini table are still not built.
+
 ## Commands to run once permitted
 
 ```sh
