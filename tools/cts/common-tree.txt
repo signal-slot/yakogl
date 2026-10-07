@@ -1,5 +1,6 @@
-# The common set: the four images every board runs first, from its bootloader
-# (driver/docs/one-method.md; the user's order of 2026-10-03). One image per
+# The common set: the five images every board runs first, from its bootloader
+# (driver/docs/one-method.md; the user's order of 2026-10-03, with cluster
+# joining on 2026-10-07). One image per
 # row, the form of baseline-tree.txt: each row is "# image <LABEL>: ..." and
 # then one line, and '#' and blank lines are skipped. tools/board.sh tree names
 # each row by its label (TREE_IMAGE_DIR=<img-dir>: <img-dir>/<LABEL>/zephyr/zephyr.bin);
@@ -10,6 +11,11 @@
 #                a view into the scan-out buffer (on the Pi 4 and the i.MX8MP;
 #                the AM62P's board layer has no view and ignores the option,
 #                so there the row is the copy path again)
+#   cluster      driver/samples/zephyr/cluster, the AGL cluster sample: the
+#                agl-slint-cluster UI on the no_std Slint workspace, animating
+#                for CONFIG_YAKOGL_BOARD_ANIMATE_S (60 s) at the board's panel
+#                size (1024x600 AM62P, 1280x800 i.MX8MP, 1920x720 Pi 4) and
+#                checking the result (its PROBES record is the verdict)
 #   gl_test      the board's gl_test sample with its default case list (gl_test
 #                on the AM62P, gc_gl_test on the i.MX8MP, v3d_gl_test on the Pi 4)
 # Run it with tools/cts/cts-common.sh <board> build|run|tally (tools/cts/README.md).
@@ -19,5 +25,7 @@ glmark2
 slint
 # image SV: slint, view on
 slint-view
+# image CL: cluster, the AGL cluster sample
+cluster
 # image GT: gl_test, the default case list
 gl_test

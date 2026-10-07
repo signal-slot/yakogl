@@ -102,6 +102,40 @@ conf_bad bad-gles3-report.config DEQP_REPORT_ES2
 conf_bad bad-sweep-ms4-name.config DEQP_GL_CONFIG_NAME
 conf_bad bad-ms4-name-missing.config DEQP_GL_CONFIG_NAME --ms4
 
+echo
+# ---- 18: common-tally.py tallies the cluster row (testdata/cluster-run) ------
+#
+# The CL row of common-tree.txt (the AGL cluster sample) is judged by its
+# PROBES record, and its rate comes from the console's FINGERPRINT, PERF and
+# APP records (`yakogl-tools record --log`). The fixture replays the Pi 4
+# cluster run of 2026-10-04: its APP and PROBES words are verbatim from
+# tools/cts/RESULTS.md, its PERF words carry that run's printed numbers, and
+# its FINGERPRINT line is the Pi 4 cluster console form pinned in
+# recordcmd.rs's throughput_from_a_log (testdata/README.md says which is
+# which). The tally must show the PROBES verdict, the cluster probes line and
+# the throughput line computed from those records.
+echo
+echo "== 18. common-tally.py on the cluster fixture (testdata/cluster-run)"
+CL_RUN=$HERE/testdata/cluster-run/20261004-0438-cluster-11236a24
+tout=$(python3 "$HERE/common-tally.py" pi4 --row "CL=$CL_RUN" 2>&1)
+trc=$?
+for want in "CL cluster rc=0 verdict=done result=record:PROBES" \
+            "cluster probes pass" \
+            "throughput: 1920x720: 8395 frames in 60019 ms, 139.9 fps, 193.4 Mpx/s; draw 4.9 ms mean, 3.54 ms/Mpx" \
+            "resets (console count) 0" \
+            "image=11236a247d72bdf0" \
+            "build=PVR_SAMPLE_TREE=031de9a2,PVR_SAMPLE_TABLE=1449eb0f"; do
+    case "$tout" in
+        *"$want"*) ok   "cluster row: reports \"$want\"" ;;
+        *)         bad  "cluster row: MISSING \"$want\"" ;;
+    esac
+done
+if [ "$trc" -eq 0 ]; then
+    ok "cluster row: exit 0 (the row has a run and its verdict is done)"
+else
+    bad "cluster row: exit $trc, expected 0"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

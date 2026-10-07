@@ -1,0 +1,10 @@
+board=pi4
+boot=tryboot
+name=cluster
+probe=0
+image=zephyr.bin
+image_sha256=11236a247d72bdf0000000000000000000000000000000000000000000000000
+image_build=PVR_SAMPLE_TREE=031de9a2 PVR_SAMPLE_TABLE=1449eb0f
+t_reboot=100
+t_back=279
+back=1

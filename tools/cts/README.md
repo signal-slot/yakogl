@@ -120,13 +120,15 @@ prints every command and does nothing. The baseline is the full-tree method
 with a five-row table, not a second runner; `tools/board_selftest.sh` checks
 the three boards' dry runs.
 
-### The common set: four images, one command per board
+### The common set: five images, one command per board
 
 Before anything else, every board runs the common set
 (`tools/cts/common-tree.txt`, driver/docs/one-method.md): glmark2 (GM), slint
 with the window copied to the screen (SO), slint with the window a view into
-the scan-out buffer (SV) and gl_test with the sample's default case list (GT),
-one image each, from the bootloader:
+the scan-out buffer (SV), the AGL cluster sample animating its cluster UI at
+the board's panel size — 1024x600 on the AM62P, 1280x800 on the i.MX8MP,
+1920x720 on the Pi 4 (CL) — and gl_test with the sample's default case list
+(GT), one image each, from the bootloader:
 
 ```sh
 tools/cts/cts-common.sh <am62p|pi4|imx8mp> build <img-dir>
@@ -135,20 +137,30 @@ tools/cts/cts-common.sh <am62p|pi4|imx8mp> tally <outdir> [<earlier outdir>]
 ```
 
 `build` is `tools/cts/common-images.sh` (its header has the environment:
-`ZEPHYR_WS`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`, and the AM62P firmware header);
-it gives every image its board's watchdog self-arm and reports an image
-without the arm line as `rc=no_marker`. The AM62P's board layer has no
-scan-out view, so its SV row is the copy path again. `run` is
+`ZEPHYR_WS`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`, `AGL_SLINT_CLUSTER_DIR` and the
+optional `NOTO_SANS_DIR` for the cluster row, and the AM62P firmware header;
+the slint and cluster rows build their Rust with `-Z build-std`, so they need
+a nightly toolchain); it gives every image its board's watchdog self-arm and
+reports an image without the arm line as `rc=no_marker`. The AM62P's board
+layer has no scan-out view, so its SV row is the copy path again (the cluster
+sample's own `prj.conf` turns the view on where the board layer has one). `run` is
 `tools/board.sh <board> tree` on the table, then `tools/cts/common-tally.py`:
 per row the record words, board.sh's verdict recomputed from the files, the
-glmark2 score with its failed and unsupported scenes, the slint probes,
-gl_test's passed of run with the failing case numbers (on the i.MX8MP only the
+glmark2 score with its failed and unsupported scenes, the slint and cluster
+probes (the cluster row also reports its throughput — frames, fps, Mpx/s and
+mean draw, from the console's FINGERPRINT, PERF and APP records, computed by
+`yakogl-tools record --log`, which rounds where the cluster's own console line
+truncates; the i.MX8MP
+has no UART and its SNVS keeps only the verdict record, so there the tally
+says `throughput absent`), gl_test's passed of run with the failing case
+numbers (on the i.MX8MP only the
 first: its CASE record carries no more), the GPU resets with their source
 (`resets (record) N` when the record carries a count, `resets (console count) N`
 from board.sh's count of the console's recovery lines, else `resets absent`) and the image's sha256
 and build ids; with an earlier common run, the row-by-row diff. `--dry-run`
 prints every command and does nothing. `common-tally.py --self-test` runs in
-`tools/check.sh`; `tools/board_selftest.sh` checks the three boards' dry runs.
+`tools/check.sh` (it replays the cluster fixture in `tools/cts/testdata`);
+`tools/board_selftest.sh` checks the three boards' dry runs.
 
 The board images compile shaders in the image (the online compiler) or look
 them up in the offline table.

@@ -8,7 +8,7 @@
 #   tools/cts/common-images.sh [--dry-run] <am62p|pi4|imx8mp> <table> <img-dir> [LABEL...]
 #
 # <table>    common-tree.txt's form: "# image <LABEL>: ..." and then one line
-#            naming what to build (glmark2, slint, slint-view, gl_test).
+#            naming what to build (glmark2, slint, slint-view, cluster, gl_test).
 # <img-dir>  one west build directory per row, <img-dir>/<LABEL>/, so the
 #            image is <img-dir>/<LABEL>/zephyr/zephyr.bin: the layout
 #            tools/board.sh tree reads with TREE_IMAGE_DIR=<img-dir>. A build
@@ -25,6 +25,9 @@
 #   glmark2     driver/samples/zephyr/glmark2 (-DGLMARK2_SRC)
 #   slint       driver/samples/zephyr/slint (-DSLINT_NOSTD_DIR, -DNOSTD_PATCH_DIR)
 #   slint-view  the same and -DCONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y
+#   cluster     driver/samples/zephyr/cluster, the AGL cluster sample
+#               (-DAGL_SLINT_CLUSTER_DIR, -DSLINT_NOSTD_DIR, -DNOSTD_PATCH_DIR,
+#               -DNOTO_SANS_DIR; the sample's own CMakeLists names each input)
 #   gl_test     gl_test (am62p), gc_gl_test (imx8mp), v3d_gl_test (pi4), each
 #               with its sample's default case list
 # and every image of a board gets that board's watchdog self-arm, because
@@ -45,9 +48,13 @@
 #   ZEPHYR_WS        the west workspace ($ZEPHYR_WS/zephyr is ZEPHYR_BASE)
 #   WEST_VENV        optional: a venv whose bin/ holds west
 #   ZEPHYR_SDK_INSTALL_DIR, RUSTUP_TOOLCHAIN as for any sample with Rust in it
+#   (slint and cluster build their Rust with -Z build-std: a nightly toolchain)
 #   GLMARK2_SRC      the glmark2 checkout the glmark2 sample pins (its CMakeLists)
 #   SLINT_NOSTD_DIR  the no_std Slint workspace (slint/nostd/README.md);
 #   NOSTD_PATCH_DIR  optional, the femtovg/glow forks (default: beside it)
+#   AGL_SLINT_CLUSTER_DIR the agl-slint-cluster clone (its ui/app-window.slint);
+#   NOTO_SANS_DIR    optional, the dir holding Noto Sans Regular, Light and
+#                    ExtraLight (default: /usr/share/fonts/noto)
 #   am62p: driver/src/fw/pvr_fw_blob.h in this checkout (driver/tools/mkfwblob.sh,
 #          never committed)
 set -uo pipefail
@@ -105,6 +112,12 @@ row_args() {
         SAMPLE=slint; ARGS+=("-DSLINT_NOSTD_DIR=${SLINT_NOSTD_DIR:-<SLINT_NOSTD_DIR>}")
         [ -n "${NOSTD_PATCH_DIR:-}" ] && ARGS+=("-DNOSTD_PATCH_DIR=$NOSTD_PATCH_DIR")
         [ "$1" = slint-view ] && ARGS+=(-DCONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y) ;;
+    cluster)
+        SAMPLE=cluster
+        ARGS+=("-DAGL_SLINT_CLUSTER_DIR=${AGL_SLINT_CLUSTER_DIR:-<AGL_SLINT_CLUSTER_DIR>}"
+               "-DSLINT_NOSTD_DIR=${SLINT_NOSTD_DIR:-<SLINT_NOSTD_DIR>}")
+        [ -n "${NOSTD_PATCH_DIR:-}" ] && ARGS+=("-DNOSTD_PATCH_DIR=$NOSTD_PATCH_DIR")
+        [ -n "${NOTO_SANS_DIR:-}" ] && ARGS+=("-DNOTO_SANS_DIR=$NOTO_SANS_DIR") ;;
     gl_test) SAMPLE=$GLTEST ;;
     *) return 1 ;;
     esac
@@ -114,7 +127,7 @@ row_args() {
 rows > /dev/null || exit 2
 if [ "$DRY" = 1 ]; then
     selected "$@" | while IFS=$'\t' read -r l w; do
-        row_args "$w" || { echo "$l: '$w' is not glmark2, slint, slint-view or gl_test"; continue; }
+        row_args "$w" || { echo "$l: '$w' is not glmark2, slint, slint-view, cluster or gl_test"; continue; }
         echo "$l $SAMPLE -b $ZBOARD ${ARGS[*]}"
     done
     exit 0
@@ -133,8 +146,11 @@ need=$(selected "$@" | cut -f2 | sort -u)
 if grep -qx glmark2 <<<"$need" && [ ! -f "${GLMARK2_SRC:-}/src/default-benchmarks.h" ]; then
     die "set GLMARK2_SRC to the glmark2 checkout (driver/samples/zephyr/glmark2/CMakeLists.txt)"
 fi
-if grep -qE '^slint(-view)?$' <<<"$need" && [ ! -d "${SLINT_NOSTD_DIR:-}/internal" ]; then
+if grep -qE '^(slint(-view)?|cluster)$' <<<"$need" && [ ! -d "${SLINT_NOSTD_DIR:-}/internal" ]; then
     die "set SLINT_NOSTD_DIR to the no_std Slint workspace (driver/samples/zephyr/slint/nostd/README.md)"
+fi
+if grep -qx cluster <<<"$need" && [ ! -f "${AGL_SLINT_CLUSTER_DIR:-}/ui/app-window.slint" ]; then
+    die "set AGL_SLINT_CLUSTER_DIR to the agl-slint-cluster clone (driver/samples/zephyr/cluster/CMakeLists.txt)"
 fi
 export ZEPHYR_BASE=$ZEPHYR_WS/zephyr
 MODS=$("$HERE/zephyr-modules.sh" "$ZEPHYR_WS") || die "zephyr-modules.sh failed"

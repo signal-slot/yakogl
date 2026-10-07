@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# The common set on a board, booted from its bootloader: the four images of
+# The common set on a board, booted from its bootloader: the five images of
 # tools/cts/common-tree.txt (glmark2, slint with the view off, slint with the
-# view on, gl_test), the first thing every board runs (driver/docs/one-method.md).
+# view on, cluster, gl_test), the first thing every board runs
+# (driver/docs/one-method.md).
 #
 #   tools/cts/cts-common.sh [--dry-run] <board> build <img-dir> [LABEL...]
 #   tools/cts/cts-common.sh [--dry-run] <board> run <img-dir> <outdir> [<earlier outdir>]
@@ -14,7 +15,7 @@
 #          board.sh's default for the board (am62p uboot-tftp, pi4 tryboot,
 #          imx8mp uboot-tftp); BOARD_BOOT=kexec-dev picks the development
 #          route (the i.MX8MP's crash route), whose runs are never rows.
-# build    makes the four images into <img-dir>/<LABEL>/ with
+# build    makes the five images into <img-dir>/<LABEL>/ with
 #          tools/cts/common-images.sh (its header lists the environment:
 #          ZEPHYR_WS, GLMARK2_SRC, SLINT_NOSTD_DIR, ...); <LABEL>.built says
 #          each image's rc, sha256 and build ids. --dry-run lists the builds.
@@ -25,13 +26,14 @@
 #          printed, nothing done, no tally.
 # tally    tools/cts/common-tally.py over <outdir>: per row the record words,
 #          board.sh's verdict (recomputed from the files), the glmark2 score
-#          and its failed / unsupported scenes, the slint probes, gl_test's
-#          passed of run and the failing cases, the GPU resets and the image's
-#          sha256 and build ids. With <earlier outdir> (an earlier common run)
-#          it adds the row-by-row diff.
+#          and its failed / unsupported scenes, the slint and cluster probes
+#          (cluster also with its fps / Mpx/s throughput, when the console
+#          carries the run's records), gl_test's passed of run and the failing
+#          cases, the GPU resets and the image's sha256 and build ids. With
+#          <earlier outdir> (an earlier common run) it adds the row-by-row diff.
 #
 # This script only names the table, the builder and the tally; running is the
-# full-tree runner's method (board.sh tree) with a four-row table, not a second
+# full-tree runner's method (board.sh tree) with a five-row table, not a second
 # runner. board.sh's own dEQP diff (TREE_PREV) is not used: these rows carry
 # no dEQP cases, and common-tally.py's diff compares what they do carry.
 set -uo pipefail

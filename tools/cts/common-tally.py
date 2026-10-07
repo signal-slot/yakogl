@@ -9,7 +9,7 @@
     tools/cts/common-tally.py --check-records <dir of the first i.MX8MP common run>
 
 <outdir> is what `tools/board.sh <board> tree tools/cts/common-tree.txt
-<outdir>` wrote: tree.txt (the rows, labelled GM SO SV GT) and one run
+<outdir>` wrote: tree.txt (the rows, labelled GM SO SV CL GT) and one run
 directory per row, YYYYMMDD-HHMM-<LABEL>-<sha8>. --row names run directories
 directly, for runs made one at a time with `board.sh run` (the rows of the
 first i.MX8MP common run, 2026-10-04, were).
@@ -22,6 +22,12 @@ it. This tool adds what board.sh's verdict line does not say, per kind:
   glmark2  the GLMARK2 record: score, scenes ran / failed / unsupported, and
            the record's own status (pass or fail)
   slint    the PROBES record's status (pass or fail)
+  cluster  the PROBES record's status (pass or fail), and the run's throughput
+           (frames, fps, Mpx/s, mean draw) that the FINGERPRINT, PERF and APP
+           records give, read from the console with `yakogl-tools record --log`
+           (the AM62P and the Pi 4 print the records to the UART; the i.MX8MP
+           has none and its SNVS keeps only the last record, so there the
+           throughput is absent, never invented)
   gl_test  passed of run and the failing case numbers. From the console:
            "gl_test: all: F of T cases failed (P passed; X timed out; ...)"
            (gl_test.c, AM62P and Pi 4) and each "gl_test: case N <name>: FAIL"
@@ -39,7 +45,8 @@ build ids (meta.txt, as board.sh read them from the image's build.ninja).
 
 --prev compares with an earlier common run (a tree outdir, or --prev-row
 LABEL=<rundir> ...), row by row by label: the verdict, the record words, and
-the fields above (glmark2 score, gl_test failing cases added and removed).
+the fields above (glmark2 score, cluster throughput, gl_test failing cases
+added and removed).
 
 The first line is this tool's own build (git describe of its checkout).
 Exit status: 0 when every row has a run and every verdict is done; 1 when a row
@@ -58,6 +65,11 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 BOARD_SH = os.path.join(REPO, "tools", "board.sh")
 BOARDS = ("am62p", "pi4", "imx8mp")
 RUN_RE = re.compile(r"^[0-9]{8}-[0-9]{4}-(.+)-([0-9a-f]{8}|probe)$")
+# the committed cluster fixture (tools/cts/testdata/README.md) and the throughput line its
+# records give, as `yakogl-tools record --log` computes it
+CLUSTER_FIXTURE = os.path.join(HERE, "testdata", "cluster-run", "20261004-0438-cluster-11236a24")
+CLUSTER_FIXTURE_THROUGHPUT = ("1920x720: 8395 frames in 60019 ms, 139.9 fps, 193.4 Mpx/s; "
+                              "draw 4.9 ms mean, 3.54 ms/Mpx")
 
 
 def describe():
@@ -200,7 +212,7 @@ def gl_test_from_console(text):
     return d
 
 
-def detail_from_record(decoded):
+def detail_from_record(decoded, label=""):
     m = GLMARK2_RE.search(decoded)
     if m:
         score, st, stname, ran, failed, unsup = m.groups()
@@ -215,8 +227,11 @@ def detail_from_record(decoded):
         return d
     m = PROBES_RE.search(decoded)
     if m:
-        return {"kind": "probes", "status": m.group(1),
-                "text": "slint probes %s (%s)" % (m.group(1), decoded.strip().split(": ", 1)[-1])}
+        # the PROBES record is the verdict of both Slint-family rows: the slint
+        # sample's probes, and the cluster sample's (row label CL)
+        sample = "cluster" if label == "CL" else "slint"
+        return {"kind": "cluster" if label == "CL" else "probes", "status": m.group(1),
+                "text": "%s probes %s (%s)" % (sample, m.group(1), decoded.strip().split(": ", 1)[-1])}
     m = CASE_RE.search(decoded)
     if m:
         case, check, st, stname, got, want = m.groups()
@@ -237,6 +252,22 @@ def detail_from_record(decoded):
                 "text": "gl_test case %d alone: %s (check %s, got 0x%08x want 0x%08x)"
                         % (case, stname, check, got, want)}
     return {"kind": "other", "text": decoded.strip().replace("\n", " | ") or "record not decoded"}
+
+
+THROUGHPUT_RE = re.compile(r"^throughput: (.*)$", re.M)
+
+
+def console_throughput(rundir, console):
+    """the cluster row's throughput line: `yakogl-tools record --log` computes it
+    from the console's FINGERPRINT, PERF and APP records (recordcmd.rs's
+    throughput_line). None when the run has no console (the i.MX8MP) or its
+    console carries no such records — absent, never invented"""
+    if console is None or "yk-record:" not in console:
+        return None
+    p = subprocess.run([ytools(), "record", "--log", os.path.join(rundir, "console.txt")],
+                       capture_output=True, text=True)
+    m = THROUGHPUT_RE.search(p.stdout)
+    return m.group(1) if m else None
 
 
 def resets_label(record_resets, line_resets):
@@ -271,13 +302,23 @@ def row_summary(board, label, rundir):
     record_resets = None
     if s["record"] != "absent":
         p = subprocess.run([ytools(), "record"] + s["record"].split(","), capture_output=True, text=True)
-        s["detail"] = detail_from_record(p.stdout + p.stderr)
+        s["detail"] = detail_from_record(p.stdout + p.stderr, label)
         p = subprocess.run([ytools(), "record", "--line"] + s["record"].split(","), capture_output=True, text=True)
         record_resets = kv(p.stdout).get("resets")
     elif s["result"].startswith("legacy:gl_test") and console is not None:
         s["detail"] = gl_test_from_console(console)
     else:
         s["detail"] = {"kind": "none", "text": "no result (result=%s)" % s["result"]}
+    if label == "CL" and s["record"] != "absent":
+        # the cluster row reports its rate too: the PERF words (fps and the
+        # means) are only readable from the console, so the i.MX8MP row says
+        # absent rather than a number it cannot prove
+        t = console_throughput(rundir, console)
+        s["detail"]["throughput"] = t
+        if t:
+            s["detail"]["text"] += "; throughput: %s" % t
+        else:
+            s["detail"]["text"] += "; throughput absent (no console records)"
     s["resets_label"] = resets_label(record_resets, s["resets"])
     return s
 
@@ -354,6 +395,10 @@ def diff(prev, now):
             for k in ("score", "ran", "failed", "unsupported", "status"):
                 if da[k] != db[k]:
                     ch.append("glmark2 %s %s -> %s" % (k, da[k], db[k]))
+        if da.get("kind") == db.get("kind") == "cluster":
+            if da.get("throughput") != db.get("throughput"):
+                ch.append("cluster throughput %s -> %s"
+                          % (da.get("throughput") or "absent", db.get("throughput") or "absent"))
         if da.get("kind") == db.get("kind") == "gl_test":
             if (da.get("passed"), da.get("total")) != (db.get("passed"), db.get("total")):
                 ch.append("gl_test passed %s of %s -> %s of %s"
@@ -450,21 +495,24 @@ def self_test():
     tmp = tempfile.mkdtemp(prefix="common-tally-")
     try:
         # 1. a tree of synthetic runs through board.sh's own verdict: GLMARK2 pass (score 48, ran 30,
-        # failed 0, unsupported 2), PROBES pass, the CASE set failed (passed 3 of 4, first failure 10);
-        # SV has no run
+        # failed 0, unsupported 2), PROBES pass, the cluster row with the i.MX8MP cluster run's real
+        # PROBES record (tools/cts/RESULTS.md 2026-10-04; its only readable record), the CASE set
+        # failed (passed 3 of 4, first failure 10); SV has no run
         out = os.path.join(tmp, "tree")
         os.makedirs(out)
         make_run(out, "GM", "glmark2", ["594b120e", "00000030", "011e0002", "03200258"], "a" * 64)
         make_run(out, "SO", "slint", ["594b0601", "08420882", "00210842", "98080883"], "b" * 64)
+        make_run(out, "CL", "cluster", ["594b0601", "10c410c4", "1905f7bf", "b1076d5f"], "9" * 64)
         make_run(out, "GT", "gl_test", ["594b0101", "000aff06", "00000003", "00000004"], "c" * 64)
         with open(os.path.join(out, "tree.txt"), "w") as f:
-            for l, w in (("GM", "glmark2"), ("SO", "slint"), ("SV", "slint-view"), ("GT", "gl_test")):
+            for l, w in (("GM", "glmark2"), ("SO", "slint"), ("SV", "slint-view"), ("CL", "cluster"),
+                         ("GT", "gl_test")):
                 f.write("%s\t/img/%s/zephyr/zephyr.bin\t-\t%s\n" % (l, l, w))
         rows = tree_rows(out)
-        check("tree.txt: four rows, SV without a run",
-              [(l, len(d)) for l, d in rows] == [("GM", 1), ("SO", 1), ("SV", 0), ("GT", 1)], rows)
+        check("tree.txt: five rows, SV without a run",
+              [(l, len(d)) for l, d in rows] == [("GM", 1), ("SO", 1), ("SV", 0), ("CL", 1), ("GT", 1)], rows)
         now, lines = tally("imx8mp", rows)
-        gm, so, gt = now["GM"], now["SO"], now["GT"]
+        gm, so, cl, gt = now["GM"], now["SO"], now["CL"], now["GT"]
         check("GM: glmark2 score 48, ran 30, failed 0, unsupported 2, status pass; verdict done",
               {k: gm["detail"].get(k) for k in ("score", "ran", "failed", "unsupported", "status")} ==
               {"score": 48, "ran": 30, "failed": 0, "unsupported": 2, "status": "pass"} and gm["verdict"] == "done",
@@ -473,6 +521,14 @@ def self_test():
               gm["record"] == "594b120e,00000030,011e0002,03200258" and gm["resets"] == "absent" and
               gm["image"] == "a" * 16 and gm["build"] == "GC_BUILD_STAMP=synthetic", gm)
         check("SO: PROBES pass, verdict done", so["detail"].get("status") == "pass" and so["verdict"] == "done", so)
+        check("CL: the cluster PROBES record decodes as cluster probes pass, verdict done",
+              cl["detail"].get("kind") == "cluster" and cl["detail"].get("status") == "pass" and
+              cl["detail"]["text"].startswith("cluster probes pass") and cl["verdict"] == "done", cl["detail"])
+        check("CL on the i.MX8MP: no console, so the throughput is absent, never invented",
+              cl["detail"].get("throughput") is None and "throughput absent" in cl["detail"]["text"], cl["detail"])
+        check("SO and CL share the PROBES decode but name their sample",
+              so["detail"]["text"].startswith("slint probes") and not cl["detail"]["text"].startswith("slint"),
+              (so["detail"]["text"], cl["detail"]["text"]))
         check("GM: no reset count in a GLMARK2 record and no console: printed 'resets absent', never 0",
               gm["resets_label"] == "resets absent" and any("; resets absent;" in l for l in lines if l.startswith("GM ")),
               (gm["resets_label"], [l for l in lines if l.startswith("GM ")]))
@@ -509,6 +565,23 @@ def self_test():
     finally:
         shutil.rmtree(tmp)
 
+    # the committed fixture: the Pi 4 cluster row of 2026-10-04 replayed through the tally. Its
+    # APP and PROBES words are verbatim from tools/cts/RESULTS.md, its PERF words carry that run's
+    # printed numbers (139.8 fps, frame 7.1 / 30.6 ms, draw 3.54 ms/Mpx, show 0.1 ms), and its
+    # FINGERPRINT line is the Pi 4 cluster console form as recordcmd.rs's throughput_from_a_log
+    # pins it. The console is the run's whole record sequence, so the verdict is the console's
+    # last record (PROBES) and the throughput is computed from the three before it.
+    fx = row_summary("pi4", "CL", CLUSTER_FIXTURE)
+    check("CL fixture (Pi 4 cluster run): PROBES pass, verdict done, resets 0 as the console count",
+          fx["detail"].get("kind") == "cluster" and fx["detail"].get("status") == "pass" and
+          fx["verdict"] == "done" and fx["resets_label"] == "resets (console count) 0", fx)
+    check("CL fixture: the throughput line its FINGERPRINT, PERF and APP records give",
+          fx["detail"].get("throughput") == CLUSTER_FIXTURE_THROUGHPUT and
+          fx["detail"]["text"].endswith("; throughput: " + CLUSTER_FIXTURE_THROUGHPUT), fx["detail"])
+    d_fx = diff({"CL": dict(fx, detail=dict(fx["detail"], throughput=None))}, {"CL": fx})[0]
+    check("diff: a cluster row that gained its throughput names it",
+          "cluster throughput absent -> %s" % CLUSTER_FIXTURE_THROUGHPUT in d_fx, d_fx)
+
     # the label's three sources, in order (the console count is board.sh's count of recovery lines)
     check("resets label: the record's value first, else the console count, else absent",
           (resets_label("2", "2"), resets_label("absent", "0"), resets_label(None, "3"), resets_label("absent", "absent"))
@@ -517,7 +590,7 @@ def self_test():
     # 2. the diff: identical runs are the same; a changed record names each field
     d_same = diff(now, now)
     check("diff of a run with itself: 'same' for each run, 'no run -> no run' for SV",
-          sum(": same (" in l for l in d_same) == 3 and "DIFF SV: no run -> no run" in d_same, d_same)
+          sum(": same (" in l for l in d_same) == 4 and "DIFF SV: no run -> no run" in d_same, d_same)
     alt = dict(now)
     alt["GM"] = dict(gm, detail=dict(gm["detail"], score=41, failed=1), verdict="failed", record="x")
     alt["GT"] = dict(gt, detail=dict(gt["detail"], failing=[], passed=4))
