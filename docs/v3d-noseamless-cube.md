@@ -415,14 +415,14 @@ The design's code points 1-5 and 7, with these decisions:
 
 ### Pi 4 verification (one session; ES 2.0 images: v3d_deqp's prj.conf has `CONFIG_YAKOGL_REPORT_ES2=y`)
 
-Where the 25 cases are, in tools/cts/pi4-full-tree.txt (row = its position
+Where the 25 cases are, in tools/cts/pi4-full-tree.txt (row = its 0-based position
 among the non-comment lines, the `TREE_ROWS` number):
 
 | Image (row) | Filter | Cases | The cube cases in it |
 |---|---|---|---|
-| **T1** (20) | `texture.vertex.*` among others | 181 | 18: `texture.vertex.cube.filtering.*` 10, `texture.vertex.cube.wrap.*` 8 |
-| **T3** (22) | `texture.mipmap.*`, `texture.specification.*` | 304 | 6: `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` |
-| **TF** (25) | `shaders.texture_functions.*` | 17 | 1: `shaders.texture_functions.vertex.texturecubelod` |
+| **T1** (19) | `texture.vertex.*` among others | 181 | 18: `texture.vertex.cube.filtering.*` 10, `texture.vertex.cube.wrap.*` 8 |
+| **T3** (21) | `texture.mipmap.*`, `texture.specification.*` | 304 | 6: `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` |
+| **TF** (24) | `shaders.texture_functions.*` | 17 | 1: `shaders.texture_functions.vertex.texturecubelod` |
 
 Build the three images (ZEPHYR_WS, DEQP_WORK, ZEPHYR_SDK_INSTALL_DIR as the
 header of tools/cts/pi4-deqp-images.sh says; `$IMG` must not exist yet) and
@@ -430,7 +430,7 @@ run them, either with the tree runner, which waits for each image's
 `<label>.built` line and tallies at the end:
 
     tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
-    TREE_IMAGE_DIR=$IMG TREE_ROWS=20,22,25 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
+    TREE_IMAGE_DIR=$IMG TREE_ROWS=19,21,24 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
     tools/board.sh pi4 tally $OUT
 
 or image by image (`<image>` is `$IMG/<LABEL>/zephyr/zephyr.bin`):

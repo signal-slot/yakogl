@@ -408,14 +408,14 @@ Confirms `ec5ba4f` (the 25 cube cases), `4e9397c` (fragdata
 `invalid_assign_to_1`) and the one open question of the inventory (the 27 fbo
 `attachment_combinations`). Needs `RUSTUP_TOOLCHAIN=nightly`, stage 1 for
 `rpi_4b` (`DEQP_WORK`) and `BOARD_UART`, `BOARD_HDMI_TIMINGS` as the lab's.
-Rows of `pi4-full-tree.txt` (position among the non-comment lines): D 2
-(`shaders.fragdata.*`), FB1 5 (`fbo.api`, `fbo.completeness`), T1 20, T3 22,
-TF 25.
+Rows of `pi4-full-tree.txt` (`TREE_ROWS` counts from 0, over the non-comment
+lines): D 1 (`shaders.fragdata.*`), FB1 4 (`fbo.api`, `fbo.completeness`), T1 19, T3 21,
+TF 24.
 
 ```sh
 export DEQP_WORK=<stage 1 for rpi_4b> RUSTUP_TOOLCHAIN=nightly
 $SW/tools/cts/pi4-deqp-images.sh $SW/tools/cts/pi4-full-tree.txt <img> D FB1 T1 T3 TF     # <img> must not exist yet
-TREE_IMAGE_DIR=<img> TREE_ROWS=2,5,20,22,25 $SW/tools/board.sh pi4 tree $SW/tools/cts/pi4-full-tree.txt <rec>/cube
+TREE_IMAGE_DIR=<img> TREE_ROWS=1,4,19,21,24 $SW/tools/board.sh pi4 tree $SW/tools/cts/pi4-full-tree.txt <rec>/cube
 $SW/tools/board.sh pi4 tally <rec>/cube
 $SW/tools/cts/common-images.sh pi4 $SW/tools/cts/common-tree.txt <img-gt> GT              # v3d_gl_test
 $SW/tools/board.sh pi4 run <img-gt>/GT/zephyr/zephyr.bin <rec>/gt gt-$HEAD8
@@ -482,11 +482,11 @@ $SW/tools/cts/deqp-uart-tally.py --mustpass $SW/tools/cts/gles2-mustpass.txt <co
 Expected: combined mustpass 0 fail, the `fail` column of all 17 image rows 0
 and of `ms4` 0, no case worse than at `d60b9d76` (17,141 pass / 0 fail / 19
 NotSupported / 5 warnings of 17,165; RESULTS 1z2). If fragdata
-`invalid_assign_to_1` passes (image 3, the table's third row), that is 17,142
+`invalid_assign_to_1` passes (image 1, the table's first row, `TREE_ROWS=0`), that is 17,142
 pass and 18 NotSupported. A case that moves from Pass to anything else is a
 regression of the compiler changes since `d60b9d76`: bisect it first. If time
-is short, run image 3 alone (`TREE_ROWS=3`) for the fragdata check and
-images 3 to 10 (the shaders groups) for the compiler. Time: at most about 11
+is short, run image 1 alone (`TREE_ROWS=0`) for the fragdata check and
+images 1 to 7 (the shaders groups, `TREE_ROWS=0-6`) for the compiler. Time: at most about 11
 min an image, 18 images.
 
 When the three sessions are done, replace each board's row in
