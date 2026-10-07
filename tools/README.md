@@ -105,13 +105,18 @@ cargo run -p yakogl-precompile --features gpu-vivante,report-es2 -- ...
 | `--pin COUNTS` | | the run's row and code-byte counts must be COUNTS' line (`tests/fixtures/precompile_counts.txt`; `PRECOMPILE_PIN_WRITE=1` writes it) |
 
 The GPU is a feature, exactly one (`gpu-powervr`, `gpu-vivante`), and
-`report-es2` builds the compiler of an image that reports ES 2.0. The table is the
-`ShcBlob` table `emit.rs` writes, sharing its printers (`shc_print.rs`) and its
-idiom (each row a library struct printed with a full destructuring pattern), with
-the columns our rows need beside it: the record key the compiler's cache finds a
-row by (the source's SHA-256 chained with the zeroed varyings, the attribute map
-and the facts), the source as an index into `SHC_PRECOMPILED_SOURCES`, the facts
-(`w_constant`, the sampler-state key, the attribute map) and the uniform blocks. Its
+`report-es2` builds the compiler of an image that reports ES 2.0. The table is a
+`ShcPrecompiledRow` array with the columns our rows need beside it: the record key
+the compiler's cache finds a row by (the source's SHA-256 chained with the zeroed
+varyings, the attribute map and the facts), the source as an index into
+`SHC_PRECOMPILED_SOURCES`, and the facts (`w_constant`, the sampler-state key, the
+attribute map). What a row does not repeat is its source's reflection -- varyings,
+attribs, uniforms, declared bindings, uniform blocks -- which one
+`ShcPrecompiledReflection` per source holds, because no variant of a source changes
+it; a source whose rows disagree on one of those fields is a refusal. The printers
+and the idiom are shared with `yakogl-tools`' `emit.rs` (`shc_print.rs`, the
+`ShcBlob` table of the Mesa reference and of `internal.rs`), whose rows keep the
+whole reflection in their shader. Its
 header carries the toolchain mark, which says which compiler made it:
 
 ```text
@@ -124,6 +129,11 @@ lints and tests it per build, and `tools/precompile/prove.sh FEATURES` runs its
 proofs: the table made twice is the same bytes, `--verify`, the counts of the whole
 list and of the `femtovg` and `gl_test_es100` sublists pinned, and the table
 compiled against the library (`rustc -D warnings`).
+`tools/precompile/measure-image.sh APP` builds the AM62P gl_test image three ways
+-- the tier off, the app's rows in front of the compiler, those rows with no
+compiler at all -- and prints the build seconds, zephyr.bin bytes and the `size -A`
+split of `.text`, `.rodata` and `.bss`, which is the comparison
+`docs/HANDOFF.md`'s step 6 turns on.
 
 Beside the rows the table carries every link the generator made, by record key
 (`SHC_PRECOMPILED_LINKS`: the verdict a link takes without the front end), every

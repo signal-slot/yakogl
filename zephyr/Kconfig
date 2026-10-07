@@ -422,16 +422,20 @@ config YAKOGL_PRECOMPILED_SHADERS
 	bool "precompiled shaders in front of the compiler"
 	depends on (YAKOGL_SHADERC_ONLINE || YAKOGL_SHADERC_PRECOMPILED_ONLY) && !YAKOGL_GPU_V3D
 	help
-	  Off by default, measured 2026-10-07 rather than assumed: the table is
+	  Off by default, measured 2026-10-07 rather than assumed: the table was
 	  4,881,999 bytes of .rodata for one app (gl_test_es100, 176 sources,
 	  1888 rows) on the AM62P gl_test image, where the in-process compiler it
-	  sits in front of is 712,704 bytes of .text and 171,497 of .rodata. The
-	  table is 5.5x the compiler's flash for one app's shaders, and it grows
-	  with the app's shader set while the compiler does not. What makes the
-	  table dear is not its code (1,447,864 of those bytes) but its
-	  reflection: about 1.67 KB per row, the same source's reflection written
-	  once per variant (docs/HANDOFF.md, open work item 1). Turning this on by
-	  default is the step after that, not before it.
+	  sits in front of is 712,704 bytes of .text and 171,497 of .rodata -- 5.5x
+	  the compiler's flash for one app's shaders, and it grows with the app's
+	  shader set while the compiler does not. What made it dear was not its code
+	  (1,447,864 of those bytes) but its reflection: about 1.67 KB per row, the
+	  same source's reflection written once per variant. That is fixed -- a row
+	  now points at its source's one reflection -- and the same list through the
+	  same compiler emits 8,600,409 bytes of table where it emitted 10,798,308
+	  (-20.4%), and 21,455,420 where it emitted 27,440,696 for the whole list
+	  (-21.8%). The image's own number for the new table is what the default
+	  waits for (docs/HANDOFF.md, open work item 1;
+	  tools/precompile/measure-image.sh measures it).
 
 	  With the in-process compiler (YAKOGL_SHADERC_ONLINE):
 	  compile the source list (tools/shaders/precompiled.list, or
@@ -452,7 +456,8 @@ config YAKOGL_PRECOMPILED_SHADERS
 	  names the apps it runs (YAKOGL_PRECOMPILED_APPS); with the tier on and
 	  nothing named the build stops rather than carrying everything. Measured
 	  on this tree, 2026-10-07, on the AM62P gl_test image (verdin_am62p,
-	  aarch64-unknown-none, release): zephyr.bin is 2,427,152 bytes with the
+	  aarch64-unknown-none, release) with the reflection still written per row:
+	  zephyr.bin is 2,427,152 bytes with the
 	  tier off, 7,309,584 with gl_test_es100's rows in front of the compiler,
 	  6,424,520 with those rows and no compiler at all
 	  (YAKOGL_SHADERC_PRECOMPILED_ONLY), and 14,154,000 with the whole list.
