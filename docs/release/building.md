@@ -24,8 +24,10 @@ Images:
 Honest status of each step. "Read" means I read the script or CMake file and
 copied the command. "Run" means I ran it.
 
-- **Run:** `tools/check.sh --quick` on this commit plus this file: `99 ok,
-  0 failed, 0 gap(s)`. It checks the host code, not this guide.
+- **Run:** `tools/check.sh --quick` on this commit. It checks the host code,
+  not this guide. Its `cargo fmt`, build and test rows pass. Its clippy rows
+  fail with warnings (`needless_range_loop` and others) in code this file does
+  not touch; plan item `clippy-clean` owns that.
 - **Read only, everything else.** In the session that wrote this file, network
   commands (`git ls-remote`, `git clone`) and scripts outside `tools/check.sh`
   were refused, so no fetch and no image build was run. No URL below was
