@@ -47,18 +47,16 @@ glClear too (§5).
 
 ## 2. Citations, and what could not be checked
 
-Lines cited as *verified* were read in this tree. The vendored Mesa subset
-(`third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml`) and the etna_viv
-rnndb headers (`driver/src/vivante/hw/*.xml.h`, the same files Mesa ships as
-`src/etnaviv/hw/`) are both here. The full Mesa 26.2.1 tree is **not**:
-`$CCFARM_DEPS_DIR/mesa-26.2.1-src` exists but is empty, and this worker had no
-network access to fetch it. Citations into files outside the vendored subset
-therefore give the file and the function, with `:L?` in place of a line.
-**tf-capture's first step is to fill those lines in** from a Mesa 26.2.1
-checkout, per `third_party/README.md`, and to correct anything below that the
-source contradicts. The ES 3.0 section numbers are those of ES 3.0.6. Where a
-rule is from memory and has not been checked against the PDF, it says
-"(verify)".
+Every Mesa `file:line` below was read in the Mesa 26.2.1 release tarball
+(`https://archive.mesa3d.org/mesa-26.2.1.tar.xz`, the version
+`third_party/README.md` pins), or in the subset of it vendored here
+(`third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml`). The etna_viv rnndb
+headers are cited from `driver/src/vivante/hw/*.xml.h`, the same files Mesa
+ships as `src/etnaviv/hw/`. The ES 3.0 section numbers are those of ES 3.0.6.
+The spec PDF was not available. Where a rule rests on Mesa or dEQP and has not
+been checked against the spec text, it says "(verify)". Mesa enforces a
+desktop-GL extension's wording in several places, and those can differ from
+ES 3.0.
 
 ## 3. Per GPU: is there a capture path?
 
@@ -83,29 +81,40 @@ applies to 4.2):
   overflowed (`enum Primitive counters`, `:307-315`). It can also store and
   reload the buffer state, which is what pause/resume needs.
 - The primitive enum has `*_TF` variants, `POINTS_TF` = 16 to
-  `TRIANGLE_FAN_TF` = 22 (`:63-69`). As far as is known (verify in
-  `v3dx_draw.c`), Mesa uses those only for V3D < 4.0 and enables capture on
-  4.x through the specs packet.
+  `TRIANGLE_FAN_TF` = 22 (`:63-69`). Mesa's 4.2+ draw path leaves
+  `prim_tf_enable` at 0 (`src/gallium/drivers/v3d/v3dx_draw.c:1281`, OR-ed
+  into `prim.mode` at `:1313-1375`). Capture is switched on by the specs
+  packet's enable bit instead.
 
 The capture is done by the **coordinate shader** in the binning pass. The data
 specs index the coordinate shader's VPM output, so the TF varyings must be
-written to the coordinate shader's VPM segment after the position header. Mesa,
-not verified here:
+written to the coordinate shader's VPM segment after its header. In Mesa 26.2.1:
 
-- `src/gallium/drivers/v3d/v3d_program.c:L?`
-  `v3d_set_transform_feedback_outputs()` builds `so->tf_specs[]` (and
-  `tf_specs_psiz[]`) from `pipe_stream_output_info`, and puts the TF outputs
-  into the coordinate shader key (`used_outputs`) so the compiler writes them
-  to the VPM.
-- `src/gallium/drivers/v3d/v3dx_emit.c:L?` (`v3dX(emit_state)`, the
-  `V3D_DIRTY_STREAMOUT` block) emits `TRANSFORM_FEEDBACK_SPECS` with the specs
-  and one `TRANSFORM_FEEDBACK_BUFFER` per bound target.
-- `src/gallium/drivers/v3d/v3dx_draw.c:L?`: `v3d_update_primitive_counters()`
-  (the primitive counts are worked out on the CPU from the vertex count and
-  the room left in each buffer), and the job flush for a buffer that TF wrote
-  and a later draw reads.
-- `src/broadcom/compiler/v3d_nir_lower_io.c:L?` and `nir_to_vir.c:L?`: the
-  coordinate shader's VPM output with the TF outputs (`num_used_outputs`).
+- `src/gallium/drivers/v3d/v3d_program.c:79-175`
+  `v3d_set_transform_feedback_outputs()` lists the captured components per
+  buffer as VPM slots (padding gaps with `POS.x`, `:105-111`). The first one
+  is at VPM offset 6, past the `[X, Y, Z, W, Xs, Ys]` header (`:132`,
+  `:138-142`). It packs one spec per run of at most 16 values (`:134-145`).
+  It also packs a second set, `tf_specs_psiz`, with every offset one higher,
+  for a shader that writes a point size (`:156-169`). There is a hardware
+  bug note, GFXH-1559: the first spec must not start at value 8
+  (`:147-149`).
+- `src/gallium/drivers/v3d/v3dx_emit.c:645-677` emits `TRANSFORM_FEEDBACK_SPECS`
+  (enable + specs; the psiz set for points with a per-vertex size,
+  `:653-659`). `:679-715` emits one `TRANSFORM_FEEDBACK_BUFFER` per target, at
+  `buffer_offset + offset` with the remaining size in words, and clamps the
+  offset to the buffer (`:696-701`).
+- `src/gallium/drivers/v3d/v3dx_draw.c:202-222` flushes the jobs that read a TF
+  buffer before a draw writes it. `:1382-1386` emits
+  `TRANSFORM_FEEDBACK_FLUSH_AND_COUNT` after every TF draw ("or the GPU may
+  hang"). `:1392-1402` advances each target's offset on the CPU by
+  `u_stream_outputs_for_vertices(mode, count)`.
+- **Counts come from the GPU**: `src/gallium/drivers/v3d/v3d_context.c:151-175`
+  `v3d_update_primitive_counters()` submits the job and waits for the
+  primitive counts it writes, and `PIPE_QUERY_PRIMITIVES_EMITTED` (ES's
+  PRIMITIVES_WRITTEN) reads `tf_prims_generated` after that
+  (`v3d_query_pipe.c:147-155`). Every query end therefore costs a job submit
+  and a wait.
 
 Our V3D compiler produces the coordinate shader itself
 (`src/shaderc/online/v3d_abi.rs`, "the linked program's three QPU programs"),
@@ -113,9 +122,9 @@ so a hardware path would mean: TF outputs appended to the CS's VPM segment, the
 specs and buffer packets in `src/v3d/backend.rs`, and the counters read back
 through `Primitive Counts Feedback` or computed on the CPU as Mesa does.
 
-### 3.2 GC7000UL (i.MX8MP): registers exist, but no driver evidence
+### 3.2 GC7000UL (i.MX8MP): this core has no hardware transform feedback
 
-Verified in the rnndb headers:
+The register headers describe the block:
 
 - a feature bit `chipMinorFeatures6_HWTFB` 0x02000000
   (`driver/src/vivante/hw/common.xml.h:345`);
@@ -128,44 +137,59 @@ Verified in the rnndb headers:
   each with output buffer, input register, component offset and component
   mask (`:900-914`).
 
-What could not be established here:
+Mesa etnaviv **does** drive the block, on cores that have it:
 
-- Whether r6204 has `HWTFB`. Our identify reads `minor_features[0..5]`
-  only, because MINOR_FEATURE_6 at 0xDC has no rnndb name
-  (`driver/docs/vivante-kernel-rust.md:146-149`). galcore's
-  `gc_feature_database.h` (`REG_HWTFB` in the gc7000UL entries the repo
-  already cites, `src/backend.rs:238-240`) would answer it.
-- Whether Mesa etnaviv drives the block at all. As far as is known it does
-  not expose stream output: `src/gallium/drivers/etnaviv/etnaviv_screen.c:L?`
-  should set no `max_stream_output_buffers`, and no `VIVS_TFB_*` should be
-  written anywhere in `src/gallium/drivers/etnaviv/` (verify both with grep).
-  If that holds, nobody has a public encoding for the descriptors, the
-  context buffer or the query buffer beyond the field names.
+- `src/gallium/drivers/etnaviv/etnaviv_screen.c:268` gives 4 stream-output
+  buffers when the core has `ETNA_FEATURE_HWTFB` **or** the `deqp` debug flag
+  is set, and 0 otherwise. The flag is "Hacks to run dEQP GLES3 tests"
+  (`etnaviv_debug.h:60`, `etnaviv_screen.c:77`). The 64/64 component limits
+  are at `:269-270`.
+- `etnaviv_state.c:842` `etna_set_stream_output_targets` binds the buffers.
+  `:1160-1200` fills `TFB_BUFFER_SIZE/STRIDE/ADDR` per buffer and one
+  `TFB_DESCRIPTOR` per captured output. The descriptor's input register is
+  the **fragment shader's input register** for that varying (`:1187-1190`,
+  `find_register_for_components(fs, output)`), so the hardware captures from
+  the VS→FS varying stream.
+- `etnaviv_query_acc_xfb.c:11-23` answers `PRIMITIVES_EMITTED` only with
+  `HWTFB`. `:32-51` drive `TFB_QUERY_BUFFER/COMMAND` and `TFB_FLUSH`.
+- `etnaviv_rasterizer.c:78` maps rasterizer discard to
+  `TFB_CONFIG.RASTERIZER_DISCARD`.
+- `src/etnaviv/hwdb/etna_hwdb.c:114` takes `HWTFB` from galcore's database.
 
-So the GC7000 has a probable hardware path with no reference implementation
-behind it.
+**The i.MX8MP's core lacks it.** Both `gc7000ULN_v123` entries, chip
+0x7000, revision 0x6204, product 0x70003, say `gcFEATURE_BIT_HWTFB 0x0`. The
+first entry is at `src/etnaviv/hwdb/nxp/gc_feature_database.h:18839-18843`,
+its HWTFB at `:19202`. The second is at `:19733-19737`, its HWTFB at `:20096`.
+These are the two entries `src/backend.rs:238-240` already cites for this
+board. The older `gc7000UL_6200` entry (`:15263`) says 0 too, at `:15626`.
+Mesa's own dEQP-GLES3 runs on this core claim 4 buffers only through the debug
+hack.
+
+So the GC7000UL has no capture path. The register block is for other
+Vivante cores.
 
 ### 3.3 PowerVR BXS-4-64 (AM62P): no capture path
 
-Mesa's PowerVR driver is Vulkan only (`src/imagination/vulkan/`) and does not
-implement `VK_EXT_transform_feedback`. Verify that it is absent from
-`pvr_physical_device.c:L?` `pvr_get_device_extensions`. The vertex USC program
-writes its outputs into the vertex output buffer that the TA consumes, and from
-there they go to the parameter buffer. No stream-out unit is documented. The
-remaining option is a vertex-shader variant that stores its outputs to memory
-through USC store instructions. Our online USC back end has no memory stores
-(`src/shaderc/online/powervr/`), and Mesa's pco would be the reference only
-where it lowers SSBO stores in a vertex stage, which ES 3.0 does not need. This
-is §6, rejected alternative R3.
+Mesa's PowerVR driver is Vulkan only (`src/imagination/vulkan/`), and its
+extension table has no `EXT_transform_feedback`
+(`pvr_physical_device.c:122-220`, `pvr_physical_device_get_supported_extensions`).
+It also reports `vertexPipelineStoresAndAtomics = false` (`:258`): Mesa does
+not let a vertex shader store to memory on this GPU at all. The vertex USC
+program writes its outputs into the vertex output buffer that the TA consumes,
+and from there they go to the parameter buffer. No stream-out unit is
+documented. A vertex-shader variant that stores its outputs to memory would
+need USC stores in a vertex stage. Neither Mesa nor our online USC back end
+(`src/shaderc/online/powervr/`) does that, so there is no reference
+implementation to follow. This is §6, rejected alternatives R2 and R3.
 
 ## 4. Decision
 
 | GPU | capture | rasterizer discard | PRIMITIVES_WRITTEN |
 |---|---|---|---|
 | all three, first | **CPU capture in the GL core** (§4.1) | GL core: skip the draw and the clear | counted by the CPU capture |
-| V3D 4.2, later, optional | hardware TF through the coordinate shader (§3.1), behind the same GL interface | unchanged | from `Primitive Counts Feedback` or the CPU count |
-| GC7000UL | CPU only until the HWTFB bit and an encoding are shown | unchanged | CPU |
-| PowerVR | CPU only | unchanged | CPU |
+| V3D 4.2, later, optional | hardware TF through the coordinate shader (§3.1), behind the same GL interface | unchanged | the GPU's primitive counts, with a submit and wait, as Mesa does |
+| GC7000UL | CPU only: r6204 has no HWTFB (§3.2) | unchanged | CPU |
+| PowerVR | CPU only: no stream-out, no VS stores (§3.3) | unchanged | CPU |
 
 ### 4.1 Why CPU capture first, on every GPU
 
@@ -255,12 +279,19 @@ from the offline table too.
 Only when an application needs the speed, and only after the CPU path passes
 the dEQP TF group on the Pi 4 (it is the oracle for the hardware path).
 Interface: the back end gets `GlesDraw.tf: Option<&GlesTfState>` (buffer
-addresses and sizes, specs, current offsets). It returns the primitives
-written, or the GL core keeps counting on the CPU as Mesa does. Constraint: a
-spec covers at most 16 consecutive 32-bit values and there are 4 buffers
-(§3.1), which covers ES 3.0's 64 interleaved and 4 × 4 separate. Pause/resume
-needs `Primitive Counts Feedback` op 2/3 then 8, store and reload of the buffer
-state (`v3d_packet.xml:711-720`). Not part of tf-capture.
+addresses and sizes, specs, current offsets). With ES 3.0's no-overflow rule,
+the GL core already knows each draw's vertex and primitive counts, so it can
+keep advancing offsets and counting on the CPU. Mesa advances its offsets on
+the CPU too (`v3dx_draw.c:1392-1402`). That spares the submit-and-wait Mesa
+pays for its counts (`v3d_context.c:151-175`). Constraints from §3.1:
+
+- a spec covers at most 16 consecutive values, and there are 4 buffers. That
+  covers ES 3.0's 64 interleaved and 4 × 4 separate;
+- the specs start at VPM value 6, and 7 with a point size;
+- GFXH-1559;
+- a `TRANSFORM_FEEDBACK_FLUSH_AND_COUNT` after each TF draw.
+
+Not part of tf-capture.
 
 ## 5. GL-layer specification (tf-api)
 
@@ -309,9 +340,9 @@ struct TfBinding { buffer: GLuint /* slot */, offset: GLintptr, size: GLsizeiptr
 - The **generic** `GL_TRANSFORM_FEEDBACK_BUFFER` binding is context state.
   The field `GlContext::bound_transform_feedback_buffer` already exists
   (`gl_context.h:261`, ABI-pinned at offset 23584), and Mesa keeps it as
-  `ctx->TransformFeedback.CurrentBuffer`, outside the object (verify in
-  `src/mesa/main/transformfeedback.c:L?`). The **indexed** bindings, START
-  and SIZE are object state.
+  `ctx->TransformFeedback.CurrentBuffer`, outside the object
+  (`src/mesa/main/transformfeedback.c:188`, `:215`, `:566`). The **indexed**
+  bindings, START and SIZE are object state.
 - `glBindBufferBase/Range(GL_TRANSFORM_FEEDBACK_BUFFER, i, buf, ...)` sets
   `bind[i]` of the **bound** object and the generic binding. Buffer slots go
   through `names::slot_of`, as `bind_uniform_buffer` does (`es3.rs:969-985`).
@@ -332,11 +363,13 @@ struct TfBinding { buffer: GLuint /* slot */, offset: GLintptr, size: GLsizeiptr
   defers the free while it is non-zero, and the name is freed (`glIsBuffer`
   false) at once.
 - **Deleting a TF object**: deleting the bound one rebinds 0. Deleting an
-  active one is `GL_INVALID_OPERATION` and deletes **nothing** in that call
-  (ES 3.0 2.15.1, verify whether the call stops at the first or deletes the
-  others; dEQP `negative_api.transform_feedback.delete_transform_feedbacks`
-  and `lifetime.delete_active.transform_feedback` are the referee).
-  Releasing an object drops its buffer refs.
+  active one is `GL_INVALID_OPERATION`. Mesa walks the list in order and
+  returns at the first active object, so the names before it are already
+  deleted and the rest are not (`transformfeedback.c:1218-1228`). Do the
+  same. The referees are dEQP
+  `negative_api.transform_feedback.delete_transform_feedbacks` and
+  `lifetime.delete_active.transform_feedback`. Releasing an object drops its
+  buffer refs.
 - `glBindTransformFeedback` on a name never generated (or deleted) is
   `GL_INVALID_OPERATION`. TF objects need glGen (ES 3.0 2.15.1), and
   `lifetime.bind_no_gen.transform_feedback` expects the refusal. That is
@@ -367,19 +400,23 @@ Per program (in `program.rs`'s `ProgramState`, next to `tf_varyings` at
    `count` elements).
 2. `name[i]`: element i of an array output. `i` out of range is a link error.
 3. `gl_Position` (vec4) and `gl_PointSize` (float).
-4. Anything else is a link error: "transform feedback varying 'X' is not an
-   output of the vertex shader". Matching is case-sensitive. A struct member
-   (`s.m`) is refused with its own message unless ES 3.0 2.11.8 allows it
-   (verify. dEQP's mustpass captures no struct members, as far as its
-   names show).
-5. The same name twice (or an element and its whole array) is a link error
-   (verify the exact rule. Mesa: "specified multiple times",
-   `src/compiler/glsl/link_varyings.cpp:L?`, `tfeedback_decl::store`).
-6. Limits: interleaved, the total components > 64, is a link error that names
-   `GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS`. Separate, one varying's
-   components > 4 (a `mat2` or larger, a `vec2[3]`), is a link error that
-   names `..._SEPARATE_COMPONENTS`. The count > 4 for separate is caught
-   earlier, at the call (§5.6).
+4. Anything else is a link error. Mesa's message is "Transform feedback
+   varying X undeclared." (`src/compiler/glsl/gl_nir_link_varyings.c:2137-2147`).
+   A subscript on a non-array is "...requested, but X is not an array."
+   (`:1826-1830`). Matching is case-sensitive. A struct member (`s.m`) is
+   refused with its own message unless ES 3.0 2.11.8 allows it (verify. As
+   far as its names show, dEQP's mustpass captures no struct members).
+5. The same variable **and the same array index** twice is a link error,
+   "Transform feedback varying X specified more than once." Mesa reads the
+   rule that way so that the elements of one array can be captured separately
+   (`gl_nir_link_varyings.c:2188-2206`). So `v[0]` and `v[1]` are fine, and
+   `v[0]` twice is not.
+6. Limits: interleaved, the total components > 64, is a link error. Mesa's
+   message is "The MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS limit has
+   been exceeded." (`:1952-1959`). Separate, one varying's components > 4 (a
+   `mat2` or larger, a `vec2[3]`) gives "Transform feedback varying X exceeds
+   MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS." (`:1848-1855`). The count > 4
+   for separate is caught earlier, at the call (§5.6).
 7. A declared output that the shader never writes is accepted, and captures
    0 (the value is undefined. 0 is deterministic for tests).
 
@@ -416,9 +453,9 @@ While the bound object is active and **not paused**:
 - `glDrawArrays` / `glDrawArraysInstanced`: validated (§5.6), then captured
   (§7.2), then drawn on the GPU unless discard is on (§5.8).
 - `glDrawElements`, `glDrawRangeElements`, `glDrawElementsInstanced`:
-  `GL_INVALID_OPERATION` (ES 3.0 2.15.2, verify; dEQP
-  `negative_api.vertex_array.draw_elements*` expects it in an ES 3.0
-  context).
+  `GL_INVALID_OPERATION` "regardless of mode". Mesa quotes the ES 3.1 text,
+  which keeps 3.0's rule, and applies it to every ES 3 context without
+  `OES_geometry_shader` (`src/mesa/main/draw_validate.c:510-538`).
 
 While paused, or with no object active, every draw is as today.
 
@@ -430,44 +467,60 @@ The checks that come first today keep their place.
 `glTransformFeedbackVaryings(program, count, varyings, mode)`:
 not a program → `not_a_program` (as today). count < 0 → `INVALID_VALUE`.
 mode not INTERLEAVED/SEPARATE → `INVALID_ENUM`. SEPARATE and count > 4 →
-`INVALID_VALUE`. Count > 0 with `varyings` NULL: record nothing and
-`INVALID_VALUE` (no rule in the spec. This is the repo's NULL convention,
-as in glDrawBuffers).
+`INVALID_VALUE`. The current TF object active, even if paused →
+`INVALID_OPERATION`. Mesa checks that first, from ARB_transform_feedback2
+(`transformfeedback.c:925-933`); verify that ES 3.0 2.15 has it. Mesa's
+order is: active, mode, count, program (`:929-957`). Today's order (program
+first, `es3.rs:440-456`) is what dEQP passed against, so keep it and add the
+active check last. Count > 0 with `varyings` NULL: record nothing and
+`INVALID_VALUE`. There is no rule in the spec. This is the repo's NULL
+convention, as in glDrawBuffers.
 
 `glBindTransformFeedback(target, id)`: target ≠ `GL_TRANSFORM_FEEDBACK` →
 `INVALID_ENUM`. The bound object active and not paused → `INVALID_OPERATION`.
-id not generated → `INVALID_OPERATION`.
+id not generated → `INVALID_OPERATION`. This is Mesa's order
+(`transformfeedback.c:1185-1196`, `:1160-1165`).
 
 `glDeleteTransformFeedbacks(n, ids)`: n < 0 → `INVALID_VALUE`. Any id active →
-`INVALID_OPERATION` (§5.2).
+`INVALID_OPERATION` (§5.2; `transformfeedback.c:1210-1228`).
 
-`glBeginTransformFeedback(mode)`: mode ∉ {POINTS, LINES, TRIANGLES} →
-`INVALID_ENUM`. Already active → `INVALID_OPERATION`. No current program, or
-the program has 0 linked TF varyings → `INVALID_OPERATION`. A binding the
-program needs has no buffer (interleaved: binding 0; separate: bindings
-0..count-1) → `INVALID_OPERATION`.
+`glBeginTransformFeedback(mode)`: No current program → `INVALID_OPERATION`.
+The program has 0 linked TF varyings → `INVALID_OPERATION`. mode ∉ {POINTS,
+LINES, TRIANGLES} → `INVALID_ENUM`. Already active → `INVALID_OPERATION`. A
+binding the program needs has no buffer (interleaved: binding 0; separate:
+bindings 0..count-1) → `INVALID_OPERATION`. That is Mesa's order
+(`transformfeedback.c:345-396`). Today's code checks the mode first
+(`es3.rs:393`). Take dEQP's negative_api section order where they disagree.
 
 `glEndTransformFeedback()`: not active → `INVALID_OPERATION`.
 `glPauseTransformFeedback()`: not active, or already paused →
 `INVALID_OPERATION`.
 `glResumeTransformFeedback()`: not active, or not paused →
-`INVALID_OPERATION`. Current program ≠ `program` at Begin →
-`INVALID_OPERATION` (verify that this is in ES 3.0 and not only 3.1+).
+`INVALID_OPERATION` (`transformfeedback.c:1327-1330`). Current program ≠
+`program` at Begin → `INVALID_OPERATION` (`:1333-1342`, quoting
+ARB_transform_feedback2; verify ES 3.0).
+`glPauseTransformFeedback()`: Mesa `:1276-1278`.
+`glEndTransformFeedback()`: Mesa `:538-539`.
 
-`glUseProgram(p)`: TF active and not paused → `INVALID_OPERATION`.
-`glLinkProgram(p)`: p in use by an active TF object (the current program,
-active, paused or not) → `INVALID_OPERATION` (verify "paused or not").
+`glUseProgram(p)`: TF active and not paused → `INVALID_OPERATION`
+(`src/mesa/main/shaderapi.c:2213-2216`).
+`glLinkProgram(p)`: p in use by **any** active TF object, bound or not,
+paused or not → `INVALID_OPERATION`. Mesa: `shaderapi.c:1385-1395`, which
+walks every object, `transformfeedback.c:59-90`. So `program` at Begin is
+per object, and the check walks the pool.
 `glProgramBinary`: the same rule as link.
 
-`glBindBufferBase/Range(GL_TRANSFORM_FEEDBACK_BUFFER, i, ...)`: i ≥ 4 →
-`INVALID_VALUE`. Range: size ≤ 0 → `INVALID_VALUE`, offset or size not a
-multiple of 4 → `INVALID_VALUE`. The bound object active (paused or not) →
-`INVALID_OPERATION`. Today's `offset < 0 || size <= 0` check (`es3.rs:1001`)
+`glBindBufferBase/Range(GL_TRANSFORM_FEEDBACK_BUFFER, i, ...)`: The bound
+object active (paused or not) → `INVALID_OPERATION`, before the index check
+(`transformfeedback.c:594-600`, `:668-680`). i ≥ 4 → `INVALID_VALUE`. Range:
+size ≤ 0 → `INVALID_VALUE`, offset or size not a multiple of 4 →
+`INVALID_VALUE`. Today's `offset < 0 || size <= 0` check (`es3.rs:1001`)
 stays first.
 
 Draws while active and not paused: mode not compatible with `prim_mode`
 (POINTS ← POINTS; LINES ← LINES, LINE_LOOP, LINE_STRIP; TRIANGLES ←
-TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN) → `INVALID_OPERATION`. An indexed
+TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN) → `INVALID_OPERATION`. This is
+Mesa's mask, `draw_validate.c:358-374`. An indexed
 draw → `INVALID_OPERATION`. Not enough room: for some binding,
 `written + vertices × stride > avail` → `INVALID_OPERATION`, nothing captured
 and nothing drawn. Here vertices = primitives(mode, count) × verts-per-prim ×
@@ -526,32 +579,42 @@ With `GL_RASTERIZER_DISCARD` enabled:
 - **Clears**: `glClear` and `glClearBuffer{fv,iv,uiv,fi}` validate their
   arguments, then do nothing (no pending clear is recorded, `draw.rs:46-140`).
   This comes from dEQP's `rasterizer_discard.*.clear_{color,depth,stencil}`
-  (9 of the 51). Mesa returns early on `ctx->RasterDiscard` in
-  `src/mesa/main/clear.c:L?` (`clear()` and the `ClearBuffer*` paths, verify).
+  (9 of the 51). Mesa returns on `ctx->RasterDiscard` in `glClear` **after**
+  the incomplete-framebuffer error (`src/mesa/main/clear.c:176-183`), and in
+  `glClearBuffer*` after their argument checks (`:717-718`, plus the
+  per-buffer conditions at `:372`, `:392`, `:485`, `:585`, `:619`). Do the
+  same: errors first, then return.
 - **Not affected**: `glReadPixels`, `glBlitFramebuffer`, `glCopyTex*`,
   `glGenerateMipmap`, and uploads (verify Blit against ES 3.0 4.3.3. If ES
   3.0 is silent, leave it unaffected as GL does).
-- The GC7000's `TFB_CONFIG.RASTERIZER_DISCARD` bit (§3.2) is **not** used.
-  The GL core drops the work before the back end, the same on all three.
+- The GC7000's `TFB_CONFIG.RASTERIZER_DISCARD` bit (§3.2; etnaviv sets it at
+  `etnaviv_rasterizer.c:78`) is **not** used. It belongs to a unit r6204
+  lacks, and the GL core drops the work before the back end, the same on all
+  three.
 
 This part needs no capture, so tf-api ships it and the 51 cases can pass
 before tf-capture.
 
 ## 6. Rejected alternatives
 
-- **R1: Hardware TF on all three GPUs first.** The PowerVR has none (§3.3).
-  The GC7000's needs an undocumented encoding and an unread feature bit
-  (§3.2). Only the V3D's is documented (§3.1). Three paths, two of them
-  unverifiable, against one host-testable path: rejected for the first
-  version. The V3D path is kept as §4.3.
+- **R1: Hardware TF on all three GPUs.** Not possible. The PowerVR has none
+  (§3.3), and the i.MX8MP's GC7000UL lacks HWTFB (§3.2). Only the V3D has
+  it (§3.1). A V3D-only hardware path plus a CPU path for the other two would
+  be two implementations from the start. Rejected for the first version. The
+  V3D path is kept as §4.3.
+- **R1b: Use the GC7000 TFB block anyway**, as Mesa's `deqp` debug flag
+  claims it (`etnaviv_screen.c:268`). The vendor's database says this core
+  does not have the unit. Programming it would be undefined behaviour on
+  silicon that the vendor says lacks it. Rejected.
 - **R2: GPU vertex pass that writes to a scratch buffer by `gl_VertexID`,
   then CPU primitive assembly.** It would avoid the evaluator's precision and
-  speed costs, but needs a memory-store vertex shader on each GPU: USC
-  stores (none in our back end), QPU TMU writes (V3D 4.2 has them, but our
-  compiler emits none for a VS), and GC7000 stores. That is three new code
-  generator features to save CPU time that dEQP does not need. Rejected for
-  now. It is the natural successor if a PowerVR or GC7000 application needs
-  fast TF.
+  speed costs, but needs a memory-store vertex shader on each GPU. On the
+  PowerVR, Mesa does not allow vertex-stage stores at all
+  (`pvr_physical_device.c:258`). Our compilers emit no USC stores and no QPU
+  TMU writes in a VS, and there would be GC7000 stores too. That is three new
+  code generator features to save CPU time that dEQP does not need. Rejected
+  for now. It is the natural successor if a PowerVR or GC7000 application
+  needs fast TF.
 - **R3: PowerVR vertex-shader variant that stores to the TF buffer directly**
   (address = f(vertex index, primitive unrolling)). Strips and fans write one
   vertex into several primitives, so the shader would need the unrolled
@@ -568,10 +631,11 @@ before tf-capture.
 - **R6: Expose TF only in builds for the V3D.** dEQP's TF and lifetime groups
   would then stay failed on two of the three boards, for no saving: the CPU
   path is GPU-independent. Rejected.
-- **R7: Report discard to the back ends** (cull everything, the GC7000's
-  `TFB_CONFIG` bit). The draw would still pay the back end's setup, and three
-  back ends would change where one GL-core early return does the same.
-  Rejected.
+- **R7: Report discard to the back ends** (cull everything, or the GC7000's
+  `TFB_CONFIG` bit, which etnaviv sets at `etnaviv_rasterizer.c:78` but which
+  belongs to the unit r6204 lacks). The draw would still pay the back end's
+  setup, and three back ends would change where one GL-core early return does
+  the same. Rejected.
 
 ## 7. Items and host tests
 
