@@ -7,8 +7,9 @@ precompiled-only, i.MX8MP gc_gl_test, rpi4 v3d_gl_test, all with
 `-DYAKOGL_WERROR=ON`) and regenerates `driver/rust/src/soc/imx8mp/regs.rs`
 from hal_nxp. Those rows need a west workspace, the Zephyr SDK and a
 hal_nxp checkout. This document records the layout, the exact commands and
-the versions on the nuc node (the ccfarm worker machine), so the same
-environment can be rebuilt elsewhere.
+the versions on the Lepton worker node (ccfarm's name for this machine;
+the user's own checkout is on nuc), so the same environment can be
+rebuilt elsewhere.
 
 The workspace, the SDK and the venv are node-local values registered in
 ccfarm's project environment: `ZEPHYR_WS`, `ZEPHYR_SDK_INSTALL_DIR`,
@@ -19,7 +20,7 @@ machine path is committed into any script.
 ## Layout
 
 The deps cache root is `$CCFARM_DEPS_DIR`
-(`/home/tasuku/.local/share/ccfarm-local/deps/yakogl` on nuc):
+(`/home/tasuku/.local/share/ccfarm-local/deps/yakogl` on Lepton):
 
 ```
 zephyr-ws/                    # ZEPHYR_WS: the west workspace
@@ -41,7 +42,7 @@ deqp-stage1-rpi_4b/sdk/zephyr-sdk-1.0.1 -> ../../zephyr-sdk-1.0.1
 The two symlinks keep the paths baked into the existing stage-1 CTS
 artifacts working after the workspace and the SDK moved to the cache root.
 
-## Versions (measured on nuc, 2026-10-08)
+## Versions (measured on Lepton, 2026-10-08)
 
 | Component | Version |
 |---|---|
@@ -137,7 +138,7 @@ python3 "$REPO/tools/hal-nxp/gen_regs.py" "$WS/modules/hal/nxp" |
   cmp - "$REPO/driver/rust/src/soc/imx8mp/regs.rs"     # identical
 ```
 
-All five rows are green on nuc; the symbol checks ran with `nm` on the
+All five rows are green on Lepton; the symbol checks ran with `nm` on the
 built ELF. The build logs are in `build/zephyr-werror/*.log` in the
 checkout.
 
@@ -156,7 +157,7 @@ property, never committed). It is generated from the board's firmware file:
 driver/tools/mkfwblob.sh "$CCFARM_DEPS_DIR/inputs/rgx.fw.36.53.104.796"
 ```
 
-The script was run on nuc and wrote the blob the builds used; re-running
+The script was run on Lepton and wrote the blob the builds used; re-running
 it leaves the file unchanged (sha256
 `ac0b4f14ebb6af44fef1e9999e2cca1ef07fef46f247bfa8d6744a73d8ac26d3`,
 229,376 firmware bytes). `git check-ignore` confirms it is ignored
