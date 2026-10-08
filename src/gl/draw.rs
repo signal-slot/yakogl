@@ -2322,6 +2322,13 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
     if t.level_defined & 1 == 0 || t.level_bad & 1 != 0 {
         return Some("level 0 has no image, or one with a zero side");
     }
+    /* ES 3.0 3.8.13: an integer (or 32-bit float) texture is complete only
+     * with nearest filtering */
+    if let Some(e) = super::es3_formats::by_index(t.es3_fmt) {
+        if e.incomplete_with(t.min_filter, t.mag_filter) {
+            return Some("an integer or 32-bit float texture filtered by anything but NEAREST (ES 3.0 3.8.13)");
+        }
+    }
     if mips && t.levels < t.chain_levels {
         return Some("a mipmap min filter, but fewer levels uploaded than the chain needs");
     }

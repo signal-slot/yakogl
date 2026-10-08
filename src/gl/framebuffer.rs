@@ -394,6 +394,9 @@ fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Storage> {
             || t.height == 0
             || t.block_bytes != 0
             || !matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
+            /* an ES 3.0 format of es3_formats is no render target, but
+             * RGB10_A2 held as RGBA8 (ES 3.0 table 3.13) */
+            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8)
             || t.grid_cols > 1
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32

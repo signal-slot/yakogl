@@ -99,10 +99,95 @@ pub const GLES_TEXFMT_R32F: u8 = 7;
 pub const GLES_TEXFMT_L8: u8 = 8;
 pub const GLES_TEXFMT_A8: u8 = 9;
 pub const GLES_TEXFMT_LA8: u8 = 10;
+/* OpenGL ES 3.0 sized formats the GL core stores natively when the backend
+ * says it samples them (`sampled_texfmts`), converted on the CPU at upload
+ * (src/gl/es3_formats.rs). Linear rows like RGBA8. Every one is four
+ * components wide, the missing ones stored as (0, 0, 0, 1): R8UI is
+ * RGBA8UI with zeros, which keeps the number of classes a backend must
+ * decode small.
+ *   R11G11B10F  one 32-bit word, r in the low 11 bits (UNSIGNED_INT_10F_11F_11F_REV)
+ *   RGB9E5      one 32-bit word, shared exponent in the top 5 bits
+ *   RGB10A2     one 32-bit word, unsigned normalised, r in the low 10 bits
+ *   RGB10A2UI   the same word, read as unsigned integers
+ *   RGBA8_SNORM four signed normalised bytes
+ *   RGBA8UI/I, RGBA16UI/I, RGBA32UI/I  four integers of that width and sign
+ *   RGBA32F     four floats (RGBA16F is the half-float class above) */
+pub const GLES_TEXFMT_R11G11B10F: u8 = 11;
+pub const GLES_TEXFMT_RGB9E5: u8 = 12;
+pub const GLES_TEXFMT_RGB10A2: u8 = 13;
+pub const GLES_TEXFMT_RGB10A2UI: u8 = 14;
+pub const GLES_TEXFMT_RGBA8_SNORM: u8 = 15;
+pub const GLES_TEXFMT_RGBA8UI: u8 = 16;
+pub const GLES_TEXFMT_RGBA8I: u8 = 17;
+pub const GLES_TEXFMT_RGBA16UI: u8 = 18;
+pub const GLES_TEXFMT_RGBA16I: u8 = 19;
+pub const GLES_TEXFMT_RGBA32UI: u8 = 20;
+pub const GLES_TEXFMT_RGBA32I: u8 = 21;
+pub const GLES_TEXFMT_RGBA32F: u8 = 22;
+
+/// The bit of one texel format in a mask such as [`sampled_texfmts`].
+pub const fn gles_texfmt_bit(f: u8) -> u32 {
+    1u32 << f
+}
+
+const fn texfmts(list: &[u8]) -> u32 {
+    let mut m = 0;
+    let mut i = 0;
+    while i < list.len() {
+        m |= gles_texfmt_bit(list[i]);
+        i += 1;
+    }
+    m
+}
+
+/// The texel formats the PowerVR TPU descriptor sampler reads today
+/// (`pvr/backend.rs`, the texture state): the formats item `formats-pvr`
+/// adds the ES 3.0 classes to this mask as it makes the sampler read them.
+pub const PVR_SAMPLED_TEXFMTS: u32 = texfmts(&[
+    GLES_TEXFMT_RGBA8,
+    GLES_TEXFMT_RGB565,
+    GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_R16F,
+    GLES_TEXFMT_R32F,
+    GLES_TEXFMT_L8,
+    GLES_TEXFMT_A8,
+    GLES_TEXFMT_LA8,
+]);
+/// The GC7000 texture descriptor's (`vivante/texture.rs`); `formats-gc`.
+pub const GC_SAMPLED_TEXFMTS: u32 = PVR_SAMPLED_TEXFMTS;
+/// The V3D TMU binding's (`v3d/texture.rs` `tmu_format`): RGBA8, L8, A8, LA8
+/// and R32F only; `formats-v3d`.
+pub const V3D_SAMPLED_TEXFMTS: u32 =
+    texfmts(&[GLES_TEXFMT_RGBA8, GLES_TEXFMT_L8, GLES_TEXFMT_A8, GLES_TEXFMT_LA8, GLES_TEXFMT_R32F]);
+
+/// Test hook: texel formats a host test adds to the mask, to exercise the
+/// native storage classes before any backend samples them.
+#[cfg(test)]
+pub static TEST_EXTRA_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// The texel formats (a mask of [`gles_texfmt_bit`]) this build's backend
+/// samples. The GL core stores an ES 3.0 sized texture (src/gl/es3_formats.rs)
+/// in the first of its storage classes in this mask, and refuses the format
+/// by name when it has none. The classes the original tables hold (RGBA8, the
+/// float trio, L8/A8/LA8, RGB565) are listed as sampled where the sampler
+/// reads them, which only matters to the formats that fall back to them.
+pub fn sampled_texfmts() -> u32 {
+    #[cfg(feature = "gpu-powervr")]
+    let m = PVR_SAMPLED_TEXFMTS;
+    #[cfg(feature = "gpu-vivante")]
+    let m = GC_SAMPLED_TEXFMTS;
+    #[cfg(feature = "gpu-v3d")]
+    let m = V3D_SAMPLED_TEXFMTS;
+    #[cfg(test)]
+    let m = m | TEST_EXTRA_SAMPLED.load(core::sync::atomic::Ordering::Relaxed);
+    m
+}
 
 /// Bytes per texel of a linear (non-block) texel format.
 pub const fn gles_texfmt_bytes(f: u8) -> u32 {
-    if f == GLES_TEXFMT_RGBA16F {
+    if f == GLES_TEXFMT_RGBA32F || f == GLES_TEXFMT_RGBA32UI || f == GLES_TEXFMT_RGBA32I {
+        16
+    } else if f == GLES_TEXFMT_RGBA16F || f == GLES_TEXFMT_RGBA16UI || f == GLES_TEXFMT_RGBA16I {
         8
     } else if f == GLES_TEXFMT_R16F || f == GLES_TEXFMT_RGB565 || f == GLES_TEXFMT_LA8 {
         2

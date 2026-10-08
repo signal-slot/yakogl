@@ -21,6 +21,7 @@ pub mod buffer;
 pub mod draw;
 pub mod egl;
 pub mod es3;
+pub mod es3_formats;
 pub mod etc1;
 pub mod framebuffer;
 pub mod names;
@@ -32,5 +33,7 @@ pub mod texture;
 pub mod vao;
 pub mod vertex;
 
+#[cfg(test)]
+mod es3_format_tests;
 #[cfg(test)]
 mod pool_tests;
