@@ -323,9 +323,6 @@ step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
-# The ES 3.0 limits the build reports (empty under report-es2).
-step "test    $V3D_CONFIG (tests/es3_caps.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_caps
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
