@@ -123,9 +123,11 @@ def check_dotconfig(path, ms4, gles3=False):
     c = parse_dotconfig(path)
     bad = conformance_rules(c, path, gles3=gles3, ms4=ms4)
     if gles3:
-        # a GLES3 image reports ES 3.0: Kconfig writes a disabled bool as "# CONFIG_X is not set"
-        if c.get('DEQP_REPORT_ES2') == 'y':
-            bad.append('%s: CONFIG_DEQP_REPORT_ES2=y (dEQP-GLES3 judges an ES 3.0 context)' % path)
+        # a GLES3 image reports ES 3.0: Kconfig writes a disabled bool as "# CONFIG_X is not set".
+        # Both symbols: YAKOGL_REPORT_ES2 is default y, so DEQP_REPORT_ES2=n alone still reports ES 2.0.
+        for s in ('DEQP_REPORT_ES2', 'YAKOGL_REPORT_ES2'):
+            if c.get(s) == 'y':
+                bad.append('%s: CONFIG_%s=y (dEQP-GLES3 needs an ES 3.0 context)' % (path, s))
         return bad
     for s in ('YAKOGL_REPORT_ES2', 'DEQP_REPORT_ES2'):
         if c.get(s) != 'y':
@@ -305,6 +307,12 @@ def self_test():
                    ('imx8mp-sweep.config', False), ('pi4-sweep.config', False)):
         ok(check_dotconfig(os.path.join(fixtures, f), ms4) == [],
            'fixture %s: a conformance image passes' % f)
+    # --gles3: both REPORT_ES2 symbols off passes; DEQP_REPORT_ES2=n alone (YAKOGL_REPORT_ES2 left y) is refused
+    ok(check_dotconfig(os.path.join(fixtures, 'bad-report-es3.config'), False, gles3=True) == [],
+       'fixture bad-report-es3.config: a GLES3 image (both REPORT_ES2 off) passes --gles3')
+    g3 = check_dotconfig(os.path.join(fixtures, 'bad-gles3-report.config'), False, gles3=True)
+    ok(any('YAKOGL_REPORT_ES2' in b for b in g3),
+       'fixture bad-gles3-report.config: --gles3 refuses it, naming YAKOGL_REPORT_ES2 (still ES 2.0)')
     for f, ms4, sym in (('bad-compiler-missing.config', False, 'YAKOGL_SHADERC_ONLINE'),
                         ('bad-shaderc-offline.config', False, 'YAKOGL_SHADERC_OFFLINE'),
                         ('bad-precompiled-only.config', False, 'YAKOGL_SHADERC_PRECOMPILED_ONLY'),

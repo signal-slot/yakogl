@@ -20,7 +20,8 @@
 # $IMX8MP_OUT/<name>.table.conf, the fragment then used. That image runs every row by its
 # selector: `TREE_IMAGE=<image> tools/board.sh imx8mp tree <table> <outdir>` (the step the old
 # i.MX8MP tree runner did before its jumps, moved here in Step 1 of driver/docs/one-method.md).
-# DEQP_MODULE=gles3 builds the dEQP-GLES3 image (-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n; DEQP_STAGE1 must
+# DEQP_MODULE=gles3 builds the dEQP-GLES3 image (-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n
+# -DCONFIG_YAKOGL_REPORT_ES2=n: the library reports ES 3.0; DEQP_STAGE1 must
 # be a stage 1 built with DEQP_MODULE=gles3) and filters like dEQP-GLES3.info.*; the gles2 default is unchanged.
 # tools/cts/imx8mp-gles3-tree.txt is the whole GLES3 mustpass in 133 table rows (docs/es3-board-recipe-imx8mp.md).
 # Name the image after the commit it is built from: a result is reported against that hash.
@@ -55,7 +56,8 @@ modargs=()
 case "${DEQP_MODULE:-gles2}" in
 	gles2) ;;
 	gles3)
-		modargs=(-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n)
+		# both: YAKOGL_REPORT_ES2 is default y, so DEQP_REPORT_ES2=n alone (no select) still reports ES 2.0
+		modargs=(-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n)
 		[ -f "$DEQP_STAGE1/build/modules/gles3/libdeqp-gles3-package.a" ] || { echo "imx8mp: $DEQP_STAGE1 has no gles3 stage 1 (DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-stage1.sh)" >&2; exit 2; } ;;
 	*) echo "imx8mp: DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" >&2; exit 2 ;;
 esac
@@ -69,7 +71,7 @@ rc=$?
 echo "rc=$rc"
 grep -E " error|Error" "$IMX8MP_OUT/$name.log" | head -10
 if [ "${DEQP_MODULE:-gles2}" = gles3 ]; then
-	# conformance for GLES3: the compiler, no precompiled tier, REPORT_ES2 not y (Kconfig writes "# CONFIG_DEQP_REPORT_ES2 is not set")
+	# conformance for GLES3: the compiler, no precompiled tier, neither REPORT_ES2 y (Kconfig writes "# CONFIG_X is not set")
 	python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" --gles3 2>&1 || echo "imx8mp: warning: not a conformance image"
 	exit $rc
 fi

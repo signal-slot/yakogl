@@ -97,7 +97,10 @@ DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3 \
 ```
 
 What this adds:
-- `-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n`. The sample's CMake refuses gles3 when REPORT_ES2 is on.
+- `-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n`. Both are needed. The
+  sample's CMake refuses gles3 when `DEQP_REPORT_ES2` is on. `YAKOGL_REPORT_ES2` is `default y`
+  (`zephyr/Kconfig`), so turning off only `DEQP_REPORT_ES2` (which drops its `select`) still leaves the
+  library reporting OpenGL ES 2.0, and dEQP-GLES3 does not run on an ES 2.0 context.
 - `CONFIG_DEQP_CASE_TABLE`: the 133 rows joined by `;`, written to `$IMX8MP_OUT/es3-$HEAD8.table.conf`.
 
 Expected output:
@@ -109,10 +112,11 @@ check-deqp-images: the dEQP image recipes build what conformance needs
 ```
 
 The last line comes from `check-deqp-images.py --config <.config> --gles3`. It checks three things: the
-in-process compiler is present, there is no precompiled tier, and REPORT_ES2 is not `y`. Kconfig writes a
-disabled bool as `# CONFIG_DEQP_REPORT_ES2 is not set`, so there is no `=n` line to grep for. A line
-`check-deqp-images: FAIL ... CONFIG_DEQP_REPORT_ES2=y` followed by `imx8mp: warning: not a conformance image`
-means the switch did not take effect.
+in-process compiler is present, there is no precompiled tier, and neither `DEQP_REPORT_ES2` nor
+`YAKOGL_REPORT_ES2` is `y`. Kconfig writes a disabled bool as `# CONFIG_X is not set`, so there is no `=n`
+line to grep for. A line `check-deqp-images: FAIL ... CONFIG_YAKOGL_REPORT_ES2=y` (or `CONFIG_DEQP_REPORT_ES2=y`)
+followed by `imx8mp: warning: not a conformance image` means that switch did not take effect, and the image
+would report ES 2.0.
 
 The image is `$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin`. Name it after the commit it is built from, because
 results are reported against that hash.

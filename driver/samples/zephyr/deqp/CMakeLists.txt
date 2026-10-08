@@ -22,8 +22,9 @@ include("${PVR_SAMPLES}/common/sample.cmake")
 
 # Which dEQP package: gles2 (default) or gles3, against a stage 1 built with
 # the same MODULE (tools/cts/cts-build-zephyr.sh). A gles3 image must let the
-# library report ES 3.0 (CONFIG_DEQP_REPORT_ES2=n): dEQP-GLES3 on an ES 2.0
-# context is not supported.
+# library report ES 3.0: CONFIG_DEQP_REPORT_ES2=n and CONFIG_YAKOGL_REPORT_ES2=n
+# (the latter is default y, so dropping the select alone still reports ES 2.0).
+# dEQP-GLES3 on an ES 2.0 context is not supported.
 if(NOT DEQP_MODULE)
   set(DEQP_MODULE gles2)
 endif()
