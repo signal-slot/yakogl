@@ -1289,7 +1289,7 @@ impl<'a> Sema<'_, 'a> {
                     /* A uniform, an attribute, and a varying in the fragment
                      * stage, are read-only (sections 4.3.3 to 4.3.5). */
                     lvalue: !matches!(s.storage, StorageQualifier::Uniform | StorageQualifier::Attribute)
-                        && !(s.storage == StorageQualifier::Varying && self.stage == Stage::Fragment)
+                        && (s.storage != StorageQualifier::Varying || self.stage != Stage::Fragment)
                         && s.storage != StorageQualifier::Const,
                     constant: matches!(
                         s.storage,
@@ -1318,7 +1318,7 @@ impl<'a> Sema<'_, 'a> {
                 /* ES 1.00 section 5.7 indexes with an `int`; ES 3.00 section
                  * 5.7 with "an integer expression" of either signedness. */
                 let integral = i.ty.base == BaseType::Int || (self.ast.es3 && i.ty.base == BaseType::Uint);
-                if !i.ty.is_unknown() && !(integral && !i.ty.is_array()) {
+                if !i.ty.is_unknown() && (!integral || i.ty.is_array()) {
                     return Err(Error::new(0, "[]", "an array index must be an integer"));
                 }
                 Ok(Val { ty: self.index_type(&b.ty), lvalue: b.lvalue, constant: b.constant })
@@ -2040,9 +2040,9 @@ impl<'a> Sema<'_, 'a> {
         } else if grad {
             true
         } else if lod {
-            !(s.shadow && (cube || arr)) && !(offset && cube)
+            (!s.shadow || (!cube && !arr)) && (!offset || !cube)
         } else if offset {
-            !cube && !(s.shadow && arr)
+            !cube && (!s.shadow || !arr)
         } else {
             true
         };
@@ -2089,7 +2089,7 @@ impl<'a> Sema<'_, 'a> {
          * never `texture` on a sampler2DArrayShadow, and only in a fragment
          * shader. */
         if tys.len() == k + 1 {
-            let biasable = !fetch && !lod && !grad && !(name == "texture" && s.shadow && arr);
+            let biasable = !fetch && !lod && !grad && (name != "texture" || !s.shadow || !arr);
             if !biasable || !is(k, BaseType::Float) {
                 return Err(bad());
             }

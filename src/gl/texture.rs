@@ -9195,11 +9195,9 @@ mod tests {
             assert_eq!(gl.error(), GL_NO_ERROR);
             assert_eq!(gl.ctx().objs().textures[MAX_TEXTURES + 3].width, 1);
         }
-        assert!(
-            gl.logs().iter().any(|l| l == "glTexImage3D(3D): not available on OpenGL ES 2.0 (GL_INVALID_OPERATION)")
-                || true,
-            "logged at most four times per process"
-        );
+        /* the "glTexImage3D(3D): not available on OpenGL ES 2.0" log line is
+         * written at most four times per process, so this test cannot
+         * expect it */
     }
 
     #[test]
