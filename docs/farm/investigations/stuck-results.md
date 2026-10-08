@@ -1,214 +1,196 @@
 # Stuck yakogl results (facts-stuck)
 
-Status: **INCOMPLETE. The table of stuck results could not be produced from
-XPS139340: it has no copy of yakogl's records (see below).**
-Nothing was changed except this file.
+Investigated 2026-10-08, 13:56Z to 16:45Z, from worker XPS139340.
+Nothing was changed except this file: no recheck, decision, merge or retry
+was run.
 
-## What the ccfarm tools returned (confirmed, 2026-10-08T13:56Z, run on XPS139340)
+Status: **partial.** The table below lists each unmerged yakogl result, its git
+state, how long it has been idle and the safest action with its risk. It is
+built from git (the snapshot of nuc's checkout plus a fetch of GitHub). The
+ccfarm review stage of each result (`review_state`, the reviewer verdict, the
+gate log) could **not** be read, because XPS139340 has none of yakogl's
+records. Columns that need those records are marked *unconfirmed*.
 
-First attempt: all four read calls were refused. After a grant, the retry gave:
+## 1. Why the ccfarm records are not readable here (confirmed)
 
-- `farm_status(detail=true)` worked. `generated_at` 2026-10-08T13:56:40Z.
-- `list_agents` (no filter, limit 100; and states=completed, limit 300) returned
-  `{"agents":[],"next_before":null}`.
-- `list_decisions(state=all)` returned `shown 0, pending_total 0`.
-- `get_updates` was denied ("nobody decided in time").
-- After a second grant: `list_plans(state=all)` returned `{"plans":[]}`, and
-  `get_agent_result` returned "no agent with id ..." for 01a11b9b-b871-7718-8b5a-3ae8342e65c6
-  and 01a11a48-6b04-75b8-91a4-bc49d401177e. Both ids exist as git branches, so
-  the agent store on XPS is empty. Plan #5 itself is not visible here either.
-
-Reading of this (the empty lists are confirmed; the cause is inferred):
-`farm_status.homes` says yakogl's records live on home `nuc`, `degraded: true`,
-`seq 157714`, with the only follower XPS139340 at `applied_seq 0`,
-`lag 157714`, `last_pull_secs null`. This worker runs on XPS139340, so it sees
-no agents, no decisions, no reviews (`reviews.items: []`, `plans.plans: []`).
-The agent list is empty because XPS has replicated nothing, not because there
-are no results. So the stuck results cannot be listed from any machine other
-than nuc until the replica works. This is itself the main finding for this item.
-
-Other facts from `farm_status` at 13:56Z (confirmed):
-
-- nuc: exhausted, `blocked_until` 2026-10-08T23:00Z, weekly utilisation 0.99,
-  running 0, queued 7 (was 14 at 13:14Z; farm-wide queued also 7).
-  five_hour `resets_at` 2026-10-07T16:30Z, `elapsed_pct` 100 (stale window).
-- Lepton: exhausted until 2026-10-10T00:00Z, utilisation 0.99.
-- system76: has quota (seven_day remaining 25%), running 8/8 slots
-  (`concurrency_reason: load`). Only node whose yakogl env has
-  `CC_aarch64_unknown_none`.
-- XPS139340: quota 77% remaining, running 10/11. No `CC_aarch64_unknown_none`
-  in its yakogl env; PATH has /usr/lib/llvm/22 and 23.
-- Lepton-local (local model): its yakogl env lists DEQP_STAGE1, DEQP_WORK,
-  GLMARK2_SRC, IMX8MP_OUT and others, but not `CC_aarch64_unknown_none`.
-- `stages.missing_tools` is empty, `promotions` is empty, `pending_decisions` 0,
-  `waiting` empty, `waiting_unclaimable` 0 (all as seen from XPS).
-- verdin-imx8mp is leased (exclusive) by system76 for task
-  01a11a48-6b04-75b8-91a4-bc49d401177e until 13:57:35Z; that is an unmerged
-  candidate below.
-
-## What git alone shows (confirmed as git facts, not as review states)
-
-The workspace clone has read-only copies of the repository refs under
-`refs/ccfarm/origin/heads/`. The integration tip there is
-`7bc37edc0e4e2f473a2a4a4cc319e4be7fe106c8`.
-
-Command:
-`git for-each-ref refs/ccfarm/origin/heads/ccfarm --no-merged=refs/ccfarm/origin/heads/ccfarm/integration`
-
-It lists many `ccfarm/<agent id>` branches that are not ancestors of the
-integration tip. That does **not** mean they are stuck:
-
-- ccfarm merges with its own merge commits and records abandonment only in
-  its records.
-- Branches of review agents ("ccfarm: review: ...", "strict review: ...",
-  "resolve conflicts: ...") are reviewer or resolver turns, not results.
-- Old branches of abandoned results stay unmerged.
-
-So this list is a candidate set only. Candidates from the last day (newest
-first; commit time is JST, +0900). Each needs a `get_agent_result` call to
-learn its `review_state`.
-
-| agent id | branch tip subject | tip commit time | safest action and risk (until the state is known) |
-|---|---|---|---|
-| 01a11bc4-6674-707f-a6a3-b0d9e34902e4 | Add public ROADMAP.md with the five stages | 10-08 22:48 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11b9b-b871-7718-8b5a-3ae8342e65c6 | Internal roadmap status: plans #2/#3 (turn 1) | 10-08 22:45 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11b9b-b591-7256-8d18-d1329773a7c7 | docs: CHANGELOG.md brought up to the integration tip | 10-08 22:11 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a1193c-ca43-7171-9286-5ff44665535f | docs: imx8mp-frame-floor host syntax-check evidence | 10-08 22:10 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11866-5c1a-7250-ae4d-e314889f9e2c | imx8mp gles3: 133-entry table, gles3 conformance check | 10-08 22:10 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11a09-e3dc-7565-8cb4-af6595bf6f65 | v3d chain: attribute_locations doc | 10-08 21:48 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11afd-f67e-76dc-854d-65cb9ae89e5e | tools/cts: executable bit on check-gles3-tree.py | 10-08 21:47 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11ab1-dd1d-7473-a776-70a296935307 | pvr pool: replay terrain's NPOT mip chains | 10-08 21:27 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11ab1-df7f-7782-9c9a-d8215b5a8512 | docs(am62p): scan-out view investigation | 10-08 18:26 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11a03-c215-717c-871f-85fd9c7d5998 | tests: es3_shaderc_pp: one #[test] | 10-08 17:34 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a119ca-708f-7040-9874-ea491427be1e | docs: es3-rest-failure-map | 10-08 17:27 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a119e0-9d60-7386-ada8-85bccbc131bc | gl: ES 3.0 integer colour render targets | 10-08 16:36 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a1194b-7f12-7095-8268-f7cc6253246d | docs: es3 shader failure map | 10-08 14:45 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11974-b6fe-71bd-a9f3-3972ec8e3fdf | shaderc (PowerVR): centroid fragment inputs | 10-08 13:07 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11989-d714-7269-8d79-06f1264220b5 | docs: es3-texture-failure-map | 10-08 12:30 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-| 01a11829-4308-7096-b6fb-ec317a4bb7d6 | AM62P board session: plan #1 confirmation | 10-08 11:09 | read `get_agent_result` on nuc first; then apply the stage table below. No action is safe to pick before that: a `recheck_results` on a merged result is harmless, but settling a decision or re-merging without the verdict could merge unreviewed work into `ccfarm/integration` |
-
-Removed from this list: 01a11a48-6b04-75b8-91a4-bc49d401177e and
-01a11ab1-df5e-7058-9bec-0b619ff3a607 (both hold board leases on system76 at
-14:26Z, so they are running, not finished). The agent 01a11b9b-b871-... and
-01a11a48-... were also not found by `get_agent_result` on XPS (empty store).
-
-The "three dEQP docs waiting for 12:00 quota" in the plan background are
-possibly among the docs rows above. That is **unconfirmed**.
-
-## Unconfirmed
-
-- Which of the 15 remaining candidates are stuck, versus merged, abandoned or
-  still in review. The expected count is 5 to 8 (plan text).
-- The stage, the thing waited on, "since when" and evidence line of each.
-- Which are blocked only by nuc or only by the single check machine. The
-  facts are confirmed (see the sections above): the records live on nuc, nuc is
-  blocked until 2026-10-08T23:00Z with 10 queued at 14:26Z, and system76 is the
-  only node with `CC_aarch64_unknown_none`. What is unconfirmed is which result
-  waits on which of them.
-- Whether any review decisions are pending on nuc. `list_decisions` on XPS
-  shows 0 only because XPS has no records.
-- Whether the three "12:00 quota" dEQP docs are really quota-limited
-  (that is item facts-health).
-
-## Safest action per stage (generic, to apply after classification)
-
-| stage found | safest action | risk |
+| time (UTC) | call (on XPS139340) | result |
 |---|---|---|
-| gate waiting for the check node/tool | wait, or `recheck_results` once a second check machine is registered (item checkenv-install) | none; recheck only re-evaluates |
-| review waiting for a slot or quota | wait for the reset (nuc 23:00Z), or `recheck_results` | none |
-| decision pending (review, not human_only) | approve if the verdict is approve; deny with a fix note otherwise | an approve merges into `ccfarm/integration`; promotion to main is off (`promote_to = ""`) |
-| merge conflict | let ccfarm's conflict resolver run again (recheck) | one more resolver turn; no integration change until reviewed |
-| waiting on nuc records | nothing from a worker: needs nuc back or the replica working (items facts-replica, replica-restart) | re-dispatching elsewhere would read nothing |
+| 13:56 | `farm_status(detail=true)` | `homes`: yakogl home `nuc`, `degraded: true`, `seq 157714`; only follower XPS139340 `applied_seq 0`, `lag 157714`, `last_pull_secs null`, `candidate false` |
+| 13:56 | `list_agents` (states=completed, limit 300; and no filter) | `{"agents":[],"next_before":null}` |
+| 13:56 | `list_decisions(state=all)` | `shown 0, pending_total 0` |
+| 13:56 | `get_updates` | denied by the permission layer ("nobody decided in time") |
+| ~14:00 | `list_plans(state=all)` | `{"plans":[]}` (plan #5 itself is not visible) |
+| ~14:00 | `get_agent_result` 01a11b9b-b871…, 01a11a48-6b04… | "no agent with id …" (both exist as branches) |
+| 14:26 | `farm_status` | `seq 163115`, follower still `applied_seq 0` |
+| 16:34 | `farm_status` | `seq 182744`, follower still `applied_seq 0`, `last_pull_secs null` |
+| 16:35 | `ask_farm` (project yakogl; asked XPS139340, Lepton, Lepton-local, nuc, system76) | `"answers":[]`, "No node of the farm knows this from its notes" |
+| 16:35 | `get_plan(5)`; `get_agent_status` 01a11974-b6fe… | "no plan with id 5"; "no agent with id" |
 
-## Redo this item
+The empty store on XPS comes from the replica, not from an absence of results:
+the home's sequence grew by 25,000 entries in 2.6 h while the follower applied
+none. Diagnosing the replica is item facts-replica.
 
-Run it on nuc (the home of yakogl's records), or on XPS139340 after the replica
-has applied entries, with `get_agent_result`, `list_plans` and `get_updates`
-allowed:
+## 2. How the result list was built (confirmed git facts)
 
-1. `farm_status(detail=true)`.
-2. `list_agents(states=["completed"], limit=500)`, filtered to yakogl.
-3. `get_agent_result` for each id above; read `review_state`.
-4. `list_decisions(state="all")`, `get_updates(since=0, peek=true)`.
-5. Fill a table with: agent id, branch, plan/item, stage, waits for, since,
-   evidence line, nuc-only or check-machine-only.
+1. Candidates: `ccfarm/<id>` branches of the snapshot (`refs/ccfarm/origin/heads`,
+   nuc's checkout at integration `7bc37ed`, 2026-10-08 13:02Z) that are not
+   ancestors of integration, with a commit in the last day. Branches whose
+   subject starts with "ccfarm: review:", "strict review:", "confirming review:"
+   or "resolve conflicts:" were left out. Those are reviewer or resolver agents,
+   not results.
+2. `git ls-remote origin` and
+   `git fetch origin 'refs/heads/ccfarm/01a1*:refs/remotes/gh/01a1*'` plus
+   `refs/heads/ccfarm/integration`. GitHub's integration is at
+   **`334d4e6`** (2026-10-08 16:24Z). Its first-parent merges after `7bc37ed`:
 
-## Re-check at 2026-10-08T14:26Z (confirmed, still on XPS139340)
+   | merge | time (UTC) | merged result |
+   |---|---|---|
+   | c9c2cd3 | 14:31 | 01a11b9b-b591-7256-8d18-d1329773a7c7 |
+   | 9ad5922 | 14:36 | 01a11b9b-b871-7718-8b5a-3ae8342e65c6 |
+   | 2c7f887 | 14:46 | 01a11a03-c215-717c-871f-85fd9c7d5998 |
+   | bc833b3 | 15:31 | 01a11bc4-636e-7458-b008-c229bf07a874 |
+   | 334d4e6 | 16:24 | 01a11bec-8e9e-715a-b54d-af6be7fba045 |
 
-Done after the review asked for a re-run. The replica has still not moved:
+   So ccfarm kept reviewing and merging yakogl results while nuc's Claude quota
+   was exhausted (blocked until 23:00Z). The merge pipeline is **not** fully
+   stopped by nuc's quota.
+3. For each remaining candidate,
+   `git log --cherry-mark --right-only --no-merges gh/integration...gh/<id>`.
+   Every one still has at least one `+` commit: its content is not in
+   integration, not even as a cherry-pick.
+4. Running, not finished: 01a11a48-6b04-75b8-91a4-bc49d401177e (verdin-imx8mp
+   lease, held by system76 at 13:56Z and 14:26Z) and
+   01a11ab1-df5e-7058-9bec-0b619ff3a607 (verdin-am62p and usb-serial-1 leases at
+   14:26Z). Both are left out of the table.
 
-- `farm_status` homes: yakogl home nuc, degraded, `seq 163115` (was 157714 at
-  13:56Z), follower XPS139340 `applied_seq 0`, `lag 163115`,
-  `last_pull_secs null`. The records on nuc keep growing; XPS applies nothing.
-- `list_agents` (limit 50): `{"agents":[]}`. `list_plans`: `{"plans":[]}`.
-- nuc: still exhausted until 2026-10-08T23:00Z, running 0, **queued 10**
-  (7 at 13:56Z, 14 at 13:14Z). Its queue is not draining.
-- system76 is now listed in `exhausted_nodes` and `quota_first.low_nodes`
-  (`remaining_pct` 25, `taking_work` false); only XPS takes work. So the one
-  machine with `CC_aarch64_unknown_none` currently takes no new work.
-  Worker slots with quota: 3 of 3 busy, 10 agents waiting (bottleneck hint).
-- Board leases held by system76 (so those agents are running, not finished):
-  01a11a48-6b04-75b8-91a4-bc49d401177e (verdin-imx8mp) and
-  01a11ab1-df5e-7058-9bec-0b619ff3a607 (verdin-am62p, usb-serial-1).
-  Remove both from the candidate table once the records can be read.
+## 3. A shared blocker: the gate is red on integration itself (confirmed in part)
 
-## Why the per-result table is not filled
+- Confirmed: the automatic review of this item's own markdown-only result ran
+  `tools/check.sh --quick` and reported one failure, `FAIL no table in the
+  artefact` ("the control found no table symbols with the table compiled in
+  (0): the pattern no longer matches"). About 80 other steps passed. A
+  markdown diff cannot cause it, so the integration base itself fails the gate
+  on that reviewer's machine.
+- Confirmed: commit `3985bee` (2026-10-08 16:02Z) on branch
+  `ccfarm/01a119e0-9d60-7386-ada8-85bccbc131bc` explains and fixes it. Its
+  message: "the release profile's LTO leaves the rlib's object as LLVM bitcode,
+  which GNU nm 2.46 reads as no symbols at all, so the control arm found 0 and
+  failed". The same commit clears clippy `needless_range_loop` at 10 sites. It
+  also names one gap it does not fix: the "board.sh dry-run matrix" row needs
+  `gawk`, which that host lacks.
+- Confirmed: `tools/check.sh` is identical in `7bc37ed` and `334d4e6`, so the
+  fix is not in integration.
+- Unconfirmed: that this red gate is what holds the results below. Results did
+  merge after 14:31Z (table above), so either those gates ran on a host whose
+  `nm` reads LTO bitcode, or the failure is judged per host. The gate log of each
+  result is in nuc's records.
 
-I disagree with the review only in that this cannot be fixed from this
-machine: the per-result fields (stage, what it waits on, since when, evidence
-line, review_state) exist only in the agent and review records on nuc. XPS holds
-0 of 163,115 entries, and nuc is not reachable from a worker. Filling the table
-from git refs would be a guess, which the task forbids. The table must be built
-by a run on nuc, or on XPS after replica-restart. This file stays
-`INCOMPLETE`, with the candidate list and the redo steps above.
+## 4. The unmerged results (13)
 
-## Re-check at 2026-10-08T16:34Z (confirmed, review round 4, still on XPS139340)
+"Idle since" is the commit time of the result branch's newest commit (UTC). It
+is the latest moment the agent touched the branch, a confirmed git fact. The
+stage after that is in nuc's records. The "stage" column gives the stage that
+git supports and marks the rest *unconfirmed*.
 
-- `farm_status` homes: yakogl home nuc, degraded, `seq 182744`; follower
-  XPS139340 `applied_seq 0`, `lag 182744`, `last_pull_secs null`. The lag grew
-  by about 19,600 entries in 2 h 8 min (14:26Z to 16:34Z).
-- `list_agents` (limit 20): `{"agents":[]}`.
-- nuc: still exhausted (`exhausted_nodes: ["nuc","Lepton"]`), next capacity
-  reset 2026-10-08T23:00Z. system76 takes work again (not in `low_nodes`;
-  weekly remaining 19%). Farm: 21/21 slots busy, 5 queued.
-- `ask_farm`, `get_plan` and `get_agent_status` were refused in this session,
-  and `git ls-remote origin` needed approval, so there was no other route to
-  the records or to a newer integration tip.
+The columns "nuc only?" and "check machine only?" answer whether that machine
+alone holds the result. *nuc*: only nuc can say the stage (records), and only
+nuc's checkout has the newer tip when marked so. *check machine*: the gate needs
+`CC_aarch64_unknown_none`, which only system76 has (farm_status 13:56Z). That
+applies to code changes whose gate has to build the no_std archive. Docs-only
+changes still run the full gate (`commands = ["tools/check.sh"]`), so it applies
+to them too.
 
-The per-result table therefore still cannot be built here. All three reviews
-also say it must be built on nuc or after replica-restart.
+| # | agent id / branch `ccfarm/<id>` | change (files) | idle since (UTC) | stage: confirmed / *unconfirmed* | waits on | nuc only? | check machine only? |
+|---|---|---|---|---|---|---|---|
+| 1 | 01a119e0-9d60-7386-ada8-85bccbc131bc | GL ES 3.0 integer render targets; plus `3985bee` gate fix (check.sh, clippy) | 10-08 16:02 (GitHub tip `3985bee`) | finished turn with a rework commit after the snapshot tip `b9b2ac0` (07:36). *Review of the rework not seen* | review of the reworked branch; *possibly a red gate before the fix* | records: yes | gate: yes (code change) |
+| 2 | 01a11bc4-6674-707f-a6a3-b0d9e34902e4 | public ROADMAP.md, HANDOFF goal list | 10-08 13:48 | finished, not merged. *Review stage unknown* | review or gate | records: yes | gate: yes |
+| 3 | 01a1193c-ca43-7171-9286-5ff44665535f | imx8mp board_show without per-frame VSYNC wait (F1/F2) + doc | 10-08 13:10 | finished, 2 unmerged commits. *Stage unknown* | review or gate (driver code) | records: yes | gate: yes (Zephyr/no_std) |
+| 4 | 01a11866-5c1a-7250-ae4d-e314889f9e2c | imx8mp dEQP-GLES3 table (119 → 133 entries), gles3 check | 10-08 13:10 | finished, 2 unmerged commits. *Stage unknown* | review or gate | records: yes | gate: yes |
+| 5 | 01a11a09-e3dc-7565-8cb4-af6595bf6f65 | V3D shaderc matrix attributes, Ishl/Ftrunc, es3_shaderc_v3d test | 10-08 12:48 | finished, 4 unmerged commits (an agent turn commit "ccfarm: V3D shaderc … (turn 1)" plus 3 follow-ups: test-rule and clippy fixes, a doc) | review of the follow-ups; *the clippy follow-up suggests an earlier gate failure* | records: yes | gate: yes (code) |
+| 6 | 01a11afd-f67e-76dc-854d-65cb9ae89e5e | Pi 4 dEQP-GLES3 tree, image builder, exec bits | 10-08 12:47 | finished, 2 unmerged commits on base `e5eff04`. `c905ac6` is a fresh single-commit redo of the Pi 4 tree; it does **not** contain 01a11866-5412 (also unmerged; `merge-base --is-ancestor` false). The snapshot also had a resolver branch for it, 01a11ac1-d205 ("resolve conflicts: Pi 4: dEQP-GLES3 tree…"), absent on GitHub | review of the redo; *01a11866-5412 is likely superseded* | records: yes | gate: yes |
+| 7 | 01a11ab1-dd1d-7473-a776-70a296935307 | pvr pool: replay terrain's NPOT mip chains | 10-08 12:27 | finished, 1 unmerged commit. *Stage unknown* | review or gate (code) | records: yes | gate: yes |
+| 8 | 01a11ab1-df7f-7782-9c9a-d8215b5a8512 | docs(am62p): scan-out view investigation | 10-08 09:26 | finished, 1 unmerged commit, idle 7 h. *Stage unknown* | review or gate | records: yes | gate: yes |
+| 9 | 01a119ca-708f-7040-9874-ea491427be1e | docs: es3-rest-failure-map (dEQP doc) | 10-08 08:27 | finished, 4 unmerged commits (turn commit plus fixes: "drop scratch files", "correct the none row total"); idle 8 h. *Stage unknown* | re-review; *candidate for the "12:00 quota" dEQP docs* | records: yes | gate: yes |
+| 10 | 01a1194b-7f12-7095-8268-f7cc6253246d | docs: es3 shader failure map (dEQP doc) | 10-08 05:45 (nuc tip `960e6d8`); GitHub has the older `6a046ea` (02:45) | finished, newer tip only in nuc's checkout; idle 11 h. *Stage unknown* | review; *candidate for the "12:00 quota" dEQP docs* | **yes: newest commit not on GitHub** | gate: yes |
+| 11 | 01a11974-b6fe-71bd-a9f3-3972ec8e3fdf | shaderc PowerVR centroid inputs, es3_shaderc_infolog test | 10-08 04:07 | finished, 1 unmerged commit; idle 12.5 h. *Stage unknown* | review or gate (code) | records: yes | gate: yes |
+| 12 | 01a11989-d714-7269-8d79-06f1264220b5 | docs: es3-texture-failure-map (dEQP doc) | 10-08 03:30 | finished, 1 unmerged commit; idle 13 h. *Stage unknown* | review; *candidate for the "12:00 quota" dEQP docs* | records: yes | gate: yes |
+| 13 | 01a11829-4308-7096-b6fb-ec317a4bb7d6 | docs: AM62P plan #1 board session | 10-08 02:09 (nuc tip `a4b59bc`); GitHub has a different lineage `c2b6294` (00:37) | finished; nuc's branch was re-created from `b83216d`, so GitHub's copy is a different lineage; idle 14.5 h. *Stage unknown* | review; *possibly superseded by 01a119a2 (strict review of a re-run, also unmerged)* | **yes: nuc's tip differs from GitHub's** | gate: yes |
 
-## New routes tried at 2026-10-08T16:35Z, after more tools were granted
+(Rows 10, 12 and 9 are the three dEQP failure-map docs. Matching
+them to the plan's "three dEQP docs waiting for 12:00 quota" is *unconfirmed*.
+Item facts-health checks it.)
 
-- `ask_farm` (project yakogl) went to XPS139340, Lepton, Lepton-local, nuc and
-  system76. The result was `"answers":[]`: "No node of the farm knows this from
-  its notes". So nuc did not answer from its records through this route.
-- `get_plan(5)` returned "no plan with id 5", and `get_agent_status` for
-  01a11974-b6fe-71bd-a9f3-3972ec8e3fdf returned "no agent with id". Same
-  cause: the store on XPS is empty.
-- `git ls-remote origin` (GitHub) worked. GitHub's `ccfarm/integration` is at
-  `334d4e658772f466e2625b8de1d512f0fc6afd2f`, not the snapshot's `7bc37ed`.
-  The commit is not in this clone; `git fetch` needed approval, so I could not
-  test which candidates it contains.
+The plan expected 5 to 8 stuck results. Git shows 13 finished, unmerged result
+branches with content not in integration. Some may be **abandoned** in ccfarm's
+records, which git cannot show. That is the most likely reason the count is
+higher than 5 to 8.
 
-Candidate branch tips on GitHub compared with the workspace snapshot (confirmed
-from the `ls-remote` output; all 15 candidates still exist on GitHub):
+## 5. Safest action per result, with its risk
 
-| agent id | snapshot tip | GitHub tip | reading |
+ccfarm's own tools are the only safe movers. None was run (fact-finding only).
+Every action assumes it runs where the records are readable (nuc, or XPS after
+replica-restart).
+
+| # | agent id | safest action | risk |
 |---|---|---|---|
-| 01a11b9b-b871-7718-8b5a-3ae8342e65c6 | 34e6055 | e9c748e | moved: a later turn (likely rework after review) |
-| 01a119e0-9d60-7386-ada8-85bccbc131bc | b9b2ac0 | 3985bee | moved: a later turn |
-| 01a1194b-7f12-7095-8268-f7cc6253246d | 960e6d8 | 6a046ea | moved: a later turn |
-| 01a11829-4308-7096-b6fb-ec317a4bb7d6 | a4b59bc | c2b6294 | moved: a later turn |
-| the other 11 candidates | same | same | no new turn since the snapshot |
+| 1 | 01a119e0-9d60… | `get_agent_result` → if it waits on review, let it be reviewed **first**: its `3985bee` fixes the shared red gate (§3). Then `recheck_results` for the others | low: review runs the normal gate; the fix touches check.sh, so a wrong fix could hide a real "table in the artefact" regression. The reviewer should check the archive-bytes fallback (measured 3 with table, 0 without) |
+| 2 | 01a11bc4-6674… | `get_agent_result`; if gate red on "no table", `recheck_results` after #1 merges | none (recheck only re-evaluates) |
+| 3 | 01a1193c-ca43… | as #2; the gate must build the Zephyr images, so it needs a node with ZEPHYR_WS and the cross CC | none; may wait for system76 (only CC_aarch64_unknown_none) |
+| 4 | 01a11866-5c1a… | as #3 | as #3 |
+| 5 | 01a11a09-e3dc… | `get_agent_result`; if a review decision is pending and its verdict is approve, approve it; else deny with the reviewer's note | approve merges into `ccfarm/integration` (promotion to main is off, `promote_to = ""`, so main is unaffected; revertible with ccfarm's revert) |
+| 6 | 01a11afd-f67e… | `get_agent_result` for 01a11afd and 01a11866-5412; let ccfarm review the redo (01a11afd) and abandon 01a11866-5412 through ccfarm if superseded, not by deleting branches | a re-merge or resolve turn costs quota; deleting branches by hand would lose work, so do not |
+| 7 | 01a11ab1-dd1d… | as #2 | none |
+| 8 | 01a11ab1-df7f… | as #2 | none |
+| 9 | 01a119ca-708f… | as #5 (its follow-up fixes suggest it went through at least one review round) | as #5 |
+| 10 | 01a1194b-7f12… | as #2, **on nuc** (the newest commit `960e6d8` is only there) | re-dispatching it elsewhere would review the older GitHub tip `6a046ea` and lose `960e6d8` |
+| 11 | 01a11974-b6fe… | as #2 | none |
+| 12 | 01a11989-d714… | as #2 | none |
+| 13 | 01a11829-4308… | `get_agent_result` for it and for 01a119a2-7d7e ("strict review: AM62P board session (re-run where the inputs exist)", in the snapshot only). If the re-run superseded it, ccfarm abandons it with that reason | abandoning wrongly drops a board-session record; check that the re-run's doc covers images 1-7 first |
 
-"A later turn" is confirmed (the branch moved). That it was rework after a
-review is unconfirmed. The other 11 have had no new commit, so if they are not
-merged they are waiting on something outside the agent: review, gate, decision
-or merge.
+General rule: `recheck_results` is the action with no risk (it re-evaluates
+only). Settling a decision and re-merging change `ccfarm/integration`. Never
+merge, rebase or delete branches by hand (ccfarm's MCP instructions).
 
-Not confirmed: whether GitHub's integration `334d4e6` merges any of them.
-Command to check it, once allowed:
-`git fetch origin refs/heads/ccfarm/integration:refs/remotes/gh/integration`
-then `git branch -r --contains` / `git merge-base --is-ancestor <tip> gh/integration`
-for each candidate tip.
+## 6. Confirmed vs unconfirmed
+
+Confirmed:
+- XPS139340 has no yakogl records (`applied_seq 0`, lag 157,714 → 182,744
+  between 13:56Z and 16:34Z). Every record-reading call returns empty or "no
+  agent / no plan".
+- nuc: exhausted, `blocked_until` 2026-10-08T23:00Z, queued 7 (13:56Z) → 10
+  (14:26Z). system76 is the only node with `CC_aarch64_unknown_none` for yakogl.
+  system76 was `taking_work: false` at 14:26Z and took work again by 16:34Z.
+- 5 results were merged into GitHub's integration between 14:31Z and 16:24Z
+  (§2). The merge pipeline runs while nuc's quota is exhausted.
+- The 13 branches in §4 are finished (no lease, an agent commit as tip) and
+  their content is not in integration `334d4e6`.
+- Two of them (rows 10 and 13) have their newest commits only on nuc.
+- The integration gate fails `no table in the artefact` on at least one review
+  host; `3985bee` (row 1) fixes it and is not merged.
+
+Unconfirmed (needs nuc's records):
+- The ccfarm stage of each of the 13: `review_state`, waiting for a review
+  slot, gate red, a decision pending, merge conflict, or abandoned.
+- How long each has been in that stage (git only gives the idle-since time).
+- Whether the red gate in §3 is what holds them.
+- Which three are the "12:00 quota" dEQP docs (rows 9, 10 and 12 are the
+  likely ones).
+- Whether pending review decisions exist (`list_decisions` on XPS is empty only
+  for lack of records).
+
+## 7. Reproduce
+
+On nuc, or on XPS after the replica has applied entries:
+
+1. `get_agent_result` for each id in §4; record `review_state` and the reason.
+2. `list_decisions(state=all)`, `get_updates(since=0, peek=true)`.
+3. Fill the *unconfirmed* cells in §4 and drop the rows found merged or
+   abandoned.
+
+From any machine with GitHub access (git only):
+
+```
+git fetch origin 'refs/heads/ccfarm/*:refs/remotes/gh/*'
+git log --first-parent --format='%h %cI %s' refs/remotes/gh/integration
+git log --oneline --cherry-mark --right-only --no-merges refs/remotes/gh/integration...refs/remotes/gh/<id>
+```
