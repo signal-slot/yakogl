@@ -13,11 +13,7 @@
 use core::ffi::c_char;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT};
 
-/// The online compiler's scratch arena is not reentrant: one compile at a time.
-static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 fn compile(src: &str) -> Result<(), String> {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
     let mut out = ShcShader::ZERO;
     let mut log = [0 as c_char; 1024];
@@ -45,37 +41,31 @@ fn ok(body: &str) {
     }
 }
 
-#[test]
 fn directive_name_split() {
     ok("#def\\\nine X 1\nvoid main() { o = vec4(float(X)); }");
     ok("#\\\ndefine X 1\n#if\\\ndef X\nvoid main() { o = vec4(float(X)); }\n#endif");
 }
 
-#[test]
 fn identifier_split() {
     ok("void main() { float f\\\noo = 1.0; o = vec4(foo); }");
     ok("#define F\\\nOO 1.0\nvoid main() { o = vec4(FOO); }");
 }
 
-#[test]
 fn number_split() {
     ok("void main() { o = vec4(1\\\n.5, 0.\\\n25, 1\\\n0.0, 1e\\\n1); }");
     ok("void main() { int i = 0x\\\n1F; o = vec4(float(i)); }");
 }
 
-#[test]
 fn operator_split() {
     ok("void main() { float a = 1.0; a +\\\n= 2.0; o = vec4(a); }");
     ok("void main() { int a = 1; a <\\\n<= 1; o = vec4(float(a)); }");
     ok("void main() { int a = 1; if (a =\\\n= 1) o = vec4(1.0); else o = vec4(0.0); }");
 }
 
-#[test]
 fn crlf_split() {
     ok("void main() { float f\\\r\noo = 1.0; o = vec4(foo); }");
 }
 
-#[test]
 fn spliced_line_still_counts() {
     // __LINE__ after one spliced line (body starts at line 4): `#if` is on 6.
     ok("int x\\\n;\n#if __LINE__ != 6\n#error wrong line\n#endif\nvoid main() { o = vec4(0.0); }");
@@ -86,7 +76,6 @@ fn spliced_line_still_counts() {
     assert!(e.starts_with("0:6:") || e.contains(":6:"), "line 6 expected: {e}");
 }
 
-#[test]
 fn es100_has_no_continuation() {
     // Same splices in a #version 100 source stay refused, as before.
     assert!(compile("#def\\\nine X 1\nvoid main() { gl_FragColor = vec4(1.0); }\n").is_err());
@@ -94,10 +83,23 @@ fn es100_has_no_continuation() {
 }
 
 /// The dEQP bodies as they are (macro use, and a backslash in the middle of a line).
-#[test]
 fn deqp_bodies() {
     ok("#def\\\nine A(X) (-1.0*(X))\nvoid main() { o = vec4(A(-1.0)); }");
     ok("void main()\n{\n    float f\\\noo = 1.0;\n    o = vec4(foo);\n}");
     ok("#define A(X) \\\n    (-1.0*(X))\nvoid main() { o = vec4(A(-1.0)); }");
     ok("#define A a \\ b\n#define B 1.0\nvoid main() { o = vec4(B); }");
+}
+
+/// One `#[test]`: the compiler's keep arena is reset per compile and is not
+/// reentrant, so a binary that resets it holds a single test (src/test_rules.rs).
+#[test]
+fn line_continuation() {
+    directive_name_split();
+    identifier_split();
+    number_split();
+    operator_split();
+    crlf_split();
+    spliced_line_still_counts();
+    es100_has_no_continuation();
+    deqp_bodies();
 }
