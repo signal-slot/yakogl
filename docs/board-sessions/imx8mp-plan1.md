@@ -200,8 +200,8 @@ the 14/30 was taken at before it can be read from this table.
 3. #8 (4x MSAA): bit 3 does not fix case 16; both arms leave the resolved
    target blank (0x00000000). Telling resolve from draw needs the scratch
    probes, which need a console — or a record kind for them — on the i.MX8MP.
-4. #9/#25: on `b20e4d11` the base arm fails case 10 in 3 of 40 boots (was 14
-   of 30), and #25 appears in base and reuse0 (1 each of 40 and 10). Neither
+4. #9/#25: on `b20e4d11` the base arm fails in 4 of 40 boots (3× case 10, 1×
+   case 2; was 14 of 30), and #25 also appears in reuse0 (1 of 10). Neither
    knob (page align, no reuse) removes the failures; at these rates the step 5
    table cannot discriminate (b) from (c) until the rate is re-measured
    against the commit the 14/30 was taken at.
