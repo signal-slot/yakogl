@@ -28,3 +28,29 @@ The extension is `.glsl`, not `.vert`/`.frag`. The corpus walkers
 re-deriving the pin, which belongs to that test's owner (glmark2-corpus).
 Until then these files are outside it. The stage is the second-to-last
 extension.
+
+## Compile test
+
+`tests/glmark2_corpus.rs` compiles every file in `index.txt` through the
+online compiler (`src/shaderc/online`) of the build's GPU and, per index
+entry, links the vertex/fragment pairs (the index does not record which
+vertex shader went with which fragment shader inside one entry, so every pair
+of the entry is tried and each shader must link with at least one partner).
+It runs per back end, like `tests/online_corpus.rs`:
+
+```text
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test glmark2_corpus -- --nocapture
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test glmark2_corpus -- --nocapture
+cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test glmark2_corpus -- --nocapture
+```
+
+`--nocapture` prints the per-back-end counts and every failure with the
+compiler's message. Today: 69 of 69 compile and link on PowerVR, GC7000 and
+V3D.
+
+`known-uncompilable.txt` lists the expected failures, one
+`<shader file> <powervr|gc7000|v3d> <reason>` per line (`#` lines are
+comments). A shader not listed that fails fails the test, and so does a listed
+one that now compiles (a stale entry). It is empty, and should stay that way
+unless a compiler gap is left for a later fix. The test also pins the index at
+69 shaders; re-derive that after a regeneration.
