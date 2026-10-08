@@ -38,7 +38,7 @@
 # Environment:
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
 #             applies it)                (default ~/com/github/KhronosGroup/VK-GL-CTS)
-#   GPU       vivante | powervr: whose online back end compiles (default vivante,
+#   GPU       vivante | powervr | v3d: whose online back end compiles (default vivante,
 #             the GC7000's); each GPU gets its own library directory
 #   MODULE    gles2 | gles3 (default gles2). gles3 builds deqp-gles3 in its own
 #             directory, runs the union of VK-GL-CTS's android/cts/main/gles3-main-*.txt
@@ -61,7 +61,8 @@ GPU=${GPU:-vivante}
 case "$GPU" in
     vivante) LIB=$BASE/lib; SUFFIX= ;;
     powervr) LIB=$BASE/lib-powervr; SUFFIX=-powervr ;;
-    *) echo "host-deqp-run: GPU must be vivante or powervr, not '$GPU'" >&2; exit 1 ;;
+    v3d) LIB=$BASE/lib-v3d; SUFFIX=-v3d ;;
+    *) echo "host-deqp-run: GPU must be vivante, powervr or v3d, not '$GPU'" >&2; exit 1 ;;
 esac
 MODULE=${MODULE:-gles2}
 case "$MODULE" in
