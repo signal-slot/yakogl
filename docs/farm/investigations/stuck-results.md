@@ -12,8 +12,11 @@ First attempt: all four read calls were refused. After a grant, the retry gave:
 - `list_agents` (no filter, limit 100; and states=completed, limit 300) returned
   `{"agents":[],"next_before":null}`.
 - `list_decisions(state=all)` returned `shown 0, pending_total 0`.
-- `get_updates` was denied ("nobody decided in time"); `list_plans` and
-  `get_agent_result` were refused (not granted).
+- `get_updates` was denied ("nobody decided in time").
+- After a second grant: `list_plans(state=all)` returned `{"plans":[]}`, and
+  `get_agent_result` returned "no agent with id ..." for 01a11b9b-b871-7718-8b5a-3ae8342e65c6
+  and 01a11a48-6b04-75b8-91a4-bc49d401177e. Both ids exist as git branches, so
+  the agent store on XPS is empty. Plan #5 itself is not visible here either.
 
 Reading of this (the empty lists are confirmed; the cause is inferred):
 `farm_status.homes` says yakogl's records live on home `nuc`, `degraded: true`,
