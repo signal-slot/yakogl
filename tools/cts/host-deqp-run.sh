@@ -55,7 +55,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 # Options equal to the environment variables below, for callers that cannot set
-# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N (before the filter).
+# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N (before the filter).
 while [ $# -gt 0 ]; do
     case "$1" in
         --gpu=*) GPU=${1#*=} ;;
@@ -63,6 +63,7 @@ while [ $# -gt 0 ]; do
         --cts=*) CTS=${1#*=} ;;
         --out=*) OUT=${1#*=} ;;
         --chunk=*) CHUNK=${1#*=} ;;
+        --jobs=*) JOBS=${1#*=} ;;
         *) break ;;
     esac
     shift
@@ -145,5 +146,21 @@ begun=$(cat "$OUT"/c_*.qpa 2>/dev/null | grep -c '^#beginTestCaseResult' || true
 echo "host-deqp-run: $begun of $asked cases began; chunk exits:"
 grep -h '^exit=' "$OUT"/c_*.out | sort | uniq -c
 grep -h -A1 'panic' "$OUT"/c_*.out 2>/dev/null | grep panicked | sort | uniq -c || true
+# Every chunk that ended abnormally, with the case it died in: the last case
+# that began and has no end in its .qpa ("-" when every case ended). Exit 1
+# with every case ended is dEQP's "not all cases passed", not an abort.
+for o in "$OUT"/c_???.out; do
+    e=$(sed -n 's/^exit=//p' "$o")
+    c=${o%.out}
+    died=$(awk '/^#beginTestCaseResult/{n=$2} /^#endTestCaseResult|^#terminateTestCaseResult/{n=""} END{print n?n:"-"}' "$c.qpa" 2>/dev/null || echo -)
+    case "$e:$died" in 0:-|1:-) continue ;; esac
+    echo "host-deqp-run: chunk $(basename "$c") exit=$e in $died"
+done | tee "$OUT/aborted.txt"
 python3 "$HERE/cts-refusals.py" --cases 2 "$OUT"
+# The per-group table, the failures by message and every failing case, kept
+# beside the logs (HOST-ONLY: a render verdict in them means nothing).
+CTS="$CTS" python3 "$HERE/cts-summary.py" --mustpass "$OUT/all.txt" --by-group 3 \
+    --by-message 100000 --list-failures 0 --failures-file "$OUT/failures.tsv" \
+    "$OUT" > "$OUT/summary.txt" 2>&1 || true
+echo "host-deqp-run: groups, failures by message: $OUT/summary.txt"
 echo "host-deqp-run: results in $OUT (HOST-ONLY: never quote a render verdict from them)"
