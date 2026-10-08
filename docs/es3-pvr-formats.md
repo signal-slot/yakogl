@@ -4,10 +4,10 @@
 
 Design for plan #3 items `int-rt-pvr` (integer render targets) and
 `formats-pvr` (sized texture formats). It gives one row per ES 3.0 sized
-internal format (ES 3.0.6 tables 3.13 and 3.14): the PBE pack format and the
-USC-side conversion for rendering, the TPU texture format and swizzle for
-sampling, filterability, and the sample return type. Every mapping cites Mesa
-26.2.1. It then names the yakogl functions and tables that hold today's
+internal format (ES 3.0.6 tables 3.13 and 3.14, the compressed ETC2
+formats included): the PBE pack format and the USC-side conversion for
+rendering, the TPU texture format and swizzle for sampling, filterability,
+and the sample return type. Every mapping cites Mesa 26.2.1. It then names the yakogl functions and tables that hold today's
 formats, what each must gain, how integer fragment outputs and raw
 `glClearBuffer{i,ui}v` clears go through the end-of-tile and clear programs,
 whether `src/pvr/internal.rs` must change, the ES 2.0 boundary, and the host
@@ -45,6 +45,8 @@ said otherwise):
 | `pbestate.xml` | `csbgen/rogue/pbestate.xml` (vendored) |
 | `texstate.xml` | `csbgen/rogue/texstate.xml` (vendored) |
 | `u_format.yaml` | `src/util/format/u_format.yaml` (format channel swizzles) |
+| `st_format.c` | `src/mesa/state_tracker/st_format.c` (GL sized format → pipe format) |
+| `teximage.c` | `src/mesa/main/teximage.c` (GL texture format swizzles) |
 
 In the format tables, a bare `:NNN` is a line of `arch-formats.c`.
 
@@ -253,21 +255,26 @@ Columns:
   (`job-common.c:51-77`, `formats.h:264`): `8P` = `8_PER_CHANNEL`,
   `F16` = `F16_PER_CHANNEL`, `γ` = gamma on.
 - **texformat** — `pvr_format_table` row (`ROGUE_TEXSTATE_FORMAT_*`,
-  `texstate.xml:95-193`).
+  `texstate.xml:95-193`; compressed formats use the `FORMAT_COMPRESSED`
+  enum, `texstate.xml:195-232`).
 - **swizzle** — the util_format swizzle (`u_format.yaml`; delivered by
   `formats.c:339-343` into both the PBE `REG_WORD0` swizzle and the TPU
   `swiz0..3`). `X..W` are texel channels 0..3; `0`/`1` are constants.
 - **filter** — §1.6 (`formats.c:275-279`).
 - **sampler** — §1.7.
 
-### 2.1 8-bit, packed and sRGB
+### 2.1 8/16-bit, packed and sRGB
 
 | GL | pipe | packmode | accum | USC→PBE | texformat | swizzle | filter | sampler |
 |---|---|---|---|---|---|---|---|---|
 | R8 | R8_UNORM | U8 :199 | U8 :199 | 8P·n1 | U8 :91 | X,0,0,1 | yes | float |
 | R8_SNORM | R8_SNORM | S8 :200 | S8 :200 | 8P·n1 | S8 :92 | X,0,0,1 | yes | float |
+| R16 | R16_UNORM | U16 :228 | U16 :228 | F16·n1 | U16 :120 | X,0,0,1 | yes | float |
+| R16_SNORM | R16_SNORM | S16 :229 | S16 :229 | F16·n1 | S16 :121 | X,0,0,1 | yes | float |
 | RG8 | R8G8_UNORM | U8U8 :203 | U8 :203 | 8P·n1 | U8U8 :95 | X,Y,0,1 | yes | float |
 | RG8_SNORM | R8G8_SNORM | S8S8 :204 | S8 :204 | 8P·n1 | S8S8 :96 | X,Y,0,1 | yes | float |
+| RG16 | R16G16_UNORM | U16U16 :233 | U16 :233 | F16·n1 | U16U16 :125 | X,Y,0,1 | yes | float |
+| RG16_SNORM | R16G16_SNORM | S16S16 :234 | S16 :234 | F16·n1 | S16S16 :126 | X,Y,0,1 | yes | float |
 | RGB8 | R8G8B8A8_UNORM | U8U8U8U8 :209 | U8 :209 | 8P·n1 | U8U8U8U8 :101 | X,Y,Z,1 | yes | float |
 | RGB8_SNORM | R8G8B8A8_SNORM | S8S8S8S8 :210 | S8 :210 | 8P·n1 | S8S8S8S8 :102 | X,Y,Z,1 | yes | float |
 | RGBA8 | R8G8B8A8_UNORM | U8U8U8U8 :209 | U8 :209 | 8P·n1 | U8U8U8U8 :101 | X,Y,Z,W | yes | float |
@@ -276,11 +283,20 @@ Columns:
 | SRGB8_ALPHA8 | R8G8B8A8_SRGB | U8U8U8U8 :213 | F16 :213 | F16·γ·n0 | U8U8U8U8 :105 | X,Y,Z,W | yes | float |
 | RGBA4 | A4R4G4B4_UNORM | A4R4G4B4 :196 | U8 :196 | 8P·n1 | A4R4G4B4 :88 | Y,Z,W,X | yes | float |
 | RGB5_A1 | B5G5R5A1_UNORM | A1R5G5B5 :198 | U8 :198 | 8P·n1 | A1R5G5B5 :90 | Z,Y,X,W | yes | float |
+| RGB5 | B5G5R5A1_UNORM | A1R5G5B5 :198 | U8 :198 | 8P·n1 | A1R5G5B5 :90 | Z,Y,X,1 | yes | float |
 | RGB565 | B5G6R5_UNORM | R5G6B5 :197 | U8 :197 | 8P·n1 | R5G6B5 :89 | Z,Y,X,1 | yes | float |
 | RGB10_A2 | R10G10B10A2_UNORM | A2R10B10G10 :223 | F16 :223 | F16·n1 | A2R10B10G10 :115 | X,Y,Z,W | yes | float |
 
 (sRGB renders with gamma because the accum is F16 and the PBE encodes to
 8-bit on the way out; the USC-side `fsat` is `pvfio.c:99-101`.)
+
+R16/RG16 read their 16-bit channels as `F16_PER_CHANNEL` (channel width
+over 8, `job-common.c:70-73`). RGB5: Mesa prefers `B5G5R5X1_UNORM`
+(`st_format.c:307-311`) but the PowerVR tables have no row for it, so the
+`B5G5R5A1_UNORM` row applies (render swizzle `Z,Y,X,W` like RGB5_A1); the
+table shows the sampling swizzle — Mesa composes its `.xyz1` texture
+swizzle (`teximage.c:759`) with the image swizzle (`image.c:166-191`) so
+the TPU reads A as 1.
 
 ### 2.2 Float
 
@@ -343,6 +359,38 @@ RGB10_A2UI renders as one packed dword (`U32` packmode, `U1010102` accum;
 clear colour via `pvr_pack_a2x10y10z10_uint`, `formats.c:103-121`) but
 samples as the TPU's `A2R10B10G10` integer format.
 
+### 2.4 Compressed (ETC2)
+
+Compressed formats are texture-only: the `FORMAT_COMPRESSED` macro
+(`arch-formats.c:70-77`) gives bind `__T__` and no PBE row — they are
+never render targets, so there is no packmode, accum or USC conversion.
+Their texformat numbers come from the `FORMAT_COMPRESSED` enum
+(`texstate.xml:195-232`, ETC2 values `:224-230`). All are filterable
+(block-compressed exception, `formats.c:278`) and sample as float.
+
+| GL | pipe | texformat | filter | sampler |
+|---|---|---|---|---|
+| COMPRESSED_RGB8_ETC2 | ETC2_RGB8 | ETC2_RGB :158 | yes | float |
+| COMPRESSED_SRGB8_ETC2 | ETC2_SRGB8 | ETC2_RGB :159 | yes | float |
+| COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 | ETC2_RGB8A1 | ETC2_PUNCHTHROUGHA :160 | yes | float |
+| COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 | ETC2_SRGB8A1 | ETC2_PUNCHTHROUGHA :161 | yes | float |
+| COMPRESSED_RGBA8_ETC2_EAC | ETC2_RGBA8 | ETC2A_RGBA :162 | yes | float |
+| COMPRESSED_SRGB8_ALPHA8_ETC2_EAC | ETC2_SRGBA8 | ETC2A_RGBA :163 | yes | float |
+| COMPRESSED_R11_EAC | ETC2_R11_UNORM | EAC_R11_UNSIGNED :164 | yes | float |
+| COMPRESSED_SIGNED_R11_EAC | ETC2_R11_SNORM | EAC_R11_SIGNED :165 | yes | float |
+| COMPRESSED_RG11_EAC | ETC2_RG11_UNORM | EAC_RG11_UNSIGNED :166 | yes | float |
+| COMPRESSED_SIGNED_RG11_EAC | ETC2_RG11_SNORM | EAC_RG11_SIGNED :167 | yes | float |
+
+The sRGB variants get the TEXSTATE gamma bits like the other sRGB formats
+(`tex-state.c:208-228`). Their PCK_INFO is plain INVALID: compressed
+formats have no typed channels (`u_format.yaml:997-1003`, `channels:
+[X64]`), so `pco_pipe_to_pck_format` returns INVALID and the UNORM bit
+(`setup_pck_info`, `tex-state.c:108-109`) stays clear — yakogl's
+`TEX_PCK_INFO_COMPRESSED_UNORM` = 0x11f (`src/pvr/backend.rs:900`) sets
+that bit on top of Mesa's value. yakogl already stores the RGB8/A1/RGBA8
+families as ETC2 texfmts (§4.1); the EAC R11/RG11 rows are recorded here
+for completeness.
+
 ## 3. ES 3.0 table 3.14, depth and stencil
 
 `FORMAT_DEPTH_STENCIL` rows: the TPU table gives combined / depth-aspect /
@@ -384,7 +432,10 @@ component fill, the way `TEXF_R32F` reuses F32 today) and integer surf
 formats with a new `gles_surf_rt_class` value (the integer class), so the
 shader compiler, the PBE words and the clear path can key off it.
 `gles_surf_bytes_per_pixel` and `gles_texfmt_bytes` gain the 1/2/4-byte
-integer sizes.
+integer sizes. The §2.1 rows also need R16/R16_SNORM/RG16/RG16_SNORM
+texfmts (the TPU has U16/S16/U16U16/S16S16 formats,
+`arch-formats.c:120-126`) and an RGB5 texfmt (the `A1R5G5B5` row, alpha
+forced to 1 in the swizzle).
 
 ### 4.2 `src/pvr/backend.rs` — texture state
 
@@ -486,7 +537,9 @@ Must gain: the integer internal formats in `sized_format` (→ new texfmts)
 and in `renderbuffer_surf_format` (→ the integer surf class); a raw-integer
 clear path that keeps the app's ints as ints (Mesa packs them per accum
 format, `formats.c:145-218`), reached from `glClearBufferiv/uiv` and from
-`glClearColor`-style clears on integer targets.
+`glClearColor`-style clears on integer targets. The same argument checks
+must accept R16/R16_SNORM/RG16/RG16_SNORM/RGB5 (→ the new texfmts of
+§4.1).
 
 ## 5. Integer fragment outputs and raw clears through the programs
 
@@ -598,10 +651,10 @@ board:
 
 Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
 
-1. a per-format PBE-word table test: for each integer packmode,
-   `pbe_emit_words` equals the csbgen-packed STATE_WORD1 with the §2.3
-   packmode, `norm=0`, `source_format=8_PER_CHANNEL` (the
-   `backend_csbgen_tests.rs` pattern);
+1. a per-format PBE-word table test: for each integer packmode (§2.3)
+   and the new 16-bit UNORM/SNORM packmodes (§2.1), `pbe_emit_words`
+   equals the csbgen-packed STATE_WORD1 with the table's packmode, norm
+   and source_format (the `backend_csbgen_tests.rs` pattern);
 2. a per-format sampler-descriptor test: integer `TEXF_*` word 0 (FORMAT
    field from `texstate.xml:95-193`), swizzle, and word 7 = PCK INVALID
    (the `float_texture_descriptors_…` pattern);
@@ -627,6 +680,10 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
   component fill but not the 8/16/32-bit widths.
 - RGB8/RGB16F storage follows Mesa's widening (no 24-bit pipe formats):
   RGBA8 / RGBA16F rows of §2.
+- RGB5 follows Mesa's fallback: the `B5G5R5A1_UNORM` row (the PowerVR
+  tables have no row for Mesa's preferred `B5G5R5X1_UNORM`,
+  `st_format.c:307-311`), with Mesa's `.xyz1` view swizzle giving A=1
+  (`teximage.c:759`).
 - RGB9_E5 stays texture-only (no accum format, `arch-formats.c:259`).
 - Depth/stencil keep today's R32F texture storage and the ISP's own depth
   path; only the table rows are recorded here (§3).
