@@ -92,9 +92,10 @@ af17c0c8…` in `zephyr-ws/zephyr`):
 
 The checkout has since been canonicalized with `git checkout FETCH_HEAD`:
 HEAD is the real `af17c0c8aa2a82a0b714a423915ad3610063ee68`, the metadata
-files are on disk, the four directories are tracked, and a fresh
-`west build` of the rpi4 row from that state is green (same 1,988,992-byte
-image). The snapshot import commit is gone.
+files are on disk, and the four directories are tracked. All four image
+rows were re-run from that state and are green with the same sizes
+(2,431,248 / 5,089,224 / 1,846,120 / 1,988,992 bytes). The snapshot import
+commit is gone.
 
 ## Gate rows: exact commands and results
 
@@ -139,6 +140,12 @@ python3 "$REPO/tools/hal-nxp/gen_regs.py" "$WS/modules/hal/nxp" |
 All five rows are green on nuc; the symbol checks ran with `nm` on the
 built ELF. The build logs are in `build/zephyr-werror/*.log` in the
 checkout.
+
+The `YAKOGL_PRECOMPILED_APPS` value must keep its inner double quotes
+through the shell (`'-DCONFIG_YAKOGL_PRECOMPILED_APPS="gl_test_es100"'`,
+as `check.sh` writes it): without them Kconfig reports "malformed string
+literal … Assignment ignored", and `-DYAKOGL_WERROR=ON` turns that warning
+into a build failure.
 
 ## PowerVR firmware blob
 
