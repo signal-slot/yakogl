@@ -1,6 +1,6 @@
 # Why XPS139340 has applied 0 of yakogl's records
 
-Plan #5, item `facts-replica`. Investigated on 2026-10-08 between 13:50Z and 14:20Z by a ccfarm worker running **on XPS139340, the follower node itself**. The ccfarm build was c5641e5 on every node.
+Plan #5, item `facts-replica`. Investigated on 2026-10-08 between 13:50Z and 14:30Z by a ccfarm worker running **on XPS139340, the follower node itself**. The ccfarm build was c5641e5 on every node.
 
 **Nothing in ccfarm's config or records was modified.**
 Every command below was read-only: `farm_status`, `ccfarm home`, `ccfarm list`, `ccfarm peers`, `journalctl`, and reads of files.
@@ -130,7 +130,7 @@ cat >> ~/.config/ccfarm/config.toml <<'EOF'
 [comms]
 # Clones directly below these directories are this node's projects: the
 # home replicator follows them (has_clone), see docs/farm/investigations/replica-zero.md
-projects_roots = ["~/com/github/signal-slot"]
+projects_roots = ["/home/tasuku/com/github/signal-slot"]
 EOF
 ccfarm drain        # finishes running turns, exits; systemd restarts ccfarm.service with the new config
 ```
