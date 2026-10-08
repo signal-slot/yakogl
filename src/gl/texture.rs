@@ -253,6 +253,7 @@ fn src_used_bytes(w: u32, format: GLenum, type_: GLenum) -> usize {
         GL_FLOAT => float_comps(format) * 4,
         GL_HALF_FLOAT | GL_HALF_FLOAT_OES => float_comps(format) * 2,
         GL_UNSIGNED_SHORT_5_6_5 | GL_UNSIGNED_SHORT_4_4_4_4 | GL_UNSIGNED_SHORT_5_5_5_1 => 2,
+        GL_UNSIGNED_INT_2_10_10_10_REV if !crate::REPORT_ES2 => 4,
         _ => 0,
     };
     w as usize * per_texel
@@ -418,6 +419,19 @@ fn convert_row(dst: &mut [u8], src: &[u8], w: u32, format: GLenum, type_: GLenum
                 dst[x * 4 + 1] = (g << 3) | (g >> 2);
                 dst[x * 4 + 2] = (b << 3) | (b >> 2);
                 dst[x * 4 + 3] = if a != 0 { 255 } else { 0 };
+            }
+            return;
+        }
+        /* ES 3.0 table 3.2: RGB5_A1 also unpacks the 10-bit word (the only
+         * internal format of the original tables that takes it, RGB10_A2
+         * being es3_formats'). Its alpha has one bit: 2 and 3 are set. */
+        if type_ == GL_UNSIGNED_INT_2_10_10_10_REV && format == GL_RGBA {
+            for x in 0..w {
+                let p = u32::from_ne_bytes([src[x * 4], src[x * 4 + 1], src[x * 4 + 2], src[x * 4 + 3]]);
+                dst[x * 4] = unorm8((p & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 1] = unorm8(((p >> 10) & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 2] = unorm8(((p >> 20) & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 3] = if p >> 30 >= 2 { 255 } else { 0 };
             }
             return;
         }
@@ -2496,12 +2510,11 @@ pub unsafe extern "C" fn glCopyTexImage2D(
         return;
     }
     if let Some((_, e)) = es3_formats::find(internalformat) {
-        /* an integer image is copied from an integer colour buffer only
-         * (ES 3.0 table 3.16), and none is a framebuffer format here */
-        if e.is_integer() || es3_storage_or_refuse(c, e, FUNC).is_none() {
-            if e.is_integer() {
-                c.set_error(GL_INVALID_OPERATION, FUNC);
-            }
+        if !es3_copy_compatible(c, e) {
+            c.set_error(GL_INVALID_OPERATION, FUNC);
+            return;
+        }
+        if es3_storage_or_refuse(c, e, FUNC).is_none() {
             return;
         }
     }
@@ -2613,8 +2626,8 @@ pub unsafe extern "C" fn glCopyTexSubImage2D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
-    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| e.is_integer()) {
-        c.set_error(GL_INVALID_OPERATION, FUNC); /* no integer colour buffer to copy from */
+    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| !es3_copy_compatible(c, e)) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
     let (lw, lh) = level_size(&c.objs_ref().textures[ti], level as u32);
@@ -4441,8 +4454,8 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
-    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| e.is_integer()) {
-        c.set_error(GL_INVALID_OPERATION, FUNC); /* no integer colour buffer to copy from */
+    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| !es3_copy_compatible(c, e)) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
     let (lw, lh) = level_size(&c.objs_ref().textures[ti], level as u32);
@@ -4561,11 +4574,37 @@ fn es3_image_check(c: &mut GlContext, internalformat: GLenum, format: GLenum, ty
         }
         return es3_storage_or_refuse(c, e, func).is_some();
     }
-    if es3_formats::only_for_new_formats(format, type_) && sized_format(internalformat).is_some() {
+    /* RGB5_A1 takes the 10-bit word too (table 3.2) */
+    let rgb5_a1_word = internalformat == GL_RGB5_A1 && is_rgb5_a1_word(format, type_);
+    if es3_formats::only_for_new_formats(format, type_) && !rgb5_a1_word && sized_format(internalformat).is_some() {
         c.set_error(GL_INVALID_OPERATION, func);
         return false;
     }
     true
+}
+
+/// May the read framebuffer's colour buffer be copied into an image of this
+/// format (ES 3.0 3.8.5, "Alternate Texture Image Specification Commands":
+/// the component types must agree)? Colour buffers here are unsigned
+/// normalised or floating point (the RGBA16F / R16F / R32F texture
+/// attachments), never integer or signed normalised: an integer or snorm image
+/// is never a copy target, a float image needs a float buffer, and
+/// RGB10_A2 (unsigned normalised) a fixed-point one.
+fn es3_copy_compatible(c: &GlContext, e: &es3_formats::Es3Format) -> bool {
+    let float_buffer = matches!(
+        framebuffer::fb_target_format(c),
+        backend::GLES_SURF_RGBA16F | backend::GLES_SURF_R16F | backend::GLES_SURF_R32F
+    );
+    match e.class {
+        es3_formats::Class::Int | es3_formats::Class::Uint | es3_formats::Class::Snorm => false,
+        es3_formats::Class::Float => float_buffer,
+        es3_formats::Class::Unorm => !float_buffer,
+    }
+}
+
+/// The pair table 3.2 gives RGB5_A1 besides its own: the 10-bit word.
+fn is_rgb5_a1_word(format: GLenum, type_: GLenum) -> bool {
+    format == GL_RGBA && type_ == GL_UNSIGNED_INT_2_10_10_10_REV
 }
 
 /// The storage class of an ES 3.0 format on this back end, or the refusal
@@ -4595,7 +4634,9 @@ fn es3_sub_image_check(c: &mut GlContext, ti: usize, format: GLenum, type_: GLen
     }
     let ok = match es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt) {
         Some(e) => e.accepts(format, type_),
-        None => !es3_formats::only_for_new_formats(format, type_),
+        /* (a texture does not record RGB5_A1 apart from RGBA8, so the word
+         * is taken into either) */
+        None => !es3_formats::only_for_new_formats(format, type_) || is_rgb5_a1_word(format, type_),
     };
     if !ok {
         c.set_error(GL_INVALID_OPERATION, func);

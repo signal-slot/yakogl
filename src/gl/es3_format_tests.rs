@@ -279,10 +279,12 @@ fn storage_and_sub_images_convert() {
     }
 }
 
-/// glCopyTexImage2D defines a snorm image from the framebuffer and refuses
-/// an integer one: no integer colour buffer exists to copy from.
+/// ES 3.0 3.8.5: the component types of the colour buffer and the image
+/// must agree. The default framebuffer is unsigned normalised, so a copy into
+/// an integer, signed normalised or floating-point image is
+/// GL_INVALID_OPERATION, and into RGB10_A2 (unsigned normalised) is fine.
 #[test]
-fn copies_into_integer_images_are_refused() {
+fn copies_follow_the_component_types() {
     if crate::REPORT_ES2 {
         return;
     }
@@ -291,16 +293,65 @@ fn copies_into_integer_images_are_refused() {
     new_tex(GL_TEXTURE_2D);
     // SAFETY: plain GL calls.
     unsafe {
-        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, 0, 0, 2, 2, 0);
-        assert_eq!(gl.error(), GL_INVALID_OPERATION);
-        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8_SNORM, 0, 0, 2, 2, 0);
-        assert_eq!(gl.error(), GL_NO_ERROR);
-        let s = new_tex(GL_TEXTURE_2D);
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32UI, 2, 2);
-        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 1, 1);
-        assert_eq!(gl.error(), GL_INVALID_OPERATION);
-        glDeleteTextures(1, &s);
+        for f in [
+            GL_RGBA8UI,
+            GL_R32I,
+            GL_RGBA8_SNORM,
+            GL_R8_SNORM,
+            GL_RGB16F,
+            GL_R11F_G11F_B10F,
+            GL_RGB9_E5,
+            GL_RG32F,
+            GL_RGB32F,
+        ] {
+            glCopyTexImage2D(GL_TEXTURE_2D, 0, f, 0, 0, 2, 2, 0);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "copy into 0x{f:x} from a fixed-point buffer");
+        }
+        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB10_A2, 0, 0, 2, 2, 0);
+        assert_eq!(gl.error(), GL_NO_ERROR, "RGB10_A2");
+        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 0, 0, 2, 2, 0);
+        assert_eq!(gl.error(), GL_NO_ERROR, "RGBA8");
+        /* the sub-image copy into existing storage of each kind */
+        for f in [GL_R32UI, GL_RGBA8_SNORM, GL_RGB16F] {
+            let s = new_tex(GL_TEXTURE_2D);
+            glTexStorage2D(GL_TEXTURE_2D, 1, f, 2, 2);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 1, 1);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "sub-copy into 0x{f:x}");
+            glDeleteTextures(1, &s);
+        }
     }
+}
+
+/// ES 3.0 table 3.2: RGB5_A1 also unpacks UNSIGNED_INT_2_10_10_10_REV (its
+/// alpha bit is set by 2 and 3), through the original RGBA8 store; no other
+/// internal format of the original tables takes the word.
+#[test]
+fn rgb5_a1_takes_the_ten_bit_word() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(ALL_NEW);
+    let name = new_tex(GL_TEXTURE_2D);
+    /* r 1023, g 512, b 0, a 2 | r 0, g 1023, b 1023, a 1 */
+    let w = [1023u32 | (512 << 10) | (2 << 30), (1023 << 10) | (1023 << 20) | (1 << 30)];
+    let bytes: Vec<u8> = w.iter().flat_map(|v| v.to_ne_bytes()).collect();
+    tex_image_2d(GL_RGB5_A1, 2, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 2), (vec![255, 128, 0, 255, 0, 255, 255, 0], GLES_TEXFMT_RGBA8));
+    /* a sub-image of the word into it */
+    // SAFETY: the source holds one texel.
+    unsafe {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 1, 0, 1, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, bytes.as_ptr() as _);
+    }
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 2).0[4..], [255, 128, 0, 255]);
+    /* RGBA8 and RGBA4 do not take it */
+    tex_image_2d(GL_RGBA8, 2, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    assert_eq!(gl.error(), GL_INVALID_OPERATION);
+    tex_image_2d(GL_RGBA4, 2, 1, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    assert_eq!(gl.error(), GL_INVALID_OPERATION);
 }
 
 /// ES 3.0 3.8.13: an integer texture is complete with NEAREST filtering
