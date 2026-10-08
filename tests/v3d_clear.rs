@@ -294,9 +294,9 @@ impl Image {
     }
 
     fn write(&mut self, p: usize, mask: u8, c: [u8; 4]) {
-        for ch in 0..4 {
+        for (ch, (dst, &src)) in self.px[p].iter_mut().zip(c.iter()).enumerate() {
             if mask >> ch & 1 != 0 {
-                self.px[p][ch] = c[ch];
+                *dst = src;
                 self.known[p] |= 1 << ch;
             }
         }
@@ -363,9 +363,9 @@ fn cts_color_clear_reference() {
                 for p in 0..(w * h) as usize {
                     let ctx = format!("{} iter {iter} flip {flip_y} pixel {p}", case.name);
                     assert_eq!(got.known[p], want.known[p], "{ctx}: known channels");
-                    for ch in 0..4 {
+                    for (ch, (g, w)) in got.px[p].iter().zip(want.px[p].iter()).enumerate() {
                         if want.known[p] >> ch & 1 != 0 {
-                            assert_eq!(got.px[p][ch], want.px[p][ch], "{ctx} channel {ch}");
+                            assert_eq!(g, w, "{ctx} channel {ch}");
                         }
                     }
                 }
