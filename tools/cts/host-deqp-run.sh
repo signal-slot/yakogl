@@ -87,9 +87,13 @@ case "$GPU" in
 esac
 MODULE=${MODULE:-gles2}
 case "$MODULE" in
-    gles2) DEQP_DIR=$BASE/deqp; MUSTPASS=$HERE/gles2-mustpass.txt; REPORT_ES2=ON ;;
+    gles2) DEQP_DIR=$BASE/deqp; MUSTPASS=$HERE/gles2-mustpass.txt; REPORT_ES2=ON; SURFACE=64 ;;
+    # 256x256 as the Android mustpass runs it: at 64x64 about 2,000 gles3 cases
+    # (all of clipping, most of texture.specification) end NotSupported on the
+    # surface size ("Too small viewport", "Render target size must be at least
+    # 200x200") before they compile anything (first full run, 2026-10-09).
     gles3) DEQP_DIR=$BASE/deqp-gles3; MUSTPASS=$CTS/android/cts/main/gles3-main-*.txt
-           REPORT_ES2=OFF; LIB=$LIB-es3; SUFFIX=$SUFFIX-gles3 ;;
+           REPORT_ES2=OFF; LIB=$LIB-es3; SUFFIX=$SUFFIX-gles3; SURFACE=256 ;;
     *) echo "host-deqp-run: MODULE must be gles2 or gles3, not '$MODULE'" >&2; exit 1 ;;
 esac
 OUT=${OUT:-$BASE/run-$COMMIT$SUFFIX}
@@ -155,7 +159,7 @@ run_chunk() {
         (cd "$DEQP_DIR/modules/$MODULE" &&
          LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-$MODULE --deqp-caselist-file="$list" \
             --deqp-log-filename="$log" --deqp-log-shader-sources=enable --deqp-log-images=disable \
-            --deqp-surface-type=pbuffer --deqp-surface-width=64 --deqp-surface-height=64 >> "$c.out" 2>&1)
+            --deqp-surface-type=pbuffer --deqp-surface-width="$SURFACE" --deqp-surface-height="$SURFACE" >> "$c.out" 2>&1)
         echo "exit=$?" >> "$c.out"
         # (Not awk's FNR==NR: with nothing begun yet its first input is empty
         # and the whole list would read as begun.)
@@ -173,7 +177,7 @@ run_chunk() {
     rm -f "$c.rest"
 }
 export -f run_chunk
-export BASE LIB DEQP_DIR MODULE
+export BASE LIB DEQP_DIR MODULE SURFACE
 ls "$OUT"/c_??? | xargs -P "$JOBS" -I{} bash -c 'run_chunk "$(realpath {})"' 2>/dev/null || true
 
 fi
