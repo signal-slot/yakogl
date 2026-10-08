@@ -5251,8 +5251,7 @@ fn a_cube_maps_six_faces_are_tiled_into_six_trees() {
     let stride = unsafe { v3d_tex_layer_stride(&layout) } as usize;
     let image = copy_image(b.base_gpu, texture::image_bytes(&b, &layout).unwrap() as usize);
     for face in 0..6usize {
-        for level in 0..levels as usize {
-            let s = layout.slices[level];
+        for (level, s) in layout.slices.iter().enumerate().take(levels as usize) {
             let l = (size as usize >> level).max(1);
             for y in 0..l {
                 for x in 0..l {
