@@ -669,22 +669,14 @@ fn prepare_one(p: &mut Prep<'_>, g: SelGroup) -> Result<(), PrepareError> {
         }
 
         let n = g.op.arity();
-<<<<<<< HEAD
         for src in &mut g.srcs[..n] {
-=======
-        for src in g.srcs.iter_mut().take(n) {
->>>>>>> 3985bee2a468281644eb0cf4988c8f06adfcb5e4
             if let Some(SelSrc::Imm(v)) = *src {
                 *src = Some(p.imm(v)?);
             }
         }
         canonicalise(op, &mut g.srcs, &mut p.stats);
 
-<<<<<<< HEAD
         for (i, src) in g.srcs[..n].iter_mut().enumerate() {
-=======
-        for (i, src) in g.srcs.iter_mut().enumerate().take(n) {
->>>>>>> 3985bee2a468281644eb0cf4988c8f06adfcb5e4
             let Some(s) = *src else { continue };
             if !bank_ok(op, i, &s) {
                 p.stats.bank_move += 1;

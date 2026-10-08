@@ -310,11 +310,7 @@ pub fn written_outputs<'a>(
     }
     let out = a.alloc_copy(m.outputs)?;
     let mut k = 0usize;
-<<<<<<< HEAD
     for o in &m.outputs[..out.len()] {
-=======
-    for o in m.outputs.iter().take(out.len()) {
->>>>>>> 3985bee2a468281644eb0cf4988c8f06adfcb5e4
         if keep(&o) {
             out[k] = *o;
             k += 1;

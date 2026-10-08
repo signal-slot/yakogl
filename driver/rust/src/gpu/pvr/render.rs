@@ -2115,11 +2115,7 @@ pub fn wait_for(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u3
         // posted kick until another command arrives; 0 of 60 runs of gl_test
         // case 13 stalled with it, about half without).
         if r.cfg.wait_repost != 0 && i == 20 {
-<<<<<<< HEAD
             for c in &r.last_kick[..r.last_kick_n as usize] {
-=======
-            for c in r.last_kick.iter().take(r.last_kick_n as usize) {
->>>>>>> 3985bee2a468281644eb0cf4988c8f06adfcb5e4
                 kccb_post(k, c);
             }
             r.reposts = r.reposts.wrapping_add(1);
