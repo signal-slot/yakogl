@@ -25,7 +25,7 @@ fetched integration branch, not from memory. Two results were merged and
 then vetoed by a confirming review and reverted (`3f78982`, `a35095b`);
 they are listed as stopped. Hashes are short abbreviations and resolve with `git show` in this
 clone, except run records named in quotes: `d60b9d76`, `d8583f20`,
-`fe5e8e73`, `396d667a` and `29460f96` name runs on main before this clone's
+`fe5e8e73`, `396d667a`, `29460f96` and `e31bd3e` name runs on main before this clone's
 root commit (`afb1633`, 2026-10-04), and `8abeaabb` is the origin/main tip
 named by the 2026-10-08 records; those objects are not in this clone (the
 read-only origin/main ref copy here is `16a53f8`, 2026-10-06). Board
@@ -96,7 +96,8 @@ State.
   defect — the two `definitions.define_value_and_function_{fragment,vertex}`
   failures come from one stale row of tools/cts/RESULTS.md (line 7623,
   measured at `e31bd3e`, 2026-09-23), so es2-preprocessor reduces to a
-  regression guard (tests/es2_preprocessor.rs). es2-offline-table-diag is
+  regression guard (tests/es2_preprocessor.rs, in review) plus a pp.rs
+  rescan fix for a gap dEQP does not test. es2-offline-table-diag is
   merged after the snapshot (`642a7589`, docs/investigations/
   es2-offline-table.md): the 8 tests the gate skips without a shader table
   are the visible part — 18 to 27 more fail in the no-table PowerVR and
@@ -282,7 +283,7 @@ Fixes:
 | item | state | note |
 |---|---|---|
 | es2-invariance | ready | fix the 9 regressions: deterministic mul-add fusion on PowerVR; its diagnosis landed no report, so this item carries the diagnosis itself (it owns docs/investigations/es2-invariance.md); blocked by a touch overlap with pvr-pool-npot (plan 2, in review) |
-| es2-preprocessor | in review (result `f44a0ff0`) | reduced to a regression guard: tests/es2_preprocessor.rs (19 shaders from section 7 of the diagnosis doc; all pass at the tip) |
+| es2-preprocessor | in review (result `f44a0ff0`) | in review, two parts: a regression guard for define_value_and_function (tests/es2_preprocessor.rs, 3 test functions pinning its token stream), and a src/shaderc/online/pp.rs `rescan_tail` fix for a defect dEQP has no case for (`#define G F` then `G(2)` left `F ( 2 )` unexpanded; C99 6.10.3.4) |
 | es2-npot-cases | ready | texture wrap and completeness under GL_OES_texture_npot, from the CTS-source case list; after es2-npot-research (in review); blocked by a touch overlap with sized-formats-gl (plan 3, running) |
 | es2-v3d-clear | ready | scissored and masked glClear drawn correctly (host proof for dEQP color_clear / fragment_ops); after es2-v3d-clear-diag (in review); blocked by a touch overlap with v3d-rt-sample (plan 2, running) |
 | es2-error-rules | ready | refuse ES 3-only enums and formats in report-es2 builds; the plan puts it after es2-host-deqp; es2-error-rules-diag (in review) informs it |
@@ -353,7 +354,7 @@ Publication record (feeds stage 3):
    es2-npot-research, es2-v3d-clear-diag, es2-error-rules-diag and
    es2-v3d-fbo-combos-diag are in review; es2-host-deqp-baseline is
    running; es2-offline-table-diag is already merged (`642a7589`).
-3. Host fixes as their diagnoses land: es2-preprocessor is in review;
+3. Host fixes as their diagnoses land: es2-preprocessor is in review (regression guard plus the pp.rs rescan fix);
    es2-invariance must diagnose the 9 regressions itself (its diagnosis
    item produced no report) and waits for the pvr-pool-npot overlap to
    settle; es2-npot-cases,
