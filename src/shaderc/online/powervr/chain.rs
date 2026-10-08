@@ -31,6 +31,10 @@ pub enum ChainError {
     /// A fragment shader that reads a varying: the iterators that evaluate
     /// one are not built.
     FragmentInputsNotBuilt,
+    /// A fragment shader reading more than 16 varying vectors (each array
+    /// element and each matrix column counts as one): the iterator tables
+    /// hold 16.
+    TooManyFragmentVaryings,
     /// A fragment shader writing anything but one `gl_FragColor` vec4: the
     /// only output path built is one RGBA8 colour.
     FragmentOutputsNotBuilt,
@@ -328,7 +332,7 @@ pub fn build_fragment_for<'a>(
     let mut comps = [0u8; 16];
     let mut coffs = [0u16; 16];
     if listed.len() > comps.len() {
-        return Err(ChainError::FragmentInputsNotBuilt);
+        return Err(ChainError::TooManyFragmentVaryings);
     }
     for (c, io) in comps.iter_mut().zip(listed) {
         *c = io.components;
