@@ -98,6 +98,18 @@ config YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT
 	  the screen to y (SET_VIRTUAL_OFFSET, no copy). A refused grant is
 	  printed and falls back to a screen-sized framebuffer.
 
+config YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC
+	bool "i.MX8MP: board_show() sets the scan-out address (and waits for VSYNC) every frame"
+	default n
+	depends on YAKOGL_BOARD_IMX8MP
+	help
+	  The A/B arm for the old behaviour. Off (the default), board_show()
+	  returns at once when the LCDIF already scans the shown buffer and
+	  pacing is eglSwapInterval's (yakogl_zephyr_wait_vblank in
+	  imx8mp/board_imx8mp.c). On, every show calls imx8mp_display_set_fb(),
+	  which waits for the next VSYNC: a floor of one panel period (17.0 ms)
+	  a frame (docs/investigations/imx8mp-frame-floor.md).
+
 config YAKOGL_BOARD_SCANOUT_VIEW
 	bool "A window smaller than the screen is a view into the scan-out buffer"
 	default n

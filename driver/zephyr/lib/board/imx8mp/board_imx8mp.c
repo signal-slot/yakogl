@@ -33,6 +33,10 @@
 #ifdef CONFIG_SAFEUI_DISPLAY_IMX8MP
 #include "imx8mp_display.h"
 #endif
+#if defined(CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST) && DT_HAS_COMPAT_STATUS_OKAY(yakogl_imx8mp_lcdif)
+#include <safeui/imx8mp_lcdif.h>
+#define HAVE_LCDIF_VBLANK 1
+#endif
 
 /* SCANOUT_VIEW: the panel-pitch buffer board_window() made, 0 for none */
 static uintptr_t s_view_phys;
@@ -113,6 +117,7 @@ int board_show(const struct board_window *win)
 {
 #if defined(CONFIG_SAFEUI_DISPLAY_IMX8MP) && defined(CONFIG_SAFEUI_GPU_VIVANTE)
 	static bool on;
+	static uintptr_t s_scan; /* the buffer the LCDIF scans, once on */
 	static struct gc_bo screen; /* the panel-sized copy, when the window is smaller */
 	uint32_t pw = 0, ph = 0;
 	uintptr_t scan;
@@ -151,13 +156,56 @@ int board_show(const struct board_window *win)
 		pitch = pw * 4u;
 	}
 	if (on) {
-		return imx8mp_display_set_fb(scan);
+		/* The window is one buffer and the LCDIF already scans it, so
+		 * there is nothing to flip; imx8mp_display_set_fb() would wait
+		 * for the next VSYNC (shadow load), a whole panel period per
+		 * frame. Pacing is eglSwapInterval's, through
+		 * yakogl_zephyr_wait_vblank() below. Only a buffer the LCDIF
+		 * does not scan yet is set. */
+		if (!IS_ENABLED(CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC) && scan == s_scan) {
+			return 0;
+		}
+		rc = imx8mp_display_set_fb(scan);
+		if (rc == 0) {
+			s_scan = scan;
+		}
+		return rc;
 	}
 	rc = imx8mp_display_on(scan, pitch);
 	on = rc == 0;
+	if (on) {
+		s_scan = scan;
+	}
 	return rc;
 #else
 	ARG_UNUSED(win);
+	return -ENOTSUP;
+#endif
+}
+
+/* The vertical-sync source for eglSwapInterval (src/osal/zephyr.c has the weak
+ * default, -ENOTSUP). Waits for the LCDIF's next VS_BLANK interrupt; the
+ * interrupt is on after a cold bring-up (yakogl_imx8mp_lcdif_enable), not on an
+ * adopted layer, which answers -ENOTSUP so a swap does not sit out the timeout.
+ * Returns 0, -ETIMEDOUT or -ENOTSUP. */
+int yakogl_zephyr_wait_vblank(int64_t timeout_us)
+{
+#ifdef HAVE_LCDIF_VBLANK
+	const struct device *lcdif = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(yakogl_imx8mp_lcdif));
+	const struct yd_lcdif_data *d;
+	int rc;
+
+	if (!device_is_ready(lcdif)) {
+		return -ENOTSUP;
+	}
+	d = yakogl_imx8mp_lcdif_data(lcdif);
+	if (!d->on || d->adopted) {
+		return -ENOTSUP;
+	}
+	rc = yakogl_imx8mp_lcdif_wait_vblank(lcdif, timeout_us < 0 ? K_FOREVER : K_USEC(timeout_us));
+	return rc == -EAGAIN ? -ETIMEDOUT : rc;
+#else
+	ARG_UNUSED(timeout_us);
 	return -ENOTSUP;
 #endif
 }

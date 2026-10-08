@@ -251,7 +251,43 @@ next limit after candidate 1 is fixed.
   published i.MX8MP scores (`driver/docs/glmark2.md:233-239`) are off-screen
   or Wayland runs, not a GL driver that spins on the LCDIF.
 
-## Proposed fix (not applied)
+## Proposed fix (F1 and F2 applied by item check-steps)
+
+Status: **F1 and F2 are applied** (written on the host; not yet run on a
+board, see Board recipe step 2). Line numbers are the tree with this change.
+
+- F1: `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-171`: once the display
+  is on, `board_show` returns 0 when `scan` is the buffer the LCDIF already
+  scans (`s_scan`, `:120`, set after `imx8mp_display_on` at `:177` and after
+  every successful `imx8mp_display_set_fb`). A new buffer address still goes
+  through `imx8mp_display_set_fb`. The first show still calls
+  `imx8mp_display_on`.
+- F2: `board_imx8mp.c:191-` defines `yakogl_zephyr_wait_vblank(int64_t)` (the
+  weak default stays in `src/osal/zephyr.c:602`, unchanged). It waits on
+  `yakogl_imx8mp_lcdif_wait_vblank` (`driver/drivers/display/display_yakogl_imx8mp_lcdif.c:178-188`,
+  the VS_BLANK interrupt semaphore) with the given timeout: 0, `-ETIMEDOUT`
+  (the driver's `-EAGAIN` mapped), or `-ENOTSUP` when the LCDIF is not on, is
+  an adopted layer (its VS_BLANK interrupt is only enabled by a cold
+  `yakogl_imx8mp_lcdif_enable`, so a wait would sit out the timeout; `-ENOTSUP`
+  makes EGL stop waiting, as before F2), or the build has no
+  `yakogl,imx8mp-lcdif` node with `SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST`.
+- A/B arm: Kconfig `YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC`
+  (`driver/zephyr/lib/board/Kconfig`, default n). `-DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`
+  restores the old `set_fb` on every show.
+- glmark2's swap interval: the sample directory
+  (`driver/samples/zephyr/glmark2/**`) has no `eglSwapInterval` call. Its
+  `GLStateEGL` is upstream's (`main.cpp:236-247` derives from it), and the
+  interval-0 call is upstream's `gl-state-egl.cpp:426-427` in `$GLMARK2_SRC`,
+  which is not in this tree. It was not re-read in this item; the claim rests on
+  the earlier reading above. If a board run shows glmark2 waiting anyway,
+  `eglSwapInterval(dpy, 0)` is not reaching YakoGL; fix that in the sample
+  (not done here).
+- Caveat: the weak default's `-ENOTSUP` made EGL's default interval 1 a no-op
+  on the i.MX8MP. With F2 an application on interval 1 (Slint, the cluster)
+  waits one VSYNC per swap: the pacing `board_show` gave them before, now in
+  `eglSwapBuffers`, and `board_show` no longer waits, so a frame waits once.
+
+The original proposal, kept for the record:
 
 F1 (the floor; board layer only). In
 `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` `board_show`: when the LCDIF
@@ -384,15 +420,45 @@ Verdict lines: `verdict=done`, `result=record:GLMARK2`, `resets=0`.
 - view = 29 or less: one clear takes more than 17 ms. Then candidate 2 or 3
   is large; step 3 page 1 and page 2 say which.
 
-### Step 2: after F1 (a later item's change)
+### Step 2: after F1 and F2 (this tree)
 
-Rebuild the `view` arm from the tree with F1 and run it the same way
-(`clear-view-f1`). Expected: `594b12ss fc3f0XXX 2104003f 03200258` with the
-score `XXX` above 0x3b (59). Then the default list with the view (the step
-1 command without `CONFIG_GLMARK2_ARGS`, `RUN_BOUND=960` as in
-`driver/docs/glmark2.md` section 2): the score was 46; expected well above
-it. Also rerun the common set's Slint, Slint view and cluster rows if F2 is
-not in the same change (they lose their pacing with F1 alone).
+Build and run the F1/F2 tree. `IMG` is an empty directory for the images,
+`<rec>` a record directory; the environment is Step 1's plus `SLINT_NOSTD_DIR`,
+`AGL_SLINT_CLUSTER_DIR`, `NOSTD_PATCH_DIR`, `NOTO_SANS_DIR`
+(`tools/cts/common-images.sh` header).
+
+```sh
+# (a) the one-scene probe, F1+F2 (view arm of Step 1, same command)
+west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d "$IMX8MP_OUT/gm-clear-view-f1" \
+  "$SW/driver/samples/zephyr/glmark2" -- "-DZEPHYR_MODULES=$MODS" \
+  -DYAKOGL_DIR="$SW" -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y -DGLMARK2_SRC="$GLMARK2_SRC" \
+  '-DCONFIG_GLMARK2_ARGS="-b clear"' -DCONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y
+"$SW/tools/board.sh" imx8mp run "$IMX8MP_OUT/gm-clear-view-f1/zephyr/zephyr.bin" <rec>/floor clear-view-f1
+# (b) the A/B arm: the same with the old wait on every show
+#     add -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y, build dir gm-clear-view-ab, name clear-view-ab
+# (c) the full glmark2 list, Slint and Slint view, cluster (common set rows GM SO SV CL)
+"$SW/tools/cts/common-images.sh" imx8mp "$SW/tools/cts/common-tree.txt" "$IMG" GM SO SV CL
+"$SW/tools/board.sh" imx8mp run "$IMG/GM/zephyr/zephyr.bin" <rec>/floor gm-f1
+"$SW/tools/board.sh" imx8mp run "$IMG/SO/zephyr/zephyr.bin" <rec>/floor so-f1
+"$SW/tools/board.sh" imx8mp run "$IMG/SV/zephyr/zephyr.bin" <rec>/floor sv-f1
+"$SW/tools/board.sh" imx8mp run "$IMG/CL/zephyr/zephyr.bin" <rec>/floor cl-f1
+```
+
+`RUN_BOUND=960` for the full glmark2 list as in `driver/docs/glmark2.md`
+section 2. Expected, per `tools/board.sh` verdict lines `verdict=done`,
+`result=record:...`, `resets=0` for every run:
+
+| Run | Record | Reading |
+|---|---|---|
+| (a) clear-view-f1 | `594b12ss fc3f0XXX 2104003f 03200258`, `XXX` above 0x3a | score 59 or more: a single clear is no longer one panel period. Under 59 (still 58): F1 did not take effect, or glmark2's interval is 1; look at the interval note above |
+| (b) clear-view-ab | `... fc3f003a ...` | 58, the Step 1 view arm (the old code), same image otherwise |
+| (c) GM | `594b12ss fc3f00ZZ 2184003f 03200258`-class | 33 ran, 0 failed, 0 unsupported; score ZZ well above 46 (view) and 37 (copy); light scenes above 58 FPS, the score no longer capped near 58 |
+| (c) SO, SV, CL | their usual records and PASS | still paced at the display rate: a frame every 17.0 ms (about 58.8 FPS) from `eglSwapBuffers` waiting one VSYNC (interval 1), not faster. Compare their frame numbers with the pre-F1 runs of the common set (`docs/benchmarks-baseline/`, `tools/cts/RESULTS.md`): same FPS, same PASS |
+
+If SO, SV or CL run faster than 59 FPS, F2 did not take effect (the wait
+returned `-ENOTSUP`: the panel was adopted, not brought up cold). If they hang
+or each swap takes 100 ms, the VS_BLANK interrupt does not fire: look at
+`d->irq_status`. Report that and use arm (b) to continue.
 
 ### Step 3: the frame-breakdown record (after it is built)
 
