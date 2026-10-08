@@ -177,3 +177,38 @@ by a run on nuc, or on XPS after replica-restart. This file stays
 
 The per-result table therefore still cannot be built here. All three reviews
 also say it must be built on nuc or after replica-restart.
+
+## New routes tried at 2026-10-08T16:35Z, after more tools were granted
+
+- `ask_farm` (project yakogl) went to XPS139340, Lepton, Lepton-local, nuc and
+  system76. The result was `"answers":[]`: "No node of the farm knows this from
+  its notes". So nuc did not answer from its records through this route.
+- `get_plan(5)` returned "no plan with id 5", and `get_agent_status` for
+  01a11974-b6fe-71bd-a9f3-3972ec8e3fdf returned "no agent with id". Same
+  cause: the store on XPS is empty.
+- `git ls-remote origin` (GitHub) worked. GitHub's `ccfarm/integration` is at
+  `334d4e658772f466e2625b8de1d512f0fc6afd2f`, not the snapshot's `7bc37ed`.
+  The commit is not in this clone; `git fetch` needed approval, so I could not
+  test which candidates it contains.
+
+Candidate branch tips on GitHub compared with the workspace snapshot (confirmed
+from the `ls-remote` output; all 15 candidates still exist on GitHub):
+
+| agent id | snapshot tip | GitHub tip | reading |
+|---|---|---|---|
+| 01a11b9b-b871-7718-8b5a-3ae8342e65c6 | 34e6055 | e9c748e | moved: a later turn (likely rework after review) |
+| 01a119e0-9d60-7386-ada8-85bccbc131bc | b9b2ac0 | 3985bee | moved: a later turn |
+| 01a1194b-7f12-7095-8268-f7cc6253246d | 960e6d8 | 6a046ea | moved: a later turn |
+| 01a11829-4308-7096-b6fb-ec317a4bb7d6 | a4b59bc | c2b6294 | moved: a later turn |
+| the other 11 candidates | same | same | no new turn since the snapshot |
+
+"A later turn" is confirmed (the branch moved). That it was rework after a
+review is unconfirmed. The other 11 have had no new commit, so if they are not
+merged they are waiting on something outside the agent: review, gate, decision
+or merge.
+
+Not confirmed: whether GitHub's integration `334d4e6` merges any of them.
+Command to check it, once allowed:
+`git fetch origin refs/heads/ccfarm/integration:refs/remotes/gh/integration`
+then `git branch -r --contains` / `git merge-base --is-ancestor <tip> gh/integration`
+for each candidate tip.
