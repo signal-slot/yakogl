@@ -1047,7 +1047,7 @@ fn current_blend_key(c: &GlContext) -> u32 {
     let mut key = SHC_BLEND_KEY_REPLACE;
     let off = disabled_channels(c);
 
-    if c.blend {
+    if c.blend && !framebuffer::fb_target_is_integer(c) {
         key = shc_blend_key(
             map_blend_factor(c.blend_src),
             map_blend_factor(c.blend_dst),
@@ -1762,6 +1762,37 @@ fn set_sample_state(c: &GlContext, d: &mut GlesDraw) {
     d.alpha_to_coverage = c.sample_alpha_to_coverage;
 }
 
+/// Integer surfaces already reported as refused (bit `format - GLES_SURF_INT_FIRST`):
+/// one log line per format, not one per draw.
+static REFUSED_INT_RT: Global<u32> = Global::new(0);
+
+/// A colour target the back end cannot render into is refused by name before
+/// the draw (or clear) reaches it: an integer surface it has not learned
+/// ([`backend::INTEGER_RT_FORMATS`]). The framebuffer is complete and the
+/// storage is there (ES 3.0 requires the formats); drawing garbage into it is
+/// worse than saying no, so the draw is dropped with GL_INVALID_OPERATION.
+/// `mask` is the clear's target mask (0: every target the draw writes).
+fn refuse_undrawable_targets(d: &GlesDraw, mask: u8) -> Result<(), DrawError> {
+    for (i, t) in d.targets[..d.num_targets as usize].iter().enumerate() {
+        if t.gpu == 0 || (mask != 0 && mask & (1u8 << i.min(7)) == 0) || backend::rt_format_drawable(t.format) {
+            continue;
+        }
+        // SAFETY: single-threaded by contract; no other reference is live.
+        let reported = unsafe { REFUSED_INT_RT.get() };
+        let bit = 1u32 << (t.format - GLES_SURF_INT_FIRST);
+        if *reported & bit == 0 {
+            *reported |= bit;
+            glog!(
+                "draw refused: this back end cannot render into a {} colour attachment (draw buffer {})",
+                gles_surf_name(t.format),
+                i
+            );
+        }
+        return Err((GL_INVALID_OPERATION, "refuse_undrawable_targets"));
+    }
+    Ok(())
+}
+
 /// The draw's colour targets, built from the glDrawBuffers mapping (ES 3.0
 /// 4.2.1): slot i is draw buffer i, which writes attachment i or nothing.
 /// Each written slot carries its attachment's memory, size and format.
@@ -1916,7 +1947,11 @@ fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear) {
      * inside every tolerance, but alpha is 1 bit in RGB5_A1 and absent in
      * GL_RGB / GL_RGB565, where GL says the buffer reads 1 -- a whole-image
      * difference, not a rounding one. */
-    d.clear_rgba[3] = framebuffer::quantise_unorm(d.clear_rgba[3], d.target_alpha_bits);
+    /* (an integer target's clear is raw integer bits, not a colour; the alpha
+     * bits are attachment 0's, so a clear of another draw buffer keeps its own) */
+    if !gles_surf_is_integer(d.target_format) && (pc.state.target_mask == 0 || pc.state.target_mask & 1 != 0) {
+        d.clear_rgba[3] = framebuffer::quantise_unorm(d.clear_rgba[3], d.target_alpha_bits);
+    }
     d.do_clear_depth = cp.depth;
     d.clear_depth = if cp.depth { pc.depth_value } else { 1.0 };
     d.do_clear_stencil = cp.stencil;
@@ -2038,6 +2073,17 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
     d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
     set_sample_state(c, d);
     resolve_targets(c, d); /* a clear opens the frame: it decides its attachments */
+    if pc.color {
+        if let Err((e, func)) = refuse_undrawable_targets(d, pc.state.target_mask) {
+            if !quiet {
+                c.set_error(e, func);
+            }
+            pc.color = false;
+            if !(with_ds && (pc.depth || pc.stencil)) {
+                return;
+            }
+        }
+    }
     /* The write masks and the scissor box apply to a clear as they do to a
      * draw: a buffer whose mask is entirely off is not cleared, an empty
      * scissor box clears nothing, and anything narrower than the target goes
@@ -2860,6 +2906,7 @@ fn build_common(
     d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
     set_sample_state(c, d);
     resolve_targets(c, d);
+    refuse_undrawable_targets(d, 0)?;
     d.instance_count = draw_instances();
     d.instance_id = DRAW_INSTANCE_ID.load(Ordering::Relaxed);
 
@@ -2903,7 +2950,8 @@ fn build_common(
 
     /* blending: swap in the FS variant compiled for this blend state, and
      * pass the state on as well for a backend that blends in hardware */
-    d.blend = c.blend;
+    /* blending is ignored for an integer buffer (ES 3.0 4.1.8) */
+    d.blend = c.blend && !framebuffer::fb_target_is_integer(c);
     d.blend_src_rgb = map_blend_factor(c.blend_src) as u8;
     d.blend_dst_rgb = map_blend_factor(c.blend_dst) as u8;
     d.blend_src_alpha = map_blend_factor(c.blend_src_a) as u8;

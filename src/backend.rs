@@ -209,7 +209,165 @@ pub const GLES_SURF_RGBA16F: u8 = 3;
 pub const GLES_SURF_R16F: u8 = 4;
 pub const GLES_SURF_R32F: u8 = 5;
 
+/* The ES 3.0 integer colour formats (table 3.13's colour-renderable integer
+ * rows), one surface each. They are stored packed, channels x bits a pixel
+ * (R8I is one byte, RGBA32UI sixteen; RGB10_A2UI is the 10/10/10/2 word), in
+ * the order below, which [`GLES_SURF_INT_FIRST`] and [`GLES_SURF_INT_LAST`]
+ * bracket. A fragment output of such a target is a signed or unsigned
+ * integer (`ivec4`/`uvec4`), never converted, never blended and never
+ * dithered; a clear carries its four raw 32-bit values in the bit patterns of
+ * `GlesDraw::clear_rgba` (see there). [`gles_surf_int_layout`] describes one
+ * for a back end to map to its hardware render-target format, and a back end
+ * says which of them it can write in [`INTEGER_RT_FORMATS`]: a draw or clear
+ * into another is refused by name before it reaches the back end
+ * (`gl::draw`, [`rt_format_drawable`]). */
+pub const GLES_SURF_R8I: u8 = 6;
+pub const GLES_SURF_R8UI: u8 = 7;
+pub const GLES_SURF_R16I: u8 = 8;
+pub const GLES_SURF_R16UI: u8 = 9;
+pub const GLES_SURF_R32I: u8 = 10;
+pub const GLES_SURF_R32UI: u8 = 11;
+pub const GLES_SURF_RG8I: u8 = 12;
+pub const GLES_SURF_RG8UI: u8 = 13;
+pub const GLES_SURF_RG16I: u8 = 14;
+pub const GLES_SURF_RG16UI: u8 = 15;
+pub const GLES_SURF_RG32I: u8 = 16;
+pub const GLES_SURF_RG32UI: u8 = 17;
+pub const GLES_SURF_RGBA8I: u8 = 18;
+pub const GLES_SURF_RGBA8UI: u8 = 19;
+pub const GLES_SURF_RGBA16I: u8 = 20;
+pub const GLES_SURF_RGBA16UI: u8 = 21;
+pub const GLES_SURF_RGBA32I: u8 = 22;
+pub const GLES_SURF_RGBA32UI: u8 = 23;
+pub const GLES_SURF_RGB10_A2UI: u8 = 24;
+pub const GLES_SURF_INT_FIRST: u8 = GLES_SURF_R8I;
+pub const GLES_SURF_INT_LAST: u8 = GLES_SURF_RGB10_A2UI;
+
+/// Is this one of the integer colour surfaces above?
+pub const fn gles_surf_is_integer(format: u8) -> bool {
+    format >= GLES_SURF_INT_FIRST && format <= GLES_SURF_INT_LAST
+}
+
+/// What an integer colour surface is made of, for a back end choosing its
+/// hardware render-target format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GlesIntLayout {
+    /// Channels the format has: 1 (R), 2 (RG) or 4 (RGBA). The others of
+    /// R,G,B,A read 0,0,0,1 (ES 3.0 4.3.2).
+    pub channels: u8,
+    /// Bits a colour channel (8, 16 or 32); 10 for RGB10_A2UI, whose alpha
+    /// has 2.
+    pub bits: u8,
+    /// Signed (`GL_INT` reads, `ivec4` outputs); else unsigned.
+    pub signed: bool,
+}
+
+/// The layout of an integer colour surface; `None` for every other format.
+pub const fn gles_surf_int_layout(format: u8) -> Option<GlesIntLayout> {
+    let (channels, bits, signed) = match format {
+        GLES_SURF_R8I => (1, 8, true),
+        GLES_SURF_R8UI => (1, 8, false),
+        GLES_SURF_R16I => (1, 16, true),
+        GLES_SURF_R16UI => (1, 16, false),
+        GLES_SURF_R32I => (1, 32, true),
+        GLES_SURF_R32UI => (1, 32, false),
+        GLES_SURF_RG8I => (2, 8, true),
+        GLES_SURF_RG8UI => (2, 8, false),
+        GLES_SURF_RG16I => (2, 16, true),
+        GLES_SURF_RG16UI => (2, 16, false),
+        GLES_SURF_RG32I => (2, 32, true),
+        GLES_SURF_RG32UI => (2, 32, false),
+        GLES_SURF_RGBA8I => (4, 8, true),
+        GLES_SURF_RGBA8UI => (4, 8, false),
+        GLES_SURF_RGBA16I => (4, 16, true),
+        GLES_SURF_RGBA16UI => (4, 16, false),
+        GLES_SURF_RGBA32I => (4, 32, true),
+        GLES_SURF_RGBA32UI => (4, 32, false),
+        GLES_SURF_RGB10_A2UI => (4, 10, false),
+        _ => return None,
+    };
+    Some(GlesIntLayout { channels, bits, signed })
+}
+
+/// The GL name of a surface, for the log line that refuses a draw into it.
+pub const fn gles_surf_name(format: u8) -> &'static str {
+    match format {
+        GLES_SURF_RGBA8888 => "RGBA8888",
+        GLES_SURF_XRGB8888 => "XRGB8888",
+        GLES_SURF_RGB565 => "RGB565",
+        GLES_SURF_RGBA16F => "RGBA16F",
+        GLES_SURF_R16F => "R16F",
+        GLES_SURF_R32F => "R32F",
+        GLES_SURF_R8I => "R8I",
+        GLES_SURF_R8UI => "R8UI",
+        GLES_SURF_R16I => "R16I",
+        GLES_SURF_R16UI => "R16UI",
+        GLES_SURF_R32I => "R32I",
+        GLES_SURF_R32UI => "R32UI",
+        GLES_SURF_RG8I => "RG8I",
+        GLES_SURF_RG8UI => "RG8UI",
+        GLES_SURF_RG16I => "RG16I",
+        GLES_SURF_RG16UI => "RG16UI",
+        GLES_SURF_RG32I => "RG32I",
+        GLES_SURF_RG32UI => "RG32UI",
+        GLES_SURF_RGBA8I => "RGBA8I",
+        GLES_SURF_RGBA8UI => "RGBA8UI",
+        GLES_SURF_RGBA16I => "RGBA16I",
+        GLES_SURF_RGBA16UI => "RGBA16UI",
+        GLES_SURF_RGBA32I => "RGBA32I",
+        GLES_SURF_RGBA32UI => "RGBA32UI",
+        GLES_SURF_RGB10_A2UI => "RGB10_A2UI",
+        _ => "unknown",
+    }
+}
+
+/// The integer colour surfaces this build's back end can render into: bit
+/// `format - GLES_SURF_INT_FIRST`. None yet. A back end that learns one sets
+/// its bits here (int-rt-pvr, int-rt-v3d, int-rt-gc) and it stops being
+/// refused at the draw; until then the GL core accepts the renderbuffer
+/// (ES 3.0 requires the formats) and refuses to draw into it, by name,
+/// rather than render garbage.
+pub const INTEGER_RT_FORMATS: u32 = {
+    #[cfg(feature = "gpu-vivante")]
+    {
+        0
+    }
+    #[cfg(feature = "gpu-v3d")]
+    {
+        0
+    }
+    #[cfg(feature = "gpu-powervr")]
+    {
+        0
+    }
+};
+
+/// Host tests only: integer surfaces a test back end claims to render, ORed
+/// into [`INTEGER_RT_FORMATS`] (the host back ends draw nothing, so the test
+/// stands in for a back end that can).
+#[cfg(feature = "host-test")]
+pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Can this build's back end render into the surface? Everything but the
+/// integer surfaces is a yes (those were always in); an integer one needs its
+/// bit in [`INTEGER_RT_FORMATS`].
+pub fn rt_format_drawable(format: u8) -> bool {
+    if !gles_surf_is_integer(format) {
+        return true;
+    }
+    #[allow(unused_mut)]
+    let mut mask = INTEGER_RT_FORMATS;
+    #[cfg(feature = "host-test")]
+    {
+        mask |= HOST_INTEGER_RT_FORMATS.load(core::sync::atomic::Ordering::Relaxed);
+    }
+    (mask >> (format - GLES_SURF_INT_FIRST)) & 1 != 0
+}
+
 pub const fn gles_surf_bytes_per_pixel(format: u8) -> u32 {
+    if let Some(l) = gles_surf_int_layout(format) {
+        return if l.bits == 10 { 4 } else { l.channels as u32 * (l.bits as u32 / 8) };
+    }
     if format == GLES_SURF_RGB565 || format == GLES_SURF_R16F {
         2
     } else if format == GLES_SURF_RGBA16F {
@@ -535,6 +693,11 @@ pub struct GlesDraw {
     /// Attachment 0 only. The other attachments (`targets`) keep 8 bits;
     /// ES 2.0 has no MRT, so nothing in the suite renders an RGB format there.
     pub target_alpha_bits: u8,
+    /// The colour the clear writes. When the cleared target is an integer
+    /// surface ([`gles_surf_is_integer`]) the four words are NOT floats but
+    /// the raw 32-bit integers glClearBuffer{i,ui}v gave, as bit patterns
+    /// (`f32::from_bits`; the signed ones in two's complement); the back end
+    /// narrows them to the surface (ES 3.0 4.2.3).
     pub clear_rgba: [f32; 4],
     /// The clear is an internal full-screen quad rather than the frame's
     /// background object. The background object covers the whole target and
