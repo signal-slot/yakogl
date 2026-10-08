@@ -24,7 +24,8 @@ fn compile(src: &str) -> Result<(), String> {
     let text = format!("{src}\0");
     let compile = yakogl::shaderc::online::SHC_ONLINE.compile.expect("the online back end compiles");
     // SAFETY: a NUL-terminated source, a real output, and a log of the size announced.
-    let rc = unsafe { compile(SHC_STAGE_FRAGMENT, text.as_ptr() as *const c_char, &mut out, log.as_mut_ptr(), log.len()) };
+    let rc =
+        unsafe { compile(SHC_STAGE_FRAGMENT, text.as_ptr() as *const c_char, &mut out, log.as_mut_ptr(), log.len()) };
     if rc == 0 {
         Ok(())
     } else {
