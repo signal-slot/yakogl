@@ -1,140 +1,157 @@
 # Why XPS139340 has applied 0 of yakogl's records
 
-Plan #5, item `facts-replica`. Investigated on 2026-10-08 between 13:50Z and 14:05Z by a ccfarm worker running **on XPS139340, the follower node itself**.
-
-**Outcome: root cause not established.**
-The worker could not read any of ccfarm's config, data or logs, and had no ssh access to nuc.
-Every probe outside the yakogl workspace was refused by the worker's permission policy (see "Unreachable" below).
-This document lists what was confirmed, the best-supported candidate causes, and the exact commands that settle the question.
-Whoever has the permissions can run those commands (the `replica-restart` item or the owner).
+Plan #5, item `facts-replica`. Investigated on 2026-10-08 between 13:50Z and 14:20Z by a ccfarm worker running **on XPS139340, the follower node itself**. The ccfarm build was c5641e5 on every node.
 
 **Nothing in ccfarm's config or records was modified.**
+Every command below was read-only: `farm_status`, `ccfarm home`, `ccfarm list`, `ccfarm peers`, `journalctl`, and reads of files.
 The only change is this file.
+
+## Root cause (one line)
+
+XPS139340 never starts a pull of yakogl, because its daemon **does not know it has a yakogl clone**.
+The follower loop starts a pull only for projects with a known clone, and the same check makes XPS advertise `candidate: false`.
+XPS's config has no `[comms] projects_roots` and no `telegram_projects`, so the only other way to find a clone is the repositories of tasks in XPS's own store.
+That store has been empty since XPS handed its two yakogl rows to nuc on 2026-10-08T06:54:08Z.
+
+Classification: **configuration**.
+The follower role is registered, but pulling never starts.
+It is not a connection, authentication or nuc-side fault.
 
 ## Confirmed
 
-Each entry gives the command or path, the quoted output, and the time.
+Each entry gives the command or path, the quoted output, and the time (UTC).
 
-1. **The worker ran on the follower.**
-   `hostname` → `XPS139340` (2026-10-08T13:53Z, `date -u` → `2026-10-08T13:53:20Z`).
-2. **ccfarm binary on XPS139340.**
-   `which ccfarm` → `/home/tasuku/.cargo/bin/ccfarm` (13:53Z).
-   It was installed with `cargo install`, so the source is wherever that install pointed, which was not readable here.
-3. **The worker could not inspect ccfarm itself.**
-   Each of these was refused with "requires approval" or "blocked" (13:53Z–14:05Z):
-   - `ccfarm --help` and `ccfarm help`
-   - `ls` / Read of `~/.config/ccfarm`, `~/.config/ccfarm/config.toml` and `~/.local/share/ccfarm`.
-     The refusal text was `ls in '/home/tasuku/.config/ccfarm' was blocked ... may only list files in the allowed working directories`.
-   - `journalctl --user -u ccfarm*`, `systemctl --user list-units --all` and `ps -eo pid,lstart,args`
-   - `ssh -o BatchMode=yes nuc true`, `git ls-remote origin HEAD`
-   - the MCP tools `mcp__ccfarm__farm_status` (detail=true, twice) and `mcp__ccfarm__ask_farm`.
+1. **The homes block now**, from `mcp__ccfarm__farm_status detail=true`, `generated_at 2026-10-08T13:57:18Z`, answered by XPS139340:
+   ```
+   {"degraded":true,"followers":[{"applied_seq":0,"candidate":false,"lag":157787,
+     "last_pull_secs":null,"missing_objects":0,"node":"XPS139340","online":true}],
+    "holding_rows":[],"home":"nuc","key":"github.com/signal-slot/yakogl",
+    "other_homes":[],"project":"yakogl","seq":157787,"term":1}
+   ```
+   nuc's log grew from 151,915 entries (the planner's read at 13:14Z) to 157,787, while `applied_seq` stayed at 0.
+2. **XPS's roles**, from `ccfarm home` (13:58Z):
+   ```
+   github.com/signal-slot/yakogl  follower (term 1, home nuc)
+   github.com/signal-slot/yakogl  replica of nuc (term 0, seq 7078, updated 2026-10-07 12:30:33 UTC)
+   ```
+   `ccfarm home show yakogl` gives the replica's path: `/home/tasuku/.local/share/ccfarm/replicas/github.com_signal-slot_yakogl@nuc.db`.
+   It holds 285 tasks and plans #1 and #2.
+   So XPS *did* replicate nuc under the old term-0 scheme, and that copy stopped at 2026-10-07 12:30:33Z.
+   The term-1 log (seq 157787) has never been pulled.
+3. **XPS went to sleep just after that last update.**
+   `journalctl --user -u ccfarm.service` at 2026-10-08T06:56:27Z shows:
+   `sentinel: this node was asleep or stopped for 1107 min key=slept:202610080656`.
+   1107 minutes before that is about 2026-10-07T12:29Z.
+4. **The handover that made XPS a follower**, from the same journal:
+   ```
+   2026-10-08T06:53:39.092746Z INFO ccfarm_mcp::failover: another node is the project's home: stepping down key=github.com/signal-slot/yakogl home=nuc term=1
+   2026-10-08T06:54:06.647944Z INFO ccfarm_mcp::failover::takeover: handing the project over: its rows are frozen here key=github.com/signal-slot/yakogl to="nuc" term=1 seq=0
+   2026-10-08T06:54:08.833572Z INFO ccfarm_mcp::failover::takeover: handed the project over: following the new home key=github.com/signal-slot/yakogl to="nuc" tasks=2
+   ```
+   Earlier, `2026-10-07T09:46:01.595357Z INFO ccfarm_mcp::home: project keys recorded tasks=2` shows that XPS held exactly two yakogl rows of its own.
+5. **No pull was ever logged.**
+   `journalctl --user --since "2026-10-07 00:00" | grep -iE 'replic|follow|pull'` matches only the handover line above and the GC lines (`replica_refs=0`).
+   It shows no error, no connection failure and no authentication failure.
+   (A failing pull would only log at debug level, `follow.rs:100`, so this alone does not rule out failing pulls; items 9–10 do.)
+6. **XPS's own task store is empty.**
+   `ccfarm list --limit 1000` printed nothing (14:10Z).
+7. **XPS's node config sets nothing about homes or clones.**
+   `/home/tasuku/.config/ccfarm/config.toml` holds only `[mcp]`, `[worker]`, `[p2p]`, `[quota]` and `[gc]`.
+   It has no `[home]` and no `[comms]` section, so `projects_roots = []` and `telegram_projects = {}`.
+8. **XPS does have a clone; ccfarm just isn't told about it.**
+   `/home/tasuku/com/github/signal-slot/yakogl/.git/config` has `[remote "origin"] url = git@github.com:signal-slot/yakogl.git`.
+   That URL normalises to the key `github.com/signal-slot/yakogl`.
+9. **The code path.**
+   ccfarm's source checkout is at `/home/tasuku/com/github/signal-slot/ccfarm`; the self-update log line names it as `source=/home/tasuku/com/github/signal-slot/ccfarm`.
+   - `crates/mcp/src/failover/mod.rs`, `sync_followers` (lines 872–908): a pull of home H is started only when `self.settings.candidate && has_clone(clones, key)` and H's hello advertises the key with `acting`.
+   - `is_candidate` (lines 530–535) = `settings.candidate && has_clone(clones, key) && front running && !draining`, and this is the value XPS advertises as `candidate`.
+   - `refresh_clones` (lines 458–489) builds `clones` from `[comms] projects_roots` (repositories directly below), `[comms] telegram_projects`, and the `repo_root` of the 200 most recent isolated tasks in **this node's store**.
+     With an empty config and an empty store, `clones` is empty.
+   - `crates/config/src/home.rs`: `[home]` defaults to `replicate = true, failover = true, candidate = true`, so `settings.candidate` is true on XPS.
+   - XPS runs its front roles: `2026-10-08T11:53:08.140382Z INFO ccfarm::front_roles: front roles running node=XPS139340`.
+   - XPS is not draining: it runs 10 turns.
+   - So the only false term in `candidate` is `has_clone`, and the same term stops `sync_followers` from ever creating the `Follower`.
+10. **Why `applied_seq` is 0.**
+    `advert()` (mod.rs lines 821–843) reads `applied_seq` from the running `Follower` of `(key, home)`, and falls back to `(0, 0)` when there is none.
+    0 here means "no follower task exists", not "pulled and got nothing".
+11. **Why `last_pull_secs` is null.**
+    `crates/mcp/src/failover/status.rs` lines 41–53 and 85 take it from the *answering node's* `homes().acks(key)`, which is the record of pulls that node served.
+    When `farm_status` is answered by a non-home node, as here on XPS, it is null by construction.
+    Only nuc's answer can show a pull time, and nuc would have had to receive one.
+12. **Why `degraded` is true.**
+    status.rs lines 101–107: a home is degraded unless some follower is online, has `lag < 50` and `candidate == true`.
+    XPS fails on `lag` and on `candidate`.
+13. **The P2P link is up.**
+    `ccfarm peers` (13:58Z) shows `100.81.213.44:9877 nuc online … build c5641e5 (up to date)`.
+    XPS runs nuc's tasks through it all day (`starting turn … source=peer 100.81.213.44:9877`), so neither connection nor authorisation is the cause.
 
-   So step (1) of the item, re-running farm_status with detail=true, **could not be done**.
-   The only homes block available is the planner's copy below.
-4. **No earlier note on this subject exists in the repository.**
-   `git log --all --oneline -- docs/farm tools/farm` returned nothing, and `git log --all -i --grep=replica --grep=follower` returned nothing (14:00Z).
+## Unconfirmed
 
-## Reported by the planner (not re-observed here)
-
-The plan text quotes `farm_status` at **2026-10-08T13:14Z**:
-
-```
-homes[]: {project yakogl, key github.com/signal-slot/yakogl, home nuc,
-          degraded true, seq 151915, term 1,
-          followers [{node XPS139340, online true, applied_seq 0, lag 151915,
-                      last_pull_secs null, candidate false, missing_objects 0}]}
-```
-
-The plan's goal text, written earlier, says "144,197 件中 0 件".
-So nuc's `seq` grew by about 7,700 between the two reads while `applied_seq` stayed at 0.
-That means nuc is still writing records, and the follower is still not pulling.
-
-## Unconfirmed: candidate causes and what they predict
-
-These candidates are ranked by fit with the data above.
-None is confirmed, because no log line could be read.
-
-| # | Candidate | Fits | Settled by (log/config signature) |
-|---|-----------|------|-----------------------------------|
-| A | **Follower pull never scheduled.** XPS is listed as a follower, but its daemon has no pull loop for this home. Possible reasons: replication is off in XPS's config, the project key differs (for example `github.com/signal-slot/yakogl` against `git@github.com:signal-slot/yakogl.git`), or the follower was registered on nuc's side only. | `last_pull_secs null`: a pull was never even attempted or recorded. `missing_objects 0`: nothing was ever compared. `online true` comes from the peer heartbeat, not from replication. | XPS journal has **no** replica, follow or pull lines at all; XPS config has no follower entry for yakogl, or its key string differs from nuc's. |
-| B | **Pulls attempted but every one errors** (auth, TLS, an HTTP 4xx/5xx from nuc, or a schema/term mismatch). | This also gives `applied_seq 0`. It would only show `last_pull_secs null` if the field records successful pulls only. | Repeated error lines in the XPS journal naming nuc or yakogl. |
-| C | **nuc not serving replication.** nuc is `degraded true` and quota-blocked until 2026-10-08T23:00Z, and its serving side may be gated on health. | This fits "degraded". It does not explain why the count was 0 even before nuc became degraded. | nuc journal shows the replication endpoint refusing or not started, or `degraded` gating it. |
-| D | **Connection.** XPS cannot reach nuc's replication port, even though the peer heartbeat works. | Less likely: `online true` means some path works. It is still possible if replication uses a different port or transport. | Connect or timeout errors in the XPS journal. |
-
-**Why `candidate` is false (inference, unverified):**
-a follower that has applied 0 of 151,915 entries, with lag equal to the whole log, cannot take over as home without losing every record.
-Any sane election rule would exclude it.
-`candidate false` is therefore most likely a *consequence* of `applied_seq 0`, not a separate fault.
-Check this against ccfarm's source or its `--help` text for the candidate rule (for example a maximum lag or "has ever pulled").
-
-**Why `last_pull_secs` is null (inference, unverified):**
-the field reports the seconds since the last pull.
-`null` means the follower has no recorded pull at all, which fits A best.
-Under B, it fits only if failed pulls are not recorded.
+- **Whether nuc has ever received a pull from XPS.**
+  This needs `farm_status` answered by nuc, or nuc's journal.
+  Both were unreachable from here (see below).
+  The code says XPS never sends one.
+- **Whether `projects_roots` alone is enough**, or whether the term-1 snapshot then downloads cleanly.
+  The snapshot is large (157k log entries; `follow.rs` takes a snapshot first) and could hit a size or time limit.
+  This was not tested, because testing it means changing config.
+- **Whether XPS would have found the clone before the handover**, through its two yakogl rows' `repo_root`.
+  This is inferred from the term-0 replica having been updated until 2026-10-07 12:30:33Z.
+  The rows are gone, so it cannot be checked now.
+- **system76 and Lepton:** they don't appear as followers at all.
+  The same cause (no `projects_roots`, no yakogl tasks in their own stores) is likely, but unchecked.
+- The repeated `WARN ccfarm_peer::server: rejected P2P request addr=100.81.213.44:… reason="address is not a known peer"` lines at each XPS restart (for example 2026-10-08T11:53:07.927107Z) come from nuc's requests arriving before XPS's discovery has listed nuc, about 4 s after start.
+  They look harmless, and they are unrelated: follower pulls go from XPS to nuc.
 
 ## Paths per node
 
 | Node | Binary | Config | Data / records | Logs | Status here |
 |------|--------|--------|----------------|------|-------------|
-| XPS139340 | `/home/tasuku/.cargo/bin/ccfarm` (confirmed) | `~/.config/ccfarm/` (exists: the refusal named it; contents unread) | `~/.local/share/ccfarm/` (exists: it holds `workspaces/` and `deps/`; records location unread) | expected `journalctl --user` for the ccfarm unit, unread; `~/.local/state/ccfarm/` unchecked | unreadable from the worker |
-| nuc | unknown | unknown (same layout expected) | unknown; the home of yakogl's records | unknown | not reached: ssh refused, login not obtained (ask_farm refused) |
-| system76, Lepton, Lepton-local | not examined (out of scope for this item) | | | | |
+| XPS139340 | `/home/tasuku/.cargo/bin/ccfarm` (self-updates from `/home/tasuku/com/github/signal-slot/ccfarm`, `origin/main`) | `/home/tasuku/.config/ccfarm/config.toml` | `/home/tasuku/.local/share/ccfarm/` (store; replicas in `replicas/`; per-task logs in `logs/`) | `journalctl --user -u ccfarm.service` (systemd user unit `ccfarm.service`, `Restart` on; retained since 2026-10-05) | read |
+| nuc | unknown | unknown (likely the same layout) | unknown; the home of yakogl's term-1 log | unknown | not reached |
+| system76, Lepton, Lepton-local | not examined (outside this item) | | | | |
 
 ## Unreachable nodes and why
 
-- **nuc:** `ssh nuc` was refused by the worker's permission policy, and the ssh login could not be looked up because `ask_farm` was refused.
-  No login was guessed.
-- **XPS139340 (local) ccfarm state:** the worker's sandbox only allows the workspace and `~/.local/share/ccfarm/deps/yakogl`.
+- **nuc:** the `ssh` permission was denied to this worker ("nobody decided in time"), so neither nuc's files nor its journal could be read.
+  `ask_farm` was granted too late to be used for the login, and no login was guessed.
+- **`systemctl --user list-units`** was denied.
+  The unit name `ccfarm.service` comes from the journal (`ccfarm.service: Scheduled restart job, restart counter is at 10.` at 2026-10-08T11:53Z).
 
-## Commands to find the cause and start the follower pulling
+## Commands to start the follower pulling (for `replica-restart`)
 
-Run these as the owner, or in a session that has these permissions.
-Steps 1–4 are read-only.
-Step 5 changes daemon state but is reversible (a restart), and step 6 needs ccfarm's actual subcommand names from step 1.
-
-On **XPS139340**:
+On **XPS139340**, these are reversible.
+Back up the config, add one key, and restart gracefully:
 
 ```sh
-# 1. What the CLI offers for homes/replication
-ccfarm --help
-ccfarm --help 2>&1 | grep -inE 'home|follow|replic|pull|sync|candidate'
+cp -a ~/.config/ccfarm/config.toml ~/.config/ccfarm/config.toml.bak-$(date -u +%Y%m%dT%H%MZ)
+cat >> ~/.config/ccfarm/config.toml <<'EOF'
 
-# 2. Follower configuration and the project key it uses
-ls -la ~/.config/ccfarm ~/.local/share/ccfarm ~/.local/state/ccfarm
-grep -rniE 'follow|replic|home|pull|yakogl|signal-slot' ~/.config/ccfarm
-
-# 3. Daemon unit and its replication log lines since the follower was registered
-systemctl --user list-units --all --no-pager | grep -i ccfarm
-journalctl --user -u '<ccfarm unit from above>' --since 2026-10-01 --no-pager \
-  | grep -iE 'replic|follow|pull|home|yakogl|nuc|term|seq' | tail -200
+[comms]
+# Clones directly below these directories are this node's projects: the
+# home replicator follows them (has_clone), see docs/farm/investigations/replica-zero.md
+projects_roots = ["~/com/github/signal-slot"]
+EOF
+ccfarm drain        # finishes running turns, exits; systemd restarts ccfarm.service with the new config
 ```
 
-On **nuc** (login from `mcp__ccfarm__ask_farm "ssh login of nuc"`):
+A narrower alternative is to name only yakogl, with `telegram_projects = { yakogl = "/home/tasuku/com/github/signal-slot/yakogl" }` under `[comms]`.
+Both keys are also read by the Telegram front, which XPS doesn't configure.
+
+To undo, restore the `.bak` file and run `ccfarm drain` again.
+
+Check the result 1–2 minutes later (the clone scan runs every 60 s):
 
 ```sh
-# 4. Is nuc serving the home, and what key does it use?
-ssh <nuc-login> 'grep -rniE "follow|replic|home|yakogl|signal-slot" ~/.config/ccfarm'
-ssh <nuc-login> 'journalctl --user -u <ccfarm unit> --since 2026-10-01 --no-pager \
-  | grep -iE "replic|follow|pull|XPS139340|degraded|yakogl" | tail -200'
+ccfarm home                     # expect a "replica of nuc (term 1, seq N…)" line with N rising
+journalctl --user -u ccfarm.service --since -10min | grep -iE 'replic|follow'
 ```
 
-Read the result against the table:
+Then run `farm_status detail=true`, on nuc if possible.
+Expect XPS's `applied_seq` to rise toward `seq`, `candidate: true`, and `last_pull_secs` to become a number in nuc's answer.
+`degraded` should turn false once `lag < 50`.
 
-- no pull lines on XPS → **A**
-- errors on XPS → **B** or **D**, depending on the text
-- refusals or "degraded" gating on nuc → **C**
-- different key strings in the two configs → **A** (key mismatch).
-
-Then:
-
-```sh
-# 5. (A, D, or after fixing B's credentials) restart the follower's daemon so it re-reads config
-systemctl --user restart '<ccfarm unit>'      # on XPS139340
-
-# 6. Confirm it pulls: applied_seq must rise and last_pull_secs must become a number.
-#    Use mcp__ccfarm__farm_status detail=true (homes block) twice, a few minutes apart.
-```
-
-If A turns out to be a missing or mismatched follower entry, the fix is a config edit.
-Make it as an added line, keep a `.bak` copy of the file, and use the key string exactly as nuc shows it.
-That edit belongs to the `replica-restart` item, not to this one.
+**Caveat:** once XPS is a candidate, the default `[home] failover = true` lets XPS **take over** yakogl automatically if nuc goes offline for 45 s (`failover_secs`).
+That is the goal of plan #5, but the owner should know it is now live.
+To follow without being electable, set `[home] candidate = false`.
+That would also stop pulling, because `sync_followers` requires `settings.candidate`.
+So the recommendation is to leave it true.
