@@ -68,8 +68,10 @@ The Zephyr image prints on `main_uart0`
 This matches the repository's own records: `tools/cts/RESULTS.md` (around
 line 1007) runs the AM62P console on `usb-serial-1:35933` and calls 35932
 dead (for the console), and every AM62P dEQP run there, including section 1r,
-used port 35933. This session's lease did not include port 35933, so it was
-not used.
+used port 35933. (Older lab notes on other machines still name 35932 as the
+AM62P console, so the wiring has changed since; the probe above is today's
+state.) This session's lease did not include port 35933, and the farm has
+no resource registered for it, so it was not used.
 
 To finish the item, the AM62P lease has to hand out the bridge port wired to
 main_uart0 (35933 in the repository's records), or the adapter on 35932 has
