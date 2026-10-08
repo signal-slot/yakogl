@@ -19,7 +19,7 @@ branch not merged into integration. The state was reconstructed from git
 (`git log afb1633..HEAD`, `git log --all --not HEAD`,
 `git merge-base --is-ancestor`), not from memory. Two results were merged and
 then vetoed by a confirming review and reverted (`3f78982`, `a35095b`); they
-are listed as stopped. Hashes are 8-character abbreviations and resolve with
+are listed as stopped. Hashes are short abbreviations and resolve with
 `git show` in this clone, except run records named in quotes: `d60b9d76`,
 `d8583f20`, `fe5e8e73`, `396d667a` and `29460f96` name runs on main before
 this clone's root commit (`afb1633`, 2026-10-04), and `8abeaabb` is the
@@ -205,7 +205,7 @@ stopped = vetoed, abandoned, or blocked with no open attempt.
 | baseline-am62p | 2 | 2 | in progress (measured nothing; redo) | docs/benchmarks-baseline/am62p.md |
 | baseline-imx8mp | 2 | 2 | done (measured; GT row fails case 16) | docs/benchmarks-baseline/imx8mp.md, `2606b25` |
 | baseline-pi4 | 2 | 2 | in progress (not run; redo) | docs/benchmarks-baseline/pi4.md, `b32b3f4` |
-| npot (GL_OES_texture_npot) | 2 | 2 | in progress (claim merged; board rerun pending) | `2673197`, section H |
+| npot (GL_OES_texture_npot) | 2 | 2 | in progress (claim merged; board rerun pending) | `2673197`, docs/es2-cts-failures.md section H |
 | carve-out (Pi 4, 96 MiB) | 2 | 2 | in progress (merged; no board run) | `ca4074a` |
 | refract (PowerVR pool) | 2 | 2 | in progress (merged; no board run) | `541c9d3` |
 | terrain (black texture) | 2 | 2 | in progress (npot merged; new pool gap `459343d`) | docs/benchmarks.md gap 1 |
