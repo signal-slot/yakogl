@@ -43,6 +43,8 @@
 // that carries none (`no-shader-table`, the image configuration).
 #![cfg(not(feature = "no-shader-table"))]
 #![cfg(feature = "shaderc-online")]
+// The same allow as src/lib.rs: the index walks two parallel tables here.
+#![allow(clippy::needless_range_loop)]
 
 use std::collections::BTreeMap;
 use std::ffi::c_char;
