@@ -36,8 +36,8 @@
 # than one process or lost cases (aborted.txt). A chunk goes on after its
 # process stops (run_chunk): the exit status alone hid that, because a
 # ResourceError ends dEQP's run with exit 1, and the first full gles3 run on
-# the V3D (2026-10-09) lost 1,275 cases that way, each such chunk exiting 1 like any chunk with
-# a failing case.
+# the V3D (2026-10-09) lost 1,275 cases that way, each such chunk exiting 1
+# like any chunk with a failing case.
 #
 # Environment:
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
