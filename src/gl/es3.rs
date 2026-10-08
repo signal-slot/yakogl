@@ -45,7 +45,6 @@ use crate::util::{self, Global};
 
 const MAX_QUERIES: usize = 32;
 const MAX_SAMPLERS: usize = 32;
-const MAX_FEEDBACKS: usize = 8;
 
 /// A name handed out by glGen* is not an object until its first bind (ES 3.0
 /// 6.1.10), which is what glIs* reports; `used` is the name, `bound` the
@@ -106,21 +105,13 @@ impl Es3Sampler {
 }
 
 static QUERIES: Global<[[Es3Name; MAX_QUERIES]; MAX_CONTEXTS]> = Global::zeroed();
-static FEEDBACKS: Global<[[Es3Name; MAX_FEEDBACKS]; MAX_CONTEXTS]> = Global::zeroed();
 static SAMPLERS: Global<[[Es3Sampler; MAX_SAMPLERS]; MAX_CONTEXTS]> = Global::zeroed();
 static BOUND_SAMPLER: Global<[[GLuint; CAP_COMBINED_TEXTURE_UNITS]; MAX_CONTEXTS]> = Global::zeroed();
-static BOUND_FEEDBACK: Global<[GLuint; MAX_CONTEXTS]> = Global::zeroed();
 
 /// The query-name pool of context `index`.
 fn queries(index: u8) -> &'static mut [Es3Name; MAX_QUERIES] {
     // SAFETY: single-threaded by contract; no other reference to the pool is live.
     unsafe { &mut QUERIES.get()[index as usize % MAX_CONTEXTS] }
-}
-
-/// The transform-feedback-name pool of context `index`.
-fn feedbacks(index: u8) -> &'static mut [Es3Name; MAX_FEEDBACKS] {
-    // SAFETY: single-threaded by contract; no other reference to the pool is live.
-    unsafe { &mut FEEDBACKS.get()[index as usize % MAX_CONTEXTS] }
 }
 
 /// The sampler-object pool of context `index`.
@@ -153,7 +144,6 @@ pub(super) fn sampler_compare(index: u8, unit: usize) -> Option<(GLenum, GLenum)
     Some((s.compare_mode, s.compare_func))
 }
 
-/// The transform feedback object bound in context `index`.
 /// GL_SAMPLER_BINDING of the active texture unit, for glGetIntegerv.
 pub(super) fn sampler_binding(c: &GlContext) -> GLuint {
     bound_sampler(c.index).get(c.active_texture as usize).copied().unwrap_or(0)
@@ -161,12 +151,7 @@ pub(super) fn sampler_binding(c: &GlContext) -> GLuint {
 
 /// GL_TRANSFORM_FEEDBACK_BINDING, for glGetIntegerv.
 pub(super) fn feedback_binding(c: &GlContext) -> GLuint {
-    *bound_feedback(c.index)
-}
-
-fn bound_feedback(index: u8) -> &'static mut GLuint {
-    // SAFETY: single-threaded by contract; no other reference is live.
-    unsafe { &mut BOUND_FEEDBACK.get()[index as usize % MAX_CONTEXTS] }
+    super::tf::binding(c)
 }
 
 /// glGen*: fill `names` from the free slots of a pool, 0 where it is exhausted
@@ -232,10 +217,49 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * The names are real; the counting is not. The BXS backend has no occlusion
- * counter wired up, so glBeginQuery refuses rather than letting a caller
- * believe a zero sample count.
+ * Query names are real, and so is one target's counting:
+ * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted on the CPU by the
+ * transform feedback capture (`tf.rs`, which adds to the active query through
+ * `add_primitives_written`). The BXS backend has no occlusion counter wired
+ * up, so glBeginQuery on the ANY_SAMPLES_PASSED targets still refuses rather
+ * than letting a caller believe a zero sample count (item occlusion-query
+ * fills in that arm).
  */
+
+/// What a query object has been used for (a name is a query object once it
+/// was bound; its target is fixed by its first Begin).
+#[derive(Clone, Copy)]
+struct Es3Query {
+    target: GLenum,
+    active: bool,
+    result: u32,
+}
+
+impl Es3Query {
+    const NONE: Es3Query = Es3Query { target: 0, active: false, result: 0 };
+}
+
+static QSTATE: Global<[[Es3Query; MAX_QUERIES]; MAX_CONTEXTS]> = Global::zeroed();
+
+fn qstate(index: u8) -> &'static mut [Es3Query; MAX_QUERIES] {
+    // SAFETY: single-threaded by contract; no other reference to the pool is live.
+    unsafe { &mut QSTATE.get()[index as usize % MAX_CONTEXTS] }
+}
+
+/// The query active on `target` of context `index`, if any.
+fn active_query(index: u8, target: GLenum) -> Option<usize> {
+    (1..MAX_QUERIES).find(|&h| qstate(index)[h].active && qstate(index)[h].target == target)
+}
+
+/// A captured draw wrote `n` primitives: the active
+/// GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN query counts them.
+#[allow(dead_code)] // called by the capture (item tf-capture)
+pub(super) fn add_primitives_written(c: &GlContext, n: u32) {
+    if let Some(h) = active_query(c.index, GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) {
+        let q = &mut qstate(c.index)[h];
+        q.result = q.result.saturating_add(n);
+    }
+}
 
 /// A target glBeginQuery / glEndQuery / glGetQueryiv accepts.
 fn query_target(target: GLenum) -> bool {
@@ -257,6 +281,15 @@ pub unsafe extern "C" fn glGenQueries(n: GLsizei, ids: *mut GLuint) {
 pub unsafe extern "C" fn glDeleteQueries(n: GLsizei, ids: *const GLuint) {
     gl_trace!(glDeleteQueries);
     let Some(c) = context::current() else { return };
+    if !ids.is_null() && n > 0 {
+        for i in 0..n as usize {
+            // SAFETY: the application passes `n` names (n > 0 checked above).
+            let h = util::app_get(ids, i) as usize;
+            if h != 0 && h < MAX_QUERIES {
+                qstate(c.index)[h] = Es3Query::NONE; /* an active query ends with its name */
+            }
+        }
+    }
     let pool = queries(c.index);
     delete_names(c, pool, n, ids, "glDeleteQueries");
 }
@@ -283,7 +316,18 @@ pub unsafe extern "C" fn glBeginQuery(target: GLenum, id: GLuint) {
         return;
     }
     queries(c.index)[h].bound = true;
-    c.set_error(GL_INVALID_OPERATION, FUNC); /* no counter behind it (see the module comment) */
+    if target != GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN || crate::REPORT_ES2 {
+        c.set_error(GL_INVALID_OPERATION, FUNC); /* no counter behind it (see the section comment) */
+        return;
+    }
+    /* ES 3.0 2.16: one active query per target; a query keeps the target of
+     * its first Begin; one that is active cannot begin again */
+    let q = qstate(c.index)[h];
+    if active_query(c.index, target).is_some() || q.active || (q.target != 0 && q.target != target) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
+    qstate(c.index)[h] = Es3Query { target, active: true, result: 0 };
 }
 
 #[no_mangle]
@@ -294,7 +338,12 @@ pub unsafe extern "C" fn glEndQuery(target: GLenum) {
         context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
         return;
     }
-    context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC); /* no query was ever active */
+    let Some(c) = context::current() else { return };
+    match active_query(c.index, target) {
+        /* the capture is synchronous: the result is complete at once */
+        Some(h) => qstate(c.index)[h].active = false,
+        None => c.set_error(GL_INVALID_OPERATION, FUNC), /* no query is active on the target */
+    }
 }
 
 #[no_mangle]
@@ -312,115 +361,123 @@ pub unsafe extern "C" fn glGetQueryiv(target: GLenum, pname: GLenum, params: *mu
         context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
         return;
     }
+    let id = context::current().and_then(|c| active_query(c.index, target)).unwrap_or(0);
     // SAFETY: params is non-null and valid for one GLint (GL contract), not
     // necessarily aligned.
-    util::app_set(params, 0, 0); /* nothing is ever active, which is true */
+    util::app_set(params, 0, id as GLint);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn glGetQueryObjectuiv(_id: GLuint, pname: GLenum, _params: *mut GLuint) {
+pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: *mut GLuint) {
     gl_trace!(glGetQueryObjectuiv);
     const FUNC: &str = "glGetQueryObjectuiv";
     if pname != GL_QUERY_RESULT && pname != GL_QUERY_RESULT_AVAILABLE {
         context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
         return;
     }
-    context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC); /* no query has ever ended */
+    let Some(c) = context::current() else { return };
+    let h = id as usize;
+    /* a query object that was counted, and is not active now */
+    if h == 0 || h >= MAX_QUERIES || !queries(c.index)[h].bound || qstate(c.index)[h].active {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
+    let q = qstate(c.index)[h];
+    if q.target == 0 {
+        /* bound but never counted (a refused Begin): nothing to report */
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
+    // SAFETY: params is null or valid for one GLuint (GL contract), not necessarily aligned.
+    util::app_put(params, if pname == GL_QUERY_RESULT { q.result } else { GL_TRUE });
 }
 
 /* ------------------------------------------------------ transform feedback --
- * Names and the binding are kept so that glIsTransformFeedback and the
- * bookkeeping tests behave; capture itself needs a geometry-stage output path
- * the backend does not have.
+ * The objects, varyings, binding points and begin/end rules are `tf.rs`; these
+ * are its entry points. Capture itself is not built (item tf-capture): a draw
+ * while a capture is active is refused loudly (GL_INVALID_OPERATION).
  */
 
 #[no_mangle]
 pub unsafe extern "C" fn glGenTransformFeedbacks(n: GLsizei, ids: *mut GLuint) {
     gl_trace!(glGenTransformFeedbacks);
     let Some(c) = context::current() else { return };
-    let pool = feedbacks(c.index);
-    gen_names(c, pool, n, ids, "glGenTransformFeedbacks");
+    super::tf::gen(c, n, ids);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glDeleteTransformFeedbacks(n: GLsizei, ids: *const GLuint) {
     gl_trace!(glDeleteTransformFeedbacks);
-    const FUNC: &str = "glDeleteTransformFeedbacks";
     let Some(c) = context::current() else { return };
-    if !ids.is_null() && n > 0 {
-        for i in 0..n as usize {
-            // SAFETY: the application passes `n` names (n > 0 checked above).
-            let h = util::app_get(ids, i);
-            if h != 0 && h == *bound_feedback(c.index) {
-                *bound_feedback(c.index) = 0;
-            }
-        }
-    }
-    let pool = feedbacks(c.index);
-    delete_names(c, pool, n, ids, FUNC);
+    super::tf::delete(c, n, ids);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glIsTransformFeedback(id: GLuint) -> GLboolean {
     gl_trace!(glIsTransformFeedback);
     let Some(c) = context::current() else { return GL_FALSE_B };
-    is_object(feedbacks(c.index), id)
+    if super::tf::is(c, id) {
+        GL_TRUE_B
+    } else {
+        GL_FALSE_B
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glBindTransformFeedback(target: GLenum, id: GLuint) {
     gl_trace!(glBindTransformFeedback);
-    const FUNC: &str = "glBindTransformFeedback";
     let Some(c) = context::current() else { return };
-    if target != GL_TRANSFORM_FEEDBACK {
-        c.set_error(GL_INVALID_ENUM, FUNC);
-        return;
-    }
-    let h = id as usize;
-    if h >= MAX_FEEDBACKS || (h != 0 && !feedbacks(c.index)[h].used) {
-        c.set_error(GL_INVALID_OPERATION, FUNC);
-        return;
-    }
-    if h != 0 {
-        feedbacks(c.index)[h].bound = true;
-    }
-    *bound_feedback(c.index) = id;
+    super::tf::bind(c, target, id);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glBeginTransformFeedback(primitiveMode: GLenum) {
     gl_trace!(glBeginTransformFeedback);
     const FUNC: &str = "glBeginTransformFeedback";
-    if !matches!(primitiveMode, GL_POINTS | GL_LINES | GL_TRIANGLES) {
-        context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
+    if crate::REPORT_ES2 {
+        if !matches!(primitiveMode, GL_POINTS | GL_LINES | GL_TRIANGLES) {
+            context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
+            return;
+        }
+        context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC); /* nothing captures the vertex stage */
         return;
     }
-    context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC); /* nothing captures the vertex stage */
+    let Some(c) = context::current() else { return };
+    super::tf::begin(c, primitiveMode);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glEndTransformFeedback() {
     gl_trace!(glEndTransformFeedback);
-    context::set_error_no_ctx(GL_INVALID_OPERATION, "glEndTransformFeedback");
+    match context::current() {
+        Some(c) if !crate::REPORT_ES2 => super::tf::end(c),
+        _ => context::set_error_no_ctx(GL_INVALID_OPERATION, "glEndTransformFeedback"),
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glPauseTransformFeedback() {
     gl_trace!(glPauseTransformFeedback);
-    context::set_error_no_ctx(GL_INVALID_OPERATION, "glPauseTransformFeedback");
+    match context::current() {
+        Some(c) if !crate::REPORT_ES2 => super::tf::pause(c),
+        _ => context::set_error_no_ctx(GL_INVALID_OPERATION, "glPauseTransformFeedback"),
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glResumeTransformFeedback() {
     gl_trace!(glResumeTransformFeedback);
-    context::set_error_no_ctx(GL_INVALID_OPERATION, "glResumeTransformFeedback");
+    match context::current() {
+        Some(c) if !crate::REPORT_ES2 => super::tf::resume(c),
+        _ => context::set_error_no_ctx(GL_INVALID_OPERATION, "glResumeTransformFeedback"),
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glTransformFeedbackVaryings(
     program: GLuint,
     count: GLsizei,
-    _varyings: *const *const GLchar,
+    varyings: *const *const GLchar,
     bufferMode: GLenum,
 ) {
     gl_trace!(glTransformFeedbackVaryings);
@@ -429,15 +486,13 @@ pub unsafe extern "C" fn glTransformFeedbackVaryings(
         context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
         return;
     };
-    /* ES 3.0 2.11.8's errors, and no others. Transform feedback is not
-     * implemented (every MAX_TRANSFORM_FEEDBACK_* is 0), and the spec says
-     * where that shows: SEPARATE_ATTRIBS with more varyings than
-     * MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS is GL_INVALID_VALUE here, and
-     * an INTERLEAVED request is accepted and fails the next link
-     * (`program::glLinkProgram`). This call raised GL_INVALID_OPERATION for
-     * any count > 0 until 2026-09-24, which no rule allows; dEQP-GLES3
-     * takes an error here as fatal and the lifetime group's init killed
-     * its process. */
+    /* ES 3.0 2.11.8's errors, and no others (this call raised
+     * GL_INVALID_OPERATION for any count > 0 until 2026-09-24, which no rule
+     * allows; dEQP-GLES3 takes an error here as fatal and the lifetime
+     * group's init killed its process). Under report-es2 every
+     * MAX_TRANSFORM_FEEDBACK_* stays 0: SEPARATE_ATTRIBS with a varying is
+     * GL_INVALID_VALUE and an INTERLEAVED request fails the next link
+     * (`program::glLinkProgram`). */
     if c.program_ref(program).is_none() {
         let e = super::program::not_a_program(c, program);
         c.set_error(e, FUNC);
@@ -451,36 +506,59 @@ pub unsafe extern "C" fn glTransformFeedbackVaryings(
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
     }
-    if bufferMode == GL_SEPARATE_ATTRIBS && count > 0 {
+    if crate::REPORT_ES2 {
+        if bufferMode == GL_SEPARATE_ATTRIBS && count > 0 {
+            c.set_error(GL_INVALID_VALUE, FUNC);
+            return;
+        }
+        super::program::set_transform_feedback_varyings(c.group, program, count as u32);
+        return;
+    }
+    if bufferMode == GL_SEPARATE_ATTRIBS && count > super::tf::TF_MAX_SEPARATE_ATTRIBS as GLsizei {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
-    super::program::set_transform_feedback_varyings(c.group, program, count as u32);
+    /* the repo's NULL convention (as glDrawBuffers): names owed, none given */
+    if count > 0 && varyings.is_null() {
+        c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    if super::tf::is_active(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
+    super::tf::set_varyings(c, program, count, varyings, bufferMode);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glGetTransformFeedbackVarying(
-    _program: GLuint,
-    _index: GLuint,
+    program: GLuint,
+    index: GLuint,
     bufSize: GLsizei,
     length: *mut GLsizei,
-    _size: *mut GLsizei,
-    _type: *mut GLenum,
+    size: *mut GLsizei,
+    type_: *mut GLenum,
     name: *mut GLchar,
 ) {
     gl_trace!(glGetTransformFeedbackVarying);
     const FUNC: &str = "glGetTransformFeedbackVarying";
-    if bufSize < 0 {
+    if crate::REPORT_ES2 {
+        /* no program has any recorded varyings */
+        if bufSize < 0 {
+            context::set_error_no_ctx(GL_INVALID_VALUE, FUNC);
+            return;
+        }
+        // SAFETY: length is null or valid for one GLsizei, name null or valid for
+        // bufSize GLchars (GL contract), neither necessarily aligned.
+        util::app_put(length, 0);
+        if !name.is_null() && bufSize != 0 {
+            util::app_set(name, 0, 0);
+        }
         context::set_error_no_ctx(GL_INVALID_VALUE, FUNC);
         return;
     }
-    // SAFETY: length is null or valid for one GLsizei, name null or valid for
-    // bufSize GLchars (GL contract), neither necessarily aligned.
-    util::app_put(length, 0);
-    if !name.is_null() && bufSize != 0 {
-        util::app_set(name, 0, 0);
-    }
-    context::set_error_no_ctx(GL_INVALID_VALUE, FUNC); /* no program has any recorded varyings */
+    let Some(c) = context::current() else { return };
+    super::tf::get_varying(c, program, index, bufSize, length, size, type_, name);
 }
 
 /* --------------------------------------------------------------- samplers --
@@ -943,8 +1021,6 @@ fn indexed_buffer_target(target: GLenum) -> bool {
     target == GL_UNIFORM_BUFFER || target == GL_TRANSFORM_FEEDBACK_BUFFER
 }
 
-/// Binding zero to an indexed point is an unbind: there is nothing bound to
-/// undo, so it succeeds. Binding a real buffer is what cannot be honoured.
 #[no_mangle]
 pub unsafe extern "C" fn glBindBufferBase(target: GLenum, index: GLuint, buffer: GLuint) {
     gl_trace!(glBindBufferBase);
@@ -957,9 +1033,22 @@ pub unsafe extern "C" fn glBindBufferBase(target: GLenum, index: GLuint, buffer:
         bind_uniform_buffer(index, buffer, 0, 0, FUNC);
         return;
     }
-    if buffer != 0 {
-        context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
+    bind_transform_feedback_buffer(index, buffer, 0, 0, false, FUNC);
+}
+
+/// glBindBufferBase / glBindBufferRange for GL_TRANSFORM_FEEDBACK_BUFFER:
+/// the bound transform feedback object's indexed point (`tf.rs`). Under
+/// report-es2 binding zero is an unbind that succeeds and a real buffer
+/// cannot be honoured.
+fn bind_transform_feedback_buffer(index: GLuint, buffer: GLuint, offset: GLintptr, size: GLsizeiptr, ranged: bool, func: &str) {
+    if crate::REPORT_ES2 {
+        if buffer != 0 {
+            context::set_error_no_ctx(GL_INVALID_OPERATION, func);
+        }
+        return;
     }
+    let Some(c) = context::current() else { return };
+    super::tf::bind_buffer(c, index, buffer, offset, size, ranged, func);
 }
 
 /// glBindBufferBase / glBindBufferRange for GL_UNIFORM_BUFFER (ES 3.0
@@ -1012,9 +1101,7 @@ pub unsafe extern "C" fn glBindBufferRange(
         bind_uniform_buffer(index, buffer, offset, size, FUNC);
         return;
     }
-    if buffer != 0 {
-        context::set_error_no_ctx(GL_INVALID_OPERATION, FUNC);
-    }
+    bind_transform_feedback_buffer(index, buffer, offset, size, true, FUNC);
 }
 
 #[no_mangle]
@@ -1290,10 +1377,10 @@ pub(crate) fn reset_for_tests() {
     // SAFETY: tests holding a TestGl are serialised.
     unsafe {
         *QUERIES.get() = [[Es3Name::FREE; MAX_QUERIES]; MAX_CONTEXTS];
-        *FEEDBACKS.get() = [[Es3Name::FREE; MAX_FEEDBACKS]; MAX_CONTEXTS];
+        *QSTATE.get() = [[Es3Query::NONE; MAX_QUERIES]; MAX_CONTEXTS];
         *SAMPLERS.get() = [[Es3Sampler::FREE; MAX_SAMPLERS]; MAX_CONTEXTS];
         *BOUND_SAMPLER.get() = [[0; CAP_COMBINED_TEXTURE_UNITS]; MAX_CONTEXTS];
-        *BOUND_FEEDBACK.get() = [0; MAX_CONTEXTS];
+        super::tf::reset_for_tests();
         *SYNCS.get() = [Es3Sync { used: false, kick: 0 }; MAX_SYNCS];
     }
 }
@@ -1459,7 +1546,7 @@ mod tests {
             assert_eq!(glIsTransformFeedback(f), GL_TRUE_B);
             assert_eq!(glIsTransformFeedback(0), GL_FALSE_B);
         }
-        assert_eq!(*bound_feedback(gl.ctx().index), f);
+        assert_eq!(feedback_binding(gl.ctx()), f);
     }
 
     #[test]
@@ -1470,11 +1557,11 @@ mod tests {
         unsafe {
             glBindTransformFeedback(GL_TRANSFORM_FEEDBACK_BUFFER, f);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
-            glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, MAX_FEEDBACKS as GLuint);
+            glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, super::super::tf::MAX_FEEDBACKS as GLuint);
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
             glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, f + 1);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "not a generated name");
-            assert_eq!(*bound_feedback(gl.ctx().index), 0, "a rejected bind changes nothing");
+            assert_eq!(feedback_binding(gl.ctx()), 0, "a rejected bind changes nothing");
             /* 0 is always bindable: it is the default object */
             glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
             assert_eq!(gl.error(), GL_NO_ERROR);
@@ -1489,9 +1576,9 @@ mod tests {
         unsafe {
             glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, keep);
             glDeleteTransformFeedbacks(1, &victim);
-            assert_eq!(*bound_feedback(gl.ctx().index), keep, "an unbound name does not touch the binding");
+            assert_eq!(feedback_binding(gl.ctx()), keep, "an unbound name does not touch the binding");
             glDeleteTransformFeedbacks(1, &keep);
-            assert_eq!(*bound_feedback(gl.ctx().index), 0);
+            assert_eq!(feedback_binding(gl.ctx()), 0);
             assert_eq!(glIsTransformFeedback(keep), GL_FALSE_B);
             glDeleteTransformFeedbacks(-1, &keep);
             assert_eq!(gl.error(), GL_INVALID_VALUE);
@@ -1618,6 +1705,7 @@ mod tests {
     /// Revert check: raise GL_INVALID_OPERATION for count > 0 again and the
     /// interleaved call below errs; drop the link check and the program
     /// links.
+    #[cfg(feature = "report-es2")] // the ES 3.0 rules are tests/es3_tf_api.rs and gl/tf_tests.rs
     #[test]
     fn transform_feedback_varyings_fail_the_link_not_the_call() {
         let gl = fresh();
@@ -1653,6 +1741,7 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
+    #[cfg(feature = "report-es2")] // the ES 3.0 rules are tests/es3_tf_api.rs and gl/tf_tests.rs
     #[test]
     fn get_transform_feedback_varying_empties_its_outputs_and_refuses() {
         let gl = fresh();
@@ -2109,12 +2198,16 @@ mod tests {
                 let target = GL_TRANSFORM_FEEDBACK_BUFFER;
                 glBindBufferBase(target, 0, 0);
                 assert_eq!(gl.error(), GL_NO_ERROR, "there is nothing bound to undo");
-                glBindBufferBase(target, 0, 1);
-                assert_eq!(gl.error(), GL_INVALID_OPERATION);
                 glBindBufferRange(target, 0, 0, 0, 16);
                 assert_eq!(gl.error(), GL_NO_ERROR);
-                glBindBufferRange(target, 0, 1, 0, 16);
-                assert_eq!(gl.error(), GL_INVALID_OPERATION);
+                /* a real buffer: refused only where nothing captures (the
+                 * ES 3.0 binding is gl/tf_tests.rs) */
+                if crate::REPORT_ES2 {
+                    glBindBufferBase(target, 0, 1);
+                    assert_eq!(gl.error(), GL_INVALID_OPERATION);
+                    glBindBufferRange(target, 0, 1, 0, 16);
+                    assert_eq!(gl.error(), GL_INVALID_OPERATION);
+                }
             }
             glBindBufferBase(GL_ARRAY_BUFFER, 0, 0);
             assert_eq!(gl.error(), GL_INVALID_ENUM);

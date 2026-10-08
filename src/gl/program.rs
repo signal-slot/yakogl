@@ -900,6 +900,7 @@ pub unsafe extern "C" fn glCreateProgram() -> GLuint {
             st.delete_pending[c.group as usize][h] = false;
             st.validated[c.group as usize][h] = false;
             st.tf_varyings[c.group as usize][h] = 0;
+            super::tf::program_reset(c.group, obj_name(h, OBJ_PROGRAM));
             return obj_name(h, OBJ_PROGRAM);
         }
     }
@@ -1611,12 +1612,25 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         return;
     };
     let ctx = c.group as usize;
+    let group = c.group;
+    if program_or_error(c, program, FUNC).is_none() {
+        return;
+    }
+    /* ES 3.0 2.11.7: a program an active transform feedback object uses
+     * cannot be linked */
+    if super::tf::program_in_use(c, program) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
     let Some(p) = program_or_error(c, program, FUNC) else {
         return;
     };
     // SAFETY: single-threaded by contract; taken once in this entry point.
     let st = STATE.get();
     st.validated[ctx][obj_index(program)] = false; /* GL: a link resets it */
+    if !crate::REPORT_ES2 {
+        super::tf::link_begin(group, program);
+    }
     let tab = &mut st.loc[ctx][obj_index(program)];
     let log = &mut st.log[ctx][obj_index(program)];
     let blocks = &mut st.blocks[ctx][obj_index(program)];
@@ -1643,11 +1657,18 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
         write_log(log, format_args!("link error: vertex and fragment shaders must be attached and compiled"));
         return;
     };
-    /* ES 3.0 2.11.8: a link fails when the varyings to capture exceed
-     * MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, which is 0 here --
+    /* ES 2.0 report: a link fails when the varyings to capture exceed
+     * MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, which is 0 there --
      * transform feedback is not implemented. */
     let tf = st.tf_varyings[ctx][obj_index(program)];
-    if tf > 0 {
+    if !crate::REPORT_ES2 {
+        /* ES 3.0 2.11.8: the requested varyings are resolved against the
+         * vertex shader's outputs; the link errors are the spec's (tf.rs) */
+        let vs_src = c.shader_ref(vs).map_or(core::ptr::null(), |s| s.source);
+        if super::tf::link_resolve(c.group, program, vs_src, &mut |a| write_log(log, a)).is_err() {
+            return;
+        }
+    } else if tf > 0 {
         write_log(
             log,
             format_args!(
@@ -1753,6 +1774,7 @@ unsafe fn destroy_program(c: &mut GlContext, program: GLuint) {
     st.validated[c.group as usize][obj_index(program)] = false;
     st.relinked[c.group as usize][obj_index(program)] = false;
     drop_active_attribs(&mut st.active_attribs[c.group as usize][obj_index(program)]);
+    super::tf::program_reset(c.group, program);
     let (vs, fs) = (c.objs().programs[obj_index(program)].vs, c.objs().programs[obj_index(program)].fs);
     c.objs().programs[obj_index(program)].free_uniforms();
     shaderc::release_shader(&c.objs().programs[obj_index(program)].rvs);
@@ -1785,6 +1807,12 @@ pub unsafe extern "C" fn glUseProgram(program: GLuint) {
             c.set_error(GL_INVALID_OPERATION, FUNC);
             return;
         }
+    }
+    /* ES 3.0 2.11.7: no program change while transform feedback is active
+     * and not paused */
+    if super::tf::capturing(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
     }
     let prev = c.cur_program;
     c.cur_program = program;
@@ -2729,6 +2757,13 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
             let n = if p.linked { (p.rvs.num_attribs as usize).min(p.rvs.attribs.len()) } else { 0 };
             let longest = (0..n).map(|i| util::name_bytes(&p.rvs.attribs[i].name).len()).max();
             longest.map_or(0, |n| n as GLint + 1)
+        }
+        GL_TRANSFORM_FEEDBACK_BUFFER_MODE
+        | GL_TRANSFORM_FEEDBACK_VARYINGS
+        | GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH
+            if !crate::REPORT_ES2 =>
+        {
+            super::tf::program_query(c.group, program, pname).unwrap_or(0)
         }
         _ => {
             c.set_error(GL_INVALID_ENUM, FUNC);

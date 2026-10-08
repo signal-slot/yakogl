@@ -29,6 +29,7 @@ pub mod native_cube;
 pub mod program;
 pub mod shader;
 pub mod state;
+pub mod tf;
 pub mod texture;
 pub mod vao;
 pub mod vertex;
@@ -37,3 +38,5 @@ pub mod vertex;
 mod es3_format_tests;
 #[cfg(test)]
 mod pool_tests;
+#[cfg(test)]
+mod tf_tests;

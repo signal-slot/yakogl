@@ -382,6 +382,12 @@ pub unsafe extern "C" fn glClear(mask: GLbitfield) {
         c.set_error(GL_INVALID_VALUE, "glClear");
         return;
     }
+    /* ES 3.0 4.2.3: with GL_RASTERIZER_DISCARD enabled clears have no effect
+     * (glClearBuffer* reach the framebuffer through this call, their own
+     * argument errors raised before it). The argument error above comes first. */
+    if !crate::REPORT_ES2 && c.rasterizer_discard {
+        return;
+    }
     /* (a clear still pending for another framebuffer is emitted first) */
     let pending = draw::pending_clear_for(c);
     /* Record a pending clear; the values are captured now (per GL). COLOR,
@@ -432,8 +438,8 @@ fn set_cap(cap: GLenum, on: bool) {
         /* ES 3.0 2.8.1: glDrawElements* splits the index list at the
          * type's largest value (`draw::restart_to_lists`). */
         GL_PRIMITIVE_RESTART_FIXED_INDEX => c.primitive_restart = on,
-        /* ES 3.0: recorded and queryable; the draw does not discard yet
-         * (transform feedback's design note) */
+        /* ES 3.0: draws and clears stop in the GL core while it is on
+         * (`draw.rs`, `glClear`); recorded only under report-es2 */
         GL_RASTERIZER_DISCARD => c.rasterizer_discard = on,
         _ => c.set_error(GL_INVALID_ENUM, "set_cap"),
     }
@@ -999,6 +1005,9 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         GL_PIXEL_PACK_BUFFER_BINDING => names::name_of(c, Kind::Buffer, c.bound_pixel_pack_buffer) as GLint,
         GL_PIXEL_UNPACK_BUFFER_BINDING => names::name_of(c, Kind::Buffer, c.bound_pixel_unpack_buffer) as GLint,
         GL_UNIFORM_BUFFER_BINDING => names::name_of(c, Kind::Buffer, c.bound_uniform_buffer) as GLint,
+        GL_TRANSFORM_FEEDBACK_BUFFER_BINDING if !crate::REPORT_ES2 => {
+            names::name_of(c, Kind::Buffer, c.bound_transform_feedback_buffer) as GLint
+        }
         GL_SAMPLER_BINDING => super::es3::sampler_binding(c) as GLint,
         GL_TRANSFORM_FEEDBACK_BINDING => super::es3::feedback_binding(c) as GLint,
         GL_COLOR_WRITEMASK => {
@@ -1135,13 +1144,21 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         GL_MAX_ELEMENT_INDEX => 0xFF_FFFF,
         GL_MAX_ELEMENTS_VERTICES | GL_MAX_ELEMENTS_INDICES => 0xFF_FFFF,
         GL_MAX_TEXTURE_LOD_BIAS => 2,
-        GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS
-        | GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS
-        | GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS => 0,
-        /* Nothing is ever captured, so neither is ever true; the queries have
-         * to answer all the same (a conformance run reads them to decide
-         * whether it must end a capture before resetting the state). */
-        GL_TRANSFORM_FEEDBACK_ACTIVE | GL_TRANSFORM_FEEDBACK_PAUSED => 0,
+        /* ES 3.0's minimums; the ES 2.0 report keeps 0 (no capture there) */
+        GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS => {
+            if crate::REPORT_ES2 { 0 } else { super::tf::TF_MAX_INTERLEAVED_COMPONENTS as GLint }
+        }
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS => {
+            if crate::REPORT_ES2 { 0 } else { super::tf::TF_MAX_SEPARATE_ATTRIBS as GLint }
+        }
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS => {
+            if crate::REPORT_ES2 { 0 } else { super::tf::TF_MAX_SEPARATE_COMPONENTS as GLint }
+        }
+        /* the bound transform feedback object's state (always false under
+         * report-es2); a conformance run reads them to decide whether it
+         * must end a capture before resetting the state */
+        GL_TRANSFORM_FEEDBACK_ACTIVE => super::tf::is_active(c) as GLint,
+        GL_TRANSFORM_FEEDBACK_PAUSED => super::tf::is_paused(c) as GLint,
         GL_MIN_PROGRAM_TEXEL_OFFSET => MIN_PROGRAM_TEXEL_OFFSET as GLint,
         GL_MAX_PROGRAM_TEXEL_OFFSET => MAX_PROGRAM_TEXEL_OFFSET as GLint,
         GL_MAX_SERVER_WAIT_TIMEOUT => 0,
@@ -1262,6 +1279,13 @@ fn indexed_state(c: &GlContext, target: GLenum, index: GLuint) -> Result<GLint64
         GL_UNIFORM_BUFFER_BINDING => Ok(GLint64::from(names::name_of(c, Kind::Buffer, ubo(index)?.buffer))),
         GL_UNIFORM_BUFFER_START => Ok(ubo(index)?.offset as GLint64),
         GL_UNIFORM_BUFFER_SIZE => Ok(ubo(index)?.size as GLint64),
+        GL_TRANSFORM_FEEDBACK_BUFFER_BINDING
+        | GL_TRANSFORM_FEEDBACK_BUFFER_START
+        | GL_TRANSFORM_FEEDBACK_BUFFER_SIZE
+            if !crate::REPORT_ES2 =>
+        {
+            super::tf::indexed_state(c, target, index)
+        }
         GL_TRANSFORM_FEEDBACK_BUFFER_BINDING
         | GL_TRANSFORM_FEEDBACK_BUFFER_START
         | GL_TRANSFORM_FEEDBACK_BUFFER_SIZE => Ok(0),
