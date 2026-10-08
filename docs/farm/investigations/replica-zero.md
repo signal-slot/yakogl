@@ -59,10 +59,11 @@ Each entry gives the command or path, the quoted output, and the time (UTC).
    `/home/tasuku/.config/ccfarm/config.toml` holds only `[mcp]`, `[worker]`, `[p2p]`, `[quota]` and `[gc]`.
    It has no `[home]` and no `[comms]` section, so `projects_roots = []` and `telegram_projects = {}`.
 8. **XPS does have a clone; ccfarm just isn't told about it.**
-   `/home/tasuku/com/github/signal-slot/yakogl/.git/config` has `[remote "origin"] url = git@github.com:signal-slot/yakogl.git`.
+   `git -C /home/tasuku/com/github/signal-slot/yakogl remote get-url origin` → `git@github.com:signal-slot/yakogl.git` (14:25Z).
    That URL normalises to the key `github.com/signal-slot/yakogl`.
 9. **The code path.**
    ccfarm's source checkout is at `/home/tasuku/com/github/signal-slot/ccfarm`; the self-update log line names it as `source=/home/tasuku/com/github/signal-slot/ccfarm`.
+   It is at the running build: `git -C … log -1` → `c5641e5694185f9e8178eeff23047ba9934ab028 2026-10-08T21:04:47+09:00`.
    - `crates/mcp/src/failover/mod.rs`, `sync_followers` (lines 872–908): a pull of home H is started only when `self.settings.candidate && has_clone(clones, key)` and H's hello advertises the key with `acting`.
    - `is_candidate` (lines 530–535) = `settings.candidate && has_clone(clones, key) && front running && !draining`, and this is the value XPS advertises as `candidate`.
    - `refresh_clones` (lines 458–489) builds `clones` from `[comms] projects_roots` (repositories directly below), `[comms] telegram_projects`, and the `repo_root` of the 200 most recent isolated tasks in **this node's store**.
