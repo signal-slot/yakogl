@@ -131,14 +131,22 @@ fn reflection_fields(sh: &ShcShader) -> BTreeMap<String, String> {
     f.insert("uses_discard".into(), sh.uses_discard.to_string());
     f.insert("uniform_dwords".into(), sh.uniform_dwords.to_string());
 
+<<<<<<< HEAD
     for (i, a) in sh.attribs.iter().enumerate().take(sh.num_attribs as usize) {
+=======
+    for (i, a) in sh.attribs[..sh.num_attribs as usize].iter().enumerate() {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
         let name = String::from_utf8_lossy(name_bytes(&a.name)).into_owned();
         f.insert(format!("attrib[{i}].name"), name);
         f.insert(format!("attrib[{i}].location"), a.location.to_string());
         f.insert(format!("attrib[{i}].components"), a.components.to_string());
         f.insert(format!("attrib[{i}].gl_type"), a.gl_type.to_string());
     }
+<<<<<<< HEAD
     for (i, v) in sh.varyings.iter().enumerate().take(sh.num_varyings as usize) {
+=======
+    for (i, v) in sh.varyings[..sh.num_varyings as usize].iter().enumerate() {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
         let name = String::from_utf8_lossy(name_bytes(&v.name)).into_owned();
         f.insert(format!("varying[{i}].name"), name);
         f.insert(format!("varying[{i}].location"), v.location.to_string());
@@ -164,14 +172,22 @@ fn reflection_fields(sh: &ShcShader) -> BTreeMap<String, String> {
         f.insert("viv.vs_load_balancing".into(), format!("{:#x}", v.vs_load_balancing));
         f.insert("viv.input_count_unk8".into(), v.input_count_unk8.to_string());
         f.insert("viv.const_count".into(), v.const_count.to_string());
+<<<<<<< HEAD
         for (i, io) in v.in_.iter().enumerate().take(v.num_in as usize) {
+=======
+        for (i, io) in v.in_[..v.num_in as usize].iter().enumerate() {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
             f.insert(format!("viv.in[{i}].name"), String::from_utf8_lossy(io_name(io)).into_owned());
             f.insert(format!("viv.in[{i}].reg"), io.reg.to_string());
             f.insert(format!("viv.in[{i}].slot"), io.slot.to_string());
             f.insert(format!("viv.in[{i}].components"), io.components.to_string());
             f.insert(format!("viv.in[{i}].interp"), io.interp.to_string());
         }
+<<<<<<< HEAD
         for (i, io) in v.out.iter().enumerate().take(v.num_out as usize) {
+=======
+        for (i, io) in v.out[..v.num_out as usize].iter().enumerate() {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
             f.insert(format!("viv.out[{i}].name"), String::from_utf8_lossy(io_name(io)).into_owned());
             f.insert(format!("viv.out[{i}].reg"), io.reg.to_string());
             f.insert(format!("viv.out[{i}].slot"), io.slot.to_string());

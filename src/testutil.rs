@@ -181,7 +181,11 @@ impl Allocation {
     /// The first run of four never-written bytes in `[off, off + len)`.
     fn uninit(&self, off: usize, len: usize) -> Option<usize> {
         let mut run = 0;
+<<<<<<< HEAD
         for (i, &init) in self.init.iter().enumerate().take(off + len).skip(off) {
+=======
+        for (i, &init) in (off..).zip(&self.init[off..off + len]) {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
             run = if init { 0 } else { run + 1 };
             if run == 4 {
                 return Some(i - 3);

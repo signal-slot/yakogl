@@ -473,8 +473,8 @@ fn push_one_constant_register<'a>(
     mut i: SelInstr,
 ) -> Result<(), SelectError> {
     let mut first: Option<(u8, u16)> = None;
-    for n in 0..3 {
-        let Some(SelSrc::Physical(p)) = i.srcs[n] else { continue };
+    for src in &mut i.srcs[..3] {
+        let Some(SelSrc::Physical(p)) = *src else { continue };
         if p.group != build::RGROUP_UNIFORM_0 && p.group != build::RGROUP_UNIFORM_1 {
             continue;
         }
@@ -492,7 +492,7 @@ fn push_one_constant_register<'a>(
                         .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
                         .operand(MOV_OPERAND, whole),
                 )?;
-                i.srcs[n] = Some(SelSrc::Virtual { v, swizzle: p.swizzle, neg: p.neg, abs: p.abs });
+                *src = Some(SelSrc::Virtual { v, swizzle: p.swizzle, neg: p.neg, abs: p.abs });
             }
         }
     }
@@ -4945,8 +4945,8 @@ mod tests {
             let s = select(&m, a).expect("selected");
             let id = |n: &str| build::op_id(n).expect("the instruction set has this opcode");
             assert_eq!(s.instrs[0].op, id("mul"));
-            for i in 1..4 {
-                assert_eq!(s.instrs[i].op, id("mad"), "instruction {i}");
+            for (i, instr) in (1..).zip(&s.instrs[1..4]) {
+                assert_eq!(instr.op, id("mad"), "instruction {i}");
             }
             /* Column i against v[i]: instruction 0 reads the column at block
              * dword 12 (column 3) against the w lane, and so on down. Stated

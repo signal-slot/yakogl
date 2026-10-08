@@ -1118,6 +1118,7 @@ fn emit_vertex_elements(c: &mut GcCmd, d: &GcDraw) {
 fn emit_streams(c: &mut GcCmd, d: &GcDraw) {
     let n = (d.num_streams as usize).min(GC_MAX_VERTEX_ELEMENTS);
 
+<<<<<<< HEAD
     for (i, s) in d.streams.iter().enumerate().take(n) {
         c.state(nfe_vertex_streams_base_addr(i as u32), s.gpu as u32);
     }
@@ -1125,6 +1126,16 @@ fn emit_streams(c: &mut GcCmd, d: &GcDraw) {
         c.state(nfe_vertex_streams_control(i as u32), vertex_stream_stride(s.stride));
     }
     for (i, s) in d.streams.iter().enumerate().take(n) {
+=======
+    let streams = &d.streams[..n];
+    for (i, s) in streams.iter().enumerate() {
+        c.state(nfe_vertex_streams_base_addr(i as u32), s.gpu as u32);
+    }
+    for (i, s) in streams.iter().enumerate() {
+        c.state(nfe_vertex_streams_control(i as u32), vertex_stream_stride(s.stride));
+    }
+    for (i, s) in streams.iter().enumerate() {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
         c.state(nfe_vertex_streams_vertex_divisor(i as u32), s.divisor);
     }
 }
@@ -1912,7 +1923,11 @@ pub extern "C" fn gc_init() -> i32 {
     /* Unknown until written: the first draw of the process writes
      * GL_VARYING_COMPONENT_USE GENERIC, whatever an earlier client left. */
     g.component_use_marked = true;
+<<<<<<< HEAD
     for f in g.frames.iter_mut().take(GC_FRAMES) {
+=======
+    for f in &mut g.frames[..GC_FRAMES] {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
         if osal::gpu_alloc(GC_HEAP_COMMAND, GC_CMD_WORDS * 4, OSAL_MEM_DATA, &mut f.cmd) != 0
             || osal::gpu_alloc(GC_HEAP_COMMAND, GC_ARENA_BYTES, OSAL_MEM_DATA, &mut f.arena) != 0
         {
@@ -1953,7 +1968,11 @@ pub extern "C" fn gc_shutdown() {
     if !g.inited {
         return;
     }
+<<<<<<< HEAD
     for f in g.frames.iter_mut().take(GC_FRAMES) {
+=======
+    for f in &mut g.frames[..GC_FRAMES] {
+>>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
         osal::gpu_free(&mut f.cmd);
         osal::gpu_free(&mut f.arena);
         if !f.extra.impl_.is_null() {
