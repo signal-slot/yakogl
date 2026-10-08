@@ -103,9 +103,11 @@ through `mem.cpu` without checking it (one traced: the tiled copy's canary,
 `glTexImage2D`, which `HH_NOCPU=1` counts as object storage).
 `gles_osal.h` allows a NULL `cpu`, so this is a backend defect, but no V3D
 OSAL hands one out (`zephyr_v3d.c` and `linux.c` always map), so it cannot
-happen on the Pi 4. Not compared yet: no V3D run has a reference log, and the
-`scen.progs-failat*` offsets were chosen for the PowerVR's start-up
-allocations.
+happen on the Pi 4. The fault-injection jobs take their offsets per GPU
+(`HH_FAIL_AFTER` 16 and `failat17..34` on the V3D, 72 and `failat68..80` on
+the PowerVR: past each backend's start-up, 15 and 67 allocations). Not
+compared yet: no V3D run has a reference log. Per-program results, with and
+without sanitizers: `FINDINGS-v3d-programs.md`.
 
 ## Sanitizers and profiles
 
