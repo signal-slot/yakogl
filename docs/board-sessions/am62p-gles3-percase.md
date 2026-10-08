@@ -3,8 +3,9 @@
 # AM62P dEQP-GLES3 per-case failure list (am62p-gles3-percase)
 
 **Result: no dEQP case result was obtained.** The board session was started
-but the serial console delivered no bytes at all, so there is no UART log, no
-tally and no per-case list. `am62p-gles3-percase-fails.tsv` was not written
+but the leased serial bridge port is wired to the wrong UART (section "Why the
+console was silent"): it never sees the Zephyr console, so there is no UART
+log, no tally and no per-case list. `am62p-gles3-percase-fails.tsv` was not written
 (an empty or header-only file would read as "no failures"). Commit under test:
 the integration tip `28c22b8d` (this note is the only change on top of it). The single trial image below was built from a docs-only descendant of it (tree string `2584915e`, a commit that no longer exists after the squash), and its log is empty anyway. The 396d667a figures stay those of
 `tools/cts/RESULTS.md` section 1r (31,278 pass / 8,835 fail / 2,636 not
@@ -38,12 +39,42 @@ pass/fail/n.s.: none measured.
    the one-shot) and Linux is up again with a boot time right after the run
    started, i.e. the image did not run for its 600 s. Without a console it
    cannot be said whether Zephyr started, died early, or U-Boot's load failed.
-4. The run is therefore **not** a board result and counts as nothing. Possible
-   causes to check first, in a session with a person at the board: the debug
-   UART adapter / cable (the adapter delivers no bytes even from U-Boot or
-   Linux's reboot), `gawk` is missing on this host (`board.sh` line 911 printed
-   `gawk: command not found`; it may only affect the post-run tally), and the
-   image itself.
+4. The run is therefore **not** a board result and counts as nothing.
+   `board.sh` also printed `gawk: command not found` (line 911) on this host;
+   that may only affect the post-run tally.
+
+## Why the console was silent
+
+The lease names the bridge port `usb-serial-1:35932`. Probed from Linux on the
+board (ssh, `sudo -n`), each UART at 115200 in turn, with the lease's console
+client reading the port:
+
+| Linux tty | controller | Linux alias | what port 35932 received |
+|---|---|---|---|
+| ttyS2 (getty, U-Boot/Linux console) | `serial@2800000` (main_uart0) | serial2 | nothing |
+| ttyS0 | `serial@2810000` (main_uart1) | serial0 | nothing |
+| ttyS1 | `serial@0` in the `2b300050` target module (wkup_uart0) | serial1 | nothing |
+| ttyS3 | `serial@4a00000` (mcu_uart0) | serial3 | `YAKOGL-PROBE-S3`, verbatim |
+
+(The first probe, written to ttyS0/1/2/3 at once while ttyS0/1/3 were still
+at 9600 baud, arrived as 74 NUL bytes: the 9600 baud ttyS3 text read at
+115200.) A newline typed into port 35932 gave no login prompt either: the
+getty is on ttyS2.
+
+The Zephyr image prints on `main_uart0`
+(`driver/boards/toradex/verdin_am62p/verdin_am62p_am62p54_a53.dts`:
+`zephyr,console = &main_uart0`), the controller Linux calls ttyS2. So port
+35932 is wired to mcu_uart0 and can never carry U-Boot's or Zephyr's output.
+This matches the repository's own records: `tools/cts/RESULTS.md` (around
+line 1007) runs the AM62P console on `usb-serial-1:35933` and calls 35932
+dead (for the console), and every AM62P dEQP run there, including section 1r,
+used port 35933. This session's lease did not include port 35933, so it was
+not used.
+
+To finish the item, the AM62P lease has to hand out the bridge port wired to
+main_uart0 (35933 in the repository's records), or the adapter on 35932 has
+to be moved to the Verdin's debug UART. Check it before building anything:
+from Linux, `echo probe | sudo tee /dev/ttyS2` must show up on the leased port.
 
 ## Commands that finish the run
 
