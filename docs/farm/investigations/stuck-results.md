@@ -125,3 +125,32 @@ allowed:
 4. `list_decisions(state="all")`, `get_updates(since=0, peek=true)`.
 5. Fill a table with: agent id, branch, plan/item, stage, waits for, since,
    evidence line, nuc-only or check-machine-only.
+
+## Re-check at 2026-10-08T14:26Z (confirmed, still on XPS139340)
+
+Done after the review asked for a re-run. The replica has still not moved:
+
+- `farm_status` homes: yakogl home nuc, degraded, `seq 163115` (was 157714 at
+  13:56Z), follower XPS139340 `applied_seq 0`, `lag 163115`,
+  `last_pull_secs null`. The records on nuc keep growing; XPS applies nothing.
+- `list_agents` (limit 50): `{"agents":[]}`. `list_plans`: `{"plans":[]}`.
+- nuc: still exhausted until 2026-10-08T23:00Z, running 0, **queued 10**
+  (7 at 13:56Z, 14 at 13:14Z). Its queue is not draining.
+- system76 is now listed in `exhausted_nodes` and `quota_first.low_nodes`
+  (`remaining_pct` 25, `taking_work` false); only XPS takes work. So the one
+  machine with `CC_aarch64_unknown_none` currently takes no new work.
+  Worker slots with quota: 3 of 3 busy, 10 agents waiting (bottleneck hint).
+- Board leases held by system76 (so those agents are running, not finished):
+  01a11a48-6b04-75b8-91a4-bc49d401177e (verdin-imx8mp) and
+  01a11ab1-df5e-7058-9bec-0b619ff3a607 (verdin-am62p, usb-serial-1).
+  Remove both from the candidate table once the records can be read.
+
+## Why the per-result table is not filled
+
+I disagree with the review only in that this cannot be fixed from this
+machine: the per-result fields (stage, what it waits on, since when, evidence
+line, review_state) exist only in the agent and review records on nuc. XPS holds
+0 of 163,115 entries, and nuc is not reachable from a worker. Filling the table
+from git refs would be a guess, which the task forbids. The table must be built
+by a run on nuc, or on XPS after replica-restart. This file stays
+`INCOMPLETE`, with the candidate list and the redo steps above.
