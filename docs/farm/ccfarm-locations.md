@@ -31,7 +31,7 @@ anything under `~/.config/ccfarm` and `~/.local/share/ccfarm`, `ccfarm home`,
 
 | Node | Binary | Version | Source checkout | Config | Data | Logs / state | Units |
 |---|---|---|---|---|---|---|---|
-| XPS139340 | `~/.cargo/bin/ccfarm`, not a symlink (confirmed here; cargo-install placement is inferred from the path, not confirmed) | unconfirmed (`--version` refused) | unconfirmed | unconfirmed | `~/.local/share/ccfarm` exists (confirmed here via workspace path; contents unreadable) | unconfirmed | unconfirmed |
+| XPS139340 | `~/.cargo/bin/ccfarm`, not a symlink (confirmed here; cargo-install placement is inferred from the path, not confirmed) | 0.1.0, commit 742c008, built 2026-10-09 (confirmed here) | unconfirmed | unconfirmed | `~/.local/share/ccfarm` exists (confirmed here via workspace path; contents unreadable) | unconfirmed | unconfirmed |
 | Lepton-local | `~/.cargo/bin/ccfarm`, cargo install (reviewer-reported) | 0.1.0, commit 742c008, built 2026-10-09 (reviewer-reported) | unconfirmed | default config plus `~/.config/ccfarm/local.toml` (reviewer-reported) | `~/.local/share/ccfarm-local` for the local instance (reviewer-reported) | unconfirmed | two daemons running: `ccfarm daemon` (default config) and `ccfarm --config ~/.config/ccfarm/local.toml daemon` (reviewer-reported); supervision mechanism unconfirmed |
 | nuc | unconfirmed | unconfirmed | unconfirmed | unconfirmed | unconfirmed (home of the yakogl records, per the task brief) | unconfirmed | unconfirmed |
 | system76 | unconfirmed | unconfirmed | unconfirmed | unconfirmed | unconfirmed | unconfirmed | unconfirmed |
@@ -47,15 +47,50 @@ and the project dependency cache is `~/.local/share/ccfarm/deps/<project>`
 
 ## Unreachable / unanswered nodes
 
-nuc, system76, Lepton, Lepton-local were not contacted from this session:
-ssh logins come from `ask_farm`, which was refused here. The reviewer reports
-`ask_farm` queried all five nodes but none recorded where ccfarm lives, so
-that answer source is empty even when permitted.
+nuc, system76, Lepton, Lepton-local were not contacted over ssh. `ask_farm`,
+once permitted, queried all five nodes (XPS139340, Lepton, Lepton-local, nuc,
+system76) and returned no answers: no node has notes on where ccfarm's
+binary, source, config, data or logs live, or how the daemon is supervised
+(confirmed here). The ssh logins are therefore also unknown; none were
+guessed.
 
 ## Subcommands and config keys
 
-None collected from this session (`--help` refused). Reviewer-reported from
-`ccfarm --help`, unverified here:
+Confirmed here from `ccfarm --help` (top level only; `ccfarm <sub> --help`
+was refused for home, update, quota, pause, env, drain, so flags beyond those
+in the top-level text are unknown). Subcommands relevant to this survey:
+
+- `daemon` / `front`: `front` runs the front roles (MCP endpoint, Telegram,
+  reports, reviewer, promoter, plans) in their own process next to `daemon`
+  (`[front]`), so either can restart without the other.
+- `drain`: finish running turns, claim no new work, exit (for upgrades;
+  SIGHUP does the same).
+- `update`: self-update from this node's source checkout's remote (`[update]`);
+  no options shows the current state. Implies a per-node source checkout.
+- `home`: `home` lists this node's roles and replicas; `home show <project>`
+  shows what its replica holds; `home take <project>` makes this node the
+  project's home now. The follower/replica mechanism.
+- `peers`: peers known to the running daemon. `status`: nodes, quota, queues.
+- `pause` / `resume [node]`: stop/start a node's worker claiming new work
+  (running agents finish; queued work waits or goes to other nodes). No node
+  means this one.
+- `quota [node [project share|remove|fill|reset]]`: per-node, per-project
+  shares; changes apply at once on that node and override its config file;
+  `reset` returns to the config file.
+- `env`: node-local project env values (`env_names` in `.ccfarm/project.toml`):
+  `list`, `set <project|*> <NAME> <value|file:path>`, `unset`, `--node`.
+- `recheck`: re-check results held as `needs_environment` now; ccfarm also does
+  it at start and when tools appear (daemon picks it up within a minute).
+- `ask`: the CLI form of `ask_farm`. `resources`, `mcp`, `mcp-add`, `gc`,
+  `plans`/`plan`, `inbox`, `decide`, `report`, `consult`/`reply`, `stages`,
+  `discover`, `chat`, `init` also exist.
+- Global options: `--config <file>` (default `$CCFARM_CONFIG` or the platform
+  config dir), `--instance <name>` (`<name>.toml` next to the main config).
+- Config sections named in help: `[front]`, `[update]`, `[mcp]`
+  (`manage_user_config`, default on), `[gc]`, `[comms]` (`chat_auth`),
+  `[[resources]]`. Key values: unconfirmed (config files unreadable here).
+
+Earlier reviewer-reported detail, unverified here:
 
 - `home` (`home show <project>`, `home take <project>`): project homes, their
   roles and replicas. This is the follower/replica mechanism.
@@ -105,8 +140,13 @@ journalctl --user -u 'ccfarm*' --since -1d | tail
 
 ## Gate note
 
-`tools/check.sh --quick` failed on this node's clippy steps (texture.rs:9199
-`overly_complex_bool_expr`, plus ten `nonminimal_bool` warnings in `src/gl` and
-`src/shaderc`) and was killed at the time limit. The review reports it passes
+`tools/check.sh --quick` on XPS139340 (run twice, same result) failed these
+rows, then was killed at the 10-minute background limit with later rows unseen:
+`clippy host-test,gpu-powervr` (deny `overly_complex_bool_expr` at
+`src/gl/texture.rs:9199`); `clippy host-test,gpu-vivante,shaderc-online,no-shader-table`
+(10 `nonminimal_bool` warnings); `clippy host-test,gpu-powervr,shaderc-online,no-shader-table`
+(9 warnings); `clippy host-test,gpu-vivante,shaderc-online,test-knobs` (same
+deny error). `cargo fmt --check`, the `yakogl-capi` no_std build and the
+`host-test,gpu-powervr` tests passed. The review reports it passes
 on its node (99 ok, 0 failed). Treat the failures as node-environment
 (toolchain version on XPS139340), not caused by this markdown-only change.
