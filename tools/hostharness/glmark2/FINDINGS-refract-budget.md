@@ -77,7 +77,9 @@ Run `build/refract-budget-8388608`. Every count equals the post-npot row
 | 22 terrain | 0 | 0 | 0 | 0 | 3: 1,404,928, 3,076,096, 6,152,192 | 59,829,248 (59.7%), the run's peak |
 
 The scene table still says `refused=0` for refract (it counts
-`yakogl_draws_refused`, not the backend's `-22`). refract ran at 23 FPS.
+`yakogl_draws_refused`, not the backend's `-22`). refract ran at 35 FPS
+(score 34). That is an artifact of the refused draw - the frame skips its
+work - not a speed advantage of the 8 MiB budget.
 
 ### 3.2 16,777,216: measured
 
@@ -105,10 +107,9 @@ wrong:
 The last logged high-water line is 8,736,768 (a line logs at each doubling,
 `backend.rs:3119`); the true high-water lies between it and the budget - the
 colour copy alone is 11,005,952, and depth and colour are never live at once
-(18,690,048 > 16,777,216). refract ran at 23 FPS, the same as at 8 MiB: the
-draw now runs, but the colour copy evicts the depth copy every frame and the
-evicted free waits for the job that sampled it, so the extra work bought no
-speed.
+(18,690,048 > 16,777,216). refract ran at 23 FPS: the refused draw now
+runs, so this is its real cost, not a slowdown against the 8 MiB run's 35
+(which skipped that draw).
 
 ### 3.3 25,165,824: measured
 
@@ -126,8 +127,8 @@ both copies stay for the frame. The high-water line 19,742,720 = 1,052,672 +
 below the 16 MiB run's: with no eviction, no free waits for a job. The stale
 line is back (the depth copy lives across frames and is given back before the
 next frame's job opens; the depth texture gets a new stamp every frame at
-every budget). refract ran at 35 FPS - 12 FPS faster than at 8 or 16 MiB:
-the draw runs and nothing is evicted mid-job.
+every budget). refract ran at 23 FPS, the same as at 16 MiB: keeping the
+depth copy gave no measured speed gain on the host harness.
 
 ### 3.4 48 MiB control: 8,388,608 budget, 50,331,648 carve-out
 
@@ -142,7 +143,7 @@ GPU memory" for refract. Measured - and terrain fails too:
 At 48 MiB the failure is earlier than the tiled copy: the colour texture's
 own 11-level linear storage (10,239,836 bytes) and the depth texture
 (7,684,096) are refused by the OSAL, so the scene errors before any draw is
-refused. The scores (refract 71 at 53 FPS, terrain 52 at 72 FPS) are
+refused. The scores (refract 71 at 72 FPS, terrain 52 at 53 FPS) are
 meaningless here: refused allocations mean less work per frame.
 
 ## 4. Conclusions (measured)
@@ -153,12 +154,14 @@ meaningless here: refused allocations mean less work per frame.
 * **Which value.** The copy alone needs 11,005,952 bytes, so any value from
   11,005,952 up passes `OverBudget`: in the Kconfig's whole MiB, 12 MiB
   (12,582,912). But with the depth copy live at the same time, 16 MiB keeps
-  both only by evicting the depth copy every frame - measured: the same
-  23 FPS as the 8 MiB default, and a *higher* carve-out peak (70,146,048)
-  because the evicted copy's free waits for a job. 24 MiB keeps both
-  (high-water 19,742,720), runs refract at 35 FPS, and peaks at 69,093,376.
-  The measured choice is therefore **24 MiB (25,165,824)** - the Kconfig
-  help's own advice - not the smallest passing value. It is set in
+  both only by evicting the depth copy every frame - measured: a *higher*
+  carve-out peak (70,146,048) because the evicted copy's free waits for a
+  job. 24 MiB keeps both copies with no per-frame eviction (high-water
+  19,742,720) and peaks lower, at 69,093,376. The FPS does not decide it:
+  16 and 24 MiB both ran refract at 23 FPS (the 8 MiB run's 35 skipped the
+  refused draw). The choice, on the memory evidence, is **24 MiB
+  (25,165,824)**: the smallest measured budget that keeps both copies - the
+  Kconfig help's own advice - not the smallest passing value. It is set in
   `driver/samples/zephyr/glmark2/boards/rpi_4b.conf` and documented in
   `driver/docs/glmark2.md`.
 * **96 MiB carve-out: confirmed.** At the 24 MiB budget the whole default
@@ -249,8 +252,8 @@ RUN_BOUND=960 tools/board.sh pi4 run <ws>/build/gm2-pi4/zephyr/zephyr.bin <logdi
 What refract and terrain must print: no `draw refused` line, no `out of GPU
 memory` line, no `(-22)` and no `GL error 0x505` anywhere in the console, and
 the run ends `glmark2: PASS` (board_finish). At the old 48 MiB carve-out the
-board console printed "out of GPU memory" for both scenes
-(`tools/cts/RESULTS.md`); the 8 MiB default's refract refusal is measured on
+board console printed "out of GPU memory" for refract and "no GPU memory for
+a tiled copy" refusals for terrain (`tools/cts/RESULTS.md`); the 8 MiB default's refract refusal is measured on
 the host (section 3.1, FINDINGS-post-npot.md). With the 24 MiB budget now in
 `rpi_4b.conf` neither must appear. Not verified on the board yet - this item
 measured on the host only.

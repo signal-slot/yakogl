@@ -186,8 +186,9 @@ the 8 MiB default, so one of its draws was refused (3 x GL error 0x505).
 Measured on the host harness at the 96 MiB carve-out: 24 MiB clears the
 refusal and keeps the 7,684,096 B depth copy beside it (refract peak
 69,093,376 B of the carve-out, 0 refused allocations across the whole
-list; refract 35 FPS, vs 23 at 16 MiB, which evicts the depth copy every
-frame) - `tools/hostharness/glmark2/FINDINGS-refract-budget.md` sections
+list; 16 MiB also clears it but evicts the depth copy every frame and peaks
+higher, at 70,146,048 B; both run refract at 23 FPS, so the choice rests on
+memory, not speed) - `tools/hostharness/glmark2/FINDINGS-refract-budget.md` sections
 3.2-3.4. The budget is a workaround for the per-frame CPU tiled copy of a
 render target: item `v3d-rt-sample` (it owns `src/v3d/**`) may sample the
 render target without the copy at all, and then the Pi 4 board file can
