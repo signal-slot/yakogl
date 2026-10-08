@@ -60,6 +60,8 @@ Slint applications run on all three boards from one sample with the same picture
 `tools/cts/RESULTS.md` the measurement log. Commit hashes quoted in the logs refer to
 the development history before this repository was published.
 
+[ROADMAP.md](ROADMAP.md) lists the stages ahead, in order, each with its completion criterion.
+
 ## Shader compilers
 
 Where a shader's machine code comes from, chosen at build time:

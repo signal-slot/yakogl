@@ -10,11 +10,17 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## Goal, in order
 
-1. ES 2.0 finished on the three boards (AM62P PowerVR, i.MX8MP GC7000,
-   Raspberry Pi 4 V3D), each booted from its own storage by its bootloader.
-2. Minimum performance.
-3. A public website (`website/`). It goes live when the repository is public.
-4. ES 3.1 / 3.2.
+The five stages of `ROADMAP.md`, which holds each stage's criterion:
+
+1. ES 2.0 conformance: dEQP-GLES2 mustpass with 0 failures on the three boards
+   (AM62P PowerVR, i.MX8MP GC7000, Raspberry Pi 4 V3D), each booted from its
+   own storage by its bootloader.
+2. The benchmarks (glmark2, Slint, the AGL cluster demo) running correctly on
+   the three boards.
+3. Public release: CHANGELOG, README, licences, the roadmap and the website
+   (`website/`, live when the repository is public).
+4. ES 3.0 (host work may run ahead of the boards).
+5. More boards.
 
 ## State of main
 
