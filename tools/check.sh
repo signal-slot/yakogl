@@ -323,6 +323,11 @@ step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
+# ES 3.0's integer colour render targets through the GL API (the stand-in
+# back end of the test draws nothing); the ES 2.0 report below must refuse
+# every one of the formats.
+step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -331,6 +336,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"

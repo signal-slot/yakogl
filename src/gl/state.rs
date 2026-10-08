@@ -1072,8 +1072,8 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         /* the bindings keep slots; the application knows them by name (gl/names.rs) */
         GL_FRAMEBUFFER_BINDING => names::name_of(c, Kind::Framebuffer, c.bound_framebuffer) as GLint,
         GL_RENDERBUFFER_BINDING => names::name_of(c, Kind::Renderbuffer, c.bound_renderbuffer) as GLint,
-        GL_IMPLEMENTATION_COLOR_READ_FORMAT => GL_RGBA as GLint,
-        GL_IMPLEMENTATION_COLOR_READ_TYPE => GL_UNSIGNED_BYTE as GLint,
+        GL_IMPLEMENTATION_COLOR_READ_FORMAT => super::framebuffer::implementation_color_read(c).0 as GLint,
+        GL_IMPLEMENTATION_COLOR_READ_TYPE => super::framebuffer::implementation_color_read(c).1 as GLint,
         GL_MAX_VERTEX_UNIFORM_VECTORS => MAX_VERTEX_UNIFORM_VECTORS as GLint,
         GL_MAX_FRAGMENT_UNIFORM_VECTORS => MAX_FRAGMENT_UNIFORM_VECTORS as GLint,
         GL_MAX_VARYING_VECTORS => MAX_VARYING_VECTORS as GLint,
