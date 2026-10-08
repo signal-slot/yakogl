@@ -1,26 +1,47 @@
 # Stuck yakogl results (facts-stuck)
 
-Status: **INCOMPLETE. The table of stuck results could not be produced.**
+Status: **INCOMPLETE. The table of stuck results could not be produced from
+XPS139340: it has no copy of yakogl's records (see below).**
 Nothing was changed except this file.
 
-## What blocked the investigation (confirmed)
+## What the ccfarm tools returned (confirmed, 2026-10-08T13:56Z, run on XPS139340)
 
-Every ccfarm MCP call this item needed was refused by the permission layer
-in this worker session (2026-10-08):
+First attempt: all four read calls were refused. After a grant, the retry gave:
 
-- `mcp__ccfarm__farm_status` (detail=true)
-- `mcp__ccfarm__list_agents` (states=completed, and a plain retry with limit 5)
-- `mcp__ccfarm__list_decisions` (state=all)
-- `mcp__ccfarm__get_updates` (peek)
+- `farm_status(detail=true)` worked. `generated_at` 2026-10-08T13:56:40Z.
+- `list_agents` (no filter, limit 100; and states=completed, limit 300) returned
+  `{"agents":[],"next_before":null}`.
+- `list_decisions(state=all)` returned `shown 0, pending_total 0`.
+- `get_updates` was denied ("nobody decided in time"); `list_plans` and
+  `get_agent_result` were refused (not granted).
 
-The error was "Claude requested permissions to use ... but you haven't
-granted it yet". `get_agent_result`, `list_plans` and `get_plan` were never
-called, because with `list_agents` refused there was no id list to feed them.
+Reading of this (the empty lists are confirmed; the cause is inferred):
+`farm_status.homes` says yakogl's records live on home `nuc`, `degraded: true`,
+`seq 157714`, with the only follower XPS139340 at `applied_seq 0`,
+`lag 157714`, `last_pull_secs null`. This worker runs on XPS139340, so it sees
+no agents, no decisions, no reviews (`reviews.items: []`, `plans.plans: []`).
+The agent list is empty because XPS has replicated nothing, not because there
+are no results. So the stuck results cannot be listed from any machine other
+than nuc until the replica works. This is itself the main finding for this item.
 
-Without these calls the facts the item needs are unknown: each result's
-`review_state`, its stage, and what it waits on. No agent id has been
-classified as stuck, merged or abandoned from ccfarm's own records.
-Everything below is a git-only substitute.
+Other facts from `farm_status` at 13:56Z (confirmed):
+
+- nuc: exhausted, `blocked_until` 2026-10-08T23:00Z, weekly utilisation 0.99,
+  running 0, queued 7 (was 14 at 13:14Z; farm-wide queued also 7).
+  five_hour `resets_at` 2026-10-07T16:30Z, `elapsed_pct` 100 (stale window).
+- Lepton: exhausted until 2026-10-10T00:00Z, utilisation 0.99.
+- system76: has quota (seven_day remaining 25%), running 8/8 slots
+  (`concurrency_reason: load`). Only node whose yakogl env has
+  `CC_aarch64_unknown_none`.
+- XPS139340: quota 77% remaining, running 10/11. No `CC_aarch64_unknown_none`
+  in its yakogl env; PATH has /usr/lib/llvm/22 and 23.
+- Lepton-local (local model): its yakogl env lists DEQP_STAGE1, DEQP_WORK,
+  GLMARK2_SRC, IMX8MP_OUT and others, but not `CC_aarch64_unknown_none`.
+- `stages.missing_tools` is empty, `promotions` is empty, `pending_decisions` 0,
+  `waiting` empty, `waiting_unclaimable` 0 (all as seen from XPS).
+- verdin-imx8mp is leased (exclusive) by system76 for task
+  01a11a48-6b04-75b8-91a4-bc49d401177e until 13:57:35Z; that is an unmerged
+  candidate below.
 
 ## What git alone shows (confirmed as git facts, not as review states)
 
@@ -91,7 +112,9 @@ possibly among the docs rows above. That is **unconfirmed**.
 
 ## Redo this item
 
-Run it from a session where the ccfarm read tools are allowed:
+Run it on nuc (the home of yakogl's records), or on XPS139340 after the replica
+has applied entries, with `get_agent_result`, `list_plans` and `get_updates`
+allowed:
 
 1. `farm_status(detail=true)`.
 2. `list_agents(states=["completed"], limit=500)`, filtered to yakogl.
