@@ -2350,7 +2350,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
     }
     if super::texture::NPOT_RESTRICTED
         && (!draw_is_pot(t.width) || !draw_is_pot(t.height))
-        && !(!mips && t.wrap_s == GL_CLAMP_TO_EDGE && t.wrap_t == GL_CLAMP_TO_EDGE)
+        && (mips || t.wrap_s != GL_CLAMP_TO_EDGE || t.wrap_t != GL_CLAMP_TO_EDGE)
     {
         return Some("ES 2.0 non-power-of-two: needs CLAMP_TO_EDGE on both axes and no mipmap filter");
     }
@@ -2757,7 +2757,7 @@ fn dump_bound_texture(t: &GlTexture, binding: u8, tw: u32, rows: u32) {
         .checked_sub(1)
         .and_then(|r| r.checked_mul(pitch.checked_mul(4)?))
         .and_then(|r| r.checked_add((tw as usize).checked_mul(4)?));
-    if !last.is_some_and(|e| e <= t.mem.size) {
+    if last.is_none_or(|e| e > t.mem.size) {
         return;
     }
     ALPHA_SCANS.fetch_sub(1, Ordering::Relaxed);
