@@ -1116,6 +1116,49 @@ fn link_online(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 
     link_by_sources(vs, &vr, &fr, fs, log)
 }
 
+/// The name of a uniform block both stages declare, but not alike (GLSL ES
+/// 3.00 section 4.3.7): another packing, another block-level matrix layout,
+/// or members that differ in count, order, name, type, array size, an
+/// explicit precision, or (for a matrix or struct) the effective
+/// `row_major`. The instance name may differ. A block only one stage
+/// declares is fine. None when the blocks agree or a source does not parse
+/// (the front end already accepted both, so that is scratch exhaustion).
+fn block_mismatch<'a>(a: &super::arena::Arena<'a>, vsrc: &'a str, fsrc: &'a str) -> Option<&'a str> {
+    use super::ast::{Ast, BaseType, Expr, Member, TypeSpec};
+    let parse = |src: &'a str| -> Option<Ast<'a>> {
+        let pre = super::pp::preprocess(a, src).ok()?;
+        super::parser::parse(a, pre.tokens).ok()
+    };
+    let (va, fa) = (parse(vsrc)?, parse(fsrc)?);
+    let len = |ast: &Ast<'_>, t: &TypeSpec<'_>| match t.array_len.map(|e| ast.expr(e)) {
+        Some(Expr::IntLit(n)) => Some(*n),
+        _ => None,
+    };
+    for vb in va.blocks {
+        let Some(fb) = fa.blocks.iter().find(|b| b.name == vb.name) else {
+            continue;
+        };
+        let (vm, fm): (&[Member<'_>], &[Member<'_>]) =
+            (&va.members[vb.members.indices()], &fa.members[fb.members.indices()]);
+        let mut differs = vb.packing != fb.packing || vb.row_major != fb.row_major || vm.len() != fm.len();
+        for (x, y) in vm.iter().zip(fm) {
+            let layout = matches!(x.ty.base, BaseType::Mat(..) | BaseType::Struct(_));
+            differs |= x.name != y.name
+                || x.ty.base != y.ty.base
+                || x.ty.is_array() != y.ty.is_array()
+                || len(&va, &x.ty) != len(&fa, &y.ty)
+                || (x.ty.precision != y.ty.precision
+                    && x.ty.precision != super::ast::Precision::Default
+                    && y.ty.precision != super::ast::Precision::Default)
+                || (layout && x.row_major.unwrap_or(vb.row_major) != y.row_major.unwrap_or(fb.row_major));
+        }
+        if differs {
+            return Some(vb.name);
+        }
+    }
+    None
+}
+
 /// [`link_online`] past the precompiled verdict: the rules decided from the
 /// two sources (the front end runs).
 fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log: &mut CStrWriter) -> i32 {
@@ -1157,6 +1200,36 @@ fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log
                     "online shaderc: uniform '{}' has another precision in each stage (GLSL ES 1.00 section \
                      4.3.4): vertex {:?}, fragment {:?}",
                     fu.name, vu.precision, fu.precision
+                );
+                return Err(-EINVAL);
+            }
+        }
+
+        /* GLSL ES 3.00 sections 4.3.9 and 4.3.7: a varying keeps its
+         * interpolation qualifier across the stages (`flat` against none is
+         * a mismatch; `smooth` is the default, so it equals none), and a
+         * uniform block of one name is declared alike in both. ES 1.00 has
+         * neither, so only an ES 3.00 pair is looked at. */
+        if vi.es3() && fi.es3() {
+            for fv in fi.reflection.varyings {
+                let Some(vv) = vi.reflection.varyings.iter().find(|v| v.name == fv.name) else {
+                    continue;
+                };
+                if (vv.interp == ir::INTERP_FLAT) != (fv.interp == ir::INTERP_FLAT) {
+                    let _ = write!(
+                        log,
+                        "online shaderc: varying '{}' has different interpolation qualifiers in the vertex and \
+                         fragment shaders (GLSL ES 3.00 section 4.3.9)",
+                        fv.name
+                    );
+                    return Err(-EINVAL);
+                }
+            }
+            if let Some(name) = block_mismatch(a, vsrc, fsrc) {
+                let _ = write!(
+                    log,
+                    "online shaderc: uniform block '{name}' is declared differently in the vertex and fragment \
+                     shaders (GLSL ES 3.00 section 4.3.7)"
                 );
                 return Err(-EINVAL);
             }
