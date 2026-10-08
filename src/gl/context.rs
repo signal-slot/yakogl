@@ -446,6 +446,10 @@ pub struct GlTexture {
     /// states and a render into it uses ([`GlTexture::level_pitch_at`];
     /// `texture.rs` `chain_layout_npot`). It sits in what was padding.
     pub pot_chain: bool,
+    /// `es3_formats::FORMATS` index + 1 of the ES 3.0 sized format the
+    /// texture holds (0: one of the original tables' formats). Sits in what
+    /// was padding.
+    pub es3_fmt: u8,
 }
 
 /// A number no object serial or storage generation has had (never 0): one

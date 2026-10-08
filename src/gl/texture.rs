@@ -19,6 +19,7 @@ use super::context::{
     self, gl_trace, heap_data, one_wide_level_pitch, tex_pitch, GlContext, GlTexture, CAP_COMBINED_TEXTURE_UNITS,
     CAP_MIP_LEVELS, MAX_TEXTURES, RGBA8_BPP, TEXTURE_SLOTS,
 };
+use super::es3_formats;
 use super::names::{self, Kind};
 use super::types::*;
 use super::{draw, framebuffer};
@@ -252,6 +253,7 @@ fn src_used_bytes(w: u32, format: GLenum, type_: GLenum) -> usize {
         GL_FLOAT => float_comps(format) * 4,
         GL_HALF_FLOAT | GL_HALF_FLOAT_OES => float_comps(format) * 2,
         GL_UNSIGNED_SHORT_5_6_5 | GL_UNSIGNED_SHORT_4_4_4_4 | GL_UNSIGNED_SHORT_5_5_5_1 => 2,
+        GL_UNSIGNED_INT_2_10_10_10_REV if !crate::REPORT_ES2 => 4,
         _ => 0,
     };
     w as usize * per_texel
@@ -420,6 +422,19 @@ fn convert_row(dst: &mut [u8], src: &[u8], w: u32, format: GLenum, type_: GLenum
             }
             return;
         }
+        /* ES 3.0 table 3.2: RGB5_A1 also unpacks the 10-bit word (the only
+         * internal format of the original tables that takes it, RGB10_A2
+         * being es3_formats'). Its alpha has one bit: 2 and 3 are set. */
+        if type_ == GL_UNSIGNED_INT_2_10_10_10_REV && format == GL_RGBA {
+            for x in 0..w {
+                let p = u32::from_ne_bytes([src[x * 4], src[x * 4 + 1], src[x * 4 + 2], src[x * 4 + 3]]);
+                dst[x * 4] = unorm8((p & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 1] = unorm8(((p >> 10) & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 2] = unorm8(((p >> 20) & 0x3ff) as f32 / 1023.0);
+                dst[x * 4 + 3] = if p >> 30 >= 2 { 255 } else { 0 };
+            }
+            return;
+        }
     }
     /* Unhandled: leave opaque black. */
     for x in 0..w {
@@ -483,6 +498,10 @@ pub(crate) fn src_bpp(format: GLenum, type_: GLenum) -> u32 {
             GL_FLOAT_32_UNSIGNED_INT_24_8_REV => 8,
             _ => 4,
         };
+    }
+    /* ES 3.0's integer, signed and packed 32-bit uploads (es3_formats) */
+    if es3_formats::only_for_new_formats(format, type_) {
+        return es3_formats::texel_bytes(format, type_) as u32;
     }
     let comps: u32 = match format {
         GL_RGBA => 4,
@@ -779,7 +798,8 @@ fn texels_writable(t: &GlTexture) -> bool {
     !t.mem.impl_.is_null()
         && t.block_bytes == 0
         && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
-            || is_narrow_la(t.texfmt))
+            || is_narrow_la(t.texfmt)
+            || es3_formats::by_index(t.es3_fmt).is_some())
 }
 
 #[no_mangle]
@@ -1488,6 +1508,52 @@ unsafe fn texture_write_rect(
     let src = pixels as *const u8;
     let (x, y) = (x as usize, y as usize);
 
+    if let Some(e) = es3_formats::by_index(t.es3_fmt).filter(|_| t.block_bytes == 0) {
+        /* an ES 3.0 sized format of es3_formats: the application's texels
+         * decoded and encoded into the storage class chosen at specification,
+         * a chunk of a row at a time. A pair the format does not take was
+         * refused by the entry point; one that slips through leaves the
+         * texels as they were. */
+        const EROW_MAX: u32 = 64;
+        let mut row = [0u8; EROW_MAX as usize * 16];
+        let gpu_write = osal::ops().and_then(|o| o.gpu_write);
+        let texfmt = t.texfmt;
+
+        for j in 0..h as usize {
+            let mut x0 = 0u32;
+            while x0 < w {
+                let n = (w - x0).min(EROW_MAX);
+                let doff = off + ((y + j) * pitch + x + x0 as usize) * bpp;
+                // SAFETY: n texels of the application's row j from texel x0.
+                let s = core::slice::from_raw_parts(src.add(j * srow + x0 as usize * sbpp), n as usize * sbpp);
+                if es3_formats::convert_row(e, texfmt, s, format, type_, n as usize, &mut row) {
+                    if !t.mem.cpu.is_null() {
+                        // SAFETY: row y + j of the level holds w texels from x
+                        // (caller's contract); `row` holds the n converted ones.
+                        core::ptr::copy_nonoverlapping(
+                            row.as_ptr(),
+                            (t.mem.cpu as *mut u8).add(doff),
+                            n as usize * bpp,
+                        );
+                    } else if let Some(gpu_write) = gpu_write {
+                        // SAFETY: `row` holds n converted texels; the OSAL bounds the write.
+                        ok &= gpu_write(&mut t.mem, doff, row.as_ptr() as *const c_void, n as usize * bpp) == 0;
+                    } else {
+                        ok = false;
+                    }
+                }
+                x0 += EROW_MAX;
+            }
+        }
+        if !t.mem.cpu.is_null() {
+            // SAFETY: the flushed range is the rows just written.
+            osal::cache_flush(
+                (t.mem.cpu as *mut u8).add(off + (y * pitch + x) * bpp) as *mut c_void,
+                ((h as usize).wrapping_sub(1) * pitch + w as usize) * bpp,
+            );
+        }
+        return ok;
+    }
     if matches!(t.texfmt, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F) {
         /* float texels: converted a row at a time through the CPU view (or
          * a stack row when there is none) */
@@ -1682,6 +1748,11 @@ fn is_half_float(type_: GLenum) -> bool {
 /// The (format, type) pairs glTexImage2D/glTexSubImage2D can unpack (GL ES
 /// 2.0 table 3.4 plus the ES 3.0 RED/RG and float uploads this core takes).
 fn valid_format_type(format: GLenum, type_: GLenum) -> bool {
+    /* ES 3.0 table 3.2's pairs of the integer, signed and packed formats
+     * (never, under report-es2) */
+    if es3_formats::transfer_pair_valid(format, type_) {
+        return true;
+    }
     match type_ {
         GL_UNSIGNED_BYTE => is_texture_format(format),
         GL_UNSIGNED_SHORT_5_6_5 => format == GL_RGB,
@@ -1923,6 +1994,9 @@ unsafe fn tex_image_2d(
      * pairing, which sized_format() resolved.) */
     let depth_fmt = format == GL_DEPTH_COMPONENT || format == GL_DEPTH_STENCIL;
     if !depth_fmt {
+        if !es3_image_check(c, internalformat as GLenum, format, type_, FUNC) {
+            return false;
+        }
         /* An ES 2.0 surface names only the sized formats its extensions
          * legitimise: GL_OES_required_internalformat's RGBA8, RGB8, RGBA4,
          * RGB5_A1 and RGB565, and GL_EXT_texture_rg's R8 and RG8. The sRGB
@@ -1987,6 +2061,7 @@ unsafe fn tex_image_2d(
     let layers: u32 = if is_face_target(target) { 6 } else { 1 };
     let face = face_of(target);
     let mut fresh = false;
+    let es3_idx = if depth_fmt { 0 } else { es3_index(internalformat as GLenum) };
 
     if level == 0 {
         /* A cube map's six faces are specified one call each: the first
@@ -1999,6 +2074,7 @@ unsafe fn tex_image_2d(
             || t.block_bytes != 0
             || t.external
             || t.texfmt != texfmt
+            || t.es3_fmt != es3_idx
             || t.format != format;
         /* Level 0 of the same size and format keeps the layout and the
          * levels above it, a 2D texture's as a cube face's. Laying it out
@@ -2041,6 +2117,7 @@ unsafe fn tex_image_2d(
         }
         t.format = format;
         t.type_ = type_;
+        t.es3_fmt = es3_idx;
         /* kept storage: level 0 is (again) specified and fits */
         t.level_defined |= 1;
         t.level_bad &= !u16::from(width != 0 && height != 0);
@@ -2091,6 +2168,7 @@ unsafe fn tex_image_2d(
             t.level_defined = 0;
             t.format = format;
             t.type_ = type_;
+            t.es3_fmt = es3_idx;
         }
         /* a later level before level 0 that does not fit the chain the first
          * one implied: the chain is the one THIS level implies, and the
@@ -2175,7 +2253,7 @@ unsafe fn tex_image_2d(
         t.level_defined |= bit;
         /* every level of a complete texture has level 0's format; a cube
          * map's faces each keep their own bit (`level_faces`) */
-        if format != t.format {
+        if format != t.format || es3_idx != t.es3_fmt {
             t.level_bad |= bit;
             t.level_faces[level as usize] &= !(1u8 << face);
         } else {
@@ -2306,6 +2384,9 @@ pub unsafe extern "C" fn glTexSubImage2D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
+    if !es3_sub_image_check(c, ti, format, type_, FUNC) {
+        return;
+    }
     /* A depth image goes into a texture of that depth format, and nothing
      * else does (ES 3.0.6 3.8.5: the format must match the texture's base
      * format; OES_packed_depth_stencil the same): written as the other kind,
@@ -2428,6 +2509,15 @@ pub unsafe extern "C" fn glCopyTexImage2D(
         c.set_error(if crate::REPORT_ES2 { GL_INVALID_ENUM } else { GL_INVALID_OPERATION }, FUNC);
         return;
     }
+    if let Some((_, e)) = es3_formats::find(internalformat) {
+        if !es3_copy_compatible(c, e) {
+            c.set_error(GL_INVALID_OPERATION, FUNC);
+            return;
+        }
+        if es3_storage_or_refuse(c, e, FUNC).is_none() {
+            return;
+        }
+    }
     let Some((copy_format, copy_type, _)) = sized_format(internalformat) else {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
@@ -2536,6 +2626,10 @@ pub unsafe extern "C" fn glCopyTexSubImage2D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
+    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| !es3_copy_compatible(c, e)) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
     let (lw, lh) = level_size(&c.objs_ref().textures[ti], level as u32);
     if xoffset as u32 + width as u32 > lw || yoffset as u32 + height as u32 > lh {
         c.set_error(GL_INVALID_VALUE, FUNC);
@@ -2873,6 +2967,7 @@ unsafe fn compressed_tex_image(
             t.layers = layers as u16;
             t.grid_cols = 0;
             t.texfmt = fmt;
+            t.es3_fmt = 0;
             t.bpp = 0;
             t.block_bytes = bb;
             t.block_w = bw;
@@ -3314,6 +3409,16 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
+    /* ES 3.0 3.8.14: only a colour-renderable, texture-filterable base level
+     * has a generated chain; of the formats of es3_formats that is RGB10_A2,
+     * and only while it is stored as RGBA8 (the fallback): a box filter over
+     * the packed word has no CPU path here. */
+    if let Some(e) = es3_formats::by_index(t.es3_fmt) {
+        if e.internalformat != GL_RGB10_A2 || t.texfmt != GLES_TEXFMT_RGBA8 {
+            c.set_error(GL_INVALID_OPERATION, FUNC);
+            return;
+        }
+    }
     let filtered = !t.mem.cpu.is_null()
         && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
             || is_narrow_la(t.texfmt))
@@ -3717,6 +3822,7 @@ pub fn texture_attach_external(c: &mut GlContext, mem: &OsalGpuMem, w: u32, h: u
      * it from the image, egl.rs); a native buffer's is the CPU's */
     t.pe_order = false;
     t.texfmt = if surf_format == GLES_SURF_RGB565 { GLES_TEXFMT_RGB565 } else { GLES_TEXFMT_RGBA8 };
+    t.es3_fmt = 0;
     t.block_w = 0;
     t.block_h = 0;
     t.block_bytes = 0;
@@ -3901,6 +4007,9 @@ pub unsafe extern "C" fn glTexImage3D(
             return;
         }
     } else {
+        if !es3_image_check(c, internalformat as GLenum, format, type_, FUNC) {
+            return;
+        }
         if sized_format(internalformat as GLenum).is_none() {
             c.set_error(GL_INVALID_VALUE, FUNC);
             return;
@@ -3930,6 +4039,7 @@ pub unsafe extern "C" fn glTexImage3D(
         }
         t.format = format;
         t.type_ = type_;
+        t.es3_fmt = es3_index(internalformat as GLenum);
     } else if level == 0 {
         if texture_alloc_storage(t, width as u32, height as u32, depth as u32, texfmt_of(internalformat)) != 0 {
             c.set_error(GL_OUT_OF_MEMORY, FUNC);
@@ -3937,6 +4047,7 @@ pub unsafe extern "C" fn glTexImage3D(
         }
         t.format = format;
         t.type_ = type_;
+        t.es3_fmt = es3_index(internalformat as GLenum);
     } else {
         let (lw, lh) = level_size(t, level as u32);
 
@@ -4036,6 +4147,9 @@ unsafe fn tex_sub_image_3d(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
+    if !es3_sub_image_check(c, ti, format, type_, FUNC) {
+        return;
+    }
     let grid_cols = c.objs().textures[ti].grid_cols as u32;
     let (lw, lh) = if grid_cols != 0 {
         (c.objs().textures[ti].width, c.objs().textures[ti].height)
@@ -4340,6 +4454,10 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     };
+    if es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt).is_some_and(|e| !es3_copy_compatible(c, e)) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
     let (lw, lh) = level_size(&c.objs_ref().textures[ti], level as u32);
     let layers = c.objs().textures[ti].layers.max(1) as u32;
     if xoffset as u32 + width as u32 > lw || yoffset as u32 + height as u32 > lh || zoffset as u32 >= layers {
@@ -4432,8 +4550,98 @@ fn sized_format(internalformat: GLenum) -> Option<(GLenum, GLenum, u8)> {
         GL_DEPTH_COMPONENT32F => (GL_DEPTH_COMPONENT, GL_FLOAT, GLES_TEXFMT_R32F),
         GL_DEPTH24_STENCIL8 | GL_DEPTH_STENCIL => (GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, GLES_TEXFMT_R32F),
         GL_DEPTH32F_STENCIL8 => (GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, GLES_TEXFMT_R32F),
-        _ => return None,
+        /* the ES 3.0 formats of es3_formats: None here also when the back
+         * end samples none of the format's storage classes
+         * (`es3_storage_or_refuse` says so by name at the entry points) */
+        _ => {
+            let (_, e) = es3_formats::find(internalformat)?;
+            (e.base, e.types[0], e.storage_here()?)
+        }
     })
+}
+
+/// The ES 3.0 formats' share of an image specification call
+/// (glTexImage2D/3D): the internal format of es3_formats takes only the
+/// (format, type) pairs of table 3.2 for it (GL_INVALID_OPERATION) and a
+/// back end that samples none of its storage classes refuses it by name; any
+/// other internal format refuses the pairs only those formats take. False
+/// when the call failed.
+fn es3_image_check(c: &mut GlContext, internalformat: GLenum, format: GLenum, type_: GLenum, func: &str) -> bool {
+    if let Some((_, e)) = es3_formats::find(internalformat) {
+        if !e.accepts(format, type_) {
+            c.set_error(GL_INVALID_OPERATION, func);
+            return false;
+        }
+        return es3_storage_or_refuse(c, e, func).is_some();
+    }
+    /* RGB5_A1 takes the 10-bit word too (table 3.2) */
+    let rgb5_a1_word = internalformat == GL_RGB5_A1 && is_rgb5_a1_word(format, type_);
+    if es3_formats::only_for_new_formats(format, type_) && !rgb5_a1_word && sized_format(internalformat).is_some() {
+        c.set_error(GL_INVALID_OPERATION, func);
+        return false;
+    }
+    true
+}
+
+/// May the read framebuffer's colour buffer be copied into an image of this
+/// format (ES 3.0 3.8.5, "Alternate Texture Image Specification Commands":
+/// the component types must agree)? Colour buffers here are unsigned
+/// normalised or floating point (the RGBA16F / R16F / R32F texture
+/// attachments), never integer or signed normalised: an integer or snorm image
+/// is never a copy target, a float image needs a float buffer, and
+/// RGB10_A2 (unsigned normalised) a fixed-point one.
+fn es3_copy_compatible(c: &GlContext, e: &es3_formats::Es3Format) -> bool {
+    let float_buffer = matches!(
+        framebuffer::fb_target_format(c),
+        backend::GLES_SURF_RGBA16F | backend::GLES_SURF_R16F | backend::GLES_SURF_R32F
+    );
+    match e.class {
+        es3_formats::Class::Int | es3_formats::Class::Uint | es3_formats::Class::Snorm => false,
+        es3_formats::Class::Float => float_buffer,
+        es3_formats::Class::Unorm => !float_buffer,
+    }
+}
+
+/// The pair table 3.2 gives RGB5_A1 besides its own: the 10-bit word.
+fn is_rgb5_a1_word(format: GLenum, type_: GLenum) -> bool {
+    format == GL_RGBA && type_ == GL_UNSIGNED_INT_2_10_10_10_REV
+}
+
+/// The storage class of an ES 3.0 format on this back end, or the refusal
+/// by name: a log line and GL_INVALID_OPERATION.
+fn es3_storage_or_refuse(c: &mut GlContext, e: &es3_formats::Es3Format, func: &str) -> Option<u8> {
+    let st = e.storage_here();
+    if st.is_none() {
+        glog!("{}: {} is not supported: this back end samples none of its storage classes", func, e.name);
+        c.set_error(GL_INVALID_OPERATION, func);
+    }
+    st
+}
+
+/// `GlTexture::es3_fmt` of an internal format: its es3_formats index + 1,
+/// 0 for any other.
+fn es3_index(internalformat: GLenum) -> u8 {
+    es3_formats::find(internalformat).map_or(0, |(i, _)| i)
+}
+
+/// A sub-image (format, type) against the texture that takes it (ES 3.0
+/// 3.8.5): an ES 3.0 format takes the pairs of its table 3.2 row, any other
+/// texture the pairs the original tables unpack. False (GL_INVALID_OPERATION
+/// set) when it does not.
+fn es3_sub_image_check(c: &mut GlContext, ti: usize, format: GLenum, type_: GLenum, func: &str) -> bool {
+    if crate::REPORT_ES2 {
+        return true;
+    }
+    let ok = match es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt) {
+        Some(e) => e.accepts(format, type_),
+        /* (a texture does not record RGB5_A1 apart from RGBA8, so the word
+         * is taken into either) */
+        None => !es3_formats::only_for_new_formats(format, type_) || is_rgb5_a1_word(format, type_),
+    };
+    if !ok {
+        c.set_error(GL_INVALID_OPERATION, func);
+    }
+    ok
 }
 
 /// The texel format a glTexImage2D/3D internal format is stored in.
@@ -4499,6 +4707,11 @@ pub unsafe extern "C" fn glTexStorage2D(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
+    if let Some((_, e)) = es3_formats::find(internalformat) {
+        if es3_storage_or_refuse(c, e, FUNC).is_none() {
+            return;
+        }
+    }
     let Some((format, type_, texfmt)) = sized_format(internalformat) else {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
@@ -4535,6 +4748,7 @@ pub unsafe extern "C" fn glTexStorage2D(
     }
     t.format = format;
     t.type_ = type_;
+    t.es3_fmt = es3_index(internalformat);
     t.immutable = true;
     t.immutable_levels = levels as u8;
     /* Immutable storage defines every face at once, so a cube map laid out
@@ -4575,6 +4789,11 @@ pub unsafe extern "C" fn glTexStorage3D(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
+    if let Some((_, e)) = es3_formats::find(internalformat) {
+        if es3_storage_or_refuse(c, e, FUNC).is_none() {
+            return;
+        }
+    }
     let Some((format, type_, texfmt)) = sized_format(internalformat) else {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
@@ -4607,6 +4826,7 @@ pub unsafe extern "C" fn glTexStorage3D(
         }
         t.format = format;
         t.type_ = type_;
+        t.es3_fmt = es3_index(internalformat);
         t.levels = 1;
         t.immutable = true;
         t.immutable_levels = levels as u8;
@@ -4618,6 +4838,7 @@ pub unsafe extern "C" fn glTexStorage3D(
     }
     t.format = format;
     t.type_ = type_;
+    t.es3_fmt = es3_index(internalformat);
     t.immutable = true;
     t.immutable_levels = levels as u8;
     t.levels = levels.min(t.chain_levels as GLsizei) as u8;
@@ -8632,7 +8853,8 @@ mod tests {
             assert_eq!(gl.error(), GL_NO_ERROR);
             assert!(!gl.ctx().objs().textures[name as usize].mem.impl_.is_null());
             let name = new_tex();
-            glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB10_A2, 4, 4);
+            /* (GL_RGB10_A2 was the example until es3_formats took it) */
+            glTexStorage2D(GL_TEXTURE_2D, 1, 0x1234, 4, 4);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "an internal format the table has not");
             assert!(gl.ctx().objs().textures[name as usize].mem.impl_.is_null());
         }
