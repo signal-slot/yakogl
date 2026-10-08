@@ -254,10 +254,17 @@ per pixel — enough for RGBA32UI (4 dwords) and matching yakogl's
 
 Columns:
 
-- **pipe** — the Mesa pipe_format the GL token maps to (Vulkan has no 24-bit
-  RGB or 3×16F formats, so RGB8/RGB16F widen to their 4-channel form;
-  GL_RGB565 is Mesa's `B5G6R5_UNORM` — the name lists bits LSB-first, so
-  `B5G6R5` is R in the high 5 bits, which is GL's RGB565).
+- **pipe** — the Mesa pipe_format the GL token maps to: the first entry of
+  the `st_format.c` candidate list the screen supports. The column shows
+  what the PowerVR driver ends up with: Vulkan does have 24-bit RGB and
+  `R16G16B16_SFLOAT` formats (`vk_format.c:67-73`, `:143`), but the
+  PowerVR table has no row for them (its only 24-bit row is
+  `R8G8B8_UINT`, `arch-formats.c:100`), so they report no features
+  (`formats.c:255-257`), and zink emulates Mesa's `X8` candidates as
+  their `A8` form (`zink_format.c:172-199`), so RGB8/RGB16F/RGB8I widen
+  to their 4-channel form (`st_format.c:211-219`, `:512-515`,
+  `:854-855`). GL_RGB565 is Mesa's `B5G6R5_UNORM` — the name lists bits
+  LSB-first, so `B5G6R5` is R in the high 5 bits, which is GL's RGB565.
 - **packmode / accum** — `pvr_pbe_format_table` rows.
 - **USC→PBE** — `source_format`·`norm` from the rules of §1.2
   (`job-common.c:51-77`, `formats.h:264`): `8P` = `8_PER_CHANNEL`,
@@ -265,9 +272,14 @@ Columns:
 - **texformat** — `pvr_format_table` row (`ROGUE_TEXSTATE_FORMAT_*`,
   `texstate.xml:95-193`; compressed formats use the `FORMAT_COMPRESSED`
   enum, `texstate.xml:195-232`).
-- **swizzle** — the util_format swizzle (`u_format.yaml`; delivered by
-  `formats.c:339-343` into both the PBE `REG_WORD0` swizzle and the TPU
-  `swiz0..3`). `X..W` are texel channels 0..3; `0`/`1` are constants.
+- **swizzle** — the util_format swizzle (`u_format.yaml`). The PBE
+  `REG_WORD0` swizzle is it verbatim (`formats.c:339-343`, applied at
+  `cmd-buffer.c:1137`); the TPU `swiz0..3` is it composed with the view
+  swizzle (`image.c:164-186`, `tex-state.c:40-64`). `X..W` are texel
+  channels 0..3; `0`/`1` are constants. For formats sampled without
+  alpha Mesa's view swizzle is `.xyz1` (`teximage.c:759`), so RGB8,
+  SRGB8, RGB5, RGB16F and RGB8I read A as 1 even where the util swizzle
+  keeps W.
 - **filter** — §1.6 (`formats.c:275-279`).
 - **sampler** — §1.7.
 
@@ -361,8 +373,10 @@ All integer formats: `norm` 0 (`formats.h:264`), `source_format`
 | RGBA32UI | R32G32B32A32_UINT | U32U32U32U32 :255 | UINT32 :255 | U32U32U32U32 :147 | X,Y,Z,W |
 | RGB10_A2UI | R10G10B10A2_UINT | U32 :227 | U1010102 :227 | A2R10B10G10 :119 | X,Y,Z,W |
 
-RGB8I has no 24-bit pipe format (Vulkan has no `R8G8B8_SINT`), so it takes
-the RGBA8_SINT row; RGB8UI does have its own (`R8G8B8_UINT`).
+Mesa prefers 24-bit formats for RGB integers (`R8G8B8_SINT`,
+`st_format.c:854-855`; `R8G8B8_UINT`, `st_format.c:980-981`), but the
+PowerVR table has a row only for `R8G8B8_UINT` (`arch-formats.c:100`), so
+RGB8UI keeps it and RGB8I falls back to the RGBA8_SINT row.
 RGB10_A2UI renders as one packed dword (`U32` packmode, `U1010102` accum;
 clear colour via `pvr_pack_a2x10y10z10_uint`, `formats.c:103-121`) but
 samples as the TPU's `A2R10B10G10` integer format.
@@ -525,10 +539,15 @@ float (`fcnorm`, §1.7). yakogl today stores every depth texture as R32F
 Checked against Mesa 26.2.1 on 2026-10-08 (item `pvr-tpu-map`): the
 texformat rows of §2.1–§2.4 and §3 match `pvr_format_table`
 (`arch-formats.c:87-170`) line for line, the swizzle column matches
-`u_format.yaml`, and the filter and sampler columns match §1.6–§1.7.
+`u_format.yaml` (or the `.xyz1`-composed sampling swizzle, as the column
+header says), and the filter and sampler columns match §1.6–§1.7.
 That check corrected the PCK default sentence of §1.5 (R11G11B10 and the
 packed UNORM/SNORM 1010102 formats do get PCK), added the `INT_SMP`
-debug gate to §1.7 and §4.5, and fixed three citation line numbers.
+debug gate to §1.7 and §4.5, fixed three citation line numbers, and
+corrected the §2 column headers and the RGB8I/RGB8UI note of §2.3
+(Vulkan does have 24-bit RGB and `R16G16B16_SFLOAT` formats; the
+4-channel widening comes from the PowerVR table's missing rows and
+zink's `X8`→`A8` emulation, not from Vulkan).
 
 ## 4. yakogl today, and what each part must gain
 
@@ -797,8 +816,9 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
 - Integer textures get their own texfmts/surf class rather than riding the
   RGBA8 store: the CTS cases check sampled values, and the swizzle can fix
   component fill but not the 8/16/32-bit widths.
-- RGB8/RGB16F storage follows Mesa's widening (no 24-bit pipe formats):
-  RGBA8 / RGBA16F rows of §2.
+- RGB8/RGB16F storage follows Mesa's widening (the PowerVR table has no
+  24-bit UNORM row and zink emulates Mesa's `X8` candidates as `A8`,
+  §2 pipe header): RGBA8 / RGBA16F rows of §2.
 - RGB5 follows Mesa's fallback: the `B5G5R5A1_UNORM` row (the PowerVR
   tables have no row for Mesa's preferred `B5G5R5X1_UNORM`,
   `st_format.c:307-311`), with Mesa's `.xyz1` view swizzle giving A=1
