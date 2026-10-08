@@ -69,6 +69,44 @@ Results:
   "Notes for the next session"; the `D rc=0` line is the result. The test
   directory was deleted after the check.
 
+### The host gate on `system76`
+
+`tools/check.sh --quick` on this branch, which changes only this file (no
+gate step reads `docs/`), run with two toolchains:
+
+| toolchain | result | failures |
+|---|---|---|
+| nightly: `RUSTUP_TOOLCHAIN=nightly`, which the farm session exports for the Pi 4 sample builds (`.ccfarm/project.toml:84`); clippy 0.1.101 (2026-10-06) | 83 ok, 16 failed | 13 clippy rows (`needless_range_loop` and others in `src/`, that nightly's lint set; the plan's `clippy-clean` item) and the 3 host rows below |
+| default: `RUSTUP_TOOLCHAIN` unset, so stable rustc 1.99.0 / clippy 0.1.99, the toolchain `tools/check.sh:1275` is written for; 4345 s at load 20 to 26 | 96 ok, 3 failed, 0 gaps | the 3 host rows below |
+
+The three rows that fail on either toolchain are each a tool this worker
+lacks: the same three `docs/release/building.md:32-34` lists from a clean
+machine, and the kind `docs/HANDOFF.md:47-48` describes ("each for a tool
+the host lacks").
+
+- `no table in the artefact`: the control counts 0 symbols. The release
+  profile has `lto = true` (`Cargo.toml:184`), so the archive's object is
+  LLVM bitcode (magic `BC C0 DE`); the host's GNU `nm` has no LLVM plugin
+  (`/usr/lib/bfd-plugins/` holds only GCC's `liblto_plugin.so`) and there
+  is no `llvm-nm`, so `nm` says `rcgu.o: file format not recognized`, which
+  the step's `2>/dev/null` hides.
+- `tools   board.sh dry-run matrix and replays`: 207 checks, 1 failed,
+  `console_from_ts` (`tools/board.sh:910`), which needs `gawk`; the host
+  has only `mawk` (`tools/board_selftest.sh: 行 592: gawk: command not found`).
+- `gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen`: `libclang-21` is
+  installed without clang's resource headers (`stdbool.h` not found) and
+  there is no `clang`.
+
+For the stable run the aarch64 targets were added to that toolchain
+(`rustup target add aarch64-unknown-none aarch64-unknown-none-softfloat
+--toolchain stable`); without them the four `check … (aarch64-unknown-none)`
+rows are a gap. An earlier nightly run (79 ok, 20 failed) also saw three of
+those rows and the artefact rows fail with cc-rs `failed to find tool
+"clang"`; the two later runs did not reproduce it. Installing `gawk`, an
+LLVM `nm` (or the LLVMgold plugin) and clang's resource headers on the
+worker would make the default-toolchain gate green here; that is outside
+this item.
+
 ## Inputs, at their pinned revisions
 
 | input | revision | pinned by |
