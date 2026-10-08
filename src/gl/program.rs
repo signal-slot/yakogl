@@ -5133,11 +5133,11 @@ mod tests {
         let name = b"an_attribute_name_of_full_length";
         assert_eq!(name.len(), 32, "the name has to fill the field for this to bite");
         p.rvs.num_attribs = 2;
-        for i in 0..2 {
-            p.rvs.attribs[i].location = i as u8;
-            p.rvs.attribs[i].components = 4;
-            p.rvs.attribs[i].gl_type = GL_FLOAT_VEC4 as u16;
-            util::set_name(&mut p.rvs.attribs[i].name, name);
+        for (i, a) in p.rvs.attribs.iter_mut().enumerate().take(2) {
+            a.location = i as u8;
+            a.components = 4;
+            a.gl_type = GL_FLOAT_VEC4 as u16;
+            util::set_name(&mut a.name, name);
         }
         assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
         assert_eq!(&p.attrib_app_index[..2], &[0, 1]);

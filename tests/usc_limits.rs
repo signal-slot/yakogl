@@ -8710,8 +8710,8 @@ fn the_clear_programs_move_shared_k_to_pixel_output_k() {
         let n = i as u32 + 1;
         let image: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let mut inp = Inputs::new(7);
-        for k in 0..8 {
-            inp.shared[k] = 0x1100_0000 + k as u32;
+        for (k, s) in inp.shared.iter_mut().enumerate().take(8) {
+            *s = 0x1100_0000 + k as u32;
         }
         let out = run_binary(&image, &inp, true).unwrap_or_else(|e| panic!("{n} dword(s): {e}"));
         let want: BTreeMap<u32, u32> = (0..n).map(|k| (k, 0x1100_0000 + k)).collect();

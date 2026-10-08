@@ -1136,13 +1136,13 @@ pub unsafe extern "C" fn glGenFramebuffers(n: GLsizei, framebuffers: *mut GLuint
     let n = n as usize;
     let mut made = 0;
 
-    for h in 1..MAX_FRAMEBUFFERS {
+    for (h, fb) in c.framebuffers.iter_mut().enumerate().take(MAX_FRAMEBUFFERS).skip(1) {
         if made >= n {
             break;
         }
-        if !c.framebuffers[h].used {
-            c.framebuffers[h] = FRAMEBUFFER_ZERO;
-            c.framebuffers[h].used = true;
+        if !fb.used {
+            *fb = FRAMEBUFFER_ZERO;
+            fb.used = true;
             // SAFETY: the application passes room for `n` names; GLuint
             // arrays are not assumed aligned.
             unsafe { framebuffers.add(made).write_unaligned(h as GLuint) };

@@ -131,16 +131,14 @@ fn reflection_fields(sh: &ShcShader) -> BTreeMap<String, String> {
     f.insert("uses_discard".into(), sh.uses_discard.to_string());
     f.insert("uniform_dwords".into(), sh.uniform_dwords.to_string());
 
-    for i in 0..sh.num_attribs as usize {
-        let a = &sh.attribs[i];
+    for (i, a) in sh.attribs.iter().enumerate().take(sh.num_attribs as usize) {
         let name = String::from_utf8_lossy(name_bytes(&a.name)).into_owned();
         f.insert(format!("attrib[{i}].name"), name);
         f.insert(format!("attrib[{i}].location"), a.location.to_string());
         f.insert(format!("attrib[{i}].components"), a.components.to_string());
         f.insert(format!("attrib[{i}].gl_type"), a.gl_type.to_string());
     }
-    for i in 0..sh.num_varyings as usize {
-        let v = &sh.varyings[i];
+    for (i, v) in sh.varyings.iter().enumerate().take(sh.num_varyings as usize) {
         let name = String::from_utf8_lossy(name_bytes(&v.name)).into_owned();
         f.insert(format!("varying[{i}].name"), name);
         f.insert(format!("varying[{i}].location"), v.location.to_string());
@@ -166,16 +164,14 @@ fn reflection_fields(sh: &ShcShader) -> BTreeMap<String, String> {
         f.insert("viv.vs_load_balancing".into(), format!("{:#x}", v.vs_load_balancing));
         f.insert("viv.input_count_unk8".into(), v.input_count_unk8.to_string());
         f.insert("viv.const_count".into(), v.const_count.to_string());
-        for i in 0..v.num_in as usize {
-            let io = &v.in_[i];
+        for (i, io) in v.in_.iter().enumerate().take(v.num_in as usize) {
             f.insert(format!("viv.in[{i}].name"), String::from_utf8_lossy(io_name(io)).into_owned());
             f.insert(format!("viv.in[{i}].reg"), io.reg.to_string());
             f.insert(format!("viv.in[{i}].slot"), io.slot.to_string());
             f.insert(format!("viv.in[{i}].components"), io.components.to_string());
             f.insert(format!("viv.in[{i}].interp"), io.interp.to_string());
         }
-        for i in 0..v.num_out as usize {
-            let io = &v.out[i];
+        for (i, io) in v.out.iter().enumerate().take(v.num_out as usize) {
             f.insert(format!("viv.out[{i}].name"), String::from_utf8_lossy(io_name(io)).into_owned());
             f.insert(format!("viv.out[{i}].reg"), io.reg.to_string());
             f.insert(format!("viv.out[{i}].slot"), io.slot.to_string());
