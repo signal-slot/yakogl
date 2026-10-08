@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # am62p-es2-r1: AM62P dEQP-GLES2 images 8-17, ms4, gl_test (BLOCKED, nothing run on the board)
 
 Integration image, not a landing proof. Nothing here is a device result.
