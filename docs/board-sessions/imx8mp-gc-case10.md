@@ -77,19 +77,59 @@ board.sh imx8mp c2-1 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled re
 
 Record words per run (`594b07ff,00000000,0000ff00,` + w3):
 
-| arm | round | record w3 | case 10 | case 2 |
-|---|---|---|---|---|
-| base | 1-10 (all ten) | 0000077e | pass | pass |
-| page | 1-8 | 0000077e | pass | pass |
-| page | 9 | **0000037e** | **FAIL** | pass |
-| page | 10 | 0000077e | pass | pass |
-| reuse0 | 1-10 (all ten) | 0000077e | pass | pass |
+Every line below is `board.sh imx8mp <tag> rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled
+result=record:SWEEP resets=0 record=594b07ff,00000000,0000ff00,<w3> back_after=<a>s uptime=<u>s`
+(from the verdict line each run stored in `build/gc10/<date>-<tag>-<hash>/INDEX.txt`):
 
-(The rows group runs that printed identical words; the 30 individual lines are in the board log
-`.g10run.log` of the session and the records under `build/gc10/<date>-<tag>-<hash>/`.)
+| tag | w3 | back_after | uptime | case 10 | case 2 |
+|---|---|---|---|---|---|
+| base-1 | 0000077e | 47s | 28s | pass | pass |
+| base-2 | 0000077e | 47s | 28s | pass | pass |
+| base-3 | 0000077e | 46s | 27s | pass | pass |
+| base-4 | 0000077e | 45s | 25s | pass | pass |
+| base-5 | 0000077e | 47s | 27s | pass | pass |
+| base-6 | 0000077e | 45s | 26s | pass | pass |
+| base-7 | 0000077e | 47s | 27s | pass | pass |
+| base-8 | 0000077e | 45s | 25s | pass | pass |
+| base-9 | 0000077e | 46s | 27s | pass | pass |
+| base-10 | 0000077e | 45s | 25s | pass | pass |
+| page-1 | 0000077e | 39s | 22s | pass | pass |
+| page-2 | 0000077e | 45s | 29s | pass | pass |
+| page-3 | 0000077e | 38s | 21s | pass | pass |
+| page-4 | 0000077e | 47s | 29s | pass | pass |
+| page-5 | 0000077e | 47s | 31s | pass | pass |
+| page-6 | 0000077e | 47s | 30s | pass | pass |
+| page-7 | 0000077e | 37s | 21s | pass | pass |
+| page-8 | 0000077e | 44s | 29s | pass | pass |
+| page-9 | **0000037e** | 47s | 29s | **FAIL** | pass |
+| page-10 | 0000077e | 45s | 29s | pass | pass |
+| reuse0-1 | 0000077e | 45s | 28s | pass | pass |
+| reuse0-2 | 0000077e | 37s | 21s | pass | pass |
+| reuse0-3 | 0000077e | 45s | 29s | pass | pass |
+| reuse0-4 | 0000077e | 45s | 28s | pass | pass |
+| reuse0-5 | 0000077e | 45s | 29s | pass | pass |
+| reuse0-6 | 0000077e | 38s | 21s | pass | pass |
+| reuse0-7 | 0000077e | 47s | 30s | pass | pass |
+| reuse0-8 | 0000077e | 47s | 31s | pass | pass |
+| reuse0-9 | 0000077e | 45s | 29s | pass | pass |
+| reuse0-10 | 0000077e | 47s | 29s | pass | pass |
 
-Solo case 2 on base (`SEL=2`, CASE record, kind CASE pass = `594b01xx,0002ff01,<checks>,00000000`):
-`c2-1` to `c2-10` all printed `record=594b010e,0002ff01,0000001d,00000000` (pass, 0x1d = 29 checks made).
+Solo case 2 on base (`SEL=2`; CASE record, pass = `594b01xx,0002ff01,<checks>,00000000`). Every line is
+`board.sh imx8mp c2-<i> rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:CASE
+resets=absent record=594b010e,0002ff01,0000001d,00000000 back_after=<a>s uptime=<u>s` (pass, 0x1d = 29 checks made):
+
+| tag | back_after | uptime |
+|---|---|---|
+| c2-1 | 33s | 23s |
+| c2-2 | 34s | 22s |
+| c2-3 | 39s | 27s |
+| c2-4 | 34s | 22s |
+| c2-5 | 39s | 27s |
+| c2-6 | 34s | 22s |
+| c2-7 | 33s | 23s |
+| c2-8 | 34s | 22s |
+| c2-9 | 39s | 28s |
+| c2-10 | 34s | 22s |
 
 ## Counts
 
