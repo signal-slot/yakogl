@@ -80,6 +80,9 @@ none. Diagnosing the replica is item facts-replica.
   `gawk`, which that host lacks.
 - Confirmed: `tools/check.sh` is identical in `7bc37ed` and `334d4e6`, so the
   fix is not in integration.
+- Confirmed: XPS139340 has `GNU nm (Gentoo 2.47 p1) 2.47.0` (`nm --version`,
+  2026-10-08). Unconfirmed: whether 2.47 reads LTO bitcode rlibs, and which nm
+  the review host that failed had.
 - Unconfirmed: that this red gate is what holds the results below. Results did
   merge after 14:31Z (table above), so either those gates ran on a host whose
   `nm` reads LTO bitcode, or the failure is judged per host. The gate log of each
