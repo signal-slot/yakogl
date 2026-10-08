@@ -453,7 +453,7 @@ Core ES 3.0 (table 3.13 "color-renderable"):
 | RGBA32UI | U32U32U32U32 :255 | 0 | 8P | X,Y,Z,W | raw, 4 dw | UINT32 `:210` |
 
 All `8P` rows are `8_PER_CHANNEL` (`job-common.c:51-53` for integers,
-`:70-77` for the packed/8-bit unorm rows, with `with_packed_usc_channel`
+`:75-78` for the packed/8-bit unorm rows, with `with_packed_usc_channel`
 true because BXS-4-64 has `usc_f16sop_u8`, `cmd-buffer.c:1130-1135`). The
 RGB565/RGBA4/RGB5_A1 "swizzle" is the pipe format's own (the names list
 channels LSB first, §2); the GL-visible RGBA order is restored by it.
