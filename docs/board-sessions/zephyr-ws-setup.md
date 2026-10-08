@@ -1,6 +1,6 @@
 # zephyr-ws-setup: shared Zephyr west workspace and SDK (BLOCKED, nothing built)
 
-Date: 2026-10-08. Result: no workspace, venv with west, or SDK exists on this
+Date: 2026-10-09 (second attempt, worker XPS139340; first attempt 2026-10-08, worker system76). Result: no workspace, venv with west, or SDK exists on this
 worker, and none could be created: the `pip install west` below is still
 refused. No sample image was built, so there is no rc=0, time or disk use.
 
@@ -30,6 +30,10 @@ fatfs, hal_nxp, hal_ti, picolibc, zephyr-lang-rust, and uses the remote
 `driver/samples/zephyr/README.md` documents the setup.
 
 ## Still-refused command
+
+2026-10-09, worker XPS139340: refused twice in a row, as two separate simple commands
+("This command requires approval"). The deps dir on this worker still holds only
+an empty `zephyr-ws/.venv` (plus `sdk-dl/`, empty). Command:
 
 `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws/.venv/bin/python -m pip install west`
 ("This command requires approval", asked on every retry). Nothing after it was
