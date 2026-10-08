@@ -17,11 +17,12 @@ There is no CI. `tools/check.sh` is the gate. Run it before you push.
   about 45 minutes on a warm tree.
 - It is green only at "N ok, 0 failed, 0 gap(s)". A step that could not run
   is a **gap**, and a gap makes the gate red. These need setup: `ZEPHYR_WS`,
-  `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), and the
-  PowerVR firmware header. Without them you get a red run with named gaps;
+  `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
+  firmware header, and the `aarch64-unknown-none-softfloat` Rust target
+  (`rustup target add`). Without them you get a red run with named gaps;
   read which rows failed and which were gaps.
-- `tools/check.sh --quick` (PowerVR row only) is for the edit loop. It is
-  never the landing gate.
+- `tools/check.sh --quick` (the PowerVR row and the AM62P archive only) is
+  for the edit loop. It is never the landing gate.
 
 ## Branches and commits
 
