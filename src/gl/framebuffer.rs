@@ -40,9 +40,9 @@ use super::names::{self, Kind};
 use super::types::*;
 use super::{draw, texture};
 use crate::backend::{
-    self, gles_surf_bytes_per_pixel, gles_surf_rt_class, gles_texfmt_bytes, GLES_SURF_R16F, GLES_SURF_R32F,
-    GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
-    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
+    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_surf_rt_class, gles_texfmt_bytes,
+    GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_XRGB8888,
+    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -488,7 +488,60 @@ fn is_color_format(f: GLenum) -> bool {
             | GL_RG16F
             | GL_R16F
             | GL_R32F
-    )
+    ) || is_integer_color_format(f)
+}
+
+/// The surface (`GLES_SURF_*`) of an ES 3.0 integer colour format, by its GL
+/// name, in any build (the ES 2.0 report refuses the formats elsewhere).
+fn integer_surf_format(f: GLenum) -> Option<u8> {
+    use backend::*;
+    Some(match f {
+        GL_R8I => GLES_SURF_R8I,
+        GL_R8UI => GLES_SURF_R8UI,
+        GL_R16I => GLES_SURF_R16I,
+        GL_R16UI => GLES_SURF_R16UI,
+        GL_R32I => GLES_SURF_R32I,
+        GL_R32UI => GLES_SURF_R32UI,
+        GL_RG8I => GLES_SURF_RG8I,
+        GL_RG8UI => GLES_SURF_RG8UI,
+        GL_RG16I => GLES_SURF_RG16I,
+        GL_RG16UI => GLES_SURF_RG16UI,
+        GL_RG32I => GLES_SURF_RG32I,
+        GL_RG32UI => GLES_SURF_RG32UI,
+        GL_RGBA8I => GLES_SURF_RGBA8I,
+        GL_RGBA8UI => GLES_SURF_RGBA8UI,
+        GL_RGBA16I => GLES_SURF_RGBA16I,
+        GL_RGBA16UI => GLES_SURF_RGBA16UI,
+        GL_RGBA32I => GLES_SURF_RGBA32I,
+        GL_RGBA32UI => GLES_SURF_RGBA32UI,
+        GL_RGB10_A2UI => GLES_SURF_RGB10_A2UI,
+        _ => return None,
+    })
+}
+
+/// The colour-renderable integer formats of ES 3.0 (table 3.13: R8I .. RGBA32UI
+/// and RGB10_A2UI). An ES 2.0-reporting build has none of them.
+fn is_integer_color_format(f: GLenum) -> bool {
+    !crate::REPORT_ES2 && integer_surf_format(f).is_some()
+}
+
+/// What a colour image of this format holds, as glClearBuffer and glReadPixels
+/// must tell apart (ES 3.0 4.2.3, 4.3.2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ColorKind {
+    /// Fixed point or floating point.
+    Float,
+    Int,
+    Uint,
+}
+
+/// The kind of a colour format, from its internal format.
+pub fn color_kind(internalformat: GLenum) -> ColorKind {
+    match integer_surf_format(internalformat).and_then(gles_surf_int_layout) {
+        Some(l) if l.signed => ColorKind::Int,
+        Some(_) => ColorKind::Uint,
+        None => ColorKind::Float,
+    }
 }
 
 /// The colour formats renderbuffer storage is named by. GL names renderbuffer
@@ -526,6 +579,7 @@ fn renderbuffer_surf_format(internalformat: GLenum) -> u8 {
         GL_RGBA16F | GL_RGB16F | GL_RG16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
+        f if is_integer_color_format(f) => integer_surf_format(f).unwrap_or(GLES_SURF_RGBA8888),
         _ => GLES_SURF_RGBA8888,
     }
 }
@@ -712,10 +766,35 @@ pub fn fb_target_alpha_bits(c: &GlContext) -> u8 {
             | Some(GL_R8) | Some(GL_RG8) => 0,
             Some(GL_RGB5_A1) => 1,
             Some(GL_RGBA4) => 4,
+            /* R and RG integer formats have no alpha (it reads 1) */
+            Some(f) if integer_surf_format(f).and_then(gles_surf_int_layout).is_some_and(|l| l.channels < 4) => 0,
             _ => 8,
         },
         _ => 8,
     }
+}
+
+/// Is the bound framebuffer's colour attachment 0 an integer image (the
+/// target the draw or clear writes, the one glReadPixels reads)?
+pub fn fb_target_is_integer(c: &GlContext) -> bool {
+    gles_surf_is_integer(fb_target_format(c))
+}
+
+/// The internal format of the image the bound framebuffer's draw buffer `i`
+/// writes: `None` for a draw buffer that is GL_NONE or has no image. The
+/// default framebuffer's one draw buffer is fixed point (GL_RGBA8).
+pub fn draw_buffer_image_format(c: &GlContext, i: usize) -> Option<GLenum> {
+    if c.bound_framebuffer == 0 {
+        return (i == 0).then_some(GL_RGBA8);
+    }
+    let fb = c.framebuffer_ref(c.bound_framebuffer)?;
+    let att = if fb.num_draw_buf == 0 { i as i8 } else { *fb.draw_buf.get(i)? };
+    let a = match att {
+        0 => &fb.color,
+        n if n > 0 && (n as usize) < CAP_COLOR_ATTACHMENTS => &fb.color_n[n as usize - 1],
+        _ => return None,
+    };
+    attachment_storage(c, a).map(|s| s.internalformat)
 }
 
 /// Whether the bound target has a depth buffer and whether it has a stencil
@@ -874,6 +953,7 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
         GL_RGBA16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
+        f if is_integer_color_format(f) => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
     Some((mem.gpu + st.offset as u64, st.w, st.h, format))
@@ -1295,6 +1375,30 @@ pub fn read_framebuffer(c: &GlContext) -> GLuint {
     }
 }
 
+/// GL_IMPLEMENTATION_COLOR_READ_FORMAT and _TYPE of the READ framebuffer's
+/// read buffer (ES 3.0 6.1.7): the pair glReadPixels takes for it besides
+/// RGBA/UNSIGNED_BYTE -- an integer buffer's only one, RGBA_INTEGER with INT
+/// (signed) or UNSIGNED_INT (unsigned) -- and RGBA/UNSIGNED_BYTE for every
+/// other.
+pub fn implementation_color_read(c: &GlContext) -> (GLenum, GLenum) {
+    let read = read_framebuffer(c);
+    let kind = c
+        .framebuffer_ref(read)
+        .filter(|_| read != 0)
+        .and_then(|fb| match fb.read_index as usize {
+            0 => Some(&fb.color),
+            n if n < CAP_COLOR_ATTACHMENTS => Some(&fb.color_n[n - 1]),
+            _ => None,
+        })
+        .and_then(|a| attachment_storage(c, a))
+        .map_or(ColorKind::Float, |s| color_kind(s.internalformat));
+    match kind {
+        ColorKind::Int => (GL_RGBA_INTEGER, GL_INT),
+        ColorKind::Uint => (GL_RGBA_INTEGER, GL_UNSIGNED_INT),
+        ColorKind::Float => (GL_RGBA, GL_UNSIGNED_BYTE),
+    }
+}
+
 /// Run `f` with the READ framebuffer where the rest of the core looks for
 /// "the" framebuffer (`bound_framebuffer`), when it is another one than the
 /// draw framebuffer: `f` is the entry point itself, called again, and finds
@@ -1608,6 +1712,18 @@ fn renderbuffer_bits(internalformat: GLenum) -> AttachmentBits {
             AttachmentBits { depth: 32, stencil: 8, component_type: GL_FLOAT, ..AttachmentBits::NONE }
         }
         GL_STENCIL_INDEX8 => AttachmentBits { stencil: 8, component_type: GL_UNSIGNED_INT, ..AttachmentBits::NONE },
+        f if is_integer_color_format(f) => {
+            let l = integer_surf_format(f).and_then(gles_surf_int_layout);
+            let Some(l) = l else { return AttachmentBits::NONE };
+            let b = l.bits as GLint;
+            let rgba = match l.channels {
+                1 => [b, 0, 0, 0],
+                2 => [b, b, 0, 0],
+                _ if l.bits == 10 => [10, 10, 10, 2],
+                _ => [b; 4],
+            };
+            AttachmentBits::color(rgba, if l.signed { GL_INT } else { GL_UNSIGNED_INT })
+        }
         _ => AttachmentBits::NONE,
     }
 }
@@ -2112,7 +2228,10 @@ pub unsafe extern "C" fn glGetRenderbufferParameteriv(target: GLenum, pname: GLe
         | GL_RENDERBUFFER_GREEN_SIZE
         | GL_RENDERBUFFER_BLUE_SIZE
         | GL_RENDERBUFFER_ALPHA_SIZE => {
-            if is_color_format(f) {
+            if is_integer_color_format(f) {
+                let bits = renderbuffer_bits(f).rgba;
+                bits[(pname - GL_RENDERBUFFER_RED_SIZE) as usize]
+            } else if is_color_format(f) {
                 8
             } else {
                 0
@@ -2189,7 +2308,7 @@ pub unsafe extern "C" fn glReadPixels(
      * and pixels (both honoured since 2026-09-24) */
     let pack_align = c.pack_alignment as usize;
     let row_len = c.pack_row_length.max(0) as usize;
-    let out_bpp = if type_ == GL_FLOAT { 16 } else { 4 };
+    let out_bpp = if matches!(type_, GL_FLOAT | GL_INT | GL_UNSIGNED_INT) { 16 } else { 4 };
     let a = pack_align.max(1);
     let stride = (if row_len > 0 { row_len } else { width.max(0) as usize } * out_bpp).div_ceil(a) * a;
     let skip = stride * c.pack_skip_rows.max(0) as usize + out_bpp * c.pack_skip_pixels.max(0) as usize;
@@ -2288,8 +2407,16 @@ pub unsafe fn read_pixels(
      * float colour buffers) */
     let fmt = fb_target_format(c);
     let float_target = gles_surf_rt_class(fmt) != 0;
+    /* ES 3.0 4.3.2: an integer read buffer is read as GL_RGBA_INTEGER with
+     * GL_INT (signed) or GL_UNSIGNED_INT (unsigned), and only so; every other
+     * read buffer refuses GL_RGBA_INTEGER */
+    let int_layout = gles_surf_int_layout(fmt);
+    let accepted = match int_layout {
+        Some(l) => format == GL_RGBA_INTEGER && type_ == if l.signed { GL_INT } else { GL_UNSIGNED_INT },
+        None => format == GL_RGBA && (type_ == GL_UNSIGNED_BYTE || (float_target && type_ == GL_FLOAT)),
+    };
 
-    if format != GL_RGBA || (type_ != GL_UNSIGNED_BYTE && !(float_target && type_ == GL_FLOAT)) {
+    if !accepted {
         /* GL_IMPLEMENTATION_COLOR_READ_FORMAT/TYPE is RGBA/UNSIGNED_BYTE: the
          * only pair every GLES2 implementation must accept, and the layout
          * the colour buffers are stored in. Known enums in another
@@ -2335,7 +2462,7 @@ pub unsafe fn read_pixels(
      * port made it; upstream took it at 9e33d7b. */
     let opaque = fmt == GLES_SURF_XRGB8888;
     let bpp = gles_surf_bytes_per_pixel(fmt) as usize;
-    let out_bpp = if type_ == GL_FLOAT { 16 } else { 4 };
+    let out_bpp = if matches!(type_, GL_FLOAT | GL_INT | GL_UNSIGNED_INT) { 16 } else { 4 };
     let dst = pixels as *mut u8;
     /* the pixels of one row, or GL_PACK_ROW_LENGTH of them when it is set */
     let row_bytes = if pack_row_len > 0 { pack_row_len } else { width as usize } * out_bpp;
@@ -2383,6 +2510,10 @@ pub unsafe fn read_pixels(
             )
         };
 
+        if let Some(l) = int_layout {
+            io_failed |= !read_int_row(ops, m, cpu, src_off, l, count, o);
+            continue;
+        }
         if float_target {
             io_failed |= !read_float_row(ops, m, cpu, src_off, fmt, count, o, type_);
             continue;
@@ -2532,6 +2663,72 @@ fn read_float_row(
     ok
 }
 
+/// The pixels of one row of an integer target as glReadPixels hands them out:
+/// four 32-bit values a pixel (GL_RGBA_INTEGER), the channels the format lacks
+/// as 0,0,0,1 (ES 3.0 4.3.2), a signed format sign-extended. Stored channels
+/// are little endian, packed in R,G,B,A order; RGB10_A2UI is one word with R
+/// in the low bits. False when the platform failed a read (those pixels come
+/// back as zeros).
+fn read_int_row(
+    ops: &osal::OsalOps,
+    m: *mut OsalGpuMem,
+    cpu: *const u8,
+    mut src_off: usize,
+    l: backend::GlesIntLayout,
+    mut npix: usize,
+    o: &mut [u8],
+) -> bool {
+    let bpp = if l.bits == 10 { 4 } else { l.channels as usize * (l.bits as usize / 8) };
+    let mut stage = [0u8; 16 * 16];
+    let mut oi = 0;
+    let mut ok = true;
+
+    while npix > 0 {
+        let k = npix.min(16);
+        let n = k * bpp;
+
+        if !cpu.is_null() {
+            // SAFETY: the caller's span lies inside the target's CPU mapping.
+            stage[..n].copy_from_slice(unsafe { core::slice::from_raw_parts(cpu.add(src_off), n) });
+        } else if let Some(gpu_read) = ops.gpu_read {
+            // SAFETY: `m` is a live descriptor and `stage` has room for n bytes.
+            if unsafe { gpu_read(m, src_off, stage.as_mut_ptr() as *mut c_void, n) } != 0 {
+                stage[..n].fill(0);
+                ok = false;
+            }
+        } else {
+            stage[..n].fill(0);
+            ok = false;
+        }
+        for px in stage[..n].chunks_exact(bpp) {
+            let mut v = [0u32, 0, 0, 1];
+            if l.bits == 10 {
+                let w = u32::from_le_bytes([px[0], px[1], px[2], px[3]]);
+                v = [w & 0x3ff, (w >> 10) & 0x3ff, (w >> 20) & 0x3ff, w >> 30];
+            } else {
+                let step = l.bits as usize / 8;
+                for (ch, out) in v.iter_mut().enumerate().take(l.channels as usize) {
+                    let b = &px[ch * step..ch * step + step];
+                    *out = match (step, l.signed) {
+                        (1, true) => b[0] as i8 as i32 as u32,
+                        (1, false) => b[0] as u32,
+                        (2, true) => i16::from_le_bytes([b[0], b[1]]) as i32 as u32,
+                        (2, false) => u16::from_le_bytes([b[0], b[1]]) as u32,
+                        _ => u32::from_le_bytes([b[0], b[1], b[2], b[3]]),
+                    };
+                }
+            }
+            for (ch, w) in v.iter().enumerate() {
+                o[oi + ch * 4..oi + ch * 4 + 4].copy_from_slice(&w.to_ne_bytes());
+            }
+            oi += 16;
+        }
+        src_off += n;
+        npix -= k;
+    }
+    ok
+}
+
 /// EGLImage target: the bound renderbuffer takes `mem` as storage without
 /// owning it. `mem` must hold `w` x `h` RGBA8888 pixels at the pair-padded
 /// row pitch (the PBE's rows); -1 otherwise, the renderbuffer unchanged.
@@ -2611,6 +2808,12 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
         return;
     }
     if samples > 1 {
+        c.set_error(GL_INVALID_OPERATION, FN);
+        return;
+    }
+    /* ES 3.0 4.4.2: an integer format has no multisampled storage, so any
+     * count above 0 is GL_INVALID_OPERATION for it */
+    if samples > 0 && is_integer_color_format(internalformat) {
         c.set_error(GL_INVALID_OPERATION, FN);
         return;
     }
@@ -2885,8 +3088,9 @@ pub unsafe extern "C" fn glGetInternalformativ(
      * negative_api.state.get_internalformativ). One sample count, 1. */
     /* ES 3.0 table 3.13's integer colour formats and RGB10_A2 are
      * renderable formats the query must know (dEQP-GLES3 state_query.
-     * internal_format.*_samples, 20 cases), though no renderbuffer of them
-     * can be made here yet. An integer format has no multisample counts
+     * internal_format.*_samples, 20 cases); an ES 3.0 build makes
+     * renderbuffers of the integer ones (the ES 2.0 report refuses them in
+     * glRenderbufferStorage). An integer format has no multisample counts
      * (6.1.15: NUM_SAMPLE_COUNTS may be 0 for one). */
     let integer = matches!(
         internalformat,

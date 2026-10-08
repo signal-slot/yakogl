@@ -38,6 +38,7 @@
 use super::consts::*;
 use super::context::{self, gl_trace, GlContext, CAP_COMBINED_TEXTURE_UNITS, MAX_CONTEXTS};
 use super::draw;
+use super::framebuffer::{self, ColorKind};
 use super::types::*;
 use crate::backend;
 use crate::util::{self, Global};
@@ -1055,6 +1056,36 @@ fn clear_buffer_args_ok(c: &mut GlContext, buffer: GLenum, drawbuffer: GLint, ta
     true
 }
 
+/// The kind of colour image draw buffer `drawbuffer` of the bound framebuffer
+/// writes; `None` when it writes none (GL_NONE, no attachment, no storage),
+/// where a clear is no error and clears nothing.
+fn clear_image_kind(c: &GlContext, drawbuffer: GLint) -> Option<ColorKind> {
+    framebuffer::draw_buffer_image_format(c, drawbuffer as usize).map(framebuffer::color_kind)
+}
+
+/// glClearBufferiv / glClearBufferuiv on GL_COLOR (ES 3.0 4.2.3): the draw
+/// buffer must hold integers of that signedness, else GL_INVALID_OPERATION.
+/// The four values travel as raw bits in the pending clear's colour
+/// (`GlesDraw::clear_rgba` of an integer target), and the clear colour of the
+/// context is put back.
+fn clear_color_integer(c: &mut GlContext, drawbuffer: GLint, want: ColorKind, bits: [u32; 4], func: &str) {
+    match clear_image_kind(c, drawbuffer) {
+        Some(k) if k == want => {}
+        Some(_) => {
+            c.set_error(GL_INVALID_OPERATION, func);
+            return;
+        }
+        None => return,
+    }
+    let save = c.clear_color;
+    c.clear_color = bits.map(f32::from_bits);
+    // SAFETY: a plain GL call, on the current context.
+    super::draw::with_clear_target(drawbuffer as u32, || unsafe { super::state::glClear(GL_COLOR_BUFFER_BIT) });
+    if let Some(c) = context::current() {
+        c.clear_color = save;
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glClearBufferfv(buffer: GLenum, drawbuffer: GLint, value: *const GLfloat) {
     gl_trace!(glClearBufferfv);
@@ -1073,6 +1104,11 @@ pub unsafe extern "C" fn glClearBufferfv(buffer: GLenum, drawbuffer: GLint, valu
      * points take the context themselves. */
     match buffer {
         GL_COLOR => {
+            /* ES 3.0 4.2.3: the float form clears a fixed or float buffer */
+            if clear_image_kind(c, drawbuffer).is_some_and(|k| k != ColorKind::Float) {
+                c.set_error(GL_INVALID_OPERATION, FUNC);
+                return;
+            }
             let save = c.clear_color;
             // SAFETY: value points at four GLfloats (GL contract), unaligned.
             let v =
@@ -1113,13 +1149,8 @@ pub unsafe extern "C" fn glClearBufferiv(buffer: GLenum, drawbuffer: GLint, valu
         }
         GL_COLOR => {
             // SAFETY: value points at four GLints (GL contract), unaligned.
-            let f = [
-                util::app_get(value, 0) as GLfloat,
-                util::app_get(value, 1) as GLfloat,
-                util::app_get(value, 2) as GLfloat,
-                util::app_get(value, 3) as GLfloat,
-            ];
-            glClearBufferfv(GL_COLOR, drawbuffer, f.as_ptr());
+            let v = [0, 1, 2, 3].map(|i| util::app_get(value, i) as u32);
+            clear_color_integer(c, drawbuffer, ColorKind::Int, v, FUNC);
         }
         _ => c.set_error(GL_INVALID_ENUM, FUNC),
     }
@@ -1136,13 +1167,8 @@ pub unsafe extern "C" fn glClearBufferuiv(buffer: GLenum, drawbuffer: GLint, val
         return;
     }
     // SAFETY: value points at four GLuints (GL contract), unaligned.
-    let f = [
-        util::app_get(value, 0) as GLfloat,
-        util::app_get(value, 1) as GLfloat,
-        util::app_get(value, 2) as GLfloat,
-        util::app_get(value, 3) as GLfloat,
-    ];
-    glClearBufferfv(GL_COLOR, drawbuffer, f.as_ptr());
+    let v = [0, 1, 2, 3].map(|i| util::app_get(value, i));
+    clear_color_integer(c, drawbuffer, ColorKind::Uint, v, "glClearBufferuiv");
 }
 
 #[no_mangle]
@@ -2219,9 +2245,43 @@ mod tests {
             assert_eq!(p.stencil_value, 9);
             assert_eq!(gl.ctx().clear_stencil, 3, "the clear stencil is context state");
 
+            /* the default framebuffer is fixed point: the integer forms do not
+             * apply to it (ES 3.0 4.2.3), and a refused clear records nothing */
             glClearBufferiv(GL_COLOR, 0, [1i32, 0, 0, 1].as_ptr());
-            assert_eq!(draw::pending_clear().rgba, [1.0, 0.0, 0.0, 1.0]);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            assert!(!draw::pending_clear().color);
+        }
+    }
+
+    /// A framebuffer with one integer renderbuffer of `format`, bound.
+    #[cfg(not(feature = "report-es2"))]
+    fn integer_fbo(format: GLenum) {
+        use crate::gl::framebuffer::*;
+        let (rb, fb) = (gen1(glGenRenderbuffers), gen1(glGenFramebuffers));
+        // SAFETY: plain GL calls on names just generated.
+        unsafe {
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, format, 4, 4);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn clear_bufferiv_and_uiv_record_the_raw_integers_for_an_integer_buffer() {
+        let gl = fresh();
+        integer_fbo(GL_RGBA16I);
+        // SAFETY: four values each; plain GL calls.
+        unsafe {
+            glClearColor(0.25, 0.5, 0.75, 1.0);
+            glClearBufferiv(GL_COLOR, 0, [-1i32, 7, i32::MIN, 3].as_ptr());
             assert_eq!(gl.error(), GL_NO_ERROR);
+            let bits = draw::pending_clear().rgba.map(f32::to_bits);
+            assert_eq!(bits, [-1i32 as u32, 7, i32::MIN as u32, 3], "the integers, bit for bit");
+            assert_eq!(gl.ctx().clear_color, [0.25, 0.5, 0.75, 1.0], "the clear colour is context state");
+            glClearBufferuiv(GL_COLOR, 0, [1u32, 2, 3, 4].as_ptr());
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "unsigned form on a signed buffer");
         }
     }
 
@@ -2230,9 +2290,10 @@ mod tests {
         let gl = fresh();
         // SAFETY: four GLuints, or null.
         unsafe {
+            /* the default framebuffer is fixed point (ES 3.0 4.2.3) */
             glClearBufferuiv(GL_COLOR, 0, [0u32, 1, 2, 3].as_ptr());
-            assert_eq!(draw::pending_clear().rgba, [0.0, 1.0, 2.0, 3.0]);
-            assert_eq!(gl.error(), GL_NO_ERROR);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            assert!(!draw::pending_clear().color);
             glClearBufferuiv(GL_DEPTH, 0, [0u32; 4].as_ptr());
             assert_eq!(gl.error(), GL_INVALID_ENUM);
             /* draw buffer 1: past GL_MAX_DRAW_BUFFERS on the GC7000 (1), in
@@ -2241,6 +2302,7 @@ mod tests {
             glClearBufferuiv(GL_COLOR, 1, [0u32; 4].as_ptr());
             let want = if context::MAX_DRAW_BUFFERS == 1 { GL_INVALID_VALUE } else { GL_NO_ERROR };
             assert_eq!(gl.error(), want, "draw buffer 1 against MAX_DRAW_BUFFERS");
+            /* draw buffer 0 of the default framebuffer is fixed point, so a null value is the only no-op */
             glClearBufferuiv(GL_COLOR, 0, core::ptr::null());
         }
         assert_eq!(gl.error(), GL_NO_ERROR);

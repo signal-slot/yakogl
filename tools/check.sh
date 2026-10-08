@@ -323,6 +323,11 @@ step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
+# ES 3.0's integer colour render targets through the GL API (the stand-in
+# back end of the test draws nothing); the ES 2.0 report below must refuse
+# every one of the formats.
+step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -331,6 +336,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"
@@ -1042,8 +1049,18 @@ table_symbols() {
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
-  nm --defined-only "$dir/release/libyakogl.rlib" 2>/dev/null |
-    grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true
+  local rlib="$dir/release/libyakogl.rlib" n
+  n=$(nm --defined-only "$rlib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true)
+  # The release profile is `lto = true`, and cargo may then build the rlib's
+  # object as LLVM bitcode alone, which an nm without the LLVM plugin (GNU
+  # binutils 2.46 here, 2026-10-08) reads as "no symbols" -- not one symbol
+  # in the whole archive. The table's names are still in its bytes, so they
+  # are counted there instead; the control arm keeps this honest (3 with the
+  # table, 0 without, measured).
+  if [ "$n" -eq 0 ] && ! nm --defined-only "$rlib" 2>/dev/null | grep -qE ' [TtDdRrBb] '; then
+    n=$(grep -c -a -E '14mesa_reference|SHC_BLOB_TABLE' "$rlib" || true)
+  fi
+  echo "$n"
 }
 
 check_table_absent() {

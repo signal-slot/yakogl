@@ -4402,10 +4402,17 @@ mod tests {
                 let env = Env { threads: p.fs.threads, textures: vec![texture.clone()], ..Env::default() };
                 let o =
                     sim::run(c.words, &stream, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env).expect("runs");
+<<<<<<< HEAD
                 for (l, got) in o.tlb[0].value[..LANES].iter().enumerate() {
                     let centre = 24 + l;
                     let want = (centre - n..=centre + n).map(|x| f64::from(red(x))).sum::<f64>() / (2 * n + 1) as f64;
                     let got = got.expect("red and green written");
+=======
+                for (l, value) in o.tlb[0].value.iter().enumerate().take(LANES) {
+                    let centre = 24 + l;
+                    let want = (centre - n..=centre + n).map(|x| f64::from(red(x))).sum::<f64>() / (2 * n + 1) as f64;
+                    let got = value.expect("red and green written");
+>>>>>>> 3985bee2a468281644eb0cf4988c8f06adfcb5e4
                     let got = f64::from(sim::half_to_f32((got & 0xffff) as u16));
                     assert!(
                         (got - want).abs() <= 1.0 / 1024.0,
