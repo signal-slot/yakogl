@@ -1,0 +1,67 @@
+# Accepted non-Pass outcomes of a dEQP-GLES2 mustpass run, for
+# tools/cts/tree-diff.py --accepted. One case name or glob per line; the '#'
+# comment on each bucket gives the reason and cites where it is recorded.
+#
+# Seeded only with the buckets docs/es2-cts-failures.md section C ("NotSupported
+# and QualityWarning buckets, with verdicts") records as verdict "acceptable":
+# the hardware or the ES 2.0 profile does not offer the feature. A case listed
+# here is still reported by tree-diff.py (marked [accepted]); it just does not
+# count against the tool's exit status.
+#
+# Not listed, because section C records them as "to fix" or "to verify", not
+# acceptable: shaders.fragdata.invalid_assign_to_1 (to fix: an ES 2.0 context
+# should report exactly one draw buffer), and the 27
+# fbo.completeness.attachment_combinations.*_tex stencil-texture cases (to
+# verify on the Pi 4 since the V3D claims GL_OES_depth_texture).
+
+# negative_api.texture.compressedtexsubimage2d_* -- 9 cases.
+# docs/es2-cts-failures.md section C: acceptable; the test needs a compressed
+# format that allows sub-image updates, ES 2.0 core requires none, and the
+# message is "No suitable compressed formats found".
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_invalid_size # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_invalid_target # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_level_max_cube # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_level_max_tex2d # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_level_cube # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_level_tex2d # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_offset # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_wdt_hgt # no suitable compressed format in ES 2.0 core
+dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_offset_allowed # no suitable compressed format in ES 2.0 core
+
+# clip_control.* -- 8 cases.
+# docs/es2-cts-failures.md section C: acceptable; EXT_clip_control is an
+# optional extension that we do not claim.
+dEQP-GLES2.functional.clip_control.depth_mode_one_to_one # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.depth_mode_zero_to_one # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.errors # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.face_culling # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.initial # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.modify_get # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.origin # EXT_clip_control not claimed
+dEQP-GLES2.functional.clip_control.viewport_bounds # EXT_clip_control not claimed
+
+# multisample.* -- 16 cases.
+# docs/es2-cts-failures.md section C: acceptable; the default config has no
+# multisample surface ("No multisample buffers"). The AM62P's 4x ms4 image
+# proves them as pass; the i.MX8MP waits on 4x MSAA (#8, gc-msaa).
+dEQP-GLES2.functional.multisample.common_edge_big_quad # default config has no multisample surface
+dEQP-GLES2.functional.multisample.common_edge_small_quads # default config has no multisample surface
+dEQP-GLES2.functional.multisample.common_edge_viewport_quad # default config has no multisample surface
+dEQP-GLES2.functional.multisample.constancy_alpha_to_coverage # default config has no multisample surface
+dEQP-GLES2.functional.multisample.constancy_both # default config has no multisample surface
+dEQP-GLES2.functional.multisample.constancy_both_inverted # default config has no multisample surface
+dEQP-GLES2.functional.multisample.constancy_sample_coverage # default config has no multisample surface
+dEQP-GLES2.functional.multisample.constancy_sample_coverage_inverted # default config has no multisample surface
+dEQP-GLES2.functional.multisample.depth # default config has no multisample surface
+dEQP-GLES2.functional.multisample.num_samples_line # default config has no multisample surface
+dEQP-GLES2.functional.multisample.num_samples_polygon # default config has no multisample surface
+dEQP-GLES2.functional.multisample.proportionality_alpha_to_coverage # default config has no multisample surface
+dEQP-GLES2.functional.multisample.proportionality_sample_coverage # default config has no multisample surface
+dEQP-GLES2.functional.multisample.proportionality_sample_coverage_inverted # default config has no multisample surface
+dEQP-GLES2.functional.multisample.sample_coverage_invert # default config has no multisample surface
+dEQP-GLES2.functional.multisample.stencil # default config has no multisample surface
+
+# multisampled_render_to_texture.readpixels -- 1 case.
+# docs/es2-cts-failures.md section C: acceptable;
+# EXT_multisampled_render_to_texture is not claimed.
+dEQP-GLES2.functional.multisampled_render_to_texture.readpixels # EXT_multisampled_render_to_texture not claimed

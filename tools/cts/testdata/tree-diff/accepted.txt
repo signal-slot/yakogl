@@ -1,0 +1,4 @@
+# Accepted non-Pass outcomes for the tree-diff fixtures. The shape follows
+# tools/cts/es2-accepted.txt: one case name or glob per line, a '#' comment
+# giving the reason.
+dEQP-GLES2.functional.treediff.accepted_* # a bucket the docs record as acceptable

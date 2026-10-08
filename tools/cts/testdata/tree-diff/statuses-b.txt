@@ -1,0 +1,3 @@
+Pass dEQP-GLES2.functional.treediff.same_pass
+Pass dEQP-GLES2.functional.treediff.fixed_case
+Pass dEQP-GLES2.functional.treediff.new_pass

@@ -1,0 +1,2 @@
+dEQP-GLES2.functional.treediff.same_pass
+dEQP-GLES2.functional.treediff.accepted_ns

@@ -1,0 +1,2 @@
+this is not a dEQP result
+just some text a serial capture picked up

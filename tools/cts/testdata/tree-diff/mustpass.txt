@@ -1,0 +1,6 @@
+dEQP-GLES2.functional.treediff.same_pass
+dEQP-GLES2.functional.treediff.regress_fail
+dEQP-GLES2.functional.treediff.fixed_case
+dEQP-GLES2.functional.treediff.missing_case
+dEQP-GLES2.functional.treediff.accepted_ns
+dEQP-GLES2.functional.treediff.accepted_stays

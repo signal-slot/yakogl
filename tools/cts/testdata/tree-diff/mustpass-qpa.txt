@@ -1,0 +1,2 @@
+dEQP-GLES2.functional.treediff.qpa_fix
+dEQP-GLES2.functional.treediff.qpa_crash
