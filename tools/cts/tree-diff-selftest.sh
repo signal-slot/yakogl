@@ -45,6 +45,12 @@ want "missing from B (a result in A, none in B): 1"
 want_pair dEQP-GLES2.functional.treediff.missing_case "-> Missing"
 want "verdict: FAIL (exit 1): 3 regression(s) outside the accepted list, 1 Fail/Crash/Timeout in B outside it"
 
+echo "== 1b. Pi 4 recorder timestamps: 'HH:MM:SS deqp: ...' lines parse the same"
+run --baseline "$FIX/console-stamped.txt" --new "$FIX/console-b.txt" --mustpass "$FIX/mustpass.txt"
+want_rc 1 "stamped console pair"
+want_n "form deqp-console" 2
+want "regressed (Pass in A -> anything else in B): 3"
+
 echo "== 2. --accepted: the accepted regression is listed but out of the gate"
 run --baseline "$FIX/console-a.txt" --new "$FIX/console-b.txt" --mustpass "$FIX/mustpass.txt" \
 	--accepted "$FIX/accepted.txt"

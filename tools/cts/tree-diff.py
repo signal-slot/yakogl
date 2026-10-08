@@ -267,7 +267,14 @@ def main(argv):
         description="Per-case diff of two dEQP-GLES2 result sets: A (the baseline) against "
                     "B (the new run), over the mustpass list. Reads the per-case forms the "
                     "repository's runners produce: 'deqp: <Status> <case>' console lines, "
-                    "TestResults.qpa XML, and '<Status> <case>' statuses lines.")
+                    "TestResults.qpa XML, and '<Status> <case>' statuses lines.",
+        epilog="inputs: --baseline A and --new B are required; each is one or more result "
+               "files or directories holding them. Exit status: 0 when B has no Fail, Crash "
+               "or Timeout outside the accepted list and no regression outside it; 1 "
+               "otherwise; 2 on bad input (unreadable file, no recognized per-case form, no "
+               "case named, unknown status, empty --mustpass). InternalError and "
+               "ResourceError are counted and listed under \"still fail\" but do not change "
+               "the exit status. The module docstring describes the accepted forms in full.")
     ap.add_argument("--baseline", nargs="+", metavar="FILE",
                     help="A: baseline result files, or directories holding them "
                          "(*.qpa and */console.txt)")
@@ -436,6 +443,8 @@ def self_test():
 
     run("console pair: regression, fix, missing",
         ["--baseline", f("console-a.txt"), "--new", f("console-b.txt"), "--mustpass", f("mustpass.txt")], 1)
+    run("Pi 4 recorder timestamps",
+        ["--baseline", f("console-stamped.txt"), "--new", f("console-b.txt"), "--mustpass", f("mustpass.txt")], 1)
     run("console pair + --accepted",
         ["--baseline", f("console-a.txt"), "--new", f("console-b.txt"), "--mustpass", f("mustpass.txt"),
          "--accepted", f("accepted.txt")], 1)
