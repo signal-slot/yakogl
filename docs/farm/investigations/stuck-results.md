@@ -161,3 +161,19 @@ line, review_state) exist only in the agent and review records on nuc. XPS holds
 from git refs would be a guess, which the task forbids. The table must be built
 by a run on nuc, or on XPS after replica-restart. This file stays
 `INCOMPLETE`, with the candidate list and the redo steps above.
+
+## Re-check at 2026-10-08T16:34Z (confirmed, review round 4, still on XPS139340)
+
+- `farm_status` homes: yakogl home nuc, degraded, `seq 182744`; follower
+  XPS139340 `applied_seq 0`, `lag 182744`, `last_pull_secs null`. The lag grew
+  by about 19,600 entries in 2 h 8 min (14:26Z to 16:34Z).
+- `list_agents` (limit 20): `{"agents":[]}`.
+- nuc: still exhausted (`exhausted_nodes: ["nuc","Lepton"]`), next capacity
+  reset 2026-10-08T23:00Z. system76 takes work again (not in `low_nodes`;
+  weekly remaining 19%). Farm: 21/21 slots busy, 5 queued.
+- `ask_farm`, `get_plan` and `get_agent_status` were refused in this session,
+  and `git ls-remote origin` needed approval, so there was no other route to
+  the records or to a newer integration tip.
+
+The per-result table therefore still cannot be built here. All three reviews
+also say it must be built on nuc or after replica-restart.
