@@ -54,6 +54,19 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
+# Options equal to the environment variables below, for callers that cannot set
+# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N (before the filter).
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --gpu=*) GPU=${1#*=} ;;
+        --module=*) MODULE=${1#*=} ;;
+        --cts=*) CTS=${1#*=} ;;
+        --out=*) OUT=${1#*=} ;;
+        --chunk=*) CHUNK=${1#*=} ;;
+        *) break ;;
+    esac
+    shift
+done
 CTS=${CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}
 BASE=$REPO/build/host-deqp
 COMMIT=$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown)
