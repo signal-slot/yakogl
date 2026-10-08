@@ -279,8 +279,8 @@ Columns:
 | RGB8_SNORM | R8G8B8A8_SNORM | S8S8S8S8 :210 | S8 :210 | 8P·n1 | S8S8S8S8 :102 | X,Y,Z,1 | yes | float |
 | RGBA8 | R8G8B8A8_UNORM | U8U8U8U8 :209 | U8 :209 | 8P·n1 | U8U8U8U8 :101 | X,Y,Z,W | yes | float |
 | RGBA8_SNORM | R8G8B8A8_SNORM | S8S8S8S8 :210 | S8 :210 | 8P·n1 | S8S8S8S8 :102 | X,Y,Z,W | yes | float |
-| SRGB8 | R8G8B8A8_SRGB | U8U8U8U8 :213 | F16 :213 | F16·γ·n0 | U8U8U8U8 :105 | X,Y,Z,1 | yes | float |
-| SRGB8_ALPHA8 | R8G8B8A8_SRGB | U8U8U8U8 :213 | F16 :213 | F16·γ·n0 | U8U8U8U8 :105 | X,Y,Z,W | yes | float |
+| SRGB8 | R8G8B8A8_SRGB | U8U8U8U8 :213 | F16 :213 | F16·γ·n1 | U8U8U8U8 :105 | X,Y,Z,1 | yes | float |
+| SRGB8_ALPHA8 | R8G8B8A8_SRGB | U8U8U8U8 :213 | F16 :213 | F16·γ·n1 | U8U8U8U8 :105 | X,Y,Z,W | yes | float |
 | RGBA4 | A4R4G4B4_UNORM | A4R4G4B4 :196 | U8 :196 | 8P·n1 | A4R4G4B4 :88 | Y,Z,W,X | yes | float |
 | RGB5_A1 | B5G5R5A1_UNORM | A1R5G5B5 :198 | U8 :198 | 8P·n1 | A1R5G5B5 :90 | Z,Y,X,W | yes | float |
 | RGB5 | B5G5R5A1_UNORM | A1R5G5B5 :198 | U8 :198 | 8P·n1 | A1R5G5B5 :90 | Z,Y,X,1 | yes | float |
@@ -390,6 +390,104 @@ formats have no typed channels (`u_format.yaml:997-1003`, `channels:
 that bit on top of Mesa's value. yakogl already stores the RGB8/A1/RGBA8
 families as ETC2 texfmts (§4.1); the EAC R11/RG11 rows are recorded here
 for completeness.
+
+### 2.5 Render-target summary (PBE side), every ES 3.0 colour-renderable format
+
+One row per format `int-rt-pvr` has to be able to render to, gathering what
+§1.2–§1.4 and the tables above spread over several places: packmode, `norm`,
+`source_format`, swizzle, how the USC packs the fragment output, and how the
+clear colour is packed. Mesa citations: packmode/accum `arch-formats.c:NNN`
+(`:195-266`); `norm` = `pvr_vk_format_is_fully_normalized` (`formats.h:264-273`,
+every channel normalized; sRGB channels are `UN8`, hence 1); `source_format`
+`job-common.c:39-79`; swizzle = util_format swizzle (`formats.c:339-343`);
+USC `to_pbe_format` (`pvfio.c:86-123`) + `pack_to_format`
+(`pvfio.c:149-218`); clear packing `pvr_get_hw_clear_color` by accum
+(`formats.c:171-215`).
+
+Clear-colour packing by accum (`formats.c`): U8 `:171` (f32→unorm8 ×4),
+S8 `:174` (snorm8), UINT8 `:177` / SINT8 `:180` (low byte of each
+component), U16 `:184` / S16 `:187` (unorm16/snorm16), F16 `:190`
+(f32→f16 ×4), UINT16 `:193` / SINT16 `:196`, U1010102 `:200` (one dword,
+`pvr_pack_a2x10y10z10_uint`, `:103-121`), F32 `:207`, UINT32 `:210`,
+SINT32 `:213` (one dword per component). Every row packs all four RGBA
+components regardless of the format's channel count (`formats.c:166-168`
+TODO), so unused components are simply ignored by the PBE swizzle.
+
+USC packing legend: `PCK` = `nir_pack_pco` (`pvfio.c:211`), `ins` =
+`nir_bitfield_insert_imm` (`pvfio.c:191`), `raw` = no packing
+(`pvfio.c:181-182`); "N dw" = the number of PIXOUT dwords
+(`DIV_ROUND_UP(blocksizebits, 32)`, `pvfio.c:177`). Mesa packs `PCK`
+channels `format_chans_per_dword` at a time (`pvfio.c:125-147`).
+
+Core ES 3.0 (table 3.13 "color-renderable"):
+
+| GL | packmode (`arch-formats.c`) | norm | source_format | swizzle | USC output (to_pbe_format → pack) | clear (accum) |
+|---|---|---|---|---|---|---|
+| R8 | U8 :199 | 1 | 8P | X,0,0,1 | R8_UNORM, PCK, 1 dw | U8 `formats.c:171` |
+| RG8 | U8U8 :203 | 1 | 8P | X,Y,0,1 | R8G8_UNORM, PCK, 1 dw | U8 `:171` |
+| RGB8 | U8U8U8U8 :209 | 1 | 8P | X,Y,Z,1 | R8G8B8A8_UNORM, PCK, 1 dw | U8 `:171` |
+| RGBA8 | U8U8U8U8 :209 | 1 | 8P | X,Y,Z,W | R8G8B8A8_UNORM, PCK, 1 dw | U8 `:171` |
+| SRGB8_ALPHA8 | U8U8U8U8 :213 + gamma | 1 | F16·γ | X,Y,Z,W | `fsat` then R16G16B16A16_FLOAT (`pvfio.c:97-104`), PCK, 2 dw | F16 `:190` (linear→f16; the PBE gamma-encodes on store) |
+| RGB565 | R5G6B5 :197 | 1 | 8P | Z,Y,X,1 | R8G8B8_UNORM (`pvfio.c:89-90`), PCK, 1 dw | U8 `:171` |
+| RGBA4 | A4R4G4B4 :196 | 1 | 8P | Y,Z,W,X | R8G8B8A8_UNORM (`pvfio.c:92-95`), PCK, 1 dw | U8 `:171` |
+| RGB5_A1 | A1R5G5B5 :198 | 1 | 8P | Z,Y,X,W | R8G8B8A8_UNORM (`pvfio.c:92-95`), PCK, 1 dw | U8 `:171` |
+| RGB10_A2 | A2R10B10G10 :223 | 1 | F16 | X,Y,Z,W | R16G16B16A16_FLOAT (`pvfio.c:103-104`), PCK, 2 dw | F16 `:190` |
+| RGB10_A2UI | U32 :227 | 0 | 8P (int) | X,Y,Z,W | R10G10B10A2_UINT, `ins` shifts 0/10/20/30 sizes 10/10/10/2, 1 dw | U1010102 `:200` |
+| R8I | S8 :202 | 0 | 8P | X,0,0,1 | `ins`, 1 dw | SINT8 `:180` |
+| R8UI | U8 :201 | 0 | 8P | X,0,0,1 | `ins`, 1 dw | UINT8 `:177` |
+| RG8I | S8S8 :207 | 0 | 8P | X,Y,0,1 | `ins`, 1 dw | SINT8 `:180` |
+| RG8UI | U8U8 :206 | 0 | 8P | X,Y,0,1 | `ins`, 1 dw | UINT8 `:177` |
+| RGBA8I | S8S8S8S8 :212 | 0 | 8P | X,Y,Z,W | `ins`, 1 dw | SINT8 `:180` |
+| RGBA8UI | U8U8U8U8 :211 | 0 | 8P | X,Y,Z,W | `ins`, 1 dw | UINT8 `:177` |
+| R16I | S16 :231 | 0 | 8P | X,0,0,1 | `ins`, 1 dw | SINT16 `:196` |
+| R16UI | U16 :230 | 0 | 8P | X,0,0,1 | `ins`, 1 dw | UINT16 `:193` |
+| RG16I | S16S16 :236 | 0 | 8P | X,Y,0,1 | `ins`, 1 dw | SINT16 `:196` |
+| RG16UI | U16U16 :235 | 0 | 8P | X,Y,0,1 | `ins`, 1 dw | UINT16 `:193` |
+| RGBA16I | S16S16S16S16 :244 | 0 | 8P | X,Y,Z,W | `ins`, 2 dw | SINT16 `:196` |
+| RGBA16UI | U16U16U16U16 :243 | 0 | 8P | X,Y,Z,W | `ins`, 2 dw | UINT16 `:193` |
+| R32I | S32 :247 | 0 | 8P | X,0,0,1 | raw, 1 dw | SINT32 `:213` |
+| R32UI | U32 :246 | 0 | 8P | X,0,0,1 | raw, 1 dw | UINT32 `:210` |
+| RG32I | S32S32 :250 | 0 | 8P | X,Y,0,1 | raw, 2 dw | SINT32 `:213` |
+| RG32UI | U32U32 :249 | 0 | 8P | X,Y,0,1 | raw, 2 dw | UINT32 `:210` |
+| RGBA32I | S32S32S32S32 :256 | 0 | 8P | X,Y,Z,W | raw, 4 dw | SINT32 `:213` |
+| RGBA32UI | U32U32U32U32 :255 | 0 | 8P | X,Y,Z,W | raw, 4 dw | UINT32 `:210` |
+
+All `8P` rows are `8_PER_CHANNEL` (`job-common.c:51-53` for integers,
+`:75-78` for the packed/8-bit unorm rows, with `with_packed_usc_channel`
+true because BXS-4-64 has `usc_f16sop_u8`, `cmd-buffer.c:1130-1135`). The
+RGB565/RGBA4/RGB5_A1 "swizzle" is the pipe format's own (the names list
+channels LSB first, §2); the GL-visible RGBA order is restored by it.
+Not in table 3.13 as renderable and therefore not needed for ES 3.0 core,
+although Mesa has rows: RGB8I/UI, RGB16I/UI, RGB32I/UI, SRGB8, R8_SNORM
+and the other SNORM formats (`EXT_render_snorm`), R16/RG16 UNORM
+(`EXT_texture_norm16`), RGB9_E5 (never: accum INVALID, `:259`).
+
+Renderable only with extensions (an ES 3.0 context without the extension
+must reject them as colour-renderable):
+
+| GL | extension | packmode | norm | source_format | swizzle | USC output | clear (accum) |
+|---|---|---|---|---|---|---|---|
+| R16F | `EXT_color_buffer_half_float` / `EXT_color_buffer_float` | F16 :232 | 0 | F16 | X,0,0,1 | R16_FLOAT, PCK, 1 dw | F16 `:190` |
+| RG16F | same | F16F16 :237 | 0 | F16 | X,Y,0,1 | R16G16_FLOAT, PCK, 1 dw | F16 `:190` |
+| RGBA16F | same | F16F16F16F16 :245 | 0 | F16 | X,Y,Z,W | R16G16B16A16_FLOAT, PCK, 2 dw | F16 `:190` |
+| R32F | `EXT_color_buffer_float` | F32 :248 | 0 | 8P (32-bit comp, `job-common.c:51-53`) | X,0,0,1 | raw, 1 dw | F32 `:207` |
+| RG32F | `EXT_color_buffer_float` | F32F32 :251 | 0 | 8P | X,Y,0,1 | raw, 2 dw | F32 `:207` |
+| RGBA32F | `EXT_color_buffer_float` | F32F32F32F32 :257 | 0 | 8P | X,Y,Z,W | raw, 4 dw | F32 `:207` |
+| R11F_G11F_B10F | `EXT_color_buffer_float` | F10F11F11 :258 | 0 | F16 | X,Y,Z,1 | R16G16B16_FLOAT (`pvfio.c:106-107`), PCK, 2 dw | F16 `:190` |
+
+RGB32F is never colour-renderable, and RGB16F only through
+`EXT_color_buffer_half_float` (`EXT_color_buffer_float` lists only the
+one/two/four-channel formats; RGB16F would take the RGBA16F row, `:245`).
+Mesa's RGB32F row (`:254`) exists only because Vulkan renders R32G32B32. RGB9_E5 is never renderable. The sRGB clear row is the only
+non-obvious one: Mesa clears gamma formats with a linear colour packed as
+F16 and lets the PBE gamma bit encode it (`formats.c:190`,
+`job-common.c:166-172`), so `glClearBufferfv` on SRGB8_ALPHA8 passes the
+linear value through (the GL clear is specified in linear space).
+
+Checked against Mesa 26.2.1 on 2026-10-08: the PBE packmode/accum rows of
+§2.1–§2.3 and §2.5 match `pvr_pbe_format_table` (`arch-formats.c:195-266`)
+line for line; §2.5 and the sRGB `norm` correction were added by item
+`pvr-pbe-map`.
 
 ## 3. ES 3.0 table 3.14, depth and stencil
 
