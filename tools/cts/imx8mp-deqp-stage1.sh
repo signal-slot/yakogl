@@ -5,7 +5,10 @@
 # Zephyr toolchain by tools/cts/cts-build-zephyr.sh. Stage 2 (imx8mp-deqp-build.sh) links against it.
 #
 #   tools/cts/imx8mp-deqp-stage1.sh
+#   DEQP_MODULE=gles3 DEQP_STAGE1=<another directory> tools/cts/imx8mp-deqp-stage1.sh
 #
+# DEQP_MODULE: gles2 (default; the behaviour is the one this script always had) or gles3, which builds the
+# dEQP-GLES3 package (cts-build-zephyr.sh MODULE=gles3). Keep one DEQP_STAGE1 directory per module.
 # Needs: the variables of imx8mp-env.sh (Zephyr part) and DEQP_STAGE1, the stage-1 work directory
 # (about 1.9 GB; cts-build-zephyr.sh fetches and patches the VK-GL-CTS tree there).
 # Output: $DEQP_STAGE1/cts (sources) and $DEQP_STAGE1/build (libraries); log in $IMX8MP_OUT/deqp-stage1.log.
@@ -14,6 +17,11 @@ set -u
 imx8mp_zephyr_env
 imx8mp_need DEQP_STAGE1
 export BOARD WORK=$DEQP_STAGE1
+case "${DEQP_MODULE:-gles2}" in
+	gles2) ;;
+	gles3) export MODULE=gles3 ;;
+	*) echo "imx8mp: DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" >&2; exit 2 ;;
+esac
 export ZEPHYR_EXTRA_MODULES="$YAKOGL_DIR/driver;$YAKOGL_DIR"   # ZEPHYR_MODULES comes from imx8mp-env.sh
 cd "$YAKOGL_DIR" || exit 1
 sh tools/cts/cts-build-zephyr.sh > "$IMX8MP_OUT/deqp-stage1.log" 2>&1

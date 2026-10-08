@@ -119,9 +119,14 @@ def conformance_rules(c, name, gles3=False, ms4=None):
     return bad
 
 
-def check_dotconfig(path, ms4):
+def check_dotconfig(path, ms4, gles3=False):
     c = parse_dotconfig(path)
-    bad = conformance_rules(c, path, ms4=ms4)
+    bad = conformance_rules(c, path, gles3=gles3, ms4=ms4)
+    if gles3:
+        # a GLES3 image reports ES 3.0: Kconfig writes a disabled bool as "# CONFIG_X is not set"
+        if c.get('DEQP_REPORT_ES2') == 'y':
+            bad.append('%s: CONFIG_DEQP_REPORT_ES2=y (dEQP-GLES3 judges an ES 3.0 context)' % path)
+        return bad
     for s in ('YAKOGL_REPORT_ES2', 'DEQP_REPORT_ES2'):
         if c.get(s) != 'y':
             bad.append('%s: CONFIG_%s=y is missing from the resolved configuration' % (path, s))
@@ -323,9 +328,9 @@ def main(argv):
         return 1 if self_test() else 0
     if argv[1:2] == ['--config']:
         if len(argv) < 3 or not os.path.isfile(argv[2]):
-            print('usage: check-deqp-images.py --config <.config> [--ms4]', file=sys.stderr)
+            print('usage: check-deqp-images.py --config <.config> [--ms4 | --gles3]', file=sys.stderr)
             return 2
-        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False)
+        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False, gles3='--gles3' in argv[3:])
     elif len(argv) == 1:
         bad, notes = check_repo()
         for n in notes:
