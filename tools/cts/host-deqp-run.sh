@@ -32,8 +32,12 @@
 # application. Chunks stay the default because a crash costs one chunk rather
 # than every case after it -- a panic that aborted the first single-process
 # run silently removed 2,743 mustpass cases from its case list. The run prints how many
-# cases BEGAN against how many were asked for; a shortfall is the aborted
-# chunks, reported by their exit status 134.
+# cases BEGAN against how many were asked for, and every chunk that needed more
+# than one process or lost cases (aborted.txt). A chunk goes on after its
+# process stops (run_chunk): the exit status alone hid that, because a
+# ResourceError ends dEQP's run with exit 1, and the first full gles3 run on
+# the V3D (2026-10-09) lost 1,275 cases that way, each such chunk exiting 1 like any chunk with
+# a failing case.
 #
 # Environment:
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
@@ -56,6 +60,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 # Options equal to the environment variables below, for callers that cannot set
 # them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N (before the filter).
+# --report=DIR builds and runs nothing: it prints step 4's report of the
+# finished run in DIR again (and rewrites its aborted.txt and summary.txt).
 while [ $# -gt 0 ]; do
     case "$1" in
         --gpu=*) GPU=${1#*=} ;;
@@ -64,6 +70,7 @@ while [ $# -gt 0 ]; do
         --out=*) OUT=${1#*=} ;;
         --chunk=*) CHUNK=${1#*=} ;;
         --jobs=*) JOBS=${1#*=} ;;
+        --report=*) OUT=${1#*=}; REPORT=1 ;;
         *) break ;;
     esac
     shift
@@ -93,6 +100,10 @@ FILTER=${1:-}
 [ -f "$CTS/targets/yakogl/yakogl.cmake" ] || {
     echo "host-deqp-run: $CTS has no yakogl target (tools/cts/cts-build.sh applies it)" >&2; exit 1; }
 
+if [ -n "${REPORT:-}" ]; then
+    [ -f "$OUT/all.txt" ] || { echo "host-deqp-run: $OUT is not a run directory" >&2; exit 1; }
+    echo "host-deqp-run: report of $OUT, run from $(cat "$OUT/commit" 2>/dev/null) (HOST-ONLY)"
+else
 echo "host-deqp-run: library and harness from $COMMIT, GPU $GPU, $MODULE (HOST-ONLY: compile/link outcomes only)"
 
 # 1. deqp-<module> for the host, against the YakoGL target (dlopen()s our libs).
@@ -129,32 +140,69 @@ asked=$(wc -l < "$OUT/all.txt")
 (cd "$OUT" && split -l "$CHUNK" -d -a 3 all.txt c_)
 echo "$COMMIT $GPU $MODULE" > "$OUT/commit"
 
+# A chunk whose process stops early (a crash, the timeout, a ResourceError --
+# which ends dEQP's whole run -- or a die() in a group's init) goes on in a
+# fresh process with the cases no process of it has begun, logged to
+# c_NNN.r<k>.qpa. A process that begins none of them is stopped by the first
+# one before it begins (lifetime.*'s init dies with no case open): that case
+# goes to c_NNN.skipped, never began, and the rest run. Bounded: every
+# process either begins a case or skips one.
 run_chunk() {
-    local c=$1
-    (cd "$DEQP_DIR/modules/$MODULE" &&
-     LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-$MODULE --deqp-caselist-file="$c" \
-        --deqp-log-filename="$c.qpa" --deqp-log-shader-sources=enable --deqp-log-images=disable \
-        --deqp-surface-type=pbuffer --deqp-surface-width=64 --deqp-surface-height=64 > "$c.out" 2>&1)
-    echo "exit=$?" >> "$c.out"
+    local c=$1 list=$1 log=$1.qpa k=0 left rest
+    left=$(wc -l < "$c")
+    : > "$c.out"
+    while :; do
+        (cd "$DEQP_DIR/modules/$MODULE" &&
+         LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-$MODULE --deqp-caselist-file="$list" \
+            --deqp-log-filename="$log" --deqp-log-shader-sources=enable --deqp-log-images=disable \
+            --deqp-surface-type=pbuffer --deqp-surface-width=64 --deqp-surface-height=64 >> "$c.out" 2>&1)
+        echo "exit=$?" >> "$c.out"
+        # (Not awk's FNR==NR: with nothing begun yet its first input is empty
+        # and the whole list would read as begun.)
+        grep -vxF -f <(cat "$c".qpa "$c".r*.qpa 2>/dev/null | sed -n 's/^#beginTestCaseResult //p'
+                       cat "$c.skipped" 2>/dev/null) "$c" > "$c.rest" || true
+        rest=$(wc -l < "$c.rest")
+        if [ "$rest" -gt 0 ] && [ "$rest" -eq "$left" ]; then
+            head -1 "$c.rest" >> "$c.skipped"
+            sed -i 1d "$c.rest"
+            rest=$((rest - 1))
+        fi
+        [ "$rest" -gt 0 ] || break
+        left=$rest k=$((k + 1)) list=$c.rest log=$c.r$k.qpa
+    done
+    rm -f "$c.rest"
 }
 export -f run_chunk
 export BASE LIB DEQP_DIR MODULE
 ls "$OUT"/c_??? | xargs -P "$JOBS" -I{} bash -c 'run_chunk "$(realpath {})"' 2>/dev/null || true
 
+fi
+
 # 4. What happened, and the refusals by reason.
+asked=$(wc -l < "$OUT/all.txt")
 begun=$(cat "$OUT"/c_*.qpa 2>/dev/null | grep -c '^#beginTestCaseResult' || true)
-echo "host-deqp-run: $begun of $asked cases began; chunk exits:"
+echo "host-deqp-run: $begun of $asked cases began; process exits (a resumed chunk has several):"
 grep -h '^exit=' "$OUT"/c_*.out | sort | uniq -c
 grep -h -A1 'panic' "$OUT"/c_*.out 2>/dev/null | grep panicked | sort | uniq -c || true
-# Every chunk that ended abnormally, with the case it died in: the last case
-# that began and has no end in its .qpa ("-" when every case ended). Exit 1
-# with every case ended is dEQP's "not all cases passed", not an abort.
-for o in "$OUT"/c_???.out; do
-    e=$(sed -n 's/^exit=//p' "$o")
-    c=${o%.out}
-    died=$(awk '/^#beginTestCaseResult/{n=$2} /^#endTestCaseResult|^#terminateTestCaseResult/{n=""} END{print n?n:"-"}' "$c.qpa" 2>/dev/null || echo -)
-    case "$e:$died" in 0:-|1:-) continue ;; esac
-    echo "host-deqp-run: chunk $(basename "$c") exit=$e in $died"
+# Every chunk that needed more than one process or lost cases: each process's
+# exit and where it stopped -- "in X" for a case that began and has no end
+# (a crash or the timeout), "after X" for one that ended (a ResourceError
+# ends dEQP's run there; so does die() in the next group's init) -- and the
+# cases skipped because they stopped every process before they began. Exit 1
+# alone is dEQP's "not every case passed".
+for c in "$OUT"/c_???; do
+    # Runs of the same exit or stop are folded: "137 x56".
+    exits=$(sed -n 's/^exit=//p' "$c.out" | uniq -c | awk '{print ($1 > 1 ? $2 " x" $1 : $2)}' | paste -sd,)
+    listed=$(wc -l < "$c")
+    began=$(cat "$c".qpa "$c".r*.qpa 2>/dev/null | grep -c '^#beginTestCaseResult' || true)
+    case "$exits" in 0|1) [ "${began:-0}" -eq "$listed" ] && continue ;; esac
+    stops=$(for q in $(ls "$c".qpa "$c".r*.qpa 2>/dev/null | sort -V); do
+        awk '/^#beginTestCaseResult/{n=$2; open=1} /^#endTestCaseResult|^#terminateTestCaseResult/{open=0}
+             END{print (n == "" ? "before any case" : (open ? "in " : "after ") n)}' "$q"
+    done | uniq -c | awk '{n = $1; sub(/^ *[0-9]+ /, ""); print (n > 1 ? $0 " x" n : $0)}' |
+        paste -sd';' | sed 's/;/; /g' || true)
+    skipped=$(cat "$c.skipped" 2>/dev/null | wc -l || true)
+    echo "host-deqp-run: chunk $(basename "$c"): exits $exits; ${began:-0} of $listed began; stopped: $stops; never began: $skipped$( [ "$skipped" -gt 0 ] && echo " ($(head -1 "$c.skipped") ..)")"
 done | tee "$OUT/aborted.txt"
 python3 "$HERE/cts-refusals.py" --cases 2 "$OUT"
 # The per-group table, the failures by message and every failing case, kept
