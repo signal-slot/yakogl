@@ -29,8 +29,8 @@ stub (`RESULTS.md:873`).
 `$CCFARM_DEPS_DIR/mesa-26.2.1-src` is an **empty directory** on node `nuc`
 (2026-10-08). The gallium and `imagination/vulkan` files are only in
 `mesa-26.2.1-caps`. The etnaviv register offsets
-(`VIVS_GL_OCCLUSION_QUERY_ADDR/CONTROL`) come from the rnndb `state_3d.xml`,
-which no vendored tree contains: see 3.3.
+(`VIVS_GL_OCCLUSION_QUERY_ADDR/CONTROL`) are in the vendored rnndb header
+`driver/src/vivante/hw/state.xml.h`: see 3.3.
 
 ## 1. What the tests need
 
@@ -200,7 +200,7 @@ clip window, as in Mesa; both are in the dEQP cases.
   buffer address, or invalid when no pool
   (`pvr_arch_job_render.c:942-957`; register `tp:...rogue/cr.xml:589-591`:
   address bits 4..39, **16-byte aligned**, `ROGUE_OQUERY_ALIGN` =
-  16, `mesa:imagination/include/hwdef/rogue_hw_defs.h:51`); for
+  16, `tp:imagination/include/hwdef/rogue_hw_defs.h:51`); for
   multicore parts `isp_oclqry_stride` (`pvr_arch_job_render.c:1243-1246`
   is a `finishme` for `core_count > 1`; fw struct
   `winsys/pvrsrvkm/fw-api/pvr_rogue_fwif.h:276, :287`). The submit flag
@@ -350,19 +350,19 @@ GC_GL_SEMAPHORE_TOKEN 0x3808, GC_GL_FLUSH_CACHE 0x380c,
 GC_GL_MULTI_SAMPLE_CONFIG 0x3818, GC_GL_VARYING_COMPONENT_USE0/1/2
 0x3828/0x382c/0x3838` (`:603-642`).
 
-**Registers.** `VIVS_GL_OCCLUSION_QUERY_CONTROL` and `_ADDR` are in
-etnaviv's rnndb `state_3d.xml`, not vendored here. My recollection is
-`0x3830` and `0x3834` (two holes in the list above: 0x3830 and 0x3834 are
-unused by `regs.rs`) **[unverified: the implementation item must read them
-from `state_3d.xml` of the etnaviv kernel or Mesa `src/etnaviv/` rnndb and
-state the file:line; do not trust this paragraph]**. The `0x1DF5E76` control
+**Registers.** The rnndb header vendored in this repository defines
+`VIVS_GL_OCCLUSION_QUERY_ADDR` = `0x00003824`
+(`driver/src/vivante/hw/state.xml.h:341`) and
+`VIVS_GL_OCCLUSION_QUERY_CONTROL` = `0x00003830` (`:395`). Neither is
+defined in `src/vivante/regs.rs`, whose GL block holds
+0x3800/0x380c/0x3818/0x3828/0x382c/0x3838/0x3854. The `0x1DF5E76` control
 value is quoted from `etnaviv_query_acc_occlusion.c:93`.
 
 **Changes.**
 
 | where | change |
 |---|---|
-| `src/vivante/regs.rs` | `GC_GL_OCCLUSION_QUERY_CONTROL`, `GC_GL_OCCLUSION_QUERY_ADDR` and `GC_OQ_CONTROL_VALUE = 0x1DF5E76` with the rnndb citation. |
+| `src/vivante/regs.rs` | `GC_GL_OCCLUSION_QUERY_CONTROL`, `GC_GL_OCCLUSION_QUERY_ADDR` and `GC_OQ_CONTROL_VALUE = 0x1DF5E76` (`ADDR` 0x3824, `CONTROL` 0x3830) with the `state.xml.h:341/:395` citation. |
 | `src/vivante/state.rs` | `GcState` gets `oq: OsalGpuMem` (one 16 KiB buffer: 2048 slots of 8 bytes, allocated at `gc_init` `:1905`; per handle a CPU-side `slots: Vec`-free array of `(first, count)`: the handle's slots are the contiguous range `[first, first+count)` of the **current** query; one query is active at a time, so slots are handed out in order) and per-frame `oq_on: u32` (the handle whose slot is currently armed, 0 = off). |
 | `emit_draw` `:1609` | before `emit_flushes` (`:1597`, which ends with the RA->PE stall): `oq_arm(f, d.gl.occlusion_query)`. If it differs from `oq_on`: if `oq_on != 0` **suspend** (`c.stall(GC_SYNC_RA, GC_SYNC_PE)` then `c.state(CONTROL, 0x1DF5E76)`, slot count++); if the new handle is non-zero **resume**: `c.state(ADDR, oq.gpu + slot*8)`. The stall before the CONTROL write [unverified: Mesa has none, but its writes are in the same stream order; a PE that still holds fragments of the previous draw would store a short count; the blob's pattern is unknown]. |
 | `emit_clear` `:1799` (the clear quad) and clear-only kicks | `oq_arm(f, 0)` first: clears never count (ES 3.0 4.2.3: clear is not a draw). |
@@ -535,7 +535,7 @@ keeps today's behaviour (`GL_OUT_OF_MEMORY` from `glGenQueries`).
 | rank | GPU | why | rough size |
 |---|---|---|---|
 | 1 (least) | **V3D 4.2** | the packet and the zero-address emission already exist in the C builder; one `u32` in `V3dJobState`, the pack-key word, a 4 KiB arena, two small back-end functions; the packet bytes are testable on the host; Mesa proves the whole flow (same BO across jobs). | 2 h |
-| 2 | **GC7000UL** | stream-only (two LOAD_STATEs), no ABI change, Mesa proves it; but the register offsets must be taken from the rnndb (not vendored), the suspend/resume bookkeeping touches `emit_draw`, `emit_clear`, `frame_submit` and `Mark`, and the PE timing of the store is unobserved. | 3 h |
+| 2 | **GC7000UL** | stream-only (two LOAD_STATEs), no ABI change, Mesa proves it; the register offsets are in the vendored `state.xml.h`, but the suspend/resume bookkeeping touches `emit_draw`, `emit_clear`, `frame_submit` and `Mark`, and the PE timing of the store is unobserved. | 3 h |
 | 3 (most) | **PowerVR** | widest ABI change (PPP builder, `PvrRenderFragRegs` in C and Rust, firmware dword 22-23, flags), the vis heap, accumulation and `GETVISRESULTS` are unobserved, plus the TBDR ordering hazard that forces a frame split at `glEndQuery` and TRANSLUCENT counted draws. The only GPU where the dEQP run is the first real test. | 4 h + board |
 
 The shared GL part (state machine, errors, `GlesDraw` field, `backend`
@@ -652,12 +652,10 @@ accumulation and ordering; the GC PE store timing; the dEQP 62 + 4 cases.
 
 ## 9. Open questions, in the order they will bite
 
-1. **GC register offsets** (3.3): read from rnndb; one line in `regs.rs`
-   with the citation.
-2. **PVR vis-test heap** (3.2): general heap first, else a new heap in
+1. **PVR vis-test heap** (3.2): general heap first, else a new heap in
    `driver/src/pvr_render.c`.
-3. **PVR OPAQUE vs TRANSLUCENT** for counted draws, and whether `EndQuery`
+2. **PVR OPAQUE vs TRANSLUCENT** for counted draws, and whether `EndQuery`
    needs the frame split (3.2): decide from the first board run of
    `occlusion_query.depth_write*`.
-4. **V3D accumulate** (3.1): one board test.
-5. **ES 2.0 extension** (section 6): owner decision, not this plan.
+3. **V3D accumulate** (3.1): one board test.
+4. **ES 2.0 extension** (section 6): owner decision, not this plan.
