@@ -4,7 +4,9 @@ Investigated 2026-10-08, 13:56Z to 16:45Z, from worker XPS139340.
 Nothing was changed except this file: no recheck, decision, merge or retry
 was run.
 
-Status: **partial.** The table below lists each unmerged yakogl result, its git
+Status: **partial.** The gate (`tools/check.sh`) is red on the integration base
+itself on this host (§3), so no result, this one included, can pass it here
+until yakogl's code or the hosts' toolchains change. The table below lists each unmerged yakogl result, its git
 state, how long it has been idle and the safest action with its risk. It is
 built from git (the snapshot of nuc's checkout plus a fetch of GitHub). The
 ccfarm review stage of each result (`review_state`, the reviewer verdict, the
@@ -83,6 +85,24 @@ none. Diagnosing the replica is item facts-replica.
 - Confirmed: XPS139340 has `GNU nm (Gentoo 2.47 p1) 2.47.0` (`nm --version`,
   2026-10-08). Unconfirmed: whether 2.47 reads LTO bitcode rlibs, and which nm
   the review host that failed had.
+- Confirmed, a second host-dependent red row (2026-10-08 17:05Z, XPS139340,
+  clippy 0.1.94 (fcf67da039 2025-12-18)): the gate's `--quick` row, run as
+  check.sh runs it,
+  `cargo clippy --no-default-features --features host-test,gpu-powervr --all-targets`,
+  fails on the integration base with
+  `src/gl/texture.rs:9199:13: error: this boolean expression contains a logic
+  bug` (the test asserts `… || true`; the lint is deny-by-default) and 4
+  warnings (`this boolean expression can be simplified` at
+  src/gl/buffer.rs:256, src/gl/draw.rs:2351 and :2760; `duplicated attribute`
+  at src/gl/draw.rs:6845). The `|| true,` line has been there since the first
+  commit (afb1633, 2026-10-04) and is unchanged in `7bc37ed`, in GitHub's
+  integration `334d4e6` and in the `3985bee` branch (there at line 8987). The
+  4th review of this item saw the same failure on its host. The 2nd review's
+  host ran clippy green for every configuration. The repository has no
+  rust-toolchain file and no `[lints]` table (Cargo.toml: `rust-version =
+  "1.88"` only), so each host's own clippy decides the row. Nothing was
+  changed here: fixing src/gl/texture.rs is yakogl code, outside this
+  fact-finding item (see §5, row 1's note).
 - Unconfirmed: that this red gate is what holds the results below. Results did
   merge after 14:31Z (table above), so either those gates ran on a host whose
   `nm` reads LTO bitcode, or the failure is judged per host. The gate log of each
@@ -136,7 +156,7 @@ replica-restart).
 
 | # | agent id | safest action | risk |
 |---|---|---|---|
-| 1 | 01a119e0-9d60… | `get_agent_result` → if it waits on review, let it be reviewed **first**: its `3985bee` fixes the shared red gate (§3). Then `recheck_results` for the others | low: review runs the normal gate; the fix touches check.sh, so a wrong fix could hide a real "table in the artefact" regression. The reviewer should check the archive-bytes fallback (measured 3 with table, 0 without) |
+| 1 | 01a119e0-9d60… | `get_agent_result` → if it waits on review, let it be reviewed **first**: its `3985bee` fixes the "no table" red row (§3); it does **not** fix the clippy row at src/gl/texture.rs:9199, which needs its own code change (a yakogl item, not a farm one). Then `recheck_results` for the others | low: review runs the normal gate; the fix touches check.sh, so a wrong fix could hide a real "table in the artefact" regression. The reviewer should check the archive-bytes fallback (measured 3 with table, 0 without) |
 | 2 | 01a11bc4-6674… | `get_agent_result`; if gate red on "no table", `recheck_results` after #1 merges | none (recheck only re-evaluates) |
 | 3 | 01a1193c-ca43… | as #2; the gate must build the Zephyr images, so it needs a node with ZEPHYR_WS and the cross CC | none; may wait for system76 (only CC_aarch64_unknown_none) |
 | 4 | 01a11866-5c1a… | as #3 | as #3 |
@@ -170,6 +190,11 @@ Confirmed:
 - Two of them (rows 10 and 13) have their newest commits only on nuc.
 - The integration gate fails `no table in the artefact` on at least one review
   host; `3985bee` (row 1) fixes it and is not merged.
+- The gate's `--quick` clippy row fails on the integration base on XPS139340
+  (clippy 0.1.94) and on the 4th review's host, at src/gl/texture.rs:9199
+  (`|| true`, in the tree since the first commit), and passed on the 2nd
+  review's host. With no rust-toolchain file, the row's outcome depends on the
+  host's clippy. No unmerged branch fixes it.
 
 Unconfirmed (needs nuc's records):
 - The ccfarm stage of each of the 13: `review_state`, waiting for a review
