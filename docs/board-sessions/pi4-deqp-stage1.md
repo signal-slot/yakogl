@@ -2,18 +2,72 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 dEQP stage 1 (host only): built, row D proven
 
-Status: **stage 1 built and proven.** dEQP-GLES2 libraries for `rpi_4b`
-are at
-`/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/work`
-(`DEQP_WORK`). Row D of `tools/cts/pi4-full-tree.txt` built with
-`tools/cts/pi4-deqp-images.sh`: `D rc=0`, conformance verdict passed, the
-test image was then deleted. No board was touched; nothing was flashed.
+Status: **stage 1 built and proven.** The dEQP-GLES2 libraries for
+`rpi_4b` (`DEQP_WORK`) are in each worker's deps cache, listed below. On
+each worker, row D of `tools/cts/pi4-full-tree.txt` built with
+`tools/cts/pi4-deqp-images.sh`: `D rc=0` and the conformance verdict
+passed; the test image was then deleted. No board was touched and
+nothing was flashed.
 
-All paths below are on the farm worker `Lepton-local` (64 cores, deps
-cache `/home/tasuku/.local/share/ccfarm-local/deps`), where this stage 1
-was built. Other workers do not have it; on `system76` the deps cache has
-no `deqp-stage1-rpi_4b/work` and its Zephyr SDK has no aarch64 toolchain
-(`zephyr-sdk-1.0.1/gnu/` is empty).
+Stage 1 is built on two farm workers, each in its own deps cache:
+
+| worker | `DEQP_WORK` | stage 1 | row D |
+|---|---|---|---|
+| `system76` (12 cores, loaded) | `/home/tasuku/.local/share/ccfarm/deps/yakogl/deqp-stage1-rpi_4b/work` | rc 0 | `D rc=0`, verdict passed |
+| `Lepton-local` (64 cores) | `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/work` | rc 0 | `D rc=0`, verdict passed |
+
+The `system76` build is in the next section. Every section after it
+describes the `Lepton-local` build, and the paths there are on that worker.
+
+## On `system76`
+
+Inputs: the shared deps cache `/home/tasuku/.local/share/ccfarm/deps/yakogl`
+already held them all at the pinned revisions: `VK-GL-CTS/` at
+`93bca01861b0e3ef3c387027a9791e6d065f900c` with its externals fetched,
+`zephyr-ws/` (west workspace, `zephyr` at
+`af17c0c8aa2a82a0b714a423915ad3610063ee68`, fatfs, hal_nxp, hal_ti,
+picolibc; `west` in `zephyr-ws/.venv`), and `zephyr-sdk-1.0.1/` with
+`gnu/aarch64-zephyr-elf` (gcc 14.3.0). Rust nightly has
+`aarch64-unknown-none`. Host cmake is 4.2.3; it configures CTS's zlib with
+`CMAKE_POLICY_VERSION_MINIMUM=3.5` in the environment.
+
+Commands (with `D=/home/tasuku/.local/share/ccfarm/deps/yakogl`):
+
+```sh
+export PATH=$D/zephyr-ws/.venv/bin:$HOME/.cargo/bin:$PATH RUSTUP_TOOLCHAIN=nightly
+export ZEPHYR_BASE=$D/zephyr-ws/zephyr ZEPHYR_SDK=$D/zephyr-sdk-1.0.1 ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh $D/zephyr-ws)" CTS=$D/VK-GL-CTS \
+    WORK=$D/deqp-stage1-rpi_4b/work BOARD=rpi_4b tools/cts/cts-build-zephyr.sh
+ZEPHYR_WS=$D/zephyr-ws WEST_VENV=$D/zephyr-ws/.venv DEQP_WORK=$D/deqp-stage1-rpi_4b/work \
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt /tmp/yakogl-pi4-stage1/rowD-system76 D
+```
+
+Results:
+
+- Stage 1: the first run was stopped by a 10-minute tool limit at ninja
+  step 400 of 418 on a host at load 15 to 30. The rerun (same command)
+  finished rc 0 in 313.8 s, 417 steps, ending
+  `cts-build-zephyr: libraries in …/deqp-stage1-rpi_4b/work/build`.
+  `work/` is 2.0 GB. The inputs it uses take 4.2 GB (`VK-GL-CTS`), 3.5 GB
+  (`zephyr-ws`) and 1.5 GB (`zephyr-sdk-1.0.1`), shared with the other
+  boards.
+- Row D in 200.1 s, the `.built` line
+
+  ```
+  D rc=0 sha256=b58b874356375ea204ea9c12e38ae8a1cc57c58c3fceb4e9c5ed1c45db7802ce build=25610e54
+  ```
+
+  and from `D.log`:
+
+  ```
+               RAM:     155440 KB       256 MB     59.30%
+  check-deqp-images: the dEQP image recipes build what conformance needs
+  ```
+
+  The script exited 1, which is the selective-build quirk described under
+  "Notes for the next session"; the `D rc=0` line is the result. The test
+  directory was deleted after the check.
 
 ## Inputs, at their pinned revisions
 
@@ -111,6 +165,15 @@ TMPDIR=$ROOT/tmp tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $TMPDI
   while `work/cts` is in use.
 
 ## Environment values
+
+`system76`:
+
+- `DEQP_WORK` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/deqp-stage1-rpi_4b/work`
+- `ZEPHYR_WS` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws`
+- `WEST_VENV` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws/.venv`
+- `ZEPHYR_SDK_INSTALL_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-sdk-1.0.1`
+
+`Lepton-local`:
 
 - `DEQP_WORK` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/work`
 - `ZEPHYR_WS` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/zephyr-ws`
