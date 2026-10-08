@@ -32,6 +32,10 @@
 #![allow(non_upper_case_globals)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
+// Clippy from 2026-10 widens needless_range_loop to loops whose index also
+// names the slot (handle allocators, parallel arrays); an iterator there reads
+// worse than the index.
+#![allow(clippy::needless_range_loop)]
 
 // The shared structs are pinned at their LP64 layout (src/abi_layout.rs and
 // the C headers, the driver structs mirrored in src/pvr/ffi.rs): on any other
