@@ -2350,7 +2350,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
     }
     if super::texture::NPOT_RESTRICTED
         && (!draw_is_pot(t.width) || !draw_is_pot(t.height))
-        && !(!mips && t.wrap_s == GL_CLAMP_TO_EDGE && t.wrap_t == GL_CLAMP_TO_EDGE)
+        && (mips || t.wrap_s != GL_CLAMP_TO_EDGE || t.wrap_t != GL_CLAMP_TO_EDGE)
     {
         return Some("ES 2.0 non-power-of-two: needs CLAMP_TO_EDGE on both axes and no mipmap filter");
     }
@@ -2757,7 +2757,7 @@ fn dump_bound_texture(t: &GlTexture, binding: u8, tw: u32, rows: u32) {
         .checked_sub(1)
         .and_then(|r| r.checked_mul(pitch.checked_mul(4)?))
         .and_then(|r| r.checked_add((tw as usize).checked_mul(4)?));
-    if !last.is_some_and(|e| e <= t.mem.size) {
+    if last.is_none_or(|e| e > t.mem.size) {
         return;
     }
     ALPHA_SCANS.fetch_sub(1, Ordering::Relaxed);
@@ -6750,11 +6750,7 @@ mod tests {
                 p.rvs.varyings[k].vtxout_off += 3;
             }
             p.rvs.vs_output_size += 3; /* the outputs moved up, the block grew */
-<<<<<<< HEAD
             for v in p.rfs.varyings.iter_mut().take(n) {
-=======
-            for v in &mut p.rfs.varyings[..n] {
->>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
                 v.vtxout_off += 3; /* as glLinkProgram would have left it */
             }
         }
@@ -6843,7 +6839,6 @@ mod tests {
         0
     }
 
-    #[cfg(feature = "gpu-powervr")]
     /// Put the fake in as the shader back end's blend variants for one test
     /// (the back end in place compiles and links); put it back on drop.
     #[cfg(feature = "gpu-powervr")]

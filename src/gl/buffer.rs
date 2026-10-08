@@ -253,7 +253,7 @@ pub fn debug_bind_hist(op: i32, h: u32) {
 pub fn debug_dump_bind_hist() {
     const NAMES: [&str; 5] = ["?", "bind-elem", "delete", "bind-vao", "bind-array"];
 
-    if !osal::ops().is_some_and(|o| o.log.is_some()) {
+    if osal::ops().is_none_or(|o| o.log.is_none()) {
         return;
     }
     // SAFETY: single-threaded by contract; no other reference to STATE is live.

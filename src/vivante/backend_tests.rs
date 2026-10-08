@@ -2366,20 +2366,12 @@ fn nine_to_sixteen_vertex_samplers_take_the_slots_after_the_fragment_ones() {
         for vs in 9..=16usize {
             let mut d = rig.draw(3);
             d.num_textures = fs as u8;
-<<<<<<< HEAD
             for (k, t) in d.textures.iter_mut().enumerate().take(fs) {
-=======
-            for (k, t) in d.textures[..fs].iter_mut().enumerate() {
->>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
                 *t = bind(rig.vbo.gpu, 4, 4, 1);
                 t.unit = k as u8;
             }
             d.num_vs_textures = vs as u8;
-<<<<<<< HEAD
             for (k, t) in d.vs_textures.iter_mut().enumerate().take(vs) {
-=======
-            for (k, t) in d.vs_textures[..vs].iter_mut().enumerate() {
->>>>>>> 141dcfa3d7e22c1bbeb666c8646116ba5c6c3fa6
                 /* width k + 1: sampler k's descriptor is recognisable */
                 *t = bind(rig.vbo.gpu + 0x400 * k as u64, k as u32 + 1, 2, 1);
                 t.unit = k as u8;

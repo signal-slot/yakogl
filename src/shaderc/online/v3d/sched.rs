@@ -808,7 +808,7 @@ fn ok_in_branch_slot(w: &Word, conditional: bool) -> bool {
         && w.uniform.is_none()
         && !signal
         && !w.special
-        && !(conditional && w.flags_push)
+        && (!conditional || !w.flags_push)
         && !super::verify::touches_peripheral(&alu)
         && !other_magic(alu.add.op != AddOp::Nop, alu.add.magic, alu.add.waddr)
         && !other_magic(alu.mul.op != MulOp::Nop, alu.mul.magic, alu.mul.waddr)
