@@ -50,3 +50,32 @@ pi4-deqp-stage1.md: `DEQP_WORK`, `ZEPHYR_WS`, `WEST_VENV`,
   SDK and a CTS stage 1 build.
 - Still no image built, no board run. Rerun on system76 (or give this worker
   pip access and disk).
+
+## rows 15-28 (pi4-es2-r1b: BLOCKED, nothing run on the board)
+
+Date: 2026-10-09. Integration tip c4a4d7fa2691 (the tip at the start of this
+item). pi4-es2-r1a ran nothing, so there is no common commit with a first half.
+
+Result: no image was built and no case ran on the Pi 4. There are no board.sh
+verdict lines for rows 15-28 (T1 19, T3 21, TF 24 included), no tally, and no
+verdict for the 25 cube cases (neither Pass nor Fail). The HANDOFF 'Reading a
+failure' branches could not be applied. There is no whole-tree total: neither
+half ran. No host result is offered in place of a device result.
+
+Reason: the same missing inputs as above. This worker holds in the deps cache
+only `VK-GL-CTS/`, `zephyr-ws/` (a bare `.venv` with pip, no `west`, no Zephyr
+checkout), `sdk-dl/` and `plan4-v3d-es2-lib.txt`. There is no Zephyr SDK, no
+west workspace and no dEQP stage 1 (`DEQP_WORK`), so
+`tools/cts/pi4-deqp-images.sh` cannot build an image. The earlier session found
+the network installs that would create them refused and the volume nearly full.
+`BOARD_HDMI_TIMINGS` and the other node-local variables are unset here too.
+
+Checked: the Pi 4 answers ssh with the leased key, is idle (load average
+0.02 0.03 0.00) and runs a 6.12 aarch64 Linux kernel. Nothing was copied to it
+or run on it.
+
+Next session: run on system76 (pi4-deqp-stage1.md lists its `DEQP_WORK`,
+`ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`) at the then-current tip,
+with `TREE_ROWS=15-28`. If both halves then run at one commit, add the
+whole-tree total with
+`tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles2-mustpass.txt`.
