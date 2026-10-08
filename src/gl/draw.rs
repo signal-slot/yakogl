@@ -6839,7 +6839,6 @@ mod tests {
         0
     }
 
-    #[cfg(feature = "gpu-powervr")]
     /// Put the fake in as the shader back end's blend variants for one test
     /// (the back end in place compiles and links); put it back on drop.
     #[cfg(feature = "gpu-powervr")]
