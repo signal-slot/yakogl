@@ -70,7 +70,7 @@ Mesa's PowerVR driver maps every pipe format twice:
   plus `PVR_PBE_ACCUM_FORMAT_*` (the per-pixel accumulator layout the USC
   writes and the clear colour is packed into).
 
-Accessors: `pvr_arch_get_tex_format` / `_aspect` (`arch-formats.c:302-324`),
+Accessors: `pvr_arch_get_tex_format` / `_aspect` (`arch-formats.c:302-326`),
 `pvr_arch_get_pbe_packmode` / `_get_pbe_accum_format`
 (`arch-formats.c:326-340`). A combined depth-stencil image sampled as a
 texture defaults to the depth aspect (`tex-state.c:190-191`); the stencil
@@ -193,19 +193,23 @@ Z32F→R32_FLOAT `:181-183`) and their TPU swizzle puts the value in X
 hint (`iface.h:132-142`: format bits [0:4], `SPLIT` bit 5, `SCALE` bit 6,
 `ROUNDZERO` bit 7, `UNORM` bit 8; `PVR_PCK_FORMAT_INVALID` = `0b11111`).
 `setup_pck_info` (`tex-state.c:84-112`) builds it from
-`pco_pipe_to_pck_format` (`pco.c:387-463`) and stores it at
+`pco_pipe_to_pck_format` (`pco.c:387-461`) and stores it at
 `tex-state.c:321`. The format numbers are `pco_isa.py:980-1003`
 (`u8888`=0, `s8888`=1, `u1616`=3, `s1616`=4, `u32`=6, `s32`=7,
 `u1010102`=8, `f111110`=12, `f16f16`=14, `f32`=15, …). Note the default in
-`pco.c:387-463`: integer, 32-bit, packed-float and depth/stencil formats
-get **no** PCK (INVALID) — only 8/16-bit UNORM/SNORM and 16F do. PCK_INFO
+`pco.c:387-461`: integer, 32-bit float, RGB9_E5, packed-integer 1010102,
+depth/stencil and compressed formats get **no** PCK (INVALID). PCK is
+given to 8-bit UNORM/SNORM (`scale`), 16-bit UNORM/SNORM
+(`scale`+`split`), the 16F family (`split`), R11G11B10 (`f111110`,
+`pco.c:414-416`) and the packed UNORM/SNORM 1010102 formats
+(`u1010102`/`s1010102` + `scale`, `pco.c:419-428`). PCK_INFO
 is consumed by the USC's tex path for shadow-compare clamping
 (`nir-tex.c:772-777`, bit 8) and image-store packing
 (`nir-tex.c:936-1060`), not by the TPU itself.
 
 ### 1.6 Filterability
 
-Mesa's rule (`pvr_get_image_format_features2`, `formats.c:246-281`, the
+Mesa's rule (`pvr_get_image_format_features2`, `formats.c:248-337`, the
 test at `:275-279`): a format is
 `SAMPLED_IMAGE_FILTER_LINEAR` when it is not integer, not depth/stencil,
 and its first component is under 32 bits (or it is block-compressed). So
@@ -225,9 +229,13 @@ SMP instruction's `fcnorm` modifier from the destination type
 `integer` modifier from `int_mode` (`:239`). An `isampler`/`usampler` fetch
 keeps the texel's integer bits (no `fcnorm`); a float sampler of a
 normalized or float format gets `fcnorm`. Hardware integer lookups beyond
-the basic ones are gated by `has_tpu_extended_integer_lookup`
-(`bxs.h:68`; `nir-tex.c:470-472`, `:937-939`; LOD disables them,
-`:607-610`).
+the basic ones (the SMP `integer` modifier, i.e. integer texel
+coordinates) are gated by `has_tpu_extended_integer_lookup` (`bxs.h:68`)
+**and** by the PCO debug flag `INT_SMP` (`nir-tex.c:469-472`,
+`:937-940`; `pco_internal.h:68`, `:76`) — Mesa only exercises them with
+the `PCO_DEBUG=int_smp` debug option (`pco_debug.c:32-34`, `:64`), never
+by default. `int_mode` is set from that support (`:626-629`), and LOD
+disables it too (`:607-611`).
 
 In GL terms: integer formats sample through `isampler*`/`usampler*` only
 (ivec4/uvec4), float and normalized formats through `sampler*` (vec4).
@@ -509,8 +517,18 @@ writes them and the USC clear program outputs `R32_FLOAT` for depth
 
 Sampled as textures they remap to colour formats with the value in X
 (`image.c:173-183`, `formats.c:352-368`): S8→R8_UINT, Z16→R16_UINT,
-Z32F→R32_FLOAT. yakogl today stores every depth texture as R32F
+Z32F→R32_FLOAT. They are not filterable (the
+`vk_format_is_depth_or_stencil` test, `formats.c:276`) and sample as
+float (`fcnorm`, §1.7). yakogl today stores every depth texture as R32F
 (`src/gl/texture.rs:4368-4372`), which is the same look-up.
+
+Checked against Mesa 26.2.1 on 2026-10-08 (item `pvr-tpu-map`): the
+texformat rows of §2.1–§2.4 and §3 match `pvr_format_table`
+(`arch-formats.c:87-170`) line for line, the swizzle column matches
+`u_format.yaml`, and the filter and sampler columns match §1.6–§1.7.
+That check corrected the PCK default sentence of §1.5 (R11G11B10 and the
+packed UNORM/SNORM 1010102 formats do get PCK), added the `INT_SMP`
+debug gate to §1.7 and §4.5, and fixed three citation line numbers.
 
 ## 4. yakogl today, and what each part must gain
 
@@ -550,7 +568,7 @@ forced to 1 in the swizzle).
 
 Must gain: a `TEXF_*` entry per integer texfmt with the texformat numbers
 of §2.3 (`texstate.xml:95-193`) and Mesa's swizzles; PCK_INFO for them is
-INVALID (`pco.c:387-463` gives integer formats no PCK) — word 7 takes
+INVALID (`pco.c:387-461` gives integer formats no PCK) — word 7 takes
 `PVR_PCK_FORMAT_INVALID` (0b11111, `iface.h:132`), which the USC already
 tolerates (it only reads PCK bits for shadow clamps and image stores,
 `nir-tex.c:772-777`, `:936-1060`).
@@ -611,8 +629,11 @@ Must gain: `fcnorm` from the destination type (Mesa's rule,
 `nir-tex.c:236`), the `integer` modifier for integer fetches
 (`nir-tex.c:239`), and selection of `Op::Tex` with an integer result.
 BXS-4-64 has `has_tpu_extended_integer_lookup` (`bxs.h:68`), but Mesa
-still disables the extended integer paths under LOD
-(`nir-tex.c:607-609`) — nearest filtering is the safe first target.
+gates the extended integer paths behind the PCO debug flag `INT_SMP`
+(`nir-tex.c:469-472`, §1.7) and disables them under LOD
+(`nir-tex.c:607-609`) — using the `integer` modifier at all is yakogl's
+own decision, not Mesa's default. Nearest filtering is the safe first
+target.
 
 ### 4.6 `src/gl` — entry points
 
