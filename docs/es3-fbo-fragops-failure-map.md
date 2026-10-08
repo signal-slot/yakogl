@@ -20,9 +20,8 @@ GLES3 run. Abbreviations used for sources:
 - **R-img** = the per-image table, `RESULTS.md:1552-1556` (images 2-5).
 - **dEQP** = `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles3/functional/` (pinned
   93bca01), **glu** = `.../framework/opengl/gluTextureUtil.cpp`.
-- **Caps** = `docs/es3-backend-caps.md` (plan item `es3-caps`, merged from
-  branch `ccfarm/01a11864-6943-723a-b34c-f362be31a1c6`, commit `b6004e19`; it
-  is not yet in the checkout this was written from), **PVRF** =
+- **Hardware caps document**: `docs/es3-backend-caps.md` (plan item `es3-caps`) was vetoed and reverted (3f78982e) and is not on `ccfarm/integration`. Nothing here is sourced from it; hardware statements below cite `docs/es3-pvr-formats.md` (**PVRF**) or are marked unverified.
+- **PVRF** =
   `docs/es3-pvr-formats.md`.
 - Code is cited at the checkout this file was written on (`src/gl/...`);
   `396d667a` has the same functions (checked: `glBlitFramebuffer: not
@@ -99,7 +98,7 @@ rgb5_a1 rgba4 srgb8_alpha8). 19 + 1 + 4 + 3 + 1 + 8 = 36.
 
 | subgroup | cases | AM62P fails | bucket (R-bucket) | dEQP source | needs | plan item |
 |---|---:|---|---|---|---|---|
-| fbo.api | 20 | 0 (20 / 20 pass, `RESULTS.md:1408`) | – | `es3fFboApiTests.cpp` | – | – |
+| fbo.api | 20 | not recorded for 396d667a (an earlier GLES3 image passed 20 / 20, `RESULTS.md:1408`; that is not the §1r run) | – | `es3fFboApiTests.cpp` | – | – |
 | fbo.blit.conversion | 436 | not recorded | INVALID_ENUM 270 (rbo of I / A2 formats), INVALID_OPERATION 252 (glBlitFramebuffer stub), n/s (F32) | `es3fFramebufferBlitTests.cpp` (blit between two renderbuffers of different formats: 255 float/normalised pairs incl. F32, 81 signed-int, 100 unsigned-int pairs) | `glBlitFramebuffer` (stub: always GL_INVALID_OPERATION, `src/gl/framebuffer.rs:2823`), format conversion int→int / float→float, integer rbo for 181 cases, sRGB8_ALPHA8 as source and destination (32 names) | int-rt-gl (181 integer cases get past the rbo), then blit: **none** |
 | fbo.blit.default_framebuffer | 106 | not recorded | INVALID_OPERATION 252 | same file | `glBlitFramebuffer` to/from the window surface, LINEAR scale, out-of-bounds | **none** (blit) |
 | fbo.blit.depth_stencil | 28 | not recorded | INVALID_OPERATION 252 | same | blit of D16, D24, D32F, D24S8, D32F_S8, S8 (depth-only, stencil-only, scaled) | **none** (blit; the depth/stencil half also needs depth/stencil copy in the back end) |
@@ -108,14 +107,14 @@ rgb5_a1 rgba4 srgb8_alpha8). 19 + 1 + 4 + 3 + 1 + 8 = 36.
 | fbo.color.clear | 36 | not recorded | INVALID_ENUM 270 for I (19) + A2 (1); F32 (4) n/s | same | `glClearBufferiv/uiv` and integer `glReadPixels` for I; classes above | int-rt-gl, int-rt-pvr / -v3d / -gc |
 | fbo.color.repeated_clear | 108 | not recorded | INVALID_OPERATION 252, Image comparison failed 675 | same | `blit` 72 (clear, blit to a second fbo), `sample` 36 (clear, sample as a texture) | blit part **none**; sample part not known |
 | fbo.color.tex2d | 36 | not recorded | INVALID_ENUM 270 / Compile failed 181 / Image comparison failed 675 | same + `FBU` shaders (`genTexFragmentShader`, `FBU:260`: `isampler2D` / `usampler2D` and `ivec4` / `uvec4` outputs for I) | texture attached to an fbo in each class; integer texture upload, integer sampling and integer render | int-rt-gl, formats-pvr / -v3d / -gc, int-rt-pvr / -v3d / -gc |
-| fbo.color.tex2darray | 36 | not recorded | same | same + `Texture2DArrayShader` (`FBU:587`) | `glFramebufferTextureLayer` on an array, `sampler2DArray` sampling (PowerVR samples an array as one tall image, Caps §2 row 5) | int-rt-gl, pvr-2darray, formats-*, int-rt-* |
+| fbo.color.tex2darray | 36 | not recorded | same | same + `Texture2DArrayShader` (`FBU:587`) | `glFramebufferTextureLayer` on an array, `sampler2DArray` sampling (PowerVR samples an array as one tall image, PowerVR shader back end; see plan item `pvr-2darray`, not re-verified here) | int-rt-gl, pvr-2darray, formats-*, int-rt-* |
 | fbo.color.tex3d | 36 | not recorded | same | same + a 3D shader | `glFramebufferTextureLayer` on a 3D texture, `sampler3D` | int-rt-gl, formats-*, int-rt-* |
 | fbo.color.texcube | 36 | not recorded | same | same + `TextureCubeShader` (`FBU:455`) | cube face attachments in each class | int-rt-gl, formats-*, int-rt-* |
 | fbo.completeness.attachment_combinations | 81 | not recorded | – | `es3fFboCompletenessTests.cpp` | colour / depth / stencil texture or rbo combinations | – (no bucket names it) |
 | fbo.completeness.layer | 8 | not recorded | – | same | `glFramebufferTextureLayer` layer / size completeness on 2D-array and 3D | tex3d-levels (host gap: NPOT mips ≥ 1), else none |
 | fbo.completeness.renderable.renderbuffer | 230 | not recorded | not named in R-bucket | same + glsFboCompletenessTests | 76 colour rows, 77 depth rows, 77 stencil rows; a format ES 3.0 makes renderable must give a complete fbo, others must not | int-rt-gl for the I and A2 colour rows (they are refused today, `src/gl/framebuffer.rs:455-478`); the rest not known |
 | fbo.completeness.renderable.texture | 226 | not recorded | not named in R-bucket | same | 72 colour rows, 77 depth, 77 stencil, as texture attachments | sized-formats-gl first (the texture must exist), then int-rt-gl |
-| fbo.completeness.samples | 13 | not recorded | INVALID_OPERATION 252 | same | `glRenderbufferStorageMultisample` with 1, 2, 4 samples and mixed fbos; refused above 1 (`src/gl/framebuffer.rs:2587`, MAX_SAMPLES 1 = Caps §3) | **none** (MSAA) |
+| fbo.completeness.samples | 13 | not recorded | INVALID_OPERATION 252 | same | `glRenderbufferStorageMultisample` with 1, 2, 4 samples and mixed fbos; refused above 1 (`src/gl/framebuffer.rs:2587`, `GL_MAX_SAMPLES` is 1) | **none** (MSAA) |
 | fbo.completeness.size | 2 | not recorded | – | same | `distinct` size attachments (complete in ES 3.0), `zero` | none (small; check) |
 | fbo.depth | 15 | not recorded | Compile failed 181 | `es3fFboDepthbufferTests.cpp` (basic, depth_test_clamp, depth_write_clamp ×5) | D32F and D24 / D16 rbo and textures, float depth written by the shader | **none** (depth-format part; shader part reading: formats-pvr) |
 | fbo.invalidate.default | 25 | not recorded | – | `es3fFboInvalidateTests.cpp` | `glInvalidateFramebuffer` on the default fbo; validation-only is correct (`src/gl/framebuffer.rs:2633`: "colour is always kept, so an invalidate is a no-op") | – (reading: pass) |
@@ -123,7 +122,7 @@ rgb5_a1 rgba4 srgb8_alpha8). 19 + 1 + 4 + 3 + 1 + 8 = 36.
 | fbo.invalidate.sub | 19 | not recorded | INVALID_OPERATION 252 (8 `unbind_blit*` cases use glBlitFramebuffer; 4 of them are MSAA) | same | `glInvalidateSubFramebuffer`, blit | blit part **none**; MSAA part **none** |
 | fbo.invalidate.target | 27 | not recorded | – | same | all `GL_FRAMEBUFFER` / `DRAW` / `READ` target combinations, validation | – (reading: pass) |
 | fbo.invalidate.whole | 19 | not recorded | INVALID_OPERATION 252 (same 8 blit cases) | same | as `sub` | blit / MSAA part **none** |
-| fbo.msaa.2_samples, 4_samples, 8_samples | 22 + 22 + 22 | not recorded | INVALID_OPERATION 252 (storage refused above 1 sample; resolve via blit) | `es3fFboMultisampleTests.cpp:276-330, 372-404` | multisample rbo of each format (21 colour + depth / stencil formats) at 2 / 4 / 8 samples, then `glBlitFramebuffer` resolve (`:180, :330`); V3D and BXS do 4x only (Caps §1), so the 2x and 8x names become n/s only if MAX_SAMPLES says 4 | **none** (MSAA + blit) |
+| fbo.msaa.2_samples, 4_samples, 8_samples | 22 + 22 + 22 | not recorded | INVALID_OPERATION 252 (storage refused above 1 sample; resolve via blit) | `es3fFboMultisampleTests.cpp:276-330, 372-404` | multisample rbo of each format (21 colour + depth / stencil formats) at 2 / 4 / 8 samples, then `glBlitFramebuffer` resolve (`:180, :330`); the hardware sample counts of the three GPUs are unverified here | **none** (MSAA + blit) |
 | fbo.msaa.renderbuffer_resize | 4 | not recorded | INVALID_OPERATION 252 | same | multisample → non-multisample and back | **none** (MSAA + blit) |
 | fbo.multiview | 3 | 0 (reading: n/s, in the 255 of `RESULTS.md:1467`) | – | `es3fMultiviewTests.cpp` | `GL_OVR_multiview` samples_1 / 2 / 4 | – (extension absent: n/s is right) |
 | fbo.render.recreate_color | 72 | not recorded | Image comparison failed 675 / Compile failed 181 | `es3fFboRenderTest.cpp` | rbo / texture colour in the ES 3.0 formats, repeated recreation | not known (reading: int-rt-gl for the I / A2 names) |
@@ -181,12 +180,11 @@ compares against a reference blended in linear space and converted back
 (`es3fBlendTests.cpp:316-331`), so blending in the encoded space fails the
 comparison in almost every case. Hardware: PowerVR's PBE has a `gamma` bit and
 the accumulator is F16, so sRGB writes encode (PVRF §2.1 rows SRGB8 /
-SRGB8_ALPHA8, `:113-114, :282-290`); V3D converts sRGB at tile load / store
-(Caps §1, V3D row "sRGB render", `v3dx_format_table.c:63,67,250-259`);
-GC7000UL's sRGB render needs HALTI3, met (Caps §1, `E:471-516`).
-Whether blending then happens in linear space on each back end (PowerVR
-blends in the USC with the destination read back; V3D blends in the TLB after
-the conversion) is **not established** and is the work of `fbo-fragops`.
+SRGB8_ALPHA8, `:113-114, :282-290`). V3D and GC7000UL sRGB support is
+unverified here.
+
+Whether blending then happens in linear space on each back end is **not
+established** and is the work of `fbo-fragops`.
 
 ### 2.3 fragment_out (940)
 
@@ -200,7 +198,7 @@ the conversion) is **not established** and is the work of `fbo-fragops`.
 | fragment_out.array.fixed | 108 | not recorded | INVALID_ENUM for rgb10_a2 (12) | same | 3 draw buffers of one format | int-rt-gl, int-rt-*; sRGB: **none** |
 | fragment_out.array.int | 108 | all 108 | INVALID_ENUM 531 | `:1282-1314` | as basic.int, with 3 targets | int-rt-gl, int-rt-* |
 | fragment_out.array.uint | 120 | all 120 | INVALID_ENUM 531 | `:1316-1346` | as basic.uint | int-rt-gl, int-rt-* |
-| fragment_out.random | 100 | not recorded; ≥ 51 | INVALID_ENUM 531 (51 of the bucket) | `:1008-1060`, `:1346-1353` (`createRandomCase(..., 2, 4, seed)`: 2 to 4 targets, random float / int / uint formats) | integer or A2 targets (the 51); cases with 4 targets need `MAX_DRAW_BUFFERS` 4 (3 today, Caps §3); some are n/s for F32 | int-rt-gl, int-rt-*, mrt4 (for the 4-target seeds; which seeds have four is not recorded) |
+| fragment_out.random | 100 | not recorded; ≥ 51 | INVALID_ENUM 531 (51 of the bucket) | `:1008-1060`, `:1346-1353` (`createRandomCase(..., 2, 4, seed)`: 2 to 4 targets, random float / int / uint formats) | integer or A2 targets (the 51); cases with 4 targets need `MAX_DRAW_BUFFERS` 4 (3 today, `CAP_COLOR_ATTACHMENTS`, `src/gl/context.rs:139`); some are n/s for F32 | int-rt-gl, int-rt-*, mrt4 (for the 4-target seeds; which seeds have four is not recorded) |
 | **fragment_out total** | **940** | **619** | | | | |
 
 Derivation of the integer-output rows. The INVALID_ENUM bucket "After
@@ -234,11 +232,11 @@ the scope for item `fbo-fragops`.
 
 | rank | subgroup(s) | fails | suspected cause (code evidence) | needs |
 |---:|---|---|---|---|
-| 1 | fragment_ops.blend.fbo_srgb.* (1,152 cases) | **1,106 – 1,111** (derived, §2.2) | no sRGB encode / decode: SRGB8_ALPHA8 is stored as plain RGBA8 (`src/gl/state.rs:105`, `src/gl/framebuffer.rs:490`); dEQP's reference blends in linear space | sRGB write encode and destination decode for blending in each back end (PVRF `:113-114, :282-290`; Caps §2 row 10); a decision whether this is done in the GL layer (convert in the shader) or the colour-buffer format. Also fixes `fbo.color.blend` srgb8_alpha8, the sRGB names of `fragment_out.*.fixed` (24) and `fbo.blit.conversion.*srgb8_alpha8*` (32 names) |
+| 1 | fragment_ops.blend.fbo_srgb.* (1,152 cases) | **1,106 – 1,111** (derived, §2.2) | no sRGB encode / decode: SRGB8_ALPHA8 is stored as plain RGBA8 (`src/gl/state.rs:105`, `src/gl/framebuffer.rs:490`); dEQP's reference blends in linear space | sRGB write encode and destination decode for blending in each back end (PVRF `:113-114, :282-290`); a decision whether this is done in the GL layer (convert in the shader) or the colour-buffer format. Also fixes `fbo.color.blend` srgb8_alpha8, the sRGB names of `fragment_out.*.fixed` (24) and `fbo.blit.conversion.*srgb8_alpha8*` (32 names) |
 | 2 | fbo.blit.* (610) + fbo.color.repeated_clear.blit (72) + fbo.invalidate.{sub,whole} blit cases (16) + fragment_ops.scissor.framebuffer_blit_* (3) | ≤ 252 (the INVALID_OPERATION bucket, shared with msaa and color; `RESULTS.md:1511`); not split | `glBlitFramebuffer` is a stub that raises GL_INVALID_OPERATION (`src/gl/framebuffer.rs:2823`; the test `blit_framebuffer_is_invalid_operation_and_says_so_once` pins it) | a real blit: same-format and converting copies, NEAREST and LINEAR, scaling, reversed rectangles, depth / stencil copies, default framebuffer as source and destination; a back-end copy or a draw-based blit. Case count affected: 701 (blit 610 + 72 + 16 + 3) |
-| 3 | fbo.msaa.* (70) + fbo.completeness.samples (13) + the 8 MSAA blit cases of fbo.invalidate | ≤ 252 (same bucket; not split) | multisample renderbuffers are refused above one sample (`src/gl/framebuffer.rs:2587`), `MAX_SAMPLES` is 1 on all three back ends (Caps §3, row "MAX_SAMPLES": "new: MSAA item; not in the plan"); resolve needs the blit of rank 2 | `glRenderbufferStorageMultisample` with 2 / 4 samples, resolve into a single-sample rbo, `glGetInternalformativ` sample counts; hardware 4x on V3D, BXS-4-64 and GC7000UL (Caps §1; 4x already exists in the AM62P 4x-MSAA image config `tools/cts/am62p-ms4-tree.txt`, not through the ES 3.0 rbo API). Case count: 91 |
+| 3 | fbo.msaa.* (70) + fbo.completeness.samples (13) + the 8 MSAA blit cases of fbo.invalidate | ≤ 252 (same bucket; not split) | multisample renderbuffers are refused above one sample (`src/gl/framebuffer.rs:2587`), `MAX_SAMPLES` is 1 on all three back ends (`glRenderbufferStorageMultisample` raises GL_INVALID_OPERATION above 1, `src/gl/framebuffer.rs:2587`; no plan item covers MSAA); resolve needs the blit of rank 2 | `glRenderbufferStorageMultisample` with 2 / 4 samples, resolve into a single-sample rbo, `glGetInternalformativ` sample counts; hardware sample counts per GPU: unverified (4x already exists in the AM62P 4x-MSAA image config `tools/cts/am62p-ms4-tree.txt`, not through the ES 3.0 rbo API). Case count: 91 |
 | 4 | fbo.depth (15), fbo.render.* (308), fbo.stencil (9), fbo.color.tex2darray / tex3d (72) | part of "Compile failed 181" (`RESULTS.md:1513`: color, depth, render) and "Image comparison failed 675"; **no split recorded** | reading from the sources: the fbo test shaders (`FBU:260`, `:455`, `:587`) use `isampler` / `usampler`, integer outputs and `sampler2DArray` / `sampler3D`; a "Compile failed" is the online compiler or the back end refusing one of them. Not a **none** if it is the integer samplers (formats-pvr / -v3d / -gc) or the array sampler (pvr-2darray) | measure first (host run or a rerun with the `glu` program log); then assign |
-| 5 | fbo.depth float-depth and D32F cases | not recorded | `GL_DEPTH_COMPONENT32F` and `DEPTH32F_STENCIL8` as rbo / texture and as blit source (Caps §1 table: PVR TPU depth/stencil formats, V3D D32F) | the depth-format list of `is_depth_format`, not read here |
+| 5 | fbo.depth float-depth and D32F cases | not recorded | `GL_DEPTH_COMPONENT32F` and `DEPTH32F_STENCIL8` as rbo / texture and as blit source (hardware support unverified here) | the depth-format list of `is_depth_format`, not read here |
 | 6 | fbo.completeness.layer (8), fbo.completeness.size (2) | not recorded | layer attach rules on 3D / array, `size.distinct` | small; read the cases |
 | – | the 88 unexplained fragment_out failures | 88 (derived) | not a cause: unaccounted (§2.3) | rerun fragment_out.basic.fixed / float and array.fixed / float, and read the "Image comparison failed" cases |
 
@@ -256,33 +254,29 @@ Failures fixed need the per-subgroup run of §6.
 | item | takes out | names in these three groups | evidence |
 |---|---|---:|---|
 | int-rt-gl | rbo / texture colour targets of the integer formats and RGB10_A2 / RGB10_A2UI, `glClearBuffer{i,ui}v`, integer `glReadPixels`, `glGetError` after fbo setup | fragment_out basic + array 456 (I) + 24 (A2) + random ≥ 51; fbo.color 5 × 20 = 100 (I 19 + A2 1 per row); fbo.invalidate.format 20; fbo.blit.conversion integer pairs 181 | `RESULTS.md:1499-1516`; `src/gl/framebuffer.rs:455-478` |
-| int-rt-pvr / -v3d / -gc | integer fragment outputs and PBE / TLB / PE formats | same names as int-rt-gl, after it | PVRF; Caps §2 row 2 |
-| sized-formats-gl, formats-pvr / -v3d / -gc | texture upload and sampling of the ES 3.0 sized formats for the texture-attached cases | fbo.color.tex2d / tex2darray / tex3d / texcube (144, the I / F / A2 rows), fbo.completeness.renderable.texture colour rows (72) | Caps §2 row 3 |
+| int-rt-pvr / -v3d / -gc | integer fragment outputs and PBE / TLB / PE formats | same names as int-rt-gl, after it | PVRF (PowerVR); V3D and GC7000UL unverified |
+| sized-formats-gl, formats-pvr / -v3d / -gc | texture upload and sampling of the ES 3.0 sized formats for the texture-attached cases | fbo.color.tex2d / tex2darray / tex3d / texcube (144, the I / F / A2 rows), fbo.completeness.renderable.texture colour rows (72) | PVRF (PowerVR); V3D and GC7000UL unverified |
 | mrt4 | `MAX_DRAW_BUFFERS` 4 | the 4-target seeds of fragment_out.random (count not recorded); the 3-target `array` cases already fit | `src/gl/context.rs:139`, `es3fFragmentOutputTests.cpp:1215` |
-| pvr-2darray | array textures sampled as arrays | fbo.color.tex2darray (36) | Caps §2 row 5 |
+| pvr-2darray | array textures sampled as arrays | fbo.color.tex2darray (36) | plan item text; not re-verified |
 | tex3d-levels | NPOT array / 3D levels ≥ 1 | fbo.completeness.layer (8) if the cases use NPOT mips (not checked) | `RESULTS.md:996` |
 | none → fbo-fragops | §3 ranks 1-3 | 1,152 + 701 + 91 | §3 |
 
 ## 5. Hardware facts that bound the `none` items
 
-From `docs/es3-backend-caps.md` (§1 hardware tables, §2 rows 9 and 10) and
-`docs/es3-pvr-formats.md`:
+Only PowerVR has a hardware document in the repository (PVRF); the V3D and
+GC7000UL statements the first draft made came from the withdrawn caps document
+and are **unverified** and removed.
 
-- **MSAA**: 4x only on all three (BXS-4-64 `max_multisample = 4`; V3D
-  `V3D_MAX_SAMPLES = 4`; GC7000UL 4x only, 2x refused, `SmallMSAA = 1`). The
-  `fbo.msaa` names fix 2, 4 and 8 samples (`es3fFboMultisampleTests.cpp:372-404`);
-  how dEQP treats a count above `GL_MAX_SAMPLES` (n/s or failure) for the 2x
-  and 8x names was not read here and decides how many of the 66 names can
-  pass at all.
-- **sRGB render**: PowerVR has `gamma` in the PBE and F16 accumulators
-  (PVRF `:113-114`); V3D converts at tile load / store; GC7000UL needs HALTI3
-  (met). None of the three is wired for the ES 3.0 GL surface today.
-- **Blit**: no hardware path is documented in the two docs. A blit is a GL-core
-  or back-end copy (texture copy by draw or by TPU/PBE) that does not exist yet.
-- **Integer targets**: all three have them (PBE S/U 8/16/32; V3D
-  `v3dx_format_table.c:118-137`; GC7000UL HALTI2, R8I / R8UI need HALTI5),
-  see Caps §2 row 2. PowerVR with two USC output registers per pixel bounds
-  wide MRT, not the `array` (3 × RGBA8-class) cases.
+- **sRGB render (PowerVR)**: the PBE has a `gamma` bit and the accumulators are
+  F16 (PVRF `:113-114`, `:282-290`). V3D and GC7000UL: unverified.
+- **MSAA**: the repository's only evidence is the GL layer (`GL_MAX_SAMPLES`
+  1, `src/gl/framebuffer.rs:2587`) and the AM62P 4x-MSAA image config
+  `tools/cts/am62p-ms4-tree.txt`. Hardware sample counts per GPU and how dEQP
+  treats a count above `GL_MAX_SAMPLES` for the 2x and 8x `fbo.msaa` names
+  (`es3fFboMultisampleTests.cpp:372-404`) were not established.
+- **Blit**: no hardware path is documented; a blit does not exist yet.
+- **Integer targets (PowerVR)**: PBE signed/unsigned pack modes exist (PVRF
+  integer sections); V3D and GC7000UL: unverified.
 
 ## 6. What to do next (for es3-inventory and fbo-fragops)
 
