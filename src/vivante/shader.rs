@@ -183,8 +183,8 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
      * writes: a column the shader never reads can sit above the count its
      * compiler reported, and the vertex fetch would write past NUM_TEMPS. */
     let mut vs_temps = d.vs.temps as u32;
-    for i in 0..(d.num_elems as usize).min(GC_MAX_VERTEX_ELEMENTS) {
-        let reg = d.elems[i].vs_reg;
+    for (i, e) in d.elems.iter().enumerate().take((d.num_elems as usize).min(GC_MAX_VERTEX_ELEMENTS)) {
+        let reg = e.vs_reg;
         vs_temps = vs_temps.max(reg as u32 + 1);
         map_set8(&mut vs_input, i, reg);
     }

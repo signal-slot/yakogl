@@ -424,8 +424,8 @@ pub fn mrt_targets(gl: &GlesDraw) -> usize {
 pub fn hw_targets(gl: &GlesDraw) -> ([u8; 4], usize) {
     let mut slots = [0u8; 4];
     let mut n = 1;
-    for slot in 1..mrt_targets(gl) {
-        if gl.targets[slot].gpu != 0 {
+    for (slot, t) in gl.targets.iter().enumerate().take(mrt_targets(gl)).skip(1) {
+        if t.gpu != 0 {
             slots[n] = slot as u8;
             n += 1;
         }
@@ -1118,14 +1118,15 @@ fn emit_vertex_elements(c: &mut GcCmd, d: &GcDraw) {
 fn emit_streams(c: &mut GcCmd, d: &GcDraw) {
     let n = (d.num_streams as usize).min(GC_MAX_VERTEX_ELEMENTS);
 
-    for i in 0..n {
-        c.state(nfe_vertex_streams_base_addr(i as u32), d.streams[i].gpu as u32);
+    let streams = &d.streams[..n];
+    for (i, s) in streams.iter().enumerate() {
+        c.state(nfe_vertex_streams_base_addr(i as u32), s.gpu as u32);
     }
-    for i in 0..n {
-        c.state(nfe_vertex_streams_control(i as u32), vertex_stream_stride(d.streams[i].stride));
+    for (i, s) in streams.iter().enumerate() {
+        c.state(nfe_vertex_streams_control(i as u32), vertex_stream_stride(s.stride));
     }
-    for i in 0..n {
-        c.state(nfe_vertex_streams_vertex_divisor(i as u32), d.streams[i].divisor);
+    for (i, s) in streams.iter().enumerate() {
+        c.state(nfe_vertex_streams_vertex_divisor(i as u32), s.divisor);
     }
 }
 
@@ -1912,9 +1913,9 @@ pub extern "C" fn gc_init() -> i32 {
     /* Unknown until written: the first draw of the process writes
      * GL_VARYING_COMPONENT_USE GENERIC, whatever an earlier client left. */
     g.component_use_marked = true;
-    for i in 0..GC_FRAMES {
-        if osal::gpu_alloc(GC_HEAP_COMMAND, GC_CMD_WORDS * 4, OSAL_MEM_DATA, &mut g.frames[i].cmd) != 0
-            || osal::gpu_alloc(GC_HEAP_COMMAND, GC_ARENA_BYTES, OSAL_MEM_DATA, &mut g.frames[i].arena) != 0
+    for f in &mut g.frames[..GC_FRAMES] {
+        if osal::gpu_alloc(GC_HEAP_COMMAND, GC_CMD_WORDS * 4, OSAL_MEM_DATA, &mut f.cmd) != 0
+            || osal::gpu_alloc(GC_HEAP_COMMAND, GC_ARENA_BYTES, OSAL_MEM_DATA, &mut f.arena) != 0
         {
             return -1;
         }
@@ -1953,11 +1954,11 @@ pub extern "C" fn gc_shutdown() {
     if !g.inited {
         return;
     }
-    for i in 0..GC_FRAMES {
-        osal::gpu_free(&mut g.frames[i].cmd);
-        osal::gpu_free(&mut g.frames[i].arena);
-        if !g.frames[i].extra.impl_.is_null() {
-            osal::gpu_free(&mut g.frames[i].extra);
+    for f in &mut g.frames[..GC_FRAMES] {
+        osal::gpu_free(&mut f.cmd);
+        osal::gpu_free(&mut f.arena);
+        if !f.extra.impl_.is_null() {
+            osal::gpu_free(&mut f.extra);
         }
     }
     super::tiled_copy::release_all();
