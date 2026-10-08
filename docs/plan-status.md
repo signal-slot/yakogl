@@ -15,15 +15,15 @@ roadmap fixed 2026-10-08, in order:
 4. ES 3.0 (host work may run ahead of the boards).
 5. More boards.
 
-How to read this file. "Merged" means the commit is an ancestor of HEAD (the
-integration tip `ecfff113908c`); "unmerged" means it lives only on a
-`ccfarm/*` branch not merged into integration. The state was reconstructed
-from git (`git log`, `git log --all --not HEAD`, `git merge-base
---is-ancestor`), not from memory. This edition was written in a clone taken
-at `ecfff113908c`; a result merged after that snapshot is named by its report
-path (the es2-invariance diagnosis). Two results were merged and then vetoed
-by a confirming review and reverted (`3f78982`, `a35095b`); they are listed as
-stopped. Hashes are short abbreviations and resolve with `git show` in this
+How to read this file. "Merged" means the commit is on the integration
+branch. This clone's HEAD is the snapshot `ecfff113908c`; the fetched
+`origin/ccfarm/integration` tip is `2256c26f`, which adds one result merged
+after the snapshot (the es2-offline-table diagnosis, `642a7589`). "Unmerged"
+means the work lives only on a `ccfarm/*` branch not merged into
+integration. The states were re-checked against the plan record and the
+fetched integration branch, not from memory. Two results were merged and
+then vetoed by a confirming review and reverted (`3f78982`, `a35095b`);
+they are listed as stopped. Hashes are short abbreviations and resolve with `git show` in this
 clone, except run records named in quotes: `d60b9d76`, `d8583f20`,
 `fe5e8e73`, `396d667a` and `29460f96` name runs on main before this clone's
 root commit (`afb1633`, 2026-10-04), and `8abeaabb` is the origin/main tip
@@ -73,26 +73,43 @@ State.
   not yet in docs/es2-cts-failures.md. The record `bf5c575` is unmerged: it
   names the board login and the serial bridge, so it must re-land redacted
   (am62p-plan1-doc); the merged docs/board-sessions/am62p-plan1.md still
-  records the earlier attempt that ran nothing. Images 8 to 17 and the ms4
-  image have not run: the round-1 session am62p-es2-r1 is running now.
-- Pi 4: no dEQP image has run since "fe5e8e73" (2026-10-01). The round-1
-  session pi4-es2-r1a merged without running anything (docs/board-sessions/
-  pi4-es2-r1.md, merged `c4a4d7f`): the worker had no Zephyr workspace, no
-  SDK 1.0.1 and no dEQP stage 1, and rows 0-14 of tools/cts/pi4-full-tree.txt
-  are all unrun. Rows 0-14 still need a session on a machine with that
-  environment (the doc names system76). Rows 15-28 run now (pi4-es2-r1b).
+  records the earlier attempt that ran nothing. The round-1 session
+  am62p-es2-r1 built all 18 images (17 plus ms4) but obtained no dEQP
+  result: image 8 booted with a silent UART (verdict empty, 0 console bytes
+  in 428 s), image 9 was interrupted by a worker restart, and images 10-17
+  and ms4 did not start (record docs/board-sessions/am62p-es2-r1.md, in
+  review, result `46e60a14`).
+- Pi 4: no dEQP image has run since "fe5e8e73" (2026-10-01). Both round-1
+  sessions ran nothing: pi4-es2-r1a merged as a blocked record
+  (docs/board-sessions/pi4-es2-r1.md, merged `c4a4d7f`), and pi4-es2-r1b
+  (rows 15-28) is in review with the same outcome (result `6e4c837`): the
+  workers lacked the Zephyr workspace, the SDK 1.0.1 and dEQP stage 1, and
+  the network installs that would create them were refused. All 29 rows of
+  tools/cts/pi4-full-tree.txt are unrun. The redo item pi4-es2-r1a2 (rows
+  0-14, its own record docs/board-sessions/pi4-es2-r1a.md) is ready and
+  waits for a free slot; the records name system76 as the machine that has
+  the environment.
 - gl_test case 171 (stopped item): the fix `41f56eb` is merged; the board
   check is pending.
-- Plan #4's host diagnoses are landing. es2-invariance-diag is done
-  (docs/investigations/es2-invariance.md, merged after this clone's
-  snapshot). es2-preprocessor-diag is merged (`ecfff11`, docs/investigations/
-  es2-preprocessor.md) and found no preprocessor defect: the two
-  `definitions.define_value_and_function_{fragment,vertex}` failures come
-  from one stale row of tools/cts/RESULTS.md (line 7623, measured at
-  `e31bd3e`, 2026-09-23), so es2-preprocessor reduces to a regression guard
-  (tests/es2_preprocessor.rs). The npot, v3d-clear, error-rules,
-  offline-table, v3d-fbo-combos and host-baseline diagnoses are pending (in
-  review or running); see the item tables below.
+- Plan #4's host diagnoses are landing. es2-preprocessor-diag is merged
+  (`ecfff11`, docs/investigations/es2-preprocessor.md): no preprocessor
+  defect — the two `definitions.define_value_and_function_{fragment,vertex}`
+  failures come from one stale row of tools/cts/RESULTS.md (line 7623,
+  measured at `e31bd3e`, 2026-09-23), so es2-preprocessor reduces to a
+  regression guard (tests/es2_preprocessor.rs). es2-offline-table-diag is
+  merged after the snapshot (`642a7589`, docs/investigations/
+  es2-offline-table.md): the 8 tests the gate skips without a shader table
+  are the visible part — 18 to 27 more fail in the no-table PowerVR and
+  GC7000 builds, which the gate only builds; the GC7000 Mesa table lags the
+  gl_test shader list (77 of 123 shaders have no row,
+  `tools/vivante/check_gl_test_blobs.py`, not run by the gate); no
+  dEQP-GLES2 case can see table code (the dEQP images compile online), so
+  issue #22 matters for stage 2, not stage 1. es2-invariance-diag finished
+  with no changes (plan record "done: no changes"): no report was merged,
+  docs/investigations/es2-invariance.md is not on the integration branch,
+  and the 9 AM62P regressions are still undiagnosed in the tree. The npot,
+  v3d-clear, error-rules and v3d-fbo-combos diagnoses are in review; the
+  host-baseline diagnosis is running; see the item tables below.
 - The gate's clippy row is host-dependent (the repository pins no
   toolchain; Cargo.toml sets only `rust-version = 1.88`). `141dcfa` cleared
   needless_range_loop for the 2026-10-06 toolchain; the plan record reports
@@ -100,7 +117,10 @@ State.
   src/gl/draw.rs, src/gl/texture.rs and src/shaderc/online/sema.rs. Measured
   on this host (clippy 0.1.98): `tools/check.sh --quick` is clean at
   `ecfff113908c` (99 ok, 0 failed, 0 gaps). clippy-gate-fix makes the row
-  green on every farm host.
+  green on every farm host. Separately, the gate's V3D library test step
+  overruns worker time limits: es2-offline-table-diag could not finish
+  `tools/check.sh --quick` because its `gpu-v3d` build was killed (exit
+  137). The item gate-timing measures the per-step durations.
 
 Remaining. The stage 1 work is plan #4's item list and execution order below.
 
@@ -166,8 +186,9 @@ State.
   decided `34d7dc0`); the redaction audit (`3a4e55f`, decided `4b37a25`);
   the website update (`058e6fc`, `b3cc30e`, decided `e4fe79a`). website/
   exists from earlier work but does not yet match the status sources.
-- Not started: the release checklist (pub-checklist) and the tree-diff tool
-  (cts-tree-diff).
+- Not started: the release checklist (pub-checklist), the tree-diff tool
+  (cts-tree-diff) and the CONTRIBUTING/SECURITY/DESIGN refresh
+  (pub-contrib-docs).
 
 Remaining. The stage 3 items and their order are in the plan #4 section
 below. The promotion to main and the publication itself are the owner's
@@ -235,10 +256,11 @@ repository with a current CHANGELOG, README, CONTRIBUTING.md and SECURITY.md,
 a clean licence/SPDX audit, a clean redaction audit, a website consistent
 with the status sources, and the roadmap published.
 
-States: done = merged; running = a session is active; pending = the result
-is in review or the agent is still running, and its report file is not
-merged; ready = not started, no blocker; waiting = not started, depends on
-an earlier step.
+States: done = finished (its report is merged, or it produced no changes);
+running = a session is active; in review = the result is waiting for
+ccfarm's review and its report file is not merged; ready = not started, no
+dependency left; waiting = not started, blocked by an earlier step, a touch
+overlap with an in-review item of another plan, or a free worker slot.
 
 ### Stage 1 items
 
@@ -246,44 +268,45 @@ Diagnoses (host only):
 
 | item | state | finding / evidence |
 |---|---|---|
-| es2-invariance-diag | done | docs/investigations/es2-invariance.md (merged; landed after this clone's snapshot) — host diagnosis of the 9 AM62P `shaders.invariance.*.common_subexpression_{1,2,3}` regressions |
+| es2-invariance-diag | done — no changes | the plan record says "done: no changes": no report was merged and docs/investigations/es2-invariance.md is not on the integration branch; the 9 AM62P `shaders.invariance.*.common_subexpression_{1,2,3}` regressions stay undiagnosed in the tree, and the fix item es2-invariance owns that doc path |
 | es2-preprocessor-diag | done | docs/investigations/es2-preprocessor.md (merged `ecfff11`): no preprocessor defect — the two `definitions.define_value_and_function_{fragment,vertex}` cases come from one stale row of tools/cts/RESULTS.md (line 7623, measured at `e31bd3e`, 2026-09-23); all 534 preprocessor shaders match the CTS verdict on the host |
-| es2-npot-research | pending (in review) | GL_OES_texture_npot: replace the predicted case list (docs/es2-cts-failures.md section H) with what the CTS source checks; report docs/investigations/es2-npot-cases.md, not merged |
-| es2-v3d-clear-diag | pending (in review) | scissored and masked glClear on V3D against the dEQP clear and fragment-ops cases; report docs/investigations/es2-v3d-clear.md, not merged |
-| es2-error-rules-diag | pending (in review) | static audit of ES 3-only enums and formats a report-es2 build accepts, against the dEQP negative_api cases; report docs/investigations/es2-error-rules.md, not merged |
-| es2-offline-table-diag | pending (running) | the offline shader table gaps: the GL tests the gate skips without a table (8 of the 11 ignored in the no-shader-table build), and the GC7000 table lag (#22, docs/es2-cts-failures.md); report docs/investigations/es2-offline-table.md, not merged |
-| es2-v3d-fbo-combos-diag | pending (running) | the 27 Pi 4 `fbo.completeness.attachment_combinations.*_tex` cases; report docs/investigations/es2-v3d-fbo-combos.md, not merged |
-| es2-host-deqp-baseline | pending (running) | host dEQP-GLES2 compile/link baseline at the integration tip, recorded without tool changes; report docs/investigations/es2-host-deqp-baseline.md, not merged |
+| es2-npot-research | in review (result `f889ed90`) | report docs/investigations/es2-npot-cases.md: the CTS never throws NotSupported for GL_OES_texture_npot — the section H prediction ("Pass -> NotSupported", 18 cases) is wrong; with the extension listed the 18 cases become real tests that must Pass, and a mistake costs a Fail |
+| es2-v3d-clear-diag | in review (result `78ba0942`) | report docs/investigations/es2-v3d-clear.md: the premise does not hold — V3D already draws every clear the TLB cannot as a clear quad, and the board ran the named groups (color_clear 19/19, depth_stencil_clear 11/11; sweep 30 has no clear or fragment_ops failure); what is missing is a host test that pins the behaviour, not a fix |
+| es2-error-rules-diag | in review (result `348b30da`) | report docs/investigations/es2-error-rules.md: the ES 3.0 surface is mostly ungated in a report-es2 build (44 rows), but no dEQP-GLES2 negative_api case reaches an ungated value — the ungated rows are conformance debt the CTS does not test; one area does exercise ES 3.0-only formats |
+| es2-offline-table-diag | done | merged after the snapshot (`642a7589`, docs/investigations/es2-offline-table.md): the 8 tests skipped without a table are the visible part — 18 to 27 more fail in the no-table PowerVR/GC7000 builds, which the gate only builds; the GC7000 Mesa table lags the gl_test shader list (77 of 123 shaders have no row; `check_gl_test_blobs.py` is not run by the gate); the matattr claim (#22) is unverified — the rows exist and their keys are current; no dEQP-GLES2 case can see table code, so #22 matters for stage 2, not stage 1 |
+| es2-v3d-fbo-combos-diag | in review (result `52d911fe`) | report docs/investigations/es2-v3d-fbo-combos.md: no defect — the 27 Pi 4 `fbo.completeness.attachment_combinations.*_tex` cases were NotSupported only because V3D did not list the depth-texture extension pair; it now claims the pair on every GPU, and the prediction for the next Pi 4 run is all 27 Pass |
+| es2-host-deqp-baseline | running | host dEQP-GLES2 compile/link baseline at the integration tip, recorded without tool changes; report docs/investigations/es2-host-deqp-baseline.md, not merged |
 
 Fixes:
 
 | item | state | note |
 |---|---|---|
-| es2-invariance | ready | fix the 9 regressions: deterministic mul-add fusion on PowerVR; follows es2-invariance-diag (done) |
-| es2-preprocessor | running | reduced to a regression guard: tests/es2_preprocessor.rs (not in the tree yet) |
-| es2-npot-cases | ready | texture wrap and completeness under GL_OES_texture_npot, from the CTS-source case list; follows es2-npot-research |
-| es2-v3d-clear | ready | scissored and masked glClear drawn correctly (host proof for dEQP color_clear / fragment_ops); follows es2-v3d-clear-diag |
-| es2-error-rules | ready | refuse ES 3-only enums and formats in report-es2 builds; follows es2-error-rules-diag |
-| es2-offline-table | ready | cover the no-table path in the GL suite and settle the GC7000 table lag (#22); follows es2-offline-table-diag |
-| es2-host-deqp | ready | the host dEQP-GLES2 compile/link and error-rule run on the PowerVR and GC7000 back ends, committed as a record; follows es2-host-deqp-baseline |
-| cts-tool-fixes | ready | board tooling defects recorded by the merged docs/board-sessions/imx8mp-gc-case10.md (`1ad4695`): the sweep-list `;` quoting (CMake drops bare separators) and the missing WDOG self-arm option in the gl_test recipe |
-| clippy-gate-fix | ready | make the `tools/check.sh --quick` clippy row green on every farm host; see the clippy note in Stage 1 |
+| es2-invariance | ready | fix the 9 regressions: deterministic mul-add fusion on PowerVR; its diagnosis landed no report, so this item carries the diagnosis itself (it owns docs/investigations/es2-invariance.md); blocked by a touch overlap with pvr-pool-npot (plan 2, in review) |
+| es2-preprocessor | in review (result `f44a0ff0`) | reduced to a regression guard: tests/es2_preprocessor.rs (19 shaders from section 7 of the diagnosis doc; all pass at the tip) |
+| es2-npot-cases | ready | texture wrap and completeness under GL_OES_texture_npot, from the CTS-source case list; after es2-npot-research (in review); blocked by a touch overlap with sized-formats-gl (plan 3, running) |
+| es2-v3d-clear | ready | scissored and masked glClear drawn correctly (host proof for dEQP color_clear / fragment_ops); after es2-v3d-clear-diag (in review); blocked by a touch overlap with v3d-rt-sample (plan 2, running) |
+| es2-error-rules | ready | refuse ES 3-only enums and formats in report-es2 builds; the plan puts it after es2-host-deqp; es2-error-rules-diag (in review) informs it |
+| es2-offline-table | ready | cover the no-table path in the GL suite and settle the GC7000 table lag (#22); its diagnosis is merged (`642a7589`); blocked by a touch overlap with v3d-corpus (plan 2, in review) |
+| es2-host-deqp | ready | the host dEQP-GLES2 compile/link and error-rule run on the PowerVR and GC7000 back ends, committed as a record; blocked by a touch overlap with host-gles3-run (plan 3, running) |
+| cts-tool-fixes | ready | board tooling defects recorded by the merged docs/board-sessions/imx8mp-gc-case10.md (`1ad4695`): the sweep-list `;` quoting (CMake drops bare separators) and the missing WDOG self-arm option in the gl_test recipe; blocked by a touch overlap with glmark2-tally-scenes (plan 2, in review) |
+| clippy-gate-fix | ready | make the `tools/check.sh --quick` clippy row green on every farm host; see the clippy note in Stage 1; blocked by a touch overlap with tf-infolog (plan 3, in review) |
+| gate-timing | ready | measure `tools/check.sh --quick` per step and find why the V3D library test step overruns (es2-offline-table-diag could not finish the gate: its `gpu-v3d` build was killed, exit 137); report docs/investigations/check-gate-timing.md; waits for a free slot |
 
 Round-1 board sessions:
 
 | item | state | note |
 |---|---|---|
-| am62p-es2-r1 | running | dEQP-GLES2 images 8-17 plus ms4 at the integration tip, plus gl_test; record docs/board-sessions/am62p-es2-r1.md not merged yet |
+| am62p-es2-r1 | in review (result `46e60a14`) | built all 18 images (17 plus ms4) at tip `bc833b39`, but obtained no dEQP result: image 8 booted with a silent UART (verdict empty, 0 console bytes in 428 s), image 9 was interrupted by a worker restart, images 10-17 and ms4 did not start; record docs/board-sessions/am62p-es2-r1.md not merged yet |
 | imx8mp-es2-r1 | running | the whole tree (29 entries); record docs/board-sessions/imx8mp-es2-r1.md not merged yet |
 | pi4-es2-r1a | done — ran nothing | docs/board-sessions/pi4-es2-r1.md (merged `c4a4d7f`): no image built, no case ran; the worker lacked the Zephyr workspace, the SDK and dEQP stage 1 |
-| pi4-es2-r1b | running | rows 15-28 of tools/cts/pi4-full-tree.txt |
-| Pi 4 rows 0-14 (new session) | needed | on a machine with the Zephyr workspace, SDK 1.0.1 and dEQP stage 1; docs/board-sessions/pi4-es2-r1.md names system76 |
+| pi4-es2-r1b | in review (result `6e4c837`) | rows 15-28: blocked, nothing built or run — the same missing environment; the Pi 4 itself answered ssh and was idle |
+| pi4-es2-r1a2 | ready | the redo of rows 0-14, with its own record docs/board-sessions/pi4-es2-r1a.md so it does not collide with pi4-es2-r1b's file; needs the west toolchain and stops in its first turn if the environment is missing; waits for a free slot |
 
 After round 1:
 
 | item | state | note |
 |---|---|---|
-| es2-docs-r1 | waiting | fold the round-1 results into docs/es2-cts-failures.md, tools/cts/STATUS.md and tools/cts/RESULTS.md |
+| es2-docs-r1 | waiting | fold the round-1 results into docs/es2-cts-failures.md, docs/HANDOFF.md, tools/cts/STATUS.md and tools/cts/RESULTS.md; the plan puts it after am62p-plan1-doc, am62p-es2-r1, imx8mp-es2-r1, pi4-es2-r1b, es2-host-deqp and es2-npot-cases, and it reads both Pi 4 record files (pi4-es2-r1.md and pi4-es2-r1a.md) |
 | am62p-es2-final-a | waiting | final tree, images 1-9 |
 | am62p-es2-final-b | waiting | final tree, images 10-17 and ms4, whole-tree total |
 | imx8mp-es2-final | waiting | final tree, run twice |
@@ -296,7 +319,7 @@ gl_test side work:
 
 | item | state | note |
 |---|---|---|
-| gc-flake-instrument | ready | the KICK_DIFF second read-back instrument for #9/#25 (gl_test cases 10 and 2); last measurement docs/board-sessions/imx8mp-gc-case10.md (`1ad4695`): case 10 failed 1/30 boots, case 2 0/40 |
+| gc-flake-instrument | ready | the KICK_DIFF second read-back instrument for #9/#25 (gl_test cases 10 and 2); last measurement docs/board-sessions/imx8mp-gc-case10.md (`1ad4695`): case 10 failed 1/30 boots, case 2 0/40; blocked by a touch overlap with v3d-corpus (plan 2, in review) |
 | gc-msaa-record | waiting | record the 4x MSAA scratch probes for #8 without a console; the harness skip is merged (`6bddfc5`), defect #8 open (docs/board-sessions/imx8mp-plan1.md) |
 | imx8mp-gltest-r2 | waiting | the #9/#25 instrument runs and the #8 probe runs on the board |
 
@@ -304,39 +327,51 @@ Publication record (feeds stage 3):
 
 | item | state | note |
 |---|---|---|
-| am62p-plan1-doc | ready | re-land the AM62P images 1-7 board record redacted; the merged docs/board-sessions/am62p-plan1.md records an attempt that ran nothing, and the unmerged record `bf5c575` names the board login and serial bridge |
+| am62p-plan1-doc | ready | re-land the AM62P images 1-7 board record redacted; the merged docs/board-sessions/am62p-plan1.md records an attempt that ran nothing, and the unmerged record `bf5c575` names the board login and serial bridge; blocked by a touch overlap with plan1-am62p-nuc (plan 2, in review) |
 
 ### Stage 3 items
 
 | item | state | note |
 |---|---|---|
-| pub-roadmap | running | public ROADMAP.md with the five stages and their criteria; also aligns README.md and docs/HANDOFF.md; ROADMAP.md is not in HEAD yet |
+| pub-roadmap | running | public ROADMAP.md with the five stages and their criteria; also aligns README.md and docs/HANDOFF.md; the first attempt failed on a bundling error and the retry is running; ROADMAP.md is not in HEAD yet |
 | pub-changelog | done | `e6b84f7` merged: CHANGELOG.md current to the integration tip |
-| pub-license-audit | ready (redo) | licence/SPDX audit tool and report; never merged (`ec9f59c`, decided `34d7dc0`) |
+| pub-license-audit | ready (redo) | licence/SPDX audit tool and report; never merged (`ec9f59c`, decided `34d7dc0`); blocked by a touch overlap with v3d-corpus (plan 2, in review) |
 | pub-redaction-audit | waiting (redo) | redaction audit of the tree and history; never merged (`3a4e55f`, decided `4b37a25`); runs after am62p-plan1-doc |
-| pub-website | ready (redo) | website/ consistent with the repository's current state; never merged (`058e6fc`, `b3cc30e`, decided `e4fe79a`) |
-| pub-checklist | waiting | release checklist with measurable criteria and the owner's decisions; after the stage 1 final trees and the audits |
-| cts-tree-diff | ready | tools/cts/tree-diff.py: per-case diff of two dEQP-GLES2 trees against the mustpass list; feeds es2-docs-r1 and es2-docs-final |
+| pub-website | ready (redo) | website/ consistent with the repository's current state; never merged (`058e6fc`, `b3cc30e`, decided `e4fe79a`); blocked by a touch overlap with release-website (plan 2, in review) |
+| pub-contrib-docs | ready | bring CONTRIBUTING.md, SECURITY.md and DESIGN.md up to the repository's current state (the drafts `b4ec427` are merged, but no item has checked them against the current state); waits for a free slot |
+| pub-checklist | waiting | release checklist with measurable criteria and the owner's decisions; the plan puts it after pub-license-audit and pub-redaction-audit |
+| cts-tree-diff | ready | tools/cts/tree-diff.py: per-case diff of two dEQP-GLES2 trees against the mustpass list; feeds es2-docs-r1 and es2-docs-final; blocked by a touch overlap with glmark2-tally-scenes (plan 2, in review) |
 
 ### Execution order
 
-1. clippy-gate-fix. No dependency. It unblocks the review gate on the farm's
-   newer-clippy hosts; every later change passes through that gate.
+1. clippy-gate-fix and gate-timing. No dependency between them; both keep
+   the review gate usable (the clippy row on newer-clippy hosts, the V3D
+   library test step inside worker time limits). Every later change passes
+   through that gate. clippy-gate-fix waits for the tf-infolog overlap to
+   settle.
 2. Land the pending host diagnoses, in parallel (all host-only):
-   es2-npot-research, es2-v3d-clear-diag, es2-error-rules-diag,
-   es2-offline-table-diag, es2-v3d-fbo-combos-diag, es2-host-deqp-baseline.
-3. Host fixes as their diagnoses land: es2-invariance and es2-preprocessor
-   can run now (their diagnoses are done); es2-npot-cases, es2-v3d-clear,
-   es2-error-rules and es2-offline-table each follow its diagnosis from
-   step 2; es2-host-deqp follows es2-host-deqp-baseline.
+   es2-npot-research, es2-v3d-clear-diag, es2-error-rules-diag and
+   es2-v3d-fbo-combos-diag are in review; es2-host-deqp-baseline is
+   running; es2-offline-table-diag is already merged (`642a7589`).
+3. Host fixes as their diagnoses land: es2-preprocessor is in review;
+   es2-invariance must diagnose the 9 regressions itself (its diagnosis
+   item produced no report) and waits for the pvr-pool-npot overlap to
+   settle; es2-npot-cases,
+   es2-v3d-clear and es2-offline-table each follow their diagnosis from
+   step 2; es2-host-deqp runs when its overlap settles, and es2-error-rules
+   follows es2-host-deqp (the plan's dependency). Each of these waits for
+   its touch overlap with a plan #2/#3 item (see the item tables).
 4. cts-tool-fixes — before any further board run.
 5. am62p-plan1-doc — re-land the redacted AM62P images 1-7 record.
-6. Round-1 board sessions: am62p-es2-r1, imx8mp-es2-r1 and pi4-es2-r1b (all
-   running) plus a new Pi 4 rows 0-14 session on a machine with the Zephyr
-   workspace, SDK and dEQP stage 1 (docs/board-sessions/pi4-es2-r1.md names
-   system76). A session started after step 3 runs at a tip that holds steps
-   1, 3 and 4.
-7. es2-docs-r1 — after all of step 6.
+6. Round-1 board sessions. imx8mp-es2-r1 is running. am62p-es2-r1 and
+   pi4-es2-r1b finished without board results, so both boards need a repeat:
+   the AM62P needs a session whose UART console works (image 8's capture was
+   silent), and the Pi 4 needs pi4-es2-r1a2 (rows 0-14) plus a rows 15-28
+   run, on a machine that holds the Zephyr workspace, SDK 1.0.1 and dEQP
+   stage 1 (the records name system76). A session started after step 3 runs
+   at a tip that holds steps 1, 3 and 4.
+7. es2-docs-r1 — after all of step 6 and after es2-host-deqp and
+   es2-npot-cases (the plan's dependencies).
 8. gl_test chain: gc-flake-instrument, then gc-msaa-record (host-side, any
    time after step 3), then imx8mp-gltest-r2 on the i.MX8MP board — between
    step 6 and step 9, so the board is free for its final tree.
@@ -346,10 +381,10 @@ Publication record (feeds stage 3):
    only the section C buckets.
 10. es2-docs-final, then changelog-es2-final.
 11. Stage 3 host items overlap steps 2-10: pub-roadmap (running),
-    pub-license-audit, pub-website and cts-tree-diff any time;
-    pub-redaction-audit after step 5; pub-checklist after step 10 and the
-    audits. The promotion to main and the publication itself stay the
-    owner's decisions.
+    pub-license-audit, pub-contrib-docs, pub-website and cts-tree-diff any
+    time; pub-redaction-audit after step 5; pub-checklist after the two
+    audits (the plan's dependency). The promotion to main and the
+    publication itself stay the owner's decisions.
 
 ## Plan #2 and plan #3 items, classified
 
@@ -377,7 +412,7 @@ stopped = vetoed, abandoned, or blocked with no open attempt.
 | errno audit | 2 | 2 | in progress | `81f3b2a` (unmerged), `06a81bd` |
 | release building guide | 2 | 3 | done | docs/release/building.md |
 | CHANGELOG | 2 | 3 | done (draft and refresh merged) | `4b60fb6`, `e6b84f7` |
-| CONTRIBUTING / SECURITY | 2 | 3 | done | `b4ec427` |
+| CONTRIBUTING / SECURITY | 2 | 3 | done (drafts merged; a new item checks them against the current state) | `b4ec427`, pub-contrib-docs |
 | licence/SPDX audit | 2 | 3 | stopped (never merged; redo) | `ec9f59c`, `34d7dc0` |
 | redaction audit | 2 | 3 | stopped (never merged; redo) | `3a4e55f`, `4b37a25` |
 | website update | 2 | 3 | stopped (never merged; redo) | `058e6fc`, `b3cc30e`, `e4fe79a` |
@@ -413,4 +448,15 @@ stopped = vetoed, abandoned, or blocked with no open attempt.
   boards. Reason: each baseline should measure the board in its ES 2.0 state
   after the round-1 fixes, and the boards are already leased to the round-1
   sessions.
+- Proposal: settle the plan #2 and plan #3 results that are already in
+  review before starting new work in those plans. Several stage 1 and stage
+  3 items are ready but blocked by a touch overlap with an in-review item:
+  es2-invariance (pvr-pool-npot), es2-offline-table, gc-flake-instrument
+  and pub-license-audit (v3d-corpus), cts-tool-fixes and cts-tree-diff
+  (glmark2-tally-scenes), clippy-gate-fix (tf-infolog), am62p-plan1-doc
+  (plan1-am62p-nuc), pub-website (release-website), es2-npot-cases
+  (sized-formats-gl), es2-v3d-clear (v3d-rt-sample), es2-host-deqp
+  (host-gles3-run). Reason: merging or abandoning each review releases the
+  plan #4 item that waits on it, and most of those are the first steps of
+  the execution order.
 - No existing plan is cancelled.
