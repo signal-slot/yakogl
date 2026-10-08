@@ -317,6 +317,10 @@ step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
+# glClear's TLB/quad decision, the clear quad's state and the scissor geometry
+# (docs/investigations/es2-v3d-clear.md, 5.1).
+step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_clear
 # glmark2's V3D allocations replayed through the OSAL's carve-out allocator
 # (src/osal/v3d_granules.h) and Mesa's layout (driver/src/v3d/v3d_tex.c), both
 # built from C by the test with `cc`: every large request fits the Pi 4's
@@ -331,6 +335,9 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+# The same clear tests in the ES 2.0 build (docs/investigations/es2-v3d-clear.md, 5.1).
+step "test    $V3D_ES2_CONFIG (tests/v3d_clear.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_clear
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"
