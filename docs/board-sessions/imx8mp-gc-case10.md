@@ -1,54 +1,117 @@
-# i.MX8MP gc-case10 board session, first part (30 boots): NOT RUN
+# i.MX8MP gc-case10 board session, first part (30 interleaved boots + 10 solo case 2)
 
-Date: 2026-10-08. Item v3d-hh-48m. Integration commit: `0175bac1b4571c2b3360851f171d69c4571d49ee`.
+Date: 2026-10-08. Item v3d-hh-48m. Board: verdin-imx8mp, `BOARD_BOOT=uboot-mmc`.
+Integration commit: `0175bac1b4571c2b3360851f171d69c4571d49ee` (the run lines print `build fc46bc68`,
+the item commit on top of it that adds only this doc).
 
-Result: **no build and no board run happened.** The tool sandbox of this session refused to execute
-`tools/cts/imx8mp-gltest-build.sh`, `tools/board.sh` and a wrapper `bash` script ("This command requires
-approval"; retried in the forms `bash script`, `./tools/...`, with and without `run_in_background`).
-Only plain `ssh` was allowed. The board was reachable: `ssh torizon@verdin-imx8mp true` returned 0.
-Listing `$CCFARM_DEPS_DIR` was also refused, so the presence of `zephyr-ws`, `.venv/bin/west`,
-`zephyr-sdk-1.0.1` and `imx8mp-out` was not checked here (imx8mp-deqp-stage1.md records them under
-`D/zephyr-ws`, `D/zephyr-sdk-1.0.1`, `D/imx8mp-out`).
+Result: **case 10 failed in 1 of 30 runs (page arm, round 9); case 2 failed in 0 of 40 runs.** Base was
+0/10, so the rate of "about 5 of 10" did not show in this session. Reading: row `0/10 | - | -`
+("the rate fell in this session").
 
-No run, no verdict line, no failure count and no reading-table row exist from this session. Nothing in
-the investigation doc's expectations (about 5/10 failures on base) is confirmed or refuted.
+## Environment
 
-## Commands left to run
-
-On a machine where the scripts may run (`D` = the deps cache; `$CCFARM_DEPS_DIR`), from a detached checkout of
-`0175bac1b4571c2b3360851f171d69c4571d49ee`, with the board lease held:
+`D=$CCFARM_DEPS_DIR` (here `/home/tasuku/.local/share/ccfarm/deps/yakogl`), the shared workspace and SDK
+that zephyr-ws-setup.md built; nothing was built from scratch.
 
 ```sh
-D=$CCFARM_DEPS_DIR
 export ZEPHYR_WORKSPACE=$D/zephyr-ws ZEPHYR_VENV=$D/zephyr-ws/.venv \
        ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1 IMX8MP_OUT=$D/imx8mp-out
-export CFLAGS=-O2 CXXFLAGS=-O2
-LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10;10;2"'
-tools/cts/imx8mp-gltest-build.sh gc10-base   0 "$LIST"
-tools/cts/imx8mp-gltest-build.sh gc10-page   0 "$LIST" -DCONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN=y
-tools/cts/imx8mp-gltest-build.sh gc10-reuse0 0 "$LIST" -DCONFIG_YAKOGL_GC_POOL_NO_REUSE=y
-export BOARD_HOST=$RESOURCE_VERDIN_IMX8MP_SSH
+export CFLAGS=-O2 CXXFLAGS=-O2 BOARD_HOST=torizon@verdin-imx8mp
+```
+
+## Build commands (two deviations from the recipe, both needed)
+
+```sh
+LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'
+W=-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+tools/cts/imx8mp-gltest-build.sh gc10-base   0 "$LIST" $W
+tools/cts/imx8mp-gltest-build.sh gc10-page   0 "$LIST" $W -DCONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN=y
+tools/cts/imx8mp-gltest-build.sh gc10-reuse0 0 "$LIST" $W -DCONFIG_YAKOGL_GC_POOL_NO_REUSE=y
+```
+
+Deviations (the recipe's commands fail as written; the recipe should be corrected by bench-recipes):
+
+1. **`\;` instead of `;` in LIST.** With a bare `;` CMake treats the value as a list and drops the
+   separators: the image got `CONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10102"`, list 0 became cases 8..47
+   and SEL=512 ran a wide sweep. That attempt printed `record=594b07ff,00000000,ef7fff00,f9fcff7e` on
+   `base-1` (not the recipe's shape) and was discarded. After the fix the built `.config` shows
+   `"1-6,8-10;10;2"` (checked on all three images).
+2. **`-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`** on all three arms. Without it the image lacks
+   `gc_wdog_arm: armed` and `tools/board.sh` refuses it (rc=3, "would not arm WDOG1"). tools/check.sh
+   builds this image with the same option. It is the same for every arm, so the A/B is unaffected.
+   The page and reuse0 flags were confirmed in each `.config`.
+
+## Run commands
+
+```sh
 for i in 1 2 3 4 5 6 7 8 9 10; do
   for arm in base page reuse0; do
     SEL=512 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
       "$IMX8MP_OUT/gc10-$arm/zephyr/zephyr.bin" build/gc10 "$arm-$i"
   done
 done
-# optional: ten single boots of case 2 on base
-for i in 1 2 3 4 5 6 7 8 9 10; do
+for i in 1 2 3 4 5 6 7 8 9 10; do   # optional part
   SEL=2 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
     "$IMX8MP_OUT/gc10-base/zephyr/zephyr.bin" build/gc10 "c2-$i"
 done
 ```
 
-Re-run any run whose `record=` w1 is not `00000000`. Decode w3 with the recipe table
-(`..077e` all pass, `..037e` case 10 failed, `..077a` case 2 failed, `..037a` both; w2 low 16 bits `ff00`).
+Process notes: the loop was interrupted once when the worker restarted, after `base-2` finished and
+while `page-2` was starting (no record from that start). It resumed with `page-2` (round 2 therefore ran
+`page-2`, `reuse0-2` after `base-2` as normal order). Earlier discarded attempts (the wide-sweep
+`base-1`, refusals for the missing watchdog marker, and a few runs aborted by me, whose stray one-shot
+image I removed from `/var/yakogl`) produced no readings. Every run in the tables below has w1 =
+`00000000` and w2 low 16 bits `ff00` (case runs: see below), so none had to be repeated.
 
-## Run table (to fill)
+## Every run
 
-| arm | round | verdict line | record words | case 10 | case 2 |
-|---|---|---|---|---|---|
-| (none run) | | | | | |
+Verdict lines are `board.sh imx8mp <tag> rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled
+result=record:SWEEP resets=0 record=<words> back_after=<n>s uptime=<n>s`; all runs had rc=0,
+resets=0 and cycled. Representative full lines:
 
-Failure counts: base -/10, page -/10, reuse0 -/10 (case 10); case 2 likewise. Matching row of the reading
-table: none yet. Next step: run the commands above.
+```
+board.sh imx8mp base-1 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:SWEEP resets=0 record=594b07ff,00000000,0000ff00,0000077e back_after=47s uptime=28s
+board.sh imx8mp page-9 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:SWEEP resets=0 record=594b07ff,00000000,0000ff00,0000037e back_after=47s uptime=29s
+board.sh imx8mp c2-1 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:CASE resets=absent record=594b010e,0002ff01,0000001d,00000000 back_after=33s uptime=23s
+```
+
+Record words per run (`594b07ff,00000000,0000ff00,` + w3):
+
+| arm | round | record w3 | case 10 | case 2 |
+|---|---|---|---|---|
+| base | 1-10 (all ten) | 0000077e | pass | pass |
+| page | 1-8 | 0000077e | pass | pass |
+| page | 9 | **0000037e** | **FAIL** | pass |
+| page | 10 | 0000077e | pass | pass |
+| reuse0 | 1-10 (all ten) | 0000077e | pass | pass |
+
+(The rows group runs that printed identical words; the 30 individual lines are in the board log
+`.g10run.log` of the session and the records under `build/gc10/<date>-<tag>-<hash>/`.)
+
+Solo case 2 on base (`SEL=2`, CASE record, kind CASE pass = `594b01xx,0002ff01,<checks>,00000000`):
+`c2-1` to `c2-10` all printed `record=594b010e,0002ff01,0000001d,00000000` (pass, 0x1d = 29 checks made).
+
+## Counts
+
+| arm | case 10 failed | case 2 failed |
+|---|---|---|
+| base | 0 / 10 | 0 / 10 (sweep) + 0 / 10 (solo) |
+| page | 1 / 10 (round 9) | 0 / 10 |
+| reuse0 | 0 / 10 | 0 / 10 |
+
+## Reading
+
+Row of the recipe table: **base 0/10 -> "the rate fell in this session"**. It does not match
+the other rows, which assume base fails about 5 of 10 (14/30 before). The chance of 0/10 at a true rate of
+0.47 is about 0.53^10 = 0.2 %, so either the failure rate depends on something that differed in this session
+(the image now has WDOG self-arm; the board's state; the thermal or time-of-day state), or the earlier rate no longer holds. The page arm's single
+failure shows the flake still exists (page alignment is not a cure); one failure is not a rate.
+Nothing here supports (b) or (c): the arms are not distinguishable at these counts.
+
+Next step named by the row: **run 20 more base boots before reading the others** (`SEL=512`, same
+image, `base-11` to `base-30`). If base stays near 0/30 the flake needs a trigger this build/session
+does not have (check the WDOG self-arm option as a candidate, since it is the one change against the
+earlier measurement, by building the old image without it only if `board.sh` is told
+`NETBOOT_NO_WATCHDOG=1`); if base returns to about 5/10, redo the table.
+
+Not run: the second (K1) part, which waits for the knob.
