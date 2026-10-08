@@ -36,4 +36,6 @@ pub mod vertex;
 #[cfg(test)]
 mod es3_format_tests;
 #[cfg(test)]
+mod fbo_combos_tests;
+#[cfg(test)]
 mod pool_tests;
