@@ -12308,6 +12308,35 @@ mod tests {
         assert_eq!((levels, bytes, pitch), (10, 5_592_404, 0));
     }
 
+    /// The host replay of glmark2's AM62P pool (driver/rust gpu::pvr::pool
+    /// tests/replay.rs, `NPOT_800X600`) sizes each of terrain's mipmapped
+    /// 800x600 RGBA8 targets with what this path asks of the GPU: glTexImage2D
+    /// with no data, LINEAR_MIPMAP_LINEAR, then glGenerateMipmap
+    /// (`BaseRenderer::update_mipmap`). It is the whole 1024x1024 chain,
+    /// 2.9 times the 1,920,000 bytes of level 0 it asked before.
+    #[cfg(feature = "gpu-powervr")]
+    #[test]
+    fn terrains_800x600_chain_asks_the_replays_size() {
+        let gl = Gl::new(16, 16);
+        let mut tex: GLuint = 0;
+        // SAFETY: valid out pointer, plain GL calls.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
+        }
+        let level0 = gl.ctx().objs_ref().textures[tex as usize].mem.size;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as GLint);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs_ref().textures[tex as usize];
+        assert_eq!((t.pot_chain, t.chain_levels), (true, 10));
+        assert_eq!((level0, t.mem.size), (1_920_000, 5_592_404));
+    }
+
     /// glmark2 terrain's path on the PowerVR's shape: a NPOT texture whose
     /// chain was laid out (glGenerateMipmap) is rendered into through a
     /// framebuffer. The render target is level 0 at the chain's power-of-two

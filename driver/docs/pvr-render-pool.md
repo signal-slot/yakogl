@@ -4997,6 +4997,41 @@ board held that the reconstruction does not name.
   its blocks for every unnamed count up to 38, and nothing in the run is
   refused. At 39 the gap is short of refract's blocks (22436 KiB): that is
   capacity, not placement.
+- **Terrain's NPOT mip chains (pvr-pool-npot).** The table above has
+  terrain's four 800x600 targets at level 0 (1875 KiB each), as the board
+  measured them before the PowerVR stored NPOT chains. Since pvr-npot-mips
+  a mipmapped one is the whole 1024x1024 chain: 5,592,404 bytes (5462 KiB),
+  2.9 times as much. That is what the GL core's real path asks of the GPU
+  (glTexImage2D, then glGenerateMipmap: `src/gl/draw.rs`
+  `terrains_800x600_chain_asks_the_replays_size`, 1,920,000 then 5,592,404
+  bytes), and the replay's `NPOT_800X600` is that figure. glmark2 mipmaps
+  its 800x600 off-screen textures (`BaseRenderer::update_mipmap`); the
+  replay sweeps one to four of them as chains (four is what the V3D replay,
+  `tests/v3d_glmark2_mem.rs`, assumes). The 800x608 depth buffer is a
+  renderbuffer and unchanged.
+
+  | chains | GENERAL before refract (on; 0 / 24 unnamed) | refract served (on) | terrain refused, either arm |
+  |---|---|---|---|
+  | 0 | gap 31908 / 26276 | yes | nothing |
+  | 1 | gap 31908 / 26276 | yes | the 800x608 depth buffer (1900) |
+  | 2 | gap 31908 / 26276 | yes | two 800x600 targets (1875 each), the depth buffer |
+  | 3 | gap 31908 / 26276 | yes | one chain (5462), one target, the depth buffer |
+  | 4 | gap 31908 / 26276 | yes | two chains (5462 each), the depth buffer |
+
+  - **Refract still fits.** Terrain's blocks all come back whole at its
+    teardown, so before refract the gap is the same as with level-0
+    targets and holds refract's three blocks (22600 KiB). Its depth buffer
+    is served, and nothing after terrain is refused. The threshold stays
+    256 KiB and the placement is unchanged. Without the region the result
+    is the same as before: no range of 22600 KiB (largest 15100).
+  - **Terrain's own set-up no longer fits the 59200 KiB pool**, from one
+    chain on: 3587 KiB more per chain on top of its 30 MiB. The two arms
+    refuse the same blocks, so this is capacity (the pool is the
+    carveout's remainder), not placement. Whether terrain draws correctly
+    on the AM62P with those blocks refused is for a board run; see "A
+    bigger pool" below for the capacity route.
+  - The recorded 2769-operation golden trace is unchanged (the region is
+    never used by it); the pool test count is now 29.
 - **Slint (800x480) and the AGL cluster (1280x720)**, the boot plus the
   application's objects, a glyph atlas that grows once, and 200 frames of
   small buffers: every allocation served in both arms, and the largest
@@ -5043,6 +5078,9 @@ they do.
   least 22600 + 4096 (refract's blocks and the frame arenas);
 - the verdict is no longer amber for refract. (Terrain's black picture is
   the npot item's, not this one's.)
+- with an image that has pvr-npot-mips, terrain's set-up may print "render
+  pool exhausted" for its 800x600 chains or its 800x608 depth buffer (the
+  replay's capacity result above); refract's expectation is unchanged.
 - If refract is still refused: the refusal's summary says which. "top 0"
   in it means the image did not carry `pool_top_above`; a gap short of
   7600 KiB with little free below means capacity (then the bigger pool

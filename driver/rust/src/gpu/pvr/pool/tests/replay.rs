@@ -44,6 +44,13 @@ use std::eprintln;
 
 const PDS: usize = 1;
 const K: u32 = 1024;
+/// A mipmapped 800x600 RGBA8 texture on the PowerVR (terrain's targets in
+/// [`terrain`] with `chains`): the 1024x1024 chain, 4 * (1024^2 + 512^2 +
+/// ... + 1) bytes, what the GL core's real path asks for it since pvr-npot-mips
+/// (glTexImage2D then glGenerateMipmap: gl::draw tests
+/// `terrains_800x600_chain_asks_the_replays_size`). It was level 0 alone,
+/// 1,920,000 bytes, before.
+const NPOT_800X600: u32 = 5_592_404;
 /// The AM62P's carveout and render pool: 64 MiB, the pool after the
 /// firmware heap's 4 MiB + 192 KiB and the 2 MiB of page tables.
 const CARVEOUT: usize = 64 << 20;
@@ -302,6 +309,23 @@ const TERRAIN: &[Op] = &[
     Hwrt(512, 512),
 ];
 
+/// Terrain's set-up with its first `chains` 800x600 targets holding their
+/// whole NPOT mip chain ([`NPOT_800X600`], the PowerVR since pvr-npot-mips)
+/// instead of level 0; the table above is what the board measured before.
+fn terrain(chains: u32) -> Vec<Op> {
+    let mut left = chains;
+    TERRAIN
+        .iter()
+        .map(|&op| match op {
+            Gen("800x600 target", _) if left > 0 => {
+                left -= 1;
+                Gen("800x600 mip chain", NPOT_800X600)
+            }
+            op => op,
+        })
+        .collect()
+}
+
 const SHADOW: &[Op] = &[
     Prog,
     Prog,
@@ -396,6 +420,12 @@ const UNNAMED_AT_THE_BOARD: u32 = 24;
 /// glmark2's entries 0-24 (to refract's first draw), with `unnamed` 256 KiB
 /// blocks kept for the rest of the run from shadow's frames on.
 fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
+    glmark2_chains(top_above, unnamed, 0)
+}
+
+/// [`glmark2`] with `chains` of terrain's 800x600 targets as whole NPOT mip
+/// chains ([`terrain`]).
+fn glmark2_chains(top_above: u32, unnamed: u32, chains: u32) -> Glmark2 {
     let mut rp = Replay::new(top_above);
     rp.boot();
     before_jellyfish(&mut rp);
@@ -409,7 +439,7 @@ fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
     let jelly: u32 = rp.live.iter().filter(|b| b.scene == 21).map(|b| b.size.div_ceil(4096) * 4).sum();
     assert_eq!((rp.live.iter().filter(|b| b.scene == 21).count(), jelly), (45, 11576), "jellyfish's frees");
     rp.teardown();
-    rp.scene(22, TERRAIN);
+    rp.scene(22, &terrain(chains));
     rp.teardown();
     rp.scene(23, SHADOW);
     for _ in 0..unnamed {
@@ -489,6 +519,41 @@ fn glmark2_with_the_top_region_fits_refract_after_shadow_and_terrain() {
         assert!(g.before_refract.contiguous() >= REFRACT_NEEDS, "{n} unnamed: {:?}", g.before_refract);
         assert!(g.depth_buffer_served, "{n} unnamed");
         assert_eq!(g.refused, [], "{n} unnamed");
+    }
+}
+
+/// Terrain's NPOT mip chains (pvr-pool-npot): with one to four of its
+/// 800x600 targets as whole chains ([`NPOT_800X600`], 5462 KiB instead of
+/// 1875), refract's three blocks still fit after shadow and terrain with the
+/// top region at the driver's threshold, alone and at the board's bytes.
+/// Terrain's blocks all go back whole at its teardown, so GENERAL before
+/// refract is what it is with level-0 targets (one range of 31908 KiB, 26276
+/// with the unnamed blocks).
+///
+/// What the chains strain is terrain's own set-up, in either arm: from one
+/// chain on, the 59200 KiB pool refuses some of it (capacity: the arms
+/// refuse the same blocks). Nothing after terrain is refused.
+#[test]
+fn glmark2_with_terrains_npot_mip_chains_still_fits_refract() {
+    let target = (22, "800x600 target", 800 * 600 * 4 / 1024);
+    let chain = (22, "800x600 mip chain", NPOT_800X600.div_ceil(1024));
+    let depth = (22, "800x608 depth buffer", 800 * 608 * 4 / 1024);
+    let terrain_refused: [&[(u32, &str, u32)]; 5] =
+        [&[], &[depth], &[target, target, depth], &[chain, target, depth], &[chain, chain, depth]];
+    for (chains, refused) in terrain_refused.iter().enumerate() {
+        let chains = chains as u32;
+        for n in [0, UNNAMED_AT_THE_BOARD] {
+            let on = glmark2_chains(YD_PVR_POOL_TOP_ABOVE, n, chains);
+            let off = glmark2_chains(0, n, chains);
+            say(&std::format!("top region on, {chains} npot chains"), n, &on);
+            say(&std::format!("top region off, {chains} npot chains"), n, &off);
+            let level0 = glmark2(YD_PVR_POOL_TOP_ABOVE, n);
+            assert_eq!(on.before_refract.gap, level0.before_refract.gap, "{chains} chains, {n} unnamed");
+            assert!(on.before_refract.contiguous() >= REFRACT_NEEDS, "{chains} chains, {n} unnamed");
+            assert!(on.depth_buffer_served, "{chains} chains, {n} unnamed");
+            assert_eq!(on.refused, *refused, "{chains} chains, {n} unnamed");
+            assert_eq!(off.refused, *refused, "{chains} chains, {n} unnamed, top region off");
+        }
     }
 }
 
