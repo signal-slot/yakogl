@@ -26,6 +26,9 @@
 //! device's `data` blob, so every instance is independent.
 #![cfg_attr(not(test), no_std)]
 #![deny(unsafe_op_in_unsafe_fn)]
+// The same allow as the library's src/lib.rs: clippy from 2026-10 flags index
+// loops over parallel per-render-target arrays.
+#![allow(clippy::needless_range_loop)]
 
 pub mod board;
 pub mod env;
