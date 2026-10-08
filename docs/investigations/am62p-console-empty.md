@@ -303,3 +303,8 @@ say `100.118.139.121:35933`.
 
 Not determined from the host side: why 35932 was also silent for the ttyS3
 probe in that session (it arrived verbatim earlier).
+
+Addendum (2026-10-09, Pi 4): the owner received the Pi 4 boot log up to the
+login prompt via `usb1:35931`, so the bridge is healthy and is not the reason
+for missing Pi 4 run records. `tools/board.sh` takes a serial device for the
+Pi 4, not `host:port`; see `docs/boards/console-map.md`.

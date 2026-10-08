@@ -10,7 +10,7 @@ AM62P, `PI4_UART` for the Pi 4) from the environment. For the AM62P it is the
 | Board | Node | Tailscale IP | LAN IP | Port | Channel | Status |
 |---|---|---|---|---|---|---|
 | Toradex Verdin AM62P (main_uart0, Linux ttyS2: U-Boot, getty, Zephyr) | `usb-serial-1` | 100.118.139.121 | 192.168.1.51 (direct, ~75 ms) | **35933** | FT4232H channel 4 | **Verified** |
-| Raspberry Pi 4 | `usb1` | 100.124.238.76 | 192.168.1.39 (direct, ~80 ms) | 35931 | Debug Probe interface 1 | **Unverified**: see below |
+| Raspberry Pi 4 | `usb1` | 100.124.238.76 | 192.168.1.39 (direct, ~80 ms) | 35931 | Debug Probe interface 1 | **Verified** (boot log to login prompt) |
 | i.MX8MP | unknown | unknown | unknown | unknown | unknown | Nothing recorded (board.sh notes the i.MX8MP has no UART capture) |
 
 `BOARD_UART=100.118.139.121:35933` selects the AM62P console.
@@ -33,19 +33,24 @@ Open TCP ports 35930-35933. Port-to-UART meaning, as far as it is known:
   `\r\nverdin-am62p-08641335 login: `. (A first attempt with one `\r` and a
   3 s wait read nothing; a second with `\r` twice and 4 s waits did.) Nothing
   was typed after that; no login.
-- **usb1:35931, Pi 4.** Owner, 2026-10-09: only 35931 open; the connection is
-  accepted, but Enter gets no response.
+- **usb1:35931, Pi 4.** Owner, 2026-10-09 (morning), on the real board:
+  through usb1:35931 the Pi 4's boot log was received in full up to the login
+  prompt. The bridge works. This supersedes the earlier note (same day) that
+  the port accepted connections but gave no answer to Enter and that power
+  and boot were unknown. (Only 35931 is open on usb1.) So a missing Pi 4 run
+  record is not caused by the bridge.
 
 ## Still unverified (guesses are marked as such)
 
-- That `usb1:35931` is the Pi 4 console. It is the owner's most likely
-  reading (Raspberry Pi Debug Probe). Whether the Pi is powered or booted is
-  unknown. The silence could be an unpowered Pi, no login console on that
-  UART, a wrong baud or wiring (all guesses).
 - `tools/board.sh` addresses the Pi 4 as a serial **device**
   (`[ -c "$BOARD_UART" ]`, `stty`; lines 751 and 822), not `host:port`.
   `usb1:35931` is a TCP bridge, so the Pi 4 path cannot use it as is (it would
-  need a local pty, e.g. a socat bridge; not set up).
+  need a local pty, e.g. a socat bridge; not set up). Fact: the Pi 4 tool
+  hard-codes no host:port (`BOARD_UART`/`PI4_UART` from the environment, a
+  device path; `/dev/PI4_UART` only as a dry-run placeholder, lines 1417/1431),
+  so it cannot "match" usb1:35931 as configured. Whatever device was set for
+  a Pi 4 run is not recorded in the repository (unknown). Likely gap (guess):
+  no bridge-to-pty step existed for the Pi 4.
 - Meaning of 35930 and 35931 on usb-serial-1; whether the channel order is
   stable across re-plugging.
 - Everything about the i.MX8MP console.
