@@ -37,3 +37,16 @@ pi4-deqp-stage1.md: `DEQP_WORK`, `ZEPHYR_WS`, `WEST_VENV`,
 `ZEPHYR_SDK_INSTALL_DIR` listed there), or let this worker run `pip install west`,
 `west init/update` and the SDK download, then follow HANDOFF 'Next board session'
 -> 'Raspberry Pi 4' and tools/cts/README.md unchanged.
+
+## Retry after the permission decisions (same day)
+
+- `ask_farm` answered: the usable copies (workspace, venv, SDK, `DEQP_WORK`) are
+  node-local to system76 (confidence 0.6, from ccfarm env, not checked against
+  af17c0c8); Lepton and XPS139340 have the SDK or a pinned tree but no venv or
+  `DEQP_WORK`. This worker (XPS139340) has none of them.
+- `pip install` into the venv stayed denied; system python 3.14 lacks `pykwalify`
+  (west's dependency), so west cannot be run from a plain git clone either.
+- The deps volume has 34 GiB free (99% used), too little for a Zephyr tree, the
+  SDK and a CTS stage 1 build.
+- Still no image built, no board run. Rerun on system76 (or give this worker
+  pip access and disk).
