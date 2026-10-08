@@ -337,10 +337,15 @@ struct Storage {
 /// Does `mem` hold `w` x `h` pixels of `bpp` bytes from `offset` on, at the
 /// PBE's pair-padded row pitch (the last row needs only `w` pixels)?
 fn storage_holds(mem: &OsalGpuMem, offset: u32, w: u32, h: u32, bpp: u32) -> bool {
+    storage_holds_at(mem, offset, w, h, bpp, tex_pitch(w))
+}
+
+/// [`storage_holds`] at a row pitch of `pitch` pixels.
+fn storage_holds_at(mem: &OsalGpuMem, offset: u32, w: u32, h: u32, bpp: u32, pitch: u32) -> bool {
     if w == 0 || h == 0 {
         return false;
     }
-    let pitch = tex_pitch(w) as u64;
+    let pitch = pitch as u64;
     let need = ((h as u64 - 1) * pitch + w as u64) * bpp as u64 + offset as u64;
     need <= mem.size as u64
 }
@@ -412,15 +417,21 @@ fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Storage> {
          * TPU samples it, and the PBE writes rows a texel pair apart: more
          * than one row of it cannot be a render target without drawing the
          * wrong picture, so it is incomplete instead. One row (a cube face's
-         * 1x1 level) is the same either way. */
-        if lh > 1 && t.level_pitch(lw) != tex_pitch(lw) {
+         * 1x1 level) is the same either way. A level of a PowerVR NPOT
+         * chain (`pot_chain`) is rendered at its power-of-two pitch, wider
+         * than the level and a whole number of pixel pairs: the draw states
+         * it (`fb_target_pitched`), as it does a window's wider stride. */
+        let pitch = t.level_pitch_at(a.level as u32);
+        let wider = t.pot_chain && pitch > tex_pitch(lw) && pitch.is_multiple_of(2);
+        if lh > 1 && pitch != tex_pitch(lw) && !wider {
             return None;
         }
         /* checked: a layer past what the storage holds is incomplete */
-        let offset = (a.layer as u64 * lh as u64 * t.level_pitch(lw) as u64 * gles_texfmt_bytes(t.texfmt) as u64)
+        let offset = (a.layer as u64 * lh as u64 * pitch as u64 * gles_texfmt_bytes(t.texfmt) as u64)
             .checked_add(t.level_off[a.level as usize] as u64)
             .and_then(|o| u32::try_from(o).ok())?;
-        if !storage_holds(&t.mem, offset, lw, lh, gles_texfmt_bytes(t.texfmt)) {
+        let rows = if wider { pitch } else { tex_pitch(lw) };
+        if !storage_holds_at(&t.mem, offset, lw, lh, gles_texfmt_bytes(t.texfmt), rows) {
             return None;
         }
         return Some(Storage { mem: Some(MemLoc::Texture(a.name as usize)), w: lw, h: lh, internalformat, offset });
@@ -795,19 +806,34 @@ fn target_loc(c: &GlContext) -> Option<(MemLoc, u32, u32, u32)> {
 /// with the kick being recorded (see `TARGET_USE`).
 /// The row pitch in pixels of the target at `loc`, `tw` wide: the default
 /// surface's own ([`GlContext::default_pitch_px`]: a window may be a view
-/// into a wider scan-out buffer), else the pair-padded `tex_pitch(tw)` every
-/// GL-core storage uses.
+/// into a wider scan-out buffer), a level of a PowerVR NPOT chain's
+/// power-of-two one (`GlTexture::pot_chain`; the level a target `tw` wide
+/// can be, `attachment_storage`), else the pair-padded `tex_pitch(tw)` every
+/// other GL-core storage uses.
 fn loc_pitch(c: &GlContext, loc: MemLoc, tw: u32) -> u32 {
     match loc {
         MemLoc::DefaultSurface => c.default_pitch_px(),
+        MemLoc::Texture(i) if c.objs_ref().textures[i].pot_chain => c.objs_ref().textures[i].level_pitch(tw),
         _ => tex_pitch(tw),
     }
 }
 
 pub fn fb_target(c: &GlContext) -> Option<(OsalGpuMem, u32, u32, u32)> {
+    fb_target_pitched(c).map(|(m, w, h, off, _)| (m, w, h, off))
+}
+
+/// [`fb_target`] and the target's row pitch in pixels where a framebuffer's
+/// colour texture is rendered at one wider than `tex_pitch(w)` (a level of
+/// a PowerVR NPOT chain, [`loc_pitch`]); 0 otherwise, as
+/// `GlesDraw::target_pitch` says "the pair-padded width".
+pub fn fb_target_pitched(c: &GlContext) -> Option<(OsalGpuMem, u32, u32, u32, u32)> {
     target_loc(c).map(|(loc, w, h, off)| {
         stamp_target_use(c, loc);
-        (*mem_at(c, loc), w, h, off)
+        let pitch = match loc {
+            MemLoc::Texture(_) if loc_pitch(c, loc, w) != tex_pitch(w) => loc_pitch(c, loc, w),
+            _ => 0,
+        };
+        (*mem_at(c, loc), w, h, off, pitch)
     })
 }
 

@@ -1685,13 +1685,14 @@ fn resolve_target(c: &mut GlContext, d: &mut GlesDraw) -> Result<(), DrawError> 
     /* a texture it renders into holds the pixel engine's channel order
      * from now on (texture::take_pe_order) */
     framebuffer::take_pe_order_targets(c);
-    match framebuffer::fb_target(c) {
-        Some((m, w, h, off)) if w != 0 && h != 0 => {
+    match framebuffer::fb_target_pitched(c) {
+        Some((m, w, h, off, pitch)) if w != 0 && h != 0 => {
             d.target_gpu = m.gpu.wrapping_add(off as u64); /* the attached level/face/layer */
             d.target_w = w;
             d.target_h = h;
-            /* the default surface may be a view into a wider buffer */
-            d.target_pitch = if c.bound_framebuffer == 0 { c.default_pitch } else { 0 };
+            /* the default surface may be a view into a wider buffer, and a
+             * level of a PowerVR NPOT chain has its power-of-two pitch */
+            d.target_pitch = if c.bound_framebuffer == 0 { c.default_pitch } else { pitch };
             Ok(())
         }
         _ => match framebuffer::fb_depth_stencil_only_size(c) {
@@ -2286,8 +2287,9 @@ fn live_texture(textures: &mut [GlTexture; TEXTURE_SLOTS], h: usize) -> Option<&
  * mode and with mipmaps, and so does ES 2.0 with GL_OES_texture_npot, which
  * every build that reports ES 2.0 claims since 2026-10-07 -- so it applies
  * only where texture::NPOT_RESTRICTED holds, which no build does any more.
- * A backend that keeps one level of a NPOT image (the PowerVR) samples the
- * base level of such a texture under a mipmap filter.
+ * Where the backend keeps one level of a NPOT image (the PowerVR's stacked
+ * NPOT cube maps, texture.rs npot_mip_chains) such a texture samples its
+ * base level under a mipmap filter.
  *
  * This replaces demoting the filter and sampling level 0, which showed an
  * application's mistake as a picture rather than as black. */
@@ -2330,7 +2332,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
      * format (format_mismatch_*); the per-level record can. */
     if mips {
         /* GL's chain, not the store's: where the backend keeps one level of
-         * a NPOT image (the PowerVR), GL still wants its whole chain, which
+         * a NPOT image (a PowerVR NPOT cube), GL still wants its whole chain, which
          * glGenerateMipmap, glTexStorage2D or the application's own levels
          * record as present without holding them */
         let chain = ((1u32 << u32::from(gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
@@ -12240,11 +12242,12 @@ mod tests {
 
     /// GL_OES_texture_npot, glmark2's terrain: an 800x600 RGBA texture,
     /// glGenerateMipmap, LINEAR_MIPMAP_LINEAR and REPEAT (or MIRRORED_REPEAT)
-    /// on both axes is complete, with no GL error, in every build. What the
-    /// draw hands the backend follows the backend: one that holds the chain
-    /// (the GC7000's shape, the V3D's too: `npot_mip_chains`) samples all
-    /// ten levels with a linear mip filter; the PowerVR's shape samples the
-    /// base level (one level, no mip filter, min LINEAR). The wrap is the
+    /// on both axes is complete, with no GL error, in every build. Every
+    /// backend holds the chain (`npot_mip_chains`) and the draw samples all
+    /// ten levels with a linear mip filter: the GC7000's shape at its one
+    /// 800-texel chain pitch, the PowerVR's at the 1024 of the power-of-two
+    /// extent it lays the chain out in (texture.rs `pot_chain_layout`; it
+    /// sampled the base level alone until 2026-10-08). The wrap is the
     /// application's either way.
     ///
     /// Revert check: put `crate::REPORT_ES2` back for NPOT_RESTRICTED in
@@ -12275,9 +12278,8 @@ mod tests {
             assert_eq!((b.width, b.height), (800, 600));
             assert_eq!((b.wrap_s, b.wrap_t), (GLES_WRAP_REPEAT, GLES_WRAP_REPEAT));
             assert_eq!((b.linear_filter, b.min_linear), (1, 1));
-            let want = if holds_chain { (10, 2) } else { (1, 0) };
-            assert_eq!((b.mip_levels, b.mip_filter), want, "{holds_chain}: levels sampled, mip filter");
-            assert_eq!(b.stride_texels, 800);
+            assert_eq!((b.mip_levels, b.mip_filter), (10, 2), "{holds_chain}: levels sampled, mip filter");
+            assert_eq!(b.stride_texels, if holds_chain { 800 } else { 1024 }, "{holds_chain}: stride");
             // SAFETY: plain GL calls.
             unsafe {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT as GLint);
@@ -12290,18 +12292,74 @@ mod tests {
     }
 
     /// The PowerVR's table is the shape `a_generated_npot_chain_is_complete_
-    /// with_repeat` runs without a chain: the TPU walks the chain itself
-    /// (packed, not a layered texture unit), so the GL core keeps one level
-    /// of a NPOT image there and the draw samples the base level, whose
-    /// descriptor is the one-level STRIDE texture every NPOT texture already
-    /// was (dEQP texture.filtering.2d.*_npot, texture.wrap.clamp_clamp_*_npot).
+    /// with_repeat` runs as the mock: the TPU walks the chain itself (packed,
+    /// not a layered texture unit), so the GL core lays a NPOT 2D chain out
+    /// as the chain of its power-of-two extent, Mesa pvr's layout (texture.rs
+    /// `pot_chain_layout`): glmark2 terrain's 800x600 is ten levels in the
+    /// 5,592,404 bytes of the 1024x1024 chain. It was one level, 800 * 600 *
+    /// 4 bytes, until 2026-10-08.
     #[cfg(feature = "gpu-powervr")]
     #[test]
-    fn the_powervr_keeps_one_level_of_a_npot_image() {
+    fn the_powervr_lays_a_npot_chain_out_as_its_power_of_two_extent() {
         let pvr = &crate::pvr::backend::yakogl_backend_pvr;
         assert_eq!((pvr.mip_level_align, pvr.native_layered_textures), (0, false));
-        let (_, levels, bytes, _) =
+        let (_, levels, bytes, pitch) =
             super::super::texture::chain_layout_npot(800, 600, 1, 4, false, 0, true, true).unwrap();
-        assert_eq!((levels, bytes), (1, 800 * 600 * 4));
+        assert_eq!((levels, bytes, pitch), (10, 5_592_404, 0));
+    }
+
+    /// glmark2 terrain's path on the PowerVR's shape: a NPOT texture whose
+    /// chain was laid out (glGenerateMipmap) is rendered into through a
+    /// framebuffer. The render target is level 0 at the chain's power-of-two
+    /// pitch (`GlesDraw::target_pitch` 16 for a 10-wide level 0 of the 16x8
+    /// chain), and glReadPixels reads its rows at that pitch. Before, a
+    /// level whose pitch was not its pair-padded width was no render target.
+    #[test]
+    fn a_powervr_npot_chain_renders_at_its_power_of_two_pitch() {
+        let gl = Gl::new(16, 16);
+        textured(&gl);
+        let tex = texture_rgba(10, 6);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as GLint);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let (gpu, off1) = {
+            let t = &gl.ctx().objs_ref().textures[tex as usize];
+            assert_eq!((t.pot_chain, t.chain_levels, t.level_pitch_at(0)), (true, 4, 16));
+            (t.mem.gpu, t.level_off[1])
+        };
+        let src = texture_rgba(4, 4);
+        let mut fbo: GLuint = 0;
+        // SAFETY: valid out pointer, plain GL calls.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            glBindTexture(GL_TEXTURE_2D, src);
+        }
+        let d = draw_tri(&gl).draw;
+        assert_eq!((d.target_gpu, d.target_w, d.target_h, d.target_pitch), (gpu, 10, 6, 16));
+        assert_eq!(crate::backend::draw_pitch(&d), 16);
+        /* level 1 (5x3) is a target too, at its pitch of 8 */
+        // SAFETY: plain GL calls.
+        unsafe {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 1);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        }
+        let d = draw_tri(&gl).draw;
+        assert_eq!((d.target_gpu, d.target_w, d.target_h, d.target_pitch), (gpu + off1 as u64, 5, 3, 8));
+        /* what the pixel engine wrote at the 16-texel pitch reads back */
+        // SAFETY: plain GL calls.
+        unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0) };
+        let row1: Vec<u8> = (0..40u8).collect();
+        gl.gpu_render(gpu + 16 * 4, &row1);
+        let mut px = [0u8; 40];
+        // SAFETY: `px` holds the 10x1 RGBA8 read.
+        unsafe { glReadPixels(0, 1, 10, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(px[..], row1[..], "row 1 at the 16-texel pitch");
     }
 }
