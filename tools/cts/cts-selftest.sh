@@ -188,6 +188,32 @@ else
     bad "images-selftest.sh: rc $irc, $iok of $IMAGES_SELFTEST_CHECKS ok; $(printf '%s\n' "$iout" | grep 'FAIL' | head -3 | paste -sd';' -)"
 fi
 
+# ---- 21: cts-summary.py --by-message tallies failures by their detail -------
+#
+# host-deqp-run.sh writes this tally into every run's summary.txt, and
+# tools/cts/log/es3-host-run.md maps it onto RESULTS.md 1r's per-message table. The
+# fixture (testdata/by-message.qpa, a batch log as deqp writes it) holds one
+# Pass and three Fail: two whose details differ only in the shader line
+# `0:<n>:`, which must fold into one row, and one other. cts-summary.py reads
+# .qpa with the CTS's own log parser, so this needs a VK-GL-CTS checkout
+# ($CTS) and is skipped without one.
+echo
+echo "== 21. cts-summary.py --by-message (testdata/by-message.qpa)"
+if [ -f "${CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}/scripts/log/log_parser.py" ]; then
+    sout=$(python3 "$HERE/cts-summary.py" --by-message 5 --list-failures 0 \
+        "$HERE/testdata/by-message.qpa" 2>&1)
+    for want in "failures by message (2 distinct, 3 cases):" \
+                "       2  Compile failed: 0:N: not lowered yet" \
+                "       1  Got invalid error"; do
+        case "$sout" in
+            *"$want"*) ok   "by-message: reports \"$want\"" ;;
+            *)         bad  "by-message: MISSING \"$want\"" ;;
+        esac
+    done
+else
+    echo "  skip  no VK-GL-CTS log parser under \$CTS"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
