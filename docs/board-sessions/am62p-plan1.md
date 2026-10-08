@@ -11,11 +11,11 @@ approved). `4e9397c` and `c6aa6ba` are both ancestors of HEAD (checked with
 `git merge-base --is-ancestor`). A later origin/main session repeats this
 before landing.
 
-## Result: images 1 to 7 ran on verdin-am62p; 10,092 pass, 9 fail
+## Result: images 1 to 7 ran on the AM62P board; 10,092 pass, 9 fail
 
 All seven shaders images (table rows 1 to 7, `TREE_ROWS=0-6`) built at
 `b83216d4` and ran to `verdict=done` through `tools/board.sh am62p tree`
-(boot `uboot-mmc`, serial bridge `usb-serial-1:35933`). Every case in every
+(boot `uboot-mmc`, serial bridge `$BOARD_UART`). Every case in every
 image got a result. Six images match the `d60b9d76` baseline exactly. Image 1
 has **9 new Fail cases** (`shaders.invariance.*.common_subexpression_1/2/3`
 in all three precisions) and one expected flip: `fragdata.invalid_assign_to_1`
@@ -27,27 +27,30 @@ are a regression against `d60b9d76` (they passed there) and are not in
 ## How it was run
 
 Inputs on this node (Lepton), all under the ccfarm dependency cache
-`/home/tasuku/.local/share/ccfarm-local/deps/yakogl`:
+`$CCFARM_DEPS_DIR`. Board address, UART bridge and workspace paths are
+environment only (`.ccfarm/CYCLE.md`, "Secrets and machine facts"); they are
+named here by their variables, never by their values:
 
-- `ZEPHYR_WS=.../deqp-stage1-rpi_4b/zephyr-ws`,
-  `WEST_VENV=.../deqp-stage1-rpi_4b/venv`,
-  `ZEPHYR_SDK_INSTALL_DIR=.../deqp-stage1-rpi_4b/sdk/zephyr-sdk-1.0.1`,
-  `CTS=.../deqp-stage1-rpi_4b/cts-src` (shared with the Pi 4 stage 1).
-- Stage 1 for this board: `WORK=/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-am62p
+- `ZEPHYR_WS=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/zephyr-ws`,
+  `WEST_VENV=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/venv`,
+  `ZEPHYR_SDK_INSTALL_DIR=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/sdk/zephyr-sdk-1.0.1`,
+  `CTS=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/cts-src` (shared with the Pi 4 stage 1).
+- Stage 1 for this board: `WORK=$CCFARM_DEPS_DIR/deqp-stage1-am62p
   BOARD=verdin_am62p/am62p54/a53 tools/cts/cts-build-zephyr.sh` (rc=0).
-  It needs a real `cargo`/`rustc` first on PATH (`/home/tasuku/.cargo/bin`);
+  It needs a real `cargo`/`rustc` first on PATH (`$CARGO_HOME/bin`);
   the kache cargo shim has no rustc next to it (same finding as baseline2).
 - `driver/src/fw/pvr_fw_blob.h` regenerated from the board's
   `/lib/firmware/rgx.fw.36.53.104.796` (fetched with
-  `ssh torizon@verdin-am62p cat ... > .inputs/rgx.fw`, then the
+  `ssh $BOARD_HOST cat ... > .inputs/rgx.fw`, then the
   `driver/tools/mkfwblob.sh` format). Never committed.
-- Images: `TABLE=/home/tasuku/.local/share/ccfarm-local/deps/yakogl/plan1-am62p-images/am62p-shaders7.txt
+- Images: `TABLE=$CCFARM_DEPS_DIR/plan1-am62p-images/am62p-shaders7.txt
   tools/cts/am62p-deqp-images.sh <that table> b83216d4` — the table is rows
   1 to 7 of `tools/cts/am62p-full-tree.txt`. All seven `img<N> rc=0`
   (`build.out`). The script still exits 1 after the last unlabelled row (a
   `set -e` quirk in its final labelled-table test); every image built.
-- Board: `BOARD_HOST=torizon@verdin-am62p BOARD_UART=usb-serial-1:35933
-  BOARD_BOOT=uboot-mmc TREE_IMAGE_DIR=<the images dir above> TREE_TAG=b83216d4
+- Board: `BOARD_HOST` and `BOARD_UART` from the environment (values never
+  written here), `BOARD_BOOT=uboot-mmc
+  TREE_IMAGE_DIR=<the images dir above> TREE_TAG=b83216d4
   TREE_ROWS=0-6 tools/board.sh am62p tree tools/cts/am62p-full-tree.txt
   records/plan1-am62p/full`, then `tools/board.sh am62p tally
   records/plan1-am62p/full`. The tree is resumable: rows with an `INDEX.txt`
@@ -150,8 +153,8 @@ rows too.
 - `fragdata.invalid_assign_to_1` Pass is board-confirmed; `es2-cts-failures.md`
   (owned by bench-recipes) can move that row from "awaiting board" to done.
 - Stage 1, the seven images, and the records are on this node:
-  `DEQP_WORK=/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-am62p`,
-  images in `.../deps/yakogl/plan1-am62p-images/img1..7-b83216d4` (labels
+  `DEQP_WORK=$CCFARM_DEPS_DIR/deqp-stage1-am62p`,
+  images in `$CCFARM_DEPS_DIR/plan1-am62p-images/img1..7-b83216d4` (labels
   `img<N>-b83216d4`, `build.out` present). A re-run of rows 8 to 17 needs no
   rebuild of rows 1 to 7: the tree skips rows with `INDEX.txt`.
 - `am62p-deqp-images.sh` exits 1 after the last unlabelled row even when all
