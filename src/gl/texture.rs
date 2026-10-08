@@ -914,7 +914,7 @@ fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
     *oom = false;
     let (w, h) = (t.width, t.height);
     if !npot_mip_chains(t.layers as u32)
-        || !(t.target == GL_TEXTURE_2D || t.target == GL_TEXTURE_CUBE_MAP)
+        || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY)
         || t.chain_levels != 1
         || (is_pot(w) && is_pot(h))
         || (w <= 1 && h <= 1)
@@ -1706,6 +1706,17 @@ fn level_size(t: &GlTexture, level: u32) -> (u32, u32) {
     ((t.width >> level).max(1), (t.height >> level).max(1))
 }
 
+/// A level GL has (glTexStorage*, or a glTexImage* that fit its chain) but
+/// the store keeps no texels for: a chain the backend cannot hold (a NPOT
+/// array or cube on the PowerVR, `npot_mip_chains`), or the levels of a 3D
+/// texture. Its sub-images are checked and then dropped, as its images are.
+fn recorded_unheld(t: &GlTexture, level: GLint) -> bool {
+    level as u32 >= t.levels as u32
+        && level < 16
+        && t.level_defined & (1u16 << level) != 0
+        && t.level_bad & (1u16 << level) == 0
+}
+
 fn is_texture_format(f: GLenum) -> bool {
     matches!(f, GL_RGBA | GL_RGB | GL_LUMINANCE | GL_ALPHA | GL_LUMINANCE_ALPHA | GL_RED | GL_RG | GL_BGRA_EXT)
 }
@@ -2376,7 +2387,7 @@ pub unsafe extern "C" fn glTexSubImage2D(
     }
     let ti = active_texture(c, target).filter(|&ti| {
         let t = &c.objs_ref().textures[ti];
-        texels_writable(t) && (level as u32) < t.levels as u32
+        texels_writable(t) && ((level as u32) < t.levels as u32 || recorded_unheld(t, level))
     });
     let Some(ti) = ti else {
         /* no storage at that level, or storage the converters cannot write
@@ -2401,7 +2412,7 @@ pub unsafe extern "C" fn glTexSubImage2D(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
-    if pixels.is_null() || width == 0 || height == 0 {
+    if pixels.is_null() || width == 0 || height == 0 || recorded_unheld(&c.objs_ref().textures[ti], level) {
         return;
     }
     if !settle_texture(c, ti) {
@@ -4051,6 +4062,38 @@ pub unsafe extern "C" fn glTexImage3D(
     } else {
         let (lw, lh) = level_size(t, level as u32);
 
+        /* A level of a non-power-of-two array's chain (ES 3.0 3.8.14: floor
+         * sizes down to 1x1, the layer count the same at every level). The
+         * store has one level of such an array until a backend that holds
+         * the chain is asked for it (grow_npot_chain); one that cannot (the
+         * PowerVR's stacked NPOT layers, npot_mip_chains) records the level
+         * as GL has it and keeps no texels, as for a NPOT cube. */
+        let npot_level = t.level_defined & 1 != 0
+            && t.level_bad & 1 == 0
+            && t.chain_levels == 1
+            && t.grid_cols == 0
+            && !(is_pot(t.width) && is_pot(t.height))
+            && (level as u32) < u32::from(context::gl_mip_levels(t.width, t.height))
+            && (width as u32, height as u32, depth as u32) == (lw, lh, t.layers as u32)
+            && t.format == format;
+        if npot_level && npot_mip_chains(t.layers as u32) {
+            if !settle_texture(c, ti) {
+                c.set_error(GL_OUT_OF_MEMORY, FUNC);
+                return;
+            }
+            let mut oom = false;
+            grow_npot_chain(&mut c.objs().textures[ti], &mut oom);
+            if oom {
+                c.set_error(GL_OUT_OF_MEMORY, FUNC);
+                return;
+            }
+        }
+        let t = &mut c.objs().textures[ti];
+        if npot_level && t.chain_levels == 1 {
+            t.level_defined |= 1u16 << (level as u32).min(15);
+            t.level_bad &= !(1u16 << (level as u32).min(15));
+            return;
+        }
         if level as u32 >= t.chain_levels as u32
             || width as u32 != lw
             || height as u32 != lh
@@ -4067,7 +4110,7 @@ pub unsafe extern "C" fn glTexImage3D(
         }
         t.level_defined |= 1u16 << (level as u32).min(15);
     }
-    if pixels.is_null() || width == 0 || height == 0 || depth == 0 || t.mem.impl_.is_null() {
+    if pixels.is_null() || width == 0 || height == 0 || depth == 0 || c.objs_ref().textures[ti].mem.impl_.is_null() {
         return;
     }
     gl_trace!(glTexSubImage3D); /* the C uploads through the entry point */
@@ -4141,7 +4184,7 @@ unsafe fn tex_sub_image_3d(
     }
     let ti = active_texture(c, target).filter(|&ti| {
         let t = &c.objs_ref().textures[ti];
-        texels_writable(t) && (level as u32) < t.levels as u32
+        texels_writable(t) && ((level as u32) < t.levels as u32 || recorded_unheld(t, level))
     });
     let Some(ti) = ti else {
         c.set_error(GL_INVALID_OPERATION, FUNC);
@@ -4151,12 +4194,18 @@ unsafe fn tex_sub_image_3d(
         return;
     }
     let grid_cols = c.objs().textures[ti].grid_cols as u32;
-    let (lw, lh) = if grid_cols != 0 {
+    let unheld = recorded_unheld(&c.objs_ref().textures[ti], level);
+    let (lw, lh) = if grid_cols != 0 && !unheld {
         (c.objs().textures[ti].width, c.objs().textures[ti].height)
     } else {
         level_size(&c.objs_ref().textures[ti], level as u32)
     };
-    let layers = c.objs().textures[ti].layers as u32;
+    /* a 3D texture's depth halves with its sides, an array's layers do not */
+    let layers = if target == GL_TEXTURE_3D && unheld {
+        (u32::from(c.objs().textures[ti].layers) >> level).max(1)
+    } else {
+        u32::from(c.objs().textures[ti].layers)
+    };
     /* u32 sums that wrap like the C */
     if (xoffset as u32).wrapping_add(width as u32) > lw
         || (yoffset as u32).wrapping_add(height as u32) > lh
@@ -4165,7 +4214,7 @@ unsafe fn tex_sub_image_3d(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
-    if pixels.is_null() || width == 0 || height == 0 || depth == 0 {
+    if pixels.is_null() || width == 0 || height == 0 || depth == 0 || unheld {
         return;
     }
     if !settle_texture(c, ti) {
@@ -4742,7 +4791,8 @@ pub unsafe extern "C" fn glTexStorage2D(
     note_target_use(c, ti);
     let t = &mut c.objs().textures[ti];
     let layers = if target == GL_TEXTURE_CUBE_MAP { 6 } else { 1 };
-    if texture_alloc_storage(t, width as u32, height as u32, layers, texfmt) != 0 {
+    /* a NPOT texture gets its whole chain where the backend holds one */
+    if texture_alloc_storage_ex(t, width as u32, height as u32, layers, texfmt, false, levels > 1) != 0 {
         c.set_error(GL_OUT_OF_MEMORY, FUNC);
         return;
     }
@@ -4830,9 +4880,13 @@ pub unsafe extern "C" fn glTexStorage3D(
         t.levels = 1;
         t.immutable = true;
         t.immutable_levels = levels as u8;
+        /* every level exists (3.8.4); the store keeps the base level's
+         * texels, so the others are recorded and their images dropped */
+        t.level_defined = ((1u32 << (levels as u32).min(15)) - 1) as u16;
+        t.level_bad = 0;
         return;
     }
-    if texture_alloc_storage(t, width as u32, height as u32, depth as u32, texfmt) != 0 {
+    if texture_alloc_storage_ex(t, width as u32, height as u32, depth as u32, texfmt, false, levels > 1) != 0 {
         c.set_error(GL_OUT_OF_MEMORY, FUNC);
         return;
     }
@@ -8730,15 +8784,19 @@ mod tests {
     }
 
     #[test]
-    fn tex_storage_npot_keeps_the_base_level_only() {
-        /* documented in the code: a chain the store cannot hold keeps the base level */
+    fn tex_storage_npot_holds_the_chain_where_the_backend_does() {
+        /* ES 3.0 3.8.4: every level of glTexStorage2D exists. A 2D NPOT
+         * texture gets room for its chain (the PowerVR's as its power-of-two
+         * extent's); es3_level_tests covers the arrays and cubes a backend
+         * keeps one level of. */
         let gl = TestGl::new(4, 4);
         let name = new_tex();
         // SAFETY: plain GL call.
         unsafe { glTexStorage2D(GL_TEXTURE_2D, 3, GL_RGBA8, 6, 5) };
         assert_eq!(gl.error(), GL_NO_ERROR);
         let t = &gl.ctx().objs_ref().textures[name as usize];
-        assert_eq!((t.levels, t.chain_levels, t.mem.size), (1, 1, 6 * 5 * 4));
+        assert_eq!((t.levels, t.chain_levels), (3, 3));
+        assert!(t.mem.size > 6 * 5 * 4);
     }
 
     #[test]
