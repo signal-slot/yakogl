@@ -499,3 +499,12 @@ than the pinned Zephyr's default (candidate 3): at 100, each sleep would be
 - Mesa etnaviv was not re-read (no Mesa tree here, and cloning was not
   possible); nothing in the conclusion rests on it.
 - The 46 (view) run has no row in RESULTS.md; its number is STATUS.md:92's.
+
+## Host evidence for F1/F2
+
+`board_imx8mp.c` was syntax-checked on the host with `cc -fsyntax-only -Wall
+-Wextra` against stub Zephyr/EGL/gc headers (the real headers are in the Zephyr
+workspace, which this host does not have), in three configurations: default,
+`CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1`, and without
+`CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST`. No warnings. This checks syntax and
+types against the stubs only: no Zephyr build and no board run yet (Step 2).
