@@ -905,10 +905,27 @@ uboot_on_exit() {
 
 # console_from_ts: console.txt ("HH:MM:SS line", the form deqp-uart-tally.py
 # reads) from the bridge capture's "<unix time> line" rows.
+# python3, not awk: strftime is a gawk-only extension, and a worker without
+# gawk got an empty console.txt (POSIX awk has no strftime). The conversion is
+# the gawk one's, row by row: the row's leading "<unix time>" (int(), so a
+# fraction is truncated) becomes local "HH:MM:SS", the rest of the row follows
+# verbatim (a row with no text after the timestamp keeps the separating
+# space; a row that does not start with digits keeps its text and gets the
+# time of epoch 0, as gawk's int() of a non-numeric $1 is 0).
 console_from_ts() {
     [ -f "$RD/console.ts" ] || return 0
-    gawk '{ t = $1; sub(/^[0-9.]+ ?/, ""); printf "%s %s\n", strftime("%H:%M:%S", int(t)), $0 }' \
-        "$RD/console.ts" > "$RD/console.txt"
+    python3 -I -c '
+import re, sys, time
+ts = re.compile(rb"^[0-9.]+ ?")   # the "<unix time> " prefix the old gawk sub removed
+num = re.compile(rb"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")  # the numeric prefix of $1
+out = sys.stdout.buffer
+for row in sys.stdin.buffer:      # bytes: a serial capture need not be valid UTF-8
+    if row[-1:] == b"\n":
+        row = row[:-1]            # the awk $0 carries no trailing newline
+    m = num.match(row.lstrip(b" \t"))   # $1: the first field, leading blanks skipped
+    t = int(float(m.group())) if m else 0
+    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + ts.sub(b"", row, 1) + b"\n")
+' < "$RD/console.ts" > "$RD/console.txt"
 }
 
 # ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------
