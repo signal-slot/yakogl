@@ -5,8 +5,8 @@ the command stream instead of executing it, so every `glReadPixels` reads black.
 case's compile/link outcome and info log are meaningful. No render verdict (Pass/Fail counts
 over rendering cases) is quoted as a result.
 
-Status: **GC7000 (vivante) measured; PowerVR NOT measured** (see "What could not be done").
-V3D has no back-end switch in the script and was not run.
+Status: **GC7000 (vivante) and PowerVR measured.** V3D has no back-end switch in the script
+and was not run.
 
 ## Identification
 
@@ -28,7 +28,8 @@ CTS=/home/tasuku/.local/share/ccfarm/deps/yakogl/VK-GL-CTS GPU=vivante tools/cts
 python3 tools/cts/cts-refusals.py --cases 60 --tokens 3 build/host-deqp/run-49fb653
 # scratch (not committed): group/negative_api split over the same .qpa files, reusing
 # scan() from cts-refusals.py (build/scratch/groups.py)
-# not run (see below): CTS=... GPU=powervr tools/cts/host-deqp-run.sh
+CTS=/home/tasuku/.local/share/ccfarm/deps/yakogl/VK-GL-CTS GPU=powervr tools/cts/host-deqp-run.sh
+#   -> build/host-deqp/run-01fb562-powervr
 ```
 
 ## GC7000 back end (GPU=vivante), HOST-ONLY
@@ -87,30 +88,38 @@ group covers only part of the ES 3-only surface; the static audit is the item
 `es2-error-rules-diag` (`docs/investigations/es2-error-rules.md`), and the board runs are
 the arbiter.
 
-## PowerVR back end (GPU=powervr)
+## PowerVR back end (GPU=powervr), HOST-ONLY
 
-**Not measured.** Asked / begun / aborted: not available. Gaps / correct refusals: not
-available. Reason: see next section.
+Run after the farm granted the command; label `01fb562` (the integration tip plus this
+document's commits), same CTS, same default chunking, run directory
+`build/host-deqp/run-01fb562-powervr`.
 
-## What could not be done
+| | |
+|---|---|
+| Cases asked | 17165 |
+| Cases begun | 17165 (no shortfall) |
+| Chunks | 172: 21 exit 0, 151 exit 1, **0 aborted (no exit 134)** |
 
-The first attempt to run the script was refused ("This command requires approval") until the
-farm granted `tools/cts/host-deqp-run.sh`. The vivante run then went through; the
-following `GPU=powervr` invocation (same form, tried five times, also via `bash` and from
-the workspace root) was refused again with the same message. This is a permission refusal,
-not a tool defect; the script produced no output for PowerVR. The deqp-gles2 binary is
-already built and shared (`build/host-deqp/deqp`), so the PowerVR run needs only the library
-build and the chunks.
-Redo: `CTS=/home/tasuku/.local/share/ccfarm/deps/yakogl/VK-GL-CTS GPU=powervr
-tools/cts/host-deqp-run.sh`, then fill in this section. The earlier deqp build took long
-because other workers shared the machine.
+- cts-refusals.py: 878 compile refusals in 92 reasons; **gaps 0**; NotSupported 0;
+  **correct refusals 878 on 876 distinct cases**, all in `functional.shaders`. The top
+  reasons and counts are identical to the GC7000 run.
+- negative_api: 246 cases, 237 passed, 9 NotSupported (the same nine
+  `compressedtexsubimage2d_*` cases), 0 failed. No ES 3-only enum or format accepted.
+- Both back ends give the same buckets. Neither run showed a back-end refusal (the
+  `online shaderc: the code generator refused ...` form that cts-refusals.py also reads), so on
+  the host neither the PowerVR nor the GC7000 code generator refuses any dEQP-GLES2 shader.
+  I did not verify that the code-generator stage runs for every compiled shader.
 
-No tool defect was found; no fix to propose for `es2-host-deqp`, except that a V3D
-`GPU=v3d` switch does not exist in the script as read at this commit.
+## Notes on running
+
+The first attempts to run the script were refused ("This command requires approval") until the
+farm granted `tools/cts/host-deqp-run.sh`; the vivante and powervr runs then went through. No
+tool defect was found. V3D has no `GPU=v3d` switch in the script as read at this commit, so no
+V3D host number exists.
 
 ## Cross-reference: gap bucket to plan item
 
-| Bucket (HOST-ONLY, GC7000) | Count | Item that closes it |
+| Bucket (HOST-ONLY, GC7000 and PowerVR identical) | Count | Item that closes it |
 |---|---|---|
 | Compile refusals on failed cases | 0 | nothing to close |
 | Correct refusals (negative GLSL, 876 cases) | 878 refusals | not work: implementing any of these reasons would turn passes into failures; `es2-preprocessor` must keep the 26 "undefined identifier in a preprocessor expression", 22 "extra tokens", 20 "#if without #endif", 20 "macro redefined" refusals |
@@ -121,9 +130,9 @@ No tool defect was found; no fix to propose for `es2-host-deqp`, except that a V
 | Texture wrap/completeness (NPOT) | not visible | `es2-npot-cases` |
 | Scissored/masked glClear on V3D | not visible, and V3D not a host back end | `es2-v3d-clear` |
 | Pi 4 fbo.completeness `*_tex` | not visible | `es2-v3d-fbo-combos-diag` (no fix item yet) |
-| PowerVR host compile gaps | not measured | uncovered until the PowerVR run is done |
+| PowerVR host compile gaps | 0 | nothing to close |
 
-Flagged as uncovered: (1) the PowerVR host compile/link gaps; (2) any host check for
+Flagged as uncovered: any host check for
 accepted-but-wrong preprocessor output and for accepted invalid shaders, which
 `cts-refusals.py` cannot produce. A host test that diffs our preprocessed output against the
-expected expansion (in `tests/es2_preprocessor.rs`) is the only way to see (2) without a board.
+expected expansion (in `tests/es2_preprocessor.rs`) is the only way to see them without a board.
