@@ -8,6 +8,10 @@
 //! `linkage.uniform.block.members_mismatch` and
 //! `layout_qualifier_mismatch_1..5`, plus controls that must still link.
 //!
+//! One `#[test]`: every link resets the compiler's keep arena
+//! (`forget_compiled`), so the cases run in sequence
+//! (`test_rules::a_test_binary_that_resets_the_compiler_holds_one_test`).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_link_iface
 //! ```
@@ -17,11 +21,7 @@
     any(feature = "gpu-powervr", feature = "gpu-vivante", feature = "gpu-v3d")
 ))]
 use core::ffi::c_char;
-use std::sync::Mutex;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
-
-/// The compiler keeps its output in one arena that every compile resets.
-static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 fn text_of(log: &[c_char]) -> String {
     log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect()
@@ -43,7 +43,6 @@ fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
 
 /// Both stages compile; the link's result: `Ok` or the info log.
 fn link(vs: &str, fs: &str) -> Result<(), String> {
-    let _serial = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
     let vso = compile(SHC_STAGE_VERTEX, vs).unwrap_or_else(|m| panic!("vertex shader does not compile: {m}"));
     let mut fso = compile(SHC_STAGE_FRAGMENT, fs).unwrap_or_else(|m| panic!("fragment shader does not compile: {m}"));
@@ -86,14 +85,12 @@ fn varying_fs(q: &str) -> String {
     )
 }
 
-#[test]
 fn interpolation_mismatch_1_flat_against_smooth() {
     must_fail(&varying_vs("flat"), &varying_fs(""), "interpolation");
     must_fail(&varying_vs(""), &varying_fs("flat"), "interpolation");
     must_fail(&varying_vs("flat"), &varying_fs("smooth"), "interpolation");
 }
 
-#[test]
 fn matching_interpolation_links() {
     must_link(&varying_vs("flat"), &varying_fs("flat"));
     must_link(&varying_vs(""), &varying_fs(""));
@@ -115,7 +112,6 @@ fn block_fs(decl: &str) -> String {
 
 const BLOCK: &str = "layout(std140) uniform B { mediump vec4 a; highp float b; mediump mat3 m; };";
 
-#[test]
 fn identical_and_one_sided_blocks_link() {
     must_link(&block_vs(BLOCK), &block_fs(BLOCK));
     must_link(&block_vs(BLOCK), &block_fs(""));
@@ -135,7 +131,6 @@ fn identical_and_one_sided_blocks_link() {
     must_link(&block_vs(r), &block_fs(r));
 }
 
-#[test]
 fn members_mismatch() {
     let n = "uniform block 'B'";
     must_fail(&block_vs(BLOCK), &block_fs("layout(std140) uniform B { mediump vec4 a; highp float b; };"), n);
@@ -167,7 +162,6 @@ fn members_mismatch() {
     );
 }
 
-#[test]
 fn layout_qualifier_mismatch() {
     let n = "uniform block 'B'";
     let b = |q: &str| format!("layout({q}) uniform B {{ mediump mat3 m; mediump vec4 a; }};");
@@ -184,4 +178,13 @@ fn layout_qualifier_mismatch() {
         &block_fs("layout(std140) uniform B { mediump mat3 m; mediump vec4 a; };"),
         n,
     );
+}
+
+#[test]
+fn stage_interface_link_rules() {
+    interpolation_mismatch_1_flat_against_smooth();
+    matching_interpolation_links();
+    identical_and_one_sided_blocks_link();
+    members_mismatch();
+    layout_qualifier_mismatch();
 }
