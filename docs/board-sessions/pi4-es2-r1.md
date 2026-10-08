@@ -11,7 +11,7 @@ is offered in place of a device result.
 ## Why it could not run
 
 - This worker has none of the inputs. The deps dir
-  (`/home/tasuku/.local/share/ccfarm/deps/yakogl`) holds only an empty
+  (`$CCFARM_DEPS_DIR`) holds only an empty
   `VK-GL-CTS/` (a `.git` with no checkout) and `plan4-v3d-es2-lib.txt`. There is no
   Zephyr west workspace, no Zephyr SDK 1.0.1, no dEQP stage 1 for `rpi_4b`
   (`DEQP_WORK`).
