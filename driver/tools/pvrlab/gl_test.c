@@ -7836,7 +7836,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [197] = "vtxgrid",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16518,6 +16518,114 @@ static int case_vtxgrid(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 196 occl: ES 3.0 occlusion queries (GL_ANY_SAMPLES_PASSED) -------
+ *
+ * docs/es3-occlusion-query.md; HANDOFF open work 4, occlusion-query. Depth
+ * test LESS on a cleared depth buffer, a full-screen red occluder at z -0.5
+ * drawn first and outside every query, then five queries:
+ *
+ *   q0  ANY            a green quad at z 0.5, behind the occluder     -> 0
+ *   q1  ANY            a blue quad at z -0.6, in front of it          -> 1
+ *   q2  CONSERVATIVE   nothing drawn                                  -> 0
+ *   q3  ANY            the hidden quad, glFlush, a cyan quad at z
+ *                      -0.7: one query over two kicks                 -> 1
+ *   q4  ANY            a yellow quad at z -0.8, visible when drawn;
+ *                      after glEndQuery a white quad at z -0.9 covers
+ *                      it in the same frame                           -> 1
+ *
+ * Each counted quad is nearer than everything drawn before it (the test is
+ * LESS), so "visible" is exact.
+ *
+ * q3 is the V3D's counter adding across jobs and the PowerVR's two result
+ * areas; q4 is the PowerVR's tile-based hazard (an occluder recorded after
+ * glEndQuery must not hide the query's draw: the backend ends the frame at
+ * glEndQuery). After glFinish every result must be available. The picture:
+ * the white quad in the centre, the red occluder in a corner.
+ * ------------------------------------------------------------------------- */
+static void occl_quad(struct cuv_vertex *v, float half, float z, float r, float g, float b)
+{
+	cuv_set(&v[0], -half, -half, z, r, g, b);
+	cuv_set(&v[1], half, -half, z, r, g, b);
+	cuv_set(&v[2], half, half, z, r, g, b);
+	cuv_set(&v[3], -half, -half, z, r, g, b);
+	cuv_set(&v[4], half, half, z, r, g, b);
+	cuv_set(&v[5], -half, half, z, r, g, b);
+}
+
+static int case_occl(void)
+{
+	enum { OCCLUDER, HIDDEN, VISIBLE, CYAN, YELLOW, WHITE, QUADS };
+	static const char *const what[5] = { "q0 ANY hidden", "q1 ANY visible", "q2 CONSERVATIVE empty",
+					     "q3 ANY two kicks", "q4 ANY then covered" };
+	static const GLuint want[5] = { 0, 1, 0, 1, 1 };
+	struct cuv_vertex v[QUADS * 6];
+	GLuint prog, vbo, q[5] = { 0 };
+	bool ok = true;
+
+	free_all_objects();
+	prog = link_program(gl_test_vs_src, gl_test_fs_src);
+	if (!prog)
+		return -1;
+	glUseProgram(prog);
+	occl_quad(&v[OCCLUDER * 6], 1.0f, -0.5f, 1, 0, 0);
+	occl_quad(&v[HIDDEN * 6], 0.5f, 0.5f, 0, 1, 0);
+	occl_quad(&v[VISIBLE * 6], 0.5f, -0.6f, 0, 0, 1);
+	occl_quad(&v[CYAN * 6], 0.5f, -0.7f, 0, 1, 1);
+	occl_quad(&v[YELLOW * 6], 0.5f, -0.8f, 1, 1, 0);
+	occl_quad(&v[WHITE * 6], 0.6f, -0.9f, 1, 1, 1);
+	vbo = upload_vbo(v, sizeof(v));
+	cuv_attribs();
+	glViewport(0, 0, TW, TH);
+	glGenQueries(5, q);
+	if (!check_gl_error("occl setup"))
+		return -1;
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, OCCLUDER * 6, 6);
+	glBeginQuery(GL_ANY_SAMPLES_PASSED, q[0]);
+	glDrawArrays(GL_TRIANGLES, HIDDEN * 6, 6);
+	glEndQuery(GL_ANY_SAMPLES_PASSED);
+	glBeginQuery(GL_ANY_SAMPLES_PASSED, q[1]);
+	glDrawArrays(GL_TRIANGLES, VISIBLE * 6, 6);
+	glEndQuery(GL_ANY_SAMPLES_PASSED);
+	glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, q[2]);
+	glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
+	glBeginQuery(GL_ANY_SAMPLES_PASSED, q[3]);
+	glDrawArrays(GL_TRIANGLES, HIDDEN * 6, 6);
+	glFlush();
+	glDrawArrays(GL_TRIANGLES, CYAN * 6, 6);
+	glEndQuery(GL_ANY_SAMPLES_PASSED);
+	glBeginQuery(GL_ANY_SAMPLES_PASSED, q[4]);
+	glDrawArrays(GL_TRIANGLES, YELLOW * 6, 6);
+	glEndQuery(GL_ANY_SAMPLES_PASSED);
+	glDrawArrays(GL_TRIANGLES, WHITE * 6, 6);
+	glFinish();
+	if (!check_gl_error("occl draws")) {
+		ok = false;
+		goto out;
+	}
+	for (int i = 0; i < 5; i++) {
+		GLuint avail = 7, res = 7;
+
+		glGetQueryObjectuiv(q[i], GL_QUERY_RESULT_AVAILABLE, &avail);
+		glGetQueryObjectuiv(q[i], GL_QUERY_RESULT, &res);
+		pr_info("gl_test: occl: %s: available %u result %u (want 1 %u)\n", what[i], avail, res, want[i]);
+		ok &= avail == GL_TRUE && res == want[i];
+	}
+	ok &= check_gl_error("occl results");
+	read_topdown();
+	ok &= expect_px("occl: the white quad on top", TW / 2, TH / 2, 0xffffffff, 2);
+	ok &= expect_px("occl: the occluder in the corner", 2, 2, 0xff0000ff, 2);
+out:
+	glDisable(GL_DEPTH_TEST);
+	glDeleteQueries(5, q);
+	glDeleteBuffers(1, &vbo);
+	return ok && check_gl_error("occl teardown") ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19538,6 +19646,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 193: rc = case_offarm(); break;
 	case 194: rc = case_offarmn(); break;
 	case 195: rc = case_ifbranch(); break;
+	case 196: rc = case_occl(); break;
 	case 197: rc = case_vtxgrid(); break;
 	case 179:
 		rc = case_retile();
