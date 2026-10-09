@@ -14,9 +14,29 @@ Pi 4. Those are development runners; the TFTP side is in
 
 State: the code is in `tools/board.sh` (backend `uboot-mmc`, verbs `default`
 and `nodefault`) and in `tools/uboot-netboot-lib.sh`, and
-`tools/board_selftest.sh` checks it without a board. **No step of this file
-has run on a board.** "On the boards" lists the steps and what each must
-print.
+`tools/board_selftest.sh` checks it without a board. The steps ran on the
+boards on 2026-10-05; the records are
+`records/am62p/standalone-2026-10-05/` and `records/imx8mp/standalone-2026-10-05/`
+(main checkout, not in git). What they prove:
+
+- **Both Verdins**: the hook installed (env backups
+  `env-before-install-20261005-*.txt` in those records).
+- **AM62P**: `probe` (`rc=0 verdict=probe_ok boot_verdict=load_failed`,
+  probe2.out), `run` (`rc=0 verdict=done boot=uboot-mmc boot_verdict=done
+  resets=0 back_after=98s`, run-SO.out), and `default <image> 2` end to end:
+  the console shows `boots left 1`, the image boots (`4569568 bytes read`,
+  `go 0x82000000`, `Booting Zephyr OS`), then `boots left 0`, the image
+  again, then `default used up, booting Linux` and Torizon (default2.raw).
+- **i.MX8MP**: `probe` (`rc=0 verdict=probe_ok boot_verdict=probe_ok`,
+  probe1.out) and `run` (`rc=0 verdict=done boot=uboot-mmc
+  boot_verdict=cycled back_after=95s`, run-SO.out). `default <image> 2` was
+  set (default2.out); the record proves the set, not the cycle — same-day
+  `boot=uboot-mmc` runs after it prove no default was left in the env by
+  then.
+- **Pi 4**: every `board.sh pi4 run` boots the product's configuration from
+  the SD card through `tryboot.txt` ("The test is the product's boot").
+- Not run on any board yet: `default <image> forever` (the product form),
+  and the Pi 4's literal `config.txt` swap.
 
 ## Summary
 
@@ -205,9 +225,11 @@ Linux crashes instead, the load can fail, and Linux boots.
 - The env from Linux (`fw_setenv`), and `setenv` changing only RAM until
   `saveenv`: [Toradex: U-Boot](https://developer.toradex.com/linux-bsp/os-development/boot/u-boot/).
 
-Unmeasured: `ext4load` and `setexpr` in the i.MX8MP's U-Boot build; the hook's
-nested `if` in both builds (the one-shot hook already nests two levels and ran
-on both boards); the load time of a 100 MB file.
+Measured on the boards 2026-10-05 (the records at the top): `ext4load` and
+the hook's nested `if` on both Verdins (the `run` rows), `setexpr` and the
+count path on the AM62P (the `default ... 2` cycle decremented 1 → 0 and
+deleted the default). Still unmeasured: the load time of a 100 MB file (a
+4.5 MB file read in 46 ms on the AM62P, default2.raw).
 
 ## Raspberry Pi 4
 

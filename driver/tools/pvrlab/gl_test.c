@@ -8659,13 +8659,6 @@ static void vsunits_vs_src(char *buf, size_t size, int n)
 		(void)snprintf(buf + len, size - len, "    v_c = r;\n    gl_Position = a_pos;\n}\n");
 }
 
-static const char vsunits_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"varying vec4 v_c;\n"
-	"void main() {\n"
-	"    gl_FragColor = v_c;\n"
-	"}\n";
 
 /* The fragment shader with `n` samplers u_f0..u_f<n-1> as well
  * (CONFIG_GL_TEST_VSU_FS_UNITS). They are active and sampled, and u_fz = 0
@@ -8734,7 +8727,7 @@ static int case_vsunits(void)
 	vsunits_vs_src(vs_src, sizeof(vs_src), VSU_USED);
 	if (VSU_FS_USED > 0)
 		vsunits_fs_samplers_src(fs_src, sizeof(fs_src), VSU_FS_USED);
-	prog = link_program(vs_src, VSU_FS_USED > 0 ? fs_src : vsunits_fs_src);
+	prog = link_program(vs_src, VSU_FS_USED > 0 ? fs_src : gl_test_vsunits_fs_src);
 	if (!prog)
 		return -1;
 	glUseProgram(prog);
@@ -8892,12 +8885,6 @@ static void shp_src(char *buf, size_t size, int n_vec4, bool frag)
 }
 
 /* Case 166's vertex shader: the quad, nothing else. */
-static const char fshp_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"void main() {\n"
-	"    gl_Position = a_pos;\n"
-	"}\n";
 
 /* One arm: draws into cells first_cell.. and judges them. `tag` names the
  * case in the log ("shprobe" 150, "fshprobe" 166); `frag` puts the probe
@@ -8919,7 +8906,7 @@ static bool shp_arm(const char *tag, bool frag, const char *arm, int n_vec4, int
 	*cells_used = ncell;
 
 	shp_src(src, sizeof(src), n_vec4, frag);
-	prog = frag ? link_program(fshp_vs_src, src) : link_program(src, vsunits_fs_src);
+	prog = frag ? link_program(gl_test_fshp_vs_src, src) : link_program(src, gl_test_vsunits_fs_src);
 	if (!prog)
 		return false;
 	glUseProgram(prog);
@@ -9051,7 +9038,7 @@ static bool fshp_arm_units(void)
 		return false;
 	}
 	fshp_units_src(fs_src, sizeof(fs_src));
-	prog = link_program(fshp_vs_src, fs_src);
+	prog = link_program(gl_test_fshp_vs_src, fs_src);
 	if (!prog)
 		return false;
 	glUseProgram(prog);
@@ -9574,26 +9561,7 @@ static int case_texlinear(void)
  * nothing. */
 extern uint32_t v3d_psiz_draws(void);
 
-static const char psizvpm_word_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"attribute vec4 a_color;\n"
-	"varying vec4 v_color;\n"
-	"void main() {\n"
-	"    gl_Position = a_pos;\n"
-	"    gl_PointSize = 4.0;\n"
-	"    v_color = a_color;\n"
-	"}\n";
 
-static const char psizvpm_plain_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"attribute vec4 a_color;\n"
-	"varying vec4 v_color;\n"
-	"void main() {\n"
-	"    gl_Position = a_pos;\n"
-	"    v_color = a_color;\n"
-	"}\n";
 
 /* One draw of `n` vertices of `mode` with `prog`, read back into `out`. */
 static bool psizvpm_draw(GLuint prog, GLenum mode, const float (*pos)[4], const float (*col)[4],
@@ -9649,8 +9617,8 @@ static int case_psizvpm(void)
 		{ "triangle", GL_TRIANGLES, tri_pos, tri_col, 3, 800 },
 		{ "lines", GL_LINES, line_pos, line_col, 6, 100 },
 	};
-	GLuint pp = link_program(psizvpm_plain_vs_src, gl_test_interp_fs_src);
-	GLuint pw = link_program(psizvpm_word_vs_src, gl_test_interp_fs_src);
+	GLuint pp = link_program(gl_test_psizvpm_plain_vs_src, gl_test_interp_fs_src);
+	GLuint pw = link_program(gl_test_psizvpm_word_vs_src, gl_test_interp_fs_src);
 	bool ok = true;
 
 	if (!pp || !pw)
@@ -9790,7 +9758,7 @@ static int case_points(void)
 {
 	static const uint32_t sized[3] = { 1, 3, 5 }, one[3] = { 1, 1, 1 };
 	GLuint psz = link_program(gl_test_points_vs_src, gl_test_interp_fs_src);
-	GLuint plain = link_program(psizvpm_plain_vs_src, gl_test_interp_fs_src);
+	GLuint plain = link_program(gl_test_psizvpm_plain_vs_src, gl_test_interp_fs_src);
 	GLuint tex = 0, fbo = 0;
 	uint32_t before;
 	bool ok = true;
@@ -10348,26 +10316,7 @@ out:
  * now: the header is on v3d_gl_test's include path only. */
 #include "tex_cube_case.h"
 
-static const char texcube_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform vec3 u_major;\n"
-	"uniform vec3 u_sx;\n"
-	"uniform vec3 u_ty;\n"
-	"varying vec3 v_dir;\n"
-	"void main() {\n"
-	"    v_dir = u_major + a_pos.x * u_sx + a_pos.y * u_ty;\n"
-	"    gl_Position = a_pos;\n"
-	"}\n";
 
-static const char texcube_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform samplerCube u_s;\n"
-	"varying vec3 v_dir;\n"
-	"void main() {\n"
-	"    gl_FragColor = textureCube(u_s, v_dir);\n"
-	"}\n";
 
 static int case_texcube(void)
 {
@@ -10379,7 +10328,7 @@ static int case_texcube(void)
 	tcc_make_faces();
 	if (!tcc_controls(printk))
 		return -1;
-	prog = link_program(texcube_vs_src, texcube_fs_src);
+	prog = link_program(gl_test_texcube_vs_src, gl_test_texcube_fs_src);
 	if (!prog)
 		return -1;
 	glUseProgram(prog);
@@ -10569,18 +10518,6 @@ static int case_texmip(void)
  * v3d_gl_test's include path only. */
 #include "tex_cubemip_case.h"
 
-static const char texcubemip_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform vec3 u_major;\n"
-	"uniform vec3 u_sx;\n"
-	"uniform vec3 u_ty;\n"
-	"uniform float u_h;\n"
-	"varying vec3 v_dir;\n"
-	"void main() {\n"
-	"    v_dir = u_major + u_h * (a_pos.x * u_sx + a_pos.y * u_ty);\n"
-	"    gl_Position = a_pos;\n"
-	"}\n";
 
 static int case_texcubemip(void)
 {
@@ -10591,7 +10528,7 @@ static int case_texcubemip(void)
 
 	if (!tcm_controls(printk))
 		return -1;
-	prog = link_program(texcubemip_vs_src, texcube_fs_src);
+	prog = link_program(gl_test_texcubemip_vs_src, gl_test_texcube_fs_src);
 	if (!prog)
 		return -1;
 	glUseProgram(prog);
@@ -10689,15 +10626,6 @@ static int case_texcubemip(void)
  * on the host by tools/v3d/tex_filter_ref_check.c. */
 #include "tex_cubethin_case.h"
 
-static const char texcubenorm_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform samplerCube u_s;\n"
-	"varying vec3 v_dir;\n"
-	"void main() {\n"
-	"    vec3 a = abs(v_dir);\n"
-	"    gl_FragColor = textureCube(u_s, v_dir / max(max(a.x, a.y), a.z));\n"
-	"}\n";
 
 static int case_texcubethin(void)
 {
@@ -10709,8 +10637,8 @@ static int case_texcubethin(void)
 
 	if (!tct_controls(printk))
 		return -1;
-	prog[0] = link_program(texcubemip_vs_src, texcube_fs_src);
-	prog[1] = link_program(texcubemip_vs_src, texcubenorm_fs_src);
+	prog[0] = link_program(gl_test_texcubemip_vs_src, gl_test_texcube_fs_src);
+	prog[1] = link_program(gl_test_texcubemip_vs_src, gl_test_texcubenorm_fs_src);
 	if (!prog[0] || !prog[1]) {
 		pr_err("texcubethin: link failed (as-is %u, normalized %u)\n", prog[0], prog[1]);
 		for (int a = 0; a < TCT_ARMS; a++)
@@ -10859,7 +10787,7 @@ static int case_texnarrow(void)
 	if (!tnc_controls(printk))
 		return -1;
 	p2d = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
-	pcube = link_program(texcube_vs_src, texcube_fs_src);
+	pcube = link_program(gl_test_texcube_vs_src, gl_test_texcube_fs_src);
 	if (!p2d || !pcube) {
 		pr_err("texnarrow: link failed (2D %u, cube %u)\n", p2d, pcube);
 		glDeleteProgram(p2d);
@@ -11020,16 +10948,7 @@ static void zsa_fresh(bool split)
 	zsa_split(split);
 }
 
-static const char zsa_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"void main() { gl_Position = a_pos; }\n";
 
-static const char zsa_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform vec4 u_color;\n"
-	"void main() { gl_FragColor = u_color; }\n";
 
 #define ZSA_RED   0xff0000ffu
 #define ZSA_GREEN 0xff00ff00u
@@ -11204,7 +11123,7 @@ static bool zsa_recreate(GLuint prog, uint32_t *right, uint32_t *wrong, uint32_t
 
 static int case_zsapart(void)
 {
-	GLuint prog = link_program(zsa_vs_src, zsa_fs_src);
+	GLuint prog = link_program(gl_test_zsa_vs_src, gl_test_zsa_fs_src);
 	bool was, ok = true;
 
 	if (!prog)
@@ -11276,16 +11195,7 @@ extern uint32_t osal_v3d_bin_oom_jobs(void);
 static float bov_vtx[2][BOV_TRIS * 3u * 2u];
 static uint32_t bov_row[BOV_SIZE * 16u];
 
-static const char bov_vs_src[] =
-	"#version 100\n"
-	"attribute vec2 a_pos;\n"
-	"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
 
-static const char bov_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform vec4 u_color;\n"
-	"void main() { gl_FragColor = u_color; }\n";
 
 /* draw i's colour: distinct for every i, opaque, no channel 0 */
 static uint32_t bov_colour(uint32_t i)
@@ -11359,7 +11269,7 @@ static bool bov_frame(GLuint prog, uint32_t n, GLint lp, GLint lc, const GLuint 
 
 static int case_binovf(void)
 {
-	GLuint prog = link_program(bov_vs_src, bov_fs_src), tex, fbo, vbo[2];
+	GLuint prog = link_program(gl_test_bov_vs_src, gl_test_bov_fs_src), tex, fbo, vbo[2];
 	GLint lp, lc;
 	bool ok = false, done = false;
 	uint32_t n = 8, oom0 = osal_v3d_bin_oom_jobs();
@@ -11468,18 +11378,7 @@ static int case_binovf(void)
 static uint32_t tsf_px[TSF * TSF];
 static uint32_t tsf_want_tex[TSF * TSF];
 
-static const char tsf_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"varying vec2 v_uv;\n"
-	"void main() { v_uv = a_pos.xy * 0.5 + 0.5; gl_Position = a_pos; }\n";
 
-static const char tsf_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform sampler2D u_s;\n"
-	"varying vec2 v_uv;\n"
-	"void main() { gl_FragColor = texture2D(u_s, v_uv); }\n";
 
 /* dEQP's fourQuads stand-in: the 64x64 source, one colour per quadrant,
  * GL coordinates (row 0 at the bottom) */
@@ -11732,7 +11631,7 @@ static bool tsf_run(GLuint prog, bool rgba, bool between)
 
 static int case_texsubfbo(void)
 {
-	GLuint prog = link_program(tsf_vs_src, tsf_fs_src);
+	GLuint prog = link_program(gl_test_tsf_vs_src, gl_test_tsf_fs_src);
 	bool ok = true;
 
 	if (!prog)
@@ -11780,55 +11679,15 @@ static int case_texsubfbo(void)
  * Printed: per lod, the points right, and the first wrong one with its
  * expected value. A constant wrong colour means state (level, swizzle, the
  * other texture); a wrong G/B that varies means coordinates. V3D only. */
-static const char vtl_vs_src[] =
-	"#version 100\n"
-	"attribute vec2 a_uv;\n"
-	"uniform sampler2D u_vtex;\n"
-	"uniform float u_lod;\n"
-	"varying vec4 v_color;\n"
-	"void main() {\n"
-	"    v_color = texture2DLod(u_vtex, a_uv, u_lod);\n"
-	/* half a pixel right and up (1/64 in NDC on the 64x64 window): the
-	 * point's centre on pixel 8i + 4's centre, not on its edge */
-	"    gl_Position = vec4(a_uv * 2.0 - 1.0 + vec2(1.0 / 64.0), 0.0, 1.0);\n"
-	"    gl_PointSize = 1.0;\n"
-	"}\n";
 
 /* The constant pass's VS (the lead's instrument (ii), 2026-09-25): the same
  * look-up with no value the draw feeds it, the coordinate texel (8, 8)'s
  * centre and the lod a literal, so a fault here does not come from the
  * attribute or the u_lod uniform. a_uv still places the points. */
-static const char vtl_vs_const_src[] =
-	"#version 100\n"
-	"attribute vec2 a_uv;\n"
-	"uniform sampler2D u_vtex;\n"
-	"varying vec4 v_color;\n"
-	"void main() {\n"
-	"    v_color = texture2DLod(u_vtex, vec2(0.53125, 0.53125), 0.0);\n"
-	"    gl_Position = vec4(a_uv * 2.0 - 1.0 + vec2(1.0 / 64.0), 0.0, 1.0);\n"
-	"    gl_PointSize = 1.0;\n"
-	"}\n";
 
 /* The grid pass's VS (dEQP texture.vertex.2d's shape): the position and the
  * coordinate each from a client array, the look-up at lod 0. */
-static const char vtl_vs_grid_src[] =
-	"#version 100\n"
-	"attribute vec2 a_pos;\n"
-	"attribute vec2 a_uv;\n"
-	"uniform sampler2D u_vtex;\n"
-	"varying vec4 v_color;\n"
-	"void main() {\n"
-	"    v_color = texture2DLod(u_vtex, a_uv, 0.0);\n"
-	"    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
-	"}\n";
 
-static const char vtl_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform sampler2D u_ftex;\n"
-	"uniform float u_pick;\n"
-	"varying vec4 v_color;\n"
-	"void main() { gl_FragColor = mix(v_color, texture2D(u_ftex, vec2(0.5, 0.5)), u_pick); }\n";
 
 /* unit 1's levels, one colour each */
 static const uint32_t vtl_b[3] = { 0xfffac80au, 0xff33550bu, 0xff99220cu };
@@ -11950,8 +11809,8 @@ static int case_vstexlod(void)
 {
 	static uint8_t lv[16 * 16 * 3];
 	static float uv[64 * 2];
-	GLuint prog = link_program(vtl_vs_src, vtl_fs_src), tex[3];
-	GLuint progk = link_program(vtl_vs_const_src, vtl_fs_src);
+	GLuint prog = link_program(gl_test_vtl_vs_src, gl_test_vtl_fs_src), tex[3];
+	GLuint progk = link_program(gl_test_vtl_const_vs_src, gl_test_vtl_fs_src);
 	GLint la, l_lod, l_pick, lak;
 	bool ok = true;
 
@@ -12154,7 +12013,7 @@ static int case_vstexlod(void)
 	/* the last pass, with every pass run: dEQP's own draw (the grid), the
 	 * control texture on unit 0 */
 	if (GL_TEST_VTL_PASSES == 0) {
-		GLuint progg = link_program(vtl_vs_grid_src, vtl_fs_src);
+		GLuint progg = link_program(gl_test_vtl_grid_vs_src, gl_test_vtl_fs_src);
 
 		if (!progg) {
 			ok = gl_test_check(false, 0, 1);
@@ -12208,40 +12067,10 @@ static int case_vstexlod(void)
  * must survive outside the viewport. Printed per arm: every channel's
  * minimum and maximum against the expected value, and the first differing
  * pixel. Which channel, and which program, is off names the layer. V3D only. */
-static const char f3_vs_src[] =
-	"attribute vec4 dEQP_Position;\n"
-	"\n"
-	"void main()\n"
-	"{\n"
-	"\tgl_Position = dEQP_Position;\n"
-	"}\n";
 
-static const char f3_fs_src[] =
-	"precision mediump float;\n"
-	"const vec4 c = (((vec4(1.625, -1.0, -1.5, 0.125)) * vec4(-1, 1.75, -1.0, true).wxyz));\n"
-	"const vec4 b = vec4(int(4) * int(1.0), float(-7.25) * 1.0 - -6.0, (float(3) * float(1.5)), "
-	"(vec2(16, 2.75).y)) + vec4(2.75, -3, -3, -1).wyxz.grba.wzxy;\n"
-	"const vec4 a = vec4(vec4(true, -11, false, true).p, float(-11.5) - -7.0, float(-7.0) + float(8), "
-	"float(-3.25) * float(0.5)).ragb * (vec4(-1, -1, 1.0, -1).rgba.qtps);\n"
-	"\n"
-	"void main()\n"
-	"{\n"
-	"\tgl_FragColor = (c.grba) * b - a;\n"
-	"}\n";
 
-static const char f3_lit_fs_src[] =
-	"precision mediump float;\n"
-	"void main() { gl_FragColor = vec4(1.0, 0.8125, 0.5625, 0.78125); }\n";
 
-static const char f3_var_vs_src[] =
-	"attribute vec4 dEQP_Position;\n"
-	"varying vec4 v_c;\n"
-	"void main() { v_c = vec4(1.0, 0.8125, 0.5625, 0.78125); gl_Position = dEQP_Position; }\n";
 
-static const char f3_var_fs_src[] =
-	"precision mediump float;\n"
-	"varying vec4 v_c;\n"
-	"void main() { gl_FragColor = v_c; }\n";
 
 #define F3_WANT   0xc78fcfffu /* R 255, G 207, B 143, A 199 */
 #define F3_MARKER 0xff402010u /* the FBO's clear: R 0x10, G 0x20, B 0x40 */
@@ -12305,9 +12134,9 @@ static int case_allfeat3(void)
 	static const struct {
 		const char *name, *vs, *fs;
 	} progs[] = {
-		{ "rsg's pair", f3_vs_src, f3_fs_src },
-		{ "the literal", f3_vs_src, f3_lit_fs_src },
-		{ "through a varying", f3_var_vs_src, f3_var_fs_src },
+		{ "rsg's pair", gl_test_f3_vs_src, gl_test_f3_fs_src },
+		{ "the literal", gl_test_f3_vs_src, gl_test_f3_lit_fs_src },
+		{ "through a varying", gl_test_f3_var_vs_src, gl_test_f3_var_fs_src },
 	};
 	GLuint tex, fbo;
 	bool ok = true;
@@ -12407,48 +12236,9 @@ static int case_allfeat3(void)
  * that size (78, 15). The want is the bilinear sample of a C replica of the
  * texture (UNORM8 round to nearest even, as tcu stores it), within 3 per
  * channel; alpha judged only on a target with alpha bits. V3D only. */
-static const char f1_vs_src[] =
-	"attribute vec4 dEQP_Position;\n"
-	"\n"
-	"void main()\n"
-	"{\n"
-	"\tgl_Position = dEQP_Position;\n"
-	"}\n";
 
-static const char f1_fs_src[] =
-	"precision mediump float;\n"
-	"const int a = (ivec2(true, 4).t - 0 * 1) * (ivec4(0.75, -4.5, 1, true).z * int(1));\n"
-	"int b = ((ivec4(-1.25, true, true, true))).sp.s;\n"
-	"const int c = 1;\n"
-	"const int d = 0;\n"
-	"int e = int(-26.5 + float(7.5) - log2(16.0) - float(float(d) - 4.0));\n"
-	"uniform mediump int f;\n"
-	"int g = (10) - (int(log2(float(32))));\n"
-	"const float h = ((vec4(-3.5, false, 6, -10.0)) + vec4(bool(false), int(-1), int(true), int(4.25))).g;\n"
-	"const int i = (int((vec2(false, 7)).g));\n"
-	"int j = int(h - float(6.0)) * (ivec4(true, a, c, d)).b - (ivec3(-4, h, true) * ivec3(true, c, true)).r;\n"
-	"const bool k = atan(float(int(-1.0))) < vec2(int(i), int(-4)).t * h;\n"
-	"uniform sampler2D l;\n"
-	"int m = ((ivec2(c, i))).y - (-3 + 6 * c);\n"
-	"\n"
-	"void main()\n"
-	"{\n"
-	"\tgl_FragColor = (texture2D(l, inversesqrt((vec2(k, m)))));\n"
-	"\tif (k)\n"
-	"\t\t(vec3(j, bool(int(i) + int(h) - g), (float(f)) * float(float(1.0)) - float(e - -9)));\n"
-	"\telse \n"
-	"\t\td * int(int(0 + c)) < b * (-3 + a);\n"
-	"}\n";
 
-static const char f1_edge_fs_src[] =
-	"precision mediump float;\n"
-	"uniform sampler2D l;\n"
-	"void main() { gl_FragColor = texture2D(l, vec2(1.0, 0.5)); }\n";
 
-static const char f1_mid_fs_src[] =
-	"precision mediump float;\n"
-	"uniform sampler2D l;\n"
-	"void main() { gl_FragColor = texture2D(l, vec2(0.5, 0.5)); }\n";
 
 #define F1_TEX 64u
 static uint8_t f1_texels[F1_TEX * F1_TEX * 4];
@@ -12544,9 +12334,9 @@ static int case_allfeat1(void)
 		const char *name, *fs;
 		float s, t;
 	} progs[] = {
-		{ "rsg's pair", f1_fs_src, 1.0f, 0.5f },
-		{ "the literal (1.0, 0.5)", f1_edge_fs_src, 1.0f, 0.5f },
-		{ "the centre (0.5, 0.5)", f1_mid_fs_src, 0.5f, 0.5f },
+		{ "rsg's pair", gl_test_f1_fs_src, 1.0f, 0.5f },
+		{ "the literal (1.0, 0.5)", gl_test_f1_edge_fs_src, 1.0f, 0.5f },
+		{ "the centre (0.5, 0.5)", gl_test_f1_mid_fs_src, 0.5f, 0.5f },
 	};
 	GLuint tex, rt, fbo;
 	bool ok = true;
@@ -12580,7 +12370,7 @@ static int case_allfeat1(void)
 	glDisable(GL_SCISSOR_TEST);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	for (size_t p = 0; p < sizeof(progs) / sizeof(progs[0]); p++) {
-		GLuint prog = link_program(f1_vs_src, progs[p].fs);
+		GLuint prog = link_program(gl_test_f1_vs_src, progs[p].fs);
 		uint32_t want = f1_sample(progs[p].s, progs[p].t);
 		GLint lf;
 		char what[80];
@@ -14674,16 +14464,7 @@ static int case_fragcoord(void)
 #define DSK_SLOTS 32 /* src/ds_retention.rs DS_SLOTS */
 #define DSK_MAX (DSK_SLOTS + 1)
 
-static const char dsk_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"void main() { gl_Position = a_pos; }\n";
 
-static const char dsk_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform vec4 u_color;\n"
-	"void main() { gl_FragColor = u_color; }\n";
 
 #define DSK_GREEN 0xff00ff00u
 #define DSK_BLUE  0xffff0000u
@@ -14714,7 +14495,7 @@ static int case_dskeep(void)
 	bool ok = true;
 
 	free_all_objects();
-	prog = link_program(dsk_vs_src, dsk_fs_src);
+	prog = link_program(gl_test_dsk_vs_src, gl_test_dsk_fs_src);
 	if (!prog)
 		return -1;
 	glGenFramebuffers(DSK_MAX, fbo);
@@ -14854,7 +14635,7 @@ static int case_stcycle(void)
 	bool ok = true;
 
 	free_all_objects();
-	prog = link_program(dsk_vs_src, dsk_fs_src);
+	prog = link_program(gl_test_dsk_vs_src, gl_test_dsk_fs_src);
 	if (!prog)
 		return -1;
 	glGenFramebuffers(STC_LAYERS, fbo);
@@ -14994,7 +14775,7 @@ static int case_stlayers(void)
 	free_all_objects();
 	while (glGetError() != GL_NO_ERROR)
 		;
-	prog = link_program(dsk_vs_src, dsk_fs_src);
+	prog = link_program(gl_test_dsk_vs_src, gl_test_dsk_fs_src);
 	if (!prog)
 		return -1;
 	glGenFramebuffers(STL_LAYERS, fbo);
@@ -15326,44 +15107,6 @@ static int case_splitzs(void)
  * With x = 0.75, q = 0.125, a = 0.5, b = 0.25 every channel is exact in
  * 8 bits; a dropped negation reads 1.0 where 0.5 is right.
  * ------------------------------------------------------------------------- */
-static const char fma_vs_plain_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"void main() { gl_Position = a_pos; }\n";
-static const char fma_fs_fused_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
-static const char fma_fs_ctrl_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  float p = u_a * u_b;\n"
-	"  gl_FragColor = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
-	"}\n";
-static const char fma_vs_fused_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_Position = a_pos; v = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
-static const char fma_vs_ctrl_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  float p = u_a * u_b;\n"
-	"  v = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
-	"}\n";
-static const char fma_fs_varying_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_FragColor = v; }\n";
 
 /* Draw `prog` over the rectangle (x0, y0)-(x1, y1) in NDC, its four
  * uniforms u_x, u_q, u_a, u_b set to vals[0..3] (a uniform the program does
@@ -15416,10 +15159,10 @@ static int case_fusemad(void)
 	GLuint fs_fused, vs_fused, fs_ctrl, vs_ctrl;
 	bool ok = true;
 
-	fs_fused = link_program(fma_vs_plain_src, fma_fs_fused_src);
-	vs_fused = link_program(fma_vs_fused_src, fma_fs_varying_src);
-	fs_ctrl = link_program(fma_vs_plain_src, fma_fs_ctrl_src);
-	vs_ctrl = link_program(fma_vs_ctrl_src, fma_fs_varying_src);
+	fs_fused = link_program(gl_test_fma_plain_vs_src, gl_test_fma_fused_fs_src);
+	vs_fused = link_program(gl_test_fma_fused_vs_src, gl_test_fma_varying_fs_src);
+	fs_ctrl = link_program(gl_test_fma_plain_vs_src, gl_test_fma_ctrl_fs_src);
+	vs_ctrl = link_program(gl_test_fma_ctrl_vs_src, gl_test_fma_varying_fs_src);
 	if (!fs_fused || !vs_fused || !fs_ctrl || !vs_ctrl)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -15467,46 +15210,6 @@ static int case_fusemad(void)
  * fold lost would not show in the clamp itself (-2.25 would read 0 where
  * 0.25 is right, 1.5 would read 1.0 where 0.75 is).
  * ------------------------------------------------------------------------- */
-static const char fsat_fs_folded_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
-	"void main() {\n"
-	"  gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
-	"                        min(1.0, max(0.0, u_a - 1.1))));\n"
-	"}\n";
-static const char fsat_fs_ctrl_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  float t = max(u_q, 0.0);\n"
-	"  gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
-	"                      min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
-	"}\n";
-static const char fsat_vs_folded_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  v = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
-	"             min(1.0, max(0.0, u_a - 1.1))));\n"
-	"}\n";
-static const char fsat_vs_ctrl_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n"
-	"  float t = max(u_q, 0.0);\n"
-	"  v = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
-	"           min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
-	"}\n";
 
 static int case_fsat(void)
 {
@@ -15517,10 +15220,10 @@ static int case_fsat(void)
 	GLuint fs_folded, vs_folded, fs_ctrl, vs_ctrl;
 	bool ok = true;
 
-	fs_folded = link_program(fma_vs_plain_src, fsat_fs_folded_src);
-	vs_folded = link_program(fsat_vs_folded_src, fma_fs_varying_src);
-	fs_ctrl = link_program(fma_vs_plain_src, fsat_fs_ctrl_src);
-	vs_ctrl = link_program(fsat_vs_ctrl_src, fma_fs_varying_src);
+	fs_folded = link_program(gl_test_fma_plain_vs_src, gl_test_fsat_folded_fs_src);
+	vs_folded = link_program(gl_test_fsat_folded_vs_src, gl_test_fma_varying_fs_src);
+	fs_ctrl = link_program(gl_test_fma_plain_vs_src, gl_test_fsat_ctrl_fs_src);
+	vs_ctrl = link_program(gl_test_fsat_ctrl_vs_src, gl_test_fma_varying_fs_src);
 	if (!fs_folded || !vs_folded || !fs_ctrl || !vs_ctrl)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -15566,16 +15269,6 @@ static int case_fsat(void)
  * not a performance target). The colour is read back so the time is the
  * time of draws that drew: (0.25, 0.75, 0, 1) from the two vec2 uniforms.
  * ------------------------------------------------------------------------- */
-static const char unipad_vs_src[] =
-	"#version 100\n"
-	"attribute vec2 a_pos;\n"
-	"uniform vec2 u_scale;\n"
-	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
-static const char unipad_fs_src[] =
-	"#version 100\n"
-	"precision mediump float;\n"
-	"uniform vec2 u_rg;\n"
-	"void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n";
 
 #define UNIPAD_DRAWS 500
 #define UNIPAD_BOUND_MS 250u
@@ -15583,7 +15276,7 @@ static const char unipad_fs_src[] =
 static int case_unipad(void)
 {
 	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
-	GLuint prog = link_program(unipad_vs_src, unipad_fs_src);
+	GLuint prog = link_program(gl_test_unipad_vs_src, gl_test_unipad_fs_src);
 	GLint pos;
 	uint32_t t0, ms;
 	bool ok = true;
@@ -15640,36 +15333,13 @@ static int case_unipad(void)
  * table's 48); if not, the gap is elsewhere. Values: u_a = u_b = 0.5, u_c =
  * 0.25, so every chain tends to 0.5 and the colour reads about 0x80.
  * ------------------------------------------------------------------------- */
-#define DEP_STEP(v) "  " v " = " v " * u_b + u_c;\n"
-#define DEP_X4(s) s s s s
-#define DEP1_12 DEP_X4(DEP_STEP("x")) DEP_X4(DEP_STEP("x")) DEP_X4(DEP_STEP("x"))
-#define DEP2_STEP DEP_STEP("x") DEP_STEP("y")
-#define DEP2_12 DEP_X4(DEP2_STEP) DEP_X4(DEP2_STEP) DEP_X4(DEP2_STEP)
-#define DEP4_STEP DEP_STEP("x") DEP_STEP("y") DEP_STEP("z") DEP_STEP("w")
-#define DEP_HEAD                                     \
-	"#version 100\n"                             \
-	"precision highp float;\n"                   \
-	"uniform float u_a, u_b, u_c;\n"             \
-	"void main() {\n"
-static const char dep1_fs_src[] = DEP_HEAD "  float x = u_a;\n" DEP1_12 DEP1_12 DEP1_12 DEP1_12
-	"  gl_FragColor = vec4(x, x, x, 1.0);\n}\n";
-static const char dep2_fs_src[] = DEP_HEAD "  float x = u_a;\n  float y = u_a + u_c;\n" DEP2_12 DEP2_12
-	"  float r = (x + y) * 0.5;\n  gl_FragColor = vec4(r, r, r, 1.0);\n}\n";
-static const char dep4_fs_src[] = DEP_HEAD
-	"  float x = u_a;\n  float y = u_a + u_c;\n  float z = u_a - u_c;\n  float w = u_a * u_b;\n"
-	DEP_X4(DEP4_STEP) DEP_X4(DEP4_STEP) DEP_X4(DEP4_STEP)
-	"  float r = (x + y + z + w) * 0.25;\n  gl_FragColor = vec4(r, r, r, 1.0);\n}\n";
-static const char dep_vs_src[] =
-	"#version 100\n"
-	"attribute vec2 a_pos;\n"
-	"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
 
 static int case_depchain(void)
 {
 	enum { W = 1024, H = 600, OVER = 16, REPS = 5 };
 	static float quads[OVER * 12];
 	static const float quad[12] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
-	const char *const fs[3] = { dep1_fs_src, dep2_fs_src, dep4_fs_src };
+	const char *const fs[3] = { gl_test_dep1_fs_src, gl_test_dep2_fs_src, gl_test_dep4_fs_src };
 	const char *const name[3] = { "one chain (distance 1)", "two chains (distance 2)", "four chains (distance 4)" };
 	GLuint tex, fbo, vbo;
 	bool ok = true;
@@ -15691,7 +15361,7 @@ static int case_depchain(void)
 	glDisable(GL_DEPTH_TEST);
 	vbo = upload_vbo(quads, sizeof(quads));
 	for (int a = 0; a < 3; a++) {
-		GLuint prog = link_program(dep_vs_src, fs[a]);
+		GLuint prog = link_program(gl_test_dep_vs_src, fs[a]);
 		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
 		uint8_t px[4];
 		GLint pos;
@@ -15755,20 +15425,6 @@ static int case_depchain(void)
  * that adds the case. Per arm: 16 full-screen quads into 1024x600, five
  * timed frames, 3D busy logged as 184 logs it.
  * ------------------------------------------------------------------------- */
-#define KC_X2(s) s s
-#define KC_X24(s) DEP_X4(DEP_X4(s)) DEP_X4(KC_X2(s))
-#define KC_HEAD                                       \
-	"#version 100\n"                              \
-	"precision highp float;\n"                    \
-	"uniform float u_a, u_b, u_c, u_d;\n"         \
-	"void main() {\n"                             \
-	"  float x = u_a;\n"
-#define KC_TAIL "  gl_FragColor = vec4(x, x, x, 1.0);\n}\n"
-static const char kc_fmul_fs_src[] = KC_HEAD KC_X24("  x = x * u_b;\n  x = x * u_c;\n") KC_TAIL;
-static const char kc_maxmul_fs_src[] = KC_HEAD KC_X24("  x = max(x * u_b, u_c);\n") KC_TAIL;
-static const char kc_mulneg_fs_src[] = KC_HEAD KC_X24("  x = -x * u_b;\n  x = -x * u_b;\n") KC_TAIL;
-static const char kc_maxneg_fs_src[] = KC_HEAD KC_X24("  x = max(-x, u_c);\n  x = max(-x, u_c);\n") KC_TAIL;
-static const char kc_fadd_fs_src[] = KC_HEAD KC_X24("  x = x + u_c;\n  x = x - u_d;\n") KC_TAIL;
 
 static int case_kindcost(void)
 {
@@ -15780,13 +15436,13 @@ static int case_kindcost(void)
 		float u[4]; /* u_a, u_b, u_c, u_d */
 		bool blend;
 	} arm[ARMS] = {
-		{ "fmul", kc_fmul_fs_src, { 0.5f, 2.0f, 0.5f, 0.0f }, false },
-		{ "maxmul (fmul + tst/movc)", kc_maxmul_fs_src, { 0.5f, 0.5f, 0.5f, 0.0f }, false },
-		{ "mulneg (fmul + mbyp)", kc_mulneg_fs_src, { 0.5f, 1.0f, 0.0f, 0.0f }, false },
-		{ "maxneg (tst/movc + mbyp)", kc_maxneg_fs_src, { 0.5f, 0.0f, 0.5f, 0.0f }, false },
-		{ "fadd", kc_fadd_fs_src, { 0.5f, 0.0f, 0.25f, 0.25f }, false },
-		{ "fmad, femtovg's blend", dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, true },
-		{ "fmad, blend off", dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, false },
+		{ "fmul", gl_test_kc_fmul_fs_src, { 0.5f, 2.0f, 0.5f, 0.0f }, false },
+		{ "maxmul (fmul + tst/movc)", gl_test_kc_maxmul_fs_src, { 0.5f, 0.5f, 0.5f, 0.0f }, false },
+		{ "mulneg (fmul + mbyp)", gl_test_kc_mulneg_fs_src, { 0.5f, 1.0f, 0.0f, 0.0f }, false },
+		{ "maxneg (tst/movc + mbyp)", gl_test_kc_maxneg_fs_src, { 0.5f, 0.0f, 0.5f, 0.0f }, false },
+		{ "fadd", gl_test_kc_fadd_fs_src, { 0.5f, 0.0f, 0.25f, 0.25f }, false },
+		{ "fmad, femtovg's blend", gl_test_dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, true },
+		{ "fmad, blend off", gl_test_dep1_fs_src, { 0.5f, 0.5f, 0.25f, 0.0f }, false },
 	};
 	static const char *const uname[4] = { "u_a", "u_b", "u_c", "u_d" };
 	GLuint tex, fbo, vbo;
@@ -15809,7 +15465,7 @@ static int case_kindcost(void)
 	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	vbo = upload_vbo(quads, sizeof(quads));
 	for (int a = 0; a < ARMS; a++) {
-		GLuint prog = link_program(dep_vs_src, arm[a].fs);
+		GLuint prog = link_program(gl_test_dep_vs_src, arm[a].fs);
 		uint32_t pc0[7], pc1[7], t0, best = 0xffffffffu;
 		uint8_t px[4];
 		GLint pos;
@@ -16045,33 +15701,6 @@ static int case_predarm(void)
  * u_q = 0.125, u_a = 0.25: then (0.5, 0.625, 0.25, 1), else (0.125, 0.125,
  * 0.75, 1), exact in 8 bits.
  * ------------------------------------------------------------------------- */
-#define PREDIF_ARMS(cond, out)                                                     \
-	"  if (" cond ") {\n"                                                      \
-	"    " out " = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n"                    \
-	"  } else {\n"                                                             \
-	"    " out " = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n"                          \
-	"  }\n"
-static const char predif_fs_uni_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  vec4 c;\n" PREDIF_ARMS("u_x > 0.0", "c") "  gl_FragColor = c;\n"
-	"}\n";
-static const char predif_vs_uni_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() {\n"
-	"  gl_Position = a_pos;\n" PREDIF_ARMS("u_x > 0.0", "v") "}\n";
-static const char predif_fs_coord_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  vec4 c;\n" PREDIF_ARMS("gl_FragCoord.x < 32.0", "c") "  gl_FragColor = c;\n"
-	"}\n";
 
 static int case_predif(void)
 {
@@ -16082,9 +15711,9 @@ static int case_predif(void)
 	GLuint fs_uni, vs_uni, fs_coord;
 	bool ok = true;
 
-	fs_uni = link_program(fma_vs_plain_src, predif_fs_uni_src);
-	vs_uni = link_program(predif_vs_uni_src, fma_fs_varying_src);
-	fs_coord = link_program(fma_vs_plain_src, predif_fs_coord_src);
+	fs_uni = link_program(gl_test_fma_plain_vs_src, gl_test_predif_uni_fs_src);
+	vs_uni = link_program(gl_test_predif_uni_vs_src, gl_test_fma_varying_fs_src);
+	fs_coord = link_program(gl_test_fma_plain_vs_src, gl_test_predif_coord_fs_src);
 	if (!fs_uni || !vs_uni || !fs_coord)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16130,25 +15759,6 @@ static int case_predif(void)
  * u_q = 0.125, u_a = 0.25, u_b = 0.25: top (0.4375, 0.125, 0.3125), middle
  * (0.3125, 0.1875, 0.1875), bottom (0.25, 0.125, 0.25).
  * ------------------------------------------------------------------------- */
-#define MULONE_MAT "mat3(vec3(u_q, u_a, 0.0), vec3(u_a, u_a, u_q), vec3(u_b, -u_q, u_x))"
-static const char mulone_fs_one_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5, 0.5, 1.0), 1.0); }\n";
-static const char mulone_fs_half_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(" MULONE_MAT " * vec3(0.5), 1.0); }\n";
-static const char mulone_fs_mods_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() {\n"
-	"  gl_FragColor = vec4(abs(u_x - 2.0 * u_a) * 1.0, 1.0 * -(u_q - u_a),\n"
-	"                      (u_b * 1.0) * u_q * 8.0, 1.0);\n"
-	"}\n";
 
 static int case_mulone(void)
 {
@@ -16159,9 +15769,9 @@ static int case_mulone(void)
 	GLuint one, half, mods;
 	bool ok = true;
 
-	one = link_program(fma_vs_plain_src, mulone_fs_one_src);
-	half = link_program(fma_vs_plain_src, mulone_fs_half_src);
-	mods = link_program(fma_vs_plain_src, mulone_fs_mods_src);
+	one = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_one_fs_src);
+	half = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_half_fs_src);
+	mods = link_program(gl_test_fma_plain_vs_src, gl_test_mulone_mods_fs_src);
 	if (!one || !half || !mods)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16206,11 +15816,6 @@ static int case_mulone(void)
  * (src/gl/state.rs glBlendEquationSeparate), so column 3 is always drawn
  * and a refusal is a GL error here.
  * ------------------------------------------------------------------------- */
-static const char blendonce_fs_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"void main() { gl_FragColor = vec4(u_x, u_q, u_a, u_b); }\n";
 
 static int case_blendonce(void)
 {
@@ -16218,7 +15823,7 @@ static int case_blendonce(void)
 	GLuint prog;
 	bool ok = true;
 
-	prog = link_program(fma_vs_plain_src, blendonce_fs_src);
+	prog = link_program(gl_test_fma_plain_vs_src, gl_test_blendonce_fs_src);
 	if (!prog)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16267,17 +15872,6 @@ static int case_blendonce(void)
  * exact: u_x = 0.75, u_q = 0.5 gives (0.75 * 2 - 1, 0.5 * 0.5 + 0.25,
  * 1 - 0.75 * 0.5, 1) = (0.5, 0.5, 0.625, 1).
  * ------------------------------------------------------------------------- */
-static const char varyfma_vs_src[] =
-	"#version 100\n"
-	"attribute vec4 a_pos;\n"
-	"uniform float u_x, u_q, u_a, u_b;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
-static const char varyfma_fs_src[] =
-	"#version 100\n"
-	"precision highp float;\n"
-	"varying vec4 v;\n"
-	"void main() { gl_FragColor = vec4(v.x * 2.0 - 1.0, v.y * 0.5 + 0.25, 1.0 - v.x * v.y, 1.0); }\n";
 
 static int case_varyfma(void)
 {
@@ -16285,7 +15879,7 @@ static int case_varyfma(void)
 	GLuint prog;
 	bool ok = true;
 
-	prog = link_program(varyfma_vs_src, varyfma_fs_src);
+	prog = link_program(gl_test_varyfma_vs_src, gl_test_varyfma_fs_src);
 	if (!prog)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16321,19 +15915,6 @@ static int case_varyfma(void)
  * on u_x drawn with u_x = 1 (left, then) and -1 (right, else), and the
  * `if` on gl_FragCoord.x < 32 (instances of one draw take both arms).
  * ------------------------------------------------------------------------- */
-#define PREDLIVE_FS(cond)                                                          \
-	"#version 100\n"                                                          \
-	"precision highp float;\n"                                                \
-	"uniform float u_x, u_q, u_a, u_b;\n"                                     \
-	"void main() {\n"                                                         \
-	"  float a = u_q * 3.0;\n"                                                \
-	"  float b = u_a + 0.125;\n"                                              \
-	"  float r, s;\n"                                                         \
-	"  if (" cond ") { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\n" \
-	"  gl_FragColor = vec4(r, s, a, b);\n"                                    \
-	"}\n"
-static const char predlive_fs_uni_src[] = PREDLIVE_FS("u_x > 0.0");
-static const char predlive_fs_coord_src[] = PREDLIVE_FS("gl_FragCoord.x < 32.0");
 
 static int case_predlive(void)
 {
@@ -16344,8 +15925,8 @@ static int case_predlive(void)
 	GLuint uni, coord;
 	bool ok = true;
 
-	uni = link_program(fma_vs_plain_src, predlive_fs_uni_src);
-	coord = link_program(fma_vs_plain_src, predlive_fs_coord_src);
+	uni = link_program(gl_test_fma_plain_vs_src, gl_test_predlive_uni_fs_src);
+	coord = link_program(gl_test_fma_plain_vs_src, gl_test_predlive_coord_fs_src);
 	if (!uni || !coord)
 		return -1;
 	glViewport(0, 0, TW, TH);
@@ -16930,7 +16511,7 @@ static int case_dstex(void)
 	while (glGetError() != GL_NO_ERROR)
 		;
 	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
-	dprog = link_program(dsk_vs_src, dsk_fs_src);
+	dprog = link_program(gl_test_dsk_vs_src, gl_test_dsk_fs_src);
 	if (!tprog || !dprog)
 		return -1;
 	glViewport(0, 0, TW, TH);

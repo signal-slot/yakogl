@@ -7462,3 +7462,896 @@ static const char gl_test_es300_cubelodf_fs_src[] =
 	"    fragColor = textureLod(u_s, v_dir, u_lod);\n"
 	"}\n";
 
+static const char gl_test_blendonce_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(u_x, u_q, u_a, u_b); }\n";
+
+static const char gl_test_bov_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform vec4 u_color;\n"
+	"void main() { gl_FragColor = u_color; }\n";
+
+static const char gl_test_bov_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+
+static const char gl_test_dep1_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_dep2_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  float y = u_a + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  float r = (x + y) * 0.5;\n"
+	"  gl_FragColor = vec4(r, r, r, 1.0);\n"
+	"}\n";
+
+static const char gl_test_dep4_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  float y = u_a + u_c;\n"
+	"  float z = u_a - u_c;\n"
+	"  float w = u_a * u_b;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  x = x * u_b + u_c;\n"
+	"  y = y * u_b + u_c;\n"
+	"  z = z * u_b + u_c;\n"
+	"  w = w * u_b + u_c;\n"
+	"  float r = (x + y + z + w) * 0.25;\n"
+	"  gl_FragColor = vec4(r, r, r, 1.0);\n"
+	"}\n";
+
+static const char gl_test_dep_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+
+static const char gl_test_dsk_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform vec4 u_color;\n"
+	"void main() { gl_FragColor = u_color; }\n";
+
+static const char gl_test_dsk_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"void main() { gl_Position = a_pos; }\n";
+
+static const char gl_test_f1_edge_fs_src[] =
+	"precision mediump float;\n"
+	"uniform sampler2D l;\n"
+	"void main() { gl_FragColor = texture2D(l, vec2(1.0, 0.5)); }\n";
+
+static const char gl_test_f1_fs_src[] =
+	"precision mediump float;\n"
+	"const int a = (ivec2(true, 4).t - 0 * 1) * (ivec4(0.75, -4.5, 1, true).z * int(1));\n"
+	"int b = ((ivec4(-1.25, true, true, true))).sp.s;\n"
+	"const int c = 1;\n"
+	"const int d = 0;\n"
+	"int e = int(-26.5 + float(7.5) - log2(16.0) - float(float(d) - 4.0));\n"
+	"uniform mediump int f;\n"
+	"int g = (10) - (int(log2(float(32))));\n"
+	"const float h = ((vec4(-3.5, false, 6, -10.0)) + vec4(bool(false), int(-1), int(true), int(4.25))).g;\n"
+	"const int i = (int((vec2(false, 7)).g));\n"
+	"int j = int(h - float(6.0)) * (ivec4(true, a, c, d)).b - (ivec3(-4, h, true) * ivec3(true, c, true)).r;\n"
+	"const bool k = atan(float(int(-1.0))) < vec2(int(i), int(-4)).t * h;\n"
+	"uniform sampler2D l;\n"
+	"int m = ((ivec2(c, i))).y - (-3 + 6 * c);\n"
+	"\n"
+	"void main()\n"
+	"{\n"
+	"	gl_FragColor = (texture2D(l, inversesqrt((vec2(k, m)))));\n"
+	"	if (k)\n"
+	"		(vec3(j, bool(int(i) + int(h) - g), (float(f)) * float(float(1.0)) - float(e - -9)));\n"
+	"	else \n"
+	"		d * int(int(0 + c)) < b * (-3 + a);\n"
+	"}\n";
+
+static const char gl_test_f1_mid_fs_src[] =
+	"precision mediump float;\n"
+	"uniform sampler2D l;\n"
+	"void main() { gl_FragColor = texture2D(l, vec2(0.5, 0.5)); }\n";
+
+static const char gl_test_f1_vs_src[] =
+	"attribute vec4 dEQP_Position;\n"
+	"\n"
+	"void main()\n"
+	"{\n"
+	"	gl_Position = dEQP_Position;\n"
+	"}\n";
+
+static const char gl_test_f3_fs_src[] =
+	"precision mediump float;\n"
+	"const vec4 c = (((vec4(1.625, -1.0, -1.5, 0.125)) * vec4(-1, 1.75, -1.0, true).wxyz));\n"
+	"const vec4 b = vec4(int(4) * int(1.0), float(-7.25) * 1.0 - -6.0, (float(3) * float(1.5)), (vec2(16, 2.75).y)) + vec4(2.75, -3, -3, -1).wyxz.grba.wzxy;\n"
+	"const vec4 a = vec4(vec4(true, -11, false, true).p, float(-11.5) - -7.0, float(-7.0) + float(8), float(-3.25) * float(0.5)).ragb * (vec4(-1, -1, 1.0, -1).rgba.qtps);\n"
+	"\n"
+	"void main()\n"
+	"{\n"
+	"	gl_FragColor = (c.grba) * b - a;\n"
+	"}\n";
+
+static const char gl_test_f3_lit_fs_src[] =
+	"precision mediump float;\n"
+	"void main() { gl_FragColor = vec4(1.0, 0.8125, 0.5625, 0.78125); }\n";
+
+static const char gl_test_f3_var_fs_src[] =
+	"precision mediump float;\n"
+	"varying vec4 v_c;\n"
+	"void main() { gl_FragColor = v_c; }\n";
+
+static const char gl_test_f3_var_vs_src[] =
+	"attribute vec4 dEQP_Position;\n"
+	"varying vec4 v_c;\n"
+	"void main() { v_c = vec4(1.0, 0.8125, 0.5625, 0.78125); gl_Position = dEQP_Position; }\n";
+
+static const char gl_test_f3_vs_src[] =
+	"attribute vec4 dEQP_Position;\n"
+	"\n"
+	"void main()\n"
+	"{\n"
+	"	gl_Position = dEQP_Position;\n"
+	"}\n";
+
+static const char gl_test_fma_ctrl_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float p = u_a * u_b;\n"
+	"  gl_FragColor = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
+	"}\n";
+
+static const char gl_test_fma_fused_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
+
+static const char gl_test_fma_varying_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_FragColor = v; }\n";
+
+static const char gl_test_fma_ctrl_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  float p = u_a * u_b;\n"
+	"  v = vec4(u_x - p, p * 2.0, u_x - abs(u_a * u_b), floor(u_a * u_b * 4.0) + 0.25);\n"
+	"}\n";
+
+static const char gl_test_fma_fused_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x - 2.0 * u_q, u_x - u_a * u_b, 2.0 * u_q + u_b, 1.0); }\n";
+
+static const char gl_test_fma_plain_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"void main() { gl_Position = a_pos; }\n";
+
+static const char gl_test_fsat_ctrl_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float t = max(u_q, 0.0);\n"
+	"  gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
+	"                      min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
+	"}\n";
+
+static const char gl_test_fsat_folded_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
+	"void main() {\n"
+	"  gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
+	"                        min(1.0, max(0.0, u_a - 1.1))));\n"
+	"}\n";
+
+static const char gl_test_fsat_ctrl_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  float t = max(u_q, 0.0);\n"
+	"  v = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n"
+	"           min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n"
+	"}\n";
+
+static const char gl_test_fsat_folded_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  v = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n"
+	"             min(1.0, max(0.0, u_a - 1.1))));\n"
+	"}\n";
+
+static const char gl_test_fshp_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"void main() {\n"
+	"    gl_Position = a_pos;\n"
+	"}\n";
+
+static const char gl_test_kc_fadd_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c, u_d;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  x = x + u_c;\n"
+	"  x = x - u_d;\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_kc_fmul_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c, u_d;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  x = x * u_b;\n"
+	"  x = x * u_c;\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_kc_maxmul_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c, u_d;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  x = max(x * u_b, u_c);\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_kc_maxneg_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c, u_d;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  x = max(-x, u_c);\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_kc_mulneg_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_a, u_b, u_c, u_d;\n"
+	"void main() {\n"
+	"  float x = u_a;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  x = -x * u_b;\n"
+	"  gl_FragColor = vec4(x, x, x, 1.0);\n"
+	"}\n";
+
+static const char gl_test_mulone_half_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(mat3(vec3(u_q, u_a, 0.0), vec3(u_a, u_a, u_q), vec3(u_b, -u_q, u_x)) * vec3(0.5), 1.0); }\n";
+
+static const char gl_test_mulone_mods_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  gl_FragColor = vec4(abs(u_x - 2.0 * u_a) * 1.0, 1.0 * -(u_q - u_a),\n"
+	"                      (u_b * 1.0) * u_q * 8.0, 1.0);\n"
+	"}\n";
+
+static const char gl_test_mulone_one_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() { gl_FragColor = vec4(mat3(vec3(u_q, u_a, 0.0), vec3(u_a, u_a, u_q), vec3(u_b, -u_q, u_x)) * vec3(0.5, 0.5, 1.0), 1.0); }\n";
+
+static const char gl_test_predif_coord_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  vec4 c;\n"
+	"  if (gl_FragCoord.x < 32.0) {\n"
+	"    c = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n"
+	"  } else {\n"
+	"    c = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n"
+	"  }\n"
+	"  gl_FragColor = c;\n"
+	"}\n";
+
+static const char gl_test_predif_uni_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  vec4 c;\n"
+	"  if (u_x > 0.0) {\n"
+	"    c = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n"
+	"  } else {\n"
+	"    c = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n"
+	"  }\n"
+	"  gl_FragColor = c;\n"
+	"}\n";
+
+static const char gl_test_predif_uni_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() {\n"
+	"  gl_Position = a_pos;\n"
+	"  if (u_x > 0.0) {\n"
+	"    v = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n"
+	"  } else {\n"
+	"    v = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n"
+	"  }\n"
+	"}\n";
+
+static const char gl_test_predlive_coord_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float a = u_q * 3.0;\n"
+	"  float b = u_a + 0.125;\n"
+	"  float r, s;\n"
+	"  if (gl_FragCoord.x < 32.0) { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\n"
+	"  gl_FragColor = vec4(r, s, a, b);\n"
+	"}\n";
+
+static const char gl_test_predlive_uni_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"void main() {\n"
+	"  float a = u_q * 3.0;\n"
+	"  float b = u_a + 0.125;\n"
+	"  float r, s;\n"
+	"  if (u_x > 0.0) { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\n"
+	"  gl_FragColor = vec4(r, s, a, b);\n"
+	"}\n";
+
+static const char gl_test_psizvpm_plain_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"attribute vec4 a_color;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    gl_Position = a_pos;\n"
+	"    v_color = a_color;\n"
+	"}\n";
+
+static const char gl_test_psizvpm_word_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"attribute vec4 a_color;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    gl_Position = a_pos;\n"
+	"    gl_PointSize = 4.0;\n"
+	"    v_color = a_color;\n"
+	"}\n";
+
+static const char gl_test_texcube_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform samplerCube u_s;\n"
+	"varying vec3 v_dir;\n"
+	"void main() {\n"
+	"    gl_FragColor = textureCube(u_s, v_dir);\n"
+	"}\n";
+
+static const char gl_test_texcube_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform vec3 u_major;\n"
+	"uniform vec3 u_sx;\n"
+	"uniform vec3 u_ty;\n"
+	"varying vec3 v_dir;\n"
+	"void main() {\n"
+	"    v_dir = u_major + a_pos.x * u_sx + a_pos.y * u_ty;\n"
+	"    gl_Position = a_pos;\n"
+	"}\n";
+
+static const char gl_test_texcubemip_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform vec3 u_major;\n"
+	"uniform vec3 u_sx;\n"
+	"uniform vec3 u_ty;\n"
+	"uniform float u_h;\n"
+	"varying vec3 v_dir;\n"
+	"void main() {\n"
+	"    v_dir = u_major + u_h * (a_pos.x * u_sx + a_pos.y * u_ty);\n"
+	"    gl_Position = a_pos;\n"
+	"}\n";
+
+static const char gl_test_texcubenorm_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform samplerCube u_s;\n"
+	"varying vec3 v_dir;\n"
+	"void main() {\n"
+	"    vec3 a = abs(v_dir);\n"
+	"    gl_FragColor = textureCube(u_s, v_dir / max(max(a.x, a.y), a.z));\n"
+	"}\n";
+
+static const char gl_test_tsf_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform sampler2D u_s;\n"
+	"varying vec2 v_uv;\n"
+	"void main() { gl_FragColor = texture2D(u_s, v_uv); }\n";
+
+static const char gl_test_tsf_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"varying vec2 v_uv;\n"
+	"void main() { v_uv = a_pos.xy * 0.5 + 0.5; gl_Position = a_pos; }\n";
+
+static const char gl_test_unipad_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform vec2 u_rg;\n"
+	"void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n";
+
+static const char gl_test_unipad_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"uniform vec2 u_scale;\n"
+	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
+
+static const char gl_test_varyfma_fs_src[] =
+	"#version 100\n"
+	"precision highp float;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_FragColor = vec4(v.x * 2.0 - 1.0, v.y * 0.5 + 0.25, 1.0 - v.x * v.y, 1.0); }\n";
+
+static const char gl_test_varyfma_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"varying vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
+
+static const char gl_test_vsunits_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"varying vec4 v_c;\n"
+	"void main() {\n"
+	"    gl_FragColor = v_c;\n"
+	"}\n";
+
+static const char gl_test_vtl_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform sampler2D u_ftex;\n"
+	"uniform float u_pick;\n"
+	"varying vec4 v_color;\n"
+	"void main() { gl_FragColor = mix(v_color, texture2D(u_ftex, vec2(0.5, 0.5)), u_pick); }\n";
+
+static const char gl_test_vtl_const_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_uv;\n"
+	"uniform sampler2D u_vtex;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    v_color = texture2DLod(u_vtex, vec2(0.53125, 0.53125), 0.0);\n"
+	"    gl_Position = vec4(a_uv * 2.0 - 1.0 + vec2(1.0 / 64.0), 0.0, 1.0);\n"
+	"    gl_PointSize = 1.0;\n"
+	"}\n";
+
+static const char gl_test_vtl_grid_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_pos;\n"
+	"attribute vec2 a_uv;\n"
+	"uniform sampler2D u_vtex;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    v_color = texture2DLod(u_vtex, a_uv, 0.0);\n"
+	"    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+	"}\n";
+
+static const char gl_test_vtl_vs_src[] =
+	"#version 100\n"
+	"attribute vec2 a_uv;\n"
+	"uniform sampler2D u_vtex;\n"
+	"uniform float u_lod;\n"
+	"varying vec4 v_color;\n"
+	"void main() {\n"
+	"    v_color = texture2DLod(u_vtex, a_uv, u_lod);\n"
+	"    gl_Position = vec4(a_uv * 2.0 - 1.0 + vec2(1.0 / 64.0), 0.0, 1.0);\n"
+	"    gl_PointSize = 1.0;\n"
+	"}\n";
+
+static const char gl_test_zsa_fs_src[] =
+	"#version 100\n"
+	"precision mediump float;\n"
+	"uniform vec4 u_color;\n"
+	"void main() { gl_FragColor = u_color; }\n";
+
+static const char gl_test_zsa_vs_src[] =
+	"#version 100\n"
+	"attribute vec4 a_pos;\n"
+	"void main() { gl_Position = a_pos; }\n";
+

@@ -12,7 +12,8 @@
 //! - [`cluster_board_report`]: the status line of the interval since the
 //!   last one;
 //! - [`cluster_board_finish`]: the animation's line, and the PERF and APP
-//!   words.
+//!   words;
+//! - [`cluster_board_mem`]: what each heap actually holds at one stage.
 
 use core::ffi::c_void;
 use core::fmt::Write;
@@ -75,10 +76,34 @@ pub struct RunRecords {
     pub perf: [u32; 3],
 }
 
+/// main.c's `struct cluster_mem`: what each allocator actually holds, in
+/// bytes. A heap is `now, most at once since init, of`; the carve-out adds
+/// the bytes its held frees keep back. `missing` is main.c's MEM_MISSING_*:
+/// a group this build has no counter for, printed as "not measured".
+#[repr(C)]
+pub struct Mem {
+    /// The stage the numbers were read at (main.c's `enum stage`).
+    pub stage: u32,
+    /// The window the board gave (stride x rows); 0 before it exists.
+    pub window: u32,
+    pub ui: [u32; 3],
+    pub malloc: [u32; 3],
+    pub keep: [u32; 3],
+    pub gpu: [u32; 4],
+    pub missing: u32,
+}
+
 const _: () = assert!(core::mem::size_of::<Sequence>() == 32);
 const _: () = assert!(core::mem::size_of::<CheckResult>() == 44);
 const _: () = assert!(core::mem::size_of::<CFrameTimes>() == 20);
 const _: () = assert!(core::mem::size_of::<RunRecords>() == 24);
+const _: () = assert!(core::mem::size_of::<Mem>() == 64);
+
+/// main.c's MEM_MISSING_*: the group has no counter in this build.
+const MISSING_UI: u32 = 1;
+const MISSING_MALLOC: u32 = 2;
+const MISSING_KEEP: u32 = 4;
+const MISSING_GPU: u32 = 8;
 
 const GL_RGBA: u32 = 0x1908;
 const GL_UNSIGNED_BYTE: u32 = 0x1401;
@@ -304,4 +329,51 @@ pub unsafe extern "C" fn cluster_board_finish(
         let _ = record::write_throughput(&mut line, &t);
         let _ = writeln!(line);
     }
+}
+
+/// " name now/most of total", or " name not measured" for a group main.c
+/// could not read (never a 0, which would read as memory not used).
+fn write_heap(out: &mut impl Write, name: &str, v: &[u32; 3], missing: bool) {
+    if missing {
+        let _ = write!(out, " {name} not measured");
+    } else {
+        let _ = write!(out, " {name} {}/{}/{}", v[0], v[1], v[2]);
+    }
+}
+
+/// What the run's memory actually is at one stage: main.c reads it at every
+/// `stage()` point. The image's statics are resident either way, so this is
+/// what the allocators hold inside them — and a run that dies partway still
+/// says how far its memory got.
+///
+/// # Safety
+/// `m` is readable.
+#[no_mangle]
+pub unsafe extern "C" fn cluster_board_mem(m: *const Mem) {
+    // SAFETY: the caller's contract.
+    let m = unsafe { &*m };
+    let mut w: Pk<320> = Pk::new();
+    let _ = write!(w, "cluster: mem stage {}: ", m.stage);
+    write_heap(&mut w, "ui heap", &m.ui, m.missing & MISSING_UI != 0);
+    write_heap(&mut w, "malloc", &m.malloc, m.missing & MISSING_MALLOC != 0);
+    write_heap(&mut w, "keep", &m.keep, m.missing & MISSING_KEEP != 0);
+    if m.missing & MISSING_GPU != 0 {
+        let _ = write!(w, " gpu carve-out not measured");
+    } else if m.gpu[2] == 0 {
+        // The OSAL has not been initialized yet (its allocator's total reads
+        // 0): that is "not set up yet", not "a carve-out of nothing".
+        let _ = write!(w, " gpu carve-out not set up yet");
+    } else {
+        let _ = write!(
+            w,
+            " gpu carve-out {}/{}/{} ({} held by frees)",
+            m.gpu[0], m.gpu[1], m.gpu[2], m.gpu[3]
+        );
+    }
+    if m.window == 0 {
+        let _ = write!(w, "; window none yet");
+    } else {
+        let _ = write!(w, "; window {} bytes", m.window);
+    }
+    let _ = writeln!(w);
 }

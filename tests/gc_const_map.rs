@@ -62,24 +62,14 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
     let mut files = Vec::new();
     sources(&root, &mut files);
     files.sort();
-    /* gl_test case 183's two stages: the board's reproducer of this */
+    /* gl_test case 183 (unipad): the board's reproducer of this. Its two
+     * stages are in the source list now, so the walk below compiles them; what
+     * is checked here is that the case still draws those files. */
     let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    let case183 = [
-        (
-            "gl_test 183 vertex",
-            SHC_STAGE_VERTEX,
-            "#version 100\nattribute vec2 a_pos;\nuniform vec2 u_scale;\n\
-             void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n",
-        ),
-        (
-            "gl_test 183 fragment",
-            SHC_STAGE_FRAGMENT,
-            "#version 100\nprecision mediump float;\nuniform vec2 u_rg;\n\
-             void main() { gl_FragColor = vec4(u_rg, 0.0, 1.0); }\n",
-        ),
-    ];
-    assert!(suite.contains("uniform vec2 u_scale;") && suite.contains("uniform vec2 u_rg;"), "case 183's text");
-    let mut all: Vec<(String, u32, String)> = files
+    for name in ["gl_test_unipad_vs_src", "gl_test_unipad_fs_src"] {
+        assert!(suite.contains(name), "case 183 links {name}");
+    }
+    let all: Vec<(String, u32, String)> = files
         .iter()
         .map(|p| {
             let stage = if p.extension().and_then(|x| x.to_str()) == Some("vert") {
@@ -91,13 +81,12 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
             (name, stage, std::fs::read_to_string(p).expect("readable"))
         })
         .collect();
-    all.extend(case183.iter().map(|(n, s, t)| (n.to_string(), *s, t.to_string())));
-    let (mut compiled, mut partial, mut bad) = (0usize, 0usize, Vec::new());
+    let (mut compiled, mut partial, mut bad) = (0usize, Vec::new(), Vec::new());
     for (name, stage, text) in &all {
         let Some(sh) = compile(*stage, text) else { continue };
         compiled += 1;
         if sh.uniform_dwords % 4 != 0 {
-            partial += 1;
+            partial.push(name.clone());
         }
         let past = past_the_block(&sh);
         if !past.is_empty() {
@@ -105,8 +94,9 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
         }
     }
     println!(
-        "{} sources, {compiled} compiled, {partial} with a block that ends part way through a register, {} naming a dword past it",
+        "{} sources, {compiled} compiled, {} with a block that ends part way through a register, {} naming a dword past it",
         all.len(),
+        partial.len(),
         bad.len()
     );
     for b in bad.iter().take(10) {
@@ -115,13 +105,18 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
     /* the population, pinned: a corpus that grows, or a compiler that
      * starts or stops refusing a source, fails here so the pin is re-derived
      * (the refusals themselves are online_corpus.rs's); the rule is exercised
-     * only by blocks that end part way through a register, and case 183 is
-     * two of them */
+     * only by blocks that end part way through a register, and case 183's two
+     * stages are two of them */
     /* a build that reports ES 2.0 refuses every `#version 300 es` source
      * (online_corpus.rs keeps its own fixture for it), so each arm has its
      * own count */
-    let pin = if cfg!(feature = "report-es2") { (736, 382) } else { (736, 611) };
+    let pin = if cfg!(feature = "report-es2") { (789, 435) } else { (789, 664) };
     assert_eq!((all.len(), compiled), pin, "sources and programs compiled: re-derive the pin");
-    assert!(partial >= 2, "no block ends part way through a register: the rule is not exercised");
+    for name in ["gltest/unipad_vs.vert", "gltest/unipad_fs.frag"] {
+        assert!(
+            partial.iter().any(|p| p == name),
+            "{name} no longer ends part way through a register: the rule is not exercised"
+        );
+    }
     assert!(bad.is_empty(), "{} programs name uniform dwords past their block (the first: {})", bad.len(), bad[0]);
 }

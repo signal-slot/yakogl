@@ -827,6 +827,14 @@ if command -v cc >/dev/null 2>&1; then
       $arm -Iinclude -Isrc -Isrc/osal -Idriver/tools/pvrlab -Idriver/src \
       -Idriver/src/vivante driver/tools/pvrlab/gl_test.c
   done
+  # The two headers gl_test.c includes are generated from tools/shaders/, never
+  # edited: regenerate them and refuse a drift. They hold the only copy of the
+  # GLSL the suite compiles, while the source list, the offline table and the
+  # host tests name the files -- the 61 texts gl_test.c wrote as C string
+  # literals became tools/shaders/gltest/ (88246148), so a header that is not
+  # that text is a suite drawing one program while everything else checks another.
+  step "gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders" \
+    python3 driver/tools/pvrlab/gen_gl_test_shaders.py --check
   # The PowerVR render pool's free lists (driver/rust/src/gpu/pvr/pool.rs, the
   # Rust port of the former driver/src/pvr_render_pool.h, which pvr_render.c
   # calls in the Zephyr build): its host tests, the

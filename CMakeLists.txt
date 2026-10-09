@@ -20,8 +20,10 @@
 #   -DYAKOGL_SHADERC=offline|online|precompiled (default: online; precompiled:
 #                                          no compiler, needs YAKOGL_PRECOMPILED_SHADERS)
 #   -DYAKOGL_PRECOMPILED_SHADERS=ON|OFF    the precompiled tier in front of the
-#                                          compiler (default: OFF); its apps:
-#   -DYAKOGL_PRECOMPILED_APPS="<app>..."   (default: the whole source list)
+#                                          compiler (default: OFF, zephyr/Kconfig
+#                                          YAKOGL_PRECOMPILED_SHADERS for the cost)
+#   -DYAKOGL_PRECOMPILED_APPS="<app>..."   required with the tier on: the `app`
+#                                          names this build runs (empty = error)
 #   -DYAKOGL_PVR_DRIVER_DIR=<powervr-bxs-am62p/src>
 #   -DYAKOGL_SHARED=ON|OFF                 (also build libEGL.so.1 +
 #                                           libGLESv2.so.2; default: OFF)
@@ -62,11 +64,23 @@ if(NOT YAKOGL_SHADERC MATCHES "^(offline|online|precompiled)$")
 endif()
 # The precompiled tier (the crate's `precompiled-shaders`): the source list
 # compiled at build time by yakogl-precompile, looked up before compiling.
+# OFF by default, like the Kconfig symbol, for the measured reason written
+# there: one app's table is 4,881,999 bytes of .rodata against the compiler's
+# 884,201 of text and rodata. An image that turns it on names the apps it
+# runs -- the whole list is 14,154,000 bytes on the AM62P gl_test image
+# against 2,427,152 with the tier off.
 option(YAKOGL_PRECOMPILED_SHADERS "Precompile the source list in front of the compiler" OFF)
-set(YAKOGL_PRECOMPILED_APPS "" CACHE STRING "The source list's apps to precompile (empty: all)")
+set(YAKOGL_PRECOMPILED_APPS "" CACHE STRING "The source list's apps to precompile (required)")
 set(_yakogl_precompiled_args "")
 if(YAKOGL_PRECOMPILED_SHADERS)
   separate_arguments(_yakogl_apps UNIX_COMMAND "${YAKOGL_PRECOMPILED_APPS}")
+  if(NOT _yakogl_apps)
+    message(FATAL_ERROR
+      "YAKOGL_PRECOMPILED_SHADERS is ON and YAKOGL_PRECOMPILED_APPS is empty: that is the whole "
+      "source list, 14,154,000 bytes on the AM62P gl_test image against 2,427,152 with the tier "
+      "off. Name the apps this build runs -- the `app` lines of tools/shaders/precompiled.list, "
+      "e.g. -DYAKOGL_PRECOMPILED_APPS=\"gl_test_es100\" -- or set YAKOGL_PRECOMPILED_SHADERS=OFF.")
+  endif()
   set(_yakogl_precompiled_args PRECOMPILED PRECOMPILED_APPS ${_yakogl_apps})
 elseif(YAKOGL_SHADERC STREQUAL "precompiled")
   message(FATAL_ERROR "YAKOGL_SHADERC=precompiled needs YAKOGL_PRECOMPILED_SHADERS=ON")

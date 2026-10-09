@@ -3412,26 +3412,15 @@ fn gl_test_case_8_blends_on_the_host() {
 #[test]
 fn gl_test_case_182_clamps_on_the_host() {
     use yakogl::shaderc::*;
-    let folded = "#version 100\n\
-        precision highp float;\n\
-        uniform float u_x, u_q, u_a, u_b;\n\
-        vec4 h(vec4 c) { return c * 0.5 + 0.25; }\n\
-        void main() {\n\
-          gl_FragColor = h(vec4(clamp(u_x, 0.0, 1.0), min(max(u_q, 0.0), 1.0), max(min(u_a, 1.0), 0.0),\n\
-                                min(1.0, max(0.0, u_a - 1.1))));\n\
-        }\n";
-    let ctrl = "#version 100\n\
-        precision highp float;\n\
-        uniform float u_x, u_q, u_a, u_b;\n\
-        void main() {\n\
-          float t = max(u_q, 0.0);\n\
-          gl_FragColor = vec4(min(t, 1.0) * 0.5 + 0.25, t * 0.5, clamp(u_a, 0.0, 0.8) * 0.5 + 0.25,\n\
-                              min(max(u_x, 0.2), 1.0) * 0.5 + 0.25);\n\
-        }\n";
-    /* the case's own text, so the two cannot drift apart */
+    /* the case's own text, so the two cannot drift apart: the file the case
+     * compiles (tools/shaders/gltest, named in gen_gl_test_shaders.py's
+     * ENTRIES and carried in both headers). gl_test.c is read only for the
+     * other half of the anchor -- that the case links these two. */
+    let folded = include_str!("../tools/shaders/gltest/fsat_fs_folded.frag");
+    let ctrl = include_str!("../tools/shaders/gltest/fsat_fs_ctrl.frag");
     let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    for line in ["min(1.0, max(0.0, u_a - 1.1))", "min(max(u_x, 0.2), 1.0) * 0.5 + 0.25"] {
-        assert!(suite.contains(line), "gl_test.c case 182 has {line:?}");
+    for name in ["gl_test_fsat_folded_fs_src", "gl_test_fsat_ctrl_fs_src"] {
+        assert!(suite.contains(name), "case 182 links {name}");
     }
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     /* the RGBA8 output's pack saturates its four channels first (four
@@ -3495,21 +3484,22 @@ fn gl_test_case_182_clamps_on_the_host() {
 #[test]
 fn gl_test_case_188_arms_on_the_host() {
     use yakogl::shaderc::*;
-    let arms = |cond: &str| {
-        format!(
-            "#version 100\nprecision highp float;\nuniform float u_x, u_q, u_a, u_b;\nvoid main() {{\n  vec4 c;\n  if ({cond}) {{\n    c = vec4(u_a * 2.0, u_q + 0.5, 0.25, 1.0);\n  }} else {{\n    c = vec4(u_q, u_a * 0.5, 0.75, 1.0);\n  }}\n  gl_FragColor = c;\n}}\n"
-        )
-    };
+    /* the case's two fragment shaders, from the files it compiles: the
+     * uniform condition and the gl_FragCoord one */
+    let uni = include_str!("../tools/shaders/gltest/predif_fs_uni.frag");
+    let coord = include_str!("../tools/shaders/gltest/predif_fs_coord.frag");
     let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    assert!(suite.contains("PREDIF_ARMS(\"gl_FragCoord.x < 32.0\", \"c\")"), "case 188's text");
+    for name in ["gl_test_predif_uni_fs_src", "gl_test_predif_coord_fs_src"] {
+        assert!(suite.contains(name), "case 188 links {name}");
+    }
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     let (then_c, else_c) = (rgba([0.5, 0.625, 0.25, 1.0]), rgba([0.125, 0.125, 0.75, 1.0]));
     /* (source, u_x, fragment x, the colour) */
     let runs = [
-        (arms("u_x > 0.0"), 1.0f32, 10.5f32, then_c),
-        (arms("u_x > 0.0"), -1.0, 10.5, else_c),
-        (arms("gl_FragCoord.x < 32.0"), 0.0, 31.5, then_c),
-        (arms("gl_FragCoord.x < 32.0"), 0.0, 32.5, else_c),
+        (uni, 1.0f32, 10.5f32, then_c),
+        (uni, -1.0, 10.5, else_c),
+        (coord, 0.0, 31.5, then_c),
+        (coord, 0.0, 32.5, else_c),
     ];
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
@@ -3560,8 +3550,9 @@ fn gl_test_case_188_arms_on_the_host() {
     .unwrap();
 }
 
-/// gl_test case 189's three fragment shaders, on the host, from the suite's
-/// own text: a product by the constant 1.0 read as its other operand (a
+/// gl_test case 189's three fragment shaders, on the host, from the files it
+/// compiles (tools/shaders/gltest/mulone_fs_{one,half,mods}.frag): a product by
+/// the constant 1.0 read as its other operand (a
 /// uniform mat3 times vec3(0.5, 0.5, 1.0), one column lane negated), the
 /// same matrix times vec3(0.5) where every product stays, and abs() and a
 /// negation times 1.0. Each must give the colour the case expects. Case 189
@@ -3570,27 +3561,34 @@ fn gl_test_case_188_arms_on_the_host() {
 #[test]
 fn gl_test_case_189_products_by_one_on_the_host() {
     use yakogl::shaderc::*;
+    /* the case's three fragment shaders, from the files it compiles */
     let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    /* `name`'s C literals joined, `" MULONE_MAT "` spliced to the macro's
-     * text, `\n` undone */
-    let mat = suite.split_once("#define MULONE_MAT \"").and_then(|(_, t)| t.split_once("\"\n")).expect("MULONE_MAT").0;
-    let source = |name: &str| -> String {
-        let (_, t) = suite.split_once(&format!("static const char {name}[] =")).unwrap_or_else(|| panic!("{name}"));
-        let body = t.split_once(";\n").unwrap().0.replace("\" MULONE_MAT \"", mat);
-        body.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n")
-    };
+    for name in ["gl_test_mulone_one_fs_src", "gl_test_mulone_half_fs_src", "gl_test_mulone_mods_fs_src"] {
+        assert!(suite.contains(name), "case 189 links {name}");
+    }
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     let runs = [
-        ("mulone_fs_one_src", rgba([0.4375, 0.125, 0.3125, 1.0])),
-        ("mulone_fs_half_src", rgba([0.3125, 0.1875, 0.1875, 1.0])),
-        ("mulone_fs_mods_src", rgba([0.25, 0.125, 0.25, 1.0])),
+        (
+            "gltest/mulone_fs_one.frag",
+            include_str!("../tools/shaders/gltest/mulone_fs_one.frag"),
+            rgba([0.4375, 0.125, 0.3125, 1.0]),
+        ),
+        (
+            "gltest/mulone_fs_half.frag",
+            include_str!("../tools/shaders/gltest/mulone_fs_half.frag"),
+            rgba([0.3125, 0.1875, 0.1875, 1.0]),
+        ),
+        (
+            "gltest/mulone_fs_mods.frag",
+            include_str!("../tools/shaders/gltest/mulone_fs_mods.frag"),
+            rgba([0.25, 0.125, 0.25, 1.0]),
+        ),
     ];
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
-        for (name, want) in &runs {
-            let src = source(name);
-            let text = a.alloc_str(&src).unwrap();
+        for (name, src, want) in &runs {
+            let text = a.alloc_str(src).unwrap();
             let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
             let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
                 &l.module,
@@ -3624,7 +3622,8 @@ fn gl_test_case_189_products_by_one_on_the_host() {
 }
 
 /// gl_test case 190's four columns, on the host: the case's own fragment
-/// shader (from gl_test.c's text) writing (0.75, 0.5, 0.25, 0.25), built as
+/// shader (tools/shaders/gltest/blendonce_fs.frag, the file it compiles)
+/// writing (0.75, 0.5, 0.25, 0.25), built as
 /// the blend variant each column's state asks for, run in the byte model
 /// over the case's pixel (0.25, 0.5, 0.75, 0.5) as it reads back in RGBA8.
 /// A factor the same in every channel is computed once (blend.rs
@@ -3634,9 +3633,11 @@ fn gl_test_case_189_products_by_one_on_the_host() {
 #[test]
 fn gl_test_case_190_blend_factors_once_on_the_host() {
     use yakogl::shaderc::*;
-    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    let (_, t) = suite.split_once("static const char blendonce_fs_src[] =").expect("case 190's shader");
-    let src = t.split_once(";\n").unwrap().0.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n");
+    let src = include_str!("../tools/shaders/gltest/blendonce_fs.frag");
+    assert!(
+        include_str!("../driver/tools/pvrlab/gl_test.c").contains("gl_test_blendonce_fs_src"),
+        "case 190 links gltest/blendonce_fs.frag"
+    );
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     let over = shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 0, 0);
     /* (what, key, the colour, the groups computing 1 - x) */
@@ -3660,7 +3661,7 @@ fn gl_test_case_190_blend_factors_once_on_the_host() {
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
-        let text = a.alloc_str(&src).unwrap();
+        let text = a.alloc_str(src).unwrap();
         let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
         for (what, key, want, inverts) in cases {
             let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
@@ -3702,23 +3703,26 @@ fn gl_test_case_190_blend_factors_once_on_the_host() {
     .unwrap();
 }
 
-/// gl_test case 191's fragment shader, on the host, from gl_test.c's text:
-/// each product of the varying and the sum that alone reads it are one
+/// gl_test case 191's fragment shader, on the host, from the file it compiles
+/// (tools/shaders/gltest/varyfma_fs.frag): each product of the varying and the
+/// sum that alone reads it are one
 /// `fmad` (the varying is in its pinned temporary, which no group writes),
 /// as in pco's program, and the colour is the case's
 /// (0.5, 0.5, 0.625, 1) with v = (0.75, 0.5, 0, 0).
 #[test]
 fn gl_test_case_191_varying_products_fuse_on_the_host() {
     use yakogl::shaderc::*;
-    let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    let (_, t) = suite.split_once("static const char varyfma_fs_src[] =").expect("case 191's shader");
-    let src = t.split_once(";\n").unwrap().0.split('"').skip(1).step_by(2).collect::<String>().replace("\\n", "\n");
+    let src = include_str!("../tools/shaders/gltest/varyfma_fs.frag");
+    assert!(
+        include_str!("../driver/tools/pvrlab/gl_test.c").contains("gl_test_varyfma_fs_src"),
+        "case 191 links gltest/varyfma_fs.frag"
+    );
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     let want = rgba([0.5, 0.5, 0.625, 1.0]);
     let _scratch = scratch_lock();
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
-        let text = a.alloc_str(&src).unwrap();
+        let text = a.alloc_str(src).unwrap();
         let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
         let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
             &l.module,
@@ -3771,28 +3775,21 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
 #[test]
 fn gl_test_case_192_values_live_across_the_arms_on_the_host() {
     use yakogl::shaderc::*;
-    let fs = |cond: &str| {
-        format!(
-            "#version 100\nprecision highp float;\nuniform float u_x, u_q, u_a, u_b;\nvoid main() {{\n  \
-             float a = u_q * 3.0;\n  float b = u_a + 0.125;\n  float r, s;\n  if ({cond}) {{ r = a * 2.0; s = b - a; }} \
-             else {{ r = b * 0.5; s = a + b; }}\n  gl_FragColor = vec4(r, s, a, b);\n}}\n"
-        )
-    };
+    /* the case's two fragment shaders, from the files it compiles: one body,
+     * the condition on a uniform in one and on gl_FragCoord.x in the other */
+    let uni = include_str!("../tools/shaders/gltest/predlive_fs_uni.frag");
+    let coord = include_str!("../tools/shaders/gltest/predlive_fs_coord.frag");
     let suite = include_str!("../driver/tools/pvrlab/gl_test.c");
-    for line in [
-        "\"  float a = u_q * 3.0;\\n\"",
-        "\"  if (\" cond \") { r = a * 2.0; s = b - a; } else { r = b * 0.5; s = a + b; }\\n\"",
-        "PREDLIVE_FS(\"gl_FragCoord.x < 32.0\")",
-    ] {
-        assert!(suite.contains(line), "case 192's text: {line}");
+    for name in ["gl_test_predlive_uni_fs_src", "gl_test_predlive_coord_fs_src"] {
+        assert!(suite.contains(name), "case 192 links {name}");
     }
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
     let (then_c, else_c) = (rgba([0.75, 0.25, 0.375, 0.625]), rgba([0.3125, 1.0, 0.375, 0.625]));
     let runs = [
-        (fs("u_x > 0.0"), 1.0f32, 10.5f32, then_c),
-        (fs("u_x > 0.0"), -1.0, 10.5, else_c),
-        (fs("gl_FragCoord.x < 32.0"), 0.0, 31.5, then_c),
-        (fs("gl_FragCoord.x < 32.0"), 0.0, 32.5, else_c),
+        (uni, 1.0f32, 10.5f32, then_c),
+        (uni, -1.0, 10.5, else_c),
+        (coord, 0.0, 31.5, then_c),
+        (coord, 0.0, 32.5, else_c),
     ];
     let _scratch = scratch_lock();
     store::with_scratch(|a| {

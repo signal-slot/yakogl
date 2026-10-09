@@ -198,6 +198,14 @@ if(CONFIG_YAKOGL)
   set(_yakogl_precompiled_args "")
   if(CONFIG_YAKOGL_PRECOMPILED_SHADERS)
     separate_arguments(_yakogl_apps UNIX_COMMAND "${CONFIG_YAKOGL_PRECOMPILED_APPS}")
+    if(NOT _yakogl_apps)
+      message(FATAL_ERROR
+        "CONFIG_YAKOGL_PRECOMPILED_SHADERS=y and CONFIG_YAKOGL_PRECOMPILED_APPS is empty: that is "
+        "the whole source list, 14,154,000 bytes on the AM62P gl_test image against 2,427,152 with "
+        "the tier off (zephyr/Kconfig, YAKOGL_PRECOMPILED_SHADERS). Name the apps this image runs "
+        "-- the `app` lines of tools/shaders/precompiled.list, e.g. "
+        "-DCONFIG_YAKOGL_PRECOMPILED_APPS=\"gl_test_es100\" -- or turn the tier off.")
+    endif()
     set(_yakogl_precompiled_args PRECOMPILED PRECOMPILED_APPS ${_yakogl_apps})
     if(NOT CONFIG_YAKOGL_PRECOMPILED_LIST STREQUAL "")
       list(APPEND _yakogl_precompiled_args PRECOMPILED_LIST "${CONFIG_YAKOGL_PRECOMPILED_LIST}")

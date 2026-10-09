@@ -105,13 +105,25 @@ cargo run -p yakogl-precompile --features gpu-vivante,report-es2 -- ...
 | `--pin COUNTS` | | the run's row and code-byte counts must be COUNTS' line (`tests/fixtures/precompile_counts.txt`; `PRECOMPILE_PIN_WRITE=1` writes it) |
 
 The GPU is a feature, exactly one (`gpu-powervr`, `gpu-vivante`), and
-`report-es2` builds the compiler of an image that reports ES 2.0. The table is the
-`ShcBlob` table `emit.rs` writes, sharing its printers (`shc_print.rs`) and its
-idiom (each row a library struct printed with a full destructuring pattern), with
-the columns our rows need beside it: the record key the compiler's cache finds a
-row by (the source's SHA-256 chained with the zeroed varyings, the attribute map
-and the facts), the source as an index into `SHC_PRECOMPILED_SOURCES`, the facts
-(`w_constant`, the sampler-state key, the attribute map) and the uniform blocks. Its
+`report-es2` builds the compiler of an image that reports ES 2.0. The table is a
+`ShcPrecompiledRow` array with the columns our rows need beside it: the record key
+the compiler's cache finds a row by (the source's SHA-256 chained with the zeroed
+varyings, the attribute map and the facts), the source as an index into
+`SHC_PRECOMPILED_SOURCES`, and the facts (`w_constant`, the sampler-state key, the
+attribute map). What a row does not repeat is its compile's reflection -- varyings,
+uniforms, uniform blocks, and the facts the compiler derived from the source --
+which one `ShcPrecompiledReflection` per compile holds. A compile is a source, its
+stage, and whether it left its attribute layout to the link; no variant of one
+changes those fields. The attribute layout itself is per row, because a vertex
+shader that defers its layout is compiled twice -- once with no layout, once with
+the link's map -- and the two records differ exactly there. A compile whose rows
+disagree on a field stored once is a refusal, naming every field it sees. The printers
+and the idiom are shared with `yakogl-tools`' `emit.rs` (`shc_print.rs`, the
+`ShcBlob` table of the Mesa reference and of `internal.rs`), whose rows keep the
+whole reflection in their shader. `shc_print.rs` is built into both tools --
+`emit.rs`, and `yakogl-precompile` through `#[path]` -- so it holds only what both
+print: a printer or a struct field that one of them needs and the other does not is
+dead code in the other, and every gate row that builds `yakogl-tools` reports it. Its
 header carries the toolchain mark, which says which compiler made it:
 
 ```text
@@ -124,6 +136,11 @@ lints and tests it per build, and `tools/precompile/prove.sh FEATURES` runs its
 proofs: the table made twice is the same bytes, `--verify`, the counts of the whole
 list and of the `femtovg` and `gl_test_es100` sublists pinned, and the table
 compiled against the library (`rustc -D warnings`).
+`tools/precompile/measure-image.sh APP` builds the AM62P gl_test image three ways
+-- the tier off, the app's rows in front of the compiler, those rows with no
+compiler at all -- and prints the build seconds, zephyr.bin bytes and the `size -A`
+split of `.text`, `.rodata` and `.bss`, which is the comparison
+`docs/HANDOFF.md`'s step 6 turns on.
 
 Beside the rows the table carries every link the generator made, by record key
 (`SHC_PRECOMPILED_LINKS`: the verdict a link takes without the front end), every
@@ -173,9 +190,10 @@ precompiled shaders: program <vs>/<fs> was not linked at build time
 (`<list>` is the list the table was made from, `SHC_PRECOMPILED_LIST`.) gl_test's
 closing line ends `precompiled hits <n>, compiler runs <n>`.
 
-An image build does the first line itself (capi/yakogl_capi.cmake, `PRECOMPILED`,
-into its build directory; `YAKOGL_PRECOMPILED_APPS` picks the apps) on every
-build; the table is rewritten only when it changed.
+An image build with the tier on does the first line itself (capi/yakogl_capi.cmake,
+`PRECOMPILED`, into its build directory; `YAKOGL_PRECOMPILED_APPS` names the apps
+and is required -- empty is a build error, not the whole list); the table is
+rewritten only when it changed.
 
 # Building the pco_shc that reproduces the table
 
@@ -183,7 +201,7 @@ build; the table is rewritten only when it changed.
 Mesa 26.2.1 from the release tarball, `tools/pco_shc/pco_shc.c` dropped in,
 `tools/pco_shc/usclib-tex.cl.patch` applied **and the usclib compiled from it in
 the same build** (the script builds Mesa's `mesa_clc` for that, so the host needs
-clang/LLVM, libclc and SPIRV-LLVM-Translator; the package list is in the
+clang/LLVM and SPIRV-LLVM-Translator; the package list is in the
 script's header):
 
     tools/pco_shc/build_pco_shc.sh ~/mesa-26.2.1.tar.xz ~/mesa-build
@@ -197,12 +215,15 @@ texture type against `ROGUE_TEXSTATE_TEXTYPE_STRIDE` (it disassembles
 directory it was built in: two builds in two directories gave the same bytes.
 It prints the path and the content id `yakogl-tools glsl2usc` will report.
 
-That binary reproduces **every one of the 2248 rows** `tests/reference/blobs.rs`
-held before it was regenerated with it, byte for byte (built 2026-10-05 with
-LLVM/clang/libclc 23.1.2, SPIRV-LLVM-Translator 23.1.1, gcc 16.2.1, and
-`glslangValidator` 16.4.0). The table now names that toolchain in its header:
+The 2026-10-05 build reproduced **every row** `tests/reference/blobs.rs` held
+at the time, byte for byte. On 2026-10-07 the same script on a second host
+(LLVM/clang 23.1.2, SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0, gcc
+16.2.1_p20260926, no libclc — this Mesa config builds `mesa_clc` without it)
+with the distro `glslangValidator` 16.4.0 regenerated the table with **all
+2476 USC rows byte-identical**; only the header line changed. The table names
+its toolchain in its header:
 
-    // toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514
+    // toolchain: pco_shc=01aa62a069bb glslang=2e8c31daf6b2
 
 and `glsl2usc` refuses to overwrite the table with a different one unless
 `GLSL2USC_NEW_REFERENCE=1` says so. A different compiler or library version
@@ -612,3 +633,15 @@ deterministic property of the shader, so it comes back as
 info log, and it is cached as a refusal; a service error (`{"error": ...}`, no
 `"ok"`) is reserved for the host being unable to answer at all (a missing
 compiler, an unreachable server) and is never cached.
+
+## land.sh — land one branch tip on main
+
+`tools/land.sh <name> <tip> <message-file>` is how a branch tip reaches
+`origin/main`: it merges the tip `--no-ff` into a detached worktree of
+`origin/main`, asserts `HEAD^2 == <tip>` (a merge that did not take the tip is a
+refusal, not a landing), runs `tools/check.sh` there — the gate that counts is
+the one run on the exact commit pushed — and pushes only on rc 0, then proves
+the *tip* is an ancestor of `origin/main` before removing the worktree. Exit
+codes name what stopped it: 1 gate red, 8 the merge did not take, 2 pushed but
+not proven, 9 a precondition. The merge message is a file because
+`git merge -F -` cannot read stdin.
