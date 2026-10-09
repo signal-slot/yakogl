@@ -1010,11 +1010,14 @@ impl<'m, 'a> Walk<'m, 'a> {
                             .find(|d| d.kind == IoKind::Varying && d.location == loc)
                             .ok_or(PrepError::NotYet("a varying with no declaration"))?;
                         match decl.interp {
-                            /* flat: the same read; the chain sets the
-                             * input's flat-shade flag and select takes C */
-                            ir::INTERP_SMOOTH | ir::INTERP_FLAT => {}
+                            /* flat and centroid: the same read; the chain
+                             * sets the input's flat-shade or centroid flag,
+                             * and select takes C, or W at the centroid */
+                            ir::INTERP_SMOOTH | ir::INTERP_FLAT | ir::INTERP_CENTROID => {}
                             ir::INTERP_NOPERSPECTIVE => return Err(PrepError::NotYet("noperspective varying")),
-                            _ => return Err(PrepError::NotYet("centroid varying")),
+                            _ => {
+                                return Err(PrepError::NotYet("an interpolation qualifier this back end does not know"))
+                            }
                         }
                         for (c, o) in out.iter_mut().enumerate().take(comps) {
                             *o = Some(self.push(a, SOp::Varying { loc, comp: c as u8 })?);

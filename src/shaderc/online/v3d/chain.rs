@@ -407,6 +407,10 @@ pub fn compile_program_keyed<'a>(
      * flat_shade_flags at the input's index). The job builder reads word 0
      * only and refuses more than 24 inputs. */
     let mut flat = 0u32;
+    /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
+     * BITSET_SET of centroid_flags, the W it multiplies by the centroid
+     * W). */
+    let mut centroid = 0u32;
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -418,6 +422,12 @@ pub fn compile_program_keyed<'a>(
                 return Err(V3dError::NotYet("a flat varying past input 31"));
             }
             flat |= 1 << i;
+        }
+        if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
+            if i >= 32 {
+                return Err(V3dError::NotYet("a centroid varying past input 31"));
+            }
+            centroid |= 1 << i;
         }
     }
 
@@ -478,7 +488,7 @@ pub fn compile_program_keyed<'a>(
     /* LazyAttributes changes nothing in a fragment shader. */
     let (fsel, (fs_code, fs_threads)) = under_pressure(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment(&fsp, inputs, flat, pr, a),
+        |pr| select_fragment(&fsp, inputs, flat, centroid, pr, a),
         false,
         a,
     )?;
@@ -499,7 +509,7 @@ pub fn compile_program_keyed<'a>(
             input_slots: slots,
             flat_shade_flags: flat,
             noperspective_flags: 0,
-            centroid_flags: 0,
+            centroid_flags: centroid,
             /* select.rs select_fragment: a discard or a read of Z */
             writes_z: fsel.writes_z,
             disable_ez: fsel.disable_ez,
@@ -3004,6 +3014,67 @@ mod tests {
         assert!(!out.iter().flatten().any(|&x| x == poison), "the GFXH-1602 row is never read");
     }
 
+    /// A `centroid in` is smooth with the centroid W (Mesa
+    /// emit_fragment_varying, nir_to_vir.c:1094-1097: payload_w_centroid,
+    /// rf1) and sets its input's bit of `centroid_flags`, which the job
+    /// builder emits as the CENTROID varying flags; the smooth input beside
+    /// it keeps the centre W (rf0). Run in the interpreter with the two W
+    /// apart, each input's value comes back with its own. Single-sampled the
+    /// hardware gives both the same W. These were refused (`NotYet("centroid
+    /// varying")`, dEQP's 9 linkage / qualification_order programs). Revert
+    /// check: with the centroid input reading rf0 the first lane's x is off.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_centroid_input_reads_the_centroid_w() {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        const VS: &str = "#version 300 es\nin vec4 p;\ncentroid out vec2 c;\nout vec2 s;\n\
+            void main() { c = p.xy; s = p.zw; gl_Position = p; }\n";
+        const FS: &str = "#version 300 es\nprecision highp float;\ncentroid in vec2 c;\nin vec2 s;\n\
+            layout(location = 0) out vec4 o;\nvoid main() { o = vec4(c, s); }\n";
+        with_program(VS, FS, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let slots: Vec<(u8, u8)> = p.fs.input_slots.to_vec();
+            assert_eq!(slots.len(), 4, "c.xy and s.xy: {slots:?}");
+            /* which inputs are c's: the vertex shader's first output */
+            let centroid_inputs: u32 = (0..4).filter(|&i| p.fs.centroid_flags & (1 << i) != 0).map(|i| 1 << i).sum();
+            assert_eq!(p.fs.centroid_flags.count_ones(), 2, "two centroid inputs: {:#x}", p.fs.centroid_flags);
+            assert!(p.fs.uses_center_w, "s reads the centre W");
+            let uniforms: Vec<u32> = p.fs.code.uniforms.iter().map(|u| u.data).collect();
+            /* vary 0.25 * (i + 1), C 0.125: value = vary * W + C */
+            let varyings = (0..4)
+                .map(|i| Varying { vary: [(0.25 * (i as f32 + 1.0)).to_bits(); LANES], c: [0.125f32.to_bits(); LANES] })
+                .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [0.5f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env = Env { threads: p.fs.threads, ..Env::default() };
+            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("runs");
+            let value = |i: usize| {
+                let w = if centroid_inputs & (1 << i) != 0 { 0.5 } else { 1.0 };
+                0.25 * (i as f32 + 1.0) * w + 0.125
+            };
+            /* o = (c.x, c.y, s.x, s.y): inputs in the order the slots list */
+            let mut want = [0f32; 4];
+            for (i, &(slot, comp)) in slots.iter().enumerate() {
+                let k = if slot == slots[0].0 { comp as usize } else { 2 + comp as usize };
+                want[k] = value(i);
+            }
+            assert!(centroid_inputs & 0b11 == 0b11 || centroid_inputs & 0b1100 == 0b1100, "c's two lanes together");
+            let h = |x: f32| u32::from(sim::f32_to_half(x));
+            let wanted = [h(want[0]) | h(want[1]) << 16, h(want[2]) | h(want[3]) << 16];
+            assert_eq!([o.tlb[0].value[0].unwrap(), o.tlb[1].value[0].unwrap()], wanted, "want {want:?}");
+            assert!(want[0] != want[2], "the two W give different values");
+        });
+    }
+
     /// A non-square matrix attribute (ES 3.00 `matCxR`) takes C consecutive
     /// locations of R components each, one attribute record per column, as
     /// Mesa slots a matrix input per column: a `mat4x3` at location 1 reads
@@ -3297,7 +3368,7 @@ mod tests {
             use crate::shaderc::online::v3d::select::{select_fragment, Dst, Operand, Pressure, VOp};
             let fsp = prepare_fragment_with(&fr.module, &[], 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
             let def = |v: Operand| {
                 sel.ops.iter().find(|o| match (o, v) {
                     (VOp::Add { dst: Dst::V(d), .. } | VOp::Mul { dst: Dst::V(d), .. }, Operand::V(x)) => *d == x,
@@ -3387,7 +3458,7 @@ mod tests {
             let (fm, trips) = unrolled(&fr.module, a).expect("the loop's trip count");
             let fsp = prepare_fragment_with(fm, trips, 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
             let head = sel.ops.iter().position(|o| *o == VOp::LoopHead).expect("a loop");
             let edge = sel.ops.iter().position(|o| matches!(o, VOp::BackEdge { .. })).expect("a back edge");
             let user = |o: &VOp| matches!(o, VOp::Ldunif { u, .. } if u.contents == QUNIFORM_UNIFORM);

@@ -644,6 +644,19 @@ impl<'a> Sema<'_, 'a> {
                  *
                  * The built-ins are reached by the other form, `invariant
                  * gl_Position;`, which is `Decl::Invariant` and is not this. */
+                /* ES 3.00 narrows the list to what a shader outputs (section
+                 * 4.6.1: "Only variables output from a shader can be
+                 * candidates for invariance"): a fragment shader's `in` is
+                 * not one. ES 1.00 lets either side of a varying be
+                 * invariant, and must match them (its 4.6.4). dEQP
+                 * qualification_order.variables.invalid.*_invariant_input. */
+                if *invariant && self.ast.es3 && self.stage == Stage::Fragment && storage == StorageQualifier::Varying {
+                    return Err(Error::new(
+                        line,
+                        name,
+                        "a fragment shader input may not be invariant (section 4.6.1: only outputs)",
+                    ));
+                }
                 if *invariant && storage != StorageQualifier::Varying {
                     return Err(Error::new(line, name, "only a varying or a built-in variable may be invariant"));
                 }
@@ -816,7 +829,19 @@ impl<'a> Sema<'_, 'a> {
                 }
                 Ok(())
             }
-            Decl::Invariant { .. } => Ok(()),
+            /* `invariant x;` of a fragment input: the same ES 3.00 rule
+             * as the qualifier written in its declaration */
+            Decl::Invariant { name, line } => {
+                let input = self.lookup(name).is_some_and(|s| s.storage == StorageQualifier::Varying);
+                if self.ast.es3 && self.stage == Stage::Fragment && input {
+                    return Err(Error::new(
+                        *line,
+                        name,
+                        "a fragment shader input may not be invariant (section 4.6.1: only outputs)",
+                    ));
+                }
+                Ok(())
+            }
         }
     }
 
@@ -3546,6 +3571,44 @@ mod tests {
         ok("invariant varying mediump vec3 Color; void main() { gl_FragColor = vec4(Color, 1.0); }");
         ok_stage("invariant gl_Position; void main() { gl_Position = vec4(1.0); }", Stage::Vertex);
         ok("varying mediump vec3 Color; invariant Color; void main() { gl_FragColor = vec4(Color, 1.0); }");
+    }
+
+    /// ES 3.00 section 4.6.1: "Only variables output from a shader can be
+    /// candidates for invariance", so a fragment shader's `in` may not be
+    /// invariant, in its declaration or by `invariant x;`; a vertex
+    /// output may, and ES 1.00's fragment varying still may (dEQP
+    /// qualification_order.variables.invalid.*_invariant_input, 7 cases,
+    /// which the GC7000 built). Revert check: without the rule the four
+    /// refusals here compile.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn an_es3_fragment_input_may_not_be_invariant() {
+        use crate::shaderc::online::{lower, store};
+        const WHY: &str = "a fragment shader input may not be invariant (section 4.6.1: only outputs)";
+        /* through the front end as glCompileShader reaches it: `resolve_io`
+         * gives each `in` / `out` its storage before the check */
+        let compile = |stage: Stage, src: &str| -> Result<(), std::string::String> {
+            let _l = store::test_lock();
+            store::with_scratch(|a| {
+                let text = a.alloc_str(src).unwrap();
+                lower::compile_to_ir(a, stage, text).map(|_| ()).map_err(|e| std::string::String::from(e.msg))
+            })
+            .unwrap()
+        };
+        let head = "#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 o;\n";
+        for decl in [
+            "invariant in float x;",
+            "invariant smooth centroid in float x;",
+            "invariant flat in float x;",
+            "in float x; invariant x;",
+        ] {
+            let src = std::format!("{head}{decl}\nvoid main() {{ o = vec4(x); }}");
+            assert_eq!(compile(Stage::Fragment, &src), Err(WHY.into()), "{decl}");
+        }
+        let vs = "#version 300 es\ninvariant out vec4 v; void main() { v = vec4(1.0); gl_Position = v; }";
+        assert_eq!(compile(Stage::Vertex, vs), Ok(()), "a vertex output may be invariant");
+        let es1 = "precision mediump float; invariant varying vec3 c; void main() { gl_FragColor = vec4(c, 1.0); }";
+        assert_eq!(compile(Stage::Fragment, es1), Ok(()), "an ES 1.00 fragment varying may be invariant");
     }
 
     /// Section 6.1, on what makes two declarations the same function:

@@ -160,6 +160,13 @@ pub struct Iterated {
 pub enum IterMode {
     /// `ditrp`: iterated and divided by the W plane (a smooth varying).
     Perspective,
+    /// `ditrp` at the centroid (`iter_mode` centroid): a `centroid in`, as
+    /// pco iterates one (pco_trans_nir.c trans_load_input_fs:
+    /// PCO_ITR_MODE_CENTROID for `var->data.centroid`). Single-sampled, the
+    /// centroid of a covered pixel is its centre, so this is
+    /// [`IterMode::Perspective`]'s value there; multisampled, the hardware
+    /// moves the point inside the covered samples.
+    Centroid,
     /// `ditr`: iterated with no divide -- pco's form for `gl_PointCoord`
     /// (pco_shc build-new: `ditr p=none`, count 2, after W's four).
     Linear,
@@ -215,7 +222,7 @@ pub fn iterate_group(v: Iterated, k: usize) -> Result<Group, BuildError> {
                 ("dest", v.dest as u32),
                 ("coff", v.coff as u32),
                 ("woff", v.woff as u32),
-                ("mode", ev("iter_mode", "pixel")?),
+                ("mode", ev("iter_mode", if v.mode == IterMode::Centroid { "centroid" } else { "pixel" })?),
                 ("count", v.count as u32),
                 ("f16", 0),
                 ("drc", 0),

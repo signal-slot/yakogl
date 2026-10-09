@@ -3968,6 +3968,72 @@ fn gl_test_case_196_trunc_and_shifts_on_the_host() {
     .unwrap();
 }
 
+/// A `centroid in` (ES 3.00 4.3.9) is iterated as pco iterates one:
+/// `ditrp` with `iter_mode` centroid (pco_trans_nir.c trans_load_input_fs,
+/// PCO_ITR_MODE_CENTROID), the smooth input beside it at the pixel centre.
+/// Single-sampled the centroid is the centre, so on the byte model both
+/// read their planes' values; the record says which input is centroid
+/// (interp 3), which the PDS iterates as smooth. These were refused
+/// (`Usc(FragmentInputsNotBuilt)`, dEQP's 9 linkage / qualification_order
+/// programs). Revert check: with the chain's filter back to smooth and
+/// flat, the shader is refused.
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_centroid_input_is_iterated_at_the_centroid() {
+    use yakogl::shaderc::*;
+    let src = "#version 300 es
+precision highp float;
+centroid in vec2 c;
+in float s;
+out vec4 o;
+void main() { o = vec4(c, s, 1.0); }
+";
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+            &l.module,
+            &l.reflection,
+            a,
+            SHC_BLEND_KEY_REPLACE,
+        )
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut listing = String::new();
+        yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+            yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let iterates: Vec<&str> = listing.split("\n[").filter(|g| g.contains("ditrp")).collect();
+        assert_eq!(iterates.len(), 2, "one ditrp per varying\n{listing}");
+        let centroid = iterates.iter().filter(|g| g.contains("mode=centroid")).count();
+        assert_eq!(centroid, 1, "c iterated at the centroid, s at the pixel\n{listing}");
+        let interps: Vec<(String, u8)> = rec.varyings[..rec.num_varyings as usize]
+            .iter()
+            .map(|v| (v.name.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect(), v.interp))
+            .collect();
+        assert_eq!(interps, [("c".to_string(), 3), ("s".to_string(), 0)], "the record's interpolation");
+        let mut inp = sentinel_inputs(1.0e30);
+        let mut at = 4usize;
+        for (v, vals) in rec.varyings[..rec.num_varyings as usize].iter().zip([[0.25f32, 0.5], [0.75, 0.0]]) {
+            for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+                inp.coeff[at + 4 * c] = x.to_bits();
+                inp.coeff[at + 4 * c + 2] = x.to_bits();
+            }
+            at += 4 * v.components as usize;
+        }
+        let out = run_binary(&image, &inp, true).expect("runs");
+        let got = *out.get(&0).expect("a colour");
+        assert_eq!(got, 0xff_bf_80_40, "(0.25, 0.5, 0.75, 1) in RGBA8\n{listing}");
+    })
+    .unwrap();
+}
+
 /// gl_test case 192's two fragment shaders, on the host: values from
 /// before a predicated `if` read in both arms and after it, beside two the
 /// arms compute into one register each from both arms (no select after the

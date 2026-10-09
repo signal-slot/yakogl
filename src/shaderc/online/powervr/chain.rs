@@ -294,10 +294,11 @@ pub fn build_fragment_for<'a>(
     let mut listed: AVec<'a, ir::IoDecl<'a>> = AVec::new();
     for io in m.inputs.iter().filter(|io| io.kind == IoKind::Varying) {
         if sel.inputs.iter().any(|(slot, c)| *slot == IoSlot::Varying(io.location) && c.iter().any(Option::is_some)) {
-            /* Smooth, iterated; flat, read from its plane's constant
+            /* Smooth, iterated; centroid, iterated at the centroid;
+             * flat, read from its plane's constant
              * (`fragment::Iterated::flat`). Noperspective is not
              * transcribed. */
-            if !matches!(io.interp, ir::INTERP_SMOOTH | ir::INTERP_FLAT) {
+            if !matches!(io.interp, ir::INTERP_SMOOTH | ir::INTERP_CENTROID | ir::INTERP_FLAT) {
                 return Err(ChainError::FragmentInputsNotBuilt);
             }
             listed.push(a, *io).map_err(oom)?;
@@ -351,7 +352,11 @@ pub fn build_fragment_for<'a>(
         dest += 2;
     }
     for (i, io) in listed.iter().enumerate() {
-        let mode = if io.interp == ir::INTERP_FLAT { IterMode::Flat } else { IterMode::Perspective };
+        let mode = match io.interp {
+            ir::INTERP_FLAT => IterMode::Flat,
+            ir::INTERP_CENTROID => IterMode::Centroid,
+            _ => IterMode::Perspective,
+        };
         iterated
             .push(a, Iterated { dest, coff: coffs[i] + shift, woff: z_set, count: io.components, mode })
             .map_err(oom)?;

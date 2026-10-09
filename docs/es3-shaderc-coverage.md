@@ -72,19 +72,19 @@ needs a link error, `pass` needs both to succeed.
 | invalid_texture_functions | 0 | 0 | 120 | 0 |
 | keywords | 8 | 0 | 348 | 0 |
 | large_constant_arrays | 16 | 0 | 0 | 0 |
-| linkage | 83 | 2 | 34 | 0 |
+| linkage | 85 | 0 | 34 | 0 |
 | loops | 9 | 0 | 0 | 0 |
 | negative | 0 | 0 | 12 | 0 |
 | preprocessor | 288 | 4 | 264 | 0 |
-| qualification_order | 8 | 7 | 64 | 0 |
+| qualification_order | 15 | 0 | 64 | 0 |
 | scoping | 34 | 0 | 48 | 0 |
 | switch | 0 | 0 | 52 | 0 |
 | swizzle_math_operations | 544 | 0 | 0 | 0 |
 | swizzles | 648 | 0 | 0 | 0 |
 | uniform_block | 64 | 2 | 72 | 0 |
-| **total** | **3444** | **17** | **2135** | **0** |
+| **total** | **3453** | **8** | **2135** | **0** |
 
-So of the 3,461 programs that must build, 3,444 (99.5 %) do; of the 2,135 that
+So of the 3,461 programs that must build, 3,453 (99.8 %) do; of the 2,135 that
 must be refused, all are (but see the caveat). The front end is
 not what stands in front of the 8,835 AM62P GLES3 CTS failures: these are
 compile/link-time verdicts only. Feature gaps that need a *draw* (integer
@@ -110,17 +110,17 @@ code generator, which refuses at link).
 | invalid_texture_functions | 0 / 0 / 120 / 0 | 0 / 0 / 120 / 0 |
 | keywords | 8 / 0 / 348 / 0 | 8 / 0 / 348 / 0 |
 | large_constant_arrays | 14 / 2 / 0 / 0 | 16 / 0 / 0 / 0 |
-| linkage | 85 / 0 / 34 / 0 | 83 / 2 / 34 / 0 |
+| linkage | 85 / 0 / 34 / 0 | 85 / 0 / 34 / 0 |
 | loops | 9 / 0 / 0 / 0 | 9 / 0 / 0 / 0 |
 | negative | 0 / 0 / 12 / 0 | 0 / 0 / 12 / 0 |
 | preprocessor | 288 / 4 / 264 / 0 | 288 / 4 / 264 / 0 |
-| qualification_order | 15 / 0 / 57 / 7 | 8 / 7 / 57 / 7 |
+| qualification_order | 15 / 0 / 64 / 0 | 15 / 0 / 64 / 0 |
 | scoping | 34 / 0 / 48 / 0 | 34 / 0 / 48 / 0 |
 | switch | 0 / 0 / 52 / 0 | 0 / 0 / 52 / 0 |
 | swizzle_math_operations | 544 / 0 / 0 / 0 | 544 / 0 / 0 / 0 |
 | swizzles | 648 / 0 / 0 / 0 | 648 / 0 / 0 / 0 |
 | uniform_block | 64 / 2 / 72 / 0 | 64 / 2 / 72 / 0 |
-| **total** | **3451 / 10 / 2128 / 7** | **3444 / 17 / 2128 / 7** |
+| **total** | **3451 / 10 / 2135 / 0** | **3453 / 8 / 2135 / 0** |
 
 ## Expected-pass programs refused, by root cause
 
@@ -131,13 +131,12 @@ no stage or construct more precise than that.
 | cause | class | PowerVR | GC7000UL | V3D | files | example (first error) |
 |---|---|---:|---:|---:|---|---|
 | `gl_MaxDrawBuffers` is 1 | back-end limit | 2 | 2 | 2 | constant_expressions | `other.complex_{vertex,fragment}`: `'case' : two case labels have the same value` |
-| `centroid in` fragment input | lowering gap | 9 | 0 | 9 | linkage, qualification_order | `varying.interpolation.centroid`: `Usc(FragmentInputsNotBuilt)` (PowerVR), `NotYet("centroid varying")` (V3D) |
 | Backslash-newline inside a preprocessing token | unsupported construct | 4 | 4 | 4 | preprocessor | `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
 | Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
 | Register pressure of a 128-element constant array index | back-end limit (GC7000UL) | 0 | 2 | 0 | large_constant_arrays | `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
-type checker (sema) on any GPU: there is no "sema bug" among the 17/10/17
+type checker (sema) on any GPU: there is no "sema bug" among the 8/10/8
 refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
 "unsupported construct" class; no `#version 300 es` *syntax* is refused.
 
@@ -147,15 +146,19 @@ refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
   `case clamp(min(gl_MaxDrawBuffers, 4), 1, 6):` next to `case 1:` and expects
   the limit to be 4 (ES 3.0 minimum). The value the front end constant-folds is 1 on all three GPUs, so two labels fold to 1. It is the MRT item
   (`mrt4`), not a switch bug.
-* The `centroid` rows are all `centroid in` in the fragment shader (`flat in`
-  and `smooth in` build). Every file where `centroid` appears is in the table.
+* `centroid in` builds on every GPU. The PowerVR iterates it with `ditrp`
+  at `iter_mode` centroid, as pco does; the V3D multiplies by the centroid
+  W (rf1) and sets the input's `centroid_flags` bit, as Mesa's v3d does;
+  the GC7000UL iterates it as smooth (no distinction in its back end).
+  Single-sampled, the centroid of a covered pixel is its centre, so all
+  three give the smooth value there; multisampled, the PowerVR and the V3D
+  move the point into the covered samples.
 * A matrix vertex attribute, square or ES 3.00's `matCxR`, takes C
   locations of R components (`v3d::chain::attribute_locations`, the GL
   core's `draw.rs vertex_inputs` per column); the V3D refused the
   non-square ones until then (132 programs: `conversions.matrix_to_*` and
   the matrix inputs of `functions` and `linkage`).
-* GC7000UL builds the centroid inputs that PowerVR and V3D refuse, and it is
-  the only GPU refusing a large constant array.
+* GC7000UL is the only GPU refusing a large constant array.
 * `trunc` (`Ftrunc`) is selected on every back end: the PowerVR as pco's
   `lower_ftrunc` select (`x < 0 ? ceil(x) : floor(x)`, four groups), the V3D as
   `FTRUNC`; the V3D also selects the integer shifts (`SHL`, `ASR`, `SHR`),
@@ -169,26 +172,27 @@ refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
 
 | cause | class | PowerVR | GC7000UL | V3D | example |
 |---|---|---:|---:|---:|---|
-| `invariant` accepted on a fragment shader input | sema bug | 0 (refused, but by the back end, see below) | 7 | 7 (refused at link by `centroid varying`, not at compile) | `qualification_order:variables.invalid.interp_storage_invariant_input` |
+| (none) | | 0 | 0 | 0 | |
+
+`invariant` on an ES 3.00 fragment input is refused by sema (section 4.6.1:
+only outputs may be invariant), in the declaration and in `invariant x;`:
+the 7 `qualification_order.variables.invalid.*_invariant_input` cases.
 
 ## Caveat: refused for the right reason?
 
 "fail refused" counts a refusal for any reason, and the log carries only one.
-Reading the messages of the 2,128 PowerVR refusals, almost all name the rule the
+Reading the messages of the 2,135 refusals, almost all name the rule the
 case tests. The exceptions, where the refusal comes from a stage past sema and
 the case would not be refused if that stage had the construct (so a back end
-that grows the feature will turn them into "fail accepted"): 16 on PowerVR, 9 on GC7000UL and V3D.
+that grows the feature will turn them into "fail accepted"): 9 on each GPU.
 
-* 7: `qualification_order:variables.invalid.*_invariant_input` (PowerVR:
-  `Usc(FragmentInputsNotBuilt)` from the `centroid in`; same cases as the
-  "invariant on a fragment input" row above).
 * 4 + 4 + 1: `functions:invalid.local_function_{prototype,definition}` and
   `scoping:invalid.use_variable_from_{if,else}_in_outer_scope` are refused by the
   lowering (`this statement is not lowered yet`, `reading this is not lowered
   yet`) and `linkage:varying.rules.invalid_type_array_struct` (`an array of
   structures ... is not lowered yet`). The scoping pair is a sema bug (an
   out-of-scope name is found), hidden by the lowering; the function-in-function
-  pair is an unsupported construct. GC7000UL and V3D show only the first 9; PowerVR adds the seven above.
+  pair is an unsupported construct.
 * 10 recursion cases (`functions:invalid.*recursion*`) are refused as `this call
   nests too deeply to inline`, i.e. by the inliner's depth bound, not by a recursion check.
 
@@ -223,14 +227,15 @@ the form in the log):
 ## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
-  in good shape: 3,444 of 3,461 expected-build programs build on the PowerVR.
+  in good shape: 3,453 of 3,461 expected-build programs build on the PowerVR.
   Shader compilation is not where most of the AM62P's GLES3 failures come from;
   the handful below is what this corpus can show. Failures that need a draw or
   the API (integer targets, MRT, transform feedback varyings) are not in it.
 * Work that closes the table:
   1. `mrt4`: `gl_MaxDrawBuffers` of 4 turns the two `complex` cases green.
-  2. Centroid fragment inputs on PowerVR and V3D (9 programs each).
-  3. Preprocessor: backslash-newline splice inside a token (4).
-  4. Reflection names of 64 or more characters (2).
-  5. Sema: `invariant in` on a fragment input; name scoping that lets a block
-     variable be read outside its block (2); recursion by call graph.
+  2. Preprocessor: backslash-newline splice inside a token (4).
+  3. Reflection names of 64 or more characters (2).
+  4. GC7000UL: the 128-element constant array index (2).
+  5. Sema, behind refusals that come from later stages today: name scoping
+     that lets a block variable be read outside its block (2); recursion
+     by call graph (10).

@@ -178,8 +178,8 @@ pub enum Operand {
     /// A small-immediate table index.
     SmallImm(u8),
     /// A payload register the fragment shader starts with: rf0 is W, rf2
-    /// is Z (nir_to_vir.c:4853-4858; rf1, the centroid W, is not read by
-    /// anything this cut selects).
+    /// is Z, rf1 the centroid W, read by a centroid varying
+    /// (nir_to_vir.c:4853-4858).
     Payload(u8),
     /// r5: the C term of the `ldvary` issued before this operation.
     R5,
@@ -2050,11 +2050,13 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 
 /// Select a fragment shader. `inputs` is [`super::prepare::fragment_inputs`];
 /// bit i of `flat` says `inputs[i]` is flat (the program's
-/// `flat_shade_flags`).
+/// `flat_shade_flags`), bit i of `centroid` that it is sampled at the
+/// centroid (`centroid_flags`).
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
     flat: u32,
+    centroid: u32,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2118,14 +2120,19 @@ pub fn select_fragment<'a>(
      * A smooth one is vary * W + C (emit_smooth_varying); a flat one is C
      * alone, which its flat-shade flag makes the provoking vertex's value,
      * and the ldvary's own result is not read (emit_flat_varying,
-     * nir_to_vir.c: MOV of the C register). */
+     * nir_to_vir.c: MOV of the C register). A centroid one is smooth with
+     * the centroid W, rf1 (emit_fragment_varying, nir_to_vir.c:1094-1097:
+     * payload_w_centroid), its centroid flag making the hardware iterate
+     * the plane at the centroid; without multisampling the centroid is the
+     * pixel centre, and the two W are the same. */
     for (i, &(loc, comp)) in inputs.iter().enumerate() {
         let raw = s.v();
         s.push(a, VOp::Ldvary { dst: raw })?;
         let value = if i < 32 && flat & (1 << i) != 0 {
             s.mul(a, MulOp::Mov, Operand::R5, Operand::None)?
         } else {
-            let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), Operand::Payload(0))?;
+            let w = if i < 32 && centroid & (1 << i) != 0 { Operand::Payload(1) } else { Operand::Payload(0) };
+            let scaled = s.mul(a, MulOp::Fmul, Operand::V(raw), w)?;
             s.add(a, AddOp::Fadd, scaled, Operand::R5)?
         };
         for (i, op) in p.ops.iter().enumerate() {
