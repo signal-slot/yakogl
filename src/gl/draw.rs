@@ -3698,10 +3698,8 @@ fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, firs
     /* ES 3.0 transform feedback and rasterizer discard: the argument and
      * capture rules first, then a discarded draw stops here (no back end
      * sees it). Neither is reachable under report-es2 / with default state. */
-    if !crate::REPORT_ES2 {
-        if !tf::pre_draw(c, mode, false, count, draw_instances(), FUNC) || c.rasterizer_discard {
-            return;
-        }
+    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, false, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+        return;
     }
     if count == 0 {
         return;
@@ -3869,10 +3867,8 @@ fn draw_elements(
     };
     /* ES 3.0 transform feedback (an indexed draw while a capture is on is an
      * error) and rasterizer discard: see draw_arrays */
-    if !crate::REPORT_ES2 {
-        if !tf::pre_draw(c, mode, true, count, draw_instances(), FUNC) || c.rasterizer_discard {
-            return;
-        }
+    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, true, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+        return;
     }
     if count == 0 {
         return;
