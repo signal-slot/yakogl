@@ -31,14 +31,14 @@ Three trees were read, all 26.2.1:
 
 * `third_party/mesa-26.2.1/` (vendored): `src/broadcom/cle/v3d_packet.xml`,
   `src/gallium/drivers/v3d/v3dx_format_table.c`.
-* `$CCFARM_DEPS_DIR/mesa-26.2.1-caps/` (`VERSION` = 26.2.1): the gallium v3d
+* `<mesa-26.2.1-caps>/` (`VERSION` = 26.2.1): the gallium v3d
   and etnaviv drivers, `src/etnaviv/hwdb/nxp/gc_feature_database.h`. Its
   `v3dx_format_table.c` is byte-identical to the vendored one (`cmp`).
-* `$CCFARM_DEPS_DIR/mesa-26.2.1-pvr/`: `src/imagination/{vulkan,pco,csbgen}`.
+* `<mesa-26.2.1-pvr>/`: `src/imagination/{vulkan,pco,csbgen}`.
   It carries no `VERSION` file; it is the tree `docs/es3-pvr-formats.md`
   cites, and its `pvr_arch_job_common.c` lines match that document's.
 
-A fourth tree, `$CCFARM_DEPS_DIR/mesa-26.2.1-full/` (`git clone --depth 1
+A fourth tree, `<mesa-26.2.1-full>/` (`git clone --depth 1
 --branch mesa-26.2.1`, HEAD `da14d65e4499e66468094be52bff9ea0915a695e`), was
 cloned for the two files the others lack: `src/compiler/nir/nir_lower_blend.c`
 and `src/broadcom/compiler/` (`full:` below; 4.2, 5.3). No Mesa main checkout

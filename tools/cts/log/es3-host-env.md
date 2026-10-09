@@ -7,17 +7,17 @@ are real (see the header of `tools/cts/host-deqp-run.sh`).
 
 ## Checkout
 
-- Path: `$CCFARM_DEPS_DIR/VK-GL-CTS`
-  (`/home/tasuku/.local/share/ccfarm/deps/yakogl/VK-GL-CTS` on this farm node).
+- Path: `<VK-GL-CTS>`
+  (`<VK-GL-CTS>` on this farm node).
 - Commit: `93bca0186` (the revision of `tools/cts/RESULTS.md` §1p/§1r), detached HEAD.
 - Built into it, uncommitted: `targets/yakogl/*` from `tools/cts/cts-yakogl-target.patch`,
   and the external sources from `external/fetch_sources.py`.
 
 ```sh
-git clone https://github.com/KhronosGroup/VK-GL-CTS "$CCFARM_DEPS_DIR/VK-GL-CTS"
-git -C "$CCFARM_DEPS_DIR/VK-GL-CTS" checkout 93bca01
-python3 "$CCFARM_DEPS_DIR/VK-GL-CTS/external/fetch_sources.py"
-git -C "$CCFARM_DEPS_DIR/VK-GL-CTS" apply "$PWD/tools/cts/cts-yakogl-target.patch"
+git clone https://github.com/KhronosGroup/VK-GL-CTS "<VK-GL-CTS>"
+git -C "<VK-GL-CTS>" checkout 93bca01
+python3 "<VK-GL-CTS>/external/fetch_sources.py"
+git -C "<VK-GL-CTS>" apply "$PWD/tools/cts/cts-yakogl-target.patch"
 ```
 
 No file in the repository needed a fix for this CTS revision.
@@ -29,7 +29,7 @@ No file in the repository needed a fix for this CTS revision.
 command: its argument is a substring filter on case names.
 
 ```sh
-export CTS="$CCFARM_DEPS_DIR/VK-GL-CTS"
+export CTS="<VK-GL-CTS>"
 tools/cts/host-deqp-run.sh info                          # gles2 (default)
 MODULE=gles3 tools/cts/host-deqp-run.sh dEQP-GLES3.info. # gles3
 ```

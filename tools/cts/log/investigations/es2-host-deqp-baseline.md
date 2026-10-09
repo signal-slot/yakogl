@@ -13,9 +13,9 @@ and was not run.
 - Integration commit: `1ad4695d64c07cf1ed8ab0d4dba4d34f668a400d`. The script labels the run
   `49fb653`, which is that commit plus one docs-only commit (the earlier version of this file).
   No source file differs from the integration tip.
-- VK-GL-CTS: `$CCFARM_DEPS_DIR/VK-GL-CTS` (the farm's dependency cache, as in
-  `docs/es3-host-env.md`) at
-  `93bca01861b0e3ef3c387027a9791e6d065f900c` (pinned in `docs/es3-host-env.md`), with
+- VK-GL-CTS: `<VK-GL-CTS>` (the farm's dependency cache, as in
+  `tools/cts/log/es3-host-env.md`) at
+  `93bca01861b0e3ef3c387027a9791e6d065f900c` (pinned in `tools/cts/log/es3-host-env.md`), with
   `targets/yakogl/yakogl.cmake` present. `deqp-gles2` was built by the script into the
   workspace's `build/host-deqp/deqp`.
 - Tools unmodified. Default chunking (100 cases per process). Mustpass list
@@ -24,12 +24,12 @@ and was not run.
 ## Commands
 
 ```sh
-CTS=$CCFARM_DEPS_DIR/VK-GL-CTS GPU=vivante tools/cts/host-deqp-run.sh
+CTS=<VK-GL-CTS> GPU=vivante tools/cts/host-deqp-run.sh
 #   -> build/host-deqp/run-49fb653 ; it ends by running tools/cts/cts-refusals.py --cases 2 on it
 python3 tools/cts/cts-refusals.py --cases 60 --tokens 3 build/host-deqp/run-49fb653
 # scratch (not committed): group/negative_api split over the same .qpa files, reusing
 # scan() from cts-refusals.py (build/scratch/groups.py)
-CTS=$CCFARM_DEPS_DIR/VK-GL-CTS GPU=powervr tools/cts/host-deqp-run.sh
+CTS=<VK-GL-CTS> GPU=powervr tools/cts/host-deqp-run.sh
 #   -> build/host-deqp/run-01fb562-powervr
 ```
 
@@ -86,7 +86,7 @@ The 9 NotSupported are all `negative_api.texture.compressedtexsubimage2d_*`
 Cases where an ES 3-only enum or format is accepted: **none seen in this run** (0 failures
 in the group). This build is `YAKOGL_REPORT_ES2=ON`. Caveat: dEQP's GLES2 negative_api
 group covers only part of the ES 3-only surface; the static audit is the item
-`es2-error-rules-diag` (`docs/investigations/es2-error-rules.md`), and the board runs are
+`es2-error-rules-diag` (`tools/cts/log/investigations/es2-error-rules.md`), and the board runs are
 the arbiter.
 
 ## PowerVR back end (GPU=powervr), HOST-ONLY

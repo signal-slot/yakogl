@@ -5,7 +5,7 @@
 Static audit for plan #4 item `es2-error-rules-diag`, written 2026-10-09 at
 the integration tip `334d4e6`. **Nothing was built or run for this file.** It
 is read from `src/gl/` and from the dEQP-GLES2 sources in
-`VK-GL-CTS/modules/{gles2,glshared}` (the checkout in `$CCFARM_DEPS_DIR`).
+`VK-GL-CTS/modules/{gles2,glshared}` (the checkout in `<deps>`).
 `es2-host-deqp` measures; `es2-error-rules` fixes. ES 2.0 section numbers
 are those of the ES 2.0.25 specification as I know them, not re-read here;
 where the repository already cites a rule I say so.

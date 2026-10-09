@@ -59,7 +59,7 @@ from Mesa **main** as of 2026-10-08 (commit not recorded). Lines marked
 repository already recorded from Mesa 26.2.1 (each with the place it is
 recorded). Where no line was recorded, the Mesa function is named and marked
 "(line not re-checked)". To re-check them, put a Mesa 26.2.1 checkout at
-`$CCFARM_DEPS_DIR/mesa` and read the named functions.
+`<deps>/mesa` and read the named functions.
 
 ## The facts the host can show
 

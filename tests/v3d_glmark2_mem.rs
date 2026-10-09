@@ -513,7 +513,7 @@ fn the_48_mib_control_reproduces_the_recorded_refusals() {
 }
 
 /// refract after npot: the colour render target has its whole 11-level chain, so
-/// its tiled copy is 11,005,952 bytes (FINDINGS-refract-budget.md section 2).
+/// its tiled copy is 11,005,952 bytes (tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md section 2).
 /// `budget` is CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES, an LRU cap on the copies
 /// kept across jobs: when the depth copy and the colour copy together exceed
 /// it, the depth copy is evicted before the colour copy is made. Returns the

@@ -14,7 +14,7 @@ csbgen XML and the device-info headers, not `pvr_image.c` or `pco/`. The
 `mesa-26.2.1-src` directory in the deps cache is empty, and `mesa-26.2.1-caps`
 has only `src/imagination/vulkan`. For this document `src/imagination/` was
 extracted from the same tarball (checked against the sha256 above) into
-`$CCFARM_DEPS_DIR/mesa-26.2.1-pvr`. Every `Mesa path:line` below was read there;
+`<mesa-26.2.1-pvr>`. Every `Mesa path:line` below was read there;
 paths are relative to `src/imagination/`. `csbgen/rogue/texstate.xml` there is
 byte-identical to `third_party/mesa-26.2.1/src/imagination/csbgen/rogue/texstate.xml`
 (checked with `cmp`), so those line numbers hold in both.

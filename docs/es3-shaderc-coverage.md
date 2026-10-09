@@ -25,7 +25,7 @@ cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online
 
 # the corpus; DEQP_GLES3_REPORT writes one TSV line per unit that is not an
 # expected-pass success (file, unit, expectation, verdict, first log line)
-DEQP_GLES3_TEST_DIR=$CCFARM_DEPS_DIR/VK-GL-CTS/data/gles3/shaders \
+DEQP_GLES3_TEST_DIR=<VK-GL-CTS>/data/gles3/shaders \
 DEQP_GLES3_REPORT=/tmp/es3-report.tsv \
   cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
   --test es3_shaderc_corpus -- --nocapture

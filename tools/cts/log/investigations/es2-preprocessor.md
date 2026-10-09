@@ -173,7 +173,7 @@ name), E7 (indirect recursion fails), E8 (`H()`), E11 (`__LINE__` in argument an
 ## 5. Pending work
 
 **[measured]** `git log --all -- src/shaderc/online/pp.rs src/shaderc/online/lexer.rs` shows one commit (`afb1633`,
-the squashed import); no ref under `refs/ccfarm/origin/` has a name containing `splice`, `pp-` or
+the squashed import); no ref of the agents' result branches has a name containing `splice`, `pp-` or
 `preproc`, and no ref's history touches `pp.rs` separately. The plan says `pp-splice` is "in review" in plan #3 and
 its branch was not in this clone, so its diff was not read.
 

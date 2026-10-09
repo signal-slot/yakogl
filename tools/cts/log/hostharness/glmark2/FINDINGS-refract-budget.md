@@ -164,7 +164,7 @@ harness `YAKOGL_V3D_CARVEOUT_BYTES=100663296` explicitly for the three budgets.
 ## 5. The runs still to make
 
 ```sh
-GLMARK2_SRC=/home/tasuku/.local/share/ccfarm/deps/yakogl/glmark2   # at 22c527cb
+GLMARK2_SRC=<deps>/glmark2   # at 22c527cb
 for b in 8388608 16777216 25165824; do
   GM2_WRITE=0 YAKOGL_V3D_TILED_COPIES_BYTES=$b \
     tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/refract-budget-$b v3d

@@ -6,13 +6,13 @@ Host-only diagnosis (item am62p-console-diag, 2026-10-09, integration tip
 `d23ed8d`). No board was touched. Every fact is marked **measured** (a number
 or output in a committed record), **read** (read in the code or a document
 today) or **inferred**. "Port-32" and "port-33" below are the two ports of
-the `usb-serial-1` bridge, named by the last two digits; the host and the
+the `$BOARD_UART` bridge, named by the last two digits; the host and the
 full address are not written here.
 
 ## Summary
 
 1. The prompt's premise needs correcting. The committed record
-   `docs/board-sessions/am62p-es2-r1.md` is **not** a run that built image 8
+   `tools/cts/log/board-sessions/am62p-es2-r1.md` is **not** a run that built image 8
    and got `verdict=empty`. It says nothing was built and nothing was run.
    The `verdict=empty ... back_after=426s` line belongs to a different record
    (`am62p-gles3-percase.md`, image 7), and that one has the same cause.
@@ -29,11 +29,11 @@ full address are not written here.
 
 ## 1. What the am62p-es2-r1 record says (read)
 
-Quoted from `docs/board-sessions/am62p-es2-r1.md`:
+Quoted from `tools/cts/log/board-sessions/am62p-es2-r1.md`:
 
 - Title: "AM62P dEQP-GLES2 images 8-17, ms4, gl_test (BLOCKED, nothing run on the
   board)".
-- "The serial bridge named by the lease (`usb-serial-1 port-32`) reports
+- "The serial bridge named by the lease (`$BOARD_UART`) reports
   "connected" but delivered 0 bytes for the whole session. No image was built
   and no dEQP case was run".
 - Deployment and boot: none. "What was tried (before any build)" lists only
@@ -54,7 +54,7 @@ and no `/var/yakogl` evidence in it (the task text mentions that directory
 being empty; the record does not). With nothing staged, an empty
 `/var/yakogl` is expected and says nothing about the console.
 
-The `verdict=empty` line comes from `docs/board-sessions/am62p-gles3-percase.md`:
+The `verdict=empty` line comes from `tools/cts/log/board-sessions/am62p-gles3-percase.md`:
 
 > `board.sh am62p img7 rc=4 verdict=empty boot=uboot-mmc row boot_verdict=empty
 > result=none resets=absent record=absent back_after=426s`. `console.raw`,
@@ -108,16 +108,15 @@ to main_uart0; nothing in the script checks this before it reboots the board.
   in `am62p-gles3-percase.md`. mcu_uart0 is ttyS3.
 
 The earlier successful sessions used the same UART (main_uart0) but on bridge
-port-33: `tools/cts/RESULTS.md` section 1a ("console over usb-serial-1 port-33 ...;
-port-32 is dead") and every AM62P row after it (1r, 1x, 1y, 1z ...), and
-`docs/board-sessions/am62p-plan1.md` ("boot `uboot-mmc`, serial bridge
-`usb-serial-1 port-33`", images 1-7 `verdict=done`, 10,092 pass, 9 fail, run
+port-33: `tools/cts/RESULTS.md` section 1a (which port carried the console and which was dead) and every AM62P row after it (1r, 1x, 1y, 1z ...), and
+`tools/cts/log/board-sessions/am62p-plan1.md` ("boot `uboot-mmc`, serial bridge
+`$BOARD_UART`", images 1-7 `verdict=done`, 10,092 pass, 9 fail, run
 2026-10-08). So the UART did not change; the bridge port named in the lease did.
 
 ## 4. Changes since the last successful capture (git log)
 
 Last successful AM62P capture: the plan1 session, 2026-10-08 (image tip
-`b83216d4`, its record `docs/board-sessions/am62p-plan1.md`).
+`b83216d4`, its record `tools/cts/log/board-sessions/am62p-plan1.md`).
 
 ```
 git log --format='%h %ad %s' --date=short -- tools/board.sh tools/am62p_netboot_uart.py \
@@ -148,8 +147,7 @@ recipe change) is therefore ruled out by git; what changed is the lease.
 
 Run the checks in this order; each is a single command, and the answers are
 mutually exclusive for the first two. `$BR` is the bridge address from the
-lease (`usb-serial-1`); `$SSH` is the board's ssh destination (resource
-`verdin-am62p`).
+lease (`$BOARD_UART`); `$SSH` is the board's ssh destination (the board resource).
 
 ### H1 (most likely): the lease names the mcu_uart0 port (port-32), not main_uart0 (port-33)
 

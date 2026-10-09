@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP board session: plan #1 on the integration image
 
-**Integration image, not a landing proof.** Source: the ccfarm integration
+**Integration image, not a landing proof.** Source: the integration
 snapshot, HEAD `b20e4d11e595c2734671132aac34c468b0dfbaa4` (`b20e4d11`).
 `4e9397c680b4cf2ebf09425c3357c705e52478c4` (fbo, fragdata),
 `6bddfc5380177da2b8f79297646dbaf00a030a57` (case 16, the bit 3 A/B) and
@@ -10,8 +10,8 @@ snapshot, HEAD `b20e4d11e595c2734671132aac34c468b0dfbaa4` (`b20e4d11`).
 (checked with `git merge-base --is-ancestor`). A later origin/main session
 repeats this before landing.
 
-Date: 2026-10-08, worker Lepton (ccfarm-local). Board: Verdin i.MX8M Plus,
-leased resource `verdin-imx8mp`, `BOARD_BOOT=uboot-mmc`. Steps 1, 2, 3 and 5
+Date: 2026-10-08, worker host B. Board: Verdin i.MX8M Plus,
+leased resource `<board>`, `BOARD_BOOT=uboot-mmc`. Steps 1, 2, 3 and 5
 of `docs/HANDOFF.md` "Next board session → i.MX8MP" all ran; step 4 (the
 whole tree) was not part of this item. Every image was built in this
 workspace from `b20e4d11` plus a docs-only commit (no build input differs);
@@ -78,7 +78,7 @@ board.sh imx8mp gt-b20e4d11-3 rc=4 verdict=failed boot=uboot-mmc row boot_verdic
 Decoded: `CASE case 16 check 255 status 6 (set failed) got 0x2e (46) want
 0x30 (48)` — 46 of 48 cases passed, the set's first failure is case 16. The
 record is byte-identical to the baseline2-imx8mp record
-(`docs/benchmarks-baseline/imx8mp.md`).
+(`tools/cts/log/benchmarks-baseline/imx8mp.md`).
 
 - Cases 2 and 10 (#25, #9) passed in all three runs: they run before case 16
   in the set's order, and the first failure is 16 in every run. No flip in

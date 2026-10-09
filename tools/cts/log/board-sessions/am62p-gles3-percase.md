@@ -18,7 +18,7 @@ pass/fail/n.s.: none measured.
    firmware `/lib/firmware/rgx.fw.36.53.104.796` was copied with `scp` to a
    scratch file and turned into the git-ignored `driver/src/fw/pvr_fw_blob.h`
    with a short `python3 -I` script (`driver/tools/mkfwblob.sh` was refused at
-   the time). A copy of the firmware file had been committed by a ccfarm turn commit; the history was squashed, so the branch holds only this note.
+   the time). A copy of the firmware file had been committed by an agent's turn commit; the history was squashed, so the branch holds only this note.
 2. `tools/cts/am62p-deqp-images.sh` with `DEQP_MODULE=gles3` builds. Image 7
    (shaders.builtin_functions, builtin_variable, conditionals,
    constant_expressions) built clean: rc=0, zephyr.bin sha256 prefix
@@ -45,11 +45,11 @@ pass/fail/n.s.: none measured.
 
 ## Why the console was silent
 
-The lease names the bridge port `usb-serial-1:35932`. Probed from Linux on the
+The lease names the bridge port `$BOARD_UART`. Probed from Linux on the
 board (ssh, `sudo -n`), each UART at 115200 in turn, with the lease's console
 client reading the port:
 
-| Linux tty | controller | Linux alias | what port 35932 received |
+| Linux tty | controller | Linux alias | what port <port 1> received |
 |---|---|---|---|
 | ttyS2 (getty, U-Boot/Linux console) | `serial@2800000` (main_uart0) | serial2 | nothing |
 | ttyS0 | `serial@2810000` (main_uart1) | serial0 | nothing |
@@ -58,23 +58,23 @@ client reading the port:
 
 (The first probe, written to ttyS0/1/2/3 at once while ttyS0/1/3 were still
 at 9600 baud, arrived as 74 NUL bytes: the 9600 baud ttyS3 text read at
-115200.) A newline typed into port 35932 gave no login prompt either: the
+115200.) A newline typed into port <port 1> gave no login prompt either: the
 getty is on ttyS2.
 
 The Zephyr image prints on `main_uart0`
 (`driver/boards/toradex/verdin_am62p/verdin_am62p_am62p54_a53.dts`:
 `zephyr,console = &main_uart0`), the controller Linux calls ttyS2. So port
-35932 is wired to mcu_uart0 and can never carry U-Boot's or Zephyr's output.
+<port 1> is wired to mcu_uart0 and can never carry U-Boot's or Zephyr's output.
 This matches the repository's own records: `tools/cts/RESULTS.md` (around
-line 1007) runs the AM62P console on `usb-serial-1:35933` and calls 35932
+line 1007) runs the AM62P console on `$BOARD_UART` and calls <port 1>
 dead (for the console), and every AM62P dEQP run there, including section 1r,
-used port 35933. (Older lab notes on other machines still name 35932 as the
+used port <port 2>. (Older lab notes on other machines still name <port 1> as the
 AM62P console, so the wiring has changed since; the probe above is today's
-state.) This session's lease did not include port 35933, and the farm has
+state.) This session's lease did not include port <port 2>, and the farm has
 no resource registered for it, so it was not used.
 
 To finish the item, the AM62P lease has to hand out the bridge port wired to
-main_uart0 (35933 in the repository's records), or the adapter on 35932 has
+main_uart0 (<port 2> in the repository's records), or the adapter on <port 1> has
 to be moved to the Verdin's debug UART. Check it before building anything:
 from Linux, `echo probe | sudo tee /dev/ttyS2` must show up on the leased port.
 
@@ -83,19 +83,18 @@ from Linux, `echo probe | sudo tee /dev/ttyS2` must show up on the leased port.
 From a clean checkout, with shell access to the board, a working UART bridge
 and the deps cache. The shell environment must hold the variables (the
 sandbox of this session refused `VAR=x cmd` prefixes). `BOARD_HOST` is the
-lease's ssh destination (`$RESOURCE_VERDIN_AM62P_SSH`), `BOARD_UART` the
-bridge address of `usb-serial-1`
-(`$RESOURCE_USB_SERIAL_1_HOST:$RESOURCE_USB_SERIAL_1_PORT`); neither is written
+lease's ssh destination (its ssh destination), `BOARD_UART` the
+bridge address (`host:port`); neither is written
 down here. Every log's first line `sample: build tree=` must show the checked
 out commit; commit the docs first, then build, so the tree string is clean.
 
 ```sh
-D=$CCFARM_DEPS_DIR
+D=<deps>
 export ZEPHYR_WS=$D/zephyr-ws WEST_VENV=$D/zephyr-ws/.venv
 export ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1
 export DEQP_WORK=$D/deqp-stage1-am62p-gles3 DEQP_MODULE=gles3
-export BOARD_HOST=$RESOURCE_VERDIN_AM62P_SSH
-export BOARD_UART=$RESOURCE_USB_SERIAL_1_HOST:$RESOURCE_USB_SERIAL_1_PORT BOARD_BOOT=uboot-mmc
+export BOARD_HOST=<the lease's ssh destination>
+export BOARD_UART=<bridge host:port> BOARD_BOOT=uboot-mmc
 
 # firmware blob (never inside the repository tree except the ignored header)
 scp "$BOARD_HOST":/lib/firmware/rgx.fw.36.53.104.796 "$TMPDIR/rgx.fw"

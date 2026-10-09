@@ -13,15 +13,15 @@ Stage 1 is built on two farm workers, each in its own deps cache:
 
 | worker | `DEQP_WORK` | stage 1 | row D |
 |---|---|---|---|
-| `system76` (12 cores, loaded) | `/home/tasuku/.local/share/ccfarm/deps/yakogl/deqp-stage1-rpi_4b/work` | rc 0 | `D rc=0`, verdict passed |
-| `Lepton-local` (64 cores) | `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/work` | rc 0 | `D rc=0`, verdict passed |
+| host A (12 cores, loaded) | `$DEQP_WORK` | rc 0 | `D rc=0`, verdict passed |
+| host B (64 cores) | `$DEQP_WORK` | rc 0 | `D rc=0`, verdict passed |
 
-The `system76` build is in the next section. Every section after it
-describes the `Lepton-local` build, and the paths there are on that worker.
+The host A build is in the next section. Every section after it
+describes the host B build, and the paths there are on that worker.
 
-## On `system76`
+## On host A
 
-Inputs: the shared deps cache `/home/tasuku/.local/share/ccfarm/deps/yakogl`
+Inputs: the shared deps cache `<deps>`
 already held them all at the pinned revisions: `VK-GL-CTS/` at
 `93bca01861b0e3ef3c387027a9791e6d065f900c` with its externals fetched,
 `zephyr-ws/` (west workspace, `zephyr` at
@@ -31,7 +31,7 @@ picolibc; `west` in `zephyr-ws/.venv`), and `zephyr-sdk-1.0.1/` with
 `aarch64-unknown-none`. Host cmake is 4.2.3; it configures CTS's zlib with
 `CMAKE_POLICY_VERSION_MINIMUM=3.5` in the environment.
 
-Commands (with `D=/home/tasuku/.local/share/ccfarm/deps/yakogl`):
+Commands (with `D=<deps>`):
 
 ```sh
 export PATH=$D/zephyr-ws/.venv/bin:$HOME/.cargo/bin:$PATH RUSTUP_TOOLCHAIN=nightly
@@ -40,7 +40,7 @@ export CMAKE_POLICY_VERSION_MINIMUM=3.5
 ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh $D/zephyr-ws)" CTS=$D/VK-GL-CTS \
     WORK=$D/deqp-stage1-rpi_4b/work BOARD=rpi_4b tools/cts/cts-build-zephyr.sh
 ZEPHYR_WS=$D/zephyr-ws WEST_VENV=$D/zephyr-ws/.venv DEQP_WORK=$D/deqp-stage1-rpi_4b/work \
-    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt /tmp/yakogl-pi4-stage1/rowD-system76 D
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt /tmp/yakogl-pi4-stage1/rowD-hostA D
 ```
 
 Results:
@@ -69,14 +69,14 @@ Results:
   "Notes for the next session"; the `D rc=0` line is the result. The test
   directory was deleted after the check.
 
-### The host gate on `system76`
+### The host gate on host A
 
 `tools/check.sh --quick` on this branch, which changes only this file (no
 gate step reads `docs/`), run with two toolchains:
 
 | toolchain | result | failures |
 |---|---|---|
-| nightly: `RUSTUP_TOOLCHAIN=nightly`, which the farm session exports for the Pi 4 sample builds (`.ccfarm/project.toml:84`); clippy 0.1.101 (2026-10-06) | 83 ok, 16 failed | 13 clippy rows (`needless_range_loop` and others in `src/`, that nightly's lint set; the plan's `clippy-clean` item) and the 3 host rows below |
+| nightly: `RUSTUP_TOOLCHAIN=nightly`, which the farm session exports for the Pi 4 sample builds (`.ccfarm/project.toml`); clippy 0.1.101 (2026-10-06) | 83 ok, 16 failed | 13 clippy rows (`needless_range_loop` and others in `src/`, that nightly's lint set; the plan's `clippy-clean` item) and the 3 host rows below |
 | default: `RUSTUP_TOOLCHAIN` unset, so stable rustc 1.99.0 / clippy 0.1.99, the toolchain `tools/check.sh:1275` is written for; 4345 s at load 20 to 26 | 96 ok, 3 failed, 0 gaps | the 3 host rows below |
 
 The three rows that fail on either toolchain are each a tool this worker
@@ -120,7 +120,7 @@ this item.
 | cmake / west | 3.31.10 / 1.5.0, in the workspace venv | see Notes (host cmake is 4.3.5) |
 
 Everything lives under
-`/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b`
+`<deps>/deqp-stage1-rpi_4b`
 (8.1 GB total): `dl/` archives, `cts-src/` (CTS at 93bca018, made a git
 repo so `cts-build-zephyr.sh` can clone from it), `zephyr-ws/` (west
 workspace: `yakogl` clone at `2718a1e9`, `zephyr`, `modules/…`), `sdk/`,
@@ -131,8 +131,8 @@ workspace: `yakogl` clone at `2718a1e9`, `zephyr`, `modules/…`), `sdk/`,
 Stage 1 (tools/cts/README.md section 2d, `BOARD=rpi_4b`):
 
 ```sh
-ROOT=/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b
-export PATH=$ROOT/venv/bin:/home/tasuku/.cargo/bin:$PATH
+ROOT=<deps>/deqp-stage1-rpi_4b
+export PATH=$ROOT/venv/bin:$HOME/.cargo/bin:$PATH
 export ZEPHYR_BASE=$ROOT/zephyr-ws/zephyr
 export ZEPHYR_SDK=$ROOT/sdk/zephyr-sdk-1.0.1
 export ZEPHYR_SDK_INSTALL_DIR=$ZEPHYR_SDK
@@ -204,16 +204,10 @@ TMPDIR=$ROOT/tmp tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $TMPDI
 
 ## Environment values
 
-`system76`:
+host A:
 
-- `DEQP_WORK` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/deqp-stage1-rpi_4b/work`
-- `ZEPHYR_WS` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws`
-- `WEST_VENV` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws/.venv`
-- `ZEPHYR_SDK_INSTALL_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-sdk-1.0.1`
+- `DEQP_WORK`, `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`: the host's own directories (not recorded)
 
-`Lepton-local`:
+host B:
 
-- `DEQP_WORK` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/work`
-- `ZEPHYR_WS` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/zephyr-ws`
-- `WEST_VENV` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/venv`
-- `ZEPHYR_SDK_INSTALL_DIR` = `/home/tasuku/.local/share/ccfarm-local/deps/yakogl/deqp-stage1-rpi_4b/sdk/zephyr-sdk-1.0.1`
+- `DEQP_WORK`, `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`: the host's own directories (not recorded)

@@ -21,12 +21,12 @@ stub (`RESULTS.md:873`).
 
 | tag | tree |
 |---|---|
-| `mesa:` | `$CCFARM_DEPS_DIR/mesa-26.2.1-caps/src/` (Mesa 26.2.1, sparse: it holds the files cited here) |
+| `mesa:` | `<mesa-26.2.1-caps>/src/` (Mesa 26.2.1, sparse: it holds the files cited here) |
 | `tp:` | `third_party/mesa-26.2.1/src/` in the repository (headers, `csbgen`, `broadcom/cle`; no gallium drivers, no `pvr_query.c`) |
-| `cts:` | `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles3/functional/` |
+| `cts:` | `<VK-GL-CTS>/modules/gles3/functional/` |
 | none | this repository |
 
-`$CCFARM_DEPS_DIR/mesa-26.2.1-src` is an **empty directory** on node `nuc`
+`<mesa-26.2.1-src>` is an **empty directory** on the review host
 (2026-10-08). The gallium and `imagination/vulkan` files are only in
 `mesa-26.2.1-caps`. The etnaviv register offsets
 (`VIVS_GL_OCCLUSION_QUERY_ADDR/CONTROL`) are in the vendored rnndb header

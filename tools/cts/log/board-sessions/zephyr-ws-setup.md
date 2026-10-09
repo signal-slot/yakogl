@@ -1,22 +1,21 @@
 # zephyr-ws-setup: shared Zephyr west workspace and SDK (BLOCKED, nothing built)
 
-Date: 2026-10-09 (second attempt, worker XPS139340; first attempt 2026-10-08, worker system76). Result: no workspace, venv with west, or SDK exists on this
+Date: 2026-10-09 (second attempt, worker host C; first attempt 2026-10-08, worker host A). Result: no workspace, venv with west, or SDK exists on this
 worker, and none could be created: the `pip install west` below is still
 refused. No sample image was built, so there is no rc=0, time or disk use.
 
-## State of this worker (system76)
+## State of this worker (host A)
 
-- `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`
+- `<deps>`: the host's dependency cache
   (contains `deqp-stage1-rpi_4b`, `mesa-26.2.1-src`, `mesa-hwdb`, `zephyr-ws`).
 - `zephyr-ws/` holds only an empty `.venv` (no west, no Zephyr tree, no `.west`).
 - No Zephyr SDK in the deps dir.
-- `ask_farm` (allowed on the second turn) answered from nuc (ccfarm env and
-  HANDOFF, confidence 0.98): `ZEPHYR_WS=/home/tasuku/com/github/signal-slot/zephyr-ws-yakogl`,
-  `WEST_VENV=$ZEPHYR_WS/.venv`,
-  `ZEPHYR_SDK_INSTALL_DIR=/home/tasuku/org/zephyrproject/zephyr-sdk-1.0.1`.
+- `ask_farm` (allowed on the second turn) answered from host D (the farm's environment and
+  HANDOFF, confidence 0.98): `ZEPHYR_WS` (a checkout beside the repository),
+  `WEST_VENV=$ZEPHYR_WS/.venv`, and `ZEPHYR_SDK_INSTALL_DIR`.
   Reading `sdk_version`, `.west/config` and `.venv/pyvenv.cfg` there gave "File
-  does not exist" on this worker: those paths are node-local to nuc and
-  unusable here. (Node Lepton named another tree, `~/org/zephyrproject/zephyrproject`,
+  does not exist" on this worker: those paths are node-local to host D and
+  unusable here. (Node host B named another tree, a different workspace,
   Zephyr 4.4.1, which is not the repo's pin.)
 - SSH to GitHub works: `git ls-remote git@github.com:zephyrproject-rtos/zephyr.git HEAD`
   returned a hash.
@@ -31,11 +30,11 @@ fatfs, hal_nxp, hal_ti, picolibc, zephyr-lang-rust, and uses the remote
 
 ## Still-refused command
 
-2026-10-09, worker XPS139340: refused twice in a row, as two separate simple commands
+2026-10-09, worker host C: refused twice in a row, as two separate simple commands
 ("This command requires approval"). The deps dir on this worker still holds only
 an empty `zephyr-ws/.venv` (plus `sdk-dl/`, empty). Command:
 
-`/home/tasuku/.local/share/ccfarm/deps/yakogl/zephyr-ws/.venv/bin/python -m pip install west`
+`$WEST_VENV/bin/python -m pip install west`
 ("This command requires approval", asked on every retry). Nothing after it was
 attempted.
 
@@ -45,7 +44,7 @@ HTTPS clone failed on a credential error before, so the manifest's HTTPS URLs
 are rewritten to SSH by a git config file kept in the deps dir (not in `$HOME`).
 
 ```sh
-D=$CCFARM_DEPS_DIR
+D=<deps>
 cat > $D/zephyr-ws.gitconfig <<'CFG'
 [url "git@github.com:"]
 	insteadOf = https://github.com/

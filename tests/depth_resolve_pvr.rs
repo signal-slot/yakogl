@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! glmark2 `shadow` and `refract` on the PowerVR: the depth texture the
 //! shadow pass renders is sampled with stale depth (item pvr-depth-resolve,
-//! tools/hostharness/glmark2/FINDINGS.md rows 23 and 24).
+//! tools/cts/log/hostharness/glmark2/FINDINGS.md rows 23 and 24).
 //!
 //! The sequence is scene-shadow.cpp's, one frame at a time:
 //!
@@ -30,9 +30,10 @@
 //! that fakes them is `cfg(test)` of the library. The real back end's answer
 //! is the host harness's: `tools/hostharness/glmark2/run.sh ... powervr`
 //! logs `the backend did not resolve its depth (-16)` once per frame of
-//! shadow and refract (FINDINGS.md).
+//! shadow and refract (tools/cts/log/hostharness/glmark2/FINDINGS.md).
 //!
-//! The cause (FINDINGS.md): the core stamps the kick that renders into a
+//! The cause (tools/cts/log/hostharness/glmark2/FINDINGS.md): the core stamps
+//! the kick that renders into a
 //! texture (`framebuffer::stamp_target_use`, src/gl/framebuffer.rs:186) with
 //! `backend::kick_id()` while it builds the draw, BEFORE the back end sees
 //! it. When the draw starts a new frame the back end first submits the

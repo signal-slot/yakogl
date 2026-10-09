@@ -1,6 +1,6 @@
-# Host toolchain for the aarch64-unknown-none rows (system76 and similar)
+# Host toolchain for the aarch64-unknown-none rows (host A and similar)
 
-Date: 2026-10-08. Host: the review machine (system76), no `clang` on PATH, no sudo.
+Date: 2026-10-08. Host: the review machine (host A), no `clang` on PATH, no sudo.
 
 ## Result in one line
 
@@ -11,8 +11,8 @@ bindgen row passes with the host's existing libclang plus gcc's builtin headers.
 
 ## Installed where
 
-Nothing new was installed. Used from the deps cache (`$CCFARM_DEPS_DIR`, here
-`/home/tasuku/.local/share/ccfarm/deps/yakogl`):
+Nothing new was installed. Used from the deps cache (`<deps>`, here
+`<deps>`):
 
 | What | Path | Version |
 |---|---|---|
@@ -25,9 +25,9 @@ The Rust target `aarch64-unknown-none` was already installed (rustup).
 ## Exact env values
 
 ```
-CC_aarch64_unknown_none=$CCFARM_DEPS_DIR/zephyr-sdk-1.0.1/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc
+CC_aarch64_unknown_none=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc
 # only for the bindgen row (csbgen-bindings --check):
-BINDGEN_EXTRA_CLANG_ARGS="-isystem $CCFARM_DEPS_DIR/zephyr-sdk-1.0.1/gnu/aarch64-zephyr-elf/lib/gcc/aarch64-zephyr-elf/14.3.0/include"
+BINDGEN_EXTRA_CLANG_ARGS="-isystem $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/lib/gcc/aarch64-zephyr-elf/14.3.0/include"
 ```
 
 `LIBCLANG_PATH` was not needed: the host already has a libclang that bindgen
@@ -72,8 +72,8 @@ Caveats, stated plainly:
 ## Follow-ups (not done, no code changed)
 
 - If a machine has no libclang at all, fetch an official LLVM x86_64-linux
-  release tarball into `$CCFARM_DEPS_DIR/llvm-<ver>` (own empty dir) and set
-  `LIBCLANG_PATH=$CCFARM_DEPS_DIR/llvm-<ver>/lib`; its `bin/clang` then also
+  release tarball into `<deps>/llvm-<ver>` (own empty dir) and set
+  `LIBCLANG_PATH=<deps>/llvm-<ver>/lib`; its `bin/clang` then also
   serves as `CC_aarch64_unknown_none`. Not done here (no network).
 - check.sh could pass the gcc include dir to bindgen itself, or the csbgen row
   could document `BINDGEN_EXTRA_CLANG_ARGS`.

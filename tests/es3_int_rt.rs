@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0's integer colour render targets, through the GL API on the host
-//! (item int-rt-gl; docs/es3-cts-failures.md names the dEQP bucket: every
+//! (item int-rt-gl; the dEQP bucket: every
 //! shaders.builtin_functions case renders into an integer renderbuffer and
 //! died at glRenderbufferStorage with GL_INVALID_ENUM).
 //!

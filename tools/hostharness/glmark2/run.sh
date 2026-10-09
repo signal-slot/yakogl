@@ -221,14 +221,14 @@ report() {
 }
 if [ ${#pvr_gc[@]} -gt 0 ]; then
   if [ "${GM2_WRITE:-1}" = 1 ]; then
-    report --shaders "$OUT/shaders" --findings "$HERE/FINDINGS.md" "${pvr_gc[@]}"
+    report --shaders "$OUT/shaders" --findings "$ROOT/tools/cts/log/hostharness/glmark2/FINDINGS.md" "${pvr_gc[@]}"
   else
     report --shaders "$OUT/shaders" "${pvr_gc[@]}"
   fi
 fi
 if [ ${#v3d[@]} -gt 0 ]; then
   if [ "${GM2_WRITE:-1}" = 1 ]; then
-    report --findings "$HERE/FINDINGS-v3d.md" --settings "$OUT/v3d-settings.txt" v3d
+    report --findings "$ROOT/tools/cts/log/hostharness/glmark2/FINDINGS-v3d.md" --settings "$OUT/v3d-settings.txt" v3d
   else
     report --settings "$OUT/v3d-settings.txt" v3d
   fi

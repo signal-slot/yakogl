@@ -1,6 +1,6 @@
 # i.MX8MP gc-case10 board session, first part (30 interleaved boots + 10 solo case 2)
 
-Date: 2026-10-08. Item v3d-hh-48m. Board: verdin-imx8mp, `BOARD_BOOT=uboot-mmc`.
+Date: 2026-10-08. Item v3d-hh-48m. Board: `<board>`, `BOARD_BOOT=uboot-mmc`.
 Integration commit: `0175bac1b4571c2b3360851f171d69c4571d49ee` (the run lines print `build fc46bc68`,
 the item commit on top of it that adds only this doc).
 
@@ -10,13 +10,13 @@ Result: **case 10 failed in 1 of 30 runs (page arm, round 9); case 2 failed in 0
 
 ## Environment
 
-`D=$CCFARM_DEPS_DIR` (here `/home/tasuku/.local/share/ccfarm/deps/yakogl`), the shared workspace and SDK
+`D=<deps>`, the shared workspace and SDK
 that zephyr-ws-setup.md built; nothing was built from scratch.
 
 ```sh
 export ZEPHYR_WORKSPACE=$D/zephyr-ws ZEPHYR_VENV=$D/zephyr-ws/.venv \
        ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1 IMX8MP_OUT=$D/imx8mp-out
-export CFLAGS=-O2 CXXFLAGS=-O2 BOARD_HOST=torizon@verdin-imx8mp
+export CFLAGS=-O2 CXXFLAGS=-O2 BOARD_HOST=$BOARD_HOST
 ```
 
 ## Build commands (two deviations from the recipe, both needed)

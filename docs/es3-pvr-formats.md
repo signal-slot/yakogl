@@ -20,7 +20,7 @@ Nothing here is implemented yet; this file is the only change.
 Mesa 26.2.1, two copies:
 
 - the vendored subset `third_party/mesa-26.2.1/` (the csbgen packet XMLs);
-- the full release tree `$CCFARM_DEPS_DIR/mesa-26.2.1-src` (the C sources;
+- the full release tree `<mesa-26.2.1-src>` (the C sources;
   tarball sha256 `c47e81bd…` as recorded in `third_party/mesa-26.2.1/UPSTREAM`).
 
 Shorthands used below (all Mesa paths are under `src/imagination/` unless

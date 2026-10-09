@@ -8,7 +8,7 @@ draw, because its NPOT mip chain no longer fits the tiled-copy budget
 
 ## 1. Commit and commands
 
-* Tree: `fdff1147b151a4a240126371a06f45f69a310601` (ccfarm/integration tip).
+* Tree: `fdff1147b151a4a240126371a06f45f69a310601`.
   The npot commits are in it: `2673197d` (core), `77693ff4`, `be938366`.
   `tools/check.sh --quick` on this tree: 99 ok, 0 failed, 0 gaps.
 * glmark2: `22c527cb0556f3a1ac4445aaa52cc532760928d5`, cloned and checked out
@@ -20,7 +20,7 @@ git -C "$GLMARK2_SRC" checkout 22c527cb0556f3a1ac4445aaa52cc532760928d5
 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-post-npot
 ```
 
-  (`GLMARK2_SRC=/home/tasuku/.local/share/ccfarm/deps/yakogl/glmark2`.)
+  (`GLMARK2_SRC=<deps>/glmark2`.)
   This runs powervr, vivante and v3d, 33 entries, 3 frames, 800x600. The V3D
   uses `YAKOGL_V3D_CARVEOUT_BYTES=100663296` (96 MiB, set by `run.sh` from the
   Pi 4 board file). `run.sh` was run with its default `GM2_WRITE=1`, so it

@@ -2,9 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P board session: plan #1 on the integration image
 
-**Integration image, not a landing proof.** Source: the ccfarm integration
+**Integration image, not a landing proof.** Source: the integration
 snapshot, HEAD `b83216d4003b3e0b4764adc067dbbc843083c8f0` (`b83216d4`, the
-`ccfarm/integration` tip this session ran; it replaces the earlier label
+integration tip this session ran; it replaces the earlier label
 `198e8a5de6da1b4452f8cc7c9c502b6cd757f1bf`, at which nothing ran — the
 session's shell was restricted and no command outside the workspace was
 approved). `4e9397c` and `c6aa6ba` are both ancestors of HEAD (checked with
@@ -26,16 +26,16 @@ are a regression against `d60b9d76` (they passed there) and are not in
 
 ## How it was run
 
-Inputs on this node (Lepton), all under the ccfarm dependency cache
-`$CCFARM_DEPS_DIR`. Board address, UART bridge and workspace paths are
-environment only (`.ccfarm/CYCLE.md`, "Secrets and machine facts"); they are
+Inputs on this node (host B), all under the dependency cache
+`<deps>`. Board address, UART bridge and workspace paths are
+environment only; they are
 named here by their variables, never by their values:
 
-- `ZEPHYR_WS=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/zephyr-ws`,
-  `WEST_VENV=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/venv`,
-  `ZEPHYR_SDK_INSTALL_DIR=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/sdk/zephyr-sdk-1.0.1`,
-  `CTS=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b/cts-src` (shared with the Pi 4 stage 1).
-- Stage 1 for this board: `WORK=$CCFARM_DEPS_DIR/deqp-stage1-am62p
+- `ZEPHYR_WS=$ZEPHYR_WS`,
+  `WEST_VENV=$WEST_VENV`,
+  `ZEPHYR_SDK_INSTALL_DIR=$ZEPHYR_SDK_INSTALL_DIR`,
+  `CTS=<deps>/deqp-stage1-rpi_4b/cts-src` (shared with the Pi 4 stage 1).
+- Stage 1 for this board: `WORK=<deps>/deqp-stage1-am62p
   BOARD=verdin_am62p/am62p54/a53 tools/cts/cts-build-zephyr.sh` (rc=0).
   It needs a real `cargo`/`rustc` first on PATH (`$CARGO_HOME/bin`);
   the kache cargo shim has no rustc next to it (same finding as baseline2).
@@ -43,7 +43,7 @@ named here by their variables, never by their values:
   `/lib/firmware/rgx.fw.36.53.104.796` (fetched with
   `ssh $BOARD_HOST cat ... > .inputs/rgx.fw`, then the
   `driver/tools/mkfwblob.sh` format). Never committed.
-- Images: `TABLE=$CCFARM_DEPS_DIR/plan1-am62p-images/am62p-shaders7.txt
+- Images: `TABLE=<deps>/plan1-am62p-images/am62p-shaders7.txt
   tools/cts/am62p-deqp-images.sh <that table> b83216d4` — the table is rows
   1 to 7 of `tools/cts/am62p-full-tree.txt`. All seven `img<N> rc=0`
   (`build.out`). The script still exits 1 after the last unlabelled row (a
@@ -153,8 +153,8 @@ rows too.
 - `fragdata.invalid_assign_to_1` Pass is board-confirmed; `es2-cts-failures.md`
   (owned by bench-recipes) can move that row from "awaiting board" to done.
 - Stage 1, the seven images, and the records are on this node:
-  `DEQP_WORK=$CCFARM_DEPS_DIR/deqp-stage1-am62p`,
-  images in `$CCFARM_DEPS_DIR/plan1-am62p-images/img1..7-b83216d4` (labels
+  `DEQP_WORK=<deps>/deqp-stage1-am62p`,
+  images in `<deps>/plan1-am62p-images/img1..7-b83216d4` (labels
   `img<N>-b83216d4`, `build.out` present). A re-run of rows 8 to 17 needs no
   rebuild of rows 1 to 7: the tree skips rows with `INDEX.txt`.
 - `am62p-deqp-images.sh` exits 1 after the last unlabelled row even when all

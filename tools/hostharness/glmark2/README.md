@@ -20,8 +20,8 @@ carve-out (its size from the Pi 4's glmark2 image), so an allocation the
 board would refuse is refused here, with the board's "out of GPU memory"
 line, and each entry's high-water is listed.
 
-The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000) and
-[FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D), and the de-duplicated shader texts
+The results are in [FINDINGS.md](../../cts/log/hostharness/glmark2/FINDINGS.md) (PowerVR, GC7000) and
+[FINDINGS-v3d.md](../../cts/log/hostharness/glmark2/FINDINGS-v3d.md) (V3D), and the de-duplicated shader texts
 are written to `build/glmark2-host/shaders/` by the run and never committed
 ([`tools/shaders/glmark2/README.md`](../../shaders/glmark2/README.md)).
 

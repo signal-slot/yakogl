@@ -39,7 +39,7 @@ re-measurement.
 
 ## 1. The cases and the state each clear runs under
 
-Source: `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles2/functional/`
+Source: `<VK-GL-CTS>/modules/gles2/functional/`
 [read]. The mustpass list is `tools/cts/gles2-mustpass.txt`.
 
 ### 1.1 `functional.color_clear.*` (19 cases, `es2fColorClearTest.cpp`)

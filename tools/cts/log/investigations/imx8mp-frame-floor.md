@@ -1,6 +1,6 @@
 # i.MX8MP: why glmark2 frames take "about 24 ms" (host investigation)
 
-Written 2026-10-08 from the code at `fdff1147` (ccfarm/integration). Line
+Written 2026-10-08 from the code at `fdff1147`. Line
 numbers are that commit's. Host-only: this item reads code and earlier
 records. It ran nothing on a board and changed no code.
 

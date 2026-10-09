@@ -255,7 +255,7 @@ repository at the commit that added this file.
   (`driver/samples/zephyr/cluster/CMakeLists.txt:55-67,109-110`,
   `driver/samples/zephyr/cluster/rust/build.rs:13-16`).
 - **Source:** Noto Sans from `googlefonts/noto-fonts` (the repository's AM62P
-  baseline note names it, `docs/benchmarks-baseline/am62p.md:22`), or your
+  baseline note names it, `tools/cts/log/benchmarks-baseline/am62p.md:22`), or your
   distro's package of static Noto Sans (SIL OFL 1.1, free to use). **Not
   pinned:** no version is named. A different version can change glyphs, and so
   the picture; keep the same files for a series of runs.

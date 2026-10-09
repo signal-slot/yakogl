@@ -32,7 +32,7 @@
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_shaderc_corpus
-//! DEQP_GLES3_TEST_DIR=$CCFARM_DEPS_DIR/VK-GL-CTS/data/gles3/shaders \
+//! DEQP_GLES3_TEST_DIR=<VK-GL-CTS>/data/gles3/shaders \
 //!     cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online \
 //!     --test es3_shaderc_corpus -- --nocapture
 //! ```

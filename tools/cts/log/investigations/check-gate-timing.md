@@ -1,6 +1,6 @@
 # `tools/check.sh --quick`: where the time goes
 
-Date: 2026-10-09. Tip: 0567683. Host: nuc, 22 logical CPUs (`nproc` = 22),
+Date: 2026-10-09. Tip: 0567683. Host: host D, 22 logical CPUs (`nproc` = 22),
 nightly rustc, kache as rustc wrapper.
 Cargo profile: `test`/`dev` = `[profile.dev] opt-level = 1, panic = "abort"`
 (cargo prints `[optimized + debuginfo]`), debug assertions on. Product builds
@@ -10,9 +10,9 @@ the gate also makes use `[profile.release]` (opt-level 2, **LTO, codegen-units
 ## What was measured, and how well
 
 The first gate run was a cold one: this workspace's `target/` was empty. The
-host was shared: other ccfarm workers ran their own `check.sh` and cargo builds
+host was shared: other workers ran their own `check.sh` and cargo builds
 at the same time (load average 33-36 on 22 CPUs while the gate ran; 20-25
-later). Every ccfarm workspace has its own `target/`, so every worker pays the
+later). Every workspace has its own `target/`, so every worker pays the
 cold build, and the workers compete for the same 22 CPUs.
 
 I could not run a per-step-timed copy of the script (executing a modified copy

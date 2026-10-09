@@ -66,7 +66,7 @@ instead (`yakogl-tools femtovg-shaders <dir>` writes the same files).
 
 **Check against upstream (byte exact).** The crate `femtovg 0.26.0` was fetched with
 `cargo fetch` (crates.io registry) and its `src/renderer/opengl/` copied to
-`$CCFARM_DEPS_DIR/femtovg-0.26.0/upstream`. The nostd patch's `NO_DISCARD` hunk
+`<femtovg-0.26.0>/upstream`. The nostd patch's `NO_DISCARD` hunk
 (`main-fs.glsl`, `femtovg-0.26.0-nostd.patch` lines 590-607) was applied to that
 `main-fs.glsl` (the hunk's context matched exactly once), and
 `python3 -I verify_variants.py <that dir>` then reports **36 variants expected, 0

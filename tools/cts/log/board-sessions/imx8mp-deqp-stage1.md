@@ -1,11 +1,11 @@
 # imx8mp-deqp-stage1b: i.MX8MP dEQP stage 1 and the two-row mini-table image
 
-Date: 2026-10-08, worker system76, yakogl `14d6c177` (integration tip). Result:
+Date: 2026-10-08, worker host A, yakogl `14d6c177` (integration tip). Result:
 stage 1 built (rc=0) and the two-row mini-table image built with
 `imx8mp-deqp-build.sh --table` (rc=0, image check passed). No board was touched
 and nothing was run over ssh.
 
-## Inputs (`D` = `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`)
+## Inputs (`D` = `<deps>`)
 
 | Variable | Value |
 |---|---|
@@ -29,12 +29,12 @@ Two things the scripts did not do by themselves on this worker:
   immediate`: the toolchain file passes no `-O` (`CMAKE_C_FLAGS_RELEASE` is
   empty), so the code is built at -O0. Fix without a repo change: `CFLAGS=-O2
   CXXFLAGS=-O2` in the environment, and a fresh `DEQP_STAGE1/build`. Whether
-  the nuc builds carry an `-O` from elsewhere is not known; a permanent fix
+  the host D builds carry an `-O` from elsewhere is not known; a permanent fix
   would be an `-O2` in `cts-build-zephyr.sh`'s toolchain file (not done: out of
   this item).
 
 ```sh
-D=/home/tasuku/.local/share/ccfarm/deps/yakogl
+D=<deps>
 export CFLAGS=-O2 CXXFLAGS=-O2 ZEPHYR_WORKSPACE=$D/zephyr-ws ZEPHYR_VENV=$D/zephyr-ws/.venv
 export ZEPHYR_SDK_INSTALL_DIR=$D/zephyr-sdk-1.0.1 ZEPHYR_SDK=$D/zephyr-sdk-1.0.1
 export IMX8MP_OUT=$D/imx8mp-out DEQP_STAGE1=$D/deqp-stage1-imx8mp HAL_NXP_DIR=$D/zephyr-ws/modules/hal/nxp
@@ -51,7 +51,7 @@ Mini table (row 1: the shaders tail incl. `shaders.fragdata.*`; row 2:
 Image build output (`real 0m53s`):
 
 ```
-imx8mp: 2 table rows -> /home/tasuku/.local/share/ccfarm/deps/yakogl/imx8mp-out/mini.table.conf
+imx8mp: 2 table rows -> <deps>/imx8mp-out/mini.table.conf
 rc=0
 CONFIG_DEQP_REPORT_ES2=y
 check-deqp-images: the dEQP image recipes build what conformance needs

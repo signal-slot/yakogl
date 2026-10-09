@@ -16,8 +16,8 @@ origin/main as visible in this workspace (read-only ref copy, HEAD8
 | `ec5ba4f` | non-seamless cube (the 25 cube cases) | no (18 commits not on main) |
 | `4e9397c` | fragdata invalid_assign_to_1 | no (5 commits not on main) |
 
-Both commits are reachable only from `ccfarm/integration` and the
-`ccfarm/*` branches (checked with `git merge-base --is-ancestor` and
+Both commits are reachable only from the integration branch and the
+agents' result branches (checked with `git merge-base --is-ancestor` and
 `git branch --all --contains`; no `main` ref contains them).
 `git fetch origin` was refused in this unattended session, so the
 snapshot of origin/main may be stale; if main has since received plan

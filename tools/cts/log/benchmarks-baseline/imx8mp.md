@@ -4,7 +4,7 @@
 
 Status: **all five common-set rows built and ran on the board.** GM, SO, SV and
 CL reach a passing verdict; GT fails (case 16). Board: Verdin i.MX8M Plus
-(GC7000UL), `torizon@verdin-imx8mp`, kernel `6.6.142-7.7.0-Torizon`.
+(GC7000UL), `$BOARD_HOST`, kernel `6.6.142-7.7.0-Torizon`.
 Date: 2026-10-08 (runs 07:50-08:07 local).
 
 ## What was built
@@ -32,7 +32,7 @@ Date: 2026-10-08 (runs 07:50-08:07 local).
 
 ## Run
 
-`BOARD_HOST=torizon@verdin-imx8mp BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh
+`BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh
 imx8mp run <img-dir> <outdir>` (`board.sh tree`, then `common-tally.py`; the
 mmc route, because no TFTP server was set up). The i.MX8MP has **no console
 capture**: the result is the SNVS record, so there is no console text, no
