@@ -43,7 +43,7 @@ and commit is `docs/es2-cts-failures.md`; it does not have the readings yet.
 | i.MX8MP gl_test case 16 (#8) | harness fixed: it failed in the default image only because that image offers no 4x config (`check 255` is the record's none-marker, not a check). Case 16 runs its 1x half and skips the 4x half by name without a 4x config. The driver did not scale viewport, scissor and clip to the 2x scratch surface: fixed behind `gc_debug_msaa` bit 3, off by default. On the integration image case 16 alone is the by-name skip, but the set walker in `gl_test.c` counts any non-zero return (the skip's -3) as a failure, so the default set still records 46 / 48 with case 16 first (the second failure, after 16, is unnamed); the bit 3 A/B failed in both arms at check 4 (`x4 inside` got 0x00000000), so bit 3 is not the fix and #8 stays open | `6bddfc5` |
 | i.MX8MP gl_test cases 10 and 2 (#9, #25) | not fixed. Reading our draw, resolve and read-back sync against etnaviv's finds no missing stall, flush or cache operation (`src/vivante/VIVANTE_NOTES.md`; two host tests pin it). The product is unchanged. The recipe's repeat runs on the integration image (60 boots): base 4 / 40, page-aligned 1 / 10, no-reuse 2 / 10; a second session (`0175bac1`, `tools/cts/log/board-sessions/imx8mp-gc-case10.md`): case 10 1 of 30, case 2 0 of 40. The rate fell from 14 / 30 and no arm removes the failure, so the three hypotheses are not separated | `8409419` |
 | PowerVR vertex attribute registers | wrong-code defect found by the host compiler check and fixed: an attribute read only where the unroller drops code took no registers, and every later attribute was read four registers early. No dEQP-GLES2 case is known to reach it; it changes AM62P vertex code, so the AM62P tree is re-run. On the integration image six of the seven shaders images equal `d60b9d76` | `c6aa6ba` |
-| AM62P, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` cases | **new regression**, found on the integration image (images 1 to 7: 10,092 pass / 9 fail, all 9 in image 1). They passed at `d60b9d76`. Not diagnosed, not in `docs/es2-cts-failures.md`, no issue yet; "Known defects" | none |
+| AM62P, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` cases | fixed on the host, not yet run on the board: the PowerVR online compiler fused `a * b + c` into one `fmad` only where the product had one reader, and the shader that also wrote `v_unrelated` gave the position's products a second reader, so one shader of each pair rounded the position once where the other rounded it twice. A sum on the way to an `invariant` output (`invariant gl_Position;`, `invariant varying`, `#pragma STDGL invariant(all)`, now carried on `ir::IoDecl::invariant`) is no longer fused, as Mesa's exact `fadd` is not `contract` (`powervr/prepare.rs` `mark_exact`). On the host the 9 pairs went from differing to identical position code (case 0 was identical before and after); no corpus source changes. Expect the 9 to pass in image 1 | (this commit) |
 | dEQP image recipes | checked against the current defaults on the host (`tools/cts/check-deqp-images.py`, 206 `board_selftest` checks, fixtures in `tools/cts/testdata/deqp-config`); the AM62P 4x image has its own table `tools/cts/am62p-ms4-tree.txt` | `e6e5f14`, `292310c`, `688a574` |
 
 The compiler check of `c6aa6ba` ran the PowerVR and GC7000 back ends against
@@ -461,11 +461,13 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      the AM62P board recipe; the board's completion timing may differ from
      the host's;
    - AM62P: 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_
-     {1,2,3}` cases fail (no issue yet). They passed at `d60b9d76` and failed
-     on the integration image `b83216d4` (image 1). Not diagnosed: the
-     plan's guess, PowerVR multiply-add fusion that does not fuse the same
-     expression the same way in two shaders, is unchecked. It blocks goal 1
-     on the AM62P;
+     {1,2,3}` cases failed on the integration image `b83216d4` (image 1;
+     they passed at `d60b9d76`). Diagnosed and fixed on the host: the
+     PowerVR multiply-add fusion fused a product only where it had one
+     reader, which depends on what else the shader computes; a sum feeding
+     an `invariant` output is now never fused (the table row above). Not yet
+     confirmed on the board; until image 1 passes them they block goal 1 on
+     the AM62P;
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (#9), and case 2
      (`texture`) fails intermittently since `05f8f749` (2 of 3 runs: 44 / 48
      and 45 / 48 with case 2 first, 46 / 48 with case 16 first; `112dd4fb`,
@@ -764,8 +766,9 @@ Confirms that nothing moved after the PowerVR compiler changes since the
 and that `4e9397c` turns `fragdata.invalid_assign_to_1` into a pass. The
 whole GLES2 tree is re-run, since it last ran on `d60b9d76`. On the
 integration image `b83216d4` images 1 to 7 ran: the fragdata case passed and
-9 `shaders.invariance` cases failed ("Known defects"); expect those 9 in
-image 1 until they are fixed. The console must be the main_uart0 bridge
+9 `shaders.invariance` cases failed ("Known defects"); with the host fix
+for them (no fusion on the way to an `invariant` output) expect them to pass
+in image 1. The console must be the main_uart0 bridge
 port: a session leased the mcu_uart0 port and captured nothing
 (`tools/cts/log/investigations/am62p-console-empty.md`):
 

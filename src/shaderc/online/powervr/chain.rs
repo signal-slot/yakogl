@@ -77,7 +77,8 @@ pub fn build_vertex<'a>(
      * temporaries (from 0: a vertex shader pins no iterated input), the
      * uniform block moved past the descriptors. */
     let (sel, sampled) = expand_samples(sel, 0, m.uniforms, a)?;
-    let (sel, prep): (Selected<'a>, PrepareStats) = prepare_fused(&sel, a).map_err(ChainError::Prepare)?;
+    let invariant = invariant_slots(m, a)?;
+    let (sel, prep): (Selected<'a>, PrepareStats) = prepare_fused(&sel, a, invariant).map_err(ChainError::Prepare)?;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
     let sel = index_high_shared(&sel, a).map_err(ChainError::Prepare)?;
     /* the default's branch-or-predicate, on the arms' final groups */
@@ -108,6 +109,17 @@ pub fn build_vertex<'a>(
         prep,
         sampled,
     })
+}
+
+/// The output slots `m` declares invariant (section 4.6.1), which
+/// [`prepare_fused`] computes without contraction.
+fn invariant_slots<'a>(m: &ir::Module<'_>, a: &'a Arena<'a>) -> Result<&'a [ir::IoSlot], ChainError> {
+    let n = m.outputs.iter().filter(|o| o.invariant).count();
+    let out = a.alloc_filled(n, ir::IoSlot::Position).map_err(|_| ChainError::OutOfScratch)?;
+    for (o, d) in out.iter_mut().zip(m.outputs.iter().filter(|o| o.invariant)) {
+        *o = d.slot();
+    }
+    Ok(out)
 }
 
 /// The largest shader image the chain builds into, in bytes. It was 16 KiB,
@@ -434,7 +446,8 @@ pub fn build_fragment_for<'a>(
     let (sel, sampled) = expand_samples(sel, pinned_n, m.uniforms, a)?;
     let native_cube = sel.groups.iter().any(|g| matches!(g.op, super::sel::SelOp::Sample { cube: true, .. }));
 
-    let sel: Selected<'a> = prepare_fused(&sel, a).map_err(ChainError::Prepare)?.0;
+    let invariant = invariant_slots(m, a)?;
+    let sel: Selected<'a> = prepare_fused(&sel, a, invariant).map_err(ChainError::Prepare)?.0;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
     /* The front-face op only when the program still reads it: a
      * gl_FrontFacing whose value nothing used is gone, and pco's record then
@@ -1162,5 +1175,143 @@ mod tests {
             .map(|run| run.iter().filter(|g| g.op == SelOp::Copy && g.srcs[0] == Some(SelSrc::Imm(0))).count())
             .collect();
         assert_eq!(zeros_before[..3], [14, 0, 1]);
+    }
+
+    /// dEQP-GLES2.functional.shaders.invariance's subexpression cases, as
+    /// es2fShaderInvarianceTests.cpp builds them (VK-GL-CTS, Apache-2.0):
+    /// `${HIGH}` and the rest replaced by the precision's literals. Each
+    /// pair writes `invariant gl_Position` through the same expression; the
+    /// first shader also computes an unrelated varying from values the
+    /// position shares.
+    const DEQP_INVARIANCE_HEAD: &str =
+        "attribute PREC vec4 a_input;\nvarying mediump vec4 v_unrelated;\ninvariant gl_Position;\nvoid main ()\n{\n";
+    const DEQP_INVARIANCE: [(&str, &str); 4] = [
+        (
+            "    v_unrelated = a_input.xzxz + (HIGH*a_input.x*a_input.xxxx + HIGH*a_input.y*a_input.yyyy) * (1.08 * a_input.zyzy * a_input.xzxz) * HIGH_INV * (a_input.z * a_input.zzxz - a_input.z * a_input.zzxz) + (HIGH*a_input.x*a_input.xxxx + HIGH*a_input.y*a_input.yyyy) / HIGH;\n    gl_Position = a_input + (HIGH*a_input.x*a_input.xxxx + HIGH*a_input.y*a_input.yyyy) * HIGH_INV;\n}\n",
+            "    v_unrelated = vec4(0.0, 0.0, 0.0, 0.0);\n    gl_Position = a_input + (HIGH*a_input.x*a_input.xxxx + HIGH*a_input.y*a_input.yyyy) * HIGH_INV;\n}\n",
+        ),
+        (
+            "    PREC vec4 a = HIGH * a_input.zzxx + a_input.xzxy - HIGH * a_input.zzxx;\n    PREC vec4 b = HIGH * a_input.zzxx;\n    PREC vec4 c = b - HIGH * a_input.zzxx + a_input.xzxy;\n    PREC vec4 d = (LOW * a_input.yzxx) * (LOW * a_input.yzzw) * (1.1*LOW_INV * a_input.yzxx) * (LOW_INV * a_input.xzzy);\n    PREC vec4 e = ((LOW * a_input.yzxx) * (1.1*LOW_INV * a_input.yzxx)) * ((LOW_INV * a_input.xzzy) * (LOW * a_input.yzzw));\n    v_unrelated = a + b + c + d + e;\n    gl_Position = a_input + fract(c) + e;\n}\n",
+            "    PREC vec4 b = HIGH * a_input.zzxx;\n    PREC vec4 c = b - HIGH * a_input.zzxx + a_input.xzxy;\n    PREC vec4 e = ((LOW * a_input.yzxx) * (1.1*LOW_INV * a_input.yzxx)) * ((LOW_INV * a_input.xzzy) * (LOW * a_input.yzzw));\n    v_unrelated = vec4(0.0, 0.0, 0.0, 0.0);\n    gl_Position = a_input + fract(c) + e;\n}\n",
+        ),
+        (
+            "    PREC vec4 a = MEDIUM * (a_input.xxxx + a_input.yyyy);\n    PREC vec4 b = (MEDIUM * (a_input.xxxx + a_input.yyyy)) * (MEDIUM * (a_input.xxxx + a_input.yyyy)) / MEDIUM / MEDIUM;\n    PREC vec4 c = a * a;\n    PREC vec4 d = c / MEDIUM / MEDIUM;\n    v_unrelated = a + b + c + d;\n    gl_Position = a_input + d;\n}\n",
+            "    PREC vec4 a = MEDIUM * (a_input.xxxx + a_input.yyyy);\n    PREC vec4 c = a * a;\n    PREC vec4 d = c / MEDIUM / MEDIUM;\n    v_unrelated = vec4(0.0, 0.0, 0.0, 0.0);\n    gl_Position = a_input + d;\n}\n",
+        ),
+        (
+            "    PREC float x = a_input.x * 0.2;\n    PREC vec4 a = a_input.xxyx * 0.7;\n    PREC vec4 b = a_input.yxyz * 0.7;\n    PREC vec4 c = a_input.zxyx * 0.5;\n    PREC vec4 f = x*a + x*b + x*c;\n    v_unrelated = f;\n    PREC vec4 g = x * (a + b + c);\n    gl_Position = a_input + g;\n}\n",
+            "    PREC float x = a_input.x * 0.2;\n    PREC vec4 a = a_input.xxyx * 0.7;\n    PREC vec4 b = a_input.yxyz * 0.7;\n    PREC vec4 c = a_input.zxyx * 0.5;\n    v_unrelated = vec4(0.0, 0.0, 0.0, 0.0);\n    PREC vec4 g = x * (a + b + c);\n    gl_Position = a_input + g;\n}\n",
+        ),
+    ];
+
+    /// The precisions dEQP runs each case at, with its literals:
+    /// (name, HIGH, HIGH_INV, MEDIUM, LOW, LOW_INV).
+    const DEQP_PRECISIONS: [[&str; 6]; 3] = [
+        ["highp", "1.0e20", "1.0e-20", "1.0e14", "1.0e9", "1.0e-9"],
+        ["mediump", "1.0e4", "1.0e-4", "1.0e2", "1.0e1", "1.0e-1"],
+        ["lowp", "0.9", "1.1", "1.1", "1.15", "0.87"],
+    ];
+
+    fn deqp_invariance_source(body: &str, p: &[&str; 6]) -> std::string::String {
+        (std::string::String::from(DEQP_INVARIANCE_HEAD) + body)
+            .replace("PREC", p[0])
+            .replace("HIGH_INV", p[2])
+            .replace("HIGH", p[1])
+            .replace("MEDIUM", p[3])
+            .replace("LOW_INV", p[5])
+            .replace("LOW", p[4])
+    }
+
+    /// The groups of `src`'s prepared program (before allocation) that
+    /// compute `gl_Position`, as text, in the order a depth-first walk from
+    /// the position's components meets them, every virtual register named
+    /// by that order: two programs computing the position alike give the
+    /// same lines whatever else they compute, and in whatever order.
+    fn position_slice(src: &str) -> std::vec::Vec<std::string::String> {
+        use crate::shaderc::online::{lower, sema::Stage, store};
+        use std::collections::BTreeMap;
+        use std::string::String;
+        let _l = store::test_lock();
+        let mut lines = std::vec::Vec::new();
+        store::with_scratch(|a| {
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+            let mut image = std::vec![0u8; MAX_IMAGE_BYTES];
+            let b = build_vertex(&l.module, LIMITS, a, &mut image).expect("builds");
+            /* the outputs `prepared` is read from: the same steps, kept */
+            let m = super::super::abi::with_matrix_varyings_split(&l.module, a).unwrap();
+            let sel = select(m, a).unwrap();
+            let (sel, _) = expand_samples(sel, 0, m.uniforms, a).unwrap();
+            let (sel, _) = prepare_fused(&sel, a, invariant_slots(m, a).unwrap()).unwrap();
+            let sel = share_common(&sel, a).unwrap();
+            let sel = index_high_shared(&sel, a).unwrap();
+            let sel = super::super::select::choose_if_lowering(sel, a).unwrap();
+            assert_eq!(sel.groups, b.prepared, "the slice is taken from the program build_vertex built");
+            let mut def: BTreeMap<u32, &SelGroup> = BTreeMap::new();
+            for g in sel.groups {
+                if let Some(SelDst::Virtual(v)) = g.dst {
+                    assert!(def.insert(v.0, g).is_none(), "straight-line code, each value defined once");
+                }
+            }
+            fn walk(
+                s: &SelSrc,
+                def: &BTreeMap<u32, &SelGroup>,
+                named: &mut BTreeMap<u32, usize>,
+                lines: &mut std::vec::Vec<String>,
+            ) -> String {
+                let SelSrc::Virtual { v, mods } = *s else { return format!("{s:?}") };
+                if let Some(n) = named.get(&v.0) {
+                    return format!("v{n}{mods:?}");
+                }
+                let g = def[&v.0];
+                let mut t = format!("{:?} {:?}", g.op, g.ty);
+                for s in g.srcs.iter().flatten() {
+                    t += " ";
+                    t += &walk(s, def, named, lines);
+                }
+                let n = lines.len();
+                named.insert(v.0, n);
+                lines.push(format!("v{n} = {t}"));
+                format!("v{n}{mods:?}")
+            }
+            let mut named = BTreeMap::new();
+            for (slot, c) in sel.outputs {
+                if *slot == ir::IoSlot::Position {
+                    for s in c.iter().flatten() {
+                        let r = walk(s, &def, &mut named, &mut lines);
+                        lines.push(format!("out {r}"));
+                    }
+                }
+            }
+        })
+        .unwrap();
+        lines
+    }
+
+    /// GLSL ES 1.00 section 4.6.1: an `invariant` output computed by the
+    /// same expression from the same inputs gets the same value in every
+    /// program, whatever else the program computes. dEQP's
+    /// shaders.invariance.*.common_subexpression_{0..3}: each pair computes
+    /// gl_Position with the same groups.
+    #[test]
+    fn an_invariant_position_is_computed_alike_whatever_else_the_shader_computes() {
+        let mut differ = std::vec::Vec::new();
+        for p in &DEQP_PRECISIONS {
+            for (k, (first, second)) in DEQP_INVARIANCE.iter().enumerate() {
+                let (a, b) = (
+                    position_slice(&deqp_invariance_source(first, p)),
+                    position_slice(&deqp_invariance_source(second, p)),
+                );
+                if a != b {
+                    differ.push(format!(
+                        "{}.common_subexpression_{k}:\n  {}\nvs\n  {}",
+                        p[0],
+                        a.join("\n  "),
+                        b.join("\n  ")
+                    ));
+                }
+            }
+        }
+        assert!(differ.is_empty(), "{} pairs compute the position differently:\n{}", differ.len(), differ.join("\n\n"));
     }
 }
