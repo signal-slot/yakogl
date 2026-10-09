@@ -52,6 +52,41 @@ pub const RT_CLASSES: &[(&str, u32)] = &[
     ("f32", abi::SHC_RT_F32),
 ];
 
+/// Integer render targets (ES 3.0 table 3.13's integer rows), by their GL
+/// names in lower case: the variant packs the integer output for the
+/// target's layout (`shc_blend_key_int_rt`). Only `replace`, with or without
+/// a mask, goes with one: an integer target is never blended.
+pub const INT_RTS: &[(&str, abi::ShcIntRt)] = &[
+    ("r8i", int_rt(1, 8, true)),
+    ("r8ui", int_rt(1, 8, false)),
+    ("r16i", int_rt(1, 16, true)),
+    ("r16ui", int_rt(1, 16, false)),
+    ("r32i", int_rt(1, 32, true)),
+    ("r32ui", int_rt(1, 32, false)),
+    ("rg8i", int_rt(2, 8, true)),
+    ("rg8ui", int_rt(2, 8, false)),
+    ("rg16i", int_rt(2, 16, true)),
+    ("rg16ui", int_rt(2, 16, false)),
+    ("rg32i", int_rt(2, 32, true)),
+    ("rg32ui", int_rt(2, 32, false)),
+    ("rgba8i", int_rt(4, 8, true)),
+    ("rgba8ui", int_rt(4, 8, false)),
+    ("rgba16i", int_rt(4, 16, true)),
+    ("rgba16ui", int_rt(4, 16, false)),
+    ("rgba32i", int_rt(4, 32, true)),
+    ("rgba32ui", int_rt(4, 32, false)),
+    ("rgb10_a2ui", int_rt(4, 10, false)),
+];
+
+const fn int_rt(channels: u8, bits: u8, signed: bool) -> abi::ShcIntRt {
+    abi::ShcIntRt { channels, bits, signed }
+}
+
+/// The integer render target `@rt` names, if it names one.
+pub fn int_rt_of(rt: &str) -> Option<abi::ShcIntRt> {
+    INT_RTS.iter().find(|(n, _)| *n == rt).map(|(_, r)| *r)
+}
+
 pub fn lookup(table: &[(&str, u32)], k: &str) -> Option<u32> {
     table.iter().find(|(n, _)| *n == k).map(|(_, v)| *v)
 }
@@ -71,6 +106,8 @@ pub enum SpecError {
     /// The spec is ONE/ZERO with every channel written into RGBA8: the plain
     /// shader, not a variant of it.
     PlainReplace,
+    /// A blend into an integer render target, which is never blended.
+    IntBlend,
 }
 
 /// The render target class names, for a message.
@@ -86,7 +123,7 @@ fn partition(s: &str, sep: char) -> (&str, &str) {
 /// 'BLENDSPEC[@rt]' -> (blendspec, rt).
 pub fn split_rt(spec: &str) -> Result<(&str, &str), SpecError> {
     let (blend, rt) = partition(spec, '@');
-    if lookup(RT_CLASSES, rt).is_none() {
+    if lookup(RT_CLASSES, rt).is_none() && int_rt_of(rt).is_none() {
         return Err(SpecError::RtClass { rt: rt.to_string() });
     }
     Ok((blend, rt))
@@ -113,6 +150,12 @@ pub fn split_variant_spec(spec: &str) -> Result<(String, u32), SpecError> {
 /// Variant spec -> the blend key (SHC_BLEND_KEY | MASK_OFF | RT).
 pub fn blend_key(spec: &str) -> Result<u32, SpecError> {
     let (factors, mask_bits) = split_variant_spec(spec)?;
+    if let Some(rt) = int_rt_of(split_rt(spec)?.1) {
+        if factors != "one,zero" {
+            return Err(SpecError::IntBlend);
+        }
+        return Ok(abi::shc_blend_key_int_rt(rt) | abi::shc_blend_key_mask_off(!mask_bits & 0xf));
+    }
     let t: Vec<&str> = factors.split(',').collect();
     if t.len() < 2 {
         return Err(SpecError::TooFewFactors);
@@ -138,12 +181,14 @@ pub fn blend_key(spec: &str) -> Result<u32, SpecError> {
 fn spec_message(spec: &str, e: &SpecError) -> String {
     match e {
         SpecError::RtClass { rt } => {
-            format!("'{spec}': render target class '{rt}' is not one of {}", rt_class_names())
+            let ints = INT_RTS.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ");
+            format!("'{spec}': render target class '{rt}' is not one of {}, {ints}", rt_class_names())
         }
         SpecError::Mask { mask } => format!("'{spec}': mask '{mask}': channels are r g b a"),
         SpecError::TooFewFactors => format!("'{spec}': needs at least srgb,drgb"),
         SpecError::Unknown(n) => format!("'{spec}': unknown blend factor/equation '{n}'"),
         SpecError::PlainReplace => format!("'{spec}' is the plain replace the base shader already is"),
+        SpecError::IntBlend => format!("'{spec}': an integer render target takes `replace` only"),
     }
 }
 
@@ -398,9 +443,9 @@ impl List {
                     }
                     let from = if let Some(k) = args[2].strip_prefix("attach:") {
                         let k: u32 = k.parse().map_err(|_| format!("{n}: attach:{k}: not a dword count"))?;
-                        if gpu != Gpu::Powervr || args.len() != 3 || !(1..=3).contains(&k) {
+                        if gpu != Gpu::Powervr || args.len() != 3 || !(1..=4).contains(&k) {
                             return Err(format!(
-                                "{n}: attach:N is the PowerVR's clear-attach program of 1 to 3 dwords, with no SPEC"
+                                "{n}: attach:N is the PowerVR's clear-attach program of 1 to 4 dwords, with no SPEC"
                             ));
                         }
                         InternalFrom::Attach(k)
@@ -580,6 +625,17 @@ mod tests {
         assert_eq!(blend_key("one,one@f64"), Err(SpecError::RtClass { rt: "f64".into() }));
         assert_eq!(blend_key("one,one:x@f64"), Err(SpecError::RtClass { rt: "f64".into() }), "the class first");
         assert_eq!(blend_key("one,one:x"), Err(SpecError::Mask { mask: "x".into() }));
+        /* an integer target: its layout's key, replace only, a mask kept */
+        let rgba8ui = abi::ShcIntRt { channels: 4, bits: 8, signed: false };
+        assert_eq!(blend_key("replace@rgba8ui"), Ok(abi::shc_blend_key_int_rt(rgba8ui)));
+        assert_eq!(blend_key("replace:rgb@rgba8ui"), Ok(abi::shc_blend_key_int_rt(rgba8ui) | (8 << 26)));
+        let r32i = abi::ShcIntRt { channels: 1, bits: 32, signed: true };
+        assert_eq!(blend_key("replace@r32i").map(abi::ShcIntRt::of_key), Ok(Some(r32i)));
+        assert_eq!(INT_RTS.len(), 19, "table 3.13's integer rows");
+        for (name, rt) in INT_RTS {
+            assert_eq!(blend_key(&format!("replace@{name}")).map(abi::ShcIntRt::of_key), Ok(Some(*rt)), "{name}");
+        }
+        assert_eq!(blend_key("one,one@rgba8ui"), Err(SpecError::IntBlend));
         assert_eq!(blend_key("one"), Err(SpecError::TooFewFactors));
     }
 
@@ -666,7 +722,7 @@ mod tests {
         refused("internal powervr x int/q.vert replace:r\n", "a variant SPEC is a fragment shader's");
         refused("internal powervr x int/c.frag replace\n", "the plain replace");
         refused("internal gc7000 x attach:1\n", "the PowerVR's clear-attach program");
-        refused("internal powervr x attach:4\n", "1 to 3 dwords");
+        refused("internal powervr x attach:5\n", "1 to 4 dwords");
         refused("internal powervr x\n", "takes 3 or 4 fields");
     }
 

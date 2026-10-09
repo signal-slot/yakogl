@@ -4,6 +4,7 @@ color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compi
 compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/es/fbload_int.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a cube fetch) is not selected yet"))
 internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/fbload.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 interp_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

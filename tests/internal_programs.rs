@@ -25,7 +25,7 @@ mod usc_exec;
 
 #[cfg(feature = "gpu-powervr")]
 mod powervr {
-    use super::usc_exec::{run_binary, Inputs};
+    use super::usc_exec::{run_binary, sample_model_at, texel_coord, Inputs};
     use std::collections::BTreeMap;
     use yakogl::pvr::internal::*;
     use yakogl::pvr::mesa_internal::*;
@@ -307,6 +307,54 @@ mod powervr {
             "the internal programs moved (regenerate src/pvr/internal.rs and re-pin):\n{}",
             wrong.join("\n")
         );
+    }
+
+    /// The frame load of an integer target (fbload_int.frag for the R32UI,
+    /// RG32UI and RGBA32UI layouts): at pixels across a flipped and an
+    /// upright target, pixel output k is channel k of the texel under the
+    /// pixel, unconverted, for the target's 1, 2 or 4 dwords and no other
+    /// output -- what the PBE then packs for the target as a draw's. Mesa
+    /// has no such program (its load is per format); the texel is the
+    /// byte model's (`sample_model_at`).
+    #[test]
+    fn the_integer_frame_load_writes_the_texel_back_raw() {
+        let h = 48u32;
+        for (i, n) in [(PVR_INTERNAL_FBLOAD_U32, 1u32), (PVR_INTERNAL_FBLOAD_U32X2, 2), (PVR_INTERNAL_FBLOAD_U32X4, 4)]
+        {
+            let sh = row(i);
+            assert_eq!((u32::from(sh.num_outputs), sh.uniform_dwords), (n, 2), "{n} dwords: the record");
+            let ytf = sh.fragcoord_ytf_off1 as usize;
+            for flip in [false, true] {
+                let pair = if flip { [-1.0f32, h as f32] } else { [1.0, 0.0] };
+                for (x, y) in [(0u32, 0u32), (5, 7), (47, 0), (0, 47), (31, 16)] {
+                    let mut inp = Inputs::new(x * 64 + y);
+                    inp.nearest = true;
+                    inp.samples = 1;
+                    let (xp, yp) = ((x as f32 + 0.5).to_bits(), (y as f32 + 0.5).to_bits());
+                    inp.frag_xy = [xp, xp, yp, yp];
+                    inp.shared[20] = pair[0].to_bits();
+                    inp.shared[21] = pair[1].to_bits();
+                    inp.shared[ytf - 1] = pair[0].to_bits();
+                    inp.shared[ytf] = pair[1].to_bits();
+                    let out = run_binary(&bytes(words(sh)), &inp, true).unwrap_or_else(|e| panic!("{n}: runs: {e}"));
+                    let (u, v) = (texel_coord(x as f32 + 0.5).unwrap(), texel_coord(y as f32 + 0.5).unwrap());
+                    let want: BTreeMap<u32, u32> =
+                        (0..n).map(|k| (k, sample_model_at(inp.shared[0], u, v, [0, 0], k))).collect();
+                    assert_eq!(out, want, "{n} dwords, flip={flip}, pixel ({x}, {y})");
+                }
+            }
+        }
+    }
+
+    /// The four-dword clear-attach program (an RGBA32I/UI target's clear)
+    /// moves shared registers 0..3 to pixel outputs 0..3, as the three
+    /// Mesa captured do for their counts.
+    #[test]
+    fn the_four_dword_clear_moves_four_dwords() {
+        let inp = Inputs::new(7);
+        let out = run_binary(&bytes(&PVR_INTERNAL_CLEAR_ATTACH4), &inp, true).expect("runs");
+        let want: BTreeMap<u32, u32> = (0..4).map(|k| (k, inp.shared[k as usize])).collect();
+        assert_eq!(out, want);
     }
 
     /// The clear-attach programs are our encoder's and Mesa's at once.

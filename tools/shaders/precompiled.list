@@ -45,7 +45,9 @@
 #                         inv_src_alpha, ...; equations add, sub, rsub, min,
 #                         max) or `replace`, MASK the colour channels written
 #                         (r g b a), RT the render target class (rgba8, f16x4,
-#                         f16, f32).
+#                         f16, f32) or an integer target by its GL name in
+#                         lower case (r8ui, rgba16i, rgb10_a2ui, ...), which
+#                         takes `replace` only.
 #   for GLOB SPEC[;SPEC]  the variants of the fragment shaders whose path
 #                         matches GLOB (`*` also crosses `/`), INSTEAD of the
 #                         `blend` lines; the first matching `for` wins.
@@ -155,6 +157,13 @@ internal powervr clear_me_f16x4 internal/es/clear.frag replace:gba@f16x4
 internal powervr clear_attach1  attach:1
 internal powervr clear_attach2  attach:2
 internal powervr clear_attach3  attach:3
+internal powervr clear_attach4  attach:4
+# The frame load of an integer target: the pixel's bytes read raw (the target
+# bound as an unsigned texel of its size, src/pvr/backend.rs) and written
+# back unchanged as one, two or four 32-bit dwords.
+internal powervr fbload_u32     internal/es/fbload_int.frag replace@r32ui
+internal powervr fbload_u32x2   internal/es/fbload_int.frag replace@rg32ui
+internal powervr fbload_u32x4   internal/es/fbload_int.frag replace@rgba32ui
 
 # The GC7000's: its clear quad (blending and colour masks are pixel-engine
 # state there, so one fragment shader clears every mask).

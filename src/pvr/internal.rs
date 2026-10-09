@@ -48,6 +48,10 @@
 //   clear_attach1: attach:1 (4 words)
 //   clear_attach2: attach:2 (8 words)
 //   clear_attach3: attach:3 (10 words)
+//   clear_attach4: attach:4 (12 words)
+//   fbload_u32: internal/es/fbload_int.frag replace@r32ui R_6DD53070E0E420F7_FS_00000120
+//   fbload_u32x2: internal/es/fbload_int.frag replace@rg32ui R_6DD53070E0E420F7_FS_00000140
+//   fbload_u32x4: internal/es/fbload_int.frag replace@rgba32ui R_6DD53070E0E420F7_FS_00000160
 
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
@@ -482,10 +486,82 @@ static R_544B1DEADF3E67C4_FS_44088621_USC: [u32; 46] = [
 static R_544B1DEADF3E67C4_FS_44088621_UNIFORMS: [ShcUniform; 1] = [
     ShcUniform { name: cname("u_color"), dword_off: 0, dwords: 4, gl_type: 0x8b52, array_len: 1, binding: 0, inner: 1 },
 ];
+static R_6DD53070E0E420F7_FS_00000120_USC: [u32; 116] = [
+    0x9c009257, 0xa0408010, 0x2c003000, 0xd255ff54, 0x80020140, 0x558180b4, 0xd300c299,
+    0x9ca0f03c, 0xcfd5871e, 0x20001180, 0x9256ff54, 0x803fd300, 0x001083c1, 0x92565530,
+    0x803fd300, 0x001083c2, 0xd2785630, 0xf03cd100, 0xd58787b0, 0x561080f4, 0x92565701,
+    0x803fd300, 0x001083c4, 0x92565530, 0x803fd300, 0x001083c5, 0xd2785630, 0xf03cd100,
+    0xd58787b0, 0x561080f4, 0x82355801, 0x08968700, 0x54000000, 0x87008235, 0x00000897,
+    0x82365500, 0x74d8c000, 0x00005500, 0x8235ff56, 0x08948700, 0x54000000, 0x87008235,
+    0x00000895, 0x82365500, 0x74d6c000, 0x00005500, 0x9257ff58, 0x80479c00, 0x1057a040,
+    0xff542c00, 0x9c009257, 0xa0408047, 0x2c001058, 0x8235ff55, 0x54079c00, 0xff560000,
+    0x00008235, 0x0002cbd6, 0x82355400, 0x55079c00, 0xff560000, 0x00008235, 0x0002cbd6,
+    0x82355500, 0x00079c00, 0xff560000, 0x87008234, 0x40000054, 0x87008234, 0x41000055,
+    0x87008234, 0x42000056, 0x87008234, 0x43000000, 0x87008234, 0x44000000, 0x87008234,
+    0x45000000, 0x87008234, 0x46000000, 0x87008234, 0x47000000, 0x87008234, 0x48000000,
+    0x87008234, 0x49000000, 0x87008234, 0x4a000000, 0x87008234, 0x4b000000, 0x87008234,
+    0x4c000000, 0x87008234, 0x4d000000, 0x87008234, 0x4e000000, 0x87008234, 0x4f000000,
+    0xe400a067, 0x6080885e, 0x80880880, 0x800200b0, 0x8234ff6a, 0x00508700, 0x82345400,
+    0x00518700, 0x82345500, 0x00528700, 0x82345500, 0x00538700, 0x82375500, 0x00548700,
+    0xfff35500, 0xffffffff, 0x87808a34, 0x20000055,
+];
+static R_6DD53070E0E420F7_FS_00000120_UNIFORMS: [ShcUniform; 2] = [
+    ShcUniform { name: cname("u_flip"), dword_off: 0, dwords: 2, gl_type: 0x8b50, array_len: 1, binding: 0, inner: 1 },
+    ShcUniform { name: cname("u_fb"), dword_off: 65535, dwords: 1, gl_type: 0x8dd2, array_len: 1, binding: 0, inner: 1 },
+];
+static R_6DD53070E0E420F7_FS_00000140_USC: [u32; 120] = [
+    0x9c009257, 0xa0408010, 0x2c003000, 0xd255ff54, 0x80020140, 0x558180b4, 0xd300c299,
+    0x9ca0f03c, 0xcfd5871e, 0x20001180, 0x9256ff54, 0x803fd300, 0x001083c1, 0x92565530,
+    0x803fd300, 0x001083c2, 0xd2785630, 0xf03cd100, 0xd58787b0, 0x561080f4, 0x92565701,
+    0x803fd300, 0x001083c4, 0x92565530, 0x803fd300, 0x001083c5, 0xd2785630, 0xf03cd100,
+    0xd58787b0, 0x561080f4, 0x82355801, 0x08968700, 0x54000000, 0x87008235, 0x00000897,
+    0x82365500, 0x74d8c000, 0x00005500, 0x8235ff56, 0x08948700, 0x54000000, 0x87008235,
+    0x00000895, 0x82365500, 0x74d6c000, 0x00005500, 0x9257ff58, 0x80479c00, 0x1057a040,
+    0xff542c00, 0x9c009257, 0xa0408047, 0x2c001058, 0x8235ff55, 0x54079c00, 0xff560000,
+    0x00008235, 0x0002cbd6, 0x82355400, 0x55079c00, 0xff560000, 0x00008235, 0x0002cbd6,
+    0x82355500, 0x00079c00, 0xff560000, 0x87008234, 0x40000054, 0x87008234, 0x41000055,
+    0x87008234, 0x42000056, 0x87008234, 0x43000000, 0x87008234, 0x44000000, 0x87008234,
+    0x45000000, 0x87008234, 0x46000000, 0x87008234, 0x47000000, 0x87008234, 0x48000000,
+    0x87008234, 0x49000000, 0x87008234, 0x4a000000, 0x87008234, 0x4b000000, 0x87008234,
+    0x4c000000, 0x87008234, 0x4d000000, 0x87008234, 0x4e000000, 0x87008234, 0x4f000000,
+    0xe400a067, 0x6080885e, 0x80880880, 0x800200b0, 0x8234ff6a, 0x00508700, 0x82345400,
+    0x00518700, 0x82345500, 0x00528700, 0x82345600, 0x00538700, 0x82345600, 0x00548700,
+    0x82345600, 0x00558700, 0x8a375400, 0x00568700, 0xfff32000, 0xffffffff, 0x87808a34,
+    0x21000054,
+];
+static R_6DD53070E0E420F7_FS_00000140_UNIFORMS: [ShcUniform; 2] = [
+    ShcUniform { name: cname("u_flip"), dword_off: 0, dwords: 2, gl_type: 0x8b50, array_len: 1, binding: 0, inner: 1 },
+    ShcUniform { name: cname("u_fb"), dword_off: 65535, dwords: 1, gl_type: 0x8dd2, array_len: 1, binding: 0, inner: 1 },
+];
+static R_6DD53070E0E420F7_FS_00000160_USC: [u32; 128] = [
+    0x9c009257, 0xa0408010, 0x2c003000, 0xd255ff54, 0x80020140, 0x558180b4, 0xd300c299,
+    0x9ca0f03c, 0xcfd5871e, 0x20001180, 0x9256ff54, 0x803fd300, 0x001083c1, 0x92565530,
+    0x803fd300, 0x001083c2, 0xd2785630, 0xf03cd100, 0xd58787b0, 0x561080f4, 0x92565701,
+    0x803fd300, 0x001083c4, 0x92565530, 0x803fd300, 0x001083c5, 0xd2785630, 0xf03cd100,
+    0xd58787b0, 0x561080f4, 0x82355801, 0x08968700, 0x54000000, 0x87008235, 0x00000897,
+    0x82365500, 0x74d8c000, 0x00005500, 0x8235ff56, 0x08948700, 0x54000000, 0x87008235,
+    0x00000895, 0x82365500, 0x74d6c000, 0x00005500, 0x9257ff58, 0x80479c00, 0x1057a040,
+    0xff542c00, 0x9c009257, 0xa0408047, 0x2c001058, 0x8235ff55, 0x54079c00, 0xff560000,
+    0x00008235, 0x0002cbd6, 0x82355400, 0x55079c00, 0xff560000, 0x00008235, 0x0002cbd6,
+    0x82355500, 0x00079c00, 0xff560000, 0x87008234, 0x40000054, 0x87008234, 0x41000055,
+    0x87008234, 0x42000056, 0x87008234, 0x43000000, 0x87008234, 0x44000000, 0x87008234,
+    0x45000000, 0x87008234, 0x46000000, 0x87008234, 0x47000000, 0x87008234, 0x48000000,
+    0x87008234, 0x49000000, 0x87008234, 0x4a000000, 0x87008234, 0x4b000000, 0x87008234,
+    0x4c000000, 0x87008234, 0x4d000000, 0x87008234, 0x4e000000, 0x87008234, 0x4f000000,
+    0xe400a067, 0x6080885e, 0x80880880, 0x800200b0, 0x8234ff6a, 0x00508700, 0x82345400,
+    0x00518700, 0x82345500, 0x00528700, 0x82345600, 0x00538700, 0x82345700, 0x00548700,
+    0x82345800, 0x00558700, 0x82345400, 0x00568700, 0x82345500, 0x00578700, 0x8a345600,
+    0x00588700, 0x8a342000, 0x00548700, 0x8a372100, 0x00558700, 0xfff32200, 0xffffffff,
+    0x87808a34, 0x23000056,
+];
+static R_6DD53070E0E420F7_FS_00000160_UNIFORMS: [ShcUniform; 2] = [
+    ShcUniform { name: cname("u_flip"), dword_off: 0, dwords: 2, gl_type: 0x8b50, array_len: 1, binding: 0, inner: 1 },
+    ShcUniform { name: cname("u_fb"), dword_off: 65535, dwords: 1, gl_type: 0x8dd2, array_len: 1, binding: 0, inner: 1 },
+];
 
 /// The programs, in the list's order; [`PVR_INTERNAL_QUAD_VS`] and its
 /// neighbours below index it by name.
-pub static PVR_INTERNAL_TABLE: [ShcBlob; 33] = [
+pub static PVR_INTERNAL_TABLE: [ShcBlob; 36] = [
     ShcBlob {
         sha256: [0x2b, 0x0a, 0x1d, 0x63, 0x27, 0x6e, 0x3e, 0xee, 0x57, 0x56, 0x0d, 0xa0, 0x2d, 0x1a, 0x8d, 0xa6, 0x9c, 0x27, 0xa0, 0x4f, 0xdc, 0xbb, 0xba, 0xf1, 0x83, 0xbe, 0x0c, 0x37, 0x82, 0x8c, 0xcc, 0x35],
         name: "internal/es/quad.vert\0",
@@ -1874,6 +1950,132 @@ pub static PVR_INTERNAL_TABLE: [ShcBlob; 33] = [
             priv_: core::ptr::null(),
         },
     },
+    ShcBlob {
+        sha256: [0x6d, 0xd5, 0x30, 0x70, 0xe0, 0xe4, 0x20, 0xf7, 0x93, 0x83, 0x30, 0xfd, 0x83, 0x1c, 0x2b, 0xfd, 0x0b, 0xaa, 0x93, 0x3a, 0x48, 0x80, 0xf7, 0x84, 0x62, 0x23, 0x87, 0x15, 0xd6, 0x34, 0xa5, 0xef],
+        name: "internal/es/fbload_int.frag\0",
+        stage: SHC_STAGE_FRAGMENT,
+        blend_key: 0x120,
+        shader: ShcShader {
+            usc: R_6DD53070E0E420F7_FS_00000120_USC.as_ptr(),
+            usc_dw: 116,
+            temps: 26,
+            varyings: [ShcVarying::ZERO; 16],
+            num_varyings: 0,
+            uses_w: 0,
+            uses_discard: 0,
+            reads_front_facing: 0,
+            meta_off: 0xffff,
+            fs_front_face_off1: 0,
+            num_outputs: 1,
+            num_tile_buffers: 0,
+            tile_buffer_sh: 0,
+            attribs: [ShcAttrib::ZERO; 16],
+            num_attribs: 0,
+            vs_output_size: 0,
+            vs_psize_off: 0x0,
+            vs_vertex_id_reg1: 0,
+            vs_instance_id_reg1: 0,
+            uniform_dwords: 2,
+            uniform_sh_dwords: 0,
+            uniforms: R_6DD53070E0E420F7_FS_00000120_UNIFORMS.as_ptr(),
+            num_uniforms: 2,
+            blend_key: 0x120,
+            uses_fbfetch: 0,
+            blend_consts_off: 0xff,
+            uses_pntc: 0,
+            uses_z: 0,
+            fragcoord_ytf_off1: 23,
+            native_cube: 0,
+            layout_at_link: 0,
+            declared: core::ptr::null(),
+            num_declared: 0,
+            priv_: core::ptr::null(),
+        },
+    },
+    ShcBlob {
+        sha256: [0x6d, 0xd5, 0x30, 0x70, 0xe0, 0xe4, 0x20, 0xf7, 0x93, 0x83, 0x30, 0xfd, 0x83, 0x1c, 0x2b, 0xfd, 0x0b, 0xaa, 0x93, 0x3a, 0x48, 0x80, 0xf7, 0x84, 0x62, 0x23, 0x87, 0x15, 0xd6, 0x34, 0xa5, 0xef],
+        name: "internal/es/fbload_int.frag\0",
+        stage: SHC_STAGE_FRAGMENT,
+        blend_key: 0x140,
+        shader: ShcShader {
+            usc: R_6DD53070E0E420F7_FS_00000140_USC.as_ptr(),
+            usc_dw: 120,
+            temps: 27,
+            varyings: [ShcVarying::ZERO; 16],
+            num_varyings: 0,
+            uses_w: 0,
+            uses_discard: 0,
+            reads_front_facing: 0,
+            meta_off: 0xffff,
+            fs_front_face_off1: 0,
+            num_outputs: 2,
+            num_tile_buffers: 0,
+            tile_buffer_sh: 0,
+            attribs: [ShcAttrib::ZERO; 16],
+            num_attribs: 0,
+            vs_output_size: 0,
+            vs_psize_off: 0x0,
+            vs_vertex_id_reg1: 0,
+            vs_instance_id_reg1: 0,
+            uniform_dwords: 2,
+            uniform_sh_dwords: 0,
+            uniforms: R_6DD53070E0E420F7_FS_00000140_UNIFORMS.as_ptr(),
+            num_uniforms: 2,
+            blend_key: 0x140,
+            uses_fbfetch: 0,
+            blend_consts_off: 0xff,
+            uses_pntc: 0,
+            uses_z: 0,
+            fragcoord_ytf_off1: 23,
+            native_cube: 0,
+            layout_at_link: 0,
+            declared: core::ptr::null(),
+            num_declared: 0,
+            priv_: core::ptr::null(),
+        },
+    },
+    ShcBlob {
+        sha256: [0x6d, 0xd5, 0x30, 0x70, 0xe0, 0xe4, 0x20, 0xf7, 0x93, 0x83, 0x30, 0xfd, 0x83, 0x1c, 0x2b, 0xfd, 0x0b, 0xaa, 0x93, 0x3a, 0x48, 0x80, 0xf7, 0x84, 0x62, 0x23, 0x87, 0x15, 0xd6, 0x34, 0xa5, 0xef],
+        name: "internal/es/fbload_int.frag\0",
+        stage: SHC_STAGE_FRAGMENT,
+        blend_key: 0x160,
+        shader: ShcShader {
+            usc: R_6DD53070E0E420F7_FS_00000160_USC.as_ptr(),
+            usc_dw: 128,
+            temps: 29,
+            varyings: [ShcVarying::ZERO; 16],
+            num_varyings: 0,
+            uses_w: 0,
+            uses_discard: 0,
+            reads_front_facing: 0,
+            meta_off: 0xffff,
+            fs_front_face_off1: 0,
+            num_outputs: 4,
+            num_tile_buffers: 0,
+            tile_buffer_sh: 0,
+            attribs: [ShcAttrib::ZERO; 16],
+            num_attribs: 0,
+            vs_output_size: 0,
+            vs_psize_off: 0x0,
+            vs_vertex_id_reg1: 0,
+            vs_instance_id_reg1: 0,
+            uniform_dwords: 2,
+            uniform_sh_dwords: 0,
+            uniforms: R_6DD53070E0E420F7_FS_00000160_UNIFORMS.as_ptr(),
+            num_uniforms: 2,
+            blend_key: 0x160,
+            uses_fbfetch: 0,
+            blend_consts_off: 0xff,
+            uses_pntc: 0,
+            uses_z: 0,
+            fragcoord_ytf_off1: 23,
+            native_cube: 0,
+            layout_at_link: 0,
+            declared: core::ptr::null(),
+            num_declared: 0,
+            priv_: core::ptr::null(),
+        },
+    },
 ];
 
 /// `quad_vs`: internal/es/quad.vert.
@@ -1959,3 +2161,15 @@ pub static PVR_INTERNAL_CLEAR_ATTACH3: [u32; 10] = [
     0x87008a35, 0x00000880, 0x8a372000, 0x08818700, 0x21000000, 0xfffffff2, 0x87808a38,
     0x00000882, 0xfff32200, 0xffffffff,
 ];
+/// `clear_attach4`: the clear-attach program of 4 dword(s): shared register k
+/// moved to pixel output k, the last move ending the program.
+pub static PVR_INTERNAL_CLEAR_ATTACH4: [u32; 12] = [
+    0x87008a35, 0x00000880, 0x8a352000, 0x08818700, 0x21000000, 0x87008a36, 0x00000882,
+    0xfff12200, 0x87808a38, 0x00000883, 0xfff32300, 0xffffffff,
+];
+/// `fbload_u32`: internal/es/fbload_int.frag, variant replace@r32ui (blend key 0x120).
+pub const PVR_INTERNAL_FBLOAD_U32: usize = 33;
+/// `fbload_u32x2`: internal/es/fbload_int.frag, variant replace@rg32ui (blend key 0x140).
+pub const PVR_INTERNAL_FBLOAD_U32X2: usize = 34;
+/// `fbload_u32x4`: internal/es/fbload_int.frag, variant replace@rgba32ui (blend key 0x160).
+pub const PVR_INTERNAL_FBLOAD_U32X4: usize = 35;

@@ -1048,6 +1048,18 @@ fn current_blend_key(c: &GlContext) -> u32 {
     let mut key = SHC_BLEND_KEY_REPLACE;
     let off = disabled_channels(c);
 
+    /* an integer target: the variant that packs the integer output for its
+     * layout (never blended, ES 3.0 4.1.7), with the mask of the channels it
+     * has (a channel it lacks is never written, masked or not) */
+    if let Some(l) = gles_surf_int_layout(framebuffer::fb_target_format(c)) {
+        let rt = ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
+        let own = (1u32 << l.channels) - 1;
+        let off = off & own;
+        /* every channel off is the ISP's (`GlesDraw::color_write`), as below */
+        let mask = if off != 0 && disabled_channels(c) != 0xf { shc_blend_key_mask_off(off) } else { 0 };
+        return shc_blend_key_int_rt(rt) | mask;
+    }
+
     if c.blend && !framebuffer::fb_target_is_integer(c) {
         key = shc_blend_key(
             map_blend_factor(c.blend_src),
@@ -6729,6 +6741,43 @@ mod tests {
         let gl = Gl::new(8, 8);
         assert_eq!(current_blend_key(gl.ctx()), 0);
         assert_eq!(disabled_channels(gl.ctx()), 0);
+    }
+
+    /// An integer colour target selects the variant that packs the integer
+    /// output for its layout, blending or not (ES 3.0 4.1.7), and keeps the
+    /// mask of its own channels; with every channel off it is the ISP's.
+    #[test]
+    fn an_integer_target_keys_its_layout_never_a_blend() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = Gl::new(8, 8);
+        let mut rb: GLuint = 0;
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RG16I, 8, 8);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let rt = ShcIntRt { channels: 2, bits: 16, signed: true };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "no blend in the key");
+        assert_eq!(ShcIntRt::of_key(current_blend_key(gl.ctx())), Some(rt));
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_TRUE_B, GL_FALSE_B, GL_TRUE_B, GL_TRUE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt) | shc_blend_key_mask_off(0b10), "green off");
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_TRUE_B, GL_TRUE_B, GL_FALSE_B, GL_FALSE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "blue and alpha it does not have");
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_FALSE_B, GL_FALSE_B, GL_FALSE_B, GL_FALSE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "every channel off: the ISP's");
     }
 
     #[test]

@@ -3536,6 +3536,109 @@ fn deqps_multisample_shader_keeps_samples_by_its_alpha_alone() {
     assert_eq!((kept([1.0, 0.0, 0.0], 0.0), kept([1.0, 0.0, 0.0], 1.0)), (0, 0xf), "alpha 0 none, alpha 1 all");
 }
 
+/// The colour output of an integer render target (`ShcIntRt`, the blend
+/// key's [5:9]), for every one of ES 3.0 table 3.13's nineteen integer
+/// layouts, run in the byte model: the pixel output dwords hold the output's
+/// integers packed as Mesa's pco packs a pure integer format
+/// (pco_nir_pvfio.c pack_to_format, :149-218) -- written down here from that
+/// rule, not from the compiler: a 32-bit channel per dword unchanged, 16-bit
+/// channels two to a dword and 8-bit four, each the low bits of its value at
+/// its place, RGB10_A2UI 10/10/10/2 -- with no `pck` in the program (no
+/// conversion, no clamp: values past a channel's range keep their low
+/// bits), and the record says the dwords it writes. A colour mask on such a
+/// target is refused by name.
+#[test]
+fn integer_render_targets_get_the_packed_bits() {
+    use yakogl::shaderc::*;
+    /* an ES 2.0 report refuses every `#version 300 es` source */
+    if yakogl::REPORT_ES2 {
+        return;
+    }
+    let layouts: [(u8, u8); 10] =
+        [(1, 8), (1, 16), (1, 32), (2, 8), (2, 16), (2, 32), (4, 8), (4, 16), (4, 32), (4, 10)];
+    let vals: [u32; 4] = [0x1234_5678, 0x8765_4321, 0xdead_beef, 0xffff_ffff];
+    let expect = |ch: u8, bits: u8| -> Vec<u32> {
+        let low = |v: u32, n: u32| if n == 32 { v } else { v & ((1 << n) - 1) };
+        match bits {
+            32 => vals[..ch as usize].to_vec(),
+            16 => (0..usize::from(ch).div_ceil(2))
+                .map(|d| {
+                    (0..2)
+                        .filter(|k| 2 * d + k < usize::from(ch))
+                        .fold(0, |a, k| a | low(vals[2 * d + k], 16) << (16 * k))
+                })
+                .collect(),
+            8 => vec![(0..usize::from(ch)).fold(0, |a, k| a | low(vals[k], 8) << (8 * k))],
+            _ => vec![low(vals[0], 10) | low(vals[1], 10) << 10 | low(vals[2], 10) << 20 | low(vals[3], 2) << 30],
+        }
+    };
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        for signed in [false, true] {
+            let (u, v) = if signed { ("ivec4", "i") } else { ("uvec4", "u") };
+            let src = format!(
+                "#version 300 es\nprecision highp float;\nuniform highp {u} u_v;\n\
+                 layout(location = 0) out highp {u} o;\nvoid main() {{\n    o = u_v;\n}}\n"
+            );
+            let text = a.alloc_str(&src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            for (channels, bits) in layouts {
+                if bits == 10 && signed {
+                    continue; /* RGB10_A2UI only */
+                }
+                let rt = ShcIntRt { channels, bits, signed };
+                let key = shc_blend_key_int_rt(rt);
+                assert_eq!(ShcIntRt::of_key(key), Some(rt), "{v} {channels}x{bits}: the key round-trips");
+                let what = format!("{v} {channels}x{bits}");
+                let rec =
+                    yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                        .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+                let want = expect(channels, bits);
+                assert_eq!(
+                    (rec.blend_key, rec.num_outputs as usize, rec.uses_fbfetch),
+                    (key, want.len(), 0),
+                    "{what}: the record"
+                );
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+                let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+                let mut off = 0;
+                while off < image.len() {
+                    let g = decode_group(&image, off).expect("decodes");
+                    let mut t = String::new();
+                    yakogl::shaderc::online::powervr::listing::group_text(&mut t, off, &g).unwrap();
+                    assert!(!t.contains("pck"), "{what}: no pack instruction:\n{t}");
+                    off += g.total;
+                }
+                // SAFETY: the record's own count describes its own table.
+                let row = unsafe { &*rec.uniforms };
+                let mut inp = sentinel_inputs(1.0e30);
+                inp.shared[row.dword_off as usize..row.dword_off as usize + 4].copy_from_slice(&vals);
+                let out = run_binary(&image, &inp, true).expect("runs");
+                let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
+                assert_eq!(got, want, "{what}: the pixel output dwords");
+                assert_eq!(out.keys().filter(|k| **k < 8).count(), want.len(), "{what}: no other pixel output");
+                /* a colour mask on one of its channels is refused by name */
+                let masked = compile_fragment_for_err(&l, a, key | shc_blend_key_mask_off(1));
+                assert!(masked.contains("colour mask on an integer render target"), "{what}: {masked}");
+            }
+        }
+    })
+    .unwrap();
+}
+
+/// The refusal of a variant, as text.
+fn compile_fragment_for_err<'a>(
+    l: &lower::Lowered<'a>,
+    a: &'a yakogl::shaderc::online::arena::Arena<'a>,
+    key: u32,
+) -> String {
+    match yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key) {
+        Ok(_) => "compiled".into(),
+        Err(e) => format!("{e:?}"),
+    }
+}
+
 /// gl_test case 182's two fragment shaders, on the host: the folded clamps
 /// (`clamp`, `min(max())`, `max(min())` of -2.25, 0.4 and 1.5, each through
 /// `* 0.5 + 0.25`) are four saturating adds besides the output's own and

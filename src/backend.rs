@@ -353,11 +353,13 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 }
 
 /// The integer colour surfaces this build's back end can render into: bit
-/// `format - GLES_SURF_INT_FIRST`. None yet. A back end that learns one sets
-/// its bits here (docs/HANDOFF.md, open work 4, int-rt) and it stops being
-/// refused at the draw; until then the GL core accepts the renderbuffer
-/// (ES 3.0 requires the formats) and refuses to draw into it, by name,
-/// rather than render garbage.
+/// `format - GLES_SURF_INT_FIRST`. A back end that learns one sets its bits
+/// here (docs/HANDOFF.md, open work 4, int-rt) and it stops being refused at
+/// the draw; until then the GL core accepts the renderbuffer (ES 3.0
+/// requires the formats) and refuses to draw into it, by name, rather than
+/// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs
+/// `pbe_int_packmode`, the online compiler's packed integer output) as the
+/// one colour attachment of a draw; the GC7000 and the V3D none yet.
 pub const INTEGER_RT_FORMATS: u32 = {
     #[cfg(feature = "gpu-vivante")]
     {
@@ -369,7 +371,7 @@ pub const INTEGER_RT_FORMATS: u32 = {
     }
     #[cfg(feature = "gpu-powervr")]
     {
-        0
+        (1 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1
     }
 };
 

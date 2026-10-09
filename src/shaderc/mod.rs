@@ -109,6 +109,79 @@ pub const SHC_RT_F16X4: u32 = 1;
 pub const SHC_RT_F16: u32 = 2;
 pub const SHC_RT_F32: u32 = 3;
 
+/// The colour output of an integer render target (ES 3.0 table 3.13's
+/// integer rows), as a blend-variant key: the src_rgb field [0:4] is 0,
+/// which no blend key has (every `shc_blend_factor` is 1 or more), and the
+/// fields a blend would use carry the target's layout instead -- [5:6] the
+/// channel count (1: one, 2: two, 3: four; never 0, so no such key is 0),
+/// [7:8] the channel width (0: 8
+/// bits, 1: 16, 2: 32, 3: RGB10_A2UI's 10/10/10/2), [9] signed. No blend
+/// applies to such a target (ES 3.0 4.1.7) and [30:31] stay 0; the colour
+/// mask keeps its bits [26:29]. The program writes the output as the
+/// target's packed dwords, bit-inserted with no conversion, the way Mesa's
+/// pco packs a pure integer format (`ShcIntRt`; pco_nir_pvfio.c
+/// pack_to_format).
+pub const fn shc_blend_key_int_rt(rt: ShcIntRt) -> u32 {
+    let ch = match rt.channels {
+        1 => 1,
+        2 => 2,
+        _ => 3,
+    };
+    let w = match rt.bits {
+        8 => 0,
+        16 => 1,
+        32 => 2,
+        _ => 3,
+    };
+    (ch << 5) | (w << 7) | ((rt.signed as u32) << 9)
+}
+
+/// An integer render target's layout, as [`shc_blend_key_int_rt`] keys it:
+/// what the fragment shader packs its integer output into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShcIntRt {
+    /// 1, 2 or 4 channels.
+    pub channels: u8,
+    /// 8, 16 or 32 bits a channel; 10 for RGB10_A2UI (alpha 2).
+    pub bits: u8,
+    /// Signed (an `ivec4` output); else unsigned.
+    pub signed: bool,
+}
+
+impl ShcIntRt {
+    /// The integer target a key is for; `None` for any other key (0, or a
+    /// blend's, whose src_rgb field is never 0).
+    pub const fn of_key(key: u32) -> Option<ShcIntRt> {
+        if key == 0 || key & 0x1f != 0 || key >> SHC_BLEND_KEY_RT_SHIFT != 0 {
+            return None;
+        }
+        let channels = match (key >> 5) & 3 {
+            1 => 1,
+            2 => 2,
+            3 => 4,
+            _ => return None,
+        };
+        let bits = match (key >> 7) & 3 {
+            0 => 8,
+            1 => 16,
+            2 => 32,
+            _ => 10,
+        };
+        if bits == 10 && channels != 4 {
+            return None;
+        }
+        Some(ShcIntRt { channels, bits, signed: (key >> 9) & 1 != 0 })
+    }
+
+    /// The 32-bit pixel output dwords the packed value takes:
+    /// `DIV_ROUND_UP(channels * bits, 32)`, as pco counts them
+    /// (pco_nir_pvfio.c:177).
+    pub const fn dwords(&self) -> u32 {
+        let bits = if self.bits == 10 { 32 } else { self.channels as u32 * self.bits as u32 };
+        bits.div_ceil(32)
+    }
+}
+
 /// ONE/ZERO ADD on both channels with every channel written: no variant.
 pub const SHC_BLEND_KEY_REPLACE: u32 =
     shc_blend_key(SHC_BF_ONE, SHC_BF_ZERO, SHC_BF_ONE, SHC_BF_ZERO, SHC_BLEND_ADD, SHC_BLEND_ADD);
