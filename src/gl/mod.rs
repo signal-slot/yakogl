@@ -29,8 +29,8 @@ pub mod native_cube;
 pub mod program;
 pub mod shader;
 pub mod state;
-pub mod tf;
 pub mod texture;
+pub mod tf;
 pub mod vao;
 pub mod vertex;
 

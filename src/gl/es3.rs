@@ -1042,7 +1042,14 @@ pub unsafe extern "C" fn glBindBufferBase(target: GLenum, index: GLuint, buffer:
 /// the bound transform feedback object's indexed point (`tf.rs`). Under
 /// report-es2 binding zero is an unbind that succeeds and a real buffer
 /// cannot be honoured.
-fn bind_transform_feedback_buffer(index: GLuint, buffer: GLuint, offset: GLintptr, size: GLsizeiptr, ranged: bool, func: &str) {
+fn bind_transform_feedback_buffer(
+    index: GLuint,
+    buffer: GLuint,
+    offset: GLintptr,
+    size: GLsizeiptr,
+    ranged: bool,
+    func: &str,
+) {
     if crate::REPORT_ES2 {
         if buffer != 0 {
             context::set_error_no_ctx(GL_INVALID_OPERATION, func);
