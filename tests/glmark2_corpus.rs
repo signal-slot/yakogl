@@ -6,9 +6,11 @@
 //! The corpus is GPL-3.0 text and is never committed: `tools/hostharness/glmark2/run.sh
 //! "$GLMARK2_SRC"` generates it into `build/glmark2-host/shaders/` (or
 //! `GLMARK2_CORPUS` names another directory holding `index.txt`). With no
-//! corpus the test prints a SKIP line and returns when `GLMARK2_SRC` is unset,
-//! and fails when it is set (the corpus should have been generated); the
-//! gate (`tools/check.sh`) makes the missing `GLMARK2_SRC` a gap. Every
+//! corpus at the default place the test prints a SKIP line and returns: the
+//! plain test rows of the gate run before the corpus exists. A directory
+//! `GLMARK2_CORPUS` names must hold the corpus, or the test fails: that is
+//! how the gate's own row (`tools/check.sh`, which generates the corpus first
+//! and makes a missing `GLMARK2_SRC` a gap) refuses an empty run. Every
 //! shader must compile and link. Per back end:
 //!
 //! ```text
@@ -67,14 +69,15 @@ fn link(vs: &ShcShader, fs: &mut ShcShader) -> Result<(), String> {
 
 #[test]
 fn every_glmark2_shader_compiles_and_links() {
-    let dir = match std::env::var_os("GLMARK2_CORPUS") {
+    let named = std::env::var_os("GLMARK2_CORPUS");
+    let dir = match &named {
         Some(d) => std::path::PathBuf::from(d),
         None => Path::new(env!("CARGO_MANIFEST_DIR")).join("build/glmark2-host/shaders"),
     };
     let Ok(index) = std::fs::read_to_string(dir.join("index.txt")) else {
         assert!(
-            std::env::var_os("GLMARK2_SRC").is_none(),
-            "GLMARK2_SRC is set but {} has no index.txt: run tools/hostharness/glmark2/run.sh \"$GLMARK2_SRC\" first",
+            named.is_none(),
+            "GLMARK2_CORPUS={} has no index.txt: run tools/hostharness/glmark2/run.sh \"$GLMARK2_SRC\" first",
             dir.display()
         );
         eprintln!(

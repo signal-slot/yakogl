@@ -36,7 +36,7 @@ Every shader must compile and link; the index is pinned at 69 shaders.
 
 It reads `GLMARK2_CORPUS` (a directory with `index.txt`), by default
 `build/glmark2-host/shaders`. With no corpus it prints a `SKIP` line and
-returns when `GLMARK2_SRC` is unset, and fails when it is set. `tools/check.sh`
+returns; a directory `GLMARK2_CORPUS` names must hold it, or the test fails. `tools/check.sh`
 generates the corpus from `GLMARK2_SRC` and runs the three back ends; without
 `GLMARK2_SRC` that row is a gap, so the gate is red.
 
