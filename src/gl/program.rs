@@ -747,7 +747,7 @@ fn copy_block_member(data: &[u8], m: &shaderc::ShcBlockMember, row: &ShcUniform,
 
 /// `(columns, rows)` of a GL uniform type: a scalar is (1, 1), a vecN
 /// (1, N), a matCxR (C, R).
-fn gl_type_shape(t: u16) -> (usize, usize) {
+pub(crate) fn gl_type_shape(t: u16) -> (usize, usize) {
     match u32::from(t) {
         GL_FLOAT_VEC2 | GL_INT_VEC2 | GL_UNSIGNED_INT_VEC2 | GL_BOOL_VEC2 => (1, 2),
         GL_FLOAT_VEC3 | GL_INT_VEC3 | GL_UNSIGNED_INT_VEC3 | GL_BOOL_VEC3 => (1, 3),

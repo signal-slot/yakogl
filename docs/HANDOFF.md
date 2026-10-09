@@ -595,14 +595,16 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      `docs/es3-pvr-2darray.md`.
    - **es3-shaderc**: the online compiler's GLSL ES 3.00 gaps, counted over
      dEQP's `shaders/*.test` corpus in `docs/es3-shaderc-coverage.md`
-     (PowerVR 3,444 / GC7000UL 3,451 / V3D 3,312 of 3,461 expected-build
+     (PowerVR 3,444 / GC7000UL 3,451 / V3D 3,444 of 3,461 expected-build
      programs build). Host-proven: `trunc` on the PowerVR and the V3D, the
      V3D's integer shifts, min/max, `~` and unsigned orderings (gl_test 196
      es3trunc, not yet run on a board; dEQP `shaders.operator` trunc, 24
      programs); on the PowerVR a bias on a 3D texture, `textureProj` with a
      level, a bias, in a vertex shader, on a 3D texture or a 2D shadow
      sampler (divided in the shader), and a shadow look-up of a smooth
-     varying (its plane gradients' W plane). That document's "Texture
+     varying (its plane gradients' W plane); on the V3D, and in the GL
+     core's per-column split for the V3D and the GC7000, non-square matrix
+     attributes. That document's "Texture
      look-ups" section lists what each back end still refuses. Open: the
      rest of its "Work that closes the table".
    - **es3-caps** and **es2-report-pin**: redo the ES 3.0 limits test and

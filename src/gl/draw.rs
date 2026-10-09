@@ -346,17 +346,17 @@ fn vertex_inputs(sh: &ShcShader) -> ([ShcAttrib; MAX_DRAW_ATTRIBS], usize) {
          * PowerVR front end splits a matrix so pco_shc never sees one) is
          * taken as it is. */
         let split = rows.iter().filter(|r| r.name == whole.name).count() > 1;
-        let columns: u8 = if cfg!(not(feature = "gpu-powervr")) && !split {
-            /* ES 2.0's matrices are square: a column is as tall as the
-             * matrix is wide */
-            match u32::from(whole.gl_type) {
-                GL_FLOAT_MAT2 => 2,
-                GL_FLOAT_MAT3 => 3,
-                GL_FLOAT_MAT4 => 4,
-                _ => 1,
+        /* (columns, rows) of a matCxR (ES 3.00's non-square ones too): C
+         * locations of R components each; (1, 1) for anything else */
+        let (columns, rows): (u8, u8) = if cfg!(not(feature = "gpu-powervr")) && !split {
+            let (c, r) = super::program::gl_type_shape(whole.gl_type);
+            if c > 1 {
+                (c as u8, r as u8)
+            } else {
+                (1, 1)
             }
         } else {
-            1
+            (1, 1)
         };
         for k in 0..columns {
             if n == MAX_DRAW_ATTRIBS {
@@ -366,7 +366,7 @@ fn vertex_inputs(sh: &ShcShader) -> ([ShcAttrib; MAX_DRAW_ATTRIBS], usize) {
             if columns > 1 {
                 col.location = whole.location.saturating_add(k);
                 col.vi_reg = whole.vi_reg.saturating_add(k);
-                col.components = columns;
+                col.components = rows;
             }
             out[n] = col;
             n += 1;
@@ -8246,8 +8246,9 @@ mod tests {
         assert!(prog_gpu(&gl, prog).lod_var.iter().all(|v| !v.used));
     }
 
-    /// The two records of one mat3/mat4 attribute -- etna_shc's rows x
-    /// columns components and ours of one column -- give the same inputs.
+    /// The two records of one matrix attribute -- etna_shc's rows x
+    /// columns components and ours of one column -- give the same inputs,
+    /// one per column, as tall as the matrix's rows.
     #[test]
     fn both_records_of_a_matrix_attribute_give_the_same_columns() {
         let rec = |components: u8, gl_type: u32| {
@@ -8268,6 +8269,15 @@ mod tests {
             let mat3 = [(0, 4, 0), (1, 3, 1), (2, 3, 2), (3, 3, 3)];
             assert_eq!(rec(9, GL_FLOAT_MAT3), mat3);
             assert_eq!(rec(3, GL_FLOAT_MAT3), mat3);
+            /* ES 3.00's matCxR: C columns of R components (a mat4x3 is four
+             * locations of three, a mat2x4 two of four), whichever way the
+             * record counts the components. Before, a non-square matrix was
+             * one input: its other columns were never fetched. */
+            let mat4x3 = [(0, 4, 0), (1, 3, 1), (2, 3, 2), (3, 3, 3), (4, 3, 4)];
+            assert_eq!(rec(12, GL_FLOAT_MAT4x3), mat4x3);
+            assert_eq!(rec(3, GL_FLOAT_MAT4x3), mat4x3);
+            assert_eq!(rec(4, GL_FLOAT_MAT2x4), [(0, 4, 0), (1, 4, 1), (2, 4, 2)]);
+            assert_eq!(rec(2, GL_FLOAT_MAT3x2), [(0, 4, 0), (1, 2, 1), (2, 2, 2), (3, 2, 3)]);
         } else {
             assert_eq!(rec(16, GL_FLOAT_MAT4), [(0, 4, 0), (1, 16, 1)], "the PowerVR path is unchanged");
         }

@@ -191,14 +191,11 @@ pub struct V3dProgram<'a> {
 }
 
 /// How many attribute locations a declaration of `gl_type` takes: one per
-/// column of `GL_FLOAT_MAT2`/`3`/`4` (0x8B5A..0x8B5C), one otherwise.
+/// column of a matrix, square or ES 3.00's non-square `matCxR` (C, as
+/// GLSL's front end lowers a matrix input to a vec per column, Mesa's
+/// `nir_lower_io` slots one per column), one otherwise.
 pub fn attribute_locations(gl_type: u16) -> u8 {
-    match gl_type {
-        0x8b5a => 2,
-        0x8b5b => 3,
-        0x8b5c => 4,
-        _ => 1,
-    }
+    crate::shaderc::online::powervr::abi::matrix_columns(gl_type).unwrap_or(1)
 }
 
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
@@ -3005,6 +3002,53 @@ mod tests {
             .collect();
         assert_eq!(out[..4], want[..], "clip position = (ID, 0, 0, 1) + off, off read from rows 2..5");
         assert!(!out.iter().flatten().any(|&x| x == poison), "the GFXH-1602 row is never read");
+    }
+
+    /// A non-square matrix attribute (ES 3.00 `matCxR`) takes C consecutive
+    /// locations of R components each, one attribute record per column, as
+    /// Mesa slots a matrix input per column: a `mat4x3` at location 1 reads
+    /// rows 4..15 in four records of three rows, a `mat3x2` three of two
+    /// (every column's last component is read: a record is as tall as the
+    /// highest component read). Each column comes back from its own rows in
+    /// the interpreter.
+    /// These were refused ("an attribute location with no declaration": the
+    /// columns past the first had no location), 132 programs of dEQP's
+    /// shaders corpus (`conversions.matrix_to_*` and the matrix inputs of
+    /// `functions` and `linkage`). Revert check: with attribute_locations
+    /// counting square matrices only, both programs are refused again.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_non_square_matrix_attribute_takes_a_location_per_column() {
+        const FS: &str = "#version 300 es\nprecision highp float;\nin vec4 v;\n\
+            layout(location = 0) out vec4 o;\nvoid main() { o = v; }\n";
+        let f = |x: f32| -> u32 { x.to_bits() };
+        let lanes = |g: &dyn Fn(usize) -> u32| -> [u32; 16] { core::array::from_fn(g) };
+        let row = |r: usize| lanes(&|l| f(100.0 * r as f32 + l as f32));
+        let rows: Vec<[u32; 16]> = (0..16).map(row).collect();
+        let sum = |a: &[u32; 16], b: &[u32; 16]| lanes(&|l| f(f32::from_bits(a[l]) + f32::from_bits(b[l])));
+        for (decl, body, sizes, want) in [
+            (
+                "mat4x3",
+                "v = vec4(m[0][2] + m[0][0], m[1][2] + m[1][1], m[2][2], m[3][2] + m[3][0]);",
+                &[4u8, 3, 3, 3, 3][..],
+                /* pos rows 0..3, column k rows 4 + 3k .. 6 + 3k */
+                [sum(&rows[6], &rows[4]), sum(&rows[9], &rows[8]), rows[12], sum(&rows[15], &rows[13])],
+            ),
+            (
+                "mat3x2",
+                "v = vec4(m[0][1], m[1][1] + m[1][0], m[2][1], m[2][0]);",
+                &[4u8, 2, 2, 2][..],
+                [rows[5], sum(&rows[7], &rows[6]), rows[9], rows[8]],
+            ),
+        ] {
+            let vs = std::format!(
+                "#version 300 es\nlayout(location = 0) in vec4 pos;\nlayout(location = 1) in {decl} m;\n\
+                 out vec4 v;\nvoid main() {{ {body} gl_Position = pos; }}\n"
+            );
+            let (_, got_sizes, out) = run_vertex_stage(&vs, FS, false, &rows);
+            assert_eq!(&got_sizes[..sizes.len()], sizes, "{decl}: a record per column, as tall as a column");
+            assert!(out.windows(4).any(|w| w == want), "{decl}: each column read from its own rows: {out:x?}");
+        }
     }
 
     /// gl_InstanceID is VPM input row 0 and pushes gl_VertexID to row 1

@@ -101,16 +101,16 @@ code generator, which refuses at link).
 | conditionals | 21 / 0 / 20 / 0 | 21 / 0 / 20 / 0 |
 | constant_expressions | 40 / 2 / 0 / 0 | 40 / 2 / 0 / 0 |
 | constants | 100 / 0 / 45 / 0 | 100 / 0 / 45 / 0 |
-| conversions | 1060 / 0 / 96 / 0 | 952 / 108 / 96 / 0 |
+| conversions | 1060 / 0 / 96 / 0 | 1060 / 0 / 96 / 0 |
 | declarations | 0 / 0 / 54 / 0 | 0 / 0 / 54 / 0 |
 | fragdata | 0 / 0 / 4 / 0 | 0 / 0 / 4 / 0 |
-| functions | 199 / 0 / 112 / 0 | 187 / 12 / 112 / 0 |
+| functions | 199 / 0 / 112 / 0 | 199 / 0 / 112 / 0 |
 | indexing | 28 / 0 / 0 / 0 | 28 / 0 / 0 / 0 |
 | invalid_implicit_conversions | 0 / 0 / 768 / 0 | 0 / 0 / 768 / 0 |
 | invalid_texture_functions | 0 / 0 / 120 / 0 | 0 / 0 / 120 / 0 |
 | keywords | 8 / 0 / 348 / 0 | 8 / 0 / 348 / 0 |
 | large_constant_arrays | 14 / 2 / 0 / 0 | 16 / 0 / 0 / 0 |
-| linkage | 85 / 0 / 34 / 0 | 71 / 14 / 34 / 0 |
+| linkage | 85 / 0 / 34 / 0 | 83 / 2 / 34 / 0 |
 | loops | 9 / 0 / 0 / 0 | 9 / 0 / 0 / 0 |
 | negative | 0 / 0 / 12 / 0 | 0 / 0 / 12 / 0 |
 | preprocessor | 288 / 4 / 264 / 0 | 288 / 4 / 264 / 0 |
@@ -120,7 +120,7 @@ code generator, which refuses at link).
 | swizzle_math_operations | 544 / 0 / 0 / 0 | 544 / 0 / 0 / 0 |
 | swizzles | 648 / 0 / 0 / 0 | 648 / 0 / 0 / 0 |
 | uniform_block | 64 / 2 / 72 / 0 | 64 / 2 / 72 / 0 |
-| **total** | **3451 / 10 / 2128 / 7** | **3312 / 149 / 2128 / 7** |
+| **total** | **3451 / 10 / 2128 / 7** | **3444 / 17 / 2128 / 7** |
 
 ## Expected-pass programs refused, by root cause
 
@@ -134,11 +134,10 @@ no stage or construct more precise than that.
 | `centroid in` fragment input | lowering gap | 9 | 0 | 9 | linkage, qualification_order | `varying.interpolation.centroid`: `Usc(FragmentInputsNotBuilt)` (PowerVR), `NotYet("centroid varying")` (V3D) |
 | Backslash-newline inside a preprocessing token | unsupported construct | 4 | 4 | 4 | preprocessor | `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
 | Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
-| Matrix-typed vertex attribute (the generated `a_in0` of the matrix `input`s) | back-end limit (V3D) | 0 | 0 | 132 | conversions 108, functions 12, linkage 12 | `matrix_to_matrix.mat4x3_to_mat4_*`: `NotYet("an attribute location with no declaration")` |
 | Register pressure of a 128-element constant array index | back-end limit (GC7000UL) | 0 | 2 | 0 | large_constant_arrays | `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
-type checker (sema) on any GPU: there is no "sema bug" among the 17/10/149
+type checker (sema) on any GPU: there is no "sema bug" among the 17/10/17
 refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
 "unsupported construct" class; no `#version 300 es` *syntax* is refused.
 
@@ -150,11 +149,11 @@ refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
   (`mrt4`), not a switch bug.
 * The `centroid` rows are all `centroid in` in the fragment shader (`flat in`
   and `smooth in` build). Every file where `centroid` appears is in the table.
-* V3D: the 132 `an attribute location with no declaration` refusals are all
-  programs whose generated vertex shader declares a matrix attribute
-  (`conversions.matrix_to_*`, and the complete programs in `functions`/`linkage`
-  that use one). The cause is read from the generated source; the V3D back-end
-  message does not name the matrix.
+* A matrix vertex attribute, square or ES 3.00's `matCxR`, takes C
+  locations of R components (`v3d::chain::attribute_locations`, the GL
+  core's `draw.rs vertex_inputs` per column); the V3D refused the
+  non-square ones until then (132 programs: `conversions.matrix_to_*` and
+  the matrix inputs of `functions` and `linkage`).
 * GC7000UL builds the centroid inputs that PowerVR and V3D refuse, and it is
   the only GPU refusing a large constant array.
 * `trunc` (`Ftrunc`) is selected on every back end: the PowerVR as pco's
@@ -235,5 +234,3 @@ the form in the log):
   4. Reflection names of 64 or more characters (2).
   5. Sema: `invariant in` on a fragment input; name scoping that lets a block
      variable be read outside its block (2); recursion by call graph.
-  6. V3D only: matrix vertex attributes (132 programs, the biggest single
-     refusal in the whole table).
