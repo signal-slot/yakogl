@@ -305,12 +305,16 @@ All from etnaviv; `caps:` = `mesa-26.2.1-caps/src/gallium/drivers/etnaviv/`.
   Its `gcFEATURE_BIT_REG_Halti3` is 1 (`:19152`; Halti0 `:19038`, Halti5
   `:19172`); a second ECO-1 entry with the same ids (`:19735`) has the same.
   So the sRGB render gate is open on this board.
-* **The bit values are not in the trees.** `VIVS_PE_LOGIC_OP_SRGB` and
-  `RT_CONFIG_SRGB` come from etnaviv's generated `state_3d.xml.h`, which
-  neither vendored nor deps trees contain (yakogl's `regs.rs` ports only the
-  registers it uses). They must be taken from the rnndb / `state_3d.xml.h` of
-  the same Mesa tag or read from an etnaviv register capture on the board;
-  do **not** guess them.
+* **The bit values** are in `full:src/etnaviv/hw/state_3d.xml.h` (not in the
+  vendored or caps trees; yakogl's `regs.rs` ports only the registers it
+  uses): `VIVS_PE_LOGIC_OP_SRGB` = `0x80000000` **with its write-enable
+  `VIVS_PE_LOGIC_OP_SRGB_MASK` = `0x40000000`** (`:1148-1149`; so setting
+  needs `0xc0000000` and an explicit clear needs the mask alone, like
+  the register's other `_MASK` bits), `RT_CONFIG_SRGB` = `0x40000000`
+  (`:151`, for `PE_RT_CONFIG[rt-1]`), `VIVS_NTE_DESCRIPTOR_SAMP_CTRL1_SRGB` =
+  `0x00000004` (`:1984`), legacy `VIVS_TE_SAMPLER_LOG_SIZE_SRGB` =
+  `0x80000000` (`:1631`). yakogl's `GC_PE_LOGIC_OP_BASE` (`regs.rs:534`) must
+  be checked for which mask bits it already carries.
 * No shader work: `etnaviv_compiler*.c` and `etnaviv_blend.c` contain no
   "srgb" (grep: none). The conversion is entirely in the PE.
 
@@ -452,8 +456,8 @@ STATE_WORD1 fields for the class; TEXSTATE word0 bit 3 set only for the
 sRGB texel class; clear/fbload program selection.
 
 **S5 - GC7000UL render and sample.**
-Obtain `VIVS_PE_LOGIC_OP_SRGB`, `RT_CONFIG_SRGB`, `SAMP_CTRL1_SRGB` from
-`state_3d.xml.h` (6.1) and add to `src/vivante/regs.rs`.
+Add `VIVS_PE_LOGIC_OP_SRGB`(+`_MASK`), `RT_CONFIG_SRGB`,
+`VIVS_NTE_DESCRIPTOR_SAMP_CTRL1_SRGB` (values in 6.1) to `src/vivante/regs.rs`.
 `src/vivante/backend.rs`: `pe_color_format` returns A8R8G8B8 for the class
 (as RGBA8888 today) and the sRGB flag is ORed into `GC_PE_LOGIC_OP` (RT0,
 `:1548-1551`) and `pe_rt_config_8` (RT1+, `:1519`), only if `HALTI3` is in
@@ -492,16 +496,14 @@ cases.
 * **B1** - blend in linear on each chip: draw `GL_FUNC_ADD` ONE/ONE of a
   0.2 grey (linear) over a cleared 0.2 grey into an `SRGB8_ALPHA8` rbo;
   expect the stored byte `encode(0.4)` = 170, not `2*encode(0.2)` = 248 (a
-  blend done on the encoded bytes). PowerVR: also whether `nir_lower_blend`
-  (not in the trees) adds a second conversion (4.2). GC7000UL: whether the
-  PE decodes the destination (6.2).
+  blend done on the encoded bytes). GC7000UL: whether the PE decodes the
+  destination (6.2).
 * **B2** - TPU/TMU/TX filter after decode: a 2x1 sRGB texture (0, 255)
   sampled `GL_LINEAR` at the centre and written to an RGBA8 target; expect
   decode-then-average (0.5, byte 128), not average-then-decode (0.214, byte 55).
 * **B3** - first sRGB triangle on V3D 4.2 (the vfpack ending, 5.3).
-* **B4** - `PE_LOGIC_OP_SRGB` and friends bit values for GC7000UL from the
-  etnaviv headers, and a register capture of an etnaviv sRGB draw if the
-  header is not available.
+* **B4** - that the `0xc0000000` write to `PE_LOGIC_OP` sticks on the
+  GC7000UL (read the register back after the draw).
 * Settled in source (not board checks any more): `nir_lower_blend` has no
   sRGB blend branch (4.2) and V3D's colour write is a plain F16 vfpack (5.3).
 
