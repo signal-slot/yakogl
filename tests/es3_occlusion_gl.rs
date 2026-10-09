@@ -188,7 +188,7 @@ unsafe extern "C" fn b_query_begin(h: u32) -> i32 {
     if f.begin_rc != 0 {
         return f.begin_rc;
     }
-    assert!(h >= 1 && h <= 32, "handle {h}");
+    assert!((1..=32).contains(&h), "handle {h}");
     assert!(!f.live[h as usize], "handle {h} given out twice");
     f.live[h as usize] = true;
     f.counters[h as usize] = 0;
