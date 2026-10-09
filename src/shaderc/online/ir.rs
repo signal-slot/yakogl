@@ -575,6 +575,30 @@ pub struct IoDecl<'a> {
     pub interp: u8,
     /// The GL enum (`GL_FLOAT_VEC4`, ...), as `ShcAttrib::gl_type` holds it.
     pub gl_type: u16,
+    /// Declared `invariant` (GLSL ES 1.00 section 4.6.1: `invariant
+    /// gl_Position;`, `invariant varying ...`, or every output under
+    /// `#pragma STDGL invariant(all)`). On an output it asks every program
+    /// that computes the value by the same expression from the same inputs
+    /// for the same bits, so a back end must not let what ELSE the program
+    /// computes change how it evaluates the value: no contraction of a
+    /// product and its sum into one fused operation on the way to it
+    /// (`powervr/prepare.rs` `fusion_pairs`). Recorded on inputs as
+    /// declared, where nothing reads it.
+    pub invariant: bool,
+}
+
+impl IoDecl<'_> {
+    /// The slot the IR's loads or stores of this declaration name.
+    pub fn slot(&self) -> IoSlot {
+        match self.kind {
+            IoKind::Attribute => IoSlot::Attrib(self.location),
+            IoKind::Varying => IoSlot::Varying(self.location),
+            IoKind::Position => IoSlot::Position,
+            IoKind::PointSize => IoSlot::PointSize,
+            IoKind::Colour => IoSlot::FragColor(self.location),
+            IoKind::Depth => IoSlot::FragDepth,
+        }
+    }
 }
 
 /// One uniform addressable by name: the source-level half of
@@ -1027,6 +1051,7 @@ mod tests {
             components: 1,
             interp: INTERP_FLAT,
             gl_type: 0,
+            invariant: false,
         }];
         let m = Module { inputs: &flat, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(!m.needs_w_iterator(), "flat inputs alone need no w iterator");
@@ -1038,6 +1063,7 @@ mod tests {
             components: 2,
             interp: INTERP_SMOOTH,
             gl_type: 0,
+            invariant: false,
         }];
         let m = Module { inputs: &smooth, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(m.needs_w_iterator(), "one perspective input is enough");

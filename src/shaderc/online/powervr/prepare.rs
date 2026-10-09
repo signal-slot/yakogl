@@ -487,12 +487,14 @@ pub fn prepare_counted<'a>(
 
 /// [`prepare_counted`] with each sum of a product it alone reads made one
 /// `fmad` ([`fusion_pairs`]): in the copy prepare makes anyway, so the
-/// fusion costs no second copy of the program.
+/// fusion costs no second copy of the program. `invariant`: the output
+/// slots declared invariant, whose values no sum on the way to is fused.
 pub fn prepare_fused<'a>(
     sel: &Selected<'a>,
     arena: &'a Arena<'a>,
+    invariant: &[IoSlot],
 ) -> Result<(Selected<'a>, PrepareStats), PrepareError> {
-    let pairs = fusion_pairs(sel, arena)?;
+    let pairs = fusion_pairs(sel, arena, invariant)?;
     prepare_with(sel, arena, pairs)
 }
 
@@ -959,11 +961,22 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
 
 /// `sel` with each `fadd` of a product it alone reads made one `fmad`:
 /// `fadd(fmul(a, b), c)` is `fmad(a, b, c)`. GLSL ES 1.00 lets an
-/// implementation evaluate `a * b + c` either way (no `precise` in ES 1.00;
-/// 4.6.1's `invariant` asks the same computation of every program, which a
-/// pass that always fuses the same shape gives); Mesa fuses the same shape
-/// (nir_opt_algebraic's `fadd(fmul(a, b), c) -> ffma`), and the offline
-/// table's programs carry the fused form where ours carried the pair.
+/// implementation evaluate `a * b + c` either way; Mesa fuses the same shape
+/// (nir_opt_algebraic's late `fadd(contract)(fmul(is_only_used_by_fadd)) ->
+/// ffma`), and the offline table's programs carry the fused form where ours
+/// carried the pair.
+///
+/// Except on the way to an output in `invariant`. The `fmad` rounds once
+/// where the pair rounds twice, and whether a product has one reader
+/// depends on what ELSE the program computes from it, so fusing there broke
+/// section 4.6.1's promise -- the same expression from the same inputs, the
+/// same value in every program (dEQP shaders.invariance.*.
+/// common_subexpression_{1,2,3}: the shader that also wrote `v_unrelated`
+/// kept the products, the other fused them, and the positions differed).
+/// Mesa's GLSL front end marks every assignment feeding an invariant output
+/// exact (propagate_invariance.cpp, glsl_to_nir's `nir_fp_exact`), and an
+/// exact `fadd` is not `contract`, so it is never fused; [`fusion_pairs`]
+/// does the same from the outputs back.
 ///
 /// Fused only where the result is the same value the pair would compute
 /// from the same inputs: the product is a virtual value defined once and
@@ -978,8 +991,12 @@ pub fn share_common<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<Sele
 /// the modifier sets as for any `fmad`. A clamp to [0, 1] becomes one
 /// `fsat` the same way ([`fusion_pairs`]). Returns the program and how many
 /// pairs were applied, of both kinds.
-pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Selected<'a>, u32), PrepareError> {
-    let pairs = fusion_pairs(sel, arena)?;
+pub fn fuse_mul_add<'a>(
+    sel: &Selected<'a>,
+    arena: &'a Arena<'a>,
+    invariant: &[IoSlot],
+) -> Result<(Selected<'a>, u32), PrepareError> {
+    let pairs = fusion_pairs(sel, arena, invariant)?;
     if pairs.is_empty() {
         return Ok((Selected { ..*sel }, 0));
     }
@@ -1002,6 +1019,75 @@ pub fn fuse_mul_add<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<(Sel
     Ok((Selected { groups: out, ..*sel }, pairs.len() as u32))
 }
 
+/// [`fusion_pairs`]'s per-value byte: the value reaches an invariant output
+/// ([`mark_exact`]). Bits 0..3 are its definition and read counts.
+const EXACT: u8 = 1 << 4;
+
+/// Mark [`EXACT`] in `seen` every value an output slot in `invariant` reads,
+/// directly or through the groups that compute it: what Mesa's
+/// propagate_invariance does over variables, here over values.
+///
+/// Conservative where the program is not a plain chain of values: a value
+/// defined more than once (a predicated arm's join, a loop's carried value)
+/// is exact if any reader is, so the walk repeats until nothing changes; a
+/// fixed temporary has no value number, so when an exact group reads one,
+/// everything every fixed temporary is written from is exact; and when any
+/// output is invariant, so is everything a group with no value result reads
+/// (an `if` or loop test, an index) and the discard flag, because the
+/// control flow on the way to the value must be the same in every program
+/// too (section 4.6.1).
+fn mark_exact(sel: &Selected<'_>, invariant: &[IoSlot], seen: &mut [u8]) {
+    let mut changed = false;
+    let mut temps = false;
+    let mark = |s: &SelSrc, seen: &mut [u8], temps: &mut bool, changed: &mut bool| match s {
+        SelSrc::Virtual { v, .. } => {
+            if let Some(c) = seen.get_mut(v.0 as usize) {
+                if *c & EXACT == 0 {
+                    *c |= EXACT;
+                    *changed = true;
+                }
+            }
+        }
+        SelSrc::Fixed { bank: Bank::Temp, .. } if !*temps => {
+            *temps = true;
+            *changed = true;
+        }
+        SelSrc::Fixed { .. } | SelSrc::Imm(_) => {}
+    };
+    for (slot, comps) in sel.outputs {
+        if invariant.contains(slot) {
+            for s in comps.iter().flatten() {
+                mark(s, seen, &mut temps, &mut changed);
+            }
+        }
+    }
+    if !changed {
+        return;
+    }
+    for s in sel.discard.iter() {
+        mark(s, seen, &mut temps, &mut changed);
+    }
+    while changed {
+        changed = false;
+        for g in sel.groups.iter().rev() {
+            let exact = match g.dst {
+                Some(SelDst::Virtual(v)) => {
+                    /* a sample writes four values from its first */
+                    let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                    (v.0..v.0 + width).any(|r| seen.get(r as usize).is_some_and(|c| c & EXACT != 0))
+                }
+                Some(SelDst::Fixed { bank: Bank::Temp, .. }) => temps,
+                Some(SelDst::Fixed { .. }) | None => true,
+            };
+            if exact {
+                for s in g.srcs.iter().flatten() {
+                    mark(s, seen, &mut temps, &mut changed);
+                }
+            }
+        }
+    }
+}
+
 /// The bounds of a clamp [`fusion_pairs`] makes one `fsat`: +0.0 and 1.0.
 const SAT_LO: u32 = 0;
 const SAT_HI: u32 = 0x3f80_0000;
@@ -1010,8 +1096,13 @@ const SAT_HI: u32 = 0x3f80_0000;
 /// index, the group that replaces the outer), in the outer groups' program
 /// order: what [`prepare_fused`] applies as it copies. A product and the
 /// sum that alone reads it become one `fmad`; the two bounds of a clamp to
-/// [0, 1] become one `fsat` (`MachineOp::Fsat`).
-pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a [(u32, u32, SelGroup)], PrepareError> {
+/// [0, 1] become one `fsat` (`MachineOp::Fsat`). No sum whose value reaches
+/// an output slot in `invariant` is fused ([`fuse_mul_add`]).
+pub fn fusion_pairs<'a>(
+    sel: &Selected<'a>,
+    arena: &'a Arena<'a>,
+    invariant: &[IoSlot],
+) -> Result<&'a [(u32, u32, SelGroup)], PrepareError> {
     /* Per value, one byte: how often it is defined (bits 0..1) and read
      * (bits 2..3), each saturating at 3: "once" is all either question asks.
      * A byte, not two counts: a large program has tens of thousands of
@@ -1053,6 +1144,7 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
             bump(*v, def, seen);
         }
     }
+    mark_exact(sel, invariant, seen);
     /* The fixed temporaries a group writes. A fragment shader's iterated
      * inputs reach this pass in the temporaries the iteration pins them to
      * (chain.rs rewrites them before), which no group writes: those hold
@@ -1167,6 +1259,11 @@ pub fn fusion_pairs<'a>(sel: &Selected<'a>, arena: &'a Arena<'a>) -> Result<&'a 
             continue;
         }
         if !(g.op == SelOp::Alu(AluOp::Fadd) && g.ty == OpType::F32) {
+            continue;
+        }
+        /* a sum an invariant output reads, directly or through others:
+         * not contracted (Mesa: an exact `fadd` is not `contract`) */
+        if matches!(g.dst, Some(SelDst::Virtual(v)) if seen.get(v.0 as usize).is_some_and(|c| c & EXACT != 0)) {
             continue;
         }
         for k in 0..2 {
@@ -1405,7 +1502,7 @@ mod tests {
         let sel = Selected { groups, vregs: 16, outputs: &outputs, inputs: &[], discard: None, alpha_to_one: None };
         let mut buf = std::vec![0u8; 64 << 10];
         let arena = Arena::new(&mut buf);
-        let (f, n) = fuse_mul_add(&sel, &arena).expect("fuses");
+        let (f, n) = fuse_mul_add(&sel, &arena, &[]).expect("fuses");
         /* the evaluator runs straight-line programs only */
         let straight = groups.iter().all(|g| !matches!(g.op, SelOp::LoopBegin | SelOp::LoopEnd));
         let same = straight && eval(f.groups, f.outputs) == eval(groups, &outputs);
@@ -1432,7 +1529,7 @@ mod tests {
             let sel = Selected { groups, vregs: 16, outputs: &outputs, inputs: &[], discard: None, alpha_to_one: None };
             let mut buf = std::vec![0u8; 64 << 10];
             let arena = Arena::new(&mut buf);
-            fusion_pairs(&sel, &arena).expect("pairs").iter().map(|q| q.2.op).collect()
+            fusion_pairs(&sel, &arena, &[]).expect("pairs").iter().map(|q| q.2.op).collect()
         };
         assert_eq!(pairs(&[mul, add]), [SelOp::Alu(AluOp::Ffma)], "t4 is written by nothing");
         /* t4 written between the product and the sum: fusing would read
@@ -1455,6 +1552,83 @@ mod tests {
         };
         assert_eq!(pairs(&[mul, write(sample, 2), add]), [], "t4 is written by the sample");
         assert_eq!(pairs(&[mul, write(sample, 5), add]), [SelOp::Alu(AluOp::Ffma)], "t5..t8: t4 is not");
+    }
+
+    /// A sum on the way to an invariant output is not contracted, directly
+    /// or through the groups after it, while a sum only another output reads
+    /// still is: whether a product has one reader depends on the rest of
+    /// the program, so fusing there let the rest of the program change the
+    /// invariant value (dEQP shaders.invariance.*.common_subexpression_
+    /// {1,2,3}; `chain.rs` compares those pairs).
+    #[test]
+    fn a_sum_an_invariant_output_reads_is_not_fused() {
+        let (vin, k) = (|r: u16| Some(fixed(Bank::VtxIn, r, NONE)), Some(SelSrc::Imm(0.7f32.to_bits())));
+        let v = |r: u32| Some(virt(r, NONE));
+        let groups = [
+            /* position: (in0 * 0.7 + in1) * 0.7 + in2 */
+            g(SelOp::Alu(AluOp::Fmul), 1, [vin(0), k, None]),
+            g(SelOp::Alu(AluOp::Fadd), 2, [v(1), vin(1), None]),
+            g(SelOp::Alu(AluOp::Fmul), 3, [v(2), k, None]),
+            g(SelOp::Alu(AluOp::Fadd), 4, [v(3), vin(2), None]),
+            /* a varying: in3 * 0.7 + in0 */
+            g(SelOp::Alu(AluOp::Fmul), 5, [vin(3), k, None]),
+            g(SelOp::Alu(AluOp::Fadd), 6, [v(5), vin(0), None]),
+        ];
+        let outputs = [(IoSlot::Position, [v(4), None, None, None]), (IoSlot::Varying(0), [v(6), None, None, None])];
+        let fused_sums = |invariant: &[IoSlot]| -> Vec<u32> {
+            let sel = Selected {
+                groups: &groups,
+                vregs: 16,
+                outputs: &outputs,
+                inputs: &[],
+                discard: None,
+                alpha_to_one: None,
+            };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let arena = Arena::new(&mut buf);
+            let pairs = fusion_pairs(&sel, &arena, invariant).expect("pairs");
+            pairs.iter().map(|p| p.1).collect()
+        };
+        assert_eq!(fused_sums(&[]), [1, 3, 5], "every sum of a product it alone reads");
+        assert_eq!(fused_sums(&[IoSlot::Position]), [5], "the position's two sums are not");
+        assert_eq!(fused_sums(&[IoSlot::Varying(0)]), [1, 3], "the varying's");
+        assert_eq!(fused_sums(&[IoSlot::Varying(0), IoSlot::Position]), [], "both");
+        assert_eq!(fused_sums(&[IoSlot::PointSize]), [1, 3, 5], "an invariant output the program does not write");
+    }
+
+    /// An `if` test on the way to an invariant output is computed without
+    /// contraction too: a group with no value result (the test's
+    /// predicate) is exact when any output is invariant, since the arm an
+    /// instance runs decides the value.
+    #[test]
+    fn a_test_of_a_program_with_an_invariant_output_is_not_fused() {
+        let (vin, k) = (|r: u16| Some(fixed(Bank::VtxIn, r, NONE)), Some(SelSrc::Imm(0.7f32.to_bits())));
+        let v = |r: u32| Some(virt(r, NONE));
+        let test =
+            SelGroup { op: SelOp::Machine(MachineOp::Tstz), ty: OpType::F32, dst: None, srcs: [v(2), None, None] };
+        let groups = [
+            g(SelOp::Alu(AluOp::Fmul), 1, [vin(0), k, None]),
+            g(SelOp::Alu(AluOp::Fadd), 2, [v(1), vin(1), None]),
+            test,
+            g(SelOp::Alu(AluOp::Fmul), 3, [vin(2), k, None]),
+            g(SelOp::Alu(AluOp::Fadd), 4, [v(3), vin(3), None]),
+        ];
+        let outputs = [(IoSlot::Position, [vin(0), None, None, None]), (IoSlot::Varying(0), [v(4), None, None, None])];
+        let fused_sums = |invariant: &[IoSlot]| -> Vec<u32> {
+            let sel = Selected {
+                groups: &groups,
+                vregs: 16,
+                outputs: &outputs,
+                inputs: &[],
+                discard: None,
+                alpha_to_one: None,
+            };
+            let mut buf = std::vec![0u8; 64 << 10];
+            let arena = Arena::new(&mut buf);
+            fusion_pairs(&sel, &arena, invariant).expect("pairs").iter().map(|p| p.1).collect()
+        };
+        assert_eq!(fused_sums(&[]), [1, 4]);
+        assert_eq!(fused_sums(&[IoSlot::Varying(0)]), [], "the test's sum and the varying's");
     }
 
     fn marker(m: super::super::sel::PredArm) -> SelGroup {

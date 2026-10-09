@@ -74,6 +74,9 @@ pub struct Preprocessed<'a> {
     pub version: u32,
     /// The lexical rules that were applied.
     pub lexer_version: Version,
+    /// `#pragma STDGL invariant(all)` was seen in live code: every output is
+    /// invariant (section 4.6.1).
+    pub all_invariant: bool,
 }
 
 /// One `#define`.
@@ -140,6 +143,7 @@ pub fn preprocess<'a>(a: &Arena<'a>, src: &'a str) -> R<'a, Preprocessed<'a>> {
         line_delta: 0,
         file: 0,
         invocation_line: None,
+        all_invariant: false,
     };
     pp.run()?;
     let tokens = pp.out.into_slice();
@@ -150,7 +154,8 @@ pub fn preprocess<'a>(a: &Arena<'a>, src: &'a str) -> R<'a, Preprocessed<'a>> {
      * reuse the space instead of stacking on top of it. */
     // SAFETY: as above; nothing refers to `toks` past this point.
     unsafe { a.give_back(toks) };
-    Ok(Preprocessed { tokens, version, lexer_version })
+    let all_invariant = pp.all_invariant;
+    Ok(Preprocessed { tokens, version, lexer_version, all_invariant })
 }
 
 /// Find the `#version` directive before tokenizing, because it decides which
@@ -269,6 +274,8 @@ struct Pp<'x, 'a> {
     active_macros: AVec<'a, &'a str>,
     seen_non_directive: bool,
     seen_version: bool,
+    /// `#pragma STDGL invariant(all)`; see [`Preprocessed::all_invariant`].
+    all_invariant: bool,
     /// What `#line` did: added to a token's own line to give `__LINE__`
     /// (section 3.4, "the following line has line number line").
     /// Diagnostics keep the application's own lines, which is what an info
@@ -378,7 +385,15 @@ impl<'a> Pp<'_, 'a> {
             "undef" => self.d_undef(name, body),
             "version" => self.d_version(name, body),
             "error" => Err(Error::new(name.line, body.first().map_or("", |t| t.text), "#error")),
-            "pragma" => Ok(()), // an unrecognised pragma is ignored (section 3.4)
+            "pragma" => {
+                /* Section 4.6.1's `#pragma STDGL invariant(all)`; any other
+                 * pragma is unrecognised and ignored (section 3.4). */
+                let words = ["STDGL", "invariant", "(", "all", ")"];
+                if body.len() == words.len() && body.iter().zip(words).all(|(t, w)| t.text == w) {
+                    self.all_invariant = true;
+                }
+                Ok(())
+            }
             "extension" => self.d_extension(name, body),
             "line" => self.d_line(name, body),
             _ => Err(Error::new(name.line, name.text, "invalid preprocessor directive")),

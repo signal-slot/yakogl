@@ -4260,7 +4260,7 @@ mod tests {
     const LOOP_TOP: u16 = 1;
 
     fn io(name: &'static str, kind: ir::IoKind, location: u8) -> ir::IoDecl<'static> {
-        ir::IoDecl { name, kind, location, components: 4, interp: ir::INTERP_SMOOTH, gl_type: 0 }
+        ir::IoDecl { name, kind, location, components: 4, interp: ir::INTERP_SMOOTH, gl_type: 0, invariant: false }
     }
 
     /// A matrix attribute read only through a later column is present as a
@@ -4996,8 +4996,17 @@ mod tests {
                 interp: 0,
                 gl_type: 0,
                 name: "v_color",
+                invariant: false,
             },
-            ir::IoDecl { kind: ir::IoKind::Varying, location: 1, components: 2, interp: 0, gl_type: 0, name: "v_uv" },
+            ir::IoDecl {
+                kind: ir::IoKind::Varying,
+                location: 1,
+                components: 2,
+                interp: 0,
+                gl_type: 0,
+                name: "v_uv",
+                invariant: false,
+            },
         ];
         /* Both are read, so both keep a register and the subject is the
          * ORDER. A varying nobody reads is dropped instead -- see
@@ -5037,8 +5046,24 @@ mod tests {
          * fails if it comes apart again. */
         let _s = store::test_lock();
         let inputs = [
-            ir::IoDecl { kind: ir::IoKind::Varying, location: 0, components: 4, interp: 0, gl_type: 0, name: "a" },
-            ir::IoDecl { kind: ir::IoKind::Varying, location: 1, components: 4, interp: 0, gl_type: 0, name: "b" },
+            ir::IoDecl {
+                kind: ir::IoKind::Varying,
+                location: 0,
+                components: 4,
+                interp: 0,
+                gl_type: 0,
+                name: "a",
+                invariant: false,
+            },
+            ir::IoDecl {
+                kind: ir::IoKind::Varying,
+                location: 1,
+                components: 4,
+                interp: 0,
+                gl_type: 0,
+                name: "b",
+                invariant: false,
+            },
         ];
         let instrs = [
             ir::Op::LoadInput { slot: ir::IoSlot::Varying(0), comps: 4 },

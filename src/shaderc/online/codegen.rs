@@ -1082,7 +1082,7 @@ mod chain_tests {
     use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_VIV_NO_REG};
 
     fn io(name: &'static str, kind: ir::IoKind, location: u8) -> ir::IoDecl<'static> {
-        ir::IoDecl { name, kind, location, components: 4, interp: ir::INTERP_SMOOTH, gl_type: 0 }
+        ir::IoDecl { name, kind, location, components: 4, interp: ir::INTERP_SMOOTH, gl_type: 0, invariant: false }
     }
 
     /// `gl_Position = a_pos;`

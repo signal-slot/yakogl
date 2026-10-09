@@ -4677,6 +4677,7 @@ mod tests {
                 components: 1,
                 interp: ir::INTERP_SMOOTH,
                 gl_type: 0,
+                invariant: false,
             }],
             ..vs(&instrs, &nodes)
         };
@@ -4785,7 +4786,15 @@ mod tests {
     #[test]
     fn a_varying_is_one_register_block_however_often_it_is_read() {
         let inputs = [
-            ir::IoDecl { name: "v_read", kind: ir::IoKind::Varying, location: 0, components: 2, interp: 0, gl_type: 0 },
+            ir::IoDecl {
+                name: "v_read",
+                kind: ir::IoKind::Varying,
+                location: 0,
+                components: 2,
+                interp: 0,
+                gl_type: 0,
+                invariant: false,
+            },
             ir::IoDecl {
                 name: "v_unread",
                 kind: ir::IoKind::Varying,
@@ -4793,6 +4802,7 @@ mod tests {
                 components: 4,
                 interp: 0,
                 gl_type: 0,
+                invariant: false,
             },
         ];
         let instrs = [
