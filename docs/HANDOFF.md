@@ -13,7 +13,11 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 1. ES 2.0 finished on the three boards (AM62P PowerVR, i.MX8MP GC7000,
    Raspberry Pi 4 V3D), each booted from its own storage by its bootloader.
 2. Minimum performance.
-3. A public website (`website/`). It goes live when the repository is public.
+3. A public website (`website/`). It goes live when the repository is public:
+   `.github/workflows/pages.yml` deploys it once Pages is turned on
+   (`website/README.md`). Every figure it shows is in `website/data.js` with
+   its commit, date and record; update that file with each new board result.
+   `tools/website-check.sh` checks links, metadata and `data.js`.
 4. ES 3.0 on the three boards (the dEQP-GLES3 mustpass, 42,810 cases). Host
    work runs ahead of the boards. A product image still reports ES 2.0 by
    default (Kconfig `YAKOGL_REPORT_ES2` default `y`, CMake

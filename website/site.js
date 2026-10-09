@@ -21,10 +21,6 @@
   function num(v) {
     return typeof v === "number" ? v.toLocaleString("en-US") : esc(v);
   }
-  function board(id) {
-    for (var i = 0; i < D.boards.length; i++) if (D.boards[i].id === id) return D.boards[i];
-    return null;
-  }
   function blob(path) {
     return D.repo + "/blob/main/" + path;
   }
