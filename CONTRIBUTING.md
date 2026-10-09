@@ -3,8 +3,8 @@
 # Contributing to YakoGL
 
 YakoGL is an OpenGL ES 2.0 + EGL library for embedded GPUs, with no OS GPU
-driver. Start with `README.md`, then `docs/HANDOFF.md` ("How to work here").
-Process details are in `.ccfarm/CYCLE.md`.
+driver. Start with `README.md`, then `docs/HANDOFF.md` ("How to work here"),
+which also holds the process details.
 
 ## The gate: `tools/check.sh`
 

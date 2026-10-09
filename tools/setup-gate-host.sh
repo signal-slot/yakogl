@@ -2,15 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# setup-check-env.sh -- check and prepare the toolchain tools/check.sh needs,
-# so a review gate does not queue for the one farm machine that happens to
-# have the tools (docs/farm/check-env.md maps every tool to the check.sh row
-# it unblocks).
+# setup-gate-host.sh -- check and prepare the toolchain tools/check.sh needs,
+# so the gate can run on any machine, not only the one that happens to have
+# the tools.
 #
-#   tools/farm/setup-check-env.sh --check
+#   tools/setup-gate-host.sh --check
 #     Print one "ok" or "missing" line per tool. Exit 0 only when all are ok.
 #
-#   tools/farm/setup-check-env.sh --install
+#   tools/setup-gate-host.sh --install
 #     Add what rustup can add (clippy, rustfmt, the two aarch64-unknown-none
 #     targets): user-space, idempotent, always safe. Install distro packages
 #     only when passwordless sudo works (sudo -n true): on apt systems run
@@ -21,15 +20,15 @@
 #     existing libclang.so* for LIBCLANG_PATH. Values found are printed,
 #     never applied: the script exports nothing into your shell and never
 #     edits an rc file. It also prints, without applying it, the
-#     `ccfarm env set yakogl CC_aarch64_unknown_none <compiler>` line for
-#     the C compiler build.rs would use for the aarch64 rows.
+#     CC_aarch64_unknown_none value for the C compiler build.rs would use for
+#     the aarch64 rows.
 #
 # Idempotent and non-destructive: it only adds rustup components, rustup
 # targets and distro packages; it removes nothing, overwrites no
 # configuration, writes no file, and re-running it changes nothing.
 #
-# The tools are the ones .ccfarm/project.toml [tools] lists that rustup or a
-# distro package can supply. The heavy per-machine workspaces (ZEPHYR_WS with
+# The tools are the ones tools/check.sh needs that rustup or a distro package
+# can supply. The heavy per-machine workspaces (ZEPHYR_WS with
 # west and the Zephyr SDK, HAL_NXP_DIR, PCO_SHC with GLSL2USC_CACHE,
 # MESA_V3D_TREE, driver/src/fw/pvr_fw_blob.h) are out of scope here: they are
 # workspaces and firmware, not packages.
@@ -250,7 +249,7 @@ run() {
   "$@"
 }
 
-# apt: the packages named by .ccfarm/project.toml [tools].
+# apt: the packages tools/check.sh needs.
 apt_packages=(clang libclang-dev python3-yaml glslang-tools pkg-config libexpat1-dev zlib1g-dev)
 # Gentoo-like: the same tools as portage categories.
 emerge_packages=(sys-devel/clang sys-libs/clang dev-python/pyyaml virtual/pkgconfig dev-libs/expat sys-libs/zlib media-libs/glslang)
@@ -340,8 +339,8 @@ report_values() {
     echo "  export CC_aarch64_unknown_none=$cc_path"
   fi
   if [ -n "$cc_path" ]; then
-    echo "ccfarm value (print only, not applied):"
-    echo "  ccfarm env set yakogl CC_aarch64_unknown_none $cc_path"
+    echo "C compiler for the aarch64 rows (print only, not applied):"
+    echo "  export CC_aarch64_unknown_none=$cc_path"
   fi
   if ! probe_libclang >/dev/null 2>&1 && libdir=$(find_libclang_dir); then
     echo "libclang is on disk at $libdir (print only, not applied):"
@@ -357,7 +356,7 @@ case ${1-} in
   --check)
     run_checks
     if [ "$missing_count" -gt 0 ]; then
-      echo "missing: $missing_count tool(s); run $PROG --install, or see docs/farm/check-env.md"
+      echo "missing: $missing_count tool(s); run $PROG --install"
       exit 1
     fi
     exit 0
