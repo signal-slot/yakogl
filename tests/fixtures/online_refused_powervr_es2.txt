@@ -36,6 +36,9 @@ gltest/es3trunc_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build repor
 gltest/es3trunc_vary_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 gltest/es3trunc_vs.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 gltest/es3trunc_vsc.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/intrt.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/isamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/usamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/es/fbload.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0

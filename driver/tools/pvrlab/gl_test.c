@@ -7861,7 +7861,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -17543,6 +17543,223 @@ out:
 	return ok ? 0 : -1;
 }
 
+/* ---- case 200: an integer render target, drawn and read back (intrt) -----
+ *
+ * ES 3.0's integer colour buffers on the PowerVR (docs/es3-pvr-formats.md,
+ * sections 2.3 and 5): an 8x8 RGBA8UI renderbuffer, then an RGBA32UI one,
+ * each
+ *   1. cleared with glClearBufferuiv -- a quad through the clear-attach
+ *      program of the target's dwords, the values packed for the target --
+ *      and read back with glReadPixels(GL_RGBA_INTEGER, GL_UNSIGNED_INT);
+ *   2. drawn whole by gltest/intrt.frag, a uvec4 output (the uniform's
+ *      integers, the pixel's column in alpha): the program bit-packs it for
+ *      the target (one dword for RGBA8UI, four for RGBA32UI) and the PBE
+ *      stores it with the integer pack mode, unconverted;
+ *   3. cleared again and drawn into its left half only in the same frame:
+ *      the right half keeps the clear;
+ *   4. drawn into its left half with no clear first: the frame reloads the
+ *      pixels raw (the integer frame load), so the right half keeps step 3's
+ *      clear and the left half takes the new values.
+ * The PowerVR's only (INTEGER_RT_FORMATS); the other GPUs refuse the draw by
+ * name, so the case is skipped there. */
+#ifdef GL_TEST_PVR
+/* One integer pixel of an 8x8 GL_RGBA_INTEGER read-back against `want`. */
+static bool expect_u4(const char *what, const GLuint *px, uint32_t x, uint32_t y, const GLuint want[4])
+{
+	const GLuint *p = &px[(y * 8 + x) * 4];
+	bool ok = p[0] == want[0] && p[1] == want[1] && p[2] == want[2] && p[3] == want[3];
+
+	pr_info("gl_test:   %-28s (%u,%u) = %u %u %u %u  want %u %u %u %u  %s  [check %d]\n", what, x, y,
+		p[0], p[1], p[2], p[3], want[0], want[1], want[2], want[3], ok ? "ok" : "MISMATCH",
+		gl_test_check_no + 1);
+	return gl_test_check(ok, p[0], want[0]);
+}
+#endif
+
+static int case_intrt(void)
+{
+#ifndef GL_TEST_PVR
+	pr_info("gl_test: case 200 intrt: SKIP (integer render targets are the PowerVR's only)\n");
+	return -3;
+#else
+	static const struct {
+		GLenum fmt;
+		const char *name;
+		GLuint clear[4], draw[4];
+	} arms[] = {
+		{ GL_RGBA8UI, "rgba8ui", { 7, 8, 9, 10 }, { 200, 17, 3, 0 } },
+		{ GL_RGBA32UI, "rgba32ui", { 0x12345678u, 0x9abcdef0u, 1, 0xffffffffu }, { 0x80000001u, 70000, 5, 0 } },
+	};
+	static GLuint px[8 * 8 * 4];
+	GLuint prog, rb = 0, fbo = 0;
+	bool ok = true;
+
+	free_all_objects();
+	prog = link_program(gl_test_es300_cube_vs_src, gl_test_es300_intrt_fs_src);
+	if (!prog)
+		return -1;
+	for (unsigned a = 0; a < sizeof(arms) / sizeof(arms[0]); a++) {
+		char what[48];
+
+		glGenRenderbuffers(1, &rb);
+		glBindRenderbuffer(GL_RENDERBUFFER, rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, arms[a].fmt, 8, 8);
+		glGenFramebuffers(1, &fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			pr_err("gl_test: %s FBO incomplete\n", arms[a].name);
+			return -1;
+		}
+		glViewport(0, 0, 8, 8);
+
+		/* 1. the clear, read back as integers */
+		glClearBufferuiv(GL_COLOR, 0, arms[a].clear);
+		glReadPixels(0, 0, 8, 8, GL_RGBA_INTEGER, GL_UNSIGNED_INT, px);
+		if (!check_gl_error("intrt clear"))
+			return -1;
+		snprintf(what, sizeof(what), "%s cleared", arms[a].name);
+		ok &= expect_u4(what, px, 1, 1, arms[a].clear);
+		ok &= expect_u4(what, px, 7, 6, arms[a].clear);
+
+		/* 2. a uvec4 output over the whole target: column x in alpha */
+		glUseProgram(prog);
+		glUniform4uiv(glGetUniformLocation(prog, "u_v"), 1, arms[a].draw);
+		puv_quad_setup();
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glReadPixels(0, 0, 8, 8, GL_RGBA_INTEGER, GL_UNSIGNED_INT, px);
+		if (!check_gl_error("intrt draw"))
+			return -1;
+		for (uint32_t x = 0; x < 8; x += 5) {
+			GLuint want[4] = { arms[a].draw[0], arms[a].draw[1], arms[a].draw[2], x };
+
+			snprintf(what, sizeof(what), "%s drawn", arms[a].name);
+			ok &= expect_u4(what, px, x, 3, want);
+		}
+
+		/* 3. clear + left-half draw in one frame */
+		glClearBufferuiv(GL_COLOR, 0, arms[a].clear);
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, 0, 4, 8);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDisable(GL_SCISSOR_TEST);
+		glReadPixels(0, 0, 8, 8, GL_RGBA_INTEGER, GL_UNSIGNED_INT, px);
+		if (!check_gl_error("intrt clear+draw"))
+			return -1;
+		{
+			GLuint left[4] = { arms[a].draw[0], arms[a].draw[1], arms[a].draw[2], 2 };
+
+			snprintf(what, sizeof(what), "%s left drawn", arms[a].name);
+			ok &= expect_u4(what, px, 2, 4, left);
+			snprintf(what, sizeof(what), "%s right kept clear", arms[a].name);
+			ok &= expect_u4(what, px, 6, 4, arms[a].clear);
+		}
+
+		/* 4. a frame with no clear: the pixels come back from memory */
+		{
+			GLuint v2[4] = { arms[a].draw[2], arms[a].draw[0], arms[a].draw[1], 0 };
+			GLuint left[4] = { v2[0], v2[1], v2[2], 1 };
+
+			glUniform4uiv(glGetUniformLocation(prog, "u_v"), 1, v2);
+			glEnable(GL_SCISSOR_TEST);
+			glScissor(0, 0, 4, 8);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glDisable(GL_SCISSOR_TEST);
+			glReadPixels(0, 0, 8, 8, GL_RGBA_INTEGER, GL_UNSIGNED_INT, px);
+			if (!check_gl_error("intrt load"))
+				return -1;
+			snprintf(what, sizeof(what), "%s loaded, left redrawn", arms[a].name);
+			ok &= expect_u4(what, px, 1, 5, left);
+			snprintf(what, sizeof(what), "%s loaded, right kept", arms[a].name);
+			ok &= expect_u4(what, px, 5, 5, arms[a].clear);
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glDeleteFramebuffers(1, &fbo);
+		glDeleteRenderbuffers(1, &rb);
+	}
+	glViewport(0, 0, TW, TH);
+	return ok ? 0 : -1;
+#endif
+}
+
+/* ---- case 201: integer textures through usampler2D / isampler2D (usamp) --
+ *
+ * ES 3.0's integer textures on the PowerVR: the TPU formats of Mesa's
+ * pvr_format_table for the GL core's storage classes, read by an `smp`
+ * without `fcnorm` (the online compiler's integer look-up). A 2x2 RGBA8UI
+ * texture sampled NEAREST with texture() through a usampler2D, each texel
+ * shown as bytes; then a 2x2 RGBA8I texture with negative values fetched
+ * with texelFetch through an isampler2D, shown offset by 128 -- the sign
+ * extension the S8S8S8S8 format gives. The default RGBA8 target is read
+ * back as bytes. The PowerVR's only (the other GPUs refuse integer textures
+ * by name), so the case is skipped there. */
+static int case_usamp(void)
+{
+#ifndef GL_TEST_PVR
+	pr_info("gl_test: case 201 usamp: SKIP (integer textures are the PowerVR's only)\n");
+	return -3;
+#else
+	/* rows bottom-up: texel (0,0) is the bottom-left quadrant */
+	static const GLubyte ut[2 * 2 * 4] = { 200, 0, 0, 255, 0, 100, 0, 255, 0, 0, 50, 255, 250, 128, 1, 255 };
+	static const GLbyte it[2 * 2 * 4] = { -100, 50, -1, 127, 0, -128, 64, -64, 10, 20, -30, 40, -8, 8, -16, 16 };
+	GLuint uprog, iprog, tex = 0;
+	bool ok = true;
+
+	free_all_objects();
+	uprog = link_program(gl_test_es300_cube_vs_src, gl_test_es300_usamp_fs_src);
+	iprog = link_program(gl_test_es300_cube_vs_src, gl_test_es300_isamp_fs_src);
+	if (!uprog || !iprog)
+		return -1;
+
+	/* 1. RGBA8UI through usampler2D, texture() at each quadrant */
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, 2, 2, 0, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, ut);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	if (!check_gl_error("usamp upload"))
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glUseProgram(uprog);
+	glUniform1i(glGetUniformLocation(uprog, "u_tex"), 0);
+	puv_quad_setup();
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("usamp draw"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("usampler2D bottom-left", 16, 48, rgba_u32(200, 0, 0, 255), 1);
+	ok &= expect_px("usampler2D bottom-right", 48, 48, rgba_u32(0, 100, 0, 255), 1);
+	ok &= expect_px("usampler2D top-left", 16, 16, rgba_u32(0, 0, 50, 255), 1);
+	ok &= expect_px("usampler2D top-right", 48, 16, rgba_u32(250, 128, 1, 255), 1);
+
+	/* 2. RGBA8I through isampler2D, texelFetch, sign extended */
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8I, 2, 2, 0, GL_RGBA_INTEGER, GL_BYTE, it);
+	if (!check_gl_error("isamp upload"))
+		return -1;
+	glUseProgram(iprog);
+	glUniform1i(glGetUniformLocation(iprog, "u_tex"), 0);
+	puv_quad_setup();
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("isamp draw"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("isampler2D bottom-left", 16, 48, rgba_u32(28, 178, 127, 255), 1);
+	ok &= expect_px("isampler2D bottom-right", 48, 48, rgba_u32(128, 0, 192, 64), 1);
+	ok &= expect_px("isampler2D top-left", 16, 16, rgba_u32(138, 148, 98, 168), 1);
+	ok &= expect_px("isampler2D top-right", 48, 16, rgba_u32(120, 136, 112, 144), 1);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	return ok ? 0 : -1;
+#endif
+}
+
 /* ---- case 180: memory a finished job held, back at once (teardown) --------
  *
  * glmark2 tears a scene down and sets the next one up with no wait in
@@ -19892,6 +20109,8 @@ static int run_case(int c, int pretransform, int debug)
 			return -3; /* skipped by name: no 4x config */
 		break;
 	case 199: rc = case_es3trunc(); break;
+	case 200: rc = case_intrt(); break;
+	case 201: rc = case_usamp(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

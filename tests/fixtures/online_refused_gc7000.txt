@@ -2,6 +2,8 @@ armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES comp
 color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+gltest/isamp.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a cube fetch) is not selected yet"))
+gltest/usamp.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a cube fetch) is not selected yet"))
 internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
 internal/es/fbload_int.frag: online shaderc: the code generator refused this fragment shader: Select(Unsupported("an ES 3.00 texture look-up (a shadow sampler, an integer result, a gradient, an offset or a cube fetch) is not selected yet"))

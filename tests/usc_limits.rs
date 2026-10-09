@@ -3627,6 +3627,59 @@ fn integer_render_targets_get_the_packed_bits() {
     .unwrap();
 }
 
+/// gl_test case 196's fragment shader (gltest/intrt.frag, the case's own
+/// text) on the host: for the RGBA8UI and RGBA32UI targets the case draws
+/// into, the pixel output dwords at column 5 are the uniform's integers
+/// with 5 in alpha, packed for the target -- the values the case reads
+/// back with glReadPixels(GL_RGBA_INTEGER). Case 196 on the AM62P is the
+/// deciding check.
+#[test]
+fn gl_test_case_196_intrt_on_the_host() {
+    use yakogl::shaderc::*;
+    if yakogl::REPORT_ES2 {
+        return;
+    }
+    let src = include_str!("../tools/shaders/gltest/intrt.frag");
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        for (bits, v, want) in [
+            (8u8, [200u32, 17, 3], vec![200 | 17 << 8 | 3 << 16 | 5 << 24]),
+            (32, [0x8000_0001, 70000, 5], vec![0x8000_0001, 70000, 5, 5]),
+        ] {
+            let rt = ShcIntRt { channels: 4, bits, signed: false };
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                shc_blend_key_int_rt(rt),
+            )
+            .unwrap_or_else(|e| panic!("rgba{bits}ui: {e:?}"));
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            // SAFETY: the record's own count describes its own table.
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let row = rows.iter().find(|r| r.dword_off != SHC_UNIFORM_NO_BLOCK).expect("u_v in the block");
+            let mut inp = sentinel_inputs(1.0e30);
+            inp.shared[row.dword_off as usize..row.dword_off as usize + 3].copy_from_slice(&v);
+            /* gl_FragCoord.y's pair, where the record says the driver puts it */
+            if rec.fragcoord_ytf_off1 != 0 {
+                let at = rec.fragcoord_ytf_off1 as usize - 1;
+                inp.shared[at] = 1.0f32.to_bits();
+                inp.shared[at + 1] = 0.0f32.to_bits();
+            }
+            let x = 5.5f32.to_bits();
+            inp.frag_xy = [x, x, 3.5f32.to_bits(), 3.5f32.to_bits()];
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
+            assert_eq!(got, want, "rgba{bits}ui at column 5");
+        }
+    })
+    .unwrap();
+}
+
 /// The refusal of a variant, as text.
 fn compile_fragment_for_err<'a>(
     l: &lower::Lowered<'a>,
