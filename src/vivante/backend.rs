@@ -2694,6 +2694,9 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),
     depth_resolve: Some(gc_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// The backend's own tests (the module is large enough to keep them apart, as

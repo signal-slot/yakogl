@@ -6825,6 +6825,9 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(pvr_backend_attachment_gone),
     depth_resolve: Some(pvr_backend_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// Append attribute `a` (first element at `base`) to the vertex-fetch streams

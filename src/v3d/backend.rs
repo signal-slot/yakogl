@@ -4649,6 +4649,9 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
     samples_texel_copies: true,
     attachment_gone: Some(v3d_attachment_gone),
     depth_resolve: Some(v3d_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 #[cfg(test)]

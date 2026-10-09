@@ -217,14 +217,19 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * Query names are real; no target counts yet.
  * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN will be counted on the CPU by the
  * transform feedback capture once it is built (docs/HANDOFF.md, open work 4,
  * tf-capture): `add_primitives_written` is the entry it adds to the active
- * query through. The BXS backend has no occlusion counter wired
- * up, so glBeginQuery on the ANY_SAMPLES_PASSED targets still refuses rather
- * than letting a caller believe a zero sample count (docs/HANDOFF.md, open
- * work 4, occlusion-query, fills in that arm).
+ * query through.
+ *
+ * GL_ANY_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED_CONSERVATIVE are counted by
+ * the backend (docs/es3-occlusion-query.md): each (context, name) owns one
+ * backend handle, every draw recorded while the query is active carries it
+ * (`GlesDraw::occlusion_query`), and the result is read once the last kick
+ * that can hold a counted draw has completed. A backend without
+ * `query_begin` counts nothing, and glBeginQuery refuses those two targets
+ * rather than let a caller believe a zero sample count; the ES 2.0 report
+ * refuses every target, as it always has.
  */
 
 /// What a query object has been used for (a name is a query object once it
@@ -233,23 +238,157 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 struct Es3Query {
     target: GLenum,
     active: bool,
+    /// The result once known: the primitives written, or 0/1 for an
+    /// occlusion target.
     result: u32,
+    /// Occlusion: `result` holds the answer (read from the backend once).
+    has_result: bool,
+    /// Occlusion: the kick that was being recorded at glEndQuery, the last
+    /// that can hold a draw the query counted.
+    end_kick: u32,
 }
 
 impl Es3Query {
-    const NONE: Es3Query = Es3Query { target: 0, active: false, result: 0 };
+    const NONE: Es3Query = Es3Query { target: 0, active: false, result: 0, has_result: false, end_kick: 0 };
 }
 
 static QSTATE: Global<[[Es3Query; MAX_QUERIES]; MAX_CONTEXTS]> = Global::zeroed();
+
+/// Per backend occlusion handle: the last kick that can hold a draw counted
+/// on it (0: none). A new query on the handle waits for it first, so the
+/// backend never resets a counter a kick in flight still adds into. Global,
+/// as the handles are: it outlives the name and the context that used it.
+static HANDLE_KICK: Global<[u32; backend::GLES_QUERY_HANDLES as usize]> = Global::zeroed();
 
 fn qstate(index: u8) -> &'static mut [Es3Query; MAX_QUERIES] {
     // SAFETY: single-threaded by contract; no other reference to the pool is live.
     unsafe { &mut QSTATE.get()[index as usize % MAX_CONTEXTS] }
 }
 
+fn handle_kick(handle: u32) -> &'static mut u32 {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    unsafe { &mut HANDLE_KICK.get()[handle as usize % backend::GLES_QUERY_HANDLES as usize] }
+}
+
 /// The query active on `target` of context `index`, if any.
 fn active_query(index: u8, target: GLenum) -> Option<usize> {
     (1..MAX_QUERIES).find(|&h| qstate(index)[h].active && qstate(index)[h].target == target)
+}
+
+/// GL_ANY_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED_CONSERVATIVE.
+fn is_occlusion(target: GLenum) -> bool {
+    target == GL_ANY_SAMPLES_PASSED || target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE
+}
+
+/// The active occlusion query of context `index`, of either target: the two
+/// share one binding point (ES 3.0 2.14; Mesa's `get_query_binding_point`,
+/// and dEQP "alias to the same target for the purposes of this error").
+fn active_occlusion(index: u8) -> Option<usize> {
+    (1..MAX_QUERIES).find(|&h| qstate(index)[h].active && is_occlusion(qstate(index)[h].target))
+}
+
+/// The backend handle of query name `h` of context `index`: one per
+/// (context, name), 1 ..GLES_QUERY_HANDLES; None past it.
+fn occlusion_handle_of(index: u8, h: usize) -> Option<u32> {
+    let handle = (index as usize % MAX_CONTEXTS) * MAX_QUERIES + h;
+    (h != 0 && handle < backend::GLES_QUERY_HANDLES as usize).then_some(handle as u32)
+}
+
+/// The handle a draw recorded now is counted on (`GlesDraw::occlusion_query`):
+/// the active occlusion query's, 0 when none is active.
+pub(super) fn occlusion_query(c: &GlContext) -> u32 {
+    active_occlusion(c.index).and_then(|h| occlusion_handle_of(c.index, h)).unwrap_or(0)
+}
+
+/// `kick` is the kick that was being recorded when it was noted. If it still
+/// is, submit it (ES 3.0 2.14: asking for a result makes it complete in
+/// finite time); a flush with nothing recorded submits nothing, and then
+/// the last kick actually submitted is the one that holds the counted draws.
+/// Returns the kick to wait for.
+fn submitted_kick(kick: u32) -> u32 {
+    if kick != 0 && kick == backend::kick_id() {
+        backend::flush();
+        if kick == backend::kick_id() {
+            return kick.wrapping_sub(1);
+        }
+    }
+    kick
+}
+
+/// Wait until `kick` (from [`submitted_kick`]) has completed: true when it
+/// did, false when the work was lost (counted by the backend wrappers).
+fn wait_for_kick(kick: u32) -> bool {
+    if !backend::kick_pending(kick) {
+        return true;
+    }
+    backend::wait_kick(kick).unwrap_or_else(backend::finish) == 0
+}
+
+/// A query on `handle` is about to count again: every kick that counted on
+/// it before must be done before the backend resets the counter.
+fn settle_handle(handle: u32) {
+    let k = *handle_kick(handle);
+    if k != 0 {
+        let k = submitted_kick(k);
+        wait_for_kick(k);
+        *handle_kick(handle) = 0;
+    }
+}
+
+/// End the active occlusion query `h` of context `index` (glEndQuery, or its
+/// name deleted, or its context gone).
+fn end_occlusion(index: u8, h: usize) {
+    let kick = backend::kick_id();
+    let q = &mut qstate(index)[h];
+    q.active = false;
+    q.end_kick = kick;
+    q.has_result = false;
+    if let Some(handle) = occlusion_handle_of(index, h) {
+        *handle_kick(handle) = kick;
+        backend::query_end(handle);
+    }
+}
+
+/// The occlusion result of query `h` of context `index` (ended), reading it
+/// from the backend once. `wait`: wait for the kick if it is still running;
+/// otherwise None while it is. Lost GPU work answers the conservative
+/// GL_TRUE (and is counted by the backend wrappers), so a caller polling
+/// GL_QUERY_RESULT_AVAILABLE still terminates.
+fn occlusion_result(index: u8, h: usize, wait: bool) -> Option<u32> {
+    let q = qstate(index)[h];
+    if q.has_result {
+        return Some(q.result);
+    }
+    let kick = submitted_kick(q.end_kick);
+    qstate(index)[h].end_kick = kick;
+    if !wait && backend::kick_pending(kick) {
+        return None;
+    }
+    let passed = if !wait_for_kick(kick) {
+        true
+    } else {
+        match occlusion_handle_of(index, h).map(backend::query_result) {
+            Some(Ok(n)) => n != 0,
+            _ => true,
+        }
+    };
+    let q = &mut qstate(index)[h];
+    q.result = passed as u32;
+    q.has_result = true;
+    Some(q.result)
+}
+
+/// Context slot `index` starts or goes: its query names and objects are
+/// gone. An active occlusion query is dropped; its handle remembers the kick
+/// so a later query on it waits for that kick first.
+pub(super) fn reset_context_queries(index: u8) {
+    if let Some(h) = active_occlusion(index) {
+        if let Some(handle) = occlusion_handle_of(index, h) {
+            *handle_kick(handle) = backend::kick_id();
+        }
+    }
+    *qstate(index) = [Es3Query::NONE; MAX_QUERIES];
+    *queries(index) = [Es3Name::FREE; MAX_QUERIES];
 }
 
 /// A captured draw wrote `n` primitives: the active
@@ -286,7 +425,11 @@ pub unsafe extern "C" fn glDeleteQueries(n: GLsizei, ids: *const GLuint) {
         for i in 0..n as usize {
             // SAFETY: the application passes `n` names (n > 0 checked above).
             let h = util::app_get(ids, i) as usize;
-            if h != 0 && h < MAX_QUERIES {
+            if h != 0 && h < MAX_QUERIES && queries(c.index)[h].used {
+                let q = qstate(c.index)[h];
+                if q.active && is_occlusion(q.target) {
+                    end_occlusion(c.index, h); /* the handle keeps its kick */
+                }
                 qstate(c.index)[h] = Es3Query::NONE; /* an active query ends with its name */
             }
         }
@@ -317,18 +460,35 @@ pub unsafe extern "C" fn glBeginQuery(target: GLenum, id: GLuint) {
         return;
     }
     queries(c.index)[h].bound = true;
-    if target != GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN || crate::REPORT_ES2 {
+    let occlusion = is_occlusion(target);
+    if crate::REPORT_ES2 || (occlusion && !backend::counts_occlusion()) {
         c.set_error(GL_INVALID_OPERATION, FUNC); /* no counter behind it (see the section comment) */
         return;
     }
-    /* ES 3.0 2.16: one active query per target; a query keeps the target of
-     * its first Begin; one that is active cannot begin again */
+    /* ES 3.0 2.14: one active query per target (the two occlusion targets
+     * are one); a query keeps the target of its first Begin; one that is
+     * active cannot begin again */
     let q = qstate(c.index)[h];
-    if active_query(c.index, target).is_some() || q.active || (q.target != 0 && q.target != target) {
+    let busy = if occlusion { active_occlusion(c.index) } else { active_query(c.index, target) };
+    if busy.is_some() || q.active || (q.target != 0 && q.target != target) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    qstate(c.index)[h] = Es3Query { target, active: true, result: 0 };
+    if occlusion {
+        let Some(handle) = occlusion_handle_of(c.index, h) else {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC); /* YAKOGL_MAX_CONTEXTS past the handle space */
+            return;
+        };
+        /* a glClear before the Begin is not counted, and lands before the
+         * counted draws */
+        draw::flush_pending_clear(c);
+        settle_handle(handle);
+        if backend::query_begin(handle) != 0 {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return;
+        }
+    }
+    qstate(c.index)[h] = Es3Query { target, active: true, ..Es3Query::NONE };
 }
 
 #[no_mangle]
@@ -340,6 +500,15 @@ pub unsafe extern "C" fn glEndQuery(target: GLenum) {
         return;
     }
     let Some(c) = context::current() else { return };
+    if is_occlusion(target) {
+        /* the binding point is shared: ending it with the other occlusion
+         * target is an error (Mesa's _mesa_EndQueryIndexed target check) */
+        match active_occlusion(c.index) {
+            Some(h) if qstate(c.index)[h].target == target => end_occlusion(c.index, h),
+            _ => c.set_error(GL_INVALID_OPERATION, FUNC),
+        }
+        return;
+    }
     match active_query(c.index, target) {
         /* the capture is synchronous: the result is complete at once */
         Some(h) => qstate(c.index)[h].active = false,
@@ -362,6 +531,7 @@ pub unsafe extern "C" fn glGetQueryiv(target: GLenum, pname: GLenum, params: *mu
         context::set_error_no_ctx(GL_INVALID_ENUM, FUNC);
         return;
     }
+    /* the active query of exactly this target (Mesa: `q->Target == target`) */
     let id = context::current().and_then(|c| active_query(c.index, target)).unwrap_or(0);
     // SAFETY: params is non-null and valid for one GLint (GL contract), not
     // necessarily aligned.
@@ -389,8 +559,20 @@ pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: 
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
+    let value = if !is_occlusion(q.target) {
+        if pname == GL_QUERY_RESULT {
+            q.result
+        } else {
+            GL_TRUE
+        }
+    } else if pname == GL_QUERY_RESULT {
+        /* ES 3.0 2.14: the boolean targets answer TRUE or FALSE */
+        occlusion_result(c.index, h, true).unwrap_or(GL_TRUE)
+    } else {
+        occlusion_result(c.index, h, false).is_some() as GLuint
+    };
     // SAFETY: params is null or valid for one GLuint (GL contract), not necessarily aligned.
-    util::app_put(params, if pname == GL_QUERY_RESULT { q.result } else { GL_TRUE });
+    util::app_put(params, value);
 }
 
 /* ------------------------------------------------------ transform feedback --
@@ -1387,6 +1569,7 @@ pub(crate) fn reset_for_tests() {
     unsafe {
         *QUERIES.get() = [[Es3Name::FREE; MAX_QUERIES]; MAX_CONTEXTS];
         *QSTATE.get() = [[Es3Query::NONE; MAX_QUERIES]; MAX_CONTEXTS];
+        *HANDLE_KICK.get() = [0; backend::GLES_QUERY_HANDLES as usize];
         *SAMPLERS.get() = [[Es3Sampler::FREE; MAX_SAMPLERS]; MAX_CONTEXTS];
         *BOUND_SAMPLER.get() = [[0; CAP_COMBINED_TEXTURE_UNITS]; MAX_CONTEXTS];
         super::tf::reset_for_tests();
@@ -1474,7 +1657,8 @@ mod tests {
         unsafe {
             assert_eq!(glIsQuery(q), GL_FALSE_B, "a generated name is not yet an object");
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
-            /* the name became an object, and the counting is refused */
+            /* the name became an object, and the counting is refused: the
+             * plain mock backend counts no samples (no query_begin) */
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
             assert_eq!(glIsQuery(q), GL_TRUE_B);
             glDeleteQueries(1, &q);
@@ -1538,6 +1722,424 @@ mod tests {
             glGetQueryiv(GL_ANY_SAMPLES_PASSED, GL_QUERY_RESULT, &mut v);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
             assert_eq!(v, 9, "a rejected query writes nothing");
+        }
+    }
+
+    /* ---- occlusion queries (docs/es3-occlusion-query.md section 8) ---- */
+
+    /// The ES 2.0 report refuses the occlusion targets even on a backend
+    /// that counts samples, exactly as it did before the backends did.
+    #[cfg(feature = "report-es2")]
+    #[test]
+    fn es2_report_refuses_occlusion_on_a_counting_backend() {
+        let gl = fresh();
+        gl.backend_counts_samples();
+        let q = gen_query();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, q);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            glEndQuery(GL_ANY_SAMPLES_PASSED);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+        }
+        assert!(gl.query_calls().is_empty(), "the backend never hears of it");
+    }
+
+    #[cfg(not(feature = "report-es2"))]
+    mod occlusion {
+        use super::*;
+        use crate::gl::draw::glDrawArrays;
+        use crate::gl::program::glUseProgram;
+        use crate::gl::state::{glClear, glFinish, glFlush};
+        use crate::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
+        use crate::testutil::QueryCall;
+
+        static TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+
+        /// A fresh context on the sample-counting mock backend, with a
+        /// program and a client array ready for [`tri`].
+        fn counting() -> TestGl {
+            let gl = fresh();
+            gl.backend_counts_samples();
+            let p = gl.program("passthrough.vert", "uniform_color.frag");
+            // SAFETY: plain GL calls; TRI is a static.
+            unsafe {
+                glUseProgram(p);
+                glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, TRI.as_ptr() as *const GLvoid);
+                glEnableVertexAttribArray(0);
+            }
+            gl.clear_recordings();
+            gl
+        }
+
+        fn tri(gl: &TestGl) {
+            // SAFETY: the array `counting` set up is a static.
+            unsafe { glDrawArrays(GL_TRIANGLES, 0, 3) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+        }
+
+        fn handle(gl: &TestGl, q: GLuint) -> u32 {
+            gl.ctx().index as u32 * MAX_QUERIES as u32 + q
+        }
+
+        fn object(q: GLuint, pname: GLenum) -> GLuint {
+            let mut v = 77;
+            // SAFETY: room for one value.
+            unsafe { glGetQueryObjectuiv(q, pname, &mut v) };
+            v
+        }
+
+        fn current(target: GLenum) -> GLuint {
+            let mut v = -1;
+            // SAFETY: room for one value.
+            unsafe { glGetQueryiv(target, GL_CURRENT_QUERY, &mut v) };
+            v as GLuint
+        }
+
+        /// The per-draw field: a draw recorded while the query is active
+        /// carries its handle, one before or after it carries 0.
+        ///
+        /// Deliberate break: drop the `occlusion_query` line in
+        /// `build_common` and the middle draw carries 0.
+        #[test]
+        fn a_draw_inside_the_query_carries_its_handle_and_one_outside_none() {
+            let gl = counting();
+            let q = gen_query();
+            tri(&gl);
+            // SAFETY: plain GL calls.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            // SAFETY: plain GL call.
+            assert_eq!(unsafe { glIsQuery(q) }, GL_TRUE_B);
+            assert_eq!((current(GL_ANY_SAMPLES_PASSED), current(GL_ANY_SAMPLES_PASSED_CONSERVATIVE)), (q, 0));
+            tri(&gl);
+            // SAFETY: plain GL call.
+            unsafe { glEndQuery(GL_ANY_SAMPLES_PASSED) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
+            tri(&gl);
+            let h = handle(&gl, q);
+            let seen: Vec<u32> = gl.draws().iter().map(|r| r.draw.occlusion_query).collect();
+            assert_eq!(seen, [0, h, 0]);
+            assert_eq!(
+                gl.query_calls(),
+                [QueryCall::Begin { handle: h, flushes: 0 }, QueryCall::End { handle: h, flushes: 0 }]
+            );
+        }
+
+        /// RESULT_AVAILABLE submits the open kick once and then answers
+        /// from the kick model; RESULT is a boolean (two draws of 7 samples
+        /// answer 1, not 14) read from the backend once.
+        ///
+        /// Deliberate breaks: skip the flush in `submitted_kick` and the
+        /// first poll leaves `flushes` at 0 (and dEQP's poll without a
+        /// glFlush would spin); return the count instead of `!= 0` and the
+        /// result reads 14; drop `has_result` and a second Result call is
+        /// recorded.
+        #[test]
+        fn availability_flushes_once_and_the_result_is_a_cached_boolean() {
+            let gl = counting();
+            gl.set_draw_samples(7);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            tri(&gl);
+            tri(&gl);
+            // SAFETY: plain GL call.
+            unsafe { glEndQuery(GL_ANY_SAMPLES_PASSED) };
+            let f0 = gl.flushes();
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_FALSE, "the kick is still running");
+            assert_eq!(gl.flushes(), f0 + 1, "the poll submitted the kick being recorded");
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_FALSE);
+            assert_eq!(gl.flushes(), f0 + 1, "a submitted kick is not submitted again");
+            // SAFETY: plain GL call.
+            unsafe { glFinish() };
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+            assert_eq!(object(q, GL_QUERY_RESULT), 1);
+            assert_eq!(object(q, GL_QUERY_RESULT), 1);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            let results = gl.query_calls().iter().filter(|c| matches!(c, QueryCall::Result { .. })).count();
+            assert_eq!(results, 1, "the answer is cached");
+        }
+
+        /// RESULT without a glFinish submits and waits; no sample passing
+        /// answers 0. The mock faults a result read while a kick holding a
+        /// counted draw is pending, so the wait is proven, not assumed.
+        ///
+        /// Deliberate break: drop `wait_for_kick` from `occlusion_result`
+        /// and the mock reports the early read.
+        #[test]
+        fn the_result_waits_for_its_kick_and_nothing_passed_is_false() {
+            let gl = counting();
+            gl.set_draw_samples(0);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, q);
+                tri(&gl);
+                glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
+            }
+            let (f0, w0) = (gl.flushes(), gl.finishes());
+            assert_eq!(object(q, GL_QUERY_RESULT), 0);
+            assert_eq!((gl.flushes(), gl.finishes()), (f0 + 1, w0 + 1));
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+        }
+
+        /// A query whose draws went out in an earlier kick, ended with
+        /// nothing recorded since, waits for that kick: the flush at the
+        /// poll submits nothing, so the kick to wait for is the last one
+        /// submitted. A query that counted no draw at all is available at
+        /// once and false.
+        ///
+        /// Deliberate break: keep `end_kick` when the flush submitted
+        /// nothing and the result waits on a kick that never runs (finish
+        /// is called, but AVAILABLE stays false before it).
+        #[test]
+        fn a_query_whose_draws_were_flushed_waits_for_that_kick() {
+            let gl = counting();
+            gl.set_draw_samples(1);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                tri(&gl);
+                glFlush();
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+            }
+            let k = gl.kick_id() - 1;
+            assert!(gl.kick_pending(k));
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_FALSE);
+            gl.complete_kicks(k);
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+            assert_eq!(object(q, GL_QUERY_RESULT), 1);
+
+            let empty = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, empty);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+            }
+            assert_eq!(object(empty, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+            assert_eq!(object(empty, GL_QUERY_RESULT), 0);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+        }
+
+        /// One query over three kicks: each kick's draws carry the handle,
+        /// one wait covers them all (kicks complete in order).
+        #[test]
+        fn a_query_spans_kicks() {
+            let gl = counting();
+            gl.set_draw_samples(2);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                tri(&gl);
+                glFlush();
+                tri(&gl);
+                glFlush();
+                tri(&gl);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+            }
+            let d = gl.draws();
+            let h = handle(&gl, q);
+            assert!(d.iter().all(|r| r.draw.occlusion_query == h));
+            assert_eq!(d.iter().map(|r| r.kick).collect::<Vec<_>>(), [d[0].kick, d[0].kick + 1, d[0].kick + 2]);
+            assert_eq!(object(q, GL_QUERY_RESULT), 1);
+        }
+
+        /// dEQP negative_api.fragment.begin_query / end_query: the two
+        /// occlusion targets are one binding point; TF primitives is its
+        /// own; a query keeps the target of its first Begin.
+        ///
+        /// Deliberate breaks: look the active query up by exact target in
+        /// glBeginQuery and Begin(CONSERVATIVE) succeeds while ANY is
+        /// active; drop the target check in glEndQuery and
+        /// End(CONSERVATIVE) ends the ANY query.
+        #[test]
+        fn the_two_occlusion_targets_share_one_binding_point() {
+            let gl = counting();
+            let (a, b, c) = (gen_query(), gen_query(), gen_query());
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, a);
+                assert_eq!(gl.error(), GL_NO_ERROR);
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, b);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION);
+                glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, b);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "aliases ANY_SAMPLES_PASSED");
+                glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, b);
+                assert_eq!(gl.error(), GL_NO_ERROR, "a target of its own");
+                glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, c);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION);
+                glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "the active query is of the other target");
+                assert_eq!(current(GL_ANY_SAMPLES_PASSED), a, "and it is still active");
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+                glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+                assert_eq!(gl.error(), GL_NO_ERROR);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "nothing active");
+
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, a);
+                glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, a);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "already active");
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+                glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, a);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "a is an ANY_SAMPLES_PASSED query");
+                glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, a);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION, "of the other occlusion target too");
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, 0);
+                assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            }
+        }
+
+        /// dEQP negative_api.state.get_query_objectuiv: an active query has
+        /// no result, and nothing is written.
+        #[test]
+        fn an_active_query_has_no_result() {
+            let gl = counting();
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(object(q, GL_QUERY_RESULT), 77);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), 77);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+            // SAFETY: plain GL call.
+            unsafe { glEndQuery(GL_ANY_SAMPLES_PASSED) };
+            assert_eq!(object(q, GL_QUERY_RESULT), 0);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+        }
+
+        /// Deleting an active query ends it; the name generated again and
+        /// begun again waits for the kick that still holds the old use's
+        /// draws before the backend resets the counter (the mock faults a
+        /// begin while such a kick is pending).
+        ///
+        /// Deliberate break: skip `settle_handle` in glBeginQuery and the
+        /// mock reports query_begin with the kick pending.
+        #[test]
+        fn a_deleted_active_query_ends_and_its_handle_waits_before_reuse() {
+            let gl = counting();
+            gl.set_draw_samples(1);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                tri(&gl);
+                glDeleteQueries(1, &q);
+                assert_eq!(gl.error(), GL_NO_ERROR);
+                assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
+                assert_eq!(glIsQuery(q), GL_FALSE_B);
+            }
+            tri(&gl);
+            assert_eq!(gl.draws().last().unwrap().draw.occlusion_query, 0, "the query ended with its name");
+            assert_eq!(gen_query(), q, "the name comes back");
+            let (f0, w0) = (gl.flushes(), gl.finishes());
+            // SAFETY: plain GL call.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            assert_eq!((gl.flushes(), gl.finishes()), (f0 + 1, w0 + 1), "the old use's kick ran first");
+            /* the same name in use again with nothing pending: no wait */
+            // SAFETY: plain GL calls.
+            unsafe { glEndQuery(GL_ANY_SAMPLES_PASSED) };
+            let (s1, w1) = (gl.submitted(), gl.finishes());
+            // SAFETY: plain GL call.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(
+                (gl.submitted(), gl.finishes()),
+                (s1, w1),
+                "no counted draw is pending: nothing submitted or waited"
+            );
+        }
+
+        /// Clears are not counted (ES 3.0 4.2.3): a clear pending at
+        /// glBeginQuery is carried out before it, uncounted; a clear inside
+        /// the query either rides on a counted draw (the backend never counts
+        /// the clear part) or goes alone, uncounted.
+        ///
+        /// Deliberate break: drop the pending-clear flush in glBeginQuery
+        /// and the first clear rides on the counted draw.
+        #[test]
+        fn clears_are_never_counted() {
+            let gl = counting();
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glClear(GL_COLOR_BUFFER_BIT);
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                tri(&gl);
+                glClear(GL_COLOR_BUFFER_BIT);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+                glFinish();
+            }
+            let d = gl.draws();
+            let h = handle(&gl, q);
+            let shape: Vec<(bool, u32)> = d.iter().map(|r| (r.draw.index_count == 0, r.draw.occlusion_query)).collect();
+            assert_eq!(shape, [(true, 0), (false, h), (true, 0)], "clear, counted draw, clear");
+            assert!(!d[1].draw.do_clear, "the first clear went out before the query");
+        }
+
+        /// A backend that cannot start a counter: GL_OUT_OF_MEMORY, and no
+        /// query is active. Lost GPU work and a failed read answer the
+        /// conservative GL_TRUE, and the query is then available.
+        #[test]
+        fn failures_answer_out_of_memory_or_true() {
+            let gl = counting();
+            let q = gen_query();
+            gl.set_query_results(-12, 0);
+            // SAFETY: plain GL calls.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(gl.error(), GL_OUT_OF_MEMORY);
+            assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
+            gl.set_query_results(0, -5);
+            gl.set_draw_samples(0);
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                tri(&gl);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+            }
+            assert_eq!(object(q, GL_QUERY_RESULT), 1, "a failed read is the conservative answer");
+            assert_eq!(object(q, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+            let r = gen_query();
+            gl.set_query_results(0, 0);
+            gl.set_finish_result(-5);
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, r);
+                tri(&gl);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+            }
+            assert_eq!(object(r, GL_QUERY_RESULT), 1, "lost work is the conservative answer");
+            assert_eq!(object(r, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+            gl.set_finish_result(0);
+            let _ = gl.logs();
+        }
+
+        /// The context's slot is reset: names and objects gone, an active
+        /// query dropped, and its handle remembers the kick so the next
+        /// context's query on it waits.
+        #[test]
+        fn a_context_slot_reset_drops_its_queries() {
+            let gl = counting();
+            gl.set_draw_samples(1);
+            let q = gen_query();
+            // SAFETY: plain GL calls.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            tri(&gl);
+            reset_context_queries(gl.ctx().index);
+            assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
+            // SAFETY: plain GL call.
+            assert_eq!(unsafe { glIsQuery(q) }, GL_FALSE_B);
+            assert_eq!(*handle_kick(handle(&gl, q)), gl.kick_id());
+            assert_eq!(gen_query(), q);
+            // SAFETY: plain GL call.
+            unsafe { glBeginQuery(GL_ANY_SAMPLES_PASSED, q) };
+            assert_eq!(gl.error(), GL_NO_ERROR, "no fault: the old kick ran before the begin");
         }
     }
 

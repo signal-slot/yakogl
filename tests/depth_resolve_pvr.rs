@@ -194,6 +194,9 @@ static STAND_IN: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: None,
     depth_resolve: Some(s_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /* ---------------------------------------------------------------- OSAL -- */

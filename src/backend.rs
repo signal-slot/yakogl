@@ -530,6 +530,11 @@ pub const FRAGMENT_HIGHP: bool = true;
 /// Colour attachments one draw may write.
 pub const GLES_MAX_TARGETS: usize = 4;
 
+/// Occlusion query handles are 1 .. this ([`GlesDraw::occlusion_query`],
+/// [`YakoglBackend::query_begin`]); a backend sizes its counter storage for
+/// all of them. The GL core gives each (context, query name) its own handle.
+pub const GLES_QUERY_HANDLES: u32 = 64;
+
 /// `struct gles_draw_target`: one colour attachment of a draw.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -874,6 +879,14 @@ pub struct GlesDraw {
     /// packed pitch, every FBO and pbuffer. Read through [`draw_pitch`].
     /// Sits in what was tail padding.
     pub target_pitch: u32,
+    /// The ES 3.0 occlusion query (GL_ANY_SAMPLES_PASSED[_CONSERVATIVE])
+    /// that counts this draw's samples: a backend query handle
+    /// (1 ..[`GLES_QUERY_HANDLES`], the one [`YakoglBackend::query_begin`]
+    /// started), 0 for none. The GL core sends 0 for every clear-only draw;
+    /// a clear fused into a counted draw (`do_clear`, `clear_quad`) is never
+    /// counted (ES 3.0 4.2.3: a clear is not a draw), whatever path the
+    /// backend clears with. Sits in what was tail padding.
+    pub occlusion_query: u32,
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -983,6 +996,7 @@ impl GlesDraw {
         sample_mask: 0xf,
         alpha_to_coverage: false,
         target_pitch: 0,
+        occlusion_query: 0,
     };
 }
 
@@ -1128,6 +1142,19 @@ pub struct YakoglBackend {
     /// depth texture's texels ([`depth_resolve`]; `src/backend.h`). `None`
     /// on a backend that keeps none or cannot read it back.
     pub depth_resolve: Option<unsafe extern "C" fn(id: u32, dst: *mut f32, w: u32, h: u32, pitch: u32) -> i32>,
+    /// An occlusion query starts counting on `handle` ([`query_begin`]): reset
+    /// its counter. 0, or a negative errno (no counter memory). `None`: the
+    /// backend counts no samples, and glBeginQuery refuses the occlusion
+    /// targets.
+    pub query_begin: Option<unsafe extern "C" fn(handle: u32) -> i32>,
+    /// The query counting on `handle` has ended; every draw it counts has
+    /// been handed over ([`query_end`]). The backend may submit the open
+    /// frame. Optional.
+    pub query_end: Option<unsafe extern "C" fn(handle: u32)>,
+    /// The samples (or any non-zero value when some passed) the draws
+    /// counted on `handle` since its `query_begin` ([`query_result`]); every
+    /// kick holding such a draw has completed. 0, or a negative errno.
+    pub query_result: Option<unsafe extern "C" fn(handle: u32, samples: *mut u64) -> i32>,
 }
 
 // SAFETY: the table is immutable; `name` points at a static string.
@@ -1525,4 +1552,40 @@ pub unsafe fn texture_uploaded(
 pub fn heap_base(heap: GlesHeap) -> u64 {
     // SAFETY: as above.
     table().and_then(|t| t.heap_base).map_or(0, |f| unsafe { f(heap) })
+}
+
+/// Whether the backend counts occlusion samples ([`YakoglBackend::query_begin`]).
+pub fn counts_occlusion() -> bool {
+    table().is_some_and(|t| t.query_begin.is_some())
+}
+
+/// Start an occlusion query on `handle` (1 ..[`GLES_QUERY_HANDLES`]): the
+/// backend resets the counter. The caller has made sure that every kick
+/// that counted on `handle` before has completed. -ENODEV when the backend
+/// counts nothing.
+pub fn query_begin(handle: u32) -> i32 {
+    // SAFETY: a static table's entry, called with a plain value.
+    table().and_then(|t| t.query_begin).map_or(-crate::util::ENODEV, |f| unsafe { f(handle) })
+}
+
+/// The query on `handle` has ended (the backend may submit the open frame).
+pub fn query_end(handle: u32) {
+    if let Some(f) = table().and_then(|t| t.query_end) {
+        // SAFETY: a static table's entry, called with a plain value.
+        unsafe { f(handle) }
+    }
+}
+
+/// The samples counted on `handle` since its [`query_begin`]; every kick
+/// that counted on it has completed. `Err` with the backend's errno.
+pub fn query_result(handle: u32) -> Result<u64, i32> {
+    let Some(f) = table().and_then(|t| t.query_result) else {
+        return Err(-crate::util::ENODEV);
+    };
+    let mut n = 0u64;
+    // SAFETY: a static table's entry; `n` is a live u64 for the call.
+    match unsafe { f(handle, &mut n) } {
+        0 => Ok(n),
+        rc => Err(rc),
+    }
 }

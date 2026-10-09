@@ -2910,6 +2910,9 @@ fn build_common(
     refuse_undrawable_targets(d, 0)?;
     d.instance_count = draw_instances();
     d.instance_id = DRAW_INSTANCE_ID.load(Ordering::Relaxed);
+    /* the active occlusion query counts this draw (the pending clear, the
+     * only other thing a draw can carry, is never counted) */
+    d.occlusion_query = super::es3::occlusion_query(c);
 
     /* shaders + their uploaded USC */
     let p = &context::objects(c.group).programs[obj_index(program)];

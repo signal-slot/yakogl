@@ -243,6 +243,16 @@ struct Mock {
     /// What depth_resolve writes into every texel (`None`: it holds
     /// nothing, and answers 1).
     resolve_depth: Option<f32>,
+    /// Every query_begin / query_end / query_result call
+    /// ([`MOCK_BACKEND_QUERIES`]), in order.
+    query_calls: Vec<QueryCall>,
+    /// The occlusion counter of each handle: query_begin zeroes it, every
+    /// recorded draw counted on the handle adds `draw_samples`.
+    query_counts: BTreeMap<u32, u64>,
+    draw_samples: u64,
+    /// What query_begin / query_result return (0: success).
+    query_begin_result: i32,
+    query_result_rc: i32,
     /* the kick model */
     last_fence: u32,
     completed: u32,
@@ -312,6 +322,11 @@ impl Default for Mock {
             waited_kicks: Vec::new(),
             depth_resolves: Vec::new(),
             resolve_depth: None,
+            query_calls: Vec::new(),
+            query_counts: BTreeMap::new(),
+            draw_samples: 0,
+            query_begin_result: 0,
+            query_result_rc: 0,
             finishes: 0,
             last_fence: 0,
             completed: 0,
@@ -1128,6 +1143,9 @@ unsafe extern "C" fn b_draw(draw: *const GlesDraw) -> i32 {
         }
         m.on_draw(&d, &rec);
         rec.kick = m.kick_id();
+        if d.occlusion_query != 0 {
+            *m.query_counts.entry(d.occlusion_query).or_insert(0) += m.draw_samples;
+        }
         m.draws.push(rec);
         0
     })
@@ -1252,6 +1270,68 @@ unsafe extern "C" fn b_wait_kick(id: u32) -> i32 {
     })
 }
 
+/// One call of the mock backend's occlusion entries, with the flushes made
+/// before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryCall {
+    Begin { handle: u32, flushes: u32 },
+    End { handle: u32, flushes: u32 },
+    Result { handle: u32, flushes: u32 },
+}
+
+impl Mock {
+    /// The contract of query_begin and query_result: no kick still running
+    /// holds a draw counted on `handle`.
+    fn check_counted_kicks_done(&mut self, handle: u32, what: &str) {
+        let pending: Vec<u32> = self
+            .draws
+            .iter()
+            .filter(|r| r.draw.occlusion_query == handle && self.kick_pending(r.kick))
+            .map(|r| r.kick)
+            .collect();
+        if !pending.is_empty() {
+            self.fault(format!("{what}({handle}) while kick(s) {pending:?} holding its counted draws are pending"));
+        }
+    }
+}
+
+unsafe extern "C" fn b_query_begin(handle: u32) -> i32 {
+    with_mock(|m| {
+        let flushes = m.flushes;
+        m.query_calls.push(QueryCall::Begin { handle, flushes });
+        if handle == 0 || handle >= crate::backend::GLES_QUERY_HANDLES {
+            m.fault(format!("query_begin of handle {handle}, outside 1..GLES_QUERY_HANDLES"));
+        }
+        m.check_counted_kicks_done(handle, "query_begin");
+        if m.query_begin_result != 0 {
+            return m.query_begin_result;
+        }
+        m.query_counts.insert(handle, 0);
+        0
+    })
+}
+
+unsafe extern "C" fn b_query_end(handle: u32) {
+    with_mock(|m| {
+        let flushes = m.flushes;
+        m.query_calls.push(QueryCall::End { handle, flushes })
+    });
+}
+
+unsafe extern "C" fn b_query_result(handle: u32, samples: *mut u64) -> i32 {
+    with_mock(|m| {
+        let flushes = m.flushes;
+        m.query_calls.push(QueryCall::Result { handle, flushes });
+        m.check_counted_kicks_done(handle, "query_result");
+        if m.query_result_rc != 0 {
+            return m.query_result_rc;
+        }
+        // SAFETY: the core passes a live u64.
+        unsafe { *samples = m.query_counts.get(&handle).copied().unwrap_or(0) };
+        0
+    })
+}
+
 unsafe extern "C" fn b_kick_pending(id: u32) -> bool {
     with_mock(|m| m.kick_pending(id))
 }
@@ -1294,6 +1374,9 @@ static MOCK_BACKEND: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(b_attachment_gone),
     depth_resolve: Some(b_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// [`MOCK_BACKEND`] with the capabilities of the GC7000: a vertex fetch that
@@ -1326,6 +1409,9 @@ static MOCK_BACKEND_GC7000: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(b_attachment_gone),
     depth_resolve: Some(b_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// [`MOCK_BACKEND`] whose texture unit has no ETC1, as the V3D's has none:
@@ -1359,6 +1445,9 @@ static MOCK_BACKEND_ETC1_DECODED: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(b_attachment_gone),
     depth_resolve: Some(b_depth_resolve),
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// [`MOCK_BACKEND`] that takes an instanced draw's arrays with any divisor up
@@ -1374,6 +1463,17 @@ static MOCK_BACKEND_WAIT_KICK: YakoglBackend = YakoglBackend { wait_kick: Some(b
 /// draw was recorded (`samples_texel_copies`), as the V3D's do: a texture
 /// write then waits only for a kick that renders into the texture.
 static MOCK_BACKEND_TEXEL_COPIES: YakoglBackend = YakoglBackend { samples_texel_copies: true, ..MOCK_BACKEND };
+
+/// [`MOCK_BACKEND`] that counts occlusion samples (`query_begin`,
+/// `query_end`, `query_result`): each draw counted on a handle adds
+/// [`TestGl::set_draw_samples`] to its counter, and a begin or a result
+/// read while a kick holding a counted draw is pending is a fault.
+static MOCK_BACKEND_QUERIES: YakoglBackend = YakoglBackend {
+    query_begin: Some(b_query_begin),
+    query_end: Some(b_query_end),
+    query_result: Some(b_query_result),
+    ..MOCK_BACKEND
+};
 
 /* ---- the guard ------------------------------------------------------------- */
 
@@ -1777,6 +1877,32 @@ impl TestGl {
         // SAFETY: tests are serialised by SERIAL; the table is a static
         // that outlives the test.
         unsafe { crate::backend::g_backend = &MOCK_BACKEND_TEXEL_COPIES };
+    }
+
+    /// Install the mock backend variant that counts occlusion samples
+    /// ([`MOCK_BACKEND_QUERIES`]).
+    pub fn backend_counts_samples(&self) {
+        // SAFETY: tests are serialised by SERIAL; the table is a static
+        // that outlives the test.
+        unsafe { crate::backend::g_backend = &MOCK_BACKEND_QUERIES };
+    }
+
+    /// The samples every draw counted on a query adds to its counter.
+    pub fn set_draw_samples(&self, n: u64) {
+        with_mock(|m| m.draw_samples = n);
+    }
+
+    /// What the mock's query_begin and query_result return (0: success).
+    pub fn set_query_results(&self, begin: i32, result: i32) {
+        with_mock(|m| {
+            m.query_begin_result = begin;
+            m.query_result_rc = result;
+        });
+    }
+
+    /// Take the backend's occlusion calls so far.
+    pub fn query_calls(&self) -> Vec<QueryCall> {
+        with_mock(|m| core::mem::take(&mut m.query_calls))
     }
 
     /// Take the backend's depth_resolve calls so far.

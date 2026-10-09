@@ -150,6 +150,9 @@ static BACKEND: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: None,
     depth_resolve: None,
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// One context for the whole file; the tests take turns on it.
