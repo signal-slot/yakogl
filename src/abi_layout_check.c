@@ -445,6 +445,7 @@ _Static_assert(offsetof(struct gl_texture, storage_gen) == 236, "struct gl_textu
 _Static_assert(offsetof(struct gl_texture, pe_order) == 240, "struct gl_texture.pe_order");
 _Static_assert(offsetof(struct gl_texture, cpu_wrote) == 241, "struct gl_texture.cpu_wrote");
 _Static_assert(offsetof(struct gl_texture, pot_chain) == 242, "struct gl_texture.pot_chain");
+_Static_assert(offsetof(struct gl_texture, es3_fmt) == 243, "struct gl_texture.es3_fmt");
 #if !defined(YAKOGL_GPU_VIVANTE) && !defined(YAKOGL_GPU_V3D)
 _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
 #endif

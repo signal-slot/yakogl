@@ -421,6 +421,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlTexture, storage_gen) == 
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, pe_order) == 240);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, cpu_wrote) == 241);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, pot_chain) == 242);
+const _: () = assert!(offset_of!(crate::gl::context::GlTexture, es3_fmt) == 243);
 #[cfg(feature = "gpu-powervr")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1296);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 2504);
 #[cfg(feature = "gpu-v3d")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1480);
