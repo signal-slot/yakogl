@@ -18,9 +18,11 @@
 # environment:
 #   GM2_FRAMES=3     frames per scene (glmark2's nframes option)
 #   GM2_SIZE=800x600 window size (glmark2's default, and the boards')
-#   GM2_WRITE=1      write tools/shaders/glmark2/ and FINDINGS.md (powervr,
-#                    vivante) and FINDINGS-v3d.md (v3d) from the run
-#                    (default); 0 leaves the tree alone
+#   GM2_WRITE=1      write FINDINGS.md (powervr, vivante) and FINDINGS-v3d.md
+#                    (v3d) from the run (default); 0 leaves the tree alone.
+#                    The shader corpus is written to <out>/shaders either
+#                    way (powervr, vivante runs); it is GPL-3.0 text and is
+#                    never committed (tools/shaders/glmark2/README.md)
 #   GM2_JOBS         parallel scene runs (default: nproc)
 #   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
 #                    one not set is taken from the Pi 4's glmark2 image,
@@ -219,9 +221,9 @@ report() {
 }
 if [ ${#pvr_gc[@]} -gt 0 ]; then
   if [ "${GM2_WRITE:-1}" = 1 ]; then
-    report --shaders "$ROOT/tools/shaders/glmark2" --findings "$HERE/FINDINGS.md" "${pvr_gc[@]}"
+    report --shaders "$OUT/shaders" --findings "$HERE/FINDINGS.md" "${pvr_gc[@]}"
   else
-    report "${pvr_gc[@]}"
+    report --shaders "$OUT/shaders" "${pvr_gc[@]}"
   fi
 fi
 if [ ${#v3d[@]} -gt 0 ]; then

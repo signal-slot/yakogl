@@ -22,7 +22,8 @@ line, and each entry's high-water is listed.
 
 The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000) and
 [FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D), and the de-duplicated shader texts
-are in [`tools/shaders/glmark2/`](../../shaders/glmark2/README.md).
+are written to `build/glmark2-host/shaders/` by the run and never committed
+([`tools/shaders/glmark2/README.md`](../../shaders/glmark2/README.md)).
 
 ## Command
 
@@ -49,11 +50,11 @@ curl -fsSL -o glmark2.tar.gz \
 ```
 
 The script builds everything in `build/glmark2-host/`, runs the three GPUs
-and rewrites `tools/shaders/glmark2/` and the generated parts of `FINDINGS.md`
-and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMARK2_SRC> [out] [powervr]
+writes the shader corpus to `build/glmark2-host/shaders/` and rewrites the
+generated parts of `FINDINGS.md` and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMARK2_SRC> [out] [powervr]
 [vivante] [v3d]`. Environment: `GM2_FRAMES` (frames per entry, default 3),
 `GM2_SIZE` (default `800x600`, glmark2's default and the boards'),
-`GM2_WRITE=0` (leave the tree alone), `GM2_JOBS`, `GM2_TIMEOUT` (seconds per
+`GM2_WRITE=0` (leave the findings files alone), `GM2_JOBS`, `GM2_TIMEOUT` (seconds per
 entry, default 600), and the V3D's settings `YAKOGL_V3D_*` (below). It needs
 gcc, g++, cmake, cargo, objcopy and python3, and no network.
 
@@ -84,7 +85,7 @@ section of `FINDINGS-v3d.md`.
 | `run.sh` | Compiles glmark2's sources unchanged (the list the Zephyr image compiles, with upstream's own `libmatrix/util.cc`), builds `libyakogl.a` per GPU with the top-level CMake (`YAKOGL_OSAL=linux`, `YAKOGL_GPU=powervr\|vivante\|v3d`, `YAKOGL_SHADERC=online`, `YAKOGL_REPORT_ES2=ON`, release: the board images' shader back end and reported version), links, and runs one process per list entry: `--size 800x600 -b :nframes=3 -b <entry>`. Then it calls `report.py`, once for the PowerVR and the GC7000 and once for the V3D. |
 | `host_main.cpp` | Upstream's `main.cpp` with a window system of its own. The native window is a `struct gles_native_window` over a malloc'd XRGB8888 buffer, which linux.c maps at its host address (the V3D: with `map_phys`, at a GPU VA of its own, as the Pi 4's OSAL does). A `MainLoop` subclass prints `gm2: scene-begin` and `gm2: scene-end <scene>: <status> frames= draws= refused=`. |
 | `shim.c`, `shim.h` | `dlopen`/`dlsym` for glmark2's `SharedLibrary` (renamed in `shared-library.o` only, with `objcopy --redefine-sym`): YakoGL is linked in, as on the Zephyr image. Every symbol is a wrapper of this file or what `eglGetProcAddress` answers. The wrappers log `gm2:` lines on stderr, where linux.c logs the library's own lines, so the order is kept. They also write each shader text to `out/capture/<gpu>/<fnv64>.<stage>`. |
-| `report.py` | Reads the logs and captures. It writes `tools/shaders/glmark2/*.glsl` and `index.txt`, and the generated parts of `FINDINGS.md` and `FINDINGS-v3d.md` (the V3D's with a GPU memory table: each entry's carve-out high-water, the longest free run at exit, the allocations refused). |
+| `report.py` | Reads the logs and captures. It writes `<out>/shaders/*.glsl` and `index.txt` (with `--shaders`), and the generated parts of `FINDINGS.md` and `FINDINGS-v3d.md` (the V3D's with a GPU memory table: each entry's carve-out high-water, the longest free run at exit, the allocations refused). |
 
 There is one process per entry so that each scene's once-per-process lines are
 its own (the incomplete-texture warning, `src/gl/draw.rs`, is logged once

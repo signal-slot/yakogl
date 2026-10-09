@@ -171,7 +171,7 @@ for b in 8388608 16777216 25165824; do
 done
 ```
 
-`GM2_WRITE=0` leaves `FINDINGS*.md` and `tools/shaders/glmark2/` alone, so
+`GM2_WRITE=0` leaves `FINDINGS*.md` alone, so
 there is nothing to restore (check with `git status`). For each run look at
 `build/refract-budget-$b/logs/v3d/{22,24}.log`: count `GL error 0x`,
 `draw refused`, `(-22)`, `stale tiled copy`, `tiled copies high-water`, and

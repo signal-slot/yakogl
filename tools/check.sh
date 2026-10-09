@@ -1427,6 +1427,30 @@ if [ "$QUICK" -eq 0 ]; then
   fi
 fi
 
+# glmark2's shaders through the online compiler of each back end
+# (tests/glmark2_corpus.rs). The corpus is GPL-3.0 text and never committed:
+# tools/hostharness/glmark2/run.sh generates it from GLMARK2_SRC (glmark2 at
+# the pinned commit) into build/glmark2-host/shaders. Without GLMARK2_SRC the
+# row is a gap.
+glmark2_corpus_tests() {
+  local c
+  GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
+    >build/glmark2-host.log 2>&1 || { tail -20 build/glmark2-host.log; return 1; }
+  for c in host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
+    host-test,gpu-v3d,shaderc-online,no-shader-table; do
+    GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features --features "$c" \
+      --test glmark2_corpus -- --nocapture 2>&1 | grep -E '^(SKIP|test result|(powervr|gc7000|v3d):)' || return 1
+  done
+}
+if [ "$QUICK" -eq 0 ]; then
+  if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
+    mkdir -p build
+    step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
+  else
+    gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"
+  fi
+fi
+
 # driver/rust/src/soc/imx8mp/regs.rs is generated from NXP's BSD-3 hal_nxp
 # headers (tools/hal-nxp/gen_regs.py), never edited: regenerate and compare.
 # The generator itself refuses inputs whose sha256 is not the pinned one (hal_nxp

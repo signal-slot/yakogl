@@ -265,7 +265,8 @@ def generated(args, entries, runs, found, names):
     o.append("")
     nv = sum(1 for h in found if found[h][0] == "vert")
     o.append("%d distinct shader texts (%d vertex, %d fragment) passed to glShaderSource, in "
-             "`tools/shaders/glmark2/` (`index.txt` maps each to its entries)."
+             "`<out>/shaders/` of the run (`index.txt` maps each to its entries; not committed, "
+             "tools/shaders/glmark2/README.md)."
              % (len(found), nv, len(found) - nv))
     return "\n".join(o)
 

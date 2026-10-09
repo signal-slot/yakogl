@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Every shader glmark2 passes to `glShaderSource` (tools/shaders/glmark2/)
-//! through this build's online compiler, and the vertex/fragment pairs glmark2
-//! links through its link step.
+//! Every shader glmark2 passes to `glShaderSource` through this build's online
+//! compiler, and the vertex/fragment pairs glmark2 links through its link step.
 //!
-//! The expected refusals are `tools/shaders/glmark2/known-uncompilable.txt`
-//! (`<shader file> <backend> <reason>`); a failure not listed fails the test,
-//! and so does a listed entry that now compiles. Per back end:
+//! The corpus is GPL-3.0 text and is never committed: `tools/hostharness/glmark2/run.sh
+//! "$GLMARK2_SRC"` generates it into `build/glmark2-host/shaders/` (or
+//! `GLMARK2_CORPUS` names another directory holding `index.txt`). With no
+//! corpus the test prints a SKIP line and returns when `GLMARK2_SRC` is unset,
+//! and fails when it is set (the corpus should have been generated); the
+//! gate (`tools/check.sh`) makes the missing `GLMARK2_SRC` a gap. Every
+//! shader must compile and link. Per back end:
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test glmark2_corpus -- --nocapture
@@ -63,9 +66,23 @@ fn link(vs: &ShcShader, fs: &mut ShcShader) -> Result<(), String> {
 }
 
 #[test]
-fn every_glmark2_shader_compiles_or_is_listed() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/shaders/glmark2");
-    let index = std::fs::read_to_string(dir.join("index.txt")).expect("index.txt");
+fn every_glmark2_shader_compiles_and_links() {
+    let dir = match std::env::var_os("GLMARK2_CORPUS") {
+        Some(d) => std::path::PathBuf::from(d),
+        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("build/glmark2-host/shaders"),
+    };
+    let Ok(index) = std::fs::read_to_string(dir.join("index.txt")) else {
+        assert!(
+            std::env::var_os("GLMARK2_SRC").is_none(),
+            "GLMARK2_SRC is set but {} has no index.txt: run tools/hostharness/glmark2/run.sh \"$GLMARK2_SRC\" first",
+            dir.display()
+        );
+        eprintln!(
+            "SKIP glmark2_corpus: no corpus at {} (it is never committed; set GLMARK2_SRC and run tools/hostharness/glmark2/run.sh)",
+            dir.display()
+        );
+        return;
+    };
     /* the files, and per entry its vertex and fragment files */
     let mut files = Vec::new();
     let mut by_entry: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
@@ -82,17 +99,6 @@ fn every_glmark2_shader_compiles_or_is_listed() {
         }
     }
     assert_eq!(files.len(), 69, "index.txt lists 69 shaders; re-derive the pin if it changed");
-
-    let mut listed: BTreeMap<String, String> = BTreeMap::new();
-    let list = std::fs::read_to_string(dir.join("known-uncompilable.txt")).expect("known-uncompilable.txt");
-    for l in list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
-        let mut p = l.splitn(3, ' ');
-        let (f, b, why) = (p.next().unwrap(), p.next().expect("a backend"), p.next().expect("a reason"));
-        assert!(matches!(b, "powervr" | "gc7000" | "v3d"), "unknown backend in `{l}`");
-        if b == BACKEND {
-            assert!(listed.insert(f.to_string(), why.to_string()).is_none(), "`{f}` listed twice");
-        }
-    }
 
     let read = |n: &str| std::fs::read_to_string(dir.join(n)).expect("a shader file");
     let stage_of = |n: &str| if n.contains(".vert.") { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
@@ -154,8 +160,5 @@ fn every_glmark2_shader_compiles_or_is_listed() {
     for (f, m) in &failed {
         println!("  FAIL {f}: {m}");
     }
-    let unlisted: Vec<_> = failed.iter().filter(|(f, _)| !listed.contains_key(*f)).collect();
-    let stale: Vec<_> = listed.keys().filter(|f| !failed.contains_key(*f)).collect();
-    assert!(unlisted.is_empty(), "{BACKEND}: unlisted failures (fix, or add to known-uncompilable.txt): {unlisted:#?}");
-    assert!(stale.is_empty(), "{BACKEND}: listed but now fine (remove from known-uncompilable.txt): {stale:#?}");
+    assert!(failed.is_empty(), "{BACKEND}: shaders that do not compile or link: {failed:#?}");
 }

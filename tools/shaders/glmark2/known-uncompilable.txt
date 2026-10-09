@@ -1,3 +1,0 @@
-# <shader file, or vertex+fragment pair> <powervr|gc7000|v3d> <one-line reason>
-# Read by tests/glmark2_corpus.rs: an unlisted failure fails it, and so does an entry that now compiles.
-# Empty: all 69 shaders compile and link on all three back ends.
