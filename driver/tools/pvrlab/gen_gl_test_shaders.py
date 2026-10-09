@@ -303,6 +303,7 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                 ('gl_test_vtl_const_vs_src', 'gltest/vtl_vs_const.vert'),
                 ('gl_test_vtl_grid_vs_src', 'gltest/vtl_vs_grid.vert'),
                 ('gl_test_vtl_vs_src', 'gltest/vtl_vs.vert'),
+                ('gl_test_vtxgrid_vs_src', 'gltest/vtxgrid_vs.vert'),
                 ('gl_test_zsa_fs_src', 'gltest/uniform_color.frag'),
                 ('gl_test_zsa_vs_src', 'gltest/position_only.vert'),
 ]

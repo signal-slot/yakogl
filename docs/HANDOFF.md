@@ -48,6 +48,7 @@ and commit is `docs/es2-cts-failures.md`; it does not have the readings yet.
 | i.MX8MP gl_test cases 10 and 2 (#9, #25) | not fixed. Reading our draw, resolve and read-back sync against etnaviv's finds no missing stall, flush or cache operation (`src/vivante/VIVANTE_NOTES.md`; two host tests pin it). The product is unchanged. The recipe's repeat runs on the integration image (60 boots): base 4 / 40, page-aligned 1 / 10, no-reuse 2 / 10; a second session (`0175bac1`, `tools/cts/log/board-sessions/imx8mp-gc-case10.md`): case 10 1 of 30, case 2 0 of 40. The rate fell from 14 / 30 and no arm removes the failure, so the three hypotheses are not separated | `8409419` |
 | PowerVR vertex attribute registers | wrong-code defect found by the host compiler check and fixed: an attribute read only where the unroller drops code took no registers, and every later attribute was read four registers early. No dEQP-GLES2 case is known to reach it; it changes AM62P vertex code, so the AM62P tree is re-run. On the integration image six of the seven shaders images equal `d60b9d76` | `c6aa6ba` |
 | AM62P, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` cases | fixed on the host, not yet run on the board: the PowerVR online compiler fused `a * b + c` into one `fmad` only where the product had one reader, and the shader that also wrote `v_unrelated` gave the position's products a second reader, so one shader of each pair rounded the position once where the other rounded it twice. A sum on the way to an `invariant` output (`invariant gl_Position;`, `invariant varying`, `#pragma STDGL invariant(all)`, now carried on `ir::IoDecl::invariant`) is no longer fused, as Mesa's exact `fadd` is not `contract` (`powervr/prepare.rs` `mark_exact`). On the host the 9 pairs went from differing to identical position code (case 0 was identical before and after); no corpus source changes. Expect the 9 to pass in image 1 | (this commit) |
+| AM62P, the 45 `texture.vertex.2d.{filtering,wrap}.*` cases | **regression of the full tree at `32778b57`** (2026-10-10, image 9, `records/am62p/deqp-32778b57/full/`): "Image comparison failed", every draw refused, not a sampling fault. dEQP's grid is 127 x 127 quads of four client vertices (two vec2 arrays, 516,128 bytes each) and 96,774 client u16 indices: 1,225,804 bytes a draw, which the PowerVR copies into the frame's GENERAL arena. `dcaafa41` made that arena 1 MiB (was 4 MiB at `d60b9d76`), so each draw logged `does not fit an empty frame: the general arena (1048576 bytes) is too small; not drawn`. Fixed on the host: an indexed draw whose client indices and arrays are over half an arena is cut into pieces of its index list, each copying its indices and only the vertex window they read (`draw_indexed_pieces`; the cube cases, 317,520 + 47,628 bytes, never reached the limit). Host tests in `src/pvr/backend_tests.rs`; gl_test 197 `vtxgrid` draws the grid four times with a mipmapped 2D texture in the VS. Board confirmation pending: image 9 of the AM62P tree | `work/pvr-vertex-texture` |
 | dEQP image recipes | checked against the current defaults on the host (`tools/cts/check-deqp-images.py`, 206 `board_selftest` checks, fixtures in `tools/cts/testdata/deqp-config`); the AM62P 4x image has its own table `tools/cts/am62p-ms4-tree.txt` | `e6e5f14`, `292310c`, `688a574` |
 
 The compiler check of `c6aa6ba` ran the PowerVR and GC7000 back ends against
@@ -464,6 +465,13 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      which also covers `settle_texture`'s busy test. The same record has
      the AM62P board recipe; the board's completion timing may differ from
      the host's;
+   - AM62P: the 45 `texture.vertex.2d.*` cases of the `32778b57` tree
+     (image 9) are fixed on the host, not yet on a board ("State of main");
+     an indexed draw whose staged data cannot be cut (a fan or a line loop,
+     a second index list, or one primitive whose vertex window is over half
+     the arena) is still refused by name when it does not fit an empty
+     frame. The GC7000 solved the same draw by giving it memory of its own
+     (`7af5e841`); the PowerVR keeps its fixed render pool;
    - AM62P: 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_
      {1,2,3}` cases failed on the integration image `b83216d4` (image 1;
      they passed at `d60b9d76`). Diagnosed and fixed on the host: the
@@ -772,7 +780,10 @@ whole GLES2 tree is re-run, since it last ran on `d60b9d76`. On the
 integration image `b83216d4` images 1 to 7 ran: the fragdata case passed and
 9 `shaders.invariance` cases failed ("Known defects"); with the host fix
 for them (no fusion on the way to an `invariant` output) expect them to pass
-in image 1. The console must be the main_uart0 bridge
+in image 1. The `32778b57` tree failed the 45
+`texture.vertex.2d.*` cases in image 9 (refused draws, fixed on the host by
+the indexed pieces): image 9 alone (`TREE_ROWS=8`) is their confirmation,
+with gl_test 197 `vtxgrid` in the regression set. The console must be the main_uart0 bridge
 port: a session leased the mcu_uart0 port and captured nothing
 (`tools/cts/log/investigations/am62p-console-empty.md`):
 
