@@ -133,6 +133,12 @@ struct v3d_job_state {
 	 * single-sampled job writes 0xf whatever this holds; a 4x job writes
 	 * this, so a 4x caller sets it (0xf: every sample). */
 	uint32_t sample_mask;
+	/* OCCLUSION_QUERY_COUNTER's address (v3dx_emit.c:720-726): the 32-bit
+	 * counter the TLB adds this draw's passing samples to at the end of the
+	 * job, 0 for none (Mesa's zero-address packet is the "disable"). One
+	 * query's draws keep one address across jobs (v3d_query_pipe.c:91-101).
+	 * 4-byte aligned. */
+	uint32_t oq_addr;
 };
 
 /* Primitive codes: Mesa's "Primitive" enum (V3D_PRIM_POINTS ..

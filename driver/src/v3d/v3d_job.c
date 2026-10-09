@@ -554,13 +554,18 @@ static bool emit_state(struct v3d_job *j, const struct v3d_job_draw *d, struct p
 		EMIT_VARYING_FLAGS(bcl, CENTROID, centroid, fs->centroid_flags);
 	}
 
-	/* no transform feedback targets (v3dx_emit.c:648-677), no occlusion
-	 * query (720-726); SAMPLE_STATE (728-736): coverage 1.0, the mask the
-	 * draw's in a 4x job, 0xf otherwise */
+	/* no transform feedback targets (v3dx_emit.c:648-677); the occlusion
+	 * query's counter, or the zero-address "disable" (720-726: the address
+	 * only while a query is active, `oq_addr` 0 otherwise; the address is
+	 * a key word, so a change of query rewrites the group); SAMPLE_STATE
+	 * (728-736): coverage 1.0, the mask the draw's in a 4x job, 0xf
+	 * otherwise */
 	const uint32_t mask = j->t.msaa ? st->sample_mask & 0xf : 0xf;
-	if (PACK(V3D_PACK_FIXED, 3, mask)) {
+	if (PACK(V3D_PACK_FIXED, 3, mask, st->oq_addr)) {
 		v3d_cl_emit(bcl, TRANSFORM_FEEDBACK_SPECS, tf);
-		v3d_cl_emit(bcl, OCCLUSION_QUERY_COUNTER, oq);
+		v3d_cl_emit(bcl, OCCLUSION_QUERY_COUNTER, oq) {
+			oq.address = st->oq_addr;
+		}
 		v3d_cl_emit(bcl, SAMPLE_STATE, ss) {
 			ss.coverage = 1.0f;
 			ss.mask = mask;
