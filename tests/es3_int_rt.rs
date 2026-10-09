@@ -173,6 +173,10 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
         }
     });
+    /* a clear the previous test left pending settles now, under that test's
+     * formats, not inside this test's draw record (the tests run in any order) */
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
     DRAWS.lock().unwrap().clear();
     backend::HOST_INTEGER_RT_FORMATS.store(0, Ordering::Relaxed);
     drain_errors();
