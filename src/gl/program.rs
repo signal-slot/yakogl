@@ -2038,7 +2038,15 @@ fn uniform_class(t: u16) -> Option<Class> {
         | GL_SAMPLER_2D_SHADOW
         | GL_SAMPLER_2D_ARRAY
         | GL_SAMPLER_2D_ARRAY_SHADOW
-        | GL_SAMPLER_CUBE_SHADOW => k(Base::Sampler, 1, 0),
+        | GL_SAMPLER_CUBE_SHADOW
+        | GL_INT_SAMPLER_2D
+        | GL_INT_SAMPLER_3D
+        | GL_INT_SAMPLER_CUBE
+        | GL_INT_SAMPLER_2D_ARRAY
+        | GL_UNSIGNED_INT_SAMPLER_2D
+        | GL_UNSIGNED_INT_SAMPLER_3D
+        | GL_UNSIGNED_INT_SAMPLER_CUBE
+        | GL_UNSIGNED_INT_SAMPLER_2D_ARRAY => k(Base::Sampler, 1, 0),
         _ => None,
     }
 }
@@ -7922,6 +7930,16 @@ mod tests {
             GL_SAMPLER_2D_ARRAY,
             GL_SAMPLER_2D_ARRAY_SHADOW,
             GL_SAMPLER_CUBE_SHADOW,
+            /* the integer samplers, set with glUniform1i like the others
+             * (ES 3.0 2.11.5) */
+            GL_INT_SAMPLER_2D,
+            GL_INT_SAMPLER_3D,
+            GL_INT_SAMPLER_CUBE,
+            GL_INT_SAMPLER_2D_ARRAY,
+            GL_UNSIGNED_INT_SAMPLER_2D,
+            GL_UNSIGNED_INT_SAMPLER_3D,
+            GL_UNSIGNED_INT_SAMPLER_CUBE,
+            GL_UNSIGNED_INT_SAMPLER_2D_ARRAY,
             GL_UNSIGNED_INT,
             GL_UNSIGNED_INT_VEC2,
             GL_UNSIGNED_INT_VEC3,

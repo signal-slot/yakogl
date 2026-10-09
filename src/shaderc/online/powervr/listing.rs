@@ -353,4 +353,37 @@ mod shprobe_tests {
             );
         }
     }
+
+    /// The `fcnorm` of each `smp` in a listing, in order.
+    fn smp_fcnorms(t: &str) -> Vec<u32> {
+        t.split("\n[")
+            .filter(|g| g.contains("phase") && g.contains("smp"))
+            .filter_map(|g| g.split_whitespace().find_map(|w| w.strip_prefix("fcnorm=")?.parse().ok()))
+            .collect()
+    }
+
+    /// An `isampler2D` / `usampler2D` look-up is pco's `smp` without
+    /// `fcnorm` (Mesa pco_nir_tex.c:236: `fcnorm` is "the destination type
+    /// is float"), in each form the 2D arms select -- the implicit level,
+    /// a replaced level, a texel fetch -- and a `sampler2D` one keeps it.
+    #[test]
+    fn an_integer_sampler_reads_without_fcnorm() {
+        /* an ES 2.0 report refuses every `#version 300 es` source */
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let fs = |sampler: &str, ty: &str, lookup: &str| {
+            std::format!(
+                "#version 300 es\nprecision highp float;\nuniform highp {sampler} u_t;\nin vec2 v_uv;\n\
+                 layout(location = 0) out vec4 o;\nvoid main() {{\n    {ty} t = {lookup};\n    o = vec4(t) / 255.0;\n}}\n"
+            )
+        };
+        for (sampler, ty, want) in [("usampler2D", "uvec4", 0u32), ("isampler2D", "ivec4", 0), ("sampler2D", "vec4", 1)]
+        {
+            for lookup in ["texture(u_t, v_uv)", "textureLod(u_t, v_uv, 1.0)", "texelFetch(u_t, ivec2(v_uv), 0)"] {
+                let (t, _, _) = compiled(crate::shaderc::SHC_STAGE_FRAGMENT, &fs(sampler, ty, lookup));
+                assert_eq!(smp_fcnorms(&t), [want], "{sampler} {lookup}:\n{t}");
+            }
+        }
+    }
 }

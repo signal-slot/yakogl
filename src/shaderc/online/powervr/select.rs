@@ -116,6 +116,19 @@ const SR_Y_S: u16 = 101;
 /// primitive (Mesa `pco_isa.py`).
 const SR_FACE_CCW: u16 = 44;
 
+/// The type of a [`SelOp::Sample`] group: what its destination holds. F32
+/// for a `sampler*` look-up, whose `smp` converts the texel to floats
+/// (`fcnorm`); S32 / U32 for an `isampler*` / `usampler*` one, whose `smp`
+/// hands back the texel's integers (pco_nir_tex.c:236: `fcnorm` is "the
+/// destination is a float"). [`super::assemble`] builds the `smp` from it.
+fn smp_type(ret: ir::ScalarType) -> OpType {
+    match ret {
+        ir::ScalarType::I32 => OpType::S32,
+        ir::ScalarType::U32 => OpType::U32,
+        _ => OpType::F32,
+    }
+}
+
 /// Does `op` sample with the implicit level at a smooth varying read as
 /// it is, so that [`Self::plane_gradients`] can give it exact gradients
 /// (`shaderc::pvr_proj_lod`)? The number of coordinates when it does.
@@ -846,11 +859,15 @@ impl<'a> Sel<'a> {
              * `textureLodOffset`) the block ends with the lookup word: u in
              * bits 0..5, v in 6..11, each truncated to its width as pco's
              * bitfield_insert does (rogue_hw_defs.h ROGUE_SMP_LOOKUP_*). */
+            /* The same look-ups through an `isampler2D` / `usampler2D`
+             * (`ret` I32 / U32): the group's type says so, and the sample is
+             * built without `fcnorm`, as pco builds it for an integer
+             * destination (pco_nir_tex.c:236, `smp_type`). */
             ir::Op::Tex {
                 dim: ir::TexDim::D2,
                 shadow: false,
                 proj,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
@@ -865,7 +882,7 @@ impl<'a> Sel<'a> {
                 let offset = offset.map(|[du, dv, _]| ((du as u16) & 0x3f) | (((dv as u16) & 0x3f) << 6));
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
                 })
@@ -882,7 +899,7 @@ impl<'a> Sel<'a> {
                 dim: ir::TexDim::D2,
                 shadow: false,
                 proj: false,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
@@ -902,7 +919,7 @@ impl<'a> Sel<'a> {
                 let lf = g(self, I2f, [Some(level), None, None])?;
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None , cube: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(uv[0]), Some(uv[1]), Some(lf)],
                 })
@@ -1176,7 +1193,7 @@ impl<'a> Sel<'a> {
                 self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference)
             }
             ir::Op::Tex { .. } => Err(SelectError::Unsupported(
-                "a texture fetch with an integer result, gradients, a projective cube or array, or an offset on a stacked texture, is not selected yet",
+                "a texture fetch with an integer result on a cube, a 3D texture or an array, gradients, a projective cube or array, or an offset on a stacked texture, is not selected yet",
             )),
             /* `textureSize(s, lod)` on a 2D sampler in a fragment shader, as
              * pco computes it (usclib/tex.cl usclib_tex_state_size, MIT, for
@@ -4971,12 +4988,13 @@ mod tests {
                 ],
                 "built-in fragment input",
             ),
-            /* an integer result (isampler2D): still refused, the
+            /* an integer result on a cube (isamplerCube): still refused, the
              * catch-all's example (the projective shadow look-up it was
-             * selects since the shadow arm divides in the shader) */
+             * selects since the shadow arm divides in the shader, and an
+             * isampler2D since the integer 2D look-ups) */
             (
                 &[ir::Op::Tex {
-                    dim: ir::TexDim::D2,
+                    dim: ir::TexDim::Cube,
                     shadow: false,
                     proj: false,
                     ret: ir::ScalarType::I32,

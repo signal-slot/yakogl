@@ -269,7 +269,15 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
             let Some(SelDst::Fixed { bank: super::sel::Bank::Temp, reg: dest }) = g.dst else {
                 return Err(BuildError::Unsupported("a sample that was not expanded"));
             };
-            return super::fragment::build_smp(image, data, sampler, dest, proj, lod, fetch, offset.is_some(), cube);
+            /* an isampler / usampler look-up (`select::smp_type`): no fcnorm */
+            let integer = g.ty != super::sel::OpType::F32;
+            return super::fragment::build_smp(
+                image,
+                data,
+                sampler,
+                dest,
+                super::fragment::SmpForm { proj, lod, fetch, offset: offset.is_some(), cube, integer },
+            );
         }
         SelOp::WaitData => return super::fragment::wait_data(),
         /* The execution mask (`powervr::cf`), on the emc the allocator gave

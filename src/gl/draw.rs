@@ -1366,7 +1366,7 @@ static LOD_VARIANT_LOGGED: AtomicBool = AtomicBool::new(false);
 /// own, ES 3.0 3.8.2), whether it has more than one level, and its storage
 /// format (`GLES_TEXFMT_*`). `None`: no texture there.
 fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, GLenum, bool, u8)> {
-    let (bound, target) = match gl_type {
+    let (bound, target) = match binding_type(gl_type) {
         GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => (*c.bound_texture_cube.get(unit)?, GL_TEXTURE_CUBE_MAP),
         GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => {
             (*c.bound_texture_2d_array.get(unit)?, GL_TEXTURE_2D_ARRAY)
@@ -1416,7 +1416,7 @@ fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAM
         if s.ret32 & bit != 0 && texfmt == GLES_TEXFMT_R32F {
             k.ret32 |= bit;
         }
-        if s.cube_noseam & bit != 0 && gl_type == GL_SAMPLER_CUBE_T && cube_filters_see_seams(min, mag) {
+        if s.cube_noseam & bit != 0 && binding_type(gl_type) == GL_SAMPLER_CUBE_T && cube_filters_see_seams(min, mag) {
             k.cube_noseam |= bit;
         }
         let mipmapped = levels
@@ -2431,6 +2431,20 @@ const GL_SAMPLER_2D_ARRAY_T: u16 = 0x8DC1;
 const GL_SAMPLER_2D_ARRAY_SHADOW_T: u16 = 0x8DC4;
 const GL_SAMPLER_3D_T: u16 = 0x8B5F;
 
+/// The float sampler type an `isampler*` / `usampler*` reads the same
+/// binding as (ES 3.0 2.11.9: the sampler's dimension picks the texture
+/// target, its return type does not); every other type as it is. The
+/// matches below on the float types take an integer sampler through this.
+const fn binding_type(gl_type: u16) -> u16 {
+    match gl_type as u32 {
+        GL_INT_SAMPLER_2D | GL_UNSIGNED_INT_SAMPLER_2D => GL_SAMPLER_2D as u16,
+        GL_INT_SAMPLER_3D | GL_UNSIGNED_INT_SAMPLER_3D => GL_SAMPLER_3D_T,
+        GL_INT_SAMPLER_CUBE | GL_UNSIGNED_INT_SAMPLER_CUBE => GL_SAMPLER_CUBE_T,
+        GL_INT_SAMPLER_2D_ARRAY | GL_UNSIGNED_INT_SAMPLER_2D_ARRAY => GL_SAMPLER_2D_ARRAY_T,
+        _ => gl_type,
+    }
+}
+
 /// The emulated 2D arrays carry their layer count in a hidden uniform
 /// (pvr_layers_<sampler>) the translator added to the fragment block: the
 /// shader divides the stacked texture's height by it. It has to be in the
@@ -2485,7 +2499,7 @@ fn fill_stage_layer_uniforms(
         if su.dword_off != SHC_UNIFORM_NO_BLOCK || su.binding as usize >= CAP_SAMPLERS {
             continue;
         }
-        let bound = match su.gl_type {
+        let bound = match binding_type(su.gl_type) {
             GL_SAMPLER_3D_T => bound_3d, /* sampler3D: the slice count, same hidden uniform */
             GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => bound_2d_array, /* (i)sampler2DArray */
             _ => continue,
@@ -2861,7 +2875,7 @@ fn resolve_sampled_depth(c: &mut GlContext, program: GLuint) {
         for (binding, gl_type) in sh.sampler_bindings() {
             if binding as usize >= CAP_SAMPLERS
                 || matches!(
-                    gl_type,
+                    binding_type(gl_type),
                     GL_SAMPLER_CUBE_T
                         | GL_SAMPLER_CUBE_SHADOW_T
                         | GL_SAMPLER_2D_ARRAY_T
@@ -3406,7 +3420,7 @@ fn build_common(
             let unit = units[binding as usize] as usize;
             /* the sampler's GLSL type says which binding of the unit it reads
              * (a samplerCube the cube map, a sampler2DArray the array) */
-            let (bound, target) = match gl_type {
+            let (bound, target) = match binding_type(gl_type) {
                 GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => (c.bound_texture_cube[unit], GL_TEXTURE_CUBE_MAP),
                 GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => {
                     (c.bound_texture_2d_array[unit], GL_TEXTURE_2D_ARRAY)
@@ -3456,7 +3470,7 @@ fn build_common(
             };
             tb.unit = binding;
             tb.format = t.texfmt;
-            tb.type_ = match gl_type {
+            tb.type_ = match binding_type(gl_type) {
                 GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => GLES_TEXTYPE_CUBE,
                 GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => GLES_TEXTYPE_2D_ARRAY,
                 GL_SAMPLER_3D_T => GLES_TEXTYPE_3D,
@@ -4416,6 +4430,29 @@ mod tests {
     impl Drop for Gl {
         fn drop(&mut self) {
             reset_draw_statics(false); /* runs before the TestGl is dropped */
+        }
+    }
+
+    /// An `isampler*` / `usampler*` reads the binding of its dimension:
+    /// the cube map, the 2D array, the 3D texture or the 2D texture of the
+    /// unit, as the float sampler of that dimension does (ES 3.0 2.11.9).
+    #[test]
+    fn an_integer_sampler_reads_the_binding_of_its_dimension() {
+        for (t, want) in [
+            (GL_INT_SAMPLER_2D, GL_SAMPLER_2D as u16),
+            (GL_UNSIGNED_INT_SAMPLER_2D, GL_SAMPLER_2D as u16),
+            (GL_INT_SAMPLER_3D, GL_SAMPLER_3D_T),
+            (GL_UNSIGNED_INT_SAMPLER_3D, GL_SAMPLER_3D_T),
+            (GL_INT_SAMPLER_CUBE, GL_SAMPLER_CUBE_T),
+            (GL_UNSIGNED_INT_SAMPLER_CUBE, GL_SAMPLER_CUBE_T),
+            (GL_INT_SAMPLER_2D_ARRAY, GL_SAMPLER_2D_ARRAY_T),
+            (GL_UNSIGNED_INT_SAMPLER_2D_ARRAY, GL_SAMPLER_2D_ARRAY_T),
+        ] {
+            assert_eq!(binding_type(t as u16), want, "0x{t:x}");
+        }
+        /* the float ones are their own */
+        for t in [GL_SAMPLER_2D as u16, GL_SAMPLER_CUBE_T, GL_SAMPLER_2D_ARRAY_SHADOW_T, GL_SAMPLER_3D_T] {
+            assert_eq!(binding_type(t), t);
         }
     }
 

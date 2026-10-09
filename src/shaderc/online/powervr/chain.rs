@@ -888,7 +888,8 @@ fn expand_samples<'a>(
             a,
             SelGroup {
                 op: SelOp::Sample { binding, proj, lod, fetch, offset, cube },
-                ty: OpType::F32,
+                /* F32, or an integer look-up's S32 / U32 (`select::smp_type`) */
+                ty: g.ty,
                 dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: dest }),
                 srcs: [
                     Some(shared(TEX_DESC_DWORDS * slot)),

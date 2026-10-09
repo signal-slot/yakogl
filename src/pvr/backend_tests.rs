@@ -4144,7 +4144,7 @@ fn a_view_window_puts_its_pitch_into_the_pbe_line_stride_and_the_load() {
     assert_eq!(draw(&d), 0);
     let ld = rig.fbload().load_draw;
     assert_eq!((ld.target_pitch, ld.textures[0].stride_texels), (1920, 1920));
-    let tw1 = tex_stride_image_word1(ld.textures[0].stride_texels, 1, ld.textures[0].base_gpu);
+    let tw1 = tex_stride_image_word1(ld.textures[0].stride_texels, 1, ld.textures[0].base_gpu, true);
     assert_eq!(tw1[0] & 0x7fff, 1920 - 1, "the load's texture stride, decoded");
 
     /* the same target packed: another frame (the pitch changed) */

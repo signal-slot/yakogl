@@ -17,24 +17,34 @@ use super::draw::texture_bind_2d;
 use super::es3_formats::{self, FORMATS};
 use super::texture::*;
 use super::types::*;
-use crate::backend::{gles_texfmt_bit, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, TEST_EXTRA_SAMPLED};
+use crate::backend::{
+    gles_texfmt_bit, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, TEST_EXTRA_SAMPLED, TEST_HIDDEN_SAMPLED,
+};
 use crate::testutil::TestGl;
 
 /// Every texel format of the new classes (ids 11 and up), as the mask a back
 /// end that samples all of them would state.
 const ALL_NEW: u32 = (!0 << 11) | (1 << GLES_TEXFMT_RGBA16F);
 
-/// Holds `TEST_EXTRA_SAMPLED` for a test and puts it back.
+/// Holds `TEST_EXTRA_SAMPLED` / `TEST_HIDDEN_SAMPLED` for a test and puts
+/// them back.
 struct Sampled;
 impl Sampled {
     fn also(mask: u32) -> Sampled {
         TEST_EXTRA_SAMPLED.store(mask, Ordering::Relaxed);
         Sampled
     }
+    /// A back end that samples none of the new classes (ids 11 and up),
+    /// whatever this build's samples.
+    fn none_new() -> Sampled {
+        TEST_HIDDEN_SAMPLED.store(!0 << 11, Ordering::Relaxed);
+        Sampled
+    }
 }
 impl Drop for Sampled {
     fn drop(&mut self) {
         TEST_EXTRA_SAMPLED.store(0, Ordering::Relaxed);
+        TEST_HIDDEN_SAMPLED.store(0, Ordering::Relaxed);
     }
 }
 
@@ -186,7 +196,7 @@ fn a_format_no_class_of_which_is_sampled_is_refused_by_name() {
         return;
     }
     let gl = TestGl::new(4, 4);
-    let _s = Sampled::also(0);
+    let _s = Sampled::none_new();
     new_tex(GL_TEXTURE_2D);
     let z = [0u8; 64];
     gl.logs();

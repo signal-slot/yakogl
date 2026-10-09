@@ -253,6 +253,24 @@ pub fn coefficient_offsets(comps: &[u8], offs: &mut [u16]) -> Result<(), BuildEr
     Ok(())
 }
 
+/// How one `smp` reads ([`build_smp`]): the operands' meaning, beside the
+/// registers.
+#[derive(Clone, Copy, Debug)]
+pub struct SmpForm {
+    /// `texture2DProj`: the data block holds (x, y, q).
+    pub proj: bool,
+    /// The level: implicit, replaced, biased or from gradients.
+    pub lod: super::sel::SmpLod,
+    /// Texel coordinates (`nncoords`), a `texelFetch`.
+    pub fetch: bool,
+    /// A lookup word with a constant offset ends the data block.
+    pub offset: bool,
+    /// The TPU's own cube: three coordinates, `dmn` 3d.
+    pub cube: bool,
+    /// An integer destination: no `fcnorm`.
+    pub integer: bool,
+}
+
 /// `texture2D` as pco emits it in a fragment shader: `smp` in the backend
 /// phase, form `smp_brief` -- normalised coordinates (`fcnorm`), 2D, four
 /// channels, the hardware's own LOD (`lodm = normal`), data-return channel 0
@@ -267,29 +285,26 @@ pub fn coefficient_offsets(comps: &[u8], offs: &mut [u16]) -> Result<(), BuildEr
 /// or through index register 0 (`idx0`, `3 | offset << 3`) past it, as
 /// pco's legalisation writes them (`prepare::index_high_shared`).
 ///
-/// `proj`: `texture2DProj`, pco's form for it -- the same operands with
+/// `form.proj`: `texture2DProj`, pco's form for it -- the same operands with
 /// `proj` set, which only the extended `smp_exta` form carries; the data
 /// block then holds (x, y, q) and the hardware divides.
-#[allow(clippy::too_many_arguments)]
-pub fn build_smp(
-    image: Operand,
-    data: u16,
-    sampler: Operand,
-    dest: u16,
-    proj: bool,
-    lod: super::sel::SmpLod,
-    fetch: bool,
-    offset: bool,
-    cube: bool,
-) -> Result<Group, BuildError> {
+///
+/// `form.integer`: an `isampler*` / `usampler*` look-up, `fcnorm` clear so
+/// that the TPU hands back the texel's integers, as pco sets it from the
+/// destination type (Mesa pco_nir_tex.c:236, `.fcnorm = base_type(dest_type)
+/// == nir_type_float`).
+pub fn build_smp(image: Operand, data: u16, sampler: Operand, dest: u16, form: SmpForm) -> Result<Group, BuildError> {
     use super::isa::PH_BACKEND;
+    let SmpForm { proj, lod, fetch, offset, cube, integer } = form;
+    let fcnorm = u32::from(!integer);
     let v = |f: &str, n: &str| super::shapes::value(BitSetId::Backend, f, n);
     /* a cube is the TPU's own (TEXTYPE_CUBE): three coordinates, `dmn` 3d,
      * as pco's program for a samplerCube has it */
     let dmn = if cube { "3d" } else { "2d" };
     /* the gradients (`lodm = gradients`) need no extended field */
     let brief_lodm = if lod == super::sel::SmpLod::Gradients { "gradients" } else { "normal" };
-    let brief = [("fcnorm", 1), ("drc", 0), ("dmn", v("dmn", dmn)?), ("chan", 4), ("lodm", v("lodm", brief_lodm)?)];
+    let brief =
+        [("fcnorm", fcnorm), ("drc", 0), ("dmn", v("dmn", dmn)?), ("chan", 4), ("lodm", v("lodm", brief_lodm)?)];
     /* The extended form: `proj` (texture2DProj), or a per-pixel level word
      * in the data block -- replacing the level (textureLod: `lodm` replace)
      * or added to it (a bias: `lodm` bias), with `pplod` either way, as pco
@@ -301,7 +316,7 @@ pub fn build_smp(
         super::sel::SmpLod::Gradients => "gradients",
     };
     let exta = [
-        ("fcnorm", 1),
+        ("fcnorm", fcnorm),
         ("drc", 0),
         ("dmn", v("dmn", dmn)?),
         ("chan", 4),

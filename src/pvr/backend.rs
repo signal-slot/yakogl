@@ -874,6 +874,13 @@ struct TexFormat {
     compressed: bool,
     swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4],
     textype: csb::ROGUE_TEXSTATE_TEXTYPE,
+    /// The STRIDE word's `alpha_msb` ([`tex_stride_image_word1`]). Mesa sets
+    /// it for an RGB format whose fourth channel is W
+    /// (`vk_format_is_alpha_on_msb`, pvr_arch_tex_state.c:253-254); the
+    /// formats yakogl sampled before the ES 3.0 classes keep the `true` they
+    /// were verified with on the board, and the ES 3.0 classes take Mesa's
+    /// value (false for R11G11B10F and RGB9E5, whose alpha is the constant 1).
+    alpha_msb: bool,
 }
 
 const SWIZ_R: csb::ROGUE_TEXSTATE_SWIZ = csb::ROGUE_TEXSTATE_SWIZ_SRCCHAN_0;
@@ -886,7 +893,13 @@ const SWIZ_RGBA: [csb::ROGUE_TEXSTATE_SWIZ; 4] = [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_A
 
 /// A STRIDE (linear) texture of `texformat`.
 const fn tex_stride(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: false, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE }
+    TexFormat { texformat, compressed: false, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE, alpha_msb: true }
+}
+
+/// A STRIDE texture of `texformat` whose alpha is the constant 1, without
+/// `alpha_msb` (Mesa's value for such a format, [`TexFormat::alpha_msb`]).
+const fn tex_stride_no_alpha(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
+    TexFormat { alpha_msb: false, ..tex_stride(texformat, swiz) }
 }
 
 /// U8U8U8U8, identity swizzle.
@@ -915,7 +928,7 @@ const TEX_PCK_INFO_F32: u32 = 15;
  * UNORM (bit 8): Mesa pvr_arch_tex_state.c / setup_pck_info for
  * VK_FORMAT_ETC2_*. */
 const fn tex_etc(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: true, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D }
+    TexFormat { texformat, compressed: true, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D, alpha_msb: false }
 }
 const TEXF_ETC2_RGB: TexFormat =
     tex_etc(csb::ROGUE_TEXSTATE_FORMAT_COMPRESSED_ETC2_RGB, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
@@ -931,6 +944,74 @@ const TEX_PCK_INFO_COMPRESSED_UNORM: u32 = 0x11f;
 const TEXF_L8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_ONE]);
 const TEXF_A8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8, [SWIZ_ZERO, SWIZ_ZERO, SWIZ_ZERO, SWIZ_R]);
 const TEXF_LA8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_G]);
+
+/* The ES 3.0 storage classes (src/backend.rs GLES_TEXFMT_R11G11B10F ..
+ * GLES_TEXFMT_RGBA32F; docs/es3-sized-formats.md): every one four components
+ * wide in memory, a component the GL format lacks stored as (0, 0, 0, 1) by
+ * the GL core, so the swizzle is the identity except where the TPU format has
+ * no alpha. TPU formats from Mesa 26.2.1's pvr_format_table
+ * (vulkan/pvr_arch_formats.c, the row of the pipe format the class holds):
+ *   R11G11B10F  R11G11B10_FLOAT     F10F11F11      :150
+ *   RGB9E5      R9G9B9E5_FLOAT      SE9995         :151
+ *   RGB10A2     R10G10B10A2_UNORM   A2R10B10G10    :115
+ *   RGB10A2UI   R10G10B10A2_UINT    A2R10B10G10    :119
+ *   RGBA8_SNORM R8G8B8A8_SNORM      S8S8S8S8       :102
+ *   RGBA8UI/I   R8G8B8A8_UINT/SINT  U8U8U8U8 / S8S8S8S8  :103-104
+ *   RGBA16UI/I  R16G16B16A16_UINT/SINT  U16U16U16U16 / S16S16S16S16  :135-136
+ *   RGBA32UI/I  R32G32B32A32_UINT/SINT  U32U32U32U32 / S32S32S32S32  :147-148
+ *   RGBA32F     R32G32B32A32_FLOAT  F32F32F32F32   :149
+ * The swizzle is the format's util swizzle (u_format.yaml: xyz1 for
+ * R11G11B10_FLOAT and R9G9B9E5_FLOAT, xyzw for the others) through
+ * pvr_get_hw_swizzle (pvr_arch_tex_state.c:40-64). An integer class is read
+ * by an isampler/usampler, whose `smp` has no `fcnorm` (pco_nir_tex.c:236):
+ * the TPU hands back the integers, sign-extended for the S formats. */
+const TEXF_R11G11B10F: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_F10F11F11, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
+const TEXF_RGB9E5: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_SE9995, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
+const TEXF_RGB10A2: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_A2R10B10G10, SWIZ_RGBA);
+const TEXF_RGBA8_SNORM: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S8S8S8S8, SWIZ_RGBA);
+const TEXF_RGBA8UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8U8U8, SWIZ_RGBA);
+const TEXF_RGBA8I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S8S8S8S8, SWIZ_RGBA);
+const TEXF_RGBA16UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U16U16U16U16, SWIZ_RGBA);
+const TEXF_RGBA16I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S16S16S16S16, SWIZ_RGBA);
+const TEXF_RGBA32UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U32U32U32U32, SWIZ_RGBA);
+const TEXF_RGBA32I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S32S32S32S32, SWIZ_RGBA);
+const TEXF_RGBA32F: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_F32F32F32F32, SWIZ_RGBA);
+/* Their image meta PCK_INFO, as Mesa's setup_pck_info (pvr_arch_tex_state.c:
+ * 84-112) builds it from pco_pipe_to_pck_format (pco/pco.c:387-461; format
+ * numbers pco/pco_isa.py:981-1003; bits common/pvr_iface.h:132-142): S8888
+ * (1) with SCALE (0x40) for RGBA8 SNORM, U1010102 (8) with SCALE and UNORM
+ * (0x100) for RGB10A2 UNORM, F111110 (12) for R11G11B10F, and "no pack
+ * format" (PVR_PCK_FORMAT_INVALID, 0x1f) for the integer classes, RGB9E5 and
+ * RGBA32F -- pco reads it only for a shadow compare's clamp and a formatless
+ * image store, neither of which these reach. */
+const PCO_PCK_SCALE: u32 = 0x40;
+const PCO_PCK_UNORM: u32 = 0x100;
+const PVR_PCK_FORMAT_INVALID: u32 = 0x1f;
+const TEX_PCK_INFO_RGBA8_SNORM: u32 = 1 | PCO_PCK_SCALE;
+const TEX_PCK_INFO_RGB10A2_UNORM: u32 = 8 | PCO_PCK_SCALE | PCO_PCK_UNORM;
+const TEX_PCK_INFO_R11G11B10F: u32 = 12;
+
+/// The ES 3.0 storage class `format`'s texture format and pack info, `None`
+/// for every other format ([`build_tex_desc`]).
+fn es3_tex_format(format: u8) -> Option<(TexFormat, u32)> {
+    Some(match format {
+        GLES_TEXFMT_R11G11B10F => (TEXF_R11G11B10F, TEX_PCK_INFO_R11G11B10F),
+        GLES_TEXFMT_RGB9E5 => (TEXF_RGB9E5, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGB10A2 => (TEXF_RGB10A2, TEX_PCK_INFO_RGB10A2_UNORM),
+        GLES_TEXFMT_RGB10A2UI => (TEXF_RGB10A2, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA8_SNORM => (TEXF_RGBA8_SNORM, TEX_PCK_INFO_RGBA8_SNORM),
+        GLES_TEXFMT_RGBA8UI => (TEXF_RGBA8UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA8I => (TEXF_RGBA8I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA16UI => (TEXF_RGBA16UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA16I => (TEXF_RGBA16I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32UI => (TEXF_RGBA32UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32I => (TEXF_RGBA32I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32F => (TEXF_RGBA32F, PVR_PCK_FORMAT_INVALID),
+        _ => return None,
+    })
+}
 
 /// TEXSTATE_IMAGE_WORD0 of a `width` x `height` image of format `f`, as
 /// `textype` (the format's own, or CUBE for the native cube).
@@ -957,13 +1038,13 @@ fn tex_image_word0(f: TexFormat, textype: csb::ROGUE_TEXSTATE_TEXTYPE, width: u3
 /// TEXSTATE_STRIDE_IMAGE_WORD1 of a linear image: `alpha_msb`, the row
 /// stride in texels minus one, `levels` mip levels (num_mip_levels, and
 /// mipmaps_present when more than one), the image address.
-fn tex_stride_image_word1(stride_texels: u32, levels: u32, base_gpu: u64) -> [u32; 2] {
+fn tex_stride_image_word1(stride_texels: u32, levels: u32, base_gpu: u64, alpha_msb: bool) -> [u32; 2] {
     csb_pack!(
         ROGUE_TEXSTATE_STRIDE_IMAGE_WORD1_pack,
         2,
         csb::ROGUE_TEXSTATE_STRIDE_IMAGE_WORD1 {
             num_mip_levels: levels,
-            alpha_msb: true,
+            alpha_msb,
             mipmaps_present: levels > 1,
             stride: stride_texels.wrapping_sub(1),
             texaddr: dev_addr(base_gpu),
@@ -3883,6 +3964,10 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
         };
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
         w[7] = if t.format == GLES_TEXFMT_R32F { TEX_PCK_INFO_F32 } else { TEX_PCK_INFO_F16 };
+    } else if let Some((f, pck)) = es3_tex_format(t.format) {
+        fmt = f;
+        w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
+        w[7] = pck;
     } else {
         fmt = if t.format == GLES_TEXFMT_ETC2_RGB {
             TEXF_ETC2_RGB
@@ -3977,7 +4062,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
     let iw1 = if twiddled {
         tex_twiddled_image_word1(true, levels & 0xf, 0, levels > 1, t.base_gpu)
     } else {
-        tex_stride_image_word1(t.stride_texels, levels, t.base_gpu)
+        tex_stride_image_word1(t.stride_texels, levels, t.base_gpu, fmt.alpha_msb)
     };
 
     w[0..2].copy_from_slice(&iw0);
@@ -7559,6 +7644,73 @@ mod tests {
         let iw0 = TEX_IMAGE_WORD0_R32F_LUMINANCE | (2u64 << 34) | (11u64 << 48);
         assert_eq!((lum[0], lum[1]), (iw0 as u32, (iw0 >> 32) as u32));
         assert_eq!(lum[2..], red[2..], "the rest of the descriptor is the R32F one");
+    }
+
+    /// The ES 3.0 storage classes' descriptors against Mesa 26.2.1, field by
+    /// field, the expected values written down from Mesa's own tables rather
+    /// than from `es3_tex_format`: the TPU format is the
+    /// `pvr_format_table` row of the class's pipe format
+    /// (vulkan/pvr_arch_formats.c:102-151) as a texstate.xml FORMAT number
+    /// (csbgen/rogue/texstate.xml:96-193); the swizzle is the pipe format's
+    /// util swizzle through `pvr_get_hw_swizzle` (pvr_arch_tex_state.c:40-64,
+    /// SRCCHAN_n = n, SRC_ONE = 4); `alpha_msb` is
+    /// `vk_format_is_alpha_on_msb` (vulkan/util/vk_format.h:214-226, used at
+    /// pvr_arch_tex_state.c:253); the pack info is `setup_pck_info`
+    /// (pvr_arch_tex_state.c:84-112) over `pco_pipe_to_pck_format`
+    /// (pco/pco.c:387-461) with pco_isa.py's numbers (u8888 0, s8888 1,
+    /// u1010102 8, f111110 12) and pvr_iface.h's bits (SCALE 0x40, UNORM
+    /// 0x100, INVALID 0x1f).
+    #[test]
+    fn es3_class_descriptors_are_mesas() {
+        let base = GlesTextureBind {
+            base_gpu: 0x80_0000_1000,
+            width: 3,
+            height: 12,
+            stride_texels: 4,
+            mip_levels: 1,
+            ..GlesTextureBind::ZERO
+        };
+        const ID: [u64; 4] = [0, 1, 2, 3];
+        const XYZ1: [u64; 4] = [0, 1, 2, 4];
+        /* (class, pipe format, FORMAT, swizzle, alpha_msb, bytes, pack info) */
+        type Row = (u8, &'static str, u64, [u64; 4], bool, u32, u32);
+        let rows: [Row; 13] = [
+            (GLES_TEXFMT_R11G11B10F, "R11G11B10_FLOAT", 88, XYZ1, false, 4, 12),
+            (GLES_TEXFMT_RGB9E5, "R9G9B9E5_FLOAT", 26, XYZ1, false, 4, 0x1f),
+            (GLES_TEXFMT_RGB10A2, "R10G10B10A2_UNORM", 14, ID, true, 4, 8 | 0x40 | 0x100),
+            (GLES_TEXFMT_RGB10A2UI, "R10G10B10A2_UINT", 14, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA8_SNORM, "R8G8B8A8_SNORM", 13, ID, true, 4, 1 | 0x40),
+            (GLES_TEXFMT_RGBA8UI, "R8G8B8A8_UINT", 12, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA8I, "R8G8B8A8_SINT", 13, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA16UI, "R16G16B16A16_UINT", 29, ID, true, 8, 0x1f),
+            (GLES_TEXFMT_RGBA16I, "R16G16B16A16_SINT", 30, ID, true, 8, 0x1f),
+            (GLES_TEXFMT_RGBA32UI, "R32G32B32A32_UINT", 62, ID, true, 16, 0x1f),
+            (GLES_TEXFMT_RGBA32I, "R32G32B32A32_SINT", 63, ID, true, 16, 0x1f),
+            (GLES_TEXFMT_RGBA32F, "R32G32B32A32_FLOAT", 61, ID, true, 16, 0x1f),
+            /* the base classes keep their words: one of them, as a guard */
+            (GLES_TEXFMT_RGBA8, "R8G8B8A8_UNORM", 12, ID, true, 4, 0x140),
+        ];
+        for (format, pipe, texformat, swiz, alpha_msb, bytes, pck) in rows {
+            let w = desc(&GlesTextureBind { format, ..base });
+            let iw0 = w[0] as u64 | (w[1] as u64) << 32;
+            let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+            assert_eq!(iw0 & 7, 4, "{pipe}: TEXTYPE_STRIDE");
+            assert_eq!((iw0 >> 27) & 0x7f, texformat, "{pipe}: FORMAT");
+            let got = [(iw0 >> 14) & 7, (iw0 >> 11) & 7, (iw0 >> 8) & 7, (iw0 >> 5) & 7];
+            assert_eq!(got, swiz, "{pipe}: swiz0..3");
+            assert_eq!(((iw0 >> 34) & 0x3fff, (iw0 >> 48) & 0x3fff), (2, 11), "{pipe}: width, height less one");
+            assert_eq!(
+                iw0 & !(0x3fff << 34 | 0x3fff << 48 | 0x7f << 27 | 0xfff << 5 | 7),
+                0,
+                "{pipe}: nothing else in word 0"
+            );
+            assert_eq!((iw1 >> 59) & 1 != 0, alpha_msb, "{pipe}: alpha_msb");
+            let want1 = (u64::from(alpha_msb) << 59) | 3 | (1u64 << 60) | ((0x80_0000_1000u64 >> 2) << 16);
+            assert_eq!(iw1, want1, "{pipe}: the STRIDE word");
+            assert_eq!(w[4], 4 * 12 * bytes, "{pipe}: layer bytes");
+            assert_eq!(gles_texfmt_bytes(format), bytes, "{pipe}: the class's texel");
+            assert_eq!(w[7], pck, "{pipe}: PCK_INFO");
+        }
     }
 
     #[test]

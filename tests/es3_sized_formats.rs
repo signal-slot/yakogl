@@ -175,27 +175,43 @@ fn storage_per_gpu_and_the_refusals() {
             let got = e.storage_in(mask);
             let want = e.storage.iter().copied().find(|&s| mask & gles_texfmt_bit(s) != 0);
             assert_eq!(got, want, "{gpu} {}", e.name);
-            /* an integer format is held natively or refused, never faked */
+            /* an integer format is held natively or refused, never faked:
+             * its only class is its own */
             if e.is_integer() {
-                assert_eq!(got, None, "{gpu} {}: a back end that samples integer classes belongs in the mask", e.name);
+                assert_eq!(e.storage.len(), 1, "{gpu} {}: an integer format has one class", e.name);
+                assert!(got.is_none() || got == Some(e.storage[0]), "{gpu} {}", e.name);
             }
         }
     }
-    /* the fallbacks that exist today */
+    /* the PowerVR samples every class natively (formats-pvr) but RGB10_A2's,
+     * which stays in RGBA8 until it is a render target there */
     let pvr = PVR_SAMPLED_TEXFMTS;
-    assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
-    assert_eq!(fmt(GL_RGB9_E5).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
+    for e in FORMATS.iter().filter(|e| e.name != "GL_RGB10_A2") {
+        assert_eq!(e.storage_in(pvr), Some(e.storage[0]), "PowerVR {}: its own class", e.name);
+    }
+    assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(pvr), Some(GLES_TEXFMT_R11G11B10F));
+    assert_eq!(fmt(GL_RGB9_E5).storage_in(pvr), Some(GLES_TEXFMT_RGB9E5));
     assert_eq!(fmt(GL_RGB16F).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
-    assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
-    assert_eq!(fmt(GL_RG32F).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
+    assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(pvr), Some(GLES_TEXFMT_RGBA8_SNORM));
+    assert_eq!(fmt(GL_RG32F).storage_in(pvr), Some(GLES_TEXFMT_RGBA32F));
     assert_eq!(fmt(GL_RGB10_A2).storage_in(pvr), Some(GLES_TEXFMT_RGBA8));
-    assert_eq!(fmt(GL_RGB10_A2UI).storage_in(pvr), None);
+    assert_eq!(fmt(GL_RGB10_A2UI).storage_in(pvr), Some(GLES_TEXFMT_RGB10A2UI));
+    assert_eq!(fmt(GL_RG16UI).storage_in(pvr), Some(GLES_TEXFMT_RGBA16UI));
+    /* the fallbacks that exist on the GC7000: the original classes only */
+    let gc = GC_SAMPLED_TEXFMTS;
+    assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
+    assert_eq!(fmt(GL_RGB9_E5).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
+    assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
+    assert_eq!(fmt(GL_RG32F).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
+    assert_eq!(fmt(GL_RGB10_A2).storage_in(gc), Some(GLES_TEXFMT_RGBA8));
+    assert_eq!(fmt(GL_RGB10_A2UI).storage_in(gc), None);
+    assert_eq!(fmt(GL_R8UI).storage_in(gc), None);
     /* the V3D TMU reads no half float yet: those are refused there */
     let v3d = V3D_SAMPLED_TEXFMTS;
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(v3d), None);
     assert_eq!(fmt(GL_RGB10_A2).storage_in(v3d), Some(GLES_TEXFMT_RGBA8));
     /* a back end that samples a native class gets it, ahead of the fallback */
-    let native = pvr | gles_texfmt_bit(GLES_TEXFMT_R11G11B10F) | gles_texfmt_bit(GLES_TEXFMT_RGBA8UI);
+    let native = gc | gles_texfmt_bit(GLES_TEXFMT_R11G11B10F) | gles_texfmt_bit(GLES_TEXFMT_RGBA8UI);
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(native), Some(GLES_TEXFMT_R11G11B10F));
     assert_eq!(fmt(GL_R8UI).storage_in(native), Some(GLES_TEXFMT_RGBA8UI));
     assert_eq!(fmt(GL_RG16UI).storage_in(native), None);
