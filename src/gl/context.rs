@@ -1601,6 +1601,7 @@ fn alloc_context(w: u32, h: u32, group: u8) -> Option<&'static mut GlContext> {
     c.index = i as u8;
     super::names::reset_context(i);
     super::tf::reset_context(c.index);
+    super::es3::reset_context(c.index);
     /* the slot's binding points start unbound, whatever a context that had
      * the slot before left in them */
     *uniform_buffers(c) = [UboBinding::default(); MAX_UNIFORM_BUFFER_BINDINGS];
@@ -1904,6 +1905,7 @@ pub unsafe fn destroy_with(c: *mut GlContext, release_external: &mut dyn FnMut(&
         crate::backend::finish();
     }
     super::draw::reset_pending_clear(ctx.index);
+    super::es3::reset_context(ctx.index);
 
     /* The objects belong to the share group, so the context only gives its
      * reference back: they go with the last holder, which may be another

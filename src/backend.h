@@ -375,6 +375,9 @@ struct gles_draw {
 	 * buffer. 0: the packed pitch (every FBO and pbuffer). Sits in what was
 	 * tail padding. */
 	uint32_t target_pitch;
+	/* The occlusion query (backend handle, 1..) this draw counts towards; 0:
+	 * none. */
+	uint32_t occlusion_query;
 };
 
 /* One-time backend init (after OSAL init: allocates persistent GPU objects,
@@ -565,6 +568,18 @@ struct yakogl_backend {
 	 * undefined), the texels are left as they are; a negative errno
 	 * otherwise. Optional: NULL answers 1. */
 	int (*depth_resolve)(uint32_t id, float *dst, uint32_t w, uint32_t h, uint32_t pitch);
+	/* Occlusion queries (GL_ANY_SAMPLES_PASSED[_CONSERVATIVE]); all four
+	 * optional, and NULL query_begin keeps glBeginQuery GL_INVALID_OPERATION.
+	 * query_begin: zero the count of `handle` (1..32); 0, or a negative errno.
+	 * Draws with gles_draw.occlusion_query == handle count into it, across
+	 * any number of kicks. query_end: no more draws count. query_result: the
+	 * samples counted, summed over those kicks; only called after the last
+	 * of them completed; 0 or a negative errno. query_free: `handle` is no
+	 * longer used. */
+	int (*query_begin)(uint32_t handle);
+	void (*query_end)(uint32_t handle);
+	int (*query_result)(uint32_t handle, uint64_t *out);
+	void (*query_free)(uint32_t handle);
 };
 
 extern const struct yakogl_backend *g_backend;   /* the backend of this build (src/backend.rs) */

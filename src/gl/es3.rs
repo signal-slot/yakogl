@@ -217,13 +217,16 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * Query names are real, and so is one target's counting:
- * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted on the CPU by the
- * transform feedback capture (`tf.rs`, which adds to the active query through
- * `add_primitives_written`). The BXS backend has no occlusion counter wired
- * up, so glBeginQuery on the ANY_SAMPLES_PASSED targets still refuses rather
- * than letting a caller believe a zero sample count (item occlusion-query
- * fills in that arm).
+ * Query names are real. GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted
+ * on the CPU by the transform feedback capture (`tf.rs`, which adds to the
+ * active query through `add_primitives_written`). The two ANY_SAMPLES_PASSED
+ * targets are counted by the back end (docs/es3-occlusion-query.md): the GL
+ * core takes a back end handle at glBeginQuery, tells every draw while the
+ * query is active which handle counts it (`GlesDraw::occlusion_query`, from
+ * [`occlusion_handle`]), remembers the kick glEndQuery closed and reads the
+ * count once that kick has completed. A back end without the query entries
+ * keeps glBeginQuery on those targets at GL_INVALID_OPERATION rather than
+ * letting a caller believe a zero sample count.
  */
 
 /// What a query object has been used for (a name is a query object once it
@@ -232,23 +235,147 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 struct Es3Query {
     target: GLenum,
     active: bool,
+    /// The result: the primitives written (transform feedback), or, once an
+    /// occlusion query was read (`pending` false), 0 / 1.
     result: u32,
+    /// The back end handle of an occlusion query (0: none, or released).
+    handle: u32,
+    /// The kick that holds the query's last counted draw (`backend::kick_id`
+    /// at glEndQuery).
+    end_kick: u32,
+    /// An occlusion query that ended and was not read yet.
+    pending: bool,
 }
 
 impl Es3Query {
-    const NONE: Es3Query = Es3Query { target: 0, active: false, result: 0 };
+    const NONE: Es3Query = Es3Query { target: 0, active: false, result: 0, handle: 0, end_kick: 0, pending: false };
 }
 
 static QSTATE: Global<[[Es3Query; MAX_QUERIES]; MAX_CONTEXTS]> = Global::zeroed();
+/// The back end query handles in use (bit n: handle n + 1), over all
+/// contexts: a back end's counters are not per context.
+static OQ_HANDLES: Global<u32> = Global::zeroed();
 
 fn qstate(index: u8) -> &'static mut [Es3Query; MAX_QUERIES] {
     // SAFETY: single-threaded by contract; no other reference to the pool is live.
     unsafe { &mut QSTATE.get()[index as usize % MAX_CONTEXTS] }
 }
 
+/// GL_ANY_SAMPLES_PASSED and its conservative twin: one target for the
+/// "one active query" rule (dEQP negative_fragment_api treats them so).
+fn occlusion_target(target: GLenum) -> bool {
+    matches!(target, GL_ANY_SAMPLES_PASSED | GL_ANY_SAMPLES_PASSED_CONSERVATIVE)
+}
+
+/// Do two targets share an active-query slot?
+fn same_slot(a: GLenum, b: GLenum) -> bool {
+    a == b || (occlusion_target(a) && occlusion_target(b))
+}
+
 /// The query active on `target` of context `index`, if any.
 fn active_query(index: u8, target: GLenum) -> Option<usize> {
-    (1..MAX_QUERIES).find(|&h| qstate(index)[h].active && qstate(index)[h].target == target)
+    (1..MAX_QUERIES).find(|&h| qstate(index)[h].active && same_slot(qstate(index)[h].target, target))
+}
+
+/// The back end handle the draws of context `c` count towards: that of the
+/// active occlusion query, 0 when there is none or the draw is discarded.
+pub(super) fn occlusion_handle(c: &GlContext) -> u32 {
+    if c.rasterizer_discard {
+        return 0;
+    }
+    active_query(c.index, GL_ANY_SAMPLES_PASSED).map_or(0, |h| qstate(c.index)[h].handle)
+}
+
+fn take_handle() -> Option<u32> {
+    // SAFETY: single-threaded by contract.
+    let m = unsafe { OQ_HANDLES.get() };
+    let n = (!*m).trailing_zeros();
+    if n >= 32 {
+        return None;
+    }
+    *m |= 1 << n;
+    Some(n + 1)
+}
+
+fn put_handle(handle: u32) {
+    // SAFETY: single-threaded by contract.
+    unsafe { *OQ_HANDLES.get() &= !(1 << (handle - 1)) };
+}
+
+/// Make kick `end_kick` complete and report whether its work is usable: the
+/// kick still being recorded is submitted first (GL: querying a result
+/// forces the query to complete in finite time). False: the work was lost.
+fn settle_kick(end_kick: u32) -> bool {
+    if end_kick >= backend::kick_id() {
+        backend::flush();
+    }
+    if end_kick >= backend::kick_id() {
+        return true; /* nothing was recorded after the query's draws: no work to wait for */
+    }
+    match backend::wait_kick(end_kick) {
+        Some(rc) => rc == 0,
+        None => backend::finish() == 0,
+    }
+}
+
+/// Give the back end handle of `q` back (after its kick has completed).
+fn release_handle(q: &mut Es3Query) {
+    if q.handle == 0 {
+        return;
+    }
+    if q.active {
+        backend::query_end(q.handle);
+        q.end_kick = backend::kick_id();
+        q.active = false;
+        backend::flush();
+        q.pending = true;
+    }
+    if q.pending {
+        settle_kick(q.end_kick);
+    }
+    backend::query_free(q.handle);
+    put_handle(q.handle);
+    q.handle = 0;
+    q.pending = false;
+}
+
+/// The context's query names go (destroy, or a slot taken again): release
+/// every back end handle.
+pub(super) fn reset_context(index: u8) {
+    for q in qstate(index).iter_mut() {
+        release_handle(q);
+        *q = Es3Query::NONE;
+    }
+    *queries(index) = [Es3Name::FREE; MAX_QUERIES];
+}
+
+/// The occlusion query `q` ended: read its count (once) and release the
+/// handle. A lost job or a failing read answers true, the conservative value.
+fn occlusion_result(q: &mut Es3Query) -> u32 {
+    if q.pending {
+        let ok = settle_kick(q.end_kick);
+        q.result = match backend::query_result(q.handle) {
+            Ok(n) if ok => (n != 0) as u32,
+            _ => GL_TRUE,
+        };
+        release_handle(q);
+    }
+    q.result
+}
+
+/// Has the ended occlusion query `q` its result? Submits the kick that
+/// holds its draws, so a caller that polls without glFlush terminates.
+fn occlusion_available(q: &Es3Query) -> bool {
+    if !q.pending {
+        return true;
+    }
+    if q.end_kick >= backend::kick_id() {
+        backend::flush();
+        if q.end_kick >= backend::kick_id() {
+            return true; /* empty: see settle_kick */
+        }
+    }
+    !backend::kick_pending(q.end_kick)
 }
 
 /// A captured draw wrote `n` primitives: the active
@@ -286,7 +413,9 @@ pub unsafe extern "C" fn glDeleteQueries(n: GLsizei, ids: *const GLuint) {
             // SAFETY: the application passes `n` names (n > 0 checked above).
             let h = util::app_get(ids, i) as usize;
             if h != 0 && h < MAX_QUERIES {
-                qstate(c.index)[h] = Es3Query::NONE; /* an active query ends with its name */
+                /* an active query ends with its name; a pending count is dropped */
+                release_handle(&mut qstate(c.index)[h]);
+                qstate(c.index)[h] = Es3Query::NONE;
             }
         }
     }
@@ -316,18 +445,37 @@ pub unsafe extern "C" fn glBeginQuery(target: GLenum, id: GLuint) {
         return;
     }
     queries(c.index)[h].bound = true;
-    if target != GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN || crate::REPORT_ES2 {
+    let occ = occlusion_target(target);
+    if crate::REPORT_ES2 || (occ && !backend::has_occlusion_query()) {
         c.set_error(GL_INVALID_OPERATION, FUNC); /* no counter behind it (see the section comment) */
         return;
     }
-    /* ES 3.0 2.16: one active query per target; a query keeps the target of
-     * its first Begin; one that is active cannot begin again */
+    /* ES 3.0 2.14: one active query per target (the two occlusion targets are
+     * one); a query keeps the target of its first Begin; one that is active
+     * cannot begin again */
     let q = qstate(c.index)[h];
     if active_query(c.index, target).is_some() || q.active || (q.target != 0 && q.target != target) {
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    qstate(c.index)[h] = Es3Query { target, active: true, result: 0 };
+    if !occ {
+        qstate(c.index)[h] = Es3Query { target, active: true, ..Es3Query::NONE };
+        return;
+    }
+    /* the pending clear lands on the near side of the query, and the counter
+     * of the name's previous use is given back before a new one is taken */
+    draw::flush_pending_clear(c);
+    release_handle(&mut qstate(c.index)[h]);
+    let Some(handle) = take_handle() else {
+        c.set_error(GL_OUT_OF_MEMORY, FUNC);
+        return;
+    };
+    if backend::query_begin(handle) < 0 {
+        put_handle(handle);
+        c.set_error(GL_OUT_OF_MEMORY, FUNC);
+        return;
+    }
+    qstate(c.index)[h] = Es3Query { target, active: true, handle, ..Es3Query::NONE };
 }
 
 #[no_mangle]
@@ -340,6 +488,16 @@ pub unsafe extern "C" fn glEndQuery(target: GLenum) {
     }
     let Some(c) = context::current() else { return };
     match active_query(c.index, target) {
+        Some(h) if occlusion_target(target) => {
+            /* the draws so far are in the kick recorded now: it closes the query */
+            draw::flush_pending_clear(c);
+            let q = &mut qstate(c.index)[h];
+            backend::query_end(q.handle);
+            q.end_kick = backend::kick_id();
+            q.active = false;
+            q.pending = true;
+            backend::flush();
+        }
         /* the capture is synchronous: the result is complete at once */
         Some(h) => qstate(c.index)[h].active = false,
         None => c.set_error(GL_INVALID_OPERATION, FUNC), /* no query is active on the target */
@@ -388,8 +546,19 @@ pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: 
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
+    let v = if !occlusion_target(q.target) {
+        if pname == GL_QUERY_RESULT {
+            q.result
+        } else {
+            GL_TRUE
+        }
+    } else if pname == GL_QUERY_RESULT {
+        occlusion_result(&mut qstate(c.index)[h])
+    } else {
+        occlusion_available(&q) as u32
+    };
     // SAFETY: params is null or valid for one GLuint (GL contract), not necessarily aligned.
-    util::app_put(params, if pname == GL_QUERY_RESULT { q.result } else { GL_TRUE });
+    util::app_put(params, v);
 }
 
 /* ------------------------------------------------------ transform feedback --
@@ -1378,6 +1547,7 @@ pub(crate) fn reset_for_tests() {
     unsafe {
         *QUERIES.get() = [[Es3Name::FREE; MAX_QUERIES]; MAX_CONTEXTS];
         *QSTATE.get() = [[Es3Query::NONE; MAX_QUERIES]; MAX_CONTEXTS];
+        *OQ_HANDLES.get() = 0;
         *SAMPLERS.get() = [[Es3Sampler::FREE; MAX_SAMPLERS]; MAX_CONTEXTS];
         *BOUND_SAMPLER.get() = [[0; CAP_COMBINED_TEXTURE_UNITS]; MAX_CONTEXTS];
         super::tf::reset_for_tests();
@@ -1423,7 +1593,11 @@ mod tests {
         gen1(glGenSamplers)
     }
 
-    /* ---- queries ---- */
+    /* ---- queries ----
+     * The mock back end here has no query entries, so these four pin the
+     * "back end without the entries" rows of docs/es3-occlusion-query.md
+     * section 4.3 (glBeginQuery stays GL_INVALID_OPERATION). The counting
+     * back end's rows are tests/es3_occlusion_gl.rs. */
 
     #[test]
     fn query_names_are_distinct_and_run_out_as_zeroes() {

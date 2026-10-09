@@ -2903,6 +2903,7 @@ fn build_common(
         resolve_sampled_depth(c, program);
     }
     resolve_target(c, d)?;
+    d.occlusion_query = super::es3::occlusion_handle(c);
     set_target_format(c, d);
     d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
     set_sample_state(c, d);

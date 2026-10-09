@@ -874,6 +874,11 @@ pub struct GlesDraw {
     /// packed pitch, every FBO and pbuffer. Read through [`draw_pitch`].
     /// Sits in what was tail padding.
     pub target_pitch: u32,
+    /// The occlusion query (the back end's handle, 1..) this draw's samples
+    /// count towards; 0: none. Set only on a regular draw while a
+    /// GL_ANY_SAMPLES_PASSED[_CONSERVATIVE] query is active (never on a
+    /// clear, a blit's quad or a draw under GL_RASTERIZER_DISCARD).
+    pub occlusion_query: u32,
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -983,6 +988,7 @@ impl GlesDraw {
         sample_mask: 0xf,
         alpha_to_coverage: false,
         target_pitch: 0,
+        occlusion_query: 0,
     };
 }
 
@@ -1128,6 +1134,23 @@ pub struct YakoglBackend {
     /// depth texture's texels ([`depth_resolve`]; `src/backend.h`). `None`
     /// on a backend that keeps none or cannot read it back.
     pub depth_resolve: Option<unsafe extern "C" fn(id: u32, dst: *mut f32, w: u32, h: u32, pitch: u32) -> i32>,
+    /// glBeginQuery(GL_ANY_SAMPLES_PASSED[_CONSERVATIVE]) took the back end's
+    /// query `handle` (1..=32; the GL core allocates it per query use): zero
+    /// its count. 0, or a negative errno (no counter memory), which the GL
+    /// core reports as GL_OUT_OF_MEMORY. `None` (the default): the back end
+    /// counts no samples and glBeginQuery stays GL_INVALID_OPERATION.
+    pub query_begin: Option<unsafe extern "C" fn(handle: u32) -> i32>,
+    /// glEndQuery for `handle`: no draw is counted for it after this one.
+    /// Optional.
+    pub query_end: Option<unsafe extern "C" fn(handle: u32)>,
+    /// The samples counted for `handle` so far, summed over every kick that
+    /// carried a draw with `occlusion_query == handle`; called only after the
+    /// last of those kicks has completed. 0, or a negative errno.
+    pub query_result: Option<unsafe extern "C" fn(handle: u32, out: *mut u64) -> i32>,
+    /// `handle` is no longer used (its result was read, or the query was
+    /// deleted or the context destroyed); its counter may be reused.
+    /// Optional.
+    pub query_free: Option<unsafe extern "C" fn(handle: u32)>,
 }
 
 // SAFETY: the table is immutable; `name` points at a static string.
@@ -1429,6 +1452,44 @@ pub fn max_instance_divisor() -> u32 {
 pub fn wait_kick(kick_id: u32) -> Option<i32> {
     // SAFETY: the backend's own entry point.
     table().and_then(|t| t.wait_kick).map(|f| counted("wait_kick", Some(unsafe { f(kick_id) })))
+}
+
+/// Does the back end count occlusion samples (`YakoglBackend::query_begin`)?
+pub fn has_occlusion_query() -> bool {
+    table().is_some_and(|t| t.query_begin.is_some())
+}
+
+/// `YakoglBackend::query_begin`: 0, or a negative errno.
+pub fn query_begin(handle: u32) -> i32 {
+    // SAFETY: the backend's own entry point.
+    table().and_then(|t| t.query_begin).map_or(-crate::util::ENODEV, |f| unsafe { f(handle) })
+}
+
+/// `YakoglBackend::query_end`.
+pub fn query_end(handle: u32) {
+    // SAFETY: the backend's own entry point.
+    if let Some(f) = table().and_then(|t| t.query_end) {
+        unsafe { f(handle) }
+    }
+}
+
+/// `YakoglBackend::query_result`: the samples counted, or a negative errno.
+pub fn query_result(handle: u32) -> Result<u64, i32> {
+    let mut v = 0u64;
+    // SAFETY: the backend's own entry point; `v` is valid for one u64.
+    match table().and_then(|t| t.query_result).map(|f| unsafe { f(handle, &mut v) }) {
+        Some(0) => Ok(v),
+        Some(rc) => Err(rc),
+        None => Err(-crate::util::ENODEV),
+    }
+}
+
+/// `YakoglBackend::query_free`.
+pub fn query_free(handle: u32) {
+    // SAFETY: the backend's own entry point.
+    if let Some(f) = table().and_then(|t| t.query_free) {
+        unsafe { f(handle) }
+    }
 }
 
 /// (`YakoglBackend::samples_texel_copies`).
