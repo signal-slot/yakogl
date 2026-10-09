@@ -151,10 +151,13 @@ at every N):
 The offline PowerVR table (`tests/reference/blobs.rs`) records the toolchain
 that reproduces it byte for byte: a `pco_shc` built by
 `tools/pco_shc/build_pco_shc.sh` with the patched usclib. It was regenerated
-2026-10-07 on the lepton host (`// toolchain: pco_shc=01aa62a069bb
-glslang=2e8c31daf6b2`): all 2476 USC rows are byte-identical to the
-`0fe778f6` build, so the board results recorded against that table carry
-over. The `0fe778f6` commit also
+2026-10-07 on a second host (`pco_shc=01aa62a069bb glslang=2e8c31daf6b2`)
+and again 2026-10-10 on the landing host (`// toolchain: pco_shc=f537fc86b41f
+glslang=9e007f4bf514`, the `0fe778f6` ids): all 2476 USC rows are
+byte-identical across the three, so the board results recorded against that
+table carry over. The id names the binary, so a host whose gcc build differs
+gets another id for the same rows; the gate row compares the whole file, and
+the recorded line is the landing host's. The `0fe778f6` commit also
 adds `matattr`'s 20 rows and re-keys `texsize.frag` to its current text.
 On the AM62P (`60ffeec8`, table image) the regression set passes 39 / 40,
 0 resets; the one failure is case 48 `es3vol`, which was already failing in
@@ -807,7 +810,7 @@ board-confirmed before then.
   `tests/glmark2_corpus.rs` reads `GLMARK2_CORPUS` (default that path) on the
   three GPUs. `tools/setup-gate-host.sh` prepares a gate host. The
   Mesa-table reproduction row also needs `PCO_SHC=<pco_shc from
-  tools/pco_shc/build_pco_shc.sh, content id 01aa62a069bb>`,
+  tools/pco_shc/build_pco_shc.sh, content id f537fc86b41f>`,
   `GLSLANG=<glslangValidator>` and, for speed, `GLSL2USC_CACHE=<dir>`;
   without them that row is a gap and the gate is red. It takes about 45
   minutes.

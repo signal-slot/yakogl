@@ -223,7 +223,11 @@ with the distro `glslangValidator` 16.4.0 regenerated the table with **all
 2476 USC rows byte-identical**; only the header line changed. The table names
 its toolchain in its header:
 
-    // toolchain: pco_shc=01aa62a069bb glslang=2e8c31daf6b2
+    // toolchain: pco_shc=f537fc86b41f glslang=9e007f4bf514
+
+(the landing host's; the second host's build was `pco_shc=01aa62a069bb
+glslang=2e8c31daf6b2`, with the same rows, and the table carried that line
+from 2026-10-07 to 2026-10-10 while that host ran the gate)
 
 and `glsl2usc` refuses to overwrite the table with a different one unless
 `GLSL2USC_NEW_REFERENCE=1` says so. A different compiler or library version

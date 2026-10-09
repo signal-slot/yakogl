@@ -24,9 +24,11 @@
 # SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0 (no libclc: this Mesa
 # config builds mesa_clc without it): pco_usclib.spv md5
 # 15eca99efcf1f20d9124abf5cdffd4ab -- the same as the 2026-10-05 build --,
-# pco_shc id 01aa62a069bb, the id tests/reference/blobs.rs records. The id
-# differs from the 2026-10-05 build (f537fc86b41f, gcc 16.2.1) because the gcc
-# build differs; every USC row of the table is byte-identical between them.
+# pco_shc id 01aa62a069bb on that host; the same versions on the landing host
+# (2026-10-10, gcc 16.2.1_p20260926 p1) give f537fc86b41f, the id
+# tests/reference/blobs.rs records, with the 2026-10-05 build's bytes. Every
+# USC row of the table is byte-identical between the two ids: the id names
+# the binary, and two hosts' builds of one source differ in it.
 # LLVM_DIR (default /usr/lib/llvm/23) selects the LLVM.
 #
 # Meson options: -Dbuildtype=debug -Dvulkan-drivers=imagination
