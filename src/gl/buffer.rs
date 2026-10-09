@@ -475,9 +475,6 @@ pub unsafe extern "C" fn glDeleteBuffers(n: GLsizei, buffers: *const GLuint) {
         if !b.used {
             continue;
         }
-        if !b.mem.impl_.is_null() {
-            osal::gpu_free(&mut b.mem);
-        }
         /* Unbind from every binding point (ES 3.0 2.9: deleting a buffer
          * reverts each binding it holds to zero). Missing the ES 3.0 points
          * left a deleted name bound to PIXEL_UNPACK_BUFFER, and the next
@@ -510,8 +507,31 @@ pub unsafe extern "C" fn glDeleteBuffers(n: GLsizei, buffers: *const GLuint) {
             }
         }
         debug_bind_hist(2, h);
-        c.objs().buffers[h as usize] = zeroed_buffer();
         names::forget(c, Kind::Buffer, h);
+        /* A transform feedback object that is not current keeps its
+         * reference (ES 3.0 D.1.2): the name is gone, the storage lives on
+         * until the object lets go (`tf::release_slot` -> `free_orphan`). */
+        if super::tf::on_buffer_delete(c, h) {
+            c.objs().buffers[h as usize].target = 0; /* glIsBuffer: false */
+            continue;
+        }
+        free_buffer_storage(c, h);
+    }
+}
+
+/// Give a deleted buffer's storage back and free its slot.
+fn free_buffer_storage(c: &mut GlContext, h: GLuint) {
+    let b = &mut c.objs().buffers[h as usize];
+    if !b.mem.impl_.is_null() {
+        osal::gpu_free(&mut b.mem);
+    }
+    c.objs().buffers[h as usize] = zeroed_buffer();
+}
+
+/// The last transform feedback object holding a deleted buffer let go of it.
+pub(super) fn free_orphan(c: &mut GlContext, h: GLuint) {
+    if c.objs().buffers.get(h as usize).is_some_and(|b| b.used) {
+        free_buffer_storage(c, h);
     }
 }
 

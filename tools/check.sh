@@ -328,6 +328,11 @@ step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
 # every one of the formats.
 step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
+# ES 3.0 transform feedback objects, varyings, queries and rasterizer
+# discard through the GL API (the capture itself is item tf-capture); the ES
+# 2.0 report below pins the old answers.
+step "test    $V3D_CONFIG (tests/es3_tf_api.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_tf_api
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -338,6 +343,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
 step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
+step "test    $V3D_ES2_CONFIG (tests/es3_tf_api.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_tf_api
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"

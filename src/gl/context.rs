@@ -844,8 +844,8 @@ pub struct GlContext {
     /// ES 3.0 GL_PRIMITIVE_RESTART_FIXED_INDEX: the type's largest index
     /// ends the primitive in glDrawElements* (`draw::restart_to_lists`).
     pub primitive_restart: bool,
-    /// ES 3.0 GL_RASTERIZER_DISCARD: recorded and queryable; the draw does
-    /// not discard yet (it belongs with transform feedback).
+    /// ES 3.0 GL_RASTERIZER_DISCARD: draws and clears stop in the GL core
+    /// while it is set (not under report-es2, where it is only recorded).
     pub rasterizer_discard: bool,
     pub generate_mipmap_hint: GLenum,
 
@@ -1600,6 +1600,7 @@ fn alloc_context(w: u32, h: u32, group: u8) -> Option<&'static mut GlContext> {
     c.set_defaults(w, h);
     c.index = i as u8;
     super::names::reset_context(i);
+    super::tf::reset_context(c.index);
     /* the slot's binding points start unbound, whatever a context that had
      * the slot before left in them */
     *uniform_buffers(c) = [UboBinding::default(); MAX_UNIFORM_BUFFER_BINDINGS];

@@ -368,8 +368,9 @@ Until 2026-09-29 it named ES 3 as well (review R-13). What an ES 3.0
 context lacks, each checked in the code:
 
 - `glBlitFramebuffer` is always `GL_INVALID_OPERATION` (`gl/framebuffer.rs`).
-- Transform feedback: every `GL_MAX_TRANSFORM_FEEDBACK_*` is 0, ES 3.0
-  table 6.34 asks for at least 64 / 4 / 4 ("Transform feedback" below).
+- Transform feedback: the limits are 64 / 4 / 4 (ES 3.0 table 6.34) outside
+  `report-es2`, where they stay 0; the state and errors are built, the
+  capture is not ("Transform feedback" below).
 - `GL_MAX_SAMPLES` is 1; ES 3.0 table 6.35 asks for at least 4.
 - A depth or stencil attachment of another size than the colour ones is
   `GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS` in both builds (`check_status`);
@@ -589,9 +590,17 @@ still stores and compares table slots.
   465 sites. The boundary form touches about 45 and leaves the draw path
   alone.
 
-## Transform feedback (design, not built)
+## Transform feedback (state built, capture not)
 
-Today only the names and the binding exist (`gl/es3.rs`): every
+**Built (item tf-api, `gl/tf.rs`; design `docs/es3-transform-feedback.md`):**
+the objects with their indexed bindings, the varyings resolved at link, the
+begin/end/pause/resume rules and errors, the primitives-written query,
+rasterizer discard for draws and clears. A draw while a capture is active is
+refused with `GL_INVALID_OPERATION` and a log line naming item tf-capture,
+and the buffer is never written. The rest of this section is the design as it
+stood before; the "State first" bullet is done.
+
+Before tf-api only the names and the binding existed (`gl/es3.rs`): every
 `MAX_TRANSFORM_FEEDBACK_*` is 0, `glBeginTransformFeedback` is
 `GL_INVALID_OPERATION`, an INTERLEAVED varyings request fails the next link.
 What that costs, from the GLES3 host run at 01de3104: negative_api 16,
