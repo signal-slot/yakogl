@@ -184,15 +184,16 @@ the 7 `qualification_order.variables.invalid.*_invariant_input` cases.
 Reading the messages of the 2,135 refusals, almost all name the rule the
 case tests. The exceptions, where the refusal comes from a stage past sema and
 the case would not be refused if that stage had the construct (so a back end
-that grows the feature will turn them into "fail accepted"): 9 on each GPU.
+that grows the feature will turn them into "fail accepted"): 1 on each GPU,
+and the 10 recursion cases below.
 
-* 4 + 4 + 1: `functions:invalid.local_function_{prototype,definition}` and
-  `scoping:invalid.use_variable_from_{if,else}_in_outer_scope` are refused by the
-  lowering (`this statement is not lowered yet`, `reading this is not lowered
-  yet`) and `linkage:varying.rules.invalid_type_array_struct` (`an array of
-  structures ... is not lowered yet`). The scoping pair is a sema bug (an
-  out-of-scope name is found), hidden by the lowering; the function-in-function
-  pair is an unsupported construct.
+* 1: `linkage:varying.rules.invalid_type_array_struct` (`an array of
+  structures ... is not lowered yet`).
+* Sema refuses `functions:invalid.local_function_{prototype,definition}` (ES
+  3.00 section 6.1: a function is declared at global scope only) and
+  `scoping:invalid.use_variable_from_{if,else}_in_outer_scope` (an `if` arm
+  and a `do` body are each a scope, the grammar's `statement_with_scope`);
+  the lowering refused them before, for want of the construct.
 * 10 recursion cases (`functions:invalid.*recursion*`) are refused as `this call
   nests too deeply to inline`, i.e. by the inliner's depth bound, not by a recursion check.
 
@@ -236,6 +237,5 @@ the form in the log):
   2. Preprocessor: backslash-newline splice inside a token (4).
   3. Reflection names of 64 or more characters (2).
   4. GC7000UL: the 128-element constant array index (2).
-  5. Sema, behind refusals that come from later stages today: name scoping
-     that lets a block variable be read outside its block (2); recursion
-     by call graph (10).
+  5. Sema, behind refusals that come from a later stage today: recursion by
+     call graph (10, refused by the inliner's depth bound).

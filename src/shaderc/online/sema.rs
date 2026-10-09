@@ -716,6 +716,17 @@ impl<'a> Sema<'_, 'a> {
                 self.declare(Symbol { name, kind: NameKind::Variable, ty: vty, storage, is_param: false }, line)
             }
             Decl::Function { name, ret, params, body, line } => {
+                /* ES 3.00 section 6.1: "Function declarations (prototypes)
+                 * cannot occur inside of functions; they must be at global
+                 * scope" (dEQP functions.invalid.local_function_{prototype,
+                 * definition}, refused only by the lowering before). */
+                if !global && self.ast.es3 {
+                    return Err(Error::new(
+                        *line,
+                        name,
+                        "a function can be declared only at global scope (section 6.1)",
+                    ));
+                }
                 /* Section 4.1.7: samplers "cannot be used as out or inout
                  * function parameters. These restrictions also apply to any
                  * structures that contain sampler types." */
@@ -1028,6 +1039,14 @@ impl<'a> Sema<'_, 'a> {
 
     /* ---- statements ---------------------------------------------------- */
 
+    /// `s` in a scope of its own (the grammar's `statement_with_scope`).
+    fn scoped_stmt(&mut self, s: StmtId) -> R<'a, ()> {
+        self.push_scope()?;
+        let r = self.stmt(s);
+        self.pop_scope();
+        r
+    }
+
     fn stmt(&mut self, id: StmtId) -> R<'a, ()> {
         match *self.ast.stmt(id) {
             Stmt::Expr(None) => Ok(()),
@@ -1045,12 +1064,17 @@ impl<'a> Sema<'_, 'a> {
                 self.pop_scope();
                 out
             }
+            /* Each arm is a `statement_with_scope` (the grammar of both
+             * versions, section 9; ES 3.00 section 6.2): a declaration that
+             * is an arm by itself, `if (c) float a = 1.0;`, is not seen
+             * after the `if` (dEQP scoping.invalid.use_variable_from_{if,
+             * else}_in_outer_scope). */
             Stmt::If { cond, then_s, else_s } => {
                 let c = self.expr(cond)?;
                 self.require_bool(&c.ty)?;
-                self.stmt(then_s)?;
+                self.scoped_stmt(then_s)?;
                 match else_s {
-                    Some(e) => self.stmt(e),
+                    Some(e) => self.scoped_stmt(e),
                     None => Ok(()),
                 }
             }
@@ -1060,9 +1084,10 @@ impl<'a> Sema<'_, 'a> {
                 self.pop_scope();
                 r
             }
+            /* `do statement_with_scope while (...)`, as an `if` arm */
             Stmt::DoWhile { body, cond } => {
                 self.loop_depth += 1;
-                let r = self.stmt(body);
+                let r = self.scoped_stmt(body);
                 self.loop_depth -= 1;
                 r?;
                 let c = self.expr(cond)?;
@@ -3647,6 +3672,46 @@ mod tests {
         assert_eq!(fails("void main() { y = 1.0; }"), "undeclared identifier");
         /* A local goes out of scope at the end of its block. */
         assert_eq!(fails("void main() { { float x = 1.0; } x = 2.0; }"), "undeclared identifier");
+        /* An `if` arm and a `do` body are each a scope, braces or not
+         * (`statement_with_scope`): a declaration that is the whole arm
+         * ends with it (dEQP scoping.invalid.use_variable_from_{if,else}_
+         * in_outer_scope, refused only by the lowering before), and may
+         * shadow an outer name. Revert check: without `scoped_stmt` the
+         * three refusals compile in sema. */
+        assert_eq!(fails("void main() { if (true) float a = 1.0; gl_FragColor = vec4(a); }"), "undeclared identifier");
+        assert_eq!(
+            fails("void main() { if (false) {} else float b = 1.0; gl_FragColor = vec4(b); }"),
+            "undeclared identifier"
+        );
+        assert_eq!(
+            fails("void main() { do float c = 1.0; while (false); gl_FragColor = vec4(c); }"),
+            "undeclared identifier"
+        );
+        ok("void main() { float a = 0.5; if (true) float a = 1.0; gl_FragColor = vec4(a); }");
+    }
+
+    /// ES 3.00 section 6.1: a function prototype or definition inside a
+    /// function body is an error (dEQP functions.invalid.local_function_
+    /// {prototype,definition}, which only the lowering refused, as "this
+    /// statement is not lowered yet"). Revert check: without the rule the
+    /// prototype compiles in sema.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn an_es3_function_is_declared_at_global_scope_only() {
+        const WHY: &str = "a function can be declared only at global scope (section 6.1)";
+        let es3 = "#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 o;\n";
+        assert_eq!(
+            fails_stage(&std::format!("{es3}void main() {{ float func(float f); o = vec4(1.0); }}"), Stage::Fragment),
+            WHY
+        );
+        assert_eq!(
+            fails_stage(
+                &std::format!("{es3}void main() {{ float func(float f) {{ return 1.0; }} o = vec4(1.0); }}"),
+                Stage::Fragment
+            ),
+            WHY
+        );
+        ok_stage(&std::format!("{es3}float func(float f);\nvoid main() {{ o = vec4(func(1.0)); }}\nfloat func(float f) {{ return f; }}"), Stage::Fragment);
     }
 
     #[test]

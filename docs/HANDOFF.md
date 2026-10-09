@@ -606,10 +606,19 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      core's per-column split for the V3D and the GC7000, non-square matrix
      attributes; `centroid in` on the PowerVR (`ditrp` at the centroid, as
      pco) and the V3D (the centroid W and `centroid_flags`, as Mesa's v3d),
-     and sema's refusal of `invariant` on an ES 3.00 fragment input. That
-     document's "Texture
+     and sema's refusals of `invariant` on an ES 3.00 fragment input, of a
+     function declared inside a function, and of a name read past the `if`
+     arm that declared it. That document's "Texture
      look-ups" section lists what each back end still refuses. Open: the
-     rest of its "Work that closes the table".
+     rest of its "Work that closes the table"; of those, two need a
+     decision first: the 63+-character names (the default-block rows of
+     an instance block are named after the instance, which GL never
+     shows, so a 1,024-character instance name fills the 64-byte field;
+     naming them after the block, as GL names the members, or task #47's
+     name pool), and the GC7000UL's 128-element constant array (34
+     temporaries against a band ceiling of 21 measured to draw: the array
+     wants the constant file with relative addressing, as etnaviv takes
+     it, not a better allocation).
    - **es3-caps** and **es2-report-pin**: redo the ES 3.0 limits test and
      the test pinning the ES 2.0 report's answers, reverted for review
      (`3f78982`, `a35095b`).
