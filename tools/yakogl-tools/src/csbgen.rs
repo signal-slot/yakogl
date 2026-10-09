@@ -42,6 +42,7 @@ const PACKERS: &[&str] = &[
     "CR_ISP_STENCIL_LOAD_BASE",
     "CR_ISP_SCISSOR_BASE",
     "CR_ISP_DBIAS_BASE",
+    "CR_ISP_OCLQRY_BASE",
     "CR_USC_PIXEL_OUTPUT_CTRL",
 ];
 

@@ -58,7 +58,7 @@ _Static_assert(sizeof(struct pvr_render_geom_regs) == 16, "struct pvr_render_geo
 _Static_assert(offsetof(struct pvr_render_geom_regs, vdm_ctrl_stream_base) == 0, "struct pvr_render_geom_regs.vdm_ctrl_stream_base");
 _Static_assert(offsetof(struct pvr_render_geom_regs, ppp_ctrl) == 8, "struct pvr_render_geom_regs.ppp_ctrl");
 _Static_assert(offsetof(struct pvr_render_geom_regs, te_psg) == 12, "struct pvr_render_geom_regs.te_psg");
-_Static_assert(sizeof(struct pvr_render_frag_regs) == 176, "struct pvr_render_frag_regs");
+_Static_assert(sizeof(struct pvr_render_frag_regs) == 184, "struct pvr_render_frag_regs");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_pixel_output_ctrl) == 0, "struct pvr_render_frag_regs.usc_pixel_output_ctrl");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_clear_register) == 4, "struct pvr_render_frag_regs.usc_clear_register");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_bgobjdepth) == 20, "struct pvr_render_frag_regs.isp_bgobjdepth");
@@ -76,7 +76,8 @@ _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zlsctl) == 144, "struct
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zload_store_base) == 152, "struct pvr_render_frag_regs.isp_zload_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_stencil_load_store_base) == 160, "struct pvr_render_frag_regs.isp_stencil_load_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, cmd_flags) == 168, "struct pvr_render_frag_regs.cmd_flags");
-_Static_assert(sizeof(struct pvr_render_kick) == 208, "struct pvr_render_kick");
+_Static_assert(offsetof(struct pvr_render_frag_regs, isp_oclqry_base) == 176, "struct pvr_render_frag_regs.isp_oclqry_base");
+_Static_assert(sizeof(struct pvr_render_kick) == 216, "struct pvr_render_kick");
 _Static_assert(offsetof(struct pvr_render_kick, width) == 0, "struct pvr_render_kick.width");
 _Static_assert(offsetof(struct pvr_render_kick, height) == 4, "struct pvr_render_kick.height");
 _Static_assert(offsetof(struct pvr_render_kick, samples) == 8, "struct pvr_render_kick.samples");

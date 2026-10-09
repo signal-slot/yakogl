@@ -4251,3 +4251,147 @@ fn a_draw_with_no_target_at_all_is_refused() {
 /// AM62P, round 2 of 2026-10-04) whatever the kick above can do.
 /// Checked when the tests compile.
 const _: () = assert!(DRAWS_WITHOUT_COLOUR && crate::backend::DEPTH_ONLY_TARGETS);
+
+/* ---- occlusion queries: ISPCTL vistest, ISP_OCLQRY_BASE, GETVISRESULTS ---- */
+
+/// A depth-writing draw as an occlusion query counts it.
+fn counted_draw(rig: &Rig, handle: u32) -> GlesDraw {
+    let mut d = rig.draw(3);
+    d.do_clear = false;
+    d.depth_test = true;
+    d.depth_write = true;
+    d.occlusion_query = handle;
+    d
+}
+
+/// Write what the ISP would count into dword `handle` of the area at `base`.
+fn vis_write(base: u64, handle: u32, n: u32) {
+    with_platform(|p| {
+        let gpu = base + u64::from(handle) * 4;
+        let (b, a) = p.allocs.range_mut(..=gpu).next_back().expect("the result area");
+        let off = (gpu - b) as usize;
+        assert!(off + 4 <= a.size);
+        // SAFETY: inside the allocation (checked).
+        unsafe { (a.mem.as_mut_ptr() as *mut u8).add(off).cast::<u32>().write_unaligned(n) };
+    });
+}
+
+fn query_result(handle: u32) -> u64 {
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { pvr_backend_query_result(handle, &mut n) }, 0);
+    n
+}
+
+/// A counted draw is a TRANSLUCENT object with ISPCTL.vistest and visreg =
+/// its handle; an uncounted draw of the same frame keeps OPAQUE and no
+/// vistest; the kick names a zeroed result area (16-byte aligned) as
+/// ISP_OCLQRY_BASE and sets GETVISRESULTS; a kick with no counted draw
+/// carries neither (the ES 2.0 kick is unchanged). The result is the area's
+/// dword once the kick completed.
+///
+/// Deliberate breaks: drop `st.vis_test = 1` and the PPP state has no
+/// vistest; drop the isp_oclqry_base line in `flush` and the kick names no
+/// area; drop `!counted` from the OPAQUE arm and the counted draw is OPAQUE.
+#[test]
+fn a_counted_draw_tests_visibility_into_its_kicks_result_area() {
+    let rig = Rig::new();
+    let mut plain = counted_draw(&rig, 0);
+    plain.do_clear = true;
+    assert_eq!(draw(&plain), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let k0 = rig.kicks().last().unwrap().0;
+    assert_eq!((k0.frag.isp_oclqry_base, k0.frag.cmd_flags & FRAG_FLAGS_GETVISRESULTS), (0, 0), "no query: no area");
+    assert!(rig.b().vis.impl_.is_null(), "no memory until a query starts");
+
+    assert_eq!(pvr_backend_query_begin(5), 0);
+    let area = rig.b().vis.gpu;
+    vis_write(area, 5, 0xdead); /* a stale count: the kick's area is zeroed */
+    rig.reset_records();
+    assert_eq!(draw(&counted_draw(&rig, 5)), 0);
+    assert_eq!(draw(&counted_draw(&rig, 0)), 0);
+    /* the frame's first object is its colour load (no vistest), then the two draws */
+    let ppp = rig.ppp();
+    let seen: Vec<(i32, u32)> = ppp.iter().map(|s| (s.vis_test, s.vis_reg)).collect();
+    assert_eq!(seen, [(0, 0), (1, 5), (0, 0)]);
+    let pass = with_gen(|g| g.passtypes.clone());
+    assert_eq!(pass[1..], [PVR_PPP_PASSTYPE_TRANSLUCENT, PVR_PPP_PASSTYPE_OPAQUE]);
+    assert_eq!(pvr_backend_flush(), 0);
+    let k = rig.kicks().last().unwrap().0;
+    assert_ne!(k.frag.cmd_flags & FRAG_FLAGS_GETVISRESULTS, 0);
+    assert_eq!(k.frag.isp_oclqry_base, area, "the first result area");
+    assert_eq!(k.frag.isp_oclqry_base & 15, 0);
+    assert_eq!(rig.gpu_u32(area + 5 * 4), 0, "the area was zeroed before the kick");
+    vis_write(area, 5, 3); /* the ISP counted 3 */
+    assert_eq!(query_result(5), 3);
+}
+
+/// One query over two kicks: each kick has its own area, the counts add
+/// up; a new begin on the handle starts from 0.
+#[test]
+fn a_query_over_two_kicks_sums_both_areas() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(7), 0);
+    with_platform(|p| p.hold_completion = true);
+    let mut bases = Vec::new();
+    for n in [3u32, 4] {
+        assert_eq!(draw(&counted_draw(&rig, 7)), 0);
+        assert_eq!(pvr_backend_flush(), 0);
+        let base = rig.kicks().last().unwrap().0.frag.isp_oclqry_base;
+        vis_write(base, 7, n);
+        bases.push(base);
+    }
+    assert_ne!(bases[0], bases[1], "a kick in flight keeps its area");
+    with_platform(|p| p.completed_to = p.fence);
+    assert_eq!(query_result(7), 7);
+    assert_eq!(pvr_backend_query_begin(7), 0);
+    assert_eq!(query_result(7), 0);
+}
+
+/// With every area in flight the next counting kick waits for the oldest
+/// and takes its area (after folding its count).
+#[test]
+fn a_counting_kick_waits_for_the_oldest_area_when_all_are_in_flight() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(2), 0);
+    with_platform(|p| p.hold_completion = true);
+    for _ in 0..VIS_SLOTS {
+        assert_eq!(draw(&counted_draw(&rig, 2)), 0);
+        assert_eq!(pvr_backend_flush(), 0);
+        vis_write(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, 2, 1);
+    }
+    let first = rig.kicks()[0].0.frag.isp_oclqry_base;
+    let waits = with_platform(|p| p.waits.len());
+    assert_eq!(draw(&counted_draw(&rig, 2)), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(with_platform(|p| p.waits.len()), waits + 1, "one wait, for the oldest kick");
+    assert_eq!(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, first, "its area again");
+    with_platform(|p| p.completed_to = p.fence);
+    assert_eq!(query_result(2), VIS_SLOTS as u64, "every kick's count, the reused area's last one zeroed");
+}
+
+/// glEndQuery ends the frame that holds the query's draws (an occluder
+/// recorded after it would hide them in the same kick: the TBDR hazard);
+/// an end with no counted draw in the open frame submits nothing.
+///
+/// Deliberate break: make `pvr_backend_query_end` do nothing and the
+/// counted frame stays open.
+#[test]
+fn query_end_submits_the_frame_holding_the_querys_draws() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(4), 0);
+    assert_eq!(draw(&counted_draw(&rig, 4)), 0);
+    let before = rig.kicks().len();
+    pvr_backend_query_end(3);
+    assert_eq!(rig.kicks().len(), before, "another handle's end: nothing to split");
+    pvr_backend_query_end(4);
+    assert_eq!(rig.kicks().len(), before + 1, "the query's frame was submitted");
+    assert!(!rig.b().frame_open);
+    let mut occluder = counted_draw(&rig, 0);
+    occluder.depth_func = GLES_CMP_ALWAYS;
+    assert_eq!(draw(&occluder), 0);
+    pvr_backend_query_end(4);
+    assert!(rig.b().frame_open, "a frame with no draw of the query stays open");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, 0, "the occluder's kick counts nothing");
+}

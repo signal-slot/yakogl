@@ -416,6 +416,18 @@ const _: () = {
     ["Offset of field: ROGUE_CR_ISP_DBIAS_BASE::addr"][::core::mem::offset_of!(ROGUE_CR_ISP_DBIAS_BASE, addr) - 0usize];
 };
 #[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub struct ROGUE_CR_ISP_OCLQRY_BASE {
+    pub addr: pvr_dev_addr_t,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ROGUE_CR_ISP_OCLQRY_BASE"][::core::mem::size_of::<ROGUE_CR_ISP_OCLQRY_BASE>() - 8usize];
+    ["Alignment of ROGUE_CR_ISP_OCLQRY_BASE"][::core::mem::align_of::<ROGUE_CR_ISP_OCLQRY_BASE>() - 8usize];
+    ["Offset of field: ROGUE_CR_ISP_OCLQRY_BASE::addr"]
+        [::core::mem::offset_of!(ROGUE_CR_ISP_OCLQRY_BASE, addr) - 0usize];
+};
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ROGUE_CR_USC_PIXEL_OUTPUT_CTRL {
     pub partition_mask: u32,
@@ -1275,6 +1287,8 @@ unsafe extern "C" {
     pub fn ROGUE_CR_ISP_SCISSOR_BASE_pack(dst: *mut core::ffi::c_void, values: *const ROGUE_CR_ISP_SCISSOR_BASE);
     #[link_name = "ROGUE_CR_ISP_DBIAS_BASE_pack__extern"]
     pub fn ROGUE_CR_ISP_DBIAS_BASE_pack(dst: *mut core::ffi::c_void, values: *const ROGUE_CR_ISP_DBIAS_BASE);
+    #[link_name = "ROGUE_CR_ISP_OCLQRY_BASE_pack__extern"]
+    pub fn ROGUE_CR_ISP_OCLQRY_BASE_pack(dst: *mut core::ffi::c_void, values: *const ROGUE_CR_ISP_OCLQRY_BASE);
     #[link_name = "ROGUE_CR_USC_PIXEL_OUTPUT_CTRL_pack__extern"]
     pub fn ROGUE_CR_USC_PIXEL_OUTPUT_CTRL_pack(
         dst: *mut core::ffi::c_void,

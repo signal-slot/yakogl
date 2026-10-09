@@ -86,7 +86,12 @@ pub struct PvrRenderFragRegs {
     pub isp_zlsctl: u64,
     pub isp_zload_store_base: u64,
     pub isp_stencil_load_store_base: u64,
+    /// RGXFWIF_CMD3D.flags (FRAG_FLAGS_DEPTHBUFFER/STENCILBUFFER, and
+    /// GETVISRESULTS 0x20 when an object of the render tests visibility).
     pub cmd_flags: u32,
+    /// CR_ISP_OCLQRY_BASE: the buffer the ISP's visibility test counts into
+    /// (one dword per TA_STATE_ISPCTL.visreg), 0 when no object tests.
+    pub isp_oclqry_base: u64,
 }
 
 /// `struct pvr_render_kick`: one GEOM kick + one FRAG kick on one HWRT dataset.

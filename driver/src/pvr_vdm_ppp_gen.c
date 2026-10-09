@@ -279,7 +279,8 @@ int32_t pvr_ppp_build_block(const struct pvr_ppp_frag_inputs *in,
                          in->texture_program_data_offset, 4) ||
        !pvr_field_fits(why, "TA_STATE_PPP_CTRL.clip_mode", st->clip_mode, 2, 0) ||
        !pvr_field_fits(why, "TA_STATE_PPP_CTRL.flatshade_vtx", st->flatshade_vtx, 2, 0) ||
-       !pvr_field_fits(why, "TA_STATE_PPP_CTRL.cullmode", st->cullmode, 2, 0))
+       !pvr_field_fits(why, "TA_STATE_PPP_CTRL.cullmode", st->cullmode, 2, 0) ||
+       (st->vis_test && !pvr_field_fits(why, "TA_STATE_ISPCTL.visreg", st->vis_reg, 14, 0)))
       return PVR_VDM_FIELD_REFUSED;
 
    /* TA_STATE_HEADER: the words below that are present -- the colour
@@ -317,6 +318,8 @@ int32_t pvr_ppp_build_block(const struct pvr_ppp_frag_inputs *in,
       c.bpres = true;
       c.dbenable = st->dbias_enable != 0;
       c.scenable = st->scissor_enable != 0;
+      c.vistest = st->vis_test != 0;
+      c.visreg = st->vis_test ? st->vis_reg : 0;
    }
    dw++;
 

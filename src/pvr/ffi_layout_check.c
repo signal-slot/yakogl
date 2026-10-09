@@ -60,7 +60,7 @@ _Static_assert(offsetof(struct pvr_ppp_frag_inputs, isp_userpass) == 24, "pvr_pp
 _Static_assert(offsetof(struct pvr_ppp_frag_inputs, passtype) == 28, "pvr_ppp_frag_inputs.passtype");
 _Static_assert(offsetof(struct pvr_ppp_frag_inputs, varying_program_code_offset) == 32, "pvr_ppp_frag_inputs.varying_program_code_offset");
 
-_Static_assert(sizeof(struct pvr_ppp_state) == 208, "struct pvr_ppp_state");
+_Static_assert(sizeof(struct pvr_ppp_state) == 216, "struct pvr_ppp_state");
 _Static_assert(offsetof(struct pvr_ppp_state, objtype) == 0, "pvr_ppp_state.objtype");
 _Static_assert(offsetof(struct pvr_ppp_state, point_line_width) == 4, "pvr_ppp_state.point_line_width");
 _Static_assert(offsetof(struct pvr_ppp_state, tri_merge_disable) == 8, "pvr_ppp_state.tri_merge_disable");
@@ -108,6 +108,8 @@ _Static_assert(offsetof(struct pvr_ppp_state, drawclippededges) == 192, "pvr_ppp
 _Static_assert(offsetof(struct pvr_ppp_state, wclampen) == 196, "pvr_ppp_state.wclampen");
 _Static_assert(offsetof(struct pvr_ppp_state, flatshade_vtx) == 200, "pvr_ppp_state.flatshade_vtx");
 _Static_assert(offsetof(struct pvr_ppp_state, z_pres) == 204, "pvr_ppp_state.z_pres");
+_Static_assert(offsetof(struct pvr_ppp_state, vis_test) == 208, "pvr_ppp_state.vis_test");
+_Static_assert(offsetof(struct pvr_ppp_state, vis_reg) == 212, "pvr_ppp_state.vis_reg");
 
 _Static_assert(sizeof(struct pvr_vdm_vs_state) == 28, "struct pvr_vdm_vs_state");
 _Static_assert(offsetof(struct pvr_vdm_vs_state, vs_pds_data_offset) == 0, "pvr_vdm_vs_state.vs_pds_data_offset");
