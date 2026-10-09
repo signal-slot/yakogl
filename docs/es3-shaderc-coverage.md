@@ -189,7 +189,7 @@ that grows the feature will turn them into "fail accepted"): 16 on PowerVR, 9 on
 * 10 recursion cases (`functions:invalid.*recursion*`) are refused as `this call
   nests too deeply to inline`, i.e. by the inliner's depth bound, not by a recursion check.
 
-## What this says for plan #3
+## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
   in good shape: 3,436 of 3,461 expected-build programs build on the PowerVR.

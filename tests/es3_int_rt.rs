@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0's integer colour render targets, through the GL API on the host
-//! (item int-rt-gl; the dEQP bucket: every
+//! (`b9b2ac00`; the dEQP bucket: every
 //! shaders.builtin_functions case renders into an integer renderbuffer and
 //! died at glRenderbufferStorage with GL_INVALID_ENUM).
 //!
@@ -14,8 +14,8 @@
 //! rendering garbage. The pixels come from a stand-in back end whose `draw`
 //! stores a clear's integers the way a back end that can render the format
 //! must (`backend::HOST_INTEGER_RT_FORMATS` is what tells the GL core it can);
-//! no GPU runs here. The back ends' own work is int-rt-pvr / int-rt-v3d /
-//! int-rt-gc.
+//! no GPU runs here. The back ends' own work is docs/HANDOFF.md, open work
+//! 4, int-rt.
 //!
 //! An ES 2.0-reporting build (`report-es2`) must still refuse every one of
 //! the formats: `es2_build_refuses_the_integer_formats` is the only test it

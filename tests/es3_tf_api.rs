@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0 transform feedback and rasterizer discard through the GL API on the
-//! host (item tf-api, docs/es3-transform-feedback.md section 5): the objects
+//! host (`16ac8641`, docs/es3-transform-feedback.md section 5): the objects
 //! and their indexed bindings, `glTransformFeedbackVaryings` resolved at link
 //! against the vertex outputs, `glGetTransformFeedbackVarying`, the
 //! begin/end/pause/resume rules, the primitives-written query, and
 //! GL_RASTERIZER_DISCARD stopping draws and clears before the back end.
 //!
-//! What is NOT here: capture. Until item tf-capture a draw while a capture is
+//! What is NOT here: capture. Until docs/HANDOFF.md open work 4, tf-capture,
+//! lands, a draw while a capture is
 //! active is refused with GL_INVALID_OPERATION and a log line, and these tests
 //! hold that refusal (`capture_is_refused_loudly`) so that it cannot turn
 //! into a quiet success. The back end is a stand-in that counts the draws it

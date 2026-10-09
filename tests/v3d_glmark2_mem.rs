@@ -360,7 +360,7 @@ struct Target {
 /// KiB (a buffer), 1,368 KiB (512x512 mip chain), 2 x 1,876 KiB (800x600)").
 ///
 /// `npot_chains`: the 800x600 targets have a full chain (GL_OES_texture_npot,
-/// item npot) and are sampled with it; off, they have one level, as the
+/// `2673197d`) and are sampled with it; off, they have one level, as the
 /// board run RESULTS records (mipmaps refused, no copy sampled). The copies
 /// of a frame are made at the draws that sample them, in pass order, and a
 /// pass that renders into a texture drops its copy first. Four copies of the

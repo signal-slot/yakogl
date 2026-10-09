@@ -1,10 +1,11 @@
 # Transform feedback and rasterizer discard: design
 
-Status: design (plan #3 item tf-design, 2026-10-08). Two items implement it:
-**tf-api** (GL state, errors, queries, rasterizer discard) and **tf-capture**
-(the data path). Nothing here is built yet. `src/GL_CORE_NOTES.md`
-("Transform feedback (design, not built)") has the short version this
-document replaces. When tf-api lands, that section should point here.
+Status: design, 2026-10-08 (`f818f84e`). It has two parts: **tf-api** (GL
+state, errors, queries, rasterizer discard), built in `16ac8641`
+(`src/gl/tf.rs`), and **tf-capture** (the data path), open:
+`docs/HANDOFF.md`, open work 4, tf-capture. Sections 1 and 5 describe the
+code as it was before `16ac8641`. `src/GL_CORE_NOTES.md` ("Transform
+feedback (state built, capture not)") points here.
 
 ## 1. What is missing, and what it costs
 

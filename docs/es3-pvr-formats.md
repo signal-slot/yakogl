@@ -2,8 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 internal formats on the PowerVR backend
 
-Design for plan #3 items `int-rt-pvr` (integer render targets) and
-`formats-pvr` (sized texture formats). It gives one row per ES 3.0 sized
+Design for the PowerVR half of `docs/HANDOFF.md`, open work 4, int-rt
+(integer render targets) and formats (sized texture formats). It gives one row per ES 3.0 sized
 internal format (ES 3.0.6 tables 3.13 and 3.14, the compressed ETC2
 formats included): the PBE pack format and the USC-side conversion for
 rendering, the TPU texture format and swizzle for sampling, filterability,

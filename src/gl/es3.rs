@@ -222,8 +222,8 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
  * transform feedback capture (`tf.rs`, which adds to the active query through
  * `add_primitives_written`). The BXS backend has no occlusion counter wired
  * up, so glBeginQuery on the ANY_SAMPLES_PASSED targets still refuses rather
- * than letting a caller believe a zero sample count (item occlusion-query
- * fills in that arm).
+ * than letting a caller believe a zero sample count (docs/HANDOFF.md, open
+ * work 4, occlusion-query, fills in that arm).
  */
 
 /// What a query object has been used for (a name is a query object once it
@@ -253,7 +253,7 @@ fn active_query(index: u8, target: GLenum) -> Option<usize> {
 
 /// A captured draw wrote `n` primitives: the active
 /// GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN query counts them.
-#[allow(dead_code)] // called by the capture (item tf-capture)
+#[allow(dead_code)] // called by the capture (docs/HANDOFF.md, open work 4, tf-capture)
 pub(super) fn add_primitives_written(c: &GlContext, n: u32) {
     if let Some(h) = active_query(c.index, GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) {
         let q = &mut qstate(c.index)[h];
@@ -394,7 +394,8 @@ pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: 
 
 /* ------------------------------------------------------ transform feedback --
  * The objects, varyings, binding points and begin/end rules are `tf.rs`; these
- * are its entry points. Capture itself is not built (item tf-capture): a draw
+ * are its entry points. Capture itself is not built (docs/HANDOFF.md, open
+ * work 4, tf-capture): a draw
  * while a capture is active is refused loudly (GL_INVALID_OPERATION).
  */
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0 uniform blocks through the GL API on the host, the way dEQP-GLES3
-//! `functional.ubo.*` drives them (item ubo-uniform): each case's interface
+//! `functional.ubo.*` drives them (`1b0e4316`, `b0c0fa6b`): each case's interface
 //! is rebuilt from `es3fUniformBlockTests.cpp`, its shaders generated as
 //! `glsUniformBlockCase.cpp` writes them, and the case run as that file's
 //! `UniformBlockCase::iterate` does -- the std140 reference layout, the

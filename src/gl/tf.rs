@@ -5,7 +5,8 @@
 //! bindings and begin/pause/resume state, the varyings a program is asked to
 //! capture and what the link resolves them to, and the draw-time rules.
 //!
-//! What is NOT here is the capture itself (item tf-capture): no data is ever
+//! What is NOT here is the capture itself (docs/HANDOFF.md, open work 4,
+//! tf-capture): no data is ever
 //! written into a bound buffer. A draw that would capture (an object active
 //! and not paused, every rule of 2.15 satisfied) is refused with
 //! GL_INVALID_OPERATION and a log line naming this gap, so a test fails

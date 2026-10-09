@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # dEQP-GLES3 fbo, fragment_ops and fragment_out: failure map
 
-Plan #3 item `es3-fbo-fragops-gap`. Input for item `fbo-fragops`. Documentation only: nothing
+Written 2026-10-08 (`53c7ba34`) as input for the ES 3.0 work of
+`docs/HANDOFF.md`, open work 4. Documentation only: nothing
 here was run; every number is either a count of names in
 `tools/cts/gles3-mustpass.txt`, a figure copied from the AM62P run, or
 arithmetic on those two (the arithmetic is shown).
@@ -17,9 +18,9 @@ GLES3 run. Abbreviations used for sources:
   (only the 16 largest of 78 messages are in the repository; the other 62
   together are 8,835 − 7,530 = 1,305 cases and are not listed anywhere).
 - **R-img** = the per-image table, `RESULTS.md:1552-1556` (images 2-5).
-- **dEQP** = `<VK-GL-CTS>/modules/gles3/functional/` (pinned
+- **dEQP** = `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles3/functional/` (pinned
   93bca01), **glu** = `.../framework/opengl/gluTextureUtil.cpp`.
-- **Hardware caps document**: (plan item `es3-caps`) was vetoed and reverted (3f78982e); there is no such document. Nothing here is sourced from it; hardware statements below cite `docs/es3-pvr-formats.md` (**PVRF**) or are marked unverified.
+- **Hardware caps document**: `docs/es3-backend-caps.md` (plan item `es3-caps`) was vetoed and reverted (3f78982e) and is not on `ccfarm/integration`. Nothing here is sourced from it; hardware statements below cite `docs/es3-pvr-formats.md` (**PVRF**) or are marked unverified.
 - **PVRF** =
   `docs/es3-pvr-formats.md`.
 - Code is cited at the checkout this file was written on (`src/gl/...`);

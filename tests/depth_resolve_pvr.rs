@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! glmark2 `shadow` and `refract` on the PowerVR: the depth texture the
-//! shadow pass renders is sampled with stale depth (item pvr-depth-resolve,
-//! tools/cts/log/hostharness/glmark2/FINDINGS.md rows 23 and 24).
+//! shadow pass renders is sampled with stale depth (docs/HANDOFF.md, known
+//! defects, pvr-depth-resolve; tools/cts/log/hostharness/glmark2/FINDINGS.md
+//! rows 23 and 24).
 //!
 //! The sequence is scene-shadow.cpp's, one frame at a time:
 //!
@@ -30,10 +31,9 @@
 //! that fakes them is `cfg(test)` of the library. The real back end's answer
 //! is the host harness's: `tools/hostharness/glmark2/run.sh ... powervr`
 //! logs `the backend did not resolve its depth (-16)` once per frame of
-//! shadow and refract (tools/cts/log/hostharness/glmark2/FINDINGS.md).
+//! shadow and refract (FINDINGS.md).
 //!
-//! The cause (tools/cts/log/hostharness/glmark2/FINDINGS.md): the core stamps
-//! the kick that renders into a
+//! The cause (FINDINGS.md): the core stamps the kick that renders into a
 //! texture (`framebuffer::stamp_target_use`, src/gl/framebuffer.rs:186) with
 //! `backend::kick_id()` while it builds the draw, BEFORE the back end sees
 //! it. When the draw starts a new frame the back end first submits the
@@ -421,7 +421,7 @@ fn no_frame_open_before_the_depth_pass_resolves() {
 /// after -EBUSY, or the stamp is taken after the back end's draw
 /// (src/gl/draw.rs:2011, after `backend::draw`).
 #[test]
-#[ignore = "BUG: stale kick stamp - stamp_target_use (src/gl/framebuffer.rs:186) takes kick_id() before the back end splits the frame; fix at resolve_depth src/gl/texture.rs:669 (flush+finish and retry on -EBUSY)"]
+#[ignore = "stale kick stamp - stamp_target_use (src/gl/framebuffer.rs:186) takes kick_id() before the back end splits the frame; fix at resolve_depth src/gl/texture.rs:669 (flush+finish and retry on -EBUSY)"]
 fn window_clear_before_the_depth_pass_resolves() {
     let (_g, ctx) = start();
     let s = setup(16, 16);

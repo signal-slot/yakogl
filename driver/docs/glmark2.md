@@ -450,11 +450,12 @@ of the main checkout (720 lines; the runner was the lead's).
      ES 2.0 without GL_OES_texture_npot and applied exactly that, so the error
      was right for what it advertised, and those textures were
      mipmap-incomplete for sampling. Mesa's v3d reports ES 3.1, where the rule
-     is gone. Since 2026-10-07 (plan #2 item `npot`) every ES 2.0 build claims
+     is gone. Since 2026-10-07 (`2673197d`) every ES 2.0 build claims
      GL_OES_texture_npot: the call succeeds and the texture is complete. The
      V3D and the GC7000 hold the whole chain (box-filtered on the CPU after
-     the frame's render into level 0, every frame); the PowerVR keeps the
-     base level and samples it (`src/gl/texture.rs` `npot_mip_chains`).
+     the frame's render into level 0, every frame); the PowerVR holds it too,
+     laid out at the power-of-two extent as Mesa's pvr driver does (`cc788590`;
+     `src/gl/texture.rs` `npot_mip_chains`, `pot_chain_layout`).
 4. **`program 2 has no uniform 'ModelViewMatrix'` (gouraud, blinn-phong-inf) is
    correct**: neither shader declares it (`data/shaders/light-basic.vert:5-6` and
    `light-advanced.vert:4-5` declare only `ModelViewProjectionMatrix` and

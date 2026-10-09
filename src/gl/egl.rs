@@ -3745,8 +3745,8 @@ mod tests {
     /// Serialised with the tests that turn a backend's MSAA knob on
     /// (`the_gc7000_offers_the_multisampled_config_while_msaa_is_on` holds
     /// TestGl while the 4x config is offered): read without the lock, the
-    /// test-knobs row saw the 4x config and failed now and then (ccfarm
-    /// review of the npot item, 2026-10-07).
+    /// test-knobs row saw the 4x config and failed now and then (found in
+    /// the review of `77693ff4`, 2026-10-07).
     #[test]
     fn valid_configs_are_the_three_handles() {
         let _serial = TestGl::new(4, 4);

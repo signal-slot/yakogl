@@ -432,7 +432,7 @@ Update rules for later items:
 - When a full tree runs on a board, replace that board's row in the summary
   table and in section A.
 
-## H. GL_OES_texture_npot: dEQP-GLES2 cases predicted to move (plan #2 `npot`, 2026-10-07)
+## H. GL_OES_texture_npot: dEQP-GLES2 cases predicted to move (`2673197d`, 2026-10-07)
 
 Every ES 2.0 build now lists `GL_OES_texture_npot` in `GL_EXTENSIONS`, on all
 three GPUs (`src/gl/state.rs`, `NPOT_EXTENSION`). Its rules replace ES 2.0's:

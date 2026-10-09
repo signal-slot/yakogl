@@ -2,9 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4: non-seamless cube sampling in ES 2.0 builds (design)
 
-Item v3d-cube-design, 2026-10-07. The design and the host reproduction of
-the Raspberry Pi 4's 25 remaining dEQP-GLES2 failures; item v3d-cube-fix
-(same day) implements it. Status: implemented and verified on the host; the
+`c3e4146d`, 2026-10-07. The design and the host reproduction of
+the Raspberry Pi 4's 25 remaining dEQP-GLES2 failures; `ec5ba4fb` (same
+day) implements it. Status: implemented and verified on the host; the
 Pi 4 run is open (section "As implemented").
 
 ## The defect
@@ -120,7 +120,7 @@ mag LINEAR with min NEAREST_MIPMAP_*. The AM62P and the i.MX8MP needed the
 compiled only in ES 2.0 builds and `sensitivity_of` returns it for every
 GPU but the V3D (`backend.rs`: the V3D path returns `ret32` only). The TMU's
 own switch is not known to be at 0.5, and under the seamless reference
-(switch at 0) the question never arose on the Pi 4. v3d-cube-fix must turn
+(switch at 0) the question never arose on the Pi 4. The implementation must turn
 `mag_switch_sensitivity` on for the V3D vertex stage too (the remap is
 IR-level and already exists); if the board then shows these six passing,
 the TMU switched at 0, and if they already passed before the remap, the
@@ -157,7 +157,7 @@ for cost on NEAREST cubes and because it moves the fragment stage's
 implicit LOD onto the per-face derivatives for every cube in an ES 2.0
 product image. Kept as the fallback if the variant plumbing for the vertex
 stage proves larger than expected: the lowering itself is the same, only
-the condition differs, so v3d-cube-fix should write the lowering keyed by a
+the condition differs, so the implementation should write the lowering keyed by a
 flag and decide the plumbing last.
 
 **(e) Reporting ES 3.0 in the conformance image.** Makes dEQP use the
@@ -167,7 +167,7 @@ keeps `REPORT_ES2` for conformance runs; a client that reads
 
 ## The code points
 
-In the order v3d-cube-fix should take them; each with its host evidence.
+In the order the implementation should take them; each with its host evidence.
 
 1. **`src/shaderc/online/v3d/prepare.rs`, `Op::Tex` with `dim == Cube`**
    (around line 1116). Under the variant condition, after the
@@ -279,7 +279,7 @@ no-shader-table` with and without `report-es2`):
   the interpreter, against references computed in the test (not by the
   model). As designed it pinned the seamless value of the unkeyed program
   and carried an ignored ES 2.0 target test that failed on the seamless
-  value; both were replaced by item v3d-cube-fix, see "As implemented /
+  value; both were replaced by `ec5ba4fb`, see "As implemented /
   Host evidence" below for what the file holds now.
 
 Cannot:
@@ -344,7 +344,7 @@ handoff after the fix):
   taps in the model (dEQP's convention, ES 3.0's recommendation); the
   hardware's rule is not known, so no test samples a corner.
 
-## As implemented (item v3d-cube-fix)
+## As implemented (`ec5ba4fb`)
 
 The design's code points 1-5 and 7, with these decisions:
 

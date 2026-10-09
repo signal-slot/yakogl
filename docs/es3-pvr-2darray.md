@@ -2,7 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR: 2D-array and shadow sampling, as Mesa's pvr / pco does it
 
-Design for plan #3 item `pvr-2darray` (and the array half of `pvr-shadow`).
+Design for `docs/HANDOFF.md`, open work 4, pvr-2darray (and the array half
+of shadow sampling).
 Written 2026-10-08 on the integration tip `14d6c177`. Docs only: nothing in
 `src/` changed, nothing was run on a board.
 

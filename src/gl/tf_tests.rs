@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Host tests for `tf.rs` (item tf-api, docs/es3-transform-feedback.md 7.1):
+//! Host tests for `tf.rs` (`16ac8641`, docs/es3-transform-feedback.md 7.1):
 //! the transform feedback objects, indexed bindings, varying resolution at
 //! link, the begin/end rules, the primitives-written query and rasterizer
 //! discard. The shader-level cases compile GLSL ES 3.00 on the in-process
@@ -588,7 +588,7 @@ mod online {
             glGetQueryObjectuiv(q[0], GL_QUERY_RESULT, &mut r);
             assert_eq!(r, 7, "a new Begin restarts the count, the captured draws add to it");
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q[1]);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION, "occlusion counting is not built (item occlusion-query)");
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "occlusion counting is not built (HANDOFF occlusion-query)");
             glDeleteQueries(2, q.as_ptr());
             assert_eq!(gl.error(), GL_NO_ERROR);
         }

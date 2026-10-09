@@ -323,7 +323,7 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 
 /// The integer colour surfaces this build's back end can render into: bit
 /// `format - GLES_SURF_INT_FIRST`. None yet. A back end that learns one sets
-/// its bits here (int-rt-pvr, int-rt-v3d, int-rt-gc) and it stops being
+/// its bits here (docs/HANDOFF.md, open work 4, int-rt) and it stops being
 /// refused at the draw; until then the GL core accepts the renderbuffer
 /// (ES 3.0 requires the formats) and refuses to draw into it, by name,
 /// rather than render garbage.

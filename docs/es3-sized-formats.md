@@ -1,6 +1,6 @@
 # ES 3.0 sized texture formats in the GL core
 
-Item `sized-formats-gl` of plan #3. What `glTexImage2D/3D`, `glTexStorage2D/3D`,
+Built in `888af5d0` and `e5c4a180`. What `glTexImage2D/3D`, `glTexStorage2D/3D`,
 `glTexSubImage2D/3D`, `glCopyTexImage2D` and friends take when the library
 reports ES 3.0 (`report-es2` off), how the texels are stored, and what a back
 end must do to sample them. Under `report-es2` nothing here exists
@@ -89,10 +89,10 @@ change; the tests state the expectation per mask.
 
 ## Not done (left to other items)
 
-* Sampling the new classes (`formats-pvr`, `formats-v3d`, `formats-gc`) and
-  isampler/usampler in the shader back ends.
+* Sampling the new classes and isampler/usampler in the shader back ends
+  (`docs/HANDOFF.md`, open work 4, formats).
 * Integer and `RGB10_A2` render targets, `glGetInternalformativ`'s texture
-  answers (ES 3.0 knows renderbuffers only; the query stays as `int-rt-gl`
+  answers (ES 3.0 knows renderbuffers only; the query stays as `b9b2ac00`
   leaves it): `es3_formats::Es3Format::storage_here()` is the question a
   caller asks.
 * `SRGB8`/`SRGB8_ALPHA8` are stored as plain `RGBA8` as before (no decode in

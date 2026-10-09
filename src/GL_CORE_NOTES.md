@@ -592,15 +592,16 @@ still stores and compares table slots.
 
 ## Transform feedback (state built, capture not)
 
-**Built (item tf-api, `gl/tf.rs`; design `docs/es3-transform-feedback.md`):**
+**Built (`16ac8641`, `gl/tf.rs`; design `docs/es3-transform-feedback.md`):**
 the objects with their indexed bindings, the varyings resolved at link, the
 begin/end/pause/resume rules and errors, the primitives-written query,
 rasterizer discard for draws and clears. A draw while a capture is active is
-refused with `GL_INVALID_OPERATION` and a log line naming item tf-capture,
+refused with `GL_INVALID_OPERATION` and a log line naming tf-capture
+(`docs/HANDOFF.md`, open work 4),
 and the buffer is never written. The rest of this section is the design as it
 stood before; the "State first" bullet is done.
 
-Before tf-api only the names and the binding existed (`gl/es3.rs`): every
+Before `16ac8641` only the names and the binding existed (`gl/es3.rs`): every
 `MAX_TRANSFORM_FEEDBACK_*` is 0, `glBeginTransformFeedback` is
 `GL_INVALID_OPERATION`, an INTERLEAVED varyings request fails the next link.
 What that costs, from the GLES3 host run at 01de3104: negative_api 16,

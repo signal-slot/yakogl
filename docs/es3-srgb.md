@@ -1,7 +1,7 @@
 # sRGB render targets and sRGB texture sampling (ES 3.0): PowerVR, V3D 4.2, GC7000UL
 
-Design for plan #17 (item `ubo-uniform`, the sRGB design). Nothing here is
-implemented; section 9 lists the implementation items.
+Design for `docs/HANDOFF.md`, open work 4, srgb (`948710f6`). Nothing here
+is implemented; section 9 lists the implementation items.
 
 Why: `GL_SRGB8_ALPHA8` is stored and rendered as plain RGBA8 and no sampler
 decodes sRGB (`src/gl/state.rs:105-107`, `src/gl/framebuffer.rs:557-566`,
