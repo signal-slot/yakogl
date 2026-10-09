@@ -100,8 +100,8 @@ None of the fixes below is confirmed on a board from main.</p>
 <h3>Known defects</h3>
 <ul>
 <li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases fail</strong>
-on a 2026-10-08 integration image; they passed at the last whole tree. No issue yet. A
-candidate fix is not yet on main and awaits board confirmation. It blocks goal 1 on the AM62P.</li>
+on a 2026-10-08 integration image and on the 32778b57 tree (2026-10-10). Fixed on main in
+e17fb6a7; image 1 of the AM62P tree on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
 <li><strong>PowerVR: glmark2 shadow and refract sample a stale depth texture</strong>
 (pvr-depth-resolve, no issue yet). Root cause found on the host (a stale kick stamp); the
 host test is marked as an open defect; not fixed.</li>

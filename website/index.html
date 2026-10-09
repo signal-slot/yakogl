@@ -226,7 +226,7 @@ run on Zephyr on the real GPU.</p>
 <div class="note">
 <p><strong>Not yet confirmed on the boards.</strong> Fixes made since these trees (the Pi 4's
 25 cube-map cases among them) are proved on the host only. A newer partial run on the AM62P
-found 9 regressed <code>shaders.invariance</code> cases; a candidate fix is not yet on main and awaits board confirmation.
+found 9 regressed <code>shaders.invariance</code> cases; the fix landed in e17fb6a7 and image 1 of the AM62P tree passes on it (1,379 / 0, 2026-10-10).
 <a href="status.html">Details on the status page.</a></p>
 </div>
 
@@ -272,8 +272,8 @@ one GPU feature per build; none or two is a compile error.</p>
 <p>The goals, in order, from <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>:</p>
 <ol>
 <li><strong>ES 2.0 finished on the three boards</strong>, each booted from its own storage. The known
-dEQP-GLES2 failures are fixed on the host, except the AM62P invariance regression, whose fix
-is not yet on main. One confirming board session per board remains.</li>
+dEQP-GLES2 failures are fixed on the host; the AM62P invariance regression is fixed on main
+(e17fb6a7) and confirmed on the board. One confirming board session per board remains.</li>
 <li><strong>Minimum performance.</strong> Not started; the benchmarks are first made to draw
 correctly.</li>
 <li><strong>This website</strong>, live when the repository is public.</li>
