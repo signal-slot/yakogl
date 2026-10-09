@@ -89,7 +89,53 @@ Written by hand from the run above (2026-10-07, both GPUs, every process exited 
 * **Shaders: no compile or link failure.** All 69 distinct texts compiled and linked with the in-process compiler on the PowerVR and the GC7000 back ends, as glmark2 used them, inside the run. No draw was refused on either GPU (refused = 0 in every scene).
 * **terrain (entry 22): `GL error 0x502 in glGenerateMipmap`**, 11 times in setup and 3 frames, on both GPUs. The texture is 800x600 (NPOT, the window size) and report-es2 builds refuse an NPOT mip chain (ES 2.0 3.7.11; GL_OES_texture_npot is not claimed). The texture is then incomplete for its `GL_LINEAR_MIPMAP_LINEAR` (0x2703) min filter and samples (0,0,0,1): the black terrain seen on every board. The known finding; the npot item fixes it.
 * **refract (entry 24): the same, not known before.** `glGenerateMipmap` raises 0x502 three times on a 1600x1200 (NPOT) target, and unit 1 samples (0,0,0,1) for the same reason. So refract draws with a black refraction texture on every board, in report-es2 builds. The npot fix should cover it; its verification should include refract, not only terrain.
-* **shadow (23) and refract (24) on the PowerVR: `the backend did not resolve its depth (-16)`**, once a frame. -16 is -EBUSY from `pvr_backend_depth_resolve` (`src/pvr/backend.rs`): the open frame still renders into the depth buffer that the depth texture is being resolved from. The GL core's `resolve_depth` (`src/gl/texture.rs`) only flushes when the texture's last rendering kick is pending, so it does not submit that open frame first, and the texels keep their previous contents (the depth used for the shadow and refraction look-ups is a frame old, or never written). The GC7000 does not log it. Host evidence only: linux.c completes every submit at once, so whether the board behaves the same is unconfirmed. Not in any plan item; a candidate for a follow-up.
+* **shadow (23) and refract (24) on the PowerVR: `the backend did not resolve its depth (-16)`**, once a frame. -16 is -EBUSY from `pvr_backend_depth_resolve` (`src/pvr/backend.rs`): the open frame still renders into the depth buffer that the depth texture is being resolved from. The texels keep their previous contents (the depth used for the shadow and refraction look-ups is a frame old, or never written). The GC7000 does not log it. Host evidence only: linux.c completes every submit at once, so whether the board behaves the same is unconfirmed. **Root cause, evidence, fix and board recipe: "Diagnosis of rows 23-24" below** (item pvr-depth-resolve; the first guess here, that `resolve_depth` never submits the open frame, was wrong: it does, when the kick it holds is pending).
+
+### Diagnosis of rows 23-24 (shadow, refract on the PowerVR): stale kick stamp
+
+Item pvr-depth-resolve. Reproduced twice: on the real PowerVR back end in the host harness, and in `tests/depth_resolve_pvr.rs` with the real GL core. No file under `src/` changed.
+
+**Root cause.** `framebuffer::stamp_target_use` (`src/gl/framebuffer.rs:186`) stamps the kick that renders into a depth texture with `backend::kick_id()` (`pvr_backend_kick_id` = `last_fence + 1`, "the kick being recorded") while `draw.rs:2011` (`stamp_depth_target`) builds the draw, before `backend::draw` runs. But the PowerVR's `draw_one` (`src/pvr/backend.rs:3994-4003`) first **submits the frame that is open** when the draw's target or depth/stencil differs (`frame_ends_here`), which makes `last_fence` one larger, and only then opens the draw's own frame. So when the depth pass's first draw arrives with a frame open on the window surface, the stamp `K` is the kick of *that* frame (just submitted), and the depth pass renders as kick `K + 1`, still open. At the sampling draw, `resolve_depth` (`src/gl/texture.rs:637`) tests `kick_pending(K)` (line 654): `K > completed_fence` is false (K completed, at once on linux.c; on the board whenever the GPU is done with it), so it neither flushes nor finishes. `pvr_backend_depth_resolve` (`src/pvr/backend.rs:3354`) then sees `frame_open && frame_zs[0] == id` and answers -EBUSY. `resolve_depth` logs it and **marks the texture resolved for `K`** (`set_depth_resolved`, `texture.rs:678`), so it does not ask again for that kick. The next frame repeats it.
+
+Why every frame: glmark2's canvas starts a frame with `glClear` of the window surface. Binding the depth FBO (`scene-shadow.cpp:DepthRenderTarget::enable`) emits that deferred clear as a kick on the window surface, which stays open; the depth pass (no colour attachment, colour mask off) is the next draw. refract does the same.
+
+**Evidence.**
+
+* Host harness, real PowerVR back end (`tools/hostharness/glmark2/run.sh $GLMARK2_SRC build/gm2-pvr powervr`, glmark2 `22c527cb`, integration tip `47aa17ae`): entries 23 and 24 log `texture 1: the backend did not resolve its depth (-16)` in **3 of 3 frames each** (`logs/powervr/23.log` lines 20-22; 24.log, 3 lines). No other entry logs it.
+* `tests/depth_resolve_pvr.rs`: the GL core on a back end that follows the PowerVR's `kick_id` / `kick_pending` / frame split / -EBUSY contract, glmark2 shadow's frame (window clear, depth-only FBO pass, ground draw sampling the depth). `window_clear_before_the_depth_pass_today` passes: each frame has exactly one resolve, -EBUSY, and the sampling draw reads texels never written. `no_frame_open_before_the_depth_pass_resolves` (no frame open before the depth pass: the stamp is right) resolves with 0. `cargo test ... --test depth_resolve_pvr -- --ignored` fails on `window_clear_before_the_depth_pass_resolves` with `frame 0: [(1073741825, -16)]`.
+* The patch below, applied to a scratch copy of `src/gl/texture.rs` and reverted: the ignored test passes (`[(id, -16), (id, 0)]`, texels 0.5) and `..._today` fails as designed.
+* Ruled out: the id (`ds_object_id(serial, true)` is the `depth_id` the draws carry, `draw.rs:2034-2045`); the level (0); `resolve_depth` not being called (once a frame, before the sampling draw); `target.resolved` stale (the first frame fails); the depth plane not kept (the -EBUSY comes before that check); a clear-only depth pass; a second FBO.
+* Real PowerVR back end inside `cargo test`: not possible from `tests/` (its C command generators are linked only in the C builds; `src/pvr/backend_tests.rs` fakes them under `cfg(test)`), so the harness run above is the real-back-end evidence.
+
+**Proposed fix** (follow-up item, in `src/gl/texture.rs`, which plan 17 (tex3d-finish) holds; verified on a scratch copy):
+
+```diff
+--- a/src/gl/texture.rs  (resolve_depth, line 669)
+-    let rc = unsafe { backend::depth_resolve(context::ds_object_id(t.serial, true), dst as *mut f32, w, h, pitch) };
++    let id = context::ds_object_id(t.serial, true);
++    let mut rc = unsafe { backend::depth_resolve(id, dst as *mut f32, w, h, pitch) };
++    /* -EBUSY: the frame still being recorded renders into the depth (the
++     * kick stamped for the texture was the one the back end submitted to
++     * open it): submit and wait for it, then ask again */
++    if rc == -crate::util::EBUSY && backend::flush() == 0 && backend::finish() == 0 {
++        rc = unsafe { backend::depth_resolve(id, dst as *mut f32, w, h, pitch) };
++    }
+```
+
+`t` is borrowed from `c.objs()`; take `t.serial` and the destination into locals before `flush`/`finish` if the borrow checker asks (the call does not touch the texture). Then un-`#[ignore]` `window_clear_before_the_depth_pass_resolves` and delete `window_clear_before_the_depth_pass_today` (it fails once the fix is in). The same stale stamp makes `settle_texture`'s `busy` test (`texture.rs`, `kick_pending(texture_target_use(...))`) miss a CPU write into a texture rendered by a frame opened the same way; a root fix stamps after `backend::draw` returns (`kick_id()` is then the open frame's id), or has the PowerVR's `kick_id` account for the split (the retry above covers the depth read, not this write). Not changed here.
+
+**AM62P board recipe** (for bench-recipes; the board has not run it):
+
+```sh
+git clone https://github.com/glmark2/glmark2 build/glmark2-upstream
+git -C build/glmark2-upstream checkout 22c527cb0556f3a1ac4445aaa52cc532760928d5
+west build -p always -d <ws>/build/gm2-am62p -b verdin_am62p/am62p54/a53 \
+    driver/samples/zephyr/glmark2 -- \
+    "-DZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh <ws>)" -DGLMARK2_SRC=$PWD/build/glmark2-upstream
+RUN_BOUND=960 tools/board.sh am62p run <ws>/build/gm2-am62p/zephyr/zephyr.bin <logdir> glmark2
+```
+
+Expected, before the fix, on the console capture in `<logdir>`: `texture <n>: the backend did not resolve its depth (-16)` once per rendered frame of `shadow` and `refract` (it needs the board's log to be on; if the line is absent, the board's completion timing may be different, see below). Expected after: none of those lines for any scene, the verdict line `33 ran / 0 failed` as before, and shadow's picture with the horse's shadow on the ground, refract's refracted floor (a picture check by eye on the display: the record does not carry pixels). Caveat: on the board the open window clear may already be done by the time of the depth pass; the stamp still names the kick submitted by `draw_one`, so `kick_pending(K)` is false whenever the GPU finished it, which is the usual case; if it is still running, `resolve_depth` flushes and waits, and the resolve works by accident (the frame is then submitted by that flush). So the board may show the stale depth only on some frames; the host's always-complete submits make it every frame.
 * **`no such uniform`: not defects.** glmark2 sets uniforms the program does not have: terrain's fog uniforms are behind a commented-out `#define USE_FOG`, the gouraud and blinn-phong-inf shaders do not declare `ModelViewMatrix`, and the bump variants declare at most one of `NormalMap`/`HeightMap` (high-poly neither). `glGetUniformLocation` answers -1 and setting -1 is ignored without error (ES 2.0 2.10.4).
 * **EGL config:** both GPUs pick config 0x1, RGBA8888 with D24S8 and no multisampling, for the window surface; the same config on all 33 runs.
 * **Not shown here:** pool and carve-out exhaustion (refract on the AM62P, refract and terrain on the Pi 4) needs the board OSALs' memory, which linux.c does not model; the V3D does not run on linux.c at all (README.md, "GPUs").
