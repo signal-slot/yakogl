@@ -31,6 +31,20 @@ and a static reading of why the V3D library should be able to take part.
 | V3D library, cargo | `cargo build --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --lib` | refused, needs approval |
 | copy of the script | `cp tools/cts/host-deqp-run.sh build/scratch/host-deqp-run-v3d.sh` and edit | done (diff below) |
 
+**Retry after the farm allowed `cmake`, `cargo build` and a `build/` clone:**
+
+- `cargo build --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --lib`
+  **succeeds** (30 s, dev profile): the V3D ES2 feature set compiles on the host.
+- The CMake configure (`-DYAKOGL_GPU=v3d ...`) **fails on this worker**, before any V3D code:
+  `capi/yakogl_capi.cmake:338: YakoGL: no rustc next to /home/tasuku/.local/lib/kache/shims/cargo`.
+  The `cargo` found on PATH is a kache shim with no `rustc` beside it; it is a worker
+  environment fault, not a V3D one. Pointing CMake at a real toolchain (a `cargo` with `rustc`
+  in the same directory) is the next thing to try.
+- `git clone https://github.com/KhronosGroup/VK-GL-CTS build/VK-GL-CTS` fails with
+  `fatal: refusing to work with credential missing host field` (a git credential-helper
+  fault in this environment); the variant with `-c credential.helper=` was refused again.
+  So there is still no dEQP checkout.
+
 So it is not known whether the V3D library links as `libGLESv2.so.2` and survives dEQP on the
 host; no failure of the library was observed either. Nothing in the V3D code was found that
 would stop it: the script's only GPU-specific line is the library directory, and
