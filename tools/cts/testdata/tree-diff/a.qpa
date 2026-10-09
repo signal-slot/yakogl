@@ -1,7 +1,4 @@
 <TestCaseResult CasePath="dEQP-GLES2.functional.treediff.qpa_fix" CaseType="SelfValidate" Version="0.3.4">
-<ShaderProgram LinkStatus="Fail"><FragmentShader CompileStatus="Fail">
-<InfoLog>online shaderc: the code generator refused this fragment shader: Usc(Select(Unsupported(&quot;a loop whose exit depends on a value&quot;)))</InfoLog>
-</FragmentShader></ShaderProgram>
 <Result StatusCode="NotSupported">Loop type is not supported</Result>
 </TestCaseResult>
 <TestCaseResult CasePath="dEQP-GLES2.functional.treediff.qpa_crash" CaseType="SelfValidate" Version="0.3.4">
