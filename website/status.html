@@ -1,0 +1,156 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YakoGL status: conformance, tests and benchmarks per board</title>
+<meta name="description" content="Per-board results of YakoGL on the Verdin AM62P, Verdin iMX8M Plus and Raspberry Pi 4: dEQP-GLES2, gl_test, glmark2, Slint and boot, each with the commit and date it was measured on.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="YakoGL">
+<meta property="og:title" content="YakoGL status per board">
+<meta property="og:description" content="dEQP-GLES2, gl_test, glmark2, Slint and boot results per board, each with its commit and date, and what is not done yet.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:alt" content="The YakoGL triangle on a dark nacre gradient">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="YakoGL status per board">
+<meta name="twitter:description" content="Results per board with commit and date, and the open defects.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="data.js" defer></script>
+<script src="site.js" defer></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="24" height="24">YakoGL</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="status.html" aria-current="page">Status</a>
+      <a href="try-it.html">Try it</a>
+      <a href="index.html#docs">Docs</a>
+      <a href="https://github.com/signal-slot/yakogl">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<h1>Status</h1>
+<p class="lead">What runs on each board, measured on which commit and when, and what is not
+done yet.</p>
+
+<div class="note">
+<p><strong>Freshness.</strong> Every figure below is the latest board record, and most of them
+predate the current main: fixes made since are proved on the host only, and this page says so
+row by row rather than extrapolating.<span class="js-only"> Checked against main at
+<span data-meta="checked"></span>.</span></p>
+</div>
+<noscript><p class="note">The tables on this page are rendered from
+<a href="data.js">data.js</a>, which holds every figure with its commit, date and source
+record; read it directly without JavaScript.</p></noscript>
+
+<p class="muted">Each row names the commit the image was built from and links the record in
+the repository. † marks a commit that is not an ancestor of main: the development history
+before the repository was published, or a branch. "Unverified" marks provenance that the
+records do not fully state.</p>
+
+<h2 id="am62p">Toradex Verdin AM62P <span class="muted">· PowerVR BXS-4-64</span></h2>
+<div class="scroll"><table class="status-table">
+<thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Measured on, source</th></tr></thead>
+<tbody data-status="am62p"></tbody>
+</table></div>
+
+<h2 id="imx8mp">Toradex Verdin iMX8M Plus <span class="muted">· Vivante GC7000UL</span></h2>
+<div class="scroll"><table class="status-table">
+<thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Measured on, source</th></tr></thead>
+<tbody data-status="imx8mp"></tbody>
+</table></div>
+
+<h2 id="pi4">Raspberry Pi 4 <span class="muted">· Broadcom V3D 4.2</span></h2>
+<div class="scroll"><table class="status-table">
+<thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Measured on, source</th></tr></thead>
+<tbody data-status="pi4"></tbody>
+</table></div>
+
+<h2 id="terms">Reading the tables</h2>
+<ul>
+<li><strong>dEQP-GLES2</strong>: the Khronos conformance tests for OpenGL ES 2.0, the 17,165-case
+mustpass list, run on Zephyr on the GPU. "Not supported" is an optional feature the board
+does not offer (for example 4x multisampling on the i.MX8MP); a warning is a quality
+warning, not a failure.</li>
+<li><strong>gl_test</strong>: YakoGL's own on-silicon suite (<code>driver/tools/pvrlab/gl_test.c</code>),
+numbered cases shared by the three boards, each reading its result back from the GPU.</li>
+<li><strong>glmark2-es2</strong>: 800x600, on-screen. Public scores come from Linux with the
+vendor or Mesa driver under different conditions (size, on- or off-screen, window system);
+<code>driver/docs/glmark2.md</code> lists them with their caveats.</li>
+<li><strong>Slint and the cluster</strong>: one Slint sample and the agl-slint-cluster demo,
+checked against a reference picture made on a PC at fixed points. The panels differ in size,
+so compare Mpx/s, not frames per second.</li>
+<li><strong>Boot</strong>: each board boots Zephyr from its own storage with no host and no
+network (<code>docs/standalone-boot.md</code>).</li>
+</ul>
+
+<h2 id="not-yet">Not yet</h2>
+<p>From <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>,
+"Known defects" and "Open work", as of main at <span data-meta="checked">the commit named in data.js</span>.
+None of the fixes below is confirmed on a board from main.</p>
+<h3>Known defects</h3>
+<ul>
+<li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases fail</strong>
+on a 2026-10-08 integration image; they passed at the last whole tree. No issue yet. A
+candidate fix is not yet on main and awaits board confirmation. It blocks goal 1 on the AM62P.</li>
+<li><strong>PowerVR: glmark2 shadow and refract sample a stale depth texture</strong>
+(pvr-depth-resolve, no issue yet). Root cause found on the host (a stale kick stamp); the
+host test is marked as an open defect; not fixed.</li>
+<li><strong>i.MX8MP: gl_test case 10 fails about one run in three</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/9">#9</a>) and case 2 intermittently
+(<a href="https://github.com/signal-slot/yakogl/issues/25">#25</a>). Cause not found.</li>
+<li><strong>i.MX8MP: 4x MSAA, gl_test case 16</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/8">#8</a>). The harness now skips the
+4x half by name without a 4x config; the 4x path itself still fails, cause unknown.</li>
+<li><strong>Pi 4: 25 cube-map cases differ from the ES 2.0 reference images</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/12">#12</a>). Fixed on the host;
+needs the Pi 4 run.</li>
+<li><strong>glmark2 terrain samples a black texture on every board</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/1">#1</a>), <strong>AM62P refract's
+depth pass is refused</strong> (<a href="https://github.com/signal-slot/yakogl/issues/2">#2</a>),
+<strong>Pi 4 refract and terrain do not fit the GPU carve-out</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/4">#4</a>,
+<a href="https://github.com/signal-slot/yakogl/issues/5">#5</a>). Fixed on the host, waiting
+for a board round.</li>
+<li><strong>i.MX8MP panel at its pixel clock</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/23">#23</a>): the link is back at
+69.3 MHz with a checked margin; viewing the panel by eye is pending.</li>
+<li><strong>GC7000 precompiled table lacks <code>matattr</code></strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/22">#22</a>).</li>
+</ul>
+<h3>Open work</h3>
+<ul>
+<li>One confirming board session per board for every host-proved fix, including a whole
+dEQP-GLES2 tree on the AM62P.</li>
+<li>OpenGL ES 3.0, host first: transform feedback capture, integer render targets, the new
+sampled formats, sRGB, occlusion queries, PowerVR 2D-array and shadow sampling; then the
+dEQP-GLES3 tree on each board.</li>
+<li>Performance: not started.</li>
+<li>Bare metal: <code>src/osal/baremetal.c</code> is a skeleton; no bare-metal boot is
+recorded yet.</li>
+<li>The PowerVR driver's end-of-tile programs and boot self-test vertex shader are still
+Mesa's pco output; the GC7000 has no precompiled rows for most gl_test sources.</li>
+<li>Design clean-up: debug knobs out of the product, the remaining C moved to Rust, names.</li>
+<li>OpenGL ES 3.1 / 3.2 (<a href="https://github.com/signal-slot/yakogl/issues/19">#19</a>).</li>
+<li>Touch input for the demos: not yet planned.</li>
+</ul>
+<p>All issues: <a href="https://github.com/signal-slot/yakogl/issues">github.com/signal-slot/yakogl/issues</a>.</p>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>YakoGL is Apache-2.0. Copyright 2026 Signal Slot, Inc.</p>
+    <p>Figures: <a href="data.js">data.js</a>. Records: <a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md">tools/cts/RESULTS.md</a>, <a href="https://github.com/signal-slot/yakogl/blob/main/docs/es2-cts-failures.md">docs/es2-cts-failures.md</a>.</p>
+  </div>
+</footer>
+</body>
+</html>

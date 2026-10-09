@@ -177,7 +177,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .note p { margin: 4px 0; }
 .js-only { display: none; }
-.has-data .js-only { display: block; }
+.has-data .js-only { display: revert; }
 
 /* Architecture diagram */
 figure { margin: 16px 0; }
