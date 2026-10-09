@@ -8,9 +8,13 @@
 //! `report-es2` the one test is `es2_answers_are_unchanged`.
 #![allow(clippy::undocumented_unsafe_blocks)]
 
+#[cfg(any(feature = "report-es2", feature = "shaderc-online"))]
 use super::consts::*;
+#[cfg(any(feature = "report-es2", feature = "shaderc-online"))]
 use super::es3::*;
+#[cfg(any(feature = "report-es2", feature = "shaderc-online"))]
 use super::types::*;
+#[cfg(any(feature = "report-es2", feature = "shaderc-online"))]
 use crate::testutil::TestGl;
 
 #[cfg(all(not(feature = "report-es2"), feature = "shaderc-online"))]

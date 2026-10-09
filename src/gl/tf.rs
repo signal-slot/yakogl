@@ -47,6 +47,7 @@ const BINDINGS: usize = TF_MAX_SEPARATE_ATTRIBS as usize;
 pub(super) const NAME_MAX: usize = 64;
 /// Rows a program keeps: one per captured varying; every row takes at least
 /// one component and the interleaved limit is 64.
+#[cfg(feature = "shaderc-online")]
 const MAX_ROWS: usize = TF_MAX_INTERLEAVED_COMPONENTS as usize;
 
 /* ------------------------------------------------------------------ objects */
@@ -505,6 +506,7 @@ pub(super) fn link_begin(group: u8, program: GLuint) {
 }
 
 /// Scalar components of a GLSL type given by its GL token.
+#[cfg(feature = "shaderc-online")]
 fn type_components(t: GLenum) -> u32 {
     match t {
         GL_FLOAT | GL_INT | GL_UNSIGNED_INT => 1,
@@ -521,6 +523,7 @@ fn type_components(t: GLenum) -> u32 {
 }
 
 /// `v[3]`: the name before the subscript and the index.
+#[cfg(feature = "shaderc-online")]
 fn split_element(name: &[u8]) -> Option<(&[u8], u32)> {
     let body = name.strip_suffix(b"]")?;
     let lb = body.iter().rposition(|&b| b == b'[')?;
