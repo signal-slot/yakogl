@@ -151,6 +151,10 @@ pub struct GcFrame {
     /// 0: never submitted.
     pub fence: i64,
     pub kick_id: u32,
+    /// The colour target and depth surface (GPU addresses) the frame's
+    /// previous draw wrote; `None` before its first. Only K1
+    /// (`YAKOGL_GC_FLUSH_AS_ETNAVIV`) reads it.
+    pub prev_targets: Option<(u64, u32)>,
 }
 
 impl GcFrame {
@@ -163,6 +167,7 @@ impl GcFrame {
         w: GcCmd::ZERO,
         fence: 0,
         kick_id: 0,
+        prev_targets: None,
     };
 
     /// Reserve `bytes` of frame arena at `align`; returns the CPU pointer and

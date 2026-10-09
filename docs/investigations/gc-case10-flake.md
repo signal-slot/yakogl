@@ -278,10 +278,10 @@ call chain lies in between, so this is unlikely. It costs one barrier to
 remove. The "late read" step of the second part catches it, together with
 "the event came before the write-back".
 
-## Proposed fix (not applied)
+## Proposed fix (K1 implemented as an off-by-default knob; the rest not applied)
 
-`src/vivante/` is held by `gc-npot-bit`. Do this after it merges, each step as
-an A/B knob first:
+K1 is in (`CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV`, see "K1 as implemented" at the
+end). Each step is an A/B knob first:
 
 1. **K1, etnaviv's flush rule.** In `emit_flushes` (backend.rs:1597-1602), do
    not flush COLOR|DEPTH before a draw when the frame's previous draw wrote the
@@ -366,18 +366,32 @@ Alone after boot, case 2 may fail rarely (its rate alone is unknown), so 0 of
 10 says nothing. A failure at check 1-21 contradicts the "tiny draw after a
 clear" shape, and then a1 is less likely.
 
-### Second part: a1, after K1 exists
+### Second part: a1, with K1
 
-This needs the K1 knob (proposed fix 1). It does not exist yet. With K1 as a
-Kconfig switch, for example `CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV` (the name is
-free), build one more image and interleave it with base:
+K1 is implemented as a knob, off by default (see "K1 as implemented" below).
+Build one more image with it and interleave it with base. LIST needs `\;`
+(a bare `;` makes CMake split the value) and every arm needs the watchdog
+self-arm (`tools/board.sh` refuses an image without `gc_wdog_arm: armed`);
+both are what docs/board-sessions/imx8mp-gc-case10.md found.
 
 ```sh
-tools/cts/imx8mp-gltest-build.sh gc10-k1 0 "$LIST" -DCONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y
+LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'
+W=-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+tools/cts/imx8mp-gltest-build.sh gc10-base 0 "$LIST" $W
+tools/cts/imx8mp-gltest-build.sh gc10-k1   0 "$LIST" $W -DCONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y
 for i in $(seq 1 10); do for arm in base k1; do
   SEL=512 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
     "$IMX8MP_OUT/gc10-$arm/zephyr/zephyr.bin" build/gc10 "$arm-k1-$i"
 done; done
+```
+
+Check in each image's `.config` that the list reads `"1-6,8-10;10;2"` and
+that `CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y` is set only on gc10-k1. The k1
+console carries `gc: flush as etnaviv (K1) on` once at boot; base does not.
+Verdict line of a passing run (the `record=` words are the table above):
+
+```
+board.sh imx8mp k1-k1-1 rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:SWEEP resets=0 record=594b07ff,00000000,0000ff00,0000077e back_after=~45s uptime=~27s
 ```
 
 - k1 0/10 with `...,0000077e` and base about 5/10: **a1 confirmed.** Make K1
@@ -400,8 +414,52 @@ low 12 bits: `0c0` on base and reuse0, `000` on page.
 - Do not spend board time on (c) for the colour target. It is the same
   buffer at the same address in every gl_test run (F1, F2).
 - The first part needs only knobs that exist on integration. The second
-  part needs K1 in src/vivante/backend.rs `emit_flushes`, after `gc-npot-bit`
-  merges.
+  part needs K1, which `v3d-null-cpu` added (src/vivante/backend.rs
+  `emit_flushes`).
 - Mesa line numbers here come from what the repository already recorded
   for Mesa 26.2.1. Check the ones marked "(line not re-checked)" when a Mesa
   checkout is at hand.
+
+## K1 as implemented
+
+- Knob: Kconfig `CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV` (zephyr/Kconfig, bool,
+  default n, depends on `YAKOGL_GPU_VIVANTE`). `osal_zephyr_register()`
+  (src/osal/zephyr_gc.c) calls the back end's `gc_set_flush_as_etnaviv(1)`,
+  which logs `gc: flush as etnaviv (K1) on` once. Enable it with
+  `-DCONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y`. There is no environment variable:
+  the Linux OSAL is shared by all three GPUs and has no GC glue; a host
+  harness calls `gc_set_flush_as_etnaviv(1)` itself.
+- Rule (`emit_flushes`, src/vivante/backend.rs): when the frame's previous
+  draw wrote the same colour target and depth surface (`GcFrame::prev_targets`,
+  reset at every frame start), and no fragment or vertex texture of this draw
+  overlaps either, the GL_FLUSH_CACHE write is TEXTURE|SHADER_L1 instead of
+  COLOR|DEPTH|TEXTURE|SHADER_L1. The TEXTUREVS flush, the stalls and the
+  tile-status flush are unchanged. A frame holds draws to one target, so a
+  new target means a new frame whose first draw flushes everything. The
+  clear quad counts as a draw: a clear followed by a draw is the case.
+- Host tests (src/vivante/backend_tests.rs): `a_frame_flushes_and_stalls_as_etnaviv_does`
+  is unchanged and pins the default stream with K1 off;
+  `k1_omits_the_color_depth_flush_behind_a_draw_to_the_same_targets`;
+  `k1_keeps_the_flush_when_a_texture_is_the_target_or_the_target_changes`.
+  Run: `cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --lib vivante::backend`.
+
+## One i.MX8MP session, in full
+
+1. The second part above: build base and k1, then 10 interleaved rounds
+   (20 boots). Read k1 against base by the table at "Expected rate".
+2. The common set (GM, SO, SV, CL, GT) on the same checkout; these images
+   have K1 off (the default):
+
+```sh
+tools/cts/common-images.sh imx8mp tools/cts/common-tree.txt build/common-img
+tools/cts/cts-common.sh imx8mp run build/common-img build/common-out
+```
+
+(`tools/cts/cts-common.sh imx8mp build build/common-img` makes the same
+images.) Expected verdict lines, from docs/benchmarks-baseline/imx8mp.md: GM,
+SO, SV and CL `rc=0 verdict=done`; GT `rc=0 verdict=done` with
+`result=record:CASE` once gl_test passes every case. On the earlier baseline
+GT was `rc=4 verdict=failed` (case 16 failing; cases 2 and 10 at random), so
+GT may still fail on case 16, which is not K1's. To run GT with K1, build
+gc_gl_test by hand as in the second part (list 0) and read its `594b010e`
+CASE record.

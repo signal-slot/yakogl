@@ -576,7 +576,15 @@ const struct osal_ops osal_zephyr_ops = {
 	.thread_id   = z_thread_id,
 };
 
+/* CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV (K1, off by default): etnaviv's flush
+ * rule in the back end's emit_flushes (vivante/backend.rs). The setter logs
+ * "gc: flush as etnaviv (K1) on" once. docs/investigations/gc-case10-flake.md */
+extern void gc_set_flush_as_etnaviv(int on);
+
 void osal_zephyr_register(void)
 {
+#ifdef CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV
+	gc_set_flush_as_etnaviv(1);
+#endif
 	osal_set_ops(&osal_zephyr_ops);
 }

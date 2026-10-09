@@ -1590,12 +1590,58 @@ fn emit_ra_state(c: &mut GcCmd, d: &GcDraw) {
     c.state(GC_RA_EARLY_DEPTH, ra);
 }
 
+/// K1, `CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV` (docs/investigations/gc-case10-flake.md):
+/// etnaviv's flush rule in [`emit_flushes`]. Off by default.
+static FLUSH_AS_ETNAVIV: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Turn K1 on or off. The Zephyr OSAL calls it at start-up from the Kconfig
+/// switch (zephyr_gc.c); a host build can set `YAKOGL_GC_FLUSH_AS_ETNAVIV=1`
+/// for the harness's C glue to pass on.
+#[no_mangle]
+pub extern "C" fn gc_set_flush_as_etnaviv(on: i32) {
+    FLUSH_AS_ETNAVIV.store(on != 0, core::sync::atomic::Ordering::Relaxed);
+    if on != 0 {
+        glog_once!("gc: flush as etnaviv (K1) on");
+    }
+}
+
+fn flush_as_etnaviv() -> bool {
+    FLUSH_AS_ETNAVIV.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// Does a texture of `d` overlap the colour target or the depth surface?
+fn texture_aliases_target(d: &GcDraw, depth_stride: u32, depth_addr: u32) -> bool {
+    let color = d.gl.target_gpu;
+    let color_end = color + u64::from(d.gl.target_w) * u64::from(d.gl.target_h) * 4;
+    let depth = u64::from(depth_addr);
+    let depth_end = depth + u64::from(depth_stride) * u64::from(d.gl.target_h).max(1);
+    d.textures.iter().chain(d.vs_textures.iter()).any(|t| {
+        let lo = t.base_gpu;
+        let hi = lo + u64::from(t.bytes).max(1);
+        (lo < color_end && color < hi) || (lo < depth_end && depth < hi)
+    })
+}
+
 /// Which caches must be written back before this draw's state lands. Emitting
 /// the whole state block every draw means every one of them may have changed,
 /// so the flush is unconditional; narrowing it is an optimisation that needs
 /// hardware to verify.
-fn emit_flushes(c: &mut GcCmd) {
-    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1);
+///
+/// With K1 on, a draw behind one that wrote the same colour and depth targets
+/// in this frame, and which samples neither, skips the COLOR|DEPTH part, as
+/// etnaviv does (VIVANTE_NOTES.md); the TEXTURE/SHADER_L1 flush and the
+/// stalls stay. With K1 off the stream is the unconditional one, unchanged.
+fn emit_flushes(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) {
+    let mut bits = GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1;
+    if flush_as_etnaviv() {
+        let now = (d.gl.target_gpu, depth_addr);
+        if f.prev_targets == Some(now) && !texture_aliases_target(d, depth_stride, depth_addr) {
+            bits = GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1;
+        }
+        f.prev_targets = Some(now);
+    }
+    let c = &mut f.w;
+    c.state(GC_GL_FLUSH_CACHE, bits);
     c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTUREVS);
     c.stall(GC_SYNC_RA, GC_SYNC_PE);
     c.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
@@ -1607,7 +1653,7 @@ fn emit_flushes(c: &mut GcCmd) {
 /// frame's, so `emit_draw` is handed them rather than reaching for the global
 /// state while the frame is borrowed.
 fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) -> i32 {
-    emit_flushes(&mut f.w);
+    emit_flushes(f, d, depth_stride, depth_addr);
     emit_vertex_elements(&mut f.w, d);
 
     if d.indexed {
@@ -1697,6 +1743,7 @@ fn frame_open(target_gpu: u64, w: u32, h: u32) -> i32 {
     f.extra_used = 0;
     f.w.words = f.cmd.cpu as *mut u32;
     f.w.used = 0;
+    f.prev_targets = None;
     /* The last GC_KICK_TAIL_BYTES of the buffer belong to the OSAL (it writes
      * a LINK there to run the stream), so they are not capacity. The
      * allocation is 64-byte aligned and the tail is 8, which leaves an even

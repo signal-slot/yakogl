@@ -163,6 +163,20 @@ config YAKOGL_GC_LOG_BIG_ALLOCS
 	  printk's the size and the two return addresses of each, so
 	  addr2line on zephyr.elf names who allocates a whole-screen buffer.
 
+config YAKOGL_GC_FLUSH_AS_ETNAVIV
+	bool "GC7000: flush caches as etnaviv does (K1, a measurement)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  Do not flush COLOR|DEPTH before a draw when the frame's previous
+	  draw wrote the same colour and depth targets and no texture of
+	  this draw is one of them; the TEXTURE/SHADER_L1 flush and the
+	  stalls stay. This is etnaviv's rule. Off, every draw flushes all
+	  four, and the command stream is unchanged. An A/B knob for
+	  gl_test cases 10 and 2, which sometimes lose colour writes on the
+	  i.MX8MP: docs/investigations/gc-case10-flake.md ("Proposed fix",
+	  K1). Prints "gc: flush as etnaviv (K1) on" at start-up.
+
 config YAKOGL_GC_ALLOC_PAGE_ALIGN
 	bool "GC7000: page-align GPU allocations of 4 KiB or more (a measurement)"
 	depends on YAKOGL_GPU_VIVANTE

@@ -4133,3 +4133,91 @@ fn msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples() {
     }
     assert_eq!(scaled.reg(GC_SE_SCISSOR_LEFT), plain.reg(GC_SE_SCISSOR_LEFT), "the origin stays at 0");
 }
+
+/* ---- K1: etnaviv's flush rule (CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV) -------- */
+
+/// Turns K1 on for a test and off again, panic or not.
+struct K1On;
+
+impl K1On {
+    fn new() -> K1On {
+        gc_set_flush_as_etnaviv(1);
+        K1On
+    }
+}
+
+impl Drop for K1On {
+    fn drop(&mut self) {
+        gc_set_flush_as_etnaviv(0);
+    }
+}
+
+/// The values written to GL_FLUSH_CACHE, the semaphore tokens and the TS
+/// flushes, in stream order.
+fn flush_trace(s: &Stream) -> (Vec<u32>, Vec<u32>, usize) {
+    let (mut flushes, mut tokens, mut ts) = (Vec::new(), Vec::new(), 0);
+
+    walk(&s.0, |r, v, _| {
+        if r == GC_GL_FLUSH_CACHE {
+            flushes.push(v);
+        } else if r == GC_GL_SEMAPHORE_TOKEN {
+            tokens.push(v);
+        } else if r == GC_TS_FLUSH_CACHE {
+            ts += 1;
+        }
+    });
+    (flushes, tokens, ts)
+}
+
+const ALL_FLUSH: u32 = GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1;
+const TEX_FLUSH: u32 = GC_FLUSH_TEXTURE | GC_FLUSH_SHADER_L1;
+
+#[test]
+fn k1_omits_the_color_depth_flush_behind_a_draw_to_the_same_targets() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.do_clear = true;
+    let off = flush_trace(&rig.submit(&d));
+    let k1 = {
+        let _k1 = K1On::new();
+        flush_trace(&rig.submit(&d))
+    };
+    /* the clear quad is the frame's first draw and flushes everything; the
+     * draw behind it keeps the texture/shader flush only */
+    assert_eq!(off.0, [GC_FLUSH_DESCRIPTOR, ALL_FLUSH, GC_FLUSH_TEXTUREVS, ALL_FLUSH, GC_FLUSH_TEXTUREVS]);
+    assert_eq!(k1.0, [GC_FLUSH_DESCRIPTOR, ALL_FLUSH, GC_FLUSH_TEXTUREVS, TEX_FLUSH, GC_FLUSH_TEXTUREVS]);
+    /* the stalls and the tile-status flushes are the same either way */
+    assert_eq!((k1.1, k1.2), (off.1, off.2));
+}
+
+#[test]
+fn k1_keeps_the_flush_when_a_texture_is_the_target_or_the_target_changes() {
+    let rig = Rig::new();
+    let _k1 = K1On::new();
+
+    /* a texture that is the colour target */
+    let mut d = rig.draw(3);
+    d.do_clear = true;
+    d.num_textures = 1;
+    d.textures[0] = bind(TARGET_GPU, 64, 64, 1);
+    let aliased = flush_trace(&rig.submit(&d));
+    assert_eq!(aliased.0, [GC_FLUSH_DESCRIPTOR, ALL_FLUSH, GC_FLUSH_TEXTUREVS, ALL_FLUSH, GC_FLUSH_TEXTUREVS]);
+
+    /* a texture elsewhere does not matter */
+    d.textures[0] = bind(rig.vbo.gpu, 4, 4, 1);
+    let apart = flush_trace(&rig.submit(&d));
+    assert_eq!(apart.0[3], TEX_FLUSH);
+
+    /* a new target starts a new frame, whose first draw flushes everything */
+    let one = rig.draw(3);
+    let mut other = rig.draw(3);
+    other.target_gpu = TARGET_GPU + 0x10_0000;
+    // SAFETY: both draws are live.
+    unsafe {
+        assert_eq!(gc_draw(&one), 0);
+        assert_eq!(gc_draw(&other), 0);
+    }
+    assert_eq!(flush_trace(&rig.last_stream()).0, [GC_FLUSH_DESCRIPTOR, ALL_FLUSH, GC_FLUSH_TEXTUREVS]);
+    assert_eq!(gc_flush(), 0);
+    assert_eq!(flush_trace(&rig.last_stream()).0, [GC_FLUSH_DESCRIPTOR, ALL_FLUSH, GC_FLUSH_TEXTUREVS]);
+}
