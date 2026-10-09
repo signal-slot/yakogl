@@ -1603,11 +1603,159 @@ fn emit_flushes(c: &mut GcCmd) {
 
 /* ---- one draw ----------------------------------------------------------- */
 
+/* ---- occlusion queries ---------------------------------------------------
+ * etnaviv's sample provider (etnaviv_query_acc_occlusion.c): the pixel engine
+ * keeps a running count; "resume" points GL_OCCLUSION_QUERY_ADDR at a 64-bit
+ * slot, "suspend" writes GL_OCCLUSION_QUERY_CONTROL, which stores the count
+ * there, and the result is the sum of the slots. Mesa suspends at every
+ * flush and around internal draws and resumes into a new slot
+ * (etnaviv_context.c, etnaviv_query.c); here the counter is armed for a
+ * draw that carries a handle and suspended before a draw that carries
+ * another (or none: every clear), and at the end of every stream. Each
+ * handle owns OQ_SLOTS slots; a query that suspends more often than that
+ * stops counting and answers "some passed" (allowed for the conservative
+ * target; logged). */
+
+/// Slots per handle; 8 bytes each.
+const OQ_SLOTS: usize = 64;
+const OQ_BYTES: usize = GLES_QUERY_HANDLES as usize * OQ_SLOTS * 8;
+/// The suspend's words (a RA->PE stall, 4, and the CONTROL write, 2): kept
+/// free in the stream while the counter is armed, so the end of the frame
+/// always has room for it.
+const OQ_SUSPEND_WORDS: u32 = 6;
+
+#[derive(Clone, Copy)]
+struct GcOq {
+    /// The handle armed in the stream being recorded (0: none).
+    on: u32,
+    /// Per handle: the slots its query has filled (the next one to arm).
+    used: [u8; GLES_QUERY_HANDLES as usize],
+    /// Per handle (bit): it ran out of slots.
+    overflow: u64,
+}
+
+impl GcOq {
+    const ZERO: GcOq = GcOq { on: 0, used: [0; GLES_QUERY_HANDLES as usize], overflow: 0 };
+}
+
+static OQ: Global<GcOq> = Global::new(GcOq::ZERO);
+/// The slots, allocated by the first query (`gc_query_begin`).
+static OQ_MEM: Global<OsalGpuMem> = Global::new(OsalGpuMem::ZERO);
+
+fn oq() -> &'static mut GcOq {
+    // SAFETY: single-threaded by contract; callers take it once per use.
+    unsafe { OQ.get() }
+}
+
+fn oq_mem() -> &'static mut OsalGpuMem {
+    // SAFETY: as above.
+    unsafe { OQ_MEM.get() }
+}
+
+/// Stop counting into the armed handle's slot: the pixel engine has
+/// finished the draws before (the stall; Mesa writes CONTROL in stream order
+/// without one, the PE's timing is unobserved) and stores the count.
+fn oq_suspend(c: &mut GcCmd) {
+    let q = oq();
+    if q.on == 0 {
+        return;
+    }
+    c.cap += OQ_SUSPEND_WORDS;
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    c.state(GC_GL_OCCLUSION_QUERY_CONTROL, GC_OQ_CONTROL_VALUE);
+    let h = q.on as usize;
+    q.used[h] = q.used[h].saturating_add(1);
+    q.on = 0;
+}
+
+/// Make `handle` (0: none) the one the next draw counts into.
+fn oq_arm(c: &mut GcCmd, handle: u32) {
+    if oq().on == handle {
+        return;
+    }
+    oq_suspend(c);
+    let mem = *oq_mem();
+    if handle == 0 || handle >= GLES_QUERY_HANDLES || mem.cpu.is_null() {
+        return;
+    }
+    let q = oq();
+    let h = handle as usize;
+    let slot = q.used[h] as usize;
+    if slot >= OQ_SLOTS {
+        if q.overflow & 1 << h == 0 {
+            glog_once!("yakogl/vivante: an occlusion query suspended more than {} times: it answers true", OQ_SLOTS);
+        }
+        q.overflow |= 1 << h;
+        return;
+    }
+    c.state(GC_GL_OCCLUSION_QUERY_ADDR, (mem.gpu + ((h * OQ_SLOTS + slot) * 8) as u64) as u32);
+    c.cap = c.cap.saturating_sub(OQ_SUSPEND_WORDS);
+    q.on = handle;
+}
+
+/// An occlusion query starts on `handle`: its slots are zeroed. The GL core
+/// has waited for every kick that counted on it (so it is not armed in the
+/// stream being recorded either: that kick was submitted first).
+pub extern "C" fn gc_query_begin(handle: u32) -> i32 {
+    if !g().inited || handle == 0 || handle >= GLES_QUERY_HANDLES || oq().on == handle {
+        return -1;
+    }
+    let mem = oq_mem();
+    if mem.cpu.is_null() {
+        let mut m = OsalGpuMem::ZERO;
+        if osal::gpu_alloc(GC_HEAP_DATA, OQ_BYTES, OSAL_MEM_DATA, &mut m) != 0 || m.cpu.is_null() {
+            osal::gpu_free(&mut m);
+            glog_once!("yakogl/vivante: no GPU memory for the occlusion query slots ({} bytes)", OQ_BYTES);
+            return -ENOMEM;
+        }
+        *mem = m;
+    }
+    let h = handle as usize;
+    let at = (mem.cpu as *mut u8).wrapping_add(h * OQ_SLOTS * 8);
+    // SAFETY: the handle's OQ_SLOTS slots inside the live mapping; no kick
+    // writes them (the GL core waited).
+    unsafe {
+        core::ptr::write_bytes(at, 0, OQ_SLOTS * 8);
+        cache_flush_raw(at as *mut c_void, OQ_SLOTS * 8);
+    }
+    let q = oq();
+    q.used[h] = 0;
+    q.overflow &= !(1 << h);
+    0
+}
+
+/// The samples counted on `handle`: the sum of the slots its query filled
+/// (etnaviv's occlusion_result), every kick that stored one complete.
+///
+/// # Safety
+/// `samples` is null or valid for writing one u64.
+pub unsafe extern "C" fn gc_query_result(handle: u32, samples: *mut u64) -> i32 {
+    let mem = *oq_mem();
+    if handle == 0 || handle >= GLES_QUERY_HANDLES || mem.cpu.is_null() || samples.is_null() {
+        return -1;
+    }
+    let (h, q) = (handle as usize, oq());
+    let at = (mem.cpu as *mut u8).wrapping_add(h * OQ_SLOTS * 8) as *mut u64;
+    let n = q.used[h] as usize;
+    // SAFETY: the handle's slots inside the live mapping; the kicks that
+    // stored them completed (the GL core's contract); `samples` is the
+    // caller's u64.
+    unsafe {
+        osal::cache_invd(at as *mut c_void, OQ_SLOTS * 8);
+        let sum = (0..n).fold(0u64, |s, i| s.wrapping_add(at.add(i).read_volatile()));
+        *samples = if q.overflow & 1 << h != 0 { sum.max(1) } else { sum };
+    }
+    0
+}
+
 /// The depth surface's stride and base address are the backend's, not the
 /// frame's, so `emit_draw` is handed them rather than reaching for the global
 /// state while the frame is borrowed.
 fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) -> i32 {
     emit_flushes(&mut f.w);
+    /* after the flushes' RA->PE stall: the draws before are done when the
+     * counter switches. A clear is never counted (ES 3.0 4.2.3). */
+    oq_arm(&mut f.w, if d.is_clear { 0 } else { d.gl.occlusion_query });
     emit_vertex_elements(&mut f.w, d);
 
     if d.indexed {
@@ -1707,6 +1855,7 @@ fn frame_open(target_gpu: u64, w: u32, h: u32) -> i32 {
     }
     f.w.cap = ((f.cmd.size - GC_KICK_TAIL_BYTES as usize) / 4) as u32;
     f.w.overflow = false;
+    oq().on = 0; /* a new stream: nothing armed */
     emit_context_init(&mut f.w);
     g.recording = true;
     frame_open_to_osal(true);
@@ -1740,6 +1889,9 @@ fn frame_submit() -> i32 {
     /* closed on every path below: submitted, or lost with a message */
     frame_open_to_osal(false);
     let f = &mut g.frames[g.cur];
+    /* the count of a query still armed is stored before the stream ends
+     * (etnaviv suspends every active query at a flush); its room was kept */
+    oq_suspend(&mut f.w);
     if f.w.overflow {
         glog_once!("yakogl/vivante: command buffer full; the frame is truncated");
     }
@@ -1974,6 +2126,11 @@ pub extern "C" fn gc_shutdown() {
     if !g.no_colour.impl_.is_null() {
         osal::gpu_free(&mut g.no_colour);
     }
+    if !oq_mem().impl_.is_null() {
+        osal::gpu_free(oq_mem());
+    }
+    *oq_mem() = OsalGpuMem::ZERO;
+    *oq() = GcOq::ZERO;
     *g = GcState::ZERO;
 }
 
@@ -2408,6 +2565,11 @@ struct Mark {
     extra_used: u32,
     component_use_marked: bool,
     ms_dest: (u64, u32, u32, u32, u32),
+    /// The occlusion counter's state and the stream's capacity (the armed
+    /// counter keeps room for its suspend): a draw taken back leaves the
+    /// counter as it found it.
+    oq: GcOq,
+    cap: u32,
 }
 
 impl Mark {
@@ -2421,6 +2583,8 @@ impl Mark {
             extra_used: f.extra_used,
             component_use_marked: g.component_use_marked,
             ms_dest: (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride),
+            oq: *oq(),
+            cap: f.w.cap,
         }
     }
 
@@ -2432,7 +2596,9 @@ impl Mark {
         f.w.overflow = false;
         f.arena_used = self.arena_used;
         f.extra_used = self.extra_used;
+        f.w.cap = self.cap;
         g.component_use_marked = self.component_use_marked;
+        *oq() = self.oq;
     }
 
     /// Submitting the frame resolved and forgot the multisampled target;
@@ -2694,9 +2860,9 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),
     depth_resolve: Some(gc_depth_resolve),
-    query_begin: None,
+    query_begin: Some(gc_query_begin),
     query_end: None,
-    query_result: None,
+    query_result: Some(gc_query_result),
 };
 
 /// The backend's own tests (the module is large enough to keep them apart, as
