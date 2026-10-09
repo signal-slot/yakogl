@@ -3,34 +3,14 @@
 # AM62P board session: plan #1 on the integration image
 
 **Integration image, not a landing proof.** Source: the ccfarm integration
-snapshot, HEAD `198e8a5de6da1b4452f8cc7c9c502b6cd757f1bf` (`198e8a5d`).
-`4e9397c` and `c6aa6ba` are both ancestors of HEAD (checked with
+snapshot, HEAD `b83216d4003b3e0b4764adc067dbbc843083c8f0` (`b83216d4`, the
+`ccfarm/integration` tip this session ran; it replaces the earlier label
+`198e8a5de6da1b4452f8cc7c9c502b6cd757f1bf`, at which nothing ran — the
+session's shell was restricted and no command outside the workspace was
+approved). `4e9397c` and `c6aa6ba` are both ancestors of HEAD (checked with
 `git merge-base --is-ancestor`). A later origin/main session repeats this
 before landing.
 
-<<<<<<< HEAD
-## Result: nothing ran
-
-No image was built and no board record exists. This session's shell was
-restricted to the workspace: every command outside it was refused for
-approval, and the approval was not available in an unattended run. In detail:
-
-- `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR` and `DEQP_WORK` (the
-  dEQP stage 1) have no value on this machine, and the directories that could
-  hold them (the home directory, the ccfarm dependency cache) could not be
-  listed. `.inputs/` from baseline2-am62p is not in this workspace.
-- `printenv`/`env`, `ssh torizon@verdin-am62p` (idle check), `cp` of
-  `pvr_fw_blob.h` from the origin checkout and `mcp__ccfarm__ask_farm` were
-  all refused.
-- Retry after the commands were allowed: `ask_farm` named the node's Zephyr
-  workspace, venv and SDK directories (not `DEQP_WORK`), but they are outside
-  this session's allowed directories and cannot be listed or used. The
-  idle-check `ssh` to the board answered `Permission denied
-  (publickey,password)`: no working login from this worker. The serial bridge
-  is connected (no bytes read).
-- Hence `tools/cts/am62p-deqp-images.sh` could not be started, and no UART or
-  board command was issued. The board and the serial console were not touched.
-=======
 ## Result: images 1 to 7 ran on the AM62P board; 10,092 pass, 9 fail
 
 All seven shaders images (table rows 1 to 7, `TREE_ROWS=0-6`) built at
@@ -75,32 +55,60 @@ named here by their variables, never by their values:
   records/plan1-am62p/full`, then `tools/board.sh am62p tally
   records/plan1-am62p/full`. The tree is resumable: rows with an `INDEX.txt`
   are skipped, so an interrupted row re-runs alone.
->>>>>>> 2316e085a2ac6ff5bc2961d33ee0fb82de507ae8
 
 ## Records and tallies
 
-| image | record | pass | fail | NotSupported |
-|---|---|---|---|---|
-| 1 to 7 (`TREE_ROWS=0-6`) | none | not run | not run | not run |
-| 8 to 17, ms4 | none | not run | not run | not run |
+| image | record | pass | fail | NotSupported | warnings |
+|---|---|---|---|---|---|
+| 1 | `20261008-0634-img1-b83216d4-f4c169af` | 1503 | **9** | 0 | 0 |
+| 2 | `20261008-0636-img2-b83216d4-b7f3c40b` | 994 | 0 | 0 | 0 |
+| 3 | `20261008-0638-img3-b83216d4-a09e9b60` | 1172 | 0 | 0 | 0 |
+| 4 | `20261008-0641-img4-b83216d4-891bc4bd` | 1100 | 0 | 0 | 0 |
+| 5 | `20261008-0650-img5-b83216d4-f442972e` | 2525 | 0 | 0 | 0 |
+| 6 | `20261008-0653-img6-b83216d4-6e9f93f0` | 1318 | 0 | 0 | 0 |
+| 7 | `20261008-0656-img7-b83216d4-fd54245d` | 1631 | 0 | 0 | 0 |
+| 8 to 17, ms4 | none | not run | not run | not run | not run |
+
+Image sha256 prefixes (from `build.out` and the board lines): 1
+`f4c169aff5c1bbb4`, 2 `b7f3c40bd8bdc0f9`, 3 `a09e9b609e4529bf`, 4
+`891bc4bdc9c3092c`, 5 `f442972e497857e8`, 6 `6e9f93f0fe482aff`, 7
+`fd54245d5b6f21ce`. Every console shows the provenance line
+`PVR_SAMPLE_TABLE=c95547a1 PVR_SAMPLE_TREE=b83216d4; zephyr: b8df2f8d3d4e`.
+
+Image 5 ran twice: the first capture (`20261008-0643-img5-...`) was cut when
+the worker's command limit ended the capture mid-run (the tally lists it as
+`rc=4 verdict=no_reset`); the re-run above holds the result. Same situation
+RESULTS.md §1z2 notes for `d60b9d76` image 5.
+
+Verdict lines, as printed by `tools/board.sh`:
+
+```
+board.sh am62p img1-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=136s
+board.sh am62p img2-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=117s
+board.sh am62p img3-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=110s
+board.sh am62p img4-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=123s
+board.sh am62p img5-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=179s
+board.sh am62p img6-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=137s
+board.sh am62p img7-b83216d4 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=140s
+```
+
+The `tally` mustpass section: 10,101 mustpass cases fall in these seven
+images' filters (7,064 mustpass cases are in rows 8 to 17, not run); of them
+**10,092 pass / 9 fail / 0 NotSupported / 0 warnings**, no case without a
+result. No GPU reset lines in any record.
 
 ## Comparison with d60b9d76 (17,141 pass / 0 fail / 19 NotSupported / 5 warnings)
 
-Not possible: no run. `fragdata.invalid_assign_to_1`: not measured (expected
-Pass, 17,142 / 18 NotSupported overall, per HANDOFF). No case was observed to
-move from Pass.
+Rows 2 to 7 are identical to the §1z2 per-image counts (994, 1172, 1100,
+2525, 1318, 1631, all 0 fail). Row 1 changed in two ways:
 
-## To run it
+- `dEQP-GLES2.functional.shaders.fragdata.invalid_assign_to_1`: NotSupported
+  at `d60b9d76`, **Pass** here (`deqp: Pass`, console line 2957). All seven
+  `fragdata.*` cases pass. The `4e9397c` ES 2.0 reporting fix works on the
+  board.
+- 9 cases moved from Pass to Fail — a regression of the compiler changes
+  since `d60b9d76`, exactly the case HANDOFF warned about:
 
-<<<<<<< HEAD
-With the inputs in place, follow `docs/HANDOFF.md`, "Next board session", then
-"AM62P", from a detached worktree of `198e8a5d` (no fetch):
-`am62p-deqp-images.sh` on `am62p-full-tree.txt`, then `TREE_ROWS=0-6
-board.sh am62p tree`, `tally`, and `deqp-uart-tally.py --mustpass
-tools/cts/gles2-mustpass.txt`. Needs `ZEPHYR_WS`, `WEST_VENV`,
-`ZEPHYR_SDK_INSTALL_DIR`, `DEQP_WORK`, `BOARD_HOST`, `BOARD_UART`, and
-`driver/src/fw/pvr_fw_blob.h` copied in (never committed).
-=======
 ```
 dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_1   Fail (Detected variance between two invariant values)
 dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_2   Fail (Detected variance between two invariant values)
@@ -152,4 +160,3 @@ rows too.
 - `am62p-deqp-images.sh` exits 1 after the last unlabelled row even when all
   images built (`set -e` on its final `[ "$labelled" = 1 ]` test) — worth a
   one-line fix by the tooling owner.
->>>>>>> 2316e085a2ac6ff5bc2961d33ee0fb82de507ae8
