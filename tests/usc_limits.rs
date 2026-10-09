@@ -5669,10 +5669,10 @@ void main() { colour = texture(s, vec3(uv, 1.0), bias); }
 /// The ES 1.00 spellings of a bias, `texture2D(s, uv, b)`,
 /// `textureCube(s, d, b)` and `texture2DProj(s, p, b)` (which the front
 /// end writes as the divide and then the 2D bias, builtin_call.rs), reach
-/// the same selection; a bias the back end has no form for -- ES 3.00's
-/// `textureProj(s, p, b)`, whose data block would need a fourth word, or
-/// one on a 3D texture -- is refused by name, not sampled at the implicit
-/// level.
+/// the same selection, and so do ES 3.00's `textureProj(s, p, b)` (the
+/// divide in the shader, select.rs `tex_coords`) and a bias on a 3D
+/// texture; a look-up the back end has no form for -- an offset on a 3D
+/// texture's grid of slices -- is refused by name, not sampled without it.
 #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
 #[test]
 fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
@@ -5684,17 +5684,6 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
          void main(){ gl_FragColor = textureCube(s, d, b); }",
         "precision highp float; uniform sampler2D s; uniform float b; varying vec3 uv; \
          void main(){ gl_FragColor = texture2DProj(s, uv, b); }",
-    ] {
-        store::with_scratch(|a| {
-            let _keep = store::begin_keep().expect("keep");
-            let text = a.alloc_str(src).unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
-            compile_fragment(&l.module, &l.reflection, a).unwrap_or_else(|e| panic!("{src}: {e:?}"));
-        })
-        .unwrap();
-    }
-    const WHY: &str = "a texture fetch with a projective level or bias, a bias on a 3D texture";
-    for src in [
         "#version 300 es\nprecision highp float; uniform highp sampler2D s; uniform float b; in vec3 p; \
          out vec4 o; void main(){ o = textureProj(s, p, b); }",
         "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
@@ -5704,11 +5693,21 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
             let _keep = store::begin_keep().expect("keep");
             let text = a.alloc_str(src).unwrap();
             let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
-            let err = compile_fragment(&l.module, &l.reflection, a).err();
-            assert!(format!("{err:?}").contains(WHY), "{src}: {err:?}");
+            compile_fragment(&l.module, &l.reflection, a).unwrap_or_else(|e| panic!("{src}: {e:?}"));
         })
         .unwrap();
     }
+    const WHY: &str = "an offset on a stacked texture";
+    let src = "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
+               out vec4 o; void main(){ o = textureOffset(s, p, ivec3(1, 0, 0), b); }";
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let err = compile_fragment(&l.module, &l.reflection, a).err();
+        assert!(format!("{err:?}").contains(WHY), "{src}: {err:?}");
+    })
+    .unwrap();
 }
 
 /// `pvr_proj_lod`: an implicit-level sample of a smooth varying read as it is
@@ -6367,6 +6366,102 @@ void main() {{ colour = 0.5 * (texture({name}, c) + textureLod({name}, c.yxz, le
     let px = stacked_against_ir(&name, &src, &refs);
     let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
     assert!(distinct.len() >= 5, "the depths read too few distinct pixels: {px:08x?}");
+}
+
+/// A bias on a 3D texture and a projective 3D look-up (dEQP
+/// texture.mipmap.3d's bias cases and texture_functions' sampler3d_bias and
+/// textureProj on a sampler3D): the bias applies to the grid image's
+/// implicit level, as on a 2D array's and a cube's stacked images, and
+/// textureProj divides x, y and z by w in the shader (select.rs
+/// `tex_coords`). Ours equals the IR at four biases and four divisors, and
+/// the biases read different pixels. Revert check: without the 3D arm's
+/// Bias the shader is refused ("a texture fetch with ...").
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_3d_texture_takes_a_bias_and_a_projective_look_up_divides_in_the_shader() {
+    let name = (0..2000)
+        .map(|i| format!("s{i}"))
+        .find(|n| {
+            let [w, h] = usc_exec::tex_size_2d(usc_exec::tex_state(sampler_marker(n)), 0);
+            w >= 3 * 256 && h >= 2 * 256
+        })
+        .expect("a sampler name with a wide and tall model image");
+    let src = format!(
+        "#version 300 es
+precision highp float;
+uniform float pvr_layers_{name};
+uniform highp sampler3D {name};
+uniform vec3 c;
+uniform float bias;
+uniform float q;
+out vec4 colour;
+void main() {{ colour = 0.5 * (texture({name}, c, bias) + textureProj({name}, vec4(c.yxz * q, q))); }}
+"
+    );
+    let layers_name = format!("pvr_layers_{name}");
+    let cases: Vec<BoxedInput> = [(0.0f32, 1.0f32), (1.25, 2.0), (2.0, 0.5), (3.5, 4.0)]
+        .into_iter()
+        .map(|(b, q)| -> BoxedInput {
+            let layers_name = layers_name.clone();
+            Box::new(move |k: &str, c: u32| {
+                if k == layers_name {
+                    5.0f32.to_bits()
+                } else if k == "c" {
+                    [0.3f32, 0.6, 0.45][c as usize].to_bits()
+                } else if k == "bias" {
+                    b.to_bits()
+                } else if k == "q" {
+                    q.to_bits()
+                } else {
+                    0
+                }
+            })
+        })
+        .collect();
+    let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+    let px = stacked_against_ir(&name, &src, &refs);
+    let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
+    assert_eq!(distinct.len(), 4, "four biases read the same pixel: {px:08x?}");
+}
+
+/// textureProj with a level or a bias on a 2D sampler (dEQP
+/// texture_functions' textureprojlod and textureproj *_bias, and every
+/// vertex-stage textureProj, whose implicit level is level 0): the divide
+/// in the shader, then the look-up a textureLod / biased texture() is --
+/// the builder has no `smp` form holding both the divisor and a level word.
+/// Ours equals the IR at four divisors with a vec3 and a vec4 coordinate,
+/// and the levels and biases read different pixels.
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_projective_2d_look_up_takes_a_level_or_a_bias() {
+    let name = tall_sampler(64);
+    let src = format!(
+        "#version 300 es
+precision highp float;
+uniform highp sampler2D {name};
+uniform vec3 p;
+uniform float lvl;
+out vec4 colour;
+void main() {{ colour = 0.5 * (textureProjLod({name}, p, lvl) + textureProj({name}, vec4(p.yx, 0.0, p.z), lvl)); }}
+"
+    );
+    let cases: Vec<BoxedInput> =
+        [(0.3f32, 0.7f32, 1.0f32, 0.0f32), (0.3, 0.7, 2.0, 1.0), (0.9, 0.2, 0.5, 2.0), (0.15, 0.45, 3.0, 3.0)]
+            .into_iter()
+            .map(|(x, y, q, l)| -> BoxedInput {
+                Box::new(move |n: &str, c: u32| match (n, c) {
+                    ("p", 0) => x.to_bits(),
+                    ("p", 1) => y.to_bits(),
+                    ("p", 2) => q.to_bits(),
+                    ("lvl", 0) => l.to_bits(),
+                    _ => 0,
+                })
+            })
+            .collect();
+    let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+    let px = stacked_against_ir(&name, &src, &refs);
+    let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
+    assert_eq!(distinct.len(), 4, "the divisors and levels read too few pixels: {px:08x?}");
 }
 
 /// textureSize and texelFetch of a 3D texture, as glsl2usc's pvr_volSize

@@ -599,8 +599,12 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      programs build). Host-proven: `trunc` on the PowerVR and the V3D, the
      V3D's integer shifts, min/max, `~` and unsigned orderings (gl_test 196
      es3trunc, not yet run on a board; dEQP `shaders.operator` trunc, 24
-     programs). Open: the rest of that document's "Work that closes the
-     table".
+     programs); on the PowerVR a bias on a 3D texture, `textureProj` with a
+     level, a bias, in a vertex shader, on a 3D texture or a 2D shadow
+     sampler (divided in the shader), and a shadow look-up of a smooth
+     varying (its plane gradients' W plane). That document's "Texture
+     look-ups" section lists what each back end still refuses. Open: the
+     rest of its "Work that closes the table".
    - **es3-caps** and **es2-report-pin**: redo the ES 3.0 limits test and
      the test pinning the ES 2.0 report's answers, reverted for review
      (`3f78982`, `a35095b`).

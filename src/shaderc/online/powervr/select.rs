@@ -122,9 +122,12 @@ const SR_FACE_CCW: u16 = 44;
 /// Asked by selection, and by the online back end at link
 /// ([`samples_with_plane_gradients`]).
 pub fn gradients_for(m: &ir::Module<'_>, op: &ir::Op) -> Option<u32> {
+    /* `shadow` either way: the shadow arm samples the depth as the plain
+     * look-up of the same coordinate does, gradients included, so the W
+     * plane they divide by is needed for it too (dEQP texture_functions'
+     * `texture(sampler2DShadow, v_texCoord)` was refused for want of it). */
     let ir::Op::Tex {
         dim,
-        shadow: false,
         proj: false,
         ret: ir::ScalarType::F32,
         coord,
@@ -846,15 +849,14 @@ impl<'a> Sel<'a> {
             ir::Op::Tex {
                 dim: ir::TexDim::D2,
                 shadow: false,
-                proj: false,
+                proj,
                 ret: ir::ScalarType::F32,
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
                 offset,
             } => {
-                let u = self.src(coord, 0)?;
-                let v = self.src(coord, 1)?;
+                let [u, v, _] = self.tex_coords(coord, 2, proj)?;
                 let (mut mode, level) = self.smp_level(lod)?;
                 if self.gradients_for(op).is_some() {
                     self.plane_gradients(coord, 2)?;
@@ -997,19 +999,19 @@ impl<'a> Sel<'a> {
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
-                proj: false,
+                proj,
                 ret: ir::ScalarType::F32,
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
                 offset: None,
             } => {
                 use ir::AluOp::{Fadd, Ffma, Fmax, Fmin, Fmul};
                 let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
                 let layers = SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
-                let uv = [self.src(coord, 0)?, self.src(coord, 1)?];
-                let cz = self.src(coord, 2)?;
+                let [u0, v0, cz] = self.tex_coords(coord, 3, proj)?;
+                let uv = [u0, v0];
                 let zl = g(self, Fmul, [Some(cz), Some(layers), None])?;
                 let zm = g(self, Fadd, [Some(zl), f(-0.5), None])?;
                 let last = g(self, Fadd, [Some(layers), f(-1.0), None])?;
@@ -1020,9 +1022,14 @@ impl<'a> Sel<'a> {
                 let z1 = g(self, Fmin, [Some(z0p), Some(last), None])?;
                 let nz0 = self.modified(z0, Mods { neg: true, abs: false, flr: false })?;
                 let t = g(self, Fadd, [Some(z), Some(nz0), None])?;
-                let level = match lod {
-                    ir::TexLod::Lod(_) => Some(SelSrc::Imm(0.0f32.to_bits())),
-                    _ => None,
+                /* an explicit level samples level 0 (pvr_volLod); a bias
+                 * applies to the grid image's implicit level, as a 2D array's
+                 * and a cube's stacked images take one (glsl2usc has no
+                 * form for it) */
+                let (mode, level) = match lod {
+                    ir::TexLod::Lod(_) => (SmpLod::Replace, Some(SelSrc::Imm(0.0f32.to_bits()))),
+                    ir::TexLod::Bias(b) => (SmpLod::Bias, Some(self.src(b, 0)?)),
+                    _ => (SmpLod::Implicit, None),
                 };
                 let mut taps = [VReg(0); 2];
                 for (tap, k) in taps.iter_mut().zip([z0, z1]) {
@@ -1033,7 +1040,7 @@ impl<'a> Sel<'a> {
                         op: SelOp::Sample {
                             binding: sampler,
                             proj: false,
-                            lod: if level.is_some() { SmpLod::Replace } else { SmpLod::Implicit },
+                            lod: mode,
                             fetch: false,
                             offset: None,
                             cube: false,
@@ -1135,19 +1142,19 @@ impl<'a> Sel<'a> {
             ir::Op::Tex {
                 dim: dim @ (ir::TexDim::D2 | ir::TexDim::Cube | ir::TexDim::D2Array),
                 shadow: true,
-                proj: false,
+                proj,
                 ret: ir::ScalarType::F32,
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
                 offset: None,
-            } if self.tex_dst.is_none() => {
+            } if self.tex_dst.is_none() && (!proj || dim == ir::TexDim::D2) => {
                 let depth = VReg(self.next_vreg);
                 self.next_vreg += LANES;
                 let plain = ir::Op::Tex {
                     dim,
                     shadow: false,
-                    proj: false,
+                    proj,
                     ret: ir::ScalarType::F32,
                     sampler,
                     coord,
@@ -1158,11 +1165,18 @@ impl<'a> Sel<'a> {
                 let sampled = self.instr(id, &plain);
                 self.tex_dst = None;
                 sampled?;
-                let reference = self.src(coord, if dim == ir::TexDim::D2 { 2 } else { 3 })?;
+                /* textureProj on a 2D shadow sampler: the reference is
+                 * divided too (r / q, ES 3.00 8.8), as the plain look-up's
+                 * coordinates are */
+                let reference = match (dim, proj) {
+                    (ir::TexDim::D2, true) => self.tex_coords(coord, 3, true)?[2],
+                    (ir::TexDim::D2, false) => self.src(coord, 2)?,
+                    _ => self.src(coord, 3)?,
+                };
                 self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference)
             }
             ir::Op::Tex { .. } => Err(SelectError::Unsupported(
-                "a texture fetch with a projective level or bias, a bias on a 3D texture, a shadow compare, an integer result or gradients, or an offset on a stacked texture, is not selected yet",
+                "a texture fetch with an integer result, gradients, a projective cube or array, or an offset on a stacked texture, is not selected yet",
             )),
             /* `textureSize(s, lod)` on a 2D sampler in a fragment shader, as
              * pco computes it (usclib/tex.cl usclib_tex_state_size, MIT, for
@@ -2673,6 +2687,34 @@ impl<'a> Sel<'a> {
         let vl = g(self, Fadd, [Some(v), Some(l), None])?;
         let out_v = g(self, Fmul, [Some(vl), Some(rl), None])?;
         Ok((u, out_v))
+    }
+
+    /// The first `n` lanes of a look-up's coordinate, divided by lane 3 (the
+    /// IR's divisor lane) when the look-up is projective: the divide in
+    /// the shader, as `shaderc::pvr_proj_divide` does for `texture2DProj`
+    /// (one `frcp`, a `fmul` per lane), so that a projective look-up takes
+    /// a level, a bias, a shadow reference or a vertex stage's implicit
+    /// level 0 like any other -- the builder has no form holding both
+    /// `smp`'s divisor word and a level word (`fragment::build_smp`). The
+    /// TPU's implicit level then comes from the quotient's derivatives,
+    /// which is the level ES 3.00 8.8 defines for it.
+    fn tex_coords(&mut self, coord: ir::Src, n: u32, proj: bool) -> Result<[SelSrc; 3], SelectError> {
+        use ir::AluOp::{Fmul, Frcp};
+        let mut c = [SelSrc::Imm(0); 3];
+        let r = if proj {
+            let q = self.src(coord, 3)?;
+            Some(self.fresh_typed(SelOp::Alu(Frcp), op_type(Frcp), [Some(q), None, None])?)
+        } else {
+            None
+        };
+        for (k, x) in c.iter_mut().enumerate().take(n as usize) {
+            let p = self.src(coord, k as u32)?;
+            *x = match r {
+                Some(r) => self.fresh_typed(SelOp::Alu(Fmul), op_type(Fmul), [Some(p), Some(r), None])?,
+                None => p,
+            };
+        }
+        Ok(c)
     }
 
     /// A move of `x` carrying a source modifier (floor, negate): the value
@@ -4324,13 +4366,15 @@ mod tests {
         use crate::shaderc::online::{lower, sema::Stage};
         use std::collections::BTreeMap;
         let _l = store::test_lock();
-        /* (dword 12, depth) -> the output's lane 0 */
-        let run = |refv: f32, cases: &[(u32, f32)]| -> std::vec::Vec<f32> {
+        /* (dword 12, depth) -> the output's lane 0, for the look-up `call`;
+         * every sample's (u, v) is pushed to `uv` */
+        let uv = core::cell::RefCell::new(std::vec::Vec::new());
+        let run_call = |call: &str, cases: &[(u32, f32)]| -> std::vec::Vec<f32> {
             store::with_scratch(|a| {
                 let src = std::format!(
                     "#version 300 es\nprecision mediump float; uniform mediump sampler2DShadow s; \
                      layout(location = 0) out vec4 o; \
-                     void main(){{ o = vec4(texture(s, vec3(0.25, 0.75, {refv:?})), 0.0, 0.0, 1.0); }}"
+                     void main(){{ o = vec4({call}, 0.0, 0.0, 1.0); }}"
                 );
                 let text = a.alloc_str(&src).unwrap();
                 let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
@@ -4352,7 +4396,11 @@ mod tests {
                         for g in sel.groups {
                             let x: std::vec::Vec<u32> = g.srcs.iter().flatten().map(|s| read(s, &v)).collect();
                             let r = match g.op {
-                                SelOp::Sample { .. } => {
+                                SelOp::Sample { proj, .. } => {
+                                    /* the coordinate the TPU samples at: its own
+                                     * divide by the third word when `proj` */
+                                    let q = if proj { fl(x[2]) } else { 1.0 };
+                                    uv.borrow_mut().push((fl(x[0]) / q, fl(x[1]) / q));
                                     let Some(SelDst::Virtual(d)) = g.dst else { panic!("a fixed sample") };
                                     for lane in 0..LANES {
                                         v.insert(d.0 + lane, if lane == 0 { depth.to_bits() } else { 0 });
@@ -4365,6 +4413,8 @@ mod tests {
                                 SelOp::Alu(ir::AluOp::Feq) => u32::from(fl(x[0]) == fl(x[1])),
                                 SelOp::Alu(ir::AluOp::Fmax) => fl(x[0]).max(fl(x[1])).to_bits(),
                                 SelOp::Alu(ir::AluOp::Fmin) => fl(x[0]).min(fl(x[1])).to_bits(),
+                                SelOp::Alu(ir::AluOp::Frcp) => (1.0 / fl(x[0])).to_bits(),
+                                SelOp::Alu(ir::AluOp::Fmul) => (fl(x[0]) * fl(x[1])).to_bits(),
                                 SelOp::Alu(ir::AluOp::Iand) => x[0] & x[1],
                                 SelOp::Alu(ir::AluOp::Ior) => x[0] | x[1],
                                 SelOp::Alu(ir::AluOp::Ine) => u32::from(x[0] != x[1]),
@@ -4386,6 +4436,8 @@ mod tests {
             })
             .unwrap()
         };
+        let run =
+            |refv: f32, cases: &[(u32, f32)]| run_call(&std::format!("texture(s, vec3(0.25, 0.75, {refv:?}))"), cases);
         const FIXED: u32 = 8; /* a fixed-point depth: the reference is clamped */
         let want = |bits: u32, r: f32, d: f32| -> f32 {
             let hold = (bits & 1 != 0 && r < d) || (bits & 2 != 0 && r == d) || (bits & 4 != 0 && r > d);
@@ -4412,6 +4464,20 @@ mod tests {
          * (ES 3.0.6 3.8.15.1), whatever the function bits */
         let got = run(0.25, &[(16, 0.625), (16 | 7, 0.625), (16 | FIXED, 0.375)]);
         assert_eq!(got, [0.625, 0.625, 0.375], "no compare: the sampled depth");
+        /* textureProj on the shadow sampler: s, t and the reference r all
+         * divided by q (ES 3.00 8.8) -- the coordinate by the TPU (the
+         * plain projective look-up's `smp` proj) or in the shader, the
+         * reference in the shader: (0.5, 1.5, 2 r, 2) samples at (0.25,
+         * 0.75) and compares r. Revert check: with the reference read
+         * undivided (lane 2) the first reference, 0.25, fails. */
+        for refv in [0.25f32, 0.375, 0.75] {
+            uv.borrow_mut().clear();
+            let cases: std::vec::Vec<(u32, f32)> = (0..8u32).map(|b| (b | FIXED, 0.5f32)).collect();
+            let got = run_call(&std::format!("textureProj(s, vec4(0.5, 1.5, {:?}, 2.0))", 2.0 * refv), &cases);
+            let exp: std::vec::Vec<f32> = (0..8).map(|b| want(b, refv, 0.5)).collect();
+            assert_eq!(got, exp, "projective: reference {refv} against depth 0.5");
+            assert!(uv.borrow().iter().all(|&p| p == (0.25, 0.75)), "sampled at s / q, t / q: {:?}", uv.borrow());
+        }
     }
 
     /// A cube and a 2D array shadow look-up select too: the depth through
@@ -4425,6 +4491,14 @@ mod tests {
             ("samplerCubeShadow", "texture(s, vec4(0.1, 0.2, 0.9, 0.5))"),
             ("sampler2DArrayShadow", "texture(s, vec4(0.1, 0.2, 1.0, 0.5))"),
             ("sampler2DShadow", "textureLod(s, vec3(0.1, 0.2, 0.5), 1.0)"),
+            /* a smooth varying as the coordinate: the plain look-up takes
+             * exact plane gradients (`gradients_for`), and the W plane they
+             * divide by is iterated for the shadow look-up too (dEQP
+             * texture_functions' sampler2dshadow_fragment was refused for
+             * want of it, "exact gradients without the W plane") */
+            ("sampler2DShadow", "texture(s, v3)"),
+            ("sampler2DShadow", "textureProj(s, v4)"),
+            ("sampler2DShadow", "textureProjLod(s, v4, 1.0)"),
         ] {
             /* a 2D array needs its hidden pvr_layers_ uniform, which the
              * front end declares on a PowerVR build only (reflect.rs) */
@@ -4434,7 +4508,7 @@ mod tests {
             store::with_scratch(|a| {
                 let src = std::format!(
                     "#version 300 es\nprecision mediump float; uniform mediump {decl} s; \
-                     layout(location = 0) out vec4 o; void main(){{ o = vec4({call}); }}"
+                     in vec3 v3; in vec4 v4; layout(location = 0) out vec4 o; void main(){{ o = vec4({call}); }}"
                 );
                 let text = a.alloc_str(&src).unwrap();
                 let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
@@ -4897,15 +4971,15 @@ mod tests {
                 ],
                 "built-in fragment input",
             ),
-            /* a projective shadow look-up (textureProj on a shadow sampler):
-             * still refused. The plain shadow look-up selects since the
-             * shadow arm; this is the catch-all's example now. */
+            /* an integer result (isampler2D): still refused, the
+             * catch-all's example (the projective shadow look-up it was
+             * selects since the shadow arm divides in the shader) */
             (
                 &[ir::Op::Tex {
                     dim: ir::TexDim::D2,
-                    shadow: true,
-                    proj: true,
-                    ret: ir::ScalarType::F32,
+                    shadow: false,
+                    proj: false,
+                    ret: ir::ScalarType::I32,
                     sampler: 0,
                     coord: ir::Src::id(ir::ValueId(0)),
                     lod: ir::TexLod::Implicit,

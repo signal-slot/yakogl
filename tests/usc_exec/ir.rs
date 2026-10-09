@@ -50,6 +50,20 @@ fn pad(id: u32, lane: usize) -> u32 {
     (1.0f32 + 0.0137 * (id % 101) as f32 + 0.29 * lane as f32).to_bits()
 }
 
+/// A projective look-up's coordinate: x, y and z divided by lane 3 (the IR's
+/// divisor lane, ES 3.00 8.8), and whether the divisor is undefined; the
+/// coordinate as it is otherwise.
+fn projected(c: V4, t: T4, proj: bool) -> (V4, bool) {
+    if !proj {
+        return (c, false);
+    }
+    let mut o = c;
+    for k in 0..3 {
+        o[k] = (f(c[k]) / f(c[3])).to_bits();
+    }
+    (o, t[3])
+}
+
 struct Ev<'m, 'i> {
     m: &'m ir::Module<'m>,
     inp: &'i IrInputs<'i>,
@@ -480,26 +494,34 @@ impl Ev<'_, '_> {
                 Some(([0, 1, 2, 3].map(|k| super::sample_model(marker, u, v, k)), [t[0] || t[1] || t[2]; 4]))
             }
             /* A 3D texture: glsl2usc's pvr_vol over the grid of slices
-             * (`vol_sample`); pvr_volLod samples level 0 whatever it is given. */
+             * (`vol_sample`); pvr_volLod samples level 0 whatever it is given,
+             * and a bias on this model's implicit level 0 reads the level it
+             * names, as on the other stacked images. textureProj divides
+             * x, y and z by lane 3 (ES 3.00 8.8). */
             Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
-                proj: false,
+                proj,
                 ret: ir::ScalarType::F32,
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
                 offset: None,
             } => {
                 let (c, t) = self.src_t(coord)?;
+                let (c, tq) = projected(c, t, proj);
                 let base = (self.inp.marker)(sampler);
-                let marker = match lod {
-                    ir::TexLod::Lod(_) => super::marker_at_level(base, 0.0f32.to_bits()),
-                    _ => base,
+                let (marker, lt) = match lod {
+                    ir::TexLod::Lod(_) => (super::marker_at_level(base, 0.0f32.to_bits()), false),
+                    ir::TexLod::Bias(b) => {
+                        let (bv, bt) = self.src_t(b)?;
+                        (super::marker_at_level(base, bv[0]), bt[0])
+                    }
+                    _ => (base, false),
                 };
                 let layers = self.layers_of(sampler)?;
                 let out = super::vol_sample(super::tex_state(base), layers, [c[0], c[1], c[2]], marker);
-                Some((out, [t[0] || t[1] || t[2]; 4]))
+                Some((out, [t[0] || t[1] || t[2] || tq || lt; 4]))
             }
             /* A 2D array: the stacked 2D image's coordinate (`array_uv`,
              * glsl2usc's pvr_arrUV), the layer count read from the uniform
@@ -584,7 +606,7 @@ impl Ev<'_, '_> {
             Op::Tex {
                 dim: ir::TexDim::D2,
                 shadow: false,
-                proj: false,
+                proj,
                 ret: ir::ScalarType::F32,
                 sampler,
                 coord,
@@ -592,6 +614,8 @@ impl Ev<'_, '_> {
                 offset,
             } => {
                 let (c, t) = self.src_t(coord)?;
+                let (c, tq) = projected(c, t, proj);
+                let t = [t[0] || tq, t[1] || tq, t[2], t[3]];
                 let base = (self.inp.marker)(sampler);
                 let (marker, lt) = match lod {
                     /* a bias on this model's implicit level 0 reads the

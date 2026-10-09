@@ -193,6 +193,34 @@ that grows the feature will turn them into "fail accepted"): 16 on PowerVR, 9 on
 * 10 recursion cases (`functions:invalid.*recursion*`) are refused as `this call
   nests too deeply to inline`, i.e. by the inliner's depth bound, not by a recursion check.
 
+## Texture look-ups (not in this corpus)
+
+The `.test` corpus samples no texture, so the look-up forms of dEQP's
+`texture.*` (glsTextureTestUtil's programs) and `shaders.texture_functions`
+are not counted above. What each back end selects, by form (a refusal names
+the form in the log):
+
+* PowerVR: every float look-up of glsTextureTestUtil (2D, cube, 2D array, 3D,
+  each shadow sampler, with and without a bias). `texture`, `textureLod`,
+  `texelFetch` and `textureOffset` on 2D; the stacked images (cube, 2D
+  array, 3D) without an offset. A shadow look-up is the plain look-up of
+  the depth and a compare in the shader (pco's `lower_tex_shadow`), on 2D,
+  cube and 2D array, with exact plane gradients when the coordinate is a
+  smooth varying. A bias on a 3D texture applies to the grid image's
+  implicit level, as on the cube's and the 2D array's stacked images.
+  `textureProj` with a level or a bias, in a vertex shader, on a 3D texture
+  or on a 2D shadow sampler divides in the shader (`frcp`, a `fmul` per
+  lane, the reference too), then samples as the unprojected form; the
+  plain fragment `textureProj` on 2D keeps `smp`'s own divide. Refused: an
+  integer result (`isampler*`/`usampler*`, the *formats* item), gradients
+  (`textureGrad`, `textureProjGrad`), and an offset on a stacked image
+  (needs the per-layer image of `docs/es3-pvr-2darray.md`).
+* GC7000UL: refuses every shadow sampler, integer result, gradient and
+  offset, and every ES 3.00 `textureProj` / `textureProjLod` (ES 1.00's
+  `texture2DProj` builds).
+* V3D: refuses every look-up other than 2D and cube, integer results,
+  shadow samplers, offsets and gradients.
+
 ## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
