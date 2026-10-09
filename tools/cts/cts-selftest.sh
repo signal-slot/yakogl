@@ -109,32 +109,6 @@ conf_bad pi4-gles3-sweep.config YAKOGL_REPORT_ES2
 conf_bad pi4-sweep.config REPORT_ES2 --gles3
 
 echo
-# ---- 19: check-gles3-tree.py: every GLES3 mustpass case once per table -------
-#
-# The dEQP-GLES3 tables (am62p-gles3-tree.txt, pi4-gles3-tree.txt) are split
-# by hand to fit each board's watchdog window, and a split by hand drops or
-# doubles a case easily (RESULTS.md 1r split its line 19 into 19a-19g and
-# named 3D lists). The checker's self-test covers its rules; the two tables
-# must then each select the 42,810 cases of gles3-mustpass.txt exactly once.
-echo
-echo "== 19. check-gles3-tree.py: self-test, then the GLES3 tables against gles3-mustpass.txt"
-if python3 -I "$HERE/check-gles3-tree.py" --self-test > /dev/null 2>&1; then
-    ok "check-gles3-tree.py --self-test"
-else
-    bad "check-gles3-tree.py --self-test failed: $(python3 -I "$HERE/check-gles3-tree.py" --self-test 2>&1 | grep FAIL)"
-fi
-for t in am62p-gles3-tree.txt pi4-gles3-tree.txt; do
-    gout=$(python3 -I "$HERE/check-gles3-tree.py" "$HERE/$t" 2>&1)
-    grc=$?
-    gline=$(printf '%s\n' "$gout" | grep '^check-gles3-tree: ')
-    if [ "$grc" -eq 0 ] && printf '%s\n' "$gline" | grep -q ' 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images$'; then
-        ok "$t: ${gline#check-gles3-tree: }"
-    else
-        bad "$t: rc $grc; $(printf '%s\n' "$gout" | grep -E 'FAIL|^check-gles3-tree: ' | head -3 | paste -sd';' -)"
-    fi
-done
-
-echo
 # ---- 18: common-tally.py tallies the cluster row (testdata/cluster-run) ------
 #
 # The CL row of common-tree.txt (the AGL cluster sample) is judged by its
@@ -167,6 +141,32 @@ if [ "$trc" -eq 0 ]; then
 else
     bad "cluster row: exit $trc, expected 0"
 fi
+
+echo
+# ---- 19: check-gles3-tree.py: every GLES3 mustpass case once per table -------
+#
+# The dEQP-GLES3 tables (am62p-gles3-tree.txt, pi4-gles3-tree.txt) are split
+# by hand to fit each board's watchdog window, and a split by hand drops or
+# doubles a case easily (RESULTS.md 1r split its line 19 into 19a-19g and
+# named 3D lists). The checker's self-test covers its rules; the two tables
+# must then each select the 42,810 cases of gles3-mustpass.txt exactly once.
+echo
+echo "== 19. check-gles3-tree.py: self-test, then the GLES3 tables against gles3-mustpass.txt"
+if python3 -I "$HERE/check-gles3-tree.py" --self-test > /dev/null 2>&1; then
+    ok "check-gles3-tree.py --self-test"
+else
+    bad "check-gles3-tree.py --self-test failed: $(python3 -I "$HERE/check-gles3-tree.py" --self-test 2>&1 | grep FAIL)"
+fi
+for t in am62p-gles3-tree.txt pi4-gles3-tree.txt; do
+    gout=$(python3 -I "$HERE/check-gles3-tree.py" "$HERE/$t" 2>&1)
+    grc=$?
+    gline=$(printf '%s\n' "$gout" | grep '^check-gles3-tree: ')
+    if [ "$grc" -eq 0 ] && printf '%s\n' "$gline" | grep -q ' 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images$'; then
+        ok "$t: ${gline#check-gles3-tree: }"
+    else
+        bad "$t: rc $grc; $(printf '%s\n' "$gout" | grep -E 'FAIL|^check-gles3-tree: ' | head -3 | paste -sd';' -)"
+    fi
+done
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"

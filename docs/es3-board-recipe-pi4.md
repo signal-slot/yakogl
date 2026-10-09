@@ -145,16 +145,20 @@ verdict line and the closing rc line, in this form (the Pi 4's GLES2 records
 print the same lines with GLES2 names):
 
 ```
-=== A1 (zephyr.bin) 2026-10-DD HH:MM:SS
+=== A1 (zephyr.bin, selector -) 2026-10-DD HH:MM:SS
   *** Booting Zephyr OS build af17c0c8aa2a ***
   v3d_deqp: build <describe>
   deqp: done: <p> passed, <f> failed, <n> not supported, <w> warnings, complete=1
   deqp: summary: <b> cases begun, <r> with a result, 0 without
   v3d_deqp DONE...: build <describe>, filter dEQP-GLES3.functional.attribute_location.*,...
   recoveries: 0
-board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=... resets=0 record=... back_after=<s>s
+board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:deqp_summary resets=0 record=absent back_after=<s>s
 === A1 rc=0 2026-10-DD HH:MM:SS
 ```
+
+(The verdict line's form was checked on a synthetic A1 record through
+`tools/board.sh pi4 tally`; `result=legacy:deqp_summary` is what a deqp
+console without a `yk-record:` line yields, and `record=absent` is expected.)
 
 The fields that matter: `rc=0 verdict=done` and `resets=0`. Each image costs
 its 240 s lifetime plus the two boots, about 5 min 24 s (sweep 30), so the 91
