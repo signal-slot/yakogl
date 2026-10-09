@@ -18,7 +18,7 @@ use std::sync::Mutex;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// The compiler keeps its output in one arena that every compile resets.
-static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+static COMPILING: Mutex<()> = Mutex::new(());
 
 fn text_of(log: &[c_char]) -> String {
     log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect()
@@ -44,7 +44,7 @@ fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
 type Layout = (Vec<u32>, Vec<(u8, u8, u8)>, Vec<(u8, u8, u8)>, u8, u8);
 
 fn build(vs: &str, fs: &str) -> Result<Layout, String> {
-    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
     let vso = compile(SHC_STAGE_VERTEX, vs).map_err(|m| format!("vertex: {m}"))?;
     let mut fso = compile(SHC_STAGE_FRAGMENT, fs).map_err(|m| format!("fragment: {m}"))?;
