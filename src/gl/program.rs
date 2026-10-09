@@ -2649,11 +2649,20 @@ unsafe fn get_uniform(program: GLuint, location: GLint, out: Out) {
         return;
     }
     let k = e.class;
-    let (m, col_stride) =
-        if k.mat != 0 { (k.mat as usize, (e.stride as usize / k.mat as usize).max(k.mat as usize)) } else { (1, 1) };
+    /* matCxR is `mat` columns of `comps / mat` rows, each column strided as
+     * `set_uniform` writes it (a column of 3 rows takes 4 dwords): a
+     * non-square matrix's rows are not its columns (dEQP-GLES3
+     * uniform_api.value.*.get_uniform.basic.mat2x3, mat2x4, mat3x4, mat4x3
+     * read the wrong dwords until 2026-10-09) */
+    let (rows, col_stride) = if k.mat != 0 {
+        let rows = k.comps as usize / k.mat as usize;
+        (rows, (e.stride as usize / k.mat as usize).max(rows))
+    } else {
+        (1, 1)
+    };
     for i in 0..k.comps as usize {
-        /* value i of a matrix is column i / m, row i % m */
-        let dw = if k.mat != 0 { (i / m) * col_stride + i % m } else { i };
+        /* value i of a matrix is column i / rows, row i % rows */
+        let dw = if k.mat != 0 { (i / rows) * col_stride + i % rows } else { i };
         /* the block covers the layout; a dword outside it reads as 0 */
         let bits = block.get(off + dw).map_or(0, |f| f.to_bits());
         put_value(out, i, k.base, bits);

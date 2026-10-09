@@ -680,10 +680,9 @@ mod es3 {
                     .map(|k| format!("compare_float(a.{0}, b.{0})", ["x", "y", "z", "w"][k as usize]))
                     .collect::<Vec<_>>()
                     .join("*"),
-                (Scalar::F, c, r) => (0..c)
-                    .map(|k| format!("compare_{}(a[{k}], b[{k}])", vec_of(r).glsl))
-                    .collect::<Vec<_>>()
-                    .join("*"),
+                (Scalar::F, c, r) => {
+                    (0..c).map(|k| format!("compare_{}(a[{k}], b[{k}])", vec_of(r).glsl)).collect::<Vec<_>>().join("*")
+                }
                 _ => "return a == b ? 1.0 : 0.0;".to_string(),
             };
             let body = if body.starts_with("return") { body } else { format!("return {body};") };
@@ -1112,7 +1111,8 @@ mod es3 {
         let vs_src = vertex_shader(iface, &r, &rdata);
         let fs_src = fragment_shader(iface, &r, &rdata);
         let vs = shader(GL_VERTEX_SHADER, &vs_src).map_err(|e| format!("Compile failed (vertex): {e}\n{vs_src}"))?;
-        let fs = shader(GL_FRAGMENT_SHADER, &fs_src).map_err(|e| format!("Compile failed (fragment): {e}\n{fs_src}"))?;
+        let fs =
+            shader(GL_FRAGMENT_SHADER, &fs_src).map_err(|e| format!("Compile failed (fragment): {e}\n{fs_src}"))?;
         // SAFETY: plain GL calls on handles this case owns.
         unsafe {
             let p = glCreateProgram();
@@ -1477,12 +1477,32 @@ mod es3 {
         run_all(cases);
     }
 
+    /// Cases a back end refuses at link for a limit of its own, with the
+    /// log line that says so. The GC7000 copies a block into the constant
+    /// registers, of which its two stages share 320 (src/vivante); these
+    /// four need 184 + 184. Reading blocks from memory on that GPU is what
+    /// lifts it. A case on the list that starts passing fails the test too,
+    /// so the list cannot outlive the limit.
+    #[cfg(feature = "gpu-vivante")]
+    const KNOWN_LIMITS: [(&str, &str); 4] = [
+        ("single_nested_struct_array.per_block_buffer.shared_instance_array_both", "exceed the 320 this GPU has"),
+        ("single_nested_struct_array.per_block_buffer.std140_instance_array_both", "exceed the 320 this GPU has"),
+        ("single_nested_struct_array.single_buffer.shared_instance_array_both", "exceed the 320 this GPU has"),
+        ("single_nested_struct_array.single_buffer.std140_instance_array_both", "exceed the 320 this GPU has"),
+    ];
+    #[cfg(not(feature = "gpu-vivante"))]
+    const KNOWN_LIMITS: [(&str, &str); 0] = [];
+
     fn run_all(cases: Vec<(String, Iface, Mode)>) {
         let n = cases.len();
         let mut failed = Vec::new();
         for (name, iface, mode) in cases {
-            if let Err(e) = run_case(&iface, mode) {
-                failed.push(format!("{name}: {e}"));
+            let known = KNOWN_LIMITS.iter().find(|(k, _)| *k == name).map(|(_, why)| *why);
+            match (run_case(&iface, mode), known) {
+                (Ok(()), None) => {}
+                (Err(e), Some(why)) if e.contains(why) => {}
+                (Ok(()), Some(_)) => failed.push(format!("{name}: passes; take it off KNOWN_LIMITS")),
+                (Err(e), _) => failed.push(format!("{name}: {e}")),
             }
         }
         assert!(failed.is_empty(), "{} of {n} cases fail:\n{}", failed.len(), failed.join("\n\n"));
@@ -1530,6 +1550,81 @@ mod es3 {
             }
         }
         run_all(cases);
+    }
+
+    /// glGetUniformfv of every matrix type reads back, column-major, what
+    /// glUniformMatrix*fv set, plain and transposed: dEQP-GLES3
+    /// uniform_api.value.{initial,assigned}.*.get_uniform.basic.matCxR. The
+    /// getter took a matrix's columns for its rows, so mat2x3, mat2x4,
+    /// mat3x4 and mat4x3 read the wrong dwords (24 host dEQP cases; mat3x2
+    /// and mat4x2 came out right only because their columns pack).
+    ///
+    /// Revert check: index the block by `i / mat`, `i % mat` in
+    /// `program::get_uniform` and the non-square rows below fail.
+    #[test]
+    fn non_square_matrices_read_back_what_was_set() {
+        type Setter = unsafe extern "C" fn(GLint, GLsizei, GLboolean, *const GLfloat);
+        let _g = context();
+        let mats: [(&str, u32, u32, Setter); 9] = [
+            ("mat2", 2, 2, glUniformMatrix2fv),
+            ("mat3", 3, 3, glUniformMatrix3fv),
+            ("mat4", 4, 4, glUniformMatrix4fv),
+            ("mat2x3", 2, 3, glUniformMatrix2x3fv),
+            ("mat2x4", 2, 4, glUniformMatrix2x4fv),
+            ("mat3x2", 3, 2, glUniformMatrix3x2fv),
+            ("mat3x4", 3, 4, glUniformMatrix3x4fv),
+            ("mat4x2", 4, 2, glUniformMatrix4x2fv),
+            ("mat4x3", 4, 3, glUniformMatrix4x3fv),
+        ];
+        for stage in [GL_VERTEX_SHADER, GL_FRAGMENT_SHADER] {
+            let decls: String = mats.iter().map(|(t, ..)| format!("uniform highp {t} u_{t};\n")).collect();
+            let sum: String = mats.iter().map(|(t, ..)| format!(" + u_{t}[1][1]")).collect();
+            let vs = if stage == GL_VERTEX_SHADER {
+                format!("#version 300 es\n{decls}in vec4 a;\nvoid main() {{ gl_Position = a * (0.0{sum}); }}\n")
+            } else {
+                "#version 300 es\nin vec4 a;\nvoid main() { gl_Position = a; }\n".to_string()
+            };
+            let fs = if stage == GL_FRAGMENT_SHADER {
+                format!("#version 300 es\nprecision highp float;\n{decls}out vec4 o;\nvoid main() {{ o = vec4(0.0{sum}); }}\n")
+            } else {
+                "#version 300 es\nprecision highp float;\nout vec4 o;\nvoid main() { o = vec4(1.0); }\n".to_string()
+            };
+            // SAFETY: plain GL calls on handles this test owns; every
+            // pointer outlives its call and holds what is asked.
+            unsafe {
+                let p = glCreateProgram();
+                glAttachShader(p, shader(GL_VERTEX_SHADER, &vs).unwrap());
+                glAttachShader(p, shader(GL_FRAGMENT_SHADER, &fs).unwrap());
+                glLinkProgram(p);
+                let mut ok: GLint = 0;
+                glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+                assert_eq!(ok, 1);
+                glUseProgram(p);
+                for &(t, cols, rows, set) in &mats {
+                    let name = CString::new(format!("u_{t}")).unwrap();
+                    let loc = glGetUniformLocation(p, name.as_ptr());
+                    assert!(loc >= 0, "{t}");
+                    let n = (cols * rows) as usize;
+                    let vals: Vec<f32> = (0..n).map(|k| k as f32 + 1.0).collect();
+                    for transpose in [0u8, 1] {
+                        set(loc, 1, transpose, vals.as_ptr());
+                        assert_eq!(err(), GL_NO_ERROR, "{t}");
+                        let mut back = vec![-1.0f32; n];
+                        glGetUniformfv(p, loc, back.as_mut_ptr());
+                        /* transposed input is row-major: value (c, r) is at r * cols + c */
+                        let want: Vec<f32> = (0..n)
+                            .map(|i| {
+                                let (c, r) = (i as u32 / rows, i as u32 % rows);
+                                vals[if transpose != 0 { (r * cols + c) as usize } else { i }]
+                            })
+                            .collect();
+                        assert_eq!(back, want, "{t} transpose {transpose} stage {stage:#x}");
+                    }
+                }
+                glUseProgram(0);
+                glDeleteProgram(p);
+            }
+        }
     }
 
     /// Every (block, matrix, matrix array) choice of row_major and
