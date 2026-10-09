@@ -1,0 +1,209 @@
+# The whole dEQP-GLES3 mustpass for the Raspberry Pi 4 (driver/samples/zephyr/v3d_deqp
+# built with DEQP_MODULE=gles3) in 91 images, one CONFIG_DEQP_CASE per line, the format
+# of pi4-full-tree.txt: each line is preceded by "# image <LABEL>: <mustpass names it
+# selects>", the label tools/board.sh pi4 tree names the record by; blank lines and '#'
+# lines are skipped. Every one of the 42,810 names of gles3-mustpass.txt is selected by
+# exactly one line (tools/cts/check-gles3-tree.py pi4-gles3-tree.txt proves it and pins
+# each "# image" count; check-deqp-images.py runs it). The filters match dEQP's whole
+# tree; the tally (deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt) restricts
+# to the list. No image needs texture-2048.conf.
+#
+# Sized for the image's watchdog window, CONFIG_V3D_DEQP_LIFETIME_S 240 s less
+# CONFIG_V3D_DEQP_PHOTO_S 30 s: a run has about 200 s after boot. The Pi 4's GLES2
+# sweep (RESULTS.md "Pi 4: sweep 30") ran 25-60 ms per case, 2,949 shaders.operator
+# cases in 111 s, and about 1.2 s per failing random shader; the AM62P's GLES3 run
+# (RESULTS.md 1r, a 600 s window) outlived it on its texture line and ran
+# texture.filtering.3d as named lists of 22. So: shader groups up to about 1,200 names
+# an image, fragment_ops / ubo / uniform_api / state_query up to about 1,000, fbo /
+# fragment_out / texture / buffer up to about 700, texture.filtering.* one subgroup
+# each, texture.filtering.3d as named lists of at most 15, builtin_functions.precision
+# about 200 (each case checks 16k sampled inputs against a CPU reference), lifetime.*
+# alone (its init dies without transform feedback, RESULTS.md 1r, and would end the
+# image's run), random.all_features by stage as in pi4-full-tree.txt. Every record
+# prints "<n> cases in <ms> ms": an image near 200 s is split before the next sweep.
+#
+# Build: DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh tools/cts/pi4-gles3-tree.txt <img-dir>
+# Run, tally: docs/es3-board-recipe-pi4.md.
+
+# image A1: 472
+dEQP-GLES3.functional.attribute_location.*,dEQP-GLES3.functional.color_clear.*,dEQP-GLES3.functional.default_vertex_array_object.*,dEQP-GLES3.functional.default_vertex_attrib.*,dEQP-GLES3.functional.depth_stencil_clear.*,dEQP-GLES3.functional.dither.*,dEQP-GLES3.functional.fence_sync.*,dEQP-GLES3.functional.implementation_limits.*,dEQP-GLES3.info.*,dEQP-GLES3.functional.prerequisite.*
+# image B1: 695
+dEQP-GLES3.functional.buffer.*
+# image C1: 602
+dEQP-GLES3.functional.clipping.*
+# image D1: 443
+dEQP-GLES3.functional.draw.*,dEQP-GLES3.functional.draw_buffers_indexed.*,dEQP-GLES3.functional.instanced.*
+# image FB1: 580
+dEQP-GLES3.functional.fbo.api.*,dEQP-GLES3.functional.fbo.completeness.*
+# image FB2: 610
+dEQP-GLES3.functional.fbo.blit.*
+# image FB3: 329
+dEQP-GLES3.functional.fbo.color.*,dEQP-GLES3.functional.fbo.depth.*,dEQP-GLES3.functional.fbo.multiview.*,dEQP-GLES3.functional.fbo.stencil.*
+# image FB4: 509
+dEQP-GLES3.functional.fbo.invalidate.*,dEQP-GLES3.functional.fbo.msaa.*,dEQP-GLES3.functional.fbo.render.*
+# image FO1: 677
+dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.equation_src_func_dst_func.*
+# image FO2: 475
+dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.*,dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_func_alpha_func.*
+# image FO3: 227 (the 225 add_* cases and the two named max and min)
+dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_*,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.max,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.min
+# image FO4: 450
+dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.reverse_subtract_*,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.subtract_*
+# image FO5: 475
+dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.rgb_equation_alpha_equation.*,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.rgb_func_alpha_func.*
+# image FO6: 866
+dEQP-GLES3.functional.fragment_ops.depth.*,dEQP-GLES3.functional.fragment_ops.depth_stencil.*,dEQP-GLES3.functional.fragment_ops.interaction.*,dEQP-GLES3.functional.fragment_ops.random.*,dEQP-GLES3.functional.fragment_ops.scissor.*,dEQP-GLES3.functional.fragment_ops.stencil.*
+# image FR1: 420
+dEQP-GLES3.functional.fragment_out.array.*
+# image FR2: 520
+dEQP-GLES3.functional.fragment_out.basic.*,dEQP-GLES3.functional.fragment_out.random.*
+# image LT: 56 (alone: the group's init needs transform feedback and dEQP ends the run when it fails)
+dEQP-GLES3.functional.lifetime.*
+# image M1: 507
+dEQP-GLES3.functional.multisample.*,dEQP-GLES3.functional.negative_api.*,dEQP-GLES3.functional.occlusion_query.*,dEQP-GLES3.functional.pbo.*,dEQP-GLES3.functional.polygon_offset.*
+# image PR: 504
+dEQP-GLES3.functional.primitive_restart.*
+# image R1: 303
+dEQP-GLES3.functional.rasterization.*,dEQP-GLES3.functional.rasterizer_discard.*,dEQP-GLES3.functional.read_pixels.*,dEQP-GLES3.functional.samplers.*,dEQP-GLES3.functional.shader_api.*,dEQP-GLES3.functional.vertex_array_objects.*
+# image SQ: 946
+dEQP-GLES3.functional.state_query.*
+# image S01: 861
+dEQP-GLES3.functional.shaders.arrays.*,dEQP-GLES3.functional.shaders.builtin_variable.*,dEQP-GLES3.functional.shaders.conditionals.*,dEQP-GLES3.functional.shaders.constant_expressions.*,dEQP-GLES3.functional.shaders.constants.*
+# image S02: 392
+dEQP-GLES3.functional.shaders.builtin_functions.common.*,dEQP-GLES3.functional.shaders.builtin_functions.pack_unpack.*
+# image S03: 192
+dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.acos.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.acosh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.add.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.*
+# image S04: 201
+dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.cross.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.degrees.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.determinant.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.distance.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.div.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.dot.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.exp.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.exp2.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.faceforward.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.floor.*
+# image S05: 202
+dEQP-GLES3.functional.shaders.builtin_functions.precision.fract.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.inverse.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.inversesqrt.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.length.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.log.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.log2.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.max.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.min.*
+# image S06: 204
+dEQP-GLES3.functional.shaders.builtin_functions.precision.mix.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.mod.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.modf.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.mul.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.normalize.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.pow.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.radians.*
+# image S07: 206
+dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.refract.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.round.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.roundeven.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.sin.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.sqrt.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.step.*
+# image S08: 142
+dEQP-GLES3.functional.shaders.builtin_functions.precision.sub.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.tanh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.trunc.*
+# image S09: 1156
+dEQP-GLES3.functional.shaders.conversions.*
+# image S10: 690
+dEQP-GLES3.functional.shaders.declarations.*,dEQP-GLES3.functional.shaders.derivate.*,dEQP-GLES3.functional.shaders.discard.*,dEQP-GLES3.functional.shaders.fragdata.*,dEQP-GLES3.functional.shaders.fragdepth.*,dEQP-GLES3.functional.shaders.function.*,dEQP-GLES3.functional.shaders.functions.*
+# image S11: 756
+dEQP-GLES3.functional.shaders.indexing.*
+# image S12: 1216
+dEQP-GLES3.functional.shaders.invalid_implicit_conversions.*,dEQP-GLES3.functional.shaders.invariance.*,dEQP-GLES3.functional.shaders.keywords.*,dEQP-GLES3.functional.shaders.large_constant_arrays.*,dEQP-GLES3.functional.shaders.linkage.*
+# image S13: 957
+dEQP-GLES3.functional.shaders.loops.*,dEQP-GLES3.functional.shaders.matrix.add.*,dEQP-GLES3.functional.shaders.matrix.add_assign.*
+# image S14: 594
+dEQP-GLES3.functional.shaders.matrix.determinant.*,dEQP-GLES3.functional.shaders.matrix.div.*,dEQP-GLES3.functional.shaders.matrix.div_assign.*,dEQP-GLES3.functional.shaders.matrix.inverse.*,dEQP-GLES3.functional.shaders.matrix.matrixcompmult.*,dEQP-GLES3.functional.shaders.matrix.mul_assign.*,dEQP-GLES3.functional.shaders.matrix.negation.*,dEQP-GLES3.functional.shaders.matrix.outerproduct.*
+# image S15: 972
+dEQP-GLES3.functional.shaders.matrix.mul.*
+# image S16: 720
+dEQP-GLES3.functional.shaders.matrix.post_decrement.*,dEQP-GLES3.functional.shaders.matrix.post_increment.*,dEQP-GLES3.functional.shaders.matrix.pre_decrement.*,dEQP-GLES3.functional.shaders.matrix.pre_increment.*,dEQP-GLES3.functional.shaders.matrix.sub.*,dEQP-GLES3.functional.shaders.matrix.sub_assign.*,dEQP-GLES3.functional.shaders.matrix.transpose.*,dEQP-GLES3.functional.shaders.matrix.unary_addition.*,dEQP-GLES3.functional.shaders.metamorphic.*,dEQP-GLES3.functional.shaders.negative.*
+# image S17: 716
+dEQP-GLES3.functional.shaders.operator.angle_and_trigonometry.*,dEQP-GLES3.functional.shaders.operator.binary_operator.add.*,dEQP-GLES3.functional.shaders.operator.binary_operator.add_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.add_assign_result.*
+# image S18: 864
+dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_and.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_and_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_and_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_or.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_or_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_or_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_xor.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_xor_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.bitwise_xor_assign_result.*
+# image S19: 716
+dEQP-GLES3.functional.shaders.operator.binary_operator.div.*,dEQP-GLES3.functional.shaders.operator.binary_operator.div_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.div_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.equal.*,dEQP-GLES3.functional.shaders.operator.binary_operator.greater.*,dEQP-GLES3.functional.shaders.operator.binary_operator.greater_or_equal.*,dEQP-GLES3.functional.shaders.operator.binary_operator.left_shift.*
+# image S20: 666
+dEQP-GLES3.functional.shaders.operator.binary_operator.left_shift_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.left_shift_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.less.*,dEQP-GLES3.functional.shaders.operator.binary_operator.less_or_equal.*,dEQP-GLES3.functional.shaders.operator.binary_operator.logical_and.*,dEQP-GLES3.functional.shaders.operator.binary_operator.logical_or.*,dEQP-GLES3.functional.shaders.operator.binary_operator.logical_xor.*,dEQP-GLES3.functional.shaders.operator.binary_operator.mod.*,dEQP-GLES3.functional.shaders.operator.binary_operator.mod_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.mod_assign_result.*
+# image S21: 680
+dEQP-GLES3.functional.shaders.operator.binary_operator.mul.*,dEQP-GLES3.functional.shaders.operator.binary_operator.mul_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.mul_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.not_equal.*,dEQP-GLES3.functional.shaders.operator.binary_operator.right_shift.*
+# image S22: 768
+dEQP-GLES3.functional.shaders.operator.binary_operator.right_shift_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.right_shift_assign_result.*,dEQP-GLES3.functional.shaders.operator.binary_operator.sub.*,dEQP-GLES3.functional.shaders.operator.binary_operator.sub_assign_effect.*,dEQP-GLES3.functional.shaders.operator.binary_operator.sub_assign_result.*
+# image S23: 866
+dEQP-GLES3.functional.shaders.operator.bool_compare.*,dEQP-GLES3.functional.shaders.operator.common_functions.*,dEQP-GLES3.functional.shaders.operator.exponential.*
+# image S24: 1126
+dEQP-GLES3.functional.shaders.operator.float_compare.*,dEQP-GLES3.functional.shaders.operator.geometric.*,dEQP-GLES3.functional.shaders.operator.int_compare.*,dEQP-GLES3.functional.shaders.operator.selection.*,dEQP-GLES3.functional.shaders.operator.sequence.*,dEQP-GLES3.functional.shaders.operator.unary_operator.*
+# image S25: 689
+dEQP-GLES3.functional.shaders.precision.*,dEQP-GLES3.functional.shaders.preprocessor.*,dEQP-GLES3.functional.shaders.qualification_order.*
+# image S26: 700
+dEQP-GLES3.functional.shaders.random.basic_expression.*,dEQP-GLES3.functional.shaders.random.comparison_ops.*,dEQP-GLES3.functional.shaders.random.conditionals.*
+# image S27: 987
+dEQP-GLES3.functional.shaders.random.exponential.*,dEQP-GLES3.functional.shaders.random.scalar_conversion.*,dEQP-GLES3.functional.shaders.random.swizzle.*,dEQP-GLES3.functional.shaders.random.texture.*,dEQP-GLES3.functional.shaders.random.trigonometric.*
+# image S5f: 66
+dEQP-GLES3.functional.shaders.random.all_features.fragment.*
+# image S5v: 70
+dEQP-GLES3.functional.shaders.random.all_features.vertex.*
+# image S30: 915
+dEQP-GLES3.functional.shaders.return.*,dEQP-GLES3.functional.shaders.scoping.*,dEQP-GLES3.functional.shaders.struct.*,dEQP-GLES3.functional.shaders.switch.*,dEQP-GLES3.functional.shaders.swizzle_math_operations.*
+# image S31: 648
+dEQP-GLES3.functional.shaders.swizzles.*
+# image S32: 678
+dEQP-GLES3.functional.shaders.texture_functions.*,dEQP-GLES3.functional.shaders.uniform_block.*
+# image T01: 266
+dEQP-GLES3.functional.texture.compressed.*
+# image T02: 129
+dEQP-GLES3.functional.texture.filtering.2d.*
+# image T03: 134
+dEQP-GLES3.functional.texture.filtering.2d_array.*
+# image T04: 124
+dEQP-GLES3.functional.texture.filtering.cube.*
+# image F3C1: 14 (texture.filtering.3d.combinations, mustpass names 1-14)
+dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_mirror_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_mirror_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_repeat_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_mirror_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_mirror_mirror
+# image F3C2: 14 (combinations 15-28)
+dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_mirror_repeat_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_mirror_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_mirror_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_repeat_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_nearest_clamp_clamp_clamp
+# image F3C3: 14 (combinations 29-42)
+dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_linear_clamp_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_mirror_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_mirror_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_clamp_repeat_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_mirror_clamp
+# image F3C4: 14 (combinations 43-56)
+dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_mirror_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_mirror_repeat_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_clamp_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_clamp_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_mirror_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_mirror_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_mirror_repeat,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_repeat_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.nearest_nearest_repeat_repeat_repeat
+# image F3F1: 15 (texture.filtering.3d.formats, mustpass names 1-15)
+dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb10_a2_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_linear_mipmap_nearest
+# image F3F2: 15 (formats 16-30)
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgb9_e5_nearest_mipmap_nearest
+# image F3F3: 15 (formats 31-45)
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest
+# image F3F4: 15 (formats 46-60)
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_snorm_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb8_alpha8_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_linear
+# image F3F5: 11 (formats 61-71)
+dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_rg8_nearest_mipmap_nearest
+# image F3S1: 13 (texture.filtering.3d.sizes, mustpass names 1-13)
+dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.128x32x64_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.32x64x16_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear
+# image F3S2: 13 (sizes 14-26)
+dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.3x7x5_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.4x8x8_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.sizes.63x63x63_linear,dEQP-GLES3.functional.texture.filtering.3d.sizes.63x63x63_nearest
+# image T05: 220
+dEQP-GLES3.functional.texture.format.compressed.*,dEQP-GLES3.functional.texture.format.unsized.*,dEQP-GLES3.functional.texture.format.sized.2d.*
+# image T06: 326
+dEQP-GLES3.functional.texture.format.sized.2d_array.*,dEQP-GLES3.functional.texture.format.sized.3d.*,dEQP-GLES3.functional.texture.format.sized.cube.*
+# image T07: 224
+dEQP-GLES3.functional.texture.mipmap.*
+# image T08: 288
+dEQP-GLES3.functional.texture.shadow.2d.*,dEQP-GLES3.functional.texture.shadow.2d_array.*
+# image T09: 222
+dEQP-GLES3.functional.texture.shadow.cube.*,dEQP-GLES3.functional.texture.size.*
+# image T10: 334
+dEQP-GLES3.functional.texture.specification.basic_copyteximage2d.*,dEQP-GLES3.functional.texture.specification.basic_copytexsubimage2d.*,dEQP-GLES3.functional.texture.specification.basic_teximage2d.*,dEQP-GLES3.functional.texture.specification.basic_teximage3d.*,dEQP-GLES3.functional.texture.specification.basic_texsubimage2d.*,dEQP-GLES3.functional.texture.specification.basic_texsubimage3d.*
+# image T11: 320
+dEQP-GLES3.functional.texture.specification.random_teximage2d.*,dEQP-GLES3.functional.texture.specification.teximage2d_align.*,dEQP-GLES3.functional.texture.specification.teximage2d_depth.*,dEQP-GLES3.functional.texture.specification.teximage2d_depth_pbo.*,dEQP-GLES3.functional.texture.specification.teximage2d_pbo.*,dEQP-GLES3.functional.texture.specification.teximage2d_unpack_params.*,dEQP-GLES3.functional.texture.specification.teximage3d_depth.*,dEQP-GLES3.functional.texture.specification.teximage3d_depth_pbo.*,dEQP-GLES3.functional.texture.specification.teximage3d_pbo.*,dEQP-GLES3.functional.texture.specification.teximage3d_unpack_params.*
+# image T12: 197
+dEQP-GLES3.functional.texture.specification.texstorage2d.*,dEQP-GLES3.functional.texture.specification.texstorage3d.*
+# image T13: 312
+dEQP-GLES3.functional.texture.specification.texsubimage2d_align.*,dEQP-GLES3.functional.texture.specification.texsubimage2d_depth.*,dEQP-GLES3.functional.texture.specification.texsubimage2d_empty_tex.*,dEQP-GLES3.functional.texture.specification.texsubimage2d_pbo.*,dEQP-GLES3.functional.texture.specification.texsubimage2d_unpack_params.*,dEQP-GLES3.functional.texture.specification.texsubimage3d_depth.*,dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.*,dEQP-GLES3.functional.texture.specification.texsubimage3d_unpack_params.*
+# image T14: 416
+dEQP-GLES3.functional.texture.swizzle.*,dEQP-GLES3.functional.texture.units.*,dEQP-GLES3.functional.texture.vertex.*
+# image T15: 432
+dEQP-GLES3.functional.texture.wrap.astc_10x10.*,dEQP-GLES3.functional.texture.wrap.astc_10x10_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_10x5.*,dEQP-GLES3.functional.texture.wrap.astc_10x5_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_10x6.*,dEQP-GLES3.functional.texture.wrap.astc_10x6_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_10x8.*,dEQP-GLES3.functional.texture.wrap.astc_10x8_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_12x10.*,dEQP-GLES3.functional.texture.wrap.astc_12x10_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_12x12.*,dEQP-GLES3.functional.texture.wrap.astc_12x12_srgb.*
+# image T16: 504
+dEQP-GLES3.functional.texture.wrap.astc_4x4.*,dEQP-GLES3.functional.texture.wrap.astc_4x4_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_5x4.*,dEQP-GLES3.functional.texture.wrap.astc_5x4_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_5x5.*,dEQP-GLES3.functional.texture.wrap.astc_5x5_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_6x5.*,dEQP-GLES3.functional.texture.wrap.astc_6x5_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_6x6.*,dEQP-GLES3.functional.texture.wrap.astc_6x6_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_8x5.*,dEQP-GLES3.functional.texture.wrap.astc_8x5_srgb.*,dEQP-GLES3.functional.texture.wrap.astc_8x6.*,dEQP-GLES3.functional.texture.wrap.astc_8x6_srgb.*
+# image T17: 504
+dEQP-GLES3.functional.texture.wrap.astc_8x8.*,dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.*,dEQP-GLES3.functional.texture.wrap.eac_r11.*,dEQP-GLES3.functional.texture.wrap.eac_rg11.*,dEQP-GLES3.functional.texture.wrap.eac_signed_r11.*,dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.*,dEQP-GLES3.functional.texture.wrap.etc1.*,dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.*,dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.rgba8.*
+# image TF1: 444
+dEQP-GLES3.functional.transform_feedback.array.*,dEQP-GLES3.functional.transform_feedback.interpolation.*,dEQP-GLES3.functional.transform_feedback.point_size.*,dEQP-GLES3.functional.transform_feedback.position.*
+# image TF2: 438
+dEQP-GLES3.functional.transform_feedback.basic_types.*,dEQP-GLES3.functional.transform_feedback.random_full_array_capture.*
+# image UB1: 968
+dEQP-GLES3.functional.ubo.single_basic_type.*
+# image UB2: 755
+dEQP-GLES3.functional.ubo.instance_array_basic_type.*,dEQP-GLES3.functional.ubo.multi_basic_types.*,dEQP-GLES3.functional.ubo.multi_nested_struct.*,dEQP-GLES3.functional.ubo.random.*
+# image UB3: 632
+dEQP-GLES3.functional.ubo.single_basic_array.*,dEQP-GLES3.functional.ubo.single_nested_struct.*,dEQP-GLES3.functional.ubo.single_nested_struct_array.*,dEQP-GLES3.functional.ubo.single_nested_struct_mixed_matrix_packing.*,dEQP-GLES3.functional.ubo.single_struct.*,dEQP-GLES3.functional.ubo.single_struct_array.*
+# image UA1: 759
+dEQP-GLES3.functional.uniform_api.info_query.*,dEQP-GLES3.functional.uniform_api.random.*
+# image UA2: 1014
+dEQP-GLES3.functional.uniform_api.value.assigned.*
+# image UA3: 408
+dEQP-GLES3.functional.uniform_api.value.initial.*
+# image VA1: 203
+dEQP-GLES3.functional.vertex_arrays.multiple_attributes.*
+# image VA2: 802
+dEQP-GLES3.functional.vertex_arrays.single_attribute.*
