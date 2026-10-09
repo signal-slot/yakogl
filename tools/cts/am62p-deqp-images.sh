@@ -101,7 +101,10 @@ MODS=$("$HERE/zephyr-modules.sh" "$ZEPHYR_WS") || die "zephyr-modules.sh failed"
 DEQP_MODULE=${DEQP_MODULE:-gles2}
 case "$DEQP_MODULE" in
     gles2) MODARGS="-DDEQP_MODULE=gles2" ;;
-    gles3) MODARGS="-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n" ;;
+    # DEQP_REPORT_ES2=n only drops the sample's select: the library's own
+    # default (y) must be turned off too, or the image reports ES 2.0 and
+    # dEQP-GLES3 dies at its first query (GL_NUM_EXTENSIONS, INVALID_ENUM)
+    gles3) MODARGS="-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n" ;;
     *) die "DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" ;;
 esac
 [ -f "$DEQP_WORK/build/modules/$DEQP_MODULE/libdeqp-$DEQP_MODULE-package.a" ] || die "$DEQP_WORK has no $DEQP_MODULE stage 1 (cts-build-zephyr.sh MODULE=$DEQP_MODULE)"
@@ -117,8 +120,9 @@ rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
         "-DCONFIG_DEQP_CASE=\"$filt\"") > "$B.log" 2>&1 < /dev/null && rc=0 || rc=$?
     # the resolved Kconfig must still be a conformance image (the compiler, REPORT_ES2, no
     # precompiled tier, the render config the row asks for); one that is not is not built
-    if [ "$rc" = 0 ] && [ "$DEQP_MODULE" = gles2 ]; then
-        python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" ${conf:+--ms4} >> "$B.log" 2>&1 \
+    if [ "$rc" = 0 ]; then
+        python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" ${conf:+--ms4} \
+            $([ "$DEQP_MODULE" = gles3 ] && echo --gles3) >> "$B.log" 2>&1 \
             || rc=not-conformance
     fi
     bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16)

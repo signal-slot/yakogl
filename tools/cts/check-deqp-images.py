@@ -111,6 +111,10 @@ def conformance_rules(c, name, gles3=False, ms4=None):
             bad.append('%s: YAKOGL_REPORT_ES2=n (dEQP-GLES2 judges an ES 2.0 context)' % name)
         if c.get('DEQP_REPORT_ES2') == 'n':
             bad.append('%s: DEQP_REPORT_ES2=n' % name)
+    elif c.get('YAKOGL_REPORT_ES2') == 'y':
+        # DEQP_REPORT_ES2=n only drops the select; the library's own default
+        # (y) stays unless the image says -DCONFIG_YAKOGL_REPORT_ES2=n
+        bad.append('%s: YAKOGL_REPORT_ES2=y (dEQP-GLES3 needs an ES 3.0 context)' % name)
     gl = c.get('DEQP_GL_CONFIG_NAME', '')
     if ms4 is True and gl != 'rgba8888d24s8ms4':
         bad.append("%s: DEQP_GL_CONFIG_NAME is '%s', the multisample image needs rgba8888d24s8ms4" % (name, gl))
@@ -119,11 +123,16 @@ def conformance_rules(c, name, gles3=False, ms4=None):
     return bad
 
 
-def check_dotconfig(path, ms4):
+def check_dotconfig(path, ms4, gles3=False):
     c = parse_dotconfig(path)
-    bad = conformance_rules(c, path, ms4=ms4)
+    bad = conformance_rules(c, path, gles3=gles3, ms4=ms4)
     for s in ('YAKOGL_REPORT_ES2', 'DEQP_REPORT_ES2'):
-        if c.get(s) != 'y':
+        if gles3:
+            # a dEQP-GLES3 image must report ES 3.0: dEQP's GLES3 context
+            # queries GL_NUM_EXTENSIONS at start and dies on INVALID_ENUM
+            if c.get(s) == 'y':
+                bad.append('%s: CONFIG_%s=y (a dEQP-GLES3 image needs the context to report ES 3.0)' % (path, s))
+        elif c.get(s) != 'y':
             bad.append('%s: CONFIG_%s=y is missing from the resolved configuration' % (path, s))
     return bad
 
@@ -323,9 +332,9 @@ def main(argv):
         return 1 if self_test() else 0
     if argv[1:2] == ['--config']:
         if len(argv) < 3 or not os.path.isfile(argv[2]):
-            print('usage: check-deqp-images.py --config <.config> [--ms4]', file=sys.stderr)
+            print('usage: check-deqp-images.py --config <.config> [--ms4] [--gles3]', file=sys.stderr)
             return 2
-        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False)
+        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False, '--gles3' in argv[3:])
     elif len(argv) == 1:
         bad, notes = check_repo()
         for n in notes:
