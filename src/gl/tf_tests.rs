@@ -8,9 +8,14 @@
 //! `report-es2` the one test is `es2_answers_are_unchanged`.
 #![allow(clippy::undocumented_unsafe_blocks)]
 
+// the tests that use these are gated on shaderc-online
+#[allow(unused_imports)]
 use super::consts::*;
+#[allow(unused_imports)]
 use super::es3::*;
+#[allow(unused_imports)]
 use super::types::*;
+#[allow(unused_imports)]
 use crate::testutil::TestGl;
 
 #[cfg(all(not(feature = "report-es2"), feature = "shaderc-online"))]
