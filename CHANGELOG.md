@@ -13,6 +13,11 @@ There is no released version yet; everything below is unreleased.
 - OpenGL ES 2.0 and EGL for embedded GPUs without an OS GPU driver (afb16335).
 - `GL_OES_texture_npot` in ES 2.0 builds; non-power-of-two textures get mip chains (2673197d).
 - Draw-step timing: each step of a draw is timed and the frame's slowest is reported (b0a9c0c8, 068cb628).
+- ES 3.0 transform feedback state: objects with indexed buffer bindings, varyings resolved at link, begin/end/pause/resume with their errors, the primitives-written query, and `GL_RASTERIZER_DISCARD`. Capture is not built yet: a draw that would capture is refused with `GL_INVALID_OPERATION` (16ac8641).
+- ES 3.0 sized internal formats (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, the integer formats) are accepted and converted at upload into a class the back end samples; formats no back end samples yet are refused by name (888af5d0, e5c4a180).
+- ES 3.0 integer colour render targets in the GL core: renderbuffer storage, framebuffer completeness, `glClearBuffer{i,ui}v` and integer `glReadPixels`. No back end draws into them yet, so a draw or clear into one is refused by name (b9b2ac00).
+- Every level of a non-power-of-two 2D array or `glTexStorage` texture is valid, as ES 3.0 requires (c40414b9).
+- The link refuses a varying whose interpolation qualifier differs between the stages, and a uniform block declared differently in the two (b88fea5e, 03ff7a63).
 
 #### PowerVR (TI AM62P)
 - Predicated `if` arms, as pco does, and an optional branched `if` where skipping an arm pays (afa12e9b, 97ba03d4, 5f4d3677).
@@ -39,6 +44,8 @@ There is no released version yet; everything below is unreleased.
 - Host harness: the scen and hostile program sets run on the V3D build too, with fail-injection offsets per GPU (93a36d33).
 - Host replay of glmark2's V3D allocations against the 96 MiB carve-out (ac0c2544).
 - glmark2's own shaders compile on all three back ends, checked as a standalone cargo test (abf8c700).
+- dEQP-GLES3's uniform block cases (every `functional.ubo` group but `random`, 2,032 cases) ported to a host test through the GL API (1b0e4316, b0c0fa6b).
+- Host reproduction of glmark2 shadow/refract sampling stale depth on the PowerVR, with the open test marking the defect (860f6b1a).
 - Provenance record for the femtovg shader corpus variants, checked byte-exact against upstream femtovg 0.26.0 (2563c275, 8d092785).
 - `check.sh` builds one Zephyr `gl_test` image per GPU with `-Werror` on our C files (990dbd32).
 - Many new `gl_test` cases that measure GPU cost (for example 184-195).
@@ -56,7 +63,7 @@ There is no released version yet; everything below is unreleased.
 - Depth/stencil buffers: 32 slots on every GPU, memory is the real bound, least recently used is given up first (2b219c5f).
 
 #### PowerVR (TI AM62P)
-- Large GENERAL blocks are taken from the end of the carve-out (541c9d3b).
+- Large GENERAL blocks are taken from the end of the carve-out (the pool's top region), so small long-lived blocks no longer split the free space (541c9d3b).
 
 #### Vivante GC7000 (NXP i.MX8MP)
 - Debug knobs leave the product; MRT, vertex-stage tiled copy and INT_FILTER are the design (260711b9, 72d16864).
@@ -74,6 +81,7 @@ There is no released version yet; everything below is unreleased.
 #### GL core
 - Refuse a `DEPTH_COMPONENT24` renderbuffer; ES 2.0 has no `MAX_DRAW_BUFFERS` (4e9397c6).
 - ES 2.0 CTS: the failures recorded on the three boards have host-side fixes; the confirming board runs are pending (`docs/es2-cts-failures.md`).
+- `glGetUniform*` of a `mat2x3`, `mat2x4`, `mat3x4` or `mat4x3` reads its own values instead of the wrong dwords (b0c0fa6b).
 
 #### PowerVR (TI AM62P)
 - glmark2 refract's 7.6 MB depth target now fits the pool (541c9d3b).
