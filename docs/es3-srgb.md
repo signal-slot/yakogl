@@ -38,15 +38,15 @@ Three trees were read, all 26.2.1:
   It carries no `VERSION` file; it is the tree `docs/es3-pvr-formats.md`
   cites, and its `pvr_arch_job_common.c` lines match that document's.
 
-Not available: `src/compiler/nir/nir_lower_blend.c` and the Broadcom
-compiler (`src/broadcom/compiler/`) are in none of those trees, and a
-`git clone` of Mesa was refused in the sandbox that wrote this. Two claims
-below depend on them and are marked "not verified in source" (4.2, 5.3).
-Section 10 lists them as the first things to check. No Mesa main checkout
-was used; there is no `mesa-main` in the deps cache.
+A fourth tree, `$CCFARM_DEPS_DIR/mesa-26.2.1-full/` (`git clone --depth 1
+--branch mesa-26.2.1`, HEAD `da14d65e4499e66468094be52bff9ea0915a695e`), was
+cloned for the two files the others lack: `src/compiler/nir/nir_lower_blend.c`
+and `src/broadcom/compiler/` (`full:` below; 4.2, 5.3). No Mesa main checkout
+was used: the tag is the version yakogl vendors, and every line cited is from
+it.
 
 Paths below are relative to those trees; `pvr:` = the imagination tree,
-`caps:` = the caps tree, `vend:` = the vendored tree.
+`caps:` = the caps tree, `vend:` = the vendored tree, `full:` = the full clone.
 
 ## 2. The GL rules the design must meet (ES 3.0)
 
@@ -178,11 +178,14 @@ Consequence, from the data path rather than from a test:
   bit on that load (4.3). yakogl's frame load is
   `PVR_INTERNAL_FBLOAD_F16X4` (`src/pvr/backend.rs:1718`, `FBLOAD_RT`); for sRGB
   it needs the same program with a texture state built with gamma ON.
-  **Not verified in source:** how Mesa's `nir_lower_blend` treats an sRGB
-  render-target format (it may add its own decode/encode, which would
-  double-convert on top of the PBE gamma). `nir_lower_blend.c` is not in the
-  trees. The yakogl port should be read for `srgb`; if it has no sRGB branch
-  the design above stands; a board test (section 10, B1) settles it.
+  `nir_lower_blend` adds **no** sRGB conversion of its own: the only
+  `srgb` tests in `full:src/compiler/nir/nir_lower_blend.c` are in
+  `nir_color_logicop` (`:270-275`, `:1047`), which skips float and sRGB
+  targets for logic ops. So there is no double conversion on top of the PBE
+  gamma, and the shader blends whatever the tile buffer holds (linear F16).
+  The same applies to `full:src/broadcom/compiler/v3d_nir_lower_logic_ops.c:352-366`
+  on V3D. Check yakogl's `blend.rs` has no sRGB branch of its own (it is a
+  port of that file); board check B1 confirms.
 
 ### 4.3 Texture side: TPU gamma
 
@@ -249,10 +252,13 @@ yakogl's V3D fragment shaders end in `vfpack ... -> TLB` (two halves per
 TLB write; `src/shaderc/online/v3d/select.rs:2193-2194`), which is how an
 8-bit and a 16F RT are fed alike (the TLB converts to the RT's internal type).
 So the shader needs **no change** for sRGB; only the RT configuration
-(5.1) does. **Not verified in source:** Mesa's own colour-write lowering for
-a 16F RT (`src/broadcom/compiler/`, not in the trees); the vfpack ending is
-the evidence from yakogl's compiler, whose RGBA8 path is already
-board-validated on the Pi 4. B3 checks the first sRGB triangle.
+(5.1) does. Mesa agrees: `vir_emit_tlb_color_write`
+(`full:src/broadcom/compiler/nir_to_vir.c:1953-2018`) writes `F16` colour
+(`TLB_TYPE_F16_COLOR`, `vir_VFPACK_dest` of r,g then b,a; `:1972-1979`,
+`:2004-2013`) for every render target except those with `f32_color_rb` set
+(32-bit float formats, `:1968-1971`). An sRGB RT is not one of those, so it
+takes the same vfpack path as RGBA8, which yakogl already emits. B3 checks the
+first sRGB triangle on the board.
 
 ### 5.4 Texture side: TMU
 
@@ -496,10 +502,8 @@ cases.
 * **B4** - `PE_LOGIC_OP_SRGB` and friends bit values for GC7000UL from the
   etnaviv headers, and a register capture of an etnaviv sRGB draw if the
   header is not available.
-* Mesa checks that could not be done here: `nir_lower_blend.c`'s sRGB
-  branch; `src/broadcom/compiler` colour-write lowering for 16F RTs. A
-  `git clone --depth 1 --branch mesa-26.2.1` into `$CCFARM_DEPS_DIR` settles
-  both; the clone was refused in the sandbox that wrote this document.
+* Settled in source (not board checks any more): `nir_lower_blend` has no
+  sRGB blend branch (4.2) and V3D's colour write is a plain F16 vfpack (5.3).
 
 ## Appendix: a CPU sRGB codec (exact 8-bit, ES 3.0 formula)
 
