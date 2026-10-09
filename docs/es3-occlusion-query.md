@@ -2,10 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 occlusion queries: design for PowerVR, V3D 4.2 and GC7000UL
 
-Design for `docs/HANDOFF.md`, open work 4, occlusion-query. Written
-2026-10-08 (`d3037128`). Docs only: nothing was built or run for this file, and
-nothing here has been measured on a board. Every hardware statement is
-either a Mesa citation or marked **[unverified]**.
+Design for `docs/HANDOFF.md`, open work 4, occlusion-query, written
+2026-10-08 (`d3037128`) and built on all three back ends (section 2 says
+where). Everything in it is proven on the host only; nothing has been
+measured on a board yet (gl_test 196 `occl` is the first board test, section
+8). Every hardware statement is either a Mesa citation or marked
+**[unverified]**.
 
 Scope: `GL_ANY_SAMPLES_PASSED` and `GL_ANY_SAMPLES_PASSED_CONSERVATIVE`
 (`glBeginQuery`, `glEndQuery`, `glGetQueryiv`, `glGetQueryObjectuiv`,
@@ -58,31 +60,31 @@ must see the result of draws that were recorded before `glEnd`/`glFinish`.
 (section 5). `es3fLifetimeTests.cpp:195-215` calls `glBeginQuery(ANY_SAMPLES_PASSED)`
 as its "bind" and `glEndQuery` as "unbind".
 
-## 2. Where yakogl is today
+## 2. Where it is built
 
-* `src/gl/es3.rs:233-329`: names are real (`glGenQueries` pool of
-  `MAX_QUERIES = 32` per context, `:45`, `QUERIES` `:107`, `Es3Name {used,
-  bound}` `:53-57`); `glBeginQuery` sets `bound` and raises
-  `GL_INVALID_OPERATION` (`:271-286`), `glEndQuery` always
-  `GL_INVALID_OPERATION` (`:289-297`), `glGetQueryiv` answers 0
-  (`:300-317`), `glGetQueryObjectuiv` always `GL_INVALID_OPERATION`
-  (`:320-328`). The module comment (`:25-30`) states the rule that a call
-  needing an unmodelled feature errors loudly; this item removes the
-  occlusion half of that rule.
-* Host tests that pin the stub and must change: `src/gl/es3.rs:1348-1418`
-  (`a_query_name_is_an_object_only_after_begin_query`,
-  `begin_query_checks_the_target_before_the_name`,
-  `end_query_and_the_object_query_refuse`,
-  `get_queryiv_answers_that_no_query_is_active`).
-* Backends: no counter anywhere. `grep -i occlusion` over `src/` finds only
-  the constants (`src/gl/consts.rs:597-598, 1432-1434`). The V3D C job
-  builder already emits the OQ packet with a **zero address** (section 3.1).
-* Nothing in `GL_EXTENSIONS` mentions queries: `ALL_EXTENSION_NAMES`
-  (`src/gl/state.rs:32-...`) has no `GL_EXT_occlusion_query_boolean`, and
-  there are no `glBeginQueryEXT`/`glEndQueryEXT` exports (`src/` and
-  `capi/` hold none; only the Khronos header `include/GLES2/gl2ext.h:1314,
-  1793-1797` and the unused constant `GL_EXT_occlusion_query_boolean`
-  `src/gl/consts.rs:1432`).
+* GL core, `src/gl/es3.rs` (queries section): the state machine of section 5,
+  one back-end handle per (context, name) (`index * 32 + name`, below
+  `GLES_QUERY_HANDLES` = 64), the per-handle kick that outlives the name
+  (`HANDLE_KICK`), and the result read of section 4.4. `src/gl/draw.rs`
+  `build_common` sets `GlesDraw::occlusion_query`. Tests:
+  `gl::es3::tests::occlusion` on `testutil`'s `MOCK_BACKEND_QUERIES`.
+* Contract: `src/backend.rs` / `src/backend.h` (`GlesDraw::occlusion_query`,
+  `YakoglBackend::query_begin / query_end / query_result`).
+* V3D: `src/v3d/backend.rs` (`v3d_query_*`, `oq_addr`),
+  `driver/src/v3d/v3d_job.c` (the FIXED group); tests
+  `src/v3d/backend_tests.rs`, `tools/v3d/job_check.c` part 19.
+* GC7000UL: `src/vivante/backend.rs` (`oq_arm`, `oq_suspend`,
+  `gc_query_*`); tests `src/vivante/backend_tests.rs`.
+* PowerVR: `src/pvr/backend.rs` (`vis_*`, `pvr_backend_query_*`, the pass
+  type in `record_draw`), `driver/src/pvr_vdm_ppp_gen.c` (ISPCTL),
+  `driver/src/pvr_render.h` / `driver/rust/src/gpu/pvr/render.rs`
+  (`isp_oclqry_base`, CMD3D dwords 22-23); tests
+  `src/pvr/backend_tests.rs`, `tools/pvr/vdm_field_check.c`.
+* Board test: `driver/tools/pvrlab/gl_test.c` case 196 `occl`.
+
+The ES 2.0 report refuses every query target exactly as before
+(`es2_report_refuses_occlusion_on_a_counting_backend`), and with no query
+active every back end emits the words it emitted before (section 6).
 
 ## 3. Per-GPU design
 
@@ -155,9 +157,9 @@ increments per submit; `v3d_kick_id()` is "the kick being recorded"
 
 | where | change |
 |---|---|
-| back end storage | `V3dState` gets an `oq` arena: one 4 KiB GPU buffer from `osal::gpu_alloc` in `v3d_init` (`:3962`), mapped. Handle `h` (1..=32) owns the dword at `h * 64` (a 64-byte stride: the CPU zeroes and reads one line while the GPU writes another's). |
+| back end storage | `V3dState::oq`: one 4 KiB GPU buffer from `osal::gpu_alloc`, allocated by the first `v3d_query_begin` (no query, no allocation), mapped. Handle `h` (1..64) owns the dword at `h * 64` (a 64-byte stride: the CPU zeroes and reads one line while the GPU writes another's). |
 | `driver/src/v3d/v3d_job.h:102` `struct v3d_job_state` + `src/v3d/ffi.rs:271` `V3dJobState` | new field `oq_addr: u32` (0 = none). `static_assert` the layout the way the other mirrors do. |
-| `src/v3d/state.rs:396` `job_state` | set `oq_addr` from `GlesDraw::occlusion_query` (`arena.gpu + h*64`, 0 for none and for every `clear_quad`, `state::clear_quad_draw` `:148`). |
+| `src/v3d/backend.rs` `draw_call` | sets `oq_addr` on the draw's `job_state` from `GlesDraw::occlusion_query` (`oq.gpu + h*64`, 0 for none); the clear quad is built from its own `GlesDraw` (`state::clear_quad_draw`) and carries 0. |
 | `driver/src/v3d/v3d_job.c:556-566` | `PACK(V3D_PACK_FIXED, 3, mask, st->oq_addr)`: **the address joins the key**, or the packet-skip cache would not re-emit it when it changes. `OCCLUSION_QUERY_COUNTER` gets `oq.address = cl_address(...)` when non-zero. The job-start packet (`:168`) stays zero. |
 | BCL relocation | the C builder emits GPU addresses directly (`cl_address`); no BO list exists. The arena is allocated once and lives as long as the context, so no per-job pinning. |
 | `src/v3d/backend.rs` | `v3d_query_begin(h)`: if the job in flight/open is using `h` (it is not: Begin zeroes a fresh handle) write 0 to the dword, `cache_flush` the line. `v3d_query_result(h)`: `osal::cache_invd` (`src/osal/mod.rs:454`) then read the dword. Both are new `YakoglBackend` entries. |
@@ -246,24 +248,25 @@ driver: `enum pvr_render_heap` has GENERAL, PDS, USC only
 | where | change |
 |---|---|
 | `driver/src/pvr_vdm_ppp_gen.{h,c}` `struct pvr_ppp_state` + `src/pvr/ffi.rs:154` `PvrPppState` + `src/pvr/ffi_layout_check.c` | `vis_test: i32`, `vis_reg: u32` (< 16384, 14 bits). Pack `c.vistest`/`c.visreg` in the `TA_STATE_ISPCTL` at `:311-321`. Extend the C generator's own test and the layout assertions. |
-| `src/pvr/backend.rs` `record_draw` (`:5227`) | `st.vis_test = d.occlusion_query != 0; st.vis_reg = slot_of(d.occlusion_query, this kick)`. Clear/load quads (`record_frame_quad` `:2677`, `record_clear_quad` `:2814`) never set it. |
-| `PvrRenderFragRegs` (C `driver/src/pvr_render.h:96`, Rust `src/pvr/ffi.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `driver/rust/src/gpu/pvr/render.rs`, `tools/hostharness/rec.c:736`) | new `isp_oclqry_base: u64`, appended **after** `cmd_flags` (offset 208; struct size 216) so no existing offset moves; the `BUILD_ASSERT`s are updated. `render.rs:1284-1291`: `lohi(&mut dk, 22, f.isp_oclqry_base)`. |
-| `src/pvr/backend.rs` `flush` (`:6139` region) | `kick.frag.isp_oclqry_base = vis.gpu` and `cmd_flags |= FRAG_FLAGS_GETVISRESULTS (0x20)` when the frame has any counted draw. |
-| heap | **Open point.** Mesa allocates from a dedicated vis-test heap. Whether the ISP/firmware accept a base in the general heap is unknown **[unverified]**. First try: a 4 KiB block from `PVR_RENDER_HEAP_GENERAL` (16-byte aligned, zeroed by the CPU before the kick). If the firmware ignores or faults, add `PVR_RENDER_HEAP_VIS_TEST` to the driver (the DRM/KM heap exists in Mesa's winsys: `pvr_srv.c:219-326`). |
-| result slots | see "accumulation" below. |
+| `src/pvr/backend.rs` `record_draw` | `st.vis_test = 1; st.vis_reg = d.occlusion_query` (the handle) for a counted draw, and the frame notes the handle (`vis_frame`). Clear/load quads (`record_frame_quad`, `record_clear_quad`) are built from their own `GlesDraw` and never set it. |
+| `PvrRenderFragRegs` (C `driver/src/pvr_render.h`, Rust `src/osal/render.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `driver/rust/src/gpu/pvr/render.rs`, `tools/hostharness/rec.c`) | new `isp_oclqry_base: u64`, appended **after** `cmd_flags` (offset 208; struct size 216) so no existing offset moves; the `BUILD_ASSERT`s are updated. `render.rs:1284-1291`: `lohi(&mut dk, 22, f.isp_oclqry_base)`. |
+| `src/pvr/backend.rs` `flush` | `kick.frag.isp_oclqry_base` = the kick's result area (packed with csbgen's `ROGUE_CR_ISP_OCLQRY_BASE_pack`, added to `yakogl-tools csbgen-bindings`) and `cmd_flags |= FRAG_FLAGS_GETVISRESULTS (0x20)` when the frame has any counted draw; both 0 otherwise. |
+| heap | Mesa allocates from a dedicated vis-test heap. Built: 2 KiB from the general heap (`alloc_mapped(HEAP_GENERAL_BASE)`, 16-byte aligned), allocated by the first `query_begin`. Whether the ISP/firmware accept a base there is unknown **[unverified]**; if the board shows they do not, add `PVR_RENDER_HEAP_VIS_TEST` to the driver (the DRM/KM heap exists in Mesa's winsys: `pvr_srv.c:219-326`). |
+| result areas | see "accumulation" below. |
 
-**Accumulation: one visreg per kick (decision).** Mesa uses one `visreg`
-for the whole query, also across the extra renders it creates
+**Accumulation: one result area per kick (as built).** Mesa uses one
+`visreg` for the whole query, also across the extra renders it creates
 (`pvr_arch_cmd_query.c:181-204`), and never sums on the CPU, so the
 firmware/ISP either adds into the dword or Mesa relies on it. I cannot
-tell which **[unverified]**. The design does not depend on it: every
-counted kick gets **its own** 4-byte register from a pool
-(`vis_reg` = next free index, zeroed by the CPU before submit), and the
-back end remembers for each query handle the list of
-`(kick_id, vis_reg)`. `query_result` sums those dwords on the CPU after the
-kicks completed. A query that outlives 16 kicks folds the completed ones
-into a running sum and recycles their registers (it waits for the oldest
-kick, the same wait the frame-set reuse does, `wait_fence` `:1874`).
+tell which **[unverified]**. The design does not depend on it: `visreg` is
+the query's handle, and every kick with a counted draw names **its own**
+result area as `ISP_OCLQRY_BASE` (8 areas of 64 dwords, zeroed by the CPU
+before the submit). Once a kick has completed (`completed_fence`), its
+area's dwords are added to the handles' CPU sums (`vis_fold`) and the area
+is free; a kick that finds all 8 in flight waits for the oldest. Either
+ISP behaviour (add or overwrite) gives the kick's own count.
+`query_begin` folds the completed areas and resets the handle's sum;
+`query_result` folds and returns it.
 
 **TBDR ordering hazard (the main PowerVR risk).** The ISP resolves
 hidden surfaces per tile and the back end deliberately makes depth-writing
@@ -274,10 +277,12 @@ visibility test counts what survives the ISP's depth test, so:
 1. An occluder **recorded after** `glEndQuery` in the same kick would hide
    a target recorded inside the query: the count would be 0 although GL
    says the target was visible at the time. Rule: **`glEndQuery` ends the
-   frame** (`frame_ends_here` gains "the query that was counting has
-   ended", implemented as the GL core calling `flush()` at `glEndQuery`, so
-   no backend rule is needed). Occluders before `glBeginQuery` stay in the
-   kick and correctly hide targets. The cost is one extra kick per query.
+   frame**: the GL core calls `query_end`, and the PowerVR's
+   (`pvr_backend_query_end`) submits the open frame when it holds a draw
+   of that query. Occluders before `glBeginQuery` stay in the kick and
+   correctly hide targets. The cost is one extra kick per query. A clear
+   pending at `glEndQuery` is not carried out there (section 4.2), so it
+   lands after the split too.
 2. Inside the query, objects must be tested in submission order: counted
    draws are given `PVR_PPP_PASSTYPE_TRANSLUCENT` (order preserving,
    `:5247-5260`) instead of OPAQUE. This is a conservative choice made from
@@ -363,13 +368,13 @@ value is quoted from `etnaviv_query_acc_occlusion.c:93`.
 | where | change |
 |---|---|
 | `src/vivante/regs.rs` | `GC_GL_OCCLUSION_QUERY_CONTROL`, `GC_GL_OCCLUSION_QUERY_ADDR` and `GC_OQ_CONTROL_VALUE = 0x1DF5E76` (`ADDR` 0x3824, `CONTROL` 0x3830) with the `state.xml.h:341/:395` citation. |
-| `src/vivante/state.rs` | `GcState` gets `oq: OsalGpuMem` (one 16 KiB buffer: 2048 slots of 8 bytes, allocated at `gc_init` `:1905`; per handle a CPU-side `slots: Vec`-free array of `(first, count)`: the handle's slots are the contiguous range `[first, first+count)` of the **current** query; one query is active at a time, so slots are handed out in order) and per-frame `oq_on: u32` (the handle whose slot is currently armed, 0 = off). |
-| `emit_draw` `:1609` | before `emit_flushes` (`:1597`, which ends with the RA->PE stall): `oq_arm(f, d.gl.occlusion_query)`. If it differs from `oq_on`: if `oq_on != 0` **suspend** (`c.stall(GC_SYNC_RA, GC_SYNC_PE)` then `c.state(CONTROL, 0x1DF5E76)`, slot count++); if the new handle is non-zero **resume**: `c.state(ADDR, oq.gpu + slot*8)`. The stall before the CONTROL write [unverified: Mesa has none, but its writes are in the same stream order; a PE that still holds fragments of the previous draw would store a short count; the blob's pattern is unknown]. |
+| `src/vivante/backend.rs` | `OQ_MEM`: one 32 KiB buffer, 64 handles x 64 slots x 8 bytes, allocated by the first `gc_query_begin`; each handle owns its 64 slots, so a finished query's slots stay readable while the next counts. `OQ`: the handle armed in the stream being recorded (`on`, 0 = off), the slots each handle's query has filled (`used`), and which ran out (`overflow`). |
+| `emit_draw` | after `emit_flushes` (whose RA->PE stall lets the draws before finish): `oq_arm(c, handle)` with the draw's handle, 0 for a clear. If it differs from `on`: if `on != 0` **suspend** (`c.stall(GC_SYNC_RA, GC_SYNC_PE)` then `c.state(CONTROL, 0x1DF5E76)`, `used[on]++`); if the new handle is non-zero **resume**: `c.state(ADDR, oq.gpu + (h*64 + used[h])*8)`. The stall before the CONTROL write [unverified: Mesa has none, but its writes are in the same stream order; a PE that still holds fragments of the previous draw would store a short count; the blob's pattern is unknown]. While a handle is armed the stream's capacity is lowered by the suspend's 6 words, so `frame_submit` always has room for it. |
 | `emit_clear` `:1799` (the clear quad) and clear-only kicks | `oq_arm(f, 0)` first: clears never count (ES 3.0 4.2.3: clear is not a draw). |
-| `frame_submit` `:1733`, before `f.w.pad()` | `oq_arm(f, 0)` (suspend), as Mesa suspends at flush; the next frame's first counted draw resumes with a new slot. `frame_open` resets `oq_on = 0`; the slot counter is per **query**, not per frame. |
-| `Mark` `:2404` | add `oq_on` and the slot counter, restored by `restore()`; a taken-back draw must not leave a half-armed counter. |
-| `gc_query_begin(h)` | zero the handle's slot range **and** reset `first/count`; `cache_flush` the buffer. `gc_query_result(h)`: `osal::cache_invd`, sum the `count` slots (`u64`), `!= 0`. |
-| slot exhaustion | 2048 suspend/resume transitions in one query (a draw loop alternating counted draws and clears). The query is flagged `overflow`; the boolean answer is then `true` (a false positive, allowed for the conservative target only; for the exact target it is logged once). |
+| `frame_submit` | `oq_suspend` first, as Mesa suspends at flush; the next frame's first counted draw resumes with a new slot. `frame_open` resets `on = 0`; `used` is per **query**, not per frame. |
+| `Mark` | saves `OQ` and the stream's capacity, restored by `restore()`; a taken-back draw leaves the counter as it found it. |
+| `gc_query_begin(h)` | zero the handle's 64 slots and `used[h]`, clear `overflow`; `cache_flush`. `gc_query_result(h)`: `osal::cache_invd`, sum the `used[h]` slots (`u64`). |
+| slot exhaustion | more than 64 suspends in one query (a draw loop alternating counted draws and clears, or 64 frames). The query stops arming and is flagged `overflow`; its answer is then "passed" (a false positive, allowed for the conservative target only; logged once). |
 
 **Availability.** The PE stores at the CONTROL write, in stream order, so
 the data is there once the frame's fence passed:
@@ -386,51 +391,60 @@ written by every resume, so it cannot.
 
 ### 4.1 State (src/gl/es3.rs)
 
-Replace the `Es3Name { used, bound }` pool of queries by a record per name:
+The `Es3Name { used, bound }` pool keeps the names; each name has a record:
 
 ```text
-struct Query {
-    used: bool,        // glGenQueries returned it
-    bound: bool,       // it is an object (first successful glBeginQuery)
+struct Es3Query {
     target: GLenum,    // fixed at the first Begin; later Begin with another target = INVALID_OPERATION
     active: bool,
-    handle: u32,       // backend handle (1..), 0 = none; a handle per query *use*
-    end_kick: u32,     // backend::kick_id() at glEndQuery
-    has_result: bool,  // the result was read once and is cached
-    result: u32,       // 0/1
+    result: u32,       // primitives written, or 0/1 for an occlusion target
+    has_result: bool,  // occlusion: the result was read once and is cached
+    end_kick: u32,     // occlusion: backend::kick_id() at glEndQuery
 }
 ```
 
-and per context `active_occlusion: u32` (query name or 0). **Both occlusion
-targets share one slot**: dEQP says "GL_ANY_SAMPLES_PASSED and
+The back-end handle is not stored: it is `index * 32 + name` (one per
+context and name, below `GLES_QUERY_HANDLES`; a context past it gets
+GL_OUT_OF_MEMORY from Begin). `HANDLE_KICK[handle]` keeps the kick of the
+handle's last use, outliving the name and the context: a Begin on the
+handle first waits for it (`settle_handle`), so the back end never resets a
+counter a kick in flight still adds into. The active occlusion query is
+found among the records. **Both occlusion targets share one slot**: dEQP says "GL_ANY_SAMPLES_PASSED and
 GL_ANY_SAMPLES_PASSED_CONSERVATIVE alias to the same target for the purposes of
 this error" (`cts:es3fNegativeFragmentApiTests.cpp:320-322`).
 `GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN` keeps its own slot (`tf-api`).
 
 ### 4.2 The per-draw field
 
-`GlesDraw` (`src/backend.rs:432`, C twin `struct gles_draw` `src/backend.h:201`,
-layout checks `src/abi_layout.rs`, `src/abi_layout_check.c`) gets
-`occlusion_query: u32` (backend handle, 0 = none), documented in
-`backend.h`. `src/gl/draw.rs` sets it where it builds the draw
-(`:2842`, the regular draw; `:3679, :4083` submit it): `ctx.active_occlusion`'s
-handle, **0** for the pending-clear draw (`:2024-2077`, a clear is not
-counted), for `glBlit*`/internal quads, and when rasterizer discard is on
-(PVR: `pvr_arch_cmd_buffer.c:6878`: no vistest with rasterizer discard;
-`GL_RASTERIZER_DISCARD` is `tf-api`'s state, `src/gl/state.rs:434`).
-The pending clear must be flushed **at `glBeginQuery` and `glEndQuery`** (it
-already is "settled" before any draw; calling `flush_pending_clear`
-`draw.rs:2236` in both makes the clear land on the correct side of the
-query).
+`GlesDraw` (`src/backend.rs`, C twin `struct gles_draw` `src/backend.h`,
+layout checks `src/abi_layout.rs`, `src/abi_layout_check.c`) has
+`occlusion_query: u32` (backend handle, 0 = none, offset 3192), documented
+in `backend.h`. `src/gl/draw.rs` `build_common`, where every application
+draw is built, sets it to the active occlusion query's handle
+(`es3::occlusion_query`); every other `GlesDraw` (the pending-clear draw,
+internal quads) starts from `GlesDraw::ZERO` and carries **0**. With
+rasterizer discard on no draw reaches the back end at all (PVR:
+`pvr_arch_cmd_buffer.c:6878`: no vistest with rasterizer discard). A clear
+fused into a counted draw is never counted: every back end clears by a path
+of its own (TLB clear or a quad built from its own `GlesDraw` on the V3D,
+the clear quad that suspends the counter on the GC7000, the background
+object or a clear quad on the PowerVR).
+The pending clear is carried out **at `glBeginQuery`** (`flush_pending_clear`),
+so it lands before the counted draws. At `glEndQuery` it stays pending: it
+is after the counted draws in any case, and on the PowerVR, which ends the
+frame at `glEndQuery`, carrying it out first would put a clear quad behind
+the query's draws in their own kick.
 
 ### 4.3 New `YakoglBackend` entries (`src/backend.rs:743`, `src/backend.h:384`; all optional)
 
 ```text
-query_begin:  fn(handle: u32) -> i32     // 0, or -ENOMEM (no slot / no counter memory)
-query_end:    fn(handle: u32)            // optional; V3D/PVR need nothing, GC may suspend
+query_begin:  fn(handle: u32) -> i32     // 0, or -ENOMEM (no counter memory); every earlier kick on the handle completed
+query_end:    fn(handle: u32)            // optional; the PowerVR ends the frame here, V3D/GC need nothing
 query_result: fn(handle: u32, out: *mut u64) -> i32   // call only after the last kick is complete
-query_free:   fn(handle: u32)            // after the query's last kick has completed
 ```
+
+There is no `query_free`: a handle belongs to its (context, name) for good,
+and its storage is a fixed slice of a buffer each back end allocates once.
 
 A back end with `query_begin == None` keeps today's behaviour exactly
 (`glBeginQuery` -> `GL_INVALID_OPERATION`); that is what the host test
@@ -440,15 +454,17 @@ at a time.
 ### 4.4 Completion, "across several jobs/flushes" and RESULT_AVAILABLE
 
 * `glEndQuery`: `end_kick = backend::kick_id()` (the kick being recorded,
-  which **contains** every draw so far: V3D `:4527`, GC `:2590`, PVR
-  `:6436`). For the PVR it also calls `backend::flush()` (3.2).
+  which **contains** every draw so far), then `query_end` (the PowerVR
+  submits that kick there, 3.2).
 * `GL_QUERY_RESULT_AVAILABLE` = `!backend::kick_pending(end_kick)`. If the
   kick is the one still being recorded the GL core **first flushes**
-  (`backend::flush`, `src/backend.rs:253`): the GL rule "querying forces the
-  query to complete within a finite time" (Mesa does the same:
-  `etnaviv_query_acc.c:122-130`, `v3d_query_pipe.c:204`), and an
-  application that polls `AVAILABLE` without a `glFlush` would spin
-  forever otherwise.
+  (`backend::flush`): the GL rule "querying forces the query to complete
+  within a finite time" (Mesa does the same: `etnaviv_query_acc.c:122-130`,
+  `v3d_query_pipe.c:204`), and an application that polls `AVAILABLE`
+  without a `glFlush` would spin forever otherwise. A flush that submits
+  nothing (the kick being recorded is empty) leaves `kick_id` where it was;
+  then the kick to wait for is the last one submitted (`kick_id - 1`),
+  which holds every counted draw.
 * `GL_QUERY_RESULT`: flush if needed, `backend::wait_kick(end_kick)`
   (`src/backend.rs:1179`; falls back to `finish`), then `query_result`;
   cache the answer (`has_result`) and free the handle. The boolean target
@@ -466,11 +482,10 @@ at a time.
 * Context loss / `eglDestroyContext` / `eglMakeCurrent(NO_CONTEXT)`
   (`src/gl/egl.rs:1843-1870`, `src/gl/context.rs:1827-1852`): queries are
   per context (`QUERIES[MAX_CONTEXTS]`, `es3.rs:107`; ES 3.0 Appendix D
-  does not share queries). On destroy: for every query with a handle,
-  `wait_kick(end_kick)` is **not** required (destroy already runs
-  `flush`+`finish` when a clear is pending, `context.rs:1840-1844`); call
-  `query_free` for each handle and clear `active_occlusion`. An active
-  query at destroy time is simply dropped. A lost GPU job (`gpu_work_lost`,
+  does not share queries). On destroy (and when a slot is reused) the
+  slot's names and records are cleared (`reset_context_queries`); an
+  active query is dropped and its handle's `HANDLE_KICK` keeps the kick,
+  so the next query on that handle waits for it. A lost GPU job (`gpu_work_lost`,
   `src/backend.rs:960-1000`: sticky counter, no GL error) makes
   `wait_kick` fail: `GL_QUERY_RESULT` then returns the **conservative**
   answer (`GL_TRUE`) and `AVAILABLE` becomes true, so a polling loop
@@ -492,7 +507,7 @@ at a time.
 | bad pname | INVALID_ENUM | same |
 | `glGetQueryiv(GL_CURRENT_QUERY)` = active name or 0; bad pname/target INVALID_ENUM | | `:1005` |
 | `glIsQuery`: false until the first Begin, false after delete | | `es3fNegativeStateApiTests.cpp:1015-1050` |
-| `glDeleteQueries` of an active query: end it (`active_occlusion = 0`), then free; a pending result is dropped, the handle is returned only after `end_kick` completed | no error | `es3fLifetimeTests.cpp:195-215` |
+| `glDeleteQueries` of an active query: end it (`query_end`, the handle keeps the kick), then free; a pending result is dropped, and the next query on the handle waits for that kick | no error | `es3fLifetimeTests.cpp:195-215` |
 | `glGetQueryObjectuiv(QUERY_RESULT)` before End: the active-query rule above; after End: waits | | `es3fOcclusionQueryTests.cpp:383-393` |
 
 Order of checks in `glBeginQuery` must stay as `es3.rs:271-286` has it
@@ -565,9 +580,9 @@ State machine, one test per row of section 5:
   per poll that finds the open kick);
 * `RESULT` waits (`wait_kick` counted) and caches (second read: no wait);
 * a query across three kicks (fake returns the sum of three parts);
-* delete while active: `active_occlusion == 0`, handle freed only after the
-  fake reports the kick complete;
-* context destroy: all handles freed (`query_free` count), no wait;
+* delete while active: no query active, and a new Begin on the name waits
+  for the kick holding the old use's draws;
+* context slot reset: names and records cleared, the handle keeps its kick;
 * `gpu_work_lost` path: `wait_kick` fails -> `RESULT` = 1, `AVAILABLE` = 1;
 * per-draw field: a draw built while a query is active carries the handle;
   the pending clear, `glClear`, `glBlitFramebuffer`, and a draw with
@@ -646,16 +661,21 @@ all three back ends) gets one `es3_occlusion_*` test:
 `Begin / draw with depth test / End / Finish / result` on the fake OSALs of
 the three GPUs, using one scripted "samples passed" source each.
 
-**Not host-testable (board items):** that the counter counts at all; the
+**On the board:** gl_test 196 `occl` (section 1's shape in one case: a
+hidden, a visible and an empty query, one over two kicks, one whose draw is
+covered after `glEndQuery` in the same frame). **Not host-testable (board
+items):** that the counter counts at all; the
 V3D accumulate-across-jobs behaviour; PVR heap, `GETVISRESULTS`,
 accumulation and ordering; the GC PE store timing; the dEQP 62 + 4 cases.
 
 ## 9. Open questions, in the order they will bite
 
-1. **PVR vis-test heap** (3.2): general heap first, else a new heap in
-   `driver/src/pvr_render.c`.
+1. **PVR vis-test heap** (3.2): built on the general heap; if gl_test 196
+   reads 0 for the visible quads on the AM62P, a new heap in
+   `driver/src/pvr_render.c`, and `GETVISRESULTS`, are the first suspects.
 2. **PVR OPAQUE vs TRANSLUCENT** for counted draws, and whether `EndQuery`
-   needs the frame split (3.2): decide from the first board run of
-   `occlusion_query.depth_write*`.
-3. **V3D accumulate** (3.1): one board test.
+   needs the frame split (3.2): both built (TRANSLUCENT, split); the first
+   board run of `occlusion_query.depth_write*` decides whether either can
+   go.
+3. **V3D accumulate** (3.1): gl_test 196's q3 (one query over two jobs).
 4. **ES 2.0 extension** (section 6): owner decision, not this plan.

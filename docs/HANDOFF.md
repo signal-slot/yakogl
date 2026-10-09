@@ -106,11 +106,12 @@ Under `report-es2` every old answer is kept and pinned.
 | Transform feedback API and rasterizer discard | the GL half is built (`src/gl/tf.rs`): 32 objects a context with indexed bindings, begin/end/pause/resume with the ES 3.0 errors, `glTransformFeedbackVaryings` resolved at link against the vertex outputs with the 2.11.8 link errors, `glGetTransformFeedbackVarying`, the PRIMITIVES_WRITTEN query state, limits 64 / 4 / 4. `GL_RASTERIZER_DISCARD` stops draws and clears before the back end. Capture is not built: a draw that would capture is refused with GL_INVALID_OPERATION and a log line, and nothing is ever written (open work 4, tf-capture). Tests: `src/gl/tf_tests.rs` (17), `tests/es3_tf_api.rs` (8; one under `report-es2`), in the V3D rows of the gate. No dEQP run. Design `docs/es3-transform-feedback.md` | `16ac864`; design `f818f84`, `0f06eba` |
 | Uniform blocks | `tests/es3_ubo.rs` ports dEQP's `UniformBlockCase::iterate` for every `functional.ubo` group but `random`: 2,032 cases through the GL API, comparing the rows each stage's default block hands the back end with what the generated shader compares against. It found and pins one defect, fixed: `glGetUniform*` of `mat2x3`, `mat2x4`, `mat3x4` and `mat4x3` read the wrong dwords (it indexed by the column count as if it were the row count); host dEQP-GLES3 on the GC7000 `uniform_api.value.*.get_uniform` 24 Fail to 0. Passes on PowerVR and GC7000; on the GC7000 four `single_nested_struct_array *_instance_array_both` cases are refused at link (184 + 184 constant registers against the 320 the stages share), pinned in `KNOWN_LIMITS` | `1b0e431`, `b0c0fa6` |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2 the tables lacked (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, `RGB10_A2UI`, the 24 integer formats) are accepted with their table 3.2 pairs and converted on the CPU at upload into the first storage class the back end samples (`src/gl/es3_formats.rs`, `docs/es3-sized-formats.md`); integer textures and 32-bit float ones are complete only with NEAREST filters. `RGB5_A1` takes `UNSIGNED_INT_2_10_10_10_REV`; copies into integer, snorm or float images from a fixed-point buffer are GL_INVALID_OPERATION. No back end samples the new classes yet, so the integer formats and `RGB10_A2UI` are refused by name on every GPU, and the float, packed-float and snorm ones land in `RGBA16F` on the PowerVR and the GC7000 and are refused on the V3D. Host dEQP-GLES3 `texture.specification` on the PowerVR: the `glGetError() == GL_NO_ERROR` bucket 720 to 594. Tests `tests/es3_sized_formats.rs`, `src/gl/es3_format_tests.rs` | `888af5d`, `e5c4a18` |
+| Occlusion queries | `GL_ANY_SAMPLES_PASSED{,_CONSERVATIVE}` are counted on all three back ends (design `docs/es3-occlusion-query.md` (`d303712`, `e37662e`); the GL core's state machine and errors per ES 3.0 2.14, `glGetQueryObjectuiv` waits and answers 0/1, the back-end hooks `query_begin/end/result` and `GlesDraw::occlusion_query`). V3D: `OCCLUSION_QUERY_COUNTER` with the query's word, in the packet-skip key. GC7000: the PE's `GL_OCCLUSION_QUERY_ADDR/CONTROL`, suspended at every switch and stream end. PowerVR: `ISPCTL.vistest`/`visreg` on TRANSLUCENT counted draws, a result area per kick as `ISP_OCLQRY_BASE` with `GETVISRESULTS`, the frame ended at `glEndQuery`. Proven on the host only (`gl::es3::tests::occlusion`, each back end's tests, `job_check` part 19, `vdm_field_check`); the first board test is gl_test 196 `occl` ("Next board session"). Under `report-es2` every target is refused as before | `af6d259`, `b03863c`, `a6cc10d`, `45fb13f`; gl_test 196 `71430ed` |
 | Integer colour render targets | the GL half is built: the 19 colour-renderable integer formats are renderbuffer storage and complete framebuffers, `glClearBuffer{i,ui}v` clear them with raw bits, `glReadPixels` takes `RGBA_INTEGER`, blending is off for them. No back end writes one yet (`INTEGER_RT_FORMATS` is 0 on all three), so a draw or clear into one is refused by name with GL_INVALID_OPERATION (open work 4, int-rt). Tests `tests/es3_int_rt.rs` (14; one under `report-es2`), in the gate's V3D rows | `b9b2ac0` |
 | NPOT levels of arrays and storage textures | every level of a NPOT 2D array or `glTexStorage2D/3D` texture is valid (ES 3.0 3.8.14); levels a back end cannot hold are recorded and their texels dropped, as for a NPOT cube. Tests `src/gl/es3_level_tests.rs` | `c40414b` |
 | Stage-interface link rules | the link refuses a varying whose interpolation qualifier differs between the stages and a uniform block declared differently in the two (`tests/es3_link_iface.rs`) | `b88fea5`, `03ff7a6` |
 | GLSL ES 3.00 in the compiler | measured over the dEQP gles3 `.test` corpus, 5,596 programs (`docs/es3-shaderc-coverage.md`, `tests/es3_shaderc_corpus.rs`); line continuation inside tokens and directive names (`tests/es3_shaderc_pp.rs`) | `4ab482e`, `79fe171`, `ed0c81d` |
-| Designs, docs only | occlusion queries on the three GPUs (`docs/es3-occlusion-query.md`), sRGB render targets and sampling (`docs/es3-srgb.md`), PowerVR 2D-array and shadow sampling (`docs/es3-pvr-2darray.md`), PowerVR format map (`docs/es3-pvr-formats.md`), the AM62P GLES3 fbo / fragment_ops / fragment_out failure map (`docs/es3-fbo-fragops-failure-map.md`). Every hardware statement cites Mesa 26.2.1 or is marked unverified; nothing in them is measured on a board | `d303712`, `e37662e`; `948710f`, `1a48782`, `71d8dd7`; `0edefef`; `6abe43d`, `8a1260b`, `7dedef7`, `a43ec9b`, `710934d`; `53c7ba3`, `3cdbe16` |
+| Designs, docs only | sRGB render targets and sampling (`docs/es3-srgb.md`), PowerVR 2D-array and shadow sampling (`docs/es3-pvr-2darray.md`), PowerVR format map (`docs/es3-pvr-formats.md`), the AM62P GLES3 fbo / fragment_ops / fragment_out failure map (`docs/es3-fbo-fragops-failure-map.md`). Every hardware statement cites Mesa 26.2.1 or is marked unverified; nothing in them is measured on a board | `948710f`, `1a48782`, `71d8dd7`; `0edefef`; `6abe43d`, `8a1260b`, `7dedef7`, `a43ec9b`, `710934d`; `53c7ba3`, `3cdbe16` |
 | Reverted | the ES 3.0 limits test with its back-end caps doc (`b6004e1`, reverted `3f78982`) and the test pinning the ES 2.0 report's answers (`75dedad`, reverted `a35095b`): both were merged without the review they needed. Open work 4 redoes them | |
 
 The only dEQP-GLES3 board run is still the AM62P tree at `396d667a`
@@ -544,9 +545,14 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      `docs/es3-srgb.md` (its section 9 lists the steps); `SRGB8_ALPHA8` is
      stored and rendered as plain RGBA8 today. About 1,106 to 1,111 AM62P
      `fragment_ops.blend.fbo_srgb` failures.
-   - **occlusion-query**: `GL_ANY_SAMPLES_PASSED{,_CONSERVATIVE}`, designed
-     per GPU in `docs/es3-occlusion-query.md`; `glBeginQuery` on them is
-     refused until then. 62 `occlusion_query` cases and 4 `negative_api`.
+   - **occlusion-query**: built on the three back ends and proven on the
+     host (the feature table above); what remains is the board: gl_test 196
+     `occl` on each board ("Next board session"), then dEQP-GLES3
+     `functional.occlusion_query` (62) and the 4 `negative_api` cases on the
+     AM62P. The unverified points, in the order a failure would point at
+     them, are `docs/es3-occlusion-query.md` section 9 (PowerVR heap and
+     `GETVISRESULTS`, TRANSLUCENT and the frame split, the V3D's
+     accumulation across jobs, the GC7000 PE's store timing).
    - **pvr-2darray**: PowerVR 2D-array and shadow sampling, designed in
      `docs/es3-pvr-2darray.md`.
    - **es3-caps** and **es2-report-pin**: redo the ES 3.0 limits test and
@@ -581,6 +587,16 @@ $SW/tools/board.sh --dry-run <board> tree <table> <outdir>    # first: prints ev
 Every dEQP build prints `rc=0` and the `check-deqp-images.py` verdict for its
 `.config` (an image that fails it reports `rc=not-conformance`). Record
 `$HEAD8` with each result: an image from any other commit proves nothing here.
+
+On every board: gl_test 196 `occl` alone (`CONFIG_GL_TEST_CASES="196"` in
+the board's gl_test sample; not in case 7's regression set until it has
+passed on all three). Expected: the five lines `gl_test: occl: q0 ... q4`
+read `available 1` and results 0, 1, 0, 1, 1, the white quad in the centre
+and the red occluder in a corner, `PASS`. q0 or q1 wrong: the counter does
+not count (PowerVR: the general-heap result area or `GETVISRESULTS`; V3D:
+`OCCLUSION_QUERY_COUNTER`; GC7000: ADDR/CONTROL); q3 0: the V3D's TLB does
+not add across jobs; q4 0 on the PowerVR: the frame split at `glEndQuery`
+is not in effect.
 
 ### i.MX8MP (Verdin, no UART: records are read from the SNVS)
 
