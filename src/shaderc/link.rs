@@ -343,7 +343,7 @@ pub fn by_register(vs: &ShcShader, fs: &mut ShcShader, log: &mut CStrWriter, who
             }
         });
         fs.viv.vs_reg_of_in[i] = out.map_or(SHC_VIV_NO_REG, |o| o.reg);
-        if !out.is_some_and(|o| o.components >= in_.components) {
+        if out.is_none_or(|o| o.components < in_.components) {
             let _ = write!(
                 log,
                 "{who}: fragment varying {i} '{}{}",

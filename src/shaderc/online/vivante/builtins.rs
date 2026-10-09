@@ -805,7 +805,7 @@ fn udiv_lane(
             out(inst_c("select", u32_, Cond::Nz)?.dst(dqn).operand(0, x(ge)).operand(1, x(q1)).operand(2, x(q)));
             q = qn;
         }
-        if !(last && !modulo) {
+        if !last || modulo {
             let (m1, dm1) = one(fresh);
             out(inst("add", s32)?.dst(dm1).operand(0, x(m)).operand(1, negx(vb)));
             let (mn, dmn) = if last { (m, dst) } else { one(fresh) };
