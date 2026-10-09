@@ -256,7 +256,7 @@ next limit after candidate 1 is fixed.
 Status: **F1 and F2 are applied** (written on the host; not yet run on a
 board, see Board recipe step 2). Line numbers are the tree with this change.
 
-- F1: `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-171`: once the display
+- F1: `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-173`: once the display
   is on, `board_show` returns 0 when `scan` is the buffer the LCDIF already
   scans (`s_scan`, `:120`, set after `imx8mp_display_on` at `:177` and after
   every successful `imx8mp_display_set_fb`). A new buffer address still goes
@@ -502,9 +502,54 @@ than the pinned Zephyr's default (candidate 3): at 100, each sleep would be
 
 ## Host evidence for F1/F2
 
-`board_imx8mp.c` was syntax-checked on the host with `cc -fsyntax-only -Wall
--Wextra` against stub Zephyr/EGL/gc headers (the real headers are in the Zephyr
-workspace, which this host does not have), in three configurations: default,
-`CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1`, and without
-`CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST`. No warnings. This checks syntax and
-types against the stubs only: no Zephyr build and no board run yet (Step 2).
+No Zephyr workspace or SDK exists on the hosts this item ran on
+(`$CCFARM_DEPS_DIR/zephyr-ws` holds an empty venv; `pip install west` is
+refused there, `docs/board-sessions/zephyr-ws-setup.md`), so the i.MX8MP
+glmark2 image was **not** built. The changed file was compiled on the host
+instead, `-fsyntax-only -Wall -Wextra -Werror`, against the **repository's own
+headers** (`yakogl_board.h`, `board_internal.h`, `gc_render.h`,
+`imx8mp_display.h`, `safeui/imx8mp_lcdif.h`, `yakogl_drivers.h`,
+`EGL/eglplatform.h`) with only Zephyr's headers stubbed (`zephyr/kernel.h`,
+`device.h`, `devicetree.h`, `toolchain.h`, `sys/util.h`, `sys/printk.h`,
+`sys/reboot.h`: `k_timeout_t`, `K_FOREVER`, `K_USEC`, `IS_ENABLED` as Zephyr
+defines it, `DEVICE_DT_GET`, `DT_HAS_COMPAT_STATUS_OKAY`), kept outside the
+tree. 2026-10-09, clang 23.1.3 and gcc 16.2.1:
+
+```sh
+I="-Ibuild/stub -Idriver/zephyr/lib/board/include -Idriver/zephyr/lib/board/common \
+   -Idriver/src/vivante -Idriver/src/display -Idriver/include -Idriver/rust/include -Iinclude"
+D="-DCONFIG_YAKOGL_BOARD=1 -DCONFIG_YAKOGL_BOARD_IMX8MP=1 -DCONFIG_SAFEUI_GPU_VIVANTE=1 \
+   -DCONFIG_SAFEUI_DISPLAY_IMX8MP=1"
+L="-DCONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST=1 -DSTUB_DT_LCDIF_OKAY"   # the lcdif node is okay
+F=driver/zephyr/lib/board/imx8mp/board_imx8mp.c
+clang -fsyntax-only -std=c11 -Wall -Wextra -Werror $I $D $L $F                                  # ok
+clang -fsyntax-only -std=c11 -Wall -Wextra -Werror $I $D $L -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1 $F  # ok
+clang -fsyntax-only -std=c11 -Wall -Wextra -Werror $I $D $F                                     # ok (no lcdif: F2 is -ENOTSUP)
+cc    -fsyntax-only -std=c11 -Wall -Wextra -Werror $I $D $L $F                                  # ok (gcc)
+cc    -fsyntax-only -std=c11 -Wall -Wextra -Werror $I $D $L -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1 $F  # ok (gcc)
+```
+
+All five exit 0 with no diagnostic. That proves the file's syntax and its
+types against the real board, GC, display and LCDIF declarations (so
+`yd_lcdif_data.on`/`.adopted`, `yakogl_imx8mp_lcdif_wait_vblank`'s
+`k_timeout_t` and `imx8mp_display_set_fb` are used as declared). It does not
+prove the Zephyr build (`-Werror` image, Kconfig parse of the new option) or
+the board behaviour: Step 2 does. The Kconfig option follows the form of
+`YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT` above it in the same file.
+
+`tools/check.sh --quick` on this tree, 2026-10-09 (clippy 0.1.94): **88 ok,
+11 failed, 0 gaps**. Every failed row is a clippy row (the lib in its six
+host configurations, `yakogl-tools` and the four `yakogl-precompile` arms,
+which all lint the lib), and every warning is in `src/**`:
+`clippy::nonminimal_bool` in `src/gl/buffer.rs`, `src/gl/draw.rs`,
+`src/shaderc/link.rs`, `src/shaderc/online/sema.rs`,
+`src/shaderc/online/vivante/builtins.rs`; `clippy::duplicated_attributes` at
+`src/gl/draw.rs:6840-6843`; and the deny-level
+`clippy::overly_complex_bool_expr` on the `|| true` at `src/gl/texture.rs:8986`
+(from the first commit `afb16335`). Every other row passed, including the
+`cc` rows, `no table in the artefact` and the board_selftest rows. No Rust
+file, `Cargo.toml` or `Cargo.lock` differs from the integration tip `3f78982e`
+(`git diff 3f78982e --stat -- '*.rs' Cargo.toml Cargo.lock` is empty), so the
+clippy rows are the integration tip's, and which lint fires depends on the
+clippy version (older clippies report `needless_range_loop` in the same
+files). Item clippy-clean owns them; this item may not edit `src/**`.
