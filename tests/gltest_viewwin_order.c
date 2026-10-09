@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /* gl_test case 171 (viewwin): the raw-memory check follows the window's byte
  * order. The case needs a GPU that renders, which no host build has, so this
  * checks the one decision it makes: the expected word of a pixel for a
@@ -7,9 +9,9 @@
  * It includes gl_test.c itself (GL_TEST_HOST), so it runs the real
  * viewwin_word(); the GL/EGL/OSAL entry points are never called, so the link
  * ignores them. Run from the repository root:
- *   cc -std=gnu11 -DGL_TEST_HOST=1 -Iinclude -Isrc -Isrc/osal -Idriver/tools/pvrlab \
- *     -Idriver/src tests/gltest_viewwin_order.c -o /tmp/vw \
- *     -Wl,--unresolved-symbols=ignore-all && /tmp/vw
+ *   mkdir -p build && cc -std=gnu11 -DGL_TEST_HOST=1 -Iinclude -Isrc -Isrc/osal -Idriver/tools/pvrlab \
+ *     -Idriver/src tests/gltest_viewwin_order.c -o build/vw \
+ *     -Wl,--unresolved-symbols=ignore-all && build/vw
  */
 #include "../driver/tools/pvrlab/gl_test.c"
 

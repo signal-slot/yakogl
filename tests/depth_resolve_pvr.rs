@@ -421,7 +421,7 @@ fn no_frame_open_before_the_depth_pass_resolves() {
 /// after -EBUSY, or the stamp is taken after the back end's draw
 /// (src/gl/draw.rs:2011, after `backend::draw`).
 #[test]
-#[ignore = "stale kick stamp - stamp_target_use (src/gl/framebuffer.rs:186) takes kick_id() before the back end splits the frame; fix at resolve_depth src/gl/texture.rs:669 (flush+finish and retry on -EBUSY)"]
+#[ignore = "BUG: stale kick stamp - stamp_target_use (src/gl/framebuffer.rs:186) takes kick_id() before the back end splits the frame; fix at resolve_depth src/gl/texture.rs:669 (flush+finish and retry on -EBUSY)"]
 fn window_clear_before_the_depth_pass_resolves() {
     let (_g, ctx) = start();
     let s = setup(16, 16);
