@@ -89,7 +89,7 @@ window.YAKOGL_DATA = {
       "source": "tools/cts/log/board-sessions/am62p-plan1.md",
       "section": "Result",
       "status": "fail",
-      "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed at d60b9d76 fail. A fix is pending board confirmation."
+      "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed at d60b9d76 fail. A candidate fix is not yet on main and awaits board confirmation."
     },
     "deqp2.imx8mp": {
       "label": "dEQP-GLES2, last whole tree",

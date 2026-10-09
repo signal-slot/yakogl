@@ -5,75 +5,301 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YakoGL</title>
-<meta name="description" content="OpenGL ES 2.0 for embedded GPUs, without an operating-system GPU driver.">
+<title>YakoGL: OpenGL ES 2.0 for embedded GPUs, no GPU driver underneath</title>
+<meta name="description" content="YakoGL is an OpenGL ES 2.0 + EGL library that drives embedded GPUs directly from Zephyr: PowerVR, Vivante and Broadcom V3D, with dEQP results per board. Apache-2.0.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="YakoGL">
+<meta property="og:title" content="YakoGL: OpenGL ES 2.0 for embedded GPUs">
+<meta property="og:description" content="An OpenGL ES 2.0 + EGL library that drives the GPU itself, with no OS GPU driver. Three boards, three GPUs, one application source.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:alt" content="The YakoGL triangle on a dark nacre gradient">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="YakoGL: OpenGL ES 2.0 for embedded GPUs">
+<meta name="twitter:description" content="An OpenGL ES 2.0 + EGL library that drives the GPU itself, with no OS GPU driver.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
+<script src="data.js" defer></script>
+<script src="site.js" defer></script>
+<script src="hero.js" defer></script>
 </head>
 <body>
-<header>
-  <a class="name" href="index.html">YakoGL</a>
-  <nav><a href="index.html" aria-current="page">Home</a><a href="try-it.html">Try it</a><a href="https://github.com/signal-slot/yakogl">Source</a></nav>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="24" height="24">YakoGL</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="status.html">Status</a>
+      <a href="try-it.html">Try it</a>
+      <a href="#docs">Docs</a>
+      <a href="https://github.com/signal-slot/yakogl">GitHub</a>
+    </nav>
+  </div>
 </header>
-<main>
-<h1>OpenGL ES 2.0 on a real GPU, without a GPU driver underneath</h1>
-<p class="lead">YakoGL is an OpenGL ES 2.0 + EGL library written in Rust. It drives the
-GPU itself, so Zephyr (or bare metal) can draw a Slint user interface on the real GPU.
-The same application source runs on three boards with three different GPUs.</p>
 
-<h2>Boards</h2>
-<div class="scroll"><table>
-<tr><th>Board</th><th>GPU</th><th>Panel</th></tr>
-<tr><td>Toradex Verdin AM62P</td><td>Imagination PowerVR BXS-4-64</td><td>1024x600</td></tr>
-<tr><td>Toradex Verdin iMX8M Plus</td><td>Vivante GC7000UL</td><td>1280x800</td></tr>
-<tr><td>Raspberry Pi 4</td><td>Broadcom V3D 4.2</td><td>1920x720</td></tr>
-</table></div>
+<section class="hero">
+  <canvas id="hero-canvas" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <h1>OpenGL ES 2.0 on embedded GPUs, with no GPU driver underneath</h1>
+    <p class="lead">YakoGL is an OpenGL ES 2.0 and EGL library that drives the GPU of an
+    embedded processor itself. An application written against the standard Khronos headers
+    links one static library and draws on the real GPU from Zephyr: no Linux, no vendor
+    driver stack, no software renderer. The same application source runs on three boards
+    with three different GPUs.</p>
+    <div class="cta">
+      <a class="button primary" href="try-it.html">Try it</a>
+      <a class="button" href="status.html">See the status</a>
+      <a class="button" href="https://github.com/signal-slot/yakogl">Source on GitHub</a>
+    </div>
+  </div>
+</section>
 
-<h2>Demos</h2>
-<p><strong>Slint dashboard.</strong> One Slint source in a 1024x600 window. All three
-boards draw the same picture: the Verdin boards bit for bit, the Pi 4 within one step
-of green at one checked point.</p>
-<p><strong>Instrument cluster</strong> (agl-slint-cluster). It fills the panel, animates
-a drive cycle for 60 seconds, then checks fixed points of the picture against a
-reference made on a PC.</p>
-<div class="scroll"><table>
-<tr><th>Board</th><th class="num">Frames / time</th><th class="num">Mpx/s</th><th>Picture check</th></tr>
-<tr><td>Raspberry Pi 4</td><td class="num">8395 / 60012 ms</td><td class="num">193.4</td><td>PASS, 34 of 34 points</td></tr>
-<tr><td>Verdin AM62P</td><td class="num">6177 / 60015 ms</td><td class="num">63.2</td><td>PASS, 15 of 15 points</td></tr>
-<tr><td>Verdin iMX8M Plus</td><td class="num">not run yet</td><td class="num"></td><td></td></tr>
-</table></div>
-<p><small class="src">The panels differ in size, so compare pixels per second (Mpx/s),
-not frames per second.</small></p>
+<main class="wrap">
 
-<h2>Conformance</h2>
-<p>The Khronos conformance tests for OpenGL ES 2.0 (dEQP-GLES2, the 17,165 cases of the
-mustpass list) run on Zephyr on the real GPU.</p>
-<div class="scroll"><table>
-<tr><th>Board</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Not supported</th><th class="num">Warning</th></tr>
-<tr><td>Verdin AM62P</td><td class="num">17,141</td><td class="num">0</td><td class="num">19</td><td class="num">5</td></tr>
-<tr><td>Verdin iMX8M Plus</td><td class="num">17,112&ndash;17,116</td><td class="num">0</td><td class="num">30&ndash;34</td><td class="num">19</td></tr>
-<tr><td>Raspberry Pi 4</td><td class="num">17,075</td><td class="num">25</td><td class="num">62</td><td class="num">3</td></tr>
-</table></div>
-<p><small class="src">The 25 Pi 4 failures are cube-map cases that differ from the
-ES 2.0 reference images. The i.MX8MP warnings appear on NXP's own driver too.</small></p>
+<h2 id="what">What it is</h2>
+<p>A GPU normally sits behind a large driver stack in a full operating system. YakoGL
+puts that work in the library: it boots the GPU (and its firmware, on the PowerVR), sets
+up GPU memory, compiles shaders, builds the command streams and handles completion. The
+GL core and the three GPU back ends are one <code>no_std</code> Rust crate with a C ABI
+(<code>libyakogl.a</code>), so C, C++ and Rust applications link it alike. The GPU and
+display drivers it needs live in the same repository. Applications are ordinary
+GL ES 2.0 clients: glmark2 and the Khronos conformance tests run on it, and so does the
+<a href="https://slint.dev/">Slint</a> UI toolkit with FemtoVG, built <code>no_std</code>
+from upstream plus a patch kept in the repository.</p>
 
-<h2>Performance</h2>
-<p>glmark2-es2, on-screen, 800x600, all 33 scenes run on every board. The public
-reference is the same board under Linux with the vendor or Mesa driver; the
-conditions differ, so read it as a direction, not a contest.</p>
-<div class="scroll"><table>
-<tr><th>Board</th><th class="num">YakoGL</th><th>Public reference</th></tr>
-<tr><td>Verdin AM62P</td><td class="num">457</td><td>306.4 (TI SDK 12.01, size not stated)</td></tr>
-<tr><td>Raspberry Pi 4</td><td class="num">183</td><td>697 (Mesa 23.2.1, 800x600 windowed)</td></tr>
-<tr><td>Verdin iMX8M Plus</td><td class="num">37</td><td>382 (Vivante 6.4.11, off-screen 800x600)</td></tr>
-</table></div>
-<p>Two scenes still draw wrong: terrain samples a black texture on every board, and
-refract misses its depth pass on the AM62P and the Pi 4. Performance work has not
-started; the i.MX8MP is about ten times slower than NXP's driver.</p>
+<h3>Who it is for</h3>
+<ul>
+<li><strong>Product teams</strong> building an instrument cluster, an HMI panel or another
+fixed-function display on an application processor with a GPU, who want a GPU-drawn UI
+on a real-time OS without bringing up Linux for it.</li>
+<li><strong>GPU and driver engineers</strong> who want a small, readable OpenGL ES stack:
+a Rust GL core tested on the host against a mock platform, three back ends side by side,
+and conformance results recorded per board and commit.</li>
+<li><strong>Board and SoC vendors</strong> who need OpenGL ES on a part where the vendor
+driver exists only for Linux.</li>
+</ul>
 
-<h2>Known issues</h2>
-<p>Every known defect is a <a href="https://github.com/signal-slot/yakogl/issues">GitHub issue</a>.</p>
+<h2 id="boards">Three boards, three GPUs</h2>
+<p>One GPU per build, chosen by exactly one Cargo feature. Every result on this site comes
+from the real GPU; software rendering is out of scope.</p>
+<div class="cards">
+  <div class="card">
+    <h3>Toradex Verdin AM62P</h3>
+    <dl>
+      <dt>SoC</dt><dd>TI AM62P</dd>
+      <dt>GPU</dt><dd>Imagination PowerVR BXS-4-64</dd>
+      <dt>Feature</dt><dd><code>gpu-powervr</code></dd>
+      <dt>Boots from</dt><dd>eMMC, U-Boot</dd>
+    </dl>
+    <p class="muted">The first target. Needs Imagination's firmware, which you supply.</p>
+  </div>
+  <div class="card">
+    <h3>Toradex Verdin iMX8M Plus</h3>
+    <dl>
+      <dt>SoC</dt><dd>NXP i.MX 8M Plus</dd>
+      <dt>GPU</dt><dd>Vivante GC7000UL</dd>
+      <dt>Feature</dt><dd><code>gpu-vivante</code></dd>
+      <dt>Boots from</dt><dd>eMMC, U-Boot</dd>
+    </dl>
+    <p class="muted">No firmware needed. Two intermittent gl_test cases are open.</p>
+  </div>
+  <div class="card">
+    <h3>Raspberry Pi 4</h3>
+    <dl>
+      <dt>SoC</dt><dd>Broadcom BCM2711</dd>
+      <dt>GPU</dt><dd>Broadcom V3D 4.2</dd>
+      <dt>Feature</dt><dd><code>gpu-v3d</code></dd>
+      <dt>Boots from</dt><dd>SD card, firmware</dd>
+    </dl>
+    <p class="muted">Zephyr's own <code>rpi_4b</code> board. The easiest board to get.</p>
+  </div>
+</div>
+<p><a href="status.html">Per-board status, with every figure's commit and date &rarr;</a></p>
 
-<footer><p>YakoGL is Apache-2.0. Copyright 2026 Signal Slot, Inc.</p></footer>
+<h2 id="architecture">Architecture</h2>
+<p>Five layers, from the application down. Only the shader back end and the OS
+abstraction are pluggable; everything above the OS abstraction is portable Rust.</p>
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 640 520" role="img" aria-labelledby="arch-title arch-desc" style="min-width:540px">
+  <title id="arch-title">YakoGL layers</title>
+  <desc id="arch-desc">An application calls the GL and EGL core. The core resolves GL state into one draw for the single GPU back end of the build: PowerVR, Vivante GC7000 or Broadcom V3D. The shader compiler turns GLSL into the GPU's code, on the board or precompiled. Below, the C OS abstraction for Zephyr, bare metal or a Linux host build, then the GPU and display drivers, then the GPU.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="dg-arrow" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+  <rect class="dg-app" x="10" y="10" width="620" height="54" rx="8"/>
+  <text class="dg-t" x="30" y="34">Application</text>
+  <text class="dg-s" x="30" y="53">an ordinary GL ES 2.0 + EGL client: Slint, FemtoVG, glmark2, dEQP, your code</text>
+
+  <line class="dg-line" x1="210" y1="64" x2="210" y2="88" marker-end="url(#ah)"/>
+  <rect class="dg-core" x="10" y="90" width="400" height="82" rx="8"/>
+  <text class="dg-t" x="30" y="114">GL / EGL core</text>
+  <text class="dg-s" x="30" y="134">src/gl, Rust, no_std: entry points, errors,</text>
+  <text class="dg-s" x="30" y="151">objects and state; draw.rs resolves the GL</text>
+  <text class="dg-s" x="30" y="166">state into one draw for the back end</text>
+
+  <line class="dg-line" x1="410" y1="131" x2="428" y2="131" marker-end="url(#ah)"/>
+  <rect class="dg-sh" x="430" y="90" width="200" height="82" rx="8"/>
+  <text class="dg-t" x="446" y="114">Shader compiler</text>
+  <text class="dg-s" x="446" y="134">src/shaderc: GLSL ES to the</text>
+  <text class="dg-s" x="446" y="151">GPU's code, on the board,</text>
+  <text class="dg-s" x="446" y="166">or precompiled, or both</text>
+
+  <line class="dg-line" x1="210" y1="172" x2="210" y2="196" marker-end="url(#ah)"/>
+  <text class="dg-s" x="440" y="214">one back end per build</text>
+  <rect class="dg-be" x="10" y="222" width="196" height="76" rx="8"/>
+  <text class="dg-t" x="24" y="246">PowerVR</text>
+  <text class="dg-s" x="24" y="266">src/pvr: VDM / PPP / PDS</text>
+  <text class="dg-s" x="24" y="283">streams, firmware kicks</text>
+  <rect class="dg-be" x="222" y="222" width="196" height="76" rx="8"/>
+  <text class="dg-t" x="236" y="246">Vivante GC7000</text>
+  <text class="dg-s" x="236" y="266">src/vivante: LOAD_STATE</text>
+  <text class="dg-s" x="236" y="283">command streams</text>
+  <rect class="dg-be" x="434" y="222" width="196" height="76" rx="8"/>
+  <text class="dg-t" x="448" y="246">Broadcom V3D</text>
+  <text class="dg-s" x="448" y="266">src/v3d: control lists,</text>
+  <text class="dg-s" x="448" y="283">binner and renderer jobs</text>
+  <line class="dg-line" x1="10" y1="200" x2="630" y2="200"/>
+  <line class="dg-line" x1="108" y1="200" x2="108" y2="220" marker-end="url(#ah)"/>
+  <line class="dg-line" x1="320" y1="200" x2="320" y2="220" marker-end="url(#ah)"/>
+  <line class="dg-line" x1="532" y1="200" x2="532" y2="220" marker-end="url(#ah)"/>
+
+  <line class="dg-line" x1="320" y1="298" x2="320" y2="320" marker-end="url(#ah)"/>
+  <rect class="dg-os" x="10" y="322" width="620" height="56" rx="8"/>
+  <text class="dg-t" x="30" y="346">OS abstraction (C)</text>
+  <text class="dg-s" x="30" y="366">src/osal, the only OS-facing layer: Zephyr; bare metal (in design); Linux host build without a GPU</text>
+
+  <line class="dg-line" x1="320" y1="378" x2="320" y2="400" marker-end="url(#ah)"/>
+  <rect class="dg-os" x="10" y="402" width="620" height="50" rx="8"/>
+  <text class="dg-t" x="30" y="424">GPU and display drivers</text>
+  <text class="dg-s" x="30" y="442">driver/: GPU bring-up, firmware boot, memory, command generators, panels</text>
+
+  <line class="dg-line" x1="320" y1="452" x2="320" y2="470" marker-end="url(#ah)"/>
+  <rect class="dg-app" x="10" y="472" width="620" height="40" rx="8"/>
+  <text class="dg-t" x="30" y="497">GPU: PowerVR BXS-4-64 · Vivante GC7000UL · Broadcom V3D 4.2</text>
+</svg>
+</div>
+<figcaption>After <a href="https://github.com/signal-slot/yakogl/blob/main/DESIGN.md">DESIGN.md</a>,
+"Layering". The PowerVR back end also calls the driver's OS-free C command generators
+directly. C/Rust struct layouts are pinned on both sides, so drift fails the build.</figcaption>
+</figure>
+
+<h2 id="shaders">Shader compilers and precompiled shaders</h2>
+<p>A GL application hands the library GLSL source at run time, so an ES 2.0 stack needs a
+shader compiler. YakoGL has its own: a <code>no_std</code>, allocation-free GLSL ES
+compiler (lexer, preprocessor, parser, semantic checks, an IR, and one back end per GPU)
+that runs on the board. Where a shader's machine code comes from is chosen when the
+image is built:</p>
+<ul>
+<li><strong>The compiler only</strong> (the default): any shader, compiled when the
+application asks.</li>
+<li><strong>Precompiled shaders in front of the compiler</strong>: the application's
+known shaders are compiled by the same compiler while the image is built; a hit runs no
+compile, a miss compiles.</li>
+<li><strong>Precompiled shaders only</strong>: no compiler and no scratch memory in the
+image; a shader the table lacks is refused by name.</li>
+</ul>
+<p>The trade-off is measured, not assumed. On the AM62P the compiler costs
+<strong><span data-fig="size.compiler"></span></strong> bytes of flash plus about 5.2 MB of
+RAM for its working memory; a precompiled table for one test application costs
+<strong><span data-fig="size.table"></span></strong> bytes of flash and grows with the
+application's shader set. So precompiled shaders are an option for an image that wants
+no compiler, not the default.</p>
+<p class="prov js-only">Compiler: <span data-prov="size.compiler"></span><br>Table: <span data-prov="size.table"></span></p>
+<p>Mesa's compilers (pco for PowerVR, etnaviv for Vivante) are the reference our output is
+compared against in host tests; a Zephyr or CMake product image links no Mesa-built
+shader table. Two
+small sets of the PowerVR driver's own programs (the end-of-tile programs and the boot
+self-test's vertex shader) are still Mesa's pco output; replacing them is open work.</p>
+
+<h2 id="results">Conformance and benchmarks</h2>
+<noscript><p class="note">The figures on this site are loaded from
+<a href="data.js">data.js</a>, which you can read directly; the
+<a href="status.html">status page</a> lists the records they come from.</p></noscript>
+<h3>dEQP-GLES2: failures in the last whole tree</h3>
+<p>The Khronos conformance tests for OpenGL ES 2.0, the 17,165 cases of the mustpass list,
+run on Zephyr on the real GPU.</p>
+<div class="tiles" data-tiles="deqp2"></div>
+<div class="note">
+<p><strong>Not yet confirmed on the boards.</strong> Fixes made since these trees (the Pi 4's
+25 cube-map cases among them) are proved on the host only. A newer partial run on the AM62P
+found 9 regressed <code>shaders.invariance</code> cases; a candidate fix is not yet on main and awaits board confirmation.
+<a href="status.html">Details on the status page.</a></p>
+</div>
+
+<h3>glmark2-es2, 800x600 on-screen</h3>
+<p>All 33 scenes run on every board, but some still draw wrong, and performance work has not
+started. A public score for the same board under Linux with the vendor or Mesa driver is on
+the status page; the conditions differ, so read it as a direction, not a contest.</p>
+<div class="tiles" data-tiles="glmark2"></div>
+
+<h3>OpenGL ES 3.0</h3>
+<p>ES 3.0 is work in progress on the host: transform feedback state, uniform blocks, sized
+and integer formats are built in the GL core, but no back end renders them yet. Product
+builds (Zephyr, CMake) report ES 2.0 by default. The one dEQP-GLES3 board run so far, on the
+AM62P: <span data-fig="deqp3.am62p"></span> of 42,810
+<span class="prov">(<span data-prov="deqp3.am62p"></span>)</span>.</p>
+
+<h2 id="start">Getting started</h2>
+<p><strong>On a board.</strong> <a href="try-it.html">Try it</a> walks through the west
+workspace, the build and booting the Slint demo from the board's own storage.</p>
+<p><strong>On a PC, no board.</strong> The GL core and a back end run against a mock platform
+that models non-coherent GPU memory and flags unflushed, freed or out-of-range reads. With
+Rust 1.88 or newer and a C compiler:</p>
+<pre><code>git clone https://github.com/signal-slot/yakogl
+cd yakogl
+cargo test --no-default-features --features host-test,gpu-powervr
+# the shader compiler, too
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online</code></pre>
+<p>Swap <code>gpu-powervr</code> for <code>gpu-vivante</code> or <code>gpu-v3d</code>. Exactly
+one GPU feature per build; none or two is a compile error.</p>
+
+<h2 id="docs">Documentation</h2>
+<ul>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/README.md">README</a>: layout, build options, linking, host tests.</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/DESIGN.md">DESIGN</a>: the layers, the back ends, the shader compiler.</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>: the current state, open work in order, known defects.</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/CHANGELOG.md">CHANGELOG</a>: what changed (no release yet).</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/docs/standalone-boot.md">Standalone boot</a>: booting each board from its eMMC or SD card.</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/driver/samples/zephyr/README.md">Zephyr samples</a>: the workspace and first builds.</li>
+<li><a href="https://github.com/signal-slot/yakogl/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> and <a href="https://github.com/signal-slot/yakogl/blob/main/SECURITY.md">SECURITY</a>.</li>
+</ul>
+
+<h2 id="roadmap">Roadmap</h2>
+<p>The goals, in order, from <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>:</p>
+<ol>
+<li><strong>ES 2.0 finished on the three boards</strong>, each booted from its own storage. The known
+dEQP-GLES2 failures are fixed on the host, except the AM62P invariance regression, whose fix
+is not yet on main. One confirming board session per board remains.</li>
+<li><strong>Minimum performance.</strong> Not started; the benchmarks are first made to draw
+correctly.</li>
+<li><strong>This website</strong>, live when the repository is public.</li>
+<li><strong>OpenGL ES 3.0</strong> on the three boards (the 42,810-case dEQP-GLES3 mustpass),
+host first.</li>
+<li><strong>OpenGL ES 3.1 / 3.2</strong> (<a href="https://github.com/signal-slot/yakogl/issues/19">#19</a>).</li>
+</ol>
+<p>Not yet planned in HANDOFF: touch input. Every demo today runs by itself.</p>
+
+<h2 id="about">Licence, name and contact</h2>
+<p>YakoGL's own code is <a href="https://github.com/signal-slot/yakogl/blob/main/LICENSE">Apache-2.0</a>,
+copyright 2026 Signal Slot, Inc. Parts are derived from Mesa (MIT) and other projects;
+<a href="https://github.com/signal-slot/yakogl/blob/main/NOTICE">NOTICE</a> lists every outside
+origin. The PowerVR firmware is Imagination's and is never distributed with YakoGL.</p>
+<p>The name comes from 夜光貝 (yakogai), the turban shell whose nacre is cut for 螺鈿
+(raden) inlay. It also reads as "yet another kernel-optional GL".</p>
+<p>Questions and defects: <a href="https://github.com/signal-slot/yakogl/issues">GitHub issues</a>.
+Signal Slot, Inc. on GitHub: <a href="https://github.com/signal-slot">github.com/signal-slot</a>.</p>
+
 </main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>YakoGL is Apache-2.0. Copyright 2026 Signal Slot, Inc.</p>
+    <p class="js-only">Figures checked against main at <span data-meta="checked"></span>; each shows the commit and date it was measured on. † marks a commit from before publication or from a branch.</p>
+  </div>
+</footer>
 </body>
 </html>
