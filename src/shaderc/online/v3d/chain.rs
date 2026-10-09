@@ -3528,6 +3528,102 @@ mod tests {
         });
     }
 
+    /// Runs the ES 3.00 fragment shader `fs` (reading `in vec4 v`) in the
+    /// interpreter on 16 lanes, varying component c of lane l being
+    /// `input(l)[c]`, and checks each lane's colour against `want` of those
+    /// inputs (the RT is f16, so every wanted value is exact in f16).
+    #[cfg(not(feature = "report-es2"))]
+    fn run_es3_fs(fs: &str, input: impl Fn(usize) -> [f32; 4], want: impl Fn([f32; 4]) -> [f32; 4]) {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        const VS: &str = "#version 300 es\nin vec4 p;\nout vec4 v;\nvoid main() { v = p; gl_Position = p; }\n";
+        with_program(VS, fs, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let uniforms: Vec<u32> =
+                p.fs.code
+                    .uniforms
+                    .iter()
+                    .map(|u| match u.contents {
+                        0 => u.data,
+                        c => panic!("uniform contents {c} not modelled here"),
+                    })
+                    .collect();
+            let varyings =
+                p.fs.input_slots
+                    .iter()
+                    .map(|&(_, comp)| Varying {
+                        vary: core::array::from_fn(|l| input(l)[comp as usize].to_bits()),
+                        c: [0; LANES],
+                    })
+                    .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [1.0f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env = Env { threads: p.fs.threads, ..Env::default() };
+            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("runs");
+            let h = |x: f32| u32::from(sim::f32_to_half(x));
+            for l in 0..LANES {
+                let c = want(input(l));
+                let wanted = [h(c[0]) | h(c[1]) << 16, h(c[2]) | h(c[3]) << 16];
+                let got = [o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap()];
+                assert_eq!(got, wanted, "lane {l}: inputs {:?}, want {c:?}: {fs}", input(l));
+            }
+        });
+    }
+
+    /// GLSL ES 3.00's `trunc`, integer shifts, integer and unsigned
+    /// min/max, `~` and the unsigned orderings, each Mesa's one operation
+    /// (nir_to_vir.c: FTRUNC, SHL, ASR, SHR, MIN, MAX, UMIN, UMAX, NOT;
+    /// ult32 / uge32 as SUB.pushc), run in the interpreter on both signs
+    /// (the shift right of a negative int is arithmetic, of a uint
+    /// logical). Revert check: with these out of prepare.rs SELECTED the
+    /// programs are refused (`NotYet("Ftrunc")`, `NotYet("Ishl")`, the
+    /// dEQP corpus's 8 indexing and 2 constant_expressions refusals); with
+    /// Ule's operands in Ult's order the third program fails at lane 0.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn trunc_shifts_and_integer_min_max_are_one_operation_each() {
+        let head = "#version 300 es\nprecision highp float;\nprecision highp int;\nin vec4 v;\n\
+                    layout(location = 0) out vec4 o;\nvoid main() { int i = int(v.y); uint u = uint(v.z); ";
+        /* x: non-integers of both signs; y: -8..7; z: 0..15; w: 3 */
+        let input = |l: usize| [(l as f32 - 8.0) * 0.75 + 0.125, l as f32 - 8.0, l as f32, 3.0];
+        let trunc_shift = std::format!(
+            "{head} o = vec4(trunc(v.x), float(i << 2), float(i >> 1), float(u >> 1u) + float(i << int(v.w))); }}"
+        );
+        run_es3_fs(&trunc_shift, input, |[x, y, z, w]| {
+            let (i, u) = (y as i32, z as u32);
+            [x.trunc(), (i << 2) as f32, (i >> 1) as f32, (u >> 1) as f32 + (i << w as i32) as f32]
+        });
+        let min_max = std::format!(
+            "{head} o = vec4(float(min(i, -2)), float(max(i, 1)), float(min(u, 5u)), float(max(u, 9u))); }}"
+        );
+        run_es3_fs(&min_max, input, |[_, y, z, _]| {
+            let (i, u) = (y as i32, z as u32);
+            [i.min(-2) as f32, i.max(1) as f32, u.min(5) as f32, u.max(9) as f32]
+        });
+        let not_cmp =
+            std::format!("{head} o = vec4(float(~i), u < 5u ? 1.0 : 0.0, u <= 5u ? 1.0 : 0.0, float(~u & 7u)); }}");
+        run_es3_fs(&not_cmp, input, |[_, y, z, _]| {
+            let (i, u) = (y as i32, z as u32);
+            [(!i) as f32, f32::from(u8::from(u < 5)), f32::from(u8::from(u <= 5)), (!u & 7) as f32]
+        });
+        assert!(input(0)[0] < 0.0 && input(15)[0] > 0.0 && input(0)[1] < 0.0, "both signs");
+        /* gl_test 196's fragment shader, from the file it compiles, on the
+         * case's v = (2.75, -6, 200, 0): (0.5, 0.25, 45/64, 50/64) */
+        run_es3_fs(
+            include_str!("../../../../tools/shaders/gltest/es3trunc_fs.frag"),
+            |_| [2.75, -6.0, 200.0, 0.0],
+            |_| [0.5, 0.25, 45.0 / 64.0, 50.0 / 64.0],
+        );
+    }
+
     /// A look-up inside a uniform branch's arm (step (b)): the `if` is a
     /// branch, as Mesa never flattens an `if` with a look-up in an arm
     /// (nir_opt_peephole_select), and the look-up's switch, which the arm

@@ -3130,6 +3130,74 @@ fn an_integer_divide_is_exact_over_32_bits_on_every_sign() {
     .unwrap();
 }
 
+/// `trunc(x)` (GLSL ES 3.00 8.3) rounds toward zero on both signs: pco's
+/// `lower_ftrunc` bcsel, written as `x < 0 ? ceil(x) : floor(x)` (select.rs
+/// `Sel::alu`), four groups per component, each one pco emits. Run on the
+/// byte model over halves, integers, the 2^23 edge, a tiny value and both
+/// zeros. Revert check: with the arm removed the shader is refused
+/// (`Usc(Build(Unsupported("lowering into several groups")))`, the 24
+/// dEQP `shaders.operator.common_functions.trunc` programs); with the
+/// `movc` arms swapped every non-integer is off by one.
+#[test]
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+fn trunc_rounds_toward_zero_on_every_sign() {
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let text =
+            a.alloc_str("#version 300 es\nuniform highp vec4 u; void main(){ gl_Position = trunc(u); }").unwrap();
+        let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+        let mut image = vec![0u8; 65536];
+        let b = build_vertex(&l.module, PLACEHOLDER, a, &mut image).expect("builds");
+        let (corpus, _) = usc_exec::corpus_skeletons();
+        let mut off = 0usize;
+        let mut groups = 0;
+        while off < b.len {
+            let g = decode_group(&image[..b.len], off).expect("decodes");
+            let mut k = String::new();
+            skeleton(&mut k, &g).unwrap();
+            assert!(corpus.contains(&k), "an unattested group at {off:#x}: {k}");
+            off += g.total;
+            groups += 1;
+        }
+        assert!(groups >= 16, "four groups per component: {groups}");
+        let u = l.reflection.uniforms.iter().find(|u| u.name == "u").expect("u is a uniform").dword_off as usize;
+        let values: [f32; 20] = [
+            2.5,
+            -2.5,
+            0.5,
+            -0.5,
+            0.0,
+            -0.0,
+            3.0,
+            -3.0,
+            7.99,
+            -7.99,
+            1.0e-7,
+            -1.0e-7,
+            8_388_607.5,
+            -8_388_607.5,
+            16_777_216.0,
+            -16_777_216.0,
+            1.0e9,
+            -1.0e9,
+            0.999_999_94,
+            -0.999_999_94,
+        ];
+        for q in values.chunks(4) {
+            let mut inp = sentinel_inputs(1.0e30);
+            for (c, v) in q.iter().enumerate() {
+                inp.shared[u + c] = v.to_bits();
+            }
+            let out = run_binary(&image[..b.len], &inp, true).expect("runs");
+            for (c, v) in q.iter().enumerate() {
+                let got = f32::from_bits(out[&(c as u32)]);
+                assert_eq!(got, v.trunc(), "trunc({v}) in component {c}");
+            }
+        }
+    })
+    .unwrap();
+}
+
 /// A flat varying is read from its plane's constant, coefficient
 /// `start + 4 * c + 2`, one `mbyp` per component after the iterations, as
 /// pco reads it -- not iterated. GLSL ES 1.00 has no `flat`, so the module's
@@ -3828,6 +3896,74 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
         let got = *out.get(&0).expect("a colour");
         let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
         assert!(close, "{got:#010x}, case 191 wants {want:#010x}\n{listing}");
+    })
+    .unwrap();
+}
+
+/// gl_test case 196's two programs, on the host, from the files it compiles
+/// (tools/shaders/gltest/es3trunc_*): `trunc` of 2.75 and -2.75 and the
+/// integer shifts `(-6 >> 1) - (-6 << 3)` and `200u >> 2u`, computed in the
+/// fragment stage from the varying (es3trunc_fs.frag) and in the vertex
+/// stage from the uniforms (es3trunc_vsc.vert), each the case's colour
+/// (0.5, 0.25, 45/64, 50/64) on the byte model.
+#[test]
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+fn gl_test_case_196_trunc_and_shifts_on_the_host() {
+    use yakogl::shaderc::*;
+    let fs = include_str!("../tools/shaders/gltest/es3trunc_fs.frag");
+    let vsc = include_str!("../tools/shaders/gltest/es3trunc_vsc.vert");
+    let gl_test = include_str!("../driver/tools/pvrlab/gl_test.c");
+    assert!(
+        gl_test.contains("gl_test_es3trunc_fs_src") && gl_test.contains("gl_test_es3trunc_vsc_vs_src"),
+        "case 196 links gltest/es3trunc_fs.frag and gltest/es3trunc_vsc.vert"
+    );
+    let want = [0.5f32, 0.25, 45.0 / 64.0, 50.0 / 64.0];
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let vals = [2.75f32, -6.0, 200.0, 0.0];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(fs).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+            &l.module,
+            &l.reflection,
+            a,
+            SHC_BLEND_KEY_REPLACE,
+        )
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut inp = sentinel_inputs(1.0e30);
+        let mut at = 4usize;
+        for v in &rec.varyings[..rec.num_varyings as usize] {
+            for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+                inp.coeff[at + 4 * c] = x.to_bits();
+                inp.coeff[at + 4 * c + 2] = x.to_bits();
+            }
+            at += 4 * v.components as usize;
+        }
+        let out = run_binary(&image, &inp, true).expect("runs");
+        let got = *out.get(&0).expect("a colour");
+        let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((rgba(want) >> (8 * k)) & 0xff) <= 1);
+        assert!(close, "fragment: {got:#010x}, case 196 wants {:#010x}", rgba(want));
+    })
+    .unwrap();
+    store::with_scratch(|a| {
+        let text = a.alloc_str(vsc).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+        let mut image = vec![0u8; 65536];
+        let b = build_vertex(&l.module, PLACEHOLDER, a, &mut image).expect("builds");
+        let mut inp = sentinel_inputs(1.0e30);
+        for (name, x) in ["u_x", "u_q", "u_a", "u_b"].iter().zip(vals) {
+            let u = l.reflection.uniforms.iter().find(|u| u.name == *name).expect("a uniform").dword_off as usize;
+            inp.shared[u] = x.to_bits();
+        }
+        let out = run_binary(&image[..b.len], &inp, true).expect("runs");
+        /* gl_Position is outputs 0..3 (a_pos, not placed here); v follows */
+        let v: Vec<f32> = (4..8).map(|k| f32::from_bits(out[&k])).collect();
+        assert_eq!(v, want, "vertex: v");
     })
     .unwrap();
 }

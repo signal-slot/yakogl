@@ -523,6 +523,8 @@ pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
 pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
+pair gltest/es3trunc_vs.vert gltest/es3trunc_fs.frag
+pair gltest/es3trunc_vsc.vert gltest/es3trunc_vary_fs.frag
 pair es100/deriv.vert es100/texbranch.frag
 pair es100/deriv.vert es100/unibranch.frag
 pair es100/deriv.vert es100/deriv.frag
@@ -670,6 +672,8 @@ pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
 pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
+pair gltest/es3trunc_vs.vert gltest/es3trunc_fs.frag
+pair gltest/es3trunc_vsc.vert gltest/es3trunc_vary_fs.frag
 pair es100/deriv.vert es100/texbranch.frag
 pair es100/deriv.vert es100/unibranch.frag
 pair es100/deriv.vert es100/deriv.frag

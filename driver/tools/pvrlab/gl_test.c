@@ -508,6 +508,14 @@
  *               the PDS programs it already holds. SKIP without a 4x config;
  *               skipped by name in a table build. All three GPUs; not in the
  *               set (as 145: the walker counts a SKIP as a failure)
+ * 199 es3trunc  GLSL ES 3.00 trunc() on both signs and the integer shifts
+ *               (>> arithmetic on a negative int, logical on a uint, <<):
+ *               trunc(2.75), trunc(-2.75), (-6 >> 1) - (-6 << 3) and
+ *               200u >> 2u, per pixel and per vertex, read back. The
+ *               PowerVR refused trunc ("lowering into several groups") and
+ *               the V3D trunc and the shifts until this case. All three
+ *               GPUs (skipped by name in a table build and in an ES 2.0
+ *               context); in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -778,7 +786,8 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192 || c == 197)
+	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192 ||
+	    c == 197 || c == 199)
 		return "its own sources: a table build has no rows for them";
 	/* alpha to coverage draws the sample-kill variant's blend variant (the
 	 * colour mask): the run-time compiler's, no table row */
@@ -7852,7 +7861,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16810,6 +16819,51 @@ static int case_a2cconst(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 199: trunc() and the integer shifts of GLSL ES 3.00 (es3trunc) --
+ *
+ * The varying carries v = (u_x, u_q, u_a, u_b) exactly (the same value at
+ * every vertex). With u_x = 2.75, u_q = -6, u_a = 200:
+ *   r = (trunc(2.75) + 2) / 8 = 0.5     (floor or ceil of 2.75 give 0.5 / 0.625)
+ *   g = (trunc(-2.75) + 4) / 8 = 0.25   (floor gives 0.125)
+ *   b = ((-6 >> 1) - (-6 << 3)) / 64 = (-3 + 48) / 64 = 45/64
+ *       (a logical shift right of -6 is 2^31 - 3: far out of range)
+ *   a = (200u >> 2u) / 64 = 50/64.
+ * The top half computes it in the fragment shader (es3trunc_fs.frag), the
+ * bottom half in the vertex shader (es3trunc_vsc.vert, the colour passed
+ * through). Host: tests/usc_limits.rs gl_test_case_199_* (PowerVR) and
+ * v3d/chain.rs trunc_shifts_and_integer_min_max_are_one_operation_each.
+ * ------------------------------------------------------------------------- */
+
+static int case_es3trunc(void)
+{
+	static const float vals[4] = { 2.75f, -6.0f, 200.0f, 0.0f };
+	const uint32_t want = fma_rgba(0.5f, 0.25f, 45.0f / 64.0f, 50.0f / 64.0f);
+	GLuint fs, vs;
+	bool ok = true;
+
+	fs = link_program(gl_test_es3trunc_vs_src, gl_test_es3trunc_fs_src);
+	vs = link_program(gl_test_es3trunc_vsc_vs_src, gl_test_es3trunc_vary_fs_src);
+	if (!fs || !vs)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	/* top is +y in NDC; read_topdown's row 0 is the top */
+	if (!fma_quad_vals(fs, -1.0f, 0.0f, 1.0f, 1.0f, vals) || !fma_quad_vals(vs, -1.0f, -1.0f, 1.0f, 0.0f, vals))
+		return -1;
+	if (!check_gl_error("es3trunc"))
+		return -1;
+	read_topdown();
+	dump_map(s_px, TW, TH);
+	ok &= expect_px("trunc and shifts, fragment", TW / 2, TH / 4, want, 1);
+	ok &= expect_px("trunc and shifts, vertex", TW / 2, 3 * TH / 4, want, 1);
+	glDeleteProgram(fs);
+	glDeleteProgram(vs);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19837,6 +19891,7 @@ static int run_case(int c, int pretransform, int debug)
 		if (rc == -3)
 			return -3; /* skipped by name: no 4x config */
 		break;
+	case 199: rc = case_es3trunc(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
@@ -20355,7 +20410,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 
 	if (gl_case == 7 || gl_case == GL_TEST_LIST) {
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 190, 191, 192, 197, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 190, 191, 192, 197, 199, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce

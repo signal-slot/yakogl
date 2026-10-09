@@ -160,6 +160,7 @@ fn is_comparison(op: AluOp) -> bool {
             | AluOp::Ilt
             | AluOp::Ile
             | AluOp::Ult
+            | AluOp::Ule
     )
 }
 
@@ -655,6 +656,12 @@ impl<'a> Sel<'a> {
             let (p, q, cond) = if op == AluOp::Ilt { (y, x, Cond::IfA) } else { (x, y, Cond::IfNA) };
             self.push(a, VOp::Flags { unit: FlagOp::Add(AddOp::Min), a: p, b: q, pf: Pf::PushC, uf: Uf::None })?;
             return Ok(cond);
+        }
+        /* IR Ule(x, y) is NIR uge(y, x): not y < x, SUB(y, x).pushc (C the
+         * unsigned borrow) under IFNA (ntq_emit_comparison, uge32). */
+        if op == AluOp::Ule {
+            self.push(a, VOp::Flags { unit: FlagOp::Add(AddOp::Sub), a: y, b: x, pf: Pf::PushC, uf: Uf::None })?;
+            return Ok(Cond::IfNA);
         }
         let (unit, pf, cond) = match op {
             AluOp::Flt => (AddOp::Fcmp, Pf::PushN, Cond::IfA),
@@ -1311,6 +1318,17 @@ impl<'a> Sel<'a> {
                         AluOp::F2u => self.add(a, AddOp::Ftouz, x, Operand::None)?,
                         AluOp::Ushr => self.add(a, AddOp::Shr, x, y)?,
                         AluOp::Imax => self.add(a, AddOp::Max, x, y)?,
+                        /* nir_to_vir.c:1651-1665: ishr ASR, ishl SHL, imin
+                         * MIN, umin UMIN, umax UMAX. The shifter takes the
+                         * count modulo 32; GLSL ES 3.00 5.9 leaves a count
+                         * outside [0, 31] undefined (eval.rs refuses it). */
+                        AluOp::Ishr => self.add(a, AddOp::Asr, x, y)?,
+                        AluOp::Ishl => self.add(a, AddOp::Shl, x, y)?,
+                        AluOp::Imin => self.add(a, AddOp::Min, x, y)?,
+                        AluOp::Umin => self.add(a, AddOp::Umin, x, y)?,
+                        AluOp::Umax => self.add(a, AddOp::Umax, x, y)?,
+                        /* inot, vir_NOT (nir_to_vir.c:1678-1680): `~x` */
+                        AluOp::Inot => self.add(a, AddOp::Not, x, Operand::None)?,
                         /* nir inot is vir_NOT (nir_to_vir.c:1678-1680); a bool
                          * is ~0 or 0, so NOT is its negation exactly. */
                         AluOp::Bnot => self.add(a, AddOp::Not, x, Operand::None)?,
@@ -1419,6 +1437,8 @@ impl<'a> Sel<'a> {
                         /* nir_to_vir.c:1755-1760: FFLOOR, FCEIL */
                         AluOp::Ffloor => self.add(a, AddOp::Ffloor, x, Operand::None)?,
                         AluOp::Fceil => self.add(a, AddOp::Fceil, x, Operand::None)?,
+                        /* nir_to_vir.c:1764-1766: FTRUNC */
+                        AluOp::Ftrunc => self.add(a, AddOp::Ftrunc, x, Operand::None)?,
                         /* lower_ffract (v3d_screen.c:568): a - ffloor(a)
                          * (nir_opt_algebraic.py:546), with the V3D's FSUB */
                         AluOp::Ffract => {

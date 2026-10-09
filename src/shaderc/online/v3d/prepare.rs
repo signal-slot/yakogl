@@ -270,6 +270,17 @@ pub const SELECTED: &[AluOp] = &[
     AluOp::F2b,
     AluOp::U2f,
     AluOp::F2u,
+    AluOp::Ftrunc,
+    AluOp::Ishl,
+    AluOp::Ishr,
+    AluOp::Ushr,
+    AluOp::Imin,
+    AluOp::Imax,
+    AluOp::Umin,
+    AluOp::Umax,
+    AluOp::Inot,
+    AluOp::Ult,
+    AluOp::Ule,
 ];
 
 /// The refusal for an [`SOp::Undef`] that an output needs.

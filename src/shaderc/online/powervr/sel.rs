@@ -638,19 +638,19 @@ mod tests {
             let expected = !matches!(shape(*op), Shape::Refused(_) | Shape::SelectionExpands(_));
             assert_eq!(SelGroup::is_buildable(*op), expected, "{op:?}");
         }
-        // Four operations may not reach the builder, for two different
-        // reasons; if this set changes the test should be read again rather
-        // than the list updated.
+        // Six operations may not reach the builder; if this set changes the
+        // test should be read again rather than the list updated.
         let refused: Vec<_> = ALL.iter().filter(|o| !SelGroup::is_buildable(**o)).collect();
         assert_eq!(
             refused,
-            vec![&AluOp::Fdot2, &AluOp::Fdot3, &AluOp::Fdot4, &AluOp::Idiv, &AluOp::Imod],
+            vec![&AluOp::Ftrunc, &AluOp::Fdot2, &AluOp::Fdot3, &AluOp::Fdot4, &AluOp::Idiv, &AluOp::Imod],
             "the refusal set changed"
         );
         // ... and every one of them for the same reason: selection already
-        // expanded it (the dots to fmul/fmad, the divides to
-        // nir_lower_idiv's sequence). None is "the machine cannot" any more.
-        for op in [AluOp::Fdot2, AluOp::Fdot3, AluOp::Fdot4, AluOp::Idiv, AluOp::Imod] {
+        // expanded it (trunc to nir lower_ftrunc's select, the dots to
+        // fmul/fmad, the divides to nir_lower_idiv's sequence). None is "the
+        // machine cannot" any more.
+        for op in [AluOp::Ftrunc, AluOp::Fdot2, AluOp::Fdot3, AluOp::Fdot4, AluOp::Idiv, AluOp::Imod] {
             assert!(matches!(shape(op), Shape::SelectionExpands(_)), "{op:?}");
         }
     }

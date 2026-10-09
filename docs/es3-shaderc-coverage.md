@@ -1,9 +1,10 @@
 # GLSL ES 3.00 coverage of the online shader compiler
 
 How much of GLSL ES 3.00 `src/shaderc/online/**` takes, measured over the
-dEQP `data/gles3/shaders/*.test` corpus (23 files). Measured 2026-10-08 on
-the host, on the integration tip 3f78982e, with `tests/es3_shaderc_corpus.rs`
-(no change under `src/**`).
+dEQP `data/gles3/shaders/*.test` corpus (23 files). Measured on the host with
+`tests/es3_shaderc_corpus.rs`, 2026-10-10, on main 32778b57 and each commit of
+the ES 3.00 gap work after it (the tables are the latest; the commit messages
+carry each step's before and after).
 
 * Corpus: VK-GL-CTS commit `93bca01861b0e3ef3c387027a9791e6d065f900c`
   (the pinned checkout in the deps cache, `VK-GL-CTS/data/gles3/shaders/`).
@@ -66,12 +67,12 @@ needs a link error, `pass` needs both to succeed.
 | declarations | 0 | 0 | 54 | 0 |
 | fragdata | 0 | 0 | 4 | 0 |
 | functions | 199 | 0 | 112 | 0 |
-| indexing | 20 | 8 | 0 | 0 |
+| indexing | 28 | 0 | 0 | 0 |
 | invalid_implicit_conversions | 0 | 0 | 768 | 0 |
 | invalid_texture_functions | 0 | 0 | 120 | 0 |
 | keywords | 8 | 0 | 348 | 0 |
 | large_constant_arrays | 16 | 0 | 0 | 0 |
-| linkage | 83 | 2 | 27 | 7 |
+| linkage | 83 | 2 | 34 | 0 |
 | loops | 9 | 0 | 0 | 0 |
 | negative | 0 | 0 | 12 | 0 |
 | preprocessor | 288 | 4 | 264 | 0 |
@@ -81,10 +82,10 @@ needs a link error, `pass` needs both to succeed.
 | swizzle_math_operations | 544 | 0 | 0 | 0 |
 | swizzles | 648 | 0 | 0 | 0 |
 | uniform_block | 64 | 2 | 72 | 0 |
-| **total** | **3436** | **25** | **2128** | **7** |
+| **total** | **3444** | **17** | **2135** | **0** |
 
-So of the 3,461 programs that must build, 3,436 (99.3 %) do; of the 2,135 that
-must be refused, 2,128 (99.7 %) are (but see the caveat). The front end is
+So of the 3,461 programs that must build, 3,444 (99.5 %) do; of the 2,135 that
+must be refused, all are (but see the caveat). The front end is
 not what stands in front of the 8,835 AM62P GLES3 CTS failures: these are
 compile/link-time verdicts only. Feature gaps that need a *draw* (integer
 render targets, MRT, transform feedback, ...) are invisible here.
@@ -98,18 +99,18 @@ code generator, which refuses at link).
 |---|---|---|
 | arrays | 294 / 0 / 22 / 0 | 294 / 0 / 22 / 0 |
 | conditionals | 21 / 0 / 20 / 0 | 21 / 0 / 20 / 0 |
-| constant_expressions | 40 / 2 / 0 / 0 | 38 / 4 / 0 / 0 |
+| constant_expressions | 40 / 2 / 0 / 0 | 40 / 2 / 0 / 0 |
 | constants | 100 / 0 / 45 / 0 | 100 / 0 / 45 / 0 |
-| conversions | 1060 / 0 / 96 / 0 | 952 / **108** / 96 / 0 |
+| conversions | 1060 / 0 / 96 / 0 | 952 / 108 / 96 / 0 |
 | declarations | 0 / 0 / 54 / 0 | 0 / 0 / 54 / 0 |
 | fragdata | 0 / 0 / 4 / 0 | 0 / 0 / 4 / 0 |
 | functions | 199 / 0 / 112 / 0 | 187 / 12 / 112 / 0 |
-| indexing | 28 / 0 / 0 / 0 | 20 / 8 / 0 / 0 |
+| indexing | 28 / 0 / 0 / 0 | 28 / 0 / 0 / 0 |
 | invalid_implicit_conversions | 0 / 0 / 768 / 0 | 0 / 0 / 768 / 0 |
 | invalid_texture_functions | 0 / 0 / 120 / 0 | 0 / 0 / 120 / 0 |
 | keywords | 8 / 0 / 348 / 0 | 8 / 0 / 348 / 0 |
 | large_constant_arrays | 14 / 2 / 0 / 0 | 16 / 0 / 0 / 0 |
-| linkage | 85 / 0 / 27 / 7 | 71 / 14 / 27 / 7 |
+| linkage | 85 / 0 / 34 / 0 | 71 / 14 / 34 / 0 |
 | loops | 9 / 0 / 0 / 0 | 9 / 0 / 0 / 0 |
 | negative | 0 / 0 / 12 / 0 | 0 / 0 / 12 / 0 |
 | preprocessor | 288 / 4 / 264 / 0 | 288 / 4 / 264 / 0 |
@@ -119,7 +120,7 @@ code generator, which refuses at link).
 | swizzle_math_operations | 544 / 0 / 0 / 0 | 544 / 0 / 0 / 0 |
 | swizzles | 648 / 0 / 0 / 0 | 648 / 0 / 0 / 0 |
 | uniform_block | 64 / 2 / 72 / 0 | 64 / 2 / 72 / 0 |
-| **total** | **3451 / 10 / 2121 / 14** | **3302 / 159 / 2121 / 14** |
+| **total** | **3451 / 10 / 2128 / 7** | **3312 / 149 / 2128 / 7** |
 
 ## Expected-pass programs refused, by root cause
 
@@ -131,15 +132,13 @@ no stage or construct more precise than that.
 |---|---|---:|---:|---:|---|---|
 | `gl_MaxDrawBuffers` is 1 | back-end limit | 2 | 2 | 2 | constant_expressions | `other.complex_{vertex,fragment}`: `'case' : two case labels have the same value` |
 | `centroid in` fragment input | lowering gap | 9 | 0 | 9 | linkage, qualification_order | `varying.interpolation.centroid`: `Usc(FragmentInputsNotBuilt)` (PowerVR), `NotYet("centroid varying")` (V3D) |
-| Output/inout parameter whose argument is an indexed element | back-end limit (PowerVR), lowering gap (V3D) | 8 | 0 | 8 | indexing | `moredynamic.user_defined_fncall_out_parameter_*`: `Usc(Build(Unsupported("lowering into several groups")))`; V3D `NotYet("Ftrunc")` |
 | Backslash-newline inside a preprocessing token | unsupported construct | 4 | 4 | 4 | preprocessor | `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
 | Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
 | Matrix-typed vertex attribute (the generated `a_in0` of the matrix `input`s) | back-end limit (V3D) | 0 | 0 | 132 | conversions 108, functions 12, linkage 12 | `matrix_to_matrix.mat4x3_to_mat4_*`: `NotYet("an attribute location with no declaration")` |
-| `Ishl` (integer shift) | lowering gap (V3D) | 0 | 0 | 2 | constant_expressions | `operators.bitwise_*`: `NotYet("Ishl")` |
 | Register pressure of a 128-element constant array index | back-end limit (GC7000UL) | 0 | 2 | 0 | large_constant_arrays | `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
-type checker (sema) on any GPU: there is no "sema bug" among the 25/10/159
+type checker (sema) on any GPU: there is no "sema bug" among the 17/10/149
 refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
 "unsupported construct" class; no `#version 300 es` *syntax* is refused.
 
@@ -156,16 +155,21 @@ refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
   (`conversions.matrix_to_*`, and the complete programs in `functions`/`linkage`
   that use one). The cause is read from the generated source; the V3D back-end
   message does not name the matrix.
-* GC7000UL builds the indexed out/inout parameter cases and the centroid
-  inputs that PowerVR and V3D refuse, and it is the only GPU refusing a large
-  constant array.
+* GC7000UL builds the centroid inputs that PowerVR and V3D refuse, and it is
+  the only GPU refusing a large constant array.
+* `trunc` (`Ftrunc`) is selected on every back end: the PowerVR as pco's
+  `lower_ftrunc` select (`x < 0 ? ceil(x) : floor(x)`, four groups), the V3D as
+  `FTRUNC`; the V3D also selects the integer shifts (`SHL`, `ASR`, `SHR`),
+  integer and unsigned min/max, `~` and the unsigned orderings. The
+  `indexing.moredynamic.*_out_parameter_*` programs were refused for their
+  `trunc`, not for the indexed out argument. dEQP's
+  `shaders.operator.common_functions.trunc` (24 programs, both stages, three
+  precisions) is the same operation; it is not in this corpus.
 
 ## Expected-fail programs built (wrongly accepted)
 
 | cause | class | PowerVR | GC7000UL | V3D | example |
 |---|---|---:|---:|---:|---|
-| Link does not compare an interpolation qualifier between the stages (`flat out` vs `in`) | link check missing | 1 | 1 | 1 | `linkage:varying.rules.interpolation_mismatch_1` |
-| Link does not compare uniform block definitions between the stages (members, layout qualifier) | link check missing | 6 | 6 | 6 | `linkage:uniform.block.members_mismatch`, `uniform.block.layout_qualifier_mismatch_1..5` |
 | `invariant` accepted on a fragment shader input | sema bug | 0 (refused, but by the back end, see below) | 7 | 7 (refused at link by `centroid varying`, not at compile) | `qualification_order:variables.invalid.interp_storage_invariant_input` |
 
 ## Caveat: refused for the right reason?
@@ -192,18 +196,16 @@ that grows the feature will turn them into "fail accepted"): 16 on PowerVR, 9 on
 ## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
-  in good shape: 3,436 of 3,461 expected-build programs build on the PowerVR.
+  in good shape: 3,444 of 3,461 expected-build programs build on the PowerVR.
   Shader compilation is not where most of the AM62P's GLES3 failures come from;
   the handful below is what this corpus can show. Failures that need a draw or
   the API (integer targets, MRT, transform feedback varyings) are not in it.
-* Work that closes the table (none of it is in this item):
+* Work that closes the table:
   1. `mrt4`: `gl_MaxDrawBuffers` of 4 turns the two `complex` cases green.
   2. Centroid fragment inputs on PowerVR and V3D (9 programs each).
-  3. Indexed out/inout arguments on PowerVR (8) and V3D (8).
-  4. Preprocessor: backslash-newline splice inside a token (4).
-  5. Reflection names of 64 or more characters (2).
-  6. Link: interpolation and uniform-block interface matching (7).
-  7. Sema: `invariant in` on a fragment input; name scoping that lets a block
+  3. Preprocessor: backslash-newline splice inside a token (4).
+  4. Reflection names of 64 or more characters (2).
+  5. Sema: `invariant in` on a fragment input; name scoping that lets a block
      variable be read outside its block (2); recursion by call graph.
-  8. V3D only: matrix vertex attributes (132 programs, the biggest single
-     refusal in the whole table), integer shift, float truncate.
+  6. V3D only: matrix vertex attributes (132 programs, the biggest single
+     refusal in the whole table).

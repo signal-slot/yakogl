@@ -1375,6 +1375,42 @@ impl<'a> Sel<'a> {
             }
             return Ok(());
         }
+        /* `trunc(x)`: pco sets NIR `lower_ftrunc`, which writes
+         * `bcsel(x < 0, -floor(|x|), floor(|x|))` (nir_opt_algebraic.py,
+         * ftrunc@32). For x < 0, `-floor(|x|)` is `-floor(-x)`, which is
+         * `ceil(x)`, one group here (`builtins::shape` Fceil), so the
+         * sequence is a `tst`, the `fceil`, the floor as Ffract writes it
+         * (`floor(x) + 0.0`, the floor a source modifier), and a `movc`:
+         * four groups, no |x| or negate to materialise. */
+        if o == Ftrunc {
+            for lane in 0..self.result_lanes(id) {
+                let x = self.src(args[0], lane)?;
+                /* An operand carrying abs or negate is computed first: the
+                 * floor modifier would otherwise apply before them. */
+                let x = match x {
+                    SelSrc::Virtual { mods, .. } | SelSrc::Fixed { mods, .. } if mods.neg || mods.abs => {
+                        self.fresh_typed(SelOp::Copy, OpType::F32, [Some(x), None, None])?
+                    }
+                    other => other,
+                };
+                let floored = match x {
+                    SelSrc::Virtual { v, mods } => SelSrc::Virtual { v, mods: Mods { flr: true, ..mods } },
+                    SelSrc::Fixed { bank, reg, mods } => SelSrc::Fixed { bank, reg, mods: Mods { flr: true, ..mods } },
+                    SelSrc::Imm(b) => SelSrc::Imm(fold_mods(b, Mods { flr: true, ..Mods::default() })),
+                };
+                let neg = self.fresh_typed(SelOp::Alu(Flt), OpType::F32, [Some(x), Some(SelSrc::Imm(0)), None])?;
+                let up = self.fresh_typed(SelOp::Alu(Fceil), OpType::F32, [Some(x), None, None])?;
+                let down =
+                    self.fresh_typed(SelOp::Alu(Fadd), OpType::F32, [Some(floored), Some(SelSrc::Imm(0)), None])?;
+                self.emit(SelGroup {
+                    op: SelOp::Alu(Bcsel),
+                    ty: OpType::U32,
+                    dst: Some(SelDst::Virtual(Self::reg(ir::ValueId(id.0), lane))),
+                    srcs: [Some(neg), Some(up), Some(down)],
+                })?;
+            }
+            return Ok(());
+        }
         if matches!(o, Idiv | Imod) {
             return self.idiv(id, o == Imod, args);
         }

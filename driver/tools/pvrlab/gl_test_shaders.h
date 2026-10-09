@@ -8281,6 +8281,50 @@ static const char gl_test_unipad_vs_src[] =
 	"uniform vec2 u_scale;\n"
 	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
 
+/* trunc() on both signs and integer shifts, per pixel and per vertex (case 196). */
+static const char gl_test_es3trunc_fs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 196: trunc() on both signs, and integer shifts (arithmetic on a\n"
+	" * negative int, logical on a uint), of values a varying carries exactly. */\n"
+	"precision highp float;\n"
+	"precision highp int;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() {\n"
+	"    int i = int(v.y);\n"
+	"    uint u = uint(v.z);\n"
+	"    o_color = vec4((trunc(v.x) + 2.0) * 0.125, (trunc(-v.x) + 4.0) * 0.125,\n"
+	"                   float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vs_src[] =
+	"#version 300 es\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
+
+static const char gl_test_es3trunc_vsc_vs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 196: es3trunc_fs.frag's arithmetic in the vertex stage. */\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() {\n"
+	"    int i = int(u_q);\n"
+	"    uint u = uint(u_a);\n"
+	"    gl_Position = a_pos;\n"
+	"    v = vec4((trunc(u_x) + 2.0) * 0.125, (trunc(-u_x) + 4.0) * 0.125,\n"
+	"             float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vary_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() { o_color = v; }\n";
+
 static const char gl_test_varyfma_fs_src[] =
 	"#version 100\n"
 	"precision highp float;\n"

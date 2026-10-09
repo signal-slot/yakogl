@@ -593,6 +593,14 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      accumulation across jobs, the GC7000 PE's store timing).
    - **pvr-2darray**: PowerVR 2D-array and shadow sampling, designed in
      `docs/es3-pvr-2darray.md`.
+   - **es3-shaderc**: the online compiler's GLSL ES 3.00 gaps, counted over
+     dEQP's `shaders/*.test` corpus in `docs/es3-shaderc-coverage.md`
+     (PowerVR 3,444 / GC7000UL 3,451 / V3D 3,312 of 3,461 expected-build
+     programs build). Host-proven: `trunc` on the PowerVR and the V3D, the
+     V3D's integer shifts, min/max, `~` and unsigned orderings (gl_test 196
+     es3trunc, not yet run on a board; dEQP `shaders.operator` trunc, 24
+     programs). Open: the rest of that document's "Work that closes the
+     table".
    - **es3-caps** and **es2-report-pin**: redo the ES 3.0 limits test and
      the test pinning the ES 2.0 report's answers, reverted for review
      (`3f78982`, `a35095b`).

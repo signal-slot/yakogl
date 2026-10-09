@@ -15,8 +15,8 @@
  * reflection of its original field by field (src/shaderc/es100_twins.rs),
  * and either set must read back the same pixels from the same case.
  *
- * 21 cases have no ES 1.00 form, because their GLSL is "#version 300 es":
- * 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163.
+ * 22 cases have no ES 1.00 form, because their GLSL is "#version 300 es":
+ * 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 196.
  * GL_TEST_SHADERS_SKIP_REASON names them, so they are skipped with a reason
  * printed rather than failing at the version line or passing silently. */
 
@@ -24,7 +24,7 @@
 
 /* Non-NULL for a case this set cannot serve; the string is the reason. */
 #define GL_TEST_SHADERS_SKIP_REASON(c) \
-	((c) == 41 || (c) == 42 || (c) == 43 || (c) == 44 || (c) == 45 || (c) == 46 || (c) == 47 || (c) == 48 || (c) == 49 || (c) == 51 || (c) == 52 || (c) == 55 || (c) == 57 || (c) == 89 || (c) == 98 || (c) == 100 || (c) == 104 || (c) == 106 || (c) == 114 || (c) == 141 || (c) == 163 \
+	((c) == 41 || (c) == 42 || (c) == 43 || (c) == 44 || (c) == 45 || (c) == 46 || (c) == 47 || (c) == 48 || (c) == 49 || (c) == 51 || (c) == 52 || (c) == 55 || (c) == 57 || (c) == 89 || (c) == 98 || (c) == 100 || (c) == 104 || (c) == 106 || (c) == 114 || (c) == 141 || (c) == 163 || (c) == 196 \
 	 ? "ES 3.00 source, outside the ES 2.0 compiler" : (const char *)0)
 
 static const char gl_test_vs_src[] =
@@ -8307,6 +8307,50 @@ static const char gl_test_unipad_vs_src[] =
 	"attribute vec2 a_pos;\n"
 	"uniform vec2 u_scale;\n"
 	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
+
+/* trunc() on both signs and integer shifts, per pixel and per vertex (case 196). */
+static const char gl_test_es3trunc_fs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 196: trunc() on both signs, and integer shifts (arithmetic on a\n"
+	" * negative int, logical on a uint), of values a varying carries exactly. */\n"
+	"precision highp float;\n"
+	"precision highp int;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() {\n"
+	"    int i = int(v.y);\n"
+	"    uint u = uint(v.z);\n"
+	"    o_color = vec4((trunc(v.x) + 2.0) * 0.125, (trunc(-v.x) + 4.0) * 0.125,\n"
+	"                   float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vs_src[] =
+	"#version 300 es\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
+
+static const char gl_test_es3trunc_vsc_vs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 196: es3trunc_fs.frag's arithmetic in the vertex stage. */\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() {\n"
+	"    int i = int(u_q);\n"
+	"    uint u = uint(u_a);\n"
+	"    gl_Position = a_pos;\n"
+	"    v = vec4((trunc(u_x) + 2.0) * 0.125, (trunc(-u_x) + 4.0) * 0.125,\n"
+	"             float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vary_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() { o_color = v; }\n";
 
 static const char gl_test_varyfma_fs_src[] =
 	"#version 100\n"
