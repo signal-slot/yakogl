@@ -96,7 +96,8 @@ change; the tests state the expectation per mask.
   leaves it): `es3_formats::Es3Format::storage_here()` is the question a
   caller asks.
 * `SRGB8`/`SRGB8_ALPHA8` are stored as plain `RGBA8` as before (no decode in
-  any sampler); `RGB5_A1` from `UNSIGNED_INT_2_10_10_10_REV` and the
-  32-bit-float filterability of `R32F`/`RGBA32F` are not modelled (they
-  predate the table and are not identifiable from the storage class).
-* Mip levels >= 1 of NPOT 3D/2D-array textures (`tex3d-levels`).
+  any sampler); the 32-bit-float filterability of `R32F`/`RGBA32F` is not
+  modelled (it predates the table and is not identifiable from the storage
+  class). `RGB5_A1` from `UNSIGNED_INT_2_10_10_10_REV` takes the 10-bit word
+  since `e5c4a180`, and every level of a NPOT 3D/2D-array texture is valid
+  since `c40414b9`.

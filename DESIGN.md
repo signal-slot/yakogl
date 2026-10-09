@@ -26,8 +26,9 @@ Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom
 - **GLES3.** The API dispatch, state object model, and backend are structured so
   GLES3 (VAOs, UBOs, MRT, instancing, transform feedback, 3D/array textures, sampler
   objects, integer/GLSL-ES-3.00 shaders) needs no reworking of the core. The ES 3.0
-  entry points are already provided (`include/GLES3/`, `src/gl/es3.rs`); the default
-  build reports ES 3.0, and `report-es2` reports ES 2.0 for the conformance runs.
+  entry points are already provided (`include/GLES3/`, `src/gl/es3.rs`). The cargo
+  crate reports ES 3.0 unless the `report-es2` feature is on; the CMake and Zephyr
+  builds default to ES 2.0 (`YAKOGL_REPORT_ES2` ON / `y`) for the conformance runs.
 - **Non-goal (for now):** EGL window-system integration beyond a minimal
   surface/context.
 

@@ -217,10 +217,11 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * Query names are real, and so is one target's counting:
- * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted on the CPU by the
- * transform feedback capture (`tf.rs`, which adds to the active query through
- * `add_primitives_written`). The BXS backend has no occlusion counter wired
+ * Query names are real; no target counts yet.
+ * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN will be counted on the CPU by the
+ * transform feedback capture once it is built (docs/HANDOFF.md, open work 4,
+ * tf-capture): `add_primitives_written` is the entry it adds to the active
+ * query through. The BXS backend has no occlusion counter wired
  * up, so glBeginQuery on the ANY_SAMPLES_PASSED targets still refuses rather
  * than letting a caller believe a zero sample count (docs/HANDOFF.md, open
  * work 4, occlusion-query, fills in that arm).
