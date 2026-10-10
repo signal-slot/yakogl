@@ -508,6 +508,16 @@
  *               the PDS programs it already holds. SKIP without a 4x config;
  *               skipped by name in a table build. All three GPUs; not in the
  *               set (as 145: the walker counts a SKIP as a failure)
+ * 205 mappbo    ES 3.0 buffer mapping and pixel buffers: the slice-A
+ *               triangle written into a VBO through glMapBufferRange and
+ *               drawn (a draw while mapped GL_INVALID_OPERATION), collapsed
+ *               through an explicit-flush mapping; a 4x2 RGBA8 texture from
+ *               a PIXEL_UNPACK_BUFFER (offset, ROW_LENGTH, SKIP_PIXELS,
+ *               SKIP_ROWS), one level with MAX_LEVEL 0 and a mipmap filter,
+ *               sampled; the window read into a PIXEL_PACK_BUFFER with
+ *               PACK_ROW_LENGTH and mapped for reading. ES 3.0 only
+ *               (skipped by name in an ES 2.0 context); all three GPUs,
+ *               not in the set
  * 199 es3trunc  GLSL ES 3.00 trunc() on both signs and the integer shifts
  *               (>> arithmetic on a negative int, logical on a uint, <<):
  *               trunc(2.75), trunc(-2.75), (-6 >> 1) - (-6 << 3) and
@@ -7869,7 +7879,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [205] = "mappbo",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -18150,6 +18160,175 @@ out:
 	glUseProgram(0);
 	glDeleteProgram(prog);
 	return ok && check_gl_error("tfcap teardown") ? 0 : -1;
+
+/* ---- case 205: a mapped VBO and pixel buffer transfers (mappbo) -----------
+ *
+ * ES 3.0 buffer mapping and pixel buffer objects, read back:
+ * 1. The slice-A triangle written into a VBO through glMapBufferRange
+ *    (WRITE | INVALIDATE_BUFFER) on the store glBufferData left empty, and
+ *    drawn: the triangle at the centroid. A draw while the buffer is mapped
+ *    is GL_INVALID_OPERATION (ES 3.0 2.9.4). Then mapped WRITE |
+ *    FLUSH_EXPLICIT, every vertex moved to the apex and the three positions
+ *    flushed with glFlushMappedBufferRange: nothing at the centroid.
+ * 2. A 4x2 RGBA8 texture of eight colours uploaded from a
+ *    PIXEL_UNPACK_BUFFER at offset 8 with UNPACK_ROW_LENGTH 7,
+ *    UNPACK_SKIP_PIXELS 2 and UNPACK_SKIP_ROWS 1 (every other byte of the
+ *    buffer 0x11), one level sampled NEAREST_MIPMAP_NEAREST with
+ *    GL_TEXTURE_MAX_LEVEL 0 -- dEQP texture.specification's state, complete
+ *    in ES 3.0 3.8.13 -- over the window: each texel's cell read back. The
+ *    GL core called that texture incomplete (it wanted the whole chain) and
+ *    every one-level texture.specification case read black until
+ *    2026-10-10.
+ * 3. The window read into a PIXEL_PACK_BUFFER at offset 4 with
+ *    PACK_ROW_LENGTH 70 and mapped for reading: every row is the one a
+ *    direct glReadPixels gives.
+ * Host: src/gl/es3_pbo_tests.rs (the uploads and the completeness) and
+ * src/gl/buffer.rs every_target_* / a_draw_that_fetches_from_a_mapped_*.
+ * ES 3.0 only (skipped by name in an ES 2.0 context); all three GPUs.
+ * ------------------------------------------------------------------------- */
+static int case_mappbo(void)
+{
+	/* texel (x, y), y = 0 the bottom row */
+	static const uint32_t texels[2][4] = {
+		{ 0xff0000ffu, 0xff00ff00u, 0xffff0000u, 0xffffffffu },
+		{ 0xff00ffffu, 0xffffff00u, 0xffff00ffu, 0xff204080u },
+	};
+	enum { OFF = 8, ROWLEN = 7, SKIPX = 2, SKIPY = 1, PBO_BYTES = OFF + 4 * ROWLEN * (SKIPY + 2) };
+	enum { PACK_OFF = 4, PACK_ROWLEN = 70, PACK_BYTES = PACK_OFF + 4 * PACK_ROWLEN * (TH - 1) + 4 * TW };
+	static uint8_t src[PBO_BYTES];
+	static uint32_t direct[TW * TH];
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	struct cuv_vertex tri[3], point[3];
+	GLuint prog, tprog, vbo = 0, tex = 0, pbo = 0;
+	GLenum err;
+	uint8_t *p;
+	uint32_t bad = 0;
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 205 mappbo: SKIP (an ES 2.0 library has no glMapBufferRange nor pixel buffers)\n");
+		return -3;
+	}
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_vs_src, gl_test_fs_src);
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	if (!prog || !tprog)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	/* 1. the triangle through a write mapping */
+	slice_a_vertices(tri, 0);
+	point[0] = point[1] = point[2] = tri[0];
+	glUseProgram(prog);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(tri), NULL, GL_DYNAMIC_DRAW);
+	cuv_attribs();
+	p = glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(tri), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+	if (!p || !check_gl_error("mappbo: map for write"))
+		return -1;
+	memcpy(p, tri, sizeof(tri));
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	err = glGetError();
+	ok &= expect_int("mappbo: a draw from the mapped VBO", (long)err, GL_INVALID_OPERATION);
+	ok &= expect_int("mappbo: glUnmapBuffer", glUnmapBuffer(GL_ARRAY_BUFFER), GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glFinish();
+	if (!check_gl_error("mappbo: the mapped triangle"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("mappbo: written through the map", 32, 40, A_CENTROID, 8);
+
+	p = glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(tri), GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
+	if (!p)
+		return -1;
+	for (size_t v = 0; v < 3; v++) {
+		memcpy(p + v * sizeof(point[0]), point[v].pos, sizeof(point[v].pos));
+		glFlushMappedBufferRange(GL_ARRAY_BUFFER, (GLintptr)(v * sizeof(point[0])),
+					 (GLsizeiptr)sizeof(point[v].pos));
+	}
+	ok &= expect_int("mappbo: glUnmapBuffer 2", glUnmapBuffer(GL_ARRAY_BUFFER), GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glFinish();
+	if (!check_gl_error("mappbo: the flushed positions"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("mappbo: collapsed by the flushed ranges", 32, 40, 0xff000000u, 0);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	/* 2. a texture from a pixel unpack buffer, one level, MAX_LEVEL 0 */
+	memset(src, 0x11, sizeof(src));
+	for (unsigned y = 0; y < 2; y++)
+		memcpy(&src[OFF + 4 * (ROWLEN * (SKIPY + y) + SKIPX)], texels[y], sizeof(texels[y]));
+	glGenBuffers(1, &pbo);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+	glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeof(src), src, GL_STATIC_DRAW);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, ROWLEN);
+	glPixelStorei(GL_UNPACK_SKIP_PIXELS, SKIPX);
+	glPixelStorei(GL_UNPACK_SKIP_ROWS, SKIPY);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void *)(uintptr_t)OFF);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+	glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+	glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	glDeleteBuffers(1, &pbo);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	if (!check_gl_error("mappbo: the unpack-buffer upload"))
+		return -1;
+	glClear(GL_COLOR_BUFFER_BIT);
+	dst_sample(tprog, tex);
+	glFinish();
+	if (!check_gl_error("mappbo: sampling the upload"))
+		return -1;
+	read_topdown();
+	for (uint32_t y = 0; y < 2; y++) {
+		for (uint32_t x = 0; x < 4; x++) {
+			char what[40];
+
+			snprintf(what, sizeof(what), "mappbo: texel (%u,%u)", (unsigned)x, (unsigned)y);
+			ok &= expect_px(what, 16 * x + 8, y ? 16 : 48, texels[y][x], 1);
+		}
+	}
+
+	/* 3. the window into a pixel pack buffer, mapped for reading */
+	glReadPixels(0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE, direct);
+	glGenBuffers(1, &pbo);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
+	glBufferData(GL_PIXEL_PACK_BUFFER, PACK_BYTES, NULL, GL_STREAM_READ);
+	glPixelStorei(GL_PACK_ROW_LENGTH, PACK_ROWLEN);
+	glReadPixels(0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE, (void *)(uintptr_t)PACK_OFF);
+	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+	p = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, PACK_BYTES, GL_MAP_READ_BIT);
+	if (!p || !check_gl_error("mappbo: the pack-buffer read"))
+		return -1;
+	for (uint32_t y = 0; y < TH; y++)
+		bad += memcmp(p + PACK_OFF + 4 * PACK_ROWLEN * y, &direct[TW * y], 4 * TW) != 0;
+	ok &= expect_int("mappbo: rows the pack buffer holds unlike glReadPixels'", (long)bad, 0);
+	ok &= expect_int("mappbo: glUnmapBuffer 3", glUnmapBuffer(GL_PIXEL_PACK_BUFFER), GL_TRUE);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+	glDeleteBuffers(1, &pbo);
+
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	glDeleteProgram(prog);
+	glDeleteProgram(tprog);
+	return ok ? 0 : -1;
 }
 
 /* ---- case 180: memory a finished job held, back at once (teardown) --------
@@ -20511,6 +20690,10 @@ static int run_case(int c, int pretransform, int debug)
 		rc = case_tfcap();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library, or no in-process compiler */
+	case 205:
+		rc = case_mappbo();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library */
 		break;
 	case 179:
 		rc = case_retile();

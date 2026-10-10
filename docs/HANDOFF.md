@@ -619,6 +619,31 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      accumulation across jobs, the GC7000 PE's store timing).
    - **pvr-2darray**: PowerVR 2D-array and shadow sampling, designed in
      `docs/es3-pvr-2darray.md`.
+   - **buffer-pbo**: ES 3.0 buffer mapping and pixel buffers, host-proven;
+     the board next (gl_test 205 `mappbo`, then the AM62P GLES3 tree's
+     images 1 `buffer.*`, 5 `pbo.*`, 6 `read_pixels.*` and 23
+     `texture.specification.*` of `tools/cts/am62p-gles3-tree.txt`). On
+     `c4ccc966`: `buffer.map.*` 300 (write 132, read_write 90, read 78)
+     read GL_INVALID_ENUM from the unmap of six of the eight targets
+     (dEQP's loader calls glUnmapBufferOES, `03840710` takes every target
+     there); every one-level `texture.specification` case -- the
+     `*_pbo` groups (teximage2d 108, texsubimage2d 109, teximage3d 112,
+     texsubimage3d 110), `*_unpack_params`, `*_align` (32 + 40) and the
+     short `texstorage2d` chains -- read black: dEQP samples with
+     NEAREST_MIPMAP_NEAREST and GL_TEXTURE_MAX_LEVEL at the last level,
+     and the draw wanted the whole chain (ES 3.0 3.8.13 stops at
+     MAX_LEVEL; an immutable texture at its last level). The uploads
+     themselves were right: `src/gl/es3_pbo_tests.rs` compares every
+     dEQP PBO and unpack-state case with a tight upload. Also: a draw
+     fetching from a mapped buffer is GL_INVALID_OPERATION (ES 3.0 2.9.4;
+     the ES 2.0 report keeps drawing), glCopyBufferSubData copies on
+     write under a pending kick and goes through the OSAL without a CPU
+     view, glGetBufferParameteri64v answers 64-bit and leaves `params`
+     alone on an error. Left: the 3D and 2D-array cases of those groups
+     also need the PowerVR's 3D / array sampling (`basic_teximage3d` and
+     the full `texstorage3d` chains fail too; `pvr-2darray`), and the
+     depth ones its depth sampling; `read_pixels` 24 were the integer
+     targets (`int-rt`).
    - **es3-shaderc**: the online compiler's GLSL ES 3.00 gaps, counted over
      dEQP's `shaders/*.test` corpus in `docs/es3-shaderc-coverage.md`
      (PowerVR 3,453 / GC7000UL 3,451 / V3D 3,453 of 3,461 expected-build
