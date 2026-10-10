@@ -6943,7 +6943,7 @@ static const char gl_test_es300_intrt_fs_src[] =
 	"void main()\n"
 	"{\n"
 	"    // an integer target's output: the uniform's integers with the pixel's\n"
-	"    // column in alpha, written unconverted (gl_test case 196, intrt)\n"
+	"    // column in alpha, written unconverted (gl_test case 200, intrt)\n"
 	"    o_v = uvec4(u_v.xyz, uint(gl_FragCoord.x));\n"
 	"}\n";
 
@@ -6955,7 +6955,7 @@ static const char gl_test_es300_usamp_fs_src[] =
 	"layout(location = 0) out vec4 fragColor;\n"
 	"void main()\n"
 	"{\n"
-	"    // an unsigned integer texel read as integers, shown as bytes (gl_test case 197, usamp)\n"
+	"    // an unsigned integer texel read as integers, shown as bytes (gl_test case 201, usamp)\n"
 	"    fragColor = vec4(texture(u_tex, v_xy * 0.5 + 0.5)) / 255.0;\n"
 	"}\n";
 
@@ -6967,7 +6967,7 @@ static const char gl_test_es300_isamp_fs_src[] =
 	"void main()\n"
 	"{\n"
 	"    // a signed integer texel fetched as integers, sign extended, shown\n"
-	"    // offset by 128 (gl_test case 197, usamp): 2x2 texels over the 64x64 target\n"
+	"    // offset by 128 (gl_test case 201, usamp): 2x2 texels over the 64x64 target\n"
 	"    fragColor = vec4(texelFetch(u_tex, ivec2(gl_FragCoord.xy) / 32, 0) + 128) / 255.0;\n"
 	"}\n";
 

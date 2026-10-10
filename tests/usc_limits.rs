@@ -3627,14 +3627,14 @@ fn integer_render_targets_get_the_packed_bits() {
     .unwrap();
 }
 
-/// gl_test case 196's fragment shader (gltest/intrt.frag, the case's own
+/// gl_test case 200's fragment shader (gltest/intrt.frag, the case's own
 /// text) on the host: for the RGBA8UI and RGBA32UI targets the case draws
 /// into, the pixel output dwords at column 5 are the uniform's integers
 /// with 5 in alpha, packed for the target -- the values the case reads
-/// back with glReadPixels(GL_RGBA_INTEGER). Case 196 on the AM62P is the
+/// back with glReadPixels(GL_RGBA_INTEGER). Case 200 on the AM62P is the
 /// deciding check.
 #[test]
-fn gl_test_case_196_intrt_on_the_host() {
+fn gl_test_case_200_intrt_on_the_host() {
     use yakogl::shaderc::*;
     if yakogl::REPORT_ES2 {
         return;

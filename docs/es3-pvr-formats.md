@@ -924,6 +924,6 @@ nineteen layouts run in the byte model); `tests/internal_programs.rs`
 `the_integer_frame_load_writes_the_texel_back_raw`,
 `the_four_dword_clear_moves_four_dwords`; the listing's
 `an_integer_sampler_reads_without_fcnorm`; `gl::draw`
-`an_integer_target_keys_its_layout_never_a_blend`. On the board: gl_test 196
-(intrt) and 197 (usamp).
+`an_integer_target_keys_its_layout_never_a_blend`. On the board: gl_test 200
+(intrt) and 201 (usamp).
 
