@@ -4,8 +4,11 @@
 
 `c3e4146d`, 2026-10-07. The design and the host reproduction of
 the Raspberry Pi 4's 25 remaining dEQP-GLES2 failures; `ec5ba4fb` (same
-day) implements it. Status: implemented and verified on the host; the
-Pi 4 run is open (section "As implemented").
+day) implements it. The Pi 4's whole tree at `a27d69c0` (2026-10-10) passed
+19 of the 25 and failed 6 cube mipmap cases and 3 `texture.size.cube.15x15`
+cases, all from one cause: the fragment stage's level of detail (section
+"The level of detail"), fixed on the host by computing the level in the
+shader (section "As implemented"). The board run of that fix is open.
 
 ## The defect
 
@@ -84,21 +87,41 @@ The level of detail:
 - Vertex stage: explicit, as today (TMUSLOD instead of TMUSCM + P2
   disable_autolod). `texturecubelod` and the 18 `texture.vertex.cube` cases
   are this path.
-- Fragment stage, implicit: the TMU derives the level from the quad's
-  derivatives of the per-face (s, t) it is given. Inside a face this is the
-  cube's own LOD (ES 2.0 3.7.7 applied to the projected coordinates, which
-  is what dEQP's `computeCubeLodBoundsFromDerivates` computes). In a quad
-  whose four pixels do not all select the same face, the derivative of (s,
-  t) across the face jump is wrong and the level too coarse on those pixels:
-  the classic non-seamless seam band, which every ES 2.0 GPU with per-face
-  sampling had. dEQP's `mipmap.cube` cases draw each face as its own quad
-  with the face's corner directions, so no quad straddles a face. Fallback,
-  if a board run shows a band failure: compute the level in the shader from
-  FDX / FDY of the direction (the V3D has both, `select.rs` dFdx / dFdy)
-  with the projected-derivative formula dEQP uses, add the bias, and retire
-  with TMUSLOD: exact per pixel, ~25 more operations, fragment variants only.
-- A bias (`textureCube(s, d, b)`): TMUB = b, TMUS retire, as a 2D bias
-  look-up today.
+- Fragment stage, implicit or with a bias: the level is computed in the
+  shader and the look-up retires with TMUSLOD (TMUB = the level). The TMU's
+  own level cannot be used: it derives it from the quad's differences of
+  the per-face (s, t) the shader writes, and in a quad whose four pixels do
+  not all select one face the difference across the face jump is
+  meaningless. Such quads are not rare: dEQP draws each face as its own
+  quad whose corner directions lie exactly on the face's edges, so wherever
+  the primitive's edge (or the viewport's) does not fall on an even pixel,
+  the 2x2 quad holds helper pixels whose extrapolated direction is past the
+  edge and selects the neighbouring face. On the Pi 4 at `a27d69c0` that
+  gave the edge pixels of every `mipmap.cube` cell the smallest level's
+  colour (6 cases) and, in `texture.size.cube.15x15_*` (min LINEAR, mag
+  NEAREST, a magnified 15x15 face), a minification on the viewport's edge
+  row and column: LINEAR where GL magnifies with NEAREST. On a 15-texel face
+  LINEAR is up to 8.43 / 255 away from the NEAREST texel there, over the
+  8-bit formats' threshold of 8 (1 + 7) and inside RGBA4444's 23: three
+  cases fail and `15x15_rgba4444` passes; on the power-of-two faces the
+  edge pixels sit at most 7/16 of a texel from a texel centre, 7.0 / 255,
+  so they pass (a model of dEQP's comparison over the six faces' edge rows
+  and columns, both sizes). The level is dEQP's
+  `computeCubeLodFromDerivates` (glsTextureTestUtil.cpp), the exact LOD of
+  ES 2.0 3.7.7 on the pixel's own face: with (ma, sc, tc) the direction's
+  major, s and t components for that face (x: (x, z, y), y: (y, x, z), z:
+  (z, x, y)), du/dx = W/2 (dsc/dx |ma| - sc |dma/dx|) / ma^2, likewise dv/dx
+  and the y pair, and lambda = log2(max(|(du/dx, dv/dx)|, |(du/dy,
+  dv/dy)|)); the direction's derivatives (FDX, FDY of the interpolated
+  direction, `select.rs` dFdx / dFdy) are continuous across faces, so a
+  pixel's level does not depend on which face its quad neighbours select.
+  W is the face size, the texture's `QUNIFORM_TEXTURE_WIDTH` word (the job
+  builder fills it from the binding, as Mesa's v3d_uniforms.c does for
+  textureSize). The bias is added, and the level clamped to [-16, 16]
+  (a constant direction gives log2(0)). Measured on dEQP's shader
+  (`textureCube(u_cube, v_dir)`): the keyed fragment program grows from 86
+  to 155 instructions (156 with a bias) and from 7 to 12 uniform words, at
+  4 threads still; fragment variants only, the unkeyed program unchanged.
 
 Which look-ups pay: only an ES 2.0 build (`crate::REPORT_ES2`), and only a
 cube binding whose sampler state can differ: mag LINEAR or min LINEAR /
@@ -289,12 +312,23 @@ Cannot:
   are and as Mesa's `is_array` write passes the NIR float layer with no
   rounding pass (`nir_lower_tex`'s `lower_array_layer_round_even` is for
   hardware that cannot). If the board says integer, the lowering adds one
-  FTOIN of the face.
-- The seam band of the fragment stage's implicit LOD (section "The level of
-  detail"), and the TMU's switch between magnification and minification
-  (0 or 0.5). Both are the board recipe's.
+  FTOIN of the face. (The Pi 4 answered: float; 19 of the 25 passed at
+  `a27d69c0`.)
 - LINEAR weights: the model's are f32; the board measured the TMU's
   (gl_test case 109). dEQP's tolerance covers the difference.
+- The V3D's quad lane layout for FDX / FDY: the interpreter models them
+  only on an assumed layout (`sim::Env::quads`, off by default), which the
+  fragment tests' inputs follow; a level of detail depends only on the two
+  derivative vectors' lengths, not on which direction is which nor on the
+  signs.
+- The TMU's switch between magnification and minification on an explicit
+  level in the fragment stage. The emulated fragment look-ups now give the
+  TMU an explicit level, so mag LINEAR with min NEAREST_MIPMAP_* (GL's
+  c = 0.5, `texture.filtering.cube.nearest_mipmap_*_linear_*`, image T2)
+  rests on the TMU's explicit-level switch. That switch is the one
+  `texture.vertex.2d.filtering.nearest_mipmap_*_linear_*` pass with on the
+  Pi 4 (explicit levels, no `mag_switch` remap on the V3D), so no remap is
+  added; T2 is the board's check.
 
 ## Test plan
 
@@ -380,19 +414,35 @@ The design's code points 1-5 and 7, with these decisions:
   variant's program too (`fs_rebuilt`: the program holds both stages'
   code, so the link and the code upload run for a vertex key as for a
   fragment one).
-- Not done: a 16th cube sampler of a stage stays seamless (bit 15), and
-  the fragment-stage FDX / FDY level fallback is not written (board-gated,
-  above).
+- **Fragment level** (after the Pi 4's `a27d69c0` tree): `prepare.rs`
+  `Walk::cube_lod` computes a keyed fragment look-up's level from FDX / FDY
+  of the direction on the selected face (section "The level of detail"),
+  adds the bias, clamps it (`clamp_lod`) and retires with TMUSLOD, so a
+  fragment variant writes TMUT, TMUI, TMUB and TMUSLOD; the vertex stage is
+  unchanged. The face size is the texture's `QUNIFORM_TEXTURE_WIDTH` word:
+  `struct v3d_job_tmu` carries each binding's base-level width and height
+  (`V3dJobTmu`, filled by `texture_units`, 1 x 1 for the black stand-in,
+  which a unit named only by a size word also gets), and v3d_job.c writes
+  `V3D_QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT` from it (a binding not given, or
+  one without its size, is a bad field). This also ends the by-name refusal
+  of textureSize on the V3D.
+- Not done: a 16th cube sampler of a stage stays seamless (bit 15).
 
 ### Host evidence
 
-- tests/v3d_cube_noseamless.rs (both builds, 7 tests): every wrap pair on
+- tests/v3d_cube_noseamless.rs (both builds, 8 tests): every wrap pair on
   eight directions over all six faces, the CLAMP / MIRROR / REPEAT edge
   case against the seamless value, explicit levels (-1, 0.25, 1, 1.5) with
   LINEAR_MIPMAP_LINEAR / NEAREST_MIPMAP_LINEAR / LINEAR on a 3-level cube,
-  a projected direction (`a_dir.xyz / a_dir.w`), a fragment look-up with a
-  bias (TMUB, TMUI, TMUS) on a one-level texture (the interpreter cannot
-  derive an implicit level, so bias on a mipmapped cube is the board's), the
+  a projected direction (`a_dir.xyz / a_dir.w`), the fragment stage's level
+  (`a_fragment_lookup_takes_each_pixels_level_from_the_direction`: four
+  quads, one inside +X, one straddling its edge with the left column on +Z
+  as dEQP's helper pixels are, one on +Z where the major axis varies, on a
+  5-level cube of one colour per level and face, implicit and biased (to
+  below zero and past the chain), LINEAR_MIPMAP_LINEAR and
+  LINEAR_MIPMAP_NEAREST, every lane against dEQP's
+  `computeCubeLodFromDerivates` computed in the test;
+  `a_fragment_lookup_with_a_constant_direction_magnifies`: the clamp), the
   stage isolation, and `an_unkeyed_program_is_unchanged`: FNV-1a hashes of
   the code and uniform streams of four cube programs (vertex textureCube,
   fragment bias, vertex textureCubeLod, cube + 2D) taken at 0252e9d, before
@@ -407,56 +457,66 @@ The design's code points 1-5 and 7, with these decisions:
   `texture.vertex.cube` cases (key [k, 0]: the vertex variant linked to the
   retained base program record) gives a program of its own with `tmui` and
   no `tmuscm`, the base untouched, the records balanced.
+- v3d/backend_tests.rs `a_program_reading_a_texture_size_gets_the_bindings_size`:
+  the size words draw, the table carries the binding's size and the
+  stand-in's 1 x 1; tools/v3d/job_check.c part 5: the words read back from
+  the indirect buffer, the two refusals.
 - v3d/backend_tests.rs (the black stand-in test): the 1x1 cube record has
   `depth` 6, the layout's layer stride is 64 bytes (the C derives the
   record's `array_stride_64` = 1 from it; that test module stubs the
   derivation, so the field itself is not asserted) and six black faces sit at
   that stride, so a TMUI look-up of an incomplete cube reads black.
 
-### Pi 4 verification (one session; ES 2.0 images: v3d_deqp's prj.conf has `CONFIG_YAKOGL_REPORT_ES2=y`)
+### Pi 4 verification (ES 2.0 images: v3d_deqp's prj.conf has `CONFIG_YAKOGL_REPORT_ES2=y`)
 
-Where the 25 cases are, in tools/cts/pi4-full-tree.txt (row = its 0-based position
-among the non-comment lines, the `TREE_ROWS` number):
+**The whole tree at `a27d69c0`** (2026-10-10, records
+`records/pi4/deqp-a27d69c0/full/`): 17,083 pass / 9 fail / 34 NotSupported.
+Of the 25, the 18 `texture.vertex.cube` cases (T1) and
+`texture_functions.vertex.texturecubelod` (TF) pass: the TMU takes TMUI as a
+float face index, and the vertex stage's explicit level with the
+`mag_switch` remap is right. The nine failures:
 
-| Image (row) | Filter | Cases | The cube cases in it |
-|---|---|---|---|
-| **T1** (19) | `texture.vertex.*` among others | 181 | 18: `texture.vertex.cube.filtering.*` 10, `texture.vertex.cube.wrap.*` 8 |
-| **T3** (21) | `texture.mipmap.*`, `texture.specification.*` | 304 | 6: `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` |
-| **TF** (24) | `shaders.texture_functions.*` | 17 | 1: `shaders.texture_functions.vertex.texturecubelod` |
+| Image (row) | Case | dEQP's result |
+|---|---|---|
+| **T3** (21) | `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` (6) | Fail, "Image verification failed" |
+| **T4** (22) | `texture.size.cube.15x15_{l8,rgb888,rgba8888}` (3) | Fail, "Image comparison failed" (`15x15_rgba4444` passes) |
 
-Build the three images (ZEPHYR_WS, DEQP_WORK, ZEPHYR_SDK_INSTALL_DIR as the
-header of tools/cts/pi4-deqp-images.sh says; `$IMG` must not exist yet) and
-run them, either with the tree runner, which waits for each image's
-`<label>.built` line and tallies at the end:
+Both are the fragment stage's level of detail (section "The level of
+detail"): the mipmap.cube `nearest_*` variants, which are not keyed (mag
+and min NEAREST within a level) and take the hardware cube look-up, pass,
+and the size cases passed at sweep 30, before the emulation keyed their
+min LINEAR. Fixed on the host by the fragment level (section "As
+implemented").
 
-    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T1 T3 TF
-    TREE_IMAGE_DIR=$IMG TREE_ROWS=19,21,24 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
+**The run that confirms the fix** (rows are 0-based positions among the
+non-comment lines of tools/cts/pi4-full-tree.txt, the `TREE_ROWS` numbers):
+T3 (21) and T4 (22) are the nine; T2 (20, `texture.filtering.*`: every
+`filtering.cube` case with a LINEAR filter now takes the computed level,
+mag LINEAR with min NEAREST_MIPMAP_* among them), TF (24, the fragment
+`texturecube*` cases), RT (11, `shaders.random.texture.*`, whose cube
+look-ups are fragment ones) and S5f (16) are the fragment cube look-ups
+that changed and must not move.
+
+    tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt $IMG T2 T3 T4 TF RT S5f
+    TREE_IMAGE_DIR=$IMG TREE_ROWS=11,16,20,21,22,24 tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt $OUT
     tools/board.sh pi4 tally $OUT
 
-or image by image (`<image>` is `$IMG/<LABEL>/zephyr/zephyr.bin`):
-
-    tools/board.sh pi4 run $IMG/T1/zephyr/zephyr.bin $OUT/T1     # likewise T3, TF
-    tools/board.sh pi4 tally $OUT/T1                              # likewise T3, TF
-
-Expected: the 25 cases above are Pass (dEQP's "Passed"), and nothing else
-moves: T1, T3 and TF each equal their sweep-30 tally with those cases moved
-from Fail to Pass; for the whole tree (all 29 images,
-`TREE_PREV=<sweep 30's tree> tools/board.sh pi4 tree ...` diffs against it)
-17,100 pass, 0 fail, 62 not supported, 3 quality warnings. Then `v3d_gl_test`
-unchanged, 21/21 (12/12 on the older record): its cube cases use NEAREST,
-which the GL core never keys.
+Expected: the nine pass and nothing else moves (each image equal to its
+`a27d69c0` tally with those cases moved from Fail to Pass); the whole tree
+then 17,092 pass / 0 fail / 34 NotSupported. `v3d_gl_test` is unchanged:
+it is an ES 3.0 image (`CONFIG_YAKOGL_REPORT_ES2=n`), which never keys
+the emulation.
 
 Reading a failure:
 
-- All 25 fail: the TMU did not take TMUI as a float face index (the
-  assumption above). Add one FTOIN of the face in `prepare.rs`
-  (`Walk::cube_face`'s caller), rebuild, run T1 `texture.vertex.cube.wrap.clamp_clamp` alone.
-- Only the six `texture.vertex.cube.filtering.nearest_mipmap_{nearest,linear}_linear_*`
-  fail: the c = 0.5 switch is wrong for the TMU. The remap is wired
-  (`LodKey::mag_switch` in the vertex key); check the vertex key reaches the
-  link (`V3D_VARIANTS_BUILT` in the back end's print grows) before
-  suspecting the remap itself.
-- Only the six `texture.mipmap.cube.*` fail, with invalid pixels along face
-  edges in the QPA: the fragment stage's implicit level needs the FDX / FDY
-  fallback (section "The level of detail"); write it in `prepare.rs` for
-  fragment variants only.
+- T3 or T4 still fail with the edge pixels wrong: check that the draw
+  keyed the binding (`V3D_VARIANTS_BUILT` grows) and that the fragment
+  variant's listing has `fdx`, `fdy`, `tmuslod` (tests/v3d_cube_noseamless.rs
+  pins it on the host).
+- A draw refused or a job failed with a bad field: the size word
+  (`QUNIFORM_TEXTURE_WIDTH`) found no size in the job builder's table
+  (`texture_units`, v3d_job.c).
+- Only T2's `filtering.cube.nearest_mipmap_*_linear_*` move to Fail: the
+  TMU's switch on an explicit fragment level is not GL's c = 0.5 for them;
+  give the fragment record a `mag_switch` key for cube bindings and apply
+  `lodkey`'s remap to the computed level, as the vertex stage does.

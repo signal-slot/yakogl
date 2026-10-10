@@ -3717,10 +3717,12 @@ pub unsafe extern "C" fn v3d_sampler_counters(packed: *mut u32, reused: *mut u32
 /// (nothing to bind), and texture object 0 is incomplete, so GL ES 2.0 3.7.10
 /// says it samples (0, 0, 0, 1). Without it the job builder refuses the draw
 /// (a P0/P1 word for a unit it has no records for).
-/// The refusal of a draw whose program reads a texture's size (textureSize):
-/// the words are compiled (select.rs) but not filled by the job builder yet.
-pub(crate) const TEXTURE_SIZE_NOT_FILLED: &str = "textureSize: the job builder does not fill the size words yet";
-
+///
+/// Each entry carries the base level's size the record samples from, which
+/// the stream's `QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT` words read (textureSize,
+/// and the face size of the ES 2.0 non-seamless cube look-up's level of
+/// detail, prepare.rs `cube_lod`); a unit only such a word names gets the
+/// stand-in too (1 x 1).
 fn texture_units(
     g: &mut V3dState,
     binds: &[GlesTextureBind],
@@ -3754,7 +3756,8 @@ fn texture_units(
         let tex_state =
             if b.incomplete != 0 { black_state(g, b.type_ == GLES_TEXTYPE_CUBE) } else { tex_state_for(g, b, ret32)? };
         let sampler = sampler_for(g, b)?;
-        out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler };
+        let (width, height) = if b.incomplete != 0 { (1, 1) } else { (b.width, b.height) };
+        out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler, width, height };
         n += 1;
     }
     let mut black_sampler = None;
@@ -3766,17 +3769,14 @@ fn texture_units(
             unsafe { core::slice::from_raw_parts(u, count as usize) }
         };
         for w in words {
-            /* textureSize's words (select.rs QUNIFORM_TEXTURE_WIDTH /
-             * _HEIGHT, Mesa's values): the job builder has no case for them
-             * yet (it would fail the job, v3d_job.c bad_field), so the draw
-             * is refused by name before anything is recorded. */
-            if w.contents == QUNIFORM_TEXTURE_WIDTH || w.contents == QUNIFORM_TEXTURE_HEIGHT {
-                return Err(Attempt::Refused(TEXTURE_SIZE_NOT_FILLED));
-            }
-            if w.contents != V3D_QUNIFORM_TMU_CONFIG_P0 && w.contents != V3D_QUNIFORM_TMU_CONFIG_P1 {
-                continue;
-            }
-            let unit = w.data >> 24;
+            /* the unit: P0/P1 carry it in bits 24..31, the size words
+             * (select.rs QUNIFORM_TEXTURE_WIDTH / _HEIGHT, Mesa's values)
+             * as their whole data */
+            let unit = match w.contents {
+                V3D_QUNIFORM_TMU_CONFIG_P0 | V3D_QUNIFORM_TMU_CONFIG_P1 => w.data >> 24,
+                QUNIFORM_TEXTURE_WIDTH | QUNIFORM_TEXTURE_HEIGHT => w.data,
+                _ => continue,
+            };
             if out[..n].iter().any(|t| t.unit == unit) {
                 continue;
             }
@@ -3797,7 +3797,7 @@ fn texture_units(
                 }
             };
             let cube = unit < 32 && cube_units & (1 << unit) != 0;
-            out[n] = V3dJobTmu { unit, tex_state: black_state(g, cube), sampler };
+            out[n] = V3dJobTmu { unit, tex_state: black_state(g, cube), sampler, width: 1, height: 1 };
             n += 1;
         }
     }

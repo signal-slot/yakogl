@@ -375,6 +375,17 @@ fn slot_name(slot: IoSlot) -> &'static str {
 }
 
 /// The walk: the IR's values as per-lane scalars, and the stores.
+/// [`Walk::cube_face`]'s result: the face's (s, t) in [0, 1], the face
+/// (the layer, a float) and the major axis (`is_x`; else `is_y`; else z),
+/// booleans as ~0 / 0.
+struct CubeFace {
+    s: S,
+    t: S,
+    face: S,
+    is_x: S,
+    is_y: S,
+}
+
 struct Walk<'m, 'a> {
     m: &'m Module<'m>,
     ops: AVec<'a, SOp>,
@@ -713,8 +724,9 @@ impl<'m, 'a> Walk<'m, 'a> {
     /// the direction as given and `d` the direction divided by its major
     /// axis; the face is chosen on `abs` by dEQP's `selectCubeFace` rule
     /// (texref::select_cube_face), ties included. Returns s and t in [0, 1]
-    /// and the face (+X -X +Y -Y +Z -Z = 0..5) as a float, the layer.
-    fn cube_face(&mut self, a: &Arena<'a>, abs: [S; 3], d: [S; 3]) -> Result<(S, S, S), PrepError> {
+    /// and the face (+X -X +Y -Y +Z -Z = 0..5) as a float, the layer, and
+    /// the major axis as two flags (x is it; else y is it; else z).
+    fn cube_face(&mut self, a: &Arena<'a>, abs: [S; 3], d: [S; 3]) -> Result<CubeFace, PrepError> {
         let [ax, ay, az] = abs;
         let [x, y, z] = d;
         let k = |w: &mut Self, v: f32| w.push(a, SOp::Const(v.to_bits()));
@@ -769,7 +781,88 @@ impl<'m, 'a> Walk<'m, 'a> {
         let s = self.op2(a, AluOp::Fadd, s, half)?;
         let t = self.op2(a, AluOp::Fmul, tc, half)?;
         let t = self.op2(a, AluOp::Fadd, t, half)?;
-        Ok((s, t, face))
+        Ok(CubeFace { s, t, face, is_x, is_y })
+    }
+
+    /// The level of detail of a fragment-stage cube look-up on the face
+    /// `f` selected, computed in the shader from the derivatives of the
+    /// direction `d` (as given, before the normalisation; `inv` = 1 / its
+    /// major axis' magnitude): dEQP's `computeCubeLodFromDerivates`
+    /// (glsTextureTestUtil.cpp; the exact LOD of GL ES 2.0 3.7.7 for the
+    /// face's projected coordinates), with the face size `width` read from
+    /// the texture's own size word:
+    ///
+    /// du/dx = W/2 (dsc/dx ma - sc |dma/dx|) / ma^2 (likewise dv, dy),
+    /// lambda = log2(max(|(du/dx, dv/dx)|, |(du/dy, dv/dy)|)) = 0.5 log2(max(px^2, py^2)).
+    ///
+    /// The TMU's own derivative of the per-face (s, t) cannot be used: in a
+    /// quad whose four pixels do not all select one face (a helper pixel
+    /// past the edge of a face-filling primitive, or a real seam) the
+    /// difference across the face jump is meaningless and the level wrong
+    /// (docs/v3d-noseamless-cube.md, "The level of detail"). The derivative
+    /// of the direction is continuous across faces, so each pixel's level
+    /// is its own face's, as in the reference. Clamped to [-16, 16]: a
+    /// constant direction gives log2(0).
+    fn cube_lod(&mut self, a: &Arena<'a>, sampler: u8, d: [S; 3], inv: S, f: &CubeFace) -> Result<S, PrepError> {
+        let (is_x, is_y) = (f.is_x, f.is_y);
+        /* (ma, sc, tc) of a vector: (x, z, y), (y, x, z), (z, x, y) by the
+         * major axis (dEQP's maNdx / sNdx / tNdx; the signs do not matter
+         * for the level, the formula takes |ma| and |dma|) */
+        let axes = |w: &mut Self, [vx, vy, vz]: [S; 3]| -> Result<[S; 3], PrepError> {
+            let mut out = [S(0); 3];
+            for (o, (cx, cy, cz)) in out.iter_mut().zip([(vx, vy, vz), (vz, vx, vx), (vy, vz, vy)]) {
+                let inner = w.sel(a, is_y, cy, cz)?;
+                *o = w.sel(a, is_x, cx, inner)?;
+            }
+            Ok(out)
+        };
+        let [ma, sc, tc] = axes(self, d)?;
+        let ma = self.op1(a, AluOp::Fabs, ma)?;
+        let k = self.op2(a, AluOp::Fmul, inv, inv)?;
+        /* |(du, dv)|^2 / (W/2)^2 along one screen direction, from that
+         * direction's derivative of the direction vector */
+        let len2 = |w: &mut Self, dd: [S; 3]| -> Result<S, PrepError> {
+            let [mad, scd, tcd] = axes(w, dd)?;
+            let mad = w.op1(a, AluOp::Fabs, mad)?;
+            let mut sq = [S(0); 2];
+            for (o, (c, cd)) in sq.iter_mut().zip([(sc, scd), (tc, tcd)]) {
+                let p = w.op2(a, AluOp::Fmul, cd, ma)?;
+                let q = w.op2(a, AluOp::Fmul, c, mad)?;
+                let q = w.op1(a, AluOp::Fneg, q)?;
+                let r = w.op2(a, AluOp::Fadd, p, q)?;
+                let r = w.op2(a, AluOp::Fmul, r, k)?;
+                *o = w.op2(a, AluOp::Fmul, r, r)?;
+            }
+            w.op2(a, AluOp::Fadd, sq[0], sq[1])
+        };
+        let mut dd = [[S(0); 3]; 2];
+        for (row, op) in dd.iter_mut().zip([AluOp::Fddx, AluOp::Fddy]) {
+            for (o, v) in row.iter_mut().zip(d) {
+                *o = self.op1(a, op, v)?;
+            }
+        }
+        let px = len2(self, dd[0])?;
+        let py = len2(self, dd[1])?;
+        let p2 = self.op2(a, AluOp::Fmax, px, py)?;
+        /* (W / 2)^2: the face size from the texture's size word (a cube's
+         * faces are square) */
+        let w = self.push(a, SOp::TexSizeWord { sampler, lane: 0 })?;
+        let w = self.op1(a, AluOp::U2f, w)?;
+        let quarter = self.push(a, SOp::Const(0.25f32.to_bits()))?;
+        let w2 = self.op2(a, AluOp::Fmul, w, w)?;
+        let w2 = self.op2(a, AluOp::Fmul, w2, quarter)?;
+        let rho2 = self.op2(a, AluOp::Fmul, p2, w2)?;
+        let l2 = self.op1(a, AluOp::Flog2, rho2)?;
+        let half = self.push(a, SOp::Const(0.5f32.to_bits()))?;
+        self.op2(a, AluOp::Fmul, l2, half)
+    }
+
+    /// `l` clamped to [-16, 16].
+    fn clamp_lod(&mut self, a: &Arena<'a>, l: S) -> Result<S, PrepError> {
+        let lo = self.push(a, SOp::Const((-16.0f32).to_bits()))?;
+        let hi = self.push(a, SOp::Const(16.0f32.to_bits()))?;
+        let l = self.op2(a, AluOp::Fmax, l, lo)?;
+        self.op2(a, AluOp::Fmin, l, hi)
     }
     /// `op(x, y)`, a kernel operation of two operands.
     fn op2(&mut self, a: &Arena<'a>, op: AluOp, x: S, y: S) -> Result<S, PrepError> {
@@ -1252,8 +1345,11 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * cube model (texref::project_to_face) divides by the major
                  * axis itself, so it cannot see the difference. */
                 let mut layer = None;
+                let mut third = third;
+                let mut is_lod = is_lod;
                 if let Some(z) = r {
                     let abs = |w: &mut Self, x: S| w.push(a, SOp::Alu(AluOp::Fabs, [x, S(0), S(0)]));
+                    let (s0, t0, z0) = (s, t, z);
                     let (ax, ay, az) = (abs(self, s)?, abs(self, t)?, abs(self, z)?);
                     let m = self.push(a, SOp::Alu(AluOp::Fmax, [ax, ay, S(0)]))?;
                     let m = self.push(a, SOp::Alu(AluOp::Fmax, [m, az, S(0)]))?;
@@ -1265,8 +1361,22 @@ impl<'m, 'a> Walk<'m, 'a> {
                         /* GL ES 2.0 3.7.5: the face and its (s, t), looked
                          * up as a layer of the cube's 2D-array record
                          * (docs/v3d-noseamless-cube.md) */
-                        let (fs, ft, face) = self.cube_face(a, [ax, ay, az], [s, t, z])?;
-                        (s, t, layer) = (fs, ft, Some(face));
+                        let dir = [s0, t0, z0];
+                        let f = self.cube_face(a, [ax, ay, az], [s, t, z])?;
+                        /* A fragment look-up's level is computed here from
+                         * the direction's derivatives (cube_lod), the bias
+                         * added, and given to the TMU as an explicit level:
+                         * the TMU's own, from the per-face (s, t), is wrong
+                         * in every quad that straddles a face edge. */
+                        if self.m.stage == SHC_STAGE_FRAGMENT && !is_lod {
+                            let mut l = self.cube_lod(a, sampler, dir, inv, &f)?;
+                            if let Some(b) = third {
+                                l = self.op2(a, AluOp::Fadd, l, b)?;
+                            }
+                            third = Some(self.clamp_lod(a, l)?);
+                            is_lod = true;
+                        }
+                        (s, t, layer) = (f.s, f.t, Some(f.face));
                         r = None;
                     } else {
                         r = Some(z);

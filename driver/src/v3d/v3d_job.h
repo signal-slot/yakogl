@@ -185,15 +185,26 @@ struct v3d_job_draw {
  * (v3d_unit_data_create, v3d_compiler.h:371-385). */
 #define V3D_QUNIFORM_TMU_CONFIG_P0 40
 #define V3D_QUNIFORM_TMU_CONFIG_P1 41
+/* The base level's width and height of the texture at sampler binding
+ * `data` (no unit shift): v3d_uniforms.c:52-70, 290-298, u_minify(width0 /
+ * height0, first_level). textureSize reads them, and the ES 2.0
+ * non-seamless cube look-up's level of detail (the face size). */
+#define V3D_QUNIFORM_TEXTURE_WIDTH  44
+#define V3D_QUNIFORM_TEXTURE_HEIGHT 45
 
 /* One sampler binding of a stage: the GPU addresses of its texture shader state
  * and its sampler state (driver/src/v3d/v3d_tex.h), each aligned to
  * V3D_TEX_RECORD_ALIGN (32): the uniform ORs the compiler's bits into the
- * low ones (v3d_uniforms.c write_tmu_p0/p1). */
+ * low ones (v3d_uniforms.c write_tmu_p0/p1); and the size of the base level
+ * the texture state record samples from, which
+ * V3D_QUNIFORM_TEXTURE_WIDTH / _HEIGHT read (0: not given, and such a word
+ * is refused). */
 struct v3d_job_tmu {
 	uint32_t unit;
 	uint32_t tex_state;
 	uint32_t sampler;
+	uint32_t width;
+	uint32_t height;
 };
 
 /* What the render list does with the tile buffer before the draws. */

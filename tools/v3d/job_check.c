@@ -52,7 +52,10 @@
  *     (v3d_uniforms.c write_tmu_p0/p1), read back from the indirect buffer;
  *     a unit the draw did not bind and a misaligned record are REFUSED, with
  *     the lists as they were; the VS stream reads the vertex stage's own
- *     table (sampler bindings are numbered per stage).
+ *     table (sampler bindings are numbered per stage). The size words
+ *     (QUNIFORM_TEXTURE_WIDTH / _HEIGHT, v3d_uniforms.c:52-70, 290-298) read the
+ *     base level's size the table carries for the binding; a binding the
+ *     draw did not give and a size not given (0) are REFUSED.
  *  6. gl_FragCoord.y's transform (QUNIFORM_FB_WPOS_Y_SCALE/OFFSET, our own
  *     contents codes): a window's draw gets (-1.0, the target's height) and
  *     an FBO's (1.0, 0.0), read back from the FS stream; a zeroed (absent)
@@ -850,6 +853,39 @@ static void part_tmu(void)
 	check(v3d_job_draw(&j, &r, &lo) == V3D_JOB_OK, "a VS binding with its own table goes in");
 	check(ind_word(lo.vs_uniforms) == (0x00600000u | 0x2),
 	      "the VS stream's P0 is the vertex table's binding 0, not the fragment table's");
+	/* the size words (v3d_uniforms.c:52-70, 290-298, QUNIFORM_TEXTURE_WIDTH /
+	 * _HEIGHT; data = the binding, not shifted): the base level's size
+	 * the table carries, looked up by binding; a binding the draw did not
+	 * give and a size of 0 (not given) are REFUSED */
+	static const struct v3d_uniform fs_size_u[] = {
+		{ V3D_QUNIFORM_TEXTURE_WIDTH, 1 }, { V3D_QUNIFORM_TEXTURE_HEIGHT, 1 },
+		{ V3D_QUNIFORM_TEXTURE_WIDTH, 0 }, { V3D_QUNIFORM_TEXTURE_HEIGHT, 0 },
+	};
+	struct v3d_fs_prog fs_size = fs;
+	fs_size.uniforms = fs_size_u;
+	fs_size.num_uniforms = 4;
+	const struct v3d_job_tmu sized[2] = { { 1, 0x00500040u, 0x00500060u, 15, 7 },
+					      { 0, 0x00500000u, 0x00500020u, 64, 32 } };
+	r = d;
+	r.fs = &fs_size;
+	r.tmu = sized;
+	check(v3d_job_draw(&j, &r, &lo) == V3D_JOB_OK, "a draw reading texture sizes goes in");
+	const uint32_t want_size[4] = { 15, 7, 64, 32 };
+	for (int i = 0; i < 4; i++) {
+		char what[120];
+		uint32_t got = ind_word(lo.fs_uniforms + 4 * (uint32_t)i);
+		snprintf(what, sizeof(what), "FS size word %d: %u, want %u", i, got, want_size[i]);
+		check(got == want_size[i], what);
+	}
+	snapshot();
+	r.tmu = &sized[1]; /* binding 0 only */
+	r.num_tmu = 1;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a size word for a binding the draw did not give: REFUSED, nothing left");
+	r.tmu = tmu; /* the same bindings, no size given */
+	r.num_tmu = 2;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a size word for a binding given without its size: REFUSED, nothing left");
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the textured job ends");
 }
@@ -2352,7 +2388,7 @@ int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
-	 * stage + 1; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
+	 * stage + 1 + 1 + 4 size words + 2 size refusals; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
 	 * part 7: 3 builds + 3 + 5 load fields + 1 + 5 store fields + 1 + 2 +
 	 * 3 builds + 8 apart;
@@ -2367,7 +2403,7 @@ int main(void)
 	 * part 17 (a view's stride): 2 builds + 1 decode + 3 strides;
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4 */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 13 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 14 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 14 +
 			    28 + 8 + 6 + 10 + 6;
 	part_identity();
 	part_rollback();

@@ -18,7 +18,7 @@ tools/cts/
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   pi4-deqp-images.sh           stage 2, Pi 4
   pi4-full-tree.txt            the whole GLES2 tree for the Pi 4, 29 images
-  deqp-uart-tally.py           a captured console -> per-group tally and names
+  deqp-uart-tally.py           a captured console -> per-group tally and names, Lost in capture
   qpa-from-uart.py             a captured console (DEQP_ECHO_QPA) -> .qpa
   cts-images.py                .qpa -> the result, reference and mask PNGs
   cts_resume.py                which cases still have no result, and why
@@ -325,6 +325,24 @@ its summary counts, is a missing result, never a pass
 (`deqp-uart-tally.py`'s MISSING, INCOMPLETE and FATAL); rerun that image
 (`TREE_ROWS=<n>`; a finished run of the same image is skipped).
 
+The tally tells a case the capture lost from a case that never ran. NoResult
+is a mustpass case in the records' case filters with no line, which the image
+never began. Lost is a case the image counted as run (`deqp: summary: N cases
+begun, M with a result`; `deqp: done: ...`; on the Pi 4 also `v3d_deqp: build B
+DONE...: N cases, P p F f ...`) whose lines the console never delivered: the
+image's M against the result lines seen, placed by the gaps in the
+`v3d_deqp: case #N` numbering (the AM62P image prints no such
+number, so there the count is known and the cases stay in `none`). A
+`Lost in capture` line names each range, the cases either side, the counters,
+and (time-stamped logs) a silent stretch of the console; `--table` adds a
+`lost` column (only when there is one), and the pass/fail totals stay the lines
+seen, with the image's counters printed under them. `deqp-uart-tally.py --lost
+<console>` prints the count; `board.sh` turns it into the verdict `done_lossy`
+with `lost=<n>` (rc 4; every other verdict keeps its meaning, and
+`common-tally.py` counts it as not `done`). Fixture:
+`tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt`, the deqp lines of the
+Pi 4 F1 rerun that lost 260 of 1923 cases (self-test and `board_selftest.sh`).
+
 ## 2e. The AM62P dEQP-GLES3 tree
 
 `am62p-gles3-tree.txt` is generated (`tools/cts/gen-am62p-gles3-tree.py`; `--check`
@@ -460,6 +478,15 @@ time, as the AM62P's console).
   runs them in file order and tallies: per group with every non-Pass case by
   name, the recoveries per record; `tools/board.sh pi4 diff <a> <b>` is the
   per-case diff of two trees.
+- The console arrives through a serial bridge that can stall and drop its
+  backlog (a TCP bridge, 2026-10-10: 260 of 1923 cases of an F1 rerun, 34 of
+  another, while the image's own summary counted all of them). Such a row
+  reads `verdict=done_lossy ... lost=<n>` in `board.sh pi4 run|tally|tree`, and
+  the tally lists the lost case numbers as `Lost`, not NoResult. The image ran
+  them; the capture does not show their results, so the row is not a result:
+  rerun it until the verdict is `done` (`TREE_ROWS=<n>`). `console.ts` has the
+  arrival times; a stall shows there as a silent stretch (named, informational,
+  in the Lost lines), and the lines dropped after it are not at the hole itself.
 
 Nothing in the scripts names a machine. The values of the lab they were
 written in (2026-10-03), for the environment:
