@@ -7,6 +7,9 @@
 //! compiler, so they exist only in `shaderc-online` builds. Under
 //! `report-es2` the one test is `es2_answers_are_unchanged`.
 #![allow(clippy::undocumented_unsafe_blocks)]
+// a build with neither the compiler nor the ES 2.0 report runs no test of
+// this file, and its imports are idle there
+#![cfg_attr(not(any(feature = "report-es2", feature = "shaderc-online")), allow(unused_imports))]
 
 use super::consts::*;
 use super::es3::*;
@@ -147,7 +150,11 @@ mod online {
             assert_eq!((gl.error(), geti(GL_TRANSFORM_FEEDBACK_BINDING) as GLuint), (GL_NO_ERROR, a));
             assert_eq!(glIsTransformFeedback(a), GL_TRUE_B);
             glDeleteTransformFeedbacks(1, &a);
-            assert_eq!((gl.error(), geti(GL_TRANSFORM_FEEDBACK_BINDING)), (GL_NO_ERROR, 0), "deleting the bound one rebinds 0");
+            assert_eq!(
+                (gl.error(), geti(GL_TRANSFORM_FEEDBACK_BINDING)),
+                (GL_NO_ERROR, 0),
+                "deleting the bound one rebinds 0"
+            );
             assert_eq!(glIsTransformFeedback(a), GL_FALSE_B);
             glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, a);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "deleted");
@@ -155,7 +162,11 @@ mod online {
             assert_eq!(gl.error(), GL_INVALID_VALUE);
             let mut many = [0u32; MAX_FEEDBACKS_FOR_TEST];
             glGenTransformFeedbacks(many.len() as GLsizei, many.as_mut_ptr());
-            assert_eq!(many.iter().filter(|n| **n != 0).count(), MAX_FEEDBACKS_FOR_TEST - 2, "slot 0 and `b` are taken");
+            assert_eq!(
+                many.iter().filter(|n| **n != 0).count(),
+                MAX_FEEDBACKS_FOR_TEST - 2,
+                "slot 0 and `b` are taken"
+            );
         }
     }
 
@@ -321,11 +332,35 @@ mod online {
             // bufSize truncates, the call after the last row errs
             let mut name = [0x55 as GLchar; 8];
             let mut len = 0;
-            glGetTransformFeedbackVarying(p, 4, 5, &mut len, core::ptr::null_mut(), core::ptr::null_mut(), name.as_mut_ptr());
+            glGetTransformFeedbackVarying(
+                p,
+                4,
+                5,
+                &mut len,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                name.as_mut_ptr(),
+            );
             assert_eq!((len, name[4]), (4, 0));
-            glGetTransformFeedbackVarying(p, 8, 8, &mut len, core::ptr::null_mut(), core::ptr::null_mut(), name.as_mut_ptr());
+            glGetTransformFeedbackVarying(
+                p,
+                8,
+                8,
+                &mut len,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                name.as_mut_ptr(),
+            );
             assert_eq!(gl.error(), GL_INVALID_VALUE);
-            glGetTransformFeedbackVarying(p, 0, -1, &mut len, core::ptr::null_mut(), core::ptr::null_mut(), name.as_mut_ptr());
+            glGetTransformFeedbackVarying(
+                p,
+                0,
+                -1,
+                &mut len,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                name.as_mut_ptr(),
+            );
             assert_eq!(gl.error(), GL_INVALID_VALUE);
         }
     }
@@ -543,7 +578,10 @@ mod online {
         use super::super::tf::captured_vertices as cv;
         assert_eq!(cv(GL_POINTS, 5), 5);
         assert_eq!((cv(GL_LINES, 5), cv(GL_LINE_STRIP, 5), cv(GL_LINE_LOOP, 5), cv(GL_LINE_LOOP, 1)), (4, 8, 10, 0));
-        assert_eq!((cv(GL_TRIANGLES, 7), cv(GL_TRIANGLE_STRIP, 5), cv(GL_TRIANGLE_FAN, 5), cv(GL_TRIANGLE_FAN, 2)), (6, 9, 9, 0));
+        assert_eq!(
+            (cv(GL_TRIANGLES, 7), cv(GL_TRIANGLE_STRIP, 5), cv(GL_TRIANGLE_FAN, 5), cv(GL_TRIANGLE_FAN, 2)),
+            (6, 9, 9, 0)
+        );
     }
 
     #[test]

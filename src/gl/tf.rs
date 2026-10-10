@@ -45,7 +45,9 @@ const BINDINGS: usize = TF_MAX_SEPARATE_ATTRIBS as usize;
 /// The longest varying name the program keeps (with its NUL).
 pub(super) const NAME_MAX: usize = 64;
 /// Rows a program keeps: one per captured varying; every row takes at least
-/// one component and the interleaved limit is 64.
+/// one component and the interleaved limit is 64. Only the in-process
+/// compiler resolves rows (`resolve_rows`), so only that build counts them.
+#[cfg(feature = "shaderc-online")]
 const MAX_ROWS: usize = TF_MAX_INTERLEAVED_COMPONENTS as usize;
 
 /* ------------------------------------------------------------------ objects */
@@ -268,7 +270,15 @@ pub(super) unsafe fn delete(c: &mut GlContext, n: GLsizei, ids: *const GLuint) {
 /// binding. `size` 0 is Base. The argument errors that need no state were
 /// raised by the caller; a bound object that is active (paused or not)
 /// comes before the index (Mesa, `transformfeedback.c`).
-pub(super) fn bind_buffer(c: &mut GlContext, index: GLuint, buffer: GLuint, offset: GLintptr, size: GLsizeiptr, ranged: bool, func: &str) {
+pub(super) fn bind_buffer(
+    c: &mut GlContext,
+    index: GLuint,
+    buffer: GLuint,
+    offset: GLintptr,
+    size: GLsizeiptr,
+    ranged: bool,
+    func: &str,
+) {
     if current(c).active {
         c.set_error(GL_INVALID_OPERATION, func);
         return;
@@ -291,7 +301,8 @@ pub(super) fn bind_buffer(c: &mut GlContext, index: GLuint, buffer: GLuint, offs
         _ => return,
     };
     let old = current(c).bind[index as usize];
-    current(c).bind[index as usize] = if slot == 0 { TfBinding::NONE } else { TfBinding { buffer: slot, offset, size } };
+    current(c).bind[index as usize] =
+        if slot == 0 { TfBinding::NONE } else { TfBinding { buffer: slot, offset, size } };
     release_slot(c, old.buffer);
 }
 
@@ -329,7 +340,8 @@ pub(super) fn on_buffer_delete(c: &mut GlContext, slot: GLuint) -> bool {
             *b = TfBinding::NONE;
         }
     }
-    let held = objects(c.index).iter().enumerate().any(|(h, o)| h != cur && o.used && o.bind.iter().any(|b| b.buffer == slot));
+    let held =
+        objects(c.index).iter().enumerate().any(|(h, o)| h != cur && o.used && o.bind.iter().any(|b| b.buffer == slot));
     if held {
         orphans(c.index)[slot as usize % MAX_BUFFERS] = true;
     }
@@ -493,7 +505,9 @@ pub(super) fn link_begin(group: u8, program: GLuint) {
     p.nrows = 0;
 }
 
-/// Scalar components of a GLSL type given by its GL token.
+/// Scalar components of a GLSL type given by its GL token (the in-process
+/// compiler's `resolve_rows` alone asks).
+#[cfg(feature = "shaderc-online")]
 fn type_components(t: GLenum) -> u32 {
     match t {
         GL_FLOAT | GL_INT | GL_UNSIGNED_INT => 1,
@@ -509,7 +523,9 @@ fn type_components(t: GLenum) -> u32 {
     }
 }
 
-/// `v[3]`: the name before the subscript and the index.
+/// `v[3]`: the name before the subscript and the index (the in-process
+/// compiler's `resolve_rows` alone asks).
+#[cfg(feature = "shaderc-online")]
 fn split_element(name: &[u8]) -> Option<(&[u8], u32)> {
     let body = name.strip_suffix(b"]")?;
     let lb = body.iter().rposition(|&b| b == b'[')?;
@@ -568,7 +584,8 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
         say(format_args!("link error: the vertex shader's source is not text"));
         return Err(());
     };
-    let mut rows = [TfRow { name: [0; NAME_MAX], name_len: 0, gl_type: 0, size: 0, comps: 0, first: 0, builtin: 0 }; MAX_ROWS];
+    let mut rows =
+        [TfRow { name: [0; NAME_MAX], name_len: 0, gl_type: 0, size: 0, comps: 0, first: 0, builtin: 0 }; MAX_ROWS];
     let mut count = 0usize;
     let mut failure: Option<()> = None;
     let ran = store::with_scratch(|a| {
@@ -578,7 +595,9 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
             return;
         };
         let Ok(iface) = crate::shaderc::online::reflect::interface(a, Stage::Vertex, text) else {
-            say(format_args!("link error: the vertex shader does not compile again for its transform feedback varyings"));
+            say(format_args!(
+                "link error: the vertex shader does not compile again for its transform feedback varyings"
+            ));
             failure = Some(());
             return;
         };
@@ -594,7 +613,15 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
                 failure = Some(());
                 return;
             }
-            let mut row = TfRow { name: [0; NAME_MAX], name_len: name.len() as u8, gl_type: 0, size: 1, comps: 0, first: 0, builtin: 0 };
+            let mut row = TfRow {
+                name: [0; NAME_MAX],
+                name_len: name.len() as u8,
+                gl_type: 0,
+                size: 1,
+                comps: 0,
+                first: 0,
+                builtin: 0,
+            };
             row.name[..name.len()].copy_from_slice(name);
             match name {
                 b"gl_Position" => (row.gl_type, row.comps, row.builtin) = (GL_FLOAT_VEC4, 4, 1),
@@ -629,7 +656,9 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
                         }
                     }
                     if row.comps == 0 {
-                        say(format_args!("link error: Transform feedback varying {shown} has a type that cannot be captured."));
+                        say(format_args!(
+                            "link error: Transform feedback varying {shown} has a type that cannot be captured."
+                        ));
                         failure = Some(());
                         return;
                     }
@@ -638,7 +667,8 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
             /* the same variable and the same element twice (Mesa reads the
              * rule so that the elements of one array can be captured apart) */
             let key = |r: &TfRow| -> (u8, [u8; NAME_MAX], u32, bool) {
-                let base = split_element(&r.name[..r.name_len as usize]).map_or(&r.name[..r.name_len as usize], |(b, _)| b);
+                let base =
+                    split_element(&r.name[..r.name_len as usize]).map_or(&r.name[..r.name_len as usize], |(b, _)| b);
                 let mut k = [0u8; NAME_MAX];
                 k[..base.len()].copy_from_slice(base);
                 (r.builtin, k, r.first, r.name[..r.name_len as usize].ends_with(b"]"))
@@ -703,7 +733,9 @@ pub(super) fn program_query(group: u8, program: GLuint, pname: GLenum) -> Option
     match pname {
         GL_TRANSFORM_FEEDBACK_BUFFER_MODE => Some(mode as GLint),
         GL_TRANSFORM_FEEDBACK_VARYINGS => Some(rows.len() as GLint),
-        GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH => Some(rows.iter().map(|r| r.name().len() + 1).max().unwrap_or(0) as GLint),
+        GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH => {
+            Some(rows.iter().map(|r| r.name().len() + 1).max().unwrap_or(0) as GLint)
+        }
         _ => None,
     }
 }
@@ -860,7 +892,14 @@ pub(super) fn captured_vertices(mode: GLenum, count: u32) -> u64 {
 /// capture that does not fit the buffers are GL_INVALID_OPERATION. Returns
 /// whether the draw may go on. Capture itself is not built (tf-capture): a
 /// draw that gets through is refused, loudly, with GL_INVALID_OPERATION.
-pub(super) fn pre_draw(c: &mut GlContext, mode: GLenum, indexed: bool, count: GLsizei, instances: u32, func: &str) -> bool {
+pub(super) fn pre_draw(
+    c: &mut GlContext,
+    mode: GLenum,
+    indexed: bool,
+    count: GLsizei,
+    instances: u32,
+    func: &str,
+) -> bool {
     if !capturing(c) {
         return true;
     }
@@ -881,7 +920,9 @@ pub(super) fn pre_draw(c: &mut GlContext, mode: GLenum, indexed: bool, count: GL
         let avail = if b.size > 0 { b.size as i64 } else { buffer_size(c, b.buffer) - b.offset as i64 };
         let need = vertices as i64 * i64::from(stride(rows, buffer_mode, i)) + i64::from(o.written[i]);
         if need > avail {
-            glog!("{func}: transform feedback buffer {i} is too small for the draw ({need} bytes needed, {avail} bound)");
+            glog!(
+                "{func}: transform feedback buffer {i} is too small for the draw ({need} bytes needed, {avail} bound)"
+            );
             c.set_error(GL_INVALID_OPERATION, func);
             return false;
         }
