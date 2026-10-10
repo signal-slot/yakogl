@@ -244,7 +244,16 @@ step() {
     oks=$((oks + 1))
   else
     red "FAIL  $label $(row_time)"
+    # The whole output is kept: the last 40 lines alone cannot name a failed
+    # test when a later binary ran after it (`--no-fail-fast` runs them all,
+    # and the integration binaries' passes push the `--lib` failure out of the
+    # tail). On 2026-10-11 a red precompiled-shaders row left the log with
+    # "1 target failed: --lib" and no test name, and the rerun passed.
+    mkdir -p build/check-fail
+    printf '%s\n' "$out" > "build/check-fail/$((fails + 1)).log"
+    printf '%s\n' "$out" | grep -E '^test .* FAILED$|panicked at|^error(\[E[0-9]+\])?: ' | head -40
     printf '%s\n' "$out" | tail -40
+    echo "(whole output: build/check-fail/$((fails + 1)).log)"
     rc=1
     fails=$((fails + 1))
   fi

@@ -566,6 +566,28 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      record on `c1f0e2a6` shows the link at 69.3 MHz (lane rate 426600 kHz,
      headroom 25.9 per mille, bridge IRQ_STAT clean, health 0x3f); the
      viewing by eye is still pending (#23).
+   - **gate-lib-red-unnamed** (no issue yet, 2026-10-11): the full gate on
+     `05d0d8df` (land8 merged with the gate-host commits) printed `FAIL test
+     host-test,gpu-powervr,shaderc-online,precompiled-shaders` with `error:
+     1 target failed: --lib` and no test name: `check.sh` kept the row's
+     last 40 lines, and under `--no-fail-fast` the integration binaries'
+     passes filled them. The row's binary (`yakogl-7f3436738c80ac74`, 2718
+     tests) then passed 20 plain runs, 20 shuffled runs (libtest
+     `--shuffle`), 10 runs of the hit test beside the `gl::` tests, and
+     the row's own `cargo test --no-fail-fast` twice, so the failure is not
+     reproduced and its test is unknown. Two gates of other sessions ran on
+     the host at the time (load 4.6 on 64 cores); the kernel log has no OOM
+     or ENOSPC; `/home` had 35 GB free. Hazards read in the code, none shown
+     to be the cause: the look-up in front of a compile
+     (`cached_or_precompiled`, `src/shaderc/online/backend.rs`) runs outside
+     the store's test lock, and
+     `a_hit_runs_no_compile_and_is_what_the_compiler_makes`
+     (`src/shaderc/precompiled.rs`) asserts exact deltas of the global `HITS`
+     counter while the GL-level tests serialise on `testutil`'s own mutex,
+     not the store's. `check.sh` now keeps a failed row's whole output in
+     `build/check-fail/<n>.log` and prints its `FAILED` and `panicked at`
+     lines first. Open until a red names its test and the cause is fixed;
+     the next red of this row is read from that file, never rerun first.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured; the counts are AM62P failures from the `396d667a` tree where a
    design document derived them. Each item keeps every `report-es2` answer
