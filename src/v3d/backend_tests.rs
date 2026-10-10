@@ -3191,30 +3191,40 @@ fn a_colour_output_with_no_attachment_slot_is_refused() {
     assert_eq!(rig.draws().len(), 1);
 }
 
-/// A program that reads a texture's size (textureSize: the compiler's
-/// QUNIFORM_TEXTURE_WIDTH / _HEIGHT words, 44 and 45) is refused by name and
-/// counted until the job builder fills those words; before, the job builder
-/// would have failed the job (v3d_job.c: an unknown word is a bad field).
-/// Revert check: without the check the draw is recorded.
+/// A program that reads a texture's size (the compiler's
+/// QUNIFORM_TEXTURE_WIDTH / _HEIGHT words, 44 and 45: textureSize, and the
+/// face size of the ES 2.0 non-seamless cube look-up's level of detail,
+/// prepare.rs `cube_lod`) is drawn, and the job builder's table carries the
+/// binding's base-level size for v3d_job.c to write; a unit only a size
+/// word names gets the 1x1 stand-in, as an unbound sampled unit does.
+/// Revert check: with the size left 0 the job builder would refuse the
+/// word (tools/v3d/job_check.c part 5), and before this the draw was
+/// refused by name.
 #[test]
-fn a_program_reading_a_texture_size_is_refused_by_name() {
-    static FS_SIZE: [ShcV3dUniform; 3] = [
+fn a_program_reading_a_texture_size_gets_the_bindings_size() {
+    static FS_SIZE: [ShcV3dUniform; 5] = [
         ShcV3dUniform { contents: V3D_QUNIFORM_TMU_CONFIG_P0, data: 0 },
         ShcV3dUniform { contents: V3D_QUNIFORM_TMU_CONFIG_P1, data: 0 },
         ShcV3dUniform { contents: 44, data: 0 },
+        ShcV3dUniform { contents: 45, data: 0 },
+        ShcV3dUniform { contents: 44, data: 3 },
     ];
     let rig = Rig::new();
     rig.init();
     let base = v3d_refused_draws();
     let mut p = program();
-    (p.v3d.fs.uniforms, p.v3d.fs.num_uniforms) = (FS_SIZE.as_ptr(), 3);
+    (p.v3d.fs.uniforms, p.v3d.fs.num_uniforms) = (FS_SIZE.as_ptr(), 5);
     with_code(&mut p);
-    let mut d = sampling(&rig, texture(0, 8, 8, 1));
+    let mut d = sampling(&rig, texture(0, 12, 8, 1));
     d.fs = &p;
-    assert_eq!(draw(&d), -EINVAL);
-    assert_eq!(rig.logs_with(TEXTURE_SIZE_NOT_FILLED), 1);
-    assert_eq!(v3d_refused_draws().wrapping_sub(base), 1, "counted");
-    assert!(rig.draws().is_empty(), "nothing was recorded");
+    assert_eq!(draw(&d), 0);
+    assert_eq!(v3d_refused_draws().wrapping_sub(base), 0, "not refused");
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 1);
+    let t = &draws[0].tmu;
+    assert_eq!(t.len(), 2, "binding 0 and the stand-in for unit 3: {t:?}");
+    assert_eq!((t[0].unit, t[0].width, t[0].height), (0, 12, 8));
+    assert_eq!((t[1].unit, t[1].width, t[1].height), (3, 1, 1));
 }
 
 /// What the job builder cannot take is refused by name before anything is

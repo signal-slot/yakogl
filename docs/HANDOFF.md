@@ -45,12 +45,14 @@ ms4 image, gl_test) and the i.MX8MP (whole tree, gl_test), and `e17fb6a7` on
 the AM62P's image 1; the rows below named `32778b57` and `e17fb6a7` carry the
 numbers, and the sentences above that say no image from main has run, or that
 `d60b9d76` and `d8583f20` are the last trees, are superseded for those two
-boards. The Pi 4 ran nothing (no UART path from the nuc).
+boards. The Pi 4 then ran the whole tree on main `a27d69c0` (2026-10-10,
+`records/pi4/deqp-a27d69c0/full/`): 17,083 pass / 9 fail / 34 NotSupported,
+the 9 being cube cases fixed on the host since (#12 row).
 
 | Failure | State on main | Commit |
 |---|---|---|
-| Pi 4, 25 cube cases (#12) | fixed on the host: non-seamless cube sampling in ES 2.0 builds (a cube look-up is a 2D-array look-up of the selected face; the V3D has no switch for seamless filtering). The owner's 2026-09-25 exclusion of these cases is replaced by this fix. Design: `docs/v3d-noseamless-cube.md` | `c3e4146` design and host reproduction, `ec5ba4f` implementation, `53ef6d7`, `d8ce931` |
-| i.MX8MP, the two dEQP regressions of `72d16864` (fbo `depth_component24`; one `shaders.fragdata.*` NotSupported) | fixed on the host: in `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`); `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1. On the integration images: the i.MX8MP shaders-tail and fbo rows are back at the `29460f96` numbers (1512 / 1512 / 0 and 711 / 711 / 0), and on the AM62P `fragdata.invalid_assign_to_1` moved from NotSupported to Pass, as predicted. Not done: other ES 3-only renderbuffer formats such as `GL_DEPTH_COMPONENT32F` are still accepted in ES 2.0 builds (a static audit lists 44 ungated ES 3.0 rows, none reached by a dEQP-GLES2 case: `tools/cts/log/investigations/es2-error-rules.md`); of its rows the vertex ones are done: `GL_INT` / `GL_UNSIGNED_INT` arrays are GL_INVALID_ENUM under `report-es2`, pinned in `tests/es2_error_rules_vertex.rs` | `4e9397c`; vertex `fdc3b69` |
+| Pi 4, 25 cube cases (#12): 25 -> 9 on the board, 9 -> 0 on the host | non-seamless cube sampling in ES 2.0 builds (a cube look-up is a 2D-array look-up of the selected face; the V3D has no switch for seamless filtering). The owner's 2026-09-25 exclusion of these cases is replaced by this fix. Design: `docs/v3d-noseamless-cube.md`. **Pi 4 whole tree on main `a27d69c0`** (2026-10-10, `records/pi4/deqp-a27d69c0/full/`, tally `build/pi4-tally-a27d69c0.txt`): 17,083 pass / 9 fail / 34 NotSupported; 19 of the 25 pass (the 18 `texture.vertex.cube` and `texturecubelod`). The 9: T3 `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` ("Image verification failed") and T4 `texture.size.cube.15x15_{l8,rgb888,rgba8888}` ("Image comparison failed"; they passed at sweep 30, before the emulation keyed their min LINEAR; `15x15_rgba4444` passes). One cause: a fragment look-up's level came from the TMU's differences of the per-face (s, t), meaningless in a quad that straddles a face edge, as every edge quad of dEQP's face-filling draws does through its helper pixels (the smallest level on the cell edges; a LINEAR minification on the 15x15 face's edge row, up to 8.43 / 255 against an 8-bit threshold of 8). Fixed on the host: the fragment variant computes dEQP's cube level from FDX / FDY of the direction and the face size word and retires with TMUSLOD; the job builder now fills `QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT` (which also ends textureSize's refusal on the V3D). Host tests `tests/v3d_cube_noseamless.rs` (8), `job_check.c` part 5, backend test. Board confirmation pending: Pi 4 images T3 and T4 (rows 21, 22), with T2, TF, RT, S5f unchanged ("Next board session") | `c3e4146` design and host reproduction, `ec5ba4f` implementation, `53ef6d7`, `d8ce931`; fragment level (this commit) |
+| i.MX8MP, the two dEQP regressions of `72d16864` (fbo `depth_component24`; one `shaders.fragdata.*` NotSupported) | fixed on the host: in `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`); `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1. On the integration images: the i.MX8MP shaders-tail and fbo rows are back at the `29460f96` numbers (1512 / 1512 / 0 and 711 / 711 / 0), and on the AM62P `fragdata.invalid_assign_to_1` moved from NotSupported to Pass, as predicted. Not done: other ES 3-only renderbuffer formats such as `GL_DEPTH_COMPONENT32F` are still accepted in ES 2.0 builds (a static audit lists 44 ungated ES 3.0 rows, none reached by a dEQP-GLES2 case: `tools/cts/log/investigations/es2-error-rules.md`) | `4e9397c` |
 | i.MX8MP gl_test case 16 (#8) | harness fixed: it failed in the default image only because that image offers no 4x config (`check 255` is the record's none-marker, not a check). Case 16 runs its 1x half and skips the 4x half by name without a 4x config. The driver did not scale viewport, scissor and clip to the 2x scratch surface: fixed behind `gc_debug_msaa` bit 3, off by default. On the integration image case 16 alone is the by-name skip. The set walker in `gl_test.c` counted any non-zero return (the skip's -3) as a failure, so the default set recorded 46 / 48 and on `c4ccc966` 47 / 49 with case 16 first and the other failure unnamed; it now counts a skip as skipped (not run, not failed), and the set's record (CASE status `CASE_SET`, `record.rs` `SetSummary`) carries passed of run, the skip count and first skip, and the first two failing cases; the bit 3 A/B failed in both arms at check 4 (`x4 inside` got 0x00000000), so bit 3 is not the fix and #8 stays open | `6bddfc5` |
 | i.MX8MP gl_test cases 10 and 2 (#9, #25) | not fixed. Reading our draw, resolve and read-back sync against etnaviv's finds no missing stall, flush or cache operation (`src/vivante/VIVANTE_NOTES.md`; two host tests pin it). The product is unchanged. The recipe's repeat runs on the integration image (60 boots): base 4 / 40, page-aligned 1 / 10, no-reuse 2 / 10; a second session (`0175bac1`, `tools/cts/log/board-sessions/imx8mp-gc-case10.md`): case 10 1 of 30, case 2 0 of 40. The rate fell from 14 / 30 and no arm removes the failure, so the three hypotheses are not separated | `8409419` |
 | i.MX8MP gl_test case 44 `es3hdr`, RGBA16F render target (#6) | fixed on the host, board run pending. On main `a0f439d6` the default set reads 47 / 48 run, 1 skipped (16), first failure case 44 (`records/imx8mp/20261010-1623-gt-a0f439d6-44175f39`; no console, so not which check). Two causes, both against etnaviv: (1) `PE_COLOR_FORMAT` for a float target set bit 31 (FORMAT_EXT's own write mask, so the PE kept its old FORMAT_EXT) where etnaviv sets bit 4, FORMAT's mask (`etnaviv_state.c:282-283`, `state_3d.xml.h` `VIVS_PE_COLOR_FORMAT_FORMAT_MASK 0x10`): every RGBA16F/R16F/R32F target was drawn in a stale format; (2) the texture unit misreads a LINEAR texture of 64-bit texels at a 64-byte-aligned base (issue #6's probes), a layout Mesa never samples: RGBA16F textures are now sampled from a 4x4-tiled copy at a page boundary (`tiled_copy.rs` `wide_texels`), as Mesa's TILED, page-aligned buffers are. Issue #6's third item (check 7 read `0x40042814`, texel (5,0) where (7,0) is wanted) was measured with only the probes' page alignment; whether it outlives the tiled copy is what the board run says. Host tests in `src/vivante/backend_tests.rs` (`a_float_target_goes_through_the_extended_format_field`, `the_pe_color_format_bits_are_the_rnndb_headers`, `an_rgba16f_texture_is_sampled_tiled_from_a_page`, `a_render_into_an_rgba16f_texture_reaches_the_draw_that_samples_it`). Board: `tools/cts/imx8mp-gltest-build.sh gc44-<head8> 44 -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`, run with `SEL=0`, expect a CASE pass record for 44 | (this commit) |
@@ -551,7 +553,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12).
      **New state (`ec5ba4f`): fixed on the host. The owner's 2026-09-25
      exclusion of these cases from the pass count is replaced by this fix.**
-     It needs the Pi 4 run (T1, T3, TF);
+     The Pi 4's tree on `a27d69c0` passed 19 of them and failed 9 (6
+     `mipmap.cube`, 3 `size.cube.15x15`), all the fragment stage's level;
+     fixed on the host since (#12 row). It needs the Pi 4 run (T3, T4, with
+     T2, TF, RT, S5f);
    - glmark2 terrain black (#1), AM62P refract's refused depth pass (#2),
      the Pi 4 carve-out (#4, #5): fixed on the host ("State of main", plan
      #2), waiting for the common-set round on each board;
@@ -816,62 +821,44 @@ $SW/tools/cts/imx8mp-deqp-stage1.sh     # only if there is no stage 1 for this C
 
 ### Raspberry Pi 4 (tryboot, no `BOARD_BOOT`)
 
-Confirms `ec5ba4f` (the 25 cube cases), `4e9397c` (fragdata
-`invalid_assign_to_1`) and the one open question of the inventory (the 27 fbo
-`attachment_combinations`). Needs `RUSTUP_TOOLCHAIN=nightly`, stage 1 for
-`rpi_4b` (`DEQP_WORK`), `BOARD_UART` (the debug probe's device, or `host:port`
-of its serial bridge) and `BOARD_HDMI_TIMINGS` as the lab's.
-Rows of `pi4-full-tree.txt` (`TREE_ROWS` counts from 0, over the non-comment
-lines): D 1 (`shaders.fragdata.*`), FB1 4 (`fbo.api`, `fbo.completeness`), T1 19, T3 21,
-TF 24.
+The whole tree ran on main `a27d69c0` (2026-10-10): 17,083 pass / 9 fail /
+34 NotSupported, the nine being the fragment cube level fixed on the host
+since (#12 row). This session confirms that fix. Needs
+`RUSTUP_TOOLCHAIN=nightly`, stage 1 for `rpi_4b` (`DEQP_WORK`) and
+`BOARD_UART` (the debug probe's device, or `host:port` of its serial
+bridge) and `BOARD_HDMI_TIMINGS` as the lab's. Rows of `pi4-full-tree.txt`
+(`TREE_ROWS` counts from 0, over the non-comment lines): T3 21 and T4 22
+hold the nine; T2 20 (`texture.filtering.*`), TF 24, RT 11
+(`shaders.random.texture.*`) and S5f 16 hold the other fragment cube
+look-ups whose code changed.
 
 ```sh
 export DEQP_WORK=<stage 1 for rpi_4b> RUSTUP_TOOLCHAIN=nightly
-$SW/tools/cts/pi4-deqp-images.sh $SW/tools/cts/pi4-full-tree.txt <img> D FB1 T1 T3 TF     # <img> must not exist yet
-TREE_IMAGE_DIR=<img> TREE_ROWS=1,4,19,21,24 $SW/tools/board.sh pi4 tree $SW/tools/cts/pi4-full-tree.txt <rec>/cube
+$SW/tools/cts/pi4-deqp-images.sh $SW/tools/cts/pi4-full-tree.txt <img> T2 T3 T4 TF RT S5f   # <img> must not exist yet
+TREE_IMAGE_DIR=<img> TREE_ROWS=11,16,20,21,22,24 $SW/tools/board.sh pi4 tree $SW/tools/cts/pi4-full-tree.txt <rec>/cube
 $SW/tools/board.sh pi4 tally <rec>/cube
-$SW/tools/cts/common-images.sh pi4 $SW/tools/cts/common-tree.txt <img-gt> GT              # v3d_gl_test
-$SW/tools/board.sh pi4 run <img-gt>/GT/zephyr/zephyr.bin <rec>/gt gt-$HEAD8
 ```
 
 Expected (`docs/v3d-noseamless-cube.md`, "Pi 4 verification"):
 
-- the 25 cases pass: T1 `texture.vertex.cube.filtering.*` 10 and
-  `texture.vertex.cube.wrap.*` 8, T3
-  `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}`
-  6, TF `shaders.texture_functions.vertex.texturecubelod` 1. T1, T3 and TF
-  each equal their sweep-30 tally (RESULTS.md "Pi 4: sweep 30"; T1 had 18
-  fail, T3 6, TF 1) with those cases moved from Fail to Pass, and no other
-  case moves;
-- D: `shaders.fragdata.invalid_assign_to_1` NotSupported to Pass (a
-  prediction from `4e9397c`, not a measurement); everything else in D as at
-  sweep 30;
-- FB1: the 27 stencil-texture `attachment_combinations` cases were
-  NotSupported at sweep 30 because the V3D did not claim the depth-texture
-  extensions; it claims `GL_OES_depth_texture` since 10/3, so they should
-  pass. If they still fail the stencil attachment, that is a V3D driver fix
-  outside this plan's list;
-- whole tree, if all 29 images run (`TREE_PREV=<sweep 30's tree>`): 17,100
-  pass / 0 fail / 62 NotSupported / 3 QualityWarning from the cube fix alone;
-  the fragdata case and the fbo 27 may move up to 28 more NotSupported to
-  pass;
-- `v3d_gl_test` unchanged, 21 / 21 (12 / 12 on the older record): its cube
-  cases use NEAREST, which the GL core never keys.
+- T3: the six `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,
+  linear_nearest}` pass, 304 / 304; T4: the three
+  `texture.size.cube.15x15_{l8,rgb888,rgba8888}` pass, 69 / 69;
+- T2, TF, RT, S5f each equal their `a27d69c0` tally (all pass there);
+- whole tree, if all 29 images run (`TREE_PREV=records/pi4/deqp-a27d69c0/full`):
+  17,092 pass / 0 fail / 34 NotSupported;
+- `v3d_gl_test` is an ES 3.0 image, which never keys the emulation: unchanged.
 
-Reading a failure (from the design document):
+Reading a failure:
 
-- all 25 fail: the TMU did not take TMUI as a float face index. Add one
-  FTOIN of the face in `prepare.rs` (the caller of `Walk::cube_face`),
-  rebuild, run T1 `texture.vertex.cube.wrap.clamp_clamp` alone;
-- only the six `texture.vertex.cube.filtering.nearest_mipmap_{nearest,
-  linear}_linear_*` fail: the c = 0.5 switch is wrong for the TMU. The remap
-  is wired (`LodKey::mag_switch` in the vertex key); first check that the
-  vertex key reaches the link (`V3D_VARIANTS_BUILT` in the back end's print
-  grows);
-- only the six `texture.mipmap.cube.*` fail, with invalid pixels along face
-  edges: the fragment stage's implicit level needs the FDX / FDY fallback
-  (design document, "The level of detail"); write it in `prepare.rs` for
-  fragment variants only.
+- T3 or T4 still fail: check that the fragment variant was built
+  (`V3D_VARIANTS_BUILT` grows) and has `fdx`, `fdy`, `tmuslod`;
+- a draw refused or a job failed on a bad field: the face size word found no
+  size in the job builder's table (`texture_units`, v3d_job.c);
+- only T2's `filtering.cube.nearest_mipmap_*_linear_*` fail: the TMU's
+  magnification switch on an explicit fragment level is not GL's c = 0.5;
+  key the fragment record's cube bindings for `mag_switch` and remap the
+  computed level as the vertex stage does.
 
 ### AM62P (`BOARD_BOOT=uboot-tftp` or `uboot-mmc`; `BOARD_UART` set; `driver/src/fw/pvr_fw_blob.h` in the checkout)
 

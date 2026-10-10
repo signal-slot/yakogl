@@ -196,7 +196,8 @@
 //!   a read of an address nothing wrote is refused. TIDX reads
 //!   [`Env::thread`]; EIDX the lane number.
 //!
-//! Unmodelled: derivatives, TMUL/TMUC/TMUH*, the magic VPM/SFU/sync
+//! Unmodelled: derivatives (unless [`Env::quads`] assumes a quad layout),
+//! TMUL/TMUC/TMUH*, the magic VPM/SFU/sync
 //! writes, RSQRT2 (Mesa 26.2.1 defines it, `VIR_SFU(RSQRT2)`, but nothing
 //! calls it and nothing states how it differs from RSQRT; the corpus has
 //! none), and the 7.x operations.
@@ -278,6 +279,16 @@ pub struct Env {
     /// 16 / threads words per thread. 0 = not given, and a TMU look-up then
     /// stops the run rather than assume one.
     pub threads: u32,
+    /// FDX and FDY run on an ASSUMED quad layout: lanes 4q .. 4q + 3 form
+    /// quad q, lane 4q + i at column i & 1 and row i >> 1; FDX is the
+    /// right pixel's value less the left one's in the lane's row, FDY the
+    /// second row's less the first row's in its column. No public source
+    /// states the V3D's layout, so this is off by default (a derivative is
+    /// then unmodelled); a test that turns it on builds its inputs from the
+    /// same layout, and a result that depends only on |d/dx| and |d/dy|
+    /// together (a level of detail) does not depend on which of the two
+    /// directions is which, nor on the signs.
+    pub quads: bool,
 }
 
 /// A piece of memory LDUNIFA can read: 32-bit words from `base` on (a byte
@@ -1336,7 +1347,19 @@ fn add_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
          * has no quad operation that would show it), so a run that reaches
          * one is unmeasured here; gl_test measures derivatives on the
          * board. */
-        Fdx | Fdy => return unmodelled(format!("add {op:?}: the quad lane layout is not modelled")),
+        Fdx | Fdy if m.env.quads => {
+            c = Computed::new(true);
+            let mut x = [0f32; LANES];
+            for (l, v) in x.iter_mut().enumerate() {
+                *v = fl(f32_unpack(a[l], ua, &what)?);
+            }
+            for l in 0..LANES {
+                let (q, i) = (l & !3, l & 3);
+                let (hi, lo) = if op == Fdx { (q + (i & 2) + 1, q + (i & 2)) } else { (q + 2 + (i & 1), q + (i & 1)) };
+                c.vals[l] = f32_result(x[hi] - x[lo], &what)?;
+            }
+        }
+        Fdx | Fdy => return unmodelled(format!("add {op:?}: the quad lane layout is not modelled (Env::quads)")),
         other => return unmodelled(format!("add {other:?}")),
     }
     Ok(Some(c))
