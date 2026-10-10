@@ -92,7 +92,24 @@ expect "gl_test: its cc arms" '^plan  cc      gl_test.c ' "$out"
 expect "gl_test: the shader header" '^plan  gen     gl_test_shaders' "$out"
 expect "gl_test: no host suite" '^skip  test    host-test,gpu-powervr$' "$out"
 out=$(plan "src/gl/draw.rs docs/x.md")
-expect "a shared layer: every row" '^check.sh: 13[0-9] ok, 0 failed, [0-9] gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
+expect "a shared layer: every row" '^check.sh: 1[0-9][0-9] ok, 0 failed, [0-9] gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
 expect "a shared layer: the path is named" '^      every row: src/gl/draw.rs$' "$out"
+# --local: a shared-layer change runs the local set only
+local_plan() {
+  ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
+    sed 's/\x1b\[[0-9;]*m//g'
+}
+out=$(local_plan src/gl/draw.rs)
+expect "local: fmt" '^plan  cargo fmt --check$' "$out"
+expect "local: the PowerVR compiler suite" '^plan  test    host-test,gpu-powervr,shaderc-online$' "$out"
+expect "local: the GC7000 compiler suite" '^plan  test    host-test,gpu-vivante,shaderc-online$' "$out"
+expect "local: the V3D suite" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(--lib' "$out"
+expect "local: the gl_test arms" '^plan  cc      gl_test.c ' "$out"
+expect "local: no report-es2 pair" '^skip  test    host-test,gpu-powervr,shaderc-online,report-es2$' "$out"
+expect "local: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
+expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$out"
+expect "local: the summary says so" '^check.sh: (9|1[0-9]) ok, 0 failed, 0 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+out=$(local_plan src/v3d/job.rs)
+expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]

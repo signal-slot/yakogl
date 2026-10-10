@@ -1087,8 +1087,12 @@ board-confirmed before then.
   `skip` for each; a shared layer (`src/gl`, `src/shaderc`, the OSALs,
   `capi`, `Cargo.toml`, the script itself) or a path the map does not know
   selects every row, and `tools/check_scope_selftest.sh` pins the map.
-  `tools/land.sh` runs it that way (`LAND_GATE=full` for every row) with a
-  cargo target directory shared between landings. Every row runs in CI
+  `tools/check.sh --local <base>` is the same, except that a diff reaching
+  everything (a shared layer) runs the local set only: fmt, clippy and the
+  suite in the three GPUs' compiler configurations, the gl_test.c arms and
+  the self-test, 13 of the 138 rows. `tools/land.sh` runs that
+  (`LAND_GATE=changed` for every row the diff reaches, `LAND_GATE=full` for
+  every row) with a cargo target directory shared between landings. Every row runs in CI
   (`.github/workflows/gate.yml`: a push to main and nightly, on a
   self-hosted runner labelled `yakogl-gate` that carries the environment
   below). The full run takes about 45 minutes; a V3D-only change selects

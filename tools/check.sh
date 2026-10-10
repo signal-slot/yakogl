@@ -11,7 +11,9 @@
 #
 #   tools/check.sh                   every row: what CI runs
 #   tools/check.sh --changed <base>  the rows the diff from <base> can reach
-#                                    (what tools/land.sh runs before a push)
+#   tools/check.sh --local <base>    the same, but a diff that reaches everything
+#                                    runs the local set only (what tools/land.sh
+#                                    runs before a push: about ten minutes)
 #   tools/check.sh --quick           the PowerVR build only, for a tight edit loop
 #
 # --changed maps each changed path to the parts it can break (scope_of_path
@@ -19,7 +21,13 @@
 # drivers crate, the samples, or everything) and skips the rows of the other
 # parts, printing `skip` for each so the log says what was not run. A path
 # the map does not know, and every shared layer (src/gl, src/shaderc, the
-# OSALs, capi, Cargo.toml, this script), selects every row. The full run is
+# OSALs, capi, Cargo.toml, this script), selects every row -- and --local then
+# runs the rows marked `local` only: fmt, clippy and the suite in the three
+# GPUs' compiler configurations, the gl_test.c arms and this script's own
+# self-test. Every other row (the report-es2 and tier pairs, the archive
+# symbol checks, the aarch64 arms, the Zephyr images, the table proofs) is
+# CI's, and so is the whole run (every landing of a shared layer took 45 to
+# 100 minutes here before --local; user, 2026-10-11). The full run is
 # CI's (.github/workflows/gate.yml, a self-hosted runner with the gate's
 # environment); locally a change is tested where it reaches (user,
 # 2026-10-10: "普通はね、ローカルでは変更の影響範囲だけをテストするよ").
@@ -135,6 +143,8 @@ if [ "${1-}" = "--scope-of" ]; then
   exit 0
 fi
 CHANGED_BASE=
+LOCAL=0
+[ "${1-}" = "--local" ] && { LOCAL=1; set -- --changed "${2-}"; }
 if [ "${1-}" = "--changed" ]; then
   CHANGED_BASE=${2:?usage: tools/check.sh --changed <base-commit>}
   git rev-parse --verify "$CHANGED_BASE^{commit}" >/dev/null 2>&1 ||
@@ -190,7 +200,11 @@ scope() { ROW_SCOPES="$*"; }
 # 0 when the rows under the current `scope` line are selected.
 wanted() {
   local s
-  [ "$SCOPES" = all ] && return 0
+  if [ "$SCOPES" = all ]; then
+    [ "$LOCAL" -eq 0 ] && return 0
+    for s in $ROW_SCOPES; do [ "$s" = local ] && return 0; done
+    return 1
+  fi
   for s in $ROW_SCOPES; do
     [ "$s" = all ] && return 0
     case " $SCOPES " in *" $s "*) return 0 ;; esac
@@ -250,6 +264,7 @@ step() {
   fi
 }
 
+scope all local
 step "cargo fmt --check" cargo fmt --check
 
 # The no_std archive crate, which every product build and every board pair go
@@ -286,6 +301,7 @@ done
 for f in "${CONFIGS[@]}"; do
   tier=()
   scope "$(config_scopes "$f")"
+  case "$f" in host-test,gpu-powervr,shaderc-online | host-test,gpu-vivante,shaderc-online) scope "$ROW_SCOPES local" ;; esac
   case "$f" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
     tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
@@ -403,9 +419,10 @@ v3d_lib_tests() {
     return 1
   fi
 }
-scope v3d
+scope v3d local
 step "clippy  $V3D_CONFIG" cargo clippy --no-default-features --features "$V3D_CONFIG" --all-targets
 step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_tests
+scope v3d
 # The V3D compiler (src/shaderc/online/v3d) and the Mesa QPU packer build.rs
 # compiles for it exist only in `gpu-v3d` builds (docs/source-form.md, F1),
 # so the rows that ran its tests without the feature -- `host-test,shaderc-online`
@@ -953,7 +970,7 @@ if command -v cc >/dev/null 2>&1; then
   # once went unseen (the query asked for pname 16 on every board).
   # The GC7000 arm twice: without the test knobs, as a product library has
   # none, and with them (YAKOGL_TEST_KNOBS, the gc_gl_test image's arm).
-  scope gltest
+  scope gltest local
   for arm in "-DGL_TEST_HOST=1" "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1" \
     "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1"; do
     step "cc      gl_test.c $arm" cc -std=gnu11 -fsyntax-only -Wall -Wextra -Werror \
@@ -1441,7 +1458,7 @@ scope tools
 step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
 # The map --changed selects rows by, pinned path by path, and the plans of
 # a docs, a V3D, a gl_test and a shared-layer change.
-scope tools
+scope tools local
 step "tools   check.sh --changed: the path-to-scope map and four plans" tools/check_scope_selftest.sh
 # The PowerVR backend's view of Mesa's csbgen packers (src/pvr/csbgen.rs and
 # the C wrappers build.rs compiles, driver/src/pvr/generated/csbgen_wrap.c)
@@ -1690,6 +1707,7 @@ fi
 echo
 mode="every row"
 [ -n "$CHANGED_BASE" ] && mode="--changed $CHANGED_BASE, scopes: $SCOPES"
+[ "$LOCAL" -eq 1 ] && mode="--local $CHANGED_BASE, scopes: $SCOPES"
 echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s"
 if [ "$rc" -eq 0 ]; then
   green "check.sh: clean"
