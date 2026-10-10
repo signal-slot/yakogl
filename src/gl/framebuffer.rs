@@ -3041,11 +3041,15 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
     const FUNC: &str = "glDrawBuffers";
     let Some(c) = context::current() else { return };
     /* The errors in the order dEQP-GLES3 negative_api.buffer.draw_buffers
-     * checks them (ES 3.0 4.2.1): a negative n; a value that is no draw
-     * buffer at all (GL_INVALID_ENUM, even when n is also too large); the
-     * window given other than one buffer; n past GL_MAX_DRAW_BUFFERS; then
-     * the per-buffer rules. n past the limit was checked first until
-     * 2026-09-24, which answered GL_INVALID_VALUE to the first two. */
+     * checks them (ES 3.0 4.2.1): a negative n; on a framebuffer object, n
+     * past GL_MAX_DRAW_BUFFERS (its last call is GL_MAX_DRAW_BUFFERS + 1
+     * buffers, one of them GL_DEPTH_ATTACHMENT, and wants GL_INVALID_VALUE);
+     * a value that is no draw buffer at all (GL_INVALID_ENUM); the window
+     * given other than one buffer; then the per-buffer rules. n past the
+     * limit was checked first everywhere until 2026-09-24, which answered
+     * GL_INVALID_VALUE to the window's n = 2 and to {COLOR_ATTACHMENT0,
+     * DEPTH_ATTACHMENT} while the limit was 1; then after the enums until
+     * 2026-10-10, which answered GL_INVALID_ENUM to that last call. */
     if n < 0 {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
@@ -3069,8 +3073,12 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
             || b == GL_BACK
             || (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum).contains(&b)
     };
-    /* the enum scan reads at most a sane count: n far past the limit is
-     * GL_INVALID_VALUE below whatever the array holds */
+    if c.bound_framebuffer != 0 && n > context::MAX_DRAW_BUFFERS as GLsizei {
+        c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    /* the enum scan reads at most a sane count: the window given more is
+     * GL_INVALID_OPERATION below whatever the array holds */
     if n <= 32 && (0..n).any(|i| !accepted(buf(i))) {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
@@ -3085,10 +3093,6 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
         }
         // SAFETY: single-threaded by contract; no other reference is live.
         unsafe { DEFAULT_DRAW_NONE.get()[c.index as usize % MAX_CONTEXTS] = buf(0) == GL_NONE };
-        return;
-    }
-    if n > context::MAX_DRAW_BUFFERS as GLsizei {
-        c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
     if c.framebuffer_ref(c.bound_framebuffer).is_none() {

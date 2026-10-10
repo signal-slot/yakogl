@@ -18,6 +18,8 @@
 //!     as the core calls do (dEQP's loader calls them in their place):
 //!     state_query.buffer_object.buffer_mapped_*, buffer_access_flags_*,
 //!     buffer_map_offset_length_*, negative_api.buffer.copy_buffer_sub_data.
+//!   - glDrawBuffers on a framebuffer object checks n against
+//!     GL_MAX_DRAW_BUFFERS before the enums: negative_api.buffer.draw_buffers.
 //!   - glReadPixels into a pixel pack buffer stays inside the buffer and
 //!     writes the rows back from the CPU cache: pbo.* (the GL half; the
 //!     integer rows also need the back ends' integer render targets).
@@ -41,7 +43,7 @@ use yakogl::gl::buffer::{
 use yakogl::gl::consts::*;
 use yakogl::gl::framebuffer::{
     glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glDeleteFramebuffers, glDeleteRenderbuffers,
-    glFramebufferRenderbuffer, glFramebufferTexture2D, glGenFramebuffers, glGenRenderbuffers,
+    glDrawBuffers, glFramebufferRenderbuffer, glFramebufferTexture2D, glGenFramebuffers, glGenRenderbuffers,
     glGetFramebufferAttachmentParameteriv, glGetRenderbufferParameteriv, glReadPixels, glRenderbufferStorage,
     glRenderbufferStorageMultisample,
 };
@@ -536,6 +538,39 @@ mod es3 {
         // SAFETY: plain GL call.
         unsafe { glUnmapBufferOES(0x1234) };
         assert_eq!(err(), GL_INVALID_ENUM, "no target at all");
+    }
+
+    /// Root cause 6: glDrawBuffers checked the enums before n on a
+    /// framebuffer object, so GL_MAX_DRAW_BUFFERS + 1 buffers with a
+    /// GL_DEPTH_ATTACHMENT among them read GL_INVALID_ENUM where
+    /// dEQP-GLES3 negative_api.buffer.draw_buffers wants GL_INVALID_VALUE.
+    /// The calls before it in that case keep their answers.
+    #[test]
+    fn draw_buffers_on_an_object_checks_the_count_first() {
+        let _g = context();
+        let max = geti(GL_MAX_DRAW_BUFFERS);
+        let mut values = vec![GL_NONE; max as usize + 1];
+        values[..4].copy_from_slice(&[GL_NONE, GL_BACK, GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT]);
+        let rb = renderbuffer(GL_RGBA8, 4, 4, None);
+        let fb = framebuffer();
+        attach_rb(GL_COLOR_ATTACHMENT0, rb);
+        // SAFETY: each call reads at most `values.len()` enums from it.
+        unsafe {
+            glDrawBuffers(2, values[2..].as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_ENUM, "{{COLOR_ATTACHMENT0, DEPTH_ATTACHMENT}}");
+            glDrawBuffers(1, values[1..].as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_OPERATION, "GL_BACK on an object");
+            glDrawBuffers(-1, values[1..].as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_VALUE);
+            glDrawBuffers(max + 1, values.as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_VALUE, "n past GL_MAX_DRAW_BUFFERS, a bad enum among them");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDrawBuffers(2, values.as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_OPERATION, "the window, n = 2");
+            glDrawBuffers(1, values[2..].as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_OPERATION, "the window, COLOR_ATTACHMENT0");
+        }
+        release(fb, &[rb]);
     }
 
     /// Root cause 4: glReadPixels with a pixel pack buffer bound checked the
