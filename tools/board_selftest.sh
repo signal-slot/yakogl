@@ -691,7 +691,11 @@ d="$S/pi4/tail/20261003-1300-TFtail-0123abcd"
 mkrun "$d" board=pi4 boot=tryboot name=TFtail probe=0 back=1
 { cat "$TD/pi4-tryboot-TF-29460f96.console.txt"
   for i in $(seq 4000); do printf '12:00:00 [  OK  ] Stopped unit-%04d.service - a Linux line after the end\n' "$i"; done; } > "$d/console.txt"
-check "pi4: the end line followed by 4000 more lines (> 64 KiB) is still the end: done" says pi4 "$d" "rc=0 verdict=done"
+# (with SIGPIPE ignored the cut-short writer also complains on stderr; the
+# tally must print its verdict line and nothing else)
+o=$(python3 -c 'import os, signal, sys; signal.signal(signal.SIGPIPE, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' "$B" pi4 tally "$d" 2>&1 >/dev/null)
+check "pi4: the end line followed by 4000 more lines (> 64 KiB) is still the end: done, and nothing on stderr with SIGPIPE ignored" \
+    eval 'says pi4 "$d" "rc=0 verdict=done" && [ -z "$o" ]'
 d="$S/pi4/cut/20261003-1300-TFcut-0123abcd"
 mkrun "$d" board=pi4 boot=tryboot name=TFcut probe=0 back=1
 grep -v -e 'deqp: summary' -e 'v3d_deqp: build' "$TD/pi4-tryboot-TF-29460f96.console.txt" > "$d/console.txt"

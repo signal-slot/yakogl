@@ -368,7 +368,9 @@ end_seen() {
     # last write (SIGPIPE, or EPIPE where SIGPIPE is ignored), so a console
     # with the end line followed by more than a pipe's worth of lines read as
     # no end (Pi 4 rows E and NS of a27d69c0, 2026-10-10)
-    if [ -n "$END_RE" ] && grep -aqE "$END_RE" < <(plain "$c"); then return 0; fi
+    # (and its stderr dropped: the writer cut short still says "Broken pipe",
+    # which landed in front of the tally's verdict line)
+    if [ -n "$END_RE" ] && grep -aqE "$END_RE" < <(plain "$c" 2>/dev/null); then return 0; fi
     if grep -aq 'yk-record: ' "$c"; then
         # (a FINGERPRINT, class fingerprint, is written beside the verdict, never as the end)
         case "$(ytools record --log "$c" --classify 2>/dev/null)" in
@@ -411,7 +413,7 @@ pvr_resets() {
     [ -s "$c" ] || { echo absent; return; }
     n=$(plain "$c" | sed -nE 's/.*render freelists: .*GPU recoveries ([0-9]+) \(HWR counter [0-9]+\).*/\1/p' | tail -1)
     if [ -n "$n" ]; then echo "$n"; return; fi
-    a0=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter ([0-9]+) -> [0-9]+\).*/\1/p' | head -1)
+    a0=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter ([0-9]+) -> [0-9]+\).*/\1/p' 2>/dev/null | head -1)
     b=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter [0-9]+ -> ([0-9]+)\).*/\1/p' | tail -1)
     if [ -n "$b" ]; then echo $((b - a0)); return; fi
     if [ -n "$(legacy_result "$c")" ]; then echo 0; return; fi
@@ -720,7 +722,7 @@ boot_build() {
     # newline, so the first Zephyr line (sample_glue.c's PRE_KERNEL_2 build
     # line) arrives glued to it ("MESS:00:00:06.210776:0:sample: build tree=...",
     # the common set of 2026-10-04); the match starts at the build line itself.
-    l=$(plain "$c" | grep -aoE '[A-Za-z0-9_][A-Za-z0-9_ ]*: build (tree=)?[0-9A-Za-z][0-9A-Za-z._:+-]{6,}.*' | grep -v '%s' | head -1)
+    l=$(plain "$c" | grep -aoE '[A-Za-z0-9_][A-Za-z0-9_ ]*: build (tree=)?[0-9A-Za-z][0-9A-Za-z._:+-]{6,}.*' | grep -v '%s' 2>/dev/null | head -1)
     echo "${l:-absent (the console has no build line)}"
 }
 
