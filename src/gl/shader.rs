@@ -559,12 +559,14 @@ pub(crate) fn reset_for_tests() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
+    use crate::gl::program::glGetProgramInfoLog;
     use crate::gl::program::{
-        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramInfoLog, glGetProgramiv,
-        glLinkProgram,
+        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramiv, glLinkProgram,
     };
     use crate::testutil::TestGl;
     use std::ffi::CString;
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
     use std::format;
     use std::string::String;
     use std::vec::Vec;
