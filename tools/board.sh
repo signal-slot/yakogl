@@ -363,7 +363,12 @@ plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
 end_seen() {
     local c=$1
     [ -s "$c" ] || return 1
-    if [ -n "$END_RE" ] && plain "$c" | grep -aqE "$END_RE"; then return 0; fi
+    # grep reads plain through a process substitution, never a pipe: under
+    # pipefail "plain | grep -q" failed whenever grep's early exit cut plain's
+    # last write (SIGPIPE, or EPIPE where SIGPIPE is ignored), so a console
+    # with the end line followed by more than a pipe's worth of lines read as
+    # no end (Pi 4 rows E and NS of a27d69c0, 2026-10-10)
+    if [ -n "$END_RE" ] && grep -aqE "$END_RE" < <(plain "$c"); then return 0; fi
     if grep -aq 'yk-record: ' "$c"; then
         # (a FINGERPRINT, class fingerprint, is written beside the verdict, never as the end)
         case "$(ytools record --log "$c" --classify 2>/dev/null)" in
@@ -530,9 +535,9 @@ verdict_line() {
             rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
         # a fatal error is never done, summary or not; the RTI feeder's end
         # (the image outlived its bounded feeding) only counts without a result
-        elif plain "$console" 2>/dev/null | grep -aq 'ZEPHYR FATAL ERROR'; then bv=fatal
+        elif grep -aq 'ZEPHYR FATAL ERROR' < <(plain "$console" 2>/dev/null); then bv=fatal
         elif [ -n "$(legacy_result "$console")" ] || [ -n "$(single_case "$console")" ]; then bv=complete
-        elif plain "$console" 2>/dev/null | grep -aq 'RTI feeder lifetime over'; then bv=watchdog_end
+        elif grep -aq 'RTI feeder lifetime over' < <(plain "$console" 2>/dev/null); then bv=watchdog_end
         elif end_seen "$console"; then bv=complete
         else bv=no_end_line; fi
         ;;

@@ -29,7 +29,8 @@
 #    - Pi 4: three records of the 29460f96 full tree in tools/testdata (the old
 #      tryboot runner's end-line rule; the old Pi 4 tree runner's tally and
 #      baseline diff; one of them as a bridge's console.ts, whose derived
-#      console.txt must equal it);
+#      console.txt must equal it), and row E of the a27d69c0 tree as the
+#      bridge captured it (tools/testdata/pi4-tryboot-E-a27d69c0.uart.ts);
 #    - i.MX8MP tree: tools/cts/imx8mp-full-tree-29460f96.results.tsv turned
 #      back into records and tallied: results.tsv against the committed one,
 #      rows.md, the TALLY line and the diff against the old tree runner's.
@@ -45,7 +46,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=221
+WANT_CHECKS=223
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -670,6 +671,27 @@ TZ=UTC gawk '{ split($1, h, ":"); t = mktime("2026 10 03 " h[1] " " h[2] " " h[3
 RD=$d TZ=UTC console_from_ts
 same "pi4 bridge capture: console.txt derived from console.ts equals the device capture's" "$TD/pi4-tryboot-GT21-29460f96.console.txt" "$d/console.txt"
 check "pi4 bridge capture: the same verdict as the device capture (done rc 0)" says pi4 "$d" "rc=0 verdict=done"
+# a bridge capture holds the Linux shutdown and the lines after the end line:
+# row E of the a27d69c0 tree (2026-10-10), whose live verdict was no_end_line
+# though its console has both end lines ("plain | grep -q" under pipefail,
+# racing its last write). Replayed with SIGPIPE ignored, as a runner started
+# from a Python parent has it (EPIPE then fails the writer), ten times.
+d="$S/pi4/bridge/20261010-1846-E-d54677f9"
+mkrun "$d" board=pi4 boot=tryboot name=E probe=0 back=1 t_reboot=1791625623 t_back=1791625920
+cp "$TD/pi4-tryboot-E-a27d69c0.uart.ts" "$d/console.ts"
+RD=$d console_from_ts
+bad=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    o=$(python3 -c 'import os, signal, sys; signal.signal(signal.SIGPIPE, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' "$B" pi4 tally "$d" 2>&1 | head -1)
+    grep -q "rc=0 verdict=done .*result=legacy:" <<<"$o" || bad=$((bad + 1))
+done
+check "pi4 bridge capture E (a27d69c0): verdict done in 10 of 10 tallies with SIGPIPE ignored ($bad not)" [ "$bad" = 0 ]
+# deterministic: the end line followed by far more than a pipe's worth (64 KiB)
+d="$S/pi4/tail/20261003-1300-TFtail-0123abcd"
+mkrun "$d" board=pi4 boot=tryboot name=TFtail probe=0 back=1
+{ cat "$TD/pi4-tryboot-TF-29460f96.console.txt"
+  for i in $(seq 4000); do printf '12:00:00 [  OK  ] Stopped unit-%04d.service - a Linux line after the end\n' "$i"; done; } > "$d/console.txt"
+check "pi4: the end line followed by 4000 more lines (> 64 KiB) is still the end: done" says pi4 "$d" "rc=0 verdict=done"
 d="$S/pi4/cut/20261003-1300-TFcut-0123abcd"
 mkrun "$d" board=pi4 boot=tryboot name=TFcut probe=0 back=1
 grep -v -e 'deqp: summary' -e 'v3d_deqp: build' "$TD/pi4-tryboot-TF-29460f96.console.txt" > "$d/console.txt"
