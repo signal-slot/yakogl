@@ -44,6 +44,8 @@ mod es3_format_tests;
 #[cfg(test)]
 mod es3_level_tests;
 #[cfg(test)]
+mod es3_pbo_tests;
+#[cfg(test)]
 mod pool_tests;
 #[cfg(all(test, feature = "shaderc-online", not(feature = "report-es2")))]
 mod tf_capture_tests;

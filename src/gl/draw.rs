@@ -2564,9 +2564,33 @@ fn min_filter_uses_mipmaps(f: GLenum) -> bool {
 /// the texture. Saying which rule was broken, once, turns that into a one-line
 /// answer. (It is what the i.MX8MP's case 20 needed, and it will be what the
 /// next one needs.)
+/// The levels a mipmap filter needs, from level 0 on. ES 3.0 3.8.13: the
+/// base level up to q = min(p, GL_TEXTURE_MAX_LEVEL), p the last level of
+/// the base image's chain; for an immutable texture no further than its last
+/// level (3.8.4, "levels - 1" clamps the maximum level). ES 2.0 3.7.10 has no
+/// GL_TEXTURE_MAX_LEVEL: the whole chain. The base level is level 0 here:
+/// the draw does not apply GL_TEXTURE_BASE_LEVEL (`GlTexture::base_level`).
+///
+/// dEQP-GLES3 texture.specification samples every texture it makes with
+/// NEAREST_MIPMAP_NEAREST and GL_TEXTURE_MAX_LEVEL at its last level; with
+/// the whole chain required, every one-level texture (teximage2d_pbo,
+/// texsubimage2d_pbo, the *_unpack_params and *_align groups) and every
+/// short glTexStorage2D chain was incomplete and read (0,0,0,1).
+fn mip_levels_needed(t: &GlTexture) -> u32 {
+    let p = u32::from(super::context::gl_mip_levels(t.width, t.height).min(15));
+    if crate::REPORT_ES2 {
+        return p;
+    }
+    let mut q = p.min(u32::try_from(t.max_level_set).unwrap_or(0).saturating_add(1));
+    if t.immutable && t.immutable_levels > 0 {
+        q = q.min(u32::from(t.immutable_levels));
+    }
+    q.max(1)
+}
+
 fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
-    use super::context::gl_mip_levels;
     let mips = min_filter_uses_mipmaps(t.min_filter);
+    let needed = mip_levels_needed(t);
 
     if t.target == GL_TEXTURE_CUBE_MAP && t.faces_set != 0x3f {
         return Some("cube map without all six faces");
@@ -2581,7 +2605,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
             return Some("an integer or 32-bit float texture filtered by anything but NEAREST (ES 3.0 3.8.13)");
         }
     }
-    if mips && t.levels < t.chain_levels {
+    if mips && u32::from(t.levels) < u32::from(t.chain_levels).min(needed) {
         return Some("a mipmap min filter, but fewer levels uploaded than the chain needs");
     }
     /* ES 2.0 3.7.10 / ES 3.0 3.8.13: with a mipmap filter every level of
@@ -2594,7 +2618,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
          * a NPOT image (a PowerVR NPOT cube), GL still wants its whole chain, which
          * glGenerateMipmap, glTexStorage2D or the application's own levels
          * record as present without holding them */
-        let chain = ((1u32 << u32::from(gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
+        let chain = ((1u32 << needed) - 1) as u16;
         if t.level_defined & chain != chain {
             return Some("a mipmap min filter, but a level of the chain has no image");
         }
@@ -2602,7 +2626,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
             return Some("a mipmap min filter, but a level of the chain has another size or format");
         }
         /* a cube map's level is complete only when all six faces hold it */
-        let levels = usize::from(gl_mip_levels(t.width, t.height)).min(t.level_faces.len());
+        let levels = (needed as usize).min(t.level_faces.len());
         if t.target == GL_TEXTURE_CUBE_MAP && t.level_faces[1..levels.max(1)].iter().any(|&f| f != 0x3f) {
             return Some("a mipmap min filter, but a cube map face lacks a level of the chain, or has one of another size or format");
         }
