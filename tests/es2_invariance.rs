@@ -21,7 +21,7 @@
 //!   output dwords 0..3 (gl_Position) as the roots. The USC interpreter of
 //!   tests/usc_exec cannot judge this: it rounds `fmad` as a product and
 //!   then a sum (`alu`, "fmad"), so a fused and an unfused form agree there.
-//!   [`powervr::fused_model_differs`] evaluates the two trees with `fmad`
+//!   `powervr::differing` evaluates the two trees with `fmad`
 //!   rounded once instead (an assumption about the hardware, which the
 //!   board's failures support) and counts the inputs whose bits differ.
 //! - GC7000: selection's instructions (`select::select`), traced lane by
