@@ -959,6 +959,14 @@ board-confirmed before then.
   <label>`. Run them from a detached checkout of main, and only with images
   built from commits on origin/main. Use `BOARD_BOOT=uboot-mmc` on the
   Verdins.
+- A serial bridge (the Pi 4's TCP bridge, the AM62P's) can stall and drop a
+  burst of console lines. A dEQP run whose image counters (`deqp: summary`)
+  say more cases had a result than the console shows has the verdict
+  `done_lossy` (`lost=<n>`, rc 4), and `board.sh <board> tally` and
+  `deqp-uart-tally.py` name the lost ranges and call those cases Lost, never
+  NoResult (a case the image never began). Rerun the row until the capture is
+  whole; do not count a `done_lossy` row as a result (tools/cts/README.md,
+  section 6).
 - A dEQP image bakes its table in: splitting rows needs a rebuilt image
   (`tools/cts/imx8mp-deqp-build.sh --table`; tools/cts/README.md).
 - One GL client per board. Check that a board is idle before you use it.

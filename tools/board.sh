@@ -77,7 +77,10 @@
 # gl_test's "all:" or "RECORD end"). A result record with status=fail (APP,
 # PROBES, CASE, FAULT, GLMARK2) is verdict=failed; status=invalid is bad_record. A GPU
 # reset count other than 0 is never a clean done
-# (done_with_resets). A breadcrumb gives died_after=<stage>. boot_verdict is
+# (done_with_resets). A dEQP console whose capture lost result lines the image
+# counted (deqp-uart-tally.py --lost: its summary against the lines seen) is not
+# a complete result either: done_lossy, with lost=<n> at the end of the line;
+# rerun the row until the capture is whole. A breadcrumb gives died_after=<stage>. boot_verdict is
 # the backend's own word (the AM62P phase scan's, the i.MX8MP TFTP log's).
 #
 # Exit codes: 0 done (probe: passed); 2 usage; 3 refused before the board was
@@ -473,7 +476,7 @@ single_case() {
 # both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN.
 verdict_line() {
     local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status
-    local console=$dir/console.txt scan="" tftp=none tl up="" ba=? recf=absent sc
+    local console=$dir/console.txt scan="" lost=0 tftp=none tl up="" ba=? recf=absent sc
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
     name=$(mget name "$dir"); boot=$(mget boot "$dir"); probe=$(mget probe "$dir"); rcc=$(mget rc_cycle "$dir")
@@ -605,6 +608,13 @@ verdict_line() {
         resets=$(pvr_resets "$console")
     fi
     if [ "$verdict" = done ] && [ "$resets" != absent ] && [ "$resets" -gt 0 ]; then verdict=done_with_resets; fi
+    # cases the image counted as run whose lines the console capture lost (a serial bridge
+    # that stalls drops its backlog): the image's counters against the result lines seen
+    # (deqp-uart-tally.py --lost). done only means complete when the capture is.
+    if [ -s "$console" ] && grep -aq 'deqp: summary: ' "$console"; then
+        lost=$(python3 "$HERE/cts/deqp-uart-tally.py" --lost "$console" 2>/dev/null) || lost=
+        if [ "${lost:-0}" -gt 0 ] 2>/dev/null && [ "$verdict" = done ]; then verdict=done_lossy; fi
+    fi
     if [ -n "$rcc" ]; then V_RC=$rcc
     elif [ "$verdict" = done ] || [ "$verdict" = probe_ok ]; then V_RC=0
     else V_RC=4; fi
@@ -616,6 +626,7 @@ verdict_line() {
     V_LINE="board.sh $BOARD $name rc=$V_RC verdict=$verdict boot=$boot $ROW boot_verdict=$bv result=$result resets=$resets record=$recf back_after=${ba}s"
     # what the run could not measure, its own outcome beside the verdict (kind GLMARK2)
     if [ -n "${unsup:-}" ] && [ "$unsup" != absent ]; then V_LINE+=" unsupported=$unsup"; fi
+    if [ "${lost:-0}" -gt 0 ] 2>/dev/null; then V_LINE+=" lost=$lost"; fi
     if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-tftp ]; then V_LINE+=" tftp=$tftp uptime=${up:-?}s"; fi
     if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-mmc ]; then V_LINE+=" uptime=${up:-?}s"; fi
     if [ "$ROW" = DEV ]; then V_LINE+=" (kexec-dev: a development run, never a row)"; fi
@@ -1895,7 +1906,10 @@ cmd_tally() {
     mapfile -t cons < <(consoles_with_deqp "${runs[@]}")
     [ ${#cons[@]} -gt 0 ] || { echo "== no dEQP lines in these consoles"; return 0; }
     echo "== per record (deqp-uart-tally.py)"
-    for c in "${cons[@]}"; do python3 "$HERE/cts/deqp-uart-tally.py" "$c" | head -1; done
+    for c in "${cons[@]}"; do
+        # the verdict line, and (a capture that lost lines) the "Lost in capture" lines after it
+        python3 "$HERE/cts/deqp-uart-tally.py" "$c" | sed '/^group /,$d'
+    done
     echo "== recoveries per record (the OSAL's diag line; GPU reset lines)"
     for c in "${cons[@]}"; do
         rv=$(grep -ao 'recoveries: [0-9]*' "$c" | tail -1)
