@@ -176,6 +176,7 @@ struct gl_renderbuffer {
 	struct osal_gpu_mem mem;  /* colour formats only */
 	bool     external;        /* storage belongs to an EGLImage: the image frees it once unused */
 	bool     orphan;          /* as gl_texture.orphan */
+	uint8_t  samples;         /* GL_RENDERBUFFER_SAMPLES: 0, or 1 for one-sample storage (ES 3.0) */
 	uint32_t serial;      /* as gl_texture.serial */
 	uint32_t storage_gen; /* as gl_texture.storage_gen */
 };
