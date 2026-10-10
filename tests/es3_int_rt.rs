@@ -172,6 +172,13 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
         }
     });
+    /* What an earlier test left recorded and unflushed (a pending clear: the
+     * clear checks end on the default framebuffer) is settled here, under the
+     * previous test's mask, before this test's draws are counted; else it
+     * reaches the back end at this test's glFinish, in whatever order the
+     * threads took the lock. */
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
     DRAWS.lock().unwrap().clear();
     backend::HOST_INTEGER_RT_FORMATS.store(0, Ordering::Relaxed);
     drain_errors();
@@ -418,6 +425,24 @@ mod es3 {
         assert_eq!(err(), GL_INVALID_OPERATION, "the draw is refused when it would reach the back end");
         assert!(DRAWS.lock().unwrap().iter().all(|d| !d.2), "nothing was handed to the back end to store");
         release(fb, &[rb]);
+    }
+
+    /// A clear one test leaves pending is not counted against the next: the
+    /// refusal test failed whenever the clear checks (which end on a pending
+    /// clear of the default framebuffer) took the lock just before it.
+    #[test]
+    fn a_test_starts_with_nothing_pending() {
+        let g = context();
+        let fv: [GLfloat; 4] = [0.0; 4];
+        // SAFETY: four values; plain GL call.
+        unsafe { glClearBufferfv(GL_COLOR, 0, fv.as_ptr()) };
+        assert_eq!(err(), GL_NO_ERROR);
+        drop(g);
+        let _g = context();
+        // SAFETY: plain GL call.
+        unsafe { glFinish() };
+        let draws = DRAWS.lock().unwrap().clone();
+        assert_eq!(draws, [], "the previous holder's clear reached this one's back end");
     }
 
     /* ---- glClearBuffer and glReadPixels ---------------------------------- */
