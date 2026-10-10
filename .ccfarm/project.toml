@@ -134,7 +134,10 @@ tools = [
   # No version requirement: Mesa pins none, and ccfarm reads a requirement
   # off the check's output (nothing printed = missing on every node).
   { name = "python3-pyyaml", check = "python3 -c 'import yaml; print(yaml.__version__)'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML for the v3d generated-file row of the gate)" },
-  { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
+  # The table was made with 16.4.0, and 16.2.0 (Ubuntu 26.04) gives byte-identical
+  # SPIR-V for every run that makes it (2554 runs, 32 of them glslang refusals on both,
+  # measured 2026-10-11 on system76 against Lepton), so 16.2 is the measured floor.
+  { name = "glslangValidator", version = ">=16.2", check = "glslangValidator --version", install = "distro package glslang-tools / glslang (16.2.0 and 16.4.0 make the same SPIR-V for the whole table; a version below 16.2 is unmeasured)" },
   # The check is clang-sys's own run-time search (clang-sys 1.9.1
   # build/common.rs search_libclang_directories): LIBCLANG_PATH alone when set,
   # else `llvm-config --prefix` bin/lib/lib64, LD_LIBRARY_PATH, LIBRARY_PATH and
