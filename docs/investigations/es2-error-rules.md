@@ -348,3 +348,24 @@ proposed.
   dEQP-GLES2, so prove it with host tests, not with a CTS delta.
 - Not verified by this audit: the ES 2.0.25 section numbers in the "rule"
   columns marked `?`; the runtime result of any row (nothing was run).
+
+## Status
+
+Item `es2-error-rules` (vertex part). Pinned by `tests/es2_error_rules_vertex.rs`,
+whose header has the per-row reasons.
+
+| Rows | State | File |
+|---|---|---|
+| 6 | done: `GL_INT` and `GL_UNSIGNED_INT` are now refused under `report-es2` (the other four types already were). `GL_HALF_FLOAT_OES` stays refused: `GL_OES_vertex_half_float` is not advertised and the draw path cannot convert it | `src/gl/vertex.rs` |
+| 9 | done at the base commit (`get_attrib_int`); now covered by a test | `src/gl/vertex.rs` |
+| 7, 8, 10 | decided: no change (entry points, no enum; see "Open questions") | - |
+| 13 | decided: no change (`GL_OES_vertex_array_object` is advertised) | `src/gl/vao.rs` |
+
+Still open, no item yet (hardening; host `negative_api` is already clean):
+
+- buffer rows (1-5): `src/gl/buffer.rs`
+- framebuffer rows: `src/gl/framebuffer.rs`
+- state rows (14-22 and the state-query rows): `src/gl/state.rs`, `src/gl/program.rs` (row 21)
+- draw rows (8's draw calls, 11, 12): `src/gl/draw.rs`
+- texture rows: `src/gl/texture.rs`
+- the shared `src/gl/es2_rules.rs` of the proposal, if wanted once more than one file needs the same predicate
