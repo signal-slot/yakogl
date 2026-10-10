@@ -713,6 +713,11 @@ pub const fn nte_descriptor_samp_ctrl1(i: u32) -> u32 {
     0x00016e00 + 4 * i
 }
 pub const GC_SAMP_CTRL1_UNK1: u32 = 0x00000002;
+/// The sampler decodes sRGB red, green and blue to linear before it filters
+/// (`VIVS_NTE_DESCRIPTOR_SAMP_CTRL1_SRGB`, Mesa 26.2.1
+/// src/etnaviv/hw/state_3d.xml.h:1984; set for an sRGB view,
+/// etnaviv_texture_desc.c:246-247).
+pub const GC_SAMP_CTRL1_SRGB: u32 = 0x00000004;
 pub const fn nte_descriptor_samp_lod_minmax(i: u32) -> u32 {
     0x00017000 + 4 * i
 }

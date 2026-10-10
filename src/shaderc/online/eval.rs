@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! A reference evaluator for [`ir::Module`], for tests only.
+//! A reference evaluator for [`ir::Module`]: the tests' oracle, and the
+//! transform-feedback capture's vertex shader (`docs/es3-transform-feedback.md`
+//! section 4.2), which runs it in the product.
 //!
 //! The lowering's control-flow rewrites -- early returns turned into a slot
 //! and an `else`, a `return` inside a loop turned into a flag and a `break`
@@ -13,15 +15,30 @@
 //! It is deliberately small and strict: every lane is a `u32` bit pattern
 //! (a float's bits, an int, or a bool as all-ones / zero, as `ir.md`
 //! decision 4 has it), and anything it does not implement -- textures,
-//! derivatives, an indexed local, an input nobody supplied, a loop that does
-//! not end -- stops the run and is returned as an `Err` naming it, never a
-//! value a caller could mistake for an answer. (An `Err`, not a panic: the
-//! workspace builds with `panic = "abort"`, and `yakogl-tools online-eval`
-//! has to report "unmeasured" and carry on.) A slot that is read before any
-//! store holds [`UNSET`], which no computation here produces by accident.
+//! derivatives, an input nobody supplied, a loop that does not end -- stops
+//! the run and is returned as an `Err` naming it, never a value a caller
+//! could mistake for an answer. (An `Err`, not a panic: the workspace builds
+//! with `panic = "abort"`, and `yakogl-tools online-eval` has to report
+//! "unmeasured" and carry on.) A slot that is read before any store holds
+//! [`UNSET`], which no computation here produces by accident.
+//!
+//! Two callers, one machine:
+//!
+//! - the host oracles ([`run`], [`run_with_textures`], [`run_with_trig_error`]:
+//!   `host-test` only) collect every store into an [`Outcome`], use the
+//!   host's `std` float functions, sample [`Texture`] models and stop at
+//!   section 5.9's undefined results, so that an invented value never
+//!   becomes a reference;
+//! - the capture ([`run_in`]: every build but `report-es2`) lends the
+//!   working memory (a [`Frame`] in the compile scratch), takes the stores
+//!   through a [`Sink`], computes with [`super::fmath`] (no libm in the
+//!   product) and, being a GL draw rather than an oracle, gives an undefined
+//!   result a value as the hardware would (GLSL ES 3.00 section 5.9:
+//!   undefined, not an error).
 
 use super::ir::{self, AluOp, IoSlot, Module, Node, Op, Range, Src};
-use std::vec::Vec;
+#[cfg(any(test, feature = "host-test"))]
+use std::{string::String, vec::Vec};
 
 /// What a slot holds before its first store: a quiet NaN with a payload no
 /// arithmetic produces, so a read of an unwritten slot shows up in the
@@ -33,7 +50,83 @@ pub const UNSET: u32 = 0x7fc0_dead;
 /// every test loop is far below this.
 const MAX_ITERATIONS: u32 = 10_000;
 
+/// The same bound for the capture: ES 3.00 lifts Appendix A, so a `while`
+/// loop may run longer than any test's; still finite, so a shader that does
+/// not terminate refuses its draw instead of hanging the GL call.
+const MAX_ITERATIONS_CAPTURE: u32 = 1 << 20;
+
+/// Bytes a [`Fault`] keeps of its text.
+const FAULT_BYTES: usize = 112;
+
+/// Why a run stopped, as text, without a heap: the first [`FAULT_BYTES`]
+/// bytes of the message (cut at a character boundary).
+#[derive(Clone, Copy)]
+pub struct Fault {
+    buf: [u8; FAULT_BYTES],
+    len: u8,
+}
+
+impl Fault {
+    /// The first [`FAULT_BYTES`] bytes of the message.
+    pub fn new(args: core::fmt::Arguments) -> Fault {
+        let mut f = Fault { buf: [0; FAULT_BYTES], len: 0 };
+        let _ = core::fmt::write(&mut f, args); /* a full buffer only cuts the text */
+        f
+    }
+
+    /// The message.
+    pub fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.buf[..usize::from(self.len)]).unwrap_or("?")
+    }
+}
+
+impl core::fmt::Write for Fault {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for ch in s.chars() {
+            let mut b = [0u8; 4];
+            let e = ch.encode_utf8(&mut b).as_bytes();
+            let at = usize::from(self.len);
+            if at + e.len() > FAULT_BYTES {
+                return Err(core::fmt::Error);
+            }
+            self.buf[at..at + e.len()].copy_from_slice(e);
+            self.len += e.len() as u8;
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::Display for Fault {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl core::fmt::Debug for Fault {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+/// Where a run's output stores go, in store order.
+pub trait Sink {
+    /// `slot` was stored `value`; `defined` says which lanes some
+    /// instruction defined (see [`Outcome::defined`]).
+    fn store(&mut self, slot: IoSlot, value: [u32; 4], defined: [bool; 4]);
+}
+
+/// The working memory of one run, lent by the caller: a value and its
+/// defined lanes per instruction (`m.instrs.len()` entries) and per local
+/// (`m.locals.len()`). [`run_in`] resets it.
+pub struct Frame<'f> {
+    pub values: &'f mut [[u32; 4]],
+    pub def: &'f mut [[bool; 4]],
+    pub locals: &'f mut [[u32; 4]],
+    pub ldef: &'f mut [[bool; 4]],
+}
+
 /// What running a module produced.
+#[cfg(any(test, feature = "host-test"))]
 #[derive(Debug, Default)]
 pub struct Outcome {
     /// Every output stored, in store order; [`Outcome::output`] reads the
@@ -51,6 +144,15 @@ pub struct Outcome {
     pub discarded: bool,
 }
 
+#[cfg(any(test, feature = "host-test"))]
+impl Sink for Outcome {
+    fn store(&mut self, slot: IoSlot, value: [u32; 4], defined: [bool; 4]) {
+        self.stores.push((slot, value));
+        self.defined.push(defined);
+    }
+}
+
+#[cfg(any(test, feature = "host-test"))]
 impl Outcome {
     /// The last value stored to `slot`, or `None` if nothing was.
     pub fn output(&self, slot: IoSlot) -> Option<[u32; 4]> {
@@ -79,6 +181,7 @@ pub struct Inputs<'x> {
 /// minification filter, as the V3D interpreter reads it (one model,
 /// [`super::texref`]). Every value must be exact in f16 (an RGBA16F
 /// texture, so a GPU returns it unrounded) and finite.
+#[cfg(any(test, feature = "host-test"))]
 pub use super::texref::Texture;
 
 /// Four float lanes as bit patterns.
@@ -95,27 +198,33 @@ enum Flow {
     Exit,
 }
 
-struct Machine<'m, 'x> {
+struct Machine<'m, 'x, 'f> {
     m: &'m Module<'m>,
     input: &'x Inputs<'x>,
-    values: Vec<[u32; 4]>,
-    locals: Vec<[u32; 4]>,
+    values: &'f mut [[u32; 4]],
+    locals: &'f mut [[u32; 4]],
     /// Beside `values` / `locals`: which lanes an instruction defined.
-    def: Vec<[bool; 4]>,
-    ldef: Vec<[bool; 4]>,
-    out: Outcome,
+    def: &'f mut [[bool; 4]],
+    ldef: &'f mut [[bool; 4]],
+    out: &'f mut dyn Sink,
+    discarded: bool,
     /// What stopped the run, when the evaluator could not go on.
-    fault: Option<String>,
+    fault: Option<Fault>,
     /// By sampler binding (`Op::Tex::sampler`); empty for [`run`].
+    #[cfg(any(test, feature = "host-test"))]
     textures: &'x [Texture],
     /// [`run_with_trig_error`]'s shift of every sin/cos result, relative
     /// to max(1, |x|); 0 for the exact functions.
     trig: f32,
+    /// The oracle's rules (the host's float functions, section 5.9's
+    /// undefined results stop the run), or the capture's ([`run_in`]).
+    oracle: bool,
 }
 
 /// Run `m` once with `input`. `Err` names what the evaluator does not
 /// implement, or what the inputs did not supply. A texture look-up stops
 /// the run; [`run_with_textures`] supplies textures.
+#[cfg(any(test, feature = "host-test"))]
 pub fn run(m: &Module<'_>, input: &Inputs<'_>) -> Result<Outcome, String> {
     run_with_textures(m, input, &[])
 }
@@ -128,6 +237,7 @@ pub fn run(m: &Module<'_>, input: &Inputs<'_>) -> Result<Outcome, String> {
 /// look-ups of a float sampler are evaluated; the level is dEQP's for an
 /// explicit level of detail ([`super::texref`]), and an implicit one (the
 /// derivatives) is read only on a texture of one level.
+#[cfg(any(test, feature = "host-test"))]
 pub fn run_with_textures(m: &Module<'_>, input: &Inputs<'_>, textures: &[Texture]) -> Result<Outcome, String> {
     run_with_trig_error(m, input, textures, 0.0)
 }
@@ -139,6 +249,7 @@ pub fn run_with_textures(m: &Module<'_>, input: &Inputs<'_>, textures: &[Texture
 /// language fixes, and a harness cannot hold a back end to it (Qt Quick
 /// 3D's `fract(sin(dot(co, k)) * 43758.5)` hash: an f32 argument reduction's
 /// 5e-6 moves it by up to 0.77).
+#[cfg(any(test, feature = "host-test"))]
 pub fn run_with_trig_error(
     m: &Module<'_>,
     input: &Inputs<'_>,
@@ -166,33 +277,80 @@ pub fn run_with_trig_error(
             }
         }
     }
+    let mut values = std::vec![[UNSET; 4]; m.instrs.len()];
+    let mut locals = std::vec![[UNSET; 4]; m.locals.len()];
+    let mut def = std::vec![[false; 4]; m.instrs.len()];
+    let mut ldef = std::vec![[false; 4]; m.locals.len()];
+    let mut out = Outcome::default();
     let mut mc = Machine {
         m,
         input,
         textures,
-        values: std::vec![[UNSET; 4]; m.instrs.len()],
-        locals: std::vec![[UNSET; 4]; m.locals.len()],
-        def: std::vec![[false; 4]; m.instrs.len()],
-        ldef: std::vec![[false; 4]; m.locals.len()],
-        out: Outcome::default(),
+        values: &mut values,
+        locals: &mut locals,
+        def: &mut def,
+        ldef: &mut ldef,
+        out: &mut out,
+        discarded: false,
         fault: None,
         trig,
+        oracle: true,
+    };
+    mc.range(m.body);
+    let (fault, discarded) = (mc.fault, mc.discarded);
+    match fault {
+        Some(why) => Err(why.as_str().into()),
+        None => {
+            out.discarded = discarded;
+            Ok(out)
+        }
+    }
+}
+
+/// Run `m` once for the transform-feedback capture: `frame` is the working
+/// memory (reset here; at least `m.instrs.len()` and `m.locals.len()`
+/// entries), the stores go to `out`. The capture's rules (see the module
+/// note): `fmath`'s functions, an undefined result is a value, no textures.
+/// `Ok(discarded)`, or why the run stopped.
+pub fn run_in(m: &Module<'_>, input: &Inputs<'_>, frame: Frame<'_>, out: &mut dyn Sink) -> Result<bool, Fault> {
+    let (ni, nl) = (m.instrs.len(), m.locals.len());
+    if frame.values.len() < ni || frame.def.len() < ni || frame.locals.len() < nl || frame.ldef.len() < nl {
+        return Err(Fault::new(format_args!("the frame is smaller than the module")));
+    }
+    frame.values[..ni].fill([UNSET; 4]);
+    frame.def[..ni].fill([false; 4]);
+    frame.locals[..nl].fill([UNSET; 4]);
+    frame.ldef[..nl].fill([false; 4]);
+    let mut mc = Machine {
+        m,
+        input,
+        #[cfg(any(test, feature = "host-test"))]
+        textures: &[],
+        values: frame.values,
+        locals: frame.locals,
+        def: frame.def,
+        ldef: frame.ldef,
+        out,
+        discarded: false,
+        fault: None,
+        trig: 0.0,
+        oracle: false,
     };
     mc.range(m.body);
     match mc.fault {
         Some(why) => Err(why),
-        None => Ok(mc.out),
+        None => Ok(mc.discarded),
     }
 }
 
-impl Machine<'_, '_> {
+impl Machine<'_, '_, '_> {
     fn range(&mut self, r: Range) -> Flow {
         for &n in self.m.nodes_of(r) {
             let f = match n {
                 Node::Instr(id) => self.instr(id),
                 Node::If { cond, then_, else_ } => {
                     if !self.read_def(cond)[0] {
-                        return self.stop("unset lane: a branch condition no instruction defined".into());
+                        return self.stop(format_args!("unset lane: a branch condition no instruction defined"));
                     }
                     if self.read(cond)[0] != 0 {
                         self.range(then_)
@@ -202,11 +360,11 @@ impl Machine<'_, '_> {
                 }
                 Node::Loop { body } => {
                     let mut k = 0;
+                    let bound = if self.oracle { MAX_ITERATIONS } else { MAX_ITERATIONS_CAPTURE };
                     loop {
                         k += 1;
-                        if k > MAX_ITERATIONS {
-                            break self
-                                .stop(std::format!("a loop ran {MAX_ITERATIONS} iterations: it does not terminate"));
+                        if k > bound {
+                            break self.stop(format_args!("a loop ran {bound} iterations: it does not terminate"));
                         }
                         match self.range(body) {
                             Flow::Break => break Flow::Normal,
@@ -235,9 +393,9 @@ impl Machine<'_, '_> {
     }
 
     /// Record why the run cannot go on, and end it.
-    fn stop(&mut self, why: String) -> Flow {
+    fn stop(&mut self, why: core::fmt::Arguments) -> Flow {
         if self.fault.is_none() {
-            self.fault = Some(why);
+            self.fault = Some(Fault::new(why));
         }
         Flow::Exit
     }
@@ -268,32 +426,31 @@ impl Machine<'_, '_> {
             Op::ConstBool(v) => (v.map(bits_of_bool), all),
             Op::Alu(op, srcs) => match self.alu(op, srcs) {
                 Ok(vd) => vd,
-                Err(why) => return self.stop(why.into()),
+                Err(why) => return self.stop(format_args!("{why}")),
             },
             Op::LoadUniform { dword_off, comps } => match self.uniform_at(dword_off as usize, comps) {
                 Some(v) => (v, Self::first(comps)),
-                None => return self.stop(std::format!("uniform dwords {dword_off}+{comps} are past the block")),
+                None => return self.stop(format_args!("uniform dwords {dword_off}+{comps} are past the block")),
             },
             Op::LoadUniformIdx { base_dw, stride_dw, len, index, comps } => {
                 if !self.read_def(index)[0] {
-                    return self.stop("unset lane: the index of an indexed uniform load".into());
+                    return self.stop(format_args!("unset lane: the index of an indexed uniform load"));
                 }
                 /* Clamped, as ir.md states. */
                 let i = (self.read(index)[0] as i32).clamp(0, i32::from(len) - 1) as usize;
                 let at = base_dw as usize + i * stride_dw as usize;
                 match self.uniform_at(at, comps) {
                     Some(v) => (v, Self::first(comps)),
-                    None => return self.stop(std::format!("uniform dwords {at}+{comps} are past the block")),
+                    None => return self.stop(format_args!("uniform dwords {at}+{comps} are past the block")),
                 }
             }
             Op::LoadInput { slot, .. } => match self.input.io.iter().find(|(s, _)| *s == slot) {
                 Some((_, v)) => (*v, all),
-                None => return self.stop(std::format!("the module reads input {slot:?}, which was not supplied")),
+                None => return self.stop(format_args!("the module reads input {slot:?}, which was not supplied")),
             },
             Op::StoreOutput { slot, src } => {
                 let (v, d) = (self.read(src), self.read_def(src));
-                self.out.stores.push((slot, v));
-                self.out.defined.push(d);
+                self.out.store(slot, v, d);
                 (v, d)
             }
             Op::LoadLocal { local, index: None, comps } => {
@@ -313,19 +470,21 @@ impl Machine<'_, '_> {
                 (v, d)
             }
             Op::LoadLocal { index: Some(_), .. } | Op::StoreLocal { index: Some(_), .. } => {
-                return self.stop("the evaluator has no indexed local".into())
+                return self.stop(format_args!("the evaluator has no indexed local"))
             }
+            #[cfg(any(test, feature = "host-test"))]
             Op::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset } if !self.textures.is_empty() => {
                 let cube = dim == ir::TexDim::Cube;
                 if !(dim == ir::TexDim::D2 || cube) || shadow || ret != ir::ScalarType::F32 || offset.is_some() {
-                    return self.stop("the evaluator samples only a float 2D or cube texture, without offsets".into());
+                    return self
+                        .stop(format_args!("the evaluator samples only a float 2D or cube texture, without offsets"));
                 }
                 if cube && proj {
-                    return self.stop("a projected cube look-up".into());
+                    return self.stop(format_args!("a projected cube look-up"));
                 }
                 let cd = self.read_def(coord);
                 if !(cd[0] && cd[1] && (!cube || cd[2]) && (!proj || cd[3])) {
-                    return self.stop("unset lane: a texture coordinate no instruction defined".into());
+                    return self.stop(format_args!("unset lane: a texture coordinate no instruction defined"));
                 }
                 /* An implicit level of detail, with or without a bias, is
                  * the derivatives': texref reads it only on one level. */
@@ -333,36 +492,37 @@ impl Machine<'_, '_> {
                     ir::TexLod::Implicit | ir::TexLod::Bias(_) => super::texref::Lod::Implicit,
                     ir::TexLod::Lod(l) => {
                         if !self.read_def(l)[0] {
-                            return self.stop("unset lane: a level of detail no instruction defined".into());
+                            return self.stop(format_args!("unset lane: a level of detail no instruction defined"));
                         }
                         super::texref::Lod::Explicit(f32::from_bits(self.read(l)[0]))
                     }
-                    ir::TexLod::Grad { .. } => return self.stop("a look-up with explicit gradients".into()),
+                    ir::TexLod::Grad { .. } => return self.stop(format_args!("a look-up with explicit gradients")),
                     /* integer coordinates and level, no filtering: not a
                      * normalised look-up, so never read as one */
-                    ir::TexLod::Fetch(_) => return self.stop("a texelFetch (integer coordinates)".into()),
+                    ir::TexLod::Fetch(_) => return self.stop(format_args!("a texelFetch (integer coordinates)")),
                 };
                 match self.tex(sampler, self.read(coord), proj, cube, lod) {
                     Ok(v) => (v, all),
-                    Err(why) => return self.stop(why),
+                    Err(why) => return self.stop(format_args!("{why}")),
                 }
             }
             /* textureSize of a level (GLSL ES 3.00 8.8: the dimensions of
              * level lod); a cube's is one face's. */
+            #[cfg(any(test, feature = "host-test"))]
             Op::TexSize { sampler, dim: ir::TexDim::D2 | ir::TexDim::Cube, lod } if !self.textures.is_empty() => {
                 if !self.read_def(lod)[0] {
-                    return self.stop("unset lane: a textureSize level no instruction defined".into());
+                    return self.stop(format_args!("unset lane: a textureSize level no instruction defined"));
                 }
                 let l = self.read(lod)[0];
                 match self.textures.get(usize::from(sampler)).map(|t| t.levels.get(l as usize)) {
                     Some(Some(lv)) => ([lv.width, lv.height, 0, 0], Self::first(2)),
-                    None => return self.stop(std::format!("no texture at sampler binding {sampler}")),
-                    Some(None) => return self.stop(std::format!("textureSize of level {l}: the texture has fewer")),
+                    None => return self.stop(format_args!("no texture at sampler binding {sampler}")),
+                    Some(None) => return self.stop(format_args!("textureSize of level {l}: the texture has fewer")),
                 }
             }
-            Op::Tex { .. } | Op::TexSize { .. } => return self.stop("the evaluator has no textures".into()),
+            Op::Tex { .. } | Op::TexSize { .. } => return self.stop(format_args!("the evaluator has no textures")),
             Op::Discard => {
-                self.out.discarded = true;
+                self.discarded = true;
                 return Flow::Exit;
             }
         };
@@ -371,6 +531,7 @@ impl Machine<'_, '_> {
         Flow::Normal
     }
 
+    #[cfg(any(test, feature = "host-test"))]
     /// One NEAREST look-up with CLAMP_TO_EDGE, GL ES 2.0.25 sections 3.7.6
     /// and 3.7.7. Both filters NEAREST always read the level zero array
     /// (3.7.7 for minification; 3.7.8: magnification "behaves exactly as
@@ -411,6 +572,35 @@ impl Machine<'_, '_> {
             sample_2d(t, f(c[0]) / q, f(c[1]) / q, lod)
         };
         v.map(|v| v.map(f32::to_bits)).map_err(why)
+    }
+
+    /// A float function of one operand: the host's `std` for the oracle
+    /// (its pins were taken with it), [`super::fmath`] for the capture.
+    fn f1(&self, op: AluOp, x: f32) -> f32 {
+        use super::fmath;
+        #[cfg(any(test, feature = "host-test"))]
+        if self.oracle {
+            return match op {
+                AluOp::Fsqrt => x.sqrt(),
+                AluOp::Fexp2 => x.exp2(),
+                AluOp::Flog2 => x.log2(),
+                AluOp::Fsin => x.sin(),
+                AluOp::Fcos => x.cos(),
+                AluOp::Ffloor => x.floor(),
+                AluOp::Fceil => x.ceil(),
+                _ => x.trunc(),
+            };
+        }
+        match op {
+            AluOp::Fsqrt => fmath::sqrt(x),
+            AluOp::Fexp2 => fmath::exp2(x),
+            AluOp::Flog2 => fmath::log2(x),
+            AluOp::Fsin => fmath::sin(x),
+            AluOp::Fcos => fmath::cos(x),
+            AluOp::Ffloor => fmath::floor(x),
+            AluOp::Fceil => fmath::ceil(x),
+            _ => fmath::trunc(x),
+        }
     }
 
     /// The value, and which of its lanes are defined: a lane-wise operation
@@ -458,7 +648,9 @@ impl Machine<'_, '_> {
          * them made 8 Qt Quick 3D particle pairs unmeasured (2026-09-26).
          * The spare lanes are then computed without the undefined operation
          * (UNSET), so nothing panics on them. */
-        let on_defined = |v: [u32; 4], bad: &dyn Fn(u32) -> bool| (0..4).any(|k| d[k] && bad(v[k]));
+        /* the capture gives them the value computed below (section 5.9:
+         * undefined, not an error), as the hardware would */
+        let on_defined = |v: [u32; 4], bad: &dyn Fn(u32) -> bool| self.oracle && (0..4).any(|k| d[k] && bad(v[k]));
         let v = match op {
             Fadd => fl(&|x, y, _| x + y),
             Fmul => fl(&|x, y, _| x * y),
@@ -477,21 +669,15 @@ impl Machine<'_, '_> {
                 }
             }),
             Frcp => fl(&|x, _, _| 1.0 / x),
-            Frsq => fl(&|x, _, _| 1.0 / x.sqrt()),
-            Fsqrt => fl(&|x, _, _| x.sqrt()),
-            Fexp2 => fl(&|x, _, _| x.exp2()),
-            Flog2 => fl(&|x, _, _| x.log2()),
+            Frsq => fl(&|x, _, _| 1.0 / self.f1(Fsqrt, x)),
+            Fsqrt | Fexp2 | Flog2 => fl(&|x, _, _| self.f1(op, x)),
             /* the exact functions unless a harness asks for the shift
              * (sin(-0.0) + 0.0 would be +0.0: the default path must stay
              * bit for bit what it was) */
-            Fsin if self.trig == 0.0 => fl(&|x, _, _| x.sin()),
-            Fcos if self.trig == 0.0 => fl(&|x, _, _| x.cos()),
-            Fsin => fl(&|x, _, _| x.sin() + self.trig * x.abs().max(1.0)),
-            Fcos => fl(&|x, _, _| x.cos() + self.trig * x.abs().max(1.0)),
-            Ffloor => fl(&|x, _, _| x.floor()),
-            Fceil => fl(&|x, _, _| x.ceil()),
-            Ftrunc => fl(&|x, _, _| x.trunc()),
-            Ffract => fl(&|x, _, _| x - x.floor()),
+            Fsin | Fcos if self.trig == 0.0 => fl(&|x, _, _| self.f1(op, x)),
+            Fsin | Fcos => fl(&|x, _, _| self.f1(op, x) + self.trig * x.abs().max(1.0)),
+            Ffloor | Fceil | Ftrunc => fl(&|x, _, _| self.f1(op, x)),
+            Ffract => fl(&|x, _, _| x - self.f1(Ffloor, x)),
             Fddx | Fddy => return Err("the evaluator has no derivatives"),
             Fdot2 => dot(2),
             Fdot3 => dot(3),
@@ -569,6 +755,7 @@ impl Machine<'_, '_> {
 }
 
 /// `x` is finite and an f16 holds it exactly.
+#[cfg(any(test, feature = "host-test"))]
 fn f16_exact(x: f32) -> bool {
     let a = x.abs();
     if x == 0.0 {

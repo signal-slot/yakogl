@@ -17,6 +17,7 @@ pub mod types;
 
 pub mod context;
 
+pub mod blit;
 pub mod buffer;
 pub mod draw;
 pub mod egl;
@@ -28,9 +29,14 @@ pub mod names;
 pub mod native_cube;
 pub mod program;
 pub mod shader;
+pub mod srgb;
 pub mod state;
 pub mod texture;
 pub mod tf;
+/// The transform-feedback capture: the vertex shader evaluated on the CPU
+/// (`docs/es3-transform-feedback.md` section 4). Only where the evaluator is.
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+mod tf_capture;
 pub mod vao;
 pub mod vertex;
 
@@ -39,6 +45,10 @@ mod es3_format_tests;
 #[cfg(test)]
 mod es3_level_tests;
 #[cfg(test)]
+mod es3_pbo_tests;
+#[cfg(test)]
 mod pool_tests;
+#[cfg(all(test, feature = "shaderc-online", not(feature = "report-es2")))]
+mod tf_capture_tests;
 #[cfg(test)]
 mod tf_tests;

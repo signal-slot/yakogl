@@ -217,10 +217,11 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN will be counted on the CPU by the
- * transform feedback capture once it is built (docs/HANDOFF.md, open work 4,
- * tf-capture): `add_primitives_written` is the entry it adds to the active
- * query through.
+ * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted on the CPU by the
+ * transform feedback capture (`tf.rs`, `tf_capture.rs`), which adds each
+ * captured draw's primitives to the active query through
+ * `add_primitives_written`; the result is available as soon as glEndQuery
+ * returns.
  *
  * GL_ANY_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED_CONSERVATIVE are counted by
  * the backend (docs/es3-occlusion-query.md): each (context, name) owns one
@@ -393,7 +394,7 @@ pub(super) fn reset_context_queries(index: u8) {
 
 /// A captured draw wrote `n` primitives: the active
 /// GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN query counts them.
-#[allow(dead_code)] // called by the capture (docs/HANDOFF.md, open work 4, tf-capture)
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
 pub(super) fn add_primitives_written(c: &GlContext, n: u32) {
     if let Some(h) = active_query(c.index, GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) {
         let q = &mut qstate(c.index)[h];
@@ -576,10 +577,8 @@ pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: 
 }
 
 /* ------------------------------------------------------ transform feedback --
- * The objects, varyings, binding points and begin/end rules are `tf.rs`; these
- * are its entry points. Capture itself is not built (docs/HANDOFF.md, open
- * work 4, tf-capture): a draw
- * while a capture is active is refused loudly (GL_INVALID_OPERATION).
+ * The objects, varyings, binding points and begin/end rules are `tf.rs`, the
+ * capture `tf_capture.rs`; these are their entry points.
  */
 
 #[no_mangle]
@@ -1298,11 +1297,17 @@ pub unsafe extern "C" fn glBindBufferRange(
 #[no_mangle]
 pub unsafe extern "C" fn glGetBufferParameteri64v(target: GLenum, pname: GLenum, params: *mut GLint64) {
     gl_trace!(glGetBufferParameteri64v);
-    let mut v: GLint = 0;
-    // SAFETY: &mut v is one valid GLint; params is null or valid for one
-    // GLint64 (GL contract), not necessarily aligned.
-    super::buffer::glGetBufferParameteriv(target, pname, &mut v);
-    util::app_put(params, v as GLint64);
+    let Some(c) = context::current() else { return };
+    if params.is_null() {
+        return;
+    }
+    /* the value whole (the 32-bit query clamps it), and nothing written on
+     * an error: it went through glGetBufferParameteriv and wrote 0 then */
+    if let Some(v) = super::buffer::buffer_parameter(c, target, pname, "glGetBufferParameteri64v") {
+        // SAFETY: params is valid for one GLint64 (GL contract), not
+        // necessarily aligned.
+        util::app_put(params, v as GLint64);
+    }
 }
 
 /* ---------------------------------------------------- glClearBuffer* (4.2.3)
@@ -2904,9 +2909,13 @@ mod tests {
             crate::gl::buffer::glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &mut v32);
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &mut v64);
             assert_eq!((v32, v64), (64, 64));
-            /* the error path of the 32-bit form reaches the caller unchanged */
+            /* an error names the 64-bit query and leaves `params` alone (it
+             * wrote 0 until 2026-10-10) */
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_TEXTURE_WRAP_S, &mut v64);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
+            assert_eq!(v64, 64, "params untouched on an error");
+            glGetBufferParameteri64v(GL_TEXTURE_2D, GL_BUFFER_SIZE, &mut v64);
+            assert_eq!((gl.error(), v64), (GL_INVALID_ENUM, 64));
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, core::ptr::null_mut());
         }
         assert_eq!(gl.error(), GL_NO_ERROR);

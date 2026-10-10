@@ -133,7 +133,7 @@ mod online {
         let (gl, _be) = fresh();
         assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS), 64);
         assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS), 4);
-        assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 4);
+        assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 64);
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
@@ -375,7 +375,6 @@ mod online {
             (&["arr[3]"], GL_INTERLEAVED_ATTRIBS, "arr[3]"),
             (&["v", "v"], GL_INTERLEAVED_ATTRIBS, "Transform feedback varying v specified more than once."),
             (&["arr[0]", "arr[0]"], GL_SEPARATE_ATTRIBS, "specified more than once"),
-            (&["arr"], GL_SEPARATE_ATTRIBS, "arr exceeds MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS"),
         ];
         for (names, mode, needle) in cases {
             let (_, ok, log) = link_with(VS, names, *mode);
@@ -384,6 +383,9 @@ mod online {
         }
         /* separate: elements apart, each within 4 components; the same name again after is fine */
         let (_, ok, log) = link_with(VS, &["arr[0]", "arr[1]", "arr[2]", "v"], GL_SEPARATE_ATTRIBS);
+        assert!(ok, "{log}");
+        /* and a whole array (6 components) to one buffer: the separate limit is 64 */
+        let (_, ok, log) = link_with(VS, &["arr", "m"], GL_SEPARATE_ATTRIBS);
         assert!(ok, "{log}");
         #[cfg(not(feature = "gpu-vivante"))] // the GC7000 compiler refuses 16 vec4 varyings
         interleaved_limit();
@@ -544,7 +546,7 @@ mod online {
     }
 
     #[test]
-    fn draws_while_capturing_are_refused_and_the_rules_come_first() {
+    fn draws_while_capturing_meet_the_rules_first() {
         let (gl, _be) = fresh();
         ready(&["v"], GL_INTERLEAVED_ATTRIBS, 1);
         unsafe {
@@ -558,12 +560,10 @@ mod online {
             glDrawArrays(GL_POINTS, 0, 1000);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "does not fit the 1 KiB buffer");
             assert!(gl.logs().iter().any(|l| l.contains("too small")), "{:?}", gl.logs());
+            assert!(gl.draws().is_empty(), "nothing refused reached the back end");
             glDrawArrays(GL_POINTS, 0, 3);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION, "capture is not built yet");
-            assert!(gl.logs().iter().any(|l| l.contains("tf-capture")), "named in the log");
-            glDrawArraysInstanced(GL_POINTS, 0, 3, 2);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION);
-            assert!(gl.draws().is_empty(), "nothing reached the back end");
+            assert_eq!(gl.error(), GL_NO_ERROR, "captured (tf_capture_tests.rs has the bytes)");
+            assert_eq!(gl.draws().len(), 1, "and drawn");
             glPauseTransformFeedback();
             glDrawArrays(GL_TRIANGLES, 0, 3);
             assert_eq!(gl.error(), GL_NO_ERROR, "paused: an ordinary draw");

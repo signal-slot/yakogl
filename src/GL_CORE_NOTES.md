@@ -367,10 +367,13 @@ whether a context "will pass the required conformance tests for that API").
 Until 2026-09-29 it named ES 3 as well (review R-13). What an ES 3.0
 context lacks, each checked in the code:
 
-- `glBlitFramebuffer` is always `GL_INVALID_OPERATION` (`gl/framebuffer.rs`).
+- `glBlitFramebuffer` copies colour (`gl/blit.rs`, a CPU copy shared by the
+  back ends) but refuses a depth or stencil copy with `GL_INVALID_OPERATION`:
+  the back ends keep depth/stencil in buffers of their own with no CPU
+  write path.
 - Transform feedback: the limits are 64 / 4 / 4 (ES 3.0 table 6.34) outside
-  `report-es2`, where they stay 0; the state and errors are built, the
-  capture is not ("Transform feedback" below).
+  `report-es2`, where they stay 0; the capture runs the vertex shader on the
+  CPU and refuses one that samples a texture ("Transform feedback" below).
 - `GL_MAX_SAMPLES` is 1; ES 3.0 table 6.35 asks for at least 4.
 - A depth or stencil attachment of another size than the colour ones is
   `GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS` in both builds (`check_status`);
@@ -590,55 +593,39 @@ still stores and compares table slots.
   465 sites. The boundary form touches about 45 and leaves the draw path
   alone.
 
-## Transform feedback (state built, capture not)
+## Transform feedback
 
-**Built (`16ac8641`, `gl/tf.rs`; design `docs/es3-transform-feedback.md`):**
-the objects with their indexed bindings, the varyings resolved at link, the
+**Built:** the state (`16ac8641`, `gl/tf.rs`) and the capture (tf-capture,
+`gl/tf_capture.rs`); the design is `docs/es3-transform-feedback.md`. The
+objects with their indexed bindings, the varyings resolved at link, the
 begin/end/pause/resume rules and errors, the primitives-written query,
-rasterizer discard for draws and clears. A draw while a capture is active is
-refused with `GL_INVALID_OPERATION` and a log line naming tf-capture
-(`docs/HANDOFF.md`, open work 4),
-and the buffer is never written. The rest of this section is the design as it
-stood before; the "State first" bullet is done.
+rasterizer discard for draws and clears, and the data path: at a draw with a
+capture active and not paused the GL core lowers the linked vertex shader's
+kept source to IR again, runs it on the CPU for every vertex the draw
+captures (`shaderc/online/eval.rs` `run_in`, its float functions from
+`shaderc/online/fmath.rs`), assembles the primitives into Begin's type
+(strips, loops and fans decomposed, last vertex provoking), writes the
+captured varyings into the bound buffers (copy on write under a pending
+kick, flushed), advances each binding and counts
+`TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN`. The draw then goes to the GPU as it
+would without the capture, or not at all under `GL_RASTERIZER_DISCARD`. No
+back end sees the capture: it is the same on the three GPUs.
 
-Before `16ac8641` only the names and the binding existed (`gl/es3.rs`): every
-`MAX_TRANSFORM_FEEDBACK_*` is 0, `glBeginTransformFeedback` is
-`GL_INVALID_OPERATION`, an INTERLEAVED varyings request fails the next link.
-What that costs, from the GLES3 host run at 01de3104: negative_api 16,
-state_query 20, the whole `transform_feedback` group (882 cases, only 2
-refused at compile, so they would run), and `functional.lifetime`, whose
-init needs a transform feedback object to work.
+Deviations, each logged by name:
 
-Neither back end has a capture path. The PowerVR's USC writes vertex outputs
-to the parameter buffer only (Mesa's pvr driver does not expose transform
-feedback either), and the GC7000's stream-out is undocumented here. So the
-plan is to capture in the GL core, on the CPU, and leave rasterisation as it is:
-
-- **State first, no capture**: transform feedback objects with their indexed
-  `GL_TRANSFORM_FEEDBACK_BUFFER` bindings (`glBindBufferBase/Range` on that
-  target), active/paused, the primitive mode, the varyings recorded at
-  `glTransformFeedbackVaryings` and resolved at link against the vertex
-  stage's reflected outputs, `glGetTransformFeedbackVarying`, the limits
-  (4 separate components x 4, 64 interleaved), and every ES 3.0 error of
-  2.15.1-2. That alone moves the negative_api and state_query cases and
-  unblocks the lifetime group's init.
-- **Capture**: at a draw with transform feedback active, the GL core runs the
-  vertex stage's IR on the CPU for the draw's vertices (an evaluator like
-  `shaderc/online/eval.rs`, today test-only and `std`, made `no_std` over the
-  host heap), assembles primitives in the begin mode (strips and fans unrolled,
-  as 2.15.2 says), and writes the captured varyings into the bound buffers
-  at their offsets; the `TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN` and
-  `PRIMITIVES_GENERATED` queries count them. The draw then goes to the GPU
-  as usual, or not at all under `GL_RASTERIZER_DISCARD` (already recorded).
-- What the evaluator must add for that: textures in the vertex stage (it
-  refuses them), indexed locals, and speed -- a CPU pass per captured vertex
-  is fine for dEQP's few hundred vertices and wrong for a real workload, which
-  is why capture stays off the draw path when no feedback is active.
-- The captured values are the evaluator's, not the GPU's: a precision
-  difference between the two would show as a dEQP transform_feedback
-  mismatch. The front-end oracles already compare the evaluator with the
-  reference (values 0 wrong of 13,953, GLES3), which is the reason to think
-  it is close enough; it is unmeasured against either GPU.
+- A capturing draw whose vertex shader samples a texture is refused with
+  `GL_INVALID_OPERATION` (the evaluator reads no texture storage); so is one
+  whose attribute element lies outside its buffer, or whose shader reads a
+  uniform the linked stage lays out differently (an offline-table stage).
+  ES 3.0 has no such error.
+- The captured values are the evaluator's f32, not the GPU's: a captured
+  `gl_Position` and the rasterised one can differ in the last bit. ES 3.0
+  does not ask for them to be the same, and dEQP compares the buffer with
+  its own reference.
+- A draw that captures costs a CPU pass: 1.5 us a vertex for a 20-operation
+  vertex shader on the x86 host (release), plus the lowering (23 us for that
+  shader); `tf_capture_tests.rs` `capture_cost` measures it. A draw that does
+  not capture pays one flag test.
 
 ## Design invariants
 

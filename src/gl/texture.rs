@@ -26,7 +26,7 @@ use super::{draw, framebuffer};
 use crate::backend::{
     self, gles_texfmt_bytes, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
     GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB565,
-    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
+    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::{self, Global};
@@ -709,6 +709,16 @@ fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
     true
 }
 
+/// glBlitFramebuffer wrote texels of `level` of texture `ti` on the CPU,
+/// with every kick already complete (`framebuffer::gpu_idle_for_cpu`): the
+/// texels take a new stamp, so a backend copy of them is made again, and
+/// the level counts as written.
+pub(crate) fn note_blit_written(c: &mut GlContext, ti: usize, level: GLint) {
+    let t = &mut c.objs().textures[ti];
+    stamp_texels(t);
+    note_level_written(t, level);
+}
+
 /// A draw is about to render into texture `ti` (a colour attachment of the
 /// bound framebuffer). On a backend whose RGBA8888 target is B,G,R,A the
 /// pixel engine writes the pixels it covers in that order and leaves the
@@ -797,8 +807,10 @@ fn note_unconverted(ti: usize) -> bool {
 fn texels_writable(t: &GlTexture) -> bool {
     !t.mem.impl_.is_null()
         && t.block_bytes == 0
-        && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
-            || is_narrow_la(t.texfmt)
+        && (matches!(
+            t.texfmt,
+            GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
+        ) || is_narrow_la(t.texfmt)
             || es3_formats::by_index(t.es3_fmt).is_some())
 }
 
@@ -2012,7 +2024,7 @@ unsafe fn tex_image_2d(
          * legitimise: GL_OES_required_internalformat's RGBA8, RGB8, RGBA4,
          * RGB5_A1 and RGB565, and GL_EXT_texture_rg's R8 and RG8. The sRGB
          * and float names are ES 3.0's, and this GL claims neither
-         * GL_EXT_sRGB (no encode or decode exists) nor GL_OES_texture_float
+         * GL_EXT_sRGB (the sRGB class is ES 3.0's) nor GL_OES_texture_float
          * (GL_RGBA32F is stored as halves), so glTexImage2D does not take
          * them -- dEQP's fbo.completeness read a complete framebuffer built
          * on one as a texture format this GL does not have.
@@ -3431,8 +3443,10 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         }
     }
     let filtered = !t.mem.cpu.is_null()
-        && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
-            || is_narrow_la(t.texfmt))
+        && (matches!(
+            t.texfmt,
+            GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
+        ) || is_narrow_la(t.texfmt))
         && !t.external;
     /* A NPOT image has one level until its chain is asked for: laid out now
      * where the backend holds one (grow_npot_chain), after the kicks using
@@ -3489,7 +3503,12 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
      * which matters for the 1-texel-wide tail levels. Float texels (Quick
      * 3D's HDR environment maps) average as floats (upstream 2c48538). */
     let bpp = gles_texfmt_bytes(t.texfmt) as usize;
-    let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F) {
+    /* sRGB texels average in linear space: red, green and blue decoded,
+     * averaged and encoded again (ES 3.0.6 3.8.9 leaves the filter to the
+     * implementation, which samples in linear space, 3.8.16); alpha is
+     * linear already */
+    let srgb = t.texfmt == GLES_TEXFMT_SRGB8_A8;
+    let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F) {
         4usize
     } else if is_narrow_la(t.texfmt) {
         bpp /* one byte a channel: L, A, or L and A */
@@ -3519,6 +3538,17 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
                     let d = dst + (y * dp + x) * bpp + ch * csize;
                     let box_src = |j: usize, i: usize| src + ((sy0 + j) * sp + x * sx + i) * bpp + ch * csize;
 
+                    if srgb && ch < 3 {
+                        let mut sum = 0.0f32;
+
+                        for j in 0..sy {
+                            for i in 0..sx {
+                                sum += super::srgb::decode(texels[box_src(j, i)]);
+                            }
+                        }
+                        texels[d] = super::srgb::encode(sum / (sx * sy) as f32);
+                        continue;
+                    }
                     if csize == 1 {
                         let mut sum: u32 = 0;
 
@@ -4551,12 +4581,21 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
 }
 
 /// The (format, type) an ES 3.0 sized internal format unpacks from, and the
-/// texel format it is stored in (RGBA8 for everything but the float ones).
+/// texel format it is stored in (RGBA8 for everything but the float and sRGB
+/// ones).
 fn sized_format(internalformat: GLenum) -> Option<(GLenum, GLenum, u8)> {
     let (u8_, rgba8) = (GL_UNSIGNED_BYTE, GLES_TEXFMT_RGBA8);
+    /* ES 3.0's sRGB pair: the RGBA8 bytes, sampled decoded (SRGB8 widened
+     * with alpha 255, as RGB8 is). Every back end samples the class
+     * (`backend::sampled_texfmts`). The ES 2.0 report has no sRGB format
+     * (glTexImage2D refuses the names) and glTexStorage2D's keep RGBA8 there,
+     * as they always did. */
+    let srgb = if crate::REPORT_ES2 { rgba8 } else { GLES_TEXFMT_SRGB8_A8 };
     Some(match internalformat {
-        GL_RGBA8 | GL_SRGB8_ALPHA8 | GL_RGBA4 | GL_RGB5_A1 | GL_RGBA => (GL_RGBA, u8_, rgba8),
-        GL_RGB8 | GL_RGB565 | GL_SRGB8 | GL_RGB => (GL_RGB, u8_, rgba8),
+        GL_SRGB8_ALPHA8 => (GL_RGBA, u8_, srgb),
+        GL_SRGB8 => (GL_RGB, u8_, srgb),
+        GL_RGBA8 | GL_RGBA4 | GL_RGB5_A1 | GL_RGBA => (GL_RGBA, u8_, rgba8),
+        GL_RGB8 | GL_RGB565 | GL_RGB => (GL_RGB, u8_, rgba8),
         GL_R8 => (GL_RED, u8_, rgba8),
         GL_RG8 => (GL_RG, u8_, rgba8),
         GL_RGBA16F => (GL_RGBA, GL_HALF_FLOAT, GLES_TEXFMT_RGBA16F),
@@ -7996,6 +8035,74 @@ mod tests {
         assert_eq!((t.levels, t.chain_levels), (3, 3));
     }
 
+    /// An sRGB texture's chain is filtered in linear space: red, green and
+    /// blue decoded, averaged and encoded (`gl::srgb`), alpha averaged as it
+    /// is -- a 2x2 of black and white is 188 (0.5 linear), not the 128 of
+    /// the RGBA8 box filter, which is what dEQP's linear-space reference
+    /// expects of a mipmapped sRGB texture.
+    #[test]
+    fn generate_mipmap_of_an_srgb_texture_averages_in_linear_space() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = TestGl::new(4, 4);
+        let img = [0u8, 0, 0, 0, 255, 255, 255, 255, 255, 64, 0, 255, 0, 64, 255, 0];
+        let mut level1 = [[0u8; 4]; 2];
+        for (k, internal) in [GL_SRGB8_ALPHA8, GL_RGBA8].into_iter().enumerate() {
+            let name = new_tex();
+            // SAFETY: plain GL calls; `img` holds the 2x2 image.
+            unsafe {
+                glTexImage2D(GL_TEXTURE_2D, 0, internal as GLint, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, ptr(&img));
+                glGenerateMipmap(GL_TEXTURE_2D);
+            }
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            let t = &gl.ctx().objs_ref().textures[name as usize];
+            let want = if k == 0 { GLES_TEXFMT_SRGB8_A8 } else { GLES_TEXFMT_RGBA8 };
+            assert_eq!((t.texfmt, t.levels), (want, 2));
+            let off = t.level_off[1] as usize;
+            level1[k].copy_from_slice(&storage(&gl, name)[off..off + 4]);
+        }
+        let lin = |v: [u8; 4]| {
+            super::super::srgb::encode(v.iter().map(|&b| super::super::srgb::decode(b)).sum::<f32>() / 4.0)
+        };
+        assert_eq!(level1[0], [lin([0, 255, 255, 0]), lin([0, 255, 64, 64]), lin([0, 255, 0, 255]), 128]);
+        assert_eq!(level1[0], [188, 143, 188, 128], "worked: (0 + 1 + 1 + 0) / 4 = 0.5 linear is 188");
+        assert_eq!(level1[1], [128, 96, 128, 128], "the RGBA8 box filter, for comparison");
+    }
+
+    /// The sRGB pair's storage: the RGBA8 bytes as uploaded (no conversion:
+    /// they are encoded already), in the sRGB class the samplers decode;
+    /// SRGB8 widened with alpha 255 and bound as having no alpha. Under the
+    /// ES 2.0 report glTexImage2D refuses both names, as it always did.
+    #[test]
+    fn srgb_textures_keep_their_bytes_in_the_srgb_class() {
+        let gl = TestGl::new(4, 4);
+        let rgba = [10u8, 120, 250, 77, 0, 1, 2, 3];
+        let rgb = [10u8, 120, 250, 0, 1, 2];
+        let a = new_tex();
+        // SAFETY: plain GL calls; the arrays hold the 2x1 images.
+        unsafe {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8 as GLint, 2, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, ptr(&rgba))
+        };
+        if crate::REPORT_ES2 {
+            assert_eq!(gl.error(), GL_INVALID_VALUE, "no sRGB format in ES 2.0 (GL_EXT_sRGB is not claimed)");
+            return;
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let b = new_tex();
+        // SAFETY: as above.
+        unsafe { glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8 as GLint, 2, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, ptr(&rgb)) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let ta = &gl.ctx().objs_ref().textures[a as usize];
+        assert_eq!((ta.texfmt, ta.format), (GLES_TEXFMT_SRGB8_A8, GL_RGBA));
+        assert_eq!(storage(&gl, a)[..8], rgba);
+        let tb = &gl.ctx().objs_ref().textures[b as usize];
+        assert_eq!((tb.texfmt, tb.format), (GLES_TEXFMT_SRGB8_A8, GL_RGB));
+        assert_eq!(storage(&gl, b)[..8], [10, 120, 250, 255, 0, 1, 2, 255]);
+        let bind = super::super::draw::texture_bind_2d(tb);
+        assert_eq!((bind.format, bind.no_alpha), (GLES_TEXFMT_SRGB8_A8, 1));
+    }
+
     #[test]
     fn generate_mipmap_of_a_one_row_texture_averages_pairs() {
         let gl = TestGl::new(4, 4);
@@ -8830,11 +8937,13 @@ mod tests {
             let t = &gl.ctx().objs_ref().textures[name as usize];
             assert_eq!((t.format, t.type_), (format, type_), "0x{internal:x}");
             /* the store is RGBA8 for all but the float formats (RGBA32F and
-             * RG16F are kept as four halves) */
+             * RG16F are kept as four halves) and the sRGB pair (the same
+             * bytes, sampled decoded; RGBA8 under the ES 2.0 report) */
             let (texfmt, bpp) = match internal {
                 GL_RGBA16F | GL_RGBA32F | GL_RG16F => (GLES_TEXFMT_RGBA16F, 8),
                 GL_R16F => (GLES_TEXFMT_R16F, 2),
                 GL_R32F => (GLES_TEXFMT_R32F, 4),
+                GL_SRGB8_ALPHA8 | GL_SRGB8 if !crate::REPORT_ES2 => (GLES_TEXFMT_SRGB8_A8, 4),
                 _ => (GLES_TEXFMT_RGBA8, 4),
             };
             assert_eq!((t.texfmt, t.bpp), (texfmt, bpp), "0x{internal:x}");
@@ -10679,9 +10788,9 @@ mod tests {
     fn the_es2_surface_refuses_the_sized_names_no_extension_of_its_claims() {
         /* GL_EXTENSIONS names GL_OES_required_internalformat and
          * GL_EXT_texture_rg, so the sized names those cover are taken. It
-         * does NOT name GL_EXT_sRGB or GL_OES_texture_float -- there is no
-         * sRGB encode or decode anywhere, and GL_RGBA32F would be stored as
-         * halves -- so those names are refused rather than accepted and then
+         * does NOT name GL_EXT_sRGB or GL_OES_texture_float -- the sRGB
+         * class is ES 3.0's alone (docs/es3-srgb.md), and GL_RGBA32F would
+         * be stored as halves -- so those names are refused rather than accepted and then
          * reported as a complete framebuffer. dEQP's fbo.completeness reads
          * the second as a texture format this GL does not have. */
         let gl = TestGl::new(8, 8);

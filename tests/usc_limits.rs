@@ -5307,6 +5307,110 @@ fn gl_test_case_91_blends_into_rgba16f_on_the_host() {
     .unwrap();
 }
 
+/// An sRGB target (`SHC_RT_SRGB`, docs/es3-srgb.md 4) on the host: the same
+/// shader as case 91 (es100/hdrcolor.frag, u_color = (0.5, 1.5, 0, 0.5)),
+/// built for the sRGB class the GL core keys an `SRGB8_ALPHA8` target with,
+/// run in the byte model over a linear pixel in two dwords of halves. The
+/// target is unsigned normalised: the source is clamped before the blend
+/// and the blended colour before the pack (a value past 1 must not survive
+/// in the accumulation the next blend reads), and the pixel is the linear
+/// value the frame load decoded -- so the halves written are GL's linear
+/// blend (ES 3.0.6 4.1.7-4.1.8) and the bytes stored are their sRGB
+/// encoding, which the PBE makes and `gl::srgb::encode` stands in for here
+/// (dEQP's reference blends exactly so). A plain replace is clamped too and
+/// reads no pixel.
+#[cfg(not(feature = "report-es2"))]
+#[test]
+fn an_srgb_target_blends_clamped_linear_halves_on_the_host() {
+    use yakogl::gl::srgb;
+    use yakogl::shaderc::*;
+    let rt = shc_blend_key_target(SHC_RT_SRGB, 0);
+    assert_eq!(shc_blend_key_class(rt), SHC_RT_SRGB);
+    /* the pixel: linear (0.25, 0.75, 0.25, 0.5), as the frame load decoded it */
+    let pixel = [0.25f32, 0.75, 0.25, 0.5];
+    type Case = (&'static str, u32, u32, [f32; 4]);
+    let cases: [Case; 4] = [
+        /* s' = (0.5, 1, 0, 0.5); s' + d = (0.75, 1.75, 0.25, 1) -> clamped */
+        (
+            "add (one, one)",
+            shc_blend_key(SHC_BF_ONE, SHC_BF_ONE, SHC_BF_ONE, SHC_BF_ONE, 0, 0) | rt,
+            1,
+            [0.75, 1.0, 0.25, 1.0],
+        ),
+        /* s' * 0.5 + d * 0.5 */
+        (
+            "over (src_alpha, one_minus_src_alpha)",
+            shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 0, 0) | rt,
+            1,
+            [0.375, 0.875, 0.125, 0.5],
+        ),
+        /* d - s': clamped at 0 */
+        (
+            "reverse subtract (one, one)",
+            shc_blend_key(
+                SHC_BF_ONE,
+                SHC_BF_ONE,
+                SHC_BF_ONE,
+                SHC_BF_ONE,
+                SHC_BLEND_REVERSE_SUBTRACT,
+                SHC_BLEND_REVERSE_SUBTRACT,
+            ) | rt,
+            1,
+            [0.0, 0.0, 0.25, 0.0],
+        ),
+        ("replace", SHC_BLEND_KEY_REPLACE | rt, 0, [0.5, 1.0, 0.0, 0.5]),
+    ];
+    let half = |x: f32| u32::from(usc_exec::f32_to_f16(x));
+    let src = include_str!("../tools/shaders/es100/hdrcolor.frag");
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        for (what, key, fbfetch, want) in cases {
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+            assert_eq!(
+                (rec.blend_key, rec.uses_fbfetch, rec.num_outputs),
+                (key, fbfetch as u8, 2),
+                "{what}: the record (two output dwords of halves)"
+            );
+            // SAFETY: the record's code and uniform rows live in `keep`.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut inp = sentinel_inputs(1.0e30);
+            place_shared(&mut inp, rows, &|n: &str, k: u32| {
+                assert_eq!(n, "u_color");
+                [0.5f32, 1.5, 0.0, 0.5][k as usize].to_bits()
+            });
+            inp.pixout = half(pixel[0]) | half(pixel[1]) << 16;
+            inp.pixout1 = half(pixel[2]) | half(pixel[3]) << 16;
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let (w0, w1) = (*out.get(&0).expect("dword 0"), *out.get(&1).expect("dword 1"));
+            let got: Vec<f32> =
+                [w0, w0 >> 16, w1, w1 >> 16].iter().map(|h| usc_exec::f16_to_f32((h & 0xffff) as u16)).collect();
+            assert_eq!(got, want, "{what}: the linear halves written");
+            /* what the PBE stores: red, green, blue encoded, alpha as 8-bit unorm */
+            let stored: Vec<u8> = got
+                .iter()
+                .enumerate()
+                .map(|(c, &v)| if c < 3 { srgb::encode(v) } else { (v * 255.0).round() as u8 })
+                .collect();
+            let want_stored: Vec<u8> = want
+                .iter()
+                .enumerate()
+                .map(|(c, &v)| if c < 3 { srgb::encode(v) } else { (v * 255.0).round() as u8 })
+                .collect();
+            assert_eq!(stored, want_stored, "{what}: the bytes stored");
+        }
+    })
+    .unwrap();
+    /* the over blend's red, worked: 0.375 linear is byte 165, not the
+     * 0.5 * 188 + 0.5 * 137 = 162.5 a blend of the encoded bytes (0.5 is
+     * byte 188, 0.25 byte 137) would give */
+    assert_eq!((srgb::encode(0.375), srgb::encode(0.5), srgb::encode(0.25)), (165, 188, 137));
+}
+
 /// The `smp` fields of the first sample in a program's bytes, by name.
 #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
 fn smp_fields(bytes: &[u8]) -> Vec<(String, u32)> {

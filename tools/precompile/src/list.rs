@@ -169,8 +169,9 @@ pub fn blend_key(spec: &str) -> Result<u32, SpecError> {
     let eq = if t.len() > 4 { bq(t[4])? } else { abi::SHC_BLEND_ADD };
     let eqa = if t.len() > 5 { bq(t[5])? } else { eq };
     let mut key = abi::shc_blend_key(srgb, drgb, sa, da, eq, eqa);
-    key |= abi::shc_blend_key_mask_off(!mask_bits & 0xf);
-    key |= abi::shc_blend_key_rt(lookup(RT_CLASSES, split_rt(spec)?.1).unwrap_or(0));
+    /* the mask and the class as the GL core keys them (a one-channel
+     * class keeps red's mask bit only) */
+    key |= abi::shc_blend_key_target(lookup(RT_CLASSES, split_rt(spec)?.1).unwrap_or(0), !mask_bits & 0xf);
     if key == abi::SHC_BLEND_KEY_REPLACE {
         return Err(SpecError::PlainReplace);
     }

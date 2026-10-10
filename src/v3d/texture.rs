@@ -113,9 +113,13 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
             "an R32F (depth) texture read by a look-up compiled for the 16-bit TMU output"
         });
     }
-    if !matches!(b.format, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_L8 | GLES_TEXFMT_A8 | GLES_TEXFMT_LA8 | GLES_TEXFMT_R32F) {
+    if !matches!(
+        b.format,
+        GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_L8 | GLES_TEXFMT_A8 | GLES_TEXFMT_LA8 | GLES_TEXFMT_R32F
+    ) {
         return Some(
-            "a texture format other than RGBA8, L8, A8, LA8 and R32F (RGB565, half float, ETC2) is not sampled yet",
+            "a texture format other than RGBA8, SRGB8_ALPHA8, L8, A8, LA8 and R32F (RGB565, half float, ETC2) is not \
+             sampled yet",
         );
     }
     if b.width == 0 || b.height == 0 || b.width >= 1 << 14 || b.height >= 1 << 14 {
@@ -234,6 +238,11 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
         max_level: layout.levels - 1,
         type_,
         swizzle,
+        /* TEXTURE_SHADER_STATE.sRGB (v3d_packet.xml:1627, V3D 4.2): the TMU
+         * decodes red, green and blue before it filters; Mesa sets it from
+         * util_format_is_srgb (v3dx_state.c:1023-1028), the texels being
+         * the RGBA8 row's */
+        srgb: b.format == GLES_TEXFMT_SRGB8_A8,
         ..V3dTexState::default()
     };
     // SAFETY: both are live values of the mirrored types.
@@ -373,6 +382,27 @@ mod tests {
             assert_eq!(tmu_format(&b), (type_, swizzle), "format {format}");
             assert_eq!(texel_bytes(&b), bytes, "format {format}");
             assert_eq!(layout(&b).unwrap().cpp, bytes, "format {format}: laid out at its own size");
+        }
+    }
+
+    /// The sRGB class is the RGBA8 row (Mesa's R8G8B8A8_SRGB: TMU format
+    /// RGBA8, SWIZ_XYZW, v3dx_format_table.c:67) with TEXTURE_SHADER_STATE's
+    /// sRGB bit (v3d_packet.xml:1627, set from util_format_is_srgb,
+    /// v3dx_state.c:1023-1028); no other class sets the bit.
+    #[test]
+    fn the_srgb_class_is_the_rgba8_row_with_the_tmu_decode() {
+        let b = GlesTextureBind { format: GLES_TEXFMT_SRGB8_A8, ..bind(4, 4) };
+        let rgba = GlesTextureBind { format: GLES_TEXFMT_RGBA8, ..bind(4, 4) };
+        assert_eq!(refusal(&b), None);
+        assert_eq!(tmu_format(&b), tmu_format(&rgba));
+        assert_eq!((texel_bytes(&b), return_32(&b)), (4, false));
+        let layout = layout(&b).unwrap();
+        let s = state(&b, &layout, 0x1000);
+        let r = state(&rgba, &layout, 0x1000);
+        assert!(s.srgb && !r.srgb);
+        assert_eq!(V3dTexState { srgb: false, ..s }, r, "nothing else differs");
+        for format in [GLES_TEXFMT_L8, GLES_TEXFMT_A8, GLES_TEXFMT_LA8, GLES_TEXFMT_R32F] {
+            assert!(!state(&GlesTextureBind { format, ..bind(4, 4) }, &layout, 0x1000).srgb, "format {format}");
         }
     }
 

@@ -1494,6 +1494,9 @@ unsafe fn reset_library_statics() {
         crate::gl::framebuffer::reset_for_tests(); /* multisample / blit latches */
         crate::gl::es3::reset_for_tests(); /* query, sampler and feedback names, syncs */
         crate::gl::egl::reset_for_tests(); /* the whole EGL state */
+        /* a test that stood in for a back end rendering the sRGB class */
+        #[cfg(feature = "host-test")]
+        crate::backend::HOST_SRGB_RT.store(false, core::sync::atomic::Ordering::Relaxed);
         set_thread_ids(true); /* the owner itself is in context::reset_for_tests */
         /* the narrow luminance/alpha switch: PowerVR tests start from the
          * expanded store and the narrow ones turn it on (the product default

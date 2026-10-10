@@ -164,6 +164,65 @@ fn unmap_buffer(b: &mut GlBuffer) {
     b.map_access = 0;
 }
 
+/// Move buffer `i` to fresh pages holding its bytes when a kick that has
+/// not completed still reads its storage (copy on write), so that a CPU
+/// write that follows reaches only the new pages: the kick keeps the bytes
+/// it was recorded with, and the old pages are released once it is done
+/// (deferred free). False when the copy could not be made (no memory, or no
+/// way to carry the contents over); the buffer then keeps its storage.
+fn detach_from_pending_kick(c: &mut GlContext, i: usize) -> bool {
+    if !backend::kick_pending(c.objs().buffers[i].last_use) {
+        return true;
+    }
+    let mut fresh = OsalGpuMem::ZERO;
+    let bytes = c.objs().buffers[i].size as usize;
+
+    if osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut fresh) != 0 {
+        return false;
+    }
+    let b = &mut c.objs().buffers[i];
+    let bounce = osal::ops().and_then(|o| o.gpu_read.zip(o.gpu_write));
+    let mut rc = 0;
+    if !b.mem.cpu.is_null() && !fresh.cpu.is_null() {
+        // SAFETY: both allocations are live, distinct and hold at least `bytes`.
+        unsafe {
+            osal::cache_invd(b.mem.cpu, bytes);
+            core::ptr::copy_nonoverlapping(b.mem.cpu as *const u8, fresh.cpu as *mut u8, bytes);
+            /* the carried bytes reach the GPU only with a flush: the write
+             * that follows publishes its own range, this one the rest */
+            osal::cache_flush(fresh.cpu, bytes);
+        }
+    } else if let Some((gpu_read, gpu_write)) = bounce {
+        /* platforms without a CPU view: bounce through the stack in chunks */
+        let mut tmp = [0u8; 512];
+        let mut o = 0usize;
+
+        while o < bytes {
+            let n = (bytes - o).min(tmp.len());
+
+            // SAFETY: `tmp` holds `n` bytes; `o + n` lies inside both allocations.
+            unsafe {
+                rc |= gpu_read(&mut b.mem, o, tmp.as_mut_ptr() as *mut c_void, n);
+                rc |= gpu_write(&mut fresh, o, tmp.as_ptr() as *const c_void, n);
+            }
+            o += n;
+        }
+    } else {
+        rc = -1; /* no way to carry the contents over */
+    }
+    if rc != 0 {
+        /* the copy failed: keep the old storage (the kick in flight
+         * still reads it) and report, rather than moving the buffer to
+         * pages holding garbage */
+        osal::gpu_free(&mut fresh);
+        return false;
+    }
+    osal::gpu_free(&mut b.mem); /* deferred until the kicks are done */
+    b.mem = fresh;
+    b.last_use = 0;
+    true
+}
+
 /// Application arrays of GLuint carry no alignment guarantee: the names are
 /// read and written one by one, unaligned.
 ///
@@ -402,57 +461,36 @@ pub unsafe extern "C" fn glBufferSubData(target: GLenum, offset: GLintptr, size:
     if data.is_null() || size == 0 {
         return;
     }
-    if backend::kick_pending(c.objs().buffers[i].last_use) {
-        /* A pending kick still reads this storage: copy on write. */
-        let mut fresh = OsalGpuMem::ZERO;
-        let bytes = c.objs().buffers[i].size as usize;
-
-        if osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut fresh) != 0 {
-            c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
-            return;
-        }
-        let b = &mut c.objs().buffers[i];
-        let bounce = osal::ops().and_then(|o| o.gpu_read.zip(o.gpu_write));
-        let mut rc = 0;
-        if !b.mem.cpu.is_null() && !fresh.cpu.is_null() {
-            // SAFETY: both allocations are live, distinct and hold at least `bytes`.
-            osal::cache_invd(b.mem.cpu, bytes);
-            core::ptr::copy_nonoverlapping(b.mem.cpu as *const u8, fresh.cpu as *mut u8, bytes);
-            /* the carried bytes reach the GPU only with a flush: the update
-             * below publishes its own range, this one the rest */
-            osal::cache_flush(fresh.cpu, bytes);
-        } else if let Some((gpu_read, gpu_write)) = bounce {
-            /* platforms without a CPU view: bounce through the stack in chunks */
-            let mut tmp = [0u8; 512];
-            let mut o = 0usize;
-
-            while o < bytes {
-                let n = (bytes - o).min(tmp.len());
-
-                // SAFETY: `tmp` holds `n` bytes; `o + n` lies inside both allocations.
-                rc |= gpu_read(&mut b.mem, o, tmp.as_mut_ptr() as *mut c_void, n);
-                rc |= gpu_write(&mut fresh, o, tmp.as_ptr() as *const c_void, n);
-                o += n;
-            }
-        } else {
-            rc = -1; /* no way to carry the contents over */
-        }
-        if rc != 0 {
-            /* the copy failed: keep the old storage (the kick in flight
-             * still reads it) and report, rather than moving the buffer to
-             * pages holding garbage */
-            osal::gpu_free(&mut fresh);
-            c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
-            return;
-        }
-        osal::gpu_free(&mut b.mem); /* deferred until the kicks are done */
-        b.mem = fresh;
-        b.last_use = 0;
+    if !writable(c, i, "glBufferSubData") {
+        return;
     }
     // SAFETY: the application passes `size` bytes at `data`; offset + size <= the buffer's size (checked above).
     if upload(&mut c.objs().buffers[i].mem, offset as usize, data, size as usize) != 0 {
         c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
     }
+}
+
+/// Make buffer slot `i`'s storage safe for the CPU to write: when a kick
+/// still pending reads it, the contents move to fresh storage (copy on
+/// write, `detach_from_pending_kick`). False, with GL_OUT_OF_MEMORY on
+/// `func`, when that copy cannot be made; the buffer is then unchanged.
+/// glBufferSubData and the transform-feedback capture (`tf_capture.rs`)
+/// write through it.
+pub(super) fn writable(c: &mut GlContext, i: usize, func: &str) -> bool {
+    if detach_from_pending_kick(c, i) {
+        return true;
+    }
+    c.set_error(GL_OUT_OF_MEMORY, func);
+    false
+}
+
+/// Copy `src` into buffer slot `i` at byte `off` (CPU-mapped or through the
+/// OSAL) and flush it for the GPU; the caller checked the range and made the
+/// storage [`writable`]. False when the OSAL could not write.
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+pub(super) fn write_at(c: &mut GlContext, i: usize, off: usize, src: &[u8]) -> bool {
+    // SAFETY: `src` is a live slice; the caller keeps off + len inside the buffer.
+    unsafe { upload(&mut c.objs().buffers[i].mem, off, src.as_ptr() as *const c_void, src.len()) == 0 }
 }
 
 #[no_mangle]
@@ -557,30 +595,41 @@ pub unsafe extern "C" fn glGetBufferParameteriv(target: GLenum, pname: GLenum, p
     if params.is_null() {
         return;
     }
+    if let Some(v) = buffer_parameter(c, target, pname, "glGetBufferParameteriv") {
+        // SAFETY: non-null (checked above), room for one value; GLint* carries
+        // no alignment guarantee.
+        params.write_unaligned(v.clamp(0, GLint::MAX as i64) as GLint);
+    }
+}
+
+/// glGetBufferParameteri{v,64v}'s value: `None` with the error set (the
+/// caller's `params` stays as it was). A size or a mapped range comes back
+/// whole; glGetBufferParameteriv clamps it to a GLint.
+pub(super) fn buffer_parameter(c: &mut GlContext, target: GLenum, pname: GLenum, func: &'static str) -> Option<i64> {
     let Ok(bound) = bound_buffer_for_target(c, target) else {
-        c.set_error(GL_INVALID_ENUM, "glGetBufferParameteriv");
-        return;
+        c.set_error(GL_INVALID_ENUM, func);
+        return None;
     };
     let Some(i) = bound else {
-        c.set_error(GL_INVALID_OPERATION, "glGetBufferParameteriv");
-        return;
+        c.set_error(GL_INVALID_OPERATION, func);
+        return None;
     };
     let b = &c.objs_ref().buffers[i];
-    let v = match pname {
-        GL_BUFFER_SIZE => b.size.clamp(0, GLint::MAX as GLsizeiptr) as GLint,
-        GL_BUFFER_USAGE => (if b.usage != 0 { b.usage } else { GL_STATIC_DRAW }) as GLint,
+    Some(match pname {
+        GL_BUFFER_SIZE => b.size as i64,
+        GL_BUFFER_USAGE => (if b.usage != 0 { b.usage } else { GL_STATIC_DRAW }) as i64,
         /* ES 3.0 6.1.9: the mapping state */
-        GL_BUFFER_MAPPED => !b.mapped.is_null() as GLint,
-        GL_BUFFER_ACCESS_FLAGS => b.map_access as GLint,
-        GL_BUFFER_MAP_OFFSET => b.map_off.clamp(0, GLint::MAX as GLintptr) as GLint,
-        GL_BUFFER_MAP_LENGTH => b.map_len.clamp(0, GLint::MAX as GLsizeiptr) as GLint,
+        GL_BUFFER_MAPPED => !b.mapped.is_null() as i64,
+        GL_BUFFER_ACCESS_FLAGS => b.map_access as i64,
+        GL_BUFFER_MAP_OFFSET => b.map_off as i64,
+        GL_BUFFER_MAP_LENGTH => b.map_len as i64,
         /* GL_OES_mapbuffer: its one access value, the initial state too */
-        GL_BUFFER_ACCESS_OES => GL_WRITE_ONLY_OES as GLint,
-        _ => return c.set_error(GL_INVALID_ENUM, "glGetBufferParameteriv"),
-    };
-    // SAFETY: non-null (checked above), room for one value; GLint* carries
-    // no alignment guarantee.
-    params.write_unaligned(v);
+        GL_BUFFER_ACCESS_OES => GL_WRITE_ONLY_OES as i64,
+        _ => {
+            c.set_error(GL_INVALID_ENUM, func);
+            return None;
+        }
+    })
 }
 
 /// `gl_pixel_buffer_resolve()`: a pixel transfer with PIXEL_UNPACK_BUFFER
@@ -624,6 +673,23 @@ pub fn pixel_buffer_resolve(
     let cpu = b.mem.cpu;
     // SAFETY: `off` lies inside the allocation (checked just above).
     Some(unsafe { (cpu as *const u8).add(off) } as *const c_void)
+}
+
+/// Does a draw read a mapped buffer? ES 3.0 2.9.4: "Most, but not all GL
+/// commands will detect attempts to read data from a mapped buffer object.
+/// When such an attempt is detected, an INVALID_OPERATION error will be
+/// generated." A draw detects it for the buffers it fetches from: every
+/// enabled array's and, when it is indexed, the element array buffer (Mesa's
+/// rule, `_mesa_all_buffers_are_unmapped`). It drew from the storage the
+/// application was still writing through the mapping, whose bytes had not
+/// been flushed, so the GPU read whatever the memory held. The ES 2.0 report
+/// keeps drawing: GL_OES_mapbuffer, its only mapping, states no such error.
+pub fn draw_reads_a_mapped_buffer(c: &GlContext, indexed: bool) -> bool {
+    if crate::REPORT_ES2 {
+        return false;
+    }
+    let mapped = |h: GLuint| h != 0 && c.buffer_ref(h).is_some_and(|b| !b.mapped.is_null());
+    c.attribs.iter().any(|a| a.enabled && mapped(a.buffer)) || (indexed && mapped(c.bound_element_buffer))
 }
 
 /// OpenGL ES 3.0: the pointer a mapped buffer handed out.
@@ -696,16 +762,51 @@ pub unsafe extern "C" fn glCopyBufferSubData(
         c.set_error(GL_INVALID_VALUE, "glCopyBufferSubData");
         return;
     }
-    let (src, dst) = (c.objs().buffers[ri].mem.cpu, c.objs().buffers[wi].mem.cpu);
-    if size == 0 || src.is_null() || dst.is_null() {
+    if size == 0 {
         return;
     }
-    // SAFETY: both ranges lie inside their allocation (checked above); they
-    // are in different buffers unless they do not overlap.
-    unsafe {
-        let dst = (dst as *mut u8).offset(writeOffset);
-        core::ptr::copy((src as *const u8).offset(readOffset), dst, size as usize);
-        osal::cache_flush(dst as *mut c_void, size as usize);
+    /* A kick that has not run yet may read the destination: the copy goes
+     * into fresh pages, as glBufferSubData's write does. It was written over
+     * the storage in flight until 2026-10-10, so a draw recorded before the
+     * copy fetched the copied bytes. */
+    if !detach_from_pending_kick(c, wi) {
+        c.set_error(GL_OUT_OF_MEMORY, "glCopyBufferSubData");
+        return;
+    }
+    let (src, dst) = (c.objs().buffers[ri].mem.cpu, c.objs().buffers[wi].mem.cpu);
+    if !src.is_null() && !dst.is_null() {
+        // SAFETY: both ranges lie inside their allocation (checked above);
+        // they are in different buffers unless they do not overlap.
+        unsafe {
+            let dst = (dst as *mut u8).offset(writeOffset);
+            core::ptr::copy((src as *const u8).offset(readOffset), dst, size as usize);
+            osal::cache_flush(dst as *mut c_void, size as usize);
+        }
+        return;
+    }
+    /* No CPU view of one of them: through the OSAL in chunks. It copied
+     * nothing and said nothing until 2026-10-10. */
+    let Some((gpu_read, gpu_write)) = osal::ops().and_then(|o| o.gpu_read.zip(o.gpu_write)) else {
+        c.set_error(GL_OUT_OF_MEMORY, "glCopyBufferSubData");
+        return;
+    };
+    let mut tmp = [0u8; 512];
+    let (mut done, total) = (0usize, size as usize);
+    while done < total {
+        let n = (total - done).min(tmp.len());
+        let (r, w) = (readOffset as usize + done, writeOffset as usize + done);
+        let mut src_mem = c.objs().buffers[ri].mem;
+        // SAFETY: `tmp` holds `n` bytes; both ranges lie inside their
+        // allocation (checked above).
+        let ok = unsafe {
+            gpu_read(&mut src_mem, r, tmp.as_mut_ptr() as *mut c_void, n) == 0
+                && gpu_write(&mut c.objs().buffers[wi].mem, w, tmp.as_ptr() as *const c_void, n) == 0
+        };
+        if !ok {
+            c.set_error(GL_OUT_OF_MEMORY, "glCopyBufferSubData");
+            return;
+        }
+        done += n;
     }
 }
 
@@ -2741,5 +2842,226 @@ mod tests {
         /* the fresh pages start as a copy: unwritten bytes keep their contents */
         assert_eq!(contents(&gl, h), [1, 2, 0x33, 4, 5, 6, 7, 8]);
         assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /* ---- dEQP-GLES3 buffer.map: every target, then a draw reads the result ---- */
+
+    /// The eight ES 3.0 buffer targets dEQP maps (es3fBufferMapTests).
+    const MAP_TARGETS: [GLenum; 8] = [
+        GL_ARRAY_BUFFER,
+        GL_ELEMENT_ARRAY_BUFFER,
+        GL_COPY_READ_BUFFER,
+        GL_COPY_WRITE_BUFFER,
+        GL_PIXEL_PACK_BUFFER,
+        GL_PIXEL_UNPACK_BUFFER,
+        GL_TRANSFORM_FEEDBACK_BUFFER,
+        GL_UNIFORM_BUFFER,
+    ];
+
+    /// Three vec4 positions as bytes, distinct per `seed`.
+    fn vertices(seed: u8) -> Vec<u8> {
+        (0..12).flat_map(|i| (f32::from(seed) + i as f32 * 0.25).to_le_bytes()).collect()
+    }
+
+    /// Draw one triangle with attribute 0 fetched from buffer `h` (bound to
+    /// GL_ARRAY_BUFFER for it, as dEQP's VertexArrayVerifier does) and return
+    /// the bytes the GPU reads there, with the first unflushed offset.
+    fn draw_from(gl: &TestGl, h: GLuint) -> (Vec<u8>, Option<usize>) {
+        let prog = gl.program("passthrough.vert", "uniform_color.frag");
+        gl.clear_recordings();
+        // SAFETY: plain GL calls; the array is an offset into buffer `h`.
+        unsafe {
+            use crate::gl::{draw::*, program::*, vertex::*};
+            glBindBuffer(GL_ARRAY_BUFFER, h);
+            glUseProgram(prog);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, core::ptr::null());
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glDisableVertexAttribArray(0);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let d = gl.draws();
+        assert_eq!(d.len(), 1, "one draw recorded");
+        let a = d[0].draw.attribs.iter().find(|a| a.buffer_gpu != 0).expect("an attribute fetched from the buffer");
+        let at = a.buffer_gpu + u64::from(a.offset);
+        (gl.gpu_bytes(at, 48), gl.unflushed(at, 48))
+    }
+
+    /// es3fBufferMapTests' write, read_write and explicit_flush cases on each
+    /// target, unmapped through glUnmapBufferOES as dEQP's loader does when
+    /// GL_OES_mapbuffer is listed: the bytes written through the mapping are
+    /// what a draw then fetches, published (the mock memory is not
+    /// coherent: an unflushed byte reads as what the device held).
+    ///
+    /// Revert check: drop the flush from `unmap_buffer` and every case reads
+    /// the cleared store; restrict `oes_unmap_target` to the extension's two
+    /// targets again and six of the eight read GL_INVALID_ENUM (the AM62P's
+    /// 300 buffer.map failures of c4ccc966).
+    #[test]
+    fn every_target_maps_writes_and_a_draw_reads_what_was_written() {
+        if crate::REPORT_ES2 {
+            return; /* the ES 3.0 targets and glMapBufferRange are not on the ES 2.0 surface */
+        }
+        let gl = TestGl::new(8, 8);
+        for (k, &target) in MAP_TARGETS.iter().enumerate() {
+            let data = vertices(k as u8 + 1);
+            let n = data.len() as GLsizeiptr;
+            for access in [
+                GL_MAP_WRITE_BIT,
+                GL_MAP_READ_BIT | GL_MAP_WRITE_BIT,
+                GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT,
+                GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT,
+                GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT,
+            ] {
+                let h = gen1();
+                // SAFETY: plain GL calls; the mapping covers `n` bytes until the unmap.
+                unsafe {
+                    glBindBuffer(target, h);
+                    glBufferData(target, n, core::ptr::null(), GL_DYNAMIC_DRAW);
+                    let p = glMapBufferRange(target, 0, n, access) as *mut u8;
+                    assert!(!p.is_null(), "target 0x{target:x} access 0x{access:x}");
+                    core::ptr::copy_nonoverlapping(data.as_ptr(), p, data.len());
+                    if access & GL_MAP_FLUSH_EXPLICIT_BIT != 0 {
+                        glFlushMappedBufferRange(target, 0, 20);
+                        glFlushMappedBufferRange(target, 20, n - 20);
+                    }
+                    assert_eq!(glUnmapBufferOES(target), GL_TRUE_B, "target 0x{target:x}");
+                }
+                assert_eq!(gl.error(), GL_NO_ERROR, "target 0x{target:x} access 0x{access:x}");
+                assert_eq!(draw_from(&gl, h), (data.clone(), None), "target 0x{target:x} access 0x{access:x}");
+                // SAFETY: plain GL call.
+                unsafe { glDeleteBuffers(1, &h) };
+            }
+        }
+    }
+
+    /// es3fBufferMapTests' read cases on each target: written by
+    /// glBufferSubData or by a write mapping, read back through a read
+    /// mapping at an offset (the partial cases).
+    #[test]
+    fn every_target_reads_back_what_was_written() {
+        if crate::REPORT_ES2 {
+            return; /* the ES 3.0 targets and glMapBufferRange are not on the ES 2.0 surface */
+        }
+        let gl = TestGl::new(8, 8);
+        for &target in &MAP_TARGETS {
+            let data: Vec<u8> = (0..200u32).map(|i| (i * 7 + 3) as u8).collect();
+            for by_map in [false, true] {
+                let h = gen1();
+                // SAFETY: plain GL calls; the mappings cover what they are given.
+                unsafe {
+                    glBindBuffer(target, h);
+                    glBufferData(target, 200, core::ptr::null(), GL_STREAM_READ);
+                    if by_map {
+                        let p = glMapBufferRange(target, 0, 200, GL_MAP_WRITE_BIT) as *mut u8;
+                        core::ptr::copy_nonoverlapping(data.as_ptr(), p, 200);
+                        glUnmapBufferOES(target);
+                    } else {
+                        glBufferSubData(target, 0, 200, data.as_ptr() as *const c_void);
+                    }
+                    let p = glMapBufferRange(target, 17, 101, GL_MAP_READ_BIT) as *const u8;
+                    assert!(!p.is_null());
+                    assert_eq!(core::slice::from_raw_parts(p, 101), &data[17..118], "target 0x{target:x}");
+                    assert_eq!(glUnmapBufferOES(target), GL_TRUE_B);
+                    glDeleteBuffers(1, &h);
+                }
+                assert_eq!(gl.error(), GL_NO_ERROR);
+            }
+        }
+    }
+
+    /// ES 3.0 2.9.4: a draw that would fetch from a mapped buffer is
+    /// GL_INVALID_OPERATION and reaches no back end. It drew from the store
+    /// the application was still writing (nothing flushed yet). An ES 2.0
+    /// report keeps drawing: GL_OES_mapbuffer states no such error.
+    ///
+    /// Revert check: drop `draw_reads_a_mapped_buffer` from draw_arrays /
+    /// draw_elements and both mapped draws are recorded with no error.
+    #[test]
+    fn a_draw_that_fetches_from_a_mapped_buffer_is_refused() {
+        let gl = TestGl::new(8, 8);
+        let prog = gl.program("passthrough.vert", "uniform_color.frag");
+        let vbo = buffer_with(GL_ARRAY_BUFFER, &vertices(1));
+        buffer_with(GL_ELEMENT_ARRAY_BUFFER, &[0, 0, 1, 0, 2, 0]);
+        let refused = if crate::REPORT_ES2 { GL_NO_ERROR } else { GL_INVALID_OPERATION };
+        // SAFETY: plain GL calls; the arrays are offsets into the buffers.
+        unsafe {
+            use crate::gl::{draw::*, program::*, vertex::*};
+            glUseProgram(prog);
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, core::ptr::null());
+            glEnableVertexAttribArray(0);
+            gl.clear_recordings();
+            assert!(!glMapBufferOES(GL_ARRAY_BUFFER, GL_WRITE_ONLY_OES).is_null());
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            assert_eq!(gl.error(), refused, "the vertex array's buffer is mapped");
+            glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, core::ptr::null());
+            assert_eq!(gl.error(), refused);
+            glUnmapBufferOES(GL_ARRAY_BUFFER);
+            assert_eq!(gl.draws().len(), if crate::REPORT_ES2 { 2 } else { 0 });
+            gl.clear_recordings();
+            assert!(!glMapBufferOES(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY_OES).is_null());
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            assert_eq!(gl.error(), GL_NO_ERROR, "a non-indexed draw does not read the index buffer");
+            glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, core::ptr::null());
+            assert_eq!(gl.error(), refused, "the index buffer is mapped");
+            glUnmapBufferOES(GL_ELEMENT_ARRAY_BUFFER);
+            assert_eq!(gl.draws().len(), if crate::REPORT_ES2 { 2 } else { 1 });
+            /* a mapped buffer no enabled array uses is no obstacle */
+            glDisableVertexAttribArray(0);
+            assert!(!glMapBufferOES(GL_ARRAY_BUFFER, GL_WRITE_ONLY_OES).is_null());
+            glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, core::ptr::null());
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            glUnmapBufferOES(GL_ARRAY_BUFFER);
+        }
+    }
+
+    /// glCopyBufferSubData into a buffer a pending kick reads moves the
+    /// destination to fresh pages first, as glBufferSubData does: the kick
+    /// keeps the bytes it was recorded with.
+    ///
+    /// Revert check: drop `detach_from_pending_kick` from
+    /// glCopyBufferSubData and the old pages read the copied bytes.
+    #[test]
+    fn a_copy_into_a_buffer_a_kick_reads_copies_on_write() {
+        let gl = TestGl::new(8, 8);
+        buffer_with(GL_COPY_READ_BUFFER, &[1, 2, 3, 4, 5, 6, 7, 8]);
+        let dst = buffer_with(GL_COPY_WRITE_BUFFER, &[0; 8]);
+        let old = gpu_of(&gl, dst);
+        make_busy(&gl, dst, 5);
+        // SAFETY: plain GL call.
+        unsafe { glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 2, 4, 3) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_ne!(gpu_of(&gl, dst), old, "fresh pages");
+        assert_eq!(contents(&gl, dst), [0, 0, 0, 0, 3, 4, 5, 0]);
+        assert_eq!(gl.unflushed(gpu_of(&gl, dst), 8), None, "carried and copied bytes published");
+        assert_eq!(gl.gpu_bytes(old, 8), [0; 8], "the kick in flight keeps its bytes");
+        /* a copy within one busy buffer reads the carried bytes */
+        let src = gen1();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBindBuffer(GL_COPY_READ_BUFFER, src);
+            glBufferData(GL_COPY_READ_BUFFER, 8, [9u8, 8, 7, 6, 0, 0, 0, 0].as_ptr() as *const c_void, GL_STATIC_DRAW);
+        }
+        make_busy(&gl, src, 6);
+        // SAFETY: plain GL call.
+        unsafe { glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_READ_BUFFER, 0, 4, 4) };
+        assert_eq!((gl.error(), contents(&gl, src)), (GL_NO_ERROR, std::vec![9, 8, 7, 6, 9, 8, 7, 6]));
+    }
+
+    /// Without a CPU view of GPU memory the copy goes through the OSAL. It
+    /// copied nothing and reported nothing.
+    #[test]
+    fn a_copy_without_a_cpu_view_goes_through_the_osal() {
+        let gl = TestGl::new(8, 8);
+        gl.set_cpu_mapping(false);
+        let data: Vec<u8> = (0..1500u32).map(|i| (i % 251) as u8).collect();
+        buffer_with(GL_COPY_READ_BUFFER, &data);
+        let dst = buffer_with(GL_COPY_WRITE_BUFFER, &std::vec![0u8; 1500]);
+        // SAFETY: plain GL call.
+        unsafe { glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 3, 1, 1400) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let got = contents(&gl, dst);
+        assert_eq!((got[0], &got[1..1401], got[1401]), (0, &data[3..1403], 0), "three chunks");
     }
 }

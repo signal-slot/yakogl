@@ -508,6 +508,16 @@
  *               the PDS programs it already holds. SKIP without a 4x config;
  *               skipped by name in a table build. All three GPUs; not in the
  *               set (as 145: the walker counts a SKIP as a failure)
+ * 205 mappbo    ES 3.0 buffer mapping and pixel buffers: the slice-A
+ *               triangle written into a VBO through glMapBufferRange and
+ *               drawn (a draw while mapped GL_INVALID_OPERATION), collapsed
+ *               through an explicit-flush mapping; a 4x2 RGBA8 texture from
+ *               a PIXEL_UNPACK_BUFFER (offset, ROW_LENGTH, SKIP_PIXELS,
+ *               SKIP_ROWS), one level with MAX_LEVEL 0 and a mipmap filter,
+ *               sampled; the window read into a PIXEL_PACK_BUFFER with
+ *               PACK_ROW_LENGTH and mapped for reading. ES 3.0 only
+ *               (skipped by name in an ES 2.0 context); all three GPUs,
+ *               not in the set
  * 199 es3trunc  GLSL ES 3.00 trunc() on both signs and the integer shifts
  *               (>> arithmetic on a negative int, logical on a uint, <<):
  *               trunc(2.75), trunc(-2.75), (-6 >> 1) - (-6 << 3) and
@@ -516,6 +526,23 @@
  *               the V3D trunc and the shifts until this case. All three
  *               GPUs (skipped by name in a table build and in an ES 2.0
  *               context); in the set
+ * 202 blitconv  glBlitFramebuffer (src/gl/blit.rs): an 8x8 RGBA8 target
+ *               cleared one colour a quadrant, blitted into a 16x16 RGB565
+ *               target scaled 2x and flipped in Y (NEAREST: 5/6/5-bit
+ *               colours, alpha 1) and into a 4x4 RGBA16F target scaled 1/2
+ *               and flipped (LINEAR, read back as floats); a scissored clear
+ *               of the RGB565 target's corner then keeps the blit around it
+ *               (the frame loads it from memory). All three GPUs (skipped
+ *               in an ES 2.0 library); not in the set
+ * 204 srgb      ES 3.0 GL_SRGB8_ALPHA8: an 8x8 sRGB renderbuffer cleared to
+ *               linear 0.2 (byte 124), blended ONE/ONE and SRC_ALPHA/
+ *               ONE_MINUS_SRC_ALPHA in linear space (170; 203 89 160 191),
+ *               reloaded decoded by a frame with no clear (188), read back
+ *               encoded; an sRGB texel sampled decoded (188 -> 128) and a
+ *               black/white pair filtered after the decode (131 at 0.516).
+ *               The render half the PowerVR's, the sample half all three
+ *               GPUs (skipped by name in a table build and in an ES 2.0
+ *               context); not in the set until it has passed on a board
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -793,6 +820,9 @@ static const char *shader_skip_reason(int c)
 	 * colour mask): the run-time compiler's, no table row */
 	if (c == 198)
 		return "alpha to coverage needs the sample-kill variant: a table build has no row for it";
+	/* an sRGB target's fragment variants are the run-time compiler's */
+	if (c == 204)
+		return "an sRGB target needs the sRGB class's variants: a table build has no row for them";
 	/* one program per source in a table: nothing to lower two ways */
 	if (c == 195)
 		return "the if lowering is the run-time compiler's: a table build has one program per source";
@@ -6245,6 +6275,188 @@ static int case_es3vid_indexed(void)
 }
 
 /* ---- case 44: clear-only frames and RGBA16F render targets --------------- */
+#ifdef GL_TEST_VIVANTE
+/*
+ * Case 44's layout probe on the GC7000 (#6 item 3). The draw of step 2 --
+ * es300/vid.vert + vcolor.frag, the quad's triangles (BL red, BR green, TR
+ * blue) and (BL white, TR red, TL green) -- gives every pixel of a W x 8
+ * target its own colour, so a glReadPixels(RGBA, FLOAT) of the target says,
+ * for each stored pixel, which pixel's colour the pixel engine put there.
+ * The i.MX8MP has no console: the probe's one check carries the answer in
+ * the CASE record's got and want words (decoding below and in
+ * VIVANTE_NOTES.md, "RGBA16F targets").
+ *
+ * Arms, one bit each in got[31:24] (set = every pixel where it belongs):
+ *   bit 0  RGBA16F  8 wide, 64-byte rows (the case's own target)
+ *   bit 1  RGBA16F  4 wide, 32-byte rows
+ *   bit 2  RGBA16F 16 wide, 128-byte rows
+ *   bit 3  RGBA16F 24 wide, 192-byte rows
+ *   bit 4  RGBA16F 32 wide, 256-byte rows
+ *   bit 5  RGBA8    8 wide, 32-byte rows (32-bit control)
+ * got[23:21] is the first failing arm (its bit number), whose pixels the
+ * slot codes describe: got[20:14] slot (0,0), [13:7] slot (1,0), [6:0]
+ * slot (2,0); want[27:21] slot (W-1,0), [20:14] (0,1), [13:7] (W-1,1),
+ * [6:0] (W-1,7); want[31:28] the rows of that arm that came out whole.
+ * (x, y) is GL's: y = 0 is the bottom row, the first in memory.
+ * A slot code: 0b0yyyddd = the colour of pixel (x + ddd mod 8, yyy) --
+ * ddd is the x offset of the pixel whose colour is stored there, mod 8, so
+ * 0 is "its own" and 2 "two pixels to the right" -- or 0x40 the clear
+ * colour (never drawn), 0x41 all zero, 0x7f no pixel's colour.
+ * The check passes only when all six arms are whole.
+ */
+enum { HDR_PROBE_H = 8, HDR_PROBE_WMAX = 32 };
+
+/* The colour step 2's draw gives pixel (px, py) of a w x 8 target; `alt`
+ * the other triangle's for a centre on the diagonal (either may own it). */
+static void hdr_probe_expect(int w, int px, int py, int alt, float c[4])
+{
+	float u = ((float)px + 0.5f) / (float)w, v = ((float)py + 0.5f) / (float)HDR_PROBE_H;
+	/* (2px + 1) * 8 vs (2py + 1) * w: which side of the diagonal, exactly */
+	int side = (2 * px + 1) * HDR_PROBE_H - (2 * py + 1) * w;
+	bool lower = side > 0 || (side == 0 && !alt);
+
+	if (lower) {   /* BL red, BR green, TR blue */
+		c[0] = 1.0f - u; c[1] = u - v; c[2] = v;
+	} else {       /* BL white, TR red, TL green */
+		c[0] = 1.0f - v + u; c[1] = 1.0f - u; c[2] = 1.0f - v;
+	}
+	c[3] = 1.0f;
+}
+
+static bool hdr_probe_near(const float *a, const float *b)
+{
+	for (int i = 0; i < 4; i++) {
+		float d = a[i] - b[i];
+
+		if (d > 0.012f || d < -0.012f)
+			return false;
+	}
+	return true;
+}
+
+/* The slot code of stored pixel (x, y) of `px` (w x 8, RGBA floats). */
+static uint32_t hdr_probe_code(const float *px, int w, int x, int y)
+{
+	static const float clear[4] = { 2.0f, 0.5f, 0.25f, 1.0f }, zero[4] = { 0, 0, 0, 0 };
+	const float *s = &px[(y * w + x) * 4];
+
+	for (int sy = 0; sy < HDR_PROBE_H; sy++) {
+		for (int sx = 0; sx < w; sx++) {
+			for (int alt = 0; alt < 2; alt++) {
+				float c[4];
+
+				hdr_probe_expect(w, sx, sy, alt, c);
+				if (hdr_probe_near(s, c))
+					return (uint32_t)(sy << 3) | (uint32_t)((sx - x) & 7);
+			}
+		}
+	}
+	if (hdr_probe_near(s, clear))
+		return 0x40;
+	if (hdr_probe_near(s, zero))
+		return 0x41;
+	return 0x7f;
+}
+
+/* One arm: a w x 8 target of `ifmt`, cleared to (2, 0.5, 0.25, 1), drawn
+ * whole by `prog` and read back as floats into `px`. Returns the rows that
+ * came out whole (8 = the arm passes); -1 when the target could not be made. */
+static int hdr_probe_arm(GLuint prog, int w, bool rgba8, float *px)
+{
+	static uint8_t px8[HDR_PROBE_WMAX * HDR_PROBE_H * 4];
+	GLuint t = 0, f = 0;
+	int rows = 0;
+
+	glGenTextures(1, &t);
+	glBindTexture(GL_TEXTURE_2D, t);
+	if (rgba8)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, HDR_PROBE_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	else
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, HDR_PROBE_H, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glGenFramebuffers(1, &f);
+	glBindFramebuffer(GL_FRAMEBUFFER, f);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		rows = -1;
+		goto out;
+	}
+	glViewport(0, 0, w, HDR_PROBE_H);
+	glClearColor(2.0f, 0.5f, 0.25f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(prog);
+	puv_quad_setup();
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (rgba8) {
+		glReadPixels(0, 0, w, HDR_PROBE_H, GL_RGBA, GL_UNSIGNED_BYTE, px8);
+		for (int i = 0; i < w * HDR_PROBE_H * 4; i++)
+			px[i] = (float)px8[i] / 255.0f;
+	} else {
+		glReadPixels(0, 0, w, HDR_PROBE_H, GL_RGBA, GL_FLOAT, px);
+	}
+	if (!check_gl_error("hdr probe arm")) {
+		rows = -1;
+		goto out;
+	}
+	for (int y = 0; y < HDR_PROBE_H; y++) {
+		bool whole = true;
+
+		for (int x = 0; x < w && whole; x++)
+			whole = hdr_probe_code(px, w, x, y) == (uint32_t)(y << 3);
+		rows += whole;
+	}
+out:
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &f);
+	glDeleteTextures(1, &t);
+	return rows;
+}
+
+/* The probe's check (see above). Leaves framebuffer 0 bound; the caller
+ * rebinds its texture and clear colour. */
+static bool hdr_layout_probe(GLuint prog)
+{
+	static const struct { int w; bool rgba8; } arm[6] = {
+		{ 8, false }, { 4, false }, { 16, false }, { 24, false }, { 32, false }, { 8, true },
+	};
+	static float px[HDR_PROBE_WMAX * HDR_PROBE_H * 4], bad_px[HDR_PROBE_WMAX * HDR_PROBE_H * 4];
+	uint32_t mask = 0, got = 0, want = 0;
+	int bad = -1, bad_rows = 0, bad_w = 8;
+
+	for (int i = 0; i < 6; i++) {
+		int rows = hdr_probe_arm(prog, arm[i].w, arm[i].rgba8, px);
+
+		pr_info("gl_test:   hdr probe arm %d (%s %2d wide): %d / 8 rows whole\n",
+			i, arm[i].rgba8 ? "RGBA8  " : "RGBA16F", arm[i].w, rows);
+		if (rows == HDR_PROBE_H) {
+			mask |= 1u << i;
+		} else if (bad < 0) {
+			bad = i;
+			bad_rows = rows < 0 ? 0 : rows;
+			bad_w = arm[i].w;
+			memcpy(bad_px, px, sizeof(px));
+			if (rows < 0)
+				memset(bad_px, 0, sizeof(bad_px));
+		}
+	}
+	got = mask << 24;
+	if (bad >= 0) {
+		int r = bad_w - 1;
+
+		got |= (uint32_t)bad << 21 | hdr_probe_code(bad_px, bad_w, 0, 0) << 14 |
+		       hdr_probe_code(bad_px, bad_w, 1, 0) << 7 | hdr_probe_code(bad_px, bad_w, 2, 0);
+		want = (uint32_t)bad_rows << 28 | hdr_probe_code(bad_px, bad_w, r, 0) << 21 |
+		       hdr_probe_code(bad_px, bad_w, 0, 1) << 14 | hdr_probe_code(bad_px, bad_w, r, 1) << 7 |
+		       hdr_probe_code(bad_px, bad_w, r, 7);
+	}
+	pr_info("gl_test:   %-28s got 0x%08x want 0x%08x  %s  [check %d]\n", "hdr layout probe", got, want,
+		mask == 0x3f ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(mask == 0x3f, got, want);
+}
+#endif /* GL_TEST_VIVANTE: case 44's layout probe */
+
 /* es300/vid.vert + vcolor.frag draw colours by vertex id; hdrsample.frag reads
  * the target back at a quarter scale so values above 1.0 stay in range. */
 static int case_es3hdr(void)
@@ -6335,6 +6547,13 @@ static int case_es3hdr(void)
 	glFinish();
 	if (!check_gl_error("hdr draw"))
 		return -1;
+#ifdef GL_TEST_VIVANTE
+	/* 2a. the GC7000's layout probe (above): check 3 there, and every
+	 * check after it is one later than on the other GPUs */
+	ok &= hdr_layout_probe(cprog);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#endif
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, TW, TH);
 	glUseProgram(sprog);
@@ -7861,7 +8080,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -17760,6 +17979,561 @@ static int case_usamp(void)
 #endif
 }
 
+/* ---- case 202: glBlitFramebuffer with conversion, scaling and a Y flip (blitconv)
+ *
+ * ES 3.0's glBlitFramebuffer, a CPU copy in the GL core (src/gl/blit.rs):
+ * an 8x8 RGBA8 renderbuffer is rendered by the GPU -- a clear and three
+ * scissored clears, one colour a quadrant -- and blitted
+ *   1. into a 16x16 RGB565 renderbuffer, scaled 2x and flipped in Y
+ *      (destination rectangle (0,16)-(16,0)), NEAREST: each pixel the
+ *      quadrant colour rounded to 5/6/5 bits, alpha 1, the source's top half
+ *      at the bottom;
+ *   2. into a 4x4 RGBA16F renderbuffer, scaled 1/2 and flipped in Y, LINEAR:
+ *      each pixel the half-float quadrant colour (the two texels filtered lie
+ *      in one quadrant), read back as floats;
+ *   3. then the RGB565 target gets a scissored clear of its corner in a GPU
+ *      frame of its own: the frame loads the colour back from memory, so the
+ *      blit's pixels outside the corner survive -- the CPU write reached
+ *      memory.
+ * Skipped in an ES 2.0 library (no glBlitFramebuffer). All three GPUs; not
+ * in the set. */
+static bool expect_rgba8(const char *what, const uint8_t *px, uint32_t w, uint32_t x, uint32_t y,
+			 const uint8_t want[4], int tol)
+{
+	const uint8_t *p = &px[(y * w + x) * 4];
+	uint32_t got = rgba_u32(p[0], p[1], p[2], p[3]);
+	uint32_t exp = rgba_u32(want[0], want[1], want[2], want[3]);
+	bool ok = chan_diff(got, exp) <= tol;
+
+	pr_info("gl_test:   %-28s (%2u,%2u) = 0x%08x  want 0x%08x  %s  [check %d]\n", what, x, y, got, exp,
+		ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, got, exp);
+}
+
+static int case_blitconv(void)
+{
+	/* the quadrants (GL x, y halves): bottom-left, bottom-right, top-left,
+	 * top-right */
+	static const float quad_f[4][4] = {
+		{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f },
+		{ 0.0f, 0.0f, 1.0f, 1.0f }, { 0.2f, 0.4f, 0.6f, 0.8f },
+	};
+	/* the same through RGB565 (round(v * 31 or 63), stored at eight bits),
+	 * alpha 1: 0.2/0.4/0.6 -> 6/31, 25/63, 19/31 -> 49, 101, 156 */
+	static const uint8_t quad_565[4][4] = {
+		{ 255, 0, 0, 255 }, { 0, 255, 0, 255 }, { 0, 0, 255, 255 }, { 49, 101, 156, 255 },
+	};
+	static uint8_t px[16 * 16 * 4];
+	static float fpx[4 * 4 * 4];
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	GLuint rb[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
+	static const GLenum fmt[3] = { GL_RGBA8, GL_RGB565, GL_RGBA16F };
+	static const GLsizei side[3] = { 8, 16, 4 };
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 202 blitconv: SKIP (an ES 2.0 library has no glBlitFramebuffer)\n");
+		return -3;
+	}
+	free_all_objects();
+	glGenRenderbuffers(3, rb);
+	glGenFramebuffers(3, fbo);
+	for (int i = 0; i < 3; i++) {
+		glBindRenderbuffer(GL_RENDERBUFFER, rb[i]);
+		glRenderbufferStorage(GL_RENDERBUFFER, fmt[i], side[i], side[i]);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb[i]);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			pr_err("gl_test: blitconv: framebuffer %d incomplete\n", i);
+			return -1;
+		}
+	}
+
+	/* the source: one colour a quadrant, drawn by the GPU */
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[0]);
+	glViewport(0, 0, 8, 8);
+	for (int q = 0; q < 4; q++) {
+		glClearColor(quad_f[q][0], quad_f[q][1], quad_f[q][2], quad_f[q][3]);
+		if (q) {
+			glEnable(GL_SCISSOR_TEST);
+			glScissor((q & 1) * 4, (q >> 1) * 4, 4, 4);
+		}
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
+	glDisable(GL_SCISSOR_TEST);
+	if (!check_gl_error("blitconv source"))
+		return -1;
+
+	/* 1. into RGB565, 2x, flipped in Y, NEAREST */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+	glBlitFramebuffer(0, 0, 8, 8, 0, 16, 16, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	if (!check_gl_error("blitconv 565"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	glReadPixels(0, 0, 16, 16, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	/* destination row y shows source row 7 - y/2: the bottom half the
+	 * source's top quadrants */
+	ok &= expect_rgba8("565 top-left from bottom-left", px, 16, 2, 13, quad_565[0], 1);
+	ok &= expect_rgba8("565 top-right from bottom-right", px, 16, 13, 13, quad_565[1], 1);
+	ok &= expect_rgba8("565 bottom-left from top-left", px, 16, 2, 2, quad_565[2], 1);
+	ok &= expect_rgba8("565 bottom-right from top-right", px, 16, 13, 2, quad_565[3], 1);
+	ok &= expect_rgba8("565 corner (0,0)", px, 16, 0, 0, quad_565[2], 1);
+
+	/* 2. into RGBA16F, 1/2, flipped in Y, LINEAR */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[2]);
+	glBlitFramebuffer(0, 0, 8, 8, 0, 4, 4, 0, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	if (!check_gl_error("blitconv rgba16f"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[2]);
+	glReadPixels(0, 0, 4, 4, GL_RGBA, GL_FLOAT, fpx);
+	if (!check_gl_error("blitconv rgba16f read"))
+		return -1;
+	{
+		/* (x, y) of the destination and the quadrant it shows */
+		static const uint32_t at[4][3] = { { 0, 3, 0 }, { 3, 3, 1 }, { 0, 0, 2 }, { 3, 0, 3 } };
+
+		for (int i = 0; i < 4; i++) {
+			const float *p = &fpx[(at[i][1] * 4 + at[i][0]) * 4];
+			const float *w = quad_f[at[i][2]];
+			bool good = true;
+
+			for (int ch = 0; ch < 4; ch++) {
+				float d = p[ch] - w[ch];
+
+				good &= d < 0.004f && d > -0.004f;
+			}
+			/* printk has no %f: thousandths */
+			pr_info("gl_test:   rgba16f (%u,%u) = %d %d %d %d /1000  want %d %d %d %d  %s  [check %d]\n",
+				at[i][0], at[i][1], (int)(p[0] * 1000), (int)(p[1] * 1000), (int)(p[2] * 1000),
+				(int)(p[3] * 1000), (int)(w[0] * 1000), (int)(w[1] * 1000), (int)(w[2] * 1000),
+				(int)(w[3] * 1000), good ? "ok" : "MISMATCH", gl_test_check_no + 1);
+			ok &= gl_test_check(good, (uint32_t)(p[0] * 1000), (uint32_t)(w[0] * 1000));
+		}
+	}
+
+	/* 3. a GPU frame on the RGB565 target loads the blit back from memory */
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	glViewport(0, 0, 16, 16);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(0, 0, 2, 2);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDisable(GL_SCISSOR_TEST);
+	glReadPixels(0, 0, 16, 16, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	if (!check_gl_error("blitconv reload"))
+		return -1;
+	{
+		static const uint8_t black[4] = { 0, 0, 0, 255 };
+
+		ok &= expect_rgba8("565 corner cleared", px, 16, 1, 1, black, 1);
+		ok &= expect_rgba8("565 blit kept beside it", px, 16, 2, 2, quad_565[2], 1);
+		ok &= expect_rgba8("565 blit kept far away", px, 16, 13, 13, quad_565[1], 1);
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(3, fbo);
+	glDeleteRenderbuffers(3, rb);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	return ok ? 0 : -1;
+}
+
+/* ---- case 203: transform feedback capture, read back (tfcap) ---------------
+ *
+ * docs/es3-transform-feedback.md; HANDOFF open work 4, tf-capture. The GL
+ * core evaluates the vertex shader on the CPU and writes the captured
+ * varyings itself (the same path on the three GPUs), and the GPU still
+ * draws. gl_test's ES 1.00 pair (gl_test_vs_src: gl_Position = a_pos,
+ * v_color = a_color), the attributes bound to 0, 1, 2 before the link:
+ *
+ *   A  INTERLEAVED gl_Position + v_color, Begin(TRIANGLES), two triangles
+ *      covering the window in green (each vertex at its own depth, so each
+ *      record differs): six records of 8 floats equal to the vertices, a 32-byte guard of 0xcd after them untouched, the
+ *      PRIMITIVES_WRITTEN query 2, and the window green (the draw drawn);
+ *   B  SEPARATE (positions to binding 0, colours to binding 1), a 4-vertex
+ *      triangle strip: the decomposed triangles' vertices 0 1 2, 2 1 3 in
+ *      each buffer, the query 2;
+ *   C  GL_RASTERIZER_DISCARD on, three points captured: the three records
+ *      written, the window keeps the red clear (nothing drawn).
+ *
+ * The buffers are read with glMapBufferRange(GL_MAP_READ_BIT), as dEQP's
+ * transform_feedback cases read them. SKIP on an ES 2.0 library, and when
+ * the link refuses the varyings for want of the in-process compiler (a
+ * table-only image).
+ * ------------------------------------------------------------------------- */
+static bool tfcap_floats(const char *what, GLuint buf, const float *want, int n)
+{
+	const float *p;
+	bool ok = true;
+
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, buf);
+	p = glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, (GLsizeiptr)(n * sizeof(float)), GL_MAP_READ_BIT);
+	if (!p) {
+		pr_err("gl_test: tfcap: %s: glMapBufferRange failed (0x%x)\n", what, (unsigned)glGetError());
+		return gl_test_check(false, 0, 1);
+	}
+	for (int i = 0; i < n; i++) {
+		if (p[i] != want[i]) {
+			uint32_t bits;
+
+			memcpy(&bits, &p[i], sizeof(bits));
+			pr_err("gl_test: tfcap: %s: float %d = %f (0x%08x), want %f\n", what, i, (double)p[i],
+			       (unsigned)bits, (double)want[i]);
+			ok = false;
+		}
+	}
+	glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+	pr_info("gl_test:   tfcap %-22s %d floats  %s  [check %d]\n", what, n, ok ? "ok" : "MISMATCH",
+		gl_test_check_no + 1);
+	return gl_test_check(ok, 0, 0);
+}
+
+static GLuint tfcap_program(const char *const *names, GLsizei n, GLenum mode, bool *skip)
+{
+	GLuint vs = compile(GL_VERTEX_SHADER, gl_test_vs_src);
+	GLuint fs = compile(GL_FRAGMENT_SHADER, gl_test_fs_src);
+	GLuint prog;
+	GLint ok = 0;
+	char log[256] = "";
+
+	if (!vs || !fs)
+		return 0;
+	prog = glCreateProgram();
+	glAttachShader(prog, vs);
+	glAttachShader(prog, fs);
+	glBindAttribLocation(prog, 0, "a_pos");
+	glBindAttribLocation(prog, 1, "a_color");
+	glBindAttribLocation(prog, 2, "a_uv");
+	glTransformFeedbackVaryings(prog, n, names, mode);
+	glLinkProgram(prog);
+	glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+	if (!ok) {
+		glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+		*skip = strstr(log, "in-process shader compiler") != NULL;
+		pr_err("gl_test: tfcap: link failed: %s\n", log);
+		return 0;
+	}
+	return prog;
+}
+
+static GLuint tfcap_buffer(GLuint index, GLsizeiptr bytes)
+{
+	static uint8_t fill[512];
+	GLuint b = 0;
+
+	memset(fill, 0xcd, sizeof(fill));
+	glGenBuffers(1, &b);
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, b);
+	glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, bytes, fill, GL_DYNAMIC_READ);
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, index, b);
+	return b;
+}
+
+static GLuint tfcap_query_result(GLuint q)
+{
+	GLuint res = 0xffffffffu;
+
+	glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+	glGetQueryObjectuiv(q, GL_QUERY_RESULT, &res);
+	return res;
+}
+
+static int case_tfcap(void)
+{
+	static const char *const both[2] = { "gl_Position", "v_color" };
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	struct cuv_vertex v[6];
+	float want[6 * 8], guard[8];
+	GLuint prog = 0, vbo, buf[3] = { 0, 0, 0 }, q = 0;
+	bool ok = true, skip = false;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 203 tfcap: SKIP (an ES 2.0 library has no transform feedback)\n");
+		return -3;
+	}
+	free_all_objects();
+	/* A: two green triangles covering the window, interleaved */
+	cuv_set(&v[0], -1.0f, -1.0f, 0.0f, 0, 1, 0);
+	cuv_set(&v[1], 1.0f, -1.0f, 0.25f, 0, 1, 0);
+	cuv_set(&v[2], -1.0f, 1.0f, 0.5f, 0, 1, 0);
+	cuv_set(&v[3], 1.0f, -1.0f, -0.25f, 0, 1, 0);
+	cuv_set(&v[4], 1.0f, 1.0f, -0.5f, 0, 1, 0);
+	cuv_set(&v[5], -1.0f, 1.0f, 0.75f, 0, 1, 0);
+	for (int k = 0; k < 6; k++) {
+		/* the depths (no depth test) make each record distinct */
+		memcpy(&want[k * 8], v[k].pos, 16);
+		memcpy(&want[k * 8 + 4], v[k].color, 16);
+	}
+	prog = tfcap_program(both, 2, GL_INTERLEAVED_ATTRIBS, &skip);
+	if (!prog) {
+		if (skip) {
+			pr_info("gl_test: case 203 tfcap: SKIP (no in-process compiler for the varyings)\n");
+			return -3;
+		}
+		return -1;
+	}
+	glUseProgram(prog);
+	vbo = upload_vbo(v, sizeof(v));
+	cuv_attribs();
+	glViewport(0, 0, TW, TH);
+	buf[0] = tfcap_buffer(0, sizeof(want) + 32);
+	glGenQueries(1, &q);
+	if (!check_gl_error("tfcap setup")) {
+		ok = false;
+		goto out;
+	}
+	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, q);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glEndTransformFeedback();
+	ok &= check_gl_error("tfcap A draw");
+	ok &= expect_int("A primitives written", (long)tfcap_query_result(q), 2);
+	ok &= tfcap_floats("A records", buf[0], want, 6 * 8);
+	memset(guard, 0xcd, sizeof(guard));
+	{
+		const uint8_t *p;
+		bool gok;
+
+		glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, buf[0]);
+		p = glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, sizeof(want), 32, GL_MAP_READ_BIT);
+		gok = p && memcmp(p, guard, 32) == 0;
+		glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+		ok &= expect_int("A guard untouched", gok, 1);
+	}
+	read_topdown();
+	ok &= expect_px("A the triangles are drawn", TW / 4, TH / 4, rgba_u32(0, 255, 0, 255), 2);
+
+	/* B: separate, a triangle strip of four */
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	prog = tfcap_program(both, 2, GL_SEPARATE_ATTRIBS, &skip);
+	if (!prog) {
+		ok = false;
+		goto out;
+	}
+	glUseProgram(prog);
+	buf[1] = tfcap_buffer(0, 6 * 16);
+	buf[2] = tfcap_buffer(1, 6 * 16);
+	glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, q);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glEndTransformFeedback();
+	ok &= check_gl_error("tfcap B draw");
+	ok &= expect_int("B primitives written", (long)tfcap_query_result(q), 2);
+	{
+		static const int order[6] = { 0, 1, 2, 2, 1, 3 };
+		float wpos[6 * 4], wcol[6 * 4];
+
+		for (int k = 0; k < 6; k++) {
+			memcpy(&wpos[k * 4], v[order[k]].pos, 16);
+			memcpy(&wcol[k * 4], v[order[k]].color, 16);
+		}
+		ok &= tfcap_floats("B positions", buf[1], wpos, 6 * 4);
+		ok &= tfcap_floats("B colours", buf[2], wcol, 6 * 4);
+	}
+
+	/* C: rasterizer discard: captured, not drawn */
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_RASTERIZER_DISCARD);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glEndTransformFeedback();
+	glDisable(GL_RASTERIZER_DISCARD);
+	ok &= check_gl_error("tfcap C draw");
+	{
+		float wpos[3 * 4];
+
+		for (int k = 0; k < 3; k++)
+			memcpy(&wpos[k * 4], v[k].pos, 16);
+		ok &= tfcap_floats("C positions", buf[1], wpos, 3 * 4);
+	}
+	read_topdown();
+	ok &= expect_px("C discard draws nothing", TW / 2, TH / 2, rgba_u32(255, 0, 0, 255), 2);
+out:
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, 0);
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 1, 0);
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0);
+	glDeleteQueries(1, &q);
+	glDeleteBuffers(3, buf);
+	glDeleteBuffers(1, &vbo);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok && check_gl_error("tfcap teardown") ? 0 : -1;
+}
+
+/* ---- case 205: a mapped VBO and pixel buffer transfers (mappbo) -----------
+ *
+ * ES 3.0 buffer mapping and pixel buffer objects, read back:
+ * 1. The slice-A triangle written into a VBO through glMapBufferRange
+ *    (WRITE | INVALIDATE_BUFFER) on the store glBufferData left empty, and
+ *    drawn: the triangle at the centroid. A draw while the buffer is mapped
+ *    is GL_INVALID_OPERATION (ES 3.0 2.9.4). Then mapped WRITE |
+ *    FLUSH_EXPLICIT, every vertex moved to the apex and the three positions
+ *    flushed with glFlushMappedBufferRange: nothing at the centroid.
+ * 2. A 4x2 RGBA8 texture of eight colours uploaded from a
+ *    PIXEL_UNPACK_BUFFER at offset 8 with UNPACK_ROW_LENGTH 7,
+ *    UNPACK_SKIP_PIXELS 2 and UNPACK_SKIP_ROWS 1 (every other byte of the
+ *    buffer 0x11), one level sampled NEAREST_MIPMAP_NEAREST with
+ *    GL_TEXTURE_MAX_LEVEL 0 -- dEQP texture.specification's state, complete
+ *    in ES 3.0 3.8.13 -- over the window: each texel's cell read back. The
+ *    GL core called that texture incomplete (it wanted the whole chain) and
+ *    every one-level texture.specification case read black until
+ *    2026-10-10.
+ * 3. The window read into a PIXEL_PACK_BUFFER at offset 4 with
+ *    PACK_ROW_LENGTH 70 and mapped for reading: every row is the one a
+ *    direct glReadPixels gives.
+ * Host: src/gl/es3_pbo_tests.rs (the uploads and the completeness) and
+ * src/gl/buffer.rs every_target_* / a_draw_that_fetches_from_a_mapped_*.
+ * ES 3.0 only (skipped by name in an ES 2.0 context); all three GPUs.
+ * ------------------------------------------------------------------------- */
+static int case_mappbo(void)
+{
+	/* texel (x, y), y = 0 the bottom row */
+	static const uint32_t texels[2][4] = {
+		{ 0xff0000ffu, 0xff00ff00u, 0xffff0000u, 0xffffffffu },
+		{ 0xff00ffffu, 0xffffff00u, 0xffff00ffu, 0xff204080u },
+	};
+	enum { OFF = 8, ROWLEN = 7, SKIPX = 2, SKIPY = 1, PBO_BYTES = OFF + 4 * ROWLEN * (SKIPY + 2) };
+	enum { PACK_OFF = 4, PACK_ROWLEN = 70, PACK_BYTES = PACK_OFF + 4 * PACK_ROWLEN * (TH - 1) + 4 * TW };
+	static uint8_t src[PBO_BYTES];
+	static uint32_t direct[TW * TH];
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	struct cuv_vertex tri[3], point[3];
+	GLuint prog, tprog, vbo = 0, tex = 0, pbo = 0;
+	GLenum err;
+	uint8_t *p;
+	uint32_t bad = 0;
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 205 mappbo: SKIP (an ES 2.0 library has no glMapBufferRange nor pixel buffers)\n");
+		return -3;
+	}
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_vs_src, gl_test_fs_src);
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	if (!prog || !tprog)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	/* 1. the triangle through a write mapping */
+	slice_a_vertices(tri, 0);
+	point[0] = point[1] = point[2] = tri[0];
+	glUseProgram(prog);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(tri), NULL, GL_DYNAMIC_DRAW);
+	cuv_attribs();
+	p = glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(tri), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+	if (!p || !check_gl_error("mappbo: map for write"))
+		return -1;
+	memcpy(p, tri, sizeof(tri));
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	err = glGetError();
+	ok &= expect_int("mappbo: a draw from the mapped VBO", (long)err, GL_INVALID_OPERATION);
+	ok &= expect_int("mappbo: glUnmapBuffer", glUnmapBuffer(GL_ARRAY_BUFFER), GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glFinish();
+	if (!check_gl_error("mappbo: the mapped triangle"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("mappbo: written through the map", 32, 40, A_CENTROID, 8);
+
+	p = glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(tri), GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
+	if (!p)
+		return -1;
+	for (size_t v = 0; v < 3; v++) {
+		memcpy(p + v * sizeof(point[0]), point[v].pos, sizeof(point[v].pos));
+		glFlushMappedBufferRange(GL_ARRAY_BUFFER, (GLintptr)(v * sizeof(point[0])),
+					 (GLsizeiptr)sizeof(point[v].pos));
+	}
+	ok &= expect_int("mappbo: glUnmapBuffer 2", glUnmapBuffer(GL_ARRAY_BUFFER), GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glFinish();
+	if (!check_gl_error("mappbo: the flushed positions"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("mappbo: collapsed by the flushed ranges", 32, 40, 0xff000000u, 0);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	/* 2. a texture from a pixel unpack buffer, one level, MAX_LEVEL 0 */
+	memset(src, 0x11, sizeof(src));
+	for (unsigned y = 0; y < 2; y++)
+		memcpy(&src[OFF + 4 * (ROWLEN * (SKIPY + y) + SKIPX)], texels[y], sizeof(texels[y]));
+	glGenBuffers(1, &pbo);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+	glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeof(src), src, GL_STATIC_DRAW);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, ROWLEN);
+	glPixelStorei(GL_UNPACK_SKIP_PIXELS, SKIPX);
+	glPixelStorei(GL_UNPACK_SKIP_ROWS, SKIPY);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void *)(uintptr_t)OFF);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+	glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+	glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	glDeleteBuffers(1, &pbo);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	if (!check_gl_error("mappbo: the unpack-buffer upload"))
+		return -1;
+	glClear(GL_COLOR_BUFFER_BIT);
+	dst_sample(tprog, tex);
+	glFinish();
+	if (!check_gl_error("mappbo: sampling the upload"))
+		return -1;
+	read_topdown();
+	for (uint32_t y = 0; y < 2; y++) {
+		for (uint32_t x = 0; x < 4; x++) {
+			char what[40];
+
+			snprintf(what, sizeof(what), "mappbo: texel (%u,%u)", (unsigned)x, (unsigned)y);
+			ok &= expect_px(what, 16 * x + 8, y ? 16 : 48, texels[y][x], 1);
+		}
+	}
+
+	/* 3. the window into a pixel pack buffer, mapped for reading */
+	glReadPixels(0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE, direct);
+	glGenBuffers(1, &pbo);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
+	glBufferData(GL_PIXEL_PACK_BUFFER, PACK_BYTES, NULL, GL_STREAM_READ);
+	glPixelStorei(GL_PACK_ROW_LENGTH, PACK_ROWLEN);
+	glReadPixels(0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE, (void *)(uintptr_t)PACK_OFF);
+	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+	p = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, PACK_BYTES, GL_MAP_READ_BIT);
+	if (!p || !check_gl_error("mappbo: the pack-buffer read"))
+		return -1;
+	for (uint32_t y = 0; y < TH; y++)
+		bad += memcmp(p + PACK_OFF + 4 * PACK_ROWLEN * y, &direct[TW * y], 4 * TW) != 0;
+	ok &= expect_int("mappbo: rows the pack buffer holds unlike glReadPixels'", (long)bad, 0);
+	ok &= expect_int("mappbo: glUnmapBuffer 3", glUnmapBuffer(GL_PIXEL_PACK_BUFFER), GL_TRUE);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+	glDeleteBuffers(1, &pbo);
+
+	glDeleteTextures(1, &tex);
+	glDeleteBuffers(1, &vbo);
+	glDeleteProgram(prog);
+	glDeleteProgram(tprog);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 180: memory a finished job held, back at once (teardown) --------
  *
  * glmark2 tears a scene down and sets the next one up with no wait in
@@ -18801,6 +19575,172 @@ static int case_hdrblend(void)
 	glDeleteFramebuffers(1, &fbo);
 	glDeleteTextures(1, &tex);
 	return ok && check_gl_error("hdrblend teardown") ? 0 : -1;
+}
+
+/* ---- case 204: sRGB render target and sRGB texture (srgb) ------------------
+ *
+ * ES 3.0's GL_SRGB8_ALPHA8 (docs/es3-srgb.md). The render half, on an 8x8
+ * SRGB8_ALPHA8 renderbuffer read back as bytes (glReadPixels returns the
+ * stored, encoded values):
+ *   1. cleared to linear (0.2, 0.2, 0.2, 1): 124 124 124 255 (the clear is
+ *      encoded: 0.2 linear is byte 124);
+ *   2. the left half blended ONE/ONE with u_color (0.2, 0.2, 0.2, 0.5):
+ *      170 170 170 255 -- 0.4 linear, blended in linear space (a blend of the
+ *      encoded bytes would read 248), alpha clamped at 1 (docs/es3-srgb.md
+ *      B1);
+ *   3. the right half blended SRC_ALPHA/ONE_MINUS_SRC_ALPHA with (1, 0, 0.5,
+ *      0.5): linear (0.6, 0.1, 0.35, 0.75) = 203 89 160 191 (on the encoded
+ *      bytes: 190 62 156);
+ *   4. a second frame with no clear, the left half blended ONE/ONE with
+ *      (0.1, 0.1, 0.1, 0): the frame load decodes 170 to 0.402, so 0.502
+ *      linear = 188 (a load that took the encoded bytes for linear would
+ *      read 227);
+ *      the right half keeps step 3's bytes.
+ * Tolerance 1 for the clear and 2 for a blend (the F16 accumulation and
+ * the PBE's encode table). The sample half, on the window (RGBA8, linear):
+ *   5. a 1x1 SRGB8_ALPHA8 texel (188, 124, 0, 128) sampled NEAREST: 128 51 0
+ *      128 (decoded; alpha is linear), tolerance 1;
+ *   6. a 2x1 texture of black and white sampled LINEAR at pixel 32 of 64,
+ *      coordinate 0.516 between the texels: 131 (decode, then filter; a
+ *      filter of the encoded bytes then a decode reads 58), tolerance 3.
+ * The render half is the PowerVR's (the other GPUs refuse a draw into an
+ * sRGB target by name); the sample half runs on all three GPUs. An ES 2.0
+ * context has no sRGB format: the case skips by name. The online compiler's
+ * image: the sRGB target's fragment variants are no table's rows.
+ * ------------------------------------------------------------------------- */
+#ifdef GL_TEST_PVR
+/* One pixel of an 8x8 RGBA8 read-back against `want` (R in the low byte). */
+static bool expect_px8(const char *what, const uint32_t *px, uint32_t x, uint32_t y, uint32_t want, int tol)
+{
+	uint32_t got = px[y * 8 + x];
+	bool ok = chan_diff(got, want) <= tol;
+
+	pr_info("gl_test:   %-28s (%u,%u) = 0x%08x  want 0x%08x  %s  [check %d]\n", what, x, y, got, want,
+		ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, got, want);
+}
+#endif
+
+static int case_srgb(void)
+{
+	static const GLubyte one[4] = { 188, 124, 0, 128 };
+	static const GLubyte bw[2 * 4] = { 0, 0, 0, 255, 255, 255, 255, 255 };
+	const char *v = (const char *)glGetString(GL_VERSION);
+	GLuint tprog, tex = 0;
+	bool ok = true;
+
+	if (v && strncmp(v, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 204 srgb: SKIP (an ES 2.0 context has no sRGB format)\n");
+		return -3;
+	}
+	free_all_objects();
+#ifdef GL_TEST_PVR
+	{
+		static uint32_t px[8 * 8];
+		GLuint cprog, rb = 0, fbo = 0;
+
+		cprog = link_program(gl_test_hdrquad_vs_src, gl_test_hdrcolor_fs_src);
+		if (!cprog)
+			return -1;
+		glGenRenderbuffers(1, &rb);
+		glBindRenderbuffer(GL_RENDERBUFFER, rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_SRGB8_ALPHA8, 8, 8);
+		glGenFramebuffers(1, &fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			pr_err("gl_test: srgb: SRGB8_ALPHA8 FBO incomplete\n");
+			return -1;
+		}
+		glViewport(0, 0, 8, 8);
+
+		/* 1. the clear, encoded */
+		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb clear"))
+			return -1;
+		ok &= expect_px8("srgb cleared", px, 1, 1, rgba_u32(124, 124, 124, 255), 1);
+		ok &= expect_px8("srgb cleared", px, 6, 6, rgba_u32(124, 124, 124, 255), 1);
+
+		/* 2, 3. blended in linear space, half and half */
+		glUseProgram(cprog);
+		puv_quad_setup();
+		glEnable(GL_BLEND);
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, 0, 4, 8);
+		glBlendFunc(GL_ONE, GL_ONE);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 0.2f, 0.2f, 0.2f, 0.5f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glScissor(4, 0, 4, 8);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 1.0f, 0.0f, 0.5f, 0.5f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb blends"))
+			return -1;
+		ok &= expect_px8("srgb one,one (0.4 linear)", px, 1, 3, rgba_u32(170, 170, 170, 255), 2);
+		ok &= expect_px8("srgb over (0.6,0.1,0.35,0.75)", px, 6, 3, rgba_u32(203, 89, 160, 191), 2);
+
+		/* 4. no clear: the frame load decodes what step 2 stored */
+		glScissor(0, 0, 4, 8);
+		glBlendFunc(GL_ONE, GL_ONE);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 0.1f, 0.1f, 0.1f, 0.0f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_BLEND);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb load"))
+			return -1;
+		ok &= expect_px8("srgb loaded + 0.1 (0.502)", px, 2, 5, rgba_u32(188, 188, 188, 255), 2);
+		ok &= expect_px8("srgb right half kept", px, 5, 5, rgba_u32(203, 89, 160, 191), 2);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glDeleteFramebuffers(1, &fbo);
+		glDeleteRenderbuffers(1, &rb);
+	}
+#else
+	pr_info("gl_test: case 204 srgb: the render half is the PowerVR's (this GPU refuses an sRGB target by name)\n");
+#endif
+
+	/* 5. an sRGB texel, decoded (alpha linear) */
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	if (!tprog)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glUseProgram(tprog);
+	glUniform1i(glGetUniformLocation(tprog, "u_tex"), 0);
+	puv_quad_setup();
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, one);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("srgb texel"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("srgb texel decoded", TW / 2, TH / 2, rgba_u32(128, 51, 0, 128), 1);
+
+	/* 6. decode, then filter */
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, 2, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, bw);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("srgb filter"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("srgb linear filter at 0.516", TW / 2, TH / 2, rgba_u32(131, 131, 131, 255), 3);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glDeleteTextures(1, &tex);
+	return ok ? 0 : -1;
 }
 
 /* ---- case 97: fifteen vec4 varyings, every io row the GC7000 reports -------
@@ -20111,6 +21051,26 @@ static int run_case(int c, int pretransform, int debug)
 	case 199: rc = case_es3trunc(); break;
 	case 200: rc = case_intrt(); break;
 	case 201: rc = case_usamp(); break;
+	case 202:
+		rc = case_blitconv();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library */
+		break;
+	case 203:
+		rc = case_tfcap();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library, or no in-process compiler */
+		break;
+	case 204:
+		rc = case_srgb();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 context */
+		break;
+	case 205:
+		rc = case_mappbo();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library */
+		break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

@@ -1,50 +1,44 @@
 # Transform feedback and rasterizer discard: design
 
-Status: design, 2026-10-08 (`f818f84e`). It has two parts: **tf-api** (GL
-state, errors, queries, rasterizer discard), built in `16ac8641`
-(`src/gl/tf.rs`), and **tf-capture** (the data path), open:
-`docs/HANDOFF.md`, open work 4, tf-capture. Sections 1 and 5 describe the
-code as it was before `16ac8641`. `src/GL_CORE_NOTES.md` ("Transform
-feedback (state built, capture not)") points here.
+Status: built. The GL half, **tf-api** (state, errors, queries, rasterizer
+discard), is `src/gl/tf.rs` (`16ac8641`); the data path, **tf-capture**, is
+`src/gl/tf_capture.rs` with the evaluator it runs (`src/shaderc/online/eval.rs`
+`run_in`, `src/shaderc/online/fmath.rs`). `src/GL_CORE_NOTES.md` ("Transform
+feedback") lists the deviations. What is left is the board run (section 9).
 
-## 1. What is missing, and what it costs
+## 1. What it covers
 
-Today (`src/gl/es3.rs` at 98ab5fae):
+A draw while a transform feedback object is active and not paused is checked
+against ES 3.0 2.15.2 (section 5.6) and then **captured on the CPU**: the GL
+core lowers the program's vertex shader to IR again, runs it for every vertex
+the draw captures, assembles the draw's primitives into the type Begin named,
+and writes the captured varyings into the bound buffers. The draw then goes
+to the GPU unchanged, or nowhere under `GL_RASTERIZER_DISCARD`. No back end
+is involved, so the three GPUs behave the same (section 3 says why none of
+them can do it in hardware here).
 
-- every `GL_MAX_TRANSFORM_FEEDBACK_*` answers 0 (`src/gl/state.rs:1137-1139`);
-- `glTransformFeedbackVaryings` with `GL_SEPARATE_ATTRIBS` and count > 0 is
-  `GL_INVALID_VALUE`, an INTERLEAVED request fails the next link
-  (`es3.rs:431-456`, `program.rs:1647-1654`);
-- `glBegin/End/Pause/ResumeTransformFeedback` are always
-  `GL_INVALID_OPERATION` (`es3.rs:390-416`);
-- `glBindBufferBase/Range(GL_TRANSFORM_FEEDBACK_BUFFER, i, buf != 0)` is
-  `GL_INVALID_OPERATION` (`es3.rs:959-961`, `1014-1016`);
-- `glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN)` is
-  `GL_INVALID_OPERATION` (`es3.rs:285`);
-- `GL_RASTERIZER_DISCARD` is recorded and queryable but changes nothing
-  (`state.rs:434-436`).
+The dEQP picture. On the AM62P at `c4ccc966` (before the capture), the
+mustpass `transform_feedback` group (882 cases) was 675 Fail and 207
+NotSupported, and the 56 `lifetime` cases that need a working object gave no
+result:
 
-What that costs on the AM62P (main 396d667a, `tools/cts/RESULTS.md` §1r and the
-row at line 991):
-
-| bucket | cases | cause |
+| bucket (AM62P, `c4ccc966`) | cases | cause |
 |---|---|---|
-| `glTransformFeedbackVaryings(): ... GL_INVALID_VALUE at gluShaderProgram.cpp` | 413 | the SEPARATE refusal above |
-| `Compile failed: '' at es3fTransformFeedbackTests.cpp` | 48 | an empty info log. This is item **tf-infolog**, not this design. |
-| `lifetime.*`, no result | 56 | the group's init needs a working TF object |
-| `rasterizer_discard.*` "Fail (no message)" | 51 | discard is not honoured |
-| `transform_feedback.*` NotSupported | 421 | dEQP reads the limits (0) and skips |
+| `guardband write: glGetError() returned GL_INVALID_ENUM` | most of the 675 | `glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER)`, a target the image did not accept yet (accepted on main since) |
+| `Compile failed: ''` | 185 | the fragment shader refused (`FragmentInputsNotBuilt`); item **tf-infolog** and the online compiler's, not this design |
+| `NotSupported (Implementation limits execeeded)` | 207 | GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS was 4 (section 5.1) |
+| `lifetime.*`, no result | 56 | the group needs a capture that works |
 
-The mustpass's `transform_feedback` group (`tools/cts/gles3-mustpass.txt`) has
-882 cases: `basic_types` and `array` (189 each per buffer mode),
-`random_full_array_capture` (30 per mode), `interpolation.{smooth,flat,centroid}`
-(18 each), and `position` and `point_size` (6 each: points/lines/triangles ×
-separate/interleaved). The draw modes are the three base modes only, so strips
-and fans are never captured there. `rasterizer_discard` has 51 cases:
-`{basic,scissor,fbo}` × (`write_depth_*` × 7 primitive modes,
-`write_stencil_*` × 7, `clear_color`, `clear_depth`, `clear_stencil`).
-Nine of every 17 cases are about the **clear**, so discard has to cover
-glClear too (§5).
+With the capture, on the host (`tools/cts/host-deqp-run.sh`, PowerVR online
+compiler, HOST-ONLY: the Linux OSAL renders nothing, so the image half of
+each case compares two black frames; the buffer contents and the query are
+real): `functional.transform_feedback` 882 of 882 Pass (675 Pass and 207
+NotSupported with the separate limit at 4), and the counts in section 9 for
+`lifetime` and `rasterizer_discard`.
+
+The mustpass draws the three base modes only, so strips, loops and fans are
+never captured by dEQP; their vertex order is pinned by the host tests
+(section 7).
 
 ## 2. Citations, and what could not be checked
 
@@ -169,7 +163,7 @@ hack.
 So the GC7000UL has no capture path. The register block is for other
 Vivante cores.
 
-### 3.3 PowerVR BXS-4-64 (AM62P): no capture path
+### 3.3 PowerVR BXS-4-64 (AM62P): no capture path we can use
 
 Mesa's PowerVR driver is Vulkan only (`src/imagination/vulkan/`), and its
 extension table has no `EXT_transform_feedback`
@@ -181,18 +175,20 @@ and from there they go to the parameter buffer. No stream-out unit is
 documented. A vertex-shader variant that stores its outputs to memory would
 need USC stores in a vertex stage. Neither Mesa nor our online USC back end
 (`src/shaderc/online/powervr/`) does that, so there is no reference
-implementation to follow. This is §6, rejected alternatives R2 and R3.
+implementation to follow, and a program whose vertex binary came from the
+offline table (made by Mesa's `pco_shc`) could never capture. This is §6,
+rejected alternatives R2 and R3.
 
 ## 4. Decision
 
 | GPU | capture | rasterizer discard | PRIMITIVES_WRITTEN |
 |---|---|---|---|
-| all three, first | **CPU capture in the GL core** (§4.1) | GL core: skip the draw and the clear | counted by the CPU capture |
-| V3D 4.2, later, optional | hardware TF through the coordinate shader (§3.1), behind the same GL interface | unchanged | the GPU's primitive counts, with a submit and wait, as Mesa does |
+| all three (built) | **CPU capture in the GL core** (§4.1) | GL core: skip the draw and the clear | counted by the CPU capture |
+| V3D 4.2, later, optional | hardware TF through the coordinate shader (§3.1), behind the same GL interface | unchanged | counted on the CPU, as now (§4.3) |
 | GC7000UL | CPU only: r6204 has no HWTFB (§3.2) | unchanged | CPU |
 | PowerVR | CPU only: no stream-out, no VS stores (§3.3) | unchanged | CPU |
 
-### 4.1 Why CPU capture first, on every GPU
+### 4.1 Why CPU capture, on every GPU
 
 1. **One implementation for three GPUs**, which can be checked on the host
    against exact expected bytes. A hardware path is board-only to verify on
@@ -215,11 +211,15 @@ implementation to follow. This is §6, rejected alternatives R2 and R3.
 
 The costs are accepted and stated:
 
-- **Speed.** An interpreted IR costs microseconds per vertex on an A53/A72.
-  That is fine for dEQP (draws of tens to hundreds of vertices) and slow for a
-  particle system of 10^5 vertices per frame. Capture runs only while TF is
-  active and not paused, so no other draw pays anything but one flag test. The
-  V3D hardware path (§4.3) is the remedy where it matters.
+- **Speed.** Measured on the x86 host, release build
+  (`tf_capture_tests.rs` `capture_cost`): 1.5 us a vertex for a vertex
+  shader of about 20 operations (a mat4 transform, a normalize), and 23 us
+  for a one-point draw, which is the lowering and the set-up. An A53/A72 is
+  several times slower. That is fine for dEQP (draws of tens to hundreds of
+  vertices) and slow for a particle system of 10^5 vertices per frame.
+  Capture runs only while TF is active and not paused, so no other draw pays
+  anything but one flag test. The V3D hardware path (§4.3) is the remedy
+  where it matters.
 - **Precision.** The captured values are the evaluator's f32, not the GPU's.
   The GPU still rasterises with its own values, so a captured `gl_Position`
   and the drawn one can differ in the last ulp. ES 3.0 does not require them
@@ -230,50 +230,43 @@ The costs are accepted and stated:
   in scope. A captured draw whose vertex shader samples a texture is refused,
   see §5.7. dEQP's TF shaders do not sample.
 
-### 4.2 What the evaluator has to become (tf-capture)
+### 4.2 The evaluator in the product
 
-`src/shaderc/online/eval.rs` is `#[cfg(any(test, feature = "host-test"))]`
-(`online/mod.rs:99-100`), uses `std::vec::Vec` (`eval.rs:23`) and std float
-methods, and refuses textures, derivatives and indexed locals
-(`eval.rs:13-20`). For product use:
+`src/shaderc/online/eval.rs` serves two callers with one machine:
 
-- **no_std.** Replace `Vec` with slices taken from the compile scratch arena
-  (`store::with_scratch`, `store.rs:580`, `SCRATCH_BYTES` 4 MiB at `:87`). The
-  value and local counts are known from the `ir::Module`. Build it in every
-  build except `report-es2`: `#[cfg(any(test, feature = "host-test",
-  not(feature = "report-es2")))]`. The test-only users keep the same API.
-- **Transcendentals.** The crate has no libm and no dependencies
-  (`Cargo.toml:159`, `fold.rs:11-13`). Add a small no_std math module (sin,
-  cos, tan, asin, acos, atan, atan2, exp, exp2, log, log2, pow, sqrt,
-  inversesqrt) with an error bound stated against GLSL ES 3.00 §4.5.1 (verify
-  the table of required precisions), and keep the host evaluator on std so
-  the existing oracles do not move. dEQP's TF shaders use none of these, so
-  this is for real applications.
-- **Indexed locals** (`out float v[N]` written in a loop with a variable
-  index): `random_full_array_capture` and `array` need it. The arena gives
-  each local array its storage.
-- **Integer and unsigned outputs** are raw 32-bit lanes already (`eval.rs:13`).
-  The capture writes the lanes, not floats.
-- A `fault` (`Err`) is a refusal (§5.7), never a value.
+- the host oracles (`run`, `run_with_textures`, `run_with_trig_error`,
+  `host-test` only): every store collected into an `Outcome`, the host's
+  `std` float functions (the oracles' pins were taken with them), texture
+  models, and section 5.9's undefined results stop the run;
+- the capture (`run_in`, compiled in every build except a `report-es2`
+  product build): the working memory is a `Frame` lent from the compile
+  scratch (`store::with_scratch`), the stores go through a `Sink`, the
+  float functions are `fmath`'s, an undefined result is a value (5.9 says
+  undefined, not an error, and a draw must not fail on it), and a loop may
+  run 2^20 iterations (ES 3.00 lifts Appendix A) before the draw is refused.
+  Faults are a fixed 112-byte text (`Fault`), never a heap string.
+
+`src/shaderc/online/fmath.rs` is the no-libm half: `sqrt`, `trunc`,
+`floor`, `ceil` bit for bit the host's (IEEE's correctly rounded square
+root; checked on every 997th bit pattern), `exp2` and `log2` within 1 ULP
+(f64 series, one rounding; GLSL ES 3.00 4.5.1 asks for 3), `sin` and `cos`
+within 2^-23 for |x| < 2^19 (fdlibm's three-piece pi/2 reduction; 4.5.1
+leaves their precision undefined).
+
+The lowering never emits an indexed local (`random_full_array_capture` and
+`array` capture output arrays written in loops: they lower to selects), so
+the evaluator's refusal of one is never reached.
 
 The vertex shader's **IR is not kept** after compile (only the GPU binary and
-reflection live in the keep region, `store.rs:124`). Keeping it for every
-program would cost keep-region space that ES 2.0 programs need. Instead:
-
-- at `glLinkProgram`, when the program has ≥ 1 TF varying, copy the linked
-  vertex shader's **source** (and its `#version` text, as compiled) into a
-  host-heap buffer owned by the program. Free it on relink and on delete. A
-  later `glShaderSource` on the shader does not change the linked program
-  (ES 3.0 2.11.3), which is why the copy is taken at link;
-- at each captured draw, re-run `lower::compile_to_ir` (`lower.rs:563`) into
-  scratch and evaluate there. The compile is milliseconds per draw. tf-capture
-  measures it on the host (§7.2, C-perf) and may cache the module for the
-  duration of one Begin/End if the scratch can be held, but not across ES 2.0
-  draws.
-
-The online front end is in every build (`online/mod.rs`: `lower`, `parser`,
-`sema` are unconditional), so this works for a program whose GPU binary came
-from the offline table too.
+reflection live in the keep region, `store.rs:124`). Instead, a link with
+transform feedback varyings copies the vertex shader's source (as the link
+read it, the same text `link_resolve` resolved the names against) into a
+heap block owned by the program (`TfProg::src`), freed on relink and on
+delete. Each captured draw lowers it again into the scratch and evaluates
+there: 23 us for the `capture_cost` shader on the host. The online front end
+is in every `shaderc-online` build, so a program whose GPU binary came from
+the offline table captures too; its uniforms are moved by name from the
+linked stage's layout to the IR's (section 7.2, item 4).
 
 ### 4.3 V3D hardware path (later, optional)
 
@@ -292,9 +285,9 @@ pays for its counts (`v3d_context.c:151-175`). Constraints from §3.1:
 - GFXH-1559;
 - a `TRANSFORM_FEEDBACK_FLUSH_AND_COUNT` after each TF draw.
 
-Not part of tf-capture.
+Not built.
 
-## 5. GL-layer specification (tf-api)
+## 5. GL-layer specification
 
 All of this is ES 3.0 state. §8 says what an ES 2.0 build keeps.
 
@@ -304,15 +297,19 @@ All of this is ES 3.0 state. §8 says what an ES 2.0 build keeps.
 |---|---|---|
 | `GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS` | 64 | 64 |
 | `GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS` | 4 | 4 |
-| `GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS` | 4 | 4 |
+| `GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS` | 64 | 4 |
 
-These are constants in a new `src/gl/tf.rs` (`TF_MAX_INTERLEAVED_COMPONENTS`,
-`TF_MAX_SEPARATE_ATTRIBS`, `TF_MAX_SEPARATE_COMPONENTS`). The minimums are
-enough because the CPU path has no hardware ceiling, and they match V3D's 4
-buffers. **Ordering:** tf-api raises the limits in the same change that makes
-Begin work. Until tf-capture lands, a draw with TF active and not paused is
-`GL_INVALID_OPERATION` with the log line "transform feedback capture is not
-implemented yet (tf-capture)". It must never succeed without capturing.
+These are constants in `src/gl/tf.rs` (`TF_MAX_INTERLEAVED_COMPONENTS`,
+`TF_MAX_SEPARATE_ATTRIBS`, `TF_MAX_SEPARATE_COMPONENTS`). The capture runs on
+the CPU and has no hardware ceiling. The separate limit is the interleaved
+one, as Mesa's softpipe, llvmpipe and etnaviv report it
+(`max_stream_output_separate_components = 64`, `sp_screen.c:284`,
+`lp_screen.c:263`, `etnaviv_screen.c:269`): at 4, dEQP's 207
+`transform_feedback.{basic_types,array}.separate` cases of a matrix or an
+array varying are NotSupported ("Implementation limits execeeded", measured
+on the host and the AM62P). A vertex shader has 64 output components, so no
+single varying can exceed 64; the link check stays for the rule's sake. The
+V3D hardware path (§4.3), if built, takes 16 values a spec and 4 buffers.
 
 ### 5.2 Objects and binding points
 
@@ -525,8 +522,13 @@ Mesa's mask, `draw_validate.c:358-374`. An indexed
 draw → `INVALID_OPERATION`. Not enough room: for some binding,
 `written + vertices × stride > avail` → `INVALID_OPERATION`, nothing captured
 and nothing drawn. Here vertices = primitives(mode, count) × verts-per-prim ×
-instances, and avail = the range size (Range), or buffer size − offset (Base,
-read at draw time). Mode compatibility is checked after today's draw
+instances, and avail = buffer size − offset (read at draw time), cut to the
+range's size for Range (a buffer respecified smaller after the bind cuts it,
+as Mesa's `compute_transform_feedback_buffer_sizes` does). A buffer the
+draw would write that is mapped → `INVALID_OPERATION` (ES 3.0 2.10.3). An
+instanced draw that the back end cannot take in one (a divisor above its
+`max_instance_divisor`) is drawn instance by instance (`draw_instanced`);
+its room is checked for all the instances before the first one captures. Mode compatibility is checked after today's draw
 argument checks (`INVALID_ENUM`/`INVALID_VALUE` first).
 
 `glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, id)`: id 0 or not
@@ -563,11 +565,14 @@ ES 3.0 has **one** primitive query, `GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN`
 - A captured draw that is **refused** (§5.6, or the evaluator refusal below) adds nothing.
 
 **Refusal of a draw the evaluator cannot run.** A vertex shader that samples
-a texture, or any evaluator `Err`, makes the draw `GL_INVALID_OPERATION`. Log
-line: "transform feedback capture: <evaluator reason>". Nothing is drawn,
-captured or counted. ES 3.0 has no such error, so it is a known deviation,
-listed in `GL_CORE_NOTES.md`. It is in the repo's practice of failing loudly
-(`es3.rs:25-31`) rather than capturing zeros.
+a texture (found in the IR before anything is written), an attribute element
+outside its buffer, a uniform the shader reads that the linked stage lays
+out differently, or any evaluator `Err` makes the draw `GL_INVALID_OPERATION`
+with the log line "transform feedback capture: <reason>". Nothing is drawn
+or counted; a fault in the middle of a draw (a loop that does not end) may
+have written the records before it. ES 3.0 has no such error, so it is a
+known deviation, listed in `GL_CORE_NOTES.md`. It is in the repo's practice
+of failing loudly (`es3.rs:25-31`) rather than capturing zeros.
 
 ### 5.8 Rasterizer discard (ES 3.0 3.1, and 4.2.3 for clears)
 
@@ -593,8 +598,8 @@ With `GL_RASTERIZER_DISCARD` enabled:
   lacks, and the GL core drops the work before the back end, the same on all
   three.
 
-This part needs no capture, so tf-api ships it and the 51 cases can pass
-before tf-capture.
+This part needs no capture; tf-api built it, and the AM62P passed the 51
+cases at `c4ccc966`.
 
 ## 6. Rejected alternatives
 
@@ -617,9 +622,16 @@ before tf-capture.
   for now. It is the natural successor if a PowerVR or GC7000 application
   needs fast TF.
 - **R3: PowerVR vertex-shader variant that stores to the TF buffer directly**
-  (address = f(vertex index, primitive unrolling)). Strips and fans write one
-  vertex into several primitives, so the shader would need the unrolled
-  index map. It inherits all of R2's cost plus that. Rejected.
+  (the USC's memory store at address = base + f(vertex index, primitive
+  unrolling) × stride, the base and stride as per-draw shared registers).
+  Strips and fans write one vertex into several primitives, so the shader
+  would need the unrolled index map (or the GL core a list-mode index
+  expansion of every strip and fan draw), and a program whose vertex binary
+  came from the offline table could never capture. It inherits all of R2's
+  cost plus that, and no part of it can be checked off silicon: Mesa never
+  issues a vertex-stage store on this GPU, so there is no reference
+  encoding or ordering against the TA to compare with. Rejected; the CPU
+  capture passes the whole dEQP group on the host.
 - **R4: Keep the IR of every program alive for capture.** It costs
   keep-region space (`KEEP_BYTES` 512 KiB, `store.rs:124`) for every program,
   ES 2.0 ones included, to save a re-lower on the rare TF draw. Rejected in
@@ -627,8 +639,8 @@ before tf-capture.
   TF varyings.
 - **R5: Answer the queries and accept Begin without capturing** ("plausible
   zero"). It would turn the 413 + 421 cases into wrong-buffer failures, hide
-  the gap, and contradict `es3.rs:25-31`. Rejected. §5.1's interim
-  `INVALID_OPERATION` at the draw is the honest version.
+  the gap, and contradict `es3.rs:25-31`. Rejected. Until the capture was
+  built, tf-api refused such a draw with `INVALID_OPERATION`.
 - **R6: Expose TF only in builds for the V3D.** dEQP's TF and lifetime groups
   would then stay failed on two of the three boards, for no saving: the CPU
   path is GPU-independent. Rejected.
@@ -640,158 +652,93 @@ before tf-capture.
 
 ## 7. Items and host tests
 
-Test modules are new files, so plan #2's files are not touched: `src/gl/tf.rs`
-holds the TF object state, the varying resolution and the capture, and
-`src/gl/tf_tests.rs` its unit tests on `testutil::TestGl` (`testutil.rs:1484`:
-it records draws, cache ops and pending kicks, and reads buffer bytes). Edits
-to `es3.rs`, `state.rs`, `program.rs`, `draw.rs` and `buffer.rs` are the hooks
-only.
+`src/gl/tf.rs` holds the object state, the varying resolution and the draw
+rules, `src/gl/tf_capture.rs` the capture; their tests are
+`src/gl/tf_tests.rs`, `src/gl/tf_capture_tests.rs` (on `testutil::TestGl`,
+which records draws, cache operations and pending kicks and reads what the
+GPU sees of a buffer) and `tests/es3_tf_api.rs` (through the C ABI, with a
+stand-in back end). Edits to `es3.rs`, `state.rs`, `program.rs`, `draw.rs`
+and `buffer.rs` are the hooks.
 
-### 7.1 tf-api (GL core: state, errors, queries, discard)
+### 7.1 tf-api (built, `16ac8641`)
 
-Work:
+The `TfObject` pool (§5.2), indexed bindings and the buffer-delete orphan
+rule, varying recording and link resolution (§5.3), Begin/End/Pause/Resume
+with every error of §5.6, the query object model, the limits (§5.1) and
+rasterizer discard for draws and clears (§5.8). Tests: `tf_tests.rs` (17,
+one of them `es2_answers_are_unchanged` under `report-es2`) and
+`es3_tf_api.rs` (8).
 
-1. `TfObject` pool (§5.2), `MAX_FEEDBACKS` 32, the default object, bind,
-   delete and is.
-2. Indexed TF bindings in `glBindBufferBase/Range`, the indexed and plain
-   queries, and the buffer-delete orphan rule.
-3. Varying recording, link resolution, link errors, `glGetProgramiv` and
-   `glGetTransformFeedbackVarying` (§5.3).
-4. Begin/End/Pause/Resume and every error in §5.6, plus the
-   UseProgram/LinkProgram/BindBuffer interlocks.
-5. The query object model and PRIMITIVES_WRITTEN (counting stub: 0 until
-   tf-capture, which is right because draws are refused until then).
-6. The limits 64/4/4, with the interim draw refusal (§5.1).
-7. Rasterizer discard in the draw and the clears (§5.8).
+### 7.2 tf-capture (built)
 
-Host tests (each a `#[test]` in `src/gl/tf_tests.rs`, all
-`#[cfg(not(feature = "report-es2"))]` except T-es2):
+1. The evaluator in product builds (§4.2): `eval::run_in` over a `Frame`
+   and a `Sink`, `fmath` for the float functions, compiled in every build
+   but a `report-es2` product build.
+2. The vertex shader's source kept at link (`TfProg::src`, §4.2).
+3. Vertex inputs per vertex: each attribute column the IR loads, from the
+   generic attribute the linked stage's location maps to
+   (`attrib_app_index`), through `draw::attrib_element` (the draw's
+   conversion, `attrib_row`; `cache_invd` before a CPU read, the OSAL bounce
+   for a buffer with no CPU view, client arrays as the draw trusts them);
+   the glVertexAttrib* value of a disabled array; element
+   `instance / divisor` of an instanced array; `gl_VertexID` = first + i,
+   `gl_InstanceID` = the instance.
+4. Uniforms: `program::fill_uniform_blocks` and the gl_DepthRange rows
+   first, as a draw fills them, then each IR uniform's dwords from the
+   linked vertex stage's row of the same name (the same layout when the
+   stage was compiled online; a row missing or of another size is refused
+   only if the shader reads it).
+5. Primitive assembly, Gallium's decomposition with the last vertex
+   provoking (`draw_decompose_tmp.h:79-160`, Mesa 26.2.1), the order
+   `draw.rs`'s `restart_to_lists` uses too: LINE_STRIP (i, i+1), LINE_LOOP
+   adds (n-1, 0), TRIANGLE_STRIP even (i, i+1, i+2) and odd (i+1, i, i+2),
+   TRIANGLE_FAN (0, i+1, i+2). Incomplete primitives are dropped; instances
+   loop outermost. Each vertex is evaluated once per instance, a strip's
+   and a fan's shared vertices read from a four-entry cache.
+6. Write-out: interleaved, the varyings of a vertex in the order they were
+   named, 4-byte components packed at `offset + written[0]`; separate,
+   varying i to binding i. Matrices column-major, arrays element by element,
+   integers as their bits; a lane the shader never defined is 0. Before the
+   first write each target goes through `buffer::writable` (copy on write
+   when a pending kick still reads it, factored out of glBufferSubData), and
+   every record through `buffer::write_at` (copied and flushed). Then each
+   binding's `written` advances and the active PRIMITIVES_WRITTEN query
+   counts the draw's primitives.
+7. The interim refusal of tf-api is gone; the draw goes to the GPU as
+   usual, or nowhere under discard.
 
-- T-limits: the three limits answer 64/4/4.
-- T-object: gen/bind/is/delete. Bind of a non-generated name →
-  INVALID_OPERATION. Deleting the bound object rebinds 0. Deleting an active
-  one → INVALID_OPERATION, and it survives.
-- T-bind: Base/Range on indices 0..3, the queries
-  BINDING/START/SIZE per index and per object (bind two objects, check
-  isolation), i = 4 → INVALID_VALUE, offset 2 → INVALID_VALUE, bind while
-  active (and while paused) → INVALID_OPERATION.
-- T-orphan: buffer bound to a non-current object, deleted. `glIsBuffer`
-  false, the object's binding still answers the old name, and the storage is
-  freed only when the object lets go (the mock's `live_allocs`).
-- T-varyings: one table-driven test per §5.3 resolution rule (whole, element,
-  `gl_Position`, `gl_PointSize`, unknown, duplicate, 65 interleaved
-  components, `mat2` separate) on the link status and the info log text.
-  `glGetTransformFeedbackVarying` rows and the three `glGetProgramiv` values.
-  A relink with new varyings replaces them, a failed relink keeps none
-  (verify ES 3.0 2.11.3's rule for a failed link).
-- T-begin: every Begin/End/Pause/Resume error of §5.6 in dEQP's order.
-  ACTIVE/PAUSED read back after each step.
-- T-interlock: UseProgram while active (error) and while paused (allowed).
-  LinkProgram of the current program while active. BindTransformFeedback
-  while active.
-- T-draw-guard: while active, DrawElements → INVALID_OPERATION and DrawArrays
-  with an incompatible mode → INVALID_OPERATION. Before tf-capture: a
-  compatible DrawArrays → INVALID_OPERATION with the interim log line, and no
-  draw recorded.
-- T-query: PRIMITIVES_WRITTEN Begin/End, `GL_CURRENT_QUERY`, result
-  available at once. Two Begins → INVALID_OPERATION. 0x8C87 →
-  INVALID_ENUM. ANY_SAMPLES_PASSED still refused (occlusion-query's).
-- T-discard-draw: with discard on, each of the 5 draw calls records no
-  backend draw (`gl.draws()` empty) and sets no error. Its argument errors
-  still fire. With discard off, the draw is recorded.
-- T-discard-clear: `glClear` (each bit) and `glClearBuffer*` under discard
-  leave no pending clear and change no pixel of the default surface. Without
-  discard they do.
-- T-es2 (only under `report-es2`): §8's list.
+Host tests, `src/gl/tf_capture_tests.rs` (bytes as the GPU sees them, every
+one checked flushed):
 
-### 7.2 tf-capture (the data path)
+| design name | test | pins |
+|---|---|---|
+| C-basic | `points_capture_the_inputs_interleaved` | the inputs exactly, the guard, the draw drawn, 6 primitives |
+| C-types, C-array | `separate_buffers_take_every_type` | ivec2, uint, mat2 column-major, `arr[1]` of a loop-written array, a uniform, `gl_VertexID` from `first` |
+| C-builtins, C-separate-room | `the_smallest_separate_buffer_decides_and_point_size_is_captured` | `gl_PointSize`; the smaller buffer refuses the draw |
+| C-modes | `each_draw_mode_captures_its_decomposed_primitives` | the seven modes' vertex orders, incomplete primitives, the counts |
+| C-instanced | `instanced_draws_capture_instance_by_instance` | a divisor-2 array and `gl_InstanceID`, one draw and instance by instance |
+| C-pause, C-offset, C-overflow | `pause_offset_and_overflow` | a range at 16 inside guards, pause/resume back to back, a refused draw writes and counts nothing, an exact fit |
+| (respecified buffer) | `a_range_is_cut_to_the_buffer_it_names_now` | the range cut to the buffer |
+| C-discard | `discard_captures_without_drawing` | captured, not drawn |
+| C-hazard | `a_buffer_a_pending_kick_reads_is_copied_first` | fresh storage, the old bytes unchanged |
+| C-refuse | `a_vertex_shader_that_samples_is_refused` | the reason logged, nothing written, drawn or counted |
+| C-feedback-loop | `a_captured_buffer_feeds_the_next_capture` | a captured buffer as a VBO, a uniform block |
+| (ES 1.00) | `an_es100_program_captures_its_varyings` | gl_test 203's pair, `glBindAttribLocation`, a VBO |
+| C-perf | `capture_cost` (ignored, by hand) | 1.5 us a vertex, 23 us a draw (x86 host, release) |
 
-Work:
+`tests/es3_tf_api.rs` `capture_writes_the_bound_buffer` reads one capture
+back through `glMapBufferRange`, as dEQP does. `fmath`'s own tests hold its
+bounds. C-oracle is dEQP itself: on the host (`tools/cts/host-deqp-run.sh`
+with `CTS` a VK-GL-CTS 93bca01 copy carrying the yakogl target,
+`DEQP_DISABLE_VK_VIDEO_TESTS=ON`, `GPU=powervr MODULE=gles3`), HOST-ONLY:
 
-1. The evaluator in product builds (§4.2: no_std, arena, indexed locals,
-   math), behind `not(report-es2)`.
-2. The VS source copy at link (§4.2).
-3. Vertex inputs per vertex: attribute fetch and conversion through
-   `draw.rs`'s existing helpers (`attrib_row`, `convert_attrib`,
-   `draw.rs:854-968`), with `cache_invd` before a CPU read and the OSAL
-   bounce for a buffer with no CPU mapping. Client arrays on the default VAO.
-   Generic attribute defaults for disabled arrays. `gl_VertexID` = first + i
-   and `gl_InstanceID`, with divisors.
-4. Uniforms: the same dwords the draw uploads for the vertex stage, flattened
-   uniform blocks included (the draw path's builder, called once per captured
-   draw).
-5. Primitive assembly in the draw mode, unrolled into `prim_mode`
-   primitives. Proposed vertex orders: LINE_STRIP (i, i+1), LINE_LOOP adds
-   (n-1, 0), TRIANGLE_STRIP even (i, i+1, i+2) and odd (i+1, i, i+2),
-   TRIANGLE_FAN (0, i+1, i+2). **Verify each against dEQP's reference in
-   `modules/gles3/functional/es3fTransformFeedbackTests.cpp`** (the cts-host
-   checkout, VK-GL-CTS 93bca01) and against ES 3.0 2.15.2 before the tests
-   pin them. The mustpass draws base modes only (§1), so the strip and fan
-   orders are pinned by our host tests, not by dEQP. Incomplete primitives
-   are dropped. Instances loop outermost.
-6. Write-out: interleaved, every varying of a vertex in declaration order,
-   tightly packed 4-byte components at `offset + written[0]`. Separate,
-   varying i to binding i. Matrices column-major, arrays element by element.
-   Integers as raw bits. Writes go through a helper factored out of
-   `glBufferSubData` (`buffer.rs:405-440`) so a pending kick still reading the
-   buffer gets copy-on-write and the written range is cache-flushed. Then
-   advance `written`, and add the primitive count to the object and the
-   active PRIMITIVES_WRITTEN query.
-7. Remove §5.1's interim refusal. Then the GPU draw as usual, or none under
-   discard.
-
-Host tests (`src/gl/tf_tests.rs`, plus `tests/es3_tf_capture.rs` for
-shader-level cases):
-
-- C-basic: a pass-through VS (`out vec4 v = a;`), 6 vertices, POINTS,
-  interleaved. The buffer bytes equal the inputs exactly, and
-  PRIMITIVES_WRITTEN = 6.
-- C-types: every ES 3.00 output type dEQP's `basic_types` uses (float/vec,
-  int/ivec, uint/uvec, mat2..mat4, mat2x3.., and lowp/mediump/highp), both
-  modes. Expected bytes are computed in the test from the inputs.
-- C-array: whole arrays, single elements (`v[1]`), and a loop-indexed
-  output array (the indexed-locals case).
-- C-builtins: `gl_Position` and `gl_PointSize` captured, interleaved with a
-  user varying.
-- C-modes: each of the 7 draw modes into its compatible begin mode, small
-  counts including incomplete primitives. The vertex order of item 5 is
-  pinned by the expected bytes.
-- C-instanced: `glDrawArraysInstanced` with a divisor-1 attribute and
-  `gl_InstanceID`.
-- C-pause: draw, pause, draw (not captured, still drawn), resume, draw. The
-  buffer holds the first and third draws back to back, and the query counts
-  only those.
-- C-offset: `glBindBufferRange` at offset 16, plus a guard pattern before and
-  after the range, untouched (dEQP checks guards).
-- C-overflow: a draw that does not fit → INVALID_OPERATION, the buffer is
-  untouched, no draw is recorded, and the query is unchanged. The draw that
-  exactly fits succeeds.
-- C-separate-room: separate mode with bindings of different sizes. The
-  smallest decides the overflow.
-- C-discard: capture with discard on writes the buffer and records no draw.
-- C-hazard: the TF buffer is still read by a pending kick
-  (`set_kick_pending`). The capture goes to fresh storage, the pending kick's
-  bytes are unchanged, and the cache flush covers the written range
-  (`cache_ops`).
-- C-refuse: a VS that samples a texture → INVALID_OPERATION with the
-  evaluator's reason in the log. Nothing written or drawn.
-- C-feedback-loop: capture into buffer A, then draw from A as a vertex
-  buffer. The recorded draw's vertex data are the captured values.
-- C-oracle: for the dEQP TF shader texts in the repo's corpus (when
-  es3-shaderc-coverage has them; otherwise the shaders of item 5's
-  dEQP source), the captured values against an independent std-f32
-  computation in the test.
-- C-perf (`#[ignore]`, run by hand): 10^4 vertices of a 20-ALU VS through
-  capture. Print µs/vertex and the re-lower time per draw for the record.
-- C-es2: the report-es2 run of the whole file compiles out the capture, and
-  T-es2 still holds.
-
-dEQP on the host: `tools/cts/host-deqp-run.sh MODULE=gles3` (items cts-host
-and host-gles3-run) over `dEQP-GLES3.functional.transform_feedback.*`,
-`rasterizer_discard.*`, `lifetime.*`, `negative_api.transform_feedback*` and
-`state_query.*transform_feedback*`. Expected outcome after tf-capture: the
-48 empty-log compile failures are tf-infolog's. Everything else in the 882 +
-51 + 56 should run. The run's failures are the input for a follow-up.
+| filter | cases | Pass | Fail | note |
+|---|---|---|---|---|
+| `functional.transform_feedback` | 882 | 882 | 0 | 675 and 207 NotSupported with the separate limit at 4 |
+| `functional.lifetime` | 56 | 56 | 0 | |
+| `negative_api` / `state_query` / `implementation_limits` with `transform_feedback` in the name | 50 | 50 | 0 | |
+| `functional.rasterizer_discard` | 56 | 5 | 51 | render verdicts: meaningless on the host (the AM62P passed the 51 at `c4ccc966`) |
+| `functional.buffer.*` with a transform feedback target | 96 | 21 | 75 | render verdicts, as every target's (`buffer.copy.basic`: 56 of 56 fail on the host, pass on the AM62P) |
 
 ## 8. The ES 2.0 boundary
 
@@ -799,7 +746,7 @@ and host-gles3-run) over `dEQP-GLES3.functional.transform_feedback.*`,
 byte for byte:
 
 - `GL_MAX_TRANSFORM_FEEDBACK_*` stay 0. tf-api writes them as
-  `if crate::REPORT_ES2 { 0 } else { 64 / 4 / 4 }`, the same pattern as
+  `if crate::REPORT_ES2 { 0 } else { 64 / 4 / 64 }`, the same pattern as
   `GL_MAX_DRAW_BUFFERS` (`state.rs:1124-1128`). Whether they should be
   `GL_INVALID_ENUM` instead, as `GL_MAJOR_VERSION` is (`state.rs:1086`), is
   not decided here. Changing them is an ES 2.0 change and out of scope.
@@ -815,8 +762,9 @@ byte for byte:
   clear early returns are `if !crate::REPORT_ES2 && c.rasterizer_discard`.
 - The draw path's added cost in every build is one test of "TF active and not
   paused" and one of discard. Neither is reached by an ES 2.0 draw with
-  default state. The evaluator, the math module and the source copy are not
-  compiled into `report-es2` builds (§4.2).
+  default state. The evaluator's product half (`run_in`), `fmath` and the
+  capture are not compiled into a `report-es2` product build (§4.2); a
+  `report-es2` host-test build compiles them, unreached.
 - `GlContext`'s C layout does not change: all new state lives in Rust-only
   statics (`tf.rs`), as the ES 3.0 pools do today (`es3.rs:33-35`).
   `abi_layout.rs` and `abi_layout_check.c` stay as they are.
@@ -825,3 +773,18 @@ byte for byte:
 - Every tf-* change runs `tools/check.sh` with its CONFIGS, the
   `report-es2` rows and `V3D_ES2_CONFIG` included (`check.sh:56-68`, `:326`).
   The T-es2/C-es2 tests pin the list above.
+
+## 9. The board
+
+gl_test case 203 (`tfcap`, `driver/tools/pvrlab/gl_test.c`) is the
+silicon check, the same on the three boards (the capture is the GL core's):
+gl_test's ES 1.00 pair with `gl_Position` and `v_color` captured,
+interleaved from two triangles (records, guard, PRIMITIVES_WRITTEN 2, the
+window drawn), separate from a 4-vertex strip (0 1 2, 2 1 3), and under
+rasterizer discard (captured, nothing drawn); read back with
+`glMapBufferRange`. Then the AM62P dEQP-GLES3 rows that hold the groups
+(`tools/cts/am62p-gles3-tree.txt` line 12, `functional.lifetime` with
+`negative_api`, `occlusion_query`, `pbo` and the rest of its image; line 32,
+`functional.transform_feedback` with the `ubo` groups of its image;
+`TREE_ROWS=4,24` for `tools/board.sh am62p tree`).
+

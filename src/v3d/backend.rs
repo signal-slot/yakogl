@@ -3180,7 +3180,7 @@ pub unsafe extern "C" fn v3d_texture_uploaded(
         || src.is_null()
         || b.content_gen == 0
         || b.bgra != 0
-        || b.format != GLES_TEXFMT_RGBA8
+        || !gles_texfmt_is_rgba8_bytes(b.format)
         || texture::refusal(b).is_some()
     {
         return;

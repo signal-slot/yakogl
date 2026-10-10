@@ -1385,14 +1385,74 @@ rebuilt after each render into the texture, which finishes that render first
 texture unit really needs (128, 256 or a page) is not measured; the copy
 makes the question moot for sampling.
 
-**Open: check 7.** In the probes, with the page alignment only, check 7
-("drawn: bottom-right ~ green") read `0x40042814` for `0x40043904`. Worked
-through the triangle (red, green, blue at (-1,-1), (1,-1), (1,1)), the
-colour read is exactly texel (5,0)'s where (7,0) is wanted: blue 1/16 (row 0
-is right), red 5/16 and green 10/16 (x is two texels short). That is either
-the sampler (the same 64-byte-stride misread, which the tiled copy removes)
-or the PE writing a 64-bit LINEAR target (Mesa renders 64-bit targets only
-TILED on this core). The board run of the fix splits them: a pass, or check
-7 again with the same value, which puts it in the PE's linear 64-bit write;
-the next step there would be to render RGBA16F targets tiled and resolve
-them, as Mesa does.
+**Open: the pixel engine's 64-bit LINEAR write.** The board run of the
+two fixes (`f2a13877`, case 44 alone, `records/imx8mp/gc44-f2a13877/`)
+fails at check 3, "drawn: bottom-right ~ green", with the same value the
+probes of #6 read with only a page-aligned base: `0x40042814` for
+`0x40043904`. Worked through step 2's triangle (red, green, blue at (-1,-1),
+(1,-1), (1,1)), that is exactly texel (5,0)'s colour where (7,0) is wanted:
+blue 1/16 (row 0 is right), red 5/16 and green 10/16 (x is two texels
+short). Two different sampling paths -- the linear texture at a page and
+now the 4x4-tiled copy the CPU makes -- read the same wrong texel, so the
+sampler is cleared: the linear storage already holds (5,0)'s colour at
+(7,0)'s place, which puts the cause in the pixel engine's 64-bit LINEAR
+write (or the rasteriser) for a target with 64-byte rows. Mesa never
+exercises that path: it renders only TILED targets on this core (the
+LINEAR_PE feature is disabled unless the `linear_pe` debug flag asks,
+`etnaviv_screen.c:1094`), and its rule for a linear target -- rows a
+multiple of 128 bytes on a CACHE128B256BPERLINE core,
+`etna_resource_is_render_compatible` -- is about tile status, which this
+backend does not use. 32-bit linear targets are right at rows of 224
+bytes (dEQP fbo.render's 55x63 targets, fbo 711 / 711).
+
+Ranked hypotheses, each with the fix it calls for:
+
+1. **The PE places 64-bit pixels wrongly in a LINEAR surface at any row
+   pitch** (pixel x stored at x ^ 2, the 16-byte halves of each 32-byte
+   group swapped, or a 2-pixel shift). Fix: render a 64-bit target TILED, as
+   Mesa does -- a 4x4-tiled shadow of the texture the texture unit then
+   samples as it is, untiled into the linear storage on the CPU after the
+   render for read-back and copies. `PE_LOGIC_OP.SINGLE_BUFFER` is one switch
+   for colour and depth (Mesa: `(2)` for a tiled 32/64-bit target), and the
+   depth surface is measured row-linear under `(1)` (gl_test 169), so the
+   depth layout under `(2)` is part of that change.
+2. **The PE needs longer or 128-byte-granular rows for 64-bit pixels.** Fix:
+   store a texture with 64-bit texels at a row pitch of a multiple of 16
+   texels on this GPU (a backend pitch rule, as the PowerVR's NPOT chain
+   pitch is one) and keep the linear path.
+3. **The rasteriser shifts a 64-bit target's pixels two to the right**
+   (slots 0 and 1 of every row never drawn). Fix: a per-format window
+   offset; nothing in etnaviv suggests one, so it is a last resort.
+4. **The target's base alignment.** Mostly ruled out: #6's probes saw the
+   same value with a page-aligned base.
+
+**The probe (gl_test 44, check 3 on the GC7000 only).** After step 2's draw,
+`hdr_layout_probe` renders the same picture into six targets -- RGBA16F 8, 4,
+16, 24 and 32 wide (rows of 64, 32, 128, 192 and 256 bytes) and an 8-wide
+RGBA8 control -- each cleared to (2, 0.5, 0.25, 1), reads every one back
+with `glReadPixels(RGBA, FLOAT)` (the CPU reading the linear storage the PE
+wrote), and names, for each stored pixel, the pixel whose colour it holds.
+The check passes only when all six are right, so a passing probe lets the
+case go on to the sampled checks (4 to 9). Its CASE record:
+
+| word | bits | meaning |
+|---|---|---|
+| got | 31:24 | arms whole: bit 0 RGBA16F 8 wide, 1 = 4, 2 = 16, 3 = 24, 4 = 32, bit 5 RGBA8 8 wide |
+| got | 23:21 | the first arm not whole, which the slot codes describe |
+| got | 20:14, 13:7, 6:0 | slots (0,0), (1,0), (2,0) |
+| want | 31:28 | that arm's rows that came out whole (of 8) |
+| want | 27:21, 20:14, 13:7, 6:0 | slots (W-1,0), (0,1), (W-1,1), (W-1,7) |
+
+(x, y) are GL's, y = 0 the bottom row and the first in memory. A slot code
+`0b0yyyddd` says the slot holds pixel (x + ddd mod 8, yyy)'s colour (ddd 0:
+its own; 2: two to the right; 6: two to the left); 0x40 the clear colour
+(never drawn), 0x41 zero, 0x7f no pixel's colour.
+`tests/gltest_hdr_probe.c` works the codes on stored pictures of each
+layout (tools/check.sh runs it). Predicted records:
+
+| record (got, want) | reading | next |
+|---|---|---|
+| `20008106 00c2873e` | hypothesis 1, pixel x at x ^ 2, every RGBA16F width; RGBA8 right | the tiled 64-bit target |
+| `20102006 00d0073e` | hypothesis 1 or 3, a 2-pixel shift (slots 0, 1 never drawn) | the tiled target first (it sidesteps both) |
+| `34......` or `3c......` (bit 2, 4 set) | hypothesis 2: 128- and 256-byte rows are right | the 16-texel pitch rule |
+| a CASE pass, or a failure at check 4 or later (all six arms whole) | the probe's draws land where they belong, which the case's own draw did not | what differs between the case's target and the probe's (allocation, history), then the sampler again |
