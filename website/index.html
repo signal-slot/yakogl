@@ -224,9 +224,11 @@ self-test's vertex shader) are still Mesa's pco output; replacing them is open w
 run on Zephyr on the real GPU.</p>
 <div class="tiles" data-tiles="deqp2"></div>
 <div class="note">
-<p><strong>Not yet confirmed on the boards.</strong> Fixes made since these trees (the Pi 4's
-25 cube-map cases among them) are proved on the host only. A newer partial run on the AM62P
-found 9 regressed <code>shaders.invariance</code> cases; the fix landed in e17fb6a7 and image 1 of the AM62P tree passes on it (1,379 / 0, 2026-10-10).
+<p><strong>Read the AM62P tile with its history.</strong> The 54 failures of the 2026-10-10 tree
+are 9 <code>shaders.invariance</code> cases (fixed in e17fb6a7, image 1 passes 1,379 / 0 on it) and 45
+vertex-texture cases (fixed on the host, board confirmation pending); the previous tree, on 2026-10-02,
+had none. The i.MX8MP tree is identical to the one of 2026-10-01. The Pi 4 was not run again:
+its 25 cube-map fixes are proved on the host only.
 <a href="status.html">Details on the status page.</a></p>
 </div>
 
