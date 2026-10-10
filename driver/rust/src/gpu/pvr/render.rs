@@ -1294,10 +1294,10 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         lohi(&mut dk, 28, f.isp_stencil_load_store_base);
         // pbe_word[8][3] in the firmware's 3D registers, PBE_STRIDE_DW apart
         let nrt = (if f.num_rt != 0 { f.num_rt } else { 1 }).min(MAX_RT as u32) as usize;
-        for i in 0..nrt {
+        for (i, word) in f.pbe_word.iter().enumerate().take(nrt) {
             let o = 30 + i * PBE_STRIDE_DW;
-            lohi(&mut dk, o, f.pbe_word[i][0]);
-            lohi(&mut dk, o + 2, f.pbe_word[i][1]);
+            lohi(&mut dk, o, word[0]);
+            lohi(&mut dk, o + 2, word[1]);
         }
         lohi(&mut dk, 70, f.pds_bgnd[0]);
         lohi(&mut dk, 72, f.pds_bgnd[1]);
@@ -2115,9 +2115,8 @@ pub fn wait_for(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u3
         // posted kick until another command arrives; 0 of 60 runs of gl_test
         // case 13 stalled with it, about half without).
         if r.cfg.wait_repost != 0 && i == 20 {
-            for j in 0..r.last_kick_n as usize {
-                let c = r.last_kick[j];
-                kccb_post(k, &c);
+            for c in r.last_kick.iter().take(r.last_kick_n as usize) {
+                kccb_post(k, c);
             }
             r.reposts = r.reposts.wrapping_add(1);
             // the first few, then every 256th: console output costs

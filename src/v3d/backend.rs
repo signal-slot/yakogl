@@ -1220,16 +1220,15 @@ fn zs_buf(
     g.zs_clock = g.zs_clock.wrapping_add(1);
     let now = g.zs_clock;
     let mut slot = None;
-    for i in 0..ZS_BUFS {
-        let b = &mut g.zsbufs[i];
+    for (i, b) in g.zsbufs.iter_mut().enumerate() {
         if b.live() && b.id == id {
             if (b.w, b.h, b.msaa, b.s8) == (w, h, msaa, s8) {
                 (b.used, b.owners) = (now, owners);
                 return Ok(i);
             }
             /* resized under the same id: the old buffer goes back */
-            osal::gpu_free(&mut g.zsbufs[i].mem);
-            g.zsbufs[i] = ZsBuf::NONE;
+            osal::gpu_free(&mut b.mem);
+            *b = ZsBuf::NONE;
             slot = Some(i);
             break;
         }

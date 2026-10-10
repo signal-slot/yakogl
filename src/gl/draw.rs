@@ -6725,8 +6725,8 @@ mod tests {
                 p.rvs.varyings[k].vtxout_off += 3;
             }
             p.rvs.vs_output_size += 3; /* the outputs moved up, the block grew */
-            for i in 0..n {
-                p.rfs.varyings[i].vtxout_off += 3; /* as glLinkProgram would have left it */
+            for v in p.rfs.varyings.iter_mut().take(n) {
+                v.vtxout_off += 3; /* as glLinkProgram would have left it */
             }
         }
         // SAFETY: plain GL calls.

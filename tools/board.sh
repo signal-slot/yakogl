@@ -907,8 +907,20 @@ uboot_on_exit() {
 # reads) from the bridge capture's "<unix time> line" rows.
 console_from_ts() {
     [ -f "$RD/console.ts" ] || return 0
-    gawk '{ t = $1; sub(/^[0-9.]+ ?/, ""); printf "%s %s\n", strftime("%H:%M:%S", int(t)), $0 }' \
-        "$RD/console.ts" > "$RD/console.txt"
+    if command -v gawk > /dev/null 2>&1; then
+        gawk '{ t = $1; sub(/^[0-9.]+ ?/, ""); printf "%s %s\n", strftime("%H:%M:%S", int(t)), $0 }' \
+            "$RD/console.ts" > "$RD/console.txt"
+        return
+    fi
+    # No gawk (strftime is its extension; mawk and busybox awk have none): bash's
+    # printf %(fmt)T is the same strftime, so the same lines come out, only slower.
+    local line t rest
+    while IFS= read -r line || [ -n "$line" ]; do
+        t=${line%% *}
+        rest=
+        [ "$t" != "$line" ] && rest=${line#* }
+        printf '%(%H:%M:%S)T %s\n' "${t%%.*}" "$rest"
+    done < "$RD/console.ts" > "$RD/console.txt"
 }
 
 # ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------

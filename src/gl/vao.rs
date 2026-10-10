@@ -75,14 +75,14 @@ pub unsafe extern "C" fn glGenVertexArraysOES(n: GLsizei, arrays: *mut GLuint) {
     }
     let n = n as usize;
     let mut made = 0usize;
-    for h in 1..MAX_VAOS {
+    for (h, vao) in c.vaos.iter_mut().enumerate().skip(1) {
         if made >= n {
             break;
         }
-        if !c.vaos[h].used {
-            c.vaos[h] = zeroed_vao();
-            c.vaos[h].used = true;
-            c.vaos[h].element_buffer = VAO_NOT_YET_BOUND;
+        if !vao.used {
+            *vao = zeroed_vao();
+            vao.used = true;
+            vao.element_buffer = VAO_NOT_YET_BOUND;
             // SAFETY: the application passes room for `n` names (n >= 0
             // checked above); written unaligned (see name_at).
             arrays.wrapping_add(made).write_unaligned(h as GLuint);

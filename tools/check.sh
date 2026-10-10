@@ -105,15 +105,23 @@ red() { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 
 # A row that could not run is its own outcome, never folded into ok or failed:
-# `gap <what was not checked>` prints it, counts it, and makes the gate red,
-# because a skipped step that looks green is how a blind spot is born.
+# `gap <what was not checked>` prints it as "skipped: <reason>" and counts it,
+# because a skipped step that looks green is how a blind spot is born. It is
+# for what THIS machine cannot do (no Zephyr workspace, no pco_shc build, no
+# hal_nxp checkout, no aarch64 target), never for a check that ran and
+# failed, so it does not turn the gate red: a machine without a Zephyr SDK
+# must not fail main for it, and rejecting every change over a skip that no
+# change can fix is how unrelated work got turned away. The summary line
+# counts the skips, and YAKOGL_CHECK_STRICT=1 makes each one fail, for the
+# machine that is meant to have everything (the owner's, before a release).
 oks=0
 fails=0
 gaps=0
 gap() {
-  printf '\033[33mgap   %s\033[0m\n' "$*"
+  printf '\033[33mskipped: %s\033[0m\n' "$*"
   gaps=$((gaps + 1))
-  rc=1
+  [ "${YAKOGL_CHECK_STRICT-}" = 1 ] && rc=1
+  return 0
 }
 
 # step <label> <command...>
@@ -1034,8 +1042,13 @@ table_symbols() {
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
-  nm --defined-only "$dir/release/libyakogl.rlib" 2>/dev/null |
-    grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true
+  # Not `nm`: the release profile is LTO (Cargo.toml), so the rlib's one
+  # object is LLVM bitcode, which a binutils `nm` without LLVMgold.so (the
+  # plugin Debian and Ubuntu install and a stock or Nix binutils may not)
+  # lists as no symbols at all -- the control then read 0 on a tree whose
+  # archive held 1,226 of them. The names are in the bitcode's string table
+  # whichever way the object is stored, so they are read there.
+  grep -a -o -E '14mesa_reference|SHC_BLOB_TABLE' "$dir/release/libyakogl.rlib" | wc -l
 }
 
 check_table_absent() {
@@ -1416,9 +1429,13 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 
 echo
-echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass)"
+echo "check.sh: $oks ok, $fails failed, $gaps skipped (a skip was not run: it is not a pass; YAKOGL_CHECK_STRICT=1 fails on it)"
 if [ "$rc" -eq 0 ]; then
-  green "check.sh: clean"
+  if [ "$gaps" -gt 0 ]; then
+    green "check.sh: clean, with $gaps environment skip(s) listed above"
+  else
+    green "check.sh: clean"
+  fi
 else
   red "check.sh: fix the above before pushing"
 fi

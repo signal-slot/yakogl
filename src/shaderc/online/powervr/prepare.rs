@@ -669,18 +669,18 @@ fn prepare_one(p: &mut Prep<'_>, g: SelGroup) -> Result<(), PrepareError> {
         }
 
         let n = g.op.arity();
-        for i in 0..n {
-            if let Some(SelSrc::Imm(v)) = g.srcs[i] {
-                g.srcs[i] = Some(p.imm(v)?);
+        for slot in g.srcs.iter_mut().take(n) {
+            if let Some(SelSrc::Imm(v)) = *slot {
+                *slot = Some(p.imm(v)?);
             }
         }
         canonicalise(op, &mut g.srcs, &mut p.stats);
 
-        for i in 0..n {
-            let Some(s) = g.srcs[i] else { continue };
+        for (i, slot) in g.srcs.iter_mut().enumerate().take(n) {
+            let Some(s) = *slot else { continue };
             if !bank_ok(op, i, &s) {
                 p.stats.bank_move += 1;
-                g.srcs[i] = Some(p.copy(s)?);
+                *slot = Some(p.copy(s)?);
             }
         }
         /* A selection copy that applies a modifier to a value outside the

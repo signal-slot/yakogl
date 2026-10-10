@@ -353,11 +353,13 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
 - The gate is `tools/check.sh`. Run it from a clean detached checkout of
   the exact commit, with `driver/src/fw/pvr_fw_blob.h` copied in, and with
   `ZEPHYR_WS=<west workspace>` and `HAL_NXP_DIR=<hal_nxp>` set. Without
-  them the Zephyr and hal_nxp rows are gaps and the gate is red. The
+  them the Zephyr and hal_nxp rows print `skipped: <reason>` and are
+  counted in the summary; the gate is clean with them, and
+  `YAKOGL_CHECK_STRICT=1` makes each skip fail (use it for this run). The
   Mesa-table reproduction row also needs `PCO_SHC=<pco_shc from
   tools/pco_shc/build_pco_shc.sh, content id 01aa62a069bb>`,
   `GLSLANG=<glslangValidator>` and, for speed, `GLSL2USC_CACHE=<dir>`;
-  without them that row is a gap and the gate is red. It takes about 45
+  without them that row is skipped the same way. It takes about 45
   minutes.
 - Board runs use `tools/board.sh <board> run <zephyr.bin> <record dir>
   <label>`. Run them from a detached checkout of main, and only with images
