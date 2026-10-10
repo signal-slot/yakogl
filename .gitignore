@@ -2,6 +2,7 @@ build/
 __pycache__/
 *.pyc
 /target
+/target-stable/
 .claude/
 /work/
 records/*

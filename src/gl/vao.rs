@@ -75,7 +75,11 @@ pub unsafe extern "C" fn glGenVertexArraysOES(n: GLsizei, arrays: *mut GLuint) {
     }
     let n = n as usize;
     let mut made = 0usize;
+<<<<<<< HEAD
     for (h, vao) in c.vaos.iter_mut().enumerate().take(MAX_VAOS).skip(1) {
+=======
+    for (h, vao) in c.vaos.iter_mut().enumerate().skip(1) {
+>>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if made >= n {
             break;
         }

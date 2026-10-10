@@ -473,8 +473,13 @@ fn push_one_constant_register<'a>(
     mut i: SelInstr,
 ) -> Result<(), SelectError> {
     let mut first: Option<(u8, u16)> = None;
+<<<<<<< HEAD
     for src in &mut i.srcs[..3] {
         let Some(SelSrc::Physical(p)) = *src else { continue };
+=======
+    for (n, src) in i.srcs.into_iter().enumerate().take(3) {
+        let Some(SelSrc::Physical(p)) = src else { continue };
+>>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if p.group != build::RGROUP_UNIFORM_0 && p.group != build::RGROUP_UNIFORM_1 {
             continue;
         }
@@ -4945,7 +4950,11 @@ mod tests {
             let s = select(&m, a).expect("selected");
             let id = |n: &str| build::op_id(n).expect("the instruction set has this opcode");
             assert_eq!(s.instrs[0].op, id("mul"));
+<<<<<<< HEAD
             for (i, instr) in (1..).zip(&s.instrs[1..4]) {
+=======
+            for (i, instr) in s.instrs.iter().enumerate().take(4).skip(1) {
+>>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
                 assert_eq!(instr.op, id("mad"), "instruction {i}");
             }
             /* Column i against v[i]: instruction 0 reads the column at block

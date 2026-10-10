@@ -335,7 +335,14 @@ function(yakogl_add_rust_archive)
   elseif(EXISTS "${_cargo_dir}/rustc.exe")
     set(_rustc "${_cargo_dir}/rustc.exe")
   else()
-    message(FATAL_ERROR "YakoGL: no rustc next to ${_cargo}")
+    # A cargo that is not the rustup proxy (a caching shim such as kache's,
+    # a distribution's wrapper) has no rustc beside it: the one on PATH is
+    # the one the same shell's cargo runs, so use it rather than refuse.
+    find_program(YAKOGL_RUSTC_FOUND rustc)
+    if(NOT YAKOGL_RUSTC_FOUND)
+      message(FATAL_ERROR "YakoGL: no rustc next to ${_cargo}, and none on PATH")
+    endif()
+    set(_rustc "${YAKOGL_RUSTC_FOUND}")
   endif()
   execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_env} "${_rustc}" --print sysroot
     WORKING_DIRECTORY "${_root}" OUTPUT_VARIABLE _sysroot OUTPUT_STRIP_TRAILING_WHITESPACE
