@@ -10911,6 +10911,7 @@ mod tests {
         assert_eq!(f32s(&d.attrib_data[1]), [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // GL_INT is an ES 3.0 array type; report-es2 refuses it
     #[test]
     fn int_arrays_of_glvertexattribpointer_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);
