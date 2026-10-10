@@ -7,6 +7,13 @@
 //! (GLES2 requires a bound VBO - the offset is a byte offset into it). The draw
 //! resolver turns each enabled attribute the linked VS consumes into a
 //! `GlesAttrib`.
+//!
+//! ES 3.0 adds integer arrays (glVertexAttribIPointer), the packed and
+//! half-float array types, instance divisors and pure-integer current values
+//! (glVertexAttribI4*). A build that reports ES 2.0 (`report-es2`) answers
+//! GL_INVALID_ENUM for the ES 3.0 array types and the ES 3.0 query pnames,
+//! as ES 2.0 does; the ES 3.0 entry points themselves stay exported, as the
+//! rest of the ES 3.0 API does in that build (docs/es3-vertex-gap.md).
 #![allow(non_snake_case)]
 
 use core::ffi::c_void;
@@ -39,10 +46,17 @@ pub unsafe extern "C" fn glVertexAttribPointer(
     }
 
     match type_ {
-        GL_BYTE | GL_UNSIGNED_BYTE | GL_SHORT | GL_UNSIGNED_SHORT | GL_INT | GL_UNSIGNED_INT | GL_FLOAT | GL_FIXED
-        | GL_HALF_FLOAT => {}
-        /* ES 3.0 packed types: the draw path unpacks them (draw.rs attrib_row) */
-        GL_INT_2_10_10_10_REV | GL_UNSIGNED_INT_2_10_10_10_REV => {
+        GL_BYTE | GL_UNSIGNED_BYTE | GL_SHORT | GL_UNSIGNED_SHORT | GL_INT | GL_UNSIGNED_INT | GL_FLOAT | GL_FIXED => {}
+        /* ES 3.0 types. A build that reports ES 2.0 knows none of them: ES
+         * 2.0 has no GL_HALF_FLOAT (0x140B; the GL_HALF_FLOAT_OES of
+         * GL_OES_vertex_half_float is 0x8D61 and is not claimed either) and
+         * no packed vertex type (GL_OES_vertex_type_10_10_10_2 is not
+         * claimed), so they are GL_INVALID_ENUM there, as any unknown type. */
+        GL_HALF_FLOAT if !crate::REPORT_ES2 => {}
+        /* ES 3.0 2.8: a packed type is four components in one word; any
+         * other size is GL_INVALID_OPERATION. The draw path unpacks the word
+         * (draw.rs attrib_row). */
+        GL_INT_2_10_10_10_REV | GL_UNSIGNED_INT_2_10_10_10_REV if !crate::REPORT_ES2 => {
             if size != 4 {
                 c.set_error(GL_INVALID_OPERATION, "glVertexAttribPointer");
                 return;
@@ -247,10 +261,28 @@ fn get_attrib_int(c: &GlContext, index: usize, pname: GLenum) -> Option<GLint> {
         GL_VERTEX_ATTRIB_ARRAY_STRIDE => a.stride,
         GL_VERTEX_ATTRIB_ARRAY_TYPE => (if a.type_ != 0 { a.type_ } else { GL_FLOAT }) as GLint,
         GL_VERTEX_ATTRIB_ARRAY_NORMALIZED => a.normalized as GLint,
-        GL_VERTEX_ATTRIB_ARRAY_INTEGER => a.integer as GLint,
-        GL_VERTEX_ATTRIB_ARRAY_DIVISOR => a.divisor as GLint,
+        /* ES 3.0 pnames: unknown to a build that reports ES 2.0 (no
+         * GL_ANGLE/EXT_instanced_arrays is claimed for the divisor either) */
+        GL_VERTEX_ATTRIB_ARRAY_INTEGER if !crate::REPORT_ES2 => a.integer as GLint,
+        GL_VERTEX_ATTRIB_ARRAY_DIVISOR if !crate::REPORT_ES2 => a.divisor as GLint,
         _ => return None,
     })
+}
+
+/// A float state value returned by an integer query: rounded to the nearest
+/// integer (ES 3.0 6.1.2, "Data Conversions"), halves away from zero,
+/// saturating at the GLint range (`as` saturates; NaN reads as 0).
+fn round_to_int(v: GLfloat) -> GLint {
+    let whole = v as i64; /* toward zero, saturating */
+    let frac = v - whole as GLfloat;
+    let nudge = if frac >= 0.5 {
+        1
+    } else if frac <= -0.5 {
+        -1
+    } else {
+        0
+    };
+    whole.saturating_add(nudge).clamp(GLint::MIN as i64, GLint::MAX as i64) as GLint
 }
 
 #[no_mangle]
@@ -291,10 +323,12 @@ pub unsafe extern "C" fn glGetVertexAttribiv(index: GLuint, pname: GLenum, param
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
+        /* the float value read as integers (ES 3.0 6.1.14: GetVertexAttribiv
+         * "reads them as floating-point values and converts them") */
         for (i, v) in c.current_attrib[index as usize].iter().enumerate() {
             // SAFETY: CURRENT_VERTEX_ATTRIB returns four values; the
             // application passes room for them, not necessarily aligned.
-            params.wrapping_add(i).write_unaligned(*v as GLint);
+            params.wrapping_add(i).write_unaligned(round_to_int(*v));
         }
         return;
     }
@@ -305,19 +339,49 @@ pub unsafe extern "C" fn glGetVertexAttribiv(index: GLuint, pname: GLenum, param
     }
 }
 
-/* OpenGL ES 3.0 integer-valued current attributes. The context keeps one
- * float quadruple per attribute, so a value is exact up to 2^24; the draw path
- * converts to float for the vertex-input registers in any case. */
+/* OpenGL ES 3.0 pure-integer current attributes (ES 3.0 2.7). The context
+ * keeps one dword quadruple per attribute, `current_attrib`, typed as floats
+ * because that is what glVertexAttrib* stores; the draw stages those dwords
+ * as they are (draw.rs: `dword_bytes(&c.current_attrib[app])`), and a vertex
+ * input reads them as its own type. So a pure integer is stored as its bit
+ * pattern in the float slot -- the same convention the draw uses for integer
+ * arrays (`attrib_component`) and for the per-instance values it writes
+ * here itself (`instance_attrib_value`) -- and an ivec/uvec input reads it
+ * exactly, i32::MIN to u32::MAX included.
+ *
+ * ES 3.0 2.7 and 6.1.14 leave a mixed read undefined: a float input or
+ * glGetVertexAttribfv/iv on a value set with glVertexAttribI4*, or an
+ * integer input or glGetVertexAttribI{i,ui}v on a value set with
+ * glVertexAttrib*f (the initial (0, 0, 0, 1) included). Here such a read
+ * returns the stored bits reinterpreted; the context does not record which
+ * family set a value (docs/es3-vertex-gap.md, task T1). */
+
+/// The dwords `index`'s input reads while its array is disabled, set from a
+/// pure-integer value: `[x, y, z, w]` as 32-bit patterns.
+fn set_current_bits(index: GLuint, v: [u32; 4], func: &str) {
+    let Some(c) = context::current() else { return };
+    if index as usize >= MAX_VERTEX_ATTRIBS {
+        c.set_error(GL_INVALID_VALUE, func);
+        return;
+    }
+    c.current_attrib[index as usize] = v.map(GLfloat::from_bits);
+}
+
+/// The current value's dwords, for the pure-integer getters.
+fn current_bits(c: &GlContext, index: usize) -> [u32; 4] {
+    c.current_attrib[index].map(GLfloat::to_bits)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glVertexAttribI4i(index: GLuint, x: GLint, y: GLint, z: GLint, w: GLint) {
     gl_trace!(glVertexAttribI4i);
-    set_current(index, x as GLfloat, y as GLfloat, z as GLfloat, w as GLfloat);
+    set_current_bits(index, [x as u32, y as u32, z as u32, w as u32], "glVertexAttribI4i");
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glVertexAttribI4ui(index: GLuint, x: GLuint, y: GLuint, z: GLuint, w: GLuint) {
     gl_trace!(glVertexAttribI4ui);
-    set_current(index, x as GLfloat, y as GLfloat, z as GLfloat, w as GLfloat);
+    set_current_bits(index, [x, y, z, w], "glVertexAttribI4ui");
 }
 
 /// # Safety
@@ -361,7 +425,8 @@ pub unsafe extern "C" fn glGetVertexAttribIiv(index: GLuint, pname: GLenum, para
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
-        for (i, v) in c.current_attrib[index as usize].iter().enumerate() {
+        /* the value glVertexAttribI4i* stored, exactly (see set_current_bits) */
+        for (i, v) in current_bits(c, index as usize).iter().enumerate() {
             // SAFETY: the caller's contract (four values, any alignment).
             unsafe { params.wrapping_add(i).write_unaligned(*v as GLint) };
         }
@@ -388,9 +453,10 @@ pub unsafe extern "C" fn glGetVertexAttribIuiv(index: GLuint, pname: GLenum, par
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
-        for (i, v) in c.current_attrib[index as usize].iter().enumerate() {
+        /* the value glVertexAttribI4ui* stored, exactly (see set_current_bits) */
+        for (i, v) in current_bits(c, index as usize).iter().enumerate() {
             // SAFETY: the caller's contract (four values, any alignment).
-            unsafe { params.wrapping_add(i).write_unaligned(*v as GLuint) };
+            unsafe { params.wrapping_add(i).write_unaligned(*v) };
         }
         return;
     }
@@ -427,6 +493,9 @@ mod tests {
     use crate::testutil::TestGl;
 
     const MAX: GLuint = MAX_VERTEX_ATTRIBS as GLuint;
+    /// The ES 3.0 array types and query pnames are known only to a build that
+    /// reports ES 3.0; the ES 2.0 report answers GL_INVALID_ENUM for them.
+    const ES3: bool = !crate::REPORT_ES2;
 
     fn geti(index: GLuint, pname: GLenum) -> GLint {
         let mut v = [-99; 4];
@@ -477,13 +546,21 @@ mod tests {
             assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_STRIDE), 0);
             assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_TYPE), GL_FLOAT as GLint);
             assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED), 0);
-            assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
-            assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 0);
             assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), 0);
             assert_eq!(pointer(i), 0);
             assert_eq!(current(i), [0.0, 0.0, 0.0, 1.0]);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            if ES3 {
+                assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
+                assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 0);
+                assert_eq!(gl.error(), GL_NO_ERROR);
+            } else {
+                assert_eq!(geti(i, GL_VERTEX_ATTRIB_ARRAY_INTEGER), -99, "an ES 3.0 pname is unknown to ES 2.0");
+                assert_eq!(gl.error(), GL_INVALID_ENUM);
+                assert_eq!(getf(i, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), -99.0);
+                assert_eq!(gl.error(), GL_INVALID_ENUM);
+            }
         }
-        assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
     #[test]
@@ -503,7 +580,9 @@ mod tests {
         assert_eq!(geti(3, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED), 1);
         assert_eq!(geti(3, GL_VERTEX_ATTRIB_ARRAY_STRIDE), 12);
         assert_eq!(geti(3, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), h as GLint);
-        assert_eq!(geti(3, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
+        if ES3 {
+            assert_eq!(geti(3, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
+        }
         assert_eq!(pointer(3), 20);
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_SIZE), 4, "the neighbours are untouched");
         assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), 0);
@@ -588,8 +667,21 @@ mod tests {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
         unsafe {
+            glVertexAttribPointer(0, 2, GL_SHORT, 0, 0, core::ptr::null());
+            if !ES3 {
+                /* the ES 2.0 report knows none of these types: GL_INVALID_ENUM,
+                 * and the array is left as it was */
+                for t in [GL_HALF_FLOAT, GL_HALF_FLOAT_OES, GL_INT_2_10_10_10_REV, GL_UNSIGNED_INT_2_10_10_10_REV] {
+                    glVertexAttribPointer(0, 4, t, 0, 0, core::ptr::null());
+                    assert_eq!(gl.error(), GL_INVALID_ENUM, "type 0x{t:x} under the ES 2.0 report");
+                }
+                assert_eq!(geti(0, GL_VERTEX_ATTRIB_ARRAY_TYPE), GL_SHORT as GLint);
+                return;
+            }
             glVertexAttribPointer(0, 3, GL_HALF_FLOAT, 0, 0, core::ptr::null());
             assert_eq!(gl.error(), GL_NO_ERROR);
+            glVertexAttribPointer(0, 4, GL_HALF_FLOAT_OES, 0, 0, core::ptr::null());
+            assert_eq!(gl.error(), GL_INVALID_ENUM, "GL_OES_vertex_half_float is not claimed");
             glVertexAttribPointer(0, 4, GL_INT_2_10_10_10_REV, 1, 0, core::ptr::null());
             assert_eq!(gl.error(), GL_NO_ERROR);
             glVertexAttribPointer(0, 4, GL_UNSIGNED_INT_2_10_10_10_REV, 1, 0, core::ptr::null());
@@ -659,7 +751,7 @@ mod tests {
         assert_eq!(floats(&buf[1..]), [1.5, 2.5, 3.5, 4.5]);
         // SAFETY: as above.
         unsafe { glGetVertexAttribiv(3, GL_CURRENT_VERTEX_ATTRIB, p as *mut GLint) };
-        assert_eq!(ints(&buf[1..]), [1, 2, 3, 4]);
+        assert_eq!(ints(&buf[1..]), [2, 3, 4, 5], "rounded to the nearest integer, halves away from zero");
         // SAFETY: as above, one value.
         unsafe {
             glGetVertexAttribiv(3, GL_VERTEX_ATTRIB_ARRAY_SIZE, p as *mut GLint);
@@ -686,7 +778,10 @@ mod tests {
         // SAFETY: plain GL calls.
         unsafe { glVertexAttribIPointer(2, 3, GL_UNSIGNED_BYTE, 4, 16 as *const c_void) };
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 1);
+        assert!(gl.ctx().attribs[2].integer);
+        if ES3 {
+            assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 1);
+        }
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED), 0);
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_SIZE), 3);
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_TYPE), GL_UNSIGNED_BYTE as GLint);
@@ -703,11 +798,14 @@ mod tests {
             glVertexAttribPointer(2, 4, GL_BYTE, 1, 0, core::ptr::null());
             glVertexAttribIPointer(2, 4, GL_INT, 0, core::ptr::null());
         }
-        assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 1);
+        assert!(gl.ctx().attribs[2].integer);
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED), 0, "integer arrays are never normalized");
         // SAFETY: plain GL calls.
         unsafe { glVertexAttribPointer(2, 4, GL_INT, 0, 0, core::ptr::null()) };
-        assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
+        assert!(!gl.ctx().attribs[2].integer);
+        if ES3 {
+            assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);
+        }
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
@@ -781,14 +879,20 @@ mod tests {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
         unsafe { glVertexAttribDivisor(4, 3) };
-        assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 3);
-        assert_eq!(getf(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 3.0);
+        assert_eq!(gl.ctx().attribs[4].divisor, 3);
+        if ES3 {
+            assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 3);
+            assert_eq!(getf(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 3.0);
+        }
         // SAFETY: plain GL calls.
         unsafe { glVertexAttribPointer(4, 4, GL_FLOAT, 0, 0, core::ptr::null()) };
-        assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 3, "the divisor is separate state");
+        assert_eq!(gl.ctx().attribs[4].divisor, 3, "the divisor is separate state");
         // SAFETY: plain GL calls.
         unsafe { glVertexAttribDivisor(4, 0) };
-        assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 0);
+        assert_eq!(gl.ctx().attribs[4].divisor, 0);
+        if ES3 {
+            assert_eq!(geti(4, GL_VERTEX_ATTRIB_ARRAY_DIVISOR), 0);
+        }
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
@@ -894,8 +998,82 @@ mod tests {
         unsafe {
             glVertexAttrib4f(0, 1.0, -2.0, 300.0, 0.0);
             glGetVertexAttribiv(0, GL_CURRENT_VERTEX_ATTRIB, v.as_mut_ptr());
+            assert_eq!(v, [1, -2, 300, 0]);
+            /* ES 3.0 6.1.2: a float read as an integer is rounded to nearest */
+            glVertexAttrib4f(0, 1.4, 1.6, -1.4, -1.6);
+            glGetVertexAttribiv(0, GL_CURRENT_VERTEX_ATTRIB, v.as_mut_ptr());
+            assert_eq!(v, [1, 2, -1, -2]);
+            glVertexAttrib4f(0, 3.0e9, -3.0e9, 0.49999997, f32::NAN);
+            glGetVertexAttribiv(0, GL_CURRENT_VERTEX_ATTRIB, v.as_mut_ptr());
+            assert_eq!(v, [GLint::MAX, GLint::MIN, 0, 0], "saturated; NaN reads as 0");
         }
-        assert_eq!(v, [1, -2, 300, 0]);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    #[test]
+    fn round_to_int_is_nearest_with_halves_away_from_zero() {
+        for (v, want) in [
+            (0.0, 0),
+            (0.5, 1),
+            (-0.5, -1),
+            (2.5, 3),
+            (-2.5, -3),
+            (2.4999998, 2),
+            (1_048_576.5, 1_048_577),
+            (16_777_216.0, 16_777_216),
+            (1.0e10, GLint::MAX),
+            (-1.0e10, GLint::MIN),
+            (f32::INFINITY, GLint::MAX),
+            (f32::NEG_INFINITY, GLint::MIN),
+            (f32::NAN, 0),
+        ] {
+            assert_eq!(round_to_int(v), want, "{v}");
+        }
+    }
+
+    /// A pure-integer current value is kept bit for bit (ES 3.0 2.7), so an
+    /// ivec/uvec input and the I-getters see every 32-bit value, not the
+    /// nearest float.
+    #[test]
+    fn integer_current_values_are_exact_bits() {
+        let gl = TestGl::new(8, 8);
+        let mut i = [-99; 4];
+        let mut u = [99u32; 4];
+        // SAFETY: room for four values; the vectors hold four values.
+        unsafe {
+            glVertexAttribI4i(1, (1 << 24) + 1, GLint::MIN, GLint::MAX, -7);
+            glGetVertexAttribIiv(1, GL_CURRENT_VERTEX_ATTRIB, i.as_mut_ptr());
+            assert_eq!(i, [(1 << 24) + 1, GLint::MIN, GLint::MAX, -7]);
+            assert_eq!(
+                gl.ctx().current_attrib[1].map(f32::to_bits),
+                [0x0100_0001, 0x8000_0000, 0x7fff_ffff, (-7i32) as u32],
+                "the dwords the draw stages are the integers themselves"
+            );
+            glVertexAttribI4ui(1, u32::MAX, 0x8000_0001, (1 << 24) + 1, 0);
+            glGetVertexAttribIuiv(1, GL_CURRENT_VERTEX_ATTRIB, u.as_mut_ptr());
+            assert_eq!(u, [u32::MAX, 0x8000_0001, (1 << 24) + 1, 0]);
+            glVertexAttribI4iv(2, [-1, -2, -3, -4].as_ptr());
+            glGetVertexAttribIiv(2, GL_CURRENT_VERTEX_ATTRIB, i.as_mut_ptr());
+            assert_eq!(i, [-1, -2, -3, -4]);
+            glVertexAttribI4uiv(2, [5, 6, 7, 0xffff_fffe].as_ptr());
+            glGetVertexAttribIuiv(2, GL_CURRENT_VERTEX_ATTRIB, u.as_mut_ptr());
+            assert_eq!(u, [5, 6, 7, 0xffff_fffe]);
+            /* a float value set afterwards is a float again */
+            glVertexAttrib4f(2, 1.5, 2.5, 3.5, 4.5);
+            assert_eq!(current(2), [1.5, 2.5, 3.5, 4.5]);
+            /* out of range: GL_INVALID_VALUE, nothing stored */
+            glVertexAttribI4i(MAX, 1, 1, 1, 1);
+            assert_eq!(gl.error(), GL_INVALID_VALUE);
+            glVertexAttribI4ui(MAX, 1, 1, 1, 1);
+            assert_eq!(gl.error(), GL_INVALID_VALUE);
+            glVertexAttribI4iv(MAX, [1; 4].as_ptr());
+            assert_eq!(gl.error(), GL_INVALID_VALUE);
+            glVertexAttribI4uiv(MAX, [1u32; 4].as_ptr());
+            assert_eq!(gl.error(), GL_INVALID_VALUE);
+            glVertexAttribI4iv(3, core::ptr::null());
+            glVertexAttribI4uiv(3, core::ptr::null());
+        }
+        assert_eq!(current(3), [0.0, 0.0, 0.0, 1.0], "a null vector is ignored");
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
