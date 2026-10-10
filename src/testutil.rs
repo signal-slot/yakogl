@@ -1486,7 +1486,10 @@ pub fn shader_source(name: &str) -> &'static str {
         }
         static ES100_TEXT: Mutex<BTreeMap<&'static str, &'static str>> = Mutex::new(BTreeMap::new());
         let mut cache = ES100_TEXT.lock().unwrap_or_else(|e| e.into_inner());
-        *cache.entry(*text).or_insert_with(|| Box::leak(text.replace("sampler2DArray", "sampler2D").into_boxed_str()))
+        let es100: &'static str = cache
+            .entry(text)
+            .or_insert_with(|| Box::leak(text.replace("sampler2DArray", "sampler2D").into_boxed_str()));
+        es100
     }
 }
 
