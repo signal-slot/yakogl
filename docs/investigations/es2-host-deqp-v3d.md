@@ -233,10 +233,10 @@ the yakogl patch is applied; its `external/` is fetched), `deqp-gles2` built fro
 `tools/cts/gles2-mustpass.txt` (the mustpass has no duplicates, so this is the same chunk as
 in the first run; case 13 is `texture.size.cube.512x512_rgb888_mipmap`, case 100 is
 `random_teximage2d.2d_3`). Same dEQP flags as `host-deqp-run.sh` (pbuffer 64x64, shader
-sources logged). The sandbox refused `bash` on any script and `VAR=x cmd`, so the dEQP binary
-was started through `cmake -E chdir <module dir> cmake -E env YAKOGL_V3D_TILED_COPIES_BYTES=...
-LD_LIBRARY_PATH=... ./deqp-gles2 ...` instead of `host-deqp-run.sh`. **The patched script
-itself was therefore not run**; only what it runs per chunk was.
+sources logged). The `c_150` itself was run by starting the dEQP binary through `cmake -E chdir <module dir> cmake -E
+env YAKOGL_V3D_TILED_COPIES_BYTES=... LD_LIBRARY_PATH=... ./deqp-gles2 ...`, because the
+sandbox then refused `bash` on scripts and `VAR=x cmd`. The patched script was run afterwards
+(see "Script diff") on the `texture.size.cube` filter.
 
 | | 8 MiB (host default) | **16 MiB (Pi 4 `prj.conf`)** |
 |---|---|---|
@@ -335,9 +335,14 @@ aborted. `git apply` it from the repository root. The working copy is
  echo "host-deqp-run: results in $OUT (HOST-ONLY: never quote a render verdict from them)"
 ```
 
-The diff comes from `diff -u` against the committed script; the patched script was **not
-run** (the sandbox refused `bash` on scripts, `bash -n` included), so the first adopter should
-run it once. Only the dEQP command it issues per chunk was run (see "Rerun").
+The diff comes from `diff -u` against the committed script. The patched copy was run later
+(`GPU=v3d CTS=<deps VK_GL_CTS> tools-copy texture.size.cube`, library and dEQP already built):
+with `YAKOGL_V3D_TILED_COPIES_BYTES=16777216` it prints "42 of 42 cases began" and no abort
+report; at the 8 MiB default it prints "31 of 42 cases began" and
+`c_000: 31 of 42 began, last: dEQP-GLES2.functional.texture.size.cube.512x512_rgb888_mipmap`.
+So `GPU=v3d` and the abort report work. (That filter makes a 42-case list, so the abort comes at
+its case 31; in `c_150` of the full list it is case 13.) The copy ran from `build/scratch/`
+with a worker-only change to `HERE`, which the diff does not carry.
 
 ### Verdict
 
