@@ -6,7 +6,10 @@
 # (in tools/cts/, deleted in Step 1) for the same records (record.rs's classify
 # printed the same 44);
 # the last block, kind 15, has no Python token (the kind is new; record.rs
-# classifies it "fingerprint", never a verdict). The decode
+# classifies it "fingerprint", never a verdict), and neither have the three
+# CASE blocks at the end: the set summary (status CASE_SET, a failure and a
+# pass, each with case 16 skipped by name) and the earlier set form the
+# i.MX8MP wrote at c4ccc966 (status 6, case 16 = the skip counted). The decode
 # lines are record.rs's describe() line, then the host's additions (dEQP names
 # from tools/cts/gles2-mustpass.txt, the DEQP_CASES bits, the WDOG and
 # console stage 1 field names).
@@ -199,4 +202,13 @@ CHECK (21) tag 7: run: the check passed, the run failed later: an EGL call faile
 # DISPLAY: the fixed Verdin image's expected record (69.3 MHz, a clean link), not a run
 ### 594b160f 80010eb4 00068268 593f0000
 DISPLAY (22) seq 15: adopted: pixel clock 69300 kHz, DSI lane rate 426600 kHz (headroom 25.9 per mille at 4 lanes); bridge IRQ_STAT now 0x00 (clean), at the start 0x00 (clean); health 0x3f; LCDIF format 9 (ARGB8888) pitch 5 KiB
+### classify verdict
+### 594b010e 002c0107 ffff002f 00100030
+CASE (1) seq 14: set status 7 (set failed) passed 47 of 48 run; skipped 1, first skip case 16; failing 1: first case 44, second case none
+### classify verdict
+### 594b010e ffff0107 ffff0030 00100030
+CASE (1) seq 14: set status 7 (set passed) passed 48 of 48 run; skipped 1, first skip case 16; failing 0: first case none, second case none
+### classify verdict
+### 594b010e 0010ff06 0000002f 00000031
+CASE (1) seq 14: case 16 check 255 status 6 (set failed) got 0x0000002f want 0x00000031
 ### classify verdict

@@ -20181,13 +20181,65 @@ static int panel_cube(void)
 }
 
 /*
- * What the regression set found, for a caller with no console: how many of
- * its cases passed, which case failed first and where it sits in the order.
- * A board that reports through the time it takes to come back has room for
- * one number at a time, and these are the three worth having.
+ * What the regression set found, for a caller with no console (the i.MX8MP's
+ * SNVS record): how many of its cases ran and passed, the first two that
+ * failed (and where the first sits in the order), and how many were skipped
+ * by name and which first. A skip (-3: the shader set has no form of the
+ * case, the walker's skip list, or the case's own "this build cannot run my
+ * subject", e.g. case 16 without a 4x config) is neither a pass nor a
+ * failure: gl_test_total counts the cases that RAN, so passed == total is a
+ * clean set even where some cases skip by design, and the skip count keeps a
+ * board that skips what it should run visible.
  */
-unsigned int gl_test_passed, gl_test_total;
-int gl_test_first_fail = -1, gl_test_first_fail_at = -1;
+unsigned int gl_test_passed, gl_test_total, gl_test_skipped;
+int gl_test_first_fail = -1, gl_test_first_fail_at = -1, gl_test_second_fail = -1;
+int gl_test_first_skip = -1;
+
+static int s_set_fails;
+static unsigned s_set_timed_out;
+
+/* The set walker's count, reset for a list of n cases. */
+static void set_tally_begin(unsigned n)
+{
+	gl_test_total = n;
+	gl_test_passed = 0;
+	gl_test_skipped = 0;
+	gl_test_first_fail = -1;
+	gl_test_first_fail_at = -1;
+	gl_test_second_fail = -1;
+	gl_test_first_skip = -1;
+	s_set_fails = 0;
+	s_set_timed_out = 0;
+}
+
+/* Count case c, at index `at` of the list, by its return: 0 passed; -3
+ * skipped by name (by the walker, or by run_case: this build cannot run the
+ * case's subject, e.g. case 16 without a 4x config), which is out of the
+ * cases run and into the skips; anything else failed (-4 also timed out, -2
+ * "no such case" is a harness defect and fails too). */
+static void set_tally_case(int c, unsigned at, int crc)
+{
+	if (crc == 0) {
+		gl_test_passed++;
+		return;
+	}
+	if (crc == -3) {
+		gl_test_total--;
+		gl_test_skipped++;
+		if (gl_test_first_skip < 0)
+			gl_test_first_skip = c;
+		return;
+	}
+	if (crc == -4)
+		s_set_timed_out++;
+	s_set_fails++;
+	if (gl_test_first_fail < 0) {
+		gl_test_first_fail = c;
+		gl_test_first_fail_at = (int)at;
+	} else if (gl_test_second_fail < 0) {
+		gl_test_second_fail = c;
+	}
+}
 
 /* A caller-supplied list of cases to run in one process, in the given order.
  *
@@ -20302,8 +20354,6 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 	s_harness_ctx = ctx;
 
 	if (gl_case == 7 || gl_case == GL_TEST_LIST) {
-		int fails = 0;
-		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
 		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 190, 191, 192, 197, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
@@ -20314,34 +20364,23 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		const int *list = (gl_case == 7) ? order : s_list;
 		unsigned n = (gl_case == 7) ? (unsigned)(sizeof(order) / sizeof(order[0])) : s_list_n;
 
-		gl_test_total = n;
-		gl_test_passed = 0;
-		gl_test_first_fail = -1;
-		gl_test_first_fail_at = -1;
+		set_tally_begin(n);
 		for (unsigned i = 0; i < n; i++) {
 			const char *skip = shader_skip_reason(list[i]);
 
 			if (skip || case_skipped(list[i])) {
 				pr_info("gl_test: case %d skipped%s%s\n", list[i],
 					skip ? ": " : "", skip ? skip : "");
-				gl_test_total--;
+				set_tally_case(list[i], i, -3);
 				gl_test_case_result(list[i], -3);
 				continue;
 			}
 			int crc = run_case(list[i], pretransform, debug);
 
 			gl_test_case_result(list[i], crc);
-			if (crc == -4)
-				timed_out++;
-			if (crc != 0) {
-				fails++;
-				if (gl_test_first_fail < 0) {
-					gl_test_first_fail = list[i];
-					gl_test_first_fail_at = (int)i;
-				}
-			} else {
-				gl_test_passed++;
-			}
+			/* a case that skipped itself (-3) ran far enough to
+			 * touch the context: the re-check below runs for it too */
+			set_tally_case(list[i], i, crc);
 			/* an EGL case leaves no context current; the next case
 			 * runs on the harness context again. 17, 18 and 21
 			 * destroy it to free the pool, so a caller list that
@@ -20371,12 +20410,14 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		/* what the run cost the shader back end: look-ups the precompiled
 		 * shaders answered and compiler runs (0 in an image without the
 		 * one or the other), so the console proves the tier */
-		pr_info("gl_test: all: %d of %u cases failed (%u passed; %u timed out; first failure case %d at index %d); "
+		pr_info("gl_test: all: %d of %u cases failed (%u passed; %u timed out; first failure case %d at index %d; "
+			"second failure case %d; %u skipped, first skip case %d); "
 			"precompiled hits %u, compiler runs %u\n",
-			fails, gl_test_total, gl_test_passed, timed_out, gl_test_first_fail,
-			gl_test_first_fail_at, shc_precompiled_hits ? shc_precompiled_hits() : 0u,
+			s_set_fails, gl_test_total, gl_test_passed, s_set_timed_out, gl_test_first_fail,
+			gl_test_first_fail_at, gl_test_second_fail, gl_test_skipped, gl_test_first_skip,
+			shc_precompiled_hits ? shc_precompiled_hits() : 0u,
 			shc_online_compiler_runs ? shc_online_compiler_runs() : 0u);
-		rc = fails ? -1 : 0;
+		rc = s_set_fails ? -1 : 0;
 	} else {
 		rc = run_case(gl_case, pretransform, debug);
 	}

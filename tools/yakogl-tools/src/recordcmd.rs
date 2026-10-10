@@ -179,6 +179,18 @@ pub fn status(w: &[u32; 4]) -> Status {
         (kind::APP, _) => pass_fail(w[1] & 0xff),
         (kind::PROBES, low) => pass_fail(u32::from(low)),
         (kind::CASE, _) => match w[1] & 0xff {
+            /* the set's summary: a pass when every case run passed, and
+             * fields that disagree are not a reading (record.rs SetSummary) */
+            record::CASE_SET => {
+                let s = record::SetSummary::from_words(w[1], w[2], w[3]);
+                if !s.consistent() {
+                    Status::Invalid
+                } else if s.passed_all() {
+                    Status::Pass
+                } else {
+                    Status::Fail
+                }
+            }
             record::CASE_PASS => Status::Pass,
             record::CASE_CHECK
             | record::CASE_NO_CHECK
@@ -559,11 +571,12 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 54 blocks (45 + GLMARK2 on- and off-screen and with
+        // the population: the golden file's 57 blocks (45 + GLMARK2 on- and off-screen and with
         // GLMARK2_SCENES + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
         // timeout, a frame over the budget with its slowest step, and nothing measured
-        // + DISPLAY), every kind of record.rs's table among them
-        assert_eq!(blocks, 54, "the golden file's block count changed: re-derive the pin");
+        // + DISPLAY + three set records: CASE_SET failed and passed, and the earlier
+        // CASE_SET_FAIL form), every kind of record.rs's table among them
+        assert_eq!(blocks, 57, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }
@@ -714,7 +727,7 @@ mod tests {
     /// rest (a fail must never read as a pass: board.sh's verdict=failed).
     #[test]
     fn status_per_kind() {
-        let cases: [([u32; 4], Status); 19] = [
+        let cases: [([u32; 4], Status); 23] = [
             ([0x594b0202, 0x0000_0001, 1, 0], Status::Pass),    // APP pass
             ([0x594b0202, 0x0000_0602, 1, 0], Status::Fail),    // APP fail, stage 6
             ([0x594b0202, 0x0000_0003, 1, 0], Status::Invalid), // APP status 3
@@ -726,6 +739,13 @@ mod tests {
             ([0x594b0101, 0x000a0302, 0xff, 0xfe], Status::Fail), // CASE 10 check 3
             ([0x594b0101, 0x000aff06, 3, 4], Status::Fail),     // CASE_SET_FAIL
             ([0x594b0101, 0x000aff00, 0, 0], Status::Invalid),  // CASE status 0
+            // CASE_SET: 48 of 48 run with case 16 skipped is a pass; 47 of 48
+            // (first failure 44) a failure; nothing run is not a pass; a
+            // failure named while every case passed is not a reading
+            ([0x594b010e, 0xffff_0107, 0xffff_0030, 0x0010_0030], Status::Pass),
+            ([0x594b010e, 0x002c_0107, 0xffff_002f, 0x0010_0030], Status::Fail),
+            ([0x594b010e, 0xffff_3107, 0xffff_0000, 0x0010_0000], Status::Fail),
+            ([0x594b010e, 0x002c_0107, 0xffff_0030, 0x0010_0030], Status::Invalid),
             ([0x594b0300, 0x96000045, 0x40001234, 0], Status::Fail), // FAULT
             // GLMARK2: the AM62P run of 2026-10-04 that printed "glmark2: FAIL rc=-5"
             // (score 533, 30 ran, 1 failed, 2 unsupported); board.sh read it as n/a

@@ -87,8 +87,13 @@ kinds! {
     CASE = 1, Seq,
         "one gl_test case. w1 = case << 16 | first bad check (255 none) << 8 | status \
          (CASE_*); w2 = got, w3 = want (0xAABBGGRR as gl_test reads them back); on a pass \
-         w2 = checks made, w3 = 0. CASE_SET_FAIL: case = the set's first failure, \
-         w2 = cases passed, w3 = cases run";
+         w2 = checks made, w3 = 0. CASE_SET (the regression set or a list, its summary): \
+         w1 = the first failing case (0xffff none) << 16 | cases skipped (saturating at \
+         255) << 8 | CASE_SET; w2 = the second failing case (0xffff none) << 16 | cases \
+         passed; w3 = the first skipped case (0xffff none) << 16 | cases run (skips not \
+         counted); a pass when passed == run. CASE_SET_FAIL (and a CASE_PASS of case 7) \
+         is the form earlier images wrote: case = the first failure, w2 = cases passed, \
+         w3 = cases run, a by-name skip counted as a failure";
     APP = 2, Seq,
         "an application run. w1 = flags (APP_*) | stage << 8 | status (1 pass, 2 fail); \
          w2 = frames presented; w3 = the application's (board_finish: the GPU resets; \
@@ -287,6 +292,9 @@ values! {
     CASE_UNFINISHED = 4;
     CASE_NO_DEVICE = 5;
     CASE_SET_FAIL = 6;
+    CASE_SET = 7;
+    // kind CASE_SET: "no such case" in a case field.
+    CASE_SET_NONE = 0xffff;
     // kind APP and PROBES: the status.
     STATUS_PASS = 1;
     STATUS_FAIL = 2;
@@ -506,6 +514,66 @@ pub const fn w0(kind: u8, low: u8) -> u32 {
 pub const fn case_w1(gl_case: u32, bad_check: i32, status: u32) -> u32 {
     let check = if bad_check < 0 || bad_check > 254 { 255 } else { bad_check as u32 };
     (gl_case & 0xffff) << 16 | check << 8 | (status & 0xff)
+}
+
+/// A set summary (kind CASE, status CASE_SET), as the walker counts it.
+/// The case fields are `None` when there is no such case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetSummary {
+    pub passed: u32,
+    /// cases run: the listed ones minus the skipped ones
+    pub run: u32,
+    pub skipped: u32,
+    pub first_fail: Option<u32>,
+    pub second_fail: Option<u32>,
+    pub first_skip: Option<u32>,
+}
+
+impl SetSummary {
+    /// w1..w3. Counts and case numbers saturate in their fields (a case
+    /// number at 0xfffe, so it never reads as none).
+    pub fn words(&self) -> [u32; 3] {
+        let case = |c: Option<u32>| c.map_or(CASE_SET_NONE, |c| c.min(CASE_SET_NONE - 1));
+        [
+            case(self.first_fail) << 16 | self.skipped.min(0xff) << 8 | CASE_SET,
+            case(self.second_fail) << 16 | self.passed.min(0xffff),
+            case(self.first_skip) << 16 | self.run.min(0xffff),
+        ]
+    }
+
+    /// The summary in w1..w3 of a CASE_SET record.
+    pub fn from_words(w1: u32, w2: u32, w3: u32) -> Self {
+        let case = |v: u32| if v >> 16 == CASE_SET_NONE { None } else { Some(v >> 16) };
+        SetSummary {
+            passed: w2 & 0xffff,
+            run: w3 & 0xffff,
+            skipped: (w1 >> 8) & 0xff,
+            first_fail: case(w1),
+            second_fail: case(w2),
+            first_skip: case(w3),
+        }
+    }
+
+    /// Cases that failed (run, not passed).
+    pub fn failed(&self) -> u32 {
+        self.run.saturating_sub(self.passed)
+    }
+
+    /// Whether the fields agree with each other: no more passes than runs,
+    /// a first failure exactly when one failed, a second when two did, and a
+    /// first skip exactly when one was skipped.
+    pub fn consistent(&self) -> bool {
+        let f = self.failed();
+        self.passed <= self.run
+            && self.first_fail.is_some() == (f >= 1)
+            && self.second_fail.is_some() == (f >= 2)
+            && self.first_skip.is_some() == (self.skipped >= 1)
+    }
+
+    /// The set's verdict: it ran something and every case it ran passed.
+    pub fn passed_all(&self) -> bool {
+        self.run > 0 && self.passed == self.run
+    }
 }
 
 /// A colour as RGB565.
@@ -1066,6 +1134,14 @@ pub fn write_throughput(out: &mut impl fmt::Write, t: &Throughput) -> fmt::Resul
     Ok(())
 }
 
+/// A CASE_SET case field: the number, or "none".
+fn write_case_or_none(out: &mut impl fmt::Write, c: Option<u32>) -> fmt::Result {
+    match c {
+        Some(c) => write!(out, "{c}"),
+        None => out.write_str("none"),
+    }
+}
+
 /// A record in words, for a reader: one line naming every field. The dEQP
 /// name checks are printed as hex; mapping them to case names needs the case
 /// list and is the host tool's.
@@ -1082,6 +1158,29 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
         None => return write!(out, "kind {k} low {low}: w1 {w1:08x} w2 {w2:08x} w3 {w3:08x} (not a known kind)"),
     }
     match k {
+        kind::CASE if w1 & 0xff == CASE_SET => {
+            let s = SetSummary::from_words(w1, w2, w3);
+            write!(
+                out,
+                "set status {CASE_SET} (set {}) passed {} of {} run; skipped {}, first skip case ",
+                if s.passed_all() { "passed" } else { "failed" },
+                s.passed,
+                s.run,
+                s.skipped
+            )?;
+            write_case_or_none(out, s.first_skip)?;
+            write!(out, "; failing {}: first case ", s.failed())?;
+            write_case_or_none(out, s.first_fail)?;
+            out.write_str(", second case ")?;
+            write_case_or_none(out, s.second_fail)?;
+            if s.failed() > 2 {
+                write!(out, ", {} more not in the record", s.failed() - 2)?;
+            }
+            if !s.consistent() {
+                out.write_str(" (INCONSISTENT fields)")?;
+            }
+            Ok(())
+        }
         kind::CASE => write!(
             out,
             "case {} check {} status {} ({}) got 0x{w2:08x} want 0x{w3:08x}",
@@ -1631,6 +1730,62 @@ mod tests {
         assert_eq!(crc16_ccitt_false(b"123456789"), 0x29B1);
         assert_eq!(crc32_ieee_update(0, b"123456789"), 0xCBF4_3926);
         assert_eq!(crc32_ieee_update(crc32_ieee_update(0, b"1234"), b"56789"), 0xCBF4_3926);
+    }
+
+    /// CASE_SET: the i.MX8MP default set as the walker now counts it (49
+    /// listed, case 16 skipped by name, one case failing; 44 stands in for
+    /// the case the earlier records could not name), its words, decode and
+    /// round trip; then two failures and more, and a clean set with a skip.
+    #[test]
+    fn set_summary_words_and_their_decode() {
+        let s = SetSummary {
+            passed: 47,
+            run: 48,
+            skipped: 1,
+            first_fail: Some(44),
+            second_fail: None,
+            first_skip: Some(16),
+        };
+        let w = s.words();
+        assert_eq!(w, [0x002c_0107, 0xffff_002f, 0x0010_0030]);
+        assert_eq!(SetSummary::from_words(w[0], w[1], w[2]), s);
+        assert!(s.consistent() && !s.passed_all());
+        let b = text(|b| describe(b, [w0(kind::CASE, 14), w[0], w[1], w[2]]));
+        assert_eq!(
+            b.as_str(),
+            "CASE (1) seq 14: set status 7 (set failed) passed 47 of 48 run; skipped 1, first skip case 16; \
+             failing 1: first case 44, second case none"
+        );
+        let four = SetSummary { passed: 44, second_fail: Some(2), ..s };
+        let w = four.words();
+        let b = text(|b| describe(b, [w0(kind::CASE, 14), w[0], w[1], w[2]]));
+        assert!(
+            b.as_str().ends_with("failing 4: first case 44, second case 2, 2 more not in the record"),
+            "{}",
+            b.as_str()
+        );
+        let clean = SetSummary { passed: 48, first_fail: None, ..s };
+        assert!(clean.consistent() && clean.passed_all());
+        let w = clean.words();
+        assert_eq!(w, [0xffff_0107, 0xffff_0030, 0x0010_0030]);
+        let b = text(|b| describe(b, [w0(kind::CASE, 14), w[0], w[1], w[2]]));
+        assert!(
+            b.as_str().contains("(set passed) passed 48 of 48 run; skipped 1, first skip case 16"),
+            "{}",
+            b.as_str()
+        );
+        // fields that disagree are said to: a failure named while all passed,
+        // a skip count without its case, nothing run
+        assert!(!SetSummary { first_fail: Some(3), ..clean }.consistent());
+        assert!(!SetSummary { first_skip: None, ..clean }.consistent());
+        assert!(!SetSummary { passed: 0, run: 0, first_fail: None, ..clean }.passed_all());
+        let w = SetSummary { first_skip: None, ..clean }.words();
+        assert!(text(|b| describe(b, [w0(kind::CASE, 1), w[0], w[1], w[2]]))
+            .as_str()
+            .ends_with("(INCONSISTENT fields)"));
+        // saturation: a case number never reads as none, counts stop at their fields
+        let big = SetSummary { skipped: 300, first_fail: Some(0x1_0000), ..s }.words();
+        assert_eq!((big[0] >> 16, (big[0] >> 8) & 0xff), (0xfffe, 0xff));
     }
 
     #[test]

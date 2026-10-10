@@ -32,11 +32,13 @@ it. This tool adds what board.sh's verdict line does not say, per kind:
            "gl_test: all: F of T cases failed (P passed; X timed out; ...)"
            (gl_test.c, AM62P and Pi 4) and each "gl_test: case N <name>: FAIL"
            or "v3d_gl_test: case N FAIL" line. From a CASE record (the
-           i.MX8MP has no UART): the regression set's passed of run and its
-           FIRST failing case only (gc_gl_test main.c: gc_result_case(7, ...,
-           CASE_PASS, passed, total) or (first failure, ..., CASE_SET_FAIL,
-           passed, total)); the other failing cases are not in the record and
-           are printed as unknown, never as none.
+           i.MX8MP has no UART): the set's summary (status CASE_SET,
+           gc_gl_test main.c gc_result_set): passed of run (skips not run),
+           the skipped count and first skip, and the FIRST TWO failing cases;
+           past two the others are not in the record and are printed as
+           unknown, never as none. The earlier form (CASE_PASS of case 7, or
+           CASE_SET_FAIL) names the first failing case only and counted a
+           by-name skip as a failure.
 
 Absent stays absent: a row without a run, a run without a result, a field the
 record does not carry. Each line names the record words (or the legacy console
@@ -148,6 +150,10 @@ GLMARK2_SCENES_RE = re.compile(r"; first failed: (.*?); unsupported: (.*)$")
 PROBES_RE = re.compile(r"PROBES \(\d+\) tag \d+: status (\S+)")
 CASE_RE = re.compile(r"CASE \(\d+\) seq \d+: case (\d+) check (\d+) status (\d+) \(([^)]*)\) "
                      r"got 0x([0-9a-f]{8}) want 0x([0-9a-f]{8})")
+# record.rs describe(), kind CASE status CASE_SET (the set's summary)
+SET_RE = re.compile(r"CASE \(\d+\) seq \d+: set status \d+ \(set (passed|failed)\) passed (\d+) of (\d+) run; "
+                    r"skipped (\d+), first skip case (\d+|none); failing (\d+): first case (\d+|none), "
+                    r"second case (\d+|none)")
 # gl_test.c: pr_info("gl_test: all: %d of %u cases failed (%u passed; %u timed out; ...")
 ALL_RE = re.compile(r"gl_test: all: (-?\d+) of (\d+) cases failed \((\d+) passed; (\d+) timed out")
 # gl_test.c: "gl_test: case N <name>: PASS/FAIL/TIMEOUT"; v3d_gl_test main.c: "v3d_gl_test: case N <rc_name>"
@@ -232,6 +238,21 @@ def detail_from_record(decoded, label=""):
         sample = "cluster" if label == "CL" else "slint"
         return {"kind": "cluster" if label == "CL" else "probes", "status": m.group(1),
                 "text": "%s probes %s (%s)" % (sample, m.group(1), decoded.strip().split(": ", 1)[-1])}
+    m = SET_RE.search(decoded)
+    if m:
+        verdict, passed, run, skipped, skip1, nfail, f1, f2 = m.groups()
+        passed, run, skipped, nfail = int(passed), int(run), int(skipped), int(nfail)
+        named = [int(c) for c in (f1, f2) if c != "none"]
+        d = {"kind": "gl_test", "source": "record", "passed": passed, "total": run, "failing": named,
+             "skipped": skipped, "first_skip": None if skip1 == "none" else int(skip1)}
+        failing = ", ".join(str(c) for c in named) or "none"
+        if nfail > len(named):
+            d["first_only"] = True
+            failing += ", then %d unknown (the record names the first two failures)" % (nfail - len(named))
+        d["text"] = ("gl_test passed %d of %d run (CASE record, set %s); skipped %d%s; failing: %s"
+                     % (passed, run, verdict, skipped,
+                        "" if skip1 == "none" else " (first case %s)" % skip1, failing))
+        return d
     m = CASE_RE.search(decoded)
     if m:
         case, check, st, stname, got, want = m.groups()
@@ -408,7 +429,7 @@ def diff(prev, now):
             if fa != fb:
                 ch.append("failing +%s -%s" % (sorted(fb - fa), sorted(fa - fb)))
                 if da.get("first_only") or db.get("first_only"):
-                    ch.append("(a CASE record names its first failure only)")
+                    ch.append("(a CASE record names its first failure only, or its first two)")
         if a["image"] != b["image"]:
             ch.append("image %s -> %s" % (a["image"], b["image"]))
         lines.append("DIFF %s: %s" % (label, "; ".join(ch) if ch else
@@ -643,10 +664,22 @@ def self_test():
     for words, want, what in ((["594b0101", "00070001", "0000001a", "0000001b"], (26, 27, []),
                                "case 7 pass: the set passed 26 of 27 (w2 of w3)"),
                               (["594b0101", "00ab0802", "ffff0000", "ff0000ff"], (0, 1, [171]),
-                               "case 171 alone, check 8 failed: failing [171]")):
+                               "case 171 alone, check 8 failed: failing [171]"),
+                              # CASE_SET (record.rs SetSummary): case 16 skipped, one failure
+                              (["594b010e", "002c0107", "ffff002f", "00100030"], (47, 48, [44]),
+                               "set: 47 of 48 run, 1 skipped (16), failing [44]"),
+                              (["594b010e", "ffff0107", "ffff0030", "00100030"], (48, 48, []),
+                               "set: 48 of 48 run, 1 skipped (16), failing none"),
+                              (["594b010e", "002c0107", "0002002c", "00100030"], (44, 48, [44, 2]),
+                               "set: 44 of 48 run, failing [44, 2] then two unknown")):
         p = subprocess.run([ytools(), "record"] + words, capture_output=True, text=True)
         r = detail_from_record(p.stdout)
         check("CASE " + what, (r.get("passed"), r.get("total"), r.get("failing")) == want, (p.stdout, r))
+        if words[1].endswith("07"):
+            check("CASE " + what + ": the skip and the unknown failures are said",
+                  r.get("skipped") == 1 and r.get("first_skip") == 16 and
+                  bool(r.get("first_only")) == (want[0] == 44) and
+                  ("2 unknown" in r["text"]) == (want[0] == 44), (p.stdout, r))
 
     print("common-tally self-test: %d checks failed" % len(fails))
     return 1 if fails else 0

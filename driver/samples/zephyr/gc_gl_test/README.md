@@ -64,8 +64,10 @@ run script that still passes one of them stops at Kconfig.
 
 **Since 2026-10-04 the reading is the result record**, the four words in the
 SNVS that survive the SoC reset (`yakogl-tools record`): the case and its first
-failing check with what it read and wanted, or the set's passed count, total
-and first failing case, or UNFINISHED with the case a stalled suite was in.
+failing check with what it read and wanted, or the set's summary (status
+CASE_SET: passed of run, the first two failing cases, how many cases skipped
+by name and the first of them; a skip is not run and not a failure, so a set
+passes when passed == run), or UNFINISHED with the case a stalled suite was in.
 The image resets the SoC right after writing it (`gc_sample_finish_recorded`)
 with `CONFIG_GC_GL_TEST_SETTLE_SECONDS` at its default 0, so a one-case run
 costs its boot and the case. Before that, a run held for a settle of 100 s and

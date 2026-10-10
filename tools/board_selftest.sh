@@ -31,8 +31,10 @@
 #      back into records and tallied: results.tsv against the committed one,
 #      rows.md, the TALLY line and the diff against the old tree runner's.
 # 4. The record's own status (no old runner read it): APP and PROBES records
-#    with a pass, a fail and an undefined status, on the Pi 4 console and in
-#    the i.MX8MP SNVS: done, failed (rc 4) and bad_record (rc 4).
+#    with a pass, a fail and an undefined status, and the gl_test set's CASE
+#    records (CASE_SET passed, failed and inconsistent; the earlier
+#    CASE_SET_FAIL form), on the Pi 4 console and in the i.MX8MP SNVS: done,
+#    failed (rc 4) and bad_record (rc 4).
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and N is
 # the pinned count (a check that silently stops running fails the pin).
 set -uo pipefail
@@ -40,7 +42,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=207
+WANT_CHECKS=215
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -694,6 +696,10 @@ failed 4 594b0202 00000602 00000001 00000000 APP status 2 (fail, the triangle's 
 done 0 594b0601 08420882 00210842 98080883 PROBES tag 1 (pass)
 failed 4 594b0602 08420882 00210842 98080883 PROBES tag 2 (fail)
 bad_record 4 594b0202 00000003 00000001 00000000 APP status 3 (undefined)
+done 0 594b010e ffff0107 ffff0030 00100030 CASE_SET 48 of 48 run, case 16 skipped by name (pass)
+failed 4 594b010e 002c0107 ffff002f 00100030 CASE_SET 47 of 48 run, case 16 skipped, failing 44 (fail)
+bad_record 4 594b010e 002c0107 ffff0030 00100030 CASE_SET a failure named while 48 of 48 passed (inconsistent)
+failed 4 594b010e 0010ff06 0000002f 00000031 CASE_SET_FAIL the earlier set form, c4ccc966 (fail)
 EOF_ST
 
 echo "== 3d. Pi 4 tree tally and diff against the old Pi 4 tree runner's (old-runner-outputs.txt)"

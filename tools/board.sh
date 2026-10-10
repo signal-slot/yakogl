@@ -391,7 +391,7 @@ pvr_resets() {
 # line: "failed" when the console's last "gl_test: all: F of T cases failed
 # (P passed; X timed out ...)" (gl_test.c, the set or a list) has F or X above
 # 0, else "done". Completion alone is not a pass: the i.MX8MP's CASE record of
-# the same set reads failed (CASE_SET_FAIL), and one verdict rule holds on all
+# the same set reads failed (CASE_SET with passed < run), and one verdict rule holds on all
 # three boards (2026-10-04; before it, a set with failures read done here).
 gl_test_set_verdict() {
     local l f x

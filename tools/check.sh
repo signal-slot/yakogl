@@ -834,6 +834,24 @@ if command -v cc >/dev/null 2>&1; then
       $arm -Iinclude -Isrc -Isrc/osal -Idriver/tools/pvrlab -Idriver/src \
       -Idriver/src/vivante driver/tools/pvrlab/gl_test.c
   done
+  # The set walker's count, RUN (tests/gltest_set_tally.c includes gl_test.c):
+  # a by-name skip is skipped, not failed, and the first two failures are
+  # named -- the counts the i.MX8MP's CASE_SET record carries, where the
+  # skip of case 16 once read as the set's first failure.
+  gltest_set_tally() {
+    local out
+    mkdir -p build || return 1
+    cc -std=gnu11 -Wall -Wextra -Werror -DGL_TEST_HOST=1 -Iinclude -Isrc -Isrc/osal \
+      -Idriver/tools/pvrlab -Idriver/src tests/gltest_set_tally.c -o build/gltest_set_tally \
+      -no-pie -Wl,--unresolved-symbols=ignore-all || return 1
+    out=$(build/gltest_set_tally) || { printf '%s\n' "$out" | grep -v ' ok$' | tail -20; return 1; }
+    printf '%s\n' "$out" |
+      grep -qE '^gltest_set_tally: ([0-9]+) checks run \(planned \1\), 0 failed$' || {
+      echo "gltest_set_tally exited 0 without its result line"
+      return 1
+    }
+  }
+  step "run     gl_test set walker count (a skip is not a failure)" gltest_set_tally
   # The two headers gl_test.c includes are generated from tools/shaders/, never
   # edited: regenerate them and refuse a drift. They hold the only copy of the
   # GLSL the suite compiles, while the source list, the offline table and the
