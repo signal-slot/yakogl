@@ -187,7 +187,7 @@ fn what_reaches_the_allocator_from_the_shipped_table() {
                 let redefined_later =
                     groups.iter().skip(i + 1).any(|h| matches!(h.dst, Some(SelDst::Virtual(v)) if v == d));
                 let at_edge = boundary.live_out.contains(&d);
-                if !read_later && !(at_edge && !redefined_later) {
+                if !read_later && (!at_edge || redefined_later) {
                     dead += 1;
                 }
             }
