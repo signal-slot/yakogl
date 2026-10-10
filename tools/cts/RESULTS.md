@@ -16968,3 +16968,154 @@ nondeterminism class of #9, not a deterministic regression of commits 4 and 5.
 GitHub issue #25 ("i.MX8MP: gl_test 2 (texture) fails intermittently since
 05f8f749 (2 of 3 runs); GPU command streams unchanged"). This supersedes the
 "REGRESSION" reading of the entry above.
+
+## AM62P: the whole dEQP-GLES2 tree on origin/main `32778b57`: 54 fail (2026-10-10)
+
+First whole tree since §1z2 (`d60b9d76`, 2026-10-02) and the first from main with plan #1's fixes
+and the precompiled tier. Instrument: `tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, 17 images
+built from origin/main `32778b57` by `build/run-es2.sh` (`tools/cts/am62p-deqp-images.sh` with
+`am62p-full-tree.txt`, the 1x config), one image per boot, the nuc. Record
+`records/am62p/deqp-32778b57/full/` of the main checkout (gitignored; one directory per image,
+`20261010-0525-img1-32778b57-84bd3510` to `20261010-0605-img17-32778b57-4fafa8a8`); the tally
+is `tools/board.sh am62p tally` plus `tools/cts/deqp-uart-tally.py --mustpass` on the consoles.
+All 17 runs `verdict=done`, `result=legacy:deqp_summary`, 0 resets, no GPU reset line, every
+case begun has a result (17,371 case lines, 17,165 of them in the mustpass list, 0 without a
+result).
+
+**Mustpass 17,165: 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2
+CompatibilityWarning.**
+
+| image | begun | pass | fail | n/s | warn |
+|---|---:|---:|---:|---:|---:|
+| 1 | 1,512 begun (1,379 mustpass) | 1,370 | 9 | 0 | 0 |
+| 2 | 994 | 994 | 0 | 0 | 0 |
+| 3 | 1,172 | 1,172 | 0 | 0 | 0 |
+| 4 | 1,100 | 1,100 | 0 | 0 | 0 |
+| 5 | 2,525 | 2,525 | 0 | 0 | 0 |
+| 6 | 1,318 | 1,318 | 0 | 0 | 0 |
+| 7 | 1,631 | 1,631 | 0 | 0 | 0 |
+| 8 | 324 | 324 | 0 | 0 | 0 |
+| 9 | 452 | 407 | 45 | 0 | 0 |
+| 10 | 80 | 80 | 0 | 0 | 0 |
+| 11 | 1,060 | 1,060 | 0 | 0 | 0 |
+| 12 | 882 | 882 | 0 | 0 | 0 |
+| 13 | 1,267 | 1,267 | 0 | 0 | 0 |
+| 14 | 711 | 711 | 0 | 0 | 0 |
+| 15 | 1,173 | 1,173 | 0 | 0 | 0 |
+| 16 | 743 | 734 | 0 | 9 | 0 |
+| 17 | 427 | 395 | 0 | 25 | 7 |
+
+(Image totals include cases outside the mustpass list, as in §1x.)
+
+**Not passing, by name.**
+
+- Fail (54), both are regressions against `d60b9d76`:
+  - image 1, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}`: the
+    PowerVR multiply-add fusion; fixed in `e17fb6a7` (below).
+  - image 9, 45 `texture.vertex.2d.{filtering (36), wrap (9)}.*`: "Image comparison failed". Cause:
+    the frame's GENERAL arena was 1 MiB since `dcaafa41` (4 MiB at `d60b9d76`) and refused the
+    1,225,804-byte client-array draw of dEQP's 127 x 127 grid. Fixed on the host by the indexed
+    pieces (`a6fc6f14`, gl_test 197 `vtxgrid`); board confirmation of image 9 pending.
+- NotSupported (34): `clip_control.*` 8; `negative_api.texture.compressedtexsubimage2d_*` 9
+  (invalid_size, invalid_target, level_max_cube, level_max_tex2d, neg_level_cube,
+  neg_level_tex2d, neg_offset, neg_wdt_hgt, offset_allowed);
+  `multisampled_render_to_texture.readpixels` 1; `multisample.*` 16 (1x config; measured on the
+  ms4 image, next entry). `shaders.fragdata.invalid_assign_to_1` is no longer NotSupported:
+  it passes (`4e9397c`).
+- Warnings (7): CompatibilityWarning `flush_finish.flush` and `flush_finish.flush_wait` (dEQP's
+  timing check, it recurred after not recurring at §1z2); QualityWarning
+  `rasterization.interpolation.basic.{line_strip, line_strip_wide, lines}` and
+  `projected.{lines, lines_wide}` (5, as before).
+
+Against §1z2 (17,141 / 0 / 19 / 5, the ms4 image replacing the 16 multisample cases): with the
+ms4 result of the next entry the same combination reads 17,084 pass / 56 fail / 18 NotSupported
+/ 5 QualityWarning / 2 CompatibilityWarning, i.e. 56 cases moved from Pass to Fail (9 invariance,
+45 vertex textures, 2 ms4), one NotSupported became a pass (fragdata) and the 2 flush_finish
+warnings came back. No count is better than §1z2 apart from fragdata.
+
+**Not an ES 3.0 measurement.** An attempt at the AM62P dEQP-GLES3 tree on `32778b57` produced no
+results: the images reported ES 2.0, so dEQP's GLES3 context could not be created. This is a
+note, not a result. `tools/cts/am62p-deqp-images.sh` now passes `-DCONFIG_YAKOGL_REPORT_ES2=n`
+(fixed on the branch this entry was written on, after the run).
+
+## AM62P: multisample on the ms4 image at `32778b57`: 14 pass / 2 fail (2026-10-10)
+
+The 16 `multisample.*` cases on the `rgba8888d24s8ms4` image (`tools/cts/am62p-ms4-tree.txt`),
+same build and instrument as the entry above. Records `records/am62p/deqp-32778b57/ms4` and
+`records/am62p/deqp-32778b57/ms4-rerun`: both runs identical, **14 pass / 2 fail**:
+
+- `multisample.constancy_alpha_to_coverage`: Fail (Failed)
+- `multisample.constancy_both_inverted`: Fail (Failed)
+
+§1z2 had 16 of 16 at `d60b9d76`, so these two are regressions, not yet explained. Both cases use
+alpha to coverage, which goes through the fragment shader's `sample_kill` variant
+(`src/gl/draw.rs`, `needs_sample_kill`); `constancy_both` (without the inversion) and
+`proportionality_alpha_to_coverage` pass. Cause not found; under diagnosis; no issue yet.
+
+## AM62P: gl_test default set on `32778b57`: 48 / 48 (2026-10-10)
+
+`tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, the `gl_test` sample built from origin/main
+`32778b57`, record `records/am62p/20261010-0611-gt-32778b57-a1cebe9a`:
+`gl_test: all: 0 of 48 cases failed (48 passed; 0 timed out; first failure case -1 at index -1)`,
+0 resets, `precompiled hits 0, compiler runs 197` (compiler-only image, as the 05f8f749 row
+of "Precompiled shaders on the AM62P without a compiler").
+
+## AM62P: image 1 on `e17fb6a7`: the invariance cases pass (2026-10-10)
+
+The invariance fix (`e17fb6a7`: no multiply-add fusion on the way to an `invariant` output),
+image 1 (the shaders groups of `am62p-full-tree.txt`) alone, built from origin/main `e17fb6a7`,
+`tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, record `records/am62p/deqp-e17fb6a7/img1`:
+**1,379 pass / 0 fail**. The 9 `shaders.invariance.*.common_subexpression_*` cases that failed
+on the integration image `b83216d4` and in the `32778b57` tree pass. Both runs of image 1
+began 1,512 cases with a result (the console's `deqp: summary`); the tally restricts to the
+mustpass list, 1,379 cases of image 1, so the `32778b57` tree's image 1 reads 1,370 pass / 9
+fail in the same terms and this one 1,379 / 0.
+
+## i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main `32778b57`: 0 fail (2026-10-10)
+
+`tools/board.sh imx8mp`, `BOARD_BOOT=uboot-mmc`, images built from origin/main `32778b57` by
+`build/run-es2.sh`, the 29 selectors of the whole tree (`tools/cts/imx8mp-full-tree.txt`
+entries 0-28), one jump per entry. Record `records/imx8mp/deqp-32778b57/full` of the main
+checkout (gitignored). The board has no console: the result is read from the SNVS record
+(`result=record:DEQP`), 0 resets where the record carries them. Entries 14 and 27 were also
+read per case (`e14-p0..p2`, `e27-p0`, `DEQP_FAILS` records).
+
+**Entries 0-28: 17,371 begun: 17,318 pass, 0 fail, 34 NotSupported, 19 other
+(QualityWarning), 0 no-result.** Mustpass: 17,165 of the 17,371 (the other 206 as in the
+`d8583f20` entry, 0 fail and 0 other among them), so the mustpass list reads 0 fail, 19 other,
+30-34 NotSupported, 17,112-17,116 pass.
+
+Against `tools/cts/imx8mp-full-tree-29460f96.results.tsv` (`d8583f20`, 2026-10-01, the same
+selectors): **every selector's begun / pass / fail / n.s. / other / no-result columns are
+identical (diffed, 29 of 29).** The totals equal too (17,318 / 0 / 34 / 19). The not-passing
+cases sit where they sat: entry 14 (`texture.mipmap`) 14 other (cube `generate` cases), entry 22
+(`negative_api`) 9 NotSupported, entry 27 (`rasterization` interpolation) 5 other, entry 28 25
+NotSupported (`multisample` 16, `clip_control` 8, `multisampled_render_to_texture.readpixels`
+1). Fixed since `d8583f20` and now board-read on a main image: 72d16864's two regressions
+(`fbo` 711 of 711 in entry 21; the shaders entry 2 has 1,512 pass, 0 NotSupported, so
+`fragdata.invalid_assign_to_1` is not refused).
+
+## i.MX8MP: gc_gl_test on `32778b57`, three runs (2026-10-10)
+
+`tools/board.sh imx8mp`, `BOARD_BOOT=uboot-mmc`, `gc_gl_test` built from origin/main
+`32778b57`. Records `records/imx8mp/20261010-0642-gt-32778b57-82dd3380` (run 1) and the reruns
+`records/imx8mp/gt-32778b57-2`, `records/imx8mp/gt-32778b57-3`:
+
+| run | passed | first failure |
+|---|---|---|
+| 1 | 45 / 48 | case 10 (the intermittent #9) |
+| 2 | 46 / 48 | case 16 (#8) |
+| 3 | 46 / 48 | case 16 (#8) |
+
+Case 16 fails in the default image because its 4x MSAA half is skipped by name and the set
+walker counts the skip as a failure (#8, `6bddfc5`); the record does not name the second
+failing case of the 46 / 48 runs. Same as the `8abeaabb` baseline (46 / 48, first failure 16).
+Run 1's case 10 is the intermittent #9 (about one run in three); case 2 (#25) passed in all
+three.
+
+## Pi 4: nothing run on 2026-10-10
+
+No Pi 4 measurement exists for this day: the nuc has no UART path to the board. The Pi 4
+figures stay those of `fe5e8e73` (whole tree, 25 cube failures, 2026-10-01) and `afa12e9b`
+(gl_test 12 / 12); the host fix for the 25 cube cases (`ec5ba4f`) and the Pi 4 items of plan
+#2 are not board-confirmed.

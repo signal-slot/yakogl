@@ -96,12 +96,18 @@ network (<code>docs/standalone-boot.md</code>).</li>
 <h2 id="not-yet">Not yet</h2>
 <p>From <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>,
 "Known defects" and "Open work", as of main at <span data-meta="checked">the commit named in data.js</span>.
-None of the fixes below is confirmed on a board from main.</p>
+Fixes below are confirmed on a board from main only where a line says so. The Pi 4 ran nothing on 2026-10-10.</p>
 <h3>Known defects</h3>
 <ul>
-<li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases fail</strong>
-on a 2026-10-08 integration image and on the 32778b57 tree (2026-10-10). Fixed on main in
-e17fb6a7; image 1 of the AM62P tree on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
+<li><strong>AM62P: 45 <code>texture.vertex.2d.{filtering,wrap}.*</code> dEQP cases fail</strong>
+in the 32778b57 tree (2026-10-10, image 9): a 1 MiB draw arena refused dEQP's 127 x 127
+quad grid. Fixed on the host (indexed pieces, gl_test 197); board confirmation pending.</li>
+<li><strong>AM62P: 2 of 16 <code>multisample.*</code> cases fail</strong> on the 4x image at
+32778b57 (<code>constancy_alpha_to_coverage</code>, <code>constancy_both_inverted</code>;
+both runs identical; 16 / 16 on 2026-10-02). Under diagnosis, no issue yet.</li>
+<li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases</strong>
+failed on a 2026-10-08 integration image and in the 32778b57 tree (2026-10-10). Fixed on main
+in e17fb6a7; image 1 on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
 <li><strong>PowerVR: glmark2 shadow and refract sample a stale depth texture</strong>
 (pvr-depth-resolve, no issue yet). Root cause found on the host (a stale kick stamp); the
 host test is marked as an open defect; not fixed.</li>

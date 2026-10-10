@@ -187,6 +187,7 @@ build() {
   local hflags=(-g -O1 -std=gnu11 $csan -DPVR_HEAP_GENERAL=GLES_HEAP_DATA -I"$HERE" -I"$HERE/shim"
                 "${cinc[@]}" -I"$drv/tools/pvrlab")
   grep -q isp_scissor_base "$drv/src/pvr_render.h" && hflags+=(-DHH_KICK_SCISSOR)
+  grep -q isp_oclqry_base "$drv/src/pvr_render.h" && hflags+=(-DHH_KICK_OCLQRY)
   # A build with the in-process compiler takes gl_test's GLSL ES 1.00 shader
   # set, as a board image with it does (gl_test.c GL_TEST_ES100): the
   # compiler refuses the desktop #version 450 set, and the table holds both.

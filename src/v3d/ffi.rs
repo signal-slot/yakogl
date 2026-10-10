@@ -303,6 +303,9 @@ pub struct V3dJobState {
     pub wpos: V3dWpos,
     /// SAMPLE_STATE's mask in a 4x job (a single-sampled one writes 0xf).
     pub sample_mask: u32,
+    /// OCCLUSION_QUERY_COUNTER's address: the counter of the occlusion
+    /// query this draw counts for, 0 for none.
+    pub oq_addr: u32,
 }
 
 /// `struct v3d_job_draw_layout`: where one draw's uniform streams went (GPU
@@ -722,7 +725,7 @@ const _: () = assert!(offset_of!(V3dJobTarget, ms_address) == 56);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_memory_format) == 60);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_height_in_ub) == 64);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
-const _: () = assert!(size_of::<V3dJobState>() == 184);
+const _: () = assert!(size_of::<V3dJobState>() == 188);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
 const _: () = assert!(offset_of!(V3dJobState, scissor_maxy) == 40);
 const _: () = assert!(offset_of!(V3dJobState, front_ccw) == 44);
@@ -739,6 +742,8 @@ const _: () = assert!(offset_of!(V3dJobState, rgb_func) == 136);
 const _: () = assert!(offset_of!(V3dJobState, colormask) == 160);
 const _: () = assert!(offset_of!(V3dJobState, blend_color_f16) == 164);
 const _: () = assert!(offset_of!(V3dJobState, wpos) == 172);
+const _: () = assert!(offset_of!(V3dJobState, sample_mask) == 180);
+const _: () = assert!(offset_of!(V3dJobState, oq_addr) == 184);
 const _: () = assert!(size_of::<V3dWpos>() == 8);
 const _: () = assert!(size_of::<V3dJobDraw>() == 152);
 const _: () = assert!(offset_of!(V3dJobDraw, instances) == 144);

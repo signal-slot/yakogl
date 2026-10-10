@@ -46,7 +46,8 @@
  * copies the front objtype, passtype, dcmpmode and pointlinewidth), one past it is
  * refused by name with nothing written, and every value in range gives the
  * word the old masked writer gave. The fields, widths from ppp.xml:
- *   STATE_ISPCTL upass [22:25] (:133); STATE_ISPA objtype [28:31],
+ *   STATE_ISPCTL upass [22:25] (:133), visreg [0:13] (:140-142, written with
+ *   vistest [15:15] only); STATE_ISPA objtype [28:31],
  *   passtype [24:26], dcmpmode [17:19], pointlinewidth [8:15], sref [0:7]
  *   (:145-160); STATE_ISPB scmpmode [25:27], sop1-3 [22:24] [19:21] [16:18],
  *   scmpmask [8:15], swmask [0:7] (:162-169), both faces; STATE_ISPDBSC
@@ -102,7 +103,7 @@
 #include "pvr_pds_render_gen.h"
 #include "pvr_vdm_ppp_gen.h"
 
-#define PLANNED 459
+#define PLANNED 468
 
 static int checks, failures;
 
@@ -732,6 +733,7 @@ struct ppp_nonsize {
 
 static const struct ppp_nonsize ppp_nonsize[] = {
 	{ "TA_STATE_ISPCTL.upass", PPP_FULL_ISPCTL, 0, 22, 4, IN_UPASS, 0 },
+	{ "TA_STATE_ISPCTL.visreg", PPP_FULL_ISPCTL, 0, 0, 14, ST(vis_reg) },
 	{ "TA_STATE_ISPA.objtype", PPP_FULL_ISPA, PPP_FULL_ISPA_BACK, 28, 4, ST(objtype) },
 	{ "TA_STATE_ISPA.passtype", PPP_FULL_ISPA, PPP_FULL_ISPA_BACK, 24, 3, IN_PASSTYPE, 0 },
 	{ "TA_STATE_ISPA.dcmpmode", PPP_FULL_ISPA, PPP_FULL_ISPA_BACK, 17, 3, ST(depth_cmp) },
@@ -787,6 +789,7 @@ static struct pvr_ppp_state ppp_full_state(void)
 	st.dbias_enable = 1;
 	st.scissor_enable = 1;
 	st.clip_enable = 1;
+	st.vis_test = 1; /* visreg is written only with vistest */
 	return st;
 }
 
@@ -846,6 +849,21 @@ static void ppp_nonsize_fields(void)
 			sweep = ppp_lands(f, v, base);
 		snprintf(m, sizeof(m), "%s: every value 0..%u as the old masked writer", f->field, max);
 		check(sweep, m);
+	}
+
+	/* vistest: bit 15 of ISPCTL with vis_test, and without it neither that
+	 * bit nor visreg, whatever vis_reg holds (an object outside a query) */
+	{
+		in = ppp_full_in();
+		st = ppp_full_state();
+		st.vis_reg = 0x1234;
+		check(pvr_ppp_build_block(&in, &st, dw, &n, NULL) == PPP_FULL_WORDS &&
+			      (dw[PPP_FULL_ISPCTL] & 0xffffu) == (0x8000u | 0x1234u),
+		      "TA_STATE_ISPCTL with vis_test: vistest (bit 15) and visreg");
+		st.vis_test = 0;
+		check(pvr_ppp_build_block(&in, &st, dw, &n, NULL) == PPP_FULL_WORDS &&
+			      (dw[PPP_FULL_ISPCTL] & 0xffffu) == 0 && (dw[PPP_FULL_ISPCTL] & ~0xffffu) == (base[PPP_FULL_ISPCTL] & ~0xffffu),
+		      "TA_STATE_ISPCTL without vis_test: no vistest, no visreg, the rest unchanged");
 	}
 
 	/* the PDS base addresses: a 16-byte aligned offset is written as is, a

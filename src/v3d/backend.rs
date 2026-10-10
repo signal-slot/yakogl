@@ -997,6 +997,10 @@ struct V3dState {
     tiled: [Tiled; TILED_ENTRIES],
     tiled_live_bytes: usize,
     tiled_high_water: usize,
+    /// The occlusion query counters (`v3d_query_begin`): one 32-bit word per
+    /// query handle, at `handle * OQ_STRIDE`, allocated by the first query
+    /// and kept until shutdown. Zero: none yet.
+    oq: OsalGpuMem,
     /// The most bytes of tiled copies kept at once (set at init).
     tiled_budget: usize,
     /// The high-water last logged (a line each time it doubles).
@@ -1095,6 +1099,7 @@ impl V3dState {
         tiled: [Tiled::NONE; TILED_ENTRIES],
         tiled_live_bytes: 0,
         tiled_high_water: 0,
+        oq: OsalGpuMem::ZERO,
         tiled_budget: DEFAULT_TILED_BUDGET,
         tiled_logged: 0,
         evictions: [0; 2],
@@ -4184,10 +4189,95 @@ pub extern "C" fn v3d_shutdown() {
         &mut g.black,
         &mut g.tile_alloc,
         &mut g.tile_state,
+        &mut g.oq,
     ] {
         osal::gpu_free(mem);
     }
     g.inited = false;
+}
+
+/* ---- occlusion queries ---------------------------------------------------------- */
+
+/// Bytes between two handles' counters: a cache line of their own, so the
+/// CPU zeroing or reading one never touches a line the GPU writes for
+/// another (docs/es3-occlusion-query.md 3.1).
+const OQ_STRIDE: usize = 64;
+const OQ_BYTES: usize = GLES_QUERY_HANDLES as usize * OQ_STRIDE;
+
+/// OCCLUSION_QUERY_COUNTER's address for a draw counted on `handle`
+/// (`GlesDraw::occlusion_query`): its word of the counter buffer; 0 for
+/// none, and for a handle `v3d_query_begin` never started a buffer for.
+fn oq_addr(g: &V3dState, handle: u32) -> u32 {
+    if handle == 0 || handle >= GLES_QUERY_HANDLES || g.oq.cpu.is_null() {
+        return 0;
+    }
+    gpu32(g.oq.gpu + handle as u64 * OQ_STRIDE as u64).unwrap_or(0)
+}
+
+/// The CPU view of `handle`'s counter word, allocating the buffer first.
+fn oq_word(g: &mut V3dState, handle: u32) -> Result<*mut u32, i32> {
+    if handle == 0 || handle >= GLES_QUERY_HANDLES {
+        return Err(-EINVAL);
+    }
+    if g.oq.cpu.is_null() {
+        let mut mem = OsalGpuMem::ZERO;
+        if osal::gpu_alloc(V3D_HEAP_DATA, OQ_BYTES, OSAL_MEM_DATA, &mut mem) != 0
+            || mem.cpu.is_null()
+            || gpu32(mem.gpu + OQ_BYTES as u64).is_none()
+        {
+            osal::gpu_free(&mut mem);
+            glog_once!("yakogl/v3d: no GPU memory for the occlusion query counters ({} bytes)", OQ_BYTES);
+            return Err(-ENOMEM);
+        }
+        g.oq = mem;
+    }
+    Ok((g.oq.cpu as *mut u8).wrapping_add(handle as usize * OQ_STRIDE) as *mut u32)
+}
+
+/// An occlusion query starts on `handle`: its counter is zeroed (Mesa's
+/// v3d_begin_query: a fresh BO whose first word is 0, v3d_query_pipe.c:91-101).
+/// The GL core has waited for every job that counted on it before.
+pub extern "C" fn v3d_query_begin(handle: u32) -> i32 {
+    let g = g();
+    if !g.inited {
+        return -ENODEV;
+    }
+    match oq_word(g, handle) {
+        Ok(w) => {
+            // SAFETY: the counter buffer's live mapping, one aligned word of
+            // the handle's line; no job adds into it (the GL core waited).
+            unsafe {
+                w.write_volatile(0);
+                osal::cache_flush(w as *mut c_void, 4);
+            }
+            0
+        }
+        Err(rc) => rc,
+    }
+}
+
+/// The samples counted on `handle`: the word the TLB added every counted
+/// job's count to (v3d_query_pipe.c:204-233, after the jobs completed).
+///
+/// # Safety
+/// `samples` is null or valid for writing one u64.
+pub unsafe extern "C" fn v3d_query_result(handle: u32, samples: *mut u64) -> i32 {
+    let g = g();
+    if !g.inited || samples.is_null() {
+        return -EINVAL;
+    }
+    if handle == 0 || handle >= GLES_QUERY_HANDLES || g.oq.cpu.is_null() {
+        return -EINVAL; /* never started */
+    }
+    let w = (g.oq.cpu as *mut u8).wrapping_add(handle as usize * OQ_STRIDE) as *mut u32;
+    // SAFETY: the counter buffer's live mapping; every job that counted on
+    // the handle has completed (the GL core's contract); `samples` is the
+    // caller's live u64.
+    unsafe {
+        osal::cache_invd(w as *mut c_void, 4);
+        *samples = u64::from(w.read_volatile());
+    }
+    0
 }
 
 /// Record one draw (see [`crate::backend::draw`] for the contract).
@@ -4314,7 +4404,9 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * has no state of its own (a quad makes its own, `clear_quad_draw`). */
     let st = if d.index_count != 0 {
         match state::job_state(d) {
-            Ok(st) => Some(st),
+            /* the occlusion query's counter (the clear quad, made from
+             * its own GlesDraw, never carries one) */
+            Ok(st) => Some(V3dJobState { oq_addr: oq_addr(g, d.occlusion_query), ..st }),
             Err(why) => return refuse(g, why),
         }
     } else {
@@ -4649,6 +4741,9 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
     samples_texel_copies: true,
     attachment_gone: Some(v3d_attachment_gone),
     depth_resolve: Some(v3d_depth_resolve),
+    query_begin: Some(v3d_query_begin),
+    query_end: None,
+    query_result: Some(v3d_query_result),
 };
 
 #[cfg(test)]

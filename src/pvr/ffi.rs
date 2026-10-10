@@ -227,6 +227,10 @@ pub struct PvrPppState {
     pub flatshade_vtx: u32,
     /// OUTPUT_SEL tsp_unclamped_z_pres: the FS iterates the Z plane.
     pub z_pres: i32,
+    /// ISPCTL.vistest: the ISP counts the object's passing samples into
+    /// dword `vis_reg` (14 bits) of the frag kick's ISP_OCLQRY_BASE buffer.
+    pub vis_test: i32,
+    pub vis_reg: u32,
 }
 
 impl PvrPppState {
@@ -278,6 +282,8 @@ impl PvrPppState {
         wclampen: 0,
         flatshade_vtx: 0,
         z_pres: 0,
+        vis_test: 0,
+        vis_reg: 0,
     };
 }
 
@@ -595,7 +601,7 @@ const _: () = assert!(offset_of!(PvrPppFragInputs, isp_userpass) == 24);
 const _: () = assert!(offset_of!(PvrPppFragInputs, passtype) == 28);
 const _: () = assert!(offset_of!(PvrPppFragInputs, varying_program_code_offset) == 32);
 
-const _: () = assert!(size_of::<PvrPppState>() == 208);
+const _: () = assert!(size_of::<PvrPppState>() == 216);
 const _: () = assert!(offset_of!(PvrPppState, objtype) == 0);
 const _: () = assert!(offset_of!(PvrPppState, point_line_width) == 4);
 const _: () = assert!(offset_of!(PvrPppState, tri_merge_disable) == 8);
@@ -643,6 +649,8 @@ const _: () = assert!(offset_of!(PvrPppState, drawclippededges) == 192);
 const _: () = assert!(offset_of!(PvrPppState, wclampen) == 196);
 const _: () = assert!(offset_of!(PvrPppState, flatshade_vtx) == 200);
 const _: () = assert!(offset_of!(PvrPppState, z_pres) == 204);
+const _: () = assert!(offset_of!(PvrPppState, vis_test) == 208);
+const _: () = assert!(offset_of!(PvrPppState, vis_reg) == 212);
 
 const _: () = assert!(size_of::<PvrVdmVsState>() == 28);
 const _: () = assert!(offset_of!(PvrVdmVsState, vs_pds_data_offset) == 0);

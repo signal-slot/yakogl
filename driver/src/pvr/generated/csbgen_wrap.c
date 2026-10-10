@@ -19,6 +19,7 @@ void ROGUE_CR_ISP_ZLOAD_BASE_pack__extern(void *dst, const struct ROGUE_CR_ISP_Z
 void ROGUE_CR_ISP_STENCIL_LOAD_BASE_pack__extern(void *dst, const struct ROGUE_CR_ISP_STENCIL_LOAD_BASE *values) { ROGUE_CR_ISP_STENCIL_LOAD_BASE_pack(dst, values); }
 void ROGUE_CR_ISP_SCISSOR_BASE_pack__extern(void *dst, const struct ROGUE_CR_ISP_SCISSOR_BASE *values) { ROGUE_CR_ISP_SCISSOR_BASE_pack(dst, values); }
 void ROGUE_CR_ISP_DBIAS_BASE_pack__extern(void *dst, const struct ROGUE_CR_ISP_DBIAS_BASE *values) { ROGUE_CR_ISP_DBIAS_BASE_pack(dst, values); }
+void ROGUE_CR_ISP_OCLQRY_BASE_pack__extern(void *dst, const struct ROGUE_CR_ISP_OCLQRY_BASE *values) { ROGUE_CR_ISP_OCLQRY_BASE_pack(dst, values); }
 void ROGUE_CR_USC_PIXEL_OUTPUT_CTRL_pack__extern(void *dst, const struct ROGUE_CR_USC_PIXEL_OUTPUT_CTRL *values) { ROGUE_CR_USC_PIXEL_OUTPUT_CTRL_pack(dst, values); }
 void ROGUE_PBESTATE_STATE_WORD0_pack__extern(void *dst, const struct ROGUE_PBESTATE_STATE_WORD0 *values) { ROGUE_PBESTATE_STATE_WORD0_pack(dst, values); }
 void ROGUE_PBESTATE_STATE_WORD1_pack__extern(void *dst, const struct ROGUE_PBESTATE_STATE_WORD1 *values) { ROGUE_PBESTATE_STATE_WORD1_pack(dst, values); }

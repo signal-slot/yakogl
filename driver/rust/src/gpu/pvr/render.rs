@@ -126,10 +126,13 @@ pub struct PvrRenderFragRegs {
     pub isp_zload_store_base: u64,
     pub isp_stencil_load_store_base: u64,
     pub cmd_flags: u32,
+    /// CR_ISP_OCLQRY_BASE: the visibility-test counters (RGXFWIF_CMD3D
+    /// dwords 22-23), 0 when no object of the render tests.
+    pub isp_oclqry_base: u64,
 }
 
 const _: () = {
-    assert!(size_of::<PvrRenderKick>() == 208);
+    assert!(size_of::<PvrRenderKick>() == 216);
     assert!(offset_of!(PvrRenderKick, geom) == 16);
     assert!(offset_of!(PvrRenderKick, frag) == 32);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pbe_word) == 80);
@@ -137,6 +140,7 @@ const _: () = {
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pds_bgnd) == 136);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_scissor_base) == 160);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, cmd_flags) == 200);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_oclqry_base) == 208);
 };
 
 /// `struct yd_pvr_hwrt`: one render-target dataset (an HWRT data and its
@@ -1289,6 +1293,7 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         };
         lohi(&mut dk, 18, f.isp_scissor_base);
         lohi(&mut dk, 20, f.isp_dbias_base);
+        lohi(&mut dk, 22, f.isp_oclqry_base);
         lohi(&mut dk, 24, f.isp_zlsctl);
         lohi(&mut dk, 26, f.isp_zload_store_base);
         lohi(&mut dk, 28, f.isp_stencil_load_store_base);

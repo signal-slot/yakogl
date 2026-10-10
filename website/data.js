@@ -66,6 +66,84 @@ window.YAKOGL_DATA = {
   ],
   "figures": {
     "deqp2.am62p": {
+      "label": "dEQP-GLES2, whole tree",
+      "board": "am62p",
+      "value": { "pass": 17070, "fail": 54, "notSupported": 34, "warnings": 7, "total": 17165 },
+      "unit": "cases of the mustpass list",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "AM62P: the whole dEQP-GLES2 tree on origin/main 32778b57",
+      "status": "fail",
+      "note": "The 54 are 9 shaders.invariance cases (fixed in e17fb6a7; image 1 alone on that commit passes, row below) and 45 texture.vertex.2d cases (a 1 MiB draw arena refused dEQP's grid; fixed on the host, not yet confirmed on the board). 34 not supported include the 16 multisample cases, which run on the 4x image (row below). 7 warnings: 5 line-interpolation quality warnings and 2 flush_finish timing warnings. Compared with the 2026-10-02 tree (0 fail) these are regressions."
+    },
+    "deqp2.imx8mp": {
+      "label": "dEQP-GLES2, whole tree",
+      "board": "imx8mp",
+      "value": { "pass": "17,112–17,116", "fail": 0, "notSupported": "30–34", "warnings": 19, "total": 17165 },
+      "unit": "cases of the mustpass list",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main 32778b57",
+      "status": "pass",
+      "note": "17,371 cases began (17,318 pass, 0 fail, 34 not supported, 19 quality warnings), every selector identical to the 2026-10-01 tree. The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
+    },
+    "deqp2.am62p.ms4": {
+      "label": "dEQP-GLES2, multisample on the 4x image",
+      "board": "am62p",
+      "value": { "pass": 14, "fail": 2 },
+      "unit": "cases (the 16 multisample.* cases)",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "AM62P: multisample on the ms4 image at 32778b57",
+      "status": "fail",
+      "note": "Two runs, identical. constancy_alpha_to_coverage and constancy_both_inverted fail; the 2026-10-02 tree had 16 / 16. Alpha to coverage goes through the fragment shader's sample_kill variant; the cause is not found and no issue exists yet."
+    },
+    "deqp2.am62p.shaders": {
+      "label": "dEQP-GLES2, image 1 (shaders) after the invariance fix",
+      "board": "am62p",
+      "value": { "pass": 1379, "fail": 0 },
+      "unit": "cases",
+      "commit": "e17fb6a7",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "AM62P: image 1 on e17fb6a7",
+      "status": "pass",
+      "note": "Image 1 alone, not a whole tree. The 9 shaders.invariance common_subexpression cases pass."
+    },
+    "gltest.am62p": {
+      "label": "gl_test regression set",
+      "board": "am62p",
+      "value": "48 / 48",
+      "unit": "cases passed, 0 timed out, 0 GPU resets",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "AM62P: gl_test default set on 32778b57",
+      "status": "pass",
+      "note": "Compiler-only image (precompiled hits 0, compiler runs 197)."
+    },
+    "gltest.imx8mp": {
+      "label": "gc_gl_test regression set",
+      "board": "imx8mp",
+      "value": "45–46 / 48",
+      "unit": "cases passed in three runs (45, 46, 46)",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "i.MX8MP: gc_gl_test on 32778b57, three runs",
+      "status": "warn",
+      "note": "Run 1: first failure case 10 (intermittent, #9). Runs 2 and 3: first failure case 16 (#8: the skipped 4x half is counted as a failure). Same as the 8abeaabb baseline (46 / 48)."
+    },
+    "deqp2.am62p.previous": {
       "label": "dEQP-GLES2, last whole tree",
       "board": "am62p",
       "value": { "pass": 17141, "fail": 0, "notSupported": 19, "warnings": 5, "total": 17165 },
@@ -76,7 +154,7 @@ window.YAKOGL_DATA = {
       "source": "docs/es2-cts-failures.md",
       "section": "Summary; tools/cts/RESULTS.md 1z2",
       "status": "pass",
-      "note": "No whole tree has run since. A later integration image found 9 regressions (below)."
+      "note": "Superseded by the 2026-10-10 tree on 32778b57 (the row above), which found 54 failures that this tree did not have."
     },
     "deqp2.am62p.integration": {
       "label": "dEQP-GLES2, shaders groups (images 1 to 7)",
@@ -91,7 +169,7 @@ window.YAKOGL_DATA = {
       "status": "fail",
       "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed at d60b9d76 fail. Fixed on main in e17fb6a7 (2026-10-10, no fusion on the way to an invariant output): image 1 of the AM62P tree on e17fb6a7 gives 1,379 pass / 0 fail."
     },
-    "deqp2.imx8mp": {
+    "deqp2.imx8mp.previous": {
       "label": "dEQP-GLES2, last whole tree",
       "board": "imx8mp",
       "value": { "pass": "17,112–17,116", "fail": 0, "notSupported": "30–34", "warnings": 19, "total": 17165 },
@@ -102,7 +180,7 @@ window.YAKOGL_DATA = {
       "source": "docs/es2-cts-failures.md",
       "section": "A. i.MX8MP",
       "status": "pass",
-      "note": "The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
+      "note": "Superseded by the 2026-10-10 tree on 32778b57, which has the same counts in every selector. The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
     },
     "deqp2.pi4": {
       "label": "dEQP-GLES2, last whole tree",
@@ -115,7 +193,7 @@ window.YAKOGL_DATA = {
       "source": "docs/es2-cts-failures.md",
       "section": "A. Raspberry Pi 4 (sweep 30)",
       "status": "warn",
-      "note": "The 25 failures are cube-map cases (#12). They are fixed on the host (ec5ba4f) and not yet run on the board."
+      "note": "The 25 failures are cube-map cases (#12). They are fixed on the host (ec5ba4f) and not yet run on the board. Nothing was run on the Pi 4 on 2026-10-10 (no UART path from the test host)."
     },
     "deqp3.am62p": {
       "label": "dEQP-GLES3, the only board run",
@@ -130,7 +208,7 @@ window.YAKOGL_DATA = {
       "status": "info",
       "note": "56 lifetime cases had no result (transform feedback was missing). ES 3.0 work since then is host-only."
     },
-    "gltest.am62p": {
+    "gltest.am62p.previous": {
       "label": "gl_test regression set",
       "board": "am62p",
       "value": "48 / 48",
@@ -143,7 +221,7 @@ window.YAKOGL_DATA = {
       "status": "pass",
       "note": "Both the compiler-only image and the precompiled + compiler image."
     },
-    "gltest.imx8mp": {
+    "gltest.imx8mp.previous": {
       "label": "gc_gl_test regression set",
       "board": "imx8mp",
       "value": "46 / 48",

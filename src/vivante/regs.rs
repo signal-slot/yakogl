@@ -621,6 +621,17 @@ pub const fn msaa_enables(x: u32) -> u32 {
     (x & 0xf) << 4
 }
 pub const GC_GL_VARYING_TOTAL_COMPONENTS: u32 = 0x0000381c;
+/// Where the pixel engine stores its running sample count (64 bits) when
+/// `GC_GL_OCCLUSION_QUERY_CONTROL` is written: Mesa's state.xml.h
+/// VIVS_GL_OCCLUSION_QUERY_ADDR (vendored at driver/src/vivante/hw/state.xml.h),
+/// written by etnaviv_query_acc_occlusion.c's resume.
+pub const GC_GL_OCCLUSION_QUERY_ADDR: u32 = 0x00003824;
+/// Writing it makes the pixel engine store the count at the address above
+/// (VIVS_GL_OCCLUSION_QUERY_CONTROL, etnaviv's suspend).
+pub const GC_GL_OCCLUSION_QUERY_CONTROL: u32 = 0x00003830;
+/// What etnaviv writes there: "the value used by the blob - but any random
+/// value will work" (etnaviv_query_acc_occlusion.c, occlusion_suspend).
+pub const GC_OQ_CONTROL_VALUE: u32 = 0x01df5e76;
 pub const GC_GL_API_MODE: u32 = 0x0000384c;
 pub const GC_API_MODE_OPENGL: u32 = 0x00000000;
 pub const GC_GL_BUG_FIXES: u32 = 0x00003860;

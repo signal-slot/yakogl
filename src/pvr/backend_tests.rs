@@ -4251,3 +4251,282 @@ fn a_draw_with_no_target_at_all_is_refused() {
 /// AM62P, round 2 of 2026-10-04) whatever the kick above can do.
 /// Checked when the tests compile.
 const _: () = assert!(DRAWS_WITHOUT_COLOUR && crate::backend::DEPTH_ONLY_TARGETS);
+
+/* ---- occlusion queries: ISPCTL vistest, ISP_OCLQRY_BASE, GETVISRESULTS ---- */
+
+/// A depth-writing draw as an occlusion query counts it.
+fn counted_draw(rig: &Rig, handle: u32) -> GlesDraw {
+    let mut d = rig.draw(3);
+    d.do_clear = false;
+    d.depth_test = true;
+    d.depth_write = true;
+    d.occlusion_query = handle;
+    d
+}
+
+/// Write what the ISP would count into dword `handle` of the area at `base`.
+fn vis_write(base: u64, handle: u32, n: u32) {
+    with_platform(|p| {
+        let gpu = base + u64::from(handle) * 4;
+        let (b, a) = p.allocs.range_mut(..=gpu).next_back().expect("the result area");
+        let off = (gpu - b) as usize;
+        assert!(off + 4 <= a.size);
+        // SAFETY: inside the allocation (checked).
+        unsafe { (a.mem.as_mut_ptr() as *mut u8).add(off).cast::<u32>().write_unaligned(n) };
+    });
+}
+
+fn query_result(handle: u32) -> u64 {
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { pvr_backend_query_result(handle, &mut n) }, 0);
+    n
+}
+
+/// A counted draw is a TRANSLUCENT object with ISPCTL.vistest and visreg =
+/// its handle; an uncounted draw of the same frame keeps OPAQUE and no
+/// vistest; the kick names a zeroed result area (16-byte aligned) as
+/// ISP_OCLQRY_BASE and sets GETVISRESULTS; a kick with no counted draw
+/// carries neither (the ES 2.0 kick is unchanged). The result is the area's
+/// dword once the kick completed.
+///
+/// Deliberate breaks: drop `st.vis_test = 1` and the PPP state has no
+/// vistest; drop the isp_oclqry_base line in `flush` and the kick names no
+/// area; drop `!counted` from the OPAQUE arm and the counted draw is OPAQUE.
+#[test]
+fn a_counted_draw_tests_visibility_into_its_kicks_result_area() {
+    let rig = Rig::new();
+    let mut plain = counted_draw(&rig, 0);
+    plain.do_clear = true;
+    assert_eq!(draw(&plain), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let k0 = rig.kicks().last().unwrap().0;
+    assert_eq!((k0.frag.isp_oclqry_base, k0.frag.cmd_flags & FRAG_FLAGS_GETVISRESULTS), (0, 0), "no query: no area");
+    assert!(rig.b().vis.impl_.is_null(), "no memory until a query starts");
+
+    assert_eq!(pvr_backend_query_begin(5), 0);
+    let area = rig.b().vis.gpu;
+    vis_write(area, 5, 0xdead); /* a stale count: the kick's area is zeroed */
+    rig.reset_records();
+    assert_eq!(draw(&counted_draw(&rig, 5)), 0);
+    assert_eq!(draw(&counted_draw(&rig, 0)), 0);
+    /* the frame's first object is its colour load (no vistest), then the two draws */
+    let ppp = rig.ppp();
+    let seen: Vec<(i32, u32)> = ppp.iter().map(|s| (s.vis_test, s.vis_reg)).collect();
+    assert_eq!(seen, [(0, 0), (1, 5), (0, 0)]);
+    let pass = with_gen(|g| g.passtypes.clone());
+    assert_eq!(pass[1..], [PVR_PPP_PASSTYPE_TRANSLUCENT, PVR_PPP_PASSTYPE_OPAQUE]);
+    assert_eq!(pvr_backend_flush(), 0);
+    let k = rig.kicks().last().unwrap().0;
+    assert_ne!(k.frag.cmd_flags & FRAG_FLAGS_GETVISRESULTS, 0);
+    assert_eq!(k.frag.isp_oclqry_base, area, "the first result area");
+    assert_eq!(k.frag.isp_oclqry_base & 15, 0);
+    assert_eq!(rig.gpu_u32(area + 5 * 4), 0, "the area was zeroed before the kick");
+    vis_write(area, 5, 3); /* the ISP counted 3 */
+    assert_eq!(query_result(5), 3);
+}
+
+/// One query over two kicks: each kick has its own area, the counts add
+/// up; a new begin on the handle starts from 0.
+#[test]
+fn a_query_over_two_kicks_sums_both_areas() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(7), 0);
+    with_platform(|p| p.hold_completion = true);
+    let mut bases = Vec::new();
+    for n in [3u32, 4] {
+        assert_eq!(draw(&counted_draw(&rig, 7)), 0);
+        assert_eq!(pvr_backend_flush(), 0);
+        let base = rig.kicks().last().unwrap().0.frag.isp_oclqry_base;
+        vis_write(base, 7, n);
+        bases.push(base);
+    }
+    assert_ne!(bases[0], bases[1], "a kick in flight keeps its area");
+    with_platform(|p| p.completed_to = p.fence);
+    assert_eq!(query_result(7), 7);
+    assert_eq!(pvr_backend_query_begin(7), 0);
+    assert_eq!(query_result(7), 0);
+}
+
+/// With every area in flight the next counting kick waits for the oldest
+/// and takes its area (after folding its count).
+#[test]
+fn a_counting_kick_waits_for_the_oldest_area_when_all_are_in_flight() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(2), 0);
+    with_platform(|p| p.hold_completion = true);
+    for _ in 0..VIS_SLOTS {
+        assert_eq!(draw(&counted_draw(&rig, 2)), 0);
+        assert_eq!(pvr_backend_flush(), 0);
+        vis_write(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, 2, 1);
+    }
+    let first = rig.kicks()[0].0.frag.isp_oclqry_base;
+    let waits = with_platform(|p| p.waits.len());
+    assert_eq!(draw(&counted_draw(&rig, 2)), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(with_platform(|p| p.waits.len()), waits + 1, "one wait, for the oldest kick");
+    assert_eq!(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, first, "its area again");
+    with_platform(|p| p.completed_to = p.fence);
+    assert_eq!(query_result(2), VIS_SLOTS as u64, "every kick's count, the reused area's last one zeroed");
+}
+
+/// glEndQuery ends the frame that holds the query's draws (an occluder
+/// recorded after it would hide them in the same kick: the TBDR hazard);
+/// an end with no counted draw in the open frame submits nothing.
+///
+/// Deliberate break: make `pvr_backend_query_end` do nothing and the
+/// counted frame stays open.
+#[test]
+fn query_end_submits_the_frame_holding_the_querys_draws() {
+    let rig = Rig::new();
+    assert_eq!(pvr_backend_query_begin(4), 0);
+    assert_eq!(draw(&counted_draw(&rig, 4)), 0);
+    let before = rig.kicks().len();
+    pvr_backend_query_end(3);
+    assert_eq!(rig.kicks().len(), before, "another handle's end: nothing to split");
+    pvr_backend_query_end(4);
+    assert_eq!(rig.kicks().len(), before + 1, "the query's frame was submitted");
+    assert!(!rig.b().frame_open);
+    let mut occluder = counted_draw(&rig, 0);
+    occluder.depth_func = GLES_CMP_ALWAYS;
+    assert_eq!(draw(&occluder), 0);
+    pvr_backend_query_end(4);
+    assert!(rig.b().frame_open, "a frame with no draw of the query stays open");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, 0, "the occluder's kick counts nothing");
+}
+
+/* ---- PDS programs shared within a frame (gl_test 198) ---------------------- */
+
+/// dEQP-GLES2 multisample's draw (es2fMultisampleTests.cpp renderTriangle):
+/// one triangle of two client arrays (a vec4 position and a vec4 colour) on
+/// a 4x target, the fragment shader the sample-kill variant (the epilogue,
+/// its control word in a one-dword uniform block, one varying), alpha to
+/// coverage on. The shaders live in `vs` and `fs`, the arrays in `arrays`.
+fn deqp_multisample_draw(rig: &Rig, vs: &mut ShcShader, fs: &mut ShcShader, arrays: &[[f32; 12]; 2]) -> GlesDraw {
+    *fs = *rig.ffs;
+    fs.uses_discard = 1;
+    fs.meta_off = 0;
+    fs.uniform_dwords = 1;
+    fs.num_varyings = 1;
+    fs.varyings[0] = crate::shaderc::ShcVarying { location: 0, components: 4, ..crate::shaderc::ShcVarying::ZERO };
+    *vs = *rig.fvs;
+    vs.vs_output_size = 8;
+    let mut d = rig.draw(3);
+    d.vs = vs;
+    d.fs = fs;
+    d.samples = 4;
+    d.alpha_to_coverage = true;
+    d.vs_output_size_dwords = 8;
+    for (k, a) in arrays.iter().enumerate() {
+        d.attribs[k] = GlesAttrib {
+            components: 4,
+            stride: 16,
+            vi_reg: 4 * k as u8,
+            cpu: a.as_ptr() as *const c_void,
+            cpu_bytes: 48,
+            ..GlesAttrib::ZERO
+        };
+    }
+    d.num_attribs = 2;
+    d
+}
+
+/// dEQP-GLES2.functional.multisample.constancy_alpha_to_coverage draws 1024
+/// triangles into one 4x frame (16x16 cells, a green and a red quad each, a
+/// quad two draws). Each draw uploaded its six PDS blocks (vertex data and
+/// code, the fragment kick, the coefficients, the control word's DMA data
+/// and code: 768 bytes), so the 768 KiB arena held 1014 draws: the 1015th,
+/// the red quad over cell 253's green one, opened the next kick, which
+/// loaded the resolved colour back into all four samples: the green the red
+/// quad does not cover stayed (32778b57 on the AM62P). A frame now uploads a
+/// program it already holds once: after the first draw, two blocks a draw
+/// (the data segments that carry its arrays and its control word), and the
+/// frame holds the 1024 draws of the draw cap.
+#[test]
+fn a_4x_frame_of_deqps_1024_multisample_draws_is_one_kick() {
+    let rig = Rig::new();
+    let (mut vs, mut fs) = (ShcShader::ZERO, ShcShader::ZERO);
+    let arrays = [[0.25f32; 12], [0.5f32; 12]];
+    let mut d = deqp_multisample_draw(&rig, &mut vs, &mut fs, &arrays);
+    assert_eq!(draw(&d), 0);
+    d.do_clear = false;
+    let first = rig.b().pds.bump;
+    assert_eq!(draw(&d), 0);
+    let shared = rig.b().pds.bump - first;
+    assert!(shared <= 2 * PDS_ALIGN + PDS_ALIGN / 2, "the second draw took {shared} PDS bytes");
+    for _ in 2..MAX_DRAWS_PER_FRAME {
+        assert_eq!(draw(&d), 0);
+    }
+    assert!(rig.kicks().is_empty(), "the frame was split at {} draws", rig.b().ndraws);
+    assert_eq!(rig.b().ndraws, MAX_DRAWS_PER_FRAME);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().len(), 1);
+    /* every draw's triangle went out, in that kick */
+    assert_eq!(rig.index_lists().len(), MAX_DRAWS_PER_FRAME as usize);
+}
+
+/// The same words again in the open frame are the program already there,
+/// and only the same words: a different program of the same length, put
+/// where a rolled-back transaction had left one, is not taken for it; a
+/// program remembered in the previous frame is uploaded again in the next.
+#[test]
+fn a_pds_program_the_frame_already_holds_is_pointed_at_not_uploaded() {
+    let rig = Rig::new();
+    let d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    let b = rig.b();
+    let base = heap_off_of(b.pds.mem.gpu);
+    let a = [0x1111_1111u32, 2, 3, 4];
+    let c = [0x2222_2222u32, 2, 3, 4];
+    let (mut oa, mut oa2, mut oc, mut oa3) = (0u32, 0u32, 0u32, 0u32);
+    let start = b.pds.bump;
+    assert_eq!(pds_put(b, &a, &mut oa), 0);
+    let after_a = b.pds.bump;
+    assert_eq!(pds_put(b, &a, &mut oa2), 0);
+    assert_eq!((oa2, b.pds.bump), (oa, after_a), "the same words: the same program, nothing uploaded");
+    /* a draw that put `a` and then failed: its transaction gives the bytes
+     * back, and the next upload lands where `a` was */
+    b.pds.bump = start;
+    assert_eq!(pds_put(b, &c, &mut oc), 0);
+    assert_eq!(oc, oa, "`c` overwrote `a`'s bytes");
+    assert_eq!(pds_put(b, &a, &mut oa3), 0);
+    assert_ne!(oa3, oc, "`a` is not where it was any more: uploaded again");
+    let held = |off: u32| rig.gpu_u32(b.pds.mem.gpu + (off - base) as u64);
+    assert_eq!((held(oc), held(oa3)), (c[0], a[0]));
+    /* a new frame forgets the old frame's programs */
+    assert_eq!(pvr_backend_flush(), 0);
+    let mut d2 = d;
+    d2.do_clear = true;
+    assert_eq!(draw(&d2), 0);
+    let b = rig.b();
+    let before = b.pds.bump;
+    let mut o = 0u32;
+    assert_eq!(pds_put(b, &a, &mut o), 0);
+    assert!(b.pds.bump > before, "uploaded in the new frame");
+}
+
+/// A multisampled frame split in two (a full arena, the draw cap, glFinish)
+/// must keep its samples: the GL's multisample buffer survives a flush. The
+/// backend resolves a 4x frame on its end-of-tile store (PBE `downscale`)
+/// and the next kick opens with the colour-load quad, which samples the
+/// resolved target once per pixel and writes that colour to all four
+/// samples: a sample the frame's later draws leave uncovered holds the
+/// average, not its own colour. Correct is a reload of each sample from a
+/// store of each sample: the load quad runs per sample.
+#[test]
+#[ignore = "BUG: a split 4x frame reloads its resolved colour into every sample (docs/HANDOFF.md, known defects, pvr-msaa-split)"]
+fn a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour() {
+    let rig = Rig::new();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    d.do_clear = false;
+    assert_eq!(draw(&d), 0, "the frame goes on in a second kick");
+    assert_eq!(pvr_backend_flush(), 0);
+    let load = heap_off_of(rig.b().fbload_fs.gpu) as u64;
+    let rates: Vec<u32> = with_platform(|p| p.kick_usc_rates.iter().filter(|r| r.0 == load).map(|r| r.1).collect());
+    assert_eq!(rates, [PDS_DOUTU_SAMPLE_RATE_FULL], "the second kick's load quad");
+}

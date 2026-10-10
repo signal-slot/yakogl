@@ -7319,3 +7319,83 @@ fn a_depth_textures_look_up_must_take_the_32_bit_output() {
         "{rc} {logs:?}"
     );
 }
+
+/* ---- occlusion queries: OCCLUSION_QUERY_COUNTER's address per draw ---- */
+
+/// A draw counted on a query carries its counter's address into the job
+/// (the job builder writes it into OCCLUSION_QUERY_COUNTER); an uncounted
+/// draw and the clear quad carry 0, and the counted draw after the quad has
+/// the address again. query_begin zeroes the handle's word (and flushes
+/// it), query_result reads what the TLB added there.
+///
+/// Deliberate breaks: drop the `oq_addr` line in `draw_call` and the
+/// counted draws carry 0; drop the zeroing in `v3d_query_begin` and the
+/// stale 0xdead is read back as the count.
+#[test]
+fn a_counted_draw_carries_its_counter_and_the_result_reads_it() {
+    let rig = Rig::new();
+    rig.init();
+    assert!(g().oq.cpu.is_null(), "no counter memory until a query starts");
+    assert_eq!(v3d_query_begin(5), 0, "{:?}", rig.gl.logs());
+    let base = g().oq.gpu as u32;
+    let word = base + 5 * 64;
+    with_platform(|p| {
+        let w = platform_cpu(p, word as u64, 4) as *mut u32;
+        // SAFETY: inside the counter buffer.
+        unsafe {
+            assert_eq!(w.read(), 0, "begin zeroed the word");
+            w.write(0xdead); /* a stale count */
+        }
+    });
+    assert_eq!(v3d_query_begin(5), 0);
+    assert_eq!(rig.gpu_bytes(word, 4), [0, 0, 0, 0], "a new begin zeroes it again");
+
+    let mut counted = rig.draw();
+    counted.occlusion_query = 5;
+    counted.do_clear = false;
+    let mut plain = rig.draw();
+    plain.do_clear = false;
+    let mut quad_then_counted = counted;
+    (quad_then_counted.do_clear, quad_then_counted.clear_quad) = (true, true);
+    (quad_then_counted.scissor, quad_then_counted.scissor_rect) = (true, [0, 0, 8, 8]);
+    for d in [&counted, &plain, &quad_then_counted] {
+        assert_eq!(draw(d), 0, "{:?}", rig.gl.logs());
+    }
+    assert_eq!(v3d_flush(), 0);
+    let seen: Vec<u32> = rig.draws().iter().map(|s| s.st.oq_addr).collect();
+    assert_eq!(seen, [word, 0, 0, word], "counted, plain, the clear quad, counted");
+
+    /* the TLB added 42 at the end of the job */
+    with_platform(|p| {
+        let w = platform_cpu(p, word as u64, 4) as *mut u32;
+        // SAFETY: inside the counter buffer.
+        unsafe { w.write(42) };
+    });
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { v3d_query_result(5, &mut n) }, 0);
+    assert_eq!(n, 42);
+}
+
+/// Handles outside 1 .. GLES_QUERY_HANDLES are refused, a result of a
+/// handle with no counter memory is an error, and a failed allocation is
+/// -ENOMEM with no address handed out.
+#[test]
+fn query_handles_are_checked_and_no_memory_is_enomem() {
+    let rig = Rig::new();
+    rig.init();
+    let mut n = 7u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { v3d_query_result(3, &mut n) }, -EINVAL, "never started");
+    assert_eq!(v3d_query_begin(0), -EINVAL);
+    assert_eq!(v3d_query_begin(GLES_QUERY_HANDLES), -EINVAL);
+    with_platform(|p| p.fail_alloc_from = Some(1));
+    assert_eq!(v3d_query_begin(3), -ENOMEM);
+    with_platform(|p| p.fail_alloc_from = None);
+    let mut d = rig.draw();
+    d.occlusion_query = 3;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(rig.draws()[0].st.oq_addr, 0, "no counter: no address");
+    assert_eq!(n, 7);
+}

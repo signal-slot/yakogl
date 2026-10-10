@@ -697,7 +697,7 @@ int pvr_render_init(void)
 /* ---------------------------------------------------------------------- *
  * Submit / wait: gpu::pvr::render (render.rs has the sequences and why).
  * ---------------------------------------------------------------------- */
-BUILD_ASSERT(sizeof(struct pvr_render_kick) == 208, "gpu::pvr::render::PvrRenderKick");
+BUILD_ASSERT(sizeof(struct pvr_render_kick) == 216, "gpu::pvr::render::PvrRenderKick");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag) == 32, "PvrRenderKick.frag");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pbe_word) == 80, "PvrRenderKick.frag.pbe_word");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.num_rt) == 128, "PvrRenderKick.frag.num_rt");
@@ -705,6 +705,7 @@ BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pds_bgnd) == 136, "PvrRenderK
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_scissor_base) == 160,
 	     "PvrRenderKick.frag.isp_scissor_base");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.cmd_flags) == 200, "PvrRenderKick.frag.cmd_flags");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_oclqry_base) == 208, "PvrRenderKick.frag.isp_oclqry_base");
 
 int pvr_render_submit(const struct pvr_render_kick *k, uint32_t *fence_out)
 {

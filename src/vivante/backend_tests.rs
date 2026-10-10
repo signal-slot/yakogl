@@ -4133,3 +4133,199 @@ fn msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples() {
     }
     assert_eq!(scaled.reg(GC_SE_SCISSOR_LEFT), plain.reg(GC_SE_SCISSOR_LEFT), "the origin stays at 0");
 }
+
+/* ---- occlusion queries: GL_OCCLUSION_QUERY_ADDR / _CONTROL ---- */
+
+/// The register writes of a stream, in order, of the two query registers:
+/// (register, value).
+fn oq_writes(s: &Stream) -> Vec<(u32, u32)> {
+    let mut out = Vec::new();
+    walk(&s.0, |r, v, _| {
+        if r == GC_GL_OCCLUSION_QUERY_ADDR || r == GC_GL_OCCLUSION_QUERY_CONTROL {
+            out.push((r, v));
+        }
+    });
+    out
+}
+
+/// The address the stream arms for `handle`'s slot `slot`.
+fn oq_slot(handle: u32, slot: u32) -> u32 {
+    (oq_mem().gpu + u64::from(handle * 64 + slot) * 8) as u32
+}
+
+/// etnaviv's resume and suspend around counted draws: the first counted
+/// draw arms the handle's slot 0, a second one of the same handle writes
+/// nothing, an uncounted draw suspends (CONTROL) and arms nothing, the next
+/// counted draw arms slot 1, and the stream ends with the suspend.
+///
+/// Deliberate breaks: drop the `oq_arm` call in `emit_draw` and no ADDR is
+/// written; drop the `oq_suspend` in `frame_submit` and the stream ends
+/// armed (the last count would never be stored).
+#[test]
+fn counted_draws_arm_a_slot_and_every_change_and_the_stream_end_suspend() {
+    let rig = Rig::new();
+    let plain = rig.draw(3);
+    let s0 = rig.submit(&plain);
+    assert!(oq_writes(&s0).is_empty(), "no query: no query register (the ES 2.0 stream is unchanged)");
+    assert!(oq_mem().cpu.is_null(), "no slots until a query starts");
+
+    assert_eq!(gc_query_begin(9), 0);
+    let mut counted = rig.draw(3);
+    counted.occlusion_query = 9;
+    // SAFETY: live draws for the calls.
+    unsafe {
+        for d in [&counted, &counted, &plain, &counted] {
+            assert_eq!(gc_draw(d), 0);
+        }
+    }
+    assert_eq!(gc_flush(), 0);
+    let s = rig.last_stream();
+    let c = (GC_GL_OCCLUSION_QUERY_CONTROL, GC_OQ_CONTROL_VALUE);
+    assert_eq!(
+        oq_writes(&s),
+        [(GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(9, 0)), c, (GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(9, 1)), c],
+        "arm slot 0, suspend before the plain draw, arm slot 1, suspend at the end"
+    );
+    let draws_at: Vec<usize> = {
+        let mut v = Vec::new();
+        let mut i = 0;
+        while i < s.0.len() {
+            let w = s.0[i];
+            if w & 0xf800_0000 == GC_OP_DRAW_INSTANCED {
+                v.push(i);
+            }
+            i += match w & 0xf800_0000 {
+                GC_OP_LOAD_STATE => 1 + ((w >> 16) & 0x3ff) as usize,
+                GC_OP_DRAW_INSTANCED => 4,
+                GC_OP_STALL => 2,
+                _ => 1,
+            };
+        }
+        v
+    };
+    assert!(s.at(GC_GL_OCCLUSION_QUERY_CONTROL) > *draws_at.last().unwrap(), "the last suspend follows the last draw");
+    assert!(whole_commands(&s.0));
+}
+
+/// A clear inside the query is not counted: the clear quad suspends the
+/// counter, and the counted draw after it arms the next slot. The result is
+/// the sum of the slots the query filled.
+///
+/// Deliberate break: arm `d.gl.occlusion_query` for the clear quad too and
+/// the clear arms slot 0 instead of suspending.
+#[test]
+fn a_clear_suspends_and_the_result_sums_the_slots() {
+    let rig = Rig::new();
+    assert_eq!(gc_query_begin(3), 0);
+    let mut counted = rig.draw(3);
+    counted.occlusion_query = 3;
+    let mut cleared = counted;
+    (cleared.do_clear, cleared.clear_color_mask) = (true, 0xf);
+    // SAFETY: live draws for the calls.
+    unsafe {
+        assert_eq!(gc_draw(&counted), 0);
+        assert_eq!(gc_draw(&cleared), 0); /* the clear quad, then the draw */
+    }
+    assert_eq!(gc_flush(), 0);
+    let c = (GC_GL_OCCLUSION_QUERY_CONTROL, GC_OQ_CONTROL_VALUE);
+    assert_eq!(
+        oq_writes(&rig.last_stream()),
+        [(GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(3, 0)), c, (GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(3, 1)), c]
+    );
+    /* the pixel engine stored 0 and 5 */
+    let at = (oq_mem().cpu as *mut u64).wrapping_add(3 * 64);
+    // SAFETY: inside the slots.
+    unsafe {
+        at.write(0);
+        at.add(1).write(5);
+        at.add(2).write(77); /* past the slots the query filled: not read */
+    }
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { gc_query_result(3, &mut n) }, 0);
+    assert_eq!(n, 5);
+    assert_eq!(gc_query_begin(3), 0);
+    // SAFETY: as above.
+    assert_eq!(unsafe { gc_query_result(3, &mut n) }, 0);
+    assert_eq!(n, 0, "begin zeroes the slots and the count");
+    assert!(rig.faults().is_empty());
+}
+
+/// A counted draw that does not fit the frame is taken back and recorded in
+/// the next, with the counter as it was before it: the frame it was taken
+/// out of holds plain draws only and ends with no query register written;
+/// the next frame arms the handle once and suspends it once.
+///
+/// Deliberate break: leave `oq` out of `Mark::restore` and the first frame
+/// ends with a CONTROL write (the handle still marked armed, its ADDR rolled
+/// back with the draw).
+#[test]
+fn a_counted_draw_taken_back_leaves_the_counter_as_it_was() {
+    let rig = Rig::new();
+    assert_eq!(gc_query_begin(4), 0);
+    let plain = rig.draw(3);
+    let mut counted = plain;
+    counted.occlusion_query = 4;
+    let room = || {
+        let g = g();
+        let w = &g.frames[g.cur].w;
+        w.cap - w.used
+    };
+    let draw = |d: &GlesDraw| {
+        // SAFETY: `d` is live.
+        assert_eq!(unsafe { gc_draw(d) }, 0);
+    };
+    /* what one draw of each kind takes in the middle of a frame */
+    draw(&plain);
+    let r0 = room();
+    draw(&plain);
+    let dp = r0 - room();
+    let r1 = room();
+    draw(&counted);
+    let dc = r1 - room() + OQ_SUSPEND_WORDS; /* and the room it keeps */
+    assert_eq!(gc_flush(), 0);
+    let kicks0 = rig.kicks();
+    /* fill a frame with plain draws until a counted draw no longer fits */
+    draw(&plain);
+    while room() >= dp + dc {
+        draw(&plain);
+    }
+    if room() >= dc {
+        draw(&plain);
+    }
+    assert!(room() < dc && rig.kicks() == kicks0, "the frame is still open, too full for a counted draw");
+    draw(&counted);
+    assert_eq!(rig.kicks(), kicks0 + 1, "the counted draw ended the frame");
+    assert_eq!(oq_writes(&rig.last_stream()), [], "the frame it was taken out of writes no query register");
+    assert_eq!(gc_flush(), 0);
+    let s = rig.last_stream();
+    assert_eq!(s.draws().len(), 1);
+    assert_eq!(
+        oq_writes(&s),
+        [(GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(4, 1)), (GC_GL_OCCLUSION_QUERY_CONTROL, GC_OQ_CONTROL_VALUE)],
+        "the next frame arms slot 1 (slot 0 was the first frame's) and suspends it"
+    );
+    assert!(whole_commands(&s.0));
+    assert!(rig.faults().is_empty());
+}
+
+/// More suspends than a handle has slots: the query stops arming and its
+/// result is "some passed" (the conservative answer), logged once.
+#[test]
+fn a_query_out_of_slots_answers_some_passed() {
+    let rig = Rig::new();
+    assert_eq!(gc_query_begin(2), 0);
+    let mut d = rig.draw(3);
+    d.occlusion_query = 2;
+    for _ in 0..65 {
+        // SAFETY: `d` is live.
+        assert_eq!(unsafe { gc_draw(&d) }, 0);
+        assert_eq!(gc_flush(), 0);
+    }
+    assert!(oq_writes(&rig.last_stream()).is_empty(), "the 65th stream arms nothing");
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { gc_query_result(2, &mut n) }, 0);
+    assert_eq!(n, 1, "all 64 slots read 0, and the overflow answers 1");
+    assert!(rig.faults().is_empty());
+}

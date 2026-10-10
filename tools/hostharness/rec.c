@@ -740,6 +740,12 @@ static void decode_kick(const struct pvr_render_kick *k)
 #ifdef HH_KICK_SCISSOR
 	printf(" scissor=%llx", (unsigned long long)f->isp_scissor_base);
 #endif
+#ifdef HH_KICK_OCLQRY
+	/* only when set: a build before the field and a kick with no
+	 * visibility test print the same line */
+	if (f->isp_oclqry_base)
+		printf(" oclqry=%llx", (unsigned long long)f->isp_oclqry_base);
+#endif
 	printf("\n");
 }
 #endif

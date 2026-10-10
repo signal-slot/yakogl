@@ -58,7 +58,7 @@ _Static_assert(sizeof(struct pvr_render_geom_regs) == 16, "struct pvr_render_geo
 _Static_assert(offsetof(struct pvr_render_geom_regs, vdm_ctrl_stream_base) == 0, "struct pvr_render_geom_regs.vdm_ctrl_stream_base");
 _Static_assert(offsetof(struct pvr_render_geom_regs, ppp_ctrl) == 8, "struct pvr_render_geom_regs.ppp_ctrl");
 _Static_assert(offsetof(struct pvr_render_geom_regs, te_psg) == 12, "struct pvr_render_geom_regs.te_psg");
-_Static_assert(sizeof(struct pvr_render_frag_regs) == 176, "struct pvr_render_frag_regs");
+_Static_assert(sizeof(struct pvr_render_frag_regs) == 184, "struct pvr_render_frag_regs");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_pixel_output_ctrl) == 0, "struct pvr_render_frag_regs.usc_pixel_output_ctrl");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_clear_register) == 4, "struct pvr_render_frag_regs.usc_clear_register");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_bgobjdepth) == 20, "struct pvr_render_frag_regs.isp_bgobjdepth");
@@ -76,7 +76,8 @@ _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zlsctl) == 144, "struct
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zload_store_base) == 152, "struct pvr_render_frag_regs.isp_zload_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_stencil_load_store_base) == 160, "struct pvr_render_frag_regs.isp_stencil_load_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, cmd_flags) == 168, "struct pvr_render_frag_regs.cmd_flags");
-_Static_assert(sizeof(struct pvr_render_kick) == 208, "struct pvr_render_kick");
+_Static_assert(offsetof(struct pvr_render_frag_regs, isp_oclqry_base) == 176, "struct pvr_render_frag_regs.isp_oclqry_base");
+_Static_assert(sizeof(struct pvr_render_kick) == 216, "struct pvr_render_kick");
 _Static_assert(offsetof(struct pvr_render_kick, width) == 0, "struct pvr_render_kick.width");
 _Static_assert(offsetof(struct pvr_render_kick, height) == 4, "struct pvr_render_kick.height");
 _Static_assert(offsetof(struct pvr_render_kick, samples) == 8, "struct pvr_render_kick.samples");
@@ -262,7 +263,7 @@ _Static_assert(offsetof(struct gles_draw_target, gpu) == 0, "struct gles_draw_ta
 _Static_assert(offsetof(struct gles_draw_target, w) == 8, "struct gles_draw_target.w");
 _Static_assert(offsetof(struct gles_draw_target, h) == 12, "struct gles_draw_target.h");
 _Static_assert(offsetof(struct gles_draw_target, format) == 16, "struct gles_draw_target.format");
-_Static_assert(sizeof(struct gles_draw) == 3192, "struct gles_draw");
+_Static_assert(sizeof(struct gles_draw) == 3200, "struct gles_draw");
 _Static_assert(offsetof(struct gles_draw, target_gpu) == 0, "struct gles_draw.target_gpu");
 _Static_assert(offsetof(struct gles_draw, target_w) == 8, "struct gles_draw.target_w");
 _Static_assert(offsetof(struct gles_draw, target_h) == 12, "struct gles_draw.target_h");
@@ -358,7 +359,8 @@ _Static_assert(offsetof(struct gles_draw, instance_id) == 3180, "struct gles_dra
 _Static_assert(offsetof(struct gles_draw, sample_mask) == 3184, "struct gles_draw.sample_mask");
 _Static_assert(offsetof(struct gles_draw, alpha_to_coverage) == 3185, "struct gles_draw.alpha_to_coverage");
 _Static_assert(offsetof(struct gles_draw, target_pitch) == 3188, "struct gles_draw.target_pitch");
-_Static_assert(sizeof(struct yakogl_backend) == 168, "struct yakogl_backend");
+_Static_assert(offsetof(struct gles_draw, occlusion_query) == 3192, "struct gles_draw.occlusion_query");
+_Static_assert(sizeof(struct yakogl_backend) == 192, "struct yakogl_backend");
 _Static_assert(offsetof(struct yakogl_backend, name) == 0, "struct yakogl_backend.name");
 _Static_assert(offsetof(struct yakogl_backend, native_attrib_formats) == 8, "struct yakogl_backend.native_attrib_formats");
 _Static_assert(offsetof(struct yakogl_backend, rt_rgba8888_is_bgra) == 12, "struct yakogl_backend.rt_rgba8888_is_bgra");
@@ -385,6 +387,9 @@ _Static_assert(offsetof(struct yakogl_backend, wait_kick) == 136, "struct yakogl
 _Static_assert(offsetof(struct yakogl_backend, samples_texel_copies) == 144, "struct yakogl_backend.samples_texel_copies");
 _Static_assert(offsetof(struct yakogl_backend, attachment_gone) == 152, "struct yakogl_backend.attachment_gone");
 _Static_assert(offsetof(struct yakogl_backend, depth_resolve) == 160, "struct yakogl_backend.depth_resolve");
+_Static_assert(offsetof(struct yakogl_backend, query_begin) == 168, "struct yakogl_backend.query_begin");
+_Static_assert(offsetof(struct yakogl_backend, query_end) == 176, "struct yakogl_backend.query_end");
+_Static_assert(offsetof(struct yakogl_backend, query_result) == 184, "struct yakogl_backend.query_result");
 _Static_assert(sizeof(struct gl_buffer) == 104, "struct gl_buffer");
 _Static_assert(offsetof(struct gl_buffer, used) == 0, "struct gl_buffer.used");
 _Static_assert(offsetof(struct gl_buffer, target) == 4, "struct gl_buffer.target");
@@ -445,6 +450,7 @@ _Static_assert(offsetof(struct gl_texture, storage_gen) == 236, "struct gl_textu
 _Static_assert(offsetof(struct gl_texture, pe_order) == 240, "struct gl_texture.pe_order");
 _Static_assert(offsetof(struct gl_texture, cpu_wrote) == 241, "struct gl_texture.cpu_wrote");
 _Static_assert(offsetof(struct gl_texture, pot_chain) == 242, "struct gl_texture.pot_chain");
+_Static_assert(offsetof(struct gl_texture, es3_fmt) == 243, "struct gl_texture.es3_fmt");
 #if !defined(YAKOGL_GPU_VIVANTE) && !defined(YAKOGL_GPU_V3D)
 _Static_assert(sizeof(struct gl_shader) == 1296, "struct gl_shader");
 #endif

@@ -124,6 +124,7 @@ struct gl_texture {
 	bool     pe_order;           /* texels in the pixel engine's B,G,R,A order (rendered into; alpha real) */
 	bool     cpu_wrote;          /* the CPU wrote texels since the storage was allocated and cleared */
 	bool     pot_chain;          /* a NPOT 2D chain laid out as its power-of-two extent's (the PowerVR) */
+	uint8_t  es3_fmt;            /* es3_formats FORMATS index + 1 of the ES 3.0 sized format held (0: none) */
 };
 
 struct gl_shader {

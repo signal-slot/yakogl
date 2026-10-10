@@ -328,6 +328,22 @@ const VDM_STREAM_BYTES: u32 = 64 * 1024;
 const PDS_ALIGN: u32 = 128;
 const PPP_ALIGN: u32 = 16;
 const MAX_DRAWS_PER_FRAME: u32 = 1024;
+/// Slots of [`Backend::pds_seen`], direct-mapped by [`pds_hash`].
+const PDS_SEEN_SLOTS: usize = 32;
+
+/// A PDS program (or one segment of one) the open frame's PDS arena already
+/// holds: at `off` in the arena, `bytes` long, its words hashing to `hash`
+/// ([`pds_put`]). `bytes` 0: an empty slot.
+#[derive(Clone, Copy)]
+struct PdsSeen {
+    off: u32,
+    bytes: u32,
+    hash: u32,
+}
+
+impl PdsSeen {
+    const ZERO: PdsSeen = PdsSeen { off: 0, bytes: 0, hash: 0 };
+}
 /* worst case one draw records: vertex/kick/coeff/DMA/VS-uniform PDS programs
  * (each PDS_ALIGN-padded), PPP block + terminate + descriptors + index copy,
  * and the VDM blocks (PDS state 3 + PPP 2 + VDM 5 + 2 index lists 6 + 3) */
@@ -596,6 +612,18 @@ const FRAG_FLAGS_DEPTHBUFFER: u32 = 0x0000_0080;
 /// from DDK capture; to be derived per Mesa (step 3). Not derivable from
 /// Mesa, as FRAG_FLAGS_DEPTHBUFFER.
 const FRAG_FLAGS_STENCILBUFFER: u32 = 0x0000_0100;
+/// RGXFWIF_CMD3D "this render has visibility results" flag: the firmware
+/// collects the ISP's visibility-test counts. Mesa's pvrsrvkm firmware
+/// interface ROGUE_FWIF_RENDERFLAGS_GETVISRESULTS (pvr_rogue_fwif.h:53-56;
+/// set by pvr_arch_srv_job_render.c:750-751 for a job with get_vis_results),
+/// in the flag set whose DEPTHBUFFER (0x80) and STENCILBUFFER (0x100) are the
+/// two values above the DDK capture gave.
+const FRAG_FLAGS_GETVISRESULTS: u32 = 0x0000_0020;
+/// Visibility result areas: one per kick in flight that counts, each
+/// GLES_QUERY_HANDLES dwords (ISPCTL.visreg = the query handle), 16-byte
+/// aligned as ISP_OCLQRY_BASE wants (ROGUE_OQUERY_ALIGN).
+const VIS_SLOTS: usize = 8;
+const VIS_SLOT_BYTES: usize = GLES_QUERY_HANDLES as usize * 4;
 /// Depth/stencil buffers kept at once ([`ds_retention::DS_SLOTS`], shared by
 /// every backend): a window surface and every framebuffer object with a
 /// depth or stencil attachment wants one. A buffer that holds contents is
@@ -1163,6 +1191,9 @@ struct Backend {
     opt: [u32; PVR_BACKEND_OPT_COUNT],
 
     pds: Arena,
+    /// The PDS programs the open frame has uploaded, for [`pds_put`] to
+    /// point a draw at instead of uploading the same words again.
+    pds_seen: [PdsSeen; PDS_SEEN_SLOTS],
     gen: Arena,
     vdm: OsalGpuMem,
     /// u16 0..N-1.
@@ -1336,6 +1367,17 @@ struct Backend {
     ndbias: u32,
     /// The last entry (draws with the same state share it).
     dbias_last: [f32; 3],
+    /// Occlusion queries (docs/es3-occlusion-query.md 3.2): the result areas
+    /// (VIS_SLOTS x VIS_SLOT_BYTES, allocated by the first query), the
+    /// handles counted by the open frame, per area the kick that writes it
+    /// (0: free) and the handles it holds, and per handle the sum of its
+    /// completed kicks' counts, and whether some count was lost.
+    vis: OsalGpuMem,
+    vis_frame: u64,
+    vis_fence: [i64; VIS_SLOTS],
+    vis_mask: [u64; VIS_SLOTS],
+    vis_sum: [u64; GLES_QUERY_HANDLES as usize],
+    vis_lost: u64,
     /// SCISSOR_MAX_ENTRIES x 2 dwords.
     scissor: OsalGpuMem,
     /// Entries used by this frame.
@@ -2033,6 +2075,68 @@ fn arena_put_words(
     unsafe { arena_put(a, words.as_ptr() as *const u8, bytes, align, heap_off_out, gpu_out) }
 }
 
+/// FNV-1a over a PDS program's words: [`pds_put`]'s slot and first check.
+fn pds_hash(words: &[u32]) -> u32 {
+    words
+        .iter()
+        .fold(0x811c_9dc5u32, |h, w| w.to_le_bytes().iter().fold(h, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193)))
+}
+
+/// Put a PDS program, or one segment of one, into the open frame's PDS
+/// arena, and give its heap offset in `heap_off`; when the frame already
+/// holds the same words, give their offset and upload nothing.
+///
+/// Most of what a draw uploads is the same for every draw of its program:
+/// the fragment kick program, the coefficient program, the code segments
+/// of the vertex and common-store DMA programs; only the data segments that
+/// carry per-draw addresses differ. Uploaded per draw, each of them
+/// PDS_ALIGN-padded, a draw of dEQP's multisample shape (two client arrays,
+/// a varying, the fragment control word) took six blocks, 768 bytes, so the
+/// 768 KiB arena held 1014 of them -- fewer than the draw cap
+/// ([`MAX_DRAWS_PER_FRAME`]) -- and a split 4x frame reloads its resolved
+/// colour into every sample (dEQP-GLES2 multisample.constancy_*, gl_test
+/// 198). Shared, the same draw takes two. Mesa's pvr keeps those programs
+/// with the pipeline and uploads only the per-draw data segments
+/// (pvr_cmd_buffer_upload_pds_data): the hardware reads a program's code and
+/// data where its state words point, so two draws may point at one.
+///
+/// The words are compared with what the arena holds at the remembered
+/// offset, below the bump: whatever happened since (a draw's transaction
+/// rolled back, the slot reused), equal words there are this program, and
+/// nothing below the bump is written again in this frame.
+fn pds_put(b: &mut Backend, words: &[u32], heap_off: &mut u32) -> i32 {
+    let Ok(bytes) = u32::try_from(core::mem::size_of_val(words)) else {
+        return frame_full(FullCause::PdsArena);
+    };
+    if bytes == 0 {
+        return arena_put_words(&mut b.pds, words, PDS_ALIGN, Some(heap_off), None);
+    }
+    let hash = pds_hash(words);
+    let slot = hash as usize % PDS_SEEN_SLOTS;
+    let seen = b.pds_seen[slot];
+    if seen.bytes == bytes
+        && seen.hash == hash
+        && seen.off.checked_add(bytes).is_some_and(|end| end <= b.pds.bump)
+        && !b.pds.mem.cpu.is_null()
+    {
+        // SAFETY: off..off + bytes lies below the bump of the live, CPU-mapped
+        // arena, and every offset `pds_put` remembers is PDS_ALIGN-aligned.
+        let held = unsafe {
+            core::slice::from_raw_parts((b.pds.mem.cpu as *const u8).add(seen.off as usize) as *const u32, words.len())
+        };
+        if held == words {
+            *heap_off = heap_off_of(b.pds.mem.gpu).wrapping_add(seen.off);
+            return 0;
+        }
+    }
+    let mut gpu = 0u64;
+    let rc = arena_put_words(&mut b.pds, words, PDS_ALIGN, Some(heap_off), Some(&mut gpu));
+    if rc == 0 {
+        b.pds_seen[slot] = PdsSeen { off: gpu.wrapping_sub(b.pds.mem.gpu) as u32, bytes, hash };
+    }
+    rc
+}
+
 /* ------------------------------------------------------------------------- */
 #[no_mangle]
 pub extern "C" fn pvr_backend_heap_base(heap: GlesHeap) -> u64 {
@@ -2531,7 +2635,130 @@ pub extern "C" fn pvr_backend_shutdown() {
         osal::gpu_free(&mut s.mem);
         *s = DsBuf::ZERO;
     }
+    if !b.vis.impl_.is_null() {
+        osal::gpu_free(&mut b.vis);
+    }
+    b.vis = OsalGpuMem::ZERO;
+    (b.vis_frame, b.vis_fence, b.vis_mask, b.vis_lost) = (0, [0; VIS_SLOTS], [0; VIS_SLOTS], 0);
+    b.vis_sum = [0; GLES_QUERY_HANDLES as usize];
     b.inited = false;
+}
+
+/* ------------------------------------------------------------------------- *
+ * occlusion queries (docs/es3-occlusion-query.md 3.2)
+ *
+ * A draw carrying a query handle is a TRANSLUCENT object with
+ * TA_STATE_ISPCTL.vistest and visreg = the handle; a kick with such draws
+ * names a zeroed result area of its own as CR_ISP_OCLQRY_BASE and sets
+ * FRAG_FLAGS_GETVISRESULTS; once the kick has completed the area's dwords
+ * are added to the handles' sums on the CPU. Whether the ISP adds into a
+ * dword or overwrites it is not known (Mesa keeps one register per query
+ * across renders); an area per kick makes the answer the same either way.
+ * The GL core ends the frame at glEndQuery through `query_end`: an occluder
+ * recorded after the query in the same kick would otherwise hide the
+ * query's draws in the ISP.
+ * ------------------------------------------------------------------------- */
+
+/// Add the counts of every completed kick's result area to its handles'
+/// sums, and free the area.
+fn vis_fold(b: &mut Backend) {
+    let done = b.completed_fence();
+    for i in 0..VIS_SLOTS {
+        if b.vis_fence[i] == 0 || b.vis_fence[i] > done || b.vis.cpu.is_null() {
+            continue;
+        }
+        let at = (b.vis.cpu as *mut u8).wrapping_add(i * VIS_SLOT_BYTES) as *mut u32;
+        // SAFETY: the area is inside the live mapping; its kick completed.
+        unsafe { osal::cache_invd(at as *mut c_void, VIS_SLOT_BYTES) };
+        let mut m = b.vis_mask[i];
+        while m != 0 {
+            let h = m.trailing_zeros() as usize;
+            m &= m - 1;
+            // SAFETY: h < GLES_QUERY_HANDLES dwords into the area.
+            let n = unsafe { at.add(h).read_volatile() };
+            b.vis_sum[h] = b.vis_sum[h].wrapping_add(u64::from(n));
+        }
+        (b.vis_fence[i], b.vis_mask[i]) = (0, 0);
+    }
+}
+
+/// A free result area for the kick being submitted: one whose kick has
+/// completed (folded first), else the oldest one, after waiting for it.
+fn vis_take_slot(b: &mut Backend) -> Option<usize> {
+    if b.vis.cpu.is_null() {
+        return None;
+    }
+    vis_fold(b);
+    if let Some(i) = (0..VIS_SLOTS).find(|&i| b.vis_fence[i] == 0) {
+        return Some(i);
+    }
+    let oldest = (0..VIS_SLOTS).min_by_key(|&i| b.vis_fence[i])?;
+    if b.wait_fence(b.vis_fence[oldest]) != 0 {
+        return None;
+    }
+    vis_fold(b);
+    (b.vis_fence[oldest] == 0).then_some(oldest)
+}
+
+/// `YakoglBackend::query_begin`: a query starts on `handle`. Every kick that
+/// counted on it has completed (the GL core waited), so its areas fold into
+/// the old sum before the sum is reset.
+#[no_mangle]
+pub extern "C" fn pvr_backend_query_begin(handle: u32) -> i32 {
+    // SAFETY: single-threaded by contract; taken once per entry point.
+    let b = unsafe { &mut PVR.get().b };
+    if !b.inited {
+        return -ENODEV;
+    }
+    if handle == 0 || handle >= GLES_QUERY_HANDLES {
+        return -EINVAL;
+    }
+    if b.vis.impl_.is_null() && alloc_mapped(HEAP_GENERAL_BASE, VIS_SLOTS * VIS_SLOT_BYTES, &mut b.vis) != 0 {
+        if !b.vis.impl_.is_null() {
+            osal::gpu_free(&mut b.vis);
+        }
+        b.vis = OsalGpuMem::ZERO;
+        glog_once!("pvr_backend: no GPU memory for the visibility results ({} bytes)", VIS_SLOTS * VIS_SLOT_BYTES);
+        return -ENOMEM;
+    }
+    vis_fold(b);
+    let bit = 1u64 << handle;
+    b.vis_sum[handle as usize] = 0;
+    b.vis_lost &= !bit;
+    0
+}
+
+/// `YakoglBackend::query_end`: the query on `handle` ended. A frame that
+/// holds its draws is submitted now, so nothing recorded after glEndQuery
+/// shares their kick (the TBDR ordering hazard, 3.2).
+#[no_mangle]
+pub extern "C" fn pvr_backend_query_end(handle: u32) {
+    // SAFETY: single-threaded by contract; taken once per entry point.
+    let p = unsafe { PVR.get() };
+    if p.b.inited && p.b.frame_open && handle < GLES_QUERY_HANDLES && p.b.vis_frame & (1u64 << handle) != 0 {
+        let _ = flush(p); /* a failed submit is counted by the kick's own result: lost */
+    }
+}
+
+/// `YakoglBackend::query_result`: the samples counted on `handle` (a
+/// non-exact count, Mesa's occlusionQueryPrecise = false; any non-zero value
+/// is "passed"), every kick that counted on it completed.
+///
+/// # Safety
+/// `samples` is null or valid for writing one u64.
+#[no_mangle]
+pub unsafe extern "C" fn pvr_backend_query_result(handle: u32, samples: *mut u64) -> i32 {
+    // SAFETY: single-threaded by contract; taken once per entry point.
+    let b = unsafe { &mut PVR.get().b };
+    if !b.inited || samples.is_null() || handle == 0 || handle >= GLES_QUERY_HANDLES {
+        return -EINVAL;
+    }
+    vis_fold(b);
+    let n = b.vis_sum[handle as usize];
+    let lost = b.vis_lost & (1u64 << handle) != 0;
+    // SAFETY: the caller's u64.
+    unsafe { *samples = if lost { n.max(1) } else { n } };
+    0
 }
 
 /* ------------------------------------------------------------------------- *
@@ -3493,6 +3720,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
 
     b.frame_open = true;
     b.ndraws = 0;
+    b.vis_frame = 0;
     b.target_gpu = d.target_gpu;
     b.target_w = d.target_w;
     b.target_h = d.target_h;
@@ -3558,6 +3786,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     }
     b.frame_set_activate(b.cur);
     b.pds.bump = 0;
+    b.pds_seen = [PdsSeen::ZERO; PDS_SEEN_SLOTS];
     b.gen.bump = 0;
     b.vdm_dw = 0;
     b.term_gpu = 0;
@@ -5073,9 +5302,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             glog!("  seq_idx @0x{:x}: {} {} {} {} {} {}", b.seq_idx.gpu, ix[0], ix[1], ix[2], ix[3], ix[4], ix[5]);
         }
     }
-    rc = arena_put_words(&mut b.pds, vdata, PDS_ALIGN, Some(&mut v_pds_data), None);
+    rc = pds_put(b, vdata, &mut v_pds_data);
     if rc == 0 {
-        rc = arena_put_words(&mut b.pds, vcode, PDS_ALIGN, Some(&mut v_pds_code), None);
+        rc = pds_put(b, vcode, &mut v_pds_code);
     }
     if rc != 0 {
         return rc;
@@ -5108,7 +5337,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             return -EINVAL;
         }
         let n = ((ki.data_size_dw + ki.code_size_dw) as usize).min(k_prog.len());
-        rc = arena_put_words(&mut b.pds, &k_prog[..n], PDS_ALIGN, Some(&mut k_pds_data), None);
+        rc = pds_put(b, &k_prog[..n], &mut k_pds_data);
         if rc != 0 {
             return rc;
         }
@@ -5197,7 +5426,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
 
             s.cprog[..nd].copy_from_slice(&s.cdata[..nd]);
             s.cprog[nd..nd + nc].copy_from_slice(&s.ccode[..nc]);
-            rc = arena_put_words(&mut b.pds, &s.cprog[..nd + nc], PDS_ALIGN, Some(&mut coeff_off), None);
+            rc = pds_put(b, &s.cprog[..nd + nc], &mut coeff_off);
             if rc != 0 {
                 return rc;
             }
@@ -5399,9 +5628,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
         let uc = &uc[..(ui.code_size_dw as usize).min(uc.len())];
-        rc = arena_put_words(&mut b.pds, ud, PDS_ALIGN, Some(&mut t_pds_data), None);
+        rc = pds_put(b, ud, &mut t_pds_data);
         if rc == 0 {
-            rc = arena_put_words(&mut b.pds, uc, PDS_ALIGN, Some(&mut t_pds_code), None);
+            rc = pds_put(b, uc, &mut t_pds_code);
         }
         if rc != 0 {
             return rc;
@@ -5443,9 +5672,20 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
      *    which keeps submission order and composites every fragment.
      * A draw with no colour output (a stencil-only or depth-only pass) has no
      * fragment to defer, so it stays TRANSLUCENT. */
+    /* A draw counted by an occlusion query is TRANSLUCENT, not OPAQUE: its
+     * visibility test must see the depth buffer as the draws before it left
+     * it, in submission order, not the hidden-surface result of the whole
+     * kick (docs/es3-occlusion-query.md 3.2, "TBDR ordering hazard" 2; a
+     * conservative choice, unverified on the ISP). */
+    let counted = d.occlusion_query != 0 && d.occlusion_query < GLES_QUERY_HANDLES && !b.vis.cpu.is_null();
     let passtype = if fs.uses_discard != 0 {
         PVR_PPP_PASSTYPE_PUNCH_THROUGH
-    } else if d.depth_test && d.depth_write && !d.blend && (fs.uses_fbfetch == 0 || !masked_clear_on()) && d.color_write
+    } else if d.depth_test
+        && d.depth_write
+        && !d.blend
+        && (fs.uses_fbfetch == 0 || !masked_clear_on())
+        && d.color_write
+        && !counted
     {
         PVR_PPP_PASSTYPE_OPAQUE
     } else {
@@ -5455,6 +5695,13 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
     fi.varying_program_code_offset = coeff_off;
 
     st.objtype = objtype;
+    if counted {
+        /* Mesa's pvr_setup_isp_faces_and_control: vistest, visreg = the
+         * query's slot (here its handle) in the kick's result area */
+        st.vis_test = 1;
+        st.vis_reg = d.occlusion_query;
+        b.vis_frame |= 1u64 << d.occlusion_query;
+    }
     if objtype == PVR_TA_OBJTYPE_LINE {
         /* ISPA.pointlinewidth: 4.4 fixed point, minus 1 (0 stays 0), max 255
          * (Mesa). Point sprites take their size from the VS's gl_PointSize
@@ -5855,9 +6102,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
         let uc = &uc[..(ui.code_size_dw as usize).min(uc.len())];
-        rc = arena_put_words(&mut b.pds, ud, PDS_ALIGN, Some(&mut ps.pds_data_offset), None);
+        rc = pds_put(b, ud, &mut ps.pds_data_offset);
         if rc == 0 {
-            rc = arena_put_words(&mut b.pds, uc, PDS_ALIGN, Some(&mut ps.pds_code_offset), None);
+            rc = pds_put(b, uc, &mut ps.pds_code_offset);
         }
         if rc != 0 {
             return rc;
@@ -6440,6 +6687,22 @@ fn flush(p: &mut Pvr) -> i32 {
     b.frame_open = false;
     b.ds_refused_logged = false; /* the next frame logs its own refusal */
 
+    /* The frame's visibility tests count into a result area of its own,
+     * zeroed now, read once the kick has completed (`vis_fold`). */
+    let vis_frame = core::mem::take(&mut b.vis_frame);
+    let vis_slot = if vis_frame != 0 { vis_take_slot(b) } else { None };
+    if let Some(i) = vis_slot {
+        let off = (i * VIS_SLOT_BYTES) as u32;
+        mem_write(&b.vis, off, &[0u32; GLES_QUERY_HANDLES as usize]);
+        cache_flush(&b.vis, off, VIS_SLOT_BYTES as u32);
+        let gpu = b.vis.gpu + off as u64;
+        b.kick.frag.isp_oclqry_base =
+            dw64(csb_pack!(ROGUE_CR_ISP_OCLQRY_BASE_pack, 2, csb::ROGUE_CR_ISP_OCLQRY_BASE { addr: dev_addr(gpu) }));
+        b.kick.frag.cmd_flags |= FRAG_FLAGS_GETVISRESULTS;
+    } else if vis_frame != 0 {
+        b.vis_lost |= vis_frame; /* no area: those queries answer "passed" */
+    }
+
     let Some(submit) = osal::ops().and_then(|o| o.submit) else {
         return -ENODEV; /* pvr_backend_init() checked it */
     };
@@ -6447,7 +6710,11 @@ fn flush(p: &mut Pvr) -> i32 {
     let fence = unsafe { submit(&b.kick as *const PvrRenderKick as *const c_void, size_of::<PvrRenderKick>()) };
     if fence < 0 {
         glog_once!("pvr_backend: submit failed ({})", fence as i32);
+        b.vis_lost |= vis_frame;
         return fence as i32;
+    }
+    if let Some(i) = vis_slot {
+        (b.vis_fence[i], b.vis_mask[i]) = (fence, vis_frame);
     }
     /* The kick runs while the application records the next frame; the GPU
      * executes kicks in order, so a later kick that samples this target or
@@ -6825,6 +7092,9 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(pvr_backend_attachment_gone),
     depth_resolve: Some(pvr_backend_depth_resolve),
+    query_begin: Some(pvr_backend_query_begin),
+    query_end: Some(pvr_backend_query_end),
+    query_result: Some(pvr_backend_query_result),
 };
 
 /// Append attribute `a` (first element at `base`) to the vertex-fetch streams

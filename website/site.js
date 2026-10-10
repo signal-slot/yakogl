@@ -75,8 +75,12 @@
   // status.html: one table per board.
   var ROWS = [
     ["dEQP-GLES2", "deqp2"],
-    ["dEQP-GLES2, newer partial run", "deqp2", ".integration"],
+    ["dEQP-GLES2, multisample (4x image)", "deqp2", ".ms4"],
+    ["dEQP-GLES2, shaders image after the fix", "deqp2", ".shaders"],
+    ["dEQP-GLES2, integration image", "deqp2", ".integration"],
+    ["dEQP-GLES2, previous whole tree", "deqp2", ".previous"],
     ["gl_test", "gltest"],
+    ["gl_test, previous run", "gltest", ".previous"],
     ["glmark2-es2", "glmark2"],
     ["glmark2 public reference", "glmark2ref"],
     ["Slint sample", "slint"],

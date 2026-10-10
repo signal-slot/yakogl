@@ -123,6 +123,8 @@ static inline uint8_t gles_surf_texfmt(uint8_t format)
 
 /* Colour attachments one draw may write (attachment 0 plus GL_CAP_COLOR_ATTACHMENTS - 1). */
 #define GLES_MAX_TARGETS      4
+/* occlusion query handles are 1 .. GLES_QUERY_HANDLES - 1 (gles_draw.occlusion_query) */
+#define GLES_QUERY_HANDLES    64
 
 /* What the shader samples the binding as. A cube map, a 2D array and a 3D
  * texture are one stack of `layers` images of width x height; which of the
@@ -375,6 +377,14 @@ struct gles_draw {
 	 * buffer. 0: the packed pitch (every FBO and pbuffer). Sits in what was
 	 * tail padding. */
 	uint32_t target_pitch;
+	/* The ES 3.0 occlusion query (GL_ANY_SAMPLES_PASSED[_CONSERVATIVE])
+	 * that counts this draw's samples: a backend query handle (1 ..
+	 * GLES_QUERY_HANDLES, started by query_begin), 0 for none. The GL core
+	 * sends 0 for every clear-only draw; a clear fused into a counted draw
+	 * (do_clear, clear_quad) is never counted (ES 3.0 4.2.3: a clear is
+	 * not a draw), whatever path the backend clears with. Sits in what was
+	 * tail padding. */
+	uint32_t occlusion_query;
 };
 
 /* One-time backend init (after OSAL init: allocates persistent GPU objects,
@@ -565,6 +575,21 @@ struct yakogl_backend {
 	 * undefined), the texels are left as they are; a negative errno
 	 * otherwise. Optional: NULL answers 1. */
 	int (*depth_resolve)(uint32_t id, float *dst, uint32_t w, uint32_t h, uint32_t pitch);
+	/* ES 3.0 occlusion queries. query_begin: a query starts counting on
+	 * `handle` (1 .. GLES_QUERY_HANDLES - 1); reset its counter. Every kick
+	 * that counted on the handle before has completed (the GL core waits).
+	 * 0, or a negative errno (no counter memory). NULL: the backend counts
+	 * no samples and glBeginQuery refuses the occlusion targets.
+	 * query_end (optional): the query ended; every draw it counts was
+	 * handed over (gles_draw.occlusion_query); the backend may submit the
+	 * open frame (a tile-based GPU whose visibility test sees later
+	 * occluders of the same kick must). query_result: the samples (or any
+	 * non-zero value when some passed) counted on `handle` since its
+	 * query_begin, called once every kick holding a counted draw has
+	 * completed; 0, or a negative errno. */
+	int (*query_begin)(uint32_t handle);
+	void (*query_end)(uint32_t handle);
+	int (*query_result)(uint32_t handle, uint64_t *samples);
 };
 
 extern const struct yakogl_backend *g_backend;   /* the backend of this build (src/backend.rs) */

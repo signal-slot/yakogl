@@ -117,8 +117,15 @@ struct pvr_render_frag_regs {
 	uint64_t isp_zload_store_base;
 	uint64_t isp_stencil_load_store_base;
 	/* RGXFWIF_CMD3D.flags (PVR_FRAG_FLAGS_DEPTHBUFFER/STENCILBUFFER when
-	 * the ISP loads or stores them). */
+	 * the ISP loads or stores them; PVR_FRAG_FLAGS_GETVISRESULTS 0x20 when
+	 * the render has objects with a visibility test). */
 	uint32_t cmd_flags;
+	/* CR_ISP_OCLQRY_BASE (cr.xml ISP_OCLQRY_BASE, 16-byte aligned): the
+	 * buffer the ISP's visibility test counts into, one dword per
+	 * TA_STATE_ISPCTL.visreg; 0 when no object tests. RGXFWIF_CMD3D dwords
+	 * 22-23 (driver/docs/gpu-recipes/coeff_base_analysis.md). Appended after
+	 * cmd_flags, so no earlier offset moved. */
+	uint64_t isp_oclqry_base;
 };
 
 /* One render = one GEOM kick + one FRAG kick on the same HWRT dataset. */

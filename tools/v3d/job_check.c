@@ -2262,6 +2262,92 @@ static void part_pack_skip(void)
 	v3d_job_pack_skip = false;
 }
 
+/* ---- 19. occlusion queries: OCCLUSION_QUERY_COUNTER's address ------------- */
+
+/* A job of four draws whose state differs only in oq_addr (`addrs`), with
+ * packet skip `skip`. */
+static char *oq_job(struct lists *l, const uint32_t *addrs, int n, bool skip)
+{
+	struct v3d_fs_prog fs = fs_prog();
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	struct v3d_job_draw d = {
+		.st = &st, .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC, false };
+	struct v3d_job_clear c = { 0 };
+	bool was = v3d_job_pack_skip;
+	v3d_job_pack_skip = skip;
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	bool ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind);
+	for (int i = 0; ok && i < n; i++) {
+		st.oq_addr = addrs[i];
+		ok = v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK;
+	}
+	ok = ok && v3d_job_end(&j, &c, NULL, NULL);
+	v3d_job_pack_skip = was;
+	check(ok, skip ? "occlusion: the four-draw job builds (packet skip on)"
+		       : "occlusion: the four-draw job builds (packet skip off)");
+	return decode(l);
+}
+
+/* The address of the nth OCCLUSION_QUERY_COUNTER_ENABLE packet as the
+ * decoder prints it: "[null]" for 0, and for an address in no registered
+ * BO a comment ("XXX: BO unknown") then 0x...; -1 when the packet is
+ * absent. */
+static long oq_address(const char *text, int nth)
+{
+	const char *name = "OCCLUSION_QUERY_COUNTER_ENABLE\n";
+	const char *p = text;
+	for (int i = 0; p && i <= nth; i++) {
+		p = strstr(p, name);
+		if (p && i < nth)
+			p += strlen(name);
+	}
+	if (!p)
+		return -1;
+	p += strlen(name);
+	const char *nl = strchr(p, '\n');
+	size_t len = nl ? (size_t)(nl - p) : strlen(p);
+	char line[128];
+	snprintf(line, sizeof(line), "%.*s", (int)len, p);
+	if (!strstr(line, "address:"))
+		return -1;
+	if (strstr(line, "[null]"))
+		return 0;
+	const char *hex = strrchr(line, 'x');
+	return hex && hex > line ? strtol(hex - 1, NULL, 16) : -1;
+}
+
+/* Mesa's v3dx_emit.c:720-726: the counter's address while a query is active,
+ * the zero-address packet otherwise; the job's prologue disables it
+ * (v3dx_draw.c:107-108). With packet skip the address is part of the FIXED
+ * group's key: a draw with the same address writes nothing, another
+ * address (0 included) rewrites the group. */
+static void part_occlusion(void)
+{
+	static struct lists l;
+	static const uint32_t addrs[4] = { 0x00400040u, 0x00400040u, 0, 0x00400080u };
+	const char *oq = "OCCLUSION_QUERY_COUNTER_ENABLE";
+	char *text = oq_job(&l, addrs, 4, false);
+	check(text && census(text, oq) == 5, "occlusion, skip off: the prologue's packet and one per draw");
+	check(text && oq_address(text, 0) == 0 && oq_address(text, 1) == 0x400040 &&
+		      oq_address(text, 2) == 0x400040 && oq_address(text, 3) == 0 &&
+		      oq_address(text, 4) == 0x400080,
+	      "occlusion, skip off: 0 (prologue), the counter twice, 0, the other counter");
+	free(text);
+	text = oq_job(&l, addrs, 4, true);
+	check(text && census(text, oq) == 4, "occlusion, skip on: the same address twice is written once");
+	check(text && oq_address(text, 0) == 0 && oq_address(text, 1) == 0x400040 &&
+		      oq_address(text, 2) == 0 && oq_address(text, 3) == 0x400080,
+	      "occlusion, skip on: 0 (prologue), the counter, 0, the other counter");
+	free(text);
+}
+
 int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
@@ -2279,9 +2365,10 @@ int main(void)
 	 * 3 depth range + 1 viewport x + 4 refusal + 2 one input + 1 new job;
 	 * part 16 (S8 stencil): 1 build + 7;
 	 * part 17 (a view's stride): 2 builds + 1 decode + 3 strides;
-	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal */
+	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
+	 * part 19 (occlusion queries): 2 builds + 4 */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 13 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 14 +
-			    28 + 8 + 6 + 10;
+			    28 + 8 + 6 + 10 + 6;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2300,6 +2387,7 @@ int main(void)
 	part_instanced();
 	part_msaa();
 	part_pack_skip();
+	part_occlusion();
 	printf("job_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);
 	return (failures == 0 && checks == planned) ? 0 : 1;
 }

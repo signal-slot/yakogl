@@ -222,6 +222,14 @@ struct pvr_ppp_state {
    /* TA_OUTPUT_SEL tsp_unclamped_z_pres: the FS iterates the Z plane
     * (gl_FragCoord.z). Last, so no earlier field moved when it was added. */
    int      z_pres;
+
+   /* TA_STATE_ISPCTL.vistest / visreg: the ISP counts the object's samples
+    * that pass into dword `vis_reg` (14 bits) of the frag kick's
+    * ISP_OCLQRY_BASE buffer, as Mesa's pvr_setup_isp_faces_and_control does
+    * for a draw inside an occlusion query (pvr_arch_cmd_buffer.c:6878-6881;
+    * visbool, never set by Mesa, stays 0). Appended after z_pres. */
+   int      vis_test;
+   uint32_t vis_reg;
 };
 
 struct pvr_vdm_field_refusal; /* below, with the VDM emitters */
