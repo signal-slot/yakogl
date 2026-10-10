@@ -1347,11 +1347,20 @@ zephyr_precompiled_only_image() {
 }
 if [ "$QUICK" -eq 0 ]; then
   if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
-    step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
-      verdin_am62p/am62p54/a53 gl_test am62p \
-      -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
-    step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
-      zephyr_precompiled_only_image
+    # The AM62P images include the PowerVR firmware as a C header
+    # (driver/src/pvr_fw_boot.c: fw/pvr_fw_blob.h), a vendor binary that is
+    # not in the repository: without it they cannot compile, whatever our
+    # sources are, so the two rows are skipped and say so (docs/HANDOFF.md:
+    # copy it in to run them).
+    if [ -f driver/src/fw/pvr_fw_blob.h ]; then
+      step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
+        verdin_am62p/am62p54/a53 gl_test am62p \
+        -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
+      step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
+        zephyr_precompiled_only_image
+    else
+      gap "zephyr am62p images (2): driver/src/fw/pvr_fw_blob.h, the PowerVR firmware blob, is not in this tree: the AM62P C files were NOT compiled with -Werror"
+    fi
     step "zephyr  imx8mp gc_gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gc_gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
     step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4
