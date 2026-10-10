@@ -978,6 +978,23 @@ if command -v cc >/dev/null 2>&1; then
     }
   }
   step "run     gl_test set walker count (a skip is not a failure)" gltest_set_tally
+  # Case 44's GC7000 layout probe, RUN (tests/gltest_hdr_probe.c includes
+  # gl_test.c as the GC7000 arm): the slot codes the i.MX8MP's CASE record
+  # carries, worked on the layouts the board's one datum allows.
+  gltest_hdr_probe() {
+    local out
+    mkdir -p build || return 1
+    cc -std=gnu11 -Wall -Wextra -Werror -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -Iinclude -Isrc -Isrc/osal \
+      -Idriver/tools/pvrlab -Idriver/src -Idriver/src/vivante tests/gltest_hdr_probe.c -o build/gltest_hdr_probe \
+      -no-pie -Wl,--unresolved-symbols=ignore-all || return 1
+    out=$(build/gltest_hdr_probe) || { printf '%s\n' "$out" | grep -v ' ok$' | tail -20; return 1; }
+    printf '%s\n' "$out" |
+      grep -qE '^gltest_hdr_probe: ([0-9]+) checks run \(planned \1\), 0 failed$' || {
+      echo "gltest_hdr_probe exited 0 without its result line"
+      return 1
+    }
+  }
+  step "run     gl_test case 44 probe decode" gltest_hdr_probe
   # The two headers gl_test.c includes are generated from tools/shaders/, never
   # edited: regenerate them and refuse a drift. They hold the only copy of the
   # GLSL the suite compiles, while the source list, the offline table and the

@@ -6275,6 +6275,188 @@ static int case_es3vid_indexed(void)
 }
 
 /* ---- case 44: clear-only frames and RGBA16F render targets --------------- */
+#ifdef GL_TEST_VIVANTE
+/*
+ * Case 44's layout probe on the GC7000 (#6 item 3). The draw of step 2 --
+ * es300/vid.vert + vcolor.frag, the quad's triangles (BL red, BR green, TR
+ * blue) and (BL white, TR red, TL green) -- gives every pixel of a W x 8
+ * target its own colour, so a glReadPixels(RGBA, FLOAT) of the target says,
+ * for each stored pixel, which pixel's colour the pixel engine put there.
+ * The i.MX8MP has no console: the probe's one check carries the answer in
+ * the CASE record's got and want words (decoding below and in
+ * VIVANTE_NOTES.md, "RGBA16F targets").
+ *
+ * Arms, one bit each in got[31:24] (set = every pixel where it belongs):
+ *   bit 0  RGBA16F  8 wide, 64-byte rows (the case's own target)
+ *   bit 1  RGBA16F  4 wide, 32-byte rows
+ *   bit 2  RGBA16F 16 wide, 128-byte rows
+ *   bit 3  RGBA16F 24 wide, 192-byte rows
+ *   bit 4  RGBA16F 32 wide, 256-byte rows
+ *   bit 5  RGBA8    8 wide, 32-byte rows (32-bit control)
+ * got[23:21] is the first failing arm (its bit number), whose pixels the
+ * slot codes describe: got[20:14] slot (0,0), [13:7] slot (1,0), [6:0]
+ * slot (2,0); want[27:21] slot (W-1,0), [20:14] (0,1), [13:7] (W-1,1),
+ * [6:0] (W-1,7); want[31:28] the rows of that arm that came out whole.
+ * (x, y) is GL's: y = 0 is the bottom row, the first in memory.
+ * A slot code: 0b0yyyddd = the colour of pixel (x + ddd mod 8, yyy) --
+ * ddd is the x offset of the pixel whose colour is stored there, mod 8, so
+ * 0 is "its own" and 2 "two pixels to the right" -- or 0x40 the clear
+ * colour (never drawn), 0x41 all zero, 0x7f no pixel's colour.
+ * The check passes only when all six arms are whole.
+ */
+enum { HDR_PROBE_H = 8, HDR_PROBE_WMAX = 32 };
+
+/* The colour step 2's draw gives pixel (px, py) of a w x 8 target; `alt`
+ * the other triangle's for a centre on the diagonal (either may own it). */
+static void hdr_probe_expect(int w, int px, int py, int alt, float c[4])
+{
+	float u = ((float)px + 0.5f) / (float)w, v = ((float)py + 0.5f) / (float)HDR_PROBE_H;
+	/* (2px + 1) * 8 vs (2py + 1) * w: which side of the diagonal, exactly */
+	int side = (2 * px + 1) * HDR_PROBE_H - (2 * py + 1) * w;
+	bool lower = side > 0 || (side == 0 && !alt);
+
+	if (lower) {   /* BL red, BR green, TR blue */
+		c[0] = 1.0f - u; c[1] = u - v; c[2] = v;
+	} else {       /* BL white, TR red, TL green */
+		c[0] = 1.0f - v + u; c[1] = 1.0f - u; c[2] = 1.0f - v;
+	}
+	c[3] = 1.0f;
+}
+
+static bool hdr_probe_near(const float *a, const float *b)
+{
+	for (int i = 0; i < 4; i++) {
+		float d = a[i] - b[i];
+
+		if (d > 0.012f || d < -0.012f)
+			return false;
+	}
+	return true;
+}
+
+/* The slot code of stored pixel (x, y) of `px` (w x 8, RGBA floats). */
+static uint32_t hdr_probe_code(const float *px, int w, int x, int y)
+{
+	static const float clear[4] = { 2.0f, 0.5f, 0.25f, 1.0f }, zero[4] = { 0, 0, 0, 0 };
+	const float *s = &px[(y * w + x) * 4];
+
+	for (int sy = 0; sy < HDR_PROBE_H; sy++) {
+		for (int sx = 0; sx < w; sx++) {
+			for (int alt = 0; alt < 2; alt++) {
+				float c[4];
+
+				hdr_probe_expect(w, sx, sy, alt, c);
+				if (hdr_probe_near(s, c))
+					return (uint32_t)(sy << 3) | (uint32_t)((sx - x) & 7);
+			}
+		}
+	}
+	if (hdr_probe_near(s, clear))
+		return 0x40;
+	if (hdr_probe_near(s, zero))
+		return 0x41;
+	return 0x7f;
+}
+
+/* One arm: a w x 8 target of `ifmt`, cleared to (2, 0.5, 0.25, 1), drawn
+ * whole by `prog` and read back as floats into `px`. Returns the rows that
+ * came out whole (8 = the arm passes); -1 when the target could not be made. */
+static int hdr_probe_arm(GLuint prog, int w, bool rgba8, float *px)
+{
+	static uint8_t px8[HDR_PROBE_WMAX * HDR_PROBE_H * 4];
+	GLuint t = 0, f = 0;
+	int rows = 0;
+
+	glGenTextures(1, &t);
+	glBindTexture(GL_TEXTURE_2D, t);
+	if (rgba8)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, HDR_PROBE_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	else
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, HDR_PROBE_H, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glGenFramebuffers(1, &f);
+	glBindFramebuffer(GL_FRAMEBUFFER, f);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		rows = -1;
+		goto out;
+	}
+	glViewport(0, 0, w, HDR_PROBE_H);
+	glClearColor(2.0f, 0.5f, 0.25f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(prog);
+	puv_quad_setup();
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (rgba8) {
+		glReadPixels(0, 0, w, HDR_PROBE_H, GL_RGBA, GL_UNSIGNED_BYTE, px8);
+		for (int i = 0; i < w * HDR_PROBE_H * 4; i++)
+			px[i] = (float)px8[i] / 255.0f;
+	} else {
+		glReadPixels(0, 0, w, HDR_PROBE_H, GL_RGBA, GL_FLOAT, px);
+	}
+	if (!check_gl_error("hdr probe arm")) {
+		rows = -1;
+		goto out;
+	}
+	for (int y = 0; y < HDR_PROBE_H; y++) {
+		bool whole = true;
+
+		for (int x = 0; x < w && whole; x++)
+			whole = hdr_probe_code(px, w, x, y) == (uint32_t)(y << 3);
+		rows += whole;
+	}
+out:
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &f);
+	glDeleteTextures(1, &t);
+	return rows;
+}
+
+/* The probe's check (see above). Leaves framebuffer 0 bound; the caller
+ * rebinds its texture and clear colour. */
+static bool hdr_layout_probe(GLuint prog)
+{
+	static const struct { int w; bool rgba8; } arm[6] = {
+		{ 8, false }, { 4, false }, { 16, false }, { 24, false }, { 32, false }, { 8, true },
+	};
+	static float px[HDR_PROBE_WMAX * HDR_PROBE_H * 4], bad_px[HDR_PROBE_WMAX * HDR_PROBE_H * 4];
+	uint32_t mask = 0, got = 0, want = 0;
+	int bad = -1, bad_rows = 0, bad_w = 8;
+
+	for (int i = 0; i < 6; i++) {
+		int rows = hdr_probe_arm(prog, arm[i].w, arm[i].rgba8, px);
+
+		pr_info("gl_test:   hdr probe arm %d (%s %2d wide): %d / 8 rows whole\n",
+			i, arm[i].rgba8 ? "RGBA8  " : "RGBA16F", arm[i].w, rows);
+		if (rows == HDR_PROBE_H) {
+			mask |= 1u << i;
+		} else if (bad < 0) {
+			bad = i;
+			bad_rows = rows < 0 ? 0 : rows;
+			bad_w = arm[i].w;
+			memcpy(bad_px, px, sizeof(px));
+			if (rows < 0)
+				memset(bad_px, 0, sizeof(bad_px));
+		}
+	}
+	got = mask << 24;
+	if (bad >= 0) {
+		int r = bad_w - 1;
+
+		got |= (uint32_t)bad << 21 | hdr_probe_code(bad_px, bad_w, 0, 0) << 14 |
+		       hdr_probe_code(bad_px, bad_w, 1, 0) << 7 | hdr_probe_code(bad_px, bad_w, 2, 0);
+		want = (uint32_t)bad_rows << 28 | hdr_probe_code(bad_px, bad_w, r, 0) << 21 |
+		       hdr_probe_code(bad_px, bad_w, 0, 1) << 14 | hdr_probe_code(bad_px, bad_w, r, 1) << 7 |
+		       hdr_probe_code(bad_px, bad_w, r, 7);
+	}
+	pr_info("gl_test:   %-28s got 0x%08x want 0x%08x  %s  [check %d]\n", "hdr layout probe", got, want,
+		mask == 0x3f ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(mask == 0x3f, got, want);
+}
+#endif /* GL_TEST_VIVANTE: case 44's layout probe */
+
 /* es300/vid.vert + vcolor.frag draw colours by vertex id; hdrsample.frag reads
  * the target back at a quarter scale so values above 1.0 stay in range. */
 static int case_es3hdr(void)
@@ -6365,6 +6547,13 @@ static int case_es3hdr(void)
 	glFinish();
 	if (!check_gl_error("hdr draw"))
 		return -1;
+#ifdef GL_TEST_VIVANTE
+	/* 2a. the GC7000's layout probe (above): check 3 there, and every
+	 * check after it is one later than on the other GPUs */
+	ok &= hdr_layout_probe(cprog);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#endif
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, TW, TH);
 	glUseProgram(sprog);
