@@ -46,7 +46,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=223
+WANT_CHECKS=227
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -756,6 +756,24 @@ failed 4 594b010e 002c0107 ffff002f 00100030 CASE_SET 47 of 48 run, case 16 skip
 bad_record 4 594b010e 002c0107 ffff0030 00100030 CASE_SET a failure named while 48 of 48 passed (inconsistent)
 failed 4 594b010e 0010ff06 0000002f 00000031 CASE_SET_FAIL the earlier set form, c4ccc966 (fail)
 EOF_ST
+
+echo "== 3c2. a console capture that lost result lines: done_lossy, Lost in capture (not NoResult)"
+# tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt: the deqp and v3d_deqp lines of the Pi 4's
+# 2026-10-10 F1 rerun (a27d69c0). The image counted 1923 cases with a result, the TCP serial bridge
+# delivered 1663 (the case numbering jumps #869 -> #1130).
+dl="$S/pi4/lossy/20261010-2130-F1-a27d69c0"
+mkrun "$dl" board=pi4 boot=tryboot name=F1 probe=0 back=1
+cp "$TD/pi4-tryboot-F1rerun2-a27d69c0.console.txt" "$dl/console.txt"
+check "pi4 F1 with 260 result lines lost in capture: verdict=done_lossy rc=4 lost=260 (not done)" \
+    says pi4 "$dl" "rc=4 verdict=done_lossy boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 .* lost=260$"
+"$B" pi4 tally "$S/pi4/lossy" > "$S/lossy-tally.txt" 2>&1
+check "the tree tally prints the Lost in capture lines with the case numbers #870-#1130 and the image's counters" \
+    eval 'grep -q "Lost in capture: 260 cases" "$S/lossy-tally.txt" && grep -q "case numbers #870-#1130" "$S/lossy-tally.txt" &&
+          grep -q "1923 cases begun, 1923 with a result" "$S/lossy-tally.txt"'
+check "the mustpass table has a lost column of 261 and calls none of them NoResult" \
+    eval 'grep -q "fragment_ops *1662 *0 *0 *0 *0 *261 *0$" "$S/lossy-tally.txt" && ! grep -q "^NoResult dEQP" "$S/lossy-tally.txt" &&
+          [ "$(grep -c "^Lost dEQP" "$S/lossy-tally.txt")" = 261 ]'
+check "a complete dEQP record keeps verdict=done (TF)" says pi4 "$S/pi4/full/20261003-1300-TF-0123abcd" "verdict=done "
 
 echo "== 3d. Pi 4 tree tally and diff against the old Pi 4 tree runner's (old-runner-outputs.txt)"
 "$B" pi4 tally "$S/pi4/full" > "$S/new-tally.txt" 2>&1

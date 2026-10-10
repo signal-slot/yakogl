@@ -45,7 +45,17 @@ fi
 echo "$NAME: merge $(git rev-parse HEAD) (HEAD^2 == tip),$(git diff --shortstat HEAD^1 HEAD)"
 BLOB=${PVR_FW_BLOB:-$REPO/driver/src/fw/pvr_fw_blob.h}
 if [ -r "$BLOB" ]; then mkdir -p driver/src/fw && cp -n "$BLOB" driver/src/fw/; fi
-tools/check.sh > build/gate-$NAME.log 2>&1; rc=$?
+# The gate before a push is the rows the merge can reach (tools/check.sh
+# --changed: the diff from main, HEAD^1); LAND_GATE=full runs every row, which
+# is otherwise CI's job (.github/workflows/gate.yml). The cargo target
+# directory is shared between landings (under home, never /tmp) so a
+# configuration the merge does not touch is not rebuilt from cold.
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/yakogl/gate-target}
+mkdir -p "$CARGO_TARGET_DIR"
+GATE_ARGS=(--changed HEAD^1)
+[ "${LAND_GATE-}" = full ] && GATE_ARGS=()
+echo "$NAME: gate tools/check.sh ${GATE_ARGS[*]:-(every row)} target $CARGO_TARGET_DIR"
+tools/check.sh "${GATE_ARGS[@]}" > build/gate-$NAME.log 2>&1; rc=$?
 echo "$NAME: gate rc=$rc $(date '+%F %T') ENOSPC=$(grep -c ENOSPC build/gate-$NAME.log)"
 sed 's/\x1b\[[0-9;]*m//g' build/gate-$NAME.log | grep -E 'check.sh:|FAIL|red' | tail -n 3
 [ $rc -eq 0 ] || { echo "$NAME: GATE RED: no push (build/gate-$NAME.log)"; exit 1; }

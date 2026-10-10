@@ -722,6 +722,9 @@ fn env(u: &Uniforms, stage: &str, st: &Stage, texs: &[sim::Texture]) -> sim::Env
         samplers: Vec::new(),
         thread: threads.map_or(0, |t| t.max(1) - 1),
         threads: threads.unwrap_or(0),
+        // derivatives stay unmodelled: the corpus' pinned counts were
+        // taken without a quad layout
+        quads: false,
     }
 }
 

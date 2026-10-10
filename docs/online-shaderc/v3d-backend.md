@@ -1197,12 +1197,17 @@ back) are the board's first measurement; then dEQP-GLES2 multisample with
 the ms4 config. Prediction: 12 of the 16 dEQP cases pass (the 4 with
 alpha-to-coverage wait for step 4).
 
-## textureSize (compiler built; the driver's words pending)
+## textureSize
 
-Status: the compiler side is built (2026-09-26). The job builder does not fill
-the words yet, so the backend refuses such a draw by name: "textureSize: the job
-builder does not fill the size words yet". The contract was proposed to v3d-tex
-(the driver's texture code is theirs).
+The compiler side is built (2026-09-26); the job builder fills the words
+(2026-10-10, for the ES 2.0 non-seamless cube look-up's level of detail, which
+reads the face size the same way: docs/v3d-noseamless-cube.md). Each entry of
+the job builder's sampler table (`struct v3d_job_tmu`) carries the binding's
+base-level width and height, filled by the backend (`texture_units`: the
+binding's size, 1 x 1 for the black stand-in), and v3d_job.c writes
+`V3D_QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT` from the entry the word's data names;
+a binding the draw did not give, or one without its size, is a bad field
+(tools/v3d/job_check.c part 5).
 
 Mesa's `ntq_emit_txs` (nir_to_vir.c:915-956): each lane of the result is a
 uniform word, QUNIFORM_TEXTURE_WIDTH (44) or _HEIGHT (45), whose data is the

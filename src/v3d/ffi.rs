@@ -360,13 +360,17 @@ pub struct V3dJobDraw {
     pub instances: u32,
 }
 
-/// `struct v3d_job_tmu`: one texture unit's record addresses.
+/// `struct v3d_job_tmu`: one texture unit's record addresses, and the
+/// size of the base level the texture record samples from (what
+/// `V3D_QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT` read; 0: not given).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct V3dJobTmu {
     pub unit: u32,
     pub tex_state: u32,
     pub sampler: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub const V3D_QUNIFORM_TMU_CONFIG_P0: u32 = 40;
@@ -752,7 +756,9 @@ const _: () = assert!(offset_of!(V3dJobDraw, num_vs_tmu) == 136);
 const _: () = assert!(offset_of!(V3dJobDraw, vs_writes_psiz) == 140);
 const _: () = assert!(offset_of!(V3dJobDraw, tmu) == 112);
 const _: () = assert!(offset_of!(V3dJobDraw, num_tmu) == 120);
-const _: () = assert!(size_of::<V3dJobTmu>() == 12);
+const _: () = assert!(size_of::<V3dJobTmu>() == 20);
+const _: () = assert!(offset_of!(V3dJobTmu, width) == 12);
+const _: () = assert!(offset_of!(V3dJobTmu, height) == 16);
 const _: () = assert!(size_of::<V3dTexSlice>() == 24);
 const _: () = assert!(size_of::<V3dTexLayout>() == 20 + 24 * V3D_TEX_MAX_LEVELS);
 const _: () = assert!(offset_of!(V3dTexLayout, slices) == 20);

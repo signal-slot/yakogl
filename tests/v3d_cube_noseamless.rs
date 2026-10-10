@@ -20,10 +20,10 @@
 //! texels, never by the model: Table 3.21's face and (s, t), dEQP's
 //! `sampleLinear2D` with the sampler's wrap modes, mipmap-LINEAR blends.
 //!
-//! The interpreter cannot derive an implicit level of detail, so the
-//! fragment-stage case (`textureCube` with a bias, dEQP's mipmap.cube.bias)
-//! runs on a one-level texture; its multi-level behaviour is the TMU's own
-//! (the board recipe, docs/v3d-noseamless-cube.md).
+//! A keyed fragment look-up computes its own level from the derivatives of
+//! the direction (FDX / FDY) and retires with TMUSLOD, so the fragment
+//! cases run on a full mip chain; the interpreter's derivatives need its
+//! assumed quad layout (`Env::quads`), which the tests' inputs follow.
 
 // The V3D compiler exists only in a gpu-v3d build (tools/check.sh runs the
 // gpu-v3d rows with and without report-es2).
@@ -59,8 +59,8 @@ const FS: &str = "precision mediump float;\nvarying vec4 v_color;\nvoid main() {
 
 /// A fragment look-up with a bias, at a constant direction.
 const VS_PASS: &str = "attribute vec4 a_dir;\nvoid main() { gl_Position = a_dir; }\n";
-const FS_BIAS: &str = "precision mediump float;\nuniform samplerCube u_cube;\n\
-                       void main() { gl_FragColor = textureCube(u_cube, vec3(1.0, 0.0, -0.875), 0.5); }\n";
+const FS_CONST_BIAS: &str = "precision mediump float;\nuniform samplerCube u_cube;\n\
+                             void main() { gl_FragColor = textureCube(u_cube, vec3(1.0, 0.0, -0.875), 0.5); }\n";
 
 const N: usize = 4;
 const LEVELS: usize = 3;
@@ -363,47 +363,221 @@ fn a_projected_direction_selects_its_face_after_the_division() {
     });
 }
 
-/// A fragment `textureCube(s, d, bias)` (dEQP's mipmap.cube.bias): TMUB
-/// holds the bias, TMUI the face, TMUS retires it (no P2 word, no
-/// TMUSCM). Run on a one-level texture, whose level every bias reads: the
-/// non-seamless value with LINEAR_MIPMAP_LINEAR as the min filter.
-#[test]
-fn a_fragment_bias_lookup_reads_the_face_with_the_samplers_wrap() {
-    let tex = texture(1);
-    with_program(VS_PASS, FS_BIAS, LodKey::NONE, KEYED, |p| {
-        let l = text(&p.fs.code);
-        for w in ["tmui", "tmub", "tmus"] {
-            assert!(l.iter().any(|t| t.contains(w)), "{w}: {l:#?}");
+/// The fragment cases' texture: `FN` x `FN` faces, a full chain, each
+/// (level, face) one colour (dEQP's mipmap.cube fill, in shape), exact in
+/// f16: what a pixel reads names its level (and the blend of two).
+const FN: usize = 16;
+const FLEVELS: usize = 5;
+
+fn solid(l: usize, f: usize) -> [f32; 4] {
+    [l as f32 / 8.0, f as f32 / 8.0, 0.25, 1.0]
+}
+
+fn solid_texture() -> Texture {
+    Texture {
+        cube: true,
+        min: MinFilter::LinearMipmapLinear,
+        levels: (0..FLEVELS)
+            .map(|l| {
+                let n = FN >> l;
+                Level { width: n as u32, height: n as u32, faces: (0..6).map(|f| vec![solid(l, f); n * n]).collect() }
+            })
+            .collect(),
+    }
+}
+
+/// dEQP's `computeCubeLodFromDerivates` (glsTextureTestUtil.cpp, LODMODE_EXACT)
+/// for direction `d` and its screen derivatives, in f64: the face by the
+/// largest component, du/dx = W/2 (dsc/dx ma - sc |dma/dx|) / ma^2, and
+/// log2 of the larger of the two derivative vectors' lengths.
+fn deqp_cube_lod(d: [f32; 3], dx: [f32; 3], dy: [f32; 3]) -> f64 {
+    let (face, _, _) = face_st(d);
+    let (ma, sn, tn) = match face {
+        0 | 1 => (0, 2, 1),
+        2 | 3 => (1, 0, 2),
+        _ => (2, 0, 1),
+    };
+    let w = FN as f64;
+    let g = |c: [f32; 3]| -> (f64, f64) {
+        let (sc, tc, m) = (d[sn] as f64, d[tn] as f64, (d[ma] as f64).abs());
+        let (scd, tcd, md) = (c[sn] as f64, c[tn] as f64, (c[ma] as f64).abs());
+        (w * 0.5 * (scd * m - sc * md) / (m * m), w * 0.5 * (tcd * m - tc * md) / (m * m))
+    };
+    let ((ux, vx), (uy, vy)) = (g(dx), g(dy));
+    (ux * ux + vx * vx).sqrt().max((uy * uy + vy * vy).sqrt()).log2()
+}
+
+/// The non-seamless reference of [`solid_texture`] at level of detail `lod`
+/// (GL ES 2.0 3.7.7-3.7.9, mag LINEAR or NEAREST alike on a solid face):
+/// level 0 when magnified, else LINEAR_MIPMAP_LINEAR's blend of floor(lod)
+/// and the next level, or LINEAR_MIPMAP_NEAREST's level ceil(lod + 0.5) - 1,
+/// clamped to the chain.
+fn solid_reference(min: MinFilter, d: [f32; 3], lod: f64) -> [f32; 4] {
+    let (face, _, _) = face_st(d);
+    let top = FLEVELS - 1;
+    if lod <= 0.0 {
+        return solid(0, face);
+    }
+    match min {
+        MinFilter::LinearMipmapLinear => {
+            let l0 = (lod.floor() as usize).min(top);
+            let l1 = (l0 + 1).min(top);
+            let w = if l0 == l1 { 0.0 } else { (lod - lod.floor()) as f32 };
+            let (a, b) = (solid(l0, face), solid(l1, face));
+            core::array::from_fn(|c| a[c] * (1.0 - w) + b[c] * w)
         }
-        assert!(!l.iter().any(|t| t.contains("tmuscm") || t.contains("tmuslod")), "{l:#?}");
-        let uniforms: Vec<u32> =
-            p.fs.code
-                .uniforms
-                .iter()
-                .map(|u| match u.contents {
-                    0 | 40 | 41 => u.data,
-                    c => panic!("fragment uniform contents {c} not modelled by this test"),
-                })
-                .collect();
+        MinFilter::LinearMipmapNearest => solid((((lod + 0.5).ceil() as usize).max(1) - 1).min(top), face),
+        _ => unreachable!("not used by these tests"),
+    }
+}
+
+/// The fragment shaders: dEQP's textureCube of an interpolated direction,
+/// implicit level (mipmap.cube.basic) and with a bias (mipmap.cube.bias).
+const VS_DIR: &str =
+    "attribute vec4 a_dir;\nvarying vec3 v_dir;\nvoid main() { v_dir = a_dir.xyz; gl_Position = a_dir; }\n";
+const FS_IMPLICIT: &str = "precision mediump float;\nuniform samplerCube u_cube;\nvarying vec3 v_dir;\n\
+                           void main() { gl_FragColor = textureCube(u_cube, v_dir); }\n";
+const FS_BIAS: &str = "precision mediump float;\nuniform samplerCube u_cube;\nuniform float u_bias;\n\
+                       varying vec3 v_dir;\nvoid main() { gl_FragColor = textureCube(u_cube, v_dir, u_bias); }\n";
+
+/// The per-pixel change of the direction across the +X face: dEQP's quad
+/// spans the face, s and t move by K / 2 a pixel (16 x 2.4 / 16: level
+/// 1.263 inside the face).
+const K: f32 = 0.3;
+
+/// The direction of the pixel at (px, py) of the +X-face quad, extended
+/// past its edge: z = 1 at px = -0.5, so the pixels at px <= -1 select +Z.
+fn quad_dir(px: i32, py: i32) -> [f32; 3] {
+    [1.0, 1.0 - (py as f32 + 0.5) * K, 1.0 - (px as f32 + 0.5) * K]
+}
+
+/// The 16 lanes as four 2x2 quads (the interpreter's `Env::quads` layout:
+/// lane 4q + i at column i & 1, row i >> 1 of quad q), each quad's top-left
+/// pixel and whether its direction follows [`quad_dir`] (else a constant
+/// one): q0 inside +X; q1 straddling +X's z = 1 edge, its left column (a
+/// helper pixel in dEQP's draw of the face) on +Z; q2 entirely on +Z (the
+/// major axis z varies there); q3 a constant direction (zero derivatives).
+const QUADS: [(i32, i32, bool); 4] = [(2, 2, true), (-1, 4, true), (-4, 0, true), (0, 0, false)];
+const CONSTANT_DIR: [f32; 3] = [1.0, 0.3, 0.2];
+
+/// Each lane's direction and its screen derivatives (exact: linear).
+fn lanes() -> Vec<([f32; 3], [f32; 3], [f32; 3])> {
+    (0..LANES)
+        .map(|l| {
+            let (ox, oy, moving) = QUADS[l / 4];
+            let (px, py) = (ox + (l & 1) as i32, oy + ((l >> 1) & 1) as i32);
+            if moving {
+                (quad_dir(px, py), [0.0, 0.0, -K], [0.0, -K, 0.0])
+            } else {
+                (CONSTANT_DIR, [0.0; 3], [0.0; 3])
+            }
+        })
+        .collect()
+}
+
+/// The fragment program run on the interpreter over [`lanes`], with the
+/// quad layout assumed (`Env::quads`): every lane's RGBA.
+fn run_fs(p: &V3dProgram<'_>, tex: &Texture, sp: Sampler, user: &[f32]) -> Vec<[f32; 4]> {
+    let uniforms: Vec<u32> =
+        p.fs.code
+            .uniforms
+            .iter()
+            .map(|u| match u.contents {
+                0 | 40 | 41 => u.data,
+                1 => user[u.data as usize].to_bits(),
+                /* QUNIFORM_TEXTURE_WIDTH of binding 0: the face size */
+                44 if u.data == 0 => FN as u32,
+                /* QUNIFORM_FB_WPOS_Y_SCALE: a window target (dFdy's sign) */
+                0x1_0000 => (-1.0f32).to_bits(),
+                c => panic!("fragment uniform contents {c} (data {}) not modelled by this test", u.data),
+            })
+            .collect();
+    let ls = lanes();
+    let one = [1.0f32.to_bits(); LANES];
+    let z = [0u32; LANES];
+    let varyings =
+        (0..3).map(|c| sim::Varying { vary: core::array::from_fn(|l| ls[l].0[c].to_bits()), c: z }).collect();
+    let inputs = FsInputs { w: one, w_centroid: one, z, x: z, y: z, back_facing: [false; LANES], varyings };
+    let env =
+        Env { textures: vec![tex.clone()], samplers: vec![sp], threads: p.fs.threads, quads: true, ..Env::default() };
+    let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(Box::new(inputs)), &env)
+        .unwrap_or_else(|e| panic!("the fragment program runs: {e}\n{:#?}", text(&p.fs.code)));
+    let h = |x: u32| sim::half_to_f32(x as u16);
+    (0..LANES)
+        .map(|l| {
+            let word = |k: usize| o.tlb[k].value[l].expect("a defined value");
+            [h(word(0) & 0xffff), h(word(0) >> 16), h(word(1) & 0xffff), h(word(1) >> 16)]
+        })
+        .collect()
+}
+
+/// dEQP's mipmap.cube.{basic,bias}.linear_* and texture.size.cube.15x15_*
+/// (the Pi 4's last nine dEQP-GLES2 failures at a27d69c0): a fragment
+/// `textureCube` on a keyed (non-seamless) binding takes its level from
+/// the derivatives of the DIRECTION, per pixel, on the pixel's own face,
+/// as dEQP's reference does: the program computes it (FDX / FDY, the face
+/// size word) and retires the look-up with TMUSLOD. The TMU's own level,
+/// from the quad's differences of the per-face (s, t), was what the board
+/// ran: in quad q1, whose left column selects +Z, the jump across the face
+/// edge made the level of the +X pixels the smallest level's (mipmap.cube:
+/// the edge pixels of every cell) or a minification where GL magnifies
+/// (texture.size 15x15, min LINEAR, mag NEAREST: LINEAR on the edge row).
+/// Every lane is checked against [`deqp_cube_lod`] and
+/// [`solid_reference`], with the implicit level, with biases (one to below
+/// zero, one past the chain) and with both LINEAR mip filters.
+#[test]
+fn a_fragment_lookup_takes_each_pixels_level_from_the_direction() {
+    let tex = solid_texture();
+    let ls = lanes();
+    for (fs, biases) in [(FS_IMPLICIT, &[0.0f32][..]), (FS_BIAS, &[0.6, -3.0, 10.0][..])] {
+        with_program(VS_DIR, fs, LodKey::NONE, KEYED, |p| {
+            let l = text(&p.fs.code);
+            for w in ["fdx", "fdy", "tmui", "tmub", "tmuslod"] {
+                assert!(l.iter().any(|t| t.contains(w)), "{w}: {l:#?}");
+            }
+            assert!(!l.iter().any(|t| t.contains("tmuscm") || t.contains("tmus ") || t.ends_with("tmus")), "{l:#?}");
+            assert!(p.fs.code.uniforms.iter().any(|u| (u.contents, u.data) == (44, 0)), "the face size word");
+            for &bias in biases {
+                for min in [MinFilter::LinearMipmapLinear, MinFilter::LinearMipmapNearest] {
+                    /* mag LINEAR (dEQP's is NEAREST): equal on a solid face,
+                     * and the model refuses NEAREST on a texel edge */
+                    let sp = Sampler { mag: Filter::Linear, min, wrap_s: Wrap::ClampToEdge, wrap_t: Wrap::ClampToEdge };
+                    let got = run_fs(p, &tex, sp, &[bias]);
+                    for (lane, (d, dx, dy)) in ls.iter().enumerate() {
+                        let lod = deqp_cube_lod(*d, *dx, *dy) + f64::from(bias);
+                        close(
+                            got[lane],
+                            solid_reference(min, *d, lod),
+                            &format!("{min:?} bias {bias} lane {lane} {d:?} lod {lod}"),
+                        );
+                    }
+                }
+            }
+        });
+    }
+    /* the quad q1 pins the straddle: its +X pixels sit at level 1.263, not
+     * at the level the per-face (s, t) difference would give */
+    let lod = deqp_cube_lod(ls[5].0, ls[5].1, ls[5].2);
+    assert!((lod - 2.4f64.log2()).abs() < 1e-5, "{lod}");
+    assert_eq!(face_st(ls[4].0).0, 4, "q1's left column is on +Z");
+    assert_eq!(face_st(ls[5].0).0, 0, "q1's right column is on +X");
+}
+
+/// The level reaches the clamp: a constant direction (q3, zero
+/// derivatives) magnifies (log2(0) clamped to -16), at level 0 for every
+/// bias; the TMU reads the face with the sampler's wrap there too.
+#[test]
+fn a_fragment_lookup_with_a_constant_direction_magnifies() {
+    let tex = texture(1);
+    with_program(VS_DIR, FS_BIAS, LodKey::NONE, KEYED, |p| {
         for w in [Wrap::ClampToEdge, Wrap::Repeat, Wrap::MirroredRepeat] {
             let sp = Sampler { mag: Filter::Linear, min: MinFilter::LinearMipmapLinear, wrap_s: w, wrap_t: w };
-            let z = [0u32; LANES];
-            let inputs = FsInputs {
-                w: [1.0f32.to_bits(); LANES],
-                w_centroid: [1.0f32.to_bits(); LANES],
-                z,
-                x: z,
-                y: z,
-                back_facing: [false; LANES],
-                varyings: Vec::new(),
-            };
-            let env = Env { textures: vec![tex.clone()], samplers: vec![sp], threads: p.fs.threads, ..Env::default() };
-            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(Box::new(inputs)), &env)
-                .unwrap_or_else(|e| panic!("the fragment program runs: {e}\n{l:#?}"));
-            let word = |k: usize| o.tlb[k].value[0].expect("a defined value");
-            let h = |x: u32| sim::half_to_f32(x as u16);
-            let got = [h(word(0) & 0xffff), h(word(0) >> 16), h(word(1) & 0xffff), h(word(1) >> 16)];
-            close(got, reference(1, &sp, [1.0, 0.0, -0.875], 0.0), &format!("{w:?}"));
+            for bias in [0.0f32, 3.0] {
+                let got = run_fs(p, &tex, sp, &[bias]);
+                for (lane, v) in got.iter().enumerate().skip(12) {
+                    close(*v, reference(1, &sp, CONSTANT_DIR, 0.0), &format!("{w:?} bias {bias} lane {lane}"));
+                }
+            }
         }
     });
 }
@@ -475,7 +649,7 @@ fn a_key_changes_only_its_own_stage() {
     with_program(VS, FS, LodKey::NONE, KEYED, |p| {
         assert!(text(&p.vs.code).iter().any(|t| t.contains("tmuscm")), "the vertex stage was not keyed");
     });
-    with_program(VS_PASS, FS_BIAS, KEYED, LodKey::NONE, |p| {
+    with_program(VS_PASS, FS_CONST_BIAS, KEYED, LodKey::NONE, |p| {
         assert!(text(&p.fs.code).iter().any(|t| t.contains("tmuscm")), "the fragment stage was not keyed");
     });
 }

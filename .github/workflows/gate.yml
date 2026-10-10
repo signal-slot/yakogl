@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The full gate: every row of tools/check.sh, on every push to main and
+# nightly. A landing runs only the rows its diff reaches (tools/land.sh,
+# `check.sh --changed`); this is where the rest run.
+#
+# It needs what GitHub's hosted runners do not have: the PowerVR firmware
+# blob, Mesa's pco_shc, a west workspace with the Zephyr SDK, hal_nxp, a
+# glmark2 tree. So it runs on a self-hosted runner labelled `yakogl-gate`
+# whose environment carries them (the runner's `.env` file, or the service's
+# environment: PVR_FW_BLOB, PCO_SHC, GLSLANG, GLSL2USC_CACHE, ZEPHYR_WS,
+# HAL_NXP_DIR, WEST_VENV, ZEPHYR_SDK_INSTALL_DIR, GLMARK2_SRC, and a TMPDIR
+# under the runner's home). None of those values live in this repository.
+# Until such a runner is registered the workflow queues and runs nothing.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 17 * * *" # 02:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: [self-hosted, yakogl-gate]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: the firmware blob (never committed)
+        run: |
+          test -r "$PVR_FW_BLOB" || { echo "PVR_FW_BLOB=$PVR_FW_BLOB is not readable on this runner"; exit 1; }
+          mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/
+      - name: tools/check.sh (every row)
+        run: tools/check.sh 2>&1 | tee build/gate-ci.log
+      - name: the gate log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-${{ github.sha }}
+          path: build/gate-ci.log
+          if-no-files-found: ignore
