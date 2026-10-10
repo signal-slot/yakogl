@@ -93,11 +93,16 @@ pub mod builtin_call;
 /// The pipeline from GLSL text to a `ShcShader`, and why a compile failed.
 pub mod codegen;
 /// The reference evaluator: the lowering's tests, `yakogl-tools online-eval`,
-/// and the host tests that compare what the back end emits against what the
-/// IR means (`tests/backend_differential.rs`). `host-test` only -- never in a
-/// product.
-#[cfg(any(test, feature = "host-test"))]
+/// the host tests that compare what the back end emits against what the IR
+/// means (`tests/backend_differential.rs`), and the transform-feedback
+/// capture (`gl/tf_capture.rs`), which is why it is in every build that can
+/// report ES 3.0. The oracle half (textures, `std` floats) is `host-test`
+/// only.
+#[cfg(any(test, feature = "host-test", not(feature = "report-es2")))]
 pub mod eval;
+/// The float functions the evaluator's capture computes with (no libm).
+#[cfg(any(test, feature = "host-test", not(feature = "report-es2")))]
+pub mod fmath;
 /// Float operations on constants, folded exactly (the V3D's `prepare` and the
 /// USC's `select`).
 pub(crate) mod fold;
