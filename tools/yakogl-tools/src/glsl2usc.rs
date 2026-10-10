@@ -51,6 +51,7 @@ fn spec_error(spec: &str, e: SpecError) -> Error {
         SpecError::TooFewFactors => "glsl2usc: --blend needs at least srgb,drgb".into(),
         SpecError::Unknown(e) => format!("glsl2usc: unknown blend factor/equation {}", py::repr(&e)),
         SpecError::PlainReplace => format!("glsl2usc: --blend {spec} is the plain replace the base shader already is"),
+        SpecError::IntBlend => format!("glsl2usc: --blend '{spec}': an integer render target takes `replace` only"),
     })
 }
 

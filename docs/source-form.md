@@ -581,8 +581,11 @@ context IDs, the deadline, the VHeap size and the pretransformed PPP_CTRL
 drm/imagination, whose commands are the mainline firmware's, and has no DDK
 client command. Divergences from Mesa kept as they are, open: ISP_CTL
 always sets skip_init_hdrs, where Mesa clears it under BRN72168/72463 for
-targets at most two tiles wide; the 4x MSAA pipe count uses a 2-register
-pixel while USC_PIXEL_OUTPUT_CTRL says 4 registers.
+targets at most two tiles wide. ISP_CTL's pipe count is Mesa's, from the
+same pixel width USC_PIXEL_OUTPUT_CTRL says (four registers: six tiles at
+one sample, two at 4x); USC_PIXEL_OUTPUT_CTRL's width is four registers
+for every frame, where Mesa takes the frame's output registers (two for one
+8-bit attachment).
 `ddk_closure.h` (captured output of the closed `rgx_triangle_test`) and the
 bring-up paths that used it are removed (step 1).
 

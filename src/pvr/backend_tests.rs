@@ -4144,7 +4144,7 @@ fn a_view_window_puts_its_pitch_into_the_pbe_line_stride_and_the_load() {
     assert_eq!(draw(&d), 0);
     let ld = rig.fbload().load_draw;
     assert_eq!((ld.target_pitch, ld.textures[0].stride_texels), (1920, 1920));
-    let tw1 = tex_stride_image_word1(ld.textures[0].stride_texels, 1, ld.textures[0].base_gpu);
+    let tw1 = tex_stride_image_word1(ld.textures[0].stride_texels, 1, ld.textures[0].base_gpu, true);
     assert_eq!(tw1[0] & 0x7fff, 1920 - 1, "the load's texture stride, decoded");
 
     /* the same target packed: another frame (the pitch changed) */
@@ -4466,6 +4466,43 @@ fn a_4x_frame_of_deqps_1024_multisample_draws_is_one_kick() {
     assert_eq!(rig.index_lists().len(), MAX_DRAWS_PER_FRAME as usize);
 }
 
+/// The ISP holds no more 4x tiles than the USC's partition store fits at the
+/// pixel width the kick programs (Mesa pvr_arch_setup_tiles_in_flight derives
+/// CR_ISP_CTL.pipe_enable and CR_USC_PIXEL_OUTPUT_CTRL.width from the same
+/// width). The 4x kick said four registers a pixel and four tiles in flight:
+/// four 4096-dword partitions against 8192 reserved dwords. gl_test 198's
+/// 1024 alpha-to-coverage triangles over a 64x64 4x pbuffer (64 a tile) locked the
+/// fragment DM up on the AM62P with no USC slot in use (2026-10-10). The
+/// one-sample kick keeps its six tiles (the DDK capture's PIPE(5)).
+#[test]
+fn a_4x_kicks_tiles_in_flight_fit_the_partitions_its_pixel_width_takes() {
+    let pipe = |isp_ctl: u32| (isp_ctl >> 12) & 0xf;
+    let regs = |ctl: u32| [2u32, 4, 8, 1][(ctl & 3) as usize];
+    let fit = |k: &PvrRenderKick| {
+        let partition = regs(k.frag.usc_pixel_output_ctrl) * k.samples.max(1) * 256;
+        (pipe(k.frag.isp_ctl) + 1) * partition <= RESERVED_PARTITION_DWORDS
+    };
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    /* MRT_STRIDE 1: two registers a pixel (bring-up override) */
+    pvr_backend_set_option(PVR_BACKEND_OPT_MRT_STRIDE, 1);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    pvr_backend_set_option(PVR_BACKEND_OPT_MRT_STRIDE, 0);
+    let kicks = rig.kicks();
+    assert_eq!(kicks.len(), 3);
+    let got: Vec<(u32, u32, u32)> =
+        kicks.iter().map(|(k, _)| (k.samples, regs(k.frag.usc_pixel_output_ctrl), pipe(k.frag.isp_ctl) + 1)).collect();
+    assert_eq!(got, [(1, 4, 6), (4, 4, 2), (4, 2, 4)], "(samples, registers a pixel, ISP tiles in flight)");
+    assert!(kicks.iter().all(|(k, _)| fit(k)));
+    assert_eq!((kicks[0].0.frag.isp_ctl, kicks[1].0.frag.isp_ctl), (ISP_CTL_DEFAULT, ISP_CTL_MSAA4));
+}
+
 /// The same words again in the open frame are the program already there,
 /// and only the same words: a different program of the same length, put
 /// where a rolled-back transaction had left one, is not taken for it; a
@@ -4529,4 +4566,130 @@ fn a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour() {
     let load = heap_off_of(rig.b().fbload_fs.gpu) as u64;
     let rates: Vec<u32> = with_platform(|p| p.kick_usc_rates.iter().filter(|r| r.0 == load).map(|r| r.1).collect());
     assert_eq!(rates, [PDS_DOUTU_SAMPLE_RATE_FULL], "the second kick's load quad");
+}
+
+/* ---- integer render targets (docs/es3-pvr-formats.md 2.3, 5) -------------- */
+
+/// A 64x64 integer target of `format` for [`Rig::draw`]'s draw: one
+/// attachment, nothing cleared yet.
+fn int_target(d: &mut GlesDraw, format: u8) {
+    d.target_format = format;
+    d.num_targets = 1;
+    d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format };
+}
+
+/// A clear of an integer target is a quad through the clear-attach program
+/// of the target's dwords (one for RGBA8UI, two for RGBA16I, four for
+/// RGBA32UI), its uniform the raw values packed for the target
+/// (`clear_uniform`), and the end-of-tile emit is the integer pack mode,
+/// not normalised, 8 per channel, from output register 0.
+#[test]
+fn an_integer_target_is_cleared_by_a_quad_of_its_packed_dwords() {
+    for (format, dwords, packed, packmode) in [
+        (GLES_SURF_RGBA8UI, 1u16, [0x0403_0201u32, 0, 0, 0], csb::ROGUE_PBESTATE_PACKMODE_U8U8U8U8),
+        (GLES_SURF_RGBA16I, 2, [0x0002_0001, 0x0004_0003, 0, 0], csb::ROGUE_PBESTATE_PACKMODE_S16S16S16S16),
+        (GLES_SURF_RGBA32UI, 4, [1, 2, 3, 4], csb::ROGUE_PBESTATE_PACKMODE_U32U32U32U32),
+    ] {
+        let rig = Rig::new();
+        let mut d = rig.draw(0);
+        int_target(&mut d, format);
+        d.clear_rgba = [1u32, 2, 3, 4].map(f32::from_bits);
+        assert_eq!(draw(&d), 0, "{}", gles_surf_name(format));
+        let (b, fl) = (rig.b(), rig.fbload());
+        let ld = &fl.load_draw;
+        let want_gpu = match dwords {
+            1 => b.clear_fs.gpu,
+            2 => b.clear_fs2.gpu,
+            _ => b.clear_fs4.gpu,
+        };
+        assert_eq!(
+            (ld.fs_usc_gpu, ld.fs_uniform_dwords),
+            (want_gpu, dwords),
+            "{}: the program",
+            gles_surf_name(format)
+        );
+        assert!(ld.color_write && ld.num_textures == 0, "{}: a colour quad", gles_surf_name(format));
+        assert_eq!(fl.clear_pack, packed, "{}: the packed colour", gles_surf_name(format));
+        // SAFETY: the uniform pointer is the clear's packed block, `dwords` long.
+        let uni = unsafe { core::slice::from_raw_parts(ld.fs_uniform_cpu as *const u32, dwords as usize) };
+        assert_eq!(uni, &packed[..dwords as usize]);
+        assert_eq!(pvr_backend_flush(), 0);
+        let emits = rig.eot_emits();
+        let w1 = emits.last().expect("an end-of-tile program")[1] as u64;
+        assert_eq!((w1 >> 7) & 0x3f, u64::from(packmode), "{}: packmode", gles_surf_name(format));
+        assert_eq!((w1 >> 13) & 1, 0, "{}: not normalised", gles_surf_name(format));
+        assert_eq!((w1 >> 14) & 3, 0, "{}: from output register 0", gles_surf_name(format));
+        assert_eq!(
+            (w1 >> 19) & 1,
+            u64::from(csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL),
+            "{}: 8 per channel",
+            gles_surf_name(format)
+        );
+    }
+}
+
+/// A frame into an integer target that does not clear it first loads the
+/// pixels back raw: the integer load program for the target's dwords over
+/// the target bound as an unsigned texel of its size, NEAREST, one level,
+/// whose descriptor is the TPU's U8/U16/U32/U32U32/U32U32U32U32 with no
+/// pack format.
+#[test]
+fn a_frame_into_an_integer_target_loads_its_bits_back_raw() {
+    for (format, idx, texfmt, tpu, bytes) in [
+        (GLES_SURF_R8I, 0usize, PVR_TEXFMT_RAW8, csb::ROGUE_TEXSTATE_FORMAT_U8, 1u32),
+        (GLES_SURF_RG8UI, 0, PVR_TEXFMT_RAW16, csb::ROGUE_TEXSTATE_FORMAT_U16, 2),
+        (GLES_SURF_RGB10_A2UI, 0, PVR_TEXFMT_RAW32, csb::ROGUE_TEXSTATE_FORMAT_U32, 4),
+        (GLES_SURF_RGBA16UI, 1, PVR_TEXFMT_RAW64, csb::ROGUE_TEXSTATE_FORMAT_U32U32, 8),
+        (GLES_SURF_RGBA32I, 2, PVR_TEXFMT_RAW128, csb::ROGUE_TEXSTATE_FORMAT_U32U32U32U32, 16),
+    ] {
+        let rig = Rig::new();
+        let mut d = rig.draw(3);
+        d.do_clear = false;
+        int_target(&mut d, format);
+        assert_eq!(draw(&d), 0, "{}", gles_surf_name(format));
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert_eq!(b.frame_quads, 1, "{}: the frame starts with the load quad", gles_surf_name(format));
+        let ld = &fl.load_draw;
+        assert_eq!(ld.fs_usc_gpu, b.fbload_fs_int[idx].gpu, "{}: the integer load", gles_surf_name(format));
+        assert!(core::ptr::eq(ld.fs, &fl.fs_int_sh[idx]));
+        assert_eq!(fl.fs_int_sh[idx].num_outputs as u32, surf_out_dwords(format), "{}", gles_surf_name(format));
+        let t = ld.textures[0];
+        assert_eq!((t.format, t.base_gpu, t.mip_levels), (texfmt, d.target_gpu, 1), "{}", gles_surf_name(format));
+        let mut w = [0u32; TEX_DESC_DWORDS as usize];
+        build_tex_desc(&mut w, &t, &mut 0, false);
+        assert_eq!((w[0] >> 27) | ((w[1] & 3) << 5), tpu, "{}: the TPU format", gles_surf_name(format));
+        assert_eq!(w[4], t.stride_texels * t.height * bytes, "{}: the layer", gles_surf_name(format));
+        assert_eq!(w[7], 0x1f, "{}: no pack format", gles_surf_name(format));
+    }
+}
+
+/// What the PowerVR cannot do with an integer target is refused by name:
+/// a clear whose colour mask keeps some of its channels, and an integer
+/// attachment beside another one.
+#[test]
+fn integer_targets_refuse_partial_masks_and_company() {
+    let rig = Rig::new();
+    let mut d = rig.draw(0);
+    int_target(&mut d, GLES_SURF_RGBA8UI);
+    d.clear_quad = true;
+    d.clear_color_mask = 0b0011;
+    pvr_debug_set_masked_clear(1);
+    assert_eq!(draw(&d), -util::ENOTSUP);
+    assert!(
+        rig.logs().iter().any(|l| l.contains("colour mask that keeps some channels of a RGBA8UI")),
+        "{:?}",
+        rig.logs()
+    );
+    /* R8UI has only red: a mask leaving red on writes it whole */
+    let mut r = rig.draw(0);
+    int_target(&mut r, GLES_SURF_R8UI);
+    r.clear_quad = true;
+    r.clear_color_mask = 0b0001;
+    assert_eq!(draw(&r), 0);
+    let mut m = rig.draw(3);
+    m.num_targets = 2;
+    m.targets[0] = GlesDrawTarget { gpu: m.target_gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888 };
+    m.targets[1] = GlesDrawTarget { gpu: m.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_R32UI };
+    assert_eq!(draw(&m), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
 }

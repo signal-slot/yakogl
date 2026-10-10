@@ -54,13 +54,19 @@ every one four components wide, linear rows, 4/8/16 bytes a texel).
 | `RGB10_A2` | `RGB10A2`, `RGBA8` (two bits lost) |
 | `RGB10_A2UI`, every integer format | its own class only |
 
-The masks today list only the classes the samplers already read, so on every
-GPU: the integer formats and `RGB10_A2UI` are **refused by name** (a log line
-`glTexImage2D: GL_RGBA16UI is not supported: this back end samples none of its
-storage classes` and GL_INVALID_OPERATION, in glTexImage2D/3D, glTexStorage2D/3D
-and glCopyTexImage2D); the float, packed-float and snorm formats land in
-`RGBA16F` on the PowerVR and the GC7000 and are refused on the V3D (whose TMU
-binding reads no half float yet); `RGB10_A2` lands in `RGBA8` everywhere.
+The PowerVR samples every new class but `RGB10A2` (`PVR_SAMPLED_TEXFMTS`; the
+TPU formats are Mesa's, `docs/es3-pvr-formats.md` section 2, and the integer
+classes are read by `isampler2D`/`usampler2D`), so there each format is
+stored in its own class except `RGB10_A2`, which stays in `RGBA8` because a
+texture of the `RGB10A2` class is no render target and has no
+glGenerateMipmap here. The GC7000 and the V3D masks list only the classes
+their samplers already read: there the integer formats and `RGB10_A2UI` are
+**refused by name** (a log line `glTexImage2D: GL_RGBA16UI is not supported:
+this back end samples none of its storage classes` and GL_INVALID_OPERATION,
+in glTexImage2D/3D, glTexStorage2D/3D and glCopyTexImage2D); the float,
+packed-float and snorm formats land in `RGBA16F` on the GC7000 and are
+refused on the V3D (whose TMU binding reads no half float yet); `RGB10_A2`
+lands in `RGBA8` everywhere.
 
 **To make a back end sample a class**: make its texture state decode the class
 (`GlesTextureBind::format` carries the `GLES_TEXFMT_*`), then add the class to
@@ -89,8 +95,10 @@ change; the tests state the expectation per mask.
 
 ## Not done (left to other items)
 
-* Sampling the new classes and isampler/usampler in the shader back ends
-  (`docs/HANDOFF.md`, open work 4, formats).
+* Sampling the new classes and isampler/usampler on the GC7000 and the V3D,
+  and the PowerVR's integer samplers of the other dimensions (cube, 3D, 2D
+  array: refused by name at compile time) (`docs/HANDOFF.md`, open work 4,
+  formats).
 * Integer and `RGB10_A2` render targets, `glGetInternalformativ`'s texture
   answers (ES 3.0 knows renderbuffers only; the query stays as `b9b2ac00`
   leaves it): `es3_formats::Es3Format::storage_here()` is the question a

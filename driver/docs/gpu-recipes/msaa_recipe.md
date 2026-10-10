@@ -22,10 +22,15 @@ Mesa (`pvr_arch_job_render.c`, `pvr_arch_srv_job_render.c`, `pvr_arch_job_common
 
 ## Fragment kick registers
 - `ISP_AA.mode` = 2 (`AA_4X`).
-- `ISP_CTL`: 4x quadruples the partition size (2 output regs * 4 samples * 256 px = 2048
-  dwords) so only 4 of the 8192-dword reserved partition store fit -> `pipe_enable = 3`
-  (0x80033000 instead of 0x80035000). `USC_PIXEL_OUTPUT_CTRL` is unchanged (the partition
-  mask covers `max_partitions`).
+- `ISP_CTL`: 4x quadruples the partition size. The pixel width is the one
+  `USC_PIXEL_OUTPUT_CTRL` says (4 output regs * 4 samples * 256 px = 4096 dwords), so only
+  2 of the 8192-dword reserved partition store fit -> `pipe_enable = 1` (0x80031000 instead
+  of 0x80035000), as Mesa derives both from the same width. `USC_PIXEL_OUTPUT_CTRL` is
+  unchanged (the partition mask covers `max_partitions`). `pipe_enable = 3` (a 2-register
+  pixel against the 4-register output control: four tiles in flight, twice what the store
+  holds) was in the kick when gl_test 198's 1024-triangle 4x picture over 64x64 locked the
+  fragment DM up (no USC slot in use, no page fault; 2026-10-10); a board run of case 198
+  with `pipe_enable = 1` is the confirmation that this was the cause.
 - PBE `REG_WORD0.downscale` (bit 56): the emit resolves the samples into the
   single-sampled memory surface (the EGL surface stays 8888 with tightly packed rows).
 - ZLS: the depth/stencil buffer is `align16(w) * 2` by `align16(h) * 2` samples of packed

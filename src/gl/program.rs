@@ -747,7 +747,7 @@ fn copy_block_member(data: &[u8], m: &shaderc::ShcBlockMember, row: &ShcUniform,
 
 /// `(columns, rows)` of a GL uniform type: a scalar is (1, 1), a vecN
 /// (1, N), a matCxR (C, R).
-fn gl_type_shape(t: u16) -> (usize, usize) {
+pub(crate) fn gl_type_shape(t: u16) -> (usize, usize) {
     match u32::from(t) {
         GL_FLOAT_VEC2 | GL_INT_VEC2 | GL_UNSIGNED_INT_VEC2 | GL_BOOL_VEC2 => (1, 2),
         GL_FLOAT_VEC3 | GL_INT_VEC3 | GL_UNSIGNED_INT_VEC3 | GL_BOOL_VEC3 => (1, 3),
@@ -2038,7 +2038,15 @@ fn uniform_class(t: u16) -> Option<Class> {
         | GL_SAMPLER_2D_SHADOW
         | GL_SAMPLER_2D_ARRAY
         | GL_SAMPLER_2D_ARRAY_SHADOW
-        | GL_SAMPLER_CUBE_SHADOW => k(Base::Sampler, 1, 0),
+        | GL_SAMPLER_CUBE_SHADOW
+        | GL_INT_SAMPLER_2D
+        | GL_INT_SAMPLER_3D
+        | GL_INT_SAMPLER_CUBE
+        | GL_INT_SAMPLER_2D_ARRAY
+        | GL_UNSIGNED_INT_SAMPLER_2D
+        | GL_UNSIGNED_INT_SAMPLER_3D
+        | GL_UNSIGNED_INT_SAMPLER_CUBE
+        | GL_UNSIGNED_INT_SAMPLER_2D_ARRAY => k(Base::Sampler, 1, 0),
         _ => None,
     }
 }
@@ -7922,6 +7930,16 @@ mod tests {
             GL_SAMPLER_2D_ARRAY,
             GL_SAMPLER_2D_ARRAY_SHADOW,
             GL_SAMPLER_CUBE_SHADOW,
+            /* the integer samplers, set with glUniform1i like the others
+             * (ES 3.0 2.11.5) */
+            GL_INT_SAMPLER_2D,
+            GL_INT_SAMPLER_3D,
+            GL_INT_SAMPLER_CUBE,
+            GL_INT_SAMPLER_2D_ARRAY,
+            GL_UNSIGNED_INT_SAMPLER_2D,
+            GL_UNSIGNED_INT_SAMPLER_3D,
+            GL_UNSIGNED_INT_SAMPLER_CUBE,
+            GL_UNSIGNED_INT_SAMPLER_2D_ARRAY,
             GL_UNSIGNED_INT,
             GL_UNSIGNED_INT_VEC2,
             GL_UNSIGNED_INT_VEC3,

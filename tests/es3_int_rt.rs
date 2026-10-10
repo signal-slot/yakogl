@@ -422,8 +422,16 @@ mod es3 {
             assert_eq!(glGetError(), GL_NO_ERROR, "the clear is recorded");
             glFinish();
         }
-        assert_eq!(err(), GL_INVALID_OPERATION, "the draw is refused when it would reach the back end");
-        assert!(DRAWS.lock().unwrap().iter().all(|d| !d.2), "nothing was handed to the back end to store");
+        /* the PowerVR renders every integer surface (INTEGER_RT_FORMATS):
+         * there the clear reaches the back end; the refusal is the other
+         * GPUs' rows of this file */
+        if backend::rt_format_drawable(backend::GLES_SURF_RGBA8I) {
+            assert_eq!(err(), GL_NO_ERROR, "a back end that renders the format takes the clear");
+            assert!(DRAWS.lock().unwrap().iter().any(|d| d.2), "the clear was handed to the back end");
+        } else {
+            assert_eq!(err(), GL_INVALID_OPERATION, "the draw is refused when it would reach the back end");
+            assert!(DRAWS.lock().unwrap().iter().all(|d| !d.2), "nothing was handed to the back end to store");
+        }
         release(fb, &[rb]);
     }
 

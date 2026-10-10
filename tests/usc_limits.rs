@@ -3130,6 +3130,74 @@ fn an_integer_divide_is_exact_over_32_bits_on_every_sign() {
     .unwrap();
 }
 
+/// `trunc(x)` (GLSL ES 3.00 8.3) rounds toward zero on both signs: pco's
+/// `lower_ftrunc` bcsel, written as `x < 0 ? ceil(x) : floor(x)` (select.rs
+/// `Sel::alu`), four groups per component, each one pco emits. Run on the
+/// byte model over halves, integers, the 2^23 edge, a tiny value and both
+/// zeros. Revert check: with the arm removed the shader is refused
+/// (`Usc(Build(Unsupported("lowering into several groups")))`, the 24
+/// dEQP `shaders.operator.common_functions.trunc` programs); with the
+/// `movc` arms swapped every non-integer is off by one.
+#[test]
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+fn trunc_rounds_toward_zero_on_every_sign() {
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let text =
+            a.alloc_str("#version 300 es\nuniform highp vec4 u; void main(){ gl_Position = trunc(u); }").unwrap();
+        let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+        let mut image = vec![0u8; 65536];
+        let b = build_vertex(&l.module, PLACEHOLDER, a, &mut image).expect("builds");
+        let (corpus, _) = usc_exec::corpus_skeletons();
+        let mut off = 0usize;
+        let mut groups = 0;
+        while off < b.len {
+            let g = decode_group(&image[..b.len], off).expect("decodes");
+            let mut k = String::new();
+            skeleton(&mut k, &g).unwrap();
+            assert!(corpus.contains(&k), "an unattested group at {off:#x}: {k}");
+            off += g.total;
+            groups += 1;
+        }
+        assert!(groups >= 16, "four groups per component: {groups}");
+        let u = l.reflection.uniforms.iter().find(|u| u.name == "u").expect("u is a uniform").dword_off as usize;
+        let values: [f32; 20] = [
+            2.5,
+            -2.5,
+            0.5,
+            -0.5,
+            0.0,
+            -0.0,
+            3.0,
+            -3.0,
+            7.99,
+            -7.99,
+            1.0e-7,
+            -1.0e-7,
+            8_388_607.5,
+            -8_388_607.5,
+            16_777_216.0,
+            -16_777_216.0,
+            1.0e9,
+            -1.0e9,
+            0.999_999_94,
+            -0.999_999_94,
+        ];
+        for q in values.chunks(4) {
+            let mut inp = sentinel_inputs(1.0e30);
+            for (c, v) in q.iter().enumerate() {
+                inp.shared[u + c] = v.to_bits();
+            }
+            let out = run_binary(&image[..b.len], &inp, true).expect("runs");
+            for (c, v) in q.iter().enumerate() {
+                let got = f32::from_bits(out[&(c as u32)]);
+                assert_eq!(got, v.trunc(), "trunc({v}) in component {c}");
+            }
+        }
+    })
+    .unwrap();
+}
+
 /// A flat varying is read from its plane's constant, coefficient
 /// `start + 4 * c + 2`, one `mbyp` per component after the iterations, as
 /// pco reads it -- not iterated. GLSL ES 1.00 has no `flat`, so the module's
@@ -3466,6 +3534,162 @@ fn deqps_multisample_shader_keeps_samples_by_its_alpha_alone() {
         last = green.count_ones();
     }
     assert_eq!((kept([1.0, 0.0, 0.0], 0.0), kept([1.0, 0.0, 0.0], 1.0)), (0, 0xf), "alpha 0 none, alpha 1 all");
+}
+
+/// The colour output of an integer render target (`ShcIntRt`, the blend
+/// key's [5:9]), for every one of ES 3.0 table 3.13's nineteen integer
+/// layouts, run in the byte model: the pixel output dwords hold the output's
+/// integers packed as Mesa's pco packs a pure integer format
+/// (pco_nir_pvfio.c pack_to_format, :149-218) -- written down here from that
+/// rule, not from the compiler: a 32-bit channel per dword unchanged, 16-bit
+/// channels two to a dword and 8-bit four, each the low bits of its value at
+/// its place, RGB10_A2UI 10/10/10/2 -- with no `pck` in the program (no
+/// conversion, no clamp: values past a channel's range keep their low
+/// bits), and the record says the dwords it writes. A colour mask on such a
+/// target is refused by name.
+#[test]
+fn integer_render_targets_get_the_packed_bits() {
+    use yakogl::shaderc::*;
+    /* an ES 2.0 report refuses every `#version 300 es` source */
+    if yakogl::REPORT_ES2 {
+        return;
+    }
+    let layouts: [(u8, u8); 10] =
+        [(1, 8), (1, 16), (1, 32), (2, 8), (2, 16), (2, 32), (4, 8), (4, 16), (4, 32), (4, 10)];
+    let vals: [u32; 4] = [0x1234_5678, 0x8765_4321, 0xdead_beef, 0xffff_ffff];
+    let expect = |ch: u8, bits: u8| -> Vec<u32> {
+        let low = |v: u32, n: u32| if n == 32 { v } else { v & ((1 << n) - 1) };
+        match bits {
+            32 => vals[..ch as usize].to_vec(),
+            16 => (0..usize::from(ch).div_ceil(2))
+                .map(|d| {
+                    (0..2)
+                        .filter(|k| 2 * d + k < usize::from(ch))
+                        .fold(0, |a, k| a | low(vals[2 * d + k], 16) << (16 * k))
+                })
+                .collect(),
+            8 => vec![(0..usize::from(ch)).fold(0, |a, k| a | low(vals[k], 8) << (8 * k))],
+            _ => vec![low(vals[0], 10) | low(vals[1], 10) << 10 | low(vals[2], 10) << 20 | low(vals[3], 2) << 30],
+        }
+    };
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        for signed in [false, true] {
+            let (u, v) = if signed { ("ivec4", "i") } else { ("uvec4", "u") };
+            let src = format!(
+                "#version 300 es\nprecision highp float;\nuniform highp {u} u_v;\n\
+                 layout(location = 0) out highp {u} o;\nvoid main() {{\n    o = u_v;\n}}\n"
+            );
+            let text = a.alloc_str(&src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+            for (channels, bits) in layouts {
+                if bits == 10 && signed {
+                    continue; /* RGB10_A2UI only */
+                }
+                let rt = ShcIntRt { channels, bits, signed };
+                let key = shc_blend_key_int_rt(rt);
+                assert_eq!(ShcIntRt::of_key(key), Some(rt), "{v} {channels}x{bits}: the key round-trips");
+                let what = format!("{v} {channels}x{bits}");
+                let rec =
+                    yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                        .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+                let want = expect(channels, bits);
+                assert_eq!(
+                    (rec.blend_key, rec.num_outputs as usize, rec.uses_fbfetch),
+                    (key, want.len(), 0),
+                    "{what}: the record"
+                );
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+                let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+                let mut off = 0;
+                while off < image.len() {
+                    let g = decode_group(&image, off).expect("decodes");
+                    let mut t = String::new();
+                    yakogl::shaderc::online::powervr::listing::group_text(&mut t, off, &g).unwrap();
+                    assert!(!t.contains("pck"), "{what}: no pack instruction:\n{t}");
+                    off += g.total;
+                }
+                // SAFETY: the record's own count describes its own table.
+                let row = unsafe { &*rec.uniforms };
+                let mut inp = sentinel_inputs(1.0e30);
+                inp.shared[row.dword_off as usize..row.dword_off as usize + 4].copy_from_slice(&vals);
+                let out = run_binary(&image, &inp, true).expect("runs");
+                let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
+                assert_eq!(got, want, "{what}: the pixel output dwords");
+                assert_eq!(out.keys().filter(|k| **k < 8).count(), want.len(), "{what}: no other pixel output");
+                /* a colour mask on one of its channels is refused by name */
+                let masked = compile_fragment_for_err(&l, a, key | shc_blend_key_mask_off(1));
+                assert!(masked.contains("colour mask on an integer render target"), "{what}: {masked}");
+            }
+        }
+    })
+    .unwrap();
+}
+
+/// gl_test case 200's fragment shader (gltest/intrt.frag, the case's own
+/// text) on the host: for the RGBA8UI and RGBA32UI targets the case draws
+/// into, the pixel output dwords at column 5 are the uniform's integers
+/// with 5 in alpha, packed for the target -- the values the case reads
+/// back with glReadPixels(GL_RGBA_INTEGER). Case 200 on the AM62P is the
+/// deciding check.
+#[test]
+fn gl_test_case_200_intrt_on_the_host() {
+    use yakogl::shaderc::*;
+    if yakogl::REPORT_ES2 {
+        return;
+    }
+    let src = include_str!("../tools/shaders/gltest/intrt.frag");
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        for (bits, v, want) in [
+            (8u8, [200u32, 17, 3], vec![200 | 17 << 8 | 3 << 16 | 5 << 24]),
+            (32, [0x8000_0001, 70000, 5], vec![0x8000_0001, 70000, 5, 5]),
+        ] {
+            let rt = ShcIntRt { channels: 4, bits, signed: false };
+            let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                &l.module,
+                &l.reflection,
+                a,
+                shc_blend_key_int_rt(rt),
+            )
+            .unwrap_or_else(|e| panic!("rgba{bits}ui: {e:?}"));
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            // SAFETY: the record's own count describes its own table.
+            let rows = unsafe { core::slice::from_raw_parts(rec.uniforms, rec.num_uniforms as usize) };
+            let row = rows.iter().find(|r| r.dword_off != SHC_UNIFORM_NO_BLOCK).expect("u_v in the block");
+            let mut inp = sentinel_inputs(1.0e30);
+            inp.shared[row.dword_off as usize..row.dword_off as usize + 3].copy_from_slice(&v);
+            /* gl_FragCoord.y's pair, where the record says the driver puts it */
+            if rec.fragcoord_ytf_off1 != 0 {
+                let at = rec.fragcoord_ytf_off1 as usize - 1;
+                inp.shared[at] = 1.0f32.to_bits();
+                inp.shared[at + 1] = 0.0f32.to_bits();
+            }
+            let x = 5.5f32.to_bits();
+            inp.frag_xy = [x, x, 3.5f32.to_bits(), 3.5f32.to_bits()];
+            let out = run_binary(&image, &inp, true).expect("runs");
+            let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
+            assert_eq!(got, want, "rgba{bits}ui at column 5");
+        }
+    })
+    .unwrap();
+}
+
+/// The refusal of a variant, as text.
+fn compile_fragment_for_err<'a>(
+    l: &lower::Lowered<'a>,
+    a: &'a yakogl::shaderc::online::arena::Arena<'a>,
+    key: u32,
+) -> String {
+    match yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key) {
+        Ok(_) => "compiled".into(),
+        Err(e) => format!("{e:?}"),
+    }
 }
 
 /// gl_test case 182's two fragment shaders, on the host: the folded clamps
@@ -3828,6 +4052,140 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
         let got = *out.get(&0).expect("a colour");
         let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((want >> (8 * k)) & 0xff) <= 1);
         assert!(close, "{got:#010x}, case 191 wants {want:#010x}\n{listing}");
+    })
+    .unwrap();
+}
+
+/// gl_test case 199's two programs, on the host, from the files it compiles
+/// (tools/shaders/gltest/es3trunc_*): `trunc` of 2.75 and -2.75 and the
+/// integer shifts `(-6 >> 1) - (-6 << 3)` and `200u >> 2u`, computed in the
+/// fragment stage from the varying (es3trunc_fs.frag) and in the vertex
+/// stage from the uniforms (es3trunc_vsc.vert), each the case's colour
+/// (0.5, 0.25, 45/64, 50/64) on the byte model.
+#[test]
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+fn gl_test_case_199_trunc_and_shifts_on_the_host() {
+    use yakogl::shaderc::*;
+    let fs = include_str!("../tools/shaders/gltest/es3trunc_fs.frag");
+    let vsc = include_str!("../tools/shaders/gltest/es3trunc_vsc.vert");
+    let gl_test = include_str!("../driver/tools/pvrlab/gl_test.c");
+    assert!(
+        gl_test.contains("gl_test_es3trunc_fs_src") && gl_test.contains("gl_test_es3trunc_vsc_vs_src"),
+        "case 199 links gltest/es3trunc_fs.frag and gltest/es3trunc_vsc.vert"
+    );
+    let want = [0.5f32, 0.25, 45.0 / 64.0, 50.0 / 64.0];
+    let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
+    let vals = [2.75f32, -6.0, 200.0, 0.0];
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(fs).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+            &l.module,
+            &l.reflection,
+            a,
+            SHC_BLEND_KEY_REPLACE,
+        )
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut inp = sentinel_inputs(1.0e30);
+        let mut at = 4usize;
+        for v in &rec.varyings[..rec.num_varyings as usize] {
+            for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+                inp.coeff[at + 4 * c] = x.to_bits();
+                inp.coeff[at + 4 * c + 2] = x.to_bits();
+            }
+            at += 4 * v.components as usize;
+        }
+        let out = run_binary(&image, &inp, true).expect("runs");
+        let got = *out.get(&0).expect("a colour");
+        let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((rgba(want) >> (8 * k)) & 0xff) <= 1);
+        assert!(close, "fragment: {got:#010x}, case 199 wants {:#010x}", rgba(want));
+    })
+    .unwrap();
+    store::with_scratch(|a| {
+        let text = a.alloc_str(vsc).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Vertex, text).map_err(|e| e.msg).unwrap();
+        let mut image = vec![0u8; 65536];
+        let b = build_vertex(&l.module, PLACEHOLDER, a, &mut image).expect("builds");
+        let mut inp = sentinel_inputs(1.0e30);
+        for (name, x) in ["u_x", "u_q", "u_a", "u_b"].iter().zip(vals) {
+            let u = l.reflection.uniforms.iter().find(|u| u.name == *name).expect("a uniform").dword_off as usize;
+            inp.shared[u] = x.to_bits();
+        }
+        let out = run_binary(&image[..b.len], &inp, true).expect("runs");
+        /* gl_Position is outputs 0..3 (a_pos, not placed here); v follows */
+        let v: Vec<f32> = (4..8).map(|k| f32::from_bits(out[&k])).collect();
+        assert_eq!(v, want, "vertex: v");
+    })
+    .unwrap();
+}
+
+/// A `centroid in` (ES 3.00 4.3.9) is iterated as pco iterates one:
+/// `ditrp` with `iter_mode` centroid (pco_trans_nir.c trans_load_input_fs,
+/// PCO_ITR_MODE_CENTROID), the smooth input beside it at the pixel centre.
+/// Single-sampled the centroid is the centre, so on the byte model both
+/// read their planes' values; the record says which input is centroid
+/// (interp 3), which the PDS iterates as smooth. These were refused
+/// (`Usc(FragmentInputsNotBuilt)`, dEQP's 9 linkage / qualification_order
+/// programs). Revert check: with the chain's filter back to smooth and
+/// flat, the shader is refused.
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_centroid_input_is_iterated_at_the_centroid() {
+    use yakogl::shaderc::*;
+    let src = "#version 300 es
+precision highp float;
+centroid in vec2 c;
+in float s;
+out vec4 o;
+void main() { o = vec4(c, s, 1.0); }
+";
+    let _scratch = scratch_lock();
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+            &l.module,
+            &l.reflection,
+            a,
+            SHC_BLEND_KEY_REPLACE,
+        )
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut listing = String::new();
+        yakogl::shaderc::online::powervr::decode::for_each_group(&image, |off, g| {
+            yakogl::shaderc::online::powervr::listing::group_text(&mut listing, off, g).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let iterates: Vec<&str> = listing.split("\n[").filter(|g| g.contains("ditrp")).collect();
+        assert_eq!(iterates.len(), 2, "one ditrp per varying\n{listing}");
+        let centroid = iterates.iter().filter(|g| g.contains("mode=centroid")).count();
+        assert_eq!(centroid, 1, "c iterated at the centroid, s at the pixel\n{listing}");
+        let interps: Vec<(String, u8)> = rec.varyings[..rec.num_varyings as usize]
+            .iter()
+            .map(|v| (v.name.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect(), v.interp))
+            .collect();
+        assert_eq!(interps, [("c".to_string(), 3), ("s".to_string(), 0)], "the record's interpolation");
+        let mut inp = sentinel_inputs(1.0e30);
+        let mut at = 4usize;
+        for (v, vals) in rec.varyings[..rec.num_varyings as usize].iter().zip([[0.25f32, 0.5], [0.75, 0.0]]) {
+            for (c, x) in vals.iter().enumerate().take(v.components as usize) {
+                inp.coeff[at + 4 * c] = x.to_bits();
+                inp.coeff[at + 4 * c + 2] = x.to_bits();
+            }
+            at += 4 * v.components as usize;
+        }
+        let out = run_binary(&image, &inp, true).expect("runs");
+        let got = *out.get(&0).expect("a colour");
+        assert_eq!(got, 0xff_bf_80_40, "(0.25, 0.5, 0.75, 1) in RGBA8\n{listing}");
     })
     .unwrap();
 }
@@ -5533,10 +5891,10 @@ void main() { colour = texture(s, vec3(uv, 1.0), bias); }
 /// The ES 1.00 spellings of a bias, `texture2D(s, uv, b)`,
 /// `textureCube(s, d, b)` and `texture2DProj(s, p, b)` (which the front
 /// end writes as the divide and then the 2D bias, builtin_call.rs), reach
-/// the same selection; a bias the back end has no form for -- ES 3.00's
-/// `textureProj(s, p, b)`, whose data block would need a fourth word, or
-/// one on a 3D texture -- is refused by name, not sampled at the implicit
-/// level.
+/// the same selection, and so do ES 3.00's `textureProj(s, p, b)` (the
+/// divide in the shader, select.rs `tex_coords`) and a bias on a 3D
+/// texture; a look-up the back end has no form for -- an offset on a 3D
+/// texture's grid of slices -- is refused by name, not sampled without it.
 #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
 #[test]
 fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
@@ -5548,17 +5906,6 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
          void main(){ gl_FragColor = textureCube(s, d, b); }",
         "precision highp float; uniform sampler2D s; uniform float b; varying vec3 uv; \
          void main(){ gl_FragColor = texture2DProj(s, uv, b); }",
-    ] {
-        store::with_scratch(|a| {
-            let _keep = store::begin_keep().expect("keep");
-            let text = a.alloc_str(src).unwrap();
-            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
-            compile_fragment(&l.module, &l.reflection, a).unwrap_or_else(|e| panic!("{src}: {e:?}"));
-        })
-        .unwrap();
-    }
-    const WHY: &str = "a texture fetch with a projective level or bias, a bias on a 3D texture";
-    for src in [
         "#version 300 es\nprecision highp float; uniform highp sampler2D s; uniform float b; in vec3 p; \
          out vec4 o; void main(){ o = textureProj(s, p, b); }",
         "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
@@ -5568,11 +5915,21 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
             let _keep = store::begin_keep().expect("keep");
             let text = a.alloc_str(src).unwrap();
             let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
-            let err = compile_fragment(&l.module, &l.reflection, a).err();
-            assert!(format!("{err:?}").contains(WHY), "{src}: {err:?}");
+            compile_fragment(&l.module, &l.reflection, a).unwrap_or_else(|e| panic!("{src}: {e:?}"));
         })
         .unwrap();
     }
+    const WHY: &str = "an offset on a stacked texture";
+    let src = "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
+               out vec4 o; void main(){ o = textureOffset(s, p, ivec3(1, 0, 0), b); }";
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+        let err = compile_fragment(&l.module, &l.reflection, a).err();
+        assert!(format!("{err:?}").contains(WHY), "{src}: {err:?}");
+    })
+    .unwrap();
 }
 
 /// `pvr_proj_lod`: an implicit-level sample of a smooth varying read as it is
@@ -6231,6 +6588,102 @@ void main() {{ colour = 0.5 * (texture({name}, c) + textureLod({name}, c.yxz, le
     let px = stacked_against_ir(&name, &src, &refs);
     let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
     assert!(distinct.len() >= 5, "the depths read too few distinct pixels: {px:08x?}");
+}
+
+/// A bias on a 3D texture and a projective 3D look-up (dEQP
+/// texture.mipmap.3d's bias cases and texture_functions' sampler3d_bias and
+/// textureProj on a sampler3D): the bias applies to the grid image's
+/// implicit level, as on a 2D array's and a cube's stacked images, and
+/// textureProj divides x, y and z by w in the shader (select.rs
+/// `tex_coords`). Ours equals the IR at four biases and four divisors, and
+/// the biases read different pixels. Revert check: without the 3D arm's
+/// Bias the shader is refused ("a texture fetch with ...").
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_3d_texture_takes_a_bias_and_a_projective_look_up_divides_in_the_shader() {
+    let name = (0..2000)
+        .map(|i| format!("s{i}"))
+        .find(|n| {
+            let [w, h] = usc_exec::tex_size_2d(usc_exec::tex_state(sampler_marker(n)), 0);
+            w >= 3 * 256 && h >= 2 * 256
+        })
+        .expect("a sampler name with a wide and tall model image");
+    let src = format!(
+        "#version 300 es
+precision highp float;
+uniform float pvr_layers_{name};
+uniform highp sampler3D {name};
+uniform vec3 c;
+uniform float bias;
+uniform float q;
+out vec4 colour;
+void main() {{ colour = 0.5 * (texture({name}, c, bias) + textureProj({name}, vec4(c.yxz * q, q))); }}
+"
+    );
+    let layers_name = format!("pvr_layers_{name}");
+    let cases: Vec<BoxedInput> = [(0.0f32, 1.0f32), (1.25, 2.0), (2.0, 0.5), (3.5, 4.0)]
+        .into_iter()
+        .map(|(b, q)| -> BoxedInput {
+            let layers_name = layers_name.clone();
+            Box::new(move |k: &str, c: u32| {
+                if k == layers_name {
+                    5.0f32.to_bits()
+                } else if k == "c" {
+                    [0.3f32, 0.6, 0.45][c as usize].to_bits()
+                } else if k == "bias" {
+                    b.to_bits()
+                } else if k == "q" {
+                    q.to_bits()
+                } else {
+                    0
+                }
+            })
+        })
+        .collect();
+    let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+    let px = stacked_against_ir(&name, &src, &refs);
+    let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
+    assert_eq!(distinct.len(), 4, "four biases read the same pixel: {px:08x?}");
+}
+
+/// textureProj with a level or a bias on a 2D sampler (dEQP
+/// texture_functions' textureprojlod and textureproj *_bias, and every
+/// vertex-stage textureProj, whose implicit level is level 0): the divide
+/// in the shader, then the look-up a textureLod / biased texture() is --
+/// the builder has no `smp` form holding both the divisor and a level word.
+/// Ours equals the IR at four divisors with a vec3 and a vec4 coordinate,
+/// and the levels and biases read different pixels.
+#[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+#[test]
+fn a_projective_2d_look_up_takes_a_level_or_a_bias() {
+    let name = tall_sampler(64);
+    let src = format!(
+        "#version 300 es
+precision highp float;
+uniform highp sampler2D {name};
+uniform vec3 p;
+uniform float lvl;
+out vec4 colour;
+void main() {{ colour = 0.5 * (textureProjLod({name}, p, lvl) + textureProj({name}, vec4(p.yx, 0.0, p.z), lvl)); }}
+"
+    );
+    let cases: Vec<BoxedInput> =
+        [(0.3f32, 0.7f32, 1.0f32, 0.0f32), (0.3, 0.7, 2.0, 1.0), (0.9, 0.2, 0.5, 2.0), (0.15, 0.45, 3.0, 3.0)]
+            .into_iter()
+            .map(|(x, y, q, l)| -> BoxedInput {
+                Box::new(move |n: &str, c: u32| match (n, c) {
+                    ("p", 0) => x.to_bits(),
+                    ("p", 1) => y.to_bits(),
+                    ("p", 2) => q.to_bits(),
+                    ("lvl", 0) => l.to_bits(),
+                    _ => 0,
+                })
+            })
+            .collect();
+    let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+    let px = stacked_against_ir(&name, &src, &refs);
+    let distinct: std::collections::BTreeSet<u32> = px.iter().copied().collect();
+    assert_eq!(distinct.len(), 4, "the divisors and levels read too few pixels: {px:08x?}");
 }
 
 /// textureSize and texelFetch of a 3D texture, as glsl2usc's pvr_volSize

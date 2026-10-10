@@ -200,6 +200,9 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                 ('gl_test_es300_vol_fs_src', 'es300/vol.frag'),
                 ('gl_test_es300_facing_fs_src', 'es300/facing.frag'),
                 ('gl_test_es300_hdrsample_fs_src', 'es300/hdrsample.frag'),
+                ('gl_test_es300_intrt_fs_src', 'gltest/intrt.frag'),
+                ('gl_test_es300_usamp_fs_src', 'gltest/usamp.frag'),
+                ('gl_test_es300_isamp_fs_src', 'gltest/isamp.frag'),
                 ('gl_test_es300_flatlast_vs_src', 'es300/flatlast.vert'),
                 ('gl_test_es300_flatlast_fs_src', 'es300/flatlast.frag'),
                 ('gl_test_deriv_vs_src', 'es100/deriv.vert',
@@ -296,6 +299,11 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                 ('gl_test_tsf_vs_src', 'gltest/tsf_vs.vert'),
                 ('gl_test_unipad_fs_src', 'gltest/unipad_fs.frag'),
                 ('gl_test_unipad_vs_src', 'gltest/unipad_vs.vert'),
+                ('gl_test_es3trunc_fs_src', 'gltest/es3trunc_fs.frag',
+                 'trunc() on both signs and integer shifts, per pixel and per vertex (case 199).'),
+                ('gl_test_es3trunc_vs_src', 'gltest/es3trunc_vs.vert'),
+                ('gl_test_es3trunc_vsc_vs_src', 'gltest/es3trunc_vsc.vert'),
+                ('gl_test_es3trunc_vary_fs_src', 'gltest/es3trunc_vary_fs.frag'),
                 ('gl_test_varyfma_fs_src', 'gltest/varyfma_fs.frag'),
                 ('gl_test_varyfma_vs_src', 'gltest/varyfma_vs.vert'),
                 ('gl_test_vsunits_fs_src', 'gltest/vsunits_fs.frag'),
@@ -334,7 +342,7 @@ ES100_TWINS = {
 # every case that mentions one of the fourteen ES 3.00 symbols, read out of
 # gl_test.c's own text (case 54 is called es3chain and is absent from this list
 # because it draws with the base pair, which does have ES 1.00 twins).
-ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163)
+ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199, 200, 201)
 
 
 def es300_cases_used():

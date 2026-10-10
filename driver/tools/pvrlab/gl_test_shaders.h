@@ -6935,6 +6935,42 @@ static const char gl_test_es300_hdrsample_fs_src[] =
 	"    fragColor = texture(hdr, v_xy * 0.5 + 0.5) * 0.25;\n"
 	"}\n";
 
+static const char gl_test_es300_intrt_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"uniform highp uvec4 u_v;\n"
+	"layout(location = 0) out highp uvec4 o_v;\n"
+	"void main()\n"
+	"{\n"
+	"    // an integer target's output: the uniform's integers with the pixel's\n"
+	"    // column in alpha, written unconverted (gl_test case 200, intrt)\n"
+	"    o_v = uvec4(u_v.xyz, uint(gl_FragCoord.x));\n"
+	"}\n";
+
+static const char gl_test_es300_usamp_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"uniform highp usampler2D u_tex;\n"
+	"in vec2 v_xy;\n"
+	"layout(location = 0) out vec4 fragColor;\n"
+	"void main()\n"
+	"{\n"
+	"    // an unsigned integer texel read as integers, shown as bytes (gl_test case 201, usamp)\n"
+	"    fragColor = vec4(texture(u_tex, v_xy * 0.5 + 0.5)) / 255.0;\n"
+	"}\n";
+
+static const char gl_test_es300_isamp_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"uniform highp isampler2D u_tex;\n"
+	"layout(location = 0) out vec4 fragColor;\n"
+	"void main()\n"
+	"{\n"
+	"    // a signed integer texel fetched as integers, sign extended, shown\n"
+	"    // offset by 128 (gl_test case 201, usamp): 2x2 texels over the 64x64 target\n"
+	"    fragColor = vec4(texelFetch(u_tex, ivec2(gl_FragCoord.xy) / 32, 0) + 128) / 255.0;\n"
+	"}\n";
+
 static const char gl_test_es300_flatlast_vs_src[] =
 	"#version 300 es\n"
 	"// gl_test case 89 \"flatlast\": flat varyings take the PROVOKING vertex's\n"
@@ -8280,6 +8316,50 @@ static const char gl_test_unipad_vs_src[] =
 	"attribute vec2 a_pos;\n"
 	"uniform vec2 u_scale;\n"
 	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
+
+/* trunc() on both signs and integer shifts, per pixel and per vertex (case 199). */
+static const char gl_test_es3trunc_fs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 199: trunc() on both signs, and integer shifts (arithmetic on a\n"
+	" * negative int, logical on a uint), of values a varying carries exactly. */\n"
+	"precision highp float;\n"
+	"precision highp int;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() {\n"
+	"    int i = int(v.y);\n"
+	"    uint u = uint(v.z);\n"
+	"    o_color = vec4((trunc(v.x) + 2.0) * 0.125, (trunc(-v.x) + 4.0) * 0.125,\n"
+	"                   float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vs_src[] =
+	"#version 300 es\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() { gl_Position = a_pos; v = vec4(u_x, u_q, u_a, u_b); }\n";
+
+static const char gl_test_es3trunc_vsc_vs_src[] =
+	"#version 300 es\n"
+	"/* gl_test 199: es3trunc_fs.frag's arithmetic in the vertex stage. */\n"
+	"in vec4 a_pos;\n"
+	"uniform float u_x, u_q, u_a, u_b;\n"
+	"out vec4 v;\n"
+	"void main() {\n"
+	"    int i = int(u_q);\n"
+	"    uint u = uint(u_a);\n"
+	"    gl_Position = a_pos;\n"
+	"    v = vec4((trunc(u_x) + 2.0) * 0.125, (trunc(-u_x) + 4.0) * 0.125,\n"
+	"             float((i >> 1) - (i << 3)) / 64.0, float(u >> 2u) / 64.0);\n"
+	"}\n";
+
+static const char gl_test_es3trunc_vary_fs_src[] =
+	"#version 300 es\n"
+	"precision highp float;\n"
+	"in vec4 v;\n"
+	"out vec4 o_color;\n"
+	"void main() { o_color = v; }\n";
 
 static const char gl_test_varyfma_fs_src[] =
 	"#version 100\n"

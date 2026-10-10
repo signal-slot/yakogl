@@ -644,6 +644,19 @@ impl<'a> Sema<'_, 'a> {
                  *
                  * The built-ins are reached by the other form, `invariant
                  * gl_Position;`, which is `Decl::Invariant` and is not this. */
+                /* ES 3.00 narrows the list to what a shader outputs (section
+                 * 4.6.1: "Only variables output from a shader can be
+                 * candidates for invariance"): a fragment shader's `in` is
+                 * not one. ES 1.00 lets either side of a varying be
+                 * invariant, and must match them (its 4.6.4). dEQP
+                 * qualification_order.variables.invalid.*_invariant_input. */
+                if *invariant && self.ast.es3 && self.stage == Stage::Fragment && storage == StorageQualifier::Varying {
+                    return Err(Error::new(
+                        line,
+                        name,
+                        "a fragment shader input may not be invariant (section 4.6.1: only outputs)",
+                    ));
+                }
                 if *invariant && storage != StorageQualifier::Varying {
                     return Err(Error::new(line, name, "only a varying or a built-in variable may be invariant"));
                 }
@@ -703,6 +716,17 @@ impl<'a> Sema<'_, 'a> {
                 self.declare(Symbol { name, kind: NameKind::Variable, ty: vty, storage, is_param: false }, line)
             }
             Decl::Function { name, ret, params, body, line } => {
+                /* ES 3.00 section 6.1: "Function declarations (prototypes)
+                 * cannot occur inside of functions; they must be at global
+                 * scope" (dEQP functions.invalid.local_function_{prototype,
+                 * definition}, refused only by the lowering before). */
+                if !global && self.ast.es3 {
+                    return Err(Error::new(
+                        *line,
+                        name,
+                        "a function can be declared only at global scope (section 6.1)",
+                    ));
+                }
                 /* Section 4.1.7: samplers "cannot be used as out or inout
                  * function parameters. These restrictions also apply to any
                  * structures that contain sampler types." */
@@ -816,7 +840,19 @@ impl<'a> Sema<'_, 'a> {
                 }
                 Ok(())
             }
-            Decl::Invariant { .. } => Ok(()),
+            /* `invariant x;` of a fragment input: the same ES 3.00 rule
+             * as the qualifier written in its declaration */
+            Decl::Invariant { name, line } => {
+                let input = self.lookup(name).is_some_and(|s| s.storage == StorageQualifier::Varying);
+                if self.ast.es3 && self.stage == Stage::Fragment && input {
+                    return Err(Error::new(
+                        *line,
+                        name,
+                        "a fragment shader input may not be invariant (section 4.6.1: only outputs)",
+                    ));
+                }
+                Ok(())
+            }
         }
     }
 
@@ -1003,6 +1039,14 @@ impl<'a> Sema<'_, 'a> {
 
     /* ---- statements ---------------------------------------------------- */
 
+    /// `s` in a scope of its own (the grammar's `statement_with_scope`).
+    fn scoped_stmt(&mut self, s: StmtId) -> R<'a, ()> {
+        self.push_scope()?;
+        let r = self.stmt(s);
+        self.pop_scope();
+        r
+    }
+
     fn stmt(&mut self, id: StmtId) -> R<'a, ()> {
         match *self.ast.stmt(id) {
             Stmt::Expr(None) => Ok(()),
@@ -1020,12 +1064,17 @@ impl<'a> Sema<'_, 'a> {
                 self.pop_scope();
                 out
             }
+            /* Each arm is a `statement_with_scope` (the grammar of both
+             * versions, section 9; ES 3.00 section 6.2): a declaration that
+             * is an arm by itself, `if (c) float a = 1.0;`, is not seen
+             * after the `if` (dEQP scoping.invalid.use_variable_from_{if,
+             * else}_in_outer_scope). */
             Stmt::If { cond, then_s, else_s } => {
                 let c = self.expr(cond)?;
                 self.require_bool(&c.ty)?;
-                self.stmt(then_s)?;
+                self.scoped_stmt(then_s)?;
                 match else_s {
-                    Some(e) => self.stmt(e),
+                    Some(e) => self.scoped_stmt(e),
                     None => Ok(()),
                 }
             }
@@ -1035,9 +1084,10 @@ impl<'a> Sema<'_, 'a> {
                 self.pop_scope();
                 r
             }
+            /* `do statement_with_scope while (...)`, as an `if` arm */
             Stmt::DoWhile { body, cond } => {
                 self.loop_depth += 1;
-                let r = self.stmt(body);
+                let r = self.scoped_stmt(body);
                 self.loop_depth -= 1;
                 r?;
                 let c = self.expr(cond)?;
@@ -3548,6 +3598,44 @@ mod tests {
         ok("varying mediump vec3 Color; invariant Color; void main() { gl_FragColor = vec4(Color, 1.0); }");
     }
 
+    /// ES 3.00 section 4.6.1: "Only variables output from a shader can be
+    /// candidates for invariance", so a fragment shader's `in` may not be
+    /// invariant, in its declaration or by `invariant x;`; a vertex
+    /// output may, and ES 1.00's fragment varying still may (dEQP
+    /// qualification_order.variables.invalid.*_invariant_input, 7 cases,
+    /// which the GC7000 built). Revert check: without the rule the four
+    /// refusals here compile.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn an_es3_fragment_input_may_not_be_invariant() {
+        use crate::shaderc::online::{lower, store};
+        const WHY: &str = "a fragment shader input may not be invariant (section 4.6.1: only outputs)";
+        /* through the front end as glCompileShader reaches it: `resolve_io`
+         * gives each `in` / `out` its storage before the check */
+        let compile = |stage: Stage, src: &str| -> Result<(), std::string::String> {
+            let _l = store::test_lock();
+            store::with_scratch(|a| {
+                let text = a.alloc_str(src).unwrap();
+                lower::compile_to_ir(a, stage, text).map(|_| ()).map_err(|e| std::string::String::from(e.msg))
+            })
+            .unwrap()
+        };
+        let head = "#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 o;\n";
+        for decl in [
+            "invariant in float x;",
+            "invariant smooth centroid in float x;",
+            "invariant flat in float x;",
+            "in float x; invariant x;",
+        ] {
+            let src = std::format!("{head}{decl}\nvoid main() {{ o = vec4(x); }}");
+            assert_eq!(compile(Stage::Fragment, &src), Err(WHY.into()), "{decl}");
+        }
+        let vs = "#version 300 es\ninvariant out vec4 v; void main() { v = vec4(1.0); gl_Position = v; }";
+        assert_eq!(compile(Stage::Vertex, vs), Ok(()), "a vertex output may be invariant");
+        let es1 = "precision mediump float; invariant varying vec3 c; void main() { gl_FragColor = vec4(c, 1.0); }";
+        assert_eq!(compile(Stage::Fragment, es1), Ok(()), "an ES 1.00 fragment varying may be invariant");
+    }
+
     /// Section 6.1, on what makes two declarations the same function:
     /// "This includes exact match of array size as well."
     ///
@@ -3584,6 +3672,46 @@ mod tests {
         assert_eq!(fails("void main() { y = 1.0; }"), "undeclared identifier");
         /* A local goes out of scope at the end of its block. */
         assert_eq!(fails("void main() { { float x = 1.0; } x = 2.0; }"), "undeclared identifier");
+        /* An `if` arm and a `do` body are each a scope, braces or not
+         * (`statement_with_scope`): a declaration that is the whole arm
+         * ends with it (dEQP scoping.invalid.use_variable_from_{if,else}_
+         * in_outer_scope, refused only by the lowering before), and may
+         * shadow an outer name. Revert check: without `scoped_stmt` the
+         * three refusals compile in sema. */
+        assert_eq!(fails("void main() { if (true) float a = 1.0; gl_FragColor = vec4(a); }"), "undeclared identifier");
+        assert_eq!(
+            fails("void main() { if (false) {} else float b = 1.0; gl_FragColor = vec4(b); }"),
+            "undeclared identifier"
+        );
+        assert_eq!(
+            fails("void main() { do float c = 1.0; while (false); gl_FragColor = vec4(c); }"),
+            "undeclared identifier"
+        );
+        ok("void main() { float a = 0.5; if (true) float a = 1.0; gl_FragColor = vec4(a); }");
+    }
+
+    /// ES 3.00 section 6.1: a function prototype or definition inside a
+    /// function body is an error (dEQP functions.invalid.local_function_
+    /// {prototype,definition}, which only the lowering refused, as "this
+    /// statement is not lowered yet"). Revert check: without the rule the
+    /// prototype compiles in sema.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn an_es3_function_is_declared_at_global_scope_only() {
+        const WHY: &str = "a function can be declared only at global scope (section 6.1)";
+        let es3 = "#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 o;\n";
+        assert_eq!(
+            fails_stage(&std::format!("{es3}void main() {{ float func(float f); o = vec4(1.0); }}"), Stage::Fragment),
+            WHY
+        );
+        assert_eq!(
+            fails_stage(
+                &std::format!("{es3}void main() {{ float func(float f) {{ return 1.0; }} o = vec4(1.0); }}"),
+                Stage::Fragment
+            ),
+            WHY
+        );
+        ok_stage(&std::format!("{es3}float func(float f);\nvoid main() {{ o = vec4(func(1.0)); }}\nfloat func(float f) {{ return f; }}"), Stage::Fragment);
     }
 
     #[test]

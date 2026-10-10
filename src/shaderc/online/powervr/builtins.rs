@@ -257,7 +257,9 @@ pub fn shape(op: AluOp) -> Shape {
 
         /* more than one group: the builder will emit a sequence */
         Fsqrt => Shape::Lower("frsq then frcp; pco sets nir lower_fsqrt"),
-        Ftrunc => Shape::Lower("floor of |x| with the sign restored; pco sets nir lower_ftrunc"),
+        /* pco sets nir lower_ftrunc; selection writes it as a `tst`, an
+         * `fceil`, a floored `fadd` and a `movc` (`Sel::alu`). */
+        Ftrunc => Shape::SelectionExpands("x < 0 ? ceil(x) : floor(x), nir lower_ftrunc's bcsel"),
         Ffract => Shape::Lower("x - floor(x); pco sets nir lower_ffract"),
         Fdot2 | Fdot3 | Fdot4 => Shape::SelectionExpands(
             "fmul then fmad per component; this machine has no dot, and three source slots cannot carry six operands",

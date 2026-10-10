@@ -420,27 +420,55 @@ fn usc_pixel_output_ctrl(width: u32) -> u32 {
 /// answer; the DDK firmware here reserves 8192 dwords). Not a Mesa value.
 const RESERVED_PARTITION_DWORDS: u32 = 8192;
 
-/// Tiles in flight for a frame of `samples`, as Mesa's
-/// `pvr_arch_setup_tiles_in_flight` (vulkan/pvr_arch_job_common.c) computes
-/// it for the BXS-4-64 (common/device_info/bxs-4-64.h: isp_samples_per_pixel
-/// 4, 16x16 tiles, max_partitions 16, isp_max_tiles_in_flight 6, one raster
-/// pipe, simple_parameter_format_version 2, paired tiles not requested) with
-/// the pixel width at `usc_min_output_registers_per_pix` (2). That reproduces
-/// both captured values -- PIPE(5) at one sample, PIPE(3) at 4x -- and is
-/// the one thing taken differently from Mesa, which derives this and
-/// CR_USC_PIXEL_OUTPUT_CTRL.width from the same pixel width: at the four
-/// registers the output control says, Mesa would allow two tiles at 4x.
-fn isp_tiles_in_flight(samples: u32) -> u32 {
-    const PIXEL_WIDTH: u32 = 2; /* usc_min_output_registers_per_pix */
+/// The output registers a pixel has under CR_USC_PIXEL_OUTPUT_CTRL.width
+/// (ROGUE_CR_PIXEL_WIDTH: 0: 2, 1: 4, 2: 8, 3: 1).
+fn pixel_width_regs(width: u32) -> u32 {
+    match width & 3 {
+        csb::ROGUE_CR_PIXEL_WIDTH_2REGISTERS => 2,
+        csb::ROGUE_CR_PIXEL_WIDTH_4REGISTERS => 4,
+        csb::ROGUE_CR_PIXEL_WIDTH_8REGISTERS => 8,
+        _ => 1,
+    }
+}
+
+/// Tiles in flight for a frame of `samples` whose pixels have `pixel_regs`
+/// output registers (the width CR_USC_PIXEL_OUTPUT_CTRL says), as Mesa's
+/// `pvr_arch_setup_tiles_in_flight` (vulkan/pvr_arch_job_common.c, Mesa
+/// 26.2.1, MIT) computes it for the BXS-4-64 (common/device_info/bxs-4-64.h:
+/// isp_samples_per_pixel 4, 16x16 tiles, max_partitions 16,
+/// isp_max_tiles_in_flight 6, usc_min_output_registers_per_pix 2, one raster
+/// pipe, simple_parameter_format_version 2, paired tiles not requested). A
+/// tile takes a USC partition of `pixel_regs` x samples x 256 dwords, and
+/// the ISP may hold no more tiles than the reserved partition store fits.
+/// Mesa derives this and the output control's width from the same pixel
+/// width; so does this. At the four registers this backend programs that is
+/// six tiles at one sample (PIPE(5), the DDK capture's value) and two at 4x.
+///
+/// It used to take the pixel at two registers whatever the width said, which
+/// let the ISP have four 4x tiles in flight against a store that holds two
+/// of the partitions the USC then allocates. gl_test 198's 4x picture --
+/// 1024 alpha-to-coverage triangles over 64x64 pixels, 64 objects a 16x16
+/// tile -- locked the fragment DM up on the AM62P with no USC slot in use
+/// and no page fault (firmware: DM3 timed out, phase count 0; HWR type
+/// UNKNOWNFAILURE), twice, both pictures lost (records/am62p/
+/// 20261010-1515-c196-198-452d6c31-e85a4597). dEQP's same picture over
+/// 256x256 (four objects a tile) passed with the same words, as
+/// gl_test 16's one 4x triangle does: the over-commit needs objects enough
+/// a tile. Nothing else in the 4x kick contradicts another of its words or
+/// Mesa's sizing (HWRT, ZLS extents); a board run of case 198 is the
+/// confirmation that this was the lockup.
+fn isp_tiles_in_flight(samples: u32, pixel_regs: u32) -> u32 {
+    const USC_MIN_OUTPUT_REGS: u32 = 2; /* usc_min_output_registers_per_pix */
     const TILE_DWORDS: u32 = 16 * 16; /* tile_size_x * tile_size_y */
     const ISP_MAX_TILES_IN_FLIGHT: u32 = 6;
-    let partition = PIXEL_WIDTH * samples.clamp(1, 4) * TILE_DWORDS;
+    let width = pixel_regs.max(USC_MIN_OUTPUT_REGS).next_power_of_two();
+    let partition = width * samples.clamp(1, 4) * TILE_DWORDS;
     let usable = RESERVED_PARTITION_DWORDS.min(partition * BXS_MAX_PARTITIONS);
     let partitions_available = BXS_MAX_PARTITIONS.min(usable / partition);
     /* one phantom (num_raster_pipes): the USC's tiles are the partitions,
      * the ISP's at most isp_max_tiles_in_flight of them (version 2 caps the
      * total by the partitions again, which changes nothing here) */
-    ISP_MAX_TILES_IN_FLIGHT.min(partitions_available)
+    ISP_MAX_TILES_IN_FLIGHT.min(partitions_available).max(1)
 }
 
 /// CR_ISP_CTL as Mesa's `pvr_render_job_ws_fragment_state_init`
@@ -453,9 +481,9 @@ fn isp_tiles_in_flight(samples: u32) -> u32 {
 /// clears it: a divergence from Mesa kept to keep today's bytes, an open
 /// question), `dbias_is_int` for an integer ZLS format
 /// on a core with ERN 42307, and `pipe_enable` = tiles in flight - 1
-/// (`pvr_arch_setup_tiles_in_flight`). 0x8003_5000 at one sample, 0x8003_3000
-/// at 4x: the values the DDK capture had.
-fn isp_ctl(samples: u32, dbias_is_int: bool) -> u32 {
+/// ([`isp_tiles_in_flight`] for the frame's samples and pixel width).
+/// 0x8003_5000 at one sample, 0x8003_1000 at 4x, with four registers a pixel.
+fn isp_ctl(samples: u32, pixel_regs: u32, dbias_is_int: bool) -> u32 {
     csb_pack!(
         ROGUE_CR_ISP_CTL_pack,
         1,
@@ -464,7 +492,7 @@ fn isp_ctl(samples: u32, dbias_is_int: bool) -> u32 {
             process_empty_tiles: true,
             sample_pos: true,
             dbias_is_int,
-            pipe_enable: isp_tiles_in_flight(samples) - 1,
+            pipe_enable: isp_tiles_in_flight(samples, pixel_regs) - 1,
             ..Default::default()
         }
     )[0]
@@ -747,7 +775,8 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
             csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3,
         ]
     };
-    if alpha_one {
+    /* an integer surface stores the channels it has, alpha included */
+    if alpha_one && !gles_surf_is_integer(fmt) {
         swiz[3] = csb::ROGUE_PBESTATE_SWIZ_ONE;
     }
     swiz
@@ -803,7 +832,10 @@ fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downsca
 /// is 8 per channel and normalised (U8U8U8U8, or R5G6B5); a float target's
 /// registers hold halves or floats (F16_PER_CHANNEL), with its pack mode
 /// F16F16F16F16 / F16 / F32 and no normalisation, and the fragment shader is
-/// the variant compiled for that class.
+/// the variant compiled for that class. An integer target is 8 per channel
+/// (Mesa pvr_arch_pbe_get_src_format_and_gamma, pvr_arch_job_common.c:51-53:
+/// any integer format), not normalised, in its integer pack mode
+/// ([`pbe_int_packmode`]), its registers the dwords the program packed.
 /// PBESTATE_STATE_WORD0/1 for a render with no colour attachment: word 0
 /// zero, word 1 only `emptytile`, so the PBE writes nothing. Transcribed from
 /// Mesa's pvr (pvr_setup_emit_state, pvr_arch_cmd_buffer.c:1508-1515, and
@@ -817,13 +849,61 @@ fn pbe_emit_words_z_only() -> [u32; 2] {
     [0, w1[0]]
 }
 
+/// The PBE pack mode of an integer surface: Mesa 26.2.1's
+/// pvr_pbe_format_table (vulkan/pvr_arch_formats.c:195-266) for the pipe
+/// format of the layout -- R8_UINT U8 :201, R8_SINT S8 :202, R8G8_UINT U8U8
+/// :206, R8G8_SINT S8S8 :207, R8G8B8A8_UINT/SINT U8U8U8U8/S8S8S8S8 :211-212,
+/// R16_UINT/SINT U16/S16 :230-231, R16G16_* U16U16/S16S16 :235-236,
+/// R16G16B16A16_* U16U16U16U16/S16S16S16S16 :243-244, R32_* U32/S32
+/// :246-247, R32G32_* U32U32/S32S32 :249-250, R32G32B32A32_*
+/// U32U32U32U32/S32S32S32S32 :255-256, and R10G10B10A2_UINT one packed U32
+/// dword :227 (the PBE has no 10/10/10/2 integer pack; the program packs it).
+fn pbe_int_packmode(l: GlesIntLayout) -> csb::ROGUE_PBESTATE_PACKMODE {
+    use csb::*;
+    match (l.channels, l.bits, l.signed) {
+        (1, 8, false) => ROGUE_PBESTATE_PACKMODE_U8,
+        (1, 8, true) => ROGUE_PBESTATE_PACKMODE_S8,
+        (1, 16, false) => ROGUE_PBESTATE_PACKMODE_U16,
+        (1, 16, true) => ROGUE_PBESTATE_PACKMODE_S16,
+        (1, 32, false) => ROGUE_PBESTATE_PACKMODE_U32,
+        (1, 32, true) => ROGUE_PBESTATE_PACKMODE_S32,
+        (2, 8, false) => ROGUE_PBESTATE_PACKMODE_U8U8,
+        (2, 8, true) => ROGUE_PBESTATE_PACKMODE_S8S8,
+        (2, 16, false) => ROGUE_PBESTATE_PACKMODE_U16U16,
+        (2, 16, true) => ROGUE_PBESTATE_PACKMODE_S16S16,
+        (2, 32, false) => ROGUE_PBESTATE_PACKMODE_U32U32,
+        (2, 32, true) => ROGUE_PBESTATE_PACKMODE_S32S32,
+        (4, 8, false) => ROGUE_PBESTATE_PACKMODE_U8U8U8U8,
+        (4, 8, true) => ROGUE_PBESTATE_PACKMODE_S8S8S8S8,
+        (4, 16, false) => ROGUE_PBESTATE_PACKMODE_U16U16U16U16,
+        (4, 16, true) => ROGUE_PBESTATE_PACKMODE_S16S16S16S16,
+        (4, 32, true) => ROGUE_PBESTATE_PACKMODE_S32S32S32S32,
+        (4, 32, false) => ROGUE_PBESTATE_PACKMODE_U32U32U32U32,
+        /* RGB10_A2UI */
+        _ => ROGUE_PBESTATE_PACKMODE_U32,
+    }
+}
+
+/// The 32-bit pixel output registers a surface's colour takes: the packed
+/// dwords of an integer surface ([`ShcIntRt::dwords`], what its program
+/// writes), two for RGBA16F's four halves, one for every other.
+fn surf_out_dwords(fmt: u8) -> u32 {
+    match gles_surf_int_layout(fmt) {
+        Some(l) => crate::shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed }.dwords(),
+        None if fmt == GLES_SURF_RGBA16F => 2,
+        None => 1,
+    }
+}
+
 fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 2] {
     let float = gles_surf_rt_class(fmt) != 0;
-    let packmode = match fmt {
-        GLES_SURF_RGBA16F => csb::ROGUE_PBESTATE_PACKMODE_F16F16F16F16,
-        GLES_SURF_R16F => csb::ROGUE_PBESTATE_PACKMODE_F16,
+    let int = gles_surf_int_layout(fmt);
+    let packmode = match (fmt, int) {
+        (_, Some(l)) => pbe_int_packmode(l),
+        (GLES_SURF_RGBA16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16F16F16F16,
+        (GLES_SURF_R16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16,
         _ if float => csb::ROGUE_PBESTATE_PACKMODE_F32,
-        GLES_SURF_RGB565 => csb::ROGUE_PBESTATE_PACKMODE_R5G6B5,
+        (GLES_SURF_RGB565, _) => csb::ROGUE_PBESTATE_PACKMODE_R5G6B5,
         _ => csb::ROGUE_PBESTATE_PACKMODE_U8U8U8U8,
     };
     let w0 =
@@ -838,7 +918,9 @@ fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 
             } else {
                 csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL
             },
-            norm: !float,
+            /* "every channel normalized" (Mesa pvr_vk_format_is_fully_normalized,
+             * pvr_formats.h:264-273): neither a float nor an integer one is */
+            norm: !float && int.is_none(),
             packmode,
             source_pos,
             mrt_index: mrt_index & 7,
@@ -874,6 +956,13 @@ struct TexFormat {
     compressed: bool,
     swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4],
     textype: csb::ROGUE_TEXSTATE_TEXTYPE,
+    /// The STRIDE word's `alpha_msb` ([`tex_stride_image_word1`]). Mesa sets
+    /// it for an RGB format whose fourth channel is W
+    /// (`vk_format_is_alpha_on_msb`, pvr_arch_tex_state.c:253-254); the
+    /// formats yakogl sampled before the ES 3.0 classes keep the `true` they
+    /// were verified with on the board, and the ES 3.0 classes take Mesa's
+    /// value (false for R11G11B10F and RGB9E5, whose alpha is the constant 1).
+    alpha_msb: bool,
 }
 
 const SWIZ_R: csb::ROGUE_TEXSTATE_SWIZ = csb::ROGUE_TEXSTATE_SWIZ_SRCCHAN_0;
@@ -886,7 +975,13 @@ const SWIZ_RGBA: [csb::ROGUE_TEXSTATE_SWIZ; 4] = [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_A
 
 /// A STRIDE (linear) texture of `texformat`.
 const fn tex_stride(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: false, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE }
+    TexFormat { texformat, compressed: false, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE, alpha_msb: true }
+}
+
+/// A STRIDE texture of `texformat` whose alpha is the constant 1, without
+/// `alpha_msb` (Mesa's value for such a format, [`TexFormat::alpha_msb`]).
+const fn tex_stride_no_alpha(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
+    TexFormat { alpha_msb: false, ..tex_stride(texformat, swiz) }
 }
 
 /// U8U8U8U8, identity swizzle.
@@ -915,7 +1010,7 @@ const TEX_PCK_INFO_F32: u32 = 15;
  * UNORM (bit 8): Mesa pvr_arch_tex_state.c / setup_pck_info for
  * VK_FORMAT_ETC2_*. */
 const fn tex_etc(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: true, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D }
+    TexFormat { texformat, compressed: true, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D, alpha_msb: false }
 }
 const TEXF_ETC2_RGB: TexFormat =
     tex_etc(csb::ROGUE_TEXSTATE_FORMAT_COMPRESSED_ETC2_RGB, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
@@ -931,6 +1026,74 @@ const TEX_PCK_INFO_COMPRESSED_UNORM: u32 = 0x11f;
 const TEXF_L8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_ONE]);
 const TEXF_A8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8, [SWIZ_ZERO, SWIZ_ZERO, SWIZ_ZERO, SWIZ_R]);
 const TEXF_LA8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_G]);
+
+/* The ES 3.0 storage classes (src/backend.rs GLES_TEXFMT_R11G11B10F ..
+ * GLES_TEXFMT_RGBA32F; docs/es3-sized-formats.md): every one four components
+ * wide in memory, a component the GL format lacks stored as (0, 0, 0, 1) by
+ * the GL core, so the swizzle is the identity except where the TPU format has
+ * no alpha. TPU formats from Mesa 26.2.1's pvr_format_table
+ * (vulkan/pvr_arch_formats.c, the row of the pipe format the class holds):
+ *   R11G11B10F  R11G11B10_FLOAT     F10F11F11      :150
+ *   RGB9E5      R9G9B9E5_FLOAT      SE9995         :151
+ *   RGB10A2     R10G10B10A2_UNORM   A2R10B10G10    :115
+ *   RGB10A2UI   R10G10B10A2_UINT    A2R10B10G10    :119
+ *   RGBA8_SNORM R8G8B8A8_SNORM      S8S8S8S8       :102
+ *   RGBA8UI/I   R8G8B8A8_UINT/SINT  U8U8U8U8 / S8S8S8S8  :103-104
+ *   RGBA16UI/I  R16G16B16A16_UINT/SINT  U16U16U16U16 / S16S16S16S16  :135-136
+ *   RGBA32UI/I  R32G32B32A32_UINT/SINT  U32U32U32U32 / S32S32S32S32  :147-148
+ *   RGBA32F     R32G32B32A32_FLOAT  F32F32F32F32   :149
+ * The swizzle is the format's util swizzle (u_format.yaml: xyz1 for
+ * R11G11B10_FLOAT and R9G9B9E5_FLOAT, xyzw for the others) through
+ * pvr_get_hw_swizzle (pvr_arch_tex_state.c:40-64). An integer class is read
+ * by an isampler/usampler, whose `smp` has no `fcnorm` (pco_nir_tex.c:236):
+ * the TPU hands back the integers, sign-extended for the S formats. */
+const TEXF_R11G11B10F: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_F10F11F11, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
+const TEXF_RGB9E5: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_SE9995, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
+const TEXF_RGB10A2: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_A2R10B10G10, SWIZ_RGBA);
+const TEXF_RGBA8_SNORM: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S8S8S8S8, SWIZ_RGBA);
+const TEXF_RGBA8UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8U8U8, SWIZ_RGBA);
+const TEXF_RGBA8I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S8S8S8S8, SWIZ_RGBA);
+const TEXF_RGBA16UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U16U16U16U16, SWIZ_RGBA);
+const TEXF_RGBA16I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S16S16S16S16, SWIZ_RGBA);
+const TEXF_RGBA32UI: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U32U32U32U32, SWIZ_RGBA);
+const TEXF_RGBA32I: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_S32S32S32S32, SWIZ_RGBA);
+const TEXF_RGBA32F: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_F32F32F32F32, SWIZ_RGBA);
+/* Their image meta PCK_INFO, as Mesa's setup_pck_info (pvr_arch_tex_state.c:
+ * 84-112) builds it from pco_pipe_to_pck_format (pco/pco.c:387-461; format
+ * numbers pco/pco_isa.py:981-1003; bits common/pvr_iface.h:132-142): S8888
+ * (1) with SCALE (0x40) for RGBA8 SNORM, U1010102 (8) with SCALE and UNORM
+ * (0x100) for RGB10A2 UNORM, F111110 (12) for R11G11B10F, and "no pack
+ * format" (PVR_PCK_FORMAT_INVALID, 0x1f) for the integer classes, RGB9E5 and
+ * RGBA32F -- pco reads it only for a shadow compare's clamp and a formatless
+ * image store, neither of which these reach. */
+const PCO_PCK_SCALE: u32 = 0x40;
+const PCO_PCK_UNORM: u32 = 0x100;
+const PVR_PCK_FORMAT_INVALID: u32 = 0x1f;
+const TEX_PCK_INFO_RGBA8_SNORM: u32 = 1 | PCO_PCK_SCALE;
+const TEX_PCK_INFO_RGB10A2_UNORM: u32 = 8 | PCO_PCK_SCALE | PCO_PCK_UNORM;
+const TEX_PCK_INFO_R11G11B10F: u32 = 12;
+
+/// The ES 3.0 storage class `format`'s texture format and pack info, `None`
+/// for every other format ([`build_tex_desc`]).
+fn es3_tex_format(format: u8) -> Option<(TexFormat, u32)> {
+    Some(match format {
+        GLES_TEXFMT_R11G11B10F => (TEXF_R11G11B10F, TEX_PCK_INFO_R11G11B10F),
+        GLES_TEXFMT_RGB9E5 => (TEXF_RGB9E5, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGB10A2 => (TEXF_RGB10A2, TEX_PCK_INFO_RGB10A2_UNORM),
+        GLES_TEXFMT_RGB10A2UI => (TEXF_RGB10A2, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA8_SNORM => (TEXF_RGBA8_SNORM, TEX_PCK_INFO_RGBA8_SNORM),
+        GLES_TEXFMT_RGBA8UI => (TEXF_RGBA8UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA8I => (TEXF_RGBA8I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA16UI => (TEXF_RGBA16UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA16I => (TEXF_RGBA16I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32UI => (TEXF_RGBA32UI, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32I => (TEXF_RGBA32I, PVR_PCK_FORMAT_INVALID),
+        GLES_TEXFMT_RGBA32F => (TEXF_RGBA32F, PVR_PCK_FORMAT_INVALID),
+        _ => return None,
+    })
+}
 
 /// TEXSTATE_IMAGE_WORD0 of a `width` x `height` image of format `f`, as
 /// `textype` (the format's own, or CUBE for the native cube).
@@ -957,13 +1120,13 @@ fn tex_image_word0(f: TexFormat, textype: csb::ROGUE_TEXSTATE_TEXTYPE, width: u3
 /// TEXSTATE_STRIDE_IMAGE_WORD1 of a linear image: `alpha_msb`, the row
 /// stride in texels minus one, `levels` mip levels (num_mip_levels, and
 /// mipmaps_present when more than one), the image address.
-fn tex_stride_image_word1(stride_texels: u32, levels: u32, base_gpu: u64) -> [u32; 2] {
+fn tex_stride_image_word1(stride_texels: u32, levels: u32, base_gpu: u64, alpha_msb: bool) -> [u32; 2] {
     csb_pack!(
         ROGUE_TEXSTATE_STRIDE_IMAGE_WORD1_pack,
         2,
         csb::ROGUE_TEXSTATE_STRIDE_IMAGE_WORD1 {
             num_mip_levels: levels,
-            alpha_msb: true,
+            alpha_msb,
             mipmaps_present: levels > 1,
             stride: stride_texels.wrapping_sub(1),
             texaddr: dev_addr(base_gpu),
@@ -1228,6 +1391,9 @@ struct Backend {
     /// [`pvr_mrt_clear`]), and its kick-USC PDS program.
     clear_fs3: OsalGpuMem,
     bg_kick3_off: u32,
+    /// Clear FS USC for four colour dwords: an RGBA32I/UI target's clear
+    /// quad (no background kick: integer targets clear by quad).
+    clear_fs4: OsalGpuMem,
     /// bg kick program, bg colour DMA program, EOT data.
     pds_static: OsalGpuMem,
     /// CLEAR_ATTACH_DWORDS dwords.
@@ -1250,6 +1416,9 @@ struct Backend {
     /// fbload FS variants that pack what they read for a float target
     /// (index = gles_surf_rt_class - 1: RGBA16F, R16F, R32F).
     fbload_fs_rt: [OsalGpuMem; 3],
+    /// fbload FS variants for an integer target ([`FBLOAD_INT`]): the
+    /// pixel's bits read raw and written back as 1, 2 or 4 dwords.
+    fbload_fs_int: [OsalGpuMem; 3],
     /// The masked clear FS variants ([`CLEAR_MASKED`]), in its order.
     clear_mask_fs: [OsalGpuMem; CLEAR_MASKED_N],
     /// This frame begins with a colour clear.
@@ -1457,7 +1626,11 @@ struct FbLoad {
      * silicon: gl_test case 44). The packed colour is the quad's uniform. */
     clear_fs_sh: ShcShader,
     clear_fs2_sh: ShcShader,
-    clear_pack: [u32; 2],
+    /// The four-dword clear (RGBA32I/UI targets).
+    clear_fs4_sh: ShcShader,
+    /// The integer-target load FS variants (as `Backend::fbload_fs_int`).
+    fs_int_sh: [ShcShader; 3],
+    clear_pack: [u32; 4],
     /// The masked clear variants' metadata (as `Backend::clear_mask_fs`), and
     /// the clear colour they read: four floats, clear.frag's uniform.
     clear_mask_sh: [ShcShader; CLEAR_MASKED_N],
@@ -1696,7 +1869,7 @@ fn mrt_clear_dwords(b: &Backend) -> u32 {
         return 0;
     }
     let fmt = |i: usize| if i != 0 { b.targets[i].format } else { b.target_format };
-    if (0..n).any(|i| gles_surf_rt_class(fmt(i)) != 0) {
+    if (0..n).any(|i| gles_surf_rt_class(fmt(i)) != 0 || gles_surf_is_integer(fmt(i))) {
         return 0;
     }
     n as u32
@@ -1758,6 +1931,58 @@ const CLEAR_MASKED: [usize; CLEAR_MASKED_N] = [
 /// The frame load's programs by render-target class (1 RGBA16F, 2 R16F, 3
 /// R32F): internal/es/fbload.frag's variant packing the texel for it.
 const FBLOAD_RT: [usize; 3] = [PVR_INTERNAL_FBLOAD_F16X4, PVR_INTERNAL_FBLOAD_F16, PVR_INTERNAL_FBLOAD_F32];
+
+/// The frame load's programs for an integer target, by the dwords its pixel
+/// takes (1, 2, 4): internal/es/fbload_int.frag compiled for the R32UI,
+/// RG32UI and RGBA32UI layouts, the target bound as a raw unsigned texel of
+/// its size ([`int_load_texfmt`]).
+const FBLOAD_INT: [usize; 3] = [PVR_INTERNAL_FBLOAD_U32, PVR_INTERNAL_FBLOAD_U32X2, PVR_INTERNAL_FBLOAD_U32X4];
+
+/// Its index in [`FBLOAD_INT`] for a pixel of `dwords` output dwords.
+const fn fbload_int_index(dwords: u32) -> usize {
+    match dwords {
+        1 => 0,
+        2 => 1,
+        _ => 2,
+    }
+}
+
+/* Raw unsigned texels the integer frame load binds the target as, by its
+ * pixel's bytes (pvr-private texture formats: the GL core never names them;
+ * [`build_tex_desc`] decodes them): the TPU's U8, U16, U32, U32U32 and
+ * U32U32U32U32 (texstate.xml) read through the load's usampler2D, so the
+ * pixel's bits come back unconverted however the PBE packed them. */
+const PVR_TEXFMT_RAW8: u8 = 0xf0;
+const PVR_TEXFMT_RAW16: u8 = 0xf1;
+const PVR_TEXFMT_RAW32: u8 = 0xf2;
+const PVR_TEXFMT_RAW64: u8 = 0xf3;
+const PVR_TEXFMT_RAW128: u8 = 0xf4;
+
+/// The raw texel an integer surface's frame load reads it as.
+fn int_load_texfmt(surf: u8) -> u8 {
+    match gles_surf_bytes_per_pixel(surf) {
+        1 => PVR_TEXFMT_RAW8,
+        2 => PVR_TEXFMT_RAW16,
+        4 => PVR_TEXFMT_RAW32,
+        8 => PVR_TEXFMT_RAW64,
+        _ => PVR_TEXFMT_RAW128,
+    }
+}
+
+/// A raw texel's texture format and bytes ([`int_load_texfmt`]); `None`
+/// for every other format.
+fn raw_tex_format(format: u8) -> Option<(TexFormat, u32)> {
+    let x = [SWIZ_R, SWIZ_ZERO, SWIZ_ZERO, SWIZ_ONE];
+    let xy = [SWIZ_R, SWIZ_G, SWIZ_ZERO, SWIZ_ONE];
+    Some(match format {
+        PVR_TEXFMT_RAW8 => (tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_U8, x), 1),
+        PVR_TEXFMT_RAW16 => (tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_U16, x), 2),
+        PVR_TEXFMT_RAW32 => (tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_U32, x), 4),
+        PVR_TEXFMT_RAW64 => (tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_U32U32, xy), 8),
+        PVR_TEXFMT_RAW128 => (tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U32U32U32U32, SWIZ_RGBA), 16),
+        _ => return None,
+    })
+}
 
 /// Row `i` of the internal table: a program our compiler made.
 fn internal(i: usize) -> &'static ShcShader {
@@ -2346,6 +2571,9 @@ fn static_objects_init(b: &mut Backend, fl: &mut FbLoad) -> i32 {
     if rc == 0 {
         rc = upload_words(&mut b.clear_fs, &PVR_INTERNAL_CLEAR_ATTACH1);
     }
+    if rc == 0 {
+        rc = upload_words(&mut b.clear_fs4, &PVR_INTERNAL_CLEAR_ATTACH4);
+    }
     if rc != 0 {
         return rc;
     }
@@ -2362,6 +2590,11 @@ fn static_objects_init(b: &mut Backend, fl: &mut FbLoad) -> i32 {
     fl.clear_fs2_sh.usc = PVR_INTERNAL_CLEAR_ATTACH2.as_ptr();
     fl.clear_fs2_sh.usc_dw = PVR_INTERNAL_CLEAR_ATTACH2.len() as u32;
     fl.clear_fs2_sh.uniform_dwords = 2;
+    fl.clear_fs4_sh = fl.clear_fs_sh;
+    fl.clear_fs4_sh.usc = PVR_INTERNAL_CLEAR_ATTACH4.as_ptr();
+    fl.clear_fs4_sh.usc_dw = PVR_INTERNAL_CLEAR_ATTACH4.len() as u32;
+    fl.clear_fs4_sh.uniform_dwords = 4;
+    fl.clear_fs4_sh.num_outputs = 4;
 
     for i in 0..b.nsets {
         rc = frame_set_static_init(b);
@@ -2412,6 +2645,13 @@ fn static_objects_init(b: &mut Backend, fl: &mut FbLoad) -> i32 {
             return rc;
         }
         fl.fs_rt_sh[i] = *internal(row);
+    }
+    for (i, &row) in FBLOAD_INT.iter().enumerate() {
+        rc = upload_words(&mut b.fbload_fs_int[i], internal_words(internal(row)));
+        if rc != 0 {
+            return rc;
+        }
+        fl.fs_int_sh[i] = *internal(row);
     }
     for (i, &row) in CLEAR_MASKED.iter().enumerate() {
         rc = upload_words(&mut b.clear_mask_fs[i], internal_words(internal(row)));
@@ -2620,6 +2860,7 @@ pub extern "C" fn pvr_backend_shutdown() {
         &mut b.clear_fs,
         &mut b.clear_fs2,
         &mut b.clear_fs3,
+        &mut b.clear_fs4,
         &mut b.fbload_fs,
         &mut b.fbload_vs,
         &mut b.fbload_quad,
@@ -2628,7 +2869,7 @@ pub extern "C" fn pvr_backend_shutdown() {
     ] {
         osal::gpu_free(m);
     }
-    for m in b.fbload_fs_rt.iter_mut().chain(b.clear_mask_fs.iter_mut()) {
+    for m in b.fbload_fs_rt.iter_mut().chain(b.fbload_fs_int.iter_mut()).chain(b.clear_mask_fs.iter_mut()) {
         osal::gpu_free(m);
     }
     for s in b.ds.iter_mut() {
@@ -2805,12 +3046,44 @@ fn f32_to_f16_bits(f: f32) -> u32 {
 /// 0x3f800000 where it meant opaque red, which is what gl_test case 58's
 /// "the clear is after the draw" check reads on the board and what dEQP-EGL's
 /// twelve color_clears failures are.
-fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 2] {
-    if gles_surf_rt_class(surf) != 0 {
-        pack_clear_float(surf, c)
+///
+/// For an integer target the four values are the raw integers of
+/// glClearBuffer{i,ui}v (`GlesDraw::clear_rgba`'s bit patterns), packed into
+/// the target's dwords by [`pack_clear_int`]. Zero past the dwords the
+/// target takes ([`surf_out_dwords`]).
+fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 4] {
+    if let Some(l) = gles_surf_int_layout(surf) {
+        pack_clear_int(l, &c.map(f32::to_bits))
+    } else if gles_surf_rt_class(surf) != 0 {
+        let [a, b] = pack_clear_float(surf, c);
+        [a, b, 0, 0]
     } else {
-        [pack_rgba8(c), 0]
+        [pack_rgba8(c), 0, 0, 0]
     }
+}
+
+/// An integer target's clear: Mesa's pvr_get_hw_clear_color
+/// (vulkan/pvr_formats.c:145-218) for its accumulation format -- the low
+/// byte (UINT8/SINT8, :177-182) or half-word (UINT16/SINT16, :193-198) of
+/// each value side by side, a 32-bit value as it is (UINT32/SINT32,
+/// :210-215), RGB10_A2UI as one 10/10/10/2 dword
+/// (pvr_pack_a2x10y10z10_uint, :103-121) -- which is the program's own
+/// packing of an integer output (`powervr::chain::pack_int_output`), so the
+/// clear program moves the dwords to the pixel outputs as a draw would
+/// write them. Only the target's channels: the rest of each dword is 0.
+fn pack_clear_int(l: GlesIntLayout, v: &[u32; 4]) -> [u32; 4] {
+    let low = |x: u32, n: u32| if n >= 32 { x } else { x & ((1 << n) - 1) };
+    let mut out = [0u32; 4];
+    for c in 0..l.channels as usize {
+        let (dword, offset, width) = match l.bits {
+            32 => (c, 0, 32),
+            16 => (c / 2, 16 * (c % 2) as u32, 16),
+            8 => (0, 8 * c as u32, 8),
+            _ => (0, 10 * c as u32, if c == 3 { 2 } else { 10 }),
+        };
+        out[dword] |= low(v[c], width) << offset;
+    }
+    out
 }
 
 /// The float encoding of a clear colour for a float render-target class.
@@ -2891,6 +3164,27 @@ fn seq_indices_ensure(b: &mut Backend, count: u32) -> i32 {
     0
 }
 
+/// The clear-attach program that moves `dwords` packed colour dwords from
+/// the uniform block to the pixel outputs ([`clear_uniform`]): its USC
+/// address and its descriptor. One dword for the 8-bit targets, R16F and
+/// R32F, two for RGBA16F, an integer target's one, two or four.
+fn clear_program(b: &Backend, fl: &FbLoad, dwords: u32) -> (u64, *const ShcShader) {
+    match dwords {
+        2 => (b.clear_fs2.gpu, &fl.clear_fs2_sh),
+        4 => (b.clear_fs4.gpu, &fl.clear_fs4_sh),
+        _ => (b.clear_fs.gpu, &fl.clear_fs_sh),
+    }
+}
+
+/// Is a colour clear of this surface drawn as a quad through the clear
+/// program, rather than left to the background object? The float classes
+/// (whose pixels the background object leaves untouched on silicon: gl_test
+/// case 44) and the integer surfaces, whose clear is raw bits the
+/// background program and the USC clear register were never measured with.
+fn clears_by_quad(surf: u8) -> bool {
+    gles_surf_rt_class(surf) != 0 || gles_surf_is_integer(surf)
+}
+
 /// The frame's first object: a full-screen quad that (a) loads the target's
 /// colour when the frame does not clear it -- its FS (fbload.frag) fetches
 /// the previous texel under every pixel, so earlier kicks into this target
@@ -2914,8 +3208,10 @@ fn record_frame_quad(
     let (vs_sh, fs_sh): (*const ShcShader, *const ShcShader) = (&fl.vs_sh, &fl.fs_sh);
     let rt_class = gles_surf_rt_class(d.target_format);
     let rt_sh: *const ShcShader = if rt_class != 0 { &fl.fs_rt_sh[rt_class as usize - 1] } else { core::ptr::null() };
-    let two = d.target_format == GLES_SURF_RGBA16F;
-    let clear_sh: *const ShcShader = if two { &fl.clear_fs2_sh } else { &fl.clear_fs_sh };
+    let int = gles_surf_is_integer(d.target_format);
+    let dwords = surf_out_dwords(d.target_format);
+    let int_sh: *const ShcShader = &fl.fs_int_sh[fbload_int_index(dwords)];
+    let (clear_gpu, clear_sh) = clear_program(b, fl, dwords);
     if clear_float {
         fl.clear_pack = clear_uniform(d.target_format, &b.clear_rgba);
     }
@@ -2938,6 +3234,12 @@ fn record_frame_quad(
         ld.fs = rt_sh;
         ld.fs_usc_gpu = b.fbload_fs_rt[rt_class as usize - 1].gpu;
     }
+    if int {
+        /* an integer target: the load FS writes the pixel's bits back as
+         * its dwords, read raw (`int_load_texfmt`, below) */
+        ld.fs = int_sh;
+        ld.fs_usc_gpu = b.fbload_fs_int[fbload_int_index(dwords)].gpu;
+    }
     ld.attribs[0].vi_reg = 0;
     ld.attribs[0].components = 4;
     ld.attribs[0].stride = 16;
@@ -2954,7 +3256,7 @@ fn record_frame_quad(
     ld.textures[0].wrap_s = GLES_WRAP_CLAMP_TO_EDGE;
     ld.textures[0].wrap_t = GLES_WRAP_CLAMP_TO_EDGE;
     ld.textures[0].mip_levels = 1;
-    ld.textures[0].format = gles_surf_texfmt(d.target_format);
+    ld.textures[0].format = if int { int_load_texfmt(d.target_format) } else { gles_surf_texfmt(d.target_format) };
     ld.textures[0].bgra = if d.target_format == GLES_SURF_XRGB8888 { 1 } else { 0 };
     ld.num_textures = 1;
     ld.viewport[2] = d.target_w as i32;
@@ -3005,12 +3307,13 @@ fn record_frame_quad(
         ld.fs_uniform_dwords = 1;
     }
     if clear_float {
-        /* the clear colour through the clear USC, as an ordinary draw */
+        /* the clear colour through the clear USC, as an ordinary draw: the
+         * target's packed dwords moved to its pixel outputs */
         ld.fs = clear_sh;
-        ld.fs_usc_gpu = if two { b.clear_fs2.gpu } else { b.clear_fs.gpu };
+        ld.fs_usc_gpu = clear_gpu;
         ld.num_textures = 0;
         ld.fs_uniform_cpu = clear_pack as *const c_void;
-        ld.fs_uniform_dwords = if two { 2 } else { 1 };
+        ld.fs_uniform_dwords = dwords as u16;
         ld.color_write = true;
     }
     if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6, None) != 0 {
@@ -3051,6 +3354,24 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
     if class >= 2 {
         mask = if mask & 1 != 0 { 0xf } else { 0 };
     }
+    /* An integer target: its own channels written or none. A mask that
+     * keeps some of them would need the pixel's other channels kept, which
+     * the masked clear programs do for the float classes only (they convert
+     * what they read): refused by name. */
+    if let Some(l) = gles_surf_int_layout(d.target_format) {
+        let own = (1u8 << l.channels) - 1;
+        mask = match mask & own {
+            0 => 0,
+            m if m == own => 0xf,
+            _ => {
+                glog_once!(
+                    "yakogl/pvr: clear refused: a colour mask that keeps some channels of a {} target",
+                    gles_surf_name(d.target_format)
+                );
+                return -util::ENOTSUP;
+            }
+        };
+    }
     let color = d.do_clear && mask != 0;
     let depth = d.do_clear_depth && has_ds;
     let stencil = d.do_clear_stencil && has_ds;
@@ -3060,12 +3381,12 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
     }
     let b = &mut p.b;
     let fl = &mut p.fbload;
-    let two = d.target_format == GLES_SURF_RGBA16F;
-    let masked = clear_masked_index(class, mask);
+    let dwords = surf_out_dwords(d.target_format);
+    let masked = if gles_surf_is_integer(d.target_format) { None } else { clear_masked_index(class, mask) };
+    let (clear_gpu, clear_one) = clear_program(b, fl, dwords);
     let clear_sh: *const ShcShader = match masked {
         Some(i) => &fl.clear_mask_sh[i],
-        None if two => &fl.clear_fs2_sh,
-        None => &fl.clear_fs_sh,
+        None => clear_one,
     };
     fl.clear_pack = clear_uniform(d.target_format, &d.clear_rgba);
     fl.clear_rgba = d.clear_rgba;
@@ -3105,14 +3426,12 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
     ld.fs = clear_sh;
     ld.fs_usc_gpu = match masked {
         Some(i) => b.clear_mask_fs[i].gpu,
-        None if two => b.clear_fs2.gpu,
-        None => b.clear_fs.gpu,
+        None => clear_gpu,
     };
     ld.fs_uniform_cpu = clear_pack;
     ld.fs_uniform_dwords = match masked {
         Some(_) => 4,
-        None if two => 2,
-        None => 1,
+        None => dwords as u16,
     };
     ld.color_write = color;
     ld.color_mask = mask;
@@ -3816,7 +4135,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
 
         b.load_depth = ds_valid.is_some() && !init_depth;
         b.load_stencil = s_valid.is_some() && !init_stencil;
-        let clear_float = bg_color && gles_surf_rt_class(d.target_format) != 0;
+        let clear_float = bg_color && clears_by_quad(d.target_format);
 
         if load_color || init_depth || init_stencil || clear_float {
             let _ = record_frame_quad(p, d, load_color, init_depth, init_stencil, clear_float);
@@ -3883,6 +4202,16 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
         };
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
         w[7] = if t.format == GLES_TEXFMT_R32F { TEX_PCK_INFO_F32 } else { TEX_PCK_INFO_F16 };
+    } else if let Some((f, pck)) = es3_tex_format(t.format) {
+        fmt = f;
+        w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
+        w[7] = pck;
+    } else if let Some((f, bytes)) = raw_tex_format(t.format) {
+        /* an integer target's frame load: its pixels as raw unsigned bits */
+        fmt = f;
+        levels = 1;
+        w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(bytes);
+        w[7] = PVR_PCK_FORMAT_INVALID;
     } else {
         fmt = if t.format == GLES_TEXFMT_ETC2_RGB {
             TEXF_ETC2_RGB
@@ -3977,7 +4306,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
     let iw1 = if twiddled {
         tex_twiddled_image_word1(true, levels & 0xf, 0, levels > 1, t.base_gpu)
     } else {
-        tex_stride_image_word1(t.stride_texels, levels, t.base_gpu)
+        tex_stride_image_word1(t.stride_texels, levels, t.base_gpu, fmt.alpha_msb)
     };
 
     w[0..2].copy_from_slice(&iw0);
@@ -4148,6 +4477,15 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
         }
         return -util::ENOTSUP;
     }
+    /* An integer colour attachment beside another one: the program's
+     * integer output is packed for one target's layout (the variant key
+     * carries one), and the MRT path packs RGBA8. Refused by name, never
+     * drawn with the wrong packing. */
+    let ntargets = (d.num_targets as usize).min(d.targets.len());
+    if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format)) {
+        glog_once!("yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment");
+        return -util::ENOTSUP;
+    }
     /* One instance of an instanced draw the GL core draws instance by
      * instance (a divisor past max_instance_divisor): the PDS starts the
      * instance number at 0 for every draw, so a program that reads
@@ -4261,7 +4599,7 @@ fn draw_one(p: &mut Pvr, d: &GlesDraw) -> i32 {
             b.frame_clr[STENCIL] = Plane::cleared(u32::from(d.clear_stencil));
         }
         /* the depth/stencil clear values must reach every pixel */
-        let clear_float = d.do_clear && gles_surf_rt_class(b.target_format) != 0;
+        let clear_float = d.do_clear && clears_by_quad(b.target_format);
         let has_ds = b.frame_ds.buf().is_some();
 
         if (has_ds && (d.do_clear_depth || d.do_clear_stencil)) || clear_float {
@@ -6319,12 +6657,9 @@ fn flush(p: &mut Pvr) -> i32 {
         let (mut dsz, mut csz) = (0u32, 0u32);
         let da = b.target_gpu;
 
-        let rt = gles_surf_rt_class(b.target_format);
-
-        col[0] = packed[0];
-        if rt != 0 {
-            col[1] = packed[1];
-        }
+        /* the packed colour: one dword, RGBA16F's two, an integer target's
+         * one to four (`clear_uniform`; zero past what the target takes) */
+        col[..4].copy_from_slice(&packed);
         /* several 8-bit attachments: the same packed colour for each (the
          * PBE converts it to each attachment's format) */
         for c in col.iter_mut().take(mrt_clear_dwords(b) as usize) {
@@ -6345,12 +6680,12 @@ fn flush(p: &mut Pvr) -> i32 {
         for i in 0..nrt_want {
             let a = if i != 0 { b.targets[i as usize].gpu } else { da };
             let fmt = if i != 0 { b.targets[i as usize].format } else { b.target_format };
-            let irt = gles_surf_rt_class(fmt);
 
             /* Which attachment this state is for, and which 32-bit slot of
              * the shader's output registers it takes: attachment i emits
              * output i, and an output is one register for the 8-bit formats,
-             * two for RGBA16F (PBESTATE_STATE_WORD1 mrt_index at 16..18,
+             * two for RGBA16F, an integer target's packed dwords for it
+             * (`surf_out_dwords`; PBESTATE_STATE_WORD1 mrt_index at 16..18,
              * source_pos at 14..15). A 64-bit source starts at an even
              * register (pbe2_in_xe), and a pixel has four of them: the
              * compiler lays the outputs out the same way, and an attachment
@@ -6358,7 +6693,7 @@ fn flush(p: &mut Pvr) -> i32 {
              * have the USC run past its output registers, which faults the
              * GPU -- unless the shader stored it to a tile buffer, which the
              * end-of-tile program loads back from dword 0. */
-            let regs = if irt == 1 { 2 } else { 1 };
+            let regs = surf_out_dwords(fmt);
             let mut spos = out_regs;
 
             if regs >= 2 && (spos & 1) != 0 {
@@ -6477,11 +6812,12 @@ fn flush(p: &mut Pvr) -> i32 {
      * has (ROGUE_CR_PIXEL_WIDTH: 0: 2, 1: 4, 2: 8, 3: 1); four, the most this
      * core has. PVR_BACKEND_OPT_MRT_STRIDE overrides the width for bring-up
      * (its value - 1, in the field's two bits). */
-    b.kick.frag.usc_pixel_output_ctrl = usc_pixel_output_ctrl(if b.opt(PVR_BACKEND_OPT_MRT_STRIDE) != 0 {
+    let pixel_width = if b.opt(PVR_BACKEND_OPT_MRT_STRIDE) != 0 {
         (b.opt(PVR_BACKEND_OPT_MRT_STRIDE) - 1) & 3
     } else {
         csb::ROGUE_CR_PIXEL_WIDTH_4REGISTERS
-    });
+    };
+    b.kick.frag.usc_pixel_output_ctrl = usc_pixel_output_ctrl(pixel_width);
     /* The USC clear register is what the tiles start from (the background
      * object only runs on empty tiles); a frame that keeps its colour drew
      * the load quad first, so the register value does not matter then. */
@@ -6575,7 +6911,9 @@ fn flush(p: &mut Pvr) -> i32 {
      * depth/stencil arm above */
     // SAFETY: a plain read of an int only the setter writes.
     let dbias_is_int = b.frame_ds.buf().is_some() && unsafe { core::ptr::addr_of!(pvr_dbias_int).read() } != 0;
-    b.kick.frag.isp_ctl = isp_ctl(b.samples, dbias_is_int);
+    /* the ISP's tiles in flight from the same pixel width as the output
+     * control above (Mesa pvr_arch_setup_tiles_in_flight) */
+    b.kick.frag.isp_ctl = isp_ctl(b.samples, pixel_width_regs(pixel_width), dbias_is_int);
     b.kick.frag.event_pixel_pds_info = if tb_emit && b.st.event_pixel_pds_info_tb_n[nrt as usize] != 0 {
         b.st.event_pixel_pds_info_tb_n[nrt as usize]
     } else if b.st.event_pixel_pds_info_n[nrt as usize] != 0 {
@@ -7015,12 +7353,20 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
         }
     }
     let mut statics = OwnerTally::default();
-    for m in
-        [&b.clear_fs, &b.clear_fs2, &b.clear_fs3, &b.fbload_fs, &b.fbload_vs, &b.fbload_quad, &b.black_tex, &b.seq_idx]
-    {
+    for m in [
+        &b.clear_fs,
+        &b.clear_fs2,
+        &b.clear_fs3,
+        &b.clear_fs4,
+        &b.fbload_fs,
+        &b.fbload_vs,
+        &b.fbload_quad,
+        &b.black_tex,
+        &b.seq_idx,
+    ] {
         statics.add(m);
     }
-    for m in b.fbload_fs_rt.iter().chain(b.clear_mask_fs.iter()) {
+    for m in b.fbload_fs_rt.iter().chain(b.fbload_fs_int.iter()).chain(b.clear_mask_fs.iter()) {
         statics.add(m);
     }
     let mut ds = OwnerTally::default();
@@ -7187,7 +7533,7 @@ const USC_PIXEL_OUTPUT_CTRL: u32 = 0x0007_fff9;
 #[cfg(test)]
 const ISP_CTL_DEFAULT: u32 = 0x8003_5000;
 #[cfg(test)]
-const ISP_CTL_MSAA4: u32 = 0x8003_3000;
+const ISP_CTL_MSAA4: u32 = 0x8003_1000;
 #[cfg(test)]
 const ISP_CTL_DBIAS_IS_INT: u32 = 1 << 20;
 #[cfg(test)]
@@ -7317,17 +7663,105 @@ mod tests {
          * RGBA8888 target wrote the float bits of red -- 0x3f800000 for
          * opaque red -- which is what a scissored clear put on the board. */
         let red = [1.0, 0.0, 0.0, 1.0];
-        assert_eq!(clear_uniform(GLES_SURF_RGBA8888, &red), [pack_rgba8(&red), 0]);
+        assert_eq!(clear_uniform(GLES_SURF_RGBA8888, &red), [pack_rgba8(&red), 0, 0, 0]);
         assert_ne!(clear_uniform(GLES_SURF_RGBA8888, &red)[0], 1.0f32.to_bits(), "not the red channel's float");
         for surf in [GLES_SURF_RGBA8888, GLES_SURF_XRGB8888, GLES_SURF_RGB565] {
             let c = [0.25, 0.5, 0.75, 1.0];
-            assert_eq!(clear_uniform(surf, &c), [pack_rgba8(&c), 0], "surf {surf}");
+            assert_eq!(clear_uniform(surf, &c), [pack_rgba8(&c), 0, 0, 0], "surf {surf}");
         }
         /* the float classes keep their encoding */
         let c = [1.0, 0.5, 2.0, 0.0];
-        assert_eq!(clear_uniform(GLES_SURF_RGBA16F, &c), pack_clear_float(GLES_SURF_RGBA16F, &c));
-        assert_eq!(clear_uniform(GLES_SURF_R16F, &c), pack_clear_float(GLES_SURF_R16F, &c));
-        assert_eq!(clear_uniform(GLES_SURF_R32F, &c), [1.0f32.to_bits(), 0], "R32F is the red channel");
+        assert_eq!(clear_uniform(GLES_SURF_RGBA16F, &c)[..2], pack_clear_float(GLES_SURF_RGBA16F, &c));
+        assert_eq!(clear_uniform(GLES_SURF_R16F, &c)[..2], pack_clear_float(GLES_SURF_R16F, &c));
+        assert_eq!(clear_uniform(GLES_SURF_R32F, &c), [1.0f32.to_bits(), 0, 0, 0], "R32F is the red channel");
+    }
+
+    /// An integer target's clear is its raw integers packed as Mesa's
+    /// pvr_get_hw_clear_color packs them for its accumulation format
+    /// (vulkan/pvr_formats.c:145-218): the low byte of each value side by
+    /// side (UINT8/SINT8 :177-182), the low half-word (UINT16/SINT16
+    /// :193-198), the value as it is (UINT32/SINT32 :210-215), one
+    /// 10/10/10/2 dword for RGB10_A2UI (pvr_pack_a2x10y10z10_uint
+    /// :103-121) -- the expected words written out by hand -- and the clear
+    /// program moves that many dwords.
+    #[test]
+    fn an_integer_clear_is_the_raw_values_packed_for_the_target() {
+        let v = [0x1234_5678u32, 0xfedc_ba98, 0x0000_0302, 0xffff_ffff];
+        let c = v.map(f32::from_bits);
+        for (surf, want, dwords) in [
+            (GLES_SURF_R8UI, [0x78, 0, 0, 0], 1),
+            (GLES_SURF_R8I, [0x78, 0, 0, 0], 1),
+            (GLES_SURF_RG8UI, [0x9878, 0, 0, 0], 1),
+            (GLES_SURF_RGBA8UI, [0xff02_9878, 0, 0, 0], 1),
+            (GLES_SURF_RGBA8I, [0xff02_9878, 0, 0, 0], 1),
+            (GLES_SURF_R16UI, [0x5678, 0, 0, 0], 1),
+            (GLES_SURF_RG16I, [0xba98_5678, 0, 0, 0], 1),
+            (GLES_SURF_RGBA16UI, [0xba98_5678, 0xffff_0302, 0, 0], 2),
+            (GLES_SURF_R32I, [0x1234_5678, 0, 0, 0], 1),
+            (GLES_SURF_RG32UI, [0x1234_5678, 0xfedc_ba98, 0, 0], 2),
+            (GLES_SURF_RGBA32UI, v, 4),
+            (GLES_SURF_RGBA32I, v, 4),
+            /* 0x278 | 0x298 << 10 | 0x302 << 20 | 3 << 30 */
+            (GLES_SURF_RGB10_A2UI, [0x278 | 0x298 << 10 | 0x302 << 20 | 3 << 30, 0, 0, 0], 1),
+        ] {
+            assert_eq!(clear_uniform(surf, &c), want, "{}", gles_surf_name(surf));
+            assert_eq!(surf_out_dwords(surf), dwords, "{}", gles_surf_name(surf));
+        }
+        assert!(clears_by_quad(GLES_SURF_RGBA8UI) && clears_by_quad(GLES_SURF_R16F));
+        assert!(!clears_by_quad(GLES_SURF_RGBA8888));
+    }
+
+    /// The PBE state of an integer target, field by field against Mesa
+    /// 26.2.1: the pack mode of pvr_pbe_format_table
+    /// (vulkan/pvr_arch_formats.c:195-266, the row of the layout's pipe
+    /// format; texstate numbers from csbgen/rogue/pbestate.xml:60-123),
+    /// `norm` 0 (pvr_vk_format_is_fully_normalized, pvr_formats.h:264-273),
+    /// `source_format` 8_PER_CHANNEL (pvr_arch_job_common.c:51-53: any
+    /// integer format), and the register swizzle the identity with no
+    /// SWIZ.ONE for alpha whatever the target's alpha bits.
+    #[test]
+    fn integer_pbe_words_are_mesas() {
+        /* (surface, pipe format, PACKMODE value) */
+        let rows: [(u8, &str, u32); 19] = [
+            (GLES_SURF_R8I, "R8_SINT", 48),
+            (GLES_SURF_R8UI, "R8_UINT", 47),
+            (GLES_SURF_R16I, "R16_SINT", 50),
+            (GLES_SURF_R16UI, "R16_UINT", 49),
+            (GLES_SURF_R32I, "R32_SINT", 53),
+            (GLES_SURF_R32UI, "R32_UINT", 52),
+            (GLES_SURF_RG8I, "R8G8_SINT", 36),
+            (GLES_SURF_RG8UI, "R8G8_UINT", 35),
+            (GLES_SURF_RG16I, "R16G16_SINT", 38),
+            (GLES_SURF_RG16UI, "R16G16_UINT", 37),
+            (GLES_SURF_RG32I, "R32G32_SINT", 41),
+            (GLES_SURF_RG32UI, "R32G32_UINT", 40),
+            (GLES_SURF_RGBA8I, "R8G8B8A8_SINT", 1),
+            (GLES_SURF_RGBA8UI, "R8G8B8A8_UINT", 0),
+            (GLES_SURF_RGBA16I, "R16G16B16A16_SINT", 9),
+            (GLES_SURF_RGBA16UI, "R16G16B16A16_UINT", 8),
+            (GLES_SURF_RGBA32I, "R32G32B32A32_SINT", 12),
+            (GLES_SURF_RGBA32UI, "R32G32B32A32_UINT", 11),
+            (GLES_SURF_RGB10_A2UI, "R10G10B10A2_UINT", 52),
+        ];
+        for (surf, pipe, packmode) in rows {
+            let [_, w1] = pbe_emit_words(0x80_0000_1000, surf, 0, 0);
+            let w1 = w1 as u64;
+            /* pbestate.xml STATE_WORD1 (as a 32-bit word): packmode [7:12],
+             * norm [13], source_pos [14:15], mrt_index [16:18],
+             * source_format [19] */
+            assert_eq!((w1 >> 7) & 0x3f, u64::from(packmode), "{pipe}: packmode");
+            assert_eq!((w1 >> 13) & 1, 0, "{pipe}: norm");
+            assert_eq!(
+                (w1 >> 19) & 1,
+                u64::from(csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL),
+                "{pipe}: source_format"
+            );
+            for alpha_one in [false, true] {
+                let w0 = pbe_reg_words(surf, alpha_one, 64, 64, 64, false, false)[0];
+                let ident = pbe_reg_words(GLES_SURF_RGBA8888, false, 64, 64, 64, false, false)[0];
+                assert_eq!(w0, ident, "{pipe}: the identity swizzle, alpha_one {alpha_one}");
+            }
+        }
     }
 
     #[test]
@@ -7559,6 +7993,73 @@ mod tests {
         let iw0 = TEX_IMAGE_WORD0_R32F_LUMINANCE | (2u64 << 34) | (11u64 << 48);
         assert_eq!((lum[0], lum[1]), (iw0 as u32, (iw0 >> 32) as u32));
         assert_eq!(lum[2..], red[2..], "the rest of the descriptor is the R32F one");
+    }
+
+    /// The ES 3.0 storage classes' descriptors against Mesa 26.2.1, field by
+    /// field, the expected values written down from Mesa's own tables rather
+    /// than from `es3_tex_format`: the TPU format is the
+    /// `pvr_format_table` row of the class's pipe format
+    /// (vulkan/pvr_arch_formats.c:102-151) as a texstate.xml FORMAT number
+    /// (csbgen/rogue/texstate.xml:96-193); the swizzle is the pipe format's
+    /// util swizzle through `pvr_get_hw_swizzle` (pvr_arch_tex_state.c:40-64,
+    /// SRCCHAN_n = n, SRC_ONE = 4); `alpha_msb` is
+    /// `vk_format_is_alpha_on_msb` (vulkan/util/vk_format.h:214-226, used at
+    /// pvr_arch_tex_state.c:253); the pack info is `setup_pck_info`
+    /// (pvr_arch_tex_state.c:84-112) over `pco_pipe_to_pck_format`
+    /// (pco/pco.c:387-461) with pco_isa.py's numbers (u8888 0, s8888 1,
+    /// u1010102 8, f111110 12) and pvr_iface.h's bits (SCALE 0x40, UNORM
+    /// 0x100, INVALID 0x1f).
+    #[test]
+    fn es3_class_descriptors_are_mesas() {
+        let base = GlesTextureBind {
+            base_gpu: 0x80_0000_1000,
+            width: 3,
+            height: 12,
+            stride_texels: 4,
+            mip_levels: 1,
+            ..GlesTextureBind::ZERO
+        };
+        const ID: [u64; 4] = [0, 1, 2, 3];
+        const XYZ1: [u64; 4] = [0, 1, 2, 4];
+        /* (class, pipe format, FORMAT, swizzle, alpha_msb, bytes, pack info) */
+        type Row = (u8, &'static str, u64, [u64; 4], bool, u32, u32);
+        let rows: [Row; 13] = [
+            (GLES_TEXFMT_R11G11B10F, "R11G11B10_FLOAT", 88, XYZ1, false, 4, 12),
+            (GLES_TEXFMT_RGB9E5, "R9G9B9E5_FLOAT", 26, XYZ1, false, 4, 0x1f),
+            (GLES_TEXFMT_RGB10A2, "R10G10B10A2_UNORM", 14, ID, true, 4, 8 | 0x40 | 0x100),
+            (GLES_TEXFMT_RGB10A2UI, "R10G10B10A2_UINT", 14, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA8_SNORM, "R8G8B8A8_SNORM", 13, ID, true, 4, 1 | 0x40),
+            (GLES_TEXFMT_RGBA8UI, "R8G8B8A8_UINT", 12, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA8I, "R8G8B8A8_SINT", 13, ID, true, 4, 0x1f),
+            (GLES_TEXFMT_RGBA16UI, "R16G16B16A16_UINT", 29, ID, true, 8, 0x1f),
+            (GLES_TEXFMT_RGBA16I, "R16G16B16A16_SINT", 30, ID, true, 8, 0x1f),
+            (GLES_TEXFMT_RGBA32UI, "R32G32B32A32_UINT", 62, ID, true, 16, 0x1f),
+            (GLES_TEXFMT_RGBA32I, "R32G32B32A32_SINT", 63, ID, true, 16, 0x1f),
+            (GLES_TEXFMT_RGBA32F, "R32G32B32A32_FLOAT", 61, ID, true, 16, 0x1f),
+            /* the base classes keep their words: one of them, as a guard */
+            (GLES_TEXFMT_RGBA8, "R8G8B8A8_UNORM", 12, ID, true, 4, 0x140),
+        ];
+        for (format, pipe, texformat, swiz, alpha_msb, bytes, pck) in rows {
+            let w = desc(&GlesTextureBind { format, ..base });
+            let iw0 = w[0] as u64 | (w[1] as u64) << 32;
+            let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+            assert_eq!(iw0 & 7, 4, "{pipe}: TEXTYPE_STRIDE");
+            assert_eq!((iw0 >> 27) & 0x7f, texformat, "{pipe}: FORMAT");
+            let got = [(iw0 >> 14) & 7, (iw0 >> 11) & 7, (iw0 >> 8) & 7, (iw0 >> 5) & 7];
+            assert_eq!(got, swiz, "{pipe}: swiz0..3");
+            assert_eq!(((iw0 >> 34) & 0x3fff, (iw0 >> 48) & 0x3fff), (2, 11), "{pipe}: width, height less one");
+            assert_eq!(
+                iw0 & !(0x3fff << 34 | 0x3fff << 48 | 0x7f << 27 | 0xfff << 5 | 7),
+                0,
+                "{pipe}: nothing else in word 0"
+            );
+            assert_eq!((iw1 >> 59) & 1 != 0, alpha_msb, "{pipe}: alpha_msb");
+            let want1 = (u64::from(alpha_msb) << 59) | 3 | (1u64 << 60) | ((0x80_0000_1000u64 >> 2) << 16);
+            assert_eq!(iw1, want1, "{pipe}: the STRIDE word");
+            assert_eq!(w[4], 4 * 12 * bytes, "{pipe}: layer bytes");
+            assert_eq!(gles_texfmt_bytes(format), bytes, "{pipe}: the class's texel");
+            assert_eq!(w[7], pck, "{pipe}: PCK_INFO");
+        }
     }
 
     #[test]

@@ -346,17 +346,17 @@ fn vertex_inputs(sh: &ShcShader) -> ([ShcAttrib; MAX_DRAW_ATTRIBS], usize) {
          * PowerVR front end splits a matrix so pco_shc never sees one) is
          * taken as it is. */
         let split = rows.iter().filter(|r| r.name == whole.name).count() > 1;
-        let columns: u8 = if cfg!(not(feature = "gpu-powervr")) && !split {
-            /* ES 2.0's matrices are square: a column is as tall as the
-             * matrix is wide */
-            match u32::from(whole.gl_type) {
-                GL_FLOAT_MAT2 => 2,
-                GL_FLOAT_MAT3 => 3,
-                GL_FLOAT_MAT4 => 4,
-                _ => 1,
+        /* (columns, rows) of a matCxR (ES 3.00's non-square ones too): C
+         * locations of R components each; (1, 1) for anything else */
+        let (columns, rows): (u8, u8) = if cfg!(not(feature = "gpu-powervr")) && !split {
+            let (c, r) = super::program::gl_type_shape(whole.gl_type);
+            if c > 1 {
+                (c as u8, r as u8)
+            } else {
+                (1, 1)
             }
         } else {
-            1
+            (1, 1)
         };
         for k in 0..columns {
             if n == MAX_DRAW_ATTRIBS {
@@ -366,7 +366,7 @@ fn vertex_inputs(sh: &ShcShader) -> ([ShcAttrib; MAX_DRAW_ATTRIBS], usize) {
             if columns > 1 {
                 col.location = whole.location.saturating_add(k);
                 col.vi_reg = whole.vi_reg.saturating_add(k);
-                col.components = columns;
+                col.components = rows;
             }
             out[n] = col;
             n += 1;
@@ -1048,6 +1048,18 @@ fn current_blend_key(c: &GlContext) -> u32 {
     let mut key = SHC_BLEND_KEY_REPLACE;
     let off = disabled_channels(c);
 
+    /* an integer target: the variant that packs the integer output for its
+     * layout (never blended, ES 3.0 4.1.7), with the mask of the channels it
+     * has (a channel it lacks is never written, masked or not) */
+    if let Some(l) = gles_surf_int_layout(framebuffer::fb_target_format(c)) {
+        let rt = ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
+        let own = (1u32 << l.channels) - 1;
+        let off = off & own;
+        /* every channel off is the ISP's (`GlesDraw::color_write`), as below */
+        let mask = if off != 0 && disabled_channels(c) != 0xf { shc_blend_key_mask_off(off) } else { 0 };
+        return shc_blend_key_int_rt(rt) | mask;
+    }
+
     if c.blend && !framebuffer::fb_target_is_integer(c) {
         key = shc_blend_key(
             map_blend_factor(c.blend_src),
@@ -1366,7 +1378,7 @@ static LOD_VARIANT_LOGGED: AtomicBool = AtomicBool::new(false);
 /// own, ES 3.0 3.8.2), whether it has more than one level, and its storage
 /// format (`GLES_TEXFMT_*`). `None`: no texture there.
 fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, GLenum, bool, u8)> {
-    let (bound, target) = match gl_type {
+    let (bound, target) = match binding_type(gl_type) {
         GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => (*c.bound_texture_cube.get(unit)?, GL_TEXTURE_CUBE_MAP),
         GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => {
             (*c.bound_texture_2d_array.get(unit)?, GL_TEXTURE_2D_ARRAY)
@@ -1416,7 +1428,7 @@ fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAM
         if s.ret32 & bit != 0 && texfmt == GLES_TEXFMT_R32F {
             k.ret32 |= bit;
         }
-        if s.cube_noseam & bit != 0 && gl_type == GL_SAMPLER_CUBE_T && cube_filters_see_seams(min, mag) {
+        if s.cube_noseam & bit != 0 && binding_type(gl_type) == GL_SAMPLER_CUBE_T && cube_filters_see_seams(min, mag) {
             k.cube_noseam |= bit;
         }
         let mipmapped = levels
@@ -2431,6 +2443,20 @@ const GL_SAMPLER_2D_ARRAY_T: u16 = 0x8DC1;
 const GL_SAMPLER_2D_ARRAY_SHADOW_T: u16 = 0x8DC4;
 const GL_SAMPLER_3D_T: u16 = 0x8B5F;
 
+/// The float sampler type an `isampler*` / `usampler*` reads the same
+/// binding as (ES 3.0 2.11.9: the sampler's dimension picks the texture
+/// target, its return type does not); every other type as it is. The
+/// matches below on the float types take an integer sampler through this.
+const fn binding_type(gl_type: u16) -> u16 {
+    match gl_type as u32 {
+        GL_INT_SAMPLER_2D | GL_UNSIGNED_INT_SAMPLER_2D => GL_SAMPLER_2D as u16,
+        GL_INT_SAMPLER_3D | GL_UNSIGNED_INT_SAMPLER_3D => GL_SAMPLER_3D_T,
+        GL_INT_SAMPLER_CUBE | GL_UNSIGNED_INT_SAMPLER_CUBE => GL_SAMPLER_CUBE_T,
+        GL_INT_SAMPLER_2D_ARRAY | GL_UNSIGNED_INT_SAMPLER_2D_ARRAY => GL_SAMPLER_2D_ARRAY_T,
+        _ => gl_type,
+    }
+}
+
 /// The emulated 2D arrays carry their layer count in a hidden uniform
 /// (pvr_layers_<sampler>) the translator added to the fragment block: the
 /// shader divides the stacked texture's height by it. It has to be in the
@@ -2485,7 +2511,7 @@ fn fill_stage_layer_uniforms(
         if su.dword_off != SHC_UNIFORM_NO_BLOCK || su.binding as usize >= CAP_SAMPLERS {
             continue;
         }
-        let bound = match su.gl_type {
+        let bound = match binding_type(su.gl_type) {
             GL_SAMPLER_3D_T => bound_3d, /* sampler3D: the slice count, same hidden uniform */
             GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => bound_2d_array, /* (i)sampler2DArray */
             _ => continue,
@@ -2861,7 +2887,7 @@ fn resolve_sampled_depth(c: &mut GlContext, program: GLuint) {
         for (binding, gl_type) in sh.sampler_bindings() {
             if binding as usize >= CAP_SAMPLERS
                 || matches!(
-                    gl_type,
+                    binding_type(gl_type),
                     GL_SAMPLER_CUBE_T
                         | GL_SAMPLER_CUBE_SHADOW_T
                         | GL_SAMPLER_2D_ARRAY_T
@@ -3406,7 +3432,7 @@ fn build_common(
             let unit = units[binding as usize] as usize;
             /* the sampler's GLSL type says which binding of the unit it reads
              * (a samplerCube the cube map, a sampler2DArray the array) */
-            let (bound, target) = match gl_type {
+            let (bound, target) = match binding_type(gl_type) {
                 GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => (c.bound_texture_cube[unit], GL_TEXTURE_CUBE_MAP),
                 GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => {
                     (c.bound_texture_2d_array[unit], GL_TEXTURE_2D_ARRAY)
@@ -3456,7 +3482,7 @@ fn build_common(
             };
             tb.unit = binding;
             tb.format = t.texfmt;
-            tb.type_ = match gl_type {
+            tb.type_ = match binding_type(gl_type) {
                 GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => GLES_TEXTYPE_CUBE,
                 GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => GLES_TEXTYPE_2D_ARRAY,
                 GL_SAMPLER_3D_T => GLES_TEXTYPE_3D,
@@ -4416,6 +4442,29 @@ mod tests {
     impl Drop for Gl {
         fn drop(&mut self) {
             reset_draw_statics(false); /* runs before the TestGl is dropped */
+        }
+    }
+
+    /// An `isampler*` / `usampler*` reads the binding of its dimension:
+    /// the cube map, the 2D array, the 3D texture or the 2D texture of the
+    /// unit, as the float sampler of that dimension does (ES 3.0 2.11.9).
+    #[test]
+    fn an_integer_sampler_reads_the_binding_of_its_dimension() {
+        for (t, want) in [
+            (GL_INT_SAMPLER_2D, GL_SAMPLER_2D as u16),
+            (GL_UNSIGNED_INT_SAMPLER_2D, GL_SAMPLER_2D as u16),
+            (GL_INT_SAMPLER_3D, GL_SAMPLER_3D_T),
+            (GL_UNSIGNED_INT_SAMPLER_3D, GL_SAMPLER_3D_T),
+            (GL_INT_SAMPLER_CUBE, GL_SAMPLER_CUBE_T),
+            (GL_UNSIGNED_INT_SAMPLER_CUBE, GL_SAMPLER_CUBE_T),
+            (GL_INT_SAMPLER_2D_ARRAY, GL_SAMPLER_2D_ARRAY_T),
+            (GL_UNSIGNED_INT_SAMPLER_2D_ARRAY, GL_SAMPLER_2D_ARRAY_T),
+        ] {
+            assert_eq!(binding_type(t as u16), want, "0x{t:x}");
+        }
+        /* the float ones are their own */
+        for t in [GL_SAMPLER_2D as u16, GL_SAMPLER_CUBE_T, GL_SAMPLER_2D_ARRAY_SHADOW_T, GL_SAMPLER_3D_T] {
+            assert_eq!(binding_type(t), t);
         }
     }
 
@@ -6694,6 +6743,43 @@ mod tests {
         assert_eq!(disabled_channels(gl.ctx()), 0);
     }
 
+    /// An integer colour target selects the variant that packs the integer
+    /// output for its layout, blending or not (ES 3.0 4.1.7), and keeps the
+    /// mask of its own channels; with every channel off it is the ISP's.
+    #[test]
+    fn an_integer_target_keys_its_layout_never_a_blend() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = Gl::new(8, 8);
+        let mut rb: GLuint = 0;
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RG16I, 8, 8);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let rt = ShcIntRt { channels: 2, bits: 16, signed: true };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "no blend in the key");
+        assert_eq!(ShcIntRt::of_key(current_blend_key(gl.ctx())), Some(rt));
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_TRUE_B, GL_FALSE_B, GL_TRUE_B, GL_TRUE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt) | shc_blend_key_mask_off(0b10), "green off");
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_TRUE_B, GL_TRUE_B, GL_FALSE_B, GL_FALSE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "blue and alpha it does not have");
+        // SAFETY: plain GL calls.
+        unsafe { glColorMask(GL_FALSE_B, GL_FALSE_B, GL_FALSE_B, GL_FALSE_B) };
+        assert_eq!(current_blend_key(gl.ctx()), shc_blend_key_int_rt(rt), "every channel off: the ISP's");
+    }
+
     #[test]
     fn blend_key_of_one_zero_is_a_plain_replace() {
         let gl = Gl::new(8, 8);
@@ -8246,8 +8332,9 @@ mod tests {
         assert!(prog_gpu(&gl, prog).lod_var.iter().all(|v| !v.used));
     }
 
-    /// The two records of one mat3/mat4 attribute -- etna_shc's rows x
-    /// columns components and ours of one column -- give the same inputs.
+    /// The two records of one matrix attribute -- etna_shc's rows x
+    /// columns components and ours of one column -- give the same inputs,
+    /// one per column, as tall as the matrix's rows.
     #[test]
     fn both_records_of_a_matrix_attribute_give_the_same_columns() {
         let rec = |components: u8, gl_type: u32| {
@@ -8268,6 +8355,15 @@ mod tests {
             let mat3 = [(0, 4, 0), (1, 3, 1), (2, 3, 2), (3, 3, 3)];
             assert_eq!(rec(9, GL_FLOAT_MAT3), mat3);
             assert_eq!(rec(3, GL_FLOAT_MAT3), mat3);
+            /* ES 3.00's matCxR: C columns of R components (a mat4x3 is four
+             * locations of three, a mat2x4 two of four), whichever way the
+             * record counts the components. Before, a non-square matrix was
+             * one input: its other columns were never fetched. */
+            let mat4x3 = [(0, 4, 0), (1, 3, 1), (2, 3, 2), (3, 3, 3), (4, 3, 4)];
+            assert_eq!(rec(12, GL_FLOAT_MAT4x3), mat4x3);
+            assert_eq!(rec(3, GL_FLOAT_MAT4x3), mat4x3);
+            assert_eq!(rec(4, GL_FLOAT_MAT2x4), [(0, 4, 0), (1, 4, 1), (2, 4, 2)]);
+            assert_eq!(rec(2, GL_FLOAT_MAT3x2), [(0, 4, 0), (1, 2, 1), (2, 2, 2), (3, 2, 3)]);
         } else {
             assert_eq!(rec(16, GL_FLOAT_MAT4), [(0, 4, 0), (1, 16, 1)], "the PowerVR path is unchanged");
         }

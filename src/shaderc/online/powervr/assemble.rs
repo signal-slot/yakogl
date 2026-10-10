@@ -269,7 +269,15 @@ pub fn build_group(g: &super::sel::SelGroup) -> Result<Group, BuildError> {
             let Some(SelDst::Fixed { bank: super::sel::Bank::Temp, reg: dest }) = g.dst else {
                 return Err(BuildError::Unsupported("a sample that was not expanded"));
             };
-            return super::fragment::build_smp(image, data, sampler, dest, proj, lod, fetch, offset.is_some(), cube);
+            /* an isampler / usampler look-up (`select::smp_type`): no fcnorm */
+            let integer = g.ty != super::sel::OpType::F32;
+            return super::fragment::build_smp(
+                image,
+                data,
+                sampler,
+                dest,
+                super::fragment::SmpForm { proj, lod, fetch, offset: offset.is_some(), cube, integer },
+            );
         }
         SelOp::WaitData => return super::fragment::wait_data(),
         /* The execution mask (`powervr::cf`), on the emc the allocator gave
@@ -1565,6 +1573,85 @@ pub fn build_fragment_shader_outputs(
                 return build_pixout_write_to(outputs[s as usize].0, base(s) + 4, s + 1 == n).map(Some);
             }
             Ok(None)
+        },
+        buf,
+    )?;
+    Ok((len, temps))
+}
+
+/// A fragment shader writing one integer render target's packed dwords
+/// (`chain::pack_int_output`; Mesa pco_nir_pvfio.c pack_to_format): dword
+/// `k` is written to pixel output register `k` as it is, with no pack
+/// instruction -- the bits are already the target's, and the PBE's integer
+/// pack mode reads them from there (src/pvr/backend.rs `pbe_emit_words`).
+/// A dword not already in a temporary is moved into one above everything
+/// the allocator placed first; the kill test and the feedback of a shader
+/// that discards come before the writes, and the last write ends the
+/// program. Returns the bytes written and the temporaries.
+pub fn build_fragment_shader_packed(
+    iterated: &[super::fragment::Iterated],
+    arithmetic: &[super::sel::SelGroup],
+    dwords: &[(super::sel::Bank, u16)],
+    discard: Option<u16>,
+    free: u16,
+    buf: &mut [u8],
+) -> Result<(usize, u16), BuildError> {
+    use super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc};
+    if dwords.is_empty() || dwords.len() > MAX_RGBA8_OUTPUTS {
+        return Err(BuildError::Unsupported("an integer output of other than 1..=4 dwords"));
+    }
+    let n = dwords.len() as u16;
+    let temps = free.checked_add(n).ok_or(BuildError::Unsupported("no temporaries left for the colour"))?;
+    /* where dword k is written from: its own temporary, or free + k */
+    let src = |k: u16| match dwords[k as usize] {
+        (Bank::Temp, r) => r,
+        _ => free + k,
+    };
+    let mut pro = Prologue::new(iterated, arithmetic);
+    let kills: u16 = if discard.is_some() { 3 } else { 0 };
+    let mut step = 0u16;
+    let len = encode_closed(
+        || {
+            if let Some(g) = pro.group()? {
+                return Ok(Some(g));
+            }
+            loop {
+                let s = step;
+                step += 1;
+                if s < n {
+                    let (bank, reg) = dwords[s as usize];
+                    if bank == Bank::Temp {
+                        continue;
+                    }
+                    return build_group(&SelGroup {
+                        op: SelOp::Copy,
+                        ty: OpType::U32,
+                        dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: free + s }),
+                        srcs: [Some(SelSrc::Fixed { bank, reg, mods: Mods::default() }), None, None],
+                    })
+                    .map(Some);
+                }
+                let s = s - n;
+                if s < kills {
+                    const TEMP: u32 = 1;
+                    let flag = discard.ok_or(BuildError::Unsupported("a kill test with no flag"))?;
+                    return match s {
+                        0 => super::shapes::build_opt(
+                            &super::shapes::KILL_TEST,
+                            &[Some(Operand { bank: TEMP, index: flag as u32 }), None, None],
+                            None,
+                        ),
+                        1 => super::shapes::build_opt(&super::shapes::ALPHA_FEEDBACK, &[None; 3], None),
+                        _ => super::fragment::wait_data(),
+                    }
+                    .map(Some);
+                }
+                let s = s - kills;
+                if s < n {
+                    return build_pixout_write_to(s, src(s), s + 1 == n).map(Some);
+                }
+                return Ok(None);
+            }
         },
         buf,
     )?;

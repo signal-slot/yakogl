@@ -49,9 +49,10 @@ mipmapped arrays went Pass -> Fail; section 6 says how this design avoids that.
 - The layer count reaches the shader as a hidden float uniform
   `pvr_layers_<sampler>` (`select.rs:2575`, filled by
   `gl/draw.rs` `fill_stage_layer_uniforms:2418`).
-- Offsets, bias on a 3D texture, gradients and every shadow form beyond plain
-  `texture` / `textureLod` on a stacked texture hit the catch-all
-  `select.rs:1164-1166`.
+- Offsets on a stacked texture (cube, 2D array, 3D) and gradients hit the
+  select.rs catch-all; a bias on a 3D texture, the shadow forms on 2D, cube
+  and 2D array, and a projective 2D shadow look-up (divided in the shader)
+  select.
 
 ## 2. The model: Mesa has no hardware array path either
 

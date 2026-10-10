@@ -140,10 +140,9 @@ const fn texfmts(list: &[u8]) -> u32 {
     m
 }
 
-/// The texel formats the PowerVR TPU descriptor sampler reads today
-/// (`pvr/backend.rs`, the texture state): the formats item `formats-pvr`
-/// adds the ES 3.0 classes to this mask as it makes the sampler read them.
-pub const PVR_SAMPLED_TEXFMTS: u32 = texfmts(&[
+/// The texel formats the original tables hold and every sampler but the
+/// V3D's reads: RGBA8, RGB565, the float trio and the narrow L8/A8/LA8.
+const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
     GLES_TEXFMT_RGBA8,
     GLES_TEXFMT_RGB565,
     GLES_TEXFMT_RGBA16F,
@@ -153,8 +152,34 @@ pub const PVR_SAMPLED_TEXFMTS: u32 = texfmts(&[
     GLES_TEXFMT_A8,
     GLES_TEXFMT_LA8,
 ]);
+/// The texel formats the PowerVR TPU descriptor sampler reads
+/// (`pvr/backend.rs`, the texture state, `es3_tex_format`): the base set
+/// and the ES 3.0 classes, each in the TPU format Mesa's pvr_format_table
+/// gives its pipe format (docs/es3-pvr-formats.md section 2). The integer
+/// classes are read by an `isampler2D` / `usampler2D` (the online compiler's
+/// `smp` without `fcnorm`); the other integer sampler dimensions are refused
+/// by name at compile time.
+///
+/// Not `GLES_TEXFMT_RGB10A2`, which the descriptor decodes too: a texture of
+/// that class is no render target and has no glGenerateMipmap in the GL core
+/// (docs/es3-sized-formats.md), and ES 3.0 makes GL_RGB10_A2 both, so it
+/// stays in RGBA8 (two bits lost) until the PowerVR renders the class.
+pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
+    | texfmts(&[
+        GLES_TEXFMT_R11G11B10F,
+        GLES_TEXFMT_RGB9E5,
+        GLES_TEXFMT_RGB10A2UI,
+        GLES_TEXFMT_RGBA8_SNORM,
+        GLES_TEXFMT_RGBA8UI,
+        GLES_TEXFMT_RGBA8I,
+        GLES_TEXFMT_RGBA16UI,
+        GLES_TEXFMT_RGBA16I,
+        GLES_TEXFMT_RGBA32UI,
+        GLES_TEXFMT_RGBA32I,
+        GLES_TEXFMT_RGBA32F,
+    ]);
 /// The GC7000 texture descriptor's (`vivante/texture.rs`); `formats-gc`.
-pub const GC_SAMPLED_TEXFMTS: u32 = PVR_SAMPLED_TEXFMTS;
+pub const GC_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS;
 /// The V3D TMU binding's (`v3d/texture.rs` `tmu_format`): RGBA8, L8, A8, LA8
 /// and R32F only; `formats-v3d`.
 pub const V3D_SAMPLED_TEXFMTS: u32 =
@@ -164,6 +189,11 @@ pub const V3D_SAMPLED_TEXFMTS: u32 =
 /// native storage classes before any backend samples them.
 #[cfg(test)]
 pub static TEST_EXTRA_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Test hook: texel formats a host test takes out of the mask, to stand in
+/// for a back end that samples fewer classes than this build's.
+#[cfg(test)]
+pub static TEST_HIDDEN_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// The texel formats (a mask of [`gles_texfmt_bit`]) this build's backend
 /// samples. The GL core stores an ES 3.0 sized texture (src/gl/es3_formats.rs)
@@ -179,7 +209,8 @@ pub fn sampled_texfmts() -> u32 {
     #[cfg(feature = "gpu-v3d")]
     let m = V3D_SAMPLED_TEXFMTS;
     #[cfg(test)]
-    let m = m | TEST_EXTRA_SAMPLED.load(core::sync::atomic::Ordering::Relaxed);
+    let m = (m & !TEST_HIDDEN_SAMPLED.load(core::sync::atomic::Ordering::Relaxed))
+        | TEST_EXTRA_SAMPLED.load(core::sync::atomic::Ordering::Relaxed);
     m
 }
 
@@ -322,11 +353,13 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 }
 
 /// The integer colour surfaces this build's back end can render into: bit
-/// `format - GLES_SURF_INT_FIRST`. None yet. A back end that learns one sets
-/// its bits here (docs/HANDOFF.md, open work 4, int-rt) and it stops being
-/// refused at the draw; until then the GL core accepts the renderbuffer
-/// (ES 3.0 requires the formats) and refuses to draw into it, by name,
-/// rather than render garbage.
+/// `format - GLES_SURF_INT_FIRST`. A back end that learns one sets its bits
+/// here (docs/HANDOFF.md, open work 4, int-rt) and it stops being refused at
+/// the draw; until then the GL core accepts the renderbuffer (ES 3.0
+/// requires the formats) and refuses to draw into it, by name, rather than
+/// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs
+/// `pbe_int_packmode`, the online compiler's packed integer output) as the
+/// one colour attachment of a draw; the GC7000 and the V3D none yet.
 pub const INTEGER_RT_FORMATS: u32 = {
     #[cfg(feature = "gpu-vivante")]
     {
@@ -338,7 +371,7 @@ pub const INTEGER_RT_FORMATS: u32 = {
     }
     #[cfg(feature = "gpu-powervr")]
     {
-        0
+        (1 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1
     }
 };
 

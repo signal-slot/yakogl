@@ -191,14 +191,11 @@ pub struct V3dProgram<'a> {
 }
 
 /// How many attribute locations a declaration of `gl_type` takes: one per
-/// column of `GL_FLOAT_MAT2`/`3`/`4` (0x8B5A..0x8B5C), one otherwise.
+/// column of a matrix, square or ES 3.00's non-square `matCxR` (C, as
+/// GLSL's front end lowers a matrix input to a vec per column, Mesa's
+/// `nir_lower_io` slots one per column), one otherwise.
 pub fn attribute_locations(gl_type: u16) -> u8 {
-    match gl_type {
-        0x8b5a => 2,
-        0x8b5b => 3,
-        0x8b5c => 4,
-        _ => 1,
-    }
+    crate::shaderc::online::powervr::abi::matrix_columns(gl_type).unwrap_or(1)
 }
 
 /// `VARYING_SLOT_VAR0` (compiler/shader_enums.h): Mesa's slot number of the
@@ -410,6 +407,10 @@ pub fn compile_program_keyed<'a>(
      * flat_shade_flags at the input's index). The job builder reads word 0
      * only and refuses more than 24 inputs. */
     let mut flat = 0u32;
+    /* Bit i: input i is sampled at the centroid (emit_fragment_varying:
+     * BITSET_SET of centroid_flags, the W it multiplies by the centroid
+     * W). */
+    let mut centroid = 0u32;
     for (i, &(loc, _)) in inputs.iter().enumerate() {
         let d = fs
             .inputs
@@ -421,6 +422,12 @@ pub fn compile_program_keyed<'a>(
                 return Err(V3dError::NotYet("a flat varying past input 31"));
             }
             flat |= 1 << i;
+        }
+        if d.interp == crate::shaderc::online::ir::INTERP_CENTROID {
+            if i >= 32 {
+                return Err(V3dError::NotYet("a centroid varying past input 31"));
+            }
+            centroid |= 1 << i;
         }
     }
 
@@ -481,7 +488,7 @@ pub fn compile_program_keyed<'a>(
     /* LazyAttributes changes nothing in a fragment shader. */
     let (fsel, (fs_code, fs_threads)) = under_pressure(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment(&fsp, inputs, flat, pr, a),
+        |pr| select_fragment(&fsp, inputs, flat, centroid, pr, a),
         false,
         a,
     )?;
@@ -502,7 +509,7 @@ pub fn compile_program_keyed<'a>(
             input_slots: slots,
             flat_shade_flags: flat,
             noperspective_flags: 0,
-            centroid_flags: 0,
+            centroid_flags: centroid,
             /* select.rs select_fragment: a discard or a read of Z */
             writes_z: fsel.writes_z,
             disable_ez: fsel.disable_ez,
@@ -3007,6 +3014,114 @@ mod tests {
         assert!(!out.iter().flatten().any(|&x| x == poison), "the GFXH-1602 row is never read");
     }
 
+    /// A `centroid in` is smooth with the centroid W (Mesa
+    /// emit_fragment_varying, nir_to_vir.c:1094-1097: payload_w_centroid,
+    /// rf1) and sets its input's bit of `centroid_flags`, which the job
+    /// builder emits as the CENTROID varying flags; the smooth input beside
+    /// it keeps the centre W (rf0). Run in the interpreter with the two W
+    /// apart, each input's value comes back with its own. Single-sampled the
+    /// hardware gives both the same W. These were refused (`NotYet("centroid
+    /// varying")`, dEQP's 9 linkage / qualification_order programs). Revert
+    /// check: with the centroid input reading rf0 the first lane's x is off.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_centroid_input_reads_the_centroid_w() {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        const VS: &str = "#version 300 es\nin vec4 p;\ncentroid out vec2 c;\nout vec2 s;\n\
+            void main() { c = p.xy; s = p.zw; gl_Position = p; }\n";
+        const FS: &str = "#version 300 es\nprecision highp float;\ncentroid in vec2 c;\nin vec2 s;\n\
+            layout(location = 0) out vec4 o;\nvoid main() { o = vec4(c, s); }\n";
+        with_program(VS, FS, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let slots: Vec<(u8, u8)> = p.fs.input_slots.to_vec();
+            assert_eq!(slots.len(), 4, "c.xy and s.xy: {slots:?}");
+            /* which inputs are c's: the vertex shader's first output */
+            let centroid_inputs: u32 = (0..4).filter(|&i| p.fs.centroid_flags & (1 << i) != 0).map(|i| 1 << i).sum();
+            assert_eq!(p.fs.centroid_flags.count_ones(), 2, "two centroid inputs: {:#x}", p.fs.centroid_flags);
+            assert!(p.fs.uses_center_w, "s reads the centre W");
+            let uniforms: Vec<u32> = p.fs.code.uniforms.iter().map(|u| u.data).collect();
+            /* vary 0.25 * (i + 1), C 0.125: value = vary * W + C */
+            let varyings = (0..4)
+                .map(|i| Varying { vary: [(0.25 * (i as f32 + 1.0)).to_bits(); LANES], c: [0.125f32.to_bits(); LANES] })
+                .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [0.5f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env = Env { threads: p.fs.threads, ..Env::default() };
+            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("runs");
+            let value = |i: usize| {
+                let w = if centroid_inputs & (1 << i) != 0 { 0.5 } else { 1.0 };
+                0.25 * (i as f32 + 1.0) * w + 0.125
+            };
+            /* o = (c.x, c.y, s.x, s.y): inputs in the order the slots list */
+            let mut want = [0f32; 4];
+            for (i, &(slot, comp)) in slots.iter().enumerate() {
+                let k = if slot == slots[0].0 { comp as usize } else { 2 + comp as usize };
+                want[k] = value(i);
+            }
+            assert!(centroid_inputs & 0b11 == 0b11 || centroid_inputs & 0b1100 == 0b1100, "c's two lanes together");
+            let h = |x: f32| u32::from(sim::f32_to_half(x));
+            let wanted = [h(want[0]) | h(want[1]) << 16, h(want[2]) | h(want[3]) << 16];
+            assert_eq!([o.tlb[0].value[0].unwrap(), o.tlb[1].value[0].unwrap()], wanted, "want {want:?}");
+            assert!(want[0] != want[2], "the two W give different values");
+        });
+    }
+
+    /// A non-square matrix attribute (ES 3.00 `matCxR`) takes C consecutive
+    /// locations of R components each, one attribute record per column, as
+    /// Mesa slots a matrix input per column: a `mat4x3` at location 1 reads
+    /// rows 4..15 in four records of three rows, a `mat3x2` three of two
+    /// (every column's last component is read: a record is as tall as the
+    /// highest component read). Each column comes back from its own rows in
+    /// the interpreter.
+    /// These were refused ("an attribute location with no declaration": the
+    /// columns past the first had no location), 132 programs of dEQP's
+    /// shaders corpus (`conversions.matrix_to_*` and the matrix inputs of
+    /// `functions` and `linkage`). Revert check: with attribute_locations
+    /// counting square matrices only, both programs are refused again.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_non_square_matrix_attribute_takes_a_location_per_column() {
+        const FS: &str = "#version 300 es\nprecision highp float;\nin vec4 v;\n\
+            layout(location = 0) out vec4 o;\nvoid main() { o = v; }\n";
+        let f = |x: f32| -> u32 { x.to_bits() };
+        let lanes = |g: &dyn Fn(usize) -> u32| -> [u32; 16] { core::array::from_fn(g) };
+        let row = |r: usize| lanes(&|l| f(100.0 * r as f32 + l as f32));
+        let rows: Vec<[u32; 16]> = (0..16).map(row).collect();
+        let sum = |a: &[u32; 16], b: &[u32; 16]| lanes(&|l| f(f32::from_bits(a[l]) + f32::from_bits(b[l])));
+        for (decl, body, sizes, want) in [
+            (
+                "mat4x3",
+                "v = vec4(m[0][2] + m[0][0], m[1][2] + m[1][1], m[2][2], m[3][2] + m[3][0]);",
+                &[4u8, 3, 3, 3, 3][..],
+                /* pos rows 0..3, column k rows 4 + 3k .. 6 + 3k */
+                [sum(&rows[6], &rows[4]), sum(&rows[9], &rows[8]), rows[12], sum(&rows[15], &rows[13])],
+            ),
+            (
+                "mat3x2",
+                "v = vec4(m[0][1], m[1][1] + m[1][0], m[2][1], m[2][0]);",
+                &[4u8, 2, 2, 2][..],
+                [rows[5], sum(&rows[7], &rows[6]), rows[9], rows[8]],
+            ),
+        ] {
+            let vs = std::format!(
+                "#version 300 es\nlayout(location = 0) in vec4 pos;\nlayout(location = 1) in {decl} m;\n\
+                 out vec4 v;\nvoid main() {{ {body} gl_Position = pos; }}\n"
+            );
+            let (_, got_sizes, out) = run_vertex_stage(&vs, FS, false, &rows);
+            assert_eq!(&got_sizes[..sizes.len()], sizes, "{decl}: a record per column, as tall as a column");
+            assert!(out.windows(4).any(|w| w == want), "{decl}: each column read from its own rows: {out:x?}");
+        }
+    }
+
     /// gl_InstanceID is VPM input row 0 and pushes gl_VertexID to row 1
     /// (Mesa ntq_setup_vs_inputs, nir_to_vir.c:2415-2421: instance ID, base
     /// instance, vertex ID), and the attributes start after both
@@ -3253,7 +3368,7 @@ mod tests {
             use crate::shaderc::online::v3d::select::{select_fragment, Dst, Operand, Pressure, VOp};
             let fsp = prepare_fragment_with(&fr.module, &[], 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
             let def = |v: Operand| {
                 sel.ops.iter().find(|o| match (o, v) {
                     (VOp::Add { dst: Dst::V(d), .. } | VOp::Mul { dst: Dst::V(d), .. }, Operand::V(x)) => *d == x,
@@ -3343,7 +3458,7 @@ mod tests {
             let (fm, trips) = unrolled(&fr.module, a).expect("the loop's trip count");
             let fsp = prepare_fragment_with(fm, trips, 0, a).expect("prepares");
             let inputs = fragment_inputs(&fsp, a).expect("inputs");
-            let sel = select_fragment(&fsp, inputs, 0, Pressure::None, a).expect("selects");
+            let sel = select_fragment(&fsp, inputs, 0, 0, Pressure::None, a).expect("selects");
             let head = sel.ops.iter().position(|o| *o == VOp::LoopHead).expect("a loop");
             let edge = sel.ops.iter().position(|o| matches!(o, VOp::BackEdge { .. })).expect("a back edge");
             let user = |o: &VOp| matches!(o, VOp::Ldunif { u, .. } if u.contents == QUNIFORM_UNIFORM);
@@ -3526,6 +3641,102 @@ mod tests {
             let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
             assert!(!ops.iter().any(|o| o.contains("fmax")), "max(a, a) is a: {ops:#?}");
         });
+    }
+
+    /// Runs the ES 3.00 fragment shader `fs` (reading `in vec4 v`) in the
+    /// interpreter on 16 lanes, varying component c of lane l being
+    /// `input(l)[c]`, and checks each lane's colour against `want` of those
+    /// inputs (the RT is f16, so every wanted value is exact in f16).
+    #[cfg(not(feature = "report-es2"))]
+    fn run_es3_fs(fs: &str, input: impl Fn(usize) -> [f32; 4], want: impl Fn([f32; 4]) -> [f32; 4]) {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        const VS: &str = "#version 300 es\nin vec4 p;\nout vec4 v;\nvoid main() { v = p; gl_Position = p; }\n";
+        with_program(VS, fs, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let uniforms: Vec<u32> =
+                p.fs.code
+                    .uniforms
+                    .iter()
+                    .map(|u| match u.contents {
+                        0 => u.data,
+                        c => panic!("uniform contents {c} not modelled here"),
+                    })
+                    .collect();
+            let varyings =
+                p.fs.input_slots
+                    .iter()
+                    .map(|&(_, comp)| Varying {
+                        vary: core::array::from_fn(|l| input(l)[comp as usize].to_bits()),
+                        c: [0; LANES],
+                    })
+                    .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [1.0f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env = Env { threads: p.fs.threads, ..Env::default() };
+            let o = sim::run(p.fs.code.words, &uniforms, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                .expect("runs");
+            let h = |x: f32| u32::from(sim::f32_to_half(x));
+            for l in 0..LANES {
+                let c = want(input(l));
+                let wanted = [h(c[0]) | h(c[1]) << 16, h(c[2]) | h(c[3]) << 16];
+                let got = [o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap()];
+                assert_eq!(got, wanted, "lane {l}: inputs {:?}, want {c:?}: {fs}", input(l));
+            }
+        });
+    }
+
+    /// GLSL ES 3.00's `trunc`, integer shifts, integer and unsigned
+    /// min/max, `~` and the unsigned orderings, each Mesa's one operation
+    /// (nir_to_vir.c: FTRUNC, SHL, ASR, SHR, MIN, MAX, UMIN, UMAX, NOT;
+    /// ult32 / uge32 as SUB.pushc), run in the interpreter on both signs
+    /// (the shift right of a negative int is arithmetic, of a uint
+    /// logical). Revert check: with these out of prepare.rs SELECTED the
+    /// programs are refused (`NotYet("Ftrunc")`, `NotYet("Ishl")`, the
+    /// dEQP corpus's 8 indexing and 2 constant_expressions refusals); with
+    /// Ule's operands in Ult's order the third program fails at lane 0.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn trunc_shifts_and_integer_min_max_are_one_operation_each() {
+        let head = "#version 300 es\nprecision highp float;\nprecision highp int;\nin vec4 v;\n\
+                    layout(location = 0) out vec4 o;\nvoid main() { int i = int(v.y); uint u = uint(v.z); ";
+        /* x: non-integers of both signs; y: -8..7; z: 0..15; w: 3 */
+        let input = |l: usize| [(l as f32 - 8.0) * 0.75 + 0.125, l as f32 - 8.0, l as f32, 3.0];
+        let trunc_shift = std::format!(
+            "{head} o = vec4(trunc(v.x), float(i << 2), float(i >> 1), float(u >> 1u) + float(i << int(v.w))); }}"
+        );
+        run_es3_fs(&trunc_shift, input, |[x, y, z, w]| {
+            let (i, u) = (y as i32, z as u32);
+            [x.trunc(), (i << 2) as f32, (i >> 1) as f32, (u >> 1) as f32 + (i << w as i32) as f32]
+        });
+        let min_max = std::format!(
+            "{head} o = vec4(float(min(i, -2)), float(max(i, 1)), float(min(u, 5u)), float(max(u, 9u))); }}"
+        );
+        run_es3_fs(&min_max, input, |[_, y, z, _]| {
+            let (i, u) = (y as i32, z as u32);
+            [i.min(-2) as f32, i.max(1) as f32, u.min(5) as f32, u.max(9) as f32]
+        });
+        let not_cmp =
+            std::format!("{head} o = vec4(float(~i), u < 5u ? 1.0 : 0.0, u <= 5u ? 1.0 : 0.0, float(~u & 7u)); }}");
+        run_es3_fs(&not_cmp, input, |[_, y, z, _]| {
+            let (i, u) = (y as i32, z as u32);
+            [(!i) as f32, f32::from(u8::from(u < 5)), f32::from(u8::from(u <= 5)), (!u & 7) as f32]
+        });
+        assert!(input(0)[0] < 0.0 && input(15)[0] > 0.0 && input(0)[1] < 0.0, "both signs");
+        /* gl_test 199's fragment shader, from the file it compiles, on the
+         * case's v = (2.75, -6, 200, 0): (0.5, 0.25, 45/64, 50/64) */
+        run_es3_fs(
+            include_str!("../../../../tools/shaders/gltest/es3trunc_fs.frag"),
+            |_| [2.75, -6.0, 200.0, 0.0],
+            |_| [0.5, 0.25, 45.0 / 64.0, 50.0 / 64.0],
+        );
     }
 
     /// A look-up inside a uniform branch's arm (step (b)): the `if` is a
