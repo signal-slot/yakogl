@@ -135,7 +135,16 @@ tools = [
   # off the check's output (nothing printed = missing on every node).
   { name = "python3-pyyaml", check = "python3 -c 'import yaml; print(yaml.__version__)'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML for the v3d generated-file row of the gate)" },
   { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
-  { name = "libclang", check = "python3 -c 'import ctypes.util, sys; sys.exit(0 if ctypes.util.find_library(\"clang\") else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
+  # The check is clang-sys's own run-time search (clang-sys 1.9.1
+  # build/common.rs search_libclang_directories): LIBCLANG_PATH alone when set,
+  # else `llvm-config --prefix` bin/lib/lib64, LD_LIBRARY_PATH, LIBRARY_PATH and
+  # the /usr/local and /usr lib directories, for libclang.so, libclang-*.so,
+  # libclang.so.* and libclang-*.so.* (libclang-cpp excluded). The check runs
+  # in the environment the worker gives agents, so its verdict is bindgen's.
+  # find_library("clang") was not: it misses Ubuntu's versioned libclang-21.so
+  # and called system76 missing while bindgen ran there (2026-10-10).
+  # tools/setup-gate-host.sh probe_libclang is the same code.
+  { name = "libclang", check = "python3 -c 'import glob,os,shutil,subprocess,sys; names=(\"libclang.so\",\"libclang-*.so\",\"libclang.so.*\",\"libclang-*.so.*\"); hit=lambda d: [p for n in names for p in sorted(glob.glob(os.path.join(d,n))) if \"-cpp.\" not in os.path.basename(p)]; lp=os.environ.get(\"LIBCLANG_PATH\"); f=hit(lp) + ([lp] if lp and os.path.isfile(lp) else []) if lp else []; pre=(lambda r: (r.stdout.splitlines() or [\"\"])[0] if r.returncode==0 else \"\")(subprocess.run([\"llvm-config\",\"--prefix\"],capture_output=True,text=True)) if not lp and shutil.which(\"llvm-config\") else \"\"; dirs=[os.path.join(pre,s) for s in (\"bin\",\"lib\",\"lib64\")] if pre else []; dirs+=[d for v in (\"LD_LIBRARY_PATH\",\"LIBRARY_PATH\") for d in os.environ.get(v,\"\").split(\":\") if d]; dirs+=[d for pat in (\"/usr/local/llvm*/lib*\",\"/usr/local/lib*/*/*\",\"/usr/local/lib*/*\",\"/usr/local/lib*\",\"/usr/lib*/*/*\",\"/usr/lib*/*\",\"/usr/lib*\") for d in sorted(glob.glob(pat))]; f=f or [p for d in dirs for p in hit(d)]; print(f[0] if f else \"\"); sys.exit(0 if f else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
   { name = "expat-zlib-dev", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
   # west lives in the WEST_VENV venv (env_names above), not on PATH: the
   # check looks there first. The build makes that venv when it is missing.

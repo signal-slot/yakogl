@@ -197,17 +197,17 @@ check_clang() {
   line ok clang "${out%%$'\n'*}"
 }
 
-# bindgen loads libclang at run time (clang-sys: LIBCLANG_PATH first, then
-# the usual places; check.sh's own probe is find_library).
+# bindgen loads libclang at run time through clang-sys, and the probe is
+# clang-sys's own search (1.9.1 build/common.rs search_libclang_directories):
+# LIBCLANG_PATH alone when set, else `llvm-config --prefix` bin/lib/lib64,
+# LD_LIBRARY_PATH, LIBRARY_PATH and the /usr/local and /usr lib directories,
+# for libclang.so, libclang-*.so, libclang.so.* and libclang-*.so.* (Ubuntu
+# ships only the versioned libclang-<N>.so; libclang-cpp is excluded).
+# .ccfarm/project.toml's libclang check is the same code. find_library("clang")
+# was not: it misses the versioned names and called system76 missing while
+# bindgen ran there (2026-10-10).
 probe_libclang() {
-  local lp=${LIBCLANG_PATH:-} found
-  if [ -n "$lp" ] && ls "$lp"/libclang.so* >/dev/null 2>&1; then
-    printf 'LIBCLANG_PATH=%s' "$lp"
-    return 0
-  fi
-  found=$(python3 -c 'import ctypes.util; v = ctypes.util.find_library("clang"); print(v or "")' 2>/dev/null)
-  [ -n "$found" ] || return 1
-  printf 'find_library("clang") -> %s' "$found"
+  python3 -c 'import glob,os,shutil,subprocess,sys; names=("libclang.so","libclang-*.so","libclang.so.*","libclang-*.so.*"); hit=lambda d: [p for n in names for p in sorted(glob.glob(os.path.join(d,n))) if "-cpp." not in os.path.basename(p)]; lp=os.environ.get("LIBCLANG_PATH"); f=hit(lp) + ([lp] if lp and os.path.isfile(lp) else []) if lp else []; pre=(lambda r: (r.stdout.splitlines() or [""])[0] if r.returncode==0 else "")(subprocess.run(["llvm-config","--prefix"],capture_output=True,text=True)) if not lp and shutil.which("llvm-config") else ""; dirs=[os.path.join(pre,s) for s in ("bin","lib","lib64")] if pre else []; dirs+=[d for v in ("LD_LIBRARY_PATH","LIBRARY_PATH") for d in os.environ.get(v,"").split(":") if d]; dirs+=[d for pat in ("/usr/local/llvm*/lib*","/usr/local/lib*/*/*","/usr/local/lib*/*","/usr/local/lib*","/usr/lib*/*/*","/usr/lib*/*","/usr/lib*") for d in sorted(glob.glob(pat))]; f=f or [p for d in dirs for p in hit(d)]; print(f[0] if f else ""); sys.exit(0 if f else 1)' 2>/dev/null
 }
 
 check_libclang() {
@@ -215,7 +215,7 @@ check_libclang() {
   if found=$(probe_libclang); then
     line ok libclang "$found"
   else
-    line missing libclang "no libclang.so* found (bindgen needs it for the csbgen-bindings --check row; distro clang/libclang, or LIBCLANG_PATH)"
+    line missing libclang "no libclang.so / libclang-*.so found (bindgen needs it for the csbgen-bindings --check row; distro clang/libclang, or LIBCLANG_PATH)"
   fi
 }
 
@@ -346,7 +346,7 @@ find_libclang_dir() {
   for d in /usr/lib/llvm-*/lib /usr/lib/llvm/*/lib \
     /usr/lib/x86_64-linux-gnu /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64; do
     [ -d "$d" ] || continue
-    for f in "$d"/libclang.so*; do
+    for f in "$d"/libclang.so "$d"/libclang-*.so "$d"/libclang.so.* "$d"/libclang-*.so.*; do
       [ -e "$f" ] || continue
       printf '%s' "$d"
       return 0
