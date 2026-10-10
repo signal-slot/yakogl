@@ -51,7 +51,7 @@ boards. The Pi 4 ran nothing (no UART path from the nuc).
 |---|---|---|
 | Pi 4, 25 cube cases (#12) | fixed on the host: non-seamless cube sampling in ES 2.0 builds (a cube look-up is a 2D-array look-up of the selected face; the V3D has no switch for seamless filtering). The owner's 2026-09-25 exclusion of these cases is replaced by this fix. Design: `docs/v3d-noseamless-cube.md` | `c3e4146` design and host reproduction, `ec5ba4f` implementation, `53ef6d7`, `d8ce931` |
 | i.MX8MP, the two dEQP regressions of `72d16864` (fbo `depth_component24`; one `shaders.fragdata.*` NotSupported) | fixed on the host: in `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`); `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1. On the integration images: the i.MX8MP shaders-tail and fbo rows are back at the `29460f96` numbers (1512 / 1512 / 0 and 711 / 711 / 0), and on the AM62P `fragdata.invalid_assign_to_1` moved from NotSupported to Pass, as predicted. Not done: other ES 3-only renderbuffer formats such as `GL_DEPTH_COMPONENT32F` are still accepted in ES 2.0 builds (a static audit lists 44 ungated ES 3.0 rows, none reached by a dEQP-GLES2 case: `tools/cts/log/investigations/es2-error-rules.md`) | `4e9397c` |
-| i.MX8MP gl_test case 16 (#8) | harness fixed: it failed in the default image only because that image offers no 4x config (`check 255` is the record's none-marker, not a check). Case 16 runs its 1x half and skips the 4x half by name without a 4x config. The driver did not scale viewport, scissor and clip to the 2x scratch surface: fixed behind `gc_debug_msaa` bit 3, off by default. On the integration image case 16 alone is the by-name skip, but the set walker in `gl_test.c` counts any non-zero return (the skip's -3) as a failure, so the default set still records 46 / 48 with case 16 first (the second failure, after 16, is unnamed); the bit 3 A/B failed in both arms at check 4 (`x4 inside` got 0x00000000), so bit 3 is not the fix and #8 stays open | `6bddfc5` |
+| i.MX8MP gl_test case 16 (#8) | harness fixed: it failed in the default image only because that image offers no 4x config (`check 255` is the record's none-marker, not a check). Case 16 runs its 1x half and skips the 4x half by name without a 4x config. The driver did not scale viewport, scissor and clip to the 2x scratch surface: fixed behind `gc_debug_msaa` bit 3, off by default. On the integration image case 16 alone is the by-name skip. The set walker in `gl_test.c` counted any non-zero return (the skip's -3) as a failure, so the default set recorded 46 / 48 and on `c4ccc966` 47 / 49 with case 16 first and the other failure unnamed; it now counts a skip as skipped (not run, not failed), and the set's record (CASE status `CASE_SET`, `record.rs` `SetSummary`) carries passed of run, the skip count and first skip, and the first two failing cases; the bit 3 A/B failed in both arms at check 4 (`x4 inside` got 0x00000000), so bit 3 is not the fix and #8 stays open | `6bddfc5` |
 | i.MX8MP gl_test cases 10 and 2 (#9, #25) | not fixed. Reading our draw, resolve and read-back sync against etnaviv's finds no missing stall, flush or cache operation (`src/vivante/VIVANTE_NOTES.md`; two host tests pin it). The product is unchanged. The recipe's repeat runs on the integration image (60 boots): base 4 / 40, page-aligned 1 / 10, no-reuse 2 / 10; a second session (`0175bac1`, `tools/cts/log/board-sessions/imx8mp-gc-case10.md`): case 10 1 of 30, case 2 0 of 40. The rate fell from 14 / 30 and no arm removes the failure, so the three hypotheses are not separated | `8409419` |
 | PowerVR vertex attribute registers | wrong-code defect found by the host compiler check and fixed: an attribute read only where the unroller drops code took no registers, and every later attribute was read four registers early. No dEQP-GLES2 case is known to reach it; it changes AM62P vertex code, so the AM62P tree is re-run. On the integration image six of the seven shaders images equal `d60b9d76` | `c6aa6ba` |
 | AM62P, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` cases | fixed (`e17fb6a7`) and confirmed on the board: image 1 of the AM62P tree on `e17fb6a7` passes 1,379 / 0 (2026-10-10, `records/am62p/deqp-e17fb6a7/img1`); the PowerVR online compiler fused `a * b + c` into one `fmad` only where the product had one reader, and the shader that also wrote `v_unrelated` gave the position's products a second reader, so one shader of each pair rounded the position once where the other rounded it twice. A sum on the way to an `invariant` output (`invariant gl_Position;`, `invariant varying`, `#pragma STDGL invariant(all)`, now carried on `ir::IoDecl::invariant`) is no longer fused, as Mesa's exact `fadd` is not `contract` (`powervr/prepare.rs` `mark_exact`). On the host the 9 pairs went from differing to identical position code (case 0 was identical before and after); no corpus source changes. Expect the 9 to pass in image 1 | (this commit) |
@@ -138,8 +138,8 @@ Results are from main as of `186cbb56`: AM62P gl_test on `05f8f749`, Slint and c
 
 | Board | gl_test | Slint | Cluster |
 |---|---|---|---|
-| AM62P | 48 / 48, 0 resets on `32778b57` (2026-10-10, `records/am62p/20261010-0611-gt-32778b57-a1cebe9a`, compiler runs 197, precompiled hits 0); 48 / 48, 0 resets (the set now has 192 `predlive`); 48 / 48 in the compiler-only and precompiled + compiler images (`05f8f749`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
-| i.MX8MP | on `32778b57` (2026-10-10, three runs, `records/imx8mp/20261010-0642-gt-32778b57-82dd3380` and `gt-32778b57-2`, `-3`): 45 / 48 (first failure case 10, #9), 46 / 48 and 46 / 48 (first failure case 16, #8: the skipped 4x half counted as a failure; the record does not name the second failing case), as on `8abeaabb`. 46 / 48 on `72d16864` and `112dd4fb`, first failure case 16 (#8). On `05f8f749`: 44 / 48 (first failure case 2), 45 / 48 (case 2), 46 / 48 (case 16): case 2 is intermittent (#25). On `8abeaabb` (the benchmark baseline): 46 / 48, case 16 first | probes pass on `8abeaabb`, copy and scan-out view | probes pass (image from the integration script, `0f608491`); no fps, the board has no console |
+| AM62P | 49 / 49, 0 resets on `c4ccc966` (2026-10-10, `records/am62p/20261010-13*-gt-c4ccc966-*`, 197 `vtxgrid` in the set, compiler runs 202); 48 / 48, 0 resets on `32778b57` (2026-10-10, `records/am62p/20261010-0611-gt-32778b57-a1cebe9a`, compiler runs 197, precompiled hits 0); 48 / 48, 0 resets (the set now has 192 `predlive`); 48 / 48 in the compiler-only and precompiled + compiler images (`05f8f749`) | pass on `7dada1ff` (705 frames in 10007 ms; also with the precompiled tier, same records, `17605c36`) | 91.8 fps, 56.4 Mpx/s, 16.28 ms/Mpx on `7dada1ff` (also with the precompiled tier, same records, `17605c36`; `39bd6983`: 91.2 fps, 56.0 Mpx/s, 16.11 ms/Mpx) |
+| i.MX8MP | 47 / 49 on `c4ccc966` (two runs, `594b010e 0010ff06 0000002f 00000031`): one real failure, unnamed, and case 16's by-name skip, which the walker then counted as a failure (#8); from the `CASE_SET` record on, the same set should read 47 / 48 run, 1 skipped (first skip case 16), and name the failing case (board run pending). 46 / 48 on `72d16864` and `112dd4fb`, first failure case 16 (#8). On `05f8f749`: 44 / 48 (first failure case 2), 45 / 48 (case 2), 46 / 48 (case 16): case 2 is intermittent (#25). On `8abeaabb` (the benchmark baseline): 46 / 48, case 16 first | probes pass on `8abeaabb`, copy and scan-out view | probes pass (image from the integration script, `0f608491`); no fps, the board has no console |
 | Pi 4 | 12 / 12 on `afa12e9b` (not run since) | not run since | not run since |
 
 AM62P, the fill shader from femtovg (`fill_color`), 3D busy per frame:
@@ -542,9 +542,10 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      behind `gc_debug_msaa` bit 3 (off). On the integration image `b20e4d11`
      the A/B failed in both arms at check 4 (`x4 inside` got 0x00000000), so
      the 4x path fails for another reason, still unknown. The gl_test set
-     walker counts the skip's -3 as a failure, so the default image's set
-     record still names case 16. The 16 `multisample.*` dEQP cases stay
-     NotSupported at 1x;
+     walker now counts the skip's -3 as skipped, not failed: the default
+     image's set record (`CASE_SET`) says 1 skipped, first skip case 16, and
+     no longer names 16 as a failure (until then it did, 47 / 49 on
+     `c4ccc966`). The 16 `multisample.*` dEQP cases stay NotSupported at 1x;
    - the Pi 4 differs from the ES 2.0 reference in 25 cube cases (#12).
      **New state (`ec5ba4f`): fixed on the host. The owner's 2026-09-25
      exclusion of these cases from the pass count is replaced by this fix.**
@@ -682,10 +683,13 @@ $SW/tools/cts/imx8mp-deqp-stage1.sh     # only if there is no stage 1 for this C
    done
    ```
 
-   Expected: case 16 is not a failure any more and is no longer the first
-   failure (without a 4x config it runs its 1x half and reports a by-name
-   skip, -3). Cases 2 and 10 may still flip (#25, #9): record which runs fail
-   and at which case. The earlier results (44, 45, 46 of 48 at `05f8f749`; 46
+   Expected (an image with the `CASE_SET` record): `set status 7 ... passed
+   P of 48 run; skipped 1, first skip case 16; failing F: first case A,
+   second case B`. Case 16 is the skip (without a 4x config it runs its 1x
+   half and skips the 4x half by name), not a failure; the record names the
+   first two failing cases, so the case that `c4ccc966`'s 47 / 49 left
+   unnamed is case A. Cases 2 and 10 may still flip (#25, #9): record which
+   runs fail and at which case. The earlier results (44, 45, 46 of 48 at `05f8f749`; 46
    of 48 at `72d16864` with case 16 failing) are not comparable one to one.
    Three clean runs do not show a fix of #9 or #25 (at a 1-in-3 rate that
    happens about 30 % of the time); step 5 is the measurement.

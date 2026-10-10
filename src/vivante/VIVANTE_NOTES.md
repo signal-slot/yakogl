@@ -1272,8 +1272,9 @@ needs about 40 runs to see any failure.
 
 **"First failure case 16, check 255" is not a check.** `gc_result_case`
 (driver/zephyr/lib/board/imx8mp/gc_result.h) stores the first bad check in
-eight bits and writes 255 for "none"; a SET_FAIL record (the whole-set run)
-carries only the first failing *case* and has no check at all. The 255 in
+eight bits and writes 255 for "none"; a SET_FAIL record (the whole-set run,
+the earlier form) carries only the first failing *case* and has no check at
+all, and neither has its successor CASE_SET (the first two failing cases). The 255 in
 tools/cts/STATUS.md is that marker. So no record says which check of case 16
 failed.
 
@@ -1289,7 +1290,10 @@ GC7000's multisampling, and it is the first failure of every i.MX8MP run.
 Fixed in the harness: on the GC7000 and V3D arms, case 16 runs its 1x half and
 returns the by-name skip (-3, neither pass nor failure, as case 145 does) when
 no 4x config is offered; with the knob on it is the full 4x case. The
-PowerVR arm still fails a missing 4x config (it always offers one).
+PowerVR arm still fails a missing 4x config (it always offers one). The set
+walker counts that skip as skipped, out of the cases run (until the CASE_SET
+record it counted every non-zero return, so the set still named case 16 as
+its first failure, 47 / 49 on `c4ccc966`).
 
 **What the 4x path does today, with the knob on** (`gc_debug_msaa`, bit 0 =
 1): the scratch is twice the target per axis, 64-padded, supertiled; PE colour

@@ -16,7 +16,7 @@
  * arriving as "the UI is black".
  *
  * Reading a run, on a board with no console: the result record in the SNVS
- * (report_result: the case, or the set's passed count and first failure),
+ * (report_result: the case, or the set's counts and first two failures),
  * which survives the SoC reset. The image resets the SoC right after the
  * record is written (gc_sample_finish_recorded), so a one-case run costs its
  * boot and the case, not a hold. Only the diagnostic knobs whose answer has
@@ -174,8 +174,8 @@ K_THREAD_DEFINE(gc_gl_test_supervisor, SUPERVISOR_STACK, supervisor, NULL, NULL,
 int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug, int no_coalesce,
 		unsigned int term0, int panel);
 
-extern unsigned int gl_test_passed, gl_test_total;
-extern int gl_test_first_fail, gl_test_first_fail_at;
+extern unsigned int gl_test_passed, gl_test_total, gl_test_skipped;
+extern int gl_test_first_fail, gl_test_first_fail_at, gl_test_second_fail, gl_test_first_skip;
 extern volatile int gl_test_check_no, gl_test_first_bad_check;
 extern const char *gl_test_skip;
 extern volatile uint32_t gl_test_first_bad_got, gl_test_first_bad_want;
@@ -324,13 +324,10 @@ static void report_result(int rc)
 	}
 #endif
 	if (the_case == 7) {
-		if (rc == 0) {
-			gc_result_case(7, -1, GC_RESULT_CASE_PASS, gl_test_passed, gl_test_total);
-		} else {
-			gc_result_case(gl_test_first_fail < 0 ? 0xffffu
-							      : (unsigned int)gl_test_first_fail,
-				       -1, GC_RESULT_CASE_SET_FAIL, gl_test_passed, gl_test_total);
-		}
+		/* pass or fail, one form: the counts say which (gc_result.h,
+		 * CASE_SET), as rc (the walker's fails ? -1 : 0) does */
+		gc_result_set(gl_test_first_fail, gl_test_second_fail, gl_test_first_skip,
+			      gl_test_skipped, gl_test_passed, gl_test_total);
 	} else if (rc == 0) {
 		gc_result_case(the_case, -1, GC_RESULT_CASE_PASS,
 			       (uint32_t)gl_test_check_no, 0);
@@ -457,8 +454,9 @@ int main(void)
 	s_suite_done = true;
 	report_result(rc);
 	if (CONFIG_GC_GL_TEST_CASE == 7) {
-		LOG_INF("gc_gl_test: %u of %u cases passed; the first failure is case %d",
-			gl_test_passed, gl_test_total, gl_test_first_fail);
+		LOG_INF("gc_gl_test: %u of %u cases passed; failures: first case %d, second case %d; "
+			"%u skipped, the first case %d", gl_test_passed, gl_test_total,
+			gl_test_first_fail, gl_test_second_fail, gl_test_skipped, gl_test_first_skip);
 	}
 
 #if defined(CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD)

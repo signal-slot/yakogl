@@ -163,9 +163,22 @@ enum gc_result_case_status {
 	GC_RESULT_CASE_NO_CHECK   = YK_RECORD_CASE_NO_CHECK, /* failed, but no check said so */
 	GC_RESULT_CASE_UNFINISHED = YK_RECORD_CASE_UNFINISHED, /* the suite did not finish in time */
 	GC_RESULT_CASE_NO_DEVICE  = YK_RECORD_CASE_NO_DEVICE, /* the GPU or render service did not come up */
-	GC_RESULT_CASE_SET_FAIL   = YK_RECORD_CASE_SET_FAIL, /* the regression set: case = its first failure,
-					* w2 = cases passed, w3 = cases run */
+	GC_RESULT_CASE_SET_FAIL   = YK_RECORD_CASE_SET_FAIL, /* the earlier set record: case = its first
+					* failure, w2 = cases passed, w3 = cases run,
+					* a by-name skip counted as a failure */
+	GC_RESULT_CASE_SET        = YK_RECORD_CASE_SET, /* the regression set or a list, below */
 };
+
+/* status CASE_SET (gc_result_set): the set's summary, pass or fail.
+ *   w1 = the first failing case (0xffff none) << 16 | cases skipped
+ *        (saturating at 255) << 8 | CASE_SET
+ *   w2 = the second failing case (0xffff none) << 16 | cases passed
+ *   w3 = the first skipped case (0xffff none) << 16 | cases run
+ * "Run" leaves the skipped cases out (gl_test.c's walker: a skip by name is
+ * neither a pass nor a failure), so the set passed when passed == run; the
+ * skip count and the first skip keep a board that skips what it should run
+ * visible. More than two failures: run - passed says how many. */
+#define GC_RESULT_CASE_SET_NONE YK_RECORD_CASE_SET_NONE
 
 /* kind APP: w1 = stage << 8 | status (1 pass, 2 fail), w2 = frames presented,
  * w3 = defined by the application. kind FAULT: w1 = ESR, w2 = ELR, w3 = FAR,
@@ -343,7 +356,29 @@ static inline void gc_result_case(unsigned int gl_case, int bad_check, unsigned 
 			((uint32_t)gl_case & 0xffffu) << 16 | check << 8 | (status & 0xffu),
 			got, want);
 }
+/* A case number for a CASE_SET field: negative is none (0xffff), and a real
+ * case saturates below it. */
+static inline uint32_t gc_result_set_case(int c)
+{
+	return c < 0 ? GC_RESULT_CASE_SET_NONE
+		     : (uint32_t)(c < (int)GC_RESULT_CASE_SET_NONE ? c : (int)GC_RESULT_CASE_SET_NONE - 1);
+}
+
+static inline void gc_result_set(int first_fail, int second_fail, int first_skip,
+				 unsigned int skipped, unsigned int passed, unsigned int run)
+{
+	gc_result_write(GC_RESULT_CASE,
+			gc_result_set_case(first_fail) << 16 | (skipped > 255u ? 255u : skipped) << 8 |
+				GC_RESULT_CASE_SET,
+			gc_result_set_case(second_fail) << 16 | (passed > 0xffffu ? 0xffffu : passed),
+			gc_result_set_case(first_skip) << 16 | (run > 0xffffu ? 0xffffu : run));
+}
 #else
+static inline void gc_result_set(int first_fail, int second_fail, int first_skip,
+				 unsigned int skipped, unsigned int passed, unsigned int run)
+{
+	(void)first_fail; (void)second_fail; (void)first_skip; (void)skipped; (void)passed; (void)run;
+}
 static inline void gc_result_write(unsigned int kind, uint32_t w1, uint32_t w2, uint32_t w3)
 {
 	(void)kind; (void)w1; (void)w2; (void)w3;
