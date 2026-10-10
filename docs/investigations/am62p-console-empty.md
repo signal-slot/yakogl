@@ -276,8 +276,6 @@ driver/samples/zephyr/deqp tools/cts/am62p-deqp-images.sh` prints nothing.
   lease's port (main_uart0, not mcu_uart0)" instead of rebooting the board and
   waiting `RUN_BOUND` (420 s) for nothing. The 426 s wait and an unnecessary
   reboot in `am62p-gles3-percase.md` are what such a guard would save.
-<<<<<<< HEAD
-=======
 
 ## Resolution (2026-10-09)
 
@@ -310,4 +308,3 @@ Addendum (2026-10-09, Pi 4): the owner received the Pi 4 boot log up to the
 login prompt via `usb1:35931`, so the bridge is healthy and is not the reason
 for missing Pi 4 run records. `tools/board.sh` takes a serial device for the
 Pi 4, not `host:port`; see `docs/boards/console-map.md`.
->>>>>>> 935f5fb8a1d9ea05699d397860f51030fb4fca74
