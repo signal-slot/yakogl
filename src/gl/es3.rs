@@ -1297,11 +1297,17 @@ pub unsafe extern "C" fn glBindBufferRange(
 #[no_mangle]
 pub unsafe extern "C" fn glGetBufferParameteri64v(target: GLenum, pname: GLenum, params: *mut GLint64) {
     gl_trace!(glGetBufferParameteri64v);
-    let mut v: GLint = 0;
-    // SAFETY: &mut v is one valid GLint; params is null or valid for one
-    // GLint64 (GL contract), not necessarily aligned.
-    super::buffer::glGetBufferParameteriv(target, pname, &mut v);
-    util::app_put(params, v as GLint64);
+    let Some(c) = context::current() else { return };
+    if params.is_null() {
+        return;
+    }
+    /* the value whole (the 32-bit query clamps it), and nothing written on
+     * an error: it went through glGetBufferParameteriv and wrote 0 then */
+    if let Some(v) = super::buffer::buffer_parameter(c, target, pname, "glGetBufferParameteri64v") {
+        // SAFETY: params is valid for one GLint64 (GL contract), not
+        // necessarily aligned.
+        util::app_put(params, v as GLint64);
+    }
 }
 
 /* ---------------------------------------------------- glClearBuffer* (4.2.3)
@@ -2903,9 +2909,13 @@ mod tests {
             crate::gl::buffer::glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &mut v32);
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &mut v64);
             assert_eq!((v32, v64), (64, 64));
-            /* the error path of the 32-bit form reaches the caller unchanged */
+            /* an error names the 64-bit query and leaves `params` alone (it
+             * wrote 0 until 2026-10-10) */
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_TEXTURE_WRAP_S, &mut v64);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
+            assert_eq!(v64, 64, "params untouched on an error");
+            glGetBufferParameteri64v(GL_TEXTURE_2D, GL_BUFFER_SIZE, &mut v64);
+            assert_eq!((gl.error(), v64), (GL_INVALID_ENUM, 64));
             glGetBufferParameteri64v(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, core::ptr::null_mut());
         }
         assert_eq!(gl.error(), GL_NO_ERROR);
