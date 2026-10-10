@@ -735,6 +735,13 @@ const CLIENT_POINTER_FLOOR: usize = 4096;
 /// [`CLIENT_POINTER_FLOOR`].
 static CLIENT_ARRAY_LOGS: AtomicI32 = AtomicI32::new(3);
 
+/// The instance the draw being built is ([`DRAW_INSTANCE_ID`]): the first
+/// instance a transform-feedback capture of this draw evaluates.
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+pub(super) fn draw_instance_id() -> u32 {
+    DRAW_INSTANCE_ID.load(Ordering::Relaxed)
+}
+
 /// [`DRAW_INSTANCES`] as the count the draw carries (at least one).
 fn draw_instances() -> u32 {
     let n = DRAW_INSTANCES.load(Ordering::Relaxed);
@@ -2733,7 +2740,7 @@ fn fill_stage_layer_uniforms(
 /// and they are filled here from glDepthRangef before the blocks are
 /// uploaded, in both stages. A shader without the rows (every offline table
 /// entry) is untouched.
-fn fill_depth_range_uniforms(p: &mut GlProgram, range: [GLclampf; 2]) {
+pub(super) fn fill_depth_range_uniforms(p: &mut GlProgram, range: [GLclampf; 2]) {
     let values = [range[0], range[1], range[1] - range[0]];
     let (vs_ptr, vs_cap) = (p.vs_uniforms, p.vs_uniform_cap as usize);
     let (fs_ptr, fs_cap) = (p.fs_uniforms, p.fs_uniform_cap as usize);
@@ -3936,7 +3943,9 @@ fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, firs
     /* ES 3.0 transform feedback and rasterizer discard: the argument and
      * capture rules first, then a discarded draw stops here (no back end
      * sees it). Neither is reachable under report-es2 / with default state. */
-    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, false, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+    if !crate::REPORT_ES2
+        && (!tf::pre_draw(c, mode, false, first, count, draw_instances(), FUNC) || c.rasterizer_discard)
+    {
         return;
     }
     if count == 0 {
@@ -4108,7 +4117,7 @@ fn draw_elements(
     };
     /* ES 3.0 transform feedback (an indexed draw while a capture is on is an
      * error) and rasterizer discard: see draw_arrays */
-    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, true, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, true, 0, count, draw_instances(), FUNC) || c.rasterizer_discard) {
         return;
     }
     if count == 0 {
@@ -4428,17 +4437,27 @@ static INSTANCED: Global<InstancedState> = Global::zeroed();
 
 /// The value attribute array `ga` (divisor > 0) supplies to `instance`.
 fn instance_attrib_value(c: &mut GlContext, ga: &GlVertexAttrib, instance: GLuint) -> Option<[GLfloat; 4]> {
+    attrib_element(c, ga, u64::from(instance / ga.divisor)).map(|v| v.map(f32::from_bits))
+}
+
+/// The four dwords a shader input reads from element `element` of the
+/// enabled attribute array `ga`, converted as the draw converts them
+/// ([`attrib_row`]: components the array lacks read as (0, 0, 0, 1)). `None`
+/// when the element is outside its buffer, or the array is an offset with
+/// no buffer bound. Instanced draws read their divisor arrays through it,
+/// and the transform-feedback capture every array (`tf_capture.rs`).
+pub(super) fn attrib_element(c: &mut GlContext, ga: &GlVertexAttrib, element: u64) -> Option<[u32; 4]> {
     let comps = (ga.size as u32).min(4);
     let tsz = attrib_type_size(ga.type_);
     let elem = attrib_elem_bytes(ga) as usize;
-    /* u64: (u32 / divisor) * stride (< 2^31) cannot overflow */
-    let rel = (instance / ga.divisor) as u64 * attrib_stride(ga) as u64;
+    /* u64: (u32 element) * stride (< 2^31) cannot overflow */
+    let rel = element.checked_mul(u64::from(attrib_stride(ga)))?;
     let mut raw = [0u8; 16];
 
     if elem == 0 {
         /* enabled, but no pointer was ever set (size 0): nothing to read,
          * the element reads as (0, 0, 0, 1) (as the C did) */
-        return Some(attrib_row(&[], ga, 0, tsz, 4).map(f32::from_bits));
+        return Some(attrib_row(&[], ga, 0, tsz, 4));
     }
     let src: *const u8 = if ga.buffer == 0 {
         if ga.offset < CLIENT_POINTER_FLOOR {
@@ -4475,7 +4494,7 @@ fn instance_attrib_value(c: &mut GlContext, ga: &GlVertexAttrib, instance: GLuin
     // SAFETY: `src` is the element inside the VBO mapping (range checked),
     // the local copy of it, or the application's array (trusted as in C).
     let vsrc = unsafe { core::slice::from_raw_parts(src, elem) };
-    Some(attrib_row(vsrc, ga, comps, tsz, 4).map(f32::from_bits))
+    Some(attrib_row(vsrc, ga, comps, tsz, 4))
 }
 
 fn draw_instanced(
@@ -4511,6 +4530,12 @@ fn draw_instanced(
                 gpu = false;
             }
         }
+    }
+    /* Drawn instance by instance below, each instance captures as its own
+     * draw: a capture that cannot hold them all is refused before the first
+     * one writes anything (ES 3.0 2.15.2: nothing is captured or drawn). */
+    if !crate::REPORT_ES2 && !gpu && type_ == 0 && !tf::fits(c, mode, count, instancecount as u32, FUNC) {
+        return;
     }
     let draw_once = |c: &mut GlContext, st: &mut DrawState| {
         if type_ != 0 {

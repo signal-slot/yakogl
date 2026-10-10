@@ -117,7 +117,7 @@ Under `report-es2` every old answer is kept and pinned.
 
 | Feature | State | Commit |
 |---|---|---|
-| Transform feedback API and rasterizer discard | the GL half is built (`src/gl/tf.rs`): 32 objects a context with indexed bindings, begin/end/pause/resume with the ES 3.0 errors, `glTransformFeedbackVaryings` resolved at link against the vertex outputs with the 2.11.8 link errors, `glGetTransformFeedbackVarying`, the PRIMITIVES_WRITTEN query state, limits 64 / 4 / 4. `GL_RASTERIZER_DISCARD` stops draws and clears before the back end. Capture is not built: a draw that would capture is refused with GL_INVALID_OPERATION and a log line, and nothing is ever written (open work 4, tf-capture). Tests: `src/gl/tf_tests.rs` (17), `tests/es3_tf_api.rs` (8; one under `report-es2`), in the V3D rows of the gate. No dEQP run. Design `docs/es3-transform-feedback.md` | `16ac864`; design `f818f84`, `0f06eba` |
+| Transform feedback | built on the host for the three GPUs (`src/gl/tf.rs`, `src/gl/tf_capture.rs`; design `docs/es3-transform-feedback.md`): 32 objects a context with indexed bindings, begin/end/pause/resume with the ES 3.0 errors, `glTransformFeedbackVaryings` resolved at link, limits 64 / 4 / 64 (separate components raised from 4 to 64 as Mesa's softpipe/llvmpipe/etnaviv: the 207 dEQP NotSupported), `GL_RASTERIZER_DISCARD` for draws and clears, and the capture: the GL core lowers the linked vertex shader's kept source and runs it on the CPU (`eval::run_in`, no-libm `fmath`) for every captured vertex, assembles strips, loops and fans (Gallium's last-vertex decomposition), writes the varyings into the bound buffers (copy on write under a pending kick, flushed) and counts PRIMITIVES_WRITTEN; the GPU still draws. No back end is involved. A vertex shader that samples a texture is refused by name. Cost: 1.5 us a vertex and 23 us a draw for a 20-operation shader (x86 host, release). Tests: `src/gl/tf_capture_tests.rs` (13, one an ignored measurement), `src/gl/tf_tests.rs` (18), `tests/es3_tf_api.rs` (9), `fmath` (3). Host dEQP-GLES3 (HOST-ONLY, buffer and query verdicts real): `functional.transform_feedback` 882 / 882, `lifetime` 56 / 56, the 50 `negative_api`/`state_query`/`implementation_limits` TF cases pass. Board: gl_test 203 `tfcap`, then the AM62P GLES3 rows 12 and 32 ("Next board session") | `16ac864`; design `f818f84`, `0f06eba`; capture (this branch) |
 | Uniform blocks | `tests/es3_ubo.rs` ports dEQP's `UniformBlockCase::iterate` for every `functional.ubo` group but `random`: 2,032 cases through the GL API, comparing the rows each stage's default block hands the back end with what the generated shader compares against. It found and pins one defect, fixed: `glGetUniform*` of `mat2x3`, `mat2x4`, `mat3x4` and `mat4x3` read the wrong dwords (it indexed by the column count as if it were the row count); host dEQP-GLES3 on the GC7000 `uniform_api.value.*.get_uniform` 24 Fail to 0. Passes on PowerVR and GC7000; on the GC7000 four `single_nested_struct_array *_instance_array_both` cases are refused at link (184 + 184 constant registers against the 320 the stages share), pinned in `KNOWN_LIMITS` | `1b0e431`, `b0c0fa6` |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2 the tables lacked (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, `RGB10_A2UI`, the 24 integer formats) are accepted with their table 3.2 pairs and converted on the CPU at upload into the first storage class the back end samples (`src/gl/es3_formats.rs`, `docs/es3-sized-formats.md`); integer textures and 32-bit float ones are complete only with NEAREST filters. `RGB5_A1` takes `UNSIGNED_INT_2_10_10_10_REV`; copies into integer, snorm or float images from a fixed-point buffer are GL_INVALID_OPERATION. The PowerVR samples every new class but `RGB10A2` in Mesa's TPU format (`docs/es3-pvr-formats.md` section 10), the integer ones through `isampler2D`/`usampler2D` (an `smp` without `fcnorm`; other integer sampler dimensions refused by name); `RGB10_A2` stays in `RGBA8` there (renderable and mipmappable). On the GC7000 and the V3D the integer formats and `RGB10_A2UI` are refused by name, and the float, packed-float and snorm ones land in `RGBA16F` on the GC7000 and are refused on the V3D. Host dEQP-GLES3 `texture.specification` on the PowerVR: the `glGetError() == GL_NO_ERROR` bucket 720 to 594 (before the PowerVR classes). Tests `tests/es3_sized_formats.rs`, `src/gl/es3_format_tests.rs`, `pvr::backend` `es3_class_descriptors_are_mesas`; on the board: gl_test 201, pending | `888af5d`, `e5c4a18`; PowerVR `074c48f`, `03340c8` |
 | Occlusion queries | `GL_ANY_SAMPLES_PASSED{,_CONSERVATIVE}` are counted on all three back ends (design `docs/es3-occlusion-query.md` (`d303712`, `e37662e`); the GL core's state machine and errors per ES 3.0 2.14, `glGetQueryObjectuiv` waits and answers 0/1, the back-end hooks `query_begin/end/result` and `GlesDraw::occlusion_query`). V3D: `OCCLUSION_QUERY_COUNTER` with the query's word, in the packet-skip key. GC7000: the PE's `GL_OCCLUSION_QUERY_ADDR/CONTROL`, suspended at every switch and stream end. PowerVR: `ISPCTL.vistest`/`visreg` on TRANSLUCENT counted draws, a result area per kick as `ISP_OCLQRY_BASE` with `GETVISRESULTS`, the frame ended at `glEndQuery`. Proven on the host only (`gl::es3::tests::occlusion`, each back end's tests, `job_check` part 19, `vdm_field_check`); the first board test is gl_test 196 `occl` ("Next board session"). Under `report-es2` every target is refused as before | `af6d259`, `b03863c`, `a6cc10d`, `45fb13f`; gl_test 196 `71430ed` |
@@ -570,13 +570,17 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
    measured; the counts are AM62P failures from the `396d667a` tree where a
    design document derived them. Each item keeps every `report-es2` answer
    and adds a test that pins it.
-   - **tf-capture**: write the captured varyings into the bound buffers and
-     count PRIMITIVES_WRITTEN (`es3::add_primitives_written` is in place,
-     not yet called). The GL half is built (`16ac864`); until this lands a
-     capturing draw is refused with GL_INVALID_OPERATION.
-     `docs/es3-transform-feedback.md` has the per-GPU paths: the V3D has
-     hardware transform feedback, the GC7000UL has none. It unblocks the
-     `transform_feedback` group and the 56 `lifetime` cases.
+   - **tf-capture**: built on the host for the three GPUs (the feature
+     table above): the CPU capture of `docs/es3-transform-feedback.md`
+     section 4, no back end involved. What remains is the board: gl_test
+     203 `tfcap` on each board, then the AM62P dEQP-GLES3 rows of
+     `tools/cts/am62p-gles3-tree.txt` that hold `transform_feedback` (line
+     32) and `lifetime` (line 12) ("Next board session"); expected 882 + 56
+     where the host passes them, the 185 `Compile failed: ''` of
+     `c4ccc966` gone with the fragment-input work since. Left: a vertex
+     shader that samples a texture refuses its capturing draw (the
+     evaluator reads no texture storage); the V3D's hardware path (section
+     4.3) only if an application needs the speed.
    - **int-rt**: each back end learns the integer render-target formats
      (`gles_surf_int_layout`, then its bits in `INTEGER_RT_FORMATS`). The
      PowerVR's is built on the host (all nineteen, one attachment;
@@ -675,6 +679,9 @@ $SW/tools/board.sh --dry-run <board> tree <table> <outdir>    # first: prints ev
 Every dEQP build prints `rc=0` and the `check-deqp-images.py` verdict for its
 `.config` (an image that fails it reports `rc=not-conformance`). Record
 `$HEAD8` with each result: an image from any other commit proves nothing here.
+
+On every board, gl_test 203 `tfcap` too (the capture is the GL core's, the
+same on the three; expected as in the AM62P section below).
 
 On every board: gl_test 196 `occl` alone (`CONFIG_GL_TEST_CASES="196"` in
 the board's gl_test sample; not in case 7's regression set until it has
@@ -918,6 +925,17 @@ regression of the compiler changes since `d60b9d76`: bisect it first. If time
 is short, run image 1 alone (`TREE_ROWS=0`) for the fragdata check and
 images 1 to 7 (the shaders groups, `TREE_ROWS=0-6`) for the compiler. Time: at most about 11
 min an image, 18 images.
+
+Transform feedback (tf-capture; host only so far): a gl_test image with
+`GL_TEST_CASES="203"`. Expected: case 203 tfcap 9/9 checks (A: PRIMITIVES_WRITTEN
+2, the six interleaved records, the guard, the window green at (16, 16); B:
+2, the strip's positions and colours in 0 1 2, 2 1 3; C: the discarded
+draw's positions, the window red), `PASS`; on an ES 2.0 image it SKIPs.
+Then the dEQP-GLES3 images of `tools/cts/am62p-gles3-tree.txt` lines 12
+(`lifetime`, 56, with `negative_api` and the rest of its image) and 32
+(`transform_feedback`, 882, with its `ubo` groups): `TREE_ROWS=4,24`
+(counted from 0 over the non-comment lines), against the host's 882 + 56; a buffer mismatch there and not on the host is the board's
+memory path (the capture writes through the CPU mapping and flushes).
 
 ES 3.0 formats and integer render targets (`074c48f`, `1779e02`, `03340c8`;
 host only so far): a gl_test image with `GL_TEST_CASES="200,201"` (the

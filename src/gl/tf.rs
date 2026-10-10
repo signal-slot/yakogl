@@ -5,13 +5,11 @@
 //! bindings and begin/pause/resume state, the varyings a program is asked to
 //! capture and what the link resolves them to, and the draw-time rules.
 //!
-//! What is NOT here is the capture itself (docs/HANDOFF.md, open work 4,
-//! tf-capture): no data is ever
-//! written into a bound buffer. A draw that would capture (an object active
-//! and not paused, every rule of 2.15 satisfied) is refused with
-//! GL_INVALID_OPERATION and a log line naming this gap, so a test fails
-//! loudly instead of reading a buffer that nothing filled in
-//! (`es3.rs`: "a test that fails loudly is a measurement").
+//! The capture itself, the vertex shader run on the CPU and its varyings
+//! written into the bound buffers, is `tf_capture.rs` (section 4);
+//! [`pre_draw`] checks a draw against the rules of 2.15 and calls it, and
+//! accounts for what it wrote (each binding's `written`, the
+//! PRIMITIVES_WRITTEN query).
 //!
 //! Everything in this module is reached only when `crate::REPORT_ES2` is
 //! false: an ES 2.0-reporting build keeps its old answers (the callers test
@@ -35,8 +33,14 @@ pub const TF_MAX_INTERLEAVED_COMPONENTS: u32 = 64;
 /// GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS (ES 3.0 minimum); also the
 /// number of indexed GL_TRANSFORM_FEEDBACK_BUFFER binding points.
 pub const TF_MAX_SEPARATE_ATTRIBS: u32 = 4;
-/// GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS (ES 3.0 minimum).
-pub const TF_MAX_SEPARATE_COMPONENTS: u32 = 4;
+/// GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS: as many as the interleaved
+/// limit, as Mesa's softpipe, llvmpipe and etnaviv report (ES 3.0 asks for
+/// 4). The capture runs on the CPU (`tf_capture.rs`) and has no hardware
+/// ceiling; with 4, dEQP's 207 `transform_feedback.*.separate` cases of a
+/// matrix or an array varying are NotSupported. A vertex shader has 64
+/// output components (MAX_VERTEX_OUTPUT_COMPONENTS), so no one varying can
+/// pass this.
+pub const TF_MAX_SEPARATE_COMPONENTS: u32 = 64;
 
 /// Transform feedback objects of a context, the default object (name 0)
 /// included. dEQP's lifetime group generates several.
@@ -79,7 +83,8 @@ struct TfObject {
     /// The program that was current at Begin (its handle).
     program: GLuint,
     bind: [TfBinding; BINDINGS],
-    /// Bytes written since Begin, per binding (tf-capture's).
+    /// Bytes written since Begin, per binding: where the next captured
+    /// vertex goes.
     written: [u32; BINDINGS],
 }
 
@@ -372,9 +377,13 @@ pub(super) struct TfRow {
     size: u32,
     /// Scalar components of one element.
     comps: u32,
-    /// The first element captured (`v[1]`), 0 for a whole variable.
+    /// The first element captured (`v[1]`), 0 for a whole variable. Set and
+    /// read by the link's resolution and the capture, which need the
+    /// in-process compiler.
+    #[cfg_attr(not(feature = "shaderc-online"), allow(dead_code))]
     first: u32,
     /// 0 a vertex output, 1 gl_Position, 2 gl_PointSize.
+    #[cfg_attr(not(feature = "shaderc-online"), allow(dead_code))]
     builtin: u8,
 }
 
@@ -386,13 +395,35 @@ impl TfRow {
     pub(super) fn components(&self) -> u32 {
         self.comps * self.size
     }
-    #[allow(dead_code)] // tf-capture
+    /// The first element captured (`v[1]`), 0 for a whole variable.
+    #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
     pub(super) fn first_element(&self) -> u32 {
         self.first
     }
-    #[allow(dead_code)] // tf-capture
+    /// The name of the variable (without an element subscript).
+    #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+    pub(super) fn base_name(&self) -> &[u8] {
+        if self.name().ends_with(b"]") && self.size == 1 && self.builtin == 0 {
+            if let Some(lb) = self.name().iter().rposition(|&b| b == b'[') {
+                return &self.name()[..lb];
+            }
+        }
+        self.name()
+    }
+    /// 0 a vertex output, 1 gl_Position, 2 gl_PointSize.
+    #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
     pub(super) fn builtin(&self) -> u8 {
         self.builtin
+    }
+    /// The GL type of one element.
+    #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+    pub(super) fn gl_type(&self) -> GLenum {
+        self.gl_type
+    }
+    /// Elements captured (1, or an array's length).
+    #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+    pub(super) fn elements(&self) -> u32 {
+        self.size
     }
 }
 
@@ -410,6 +441,16 @@ struct TfProg {
     rows: *mut TfRow,
     nrows: u32,
     mode: GLenum,
+    /// The vertex shader's source as the link saw it, kept for the capture
+    /// (`tf_capture.rs` lowers it again per captured draw; a later
+    /// glShaderSource does not change the linked program, ES 3.0 2.11.3).
+    /// Only a program with linked varyings keeps one.
+    src: *mut u8,
+    #[cfg_attr(
+        not(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2")))),
+        allow(dead_code)
+    )]
+    src_len: u32,
 }
 
 impl TfProg {
@@ -421,6 +462,8 @@ impl TfProg {
         rows: core::ptr::null_mut(),
         nrows: 0,
         mode: 0,
+        src: core::ptr::null_mut(),
+        src_len: 0,
     };
 }
 
@@ -444,6 +487,7 @@ pub(super) fn program_reset(group: u8, program: GLuint) {
     let p = prog(group, program);
     free_block(&mut p.pending);
     free_block(&mut p.rows);
+    free_block(&mut p.src);
     *p = TfProg::NONE;
 }
 
@@ -503,6 +547,8 @@ pub(super) fn link_begin(group: u8, program: GLuint) {
     let p = prog(group, program);
     free_block(&mut p.rows);
     p.nrows = 0;
+    free_block(&mut p.src);
+    p.src_len = 0;
 }
 
 /// Scalar components of a GLSL type given by its GL token.
@@ -708,8 +754,21 @@ fn resolve_rows(p: &mut TfProg, n: usize, names: &[u8], vs_src: *const c_char, s
     }
     // SAFETY: `block` holds `count` rows; `rows` has at least that many initialised.
     unsafe { core::ptr::copy_nonoverlapping(rows.as_ptr(), block, count) };
+    /* the source the capture lowers again (section 4.2) */
+    // SAFETY: a plain heap block, freed by `link_begin` / `program_reset`.
+    let text = unsafe { util::malloc(src.len().max(1)) } as *mut u8;
+    if text.is_null() {
+        // SAFETY: the row block taken just above.
+        unsafe { util::free(block as *mut core::ffi::c_void) };
+        say(format_args!("link error: out of memory for the transform feedback varyings"));
+        return Err(());
+    }
+    // SAFETY: `text` holds `src.len()` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(src.as_ptr(), text, src.len()) };
     p.rows = block;
     p.nrows = count as u32;
+    p.src = text;
+    p.src_len = src.len() as u32;
     Ok(())
 }
 
@@ -885,15 +944,50 @@ pub(super) fn captured_vertices(mode: GLenum, count: u32) -> u64 {
     u64::from(prims) * per
 }
 
-/// The rules every draw meets while capture is on (ES 3.0 2.15.2, 2.8.3):
-/// an indexed draw, a mode that does not match Begin's primitive, and a
-/// capture that does not fit the buffers are GL_INVALID_OPERATION. Returns
-/// whether the draw may go on. Capture itself is not built (tf-capture): a
-/// draw that gets through is refused, loudly, with GL_INVALID_OPERATION.
+/// Whether the capture of `instances` instances of a `count`-vertex draw in
+/// `mode` fits every buffer the program writes (ES 3.0 2.15.2: "the
+/// transform feedback buffers ... do not have enough space" is
+/// GL_INVALID_OPERATION, and nothing is captured or drawn). True when
+/// nothing is being captured. Sets the error and logs which binding is short.
+pub(super) fn fits(c: &mut GlContext, mode: GLenum, count: GLsizei, instances: u32, func: &str) -> bool {
+    if !capturing(c) {
+        return true;
+    }
+    let o = *current(c);
+    let (rows, buffer_mode) = rows(c.group, o.program);
+    let vertices = captured_vertices(mode, count.max(0) as u32) * u64::from(instances.max(1));
+    let used = if buffer_mode == GL_SEPARATE_ATTRIBS { rows.len() } else { 1 };
+    for i in 0..used {
+        let b = o.bind[i];
+        /* a range is cut to the buffer as it is now (it may have been
+         * respecified smaller since the bind), as Mesa's
+         * compute_transform_feedback_buffer_sizes cuts it */
+        let left = buffer_size(c, b.buffer) - b.offset as i64;
+        let avail = if b.size > 0 { left.min(b.size as i64) } else { left };
+        let need = vertices as i64 * i64::from(stride(rows, buffer_mode, i)) + i64::from(o.written[i]);
+        if need > avail {
+            glog!(
+                "{func}: transform feedback buffer {i} is too small for the draw ({need} bytes needed, {avail} bound)"
+            );
+            c.set_error(GL_INVALID_OPERATION, func);
+            return false;
+        }
+    }
+    true
+}
+
+/// The rules every draw meets while capture is on (ES 3.0 2.15.2, 2.8.3),
+/// then the capture itself: an indexed draw, a mode that does not match
+/// Begin's primitive, a bound buffer that is mapped, and a capture that
+/// does not fit the buffers are GL_INVALID_OPERATION. A draw that passes is
+/// captured here (`tf_capture.rs`), the bytes written and the primitives
+/// counted, before the caller draws it (or, under rasterizer discard, does
+/// not). Returns whether the draw may go on.
 pub(super) fn pre_draw(
     c: &mut GlContext,
     mode: GLenum,
     indexed: bool,
+    first: GLint,
     count: GLsizei,
     instances: u32,
     func: &str,
@@ -911,21 +1005,83 @@ pub(super) fn pre_draw(
         return false;
     }
     let (rows, buffer_mode) = rows(c.group, o.program);
-    let vertices = captured_vertices(mode, count.max(0) as u32) * u64::from(instances.max(1));
     let used = if buffer_mode == GL_SEPARATE_ATTRIBS { rows.len() } else { 1 };
-    for i in 0..used {
+    /* ES 3.0 2.10.3: a buffer a command writes may not be mapped */
+    let mapped = |c: &GlContext, slot: GLuint| {
+        c.objs_ref().buffers.get(slot as usize).is_some_and(|b| b.used && !b.mapped.is_null())
+    };
+    if o.bind[..used].iter().any(|b| mapped(c, b.buffer)) {
+        glog!("{func}: a transform feedback buffer is mapped");
+        c.set_error(GL_INVALID_OPERATION, func);
+        return false;
+    }
+    if !fits(c, mode, count, instances, func) {
+        return false;
+    }
+    if count <= 0 || first < 0 {
+        return true; /* nothing to capture; the caller's own checks run */
+    }
+    capture(c, mode, first as u32, count as u32, instances.max(1), func)
+}
+
+/// Capture one draw into the bound buffers (`tf_capture.rs`) and account
+/// for it: each binding's `written` advances by what the draw wrote, the
+/// active PRIMITIVES_WRITTEN query counts its primitives. False, with
+/// GL_INVALID_OPERATION and the reason in the log, when the vertex shader
+/// cannot be evaluated: nothing is then counted or drawn.
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+fn capture(c: &mut GlContext, mode: GLenum, first: u32, count: u32, instances: u32, func: &str) -> bool {
+    let o = *current(c);
+    let (rows, buffer_mode) = rows(c.group, o.program);
+    let p = prog(c.group, o.program);
+    if p.src.is_null() {
+        glog!("{func}: transform feedback capture: the vertex shader's source was not kept at link");
+        c.set_error(GL_INVALID_OPERATION, func);
+        return false;
+    }
+    // SAFETY: the heap block `link_resolve` copied the source into, `src_len` bytes.
+    let src = unsafe { core::slice::from_raw_parts(p.src, p.src_len as usize) };
+    let used = if buffer_mode == GL_SEPARATE_ATTRIBS { rows.len() } else { 1 };
+    let mut targets = [super::tf_capture::Target::NONE; BINDINGS];
+    for (i, t) in targets.iter_mut().enumerate().take(used) {
         let b = o.bind[i];
-        let avail = if b.size > 0 { b.size as i64 } else { buffer_size(c, b.buffer) - b.offset as i64 };
-        let need = vertices as i64 * i64::from(stride(rows, buffer_mode, i)) + i64::from(o.written[i]);
-        if need > avail {
-            glog!(
-                "{func}: transform feedback buffer {i} is too small for the draw ({need} bytes needed, {avail} bound)"
-            );
-            c.set_error(GL_INVALID_OPERATION, func);
-            return false;
+        *t = super::tf_capture::Target {
+            slot: b.buffer,
+            at: b.offset as usize + o.written[i] as usize,
+            stride: stride(rows, buffer_mode, i),
+        };
+    }
+    let draw = super::tf_capture::Draw {
+        program: o.program,
+        mode,
+        first,
+        count,
+        instances,
+        first_instance: super::draw::draw_instance_id(),
+    };
+    match super::tf_capture::capture(c, rows, buffer_mode == GL_SEPARATE_ATTRIBS, src, &targets[..used], &draw) {
+        Ok(prims) => {
+            let vertices = captured_vertices(mode, count) * u64::from(instances);
+            let o = current(c);
+            for i in 0..used {
+                o.written[i] += (vertices * u64::from(targets[i].stride)) as u32;
+            }
+            super::es3::add_primitives_written(c, prims);
+            true
+        }
+        Err(why) => {
+            glog!("{func}: transform feedback capture: {why}");
+            c.set_error(why.error(), func);
+            false
         }
     }
-    glog!("{func}: transform feedback capture is not implemented yet (tf-capture); the draw is refused");
+}
+
+/// Without the evaluator no program can have linked varyings
+/// (`resolve_rows` refuses them), so no draw gets here; refused all the same.
+#[cfg(not(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2")))))]
+fn capture(c: &mut GlContext, _mode: GLenum, _first: u32, _count: u32, _instances: u32, func: &str) -> bool {
+    glog!("{func}: transform feedback capture needs the in-process shader compiler");
     c.set_error(GL_INVALID_OPERATION, func);
     false
 }

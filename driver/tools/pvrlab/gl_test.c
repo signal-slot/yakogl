@@ -7861,7 +7861,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [203] = "tfcap",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -17760,6 +17760,231 @@ static int case_usamp(void)
 #endif
 }
 
+/* ---- case 203: transform feedback capture, read back (tfcap) ---------------
+ *
+ * docs/es3-transform-feedback.md; HANDOFF open work 4, tf-capture. The GL
+ * core evaluates the vertex shader on the CPU and writes the captured
+ * varyings itself (the same path on the three GPUs), and the GPU still
+ * draws. gl_test's ES 1.00 pair (gl_test_vs_src: gl_Position = a_pos,
+ * v_color = a_color), the attributes bound to 0, 1, 2 before the link:
+ *
+ *   A  INTERLEAVED gl_Position + v_color, Begin(TRIANGLES), two triangles
+ *      covering the window in green (each vertex at its own depth, so each
+ *      record differs): six records of 8 floats equal to the vertices, a 32-byte guard of 0xcd after them untouched, the
+ *      PRIMITIVES_WRITTEN query 2, and the window green (the draw drawn);
+ *   B  SEPARATE (positions to binding 0, colours to binding 1), a 4-vertex
+ *      triangle strip: the decomposed triangles' vertices 0 1 2, 2 1 3 in
+ *      each buffer, the query 2;
+ *   C  GL_RASTERIZER_DISCARD on, three points captured: the three records
+ *      written, the window keeps the red clear (nothing drawn).
+ *
+ * The buffers are read with glMapBufferRange(GL_MAP_READ_BIT), as dEQP's
+ * transform_feedback cases read them. SKIP on an ES 2.0 library, and when
+ * the link refuses the varyings for want of the in-process compiler (a
+ * table-only image).
+ * ------------------------------------------------------------------------- */
+static bool tfcap_floats(const char *what, GLuint buf, const float *want, int n)
+{
+	const float *p;
+	bool ok = true;
+
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, buf);
+	p = glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, (GLsizeiptr)(n * sizeof(float)), GL_MAP_READ_BIT);
+	if (!p) {
+		pr_err("gl_test: tfcap: %s: glMapBufferRange failed (0x%x)\n", what, (unsigned)glGetError());
+		return gl_test_check(false, 0, 1);
+	}
+	for (int i = 0; i < n; i++) {
+		if (p[i] != want[i]) {
+			uint32_t bits;
+
+			memcpy(&bits, &p[i], sizeof(bits));
+			pr_err("gl_test: tfcap: %s: float %d = %f (0x%08x), want %f\n", what, i, (double)p[i],
+			       (unsigned)bits, (double)want[i]);
+			ok = false;
+		}
+	}
+	glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+	pr_info("gl_test:   tfcap %-22s %d floats  %s  [check %d]\n", what, n, ok ? "ok" : "MISMATCH",
+		gl_test_check_no + 1);
+	return gl_test_check(ok, 0, 0);
+}
+
+static GLuint tfcap_program(const char *const *names, GLsizei n, GLenum mode, bool *skip)
+{
+	GLuint vs = compile(GL_VERTEX_SHADER, gl_test_vs_src);
+	GLuint fs = compile(GL_FRAGMENT_SHADER, gl_test_fs_src);
+	GLuint prog;
+	GLint ok = 0;
+	char log[256] = "";
+
+	if (!vs || !fs)
+		return 0;
+	prog = glCreateProgram();
+	glAttachShader(prog, vs);
+	glAttachShader(prog, fs);
+	glBindAttribLocation(prog, 0, "a_pos");
+	glBindAttribLocation(prog, 1, "a_color");
+	glBindAttribLocation(prog, 2, "a_uv");
+	glTransformFeedbackVaryings(prog, n, names, mode);
+	glLinkProgram(prog);
+	glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+	if (!ok) {
+		glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+		*skip = strstr(log, "in-process shader compiler") != NULL;
+		pr_err("gl_test: tfcap: link failed: %s\n", log);
+		return 0;
+	}
+	return prog;
+}
+
+static GLuint tfcap_buffer(GLuint index, GLsizeiptr bytes)
+{
+	static uint8_t fill[512];
+	GLuint b = 0;
+
+	memset(fill, 0xcd, sizeof(fill));
+	glGenBuffers(1, &b);
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, b);
+	glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, bytes, fill, GL_DYNAMIC_READ);
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, index, b);
+	return b;
+}
+
+static GLuint tfcap_query_result(GLuint q)
+{
+	GLuint res = 0xffffffffu;
+
+	glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+	glGetQueryObjectuiv(q, GL_QUERY_RESULT, &res);
+	return res;
+}
+
+static int case_tfcap(void)
+{
+	static const char *const both[2] = { "gl_Position", "v_color" };
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	struct cuv_vertex v[6];
+	float want[6 * 8], guard[8];
+	GLuint prog = 0, vbo, buf[3] = { 0, 0, 0 }, q = 0;
+	bool ok = true, skip = false;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 203 tfcap: SKIP (an ES 2.0 library has no transform feedback)\n");
+		return -3;
+	}
+	free_all_objects();
+	/* A: two green triangles covering the window, interleaved */
+	cuv_set(&v[0], -1.0f, -1.0f, 0.0f, 0, 1, 0);
+	cuv_set(&v[1], 1.0f, -1.0f, 0.25f, 0, 1, 0);
+	cuv_set(&v[2], -1.0f, 1.0f, 0.5f, 0, 1, 0);
+	cuv_set(&v[3], 1.0f, -1.0f, -0.25f, 0, 1, 0);
+	cuv_set(&v[4], 1.0f, 1.0f, -0.5f, 0, 1, 0);
+	cuv_set(&v[5], -1.0f, 1.0f, 0.75f, 0, 1, 0);
+	for (int k = 0; k < 6; k++) {
+		/* the depths (no depth test) make each record distinct */
+		memcpy(&want[k * 8], v[k].pos, 16);
+		memcpy(&want[k * 8 + 4], v[k].color, 16);
+	}
+	prog = tfcap_program(both, 2, GL_INTERLEAVED_ATTRIBS, &skip);
+	if (!prog) {
+		if (skip) {
+			pr_info("gl_test: case 203 tfcap: SKIP (no in-process compiler for the varyings)\n");
+			return -3;
+		}
+		return -1;
+	}
+	glUseProgram(prog);
+	vbo = upload_vbo(v, sizeof(v));
+	cuv_attribs();
+	glViewport(0, 0, TW, TH);
+	buf[0] = tfcap_buffer(0, sizeof(want) + 32);
+	glGenQueries(1, &q);
+	if (!check_gl_error("tfcap setup")) {
+		ok = false;
+		goto out;
+	}
+	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, q);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glEndTransformFeedback();
+	ok &= check_gl_error("tfcap A draw");
+	ok &= expect_int("A primitives written", (long)tfcap_query_result(q), 2);
+	ok &= tfcap_floats("A records", buf[0], want, 6 * 8);
+	memset(guard, 0xcd, sizeof(guard));
+	{
+		const uint8_t *p;
+		bool gok;
+
+		glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, buf[0]);
+		p = glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, sizeof(want), 32, GL_MAP_READ_BIT);
+		gok = p && memcmp(p, guard, 32) == 0;
+		glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+		ok &= expect_int("A guard untouched", gok, 1);
+	}
+	read_topdown();
+	ok &= expect_px("A the triangles are drawn", TW / 4, TH / 4, rgba_u32(0, 255, 0, 255), 2);
+
+	/* B: separate, a triangle strip of four */
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	prog = tfcap_program(both, 2, GL_SEPARATE_ATTRIBS, &skip);
+	if (!prog) {
+		ok = false;
+		goto out;
+	}
+	glUseProgram(prog);
+	buf[1] = tfcap_buffer(0, 6 * 16);
+	buf[2] = tfcap_buffer(1, 6 * 16);
+	glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, q);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glEndTransformFeedback();
+	ok &= check_gl_error("tfcap B draw");
+	ok &= expect_int("B primitives written", (long)tfcap_query_result(q), 2);
+	{
+		static const int order[6] = { 0, 1, 2, 2, 1, 3 };
+		float wpos[6 * 4], wcol[6 * 4];
+
+		for (int k = 0; k < 6; k++) {
+			memcpy(&wpos[k * 4], v[order[k]].pos, 16);
+			memcpy(&wcol[k * 4], v[order[k]].color, 16);
+		}
+		ok &= tfcap_floats("B positions", buf[1], wpos, 6 * 4);
+		ok &= tfcap_floats("B colours", buf[2], wcol, 6 * 4);
+	}
+
+	/* C: rasterizer discard: captured, not drawn */
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_RASTERIZER_DISCARD);
+	glBeginTransformFeedback(GL_TRIANGLES);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glEndTransformFeedback();
+	glDisable(GL_RASTERIZER_DISCARD);
+	ok &= check_gl_error("tfcap C draw");
+	{
+		float wpos[3 * 4];
+
+		for (int k = 0; k < 3; k++)
+			memcpy(&wpos[k * 4], v[k].pos, 16);
+		ok &= tfcap_floats("C positions", buf[1], wpos, 3 * 4);
+	}
+	read_topdown();
+	ok &= expect_px("C discard draws nothing", TW / 2, TH / 2, rgba_u32(255, 0, 0, 255), 2);
+out:
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, 0);
+	glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 1, 0);
+	glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0);
+	glDeleteQueries(1, &q);
+	glDeleteBuffers(3, buf);
+	glDeleteBuffers(1, &vbo);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok && check_gl_error("tfcap teardown") ? 0 : -1;
+}
+
 /* ---- case 180: memory a finished job held, back at once (teardown) --------
  *
  * glmark2 tears a scene down and sets the next one up with no wait in
@@ -20111,6 +20336,11 @@ static int run_case(int c, int pretransform, int debug)
 	case 199: rc = case_es3trunc(); break;
 	case 200: rc = case_intrt(); break;
 	case 201: rc = case_usamp(); break;
+	case 203:
+		rc = case_tfcap();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library, or no in-process compiler */
+		break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

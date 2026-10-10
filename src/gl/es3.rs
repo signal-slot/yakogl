@@ -217,10 +217,11 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
 }
 
 /* ---------------------------------------------------------------- queries --
- * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN will be counted on the CPU by the
- * transform feedback capture once it is built (docs/HANDOFF.md, open work 4,
- * tf-capture): `add_primitives_written` is the entry it adds to the active
- * query through.
+ * GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN is counted on the CPU by the
+ * transform feedback capture (`tf.rs`, `tf_capture.rs`), which adds each
+ * captured draw's primitives to the active query through
+ * `add_primitives_written`; the result is available as soon as glEndQuery
+ * returns.
  *
  * GL_ANY_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED_CONSERVATIVE are counted by
  * the backend (docs/es3-occlusion-query.md): each (context, name) owns one
@@ -393,7 +394,7 @@ pub(super) fn reset_context_queries(index: u8) {
 
 /// A captured draw wrote `n` primitives: the active
 /// GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN query counts them.
-#[allow(dead_code)] // called by the capture (docs/HANDOFF.md, open work 4, tf-capture)
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
 pub(super) fn add_primitives_written(c: &GlContext, n: u32) {
     if let Some(h) = active_query(c.index, GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) {
         let q = &mut qstate(c.index)[h];
@@ -576,10 +577,8 @@ pub unsafe extern "C" fn glGetQueryObjectuiv(id: GLuint, pname: GLenum, params: 
 }
 
 /* ------------------------------------------------------ transform feedback --
- * The objects, varyings, binding points and begin/end rules are `tf.rs`; these
- * are its entry points. Capture itself is not built (docs/HANDOFF.md, open
- * work 4, tf-capture): a draw
- * while a capture is active is refused loudly (GL_INVALID_OPERATION).
+ * The objects, varyings, binding points and begin/end rules are `tf.rs`, the
+ * capture `tf_capture.rs`; these are their entry points.
  */
 
 #[no_mangle]

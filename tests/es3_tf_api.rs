@@ -7,12 +7,10 @@
 //! begin/end/pause/resume rules, the primitives-written query, and
 //! GL_RASTERIZER_DISCARD stopping draws and clears before the back end.
 //!
-//! What is NOT here: capture. Until docs/HANDOFF.md open work 4, tf-capture,
-//! lands, a draw while a capture is
-//! active is refused with GL_INVALID_OPERATION and a log line, and these tests
-//! hold that refusal (`capture_is_refused_loudly`) so that it cannot turn
-//! into a quiet success. The back end is a stand-in that counts the draws it
-//! is handed.
+//! The capture itself is tested byte by byte in `src/gl/tf_capture_tests.rs`;
+//! here one capture is read back through glMapBufferRange, as dEQP reads it
+//! (`capture_writes_the_bound_buffer`). The back end is a stand-in that counts
+//! the draws it is handed.
 //!
 //! An ES 2.0-reporting build (`report-es2`) must answer as before:
 //! `es2_build_keeps_its_answers` is the only test it runs. The shader-level
@@ -39,6 +37,7 @@ use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
 use yakogl::gl::types::*;
+use yakogl::gl::vertex::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 
 /* ---- a context on the host: the smallest OSAL and back end that make one --- */
@@ -306,7 +305,7 @@ mod es3 {
         let _g = context();
         assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS), 64);
         assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS), 4);
-        assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 4);
+        assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 64);
         assert_eq!(err(), GL_NO_ERROR);
     }
 
@@ -379,13 +378,14 @@ mod es3 {
         for (names, mode, needle) in [
             (&["nosuch"][..], GL_INTERLEAVED_ATTRIBS, "undeclared"),
             (&["v", "v"][..], GL_INTERLEAVED_ATTRIBS, "more than once"),
-            (&["arr"][..], GL_SEPARATE_ATTRIBS, "MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS"),
         ] {
             let (_, ok, log) = link(names, mode);
             assert!(!ok && log.contains(needle), "{names:?}: {log:?}");
         }
         let (_, ok, log) = link(&["f", "v", "arr[0]", "arr[1]"], GL_SEPARATE_ATTRIBS);
         assert!(ok, "four separate varyings: {log}");
+        let (_, ok, log) = link(&["arr", "v"], GL_SEPARATE_ATTRIBS);
+        assert!(ok, "a whole array to one buffer (separate components 64): {log}");
     }
 
     #[test]
@@ -420,24 +420,41 @@ mod es3 {
         }
     }
 
+    /// The capture through the API (tf-capture): three points of a client
+    /// array, `v` and `f` interleaved, read back with glMapBufferRange as
+    /// dEQP reads them; the draw reaches the back end too, and the rules
+    /// still come first.
     #[test]
-    fn capture_is_refused_loudly() {
+    fn capture_writes_the_bound_buffer() {
         let _g = context();
-        ready(&["v"], GL_INTERLEAVED_ATTRIBS, 1);
-        // SAFETY: plain GL calls.
+        ready(&["v", "f"], GL_INTERLEAVED_ATTRIBS, 1);
+        let input: [f32; 12] = [1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0, 0.5, 0.25, 0.125, 0.0625];
+        // SAFETY: plain GL calls; the client array outlives the draw.
         unsafe {
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE as GLboolean, 0, input.as_ptr().cast());
             glBeginTransformFeedback(GL_POINTS);
             glDrawArrays(GL_TRIANGLES, 0, 3);
             assert_eq!(err(), GL_INVALID_OPERATION, "mode does not match");
             glDrawElements(GL_POINTS, 1, GL_UNSIGNED_SHORT, core::ptr::null());
             assert_eq!(err(), GL_INVALID_OPERATION, "indexed");
-            glDrawArrays(GL_POINTS, 0, 3);
-            assert_eq!(err(), GL_INVALID_OPERATION, "capture is not built: refused, never a quiet success");
             assert_eq!(DRAWS.load(Ordering::Relaxed), 0);
-            glPauseTransformFeedback();
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            assert_eq!(err(), GL_NO_ERROR, "paused: an ordinary draw");
+            glDrawArrays(GL_POINTS, 0, 3);
+            assert_eq!(err(), GL_NO_ERROR, "captured");
+            assert_eq!(DRAWS.load(Ordering::Relaxed), 1, "and drawn");
             glEndTransformFeedback();
+            glDisableVertexAttribArray(0);
+            let mut b: GLint = 0;
+            glGetIntegeri_v(GL_TRANSFORM_FEEDBACK_BUFFER_BINDING, 0, &mut b);
+            glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, b as GLuint);
+            let p = glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, 60, GL_MAP_READ_BIT) as *const f32;
+            assert!(!p.is_null(), "mapped");
+            let got = core::slice::from_raw_parts(p, 15).to_vec();
+            glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+            assert_eq!(err(), GL_NO_ERROR);
+            let want: Vec<f32> = input.chunks(4).flat_map(|a| [a[0], a[1], a[2], a[3], a[0]]).collect();
+            assert_eq!(got, want);
         }
     }
 

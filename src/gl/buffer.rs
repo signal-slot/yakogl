@@ -402,57 +402,84 @@ pub unsafe extern "C" fn glBufferSubData(target: GLenum, offset: GLintptr, size:
     if data.is_null() || size == 0 {
         return;
     }
-    if backend::kick_pending(c.objs().buffers[i].last_use) {
-        /* A pending kick still reads this storage: copy on write. */
-        let mut fresh = OsalGpuMem::ZERO;
-        let bytes = c.objs().buffers[i].size as usize;
-
-        if osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut fresh) != 0 {
-            c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
-            return;
-        }
-        let b = &mut c.objs().buffers[i];
-        let bounce = osal::ops().and_then(|o| o.gpu_read.zip(o.gpu_write));
-        let mut rc = 0;
-        if !b.mem.cpu.is_null() && !fresh.cpu.is_null() {
-            // SAFETY: both allocations are live, distinct and hold at least `bytes`.
-            osal::cache_invd(b.mem.cpu, bytes);
-            core::ptr::copy_nonoverlapping(b.mem.cpu as *const u8, fresh.cpu as *mut u8, bytes);
-            /* the carried bytes reach the GPU only with a flush: the update
-             * below publishes its own range, this one the rest */
-            osal::cache_flush(fresh.cpu, bytes);
-        } else if let Some((gpu_read, gpu_write)) = bounce {
-            /* platforms without a CPU view: bounce through the stack in chunks */
-            let mut tmp = [0u8; 512];
-            let mut o = 0usize;
-
-            while o < bytes {
-                let n = (bytes - o).min(tmp.len());
-
-                // SAFETY: `tmp` holds `n` bytes; `o + n` lies inside both allocations.
-                rc |= gpu_read(&mut b.mem, o, tmp.as_mut_ptr() as *mut c_void, n);
-                rc |= gpu_write(&mut fresh, o, tmp.as_ptr() as *const c_void, n);
-                o += n;
-            }
-        } else {
-            rc = -1; /* no way to carry the contents over */
-        }
-        if rc != 0 {
-            /* the copy failed: keep the old storage (the kick in flight
-             * still reads it) and report, rather than moving the buffer to
-             * pages holding garbage */
-            osal::gpu_free(&mut fresh);
-            c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
-            return;
-        }
-        osal::gpu_free(&mut b.mem); /* deferred until the kicks are done */
-        b.mem = fresh;
-        b.last_use = 0;
+    if !writable(c, i, "glBufferSubData") {
+        return;
     }
     // SAFETY: the application passes `size` bytes at `data`; offset + size <= the buffer's size (checked above).
     if upload(&mut c.objs().buffers[i].mem, offset as usize, data, size as usize) != 0 {
         c.set_error(GL_OUT_OF_MEMORY, "glBufferSubData");
     }
+}
+
+/// Make buffer slot `i`'s storage safe for the CPU to write: when a kick
+/// still pending reads it, the contents move to fresh storage (copy on
+/// write) and the old storage is freed once the kicks are done. False (with
+/// GL_OUT_OF_MEMORY on `func`) when that copy cannot be made; the buffer is
+/// then unchanged. glBufferSubData and the transform-feedback capture
+/// (`tf_capture.rs`) write through it.
+pub(super) fn writable(c: &mut GlContext, i: usize, func: &str) -> bool {
+    if !backend::kick_pending(c.objs().buffers[i].last_use) {
+        return true;
+    }
+    /* A pending kick still reads this storage: copy on write. */
+    let mut fresh = OsalGpuMem::ZERO;
+    let bytes = c.objs().buffers[i].size as usize;
+
+    if osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut fresh) != 0 {
+        c.set_error(GL_OUT_OF_MEMORY, func);
+        return false;
+    }
+    let b = &mut c.objs().buffers[i];
+    let bounce = osal::ops().and_then(|o| o.gpu_read.zip(o.gpu_write));
+    let mut rc = 0;
+    if !b.mem.cpu.is_null() && !fresh.cpu.is_null() {
+        // SAFETY: both allocations are live, distinct and hold at least `bytes`.
+        unsafe {
+            osal::cache_invd(b.mem.cpu, bytes);
+            core::ptr::copy_nonoverlapping(b.mem.cpu as *const u8, fresh.cpu as *mut u8, bytes);
+            /* the carried bytes reach the GPU only with a flush: the update
+             * the caller makes publishes its own range, this one the rest */
+            osal::cache_flush(fresh.cpu, bytes);
+        }
+    } else if let Some((gpu_read, gpu_write)) = bounce {
+        /* platforms without a CPU view: bounce through the stack in chunks */
+        let mut tmp = [0u8; 512];
+        let mut o = 0usize;
+
+        while o < bytes {
+            let n = (bytes - o).min(tmp.len());
+
+            // SAFETY: `tmp` holds `n` bytes; `o + n` lies inside both allocations.
+            unsafe {
+                rc |= gpu_read(&mut b.mem, o, tmp.as_mut_ptr() as *mut c_void, n);
+                rc |= gpu_write(&mut fresh, o, tmp.as_ptr() as *const c_void, n);
+            }
+            o += n;
+        }
+    } else {
+        rc = -1; /* no way to carry the contents over */
+    }
+    if rc != 0 {
+        /* the copy failed: keep the old storage (the kick in flight
+         * still reads it) and report, rather than moving the buffer to
+         * pages holding garbage */
+        osal::gpu_free(&mut fresh);
+        c.set_error(GL_OUT_OF_MEMORY, func);
+        return false;
+    }
+    osal::gpu_free(&mut b.mem); /* deferred until the kicks are done */
+    b.mem = fresh;
+    b.last_use = 0;
+    true
+}
+
+/// Copy `src` into buffer slot `i` at byte `off` (CPU-mapped or through the
+/// OSAL) and flush it for the GPU; the caller checked the range and made the
+/// storage [`writable`]. False when the OSAL could not write.
+#[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
+pub(super) fn write_at(c: &mut GlContext, i: usize, off: usize, src: &[u8]) -> bool {
+    // SAFETY: `src` is a live slice; the caller keeps off + len inside the buffer.
+    unsafe { upload(&mut c.objs().buffers[i].mem, off, src.as_ptr() as *const c_void, src.len()) == 0 }
 }
 
 #[no_mangle]
