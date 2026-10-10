@@ -4739,3 +4739,104 @@ fn integer_targets_refuse_partial_masks_and_company() {
     assert_eq!(draw(&m), -util::ENOTSUP);
     assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
 }
+
+/* ---- sRGB render targets (docs/es3-srgb.md 4) ------------------------------ */
+
+/// A 64x64 sRGB target for [`Rig::draw`]'s draw: one attachment.
+fn srgb_target(d: &mut GlesDraw) {
+    d.target_format = GLES_SURF_SRGB8_A8;
+    d.num_targets = 1;
+    d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format: GLES_SURF_SRGB8_A8 };
+}
+
+/// A frame into an sRGB target: cleared by a quad through the two-dword
+/// clear program with the linear colour as clamped halves; the background
+/// object takes the two-dword program; the end-of-tile emit is U8U8U8U8,
+/// normalised, F16 per channel, and the PBE register word carries `gamma`
+/// (bit 4), so the PBE encodes the linear accumulation on store.
+#[test]
+fn an_srgb_frame_clears_linear_halves_and_the_pbe_encodes_them() {
+    let rig = Rig::new();
+    let mut d = rig.draw(0);
+    srgb_target(&mut d);
+    d.clear_rgba = [0.2, 1.5, -0.5, 1.0];
+    assert_eq!(draw(&d), 0);
+    let (b, fl) = (rig.b(), rig.fbload());
+    let ld = &fl.load_draw;
+    assert_eq!((ld.fs_usc_gpu, ld.fs_uniform_dwords), (b.clear_fs2.gpu, 2), "the two-dword clear");
+    let h = |v: f32| super::f32_to_f16_bits(v);
+    assert_eq!(fl.clear_pack, [h(0.2) | h(1.0) << 16, h(0.0) | h(1.0) << 16, 0, 0], "clamped linear halves");
+    let bg2 = b.bg_kick2_off;
+    assert_eq!(pvr_backend_flush(), 0);
+    let emits = rig.eot_emits();
+    let w1 = emits.last().expect("an end-of-tile program")[1] as u64;
+    assert_eq!((w1 >> 7) & 0x3f, u64::from(csb::ROGUE_PBESTATE_PACKMODE_U8U8U8U8), "packmode");
+    assert_eq!((w1 >> 13) & 1, 1, "normalised");
+    assert_eq!((w1 >> 19) & 1, u64::from(csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL), "F16 source");
+    let (k, _) = rig.kicks().last().cloned().expect("a kick");
+    assert_eq!((k.frag.pbe_word[0][0] >> 4) & 1, 1, "REG_WORD0 gamma");
+    assert_eq!((k.frag.pds_bgnd[0] & 0xffff_ffff) as u32, bg2, "the two-dword background program");
+}
+
+/// A frame into an sRGB target that does not clear it loads the pixels
+/// through the RGBA16F load program from a texture of the sRGB class, whose
+/// descriptor has the TPU's gamma: the accumulation gets linear colour back.
+#[test]
+fn a_frame_into_an_srgb_target_loads_it_decoded() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.do_clear = false;
+    srgb_target(&mut d);
+    assert_eq!(draw(&d), 0);
+    let (b, fl) = (rig.b(), rig.fbload());
+    assert_eq!(b.frame_quads, 1, "the frame starts with the load quad");
+    let ld = &fl.load_draw;
+    assert_eq!(ld.fs_usc_gpu, b.fbload_fs_rt[0].gpu, "RGBA16F's load");
+    assert!(core::ptr::eq(ld.fs, &fl.fs_rt_sh[0]));
+    let t = ld.textures[0];
+    assert_eq!(t.format, GLES_TEXFMT_SRGB8_A8);
+    let mut w = [0u32; TEX_DESC_DWORDS as usize];
+    build_tex_desc(&mut w, &t, &mut 0, false);
+    assert_eq!((w[0] >> 3) & 1, 1, "the TPU decodes");
+}
+
+/// A masked clear of an sRGB target takes RGBA16F's masked program (it
+/// reads the linear pixel back for the channels left off) and its float
+/// uniform is the clear colour clamped to [0, 1].
+#[test]
+fn a_masked_srgb_clear_takes_the_f16x4_program_and_a_clamped_colour() {
+    let rig = Rig::new();
+    let mut first = rig.draw(3);
+    first.do_clear = false;
+    srgb_target(&mut first);
+    assert_eq!(draw(&first), 0);
+    let mut cq = rig.draw(0);
+    srgb_target(&mut cq);
+    cq.clear_quad = true;
+    cq.do_clear = true;
+    cq.clear_rgba = [2.0, 0.5, -1.0, 1.0];
+    cq.clear_color_mask = 0b0011;
+    pvr_debug_set_masked_clear(1);
+    assert_eq!(draw(&cq), 0);
+    let fl = rig.fbload();
+    let i = clear_masked_index(crate::shaderc::SHC_RT_F16X4, 0b0011).expect("a partial mask");
+    assert_eq!(fl.load_draw.fs, &fl.clear_mask_sh[i] as *const ShcShader, "RGBA16F's form");
+    assert!(i >= 14, "past the RGBA8 forms");
+    // SAFETY: the uniform pointer is the backend's own four floats.
+    let u = unsafe { core::slice::from_raw_parts(fl.load_draw.fs_uniform_cpu as *const f32, 4) };
+    assert_eq!(u, [1.0, 0.5, 0.0, 1.0]);
+    pvr_debug_set_masked_clear(0);
+}
+
+/// An sRGB attachment beside another one is refused by name: the
+/// several-output path packs RGBA8 bytes where the PBE would read halves.
+#[test]
+fn an_srgb_attachment_beside_another_is_refused_by_name() {
+    let rig = Rig::new();
+    let mut m = rig.draw(3);
+    m.num_targets = 2;
+    m.targets[0] = GlesDrawTarget { gpu: m.target_gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888 };
+    m.targets[1] = GlesDrawTarget { gpu: m.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_SRGB8_A8 };
+    assert_eq!(draw(&m), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l.contains("SRGB8_ALPHA8 colour attachment beside")), "{:?}", rig.logs());
+}

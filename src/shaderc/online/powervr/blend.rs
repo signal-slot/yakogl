@@ -33,6 +33,15 @@
 //! clamped, as pco's float variants do (pco_shc build-new,
 //! `src_alpha,inv_src_alpha@f16x4`, `@f16`, `@f32`); a variant that does not
 //! read the pixel (a plain replace) reads nothing, as pco's do not.
+//!
+//! An sRGB target ([`SHC_RT_SRGB`]) is read and written as RGBA16F is: the
+//! accumulation holds linear halves (the frame load decodes, the PBE encodes
+//! on store), so the blend is in linear space with no conversion of its own
+//! -- `nir_lower_blend` has none either (docs/es3-srgb.md 4.2). The target is
+//! unsigned normalised, so the source is clamped as for RGBA8, and so is the
+//! blended colour (pco's `nir_fsat` before the F16 pack of an sRGB format,
+//! pco_nir_pvfio.c:97-101): the next blend reads it back from the
+//! accumulation, where a value past 1 would otherwise survive.
 
 use super::assemble::{build_group, build_pixout_read_from, build_unpck, BuildError};
 use super::decode::Group;
@@ -49,7 +58,7 @@ pub struct Blend {
     pub eq: [u32; 2],
     /// Bit k set: channel k is not written (it keeps the pixel's value).
     pub masked: u32,
-    /// The render target class: SHC_RT_RGBA8, _F16X4, _F16 or _F32.
+    /// The render target class: SHC_RT_RGBA8, _F16X4, _F16, _F32 or _SRGB.
     pub class: u32,
 }
 
@@ -68,8 +77,8 @@ impl Blend {
             src: [f(0), f(10)],
             dst: [f(5), f(15)],
             eq: [(key >> 20) & 7, (key >> 23) & 7],
-            masked: (key >> 26) & 0xf,
-            class: key >> SHC_BLEND_KEY_RT_SHIFT,
+            masked: shc_blend_key_masked(key),
+            class: shc_blend_key_class(key),
         };
         for x in b.src.iter().chain(b.dst.iter()) {
             if !matches!(*x & !SHC_BF_INVERT, 1..=8) {
@@ -103,6 +112,26 @@ impl Blend {
                 || self.dst[ch] != SHC_BF_ZERO
                 || reads(self.src[ch])
         })
+    }
+
+    /// Is the target unsigned normalised (RGBA8, sRGB), so that the source
+    /// is clamped to [0, 1] before the blend (ES 3.0.6 4.1.7)?
+    pub fn unorm(&self) -> bool {
+        matches!(self.class, SHC_RT_RGBA8 | SHC_RT_SRGB)
+    }
+
+    /// Is the pixel two dwords of four halves (RGBA16F, and the sRGB
+    /// target's linear accumulation)?
+    pub fn wide(&self) -> bool {
+        matches!(self.class, SHC_RT_F16X4 | SHC_RT_SRGB)
+    }
+
+    /// Is the blended colour clamped before it is packed? An sRGB target's
+    /// halves are not clamped by a pack, unlike RGBA8's bytes; a plain
+    /// replace writes the clamped source, which needs nothing more.
+    pub fn clamps_result(&self) -> bool {
+        let replace = self.src == [SHC_BF_ONE; 2] && self.dst == [SHC_BF_ZERO; 2] && self.eq == [SHC_BLEND_ADD; 2];
+        self.class == SHC_RT_SRGB && !replace
     }
 
     /// Does any factor read the blend colour (`glBlendColor`)?
@@ -420,18 +449,18 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
             Step::Unpack(format, scale, rpt, dst, src) => build_unpck(format, scale, rpt, src, dst).map(Some),
         }
     };
-    /* The source: clamped for an RGBA8 target, as it is for any UNORM
-     * one; a float target takes it as it is. */
+    /* The source: clamped for an RGBA8 or sRGB target, as it is for any
+     * UNORM one; a float target takes it as it is. */
     if i < 4 {
         let (dst, src) = (r.s(i as u16), r.colour + i as u16);
-        return fixed(if b.class == SHC_RT_RGBA8 { Step::Sat(dst, src) } else { Step::Group(mov(dst, temp(src))) });
+        return fixed(if b.unorm() { Step::Sat(dst, src) } else { Step::Group(mov(dst, temp(src))) });
     }
     i -= 4;
     /* The pixel, in the target's format, the channels a format lacks read
      * as GL reads them (0, 0, 0, 1). */
     if b.reads_pixel() {
         let reads: &[Step] = match b.class {
-            SHC_RT_F16X4 => &[
+            SHC_RT_F16X4 | SHC_RT_SRGB => &[
                 Step::PixRead(0, r.p()),
                 Step::PixRead(1, r.p1()),
                 Step::Unpack("f16f16", 0, 2, r.d(0), r.p()),
@@ -473,6 +502,14 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
             return fixed(buf[i]);
         }
         i -= n;
+    }
+    /* An sRGB target's blended colour, clamped for the F16 pack. */
+    if b.clamps_result() {
+        if i < 4 {
+            let c = r.colour + i as u16;
+            return fixed(Step::Sat(c, c));
+        }
+        i -= 4;
     }
     /* Alpha-to-one, on the blended colour. */
     if let (0, Some(flag)) = (i, r.a2one) {

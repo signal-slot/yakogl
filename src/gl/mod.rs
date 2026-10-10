@@ -29,6 +29,7 @@ pub mod names;
 pub mod native_cube;
 pub mod program;
 pub mod shader;
+pub mod srgb;
 pub mod state;
 pub mod texture;
 pub mod tf;

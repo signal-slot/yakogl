@@ -124,6 +124,19 @@ pub const GLES_TEXFMT_RGBA16I: u8 = 19;
 pub const GLES_TEXFMT_RGBA32UI: u8 = 20;
 pub const GLES_TEXFMT_RGBA32I: u8 = 21;
 pub const GLES_TEXFMT_RGBA32F: u8 = 22;
+/// ES 3.0's sRGB texels (GL_SRGB8_ALPHA8, and GL_SRGB8 widened with alpha
+/// 255): the bytes of [`GLES_TEXFMT_RGBA8`], sampled with their red, green
+/// and blue decoded from the sRGB curve to linear before filtering (ES
+/// 3.0.6 3.8.16, eq. 3.24); alpha is linear. Every CPU path that moves
+/// RGBA8 bytes moves these ([`gles_texfmt_is_rgba8_bytes`]); what differs is
+/// the sampler's decode and the CPU's mip filter (`gl::srgb`).
+pub const GLES_TEXFMT_SRGB8_A8: u8 = 23;
+
+/// Is the texel format stored as four bytes R,G,B,A (RGBA8, or the sRGB
+/// class whose bytes are the same and only sample differently)?
+pub const fn gles_texfmt_is_rgba8_bytes(f: u8) -> bool {
+    f == GLES_TEXFMT_RGBA8 || f == GLES_TEXFMT_SRGB8_A8
+}
 
 /// The bit of one texel format in a mask such as [`sampled_texfmts`].
 pub const fn gles_texfmt_bit(f: u8) -> u32 {
@@ -155,7 +168,8 @@ const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
 /// The texel formats the PowerVR TPU descriptor sampler reads
 /// (`pvr/backend.rs`, the texture state, `es3_tex_format`): the base set
 /// and the ES 3.0 classes, each in the TPU format Mesa's pvr_format_table
-/// gives its pipe format (docs/es3-pvr-formats.md section 2). The integer
+/// gives its pipe format (docs/es3-pvr-formats.md section 2); the sRGB class
+/// is U8U8U8U8 with TEXSTATE_IMAGE_WORD0 `gamma` on (docs/es3-srgb.md). The integer
 /// classes are read by an `isampler2D` / `usampler2D` (the online compiler's
 /// `smp` without `fcnorm`); the other integer sampler dimensions are refused
 /// by name at compile time.
@@ -166,6 +180,7 @@ const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
 /// stays in RGBA8 (two bits lost) until the PowerVR renders the class.
 pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
+        GLES_TEXFMT_SRGB8_A8,
         GLES_TEXFMT_R11G11B10F,
         GLES_TEXFMT_RGB9E5,
         GLES_TEXFMT_RGB10A2UI,
@@ -178,12 +193,20 @@ pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
         GLES_TEXFMT_RGBA32I,
         GLES_TEXFMT_RGBA32F,
     ]);
-/// The GC7000 texture descriptor's (`vivante/texture.rs`); `formats-gc`.
-pub const GC_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS;
+/// The GC7000 texture descriptor's (`vivante/texture.rs`), and the sRGB
+/// class (A8B8G8R8 with SAMP_CTRL1's SRGB decode); `formats-gc`.
+pub const GC_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS | gles_texfmt_bit(GLES_TEXFMT_SRGB8_A8);
 /// The V3D TMU binding's (`v3d/texture.rs` `tmu_format`): RGBA8, L8, A8, LA8
-/// and R32F only; `formats-v3d`.
-pub const V3D_SAMPLED_TEXFMTS: u32 =
-    texfmts(&[GLES_TEXFMT_RGBA8, GLES_TEXFMT_L8, GLES_TEXFMT_A8, GLES_TEXFMT_LA8, GLES_TEXFMT_R32F]);
+/// and R32F only, and the sRGB class (RGBA8 with TEXTURE_SHADER_STATE's
+/// sRGB decode); `formats-v3d`.
+pub const V3D_SAMPLED_TEXFMTS: u32 = texfmts(&[
+    GLES_TEXFMT_RGBA8,
+    GLES_TEXFMT_SRGB8_A8,
+    GLES_TEXFMT_L8,
+    GLES_TEXFMT_A8,
+    GLES_TEXFMT_LA8,
+    GLES_TEXFMT_R32F,
+]);
 
 /// Test hook: texel formats a host test adds to the mask, to exercise the
 /// native storage classes before any backend samples them.
@@ -274,6 +297,23 @@ pub const GLES_SURF_RGB10_A2UI: u8 = 24;
 pub const GLES_SURF_INT_FIRST: u8 = GLES_SURF_R8I;
 pub const GLES_SURF_INT_LAST: u8 = GLES_SURF_RGB10_A2UI;
 
+/* ES 3.0's sRGB colour buffer (GL_SRGB8_ALPHA8, a renderbuffer or a texture
+ * level; GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING = GL_SRGB). Stored as the
+ * bytes of RGBA8888, the red, green and blue sRGB-encoded (ES 3.0.6 4.1.8,
+ * eq. 4.1-4.2) and alpha linear. Fragment colours, the blend's constant,
+ * source and result and the clear colour are linear: a back end that renders
+ * the class decodes the destination before blending and encodes what it
+ * writes (on the PowerVR the PBE's gamma on store over an F16 accumulation,
+ * docs/es3-srgb.md). glReadPixels returns the stored (encoded) bytes. A back
+ * end says whether it can in [`SRGB_RT`]; a draw or clear into one it cannot
+ * is refused by name ([`rt_format_drawable`]). */
+pub const GLES_SURF_SRGB8_A8: u8 = 25;
+
+/// Is this the sRGB colour surface?
+pub const fn gles_surf_is_srgb(format: u8) -> bool {
+    format == GLES_SURF_SRGB8_A8
+}
+
 /// Is this one of the integer colour surfaces above?
 pub const fn gles_surf_is_integer(format: u8) -> bool {
     format >= GLES_SURF_INT_FIRST && format <= GLES_SURF_INT_LAST
@@ -348,6 +388,7 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
         GLES_SURF_RGBA32I => "RGBA32I",
         GLES_SURF_RGBA32UI => "RGBA32UI",
         GLES_SURF_RGB10_A2UI => "RGB10_A2UI",
+        GLES_SURF_SRGB8_A8 => "SRGB8_ALPHA8",
         _ => "unknown",
     }
 }
@@ -381,10 +422,31 @@ pub const INTEGER_RT_FORMATS: u32 = {
 #[cfg(feature = "host-test")]
 pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
+/// Can this build's back end render into [`GLES_SURF_SRGB8_A8`], encoding
+/// what it writes and blending in linear space? The PowerVR does (the PBE's
+/// gamma over the F16 accumulation, the fragment shader's sRGB class); the
+/// GC7000 and the V3D not yet (docs/es3-srgb.md), so the GL core accepts the
+/// renderbuffer or texture level (ES 3.0 requires the format) and refuses a
+/// draw or clear into it by name rather than storing linear values as if
+/// they were encoded.
+pub const SRGB_RT: bool = cfg!(feature = "gpu-powervr");
+
+/// Host tests only: a test back end that claims to render the sRGB surface,
+/// ORed into [`SRGB_RT`] (the host back ends draw nothing).
+#[cfg(feature = "host-test")]
+pub static HOST_SRGB_RT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 /// Can this build's back end render into the surface? Everything but the
-/// integer surfaces is a yes (those were always in); an integer one needs its
-/// bit in [`INTEGER_RT_FORMATS`].
+/// integer and sRGB surfaces is a yes (those were always in); an integer one
+/// needs its bit in [`INTEGER_RT_FORMATS`], the sRGB one [`SRGB_RT`].
 pub fn rt_format_drawable(format: u8) -> bool {
+    if gles_surf_is_srgb(format) {
+        #[cfg(feature = "host-test")]
+        if HOST_SRGB_RT.load(core::sync::atomic::Ordering::Relaxed) {
+            return true;
+        }
+        return SRGB_RT;
+    }
     if !gles_surf_is_integer(format) {
         return true;
     }
@@ -413,11 +475,18 @@ pub const fn gles_surf_bytes_per_pixel(format: u8) -> u32 {
 /// The render target class (`SHC_RT_*`) a fragment shader must be compiled for.
 pub const fn gles_surf_rt_class(format: u8) -> u32 {
     match format {
-        GLES_SURF_RGBA16F => 1,
-        GLES_SURF_R16F => 2,
-        GLES_SURF_R32F => 3,
-        _ => 0,
+        GLES_SURF_RGBA16F => crate::shaderc::SHC_RT_F16X4,
+        GLES_SURF_R16F => crate::shaderc::SHC_RT_F16,
+        GLES_SURF_R32F => crate::shaderc::SHC_RT_F32,
+        GLES_SURF_SRGB8_A8 => crate::shaderc::SHC_RT_SRGB,
+        _ => crate::shaderc::SHC_RT_RGBA8,
     }
+}
+
+/// Is the surface one of the float render targets (RGBA16F, R16F, R32F),
+/// whose pixels are halves or floats, not normalised bytes?
+pub const fn gles_surf_is_float(format: u8) -> bool {
+    matches!(format, GLES_SURF_RGBA16F | GLES_SURF_R16F | GLES_SURF_R32F)
 }
 
 /// The texel format the surface is sampled as (fbload).
@@ -427,6 +496,9 @@ pub const fn gles_surf_texfmt(format: u8) -> u8 {
         GLES_SURF_RGBA16F => GLES_TEXFMT_RGBA16F,
         GLES_SURF_R16F => GLES_TEXFMT_R16F,
         GLES_SURF_R32F => GLES_TEXFMT_R32F,
+        /* decoded by the sampler: the frame load puts linear colour back in
+         * the accumulation the PBE encodes again on store */
+        GLES_SURF_SRGB8_A8 => GLES_TEXFMT_SRGB8_A8,
         _ => GLES_TEXFMT_RGBA8,
     }
 }

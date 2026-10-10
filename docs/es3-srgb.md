@@ -1,16 +1,39 @@
 # sRGB render targets and sRGB texture sampling (ES 3.0): PowerVR, V3D 4.2, GC7000UL
 
-Design for `docs/HANDOFF.md`, open work 4, srgb (`948710f6`). Nothing here
-is implemented; section 9 lists the implementation items.
+`docs/HANDOFF.md`, open work 4, srgb. Built on the host: the GL core's
+sRGB storage class and surface, the CPU codec, the shader back end's sRGB
+render-target class and the PowerVR's PBE and TPU gamma (render and
+sample); the GC7000UL's and the V3D's sampler decode; `glBlitFramebuffer`'s
+sRGB decode and encode (3.2). Not built: the GC7000UL's and the V3D's sRGB
+render targets (a draw into one is refused by name there), compressed sRGB
+textures. Nothing is measured on a board yet: gl_test 204 `srgb` is the
+first check (section 10). Section 9 is the state per item.
 
-Why: `GL_SRGB8_ALPHA8` is stored and rendered as plain RGBA8 and no sampler
-decodes sRGB (`src/gl/state.rs:105-107`, `src/gl/framebuffer.rs:557-566`,
-`src/gl/texture.rs:4558-4559`, `docs/es3-sized-formats.md:98`).
-`docs/es3-fbo-fragops-failure-map.md` §3 rank 1 puts about 1,106-1,111 AM62P
-`fragment_ops.blend.fbo_srgb.*` failures on this, plus
-`fbo.color.blend` srgb8_alpha8 (1), 24 `fragment_out` names, 32
-`fbo.blit.conversion` names, and the sRGB cases of the `texture` group
-(that count was not established; no per-case list for it exists in the tree).
+Why: `GL_SRGB8_ALPHA8` was stored and rendered as plain RGBA8 and no
+sampler decoded sRGB. On the AM62P dEQP-GLES3 tree at `c4ccc966`
+(`records/am62p/deqp-gles3-c4ccc966/`, tally with
+`tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt`) the
+whole `fragment_ops.blend.fbo_srgb.*` group failed, 1,106 of 1,152
+("Image compare failed": the blend ran on the encoded bytes; the 46 that
+passed are blends whose result does not depend on the destination), and
+with it these sRGB cases:
+
+| group | fail | failure text | cause, and what answers it |
+|---|---|---|---|
+| `texture.specification` srgb8 / srgb8_alpha8 | 34 + 2 | Image comparison failed | no decode on sampling: TPU gamma |
+| `texture.filtering.{2d,2d_array}.formats.srgb8_alpha8_*` | 12 | Image verification failed | no decode before the filter: TPU gamma |
+| `fragment_out.basic.fixed.srgb8_alpha8_*` | 12 | Image comparison failed | no encode on write: PBE gamma |
+| `fragment_out.array.fixed.srgb8_alpha8_*` | 12 | Image comparison failed | several sRGB attachments: refused by name (section 4.4) |
+| `fbo.render.*srgb8_alpha8*` | 6 | Image comparison failed | no encode: PBE gamma |
+| `fbo.color.{clear,tex3d,texcube,blend}` srgb8_alpha8 | 4 | Image comparison failed | encode and decode |
+| `fbo.completeness.renderable.texture.color0.srgb8` | 1 | complete, expected incomplete | SRGB8 is texture-only: now incomplete |
+| `fbo.blit.*srgb*`, `fbo.msaa.*srgb*`, `fbo.color.repeated_clear.*srgb*` | 30 + 2 + 3 | GL_INVALID_OPERATION / INVALID_ENUM at es3fFboTestCase.cpp | `glBlitFramebuffer` was not implemented; `src/gl/blit.rs` now copies colour, decoding an sRGB read buffer and encoding an sRGB draw buffer (3.2); the multisample blit (`fbo.msaa`) is the blit item's |
+
+`texture.format.sized.*srgb*` (32) and `texture.filtering.{3d,cube}.formats.srgb*`
+(36) were NoResult (their images did not reach those cases),
+`pbo.renderbuffer.srgb8_alpha8_*` (2) likewise; `texture.compressed` sRGB
+(112) and the `srgb_r8` / `srgb_rg8` names (EXT_texture_sRGB_R8/RG8, not
+claimed) are NotSupported.
 
 ## 0. Decisions in one table
 
@@ -22,6 +45,7 @@ decodes sRGB (`src/gl/state.rs:105-107`, `src/gl/framebuffer.rs:557-566`,
 | sample decode | TEXSTATE `gamma` = ON | `TEXTURE_SHADER_STATE.sRGB` (v42) | sampler descriptor `SAMP_CTRL1` SRGB bit (descriptor path) |
 | SRGB8 (RGB) | widen to RGBA8, alpha 255, same sRGB class | same | same |
 | gating | none | none | `ETNA_FEATURE_HALTI3` for render, HALTI0 for sampling; the board's entry has both |
+| built | render and sample | sample; render refused by name | sample; render refused by name |
 
 ## 1. Sources and versions
 
@@ -78,47 +102,94 @@ in the tree, so section numbers are from memory.)
 8. `GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING`: `GL_SRGB` for sRGB images,
    `GL_LINEAR` otherwise (including the default framebuffer, section 8).
 
-## 3. What yakogl does today
+## 3. What yakogl does
 
-* GL core: `renderbuffer_surf_format` (`src/gl/framebuffer.rs:580-588`) sends
-  `SRGB8_ALPHA8` to `GLES_SURF_RGBA8888`. The sized-format table stores
-  `SRGB8_ALPHA8` and `SRGB8` as `GLES_TEXFMT_RGBA8`
-  (`src/gl/texture.rs:4558-4559`).
-  `GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING` already answers `GL_SRGB` for an
-  `SRGB8_ALPHA8` **renderbuffer** (`framebuffer.rs:1701`, test `:4598-4600`);
-  a texture-attached `SRGB8_ALPHA8` level is not checked here and must be
-  (item S1).
-* The only surface and texel classes are in `src/backend.rs`:
-  `GLES_TEXFMT_*` 0-22 (`:84-126`), `GLES_SURF_*` 0-24 (`:205-244`;
-  integer ones are the range `GLES_SURF_INT_FIRST..=LAST`),
-  `gles_surf_bytes_per_pixel` (`:367`), `gles_surf_rt_class` (`:381-388`)
-  and `gles_surf_texfmt` (`:391-399`). Drawability of a non-default surface is
-  `rt_format_drawable` (`:354-365`), keyed by the per-build mask
-  `INTEGER_RT_FORMATS` with a host-test override
-  (`HOST_INTEGER_RT_FORMATS`, `:349`). That is the pattern the sRGB
-  gate should copy.
-* Back ends: PowerVR builds PBE words in `pbe_reg_words`
-  (`src/pvr/backend.rs:731-767`, REG_WORD0/1) and `pbe_emit_words`
-  (`:792-821`, STATE_WORD0/1); it has no gamma field set. Texture formats
-  are `TexFormat` consts (`:865`, `TEXF_RGBA8`; chosen at `:3626-3629`).
-  V3D: `src/v3d/state.rs:29-34` (`refusal`, `:27`) refuses every surface but
-  RGBA8888/XRGB8888/RGB565; RT config lives in C, `driver/src/v3d/v3d_job.c`
-  (`:162`, `:832-870`, `:917-948`, `:1028-1065`) and `v3d_frame.c:119-162`,
-  all hard-wired to internal type 8 / BPP_32 / clamp NONE / output format
-  RGBA8. Its texture state already carries an `srgb` field
-  (`src/v3d/ffi.rs:457`, packed at `driver/src/v3d/v3d_tex.c:489`) that
-  nothing sets. GC7000UL: `pe_color_format` (`src/vivante/backend.rs:263-272`)
-  has no sRGB case; texture formats are `format_of`
-  (`src/vivante/texture.rs:74-98`); `GC_PE_LOGIC_OP` is written at
-  `backend.rs:1548-1551` with no sRGB bit; the sampler's `SAMP_CTRL1` at
-  `texture.rs:385` carries `GC_SAMP_CTRL1_UNK1` only.
-* Shader back ends know four render-target classes, `SHC_RT_RGBA8/F16X4/F16/F32`
-  (`src/shaderc/mod.rs:107-110`), carried by the blend key
-  (`src/gl/draw.rs:1065`, `shc_blend_key_rt(gles_surf_rt_class(..))`).
-* Host: the host back ends draw nothing (`HOST_INTEGER_RT_FORMATS` doc,
-  `src/backend.rs:341-343`). Host tests are therefore GL-state tests against
-  a fake back end, register-pack tests (`src/{pvr,v3d,vivante}/backend_tests.rs`)
-  and shader-compile tests; pixel results exist only on boards.
+### 3.1 The classes (`src/backend.rs`)
+
+* `GLES_TEXFMT_SRGB8_A8` (23): the texel class of `SRGB8_ALPHA8` and
+  `SRGB8` (widened with alpha 255, its binding `no_alpha`). Its bytes are
+  RGBA8's (`gles_texfmt_is_rgba8_bytes`), so every CPU path that moves RGBA8
+  texels moves these unchanged (upload, sub-image, copy, read-back); what
+  differs is the sampler's decode and glGenerateMipmap (3.3). All three back
+  ends sample it (`PVR_SAMPLED_TEXFMTS`, `GC_SAMPLED_TEXFMTS`,
+  `V3D_SAMPLED_TEXFMTS`), so `texture.rs` `sized_format` stores the two
+  names in it whatever the GPU. The ES 2.0 report keeps RGBA8 (glTexImage2D
+  refuses the names there, glTexStorage2D's store stays as it was).
+* `GLES_SURF_SRGB8_A8` (25, outside the integer range): the surface of an
+  `SRGB8_ALPHA8` renderbuffer or texture level. RGBA8888's bytes, red,
+  green and blue encoded, alpha linear; four bytes a pixel; sampled back as
+  `GLES_TEXFMT_SRGB8_A8` (`gles_surf_texfmt`: the frame load decodes);
+  shader class `SHC_RT_SRGB` (`gles_surf_rt_class`); not a float surface
+  (`gles_surf_is_float`, which the read-back's float path asks instead of
+  the class).
+* `SRGB_RT` (true on the PowerVR only; host tests stand in with
+  `HOST_SRGB_RT`): whether the back end encodes. `rt_format_drawable`
+  answers it for the sRGB surface, so on the GC7000UL and the V3D a draw or
+  clear into one is refused by name with GL_INVALID_OPERATION
+  (`draw.rs` `refuse_undrawable_targets`, the integer formats' path)
+  rather than storing linear values as if they were encoded.
+
+### 3.2 The GL core
+
+* `framebuffer.rs`: `renderbuffer_surf_format` and `fb_target_n` give
+  `GLES_SURF_SRGB8_A8` for an `SRGB8_ALPHA8` renderbuffer (ES 3.0 report
+  only: `is_renderbuffer_color_format` refuses the name under ES 2.0);
+  `attachment_storage` takes a texture level of the sRGB class as
+  `GL_SRGB8_ALPHA8` and refuses an `SRGB8` level (texture-only, table 3.13:
+  `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`); `fb_target_format` maps the class
+  to the surface; `texture_bits` answers `GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING`
+  = `GL_SRGB` for a texture level as the renderbuffer row already did. The
+  default framebuffer stays `GL_LINEAR` (section 8).
+* The draw: the clear colour (`GlesDraw::clear_rgba`) reaches the back end
+  linear and unclamped, as for every surface; the back end clamps (unsigned
+  normalised) and encodes.
+* glReadPixels returns the stored (encoded) bytes, through the RGBA8 path.
+* glBlitFramebuffer (`src/gl/blit.rs`, a CPU copy): an sRGB read buffer's
+  red, green and blue are decoded to linear before any filtering
+  (`decode_float`), an sRGB draw buffer's encoded after it
+  (`encode_float`), alpha a linear byte; between two sRGB buffers a NEAREST
+  copy keeps every byte (the codec's encode inverts its decode). Texture
+  levels and renderbuffers alike. Host test
+  `gl::blit::tests::srgb_buffers_decode_as_the_source_and_encode_as_the_destination`.
+* glCopyTex{Sub}Image copies the read buffer's stored bytes into the sRGB
+  texel bytes unconverted, as it copies RGBA8; a copy between an sRGB and a
+  linear buffer converting is not built (no failing dEQP case asks for it).
+
+### 3.3 The CPU codec (`src/gl/srgb.rs`)
+
+`decode(u8) -> f32` and `encode(f32) -> u8`, the ES 3.0 formulas (appendix),
+from two tables made at compile time in f64 (`core` has no `powf`; a Newton
+fifth root gives x^2.4 = x^2 (x^2)^(1/5)): the 256 decoded values, and the
+255 linear values where the encoded value crosses k + 1/2, which make the
+encode an exact nearest-byte search. Host tests: all 256 decodes against the
+formula, `encode(decode(i)) == i`, a sweep of 2^20 + 1 values against the
+formula in f64, NaN and the ends. glGenerateMipmap of an sRGB texture
+averages red, green and blue through it (decode, average, encode; alpha
+linear), so a 2x2 of black and white is 188, not RGBA8's 128.
+
+### 3.4 The shader back end's sRGB class (`src/shaderc/mod.rs`)
+
+`SHC_RT_SRGB` (4) is not a value of the blend key's 2-bit class field
+[30:31], and the 32-bit key has no free bit. It is carried on codes no
+other key has: a one-channel class (F16 or F32) has no green, blue or alpha,
+so its key keeps red's mask bit only, and the alpha mask bit [29] together
+with a one-channel class is the sRGB tag. `shc_blend_key_target(class,
+disabled)`:
+
+* RGBA8, F16X4: [26:29] the four mask bits, [30:31] the class (every such
+  key as it always was, so every table row keeps its key);
+* F16, F32: [26] red's mask bit, [30:31] the class;
+* sRGB: [26:28] red, green and blue's mask bits, [29] set, [30:31] F16 plus
+  alpha's mask bit.
+
+`shc_blend_key_class` and `shc_blend_key_masked` read them back; the GL
+core (`draw.rs` `current_blend_key`) and the precompiled list
+(`tools/precompile/src/list.rs`) build keys through it. The key of the
+"stencil only, shader discards" ZERO/ONE variant carries the target's class
+now too (it was class 0 for every target, which packs an F16X4 or sRGB
+pixel as one dword of bytes). No table row has an sRGB variant (glsl2usc
+and pco_shc have no such output class): a table-only image refuses the
+draw by name, as for the integer variants; the online compiler builds it.
 
 ## 4. PowerVR (Rogue BXS-4-64)
 
@@ -175,17 +246,18 @@ Consequence, from the data path rather than from a test:
 * What the tile buffer contains **at the start of a tile** matters: a
   render that loads the previous colour (no clear, or a second pass) loads
   it through the TPU as a texture, and decoding needs the TEXSTATE gamma
-  bit on that load (4.3). yakogl's frame load is
-  `PVR_INTERNAL_FBLOAD_F16X4` (`src/pvr/backend.rs:1718`, `FBLOAD_RT`); for sRGB
-  it needs the same program with a texture state built with gamma ON.
+  bit on that load (4.3). yakogl's frame load for the sRGB surface is
+  `PVR_INTERNAL_FBLOAD_F16X4` (`FBLOAD_RT`, RGBA16F's) over a texture of the
+  sRGB class, whose state has gamma ON (4.4).
   `nir_lower_blend` adds **no** sRGB conversion of its own: the only
   `srgb` tests in `full:src/compiler/nir/nir_lower_blend.c` are in
   `nir_color_logicop` (`:270-275`, `:1047`), which skips float and sRGB
   targets for logic ops. So there is no double conversion on top of the PBE
   gamma, and the shader blends whatever the tile buffer holds (linear F16).
   The same applies to `full:src/broadcom/compiler/v3d_nir_lower_logic_ops.c:352-366`
-  on V3D. Check yakogl's `blend.rs` has no sRGB branch of its own (it is a
-  port of that file); board check B1 confirms.
+  on V3D. yakogl's `blend.rs` has no sRGB conversion either: its sRGB class
+  reads and writes the halves (4.4); gl_test 204 checks 2 and 4 confirm on
+  the board.
 
 ### 4.3 Texture side: TPU gamma
 
@@ -197,13 +269,55 @@ Consequence, from the data path rather than from a test:
 * The TPU returns decoded floats; alpha is not gamma'd for four-channel
   formats. Whether the TPU decodes **before** bilinear filtering is not
   stated in any file in the tree (Vulkan requires it, so Mesa relies on it);
-  board check B2.
-* Compressed sRGB (ETC2): same gamma bit (`docs/es3-pvr-formats.md:406`).
+  gl_test 204 check 6.
+* Compressed sRGB (ETC2): same gamma bit (`docs/es3-pvr-formats.md:406`);
+  not built (the GL core has no compressed sRGB class).
 * `SRGB8` (RGB): Mesa has no three-component 8-bit sRGB format on PVR (no
   `R8G8B8_SRGB` row in `pvr_arch_formats.c`), and neither the PBE nor the TPU
-  has one; yakogl already widens to RGBA8 with alpha 255
-  (`src/gl/texture.rs:4559`), so SRGB8 is the SRGB8_ALPHA8 sampling class
-  with an opaque alpha. It is never a render target (ES 3.0).
+  has one; yakogl widens to RGBA8 with alpha 255 (`texture.rs`
+  `sized_format`), so SRGB8 is the SRGB8_ALPHA8 sampling class with an
+  opaque alpha. It is never a render target (ES 3.0).
+
+### 4.4 What yakogl's PowerVR back end does
+
+* `pbe_reg_words` sets REG_WORD0 `gamma` (bit 4) for `GLES_SURF_SRGB8_A8`
+  and for nothing else: the RGBA8888 register words plus that bit.
+  `pbe_emit_words`: `source_format` F16_PER_CHANNEL, `norm` set, `packmode`
+  U8U8U8U8 -- RGBA8888's state word but for the source format.
+  `surf_out_dwords` is 2 (four halves, as RGBA16F), so the MRT layout and
+  the background object's program (`bg_kick2_off`) are RGBA16F's.
+* The fragment shader: the key's sRGB class (3.4). `blend.rs` treats it as
+  RGBA16F for the pixel (read and write two dwords of halves, `Blend::wide`)
+  and as RGBA8 for the source (clamped, `Blend::unorm`), and clamps the
+  blended colour before the pack (`Blend::clamps_result`, four `fsat`; a
+  plain replace writes the clamped source and needs none): pco's `nir_fsat`
+  before the F16 pack of an sRGB format, and what keeps a value past 1 out
+  of the accumulation the next blend reads. `assemble.rs` packs it as
+  F16X4; the record says two outputs (`chain.rs`).
+* The back end's own programs take the RGBA16F forms (`pixel_class`): the
+  frame load (`FBLOAD_RT[0]`, its texture `gles_surf_texfmt` = the sRGB
+  class, so the TPU decodes), the clear-attach program of two dwords, the
+  masked clears' F16X4 forms. The clear colour is clamped to [0, 1]
+  (`clear_colour`; NaN to 0) and packed as halves (`clear_uniform`); the
+  surface clears by quad (`clears_by_quad`, as the float classes: the
+  background object's untouched pixels were never measured for an F16
+  accumulation).
+* Textures: `TEXF_SRGB8_A8` is `TEXF_RGBA8` with `gamma` (TEXSTATE_IMAGE_WORD0
+  bit 3; `TexFormat::gamma`, packed by `tex_image_word0`, so the native
+  cube's twiddled word has it too); pack info `PVR_PCK_FORMAT_INVALID |
+  UNORM` (0x11f), Mesa's setup_pck_info for R8G8B8A8_SRGB.
+* Refused by name: an sRGB attachment beside another colour attachment
+  (the several-output path packs RGBA8 bytes per output, which the PBE would
+  take for halves) -- the `fragment_out.array.fixed.srgb8_alpha8_*` cases.
+* Host tests: `srgb_pbe_words_are_mesas`,
+  `an_srgb_texture_is_the_rgba8_descriptor_with_the_tpu_gamma`,
+  `an_srgb_clear_is_the_clamped_linear_colour_in_halves`
+  (`src/pvr/backend.rs`); the frame, load, masked clear and MRT refusal in
+  `src/pvr/backend_tests.rs`; the blend tail in the byte model,
+  `tests/usc_limits.rs` `an_srgb_target_blends_clamped_linear_halves_on_the_host`
+  (case 91's shader keyed for the sRGB class: ONE/ONE, over, reverse
+  subtract and replace written as GL's clamped linear blend, and those
+  halves' encoding through `gl::srgb` as the bytes stored).
 
 ## 5. V3D 4.2 (Raspberry Pi 4)
 
@@ -270,15 +384,19 @@ first sRGB triangle on the board.
 * `Sampler State.sRGB Disable` (`v3d_packet.xml:1726`, struct `:1709`) is the
   `GL_EXT_texture_sRGB_decode` switch; yakogl leaves it 0 (`v3d_tex.c:553`
   comment "sRGB decode on"), correct for ES 3.0.
-* yakogl already plumbs the bit: `V3dTexState.srgb` (`src/v3d/ffi.rs:457`),
-  packed at `driver/src/v3d/v3d_tex.c:489`; `src/v3d/texture.rs` never sets
-  it. Texel ordering and the swizzle rows (`tmu_format`, `:160-181`) stay
+* Built: `src/v3d/texture.rs` `state` sets `V3dTexState.srgb` for the sRGB
+  class (packed at `driver/src/v3d/v3d_tex.c:489`), `refusal` accepts the
+  class, `tmu_format` takes the RGBA8 row for it (host test
+  `the_srgb_class_is_the_rgba8_row_with_the_tmu_decode`). Texel ordering and the swizzle rows (`tmu_format`, `:160-181`) stay
   those of RGBA8; `SRGB8` uses the SRGB8_ALPHA8 row with alpha stored 255
   (Mesa's `R8G8B8X8_SRGB` is `RGBA8` + `SWIZ_XYZ1`, `:68`; yakogl widens in
   the GL core instead, which gives the same texels).
 * TMU decode-before-filter is by construction (the bit is on the texture
   state, the filter runs in the TMU after format conversion); no source
-  statement in the tree. B2 covers it.
+  statement in the tree. gl_test 204 check 6 covers it.
+* The render side (5.1) is not built: `SRGB_RT` is false on the V3D, and a
+  draw into the sRGB surface is refused by name in the GL core before it
+  reaches `src/v3d/state.rs`.
 
 ## 6. GC7000UL (Vivante, i.MX8MP)
 
@@ -341,8 +459,16 @@ a larger item; keep it as the contingency, not the plan.
   `VIVS_TE_SAMPLER_LOG_SIZE_SRGB` (`etnaviv_texture_state.c:271`, not ASTC).
   Sampling needs `HALTI0` (`etnaviv_screen.c:406-407`).
 * sRGB textures cannot use the integer-filter fast path
-  (`etnaviv_format.c:314-318`); yakogl's own rule at `src/vivante/texture.rs:294`
-  ("UNORM, non-sRGB ...") must keep excluding them.
+  (`etnaviv_format.c:314-318`).
+* Built: `src/vivante/texture.rs` samples the sRGB class through the
+  A8B8G8R8 row (`format_of`'s default), `samp_ctrl1` adds
+  `GC_SAMP_CTRL1_SRGB` (0x4, `regs.rs`) to Mesa's UNK1 for it, and
+  `int_filter_wanted` leaves it out (host tests
+  `an_srgb_sampler_decodes_and_takes_no_int_filter`,
+  `the_srgb_class_is_the_rgba8_texel_row_with_the_decode_bit`). The render
+  side (6.1, 6.2) is not built: `SRGB_RT` is false on the GC7000UL and a
+  draw into the sRGB surface is refused by name in the GL core; B1 (the PE's
+  blend in linear space) and B4 (the `PE_LOGIC_OP` write) wait for it.
 * `SRGB8`: etnaviv has `R8G8B8X8_SRGB` (X8 formats, `etnaviv_translate.h:258,303`);
   yakogl widens in the GL core (alpha 255) and samples the SRGB8_ALPHA8 row.
 
@@ -354,35 +480,17 @@ decode+encode roundtrip would only lose precision"), config bits at `:162`
 and `:177`. yakogl's MSAA resolve and tiled copies of an sRGB target are
 same-encoding and must not set them.
 
-## 7. Cross-cutting: what the GL core must know
+## 7. What the GL core does not do yet
 
-* The GL core cannot encode on the CPU on the draw path, because pixels are
-  produced on the GPU. It must (a) put sRGB into the surface/texel **class**
-  so a back end can set the hardware bits, (b) refuse (INVALID_OPERATION
-  incomplete framebuffer) when the back end cannot render the class, as it
-  does for integers (`rt_format_drawable`), and (c) keep the ES 2.0 build
-  unchanged: the ES 2.0 report refuses the format already
-  (`framebuffer.rs:563`, `texture.rs:2026`), so the new classes are only
-  reachable with `REPORT_ES2=0`.
-* Clear values: the GL core passes `GlesDraw::clear_rgba` (floats, linear,
-  `src/backend.rs:701`) unchanged for sRGB targets. PowerVR and V3D convert
-  in hardware from linear F16 (4.1, 5.1); GC7000UL's clear writes the RGBA8
-  bytes, so for that back end the **PE does not encode a clear that is a
-  memory fill**: if the Vivante clear is a fast clear / RS fill of the packed
-  colour, the packed colour must be sRGB-encoded on the CPU (appendix);
-  if it is a drawn quad through the PE, the PE encodes it. Check which path
-  `src/vivante` uses per clear before choosing (item S5).
-* `glReadPixels` of the target: bytes are returned as stored; no change.
-* `glBlitFramebuffer` (stub today, `framebuffer.rs:2823` per the failure map)
-  is a separate item; its sRGB part needs the CPU codec (appendix) or the
-  BLT flags (6.4).
-* `glGenerateMipmap` on an `SRGB8_ALPHA8` texture: the box filter should
-  average in linear space (decode, average, encode); the GL core's mip
-  generation is CPU code (`src/gl/texture.rs`), so it needs the codec.
-* Compressed sRGB (ETC2 `SRGB8*`, EAC): the GL core decodes ETC2 to RGBA8 on
-  the CPU at upload for back ends without hardware ETC2
-  (`texture.rs:2925` area); the decoded texels are sRGB-encoded bytes and
-  must be tagged with the sRGB class, not RGBA8, to get the sampler's decode.
+* Compressed sRGB (`COMPRESSED_SRGB8_*_ETC2`, `*_EAC`): no class; the
+  `texture.compressed` sRGB cases stay NotSupported. The PowerVR's TPU
+  decodes them with the same gamma bit (4.3).
+* glCopyTex{Sub}Image between an sRGB and a linear buffer copies the stored
+  bytes (3.2).
+* `GL_EXT_sRGB` / `GL_EXT_sRGB_write_control` are not claimed: the ES 2.0
+  report has no sRGB format (`glTexImage2D` GL_INVALID_VALUE,
+  `glRenderbufferStorage` GL_INVALID_ENUM, unchanged), and in ES 3.0 an sRGB
+  buffer is always encoded (no `GL_FRAMEBUFFER_SRGB` switch).
 
 ## 8. The window surface
 
@@ -395,136 +503,82 @@ test at `:4790` pins it. Keep that until a default-framebuffer sRGB is wanted;
 do not let a `GL_SRGB8_ALPHA8` renderbuffer's class reach the window-surface
 paths (`default_format`, `egl.rs:2402`).
 
-## 9. Implementation items
+## 9. Implementation state
 
-Order matters: S1 and S2 first (no board needed), then per back end.
-`REPORT_ES2=0` only in every item; each item adds an ES 2.0 no-regression
-check (the existing `es2-guard` test plus a build with `--features report-es2`).
-Files owned by running items (`state.rs`, `framebuffer.rs`, `texture.rs`)
-must be edited after `gl-core-misc` and `tex3d-finish` merge.
+**S1, classes and the GL core: built** (3.1, 3.2). Host tests:
+`tests/es3_srgb.rs` (the GL API with a stand-in back end that stores a clear
+as one that encodes must: completeness, the encoding queries, SRGB8
+texture-only, the clear read back encoded, the refusal where `SRGB_RT` is
+false, every back end sampling the class; its ES 2.0 test that the report
+has no sRGB format), `gl::framebuffer` `srgb_colour_buffers_are_the_srgb_surface_and_read_back_their_bytes`,
+`gl::texture` `srgb_textures_keep_their_bytes_in_the_srgb_class`,
+`tex_storage_sized_formats_map_to_their_unpack_pair`, `gl::draw`
+`an_srgb_target_keys_the_srgb_class_and_clears_linear`.
 
-**S1 - classes and the GL core.**
-`src/backend.rs`: new `GLES_SURF_SRGB8_A8 = 25` (outside the integer range
-`GLES_SURF_INT_FIRST..=LAST`; add `gles_surf_is_srgb`), new
-`GLES_TEXFMT_SRGB8_A8 = 23`; extend `gles_surf_bytes_per_pixel` (4),
-`gles_surf_rt_class` (new `SHC_RT_SRGB = 4`, see S3), `gles_surf_texfmt`; a
-per-build `SRGB_RT_FORMATS` mask + `HOST_SRGB_RT_FORMATS` host override beside
-`INTEGER_RT_FORMATS`, consulted by `rt_format_drawable`.
-`src/gl/framebuffer.rs`: `renderbuffer_surf_format`, the texture-attachment
-surface format, `GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING` for a texture level
-of `SRGB8_ALPHA8` (renderbuffer already done, `:1701`).
-`src/gl/texture.rs`: `sized_format` maps `SRGB8_ALPHA8`/`SRGB8` to
-`GLES_TEXFMT_SRGB8_A8` (RGB widened with alpha 255), the 3D/array/cube
-paths follow; ETC2 sRGB decode tags the class (section 7).
-Host tests: new `tests/es3_srgb.rs` (fake back end with
-`HOST_SRGB_RT_FORMATS`): rbo `SRGB8_ALPHA8` -> `d.target_format ==
-GLES_SURF_SRGB8_A8`; completeness fails without the back end bit; texture
-attachment encoding is `GL_SRGB`; `SRGB8` is not colour-renderable; upload
-of `SRGB8` stores alpha 255 in the sRGB class; default framebuffer encoding is
-`GL_LINEAR`; a `report-es2` build still refuses the format.
+**S2, CPU codec: built** (3.3); glGenerateMipmap uses it
+(`generate_mipmap_of_an_srgb_texture_averages_in_linear_space`).
 
-**S2 - CPU codec.** New `src/gl/srgb.rs` (appendix). Host tests: all 256
-decode values against the ES 3.0 formula in f64, encode(decode(i)) == i for
-all i, monotone, alpha untouched, NaN -> 0; used by S5 and later blit and
-mip-generation work.
+**S3, the shader back end's class: built** for the PowerVR (3.4, 4.4):
+`shaderc::key_tests`, the byte-model test in `tests/usc_limits.rs`, and
+`gl::draw` `a_draw_into_an_srgb_target_runs_the_srgb_variant` (the online
+compiler's variant reached through a draw). The GC7000UL and the V3D blend
+in fixed function and have no key (their render side is S5, S6).
 
-**S3 - shader back end class.** `src/shaderc/mod.rs`: `SHC_RT_SRGB`;
-`src/gl/draw.rs:1065` blend key; `src/shaderc/online/powervr/blend.rs`: the
-class is read/written as F16X4 and the source is saturated (pvfio `:100`),
-and the fragment end packs F16X4 (as for RGBA16F). V3D and Vivante map the
-class to their RGBA8 shapes (no shader change). Host tests: a shader-compile
-test per back end (extend `tests/online_lowering.rs` pattern, new file
-`tests/es3_srgb_shaders.rs`): the same blending fragment shader compiles for
-`SHC_RT_SRGB` to the F16X4 variant's words plus a saturate on PowerVR, and to
-the RGBA8 words on V3D/Vivante. Also check `blend.rs` for any sRGB branch
-(4.2 caveat).
+**S4, PowerVR render and sample: built** (4.4).
 
-**S4 - PowerVR render and sample.**
-`src/pvr/backend.rs`: `pbe_reg_words` sets `gamma: true` when the target is
-`GLES_SURF_SRGB8_A8` (REG_WORD0 bit 4); `pbe_emit_words`: for the sRGB class
-`source_format = F16_PER_CHANNEL`, `packmode = U8U8U8U8`, `norm = true`
-(`pvr:vulkan/pvr_arch_formats.c:213` and docs/es3-pvr-formats.md row SRGB8_ALPHA8),
-`source_pos` as for the two-register F16X4 output; `FBLOAD_RT` and
-`CLEAR_MASKED` use the F16X4 programs for the class, with the fbload texture
-built with gamma ON; the clear uniform is the linear float colour; `TexFormat`:
-`TEXF_SRGB8_A8` = `TEXF_RGBA8` with `gamma` ON in
-`tex_image_word0`, chosen at the `GLES_TEXFMT_RGBA8` branch
-(`:3626-3629`). Host tests in `src/pvr/backend_tests.rs`
-(+ `backend_csbgen_tests.rs` for the layout): REG_WORD0 bit 4 set only for the
-sRGB class and clear for every other class (ES 2.0 words byte-identical);
-STATE_WORD1 fields for the class; TEXSTATE word0 bit 3 set only for the
-sRGB texel class; clear/fbload program selection.
+**S5, GC7000UL: sample built** (6.3); render not built (6.1-6.2: the
+`PE_LOGIC_OP` / `PE_RT_CONFIG` sRGB bits, the clear path, HALTI3), refused
+by name meanwhile.
 
-**S5 - GC7000UL render and sample.**
-Add `VIVS_PE_LOGIC_OP_SRGB`(+`_MASK`), `RT_CONFIG_SRGB`,
-`VIVS_NTE_DESCRIPTOR_SAMP_CTRL1_SRGB` (values in 6.1) to `src/vivante/regs.rs`.
-`src/vivante/backend.rs`: `pe_color_format` returns A8R8G8B8 for the class
-(as RGBA8888 today) and the sRGB flag is ORed into `GC_PE_LOGIC_OP` (RT0,
-`:1548-1551`) and `pe_rt_config_8` (RT1+, `:1519`), only if `HALTI3` is in
-the device features (it is on this chip); the resolve/tiled-copy paths do not
-set it (6.4); clear: per section 7 (CPU-encode if the clear is a memory
-fill). `src/vivante/texture.rs`: `format_of` maps the texel class to the
-RGBA8 row and `SAMP_CTRL1_SRGB` is set at `:385`; the integer-filter rule at
-`:294` keeps excluding it. Host tests in `src/vivante/backend_tests.rs`:
-register images (pattern `reg(GC_PE_LOGIC_OP)`, `:3787`) for sRGB vs RGBA8
-RT0/RT1; the descriptor word for an sRGB texture; the ES 2.0 images
-unchanged.
+**S6, V3D: sample built** (5.4); render not built (5.1: internal type 16F,
+64 bpp and the tile size that follows, clamp NORM, the output image format,
+the clear as halves -- the same change RGBA16F render targets need),
+refused by name meanwhile.
 
-**S6 - V3D render and sample.**
-`src/v3d/state.rs:29-34` accepts the class; `driver/src/v3d/v3d_job.c` RT
-config uses internal type 16F, bpp 64, clamp NORM, load/store/MS-store image
-format `SRGB8_ALPHA8` for an RT of the class, and
-`maximum_bpp_of_all_render_targets` = 64 (`:162`, `:1028`); the clear colour
-is the linear float as `R16G16B16A16_FLOAT` (5.1) instead of
-`c->rgba8` (`:1041-1044`; `v3d_frame.c` for the first frame); MRT check
-`backend.rs:4234` allows the class on RT1+. `src/v3d/texture.rs`: `refusal_for`
-(`:116`) accepts `GLES_TEXFMT_SRGB8_A8`, `tmu_format` maps it to the RGBA8
-row, `state` sets `srgb = true`. Host tests: `src/v3d/backend_tests.rs`
-(packed RT config packets: type/bpp/clamp/format fields, 64 bpp bin
-config), `V3dTexState.srgb` (texture bit only for the class),
-`tools/v3d/tex_check.c` comparison against Mesa's table, ES 2.0
-packets byte-identical.
+**S7, board verification:** gl_test 204 `srgb` (section 10), then on the
+AM62P the dEQP-GLES3 images that hold the cases of the table at the top
+(`tools/cts/am62p-gles3-tree.txt`, `TREE_ROWS` 0-based): 3
+(`fragment_ops.blend.fbo_srgb`), 1 and 2 (`fbo.color`, `fbo.completeness`,
+`fbo.render`), 4 (`fragment_out`, `pbo`), 18 (`texture.filtering.2d`,
+`2d_array`), 19 (`texture.filtering.3d.formats`), 21
+(`texture.filtering.cube`, `texture.format`) and 22
+(`texture.specification`).
 
-**S7 - board verification (after S3-S6).** `board-am62p`, `board-pi4`,
-`board-imx8mp`: the checks of section 10, then
-`dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.*`,
-`fbo.color.blend.srgb8_alpha8`, `fragment_out.*srgb*`, and the texture sRGB
-cases.
+## 10. Board checks: gl_test 204 `srgb`
 
-## 10. Open points to settle on a board (all small)
+`driver/tools/pvrlab/gl_test.c` case 204 (ES 3.0 context, the online
+compiler's image):
 
-* **B1** - blend in linear on each chip: draw `GL_FUNC_ADD` ONE/ONE of a
-  0.2 grey (linear) over a cleared 0.2 grey into an `SRGB8_ALPHA8` rbo;
-  expect the stored byte `encode(0.4)` = 170, not `2*encode(0.2)` = 248 (a
-  blend done on the encoded bytes). GC7000UL: whether the PE decodes the
-  destination (6.2).
-* **B2** - TPU/TMU/TX filter after decode: a 2x1 sRGB texture (0, 255)
-  sampled `GL_LINEAR` at the centre and written to an RGBA8 target; expect
-  decode-then-average (0.5, byte 128), not average-then-decode (0.214, byte 55).
-* **B3** - first sRGB triangle on V3D 4.2 (the vfpack ending, 5.3).
-* **B4** - that the `0xc0000000` write to `PE_LOGIC_OP` sticks on the
-  GC7000UL (read the register back after the draw).
-* Settled in source (not board checks any more): `nir_lower_blend` has no
-  sRGB blend branch (4.2) and V3D's colour write is a plain F16 vfpack (5.3).
+1. an 8x8 `SRGB8_ALPHA8` renderbuffer cleared to linear 0.2: 124 124 124 255
+   (the PBE encodes the clear);
+2. its left half blended ONE/ONE with 0.2: 170 (**B1**, blend in linear
+   space; a blend of the encoded bytes reads 248);
+3. its right half blended SRC_ALPHA/ONE_MINUS_SRC_ALPHA with (1, 0, 0.5,
+   0.5): 203 89 160 191 (encoded bytes: 190 62 156);
+4. a frame with no clear blends 0.1 over the left half: 188 (the frame load
+   decodes 170 to 0.402; a load of the encoded bytes reads 227);
+5. an sRGB texel (188, 124, 0, 128) sampled NEAREST into the RGBA8 window:
+   128 51 0 128 (decoded, alpha linear);
+6. a black/white sRGB pair sampled LINEAR at 0.516: 131 (**B2**, decode
+   before the filter; filter then decode reads 58).
 
-## Appendix: a CPU sRGB codec (exact 8-bit, ES 3.0 formula)
+Checks 1-4 are the PowerVR's (the other GPUs refuse an sRGB target by name),
+5-6 every GPU's. The tolerances (1 for the clear and the texel, 2 for a
+blend, 3 for the filter) are what the F16 accumulation, the encode table
+and the filter's fraction can move a byte; a result past them is a finding.
+**B3** (the V3D's first sRGB triangle) and **B4** (the GC7000UL's
+`PE_LOGIC_OP` write) belong to the render sides not built. Settled in
+source: `nir_lower_blend` has no sRGB blend branch (4.2) and the V3D's
+colour write is a plain F16 vfpack (5.3).
 
-Needed later for: `glBlitFramebuffer` between sRGB and linear buffers,
-`glGenerateMipmap` of sRGB textures, a GC7000UL memory-fill clear,
-software ETC2 sRGB decode, and as the host test oracle.
+## Appendix: the ES 3.0 formulas
 
-* Decode (8-bit -> linear float), ES 3.0 §3.8.16 / EXT_sRGB:
+* Decode (8-bit to linear), ES 3.0.6 3.8.16 (eq. 3.24) / EXT_sRGB:
   `c = i/255; lin = c <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`.
-* Encode (linear float -> 8-bit): clamp to [0,1] (NaN -> 0);
+* Encode (linear to 8-bit), ES 3.0.6 4.1.8: clamp to [0, 1] (NaN to 0);
   `s = lin <= 0.0031308 ? 12.92*lin : 1.055*lin^(1/2.4) - 0.055`; result
-  `round(s*255)`. For determinism build a 256-entry decode table (f32) and
-  implement encode by comparing against the 255 midpoints between consecutive
-  decoded values (nearest in the *linear* domain), or against
-  `(k+0.5)/255` encoded; pick one and test it against the f64 formula for
-  all 256 values and a dense sweep of floats. The spec allows hardware
-  tolerance (dEQP compares with a threshold), so the codec's job is to be
-  exact and monotone, not to match any GPU bit for bit.
-* Alpha is never converted. An sRGB-to-sRGB copy copies bits (no round trip).
-* `pow` is not in `core`: the table must be built with a `const fn`-safe
-  series, an integer-only method, or a build-time generator; check whether the
-  crate already has `libm` before adding one (not looked at here).
+  `round(s*255)`.
+* Alpha is never converted. An sRGB-to-sRGB copy copies bits.
+* `src/gl/srgb.rs` is exact against the f64 formula for every byte and
+  monotone (3.3). The GPUs need not match it bit for bit (dEQP compares
+  with a threshold); it is the CPU's codec and the host tests' oracle.

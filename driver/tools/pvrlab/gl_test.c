@@ -534,6 +534,15 @@
  *               of the RGB565 target's corner then keeps the blit around it
  *               (the frame loads it from memory). All three GPUs (skipped
  *               in an ES 2.0 library); not in the set
+ * 204 srgb      ES 3.0 GL_SRGB8_ALPHA8: an 8x8 sRGB renderbuffer cleared to
+ *               linear 0.2 (byte 124), blended ONE/ONE and SRC_ALPHA/
+ *               ONE_MINUS_SRC_ALPHA in linear space (170; 203 89 160 191),
+ *               reloaded decoded by a frame with no clear (188), read back
+ *               encoded; an sRGB texel sampled decoded (188 -> 128) and a
+ *               black/white pair filtered after the decode (131 at 0.516).
+ *               The render half the PowerVR's, the sample half all three
+ *               GPUs (skipped by name in a table build and in an ES 2.0
+ *               context); not in the set until it has passed on a board
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -811,6 +820,9 @@ static const char *shader_skip_reason(int c)
 	 * colour mask): the run-time compiler's, no table row */
 	if (c == 198)
 		return "alpha to coverage needs the sample-kill variant: a table build has no row for it";
+	/* an sRGB target's fragment variants are the run-time compiler's */
+	if (c == 204)
+		return "an sRGB target needs the sRGB class's variants: a table build has no row for them";
 	/* one program per source in a table: nothing to lower two ways */
 	if (c == 195)
 		return "the if lowering is the run-time compiler's: a table build has one program per source";
@@ -7879,7 +7891,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [205] = "mappbo",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19376,6 +19388,172 @@ static int case_hdrblend(void)
 	return ok && check_gl_error("hdrblend teardown") ? 0 : -1;
 }
 
+/* ---- case 204: sRGB render target and sRGB texture (srgb) ------------------
+ *
+ * ES 3.0's GL_SRGB8_ALPHA8 (docs/es3-srgb.md). The render half, on an 8x8
+ * SRGB8_ALPHA8 renderbuffer read back as bytes (glReadPixels returns the
+ * stored, encoded values):
+ *   1. cleared to linear (0.2, 0.2, 0.2, 1): 124 124 124 255 (the clear is
+ *      encoded: 0.2 linear is byte 124);
+ *   2. the left half blended ONE/ONE with u_color (0.2, 0.2, 0.2, 0.5):
+ *      170 170 170 255 -- 0.4 linear, blended in linear space (a blend of the
+ *      encoded bytes would read 248), alpha clamped at 1 (docs/es3-srgb.md
+ *      B1);
+ *   3. the right half blended SRC_ALPHA/ONE_MINUS_SRC_ALPHA with (1, 0, 0.5,
+ *      0.5): linear (0.6, 0.1, 0.35, 0.75) = 203 89 160 191 (on the encoded
+ *      bytes: 190 62 156);
+ *   4. a second frame with no clear, the left half blended ONE/ONE with
+ *      (0.1, 0.1, 0.1, 0): the frame load decodes 170 to 0.402, so 0.502
+ *      linear = 188 (a load that took the encoded bytes for linear would
+ *      read 227);
+ *      the right half keeps step 3's bytes.
+ * Tolerance 1 for the clear and 2 for a blend (the F16 accumulation and
+ * the PBE's encode table). The sample half, on the window (RGBA8, linear):
+ *   5. a 1x1 SRGB8_ALPHA8 texel (188, 124, 0, 128) sampled NEAREST: 128 51 0
+ *      128 (decoded; alpha is linear), tolerance 1;
+ *   6. a 2x1 texture of black and white sampled LINEAR at pixel 32 of 64,
+ *      coordinate 0.516 between the texels: 131 (decode, then filter; a
+ *      filter of the encoded bytes then a decode reads 58), tolerance 3.
+ * The render half is the PowerVR's (the other GPUs refuse a draw into an
+ * sRGB target by name); the sample half runs on all three GPUs. An ES 2.0
+ * context has no sRGB format: the case skips by name. The online compiler's
+ * image: the sRGB target's fragment variants are no table's rows.
+ * ------------------------------------------------------------------------- */
+#ifdef GL_TEST_PVR
+/* One pixel of an 8x8 RGBA8 read-back against `want` (R in the low byte). */
+static bool expect_px8(const char *what, const uint32_t *px, uint32_t x, uint32_t y, uint32_t want, int tol)
+{
+	uint32_t got = px[y * 8 + x];
+	bool ok = chan_diff(got, want) <= tol;
+
+	pr_info("gl_test:   %-28s (%u,%u) = 0x%08x  want 0x%08x  %s  [check %d]\n", what, x, y, got, want,
+		ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, got, want);
+}
+#endif
+
+static int case_srgb(void)
+{
+	static const GLubyte one[4] = { 188, 124, 0, 128 };
+	static const GLubyte bw[2 * 4] = { 0, 0, 0, 255, 255, 255, 255, 255 };
+	const char *v = (const char *)glGetString(GL_VERSION);
+	GLuint tprog, tex = 0;
+	bool ok = true;
+
+	if (v && strncmp(v, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 204 srgb: SKIP (an ES 2.0 context has no sRGB format)\n");
+		return -3;
+	}
+	free_all_objects();
+#ifdef GL_TEST_PVR
+	{
+		static uint32_t px[8 * 8];
+		GLuint cprog, rb = 0, fbo = 0;
+
+		cprog = link_program(gl_test_hdrquad_vs_src, gl_test_hdrcolor_fs_src);
+		if (!cprog)
+			return -1;
+		glGenRenderbuffers(1, &rb);
+		glBindRenderbuffer(GL_RENDERBUFFER, rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_SRGB8_ALPHA8, 8, 8);
+		glGenFramebuffers(1, &fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			pr_err("gl_test: srgb: SRGB8_ALPHA8 FBO incomplete\n");
+			return -1;
+		}
+		glViewport(0, 0, 8, 8);
+
+		/* 1. the clear, encoded */
+		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb clear"))
+			return -1;
+		ok &= expect_px8("srgb cleared", px, 1, 1, rgba_u32(124, 124, 124, 255), 1);
+		ok &= expect_px8("srgb cleared", px, 6, 6, rgba_u32(124, 124, 124, 255), 1);
+
+		/* 2, 3. blended in linear space, half and half */
+		glUseProgram(cprog);
+		puv_quad_setup();
+		glEnable(GL_BLEND);
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, 0, 4, 8);
+		glBlendFunc(GL_ONE, GL_ONE);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 0.2f, 0.2f, 0.2f, 0.5f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glScissor(4, 0, 4, 8);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 1.0f, 0.0f, 0.5f, 0.5f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb blends"))
+			return -1;
+		ok &= expect_px8("srgb one,one (0.4 linear)", px, 1, 3, rgba_u32(170, 170, 170, 255), 2);
+		ok &= expect_px8("srgb over (0.6,0.1,0.35,0.75)", px, 6, 3, rgba_u32(203, 89, 160, 191), 2);
+
+		/* 4. no clear: the frame load decodes what step 2 stored */
+		glScissor(0, 0, 4, 8);
+		glBlendFunc(GL_ONE, GL_ONE);
+		glUniform4f(glGetUniformLocation(cprog, "u_color"), 0.1f, 0.1f, 0.1f, 0.0f);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_BLEND);
+		glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		if (!check_gl_error("srgb load"))
+			return -1;
+		ok &= expect_px8("srgb loaded + 0.1 (0.502)", px, 2, 5, rgba_u32(188, 188, 188, 255), 2);
+		ok &= expect_px8("srgb right half kept", px, 5, 5, rgba_u32(203, 89, 160, 191), 2);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glDeleteFramebuffers(1, &fbo);
+		glDeleteRenderbuffers(1, &rb);
+	}
+#else
+	pr_info("gl_test: case 204 srgb: the render half is the PowerVR's (this GPU refuses an sRGB target by name)\n");
+#endif
+
+	/* 5. an sRGB texel, decoded (alpha linear) */
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	if (!tprog)
+		return -1;
+	glViewport(0, 0, TW, TH);
+	glUseProgram(tprog);
+	glUniform1i(glGetUniformLocation(tprog, "u_tex"), 0);
+	puv_quad_setup();
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, one);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("srgb texel"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("srgb texel decoded", TW / 2, TH / 2, rgba_u32(128, 51, 0, 128), 1);
+
+	/* 6. decode, then filter */
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, 2, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, bw);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	if (!check_gl_error("srgb filter"))
+		return -1;
+	read_topdown();
+	ok &= expect_px("srgb linear filter at 0.516", TW / 2, TH / 2, rgba_u32(131, 131, 131, 255), 3);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glDeleteTextures(1, &tex);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 97: fifteen vec4 varyings, every io row the GC7000 reports -------
  *
  * GL_MAX_VARYING_VECTORS is 15 on the GC7000 since 76f3c5d (it was 8, and a
@@ -20693,6 +20871,11 @@ static int run_case(int c, int pretransform, int debug)
 		rc = case_tfcap();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library, or no in-process compiler */
+		break;
+	case 204:
+		rc = case_srgb();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 context */
 		break;
 	case 205:
 		rc = case_mappbo();

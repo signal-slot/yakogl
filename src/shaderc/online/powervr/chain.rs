@@ -1114,8 +1114,9 @@ pub fn compile_fragment_for<'a>(
         if let Some(b) = blend {
             sh.blend_key = blend_key;
             sh.uses_fbfetch = u8::from(b.reads_pixel());
-            if b.class == crate::shaderc::SHC_RT_F16X4 {
-                /* Two pixel output dwords, as pco's f16x4 records say. */
+            if b.wide() {
+                /* Two pixel output dwords, as pco's f16x4 records say (an
+                 * sRGB target's linear halves too). */
                 sh.num_outputs = 2;
             }
         }

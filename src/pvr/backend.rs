@@ -790,7 +790,11 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
 /// row pitch in pixel pairs minus one whatever the pixel size (gl_test case
 /// 21 checks RGB565 rows), the channel order -- and PBESTATE_REG_WORD1,
 /// maxclip_x/y. `twiddle` (PVR_BACKEND_OPT_PBE_TWIDDLE, power-of-two
-/// targets only) stores the target twiddled, with its log2 size.
+/// targets only) stores the target twiddled, with its log2 size. An sRGB
+/// target sets `gamma` (REG_WORD0 bit 4, pbestate.xml:268): the PBE encodes
+/// red, green and blue on store, as Mesa's pvr_arch_pbe_pack_state does for
+/// PVR_PBE_GAMMA_ENABLED (pvr_arch_job_common.c:163-171; `twocomp_gamma`
+/// only for a two-component format, which this is not).
 fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downscale: bool, twiddle: bool) -> [u64; 2] {
     let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one);
     let w0 = csb_pack!(
@@ -809,6 +813,7 @@ fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downsca
             swiz_chan1,
             swiz_chan2,
             swiz_chan3,
+            gamma: gles_surf_is_srgb(fmt),
             ..Default::default()
         }
     );
@@ -886,18 +891,36 @@ fn pbe_int_packmode(l: GlesIntLayout) -> csb::ROGUE_PBESTATE_PACKMODE {
 
 /// The 32-bit pixel output registers a surface's colour takes: the packed
 /// dwords of an integer surface ([`ShcIntRt::dwords`], what its program
-/// writes), two for RGBA16F's four halves, one for every other.
+/// writes), two for RGBA16F's four halves and for an sRGB target's (its
+/// linear F16 accumulation), one for every other.
 fn surf_out_dwords(fmt: u8) -> u32 {
     match gles_surf_int_layout(fmt) {
         Some(l) => crate::shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed }.dwords(),
-        None if fmt == GLES_SURF_RGBA16F => 2,
+        None if fmt == GLES_SURF_RGBA16F || gles_surf_is_srgb(fmt) => 2,
         None => 1,
     }
 }
 
+/// The class of the pixel a surface's colour is accumulated in, for the
+/// back end's own programs (the frame load, the clears): the shader class
+/// ([`gles_surf_rt_class`]), with an sRGB target's linear halves taken as
+/// RGBA16F's -- the load's TPU decode and the PBE's encode on store are what
+/// differ, not the program.
+fn pixel_class(fmt: u8) -> u32 {
+    match gles_surf_rt_class(fmt) {
+        crate::shaderc::SHC_RT_SRGB => crate::shaderc::SHC_RT_F16X4,
+        c => c,
+    }
+}
+
 fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 2] {
-    let float = gles_surf_rt_class(fmt) != 0;
+    let float = gles_surf_is_float(fmt);
     let int = gles_surf_int_layout(fmt);
+    /* An sRGB target: F16 source (pvr_arch_pbe_get_src_format_and_gamma,
+     * pvr_arch_job_common.c:56-60), normalised, packed U8U8U8U8 (Mesa's
+     * FORMAT(R8G8B8A8_SRGB, U8U8U8U8, F16), pvr_arch_formats.c:213); the
+     * encode is REG_WORD0's gamma ([`pbe_reg_words`]). */
+    let srgb = gles_surf_is_srgb(fmt);
     let packmode = match (fmt, int) {
         (_, Some(l)) => pbe_int_packmode(l),
         (GLES_SURF_RGBA16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16F16F16F16,
@@ -913,7 +936,7 @@ fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 
         1,
         csb::ROGUE_PBESTATE_STATE_WORD1 {
             address_high: dev_addr(addr),
-            source_format: if float {
+            source_format: if float || srgb {
                 csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL
             } else {
                 csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL
@@ -963,6 +986,11 @@ struct TexFormat {
     /// were verified with on the board, and the ES 3.0 classes take Mesa's
     /// value (false for R11G11B10F and RGB9E5, whose alpha is the constant 1).
     alpha_msb: bool,
+    /// TEXSTATE_IMAGE_WORD0 `gamma` (texstate.xml:287-288, bit 3): the TPU
+    /// decodes red, green and blue from sRGB before it filters, alpha left
+    /// linear -- Mesa's for a four-component sRGB format
+    /// (pvr_arch_tex_state.c:207-226, `word0.gamma = ROGUE_TEXSTATE_GAMMA_ON`).
+    gamma: bool,
 }
 
 const SWIZ_R: csb::ROGUE_TEXSTATE_SWIZ = csb::ROGUE_TEXSTATE_SWIZ_SRCCHAN_0;
@@ -975,7 +1003,14 @@ const SWIZ_RGBA: [csb::ROGUE_TEXSTATE_SWIZ; 4] = [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_A
 
 /// A STRIDE (linear) texture of `texformat`.
 const fn tex_stride(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: false, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE, alpha_msb: true }
+    TexFormat {
+        texformat,
+        compressed: false,
+        swiz,
+        textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE,
+        alpha_msb: true,
+        gamma: false,
+    }
 }
 
 /// A STRIDE texture of `texformat` whose alpha is the constant 1, without
@@ -986,6 +1021,14 @@ const fn tex_stride_no_alpha(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]
 
 /// U8U8U8U8, identity swizzle.
 const TEXF_RGBA8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8U8U8, SWIZ_RGBA);
+/// The sRGB class: U8U8U8U8 (Mesa's FORMAT(R8G8B8A8_SRGB, U8U8U8U8, ...),
+/// pvr_arch_formats.c:105) with the TPU's gamma decode on.
+const TEXF_SRGB8_A8: TexFormat = TexFormat { gamma: true, ..TEXF_RGBA8 };
+/// Its image meta PCK_INFO: Mesa's setup_pck_info (pvr_arch_tex_state.c:
+/// 84-112) for R8G8B8A8_SRGB, which pco_pipe_to_pck_format (pco/pco.c:
+/// 387-461) does not list: "no pack format" (0x1f) with UNORM (0x100), the
+/// format being unsigned normalised.
+const TEX_PCK_INFO_SRGB8_A8: u32 = PVR_PCK_FORMAT_INVALID | PCO_PCK_UNORM;
 /// ... read as B,G,R,A (swiz0 = chan 2, swiz2 = chan 0).
 const TEXF_BGRA8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8U8U8, [SWIZ_B, SWIZ_G, SWIZ_R, SWIZ_A]);
 /* Float texel formats (Mesa pvr_arch_tex_state.c setup_pck_info /
@@ -1010,7 +1053,14 @@ const TEX_PCK_INFO_F32: u32 = 15;
  * UNORM (bit 8): Mesa pvr_arch_tex_state.c / setup_pck_info for
  * VK_FORMAT_ETC2_*. */
 const fn tex_etc(texformat: u32, swiz: [csb::ROGUE_TEXSTATE_SWIZ; 4]) -> TexFormat {
-    TexFormat { texformat, compressed: true, swiz, textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D, alpha_msb: false }
+    TexFormat {
+        texformat,
+        compressed: true,
+        swiz,
+        textype: csb::ROGUE_TEXSTATE_TEXTYPE_2D,
+        alpha_msb: false,
+        gamma: false,
+    }
 }
 const TEXF_ETC2_RGB: TexFormat =
     tex_etc(csb::ROGUE_TEXSTATE_FORMAT_COMPRESSED_ETC2_RGB, [SWIZ_R, SWIZ_G, SWIZ_B, SWIZ_ONE]);
@@ -1112,6 +1162,7 @@ fn tex_image_word0(f: TexFormat, textype: csb::ROGUE_TEXSTATE_TEXTYPE, width: u3
             swiz2,
             swiz3,
             textype,
+            gamma: if f.gamma { csb::ROGUE_TEXSTATE_GAMMA_ON } else { csb::ROGUE_TEXSTATE_GAMMA_OFF },
             ..Default::default()
         }
     )
@@ -3051,6 +3102,11 @@ fn f32_to_f16_bits(f: f32) -> u32 {
 /// glClearBuffer{i,ui}v (`GlesDraw::clear_rgba`'s bit patterns), packed into
 /// the target's dwords by [`pack_clear_int`]. Zero past the dwords the
 /// target takes ([`surf_out_dwords`]).
+///
+/// An sRGB target takes the linear colour as four halves, clamped to [0, 1]
+/// (the target is unsigned normalised, ES 3.0.6 4.2.3), and the PBE encodes
+/// it on store -- Mesa packs an sRGB clear colour the same way, as
+/// F16F16F16F16 for the gamma'd PBE (pvr_arch_job_transfer.c:2372-2384).
 fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 4] {
     if let Some(l) = gles_surf_int_layout(surf) {
         pack_clear_int(l, &c.map(f32::to_bits))
@@ -3086,15 +3142,38 @@ fn pack_clear_int(l: GlesIntLayout, v: &[u32; 4]) -> [u32; 4] {
     out
 }
 
-/// The float encoding of a clear colour for a float render-target class.
-/// Only reached for those: [`clear_uniform`] is the way in.
+/// The float encoding of a clear colour for a float render-target class
+/// (and an sRGB target's linear halves, clamped: [`clear_colour`]). Only
+/// reached for those: [`clear_uniform`] is the way in.
 fn pack_clear_float(surf: u8, c: &[f32; 4]) -> [u32; 2] {
-    if surf == GLES_SURF_RGBA16F {
+    let c = &clear_colour(surf, c);
+    if surf == GLES_SURF_RGBA16F || gles_surf_is_srgb(surf) {
         [f32_to_f16_bits(c[0]) | (f32_to_f16_bits(c[1]) << 16), f32_to_f16_bits(c[2]) | (f32_to_f16_bits(c[3]) << 16)]
     } else if surf == GLES_SURF_R16F {
         [f32_to_f16_bits(c[0]), 0]
     } else {
         [c[0].to_bits(), 0]
+    }
+}
+
+/// The clear colour a program writes into a target of format `surf`: as
+/// given, but clamped to [0, 1] for an sRGB target, which is unsigned
+/// normalised (ES 3.0.6 4.2.3) and whose F16 accumulation would keep a value
+/// past 1 for the next blend to read. (An RGBA8 target's bytes clamp in
+/// `pack_rgba8`; a float target keeps the value.) NaN clamps to 0.
+fn clear_colour(surf: u8, c: &[f32; 4]) -> [f32; 4] {
+    if gles_surf_is_srgb(surf) {
+        c.map(|v| {
+            if v >= 1.0 {
+                1.0
+            } else if v > 0.0 {
+                v
+            } else {
+                0.0
+            }
+        })
+    } else {
+        *c
     }
 }
 
@@ -3206,7 +3285,7 @@ fn record_frame_quad(
     let b = &mut p.b;
     let fl = &mut p.fbload;
     let (vs_sh, fs_sh): (*const ShcShader, *const ShcShader) = (&fl.vs_sh, &fl.fs_sh);
-    let rt_class = gles_surf_rt_class(d.target_format);
+    let rt_class = pixel_class(d.target_format);
     let rt_sh: *const ShcShader = if rt_class != 0 { &fl.fs_rt_sh[rt_class as usize - 1] } else { core::ptr::null() };
     let int = gles_surf_is_integer(d.target_format);
     let dwords = surf_out_dwords(d.target_format);
@@ -3230,7 +3309,9 @@ fn record_frame_quad(
     ld.vs_usc_gpu = b.fbload_vs.gpu;
     ld.fs_usc_gpu = b.fbload_fs.gpu;
     if rt_class != 0 {
-        /* a float target: the load FS packs the texel for its class */
+        /* a float target: the load FS packs the texel for its class (an
+         * sRGB one's as RGBA16F's, the texture state decoding it,
+         * `gles_surf_texfmt`) */
         ld.fs = rt_sh;
         ld.fs_usc_gpu = b.fbload_fs_rt[rt_class as usize - 1].gpu;
     }
@@ -3343,7 +3424,7 @@ fn record_frame_quad(
 /// into the fragment shader on this GPU, as Mesa's pvr lowers a write mask.
 fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let has_ds = p.b.frame_ds.buf().is_some();
-    let class = gles_surf_rt_class(d.target_format);
+    let class = pixel_class(d.target_format);
     /* with the switch off, every channel: the clear as it always was */
     let mut mask = match (d.do_clear, masked_clear_on()) {
         (false, _) => 0,
@@ -3389,7 +3470,7 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
         None => clear_one,
     };
     fl.clear_pack = clear_uniform(d.target_format, &d.clear_rgba);
-    fl.clear_rgba = d.clear_rgba;
+    fl.clear_rgba = clear_colour(d.target_format, &d.clear_rgba);
     let clear_pack: *const c_void = match masked {
         /* clear.frag's uniform: the colour as four floats */
         Some(_) => fl.clear_rgba.as_ptr() as *const c_void,
@@ -4175,6 +4256,12 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, force_mi
         fmt = if t.bgra != 0 { TEXF_BGRA8 } else { TEXF_RGBA8 };
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(4); /* layer size (bytes) */
         w[7] = TEX_PCK_INFO_RGBA8_UNORM;
+    } else if t.format == GLES_TEXFMT_SRGB8_A8 {
+        /* the RGBA8 texels, decoded by the TPU (never B,G,R,A: no scan-out
+         * image is sRGB) */
+        fmt = TEXF_SRGB8_A8;
+        w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(4);
+        w[7] = TEX_PCK_INFO_SRGB8_A8;
     } else if t.format == GLES_TEXFMT_RGB565 {
         fmt = TEXF_RGB565;
         levels = 1;
@@ -4484,6 +4571,13 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     let ntargets = (d.num_targets as usize).min(d.targets.len());
     if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format)) {
         glog_once!("yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment");
+        return -util::ENOTSUP;
+    }
+    /* So is an sRGB one: its colour is two dwords of linear halves packed
+     * by the variant for its class, and the several-output path packs each
+     * output as RGBA8 bytes, which the PBE would take for halves. */
+    if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_srgb(t.format)) {
+        glog_once!("yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside another colour attachment");
         return -util::ENOTSUP;
     }
     /* One instance of an instanced draw the GL core draws instance by
@@ -6952,7 +7046,7 @@ fn flush(p: &mut Pvr) -> i32 {
     let shader = match mrt_clear_dwords(b) {
         2 => b.bg_kick2_off,
         3 => b.bg_kick3_off,
-        _ if b.target_format == GLES_SURF_RGBA16F => b.bg_kick2_off,
+        _ if b.target_format == GLES_SURF_RGBA16F || gles_surf_is_srgb(b.target_format) => b.bg_kick2_off,
         _ => b.bg_kick_off,
     };
     b.kick.frag.pds_bgnd[0] = dw64(csb_pack!(
@@ -7761,6 +7855,96 @@ mod tests {
                 let ident = pbe_reg_words(GLES_SURF_RGBA8888, false, 64, 64, 64, false, false)[0];
                 assert_eq!(w0, ident, "{pipe}: the identity swizzle, alpha_one {alpha_one}");
             }
+        }
+    }
+
+    /// An sRGB target's PBE state against Mesa 26.2.1: the pack mode of its
+    /// FORMAT row, U8U8U8U8 (vulkan/pvr_arch_formats.c:213, PACKMODE 0 in
+    /// csbgen/rogue/pbestate.xml:61), `norm` set (the format is fully
+    /// normalised), `source_format` F16_PER_CHANNEL (0, pbestate.xml:156;
+    /// pvr_arch_pbe_get_src_format_and_gamma, pvr_arch_job_common.c:56-60)
+    /// and REG_WORD0's `gamma` (bit 4, pbestate.xml:268; set at
+    /// pvr_arch_job_common.c:163-171) -- the RGBA8888 register words with
+    /// that one bit, which no other surface sets. Its colour is two output
+    /// dwords of halves; its programs are RGBA16F's; it clears by quad.
+    #[test]
+    fn srgb_pbe_words_are_mesas() {
+        let [_, w1] = pbe_emit_words(0x80_0000_1000, GLES_SURF_SRGB8_A8, 2, 1);
+        let w1 = w1 as u64;
+        assert_eq!((w1 >> 7) & 0x3f, 0, "packmode U8U8U8U8");
+        assert_eq!((w1 >> 13) & 1, 1, "norm");
+        assert_eq!((w1 >> 19) & 1, u64::from(csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL), "source_format");
+        assert_eq!(csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL, 0);
+        /* the RGBA8888 state but for those fields */
+        let [_, rgba] = pbe_emit_words(0x80_0000_1000, GLES_SURF_RGBA8888, 2, 1);
+        assert_eq!(w1 & !(1 << 19), rgba as u64 & !(1 << 19), "only source_format differs from RGBA8888");
+        for alpha_one in [false, true] {
+            let srgb = pbe_reg_words(GLES_SURF_SRGB8_A8, alpha_one, 64, 64, 64, false, false);
+            let rgba = pbe_reg_words(GLES_SURF_RGBA8888, alpha_one, 64, 64, 64, false, false);
+            assert_eq!(srgb[0], rgba[0] | 1 << 4, "gamma, alpha_one {alpha_one}");
+            assert_eq!(srgb[1], rgba[1], "REG_WORD1 alike");
+        }
+        let all = [GLES_SURF_RGBA8888, GLES_SURF_XRGB8888, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_R16F]
+            .into_iter()
+            .chain([GLES_SURF_R32F])
+            .chain(GLES_SURF_INT_FIRST..=GLES_SURF_INT_LAST);
+        for surf in all {
+            let w0 = pbe_reg_words(surf, false, 64, 64, 64, false, false)[0];
+            assert_eq!(w0 & 1 << 4, 0, "{}: no gamma", gles_surf_name(surf));
+        }
+        assert_eq!(surf_out_dwords(GLES_SURF_SRGB8_A8), 2);
+        assert_eq!(pixel_class(GLES_SURF_SRGB8_A8), crate::shaderc::SHC_RT_F16X4);
+        assert_eq!(pixel_class(GLES_SURF_RGBA16F), crate::shaderc::SHC_RT_F16X4);
+        assert!(clears_by_quad(GLES_SURF_SRGB8_A8));
+        assert_eq!(gles_surf_texfmt(GLES_SURF_SRGB8_A8), GLES_TEXFMT_SRGB8_A8, "the frame load decodes");
+    }
+
+    /// An sRGB target's clear is its linear colour as RGBA16F's two dwords
+    /// of halves, clamped to [0, 1] first (unsigned normalised; NaN to 0);
+    /// the PBE encodes it. The masked clear's float uniform is clamped alike.
+    #[test]
+    fn an_srgb_clear_is_the_clamped_linear_colour_in_halves() {
+        let c = [1.5f32, 0.5, -1.0, f32::NAN];
+        assert_eq!(clear_colour(GLES_SURF_SRGB8_A8, &c), [1.0, 0.5, 0.0, 0.0]);
+        assert_eq!(clear_uniform(GLES_SURF_SRGB8_A8, &c), [0x3C00 | (0x3800 << 16), 0, 0, 0]);
+        let g = [0.2f32, 0.2, 0.2, 1.0];
+        assert_eq!(clear_uniform(GLES_SURF_SRGB8_A8, &g)[..2], pack_clear_float(GLES_SURF_RGBA16F, &g));
+        /* a float target is not clamped */
+        assert_eq!(clear_colour(GLES_SURF_RGBA16F, &c)[0], 1.5);
+    }
+
+    /// An sRGB texture's descriptor is the RGBA8 one with TEXSTATE_IMAGE_WORD0
+    /// `gamma` on (bit 3, texstate.xml:287-288; Mesa's for a four-component
+    /// sRGB format, pvr_arch_tex_state.c:207-226) and the pack info of
+    /// setup_pck_info for R8G8B8A8_SRGB, which pco_pipe_to_pck_format leaves
+    /// out: INVALID (0x1f) with UNORM (0x100). No other class sets the bit.
+    #[test]
+    fn an_srgb_texture_is_the_rgba8_descriptor_with_the_tpu_gamma() {
+        let base = GlesTextureBind {
+            base_gpu: 0x80_0000_1000,
+            width: 3,
+            height: 12,
+            stride_texels: 4,
+            mip_levels: 1,
+            ..GlesTextureBind::ZERO
+        };
+        let srgb = desc(&GlesTextureBind { format: GLES_TEXFMT_SRGB8_A8, ..base });
+        let rgba = desc(&GlesTextureBind { format: GLES_TEXFMT_RGBA8, ..base });
+        assert_eq!(srgb[0], rgba[0] | 1 << 3, "word 0: gamma");
+        assert_eq!(srgb[1..7], rgba[1..7], "the rest of the image words and the meta");
+        assert_eq!(srgb[7], 0x11f, "PCK_INFO");
+        assert_eq!(srgb[8..], rgba[8..], "the sampler words");
+        for format in [
+            GLES_TEXFMT_RGBA8,
+            GLES_TEXFMT_RGBA16F,
+            GLES_TEXFMT_R16F,
+            GLES_TEXFMT_R32F,
+            GLES_TEXFMT_L8,
+            GLES_TEXFMT_RGBA8_SNORM,
+            GLES_TEXFMT_RGBA8UI,
+            GLES_TEXFMT_RGB10A2,
+        ] {
+            assert_eq!(desc(&GlesTextureBind { format, ..base })[0] & 1 << 3, 0, "format {format}: no gamma");
         }
     }
 

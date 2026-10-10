@@ -122,12 +122,13 @@ Under `report-es2` every old answer is kept and pinned.
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2 the tables lacked (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, `RGB10_A2UI`, the 24 integer formats) are accepted with their table 3.2 pairs and converted on the CPU at upload into the first storage class the back end samples (`src/gl/es3_formats.rs`, `docs/es3-sized-formats.md`); integer textures and 32-bit float ones are complete only with NEAREST filters. `RGB5_A1` takes `UNSIGNED_INT_2_10_10_10_REV`; copies into integer, snorm or float images from a fixed-point buffer are GL_INVALID_OPERATION. The PowerVR samples every new class but `RGB10A2` in Mesa's TPU format (`docs/es3-pvr-formats.md` section 10), the integer ones through `isampler2D`/`usampler2D` (an `smp` without `fcnorm`; other integer sampler dimensions refused by name); `RGB10_A2` stays in `RGBA8` there (renderable and mipmappable). On the GC7000 and the V3D the integer formats and `RGB10_A2UI` are refused by name, and the float, packed-float and snorm ones land in `RGBA16F` on the GC7000 and are refused on the V3D. Host dEQP-GLES3 `texture.specification` on the PowerVR: the `glGetError() == GL_NO_ERROR` bucket 720 to 594 (before the PowerVR classes). Tests `tests/es3_sized_formats.rs`, `src/gl/es3_format_tests.rs`, `pvr::backend` `es3_class_descriptors_are_mesas`; on the board: gl_test 201, pending | `888af5d`, `e5c4a18`; PowerVR `074c48f`, `03340c8` |
 | Occlusion queries | `GL_ANY_SAMPLES_PASSED{,_CONSERVATIVE}` are counted on all three back ends (design `docs/es3-occlusion-query.md` (`d303712`, `e37662e`); the GL core's state machine and errors per ES 3.0 2.14, `glGetQueryObjectuiv` waits and answers 0/1, the back-end hooks `query_begin/end/result` and `GlesDraw::occlusion_query`). V3D: `OCCLUSION_QUERY_COUNTER` with the query's word, in the packet-skip key. GC7000: the PE's `GL_OCCLUSION_QUERY_ADDR/CONTROL`, suspended at every switch and stream end. PowerVR: `ISPCTL.vistest`/`visreg` on TRANSLUCENT counted draws, a result area per kick as `ISP_OCLQRY_BASE` with `GETVISRESULTS`, the frame ended at `glEndQuery`. Proven on the host only (`gl::es3::tests::occlusion`, each back end's tests, `job_check` part 19, `vdm_field_check`); the first board test is gl_test 196 `occl` ("Next board session"). Under `report-es2` every target is refused as before | `af6d259`, `b03863c`, `a6cc10d`, `45fb13f`; gl_test 196 `71430ed` |
 | Integer colour render targets | the GL half is built: the 19 colour-renderable integer formats are renderbuffer storage and complete framebuffers, `glClearBuffer{i,ui}v` clear them with raw bits, `glReadPixels` takes `RGBA_INTEGER`, blending is off for them. The PowerVR writes all nineteen as a draw's one colour attachment (`INTEGER_RT_FORMATS`; the program bit-packs the int/uint output per Mesa's `pack_to_format`, the PBE stores it in its integer pack mode, clears are quads of the raw packed dwords, a frame without a clear reloads the bits raw; `docs/es3-pvr-formats.md` section 10); refused by name there: a colour mask keeping some of the target's channels, an integer attachment beside another one. The GC7000 and the V3D write none yet, so there a draw or clear into one is refused by name with GL_INVALID_OPERATION (open work 4, int-rt). Tests `tests/es3_int_rt.rs` (14; one under `report-es2`), in the gate's V3D rows; `tests/usc_limits.rs` `integer_render_targets_get_the_packed_bits`, the `pvr::backend` integer tests; on the board: gl_test 200, pending | `b9b2ac0`; PowerVR `1779e02`, `03340c8` |
-| `glBlitFramebuffer` | the colour half is built in the GL core, shared by the three back ends (`src/gl/blit.rs`): ES 3.0.6 4.3.3's errors in Mesa's order (incomplete framebuffers, filter, mask, LINEAR with depth/stencil or an integer read buffer, the fixed-or-float / signed / unsigned classes, identical buffers, sample buffers on either side), then a CPU copy after one flush and finish: the read buffer's rows invalidated, each draw buffer's rows invalidated, written and written back. Scaling, reversed rectangles, both rectangles cut to their buffers with the uncut mapping, the scissor box on the destination, NEAREST and (scaled only) LINEAR as dEQP's reference computes them; unorm rounded to the format's bits, half floats, integers saturated, missing channels 0 / alpha 1; the window as source and destination (stored top-down); every draw buffer. sRGB storage adds its decode/encode in `decode_float` / `encode_float` (item srgb). A depth or stencil blit is validated and then refused with GL_INVALID_OPERATION, said once: the back ends' depth/stencil buffers have no copy path (open work 4, blit-ds). Under `report-es2` the command stays GL_INVALID_OPERATION. Tests: `gl::blit::tests` (18); on the board: gl_test 202 `blitconv` and the AM62P GLES3 rows 1, 2 and 4, pending | (this commit) |
+| `glBlitFramebuffer` | the colour half is built in the GL core, shared by the three back ends (`src/gl/blit.rs`): ES 3.0.6 4.3.3's errors in Mesa's order (incomplete framebuffers, filter, mask, LINEAR with depth/stencil or an integer read buffer, the fixed-or-float / signed / unsigned classes, identical buffers, sample buffers on either side), then a CPU copy after one flush and finish: the read buffer's rows invalidated, each draw buffer's rows invalidated, written and written back. Scaling, reversed rectangles, both rectangles cut to their buffers with the uncut mapping, the scissor box on the destination, NEAREST and (scaled only) LINEAR as dEQP's reference computes them; unorm rounded to the format's bits, half floats, integers saturated, missing channels 0 / alpha 1; the window as source and destination (stored top-down); every draw buffer. An sRGB read buffer is decoded and an sRGB draw buffer encoded in `decode_float` / `encode_float` (item srgb). A depth or stencil blit is validated and then refused with GL_INVALID_OPERATION, said once: the back ends' depth/stencil buffers have no copy path (open work 4, blit-ds). Under `report-es2` the command stays GL_INVALID_OPERATION. Tests: `gl::blit::tests` (18); on the board: gl_test 202 `blitconv` and the AM62P GLES3 rows 1, 2 and 4, pending | (this commit) |
+| sRGB colour buffers and textures | `GL_SRGB8_ALPHA8` (and `GL_SRGB8`, texture-only) are their own storage class and surface (`GLES_TEXFMT_SRGB8_A8`, `GLES_SURF_SRGB8_A8`; `docs/es3-srgb.md`): encoding `GL_SRGB`, an SRGB8 level an incomplete attachment, `glReadPixels` the stored encoded bytes, glGenerateMipmap averaging in linear space (`src/gl/srgb.rs`, the ES 3.0 codec from compile-time tables). PowerVR: the PBE's REG_WORD0 `gamma` over an F16 accumulation (F16 source, U8U8U8U8, normalised), the fragment shader's sRGB class (`SHC_RT_SRGB`: RGBA16F's halves, the source and the blended colour clamped, carried on blend-key codes no other key has), the RGBA16F frame load over a TEXSTATE `gamma` texture, the clear clamped linear halves; textures TEXSTATE_IMAGE_WORD0 `gamma`. GC7000UL (`SAMP_CTRL1` SRGB) and V3D (`TEXTURE_SHADER_STATE.sRGB`) sample the class; their draws into an sRGB target are refused by name (`SRGB_RT`). Proven on the host only (`tests/es3_srgb.rs`, the byte model in `tests/usc_limits.rs`, each back end's word tests); the first board test is gl_test 204 `srgb` ("Next board session"). Under `report-es2` nothing changes (no sRGB format) | (this commit) |
 | NPOT levels of arrays and storage textures | every level of a NPOT 2D array or `glTexStorage2D/3D` texture is valid (ES 3.0 3.8.14); levels a back end cannot hold are recorded and their texels dropped, as for a NPOT cube. Tests `src/gl/es3_level_tests.rs` | `c40414b` |
 | Stage-interface link rules | the link refuses a varying whose interpolation qualifier differs between the stages and a uniform block declared differently in the two (`tests/es3_link_iface.rs`) | `b88fea5`, `03ff7a6` |
 | GLSL ES 3.00 in the compiler | measured over the dEQP gles3 `.test` corpus, 5,596 programs (`docs/es3-shaderc-coverage.md`, `tests/es3_shaderc_corpus.rs`); line continuation inside tokens and directive names (`tests/es3_shaderc_pp.rs`) | `4ab482e`, `79fe171`, `ed0c81d` |
 | GL-core fixes from the dEQP-GLES3 inventory | `GL_RGB10_A2` is renderbuffer storage (held as RGBA8, which the size queries say); `glRenderbufferStorageMultisample` with one sample keeps `GL_RENDERBUFFER_SAMPLES` 1, a framebuffer mixing sample counts is `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE`, and `glReadPixels` from one with sample buffers is GL_INVALID_OPERATION; a texture attachment of an ES 3.0 sized format answers its own component type and bits; `glReadPixels` into a pixel pack buffer checks the whole write against the buffer and writes the rows back from the cache; `glUnmapBufferOES` / `glGetBufferPointervOES` take every ES 3.0 target; `glDrawBuffers` on a framebuffer object checks `n` before the enums; `glVertexAttribI4*` values reach an ivec4/uvec4 input and `glGetVertexAttribI{i,ui}v` exactly, `glGetVertexAttribiv` rounds. Under `report-es2` `GL_HALF_FLOAT`, the packed types and the integer array queries are GL_INVALID_ENUM. Tests `tests/es3_gl_core.rs`, `tests/es3_vertex_api.rs`; the vertex buckets of the AM62P run in `docs/es3-vertex-gap.md` | `468528a`, `0384071`, `3d1e5ba`; vertex `8b3e703` |
-| Designs, docs only | sRGB render targets and sampling (`docs/es3-srgb.md`), PowerVR 2D-array and shadow sampling (`docs/es3-pvr-2darray.md`), PowerVR format map (`docs/es3-pvr-formats.md`), the AM62P GLES3 fbo / fragment_ops / fragment_out failure map (`docs/es3-fbo-fragops-failure-map.md`), the AM62P dEQP-GLES3 failure inventory by root cause from the `396d667a` numbers (`docs/es3-cts-failures.md`, `1e58b9b`). Every hardware statement cites Mesa 26.2.1 or is marked unverified; nothing in them is measured on a board | `948710f`, `1a48782`, `71d8dd7`; `0edefef`; `6abe43d`, `8a1260b`, `7dedef7`, `a43ec9b`, `710934d`; `53c7ba3`, `3cdbe16` |
+| Designs, docs only | PowerVR 2D-array and shadow sampling (`docs/es3-pvr-2darray.md`), PowerVR format map (`docs/es3-pvr-formats.md`), the AM62P GLES3 fbo / fragment_ops / fragment_out failure map (`docs/es3-fbo-fragops-failure-map.md`), the AM62P dEQP-GLES3 failure inventory by root cause from the `396d667a` numbers (`docs/es3-cts-failures.md`, `1e58b9b`). Every hardware statement cites Mesa 26.2.1 or is marked unverified; nothing in them is measured on a board | `948710f`, `1a48782`, `71d8dd7`; `0edefef`; `6abe43d`, `8a1260b`, `7dedef7`, `a43ec9b`, `710934d`; `53c7ba3`, `3cdbe16` |
 | ES 2.0 report guard | `tests/es2_report_guard.rs` (`report-es2` builds only) pins what an ES 2.0 client sees, each pin with its ES 2.0 rule: the version strings, the exact extension list, the ES 3.0 pnames and entry points refused, the table 6.18-6.20 limits, the renderbuffer and texture formats. Four pins the code does not meet yet are `#[ignore = "BUG: ..."]`: ES 3.0-only `glGet` pnames and `GL_RASTERIZER_DISCARD` / `GL_PRIMITIVE_RESTART_FIXED_INDEX` are answered, `GL_R32F`, `GL_DEPTH_COMPONENT32F`, `GL_DEPTH32F_STENCIL8` and `GL_BGRA8_EXT` renderbuffers are accepted, and the ES 3.0-only pixel types get GL_INVALID_OPERATION, all where ES 2.0 says GL_INVALID_ENUM. It replaces the reverted `75dedad` | `6c9e9ee` |
 | Reverted | the ES 3.0 limits test with its back-end caps doc (`b6004e1`, reverted `3f78982`), merged without the review it needed. Open work 4 redoes it | |
 
@@ -605,10 +606,21 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      at compile time), and `RGB10A2` as a class (it needs the RGB10_A2
      render target: A2R10B10G10 packmode, the RGBA16F output). The GC7000
      and the V3D: none.
-   - **srgb**: sRGB render targets and sampling, designed in
-     `docs/es3-srgb.md` (its section 9 lists the steps); `SRGB8_ALPHA8` is
-     stored and rendered as plain RGBA8 today. About 1,106 to 1,111 AM62P
-     `fragment_ops.blend.fbo_srgb` failures.
+   - **srgb**: sRGB render targets and sampling (`docs/es3-srgb.md`). The
+     PowerVR's is built on the host (render: the PBE's gamma, the shader's
+     sRGB class; sample: the TPU's gamma); the GC7000 and the V3D sample
+     the class and refuse a draw into it by name. The proof is the AM62P,
+     gl_test 204 (srgb) and the dEQP-GLES3 cases `docs/es3-srgb.md` lists
+     at its top: the 1,106 `fragment_ops.blend.fbo_srgb` failures of
+     `c4ccc966`, 36 `texture.specification`, 12 `texture.filtering`, 12
+     `fragment_out.basic`, 6 `fbo.render`, 4 `fbo.color` and the
+     `fbo.completeness` srgb8 case. Left: the GC7000's and the V3D's sRGB
+     render targets (`docs/es3-srgb.md` 5.1, 6.1), an sRGB attachment
+     beside another on the PowerVR (refused by name: the 12
+     `fragment_out.array` srgb cases) and compressed sRGB.
+     `glBlitFramebuffer` converts sRGB (`src/gl/blit.rs`): the 32
+     `fbo.blit.conversion.*srgb8_alpha8*` cases and the sRGB
+     `repeated_clear.blit` ones are its proof on the board.
    - **occlusion-query**: built on the three back ends and proven on the
      host (the feature table above); what remains is the board: gl_test 196
      `occl` on each board ("Next board session"), then dEQP-GLES3
@@ -996,11 +1008,47 @@ still beside it). Then the dEQP-GLES3 tree's rows 1, 2 and 4 of
 (`records/am62p/deqp-gles3-c4ccc966`): `fbo.blit.conversion` 324 fail,
 `default_framebuffer` 84, `rect` 40, `repeated_clear.blit` 64,
 `invalidate.{sub,whole}.unbind_blit_color*` 8 and
-`fragment_ops.scissor.framebuffer_blit_*` 3 should pass but for the 32
-`srgb8_alpha8` conversions (no sRGB storage yet) and the integer `tex2d`
-names of `repeated_clear.blit` (no integer texture targets); the 16
+`fragment_ops.scissor.framebuffer_blit_*` 3 should pass but for the integer `tex2d`
+names of `repeated_clear.blit` (no integer texture targets; the 32
+`srgb8_alpha8` conversions are the sRGB item's, below); the 16
 `fbo.blit.depth_stencil` failures stay (blit-ds). A blit case that fails
 with "Image comparison failed" is a finding for `src/gl/blit.rs`.
+
+ES 3.0 sRGB (`docs/es3-srgb.md`; host only so far): a gl_test image with
+`GL_TEST_CASES="204"` (the online compiler's image: no table has an sRGB
+variant). Expected: case 204 srgb 8/8 checks -- the SRGB8_ALPHA8 clear to
+linear 0.2 reads 124 124 124 255 (two checks), ONE/ONE with 0.2 reads 170
+(248 would be a blend of the encoded bytes), SRC_ALPHA/ONE_MINUS_SRC_ALPHA
+reads 203 89 160 191, a frame with no clear blending 0.1 reads 188 (227: the
+load did not decode) and keeps 203 89 160 191, an sRGB texel (188, 124, 0,
+128) samples as 128 51 0 128, and a black/white pair filtered LINEAR at
+0.516 reads 131 (58: filtered before the decode). Then the dEQP-GLES3 rows
+of `tools/cts/am62p-gles3-tree.txt` that hold sRGB cases, against the
+`c4ccc966` records (`records/am62p/deqp-gles3-c4ccc966`):
+
+```sh
+DEQP_MODULE=gles3 DEQP_WORK=<gles3 stage 1> \
+  $SW/tools/cts/am62p-deqp-images.sh $SW/tools/cts/am62p-gles3-tree.txt <img3> $HEAD8 > <img3>/build.out
+TREE_IMAGE_DIR=<img3> TREE_TAG=$HEAD8 TREE_ROWS=1-4,18,19,21,22 \
+  $SW/tools/board.sh am62p tree $SW/tools/cts/am62p-gles3-tree.txt <rec>/gles3-srgb
+$SW/tools/cts/deqp-uart-tally.py --mustpass $SW/tools/cts/gles3-mustpass.txt --statuses <rec>/gles3-srgb/*/console.txt | grep -i srgb
+```
+
+Row 3 is `fragment_ops.blend.fbo_srgb` (1,106 of 1,152 failed): expected
+all 1,152 to pass. Rows 1, 2 (`fbo.color`, `fbo.completeness`, `fbo.render`),
+4 (`fragment_out`, `pbo`), 18 (`texture.filtering.2d`/`2d_array`), 19, 21
+(`texture.filtering.cube`, `texture.format`) and 22 (`texture.specification`):
+the srgb8 / srgb8_alpha8 cases of the table at the top of
+`docs/es3-srgb.md` pass, except the 12 `fragment_out.array.*srgb8_alpha8*`
+(refused by name: an sRGB attachment beside another); the 32
+`fbo.blit.conversion.*srgb8_alpha8*` cases and the sRGB
+`fbo.color.repeated_clear.blit` ones pass through `src/gl/blit.rs`'s sRGB
+decode and encode (`fbo.blit.conversion.*32f*` sRGB pairs and
+`fbo.msaa.*srgb8_alpha8` stay NotSupported / as the multisample blit is).
+Every other case of those rows
+as at `c4ccc966` (a Pass that moves is a regression). A filtering case that
+fails by a step or two in dark texels is the TPU's decode precision, a
+finding for `docs/es3-srgb.md` 4.3.
 
 When the three sessions are done, replace each board's row in
 `docs/es2-cts-failures.md` (the summary table, section A and the "Status

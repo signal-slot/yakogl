@@ -1343,9 +1343,14 @@ pub fn build_fragment_shader_blended(
      * through -- and the pack reads them where they are, as pco's does. */
     let in_place = colour.iter().enumerate().all(|(k, (b, r))| *b == Bank::Temp && *r == colour[0].1 + k as u16);
     /* The render target's class: an RGBA16F target packs two dwords (the
-     * second one temporary past the first), R16F one, R32F none. */
-    use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
-    let class = blend.map_or(SHC_RT_RGBA8, |(b, _, _)| b.class);
+     * second one temporary past the first), R16F one, R32F none. An sRGB
+     * target packs as RGBA16F (its linear halves, clamped by the blend
+     * tail; the PBE encodes them). */
+    use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8, SHC_RT_SRGB};
+    let class = match blend.map_or(SHC_RT_RGBA8, |(b, _, _)| b.class) {
+        SHC_RT_SRGB => SHC_RT_F16X4,
+        c => c,
+    };
     let wide = u16::from(class == SHC_RT_F16X4);
     let (first, packed, temps) = if in_place {
         (colour[0].1, free, free.checked_add(1 + wide))

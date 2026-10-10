@@ -31,9 +31,11 @@
 //! upload path rounds them); an integer read buffer copies values into the
 //! same signedness, saturated to the draw buffer's width. A channel the
 //! format lacks reads 0 (alpha 1) and is written 0 (alpha 1). The decode and
-//! encode are the one place per storage class: a class added later (sRGB
-//! storage, whose decode before filtering and encode after belong in
-//! [`decode_float`] / [`encode_float`]) needs no change to the copy itself.
+//! encode are the one place per storage class: an sRGB read buffer's red,
+//! green and blue are decoded to linear before any filtering and an sRGB
+//! draw buffer's encoded after it (ES 3.0.6 4.3.3: an sRGB buffer is always
+//! converted; `gl::srgb`), alpha linear; an sRGB-to-sRGB NEAREST copy
+//! keeps the bytes, the codec's encode inverting its decode exactly.
 //!
 //! Depth and stencil are validated as the spec says, but not copied: the back
 //! ends keep depth/stencil in buffers of their own (`ds_retention`), which
@@ -51,8 +53,8 @@ use super::framebuffer::{
 use super::types::*;
 use crate::backend::{
     self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB565,
-    GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F,
-    GLES_TEXFMT_RGBA8,
+    GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
+    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem};
 use crate::util::Global;
@@ -154,6 +156,7 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
                 GLES_TEXFMT_RGBA16F => GLES_SURF_RGBA16F,
                 GLES_TEXFMT_R16F => GLES_SURF_R16F,
                 GLES_TEXFMT_R32F => GLES_SURF_R32F,
+                GLES_TEXFMT_SRGB8_A8 => GLES_SURF_SRGB8_A8,
                 GLES_TEXFMT_RGBA8 if t.bgra => GLES_SURF_XRGB8888,
                 GLES_TEXFMT_RGBA8 => GLES_SURF_RGBA8888,
                 _ => return None,
@@ -419,8 +422,8 @@ fn store(c: &mut GlContext, img: &Image, x: u32, y: u32, raw: &[u8; 16]) -> bool
 /// The channels a fixed or floating point image's stored pixel holds, as
 /// floats; the channels its format lacks read 0, 0, 0, 1.
 ///
-/// The place a storage class with its own decode (sRGB: to linear, before
-/// any filtering) adds it.
+/// An sRGB image's red, green and blue are decoded to linear here, before
+/// any filtering (`gl::srgb::decode`); its alpha is a linear byte.
 fn decode_float(img: &Image, raw: &[u8; 16]) -> [f32; 4] {
     let half = |i: usize| framebuffer::half_to_float(u16::from_le_bytes([raw[i], raw[i + 1]]));
     let mut v = match img.surf {
@@ -434,7 +437,12 @@ fn decode_float(img: &Image, raw: &[u8; 16]) -> [f32; 4] {
         _ => {
             let (r, b) = if img.bgra { (raw[2], raw[0]) } else { (raw[0], raw[2]) };
             let a = if img.opaque { 255 } else { raw[3] };
-            [r as f32 / 255.0, raw[1] as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0]
+            if img.surf == GLES_SURF_SRGB8_A8 {
+                use super::srgb::decode;
+                [decode(r), decode(raw[1]), decode(b), a as f32 / 255.0]
+            } else {
+                [r as f32 / 255.0, raw[1] as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0]
+            }
         }
     };
     for (ch, x) in v.iter_mut().enumerate() {
@@ -458,8 +466,9 @@ fn unorm8(v: f32, bits: GLint) -> u8 {
 /// image: unorm rounded to the format's bits, half floats as uploads round
 /// them; the channels the format lacks are written 0, 0, 0, 1.
 ///
-/// The place a storage class with its own encode (sRGB: from linear, after
-/// filtering) adds it.
+/// An sRGB image's red, green and blue are encoded from linear here
+/// (`gl::srgb::encode`: clamped, the nearest byte on the curve); its alpha
+/// is a linear byte.
 fn encode_float(img: &Image, mut v: [f32; 4], raw: &mut [u8; 16]) {
     for (ch, x) in v.iter_mut().enumerate() {
         if img.bits[ch] == 0 {
@@ -483,7 +492,13 @@ fn encode_float(img: &Image, mut v: [f32; 4], raw: &mut [u8; 16]) {
         GLES_SURF_R16F => half(raw, 0, v[0]),
         GLES_SURF_R32F => raw[..4].copy_from_slice(&v[0].to_le_bytes()),
         _ => {
-            let b: [u8; 4] = core::array::from_fn(|ch| unorm8(v[ch], img.bits[ch]));
+            let b: [u8; 4] = core::array::from_fn(|ch| {
+                if img.surf == GLES_SURF_SRGB8_A8 && ch < 3 {
+                    super::srgb::encode(v[ch])
+                } else {
+                    unorm8(v[ch], img.bits[ch])
+                }
+            });
             let a = if img.opaque { 0xff } else { b[3] };
             raw[..4].copy_from_slice(&if img.bgra { [b[2], b[1], b[0], a] } else { [b[0], b[1], b[2], a] });
         }
@@ -989,6 +1004,97 @@ mod tests {
         blit([0, 0, 2, 1], [0, 0, 2, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
         let want: Vec<u8> = [1.0f32, 0.0, 128.0 / 255.0, 64.0 / 255.0].iter().flat_map(|&v| half(v)).collect();
         assert_eq!(stored(&gl, rb_gpu(&gl, f_rb), 2, 8, 1, 0), want);
+    }
+
+    /// sRGB on either side of a blit (ES 3.0.6 4.3.3; dEQP's
+    /// fbo.blit.conversion.*srgb8_alpha8* and repeated_clear.blit srgb):
+    /// an sRGB source decodes to linear (byte 188 is 0.5029, written to RGBA8
+    /// as 128), an sRGB destination encodes (RGBA8's 128 is 0.502 linear,
+    /// stored as 188), alpha a linear byte both ways; sRGB to sRGB keeps
+    /// every byte; and a LINEAR 2:1 reduction filters after the decode -- a
+    /// black/white pair is 0.5 linear (RGBA8 128), not the 55 of filtering
+    /// the encoded bytes first. Every expected byte is the f64 formula's.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn srgb_buffers_decode_as_the_source_and_encode_as_the_destination() {
+        let gl = TestGl::new(8, 8);
+        let dec = |i: u8| -> f64 {
+            let c = i as f64 / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let enc = |l: f64| -> u8 {
+            let l = l.clamp(0.0, 1.0);
+            let s = if l <= 0.0031308 { 12.92 * l } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+            (s * 255.0 + 0.5).floor() as u8
+        };
+        let vals: [[u8; 4]; 4] = [[0, 10, 11, 0], [188, 124, 255, 128], [1, 50, 200, 255], [255, 254, 128, 7]];
+        let (s_fb, s_rb) = rbo_fbo(GL_SRGB8_ALPHA8, 4, 1);
+        let (u_fb, u_rb) = rbo_fbo(GL_RGBA8, 4, 1);
+        let (t_fb, t_rb) = rbo_fbo(GL_SRGB8_ALPHA8, 4, 1);
+        render(&gl, rb_gpu(&gl, s_rb), 4, 1, 4, |x, _| vals[x as usize].to_vec());
+        /* sRGB into RGBA8: decoded */
+        bind(s_fb, u_fb);
+        blit([0, 0, 4, 1], [0, 0, 4, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        for (x, v) in vals.iter().enumerate() {
+            let want = vec![unorm_ref(dec(v[0]), 8), unorm_ref(dec(v[1]), 8), unorm_ref(dec(v[2]), 8), v[3]];
+            assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 4, 4, x as u32, 0), want, "decoded pixel {x}");
+        }
+        assert_eq!(stored(&gl, rb_gpu(&gl, u_rb), 4, 4, 1, 0), vec![128, 51, 255, 128], "worked");
+        /* sRGB into sRGB: the bytes */
+        bind(s_fb, t_fb);
+        blit([0, 0, 4, 1], [0, 0, 4, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        for (x, v) in vals.iter().enumerate() {
+            assert_eq!(stored(&gl, rb_gpu(&gl, t_rb), 4, 4, x as u32, 0), v.to_vec(), "kept pixel {x}");
+        }
+        /* RGBA8 into sRGB: encoded */
+        render(&gl, rb_gpu(&gl, u_rb), 4, 1, 4, |x, _| vals[x as usize].to_vec());
+        bind(u_fb, t_fb);
+        blit([0, 0, 4, 1], [0, 0, 4, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        for (x, v) in vals.iter().enumerate() {
+            let f = |c: u8| c as f64 / 255.0;
+            let want = vec![enc(f(v[0])), enc(f(v[1])), enc(f(v[2])), v[3]];
+            assert_eq!(stored(&gl, rb_gpu(&gl, t_rb), 4, 4, x as u32, 0), want, "encoded pixel {x}");
+        }
+        assert_eq!(stored(&gl, rb_gpu(&gl, t_rb), 4, 4, 3, 0)[2], 188, "worked: RGBA8's 128 is stored as 188");
+        /* LINEAR 2:1 from an sRGB black/white pair: decode, then filter */
+        let (p_fb, p_rb) = rbo_fbo(GL_SRGB8_ALPHA8, 2, 1);
+        let (o_fb, o_rb) = rbo_fbo(GL_RGBA8, 1, 1);
+        render(&gl, rb_gpu(&gl, p_rb), 2, 1, 4, |x, _| if x == 0 { vec![0, 0, 0, 255] } else { vec![255; 4] });
+        bind(p_fb, o_fb);
+        blit([0, 0, 2, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![128, 128, 128, 255]);
+        /* an sRGB texture level as the source too */
+        let mut tex = 0;
+        let (mut tfb, texels) = (0, [188u8, 124, 0, 128]);
+        // SAFETY: plain GL calls; `texels` holds one RGBA texel.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_SRGB8_ALPHA8 as GLint,
+                1,
+                1,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                texels.as_ptr() as *const c_void,
+            );
+            glGenFramebuffers(1, &mut tfb);
+            glBindFramebuffer(GL_FRAMEBUFFER, tfb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        }
+        bind(tfb, o_fb);
+        blit([0, 0, 1, 1], [0, 0, 1, 1], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(stored(&gl, rb_gpu(&gl, o_rb), 1, 4, 0, 0), vec![128, 51, 0, 128], "a texture source decodes");
     }
 
     /// A channel the format lacks reads 0 (alpha 1) on the source whatever

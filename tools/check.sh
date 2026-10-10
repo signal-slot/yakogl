@@ -438,6 +438,12 @@ step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
 # 2.0 report below pins the old answers.
 step "test    $V3D_CONFIG (tests/es3_tf_api.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_tf_api
+# ES 3.0's sRGB colour buffers and textures through the GL API (the stand-in
+# back end stores a clear as one that encodes must); the V3D samples the
+# class and refuses a draw into it by name. The ES 2.0 report below must
+# have no sRGB format.
+step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_srgb
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -450,6 +456,8 @@ step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
 step "test    $V3D_ES2_CONFIG (tests/es3_tf_api.rs)" \
   cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_tf_api
+step "test    $V3D_ES2_CONFIG (tests/es3_srgb.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_srgb
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"

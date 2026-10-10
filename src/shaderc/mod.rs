@@ -108,6 +108,67 @@ pub const SHC_RT_RGBA8: u32 = 0;
 pub const SHC_RT_F16X4: u32 = 1;
 pub const SHC_RT_F16: u32 = 2;
 pub const SHC_RT_F32: u32 = 3;
+/// An sRGB target (`GLES_SURF_SRGB8_A8`, docs/es3-srgb.md): the colour is
+/// written as four linear halves in two dwords, as for [`SHC_RT_F16X4`], but
+/// saturated -- the target is unsigned normalised, so the blend's source is
+/// clamped as for RGBA8 and so is what is written, which keeps the F16
+/// accumulation the next blend reads inside [0, 1] -- and the PowerVR's PBE
+/// encodes it on store (pco: `to_pbe_format`, pco_nir_pvfio.c:97-101, the
+/// `nir_fsat` before an F16 pack). Not a value of the 2-bit class field:
+/// [`shc_blend_key_target`] says how the key carries it.
+pub const SHC_RT_SRGB: u32 = 4;
+
+/// The tag of an sRGB key: the alpha mask bit [29] together with a
+/// one-channel class (F16 or F32) in [30:31], a combination no other key
+/// has, because a one-channel target has no alpha and its key never carries
+/// that bit ([`shc_blend_key_target`]).
+const SHC_BLEND_KEY_SRGB_TAG: u32 = 1 << 29;
+
+/// The render-target part of a blend key: the channels `glColorMask`
+/// disables (`disabled_rgba`, bit 0 R .. bit 3 A) and the target class.
+///
+/// * RGBA8, F16X4: [26:29] the four mask bits, [30:31] the class.
+/// * F16, F32 (one channel): [26] red's mask bit only -- green, blue and
+///   alpha do not exist, so their bits are dropped and every such key has
+///   [27:29] clear -- and [30:31] the class.
+/// * sRGB ([`SHC_RT_SRGB`], which the 2-bit field cannot hold): [26:28] the
+///   red, green and blue mask bits, [29] set (the tag), [30:31] F16 plus
+///   alpha's mask bit (2: alpha written, 3: alpha masked).
+///
+/// Every key made before the sRGB class keeps its value, except a
+/// one-channel target's under a mask of green, blue or alpha, which changes
+/// nothing that is drawn. [`shc_blend_key_class`] and
+/// [`shc_blend_key_masked`] read the two back.
+pub const fn shc_blend_key_target(cls: u32, disabled_rgba: u32) -> u32 {
+    let off = disabled_rgba & 0xf;
+    match cls {
+        SHC_RT_SRGB => {
+            ((off & 7) << 26) | SHC_BLEND_KEY_SRGB_TAG | ((SHC_RT_F16 | (off >> 3)) << SHC_BLEND_KEY_RT_SHIFT)
+        }
+        SHC_RT_F16 | SHC_RT_F32 => ((off & 1) << 26) | (cls << SHC_BLEND_KEY_RT_SHIFT),
+        _ => (off << 26) | ((cls & 3) << SHC_BLEND_KEY_RT_SHIFT),
+    }
+}
+
+/// The render-target class a key is for ([`shc_blend_key_target`]).
+pub const fn shc_blend_key_class(key: u32) -> u32 {
+    let rt = key >> SHC_BLEND_KEY_RT_SHIFT;
+    if rt >= SHC_RT_F16 && key & SHC_BLEND_KEY_SRGB_TAG != 0 {
+        SHC_RT_SRGB
+    } else {
+        rt
+    }
+}
+
+/// The channels a key's colour mask disables, bit 0 R .. bit 3 A
+/// ([`shc_blend_key_target`]).
+pub const fn shc_blend_key_masked(key: u32) -> u32 {
+    if shc_blend_key_class(key) == SHC_RT_SRGB {
+        ((key >> 26) & 7) | (((key >> SHC_BLEND_KEY_RT_SHIFT) & 1) << 3)
+    } else {
+        (key >> 26) & 0xf
+    }
+}
 
 /// The colour output of an integer render target (ES 3.0 table 3.13's
 /// integer rows), as a blend-variant key: the src_rgb field [0:4] is 0,
@@ -1631,4 +1692,74 @@ pub const fn pad_attribs<const N: usize>(a: [ShcAttrib; N]) -> [ShcAttrib; 16] {
         i += 1;
     }
     out
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    /// The target part of a key: the classes the 2-bit field held keep the
+    /// values they always had (so every row of the tables keeps its key),
+    /// a one-channel class keeps red's mask bit only, and the sRGB class --
+    /// every mask but all-off, the ISP's -- reads back as itself with its
+    /// mask, on codes no other class or integer target has.
+    #[test]
+    fn srgb_keys_are_their_own_and_the_old_keys_are_unchanged() {
+        let blends = [
+            SHC_BLEND_KEY_REPLACE,
+            shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_ZERO, 0, 0),
+            shc_blend_key(
+                SHC_BF_ONE,
+                SHC_BF_ONE,
+                SHC_BF_CONST_ALPHA,
+                SHC_BF_INV_CONST_ALPHA,
+                SHC_BLEND_MAX,
+                SHC_BLEND_MAX,
+            ),
+        ];
+        let mut others = std::collections::BTreeSet::new();
+        let mut srgb = std::collections::BTreeSet::new();
+        for b in blends {
+            for off in 0..0xfu32 {
+                for cls in [SHC_RT_RGBA8, SHC_RT_F16X4] {
+                    let k = b | shc_blend_key_target(cls, off);
+                    assert_eq!(k, b | shc_blend_key_mask_off(off) | shc_blend_key_rt(cls), "class {cls} off {off:#x}");
+                    assert_eq!((shc_blend_key_class(k), shc_blend_key_masked(k)), (cls, off));
+                    others.insert(k);
+                }
+                for cls in [SHC_RT_F16, SHC_RT_F32] {
+                    let k = b | shc_blend_key_target(cls, off);
+                    assert_eq!(
+                        k,
+                        b | shc_blend_key_mask_off(off & 1) | shc_blend_key_rt(cls),
+                        "class {cls} off {off:#x}"
+                    );
+                    assert_eq!((shc_blend_key_class(k), shc_blend_key_masked(k)), (cls, off & 1));
+                    others.insert(k);
+                }
+                let k = b | shc_blend_key_target(SHC_RT_SRGB, off);
+                assert_eq!((shc_blend_key_class(k), shc_blend_key_masked(k)), (SHC_RT_SRGB, off), "sRGB off {off:#x}");
+                assert_eq!(ShcIntRt::of_key(k), None, "not an integer target's");
+                srgb.insert(k);
+            }
+        }
+        /* integer targets' keys: replace only, any mask */
+        for channels in [1, 2, 4] {
+            for bits in [8, 16, 32] {
+                for signed in [false, true] {
+                    for off in 0..0xfu32 {
+                        others.insert(
+                            shc_blend_key_int_rt(ShcIntRt { channels, bits, signed }) | shc_blend_key_mask_off(off),
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(srgb.len(), blends.len() * 15);
+        assert!(srgb.is_disjoint(&others), "an sRGB key is no other target's");
+        /* the tag: the alpha mask bit on a one-channel class */
+        assert_eq!(shc_blend_key_target(SHC_RT_SRGB, 0), 1 << 29 | SHC_RT_F16 << 30);
+        assert_eq!(shc_blend_key_target(SHC_RT_SRGB, 0b1000), 1 << 29 | 3 << 30);
+        assert_eq!(shc_blend_key_target(SHC_RT_SRGB, 0b0101), 0b101 << 26 | 1 << 29 | SHC_RT_F16 << 30);
+    }
 }

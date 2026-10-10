@@ -16,8 +16,8 @@
 use crate::backend::{
     gles_texfmt_bytes, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA,
     GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB565,
-    GLES_TEXFMT_RGBA16F, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D, GLES_TEXTYPE_CUBE, GLES_WRAP_CLAMP_TO_EDGE,
-    GLES_WRAP_MIRRORED_REPEAT,
+    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_SRGB8_A8, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D, GLES_TEXTYPE_CUBE,
+    GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
 };
 use crate::shaderc::{ShcShader, SHC_UNIFORM_NO_BLOCK};
 use crate::util::{Global, ENOMEM};
@@ -299,7 +299,16 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
 /// binding does not say so, so a depth texture takes the bit where Mesa
 /// leaves it off.
 fn int_filter_wanted(t: &GlesTextureBind) -> bool {
-    t.type_ != GLES_TEXTYPE_3D && !matches!(t.format, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
+    t.type_ != GLES_TEXTYPE_3D
+        && !matches!(t.format, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F | GLES_TEXFMT_SRGB8_A8)
+}
+
+/// SAMP_CTRL1 of a binding: Mesa's constant UNK1 (etnaviv_texture_desc.c:
+/// 116), with SRGB for the sRGB class (:246-247), whose texels are the
+/// A8B8G8R8 row's (etnaviv translates an sRGB format through its linear
+/// twin, etnaviv_format.c:278).
+fn samp_ctrl1(t: &GlesTextureBind) -> u32 {
+    GC_SAMP_CTRL1_UNK1 | if t.format == GLES_TEXFMT_SRGB8_A8 { GC_SAMP_CTRL1_SRGB } else { 0 }
 }
 
 fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
@@ -383,7 +392,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
             | GC_SAMP_CTRL0_UNK21
             | if int_filter_wanted(t) { GC_SAMP_INT_FILTER } else { 0 },
     );
-    c.state(nte_descriptor_samp_ctrl1(slot), GC_SAMP_CTRL1_UNK1);
+    c.state(nte_descriptor_samp_ctrl1(slot), samp_ctrl1(t));
     /*
      * The sampler's own LOD range, which is GL_TEXTURE_MIN_LOD and
      * GL_TEXTURE_MAX_LOD -- and ES 2.0 has no way to set either, so it is
@@ -512,4 +521,28 @@ fn declared_samplers(sh: &ShcShader) -> impl Iterator<Item = u8> + '_ {
         .iter()
         .filter(|u| u.dword_off == SHC_UNIFORM_NO_BLOCK)
         .flat_map(|u| (0..u.array_len.max(1)).map(move |k| u.binding.saturating_add(k)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The sRGB class's texels are the RGBA8 row's (A8B8G8R8): etnaviv
+    /// translates an sRGB format through its linear twin
+    /// (etnaviv_format.c:278) and decodes with SAMP_CTRL1's SRGB bit
+    /// ([`samp_ctrl1`]), which only it sets.
+    #[test]
+    fn the_srgb_class_is_the_rgba8_texel_row_with_the_decode_bit() {
+        let (s, r) = (format_of(GLES_TEXFMT_SRGB8_A8), format_of(crate::backend::GLES_TEXFMT_RGBA8));
+        assert_eq!(
+            (s.format, s.format_ext, s.compressed, s.no_alpha),
+            (r.format, r.format_ext, r.compressed, r.no_alpha)
+        );
+        assert_eq!(s.format, GC_TEX_FORMAT_A8B8G8R8);
+        let t = GlesTextureBind { format: GLES_TEXFMT_SRGB8_A8, ..GlesTextureBind::ZERO };
+        assert_eq!(samp_ctrl1(&t), GC_SAMP_CTRL1_UNK1 | GC_SAMP_CTRL1_SRGB);
+        for format in [crate::backend::GLES_TEXFMT_RGBA8, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_L8, GLES_TEXFMT_ETC2_RGB] {
+            assert_eq!(samp_ctrl1(&GlesTextureBind { format, ..t }), GC_SAMP_CTRL1_UNK1, "format {format}");
+        }
+    }
 }

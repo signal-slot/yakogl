@@ -2296,6 +2296,33 @@ fn a_unorm_sampler_takes_int_filter() {
     assert_eq!(ctrl0(vol, false) & GC_SAMP_INT_FILTER, 0, "a 3D texture");
 }
 
+/// An sRGB texture's sampler: SAMP_CTRL1 is Mesa's UNK1 with SRGB (0x4,
+/// state_3d.xml.h:1984; etnaviv_texture_desc.c:246-247), every other format
+/// UNK1 alone; INT_FILTER off (Mesa's texture_use_int_filter leaves an sRGB
+/// format out, etnaviv_format.c:317-318); the descriptor's texel format the
+/// RGBA8 one (etnaviv translates through util_format_linear,
+/// etnaviv_format.c:278).
+#[test]
+fn an_srgb_sampler_decodes_and_takes_no_int_filter() {
+    let rig = Rig::new();
+    let regs = |t: GlesTextureBind| {
+        let mut d = rig.draw(3);
+        d.num_textures = 1;
+        d.textures[0] = t;
+        let s = rig.submit(&d);
+        (s.reg(nte_descriptor_samp_ctrl0(0)), s.reg(nte_descriptor_samp_ctrl1(0)))
+    };
+    let rgba = bind(rig.vbo.gpu, 4, 4, 1);
+    let mut srgb = rgba;
+    srgb.format = GLES_TEXFMT_SRGB8_A8;
+    let (c0, c1) = regs(srgb);
+    assert_eq!(c1, GC_SAMP_CTRL1_UNK1 | GC_SAMP_CTRL1_SRGB, "SRGB decode");
+    assert_eq!(c0 & GC_SAMP_INT_FILTER, 0, "no integer filter for sRGB");
+    let (r0, r1) = regs(rgba);
+    assert_eq!(r1, GC_SAMP_CTRL1_UNK1, "RGBA8: no decode");
+    assert_eq!(c0 | GC_SAMP_INT_FILTER, r0, "SAMP_CTRL0 otherwise the RGBA8 one");
+}
+
 /// An ETC1 binding as the GL core makes one since 43f99f47: level-major,
 /// each level `layers` block grids at its own size on a 64-byte boundary,
 /// `bytes` = level 0 of every face. `cpu` is set, as the draw fill sets it.

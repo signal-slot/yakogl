@@ -40,9 +40,9 @@ use super::names::{self, Kind};
 use super::types::*;
 use super::{draw, texture};
 use crate::backend::{
-    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_surf_rt_class, gles_texfmt_bytes,
-    GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_XRGB8888,
-    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
+    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_texfmt_bytes, GLES_SURF_R16F,
+    GLES_SURF_R32F, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
+    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -408,7 +408,13 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             || t.width == 0
             || t.height == 0
             || t.block_bytes != 0
-            || !matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
+            || !matches!(
+                t.texfmt,
+                GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
+            )
+            /* SRGB8 is a texture format only (ES 3.0.6 table 3.13: not
+             * colour-renderable); SRGB8_ALPHA8 is both */
+            || (t.texfmt == GLES_TEXFMT_SRGB8_A8 && t.format == GL_RGB)
             /* an ES 3.0 format of es3_formats is no render target, but
              * RGB10_A2 held as RGBA8 (ES 3.0 table 3.13) */
             || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8)
@@ -429,6 +435,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             GLES_TEXFMT_RGBA16F => GL_RGBA16F,
             GLES_TEXFMT_R16F => GL_R16F,
             GLES_TEXFMT_R32F => GL_R32F,
+            GLES_TEXFMT_SRGB8_A8 => GL_SRGB8_ALPHA8,
             _ => GL_RGBA,
         };
         /* A 1-wide level of a PowerVR chain has one-texel rows where the
@@ -575,11 +582,11 @@ pub fn color_kind(internalformat: GLenum) -> ColorKind {
 /// incomplete.
 fn is_renderbuffer_color_format(f: GLenum) -> bool {
     /* GL_SRGB8_ALPHA8 is renderbuffer storage in ES 3.0 and in ES 2.0 only
-     * with GL_EXT_sRGB or GL_EXT_sRGB_write_control. This surface claims
-     * neither -- there is no sRGB encode or decode anywhere in it -- so on
-     * the ES 2.0 surface the name is not renderbuffer storage, and a
-     * framebuffer built on one is not complete. glTexImage2D already refuses
-     * the same name for the same reason. */
+     * with GL_EXT_sRGB or GL_EXT_sRGB_write_control. The ES 2.0 surface
+     * claims neither (the sRGB surface is ES 3.0's, docs/es3-srgb.md), so
+     * there the name is not renderbuffer storage, and a framebuffer built
+     * on one is not complete. glTexImage2D refuses the same name for the
+     * same reason. */
     if crate::REPORT_ES2 && f == GL_SRGB8_ALPHA8 {
         return false;
     }
@@ -602,6 +609,9 @@ pub(super) fn renderbuffer_surf_format(internalformat: GLenum) -> u8 {
         GL_RGBA16F | GL_RGB16F | GL_RG16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
+        /* ES 3.0 only: the ES 2.0 report has no such renderbuffer
+         * (`is_renderbuffer_color_format`) */
+        GL_SRGB8_ALPHA8 if !crate::REPORT_ES2 => GLES_SURF_SRGB8_A8,
         f if is_integer_color_format(f) => integer_surf_format(f).unwrap_or(GLES_SURF_RGBA8888),
         _ => GLES_SURF_RGBA8888,
     }
@@ -764,6 +774,7 @@ pub fn fb_target_format(c: &GlContext) -> u8 {
                 Some((GLES_TEXFMT_RGBA16F, _)) => return GLES_SURF_RGBA16F,
                 Some((GLES_TEXFMT_R16F, _)) => return GLES_SURF_R16F,
                 Some((GLES_TEXFMT_R32F, _)) => return GLES_SURF_R32F,
+                Some((GLES_TEXFMT_SRGB8_A8, _)) => return GLES_SURF_SRGB8_A8,
                 /* an XRGB8888 image's texels are B,G,R,X */
                 Some((GLES_TEXFMT_RGBA8, true)) => return GLES_SURF_XRGB8888,
                 _ => {}
@@ -1008,7 +1019,7 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
         GL_RGBA16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
-        f if is_integer_color_format(f) => renderbuffer_surf_format(f),
+        f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
     Some((mem.gpu + st.offset as u64, st.w, st.h, format))
@@ -1801,6 +1812,11 @@ pub(super) fn texture_bits(t: &context::GlTexture) -> AttachmentBits {
     if let Some(e) = super::es3_formats::by_index(t.es3_fmt) {
         return es3_texture_bits(e, t.texfmt);
     }
+    /* sRGB texels (SRGB8_ALPHA8, or SRGB8 with its alpha byte 255) */
+    if t.texfmt == backend::GLES_TEXFMT_SRGB8_A8 {
+        let a = if t.format == GL_RGB { 0 } else { 8 };
+        return AttachmentBits { encoding: GL_SRGB, ..AttachmentBits::color([8, 8, 8, a], GL_UNSIGNED_NORMALIZED) };
+    }
     let float = matches!(t.type_, GL_HALF_FLOAT | GL_HALF_FLOAT_OES | GL_FLOAT);
     let (bits, ct) = if float {
         (if t.type_ == GL_FLOAT && t.texfmt != GLES_TEXFMT_RGBA16F { 32 } else { 16 }, GL_FLOAT)
@@ -2567,7 +2583,7 @@ pub unsafe fn read_pixels(
      * RGBA/UNSIGNED_BYTE (clamped) or as RGBA/FLOAT (ES 3.0's read type for
      * float colour buffers) */
     let fmt = fb_target_format(c);
-    let float_target = gles_surf_rt_class(fmt) != 0;
+    let float_target = backend::gles_surf_is_float(fmt);
     /* ES 3.0 4.3.2: an integer read buffer is read as GL_RGBA_INTEGER with
      * GL_INT (signed) or GL_UNSIGNED_INT (unsigned), and only so; every other
      * read buffer refuses GL_RGBA_INTEGER */
@@ -7577,6 +7593,81 @@ mod tests {
             );
         }
         assert_eq!(v, 0, "a 2D texture attachment has no cube face");
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// ES 3.0's sRGB colour buffers (docs/es3-srgb.md): an `SRGB8_ALPHA8`
+    /// renderbuffer and texture level are complete, report the encoding
+    /// GL_SRGB and eight bits a channel, and are the sRGB surface of a draw;
+    /// `SRGB8` is a texture format only (table 3.13), so its level is an
+    /// incomplete attachment; the default framebuffer is linear; and
+    /// glReadPixels hands back the stored (encoded) bytes unconverted.
+    #[test]
+    fn srgb_colour_buffers_are_the_srgb_surface_and_read_back_their_bytes() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = TestGl::new(8, 8);
+        assert_eq!(fb_param(GL_BACK, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING), GL_LINEAR as GLint);
+        bound_fb();
+        let rb = rb_with_storage(GL_SRGB8_ALPHA8, 4, 2);
+        attach_rb(GL_COLOR_ATTACHMENT0, rb);
+        assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+        assert_eq!(fb_target_format(gl.ctx()), GLES_SURF_SRGB8_A8);
+        /* the stored bytes come back as they are: no decode on the way out */
+        let mem = gl.ctx().objs().renderbuffers[rb as usize].mem;
+        fill_rgba(&mem, 4, 4, 2);
+        let got = read(0, 0, 4, 2);
+        let want: Vec<u8> = (0..2).flat_map(|row| (0..4).flat_map(move |x| px(x, row))).collect();
+        assert_eq!(got, want, "the stored texels, unconverted");
+
+        let tex = gen_tex();
+        // SAFETY: plain GL calls; null pixels only allocate.
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_SRGB8_ALPHA8 as GLint,
+                4,
+                4,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                core::ptr::null(),
+            );
+        }
+        attach_tex(GL_COLOR_ATTACHMENT0, tex);
+        assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+        assert_eq!(fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING), GL_SRGB as GLint);
+        let sizes: [GLint; 4] = [
+            GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+        ]
+        .map(|p| fb_param(GL_COLOR_ATTACHMENT0, p));
+        assert_eq!(sizes, [8, 8, 8, 8]);
+        assert_eq!(
+            fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE),
+            GL_UNSIGNED_NORMALIZED as GLint
+        );
+        assert_eq!(fb_target_format(gl.ctx()), GLES_SURF_SRGB8_A8);
+        /* as a second attachment too */
+        // SAFETY: plain GL call.
+        unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tex, 0) };
+        assert_eq!(fb_target_n(gl.ctx(), 1).map(|t| t.3), Some(GLES_SURF_SRGB8_A8));
+        // SAFETY: plain GL call.
+        unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0) };
+
+        let rgb = gen_tex();
+        // SAFETY: as above.
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, rgb);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8 as GLint, 4, 4, 0, GL_RGB, GL_UNSIGNED_BYTE, core::ptr::null());
+        }
+        attach_tex(GL_COLOR_ATTACHMENT0, rgb);
+        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "SRGB8 is not colour-renderable");
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 }

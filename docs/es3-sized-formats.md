@@ -21,7 +21,8 @@ hold: `R8/RG8/RGB8/RGBA8_SNORM`, `R11F_G11F_B10F`, `RGB9_E5`, `RGB16F`,
 `RG32F`, `RGB32F`, `RGB10_A2`, `RGB10_A2UI`, and the 24 integer formats
 `{R,RG,RGB,RGBA}{8,16,32}{I,UI}`. The formats the tables already held
 (`R8`, `RG8`, `RGB8`, `RGBA8`, `SRGB8`, `SRGB8_ALPHA8`, `RGB565`, `RGBA4`,
-`RGB5_A1`, `R16F`, `RG16F`, `RGBA16F`, `R32F`, `RGBA32F`) behave as before;
+`RGB5_A1`, `R16F`, `RG16F`, `RGBA16F`, `R32F`, `RGBA32F`) behave as before
+(the sRGB pair in its own class, `docs/es3-srgb.md`);
 `sized_format()` / `texfmt_of()` consult `es3_formats` only for a name they
 do not know.
 

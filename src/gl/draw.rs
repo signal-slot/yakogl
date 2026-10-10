@@ -1262,12 +1262,11 @@ fn current_blend_key(c: &GlContext) -> u32 {
             map_blend_eq(c.blend_eq_a),
         );
     }
-    if off != 0xf {
-        key |= shc_blend_key_mask_off(off);
-    }
-    /* a float render target takes the fragment shader variant that packs
-     * its output for that class (a non-zero key even for plain replace) */
-    key |= shc_blend_key_rt(gles_surf_rt_class(framebuffer::fb_target_format(c)));
+    /* a float or sRGB render target takes the fragment shader variant that
+     * packs its output for that class (a non-zero key even for plain
+     * replace); every channel off is the ISP's, as above */
+    let off = if off != 0xf { off } else { 0 };
+    key |= shc_blend_key_target(gles_surf_rt_class(framebuffer::fb_target_format(c)), off);
     if key == SHC_BLEND_KEY_REPLACE {
         0
     } else {
@@ -1967,13 +1966,15 @@ fn set_sample_state(c: &GlContext, d: &mut GlesDraw) {
     d.alpha_to_coverage = c.sample_alpha_to_coverage;
 }
 
-/// Integer surfaces already reported as refused (bit `format - GLES_SURF_INT_FIRST`):
-/// one log line per format, not one per draw.
+/// Integer and sRGB surfaces already reported as refused (bit `format -
+/// GLES_SURF_INT_FIRST`; the sRGB surface is past the integer ones): one log
+/// line per format, not one per draw.
 static REFUSED_INT_RT: Global<u32> = Global::new(0);
 
 /// A colour target the back end cannot render into is refused by name before
 /// the draw (or clear) reaches it: an integer surface it has not learned
-/// ([`backend::INTEGER_RT_FORMATS`]). The framebuffer is complete and the
+/// ([`backend::INTEGER_RT_FORMATS`]), or the sRGB surface on a back end that
+/// does not encode ([`backend::SRGB_RT`]). The framebuffer is complete and the
 /// storage is there (ES 3.0 requires the formats); drawing garbage into it is
 /// worse than saying no, so the draw is dropped with GL_INVALID_OPERATION.
 /// `mask` is the clear's target mask (0: every target the draw writes).
@@ -3232,7 +3233,11 @@ fn build_common(
         let stencil_only_discard = !fixed_function_blend && disabled_channels(c) == 0xf && p.rfs.uses_discard != 0;
 
         if stencil_only_discard {
-            key = shc_blend_key(SHC_BF_ZERO, SHC_BF_ONE, SHC_BF_ZERO, SHC_BF_ONE, SHC_BLEND_ADD, SHC_BLEND_ADD);
+            /* in the target's class: the colour written back is read and
+             * packed as the target holds it (an F16X4 or sRGB pixel is two
+             * dwords of halves, not one of bytes) */
+            key = shc_blend_key(SHC_BF_ZERO, SHC_BF_ONE, SHC_BF_ZERO, SHC_BF_ONE, SHC_BLEND_ADD, SHC_BLEND_ADD)
+                | shc_blend_key_target(gles_surf_rt_class(framebuffer::fb_target_format(c)), 0);
         }
         /* gl_FrontFacing where the sense is compiled in rather than draw state
          * (the GC7000: see `YakoglBackend::front_facing_shader_variant`). Two
@@ -11941,6 +11946,112 @@ mod tests {
         // SAFETY: plain GL call.
         unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) };
         assert_eq!(current_blend_key(gl.ctx()), 0);
+    }
+
+    /// An sRGB renderbuffer (docs/es3-srgb.md): the draw targets the sRGB
+    /// surface and keys the sRGB class, with the blend and the colour mask
+    /// (alpha's included) read back from the key; a one-channel float target
+    /// drops the mask bits of channels it lacks, so no such key is ever an
+    /// sRGB one; the clear colour reaches the back end linear, unchanged.
+    #[test]
+    fn an_srgb_target_keys_the_srgb_class_and_clears_linear() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = Gl::new(8, 8);
+        let mut rb: GLuint = 0;
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_SRGB8_ALPHA8, 8, 8);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(framebuffer::fb_target_format(gl.ctx()), GLES_SURF_SRGB8_A8);
+        let key = current_blend_key(gl.ctx());
+        assert_eq!(key, SHC_BLEND_KEY_REPLACE | shc_blend_key_target(SHC_RT_SRGB, 0), "a plain replace is a variant");
+        assert_eq!((shc_blend_key_class(key), shc_blend_key_masked(key)), (SHC_RT_SRGB, 0));
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColorMask(GL_TRUE_B, GL_FALSE_B, GL_TRUE_B, GL_FALSE_B);
+        }
+        let key = current_blend_key(gl.ctx());
+        assert_eq!((shc_blend_key_class(key), shc_blend_key_masked(key)), (SHC_RT_SRGB, 0b1010));
+        assert_eq!(
+            key & 0x3ff_ffff,
+            shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 0, 0)
+        );
+        /* a back end that renders the class (the PowerVR is one; the host
+         * stands in for the others) */
+        backend::HOST_SRGB_RT.store(true, Ordering::Relaxed);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDisable(GL_BLEND);
+            glColorMask(GL_TRUE_B, GL_TRUE_B, GL_TRUE_B, GL_TRUE_B);
+            glClearColor(0.2, 1.5, -0.5, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+        }
+        let d = one(&gl).draw;
+        assert!(d.do_clear);
+        assert_eq!(d.target_format, GLES_SURF_SRGB8_A8);
+        assert_eq!(d.clear_rgba, [0.2, 1.5, -0.5, 1.0], "linear and unclamped: the back end clamps and encodes");
+        /* an R16F target with alpha (and green, blue) masked keys red's bit only */
+        let tex = bind_new_tex(GL_TEXTURE_2D);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_R16F, 8, 8);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            glColorMask(GL_TRUE_B, GL_FALSE_B, GL_FALSE_B, GL_FALSE_B);
+        }
+        let key = current_blend_key(gl.ctx());
+        assert_eq!(key, SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(SHC_RT_F16));
+        assert_eq!(shc_blend_key_class(key), SHC_RT_F16);
+    }
+
+    /// A draw into an sRGB target runs the variant the online compiler built
+    /// for the sRGB class: two output dwords of halves, the record keyed by
+    /// the sRGB key.
+    #[test]
+    #[cfg(all(feature = "gpu-powervr", feature = "shaderc-online", not(feature = "report-es2")))]
+    fn a_draw_into_an_srgb_target_runs_the_srgb_variant() {
+        struct BackEnd(*const crate::shaderc::ShcBackend);
+        impl Drop for BackEnd {
+            fn drop(&mut self) {
+                // SAFETY: restoring what was saved, under the suite's guard.
+                unsafe { crate::shaderc::g_shaderc = self.0 };
+            }
+        }
+        let gl = Gl::new(16, 16);
+        /* the online compiler builds the class's variant (no table row has
+         * one) */
+        // SAFETY: the guard serialises the suite; the restorer puts it back.
+        let _be = BackEnd(unsafe { crate::shaderc::g_shaderc });
+        // SAFETY: as above; a static table pointer.
+        unsafe { crate::shaderc::g_shaderc = &crate::shaderc::online::SHC_ONLINE };
+        let _prog = es3_prog(&gl, "cube.frag");
+        let tex = bind_new_tex(GL_TEXTURE_2D);
+        let mut fbo: GLuint = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_SRGB8_ALPHA8, 8, 8);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        }
+        let d = draw_strip(&gl).draw;
+        // SAFETY: the variant lives in the draw path's static cache.
+        let fs = unsafe { &*d.fs };
+        assert_eq!(shc_blend_key_class(fs.blend_key), SHC_RT_SRGB);
+        assert_eq!(fs.num_outputs, 2, "the linear halves");
+        assert_eq!(d.target_format, GLES_SURF_SRGB8_A8);
+        assert_eq!(d.target_gpu, gl.ctx().objs().textures[tex as usize].mem.gpu);
     }
 
     #[test]
