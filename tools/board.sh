@@ -143,6 +143,9 @@
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
 #                      also read); BOARD_TAIL_S seconds kept after it (5)
 #   BOARD_HDMI_TIMINGS pi4: the panel's hdmi_timings (PI4_HDMI_TIMINGS also read)
+#   BOARD_MUSTPASS     the mustpass list the console tally and diff read
+#                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
+#                      tree names tools/cts/gles3-mustpass.txt)
 #   SEL                i.MX8MP: the selector written into the cleared record
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 #   YAKOGL_TOOLS       the yakogl-tools binary (default: built with cargo here)
@@ -1863,7 +1866,7 @@ cmd_tally() {
         printf '%-28s %s; GPU reset lines: %s\n' "$(basename "$(dirname "$c")")" "${rv:-no recoveries line}" \
             "$(grep -ac 'GPU reset (recovery' "$c")"
     done
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --table "${cons[@]}"
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --table "${cons[@]}"
 }
 
 cmd_diff() {
@@ -1889,9 +1892,9 @@ cmd_diff() {
     mapfile -t cb < <(consoles_with_deqp "${rb[@]}")
     { [ ${#ca[@]} -gt 0 ] && [ ${#cb[@]} -gt 0 ]; } || die "diff needs dEQP consoles (or results.tsv) in both $a and $b" 2
     base=$TMP/statuses-a.txt
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --statuses "${ca[@]}" > "$base" ||
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --statuses "${ca[@]}" > "$base" ||
         die "cannot read the statuses of $a"
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --baseline "$base" "${cb[@]}" |
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --baseline "$base" "${cb[@]}" |
         sed "s|against $base|of $b against $a|"
 }
 
