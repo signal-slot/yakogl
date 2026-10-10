@@ -1015,6 +1015,12 @@ import sys
 l = open("tools/cts/gles3-mustpass.txt").read().splitlines()
 ok = len(l) == 42810 and l == sorted(set(l)) and all(x.startswith("dEQP-GLES3.") for x in l)
 print(len(l), "cases"); sys.exit(0 if ok else 1)'
+  # The AM62P GLES3 tree (tools/cts/am62p-gles3-tree.txt) is generated from
+  # that list; a hand edit, a case listed twice or in no image, or an image
+  # over 2,000 cases fails here, and a case the board's 600 s watchdog cannot
+  # fit is split in the generator, not in the table.
+  step "tools   am62p-gles3-tree: generator self-test and table check" sh -c \
+    'python3 tools/cts/gen-am62p-gles3-tree.py --self-test && python3 tools/cts/gen-am62p-gles3-tree.py --check'
   # R-23: nothing checked the public headers against what the library
   # exports and what eglGetProcAddress answers, so a header could promise an
   # entry point the archive never carried, or eglGetProcAddress could answer

@@ -142,6 +142,16 @@ cases once (`tools/cts/check-gles3-tree.py`, run by `check-deqp-images.py` and
 `cts-selftest.sh` check 19 on both GLES3 tables); `pi4-deqp-images.sh
 DEQP_MODULE=gles3` builds it and `docs/es3-board-recipe-pi4.md` is the recipe.
 
+The AM62P GLES3 tree on `c4ccc966` (2026-10-10, `records/am62p/deqp-gles3-c4ccc966`)
+ran 24 of 25 images; the 19th (`texture.filtering.*` and four neighbours) never
+finished because `texture.filtering.3d.combinations.linear_mipmap_linear_*` (not in
+the mustpass list) takes minutes a case and the 600 s watchdog reset the board.
+The tree is now 28 images (`tools/cts/gen-am62p-gles3-tree.py`, checked by
+`tools/check.sh`): `texture.filtering` is split by dimension, its 3d combinations
+name only the mustpass prefixes, and 3d `formats` and `sizes` have an image each.
+Measured spans per image, all under 260 s, are in `tools/cts/README.md` 2e; the new
+rows 19 to 22 are unmeasured and the next tree run records them.
+
 Results are from main as of `186cbb56`: AM62P gl_test on `05f8f749`, Slint and cluster on `05f8f749` (`7dada1ff` for the fill_color figures), i.MX8MP gc_gl_test on `05f8f749`, the Pi 4 on `afa12e9b`. All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD (Pi 4).
 `docs/standalone-boot.md` has the procedure.
 
