@@ -3476,7 +3476,7 @@ mod branch_target_tests {
     /// is what caught that: it found no TARGET at all in the PowerVR table
     /// and refused to report a pass. This is the second time that alias has
     /// had me; the first was `es100_twins.rs`.
-    #[cfg(feature = "gpu-vivante")]
+    #[cfg(all(feature = "gpu-vivante", mesa_reference))]
     #[test]
     fn the_corpus_branches_are_within_what_this_can_express() {
         let mut n = 0usize;
@@ -3686,7 +3686,7 @@ mod address_register_tests {
     /// builds only: `shaderc::mesa_reference` aliases the PowerVR blobs otherwise and
     /// those are USC. The `n > 0` guard is what catches that alias -- twice
     /// already in this file's history.
-    #[cfg(feature = "gpu-vivante")]
+    #[cfg(all(feature = "gpu-vivante", mesa_reference))]
     #[test]
     fn every_corpus_address_write_has_the_shape_this_builds() {
         let mut n = 0usize;
@@ -3864,7 +3864,7 @@ mod unused_destination_tests {
     /// operations never set `DST_USE`, and every other operation carrying the
     /// field sets it in **all** of its instances. A threshold would be a
     /// judgement call; this is not one.
-    #[cfg(feature = "gpu-vivante")]
+    #[cfg(all(feature = "gpu-vivante", mesa_reference))]
     #[test]
     fn the_corpus_splits_cleanly_into_writers_and_non_writers() {
         // (total, with DST_USE = 1) per operation name, small fixed table.
@@ -4003,7 +4003,7 @@ mod temp_bound_tests {
     /// Every blob the reference shipped fits the bound. If this ever fails,
     /// the bound is wrong and not the shaders -- so it is the check that
     /// would catch me having misread the field as a count.
-    #[cfg(feature = "gpu-vivante")]
+    #[cfg(all(feature = "gpu-vivante", mesa_reference))]
     #[test]
     fn no_shipped_blob_exceeds_the_bound() {
         let mut n = 0usize;
@@ -5153,7 +5153,7 @@ mod sink_tests {
     /// values that have been written. This is the check that would catch the
     /// pass breaking a real shader, and it is run over all of them rather
     /// than over the two that prompted it.
-    #[cfg(feature = "gpu-vivante")]
+    #[cfg(all(feature = "gpu-vivante", mesa_reference))]
     #[test]
     fn the_corpus_survives_the_reordering() {
         use crate::shaderc::mesa_reference::SHC_SOURCE_TABLE;

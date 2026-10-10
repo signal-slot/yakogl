@@ -1473,11 +1473,37 @@ pub fn shader_source(name: &str) -> &'static str {
             src!("matattr4.vert", "es100/matattr4.vert"),
             src!("matattr.frag", "es100/matattr.frag"),
         ];
-        match SOURCES.iter().find(|(n, _)| *n == name) {
-            Some((_, text)) => text,
-            None => panic!("{name}: not in testutil::shader_source's list for the no-shader-table build"),
+        let Some((_, text)) = SOURCES.iter().find(|(n, _)| *n == name) else {
+            panic!("{name}: not in testutil::shader_source's list for the no-shader-table build");
+        };
+        /* The two Qt Quick 3D sources declare `sampler2DArray`, an ES 3.00
+         * type under `#version 100` that the offline table never judged and
+         * the online compiler refuses. Neither shader samples it, so the
+         * build takes the ES 1.00 text with `sampler2D` in its place; the
+         * rest of the reflection is the table's. */
+        if !(text.contains("sampler2DArray") && text.starts_with("#version 100")) {
+            return text;
         }
+        static ES100_TEXT: Mutex<BTreeMap<&'static str, &'static str>> = Mutex::new(BTreeMap::new());
+        let mut cache = ES100_TEXT.lock().unwrap_or_else(|e| e.into_inner());
+        let es100: &'static str = cache
+            .entry(text)
+            .or_insert_with(|| Box::leak(text.replace("sampler2DArray", "sampler2D").into_boxed_str()));
+        es100
     }
+}
+
+/// Make `stage` read as one the OFFLINE table compiled: no record of the
+/// build's own compiler behind it (`shaderc::is_online` is then false), so
+/// the GL core reads its uniform rows in the table's shape (one flattened
+/// row per struct-array member, `program::row_is_flattened`). With a table
+/// the stages the tests link already are that; in a `no-shader-table` build
+/// every stage is the compiler's, and a test that hands the core the table's
+/// reflection shape marks the stage it hand-built. The stage's own record
+/// stays in the keep region until the next reset.
+pub fn mark_stage_offline(stage: &mut crate::shaderc::ShcShader) {
+    stage.priv_ = core::ptr::null();
+    assert!(!crate::shaderc::is_online(stage), "a stage without a record is not the compiler's");
 }
 
 /// A fresh GL context on the mocks, current for the guard's lifetime.
