@@ -17936,6 +17936,7 @@ static int case_blitconv(void)
 	glViewport(0, 0, TW, TH);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	return ok ? 0 : -1;
+}
 
 /* ---- case 203: transform feedback capture, read back (tfcap) ---------------
  *
@@ -18160,6 +18161,7 @@ out:
 	glUseProgram(0);
 	glDeleteProgram(prog);
 	return ok && check_gl_error("tfcap teardown") ? 0 : -1;
+}
 
 /* ---- case 205: a mapped VBO and pixel buffer transfers (mappbo) -----------
  *
@@ -20686,10 +20688,12 @@ static int run_case(int c, int pretransform, int debug)
 		rc = case_blitconv();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library */
+		break;
 	case 203:
 		rc = case_tfcap();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library, or no in-process compiler */
+		break;
 	case 205:
 		rc = case_mappbo();
 		if (rc == -3)
