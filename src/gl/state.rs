@@ -1050,12 +1050,25 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
         GL_PACK_SKIP_ROWS => c.pack_skip_rows,
         GL_PACK_SKIP_PIXELS => c.pack_skip_pixels,
         GL_SAMPLE_COVERAGE_INVERT => c.sample_coverage_invert as GLint,
-        GL_SAMPLE_BUFFERS => (c.bound_framebuffer == 0 && c.default_samples > 1) as GLint,
-        GL_SAMPLES => {
-            if c.bound_framebuffer == 0 && c.default_samples > 1 {
-                c.default_samples as GLint
+        /* the bound framebuffer's: the surface's samples, or a complete
+         * framebuffer object's (one-sample renderbuffers in an ES 3.0
+         * build; 0 in an ES 2.0 report, as always) */
+        GL_SAMPLE_BUFFERS => {
+            if c.bound_framebuffer == 0 {
+                (c.default_samples > 1) as GLint
             } else {
-                0
+                (super::framebuffer::framebuffer_samples(c) > 0) as GLint
+            }
+        }
+        GL_SAMPLES => {
+            if c.bound_framebuffer == 0 {
+                if c.default_samples > 1 {
+                    c.default_samples as GLint
+                } else {
+                    0
+                }
+            } else {
+                super::framebuffer::framebuffer_samples(c) as GLint
             }
         }
         GL_NUM_COMPRESSED_TEXTURE_FORMATS => 3,
@@ -3164,7 +3177,9 @@ mod tests {
         assert_eq!((geti1(GL_SAMPLE_BUFFERS), geti1(GL_SAMPLES)), (0, 0));
         gl.ctx().default_samples = 4;
         assert_eq!((geti1(GL_SAMPLE_BUFFERS), geti1(GL_SAMPLES)), (1, 4));
-        gl.ctx().bound_framebuffer = 1; /* an FBO is never multisampled */
+        /* not the surface's: an FBO has sample buffers only when complete
+         * with one-sample renderbuffers (tests/es3_gl_core.rs) */
+        gl.ctx().bound_framebuffer = 1;
         assert_eq!((geti1(GL_SAMPLE_BUFFERS), geti1(GL_SAMPLES)), (0, 0));
         gl.ctx().bound_framebuffer = 0;
         assert_eq!(gl.error(), GL_NO_ERROR);

@@ -79,6 +79,7 @@ const RENDERBUFFER_ZERO: GlRenderbuffer = GlRenderbuffer {
     mem: OsalGpuMem::ZERO,
     external: false,
     orphan: false,
+    samples: 0,
     serial: 0,
     storage_gen: 0,
 };
@@ -492,6 +493,11 @@ fn is_color_format(f: GLenum) -> bool {
             | GL_R16F
             | GL_R32F
     ) || is_integer_color_format(f)
+        /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. Held
+         * as RGBA8 (eight bits a channel, which the size queries say), as
+         * the texture of the name is (es3_formats' fallback class); no
+         * back end has a 10-bit render target yet. ES 2.0 has no such name. */
+        || (f == GL_RGB10_A2 && !crate::REPORT_ES2)
 }
 
 /// The surface (`GLES_SURF_*`) of an ES 3.0 integer colour format, by its GL
@@ -667,6 +673,12 @@ fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
     if !any {
         return GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT;
     }
+    /* ES 3.0 4.4.4.2: every attached renderbuffer has the same
+     * GL_RENDERBUFFER_SAMPLES, and that is 0 when a texture is attached too
+     * (an ES 2.0 report records no sample count, see `renderbuffer_storage`) */
+    if attached_samples(c, fb).is_none() {
+        return GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE;
+    }
     /* No colour attachment 0. A framebuffer with no colour attachment at
      * all (glmark2's shadow pass) is the backend's question: complete where
      * it draws without one (backend::DEPTH_ONLY_TARGETS, which each backend
@@ -676,6 +688,32 @@ fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
         return GL_FRAMEBUFFER_UNSUPPORTED;
     }
     GL_FRAMEBUFFER_COMPLETE
+}
+
+/// The one sample count of `fb`'s attached images (a texture's is 0, a
+/// renderbuffer's its GL_RENDERBUFFER_SAMPLES), 0 with nothing attached;
+/// None when two differ (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE).
+fn attached_samples(c: &GlContext, fb: &GlFramebuffer) -> Option<u8> {
+    let mut samples = None;
+    for a in attachment_points(fb).filter(|a| a.type_ != GL_NONE) {
+        let s = if a.type_ == GL_RENDERBUFFER { c.renderbuffer_ref(a.name).map_or(0, |rb| rb.samples) } else { 0 };
+        match samples {
+            Some(p) if p != s => return None,
+            _ => samples = Some(s),
+        }
+    }
+    Some(samples.unwrap_or(0))
+}
+
+/// GL_SAMPLES of the bound (draw) framebuffer object: the sample count of
+/// its images when it is complete, else 0 (GL_SAMPLE_BUFFERS is 1 when this
+/// is). Never above 0 in an ES 2.0 report, which records no counts.
+pub fn framebuffer_samples(c: &GlContext) -> u8 {
+    c.framebuffer_ref(c.bound_framebuffer)
+        .filter(|_| c.bound_framebuffer != 0)
+        .filter(|fb| check_status(c, fb) == GL_FRAMEBUFFER_COMPLETE)
+        .and_then(|fb| attached_samples(c, fb))
+        .unwrap_or(0)
 }
 
 /// No colour attachment at all, and a depth or stencil one.
@@ -1698,10 +1736,16 @@ fn renderbuffer_bits(internalformat: GLenum) -> AttachmentBits {
         GL_RGB565 => AttachmentBits::color([5, 6, 5, 0], un),
         GL_RGB8 | GL_RGB => AttachmentBits::color([8, 8, 8, 0], un),
         GL_RGBA8 | GL_RGBA | GL_BGRA_EXT | GL_BGRA8_EXT => AttachmentBits::color([8, 8, 8, 8], un),
+        /* held as RGBA8 (`is_color_format`): eight bits a channel, the
+         * same as glGetRenderbufferParameteriv says, not the 10/10/10/2
+         * the name asks for, which no render target here stores */
+        GL_RGB10_A2 if !crate::REPORT_ES2 => AttachmentBits::color([8, 8, 8, 8], un),
         GL_SRGB8_ALPHA8 => AttachmentBits { encoding: GL_SRGB, ..AttachmentBits::color([8, 8, 8, 8], un) },
         GL_R8 => AttachmentBits::color([8, 0, 0, 0], un),
         GL_RG8 => AttachmentBits::color([8, 8, 0, 0], un),
         GL_RGBA16F => AttachmentBits::color([16, 16, 16, 16], GL_FLOAT),
+        /* RGB16F keeps four half-float channels, three of them the format's */
+        GL_RGB16F => AttachmentBits::color([16, 16, 16, 0], GL_FLOAT),
         GL_R16F => AttachmentBits::color([16, 0, 0, 0], GL_FLOAT),
         GL_RG16F => AttachmentBits::color([16, 16, 0, 0], GL_FLOAT),
         GL_R32F => AttachmentBits::color([32, 0, 0, 0], GL_FLOAT),
@@ -1738,6 +1782,11 @@ fn texture_bits(t: &context::GlTexture) -> AttachmentBits {
     if t.mem.impl_.is_null() && t.width == 0 {
         return AttachmentBits::NONE;
     }
+    /* an ES 3.0 sized format of es3_formats: its base format and type say
+     * GL_RGBA_INTEGER and such, which the table below does not know */
+    if let Some(e) = super::es3_formats::by_index(t.es3_fmt) {
+        return es3_texture_bits(e, t.texfmt);
+    }
     let float = matches!(t.type_, GL_HALF_FLOAT | GL_HALF_FLOAT_OES | GL_FLOAT);
     let (bits, ct) = if float {
         (if t.type_ == GL_FLOAT && t.texfmt != GLES_TEXFMT_RGBA16F { 32 } else { 16 }, GL_FLOAT)
@@ -1758,6 +1807,47 @@ fn texture_bits(t: &context::GlTexture) -> AttachmentBits {
             AttachmentBits { depth: 24, stencil: 8, component_type: GL_UNSIGNED_NORMALIZED, ..AttachmentBits::NONE }
         }
         _ => AttachmentBits::NONE,
+    }
+}
+
+/// The bits of a texture of an es3_formats format, kept in storage class
+/// `texfmt`: the format's own channels and component type (dEQP-GLES3
+/// state_query.fbo.framebuffer_attachment_component_type asks for every
+/// colour-renderable one), at the precision the class holds. An integer
+/// class is the four-channel twin of the name's own width; the 10-bit
+/// formats read 10/10/10/2 where the class is 10-bit, and RGB10_A2 held as
+/// RGBA8 reads eight.
+fn es3_texture_bits(e: &super::es3_formats::Es3Format, texfmt: u8) -> AttachmentBits {
+    use super::es3_formats::Class;
+    let comps = e.comps as usize;
+    let first = |bits: GLint| -> [GLint; 4] { core::array::from_fn(|i| if i < comps { bits } else { 0 }) };
+    match e.class {
+        Class::Int | Class::Uint => {
+            let ct = if e.class == Class::Int { GL_INT } else { GL_UNSIGNED_INT };
+            let rgba = match texfmt {
+                backend::GLES_TEXFMT_RGB10A2UI => [10, 10, 10, 2],
+                backend::GLES_TEXFMT_RGBA8UI | backend::GLES_TEXFMT_RGBA8I => first(8),
+                backend::GLES_TEXFMT_RGBA16UI | backend::GLES_TEXFMT_RGBA16I => first(16),
+                _ => first(32),
+            };
+            AttachmentBits::color(rgba, ct)
+        }
+        Class::Unorm => {
+            let rgba = if texfmt == backend::GLES_TEXFMT_RGB10A2 { [10, 10, 10, 2] } else { [8; 4] };
+            AttachmentBits::color(rgba, GL_UNSIGNED_NORMALIZED)
+        }
+        /* eight bits whether the class is RGBA8_SNORM or the half-float
+         * fallback, which holds at least that */
+        Class::Snorm => AttachmentBits::color(first(8), GL_SIGNED_NORMALIZED),
+        Class::Float => {
+            let rgba = match texfmt {
+                backend::GLES_TEXFMT_R11G11B10F => [11, 11, 10, 0],
+                backend::GLES_TEXFMT_RGB9E5 => [9, 9, 9, 0],
+                backend::GLES_TEXFMT_RGBA32F => first(32),
+                _ => first(16),
+            };
+            AttachmentBits::color(rgba, GL_FLOAT)
+        }
     }
 }
 
@@ -2145,11 +2235,23 @@ fn renderbuffer_storage_args_ok(
     true
 }
 
-fn renderbuffer_storage(c: &mut GlContext, target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) {
+/// `samples` is the count glRenderbufferStorageMultisample was given (0 or
+/// 1, checked there; 0 from glRenderbufferStorage), kept as
+/// GL_RENDERBUFFER_SAMPLES by an ES 3.0 build only: ES 2.0 has neither the
+/// query nor the multisample completeness rule.
+fn renderbuffer_storage(
+    c: &mut GlContext,
+    target: GLenum,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+    samples: u8,
+) {
     const FN: &str = "glRenderbufferStorage";
     if !renderbuffer_storage_args_ok(c, target, internalformat, width, height, FN) {
         return;
     }
+    let samples = if crate::REPORT_ES2 { 0 } else { samples };
 
     let bound = c.bound_renderbuffer;
     let Some(rb) = c.renderbuffer(bound) else {
@@ -2180,6 +2282,7 @@ fn renderbuffer_storage(c: &mut GlContext, target: GLenum, internalformat: GLenu
         rb.internalformat = internalformat;
         rb.width = width as u32;
         rb.height = height as u32;
+        rb.samples = samples;
         rb.storage_gen = context::respecified(rb.serial, false);
         if !cleared {
             c.set_error(GL_OUT_OF_MEMORY, FN);
@@ -2189,6 +2292,7 @@ fn renderbuffer_storage(c: &mut GlContext, target: GLenum, internalformat: GLenu
     rb.internalformat = internalformat;
     rb.width = width as u32;
     rb.height = height as u32;
+    rb.samples = samples;
     rb.storage_gen = context::respecified(rb.serial, false);
 }
 
@@ -2201,7 +2305,7 @@ pub unsafe extern "C" fn glRenderbufferStorage(
 ) {
     gl_trace!(glRenderbufferStorage);
     let Some(c) = context::current() else { return };
-    renderbuffer_storage(c, target, internalformat, width, height);
+    renderbuffer_storage(c, target, internalformat, width, height, 0);
 }
 
 #[no_mangle]
@@ -2240,9 +2344,9 @@ pub unsafe extern "C" fn glGetRenderbufferParameteriv(target: GLenum, pname: GLe
                 0
             }
         }
-        /* ES 3.0: single-sampled storage only (glRenderbufferStorageMultisample
-         * refuses more than one sample) */
-        GL_RENDERBUFFER_SAMPLES if !crate::REPORT_ES2 => 0,
+        /* ES 3.0: 0, or 1 for one-sample storage (GL_MAX_SAMPLES is 1, and
+         * 4.4.2.1 says the count is at least the one asked for) */
+        GL_RENDERBUFFER_SAMPLES if !crate::REPORT_ES2 => rb.samples as GLint,
         GL_RENDERBUFFER_DEPTH_SIZE => match f {
             GL_DEPTH_COMPONENT16 => 16,
             GL_DEPTH_COMPONENT24 | GL_DEPTH24_STENCIL8 => 24,
@@ -2303,9 +2407,12 @@ pub unsafe extern "C" fn glReadPixels(
         c.set_error(GL_INVALID_OPERATION, "glReadPixels");
         return;
     }
-    let Some(pixels) = super::buffer::pixel_buffer_resolve(c, true, pixels, 0, "glReadPixels") else {
+    /* ES 3.0 4.3.2: a framebuffer object with sample buffers (one-sample
+     * renderbuffers, the only kind there is) is not read from */
+    if framebuffer_samples(c) > 0 {
+        c.set_error(GL_INVALID_OPERATION, "glReadPixels");
         return;
-    };
+    }
     /* ES 3.0 4.3.2's pack state: rows GL_PACK_ROW_LENGTH pixels apart
      * when it is set, and the first pixel written after the skipped rows
      * and pixels (both honoured since 2026-09-24) */
@@ -2315,10 +2422,36 @@ pub unsafe extern "C" fn glReadPixels(
     let a = pack_align.max(1);
     let stride = (if row_len > 0 { row_len } else { width.max(0) as usize } * out_bpp).div_ceil(a) * a;
     let skip = stride * c.pack_skip_rows.max(0) as usize + out_bpp * c.pack_skip_pixels.max(0) as usize;
+    /* The bytes the read writes, from `pixels` on: the skipped rows and
+     * pixels, every row but the last at the stride, and the last one's
+     * pixels. With a pixel pack buffer bound the whole of it must lie inside
+     * the buffer, else GL_INVALID_OPERATION (ES 3.0 4.3.2) -- it was checked
+     * as an empty transfer until 2026-10-10, and a read larger than the
+     * buffer wrote past its store. */
+    let need = if width > 0 && height > 0 {
+        skip.saturating_add(stride.saturating_mul(height as usize - 1)).saturating_add(width as usize * out_bpp)
+    } else {
+        0
+    };
+    let pack_buffer = c.bound_pixel_pack_buffer != 0;
+    let Some(pixels) = super::buffer::pixel_buffer_resolve(c, true, pixels, need, "glReadPixels") else {
+        return;
+    };
+    let base = pixels as *mut c_void;
     let pixels =
         if pixels.is_null() { pixels as *mut c_void } else { (pixels as *mut u8).wrapping_add(skip) as *mut c_void };
-    // SAFETY: the caller's contract, forwarded (see `read_pixels`).
+    // SAFETY: the caller's contract, forwarded (see `read_pixels`); a pack
+    // buffer holds the `need` bytes from `base` (checked just above).
     unsafe { read_pixels(c, x, y, width, height, format, type_, pixels, true, pack_align, row_len) };
+    if pack_buffer && need > 0 {
+        /* The rows went into the buffer through the CPU's cache. Write them
+         * back, as glBufferSubData does: a later glMapBufferRange with
+         * GL_MAP_READ_BIT invalidates the range, which may drop lines that
+         * are still dirty, and a draw sourcing the buffer reads memory. */
+        // SAFETY: `base` .. `base + need` lies inside the buffer's CPU
+        // mapping (pixel_buffer_resolve checked it).
+        unsafe { osal::cache_flush(base, need) };
+    }
 }
 
 /// Everything recorded so far reaches memory, and the target comes back into
@@ -2749,6 +2882,7 @@ pub fn renderbuffer_attach_external(c: &mut GlContext, mem: &OsalGpuMem, w: u32,
     rb.internalformat = GL_RGBA;
     rb.width = w;
     rb.height = h;
+    rb.samples = 0;
     rb.storage_gen = context::respecified(rb.serial, false);
     0
 }
@@ -2783,8 +2917,10 @@ fn log_available() -> bool {
 }
 
 /// Multisampled renderbuffers are single-sampled: GL_MAX_SAMPLES is 1, so a
-/// conformant caller never asks for more; one that does gets the plain
-/// storage (and no resolve).
+/// conformant caller never asks for more (one that does gets
+/// GL_INVALID_OPERATION). One sample is kept as GL_RENDERBUFFER_SAMPLES 1
+/// in an ES 3.0 build: one sample a pixel, as plain storage, but a
+/// framebuffer of it has sample buffers.
 #[no_mangle]
 pub unsafe extern "C" fn glRenderbufferStorageMultisample(
     target: GLenum,
@@ -2820,7 +2956,7 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
         c.set_error(GL_INVALID_OPERATION, FN);
         return;
     }
-    renderbuffer_storage(c, target, internalformat, width, height);
+    renderbuffer_storage(c, target, internalformat, width, height, samples as u8);
 }
 
 /// glInvalidateFramebuffer on the current context (glInvalidateSubFramebuffer
@@ -2905,11 +3041,15 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
     const FUNC: &str = "glDrawBuffers";
     let Some(c) = context::current() else { return };
     /* The errors in the order dEQP-GLES3 negative_api.buffer.draw_buffers
-     * checks them (ES 3.0 4.2.1): a negative n; a value that is no draw
-     * buffer at all (GL_INVALID_ENUM, even when n is also too large); the
-     * window given other than one buffer; n past GL_MAX_DRAW_BUFFERS; then
-     * the per-buffer rules. n past the limit was checked first until
-     * 2026-09-24, which answered GL_INVALID_VALUE to the first two. */
+     * checks them (ES 3.0 4.2.1): a negative n; on a framebuffer object, n
+     * past GL_MAX_DRAW_BUFFERS (its last call is GL_MAX_DRAW_BUFFERS + 1
+     * buffers, one of them GL_DEPTH_ATTACHMENT, and wants GL_INVALID_VALUE);
+     * a value that is no draw buffer at all (GL_INVALID_ENUM); the window
+     * given other than one buffer; then the per-buffer rules. n past the
+     * limit was checked first everywhere until 2026-09-24, which answered
+     * GL_INVALID_VALUE to the window's n = 2 and to {COLOR_ATTACHMENT0,
+     * DEPTH_ATTACHMENT} while the limit was 1; then after the enums until
+     * 2026-10-10, which answered GL_INVALID_ENUM to that last call. */
     if n < 0 {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
@@ -2933,8 +3073,12 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
             || b == GL_BACK
             || (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum).contains(&b)
     };
-    /* the enum scan reads at most a sane count: n far past the limit is
-     * GL_INVALID_VALUE below whatever the array holds */
+    if c.bound_framebuffer != 0 && n > context::MAX_DRAW_BUFFERS as GLsizei {
+        c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    /* the enum scan reads at most a sane count: the window given more is
+     * GL_INVALID_OPERATION below whatever the array holds */
     if n <= 32 && (0..n).any(|i| !accepted(buf(i))) {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
@@ -2949,10 +3093,6 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
         }
         // SAFETY: single-threaded by contract; no other reference is live.
         unsafe { DEFAULT_DRAW_NONE.get()[c.index as usize % MAX_CONTEXTS] = buf(0) == GL_NONE };
-        return;
-    }
-    if n > context::MAX_DRAW_BUFFERS as GLsizei {
-        c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
     if c.framebuffer_ref(c.bound_framebuffer).is_none() {
