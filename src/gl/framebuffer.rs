@@ -85,11 +85,12 @@ const RENDERBUFFER_ZERO: GlRenderbuffer = GlRenderbuffer {
 };
 
 /// Per context slot and texture name: the kick that last rendered into the
-/// texture (stamped when a draw resolves it as its target). Texture writes
-/// wait for that kick (`texture_target_use`): the GPU may still be
-/// writing the texels. A table here rather than a `GlTexture` field keeps
-/// the C view of the struct unchanged; a stale stamp of a completed kick is
-/// harmless.
+/// texture (stamped when a draw resolves it as its target, and moved to the
+/// kick the backend put the draw in once it has recorded it:
+/// `draw::restamp_draw`). Texture writes wait for that kick
+/// (`texture_target_use`): the GPU may still be writing the texels. A table
+/// here rather than a `GlTexture` field keeps the C view of the struct
+/// unchanged.
 static TARGET_USE: Global<[[u32; MAX_TEXTURES]; MAX_CONTEXTS]> = Global::zeroed();
 
 /// Per context slot and texture name, for a depth texture a draw renders
@@ -184,11 +185,24 @@ pub fn draw_buffer(c: &GlContext, i: usize) -> GLenum {
     }
 }
 
+/// A draw is being built that renders into `loc`: a texture is stamped
+/// with the kick being recorded, and moved to the kick the backend puts the
+/// draw in once it has recorded it (`draw::draw_stamp`).
 fn stamp_target_use(c: &GlContext, loc: MemLoc) {
     if let MemLoc::Texture(i) = loc {
-        // SAFETY: single-threaded by contract; no other reference is live.
-        let t = unsafe { TARGET_USE.get() };
-        t[c.index as usize % MAX_CONTEXTS][i] = backend::kick_id();
+        let ctx = c.index as usize % MAX_CONTEXTS;
+        let kick = draw::draw_stamp(draw::StampAt::Target { ctx: ctx as u8, ti: i as u16 });
+        set_target_use(ctx, i, kick);
+    }
+}
+
+/// Texture `ti` of context slot `ctx` was last rendered into by `kick`
+/// ([`texture_target_use`]).
+pub(crate) fn set_target_use(ctx: usize, ti: usize, kick: u32) {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let t = unsafe { TARGET_USE.get() };
+    if let Some(e) = t.get_mut(ctx % MAX_CONTEXTS).and_then(|row| row.get_mut(ti)) {
+        *e = kick;
     }
 }
 

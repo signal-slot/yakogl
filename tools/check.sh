@@ -1449,11 +1449,15 @@ fi
 # (tests/glmark2_corpus.rs). The corpus is GPL-3.0 text and never committed:
 # tools/hostharness/glmark2/run.sh generates it from GLMARK2_SRC (glmark2 at
 # the pinned commit) into build/glmark2-host/shaders. Without GLMARK2_SRC the
-# row is a gap.
+# row is a gap. The same run's logs must hold no depth texture sampled stale
+# (shadow and refract on the PowerVR, pvr-depth-resolve: "the backend did not
+# resolve its depth").
 glmark2_corpus_tests() {
-  local c
+  local c stale
   GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
     >build/glmark2-host.log 2>&1 || { tail -20 build/glmark2-host.log; return 1; }
+  stale=$(grep -l 'did not resolve its depth' build/glmark2-host/logs/*/*.log || true)
+  [ -z "$stale" ] || { echo "a depth texture sampled stale in: $stale"; return 1; }
   for c in host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
     host-test,gpu-v3d,shaderc-online,no-shader-table; do
     GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features --features "$c" \

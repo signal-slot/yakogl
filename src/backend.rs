@@ -1120,7 +1120,14 @@ pub struct YakoglBackend {
     pub finish: Option<unsafe extern "C" fn() -> i32>,
     /// Wait for the frame before the last submitted one (pipelined swap).
     pub finish_previous: Option<unsafe extern "C" fn() -> i32>,
+    /// The kick being recorded: the id the frame open now has, or the one
+    /// the next frame will have. After a `draw` that returned 0 it names the
+    /// kick holding that draw (its last part, when the backend split it): a
+    /// draw that ended the open frame is in the next kick, and the GL core
+    /// moves the draw's stamps there (`gl::draw::restamp_draw`).
     pub kick_id: Option<unsafe extern "C" fn() -> u32>,
+    /// Whether kick `kick_id` (from `kick_id`) has still to complete: the
+    /// kick being recorded is, from its first draw.
     pub kick_pending: Option<unsafe extern "C" fn(kick_id: u32) -> bool>,
     pub heap_base: Option<unsafe extern "C" fn(heap: GlesHeap) -> u64>,
     pub counters: Option<unsafe extern "C" fn(kicks: *mut u32, waits: *mut u32)>,

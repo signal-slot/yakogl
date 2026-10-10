@@ -25,6 +25,15 @@
  *   gm2: eglGetError 0x<e>                  ... a non-EGL_SUCCESS one
  *   gm2: fb-incomplete 0x<status>           glCheckFramebufferStatus said so
  *   gm2: egl-config id=... (eglCreateWindowSurface / eglCreatePbufferSurface)
+ *   gm2: draw <n> fb <fb> kick <k> submitted <s>
+ *                                            with GM2_KICKS=1 on a PowerVR
+ *                                            build, after every draw: the
+ *                                            framebuffer it rendered into, the
+ *                                            kick holding it (the backend's
+ *                                            kick_id() after the draw), and
+ *                                            the kicks submitted so far
+ *                                            (pvr_backend_counters): the
+ *                                            order of a scene's passes
  *
  * The GL errors themselves, with the entry point that raised them, are the
  * library's own lines ("GL error 0x502 in glGenerateMipmap"), every one of
@@ -228,16 +237,46 @@ unsigned long gm2_draws(void)
 	return n_draws;
 }
 
+/* The PowerVR back end's kick id and counters (src/pvr/backend.rs), weak:
+ * the other GPUs' libraries have none, and GM2_KICKS then logs nothing. */
+extern uint32_t pvr_backend_kick_id(void) __attribute__((weak));
+extern void pvr_backend_counters(uint32_t *kicks, uint32_t *waits) __attribute__((weak));
+
+/* GM2_KICKS=1: the "gm2: draw" line after every draw (above). glmark2
+ * shadow's frame then reads: the depth pass in kick k with k - 1 submitted
+ * (its draw ended the window clear's frame, so it is not in the kick that was
+ * being recorded when it began: pvr-depth-resolve), then the ground in k + 1
+ * with k submitted (the depth resolve's, or the draw's own, submit). */
+static void log_kick(void)
+{
+	static int on = -1;
+
+	if (on < 0) {
+		const char *e = getenv("GM2_KICKS");
+		on = e && strcmp(e, "1") == 0 && pvr_backend_kick_id && pvr_backend_counters;
+	}
+	if (!on)
+		return;
+	GLint fb = 0;
+	uint32_t kicks = 0;
+
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fb);
+	pvr_backend_counters(&kicks, NULL);
+	fprintf(stderr, "gm2: draw %lu fb %d kick %u submitted %u\n", n_draws, (int)fb, pvr_backend_kick_id(), kicks);
+}
+
 static void w_glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
 	n_draws++;
 	glDrawArrays(mode, first, count);
+	log_kick();
 }
 
 static void w_glDrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
 {
 	n_draws++;
 	glDrawElements(mode, count, type, indices);
+	log_kick();
 }
 
 /* ---- the EGL config ------------------------------------------------------- */

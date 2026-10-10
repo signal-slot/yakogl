@@ -55,7 +55,11 @@ generated parts of `FINDINGS.md` and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMA
 [vivante] [v3d]`. Environment: `GM2_FRAMES` (frames per entry, default 3),
 `GM2_SIZE` (default `800x600`, glmark2's default and the boards'),
 `GM2_WRITE=0` (leave the findings files alone), `GM2_JOBS`, `GM2_TIMEOUT` (seconds per
-entry, default 600), and the V3D's settings `YAKOGL_V3D_*` (below). It needs
+entry, default 600), `GM2_KICKS=1` (PowerVR: a `gm2: draw <n> fb <fb> kick <k>
+submitted <s>` line after every draw, the framebuffer it rendered into, the
+kick holding it and the kicks submitted so far, to read a scene's pass
+order; `shim.c`), and
+the V3D's settings `YAKOGL_V3D_*` (below). It needs
 gcc, g++, cmake, cargo, objcopy and python3, and no network.
 
 ### The V3D's settings

@@ -97,7 +97,7 @@ to a refused draw of a large cube texture).
 | AM62P: refract's 7.6 MB depth buffer refused every frame (#2) | fixed on the host: the pool's top region places GENERAL requests over 256 KiB from the carve-out's end downward, so small long-lived blocks no longer split the free space (`driver/docs/pvr-render-pool.md`). The replay of glmark2's allocations leaves a 31,908 KiB range before refract (15,100 without), which needs 22,600; the replay cannot reproduce the board's exact placement. `-DPVR_POOL_TOP_ABOVE=0` builds the old pool for the A/B | `541c9d3` |
 | Pi 4: refract and terrain do not fit the 48 MiB V3D carve-out (#4, #5) | glmark2's Pi 4 image takes 96 MiB (`ca4074a`), replayed on the host (`ac0c254`, `tests/v3d_glmark2_mem.rs`). After the NPOT chains the host harness shows refract refusing one draw on the V3D: its 1600x1200 mip chain does not fit the 8 MiB tiled-copy budget (`tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`, predictions only) | `ca4074a`, `ac0c254` |
 | gl_test case 171 `viewwin` ignored byte order (#15) | fixed: the raw-memory check follows the window's byte order (the GC7000 stores BGRA) | `41f56eb` |
-| glmark2 shadow and refract on the PowerVR sample stale depth | found, not fixed: "Known defects", pvr-depth-resolve | `860f6b1` |
+| glmark2 shadow and refract on the PowerVR sample stale depth (pvr-depth-resolve) | fixed on the host. The cause (`860f6b1`): the GL core stamps what a draw renders into and reads with `backend::kick_id()` while it builds the draw, and a draw that ends the open frame (the depth pass after glmark2's window clear) lands in the next kick, so the depth texture's stamp named the clear's kick, complete by the sampling draw: `resolve_depth` neither submitted nor waited and the PowerVR answered -EBUSY. Now the core notes where each stamp of a draw lives (render-into stamps, texture and buffer last use, staging blocks; `draw::draw_stamp`) and moves them to `kick_id()` once the back end has recorded the draw, which names the kick holding it (`draw::restamp_draw`; contract on `YakoglBackend::kick_id`). The same stale stamp let a CPU write into a texture or buffer such a draw uses go under its open kick; that is fixed with it. The V3D's `open_alias` (the same repair made inside its back end, `src/v3d/backend.rs`) no longer has a stale stamp to answer for; it stays until a V3D change with a Pi 4 run removes it. Tests: `tests/depth_resolve_pvr.rs` (the BUG test passes with one resolve, no retry), `a_render_that_ends_the_open_frame_is_stamped_with_the_kick_holding_it`, `a_cpu_write_after_a_render_that_ended_the_open_frame_waits_for_its_kick` (`src/gl/draw.rs`), `after_a_draw_the_kick_id_names_the_kick_holding_it` (`src/pvr/backend_tests.rs`). The host harness logs no `did not resolve its depth` line in any entry (FINDINGS.md rows 23-24; `GM2_KICKS=1` shows the depth pass's kick order), and the full gate's glmark2 row now fails on one (`tools/check.sh`, `glmark2_corpus_tests`). Board confirmation pending: the common set's GM image on the AM62P ("Next board session") | (this commit) |
 
 The i.MX8MP benchmark baseline is a board result from main `8abeaabb`
 (the CL row from the integration script, `0f608491`; record
@@ -469,26 +469,6 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
 3. **Known defects.** Each has a GitHub issue unless marked "no issue yet";
    what remains is the fixes. State as of 2026-10-10; none is confirmed on a
    board from main:
-   - **pvr-depth-resolve** (no issue yet): glmark2 `shadow` and `refract` on
-     the PowerVR sample their depth texture stale, a frame old or never
-     written. The host harness's real PowerVR back end logs `the backend did
-     not resolve its depth (-16)` once a frame of both scenes; the GC7000
-     does not. Root cause (`860f6b1`): `framebuffer::stamp_target_use`
-     stamps the depth pass's kick with `backend::kick_id()` while the draw is
-     built, but the PowerVR's `draw_one` first submits the open frame (the
-     window clear glmark2 starts each frame with) and the depth pass renders
-     as the next kick, so the stamp names a completed kick, `resolve_depth`
-     does not submit, and `pvr_backend_depth_resolve` answers -EBUSY.
-     `tests/depth_resolve_pvr.rs` reproduces it with the real GL core on a
-     back end that follows the PowerVR's contract; its
-     `window_clear_before_the_depth_pass_resolves` is
-     `#[ignore = "BUG: stale kick stamp ..."]` and asserts the right answer.
-     The fix sketch (`tools/cts/log/hostharness/glmark2/FINDINGS.md`,
-     "Diagnosis of rows 23-24"): flush, finish and retry on -EBUSY in
-     `resolve_depth`; the root fix takes the stamp after `backend::draw`,
-     which also covers `settle_texture`'s busy test. The same record has
-     the AM62P board recipe; the board's completion timing may differ from
-     the host's;
    - **pvr-msaa-split** (no issue yet): a 4x frame the PowerVR splits into
      two kicks (a full arena, the 1024-draw cap, which counts the frame's
      own quads, or a glFinish / glReadPixels before more drawing) loses its
@@ -899,11 +879,13 @@ the indexed pieces): image 9 alone (`TREE_ROWS=8`) is their confirmation,
 with gl_test 197 `vtxgrid` in the regression set. The `32778b57` `ms4`
 image failed `constancy_alpha_to_coverage` and `constancy_both_inverted`
 (a 4x frame split by the PDS arena, fixed on the host by sharing the
-frame's PDS programs): the `ms4` image confirmed them on `452d6c31`
-(16 / 16). gl_test 198 `a2cconst` (by number: it is not in the set) hung
-the fragment DM on the gl_test image of `452d6c31`; with the tiles in
-flight taken from the pixel width, an image with
-`CONFIG_GL_TEST_CASES="198"` is its confirmation. The console must be the main_uart0 bridge
+frame's PDS programs): the `ms4` image confirmed them on `452d6c31` and
+`a27d69c0` (16 / 16 both). gl_test 198 `a2cconst` (by number: it is not in
+the set) hung the fragment DM on `452d6c31`; with the tiles in flight taken
+from the pixel width it passes on `a27d69c0` (0 resets), as do 199 `es3trunc`,
+200 `intrt` and 201 `usamp`. glmark2 `shadow` and `refract` sampled stale
+depth (pvr-depth-resolve, fixed on the host: the draw's stamps move to the
+kick holding it): the common set's GM image is their confirmation (below). The console must be the main_uart0 bridge
 port: a session leased the mcu_uart0 port and captured nothing
 (`tools/cts/log/investigations/am62p-console-empty.md`):
 
@@ -916,7 +898,19 @@ TREE_IMAGE_DIR=<img-ms4> TREE_TAG=ms4 $SW/tools/board.sh am62p tree $SW/tools/ct
 $SW/tools/board.sh am62p tally <rec>/full
 $SW/tools/board.sh am62p tally <rec>/ms4
 $SW/tools/cts/deqp-uart-tally.py --mustpass $SW/tools/cts/gles2-mustpass.txt <console logs of both trees>
+GLMARK2_SRC=<glmark2 at 22c527cb> $SW/tools/cts/common-images.sh am62p $SW/tools/cts/common-tree.txt <img-gm> GM
+RUN_BOUND=960 $SW/tools/board.sh am62p run <img-gm>/GM/zephyr/zephyr.bin <rec>/gm gm-$HEAD8
 ```
+
+glmark2 (the GM image), expected on the console capture: no line `texture
+<n>: the backend did not resolve its depth (-16)` in any scene (before the
+fix: one per rendered frame of `shadow` and `refract`, when the window
+clear's kick had completed by the depth pass, the usual case), the verdict
+`33 ran / 0 failed` as before, and by eye on the display the horse's shadow
+on the ground in `shadow` and the refracted floor in `refract`. A `-16` line
+still there is a finding: the board's kick order differs from the host's
+(`tools/cts/log/hostharness/glmark2/FINDINGS.md`, "Diagnosis of rows
+23-24").
 
 Expected: combined mustpass 0 fail, the `fail` column of all 17 image rows 0
 and of `ms4` 0, no case worse than at `d60b9d76` (17,141 pass / 0 fail / 19

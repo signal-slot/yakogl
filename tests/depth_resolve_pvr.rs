@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! glmark2 `shadow` and `refract` on the PowerVR: the depth texture the
-//! shadow pass renders is sampled with stale depth (docs/HANDOFF.md, known
-//! defects, pvr-depth-resolve; tools/cts/log/hostharness/glmark2/FINDINGS.md
-//! rows 23 and 24).
+//! shadow pass renders was sampled with stale depth (pvr-depth-resolve,
+//! fixed on the host; tools/cts/log/hostharness/glmark2/FINDINGS.md rows 23
+//! and 24).
 //!
 //! The sequence is scene-shadow.cpp's, one frame at a time:
 //!
@@ -33,14 +33,17 @@
 //! logs `the backend did not resolve its depth (-16)` once per frame of
 //! shadow and refract (FINDINGS.md).
 //!
-//! The cause (FINDINGS.md): the core stamps the kick that renders into a
-//! texture (`framebuffer::stamp_target_use`, src/gl/framebuffer.rs:186) with
-//! `backend::kick_id()` while it builds the draw, BEFORE the back end sees
-//! it. When the draw starts a new frame the back end first submits the
-//! frame that is open, so the draw renders as the next kick, `stamp + 1`, and
-//! the stamp names the kick that was just submitted. Completed, it is not
-//! pending: `resolve_depth` (src/gl/texture.rs:637, test at :654) neither flushes nor
-//! waits, the back end still has the frame open, and it answers -EBUSY.
+//! The cause (FINDINGS.md): the core stamped the kick that renders into a
+//! texture (`framebuffer::stamp_target_use`) with `backend::kick_id()` while
+//! it built the draw, BEFORE the back end saw it. When the draw starts a new
+//! frame the back end first submits the frame that is open, so the draw
+//! renders as the next kick, `stamp + 1`, and the stamp named the kick that
+//! was just submitted. Completed, it was not pending: `resolve_depth`
+//! neither flushed nor waited, the back end still had the frame open, and it
+//! answered -EBUSY. The fix: the core notes where a draw's stamps live and
+//! moves them to `kick_id()` once the back end has recorded the draw
+//! (`draw::draw_stamp`, `draw::restamp_draw`), which then names the kick
+//! holding it.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test depth_resolve_pvr
@@ -365,6 +368,12 @@ fn setup(w: i32, h: i32) -> Scene {
 /// One frame of scene-shadow.cpp. `clear_window`: the frame starts with a
 /// `glClear` of the window surface, as glmark2's canvas does.
 fn frame(s: &Scene, clear_window: bool) {
+    depth_pass(s, clear_window);
+    ground(s);
+}
+
+/// The frame up to the end of the depth pass.
+fn depth_pass(s: &Scene, clear_window: bool) {
     // SAFETY: plain GL calls on the current context.
     unsafe {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -380,6 +389,14 @@ fn frame(s: &Scene, clear_window: bool) {
         glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        assert_eq!(glGetError(), GL_NO_ERROR);
+    }
+}
+
+/// The rest of the frame: back to the window, the ground sampling the depth.
+fn ground(s: &Scene) {
+    // SAFETY: plain GL calls on the current context.
+    unsafe {
         /* DepthRenderTarget::disable, then the ground */
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, 64, 64);
@@ -415,54 +432,52 @@ fn no_frame_open_before_the_depth_pass_resolves() {
 
 /// glmark2 shadow: the window clear is a kick of its own and the frame open
 /// on the window surface when the depth pass draws. The back end submits it
-/// at the depth pass's first draw (after the core stamped `kick_id()` = that
-/// very kick) and the depth pass opens the next one. At the sampling draw
-/// the stamp is complete, `resolve_depth` waits for nothing, and the back end
-/// answers -EBUSY: the texels keep the previous frame's depth, or none.
-///
-/// Remove the `ignore` when `resolve_depth` (src/gl/texture.rs:669) retries
-/// after -EBUSY, or the stamp is taken after the back end's draw
-/// (src/gl/draw.rs:2011, after `backend::draw`).
+/// at the depth pass's first draw and the depth pass opens the next one; the
+/// core moves the depth pass's stamp there, so at the sampling draw the
+/// stamp is pending, `resolve_depth` submits and waits for it, and the one
+/// resolve succeeds (no -EBUSY, no retry).
 #[test]
-#[ignore = "BUG: stale kick stamp - stamp_target_use (src/gl/framebuffer.rs:186) takes kick_id() before the back end splits the frame; fix at resolve_depth src/gl/texture.rs:669 (flush+finish and retry on -EBUSY)"]
 fn window_clear_before_the_depth_pass_resolves() {
     let (_g, ctx) = start();
     let s = setup(16, 16);
     for f in 0..3 {
         rig(|r| r.resolves.clear());
         frame(&s, true);
-        /* (a fix may ask twice, -EBUSY and then 0: the answer that counts is the last) */
-        assert_eq!(rcs().last(), Some(&0), "frame {f}: {:?}", rig(|r| r.resolves.clone()));
+        assert_eq!(rcs(), vec![0], "frame {f}: {:?}", rig(|r| r.resolves.clone()));
         assert_eq!(rig(|r| r.sampled_texel), Some(RESOLVED), "frame {f}");
     }
     stop(ctx);
 }
 
-/// The same sequence, asserting what happens today so the cause cannot
-/// drift unseen: every frame's single resolve is -EBUSY (the harness's
-/// `(-16)`, once a frame) and the sampling draw reads texels never written.
-/// When the fix lands this fails: remove the `ignore` of the test above and
-/// delete this one.
+/// The stamp itself: after the depth pass the depth texture's render-into
+/// stamp is the kick the back end has open on the depth id (the depth
+/// pass's), not the window clear's, which the depth pass's draw submitted.
+/// Before the fix it was the clear's (`last_fence`), already complete.
 #[test]
-fn window_clear_before_the_depth_pass_today() {
+fn the_depth_pass_stamp_names_the_kick_that_renders_it() {
     let (_g, ctx) = start();
     let s = setup(16, 16);
     for f in 0..3 {
-        rig(|r| r.resolves.clear());
-        frame(&s, true);
-        let r = rig(|r| r.resolves.clone());
-        assert_eq!(rcs(), vec![-EBUSY], "frame {f}: {r:?}");
-        assert_ne!(rig(|r| r.sampled_texel), Some(RESOLVED), "frame {f}: the sampling draw saw resolved depth");
+        let fence_before = rig(|r| r.last_fence);
+        depth_pass(&s, true);
+        // SAFETY: the context `start` made, current.
+        let stamp = texture_target_use(unsafe { &*ctx.0 }, s.tex as usize);
+        let (last_fence, open) = rig(|r| (r.last_fence, r.open));
+        assert_eq!(last_fence, fence_before + 1, "frame {f}: the window clear was submitted by the depth pass's draw");
+        assert!(open.is_some_and(|o| o.1 != 0), "frame {f}: the depth pass's frame is open: {open:?}");
+        assert_eq!(stamp, last_fence + 1, "frame {f}: the stamp names the open frame, not the clear ({last_fence})");
+        // SAFETY: the stand-in's own entry point.
+        assert!(unsafe { s_kick_pending(stamp) }, "frame {f}");
+        ground(&s);
     }
     stop(ctx);
 }
 
-/// Candidates of the first guess, ruled out: the id the core hands to
-/// `depth_resolve` is the id the draws carried (an -EBUSY needs
-/// `frame_zs == id`, which an unequal id would never give), `resolve_depth`
-/// does run before the sampling draw (one call a frame), and the kick it
-/// read was complete (no flush or finish between the sampling draw's start
-/// and the resolve: the stamp is the one that went stale, not the wait).
+/// Candidates of the first guess, ruled out when the defect was diagnosed
+/// (the stamp was the one that went stale, not the id or the wait): the id
+/// the core hands to `depth_resolve` is the id the draws carried (an -EBUSY
+/// needs `frame_zs == id`, which an unequal id would never give), and
+/// `resolve_depth` does run before the sampling draw (one call a frame).
 #[test]
 fn ruled_out_candidates() {
     let (_g, ctx) = start();
