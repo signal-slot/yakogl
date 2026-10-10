@@ -128,7 +128,7 @@ copy_from_origin = ["driver/src/fw/pvr_fw_blob.h"]
 tools = [
   { name = "cargo", version = ">=1.88", check = "cargo --version", install = "rustup (rust-version 1.88 in Cargo.toml; stable toolchain)" },
   { name = "rustup-target-aarch64-unknown-none", check = "rustup target list --installed | grep -qx aarch64-unknown-none", install = "rustup target add aarch64-unknown-none" },
-  { name = "rustup-target-aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)" },
+  { name = "rustup-target-aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)", build = "rustup target add aarch64-unknown-none-softfloat" },
   { name = "cc", check = "cc --version", install = "distro package gcc or clang (C11 host compiler; the gate also uses nm, objcopy, sha256sum, cmp, awk)" },
   { name = "clang", check = "clang --version", install = "distro package clang: build.rs compiles the C wrappers of the aarch64-unknown-none rows with clang unless CC_aarch64-unknown-none names another cross compiler, so the three aarch64 check rows and the 'no Mesa reference' control build fail without it" },
   # No version requirement: Mesa pins none, and ccfarm reads a requirement
@@ -137,7 +137,9 @@ tools = [
   { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
   { name = "libclang", check = "python3 -c 'import ctypes.util, sys; sys.exit(0 if ctypes.util.find_library(\"clang\") else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
   { name = "expat-zlib-dev", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
-  { name = "west", check = "west --version", install = "pip install west in a venv (WEST_VENV); the Zephyr SDK 1.0.1 at ZEPHYR_SDK_INSTALL_DIR; the workspace from west.yml at ZEPHYR_WS" },
+  # west lives in the WEST_VENV venv (env_names above), not on PATH: the
+  # check looks there first. The build makes that venv when it is missing.
+  { name = "west", check = "\"${WEST_VENV:-/nonexistent}/bin/west\" --version 2>/dev/null || west --version", install = "pip install west in a venv (WEST_VENV); the Zephyr SDK 1.0.1 at ZEPHYR_SDK_INSTALL_DIR; the workspace from west.yml at ZEPHYR_WS", build = "test -n \"${WEST_VENV:-}\" && python3 -m venv \"$WEST_VENV\" && \"$WEST_VENV/bin/pip\" install west" },
   { name = "pco_shc", check = "test -x \"$PCO_SHC\"", install = "tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> <build dir> (needs clang/LLVM, libclc, SPIRV-LLVM-Translator, spirv-dis; see the script's header), then PCO_SHC=<build dir>/mesa-26.2.1/build/src/imagination/vulkan/pco_shc; it must print content id f537fc86b41f", heavy = true },
 ]
 
