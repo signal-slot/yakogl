@@ -597,7 +597,7 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      dEQP's `shaders/*.test` corpus in `docs/es3-shaderc-coverage.md`
      (PowerVR 3,453 / GC7000UL 3,451 / V3D 3,453 of 3,461 expected-build
      programs build; every expected-fail program refused). Host-proven: `trunc` on the PowerVR and the V3D, the
-     V3D's integer shifts, min/max, `~` and unsigned orderings (gl_test 196
+     V3D's integer shifts, min/max, `~` and unsigned orderings (gl_test 199
      es3trunc, not yet run on a board; dEQP `shaders.operator` trunc, 24
      programs); on the PowerVR a bias on a 3D texture, `textureProj` with a
      level, a bias, in a vertex shader, on a 3D texture or a 2D shadow

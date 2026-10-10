@@ -1,5 +1,5 @@
 #version 300 es
-/* gl_test 196: es3trunc_fs.frag's arithmetic in the vertex stage. */
+/* gl_test 199: es3trunc_fs.frag's arithmetic in the vertex stage. */
 in vec4 a_pos;
 uniform float u_x, u_q, u_a, u_b;
 out vec4 v;

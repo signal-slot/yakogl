@@ -3730,7 +3730,7 @@ mod tests {
             [(!i) as f32, f32::from(u8::from(u < 5)), f32::from(u8::from(u <= 5)), (!u & 7) as f32]
         });
         assert!(input(0)[0] < 0.0 && input(15)[0] > 0.0 && input(0)[1] < 0.0, "both signs");
-        /* gl_test 196's fragment shader, from the file it compiles, on the
+        /* gl_test 199's fragment shader, from the file it compiles, on the
          * case's v = (2.75, -6, 200, 0): (0.5, 0.25, 45/64, 50/64) */
         run_es3_fs(
             include_str!("../../../../tools/shaders/gltest/es3trunc_fs.frag"),

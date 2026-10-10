@@ -3900,7 +3900,7 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
     .unwrap();
 }
 
-/// gl_test case 196's two programs, on the host, from the files it compiles
+/// gl_test case 199's two programs, on the host, from the files it compiles
 /// (tools/shaders/gltest/es3trunc_*): `trunc` of 2.75 and -2.75 and the
 /// integer shifts `(-6 >> 1) - (-6 << 3)` and `200u >> 2u`, computed in the
 /// fragment stage from the varying (es3trunc_fs.frag) and in the vertex
@@ -3908,14 +3908,14 @@ fn gl_test_case_191_varying_products_fuse_on_the_host() {
 /// (0.5, 0.25, 45/64, 50/64) on the byte model.
 #[test]
 #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
-fn gl_test_case_196_trunc_and_shifts_on_the_host() {
+fn gl_test_case_199_trunc_and_shifts_on_the_host() {
     use yakogl::shaderc::*;
     let fs = include_str!("../tools/shaders/gltest/es3trunc_fs.frag");
     let vsc = include_str!("../tools/shaders/gltest/es3trunc_vsc.vert");
     let gl_test = include_str!("../driver/tools/pvrlab/gl_test.c");
     assert!(
         gl_test.contains("gl_test_es3trunc_fs_src") && gl_test.contains("gl_test_es3trunc_vsc_vs_src"),
-        "case 196 links gltest/es3trunc_fs.frag and gltest/es3trunc_vsc.vert"
+        "case 199 links gltest/es3trunc_fs.frag and gltest/es3trunc_vsc.vert"
     );
     let want = [0.5f32, 0.25, 45.0 / 64.0, 50.0 / 64.0];
     let rgba = |c: [f32; 4]| c.iter().enumerate().map(|(i, x)| ((x * 255.0 + 0.5) as u32) << (8 * i)).sum::<u32>();
@@ -3947,7 +3947,7 @@ fn gl_test_case_196_trunc_and_shifts_on_the_host() {
         let out = run_binary(&image, &inp, true).expect("runs");
         let got = *out.get(&0).expect("a colour");
         let close = (0..4).all(|k| ((got >> (8 * k)) & 0xff).abs_diff((rgba(want) >> (8 * k)) & 0xff) <= 1);
-        assert!(close, "fragment: {got:#010x}, case 196 wants {:#010x}", rgba(want));
+        assert!(close, "fragment: {got:#010x}, case 199 wants {:#010x}", rgba(want));
     })
     .unwrap();
     store::with_scratch(|a| {

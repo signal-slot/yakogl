@@ -8281,10 +8281,10 @@ static const char gl_test_unipad_vs_src[] =
 	"uniform vec2 u_scale;\n"
 	"void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }\n";
 
-/* trunc() on both signs and integer shifts, per pixel and per vertex (case 196). */
+/* trunc() on both signs and integer shifts, per pixel and per vertex (case 199). */
 static const char gl_test_es3trunc_fs_src[] =
 	"#version 300 es\n"
-	"/* gl_test 196: trunc() on both signs, and integer shifts (arithmetic on a\n"
+	"/* gl_test 199: trunc() on both signs, and integer shifts (arithmetic on a\n"
 	" * negative int, logical on a uint), of values a varying carries exactly. */\n"
 	"precision highp float;\n"
 	"precision highp int;\n"
@@ -8306,7 +8306,7 @@ static const char gl_test_es3trunc_vs_src[] =
 
 static const char gl_test_es3trunc_vsc_vs_src[] =
 	"#version 300 es\n"
-	"/* gl_test 196: es3trunc_fs.frag's arithmetic in the vertex stage. */\n"
+	"/* gl_test 199: es3trunc_fs.frag's arithmetic in the vertex stage. */\n"
 	"in vec4 a_pos;\n"
 	"uniform float u_x, u_q, u_a, u_b;\n"
 	"out vec4 v;\n"

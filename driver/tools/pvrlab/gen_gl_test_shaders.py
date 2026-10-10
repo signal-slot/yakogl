@@ -297,7 +297,7 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                 ('gl_test_unipad_fs_src', 'gltest/unipad_fs.frag'),
                 ('gl_test_unipad_vs_src', 'gltest/unipad_vs.vert'),
                 ('gl_test_es3trunc_fs_src', 'gltest/es3trunc_fs.frag',
-                 'trunc() on both signs and integer shifts, per pixel and per vertex (case 196).'),
+                 'trunc() on both signs and integer shifts, per pixel and per vertex (case 199).'),
                 ('gl_test_es3trunc_vs_src', 'gltest/es3trunc_vs.vert'),
                 ('gl_test_es3trunc_vsc_vs_src', 'gltest/es3trunc_vsc.vert'),
                 ('gl_test_es3trunc_vary_fs_src', 'gltest/es3trunc_vary_fs.frag'),
@@ -339,7 +339,7 @@ ES100_TWINS = {
 # every case that mentions one of the fourteen ES 3.00 symbols, read out of
 # gl_test.c's own text (case 54 is called es3chain and is absent from this list
 # because it draws with the base pair, which does have ES 1.00 twins).
-ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 196)
+ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199)
 
 
 def es300_cases_used():

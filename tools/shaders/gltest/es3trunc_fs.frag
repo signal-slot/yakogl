@@ -1,5 +1,5 @@
 #version 300 es
-/* gl_test 196: trunc() on both signs, and integer shifts (arithmetic on a
+/* gl_test 199: trunc() on both signs, and integer shifts (arithmetic on a
  * negative int, logical on a uint), of values a varying carries exactly. */
 precision highp float;
 precision highp int;
