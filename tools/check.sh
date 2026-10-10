@@ -1427,11 +1427,22 @@ mesa_table_repro() {
     tail -20 "$log"
     return 1
   fi
-  cmp "$out" tests/reference/blobs.rs || {
+  # The rows are the reference. The header's `// toolchain:` line names the
+  # pco_shc and glslang BINARIES (the first 12 hex digits of their SHA-256),
+  # and two hosts' builds of one Mesa source differ in that hash while every
+  # USC row is the same (tools/pco_shc/build_pco_shc.sh, 2026-10-07 vs
+  # 2026-10-10). So the ids are printed as provenance and the rows are
+  # compared byte for byte; a pco_shc whose rows differ still fails here.
+  local recorded here
+  recorded=$(grep -m1 '^// toolchain: ' tests/reference/blobs.rs | cut -c15-)
+  here=$(grep -m1 '^// toolchain: ' "$out" | cut -c15-)
+  cmp <(grep -v '^// toolchain: ' "$out") <(grep -v '^// toolchain: ' tests/reference/blobs.rs) || {
     echo "the table glsl2usc.sh makes from precompiled.list is not tests/reference/blobs.rs (log: $log)"
+    echo "  recorded toolchain: $recorded"
+    echo "  this host:          $here"
     return 1
   }
-  echo "$(grep -c '^    ShcBlob {$' "$out") rows, byte for byte"
+  echo "$(grep -c '^    ShcBlob {$' "$out") rows, byte for byte (recorded $recorded; this host $here)"
 }
 if [ "$QUICK" -eq 0 ]; then
   for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do

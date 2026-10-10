@@ -140,7 +140,7 @@ tools = [
   # west lives in the WEST_VENV venv (env_names above), not on PATH: the
   # check looks there first. The build makes that venv when it is missing.
   { name = "west", check = "\"${WEST_VENV:-/nonexistent}/bin/west\" --version 2>/dev/null || west --version", install = "pip install west in a venv (WEST_VENV); the Zephyr SDK 1.0.1 at ZEPHYR_SDK_INSTALL_DIR; the workspace from west.yml at ZEPHYR_WS", build = "test -n \"${WEST_VENV:-}\" && python3 -m venv \"$WEST_VENV\" && \"$WEST_VENV/bin/pip\" install west" },
-  { name = "pco_shc", check = "test -x \"$PCO_SHC\"", install = "tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> <build dir> (needs clang/LLVM, libclc, SPIRV-LLVM-Translator, spirv-dis; see the script's header), then PCO_SHC=<build dir>/mesa-26.2.1/build/src/imagination/vulkan/pco_shc; it must print content id f537fc86b41f", heavy = true },
+  { name = "pco_shc", check = "test -x \"$PCO_SHC\"", install = "tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> <build dir> (needs clang/LLVM, libclc, SPIRV-LLVM-Translator, spirv-dis; see the script's header), then PCO_SHC=<build dir>/mesa-26.2.1/build/src/imagination/vulkan/pco_shc; the gate compares the USC rows it makes with tests/reference/blobs.rs, not the binary's hash", heavy = true },
 ]
 
 # Steps after landing. Board runs are the project's proofs: every result in

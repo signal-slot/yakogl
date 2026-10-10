@@ -490,6 +490,24 @@ fn stat_tool_id(p: &str) -> String {
     content_id(p)
 }
 
+/// A bare command name (`glslangValidator`, the GLSLANG default) names the
+/// file the shell would run: the first match on PATH. Anything with a `/`
+/// is a path and stays as it is. Without this the identity of a tool named
+/// by command was `?missing` while the tool itself ran fine.
+fn resolve_on_path(p: &str) -> std::path::PathBuf {
+    if p.contains('/') {
+        return std::path::PathBuf::from(p);
+    }
+    std::env::var_os("PATH")
+        .map(|v| {
+            std::env::split_paths(&v)
+                .map(|d| d.join(p))
+                .find(|f| f.is_file())
+                .unwrap_or_else(|| std::path::PathBuf::from(p))
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from(p))
+}
+
 /// A tool's identity: the first 12 hex digits of its contents' SHA-256.
 ///
 /// It used to be `size:mtime`, which is not an identity. Two builds of
@@ -501,7 +519,7 @@ fn stat_tool_id(p: &str) -> String {
 /// An unreadable tool is reported as `?<reason>` rather than as a constant,
 /// so it cannot silently equal another unreadable tool.
 fn content_id(p: &str) -> String {
-    match std::fs::read(p) {
+    match std::fs::read(resolve_on_path(p)) {
         Ok(b) => {
             let d = Sha256::digest(&b);
             d.iter().take(6).map(|x| format!("{x:02x}")).collect()
@@ -1720,5 +1738,23 @@ mod tests {
             !text[block..close].contains("sampler"),
             "and it is not inside the block, which would not compile: {text}"
         );
+    }
+}
+
+#[cfg(test)]
+mod content_id_tests {
+    use super::*;
+
+    #[test]
+    fn content_id_resolves_a_bare_command_through_path() {
+        // `sh` is on every PATH the tests run under; its id must be the hash of
+        // the file the shell would run, not "?missing".
+        let bare = content_id("sh");
+        assert!(!bare.starts_with('?'), "bare command not resolved: {bare}");
+        let full = resolve_on_path("sh");
+        assert!(full.is_absolute(), "{}", full.display());
+        assert_eq!(bare, content_id(full.to_str().unwrap()));
+        // A path with a slash is taken as it is.
+        assert_eq!(content_id("/nonexistent/dir/sh"), "?missing");
     }
 }
