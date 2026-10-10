@@ -3,16 +3,18 @@
 #
 # The full gate: every row of tools/check.sh, on every push to main and
 # nightly. A landing runs only the rows its diff reaches (tools/land.sh,
-# `check.sh --changed`); this is where the rest run.
+# `check.sh --local`); this is where the rest run.
 #
 # It needs what GitHub's hosted runners do not have: the PowerVR firmware
 # blob, Mesa's pco_shc, a west workspace with the Zephyr SDK, hal_nxp, a
-# glmark2 tree. So it runs on a self-hosted runner labelled `yakogl-gate`
-# whose environment carries them (the runner's `.env` file, or the service's
-# environment: PVR_FW_BLOB, PCO_SHC, GLSLANG, GLSL2USC_CACHE, ZEPHYR_WS,
-# HAL_NXP_DIR, WEST_VENV, ZEPHYR_SDK_INSTALL_DIR, GLMARK2_SRC, and a TMPDIR
-# under the runner's home). None of those values live in this repository.
-# Until such a runner is registered the workflow queues and runs nothing.
+# glmark2 tree. So it runs on a self-hosted runner, and the runner is a
+# generic machine: it carries no project environment of its own. Everything
+# this job needs is named here, by the layout ccfarm installs a project's
+# dependencies in, ~/.local/share/ccfarm/deps/yakogl (a host that keeps them
+# elsewhere links them into that layout), and `tools/setup-gate-host.sh
+# --check` refuses the job when a tool is missing, so a gap never looks like
+# a pass. Another project uses the same runners with its own workflow and its
+# own deps directory. No value in this file is secret.
 name: gate
 
 on:
@@ -25,22 +27,54 @@ on:
 permissions:
   contents: read
 
+# One run per commit; two runners can gate two commits at once.
 concurrency:
-  group: gate
+  group: gate-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
   check:
-    runs-on: [self-hosted, yakogl-gate]
-    timeout-minutes: 120
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 180
+    env:
+      GIT_CONFIG_GLOBAL: /dev/null
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: the project environment (ccfarm's dependency layout)
+        run: |
+          deps="$HOME/.local/share/ccfarm/deps/yakogl"
+          test -d "$deps" || { echo "no dependency layout at $deps on $(hostname)"; exit 1; }
+          {
+            echo "ZEPHYR_WS=$deps/zephyr-ws"
+            echo "HAL_NXP_DIR=$deps/zephyr-ws/modules/hal/nxp"
+            echo "WEST_VENV=$deps/zephyr-ws/.venv"
+            echo "ZEPHYR_SDK_INSTALL_DIR=$deps/zephyr-sdk-1.0.1"
+            echo "PCO_SHC=$deps/PCO_SHC/pco_shc"
+            echo "GLSLANG=$(command -v glslangValidator || echo /usr/bin/glslangValidator)"
+            echo "GLSL2USC_CACHE=$deps/glsl2usc-cache"
+            echo "GLMARK2_SRC=$deps/glmark2-src"
+            echo "TMPDIR=$HOME/.cache/yakogl/tmp"
+            echo "CARGO_TARGET_DIR=$HOME/.cache/yakogl/ci-target"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.cache/yakogl/tmp" "$HOME/.cache/yakogl/ci-target" "$deps/glsl2usc-cache"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          [ -d "$deps/hosttools/bin" ] && echo "$deps/hosttools/bin" >> "$GITHUB_PATH"
+          for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done
+          true
       - name: the firmware blob (never committed)
         run: |
-          test -r "$PVR_FW_BLOB" || { echo "PVR_FW_BLOB=$PVR_FW_BLOB is not readable on this runner"; exit 1; }
-          mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/
+          blob="$HOME/.local/share/ccfarm/deps/yakogl/pvr_fw_blob.h"
+          [ -r "$blob" ] || blob="$HOME/com/github/signal-slot/yakogl/driver/src/fw/pvr_fw_blob.h"
+          test -r "$blob" || { echo "no PowerVR firmware blob on $(hostname) (driver/tools/mkfwblob.sh)"; exit 1; }
+          mkdir -p driver/src/fw && cp "$blob" driver/src/fw/
+      - name: the gate host has every tool
+        run: tools/setup-gate-host.sh --check
       - name: tools/check.sh (every row)
-        run: tools/check.sh 2>&1 | tee build/gate-ci.log
+        run: |
+          mkdir -p build
+          tools/check.sh 2>&1 | tee build/gate-ci.log
+          test "${PIPESTATUS[0]}" -eq 0
       - name: the gate log
         if: always()
         uses: actions/upload-artifact@v4

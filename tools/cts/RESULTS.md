@@ -17119,3 +17119,152 @@ No Pi 4 measurement exists for this day: the nuc has no UART path to the board. 
 figures stay those of `fe5e8e73` (whole tree, 25 cube failures, 2026-10-01) and `afa12e9b`
 (gl_test 12 / 12); the host fix for the 25 cube cases (`ec5ba4f`) and the Pi 4 items of plan
 #2 are not board-confirmed.
+
+## AM62P: glmark2 (GM image) on `f2a13877`: the depth pass resolves (2026-10-11)
+
+`tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, the common set's GM image built from origin/main
+`f2a13877` (`PVR_SAMPLE_TABLE=c95547a1`, image sha256 prefix `52ffe16d`). Record
+`records/am62p/gm-f2a13877/20261011-0008-gm-f2a13877-52ffe16d`: verdict `done`, 0 resets, back
+after 419 s, one `GLMARK2` record (`594b1201 fc3f01d1 2184003f 03200258`).
+
+**33 scenes ran, 0 failed, 0 unsupported; glmark2 Score 465** (800x600 on-screen). The
+console has **0 lines `the backend did not resolve its depth`**; at `8e7257f8` (2026-10-04,
+score 457) `shadow` and `refract` logged one per rendered frame. This is the board
+confirmation of pvr-depth-resolve (the draw's stamps move to the kick holding it). The
+capture holds no per-scene picture, so the shadow and the refracted floor were not looked at
+here.
+
+## i.MX8MP: gl_test case 44 on `f2a13877` still fails (2026-10-11)
+
+`tools/board.sh imx8mp`, `BOARD_BOOT=uboot-mmc`, `gc_gl_test` with `CONFIG_GL_TEST_CASES="44"`
+built from origin/main `f2a13877`. Record
+`records/imx8mp/gc44-f2a13877/20261011-0032-gc44-f2a13877-81722382` (SNVS record, no
+console): verdict `failed`, `CASE` record `594b010e 002c0302 40042814 40043904`: **case 44
+(`es3hdr`) check 3 status 2, got `0x40042814` want `0x40043904`.**
+
+`466e1b00`'s two fixes (the `PE_COLOR_FORMAT` write mask, RGBA16F textures sampled from a
+4x4-tiled copy) did not move it. `0x40042814` is texel (5,0)'s colour; `0x40043904` is (7,0)'s,
+the value the linear sampler reads back. The same wrong texel reads through both sampling
+paths, so it is not the sampler: the pixel engine (or the rasteriser) stores (5,0)'s colour at
+(7,0) of an 8-wide linear RGBA16F target. The ranked hypotheses and the fix each calls for are
+in `src/vivante/VIVANTE_NOTES.md`, "RGBA16F targets"; a layout probe (case 44's check 3,
+`hdr_layout_probe`) is built but has not run on a board.
+
+## Pi 4: gl_test on `1cf946a9` and the six cube rows (2026-10-11)
+
+`tools/board.sh pi4`, tryboot, images built from origin/main `1cf946a9` (the V3D non-seamless
+cube level fix on `f2a13877`'s tree).
+
+- `v3d_gl_test`: **12 of 12 passed** (2699 ms), verdict `done`, 0 resets, record
+  `records/pi4/gt-1cf946a9/20261011-0152-gt-1cf946a9-4555048a` (build line `v3d_gl_test: build
+  1cf946a9`). The earlier reading was `afa12e9b`, 12 of 12.
+- The six rows whose fragment cube look-ups changed, `records/pi4/deqp-1cf946a9/rows`: RT 200,
+  S5f 100, T2 248, T3 304, T4 69, TF 20 cases, each verdict `done`, 0 resets, each image's own
+  counters all passed. Tally `build/pi4-rows-tally-1cf946a9.txt`: **934 mustpass cases in the
+  rows' filters, 934 pass, 0 fail, 0 not supported, 0 lost** (shaders 315, texture 619; 941 case
+  lines in all, 7 of them outside the mustpass list). T3's six `texture.mipmap.cube.*.linear_*`
+  and T4's three `texture.size.cube.15x15_{l8,rgb888,rgba8888}`, the nine that failed on
+  `a27d69c0`, pass.
+
+## Pi 4: the whole dEQP-GLES2 tree, 0 fail (2026-10-10 and 10-11)
+
+Three records, all main builds:
+
+1. the whole tree on `a27d69c0`, 29 images, `records/pi4/deqp-a27d69c0/full`, tally
+   `build/pi4-tally-a27d69c0.txt` (written 2026-10-10 evening): of the 17,165 mustpass cases,
+   17,131 with a result: **17,083 pass, 9 fail, 34 NotSupported, 3 QualityWarning, 2
+   CompatibilityWarning, 34 without a result** (all in F1, below). The 9 fail are exactly the
+   cases of the previous section: T3 `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,
+   linear_nearest}` and T4 `texture.size.cube.15x15_{l8,rgb888,rgba8888}`. The other 16 vertex
+   cube cases of the 2026-10-01 tree's 25 and `shaders.texture_functions.vertex.texturecubelod`
+   (19 in all) pass; so do the 27 `fbo...attachment_combinations` cases and
+   `shaders.fragdata.invalid_assign_to_1`. NotSupported 34: `clip_control` 8, `multisample` 16,
+   `multisampled_render_to_texture.readpixels` 1, `negative_api.texture.compressedtexsubimage2d_*`
+   9. The 3 QualityWarnings are the `rasterization.interpolation` line cases, the 2
+   CompatibilityWarnings `flush_finish.flush` and `flush_wait`. Rows E and NS ended
+   `no_end_line` (the image's end line did not reach the log); every case of both has its result
+   line.
+2. the nine on `1cf946a9` (previous section): 9 -> 0 fail.
+3. F1 (`fragment_ops.*`, 1,923 cases): the 34 cases with no result on `a27d69c0`
+   (`blend.equation_src_func_dst_func.reverse_subtract_src_alpha_*` and neighbours, #379-#412 of
+   the image) pass in the rerun `records/pi4/deqp-a27d69c0/F1-rerun2/20261010-2130-F1-d06b7b4f`
+   (all 34 by name, `deqp: Pass`; the image's counters read 1,923 cases, P 1,923 F 0). The rerun's
+   capture lost 260 other cases (#870-#1129), which the image's counters count as passed and the
+   tally reads as Lost. (`records/pi4/deqp-a27d69c0/F1-rerun` holds a rerun of image E, 453
+   passes, not of F1.)
+
+**The Pi 4 dEQP-GLES2 mustpass stands at 17,126 pass / 0 fail / 34 NotSupported / 5 warnings (3
+QualityWarning, 2 CompatibilityWarning) of 17,165**: 17,083 + 9 + 34 = 17,126 passes. Against
+2026-10-01 (`fe5e8e73`, 17,075 / 25 / 62 / 3): the 25 cube failures are 0, and the 27 fbo cases and
+fragdata that were NotSupported pass (62 -> 34). It is composed of the three records above, not
+one image set of one commit; a single-commit tree on `1cf946a9` has not run.
+
+**Capture loss.** The usb1 TCP serial bridge drops a burst of console lines when its connection
+stalls (F1 lost #379-#412 once and #870-#1129 on the rerun; the lines never reach the log, the
+image ran the cases). `tools/cts/deqp-uart-tally.py` now reads such cases as Lost, and
+`tools/board.sh` a run as `done_lossy`, instead of NoResult / `done`; the image's own counters
+decide what the lost cases were. The fix belongs to the bridge firmware.
+
+## AM62P: the whole dEQP-GLES3 tree on `f2a13877`, 28 images (2026-10-11)
+
+`tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, `BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt`, 28
+images of `tools/cts/am62p-gles3-tree.txt` built from origin/main `f2a13877` (ES 3.0 reported).
+Records `records/am62p/deqp-gles3-f2a13877/full` (images 1 to 20), `full2` (image 11 again,
+image 21) and `full3` (images 22 to 28); tally `build/am62p-gles3-tally-f2a13877.txt`
+(`deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --table --depth 2` over the three
+directories; the Lost-aware tally of `1cf946a9` gives the same table).
+
+**Of 42,810: 32,669 pass, 5,549 fail, 2,318 NotSupported, 185 QualityWarning, 2,089 without a
+result** (40,721 with a result). The previous tree, `c4ccc966` (2026-10-10, 24 of 25 images): 30,431
+/ 7,011 / 2,274 / 5 / 3,088 none (1 other).
+
+| group | fail on `f2a13877` | fail on `c4ccc966` |
+|---|---:|---:|
+| shaders | 412 | 1,603 |
+| texture | 1,752 (+ 1,646 NotSupported) | 1,451 (+ 1,586) |
+| fragment_ops | 1,109 | 1,111 |
+| fbo | 872 | 1,000 |
+| transform_feedback | 640 (+ 191 NotSupported) | 675 (+ 207) |
+| fragment_out | 595 | 619 |
+| attribute_location | 48 | 48 |
+| vertex_arrays | 41 | 41 |
+| state_query | 26 | 35 |
+| rasterization | 21 | 21 |
+| draw | 14 | 50 |
+| implementation_limits | 11 | 9 |
+| instanced | 6 | 6 |
+| lifetime | 1 | 1 |
+| uniform_api | 1 | 1 |
+| buffer | 0 | 300 |
+| read_pixels | 0 | 24 |
+| default_vertex_attrib | 0 | 16 |
+
+(The 5,549 are these rows' sum; texture has 180 QualityWarnings, `rasterization` 5.) The texture
+fail count rose because 1,447 more of its cases ran (none 1,530 -> 83).
+
+**Two images hang the GPU.** Image 20 (`texture.filtering.3d.formats.*`) and image 21
+(`texture.filtering.3d.sizes.*`) each ran 13 cases and began the 14th, then stopped:
+`texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear` and
+`texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear`. The board comes back only with the
+RTI reset: runner verdict `no_reset` at 602 s (image 20) and 612 s (image 21) with
+`RUN_BOUND=720 RETURN_BOUND=240`, no result in the record. Image 11 completes with 4 resets
+(`done_with_resets`), both times (`full`, `full2`), all 1,818 cases with a result. Images 1 to 10,
+12 to 19 and 22 to 28: `done`, 0 resets.
+
+**The 2,089 without a result**, accounted by image: image 5 ended at
+`lifetime.attach.deleted_output.buffer_transform_feedback` (`complete=0`, "Test run was
+ABORTED!"; transform-feedback capture is not in this tree): its tail, `lifetime` 48, `multisample`
+64, `negative_api` 312, `occlusion_query` 62, `pbo` 49, `polygon_offset` 20, `prerequisite` 3 =
+558; image 7 ended at `shaders.builtin_functions.precision.clamp.highp_fragment.vec3`, a
+`ResourceError` (a 24,384-vertex draw "does not fit an empty frame: the general arena (1048576
+bytes) is too small"): `builtin_functions` 987, `constant_expressions` 340, `conditionals` 41,
+`builtin_variable` 29 = 1,397; the hung images 20 and 21, `texture.filtering` 83; and **51 Lost in
+capture** (image 25, `transform_feedback.basic_types`: the image ran 2,421 cases and the log has
+2,370 result lines; by the image's done counters the lost cases were 35 Fail and 16 NotSupported,
+but they cannot be placed, so they stay in the none column). The AM62P's serial bridge can drop a
+burst too, not only the Pi 4's. Lost cases are cases the board ran: they are counted neither as
+failures nor as NoResult.
+
+Not run on a board: the pending landing (transform-feedback capture on the CPU, colour
+`glBlitFramebuffer` on the CPU, buffer mapping and PBO fixes, sRGB on the PowerVR) is host-only;
+none of these numbers is a result of it.
