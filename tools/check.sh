@@ -116,11 +116,20 @@ gap() {
   rc=1
 }
 
+# Every row ends with the seconds it took, so a gate log says where the time
+# went: measured 2026-10-10, a full gate is about 45 min alone and 90 min
+# beside four cargo builds on this 8-core host, and no row carried a time, so
+# nothing said which rows to shorten or run in parallel.
+gate_t0=$SECONDS
+row_t0=$SECONDS
+row_time() { printf '[%ds]' "$((SECONDS - row_t0))"; row_t0=$SECONDS; }
+
 # step <label> <command...>
 step() {
   local label="$1"
   shift
   local out warns
+  row_t0=$SECONDS
   if out=$("$@" 2>&1); then
     # clippy exits 0 even with warnings, so the warning count is what decides.
     #
@@ -136,16 +145,16 @@ step() {
     # than no gate, because it is believed. Anything but a summary counts.
     warns=$(printf '%s\n' "$out" | grep -E '^warning: ' | grep -cvE 'generated [0-9]+ warning')
     if [ "$warns" -gt 0 ]; then
-      red "FAIL  $label: $warns warning(s)"
+      red "FAIL  $label: $warns warning(s) $(row_time)"
       printf '%s\n' "$out" | grep -E '^warning: |^ +--> ' | grep -vE 'generated [0-9]+ warning' | head -40
       rc=1
       fails=$((fails + 1))
       return
     fi
-    green "ok    $label"
+    green "ok    $label $(row_time)"
     oks=$((oks + 1))
   else
-    red "FAIL  $label"
+    red "FAIL  $label $(row_time)"
     printf '%s\n' "$out" | tail -40
     rc=1
     fails=$((fails + 1))
@@ -1508,7 +1517,7 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 
 echo
-echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass)"
+echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass) in $((SECONDS - gate_t0))s"
 if [ "$rc" -eq 0 ]; then
   green "check.sh: clean"
 else
