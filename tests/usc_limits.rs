@@ -3402,6 +3402,72 @@ fn gl_test_case_8_blends_on_the_host() {
     .unwrap();
 }
 
+/// dEQP-GLES2 multisample's fragment shader (es2fMultisampleTests.cpp
+/// `gl_FragColor = v_color`) as the sample-kill variant with the colour mask
+/// of its constancy cases (alpha off), the program a 4x draw with alpha to
+/// coverage gets: two compiles are the same words, and in the byte model,
+/// with the control word's alpha-to-coverage bit set and every sample
+/// covered, which of the four samples a fragment keeps is a function of its
+/// alpha alone -- the green quad and the red one over it keep the same
+/// samples at each of dEQP's alphas (col / 15) -- growing from none at 0 to
+/// all four at 1. constancy_alpha_to_coverage and constancy_both_inverted
+/// failed on the AM62P at 32778b57; this pins that the coverage was not why
+/// (a split 4x frame was: gl_test 198).
+#[test]
+fn deqps_multisample_shader_keeps_samples_by_its_alpha_alone() {
+    use yakogl::shaderc::*;
+    let src = "varying mediump vec4 v_color;\nvoid main()\n{\n    gl_FragColor = v_color;\n}\n";
+    let key = SHC_BLEND_KEY_REPLACE | shc_blend_key_mask_off(0b1000);
+    let _scratch = scratch_lock();
+    let old = set_compile_lod_key(LodKey { sample_kill: true, ..LodKey::NONE });
+    let compiled: Vec<(Vec<u32>, u16)> = (0..2)
+        .map(|_| {
+            store::with_scratch(|a| {
+                let _keep = store::begin_keep().expect("keep");
+                let text = a.alloc_str(src).unwrap();
+                let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let rec =
+                    yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key)
+                        .unwrap_or_else(|e| panic!("{e:?}"));
+                assert_eq!((rec.uses_discard, rec.blend_key), (1, key), "the epilogue's kill, the colour mask");
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                (unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) }.to_vec(), rec.meta_off)
+            })
+            .unwrap()
+        })
+        .collect();
+    set_compile_lod_key(old);
+    assert_eq!(compiled[0], compiled[1], "two compiles of the variant");
+    let (code, meta_off) = &compiled[0];
+    assert_ne!(*meta_off, SHC_NO_META);
+    let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let kept = |rgb: [f32; 3], alpha: f32| -> u32 {
+        (0..4u32)
+            .filter(|&samp| {
+                let mut inp = sentinel_inputs(1.0e30);
+                (inp.samples, inp.savmsk, inp.samp_num) = (4, 0xf, samp);
+                inp.pixout = 0xff00_0000;
+                inp.shared[*meta_off as usize] = SHC_FS_META_DEFAULT | 1 << 25;
+                /* v_color, the only varying: four coefficients from 4 */
+                for (c, x) in [rgb[0], rgb[1], rgb[2], alpha].iter().enumerate() {
+                    inp.coeff[4 + 4 * c] = x.to_bits();
+                    inp.coeff[4 + 4 * c + 2] = x.to_bits();
+                }
+                run_binary(&image, &inp, true).expect("runs").contains_key(&usc_exec::FEEDBACK)
+            })
+            .fold(0, |m, s| m | 1 << s)
+    };
+    let mut last = 0u32;
+    for col in 0..16 {
+        let alpha = col as f32 / 15.0;
+        let (green, red) = (kept([0.0, 1.0, 0.0], alpha), kept([1.0, 0.0, 0.0], alpha));
+        assert_eq!(green, red, "alpha {alpha}: green keeps {green:#06b}, red {red:#06b}");
+        assert!(green.count_ones() >= last, "alpha {alpha}: {green:#06b} keeps fewer samples than a lower alpha");
+        last = green.count_ones();
+    }
+    assert_eq!((kept([1.0, 0.0, 0.0], 0.0), kept([1.0, 0.0, 0.0], 1.0)), (0, 0xf), "alpha 0 none, alpha 1 all");
+}
+
 /// gl_test case 182's two fragment shaders, on the host: the folded clamps
 /// (`clamp`, `min(max())`, `max(min())` of -2.25, 0.4 and 1.5, each through
 /// `* 0.5 + 0.25`) are four saturating adds besides the output's own and

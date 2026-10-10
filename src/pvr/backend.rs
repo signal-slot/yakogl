@@ -328,6 +328,22 @@ const VDM_STREAM_BYTES: u32 = 64 * 1024;
 const PDS_ALIGN: u32 = 128;
 const PPP_ALIGN: u32 = 16;
 const MAX_DRAWS_PER_FRAME: u32 = 1024;
+/// Slots of [`Backend::pds_seen`], direct-mapped by [`pds_hash`].
+const PDS_SEEN_SLOTS: usize = 32;
+
+/// A PDS program (or one segment of one) the open frame's PDS arena already
+/// holds: at `off` in the arena, `bytes` long, its words hashing to `hash`
+/// ([`pds_put`]). `bytes` 0: an empty slot.
+#[derive(Clone, Copy)]
+struct PdsSeen {
+    off: u32,
+    bytes: u32,
+    hash: u32,
+}
+
+impl PdsSeen {
+    const ZERO: PdsSeen = PdsSeen { off: 0, bytes: 0, hash: 0 };
+}
 /* worst case one draw records: vertex/kick/coeff/DMA/VS-uniform PDS programs
  * (each PDS_ALIGN-padded), PPP block + terminate + descriptors + index copy,
  * and the VDM blocks (PDS state 3 + PPP 2 + VDM 5 + 2 index lists 6 + 3) */
@@ -1175,6 +1191,9 @@ struct Backend {
     opt: [u32; PVR_BACKEND_OPT_COUNT],
 
     pds: Arena,
+    /// The PDS programs the open frame has uploaded, for [`pds_put`] to
+    /// point a draw at instead of uploading the same words again.
+    pds_seen: [PdsSeen; PDS_SEEN_SLOTS],
     gen: Arena,
     vdm: OsalGpuMem,
     /// u16 0..N-1.
@@ -2054,6 +2073,68 @@ fn arena_put_words(
     };
     // SAFETY: the slice is valid for its own length.
     unsafe { arena_put(a, words.as_ptr() as *const u8, bytes, align, heap_off_out, gpu_out) }
+}
+
+/// FNV-1a over a PDS program's words: [`pds_put`]'s slot and first check.
+fn pds_hash(words: &[u32]) -> u32 {
+    words
+        .iter()
+        .fold(0x811c_9dc5u32, |h, w| w.to_le_bytes().iter().fold(h, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193)))
+}
+
+/// Put a PDS program, or one segment of one, into the open frame's PDS
+/// arena, and give its heap offset in `heap_off`; when the frame already
+/// holds the same words, give their offset and upload nothing.
+///
+/// Most of what a draw uploads is the same for every draw of its program:
+/// the fragment kick program, the coefficient program, the code segments
+/// of the vertex and common-store DMA programs; only the data segments that
+/// carry per-draw addresses differ. Uploaded per draw, each of them
+/// PDS_ALIGN-padded, a draw of dEQP's multisample shape (two client arrays,
+/// a varying, the fragment control word) took six blocks, 768 bytes, so the
+/// 768 KiB arena held 1014 of them -- fewer than the draw cap
+/// ([`MAX_DRAWS_PER_FRAME`]) -- and a split 4x frame reloads its resolved
+/// colour into every sample (dEQP-GLES2 multisample.constancy_*, gl_test
+/// 198). Shared, the same draw takes two. Mesa's pvr keeps those programs
+/// with the pipeline and uploads only the per-draw data segments
+/// (pvr_cmd_buffer_upload_pds_data): the hardware reads a program's code and
+/// data where its state words point, so two draws may point at one.
+///
+/// The words are compared with what the arena holds at the remembered
+/// offset, below the bump: whatever happened since (a draw's transaction
+/// rolled back, the slot reused), equal words there are this program, and
+/// nothing below the bump is written again in this frame.
+fn pds_put(b: &mut Backend, words: &[u32], heap_off: &mut u32) -> i32 {
+    let Ok(bytes) = u32::try_from(core::mem::size_of_val(words)) else {
+        return frame_full(FullCause::PdsArena);
+    };
+    if bytes == 0 {
+        return arena_put_words(&mut b.pds, words, PDS_ALIGN, Some(heap_off), None);
+    }
+    let hash = pds_hash(words);
+    let slot = hash as usize % PDS_SEEN_SLOTS;
+    let seen = b.pds_seen[slot];
+    if seen.bytes == bytes
+        && seen.hash == hash
+        && seen.off.checked_add(bytes).is_some_and(|end| end <= b.pds.bump)
+        && !b.pds.mem.cpu.is_null()
+    {
+        // SAFETY: off..off + bytes lies below the bump of the live, CPU-mapped
+        // arena, and every offset `pds_put` remembers is PDS_ALIGN-aligned.
+        let held = unsafe {
+            core::slice::from_raw_parts((b.pds.mem.cpu as *const u8).add(seen.off as usize) as *const u32, words.len())
+        };
+        if held == words {
+            *heap_off = heap_off_of(b.pds.mem.gpu).wrapping_add(seen.off);
+            return 0;
+        }
+    }
+    let mut gpu = 0u64;
+    let rc = arena_put_words(&mut b.pds, words, PDS_ALIGN, Some(heap_off), Some(&mut gpu));
+    if rc == 0 {
+        b.pds_seen[slot] = PdsSeen { off: gpu.wrapping_sub(b.pds.mem.gpu) as u32, bytes, hash };
+    }
+    rc
 }
 
 /* ------------------------------------------------------------------------- */
@@ -3705,6 +3786,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     }
     b.frame_set_activate(b.cur);
     b.pds.bump = 0;
+    b.pds_seen = [PdsSeen::ZERO; PDS_SEEN_SLOTS];
     b.gen.bump = 0;
     b.vdm_dw = 0;
     b.term_gpu = 0;
@@ -5220,9 +5302,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             glog!("  seq_idx @0x{:x}: {} {} {} {} {} {}", b.seq_idx.gpu, ix[0], ix[1], ix[2], ix[3], ix[4], ix[5]);
         }
     }
-    rc = arena_put_words(&mut b.pds, vdata, PDS_ALIGN, Some(&mut v_pds_data), None);
+    rc = pds_put(b, vdata, &mut v_pds_data);
     if rc == 0 {
-        rc = arena_put_words(&mut b.pds, vcode, PDS_ALIGN, Some(&mut v_pds_code), None);
+        rc = pds_put(b, vcode, &mut v_pds_code);
     }
     if rc != 0 {
         return rc;
@@ -5255,7 +5337,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             return -EINVAL;
         }
         let n = ((ki.data_size_dw + ki.code_size_dw) as usize).min(k_prog.len());
-        rc = arena_put_words(&mut b.pds, &k_prog[..n], PDS_ALIGN, Some(&mut k_pds_data), None);
+        rc = pds_put(b, &k_prog[..n], &mut k_pds_data);
         if rc != 0 {
             return rc;
         }
@@ -5344,7 +5426,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
 
             s.cprog[..nd].copy_from_slice(&s.cdata[..nd]);
             s.cprog[nd..nd + nc].copy_from_slice(&s.ccode[..nc]);
-            rc = arena_put_words(&mut b.pds, &s.cprog[..nd + nc], PDS_ALIGN, Some(&mut coeff_off), None);
+            rc = pds_put(b, &s.cprog[..nd + nc], &mut coeff_off);
             if rc != 0 {
                 return rc;
             }
@@ -5546,9 +5628,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
         let uc = &uc[..(ui.code_size_dw as usize).min(uc.len())];
-        rc = arena_put_words(&mut b.pds, ud, PDS_ALIGN, Some(&mut t_pds_data), None);
+        rc = pds_put(b, ud, &mut t_pds_data);
         if rc == 0 {
-            rc = arena_put_words(&mut b.pds, uc, PDS_ALIGN, Some(&mut t_pds_code), None);
+            rc = pds_put(b, uc, &mut t_pds_code);
         }
         if rc != 0 {
             return rc;
@@ -6020,9 +6102,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         }
         let ud = &ud[..(ui.data_size_dw as usize).min(ud.len())];
         let uc = &uc[..(ui.code_size_dw as usize).min(uc.len())];
-        rc = arena_put_words(&mut b.pds, ud, PDS_ALIGN, Some(&mut ps.pds_data_offset), None);
+        rc = pds_put(b, ud, &mut ps.pds_data_offset);
         if rc == 0 {
-            rc = arena_put_words(&mut b.pds, uc, PDS_ALIGN, Some(&mut ps.pds_code_offset), None);
+            rc = pds_put(b, uc, &mut ps.pds_code_offset);
         }
         if rc != 0 {
             return rc;

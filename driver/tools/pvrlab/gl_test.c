@@ -496,6 +496,18 @@
  *               (the 45 texture.vertex.2d cases at 32778b57) until indexed
  *               draws were cut into pieces. All three GPUs (skipped by
  *               name in a table build); in the set
+ * 198 a2cconst dEQP multisample.constancy_alpha_to_coverage's picture on a 4x
+ *               pbuffer: 16x16 cells, each a green quad and then a red one
+ *               with the same alphas, alpha to coverage on, alpha masked
+ *               (1024 draws, one frame), drawn twice: no green in either
+ *               read-back, the two equal pixel for pixel, the alpha 1 cell
+ *               red and the alpha 0 cell clear. The PowerVR split that frame
+ *               after 1014 draws (six PDS blocks a draw in the 768 KiB
+ *               arena) and reloaded the resolved colour into all samples
+ *               (the two constancy cases at 32778b57) until a frame shared
+ *               the PDS programs it already holds. SKIP without a 4x config;
+ *               skipped by name in a table build. All three GPUs; not in the
+ *               set (as 145: the walker counts a SKIP as a failure)
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -768,6 +780,10 @@ static const char *shader_skip_reason(int c)
 	 * case's own sources */
 	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192 || c == 197)
 		return "its own sources: a table build has no rows for them";
+	/* alpha to coverage draws the sample-kill variant's blend variant (the
+	 * colour mask): the run-time compiler's, no table row */
+	if (c == 198)
+		return "alpha to coverage needs the sample-kill variant: a table build has no row for it";
 	/* one program per source in a table: nothing to lower two ways */
 	if (c == 195)
 		return "the if lowering is the run-time compiler's: a table build has one program per source";
@@ -7836,7 +7852,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -16626,6 +16642,174 @@ out:
 	return ok && check_gl_error("occl teardown") ? 0 : -1;
 }
 
+/* ---- case 198: alpha-to-coverage constancy on a 4x surface (a2cconst) ------
+ *
+ * dEQP-GLES2.functional.multisample.constancy_alpha_to_coverage and
+ * constancy_both_inverted (es2fMultisampleTests.cpp MaskConstancyCase)
+ * failed on the AM62P's 4x config at 32778b57 where they passed at d60b9d76.
+ * Each draws a 16x16 grid of cells, every cell a green quad and then a red
+ * quad over it with the same per-vertex alphas, alpha to coverage on and
+ * alpha masked: the coverage is a function of the alpha, so the red quad
+ * covers every sample the green one did and no green may be left. A quad is
+ * two draws (renderQuad), so the picture is 1024 draws in one frame. The
+ * coverage was constant; the frame was not: each draw uploaded six PDS
+ * blocks (768 bytes), the 768 KiB PDS arena held 1014 draws, and the
+ * 1015th -- cell 253's red quad, over its green one -- opened a kick that
+ * reloaded the resolved colour into all four samples: green in the samples
+ * the red quad leaves uncovered. The fix uploads a PDS program a
+ * frame already holds once (pvr_backend pds_put): two blocks a draw.
+ *
+ * This case is that picture at 64x64 (4x4 pixels a cell) with dEQP's draws
+ * (passthrough.vert + interp_color.frag, client arrays, one triangle a
+ * draw), read back; then, after a clear, the same picture again. Checks:
+ * no pixel of either holds green; the two read-backs are equal pixel for
+ * pixel; the cell of alpha 1 is red and the cell of alpha 0 the clear colour
+ * (alpha to coverage did act). 1024 draws is also the backend's draw cap
+ * for a frame (MAX_DRAWS_PER_FRAME), which counts the frame's own quads: the
+ * depth buffer is made valid first, as the earlier dEQP cases left it, so
+ * the frame opens with no initialisation quad. A split 4x frame still loses
+ * its samples (docs/HANDOFF.md); this case does not split one. SKIPs where
+ * the build offers no 4x config (as case 145); skipped by name in a table
+ * build (no row for the sample-kill blend variant). All three GPUs; not in
+ * the set, as case 145: only the PowerVR offers 4x in a default image, and
+ * the set walker counts a case's own SKIP as a failure. */
+static void a2c_tri(GLint lp, GLint lc, const float *pos, const float *col)
+{
+	glVertexAttribPointer((GLuint)lp, 4, GL_FLOAT, GL_FALSE, 0, pos);
+	glVertexAttribPointer((GLuint)lc, 4, GL_FLOAT, GL_FALSE, 0, col);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
+/* dEQP's renderQuad: corners p0 (x0,y0), p1 (x1,y0), p2 (x0,y1), p3 (x1,y1)
+ * with alphas (a0, a1, a0, a1), drawn as two draws of client arrays, the
+ * triangles (p0, p1, p2) and (p2, p1, p3) */
+static void a2c_quad(GLint lp, GLint lc, float x0, float y0, float x1, float y1, const float rgb[3], float a0,
+		     float a1)
+{
+	const float p[4][2] = { { x0, y0 }, { x1, y0 }, { x0, y1 }, { x1, y1 } };
+	const float al[4] = { a0, a1, a0, a1 };
+	static const int tri[2][3] = { { 0, 1, 2 }, { 2, 1, 3 } };
+
+	for (int t = 0; t < 2; t++) {
+		float pos[12], col[12];
+
+		for (int v = 0; v < 3; v++) {
+			const int k = tri[t][v];
+
+			pos[4 * v] = p[k][0];
+			pos[4 * v + 1] = p[k][1];
+			pos[4 * v + 2] = 0;
+			pos[4 * v + 3] = 1;
+			col[4 * v] = rgb[0];
+			col[4 * v + 1] = rgb[1];
+			col[4 * v + 2] = rgb[2];
+			col[4 * v + 3] = al[k];
+		}
+		a2c_tri(lp, lc, pos, col);
+	}
+}
+
+static int case_a2cconst(void)
+{
+	static const EGLint cfg4[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_SAMPLES, 4, EGL_NONE };
+	static const EGLint pb_attribs[] = { EGL_WIDTH, TW, EGL_HEIGHT, TH, EGL_NONE };
+	static const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+	static const float green[3] = { 0, 1, 0 }, red[3] = { 1, 0, 0 };
+	static uint32_t first[TW * TH];
+	const int n = 16; /* dEQP: numSamples * 4 cells a side */
+	EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	EGLConfig cfg;
+	EGLint nc = 0;
+	GLuint prog;
+	GLint lp, lc;
+	uint32_t diff = 0, dat = 0;
+	bool ok = true;
+
+	if (!eglInitialize(dpy, NULL, NULL))
+		return -1;
+	if (!eglChooseConfig(dpy, cfg4, &cfg, 1, &nc) || nc != 1) {
+		pr_info("gl_test: case 198 a2cconst: SKIP (no 4x EGL config offered)\n");
+		return -3;
+	}
+	EGLSurface pb = eglCreatePbufferSurface(dpy, cfg, pb_attribs);
+	EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
+	if (pb == EGL_NO_SURFACE || ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, pb, pb, ctx)) {
+		pr_err("gl_test: a2cconst: surface/context failed (0x%x)\n", eglGetError());
+		return -1;
+	}
+	prog = link_program(gl_test_passthrough_vs_src, gl_test_interp_fs_src);
+	if (!prog)
+		return -1;
+	lp = glGetAttribLocation(prog, "a_pos");
+	lc = glGetAttribLocation(prog, "a_color");
+	if (lp < 0 || lc < 0) {
+		pr_err("a2cconst: a_pos %d a_color %d\n", lp, lc);
+		glDeleteProgram(prog);
+		return -1;
+	}
+	glUseProgram(prog);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glEnableVertexAttribArray((GLuint)lp);
+	glEnableVertexAttribArray((GLuint)lc);
+	glViewport(0, 0, TW, TH);
+	/* a depth buffer that holds a store: the frames below load it */
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glFinish();
+	glClearColor(0, 0, 0, 1);
+	for (int pass = 0; pass < 2; pass++) {
+		uint32_t g = 0, at = 0;
+
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+		for (int row = 0; row < n; row++)
+			for (int col = 0; col < n; col++) {
+				const float x0 = (float)col / n * 2 - 1, x1 = (float)(col + 1) / n * 2 - 1;
+				const float y0 = (float)row / n * 2 - 1, y1 = (float)(row + 1) / n * 2 - 1;
+				const float a0 = (float)col / (n - 1), a1 = (float)row / (n - 1);
+
+				a2c_quad(lp, lc, x0, y0, x1, y1, green, a0, a1);
+				a2c_quad(lp, lc, x0, y0, x1, y1, red, a0, a1);
+			}
+		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		ok &= gl_test_check(check_gl_error("a2cconst: 1024 draws"), 0, 0);
+		read_topdown();
+		for (uint32_t i = 0; i < TW * TH; i++)
+			if (((s_px[i] >> 8) & 0xff) && g++ == 0)
+				at = i;
+		pr_info("gl_test: a2cconst picture %d: %u of %u pixels hold green\n", pass + 1, g, TW * TH);
+		if (g)
+			pr_info("gl_test: a2cconst picture %d: first at (%u, %u) top-down = 0x%08x\n", pass + 1,
+				at % TW, at / TW, s_px[at]);
+		ok &= gl_test_check(g == 0, g, 0);
+		if (pass == 0)
+			memcpy(first, s_px, sizeof(first));
+	}
+	for (uint32_t i = 0; i < TW * TH; i++)
+		if (first[i] != s_px[i] && diff++ == 0)
+			dat = i;
+	pr_info("gl_test: a2cconst: %u of %u pixels differ between the two pictures\n", diff, TW * TH);
+	if (diff)
+		pr_info("gl_test: a2cconst: first at (%u, %u) top-down: 0x%08x, then 0x%08x\n", dat % TW, dat / TW,
+			first[dat], s_px[dat]);
+	ok &= gl_test_check(diff == 0, diff, 0);
+	/* cell (15, 15), alpha 1 at every corner: every sample red; cell (0, 0),
+	 * alpha 0: none (the clear colour; alpha was never written) */
+	ok &= expect_px("a2cconst alpha 1 cell", TW - 2, 1, 0xff0000ffu, 0);
+	ok &= expect_px("a2cconst alpha 0 cell", 2, TH - 2, 0xff000000u, 0);
+
+	glDisableVertexAttribArray((GLuint)lp);
+	glDisableVertexAttribArray((GLuint)lc);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+	eglDestroySurface(dpy, pb);
+	eglDestroyContext(dpy, ctx);
+	return ok ? 0 : -1;
+}
+
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
  * mapped write-only and: nothing written (OES_mapbuffer: "any portion of a
@@ -19648,6 +19832,11 @@ static int run_case(int c, int pretransform, int debug)
 	case 195: rc = case_ifbranch(); break;
 	case 196: rc = case_occl(); break;
 	case 197: rc = case_vtxgrid(); break;
+	case 198:
+		rc = case_a2cconst();
+		if (rc == -3)
+			return -3; /* skipped by name: no 4x config */
+		break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)

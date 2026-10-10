@@ -57,8 +57,8 @@ boards. The Pi 4 ran nothing (no UART path from the nuc).
 | AM62P, 9 `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` cases | fixed (`e17fb6a7`) and confirmed on the board: image 1 of the AM62P tree on `e17fb6a7` passes 1,379 / 0 (2026-10-10, `records/am62p/deqp-e17fb6a7/img1`); the PowerVR online compiler fused `a * b + c` into one `fmad` only where the product had one reader, and the shader that also wrote `v_unrelated` gave the position's products a second reader, so one shader of each pair rounded the position once where the other rounded it twice. A sum on the way to an `invariant` output (`invariant gl_Position;`, `invariant varying`, `#pragma STDGL invariant(all)`, now carried on `ir::IoDecl::invariant`) is no longer fused, as Mesa's exact `fadd` is not `contract` (`powervr/prepare.rs` `mark_exact`). On the host the 9 pairs went from differing to identical position code (case 0 was identical before and after); no corpus source changes. Expect the 9 to pass in image 1 | (this commit) |
 | AM62P, the 45 `texture.vertex.2d.{filtering,wrap}.*` cases | **regression of the full tree at `32778b57`** (2026-10-10, image 9, `records/am62p/deqp-32778b57/full/`): "Image comparison failed", every draw refused, not a sampling fault. dEQP's grid is 127 x 127 quads of four client vertices (two vec2 arrays, 516,128 bytes each) and 96,774 client u16 indices: 1,225,804 bytes a draw, which the PowerVR copies into the frame's GENERAL arena. `dcaafa41` made that arena 1 MiB (was 4 MiB at `d60b9d76`), so each draw logged `does not fit an empty frame: the general arena (1048576 bytes) is too small; not drawn`. Fixed on the host: an indexed draw whose client indices and arrays are over half an arena is cut into pieces of its index list, each copying its indices and only the vertex window they read (`draw_indexed_pieces`; the cube cases, 317,520 + 47,628 bytes, never reached the limit). Host tests in `src/pvr/backend_tests.rs`; gl_test 197 `vtxgrid` draws the grid four times with a mipmapped 2D texture in the VS. Board confirmation pending: image 9 of the AM62P tree | `a6fc6f14` |
 | AM62P, whole dEQP-GLES2 tree on main `32778b57` | measured 2026-10-10 (`records/am62p/deqp-32778b57/full/`, 17 images, 0 resets, every case with a result): mustpass 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning (`flush_finish.flush`, `flush_wait`). The 54 are the 9 invariance and the 45 vertex-texture cases of the two rows above; no other case failed. NotSupported 34: `clip_control` 8, `negative_api.texture.compressedtexsubimage2d_*` 9, `multisampled_render_to_texture.readpixels` 1, `multisample.*` 16 (1x config; measured on the ms4 image). `fragdata.invalid_assign_to_1` passes. Against `d60b9d76` (17,141 / 0 / 19 / 5) 56 cases are worse counting the ms4 image's 2 (next row); `tools/cts/RESULTS.md`, "AM62P: the whole dEQP-GLES2 tree on origin/main `32778b57`" | `32778b57` |
-| AM62P, `multisample.constancy_alpha_to_coverage` and `constancy_both_inverted` (no issue yet) | **regression, under diagnosis**: the ms4 image (`records/am62p/deqp-32778b57/ms4` and `ms4-rerun`, 2026-10-10) reads 14 pass / 2 fail, both runs identical, both "Fail (Failed)"; `d60b9d76` had 16 / 16. Alpha to coverage goes through the fragment shader's `sample_kill` variant (`src/gl/draw.rs`, `needs_sample_kill`); cause not found | `32778b57` |
 | i.MX8MP, whole dEQP-GLES2 tree on main `32778b57` | measured 2026-10-10 (`records/imx8mp/deqp-32778b57/full`, 29 selectors): 17,371 begun, 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning / 0 no result. Every selector equals `d8583f20`'s (`tools/cts/imx8mp-full-tree-29460f96.results.tsv`, 2026-10-01); entry 21 `fbo` is 711 / 711 and `fragdata.invalid_assign_to_1` passes, so the two regressions of `72d16864` are fixed on the board | `32778b57` |
+| AM62P 4x image, `multisample.constancy_alpha_to_coverage` and `constancy_both_inverted` | **regression of the `ms4` image at `32778b57`** (2026-10-10, 14 / 2, deterministic: `records/am62p/deqp-32778b57/ms4/` and `ms4-rerun/`; 16 / 16 at `d60b9d76`). Not the coverage: the sample-kill variant and its epilogue are the same words at both commits and on every draw, and kill by alpha alone in the byte model; the GL streams of the two commits are equal. The frame: each case draws 1024 (or 1020) triangles into one 4x frame, a green quad and the red one over it per cell, and each draw uploaded six PDS blocks (768 bytes: vertex data and code, the fragment kick, the coefficients, the control word's DMA data and code). `dcaafa41` made the PDS arena 768 KiB (1 MiB at `d60b9d76`), so the frame held 1014 draws and the 1015th, the red quad over cell 253's green one, opened a second kick (Rig and host harness), and the split's next kick loaded the resolved colour into all four samples: green stayed where the red quad's coverage leaves samples out (`constancy_both` and `sample_coverage` have 768 draws; `sample_coverage_inverted` splits at the same draw, in the cell whose inverted coverage is all four samples, so nothing is lost there). Fixed on the host: a frame uploads a PDS program it already holds once (`pds_put`, the words compared with the arena below its bump), two blocks a draw after the first, as Mesa keeps those programs with the pipeline; the 1024 draws are one kick. Tests: `a_4x_frame_of_deqps_1024_multisample_draws_is_one_kick`, `a_pds_program_the_frame_already_holds_is_pointed_at_not_uploaded` (`src/pvr/backend_tests.rs`), `deqps_multisample_shader_keeps_samples_by_its_alpha_alone` (`tests/usc_limits.rs`), `sample_coverage_invert_is_the_masks_complement_at_deqps_values`, `every_alpha_to_coverage_draw_runs_the_sample_kill_variant_from_the_first` (`src/gl/draw.rs`); gl_test 198 `a2cconst` draws the picture twice. The split itself still loses samples (known defects, pvr-msaa-split). Board confirmation pending: the `ms4` image | (this commit) |
 | dEQP image recipes | checked against the current defaults on the host (`tools/cts/check-deqp-images.py`, 206 `board_selftest` checks, fixtures in `tools/cts/testdata/deqp-config`); the AM62P 4x image has its own table `tools/cts/am62p-ms4-tree.txt` | `e6e5f14`, `292310c`, `688a574` |
 
 The compiler check of `c6aa6ba` ran the PowerVR and GC7000 back ends against
@@ -480,6 +480,23 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      which also covers `settle_texture`'s busy test. The same record has
      the AM62P board recipe; the board's completion timing may differ from
      the host's;
+   - **pvr-msaa-split** (no issue yet): a 4x frame the PowerVR splits into
+     two kicks (a full arena, the 1024-draw cap, which counts the frame's
+     own quads, or a glFinish / glReadPixels before more drawing) loses its
+     samples. The end-of-tile store resolves them into the target (PBE
+     `downscale`) and the next kick's colour-load quad samples the resolved
+     target once a pixel and writes that colour to all four samples, so a
+     sample the later draws leave uncovered holds the average. The two
+     `multisample.constancy_*` cases met it through the PDS arena (fixed on
+     the host by sharing the frame's PDS programs: "State of main"); a 4x
+     frame past 1024 draws, or one read back mid-picture, still does.
+     `a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour`
+     (`src/pvr/backend_tests.rs`) is `#[ignore = "BUG: ..."]` and asserts
+     the right answer: the load quad runs per sample. The fix keeps a store
+     of each sample across kicks (an unresolved emit beside the resolved
+     one, or a 4x image resolved at the frame's end, as Mesa's pvr keeps an
+     MSAA attachment) and reloads it at the full sample rate; the PBE's
+     unresolved layout and the per-sample load are unmeasured on the board;
    - AM62P: the 45 `texture.vertex.2d.*` cases of the `32778b57` tree
      (image 9) are fixed on the host, not yet on a board ("State of main");
      an indexed draw whose staged data cannot be cut (a fan or a line loop,
@@ -819,7 +836,12 @@ for them (no fusion on the way to an `invariant` output) expect them to pass
 in image 1. The `32778b57` tree failed the 45
 `texture.vertex.2d.*` cases in image 9 (refused draws, fixed on the host by
 the indexed pieces): image 9 alone (`TREE_ROWS=8`) is their confirmation,
-with gl_test 197 `vtxgrid` in the regression set. The console must be the main_uart0 bridge
+with gl_test 197 `vtxgrid` in the regression set. The `32778b57` `ms4`
+image failed `constancy_alpha_to_coverage` and `constancy_both_inverted`
+(a 4x frame split by the PDS arena, fixed on the host by sharing the
+frame's PDS programs): the `ms4` image is their confirmation (16 / 16
+expected), and gl_test 198 `a2cconst` (by number: it is not in the set) on
+the gl_test image. The console must be the main_uart0 bridge
 port: a session leased the mcu_uart0 port and captured nothing
 (`tools/cts/log/investigations/am62p-console-empty.md`):
 

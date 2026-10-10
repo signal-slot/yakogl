@@ -4395,3 +4395,138 @@ fn query_end_submits_the_frame_holding_the_querys_draws() {
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(rig.kicks().last().unwrap().0.frag.isp_oclqry_base, 0, "the occluder's kick counts nothing");
 }
+
+/* ---- PDS programs shared within a frame (gl_test 198) ---------------------- */
+
+/// dEQP-GLES2 multisample's draw (es2fMultisampleTests.cpp renderTriangle):
+/// one triangle of two client arrays (a vec4 position and a vec4 colour) on
+/// a 4x target, the fragment shader the sample-kill variant (the epilogue,
+/// its control word in a one-dword uniform block, one varying), alpha to
+/// coverage on. The shaders live in `vs` and `fs`, the arrays in `arrays`.
+fn deqp_multisample_draw(rig: &Rig, vs: &mut ShcShader, fs: &mut ShcShader, arrays: &[[f32; 12]; 2]) -> GlesDraw {
+    *fs = *rig.ffs;
+    fs.uses_discard = 1;
+    fs.meta_off = 0;
+    fs.uniform_dwords = 1;
+    fs.num_varyings = 1;
+    fs.varyings[0] = crate::shaderc::ShcVarying { location: 0, components: 4, ..crate::shaderc::ShcVarying::ZERO };
+    *vs = *rig.fvs;
+    vs.vs_output_size = 8;
+    let mut d = rig.draw(3);
+    d.vs = vs;
+    d.fs = fs;
+    d.samples = 4;
+    d.alpha_to_coverage = true;
+    d.vs_output_size_dwords = 8;
+    for (k, a) in arrays.iter().enumerate() {
+        d.attribs[k] = GlesAttrib {
+            components: 4,
+            stride: 16,
+            vi_reg: 4 * k as u8,
+            cpu: a.as_ptr() as *const c_void,
+            cpu_bytes: 48,
+            ..GlesAttrib::ZERO
+        };
+    }
+    d.num_attribs = 2;
+    d
+}
+
+/// dEQP-GLES2.functional.multisample.constancy_alpha_to_coverage draws 1024
+/// triangles into one 4x frame (16x16 cells, a green and a red quad each, a
+/// quad two draws). Each draw uploaded its six PDS blocks (vertex data and
+/// code, the fragment kick, the coefficients, the control word's DMA data
+/// and code: 768 bytes), so the 768 KiB arena held 1014 draws: the 1015th,
+/// the red quad over cell 253's green one, opened the next kick, which
+/// loaded the resolved colour back into all four samples: the green the red
+/// quad does not cover stayed (32778b57 on the AM62P). A frame now uploads a
+/// program it already holds once: after the first draw, two blocks a draw
+/// (the data segments that carry its arrays and its control word), and the
+/// frame holds the 1024 draws of the draw cap.
+#[test]
+fn a_4x_frame_of_deqps_1024_multisample_draws_is_one_kick() {
+    let rig = Rig::new();
+    let (mut vs, mut fs) = (ShcShader::ZERO, ShcShader::ZERO);
+    let arrays = [[0.25f32; 12], [0.5f32; 12]];
+    let mut d = deqp_multisample_draw(&rig, &mut vs, &mut fs, &arrays);
+    assert_eq!(draw(&d), 0);
+    d.do_clear = false;
+    let first = rig.b().pds.bump;
+    assert_eq!(draw(&d), 0);
+    let shared = rig.b().pds.bump - first;
+    assert!(shared <= 2 * PDS_ALIGN + PDS_ALIGN / 2, "the second draw took {shared} PDS bytes");
+    for _ in 2..MAX_DRAWS_PER_FRAME {
+        assert_eq!(draw(&d), 0);
+    }
+    assert!(rig.kicks().is_empty(), "the frame was split at {} draws", rig.b().ndraws);
+    assert_eq!(rig.b().ndraws, MAX_DRAWS_PER_FRAME);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().len(), 1);
+    /* every draw's triangle went out, in that kick */
+    assert_eq!(rig.index_lists().len(), MAX_DRAWS_PER_FRAME as usize);
+}
+
+/// The same words again in the open frame are the program already there,
+/// and only the same words: a different program of the same length, put
+/// where a rolled-back transaction had left one, is not taken for it; a
+/// program remembered in the previous frame is uploaded again in the next.
+#[test]
+fn a_pds_program_the_frame_already_holds_is_pointed_at_not_uploaded() {
+    let rig = Rig::new();
+    let d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    let b = rig.b();
+    let base = heap_off_of(b.pds.mem.gpu);
+    let a = [0x1111_1111u32, 2, 3, 4];
+    let c = [0x2222_2222u32, 2, 3, 4];
+    let (mut oa, mut oa2, mut oc, mut oa3) = (0u32, 0u32, 0u32, 0u32);
+    let start = b.pds.bump;
+    assert_eq!(pds_put(b, &a, &mut oa), 0);
+    let after_a = b.pds.bump;
+    assert_eq!(pds_put(b, &a, &mut oa2), 0);
+    assert_eq!((oa2, b.pds.bump), (oa, after_a), "the same words: the same program, nothing uploaded");
+    /* a draw that put `a` and then failed: its transaction gives the bytes
+     * back, and the next upload lands where `a` was */
+    b.pds.bump = start;
+    assert_eq!(pds_put(b, &c, &mut oc), 0);
+    assert_eq!(oc, oa, "`c` overwrote `a`'s bytes");
+    assert_eq!(pds_put(b, &a, &mut oa3), 0);
+    assert_ne!(oa3, oc, "`a` is not where it was any more: uploaded again");
+    let held = |off: u32| rig.gpu_u32(b.pds.mem.gpu + (off - base) as u64);
+    assert_eq!((held(oc), held(oa3)), (c[0], a[0]));
+    /* a new frame forgets the old frame's programs */
+    assert_eq!(pvr_backend_flush(), 0);
+    let mut d2 = d;
+    d2.do_clear = true;
+    assert_eq!(draw(&d2), 0);
+    let b = rig.b();
+    let before = b.pds.bump;
+    let mut o = 0u32;
+    assert_eq!(pds_put(b, &a, &mut o), 0);
+    assert!(b.pds.bump > before, "uploaded in the new frame");
+}
+
+/// A multisampled frame split in two (a full arena, the draw cap, glFinish)
+/// must keep its samples: the GL's multisample buffer survives a flush. The
+/// backend resolves a 4x frame on its end-of-tile store (PBE `downscale`)
+/// and the next kick opens with the colour-load quad, which samples the
+/// resolved target once per pixel and writes that colour to all four
+/// samples: a sample the frame's later draws leave uncovered holds the
+/// average, not its own colour. Correct is a reload of each sample from a
+/// store of each sample: the load quad runs per sample.
+#[test]
+#[ignore = "BUG: a split 4x frame reloads its resolved colour into every sample (docs/HANDOFF.md, known defects, pvr-msaa-split)"]
+fn a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour() {
+    let rig = Rig::new();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    d.do_clear = false;
+    assert_eq!(draw(&d), 0, "the frame goes on in a second kick");
+    assert_eq!(pvr_backend_flush(), 0);
+    let load = heap_off_of(rig.b().fbload_fs.gpu) as u64;
+    let rates: Vec<u32> = with_platform(|p| p.kick_usc_rates.iter().filter(|r| r.0 == load).map(|r| r.1).collect());
+    assert_eq!(rates, [PDS_DOUTU_SAMPLE_RATE_FULL], "the second kick's load quad");
+}

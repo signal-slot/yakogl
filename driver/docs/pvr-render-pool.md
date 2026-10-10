@@ -485,6 +485,15 @@ about 12 KiB unaccounted again.
   is split, at the cost of one more kick, and only a draw too big for an
   empty frame is refused, by name. The margin is there so glmark2-sized
   frames are not split.
+- **A frame shares the PDS programs it holds** (`pds_put` in
+  `src/pvr/backend.rs`, gl_test 198): a program the open frame already
+  uploaded is pointed at again, so after its first draw a draw of the same
+  program takes only its per-draw data segments -- two 128-byte blocks for
+  dEQP's multisample draw instead of six. The PDS high-waters above were
+  measured before that and are upper bounds. A split is not free on a 4x
+  target: its next kick reloads the resolved colour into every sample
+  (`docs/HANDOFF.md`, known defects, pvr-msaa-split), which is how six
+  blocks a draw in this arena failed two dEQP multisample cases.
 - **Four sets, not two.** The count is load-bearing for pipelining, not
   for capacity. A set is reused only after the kick that last used it has
   completed (`backend.rs`, "the next frame set ... waits for its fence"),

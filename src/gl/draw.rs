@@ -6091,6 +6091,42 @@ mod tests {
         assert_eq!((d.sample_mask, d.alpha_to_coverage), (0xf, false));
     }
 
+    /// glSampleCoverage's invert inverts the coverage mask and nothing else
+    /// (ES 2.0.25 4.1.3), at every value dEQP's multisample.constancy_both
+    /// and constancy_both_inverted give it (row * 16 + col over 255, the
+    /// inverted case 1 minus that) with alpha to coverage on: the inverted
+    /// draw's mask is the other draw's complement within the four samples,
+    /// and the two carry the same alpha-to-coverage flag and fragment shader
+    /// (an empty mask draws nothing). Those two cases failed together on the
+    /// AM62P at 32778b57 for another reason (a split 4x frame, gl_test 198):
+    /// this pins that the inverted arm was not it.
+    #[test]
+    fn sample_coverage_invert_is_the_masks_complement_at_deqps_values() {
+        let gl = Gl::new(16, 16);
+        basic(&gl);
+        gl.ctx().default_samples = 4;
+        gl.ctx().sample_alpha_to_coverage = true;
+        let draw_with = |value: f32, invert: bool| -> Option<(u8, bool, *const ShcShader)> {
+            let c = gl.ctx();
+            (c.sample_coverage, c.sample_coverage_value, c.sample_coverage_invert) = (true, value, invert);
+            // SAFETY: the arrays the fixtures set up are statics.
+            unsafe { glDrawArrays(GL_TRIANGLES, 0, 3) };
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            gl.draws().pop().map(|r| (r.draw.sample_mask, r.draw.alpha_to_coverage, r.draw.fs))
+        };
+        for k in 0..256 {
+            for value in [k as f32 / 255.0, 1.0 - k as f32 / 255.0] {
+                let plain = draw_with(value, false);
+                let inverted = draw_with(value, true);
+                let mask = |d: Option<(u8, bool, *const ShcShader)>| d.map_or(0, |d| d.0);
+                assert_eq!(mask(inverted), !mask(plain) & 0xf, "value {value}");
+                if let (Some(a), Some(b)) = (plain, inverted) {
+                    assert_eq!((a.1, a.2), (b.1, b.2), "value {value}: the same alpha to coverage and shader");
+                }
+            }
+        }
+    }
+
     #[test]
     fn fbo_colour_texture_target() {
         let gl = Gl::new(16, 16);
@@ -12430,5 +12466,51 @@ mod tests {
         unsafe { glReadPixels(0, 1, 10, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void) };
         assert_eq!(gl.error(), GL_NO_ERROR);
         assert_eq!(px[..], row1[..], "row 1 at the 16-texel pitch");
+    }
+
+    /// dEQP-GLES2 multisample's draws with alpha to coverage on a 4x target
+    /// and alpha masked (the constancy cases): every draw, the first one
+    /// too, runs the same fragment program, the sample-kill variant's blend
+    /// variant for the colour mask -- the kill epilogue, never the program's
+    /// own code -- whatever colour the draw's vertices carry. A first draw
+    /// compiled without the epilogue would draw where its twin later does
+    /// not (the constancy cases' green quad under the red one).
+    #[cfg(all(feature = "shaderc-online", feature = "gpu-powervr"))]
+    #[test]
+    fn every_alpha_to_coverage_draw_runs_the_sample_kill_variant_from_the_first() {
+        const VS: &str = "attribute highp vec4 p; attribute mediump vec4 a_color; varying mediump vec4 v_color; \
+                          void main(){ gl_Position = p; v_color = a_color; }";
+        const FS: &str = "varying mediump vec4 v_color;\nvoid main()\n{\n    gl_FragColor = v_color;\n}\n";
+        let gl = Gl::new(16, 16);
+        let _be = OnlineBackEnd::install();
+        gl.ctx().default_samples = 4;
+        let prog = online_program(VS, FS);
+        let own = gl.ctx().objs().programs[obj_index(prog)].rfs.usc_words().to_vec();
+        let colours: [[f32; 12]; 2] = [
+            [0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.0, 1.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 1.0],
+        ];
+        // SAFETY: a NUL-terminated name.
+        let ca = unsafe { glGetAttribLocation(prog, c"a_color".as_ptr()) };
+        assert!(ca >= 0);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+            glColorMask(1, 1, 1, 0);
+            glEnableVertexAttribArray(ca as GLuint);
+        }
+        let key = shaderc::SHC_BLEND_KEY_REPLACE | shaderc::shc_blend_key_mask_off(0b1000);
+        let mut first = None;
+        for k in 0..8 {
+            // SAFETY: as above.
+            unsafe { glVertexAttribPointer(ca as GLuint, 4, GL_FLOAT, 0, 0, colours[k % 2].as_ptr() as *const c_void) };
+            let d = draw_tri(&gl).draw;
+            // SAFETY: the variant lives in the draw path's cache.
+            let fs = unsafe { &*d.fs };
+            assert_eq!((fs.uses_discard, fs.blend_key, d.alpha_to_coverage), (1, key, true), "draw {k}");
+            assert_ne!(fs.usc_words(), &own[..], "draw {k}: not the program's own code");
+            let at = (d.fs_usc_gpu, fs.usc_words().to_vec());
+            assert_eq!(first.get_or_insert_with(|| at.clone()), &at, "draw {k}: the first draw's program");
+        }
     }
 }
