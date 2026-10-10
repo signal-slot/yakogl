@@ -14,6 +14,10 @@
 //!     RGB10_A2) answers the attachment queries with its own component type
 //!     and sizes: state_query.fbo.framebuffer_attachment_component_type and
 //!     framebuffer_attachment_x_size_texture.
+//!   - glUnmapBufferOES and glGetBufferPointervOES take every ES 3.0 target,
+//!     as the core calls do (dEQP's loader calls them in their place):
+//!     state_query.buffer_object.buffer_mapped_*, buffer_access_flags_*,
+//!     buffer_map_offset_length_*, negative_api.buffer.copy_buffer_sub_data.
 //!   - glReadPixels into a pixel pack buffer stays inside the buffer and
 //!     writes the rows back from the CPU cache: pbo.* (the GL half; the
 //!     integer rows also need the back ends' integer render targets).
@@ -30,7 +34,10 @@
 use core::ffi::{c_char, c_void};
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
-use yakogl::gl::buffer::{glBindBuffer, glBufferData, glDeleteBuffers, glGenBuffers, glMapBufferRange, glUnmapBuffer};
+use yakogl::gl::buffer::{
+    glBindBuffer, glBufferData, glDeleteBuffers, glGenBuffers, glGetBufferPointervOES, glMapBufferRange, glUnmapBuffer,
+    glUnmapBufferOES,
+};
 use yakogl::gl::consts::*;
 use yakogl::gl::framebuffer::{
     glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glDeleteFramebuffers, glDeleteRenderbuffers,
@@ -254,6 +261,11 @@ fn es2_report_is_unchanged() {
     unsafe { glReadPixels(0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void) };
     assert_eq!(err(), GL_NO_ERROR, "an ES 2.0 framebuffer has no sample buffers to refuse a read for");
     release(fb, &[rb]);
+
+    /* GL_OES_mapbuffer's unmap takes only the extension's two targets */
+    // SAFETY: plain GL call.
+    assert_eq!(unsafe { glUnmapBufferOES(GL_COPY_READ_BUFFER) }, GL_FALSE as GLboolean);
+    assert_eq!(err(), GL_INVALID_ENUM);
 }
 
 /* ---- ES 3.0 --------------------------------------------------------------- */
@@ -485,6 +497,45 @@ mod es3 {
         }
         assert!(checked >= 1, "RGB10_A2 at least (its RGBA8 fallback is on every back end)");
         release(fb, &[]);
+    }
+
+    /// Root cause 5: glUnmapBufferOES and glGetBufferPointervOES took only
+    /// GL_ARRAY_BUFFER and GL_ELEMENT_ARRAY_BUFFER. dEQP's GL loader
+    /// (glwInitExtES.inl) calls them in place of glUnmapBuffer and
+    /// glGetBufferPointerv whenever GL_OES_mapbuffer is listed, so every
+    /// unmap of another target read GL_INVALID_ENUM and left the buffer
+    /// mapped: state_query.buffer_object.buffer_mapped_*,
+    /// buffer_access_flags_*, buffer_map_offset_length_* and
+    /// negative_api.buffer.copy_buffer_sub_data. In an ES 3.0 build they are
+    /// the core commands under another name.
+    #[test]
+    fn the_oes_unmap_and_pointer_calls_take_every_es3_target() {
+        let _g = context();
+        let mut buf = 0;
+        let data = [0u8; 16];
+        for target in [GL_COPY_READ_BUFFER, GL_UNIFORM_BUFFER, GL_PIXEL_PACK_BUFFER, GL_ARRAY_BUFFER] {
+            // SAFETY: room for one name; `data` holds the 16 bytes; plain GL calls.
+            unsafe {
+                glGenBuffers(1, &mut buf);
+                glBindBuffer(target, buf);
+                glBufferData(target, 16, data.as_ptr() as *const c_void, GL_DYNAMIC_COPY);
+                let mapped = glMapBufferRange(target, 4, 8, GL_MAP_WRITE_BIT);
+                assert!(!mapped.is_null(), "0x{target:x}");
+                let mut p = core::ptr::null_mut();
+                glGetBufferPointervOES(target, GL_BUFFER_MAP_POINTER, &mut p);
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{target:x}: pointer");
+                assert_eq!(p, mapped, "0x{target:x}");
+                assert_eq!(glUnmapBufferOES(target), GL_TRUE as GLboolean, "0x{target:x}");
+                assert_eq!(glGetError(), GL_NO_ERROR, "0x{target:x}: unmap");
+                assert_eq!(glUnmapBuffer(target), GL_FALSE as GLboolean, "0x{target:x}: no longer mapped");
+                assert_eq!(glGetError(), GL_INVALID_OPERATION);
+                glBindBuffer(target, 0);
+                glDeleteBuffers(1, &buf);
+            }
+        }
+        // SAFETY: plain GL call.
+        unsafe { glUnmapBufferOES(0x1234) };
+        assert_eq!(err(), GL_INVALID_ENUM, "no target at all");
     }
 
     /// Root cause 4: glReadPixels with a pixel pack buffer bound checked the
