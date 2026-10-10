@@ -309,12 +309,12 @@ fn csbgen_fragment_registers_equal_the_hand_packed_ones() {
     for w in 0..4 {
         assert_eq!(usc_pixel_output_ctrl(w), (USC_PIXEL_OUTPUT_CTRL & !3) | w, "MRT_STRIDE width {w}");
     }
-    for s in [0, 1, 2] {
-        assert_eq!(isp_ctl(s, false), ISP_CTL_DEFAULT, "{s} samples");
-        assert_eq!(isp_ctl(s, true), ISP_CTL_DEFAULT | ISP_CTL_DBIAS_IS_INT, "{s} samples");
+    for s in [0, 1] {
+        assert_eq!(isp_ctl(s, 4, false), ISP_CTL_DEFAULT, "{s} samples");
+        assert_eq!(isp_ctl(s, 4, true), ISP_CTL_DEFAULT | ISP_CTL_DBIAS_IS_INT, "{s} samples");
     }
-    assert_eq!(isp_ctl(4, false), ISP_CTL_MSAA4);
-    assert_eq!(isp_ctl(4, true), ISP_CTL_MSAA4 | ISP_CTL_DBIAS_IS_INT);
+    assert_eq!(isp_ctl(4, 4, false), ISP_CTL_MSAA4);
+    assert_eq!(isp_ctl(4, 4, true), ISP_CTL_MSAA4 | ISP_CTL_DBIAS_IS_INT);
     for (s, mode) in [(0, 0), (1, 0), (2, 1), (4, 2), (8, 0)] {
         assert_eq!(isp_aa(s), mode, "{s} samples");
     }

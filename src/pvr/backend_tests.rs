@@ -4466,6 +4466,43 @@ fn a_4x_frame_of_deqps_1024_multisample_draws_is_one_kick() {
     assert_eq!(rig.index_lists().len(), MAX_DRAWS_PER_FRAME as usize);
 }
 
+/// The ISP holds no more 4x tiles than the USC's partition store fits at the
+/// pixel width the kick programs (Mesa pvr_arch_setup_tiles_in_flight derives
+/// CR_ISP_CTL.pipe_enable and CR_USC_PIXEL_OUTPUT_CTRL.width from the same
+/// width). The 4x kick said four registers a pixel and four tiles in flight:
+/// four 4096-dword partitions against 8192 reserved dwords. gl_test 198's
+/// 1024 alpha-to-coverage triangles over a 64x64 4x pbuffer (64 a tile) locked the
+/// fragment DM up on the AM62P with no USC slot in use (2026-10-10). The
+/// one-sample kick keeps its six tiles (the DDK capture's PIPE(5)).
+#[test]
+fn a_4x_kicks_tiles_in_flight_fit_the_partitions_its_pixel_width_takes() {
+    let pipe = |isp_ctl: u32| (isp_ctl >> 12) & 0xf;
+    let regs = |ctl: u32| [2u32, 4, 8, 1][(ctl & 3) as usize];
+    let fit = |k: &PvrRenderKick| {
+        let partition = regs(k.frag.usc_pixel_output_ctrl) * k.samples.max(1) * 256;
+        (pipe(k.frag.isp_ctl) + 1) * partition <= RESERVED_PARTITION_DWORDS
+    };
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    /* MRT_STRIDE 1: two registers a pixel (bring-up override) */
+    pvr_backend_set_option(PVR_BACKEND_OPT_MRT_STRIDE, 1);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    pvr_backend_set_option(PVR_BACKEND_OPT_MRT_STRIDE, 0);
+    let kicks = rig.kicks();
+    assert_eq!(kicks.len(), 3);
+    let got: Vec<(u32, u32, u32)> =
+        kicks.iter().map(|(k, _)| (k.samples, regs(k.frag.usc_pixel_output_ctrl), pipe(k.frag.isp_ctl) + 1)).collect();
+    assert_eq!(got, [(1, 4, 6), (4, 4, 2), (4, 2, 4)], "(samples, registers a pixel, ISP tiles in flight)");
+    assert!(kicks.iter().all(|(k, _)| fit(k)));
+    assert_eq!((kicks[0].0.frag.isp_ctl, kicks[1].0.frag.isp_ctl), (ISP_CTL_DEFAULT, ISP_CTL_MSAA4));
+}
+
 /// The same words again in the open frame are the program already there,
 /// and only the same words: a different program of the same length, put
 /// where a rolled-back transaction had left one, is not taken for it; a

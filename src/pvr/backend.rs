@@ -420,27 +420,55 @@ fn usc_pixel_output_ctrl(width: u32) -> u32 {
 /// answer; the DDK firmware here reserves 8192 dwords). Not a Mesa value.
 const RESERVED_PARTITION_DWORDS: u32 = 8192;
 
-/// Tiles in flight for a frame of `samples`, as Mesa's
-/// `pvr_arch_setup_tiles_in_flight` (vulkan/pvr_arch_job_common.c) computes
-/// it for the BXS-4-64 (common/device_info/bxs-4-64.h: isp_samples_per_pixel
-/// 4, 16x16 tiles, max_partitions 16, isp_max_tiles_in_flight 6, one raster
-/// pipe, simple_parameter_format_version 2, paired tiles not requested) with
-/// the pixel width at `usc_min_output_registers_per_pix` (2). That reproduces
-/// both captured values -- PIPE(5) at one sample, PIPE(3) at 4x -- and is
-/// the one thing taken differently from Mesa, which derives this and
-/// CR_USC_PIXEL_OUTPUT_CTRL.width from the same pixel width: at the four
-/// registers the output control says, Mesa would allow two tiles at 4x.
-fn isp_tiles_in_flight(samples: u32) -> u32 {
-    const PIXEL_WIDTH: u32 = 2; /* usc_min_output_registers_per_pix */
+/// The output registers a pixel has under CR_USC_PIXEL_OUTPUT_CTRL.width
+/// (ROGUE_CR_PIXEL_WIDTH: 0: 2, 1: 4, 2: 8, 3: 1).
+fn pixel_width_regs(width: u32) -> u32 {
+    match width & 3 {
+        csb::ROGUE_CR_PIXEL_WIDTH_2REGISTERS => 2,
+        csb::ROGUE_CR_PIXEL_WIDTH_4REGISTERS => 4,
+        csb::ROGUE_CR_PIXEL_WIDTH_8REGISTERS => 8,
+        _ => 1,
+    }
+}
+
+/// Tiles in flight for a frame of `samples` whose pixels have `pixel_regs`
+/// output registers (the width CR_USC_PIXEL_OUTPUT_CTRL says), as Mesa's
+/// `pvr_arch_setup_tiles_in_flight` (vulkan/pvr_arch_job_common.c, Mesa
+/// 26.2.1, MIT) computes it for the BXS-4-64 (common/device_info/bxs-4-64.h:
+/// isp_samples_per_pixel 4, 16x16 tiles, max_partitions 16,
+/// isp_max_tiles_in_flight 6, usc_min_output_registers_per_pix 2, one raster
+/// pipe, simple_parameter_format_version 2, paired tiles not requested). A
+/// tile takes a USC partition of `pixel_regs` x samples x 256 dwords, and
+/// the ISP may hold no more tiles than the reserved partition store fits.
+/// Mesa derives this and the output control's width from the same pixel
+/// width; so does this. At the four registers this backend programs that is
+/// six tiles at one sample (PIPE(5), the DDK capture's value) and two at 4x.
+///
+/// It used to take the pixel at two registers whatever the width said, which
+/// let the ISP have four 4x tiles in flight against a store that holds two
+/// of the partitions the USC then allocates. gl_test 198's 4x picture --
+/// 1024 alpha-to-coverage triangles over 64x64 pixels, 64 objects a 16x16
+/// tile -- locked the fragment DM up on the AM62P with no USC slot in use
+/// and no page fault (firmware: DM3 timed out, phase count 0; HWR type
+/// UNKNOWNFAILURE), twice, both pictures lost (records/am62p/
+/// 20261010-1515-c196-198-452d6c31-e85a4597). dEQP's same picture over
+/// 256x256 (four objects a tile) passed with the same words, as
+/// gl_test 16's one 4x triangle does: the over-commit needs objects enough
+/// a tile. Nothing else in the 4x kick contradicts another of its words or
+/// Mesa's sizing (HWRT, ZLS extents); a board run of case 198 is the
+/// confirmation that this was the lockup.
+fn isp_tiles_in_flight(samples: u32, pixel_regs: u32) -> u32 {
+    const USC_MIN_OUTPUT_REGS: u32 = 2; /* usc_min_output_registers_per_pix */
     const TILE_DWORDS: u32 = 16 * 16; /* tile_size_x * tile_size_y */
     const ISP_MAX_TILES_IN_FLIGHT: u32 = 6;
-    let partition = PIXEL_WIDTH * samples.clamp(1, 4) * TILE_DWORDS;
+    let width = pixel_regs.max(USC_MIN_OUTPUT_REGS).next_power_of_two();
+    let partition = width * samples.clamp(1, 4) * TILE_DWORDS;
     let usable = RESERVED_PARTITION_DWORDS.min(partition * BXS_MAX_PARTITIONS);
     let partitions_available = BXS_MAX_PARTITIONS.min(usable / partition);
     /* one phantom (num_raster_pipes): the USC's tiles are the partitions,
      * the ISP's at most isp_max_tiles_in_flight of them (version 2 caps the
      * total by the partitions again, which changes nothing here) */
-    ISP_MAX_TILES_IN_FLIGHT.min(partitions_available)
+    ISP_MAX_TILES_IN_FLIGHT.min(partitions_available).max(1)
 }
 
 /// CR_ISP_CTL as Mesa's `pvr_render_job_ws_fragment_state_init`
@@ -453,9 +481,9 @@ fn isp_tiles_in_flight(samples: u32) -> u32 {
 /// clears it: a divergence from Mesa kept to keep today's bytes, an open
 /// question), `dbias_is_int` for an integer ZLS format
 /// on a core with ERN 42307, and `pipe_enable` = tiles in flight - 1
-/// (`pvr_arch_setup_tiles_in_flight`). 0x8003_5000 at one sample, 0x8003_3000
-/// at 4x: the values the DDK capture had.
-fn isp_ctl(samples: u32, dbias_is_int: bool) -> u32 {
+/// ([`isp_tiles_in_flight`] for the frame's samples and pixel width).
+/// 0x8003_5000 at one sample, 0x8003_1000 at 4x, with four registers a pixel.
+fn isp_ctl(samples: u32, pixel_regs: u32, dbias_is_int: bool) -> u32 {
     csb_pack!(
         ROGUE_CR_ISP_CTL_pack,
         1,
@@ -464,7 +492,7 @@ fn isp_ctl(samples: u32, dbias_is_int: bool) -> u32 {
             process_empty_tiles: true,
             sample_pos: true,
             dbias_is_int,
-            pipe_enable: isp_tiles_in_flight(samples) - 1,
+            pipe_enable: isp_tiles_in_flight(samples, pixel_regs) - 1,
             ..Default::default()
         }
     )[0]
@@ -6784,11 +6812,12 @@ fn flush(p: &mut Pvr) -> i32 {
      * has (ROGUE_CR_PIXEL_WIDTH: 0: 2, 1: 4, 2: 8, 3: 1); four, the most this
      * core has. PVR_BACKEND_OPT_MRT_STRIDE overrides the width for bring-up
      * (its value - 1, in the field's two bits). */
-    b.kick.frag.usc_pixel_output_ctrl = usc_pixel_output_ctrl(if b.opt(PVR_BACKEND_OPT_MRT_STRIDE) != 0 {
+    let pixel_width = if b.opt(PVR_BACKEND_OPT_MRT_STRIDE) != 0 {
         (b.opt(PVR_BACKEND_OPT_MRT_STRIDE) - 1) & 3
     } else {
         csb::ROGUE_CR_PIXEL_WIDTH_4REGISTERS
-    });
+    };
+    b.kick.frag.usc_pixel_output_ctrl = usc_pixel_output_ctrl(pixel_width);
     /* The USC clear register is what the tiles start from (the background
      * object only runs on empty tiles); a frame that keeps its colour drew
      * the load quad first, so the register value does not matter then. */
@@ -6882,7 +6911,9 @@ fn flush(p: &mut Pvr) -> i32 {
      * depth/stencil arm above */
     // SAFETY: a plain read of an int only the setter writes.
     let dbias_is_int = b.frame_ds.buf().is_some() && unsafe { core::ptr::addr_of!(pvr_dbias_int).read() } != 0;
-    b.kick.frag.isp_ctl = isp_ctl(b.samples, dbias_is_int);
+    /* the ISP's tiles in flight from the same pixel width as the output
+     * control above (Mesa pvr_arch_setup_tiles_in_flight) */
+    b.kick.frag.isp_ctl = isp_ctl(b.samples, pixel_width_regs(pixel_width), dbias_is_int);
     b.kick.frag.event_pixel_pds_info = if tb_emit && b.st.event_pixel_pds_info_tb_n[nrt as usize] != 0 {
         b.st.event_pixel_pds_info_tb_n[nrt as usize]
     } else if b.st.event_pixel_pds_info_n[nrt as usize] != 0 {
@@ -7502,7 +7533,7 @@ const USC_PIXEL_OUTPUT_CTRL: u32 = 0x0007_fff9;
 #[cfg(test)]
 const ISP_CTL_DEFAULT: u32 = 0x8003_5000;
 #[cfg(test)]
-const ISP_CTL_MSAA4: u32 = 0x8003_3000;
+const ISP_CTL_MSAA4: u32 = 0x8003_1000;
 #[cfg(test)]
 const ISP_CTL_DBIAS_IS_INT: u32 = 1 << 20;
 #[cfg(test)]
