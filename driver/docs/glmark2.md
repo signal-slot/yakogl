@@ -177,6 +177,23 @@ before staging). If a
 smaller set is ever needed, the default list does not use
 `textures/nasa2.png` and `nasa3.png` (1.04 MB).
 
+Beside the 96 MiB carve-out, the Pi 4's glmark2 image raises the V3D's
+tiled-copy budget to 24 MiB
+(`CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES=25165824` in `boards/rpi_4b.conf`;
+the Kconfig default stays 8 MiB for the other boards). refract's 1600x1200
+RGBA8 colour render target tiles to 11,001,856 B with its mip chain, over
+the 8 MiB default, so one of its draws was refused (3 x GL error 0x505).
+Measured on the host harness at the 96 MiB carve-out: 24 MiB clears the
+refusal and keeps the 7,684,096 B depth copy beside it (refract peak
+69,093,376 B of the carve-out, 0 refused allocations across the whole
+list; 16 MiB also clears it but evicts the depth copy every frame and peaks
+higher, at 70,146,048 B; both run refract at 23 FPS, so the choice rests on
+memory, not speed) - `tools/hostharness/glmark2/FINDINGS-refract-budget.md` sections
+3.2-3.4. The budget is a workaround for the per-frame CPU tiled copy of a
+render target: item `v3d-rt-sample` (it owns `src/v3d/**`) may sample the
+render target without the copy at all, and then the Pi 4 board file can
+drop this line and go back to the 8 MiB default.
+
 ### The record: kind 18 GLMARK2 (`record.rs`)
 
 The i.MX8MP has no UART and its SNVS keeps only the last record, so the run
