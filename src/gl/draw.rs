@@ -27,8 +27,9 @@ use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use super::buffer;
 use super::consts::*;
 use super::context::{
-    self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib, CAP_SAMPLERS,
-    MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
+    self, gl_trace, obj_index, tex_pitch, GlBuffer, GlContext, GlProgram, GlTexture, GlVertexAttrib,
+    CAP_COLOR_ATTACHMENTS, CAP_SAMPLERS, MAX_BUFFERS, MAX_CONTEXTS, MAX_PROGRAMS, MAX_TEXTURES, MAX_UNIFORM_DWORDS,
+    MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS,
 };
 use super::framebuffer;
 use super::tf;
@@ -384,6 +385,177 @@ struct AttribStaging<'a> {
     dup_kick: &'a mut [u32; MAX_DRAW_ATTRIBS],
 }
 
+/* --------------------------------------------------------------------------- */
+/* the kick a draw's stamps name */
+
+/// Where a stamp a draw took while it was being built lives
+/// ([`draw_stamp`]): what it rendered into or read, and the staging blocks
+/// it read.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum StampAt {
+    /// The render-into stamp of texture `ti` in context slot `ctx`
+    /// (`framebuffer::texture_target_use`).
+    Target {
+        ctx: u8,
+        ti: u16,
+    },
+    /// `GlTexture::last_use` of texture slot `ti` of share group `group`.
+    Texture {
+        group: u8,
+        ti: u16,
+    },
+    /// `GlBuffer::last_use` of buffer `bi` of share group `group`.
+    Buffer {
+        group: u8,
+        bi: u16,
+    },
+    /// [`staging_reserve`]'s stamps, in `DrawState`: the index scratch, an
+    /// attribute index's scratch, an input's second scratch, and the
+    /// uniform block of program slot `prog` of share group `group`.
+    IndexStaging,
+    AttribStaging(u8),
+    DupStaging(u8),
+    Uniforms {
+        group: u8,
+        prog: u16,
+    },
+}
+
+/// Distinct stamps one draw (and the pending clear it emits first) can
+/// take: its targets, the textures of every unit of both stages, the vertex
+/// and index buffers, and every staging block.
+const DRAW_STAMPS_CAP: usize = (CAP_COLOR_ATTACHMENTS + 1)
+    + 2 * CAP_SAMPLERS
+    + (MAX_DRAW_ATTRIBS + 1)
+    + (MAX_VERTEX_ATTRIBS + MAX_DRAW_ATTRIBS + 2);
+
+/// The stamps the draw being built took ([`draw_stamp`]), so they can be
+/// moved to the kick that holds the draw once the backend has recorded it
+/// ([`restamp_draw`]). `depth` counts open [`DrawStampScope`]s: a pending
+/// clear a draw emits first keeps the draw's own stamps.
+struct DrawStamps {
+    depth: u8,
+    n: usize,
+    /// A stamp did not fit (never, while the cap counts right): see
+    /// [`restamp_draw`].
+    lost: bool,
+    at: [StampAt; DRAW_STAMPS_CAP],
+}
+
+static DRAW_STAMPS: Global<DrawStamps> =
+    Global::new(DrawStamps { depth: 0, n: 0, lost: false, at: [StampAt::IndexStaging; DRAW_STAMPS_CAP] });
+
+fn draw_stamps() -> &'static mut DrawStamps {
+    // SAFETY: single-threaded by contract; callers hold no other reference.
+    unsafe { DRAW_STAMPS.get() }
+}
+
+/// The value a draw being built stamps what it renders into or reads with:
+/// `backend::kick_id()`, the kick being recorded. That is the kick holding
+/// the draw only if the backend does not end the open frame for it: a draw
+/// into another target (or one the open frame has no room for) makes the
+/// backend submit that frame first, and the draw lands in the next kick.
+/// So the place is noted, inside a [`DrawStampScope`], and the stamp moves
+/// to the kick the backend actually put the draw in when it returns
+/// ([`restamp_draw`]). Outside a scope (a target query, a completeness
+/// check) the stamp is only taken.
+pub(crate) fn draw_stamp(at: StampAt) -> u32 {
+    let s = draw_stamps();
+    if s.depth != 0 && !s.at[..s.n].contains(&at) {
+        match s.at.get_mut(s.n) {
+            Some(slot) => {
+                *slot = at;
+                s.n += 1;
+            }
+            None => s.lost = true,
+        }
+    }
+    backend::kick_id()
+}
+
+/// A draw entry point (or a pending clear's emission) from its start to
+/// its end: the stamps taken meanwhile are the ones [`restamp_draw`] moves.
+/// Nested scopes share the outer one's stamps.
+struct DrawStampScope;
+
+impl DrawStampScope {
+    fn open() -> Self {
+        let s = draw_stamps();
+        if s.depth == 0 {
+            s.n = 0;
+            s.lost = false;
+        }
+        s.depth = s.depth.saturating_add(1);
+        DrawStampScope
+    }
+}
+
+impl Drop for DrawStampScope {
+    fn drop(&mut self) {
+        let s = draw_stamps();
+        s.depth = s.depth.saturating_sub(1);
+        if s.depth == 0 {
+            s.n = 0;
+            s.lost = false;
+        }
+    }
+}
+
+/// `DrawState`'s staging stamps, for [`restamp_draw`]; a pending clear
+/// stages nothing and passes none.
+struct StagingKicks<'a> {
+    index: &'a mut u32,
+    attrib: &'a mut [u32; MAX_VERTEX_ATTRIBS],
+    dup: &'a mut [u32; MAX_DRAW_ATTRIBS],
+    pg: &'a mut [[ProgGpu; MAX_PROGRAMS]; MAX_CONTEXTS],
+}
+
+/// The backend recorded a draw: every stamp the draw took ([`draw_stamp`])
+/// now names `backend::kick_id()`, the kick holding it. After a successful
+/// draw that is the open frame the draw is in (or its last part is: the
+/// parts before it are in earlier kicks, which complete first); the
+/// backend contract says so (`YakoglBackend::kick_id`). Without this move
+/// a draw that ended the open frame left stamps naming the kick just
+/// submitted: glmark2 shadow's depth pass, after the window clear, was
+/// stamped with the clear's kick, which had completed by the time the
+/// ground sampled the depth texture, so `texture::resolve_depth` neither
+/// submitted nor waited and the PowerVR answered -EBUSY (pvr-depth-resolve,
+/// tests/depth_resolve_pvr.rs). Staging stamps without `kicks` are left for
+/// the enclosing draw's own call.
+fn restamp_draw(kicks: Option<&mut StagingKicks<'_>>) {
+    let k = backend::kick_id();
+    let s = draw_stamps();
+    let mut kicks = kicks;
+    for &at in &s.at[..s.n] {
+        match (at, kicks.as_deref_mut()) {
+            (StampAt::Target { ctx, ti }, _) => framebuffer::set_target_use(ctx as usize, ti as usize, k),
+            (StampAt::Texture { group, ti }, _) => {
+                if let Some(t) = context::objects(group).textures.get_mut(ti as usize) {
+                    t.last_use = k;
+                }
+            }
+            (StampAt::Buffer { group, bi }, _) => {
+                if let Some(b) = context::objects(group).buffers.get_mut(bi as usize) {
+                    b.last_use = k;
+                }
+            }
+            (StampAt::IndexStaging, Some(sk)) => *sk.index = k,
+            (StampAt::AttribStaging(i), Some(sk)) => sk.attrib[i as usize] = k,
+            (StampAt::DupStaging(i), Some(sk)) => sk.dup[i as usize] = k,
+            (StampAt::Uniforms { group, prog }, Some(sk)) => sk.pg[group as usize][prog as usize].uniforms_kick = k,
+            (_, None) => {}
+        }
+    }
+    if s.lost {
+        /* a stamp that could not be noted may name a kick before the one
+         * holding the draw: wait for the draw itself instead */
+        glog_once!("yakogl: a draw took more stamps than the journal holds; waiting for its kick");
+        if backend::flush() == 0 {
+            let _ = backend::finish();
+        }
+    }
+}
+
 /// Log lines [`submit_draw`] spends on draws the backend refused.
 const DRAW_FAIL_LOGS: u32 = 8;
 
@@ -398,9 +570,20 @@ const DRAW_FAIL_LOGS: u32 = 8;
 /// but it is reported as GL_INVALID_OPERATION: dEQP treats GL_OUT_OF_MEMORY
 /// as a fatal resource error and ends the whole run, while any other error
 /// fails only that case (`backend::draw` documents the contract).
-fn submit_draw(c: &mut GlContext, reported: &mut u32, d: &GlesDraw, what: &'static str) {
+///
+/// A draw the backend recorded moves the stamps it took to the kick that
+/// holds it ([`restamp_draw`]); a lost one leaves them.
+fn submit_draw(
+    c: &mut GlContext,
+    reported: &mut u32,
+    d: &GlesDraw,
+    what: &'static str,
+    kicks: Option<&mut StagingKicks<'_>>,
+) {
     let rc = backend::draw(d);
-    if rc < 0 {
+    if rc >= 0 {
+        restamp_draw(kicks);
+    } else {
         if *reported < DRAW_FAIL_LOGS && log_enabled() {
             *reported += 1;
             glog!("yakogl: {} was not recorded ({}); the frame is missing it", what, rc);
@@ -679,15 +862,15 @@ fn scratch_reserve(m: &mut OsalGpuMem, need: usize) -> i32 {
 /// one the kick reads the block itself: a block a pending kick still reads
 /// is released (the OSAL defers the free until that kick is done) and the
 /// draw stages into fresh memory. `kick` stamps the block with the frame
-/// that reads it.
-fn staging_reserve(m: &mut OsalGpuMem, kick: &mut u32, need: usize) -> i32 {
+/// that reads it; `at` is where that stamp lives ([`draw_stamp`]).
+fn staging_reserve(m: &mut OsalGpuMem, kick: &mut u32, at: StampAt, need: usize) -> i32 {
     if !m.impl_.is_null() && m.cpu.is_null() && backend::kick_pending(*kick) {
         osal::gpu_free(m);
         *m = OsalGpuMem::ZERO;
     }
     let rc = scratch_reserve(m, need);
     if rc == 0 {
-        *kick = backend::kick_id();
+        *kick = draw_stamp(at);
     }
     rc
 }
@@ -884,6 +1067,7 @@ fn attrib_row(vsrc: &[u8], ga: &GlVertexAttrib, comps: u32, tsz: u32, out_comps:
 fn convert_attrib(
     m: &mut OsalGpuMem,
     kick: &mut u32,
+    at: StampAt,
     ga: &GlVertexAttrib,
     src: *const u8,
     mut vb: Option<&mut OsalGpuMem>,
@@ -907,7 +1091,8 @@ fn convert_attrib(
         return -1;
     };
 
-    if (src.is_null() && elem != 0 && !(vb.is_some() && ops.gpu_read.is_some())) || staging_reserve(m, kick, need) != 0
+    if (src.is_null() && elem != 0 && !(vb.is_some() && ops.gpu_read.is_some()))
+        || staging_reserve(m, kick, at, need) != 0
     {
         return -1;
     }
@@ -2061,6 +2246,7 @@ fn ds_identity(c: &GlContext, a: &super::context::GlAttachment) -> (u32, u32, u3
 /// for the next draw to that target). `quiet`: a target that cannot be
 /// resolved drops the clear without raising GL_INVALID_FRAMEBUFFER_OPERATION.
 fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, with_ds: bool, quiet: bool) {
+    let _stamps = DrawStampScope::open();
     let pc = pending_clear_of(c);
     if !pc.color && !(with_ds && (pc.depth || pc.stencil)) {
         return;
@@ -2134,7 +2320,7 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
      * no draw behind it wrote depth 0 whatever value it was given. */
     d.depth_range = c.depth_range;
 
-    submit_draw(c, reported, d, "the pending clear");
+    submit_draw(c, reported, d, "the pending clear", None);
 }
 
 /// A glClear applies to the framebuffer bound when it was called. A clear
@@ -3130,7 +3316,8 @@ fn build_common(
             /* no CPU view: the kick reads the block itself, so a block a
              * pending kick reads is not rewritten (staging_reserve) */
             let bytes = pg.uniforms.size;
-            if staging_reserve(&mut pg.uniforms, &mut pg.uniforms_kick, bytes) != 0 {
+            let uniforms_at = StampAt::Uniforms { group: c.group, prog: obj_index(program) as u16 };
+            if staging_reserve(&mut pg.uniforms, &mut pg.uniforms_kick, uniforms_at, bytes) != 0 {
                 return Err((GL_OUT_OF_MEMORY, FUNC));
             }
         }
@@ -3225,16 +3412,16 @@ fn build_common(
         /* Where this input is staged: the attribute index's scratch, unless
          * another input of this draw already staged there (two inputs bound
          * to one index read it with their own widths). */
-        let (m, kick) = if staged_apps & (1u32 << app) != 0 {
-            (&mut staging.dup[slot], &mut staging.dup_kick[slot])
+        let (m, kick, at) = if staged_apps & (1u32 << app) != 0 {
+            (&mut staging.dup[slot], &mut staging.dup_kick[slot], StampAt::DupStaging(slot as u8))
         } else {
-            (&mut staging.scratch[app], &mut staging.kick[app])
+            (&mut staging.scratch[app], &mut staging.kick[app], StampAt::AttribStaging(app as u8))
         };
 
         if !ga.enabled {
             /* no array: every vertex reads the glVertexAttrib* value, a
              * zero-stride fetch of the input's width from scratch */
-            if staging_reserve(m, kick, 16) != 0 || put(m, 0, dword_bytes(&c.current_attrib[app])) != 0 {
+            if staging_reserve(m, kick, at, 16) != 0 || put(m, 0, dword_bytes(&c.current_attrib[app])) != 0 {
                 return Err((GL_OUT_OF_MEMORY, FUNC));
             }
             staged_apps |= 1u32 << app;
@@ -3321,7 +3508,7 @@ fn build_common(
                 }
             }
             pa.buffer_gpu = vb.mem.gpu;
-            vb.last_use = backend::kick_id();
+            vb.last_use = draw_stamp(StampAt::Buffer { group: c.group, bi: ga.buffer as u16 });
             if attrib_dump_enabled() && src_fmt == GLES_ATTRIBF_FLOAT32 && !vb.mem.cpu.is_null() && log_enabled() {
                 /* debug: the first vertices of an in-place stream */
                 for v in 0..a_count.min(24) {
@@ -3363,13 +3550,33 @@ fn build_common(
                 // SAFETY: offset .. end was just checked against the VBO's size.
                 unsafe { (vb.mem.cpu as *const u8).add(ga.offset) }
             };
-            let r =
-                convert_attrib(m, kick, &ga, src, Some(&mut vb.mem), ga.offset, a_first, a_count, sa.components as u32);
+            let r = convert_attrib(
+                m,
+                kick,
+                at,
+                &ga,
+                src,
+                Some(&mut vb.mem),
+                ga.offset,
+                a_first,
+                a_count,
+                sa.components as u32,
+            );
             if r != 0 {
                 return Err((GL_OUT_OF_MEMORY, FUNC));
             }
-        } else if convert_attrib(m, kick, &ga, ga.offset as *const u8, None, 0, a_first, a_count, sa.components as u32)
-            != 0
+        } else if convert_attrib(
+            m,
+            kick,
+            at,
+            &ga,
+            ga.offset as *const u8,
+            None,
+            0,
+            a_first,
+            a_count,
+            sa.components as u32,
+        ) != 0
         {
             return Err((GL_OUT_OF_MEMORY, FUNC));
         }
@@ -3449,7 +3656,9 @@ fn build_common(
             let sampler = super::es3::sampler_state(c.index, unit);
             /* the render-into stamp is kept by texture NAME (its slot) */
             let target_kick = slot.map_or(0, |s| framebuffer::texture_target_use(c, s));
-            let Some(t) = slot.and_then(|s| live_texture(&mut context::objects(c.group).textures, s)) else {
+            let Some((ti, t)) =
+                slot.and_then(|s| live_texture(&mut context::objects(c.group).textures, s).map(|t| (s, t)))
+            else {
                 continue;
             };
             if t.mem.impl_.is_null() {
@@ -3504,7 +3713,7 @@ fn build_common(
             tb.content_gen = t.content_gen;
             tb.target_kick = target_kick;
             tb.cpu = t.mem.cpu as *const core::ffi::c_void;
-            t.last_use = backend::kick_id();
+            t.last_use = draw_stamp(StampAt::Texture { group: c.group, ti: ti as u16 });
             tb.width = tw;
             tb.height = rows;
             tb.stride_texels = t.level_pitch(tw);
@@ -3708,6 +3917,7 @@ fn current_drawable_program(c: Option<&mut GlContext>) -> Option<(&mut GlContext
 fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, first: GLint, count: GLsizei) {
     const FUNC: &str = "glDrawArrays";
     gl_trace!(glDrawArrays);
+    let _stamps = DrawStampScope::open();
 
     if count < 0 {
         return raise(c, GL_INVALID_VALUE, FUNC);
@@ -3769,7 +3979,9 @@ fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, firs
     d.index_cpu = core::ptr::null();
     d.index_bytes = 0;
 
-    submit_draw(c, &mut st.draw_fail_reported, d, FUNC);
+    let mut kicks =
+        StagingKicks { index: &mut st.index_kick, attrib: &mut st.attrib_kick, dup: &mut st.dup_kick, pg: &mut st.pg };
+    submit_draw(c, &mut st.draw_fail_reported, d, FUNC, Some(&mut kicks));
 }
 
 #[no_mangle]
@@ -3878,6 +4090,7 @@ fn draw_elements(
 ) {
     const FUNC: &str = "glDrawElements";
     gl_trace!(glDrawElements);
+    let _stamps = DrawStampScope::open();
 
     if count < 0 {
         return raise(c, GL_INVALID_VALUE, FUNC);
@@ -3966,7 +4179,7 @@ fn draw_elements(
 
         if type_ == GL_UNSIGNED_SHORT && !need_range && (ib.mem.gpu + off as u64).is_multiple_of(INDEX_ADDR_ALIGN) {
             index_gpu = ib.mem.gpu + off as u64;
-            ib.last_use = backend::kick_id();
+            ib.last_use = draw_stamp(StampAt::Buffer { group: c.group, bi: c.bound_element_buffer as u16 });
         } else if !ib.mem.cpu.is_null() {
             // SAFETY: off + src_bytes was checked against the buffer's size.
             unsafe {
@@ -4067,7 +4280,7 @@ fn draw_elements(
         /* widen into the scratch (u16 copy), tracking the range */
         let need = src_bytes / esz * 2;
 
-        if staging_reserve(&mut st.index_scratch, &mut st.index_kick, need) != 0 {
+        if staging_reserve(&mut st.index_scratch, &mut st.index_kick, StampAt::IndexStaging, need) != 0 {
             return c.set_error(GL_OUT_OF_MEMORY, FUNC);
         }
         let m = &mut st.index_scratch;
@@ -4178,7 +4391,9 @@ fn draw_elements(
         }
     }
 
-    submit_draw(c, &mut st.draw_fail_reported, d, FUNC);
+    let mut kicks =
+        StagingKicks { index: &mut st.index_kick, attrib: &mut st.attrib_kick, dup: &mut st.dup_kick, pg: &mut st.pg };
+    submit_draw(c, &mut st.draw_fail_reported, d, FUNC, Some(&mut kicks));
 }
 
 #[no_mangle]
@@ -9449,6 +9664,143 @@ mod tests {
         assert_eq!((depth_texel(&gl, depth, 0, 0), depth_texel(&gl, depth, 1, 0)), (1.0, 0.75));
     }
 
+    /// A colour texture and a depth texture (8x8) attached to a new
+    /// framebuffer object, left bound; the depth texture's name second.
+    fn colour_depth_fbo() -> (GLuint, GLuint, GLuint) {
+        let mut depth: GLuint = 0;
+        let zeros = [0u16; 64];
+        // SAFETY: room for one name; `zeros` holds an 8x8 GL_UNSIGNED_SHORT image.
+        unsafe {
+            glGenTextures(1, &mut depth);
+            glBindTexture(GL_TEXTURE_2D, depth);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_DEPTH_COMPONENT as GLint,
+                8,
+                8,
+                0,
+                GL_DEPTH_COMPONENT,
+                GL_UNSIGNED_SHORT,
+                zeros.as_ptr() as *const c_void,
+            );
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+        }
+        let colour = texture_rgba(8, 8);
+        let mut fbo: GLuint = 0;
+        // SAFETY: valid out pointer, plain GL calls.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colour, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        }
+        (fbo, colour, depth)
+    }
+
+    /// glmark2 shadow's frame on the PowerVR (pvr-depth-resolve): the frame
+    /// open on the window when the render into a depth texture starts is
+    /// submitted by that draw (the backend's frame split), and the render is
+    /// the NEXT kick. The stamps the draw took while it was built named the
+    /// kick being recorded then, the window's; they move to the kick the
+    /// backend put the draw in (`restamp_draw`): the render-into stamps of
+    /// both attachments and the sampled texture's last use. So the draw that
+    /// samples the depth submits that kick and waits for it before the
+    /// resolve. With kicks that complete at their submit (linux.c, and the
+    /// usual case on the board) the window's kick is done by then, and a
+    /// stamp left on it waited for nothing: the resolve ran while the render
+    /// was still being recorded.
+    #[test]
+    fn a_render_that_ends_the_open_frame_is_stamped_with_the_kick_holding_it() {
+        let gl = Gl::new(16, 16);
+        gl.set_kick_lag(Some(0));
+        textured(&gl);
+        let (fbo, colour, depth) = colour_depth_fbo();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glEnable(GL_DEPTH_TEST);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+        draw_tri(&gl);
+        let window = gl.kick_id();
+        assert!(gl.kick_pending(window), "the window's frame is open");
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glBindTexture(GL_TEXTURE_2D, colour); /* sampled while rendering into it: only stamps here */
+        }
+        let render = draw_tri(&gl);
+        assert_eq!(gl.submitted(), window, "the render's draw submitted the window's frame");
+        assert!(!gl.kick_pending(window), "and it completed at once");
+        assert_eq!(render.kick, window + 1, "the render is the next kick");
+        for (what, ti) in [("depth", depth), ("colour", colour)] {
+            assert_eq!(framebuffer::texture_target_use(gl.ctx(), ti as usize), render.kick, "{what} render-into stamp");
+        }
+        assert_eq!(gl.ctx().objs().textures[colour as usize].last_use, render.kick, "the sampled texture's last use");
+        /* the ground: back to the window, sampling the depth */
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, depth);
+        }
+        gl.set_resolve_depth(Some(0.5));
+        let flushes = gl.flushes();
+        draw_tri(&gl);
+        let r = gl.depth_resolves();
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert!(r[0].flushes > flushes, "the render's kick was submitted before the resolve: {r:?}");
+        assert_eq!(depth_texel(&gl, depth, 7, 7), 0.5);
+    }
+
+    /// The same stamps protect a CPU write: glTexSubImage2D into a texture
+    /// a split-off render still has open, and glBufferSubData into the
+    /// buffer that render reads, wait for (or step around) the render's kick
+    /// rather than the completed one before it. The mock flags a write that
+    /// lands under a kick still to run.
+    #[test]
+    fn a_cpu_write_after_a_render_that_ended_the_open_frame_waits_for_its_kick() {
+        let gl = Gl::new(16, 16);
+        gl.set_kick_lag(Some(0));
+        let prog = gl.program("uv.vert", "texture.frag");
+        let vbo = buffer_with(GL_ARRAY_BUFFER, dword_bytes(&TRI));
+        // SAFETY: plain GL calls; the vertices come from `vbo`.
+        unsafe {
+            glUseProgram(prog);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, core::ptr::null());
+            glEnableVertexAttribArray(0);
+        }
+        let sampled = texture_rgba(4, 4);
+        let (fbo, colour, _) = colour_depth_fbo();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, sampled);
+        }
+        draw_tri(&gl);
+        let window = gl.kick_id();
+        // SAFETY: plain GL call.
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, fbo) };
+        let render = draw_tri(&gl);
+        assert_eq!((gl.submitted(), render.kick), (window, window + 1));
+        assert_eq!(gl.ctx().objs().buffers[vbo as usize].last_use, render.kick, "the vertex buffer's last use");
+        assert_eq!(gl.ctx().objs().textures[sampled as usize].last_use, render.kick);
+        /* the render target, written by the CPU while its kick is open */
+        let flushes = gl.flushes();
+        let px = [0xffu8; 4];
+        // SAFETY: `px` holds a 1x1 RGBA image; `TRI` covers the bytes passed.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, colour);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.as_ptr() as *const c_void);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, 16, TRI.as_ptr() as *const c_void);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert!(gl.flushes() > flushes, "the render's kick was submitted before the write");
+        assert!(!gl.kick_pending(render.kick));
+        assert_eq!(gl.take_faults(), Vec::<String>::new());
+    }
+
     #[test]
     fn odd_width_texture_reports_the_even_row_pitch() {
         let gl = Gl::new(16, 16);
@@ -10891,6 +11243,7 @@ mod tests {
         assert_eq!(attrib_row(&word(5, 6, 7, 1), &ga, 4, 4, 2)[..2], [5.0f32.to_bits(), 6.0f32.to_bits()]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // ES 3.0 array types; report-es2 refuses them
     #[test]
     fn half_float_and_packed_arrays_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);
@@ -10910,6 +11263,7 @@ mod tests {
         assert_eq!(f32s(&d.attrib_data[1]), [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // GL_INT is an ES 3.0 array type; report-es2 refuses it
     #[test]
     fn int_arrays_of_glvertexattribpointer_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);

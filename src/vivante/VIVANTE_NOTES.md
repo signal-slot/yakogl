@@ -60,7 +60,8 @@ Files:
   `PE_PIPE_COLOR_ADDR`, linear, with `PE_LOGIC_OP.SINGLE_BUFFER(1)`, which is
   what a linear surface needs on a part with `LINEAR_PE`. RGB565, XRGB8888 and
   RGBA8888 window and FBO surfaces, plus the three float classes
-  (RGBA16F, R16F, R32F) through the extended format field.
+  (RGBA16F, R16F, R32F) through the extended format field, with FORMAT's
+  write mask (bit 4) set as etnaviv sets it ("RGBA16F targets", below).
 - **Depth and stencil.** One D24S8 buffer in memory, grown to the largest
   target seen, with `PE_DEPTH_CONFIG` (test, function, write, early Z),
   `PE_DEPTH_NEAR/FAR/NORMALIZE`, two-sided `PE_STENCIL_OP`,
@@ -1342,3 +1343,56 @@ check, got and want). The log's "x4: inside / outside / edge", "x4 scratch",
 A fence timeout or fault: dmesg, then tile status and RS_EXTRA_CONFIG are the
 next suspects. If arm 9 passes, make bit 3 the design (drop the knob bit),
 turn `GC_MSAA_ENABLE` on, and run dEQP multisample with the 4x config image.
+
+## RGBA16F targets, gl_test case 44 `es3hdr` (#6, 2026-10-10)
+
+Case 44 clears an RGBA8 and then an RGBA16F texture through an FBO, draws
+into the RGBA16F one, and samples each back at a quarter scale into the
+default framebuffer. The AM62P passes it; the i.MX8MP's default set on
+`a0f439d6` names it as its one failure. Two causes, both a departure from
+etnaviv, and one open question.
+
+**`PE_COLOR_FORMAT`'s two write masks.** The register has a write-mask bit
+per field: bit 4 for the 4-bit FORMAT, bit 31 for the 7-bit FORMAT_EXT
+(`state_3d.xml.h`: `VIVS_PE_COLOR_FORMAT_FORMAT_MASK 0x00000010`,
+`..._FORMAT_EXT_MASK 0x80000000`). A set mask bit keeps the field's old
+value. etnaviv writes `FORMAT_EXT(fmt) | FORMAT_MASK` for every format from
+R16F up (`etnaviv_state.c:282-283`), then ORs the blend state's COMPONENTS
+and OVERWRITE in (`etnaviv_emit.c:538-544`): for an RGBA16F target with
+every channel written and no blending, `0x13010f10`. regs.rs had named bit
+31 `GC_PE_COLOR_FORMAT_FORMAT_MASK`, so this backend wrote `0x93010f00`:
+FORMAT_EXT kept whatever it held, FORMAT was written as 0, and every
+RGBA16F, R16F and R32F target was drawn in a stale format. Both bits now
+carry their rnndb names and values; `the_pe_color_format_bits_are_the_rnndb_headers`
+reads them out of the vendored header, and
+`a_float_target_goes_through_the_extended_format_field` pins the whole word
+for five formats.
+
+**A LINEAR texture of 64-bit texels.** Issue #6's probes found that the
+texture unit reads the first 64 bytes of a LINEAR RGBA16F texture as 0 and,
+at a 64-byte row stride, misreads the edge texels of other rows, while the
+CPU reads the same memory right and RGBA8 is not affected; with the
+texture's base on a page both effects went away. The GC7000 OSAL aligns
+allocations to 64 bytes. Mesa never samples that layout here: a texture that
+is rendered into is TILED, every texture is a page-aligned GEM buffer, and
+`etna_texture_handle_incompatible` (`etnaviv_texture.c:240`) resolves
+anything else into a TILED one. So a texture with 64-bit texels is now
+sampled from the tiled copy (`tiled_copy.rs`, `wide_texels`), in either
+stage, and that copy starts on a page (`WIDE_BASE_ALIGN`; the allocation is
+one page larger and the copy starts at its first page boundary). The copy is
+rebuilt after each render into the texture, which finishes that render first
+(a CPU copy of 512 bytes for case 44's 8x8 target). What alignment the
+texture unit really needs (128, 256 or a page) is not measured; the copy
+makes the question moot for sampling.
+
+**Open: check 7.** In the probes, with the page alignment only, check 7
+("drawn: bottom-right ~ green") read `0x40042814` for `0x40043904`. Worked
+through the triangle (red, green, blue at (-1,-1), (1,-1), (1,1)), the
+colour read is exactly texel (5,0)'s where (7,0) is wanted: blue 1/16 (row 0
+is right), red 5/16 and green 10/16 (x is two texels short). That is either
+the sampler (the same 64-byte-stride misread, which the tiled copy removes)
+or the PE writing a 64-bit LINEAR target (Mesa renders 64-bit targets only
+TILED on this core). The board run of the fix splits them: a pass, or check
+7 again with the same value, which puts it in the PE's linear 64-bit write;
+the next step there would be to render RGBA16F targets tiled and resolve
+them, as Mesa does.

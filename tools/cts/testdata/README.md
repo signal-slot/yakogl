@@ -30,6 +30,10 @@ fixtures are its only host evidence:
 - `am62p-sweep.config`, `imx8mp-sweep.config`, `pi4-sweep.config` and
   `am62p-ms4.config` (with `--ms4`) — one conformance image per board plus
   the multisample one; the check must pass each
+- `pi4-gles3-sweep.config` — a Pi 4 dEQP-GLES3 image
+  (`pi4-deqp-images.sh` with `DEQP_MODULE=gles3`: both `REPORT_ES2` symbols
+  off); the check must pass it with `--gles3` and refuse it without, naming
+  `YAKOGL_REPORT_ES2`, and must refuse `pi4-sweep.config` with `--gles3`
 - `bad-*.config` — one broken image per rule the check enforces: the
   compiler off (`bad-compiler-missing`), the Mesa table chosen
   (`bad-shaderc-offline`), precompiled-only (`bad-precompiled-only`), the

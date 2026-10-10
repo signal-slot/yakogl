@@ -212,6 +212,16 @@ suite and the samples' diagnostics include it. Each further GPU adds `src/<gpu>/
 its own table and shader back end (`driver/docs/imx8mp-backend-plan.md`,
 `driver/docs/rpi4-v3d-backend-plan.md`).
 
+Kicks: `kick_id` is the kick being recorded, and `kick_pending(id)` whether a
+kick has still to complete. The GL core stamps what a draw renders into and reads
+(texture targets, textures, buffers, its staging blocks) with `kick_id()` while it
+builds the draw, notes where each stamp lives, and moves them all to `kick_id()`
+once `draw` has returned 0 (`gl::draw::draw_stamp`, `restamp_draw`): a draw that
+ends the open frame (another target, a full frame) lands in the next kick, and the
+contract is that `kick_id()` after a recorded draw names the kick holding it. A
+CPU write into an object, a depth texture's resolve and a read-back submit and
+wait for the object's stamp while it is pending.
+
 ## The Rust crate (2026-09)
 
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from

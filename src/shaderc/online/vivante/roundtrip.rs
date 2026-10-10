@@ -6,7 +6,7 @@
 //! Host tests over the Vivante table, so they are compiled only when that is
 //! the table in the build (`host-test,gpu-vivante,shaderc-online`).
 
-#![cfg(all(test, feature = "gpu-vivante"))]
+#![cfg(all(test, feature = "gpu-vivante", mesa_reference))]
 
 use super::decode::{decode_instr, DecodeError};
 use super::encode::encode_instr;

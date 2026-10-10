@@ -493,7 +493,12 @@ struct yakogl_backend {
 	int  (*finish)(void);
 	/* wait for the frame before the last submitted one (pipelined swap) */
 	int  (*finish_previous)(void);
-	/* the id of the last submitted frame, and whether a frame is still running */
+	/* The kick being recorded (the open frame's id, or the next frame's).
+	 * After a draw that returned 0 it names the kick holding that draw (its
+	 * last part, when the backend split it): the GL core moves the draw's
+	 * stamps there (gl::draw::restamp_draw). kick_pending(id): whether kick
+	 * id has still to complete (the kick being recorded is, from its first
+	 * draw). */
 	uint32_t (*kick_id)(void);
 	bool (*kick_pending)(uint32_t kick_id);
 	/* device-VA base of a heap the core allocates in */

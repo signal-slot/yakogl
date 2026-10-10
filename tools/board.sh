@@ -43,8 +43,9 @@
 #   4. stages the image (/boot/firmware + tryboot.txt | the TFTP root |
 #      /var/yakogl on the eMMC | ~/kexec) and reads it back by sha256 (the
 #      eMMC copy after dropping the page cache);
-#   5. starts the console capture (Pi 4 UART | AM62P serial bridge; the
-#      i.MX8MP has none, its TFTP log and SNVS record are read afterwards);
+#   5. starts the console capture (Pi 4 UART or serial bridge | AM62P serial
+#      bridge; the i.MX8MP has none, its TFTP log and SNVS record are read
+#      afterwards);
 #   6. boots (tryboot reboot | the U-Boot one-shot and a reboot | kexec);
 #   7. waits for the image's end (a result `yk-record:` line, or the sample's
 #      own end line) or the bound, then for Linux from a new boot;
@@ -85,7 +86,7 @@
 #
 # Records: run writes <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>/ with meta.txt
 # (what the run measured, key=value), console.txt ("HH:MM:SS line"), the
-# backend's own files (console.raw and console.ts from the AM62P bridge,
+# backend's own files (console.raw and console.ts from a serial bridge,
 # tftp.txt and snvs.txt on the i.MX8MP, kexec.log) and INDEX.txt (the runner's
 # build, the image's sha256 and build line, board, backend, times, the verdict
 # line, the decoded records, every file with its sha256 and line count;
@@ -127,9 +128,9 @@
 #
 # Environment (no default for a machine or an address):
 #   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read)
-#   BOARD_UART         pi4: the serial device wired to the Pi (PI4_UART also
-#                      read); am62p: host:port of the serial bridge (UART_ADDR
-#                      also read)
+#   BOARD_UART         pi4: the serial device wired to the Pi, or host:port of
+#                      a serial bridge (PI4_UART also read); am62p: host:port
+#                      of the serial bridge (UART_ADDR also read)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
@@ -143,6 +144,9 @@
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
 #                      also read); BOARD_TAIL_S seconds kept after it (5)
 #   BOARD_HDMI_TIMINGS pi4: the panel's hdmi_timings (PI4_HDMI_TIMINGS also read)
+#   BOARD_MUSTPASS     the mustpass list the console tally and diff read
+#                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
+#                      tree names tools/cts/gles3-mustpass.txt)
 #   SEL                i.MX8MP: the selector written into the cleared record
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 #   YAKOGL_TOOLS       the yakogl-tools binary (default: built with cargo here)
@@ -239,6 +243,33 @@ NB_RECORDS="records/$BOARD/netboot"
 
 note() { echo "board.sh $BOARD: $*"; }
 
+# uart_is_bridge: BOARD_UART is host:port of a serial bridge (a raw TCP stream
+# of the board's UART, one client at a time), not a local device
+uart_is_bridge() { [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
+
+# bridge_capture: the capture of BOARD_UART's bridge into console.raw and
+# console.ts (tools/am62p_netboot_uart.py capture: the bridge's protocol, no
+# board's); CAP its PID. The bridge holds one client; "busy" is the previous
+# one, retried up to 12 times 10 s apart. Returns 1 when it never connected.
+bridge_capture() {
+    local try
+    if [ "$DRY" = 1 ]; then
+        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
+        return 0
+    fi
+    for try in $(seq 1 12); do
+        python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+        CAP=$!
+        sleep 3
+        if kill -0 "$CAP" 2>/dev/null; then return 0; fi
+        wait "$CAP" 2>/dev/null
+        CAP=
+        note "bridge busy or unreachable (try $try of 12)" >&2
+        sleep 10
+    done
+    return 1
+}
+
 # bget VAR CMD [DRY-VALUE]: a board read into VAR. In --dry-run the command is
 # printed (a capture would swallow b's own print) and VAR gets DRY-VALUE.
 bget() {
@@ -332,7 +363,14 @@ plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
 end_seen() {
     local c=$1
     [ -s "$c" ] || return 1
-    if [ -n "$END_RE" ] && plain "$c" | grep -aqE "$END_RE"; then return 0; fi
+    # grep reads plain through a process substitution, never a pipe: under
+    # pipefail "plain | grep -q" failed whenever grep's early exit cut plain's
+    # last write (SIGPIPE, or EPIPE where SIGPIPE is ignored), so a console
+    # with the end line followed by more than a pipe's worth of lines read as
+    # no end (Pi 4 rows E and NS of a27d69c0, 2026-10-10)
+    # (and its stderr dropped: the writer cut short still says "Broken pipe",
+    # which landed in front of the tally's verdict line)
+    if [ -n "$END_RE" ] && grep -aqE "$END_RE" < <(plain "$c" 2>/dev/null); then return 0; fi
     if grep -aq 'yk-record: ' "$c"; then
         # (a FINGERPRINT, class fingerprint, is written beside the verdict, never as the end)
         case "$(ytools record --log "$c" --classify 2>/dev/null)" in
@@ -375,7 +413,7 @@ pvr_resets() {
     [ -s "$c" ] || { echo absent; return; }
     n=$(plain "$c" | sed -nE 's/.*render freelists: .*GPU recoveries ([0-9]+) \(HWR counter [0-9]+\).*/\1/p' | tail -1)
     if [ -n "$n" ]; then echo "$n"; return; fi
-    a0=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter ([0-9]+) -> [0-9]+\).*/\1/p' | head -1)
+    a0=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter ([0-9]+) -> [0-9]+\).*/\1/p' 2>/dev/null | head -1)
     b=$(plain "$c" | sed -nE 's/.*render: HWR during fence [0-9]+ \(counter [0-9]+ -> ([0-9]+)\).*/\1/p' | tail -1)
     if [ -n "$b" ]; then echo $((b - a0)); return; fi
     if [ -n "$(legacy_result "$c")" ]; then echo 0; return; fi
@@ -499,9 +537,9 @@ verdict_line() {
             rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
         # a fatal error is never done, summary or not; the RTI feeder's end
         # (the image outlived its bounded feeding) only counts without a result
-        elif plain "$console" 2>/dev/null | grep -aq 'ZEPHYR FATAL ERROR'; then bv=fatal
+        elif grep -aq 'ZEPHYR FATAL ERROR' < <(plain "$console" 2>/dev/null); then bv=fatal
         elif [ -n "$(legacy_result "$console")" ] || [ -n "$(single_case "$console")" ]; then bv=complete
-        elif plain "$console" 2>/dev/null | grep -aq 'RTI feeder lifetime over'; then bv=watchdog_end
+        elif grep -aq 'RTI feeder lifetime over' < <(plain "$console" 2>/dev/null); then bv=watchdog_end
         elif end_seen "$console"; then bv=complete
         else bv=no_end_line; fi
         ;;
@@ -684,7 +722,7 @@ boot_build() {
     # newline, so the first Zephyr line (sample_glue.c's PRE_KERNEL_2 build
     # line) arrives glued to it ("MESS:00:00:06.210776:0:sample: build tree=...",
     # the common set of 2026-10-04); the match starts at the build line itself.
-    l=$(plain "$c" | grep -aoE '[A-Za-z0-9_][A-Za-z0-9_ ]*: build (tree=)?[0-9A-Za-z][0-9A-Za-z._:+-]{6,}.*' | grep -v '%s' | head -1)
+    l=$(plain "$c" | grep -aoE '[A-Za-z0-9_][A-Za-z0-9_ ]*: build (tree=)?[0-9A-Za-z][0-9A-Za-z._:+-]{6,}.*' | grep -v '%s' 2>/dev/null | head -1)
     echo "${l:-absent (the console has no build line)}"
 }
 
@@ -744,6 +782,12 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 # ---- tryboot (pi4) ----------------------------------------------------------------
 pi4_uart_free() {
     local uart p f holders=
+    if uart_is_bridge; then
+        # no device on this host: the bridge answers a second client "busy",
+        # which the capture retries and refuses on
+        [ "$DRY" = 1 ] && echo "DRY host\$ (no local device: $BOARD_UART is a serial bridge; a 'busy' answer refuses at the capture)"
+        return 0
+    fi
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ scan every /proc/<pid>/fd for $BOARD_UART (nobody may hold it)"
         return 0
@@ -819,6 +863,11 @@ $(pi4_config "$STAGED")"
 }
 
 pi4_capture_start() {
+    if uart_is_bridge; then
+        bridge_capture || { pi4_undo; die "serial bridge $BOARD_UART busy or unreachable after 12 tries (staged image removed; no reboot)"; }
+        meta console "serial bridge: console.raw, console.ts; console.txt derived"
+        return 0
+    fi
     act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || { pi4_undo; die "stty on $BOARD_UART failed"; }
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
@@ -851,6 +900,7 @@ run_tryboot() {
     meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then b 'sudo reboot "0 tryboot"'; else b 'sudo reboot "0 tryboot"' > /dev/null 2>&1; fi
     if [ "$DRY" = 1 ]; then
+        uart_is_bridge && echo "DRY host\$ derive <rundir>/console.txt ('HH:MM:SS line') from <rundir>/console.ts as it grows, and once more after the capture stops"
         echo "DRY host\$ wait for the end line ($END_RE) or a result yk-record: line, <= $bound s; then $TAIL_S s more"
         echo "DRY host\$ stop the reader; wait for a boot_id other than the one read (<= $backs s more)"
         pi4_undo
@@ -858,11 +908,13 @@ run_tryboot() {
     fi
     note "$NAME: tryboot at $(date +%T), waiting for the record's end (at most $bound s)"
     while [ $(($(date +%s) - t0)) -lt "$bound" ]; do
+        uart_is_bridge && console_from_ts
         if end_seen "$RD/console.txt"; then ended=1; break; fi
         sleep 2
     done
     [ "$ended" = 1 ] && sleep "$TAIL_S"
     stop_cap
+    uart_is_bridge && console_from_ts
     meta end_seen "$ended"
     meta capture_stopped "$(date '+%F %T'), $(wc -l < "$RD/console.txt") lines"
     while [ $(($(date +%s) - t0)) -lt $((bound + backs)) ]; do
@@ -1236,23 +1288,10 @@ run_kexec() {
 }
 
 kexec_am62p() {
-    local try t0 rcc=""
-    # 5. the capture: the bridge holds one client; "busy" is the previous one,
-    #    retried up to 12 times 10 s apart
-    if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
-    else
-        for try in $(seq 1 12); do
-            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
-            CAP=$!
-            sleep 3
-            if kill -0 "$CAP" 2>/dev/null; then break; fi
-            wait "$CAP" 2>/dev/null
-            CAP=
-            note "bridge busy or unreachable (try $try of 12)" >&2
-            sleep 10
-        done
-        [ -n "$CAP" ] || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
+    local t0 rcc=""
+    # 5. the capture (bridge_capture: 'busy' retried)
+    bridge_capture || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
+    if [ "$DRY" != 1 ]; then
         trap 'stop_cap; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     fi
     # 4.+6. kexec_run.sh copies the image and the loader, releases the GPU
@@ -1426,7 +1465,7 @@ cmd_run() {
         tryboot)
             STAGED="yakogl-probe.bin"
             if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-            : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi}"
+            : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
             pi4_prechecks
             ;;
         kexec-dev)
@@ -1440,7 +1479,7 @@ cmd_run() {
     case "$BOOT" in
     tryboot)
         if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-        : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi}"
+        : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
         run_tryboot
         ;;
     uboot-tftp | uboot-mmc) run_uboot ;;
@@ -1874,7 +1913,7 @@ cmd_tally() {
         printf '%-28s %s; GPU reset lines: %s\n' "$(basename "$(dirname "$c")")" "${rv:-no recoveries line}" \
             "$(grep -ac 'GPU reset (recovery' "$c")"
     done
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --table "${cons[@]}"
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --table "${cons[@]}"
 }
 
 cmd_diff() {
@@ -1900,9 +1939,9 @@ cmd_diff() {
     mapfile -t cb < <(consoles_with_deqp "${rb[@]}")
     { [ ${#ca[@]} -gt 0 ] && [ ${#cb[@]} -gt 0 ]; } || die "diff needs dEQP consoles (or results.tsv) in both $a and $b" 2
     base=$TMP/statuses-a.txt
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --statuses "${ca[@]}" > "$base" ||
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --statuses "${ca[@]}" > "$base" ||
         die "cannot read the statuses of $a"
-    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "$HERE/cts/gles2-mustpass.txt" --baseline "$base" "${cb[@]}" |
+    python3 "$HERE/cts/deqp-uart-tally.py" --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" --baseline "$base" "${cb[@]}" |
         sed "s|against $base|of $b against $a|"
 }
 

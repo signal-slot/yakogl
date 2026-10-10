@@ -24,6 +24,9 @@
 #                    way (powervr, vivante runs); it is GPL-3.0 text and is
 #                    never committed (tools/shaders/glmark2/README.md)
 #   GM2_JOBS         parallel scene runs (default: nproc)
+#   GM2_KICKS=1      on the PowerVR, log after every draw the framebuffer it
+#                    rendered into and the kick holding it ("gm2: draw",
+#                    shim.c), to read a scene's pass order in logs/powervr/
 #   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
 #                    one not set is taken from the Pi 4's glmark2 image,
 #                    driver/samples/zephyr/glmark2/boards/rpi_4b.conf (its
@@ -36,7 +39,7 @@ VERSION=2023.01 # meson.build's project version at that commit
 
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { sed -n '3,29p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,32p' "$0"; exit 2; }
 GM_ROOT="$(cd "$1" && pwd)" || die "no directory $1"
 OUT="${2:-$ROOT/build/glmark2-host}"
 shift $(( $# >= 2 ? 2 : 1 ))

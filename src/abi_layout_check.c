@@ -596,6 +596,7 @@ _Static_assert(offsetof(struct gl_renderbuffer, height) == 12, "struct gl_render
 _Static_assert(offsetof(struct gl_renderbuffer, mem) == 16, "struct gl_renderbuffer.mem");
 _Static_assert(offsetof(struct gl_renderbuffer, external) == 56, "struct gl_renderbuffer.external");
 _Static_assert(offsetof(struct gl_renderbuffer, orphan) == 57, "struct gl_renderbuffer.orphan");
+_Static_assert(offsetof(struct gl_renderbuffer, samples) == 58, "struct gl_renderbuffer.samples");
 _Static_assert(offsetof(struct gl_renderbuffer, serial) == 60, "struct gl_renderbuffer.serial");
 _Static_assert(offsetof(struct gl_renderbuffer, storage_gen) == 64, "struct gl_renderbuffer.storage_gen");
 _Static_assert(sizeof(struct gl_attachment) == 16, "struct gl_attachment");

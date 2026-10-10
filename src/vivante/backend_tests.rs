@@ -54,6 +54,10 @@ struct Platform {
     clock: Option<(u64, u64)>,
     /// Every OSAL_QUERY_DRAW_STATS report, in order.
     draw_stats: Vec<crate::draw_steps::OsalDrawStats>,
+    /// Hand out addresses 64 bytes past a page, as the GC7000 OSAL's 64-byte
+    /// alignment can (src/osal/zephyr_gc.c GC_OSAL_ALIGN); the reservation
+    /// stays page-sized, so nothing else moves.
+    off_page: bool,
 }
 
 static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
@@ -87,8 +91,9 @@ unsafe extern "C" fn p_gpu_alloc(heap_base: u64, size: usize, _flags: u32, out: 
         let mut mem = vec![0u64; size.div_ceil(8)].into_boxed_slice();
         /* page-aligned, as a real allocator's are: the frame's command buffer
          * relies on an even capacity for its closing pad word */
-        let gpu = heap_base + 0x1000 + p.bump[h];
-        p.bump[h] += (size as u64).div_ceil(4096) * 4096;
+        let skew = if p.off_page { 64 } else { 0 };
+        let gpu = heap_base + 0x1000 + p.bump[h] + skew;
+        p.bump[h] += (size as u64 + skew).div_ceil(4096) * 4096;
         let cpu = mem.as_mut_ptr() as *mut c_void;
         // SAFETY: the caller passes a writable descriptor.
         unsafe { *out = OsalGpuMem { cpu, gpu, phys: gpu, size, impl_: cpu } };
@@ -1080,15 +1085,60 @@ fn a_view_window_puts_its_pitch_into_the_pixel_engines_and_the_resolves_stride()
     assert_eq!(p.reg(GC_PE_COLOR_STRIDE), 800 * 4);
 }
 
+/// PE_COLOR_FORMAT for a float target is etnaviv's word: FORMAT_EXT(fmt) with
+/// FORMAT's write mask (bit 4), never FORMAT_EXT's (bit 31), then the colour
+/// mask and OVERWRITE (etnaviv_state.c:281-291, merged with the blend state's
+/// bits as etnaviv_emit.c:538-544 does). Bit 31 in place of bit 4 told the PE
+/// to keep the FORMAT_EXT it had, so an RGBA16F target was drawn in some
+/// other format (gl_test 44, #6). A 32-bit format goes through FORMAT, and
+/// neither mask bit is set.
 #[test]
 fn a_float_target_goes_through_the_extended_format_field() {
     let rig = Rig::new();
+    for (fmt, want, what) in [
+        (GLES_SURF_RGBA16F, 0x1301_0f10u32, "RGBA16F: FORMAT_EXT 0x13"),
+        (GLES_SURF_R16F, 0x1101_0f10, "R16F: FORMAT_EXT 0x11"),
+        (GLES_SURF_R32F, 0x1401_0f10, "R32F: FORMAT_EXT 0x14"),
+        (GLES_SURF_RGBA8888, 0x0001_0f06, "RGBA8888: FORMAT 6 (A8R8G8B8)"),
+        (GLES_SURF_RGB565, 0x0001_0f04, "RGB565: FORMAT 4"),
+    ] {
+        let mut d = rig.draw(3);
+        d.target_format = fmt;
+        d.targets[0].format = fmt;
+        let f = rig.submit(&d).reg(GC_PE_COLOR_FORMAT);
+        assert_eq!(f, want, "{what}: 0x{f:08x}");
+        assert_eq!(f & GC_PE_COLOR_FORMAT_FORMAT_EXT_MASK, 0, "{what}: FORMAT_EXT is written");
+    }
     let mut d = rig.draw(3);
     d.target_format = GLES_SURF_RGBA16F;
+    d.targets[0].format = GLES_SURF_RGBA16F;
     let f = rig.submit(&d).reg(GC_PE_COLOR_FORMAT);
-
-    assert_ne!(f & GC_PE_COLOR_FORMAT_FORMAT_MASK, 0, "FORMAT_EXT is the one that counts");
+    assert_eq!(f & 0xf, 0, "FORMAT itself is left at 0, under its mask");
     assert_eq!((f >> 24) & 0x7f, GC_PE_FORMAT_A16B16G16R16F);
+}
+
+/// The PE_COLOR_FORMAT bits regs.rs names are the vendored rnndb header's
+/// (driver/src/vivante/hw/state_3d.xml.h, Mesa's src/etnaviv/hw): the bit-4
+/// write mask was once written down as bit 31, which is FORMAT_EXT's own.
+#[test]
+fn the_pe_color_format_bits_are_the_rnndb_headers() {
+    const XML: &str = include_str!("../../driver/src/vivante/hw/state_3d.xml.h");
+    let define = |name: &str| -> u32 {
+        let line = XML
+            .lines()
+            .find(|l| l.split_whitespace().nth(1) == Some(name))
+            .unwrap_or_else(|| panic!("{name} is in state_3d.xml.h"));
+        let v = line.split_whitespace().nth(2).expect("a value");
+        u32::from_str_radix(v.trim_start_matches("0x"), 16).expect("hex")
+    };
+    assert_eq!(GC_PE_COLOR_FORMAT, define("VIVS_PE_COLOR_FORMAT"));
+    assert_eq!(GC_PE_COLOR_FORMAT_FORMAT_MASK, define("VIVS_PE_COLOR_FORMAT_FORMAT_MASK"));
+    assert_eq!(GC_PE_COLOR_FORMAT_FORMAT_EXT_MASK, define("VIVS_PE_COLOR_FORMAT_FORMAT_EXT_MASK"));
+    assert_eq!(GC_PE_COLOR_FORMAT_OVERWRITE, define("VIVS_PE_COLOR_FORMAT_OVERWRITE"));
+    assert_eq!(GC_PE_COLOR_FORMAT_SUPER_TILED, define("VIVS_PE_COLOR_FORMAT_SUPER_TILED"));
+    assert_eq!(GC_PE_COLOR_FORMAT_SUPER_TILED_NEW, define("VIVS_PE_COLOR_FORMAT_SUPER_TILED_NEW"));
+    assert_eq!(pe_color_format_format_ext(0x7f), define("VIVS_PE_COLOR_FORMAT_FORMAT_EXT__MASK"));
+    assert_eq!(pe_color_format_components(0xf), define("VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK"));
 }
 
 #[test]
@@ -2101,6 +2151,119 @@ fn a_vertex_stage_2d_texture_is_sampled_from_a_tiled_copy() {
         let at = ((tile * 16 + (y % 4) * 4 + x % 4) * 4) as usize;
         assert_eq!(u32::from_le_bytes(copy[at..at + 4].try_into().unwrap()), y << 8 | x, "({x}, {y})");
     }
+}
+
+/// An RGBA16F 8x8 texture with its bytes, as gl_test 44's render target is:
+/// texel (x, y) holds the halves (x, y, salt, 0x3c00).
+fn half_texture(gpu: u64, salt: u16) -> (Vec<u16>, GlesTextureBind) {
+    let (w, h) = (8u32, 8u32);
+    let mut mem = vec![0u16; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let at = ((y * w + x) * 4) as usize;
+            mem[at..at + 4].copy_from_slice(&[x as u16, y as u16, salt, 0x3c00]);
+        }
+    }
+    let mut t = bind(gpu, w, h, 1);
+    t.format = GLES_TEXFMT_RGBA16F;
+    t.bytes = w * h * 8;
+    t.cpu = mem.as_ptr() as *const c_void;
+    (mem, t)
+}
+
+/// A texture with 64-bit texels is sampled from a tiled copy at a page
+/// boundary, never from its linear storage, in the fragment stage too: on
+/// the i.MX8MP the texture unit misread a LINEAR RGBA16F texture at a
+/// 64-byte-aligned base (its first 64 bytes as 0, the edge texels of other
+/// rows at a 64-byte stride; gl_test 44, #6), and Mesa samples such a
+/// texture only TILED in a page-aligned buffer. The OSAL here hands out
+/// addresses 64 bytes past a page, as the GC7000 one can.
+#[test]
+fn an_rgba16f_texture_is_sampled_tiled_from_a_page() {
+    let rig = Rig::new();
+    with_platform(|p| p.off_page = true);
+    let (mem, t) = half_texture(GC_HEAP_DATA + 0x80_0040, 7);
+    let mut d = rig.draw(3);
+    d.num_textures = 1;
+    d.textures[0] = t;
+    let desc = rig.submit(&d).descriptor(0);
+    let c0 = desc[GC_TEXDESC_CONFIG0 as usize / 4];
+    let lod0 = desc[texdesc_lod_addr(0) as usize / 4] as u64;
+
+    assert_eq!((c0 >> 20) & 0x3, GC_TEX_ADDRESSING_TILED, "CONFIG0 0x{c0:08x}");
+    assert_ne!(lod0, t.base_gpu, "the copy, not the GL core's storage");
+    assert_eq!(lod0 % 4096, 0, "the copy starts on a page: 0x{lod0:x}");
+    assert_eq!(desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4], 8 * 8, "a level-0 row of 8 texels of 8 bytes");
+    assert_eq!(desc[GC_TEXDESC_SLICE as usize / 4], 8 * 8 * 8);
+    /* every texel in its 4x4 tile, all eight bytes */
+    let copy = gpu_bytes(lod0, 8 * 8 * 8);
+    for y in 0..8u32 {
+        for x in 0..8u32 {
+            let tile = (y / 4) * 2 + x / 4;
+            let at = ((tile * 16 + (y % 4) * 4 + x % 4) * 8) as usize;
+            let src = ((y * 8 + x) * 4) as usize;
+            let got: Vec<u16> = copy[at..at + 8].chunks(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+            assert_eq!(got, mem[src..src + 4], "texel ({x}, {y})");
+        }
+    }
+    assert!(rig.faults().is_empty(), "{:?}", rig.faults());
+
+    /* an RGBA8 texture at the same kind of address keeps its linear storage */
+    let rgba = vec![0u32; 64];
+    let mut t8 = bind(GC_HEAP_DATA + 0x90_0040, 8, 8, 1);
+    t8.cpu = rgba.as_ptr() as *const c_void;
+    d.textures[0] = t8;
+    let desc = rig.submit(&d).descriptor(0);
+    assert_eq!((desc[GC_TEXDESC_CONFIG0 as usize / 4] >> 20) & 0x3, GC_TEX_ADDRESSING_LINEAR);
+    assert_eq!(desc[texdesc_lod_addr(0) as usize / 4] as u64, t8.base_gpu);
+}
+
+/// gl_test 44's round trip through the mock backend: a clear and a draw into
+/// an RGBA16F texture, each followed by a draw sampling it. A render into the
+/// texture still in the open frame is submitted and finished before the copy
+/// is read from memory, and each render's texels are what the next draw
+/// samples -- the copy is rebuilt from the storage, not kept.
+#[test]
+fn a_render_into_an_rgba16f_texture_reaches_the_draw_that_samples_it() {
+    let rig = Rig::new();
+    let (mut mem, t) = half_texture(GC_HEAP_DATA + 0x80_0000, 1);
+    let sample = |t: GlesTextureBind| {
+        let mut d = rig.draw(3);
+        d.num_textures = 1;
+        d.textures[0] = t;
+        d
+    };
+    let texel0 = |s: &Stream| {
+        let lod0 = s.descriptor(0)[texdesc_lod_addr(0) as usize / 4] as u64;
+        let b = gpu_bytes(lod0, 8);
+        [0, 2, 4, 6].map(|i| u16::from_le_bytes([b[i], b[i + 1]]))
+    };
+
+    /* the "clear" is a render into it in the open frame */
+    let mut into = rig.draw(3);
+    into.target_gpu = t.base_gpu;
+    into.target_format = GLES_SURF_RGBA16F;
+    into.targets[0] = GlesDrawTarget { gpu: t.base_gpu, w: 8, h: 8, format: GLES_SURF_RGBA16F };
+    into.target_w = 8;
+    into.target_h = 8;
+    into.viewport = [0, 0, 8, 8];
+    // SAFETY: `into` is a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&into) }, 0);
+    let kicks = rig.kicks();
+    /* what the PE would have written: 2.0, 0.5, 0.25, 1.0 */
+    mem[..4].copy_from_slice(&[0x4000, 0x3800, 0x3400, 0x3c00]);
+    let mut tc = t;
+    tc.target_kick = gc_kick_id();
+    let s = rig.submit(&sample(tc));
+    assert!(rig.kicks() > kicks, "the render into the texture was submitted before the copy");
+    assert_eq!(texel0(&s), [0x4000, 0x3800, 0x3400, 0x3c00], "the clear's texel is sampled");
+
+    /* a draw into it, by a kick that has completed */
+    mem[..4].copy_from_slice(&[0x2c00, 0x3b00, 0x2c00, 0x3c00]);
+    tc.target_kick = gc_kick_id() - 1;
+    let s = rig.submit(&sample(tc));
+    assert_eq!(texel0(&s), [0x2c00, 0x3b00, 0x2c00, 0x3c00], "the draw's texel, not the clear's");
+    assert!(rig.faults().is_empty(), "{:?}", rig.faults());
 }
 
 /// INT_FILTER (SAMP_CTRL0 bit 23) on a UNORM, non-3D texture's sampler in
