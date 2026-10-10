@@ -46,13 +46,14 @@ pub unsafe extern "C" fn glVertexAttribPointer(
     }
 
     match type_ {
-        GL_BYTE | GL_UNSIGNED_BYTE | GL_SHORT | GL_UNSIGNED_SHORT | GL_INT | GL_UNSIGNED_INT | GL_FLOAT | GL_FIXED => {}
-        /* ES 3.0 types. A build that reports ES 2.0 knows none of them: ES
+        GL_BYTE | GL_UNSIGNED_BYTE | GL_SHORT | GL_UNSIGNED_SHORT | GL_FLOAT | GL_FIXED => {}
+        /* ES 3.0 types. ES 2.0 2.8 lists no 32-bit integer array type, so
+         * GL_INT and GL_UNSIGNED_INT are GL_INVALID_ENUM there too. A build that reports ES 2.0 knows none of them: ES
          * 2.0 has no GL_HALF_FLOAT (0x140B; the GL_HALF_FLOAT_OES of
          * GL_OES_vertex_half_float is 0x8D61 and is not claimed either) and
          * no packed vertex type (GL_OES_vertex_type_10_10_10_2 is not
          * claimed), so they are GL_INVALID_ENUM there, as any unknown type. */
-        GL_HALF_FLOAT if !crate::REPORT_ES2 => {}
+        GL_INT | GL_UNSIGNED_INT | GL_HALF_FLOAT if !crate::REPORT_ES2 => {}
         /* ES 3.0 2.8: a packed type is four components in one word; any
          * other size is GL_INVALID_OPERATION. The draw path unpacks the word
          * (draw.rs attrib_row). */
@@ -626,7 +627,12 @@ mod tests {
     #[test]
     fn pointer_accepts_every_es2_type_and_size() {
         let gl = TestGl::new(8, 8);
-        for t in [GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT, GL_INT, GL_UNSIGNED_INT, GL_FLOAT, GL_FIXED] {
+        /* GL_INT and GL_UNSIGNED_INT are ES 3.0 array types (ES 2.0 2.8) */
+        let es3_only = [GL_INT, GL_UNSIGNED_INT];
+        for t in [GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT, GL_FLOAT, GL_FIXED]
+            .into_iter()
+            .chain(es3_only.into_iter().filter(|_| ES3))
+        {
             for size in 1..=4 {
                 // SAFETY: plain GL calls.
                 unsafe { glVertexAttribPointer(5, size, t, 0, 0, core::ptr::null()) };
@@ -801,7 +807,7 @@ mod tests {
         assert!(gl.ctx().attribs[2].integer);
         assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED), 0, "integer arrays are never normalized");
         // SAFETY: plain GL calls.
-        unsafe { glVertexAttribPointer(2, 4, GL_INT, 0, 0, core::ptr::null()) };
+        unsafe { glVertexAttribPointer(2, 4, if ES3 { GL_INT } else { GL_SHORT }, 0, 0, core::ptr::null()) };
         assert!(!gl.ctx().attribs[2].integer);
         if ES3 {
             assert_eq!(geti(2, GL_VERTEX_ATTRIB_ARRAY_INTEGER), 0);

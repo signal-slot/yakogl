@@ -10756,6 +10756,7 @@ mod tests {
         assert_eq!(attrib_row(&word(5, 6, 7, 1), &ga, 4, 4, 2)[..2], [5.0f32.to_bits(), 6.0f32.to_bits()]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // ES 3.0 array types; report-es2 refuses them
     #[test]
     fn half_float_and_packed_arrays_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);
@@ -10775,6 +10776,7 @@ mod tests {
         assert_eq!(f32s(&d.attrib_data[1]), [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // GL_INT is an ES 3.0 array type; report-es2 refuses it
     #[test]
     fn int_arrays_of_glvertexattribpointer_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);
