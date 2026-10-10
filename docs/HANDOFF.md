@@ -941,7 +941,20 @@ board-confirmed before then.
 
 - The records prove the framebuffer, not the panel: a display change needs
   someone looking at the panel (#23).
-- The gate is `tools/check.sh`. Run it from a clean detached checkout of
+- The gate is `tools/check.sh`. Before a push run the rows the change
+  reaches: `tools/check.sh --changed <base>` maps each changed path to the
+  parts it can break (a GPU back end, gl_test, the tools, the precompiled
+  tables, the drivers crate, the samples) and skips the other rows, printing
+  `skip` for each; a shared layer (`src/gl`, `src/shaderc`, the OSALs,
+  `capi`, `Cargo.toml`, the script itself) or a path the map does not know
+  selects every row, and `tools/check_scope_selftest.sh` pins the map.
+  `tools/land.sh` runs it that way (`LAND_GATE=full` for every row) with a
+  cargo target directory shared between landings. Every row runs in CI
+  (`.github/workflows/gate.yml`: a push to main and nightly, on a
+  self-hosted runner labelled `yakogl-gate` that carries the environment
+  below). The full run takes about 45 minutes; a V3D-only change selects
+  34 of the 137 rows, a docs change 2. For the full run by hand: a clean
+  detached checkout of
   the exact commit, with `driver/src/fw/pvr_fw_blob.h` copied in, and with
   `ZEPHYR_WS=<west workspace>`, `HAL_NXP_DIR=<hal_nxp>` and
   `GLMARK2_SRC=<glmark2 checkout at 22c527cb>` set. Without them the Zephyr,
@@ -953,8 +966,7 @@ board-confirmed before then.
   Mesa-table reproduction row also needs `PCO_SHC=<pco_shc from
   tools/pco_shc/build_pco_shc.sh, content id f537fc86b41f>`,
   `GLSLANG=<glslangValidator>` and, for speed, `GLSL2USC_CACHE=<dir>`;
-  without them that row is a gap and the gate is red. It takes about 45
-  minutes.
+  without them that row is a gap and the gate is red.
 - Board runs use `tools/board.sh <board> run <zephyr.bin> <record dir>
   <label>`. Run them from a detached checkout of main, and only with images
   built from commits on origin/main. Use `BOARD_BOOT=uboot-mmc` on the

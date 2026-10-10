@@ -9,8 +9,20 @@
 # invisible -- which is how three unused_unsafe of my own survived (283cc56)
 # and how a function with no callers did (7715e3f).
 #
-#   tools/check.sh            fmt, the no_std archive, clippy and the tests
-#   tools/check.sh --quick    the PowerVR build only, for a tight edit loop
+#   tools/check.sh                   every row: what CI runs
+#   tools/check.sh --changed <base>  the rows the diff from <base> can reach
+#                                    (what tools/land.sh runs before a push)
+#   tools/check.sh --quick           the PowerVR build only, for a tight edit loop
+#
+# --changed maps each changed path to the parts it can break (scope_of_path
+# below: a GPU back end, gl_test, the tools, the precompiled tables, the
+# drivers crate, the samples, or everything) and skips the rows of the other
+# parts, printing `skip` for each so the log says what was not run. A path
+# the map does not know, and every shared layer (src/gl, src/shaderc, the
+# OSALs, capi, Cargo.toml, this script), selects every row. The full run is
+# CI's (.github/workflows/gate.yml, a self-hosted runner with the gate's
+# environment); locally a change is tested where it reaches (user,
+# 2026-10-10: "普通はね、ローカルでは変更の影響範囲だけをテストするよ").
 #
 # In every configuration the library ships in:
 #
@@ -93,8 +105,41 @@ BUILD_ONLY_CONFIGS=(
   "host-test,gpu-vivante,shaderc-online,no-shader-table"
   "host-test,gpu-powervr,shaderc-online,no-shader-table"
 )
+# The parts of the tree a changed path can break. `all` is every row; the
+# others name the rows below that carry them in a `scope` line. The map is
+# conservative on purpose: a shared layer, a generated file's generator, or
+# a path it has never seen selects everything, and a wrong `skip` here is
+# what the full run in CI exists to catch.
+scope_of_path() {
+  case "$1" in
+  docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
+  tools/precompile/* | tools/shaders/* | tests/fixtures/precompile*) echo precompile ;;
+  src/shaderc/online/v3d/* | src/shaderc/online/v3d_abi.rs | src/v3d/* | driver/src/v3d/* | tools/v3d/* | tests/v3d_*) echo v3d ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/*) echo vivante ;;
+  src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
+  driver/tools/pvrlab/*) echo gltest ;;
+  tools/yakogl-tools/*) echo toolscrate ;;
+  tools/osal/*) echo osal ;;
+  driver/samples/*) echo samples ;;
+  driver/rust/* | driver/*) echo drivers ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/setup-gate-host.sh | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  *) echo all ;;
+  esac
+}
 QUICK=0
 [ "${1-}" = "--quick" ] && { CONFIGS=("host-test,gpu-powervr"); QUICK=1; }
+# --scope-of <path>...: print each path's scope and exit (tools/check_scope_selftest.sh).
+if [ "${1-}" = "--scope-of" ]; then
+  shift
+  for sp in "$@"; do echo "$sp $(scope_of_path "$sp")"; done
+  exit 0
+fi
+CHANGED_BASE=
+if [ "${1-}" = "--changed" ]; then
+  CHANGED_BASE=${2:?usage: tools/check.sh --changed <base-commit>}
+  git rev-parse --verify "$CHANGED_BASE^{commit}" >/dev/null 2>&1 ||
+    { echo "check.sh: --changed $CHANGED_BASE is not a commit"; exit 2; }
+fi
 # YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr host-test,gpu-vivante" (space-separated feature
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
@@ -111,9 +156,51 @@ oks=0
 fails=0
 gaps=0
 gap() {
+  if ! wanted; then skip "$*"; return; fi
   printf '\033[33mgap   %s\033[0m\n' "$*"
   gaps=$((gaps + 1))
   rc=1
+}
+
+# The scopes a cargo feature set reaches: its GPU, and the precompiled tier.
+config_scopes() {
+  local out=""
+  case "$1" in *gpu-powervr*) out="pvr" ;; *gpu-vivante*) out="vivante" ;; *gpu-v3d*) out="v3d" ;; esac
+  case "$1" in *precompiled-shaders*) out="$out precompile" ;; esac
+  echo "$out"
+}
+SCOPES=all
+if [ -n "$CHANGED_BASE" ]; then
+  # YAKOGL_CHECK_PATHS="<path> ..." stands in for the diff (the self-test).
+  if [ -n "${YAKOGL_CHECK_PATHS-}" ]; then
+    changed_paths=$(printf '%s\n' $YAKOGL_CHECK_PATHS)
+  else
+    changed_paths=$( { git diff --name-only "$CHANGED_BASE" HEAD
+      git status --porcelain | cut -c4- | sed 's/^.* -> //'; } | sort -u | grep . )
+  fi
+  SCOPES=$(for cp in $changed_paths; do scope_of_path "$cp"; done | sort -u | tr '\n' ' ')
+  case " $SCOPES " in *" all "*) SCOPES=all ;; esac
+  echo "check.sh: --changed $CHANGED_BASE: $(printf '%s\n' "$changed_paths" | grep -c .) path(s), scopes: ${SCOPES:-none}"
+  if [ "$SCOPES" = all ]; then
+    for cp in $changed_paths; do [ "$(scope_of_path "$cp")" = all ] && echo "      every row: $cp"; done
+  fi
+fi
+ROW_SCOPES=all
+scope() { ROW_SCOPES="$*"; }
+# 0 when the rows under the current `scope` line are selected.
+wanted() {
+  local s
+  [ "$SCOPES" = all ] && return 0
+  for s in $ROW_SCOPES; do
+    [ "$s" = all ] && return 0
+    case " $SCOPES " in *" $s "*) return 0 ;; esac
+  done
+  return 1
+}
+skips=0
+skip() {
+  printf '\033[2mskip  %s\033[0m\n' "$*"
+  skips=$((skips + 1))
 }
 
 # Every row ends with the seconds it took, so a gate log says where the time
@@ -129,6 +216,8 @@ step() {
   local label="$1"
   shift
   local out warns
+  if ! wanted; then skip "$label"; return 0; fi
+  if [ -n "${YAKOGL_CHECK_PLAN-}" ]; then echo "plan  $label"; oks=$((oks + 1)); return 0; fi
   row_t0=$SECONDS
   if out=$("$@" 2>&1); then
     # clippy exits 0 even with warnings, so the warning count is what decides.
@@ -174,6 +263,7 @@ step "cargo fmt --check" cargo fmt --check
 # images take it (the Mesa reference as the table, `mesa-reference-table`),
 # the configuration with the most exported entry points, which
 # tools/api_coverage.py reads from this archive.
+scope pvr tools
 step "build   yakogl-capi (no_std)" cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table
 
 # The tables of the tier configurations: yakogl-precompile on the gl_test_es100
@@ -189,11 +279,13 @@ tier_tables() {
   done
 }
 tier=()
+scope pvr vivante precompile
 for f in "${CONFIGS[@]}"; do
   case "$f" in *precompiled-shaders*) step "gen     precompiled tables for the tier configurations" tier_tables; break ;; esac
 done
 for f in "${CONFIGS[@]}"; do
   tier=()
+  scope "$(config_scopes "$f")"
   case "$f" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
     tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
@@ -219,6 +311,7 @@ if [ "$QUICK" -eq 0 ]; then
     [ "$gpu" = gc7000 ] && feature=gpu-vivante
     c="host-test,$feature,precompiled-shaders,no-shader-table"
     alone=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-$gpu.rs")
+    scope "$(config_scopes "$c")"
     step "clippy  $c (no compiler; lib and its tests)" "${alone[@]}" \
       cargo clippy --no-default-features --features "$c" --lib --profile test
     step "test    $c (no compiler: shaderc::precompiled)" "${alone[@]}" \
@@ -227,6 +320,7 @@ if [ "$QUICK" -eq 0 ]; then
 fi
 
 for f in "${BUILD_ONLY_CONFIGS[@]}"; do
+  scope "$(config_scopes "$f")"
   step "clippy  $f (no tests: see BUILD_ONLY_CONFIGS)" \
     cargo clippy --no-default-features --features "$f" --lib
 done
@@ -258,6 +352,7 @@ knobs_lib_tests() {
     printf '%s\n' "$out" | grep -qxF "test $t ... ok" || { echo "knob test did not run and pass: $t"; return 1; }
   done
 }
+scope vivante
 step "clippy  $KNOBS_CONFIG" cargo clippy --no-default-features --features "$KNOBS_CONFIG" --all-targets
 step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knobs_lib_tests
 
@@ -308,6 +403,7 @@ v3d_lib_tests() {
     return 1
   fi
 }
+scope v3d
 step "clippy  $V3D_CONFIG" cargo clippy --no-default-features --features "$V3D_CONFIG" --all-targets
 step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_tests
 # The V3D compiler (src/shaderc/online/v3d) and the Mesa QPU packer build.rs
@@ -385,6 +481,7 @@ if command -v cc >/dev/null 2>&1; then
     PYTHONDONTWRITEBYTECODE=1 python3 "$m/util/format/u_format_table.py" \
       "$m/util/format/u_format.yaml" --enums | cmp - "$g/util/format/u_format_gen.h"
   }
+  scope v3d
   step "gen     driver/src/v3d/generated == Mesa's generators on third_party" v3d_generated_regenerate
   # driver/src/pvr/generated/csbgen/rogue/ is what Mesa's csbgen makes from
   # the vendored XML, byte for byte, with the command of Mesa's
@@ -396,6 +493,7 @@ if command -v cc >/dev/null 2>&1; then
       PYTHONDONTWRITEBYTECODE=1 python3 "$m/gen_pack_header.py" "$m/rogue/$n.xml" | cmp - "$h" || return 1
     done
   }
+  scope pvr
   step "gen     driver/src/pvr/generated == Mesa's csbgen on third_party" pvr_generated_regenerate
   upstream_files_unmodified() {
     local u
@@ -403,7 +501,9 @@ if command -v cc >/dev/null 2>&1; then
       (cd "${u%/UPSTREAM}" && awk 'NF==2 && $1 ~ /^[0-9a-f]{64}$/ {print $1 "  " $2}' UPSTREAM | sha256sum --quiet -c -) || return 1
     done
   }
+  scope all
   step "sha256  third_party files are the upstream files (UPSTREAM)" upstream_files_unmodified
+  scope v3d
   step "cc      v3d FFI layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
     "${v3d_inc[@]}" src/v3d/ffi_layout_check.c
   step "cc      v3d job builder" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
@@ -487,6 +587,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope pvr
   step "run     pvr vdm_field_check (VDM/PPP fields refuse, never mask)" pvr_vdm_field_check
   # The render register words the C side packs with Mesa's csbgen
   # (driver/src/pvr_render_regs.c) against the literals the driver carried
@@ -543,6 +644,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope v3d
   step "run     v3d hw_mock_test (v3d_hw.c against the register model)" v3d_hw_mock_test
   # The TI/Img DDK's RGXStart / RGXStop and firmware image loader
   # (rgxstartstop.c, rgxfwimageutils.c, compiled through driver/compat exactly
@@ -581,6 +683,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope pvr drivers
   step "run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer)" pvr_rgxlayer_check
   # The PowerVR kernel side in Rust (driver/rust/src/gpu/pvr: mem, mmu, ccb,
   # freelist, fwinit, render; docs/source-form.md step 7): every layout
@@ -642,6 +745,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope v3d
   step "run     v3d tex_upload_check (eager copy = lazy copy)" v3d_upload_check
   # The V3D OSAL's rule for giving freed GPU memory back
   # (src/osal/v3d_frees.h, which zephyr_v3d.c uses and no host build
@@ -693,6 +797,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope osal
   step "run     osal pending_frees_check (a full queue waits, never leaks silently)" osal_pending_frees_check
   # The GC7000 Zephyr OSAL's rule for the same (src/osal/gc_frees.h, which
   # zephyr_gc.c uses and no host build reaches): tools/gc/osal_frees_check.c.
@@ -708,6 +813,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope vivante
   step "run     gc7000 osal_frees_check (frees back at once with no frame open)" gc_frees_check
   # GPU-neutral OSAL checks (tools/osal/): each program is built from its own
   # .c plus the cc arguments given, and the row requires its
@@ -728,6 +834,7 @@ if command -v cc >/dev/null 2>&1; then
   }
   # The one gpu_write / gpu_read argument check all seven OSALs make
   # (src/osal/osal_bounds.h): off + n wrapping, the edges, NULL buffers.
+  scope osal
   step "run     osal_bounds_check (gpu_write/gpu_read refuse a wrapped range)" \
     osal_host_check osal_bounds_check
   # The line buffer of the Zephyr OSALs' log() (src/osal/osal_log.h): a line
@@ -796,6 +903,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope v3d
   if [ -z "$v3d_mesa_tree" ]; then
     v3d_ref=build/v3d-check/mesa
     step "build   v3d mesa reference (tools/v3d/mesa_ref.sh)" tools/v3d/mesa_ref.sh
@@ -837,6 +945,7 @@ if command -v cc >/dev/null 2>&1; then
   # once went unseen (the query asked for pname 16 on every board).
   # The GC7000 arm twice: without the test knobs, as a product library has
   # none, and with them (YAKOGL_TEST_KNOBS, the gc_gl_test image's arm).
+  scope gltest
   for arm in "-DGL_TEST_HOST=1" "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1" \
     "-DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1"; do
     step "cc      gl_test.c $arm" cc -std=gnu11 -fsyntax-only -Wall -Wextra -Werror \
@@ -867,6 +976,7 @@ if command -v cc >/dev/null 2>&1; then
   # host tests name the files -- the 61 texts gl_test.c wrote as C string
   # literals became tools/shaders/gltest/ (88246148), so a header that is not
   # that text is a suite drawing one program while everything else checks another.
+  scope gltest precompile
   step "gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders" \
     python3 driver/tools/pvrlab/gen_gl_test_shaders.py --check
   # The PowerVR render pool's free lists (driver/rust/src/gpu/pvr/pool.rs, the
@@ -893,6 +1003,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope pvr drivers
   step "test    pvr render pool (Rust; the C pool's golden trace replayed, 28 tests)" pvr_pool_tests
   # The AM62P RTI arming arithmetic (driver/zephyr/lib/board/am62p/rti_arm.h):
   # the preload for 60 s at each clock rate the board reported, and the
@@ -909,6 +1020,7 @@ if command -v cc >/dev/null 2>&1; then
       return 1
     }
   }
+  scope pvr tools
   step "run     am62p rti_arm_check (60 s preload per reported RTI clock rate)" pvr_rti_arm_check
 else
   red "check.sh: no C compiler: the v3d FFI pins were NOT checked; this is a gap, not a pass"
@@ -946,10 +1058,12 @@ target_precompiled() {
 }
 if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none; then
   for f in "${TARGET_CONFIGS[@]}"; do
+    scope "$(config_scopes "$f")"
     step "check   $f (aarch64-unknown-none, no host-test)" \
       cargo check -p yakogl --no-default-features --features "$f" \
         --target aarch64-unknown-none
   done
+  scope pvr precompile
   step "check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)" target_precompiled
 else
   red "check.sh: aarch64-unknown-none is NOT installed -- the product arms were NOT compiled"
@@ -962,6 +1076,7 @@ fi
 # the writer reports a confident wrong reason, which is worse than no channel
 # at all, so its self-test runs here (six pages, well under a second).
 if command -v python3 >/dev/null 2>&1; then
+  scope tools
   step "tools   fault-record decoder self-test" python3 tools/cts/fault-record.py --self-test
   # The self-test only proves the decoder agrees with ITSELF. This one reads
   # gc_sample.c and checks every word it writes against what the decoder
@@ -976,11 +1091,13 @@ if command -v python3 >/dev/null 2>&1; then
   # shipped them. Two: the row comparison the rebuild refusal rests on,
   # exercised against the committed table so that a parser which has drifted
   # from the emitted shape fails here rather than reporting "nothing changed".
+  scope vivante tools
   step "tools   shader-table generator guards" python3 tools/vivante/gen_shader_table.py --self-test
   # The source list's gl_test programs (tools/shaders/precompiled.list, apps
   # gl_test and gl_test_es100) are what gl_test.c links, read out of its text
   # by glsl2v3d.py's reader: a case that links a new program and a list that
   # was not told fail here, not as a miss on a board.
+  scope gltest precompile
   step "tools   precompiled.list gl_test pairs == what gl_test.c links" python3 tools/precompile/gl_test_pairs.py --check
   # The PowerVR driver's USC blobs (driver/src/pvr_usc_*_blob.h) are the
   # rendering of tools/pco_shc/usc_blobs.txt, the list of what Mesa's pco
@@ -989,12 +1106,14 @@ if command -v python3 >/dev/null 2>&1; then
   # our encoder's, src/pvr/internal.rs). No Mesa build needed; that the list is what pco
   # makes is `gen_usc_blobs.py capture <capture_usc> --check` against a
   # build (tools/pco_shc/README.md), which this row does not run.
+  scope pvr
   step "gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt" \
     python3 tools/pco_shc/gen_usc_blobs.py render --check
   # The Zephyr dEQP tally's two verdicts on a log: MISSING (no summary) and
   # INCOMPLETE (fewer case lines than the summary's "with a result": the
   # serial capture lost lines, which on 2026-09-25 hid 12 mustpass cases
   # behind an exit status of 0).
+  scope tools
   step "tools   deqp-uart-tally log verdicts" python3 tools/cts/deqp-uart-tally.py --self-test
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
@@ -1038,6 +1157,7 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/api_coverage.py reads gl2.h + egl.h (declared), `nm`s the
   # yakogl-capi archive `cargo build -p yakogl-capi` above already built
   # (exported), and parses the PROCS table in src/gl/egl.rs (procaddress).
+  scope tools pvr
   step "tools   api_coverage.py self-test" python3 tools/api_coverage.py --self-test
   step "tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress" python3 tools/api_coverage.py
   # The population, not only its zero: a declared-but-not-exported name does
@@ -1071,6 +1191,7 @@ fi
 # --dry-run prints what it would install and touches no machine, so the gate can
 # execute it. `env -u` is the point: inheriting the variable from the developer's
 # shell is exactly how the defect stayed invisible here.
+scope tools
 step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
   env -u FAULT_RECORD_ADDR -u KO_DIR -u KEXEC_DIR BOARD_HOST=torizon@gate.invalid \
     driver/tools/kexec-zephyr/board-sudo-setup.sh --dry-run
@@ -1127,6 +1248,7 @@ check_table_absent() {
   echo "table symbols: $with with the table, $without without"
 }
 
+scope vivante precompile
 step "no table in the artefact" check_table_absent
 
 # No Mesa reference in a product artefact. The Mesa-built tables
@@ -1206,6 +1328,7 @@ check_no_mesa_reference() {
   echo "${#configs[@]} product archive(s), 0 reference symbols each"
 }
 
+scope pvr vivante v3d precompile
 step "no Mesa reference in the artefact" check_no_mesa_reference
 
 # No test knob in the artefact either, read the same way: the C archive a
@@ -1246,6 +1369,7 @@ check_knobs_absent() {
   echo "gc_debug_* symbols: 0 in the product archive, $(printf '%s\n' "$knobs" | wc -l) with test-knobs"
 }
 
+scope vivante
 step "no test knob in the artefact" check_knobs_absent
 
 # The rows above name THIS package's features, so they never build the
@@ -1253,6 +1377,7 @@ step "no test knob in the artefact" check_knobs_absent
 # so a change to a public signature breaks it and every row still passes:
 # `sema::check` gained a return value and `online-check` went on compiling
 # `Ok(())` until someone ran the binary by hand. One row closes that.
+scope toolscrate
 step "clippy  yakogl-tools" cargo clippy -p yakogl-tools --all-targets
 # Clippy alone does not run its tests: the cube helper's level-aware clamp
 # (6874c8ee) changed the GLSL prelude and three glsl::tests stayed red on main
@@ -1264,6 +1389,7 @@ step "test    yakogl-tools" cargo test -p yakogl-tools
 # configuration with std around it. Lint it for every build it makes a table
 # for, and run its tests for both GPUs (the GC7000 one has the link-time
 # attribute layout; about 15 s and 1 s).
+scope precompile pvr vivante
 for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
   step "clippy  yakogl-precompile $f" cargo clippy -p yakogl-precompile --features "$f" --all-targets
 done
@@ -1286,13 +1412,19 @@ step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compi
 # and the i.MX8MP full-tree results replayed through its verdict, tally and
 # diff, each against what the old runner prints for the same input. The check
 # count is pinned (about 35 s).
+scope tools
 step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
+# The map --changed selects rows by, pinned path by path, and the plans of
+# a docs, a V3D, a gl_test and a shared-layer change.
+scope tools
+step "tools   check.sh --changed: the path-to-scope map and four plans" tools/check_scope_selftest.sh
 # The PowerVR backend's view of Mesa's csbgen packers (src/pvr/csbgen.rs and
 # the C wrappers build.rs compiles, driver/src/pvr/generated/csbgen_wrap.c)
 # is bindgen's output over driver/compat/pvr_csbgen_rs.h, committed so that no
 # build needs libclang: regenerate it here and require the committed bytes.
 # bindgen loads libclang at run time (clang-sys: LIBCLANG_PATH, else the
 # usual places), which this machine has; a gate without it is a red row.
+scope pvr toolscrate
 step "gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen" \
   cargo run -q -p yakogl-tools -- csbgen-bindings --check
 
@@ -1303,6 +1435,7 @@ step "gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen" \
 # The one Slint sample's frame check (driver/samples/zephyr/slint/check): the
 # AM62P reference table, the tolerance and the record words, on synthetic
 # frames. The Zephyr images themselves are not built here.
+scope samples
 step "clippy  yakogl-slint-check" cargo clippy -p yakogl-slint-check --all-targets
 step "test    yakogl-slint-check" cargo test -p yakogl-slint-check
 # The cluster sample's check and records (driver/samples/zephyr/cluster/check):
@@ -1315,6 +1448,7 @@ step "test    yakogl-cluster-check" cargo test -p yakogl-cluster-check
 # shader texts against both offline tables, on synthetic frames.
 step "clippy  yakogl-triangle-check" cargo clippy -p yakogl-triangle-check --all-targets
 step "test    yakogl-triangle-check" cargo test -p yakogl-triangle-check
+scope drivers pvr vivante
 step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --all-targets
 # --all-features is not every arm that ships: a cfg arm can lint clean with all
 # features on and fail with one of them off (78c4c208's fence-wait loop was
@@ -1406,14 +1540,18 @@ zephyr_precompiled_only_image() {
   fi
 }
 if [ "$QUICK" -eq 0 ]; then
+  scope pvr vivante v3d gltest drivers samples precompile
   if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
+    scope pvr gltest drivers samples precompile
     step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_am62p/am62p54/a53 gl_test am62p \
       -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
     step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
       zephyr_precompiled_only_image
+    scope vivante gltest drivers samples
     step "zephyr  imx8mp gc_gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gc_gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+    scope v3d gltest drivers samples
     step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
@@ -1450,9 +1588,11 @@ mesa_table_repro() {
 }
 if [ "$QUICK" -eq 0 ]; then
   for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
+    scope "$(config_scopes "$f")" precompile
     step "gen     precompiled table $f: deterministic, rows == fresh compiles, counts pinned, compiles" \
       tools/precompile/prove.sh "$f"
   done
+  scope pvr precompile
   if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
   else
@@ -1480,6 +1620,7 @@ glmark2_corpus_tests() {
   done
 }
 if [ "$QUICK" -eq 0 ]; then
+  scope pvr vivante v3d
   if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
     mkdir -p build
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
@@ -1496,11 +1637,14 @@ fi
 # the row is a gap.
 hal_nxp_dir=${HAL_NXP_DIR:-$HOME/com/github/zephyrproject-rtos/modules/hal/nxp}
 if command -v python3 >/dev/null 2>&1; then
+  scope vivante tools
   step "tools   hal-nxp gen_regs self-test" python3 tools/hal-nxp/gen_regs.py --self-test
+  scope vivante
   if [ -d "$hal_nxp_dir/mcux/mcux-sdk-ng/devices/i.MX/i.MX8MP/periph" ]; then
     hal_nxp_regs_regenerate() {
       python3 tools/hal-nxp/gen_regs.py "$hal_nxp_dir" | cmp - driver/rust/src/soc/imx8mp/regs.rs
     }
+    scope vivante
     step "gen     driver/rust imx8mp regs.rs == gen_regs.py on hal_nxp 1e91007b" hal_nxp_regs_regenerate
   else
     gap "imx8mp regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
@@ -1509,15 +1653,19 @@ if command -v python3 >/dev/null 2>&1; then
   # AM62Px TRM does not state, generated from TI's Zephyr driver vendored
   # unmodified in third_party/zephyr-pr114866-2026-07-29-2473da6b (the
   # generator refuses a file whose sha256 is not the pinned one).
+  scope pvr drivers
   step "gen     driver/rust am62p ti_pr114866.rs == gen_dphy_data.py on third_party" \
     python3 tools/ti-zephyr/gen_dphy_data.py --check
   # driver/compat/pvr_rgx_core.h spells out every feature, erratum and value of
   # the vendored DDK's rgx_bvnc_defs_km.h for the rgxlayer pins; generated.
+  scope pvr
   step "gen     driver/compat/pvr_rgx_core.h == gen_rgx_core.py" python3 tools/pvr/gen_rgx_core.py --check
 fi
 
 echo
-echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass) in $((SECONDS - gate_t0))s"
+mode="every row"
+[ -n "$CHANGED_BASE" ] && mode="--changed $CHANGED_BASE, scopes: $SCOPES"
+echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s"
 if [ "$rc" -eq 0 ]; then
   green "check.sh: clean"
 else
