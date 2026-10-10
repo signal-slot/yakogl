@@ -504,8 +504,16 @@ pub const GC_PE_COLOR_FORMAT_SUPER_TILED_NEW: u32 = 0x0000_2000;
 pub const fn pe_color_format_format_ext(x: u32) -> u32 {
     (x & 0x7f) << 24
 }
-/// use FORMAT_EXT
-pub const GC_PE_COLOR_FORMAT_FORMAT_MASK: u32 = 0x80000000;
+/// The write mask of the 4-bit FORMAT field (bit 4): set, FORMAT keeps its
+/// value and FORMAT_EXT is the format. etnaviv_state.c:282-283 writes
+/// `FORMAT_EXT(fmt) | FORMAT_MASK` for every format from R16F up
+/// (state_3d.xml.h: VIVS_PE_COLOR_FORMAT_FORMAT_MASK 0x00000010).
+pub const GC_PE_COLOR_FORMAT_FORMAT_MASK: u32 = 0x0000_0010;
+/// The write mask of FORMAT_EXT itself (bit 31, VIVS_PE_COLOR_FORMAT_FORMAT_EXT_MASK).
+/// Never set: with it the PE keeps its old FORMAT_EXT. This backend set it in
+/// place of bit 4 until gl_test 44, so every float target was drawn in
+/// whatever format the PE held (#6).
+pub const GC_PE_COLOR_FORMAT_FORMAT_EXT_MASK: u32 = 0x8000_0000;
 pub const GC_PE_COLOR_STRIDE: u32 = 0x00001434;
 pub const GC_PE_HDEPTH_CONTROL: u32 = 0x00001454;
 pub const fn pe_pipe_color_addr(i: u32) -> u32 {

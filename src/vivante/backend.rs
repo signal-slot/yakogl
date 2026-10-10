@@ -2408,10 +2408,11 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         canary::gc_depth_canary_fill();
     }
 
-    /* A mipmapped layered texture is sampled from a tiled copy
-     * (tiled_copy.rs), made or refreshed now, before this draw records
-     * anything: a render into the texture still in flight is finished first.
-     * Without its copy the draw would read the wrong faces, so it is refused. */
+    /* A mipmapped layered texture, and one with 64-bit texels, is sampled
+     * from a tiled copy (tiled_copy.rs), made or refreshed now, before this
+     * draw records anything: a render into the texture still in flight is
+     * finished first. Without its copy the draw would read the wrong faces
+     * (or texels), so it is refused. */
     clock.lap(Step::GcRest);
     if super::tiled_copy::prepare(gl, |k| gc_kick_pending(k), || gc_finish()) != 0 {
         return -1;
