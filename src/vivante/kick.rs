@@ -53,3 +53,248 @@ pub struct GcKick {
 impl GcKick {
     pub const ZERO: GcKick = GcKick { magic: 0, stream_bytes: 0, stream_gpu: 0 };
 }
+
+/// KICK_DIFF: read the render target twice after a kick, to tell a late
+/// write from a wrong one (docs/investigations/gc-kick-diff.md).
+///
+/// i.MX8MP gl_test cases 10 and 2 (#9, #25) lose the pixels of a tiny draw
+/// that follows a clear in one kick. Two stories fit: the pixel engine's
+/// write lands after the fence fired (a late write), or it never lands (a
+/// lost or wrong write). The first read happens as soon as the fence is seen.
+/// The second happens `delay_us` later, behind a load barrier. If the second
+/// read differs from the first, the first came too early. If they are equal,
+/// the write did not arrive in `delay_us`.
+///
+/// A test knob: it exists only with the `test-knobs` feature, and it is off
+/// until a harness arms it ([`gc_kick_diff_enable`]). Without the feature
+/// none of this is in the build. It never writes to the target and never
+/// touches the command stream; it only reads memory the GPU wrote.
+#[cfg(feature = "test-knobs")]
+pub mod diff {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    /// Words each read can hold: the 64x64 RGBA8 surface gl_test draws to
+    /// (16 KiB). A larger watch is cut to this.
+    pub const KICK_DIFF_MAX_WORDS: usize = 64 * 64;
+
+    /// How the two reads compare.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Verdict {
+        /// The two reads are equal. The target was right at the fence, or the
+        /// missing write did not arrive in the delay: the instrument alone
+        /// cannot say which (the case's own check does).
+        Stable,
+        /// The second read differs: words changed after the fence. The fence
+        /// fired before the pixel engine's write-back landed.
+        Late,
+    }
+
+    /// The difference of two reads of the same words.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Diff {
+        /// Words compared (the shorter of the two reads).
+        pub words: u32,
+        /// Words that differ.
+        pub changed: u32,
+        /// Index of the first changed word (`words` when none).
+        pub first: u32,
+        /// Index of the last changed word (0 when none).
+        pub last: u32,
+        /// Rows holding a changed word (rows of `pitch_words`; pitch 0: one row).
+        pub rows: u32,
+        /// The first changed word, in the first and in the second read.
+        pub first_before: u32,
+        pub first_after: u32,
+    }
+
+    impl Diff {
+        pub const fn verdict(&self) -> Verdict {
+            if self.changed == 0 {
+                Verdict::Stable
+            } else {
+                Verdict::Late
+            }
+        }
+    }
+
+    /// Compare two reads. `pitch_words` is the row length in words, to count
+    /// the rows the changes touch.
+    pub fn compare(first: &[u32], second: &[u32], pitch_words: usize) -> Diff {
+        let n = first.len().min(second.len());
+        let mut d =
+            Diff { words: n as u32, changed: 0, first: n as u32, last: 0, rows: 0, first_before: 0, first_after: 0 };
+        let mut last_row = usize::MAX;
+
+        for (i, (&a, &b)) in first.iter().zip(second.iter()).enumerate() {
+            if a == b {
+                continue;
+            }
+            if d.changed == 0 {
+                d.first = i as u32;
+                d.first_before = a;
+                d.first_after = b;
+            }
+            d.changed += 1;
+            d.last = i as u32;
+            let row = i.checked_div(pitch_words).unwrap_or(0);
+            if row != last_row {
+                d.rows += 1;
+                last_row = row;
+            }
+        }
+        d
+    }
+
+    /// What the harness armed.
+    struct Watch {
+        ptr: *const u32,
+        words: usize,
+        pitch_words: usize,
+        delay_us: u32,
+        delay: Option<unsafe extern "C" fn(u32)>,
+    }
+
+    static mut WATCH: Watch = Watch { ptr: core::ptr::null(), words: 0, pitch_words: 0, delay_us: 0, delay: None };
+    static mut FIRST: [u32; KICK_DIFF_MAX_WORDS] = [0; KICK_DIFF_MAX_WORDS];
+    static mut SECOND: [u32; KICK_DIFF_MAX_WORDS] = [0; KICK_DIFF_MAX_WORDS];
+
+    /// Counters for the harness's record: checks made, checks with a late
+    /// write, and the most words one check saw change.
+    static CHECKS: AtomicU32 = AtomicU32::new(0);
+    static LATE: AtomicU32 = AtomicU32::new(0);
+    static MAX_CHANGED: AtomicU32 = AtomicU32::new(0);
+
+    /// Arm the instrument: watch `words` words at `ptr` (the CPU view of the
+    /// render target, a row `pitch_words` long). `delay` waits `delay_us`
+    /// microseconds (the OSAL has no sleep op; the harness has one); with
+    /// None the second read follows at once, which still catches a CPU-side
+    /// reordering. A null `ptr` or 0 `words` disarms. Resets the counters.
+    ///
+    /// # Safety
+    /// `ptr` must stay readable for `words` words until it is disarmed.
+    #[no_mangle]
+    pub unsafe extern "C" fn gc_kick_diff_enable(
+        ptr: *const u32,
+        words: u32,
+        pitch_words: u32,
+        delay_us: u32,
+        delay: Option<unsafe extern "C" fn(u32)>,
+    ) {
+        let words = (words as usize).min(KICK_DIFF_MAX_WORDS);
+        // SAFETY: single-threaded by contract, as every test knob.
+        unsafe {
+            core::ptr::addr_of_mut!(WATCH).write(Watch {
+                ptr: if words == 0 { core::ptr::null() } else { ptr },
+                words,
+                pitch_words: pitch_words as usize,
+                delay_us,
+                delay,
+            });
+        }
+        CHECKS.store(0, Ordering::Relaxed);
+        LATE.store(0, Ordering::Relaxed);
+        MAX_CHANGED.store(0, Ordering::Relaxed);
+    }
+
+    /// Checks made, checks that saw a late write, the most words one check
+    /// saw change, written to `out[0..3]`. For the harness's record.
+    ///
+    /// # Safety
+    /// `out` is null or points at 3 writable `u32`.
+    #[no_mangle]
+    pub unsafe extern "C" fn gc_kick_diff_stats(out: *mut u32) {
+        if out.is_null() {
+            return;
+        }
+        // SAFETY: the caller passes 3 words.
+        unsafe {
+            out.write(CHECKS.load(Ordering::Relaxed));
+            out.add(1).write(LATE.load(Ordering::Relaxed));
+            out.add(2).write(MAX_CHANGED.load(Ordering::Relaxed));
+        }
+    }
+
+    fn load_barrier() {
+        #[cfg(target_arch = "aarch64")]
+        // SAFETY: a barrier; it touches no memory or register the compiler uses.
+        unsafe {
+            core::arch::asm!("dmb ishld", options(nostack, preserves_flags))
+        };
+        core::sync::atomic::fence(Ordering::Acquire);
+    }
+
+    fn read_into(dst: &mut [u32], src: *const u32) {
+        for (i, w) in dst.iter_mut().enumerate() {
+            // SAFETY: `gc_kick_diff_enable`'s contract: `src` is readable for
+            // `dst.len()` words. Volatile: the GPU writes it, not this thread.
+            *w = unsafe { src.add(i).read_volatile() };
+        }
+    }
+
+    /// Call it once the kick's fence is seen (after `glFinish`, or in the
+    /// backend after `wait_fence`): read the target, wait, read it again,
+    /// compare, report. Does nothing when not armed. Returns 0 when off, 1
+    /// for [`Verdict::Stable`], 2 for [`Verdict::Late`].
+    #[no_mangle]
+    pub extern "C" fn gc_kick_diff_after_fence() -> i32 {
+        // SAFETY: single-threaded by contract; WATCH is plain data.
+        let (ptr, words, pitch, delay_us, delay) = unsafe {
+            let w = &*core::ptr::addr_of!(WATCH);
+            (w.ptr, w.words, w.pitch_words, w.delay_us, w.delay)
+        };
+        if ptr.is_null() || words == 0 {
+            return 0;
+        }
+        // SAFETY: the two buffers are this function's; no other borrow exists,
+        // and `words` is at most their length (`gc_kick_diff_enable` cuts it).
+        let (first, second) = unsafe {
+            (
+                core::slice::from_raw_parts_mut(core::ptr::addr_of_mut!(FIRST).cast::<u32>(), words),
+                core::slice::from_raw_parts_mut(core::ptr::addr_of_mut!(SECOND).cast::<u32>(), words),
+            )
+        };
+
+        load_barrier();
+        read_into(first, ptr);
+        if let Some(wait) = delay {
+            // SAFETY: the harness's own delay routine.
+            unsafe { wait(delay_us) };
+        }
+        load_barrier();
+        read_into(second, ptr);
+        report(&compare(first, second, pitch), delay_us)
+    }
+
+    /// Count the check and log it: every late one, and the first stable one.
+    fn report(d: &Diff, delay_us: u32) -> i32 {
+        let n = CHECKS.fetch_add(1, Ordering::Relaxed);
+        MAX_CHANGED.fetch_max(d.changed, Ordering::Relaxed);
+        match d.verdict() {
+            Verdict::Stable => {
+                if n == 0 {
+                    crate::glog!(
+                        "yakogl/vivante: KICK_DIFF stable ({} words, second read {} us later)",
+                        d.words,
+                        delay_us
+                    );
+                }
+                1
+            }
+            Verdict::Late => {
+                LATE.fetch_add(1, Ordering::Relaxed);
+                crate::glog!(
+                    "yakogl/vivante: KICK_DIFF late: {} of {} words changed after the fence, rows {}, first word {} {:#010x} -> {:#010x}, last {}, second read {} us later",
+                    d.changed,
+                    d.words,
+                    d.rows,
+                    d.first,
+                    d.first_before,
+                    d.first_after,
+                    d.last,
+                    delay_us
+                );
+                2
+            }
+        }
+    }
+}
