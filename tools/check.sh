@@ -1402,8 +1402,22 @@ if [ "$QUICK" -eq 0 ]; then
     step "gen     precompiled table $f: deterministic, rows == fresh compiles, counts pinned, compiles" \
       tools/precompile/prove.sh "$f"
   done
+  # The table records the identity of the tools that made it (the first 12
+  # hex digits of the SHA-256 of pco_shc and of glslangValidator, its header's
+  # `toolchain:` line); a different build makes a different table (308 of 324
+  # GC7000 blobs differed in one experiment), so a pco_shc or glslang that is
+  # not the pinned one cannot show anything and the row is skipped, naming
+  # both ids, instead of failing on a diff nobody can act on.
+  pinned_tools=$(sed -n 's|^// toolchain: ||p' tests/reference/blobs.rs | head -1)
+  have_tools=
   if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
+    glslang_bin=${GLSLANG:-$(command -v glslangValidator || true)}
+    have_tools="pco_shc=$(sha256sum "$PCO_SHC" | cut -c1-12) glslang=$( [ -r "${glslang_bin-}" ] && sha256sum "$glslang_bin" | cut -c1-12 || echo '?missing')"
+  fi
+  if [ -n "$have_tools" ] && [ "$have_tools" = "$pinned_tools" ]; then
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
+  elif [ -n "$have_tools" ]; then
+    gap "tests/reference/blobs.rs from precompiled.list: this host's tools are '$have_tools', the table was made by '$pinned_tools' (tools/pco_shc/build_pco_shc.sh on the recorded gcc/LLVM): the list was NOT shown to make the committed table"
   else
     gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
   fi
