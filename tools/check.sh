@@ -1015,6 +1015,12 @@ import sys
 l = open("tools/cts/gles3-mustpass.txt").read().splitlines()
 ok = len(l) == 42810 and l == sorted(set(l)) and all(x.startswith("dEQP-GLES3.") for x in l)
 print(len(l), "cases"); sys.exit(0 if ok else 1)'
+  # The AM62P GLES3 tree (tools/cts/am62p-gles3-tree.txt) is generated from
+  # that list; a hand edit, a case listed twice or in no image, or an image
+  # over 2,000 cases fails here, and a case the board's 600 s watchdog cannot
+  # fit is split in the generator, not in the table.
+  step "tools   am62p-gles3-tree: generator self-test and table check" sh -c \
+    'python3 tools/cts/gen-am62p-gles3-tree.py --self-test && python3 tools/cts/gen-am62p-gles3-tree.py --check'
   # R-23: nothing checked the public headers against what the library
   # exports and what eglGetProcAddress answers, so a header could promise an
   # entry point the archive never carried, or eglGetProcAddress could answer
@@ -1449,11 +1455,15 @@ fi
 # (tests/glmark2_corpus.rs). The corpus is GPL-3.0 text and never committed:
 # tools/hostharness/glmark2/run.sh generates it from GLMARK2_SRC (glmark2 at
 # the pinned commit) into build/glmark2-host/shaders. Without GLMARK2_SRC the
-# row is a gap.
+# row is a gap. The same run's logs must hold no depth texture sampled stale
+# (shadow and refract on the PowerVR, pvr-depth-resolve: "the backend did not
+# resolve its depth").
 glmark2_corpus_tests() {
-  local c
+  local c stale
   GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
     >build/glmark2-host.log 2>&1 || { tail -20 build/glmark2-host.log; return 1; }
+  stale=$(grep -l 'did not resolve its depth' build/glmark2-host/logs/*/*.log || true)
+  [ -z "$stale" ] || { echo "a depth texture sampled stale in: $stale"; return 1; }
   for c in host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
     host-test,gpu-v3d,shaderc-online,no-shader-table; do
     GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features --features "$c" \

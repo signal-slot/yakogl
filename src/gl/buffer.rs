@@ -826,12 +826,28 @@ unsafe fn map_range(
  * included): one mapping state, so glBufferData, glBufferSubData, the copies
  * and glUnmapBuffer treat an OES mapping as any other. The targets are the
  * ones the extension was written against (ES 1.1 / 2.0 vertex buffer objects:
- * GL_ARRAY_BUFFER and GL_ELEMENT_ARRAY_BUFFER); any other is GL_INVALID_ENUM.
+ * GL_ARRAY_BUFFER and GL_ELEMENT_ARRAY_BUFFER); any other is GL_INVALID_ENUM
+ * -- except for glUnmapBufferOES and glGetBufferPointervOES in an ES 3.0
+ * build, which take every target (`oes_unmap_target`).
  * A zero-sized store maps as ES 3.0's zero-length range does:
  * GL_INVALID_OPERATION and NULL (OpenGL 2.0 states no rule for it). */
 
 fn oes_target(target: GLenum) -> bool {
     matches!(target, GL_ARRAY_BUFFER | GL_ELEMENT_ARRAY_BUFFER)
+}
+
+/// The targets glUnmapBufferOES and glGetBufferPointervOES take. An ES 2.0
+/// report: the extension's two. An ES 3.0 build: every target, as the core
+/// calls do -- they are the same commands there (Mesa dispatches both names
+/// to one function), and a client may call either: dEQP's loader replaces
+/// glUnmapBuffer and glGetBufferPointerv with the OES names whenever
+/// GL_OES_mapbuffer is listed (glwInitExtES.inl), so dEQP-GLES3
+/// state_query.buffer_object.buffer_mapped_* and friends unmapped a
+/// GL_COPY_READ_BUFFER through glUnmapBufferOES and read GL_INVALID_ENUM.
+/// glMapBufferOES keeps the two either way (its access enum is the
+/// extension's own). An unknown target stays GL_INVALID_ENUM below.
+fn oes_unmap_target(target: GLenum) -> bool {
+    !crate::REPORT_ES2 || oes_target(target)
 }
 
 #[no_mangle]
@@ -854,7 +870,7 @@ pub unsafe extern "C" fn glMapBufferOES(target: GLenum, access: GLenum) -> *mut 
 pub unsafe extern "C" fn glUnmapBufferOES(target: GLenum) -> GLboolean {
     gl_trace!(glUnmapBufferOES);
     let Some(c) = context::current() else { return GL_FALSE_B };
-    if !oes_target(target) {
+    if !oes_unmap_target(target) {
         c.set_error(GL_INVALID_ENUM, "glUnmapBufferOES");
         return GL_FALSE_B;
     }
@@ -865,7 +881,7 @@ pub unsafe extern "C" fn glUnmapBufferOES(target: GLenum) -> GLboolean {
 pub unsafe extern "C" fn glGetBufferPointervOES(target: GLenum, pname: GLenum, params: *mut *mut c_void) {
     gl_trace!(glGetBufferPointervOES);
     let Some(c) = context::current() else { return };
-    if !oes_target(target) {
+    if !oes_unmap_target(target) {
         c.set_error(GL_INVALID_ENUM, "glGetBufferPointervOES");
         return;
     }
@@ -2670,11 +2686,17 @@ mod tests {
         unsafe {
             glGetBufferPointervOES(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &mut p);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "pname");
+            /* an ES 3.0 target: refused in an ES 2.0 report; an ES 3.0 build
+             * takes it as glGetBufferPointerv / glUnmapBuffer would, and
+             * nothing is bound to it here (oes_unmap_target) */
+            let want = if crate::REPORT_ES2 { GL_INVALID_ENUM } else { GL_INVALID_OPERATION };
             glGetBufferPointervOES(GL_PIXEL_UNPACK_BUFFER, GL_BUFFER_MAP_POINTER_OES, &mut p);
-            assert_eq!(gl.error(), GL_INVALID_ENUM, "an ES 3.0 target");
+            assert_eq!(gl.error(), want, "an ES 3.0 target");
             assert_eq!(p, core::ptr::dangling_mut::<c_void>(), "nothing written on an error");
             assert_eq!(glUnmapBufferOES(GL_PIXEL_UNPACK_BUFFER), GL_FALSE_B);
-            assert_eq!(gl.error(), GL_INVALID_ENUM, "an ES 3.0 target");
+            assert_eq!(gl.error(), want, "an ES 3.0 target");
+            assert_eq!(glUnmapBufferOES(0x1234), GL_FALSE_B);
+            assert_eq!(gl.error(), GL_INVALID_ENUM, "no target at all");
             assert_eq!(glUnmapBufferOES(GL_ARRAY_BUFFER), GL_FALSE_B);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "not mapped");
         }

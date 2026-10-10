@@ -63,7 +63,7 @@ NOISE = re.compile(
     # has no binner (linux.c answers OSAL_QUERY_V3D_BIN_POOL with no data)
     r"|^yakogl/v3d: (depth and stencil (apart|in one buffer)|job arenas for |two job arena sets"
     r"|clear program built|job arenas high-water at frame |binner tile pool high-water at frame \d+: not read)"
-    r"|^gm2: (shader|scene-begin|scene-end|egl-config) ")
+    r"|^gm2: (shader|scene-begin|scene-end|egl-config|draw) ")
 SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)$")
 # The V3D carve-out's line at exit (src/osal/linux.c report_heaps): one
 # process per entry, so the entry's high-water.

@@ -4,7 +4,7 @@
 """Do the dEQP-GLES2 image recipes still build what conformance needs?
 
   tools/cts/check-deqp-images.py                  the recipes in this checkout
-  tools/cts/check-deqp-images.py --config <.config> [--ms4]
+  tools/cts/check-deqp-images.py --config <.config> [--ms4] [--gles3]
                                                   one built image's Kconfig result
   tools/cts/check-deqp-images.py --self-test
 
@@ -24,14 +24,22 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
     (Pi 4: 48 MiB / 16 MiB of tiled copies, and texture-2048.conf's 64 / 24
     MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out);
   - a table no longer selects every case of gles2-mustpass.txt, or the AM62P
-    multisample table is not the rgba8888d24s8ms4 image.
+    multisample table is not the rgba8888d24s8ms4 image;
+  - a dEQP-GLES3 table (am62p-gles3-tree.txt, pi4-gles3-tree.txt) does not
+    select every case of gles3-mustpass.txt exactly once (check-gles3-tree.py,
+    whose verdict line is printed as a note).
 
 With --config it checks the .config a build wrote: the same conformance rules
 on the result of Kconfig itself (the builders run it after each image).
+--gles3 is a dEQP-GLES3 image's rule (pi4-deqp-images.sh DEQP_MODULE=gles3):
+the compiler and no table as before, and both REPORT_ES2 symbols off, since
+dEQP-GLES3 judges a context that reports ES 3.0; without it a resolved
+configuration that reports ES 3.0 is refused as before.
 """
 import fnmatch
 import os
 import re
+import subprocess
 import sys
 import tempfile
 
@@ -271,6 +279,16 @@ def check_repo():
     n_ms = len([n for n in must if selects('dEQP-GLES2.functional.multisample.*', n)])
     notes.append('%d multisample.* mustpass cases run on the ms4 image; the 17-image tree covers all %d mustpass cases'
                  % (n_ms, len(must)))
+
+    # 6. the dEQP-GLES3 tables select every case of gles3-mustpass.txt exactly
+    # once (check-gles3-tree.py, as a process: under -I a sibling import fails)
+    for tname in ('am62p-gles3-tree.txt', 'pi4-gles3-tree.txt'):
+        r = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'check-gles3-tree.py'), os.path.join(HERE, tname)],
+                           capture_output=True, text=True)
+        verdict = [l for l in r.stdout.splitlines() if l.startswith('check-gles3-tree: ')]
+        if r.returncode != 0:
+            bad.append('%s: %s' % (tname, (r.stderr.strip().splitlines() or verdict or ['check-gles3-tree.py failed'])[0]))
+        notes.append(verdict[0] if verdict else '%s: check-gles3-tree.py printed no verdict line' % tname)
     return bad, notes
 
 
@@ -309,6 +327,16 @@ def self_test():
                    ('imx8mp-sweep.config', False), ('pi4-sweep.config', False)):
         ok(check_dotconfig(os.path.join(fixtures, f), ms4) == [],
            'fixture %s: a conformance image passes' % f)
+    # the dEQP-GLES3 image (pi4-deqp-images.sh DEQP_MODULE=gles3): both REPORT_ES2
+    # symbols off, which --gles3 wants and the GLES2 rule refuses; a GLES2 sweep
+    # image judged with --gles3 is refused the other way round
+    ok(check_dotconfig(os.path.join(fixtures, 'pi4-gles3-sweep.config'), False, gles3=True) == [],
+       'fixture pi4-gles3-sweep.config: a dEQP-GLES3 image passes with --gles3')
+    ok(any('YAKOGL_REPORT_ES2' in b for b in check_dotconfig(os.path.join(fixtures, 'pi4-gles3-sweep.config'), False)),
+       'fixture pi4-gles3-sweep.config: refused as a GLES2 image, the message names YAKOGL_REPORT_ES2')
+    ok(any('REPORT_ES2=y (a dEQP-GLES3 image' in b
+           for b in check_dotconfig(os.path.join(fixtures, 'pi4-sweep.config'), False, gles3=True)),
+       'fixture pi4-sweep.config with --gles3: refused, the message names REPORT_ES2')
     for f, ms4, sym in (('bad-compiler-missing.config', False, 'YAKOGL_SHADERC_ONLINE'),
                         ('bad-shaderc-offline.config', False, 'YAKOGL_SHADERC_OFFLINE'),
                         ('bad-precompiled-only.config', False, 'YAKOGL_SHADERC_PRECOMPILED_ONLY'),
@@ -331,10 +359,10 @@ def main(argv):
     if argv[1:] == ['--self-test']:
         return 1 if self_test() else 0
     if argv[1:2] == ['--config']:
-        if len(argv) < 3 or not os.path.isfile(argv[2]):
+        if len(argv) < 3 or not os.path.isfile(argv[2]) or any(a not in ('--ms4', '--gles3') for a in argv[3:]):
             print('usage: check-deqp-images.py --config <.config> [--ms4] [--gles3]', file=sys.stderr)
             return 2
-        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False, '--gles3' in argv[3:])
+        bad = check_dotconfig(argv[2], '--ms4' in argv[3:], '--gles3' in argv[3:])
     elif len(argv) == 1:
         bad, notes = check_repo()
         for n in notes:

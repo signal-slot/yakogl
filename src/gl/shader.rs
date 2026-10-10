@@ -559,12 +559,14 @@ pub(crate) fn reset_for_tests() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
+    use crate::gl::program::glGetProgramInfoLog;
     use crate::gl::program::{
-        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramInfoLog, glGetProgramiv,
-        glLinkProgram,
+        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramiv, glLinkProgram,
     };
     use crate::testutil::TestGl;
     use std::ffi::CString;
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
     use std::format;
     use std::string::String;
     use std::vec::Vec;
@@ -612,6 +614,7 @@ mod tests {
         crate::testutil::shader_source(name).trim_end_matches('\0').into()
     }
 
+    #[cfg(not(feature = "no-shader-table"))]
     fn hex(d: &[u8]) -> String {
         d.iter().map(|b| format!("{b:02x}")).collect()
     }
@@ -1249,11 +1252,11 @@ mod tests {
     /* The offline table's own contract: a text the table lacks compiles
      * (COMPILE_STATUS true, `missing` set, "not in offline table" logged) and
      * glLinkProgram refuses it. A `no-shader-table` build has no offline back
-     * end; its online compiler refuses such a text at glCompileShader
-     * instead, which
+     * end, so this runs only with a table; the online compiler refuses such
+     * a text at glCompileShader instead, and the `..._online` twin next to
      * `an_invalid_source_is_refused_at_compile_time_by_the_online_compiler`
-     * pins. */
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table contract: this build has no offline table")]
+     * pins that. */
+    #[cfg(not(feature = "no-shader-table"))]
     fn compile_of_an_unknown_source_keeps_the_log_and_raises_no_gl_error() {
         let gl = TestGl::new(8, 8);
         let src = "void main() { gl_Position = vec4(0.125); }";
@@ -1282,11 +1285,11 @@ mod tests {
     /* The offline table's own contract: a text the table lacks compiles
      * (COMPILE_STATUS true, `missing` set, "not in offline table" logged) and
      * glLinkProgram refuses it. A `no-shader-table` build has no offline back
-     * end; its online compiler refuses such a text at glCompileShader
-     * instead, which
+     * end, so this runs only with a table; the online compiler refuses such
+     * a text at glCompileShader instead, and the `..._online` twin next to
      * `an_invalid_source_is_refused_at_compile_time_by_the_online_compiler`
-     * pins. */
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table contract: this build has no offline table")]
+     * pins that. */
+    #[cfg(not(feature = "no-shader-table"))]
     fn compile_looks_the_source_up_for_the_shaders_own_stage() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -1321,11 +1324,11 @@ mod tests {
     /* The offline table's own contract: a text the table lacks compiles
      * (COMPILE_STATUS true, `missing` set, "not in offline table" logged) and
      * glLinkProgram refuses it. A `no-shader-table` build has no offline back
-     * end; its online compiler refuses such a text at glCompileShader
-     * instead, which
+     * end, so this runs only with a table; the online compiler refuses such
+     * a text at glCompileShader instead, and the `..._online` twin next to
      * `an_invalid_source_is_refused_at_compile_time_by_the_online_compiler`
-     * pins. */
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table contract: this build has no offline table")]
+     * pins that. */
+    #[cfg(not(feature = "no-shader-table"))]
     fn recompile_after_fixing_the_source_clears_status_and_log() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -1473,7 +1476,163 @@ mod tests {
         assert!(log.contains("oops"), "the log names the undeclared identifier: {log}");
     }
 
+    /// Online twins of the offline-table contract tests above: the same
+    /// behaviours with the online compiler as the back end, which refuses a
+    /// text it cannot compile at glCompileShader (status false, `missing`
+    /// never set) where the table accepts it and glLinkProgram refuses.
+    #[cfg(feature = "shaderc-online")]
+    fn online_compile(s: GLuint) {
+        // SAFETY: TestGl serialises the tests; the back end is restored right after.
+        unsafe {
+            let saved = crate::shaderc::g_shaderc;
+            crate::shaderc::g_shaderc = &crate::shaderc::online::backend::SHC_ONLINE;
+            glCompileShader(s);
+            crate::shaderc::g_shaderc = saved;
+        }
+    }
+
+    /// Twin of `compile_of_an_unknown_source_keeps_the_log_and_raises_no_gl_error`:
+    /// a text the compiler cannot compile is status false with the compiler's
+    /// own message, no GL error, and never `missing`. (A text that is valid
+    /// GLSL compiles, table or not: the table twin's "unknown" source is one.)
+    #[test]
+    #[cfg(feature = "shaderc-online")]
+    fn an_unknown_source_online_is_refused_with_the_compilers_log_and_no_gl_error() {
+        let gl = TestGl::new(8, 8);
+        let src = "void main() { gl_Position = vec4(0.125); }";
+        // SAFETY: plain GL calls.
+        let (ok, s) = unsafe {
+            let s = glCreateShader(GL_VERTEX_SHADER);
+            set_source(s, src);
+            online_compile(s);
+            (get_iv(s, GL_COMPILE_STATUS), s)
+        };
+        assert_eq!((ok, get_info_log(s).as_str()), (1, ""), "valid GLSL compiles, table or no table");
+        set_source(s, "// first\n\nvoid main() { oops }\n");
+        online_compile(s);
+        let log = get_info_log(s);
+        assert_eq!(get_iv(s, GL_COMPILE_STATUS), 0, "{log}");
+        assert_eq!(log, "0:3: '}' : expected ';'");
+        assert_eq!(get_iv(s, GL_INFO_LOG_LENGTH), log.len() as GLint + 1, "length includes the NUL");
+        assert!(!gl.ctx().objs().shaders[obj_index(s)].missing, "a refused text is not one the table lacks");
+        assert_eq!(gl.error(), GL_NO_ERROR, "a compile failure is not a GL error");
+    }
+
+    /// Texts the online twins compile as they are (the table's own rows are
+    /// not all GLSL ES 1.00 the compiler takes, so these do not come from it).
+    #[cfg(feature = "shaderc-online")]
+    const VERTEX_TEXT: &str = "attribute float a_pos;\nvoid main() { gl_Position = vec4(a_pos); }\n";
+    #[cfg(feature = "shaderc-online")]
+    const FRAGMENT_TEXT: &str =
+        "precision mediump float;\nuniform vec4 u_color;\nvoid main() { gl_FragColor = u_color; }\n";
+
+    /// Twin of `compile_looks_the_source_up_for_the_shaders_own_stage`: the
+    /// online compiler judges a text for the stage it is compiled as, so a
+    /// vertex text in a fragment shader is refused (its attribute needs a
+    /// default precision in a fragment shader).
+    #[test]
+    #[cfg(feature = "shaderc-online")]
+    fn a_vertex_text_in_a_fragment_shader_is_refused_by_the_online_compiler() {
+        let gl = TestGl::new(8, 8);
+        // SAFETY: plain GL calls.
+        let s = unsafe {
+            let s = glCreateShader(GL_FRAGMENT_SHADER);
+            set_source(s, VERTEX_TEXT);
+            s
+        };
+        online_compile(s);
+        let log = get_info_log(s);
+        assert_eq!(get_iv(s, GL_COMPILE_STATUS), 0, "{log}");
+        assert_eq!(log, "0:1: 'a_pos' : 'float' : type requires declaration of default precision qualifier");
+        assert!(!gl.ctx().objs().shaders[obj_index(s)].missing);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// Twin of `recompile_after_fixing_the_source_clears_status_and_log`.
+    #[test]
+    #[cfg(feature = "shaderc-online")]
+    fn recompile_after_fixing_the_source_clears_status_and_log_online() {
+        let gl = TestGl::new(8, 8);
+        // SAFETY: plain GL calls.
+        let s = unsafe { glCreateShader(GL_FRAGMENT_SHADER) };
+        set_source(s, "void main() { /* unknown */ ");
+        online_compile(s);
+        assert_eq!(get_iv(s, GL_COMPILE_STATUS), 0);
+        assert!(get_iv(s, GL_INFO_LOG_LENGTH) > 0);
+
+        set_source(s, FRAGMENT_TEXT);
+        online_compile(s);
+        assert_eq!(get_iv(s, GL_COMPILE_STATUS), 1);
+        assert_eq!(get_iv(s, GL_INFO_LOG_LENGTH), 0);
+        assert_eq!(get_info_log(s), "");
+
+        /* and back: a recompile of a refused text is refused again, with a log */
+        set_source(s, "void main() { /* unknown again */ ");
+        online_compile(s);
+        assert_eq!(get_iv(s, GL_COMPILE_STATUS), 0);
+        assert!(get_iv(s, GL_INFO_LOG_LENGTH) > 0);
+        assert!(!gl.ctx().objs().shaders[obj_index(s)].missing);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// Twin of `a_shader_the_table_lacks_compiles_and_its_text_is_logged_in_indexed_chunks`:
+    /// the online compiler logs one line, the compiler's message with the
+    /// stage and the source size, and no "shsrc" chunks (those are the
+    /// table-miss harvester's).
+    #[test]
+    #[cfg(feature = "shaderc-online")]
+    fn a_refused_shader_online_logs_one_summary_line_and_no_source_chunks() {
+        let gl = TestGl::new(8, 8);
+        let src = "// first\n\nvoid main() { oops }\n";
+        // SAFETY: plain GL calls.
+        let s = unsafe { glCreateShader(GL_FRAGMENT_SHADER) };
+        set_source(s, src);
+        online_compile(s);
+        let logs = gl.logs();
+        assert_eq!(
+            logs,
+            std::vec![format!("glCompileShader({s}): 0:3: '}}' : expected ';' [fragment stage, {} bytes]", src.len())]
+        );
+        /* the same text again logs again: nothing is remembered as "seen" */
+        online_compile(s);
+        assert_eq!(gl.logs().len(), 1);
+    }
+
+    /// Twin of `a_program_with_a_shader_the_table_lacks_does_not_link`: the
+    /// online compiler refuses the stage at glCompileShader, so the program
+    /// links no better; glLinkProgram fails without a GL error.
+    #[test]
+    #[cfg(feature = "shaderc-online")]
+    fn a_program_with_a_shader_the_online_compiler_refused_does_not_link() {
+        let gl = TestGl::new(8, 8);
+        // SAFETY: plain GL calls.
+        unsafe {
+            let vs = glCreateShader(GL_VERTEX_SHADER);
+            let fs = glCreateShader(GL_FRAGMENT_SHADER);
+            set_source(vs, "a vertex shader the compiler has never seen\n");
+            set_source(fs, FRAGMENT_TEXT);
+            online_compile(vs);
+            online_compile(fs);
+            assert_eq!(get_iv(vs, GL_COMPILE_STATUS), 0);
+            assert_eq!(get_iv(fs, GL_COMPILE_STATUS), 1);
+
+            let p = glCreateProgram();
+            glAttachShader(p, vs);
+            glAttachShader(p, fs);
+            glLinkProgram(p);
+            let mut linked: GLint = -1;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut linked);
+            assert_eq!(linked, 0);
+            let mut log = [0u8; 128];
+            glGetProgramInfoLog(p, log.len() as GLsizei, core::ptr::null_mut(), log.as_mut_ptr() as *mut GLchar);
+            let log = core::str::from_utf8(&log[..log.iter().position(|&b| b == 0).unwrap()]).unwrap();
+            assert_eq!(log, "link error: vertex and fragment shaders must be attached and compiled");
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
     /// The 16-hex-digit prefix the "shsrc" lines of a compile log carry.
+    #[cfg(not(feature = "no-shader-table"))]
     fn sha16_of(log: &str) -> String {
         let h = log.find("sha256=").expect("the compile log names the text");
         log[h + 7..h + 7 + 16].to_string()
@@ -1483,11 +1642,11 @@ mod tests {
     /* The offline table's own contract: a text the table lacks compiles
      * (COMPILE_STATUS true, `missing` set, "not in offline table" logged) and
      * glLinkProgram refuses it. A `no-shader-table` build has no offline back
-     * end; its online compiler refuses such a text at glCompileShader
-     * instead, which
+     * end, so this runs only with a table; the online compiler refuses such
+     * a text at glCompileShader instead, and the `..._online` twin next to
      * `an_invalid_source_is_refused_at_compile_time_by_the_online_compiler`
-     * pins. */
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table contract: this build has no offline table")]
+     * pins that. */
+    #[cfg(not(feature = "no-shader-table"))]
     fn a_shader_the_table_lacks_compiles_and_its_text_is_logged_in_indexed_chunks() {
         /* upstream 18692b4: the harvester needs the text of every run-time
          * shader in one run, so the missing shader reports COMPILE_STATUS
@@ -1538,11 +1697,11 @@ mod tests {
     /* The offline table's own contract: a text the table lacks compiles
      * (COMPILE_STATUS true, `missing` set, "not in offline table" logged) and
      * glLinkProgram refuses it. A `no-shader-table` build has no offline back
-     * end; its online compiler refuses such a text at glCompileShader
-     * instead, which
+     * end, so this runs only with a table; the online compiler refuses such
+     * a text at glCompileShader instead, and the `..._online` twin next to
      * `an_invalid_source_is_refused_at_compile_time_by_the_online_compiler`
-     * pins. */
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table contract: this build has no offline table")]
+     * pins that. */
+    #[cfg(not(feature = "no-shader-table"))]
     fn a_program_with_a_shader_the_table_lacks_does_not_link() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.

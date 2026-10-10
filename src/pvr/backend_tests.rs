@@ -3460,6 +3460,52 @@ fn depth_resolve_reads_the_packed_depth_as_floats() {
     assert_eq!((t[0], t[18], t[19]), (0.25, 0.25, 7.0));
 }
 
+/// The PowerVR's half of the stamp contract (`YakoglBackend::kick_id`,
+/// pvr-depth-resolve): after a draw that returned 0, `kick_id()` names the
+/// kick holding it, which is what the GL core moves the draw's stamps to.
+/// glmark2 shadow's depth pass after the window's frame: the draw ends that
+/// frame (another target and depth/stencil), submits it and opens its own,
+/// so `kick_id()` is one larger across the draw, that kick is pending, and
+/// `depth_resolve` answers -EBUSY for its depth until it is submitted. A
+/// draw the open frame has no room for (the draw table full) splits inside
+/// the backend: `kick_id()` after it again names the frame holding it.
+#[test]
+fn after_a_draw_the_kick_id_names_the_kick_holding_it() {
+    let rig = Rig::new();
+    assert_eq!(draw(&rig.draw(3)), 0);
+    let window = pvr_backend_kick_id();
+    assert!(rig.b().frame_open && pvr_backend_kick_pending(window));
+    let id = 0x4000_0064; /* a texture's id form */
+    let mut depth = fbo_draw(&rig, 1);
+    depth.depth_id = id;
+    assert_eq!(draw(&depth), 0);
+    assert_eq!(rig.kicks().len(), 1, "the depth pass's draw submitted the window's frame");
+    let pass = pvr_backend_kick_id();
+    assert_eq!(pass, window + 1, "the depth pass is the next kick");
+    assert!(rig.b().frame_open && pvr_backend_kick_pending(pass));
+    assert_eq!(rig.b().frame_zs[0], id, "the open frame renders the depth");
+    let mut t = [0f32; 1];
+    // SAFETY: 1 row of 1 float.
+    assert_eq!(unsafe { pvr_backend_depth_resolve(id, t.as_mut_ptr(), 1, 1, 1) }, -crate::util::EBUSY);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(pvr_backend_finish(), 0);
+    assert!(!pvr_backend_kick_pending(pass), "submitted and waited for");
+    // SAFETY: as above.
+    assert_ne!(unsafe { pvr_backend_depth_resolve(id, t.as_mut_ptr(), 1, 1, 1) }, -crate::util::EBUSY);
+
+    /* a split inside the backend: the draw table's limit */
+    let mut d = rig.draw(3);
+    for _ in 0..MAX_DRAWS_PER_FRAME {
+        assert_eq!(draw(&d), 0);
+        d.do_clear = false;
+    }
+    let before = pvr_backend_kick_id();
+    assert_eq!(draw(&d), 0);
+    assert_eq!(rig.b().ndraws, 2, "the draw went into a new frame (load quad + the draw)");
+    assert_eq!(pvr_backend_kick_id(), before + 1, "and kick_id() names it");
+    assert!(rig.b().frame_open);
+}
+
 /// The GL core deleting framebuffer 0's depth renderbuffer frees its
 /// buffer exactly, and the framebuffer past the table gets that slot.
 #[test]

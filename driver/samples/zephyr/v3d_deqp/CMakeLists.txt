@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# v3d_deqp: dEQP-GLES2 on the Raspberry Pi 4 (V3D 4.2), on Zephyr, through
-# YakoGL's V3D backend (docs/online-shaderc/v3d-backend.md, "M8").
+# v3d_deqp: dEQP-GLES2 (or, with -DDEQP_MODULE=gles3, dEQP-GLES3) on the
+# Raspberry Pi 4 (V3D 4.2), on Zephyr, through YakoGL's V3D backend
+# (docs/online-shaderc/v3d-backend.md, "M8").
 #
 # The dEQP side is the deqp sample's, used by path and never edited: its
 # main loop, test-data archive, QPA-to-console log and stubs. The board side
@@ -11,7 +12,9 @@
 #
 #   -DDEQP_SRC=<CTS copy with cts-yakogl-zephyr.patch applied>
 #   -DDEQP_BUILD=<its stage-1 build (static libraries)>
-# tools/cts/cts-build-zephyr.sh makes both (BOARD=rpi_4b).
+#   -DDEQP_MODULE=gles2|gles3 (default gles2; the stage 1's MODULE)
+# tools/cts/cts-build-zephyr.sh makes the first two (BOARD=rpi_4b, MODULE=);
+# tools/cts/pi4-deqp-images.sh builds a table of images (DEQP_MODULE=).
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(PVR_REPO "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/yakogl_dir.cmake")
@@ -23,6 +26,24 @@ foreach(v DEQP_SRC DEQP_BUILD)
     message(FATAL_ERROR "v3d_deqp: set -D${v}=...")
   endif()
 endforeach()
+
+# Which dEQP package: gles2 (default) or gles3, against a stage 1 built with
+# the same MODULE (the deqp sample's rule). A gles3 image must report ES 3.0:
+# prj.conf says CONFIG_YAKOGL_REPORT_ES2=y for dEQP-GLES2, so a gles3 build
+# passes -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n on the command
+# line (merged after prj.conf; pi4-deqp-images.sh DEQP_MODULE=gles3 does), and
+# a gles3 image whose configuration still says ES 2.0 is refused here, since
+# dEQP-GLES3 on an ES 2.0 context is not supported.
+if(NOT DEQP_MODULE)
+  set(DEQP_MODULE gles2)
+endif()
+if(NOT DEQP_MODULE MATCHES "^gles[23]$")
+  message(FATAL_ERROR "v3d_deqp: DEQP_MODULE must be gles2 or gles3, not ${DEQP_MODULE}")
+endif()
+if(DEQP_MODULE STREQUAL "gles3" AND (CONFIG_DEQP_REPORT_ES2 OR CONFIG_YAKOGL_REPORT_ES2))
+  message(FATAL_ERROR "v3d_deqp: DEQP_MODULE=gles3 needs CONFIG_DEQP_REPORT_ES2=n and CONFIG_YAKOGL_REPORT_ES2=n")
+endif()
+string(SUBSTRING "${DEQP_MODULE}" 4 1 _deqp_ver)
 
 execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
                 OUTPUT_VARIABLE V3D_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -38,9 +59,9 @@ set(V3D_BOARD "${CMAKE_CURRENT_SOURCE_DIR}/../../../zephyr/lib/board/rpi4")
 set(_data_c "${CMAKE_CURRENT_BINARY_DIR}/deqp_data.c")
 add_custom_command(OUTPUT "${_data_c}"
   COMMAND python3 "${DEQP_SAMPLE}/tools/embed_data.py"
-          "${DEQP_BUILD}/modules/gles2/gles2" gles2 "${_data_c}"
+          "${DEQP_BUILD}/modules/${DEQP_MODULE}/${DEQP_MODULE}" ${DEQP_MODULE} "${_data_c}"
   DEPENDS "${DEQP_SAMPLE}/tools/embed_data.py"
-  COMMENT "embedding the dEQP-GLES2 test data")
+  COMMENT "embedding the dEQP ${DEQP_MODULE} test data")
 
 target_sources(app PRIVATE
   "${DEQP_SAMPLE}/src/main.cpp"
@@ -49,7 +70,7 @@ target_sources(app PRIVATE
   "${DEQP_SAMPLE}/src/deqp_stubs.c"
   "${_data_c}"
   # the package registration lives in dEQP's executable, not in a library
-  ${DEQP_SRC}/modules/gles2/tes2TestPackageEntry.cpp
+  ${DEQP_SRC}/modules/${DEQP_MODULE}/tes${_deqp_ver}TestPackageEntry.cpp
   src/v3d_board.c
   "${V3D_BOARD}/rpi_mbox.c"
   "${V3D_BOARD}/fbcon.c")
@@ -90,17 +111,17 @@ target_include_directories(app PRIVATE
   ${DEQP_SRC}/framework/delibs/deutil ${DEQP_SRC}/framework/delibs/destream
   ${DEQP_SRC}/framework/referencerenderer ${DEQP_SRC}/framework/opengl
   ${DEQP_SRC}/framework/opengl/wrapper ${DEQP_SRC}/framework/egl
-  ${DEQP_SRC}/framework/egl/wrapper ${DEQP_SRC}/modules/gles2
+  ${DEQP_SRC}/framework/egl/wrapper ${DEQP_SRC}/modules/${DEQP_MODULE}
   ${DEQP_SRC}/modules/glshared ${DEQP_SRC}/framework/opengl/simplereference)
 
 # The stage-1 archives, in dependency order inside one group (the deqp
 # sample's list).
 set(_libs
-  modules/gles2/libdeqp-gles2-package.a
-  modules/gles2/functional/libdeqp-gles2-functional.a
-  modules/gles2/accuracy/libdeqp-gles2-accuracy.a
-  modules/gles2/performance/libdeqp-gles2-performance.a
-  modules/gles2/stress/libdeqp-gles2-stress.a
+  modules/${DEQP_MODULE}/libdeqp-${DEQP_MODULE}-package.a
+  modules/${DEQP_MODULE}/functional/libdeqp-${DEQP_MODULE}-functional.a
+  modules/${DEQP_MODULE}/accuracy/libdeqp-${DEQP_MODULE}-accuracy.a
+  modules/${DEQP_MODULE}/performance/libdeqp-${DEQP_MODULE}-performance.a
+  modules/${DEQP_MODULE}/stress/libdeqp-${DEQP_MODULE}-stress.a
   modules/glshared/libdeqp-gl-shared.a
   framework/opengl/simplereference/libglutil-sglr.a
   framework/opengl/libglutil.a

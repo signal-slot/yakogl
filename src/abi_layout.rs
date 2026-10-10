@@ -488,6 +488,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, height) == 
 const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, mem) == 16);
 const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, external) == 56);
 const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, orphan) == 57);
+const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, samples) == 58);
 const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, serial) == 60);
 const _: () = assert!(offset_of!(crate::gl::context::GlRenderbuffer, storage_gen) == 64);
 const _: () = assert!(size_of::<crate::gl::context::GlAttachment>() == 16);

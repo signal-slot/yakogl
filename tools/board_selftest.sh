@@ -11,7 +11,9 @@
 #    images, with ssh, scp, curl, ping, fuser, flock, stty, sudo and kexec
 #    replaced by stubs that only record that they were called: each verb must
 #    exit 0 and print its board commands as "DRY ..." lines (the boot command
-#    of its backend among them), and no stub may have run.
+#    of its backend among them), and no stub may have run. The Pi 4 with
+#    BOARD_UART a serial bridge's host:port captures through the bridge (no
+#    stty, no fd scan), with a device path as before.
 # 2. The refusals that need no board: an image without the watchdog marker,
 #    one too big for the board's RAM window, a backend the board has not, an
 #    unknown board, a bad run name.
@@ -26,7 +28,9 @@
 #      uboot-tftp and kexec-dev;
 #    - Pi 4: three records of the 29460f96 full tree in tools/testdata (the old
 #      tryboot runner's end-line rule; the old Pi 4 tree runner's tally and
-#      baseline diff);
+#      baseline diff; one of them as a bridge's console.ts, whose derived
+#      console.txt must equal it), and row E of the a27d69c0 tree as the
+#      bridge captured it (tools/testdata/pi4-tryboot-E-a27d69c0.uart.ts);
 #    - i.MX8MP tree: tools/cts/imx8mp-full-tree-29460f96.results.tsv turned
 #      back into records and tallied: results.tsv against the committed one,
 #      rows.md, the TALLY line and the diff against the old tree runner's.
@@ -42,7 +46,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=215
+WANT_CHECKS=223
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -151,6 +155,22 @@ check "imx8mp: SEL=0x8003 is written as w1 = 53458003" grep -q "00000000 5345800
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
     eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
+# the Pi's console behind a serial bridge (BOARD_UART=host:port): the bridge
+# capture with its 'busy' retry, no stty and no /proc scan of a local device;
+# a device path keeps both
+out=$(BOARD_UART=bridge:35931 BOARD_HOST=user@host BOARD_HDMI_TIMINGS="1 2 3" dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi4 BOARD_UART=host:port: rc 0, the bridge capture ('busy' retried), console.txt derived from console.ts, no stty, no fd scan" \
+    eval '[ "$rc" = 0 ] && grep -qF "am62p_netboot_uart.py capture bridge:35931 <rundir>/console.raw <rundir>/console.ts &   # '"'"'busy'"'"' retried 12 x 10 s" <<<"$out" &&
+          grep -q "derive <rundir>/console.txt" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out" &&
+          grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
+out=$(BOARD_UART=bridge:35931 dry pi4 probe "$S/logs" 2>&1)
+check "pi4 BOARD_UART=host:port probe: rc 0, no fd scan" eval '[ $? = 0 ] && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+out=$(BOARD_UART=/dev/ttyACM9 dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
+check "pi4 BOARD_UART=/dev/...: stty and the fd scan as before, no bridge capture" \
+    eval 'grep -qF "stty -F /dev/ttyACM9 115200 cs8 -cstopb -parenb raw -echo" <<<"$out" && grep -q "scan every /proc/<pid>/fd for /dev/ttyACM9" <<<"$out" &&
+          ! grep -q "am62p_netboot_uart.py" <<<"$out"'
+check "pi4 bridge and device runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 out=$(NETBOOT_ROUTE=typed dry am62p run "$S/img/am62p.bin" "$S/logs" 2>&1)
 check "am62p typed route: nothing written to the env, the line typed" \
     eval 'grep -q "am62p_netboot_uart.py typed" <<<"$out" && ! grep -q "fw_setenv -s" <<<"$out"'
@@ -641,6 +661,41 @@ for L in TF XT GT21; do
     check "$L: old end line seen=$oldend, Linux back (old runner: complete, rc 0); new verdict=$(field verdict <<<"$new") result=$(field result <<<"$new") resets=$(field resets <<<"$new") rc=$(field rc <<<"$new")" \
         eval '[ "$oldend" = 1 ] && [ "$(field verdict <<<"$new")" = done ] && [ "$(field rc <<<"$new")" = 0 ] && [ "$(field resets <<<"$new")" = 0 ]'
 done
+# the same record captured through a serial bridge (BOARD_UART=host:port):
+# console.ts rows "<unix time> line", console.txt derived by board.sh's own
+# console_from_ts, line for line the device capture's, and the same verdict
+d="$S/pi4/bridge/20261003-1300-GT21-0123abcd"
+mkrun "$d" board=pi4 boot=tryboot name=GT21 probe=0 back=1 t_reboot=100 t_back=370
+TZ=UTC gawk '{ split($1, h, ":"); t = mktime("2026 10 03 " h[1] " " h[2] " " h[3]); sub(/^[^ ]+ /, ""); printf "%d.%03d %s\n", t, NR % 1000, $0 }' \
+    "$TD/pi4-tryboot-GT21-29460f96.console.txt" > "$d/console.ts"
+RD=$d TZ=UTC console_from_ts
+same "pi4 bridge capture: console.txt derived from console.ts equals the device capture's" "$TD/pi4-tryboot-GT21-29460f96.console.txt" "$d/console.txt"
+check "pi4 bridge capture: the same verdict as the device capture (done rc 0)" says pi4 "$d" "rc=0 verdict=done"
+# a bridge capture holds the Linux shutdown and the lines after the end line:
+# row E of the a27d69c0 tree (2026-10-10), whose live verdict was no_end_line
+# though its console has both end lines ("plain | grep -q" under pipefail,
+# racing its last write). Replayed with SIGPIPE ignored, as a runner started
+# from a Python parent has it (EPIPE then fails the writer), ten times.
+d="$S/pi4/bridge/20261010-1846-E-d54677f9"
+mkrun "$d" board=pi4 boot=tryboot name=E probe=0 back=1 t_reboot=1791625623 t_back=1791625920
+cp "$TD/pi4-tryboot-E-a27d69c0.uart.ts" "$d/console.ts"
+RD=$d console_from_ts
+bad=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    o=$(python3 -c 'import os, signal, sys; signal.signal(signal.SIGPIPE, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' "$B" pi4 tally "$d" 2>&1 | head -1)
+    grep -q "rc=0 verdict=done .*result=legacy:" <<<"$o" || bad=$((bad + 1))
+done
+check "pi4 bridge capture E (a27d69c0): verdict done in 10 of 10 tallies with SIGPIPE ignored ($bad not)" [ "$bad" = 0 ]
+# deterministic: the end line followed by far more than a pipe's worth (64 KiB)
+d="$S/pi4/tail/20261003-1300-TFtail-0123abcd"
+mkrun "$d" board=pi4 boot=tryboot name=TFtail probe=0 back=1
+{ cat "$TD/pi4-tryboot-TF-29460f96.console.txt"
+  for i in $(seq 4000); do printf '12:00:00 [  OK  ] Stopped unit-%04d.service - a Linux line after the end\n' "$i"; done; } > "$d/console.txt"
+# (with SIGPIPE ignored the cut-short writer also complains on stderr; the
+# tally must print its verdict line and nothing else)
+o=$(python3 -c 'import os, signal, sys; signal.signal(signal.SIGPIPE, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' "$B" pi4 tally "$d" 2>&1 >/dev/null)
+check "pi4: the end line followed by 4000 more lines (> 64 KiB) is still the end: done, and nothing on stderr with SIGPIPE ignored" \
+    eval 'says pi4 "$d" "rc=0 verdict=done" && [ -z "$o" ]'
 d="$S/pi4/cut/20261003-1300-TFcut-0123abcd"
 mkrun "$d" board=pi4 boot=tryboot name=TFcut probe=0 back=1
 grep -v -e 'deqp: summary' -e 'v3d_deqp: build' "$TD/pi4-tryboot-TF-29460f96.console.txt" > "$d/console.txt"

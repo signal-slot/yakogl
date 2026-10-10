@@ -4451,9 +4451,17 @@ mod tests {
     /// A linked, current program whose uniform reflection is replaced by hand-built tables: the offline table has
     /// no ivec/mat2/bool uniforms and few arrays, and the setters only look at the reflection.
     fn fake_program(gl: &TestGl, vs: Vec<ShcUniform>, fs: Vec<ShcUniform>) -> GLuint {
+        fake_program_of(gl, vs, fs, false)
+    }
+
+    fn fake_program_of(gl: &TestGl, vs: Vec<ShcUniform>, fs: Vec<ShcUniform>, offline: bool) -> GLuint {
         let prog = gl.program("passthrough.vert", "uniform_color.frag");
         let c = gl.ctx();
         let p = &mut context::objects(c.group).programs[obj_index(prog)];
+        if offline {
+            crate::testutil::mark_stage_offline(&mut p.rvs);
+            crate::testutil::mark_stage_offline(&mut p.rfs);
+        }
         set_table(&mut p.rvs, vs);
         set_table(&mut p.rfs, fs);
         // SAFETY: TestGl serialises the tests; no other reference to STATE is live.
@@ -4475,6 +4483,14 @@ mod tests {
         // SAFETY: plain GL call.
         unsafe { glUseProgram(prog) };
         prog
+    }
+
+    /// [`fake_program`] with both stages read as the offline table's: the
+    /// reflection shape of `light_array_reflection` (flattened struct-array
+    /// rows) is only read as that for an offline stage, which a
+    /// `no-shader-table` build has none of until the stages are marked.
+    fn fake_offline_program(gl: &TestGl, vs: Vec<ShcUniform>, fs: Vec<ShcUniform>) -> GLuint {
+        fake_program_of(gl, vs, fs, true)
     }
 
     #[test]
@@ -5315,12 +5331,12 @@ mod tests {
      * OFFLINE table's reflection shape (one flattened row per struct member)
      * on a program whose stages the build's back end compiled. build_locations
      * flattens only rows of an offline-compiled stage (`!shaderc::is_online`),
-     * so in a `no-shader-table` build, where every stage is online, the shape
-     * cannot occur and these rows would be read as the online compiler's. The
-     * online shape of the same dEQP contract is pinned by
+     * so they run on `fake_offline_program`, which marks the stages offline
+     * (`testutil::mark_stage_offline`): a `no-shader-table` build has no
+     * offline stage of its own. The online shape of the same dEQP contract
+     * is pinned by
      * `nested_struct_array_uniforms_reach_the_shader_as_deqp_sets_them`. */
     #[test]
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table reflection shape: this build has no offline table")]
     fn get_active_uniform_enumerates_one_entry_per_struct_array_element() {
         /* dEQP recurses per outer index for an array of structs and collapses
          * to a single "name[0]" entry ONLY where the element type is basic.
@@ -5328,7 +5344,7 @@ mod tests {
          * `atten` reports the size of the INNER array (3), not of the nine
          * leaves the reflection flattens it into. */
         let gl = fresh();
-        let p = fake_program(&gl, light_array_reflection(), std::vec![]);
+        let p = fake_offline_program(&gl, light_array_reflection(), std::vec![]);
         let want: Vec<(String, GLint, GLenum)> = std::vec![
             ("u_lights[0].atten[0]".into(), 3, GL_FLOAT),
             ("u_lights[0].color".into(), 1, GL_FLOAT_VEC3),
@@ -5373,10 +5389,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table reflection shape: this build has no offline table")]
     fn struct_array_uniform_locations_follow_the_gl_naming_rules() {
         let gl = fresh();
-        let p = fake_program(&gl, light_array_reflection(), std::vec![]);
+        let p = fake_offline_program(&gl, light_array_reflection(), std::vec![]);
 
         /* every element of the struct array has its own location */
         let l0 = loc(p, "u_lights[0].color");
@@ -5402,14 +5417,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(feature = "no-shader-table", ignore = "offline-table reflection shape: this build has no offline table")]
     fn a_write_to_a_struct_members_array_stops_at_that_array() {
         /* GL ES 2.0 2.10.4: a count that runs past the end of the array is
          * clamped to the elements that remain -- and the array that bounds it
          * is `atten`'s own three, not the nine leaves the flattening makes of
          * it, so light 0's write must not spill into light 1's. */
         let gl = fresh();
-        let p = fake_program(&gl, light_array_reflection(), std::vec![]);
+        let p = fake_offline_program(&gl, light_array_reflection(), std::vec![]);
         let v = [7.0f32; 8];
         // SAFETY: v holds the eight elements announced.
         unsafe { glUniform1fv(loc(p, "u_lights[0].atten[1]"), 8, v.as_ptr()) };
@@ -6144,7 +6158,7 @@ mod tests {
     /// (blobs.rs): ubLights.lights[0].position vec3[16] @620 (64 dwords), .coneAngle float[16] @684,
     /// .pcfSamples int[16] @956, ubDirectionalLights.directionalLights[0].matrices mat4[16] @180 with inner 4
     /// (4 lights x 4 cascades), .direction vec3[4] @120, .shadowBias float[4] @136.
-    #[cfg(feature = "gpu-powervr")] /* only the PowerVR table has these shaders */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* only the PowerVR table has these shaders */
     fn lit_program(gl: &TestGl) -> GLuint {
         let p = gl.program("83a830e25f56fd85.vert", "0119aeb276db508c.frag");
         let c = gl.ctx();
@@ -6155,7 +6169,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn struct_array_member_location_carries_the_element_in_the_upper_bits() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6170,7 +6184,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn struct_array_member_with_an_inner_array_scales_the_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6183,7 +6197,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn set_vec3_member_of_struct_array_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6199,7 +6213,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn set_scalar_members_of_struct_array_elements() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6216,7 +6230,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn set_matrices_of_one_struct_array_element() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6231,7 +6245,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn a_struct_member_that_is_not_an_array_takes_count_one_only() {
         /* This test used to expect the write to run on into the following structs' members. GL ES 3.0 2.12.6:
          * "ubLights.lights[14].position" is a vec3, not an array, so count > 1 is GL_INVALID_OPERATION; the
@@ -6257,7 +6271,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn an_inner_array_write_is_clamped_to_the_inner_array() {
         /* matrices is mat4[4] per light: the location of light k's matrices addresses a 4-element array */
         let gl = fresh();
@@ -6276,7 +6290,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn an_inner_array_element_has_its_own_location() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6298,7 +6312,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn element_bits_beyond_the_array_write_nothing() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6309,7 +6323,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn get_uniform_reads_the_element_the_location_addresses() {
         let gl = fresh();
         let p = lit_program(&gl);
@@ -6395,7 +6409,7 @@ mod tests {
     /* ---- uniform blocks sized at link time (upstream bcef68b) --------------------------------------- */
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn link_sizes_each_block_to_its_stage() {
         let gl = fresh();
         let p = gl.program("main.vert", "fill_color.frag");
@@ -6503,7 +6517,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn femtovg_frag_array_reaches_the_draw_and_the_upload_keeps_the_table_size() {
         /* the Slint UI on the device: FemtoVG's fill shaders set frag[14] with one glUniform4fv; the upload is the
          * 52 dwords the shader reads, now holding the application's values */
@@ -6712,7 +6726,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn real_normal_matrix_is_strided_in_the_vs_block() {
         let gl = fresh();
         let p = gl.program("fd0c8a22ac0eef86.vert", "0119aeb276db508c.frag");
@@ -7802,7 +7816,7 @@ mod tests {
     /* ---- glGetProgramiv / glGetProgramInfoLog / glValidateProgram ---- */
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn get_programiv_max_lengths_cover_the_longest_names() {
         let gl = fresh();
         let p = gl.program("83a830e25f56fd85.vert", "0119aeb276db508c.frag");

@@ -111,7 +111,8 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
      * the GL core converted it then and says so in `bgra`) take the format
      * that puts them back in R,G,B,A for the shader */
     let pe_order = fmt.format == GC_TEX_FORMAT_A8B8G8R8 && t.bgra != 0;
-    /* a mipmapped layered texture is sampled from its tiled copy (tiled_copy.rs) */
+    /* a mipmapped layered texture, and one with 64-bit texels, is sampled
+     * from its tiled copy (tiled_copy.rs) */
     let copy = super::tiled_copy::lookup(t, super::backend::gc_kick_id());
     let levels = t.mip_levels.max(1) as usize;
     /* A cube map, a 2D array and a 3D texture are one stack of layers here and

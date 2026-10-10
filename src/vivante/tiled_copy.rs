@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! A derived 4x4-tiled copy of a mipmapped layered texture (a cube, a 2D
-//! array, a 3D texture) for the texture unit to sample.
+//! array, a 3D texture), or of any texture with 64-bit texels, for the
+//! texture unit to sample.
 //!
 //! The texture unit steps from one face (layer) to the next by the level's
 //! 4x4-TILE-padded size, `align4(w) * align4(h) * bpp`, whatever the
@@ -20,7 +21,9 @@
 //! texture still in flight is finished first, and the CPU reads the storage
 //! after invalidating its cache. A texture with one level, a compressed one
 //! and a plain 2D one are sampled as they are -- except a 2D texture the
-//! vertex stage samples, which is copied too (see `wanted_vs`).
+//! vertex stage samples, which is copied too (see `wanted_vs`), and a
+//! texture with 64-bit texels (RGBA16F), which is copied into page-aligned
+//! memory (see `wide_texels`).
 
 use crate::backend::{
     gles_texfmt_bytes, GlesDraw, GlesTextureBind, GLES_TEXTYPE_2D, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
@@ -35,6 +38,9 @@ const LEVEL_ALIGN: usize = 64;
 /// Copies kept at once; the least recently used one whose last sampling kick
 /// has completed is the one replaced.
 const ENTRIES: usize = 16;
+/// Where a copy of 64-bit texels starts: a page, as every texture Mesa hands
+/// this GPU is a page-aligned GEM buffer. See [`wide_texels`].
+const WIDE_BASE_ALIGN: usize = 4096;
 /// Bytes the copies may hold together. The i.MX8MP's GPU memory is a 64 MiB
 /// carveout that also holds every texture, the frame arenas and the depth
 /// surfaces; sixteen 512x512 mipmapped cubes would take twice this. A copy
@@ -61,6 +67,9 @@ struct Key {
 struct Entry {
     key: Key,
     mem: OsalGpuMem,
+    /// The copy's GPU address: `mem.gpu`, or the first page boundary in it
+    /// for 64-bit texels (`WIDE_BASE_ALIGN`).
+    gpu: u64,
     /// The kick that last sampled the copy: not reused until it completed.
     used_by: u32,
     /// For the LRU.
@@ -97,14 +106,31 @@ fn cache() -> &'static mut Cache {
 /// shifted -- dEQP filtering.cube's sixteen *_npot cases on the i.MX8MP, the
 /// only filtering.cube cases the copy had not moved (652000b4), since the GL
 /// core gives an NPOT texture one level.
+///
+/// And a texture with 64-bit texels always, whatever its type and levels
+/// ([`wide_texels`]).
 pub fn wanted(t: &GlesTextureBind) -> bool {
     let layered = t.type_ == GLES_TEXTYPE_CUBE || t.type_ == GLES_TEXTYPE_2D_ARRAY || t.type_ == GLES_TEXTYPE_3D;
     let padded = t.stride_texels * t.height != align4(t.width) * align4(t.height);
-    layered
-        && (t.mip_levels > 1 || padded)
+    (layered && (t.mip_levels > 1 || padded) || wide_texels(t))
         && t.incomplete == 0
         && !t.cpu.is_null()
         && !super::texture::is_block_format(t.format)
+}
+
+/// Texels of 64 bits (RGBA16F) are never sampled from the GL core's linear
+/// storage. On the i.MX8MP (gl_test 44's probes, #6) the texture unit read
+/// the first 64 bytes of such a LINEAR texture as 0 and misread the edge
+/// texels of other rows at a 64-byte row stride, while CPU reads of the same
+/// memory were right and RGBA8 was not affected; both went away with the
+/// texture's base on a page. The GC7000 OSAL aligns allocations to 64 bytes.
+/// Mesa never samples that layout on this core: a texture that is rendered
+/// into is TILED (etnaviv_resource.c etna_resource_alloc), a texture is a
+/// page-aligned GEM buffer, and `etna_texture_handle_incompatible`
+/// (etnaviv_texture.c:240) resolves anything else into a TILED one. So the
+/// copy of such a texture is that: 4x4-tiled, at a page boundary.
+fn wide_texels(t: &GlesTextureBind) -> bool {
+    gles_texfmt_bytes(t.format) == 8
 }
 
 /// A texture the vertex stage samples: a layered one as [`wanted`] says,
@@ -253,11 +279,14 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
     let bpp = gles_texfmt_bytes(t.format);
     let layers = t.layers.max(1) as u32;
     let (_, total) = tiled_layout(t.width, t.height, layers, t.mip_levels as u32, bpp);
+    /* a copy of 64-bit texels starts on a page: room to move up to one */
+    let align = if wide_texels(t) { WIDE_BASE_ALIGN } else { 1 };
+    let alloc = if total == 0 { 0 } else { total + align - 1 };
     /* room under the budget: least recently used first, never one a
      * pending kick samples */
     loop {
         let held: usize = c.entries.iter().flatten().map(|e| e.mem.size).sum();
-        if held + total <= BUDGET {
+        if held + alloc <= BUDGET {
             break;
         }
         let Some(i) = lru_idle(c, kick_pending) else { break };
@@ -273,7 +302,7 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
         osal::gpu_free(&mut old.mem);
     }
     let mut mem = OsalGpuMem::ZERO;
-    if total == 0 || osal::gpu_alloc(super::backend::heap_data(), total, OSAL_MEM_DATA, &mut mem) != 0 {
+    if alloc == 0 || osal::gpu_alloc(super::backend::heap_data(), alloc, OSAL_MEM_DATA, &mut mem) != 0 {
         crate::glog_once!("vivante: no GPU memory for a {total}-byte tiled copy");
         return -1;
     }
@@ -281,17 +310,27 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
         osal::gpu_free(&mut mem);
         return -1;
     }
+    /* the CPU view and the GPU address move together: one allocation */
+    let skip = base_skip(mem.gpu, align);
     let src_bytes = t.bytes as usize;
     // SAFETY: `t.cpu` is the storage's CPU view for `t.bytes` bytes (the GL
-    // core's contract); `mem` was just allocated with `total` bytes.
+    // core's contract); `mem` was just allocated with `alloc` bytes, and
+    // `skip + total <= alloc` (base_skip is below `align`).
     unsafe {
+        let dst = (mem.cpu as *mut u8).add(skip);
         osal::cache_invd(t.cpu as *mut core::ffi::c_void, src_bytes);
-        core::ptr::write_bytes(mem.cpu as *mut u8, 0, total);
-        tile(t, t.cpu as *const u8, mem.cpu as *mut u8, bpp);
-        osal::cache_flush(mem.cpu, total);
+        core::ptr::write_bytes(dst, 0, total);
+        tile(t, t.cpu as *const u8, dst, bpp);
+        osal::cache_flush(dst as *mut core::ffi::c_void, total);
     }
-    c.entries[slot] = Some(Entry { key, mem, used_by: 0, stamp: clock });
+    let gpu = mem.gpu + skip as u64;
+    c.entries[slot] = Some(Entry { key, mem, gpu, used_by: 0, stamp: clock });
     0
+}
+
+/// Bytes from `gpu` up to the next multiple of `align` (a power of two).
+const fn base_skip(gpu: u64, align: usize) -> usize {
+    (gpu.wrapping_neg() & (align as u64 - 1)) as usize
 }
 
 /// The slot to (re)use: an empty one, else the least recently used one whose
@@ -341,7 +380,7 @@ pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32)>
     let bpp = gles_texfmt_bytes(t.format);
     let (off, _) = tiled_layout(t.width, t.height, t.layers.max(1) as u32, t.mip_levels as u32, bpp);
     let slice = align4(t.width) * align4(t.height) * bpp;
-    Some((e.mem.gpu, off, slice))
+    Some((e.gpu, off, slice))
 }
 
 /// Free every copy (backend shutdown).
@@ -356,6 +395,14 @@ pub fn release_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_base_moves_up_to_its_alignment_and_no_further() {
+        assert_eq!(base_skip(0x1000, 4096), 0, "already on a page");
+        assert_eq!(base_skip(0x1040, 4096), 4096 - 64, "the GC7000 OSAL's 64-byte alignment");
+        assert_eq!(base_skip(0x1fff, 4096), 1);
+        assert_eq!(base_skip(0x1040, 1), 0, "no alignment asked");
+    }
 
     #[test]
     fn a_texel_lands_in_its_4x4_tile_row_major() {
