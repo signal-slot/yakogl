@@ -256,7 +256,10 @@ is kept and pinned by tests.
      `gc_debug_msaa` bit 3, for a reason still unknown. The `x4 scratch`,
      `x4 clear only` and `x4 draw only` lines that would tell a failed
      resolve from a failed draw are console output, and the i.MX8MP has no
-     console: a probe for #8 needs a record kind for them. The 16
+     console. They now also go into the result record, one page of three
+     words a boot (`SEL=0x1000|tag`, kind PERF; `yakogl-tools record msaa`
+     decodes them): `tools/cts/log/investigations/gc-msaa-record.md` has the
+     two-arm recipe; no board has run it yet. The 16
      `multisample.*` dEQP cases stay NotSupported at 1x.
    - **i.MX8MP glmark2 frames wait for VSYNC** (no issue yet). `board_show`
      (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c`) calls
