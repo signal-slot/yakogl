@@ -134,8 +134,9 @@ the `c_*.out` files.
 
 **Verdict: Pi 4 image fits.** The Pi 4 images set 16 MiB of tiled copies; the largest
 `texture.size` cube needs 8,404,992 bytes. The host abort comes from the host library's
-8 MiB default, which the Pi 4 image overrides. **Not done in this item: the host rerun of
-`c_150`** (see "Rerun"), so the 87 host cases are still unmeasured.
+8 MiB default, which the Pi 4 image overrides. **Measured on the host (see "Rerun")**: with
+16 MiB, chunk `c_150` runs all 100 cases, 0 aborted, 0 `ResourceError`; with the 8 MiB
+default it aborts again at case 13.
 
 ### Where the budget comes from (file:line)
 
@@ -219,33 +220,66 @@ The largest `texture.size` case overall is 2D: `texture.size.2d.2048x2048_rgba88
     (`pi4-full-tree.txt:11-14`, `pi4-deqp-images.sh:72`), and sweep 28 ran T5 with it.
 - No board run at the tip has a `texture.size` row yet.
 
-### Rerun (not done)
+### Rerun (measured, HOST-ONLY)
 
-Asked: rerun `c_150` on the host with the V3D library and the Pi 4 image's budget. The budget
-is the env var `YAKOGL_V3D_TILED_COPIES_BYTES=16777216`, read at runtime
-(`src/osal/linux.c:585`), so **no CMake option is needed and none was added**. **I did not
-run it.** The checkout in `$CCFARM_DEPS_DIR` is at `93bca01` but has no `targets/yakogl`
-(patch not applied), and copying it was refused. A fresh clone into `build/VK-GL-CTS` worked,
-but `git checkout 93bca01` and `external/fetch_sources.py` then needed approval and were
-refused, so dEQP was not built. So there is **no begun/aborted count for the 100 cases of `c_150`** and no per-case
-table. What stands: `c_150` at the 8 MiB default = 13 of 100 began, 1 aborted (above). That
-cases 14-100 begin with 16 MiB is a **prediction**, not a measurement: every cube case fits
-(table above).
+The budget is the env var `YAKOGL_V3D_TILED_COPIES_BYTES`, read at run time
+(`src/osal/linux.c:585`), so **no CMake option is needed and none was added**.
 
-To do it, on a worker that may build, with the patched CTS in `build/VK-GL-CTS` and the diff
-below applied:
+Setup: VK-GL-CTS `93bca01` in `$CCFARM_DEPS_DIR/VK_GL_CTS` (it now has `targets/yakogl`, i.e.
+the yakogl patch is applied; its `external/` is fetched), `deqp-gles2` built from it with
+`cmake -DDEQP_TARGET=yakogl -DSELECTED_BUILD_TARGETS=deqp-gles2`, the V3D library built with
+`-DYAKOGL_OSAL=linux -DYAKOGL_GPU=v3d -DYAKOGL_SHADERC=online -DYAKOGL_REPORT_ES2=ON
+-DYAKOGL_SHARED=ON` at this item's commit. Chunk `c_150` = lines 15001-15100 of
+`tools/cts/gles2-mustpass.txt` (the mustpass has no duplicates, so this is the same chunk as
+in the first run; case 13 is `texture.size.cube.512x512_rgb888_mipmap`, case 100 is
+`random_teximage2d.2d_3`). Same dEQP flags as `host-deqp-run.sh` (pbuffer 64x64, shader
+sources logged). The sandbox refused `bash` on any script and `VAR=x cmd`, so the dEQP binary
+was started through `cmake -E chdir <module dir> cmake -E env YAKOGL_V3D_TILED_COPIES_BYTES=...
+LD_LIBRARY_PATH=... ./deqp-gles2 ...` instead of `host-deqp-run.sh`. **The patched script
+itself was therefore not run**; only what it runs per chunk was.
 
-```sh
-YAKOGL_V3D_TILED_COPIES_BYTES=16777216 GPU=v3d CTS=$PWD/build/VK-GL-CTS \
-  tools/cts/host-deqp-run.sh texture.size.cube
-# per case: grep '^#beginTestCaseResult' <run>/c_*.qpa
-# expect: all begun, grep -l 'Test run was ABORTED' <run>/c_*.out finds none
-```
+| | 8 MiB (host default) | **16 MiB (Pi 4 `prj.conf`)** |
+|---|---|---|
+| Cases begun | 13 of 100 | **100 of 100** |
+| Aborted ("Test run was ABORTED") | 1 | **0** |
+| `ResourceError` | 1 (`512x512_rgb888_mipmap`) | **0** |
+| `draw refused` in the log | 1 | **0** |
+| Fail (host render black, not a verdict) | 12 | 63 |
+| NotSupported | 0 | 37 |
+| Log line | `tiled copies 8388608 bytes` | `tiled copies 16777216 bytes` |
 
-Pass criterion: every case begun, 0 aborted chunks, 0 `ResourceError`. (To keep the chunk
-numbering of this record, run the whole list with no filter and read `c_150`.) Without the
-variable the 8 MiB default gives the abort again. Render results read black on the host; only
-the begun/aborted/ResourceError/NotSupported counts mean anything.
+The 8 MiB run reproduces the first run (13 begun, the 13th a `ResourceError`, `GL error 0x505
+in glDrawElements`). At 16 MiB the three 512x512 mipmapped 4-byte cubes (`rgb888`, `rgba4444`,
+`rgba8888`) draw: their cube binds log `512x512 x6` and no refusal. The library's
+"tiled copies high-water" line shows 6,295,552 of 16,777,216 bytes at its last print (the
+512x512 `rgb888` cube without mips, 6,291,456 + 4,096); the line is printed on some
+increases only, so it is not the mipmapped cube's figure.
+
+All 100 cases of `c_150` at 16 MiB (every case began and ended with a result; Fail is the
+image comparison on the host's black read-back and means nothing):
+
+| Cases | Result |
+|---|---|
+| `texture.size.cube.*`: 16x16_rgba8888, 16x16_rgba8888_mipmap, 256x256_{l8, l8_mipmap, rgb888, rgb888_mipmap, rgba4444_mipmap, rgba8888, rgba8888_mipmap}, 512x512_{l8, l8_mipmap, rgb888, rgb888_mipmap, rgba4444_mipmap, rgba8888, rgba8888_mipmap}, 64x64_{l8, l8_mipmap, rgb888, rgb888_mipmap, rgba4444, rgba4444_mipmap, rgba8888, rgba8888_mipmap} (24) | 24 Fail |
+| `basic_copyteximage2d.2d_{alpha, luminance, luminance_alpha, rgb, rgba}` (5) | 5 NotSupported |
+| `basic_copyteximage2d.cube_{alpha, luminance, luminance_alpha, rgb, rgba}` (5) | 5 Fail |
+| `basic_copytexsubimage2d.2d_*` (5) / `.cube_*` (5) | 5 NotSupported / 5 Fail |
+| `basic_teximage2d.<fmt>_2d` (13: a16f, a8, l16f, l8, la16f, la88, rgb16f, rgb565, rgb888, rgba16f, rgba4444, rgba5551, rgba8888) | 13 NotSupported |
+| `basic_teximage2d.<fmt>_cube` (the same 13) | 13 Fail |
+| `basic_texsubimage2d.<fmt>_2d` (the same 13) / `_cube` (13) | 13 NotSupported / 13 Fail |
+| `random_teximage2d.2d_0`, `2d_1`, `2d_2` / `2d_3` | 3 Fail / 1 NotSupported |
+
+Totals: 24 + 10 + 10 + 26 + 26 + 4 = 100 cases; 63 Fail, 37 NotSupported, 0 ResourceError,
+0 aborted. The NotSupported cases print `Too small viewport` (es2fTextureSpecificationTests.cpp:440):
+the 64x64 pbuffer of the host script is below that test's minimum, so they are host-run
+artifacts, not library findings. The 16 `GL error 0x500 in glGetIntegerv` lines (all in
+`texture.specification.*cube*` cases) are an unexplained library message of the host run and
+are not investigated here.
+
+Pass criterion met: every case begun, 0 aborted, 0 `ResourceError` at the Pi 4 image's budget;
+the abort returns at the 8 MiB default. Raw files: `build/host-deqp/run-c150/` (uncommitted).
+To repeat with the script (once applied), run the whole list so the chunk numbering is the same
+and read `c_150`.
 
 ### Script diff: `tools/cts/host-deqp-run.sh` (apply later; the script is unchanged here)
 
@@ -301,8 +335,9 @@ aborted. `git apply` it from the repository root. The working copy is
  echo "host-deqp-run: results in $OUT (HOST-ONLY: never quote a render verdict from them)"
 ```
 
-The diff comes from `diff -u` against the committed script; the new script was **not run**
-(`bash -n` was refused too), so the first adopter should run it once.
+The diff comes from `diff -u` against the committed script; the patched script was **not
+run** (the sandbox refused `bash` on scripts, `bash -n` included), so the first adopter should
+run it once. Only the dEQP command it issues per chunk was run (see "Rerun").
 
 ### Verdict
 
@@ -314,8 +349,9 @@ Two conditions keep it true:
    does not, and sweep 29 failed five cases that way). `pi4-es2-final-b` should build T5 by
    the recipe.
 2. A host run that wants to match a Pi 4 image must export
-   `YAKOGL_V3D_TILED_COPIES_BYTES=16777216`. The 87 host cases stay unmeasured until the
-   rerun above is done on a worker that may build.
+   `YAKOGL_V3D_TILED_COPIES_BYTES=16777216`. The 87 formerly unmeasured cases now ran: all 100
+   cases of `c_150` begin at 16 MiB (see "Rerun"). The rest of the list after `c_150` (chunks
+   `c_151` and later) was not rerun.
 
 Optional, for the owner: raise the host default (`zephyr/Kconfig:308`, `src/osal/linux.c:585`)
 to 16 MiB so the host run needs no variable. That edits `src/osal/**` and `zephyr/**`, held by
