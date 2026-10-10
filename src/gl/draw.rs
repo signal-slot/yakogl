@@ -10891,6 +10891,7 @@ mod tests {
         assert_eq!(attrib_row(&word(5, 6, 7, 1), &ga, 4, 4, 2)[..2], [5.0f32.to_bits(), 6.0f32.to_bits()]);
     }
 
+    #[cfg(not(feature = "report-es2"))] // ES 3.0 array types; report-es2 refuses them
     #[test]
     fn half_float_and_packed_arrays_reach_the_shader_as_floats() {
         let gl = Gl::new(16, 16);
