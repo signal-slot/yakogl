@@ -131,7 +131,9 @@ tools = [
   { name = "rustup-target-aarch64-unknown-none-softfloat", check = "rustup target list --installed | grep -qx aarch64-unknown-none-softfloat", install = "rustup target add aarch64-unknown-none-softfloat (or a nightly with rust-src)" },
   { name = "cc", check = "cc --version", install = "distro package gcc or clang (C11 host compiler; the gate also uses nm, objcopy, sha256sum, cmp, awk)" },
   { name = "clang", check = "clang --version", install = "distro package clang: build.rs compiles the C wrappers of the aarch64-unknown-none rows with clang unless CC_aarch64-unknown-none names another cross compiler, so the three aarch64 check rows and the 'no Mesa reference' control build fail without it" },
-  { name = "python3-pyyaml", version = ">=3", check = "python3 -c 'import yaml'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML)" },
+  # No version requirement: Mesa pins none, and ccfarm reads a requirement
+  # off the check's output (nothing printed = missing on every node).
+  { name = "python3-pyyaml", check = "python3 -c 'import yaml; print(yaml.__version__)'", install = "distro packages python3 and python3-yaml (Mesa's u_format_table.py needs PyYAML for the v3d generated-file row of the gate)" },
   { name = "glslangValidator", version = ">=16.4", check = "glslangValidator --version", install = "distro package glslang (the Mesa table records glslang=9e007f4bf514, 16.4.0)" },
   { name = "libclang", check = "python3 -c 'import ctypes.util, sys; sys.exit(0 if ctypes.util.find_library(\"clang\") else 1)'", install = "distro package clang / libclang (bindgen loads it at run time for the csbgen-bindings --check row; LIBCLANG_PATH otherwise)" },
   { name = "expat-zlib-dev", check = "pkg-config --exists expat zlib", install = "distro packages expat and zlib (the V3D job_check links Mesa's CLIF decoder against them)" },
