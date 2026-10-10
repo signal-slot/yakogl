@@ -9,7 +9,8 @@
 #                           links the `yakogl` crate into its own Rust
 #                           staticlib (README.md, "Linking").
 #   YAKOGL_CARGO            the cargo executable (default: `cargo` on PATH, as
-#                           the driver repository's samples use).
+#                           the driver repository's samples use). rustc is
+#                           found the way cargo finds it: RUSTC, else PATH.
 #   YAKOGL_RUSTUP_TOOLCHAIN RUSTUP_TOOLCHAIN for cargo (empty: inherited).
 #   YAKOGL_CARGO_BUILD_STD  AUTO|ON|OFF: `-Z build-std=core` (nightly + rust-src)
 #                           instead of the target's precompiled core. AUTO uses
@@ -327,15 +328,20 @@ function(yakogl_add_rust_archive)
     list(APPEND _env "CC=${CMAKE_C_COMPILER}" "AR=${CMAKE_AR}")
   endif()
 
-  # rustc of the same toolchain (the rustup proxy next to cargo honours
-  # RUSTUP_TOOLCHAIN and the override files of the source directory).
-  get_filename_component(_cargo_dir "${_cargo}" DIRECTORY)
-  if(EXISTS "${_cargo_dir}/rustc")
-    set(_rustc "${_cargo_dir}/rustc")
-  elseif(EXISTS "${_cargo_dir}/rustc.exe")
-    set(_rustc "${_cargo_dir}/rustc.exe")
+  # rustc of the same toolchain, found the way cargo itself finds it: RUSTC
+  # in the environment, else `rustc` on PATH. The rustup proxies honour
+  # RUSTUP_TOOLCHAIN and the override files of the source directory, so this
+  # is the rustc cargo builds with. It is not "the rustc next to cargo": a
+  # compiler-cache shim directory (kache, sccache) fronts cargo on PATH and
+  # holds no rustc.
+  if(DEFINED ENV{RUSTC})
+    set(_rustc "$ENV{RUSTC}")
   else()
-    message(FATAL_ERROR "YakoGL: no rustc next to ${_cargo}")
+    find_program(YAKOGL_RUSTC_FOUND rustc)
+    if(NOT YAKOGL_RUSTC_FOUND)
+      message(FATAL_ERROR "YakoGL: rustc not found on PATH (cargo is ${_cargo}); install Rust or set RUSTC")
+    endif()
+    set(_rustc "${YAKOGL_RUSTC_FOUND}")
   endif()
   execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_env} "${_rustc}" --print sysroot
     WORKING_DIRECTORY "${_root}" OUTPUT_VARIABLE _sysroot OUTPUT_STRIP_TRAILING_WHITESPACE
