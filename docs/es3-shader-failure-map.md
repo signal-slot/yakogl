@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # dEQP-GLES3 shaders: failure map
 
-Plan #3 item `es3-shader-deqp-gap`. Input for `docs/es3-cts-failures.md`
+ES 3.0 plan (plan #4), item `es3-shader-deqp-gap`. Input for `docs/es3-cts-failures.md`
 (item `es3-inventory`). Documentation only: nothing here was run. Every number
 is a count of names in `tools/cts/gles3-mustpass.txt`, a figure copied from
 the repository, or arithmetic on those two (the arithmetic is shown).
@@ -28,8 +28,8 @@ history (squashed), so no code is cited at it. Abbreviations for sources:
   HOST-ONLY: compile/link verdicts at `008b4652`, GC back end, no pixels.
 - **COV**: `docs/es3-shaderc-coverage.md`, the per-`.test`-file compile/link
   table at 3f78982e (2026-10-08, after the run). PowerVR table at lines 59-84.
-- **dEQP**: `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles3/functional/` (pinned
-  93bca01). **data**: `$CCFARM_DEPS_DIR/VK-GL-CTS/data/gles3/shaders/`.
+- **dEQP**: `$CCFARM_DEPS_DIR/VK_GL_CTS/modules/gles3/functional/` (pinned
+  93bca01). **data**: `$CCFARM_DEPS_DIR/VK_GL_CTS/data/gles3/shaders/`.
   Group registration: `es3fFunctionalTests.cpp:188-234`. The `.test` groups
   are loaded by `ShaderLibraryTest` (`:153-170`, file `shaders/<name>.test`).
 
