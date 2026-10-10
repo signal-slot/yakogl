@@ -914,7 +914,7 @@ fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
     *oom = false;
     let (w, h) = (t.width, t.height);
     if !npot_mip_chains(t.layers as u32)
-        || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY)
+        || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY | GL_TEXTURE_3D)
         || t.chain_levels != 1
         || (is_pot(w) && is_pot(h))
         || (w <= 1 && h <= 1)
@@ -1040,6 +1040,57 @@ fn grid_cols_for(depth: u32) -> u32 {
     c
 }
 
+/// The levels of GL's chain of a `w x h x depth` 3D texture (ES 3.0 3.8.14:
+/// log2 of its largest side, plus one), as far as GL_MAX_3D_TEXTURE_SIZE's
+/// chain goes.
+fn levels_3d(w: u32, h: u32, depth: u32) -> u32 {
+    u32::from(context::gl_mip_levels(w.max(depth), h)).min(MAX_3D_LEVELS as u32)
+}
+
+/// The slices of level `level` of a 3D texture: its depth halves with its
+/// sides (an array's layer count does not).
+fn level_depth_3d(t: &GlTexture, level: u32) -> u32 {
+    if level == 0 {
+        u32::from(t.layers)
+    } else {
+        context::pot_level_side(u32::from(t.layers), level)
+    }
+}
+
+/// The byte layout of the levels above 0 of a 3D texture whose slices are
+/// tiled in a grid of `cols` columns (`GlTexture::grid_cols`): level l is a
+/// grid of the same columns of its own `max(w >> l, 1) x max(h >> l, 1)`
+/// slices, as many rows of them as its `max(depth >> l, 1)` slices fill, at
+/// the pitch `pitch(lw * cols)` texels -- what `GlTexture::level_pitch`
+/// answers for that width, so texture_write_rect writes a level as it writes
+/// level 0 -- and the levels follow level 0 (`level0_bytes`) packed.
+/// (offsets with level 0's at 0, levels laid out, total bytes); None past
+/// the u32 offsets.
+#[allow(clippy::too_many_arguments)]
+fn grid_chain_layout(
+    w: u32,
+    h: u32,
+    depth: u32,
+    cols: u32,
+    bpp: u32,
+    levels: u32,
+    level0_bytes: u32,
+    pitch: impl Fn(u32) -> u32,
+) -> Option<([u32; CAP_MIP_LEVELS], u32, u32)> {
+    let mut off = [0u32; CAP_MIP_LEVELS];
+    let mut bytes = level0_bytes;
+    let mut n = 1u32;
+    while n < levels.min(CAP_MIP_LEVELS as u32) {
+        let (lw, lh) = (context::pot_level_side(w, n), context::pot_level_side(h, n));
+        let rows = context::pot_level_side(depth, n).div_ceil(cols);
+        off[n as usize] = bytes;
+        bytes =
+            bytes.checked_add(pitch(lw.checked_mul(cols)?).checked_mul(lh)?.checked_mul(rows)?.checked_mul(bpp)?)?;
+        n += 1;
+    }
+    Some((off, n, bytes))
+}
+
 /// Level-0 storage of a 3D texture: w x h slices, `depth` of them, tiled --
 /// or simply stacked, on a backend whose texture unit walks the stack itself.
 ///
@@ -1049,9 +1100,23 @@ fn grid_cols_for(depth: u32) -> u32 {
 /// them instead, and it would look for slice k at k * SLICE -- which a grid is
 /// not. Stacked is what a 2D array already does here, and its layer stride is
 /// that same pitch * height, so the two agree by construction.
-fn texture_alloc_storage_3d(t: &mut GlTexture, w: u32, h: u32, depth: u32, texfmt: u8) -> i32 {
+///
+/// `levels`: the levels of GL's chain the storage is to hold. Stacked, the
+/// chain is a 2D array's (every level `depth` slices deep, a 3D level's
+/// `depth >> l` slices the first of them), laid out for a power-of-two size
+/// whatever `levels` says and, with `levels` above 1, for a non-power-of-two
+/// one ([`grow_npot_chain`] does it later otherwise); a 3D level past the
+/// array chain (a texture deeper than it is wide and tall) is not held. In a
+/// grid, every level
+/// asked for is laid out after level 0 ([`grid_chain_layout`]) and held in
+/// the same allocation, while the texture keeps `chain_levels` and `levels`
+/// at 1: the PowerVR's shader addresses level 0's grid only, and its TPU
+/// must not be told of a chain it would walk as the mips of one 2D image.
+/// Those levels' texels are kept for the day the grid is sampled with
+/// mipmaps; until then a draw samples level 0, as before.
+fn texture_alloc_storage_3d(t: &mut GlTexture, w: u32, h: u32, depth: u32, texfmt: u8, levels: u32) -> i32 {
     if backend::native_layered_textures() {
-        return texture_alloc_storage(t, w, h, depth, texfmt);
+        return texture_alloc_storage_ex(t, w, h, depth, texfmt, false, levels > 1);
     }
     if depth > 1024 {
         return -1; /* beyond the TPU's texture size */
@@ -1062,15 +1127,81 @@ fn texture_alloc_storage_3d(t: &mut GlTexture, w: u32, h: u32, depth: u32, texfm
     if w as u64 * cols as u64 > 16384 || h as u64 * rows as u64 > 16384 {
         return -1; /* beyond the TPU's texture size */
     }
+    /* The levels above 0, after level 0's grid: the allocation is asked for
+     * as level 0 with enough extra rows (of level 0's pitch) to hold them.
+     * The rows are the allocation's only: the texture's size is set back
+     * below, and a draw describes level 0's grid from it. */
+    let (gw, gh) = (w.wrapping_mul(cols), h.wrapping_mul(rows));
+    let bpp = gles_texfmt_bytes(texfmt);
+    let lvl_align = backend::mip_level_align();
+    let pitch = |lw: u32| if lvl_align != 0 { tex_pitch(gw) } else { tex_pitch(lw) };
+    let row_bytes = pitch(gw).saturating_mul(bpp).max(1);
+    let level0_bytes = row_bytes.saturating_mul(gh);
+    let chain = if w == 0 || h == 0 || depth == 0 || levels < 2 {
+        None
+    } else {
+        grid_chain_layout(w, h, depth, cols, bpp, levels, level0_bytes, pitch)
+    };
+    let extra_rows = chain.map_or(0, |(_, _, bytes)| (bytes - level0_bytes).div_ceil(row_bytes));
     /* one level of cols*w x rows*h: a single "layer" the size of the grid */
-    if texture_alloc_storage_ex(t, w.wrapping_mul(cols), h.wrapping_mul(rows), 1, texfmt, true, false) != 0 {
+    if texture_alloc_storage_ex(t, gw, gh.saturating_add(extra_rows), 1, texfmt, true, false) != 0 {
         return -1;
     }
     t.width = w;
     t.height = h;
     t.layers = depth as u16;
     t.grid_cols = cols as u8;
+    if let Some((off, n, _)) = chain {
+        t.level_off[1..n as usize].copy_from_slice(&off[1..n as usize]);
+    }
     0
+}
+
+/// Does a 3D texture's grid hold level `level` above 0 ([`grid_chain_layout`]:
+/// its offset is set, and only by laying it out)?
+fn grid_level_held(t: &GlTexture, level: u32) -> bool {
+    t.grid_cols != 0 && level >= 1 && (level as usize) < CAP_MIP_LEVELS && t.level_off[level as usize] != 0
+}
+
+/// Does the storage hold the texels of level `level` (not only GL's record
+/// of it)? A stacked chain holds its `chain_levels`; a 3D grid its level 0
+/// and the levels laid out after it.
+fn level_held(t: &GlTexture, level: u32) -> bool {
+    if t.grid_cols != 0 {
+        level == 0 || grid_level_held(t, level)
+    } else {
+        level < u32::from(t.chain_levels)
+    }
+}
+
+/// Where texel (x, y) of face/layer/slice `z` of level `level` of `t` is in
+/// its storage: the byte offset from the start of `t.mem`, or None when the
+/// storage holds no texels of that level (a level GL has but the store only
+/// records, see [`recorded_unheld`]), the texel is outside the level, or the
+/// texture is block-compressed. The layouts are the writers' own: a stacked
+/// level holds its faces/layers/slices `max(h >> level, 1)` rows apart at
+/// the level's row pitch, a 3D grid level its slices in `grid_cols` columns
+/// ([`texture_alloc_storage_3d`]). For the tests and for anyone who reads
+/// the texels back.
+pub fn level_texel_offset(t: &GlTexture, level: u32, x: u32, y: u32, z: u32) -> Option<usize> {
+    if t.block_bytes != 0 || t.mem.impl_.is_null() || !level_held(t, level) {
+        return None;
+    }
+    let bpp = u64::from(gles_texfmt_bytes(t.texfmt));
+    let (lw, lh) = if t.grid_cols != 0 && level == 0 { (t.width, t.height) } else { level_size(t, level) };
+    let slices = if t.target == GL_TEXTURE_3D { level_depth_3d(t, level) } else { u32::from(t.layers.max(1)) };
+    if x >= lw || y >= lh || z >= slices {
+        return None;
+    }
+    let (col, row, pitch) = if t.grid_cols != 0 {
+        let cols = u32::from(t.grid_cols);
+        let (col, row) = ((z % cols) * lw + x, (z / cols) * lh + y);
+        (col, row, t.level_pitch(lw * cols))
+    } else {
+        (x, z * lh + y, level_row_pitch(t, level, lw))
+    };
+    let off = u64::from(t.level_off[level as usize]) + (u64::from(row) * u64::from(pitch) + u64::from(col)) * bpp;
+    (off + bpp <= t.mem.size as u64).then_some(off as usize)
 }
 
 /// [`chain_layout_npot`] without `npot_chain`: the layout a level-0 upload
@@ -1706,10 +1837,12 @@ fn level_size(t: &GlTexture, level: u32) -> (u32, u32) {
     ((t.width >> level).max(1), (t.height >> level).max(1))
 }
 
-/// A level GL has (glTexStorage*, or a glTexImage* that fit its chain) but
-/// the store keeps no texels for: a chain the backend cannot hold (a NPOT
-/// array or cube on the PowerVR, `npot_mip_chains`), or the levels of a 3D
-/// texture. Its sub-images are checked and then dropped, as its images are.
+/// A level GL has (glTexStorage*, or a glTexImage* that fit its chain) that
+/// the draw is not told of (`levels`): one the store keeps no texels for --
+/// a chain the backend cannot hold (a NPOT array or cube on the PowerVR,
+/// `npot_mip_chains`), or a 3D level past a stacked chain -- whose
+/// sub-images are checked and then dropped, as its images are; or a level
+/// above 0 of a 3D grid, whose texels are held ([`level_held`]).
 fn recorded_unheld(t: &GlTexture, level: GLint) -> bool {
     level as u32 >= t.levels as u32
         && level < 16
@@ -3434,6 +3567,10 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         && (matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F)
             || is_narrow_la(t.texfmt))
         && !t.external;
+    if t.target == GL_TEXTURE_3D {
+        generate_mipmap_3d(c, ti, npot, filtered);
+        return;
+    }
     /* A NPOT image has one level until its chain is asked for: laid out now
      * where the backend holds one (grow_npot_chain), after the kicks using
      * the texture, whose texels are copied across. Elsewhere nothing is
@@ -3565,6 +3702,111 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     t.level_defined = ((1u32 << u32::from(super::context::gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
     t.level_bad = 0;
     t.level_faces = [0x3f; CAP_MIP_LEVELS];
+}
+
+/// glGenerateMipmap of the 3D texture `ti` (the entry point's checks done):
+/// every level the storage holds ([`level_held`]) box-filtered from the one
+/// above it on the CPU, 2x2x2 texels into one -- a side already 1 is not
+/// halved, and a level's depth halves with its sides (ES 3.0 3.8.14), which
+/// filtering each slice as a 2D image did not do. A stacked non-power-of-two
+/// chain is laid out first where the backend holds one ([`grow_npot_chain`]).
+/// GL's whole chain is recorded as present, held or not, as for a 2D image.
+/// `filtered`: the texels are in a format the CPU averages (as for 2D).
+fn generate_mipmap_3d(c: &mut GlContext, ti: usize, npot: bool, filtered: bool) {
+    const FUNC: &str = "glGenerateMipmap";
+    let t = &c.objs_ref().textures[ti];
+    if npot && filtered && t.grid_cols == 0 && t.chain_levels < 2 && npot_mip_chains(t.layers as u32) {
+        if !settle_texture(c, ti) {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return;
+        }
+        let mut oom = false;
+        grow_npot_chain(&mut c.objs().textures[ti], &mut oom);
+        if oom {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return;
+        }
+    }
+    let t = &mut c.objs().textures[ti];
+    let n = levels_3d(t.width, t.height, u32::from(t.layers));
+    t.level_defined = ((1u32 << n.min(15)) - 1) as u16;
+    t.level_bad = 0;
+    let held = (1..n).take_while(|&l| level_held(t, l)).count() as u32 + 1;
+    if !filtered || held < 2 {
+        return; /* the base level is what there is; a draw samples it */
+    }
+    /* the chain is rewritten in place: no kick may still read or write it */
+    if !settle_texture(c, ti) {
+        c.set_error(GL_OUT_OF_MEMORY, FUNC);
+        return;
+    }
+    let t = &mut c.objs().textures[ti];
+    // SAFETY: the texture owns its live allocation and no kick uses it any
+    // more (settled above); nothing else writes the bytes while it lives.
+    let Some(texels) = (unsafe { t.mem.bytes_mut() }) else {
+        return;
+    };
+    let bpp = gles_texfmt_bytes(t.texfmt) as usize;
+    let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGBA16F) {
+        4usize
+    } else if is_narrow_la(t.texfmt) {
+        bpp /* one byte a channel: L, A, or L and A */
+    } else {
+        1
+    };
+    let csize = bpp / comps; /* 1 (u8), 2 (half), 4 (float) */
+    let read = |texels: &[u8], p: usize| -> f32 {
+        match csize {
+            1 => f32::from(texels[p]),
+            2 => draw::half_to_float(u16::from_le_bytes([texels[p], texels[p + 1]])),
+            _ => f32::from_le_bytes([texels[p], texels[p + 1], texels[p + 2], texels[p + 3]]),
+        }
+    };
+
+    // SAFETY: the whole CPU mapping of the allocation.
+    unsafe { osal::cache_invd(t.mem.cpu, t.mem.size) };
+    for l in 1..held {
+        let (sw, sh) = level_size(t, l - 1);
+        let sd = level_depth_3d(t, l - 1);
+        let (dw, dh) = level_size(t, l);
+        let dd = level_depth_3d(t, l);
+        let step = |s: u32| if s > 1 { 2u32 } else { 1 };
+        let (bx, by, bz) = (step(sw), step(sh), step(sd));
+        let box_n = (bx * by * bz) as f32;
+        for z in 0..dd {
+            for y in 0..dh {
+                for x in 0..dw {
+                    let Some(d) = level_texel_offset(t, l, x, y, z) else { continue };
+                    for ch in 0..comps {
+                        let mut sum = 0.0f32;
+                        for k in 0..bz {
+                            for j in 0..by {
+                                for i in 0..bx {
+                                    if let Some(s) = level_texel_offset(t, l - 1, x * bx + i, y * by + j, z * bz + k) {
+                                        sum += read(texels, s + ch * csize);
+                                    }
+                                }
+                            }
+                        }
+                        let p = d + ch * csize;
+                        match csize {
+                            1 => texels[p] = (sum / box_n + 0.5) as u8,
+                            2 => texels[p..p + 2].copy_from_slice(&float_to_half(sum / box_n).to_le_bytes()),
+                            _ => texels[p..p + 4].copy_from_slice(&(sum / box_n).to_le_bytes()),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // SAFETY: as above.
+    unsafe { osal::cache_flush(t.mem.cpu, t.mem.size) };
+    /* a stacked chain's levels are sampled; a grid's draw samples level 0
+     * (texture_alloc_storage_3d) */
+    if t.grid_cols == 0 {
+        t.levels = held as u8;
+    }
+    t.levels_written = held as u8;
 }
 
 /// Is `param` a value GL ES 3.0 accepts for `pname` (the modelled ones)?
@@ -3960,9 +4202,78 @@ pub(super) fn free_texture(c: &mut GlContext, h: GLuint) {
     t.max_level = MAX_LEVEL_DEFAULT; /* GL's default is "no clamp" */
 }
 
+/// glTexImage3D of level `level` > 0 of the 3D texture `ti`: records the
+/// level as GL has it and answers whether its texels go into the storage
+/// (the caller then uploads them as a sub-image of the whole level).
+///
+/// A level of GL's chain (ES 3.0 3.8.14: every side, the depth too, halved
+/// and floored, down to 1) of level 0's format is held where the storage
+/// has it ([`level_held`]): a 3D grid has every level laid out from level 0
+/// on ([`texture_alloc_storage_3d`]); a stacked chain of a non-power-of-two
+/// size is laid out now where the backend holds one ([`grow_npot_chain`]).
+/// One the storage cannot hold (a stacked chain stops where the sides reach
+/// 1x1, the depth may go on) is recorded and its texels dropped, as for a
+/// PowerVR NPOT cube. A level of another size or format is recorded as such
+/// (the texture is incomplete under a mipmap filter, ES 3.0 3.8.13), as
+/// glTexImage2D records one. With no level 0 there is no chain to put a
+/// level in, and it is dropped unrecorded, as it always was.
+fn tex_image_3d_level(
+    c: &mut GlContext,
+    ti: usize,
+    level: u32,
+    (width, height, depth): (GLsizei, GLsizei, GLsizei),
+    internalformat: GLint,
+    format: GLenum,
+) -> bool {
+    const FUNC: &str = "glTexImage3D";
+    let t = &c.objs_ref().textures[ti];
+    if t.level_defined & 1 == 0 || t.level_bad & 1 != 0 || t.mem.impl_.is_null() {
+        return false;
+    }
+    let bit = 1u16 << level.min(15);
+    let (lw, lh) = level_size(t, level);
+    let fits = level < levels_3d(t.width, t.height, u32::from(t.layers))
+        && (width as u32, height as u32, depth as u32) == (lw, lh, level_depth_3d(t, level))
+        && format == t.format
+        && texfmt_of(internalformat) == t.texfmt
+        && es3_index(internalformat as GLenum) == t.es3_fmt;
+    if !fits {
+        let t = &mut c.objs().textures[ti];
+        t.level_defined |= bit;
+        t.level_bad |= bit;
+        return false;
+    }
+    if t.grid_cols == 0 && t.chain_levels == 1 && !(is_pot(t.width) && is_pot(t.height)) {
+        if !settle_texture(c, ti) {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return false;
+        }
+        let mut oom = false;
+        grow_npot_chain(&mut c.objs().textures[ti], &mut oom);
+        if oom {
+            c.set_error(GL_OUT_OF_MEMORY, FUNC);
+            return false;
+        }
+    }
+    let t = &mut c.objs().textures[ti];
+    t.level_defined |= bit;
+    t.level_bad &= !bit;
+    if !level_held(t, level) {
+        return false;
+    }
+    /* a stacked chain's levels are what a draw samples; a grid's draw
+     * samples level 0 alone (texture_alloc_storage_3d) */
+    if t.grid_cols == 0 && level + 1 > u32::from(t.levels) {
+        t.levels = (level + 1) as u8;
+    }
+    note_level_written(t, level as GLint);
+    true
+}
+
 /// 2D texture arrays: `depth` layers stacked in one linear texture; 3D
-/// textures: `depth` slices tiled in a grid, one mip level (see
-/// `GlTexture::layers` / `grid_cols`).
+/// textures: `depth` slices stacked as well, or tiled in a grid, every
+/// level held (see `GlTexture::layers` / `grid_cols`,
+/// [`texture_alloc_storage_3d`]).
 #[no_mangle]
 pub unsafe extern "C" fn glTexImage3D(
     target: GLenum,
@@ -4042,15 +4353,23 @@ pub unsafe extern "C" fn glTexImage3D(
     let t = &mut c.objs().textures[ti];
     if target == GL_TEXTURE_3D {
         if level > 0 {
-            return; /* one level: sampled without mipmaps */
+            if !tex_image_3d_level(c, ti, level as u32, (width, height, depth), internalformat, format) {
+                return;
+            }
+        } else {
+            /* a grid lays its levels out now; a stacked non-power-of-two
+             * chain waits until a level above 0 asks for it, as a 2D
+             * image's does (grow_npot_chain) */
+            let (w, h, d) = (width as u32, height as u32, depth as u32);
+            let levels = if backend::native_layered_textures() { 1 } else { levels_3d(w, h, d) };
+            if texture_alloc_storage_3d(t, w, h, d, texfmt_of(internalformat), levels) != 0 {
+                c.set_error(GL_OUT_OF_MEMORY, FUNC);
+                return;
+            }
+            t.format = format;
+            t.type_ = type_;
+            t.es3_fmt = es3_index(internalformat as GLenum);
         }
-        if texture_alloc_storage_3d(t, width as u32, height as u32, depth as u32, texfmt_of(internalformat)) != 0 {
-            c.set_error(GL_OUT_OF_MEMORY, FUNC);
-            return;
-        }
-        t.format = format;
-        t.type_ = type_;
-        t.es3_fmt = es3_index(internalformat as GLenum);
     } else if level == 0 {
         if texture_alloc_storage(t, width as u32, height as u32, depth as u32, texfmt_of(internalformat)) != 0 {
             c.set_error(GL_OUT_OF_MEMORY, FUNC);
@@ -4067,7 +4386,14 @@ pub unsafe extern "C" fn glTexImage3D(
          * store has one level of such an array until a backend that holds
          * the chain is asked for it (grow_npot_chain); one that cannot (the
          * PowerVR's stacked NPOT layers, npot_mip_chains) records the level
-         * as GL has it and keeps no texels, as for a NPOT cube. */
+         * as GL has it and keeps no texels, as for a NPOT cube.
+         *
+         * Left so on purpose for the PowerVR: its NPOT array is one tall
+         * stacked image, whose level l the TPU would read as (h * layers) >> l
+         * rows, not `layers` layers of h >> l rows. Plan item pvr-2darray
+         * changes that storage (layer-major, docs/es3-pvr-2darray.md); the
+         * levels are to be held here once it has. Every other array level
+         * (power-of-two, or on a backend that walks the layers) is held. */
         let npot_level = t.level_defined & 1 != 0
             && t.level_bad & 1 == 0
             && t.chain_levels == 1
@@ -4194,15 +4520,20 @@ unsafe fn tex_sub_image_3d(
         return;
     }
     let grid_cols = c.objs().textures[ti].grid_cols as u32;
-    let unheld = recorded_unheld(&c.objs_ref().textures[ti], level);
-    let (lw, lh) = if grid_cols != 0 && !unheld {
+    /* a level GL has whose texels the store does not keep: a PowerVR NPOT
+     * array's (see glTexImage3D), or a 3D level past a stacked chain */
+    let unheld = {
+        let t = &c.objs_ref().textures[ti];
+        recorded_unheld(t, level) && !level_held(t, level as u32)
+    };
+    let (lw, lh) = if grid_cols != 0 && level == 0 {
         (c.objs().textures[ti].width, c.objs().textures[ti].height)
     } else {
         level_size(&c.objs_ref().textures[ti], level as u32)
     };
     /* a 3D texture's depth halves with its sides, an array's layers do not */
-    let layers = if target == GL_TEXTURE_3D && unheld {
-        (u32::from(c.objs().textures[ti].layers) >> level).max(1)
+    let layers = if target == GL_TEXTURE_3D {
+        level_depth_3d(&c.objs_ref().textures[ti], level as u32)
     } else {
         u32::from(c.objs().textures[ti].layers)
     };
@@ -4226,6 +4557,9 @@ unsafe fn tex_sub_image_3d(
     let mut ok = true;
 
     if grid_cols != 0 {
+        /* slice k of the level at column k % cols, row k / cols of its grid
+         * (the levels above 0 laid out by texture_alloc_storage_3d, at the
+         * pitch level_pitch gives the grid's width) */
         let cols = grid_cols;
 
         for z in 0..depth as u32 {
@@ -4234,7 +4568,7 @@ unsafe fn tex_sub_image_3d(
             ok &= texture_write_rect(
                 c,
                 ti,
-                0,
+                level as u32,
                 lw.wrapping_mul(cols),
                 (xoffset as u32).wrapping_add((k % cols).wrapping_mul(lw)),
                 (yoffset as u32).wrapping_add((k / cols).wrapping_mul(lh)),
@@ -4494,10 +4828,11 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
+    /* a level the store holds, or one GL has whose texels it drops (as
+     * glTexSubImage3D does) */
     let ti = active_texture(c, target).filter(|&ti| {
         let t = &c.objs_ref().textures[ti];
-        /* a 3D texture tiles its slices in a grid, not a stack */
-        texels_writable(t) && (level as u32) < t.levels as u32 && t.block_bytes == 0 && t.grid_cols == 0
+        texels_writable(t) && ((level as u32) < t.levels as u32 || recorded_unheld(t, level)) && t.block_bytes == 0
     });
     let Some(ti) = ti else {
         c.set_error(GL_INVALID_OPERATION, FUNC);
@@ -4507,8 +4842,12 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return;
     }
-    let (lw, lh) = level_size(&c.objs_ref().textures[ti], level as u32);
-    let layers = c.objs().textures[ti].layers.max(1) as u32;
+    let t = &c.objs_ref().textures[ti];
+    let held = level_held(t, level as u32);
+    let grid_cols = u32::from(t.grid_cols);
+    let (lw, lh) = if grid_cols != 0 && level == 0 { (t.width, t.height) } else { level_size(t, level as u32) };
+    /* a 3D texture's depth halves with its sides, an array's layers do not */
+    let layers = if target == GL_TEXTURE_3D { level_depth_3d(t, level as u32) } else { t.layers.max(1) as u32 };
     if xoffset as u32 + width as u32 > lw || yoffset as u32 + height as u32 > lh || zoffset as u32 >= layers {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
@@ -4517,9 +4856,17 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
         c.set_error(GL_INVALID_FRAMEBUFFER_OPERATION, FUNC);
         return;
     }
-    if width == 0 || height == 0 {
+    if width == 0 || height == 0 || !held {
         return;
     }
+    /* slice k of a 3D grid at column k % cols, row k / cols of its level's
+     * grid; a stacked slice or layer `lh` rows after the one before */
+    let (row_width, dx, dy) = if grid_cols != 0 {
+        let k = zoffset as u32;
+        (lw * grid_cols, (k % grid_cols) * lw + xoffset as u32, (k / grid_cols) * lh + yoffset as u32)
+    } else {
+        (lw, xoffset as u32, zoffset as u32 * lh + yoffset as u32)
+    };
     if !settle_texture(c, ti) {
         c.set_error(GL_OUT_OF_MEMORY, FUNC);
         return;
@@ -4531,23 +4878,13 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
     // SAFETY: the destination lies inside the level's storage (checked
     // above), which is writable (`texels_writable`).
     let ok = unsafe {
-        texture_copy_from_fb(
-            c,
-            ti,
-            level as u32,
-            lw,
-            xoffset as u32,
-            zoffset as u32 * lh + yoffset as u32,
-            x,
-            y,
-            width as u32,
-            height as u32,
-            format,
-        )
+        texture_copy_from_fb(c, ti, level as u32, row_width, dx, dy, x, y, width as u32, height as u32, format)
     };
     if !ok {
         c.set_error(GL_OUT_OF_MEMORY, FUNC);
+        return;
     }
+    note_level_written(&mut c.objs().textures[ti], level);
 }
 
 /// The (format, type) an ES 3.0 sized internal format unpacks from, and the
@@ -4870,18 +5207,21 @@ pub unsafe extern "C" fn glTexStorage3D(
     note_target_use(c, ti);
     let t = &mut c.objs().textures[ti];
     if target == GL_TEXTURE_3D {
-        if texture_alloc_storage_3d(t, width as u32, height as u32, depth as u32, texfmt) != 0 {
+        if texture_alloc_storage_3d(t, width as u32, height as u32, depth as u32, texfmt, levels as u32) != 0 {
             c.set_error(GL_OUT_OF_MEMORY, FUNC);
             return;
         }
         t.format = format;
         t.type_ = type_;
         t.es3_fmt = es3_index(internalformat);
-        t.levels = 1;
+        /* a stacked chain's levels are sampled; a grid's draw samples level
+         * 0 and holds the others' texels (texture_alloc_storage_3d) */
+        t.levels = if t.grid_cols != 0 { 1 } else { levels.min(t.chain_levels as GLsizei) as u8 };
         t.immutable = true;
         t.immutable_levels = levels as u8;
-        /* every level exists (3.8.4); the store keeps the base level's
-         * texels, so the others are recorded and their images dropped */
+        /* every level exists (3.8.4); the store keeps the texels of those
+         * it holds (level_held), the others are recorded and their images
+         * dropped */
         t.level_defined = ((1u32 << (levels as u32).min(15)) - 1) as u16;
         t.level_bad = 0;
         return;
@@ -9214,18 +9554,27 @@ mod tests {
         unsafe { glTexStorage3D(GL_TEXTURE_3D, 3, GL_RGBA16F, 3, 2, 5) };
         assert_eq!(gl.error(), GL_NO_ERROR);
         let t = &gl.ctx().objs_ref().textures[vol as usize];
-        /* 5 slices: 3 columns, 2 rows of 3x2 -> one 9x4 level, the requested mip levels ignored */
+        /* 5 slices: 3 columns, 2 rows of 3x2 -> one 9x4 level the draw is
+         * told of; the levels above it follow it in the allocation */
         assert_eq!((t.width, t.height, t.layers, t.grid_cols), (3, 2, 5, 3));
         assert_eq!((t.levels, t.chain_levels, t.texfmt), (1, 1, GLES_TEXFMT_RGBA16F));
         assert_eq!((t.format, t.type_), (GL_RGBA, GL_HALF_FLOAT));
-        assert_eq!(t.mem.size, tex_pitch(9) as usize * 4 * 8);
-        /* a power-of-two grid still gets no chain (a fresh texture: the
-         * storage above is immutable) */
+        /* level 0: 4 rows at the pitch of 10, 8-byte texels (320 bytes);
+         * level 1 (1x1x2) and 2 (1x1x1): one row of 3 tiles each at the
+         * pitch of 4 (32 bytes each); room for them as 1 more row of level 0 */
+        let row = tex_pitch(9) as usize * 8;
+        assert_eq!((t.level_off[1], t.level_off[2], t.level_off[3]), (320, 352, 0));
+        assert_eq!(t.mem.size, row * 5);
+        /* a power-of-two grid: the draw is told of level 0 alone, its chain
+         * held after it (a fresh texture: the storage above is immutable) */
         let vol = bind_new(GL_TEXTURE_3D);
         // SAFETY: plain GL call.
         unsafe { glTexStorage3D(GL_TEXTURE_3D, 3, GL_RGBA8, 4, 4, 4) };
         let t = &gl.ctx().objs_ref().textures[vol as usize];
-        assert_eq!((t.grid_cols, t.chain_levels, t.levels, t.mem.size), (2, 1, 1, 8 * 8 * 4));
+        /* 8x8 (256 bytes), then 2x2x2 as 2 tiles at the pitch of 4 (32),
+         * then 1x1x1 at the pitch of 2 (8): 296 bytes, 10 rows of 32 */
+        assert_eq!((t.grid_cols, t.chain_levels, t.levels, t.mem.size), (2, 1, 1, 8 * 10 * 4));
+        assert_eq!((t.level_off[1], t.level_off[2]), (256, 288));
         /* storage of a 2D array afterwards is laid out as stacked layers again */
         let arr = bind_new(GL_TEXTURE_2D_ARRAY);
         // SAFETY: plain GL call.
@@ -9377,23 +9726,36 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
         let t = &gl.ctx().objs_ref().textures[vol as usize];
         assert_eq!((t.width, t.height, t.layers, t.grid_cols, t.levels), (2, 1, 5, 3, 1));
-        /* a 6x2 grid: slices 0..2 on row 0, 3..4 on row 1, the last tile untouched */
+        /* a 6x2 grid: slices 0..2 on row 0, 3..4 on row 1, the last tile
+         * untouched; levels 1 (1x1x2) and 2 (1x1x1) after it, 16 bytes each */
         let st = storage(&gl, vol);
-        assert_eq!(st.len(), 6 * 2 * 4);
+        assert_eq!(st.len(), 6 * 4 * 4);
         assert_eq!(st[..24], px[..24]);
         assert_eq!(st[24..40], px[24..40]);
-        assert_eq!(st[40..], [0; 8], "the cleared storage");
+        assert_eq!(st[40..48], [0; 8], "the cleared storage");
         /* one texel of slice 4, column 1: x = 1 + 1 * 2 */
         let one = [1u8, 2, 3, 4];
         // SAFETY: `one` holds one texel.
         unsafe { glTexSubImage3D(GL_TEXTURE_3D, 0, 1, 0, 4, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, ptr(&one)) };
         assert_eq!(gl.error(), GL_NO_ERROR);
         assert_eq!(storage(&gl, vol)[(6 + 3) * 4..(6 + 4) * 4], one);
-        /* a level above 0 is accepted and ignored */
+        /* level 1 is 1x1x2: one of another depth is accepted, recorded as
+         * such and not written */
         // SAFETY: as above.
         unsafe { glTexImage3D(GL_TEXTURE_3D, 1, GL_RGBA8 as GLint, 1, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, ptr(&one)) };
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_eq!(gl.ctx().objs().textures[vol as usize].levels, 1);
+        let t = &gl.ctx().objs().textures[vol as usize];
+        assert_eq!((t.levels, t.level_defined & 2, t.level_bad & 2), (1, 2, 2));
+        assert_eq!(storage(&gl, vol)[48..64], [0; 16]);
+        /* the right one is held after level 0, its two slices side by side
+         * in the grid's columns; the draw is still told of level 0 alone */
+        let two = [9u8, 8, 7, 6, 5, 4, 3, 2];
+        // SAFETY: `two` holds two 1x1 slices.
+        unsafe { glTexImage3D(GL_TEXTURE_3D, 1, GL_RGBA8 as GLint, 1, 1, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, ptr(&two)) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let t = &gl.ctx().objs().textures[vol as usize];
+        assert_eq!((t.levels, t.level_defined & 2, t.level_bad & 2), (1, 2, 0));
+        assert_eq!(storage(&gl, vol)[48..56], two);
     }
 
     #[test]
@@ -9902,12 +10264,20 @@ mod tests {
             assert_eq!(gl.error(), GL_INVALID_VALUE, "past the width of the level");
             glCopyTexSubImage3D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 0, 2, 2);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "not an array or 3D target");
-            /* a 3D texture tiles its slices in a grid, not a stack */
-            bind_new(GL_TEXTURE_3D);
-            glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8 as GLint, 2, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
-            glCopyTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, 0, 0, 2, 2);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION);
         }
+        /* a 3D texture tiles its slices in a grid: 2 slices of 2x2 side by
+         * side, rows of 4 texels; slice 1 is columns 2 and 3 */
+        let vol = bind_new(GL_TEXTURE_3D);
+        // SAFETY: plain GL calls; nothing is read.
+        unsafe {
+            glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8 as GLint, 2, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
+            glCopyTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 1, 0, 0, 2, 2);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let s = storage(&gl, vol);
+        assert_eq!(s[8..16], [surf_texel(0, 3), surf_texel(1, 3)].concat()[..]);
+        assert_eq!(s[24..32], [surf_texel(0, 2), surf_texel(1, 2)].concat()[..]);
+        assert!(s[..8].iter().all(|&b| b == 0) && s[16..24].iter().all(|&b| b == 0), "slice 0 untouched");
     }
 
     #[test]
