@@ -147,9 +147,7 @@ fn context() -> MutexGuard<'static, ()> {
         }
     });
     // SAFETY: a plain GL call on the one context.
-    unsafe {
-        while glGetError() != GL_NO_ERROR {}
-    }
+    unsafe { while glGetError() != GL_NO_ERROR {} }
     g
 }
 
