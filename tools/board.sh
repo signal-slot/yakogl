@@ -904,11 +904,22 @@ uboot_on_exit() {
 }
 
 # console_from_ts: console.txt ("HH:MM:SS line", the form deqp-uart-tally.py
-# reads) from the bridge capture's "<unix time> line" rows.
+# reads) from the bridge capture's "<unix time> line" rows. python3 (which
+# the capture itself runs on, am62p_netboot_uart.py), not gawk: a host with
+# only mawk has no strftime, and left console.txt empty (tools/cts/log/
+# investigations/am62p-console-empty.md). Local time, as gawk's strftime was.
 console_from_ts() {
     [ -f "$RD/console.ts" ] || return 0
-    gawk '{ t = $1; sub(/^[0-9.]+ ?/, ""); printf "%s %s\n", strftime("%H:%M:%S", int(t)), $0 }' \
-        "$RD/console.ts" > "$RD/console.txt"
+    python3 - "$RD/console.ts" > "$RD/console.txt" <<'EOF'
+import re, sys, time
+out = sys.stdout.buffer
+for line in open(sys.argv[1], "rb"):
+    line = line.rstrip(b"\n")
+    m = re.match(rb"([0-9]+)[0-9.]* ?", line)
+    t = int(m.group(1)) if m else 0
+    rest = line[m.end():] if m else line
+    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + rest + b"\n")
+EOF
 }
 
 # ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------
