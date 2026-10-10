@@ -16987,7 +16987,7 @@ CompatibilityWarning.**
 
 | image | begun | pass | fail | n/s | warn |
 |---|---:|---:|---:|---:|---:|
-| 1 | 1,512 | 1,503 | 9 | 0 | 0 |
+| 1 | 1,512 begun (1,379 mustpass) | 1,370 | 9 | 0 | 0 |
 | 2 | 994 | 994 | 0 | 0 | 0 |
 | 3 | 1,172 | 1,172 | 0 | 0 | 0 |
 | 4 | 1,100 | 1,100 | 0 | 0 | 0 |
@@ -17066,10 +17066,10 @@ The invariance fix (`e17fb6a7`: no multiply-add fusion on the way to an `invaria
 image 1 (the shaders groups of `am62p-full-tree.txt`) alone, built from origin/main `e17fb6a7`,
 `tools/board.sh am62p`, `BOARD_BOOT=uboot-mmc`, record `records/am62p/deqp-e17fb6a7/img1`:
 **1,379 pass / 0 fail**. The 9 `shaders.invariance.*.common_subexpression_*` cases that failed
-on the integration image `b83216d4` and in the `32778b57` tree pass. Note: image 1 of the
-`32778b57` tree began 1,512 cases (1,503 pass, 9 fail), this run counts 1,379; the case-count
-difference is not explained in the notes I was given, so check the record before quoting it as
-the same image.
+on the integration image `b83216d4` and in the `32778b57` tree pass. Both runs of image 1
+began 1,512 cases with a result (the console's `deqp: summary`); the tally restricts to the
+mustpass list, 1,379 cases of image 1, so the `32778b57` tree's image 1 reads 1,370 pass / 9
+fail in the same terms and this one 1,379 / 0.
 
 ## i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main `32778b57`: 0 fail (2026-10-10)
 
