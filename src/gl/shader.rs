@@ -560,11 +560,17 @@ pub(crate) fn reset_for_tests() {
 mod tests {
     use super::*;
     use crate::gl::program::{
-        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramInfoLog, glGetProgramiv,
-        glLinkProgram,
+        glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramiv, glLinkProgram,
     };
+    /* Only the link-refusal tests read a program's info log or format
+     * expected log lines; both are gated on the online compiler or the
+     * offline table, so a `no-shader-table` build without `shaderc-online`
+     * would see these imports as unused. */
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
+    use crate::gl::program::glGetProgramInfoLog;
     use crate::testutil::TestGl;
     use std::ffi::CString;
+    #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
     use std::format;
     use std::string::String;
     use std::vec::Vec;
