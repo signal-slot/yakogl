@@ -110,7 +110,7 @@ fn every_uniform_constant_names_a_dword_of_the_block() {
     /* a build that reports ES 2.0 refuses every `#version 300 es` source
      * (online_corpus.rs keeps its own fixture for it), so each arm has its
      * own count */
-    let pin = if cfg!(feature = "report-es2") { (789, 435) } else { (789, 664) };
+    let pin = if cfg!(feature = "report-es2") { (790, 436) } else { (790, 665) };
     assert_eq!((all.len(), compiled), pin, "sources and programs compiled: re-derive the pin");
     for name in ["gltest/unipad_vs.vert", "gltest/unipad_fs.frag"] {
         assert!(

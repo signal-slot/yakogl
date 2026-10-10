@@ -8371,6 +8371,18 @@ static const char gl_test_vtl_vs_src[] =
 	"    gl_PointSize = 1.0;\n"
 	"}\n";
 
+static const char gl_test_vtxgrid_vs_src[] =
+	"#version 100\n"
+	"attribute highp vec2 a_pos;\n"
+	"attribute highp vec2 a_uv;\n"
+	"uniform highp sampler2D u_vtex;\n"
+	"uniform highp float u_lod;\n"
+	"varying mediump vec4 v_color;\n"
+	"void main() {\n"
+	"    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+	"    v_color = texture2DLod(u_vtex, a_uv, u_lod);\n"
+	"}\n";
+
 static const char gl_test_zsa_fs_src[] =
 	"#version 100\n"
 	"precision mediump float;\n"

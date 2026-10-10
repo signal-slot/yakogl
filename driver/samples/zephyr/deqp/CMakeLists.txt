@@ -33,6 +33,10 @@ endif()
 if(DEQP_MODULE STREQUAL "gles3" AND CONFIG_DEQP_REPORT_ES2)
   message(FATAL_ERROR "deqp: DEQP_MODULE=gles3 needs CONFIG_DEQP_REPORT_ES2=n")
 endif()
+if(DEQP_MODULE STREQUAL "gles3" AND CONFIG_YAKOGL_REPORT_ES2)
+  # DEQP_REPORT_ES2=n drops the select only; the library's default is y
+  message(FATAL_ERROR "deqp: DEQP_MODULE=gles3 needs CONFIG_YAKOGL_REPORT_ES2=n too (the context must report ES 3.0)")
+endif()
 string(SUBSTRING "${DEQP_MODULE}" 4 1 _deqp_ver)
 
 # the test data, embedded

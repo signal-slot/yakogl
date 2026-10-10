@@ -5,77 +5,189 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Try YakoGL</title>
-<meta name="description" content="Build the Slint demo and boot it on a Verdin AM62P, a Verdin iMX8M Plus or a Raspberry Pi 4.">
+<title>Try YakoGL: build and boot the Slint demo, or run the host tests</title>
+<meta name="description" content="Build YakoGL's Slint demo with west and boot it from the eMMC of a Verdin AM62P or iMX8M Plus or the SD card of a Raspberry Pi 4, or run the host tests with no board.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="YakoGL">
+<meta property="og:title" content="Try YakoGL">
+<meta property="og:description" content="Build the Slint demo and boot it from the board's own storage, or run the host tests on a PC.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:alt" content="The YakoGL triangle on a dark nacre gradient">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Try YakoGL">
+<meta name="twitter:description" content="Build and boot the Slint demo, or run the host tests.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <a class="name" href="index.html">YakoGL</a>
-  <nav><a href="index.html">Home</a><a href="try-it.html" aria-current="page">Try it</a><a href="https://github.com/signal-slot/yakogl">Source</a></nav>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="24" height="24">YakoGL</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="status.html">Status</a>
+      <a href="try-it.html" aria-current="page">Try it</a>
+      <a href="index.html#docs">Docs</a>
+      <a href="https://github.com/signal-slot/yakogl">GitHub</a>
+    </nav>
+  </div>
 </header>
-<main>
-<h1>Try it</h1>
-<p class="lead">Build the Slint demo on a Linux PC and boot it on your board from its own
-storage: the eMMC on the Verdin boards, the SD card on the Raspberry Pi 4.</p>
 
-<h2>1. What you need</h2>
+<main class="wrap">
+<h1>Try it</h1>
+<p class="lead">Two paths: run the library's tests on a PC with no board, or build the Slint
+demo and boot it on a board from its own storage.</p>
+<p class="muted">Throughout, <code>&lt;user&gt;@&lt;board&gt;</code>, <code>&lt;board&gt;</code> and
+paths in angle brackets are yours to fill in.</p>
+
+<h2 id="host">On a PC, no board</h2>
+<p>The GL core and one GPU back end run against a mock platform that models non-coherent GPU
+memory (it flags unflushed, freed or out-of-range reads) and a recording back end. You need
+Rust 1.88 or newer and a C compiler.</p>
+<pre><code>git clone https://github.com/signal-slot/yakogl
+cd yakogl
+cargo test --no-default-features --features host-test,gpu-powervr
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online   # the shader compiler
+cargo test --no-default-features --features host-test,gpu-powervr,report-es2       # the ES 2.0 report's rules
+cargo test -p yakogl-tools                                                          # the host tools</code></pre>
+<p>Use <code>gpu-vivante</code> or <code>gpu-v3d</code> for the other back ends; exactly one GPU
+feature per build. The project's full gate is <code>tools/check.sh</code>; it also needs a
+Zephyr workspace and more, see the
+<a href="https://github.com/signal-slot/yakogl/blob/main/README.md#testing-on-the-host">README</a>.</p>
+
+<h2 id="board">On a board</h2>
+
+<h3>1. What you need</h3>
 <ul>
-<li>One of the boards: Toradex Verdin AM62P on a Dahlia carrier, Toradex Verdin iMX8M
-Plus, or a Raspberry Pi 4. A panel on the board.</li>
-<li>A Linux PC with Python 3, the <a href="https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html">Zephyr SDK</a>,
-and Rust nightly with the <code>aarch64-unknown-none</code> target.</li>
+<li>One board: Toradex Verdin AM62P (on a Dahlia carrier), Toradex Verdin iMX8M Plus, or a
+Raspberry Pi 4, with a display. The results on this site were taken on a 1024x600 panel
+(AM62P), a 1280x800 panel (i.MX8MP) and a 1920x720 HDMI bar panel (Pi 4); other displays
+are untested.</li>
+<li>For the Verdin boards: the stock Torizon OS on the eMMC and a serial console to reach the
+U-Boot prompt (our i.MX8MP has no serial console attached; reaching its prompt takes a
+UART cable).</li>
+<li>A Linux PC with the host tools from Zephyr's
+<a href="https://docs.zephyrproject.org/latest/develop/getting_started/index.html">Getting Started Guide</a>,
+the <a href="https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html">Zephyr SDK</a>
+(1.0.1 was used), and Rust nightly with the <code>rust-src</code> component (the Rust parts
+are built with <code>-Z build-std</code>):
+<pre><code>rustup toolchain install nightly --component rust-src</code></pre></li>
 </ul>
 
-<h2>2. The workspace</h2>
-<pre>python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install west
+<h3>2. The workspace</h3>
+<pre><code>python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install west
 west init -m https://github.com/signal-slot/yakogl --mr main yakogl-ws
 cd yakogl-ws &amp;&amp; west update
-pip install -r zephyr/scripts/requirements-base.txt</pre>
-<p>Zephyr comes pinned to the revision the demos run on. The no_std Slint tree the demo
-needs is upstream Slint plus one patch:
-<a href="https://github.com/signal-slot/yakogl/blob/main/driver/samples/zephyr/slint/nostd/README.md">driver/samples/zephyr/slint/nostd/README.md</a>.</p>
+pip install -r zephyr/scripts/requirements-base.txt</code></pre>
+<p>The manifest (<a href="https://github.com/signal-slot/yakogl/blob/main/west.yml">west.yml</a>)
+pins Zephyr to the revision the samples were built and run against and imports only the
+modules they need. The repository lands in <code>yakogl-ws/yakogl</code> and is a Zephyr module
+by itself; each sample adds the drivers on its own. A first triangle on each board, before the
+Slint demo, is in
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/samples/zephyr/README.md">driver/samples/zephyr/README.md</a>.</p>
 
-<h2>3. AM62P only: the GPU firmware</h2>
-<p>The PowerVR GPU needs Imagination's firmware, <code>rgx.fw.36.53.104.796</code>. It is not
-part of YakoGL and is never distributed with it. Take it from TI's Processor SDK for the
-AM62P (or from the board's <code>/lib/firmware</code>) under its licence, and turn it into a
-header:</p>
-<pre>yakogl/driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796</pre>
+<h3>3. The no_std Slint tree</h3>
+<p>The demo links Slint, femtovg and glow, which have no <code>no_std</code> form upstream. The
+repository carries the patches; you recreate the trees once, outside the workspace:</p>
+<pre><code>WORK=&lt;a directory of yours&gt;
+P=&lt;workspace&gt;/yakogl/driver/samples/zephyr/slint/nostd    # the patches
+git clone https://github.com/slint-ui/slint.git $WORK/slint-nostd/slint
+(cd $WORK/slint-nostd/slint &amp;&amp; git checkout 1007c032ca1573e60dce2113e802e0ccb91c2641 &amp;&amp;
+ patch -p1 &lt; $P/slint-nostd.patch)
+# femtovg 0.26.0 and glow 0.18.0 from the cargo registry, patched, into $WORK/nostd</code></pre>
+<p>The femtovg and glow steps and the details are in
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/samples/zephyr/slint/nostd/README.md">slint/nostd/README.md</a>.</p>
 
-<h2>4. Build</h2>
-<pre>west build -b &lt;board&gt; -d build/slint yakogl/driver/samples/zephyr/slint -- \
-    -DSLINT_NOSTD_DIR=&lt;the no_std Slint tree&gt;</pre>
+<h3>4. AM62P only: the GPU firmware</h3>
+<p>The PowerVR needs Imagination's firmware <code>rgx.fw.36.53.104.796</code>. It is not part of
+YakoGL and is never distributed with it. Take it, under its licence, from the board's
+<code>/lib/firmware</code> under TI's Linux, or from TI's graphics binary release
+(ti-img-rogue-umlibs). Do not use linux-firmware's
+<code>powervr/rogue_36.53.104.796_v1.fw</code>: that is a different firmware, which this loader
+cannot boot. Turn it into a header, from the top of the workspace:</p>
+<pre><code>yakogl/driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796</code></pre>
+<p>It writes <code>yakogl/driver/src/fw/pvr_fw_blob.h</code>. Never commit that file.</p>
+
+<h3>5. Build</h3>
+<pre><code>RUSTUP_TOOLCHAIN=nightly west build -p always -b &lt;board&gt; -d build/slint \
+    yakogl/driver/samples/zephyr/slint -- \
+    -DSLINT_NOSTD_DIR=$WORK/slint-nostd/slint -DNOSTD_PATCH_DIR=$WORK/nostd</code></pre>
 <p><code>&lt;board&gt;</code> is <code>verdin_am62p/am62p54/a53</code>,
 <code>verdin_imx8mp/mimx8ml8/a53</code> or <code>rpi_4b</code>. The image is
-<code>build/slint/zephyr/zephyr.bin</code>.</p>
+<code>build/slint/zephyr/zephyr.bin</code>. (Without <code>-DNOSTD_PATCH_DIR</code> the
+build looks in <code>&lt;SLINT_NOSTD_DIR&gt;/../nostd</code>.)</p>
 
-<h2>5. Boot it from the board's storage</h2>
-<p><strong>Verdin boards</strong> (Torizon OS). Copy the image to <code>/var</code>, which is
-on the eMMC's first partition, then set U-Boot to load it:</p>
-<pre>scp build/slint/zephyr/zephyr.bin torizon@&lt;board&gt;:/tmp/
-ssh torizon@&lt;board&gt; 'sudo cp /tmp/zephyr.bin /var/zephyr.bin &amp;&amp; sync'
-# at the U-Boot prompt, Verdin AM62P:
-setenv bootcmd 'ext4load mmc 0:1 0x82000000 /ostree/deploy/torizon/var/zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x82000000'
-saveenv
-# Verdin iMX8M Plus: mmc 2:1 and 0x60000000</pre>
-<p>To go back to Linux, restore the previous <code>bootcmd</code> at the U-Boot prompt
-(<code>printenv bootcmd</code> before you change it).</p>
-<p><strong>Raspberry Pi 4.</strong> On the SD card's FAT partition, next to the Raspberry Pi
-firmware files, put <code>zephyr.bin</code> and a <code>config.txt</code> with
-<code>kernel=zephyr.bin</code> and <code>arm_64bit=1</code>. Keep the old
-<code>config.txt</code> to go back to Linux.</p>
-<p>The full details, the panel settings and how we test on shared boards without changing
-their default boot are in
+<h3>6. Boot it from the board's own storage</h3>
+
+<h4>Verdin AM62P and Verdin iMX8M Plus (U-Boot, eMMC)</h4>
+<p>Torizon's root file system, partition 1 of the eMMC, is read-only, but <code>/var</code> is
+writable and lives on the same partition (a bind mount of
+<code>/ostree/deploy/torizon/var</code>), so U-Boot can read a file you put there:</p>
+<pre><code>scp build/slint/zephyr/zephyr.bin &lt;user&gt;@&lt;board&gt;:
+ssh &lt;user&gt;@&lt;board&gt; 'sudo mkdir -p /var/yakogl &amp;&amp; sudo cp zephyr.bin /var/yakogl/ &amp;&amp; sync &amp;&amp; findmnt -T /var/yakogl'</code></pre>
+<p><code>findmnt</code> must show <code>/dev/mmcblk0p1</code> on the AM62P or
+<code>/dev/mmcblk2p1</code> on the i.MX8MP: the partition U-Boot reads as <code>mmc 0:1</code> or
+<code>mmc 2:1</code>.</p>
+<p><strong>Boot it once</strong> (changes nothing): reboot, stop autoboot at the U-Boot prompt, and
+type</p>
+<pre><code># Verdin AM62P
+ext4load mmc 0:1 0x82000000 /ostree/deploy/torizon/var/yakogl/zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x82000000
+# Verdin iMX8M Plus
+ext4load mmc 2:1 0x60000000 /ostree/deploy/torizon/var/yakogl/zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x60000000</code></pre>
+<p><code>go</code>, not <code>booti</code>, with both caches off. The environment is untouched, so the
+next reset boots Linux again.</p>
+<p><strong>Make it the default</strong> (the product form). First write down Torizon's
+<code>bootcmd</code> with <code>printenv bootcmd</code>; you need it to go back. Then, AM62P:</p>
+<pre><code>setenv bootcmd 'ext4load mmc 0:1 0x82000000 /ostree/deploy/torizon/var/yakogl/zephyr.bin &amp;&amp; dcache off &amp;&amp; icache off &amp;&amp; go 0x82000000'
+saveenv</code></pre>
+<p>On the i.MX8MP, the same with <code>mmc 2:1</code> and <code>0x60000000</code>. From now on only
+the U-Boot prompt brings Linux back: <code>setenv bootcmd '&lt;the value you wrote down&gt;'</code>,
+<code>saveenv</code>, <code>boot</code>. If the file is missing, the load fails and U-Boot stops at
+its prompt instead of booting Linux.</p>
+<p>For shared boards the repository has a reversible form: a U-Boot hook in front of Torizon's
+<code>bootcmd</code> that boots an image once, or a counted number of times, and then Linux by
+itself, driven from Linux by <code>tools/board.sh</code> (<code>install</code>,
+<code>default &lt;image&gt; &lt;N&gt;</code>, <code>nodefault</code>). See
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/standalone-boot.md">docs/standalone-boot.md</a>.</p>
 
-<h2>Known gaps</h2>
+<h4>Raspberry Pi 4 (firmware, SD card)</h4>
+<p>No U-Boot: the Pi's boot loader reads the SD card's first FAT partition. Start from a
+Raspberry Pi OS Lite (64-bit) card and keep its firmware files (<code>start4.elf</code>,
+<code>fixup4.dat</code>, <code>bcm2711-rpi-4-b.dtb</code>, <code>overlays/overlay_map.dtb</code>,
+<code>cmdline.txt</code>). Add <code>zephyr.bin</code> and this configuration:</p>
+<pre><code>[all]
+kernel=zephyr.bin
+arm_64bit=1
+enable_uart=1
+uart_2ndstage=1
+hdmi_group=2
+hdmi_mode=87
+hdmi_timings=1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1</code></pre>
+<p>The <code>hdmi_*</code> lines describe the 1920x720 panel the results were taken on.</p>
+<p><strong>Boot it once</strong>: from Raspberry Pi OS, copy <code>zephyr.bin</code> to
+<code>/boot/firmware/</code>, save the lines above as <code>/boot/firmware/tryboot.txt</code> and run
+<code>sudo reboot '0 tryboot'</code>. The firmware reads <code>tryboot.txt</code> instead of
+<code>config.txt</code> for that one boot; the next reset boots Linux. This is how every Pi 4 result
+on this site was booted.</p>
+<p><strong>Make it the default</strong>: keep Linux's <code>config.txt</code> as
+<code>config-linux.txt</code> and save the lines above as <code>config.txt</code>. To go back, put the
+card in a PC and copy <code>config-linux.txt</code> over <code>config.txt</code>. (This literal swap
+has not yet been run on our board; the tryboot path has.)</p>
+
+<h2 id="gaps">Known gaps</h2>
 <ul>
 <li>No demo takes touch input yet; the demos run by themselves.</li>
-<li>Known defects are <a href="https://github.com/signal-slot/yakogl/issues">GitHub issues</a>.</li>
+<li>The current defects are on the <a href="status.html#not-yet">status page</a> and in
+<a href="https://github.com/signal-slot/yakogl/issues">GitHub issues</a>.</li>
 </ul>
-
-<footer><p>YakoGL is Apache-2.0. Copyright 2026 Signal Slot, Inc.</p></footer>
 </main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>YakoGL is Apache-2.0. Copyright 2026 Signal Slot, Inc.</p>
+  </div>
+</footer>
 </body>
 </html>

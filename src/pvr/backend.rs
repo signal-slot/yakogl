@@ -2786,7 +2786,7 @@ fn record_frame_quad(
         ld.fs_uniform_dwords = if two { 2 } else { 1 };
         ld.color_write = true;
     }
-    if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6) != 0 {
+    if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6, None) != 0 {
         if !b.warned_load {
             glog!("pvr_backend: could not record the frame's load/clear quad");
         }
@@ -2920,7 +2920,7 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
     }
     /* Not counted as a frame quad: it is one of the frame's objects, so a
      * later background clear still sees draws ahead of it and flushes. */
-    if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6) != 0 {
+    if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6, None) != 0 {
         if !b.warned_load {
             glog!("pvr_backend: could not record the scissored/masked clear quad");
         }
@@ -4191,13 +4191,176 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
 }
 
 /// One draw into the open frame: whole, or cut into 16-bit index lists when a
-/// sequential draw is longer than one list can address.
+/// sequential draw is longer than one list can address, or cut into pieces of
+/// its index list when an indexed draw's staged data is too large.
+///
+/// An indexed draw whose staged data (client indices and arrays) is more
+/// than half an empty GENERAL arena is cut into pieces that each fit
+/// ([`draw_indexed_pieces`]).
 fn draw_dispatch(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let sequential = d.index_buf_gpu == 0 && (d.index_cpu.is_null() || d.index_bytes == 0);
     if sequential && d.index_count > SEQ_MAX_VERTICES {
         draw_chunked(p, d)
+    } else if !sequential && staged_bytes(d) > p.b.gen.mem.size as u64 / 2 {
+        draw_indexed_pieces(p, d)
     } else {
-        draw_part(p, d, 0, d.index_count)
+        draw_part(p, d, 0, d.index_count, None)
+    }
+}
+
+/// What recording `d` whole copies into the GENERAL arena from the GL core's
+/// staging: its client indices and every staged attribute.
+fn staged_bytes(d: &GlesDraw) -> u64 {
+    let idx = if d.index_cpu.is_null() { 0 } else { d.index_bytes as u64 };
+    d.attribs[..(d.num_attribs as usize).min(d.attribs.len())]
+        .iter()
+        .filter(|a| !a.cpu.is_null())
+        .fold(idx, |n, a| n + a.cpu_bytes as u64)
+}
+
+/// The arena bytes a piece of an indexed draw copies: `n` indices and, of
+/// each staged attribute, vertices `vmin..=vmax` (a per-instance or constant
+/// one whole), each copy 16-byte aligned as [`record_draw`] places it.
+fn piece_bytes(d: &GlesDraw, n: u32, vmin: u32, vmax: u32) -> u64 {
+    let pad = |b: u64| b + 15;
+    d.attribs[..d.num_attribs as usize].iter().filter(|a| !a.cpu.is_null() && a.cpu_bytes != 0).fold(
+        pad(n as u64 * 2),
+        |sum, a| {
+            let bytes = if a.per_instance != 0 || a.stride == 0 {
+                a.cpu_bytes as u64
+            } else {
+                let from = vmin as u64 * a.stride as u64;
+                let want = (vmax - vmin) as u64 * a.stride as u64 + a.components as u64 * 4;
+                (a.cpu_bytes as u64).saturating_sub(from).min(want)
+            };
+            sum + pad(bytes)
+        },
+    )
+}
+
+/// The next piece of an indexed draw from index `start`: the most indices
+/// (a multiple of `unit` beyond the `overlap` the next piece repeats) whose
+/// copies stay within `budget` bytes, and the vertex range they read.
+/// `None` when not even one primitive fits.
+fn next_index_piece(
+    d: &GlesDraw,
+    idx: &[u16],
+    start: usize,
+    unit: usize,
+    overlap: usize,
+    budget: u64,
+) -> Option<(u32, u32, u32)> {
+    let (mut lo, mut hi) = (u32::MAX, 0u32);
+    let mut best = None;
+    let mut end = start;
+    while end < idx.len() {
+        /* the next primitive's indices (a strip's first piece takes its
+         * first `overlap` vertices with its first primitive) */
+        let step = if end == start { (unit + overlap).max(unit) } else { unit };
+        let next = (end + step).min(idx.len());
+        for &v in &idx[end..next] {
+            lo = lo.min(v as u32);
+            hi = hi.max(v as u32);
+        }
+        if piece_bytes(d, (next - start) as u32, lo, hi) > budget {
+            break;
+        }
+        end = next;
+        best = Some(((end - start) as u32, lo, hi - lo + 1));
+    }
+    best
+}
+
+/// An indexed draw whose client indices and arrays do not fit half an empty
+/// GENERAL arena, drawn as pieces of its index list that do: each piece
+/// copies its own indices and, of every staged attribute, only the vertex
+/// window its indices read ([`record_draw`]'s `win`). dEQP's vertex-texture
+/// grids are such draws: 127 x 127 quads of four client vertices each,
+/// 64,516 vertices of two vec2 arrays and 96,774 indices, 1.2 MB against
+/// the 1 MiB default arena (dEQP-GLES2.functional.texture.vertex.2d.*).
+///
+/// Lists cut anywhere on a primitive boundary; strips repeat the vertices
+/// the next piece continues from, an even number of triangles per piece
+/// keeping the winding, as [`draw_chunked`]. Fans and loops, whose
+/// primitives reach back to the first vertex, and a draw with a second index
+/// list go whole (refused when they do not fit). A draw whose indices are
+/// scattered so widely that one primitive's window does not fit is refused
+/// the same way. A failure after some pieces were recorded leaves those in
+/// the frame.
+fn draw_indexed_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    let (unit, overlap): (usize, usize) = match d.prim {
+        GLES_PRIM_POINTS => (1, 0),
+        GLES_PRIM_LINES => (2, 0),
+        GLES_PRIM_LINE_STRIP => (1, 1),
+        GLES_PRIM_TRI_STRIP => (2, 2),
+        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
+        _ => (3, 0), /* a triangle list (record_draw's default topology) */
+    };
+    let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
+    if unit == 0
+        || second
+        || d.index_cpu.is_null()
+        || !(d.index_cpu as usize).is_multiple_of(2)
+        || (d.index_bytes / 2) < d.index_count
+    {
+        return draw_part(p, d, 0, d.index_count, None);
+    }
+    // SAFETY: the core stages index_bytes bytes of u16 indices at index_cpu
+    // for this draw (u16-aligned scratch), and index_count <= index_bytes / 2
+    // was just checked.
+    let idx = unsafe { core::slice::from_raw_parts(d.index_cpu as *const u16, d.index_count as usize) };
+    let budget = p.b.gen.mem.size as u64 / 2;
+    /* count the pieces first: past MAX_PIECES the draw is refused before
+     * anything is recorded (the bound draw_chunked keeps) */
+    let mut pieces = 0u32;
+    let mut start = 0usize;
+    loop {
+        let Some((n, _, _)) = next_index_piece(d, idx, start, unit, overlap, budget) else {
+            return draw_part(p, d, 0, d.index_count, None); /* refused by name */
+        };
+        pieces += 1;
+        if pieces > MAX_PIECES {
+            if !p.b.warned_big {
+                glog!(
+                    "pvr_backend: an indexed draw of {} indices needs more than {} pieces to fit its client arrays: not drawn",
+                    d.index_count,
+                    MAX_PIECES
+                );
+                p.b.warned_big = true;
+            }
+            return -E2BIG;
+        }
+        if start + n as usize >= idx.len() {
+            break;
+        }
+        start += n as usize - overlap;
+    }
+    /* as draw_chunked: a piece that opens a new frame loads the colour */
+    let mut cont = *d;
+    cont.do_clear = false;
+    cont.do_clear_depth = false;
+    cont.do_clear_stencil = false;
+    let mut start = 0usize;
+    loop {
+        let Some((n, vmin, vcount)) = next_index_piece(d, idx, start, unit, overlap, budget) else {
+            unreachable!("counted above");
+        };
+        let mut pd = if start == 0 { *d } else { cont };
+        // SAFETY: start + n <= index_count indices of the staging.
+        pd.index_cpu = unsafe { idx.as_ptr().add(start) } as *const c_void;
+        pd.index_bytes = n * 2;
+        pd.index_count = n;
+        if pd.index_buf_gpu != 0 {
+            pd.index_buf_gpu += start as u64 * 2;
+        }
+        let rc = draw_part(p, &pd, 0, n, Some((vmin, vcount)));
+        if rc != 0 {
+            return rc;
+        }
+        if start + n as usize >= idx.len() {
+            return 0;
+        }
+        start += n as usize - overlap;
     }
 }
 
@@ -4211,13 +4374,13 @@ fn public_rc(rc: i32) -> i32 {
 }
 
 /// Record vertices `first..first + count` of `d` (the whole draw: 0 and
-/// `d.index_count`) into the open frame. Split the frame (the next kick
+/// `d.index_count`; `win` as [`record_draw`]'s) into the open frame. Split the frame (the next kick
 /// loads this one's colour back) when the draw table or an arena could not
 /// take another draw -- a draw needs at most PDS_PER_DRAW_MAX /
 /// GEN_PER_DRAW_MAX bytes plus its staged data, and VDM_PER_DRAW_MAX stream
 /// words -- and once more when the draw still did not fit (large staged
 /// arrays or indices, full depth-bias / scissor tables).
-fn draw_part(p: &mut Pvr, d: &GlesDraw, first: u32, count: u32) -> i32 {
+fn draw_part(p: &mut Pvr, d: &GlesDraw, first: u32, count: u32, win: Option<(u32, u32)>) -> i32 {
     if p.b.ndraws > 0
         && (p.b.ndraws >= MAX_DRAWS_PER_FRAME
             || p.b.pds.bump.saturating_add(PDS_PER_DRAW_MAX) as usize > p.b.pds.mem.size
@@ -4230,7 +4393,7 @@ fn draw_part(p: &mut Pvr, d: &GlesDraw, first: u32, count: u32) -> i32 {
         }
         frame_begin(p, d);
     }
-    let mut rc = record_draw_txn(&mut p.b, &mut p.scratch, d, first, count);
+    let mut rc = record_draw_txn(&mut p.b, &mut p.scratch, d, first, count, win);
     if rc == -EFRAME_FULL && p.b.ndraws > p.b.frame_quads {
         /* the frame's earlier draws took the room: a fresh frame has it */
         rc = flush(p);
@@ -4238,7 +4401,7 @@ fn draw_part(p: &mut Pvr, d: &GlesDraw, first: u32, count: u32) -> i32 {
             return rc;
         }
         frame_begin(p, d);
-        rc = record_draw_txn(&mut p.b, &mut p.scratch, d, first, count);
+        rc = record_draw_txn(&mut p.b, &mut p.scratch, d, first, count, win);
     }
     if rc == -EFRAME_FULL && !p.b.warned_big {
         // SAFETY: single-threaded by contract; no other reference is live.
@@ -4337,7 +4500,7 @@ fn draw_chunked(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let mut first = 0u32;
     loop {
         let n = len.min(total - first);
-        let rc = draw_part(p, if first == 0 { d } else { &cont }, first, n);
+        let rc = draw_part(p, if first == 0 { d } else { &cont }, first, n, None);
         if rc != 0 {
             return rc;
         }
@@ -4516,9 +4679,16 @@ fn build_desc_block(
 /// was (arena bumps, depth-bias / scissor tables, the terminate block), so a
 /// failed draw neither wastes the frame's room nor changes what later draws
 /// record, and it can be retried in a fresh frame.
-fn record_draw_txn(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count: u32) -> i32 {
+fn record_draw_txn(
+    b: &mut Backend,
+    s: &mut Scratch,
+    d: &GlesDraw,
+    first: u32,
+    count: u32,
+    win: Option<(u32, u32)>,
+) -> i32 {
     let saved = (b.pds.bump, b.gen.bump, b.ndbias, b.dbias_last, b.nscissor, b.scissor_last, b.term_gpu, b.vdm_dw);
-    let rc = record_draw(b, s, d, first, count);
+    let rc = record_draw(b, s, d, first, count, win);
 
     if rc != 0 {
         (b.pds.bump, b.gen.bump, b.ndbias, b.dbias_last, b.nscissor, b.scissor_last, b.term_gpu, b.vdm_dw) = saved;
@@ -4563,10 +4733,15 @@ fn draw_box(d: &GlesDraw) -> Option<[i32; 4]> {
 /// Record one draw into the open frame: PDS programs, descriptors, PPP state
 /// block and VDM blocks. `first` / `count`: the vertices of a sequential draw
 /// to record (a piece of a larger one, see [`draw_chunked`]), otherwise 0 and
-/// `d.index_count`. Returns 0, -[`EFRAME_FULL`] (the frame has no room),
+/// `d.index_count`. `win`: a piece of a split indexed draw (see
+/// [`draw_indexed_pieces`]) reads vertices `win.0 .. win.0 + win.1` only, so
+/// each staged per-vertex attribute is copied for that window alone and its
+/// stream addressed as if the copy began at vertex 0 (the indices stay
+/// absolute: gl_VertexID and the VBO-resident attributes are unchanged).
+/// Returns 0, -[`EFRAME_FULL`] (the frame has no room),
 /// -EINVAL (a draw the backend cannot encode), -ENOMEM (no memory for the
 /// sequential indices) or -EIO (an arena without a CPU mapping).
-fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count: u32) -> i32 {
+fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count: u32, win: Option<(u32, u32)>) -> i32 {
     // SAFETY: d.vs / d.fs are null (rejected here) or point at shader
     // descriptors that outlive the draw: the core's linked program, or the
     // backend's own FbLoad descriptors, which nothing mutates while recording.
@@ -4652,7 +4827,18 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
                 /* draw-time data: the GL core's staging is reused by the
                  * next draw, so this draw gets its own copy in the arena
                  * (a piece copies only the bytes its vertices use) */
-                let (from, len) = if !piece || a.per_instance != 0 || a.stride == 0 {
+                let window = win.filter(|_| a.per_instance == 0 && a.stride != 0);
+                let (from, len) = if let Some((vmin, vcount)) = window {
+                    /* a piece of a split indexed draw: its vertex window */
+                    let from = vmin as u64 * a.stride as u64;
+                    let want = (vcount.max(1) - 1) as u64 * a.stride as u64 + a.components as u64 * 4;
+                    match (from < a.cpu_bytes as u64)
+                        .then(|| (from as u32, (a.cpu_bytes as u64 - from).min(want) as u32))
+                    {
+                        Some(r) => r,
+                        None => return -EINVAL, /* the staging ends before the window */
+                    }
+                } else if !piece || a.per_instance != 0 || a.stride == 0 {
                     (0, a.cpu_bytes) /* the whole draw, per instance, or a constant */
                 } else {
                     let want = count as u64 * a.stride as u64 + a.components as u64 * 4;
@@ -4670,6 +4856,11 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
                 };
                 if arc != 0 {
                     return arc;
+                }
+                if window.is_some() {
+                    /* the stream's vertex 0 lies `from` bytes before the
+                     * copy; the piece's indices never reach below win.0 */
+                    abase[i] = abase[i].wrapping_sub(from as u64);
                 }
             } else {
                 abase[i] = a.buffer_gpu.wrapping_add(a.offset as u64).wrapping_add(skip);

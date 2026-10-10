@@ -24,7 +24,9 @@ config DEQP_REPORT_ES2
 	  complete and a transposed glUniformMatrix legal, so the GLES2
 	  module judges ES 3.0 behaviour. Every other GLES2 run (the Linux
 	  pair, check.sh's row) uses report-es2; this is the same for the
-	  Zephyr image. Say n only for a future dEQP-GLES3 image.
+	  Zephyr image. A dEQP-GLES3 image says n here AND sets
+	  YAKOGL_REPORT_ES2=n (n here only drops the select; the library's
+	  default stays y): tools/cts/am62p-deqp-images.sh passes both.
 config DEQP_GL_CONFIG_NAME
 	string "dEQP render config name (--deqp-gl-config-name), empty = not passed"
 	default "$(DEQP_GL_CONFIG_NAME)"

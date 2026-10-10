@@ -46,6 +46,10 @@ struct GenLog {
     streams: Vec<Vec<PvrPdsVertexStream>>,
     /// topology, index address, count, instances
     index_lists: Vec<(u32, u64, u32, u32)>,
+    /// Each index list's vertex streams: the index in `streams` of the
+    /// vertex program built last before it (a draw that failed after
+    /// building its program, and was retried, left one more there).
+    list_streams: Vec<usize>,
     /// Per common-store DMA program: (source address, dwords, dest_offset).
     dma_kicks: Vec<Vec<(u64, u32, u32)>>,
     /// uses_pntc of each coefficient program built.
@@ -259,7 +263,10 @@ unsafe extern "C" fn pvr_vdm_emit_index_list_instanced(
         }
         return PVR_VDM_FIELD_REFUSED;
     }
-    with_gen(|g| g.index_lists.push((topology, addr, count, instance_count)));
+    with_gen(|g| {
+        g.index_lists.push((topology, addr, count, instance_count));
+        g.list_streams.push(g.streams.len().wrapping_sub(1));
+    });
     let mut w = vec![W_INDEX | topology];
     if addr != 0 {
         w.push(addr as u32);
@@ -654,6 +661,9 @@ static RIG_OSAL: OsalOps = OsalOps {
     thread_id: None,
 };
 
+/// One recorded index list: topology, index address, count, instances.
+type IndexList = (u32, u64, u32, u32);
+
 /// An initialised backend on [`RIG_OSAL`] with the fake generators.
 struct Rig {
     prev_osal: *const OsalOps,
@@ -755,6 +765,11 @@ impl Rig {
 
     fn index_lists(&self) -> Vec<(u32, u64, u32, u32)> {
         with_gen(|g| g.index_lists.clone())
+    }
+
+    /// Each index list with the vertex streams its draw fetched.
+    fn lists_with_streams(&self) -> Vec<(IndexList, Vec<PvrPdsVertexStream>)> {
+        with_gen(|g| g.index_lists.iter().zip(&g.list_streams).map(|(l, &k)| (*l, g.streams[k].clone())).collect())
     }
 
     fn streams(&self) -> Vec<Vec<PvrPdsVertexStream>> {
@@ -980,7 +995,8 @@ fn restart_with_arenas(sets: u32, gen_kib: u32, pds_kib: u32) {
 }
 
 /// A draw whose indices are staged into the GENERAL arena: 10000 u16, 20000
-/// bytes, more than a 16 KiB arena holds.
+/// bytes, more than a 16 KiB arena holds (a triangle list, so a draw of more
+/// than half an arena is cut into index pieces).
 fn staged_index_draw(rig: &Rig, idx: &[u16]) -> GlesDraw {
     let mut d = rig.draw(3);
     d.index_cpu = idx.as_ptr() as *const c_void;
@@ -1003,7 +1019,9 @@ fn a_smaller_general_arena_refuses_a_draw_it_cannot_hold_and_names_it() {
 
     restart_with_arenas(4, 16, 1024);
     let _ = rig.logs();
-    let d = staged_index_draw(&rig, &idx);
+    let mut d = staged_index_draw(&rig, &idx);
+    /* a fan, which cannot be cut into index pieces, goes whole */
+    d.prim = GLES_PRIM_TRI_FAN;
     assert_eq!(draw(&d), -ENOMEM, "refused, not masked");
     assert!(rig.b().gen.bump as usize <= rig.b().gen.mem.size, "nothing written past the arena");
     let logs = rig.logs();
@@ -1016,10 +1034,11 @@ fn a_smaller_general_arena_refuses_a_draw_it_cannot_hold_and_names_it() {
 }
 
 /// The default arenas since the frame-set measurement: 4 x (1024 KiB
-/// GENERAL + 768 KiB PDS). What it costs, pinned: a draw's client-side
-/// indices are staged whole into the GENERAL arena, so 1.5 MB of them no
-/// longer fits an empty frame (-ENOMEM, the arena named), where the 4 MiB
-/// arena drew it; 512 KiB still fits.
+/// GENERAL + 768 KiB PDS). A draw's client-side indices are staged into the
+/// GENERAL arena: 512 KiB of them go whole, and 1.5 MB, which no longer fits
+/// an empty frame, are drawn as pieces of half an arena at most (until the
+/// pieces it was refused, -ENOMEM with the arena named). A fan, which cannot
+/// be cut, is still refused that way.
 #[test]
 fn the_default_arenas_are_1024_and_768_kib_and_bound_a_draws_client_indices() {
     let rig = Rig::new();
@@ -1028,15 +1047,158 @@ fn the_default_arenas_are_1024_and_768_kib_and_bound_a_draws_client_indices() {
     let mut d = staged_index_draw(&rig, &small);
     d.index_buf_gpu = HEAP_GENERAL_BASE + 0x3000_0000;
     assert_eq!(draw(&d), 0, "512 KiB of client indices fit");
+    assert_eq!(rig.index_lists().iter().map(|l| l.2).collect::<Vec<_>>(), [256 * 1024], "whole");
     assert_eq!(pvr_backend_flush(), 0);
+    rig.reset_records();
     let big = vec![0u16; 750_000];
     let mut d = staged_index_draw(&rig, &big);
     d.index_buf_gpu = HEAP_GENERAL_BASE + 0x3000_0000;
+    assert_eq!(draw(&d), 0, "1.5 MB of client indices are drawn in pieces");
+    /* (the frames a piece opens begin with a load quad: not the draw's) */
+    let app = HEAP_GENERAL_BASE + 0x1000_0000 + 8;
+    let counts: Vec<u32> =
+        rig.lists_with_streams().iter().filter(|(_, st)| st[0].address == app).map(|(l, _)| l.2).collect();
+    assert_eq!(counts.iter().sum::<u32>(), 750_000);
+    assert!(counts.iter().all(|&n| n % 3 == 0 && n as usize * 2 <= 512 * 1024), "{counts:?}");
+    assert_eq!(counts.len(), 3, "{counts:?}");
+    assert_eq!(pvr_backend_flush(), 0);
+    d.prim = GLES_PRIM_TRI_FAN;
     let _ = rig.logs();
-    assert_eq!(draw(&d), -ENOMEM, "1.5 MB of client indices do not fit a 1 MiB arena");
+    assert_eq!(draw(&d), -ENOMEM, "a fan reaches back to its first vertex: it is not cut");
     assert!(
         rig.logs().iter().any(|l| l
             == "pvr_backend: a draw (750000 vertices/indices) does not fit an empty frame: the general arena (1048576 bytes) is too small; not drawn"),
+        "{:?}",
+        rig.logs()
+    );
+}
+
+/// dEQP's vertex-texture grid (dEQP-GLES2.functional.texture.vertex.2d.*,
+/// es2fVertexTextureTests.cpp PosTexCoordQuadGrid<2D>, GRID_SIZE_2D 127):
+/// 127 x 127 quads of four client vertices each, so 64,516 vertices of a
+/// vec2 position and a vec2 texture coordinate (516,128 bytes each) and
+/// 96,774 u16 indices (193,548 bytes), drawn with glDrawElements from client
+/// memory. 1.2 MB of staged data against the 1 MiB GENERAL arena: until the
+/// indexed pieces every such draw was refused ("does not fit an empty
+/// frame"), so all 45 2d cases read back the clear colour on the AM62P.
+/// Now: whole triangles per piece, each piece's copy within half an arena,
+/// and every index of every piece fetches the vertex it names.
+#[test]
+fn a_deqp_vertex_texture_grid_of_client_arrays_is_drawn_in_index_pieces() {
+    let rig = Rig::new();
+    const GRID: u32 = 127;
+    let nv = (GRID * GRID * 4) as usize;
+    /* each vertex's position is (v, -v), its coordinate (v + 0.5, 1) */
+    let pos: Vec<f32> = (0..nv).flat_map(|v| [v as f32, -(v as f32)]).collect();
+    let tc: Vec<f32> = (0..nv).flat_map(|v| [v as f32 + 0.5, 1.0]).collect();
+    let mut idx: Vec<u16> = Vec::new();
+    for q in 0..(GRID * GRID) as u16 {
+        let f = q * 4;
+        idx.extend_from_slice(&[f, f + 1, f + 2, f + 1, f + 3, f + 2]);
+    }
+    assert_eq!((nv, idx.len()), (64_516, 96_774));
+    let mut d = staged_index_draw(&rig, &idx);
+    d.index_buf_gpu = HEAP_GENERAL_BASE + 0x3000_0000;
+    for (k, a) in [&pos, &tc].into_iter().enumerate() {
+        d.attribs[k] = GlesAttrib {
+            components: 2,
+            stride: 8,
+            vi_reg: (k * 2) as u8,
+            buffer_gpu: HEAP_GENERAL_BASE + 0x1000_0000 + k as u64 * 0x10_0000,
+            cpu: a.as_ptr() as *const c_void,
+            cpu_bytes: (a.len() * 4) as u32,
+            ..GlesAttrib::ZERO
+        };
+    }
+    d.num_attribs = 2;
+    let _ = rig.logs();
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    assert!(!rig.logs().iter().any(|l| l.contains("not drawn")), "{:?}", rig.logs());
+
+    /* the draw's pieces: two streams in vi0 and vi2 (a frame a piece opens
+     * begins with a load quad, which has other streams) */
+    let (lists, streams): (Vec<_>, Vec<_>) =
+        rig.lists_with_streams().into_iter().filter(|(_, st)| st.len() == 2 && st[1].dst_reg == 2).unzip();
+    assert_eq!(lists.len(), 3, "1.2 MB in pieces of at most 512 KiB: {lists:?}");
+    assert_eq!(lists.iter().map(|l| l.2).sum::<u32>(), 96_774);
+    let mut at = 0usize;
+    for (l, st) in lists.iter().zip(&streams) {
+        let n = l.2 as usize;
+        assert_eq!(n % 3, 0, "whole triangles");
+        for i in 0..n {
+            let word = rig.gpu_u32(l.1 + (i as u64 & !1) * 2);
+            let v = if i % 2 == 0 { word & 0xffff } else { word >> 16 };
+            assert_eq!(v, idx[at + i] as u32, "the piece's indices are the draw's, absolute");
+            let p0 = f32::from_bits(rig.gpu_u32(st[0].address.wrapping_add(v as u64 * 8)));
+            let p1 = f32::from_bits(rig.gpu_u32(st[0].address.wrapping_add(v as u64 * 8 + 4)));
+            let t0 = f32::from_bits(rig.gpu_u32(st[1].address.wrapping_add(v as u64 * 8)));
+            assert_eq!((p0, p1, t0), (v as f32, -(v as f32), v as f32 + 0.5), "piece at index {at}, vertex {v}");
+        }
+        at += n;
+    }
+    /* the first two pieces are half an arena each: the second opens the
+     * next frame, which the third, smaller one joins */
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().len(), 2);
+}
+
+/// An indexed strip is cut as a sequential one: an even number of triangles
+/// per piece, each piece repeating the two vertices the next continues from.
+#[test]
+fn an_indexed_strip_of_client_arrays_is_cut_with_its_shared_vertices_repeated() {
+    let rig = Rig::new();
+    let nv = 40_000usize;
+    let pos: Vec<f32> = (0..nv * 4).map(|k| k as f32).collect();
+    let idx: Vec<u16> = (0..nv as u16).collect();
+    let mut d = staged_index_draw(&rig, &idx);
+    d.prim = GLES_PRIM_TRI_STRIP;
+    d.attribs[0] = GlesAttrib {
+        components: 4,
+        stride: 16,
+        cpu: pos.as_ptr() as *const c_void,
+        cpu_bytes: (pos.len() * 4) as u32,
+        ..d.attribs[0]
+    };
+    assert_eq!(draw(&d), 0);
+    let lists = rig.index_lists();
+    assert!(lists.len() >= 2, "{lists:?}");
+    let mut at = 0usize;
+    for (k, l) in lists.iter().enumerate() {
+        let n = l.2 as usize;
+        if k + 1 < lists.len() {
+            assert_eq!(n % 2, 0, "an even number of triangles: {n}");
+        }
+        let first = rig.gpu_u32(l.1) & 0xffff;
+        assert_eq!(first as usize, at, "piece {k} starts where the last one's final two vertices do");
+        at += n - 2;
+    }
+    assert_eq!(at + 2, nv, "every vertex drawn");
+}
+
+/// A primitive whose vertex window alone is more than half an arena cannot
+/// be cut finer: the draw is refused by name, as before the pieces, and
+/// nothing is recorded.
+#[test]
+fn an_indexed_draw_whose_one_triangle_spans_more_than_half_an_arena_is_refused() {
+    let rig = Rig::new();
+    let nv = 65_536usize;
+    let pos = vec![0f32; nv * 4];
+    let idx: Vec<u16> = (0..30_000).flat_map(|_| [0u16, 1, 65_535]).collect();
+    let mut d = staged_index_draw(&rig, &idx);
+    d.attribs[0] = GlesAttrib {
+        components: 4,
+        stride: 16,
+        cpu: pos.as_ptr() as *const c_void,
+        cpu_bytes: (pos.len() * 4) as u32,
+        ..d.attribs[0]
+    };
+    let _ = rig.logs();
+    assert_eq!(draw(&d), -ENOMEM);
+    assert!(rig.index_lists().is_empty(), "nothing recorded");
+    assert!(
+        rig.logs()
+            .iter()
+            .any(|l| l.starts_with("pvr_backend: a draw (90000 vertices/indices) does not fit an empty frame")),
         "{:?}",
         rig.logs()
     );
@@ -1246,13 +1408,15 @@ fn a_draw_larger_than_an_empty_frame_is_out_of_memory_and_leaves_the_frame_alone
     let mut d = rig.draw(3);
 
     assert_eq!(draw(&d), 0);
-    let idx = vec![0u16; 3_000_000];
+    let idx = vec![0u16; 750_000];
     let mut big = d;
     big.do_clear = false;
     big.index_cpu = idx.as_ptr() as *const c_void;
-    big.index_bytes = 6_000_000;
-    big.index_count = 3_000_000;
+    big.index_bytes = 1_500_000;
+    big.index_count = 750_000;
     big.index_buf_gpu = HEAP_GENERAL_BASE + 0x3000_0000;
+    /* a fan cannot be cut into index pieces: it goes whole */
+    big.prim = GLES_PRIM_TRI_FAN;
     assert_eq!(draw(&big), -ENOMEM);
     assert_eq!(rig.kicks().len(), 1, "the retry submitted the frame");
     assert!(rig.logs().iter().any(|l| l.contains("does not fit an empty frame")), "{:?}", rig.logs());
@@ -1277,6 +1441,9 @@ fn a_failed_draw_leaves_no_trace_in_the_frame() {
     bad.index_cpu = idx.as_ptr() as *const c_void;
     bad.index_bytes = u32::MAX; /* the bound check must not wrap */
     bad.index_count = 3;
+    /* a fan goes whole (an indexed draw of more staged bytes than half an
+     * arena is otherwise cut into pieces, each copying only its indices) */
+    bad.prim = GLES_PRIM_TRI_FAN;
 
     assert_eq!(draw(&d), 0);
     /* the arena cannot take it; the frame has an application draw, so it

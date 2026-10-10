@@ -99,6 +99,9 @@ conf_bad bad-precompiled-only.config YAKOGL_SHADERC_PRECOMPILED_ONLY
 conf_bad bad-precompiled-tier.config YAKOGL_PRECOMPILED_SHADERS
 conf_bad bad-report-es3.config YAKOGL_REPORT_ES2
 conf_bad bad-gles3-report.config DEQP_REPORT_ES2
+conf_ok  am62p-gles3.config --gles3
+conf_bad bad-gles3-report.config YAKOGL_REPORT_ES2 --gles3
+conf_bad am62p-sweep.config YAKOGL_REPORT_ES2 --gles3
 conf_bad bad-sweep-ms4-name.config DEQP_GL_CONFIG_NAME
 conf_bad bad-ms4-name-missing.config DEQP_GL_CONFIG_NAME --ms4
 

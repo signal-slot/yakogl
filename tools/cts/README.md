@@ -227,7 +227,11 @@ of tiled copies (image T5: `texture-2048.conf`, 64 / 24 MiB), i.MX8MP 160 MiB
 C heap, AM62P 256 MiB GPU carve-out (`boards/*.overlay`). A sweep image runs
 on dEQP's default single-sampled config; only the AM62P's MS4 image names
 `rgba8888d24s8ms4`. A builder whose image fails the check reports
-`rc=not-conformance` and the tree skips it.
+`rc=not-conformance` and the tree skips it. A dEQP-GLES3 image
+(`DEQP_MODULE=gles3`) is checked with `--gles3`: both report switches must be
+off (`-DCONFIG_DEQP_REPORT_ES2=n` only drops the select; the AM62P builder also
+passes `-DCONFIG_YAKOGL_REPORT_ES2=n`), because dEQP's GLES3 context queries
+`GL_NUM_EXTENSIONS` at start and an ES 2.0 report ends the run there.
 
 Common to all three (the scripts build the checkout they live in, so run them
 from the detached one):

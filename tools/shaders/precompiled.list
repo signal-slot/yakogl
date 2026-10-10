@@ -522,6 +522,7 @@ pair gltest/position_only.vert gltest/predlive_fs_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
+pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
 pair es100/deriv.vert es100/texbranch.frag
 pair es100/deriv.vert es100/unibranch.frag
 pair es100/deriv.vert es100/deriv.frag
@@ -668,6 +669,7 @@ pair gltest/position_only.vert gltest/predlive_fs_coord.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
 pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
+pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
 pair es100/deriv.vert es100/texbranch.frag
 pair es100/deriv.vert es100/unibranch.frag
 pair es100/deriv.vert es100/deriv.frag

@@ -487,6 +487,15 @@
  *               picture. The run-time compiler only (skipped by name in a
  *               table build); all three GPUs, the option the PowerVR's. A
  *               measurement, not in the set
+ * 197 vtxgrid   dEQP texture.vertex.2d's draw: its 127x127 grid of client
+ *               arrays (1,225,804 bytes with the indices) drawn four times,
+ *               one viewport quarter each, the VS sampling a mipmapped
+ *               16x16 GL_RGB chain with texture2DLod at lod 0, 1, 2, 3;
+ *               every pixel read back against its level's texel. The
+ *               PowerVR refused each such draw with its 1 MiB GENERAL arena
+ *               (the 45 texture.vertex.2d cases at 32778b57) until indexed
+ *               draws were cut into pieces. All three GPUs (skipped by
+ *               name in a table build); in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -757,7 +766,7 @@ static const char *shader_skip_reason(int c)
 #ifndef GL_TEST_ES100_SET
 	/* the desktop set is a table build's, and the table has no rows for a
 	 * case's own sources */
-	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192)
+	if (c == 181 || c == 182 || c == 183 || c == 184 || c == 185 || c == 188 || c == 189 || c == 190 || c == 191 || c == 192 || c == 197)
 		return "its own sources: a table build has no rows for them";
 	/* one program per source in a table: nothing to lower two ways */
 	if (c == 195)
@@ -7827,7 +7836,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [197] = "vtxgrid",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -11649,6 +11658,50 @@ static int case_texsubfbo(void)
 }
 #endif
 
+/* ---- shared by cases 129 and 197: the RGB chain and dEQP's grid ---------- */
+
+/* texel (x, y) of level L of the 16x16 GL_RGB chain: (40 + 60 L, 16 x, 16 y) */
+static uint32_t vtl_texel(uint32_t level, uint32_t x, uint32_t y)
+{
+	return 0xff000000u | ((16u * y) << 16) | ((16u * x) << 8) | (40u + 60u * level);
+}
+
+/* dEQP's grid (es2fVertexTextureTests.cpp:78, 316-373): 127 x 127 quads,
+ * four vertices each sharing the quad's coordinate (x / 127, y / 127), two
+ * triangles by 16-bit indices: 1,225,804 bytes of client arrays for one draw */
+#define VTL_GRID 127u
+static float vtl_gpos[VTL_GRID * VTL_GRID * 4 * 2], vtl_guv[VTL_GRID * VTL_GRID * 4 * 2];
+static uint16_t vtl_gidx[VTL_GRID * VTL_GRID * 6];
+
+/* fill the grid's three client arrays */
+static void vtl_grid_fill(void)
+{
+	uint32_t n = 0;
+
+	for (uint32_t y = 0; y < VTL_GRID; y++)
+		for (uint32_t x = 0; x < VTL_GRID; x++) {
+			const float fx0 = (float)x / VTL_GRID, fx1 = (float)(x + 1u) / VTL_GRID;
+			const float fy0 = (float)y / VTL_GRID, fy1 = (float)(y + 1u) / VTL_GRID;
+			const float q[4][2] = { { fx0, fy0 }, { fx1, fy0 }, { fx0, fy1 }, { fx1, fy1 } };
+			const uint16_t first = (uint16_t)n;
+
+			for (int k = 0; k < 4; k++, n++) {
+				vtl_gpos[n * 2] = q[k][0] * 2.0f - 1.0f;
+				vtl_gpos[n * 2 + 1] = q[k][1] * 2.0f - 1.0f;
+				vtl_guv[n * 2] = (float)x / VTL_GRID;
+				vtl_guv[n * 2 + 1] = (float)y / VTL_GRID;
+			}
+			uint16_t *ix = &vtl_gidx[(y * VTL_GRID + x) * 6];
+
+			ix[0] = first;
+			ix[1] = (uint16_t)(first + 1);
+			ix[2] = (uint16_t)(first + 2);
+			ix[3] = (uint16_t)(first + 1);
+			ix[4] = (uint16_t)(first + 3);
+			ix[5] = (uint16_t)(first + 2);
+		}
+}
+
 #if defined(GL_TEST_V3D) || defined(GL_TEST_VIVANTE)
 /* ---- case 129: a vertex-shader texture2DLod on a mipmapped RGB8 texture ------
  *
@@ -11692,11 +11745,6 @@ static int case_texsubfbo(void)
 /* unit 1's levels, one colour each */
 static const uint32_t vtl_b[3] = { 0xfffac80au, 0xff33550bu, 0xff99220cu };
 
-static uint32_t vtl_texel(uint32_t level, uint32_t x, uint32_t y)
-{
-	return 0xff000000u | ((16u * y) << 16) | ((16u * x) << 8) | (40u + 60u * level);
-}
-
 /* the level-L texel point (i, j) samples (NEAREST) */
 static uint32_t vtl_want(uint32_t level, uint32_t i, uint32_t j)
 {
@@ -11704,13 +11752,6 @@ static uint32_t vtl_want(uint32_t level, uint32_t i, uint32_t j)
 
 	return vtl_texel(level, (2u * i + 1u) * size / 16u, (2u * j + 1u) * size / 16u);
 }
-
-/* dEQP's grid (es2fVertexTextureTests.cpp:78, 316-373): 127 x 127 quads,
- * four vertices each sharing the quad's coordinate (x / 127, y / 127), two
- * triangles by 16-bit indices: 1,225,804 bytes of client arrays for one draw */
-#define VTL_GRID 127u
-static float vtl_gpos[VTL_GRID * VTL_GRID * 4 * 2], vtl_guv[VTL_GRID * VTL_GRID * 4 * 2];
-static uint16_t vtl_gidx[VTL_GRID * VTL_GRID * 6];
 
 /* the texel of the control texture quad (qx, qy) reads (NEAREST, CLAMP) */
 static uint32_t vtl_grid_texel(uint32_t qx, uint32_t qy)
@@ -11727,35 +11768,14 @@ static uint32_t vtl_grid_texel(uint32_t qx, uint32_t qy)
 static bool vtl_grid_pass(GLuint prog)
 {
 	GLint lp = glGetAttribLocation(prog, "a_pos"), lu = glGetAttribLocation(prog, "a_uv");
-	uint32_t n = 0, bad = 0, fx = 0, fy = 0, fgot = 0;
+	uint32_t bad = 0, fx = 0, fy = 0, fgot = 0;
 	GLenum err;
 
 	if (lp < 0 || lu < 0) {
 		pr_err("vstexlod grid: a_pos %d a_uv %d\n", lp, lu);
 		return false;
 	}
-	for (uint32_t y = 0; y < VTL_GRID; y++)
-		for (uint32_t x = 0; x < VTL_GRID; x++) {
-			const float fx0 = (float)x / VTL_GRID, fx1 = (float)(x + 1u) / VTL_GRID;
-			const float fy0 = (float)y / VTL_GRID, fy1 = (float)(y + 1u) / VTL_GRID;
-			const float q[4][2] = { { fx0, fy0 }, { fx1, fy0 }, { fx0, fy1 }, { fx1, fy1 } };
-			const uint16_t first = (uint16_t)n;
-
-			for (int k = 0; k < 4; k++, n++) {
-				vtl_gpos[n * 2] = q[k][0] * 2.0f - 1.0f;
-				vtl_gpos[n * 2 + 1] = q[k][1] * 2.0f - 1.0f;
-				vtl_guv[n * 2] = (float)x / VTL_GRID;
-				vtl_guv[n * 2 + 1] = (float)y / VTL_GRID;
-			}
-			uint16_t *ix = &vtl_gidx[(y * VTL_GRID + x) * 6];
-
-			ix[0] = first;
-			ix[1] = (uint16_t)(first + 1);
-			ix[2] = (uint16_t)(first + 2);
-			ix[3] = (uint16_t)(first + 1);
-			ix[4] = (uint16_t)(first + 3);
-			ix[5] = (uint16_t)(first + 2);
-		}
+	vtl_grid_fill();
 	glUseProgram(prog);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -16343,6 +16363,160 @@ static int case_ifbranch(void)
 	glDeleteBuffers(1, &vbo);
 	return ok ? 0 : -1;
 }
+/* ---- case 197: dEQP texture.vertex.2d's draw, mipmapped (vtxgrid) ----------
+ *
+ * dEQP-GLES2.functional.texture.vertex.2d.* (45 cases) came back with the
+ * clear colour on the AM62P at 32778b57 (full tree, 2026-10-10, image 9)
+ * where they passed at d60b9d76: not a sampling fault but a refused draw.
+ * Each case draws dEQP's grid (es2fVertexTextureTests.cpp, GRID_SIZE_2D 127):
+ * 127 x 127 quads of four client vertices, a vec2 position and a vec2
+ * coordinate, 96,774 client u16 indices -- 1,225,804 bytes of client data
+ * per glDrawElements, four draws (viewport quarters) per picture. The
+ * PowerVR backend copies a draw's client data into the frame's GENERAL
+ * arena, which went from 4 MiB to 1 MiB (dcaafa41), so every such draw was
+ * refused ("does not fit an empty frame ... not drawn"). The fix cuts an
+ * indexed draw whose client data is over half an arena into pieces of its
+ * index list, each copying only the vertices its indices read.
+ *
+ * This case is that picture with dEQP's shader shape (tools/shaders/gltest/
+ * vtxgrid_vs.vert: texture2DLod(u_vtex, a_uv, u_lod) into a varying): the
+ * 16x16 GL_RGB chain of case 129 (5 levels, texel (x, y) of level L =
+ * (40 + 60 L, 16 x, 16 y)), NEAREST_MIPMAP_NEAREST, CLAMP_TO_EDGE, drawn
+ * whole into each 32x32 quarter of the target at lod 0, 1, 2 and 3 (bottom
+ * left, bottom right, top left, top right), then read back once. Every pixel
+ * must be the texel of level `lod` that its quad's coordinate names (one quad
+ * either way allowed, for the pixels on a quad's edge); a refused draw leaves
+ * its quarter black, a wrong level shows in blue. One check per quarter, and
+ * GL_NO_ERROR. All three GPUs (skipped by name in a table build: no row for
+ * its vertex shader); in the set. */
+static int case_vtxgrid(void)
+{
+	static uint8_t lv[16 * 16 * 3];
+	static const uint8_t one[3] = { 0x11, 0x22, 0x33 };
+	GLuint prog = link_program(gl_test_vtxgrid_vs_src, gl_test_vtl_fs_src), tex[2];
+	GLint lp, lu, l_lod;
+	bool ok = true;
+
+	if (!prog)
+		return -1;
+	lp = glGetAttribLocation(prog, "a_pos");
+	lu = glGetAttribLocation(prog, "a_uv");
+	l_lod = glGetUniformLocation(prog, "u_lod");
+	if (lp < 0 || lu < 0 || l_lod < 0) {
+		pr_err("vtxgrid: a_pos %d a_uv %d u_lod %d\n", lp, lu, l_lod);
+		glDeleteProgram(prog);
+		return -1;
+	}
+	glUseProgram(prog);
+	glUniform1i(glGetUniformLocation(prog, "u_vtex"), 0);
+	glUniform1i(glGetUniformLocation(prog, "u_ftex"), 1);
+	glUniform1f(glGetUniformLocation(prog, "u_pick"), 0.0f);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glGenTextures(2, tex);
+	/* unit 1: the FS's texture (u_pick 0 weighs it out), complete so that
+	 * no GPU samples an unbound unit */
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, tex[1]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, one);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex[0]);
+	for (uint32_t level = 0; level < 5; level++) {
+		uint32_t size = 16u >> level;
+
+		for (uint32_t y = 0; y < size; y++)
+			for (uint32_t x = 0; x < size; x++) {
+				uint32_t t = vtl_texel(level, x, y);
+
+				lv[(y * size + x) * 3] = (uint8_t)t;
+				lv[(y * size + x) * 3 + 1] = (uint8_t)(t >> 8);
+				lv[(y * size + x) * 3 + 2] = (uint8_t)(t >> 16);
+			}
+		glTexImage2D(GL_TEXTURE_2D, (GLint)level, GL_RGB, (GLsizei)size, (GLsizei)size, 0, GL_RGB,
+			     GL_UNSIGNED_BYTE, lv);
+	}
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	if (!check_gl_error("vtxgrid upload")) {
+		glDeleteTextures(2, tex);
+		glDeleteProgram(prog);
+		return -1;
+	}
+	vtl_grid_fill();
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glVertexAttribPointer((GLuint)lp, 2, GL_FLOAT, GL_FALSE, 0, vtl_gpos);
+	glVertexAttribPointer((GLuint)lu, 2, GL_FLOAT, GL_FALSE, 0, vtl_guv);
+	glEnableVertexAttribArray((GLuint)lp);
+	glEnableVertexAttribArray((GLuint)lu);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	/* the four quarters, as dEQP's four cells: lod = quarter index */
+	for (uint32_t k = 0; k < 4; k++) {
+		glViewport((GLint)((k & 1u) * (TW / 2u)), (GLint)((k >> 1) * (TH / 2u)), (GLsizei)(TW / 2u),
+			   (GLsizei)(TH / 2u));
+		glUniform1f(l_lod, (float)k);
+		glDrawElements(GL_TRIANGLES, (GLsizei)(VTL_GRID * VTL_GRID * 6), GL_UNSIGNED_SHORT, vtl_gidx);
+	}
+	glFinish();
+	glViewport(0, 0, TW, TH);
+	glDisableVertexAttribArray((GLuint)lp);
+	glDisableVertexAttribArray((GLuint)lu);
+	ok &= gl_test_check(check_gl_error("vtxgrid: four grid draws"), 0, 0);
+	read_topdown();
+	for (uint32_t k = 0; k < 4; k++) {
+		const uint32_t size = 16u >> k, x0 = (k & 1u) * (TW / 2u), y0 = (k >> 1) * (TH / 2u);
+		uint32_t bad = 0, fx = 0, fy = 0, fgot = 0, fwant = 0;
+
+		for (uint32_t gy = 0; gy < TH / 2u; gy++)
+			for (uint32_t x = 0; x < TW / 2u; x++) {
+				/* the quarter's pixel (x, gy) from its bottom, and the quad under it */
+				uint32_t got = s_px[(TH - 1u - (y0 + gy)) * TW + x0 + x];
+				uint32_t qx = (2u * x + 1u) * VTL_GRID / TW, qy = (2u * gy + 1u) * VTL_GRID / TH;
+				uint32_t want = 0;
+				bool right = false;
+
+				for (int dy = -1; dy <= 1 && !right; dy++)
+					for (int dx = -1; dx <= 1 && !right; dx++) {
+						int cx = (int)qx + dx, cy = (int)qy + dy;
+						uint32_t tx, ty;
+
+						if (cx < 0 || cy < 0 || cx >= (int)VTL_GRID || cy >= (int)VTL_GRID)
+							continue;
+						tx = (uint32_t)cx * size / VTL_GRID;
+						ty = (uint32_t)cy * size / VTL_GRID;
+						want = vtl_texel(k, tx, ty);
+						right = chan_diff(got, want) <= 1;
+					}
+				if (!right && bad++ == 0) {
+					fx = x;
+					fy = gy;
+					fgot = got;
+					fwant = vtl_texel(k, qx * size / VTL_GRID, qy * size / VTL_GRID);
+				}
+			}
+		pr_info("gl_test: vtxgrid lod %u (level %u, %ux%u): %u of %u pixels wrong\n", k, k, size, size, bad,
+		       (TW / 2u) * (TH / 2u));
+		if (bad)
+			pr_info("gl_test: vtxgrid lod %u: first wrong (%u, %u) from the quarter's bottom left = 0x%08x, "
+			       "want 0x%08x%s\n", k, fx, fy, fgot, fwant,
+			       fgot == 0xff000000u ? " (the clear colour: the draw was not made)" : "");
+		ok &= gl_test_check(bad == 0, bad, 0);
+	}
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteTextures(2, tex);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
 
 /* 176 mapbuf: GL_OES_mapbuffer (glmark2's buffer:update-method=map scenes ask
  * for it). The slice-A triangle is drawn from a VBO; then the whole store is
@@ -19364,6 +19538,7 @@ static int run_case(int c, int pretransform, int debug)
 	case 193: rc = case_offarm(); break;
 	case 194: rc = case_offarmn(); break;
 	case 195: rc = case_ifbranch(); break;
+	case 197: rc = case_vtxgrid(); break;
 	case 179:
 		rc = case_retile();
 		if (rc == -3)
@@ -19832,7 +20007,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		int fails = 0;
 		unsigned timed_out = 0;
 		/* the cases that take over the context pool (17, 18) run last */
-		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 190, 191, 192, 21, 17, 18 };
+		static const int order[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 22, 11, 34, 12, 23, 13, 40, 14, 24, 58, 59, 60, 61, 15, 16, 19, 20, 41, 42, 43, 46, 47, 48, 49, 45, 44, 172, 173, 181, 182, 183, 188, 189, 190, 191, 192, 197, 21, 17, 18 };
 		/* One walker, two callers: the regression set walks `order`, a
 		 * caller-supplied list walks its own. They must stay the same
 		 * code, because the whole point of the list is to reproduce
