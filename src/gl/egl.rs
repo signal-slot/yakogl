@@ -872,9 +872,10 @@ fn config_attrib(config: EGLConfig, attribute: EGLint) -> Option<EGLint> {
          * renderable type names both. Conformance is a different claim: EGL
          * 1.5 3.4 says EGL_CONFORMANT tells "if a client API context created
          * with respect to the corresponding EGLConfig will pass the required
-         * conformance tests for that API". An ES 3 context would not:
-         * glBlitFramebuffer always fails (src/GL_CORE_NOTES.md, "What is not
-         * ES 3.0 conformant"). So only the ES 2 bit is claimed. */
+         * conformance tests for that API". An ES 3 context would not
+         * (src/GL_CORE_NOTES.md, "What is not ES 3.0 conformant": no depth
+         * or stencil blit, GL_MAX_SAMPLES 1, ...). So only the ES 2 bit is
+         * claimed. */
         EGL_RENDERABLE_TYPE => EGL_OPENGL_ES2_BIT | EGL_OPENGL_ES3_BIT,
         EGL_CONFORMANT => EGL_OPENGL_ES2_BIT,
         EGL_CONFIG_ID => {
@@ -4268,7 +4269,7 @@ mod tests {
             assert_eq!(
                 a(EGL_CONFORMANT),
                 EGL_OPENGL_ES2_BIT,
-                "EGL_CONFORMANT claims ES 3 while glBlitFramebuffer always fails (review R-13)"
+                "EGL_CONFORMANT claims ES 3 while an ES 3 context is not conformant (review R-13)"
             );
             assert_eq!(a(EGL_COLOR_BUFFER_TYPE), EGL_RGB_BUFFER);
             assert_eq!(a(EGL_CONFIG_CAVEAT), EGL_NONE);

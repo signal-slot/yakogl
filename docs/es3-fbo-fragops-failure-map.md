@@ -7,6 +7,14 @@ here was run; every number is either a count of names in
 `tools/cts/gles3-mustpass.txt`, a figure copied from the AM62P run, or
 arithmetic on those two (the arithmetic is shown).
 
+The blit rows (`fbo.blit.*`, `fbo.color.repeated_clear`, `fbo.invalidate.sub`
+/ `whole`, `fragment_ops.scissor`) are the exception: they carry the per-case
+results of the AM62P GLES3 tree at `c4ccc966`
+(`records/am62p/deqp-gles3-c4ccc966`, tallied with `deqp-uart-tally.py
+--mustpass tools/cts/gles3-mustpass.txt`) and what the host shows since
+`glBlitFramebuffer` was built (`src/gl/blit.rs`). "Fixed on the host" means
+the unit tests pass; no board has run it.
+
 The run is the only GLES3 run there is: AM62P, main `396d667a`, 2026-09-26,
 `tools/cts/RESULTS.md` §1r (heading at line 1437), summarised in
 `tools/cts/STATUS.md:9` and `:250` (Japanese). The i.MX8MP and the Pi 4 have no
@@ -99,13 +107,13 @@ rgb5_a1 rgba4 srgb8_alpha8). 19 + 1 + 4 + 3 + 1 + 8 = 36.
 | subgroup | cases | AM62P fails | bucket (R-bucket) | dEQP source | needs | plan item |
 |---|---:|---|---|---|---|---|
 | fbo.api | 20 | not recorded for 396d667a (an earlier GLES3 image passed 20 / 20, `RESULTS.md:1408`; that is not the §1r run) | – | `es3fFboApiTests.cpp` | – | – |
-| fbo.blit.conversion | 436 | not recorded | INVALID_ENUM 270 (rbo of I / A2 formats), INVALID_OPERATION 252 (glBlitFramebuffer stub), n/s (F32) | `es3fFramebufferBlitTests.cpp` (blit between two renderbuffers of different formats: 255 float/normalised pairs incl. F32, 81 signed-int, 100 unsigned-int pairs) | `glBlitFramebuffer` (stub: always GL_INVALID_OPERATION, `src/gl/framebuffer.rs:2823`), format conversion int→int / float→float, integer rbo for 181 cases, sRGB8_ALPHA8 as source and destination (32 names) | int-rt-gl (181 integer cases get past the rbo), then blit: **none** |
-| fbo.blit.default_framebuffer | 106 | not recorded | INVALID_OPERATION 252 | same file | `glBlitFramebuffer` to/from the window surface, LINEAR scale, out-of-bounds | **none** (blit) |
-| fbo.blit.depth_stencil | 28 | not recorded | INVALID_OPERATION 252 | same | blit of D16, D24, D32F, D24S8, D32F_S8, S8 (depth-only, stencil-only, scaled) | **none** (blit; the depth/stencil half also needs depth/stencil copy in the back end) |
-| fbo.blit.rect | 40 | not recorded | INVALID_OPERATION 252 | same | blit with reversed rectangles, scaling, clamping, NEAREST / LINEAR | **none** (blit) |
+| fbo.blit.conversion | 436 | 324 at `c4ccc966` (`records/am62p/deqp-gles3-c4ccc966`): "Got GL_INVALID_OPERATION" 302 (the stub), "Got GL_INVALID_ENUM" 23 (an RGB10_A2 rbo, taken since `468528a`); 112 n/s (F32 / R11F_G11F_B10F) | – | `es3fFramebufferBlitTests.cpp` (blit between two renderbuffers of different formats: 255 float/normalised pairs incl. F32, 81 signed-int, 100 unsigned-int pairs) | format conversion int→int / float→float, integer rbo for 181 cases, sRGB8_ALPHA8 as source and destination (32 names) | **fixed on the host** (blit: `src/gl/blit.rs`, a CPU copy with the conversions of ES 3.0.6 4.3.3). The 32 `srgb8_alpha8` names need sRGB storage (item srgb): the blit decodes and encodes through one place per storage class |
+| fbo.blit.default_framebuffer | 106 | 84 at `c4ccc966`: "GL_INVALID_OPERATION" (the stub) 84; 22 n/s | – | same file | `glBlitFramebuffer` to/from the window surface (stored top-down), LINEAR scale, out-of-bounds | **fixed on the host** (blit) |
+| fbo.blit.depth_stencil | 28 | 16 at `c4ccc966`: "GL_INVALID_OPERATION" 16; 12 n/s (separate depth and stencil) | – | same | blit of D16, D24, D32F, D24S8, D32F_S8, S8 (depth-only, stencil-only, scaled) | **none**: the blit validates them and refuses the copy with GL_INVALID_OPERATION; it needs a depth/stencil copy in each back end (the planes live in the back ends' own buffers, `src/ds_retention.rs`) |
+| fbo.blit.rect | 40 | 40 at `c4ccc966`: "GL_INVALID_OPERATION" (the stub) | – | same | blit with reversed rectangles, scaling, clamping, NEAREST / LINEAR, NEAREST consistency | **fixed on the host** (blit) |
 | fbo.color.blend | 14 | not recorded | INVALID_ENUM 270 (A2), Compile failed 181, Image comparison failed 675 | `es3fFboColorbufferTests.cpp` (blend on a colour rbo) | A2 (1), F32 (1), sRGB blend in linear space (1), others ok | int-rt-gl (A2 rbo); sRGB part: **none** (§3, item 1) |
 | fbo.color.clear | 36 | not recorded | INVALID_ENUM 270 for I (19) + A2 (1); F32 (4) n/s | same | `glClearBufferiv/uiv` and integer `glReadPixels` for I; classes above | int-rt-gl, int-rt-pvr / -v3d / -gc |
-| fbo.color.repeated_clear | 108 | not recorded | INVALID_OPERATION 252, Image comparison failed 675 | same | `blit` 72 (clear, blit to a second fbo), `sample` 36 (clear, sample as a texture) | blit part **none**; sample part not known |
+| fbo.color.repeated_clear | 108 | `blit` 64 at `c4ccc966` (62 "Got GL_INVALID_OPERATION", the stub; rgb10_a2 INVALID_ENUM, rgb16f tex2d incomplete), 8 n/s | Image comparison failed 675 | same | `blit` 72 (clear, blit to a second fbo), `sample` 36 (clear, sample as a texture) | blit part **fixed on the host** (blit; the `tex2d` integer names also need integer textures as render targets); sample part not known |
 | fbo.color.tex2d | 36 | not recorded | INVALID_ENUM 270 / Compile failed 181 / Image comparison failed 675 | same + `FBU` shaders (`genTexFragmentShader`, `FBU:260`: `isampler2D` / `usampler2D` and `ivec4` / `uvec4` outputs for I) | texture attached to an fbo in each class; integer texture upload, integer sampling and integer render | int-rt-gl, formats-pvr / -v3d / -gc, int-rt-pvr / -v3d / -gc |
 | fbo.color.tex2darray | 36 | not recorded | same | same + `Texture2DArrayShader` (`FBU:587`) | `glFramebufferTextureLayer` on an array, `sampler2DArray` sampling (PowerVR samples an array as one tall image, PowerVR shader back end; see plan item `pvr-2darray`, not re-verified here) | int-rt-gl, pvr-2darray, formats-*, int-rt-* |
 | fbo.color.tex3d | 36 | not recorded | same | same + a 3D shader | `glFramebufferTextureLayer` on a 3D texture, `sampler3D` | int-rt-gl, formats-*, int-rt-* |
@@ -119,9 +127,9 @@ rgb5_a1 rgba4 srgb8_alpha8). 19 + 1 + 4 + 3 + 1 + 8 = 36.
 | fbo.depth | 15 | not recorded | Compile failed 181 | `es3fFboDepthbufferTests.cpp` (basic, depth_test_clamp, depth_write_clamp ×5) | D32F and D24 / D16 rbo and textures, float depth written by the shader | **none** (depth-format part; shader part reading: formats-pvr) |
 | fbo.invalidate.default | 25 | not recorded | – | `es3fFboInvalidateTests.cpp` | `glInvalidateFramebuffer` on the default fbo; validation-only is correct (`src/gl/framebuffer.rs:2633`: "colour is always kept, so an invalidate is a no-op") | – (reading: pass) |
 | fbo.invalidate.format | 41 | not recorded | INVALID_ENUM 270 (I 19 + A2 1), Image comparison failed 675 | same | one case per format (35 colour: I 19, A2 1, F32 4, F16 3, ok 8; plus 5 depth, 1 stencil) | int-rt-gl |
-| fbo.invalidate.sub | 19 | not recorded | INVALID_OPERATION 252 (8 `unbind_blit*` cases use glBlitFramebuffer; 4 of them are MSAA) | same | `glInvalidateSubFramebuffer`, blit | blit part **none**; MSAA part **none** |
+| fbo.invalidate.sub | 19 | 8 at `c4ccc966`: `unbind_blit*` 4 ("GL_INVALID_OPERATION", the stub), `unbind_blit_msaa*` 4 (incomplete: no multisample storage) | – | same | `glInvalidateSubFramebuffer`, blit | blit part **fixed on the host**; MSAA part **none** |
 | fbo.invalidate.target | 27 | not recorded | – | same | all `GL_FRAMEBUFFER` / `DRAW` / `READ` target combinations, validation | – (reading: pass) |
-| fbo.invalidate.whole | 19 | not recorded | INVALID_OPERATION 252 (same 8 blit cases) | same | as `sub` | blit / MSAA part **none** |
+| fbo.invalidate.whole | 19 | 11 at `c4ccc966`: the same 4 + 4 blit cases, and 3 `unbind_read_color*` "Image comparison failed" | – | same | as `sub` | blit part **fixed on the host**; MSAA part **none**; `unbind_read_color*` not known |
 | fbo.msaa.2_samples, 4_samples, 8_samples | 22 + 22 + 22 | not recorded | INVALID_OPERATION 252 (storage refused above 1 sample; resolve via blit) | `es3fFboMultisampleTests.cpp:276-330, 372-404` | multisample rbo of each format (21 colour + depth / stencil formats) at 2 / 4 / 8 samples, then `glBlitFramebuffer` resolve (`:180, :330`); the hardware sample counts of the three GPUs are unverified here | **none** (MSAA + blit) |
 | fbo.msaa.renderbuffer_resize | 4 | not recorded | INVALID_OPERATION 252 | same | multisample → non-multisample and back | **none** (MSAA + blit) |
 | fbo.multiview | 3 | 0 (reading: n/s, in the 255 of `RESULTS.md:1467`) | – | `es3fMultiviewTests.cpp` | `GL_OVR_multiview` samples_1 / 2 / 4 | – (extension absent: n/s is right) |
@@ -157,7 +165,7 @@ split is not recorded.
 | fragment_ops.depth_stencil | 621 | same | – | `es3fDepthStencilTests.cpp` (random 25, stencil_depth_funcs 81, stencil_ops 512, write_mask 3) | | – |
 | fragment_ops.interaction | 94 | same | – | `es3fFragOpInteractionTests.cpp` (basic_shader) | | – |
 | fragment_ops.random | 100 | same | – | `es3fRandomFragmentOpTests.cpp` | | – |
-| fragment_ops.scissor | 26 | not recorded (≤ 5 with the stencil row) | – | `es3fScissorTests.cpp` (clear_int_buffer and clear_uint_buffer are 2 of the names; blit ×3 `framebuffer_blit_*`) | `glClearBufferiv/uiv` on an integer buffer (only the `clear_*_buffer` names), `glBlitFramebuffer` for the 3 blit names | `framebuffer_blit_*` (3): **none** (blit); the rest – |
+| fragment_ops.scissor | 26 | `framebuffer_blit_*` 3 at `c4ccc966` ("GL_INVALID_OPERATION", the stub); the rest not recorded | – | `es3fScissorTests.cpp` (clear_int_buffer and clear_uint_buffer are 2 of the names; blit ×3 `framebuffer_blit_*`) | `glClearBufferiv/uiv` on an integer buffer (only the `clear_*_buffer` names), `glBlitFramebuffer` into the window under a scissor box for the 3 blit names | `framebuffer_blit_*` (3): **fixed on the host** (the scissor box cuts the blit's destination); the rest – |
 | fragment_ops.stencil | 17 | not recorded (≤ 5 with the scissor row) | – | `es3fStencilTests.cpp` | | – |
 | **fragment_ops total** | **3,170** | **1,111** | | | | |
 
@@ -233,18 +241,16 @@ the scope for item `fbo-fragops`.
 | rank | subgroup(s) | fails | suspected cause (code evidence) | needs |
 |---:|---|---|---|---|
 | 1 | fragment_ops.blend.fbo_srgb.* (1,152 cases) | **1,106 – 1,111** (derived, §2.2) | no sRGB encode / decode: SRGB8_ALPHA8 is stored as plain RGBA8 (`src/gl/state.rs:105`, `src/gl/framebuffer.rs:490`); dEQP's reference blends in linear space | sRGB write encode and destination decode for blending in each back end (PVRF `:113-114, :282-290`); a decision whether this is done in the GL layer (convert in the shader) or the colour-buffer format. Also fixes `fbo.color.blend` srgb8_alpha8, the sRGB names of `fragment_out.*.fixed` (24) and `fbo.blit.conversion.*srgb8_alpha8*` (32 names) |
-| 2 | fbo.blit.* (610) + fbo.color.repeated_clear.blit (72) + fbo.invalidate.{sub,whole} blit cases (16) + fragment_ops.scissor.framebuffer_blit_* (3) | ≤ 252 (the INVALID_OPERATION bucket, shared with msaa and color; `RESULTS.md:1511`); not split | `glBlitFramebuffer` is a stub that raises GL_INVALID_OPERATION (`src/gl/framebuffer.rs:2823`; the test `blit_framebuffer_is_invalid_operation_and_says_so_once` pins it) | a real blit: same-format and converting copies, NEAREST and LINEAR, scaling, reversed rectangles, depth / stencil copies, default framebuffer as source and destination; a back-end copy or a draw-based blit. Case count affected: 701 (blit 610 + 72 + 16 + 3) |
+| 2 | fbo.blit.depth_stencil (16 at `c4ccc966`) | 16 | the colour blit is built (`src/gl/blit.rs`: every class pair, NEAREST / LINEAR, scaling, flips, cut rectangles, scissor, the window as source and destination; fixed on the host, the AM62P rows of `tools/cts/am62p-gles3-tree.txt` 1, 2 and 4 to rerun); a depth or stencil copy is validated and then refused with GL_INVALID_OPERATION, said once in the log | a depth/stencil copy in each back end: the planes live in the back ends' buffers (`src/ds_retention.rs`; the PowerVR's packed D24S8 rows in its ZLS layout, `pvr_backend_depth_resolve`), so a back-end entry that copies between two objects' planes (or writes one from the CPU) and keeps their plane state |
 | 3 | fbo.msaa.* (70) + fbo.completeness.samples (13) + the 8 MSAA blit cases of fbo.invalidate | ≤ 252 (same bucket; not split) | multisample renderbuffers are refused above one sample (`src/gl/framebuffer.rs:2587`), `MAX_SAMPLES` is 1 on all three back ends (`glRenderbufferStorageMultisample` raises GL_INVALID_OPERATION above 1, `src/gl/framebuffer.rs:2587`; no plan item covers MSAA); resolve needs the blit of rank 2 | `glRenderbufferStorageMultisample` with 2 / 4 samples, resolve into a single-sample rbo, `glGetInternalformativ` sample counts; hardware sample counts per GPU: unverified (4x already exists in the AM62P 4x-MSAA image config `tools/cts/am62p-ms4-tree.txt`, not through the ES 3.0 rbo API). Case count: 91 |
 | 4 | fbo.depth (15), fbo.render.* (308), fbo.stencil (9), fbo.color.tex2darray / tex3d (72) | part of "Compile failed 181" (`RESULTS.md:1513`: color, depth, render) and "Image comparison failed 675"; **no split recorded** | reading from the sources: the fbo test shaders (`FBU:260`, `:455`, `:587`) use `isampler` / `usampler`, integer outputs and `sampler2DArray` / `sampler3D`; a "Compile failed" is the online compiler or the back end refusing one of them. Not a **none** if it is the integer samplers (formats-pvr / -v3d / -gc) or the array sampler (pvr-2darray) | measure first (host run or a rerun with the `glu` program log); then assign |
 | 5 | fbo.depth float-depth and D32F cases | not recorded | `GL_DEPTH_COMPONENT32F` and `DEPTH32F_STENCIL8` as rbo / texture and as blit source (hardware support unverified here) | the depth-format list of `is_depth_format`, not read here |
 | 6 | fbo.completeness.layer (8), fbo.completeness.size (2) | not recorded | layer attach rules on 3D / array, `size.distinct` | small; read the cases |
 | – | the 88 unexplained fragment_out failures | 88 (derived) | not a cause: unaccounted (§2.3) | rerun fragment_out.basic.fixed / float and array.fixed / float, and read the "Image comparison failed" cases |
 
-Ranking note: rank 1 is the only `none` subgroup with a derived failure
-count; it is larger than the whole INVALID_OPERATION bucket (≤ 252) that holds
-ranks 2 and 3. Ranks 2 and 3 share that bucket and cannot be ordered from the
-repository's data; rank 2 is placed first because rank 3 needs its blit and
-because more names depend on it (701 vs 91).
+Ranking note: rank 1 is the largest. Rank 2 is the 16 depth/stencil blit
+cases the colour blit leaves; rank 3 (91 names) needs multisample storage
+first, and its resolves then go through the colour blit.
 
 ## 4. Plan items and what each takes out of these groups
 
@@ -259,7 +265,8 @@ Failures fixed need the per-subgroup run of §6.
 | mrt4 | `MAX_DRAW_BUFFERS` 4 | the 4-target seeds of fragment_out.random (count not recorded); the 3-target `array` cases already fit | `src/gl/context.rs:139`, `es3fFragmentOutputTests.cpp:1215` |
 | pvr-2darray | array textures sampled as arrays | fbo.color.tex2darray (36) | plan item text; not re-verified |
 | tex3d-levels | NPOT array / 3D levels ≥ 1 | fbo.completeness.layer (8) if the cases use NPOT mips (not checked) | `RESULTS.md:996` |
-| none → fbo-fragops | §3 ranks 1-3 | 1,152 + 701 + 91 | §3 |
+| blit (`src/gl/blit.rs`) | the colour half of §3's former rank 2 | 701 names depend on `glBlitFramebuffer` (blit 610 + repeated_clear.blit 72 + invalidate 16 + scissor 3); the depth/stencil 28 of them are not taken out | the unit tests of `src/gl/blit.rs`, gl_test 202 `blitconv` |
+| none → fbo-fragops | §3 ranks 1-3 | 1,152 + 28 + 91 | §3 |
 
 ## 5. Hardware facts that bound the `none` items
 
@@ -274,7 +281,8 @@ and are **unverified** and removed.
   `tools/cts/am62p-ms4-tree.txt`. Hardware sample counts per GPU and how dEQP
   treats a count above `GL_MAX_SAMPLES` for the 2x and 8x `fbo.msaa` names
   (`es3fFboMultisampleTests.cpp:372-404`) were not established.
-- **Blit**: no hardware path is documented; a blit does not exist yet.
+- **Blit**: a CPU copy in the GL core (`src/gl/blit.rs`), on the three GPUs
+  alike; no hardware blit path is used or documented.
 - **Integer targets (PowerVR)**: PBE signed/unsigned pack modes exist (PVRF
   integer sections); V3D and GC7000UL: unverified.
 
@@ -290,8 +298,8 @@ and are **unverified** and removed.
 2. **Split the 413 + 88 unexplained fbo / fragment_out failures** and the 62
    unlisted buckets (1,305 cases) before ranking beyond §3 rank 3.
 3. **fbo-fragops scope**, in order: (a) fbo_srgb (§3 rank 1, 1,106+ failures,
-   independent of the other items); (b) `glBlitFramebuffer` (rank 2, also
-   needed by MSAA and by `fbo.color.repeated_clear`); (c) multisample
+   independent of the other items); (b) the depth/stencil half of
+   `glBlitFramebuffer` (rank 2; the colour half is built); (c) multisample
    renderbuffers and resolve (rank 3); (d) re-measure the remaining fbo
    buckets after int-rt-* and formats-* merge.
 4. After int-rt-gl lands, the INVALID_ENUM bucket (270 + 531) should collapse;

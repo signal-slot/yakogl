@@ -367,7 +367,10 @@ whether a context "will pass the required conformance tests for that API").
 Until 2026-09-29 it named ES 3 as well (review R-13). What an ES 3.0
 context lacks, each checked in the code:
 
-- `glBlitFramebuffer` is always `GL_INVALID_OPERATION` (`gl/framebuffer.rs`).
+- `glBlitFramebuffer` copies colour (`gl/blit.rs`, a CPU copy shared by the
+  back ends) but refuses a depth or stencil copy with `GL_INVALID_OPERATION`:
+  the back ends keep depth/stencil in buffers of their own with no CPU
+  write path.
 - Transform feedback: the limits are 64 / 4 / 4 (ES 3.0 table 6.34) outside
   `report-es2`, where they stay 0; the capture runs the vertex shader on the
   CPU and refuses one that samples a texture ("Transform feedback" below).

@@ -17,6 +17,7 @@ pub mod types;
 
 pub mod context;
 
+pub mod blit;
 pub mod buffer;
 pub mod draw;
 pub mod egl;

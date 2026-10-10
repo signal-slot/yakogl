@@ -516,6 +516,14 @@
  *               the V3D trunc and the shifts until this case. All three
  *               GPUs (skipped by name in a table build and in an ES 2.0
  *               context); in the set
+ * 202 blitconv  glBlitFramebuffer (src/gl/blit.rs): an 8x8 RGBA8 target
+ *               cleared one colour a quadrant, blitted into a 16x16 RGB565
+ *               target scaled 2x and flipped in Y (NEAREST: 5/6/5-bit
+ *               colours, alpha 1) and into a 4x4 RGBA16F target scaled 1/2
+ *               and flipped (LINEAR, read back as floats); a scissored clear
+ *               of the RGB565 target's corner then keeps the blit around it
+ *               (the frame loads it from memory). All three GPUs (skipped
+ *               in an ES 2.0 library); not in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -7861,7 +7869,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [203] = "tfcap",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -17760,6 +17768,165 @@ static int case_usamp(void)
 #endif
 }
 
+/* ---- case 202: glBlitFramebuffer with conversion, scaling and a Y flip (blitconv)
+ *
+ * ES 3.0's glBlitFramebuffer, a CPU copy in the GL core (src/gl/blit.rs):
+ * an 8x8 RGBA8 renderbuffer is rendered by the GPU -- a clear and three
+ * scissored clears, one colour a quadrant -- and blitted
+ *   1. into a 16x16 RGB565 renderbuffer, scaled 2x and flipped in Y
+ *      (destination rectangle (0,16)-(16,0)), NEAREST: each pixel the
+ *      quadrant colour rounded to 5/6/5 bits, alpha 1, the source's top half
+ *      at the bottom;
+ *   2. into a 4x4 RGBA16F renderbuffer, scaled 1/2 and flipped in Y, LINEAR:
+ *      each pixel the half-float quadrant colour (the two texels filtered lie
+ *      in one quadrant), read back as floats;
+ *   3. then the RGB565 target gets a scissored clear of its corner in a GPU
+ *      frame of its own: the frame loads the colour back from memory, so the
+ *      blit's pixels outside the corner survive -- the CPU write reached
+ *      memory.
+ * Skipped in an ES 2.0 library (no glBlitFramebuffer). All three GPUs; not
+ * in the set. */
+static bool expect_rgba8(const char *what, const uint8_t *px, uint32_t w, uint32_t x, uint32_t y,
+			 const uint8_t want[4], int tol)
+{
+	const uint8_t *p = &px[(y * w + x) * 4];
+	uint32_t got = rgba_u32(p[0], p[1], p[2], p[3]);
+	uint32_t exp = rgba_u32(want[0], want[1], want[2], want[3]);
+	bool ok = chan_diff(got, exp) <= tol;
+
+	pr_info("gl_test:   %-28s (%2u,%2u) = 0x%08x  want 0x%08x  %s  [check %d]\n", what, x, y, got, exp,
+		ok ? "ok" : "MISMATCH", gl_test_check_no + 1);
+	return gl_test_check(ok, got, exp);
+}
+
+static int case_blitconv(void)
+{
+	/* the quadrants (GL x, y halves): bottom-left, bottom-right, top-left,
+	 * top-right */
+	static const float quad_f[4][4] = {
+		{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f },
+		{ 0.0f, 0.0f, 1.0f, 1.0f }, { 0.2f, 0.4f, 0.6f, 0.8f },
+	};
+	/* the same through RGB565 (round(v * 31 or 63), stored at eight bits),
+	 * alpha 1: 0.2/0.4/0.6 -> 6/31, 25/63, 19/31 -> 49, 101, 156 */
+	static const uint8_t quad_565[4][4] = {
+		{ 255, 0, 0, 255 }, { 0, 255, 0, 255 }, { 0, 0, 255, 255 }, { 49, 101, 156, 255 },
+	};
+	static uint8_t px[16 * 16 * 4];
+	static float fpx[4 * 4 * 4];
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	GLuint rb[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
+	static const GLenum fmt[3] = { GL_RGBA8, GL_RGB565, GL_RGBA16F };
+	static const GLsizei side[3] = { 8, 16, 4 };
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 202 blitconv: SKIP (an ES 2.0 library has no glBlitFramebuffer)\n");
+		return -3;
+	}
+	free_all_objects();
+	glGenRenderbuffers(3, rb);
+	glGenFramebuffers(3, fbo);
+	for (int i = 0; i < 3; i++) {
+		glBindRenderbuffer(GL_RENDERBUFFER, rb[i]);
+		glRenderbufferStorage(GL_RENDERBUFFER, fmt[i], side[i], side[i]);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb[i]);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			pr_err("gl_test: blitconv: framebuffer %d incomplete\n", i);
+			return -1;
+		}
+	}
+
+	/* the source: one colour a quadrant, drawn by the GPU */
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[0]);
+	glViewport(0, 0, 8, 8);
+	for (int q = 0; q < 4; q++) {
+		glClearColor(quad_f[q][0], quad_f[q][1], quad_f[q][2], quad_f[q][3]);
+		if (q) {
+			glEnable(GL_SCISSOR_TEST);
+			glScissor((q & 1) * 4, (q >> 1) * 4, 4, 4);
+		}
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
+	glDisable(GL_SCISSOR_TEST);
+	if (!check_gl_error("blitconv source"))
+		return -1;
+
+	/* 1. into RGB565, 2x, flipped in Y, NEAREST */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+	glBlitFramebuffer(0, 0, 8, 8, 0, 16, 16, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	if (!check_gl_error("blitconv 565"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	glReadPixels(0, 0, 16, 16, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	/* destination row y shows source row 7 - y/2: the bottom half the
+	 * source's top quadrants */
+	ok &= expect_rgba8("565 top-left from bottom-left", px, 16, 2, 13, quad_565[0], 1);
+	ok &= expect_rgba8("565 top-right from bottom-right", px, 16, 13, 13, quad_565[1], 1);
+	ok &= expect_rgba8("565 bottom-left from top-left", px, 16, 2, 2, quad_565[2], 1);
+	ok &= expect_rgba8("565 bottom-right from top-right", px, 16, 13, 2, quad_565[3], 1);
+	ok &= expect_rgba8("565 corner (0,0)", px, 16, 0, 0, quad_565[2], 1);
+
+	/* 2. into RGBA16F, 1/2, flipped in Y, LINEAR */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[2]);
+	glBlitFramebuffer(0, 0, 8, 8, 0, 4, 4, 0, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	if (!check_gl_error("blitconv rgba16f"))
+		return -1;
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[2]);
+	glReadPixels(0, 0, 4, 4, GL_RGBA, GL_FLOAT, fpx);
+	if (!check_gl_error("blitconv rgba16f read"))
+		return -1;
+	{
+		/* (x, y) of the destination and the quadrant it shows */
+		static const uint32_t at[4][3] = { { 0, 3, 0 }, { 3, 3, 1 }, { 0, 0, 2 }, { 3, 0, 3 } };
+
+		for (int i = 0; i < 4; i++) {
+			const float *p = &fpx[(at[i][1] * 4 + at[i][0]) * 4];
+			const float *w = quad_f[at[i][2]];
+			bool good = true;
+
+			for (int ch = 0; ch < 4; ch++) {
+				float d = p[ch] - w[ch];
+
+				good &= d < 0.004f && d > -0.004f;
+			}
+			/* printk has no %f: thousandths */
+			pr_info("gl_test:   rgba16f (%u,%u) = %d %d %d %d /1000  want %d %d %d %d  %s  [check %d]\n",
+				at[i][0], at[i][1], (int)(p[0] * 1000), (int)(p[1] * 1000), (int)(p[2] * 1000),
+				(int)(p[3] * 1000), (int)(w[0] * 1000), (int)(w[1] * 1000), (int)(w[2] * 1000),
+				(int)(w[3] * 1000), good ? "ok" : "MISMATCH", gl_test_check_no + 1);
+			ok &= gl_test_check(good, (uint32_t)(p[0] * 1000), (uint32_t)(w[0] * 1000));
+		}
+	}
+
+	/* 3. a GPU frame on the RGB565 target loads the blit back from memory */
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
+	glViewport(0, 0, 16, 16);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(0, 0, 2, 2);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDisable(GL_SCISSOR_TEST);
+	glReadPixels(0, 0, 16, 16, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	if (!check_gl_error("blitconv reload"))
+		return -1;
+	{
+		static const uint8_t black[4] = { 0, 0, 0, 255 };
+
+		ok &= expect_rgba8("565 corner cleared", px, 16, 1, 1, black, 1);
+		ok &= expect_rgba8("565 blit kept beside it", px, 16, 2, 2, quad_565[2], 1);
+		ok &= expect_rgba8("565 blit kept far away", px, 16, 13, 13, quad_565[1], 1);
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(3, fbo);
+	glDeleteRenderbuffers(3, rb);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	return ok ? 0 : -1;
+
 /* ---- case 203: transform feedback capture, read back (tfcap) ---------------
  *
  * docs/es3-transform-feedback.md; HANDOFF open work 4, tf-capture. The GL
@@ -20336,6 +20503,10 @@ static int run_case(int c, int pretransform, int debug)
 	case 199: rc = case_es3trunc(); break;
 	case 200: rc = case_intrt(); break;
 	case 201: rc = case_usamp(); break;
+	case 202:
+		rc = case_blitconv();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library */
 	case 203:
 		rc = case_tfcap();
 		if (rc == -3)

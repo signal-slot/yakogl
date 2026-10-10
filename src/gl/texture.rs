@@ -709,6 +709,16 @@ fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
     true
 }
 
+/// glBlitFramebuffer wrote texels of `level` of texture `ti` on the CPU,
+/// with every kick already complete (`framebuffer::gpu_idle_for_cpu`): the
+/// texels take a new stamp, so a backend copy of them is made again, and
+/// the level counts as written.
+pub(crate) fn note_blit_written(c: &mut GlContext, ti: usize, level: GLint) {
+    let t = &mut c.objs().textures[ti];
+    stamp_texels(t);
+    note_level_written(t, level);
+}
+
 /// A draw is about to render into texture `ti` (a colour attachment of the
 /// bound framebuffer). On a backend whose RGBA8888 target is B,G,R,A the
 /// pixel engine writes the pixels it covers in that order and leaves the

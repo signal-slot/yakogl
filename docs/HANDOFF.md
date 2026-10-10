@@ -122,6 +122,7 @@ Under `report-es2` every old answer is kept and pinned.
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2 the tables lacked (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, `RGB10_A2UI`, the 24 integer formats) are accepted with their table 3.2 pairs and converted on the CPU at upload into the first storage class the back end samples (`src/gl/es3_formats.rs`, `docs/es3-sized-formats.md`); integer textures and 32-bit float ones are complete only with NEAREST filters. `RGB5_A1` takes `UNSIGNED_INT_2_10_10_10_REV`; copies into integer, snorm or float images from a fixed-point buffer are GL_INVALID_OPERATION. The PowerVR samples every new class but `RGB10A2` in Mesa's TPU format (`docs/es3-pvr-formats.md` section 10), the integer ones through `isampler2D`/`usampler2D` (an `smp` without `fcnorm`; other integer sampler dimensions refused by name); `RGB10_A2` stays in `RGBA8` there (renderable and mipmappable). On the GC7000 and the V3D the integer formats and `RGB10_A2UI` are refused by name, and the float, packed-float and snorm ones land in `RGBA16F` on the GC7000 and are refused on the V3D. Host dEQP-GLES3 `texture.specification` on the PowerVR: the `glGetError() == GL_NO_ERROR` bucket 720 to 594 (before the PowerVR classes). Tests `tests/es3_sized_formats.rs`, `src/gl/es3_format_tests.rs`, `pvr::backend` `es3_class_descriptors_are_mesas`; on the board: gl_test 201, pending | `888af5d`, `e5c4a18`; PowerVR `074c48f`, `03340c8` |
 | Occlusion queries | `GL_ANY_SAMPLES_PASSED{,_CONSERVATIVE}` are counted on all three back ends (design `docs/es3-occlusion-query.md` (`d303712`, `e37662e`); the GL core's state machine and errors per ES 3.0 2.14, `glGetQueryObjectuiv` waits and answers 0/1, the back-end hooks `query_begin/end/result` and `GlesDraw::occlusion_query`). V3D: `OCCLUSION_QUERY_COUNTER` with the query's word, in the packet-skip key. GC7000: the PE's `GL_OCCLUSION_QUERY_ADDR/CONTROL`, suspended at every switch and stream end. PowerVR: `ISPCTL.vistest`/`visreg` on TRANSLUCENT counted draws, a result area per kick as `ISP_OCLQRY_BASE` with `GETVISRESULTS`, the frame ended at `glEndQuery`. Proven on the host only (`gl::es3::tests::occlusion`, each back end's tests, `job_check` part 19, `vdm_field_check`); the first board test is gl_test 196 `occl` ("Next board session"). Under `report-es2` every target is refused as before | `af6d259`, `b03863c`, `a6cc10d`, `45fb13f`; gl_test 196 `71430ed` |
 | Integer colour render targets | the GL half is built: the 19 colour-renderable integer formats are renderbuffer storage and complete framebuffers, `glClearBuffer{i,ui}v` clear them with raw bits, `glReadPixels` takes `RGBA_INTEGER`, blending is off for them. The PowerVR writes all nineteen as a draw's one colour attachment (`INTEGER_RT_FORMATS`; the program bit-packs the int/uint output per Mesa's `pack_to_format`, the PBE stores it in its integer pack mode, clears are quads of the raw packed dwords, a frame without a clear reloads the bits raw; `docs/es3-pvr-formats.md` section 10); refused by name there: a colour mask keeping some of the target's channels, an integer attachment beside another one. The GC7000 and the V3D write none yet, so there a draw or clear into one is refused by name with GL_INVALID_OPERATION (open work 4, int-rt). Tests `tests/es3_int_rt.rs` (14; one under `report-es2`), in the gate's V3D rows; `tests/usc_limits.rs` `integer_render_targets_get_the_packed_bits`, the `pvr::backend` integer tests; on the board: gl_test 200, pending | `b9b2ac0`; PowerVR `1779e02`, `03340c8` |
+| `glBlitFramebuffer` | the colour half is built in the GL core, shared by the three back ends (`src/gl/blit.rs`): ES 3.0.6 4.3.3's errors in Mesa's order (incomplete framebuffers, filter, mask, LINEAR with depth/stencil or an integer read buffer, the fixed-or-float / signed / unsigned classes, identical buffers, sample buffers on either side), then a CPU copy after one flush and finish: the read buffer's rows invalidated, each draw buffer's rows invalidated, written and written back. Scaling, reversed rectangles, both rectangles cut to their buffers with the uncut mapping, the scissor box on the destination, NEAREST and (scaled only) LINEAR as dEQP's reference computes them; unorm rounded to the format's bits, half floats, integers saturated, missing channels 0 / alpha 1; the window as source and destination (stored top-down); every draw buffer. sRGB storage adds its decode/encode in `decode_float` / `encode_float` (item srgb). A depth or stencil blit is validated and then refused with GL_INVALID_OPERATION, said once: the back ends' depth/stencil buffers have no copy path (open work 4, blit-ds). Under `report-es2` the command stays GL_INVALID_OPERATION. Tests: `gl::blit::tests` (18); on the board: gl_test 202 `blitconv` and the AM62P GLES3 rows 1, 2 and 4, pending | (this commit) |
 | NPOT levels of arrays and storage textures | every level of a NPOT 2D array or `glTexStorage2D/3D` texture is valid (ES 3.0 3.8.14); levels a back end cannot hold are recorded and their texels dropped, as for a NPOT cube. Tests `src/gl/es3_level_tests.rs` | `c40414b` |
 | Stage-interface link rules | the link refuses a varying whose interpolation qualifier differs between the stages and a uniform block declared differently in the two (`tests/es3_link_iface.rs`) | `b88fea5`, `03ff7a6` |
 | GLSL ES 3.00 in the compiler | measured over the dEQP gles3 `.test` corpus, 5,596 programs (`docs/es3-shaderc-coverage.md`, `tests/es3_shaderc_corpus.rs`); line continuation inside tokens and directive names (`tests/es3_shaderc_pp.rs`) | `4ab482e`, `79fe171`, `ed0c81d` |
@@ -644,6 +645,15 @@ from 91.1 to 55.3 ms with the arm off); it is not planned now.
      temporaries against a band ceiling of 21 measured to draw: the array
      wants the constant file with relative addressing, as etnaviv takes
      it, not a better allocation).
+   - **blit-ds**: the depth/stencil half of `glBlitFramebuffer` (the 16
+     AM62P `fbo.blit.depth_stencil` failures; the colour half is built,
+     `src/gl/blit.rs`). The planes live in each back end's own buffers
+     (`src/ds_retention.rs`; the PowerVR's are packed D24S8 rows in its ZLS
+     layout, keyed by `GlesDraw::ds_id`), so it needs a back-end entry that
+     copies a rectangle between two objects' planes with the blit's mapping
+     (NEAREST only) and leaves the destination plane live, including from a
+     plane that holds only a clear value; the GL core already validates the
+     call and cuts the rectangles.
    - **es3-caps**: redo the ES 3.0 limits test, reverted for review
      (`3f78982`).
    - **es2-report-gaps**: the four `BUG` pins of `tests/es2_report_guard.rs`
@@ -948,6 +958,24 @@ isampler2D). Then the dEQP-GLES3 `texture.specification`, `fragment_out`
 and `shaders.builtin_functions` buckets (736 + 522 + 531 + 1,461 cases)
 against their last numbers: `fragment_out.array.*`/`random.*` with an
 integer attachment beside another stay refused by name.
+
+`glBlitFramebuffer` (this commit; host only so far): a gl_test image with
+`GL_TEST_CASES="202"` (any shader set: the case draws with clears only).
+Expected: case 202 blitconv 12/12 checks (the RGB565 target's quadrants
+0xff0000ff, 0xff00ff00, 0xffff0000 and 0xff9c6531 with the source's top
+half at the bottom, the RGBA16F target's four quadrant colours as floats
+within 0.004, and after a scissored clear of the RGB565 corner the blit
+still beside it). Then the dEQP-GLES3 tree's rows 1, 2 and 4 of
+`tools/cts/am62p-gles3-tree.txt` (`TREE_ROWS=1,2,4`: `fbo.blit`,
+`fbo.color`, `fbo.invalidate`, `fragment_ops.scissor`) against `c4ccc966`
+(`records/am62p/deqp-gles3-c4ccc966`): `fbo.blit.conversion` 324 fail,
+`default_framebuffer` 84, `rect` 40, `repeated_clear.blit` 64,
+`invalidate.{sub,whole}.unbind_blit_color*` 8 and
+`fragment_ops.scissor.framebuffer_blit_*` 3 should pass but for the 32
+`srgb8_alpha8` conversions (no sRGB storage yet) and the integer `tex2d`
+names of `repeated_clear.blit` (no integer texture targets); the 16
+`fbo.blit.depth_stencil` failures stay (blit-ds). A blit case that fails
+with "Image comparison failed" is a finding for `src/gl/blit.rs`.
 
 When the three sessions are done, replace each board's row in
 `docs/es2-cts-failures.md` (the summary table, section A and the "Status
