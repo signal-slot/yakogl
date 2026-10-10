@@ -13,7 +13,12 @@ formats, what each must gain, how integer fragment outputs and raw
 whether `src/pvr/internal.rs` must change, the ES 2.0 boundary, and the host
 tests that check the PBE and texture-state words per format without a board.
 
-Nothing here is implemented yet; this file is the only change.
+Sections 1 to 3 are the hardware and Mesa's tables; sections 4 to 6 are the
+plan as it was written against the tree before the work (their yakogl line
+numbers are that tree's); section 10 is what the PowerVR does now on the
+host -- sampling of the ES 3.0 storage classes, isampler2D/usampler2D, and
+the nineteen integer render targets -- and where it parts from the plan.
+None of it has run on the AM62P yet.
 
 ## Sources and citation shorthand
 
@@ -549,7 +554,9 @@ corrected the §2 column headers and the RGB8I/RGB8UI note of §2.3
 4-channel widening comes from the PowerVR table's missing rows and
 zink's `X8`→`A8` emulation, not from Vulkan).
 
-## 4. yakogl today, and what each part must gain
+## 4. yakogl before the work, and what each part had to gain
+
+(The plan, against the tree it was written on; section 10 is what was built.)
 
 ### 4.1 `src/backend.rs` — the format layer
 
@@ -807,6 +814,8 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
 
 ## 9. Decisions this doc makes
 
+(Section 10 records where the implementation decided otherwise.)
+
 - Follow Mesa's `pack_to_format` exactly for integer outputs: bitfield
   inserts, never PCK (`pvfio.c:184-198`); 32-bit integer formats need no
   packing at all (`pvfio.c:180-182`).
@@ -829,3 +838,92 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
 - First integer sampling target: nearest filtering (Mesa disables the
   extended integer lookup under LOD, `nir-tex.c:607-609`); linear filtering
   of integer formats is out of the question per §1.6 anyway.
+
+## 10. As built (formats-pvr, int-rt-pvr)
+
+### 10.1 Sampling
+
+- `PVR_SAMPLED_TEXFMTS` (`src/backend.rs`) holds every ES 3.0 storage class
+  of `docs/es3-sized-formats.md` but `GLES_TEXFMT_RGB10A2`: R11G11B10F,
+  RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I, RGBA32UI/I,
+  RGBA32F. The GL core stores each format in its own class there (R8UI as
+  RGBA8UI with zeros, RG32F as RGBA32F, ...).
+- **Deviation: RGB10_A2 stays in RGBA8.** The descriptor decodes the
+  `RGB10A2` class (A2R10B10G10, PCK 0x148), but the GL core makes a texture
+  of that class no render target and gives it no glGenerateMipmap, and ES 3.0
+  requires both of GL_RGB10_A2; until the PowerVR renders the class (the
+  §2.5 row: A2R10B10G10 packmode, F16 accum, the RGBA16F shader output), the
+  two bits are the smaller loss.
+- The texture state is `es3_tex_format` (`src/pvr/backend.rs`): the TPU
+  formats and swizzles of §2.1-§2.3 (the GL core's classes are four
+  components wide, so the swizzle is the identity but for the packed floats'
+  `xyz1`), PCK_INFO per `setup_pck_info` (0x41, 0x148, 12, else 0x1f).
+  `alpha_msb` follows Mesa for the new classes (off for R11G11B10F and
+  RGB9E5); the classes sampled before keep the `true` they were measured
+  with, which is Mesa's only where the format has alpha.
+- The compiler (§4.5): the 2D look-ups of an `isampler2D`/`usampler2D`
+  (texture, textureLod, a bias, an offset, texelFetch) select like the
+  float ones with the sample group typed S32/U32, and the `smp` is built
+  without `fcnorm` (pco_nir_tex.c:236). The `integer` modifier is not used
+  (Mesa's default too: its integer lookup is behind PCO_DEBUG=int_smp). The
+  other integer dimensions (cube, 3D, 2D array) are refused by name. The GL
+  core takes the eight integer sampler types as glUniform1i types and binds
+  each the target of its dimension.
+
+### 10.2 Integer render targets
+
+- `INTEGER_RT_FORMATS` has all nineteen bits on the PowerVR, for a draw whose
+  one colour attachment is the integer surface.
+- **Variant key, not an RT class.** The blend key's two RT-class bits were
+  full, so an integer target is keyed by `shc_blend_key_int_rt`
+  (`src/shaderc/mod.rs`): the src_rgb field 0, which no blend key has, and
+  the layout (channels, width, signedness) in the fields a blend would use;
+  the colour mask keeps its bits. `gl::draw::current_blend_key` sends it for
+  every integer target, blending or not.
+- **The pack is selection-level arithmetic.** `powervr::chain::
+  pack_int_output` follows `pack_to_format` (pvfio.c:149-218): 32-bit
+  channels are their own dword, narrower ones `iand` to their width, `ishl`
+  to their place and `ior`-ed together -- the selector's integer groups,
+  not a bitfield-insert instruction -- and
+  `assemble::build_fragment_shader_packed` writes the dwords to pixel
+  outputs 0.. with no `pck`. The record's `num_outputs` is the dword count.
+- PBE words (§4.3): `pbe_int_packmode` (the §2.3 packmodes, RGB10_A2UI one
+  U32 dword), `norm` 0, `source_format` 8_PER_CHANNEL, the identity swizzle
+  with no SWIZ.ONE alpha; the end-of-tile emit counts the target's dwords as
+  its output registers (`surf_out_dwords`).
+- **Clears need no new program.** An integer clear is the raw values packed
+  for the target (`pack_clear_int`, `pvr_get_hw_clear_color`'s rule, which is
+  the program's packing) and drawn as a quad through the clear-attach
+  program of that many dwords -- the existing one- and two-dword ones and a
+  new `clear_attach4` (`attach:4`) for RGBA32I/UI -- as the float classes
+  are cleared (`clears_by_quad`). §6's integer clear variants of
+  `clear.frag` are not needed.
+- **One frame-load source.** A frame that does not clear an integer target
+  reloads it with `internal/es/fbload_int.frag` (a usampler2D texelFetch to
+  a uvec4 output) compiled for the R32UI, RG32UI and RGBA32UI layouts
+  (`fbload_u32`, `fbload_u32x2`, `fbload_u32x4` in `src/pvr/internal.rs`),
+  the target bound as a raw unsigned texel of its pixel's size (pvr-private
+  formats `PVR_TEXFMT_RAW8..RAW128`: TPU U8, U16, U32, U32U32,
+  U32U32U32U32): the bits go back to the output registers as they came, and
+  the PBE packs them as it packs a draw's.
+- Refused by name (`-ENOTSUP` and one log line, or a compile refusal): a
+  colour mask that keeps some of an integer target's channels (the variant
+  and the clear quad), an integer attachment beside another colour
+  attachment, and a blend spec other than `replace` for an integer target in
+  `tools/shaders/precompiled.list` (`replace@rgba8ui`, ...).
+
+### 10.3 Host tests
+
+`pvr::backend::tests` `es3_class_descriptors_are_mesas`,
+`integer_pbe_words_are_mesas`, `an_integer_clear_is_the_raw_values_packed_
+for_the_target`; `pvr::backend::rig_tests` `an_integer_target_is_cleared_by_
+a_quad_of_its_packed_dwords`, `a_frame_into_an_integer_target_loads_its_bits_
+back_raw`, `integer_targets_refuse_partial_masks_and_company`;
+`tests/usc_limits.rs` `integer_render_targets_get_the_packed_bits` (the
+nineteen layouts run in the byte model); `tests/internal_programs.rs`
+`the_integer_frame_load_writes_the_texel_back_raw`,
+`the_four_dword_clear_moves_four_dwords`; the listing's
+`an_integer_sampler_reads_without_fcnorm`; `gl::draw`
+`an_integer_target_keys_its_layout_never_a_blend`. On the board: gl_test 196
+(intrt) and 197 (usamp).
+
