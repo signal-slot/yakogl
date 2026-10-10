@@ -627,7 +627,12 @@ mod tests {
     #[test]
     fn pointer_accepts_every_es2_type_and_size() {
         let gl = TestGl::new(8, 8);
-        for t in [GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT, GL_INT, GL_UNSIGNED_INT, GL_FLOAT, GL_FIXED] {
+        /* GL_INT and GL_UNSIGNED_INT are ES 3.0 array types (ES 2.0 2.8) */
+        let es3_only = [GL_INT, GL_UNSIGNED_INT];
+        for t in [GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT, GL_FLOAT, GL_FIXED]
+            .into_iter()
+            .chain(es3_only.into_iter().filter(|_| ES3))
+        {
             for size in 1..=4 {
                 // SAFETY: plain GL calls.
                 unsafe { glVertexAttribPointer(5, size, t, 0, 0, core::ptr::null()) };
