@@ -299,7 +299,7 @@ earlier tree's directory is kept. Known intermittent rows: see
 `docs/HANDOFF.md` (#25, #9, #8).
 
 **Raspberry Pi 4** (`BOARD=rpi_4b` for stage 1; backend tryboot, so no
-`BOARD_BOOT`; `BOARD_UART` the debug probe's by-id device,
+`BOARD_BOOT`; `BOARD_UART` the debug probe's by-id device or its bridge's `host:port`,
 `BOARD_HDMI_TIMINGS` as the lab's; the environment values are in section 6).
 Needs `RUSTUP_TOOLCHAIN=nightly` as for any V3D sample, and the 256 MiB
 `dram0` overlay the sample already carries.
@@ -368,15 +368,21 @@ checkout — not the list to use.) The binary knows 19825 cases in all; the
 The Pi 4 boots Raspberry Pi OS by default. Each Zephyr image runs once through
 the firmware's tryboot and ends with its PM watchdog reset, which brings the
 board back to Linux (`driver/docs/rpi4-v3d-backend-plan.md`, "On the board").
-The record is read from the Pi's UART (GPIO 14/15), never from the HDMI panel.
+The record is read from the Pi's UART (GPIO 14/15), never from the HDMI panel:
+`BOARD_UART` is either the serial device wired to it on this host or
+`host:port` of a serial bridge (a raw TCP stream of the UART, one client at a
+time, as the AM62P's console).
 
 - `tools/board.sh pi4 run <zephyr.bin> <logdir> [name]` (backend tryboot):
   one image, once. It refuses (exit 3, nothing changed on the board) when the
   board does not answer, when `who` there shows a session from another
-  machine, when a process on this host holds the UART, or when
-  `/boot/firmware` has less than twice the image free; it reads the staged
-  image and `tryboot.txt` back before the reboot, captures the UART into the
-  run directory's `console.txt` until the record's end line, waits for Linux
+  machine, when a process on this host holds the UART device (a bridge that
+  answers `busy` 12 times, 10 s apart, refuses after staging, with the image
+  removed again and no reboot), or when `/boot/firmware` has less than twice
+  the image free; it reads the staged image and `tryboot.txt` back before the
+  reboot, captures the UART into the run directory's `console.txt` (from a
+  bridge: `console.raw` and `console.ts` from `tools/am62p_netboot_uart.py
+  capture`, `console.txt` derived from them) until the record's end line, waits for Linux
   (a new boot_id), removes the image and puts the old `tryboot.txt` back.
 - `tools/cts/pi4-deqp-images.sh <table> <img-dir>` builds the 29 images of
   `pi4-full-tree.txt` (one `<img-dir>/<LABEL>/` each, never reused);
@@ -393,6 +399,8 @@ export BOARD_HOST=signal-slot@<pi4>            # key login, passwordless sudo (P
 # the Raspberry Pi Debug Probe; its ttyACM number changes when USB re-enumerates
 # (ttyACM0 on 2026-09-25, ttyACM2 on 2026-10-03), the by-id name does not
 export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01
+# or the probe behind a serial bridge (usb-serial-over-tailscale): its host:port
+# export BOARD_UART=<bridge>:<port>
 # the 1920x720 bar panel (17 fields, as the board's own tryboot.txt had them)
 export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'
 # build

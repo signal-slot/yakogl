@@ -43,8 +43,9 @@
 #   4. stages the image (/boot/firmware + tryboot.txt | the TFTP root |
 #      /var/yakogl on the eMMC | ~/kexec) and reads it back by sha256 (the
 #      eMMC copy after dropping the page cache);
-#   5. starts the console capture (Pi 4 UART | AM62P serial bridge; the
-#      i.MX8MP has none, its TFTP log and SNVS record are read afterwards);
+#   5. starts the console capture (Pi 4 UART or serial bridge | AM62P serial
+#      bridge; the i.MX8MP has none, its TFTP log and SNVS record are read
+#      afterwards);
 #   6. boots (tryboot reboot | the U-Boot one-shot and a reboot | kexec);
 #   7. waits for the image's end (a result `yk-record:` line, or the sample's
 #      own end line) or the bound, then for Linux from a new boot;
@@ -85,7 +86,7 @@
 #
 # Records: run writes <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>/ with meta.txt
 # (what the run measured, key=value), console.txt ("HH:MM:SS line"), the
-# backend's own files (console.raw and console.ts from the AM62P bridge,
+# backend's own files (console.raw and console.ts from a serial bridge,
 # tftp.txt and snvs.txt on the i.MX8MP, kexec.log) and INDEX.txt (the runner's
 # build, the image's sha256 and build line, board, backend, times, the verdict
 # line, the decoded records, every file with its sha256 and line count;
@@ -127,9 +128,9 @@
 #
 # Environment (no default for a machine or an address):
 #   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read)
-#   BOARD_UART         pi4: the serial device wired to the Pi (PI4_UART also
-#                      read); am62p: host:port of the serial bridge (UART_ADDR
-#                      also read)
+#   BOARD_UART         pi4: the serial device wired to the Pi, or host:port of
+#                      a serial bridge (PI4_UART also read); am62p: host:port
+#                      of the serial bridge (UART_ADDR also read)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
@@ -241,6 +242,33 @@ NB_RECORDS="records/$BOARD/netboot"
 . "$HERE/uboot-netboot-lib.sh"
 
 note() { echo "board.sh $BOARD: $*"; }
+
+# uart_is_bridge: BOARD_UART is host:port of a serial bridge (a raw TCP stream
+# of the board's UART, one client at a time), not a local device
+uart_is_bridge() { [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
+
+# bridge_capture: the capture of BOARD_UART's bridge into console.raw and
+# console.ts (tools/am62p_netboot_uart.py capture: the bridge's protocol, no
+# board's); CAP its PID. The bridge holds one client; "busy" is the previous
+# one, retried up to 12 times 10 s apart. Returns 1 when it never connected.
+bridge_capture() {
+    local try
+    if [ "$DRY" = 1 ]; then
+        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
+        return 0
+    fi
+    for try in $(seq 1 12); do
+        python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+        CAP=$!
+        sleep 3
+        if kill -0 "$CAP" 2>/dev/null; then return 0; fi
+        wait "$CAP" 2>/dev/null
+        CAP=
+        note "bridge busy or unreachable (try $try of 12)" >&2
+        sleep 10
+    done
+    return 1
+}
 
 # bget VAR CMD [DRY-VALUE]: a board read into VAR. In --dry-run the command is
 # printed (a capture would swallow b's own print) and VAR gets DRY-VALUE.
@@ -747,6 +775,12 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 # ---- tryboot (pi4) ----------------------------------------------------------------
 pi4_uart_free() {
     local uart p f holders=
+    if uart_is_bridge; then
+        # no device on this host: the bridge answers a second client "busy",
+        # which the capture retries and refuses on
+        [ "$DRY" = 1 ] && echo "DRY host\$ (no local device: $BOARD_UART is a serial bridge; a 'busy' answer refuses at the capture)"
+        return 0
+    fi
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ scan every /proc/<pid>/fd for $BOARD_UART (nobody may hold it)"
         return 0
@@ -822,6 +856,11 @@ $(pi4_config "$STAGED")"
 }
 
 pi4_capture_start() {
+    if uart_is_bridge; then
+        bridge_capture || { pi4_undo; die "serial bridge $BOARD_UART busy or unreachable after 12 tries (staged image removed; no reboot)"; }
+        meta console "serial bridge: console.raw, console.ts; console.txt derived"
+        return 0
+    fi
     act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || { pi4_undo; die "stty on $BOARD_UART failed"; }
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
@@ -854,6 +893,7 @@ run_tryboot() {
     meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then b 'sudo reboot "0 tryboot"'; else b 'sudo reboot "0 tryboot"' > /dev/null 2>&1; fi
     if [ "$DRY" = 1 ]; then
+        uart_is_bridge && echo "DRY host\$ derive <rundir>/console.txt ('HH:MM:SS line') from <rundir>/console.ts as it grows, and once more after the capture stops"
         echo "DRY host\$ wait for the end line ($END_RE) or a result yk-record: line, <= $bound s; then $TAIL_S s more"
         echo "DRY host\$ stop the reader; wait for a boot_id other than the one read (<= $backs s more)"
         pi4_undo
@@ -861,11 +901,13 @@ run_tryboot() {
     fi
     note "$NAME: tryboot at $(date +%T), waiting for the record's end (at most $bound s)"
     while [ $(($(date +%s) - t0)) -lt "$bound" ]; do
+        uart_is_bridge && console_from_ts
         if end_seen "$RD/console.txt"; then ended=1; break; fi
         sleep 2
     done
     [ "$ended" = 1 ] && sleep "$TAIL_S"
     stop_cap
+    uart_is_bridge && console_from_ts
     meta end_seen "$ended"
     meta capture_stopped "$(date '+%F %T'), $(wc -l < "$RD/console.txt") lines"
     while [ $(($(date +%s) - t0)) -lt $((bound + backs)) ]; do
@@ -1228,23 +1270,10 @@ run_kexec() {
 }
 
 kexec_am62p() {
-    local try t0 rcc=""
-    # 5. the capture: the bridge holds one client; "busy" is the previous one,
-    #    retried up to 12 times 10 s apart
-    if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
-    else
-        for try in $(seq 1 12); do
-            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
-            CAP=$!
-            sleep 3
-            if kill -0 "$CAP" 2>/dev/null; then break; fi
-            wait "$CAP" 2>/dev/null
-            CAP=
-            note "bridge busy or unreachable (try $try of 12)" >&2
-            sleep 10
-        done
-        [ -n "$CAP" ] || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
+    local t0 rcc=""
+    # 5. the capture (bridge_capture: 'busy' retried)
+    bridge_capture || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
+    if [ "$DRY" != 1 ]; then
         trap 'stop_cap; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     fi
     # 4.+6. kexec_run.sh copies the image and the loader, releases the GPU
@@ -1418,7 +1447,7 @@ cmd_run() {
         tryboot)
             STAGED="yakogl-probe.bin"
             if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-            : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi}"
+            : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
             pi4_prechecks
             ;;
         kexec-dev)
@@ -1432,7 +1461,7 @@ cmd_run() {
     case "$BOOT" in
     tryboot)
         if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-        : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi}"
+        : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
         run_tryboot
         ;;
     uboot-tftp | uboot-mmc) run_uboot ;;

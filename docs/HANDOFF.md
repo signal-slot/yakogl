@@ -828,7 +828,8 @@ $SW/tools/cts/imx8mp-deqp-stage1.sh     # only if there is no stage 1 for this C
 Confirms `ec5ba4f` (the 25 cube cases), `4e9397c` (fragdata
 `invalid_assign_to_1`) and the one open question of the inventory (the 27 fbo
 `attachment_combinations`). Needs `RUSTUP_TOOLCHAIN=nightly`, stage 1 for
-`rpi_4b` (`DEQP_WORK`) and `BOARD_UART`, `BOARD_HDMI_TIMINGS` as the lab's.
+`rpi_4b` (`DEQP_WORK`), `BOARD_UART` (the debug probe's device, or `host:port`
+of its serial bridge) and `BOARD_HDMI_TIMINGS` as the lab's.
 Rows of `pi4-full-tree.txt` (`TREE_ROWS` counts from 0, over the non-comment
 lines): D 1 (`shaders.fragdata.*`), FB1 4 (`fbo.api`, `fbo.completeness`), T1 19, T3 21,
 TF 24.
