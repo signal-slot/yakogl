@@ -170,9 +170,12 @@ How the Pi 4 recipe picks the `.conf` files:
 
 Computed by hand from `driver/src/v3d/v3d_tex.c:134-330` (the layout, `uif_top` false; 4 bytes
 a texel for RGB888, RGBA4444 and RGBA8888, because `gles_texfmt_bytes`, `src/backend.rs:187-199`,
-returns 4 for them; L8 is 1) and the layer stride (`:335-340`). **I could not run a program in
-this session** (every build and python run was refused), so this is hand arithmetic; the script
-`build/scratch/tilebytes.py` (uncommitted, never run) holds the same steps.
+returns 4 for them; L8 is 1) and the layer stride (`:335-340`). I did the arithmetic by hand,
+then ran a Python mirror of that layout (`build/scratch/tilebytes.py`, uncommitted): it gives
+the same 8,404,992 (cube 512 mipmapped, 4 bytes) and 2,113,536 (L8), 6,291,456 (no mip). For
+the 2048 mip chain the mirror gives 22,372,352, 4,096 below the 22,376,448 that
+`texture-2048.conf:7` quotes (probably a page of alignment the mirror misses); either is far
+below 24 MiB. The mirror is not Mesa's code, so it is a cross-check, not a measurement.
 
 512x512, 4 bytes a texel, 10 levels, each padded: levels 9, 8, 7 are 64 bytes each (4x4
 utiles), level 6 256 (8x8), level 5 1,024 (16x16), level 4 4,096 (32x32 UIF), level 3 16,384,
@@ -221,10 +224,10 @@ The largest `texture.size` case overall is 2D: `texture.size.2d.2048x2048_rgba88
 Asked: rerun `c_150` on the host with the V3D library and the Pi 4 image's budget. The budget
 is the env var `YAKOGL_V3D_TILED_COPIES_BYTES=16777216`, read at runtime
 (`src/osal/linux.c:585`), so **no CMake option is needed and none was added**. **I did not
-run it.** In this session `cmake`, `cargo`, `python3`, `tools/check.sh`, `git clone` (network)
-and copying the 4.2 GB checkout in `$CCFARM_DEPS_DIR` were all refused ("requires
-approval"); that checkout is at `93bca01` but has no `targets/yakogl` (the patch is not
-applied). So there is **no begun/aborted count for the 100 cases of `c_150`** and no per-case
+run it.** The checkout in `$CCFARM_DEPS_DIR` is at `93bca01` but has no `targets/yakogl`
+(patch not applied), and copying it was refused. A fresh clone into `build/VK-GL-CTS` worked,
+but `git checkout 93bca01` and `external/fetch_sources.py` then needed approval and were
+refused, so dEQP was not built. So there is **no begun/aborted count for the 100 cases of `c_150`** and no per-case
 table. What stands: `c_150` at the 8 MiB default = 13 of 100 began, 1 aborted (above). That
 cases 14-100 begin with 16 MiB is a **prediction**, not a measurement: every cube case fits
 (table above).
