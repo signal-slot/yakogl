@@ -11,7 +11,8 @@
 #
 #   tools/setup-gate-host.sh --install
 #     Add what rustup can add (clippy, rustfmt, the two aarch64-unknown-none
-#     targets): user-space, idempotent, always safe. Install distro packages
+#     targets on every toolchain the gate runs under, see gate_toolchains):
+#     user-space, idempotent, always safe. Install distro packages
 #     only when passwordless sudo works (sudo -n true): on apt systems run
 #     it, on Gentoo-like systems print the emerge equivalents instead. When
 #     sudo is not available, print the exact owner command and fall back to
@@ -81,34 +82,60 @@ check_cargo() {
   fi
 }
 
+# A rustup target lives per toolchain. The gate runs under the toolchain in
+# effect (RUSTUP_TOOLCHAIN, else the default), and on the farm that is the
+# nightly .ccfarm/project.toml names; check.sh's softfloat row also calls
+# `cargo +nightly`. A target added only to the default toolchain is "missing"
+# the moment the gate runs under nightly (nuc, 2026-10-10). So every target
+# is checked and added on the toolchain in effect and on nightly, when one is
+# installed.
+gate_toolchains() {
+  local active
+  active=$(rustup show active-toolchain 2>/dev/null | head -1 | cut -d' ' -f1)
+  [ -n "$active" ] && echo "$active"
+  case $active in
+    nightly*) ;;
+    *) rustup toolchain list 2>/dev/null | grep -m1 -o '^nightly[^ ]*' ;;
+  esac
+}
+
+target_installed() { # <target> <toolchain>
+  rustup target list --installed --toolchain "$2" 2>/dev/null | grep -qx "$1"
+}
+
 check_rustup_target() {
-  local t=$1
+  local t=$1 tc
   if ! command -v rustup >/dev/null 2>&1; then
     line missing "rustup-target-$t" "rustup is not installed"
     return
   fi
-  if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
-    line ok "rustup-target-$t"
-  else
-    line missing "rustup-target-$t" "rustup target add $t"
-  fi
+  for tc in $(gate_toolchains); do
+    if target_installed "$t" "$tc"; then
+      line ok "rustup-target-$t" "$tc"
+    else
+      line missing "rustup-target-$t" "rustup target add --toolchain $tc $t"
+    fi
+  done
 }
 
 # check.sh accepts a nightly with rust-src in place of the installed target
 # (drivers_softfloat_check), so accept it here too.
 check_softfloat_target() {
-  local t=aarch64-unknown-none-softfloat sysroot
-  if command -v rustup >/dev/null 2>&1 &&
-    rustup target list --installed 2>/dev/null | grep -qx "$t"; then
-    line ok "rustup-target-$t"
+  local t=aarch64-unknown-none-softfloat tc sysroot
+  if ! command -v rustup >/dev/null 2>&1; then
+    line missing "rustup-target-$t" "rustup is not installed"
     return
   fi
   sysroot=$(rustc +nightly --print sysroot 2>/dev/null) || sysroot=
-  if [ -n "$sysroot" ] && [ -d "$sysroot/lib/rustlib/src/rust/library/core" ]; then
-    line ok "rustup-target-$t" "target not installed; a nightly with rust-src covers the row"
-  else
-    line missing "rustup-target-$t" "rustup target add $t (or a nightly with rust-src)"
-  fi
+  for tc in $(gate_toolchains); do
+    if target_installed "$t" "$tc"; then
+      line ok "rustup-target-$t" "$tc"
+    elif [ -n "$sysroot" ] && [ -d "$sysroot/lib/rustlib/src/rust/library/core" ]; then
+      line ok "rustup-target-$t" "$tc: target not installed; a nightly with rust-src covers the row"
+    else
+      line missing "rustup-target-$t" "rustup target add --toolchain $tc $t (or a nightly with rust-src)"
+    fi
+  done
 }
 
 check_clippy() {
@@ -260,7 +287,10 @@ install_rustup() {
     return
   fi
   run rustup component add clippy rustfmt
-  run rustup target add aarch64-unknown-none aarch64-unknown-none-softfloat
+  local tc
+  for tc in $(gate_toolchains); do
+    run rustup target add --toolchain "$tc" aarch64-unknown-none aarch64-unknown-none-softfloat
+  done
 }
 
 install_distro() {
