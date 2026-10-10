@@ -276,3 +276,38 @@ driver/samples/zephyr/deqp tools/cts/am62p-deqp-images.sh` prints nothing.
   lease's port (main_uart0, not mcu_uart0)" instead of rebooting the board and
   waiting `RUN_BOUND` (420 s) for nothing. The 426 s wait and an unnecessary
   reboot in `am62p-gles3-percase.md` are what such a guard would save.
+<<<<<<< HEAD
+=======
+
+## Resolution (2026-10-09)
+
+Facts:
+
+- The owner verified by hand that the AM62P console is `usb-serial-1`
+  (100.118.139.121) port **35933**: Enter returns
+  `verdin-am62p-08641335 login:`. A read-only check from a ccfarm worker the
+  same day (connect, `\r`, read) got the same prompt. See
+  `docs/boards/console-map.md`.
+- `docs/board-sessions/am62p-es2-r1.md` (commit `324fa54`, not in every
+  branch) records that the lease named `usb-serial-1:35932` (mcu_uart0, Linux
+  ttyS3) and that 35933 was not leased. Nothing in `tools/` hard-codes a host
+  or port: `BOARD_UART` / `UART_ADDR` come from the environment
+  (`tools/board.sh:207`), so the run used whatever the lease supplied.
+
+Cause: the run read the wrong UART channel, 35932, which accepts connections
+but never carries main_uart0 output. This is H1 above. The 35932 value is
+taken from the committed record, not from a dump of that session's
+environment (not available here).
+
+Fix: the repository holds no value to correct. The route is recorded in
+`docs/boards/console-map.md`; the lease, or whatever sets `BOARD_UART`, must
+say `100.118.139.121:35933`.
+
+Not determined from the host side: why 35932 was also silent for the ttyS3
+probe in that session (it arrived verbatim earlier).
+
+Addendum (2026-10-09, Pi 4): the owner received the Pi 4 boot log up to the
+login prompt via `usb1:35931`, so the bridge is healthy and is not the reason
+for missing Pi 4 run records. `tools/board.sh` takes a serial device for the
+Pi 4, not `host:port`; see `docs/boards/console-map.md`.
+>>>>>>> 935f5fb8a1d9ea05699d397860f51030fb4fca74
