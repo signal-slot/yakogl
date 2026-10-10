@@ -227,8 +227,9 @@ run on Zephyr on the real GPU.</p>
 <p><strong>Read the AM62P tile with its history.</strong> The 54 failures of the 2026-10-10 tree
 are 9 <code>shaders.invariance</code> cases (fixed in e17fb6a7, image 1 passes 1,379 / 0 on it) and 45
 vertex-texture cases (fixed on the host, board confirmation pending); the previous tree, on 2026-10-02,
-had none. The i.MX8MP tree is identical to the one of 2026-10-01. The Pi 4 was not run again:
-its 25 cube-map fixes are proved on the host only.
+had none. The i.MX8MP tree is identical to the one of 2026-10-01. The Pi 4 tile is a composition
+of the 2026-10-10 tree and two later reruns (the 2026-10-01 tree had 25 cube-map failures; they are
+0 on the board now).
 <a href="status.html">Details on the status page.</a></p>
 </div>
 
@@ -241,8 +242,8 @@ the status page; the conditions differ, so read it as a direction, not a contest
 <h3>OpenGL ES 3.0</h3>
 <p>ES 3.0 is work in progress on the host: transform feedback state, uniform blocks, sized
 and integer formats are built in the GL core, but no back end renders them yet. Product
-builds (Zephyr, CMake) report ES 2.0 by default. The one dEQP-GLES3 board run so far, on the
-AM62P: <span data-fig="deqp3.am62p"></span> of 42,810
+builds (Zephyr, CMake) report ES 2.0 by default. The dEQP-GLES3 tree has run on the
+AM62P only (2026-10-11; two cases hang its GPU, and 2,089 cases have no result): <span data-fig="deqp3.am62p"></span> of 42,810
 <span class="prov">(<span data-prov="deqp3.am62p"></span>)</span>.</p>
 
 <h2 id="start">Getting started</h2>

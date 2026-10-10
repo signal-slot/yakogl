@@ -25,7 +25,7 @@
 //   unverified  present and true when part of the provenance could not be checked
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
-  "checkedAgainst": { "commit": "32778b57", "date": "2026-10-10", "source": "docs/HANDOFF.md" },
+  "checkedAgainst": { "commit": "1cf946a9", "date": "2026-10-11", "source": "docs/HANDOFF.md" },
   "boards": [
     {
       "id": "am62p",
@@ -141,7 +141,7 @@ window.YAKOGL_DATA = {
       "source": "tools/cts/RESULTS.md",
       "section": "i.MX8MP: gc_gl_test on 32778b57, three runs",
       "status": "warn",
-      "note": "Run 1: first failure case 10 (intermittent, #9). Runs 2 and 3: first failure case 16 (#8: the skipped 4x half is counted as a failure). Same as the 8abeaabb baseline (46 / 48)."
+      "note": "Run 1: first failure case 10 (intermittent, #9). Runs 2 and 3: first failure case 16 (#8: the skipped 4x half is counted as a failure). Same as the 8abeaabb baseline (46 / 48). Case 44 (es3hdr, #6) alone on f2a13877 (2026-10-11) still fails: check 3 got 0x40042814, wanted 0x40043904, the colour of texel (5,0) stored where (7,0) belongs in an 8-wide linear RGBA16F target."
     },
     "deqp2.am62p.previous": {
       "label": "dEQP-GLES2, last whole tree",
@@ -183,6 +183,19 @@ window.YAKOGL_DATA = {
       "note": "Superseded by the 2026-10-10 tree on 32778b57, which has the same counts in every selector. The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
     },
     "deqp2.pi4": {
+      "label": "dEQP-GLES2, whole tree",
+      "board": "pi4",
+      "value": { "pass": 17126, "fail": 0, "notSupported": 34, "warnings": 5, "total": 17165 },
+      "unit": "cases of the mustpass list",
+      "commit": "a27d69c0",
+      "onMain": true,
+      "date": "2026-10-11",
+      "source": "tools/cts/RESULTS.md",
+      "section": "Pi 4: the whole dEQP-GLES2 tree, 0 fail",
+      "status": "pass",
+      "note": "Composed of three records on main builds, not one image set: the whole tree on a27d69c0 (2026-10-10: 17,083 pass, 9 fail, 34 not supported, 3 quality and 2 compatibility warnings, 34 cases lost by the serial capture), the 9 cube cases passing on 1cf946a9 (the six rows whose fragment cube look-ups changed: 934 of 934 pass), and the 34 lost cases passing in a rerun of image F1. The 25 cube failures (#12) of the 2026-10-01 tree are 0. 34 not supported: 16 multisample, 9 compressed-texture negative tests, 8 clip_control, 1 multisampled_render_to_texture. A single-commit tree is not run."
+    },
+    "deqp2.pi4.previous": {
       "label": "dEQP-GLES2, last whole tree",
       "board": "pi4",
       "value": { "pass": 17075, "fail": 25, "notSupported": 62, "warnings": 3, "total": 17165 },
@@ -192,21 +205,21 @@ window.YAKOGL_DATA = {
       "date": "2026-10-01",
       "source": "docs/es2-cts-failures.md",
       "section": "A. Raspberry Pi 4 (sweep 30)",
-      "status": "warn",
-      "note": "The 25 failures are cube-map cases (#12). They are fixed on the host (ec5ba4f) and not yet run on the board. Nothing was run on the Pi 4 on 2026-10-10 (no UART path from the test host)."
+      "status": "info",
+      "note": "Superseded by the 2026-10-11 reading (the row above): the 25 cube-map failures (#12) are 0 on the board, and the 27 fbo and fragdata cases that were not supported pass."
     },
     "deqp3.am62p": {
-      "label": "dEQP-GLES3, the only board run",
+      "label": "dEQP-GLES3, whole tree (28 images)",
       "board": "am62p",
-      "value": { "pass": 31278, "fail": 8835, "notSupported": 2636, "warnings": 5, "total": 42810 },
-      "unit": "cases of the mustpass list",
-      "commit": "396d667a",
-      "onMain": false,
-      "date": "2026-09-26",
+      "value": { "pass": 32669, "fail": 5549, "notSupported": 2318, "warnings": 185, "total": 42810 },
+      "unit": "cases of the mustpass list; 2,089 more have no result",
+      "commit": "f2a13877",
+      "onMain": true,
+      "date": "2026-10-11",
       "source": "tools/cts/RESULTS.md",
-      "section": "1r",
+      "section": "AM62P: the whole dEQP-GLES3 tree on f2a13877, 28 images",
       "status": "info",
-      "note": "56 lifetime cases had no result (transform feedback was missing). ES 3.0 work since then is host-only."
+      "note": "The previous tree (c4ccc966, 2026-10-10) had 30,431 pass, 7,011 fail and 3,088 without a result. The 2,089 without a result: the tails of two images that stopped early (transform-feedback capture missing; a draw too big for the 1 MiB arena), the tails of two images whose GPU hangs on a 3D linear_mipmap_linear case (the board returns only with the reset), and 51 cases the serial capture lost (counted as run, not as failures). ES 3.0 work since then is host-only."
     },
     "gltest.am62p.previous": {
       "label": "gl_test regression set",
@@ -238,28 +251,27 @@ window.YAKOGL_DATA = {
       "label": "v3d_gl_test",
       "board": "pi4",
       "value": "12 / 12",
-      "unit": "cases passed",
-      "commit": "afa12e9b",
+      "unit": "cases passed, 0 resets",
+      "commit": "1cf946a9",
       "onMain": true,
-      "date": "2026-10-05",
-      "source": "docs/HANDOFF.md",
-      "section": "State of main (results table)",
+      "date": "2026-10-11",
+      "source": "tools/cts/RESULTS.md",
+      "section": "Pi 4: gl_test on 1cf946a9 and the six cube rows",
       "status": "pass",
-      "note": "Not run since. The date is the commit's; the run date is not in the committed records.",
-      "unverified": true
+      "note": "Run on the Pi 4 through the tryboot product configuration."
     },
     "glmark2.am62p": {
       "label": "glmark2-es2",
       "board": "am62p",
-      "value": 457,
-      "unit": "score, 800x600 on-screen, 33 of 33 scenes ran",
-      "commit": "8e7257f8",
-      "onMain": false,
-      "date": "2026-10-04",
+      "value": 465,
+      "unit": "score, 800x600 on-screen, 33 of 33 scenes ran, 0 GPU resets",
+      "commit": "f2a13877",
+      "onMain": true,
+      "date": "2026-10-11",
       "source": "tools/cts/RESULTS.md",
-      "section": "AM62P: the reclaim default, common round",
+      "section": "AM62P: glmark2 (GM image) on f2a13877: the depth pass resolves",
       "status": "warn",
-      "note": "Refract's depth pass was refused every frame (#2; fixed on the host, 541c9d3). Terrain samples black (#1; fixed on the host). Shadow and refract sample stale depth (pvr-depth-resolve, open). None of the fixes has run on the board."
+      "note": "Shadow and refract no longer sample stale depth: no 'did not resolve its depth' line in the capture (one per frame before; pvr-depth-resolve confirmed on the board). The earlier reading was 457 on 8e7257f8 (2026-10-04). The capture has no picture, so no scene was looked at: whether terrain still samples black (#1, fixed on the host) is not read from this run."
     },
     "glmark2.imx8mp": {
       "label": "glmark2-es2",

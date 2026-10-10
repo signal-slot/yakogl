@@ -108,18 +108,22 @@ both runs identical; 16 / 16 on 2026-10-02). Under diagnosis, no issue yet.</li>
 <li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases</strong>
 failed on a 2026-10-08 integration image and in the 32778b57 tree (2026-10-10). Fixed on main
 in e17fb6a7; image 1 on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
-<li><strong>PowerVR: glmark2 shadow and refract sample a stale depth texture</strong>
-(pvr-depth-resolve, no issue yet). Root cause found on the host (a stale kick stamp); the
-host test is marked as an open defect; not fixed.</li>
+<li><strong>PowerVR: glmark2 shadow and refract sampled a stale depth texture</strong>
+(pvr-depth-resolve). Fixed; the AM62P's glmark2 run of 2026-10-11 has no failed depth
+resolve.</li>
 <li><strong>i.MX8MP: gl_test case 10 fails about one run in three</strong>
 (<a href="https://github.com/signal-slot/yakogl/issues/9">#9</a>) and case 2 intermittently
 (<a href="https://github.com/signal-slot/yakogl/issues/25">#25</a>). Cause not found.</li>
 <li><strong>i.MX8MP: 4x MSAA, gl_test case 16</strong>
 (<a href="https://github.com/signal-slot/yakogl/issues/8">#8</a>). The harness now skips the
 4x half by name without a 4x config; the 4x path itself still fails, cause unknown.</li>
-<li><strong>Pi 4: 25 cube-map cases differ from the ES 2.0 reference images</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/12">#12</a>). Fixed on the host;
-needs the Pi 4 run.</li>
+<li><strong>Pi 4: 25 cube-map cases differed from the ES 2.0 reference images</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/12">#12</a>). Fixed; 0 fail on the
+board (2026-10-11).</li>
+<li><strong>AM62P: two dEQP-GLES3 cases hang the GPU</strong>
+(<code>texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear</code> and
+<code>texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear</code>, 2026-10-11, no issue yet).
+The board returns only with the reset; cause not found.</li>
 <li><strong>glmark2 terrain samples a black texture on every board</strong>
 (<a href="https://github.com/signal-slot/yakogl/issues/1">#1</a>), <strong>AM62P refract's
 depth pass is refused</strong> (<a href="https://github.com/signal-slot/yakogl/issues/2">#2</a>),
