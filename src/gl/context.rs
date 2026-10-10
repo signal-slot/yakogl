@@ -639,6 +639,12 @@ pub struct GlRenderbuffer {
     pub external: bool,
     /// As `GlTexture::orphan`.
     pub orphan: bool,
+    /// GL_RENDERBUFFER_SAMPLES: 0, or 1 for storage glRenderbufferStorage-
+    /// Multisample made with one sample (GL_MAX_SAMPLES is 1; ES 3.0 4.4.2.1
+    /// says the count is at least the one asked for). The pixels are one
+    /// sample either way; the count decides completeness (4.4.4.2) and
+    /// GL_SAMPLE_BUFFERS. Sits in what was padding.
+    pub samples: u8,
     /// As `GlTexture::serial`.
     pub serial: u32,
     /// As `GlTexture::storage_gen`: glRenderbufferStorage*, an EGLImage.
