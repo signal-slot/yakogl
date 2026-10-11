@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# The full gate: every row of tools/check.sh, on every push to main and
-# nightly. A landing runs only the rows its diff reaches (tools/land.sh,
-# `check.sh --local`); this is where the rest run.
+# The full gate: every row of tools/check.sh, on every pull request to main
+# (the merge of the branch into main, refs/pull/N/merge), on every push to
+# main (the merge commit itself: main may have moved since the pull
+# request's run) and nightly. Locally a change runs only the rows its diff
+# reaches (`check.sh --changed <base>`); this is where the rest run.
 #
 # It needs what GitHub's hosted runners do not have: the PowerVR firmware
 # blob, Mesa's pco_shc, a west workspace with the Zephyr SDK, hal_nxp, a
@@ -19,6 +21,8 @@
 name: gate
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   schedule:
@@ -28,10 +32,11 @@ on:
 permissions:
   contents: read
 
-# One run per commit; two runners can gate two commits at once.
+# One run per commit; two runners can gate two commits at once. A pull
+# request's run is replaced by the next push to it.
 concurrency:
-  group: gate-${{ github.sha }}
-  cancel-in-progress: false
+  group: gate-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
