@@ -41,7 +41,7 @@ fixtures are its only host evidence:
 - `am62p-sweep.config`, `imx8mp-sweep.config`, `pi4-sweep.config` and
   `am62p-ms4.config` (with `--ms4`) — one conformance image per board plus
   the multisample one; the check must pass each
-- `am62p-gles3.config` — an AM62P dEQP-GLES3 image; the check must pass
+- `am62p-gles3.config`: an AM62P dEQP-GLES3 image; the check must pass
   it with `--gles3`
 - `pi4-gles3-sweep.config` — a Pi 4 dEQP-GLES3 image
   (`pi4-deqp-images.sh` with `DEQP_MODULE=gles3`: both `REPORT_ES2` symbols
