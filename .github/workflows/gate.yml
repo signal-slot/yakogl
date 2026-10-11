@@ -9,12 +9,13 @@
 # blob, Mesa's pco_shc, a west workspace with the Zephyr SDK, hal_nxp, a
 # glmark2 tree. So it runs on a self-hosted runner, and the runner is a
 # generic machine: it carries no project environment of its own. Everything
-# this job needs is named here, by the layout ccfarm installs a project's
+# this job needs comes from the layout ccfarm installs a project's
 # dependencies in, ~/.local/share/ccfarm/deps/yakogl (a host that keeps them
-# elsewhere links them into that layout), and `tools/setup-gate-host.sh
-# --check` refuses the job when a tool is missing, so a gap never looks like
-# a pass. Another project uses the same runners with its own workflow and its
-# own deps directory. No value in this file is secret.
+# elsewhere links them into that layout); tools/cts/deps-env.sh names the
+# entries and refuses the job when one is missing, `tools/setup-gate-host.sh
+# --check` when a tool is, so a gap never looks like a pass. Another project
+# uses the same runners with its own workflow and its own deps directory. No
+# value in this file is secret.
 name: gate
 
 on:
@@ -37,37 +38,35 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 180
     env:
-      GIT_CONFIG_GLOBAL: /dev/null
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - uses: actions/checkout@v4
-      - name: the project environment (ccfarm's dependency layout)
+      # The job's git reads no global configuration of the runner's user (a
+      # credential helper there once broke the fetch), but actions/checkout
+      # must be able to write one (safe.directory), or it reports "could not
+      # lock config file" and re-clones the repository on every run: an empty
+      # file of this run's own, not /dev/null.
+      - name: a git configuration of this run's own
         run: |
-          deps="$HOME/.local/share/ccfarm/deps/yakogl"
-          test -d "$deps" || { echo "no dependency layout at $deps on $(hostname)"; exit 1; }
+          : > "$RUNNER_TEMP/gitconfig"
+          echo "GIT_CONFIG_GLOBAL=$RUNNER_TEMP/gitconfig" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - name: the project environment (ccfarm's dependency layout, tools/cts/deps-env.sh)
+        run: |
+          tools/cts/deps-env.sh --check
+          tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {
-            echo "ZEPHYR_WS=$deps/zephyr-ws"
-            echo "HAL_NXP_DIR=$deps/zephyr-ws/modules/hal/nxp"
-            echo "WEST_VENV=$deps/zephyr-ws/.venv"
-            echo "ZEPHYR_SDK_INSTALL_DIR=$deps/zephyr-sdk-1.0.1"
-            echo "PCO_SHC=$deps/PCO_SHC/pco_shc"
-            echo "GLSLANG=$(command -v glslangValidator || echo /usr/bin/glslangValidator)"
-            echo "GLSL2USC_CACHE=$deps/glsl2usc-cache"
-            echo "GLMARK2_SRC=$deps/glmark2-src"
             echo "TMPDIR=$HOME/.cache/yakogl/tmp"
             echo "CARGO_TARGET_DIR=$HOME/.cache/yakogl/ci-target"
           } >> "$GITHUB_ENV"
-          mkdir -p "$HOME/.cache/yakogl/tmp" "$HOME/.cache/yakogl/ci-target" "$deps/glsl2usc-cache"
+          mkdir -p "$HOME/.cache/yakogl/tmp" "$HOME/.cache/yakogl/ci-target"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          deps="$HOME/.local/share/ccfarm/deps/yakogl"
           [ -d "$deps/hosttools/bin" ] && echo "$deps/hosttools/bin" >> "$GITHUB_PATH"
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done
           true
       - name: the firmware blob (never committed)
         run: |
-          blob="$HOME/.local/share/ccfarm/deps/yakogl/pvr_fw_blob.h"
-          [ -r "$blob" ] || blob="$HOME/com/github/signal-slot/yakogl/driver/src/fw/pvr_fw_blob.h"
-          test -r "$blob" || { echo "no PowerVR firmware blob on $(hostname) (driver/tools/mkfwblob.sh)"; exit 1; }
-          mkdir -p driver/src/fw && cp "$blob" driver/src/fw/
+          mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/
       - name: the gate host has every tool
         run: tools/setup-gate-host.sh --check
       - name: tools/check.sh (every row)

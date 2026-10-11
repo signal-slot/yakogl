@@ -3,7 +3,12 @@
 #
 # Publishes website/ with GitHub Pages. The site is static: no build step,
 # the directory is uploaded as it is. It deploys only once Pages is turned
-# on in the repository settings (Settings > Pages > Source: GitHub Actions);
+# on in the repository settings (Settings > Pages > Source: GitHub Actions)
+# AND the repository variable PAGES_ENABLED is "true" (Settings > Secrets
+# and variables > Actions > Variables): a private repository on the free
+# plan has no Pages, and configure-pages fails with "Not Found" on every
+# push that touches the site. Until then the job is skipped, and the
+# site's own checks stay in the gate (tools/website-check.sh).
 # website/README.md says when.
 name: website
 
@@ -26,6 +31,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

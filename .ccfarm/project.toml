@@ -68,7 +68,13 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 # Values that differ per machine (paths of external workspaces and SDKs). The
 # board and image scripts default none of them to a path on one machine;
 # check.sh alone falls back to $HOME/com/github/zephyrproject-rtos/modules/hal/nxp
-# for HAL_NXP_DIR, so set it explicitly anywhere else.
+# for HAL_NXP_DIR, so set it explicitly anywhere else. On a node the values
+# are the entries of ccfarm's dependency layout for this project
+# (~/.local/share/ccfarm/deps/yakogl, $CCFARM_DEPS_DIR in a turn):
+# tools/cts/deps-env.sh names them, `deps-env.sh --check [board]` says which
+# are missing, and `ccfarm env set yakogl NAME value` stores each one; a
+# board task reads them with `eval "$(tools/cts/deps-env.sh <board>)"`
+# (DEQP_WORK is per board, so it is not stored).
 #   ZEPHYR_WS        the west workspace ($ZEPHYR_WS/zephyr is ZEPHYR_BASE),
 #                    made from west.yml (driver/samples/zephyr/README.md); the
 #                    three Zephyr -Werror images of the gate are gaps without it
@@ -94,7 +100,10 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 #   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
 #   ZEPHYR_VENV, IMX8MP_OUT (tools/cts/imx8mp-env.sh) and DEQP_STAGE1 (the
 #   output of tools/cts/imx8mp-deqp-stage1.sh, which imx8mp-deqp-build.sh
-#   requires). BOARD_HDMI_TIMINGS is the Pi 4 panel's hdmi_timings.
+#   requires). BOARD_HDMI_TIMINGS is the Pi 4 panel's hdmi_timings;
+#   BOARD_UART the Pi 4's serial device or its bridge's host:port
+#   (tools/board.sh); PVR_FW_BLOB the PowerVR firmware header the gate and
+#   every AM62P image copy to driver/src/fw/ (never committed).
 env_names = [
   "ZEPHYR_WS",
   "HAL_NXP_DIR",
@@ -115,6 +124,8 @@ env_names = [
   "IMX8MP_OUT",
   "DEQP_STAGE1",
   "BOARD_HDMI_TIMINGS",
+  "BOARD_UART",
+  "PVR_FW_BLOB",
 ]
 
 # The PowerVR firmware header: generated from TI's rgx.fw by

@@ -22,7 +22,10 @@ Check it with `tools/website-check.sh` (relative links, page metadata,
 `.github/workflows/pages.yml` deploys this directory with GitHub Pages on
 every push to `main` that touches it, and on demand. It does nothing until
 Pages is turned on: when the repository goes public, set Settings > Pages >
-Source to "GitHub Actions". There is no custom domain and no `CNAME`; the
+Source to "GitHub Actions" and the repository variable `PAGES_ENABLED` to
+`true` (Settings > Secrets and variables > Actions > Variables; the job is
+skipped without it, because a private repository on the free plan has no
+Pages and the deploy would fail on every push). There is no custom domain and no `CNAME`; the
 site lives at the address GitHub gives it. Once it is known, put it in front
 of the `<loc>` entries of `sitemap.xml` and add a `Sitemap:` line to
 `robots.txt`.
