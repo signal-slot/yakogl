@@ -4,8 +4,9 @@
 
 Written from the code at `700a4310`; no board was used. Section 1 is the
 inventory at that commit, before the migration: `rust_slint`, `gc_slint`,
-`v3d_gl_slint`, `v3d_gl_cluster`, `v3d_gl_triangle` and
-`common/sample_glue.c` have gone since. State of the migration (section 5):
+`v3d_gl_slint`, `v3d_gl_cluster` and `v3d_gl_triangle` have gone since, and
+`common/sample_glue.c` moved into the board layer
+(`driver/zephyr/lib/board/common/`). State of the migration (section 5):
 step 1 is done; step 5 is done, with its i.MX8MP row still pending in the
 acceptance run; step 3 has the one `triangle/` sample while `gl_triangle` and
 `gc_gl_triangle` remain; steps 2, 4 and 6 are open (`gc_gl_test`,

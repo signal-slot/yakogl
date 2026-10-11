@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# The PowerVR kernel side in Rust: inventory and plan
+# The PowerVR kernel side in Rust: inventory
+
+Status: done. Every module planned below exists in `driver/rust/src/gpu/pvr/`,
+and every step was board-verified ("Results"). The tables are the record of
+where each C function went; "Open" lists what is still open. The render
+pool's current policy is `driver/docs/pvr-render.md`.
 
 docs/source-form.md, group A, the remainder (branch `form/7-pvr-kernel-rust`).
 After step 6 the firmware start, stop and image load are the vendored DDK's
