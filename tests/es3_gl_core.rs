@@ -20,39 +20,44 @@
 //!     buffer_map_offset_length_*, negative_api.buffer.copy_buffer_sub_data.
 //!   - glDrawBuffers on a framebuffer object checks n against
 //!     GL_MAX_DRAW_BUFFERS before the enums: negative_api.buffer.draw_buffers.
-//!   - glReadPixels into a pixel pack buffer stays inside the buffer and
-//!     writes the rows back from the CPU cache: pbo.* (the GL half; the
-//!     integer rows also need the back ends' integer render targets).
+//!   - glReadPixels into a pixel pack buffer stays inside the buffer, with
+//!     the offset a multiple of the type's size (ES 3.0 4.3.2), and writes
+//!     the rows back from the CPU cache: pbo.*, read_pixels.* on a pack
+//!     buffer, negative_api.buffer.read_pixels* (the GL half; the integer
+//!     rows also need the back ends' integer render targets).
+//!   - A half- or single-float renderbuffer answers its stored resolution
+//!     from glGetRenderbufferParameteriv (ES 3.0 6.1.15), not 8 bits a
+//!     channel: state_query.rbo.renderbuffer_component_size_color's float
+//!     rows.
+//!   - An attached float depth texture answers 32 float bits, not 24
+//!     unsigned-normalised ones: state_query.fbo.
+//!     framebuffer_attachment_x_size_texture and _component_type. Integer
+//!     textures are also framebuffer.rs's unit test
+//!     `attached_integer_texture_reports_its_image`.
 //!
 //! The context is the smallest OSAL and back end that make one, as in
-//! tests/es3_int_rt.rs; no pixel is rendered. An ES 2.0-reporting build
-//! (`report-es2`) runs `es2_report_is_unchanged` only: none of the above
-//! exists on that surface.
+//! tests/es3_int_rt.rs; no pixel is rendered (the pixels read back are the
+//! ones the CPU wrote). An ES 2.0-reporting build (`report-es2`) runs
+//! `es2_report_is_unchanged` and `es2_float_renderbuffer_sizes_are_unchanged`
+//! only: none of the above exists on that surface (ES 2.0 has no pixel pack
+//! buffer target either).
 
 #![cfg(feature = "host-test")]
-// the ES 2.0 report runs one test of the file; the helpers of the rest are idle there
+// the ES 2.0 report runs two tests of the file; the helpers of the rest are idle there
 #![cfg_attr(feature = "report-es2", allow(dead_code, unused_imports))]
 
 use core::ffi::{c_char, c_void};
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
-use yakogl::gl::buffer::{
-    glBindBuffer, glBufferData, glDeleteBuffers, glGenBuffers, glGetBufferPointervOES, glMapBufferRange, glUnmapBuffer,
-    glUnmapBufferOES,
-};
+use yakogl::gl::buffer::*;
 use yakogl::gl::consts::*;
-use yakogl::gl::framebuffer::{
-    glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glDeleteFramebuffers, glDeleteRenderbuffers,
-    glDrawBuffers, glFramebufferRenderbuffer, glFramebufferTexture2D, glGenFramebuffers, glGenRenderbuffers,
-    glGetFramebufferAttachmentParameteriv, glGetRenderbufferParameteriv, glReadPixels, glRenderbufferStorage,
-    glRenderbufferStorageMultisample,
-};
-use yakogl::gl::state::{glGetError, glGetIntegerv, glPixelStorei};
-use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexStorage2D};
+use yakogl::gl::framebuffer::*;
+use yakogl::gl::state::*;
+use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 
-/* ---- a context on the host ---------------------------------------------- */
+/* ---- a context on the host: the smallest OSAL and backend that make one --- */
 
 unsafe extern "C" fn m_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
     let mem = Box::leak(vec![0u8; size].into_boxed_slice());
@@ -268,6 +273,30 @@ fn es2_report_is_unchanged() {
     // SAFETY: plain GL call.
     assert_eq!(unsafe { glUnmapBufferOES(GL_COPY_READ_BUFFER) }, GL_FALSE as GLboolean);
     assert_eq!(err(), GL_INVALID_ENUM);
+}
+
+fn rb_sizes() -> [GLint; 4] {
+    let pnames =
+        [GL_RENDERBUFFER_RED_SIZE, GL_RENDERBUFFER_GREEN_SIZE, GL_RENDERBUFFER_BLUE_SIZE, GL_RENDERBUFFER_ALPHA_SIZE];
+    pnames.map(|p| {
+        let mut v = -1;
+        // SAFETY: room for one value.
+        unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, p, &mut v) };
+        v
+    })
+}
+
+/// A half-float renderbuffer answers 8 a channel in the ES 2.0 report, as
+/// before (the stored resolution is ES 3.0's answer).
+#[test]
+#[cfg(feature = "report-es2")]
+fn es2_float_renderbuffer_sizes_are_unchanged() {
+    let _g = context();
+    let rb = renderbuffer(GL_RGBA16F, 4, 4, None);
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(rb_sizes(), [8; 4], "the ES 2.0 report answers 8 a channel, as before");
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &rb) };
 }
 
 /* ---- ES 3.0 --------------------------------------------------------------- */
@@ -648,5 +677,262 @@ mod es3 {
             glDeleteBuffers(1, &pbo);
         }
         release(fb, &[rb]);
+    }
+
+    /// A 4x2 RGBA8 texture with known texels on a bound framebuffer; the
+    /// texels are byte i of texel j = 16 j + i.
+    fn texture_framebuffer() -> (GLuint, GLuint) {
+        let texels: Vec<u8> = (0..32u8).map(|i| (i / 4) * 16 + i % 4).collect();
+        let (mut tex, mut fb) = (0, 0);
+        // SAFETY: room for one name each; `texels` holds 4 x 2 RGBA8 texels.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA8 as GLint,
+                4,
+                2,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                texels.as_ptr() as *const c_void,
+            );
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        (tex, fb)
+    }
+
+    /// A pixel pack buffer of `size` bytes of 0xaa, bound.
+    fn pack_buffer(size: usize) -> GLuint {
+        let fill = vec![0xaau8; size];
+        let mut b = 0;
+        // SAFETY: room for one name; `fill` holds `size` bytes.
+        unsafe {
+            glGenBuffers(1, &mut b);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, b);
+            glBufferData(GL_PIXEL_PACK_BUFFER, size as GLsizeiptr, fill.as_ptr() as *const c_void, GL_STREAM_READ);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        b
+    }
+
+    fn pack_contents(size: usize) -> Vec<u8> {
+        // SAFETY: the bound pack buffer holds `size` bytes; the mapping is
+        // read before it is unmapped.
+        unsafe {
+            let p = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, size as GLsizeiptr, GL_MAP_READ_BIT) as *const u8;
+            assert!(!p.is_null());
+            let v = core::slice::from_raw_parts(p, size).to_vec();
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+            v
+        }
+    }
+
+    fn release_pack(tex: GLuint, fb: GLuint, buf: GLuint) {
+        // SAFETY: names this test made.
+        unsafe {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            glDeleteBuffers(1, &buf);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+            glDeleteTextures(1, &tex);
+            glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        }
+    }
+
+    /// ES 3.0 4.3.2: with a pixel pack buffer bound, a read whose pixels
+    /// (from the offset, under the pack state) would pass the end of the
+    /// buffer, or whose offset is not a multiple of the type's size, is
+    /// GL_INVALID_OPERATION and writes nothing; one that fits lands at the
+    /// offset. The bound was never checked: the buffer was asked for no
+    /// bytes, so a read larger than the store wrote past it.
+    #[test]
+    fn read_pixels_into_a_pack_buffer_stays_inside_it() {
+        let _g = context();
+        let (tex, fb) = texture_framebuffer();
+        let buf = pack_buffer(40);
+
+        // SAFETY: with a pack buffer bound, the pointer is an offset into it.
+        unsafe {
+            /* 4 x 2 RGBA8 is 32 bytes: at offset 8 it fills the buffer exactly */
+            glReadPixels(0, 0, 4, 2, GL_RGBA, GL_UNSIGNED_BYTE, 8 as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "a read that fits");
+            let got = pack_contents(40);
+            assert_eq!(&got[..8], &[0xaa; 8], "the bytes before the offset are the buffer's");
+            let want: Vec<u8> = (0..32u8).map(|i| (i / 4) * 16 + i % 4).collect();
+            assert_eq!(&got[8..], &want[..], "the pixels at the offset");
+
+            /* one byte further and the last pixel would pass the end */
+            let fill = [0x55u8; 40];
+            glBufferSubData(GL_PIXEL_PACK_BUFFER, 0, 40, fill.as_ptr() as *const c_void);
+            glReadPixels(0, 0, 4, 2, GL_RGBA, GL_UNSIGNED_BYTE, 9 as *mut c_void);
+            assert_eq!(err(), GL_INVALID_OPERATION, "past the end by one byte");
+            glReadPixels(0, 0, 4, 2, GL_RGBA, GL_UNSIGNED_BYTE, 40 as *mut c_void);
+            assert_eq!(err(), GL_INVALID_OPERATION, "at the end");
+            /* the skipped rows count: one 16-byte row pushes 32 bytes from 0 to 48 */
+            glPixelStorei(GL_PACK_SKIP_ROWS, 1);
+            glReadPixels(0, 0, 4, 2, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null_mut());
+            assert_eq!(err(), GL_INVALID_OPERATION, "the pack skip rows lay out past the end");
+            glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+            /* ...and the row length: two rows 8 pixels apart need 32 + 16 bytes */
+            glPixelStorei(GL_PACK_ROW_LENGTH, 8);
+            glReadPixels(0, 0, 4, 2, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null_mut());
+            assert_eq!(err(), GL_INVALID_OPERATION, "the pack row length lays out past the end");
+            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+            /* a layout larger than the address space must not wrap into one that fits */
+            glPixelStorei(GL_PACK_ROW_LENGTH, GLint::MAX);
+            glPixelStorei(GL_PACK_SKIP_ROWS, GLint::MAX);
+            glReadPixels(0, 0, 1, 2, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null_mut());
+            assert_eq!(err(), GL_INVALID_OPERATION, "an extreme pack layout");
+            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+            glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+            assert_eq!(pack_contents(40), fill, "a refused read writes nothing");
+
+            /* an empty read needs no bytes: at the end it is no error */
+            glReadPixels(0, 0, 0, 2, GL_RGBA, GL_UNSIGNED_BYTE, 40 as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "an empty read");
+        }
+        release_pack(tex, fb, buf);
+    }
+
+    /// ES 3.0 4.3.2: the offset into a pack buffer must be a multiple of
+    /// the size of the type's GL data type (table 3.2): any offset for
+    /// GL_UNSIGNED_BYTE, multiples of four for GL_FLOAT, GL_INT and
+    /// GL_UNSIGNED_INT.
+    #[test]
+    fn read_pixels_pack_buffer_offset_is_a_multiple_of_the_type() {
+        let _g = context();
+        let rb = renderbuffer(GL_RGBA32I, 2, 2, None);
+        let mut fb = 0;
+        // SAFETY: room for one name.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        }
+        let buf = pack_buffer(128);
+        // SAFETY: with a pack buffer bound, the pointer is an offset into it.
+        unsafe {
+            glReadPixels(0, 0, 1, 1, GL_RGBA_INTEGER, GL_INT, 2 as *mut c_void);
+            assert_eq!(err(), GL_INVALID_OPERATION, "GL_INT at offset 2");
+            glReadPixels(0, 0, 1, 1, GL_RGBA_INTEGER, GL_INT, 4 as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "GL_INT at offset 4");
+            /* 2 x 2 RGBA32I is 64 bytes */
+            glReadPixels(0, 0, 2, 2, GL_RGBA_INTEGER, GL_INT, 64 as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "the last 64 bytes");
+            glReadPixels(0, 0, 2, 2, GL_RGBA_INTEGER, GL_INT, 68 as *mut c_void);
+            assert_eq!(err(), GL_INVALID_OPERATION, "past the end");
+            /* 16 bytes a pixel: GLint::MAX skipped rows of GLint::MAX pixels
+             * are more bytes than a usize holds; the layout is refused, it
+             * does not wrap round (or, with overflow checks, panic) */
+            glPixelStorei(GL_PACK_ROW_LENGTH, GLint::MAX);
+            glPixelStorei(GL_PACK_SKIP_ROWS, GLint::MAX);
+            glReadPixels(0, 0, 1, 1, GL_RGBA_INTEGER, GL_INT, core::ptr::null_mut());
+            assert_eq!(err(), GL_INVALID_OPERATION, "an extreme pack layout of 16-byte pixels");
+            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+            glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+            glDeleteRenderbuffers(1, &rb);
+        }
+        // SAFETY: names this test made.
+        unsafe {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            glDeleteBuffers(1, &buf);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+        }
+    }
+
+    /// ES 3.0 6.1.13: an attached texture's GL_FRAMEBUFFER_ATTACHMENT_x_SIZE
+    /// and _COMPONENT_TYPE describe its image. A float depth texture read 24
+    /// unsigned-normalised bits. (Integer textures, which read 0 bits and
+    /// GL_NONE, are held by framebuffer.rs's unit test
+    /// `attached_integer_texture_reports_its_image`: no back end samples
+    /// integer texels yet, so their storage cannot be made here.)
+    #[test]
+    fn attached_float_depth_texture_reports_its_image() {
+        let _g = context();
+        let rgba = [
+            GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+        ];
+        let cases: [(GLenum, GLenum, [GLint; 4], GLenum); 2] = [
+            (GL_RGBA8, GL_COLOR_ATTACHMENT0, [8; 4], GL_UNSIGNED_NORMALIZED),
+            (GL_DEPTH_COMPONENT32F, GL_DEPTH_ATTACHMENT, [0; 4], GL_FLOAT),
+        ];
+        let mut fb = 0;
+        // SAFETY: room for one name.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        }
+        for (f, at, want, ct) in cases {
+            let mut tex = 0;
+            let q = |p: GLenum| {
+                let mut v = -1;
+                // SAFETY: room for one value.
+                unsafe { glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, at, p, &mut v) };
+                v
+            };
+            // SAFETY: room for one name; storage without texels.
+            unsafe {
+                glGenTextures(1, &mut tex);
+                glBindTexture(GL_TEXTURE_2D, tex);
+                glTexStorage2D(GL_TEXTURE_2D, 1, f, 16, 16);
+                assert_eq!(err(), GL_NO_ERROR, "{f:#x}: storage");
+                glFramebufferTexture2D(GL_FRAMEBUFFER, at, GL_TEXTURE_2D, tex, 0);
+            }
+            assert_eq!(err(), GL_NO_ERROR, "{f:#x}: attach");
+            assert_eq!(rgba.map(q), want, "{f:#x}: colour sizes");
+            assert_eq!(q(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE) as GLenum, ct, "{f:#x}: component type");
+            if at == GL_DEPTH_ATTACHMENT {
+                assert_eq!(q(GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE), 32, "{f:#x}: depth bits");
+            } else {
+                assert_eq!(q(GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE), 0, "{f:#x}: no depth");
+            }
+            // SAFETY: names this test made.
+            unsafe {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, at, GL_TEXTURE_2D, 0, 0);
+                glDeleteTextures(1, &tex);
+            }
+        }
+        // SAFETY: a name this test made.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+        }
+    }
+
+    /// ES 3.0 6.1.15: GL_RENDERBUFFER_x_SIZE is the stored resolution. The
+    /// half- and single-float names are stored as such, and answered 8.
+    #[test]
+    fn float_renderbuffers_report_their_channel_sizes() {
+        let _g = context();
+        for (f, want) in [
+            (GL_RGBA16F, [16, 16, 16, 16]),
+            (GL_RG16F, [16, 16, 0, 0]),
+            (GL_R16F, [16, 0, 0, 0]),
+            (GL_R32F, [32, 0, 0, 0]),
+        ] {
+            let rb = renderbuffer(f, 4, 4, None);
+            assert_eq!(err(), GL_NO_ERROR, "{f:#x}");
+            assert_eq!(rb_sizes(), want, "{f:#x}");
+            // SAFETY: a name this test made.
+            unsafe { glDeleteRenderbuffers(1, &rb) };
+        }
+        /* the eight-bit names keep their answer */
+        let rb = renderbuffer(GL_RGBA8, 4, 4, None);
+        assert_eq!(rb_sizes(), [8; 4]);
+        // SAFETY: a name this test made.
+        unsafe { glDeleteRenderbuffers(1, &rb) };
     }
 }
