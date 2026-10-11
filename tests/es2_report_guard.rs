@@ -428,12 +428,12 @@ fn es2_limits() {
 
 /// ES 2.0 6.1.1 again: none of these is a state variable of ES 2.0, and no
 /// claimed extension adds one, so each is GL_INVALID_ENUM there. The code
-/// answers every one of them with its ES 3.0 value (the transform feedback
-/// limits with 0, GL_READ_BUFFER with GL_BACK, the bindings with 0 ...).
-/// No dEQP-GLES2 case asks, which is why the zero-failure runs did not see
-/// it; the ES 3.0 build's answers are its own business.
+/// answered every one of them with its ES 3.0 value (the transform feedback
+/// limits with 0, GL_READ_BUFFER with GL_BACK, the bindings with 0 ...)
+/// until the state/program tranche of the ES 2.0 error rules
+/// (tests/es2_error_rules_state.rs). No dEQP-GLES2 case asks; the ES 3.0
+/// build's answers are its own business.
 #[test]
-#[ignore = "BUG: state.rs get_integerv answers these ES 3.0 pnames under report-es2; ES 2.0 6.1.1 says GL_INVALID_ENUM"]
 fn es3_only_queries_are_invalid_enum() {
     let _g = context();
     for (n, q) in named![
@@ -486,10 +486,9 @@ fn es3_only_queries_are_invalid_enum() {
 /// specification lists (the manual: "GL_INVALID_ENUM is generated if cap is
 /// not one of the values listed"); GL_RASTERIZER_DISCARD and
 /// GL_PRIMITIVE_RESTART_FIXED_INDEX are ES 3.0's, so GL_INVALID_ENUM and the
-/// state untouched. The code records both (and GL_RASTERIZER_DISCARD then
-/// changes no draw under report-es2).
+/// state untouched. The code recorded both until the state/program tranche
+/// of the ES 2.0 error rules (tests/es2_error_rules_state.rs).
 #[test]
-#[ignore = "BUG: state.rs set_cap records the two ES 3.0 capabilities under report-es2; ES 2.0 says GL_INVALID_ENUM"]
 fn es3_only_caps_are_invalid_enum() {
     let _g = context();
     for (n, cap) in named![GL_RASTERIZER_DISCARD, GL_PRIMITIVE_RESTART_FIXED_INDEX] {

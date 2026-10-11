@@ -357,21 +357,24 @@ proposed.
 
 ## Status
 
-Item `es2-error-rules` (vertex part). Pinned by `tests/es2_error_rules_vertex.rs`,
-whose header has the per-row reasons.
+Two tranches are done. Each test asserts the error in `report-es2` and the
+unchanged result in the ES 3.0 build. (Status rewritten 2026-10-12 from the
+integration results of old PRs #35 and #64.)
 
 | Rows | State | File |
 |---|---|---|
-| 6 | done: `GL_INT` and `GL_UNSIGNED_INT` are now refused under `report-es2` (the other four types already were). `GL_HALF_FLOAT_OES` stays refused: `GL_OES_vertex_half_float` is not advertised and the draw path cannot convert it | `src/gl/vertex.rs` |
-| 9 | done at the base commit (`get_attrib_int`); now covered by a test | `src/gl/vertex.rs` |
-| 7, 8, 10 | decided: no change (entry points, no enum; see "Open questions") | - |
-| 13 | decided: no change (`GL_OES_vertex_array_object` is advertised) | `src/gl/vao.rs` |
+| 6 | done: `GL_INT`, `GL_UNSIGNED_INT`, `GL_HALF_FLOAT` (0x140B), `GL_INT_2_10_10_10_REV`, `GL_UNSIGNED_INT_2_10_10_10_REV` give `GL_INVALID_ENUM` under `report-es2` and record nothing; the ES 3.0 build accepts them (packed types still need size 4). `GL_HALF_FLOAT_OES` (0x8D61) is refused in both builds: `GL_OES_vertex_half_float` is not advertised and the draw path cannot convert it. Pinned by `tests/es2_error_rules_vertex.rs` | `src/gl/vertex.rs` |
+| 9 | done: `GL_VERTEX_ATTRIB_ARRAY_INTEGER` and `_DIVISOR` give `GL_INVALID_ENUM` from `glGetVertexAttribfv/iv` under `report-es2` (`tests/es2_error_rules_vertex.rs`) | `src/gl/vertex.rs` |
+| 7, 8 (attrib part), 10 | decided: no change (entry points, no enum; see "Open questions"). Tests pin that they still work in both builds | - |
+| 13 | decided: no change (`GL_OES_vertex_array_object` is advertised; the unsuffixed names are the same calls and take no enum). `vao.rs` needs no edit | `src/gl/vao.rs` |
+| 14-17, 19-21 | done (state/program tranche): the ES 3.0 caps in `glEnable`/`glDisable`/`glIsEnabled`/`glGet*`, `GL_MIN`/`GL_MAX` in `glBlendEquation(Separate)`, the eight ES 3.0 pixel-store names, the ES 3.0 `glGet*` pnames and four `glGetProgramiv` pnames give `GL_INVALID_ENUM` under `report-es2`. Pinned by `tests/es2_error_rules_state.rs`; the two `tests/es2_report_guard.rs` pins `es3_only_queries_are_invalid_enum` and `es3_only_caps_are_invalid_enum` run (no longer ignored) | `src/gl/state.rs`, `src/gl/program.rs` |
+| 18, 22 | already refused at the audit's base (Table A) | `src/gl/state.rs` |
 
-Still open, no item yet (hardening; host `negative_api` is already clean):
+### Next tranche (not done)
 
-- buffer rows (1-5): `src/gl/buffer.rs`
-- framebuffer rows: `src/gl/framebuffer.rs`
-- state rows (14-22 and the state-query rows): `src/gl/state.rs`, `src/gl/program.rs` (row 21)
-- draw rows (8's draw calls, 11, 12): `src/gl/draw.rs`
-- texture rows: `src/gl/texture.rs`
-- the shared `src/gl/es2_rules.rs` of the proposal, if wanted once more than one file needs the same predicate
+- `src/gl/buffer.rs`: rows 1-3 (targets, usages, `glGetBufferParameteriv` pnames).
+- `src/gl/framebuffer.rs`: rows 34-36 (`GL_READ/DRAW_FRAMEBUFFER`, `GL_DEPTH_STENCIL_ATTACHMENT`, `GL_DEPTH_COMPONENT32F`/`GL_DEPTH32F_STENCIL8`/`GL_R32F` renderbuffers; `tests/es2_report_guard.rs` `es3_only_renderbuffer_formats_are_invalid_enum` is still an ignored `BUG:` pin), row 42 (`glReadPixels` type).
+- `src/gl/draw.rs`: row 11 (`GL_UNSIGNED_INT` index type; also row 8's draw calls, row 12). `src/gl/texture.rs`: rows 24-27 (`es3_only_pixel_types_are_invalid_enum` is still an ignored `BUG:` pin).
+- the shared `src/gl/es2_rules.rs` of the proposal, once more than one file needs the same predicate.
+
+Rows 4, 5, 33, 43, 44 stay as decided in the proposal (no enum rule).

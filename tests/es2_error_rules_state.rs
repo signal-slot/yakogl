@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 2.0 error rules, state and program part (item changelog-es2-final; the
-//! audit is docs/investigations/es2-error-rules.md, Table A "State and
+//! audit is tools/cts/log/investigations/es2-error-rules.md, Table A "State and
 //! program", rows 14-17 and 19-21).
 //!
 //! A `report-es2` build refuses what ES 2.0 does not define with
@@ -113,6 +113,9 @@ static BACKEND: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: None,
     depth_resolve: None,
+    query_begin: None,
+    query_end: None,
+    query_result: None,
 };
 
 /// One context for the whole file; the tests take turns on it.
