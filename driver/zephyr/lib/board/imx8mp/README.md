@@ -1,4 +1,6 @@
-# yakogl_gc_board -- board support for an image kexec'd onto the Verdin iMX8M Plus
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# yakogl_gc_board: board support for the Verdin iMX8M Plus
 
 The Zephyr library the driver module builds when `CONFIG_YAKOGL_GC_BOARD=y`.
 It started as the i.MX8MP samples' `gc_common` and moved here (2026-09-23) so
@@ -9,12 +11,14 @@ The option names keep their `GC_SAMPLE_*` / `GC_COMMON_*` prefixes.
 
 ## The bounded lifetime (`gc_sample.c`)
 
-The samples boot with kexec out of Torizon, so Linux is gone and nothing can
-reset the board remotely. `gc_sample_finish()` services the watchdog Linux left
-armed for `CONFIG_GC_SAMPLE_HOLD_SECONDS` (60), then resets the SoC through
-PSCI so the boot loader brings Linux back. Sixty seconds is the time it takes
-to read the panel and photograph it. Every sample must call it on every path,
-failures included.
+An image runs with Linux gone, and nothing can reset the board remotely. It is
+started by U-Boot (`docs/standalone-boot.md`), or by kexec out of Torizon on
+the development route. `gc_sample_finish()` services WDOG1 for
+`CONFIG_GC_SAMPLE_HOLD_SECONDS` (60), then resets the SoC through PSCI so the
+boot loader brings Linux back. On a U-Boot entry the image armed WDOG1 itself
+(below); on a kexec entry Linux left it armed. Every sample must call it on
+every path, failures included. A result-record image ends sooner
+(`gc_sample_finish_recorded`).
 
 ## WDOG1 armed by the image (`gc_wdog_arm.c`, opt-in)
 
@@ -31,6 +35,7 @@ that proves on the board that WDOG1 really resets it.
 
 A kexec'd image inherits a GIC the previous kernel left configured, and on the
 i.MX8MP it dies on an interrupt no Zephyr driver owns within its first minute.
+(On a U-Boot entry nothing is pending and the guard claims nothing.)
 The guard walks every line still pointing at `z_irq_spurious` and gives it a
 handler that disables the line, counts it and prints it. It runs at
 `PRE_KERNEL_1` priority 50 -- *before* every driver, and immediately after the
@@ -52,7 +57,7 @@ Two lines that get blamed for hangs are connected exactly that way, and
 neither can be the guard's doing:
 
 * the **arch timer** (`arm_arch_timer.c`), so a dead system tick is not this;
-* the **Vivante GPU** (`gc_irq_connect` in `drivers/gpu/gpu_vivante_gc_rust.c`;
+* the **Vivante GPU** (`gc_irq_connect` in `driver/drivers/gpu/gpu_vivante_gc_rust.c`;
   `src/vivante/gc_hw.c` when this was checked), which uses
   `IRQ_CONNECT` and then calls `irq_enable` itself, so a GPU init that waits
   forever for an interrupt is not this either. Checked 2026-09-22 against every image then in the tree
@@ -66,24 +71,26 @@ happened.
 
 ## The panel console (`gc_panel_console.c`, `gc_font8x16.h`)
 
-**This board has no console but the picture.** The Verdin iMX8M Plus on a
-Mallow carrier leaves the debug header X11 unassembled, so there is no
-reachable UART, and every RAM channel measured on 2026-09-20 is gone by the
-time a kexec'd Zephyr runs:
+**This board has no UART.** The Verdin iMX8M Plus on a Mallow carrier leaves
+the debug header X11 unassembled. Results leave the board in the SNVS LPGPR
+(`gc_result.c`, LPGPR0..3 at 0x30370090): four words that survive the SoC
+reset and that Linux reads afterwards through the `snvs_lpgpr` nvmem device
+(`gc_result.h`). An earlier version of this file listed the LPGPR as secure,
+with writes ignored (a reading of 2026-09-20). Board runs read their record
+there (for example the netboot runs of 2026-10-03), so that entry was wrong.
+The other channels tried then do not work: SRC_GPR8/9 belong to TF-A, OCRAM
+is rewritten by TF-A and U-Boot, and DDR comes back as noise after the PMIC
+power cycle of the SoC reset. The panel is the channel a person reads.
 
-| channel | why it does not work |
-| --- | --- |
-| SNVS LPGPR | secure; writes are ignored |
-| SRC_GPR8/9 | TF-A owns them; writes are masked |
-| OCRAM | rewritten by ATF and U-Boot |
-| DDR | the SoC reset is a PMIC power cycle, so a marker comes back as noise |
+On the kexec route, what survives the jump is the scan-out. Linux leaves the
+LCDIFv3 at `0x32e80000` (Linux's device tree calls it
+`lcd-controller@32e80000`, the instance wired to the DSI bridge) reading a
+linear XRGB8888 framebuffer and sending it to the 10-inch DSI panel, and it
+keeps doing so after the jump. On a U-Boot entry the LCDIF is off; the
+console's second stage brings the chain up instead
+(`driver/src/display/NOTES.md`, "The panel console").
 
-What survives the kexec jump is the scan-out. Linux leaves the LCDIFv3 at
-`0x32e80000` (Linux's device tree calls it `lcd-controller@32e80000`, the
-instance wired to the DSI bridge) reading a linear XRGB8888 framebuffer and
-sending it to the 10-inch DSI panel, and it keeps doing so after the jump.
-
-So the console reads that controller instead of configuring it:
+So on the kexec route the console reads that controller instead of configuring it:
 
 1. `CTRLDESCL0_5` (0x214) for the layer enable and the pixel format,
    `DISP_PARA` (0x10) for the display enable, `CTRLDESCL0_1` (0x200) for width
@@ -130,7 +137,8 @@ up empty once `CONFIG_UART_CONSOLE` is off. Nothing is lost by it.
 
 ### The font
 
-`gc_font8x16.h` is generated by `gen_font8x16.py` from the X11 "misc-fixed"
+`gc_font8x16.h` is generated by `driver/zephyr/lib/board/common/gen_font8x16.py`
+(both live in `driver/zephyr/lib/board/common/`) from the X11 "misc-fixed"
 8x13 font that every distribution ships as `/usr/share/fonts/misc/8x13.pcf.gz`
 (package `font-misc-misc`). Its PCF `COPYRIGHT` property reads "Public domain
 font.  Share and enjoy.", so the bitmaps carry no licence of their own. The
@@ -139,6 +147,5 @@ font.  Share and enjoy.", so the bitmaps carry no licence of their own. The
 ## Status
 
 Built for `verdin_imx8mp/mimx8ml8/a53`, and run on that board: the bounded
-lifetime, the panel console and the interrupt guard are all exercised by every
-kexec run the `gc_gl_test` and `gc_slint` work does. This line used to say no
-board had ever run any of it; it had been false for a while.
+lifetime, the panel console and the interrupt guard are exercised by every
+image run there, from U-Boot and on the kexec route.
