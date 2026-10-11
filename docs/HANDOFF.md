@@ -280,10 +280,11 @@ is kept and pinned by tests.
      pool's top region, `541c9d3`); on the AM62P at `f2a13877` all 33
      scenes ran, but no capture shows the pictures. The Pi 4 carve-out (#4,
      #5): the Pi 4 glmark2 image takes 96 MiB (`ca4074a`); the host harness
-     (`tools/hostharness/glmark2/FINDINGS-v3d.md`, 2026-10-11) still shows
-     refract's draw refused once a frame (its 1600x1200 mip chain is over
-     the 8 MiB tiled-copy budget) and no allocation refused
-     (`tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`).
+     (`tools/hostharness/glmark2/FINDINGS-v3d.md`, 2026-10-12) shows no
+     refused draw and no refused allocation since the image's tiled-copy
+     budget is 24 MiB (refract's 1600x1200 mip chain was over the 8 MiB
+     default: `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`);
+     not yet run on the board.
    - The i.MX8MP panel at 69.3 MHz (`c1f0e2a6`; its DISPLAY record is
      clean): the viewing by eye is still pending (#23).
    - ES 2.0 builds still accept other ES 3-only renderbuffer formats such
