@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # `tests/fixtures/deqp_random_dead_cube/`
 
 GLSL ES 1.00 sources that dEQP-GLES2 (VK-GL-CTS 93bca01) generates for eleven

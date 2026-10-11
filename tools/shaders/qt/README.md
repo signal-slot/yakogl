@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Qt Quick shaders
 
 The GLSL ES 1.00 sources Qt 6's GLES2 RHI backend passes to `glShaderSource`,

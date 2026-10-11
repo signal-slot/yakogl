@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # glmark2's shaders
 
 The distinct shader texts glmark2-es2's default benchmark set passes to
