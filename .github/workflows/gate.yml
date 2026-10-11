@@ -52,6 +52,13 @@ jobs:
     timeout-minutes: 180
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # Rows at once (tools/check.sh --jobs). Measured on 8 cores (nuc's
+      # count) on fc1bb2a6, every row, empty cache: 1174 s with 1, 877 s
+      # with 2, 547-593 s with 4 (docs/ci.md, section 1). A test row already
+      # uses every core, so more rows mostly overlap the one-core rows; more
+      # than 4 was not measured. The farm's agents keep priority through CPU
+      # weight (docs/ci.md 3.3, "Beside the farm"), not through this count.
+      YAKOGL_CHECK_JOBS: "4"
     steps:
       # The job's git reads no global configuration of the runner's user (a
       # credential helper there once broke the fetch), but actions/checkout
