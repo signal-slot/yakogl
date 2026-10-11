@@ -724,6 +724,19 @@ knobs_lib_tests() {
 scope vivante
 step "clippy  $KNOBS_CONFIG" cargo clippy --no-default-features --features "$KNOBS_CONFIG" --all-targets
 step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knobs_lib_tests
+# The KICK_DIFF comparison (src/vivante/kick.rs `diff`) exists only with the
+# knobs, so its test binary runs here; all KICK_DIFF_TESTS of it must pass,
+# so a cfg that stops compiling them turns the row red, not green.
+KICK_DIFF_TESTS=7
+kick_diff_tests() {
+  local out
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_kick_diff 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  printf '%s\n' "$out" | grep -q "^test result: ok. $KICK_DIFF_TESTS passed; 0 failed; 0 ignored" ||
+    { echo "tests/gc_kick_diff.rs: not $KICK_DIFF_TESTS passed"; return 1; }
+}
+step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, $KICK_DIFF_TESTS tests)" kick_diff_tests
 
 # The Raspberry Pi 4's V3D (`gpu-v3d`). Its only shader back end is the
 # in-process compiler and it has no offline table, so its one host
@@ -1730,22 +1743,22 @@ step "no Mesa reference in the artefact" check_no_mesa_reference
 
 # No test knob in the artefact either, read the same way: the C archive a
 # GC7000 product image links (yakogl-capi with the Zephyr image's features,
-# the in-process compiler and no table) must define no gc_debug_* or
-# gc_perf_* symbol at all. The same archive with `test-knobs`, what
+# the in-process compiler and no table) must define no gc_debug_*, gc_perf_* or
+# gc_kick_diff_* symbol at all. The same archive with `test-knobs`, what
 # gc_gl_test links, must define exactly the knobs, which is the control: a
 # pattern that stopped matching would find neither. Exact sets, so a new
 # `#[no_mangle]` switch fails here until it is moved behind the feature and
 # listed.
 KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la"
+gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_enable gc_kick_diff_stats"
 knob_symbols() {
   local dir
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build -p yakogl-capi --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
   nm --defined-only -g "$dir/release/libyakogl_capi.a" 2>/dev/null |
-    awk 'NF == 3 && $3 ~ /^gc_(debug|perf)_/ { print $3 }' | sort -u
+    awk 'NF == 3 && $3 ~ /^gc_(debug|perf|kick_diff)_/ { print $3 }' | sort -u
 }
 
 check_knobs_absent() {
@@ -1754,12 +1767,12 @@ check_knobs_absent() {
   knobs=$(knob_symbols "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table,test-knobs") || return 1
   want_knobs=$(printf '%s\n' $KNOB_TEST_SYMBOLS | sort -u)
   if [ "$knobs" != "$want_knobs" ]; then
-    echo "the test-knobs archive's gc_debug_*/gc_perf_* symbols are not the expected set:"
+    echo "the test-knobs archive's gc_debug_*/gc_perf_*/gc_kick_diff_* symbols are not the expected set:"
     diff <(printf '%s\n' "$want_knobs") <(printf '%s\n' "$knobs")
     return 1
   fi
   if [ -n "$product" ]; then
-    echo "the product archive defines gc_debug_*/gc_perf_* symbols:"
+    echo "the product archive defines gc_debug_*/gc_perf_*/gc_kick_diff_* symbols:"
     printf '%s\n' "$product"
     return 1
   fi
