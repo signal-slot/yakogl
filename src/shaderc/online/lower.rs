@@ -2815,6 +2815,32 @@ impl<'a> Lower<'_, 'a> {
                 out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
                 return Ok(());
             }
+            /* `var.m[k] = c`, `m` a matrix member and `k` a constant: one
+             * column, to its own location (dEQP's transform-feedback shape,
+             * `v[c] = a_c`, on a structure member). */
+            if let Expr::Index(mb, idx) = *self.ast.expr(lhs) {
+                if let (Some(name), BaseType::Mat(n, _)) = (self.struct_varying_leaf(mb)?, self.types.of(mb).base) {
+                    if op.is_some() {
+                        return Err(self.err(name, "a compound assignment to a structure output is not lowered yet"));
+                    }
+                    let Some(k) = self.pure_index(idx) else {
+                        return Err(
+                            self.err(name, "a column of a structure output chosen at run time is not lowered yet")
+                        );
+                    };
+                    if !(0..i64::from(n)).contains(&k) {
+                        return Err(self.err("[]", "index out of range"));
+                    }
+                    let Some(row) = self.reflection.varyings.iter().find(|v| v.name == name).copied() else {
+                        return Err(self.err(name, "assignment to this is not lowered yet"));
+                    };
+                    let src = value_of(self, row.components, out)?;
+                    let slot = ir::IoSlot::Varying(row.location + k as u8);
+                    let v = self.push_instr(Op::StoreOutput { slot, src })?;
+                    out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
+                    return Ok(());
+                }
+            }
         }
         /* `a[i].yx = v` with `i` chosen at run time: the element resolved
          * once, the swizzled lanes written in whichever element it is. */
@@ -13397,6 +13423,37 @@ mod io_array_tests {
         assert_eq!([at(v), at(v + 1), at(v + 2), at(v + 3)], [[1.0, 2.0], [3.0, 4.0], [5.0, 9.0], [7.0, 8.0]]);
         assert_eq!(out.output_f32(ir::IoSlot::Varying(loc("w"))).expect("w"), [10.0; 4]);
         assert_eq!([at(loc("m")), at(loc("m") + 1)], [[13.0, 14.0], [11.0, 12.0]]);
+    }
+
+    /// `v.m[k] = c` on an ES 3.00 structure output: column k of the member
+    /// at the member's location + k (the transform-feedback tests' shape on
+    /// a struct; refused with "assignment to this is not lowered yet" before).
+    #[test]
+    fn a_column_of_a_structure_output_member() {
+        let vs = "#version 300 es\nstruct S { float a; mat2 m; };\nout S v;\n\
+                  void main() { gl_Position = vec4(0.0); v.a = 1.0;\n\
+                  v.m[1] = vec2(3.0, 4.0); v.m[0] = vec2(5.0, 6.0); }";
+        let mut buf = std::vec![0u8; 1 << 20];
+        let a = Arena::new(&mut buf);
+        let l = compile_to_ir(&a, Stage::Vertex, vs).unwrap_or_else(|e| panic!("refused: {}", e.msg));
+        let loc = |n: &str| l.reflection.varyings.iter().find(|x| x.name == n).expect("a varying").location;
+        let out = run(&l.module, &Inputs { io: &[], uniforms: &[] }).expect("runs");
+        let at = |slot: u8| {
+            let v = out.output_f32(ir::IoSlot::Varying(slot)).expect("written");
+            [v[0], v[1]]
+        };
+        assert_eq!(at(loc("v.a"))[0], 1.0);
+        assert_eq!([at(loc("v.m")), at(loc("v.m") + 1)], [[5.0, 6.0], [3.0, 4.0]]);
+        /* A run-time column and a compound form are refused by name. */
+        for body in ["v.m[k] = vec2(1.0);", "v.m[0] += vec2(1.0);"] {
+            let src = std::format!(
+                "#version 300 es\nstruct S {{ mat2 m; }};\nout S v;\nuniform int k;\nvoid main() {{ {body} }}"
+            );
+            let mut buf = std::vec![0u8; 1 << 20];
+            let a = Arena::new(&mut buf);
+            let e = compile_to_ir(&a, Stage::Vertex, &src).err().expect("refused");
+            assert!(e.msg.contains("structure output"), "{body}: {}", e.msg);
+        }
     }
 
     #[test]
