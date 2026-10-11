@@ -184,16 +184,12 @@ run into shards (one job per scope class: `pvr`, `vivante`, `v3d`,
 `precompile`, `tools`, `images`), each a `check.sh --shard <class>` on its
 own runner, and a last job joins the summaries. More runner capacity is a
 matter of registering more runner instances: a machine can run several
-(one per directory), and this host (64 cores) would be the strongest of
-them. Whether the owner's workstation becomes a runner is the owner's
-decision.
+(one per directory).
 
-**Away from the farm.** The two runners are farm workers. A gate job on
-system76 shares its cores with up to five agents; that alone doubled the
-run. Either the farm's slots on runner machines go down while a gate runs
-(ccfarm knows a node's load; a runner job could pause the worker's claims
-through `ccfarm node pause` for its duration), or the gate gets machines
-the farm does not use. Decision for the owner.
+**Beside the farm.** ccfarm runs its agents at nice 10 / CPUWeight 20
+by default, and the runner units will be set below that. So a gate run
+on a busy machine is slower by design, and the gate makes up for it by
+doing less and running in parallel.
 
 ### 3.4 Make the slow tests faster
 
