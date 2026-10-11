@@ -54,6 +54,14 @@ allow = [
   "Bash(git show:*)",
   "Bash(git add:*)",
   "Bash(git commit:*)",
+  # The board recipes (tools/cts/README.md): the layout script, the image
+  # builds, the board runner and west. Without these a task on a board lease
+  # waits ten minutes per call for a decision nobody is there to make.
+  "Bash(tools/cts/*)",
+  "Bash(sh tools/cts/*)",
+  "Bash(tools/board.sh*)",
+  "Bash(west *)",
+  "Bash(git fetch:*)",
 ]
 
 [workspace]
@@ -127,6 +135,11 @@ env_names = [
   "BOARD_UART",
   "PVR_FW_BLOB",
 ]
+# The values a board task writes under (image output, the dEQP stage-1 trees,
+# all under the dependency layout): a sandboxed task may write `$NAME/...`
+# there without asking (ccfarm `[workspace] writable_env_names`; the four
+# board tasks of 2026-10-11 stopped on `mkdir $IMX8MP_OUT/...`).
+writable_env_names = ["IMX8MP_OUT", "DEQP_STAGE1", "DEQP_WORK"]
 
 # The PowerVR firmware header: generated from TI's rgx.fw by
 # driver/tools/mkfwblob.sh, gitignored (driver/.gitignore: src/fw/), never
