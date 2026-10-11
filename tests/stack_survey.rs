@@ -101,20 +101,40 @@ fn survey(sources: &[(String, Stage, String)]) -> [Worst; 6] {
             note(4, d);
         }
         let st = if *stage == Stage::Vertex { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
-        let (_, d) =
+        /* The front end above runs in this part's own arena; the compile
+         * runs in the process's one scratch arena and keep store, which the
+         * other parts of this binary use too. */
+        let _compile = compile_lock();
+        let (compiled, d) =
             depth_of(|| store::with_scratch(|s| codegen::compile(st, text.as_bytes(), 0, s, store::keep()).is_ok()));
+        /* A refused arena ran no compile: its depth would be a figure for nothing. */
+        assert!(compiled.is_some(), "the scratch arena was busy for {}: the depth measured no compile", sources[k].0);
         note(5, d);
         yakogl::shaderc::online::backend::forget_compiled();
     }
     worst
 }
 
-fn corpus() -> Vec<(String, Stage, String)> {
-    let mut v: Vec<(String, Stage, String)> = SHC_SOURCE_TABLE
+/// The compiler's scratch arena and keep store are one per process, and
+/// `store::with_scratch` refuses a second caller (`None`) rather than
+/// waiting: the parts of this binary that run at once take turns at the
+/// compile, while their front ends, each in its own arena, overlap.
+fn compile_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Every source of the survey, with the part it belongs to: the reference
+/// table by stage, each directory under `tools/shaders` (its files at any
+/// depth), the files at the top of `tools/shaders`, and the adversarial
+/// shapes.
+fn corpus() -> Vec<(&'static str, (String, Stage, String))> {
+    let mut v: Vec<(&'static str, (String, Stage, String))> = SHC_SOURCE_TABLE
         .iter()
         .map(|e| {
             let st = if e.name.contains(".vert") { Stage::Vertex } else { Stage::Fragment };
-            (e.name.to_string(), st, e.text.trim_end_matches('\0').to_string())
+            let part = if st == Stage::Vertex { "table vertex" } else { "table fragment" };
+            (part, (e.name.to_string(), st, e.text.trim_end_matches('\0').to_string()))
         })
         .collect();
     fn walk(dir: &std::path::Path, out: &mut Vec<(String, Stage, String)>) {
@@ -136,8 +156,23 @@ fn corpus() -> Vec<(String, Stage, String)> {
             }
         }
     }
-    walk(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders")), &mut v);
-    v.extend(adversarial());
+    let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders"));
+    let mut walked = Vec::new();
+    walk(root, &mut walked);
+    for src in walked {
+        let rel = std::path::Path::new(&src.0).strip_prefix(root).expect("a file under tools/shaders");
+        let part = match rel.components().count() {
+            1 => "tools/shaders",
+            _ => {
+                let dir = rel.components().next().and_then(|c| c.as_os_str().to_str()).expect("a directory name");
+                PARTS.iter().map(|p| p.0).find(|p| p.strip_prefix("tools/shaders/") == Some(dir)).unwrap_or_else(|| {
+                    panic!("tools/shaders/{dir} is no part of this survey: add it to PARTS with its count")
+                })
+            }
+        };
+        v.push((part, src));
+    }
+    v.extend(adversarial().into_iter().map(|x| ("adversarial", x)));
     v
 }
 
@@ -176,10 +211,65 @@ fn adversarial() -> Vec<(String, Stage, String)> {
     v
 }
 
+/// The parts of the corpus, how many sources each holds, and the test that
+/// surveys it: one test per part, so the harness (and cargo-nextest) runs
+/// them at once, and no part can be listed without its test. A source added
+/// or removed fails `the_parts_cover_the_corpus` until the count here is
+/// re-derived, so the survey never covers less than it says. The reference
+/// tables differ per GPU (`tests/reference/`).
+macro_rules! parts {
+    ($($test:ident: $part:literal, $count:expr;)*) => {
+        const PARTS: [(&str, usize); [$($part),*].len()] = [$(($part, $count)),*];
+        $(
+            #[test]
+            fn $test() {
+                stack_by_phase($part);
+            }
+        )*
+    };
+}
+parts! {
+    the_compilers_stack_by_phase_table_vertex: "table vertex", if cfg!(feature = "gpu-vivante") { 179 } else { 219 };
+    the_compilers_stack_by_phase_table_fragment: "table fragment", if cfg!(feature = "gpu-vivante") { 151 } else { 335 };
+    the_compilers_stack_by_phase_shaders_top: "tools/shaders", 20;
+    the_compilers_stack_by_phase_shaders_es100: "tools/shaders/es100", 113;
+    the_compilers_stack_by_phase_shaders_es300: "tools/shaders/es300", 30;
+    the_compilers_stack_by_phase_shaders_femtovg: "tools/shaders/femtovg", 36;
+    the_compilers_stack_by_phase_shaders_gl_test_es100: "tools/shaders/gl_test_es100", 14;
+    the_compilers_stack_by_phase_shaders_gltest: "tools/shaders/gltest", 63;
+    the_compilers_stack_by_phase_shaders_internal: "tools/shaders/internal", 8;
+    the_compilers_stack_by_phase_shaders_offarm: "tools/shaders/offarm", 13;
+    the_compilers_stack_by_phase_shaders_qt: "tools/shaders/qt", 169;
+    the_compilers_stack_by_phase_shaders_qt3d: "tools/shaders/qt3d", 332;
+    the_compilers_stack_by_phase_adversarial: "adversarial", 10;
+}
+const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 1138 } else { 1362 };
+
+/// The parts together are the whole corpus: every source is in exactly one
+/// part (`corpus` refuses a directory no part names), each part holds the
+/// count pinned for it, and the counts add up to the pinned total.
 #[test]
-fn the_compilers_stack_by_phase() {
-    let sources = corpus();
+fn the_parts_cover_the_corpus() {
+    let all = corpus();
+    let mut seen = std::collections::BTreeMap::<&str, usize>::new();
+    for (part, _) in &all {
+        *seen.entry(part).or_default() += 1;
+    }
+    for (part, want) in PARTS {
+        assert_eq!(seen.remove(part).unwrap_or(0), want, "the part {part:?} changed size; re-derive PARTS");
+    }
+    assert!(seen.is_empty(), "sources in no part: {seen:?}");
+    assert_eq!(PARTS.iter().map(|p| p.1).sum::<usize>(), TOTAL, "PARTS does not add up to the pinned total");
+    assert_eq!(all.len(), TOTAL, "the corpus changed size; re-derive PARTS and TOTAL");
+}
+
+/// Survey one part on a thread whose stack holds the measuring window.
+fn stack_by_phase(part: &'static str) {
+    let want = PARTS.iter().find(|p| p.0 == part).expect("a part of PARTS").1;
+    let sources: Vec<(String, Stage, String)> =
+        corpus().into_iter().filter(|(p, _)| *p == part).map(|(_, x)| x).collect();
     let n = sources.len();
+    assert_eq!(n, want, "the part {part:?} holds {n} sources, pinned at {want}");
     let worst = std::thread::Builder::new()
         .stack_size(WINDOW * 3)
         .spawn(move || {
@@ -191,7 +281,7 @@ fn the_compilers_stack_by_phase() {
         .expect("the survey ran");
     let (w, sources) = worst;
     println!(
-        "\n=== stack by phase, {n} sources (host {}, painted window {} KiB) ===",
+        "\n=== stack by phase, {part}: {n} sources (host {}, painted window {} KiB) ===",
         std::env::consts::ARCH,
         WINDOW / 1024
     );
@@ -208,7 +298,8 @@ fn the_compilers_stack_by_phase() {
      * PowerVR one, with the front end's own worst -- adversarial nesting at
      * the parser's and the inliner's limits -- under 90 KiB. A change that
      * moves a figure past these has changed what every Zephyr thread that
-     * compiles must reserve, and has to say so here and in the docs. */
+     * compiles must reserve, and has to say so here and in the docs. Each
+     * part is held to them, so the whole corpus is. */
     let front = w[..5].iter().map(|x| x.bytes).max().unwrap_or(0);
     assert!(front <= 96 * 1024, "the front end needs {front} bytes of stack, past its 96 KiB tripwire");
     assert!(w[5].bytes <= 160 * 1024, "a compile needs {} bytes of stack, past the 160 KiB tripwire", w[5].bytes);
