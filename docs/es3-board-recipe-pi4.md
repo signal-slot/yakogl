@@ -65,13 +65,9 @@ cts-build-zephyr: libraries in <WORK>/build
 ```
 
 and `<WORK>/build/modules/gles3/libdeqp-gles3-package.a` present (the file the
-<<<<<<< HEAD
-image builder checks for). The gles2 stage 1 built it in 101 s on 64 cores and
-=======
 image builder checks for). Measured on 2026-10-11 (`stage1-pi4`,
 `docs/board-sessions/pi4-deqp-stage1-gles3.md`): the stage 1 built in 203 s
 on 12 cores, and image A1 linked at 161,256 KB (61.51 % of the window). The gles2 stage 1 built it in 101 s on 64 cores and
->>>>>>> 616e87ad144b08fa37533d0418c1026ccb3d7579
 314 s on 12 loaded ones (`pi4-deqp-stage1.md`); gles3 has about 15 % more
 sources. Keep `<WORK>` as `DEQP_WORK` for the farm:
 `<ccfarm-env name="DEQP_WORK_GLES3" ...>` in the session's report, since
@@ -194,8 +190,6 @@ What a row can say instead, and what to do:
   board; the chain stops (`TREE_RETRIES` is 0 on the Pi 4). `rc=5`: the board
   did not come back to Linux; the chain stops, a person looks at the board.
 
-<<<<<<< HEAD
-=======
 ### On the farm: `pi4-elegance`
 
 `pi4-elegance` is the farm's Pi 4 (resource kind `pi4`). A ccfarm session
@@ -251,7 +245,6 @@ expected first-run outcome above), and after the last row the tally's
 were checked against `tools/board.sh` and `pi4-deqp-images.sh` at
 `eb911ac`, not run on the board.
 
->>>>>>> 616e87ad144b08fa37533d0418c1026ccb3d7579
 ## 5. The tally
 
 The authoritative command, over every record's console:
