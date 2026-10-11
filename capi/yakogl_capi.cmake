@@ -329,12 +329,18 @@ function(yakogl_add_rust_archive)
 
   # rustc of the same toolchain (the rustup proxy next to cargo honours
   # RUSTUP_TOOLCHAIN and the override files of the source directory).
+  # When `cargo` on PATH is a wrapper that sits alone (a build cache's shim
+  # directory, for instance), there is no rustc beside it: ask rustup for the
+  # toolchain's rustc instead (it honours RUSTUP_TOOLCHAIN and the overrides
+  # of the source directory just the same), and as a last resort take the
+  # rustc on PATH.
   get_filename_component(_cargo_dir "${_cargo}" DIRECTORY)
   if(EXISTS "${_cargo_dir}/rustc")
     set(_rustc "${_cargo_dir}/rustc")
   elseif(EXISTS "${_cargo_dir}/rustc.exe")
     set(_rustc "${_cargo_dir}/rustc.exe")
   else()
+<<<<<<< HEAD
     # A cargo that is not the rustup proxy (a caching shim such as kache's,
     # a distribution's wrapper) has no rustc beside it: the one on PATH is
     # the one the same shell's cargo runs, so use it rather than refuse.
@@ -343,6 +349,28 @@ function(yakogl_add_rust_archive)
       message(FATAL_ERROR "YakoGL: no rustc next to ${_cargo}, and none on PATH")
     endif()
     set(_rustc "${YAKOGL_RUSTC_FOUND}")
+=======
+    set(_rustc "")
+    find_program(YAKOGL_RUSTUP_FOUND rustup)
+    if(YAKOGL_RUSTUP_FOUND)
+      execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_env} "${YAKOGL_RUSTUP_FOUND}" which rustc
+        WORKING_DIRECTORY "${_root}" OUTPUT_VARIABLE _rustup_rustc OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _rustup_rc ERROR_QUIET)
+      if(_rustup_rc EQUAL 0 AND EXISTS "${_rustup_rustc}")
+        set(_rustc "${_rustup_rustc}")
+      endif()
+    endif()
+    if(NOT _rustc)
+      find_program(YAKOGL_RUSTC_FOUND rustc)
+      if(YAKOGL_RUSTC_FOUND)
+        set(_rustc "${YAKOGL_RUSTC_FOUND}")
+      endif()
+    endif()
+    if(NOT _rustc)
+      message(FATAL_ERROR "YakoGL: no rustc next to ${_cargo}, and neither `rustup which rustc` nor a rustc on PATH answers")
+    endif()
+    message(STATUS "YakoGL: no rustc next to ${_cargo}; using ${_rustc}")
+>>>>>>> 7979cc55de5a2f289ef662a933abaf30cba45c73
   endif()
   execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_env} "${_rustc}" --print sysroot
     WORKING_DIRECTORY "${_root}" OUTPUT_VARIABLE _sysroot OUTPUT_STRIP_TRAILING_WHITESPACE
