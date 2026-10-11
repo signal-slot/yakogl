@@ -8,6 +8,12 @@
 # failing binary turns the row red, is named, and is never recorded. A
 # wrong skip hides a failure, so the cache is pinned here and run in the
 # gate (scope tools).
+#
+# And the input keys of the other rows (rowkey): a keyed row records, is
+# not run again with the same key, runs again when an input changes, and a
+# red keyed row is never recorded. Every real row key is then checked
+# against a known positive (a change to one input it names moves it) and a
+# negative (a document, or the inputs of the other rows, leave it).
 set -u
 cd "$(dirname "$0")/.." || exit 2
 fails=0
@@ -15,11 +21,15 @@ checks=0
 mkdir -p build/check
 cache=$(mktemp -d build/check/testcache-selftest.XXXXXX) || exit 2
 probes=()
+restore=()
 cleanup() {
+  local f
+  for f in "${restore[@]}"; do cp "$cache/restore/$(echo "$f" | tr / _)" "$f"; done
   rm -rf "$cache"
   [ "${#probes[@]}" -eq 0 ] || rm -f "${probes[@]}"
 }
 trap cleanup EXIT
+trap 'exit 2' INT TERM
 expect() {
   local label=$1 pattern=$2 out=$3
   checks=$((checks + 1))
@@ -126,5 +136,109 @@ echo probe > tools/shaders/.testcache-selftest-probe
 same "a shader the tests read: the tree key" "$tree0" "$(key tree)" differ
 same "a shader the tests read: the library's tree key" "$lib0" "$(key lib-tree)" differ
 same "the environment key does not read the tree" "$env0" "$(key env)" same
+rm -f "${probes[@]}"
+probes=()
+
+# A keyed row end to end, on a real key function over a directory: record,
+# not run again, run again when a file under the directory is added; a run
+# without YAKOGL_CHECK_RECORD and a red row write no entry.
+keyed() {
+  row "$@" tools/check.sh --keyed-row key_python_row tools/cts -- python3 tools/cts/deqp-uart-tally.py --self-test
+}
+rows() { find "$cache/rows" -maxdepth 1 -type f ! -name '*.log' 2>/dev/null | wc -l; }
+out=$(keyed YAKOGL_CHECK_RECORD=deadbeef)
+expect "keyed: recorded, green" '^check.sh: 1 ok, 0 failed, .* 0 not run \(passed on main\)' "$out"
+checks=$((checks + 1))
+[ "$(rows)" -eq 1 ] || { echo "FAIL keyed: $(rows) row entries after one recorded row"; fails=$((fails + 1)); }
+out=$(keyed)
+expect "keyed: not run again" '^check.sh: 0 ok, 0 failed, .* 1 not run \(passed on main\)' "$out"
+expect "keyed: the skip line" '^skip  keyed   python3 tools/cts/deqp-uart-tally.py --self-test \(passed on main deadbeef\)$' "$out"
+probes+=(tools/cts/.testcache-selftest-probe)
+echo probe > tools/cts/.testcache-selftest-probe
+out=$(keyed)
+expect "keyed: an input added, it runs" '^check.sh: 1 ok, 0 failed, .* 0 not run \(passed on main\)' "$out"
+checks=$((checks + 1))
+[ "$(rows)" -eq 1 ] || { echo "FAIL keyed: a run without YAKOGL_CHECK_RECORD wrote an entry"; fails=$((fails + 1)); }
+out=$(row YAKOGL_CHECK_RECORD=deadbeef tools/check.sh --keyed-row key_python_row tools/cts -- false)
+expect "keyed: a red row is red" '^check.sh: 0 ok, 1 failed' "$out"
+checks=$((checks + 1))
+[ "$(rows)" -eq 1 ] || { echo "FAIL keyed: a red row was recorded"; fails=$((fails + 1)); }
+rm -f tools/cts/.testcache-selftest-probe
+
+# Every row key of the gate, over its declared inputs (YAKOGL_CHECK_INPUT_KEYS:
+# the keys printed, nothing run, the artefacts a key also holds not built).
+row_keys() {
+  env "$@" YAKOGL_CHECK_INPUT_KEYS=1 YAKOGL_CHECK_PATHS=src/gl/draw.rs tools/check.sh --changed HEAD 2>&1 |
+    sed 's/\x1b\[[0-9;]*m//g' | sed -n 's/^key   //p' | sort
+}
+k0=$(row_keys)
+want_rows="tools   am62p netboot TFTP server
+tools   am62p netboot UART phases
+tools   am62p-gles3-tree: generator self-test and table check
+no table in the artefact
+no Mesa reference in the artefact
+no test knob in the artefact
+gen     precompiled table gpu-powervr:
+gen     precompiled table gpu-vivante:
+gen     precompiled table gpu-powervr,report-es2:
+gen     precompiled table gpu-vivante,report-es2:"
+[ -n "${PCO_SHC-}" ] && want_rows="$want_rows
+gen     tests/reference/blobs.rs"
+while IFS= read -r r; do
+  checks=$((checks + 1))
+  printf '%s\n' "$k0" | grep -qF "$r" || { echo "FAIL row keys: no key for '$r'"; fails=$((fails + 1)); }
+done <<< "$want_rows"
+checks=$((checks + 1))
+if printf '%s\n' "$k0" | grep -q 'not made'; then
+  echo "FAIL row keys: a key was not made:"
+  printf '%s\n' "$k0" | grep 'not made' | sed 's/^/    /'
+  fails=$((fails + 1))
+fi
+[ -n "${PCO_SHC-}" ] || echo "check_testcache_selftest: no PCO_SHC; the Mesa table's key was not checked"
+# moved <label> <regex of the rows whose key must move> <keys after>: every
+# other row's key is the same as before.
+moved() {
+  local label=$1 want=$2 after=$3 name before_k after_k
+  while IFS= read -r line; do
+    name=${line% *}
+    before_k=${line##* }
+    after_k=$(printf '%s\n' "$after" | grep -F "$name " | sed 's/.* //')
+    checks=$((checks + 1))
+    if printf '%s\n' "$name" | grep -qE "$want"; then
+      [ "$before_k" != "$after_k" ] || { echo "FAIL $label: the key of '$name' did not move"; fails=$((fails + 1)); }
+    else
+      [ "$before_k" = "$after_k" ] || { echo "FAIL $label: the key of '$name' moved"; fails=$((fails + 1)); }
+    fi
+  done <<< "$k0"
+}
+moved "nothing changed" '^$' "$(row_keys)"
+probe() {
+  probes+=("$1")
+  echo probe > "$1"
+  moved "$2" "$3" "$(row_keys)"
+  rm -f "$1"
+}
+probe docs/.testcache-selftest-probe "a document" '^$'
+probe tools/shaders/.testcache-selftest-probe "a shader source" '^(gen     precompiled table|gen     tests/reference|no )'
+probe tests/fixtures/precompile_testcache_probe.txt "a precompile fixture" '^gen     precompiled table'
+probe src/.testcache-selftest-probe "a library source" '^no '
+probe third_party/mesa-26.2.1/.testcache-selftest-probe "a C source build.rs compiles" '^no '
+probe tools/testdata/am62p-netboot-testcache-probe.uart.ts "a UART capture" 'netboot UART'
+# A tracked file each Python row names, changed in place and restored.
+change() {
+  mkdir -p "$cache/restore"
+  cp "$1" "$cache/restore/$(echo "$1" | tr / _)"
+  restore+=("$1")
+  echo "# probe" >> "$1"
+  moved "$2" "$3" "$(row_keys)"
+  cp "$cache/restore/$(echo "$1" | tr / _)" "$1"
+}
+change tools/tftp_oneshot.py "the TFTP server" 'TFTP server'
+change tools/cts/am62p-gles3-tree.txt "the GLES3 tree table" 'gles3-tree'
+change tests/reference/blobs.rs "the committed Mesa table" '^(gen     tests/reference|no )'
+# The environment: the toolchain's variables, the interpreter's.
+moved "RUSTFLAGS" '^(gen     precompiled table|no )' "$(row_keys RUSTFLAGS=--cfg=testcache_probe)"
+moved "PYTHONPATH" '^tools ' "$(row_keys PYTHONPATH=/nonexistent)"
+moved "PCO_DEBUG" '^gen     tests/reference' "$(row_keys PCO_DEBUG=probe)"
 echo "check_testcache_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]

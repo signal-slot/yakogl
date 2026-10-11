@@ -22,7 +22,9 @@
 # binary that passed on main with the same key (cargo_test below:
 # YAKOGL_CHECK_TEST_JOBS, YAKOGL_TEST_OK, YAKOGL_CHECK_RECORD,
 # YAKOGL_CHECK_VERBOSE). The summary counts those binaries apart from the
-# rows --changed skipped.
+# rows --changed skipped. A row outside cargo whose inputs are all named has
+# an input key (rowkey below), and one that passed on main with the same key
+# is not run either; the summary counts those rows too.
 #
 # --changed maps each changed path to the parts it can break (scope_of_path
 # below: a GPU back end, gl_test, the tools, the precompiled tables, the
@@ -253,6 +255,7 @@ wanted() {
   return 1
 }
 skips=0
+rows_cached=0
 skip() {
   queue_line "$(printf '\033[2mskip  %s\033[0m' "$*")"
   skips=$((skips + 1))
@@ -296,6 +299,9 @@ JOBS=${YAKOGL_CHECK_JOBS:-1}
 [[ $JOBS =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: --jobs/YAKOGL_CHECK_JOBS '$JOBS' is not a count"; exit 2; }
 ROW_USES=
 uses() { ROW_USES="$*"; }
+# rowkey <function> [args]: the row after it has an input key (below).
+ROW_KEY=
+rowkey() { ROW_KEY="$*"; }
 declare -A LANE_W=() LANE_R=()
 # lane_deps <n> <uses>: the done-files row <n> waits for, in ROW_DEPS, and
 # the lanes updated for the rows after it.
@@ -322,42 +328,64 @@ lane_deps() {
 
 # step <label> <command...>
 step() {
-  local label="$1" n row_uses=$ROW_USES
+  local label="$1" n row_uses=$ROW_USES row_key=$ROW_KEY h
   shift
   ROW_USES=
+  ROW_KEY=
   if ! wanted; then skip "$label"; return 0; fi
   if [ -n "${YAKOGL_CHECK_PLAN-}" ]; then queue_line "plan  $label"; oks=$((oks + 1)); return 0; fi
+  # YAKOGL_CHECK_INPUT_KEYS=1: print each keyed row's key and run nothing
+  # (tools/check_testcache_selftest.sh).
+  if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
+    [ -n "$row_key" ] || return 0
+    if h=$(row_key "$row_key" "$@" 2>&1); then
+      queue_line "key   $label $(printf '%s\n' "$h" | sha256sum | cut -c1-64)"
+    else
+      queue_line "key   $label (not made: $(printf '%s\n' "$h" | tail -1))"
+    fi
+    return 0
+  fi
   entries=$((entries + 1))
   n=$entries
   printf '%s\n' "$label" > "$ROWS/$n.label"
   lane_deps "$n" "$row_uses"
   if [ "$JOBS" -eq 1 ]; then
-    run_row "$n" "$ROW_DEPS" "$@"
+    run_row "$n" "$ROW_DEPS" "$row_key" "$@"
   else
     while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do
       wait -n
       flush_entries
     done
-    run_row "$n" "$ROW_DEPS" "$@" &
+    run_row "$n" "$ROW_DEPS" "$row_key" "$@" &
   fi
   flush_entries
 }
 
-# run_row <n> <done-files> <command...>: one row, in a process of its own.
-# It waits for the rows it depends on, runs the command with its output in
-# n.out and what it writes to fd 3 in n.notes (cargo_test's lines about the
-# binaries it did not run), and leaves its verdict in n.verdict and its
-# seconds in n.time. n.done comes last: the entry is complete.
+# run_row <n> <done-files> <key> <command...>: one row, in a process of its
+# own. It waits for the rows it depends on, runs the command with its output
+# in n.out and what it writes to fd 3 in n.notes (cargo_test's lines about
+# the binaries it did not run), and leaves its verdict in n.verdict and its
+# seconds in n.time. n.done comes last: the entry is complete. A row with an
+# input key (<key> not empty) that passed on main is not run: its recorded
+# log stands in for its output (row_cached).
 run_row() (
   n=$1
   deps=$2
-  shift 2
+  key=$3
+  shift 3
   for d in $deps; do
     while [ ! -e "$d" ]; do sleep 0.2; done
   done
   t0=$SECONDS
   export ROW_SEQ=$n
-  if "$@" > "$ROWS/$n.out" 2>&1 3> "$ROWS/$n.notes"; then
+  if [ -n "$key" ] && row_cached "$n" "$key" "$@"; then
+    echo $((SECONDS - t0)) > "$ROWS/$n.time"
+    : > "$ROWS/$n.done"
+    exit 0
+  fi
+  if [ -e "$ROWS/$n.verdict" ]; then
+    : # row_cached could not make the key: the verdict is written
+  elif "$@" > "$ROWS/$n.out" 2>&1 3> "$ROWS/$n.notes"; then
     # clippy exits 0 even with warnings, so the warning count is what decides.
     #
     # Count EVERY `warning:` line and drop only cargo's per-crate summaries
@@ -375,6 +403,7 @@ run_row() (
   else
     echo fail > "$ROWS/$n.verdict"
   fi
+  [ -n "$key" ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_record "$n"
   echo $((SECONDS - t0)) > "$ROWS/$n.time"
   : > "$ROWS/$n.done"
 )
@@ -390,6 +419,12 @@ report_row() {
   ok)
     green "ok    $label $t"
     oks=$((oks + 1))
+    ;;
+  cached\ *)
+    printf '\033[2mskip  %s (passed on main %s)\033[0m\n' "$label" "${verdict#cached }"
+    [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] && echo "      key $(cat "$ROWS/$n.keyhash") ($ROWS/$n.key)"
+    sed 's/^/      /' "$out"
+    rows_cached=$((rows_cached + 1))
     ;;
   warn\ *)
     red "FAIL  $label: ${verdict#warn } warning(s) $t"
@@ -433,6 +468,140 @@ drain_entries() {
     [ -e "$ROWS/$i.done" ] || : > "$ROWS/$i.done"
   done
   flush_entries
+}
+
+# Input keys for the rows cargo_test does not cover (docs/ci.md, 3.2).
+#
+# A row whose every input can be named gets `rowkey <function> [args]` before
+# its step. The function prints the row's inputs as text: the files it reads
+# (key_tree: their git blob ids, and the content of any changed or added in
+# the working tree), the bytes of the programs it runs and of what it builds
+# and then reads (a binary, a library), the tool versions and the
+# environment. The key is the sha256 of that text, the row's command line
+# and the text of every shell function the command names. When an entry for
+# the key exists in $TEST_OK_DIR/rows/ (cargo_test's directory, YAKOGL_TEST_OK),
+# the row is not run: the log prints `skip  <row> (passed on main <commit>)`
+# and the output the row printed on main. Entries are written only when
+# YAKOGL_CHECK_RECORD=<commit> is set (the gate's run on main), and only for
+# a row that passed. A key that cannot be made is a red row. A row whose
+# inputs cannot all be named has no rowkey line and runs every time; its
+# comment says why. YAKOGL_CHECK_VERBOSE=1 prints each key, and n.key under
+# build/check/tests-<pid>/rows/ holds its text.
+
+# row_key <key spec> <command...>: the key text of a row.
+row_key() {
+  local spec=$1 w
+  shift
+  local -a fn
+  read -r -a fn <<< "$spec"
+  echo "command $*"
+  for w in "$@"; do
+    [ "$(type -t -- "$w")" = function ] && declare -f -- "$w"
+  done
+  echo "inputs ${fn[*]}"
+  "${fn[@]}"
+}
+
+# row_cached <n> <key spec> <command...>: 0 when the row passed on main with
+# this key (its recorded log becomes n.out, the verdict `cached <commit>`).
+# A key that cannot be made leaves the verdict `fail` and the reason in n.out.
+row_cached() {
+  local n=$1 spec=$2 h entry
+  shift 2
+  if ! row_key "$spec" "$@" > "$ROWS/$n.key" 2> "$ROWS/$n.key.err"; then
+    { echo "check.sh: the row's input key could not be made ($spec):"; cat "$ROWS/$n.key.err"; } > "$ROWS/$n.out"
+    echo fail > "$ROWS/$n.verdict"
+    return 1
+  fi
+  h=$(sha256sum < "$ROWS/$n.key" | cut -c1-64)
+  echo "$h" > "$ROWS/$n.keyhash"
+  entry="$TEST_OK_DIR/rows/$h"
+  [ -s "$entry" ] && [ -f "$entry.log" ] || return 1
+  cp "$entry.log" "$ROWS/$n.out" || return 1
+  echo "cached $(head -1 "$entry")" > "$ROWS/$n.verdict"
+}
+
+# row_record <n>: a row that passed is recorded under its key, when this is
+# a run on main (YAKOGL_CHECK_RECORD=<commit>).
+row_record() {
+  local n=$1 h d="$TEST_OK_DIR/rows"
+  [ -n "${YAKOGL_CHECK_RECORD-}" ] && [ -s "$ROWS/$n.keyhash" ] || return 0
+  h=$(cat "$ROWS/$n.keyhash")
+  mkdir -p "$d" &&
+    cp "$ROWS/$n.out" "$d/$h.log.tmp.$BASHPID" && mv "$d/$h.log.tmp.$BASHPID" "$d/$h.log" &&
+    echo "$YAKOGL_CHECK_RECORD" > "$d/$h.tmp.$BASHPID" && mv "$d/$h.tmp.$BASHPID" "$d/$h"
+}
+
+# tree_listing <pathspec>...: the tracked files under the pathspecs as git
+# has them (mode, blob id, path), then each file changed or added (and not
+# ignored) in the working tree, by its content, or `deleted`.
+tree_listing() {
+  local p
+  git ls-files -s -- "$@" || return 1
+  { git ls-files -m -- "$@" && git ls-files -o --exclude-standard -- "$@"; } | sort -u |
+    while IFS= read -r p; do
+      if [ -f "$p" ]; then echo "worktree $(git hash-object -- "$p") $p"; else echo "worktree deleted $p"; fi
+    done
+}
+# key_tree <pathspec>...: one line for the files under the pathspecs.
+key_tree() {
+  local h
+  h=$(tree_listing "$@" | sha256sum | cut -c1-64) || return 1
+  echo "tree $* $h"
+}
+# key_file <path>: a file outside git (a generated table), by content.
+key_file() {
+  if [ -f "$1" ]; then echo "file $1 $(sha256sum < "$1" | cut -c1-64)"; else echo "file $1 absent"; fi
+}
+# key_exe <what> <path>: a program a row runs or a library it reads, by its
+# bytes. A path that is not a file is an error: the key is not made.
+key_exe() {
+  [ -f "$2" ] || { echo "$1: $2 is not a file" >&2; return 1; }
+  echo "$1 $(sha256sum < "$2" | cut -c1-64)"
+}
+# key_program <what> <path>: a program by its bytes and those of every shared
+# library it loads (ldd): glslangValidator is a small front end to
+# libglslang.so, and pco_shc loads libSPIRV-Tools.so, so a library upgrade
+# changes what they make while the program's own bytes stay.
+key_program() {
+  local lib
+  key_exe "$1" "$2" || return 1
+  ldd "$2" 2>/dev/null | sed -nE 's/.*=> (\/[^ ]+) .*/\1/p' | sort -u | while read -r lib; do
+    key_exe "  library" "$lib" | sed "s|^  library|  library $lib|"
+  done
+}
+# The Rust and C toolchains and what configures them: rustc and cargo,
+# the host C compiler and clang (build.rs compiles C), nm (the artefact rows
+# read archives with it), every cargo configuration file cargo reads from
+# here (rustc-wrapper, [env]), and the variables cargo, rustc and the cc
+# crate read.
+key_toolchain() {
+  local d f
+  rustc -vV || return 1
+  cargo -V || return 1
+  echo "cc: $(cc --version 2>/dev/null | head -1)"
+  echo "clang: $(clang --version 2>/dev/null | head -1)"
+  echo "nm: $(nm --version 2>/dev/null | head -1)"
+  d=$PWD
+  while :; do
+    for f in "$d/.cargo/config" "$d/.cargo/config.toml"; do [ -f "$f" ] && key_file "$f"; done
+    [ "$d" = / ] && break
+    d=$(dirname "$d")
+  done
+  for f in "${CARGO_HOME:-$HOME/.cargo}/config" "${CARGO_HOME:-$HOME/.cargo}/config.toml"; do
+    [ -f "$f" ] && key_file "$f"
+  done
+  env | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|RUSTC|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|RUSTUP_TOOLCHAIN|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_[A-Z_]+|CARGO_PROFILE_[A-Z0-9_]+|CARGO_TARGET_[A-Z0-9_]+_(LINKER|RUSTFLAGS|RUNNER)|CC|CC_[A-Za-z0-9_-]+|CFLAGS|CFLAGS_[A-Za-z0-9_-]+|TARGET_CC|TARGET_CFLAGS|HOST_CC|HOST_CFLAGS|AR|AR_[A-Za-z0-9_-]+|CROSS_COMPILE)=' | sort
+}
+# The Python interpreter and what changes what it imports.
+key_python() {
+  echo "python: $(python3 -VV 2>&1)"
+  env | grep -E '^(PYTHONPATH|PYTHONHOME|PYTHONSAFEPATH)=' | sort
+}
+# key_python_row <pathspec>...: a Python check that reads only the files
+# named (measured with strace for each row that uses it).
+key_python_row() {
+  key_python && key_tree "$@"
 }
 
 # A test row: cargo_test <cargo test arguments> [-- <harness arguments>]
@@ -748,7 +917,7 @@ summary() {
     bins_run=$((bins_run + r))
     bins_cached=$((bins_cached + c))
   done < "$TEST_STATE/counts"
-  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
+  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode), $rows_cached not run (passed on main) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
   if [ "$rc" -eq 0 ]; then
     green "check.sh: clean"
   else
@@ -771,6 +940,17 @@ fi
 if [ "${1-}" = "--cargo-test" ]; then
   shift
   step "test    $*" cargo_test "$@"
+  summary
+fi
+# --keyed-row <key function> [args] -- <command...>: one row with that input
+# key through the record and the summary (tools/check_testcache_selftest.sh).
+if [ "${1-}" = "--keyed-row" ]; then
+  shift
+  spec=()
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do spec+=("$1"); shift; done
+  shift
+  rowkey "${spec[@]}"
+  step "keyed   $*" "$@"
   summary
 fi
 # --pool-demo <dir> [nolanes]: rows that pass, warn, fail, a gap, and a
@@ -1714,6 +1894,8 @@ if command -v python3 >/dev/null 2>&1; then
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
   # failing cases), on synthetic runs through board.sh's own tally.
+  # No input key (about 28 s): it runs tools/board.sh's tally, which runs
+  # cargo and git over the whole checkout (strace, 2026-10-12).
   step "tools   common-tally row verdicts" python3 tools/cts/common-tally.py --self-test
   # The .qpa rebuilt from a CONFIG_DEQP_ECHO_QPA console: a case whose end
   # or an image the bridge lost is named, never read as a picture.
@@ -1722,7 +1904,13 @@ if command -v python3 >/dev/null 2>&1; then
   # server on loopback (a 16 MiB transfer with windows, lost packets, block
   # number wrap, one-shot rename, paths outside the root), about 5 s; and the
   # UART phase scan, one verdict per missing phase, "empty" never a pass.
+  # Keyed by what each reads, measured with strace (2026-10-12): the TFTP
+  # server only itself; the UART scan itself, tools/board.sh, the RTI arming
+  # source and the 2026-10-03 captures.
+  rowkey key_python_row tools/tftp_oneshot.py
   step "tools   am62p netboot TFTP server" python3 tools/tftp_oneshot.py --self-test
+  rowkey key_python_row tools/am62p_netboot_uart.py tools/board.sh driver/zephyr/lib/board/am62p/rti_arm.c \
+    ':(glob)tools/testdata/am62p-netboot-*'
   step "tools   am62p netboot UART phases" python3 tools/am62p_netboot_uart.py --self-test
   # The i.MX8MP netboot's verdicts (driver/docs/imx8mp-netboot-plan.md) are
   # tools/board.sh's now, replayed on the 2026-10-03 records by
@@ -1743,6 +1931,8 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # that list; a hand edit, a case listed twice or in no image, or an image
   # over 2,000 cases fails here, and a case the board's 600 s watchdog cannot
   # fit is split in the generator, not in the table.
+  # Keyed by the generator, the list and the table (strace, 2026-10-12).
+  rowkey key_python_row tools/cts/gen-am62p-gles3-tree.py tools/cts/gles3-mustpass.txt tools/cts/am62p-gles3-tree.txt
   step "tools   am62p-gles3-tree: generator self-test and table check" sh -c \
     'python3 tools/cts/gen-am62p-gles3-tree.py --self-test && python3 tools/cts/gen-am62p-gles3-tree.py --check'
   # R-23: nothing checked the public headers against what the library
@@ -1811,11 +2001,93 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # held only in the shells that export CARGO_TARGET_DIR=.target, and anywhere
 # else it read a stale archive from an earlier build, the control's 0 failing
 # a tree whose freshly built archive held 1,200 table symbols (2026-09-23).
+# The input key of the three rows that build release archives and read them
+# (no table, no Mesa reference, no test knob): the toolchain, the installed
+# targets, the files the builds read, the precompiled tables (by content:
+# they live in build/), and the text of the functions the rows run. The
+# files are what cargo's dep-info for these archives lists (Rust sources,
+# the `#[path]` modules in tests/reference/ and driver/rust/, build.rs and
+# the C it compiles from driver/ and third_party/), the manifests and the
+# lock file, and what makes the tier tables when a row has to
+# (tools/precompile, tools/shaders). Each build checks its dep-info against
+# this list (dep_info_within), so a new input outside it fails the row
+# instead of leaving the key blind to it.
+# The test knobs the "no test knob" row requires of a test-knobs archive
+# (check_knobs_absent, below); here because that row's key holds it.
+KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
+gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
+gc_debug_set_narrow_la"
+RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
+  driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
+  tools/precompile tools/shaders tools/yakogl-tools/src/shc_print.rs)
+key_release_archives() {
+  key_toolchain || return 1
+  echo "targets: $(rustup target list --installed 2>/dev/null | tr '\n' ' ')"
+  key_tree "${RELEASE_KEY_PATHS[@]}" || return 1
+  key_file build/precompiled/check-powervr.rs
+  key_file build/precompiled/check-gc7000.rs
+  declare -f table_symbols mesa_reference_symbols knob_symbols tier_tables dep_info_within
+  echo "quick $QUICK; knobs $KNOB_TEST_SYMBOLS"
+}
+
+# dep_info_within <file.d>: every input cargo's dep-info lists for an archive
+# is under RELEASE_KEY_PATHS, generated in the target directory, a
+# precompiled table under build/precompiled (its content is in the key), or
+# a registry crate's or the toolchain's (Cargo.lock and the toolchain line
+# pin those). Any other input is named on stderr and fails the row.
+dep_info_within() {
+  local target
+  target=$(cargo metadata --no-deps --format-version 1 |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
+  python3 - "$1" "$PWD" "$target" "${CARGO_HOME:-$HOME/.cargo}" "$(rustc --print sysroot)" \
+    "${RELEASE_KEY_PATHS[@]}" <<'PY' >&2
+import fnmatch, os, re, sys
+dfile, root, target, cargo_home, sysroot, *specs = sys.argv[1:]
+try:
+    text = open(dfile).read()
+except OSError as e:
+    sys.exit("dep_info_within: no dep-info: %s" % e)
+deps = []
+for line in text.splitlines():
+    _, sep, rest = line.partition(": ")
+    if sep:
+        deps += [d.replace("\\ ", " ") for d in re.split(r"(?<!\\) ", rest) if d]
+def keyed(rel):
+    for s in specs:
+        if s.startswith(":(glob)"):
+            if fnmatch.fnmatch(rel, s[len(":(glob)"):].replace("**/", "*/")):
+                return True
+        elif rel == s or rel.startswith(s.rstrip("/") + "/"):
+            return True
+    return False
+outside = []
+for d in deps:
+    p = os.path.realpath(d)
+    if p.startswith(os.path.realpath(target) + "/"):
+        continue
+    if p.startswith(root + "/"):
+        rel = p[len(root) + 1:]
+        if keyed(rel) or rel.startswith("build/precompiled/"):
+            continue
+    elif any(p.startswith(os.path.realpath(x) + "/") for x in (cargo_home + "/registry", cargo_home + "/git", sysroot)):
+        continue
+    outside.append(d)
+if not deps:
+    sys.exit("dep_info_within: %s lists no input" % dfile)
+if outside:
+    print("dep_info_within: %s reads inputs the row's key does not hold (RELEASE_KEY_PATHS):" % dfile)
+    for d in outside:
+        print("  " + d)
+    sys.exit(1)
+PY
+}
+
 table_symbols() {
   local dir
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
+  dep_info_within "$dir/release/libyakogl.d" || return 1
   local rlib="$dir/release/libyakogl.rlib" n
   n=$(nm --defined-only "$rlib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true)
   # The release profile is `lto = true`, and cargo may then build the rlib's
@@ -1848,6 +2120,7 @@ check_table_absent() {
 
 scope vivante precompile
 uses w:release
+rowkey key_release_archives
 step "no table in the artefact" check_table_absent
 
 # No Mesa reference in a product artefact. The Mesa-built tables
@@ -1881,6 +2154,7 @@ mesa_reference_symbols() {
       --features "$features" >/dev/null 2>&1 || return 1
     lib="$dir/$target/release/libyakogl_capi.a"
   fi
+  dep_info_within "${lib%.a}.d" || return 1
   nm "$lib" 2>/dev/null |
     grep -cE '14mesa_reference|13mesa_internal|17mesa_clear_shader|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
 }
@@ -1929,6 +2203,7 @@ check_no_mesa_reference() {
 
 scope pvr vivante v3d precompile
 uses w:release "$(tier_tables_uses)"
+rowkey key_release_archives
 step "no Mesa reference in the artefact" check_no_mesa_reference
 
 # No test knob in the artefact either, read the same way: the C archive a
@@ -1939,14 +2214,13 @@ step "no Mesa reference in the artefact" check_no_mesa_reference
 # pattern that stopped matching would find neither. Exact sets, so a new
 # `#[no_mangle]` switch fails here until it is moved behind the feature and
 # listed.
-KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
-gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la"
+# KNOB_TEST_SYMBOLS: defined with the release archives' key, above.
 knob_symbols() {
   local dir
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build -p yakogl-capi --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
+  dep_info_within "$dir/release/libyakogl_capi.d" || return 1
   nm --defined-only -g "$dir/release/libyakogl_capi.a" 2>/dev/null |
     awk 'NF == 3 && $3 ~ /^gc_(debug|perf)_/ { print $3 }' | sort -u
 }
@@ -1971,6 +2245,7 @@ check_knobs_absent() {
 
 scope vivante
 uses w:release
+rowkey key_release_archives
 step "no test knob in the artefact" check_knobs_absent
 
 # The rows above name THIS package's features, so they never build the
@@ -2020,6 +2295,8 @@ step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compi
 # and the i.MX8MP full-tree results replayed through its verdict, tally and
 # diff, each against what the old runner prints for the same input. The check
 # count is pinned (about 35 s).
+# No input key: what it reads has not been traced (it runs board.sh on
+# every board and backend), so it runs every time.
 scope tools
 step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
 # The map --changed selects rows by, pinned path by path, and the plans of
@@ -2155,6 +2432,9 @@ zephyr_precompiled_only_image() {
     return 1
   fi
 }
+# No input key: an image's inputs include the west workspace and the Zephyr
+# SDK, thousands of files outside the checkout, and a module edited in place
+# moves no revision check.sh could read; so the images are built every time.
 if [ "$QUICK" -eq 0 ]; then
   scope pvr vivante v3d gltest drivers samples precompile
   if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
@@ -2189,6 +2469,57 @@ fi
 # (PCO_SHC; GLSLANG; GLSL2USC_CACHE keeps a rerun at about 3.5 minutes).
 # Without PCO_SHC the row is a gap: the list's PowerVR half was not shown to
 # be the committed table's.
+# The input key of the table proofs (tools/precompile/prove.sh FEATURES): the
+# tool and the library's rlib it builds and runs (their bytes hold everything
+# they were compiled from), the toolchain (rustc compiles the table against
+# the rlib), and what the tool reads at run time, measured with strace on
+# 2026-10-12 (gpu-vivante,report-es2): the list and its sources
+# (tools/shaders), the pinned counts and the refusal lists
+# (tests/fixtures/precompile_*, online_refused_*). Not in the key: the commit
+# and `git status`, which the tool writes into the table's header as its mark;
+# the proof compares a table only with another made by the same tool from the
+# same tree, so the mark cannot change its verdict.
+key_prove() {
+  local out tool rlib
+  if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
+    echo "artefacts of $1: not built (YAKOGL_CHECK_INPUT_KEYS)"
+  else
+    out=$(tools/precompile/prove.sh --artefacts "$1") || return 1
+    read -r tool rlib <<< "$out"
+    key_program tool "$tool" && key_exe rlib "$rlib" || return 1
+  fi
+  key_toolchain && key_tree tools/precompile/prove.sh tools/shaders \
+    ':(glob)tests/fixtures/precompile_*' ':(glob)tests/fixtures/online_refused_*'
+}
+# The input key of the Mesa table (mesa_table_repro): the yakogl-tools
+# binary tools/glsl2usc.sh runs (`cargo run`, so its bytes), pco_shc and
+# glslang (their bytes), the variables the tool reads, and the files it
+# reads, measured with strace on 2026-10-12: glsl2usc.sh, the list and its
+# sources (tools/shaders) and the committed table it is compared with. Not
+# in the key: GLSL2USC_CACHE, a memo of pco_shc's output whose entries are
+# keyed by the text, the stage, the variant, the tools' ids and the options
+# (cache_key_material in tools/yakogl-tools/src/glsl2usc.rs), so an entry
+# is what pco_shc makes.
+key_mesa_table() {
+  local exe glslang
+  if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
+    echo "yakogl-tools: not built (YAKOGL_CHECK_INPUT_KEYS)"
+  elif [ -n "${YAKOGL_TOOLS-}" ]; then
+    key_program yakogl-tools "$YAKOGL_TOOLS" || return 1
+  else
+    exe=$(cargo build -q -p yakogl-tools --message-format=json | python3 -c '
+import json, sys
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("reason") == "compiler-artifact" and m["target"]["name"] == "yakogl-tools" and m.get("executable"):
+        print(m["executable"])') || return 1
+    key_program yakogl-tools "$exe" || return 1
+  fi
+  key_program pco_shc "${PCO_SHC-}" || return 1
+  glslang=$(command -v "${GLSLANG:-glslangValidator}") && key_program glslang "$glslang" || return 1
+  env | grep -E '^(PCO_DEBUG|GLSL2USC_OPT|GLSL2USC_UNROLL|GLSL2USC_KEEP|YAKOGL_TOOLS_ROOT)=' | sort
+  key_tree tools/glsl2usc.sh tools/shaders tests/reference/blobs.rs
+}
 mesa_table_repro() {
   local out=build/mesa-repro/blobs.rs log=build/mesa-repro/glsl2usc.log
   mkdir -p build/mesa-repro && rm -f "$out"
@@ -2217,11 +2548,13 @@ if [ "$QUICK" -eq 0 ]; then
   for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
     scope "$(config_scopes "$f")" precompile
     uses w:precompile-bin
+    rowkey key_prove "$f"
     step "gen     precompiled table $f: deterministic, rows == fresh compiles, counts pinned, compiles" \
       tools/precompile/prove.sh "$f"
   done
   scope pvr precompile
   if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
+    rowkey key_mesa_table
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
   else
     gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
