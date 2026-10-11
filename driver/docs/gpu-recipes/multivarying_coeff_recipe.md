@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Multi-varying PDS coefficient-loading (DOUTI) recipe — V1 + F4 (two smooth varyings)
 
 Read-only source analysis. Target: BXS-4-64, BVNC **36.53.104.796**, Mesa arch ROGUE.
@@ -5,9 +7,9 @@ Goal: run the pco_shc-compiled **V1_passthrough** (VS) + **F4_multivary** (FS) p
 driver so the FS reads two **perspective-correct (smooth)** varyings and interpolates across all 3 vertices.
 
 ## Authoritative sources (file:line)
-- Coeff/DOUTI descriptor build: `mesa-build/.../vulkan/pvr_arch_pipeline.c:1486-1616`
+- Coeff/DOUTI descriptor build: Mesa 26.2.1 `src/imagination/vulkan/pvr_arch_pipeline.c:1486-1616`
   `pvr_graphics_pipeline_setup_fragment_coeff_program()`.
-- PDS program (DATA+CODE) layout: `mesa-build/.../vulkan/pds/pvr_pds.c:4136-4230`
+- PDS program (DATA+CODE) layout: Mesa 26.2.1 `src/imagination/vulkan/pds/pvr_pds.c:4136-4230`
   `pvr_pds_coefficient_loading()`.
 - DOUT encoders: `pvr_rogue_pds_encode.h:514` (`pvr_pds_inst_encode_dout`), `pvr_pds.c:225`
   (`pvr_pds_encode_douti`); shifts in `pvr_rogue_pds_defs.h` (OPCODE 28, DST 0, SRC0 8, END 26,

@@ -1,6 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # 4x multisampling on BXS-4-64 (BVNC 36.53.104.796)
 
-> **Verified on silicon (2026-09-14):** `tools/pvrlab/gl_test.c` case 16 draws a triangle
+> **Verified on silicon (2026-09-14):** `driver/tools/pvrlab/gl_test.c` case 16 draws a triangle
 > whose hypotenuse is the window diagonal into an `EGL_SAMPLES 4` pbuffer: every edge pixel
 > resolves to exactly half coverage (0x7f), interior/exterior pixels are exact, and the
 > single-sampled config keeps a hard edge. `gl_panel=2` spins the cube anti-aliased.
