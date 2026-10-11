@@ -475,24 +475,31 @@ Update rules for later items:
 - When a full tree runs on a board, replace that board's row in the summary
   table and in section A.
 
-## H. GL_OES_texture_npot: dEQP-GLES2 cases predicted to move (`2673197d`, 2026-10-07)
+## H. GL_OES_texture_npot: the dEQP-GLES2 cases it touches (`2673197d`, 2026-10-07)
 
-Every ES 2.0 build now lists `GL_OES_texture_npot` in `GL_EXTENSIONS`, on all
+**Status (2026-10-11): the earlier prediction was wrong, and the boards
+agree with the CTS source.** This section first predicted that 18 cases
+move from Pass to NotSupported. Reading the CTS source (2026-10-08) showed
+that no case throws NotSupported on this extension; the cases run and must
+Pass. The three boards' trees since then have none of the 18 among their
+failures or NotSupported cases (H.4).
+
+Every ES 2.0 build lists `GL_OES_texture_npot` in `GL_EXTENSIONS`, on all
 three GPUs (`src/gl/state.rs`, `NPOT_EXTENSION`). Its rules replace ES 2.0's:
 a non-power-of-two texture may have a mip chain and wrap with `GL_REPEAT` or
 `GL_MIRRORED_REPEAT`, `glGenerateMipmap` of one succeeds, and a level above 0
 that is not a power of two is no error (`src/gl/texture.rs`,
-`NPOT_RESTRICTED` is now false in every build). This is what glmark2's
+`NPOT_RESTRICTED` is false in every build). This is what glmark2's
 terrain needed: 16 `GL error 0x502 in glGenerateMipmap` and a black 800x600
 texture on every board (`tools/cts/RESULTS.md`, 2026-10-04).
 
-How each GPU holds the chain (host-tested, not board-confirmed):
+### H.1 How each GPU holds the chain (host-tested)
 
 | GPU | NPOT chain | Host tests |
 |---|---|---|
 | V3D (Pi 4) | whole chain; level i is max(w >> i, 1) x max(h >> i, 1), packed at its own pitch; the tiled copy follows Mesa's v3d_setup_slices (levels 0 and 1 at their size, the rest padded from the power-of-two level 1), which `tools/v3d/tex_check.c` already compares with Mesa for 13x7 x3, 37x61 x6 and 100x3 x2 | `v3d::backend::backend_tests::a_generated_npot_chain_is_sampled_whole` (800x600: ten levels, offsets, pitches, generated texels, binding, sampler, tiled levels) |
 | GC7000 (i.MX8MP) | whole chain at one 800-texel pitch, each level on 64 bytes; the descriptor names each level's address | `vivante::backend::backend_tests::a_generated_npot_chain_is_named_level_by_level` |
-| PowerVR (AM62P) | base level only, complete, sampled from level 0 (the TPU finds level i+1 by its own power-of-two arithmetic, unmeasured for a NPOT stride) | `gl::draw::tests::a_generated_npot_chain_is_complete_with_repeat`, `the_powervr_keeps_one_level_of_a_npot_image` |
+| PowerVR (AM62P) | a 2D texture is laid out as the chain of its power-of-two extent (`cc78859`, 2026-10-08: `chain_layout_npot`, `pot_chain`); the TPU finds each level with its own arithmetic, which no board run has measured for an NPOT size. A cube keeps its base level and samples level 0 under a mip filter | `gl::draw::tests::a_generated_npot_chain_is_complete_with_repeat`, `a_powervr_npot_cube_keeps_its_base_level` |
 
 The GC7000 caveat: etnaviv uses NPOT textures with any wrap mode only when
 `chipMinorFeatures1_NON_POWER_OF_TWO` is set. This repository records the
@@ -500,67 +507,73 @@ part's `features` and `minor0` words (driver/src/vivante/NOTES.md) and the
 feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs),
 not `minor_features[1]`. The part is HALTI5 (an ES 3.x-class core, whose ES
 3.0 needs NPOT repeat and mipmaps), and the ES 3.0 build has always sampled
-NPOT textures with REPEAT there. So the extension is claimed, and the board
-recipe below must confirm it.
+NPOT textures with REPEAT there. The i.MX8MP tree (H.4) passes the REPEAT
+cases.
 
-The dEQP-GLES2 mustpass cases (`tools/cts/gles2-mustpass.txt`) that test ES
-2.0's NPOT rules, 18, Pass on the three boards after plan #1:
+### H.2 What the CTS checks
 
-| Group | Cases | Without the extension they expect | Predicted with it, every board |
-|---|---|---|---|
-| `texture.completeness.2d` wrap | `npot_all_repeat`, `npot_mirrored_repeat`, `npot_s_repeat`, `npot_t_repeat`, `repeat_width_npot`, `repeat_height_npot` (6) | black (incomplete) | Pass -> NotSupported |
-| `texture.completeness.cube` wrap | `npot_all_repeat`, `npot_mirrored_repeat`, `npot_s_repeat`, `npot_t_repeat` (4) | black | Pass -> NotSupported |
-| `texture.completeness.2d` size | `npot_size`, `npot_size_level_0`, `npot_size_level_1` (3) | black | Pass -> NotSupported, or stays Pass |
-| `texture.completeness.cube` size | `npot_size_level_0`, `npot_size_level_0_pos_x`, `npot_size_level_1`, `npot_size_level_1_neg_x` (4) | black | Pass -> NotSupported, or stays Pass |
-| `negative_api.texture` | `generatemipmap_npot_wdt_hgt` (1) | `GL_INVALID_OPERATION` | Pass -> NotSupported |
+Read in VK-GL-CTS `modules/gles2/functional/` (2026-10-08):
+`es2fTextureCompletenessTests.cpp` (CC) and `es2fNegativeTextureApiTests.cpp`
+(NT). A grep for `npot`, `PowerOfTwo` and the extension check over
+`modules/gles2` found no other user.
 
-Reasoning, and how sure it is:
+| Where | What |
+|---|---|
+| CC:291-309 | `Incomplete2DSizeCase`: the relaxing extensions are `GL_OES_texture_npot` or `GL_NV_texture_npot_2D_mipmap` |
+| CC:332-334 | each `glTexImage2D` expects `GL_INVALID_VALUE` only with **no** relaxing extension, level > 0 and an NPOT level; otherwise `GL_NO_ERROR` |
+| CC:338-343 | only an NPOT **base** with the extension listed changes the expected colour to blue; otherwise black |
+| CC:517-523, CC:920-926 | the wrap cases (2D, cube): extension listed, expected colour blue |
+| CC:671, 701-703 | `IncompleteCubeSizeCase`: the error rule of CC:332-334; the expected colour stays black |
+| NT:1341-1349 | `generatemipmap_npot_wdt_hgt`: extension listed, the case logs a line and returns; `es2fApiCase.cpp:54` set the result to Pass before the body |
 
-- VK-GL-CTS was not reachable from the host this was written on (no network
-  for curl or WebFetch, and `DEQP_STAGE1` / `DEQP_WORK` unset), so the case
-  sources were not read. The prediction rests on (1) the recollection that
-  `es2fTextureCompletenessTests.cpp` skips its NPOT cases with
-  NotSupported when a "relaxing" extension (`GL_OES_texture_npot`,
-  `GL_NV_texture_npot_2D_mipmap`) is listed, and that
-  `es2fNegativeTextureApiTests.cpp`'s `generatemipmap_npot_wdt_hgt` throws
-  NotSupported ("GL_OES_texture_npot extension removes error code
-  validation"); and (2) the fact that these cases are in the mustpass every
-  Mesa ES 2.0 driver runs (the V3D on the Pi 4 among them), all of which
-  claim `GL_OES_texture_npot`. A case that failed whenever the extension is
-  listed would be failing on every such driver.
-- If the wrap cases were not guarded, they would fail on all three boards
-  (10 cases): with the extension a NPOT texture with REPEAT is complete and
-  samples its texels, not black. The host behaviour behind that is pinned by
-  `a_npot_texture_is_complete_only_where_the_version_allows_it`.
-- The size cases stay Pass even if they run, as long as each builds a chain
-  with a level of the wrong size or a missing level: such a texture is still
-  incomplete (`a_npot_level_above_0_follows_the_version`,
-  `tex_image_level_on_npot_texture_follows_the_version`). One that uploads a
-  whole consistent NPOT chain and expects black would fail like the wrap
-  cases.
-- Nothing else in the mustpass is predicted to move. The other `*_npot`
-  cases (`texture.format.*_npot`, `texture.filtering.{2d,cube}.*_clamp_*_npot`,
-  `texture.wrap.clamp_clamp_*_npot`, `fbo.render.*npot*`) use one level and
-  CLAMP_TO_EDGE, which were complete before and are unchanged. No ES 2.0
-  mustpass case samples a mipmapped NPOT texture, so the PowerVR's
-  base-level sampling is not visible to dEQP-GLES2 (it is visible in glmark2's
-  terrain as aliasing where the texture is minified, instead of black).
+Nothing throws `NotSupportedError` on this extension. Each completeness case
+draws one quad with a solid blue texture over a 64x64 viewport, and every
+pixel must equal the expected colour exactly.
 
-Predicted totals if the prediction holds: Pass -18 and NotSupported +18 on
-each board (section C's NotSupported: AM62P 19 -> 37, i.MX8MP 34 -> 52, Pi 4
-62 -> 80); failures unchanged at 0.
+### H.3 The 18 cases
 
-Board check (one run per board, the dEQP-GLES2 image of the commit):
-`dEQP-GLES2.functional.texture.completeness.*`,
-`dEQP-GLES2.functional.negative_api.texture.generatemipmap_npot_wdt_hgt`,
-`dEQP-GLES2.functional.texture.{wrap,format,filtering,size,mipmap}.*`; then
-glmark2 `-b terrain`: no `GL error 0x502`, no "texture on unit 0 is
-incomplete" line, and the terrain picture not black. If a wrap case Fails
-instead of NotSupported, the prediction was wrong: take the extension out
-(`NPOT_EXTENSION` false makes `NPOT_RESTRICTED` true again and restores the
-ES 2.0 rules; the extension list's ES 2.0-only tail then has to leave the
-name out on its own, which a const assert in `state.rs` points at) and record
-the case here. On the i.MX8MP, NXP's own driver
-(which claims the extension) running the same cases says what dEQP does with
-it, and a REPEAT-wrapped NPOT draw on our driver shows whether the GC7000
-honours the wrap.
+| Case (`dEQP-GLES2.functional.` ...) | With the extension listed | Why yakogl passes it |
+|---|---|---|
+| `texture.completeness.2d.` `npot_t_repeat`, `npot_s_repeat`, `npot_all_repeat`, `npot_mirrored_repeat`, `repeat_width_npot`, `repeat_height_npot` (6) | runs; expects **blue** | an NPOT texture with REPEAT is complete (`incomplete_reason` has no NPOT arm) |
+| `texture.completeness.cube.` `npot_t_repeat`, `npot_s_repeat`, `npot_all_repeat`, `npot_mirrored_repeat` (4) | runs; expects **blue**. The case binds its texture to `GL_TEXTURE_2D` and sets the images on the default cube texture (name 0) | the default cube object takes images and is sampled (`a_sampler_reads_the_default_texture_object_at_binding_0`) |
+| `texture.completeness.2d.npot_size` | runs; a complete 255x255 chain, NEAREST_MIPMAP_NEAREST, REPEAT; no error at any level, expects **blue**. The only case that samples a mipmapped NPOT texture | the chain is accepted and complete (`a_npot_level_above_0_grows_the_chain_where_the_backend_holds_one`, at 15x15 only) |
+| `texture.completeness.2d.` `npot_size_level_0`, `npot_size_level_1` (2) | run; no error; expect **black** | a level of the wrong size makes the texture incomplete |
+| `texture.completeness.cube.` `npot_size_level_0`, `npot_size_level_1`, `npot_size_level_0_pos_x`, `npot_size_level_1_neg_x` (4) | run; no error; expect **black** | the same, per face |
+| `negative_api.texture.generatemipmap_npot_wdt_hgt` | returns early; **Pass** | nothing to do |
+
+The seven "expect black" cases also need the upload to succeed: a build that
+returned `GL_INVALID_VALUE` for an NPOT level (the ES 2.0 rule without the
+extension) would now fail them. So the extension and the rules must change
+together, never in one place only. Other `*_npot` cases
+(`texture.format.*_npot`, `texture.filtering.{2d,cube}.*_clamp_*_npot`,
+`texture.wrap.clamp_clamp_*_npot_*`, `texture.size.2d.65x63_*`,
+`texture.size.cube.15x15_*`, `fbo.render.*npot*`) use one level and
+CLAMP_TO_EDGE and do not read the extension list.
+
+### H.4 Board results
+
+- **i.MX8MP**, integration image `334d4e65` (2026-10-09), the whole tree: entry
+  10 (`texture.completeness.*`) 40/40 Pass, 0 NotSupported, so the 17
+  completeness cases pass by name. Entry 22 (`negative_api.*`) is 237 Pass /
+  9 NotSupported, the same as before the extension, so
+  `generatemipmap_npot_wdt_hgt` passes by count. The REPEAT cases did not
+  fail, so the GC7000 honours REPEAT on an NPOT size. The main tree on
+  `32778b57` (2026-10-10) has the same numbers (`tools/cts/STATUS.md`).
+- **AM62P**, main `32778b57` (2026-10-10): the 54 failures and 34
+  NotSupported are named in `tools/cts/STATUS.md`; none of the 18 is among
+  them.
+- **Pi 4**, main `a27d69c0` (2026-10-11): the 9 failures and 34 NotSupported
+  are named in `tools/cts/STATUS.md`; none of the 18 is among them.
+
+### H.5 Still open
+
+- Source comments still say dEQP expects the ES 2.0 error:
+  `src/gl/texture.rs` ("dEQP texture.completeness.2d.npot_size expects it",
+  two places) and the `cube_chain_is_complete` comment ("which dEQP expects
+  too"). With the extension listed the CTS expects `GL_NO_ERROR`.
+- No host test replays the CTS sequences at their sizes
+  (`Incomplete2DSizeCase` at 255x255, the cube size and wrap cases with the
+  texture bound to `GL_TEXTURE_2D`). The boards pass them; a host test
+  would keep it so.
+- The PowerVR's level arithmetic for an NPOT 2D chain is exercised only by
+  `2d.npot_size` (a 63x63 level 2 at a 64-texel pitch) and glmark2's terrain.
