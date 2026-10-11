@@ -31,6 +31,15 @@ reads both `.qpa` files and expects, among others, one refusal on a
 NotSupported case (excused, not a gap) and the
 `Usc(Record(MatrixAttrib { index: 0 }))` reason.
 
+`by-message.qpa` — a batch log as deqp-gles3 writes one (`#beginTestCaseResult`
+lines around each case, which the CTS's own log parser needs and the two
+refusal fixtures do not have), for `cts-summary.py --by-message`
+(`cts-selftest.sh` check 21). Session header from a real host run; the four
+cases are scaffolding: one Pass, "Got invalid error", and two "Compile failed"
+details that differ only in the shader line `0:12:` / `0:7:`, which must fold
+into one row of 2. It carries no info log, so `cts-refusals.py`'s counts over
+this directory (check 16) do not change.
+
 `deqp-config/` — resolved Zephyr configurations in the form a build writes
 its `zephyr/.config` (`CONFIG_X=value` lines, a disabled bool as
 `# CONFIG_X is not set`), fed to `check-deqp-images.py --config` by

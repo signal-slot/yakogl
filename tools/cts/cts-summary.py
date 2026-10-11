@@ -3,8 +3,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Summarise one or more dEQP .qpa logs with the CTS's own log parser.
 
-  cts-summary.py [--mustpass FILE] [--by-group N] [--list-failures N] \
-                 [--failures-file F] result.qpa [more.qpa ...]
+  cts-summary.py [--mustpass FILE] [--by-group N] [--by-message N] \
+                 [--list-failures N] [--failures-file F] result.qpa [more.qpa ...]
 
 Prints a Pass / Fail / NotSupported / Crash histogram. With --mustpass it also
 reports how many of the expected cases produced no result at all, which is what
@@ -78,6 +78,9 @@ def main():
     ap.add_argument("--list-failures", type=int, default=20,
                     help="print at most N failing case names (0 = none)")
     ap.add_argument("--failures-file", help="write every failing case to this file")
+    ap.add_argument("--by-message", type=int, metavar="N", default=0,
+                    help="the N most frequent status details of the failing "
+                         "cases, with counts (RESULTS.md's per-message tally)")
     ap.add_argument("--logs-file",
                     help="write the compiler/driver logs of every failing case "
                          "here, whole. This is where a shader toolchain says why.")
@@ -167,6 +170,18 @@ def main():
             for name, code, detail in failures:
                 f.write("%s\t%s\t%s\n" % (name, code, detail))
         print("\nfailures written to %s (%d)" % (args.failures_file, len(failures)))
+
+    if args.by_message:
+        # The detail as dEQP wrote it, with only a shader's `0:<line>:` folded,
+        # so one refusal at different lines stays one row.
+        by_msg = {}
+        for _, _, detail in failures:
+            key = re.sub(r"\b0:\d+:", "0:N:", detail or "(no message)")
+            by_msg[key] = by_msg.get(key, 0) + 1
+        rows = sorted(by_msg.items(), key=lambda kv: (-kv[1], kv[0]))
+        print("\nfailures by message (%d distinct, %d cases):" % (len(rows), len(failures)))
+        for msg, n in rows[:args.by_message]:
+            print("  %6d  %s" % (n, msg))
 
     if args.logs_file:
         n = 0

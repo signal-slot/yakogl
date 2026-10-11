@@ -32,13 +32,17 @@
 # application. Chunks stay the default because a crash costs one chunk rather
 # than every case after it -- a panic that aborted the first single-process
 # run silently removed 2,743 mustpass cases from its case list. The run prints how many
-# cases BEGAN against how many were asked for; a shortfall is the aborted
-# chunks, reported by their exit status 134.
+# cases BEGAN against how many were asked for, and every chunk that needed more
+# than one process or lost cases (aborted.txt). A chunk goes on after its
+# process stops (run_chunk): the exit status alone hid that, because a
+# ResourceError ends dEQP's run with exit 1, and the first full gles3 run on
+# the V3D (2026-10-09) lost 1,275 cases that way, each such chunk exiting 1
+# like any chunk with a failing case.
 #
 # Environment:
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
 #             applies it)                (default ~/com/github/KhronosGroup/VK-GL-CTS)
-#   GPU       vivante | powervr: whose online back end compiles (default vivante,
+#   GPU       vivante | powervr | v3d: whose online back end compiles (default vivante,
 #             the GC7000's); each GPU gets its own library directory
 #   MODULE    gles2 | gles3 (default gles2). gles3 builds deqp-gles3 in its own
 #             directory, runs the union of VK-GL-CTS's android/cts/main/gles3-main-*.txt
@@ -54,6 +58,23 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
+# Options equal to the environment variables below, for callers that cannot set
+# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N (before the filter).
+# --report=DIR builds and runs nothing: it prints step 4's report of the
+# finished run in DIR again (and rewrites its aborted.txt and summary.txt).
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --gpu=*) GPU=${1#*=} ;;
+        --module=*) MODULE=${1#*=} ;;
+        --cts=*) CTS=${1#*=} ;;
+        --out=*) OUT=${1#*=} ;;
+        --chunk=*) CHUNK=${1#*=} ;;
+        --jobs=*) JOBS=${1#*=} ;;
+        --report=*) OUT=${1#*=}; REPORT=1 ;;
+        *) break ;;
+    esac
+    shift
+done
 CTS=${CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}
 BASE=$REPO/build/host-deqp
 COMMIT=$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown)
@@ -61,13 +82,18 @@ GPU=${GPU:-vivante}
 case "$GPU" in
     vivante) LIB=$BASE/lib; SUFFIX= ;;
     powervr) LIB=$BASE/lib-powervr; SUFFIX=-powervr ;;
-    *) echo "host-deqp-run: GPU must be vivante or powervr, not '$GPU'" >&2; exit 1 ;;
+    v3d) LIB=$BASE/lib-v3d; SUFFIX=-v3d ;;
+    *) echo "host-deqp-run: GPU must be vivante, powervr or v3d, not '$GPU'" >&2; exit 1 ;;
 esac
 MODULE=${MODULE:-gles2}
 case "$MODULE" in
-    gles2) DEQP_DIR=$BASE/deqp; MUSTPASS=$HERE/gles2-mustpass.txt; REPORT_ES2=ON ;;
+    gles2) DEQP_DIR=$BASE/deqp; MUSTPASS=$HERE/gles2-mustpass.txt; REPORT_ES2=ON; SURFACE=64 ;;
+    # 256x256 as the Android mustpass runs it: at 64x64 about 2,000 gles3 cases
+    # (all of clipping, most of texture.specification) end NotSupported on the
+    # surface size ("Too small viewport", "Render target size must be at least
+    # 200x200") before they compile anything (first full run, 2026-10-09).
     gles3) DEQP_DIR=$BASE/deqp-gles3; MUSTPASS=$CTS/android/cts/main/gles3-main-*.txt
-           REPORT_ES2=OFF; LIB=$LIB-es3; SUFFIX=$SUFFIX-gles3 ;;
+           REPORT_ES2=OFF; LIB=$LIB-es3; SUFFIX=$SUFFIX-gles3; SURFACE=256 ;;
     *) echo "host-deqp-run: MODULE must be gles2 or gles3, not '$MODULE'" >&2; exit 1 ;;
 esac
 OUT=${OUT:-$BASE/run-$COMMIT$SUFFIX}
@@ -78,6 +104,10 @@ FILTER=${1:-}
 [ -f "$CTS/targets/yakogl/yakogl.cmake" ] || {
     echo "host-deqp-run: $CTS has no yakogl target (tools/cts/cts-build.sh applies it)" >&2; exit 1; }
 
+if [ -n "${REPORT:-}" ]; then
+    [ -f "$OUT/all.txt" ] || { echo "host-deqp-run: $OUT is not a run directory" >&2; exit 1; }
+    echo "host-deqp-run: report of $OUT, run from $(cat "$OUT/commit" 2>/dev/null) (HOST-ONLY)"
+else
 echo "host-deqp-run: library and harness from $COMMIT, GPU $GPU, $MODULE (HOST-ONLY: compile/link outcomes only)"
 
 # 1. deqp-<module> for the host, against the YakoGL target (dlopen()s our libs).
@@ -114,22 +144,75 @@ asked=$(wc -l < "$OUT/all.txt")
 (cd "$OUT" && split -l "$CHUNK" -d -a 3 all.txt c_)
 echo "$COMMIT $GPU $MODULE" > "$OUT/commit"
 
+# A chunk whose process stops early (a crash, the timeout, a ResourceError --
+# which ends dEQP's whole run -- or a die() in a group's init) goes on in a
+# fresh process with the cases no process of it has begun, logged to
+# c_NNN.r<k>.qpa. A process that begins none of them is stopped by the first
+# one before it begins (lifetime.*'s init dies with no case open): that case
+# goes to c_NNN.skipped, never began, and the rest run. Bounded: every
+# process either begins a case or skips one.
 run_chunk() {
-    local c=$1
-    (cd "$DEQP_DIR/modules/$MODULE" &&
-     LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-$MODULE --deqp-caselist-file="$c" \
-        --deqp-log-filename="$c.qpa" --deqp-log-shader-sources=enable --deqp-log-images=disable \
-        --deqp-surface-type=pbuffer --deqp-surface-width=64 --deqp-surface-height=64 > "$c.out" 2>&1)
-    echo "exit=$?" >> "$c.out"
+    local c=$1 list=$1 log=$1.qpa k=0 left rest
+    left=$(wc -l < "$c")
+    : > "$c.out"
+    while :; do
+        (cd "$DEQP_DIR/modules/$MODULE" &&
+         LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-$MODULE --deqp-caselist-file="$list" \
+            --deqp-log-filename="$log" --deqp-log-shader-sources=enable --deqp-log-images=disable \
+            --deqp-surface-type=pbuffer --deqp-surface-width="$SURFACE" --deqp-surface-height="$SURFACE" >> "$c.out" 2>&1)
+        echo "exit=$?" >> "$c.out"
+        # (Not awk's FNR==NR: with nothing begun yet its first input is empty
+        # and the whole list would read as begun.)
+        grep -vxF -f <(cat "$c".qpa "$c".r*.qpa 2>/dev/null | sed -n 's/^#beginTestCaseResult //p'
+                       cat "$c.skipped" 2>/dev/null) "$c" > "$c.rest" || true
+        rest=$(wc -l < "$c.rest")
+        if [ "$rest" -gt 0 ] && [ "$rest" -eq "$left" ]; then
+            head -1 "$c.rest" >> "$c.skipped"
+            sed -i 1d "$c.rest"
+            rest=$((rest - 1))
+        fi
+        [ "$rest" -gt 0 ] || break
+        left=$rest k=$((k + 1)) list=$c.rest log=$c.r$k.qpa
+    done
+    rm -f "$c.rest"
 }
 export -f run_chunk
-export BASE LIB DEQP_DIR MODULE
+export BASE LIB DEQP_DIR MODULE SURFACE
 ls "$OUT"/c_??? | xargs -P "$JOBS" -I{} bash -c 'run_chunk "$(realpath {})"' 2>/dev/null || true
 
+fi
+
 # 4. What happened, and the refusals by reason.
+asked=$(wc -l < "$OUT/all.txt")
 begun=$(cat "$OUT"/c_*.qpa 2>/dev/null | grep -c '^#beginTestCaseResult' || true)
-echo "host-deqp-run: $begun of $asked cases began; chunk exits:"
+echo "host-deqp-run: $begun of $asked cases began; process exits (a resumed chunk has several):"
 grep -h '^exit=' "$OUT"/c_*.out | sort | uniq -c
 grep -h -A1 'panic' "$OUT"/c_*.out 2>/dev/null | grep panicked | sort | uniq -c || true
+# Every chunk that needed more than one process or lost cases: each process's
+# exit and where it stopped -- "in X" for a case that began and has no end
+# (a crash or the timeout), "after X" for one that ended (a ResourceError
+# ends dEQP's run there; so does die() in the next group's init) -- and the
+# cases skipped because they stopped every process before they began. Exit 1
+# alone is dEQP's "not every case passed".
+for c in "$OUT"/c_???; do
+    # Runs of the same exit or stop are folded: "137 x56".
+    exits=$(sed -n 's/^exit=//p' "$c.out" | uniq -c | awk '{print ($1 > 1 ? $2 " x" $1 : $2)}' | paste -sd,)
+    listed=$(wc -l < "$c")
+    began=$(cat "$c".qpa "$c".r*.qpa 2>/dev/null | grep -c '^#beginTestCaseResult' || true)
+    case "$exits" in 0|1) [ "${began:-0}" -eq "$listed" ] && continue ;; esac
+    stops=$(for q in $(ls "$c".qpa "$c".r*.qpa 2>/dev/null | sort -V); do
+        awk '/^#beginTestCaseResult/{n=$2; open=1} /^#endTestCaseResult|^#terminateTestCaseResult/{open=0}
+             END{print (n == "" ? "before any case" : (open ? "in " : "after ") n)}' "$q"
+    done | uniq -c | awk '{n = $1; sub(/^ *[0-9]+ /, ""); print (n > 1 ? $0 " x" n : $0)}' |
+        paste -sd';' | sed 's/;/; /g' || true)
+    skipped=$(cat "$c.skipped" 2>/dev/null | wc -l || true)
+    echo "host-deqp-run: chunk $(basename "$c"): exits $exits; ${began:-0} of $listed began; stopped: $stops; never began: $skipped$( [ "$skipped" -gt 0 ] && echo " ($(head -1 "$c.skipped") ..)")"
+done | tee "$OUT/aborted.txt"
 python3 "$HERE/cts-refusals.py" --cases 2 "$OUT"
+# The per-group table, the failures by message and every failing case, kept
+# beside the logs (HOST-ONLY: a render verdict in them means nothing).
+CTS="$CTS" python3 "$HERE/cts-summary.py" --mustpass "$OUT/all.txt" --by-group 3 \
+    --by-message 100000 --list-failures 0 --failures-file "$OUT/failures.tsv" \
+    "$OUT" > "$OUT/summary.txt" 2>&1 || true
+echo "host-deqp-run: groups, failures by message: $OUT/summary.txt"
 echo "host-deqp-run: results in $OUT (HOST-ONLY: never quote a render verdict from them)"
