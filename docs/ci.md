@@ -45,6 +45,21 @@ harness has nothing to run in parallel inside them, and `cargo test` runs
 the binaries one after another. A row's time is the sum of its binaries'
 times, on one core each. The build is not the cost; the test execution is.
 
+After step 2 (a row runs its binaries concurrently, `cargo_test` in
+`tools/check.sh`), the same row on this host, warm cache, load 25 to 60,
+2026-10-11:
+
+| | before | after step 2 |
+|---|---|---|
+| `test host-test,gpu-vivante,shaderc-online` (52 binaries) | 405 s (test run) | 63 s (build check and run) |
+
+The binaries' own run-time inputs are part of the cache key, not only
+their bytes: the tests read `tools/shaders`, `tests/fixtures`,
+`tests/reference` and headers at run time, and `src/test_rules.rs` reads
+`src/` and `tests/`. So the key also hashes every tracked file except the
+documents, the CI files and `check.sh` with its self-tests. For every
+binary but the library's own unit tests it also leaves out `tests/*.rs`.
+
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
 change: `src/gl/draw.rs`, `src/shaderc/online/*` and `tools/check.sh`
 select all 134 rows ("scopes: all"); `src/vivante/*` selects 38; a document

@@ -93,8 +93,15 @@ jobs:
           echo "merge base with origin/$BASE_REF: $base"
           tools/check.sh --changed "$base" 2>&1 | tee build/gate-ci.log
           test "${PIPESTATUS[0]}" -eq 0
+      # A run on main records the test binaries that passed
+      # (YAKOGL_CHECK_RECORD, tools/check.sh cargo_test), in
+      # ~/.cache/yakogl/test-ok beside the target directory; a later run
+      # skips a binary whose key is recorded. A pull request's run only
+      # reads the record, so it reuses only passes of what is on main.
       - name: tools/check.sh (every row, main, nightly or by hand)
         if: github.event_name != 'pull_request'
+        env:
+          YAKOGL_CHECK_RECORD: ${{ github.ref == 'refs/heads/main' && github.sha || '' }}
         run: |
           mkdir -p build
           tools/check.sh 2>&1 | tee build/gate-ci.log
