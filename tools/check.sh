@@ -805,6 +805,13 @@ step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
+# glClear on the V3D (tests/v3d_clear.rs, from the investigation
+# es2-v3d-clear.md section 5.1, removed by 358ca5324): the TLB/quad
+# decision, the clear quad's state and the scissor geometry, and dEQP's 19
+# color_clear cases on a model of the two clear paths. Both builds:
+# dEQP-GLES2 runs on the report-es2 one.
+step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_clear
 # glmark2's V3D allocations replayed through the OSAL's carve-out allocator
 # (src/osal/v3d_granules.h) and Mesa's layout (driver/src/v3d/v3d_tex.c), both
 # built from C by the test with `cc`: every large request fits the Pi 4's
@@ -835,6 +842,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+step "test    $V3D_ES2_CONFIG (tests/v3d_clear.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_clear
 step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
 step "test    $V3D_ES2_CONFIG (tests/es3_tf_api.rs)" \

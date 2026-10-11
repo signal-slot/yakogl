@@ -81,7 +81,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/HANDOFF.md)
-expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 141 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 143 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
