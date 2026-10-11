@@ -16,6 +16,12 @@
 #                                    runs before a push: about ten minutes)
 #   tools/check.sh --quick           the PowerVR build only, for a tight edit loop
 #
+# A test row builds its binaries and runs them concurrently, and skips a
+# binary that passed on main with the same key (cargo_test below:
+# YAKOGL_CHECK_TEST_JOBS, YAKOGL_TEST_OK, YAKOGL_CHECK_RECORD,
+# YAKOGL_CHECK_VERBOSE). The summary counts those binaries apart from the
+# rows --changed skipped.
+#
 # --changed maps each changed path to the parts it can break (scope_of_path
 # below: a GPU back end, gl_test, the tools, the precompiled tables, the
 # drivers crate, the samples, or everything) and skips the rows of the other
@@ -273,6 +279,344 @@ step() {
   fi
 }
 
+# A test row: cargo_test <cargo test arguments> [-- <harness arguments>]
+#
+# `cargo test` runs a row's test binaries one after another, so a row took
+# the sum of its binaries' times on one core (docs/ci.md, section 1: 405 s
+# for 53 binaries, the slowest 78 s). cargo_test builds the binaries
+# (`--no-run`), then runs them itself, YAKOGL_CHECK_TEST_JOBS at a time
+# (default: every core). Each binary's harness still runs its own tests in
+# parallel. Every binary runs, whatever the others do (cargo's
+# --no-fail-fast). Each binary's output goes to its own file under
+# build/check/tests-<pid>/logs/; the row prints all of them in cargo's order, so a
+# row that greps the output reads what `cargo test` printed. A failing
+# binary is named at the end with its log.
+#
+# A binary that already passed on main is not run again. Its key is the
+# sha256 of its bytes, the arguments it gets, its directory, the
+# environment (test_env_key) and the tracked files the tests read at run
+# time (test_tree_key). An entry for the key in YAKOGL_TEST_OK holds the
+# main commit that recorded it and the binary's log, which the row prints
+# instead. Entries are written only when YAKOGL_CHECK_RECORD=<commit> is
+# set: the gate's run on main sets it, a pull request's run never does.
+# A row prints `skip   <binary> (passed on main <commit>)` for each binary
+# it did not run, outside the row's captured output, so the log says it.
+#
+# Leading `env NAME=value...` arguments are exported first (the tier rows'
+# table), because `env` cannot run a shell function.
+exec 3>&1
+TEST_OK_DIR=$(realpath -m "${YAKOGL_TEST_OK:-${CARGO_TARGET_DIR:-target}/../test-ok}")
+TEST_JOBS=${YAKOGL_CHECK_TEST_JOBS:-$(nproc)}
+# cargo-nextest when the host has it (YAKOGL_CHECK_NEXTEST=0 turns it off):
+# it runs each test as its own process across all binaries of the row, so
+# a binary's tests spread over the cores too. Without it, the binaries run
+# concurrently as below. A row that reads libtest's output (`--libtest`) or
+# passes harness arguments always runs the binaries itself. The runner is
+# part of the cache key: a pass under one runner says nothing about the
+# other (nextest runs every test in a fresh process, libtest shares one).
+NEXTEST_VERSION=
+[ "${YAKOGL_CHECK_NEXTEST-}" = 0 ] || NEXTEST_VERSION=$(cargo nextest --version 2>/dev/null | head -1)
+# One directory per run, because a run can hold another (the self-tests run
+# check.sh inside the gate); the directories of runs that ended go.
+TEST_RUN=build/check/tests-$$
+for d in build/check/tests-*; do
+  [ -d "$d" ] && ! kill -0 "${d##*-}" 2>/dev/null && rm -rf "$d"
+done
+TEST_STATE=$TEST_RUN/state
+mkdir -p "$TEST_STATE"
+: > "$TEST_STATE/counts"
+
+# The environment a test binary runs in, as text: the toolchain, the host C
+# compiler (tests/v3d_glmark2_mem.rs compiles C at run time), every line of
+# `tools/cts/deps-env.sh --check` with the sha256 of the line's marker when
+# it is a file (pco_shc, glslangValidator, the firmware header: a rebuilt
+# tool at the same path is a new key), YAKOGL_TEST_ENV_EXTRA, and the value
+# of every environment variable a test reads by name (test_env_names).
+# Made once per run.
+test_env_names() {
+  grep -rhoE --include='*.rs' '(env::var(_os)?|env_set)\("[A-Za-z0-9_]+"\)' src tests tools driver |
+    sed -E 's/.*\("([A-Za-z0-9_]+)"\)$/\1/' | sort -u
+}
+test_env_key() {
+  local f="$TEST_STATE/env-key" st name marker v
+  if [ ! -s "$f" ]; then
+    {
+      rustc -vV
+      echo "cc: $(cc --version 2>/dev/null | head -1)"
+      tools/cts/deps-env.sh --check 2>&1 | while read -r st name marker; do
+        if [ -f "${marker-}" ]; then
+          echo "$st $name $marker sha256=$(sha256sum < "$marker" | cut -c1-64)"
+        else
+          echo "$st $name ${marker-}"
+        fi
+      done
+      echo "extra: ${YAKOGL_TEST_ENV_EXTRA-}"
+      for v in $(test_env_names); do
+        if [ -n "${!v+x}" ]; then echo "env $v=${!v}"; fi
+      done
+    } > "$f.tmp" || return 1
+    mv "$f.tmp" "$f" || return 1
+  fi
+  sha256sum < "$f" | cut -c1-64
+}
+
+# The files a test may read at run time, as one hash: every tracked file
+# (its blob id; a file changed or added in the working tree by its content)
+# except the paths no test reads. The tests read the tree at run time
+# (tools/shaders, tests/fixtures, tests/reference, headers, and
+# src/test_rules.rs reads src/ and tests/ themselves), so the binary's bytes
+# alone are not its inputs. The exceptions: the documents, the CI files,
+# this script and its self-tests; and for every binary but the library's
+# own unit tests (src/lib.rs, which holds test_rules), the integration test
+# sources tests/*.rs, each compiled into its own binary. So a change to one
+# integration test reruns that binary and the library's unit tests.
+# $1: lib or other.
+test_tree_key() {
+  local f="$TEST_STATE/tree-key-$1" ex p ok_rel
+  if [ ! -s "$f" ]; then
+    ex=(':(exclude)docs' ':(exclude)website' ':(exclude)records' ':(exclude).github' ':(exclude).ccfarm'
+      ':(exclude,glob)*.md' ':(exclude)tools/check.sh' ':(exclude)tools/check_scope_selftest.sh'
+      ':(exclude)tools/check_testcache_selftest.sh')
+    [ "$1" = lib ] || ex+=(':(exclude,glob)tests/*.rs')
+    ok_rel=$(realpath -m --relative-base="$PWD" "$TEST_OK_DIR")
+    case "$ok_rel" in /*) ;; *) ex+=(":(exclude)$ok_rel") ;; esac
+    {
+      git ls-files -s -- . "${ex[@]}"
+      { git ls-files -m -- . "${ex[@]}"; git ls-files -o --exclude-standard -- . "${ex[@]}"; } | sort -u |
+        while IFS= read -r p; do
+          if [ -f "$p" ]; then echo "worktree $(git hash-object -- "$p") $p"; else echo "worktree deleted $p"; fi
+        done
+    } | sha256sum | cut -c1-64 > "$f.tmp" || return 1
+    mv "$f.tmp" "$f" || return 1
+  fi
+  cat "$f"
+}
+
+cargo_test() {
+  local cargo_args=() filter=() harness=() a after_dd=0 value=0 libtest_only=0
+  if [ "${1-}" = --libtest ]; then libtest_only=1; shift; fi
+  if [ "${1-}" = env ]; then
+    shift
+    while [ $# -gt 0 ] && [[ $1 == [A-Za-z_]*=* ]]; do export "${1?}"; shift; done
+  fi
+  while [ $# -gt 0 ]; do
+    a=$1
+    shift
+    if [ "$after_dd" -eq 1 ]; then harness+=("$a"); continue; fi
+    if [ "$value" -eq 1 ]; then cargo_args+=("$a"); value=0; continue; fi
+    case "$a" in
+    --) after_dd=1 ;;
+    # every binary runs below, whatever the others do
+    --no-fail-fast) ;;
+    --features | -F | -p | --package | --test | --bin | --example | --bench | --profile | --target | \
+      -j | --jobs | --manifest-path | --exclude | --color | --config | -Z) cargo_args+=("$a"); value=1 ;;
+    -*) cargo_args+=("$a") ;;
+    # the test name filter cargo passes to every binary
+    *) filter+=("$a") ;;
+    esac
+  done
+  local runner=libtest
+  [ "$libtest_only" -eq 0 ] && [ "${#harness[@]}" -eq 0 ] && [ -n "$NEXTEST_VERSION" ] && runner=nextest
+  local row
+  row=$(($(wc -l < "$TEST_STATE/counts") + 1))
+  local logs="$TEST_RUN/logs/$row" alogs="$PWD/$TEST_RUN/logs/$row"
+  mkdir -p "$logs" || return 1
+  local listing
+  listing=$(cargo test --no-run --message-format=json-render-diagnostics "${cargo_args[@]}") || {
+    echo "cargo_test: the build failed (cargo test --no-run ${cargo_args[*]})"
+    echo "0 0" >> "$TEST_STATE/counts"
+    return 1
+  }
+  # executable, package directory, target name, kind, source path; cargo's order
+  local bins
+  bins=$(printf '%s\n' "$listing" | python3 -c '
+import json, os, sys
+seen = set()
+for line in sys.stdin:
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    if m.get("reason") != "compiler-artifact" or not m.get("executable") or not m["profile"]["test"]:
+        continue
+    if m["executable"] in seen:
+        continue
+    seen.add(m["executable"])
+    t = m["target"]
+    print("\t".join([m["executable"], os.path.dirname(m["manifest_path"]), t["name"], "/".join(t["kind"]), t["src_path"]]))
+') || return 1
+  if [ -z "$bins" ]; then
+    echo "cargo_test: cargo listed no test binary for: cargo test ${cargo_args[*]}"
+    echo "0 0" >> "$TEST_STATE/counts"
+    return 1
+  fi
+  local envk treek_lib treek_other
+  # A key that could not be made is a red row, never an empty key.
+  envk=$(test_env_key) && treek_lib=$(test_tree_key lib) && treek_other=$(test_tree_key other) &&
+    [ ${#envk} -eq 64 ] && [ ${#treek_lib} -eq 64 ] && [ ${#treek_other} -eq 64 ] || {
+    echo "cargo_test: the cache key could not be made (env '${envk-}', tree '${treek_other-}', lib tree '${treek_lib-}')"
+    echo "0 0" >> "$TEST_STATE/counts"
+    return 1
+  }
+  [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] &&
+    echo "key    row $row: env $envk ($TEST_STATE/env-key), tree $treek_other, lib tree $treek_lib" >&3
+  local i=0 ran=0 cached=0 exe dir name kind src label h treek entry
+  local -a labels=() hashes=() states=() exes=()
+  while IFS=$'\t' read -r exe dir name kind src; do
+    i=$((i + 1))
+    label="$name ($kind)"
+    treek=$treek_other
+    [ "$src" = "$PWD/src/lib.rs" ] && treek=$treek_lib
+    h=$( {
+      echo "binary $(sha256sum < "$exe" | cut -c1-64)"
+      echo "dir ${dir#"$PWD"}"
+      echo "args ${filter[*]} -- ${harness[*]}"
+      if [ "$runner" = nextest ]; then echo "runner $NEXTEST_VERSION"; else echo "runner libtest"; fi
+      echo "env $envk"
+      echo "tree $treek"
+    } | sha256sum | cut -c1-64)
+    labels+=("$label")
+    hashes+=("$h")
+    exes+=("$exe")
+    entry="$TEST_OK_DIR/$h"
+    if [ -s "$entry" ] && [ -f "$entry.log" ]; then
+      echo "skip   $label (passed on main $(head -1 "$entry"))" >&3
+      [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] && echo "       key $h" >&3
+      cp "$entry.log" "$logs/$i.log" && echo 0 > "$logs/$i.rc"
+      states+=(cached)
+      cached=$((cached + 1))
+      continue
+    fi
+    [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] && echo "run    $label key $h" >&3
+    states+=(run)
+    ran=$((ran + 1))
+    [ "$runner" = nextest ] && continue
+    while [ "$(jobs -rp | wc -l)" -ge "$TEST_JOBS" ]; do wait -n; done
+    (
+      cd "$dir" || exit 2
+      CARGO_MANIFEST_DIR=$dir "$exe" "${filter[@]}" "${harness[@]}" > "$alogs/$i.log" 2>&1
+      echo $? > "$alogs/$i.rc"
+    ) &
+  done <<< "$bins"
+  wait
+  echo "$ran $cached" >> "$TEST_STATE/counts"
+  if [ "$runner" = nextest ] && [ "$ran" -gt 0 ]; then
+    nextest_run "$logs" || return 1
+  fi
+  local failed=() rc_i
+  for ((i = 1; i <= ${#labels[@]}; i++)); do
+    if [ "${states[i - 1]}" = cached ]; then
+      echo "     Running ${labels[i - 1]}: not run, its log from main"
+      cat "$logs/$i.log" 2>/dev/null
+    elif [ "$runner" = libtest ]; then
+      echo "     Running ${labels[i - 1]}"
+      cat "$logs/$i.log" 2>/dev/null
+    fi
+    rc_i=$(cat "$logs/$i.rc" 2>/dev/null || echo none)
+    if [ "$rc_i" != 0 ]; then
+      failed+=("${labels[i - 1]}: exit $rc_i, log $logs/$i.log")
+    elif [ "${states[i - 1]}" = run ] && [ -n "${YAKOGL_CHECK_RECORD-}" ] && [ ! -e "$logs/norecord" ]; then
+      mkdir -p "$TEST_OK_DIR" &&
+        cp "$logs/$i.log" "$TEST_OK_DIR/${hashes[i - 1]}.log.tmp" &&
+        mv "$TEST_OK_DIR/${hashes[i - 1]}.log.tmp" "$TEST_OK_DIR/${hashes[i - 1]}.log" &&
+        echo "$YAKOGL_CHECK_RECORD" > "$TEST_OK_DIR/${hashes[i - 1]}.tmp" &&
+        mv "$TEST_OK_DIR/${hashes[i - 1]}.tmp" "$TEST_OK_DIR/${hashes[i - 1]}"
+    fi
+  done
+  [ "$runner" = nextest ] && [ "$ran" -gt 0 ] && cat "$logs/nextest.log"
+  if [ "${#failed[@]}" -gt 0 ]; then
+    printf 'cargo_test: %d of %d test binaries failed:\n' "${#failed[@]}" "${#labels[@]}"
+    printf '  FAILED binary %s\n' "${failed[@]}"
+    return 1
+  fi
+}
+
+# cargo_test's nextest arm: one `cargo nextest run` over the binaries that
+# are not cached, chosen by their nextest binary ids, which
+# `cargo nextest list` maps from their paths (a path without an id is a red
+# row, never a binary left out). Reads cargo_test's locals; $1 is the log
+# directory. Each binary gets the nextest lines that name it as its log.
+# A binary named by a line other than PASS, SLOW or SKIP failed.
+nextest_run() {
+  local logs=$1 ids j id expr="" st bad
+  ids=$(cargo nextest list "${cargo_args[@]}" --message-format json 2>/dev/null | python3 -c '
+import json, sys
+for k, v in json.load(sys.stdin)["rust-suites"].items():
+    print(v["binary-path"] + "\t" + k)
+') || { echo "cargo_test: cargo nextest list failed"; return 1; }
+  local -A id_of=()
+  while IFS=$'\t' read -r a id; do id_of[$a]=$id; done <<< "$ids"
+  local -a run_ids=()
+  for ((j = 1; j <= ${#exes[@]}; j++)); do
+    [ "${states[j - 1]}" = run ] || continue
+    id=${id_of[${exes[j - 1]}]-}
+    [ -n "$id" ] || { echo "cargo_test: nextest has no binary id for ${exes[j - 1]}"; return 1; }
+    run_ids[j]=$id
+    expr="${expr:+$expr | }binary_id(=$id)"
+  done
+  cargo nextest run "${cargo_args[@]}" --no-fail-fast --test-threads "$TEST_JOBS" "${filter[@]}" \
+    -E "$expr" > "$logs/nextest.log" 2>&1
+  st=$?
+  local named=0
+  for j in "${!run_ids[@]}"; do
+    grep -F " ${run_ids[j]} " "$logs/nextest.log" > "$logs/$j.log"
+    bad=$(grep -cvE '^ *(PASS|SLOW|SKIP) ' "$logs/$j.log")
+    if [ "$bad" -gt 0 ]; then echo 1 > "$logs/$j.rc"; named=$((named + 1)); else echo 0 > "$logs/$j.rc"; fi
+  done
+  if [ "$st" -ne 0 ]; then
+    # Nothing from a failed run is recorded. A failed run that names no
+    # binary fails them all.
+    : > "$logs/norecord"
+    if [ "$named" -eq 0 ]; then
+      for j in "${!run_ids[@]}"; do echo "$st" > "$logs/$j.rc"; done
+    fi
+  fi
+  return 0
+}
+
+# The summary line and the verdict; the end of every run.
+summary() {
+  echo
+  mode="every row"
+  [ -n "$CHANGED_BASE" ] && mode="--changed $CHANGED_BASE, scopes: $SCOPES"
+  [ "$LOCAL" -eq 1 ] && mode="--local $CHANGED_BASE, scopes: $SCOPES"
+  # The test binaries the rows ran and the ones they did not run because the
+  # same binary passed on main (cargo_test), apart from the rows `--changed`
+  # skipped.
+  bins_run=0
+  bins_cached=0
+  runner_name="the binaries concurrently (no cargo-nextest)"
+  [ -n "$NEXTEST_VERSION" ] && runner_name="$NEXTEST_VERSION (the rows that read libtest's output run the binaries concurrently)"
+  while read -r r c; do
+    bins_run=$((bins_run + r))
+    bins_cached=$((bins_cached + c))
+  done < "$TEST_STATE/counts"
+  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
+  if [ "$rc" -eq 0 ]; then
+    green "check.sh: clean"
+  else
+    red "check.sh: fix the above before pushing"
+  fi
+  exit "$rc"
+}
+
+# --cargo-test <cargo test arguments>: one test row through cargo_test and
+# the summary, nothing else (tools/check_testcache_selftest.sh).
+# --test-keys: print cargo_test's keys and the variable names the
+# environment key reads, and exit (the self-test).
+if [ "${1-}" = "--test-keys" ]; then
+  echo "env $(test_env_key)"
+  echo "tree $(test_tree_key other)"
+  echo "lib-tree $(test_tree_key lib)"
+  echo "names $(test_env_names | tr '\n' ' ')"
+  exit 0
+fi
+if [ "${1-}" = "--cargo-test" ]; then
+  shift
+  step "test    $*" cargo_test "$@"
+  summary
+fi
+
 scope all local
 step "cargo fmt --check" cargo fmt --check
 
@@ -321,7 +665,7 @@ for f in "${CONFIGS[@]}"; do
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
-  step "test    $f" "${tier[@]}" cargo test --no-fail-fast --no-default-features --features "$f"
+  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f"
 done
 
 # An image without the compiler: the precompiled shaders the whole back end
@@ -339,8 +683,8 @@ if [ "$QUICK" -eq 0 ]; then
     scope "$(config_scopes "$c")"
     step "clippy  $c (no compiler; lib and its tests)" "${alone[@]}" \
       cargo clippy --no-default-features --features "$c" --lib --profile test
-    step "test    $c (no compiler: shaderc::precompiled)" "${alone[@]}" \
-      cargo test --no-default-features --features "$c" --lib shaderc::precompiled
+    step "test    $c (no compiler: shaderc::precompiled)" \
+      cargo_test "${alone[@]}" --no-default-features --features "$c" --lib shaderc::precompiled
   done
 fi
 
@@ -370,7 +714,7 @@ KNOBS_TESTS=(
 )
 knobs_lib_tests() {
   local out t
-  out=$(cargo test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --lib 2>&1) ||
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --lib 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
   for t in "${KNOBS_TESTS[@]}"; do
@@ -403,7 +747,7 @@ V3D_MIN_TESTS=2460
 V3D_IGNORED="build/check/v3d-ignored.txt"
 v3d_lib_tests() {
   local out passed
-  out=$(cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --lib 2>&1)
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$V3D_CONFIG" --lib 2>&1)
   local status=$?
   printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20
   mkdir -p "$(dirname "$V3D_IGNORED")" || return 1
@@ -445,45 +789,45 @@ scope v3d
 # too: the keyed (cube_noseam) programs against a non-seamless reference
 # computed in the test, and the unkeyed ones as golden hashes.
 step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
 # glmark2's V3D allocations replayed through the OSAL's carve-out allocator
 # (src/osal/v3d_granules.h) and Mesa's layout (driver/src/v3d/v3d_tex.c), both
 # built from C by the test with `cc`: every large request fits the Pi 4's
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
 # ES 3.0's integer colour render targets through the GL API (the stand-in
 # back end of the test draws nothing); the ES 2.0 report below must refuse
 # every one of the formats.
 step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
 # ES 3.0 transform feedback objects, varyings, queries and rasterizer
 # discard through the GL API (the capture itself is item tf-capture); the ES
 # 2.0 report below pins the old answers.
 step "test    $V3D_CONFIG (tests/es3_tf_api.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_tf_api
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_tf_api
 # ES 3.0's sRGB colour buffers and textures through the GL API (the stand-in
 # back end stores a clear as one that encodes must); the V3D samples the
 # class and refuses a draw into it by name. The ES 2.0 report below must
 # have no sRGB format.
 step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_srgb
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_srgb
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --lib shaderc::online::v3d
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --lib shaderc::online::v3d
 step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
 step "test    $V3D_ES2_CONFIG (tests/es3_int_rt.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_int_rt
 step "test    $V3D_ES2_CONFIG (tests/es3_tf_api.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_tf_api
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_tf_api
 step "test    $V3D_ES2_CONFIG (tests/es3_srgb.rs)" \
-  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_srgb
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_srgb
 # The ignored population of the row above, by name: never silent.
 if [ -s "$V3D_IGNORED" ]; then
   echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"
@@ -1042,7 +1386,7 @@ if command -v cc >/dev/null 2>&1; then
   # layout (pool/tests/replay.rs) are among them.
   pvr_pool_tests() {
     local out want=28
-    out=$(cargo test --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
+    out=$(cargo_test --libtest --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
       { printf '%s\n' "$out" | tail -20; return 1; }
     printf '%s\n' "$out" | grep -qE "^test result: ok\. $want passed; 0 failed; 0 ignored;" || {
       echo "pvr pool tests: not exactly $want passed:"
@@ -1435,7 +1779,7 @@ step "clippy  yakogl-tools" cargo clippy -p yakogl-tools --all-targets
 # Clippy alone does not run its tests: the cube helper's level-aware clamp
 # (6874c8ee) changed the GLSL prelude and three glsl::tests stayed red on main
 # under a clean gate.
-step "test    yakogl-tools" cargo test -p yakogl-tools
+step "test    yakogl-tools" cargo_test -p yakogl-tools
 # yakogl-precompile (tools/precompile), the build-time precompiler of the
 # source list: it links the library as an image does -- the in-process
 # compiler, no table, no `host-test` -- so no row above builds that
@@ -1446,8 +1790,8 @@ scope precompile pvr vivante
 for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
   step "clippy  yakogl-precompile $f" cargo clippy -p yakogl-precompile --features "$f" --all-targets
 done
-step "test    yakogl-precompile gpu-powervr" cargo test -p yakogl-precompile --features gpu-powervr
-step "test    yakogl-precompile gpu-vivante" cargo test -p yakogl-precompile --features gpu-vivante
+step "test    yakogl-precompile gpu-powervr" cargo_test -p yakogl-precompile --features gpu-powervr
+step "test    yakogl-precompile gpu-vivante" cargo_test -p yakogl-precompile --features gpu-vivante
 # The back ends' own programs (the frame and clear quads' shaders; the list's
 # `internal` lines), committed as src/pvr/internal.rs and
 # src/vivante/internal.rs because every image binds them, compiler or not:
@@ -1471,6 +1815,9 @@ step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
 # a docs, a V3D, a gl_test and a shared-layer change.
 scope tools local
 step "tools   check.sh --changed: the path-to-scope map and four plans" tools/check_scope_selftest.sh
+# cargo_test's cache: a recorded binary is skipped, a new key runs it again,
+# a failing binary is named and never recorded.
+step "tools   check.sh test cache: record, skip, run again on a new key" tools/check_testcache_selftest.sh
 # The PowerVR backend's view of Mesa's csbgen packers (src/pvr/csbgen.rs and
 # the C wrappers build.rs compiles, driver/src/pvr/generated/csbgen_wrap.c)
 # is bindgen's output over driver/compat/pvr_csbgen_rs.h, committed so that no
@@ -1490,17 +1837,17 @@ step "gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen" \
 # frames. The Zephyr images themselves are not built here.
 scope samples
 step "clippy  yakogl-slint-check" cargo clippy -p yakogl-slint-check --all-targets
-step "test    yakogl-slint-check" cargo test -p yakogl-slint-check
+step "test    yakogl-slint-check" cargo_test -p yakogl-slint-check
 # The cluster sample's check and records (driver/samples/zephyr/cluster/check):
 # the host reference's tables per panel size, the tolerance, the present
 # accounting and the record words, on synthetic frames.
 step "clippy  yakogl-cluster-check" cargo clippy -p yakogl-cluster-check --all-targets
-step "test    yakogl-cluster-check" cargo test -p yakogl-cluster-check
+step "test    yakogl-cluster-check" cargo_test -p yakogl-cluster-check
 # The one triangle sample's scene and check (driver/samples/zephyr/triangle/check):
 # the whole-window classification, the tolerance, the PICTURE packing and the
 # shader texts against both offline tables, on synthetic frames.
 step "clippy  yakogl-triangle-check" cargo clippy -p yakogl-triangle-check --all-targets
-step "test    yakogl-triangle-check" cargo test -p yakogl-triangle-check
+step "test    yakogl-triangle-check" cargo_test -p yakogl-triangle-check
 scope drivers pvr vivante
 step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --all-targets
 # --all-features is not every arm that ships: a cfg arm can lint clean with all
@@ -1521,7 +1868,7 @@ drivers_clippy_arms() {
   done
 }
 step "clippy  yakogl-drivers, each shipped feature arm (-D warnings)" drivers_clippy_arms
-step "test    yakogl-drivers (register model)" cargo test --no-fail-fast -p yakogl-drivers --all-features
+step "test    yakogl-drivers (register model)" cargo_test --no-fail-fast -p yakogl-drivers --all-features
 # The target it ships for: aarch64-unknown-none-softfloat (no FP/SIMD registers:
 # the code runs at PRE_KERNEL_1 and in ISRs). With the target installed for the
 # default toolchain that is a plain check; otherwise a nightly with rust-src
@@ -1677,6 +2024,8 @@ glmark2_corpus_tests() {
     >build/glmark2-host.log 2>&1 || { tail -20 build/glmark2-host.log; return 1; }
   stale=$(grep -l 'did not resolve its depth' build/glmark2-host/logs/*/*.log || true)
   [ -z "$stale" ] || { echo "a depth texture sampled stale in: $stale"; return 1; }
+  # Plain `cargo test`, not cargo_test: the corpus is generated under
+  # build/, outside git, so no key of cargo_test covers it.
   for c in host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
     host-test,gpu-v3d,shaderc-online,no-shader-table; do
     GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features --features "$c" \
@@ -1728,14 +2077,4 @@ if command -v python3 >/dev/null 2>&1; then
   step "gen     driver/compat/pvr_rgx_core.h == gen_rgx_core.py" python3 tools/pvr/gen_rgx_core.py --check
 fi
 
-echo
-mode="every row"
-[ -n "$CHANGED_BASE" ] && mode="--changed $CHANGED_BASE, scopes: $SCOPES"
-[ "$LOCAL" -eq 1 ] && mode="--local $CHANGED_BASE, scopes: $SCOPES"
-echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s"
-if [ "$rc" -eq 0 ]; then
-  green "check.sh: clean"
-else
-  red "check.sh: fix the above before pushing"
-fi
-exit "$rc"
+summary
