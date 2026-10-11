@@ -3,8 +3,10 @@
 //! ES 2.0 error rules, texture part (item es2-tex-tests; the audit is
 //! tools/cts/log/investigations/es2-error-rules.md, Table A "Textures"). These tests
 //! come before the guards: the guards in src/gl/texture.rs are not written
-//! yet, and each `#[ignore = "BUG: ..."]` below names what main answers
-//! today; the guard removes it.
+//! yet, so each open row is pinned at what the code answers today, with an
+//! assertion message that names the ES 2.0 answer and the guard it waits
+//! for. The guard makes the pin fail; whoever lands it turns the pin into
+//! the GL_INVALID_ENUM assertion.
 //!
 //! A `report-es2` build refuses what ES 2.0 does not define; an ES 3.0 build
 //! behaves as before. Decision per row:
@@ -28,22 +30,26 @@
 //!   type comes from the framebuffer), so there is no type refusal to test
 //!   there; their internal-format checks (row 32) are not in this item.
 //!
-//! Ignored today (the guard is missing; each gives the error shown):
+//! Pinned today (measured with the report-es2 command below; the guard is
+//! missing, each call gives the answer shown):
 //!
-//! - `es2_3d_targets_are_invalid_enum` (row 24): today GL_NO_ERROR from
-//!   glGenerateMipmap, glTexParameter* and glGetTexParameter* on both
-//!   targets; glBindTexture of a name bound to no target gives GL_NO_ERROR
-//!   too (it binds), and of a name bound to 2D gives GL_INVALID_OPERATION.
-//! - `es2_setting_es3_parameters_is_invalid_enum` (row 25): today
-//!   GL_NO_ERROR for all eleven names (the audit: setting is accepted,
-//!   reading is gated).
-//! - `es2_getting_immutable_state_is_invalid_enum` (row 26): today
-//!   GL_NO_ERROR, the value is 0.
-//! - `es2_teximage2d_es3_types_are_invalid_enum` and
-//!   `es2_texsubimage2d_es3_types_are_invalid_enum` (row 27): today
-//!   GL_INVALID_OPERATION for GL_BYTE with RGBA (the first type tried; the
-//!   other types are not reached before the first assertion fails, so the
-//!   guard item must check each).
+//! - `es2_3d_targets_are_not_invalid_enum_yet` (row 24), per target:
+//!   glBindTexture of a fresh name to GL_TEXTURE_3D GL_NO_ERROR (it binds),
+//!   of the same name to GL_TEXTURE_2D_ARRAY GL_INVALID_OPERATION (type
+//!   clash); glGenerateMipmap GL_INVALID_OPERATION (no image, not the
+//!   target); glTexParameteri/f/iv/fv and glGetTexParameteriv/fv
+//!   GL_NO_ERROR, the getters read back GL_NEAREST.
+//! - `es2_setting_es3_parameters_is_not_invalid_enum_yet` (row 25):
+//!   GL_NO_ERROR from all four setters for all eleven names (44 calls).
+//! - `es2_getting_immutable_state_is_not_invalid_enum_yet` (row 26):
+//!   GL_NO_ERROR from both getters for both names, the value written is 0.
+//! - `es2_teximage2d_es3_types_are_not_invalid_enum_yet` (row 27):
+//!   GL_INVALID_OPERATION for each of the nine types.
+//! - `es2_texsubimage2d_es3_types_are_not_invalid_enum_yet` (row 27):
+//!   GL_INVALID_OPERATION for eight types; GL_HALF_FLOAT (0x140B) with RGBA
+//!   into an RGBA / UNSIGNED_BYTE texture is taken with GL_NO_ERROR (the
+//!   report-es2 refusal of an unsized format with GL_HALF_FLOAT is in
+//!   glTexImage2D only).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,report-es2 --test es2_error_rules_texture
@@ -216,41 +222,96 @@ fn tex_sub_image(format: GLenum, type_: GLenum) -> GLenum {
 /// The ES 3.0-only targets of row 24.
 const TARGETS_3D: [GLenum; 2] = [GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY];
 
-/// Row 24: refused in every entry that goes through `binding_for`.
+/// The name of a GL error, for the pin messages.
+#[cfg(feature = "report-es2")]
+fn error_name(e: GLenum) -> &'static str {
+    match e {
+        GL_NO_ERROR => "GL_NO_ERROR",
+        GL_INVALID_ENUM => "GL_INVALID_ENUM",
+        GL_INVALID_VALUE => "GL_INVALID_VALUE",
+        GL_INVALID_OPERATION => "GL_INVALID_OPERATION",
+        _ => "another error",
+    }
+}
+
+/// Pins today's wrong answer `today` of one call of row `row`. ES 2.0 wants
+/// GL_INVALID_ENUM (`spec`); the texture.rs guard turns `got` into it, the
+/// assertion fails, and whoever lands the guard makes GL_INVALID_ENUM the
+/// assertion. `why` says where today's answer comes from.
+#[cfg(feature = "report-es2")]
+fn pin(row: u32, call: &str, got: GLenum, today: GLenum, why: &str, spec: &str) {
+    assert_eq!(
+        got,
+        today,
+        "row {row}: {call}: today {} ({why}), ES 2.0 wants GL_INVALID_ENUM ({spec}); waits for the texture.rs guard \
+         (got {}: if it is GL_INVALID_ENUM the guard landed, make it the assertion)",
+        error_name(today),
+        error_name(got),
+    );
+}
+
+/// Row 24's spec reference (the audit's: the ES 2.0 targets).
+#[cfg(feature = "report-es2")]
+const ROW24_SPEC: &str = "ES 2.0 has only GL_TEXTURE_2D and GL_TEXTURE_CUBE_MAP";
+
+/// Row 24, pinned: nothing that goes through `binding_for` refuses the two
+/// ES 3.0 targets yet. Every answer below is today's; the guard makes each
+/// one GL_INVALID_ENUM.
 #[cfg(feature = "report-es2")]
 #[test]
-#[ignore = "BUG: report-es2 binds GL_TEXTURE_3D / GL_TEXTURE_2D_ARRAY and answers GL_NO_ERROR for them (not ES 2.0: GL_INVALID_ENUM); waits for the texture.rs guard (row 24)"]
-fn es2_3d_targets_are_invalid_enum() {
+fn es2_3d_targets_are_not_invalid_enum_yet() {
     let _g = context();
     /* a name never bound: the refusal must come before any type clash */
     let mut t = 0;
     // SAFETY: room for one name.
     unsafe { glGenTextures(1, &mut t) };
-    let mut i = 0;
-    let mut f = 0.0;
+    /* today's glBindTexture answer per target: the first bind makes `t` a 3D
+     * texture, so binding it to GL_TEXTURE_2D_ARRAY is a type clash */
+    let bind_today = [
+        (GL_NO_ERROR, "the target is taken and `t` becomes a 3D texture"),
+        (GL_INVALID_OPERATION, "the target is taken; `t` is already a 3D texture, a type clash"),
+    ];
     // SAFETY: plain GL calls, room for one value.
     unsafe {
-        for target in TARGETS_3D {
+        for (target, (bind, bind_why)) in TARGETS_3D.into_iter().zip(bind_today) {
+            let call = |name: &str| format!("{name}(0x{target:x})");
             glBindTexture(target, t);
-            assert_eq!(err(), GL_INVALID_ENUM, "glBindTexture 0x{target:x}");
+            pin(24, &call("glBindTexture"), err(), bind, bind_why, ROW24_SPEC);
             glGenerateMipmap(target);
-            assert_eq!(err(), GL_INVALID_ENUM, "glGenerateMipmap 0x{target:x}");
+            pin(
+                24,
+                &call("glGenerateMipmap"),
+                err(),
+                GL_INVALID_OPERATION,
+                "the target is taken; the bound texture has no image",
+                ROW24_SPEC,
+            );
+            let taken = "the target is taken";
             glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameteri 0x{target:x}");
+            pin(24, &call("glTexParameteri"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
             glTexParameterf(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLfloat);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameterf 0x{target:x}");
+            pin(24, &call("glTexParameterf"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
             let iv = GL_NEAREST as GLint;
             glTexParameteriv(target, GL_TEXTURE_MIN_FILTER, &iv);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameteriv 0x{target:x}");
+            pin(24, &call("glTexParameteriv"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
             let fv = GL_NEAREST as GLfloat;
             glTexParameterfv(target, GL_TEXTURE_MIN_FILTER, &fv);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameterfv 0x{target:x}");
+            pin(24, &call("glTexParameterfv"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
+            let mut i = 0;
             glGetTexParameteriv(target, GL_TEXTURE_MIN_FILTER, &mut i);
-            assert_eq!(err(), GL_INVALID_ENUM, "glGetTexParameteriv 0x{target:x}");
+            pin(24, &call("glGetTexParameteriv"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
+            assert_eq!(i, GL_NEAREST as GLint, "row 24: today the setter above took GL_NEAREST on 0x{target:x}");
+            let mut f = 0.0;
             glGetTexParameterfv(target, GL_TEXTURE_MIN_FILTER, &mut f);
-            assert_eq!(err(), GL_INVALID_ENUM, "glGetTexParameterfv 0x{target:x}");
+            pin(24, &call("glGetTexParameterfv"), err(), GL_NO_ERROR, taken, ROW24_SPEC);
+            assert_eq!(f, GL_NEAREST as GLfloat, "row 24: today the setter above took GL_NEAREST on 0x{target:x}");
         }
+        /* leave both targets empty for the next test; with the guard these
+         * two calls are refused, which is the same empty state */
+        glBindTexture(GL_TEXTURE_3D, 0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
+    drain();
 }
 
 /// Row 24: the ES 3.0 build binds both targets, sets WRAP_R and reads it back.
@@ -317,25 +378,27 @@ const SET_PNAMES: [(GLenum, GLint); 11] = [
     (GL_TEXTURE_SWIZZLE_A, GL_ALPHA as GLint),
 ];
 
-/// Row 25: setting any of them is GL_INVALID_ENUM, by all four setters.
+/// Row 25, pinned: all four setters take every one of the eleven names with
+/// GL_NO_ERROR today; the guard makes each GL_INVALID_ENUM.
 #[cfg(feature = "report-es2")]
 #[test]
-#[ignore = "BUG: report-es2 sets the ES 3.0 texture parameters (WRAP_R, BASE/MAX_LEVEL, LODs, COMPARE_*, SWIZZLE_*) with GL_NO_ERROR (not ES 2.0: GL_INVALID_ENUM); waits for the texture.rs guard (row 25)"]
-fn es2_setting_es3_parameters_is_invalid_enum() {
+fn es2_setting_es3_parameters_is_not_invalid_enum_yet() {
     let _g = context();
     bind_new_2d();
+    const SPEC: &str = "ES 2.0 3.7.4: MIN_FILTER, MAG_FILTER, WRAP_S, WRAP_T only";
+    const WHY: &str = "the setter takes the ES 3.0 name";
     // SAFETY: plain GL calls.
     unsafe {
         for (pname, value) in SET_PNAMES {
             glTexParameteri(GL_TEXTURE_2D, pname, value);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameteri 0x{pname:x}");
+            pin(25, &format!("glTexParameteri(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
             glTexParameterf(GL_TEXTURE_2D, pname, value as GLfloat);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameterf 0x{pname:x}");
+            pin(25, &format!("glTexParameterf(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
             glTexParameteriv(GL_TEXTURE_2D, pname, &value);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameteriv 0x{pname:x}");
+            pin(25, &format!("glTexParameteriv(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
             let fv = value as GLfloat;
             glTexParameterfv(GL_TEXTURE_2D, pname, &fv);
-            assert_eq!(err(), GL_INVALID_ENUM, "glTexParameterfv 0x{pname:x}");
+            pin(25, &format!("glTexParameterfv(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
         }
     }
 }
@@ -382,22 +445,32 @@ fn mirrored_repeat_and_es2_parameters_are_accepted() {
     }
 }
 
-/// Row 26: reading the immutability state is GL_INVALID_ENUM.
+/// Row 26, pinned: both getters answer the two names with GL_NO_ERROR and
+/// write 0 today; the guard makes each GL_INVALID_ENUM and writes nothing.
 #[cfg(feature = "report-es2")]
 #[test]
-#[ignore = "BUG: report-es2 answers GL_TEXTURE_IMMUTABLE_FORMAT / _LEVELS with GL_NO_ERROR (not ES 2.0: GL_INVALID_ENUM); waits for the texture.rs guard (row 26)"]
-fn es2_getting_immutable_state_is_invalid_enum() {
+fn es2_getting_immutable_state_is_not_invalid_enum_yet() {
     let _g = context();
     bind_new_2d();
-    let mut i = -99;
-    let mut f = -99.0;
+    const SPEC: &str = "not an ES 2.0 name";
+    const WHY: &str = "the getter answers the ES 3.0 name with 0";
     // SAFETY: plain GL calls, room for one value.
     unsafe {
         for pname in [GL_TEXTURE_IMMUTABLE_FORMAT, GL_TEXTURE_IMMUTABLE_LEVELS] {
+            let mut i = -99;
             glGetTexParameteriv(GL_TEXTURE_2D, pname, &mut i);
-            assert_eq!(err(), GL_INVALID_ENUM, "iv 0x{pname:x}");
+            pin(26, &format!("glGetTexParameteriv(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
+            assert_eq!(
+                i, 0,
+                "row 26: today glGetTexParameteriv(0x{pname:x}) writes 0; with the guard it writes nothing"
+            );
+            let mut f = -99.0;
             glGetTexParameterfv(GL_TEXTURE_2D, pname, &mut f);
-            assert_eq!(err(), GL_INVALID_ENUM, "fv 0x{pname:x}");
+            pin(26, &format!("glGetTexParameterfv(0x{pname:x})"), err(), GL_NO_ERROR, WHY, SPEC);
+            assert_eq!(
+                f, 0.0,
+                "row 26: today glGetTexParameterfv(0x{pname:x}) writes 0; with the guard it writes nothing"
+            );
         }
     }
 }
@@ -434,28 +507,56 @@ const ES3_TYPES: [(GLenum, GLenum); 9] = [
     (GL_FLOAT_32_UNSIGNED_INT_24_8_REV, GL_DEPTH_STENCIL),
 ];
 
-/// Row 27: glTexImage2D refuses them with GL_INVALID_ENUM.
+/// Row 27's spec reference (the file's).
+#[cfg(feature = "report-es2")]
+const ROW27_SPEC: &str = "ES 2.0 3.7.1: an unknown type is GL_INVALID_ENUM";
+
+/// Row 27, pinned: glTexImage2D answers every one of the nine types with
+/// GL_INVALID_OPERATION today (a known enum with no pair); the guard makes
+/// each GL_INVALID_ENUM. Every type is checked, not only the first.
 #[cfg(feature = "report-es2")]
 #[test]
-#[ignore = "BUG: report-es2 glTexImage2D answers GL_INVALID_OPERATION to the ES 3.0-only pixel types (ES 2.0 3.7.1: GL_INVALID_ENUM); waits for the texture.rs guard (row 27)"]
-fn es2_teximage2d_es3_types_are_invalid_enum() {
+fn es2_teximage2d_es3_types_are_not_invalid_enum_yet() {
     let _g = context();
     bind_new_2d();
     for (type_, format) in ES3_TYPES {
-        assert_eq!(tex_image(format, type_), GL_INVALID_ENUM, "type 0x{type_:x} format 0x{format:x}");
+        pin(
+            27,
+            &format!("glTexImage2D(type 0x{type_:x}, format 0x{format:x})"),
+            tex_image(format, type_),
+            GL_INVALID_OPERATION,
+            "the type is known, the (format, type) pair is refused",
+            ROW27_SPEC,
+        );
     }
 }
 
-/// Row 27: glTexSubImage2D refuses them with GL_INVALID_ENUM.
+/// Row 27, pinned: glTexSubImage2D answers eight of the nine types with
+/// GL_INVALID_OPERATION today, and takes GL_HALF_FLOAT (0x140B) with RGBA
+/// into the RGBA / UNSIGNED_BYTE texel with GL_NO_ERROR: `valid_format_type`
+/// pairs it with every unsized format, and the report-es2 refusal of
+/// (unsized, GL_HALF_FLOAT) is in glTexImage2D only. The guard makes all
+/// nine GL_INVALID_ENUM.
 #[cfg(feature = "report-es2")]
 #[test]
-#[ignore = "BUG: report-es2 glTexSubImage2D answers GL_INVALID_OPERATION to the ES 3.0-only pixel types (not ES 2.0: GL_INVALID_ENUM); waits for the texture.rs guard (row 27)"]
-fn es2_texsubimage2d_es3_types_are_invalid_enum() {
+fn es2_texsubimage2d_es3_types_are_not_invalid_enum_yet() {
     let _g = context();
     bind_new_2d();
     assert_eq!(tex_image(GL_RGBA, GL_UNSIGNED_BYTE), GL_NO_ERROR);
     for (type_, format) in ES3_TYPES {
-        assert_eq!(tex_sub_image(format, type_), GL_INVALID_ENUM, "type 0x{type_:x} format 0x{format:x}");
+        let (today, why) = if type_ == GL_HALF_FLOAT {
+            (GL_NO_ERROR, "the upload is taken: no report-es2 refusal of GL_HALF_FLOAT in glTexSubImage2D")
+        } else {
+            (GL_INVALID_OPERATION, "the type is known, the (format, type) pair is refused")
+        };
+        pin(
+            27,
+            &format!("glTexSubImage2D(type 0x{type_:x}, format 0x{format:x})"),
+            tex_sub_image(format, type_),
+            today,
+            why,
+            ROW27_SPEC,
+        );
     }
 }
 
