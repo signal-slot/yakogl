@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D 4.2 (Raspberry Pi 4) reference instruments
 
 The product path for this GPU is our own online compiler (`src/shaderc/online/v3d/`);
@@ -84,12 +86,11 @@ creates at the first draw (st_program.c, `st_finalize_nir`,
 (`IDENT1.VPM_SIZE * 8192`) is passed with `--vpm-size`; the compiler uses it for
 the VPM configuration, so a table built on the assumption is not final.
 
-On the lab host the tree is `~/pvr-lab/mesa-build/mesa-26.2.1` and the tool is
-built there (`build-v3d/src/broadcom/v3d_shc`).
+The tool is `build-v3d/src/broadcom/v3d_shc` inside the Mesa tree of the set-up above.
 
 ## Host checks for the driver (driver/src/v3d)
 
-Five programs check the V3D driver on the host, before any board time. Each
+The programs below check the V3D driver on the host, before any board time. Each
 exits non-zero on any failure and when the number of cases it ran differs
 from the number it planned, and each was run once against a deliberately
 broken copy of the code to show that it can fail.
@@ -102,7 +103,7 @@ its CLIF decoder, the part of `src/util` that needs, and its format table,
 into `build/v3d-check/mesa/` (`tools/v3d/mesa-stub/` holds the two gallium
 driver headers and libdrm's that the table and the shared headers include and
 nothing here uses). `MESA_V3D_TREE`, a Mesa tree with `build-v3d` (the
-lab tree above), compares against that tree instead; set to something that is
+tree above), compares against that tree instead; set to something that is
 not one, the rows fail.
 
 - `cl_golden.c` (with `cl_golden_mesa.c`): the packets are Mesa's own
@@ -254,9 +255,10 @@ name, and the mapping is made at draw time.
 
 `src/shaderc/online/v3d/` is the V3D 4.2 QPU instruction set as a Rust module:
 a decoder, an encoder, program helpers and a listing in Mesa's text format. It
-is the base of the V3D's only product path, our own online compiler.
-Instruction selection is not written yet. Mesa's v3d compiler (`v3d_shc`) is
-only the reference we compare against. The module is compiled wherever
+is the base of the V3D's only product path, our own online compiler, whose
+instruction selection (`select.rs`) and program chain (`chain.rs`) live in
+the same directory. Mesa's v3d compiler (`v3d_shc`) is only the reference we
+compare against. The module is compiled wherever
 `online` is, like `vivante` and `powervr`, and its tests run in every
 `shaderc-online` row of `tools/check.sh`. The tables are transcribed from
 Mesa 26.2.1 `src/broadcom/qpu/qpu_pack.c` (MIT, ver 42 only). No other
@@ -388,8 +390,9 @@ corrected against Mesa's own code:
 
 `tests/v3d_sim_mesa.rs` runs Mesa's FS, VS and CS for the real program pairs
 of the corpus. It needs no Mesa build, because it reads the checked-in
-fixture `tests/fixtures/v3d_mesa_programs.txt` (344 KB: 105 pairs, code
-words, uniform streams and prog_data). Regenerate the fixture with:
+fixture `tests/fixtures/v3d_mesa_programs.txt` (about 500 KB: 287 real
+pairs, 141 of them with Mesa's code words, uniform streams and prog_data;
+its header gives the counts). Regenerate the fixture with:
 
 ```sh
 tools/v3d/sim_fixture.py      # needs v3d_shc, glslangValidator, spirv-dis
@@ -405,7 +408,8 @@ The IR evaluator runs the same GLSL on the same inputs.
   VS's scaled x and y, Zs and 1/Wc. The CS's clip position and scaled x and
   y. Comparisons are bit for bit, with a stated tolerance only where the
   program ran an SFU op.
-- **Result at a0a485d6, measured 2026-09-24:** 105 pairs, 70 tried: 49 agree,
+- **Result at a0a485d6, measured 2026-09-24, when the fixture had 105
+  pairs; not re-measured on the larger fixture:** 105 pairs, 70 tried: 49 agree,
   0 disagree, 21 unmodelled. 35 were not tried (31 are desktop GLSL, which
   our front end refuses). 10,968 values were compared.
 - **Negative controls.** In the test, 81 mutants of Mesa's code
@@ -415,7 +419,7 @@ The IR evaluator runs the same GLSL on the same inputs.
 - `V3D_SIM_PAIR=<substring>` runs only the matching pairs and prints their IR
   declarations, Mesa's listing and the uniform stream.
 - **The three-way check** is `our_programs_agree_with_the_ir_and_with_mesa`,
-  in the same file. The fixture lists all 249 real pairs (`real` lines).
+  in the same file. The fixture lists all real pairs (`real` lines, 287 today).
   For each pair our compiler (`v3d::chain::compile_program`, Target
   `vpm_size` 65536) compiles, the test compares:
   - (a) the interpreter on our FS/VS/CS words, with our uniform stream;
@@ -425,7 +429,8 @@ The IR evaluator runs the same GLSL on the same inputs.
   (a) is compared with (b), and with (c) on the colour, the discards and
   the position rows. The varying rows are not compared, because their order
   is each compiler's. Refusals are counted by NotYet name, as coverage.
-  Measured 2026-09-24 at a0a485d6: 249 real pairs plus 1 extra
-  (passthrough + interp_color), and 9 compile. (a) vs (b): 6 agree, 0
+  Measured 2026-09-24 at a0a485d6, on the fixture of that day (249 real
+  pairs plus 1 extra, passthrough + interp_color), before the instruction
+  selection grew; not re-measured: 9 compile. (a) vs (b): 6 agree, 0
   disagree, and 3 matrix-attribute pairs are not tried. (a) vs (c): 5 agree.
   12 of 12 mutants of our code are caught.
