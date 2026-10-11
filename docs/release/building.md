@@ -108,7 +108,9 @@ repository at the commit that added this file.
   `.ccfarm/project.toml:86`). Download page:
   `https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html`.
   Install the AArch64 toolchain (`aarch64-zephyr-elf`) and the host tools; run
-  the SDK's `setup.sh`. I did not check the archive name.
+  the SDK's `setup.sh` (`./setup.sh -t aarch64-zephyr-elf`). Its `-c` option
+  registers the SDK in `~/.cmake/packages`; it is not needed, because
+  `ZEPHYR_SDK_INSTALL_DIR` is enough. I did not check the archive name.
 - **Variable:** `ZEPHYR_SDK_INSTALL_DIR` (west finds the SDK with it). The
   dEQP stage 1 script reads a second name, `ZEPHYR_SDK`, and its default is
   `$HOME/org/zephyrproject/zephyr-sdk-1.0.1` (`tools/cts/cts-build-zephyr.sh:34,47`).
@@ -254,8 +256,7 @@ repository at the commit that added this file.
   compiler pre-renders the glyphs of the cluster into the image
   (`driver/samples/zephyr/cluster/CMakeLists.txt:55-67,109-110`,
   `driver/samples/zephyr/cluster/rust/build.rs:13-16`).
-- **Source:** Noto Sans from `googlefonts/noto-fonts` (the repository's AM62P
-  baseline note names it, `tools/cts/log/benchmarks-baseline/am62p.md:22`), or your
+- **Source:** Noto Sans from `googlefonts/noto-fonts`, or your
   distro's package of static Noto Sans (SIL OFL 1.1, free to use). **Not
   pinned:** no version is named. A different version can change glyphs, and so
   the picture; keep the same files for a series of runs.
