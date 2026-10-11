@@ -21,6 +21,27 @@ HEAD8: `198e8a5d` (ccfarm/integration tip, the workspace's snapshot).
   and `test -d /dev/serial` all failed). The Debug Probe is not attached to
   it, and no value for `BOARD_UART` is known to me.
 
+## Second attempt (after the permissions were granted)
+
+- `ask_farm` answered (confidence 0.6, node nuc's notes): the Pi 4's
+  `BOARD_UART` is the Debug Probe's raw TCP bridge on tailnet host `usb1`
+  (100.124.238.76) port 35931, and
+  `BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1"`.
+- The build inputs were in the environment: `ZEPHYR_WS`, `WEST_VENV`,
+  `ZEPHYR_SDK_INSTALL_DIR`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`,
+  `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`, `NOTO_SANS_DIR` (all under
+  `$CCFARM_DEPS_DIR`), `RUSTUP_TOOLCHAIN=nightly`.
+- Blockers that remain: (1) the lease covers only `ssh signal-slot@elegance-1`;
+  `usb1:35931` is another host, so I did not connect to it. (2) the pi4
+  backend of `tools/board.sh` takes `BOARD_UART` as a local character device
+  (`[ -c "$BOARD_UART" ]`, lines 751 and 822), not `host:port`; a bridge such
+  as `socat` to a pty would be needed, which is outside this item's change set.
+- I started `tools/cts/common-images.sh pi4 tools/cts/common-tree.txt
+  /tmp/pi4ci-img` (build 04ed90d, which differs from `198e8a5d` only by this
+  note). After about 2.5 h no `GM.built` file existed that I could see (the
+  tool refused listing or reading `/tmp`, and the script's stdout stayed at its
+  first line), so I stopped it. **No image is reported built.**
+
 ## What could not run
 
 | step | outcome |
