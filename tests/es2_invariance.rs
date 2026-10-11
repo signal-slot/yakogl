@@ -7,8 +7,8 @@
 //! draws the same triangles with both and fails on any pixel the first draw
 //! covered and the second did not (es2fShaderInvarianceTests.cpp:257-366),
 //! so the two programs must compute gl_Position bit for bit alike.
-//! docs/investigations/es2-invariance.md has the cases, the cause and the
-//! proposed fix.
+//! tools/cts/log/investigations/es2-invariance.md has the cases and the
+//! cause (its proposed fix was not taken; main fixed it with f9688bc5).
 //!
 //! What is compared is the computation itself, as each back end hands it to
 //! its encoder: gl_Position's four components traced back through the
@@ -29,9 +29,9 @@
 //! - V3D: the prepared scalar program (`v3d::prepare::prepare_vertex`), whose
 //!   `position` names gl_Position's four scalars.
 //!
-//! A case the back end computes differently at the tip is `#[ignore]`d with
-//! the cause, so the suite stays green; the fix (plan item es2-invariance)
-//! removes the ignore. The shaders are dEQP's (VK-GL-CTS, Apache-2.0),
+//! The nine PowerVR cases computed gl_Position differently until f9688bc5
+//! (`fusion_pairs` fused a product into an fmad only when one sum read it);
+//! since then every case of every back end must pass. The shaders are dEQP's (VK-GL-CTS, Apache-2.0),
 //! es2fShaderInvarianceTests.cpp:558-660, with each precision's literals
 //! (:485-491) substituted as dEQP's formatGLSL does.
 
@@ -249,7 +249,7 @@ macro_rules! lower {
 }
 
 /// One test per case and precision, calling `$check(name, case, precision)`;
-/// `$attr` is the test's attributes (an `#[ignore]` where the tip fails).
+/// `$attr` is the test's optional attributes (none is used today).
 macro_rules! cases {
     ($check:ident; $($test:ident: $case:ident, $prec:ident $(, #[$attr:meta])?;)*) => {$(
         #[test]
@@ -445,24 +445,15 @@ mod powervr {
     }
 
     cases! { check;
-        lowp_common_subexpression_1: CASE1, LOWP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        mediump_common_subexpression_1: CASE1, MEDIUMP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        highp_common_subexpression_1: CASE1, HIGHP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        lowp_common_subexpression_2: CASE2, LOWP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        mediump_common_subexpression_2: CASE2, MEDIUMP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        highp_common_subexpression_2: CASE2, HIGHP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        lowp_common_subexpression_3: CASE3, LOWP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        mediump_common_subexpression_3: CASE3, MEDIUMP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
-        highp_common_subexpression_3: CASE3, HIGHP,
-            #[ignore = "es2-invariance: fusion_pairs fuses a product into an fmad only when one sum reads it"];
+        lowp_common_subexpression_1: CASE1, LOWP;
+        mediump_common_subexpression_1: CASE1, MEDIUMP;
+        highp_common_subexpression_1: CASE1, HIGHP;
+        lowp_common_subexpression_2: CASE2, LOWP;
+        mediump_common_subexpression_2: CASE2, MEDIUMP;
+        highp_common_subexpression_2: CASE2, HIGHP;
+        lowp_common_subexpression_3: CASE3, LOWP;
+        mediump_common_subexpression_3: CASE3, MEDIUMP;
+        highp_common_subexpression_3: CASE3, HIGHP;
         lowp_common_subexpression_0: CASE0, LOWP;
         mediump_common_subexpression_0: CASE0, MEDIUMP;
         highp_common_subexpression_0: CASE0, HIGHP;
