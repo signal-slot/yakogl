@@ -17,8 +17,9 @@ line 1437, group table lines 1457-1494, "8,835 failures by message" lines
 1496-1516), and `tools/cts/STATUS.md` lines 9 and 250 (Japanese). The i.MX8MP
 and the Pi 4 have **no GLES3 run**, so everything below is AM62P only.
 
-There is **no per-case list**. `tools/cts/log/board-sessions/am62p-gles3-percase.md`
-says the session got no console output and wrote no TSV. The logs of the 396d667a
+There is **no per-case list**. The per-case session of 2026-10-08 got no console
+output and wrote no TSV: its lease named the wrong UART port
+(`tools/cts/log/investigations/am62p-console-empty.md`, section 8). The logs of the 396d667a
 run were deleted with a worktree cleanup (RESULTS.md lines 1527-1529). So causes
 are assigned by **message bucket** and by group, and every count carries a tag:
 
@@ -371,8 +372,8 @@ Check: 1,234 + 748 + 413 + 187 + 88 + 139 + 167 + 5 = **2,981**.
 es3_link_iface, es3_shaderc_pp, es3_ubo). Their effect on dEQP numbers is
 **host-tested only**. The numbers in this file are all those of 396d667a;
 nothing here is a board result at a later commit. The first board run after
-them is `board-am62p`; `oq-gc` and `am62p-gles3-percase` (merged note, but no
-data) are the sessions meant to produce the per-case list.
+them is `board-am62p`; `oq-gc` and `am62p-gles3-percase` (no data: the
+console was on the wrong UART port) are the sessions meant to produce the per-case list.
 
 ## Pending inputs
 
