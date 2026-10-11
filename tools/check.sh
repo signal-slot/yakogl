@@ -730,7 +730,7 @@ step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knob
 KICK_DIFF_TESTS=7
 kick_diff_tests() {
   local out
-  out=$(cargo test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_kick_diff 2>&1) ||
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_kick_diff 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
   printf '%s\n' "$out" | grep -q "^test result: ok. $KICK_DIFF_TESTS passed; 0 failed; 0 ignored" ||
