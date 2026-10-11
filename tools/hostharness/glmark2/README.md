@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # glmark2 on the host harness
 
 glmark2-es2's default benchmark set (the 33 entries of upstream's
@@ -20,8 +22,9 @@ carve-out (its size from the Pi 4's glmark2 image), so an allocation the
 board would refuse is refused here, with the board's "out of GPU memory"
 line, and each entry's high-water is listed.
 
-The results are in [FINDINGS.md](../../cts/log/hostharness/glmark2/FINDINGS.md) (PowerVR, GC7000) and
-[FINDINGS-v3d.md](../../cts/log/hostharness/glmark2/FINDINGS-v3d.md) (V3D), and the de-duplicated shader texts
+The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000) and
+[FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D), beside this file because the run
+rewrites their generated parts. The de-duplicated shader texts
 are written to `build/glmark2-host/shaders/` by the run and never committed
 ([`tools/shaders/glmark2/README.md`](../../shaders/glmark2/README.md)).
 
@@ -49,7 +52,7 @@ curl -fsSL -o glmark2.tar.gz \
   https://github.com/glmark2/glmark2/archive/22c527cb0556f3a1ac4445aaa52cc532760928d5.tar.gz
 ```
 
-The script builds everything in `build/glmark2-host/`, runs the three GPUs
+The script builds everything in `build/glmark2-host/`, runs the three GPUs,
 writes the shader corpus to `build/glmark2-host/shaders/` and rewrites the
 generated parts of `FINDINGS.md` and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMARK2_SRC> [out] [powervr]
 [vivante] [v3d]`. Environment: `GM2_FRAMES` (frames per entry, default 3),
@@ -117,9 +120,9 @@ entry, from an empty carve-out.
 ## Limits
 
 * Nothing is rendered. A finding that depends on pixels (wrong colours, a
-  black texture) shows only through the line the library logs about it.
-  terrain's black texture shows as its `glGenerateMipmap` error and the
-  incomplete-texture line.
+  black texture) shows only through the line the library logs about it, for
+  example a GL error or an incomplete-texture line. That is how terrain's
+  black texture showed before `GL_OES_texture_npot`.
 * The fake GPU never fails, and linux.c's submits complete at once, so no
   in-flight path runs. Only the V3D can run out of memory (its carve-out);
   the PowerVR and the GC7000 cannot.
