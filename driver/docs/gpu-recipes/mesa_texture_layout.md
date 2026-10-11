@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR BXS-4-64 texture-sampling state layouts (from Mesa PVR + DDK)
 
 > **Verified on silicon (2026-09-14):** mip chains work on the STRIDE (linear) layout
@@ -8,8 +10,8 @@
 > box-filtered level.
 
 Target: BXS-4-64, BVNC **36.53.104.796**. Analysis of Mesa's open PVR Vulkan driver
-(`scratchpad/mesa/src/imagination`) cross-checked against the TI DDK 25.2
-(`scratchpad/ti-img-rogue-driver-25.2`). **Analysis only — nothing modified.**
+(Mesa `src/imagination`) cross-checked against the TI DDK 25.2
+(the `ti-img-rogue-driver` kernel tree). **Analysis only — nothing modified.**
 
 ## 0. CRITICAL: which arch/csbgen applies
 

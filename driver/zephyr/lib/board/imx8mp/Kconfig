@@ -191,20 +191,20 @@ config GC_BOARD_WDOG_SELF_ARM
 	depends on MMU
 	select SAFEUI_DISPLAY_RUST
 	help
-	  For an image U-Boot starts with "go" (the netboot,
-	  driver/docs/imx8mp-netboot-plan.md). Nothing then guarantees that
-	  WDOG1 runs: a U-Boot built without the driver model watchdog's
-	  autostart leaves it stopped, and the inherited-watchdog feeding the
-	  samples do (gc_sample.c) then bounds nothing. At PRE_KERNEL_1 this
-	  turns the CCM WDOG root and the WDOG1 gate on, arms WDOG1 for 60 s
-	  from whatever state it is in (stopped, U-Boot's 60 s, Linux's 30 s:
-	  the register logic is driver/rust ip::imx_wdog), reads it back and
-	  logs "gc_wdog_arm: armed" (the literal tools/board.sh
-	  requires). From then on gc_sample_service_wdog() and a 1 s timer feed
-	  it until GC_BOARD_WDOG_SECONDS of uptime and never after, so a hung
-	  image comes back by itself at most that plus 60 s after boot. A
-	  refusal (gc_result.h kind WDOG tag 2) resets the SoC at once: an
-	  image that could not arm its watchdog does not run.
+	  For an image U-Boot starts with "go" (docs/standalone-boot.md, "What
+	  the image does on a go entry"). Nothing then guarantees that WDOG1
+	  runs: a U-Boot built without the driver model watchdog's autostart
+	  leaves it stopped, and the inherited-watchdog feeding the samples do
+	  (gc_sample.c) then bounds nothing. At PRE_KERNEL_1 this turns the CCM
+	  WDOG root and the WDOG1 gate on, arms WDOG1 for 60 s from whatever
+	  state it is in (stopped, U-Boot's 60 s, Linux's 30 s: the register
+	  logic is driver/rust ip::imx_wdog), reads it back and logs
+	  "gc_wdog_arm: armed" (the literal tools/board.sh requires). From then
+	  on gc_sample_service_wdog() and a 1 s timer feed it until
+	  GC_BOARD_WDOG_SECONDS of uptime and never after, so a hung image comes
+	  back by itself at most that plus 60 s after boot. A refusal
+	  (gc_result.h kind WDOG tag 2) resets the SoC at once: an image that
+	  could not arm its watchdog does not run.
 
 	  The same image works on a kexec entry: the running watchdog is
 	  re-timed to 60 s and fed under the same bound.
@@ -398,15 +398,15 @@ config GC_COMMON_RESULT_STAGES
 	depends on GC_COMMON_RESULT_SNVS
 	help
 	  For a board with no UART that dies before its result record
-	  (driver/docs/imx8mp-netboot-plan.md, "Board run 2026-10-03": the
-	  first gc_gl_triangle run from U-Boot left only the WDOG1 arming
-	  breadcrumb). Writes a kind STAGE record (gc_result.h, which lists
-	  the stages) at the PRE_KERNEL_1, PRE_KERNEL_2 and POST_KERNEL
-	  driver boundaries, around the panel console's two stages, at each
-	  sub-step of the GPU device init and at the sample's own stages
+	  (tools/cts/log/board-sessions/imx8mp-netboot.md, "Board run
+	  2026-10-03": the first gc_gl_triangle run from U-Boot left only the
+	  WDOG1 arming breadcrumb). Writes a kind STAGE record (gc_result.h,
+	  which lists the stages) at the PRE_KERNEL_1, PRE_KERNEL_2 and
+	  POST_KERNEL driver boundaries, around the panel console's two stages,
+	  at each sub-step of the GPU device init and at the sample's own stages
 	  (gc_gl_triangle). Each is a breadcrumb: dropped once a result record
 	  is stored and never counted in the record's sequence number, so an
-	  image that reaches its verdict leaves the same record as without
-	  this. Each costs five register writes to the SNVS.
+	  image that reaches its verdict leaves the same record as without this.
+	  Each costs five register writes to the SNVS.
 
 endif # YAKOGL_GC_BOARD

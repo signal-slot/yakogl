@@ -41,9 +41,10 @@ am62p = []
 # rgxstartstop.c / rgxfwimageutils.c; AM62P images with the GPU driver.
 pvr = []
 # PowerVR fence wait: read the fragment UFO every 20 us instead of once per
-# ms (gpu::pvr::render::WAIT_POLL_US; driver/docs/pvr-fence-wait.md). Opt-in
-# until gl_test and glmark2 have run with it on the AM62P; a Zephyr image
-# takes it from CONFIG_SAFEUI_GPU_PVR_FINE_WAIT.
+# ms (gpu::pvr::render::WAIT_POLL_US;
+# tools/cts/log/investigations/pvr-fence-wait.md). Opt-in until gl_test and
+# glmark2 have run with it on the AM62P; a Zephyr image takes it from
+# CONFIG_SAFEUI_GPU_PVR_FINE_WAIT.
 pvr-fine-wait = ["pvr"]
 # Per-kick timestamps of the PowerVR render service (gpu::pvr::kick_times:
 # submit, MMU invalidate, post, geometry and fragment fence seen, wait), read

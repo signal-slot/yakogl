@@ -1038,7 +1038,9 @@ void gc_render_stall_dump(const char *why)
 	 * that did it took the board down, one on a wedged GPU and one on a
 	 * GPU that had just completed a submit, against zero reboots in dozens
 	 * of runs without them. The HI/PM/MC registers above are a different
-	 * space and have been read all day without incident. See NOTES.md. */
+	 * space and have been read all day without incident. See
+	 * driver/docs/vivante-kernel-rust.md, "Hardware findings that still
+	 * hold". */
 
 	for (uint32_t i = 0; i < GC_EVENT_COUNT; i++) {
 		if (!(g->event_free & BIT(i))) {

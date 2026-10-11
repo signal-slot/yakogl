@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The PowerVR render pool
+
+Status: finished record, moved here from `driver/docs/pvr-render-pool.md` on 2026-10-11. Runs and designs of 2026-10-03 to 10-05 on the AM62P. The pool's policy as it is now (free lists in gpu::pvr::pool, the top region, reclaim, frame sets) is driver/docs/pvr-render.md. The files its opening cites, driver/src/pvr_render_pool.h and tools/pvr/render_pool_check.c, are gone; the pool is driver/rust/src/gpu/pvr/pool.rs.
 
 Account of the render pool on the AM62P at 5398fb14. It was written for the
 glmark2 item (`build/glmark2-am62p-20261003-230937` in the main checkout:
@@ -1390,7 +1394,7 @@ frame sets, four runs), written before they run:
   write VA=0x40", "GPU recoveries 1", and the run completes.
 - **Every run:** "pool owner freelists: 8 blocks, 8368 KiB",
   "unaccounted 0 KiB", score near 293. Kick times adds reads of the UFO
-  words to every poll of the fence wait (driver/docs/pvr-fence-wait.md).
+  words to every poll of the fence wait (tools/cts/log/investigations/pvr-fence-wait.md).
 
 ### The knob-off fix run: ea9fb532 (ebb5a080, knob off)
 

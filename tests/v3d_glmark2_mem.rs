@@ -356,8 +356,9 @@ struct Target {
 /// the terrain pass at 800x600 with a depth target, bloom at 256x256 (one
 /// target with a chain, one a single level), the overlay and the two tilt
 /// passes at 800x600. The mesh buffers are three of 4608 KiB and one of
-/// 3072 KiB (driver/docs/pvr-render-pool.md; glmark2.md: "terrain asks 3,072
-/// KiB (a buffer), 1,368 KiB (512x512 mip chain), 2 x 1,876 KiB (800x600)").
+/// 3072 KiB (tools/cts/log/investigations/pvr-render-pool.md; glmark2.md:
+/// "terrain asks 3,072 KiB (a buffer), 1,368 KiB (512x512 mip chain), 2 x 1,876
+/// KiB (800x600)").
 ///
 /// `npot_chains`: the 800x600 targets have a full chain (GL_OES_texture_npot,
 /// `2673197d`) and are sampled with it; off, they have one level, as the

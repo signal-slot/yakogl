@@ -136,8 +136,8 @@ FUNC_NORETURN void board_finish(const char *name, int rc)
 
 #if defined(CONFIG_YAKOGL) && defined(CONFIG_YAKOGL_GPU_POWERVR)
 	/* every run that ends here prints the pool's state (glmark2's terrain,
-	 * driver/docs/pvr-render-pool.md); gl_test ends elsewhere and prints its
-	 * own */
+	 * tools/cts/log/investigations/pvr-render-pool.md); gl_test ends
+	 * elsewhere and prints its own */
 	osal_zephyr_diag_print();
 #endif
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE

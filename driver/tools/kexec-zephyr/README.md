@@ -1,4 +1,13 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # kexec_zephyr
+
+**Development only.** A result counts only when the board's boot loader
+started the image: U-Boot on the Verdin boards (`docs/standalone-boot.md`,
+`tools/board.sh`). This tool is the fast development route; `tools/board.sh`
+uses it as its `kexec-dev` backend, whose verdict line says DEV and is never
+a result row. `board_lock.sh` (below) is the lock every `tools/board.sh` run
+takes.
 
 Boots a Zephyr AArch64 image on the Verdin AM62P straight from Torizon Linux,
 using the `kexec_load` system call (the board's kernel has `CONFIG_KEXEC=y` but
@@ -7,7 +16,7 @@ placed at its link address and the kernel jumps to it with the MMU off.
 
 ```sh
 # host: freestanding, so any aarch64 GCC works (no libc or sysroot needed)
-aarch64-linux-gcc -O2 -static -nostdlib -ffreestanding -fno-stack-protector -o kexec_zephyr tools/kexec-zephyr/kexec_zephyr.c
+aarch64-linux-gcc -O2 -static -nostdlib -ffreestanding -fno-stack-protector -o kexec_zephyr driver/tools/kexec-zephyr/kexec_zephyr.c
 scp kexec_zephyr build/zephyr/zephyr.bin torizon@<board>:/tmp/
 # board
 sudo rmmod pvrsrvkm          # the stock GPU driver must let go of the GPU
@@ -19,11 +28,11 @@ waits for the board's boot to settle (a jump during early boot sometimes gave
 a Zephyr that never reached its console):
 
 ```sh
-BOARD_HOST=torizon@<board> tools/kexec-zephyr/kexec_run.sh build/zephyr/zephyr.bin
+BOARD_HOST=torizon@<board> driver/tools/kexec-zephyr/kexec_run.sh build/zephyr/zephyr.bin
 ```
 
 The image is `zephyr.bin` from a build with `CONFIG_AARCH64_IMAGE_HEADER=y`
-(the SafeUI `verdin_am62p/am62p54/a53` board sets it); the default load
+(the `verdin_am62p/am62p54/a53` board in `driver/boards/toradex/` sets it); the default load
 address 0x82000000 is that board's `zephyr,sram` base.
 
 Linux comes back when Zephyr resets the SoC (`sys_reboot`, or the RTI
@@ -110,7 +119,7 @@ moment it has gone wrong.
 ```sh
 -exec 9>"$LOCK"
 -flock 9
-+. "$REPO/tools/kexec-zephyr/board_lock.sh"
++. "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
 ```
 
 The runner keeps its own `$LOCK`, which is taken as the default, so that is the
@@ -226,7 +235,7 @@ sourcing:
 
 ```sh
 HOLD_MAX=${HOLD_MAX:-1800}
-. "$REPO/tools/kexec-zephyr/board_lock.sh"
+. "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
 ```
 
 Work it out from what your runner does *while holding the lock*, and leave
@@ -254,6 +263,6 @@ one with a live `flock` child is still in the queue. `board_lock_holder` prints
 that, and it is worth running by hand when the board seems stuck:
 
 ```sh
-BOARD_HOST=<user@board> BOARD_LOCK_NO_ACQUIRE=1 . tools/kexec-zephyr/board_lock.sh
+BOARD_HOST=<user@board> BOARD_LOCK_NO_ACQUIRE=1 . driver/tools/kexec-zephyr/board_lock.sh
 board_lock_holder
 ```

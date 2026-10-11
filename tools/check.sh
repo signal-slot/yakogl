@@ -1173,14 +1173,16 @@ if command -v python3 >/dev/null 2>&1; then
   # The .qpa rebuilt from a CONFIG_DEQP_ECHO_QPA console: a case whose end
   # or an image the bridge lost is named, never read as a picture.
   step "tools   qpa-from-uart rebuild verdicts" python3 tools/cts/qpa-from-uart.py --self-test
-  # The AM62P netboot (driver/docs/am62p-netboot-plan.md): the one-shot TFTP
-  # server on loopback (a 16 MiB transfer with windows, lost packets, block
-  # number wrap, one-shot rename, paths outside the root), about 5 s; and the
-  # UART phase scan, one verdict per missing phase, "empty" never a pass.
+  # The AM62P netboot (docs/standalone-boot.md, "The TFTP runner"): the
+  # one-shot TFTP server on loopback (a 16 MiB transfer with windows, lost
+  # packets, block number wrap, one-shot rename, paths outside the root),
+  # about 5 s; and the UART phase scan, one verdict per missing phase,
+  # "empty" never a pass.
   step "tools   am62p netboot TFTP server" python3 tools/tftp_oneshot.py --self-test
   step "tools   am62p netboot UART phases" python3 tools/am62p_netboot_uart.py --self-test
-  # The i.MX8MP netboot's verdicts (driver/docs/imx8mp-netboot-plan.md) are
-  # tools/board.sh's now, replayed on the 2026-10-03 records by
+  # The i.MX8MP netboot's verdicts
+  # (tools/cts/log/board-sessions/imx8mp-netboot.md) are tools/board.sh's
+  # now, replayed on the 2026-10-03 records by
   # tools/board_selftest.sh ("tools   board.sh dry-run matrix and replays"
   # below); the record's classes and stage table are
   # driver/rust/src/board/record.rs, decoded by yakogl-tools record ("test

@@ -2,9 +2,10 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * The AM62P GPU for a TI K3 A53 target. Register block, TISCI ids and the
- * clock are the AM62P's (docs/gpu-recipes/gpu-bringup-spec.md); the carveout
- * is a reserved 64 MiB of DDR that the Zephyr image and every other user
- * (R5F, OP-TEE, shared memory) leave alone. The dmsc/secure-proxy nodes are
+ * clock are the AM62P's (see
+ * tools/cts/log/investigations/pvr-bringup/gpu-bringup-spec.md); the
+ * carveout is a reserved 64 MiB of DDR that the Zephyr image and every
+ * other user (R5F, OP-TEE, shared memory) leave alone. The dmsc/secure-proxy nodes are
  * the A53's TISCI channel (host id 12).
  */
 

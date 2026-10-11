@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# The PowerVR kernel side in Rust: inventory and plan
+# The PowerVR kernel side in Rust: inventory
+
+Status: done. Every module planned below exists in `driver/rust/src/gpu/pvr/`,
+and every step was board-verified ("Results"). The tables are the record of
+where each C function went; "Open" lists what is still open. The render
+pool's current policy is `driver/docs/pvr-render.md`.
 
 docs/source-form.md, group A, the remainder (branch `form/7-pvr-kernel-rust`).
 After step 6 the firmware start, stop and image load are the vendored DDK's
@@ -24,7 +29,7 @@ about 170k lines with what they pull in); vendoring them is not proposed.
 | Rust module (`driver/rust/src/gpu/pvr/`) | what | C left |
 |---|---|---|
 | `km.rs` | `struct yd_pvr_km`: the carveout, the OS hooks (cache clean/invalidate, full barrier, log), the register bus; all state of the modules below lives in it (C-owned, one per GPU) | `pvr_fw_boot.c` owns the instance and fills the hooks |
-| `pool.rs` | the render pool's free lists per heap (best fit, merge on both sides, overflow chain with checked headers, double-free refusal, opt-in rollback) and the pool's summary lines (driver/docs/pvr-render-pool.md) | `pvr_render_alloc`, `pvr_render_free`, `pvr_render_pool_report` wrappers |
+| `pool.rs` | the render pool's free lists per heap (best fit, merge on both sides, overflow chain with checked headers, double-free refusal, opt-in rollback) and the pool's summary lines (tools/cts/log/investigations/pvr-render-pool.md) | `pvr_render_alloc`, `pvr_render_free`, `pvr_render_pool_report` wrappers |
 | `mem.rs` | the carveout's allocators: FW-heap bump, page-table pages, render pool (bump, PM-heap 16 KiB variant, newest-block rollback, placed spans) and FW-heap addressing | thin `pvr_*` wrappers in `pvr_fw_boot.c` (pvr_drv.h API) |
 | `mmu.rs` | the 3-level page-table writer on the formats of `rgxmmudefs_km.h`: map, lookup, audit, dirty flag | wrappers |
 | `ccb.rs` | KCCB post and MTS doorbell (with the release barrier before the doorbell), slot probe, FWCCB service | wrappers |
@@ -87,7 +92,7 @@ Zephyr/the OS needs it there), **C lab** (bring-up rig, not ported), or
 | `hwrt_get`, `npot2`, `multisamplectl` | `render.rs` | 5 |
 | `ring_reserve`, `ring_put`, `mmu_cache_sync`, the MMUCACHE probes (`mc_*`), `pvr_render_submit` | `render.rs` (`submit`); `pvr_render_submit` a C wrapper | 5 |
 | `render_wait_for`, `pvr_render_wait`, `pvr_render_completed`, the dumps (`debug_mappings`, `render_debug_after`, `dump_last_frag_cmd`, `dump_cccb_pending`, `nz_count`, `lookup_log`) | `render.rs` (`wait_for`, `completed`); C wrappers | 5 |
-| the pool header (`pvr_render_pool.h`, with `driver/tools/pooltest` and `tools/pvr/render_pool_check.c`) | `pool.rs` (the free lists; a golden trace from the C proves the port, and its host tests replace both C checks); `pvr_render_alloc`, `pvr_render_free`, `pvr_render_pool_report` C wrappers | 2026-10-04 (driver/docs/pvr-render-pool.md) |
+| the pool header (`pvr_render_pool.h`, with `driver/tools/pooltest` and `tools/pvr/render_pool_check.c`) | `pool.rs` (the free lists; a golden trace from the C proves the port, and its host tests replace both C checks); `pvr_render_alloc`, `pvr_render_free`, `pvr_render_pool_report` C wrappers | 2026-10-04 (tools/cts/log/investigations/pvr-render-pool.md) |
 | `flush*`, `heap_bump`, `heap_base`, `pvr_render_map_phys` | C (ours), not ported | — |
 | `static_areas_init`, `pvr_render_init`, `pvr_render_static_get` | C: they call the command-stream generators of group B (`pvr_pds_render_gen.c`, `pvr_pds_pixel_event_gen.c` over Mesa's PDS code) and size the parameter buffer from the carveout | — |
 | the run-time switches (`pvr_render_combined_kick`, `_wait_repost`, `_mmu_ack`, ...), `pvr_render_debug_*`, `pvr_render_perf_read`, `pvr_render_stall_dump_rearm` | C shim (exported variables, copied into the Rust state at each call; counters read from it) | 5 |

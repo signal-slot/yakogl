@@ -28,7 +28,7 @@
     am62p_netboot_uart.py --self-test [SAVED_KEXEC_LOG]
 
 The phases, in the order one netboot cycle prints them on UART_3 (the U-Boot
-lines are the ones driver/docs/am62p-netboot-plan.md installs):
+lines are the ones tools/cts/log/board-sessions/am62p-netboot.md installs):
 
   spl1       "U-Boot SPL"                      the reboot from Linux reached SPL
   hook       "yakogl-netboot: once=<token>"    U-Boot found the one-shot armed

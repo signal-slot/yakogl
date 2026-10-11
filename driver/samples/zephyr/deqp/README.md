@@ -1,10 +1,12 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # deqp (Zephyr)
 
 dEQP-GLES2, the Khronos conformance suite, as a Zephyr image: EGL and GLES2
 are YakoGL linked in directly, shaders come from the in-process compiler
 (`CONFIG_YAKOGL_SHADERC_ONLINE`), the test data is embedded, and the test log
-never exists as a file. First run on the Verdin AM62P on 2026-09-24:
-`dEQP-GLES2.info.*` 6/6 and `functional.prerequisite.*` 3/3 passed.
+never exists as a file. Current results per board are in
+`tools/cts/STATUS.md`.
 
 ```sh
 # stage 1, once per CTS revision: dEQP's libraries with the Zephyr SDK compiler

@@ -680,7 +680,10 @@ citations are removed from `v3d_regs.h`, `v3d_hw.c` and
   `coeff_base_analysis.md` (CMD3D field list kept, captured values removed),
   `varying_interp_analysis.md`, `fullpanel_sizes.md`,
   `multidraw_stencil_recipe.md`, `gpu-hw-capture.md` and `frag_fault_pin.md`
-  are cut to their conclusions; `gpu-fwtrace-enable.md` is rewritten for
+  are cut to their conclusions (`fullpanel_sizes.md`, `gpu-hw-capture.md`
+  and `frag_fault_pin.md` later moved to
+  `tools/cts/log/investigations/pvr-bringup/` as finished records);
+  `gpu-fwtrace-enable.md` is rewritten for
   `RGXFWIF_TRACEBUF` and the `rgx_fwif_sf.h` decoder; the captured-word
   decode in `depth-clip-convention.md` is cut as well.
 - The self-test rig's default PPP tail words in `pvr_fw_boot.c` and the

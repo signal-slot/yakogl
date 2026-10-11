@@ -294,7 +294,7 @@ pub fn fwccb_service_with(
 /// command)". On the AM62P the host twice read a slot whose type had no
 /// command magic (0x00000000), skipped it, and the firmware's next grow
 /// request was never answered (a71c9b8b, kt-3 of 157b76e3;
-/// driver/docs/pvr-render-pool.md).
+/// tools/cts/log/investigations/pvr-render-pool.md).
 ///
 /// Linux drm/imagination's consumer (pvr_ccb.c `pvr_fwccb_process`, Linux
 /// 7.3-rc5, "GPL-2.0-only OR MIT") reads the offsets with READ_ONCE, copies
@@ -396,8 +396,9 @@ fn write_offset_check(k: &mut YdPvrKm, wo: u32, wrap: u32) {
 /// 1280 of 4096) has room, so it is no stop.
 ///
 /// The rule before returned whenever the batch held any grow, and fwccb-2's
-/// two notices at 4096 were never considered (driver/docs/pvr-render-pool.md,
-/// "The runaway grow and the stop that did not fire").
+/// two notices at 4096 were never considered
+/// (tools/cts/log/investigations/pvr-render-pool.md, "The runaway grow and the
+/// stop that did not fire").
 pub fn at_maximum(k: &mut YdPvrKm, grows: u32, ooms_after: u32) {
     let needed = if grows == 0 { 1 } else { 2 };
     if ooms_after < needed {
@@ -425,7 +426,7 @@ const _: () = assert!(FWCCB_STATS_PARTIAL_RENDERS == 1 && FWCCB_STATS_TDM_STORES
 /// the notices by element ([`YdPvrKm::fw_stats`], 0 for a value outside the
 /// DDK's list) and says each one, so a run shows what the firmware reported
 /// (an out-of-memory notice came with every grow on the AM62P,
-/// driver/docs/pvr-render-pool.md, the probe).
+/// tools/cts/log/investigations/pvr-render-pool.md, the probe).
 pub fn update_stats(k: &mut YdPvrKm, e: u32, adj: i32) {
     let known = (FWCCB_STATS_PARTIAL_RENDERS..=FWCCB_STATS_TDM_STORES).contains(&e);
     let slot = if known { e as usize } else { 0 };

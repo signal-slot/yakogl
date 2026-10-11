@@ -20452,9 +20452,9 @@ static int case_clearload(void)
  * offset says the slot is written, and the host reads type 0 there (with
  * CONFIG_SAFEUI_GPU_PVR_FWCCB_CHECK: "slot S read empty; still empty after
  * 2000 us"). glmark2 met it at slot 12, read offset 12 / write offset 14,
- * the 13th command of a run (driver/docs/pvr-render-pool.md). The loss is in
- * the queue's traffic, so this case makes traffic that the driver always
- * answers with pages:
+ * the 13th command of a run (tools/cts/log/investigations/pvr-render-pool.md).
+ * The loss is in the queue's traffic, so this case makes traffic that the
+ * driver always answers with pages:
  * - frames of L layers into a 1024x1024 target, each frame flushed without
  *   waiting, so two frames' geometry is in flight. A layer is one draw of a
  *   4x4-pixel quad inside each of the 1024 32x32 tiles: it costs the tiler
@@ -20635,11 +20635,11 @@ static int case_fwccbloss(void)
  * The AM62P glmark2 cell's hang: a freelist grow the host refuses while no
  * kick's 3D is pending to return pages. The out-of-memory TA then has
  * nothing to wait for and never completes, because this driver queues no
- * partial-render command (driver/docs/pvr-render-pool.md, "Design: the
- * firmware's partial render"). d320c8a5 met it in glmark2 with one kick in
- * flight. This case is that, alone: one kick in flight (glFinish after every
- * frame), frames of N full-screen quads into a 1024x1024 target, N up by a
- * quarter every frame until a frame asks for a grow. Built with
+ * partial-render command (tools/cts/log/investigations/pvr-render-pool.md,
+ * "Design: the firmware's partial render"). d320c8a5 met it in glmark2 with one
+ * kick in flight. This case is that, alone: one kick in flight (glFinish after
+ * every frame), frames of N full-screen quads into a 1024x1024 target, N up by
+ * a quarter every frame until a frame asks for a grow. Built with
  * CONFIG_SAFEUI_GPU_PVR_FL_PROBE_NO_RESERVE that grow is refused at A = 0.
  * - Today: the frame's kick never completes and the render service stops at
  *   10 s (cause 4, "a kick that did not complete in the stop's time"), in

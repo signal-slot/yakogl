@@ -10,7 +10,8 @@
  *   - online (Linux/PX5/dev): the PCO compiler runs on-target for arbitrary source.
  *
  * Both produce the same shader ABI the PowerVR backend consumes. The ABI matches
- * what the toolchain already emits (see scratchpad/shader_toolchain.md):
+ * what the toolchain already emits (see
+ * driver/docs/gpu-recipes/shader_toolchain.md, section 2):
  *   VS: attributes in vi0.. (ascending location, 1 dword/attrib dword); outputs
  *       emitted via UVSW at vtxout offsets; vs_output_size dwords.
  *   FS: input varyings iterated from coefficient regs cf.. via a DOUTI program

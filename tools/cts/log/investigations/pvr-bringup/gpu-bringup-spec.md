@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR BXS-4-64 MC1 (Rogue "Volcanic", BVNC 36.53.104.796) Zephyr Bring-up Spec
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/gpu-bringup-spec.md` on 2026-10-11. A pre-bring-up spec written from the mainline drm/imagination driver. The driver boots the DDK firmware rgx.fw.36.53.104.796 instead (driver/README.md); the boot code is driver/src/pvr_bringup.c and driver/src/pvr_fw_boot.c.
 
 Source: mainline `drivers/gpu/drm/imagination` (torvalds/linux master), extracted via WebFetch.
 Target: TI AM62P SoC, bare-metal Zephyr (no DRM/GEM). Firmware: RISC-V 32-bit ELF

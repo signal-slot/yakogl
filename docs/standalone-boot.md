@@ -9,8 +9,10 @@ boards without leaving a board that needs a person to come back.
 
 Tests of everything else boot an image once from the host: U-Boot over TFTP
 on the Verdin boards (`BOARD_BOOT=uboot-tftp`), the firmware's tryboot on the
-Pi 4. Those are development runners; the TFTP side is in
-`driver/docs/am62p-netboot-plan.md` and `driver/docs/imx8mp-netboot-plan.md`.
+Pi 4. Those are development runners; the TFTP side is "The TFTP runner"
+below, and its bring-up records are
+`tools/cts/log/board-sessions/am62p-netboot.md` and
+`tools/cts/log/board-sessions/imx8mp-netboot.md`.
 
 State: the code is in `tools/board.sh` (backend `uboot-mmc`, verbs `default`
 and `nodefault`) and in `tools/uboot-netboot-lib.sh`, and
@@ -76,7 +78,7 @@ saveenv
 ```
 
 i.MX8MP: the same with `mmc 2:1` and `0x60000000`. `go`, not `booti`, with
-both caches off: `driver/docs/am62p-netboot-plan.md` section 3 says why. The
+both caches off: "What the image does on a `go` entry" below says why. The
 image is the same `zephyr.bin` the other routes boot (an AArch64 Image header,
 linked at the load address). U-Boot runs no watchdog for it, so the image arms
 its own (the RTI on the AM62P, WDOG1 on the i.MX8MP); `board.sh` refuses an
@@ -205,14 +207,14 @@ Linux crashes instead, the load can fail, and Linux boots.
   `ext4load mmc 0:1 0x82000000 ... && dcache off && icache off && go 0x82000000`
   (env record `records/am62p/netboot/env-before-install-*.txt`, main checkout,
   not in git), a path measured on this board
-  (`driver/docs/am62p-netboot-plan.md` sections 1 and 3).
+  (`tools/cts/log/board-sessions/am62p-netboot.md` sections 1 and 3).
 - i.MX8MP: the eMMC is U-Boot's `mmc 2` (its env's `update_uboot`: `mmc dev 2
   1`); Torizon is on partition 1 (`distro_bootpart_uuid=8725ec00-01`); the
   env's `distro_bootcmd` runs `run bootcmd_${target}`, the form of `run
   yako_${yako_src}` (env record `records/imx8mp/netboot/env-before-install-*.txt`).
 - Boot partitions: 8192 sectors each, read on both boards
   (`/sys/block/mmcblk0boot*/size` on the AM62P, `mmcblk2boot*` on the i.MX8MP:
-  `driver/docs/imx8mp-netboot-plan.md` section 1).
+  `tools/cts/log/board-sessions/imx8mp-netboot.md` section 1).
 - `ext4load`: both boards' mainline defconfigs set `CONFIG_CMD_EXT4_WRITE=y`,
   which needs `CMD_EXT4`
   ([verdin-am62p_a53_defconfig](https://github.com/u-boot/u-boot/blob/master/configs/verdin-am62p_a53_defconfig),
@@ -230,6 +232,71 @@ the hook's nested `if` on both Verdins (the `run` rows), `setexpr` and the
 count path on the AM62P (the `default ... 2` cycle decremented 1 → 0 and
 deleted the default). Still unmeasured: the load time of a 100 MB file (a
 4.5 MB file read in 46 ms on the AM62P, default2.raw).
+
+### What the image does on a `go` entry
+
+These facts hold for every U-Boot route, eMMC or TFTP. They were measured on
+the boards on 2026-10-03 (the records are in
+`tools/cts/log/board-sessions/am62p-netboot.md` and `imx8mp-netboot.md`).
+
+**`go`, not `booti`.** `zephyr.bin` carries an AArch64 Image header with
+`text_offset` 0. `booti` places such an image at the start of DRAM
+(0x80000000 on the AM62P, where TF-A is; 0x40000000 on the i.MX8MP; U-Boot
+v2024.07 `arch/arm/lib/image.c`), and the image, linked at its load address,
+does not start there. `go` jumps to the load address and passes no device
+tree; Zephyr has its devicetree built in. `dcache off; icache off` before
+`go` cleans the D-cache and turns the MMU off, so Zephyr enters with the MMU
+and caches off, as it does from kexec's purgatory. SafeUI measured the
+AM62P case on 2026-09-05; the i.MX8MP case follows from the same code and
+the self-arm images ran there.
+
+**The image arms its own watchdog.** A hang must not hold a board until a
+person cuts the power.
+
+- AM62P: this U-Boot has no watchdog driver, so after `go` the RTI is
+  stopped. `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM`
+  (`driver/zephyr/lib/board/am62p/rti_arm.c`) powers MAIN RTI0 (TISCI device
+  125) on, sets its clock parent to 2 (32768 Hz, measured; the 25 MHz
+  parent cannot hold 60 s), reads the rate back, programs a 60.000 s expiry
+  (preload `0xef`), enables it and feeds it until
+  `CONFIG_YAKOGL_AM62P_WDT_SECONDS`. Any refusal resets the SoC at once. The
+  RTI expiry reaches the SoC reset through the ESM, which the boot loader
+  sets up. Measured: the proof image (armed, never fed) was reset 60.19 s
+  after the arming line. One gap remains: between `go` and the arming at
+  `POST_KERNEL` nothing bounds a hang (about 0.11 s). Closing it needs a
+  watchdog in U-Boot.
+- i.MX8MP: U-Boot starts WDOG1 itself with 60 s (`WCR` 0x773f found by the
+  proof image on 2026-10-03), so there is no gap. The i.MX WDOG cannot be
+  stopped once on. `CONFIG_GC_BOARD_WDOG_SELF_ARM`
+  (`driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c` over Rust
+  `ip::imx_wdog`) arms it in either case at `PRE_KERNEL_1`: it sets 60 s
+  (`WT` 0x77), clears `WMCR.PDE`, reads `WCR` back, and stops feeding after
+  `CONFIG_GC_BOARD_WDOG_SECONDS`. A refusal writes a WDOG record and resets
+  through PSCI. `WCR.WDT` makes the timeout assert `WDOG_B`, the board reset.
+
+**What a cold entry lacks that kexec had.** No Linux ran before the image.
+That removes hazards (no Ethernet DMA into Zephyr's memory, no split-EOI GIC
+state, no stray interrupts) and also removes help. On the i.MX8MP this
+U-Boot has no display driver: MEDIAMIX, the LCDIF, the DSIM, the bridge and
+the backlight are as reset left them, and the GPU power domains are off. A
+read of a powered-down domain is never answered; the core stalls until the
+watchdog resets the SoC. That was the step C failure on 2026-10-03: the
+panel console read an LCDIF register before anything powered MEDIAMIX on.
+The rule since then: code that may run before its domain is powered asks
+first (`soc::imx8mp::media::lcdif_unreachable` reads only the GPC and the
+CCM, which always answer), and the image brings the chain up itself
+(`CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_BRINGUP`, the GPU power-up in Rust
+`gpu::vivante`).
+
+**The TFTP runner** (`BOARD_BOOT=uboot-tftp`, development only). The hook's
+`yako_net` sets `netretry no` (a host that is down must not keep U-Boot
+retrying, and U-Boot runs no watchdog on the AM62P), takes an address by
+`dhcp` and fetches with `tftpboot`. U-Boot always sends to UDP port 69 (no
+`tftpdstp`), so the server needs that port. `tools/tftp_oneshot.py` serves
+each file once (it renames it after the final ACK) and refuses a file staged
+more than `--max-age` seconds ago, so a later reboot by anyone gets "File not
+found" and boots Linux. Its log is the only witness of the U-Boot leg on the
+i.MX8MP, which has no UART.
 
 ## Raspberry Pi 4
 

@@ -3,8 +3,9 @@
 //! The i.MX "WDOG" watchdog (i.MX 8M Plus WDOG1..3): arm it for a fixed
 //! timeout, whatever state the previous stage left it in, and service it.
 //!
-//! Why: an image that U-Boot starts with `go` (driver/docs/imx8mp-netboot-plan.md)
-//! must not depend on whoever ran before to have armed WDOG1. A kexec entry
+//! Why: an image that U-Boot starts with `go` (docs/standalone-boot.md,
+//! "What the image does on a `go` entry") must not depend on whoever ran
+//! before to have armed WDOG1. A kexec entry
 //! finds it running with Linux's timeout (systemd: 30 s); a U-Boot entry
 //! finds it running with U-Boot's (when U-Boot's driver model watchdog
 //! autostarted it) or stopped. [`arm`] leaves it running with the timeout

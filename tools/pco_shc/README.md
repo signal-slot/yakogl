@@ -64,3 +64,38 @@ textureSize, arrays), gl_VertexID/gl_InstanceID system values, PCO_SHC_OUT
 PCO_SHC_BLEND (blend state lowered into the FS), and a push-constant range
 sized from the block when a load has a dynamic offset (uniform arrays indexed
 by a loop counter).
+
+## How the harness compiles, and how to run it by hand
+
+The route is GLSL -> SPIR-V (glslang) -> NIR -> PCO, the same pipeline Mesa's
+PowerVR Vulkan driver runs (`src/imagination/vulkan/pvr_arch_pipeline.c`):
+`spirv_to_nir` with `pco_spirv_options()`, the common lowering, then
+`pco_preprocess_nir`, `pco_lower_nir`, `pco_postprocess_nir`,
+`pco_trans_nir`, `pco_process_ir` and `pco_encode_ir`. The driver's
+register-allocation helpers (`pvr_alloc_vs_attribs`, `pvr_alloc_vs_varyings`,
+`pvr_alloc_fs_varyings`, the push-constant allocation) are copied into the
+harness, so the vertex-input, coefficient and shared-register layout is the
+real driver's.
+
+One shader:
+
+    glslangValidator -V -S frag shader.frag -o shader.spv
+    pco_shc fs shader.spv > shader.bin     # USC bytes on stdout, metadata on stderr
+    PCO_SHC_NOBIN=1 PCO_DEBUG_PRINT=fs,vs,internal pco_shc fs shader.spv   # disassembly
+
+Two code generation modes:
+
+- **lean** (the default): the NIR is marked `internal`, so the back end skips
+  the run-time-gated Vulkan fragment epilogue (alpha-to-coverage, colour-write
+  enable, alpha test, the ISP feedback a full FS reads from a per-draw meta
+  word) and the VS implicit point-size and clip/cull outputs.
+- **full** (`PCO_SHC_FULL=1`): the full Vulkan pipeline output; the FS reads
+  a meta control word from a shared register. The harness forces full mode
+  for any FS that uses `discard`, because the coverage kill is only emitted
+  on that path (it prints a note on stderr).
+
+The other switches: `PCO_SHC_OUT` (the fragment output class),
+`PCO_SHC_BLEND` and `PCO_SHC_COLORMASK` (blend state lowered into the FS),
+`PCO_SHC_NOBIN` (no machine code on stdout). The register model the metadata
+describes is `driver/docs/gpu-recipes/shader_toolchain.md`, section 2.
+

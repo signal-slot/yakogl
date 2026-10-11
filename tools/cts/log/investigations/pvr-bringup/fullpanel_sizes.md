@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # 1024x600 render-buffer sizing vs 64x64 (BXS-4-64, BVNC 36.53.104.796)
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/fullpanel_sizes.md` on 2026-10-11. Concluded that the full-panel buffers were not undersized; the failure was in the emit/ISP path. The render service sizes buffers per target (driver/src/pvr_render.c).
 
 Conclusion of a read-only bring-up analysis, cut down. The original compared
 our buffer sizes with words captured from the DDK's own 1024x600 render; those

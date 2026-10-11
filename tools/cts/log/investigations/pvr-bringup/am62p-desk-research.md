@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P / Verdin AM62P (Dahlia) desk research — findings
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/research.md` on 2026-10-11. Desk research of 2026-09-05 on the AM62P device trees, firmware licences and boot flow. The facts that were used now live in the board files (driver/dts, driver/boards) and docs/standalone-boot.md.
 
 Date: 2026-09-05. All DT quotes below were taken from files actually downloaded (raw copies kept under `scratchpad/dts/`). Where a fact could not be verified it is marked **NOT FOUND**.
 

@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P: boot Zephyr from U-Boot over TFTP (plan, 2026-09-29)
+
+Status: finished record, moved here from `driver/docs/am62p-netboot-plan.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03. The current design (the hook, the go entry, the RTI self-arm, the TFTP runner) is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/am62p/rti_arm.c.
 
 Goal (user, 2026-09-29): replace "U-Boot -> Linux -> kexec-zephyr" on the Verdin
 AM62P with a host-controlled boot of the Zephyr image straight from U-Boot.
@@ -58,7 +62,7 @@ should stage an image under that name while the SafeUI boot is in `bootcmd`.
 
 ## 2. The boot flow: a one-shot armed from Linux
 
-The model is the Pi 4's tryboot (`rpi4-v3d-backend-plan.md`, "Board port" and
+The model is the Pi 4's tryboot (`pi4-v3d-bringup.md`, "Board port" and
 the tryboot rows): the next boot runs the test image once, and the boot after
 that is the normal one, whatever happens. U-Boot has no firmware flag like
 tryboot, so the one-shot is an env variable that **U-Boot itself deletes and
@@ -89,7 +93,7 @@ bootcmd           = run yako_hook; <the bootcmd as it was>
 
 Each value is one line in the env; the line breaks above are only for reading.
 `tools/uboot-netboot-lib.sh` (shared with the i.MX8MP runner,
-`imx8mp-netboot-plan.md`) holds the exact strings, and `tools/board.sh`
+`imx8mp-netboot.md`) holds the exact strings, and `tools/board.sh`
 checks the board's copy against them before every run. The hook also loads
 from the eMMC and boots a default (`yako_src`, `yako_mmc`, `yako_dflt`):
 `docs/standalone-boot.md` has its whole form; the block above is the TFTP
@@ -555,7 +559,7 @@ at 15:00 and at 15:31 was the 46 variables of the 09-29 record, value for value
    The probe's `saveenv` stores U-Boot's whole RAM environment, including
    `serial#` and `carrier_serial#`, which U-Boot sets from the config blocks
    at every boot (`board/toradex/common/tdx-common.c`, `settings_r()`, read
-   for U-Boot v2024.07 in `imx8mp-netboot-plan.md`; not re-read for this
+   for U-Boot v2024.07 in `imx8mp-netboot.md`; not re-read for this
    board's 2024.04-ti tree). Here the stored values were already the current
    ones, so the stored copy did not change.
 

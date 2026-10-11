@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL on the Raspberry Pi 4 (V3D 4.2): backend plan
+
+Status: finished record, moved here from `driver/docs/rpi4-v3d-backend-plan.md` on 2026-10-11. M1 to M6 passed on the board on 2026-09-24. The design facts that are still true are driver/docs/rpi4-v3d.md; how an image boots is docs/standalone-boot.md, Raspberry Pi 4.
 
 Status: started 2026-09-23. Board: **Raspberry Pi 4 Model B, 8 GB** (bootloader 2226a853,
 2025/12/08), HDMI on the lab capture card, microSD through the microSD OTA bridge

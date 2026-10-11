@@ -1,4 +1,12 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP display bring-up: what is written where, and why
+
+This is the note for the default C LCDIF and DSIM drivers here
+(`imx8mp_lcdif.c`, `imx8mp_dsim.c`). Their Rust replacements are behind
+`SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST` and `SAFEUI_DSIM_RUST` (default n;
+`driver/docs/imx8mp-display-cold.md`). Since 2026-10-03 the chain is also
+brought up from a cold U-Boot entry ("The panel console" below).
 
 Status on 2026-09-21: runs on the board. `gc_display_raw` (the driver alone,
 a colour ramp in a buffer of its own) reports all six health bits from the
@@ -523,22 +531,24 @@ termination and polarities), and the node itself is
 `samples/zephyr/gc_common/verdin_imx8mp_display.dtsi`, included by each
 sample's `boards/verdin_imx8mp_mimx8ml8_a53.overlay`.
 
-**That dtsi belongs in the board**, in
-`slint-safe-ui-zephyr-verdin-am62p/boards/toradex/verdin_imx8mp/`, once it has
-run on hardware: the pinctrl groups (`i2c2_display`, `pwm3_backlight`), the
+**That dtsi belongs in the board**, in `driver/boards/toradex/verdin_imx8mp/`:
+the pinctrl groups (`i2c2_display`, `pwm3_backlight`), the
 `&gpio4` and `&i2c2` enables, the `lvds_bridge` node and the `display0` node
-are all board facts, not sample facts. It lives in the sample while it is
-unproven so that repository keeps building for everyone else.
+are all board facts, not sample facts. It has run on hardware; the move is
+still to do.
 
 ## The panel console
 
-`samples/zephyr/gc_common/gc_panel_console.c` now has two stages.
+`driver/zephyr/lib/board/imx8mp/gc_panel_console.c` has two stages.
 
-* **PRE_KERNEL_1** — unchanged: if the LCDIF is already scanning, read its
-  geometry, put our own framebuffer in front of it and install the printk
-  hook. Nothing here needs the kernel, so the console exists as early as it
-  possibly can. This is the crash route.
-* **POST_KERNEL, priority 85** — new: if stage one found nothing, call
+* **PRE_KERNEL_1**: if the LCDIF is already scanning, read its geometry, put
+  our own framebuffer in front of it and install the printk hook. Nothing
+  here needs the kernel, so the console exists as early as it possibly can.
+  This is the crash route. Before its first LCDIF read it asks whether the
+  LCDIF can answer at all (`soc::imx8mp::media::lcdif_unreachable`, which
+  reads only the GPC and the CCM). On a cold U-Boot entry MEDIAMIX is off,
+  a read would stall the core, and the stage returns.
+* **POST_KERNEL, priority 85**: if stage one found nothing, call
   `imx8mp_display_on()` on our own framebuffer and install the hook then.
 
 Stage two cannot run earlier. The bridge is on I2C behind a GPIO enable line,
@@ -588,11 +598,12 @@ earlier bring-up.
    drain, Schmitt, `input-enable` for the SION bit; `"x4"` for the PWM).
    The exact DSE/FSEL mapping was not verified field by field. I2C failing
    to ACK at 0x2c, or ACKing only at a lower bus speed, points here.
-6. **Does the GPC accept these writes from Zephyr at EL1 NS?** The GPU
-   bring-up (`src/vivante/gc_bringup.c` then; `gpu::vivante::power` in
-   driver/rust since 2026-10-03) already does the same thing for the GPU
-   domains and has not been contradicted, but neither has it been confirmed
-   on silicon.
+6. **Does the GPC accept these writes from Zephyr at EL1 NS?** Answered:
+   yes. On 2026-10-03 an image started by U-Boot, with MEDIAMIX and the GPU
+   domains off from reset, powered both up itself (`soc::imx8mp::media`,
+   `gpu::vivante::power`) and left the same PICTURE record as the kexec
+   route (`tools/cts/log/board-sessions/imx8mp-netboot.md`, "step C root
+   cause and fix").
 7. **The ADB400 handshake.** Like Linux, the code delays instead of waiting
    for `PU_PWRHSK` bit 30. If the MEDIA_BLK_CTRL registers read back as
    0xffffffff or the LCDIF ignores writes, the handshake did not complete

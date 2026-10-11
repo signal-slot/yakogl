@@ -138,7 +138,7 @@
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
 #                      (AM62P env|typed), NETBOOT_NO_WATCHDOG, NETBOOT_BACKUP_DIR:
-#                      as driver/docs/am62p-netboot-plan.md and imx8mp-netboot-plan.md describe
+#                      as tools/cts/log/board-sessions/am62p-netboot.md and imx8mp-netboot.md describe
 #                      (uboot-mmc needs no server, TFTP root, log or route)
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #                      (pi4 420/300, am62p U-Boot 420/180, imx8mp U-Boot 600

@@ -1203,8 +1203,9 @@ pub(crate) fn chain_layout_npot(
 /// image (`GlTexture::pot_chain`), as [`chain_layout_npot`] returns it.
 ///
 /// Mesa 26.2.1's pvr driver (src/imagination/vulkan/pvr_image.c; not
-/// vendored here, its rules are recorded in driver/docs/pvr-render-pool.md,
-/// "What the PowerVR's texture unit needs"):
+/// vendored here, its rules are recorded in
+/// tools/cts/log/investigations/pvr-render-pool.md, "What the PowerVR's texture
+/// unit needs"):
 /// - `pvr_image_plane_init_physical_extent`: an image with more than one mip
 ///   level has the physical extent `util_next_power_of_two` of its extent on
 ///   each axis (a one-level linear image keeps its extent);
@@ -8347,7 +8348,8 @@ mod tests {
     /// 800x600 and the odd shapes 100x60 and 3x5 too.
     /// Mesa 26.2.1 pvr's layout of a `w x h` image with a full mip chain, cpp
     /// `bpp`, written from Mesa's rules (src/imagination/vulkan/pvr_image.c,
-    /// not vendored: driver/docs/pvr-render-pool.md records them):
+    /// not vendored: tools/cts/log/investigations/pvr-render-pool.md records
+    /// them):
     /// `pvr_image_plane_init_physical_extent` rounds the extent of a
     /// multi-level image up to `util_next_power_of_two` per axis;
     /// `pvr_image_plane_setup_mip_levels` gives level l `pitch = cpp *

@@ -82,7 +82,8 @@ pub const DB: DbEntry = DbEntry {
 
 /// The interconnect's answer to a read nobody decodes on this SoC
 /// (0xdeadde..). Measured on the board, 2026-09-22 (MMUv2_AHB_CONTROL reads
-/// 0xdeadde.., driver/src/vivante/NOTES.md); the RM does not state it.
+/// 0xdeadde.., driver/docs/vivante-kernel-rust.md, "Hardware findings that
+/// still hold"); the RM does not state it.
 pub fn reg_absent(v: u32) -> bool {
     v & 0xffff_ff00 == 0xdead_de00
 }

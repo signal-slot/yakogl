@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Parameter-Buffer VA space & catalog routing — DDK 25.2 analysis
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/pb_va_catalog_analysis.md` on 2026-10-11. A 2026-09 analysis of the parameter-buffer fault. The fault is resolved; the PM and freelist setup is driver/rust/src/gpu/pvr/freelist.rs and render.rs.
 
 Scope: why the 3D/ISP faults reading the TA-tiled parameter buffer on our bare-metal BXS-4-64
 driver. All paths under `.../scratchpad/ti-img-rogue-driver-25.2`.

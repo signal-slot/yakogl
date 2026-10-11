@@ -126,7 +126,8 @@ enum pvr_backend_option {
 	 * in the history at 8b53557f). */
 	PVR_BACKEND_OPT_PBE_TWIDDLE,
 	/* MEASUREMENT: 1 = one kick in flight: the swap waits for its own kick
-	 * too (backend.rs PVR_BACKEND_OPT_ONE_IN_FLIGHT; pvr-fence-wait.md). */
+	 * too (backend.rs PVR_BACKEND_OPT_ONE_IN_FLIGHT; driver/docs/pvr-render.md).
+	 */
 	PVR_BACKEND_OPT_ONE_IN_FLIGHT,
 	/* 1 = the swap drops the window's depth/stencil: the swapped frame's
 	 * kick stores none (backend.rs PVR_BACKEND_OPT_SWAP_DROPS_ZS). */

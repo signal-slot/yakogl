@@ -582,8 +582,9 @@ mod tests {
     }
 
     /// classify on records with known meaning: the two 2026-10-03 netboot
-    /// board records (step C and its kexec control, imx8mp-netboot-plan.md
-    /// "Board run 2026-10-03") and one of each class. Moved from
+    /// board records (step C and its kexec control,
+    /// tools/cts/log/board-sessions/imx8mp-netboot.md "Board run 2026-10-03")
+    /// and one of each class. Moved from
     /// the old Python decoder's self-test; run here on record.rs's classify.
     #[test]
     fn classify_known_records() {

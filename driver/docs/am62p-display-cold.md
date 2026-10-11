@@ -5,8 +5,8 @@
 Status (2026-10-02): **runs on the Verdin AM62P** and is the only
 implementation. A register dump taken while Linux drove the panel is the
 golden test's data; the drivers were brought up one at a time against the C
-drivers of the same tree and then together (results at the end: "On the
-board"), no fallback was needed, and the C drivers, the `_RUST` switches and
+drivers of the same tree and then together (what that settled: "What the
+board settled"), no fallback was needed, and the C drivers, the `_RUST` switches and
 `display_calc` were deleted. A human look at the panel is still owed: the
 evidence is the DSS counters, the bridge's IRQ_STAT, the GPU read-backs and
 dEQP, not the picture.
@@ -243,9 +243,9 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b/  TI's driver, unmodified
 The `driver/tests/display_calc` ztest that tested the C arithmetic went with
 the C drivers.
 
-## Board plan (the follow-up task)
+## Board plan (a): the golden dump's read list
 
-**(a) Golden dump, Linux running the panel** (Torizon, before any kexec;
+The golden dump is taken while Linux runs the panel (Torizon;
 read-only, 32-bit reads with `devmem2`/`memtool`). Safe ranges (no
 read-to-clear, no FIFO pops):
 
@@ -265,81 +265,35 @@ D-PHY         0x301C0000 + 0x000..0x014 (the TRM's WIZ place: does MOD_VER 69924
                            0xB00, 0xB04, 0x0F8, 0x0FC, 0xF00..0xF14, 0xFF8, 0xFFC
 ```
 
-Plus the SN65DSI83 i2cdump (as for the i.MX8MP golden). Store it as
-`driver/docs/am62p-display-dump-linux.txt` and add a golden test like
-`soc::imx8mp::hdmi_golden` that compares the model's image after
-`dss_init` + `attach` + `output_enable` with it, masked by
-`driver/docs/am62p-display-allow.txt` (seeded with the expected
-differences: address registers, status/event bits, the table above).
+Plus the SN65DSI83 i2cdump. The dump is
+`driver/docs/am62p-display-dump-linux.txt` (taken 2026-10-01); the golden
+test `driver/rust/src/soc/am62p/display_golden.rs` compares the model's image
+after `dss_init` + `attach` + `output_enable` with it, masked by
+`driver/docs/am62p-display-allow.txt` (address registers, status and event
+bits, and this project's choices, each with its reason).
 
-**(b) Staged bring-up on the board**, each a `gl_triangle` image with
-`CONFIG_PVR_SAMPLE_HOLD_SECONDS`, judged by the console and the camera against
-the C-driver image of the same tree:
+## What the board settled (2026-10-02)
 
-1. `CONFIG_SAFEUI_DSI_CDNS_J721E_RUST=y` only. Console: "Cadence DSI id
-   0xcadd5131", the WIZ found at 0xf00, "D-PHY: 307812500 bit/s per lane,
-   band 5", "DSI link up". Then the bridge's PLL lock and IRQ_STAT 0
-   (sn65dsi8x self-start) and the picture.
-2. `CONFIG_SAFEUI_DSS_AM62P_RUST=y` only. Console: "DSS rev 0x64040901",
-   "DSS ready: VP2 1024x600". Counters after the hold (`am62p_dss_get_stats`,
-   printed by the sample): vsyncs ~ 60 x seconds, underflows 0, sync_lost 0.
-3. Both. Then Qt/Slint pictures (`rust_slint`, the route-3 SafeUI ring)
-   against references, and the safety-layer flip rate unchanged.
+The staged runs are in `tools/cts/log/board-sessions/am62p-display-rust-2026-10-02.md`.
+What they settled:
 
-If step 1 fails at the lanes: swap the lane start back to the C order (with
-PLL_START) as a single change; if the picture rolls or tears: VID_VSIZE1 back
-to the DPI totals; both are one-line changes recorded here first.
-
-**(c) Then** flip both defaults to y, delete the two C drivers and the three
-functions of `display_calc.c` with their ztest, and update the group E rows.
-(Done 2026-10-02, with the switches removed rather than left at y.)
-
-## On the board (2026-10-02)
-
-**The dump** (driver/docs/am62p-display-dump-linux.txt): Torizon 6.6.138
-driving the panel, STRICT_DEVMEM without IO_STRICT, so every address of the
-read list above was readable as root; one 32-bit load each, no writes.
-SN65DSI83 registers by `i2cdump -f` (IRQ_STAT 0).
-
-**The WIZ offset**: MOD_VER (MODULE_ID 992h, 69924881h on this silicon) reads
-at +F00h, and 0h..14h read 0. TI's driver is right; the SPRUJ83D register
-summary (14.8.6.3.2: MOD_VER at 0h) is not. The probe keeps the fallback to 0h
-(harmless) and logs where it found it.
-
-**Golden differences.** Model gaps fixed in the model (TRM reset values it
-lacked: GLOBAL_BUFFER 4688h, ATTRIBUTES2 3C000000h, MCTL_3DVIDEO_CTL 10h,
-CMD_MODE_CTL2 7FF800h, DPI_CFG 8000000h, the wrapper's REVISION 640A1101h;
-IRQENABLE_CLR reads the enables, 14.8.9.1.2.8) and the test reads status
-through the model (PLL lock, CMN ready, lane ready). The rest are allow-list
-lines with their reasons: live status (IRQSTATUS_RAW, LANE_STS, VID_VPOS/HPOS,
-VID_MODE_STS, the *_STS_FLAG registers, the DPI FIFO level), the WIZ revision
-field, and this project's choices (VSYNC instead of FRAMEDONE, the safety
-layer ARGB8888 straight alpha on overlay layer 1 over VID on layer 0, no
-gamma table, CBA_CFG never written). The PSM clock is 16 MHz on the board
-(Linux's clk_summary), so the test asks for 16 MHz and PSM_FREQ agrees. No
-driver change came from the comparison. Linux itself agrees with the C
-drivers on every TRM difference of the table above (VSIZE1 11/22/12,
-WAIT_BURST_TIME 0, FIFO low = size/2, MFLAG 2/3 / 1/3), so those stay in the
-seeded part of the allow-list: the board, below, decides them.
-
-**Staged runs** (`gl_triangle`, 40 s hold; the sample now logs the DSS
-counters before and after it; same tree, C drivers vs Rust):
-
-| image | console | counters after the hold | record |
-|---|---|---|---|
-| C drivers | DSI link up, sn65dsi8x link clean (IRQ_STAT 0x00) | vsyncs 2354, underflows 0, sync_lost 0 | `594b0400 ff403f80 35706c4e 04000258` |
-| DSI Rust | `Cadence DSI id 0xcadd5131`, `WIZ at +0xf00 (MOD_VER 0x69924881)`, `307812500 bit/s per lane, band 5`, `DSI link up: 4 lanes, sync events, line 4047 B`, IRQ_STAT 0x00 | 2354 / 0 / 0 | same |
-| DSS Rust | `DSS rev 0x64040901`, `DSS ready: VP2 1024x600 @ 51200000 Hz` | 2354 / 0 / 0 | same |
-| both | the union | 2354 / 0 / 0 | same |
-| gl_slint, both | 3525 frames in 60 s, 58 fps, GL error 0, the five read-backs equal the 2026-09-23 reference run's | 3524 application frames latched, 0 underflows, 0 sync_lost, 0 go_waits | PASS |
-| dEQP fbo + shaders.texture_functions, both | | (port off in dEQP) | 731 passed / 0 / 0 / 0, complete=1 |
-
-2354 vsyncs in 40.0 s is 58.8 Hz = 51.2 MHz / (1349 x 645), the RVT70's
-totals: the same for both drivers. So on this board the TRM's values (VSIZE1
-10/23/11, WAIT_BURST_TIME 4, FIFO low = size-8 with preload = low, MFLAG
-1/4..1/2, lanes after PLL_LCK, no CBA_CFG write, EOI 1, maximum time-outs)
-work: neither fallback was needed, no underflow or sync loss in 40 s with a
-static plane nor in 60 s of 58 fps flips.
+- **The WIZ offset.** MOD_VER (MODULE_ID 992h, 69924881h on this silicon)
+  reads at +F00h, and 0h..14h read 0. TI's driver is right; the SPRUJ83D
+  register summary (14.8.6.3.2: MOD_VER at 0h) is not. The probe keeps the
+  fallback to 0h and logs where it found it.
+- **The TRM's values work.** VSIZE1 10/23/11, WAIT_BURST_TIME 4, FIFO low =
+  size-8 with preload = low, MFLAG 1/4..1/2, lanes after PLL_LCK, no
+  CBA_CFG write, EOI 1 and maximum time-outs gave 0 underflows and 0 sync
+  losses in 40 s with a static plane and in 60 s of 58 fps flips, with the
+  same vsync count as the C drivers (58.8 Hz = 51.2 MHz / (1349 x 645)).
+  Neither fallback was needed. Linux itself agrees with the C drivers on
+  those values, so they stay in the seeded part of the allow-list.
+- **The model's reset values.** The golden comparison found TRM reset
+  values the model lacked (GLOBAL_BUFFER 4688h, ATTRIBUTES2 3C000000h,
+  MCTL_3DVIDEO_CTL 10h, CMD_MODE_CTL2 7FF800h, DPI_CFG 8000000h, the
+  wrapper's REVISION 640A1101h; IRQENABLE_CLR reads the enables). They are
+  in the model. No driver change came from the comparison. The PSM clock is
+  16 MHz on the board.
 
 ## Open questions
 
