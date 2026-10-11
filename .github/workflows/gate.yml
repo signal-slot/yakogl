@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# The full gate: every row of tools/check.sh, on every pull request to main
-# (the merge of the branch into main, refs/pull/N/merge), on every push to
-# main (the merge commit itself: main may have moved since the pull
-# request's run) and nightly. Locally a change runs only the rows its diff
-# reaches (`check.sh --changed <base>`); this is where the rest run.
+# The gate: tools/check.sh on every pull request to main, on every push to
+# main and nightly.
+#
+# A pull request runs the rows its diff reaches: `check.sh --changed
+# <merge base>`, where the merge base is that of the base branch and the
+# commit checked out (the merge of the branch into main, refs/pull/N/merge).
+# A push to main (the merge commit itself: main may have moved since the
+# pull request's run), the nightly run and a run by hand run every row. They
+# are the proof of the whole, and they catch a wrong `skip` of the scope map
+# (docs/ci.md).
 #
 # It needs what GitHub's hosted runners do not have: the PowerVR firmware
 # blob, Mesa's pco_shc, a west workspace with the Zephyr SDK, hal_nxp, a
@@ -54,7 +59,11 @@ jobs:
         run: |
           : > "$RUNNER_TEMP/gitconfig"
           echo "GIT_CONFIG_GLOBAL=$RUNNER_TEMP/gitconfig" >> "$GITHUB_ENV"
+      # The whole history, so that the base branch and the merge base are
+      # here for `--changed`.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: the project environment (ccfarm's dependency layout, tools/cts/deps-env.sh)
         run: |
           tools/cts/deps-env.sh --check
@@ -74,7 +83,18 @@ jobs:
           mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/
       - name: the gate host has every tool
         run: tools/setup-gate-host.sh --check
-      - name: tools/check.sh (every row)
+      - name: tools/check.sh --changed <merge base> (a pull request, the rows its diff reaches)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          mkdir -p build
+          base=$(git merge-base "origin/$BASE_REF" HEAD) || { echo "no merge base with origin/$BASE_REF"; exit 1; }
+          echo "merge base with origin/$BASE_REF: $base"
+          tools/check.sh --changed "$base" 2>&1 | tee build/gate-ci.log
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: tools/check.sh (every row, main, nightly or by hand)
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p build
           tools/check.sh 2>&1 | tee build/gate-ci.log
