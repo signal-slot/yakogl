@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Host harness: differential checker for libyakogl
 
 The harness runs GL/EGL call streams through a library build on the host
@@ -31,7 +33,7 @@ those before looking for a regression.
 |---|---|
 | `rec.c`, `hh.h` | the recording OSAL: all 17 `struct osal_ops` entries (PowerVR kicks, or the V3D's with `-DYAKOGL_GPU_V3D`) |
 | `gen_wrap.py`, `hh_wrap.h`, `wrap_rt.c` | generates and runs the entry-point interposer |
-| `gltest.c` | program 1: the driver repository's `tools/pvrlab/gl_test.c` (every case) |
+| `gltest.c` | program 1: `driver/tools/pvrlab/gl_test.c` (every case) |
 | `scen.c` | program 2: state / query / EGL / program-link / texture / buffer / FBO / stress / context / window sweeps |
 | `hostile.c` | program 3: hostile sequences (wrapping range checks, misaligned pointers, EGLImage ownership, odd widths, size extremes, allocation failures) |
 | `run.sh` | builds a library with sanitizers, builds the programs against it, runs every job in every mode |
@@ -42,19 +44,23 @@ those before looking for a regression.
 
 ## Usage
 
+The `<driver repo>` argument of `run.sh` is a driver tree: this repository's
+`driver/` (its `src/` and `tools/pvrlab/gl_test.c`), or the `driver/` of
+another checkout for the other side of a comparison.
+
 ```sh
 W=/var/tmp/yakogl-work
 # one library, all jobs, all modes (logs in out/logs/<job>.<mode>.{log,err,rc,calls,time})
-tools/hostharness/run.sh all out rust:. $W/drv dev
+tools/hostharness/run.sh all out rust:. driver dev
 python3 tools/hostharness/report.py status out
 
 # two libraries: exit status 1 on an unexpected difference, report in out/report.txt
-tools/hostharness/compare.sh out csrc:$W/oldsrc rust:. $W/drvold
+tools/hostharness/compare.sh out csrc:$W/oldsrc rust:. $W/old/driver
 # a build before source-form step 3 (main up to land123) vs one after it: the
 # draws whose vertex shader reads gl_VertexID/gl_InstanceID use Mesa's layout
 HH_ALLOW=tools/hostharness/allow-mesa-pds.txt tools/hostharness/compare.sh ...
 # the port before and after a change
-tools/hostharness/compare.sh out rust:/path/to/before rust:. $W/drv
+tools/hostharness/compare.sh out rust:/path/to/before rust:. driver
 ```
 
 Library specifications: `rust:<crate dir>` (either the workspace layout with
