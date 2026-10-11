@@ -562,17 +562,10 @@ mod tests {
     use crate::gl::program::{
         glAttachShader, glCreateProgram, glDeleteProgram, glDetachShader, glGetProgramiv, glLinkProgram,
     };
-<<<<<<< HEAD
     // glGetProgramInfoLog and format! are used only by the tests that need a
     // compiler (shaderc-online) or the offline table (not no-shader-table);
     // a precompiled no-shader-table build compiles none of them, so the
     // imports are gated with the union of those conditions.
-=======
-    /* Only the link-refusal tests read a program's info log or format
-     * expected log lines; both are gated on the online compiler or the
-     * offline table, so a `no-shader-table` build without `shaderc-online`
-     * would see these imports as unused. */
->>>>>>> 7979cc55de5a2f289ef662a933abaf30cba45c73
     #[cfg(any(feature = "shaderc-online", not(feature = "no-shader-table")))]
     use crate::gl::program::glGetProgramInfoLog;
     use crate::testutil::TestGl;
