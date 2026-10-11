@@ -307,6 +307,15 @@ step() {
 exec 3>&1
 TEST_OK_DIR=$(realpath -m "${YAKOGL_TEST_OK:-${CARGO_TARGET_DIR:-target}/../test-ok}")
 TEST_JOBS=${YAKOGL_CHECK_TEST_JOBS:-$(nproc)}
+# cargo-nextest when the host has it (YAKOGL_CHECK_NEXTEST=0 turns it off):
+# it runs each test as its own process across all binaries of the row, so
+# a binary's tests spread over the cores too. Without it, the binaries run
+# concurrently as below. A row that reads libtest's output (`--libtest`) or
+# passes harness arguments always runs the binaries itself. The runner is
+# part of the cache key: a pass under one runner says nothing about the
+# other (nextest runs every test in a fresh process, libtest shares one).
+NEXTEST_VERSION=
+[ "${YAKOGL_CHECK_NEXTEST-}" = 0 ] || NEXTEST_VERSION=$(cargo nextest --version 2>/dev/null | head -1)
 # One directory per run, because a run can hold another (the self-tests run
 # check.sh inside the gate); the directories of runs that ended go.
 TEST_RUN=build/check/tests-$$
@@ -384,7 +393,8 @@ test_tree_key() {
 }
 
 cargo_test() {
-  local cargo_args=() filter=() harness=() a after_dd=0 value=0
+  local cargo_args=() filter=() harness=() a after_dd=0 value=0 libtest_only=0
+  if [ "${1-}" = --libtest ]; then libtest_only=1; shift; fi
   if [ "${1-}" = env ]; then
     shift
     while [ $# -gt 0 ] && [[ $1 == [A-Za-z_]*=* ]]; do export "${1?}"; shift; done
@@ -405,6 +415,8 @@ cargo_test() {
     *) filter+=("$a") ;;
     esac
   done
+  local runner=libtest
+  [ "$libtest_only" -eq 0 ] && [ "${#harness[@]}" -eq 0 ] && [ -n "$NEXTEST_VERSION" ] && runner=nextest
   local row
   row=$(($(wc -l < "$TEST_STATE/counts") + 1))
   local logs="$TEST_RUN/logs/$row" alogs="$PWD/$TEST_RUN/logs/$row"
@@ -449,7 +461,7 @@ for line in sys.stdin:
   [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] &&
     echo "key    row $row: env $envk ($TEST_STATE/env-key), tree $treek_other, lib tree $treek_lib" >&3
   local i=0 ran=0 cached=0 exe dir name kind src label h treek entry
-  local -a labels=() hashes=() states=()
+  local -a labels=() hashes=() states=() exes=()
   while IFS=$'\t' read -r exe dir name kind src; do
     i=$((i + 1))
     label="$name ($kind)"
@@ -459,11 +471,13 @@ for line in sys.stdin:
       echo "binary $(sha256sum < "$exe" | cut -c1-64)"
       echo "dir ${dir#"$PWD"}"
       echo "args ${filter[*]} -- ${harness[*]}"
+      if [ "$runner" = nextest ]; then echo "runner $NEXTEST_VERSION"; else echo "runner libtest"; fi
       echo "env $envk"
       echo "tree $treek"
     } | sha256sum | cut -c1-64)
     labels+=("$label")
     hashes+=("$h")
+    exes+=("$exe")
     entry="$TEST_OK_DIR/$h"
     if [ -s "$entry" ] && [ -f "$entry.log" ]; then
       echo "skip   $label (passed on main $(head -1 "$entry"))" >&3
@@ -476,6 +490,7 @@ for line in sys.stdin:
     [ "${YAKOGL_CHECK_VERBOSE-}" = 1 ] && echo "run    $label key $h" >&3
     states+=(run)
     ran=$((ran + 1))
+    [ "$runner" = nextest ] && continue
     while [ "$(jobs -rp | wc -l)" -ge "$TEST_JOBS" ]; do wait -n; done
     (
       cd "$dir" || exit 2
@@ -485,18 +500,22 @@ for line in sys.stdin:
   done <<< "$bins"
   wait
   echo "$ran $cached" >> "$TEST_STATE/counts"
+  if [ "$runner" = nextest ] && [ "$ran" -gt 0 ]; then
+    nextest_run "$logs" || return 1
+  fi
   local failed=() rc_i
   for ((i = 1; i <= ${#labels[@]}; i++)); do
     if [ "${states[i - 1]}" = cached ]; then
       echo "     Running ${labels[i - 1]}: not run, its log from main"
-    else
+      cat "$logs/$i.log" 2>/dev/null
+    elif [ "$runner" = libtest ]; then
       echo "     Running ${labels[i - 1]}"
+      cat "$logs/$i.log" 2>/dev/null
     fi
-    cat "$logs/$i.log" 2>/dev/null
     rc_i=$(cat "$logs/$i.rc" 2>/dev/null || echo none)
     if [ "$rc_i" != 0 ]; then
       failed+=("${labels[i - 1]}: exit $rc_i, log $logs/$i.log")
-    elif [ "${states[i - 1]}" = run ] && [ -n "${YAKOGL_CHECK_RECORD-}" ]; then
+    elif [ "${states[i - 1]}" = run ] && [ -n "${YAKOGL_CHECK_RECORD-}" ] && [ ! -e "$logs/norecord" ]; then
       mkdir -p "$TEST_OK_DIR" &&
         cp "$logs/$i.log" "$TEST_OK_DIR/${hashes[i - 1]}.log.tmp" &&
         mv "$TEST_OK_DIR/${hashes[i - 1]}.log.tmp" "$TEST_OK_DIR/${hashes[i - 1]}.log" &&
@@ -504,11 +523,55 @@ for line in sys.stdin:
         mv "$TEST_OK_DIR/${hashes[i - 1]}.tmp" "$TEST_OK_DIR/${hashes[i - 1]}"
     fi
   done
+  [ "$runner" = nextest ] && [ "$ran" -gt 0 ] && cat "$logs/nextest.log"
   if [ "${#failed[@]}" -gt 0 ]; then
     printf 'cargo_test: %d of %d test binaries failed:\n' "${#failed[@]}" "${#labels[@]}"
     printf '  FAILED binary %s\n' "${failed[@]}"
     return 1
   fi
+}
+
+# cargo_test's nextest arm: one `cargo nextest run` over the binaries that
+# are not cached, chosen by their nextest binary ids, which
+# `cargo nextest list` maps from their paths (a path without an id is a red
+# row, never a binary left out). Reads cargo_test's locals; $1 is the log
+# directory. Each binary gets the nextest lines that name it as its log.
+# A binary named by a line other than PASS, SLOW or SKIP failed.
+nextest_run() {
+  local logs=$1 ids j id expr="" st bad
+  ids=$(cargo nextest list "${cargo_args[@]}" --message-format json 2>/dev/null | python3 -c '
+import json, sys
+for k, v in json.load(sys.stdin)["rust-suites"].items():
+    print(v["binary-path"] + "\t" + k)
+') || { echo "cargo_test: cargo nextest list failed"; return 1; }
+  local -A id_of=()
+  while IFS=$'\t' read -r a id; do id_of[$a]=$id; done <<< "$ids"
+  local -a run_ids=()
+  for ((j = 1; j <= ${#exes[@]}; j++)); do
+    [ "${states[j - 1]}" = run ] || continue
+    id=${id_of[${exes[j - 1]}]-}
+    [ -n "$id" ] || { echo "cargo_test: nextest has no binary id for ${exes[j - 1]}"; return 1; }
+    run_ids[j]=$id
+    expr="${expr:+$expr | }binary_id(=$id)"
+  done
+  cargo nextest run "${cargo_args[@]}" --no-fail-fast --test-threads "$TEST_JOBS" "${filter[@]}" \
+    -E "$expr" > "$logs/nextest.log" 2>&1
+  st=$?
+  local named=0
+  for j in "${!run_ids[@]}"; do
+    grep -F " ${run_ids[j]} " "$logs/nextest.log" > "$logs/$j.log"
+    bad=$(grep -cvE '^ *(PASS|SLOW|SKIP) ' "$logs/$j.log")
+    if [ "$bad" -gt 0 ]; then echo 1 > "$logs/$j.rc"; named=$((named + 1)); else echo 0 > "$logs/$j.rc"; fi
+  done
+  if [ "$st" -ne 0 ]; then
+    # Nothing from a failed run is recorded. A failed run that names no
+    # binary fails them all.
+    : > "$logs/norecord"
+    if [ "$named" -eq 0 ]; then
+      for j in "${!run_ids[@]}"; do echo "$st" > "$logs/$j.rc"; done
+    fi
+  fi
+  return 0
 }
 
 # The summary line and the verdict; the end of every run.
@@ -522,11 +585,13 @@ summary() {
   # skipped.
   bins_run=0
   bins_cached=0
+  runner_name="the binaries concurrently (no cargo-nextest)"
+  [ -n "$NEXTEST_VERSION" ] && runner_name="$NEXTEST_VERSION (the rows that read libtest's output run the binaries concurrently)"
   while read -r r c; do
     bins_run=$((bins_run + r))
     bins_cached=$((bins_cached + c))
   done < "$TEST_STATE/counts"
-  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main)"
+  echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass), $skips skipped ($mode) in $((SECONDS - gate_t0))s; test binaries: $bins_run run, $bins_cached skipped (passed on main); runner: $runner_name"
   if [ "$rc" -eq 0 ]; then
     green "check.sh: clean"
   else
@@ -649,7 +714,7 @@ KNOBS_TESTS=(
 )
 knobs_lib_tests() {
   local out t
-  out=$(cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --lib 2>&1) ||
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --lib 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
   for t in "${KNOBS_TESTS[@]}"; do
@@ -682,7 +747,7 @@ V3D_MIN_TESTS=2460
 V3D_IGNORED="build/check/v3d-ignored.txt"
 v3d_lib_tests() {
   local out passed
-  out=$(cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --lib 2>&1)
+  out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$V3D_CONFIG" --lib 2>&1)
   local status=$?
   printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20
   mkdir -p "$(dirname "$V3D_IGNORED")" || return 1
@@ -1321,7 +1386,7 @@ if command -v cc >/dev/null 2>&1; then
   # layout (pool/tests/replay.rs) are among them.
   pvr_pool_tests() {
     local out want=28
-    out=$(cargo_test --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
+    out=$(cargo_test --libtest --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
       { printf '%s\n' "$out" | tail -20; return 1; }
     printf '%s\n' "$out" | grep -qE "^test result: ok\. $want passed; 0 failed; 0 ignored;" || {
       echo "pvr pool tests: not exactly $want passed:"

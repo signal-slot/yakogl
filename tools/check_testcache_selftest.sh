@@ -37,8 +37,15 @@ same() {
     fails=$((fails + 1))
   fi
 }
+# The binaries-concurrently arm first (YAKOGL_CHECK_NEXTEST=0); the nextest
+# arm below when the host has cargo-nextest.
 row() {
-  env -u YAKOGL_CHECK_RECORD -u YAKOGL_TEST_ENV_EXTRA YAKOGL_TEST_OK="$cache" "$@" 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
+  env -u YAKOGL_CHECK_RECORD -u YAKOGL_TEST_ENV_EXTRA YAKOGL_TEST_OK="$cache" YAKOGL_CHECK_NEXTEST=0 "$@" 2>&1 |
+    sed 's/\x1b\[[0-9;]*m//g'
+}
+nextest_row() {
+  env -u YAKOGL_CHECK_RECORD -u YAKOGL_TEST_ENV_EXTRA -u YAKOGL_CHECK_NEXTEST YAKOGL_TEST_OK="$cache" "$@" 2>&1 |
+    sed 's/\x1b\[[0-9;]*m//g'
 }
 key() { row tools/check.sh --test-keys | sed -n "s/^$1 //p"; }
 
@@ -75,6 +82,21 @@ expect "failure: the row is red" '^check.sh: 0 ok, 1 failed' "$out"
 expect "failure: the binary is named" '^  FAILED binary yakogl-tools \(.*\): exit [0-9]+, log build/check/tests-[0-9]+/logs/1/1\.log$' "$out"
 checks=$((checks + 1))
 [ "$(find "$cache" -type f | wc -l)" -eq "$before" ] || { echo "FAIL a failing binary was recorded"; fails=$((fails + 1)); }
+
+# The nextest arm: a pass recorded by the other runner is not one for
+# nextest (the runner is in the key); nextest records, then skips.
+if nv=$(cargo nextest --version 2>/dev/null | head -1) && [ -n "$nv" ]; then
+  out=$(nextest_row tools/check.sh --cargo-test -p yakogl-tools)
+  expect "nextest: the runner is named" "runner: cargo-nextest " "$out"
+  expect "nextest: the other runner's pass is not reused" "test binaries: ${n:-x} run, 0 skipped" "$out"
+  out=$(nextest_row YAKOGL_CHECK_RECORD=cafe tools/check.sh --cargo-test -p yakogl-tools)
+  expect "nextest: record, green" '^check.sh: 1 ok, 0 failed' "$out"
+  out=$(nextest_row tools/check.sh --cargo-test -p yakogl-tools)
+  expect "nextest: cached, nothing ran" "test binaries: 0 run, ${n:-x} skipped" "$out"
+  expect "nextest: the skip line" '^skip   yakogl-tools \(.*\) \(passed on main cafe\)$' "$out"
+else
+  echo "check_testcache_selftest: no cargo-nextest on this host; its arm was not checked"
+fi
 
 # The run-time inputs: the tree key moves with a file the tests read
 # (tools/shaders), never with a document; an integration test source moves

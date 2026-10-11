@@ -161,10 +161,17 @@ visible and attributable.
 concurrently: the gate runs the executables itself (from the same
 `--message-format=json` list), N at a time (N = cores), each binary's own
 harness threads as today. A row's wall time becomes its longest binary
-(78 s) instead of the sum (365 s). `cargo nextest` does the same per test
-and would be the better tool once it is installed on the gate hosts
-(`cargo install cargo-nextest --locked`; a host package, so the owner's
-decision); the gate's own runner needs nothing installed.
+(78 s) instead of the sum (365 s). On a host with `cargo-nextest`
+(0.9.148 on nuc and system76, in `~/.cargo/bin`), a row runs its
+binaries through `cargo nextest run` instead, which runs every test as
+its own process, so a binary's tests spread over the cores too. A host
+without it (a developer's machine) uses the gate's own runner. The hash
+cache comes first in both cases, and the runner is part of the key. The
+rows that read libtest's output (the knob tests by name, the V3D count,
+the PowerVR pool) always use the gate's own runner. Measured once each
+on this host, no cache: the GC7000 online row 44 s (own runner) and
+52 s (nextest); the PowerVR online row 136 s and 97 s, because nextest
+splits `tests/usc_limits.rs` over processes.
 
 **Across rows.** Rows of one scope class are independent processes on one
 target directory. cargo serializes the builds on its directory lock, which

@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# The gate: tools/check.sh on every pull request to main, on every push to
-# main and nightly.
+# The gate: tools/check.sh on every pull request (to main or
+# ccfarm/integration), on every push to main and nightly.
 #
 # A pull request runs the rows its diff reaches: `check.sh --changed
 # <merge base>`, where the merge base is that of the base branch and the
-# commit checked out (the merge of the branch into main, refs/pull/N/merge).
+# commit checked out (the merge of the branch into the base branch,
+# refs/pull/N/merge).
 # A push to main (the merge commit itself: main may have moved since the
 # pull request's run), the nightly run and a run by hand run every row. They
 # are the proof of the whole, and they catch a wrong `skip` of the scope map
@@ -95,6 +96,8 @@ jobs:
           echo "merge base with origin/$BASE_REF: $base"
           tools/check.sh --changed "$base" 2>&1 | tee build/gate-ci.log
           test "${PIPESTATUS[0]}" -eq 0
+      # A test row uses cargo-nextest when the runner has it (~/.cargo/bin,
+      # on PATH above) and runs the binaries itself otherwise.
       # A run on main records the test binaries that passed
       # (YAKOGL_CHECK_RECORD, tools/check.sh cargo_test), in
       # ~/.cache/yakogl/test-ok beside the target directory; a later run
