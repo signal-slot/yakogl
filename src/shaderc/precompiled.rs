@@ -179,9 +179,11 @@ pub fn applies() -> bool {
         && switches_at_boot()
 }
 
-/// Log the table's toolchain mark, once.
+/// Log the table's toolchain mark, once per process. A test that asserts
+/// the exact log lines calls it first, so the mark is never in its lines
+/// whichever test of the process used the table first.
 #[cfg(feature = "precompiled-shaders")]
-fn mark_once() {
+pub(crate) fn mark_once() {
     if !MARKED.swap(true, core::sync::atomic::Ordering::Relaxed) {
         glog!(
             "yakogl: precompiled shaders: {} rows, {} links of {}; toolchain: {}",

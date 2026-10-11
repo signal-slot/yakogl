@@ -1583,6 +1583,13 @@ mod tests {
     #[cfg(feature = "shaderc-online")]
     fn a_refused_shader_online_logs_one_summary_line_and_no_source_chunks() {
         let gl = TestGl::new(8, 8);
+        // The precompiled tier logs its toolchain mark once per process, on
+        // the first look-up. Log it now and drop it, so the lines below are
+        // this compile's whether or not another test of the process ran
+        // first (alone, or under cargo-nextest, this test is the first).
+        #[cfg(feature = "precompiled-shaders")]
+        crate::shaderc::precompiled::mark_once();
+        let _ = gl.logs();
         let src = "// first\n\nvoid main() { oops }\n";
         // SAFETY: plain GL calls.
         let s = unsafe { glCreateShader(GL_FRAGMENT_SHADER) };
