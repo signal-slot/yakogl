@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GEOM(TA)+3D render — code-level reproduction spec (PowerVR BXS-4-64, BVNC 36.53.104.796)
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/gpu-ta3d-spec.md` on 2026-10-11. The plan for the GEOM+3D pair that replaced the TQ_3D fill. It is built: driver/src/pvr_render.c and driver/rust/src/gpu/pvr/render.rs.
 
 Target: one screen-covering primitive filling a 64x64 RGBA8888 linear surface, produced by a
 **fence-chained GEOM(TA)+3D pair** sharing one HWRTData — the structure the on-board known-good

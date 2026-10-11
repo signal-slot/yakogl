@@ -50,7 +50,7 @@ flight", and "HWRT pair recycle".
 - The device tree has the GPU's line: `interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL
   IRQ_DEFAULT_PRIORITY>` (`driver/dts/arm64/ti/ti_am62p54_a53.dtsi:156`). The
   source is TI's kernel device tree, quoted in
-  `driver/docs/gpu-recipes/research.md` section 1 (`GIC_SPI 241
+  `tools/cts/log/investigations/pvr-bringup/am62p-desk-research.md` section 1 (`GIC_SPI 241
   IRQ_TYPE_LEVEL_HIGH`).
 - Nothing connects it. `IRQ_CONNECT` appears in `src/osal/zephyr_v3d.c`
   (the V3D) and in the shims `driver/drivers/gpu/gpu_vivante_gc_rust.c` and the

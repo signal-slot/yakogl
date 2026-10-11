@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # 3D/fragment fault pinned (clean baseline 2026-09-12)
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/frag_fault_pin.md` on 2026-10-11. The 2026-09-12 fragment fault is resolved by the DDK command-block layout; the layout note that stays current is driver/docs/gpu-recipes/coeff_base_analysis.md.
 
 Bring-up note, cut to its measured facts and conclusion. Build:
 `-DPVR_DDK_FW -DPVR_BIG_GLOBAL_FL -DPVR_DRAW_TRIANGLE`, TA tiling default.
@@ -51,5 +55,6 @@ test).
 
 The fix is to give the coefficient path a valid base by correcting the
 command-block and PM/freelist setup, not by the scratch mapping. See
-`coeff_base_analysis.md` for the mechanism and `varying_interp_analysis.md` for
+`driver/docs/gpu-recipes/coeff_base_analysis.md` for the mechanism and
+`driver/docs/gpu-recipes/varying_interp_analysis.md` for
 the PPP/PDS fields that govern varying iteration.
