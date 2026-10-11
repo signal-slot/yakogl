@@ -21,8 +21,13 @@ proves, before any board, that the Rust does what the C it replaced did.
 
 `tools/check.sh` (row "pvr km_check") builds the Rust side, runs the pins and
 every scenario, and requires the hashes. To see a difference instead of a
-hash mismatch, rebuild the C records (`tools/pvr/km/record_c.sh <dir>`, needs
-674ea1cf in the history) and diff them against `build/pvr-check/km/`.
+hash mismatch, rebuild the C records (`tools/pvr/km/record_c.sh <dir>`) and diff
+them against `build/pvr-check/km/`. `record_c.sh` reads the C with
+`git show 674ea1cf:...`, so it needs that commit in the object store. It is
+not an ancestor of main: main's history starts at the release commit
+`afb16335`, and 674ea1cf is reachable only from older branches
+(`origin/ccfarm/*` held it on 2026-10-11) or the pre-release history. The
+gate needs only the hashes, not the commit.
 
 ## What "identical" means here
 
