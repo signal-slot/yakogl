@@ -60,6 +60,35 @@ their bytes: the tests read `tools/shaders`, `tests/fixtures`,
 documents, the CI files and `check.sh` with its self-tests. For every
 binary but the library's own unit tests it also leaves out `tests/*.rs`.
 
+After step 3 (`[profile.test] opt-level = 3`), the three slow binaries,
+the same binaries back to back (two runs per arm), load 2 to 8:
+
+| | opt-level 1 | opt-level 3 |
+|---|---|---|
+| es3_ubo | 50.4 s, 49.4 s | 30.7 s, 30.7 s |
+| gc_const_map | 46.5 s, 45.9 s | 29.5 s, 29.5 s |
+| online_corpus | 46.1 s, 46.2 s | 29.5 s, 29.5 s |
+
+The whole `tools/check.sh` after steps 2 and 3, on this host, from an
+uncommitted tree on top of `df934dfd` (a change to `check.sh` and
+`Cargo.toml`, so every row, 142), load 2 at the start:
+
+| | first run (records the cache) | second run (reads it) |
+|---|---|---|
+| whole run | 2377 s | 677 s |
+| test binaries | 492 run | 0 run, 492 skipped |
+| the 34 `test` rows | 1077 s | 25 s |
+| slowest rows | Mesa table 202 s, `test` PowerVR tier 184 s, `test` PowerVR online 178 s | Mesa table 222 s, GC7000 table proof 174 s, PowerVR table proof 54 s |
+
+A PowerVR online row now takes as long as its slowest binary,
+`tests/usc_limits.rs` (130 to 135 s, one test,
+`deqp_test_programs_compute_what_the_ir_means_in_each_if_lowering`).
+The second run's remaining time is the non-cargo rows (step 4). Two
+rows were red in both runs for a reason outside this change: the AM62P
+gl_test images, whose generated linker script includes Zephyr's
+`swi_tables.ld` by a relative path that does not resolve from a build
+directory under `/tmp`.
+
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
 change: `src/gl/draw.rs`, `src/shaderc/online/*` and `tools/check.sh`
 select all 134 rows ("scopes: all"); `src/vivante/*` selects 38; a document

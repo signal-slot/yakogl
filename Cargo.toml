@@ -169,6 +169,17 @@ cc = "1.2"
 panic = "abort"
 opt-level = 1
 
+# The tests (`cargo test`, every test row of tools/check.sh) at opt-level 3.
+# The profile inherits `dev` otherwise, and opt-level 1 halves the speed of
+# the compiler-heavy tests (docs/ci.md, section 3.4). Debug assertions and
+# overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
+# harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
+# applies. The edit loop's `dev` profile keeps opt-level 1.
+[profile.test]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true
+
 # The C archive's dev build (YAKOGL_CARGO_PROFILE=dev): dev semantics
 # (overflow checks, debug assertions) but one LTO object, which the archive
 # post-processing (capi/assemble.cmake) needs to hide the Rust runtime symbols.
