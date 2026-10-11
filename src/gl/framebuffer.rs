@@ -1830,8 +1830,18 @@ pub(super) fn texture_bits(t: &context::GlTexture) -> AttachmentBits {
         GL_RED | GL_LUMINANCE => AttachmentBits::color([bits, 0, 0, 0], ct),
         GL_ALPHA => AttachmentBits::color([0, 0, 0, bits], ct),
         GL_LUMINANCE_ALPHA => AttachmentBits::color([bits, 0, 0, bits], ct),
+        /* depth: one float a texel (R32F storage, texture.rs `sized_format`),
+         * filled from the transfer type; a float depth keeps all 32 bits
+         * (dEQP state_query.fbo.framebuffer_attachment_x_size_texture
+         * wants DEPTH_COMPONENT32F at least 32) */
+        GL_DEPTH_COMPONENT if !crate::REPORT_ES2 && t.type_ == GL_FLOAT => {
+            AttachmentBits { depth: 32, component_type: GL_FLOAT, ..AttachmentBits::NONE }
+        }
         GL_DEPTH_COMPONENT => {
             AttachmentBits { depth: 24, component_type: GL_UNSIGNED_NORMALIZED, ..AttachmentBits::NONE }
+        }
+        GL_DEPTH_STENCIL if !crate::REPORT_ES2 && t.type_ == GL_FLOAT_32_UNSIGNED_INT_24_8_REV => {
+            AttachmentBits { depth: 32, stencil: 8, component_type: GL_FLOAT, ..AttachmentBits::NONE }
         }
         GL_DEPTH_STENCIL => {
             AttachmentBits { depth: 24, stencil: 8, component_type: GL_UNSIGNED_NORMALIZED, ..AttachmentBits::NONE }
@@ -2365,9 +2375,16 @@ pub unsafe extern "C" fn glGetRenderbufferParameteriv(target: GLenum, pname: GLe
         | GL_RENDERBUFFER_GREEN_SIZE
         | GL_RENDERBUFFER_BLUE_SIZE
         | GL_RENDERBUFFER_ALPHA_SIZE => {
+            let bits = renderbuffer_bits(f);
             if is_integer_color_format(f) {
-                let bits = renderbuffer_bits(f).rgba;
-                bits[(pname - GL_RENDERBUFFER_RED_SIZE) as usize]
+                bits.rgba[(pname - GL_RENDERBUFFER_RED_SIZE) as usize]
+            } else if !crate::REPORT_ES2 && bits.component_type == GL_FLOAT {
+                /* ES 3.0 6.1.15: the stored resolution. A half- or
+                 * single-float renderbuffer is stored as such
+                 * (renderbuffer_surf_format) and read 8; dEQP
+                 * state_query.rbo/fbo want at least 16 (the ES 2.0 report
+                 * keeps its answer) */
+                bits.rgba[(pname - GL_RENDERBUFFER_RED_SIZE) as usize]
             } else if is_color_format(f) {
                 8
             } else {
@@ -2448,25 +2465,49 @@ pub unsafe extern "C" fn glReadPixels(
      * and pixels (both honoured since 2026-09-24) */
     let pack_align = c.pack_alignment as usize;
     let row_len = c.pack_row_length.max(0) as usize;
-    let out_bpp = if matches!(type_, GL_FLOAT | GL_INT | GL_UNSIGNED_INT) { 16 } else { 4 };
+    let wide = matches!(type_, GL_FLOAT | GL_INT | GL_UNSIGNED_INT);
+    let out_bpp = if wide { 16 } else { 4 };
     let a = pack_align.max(1);
-    let stride = (if row_len > 0 { row_len } else { width.max(0) as usize } * out_bpp).div_ceil(a) * a;
-    let skip = stride * c.pack_skip_rows.max(0) as usize + out_bpp * c.pack_skip_pixels.max(0) as usize;
     /* The bytes the read writes, from `pixels` on: the skipped rows and
      * pixels, every row but the last at the stride, and the last one's
-     * pixels. With a pixel pack buffer bound the whole of it must lie inside
-     * the buffer, else GL_INVALID_OPERATION (ES 3.0 4.3.2) -- it was checked
-     * as an empty transfer until 2026-10-10, and a read larger than the
-     * buffer wrote past its store. */
+     * pixels. Checked: the pack state's ints can lay out more than an
+     * address space, which must not wrap round into a size that fits. */
     let need = if width > 0 && height > 0 {
-        skip.saturating_add(stride.saturating_mul(height as usize - 1)).saturating_add(width as usize * out_bpp)
+        (|| {
+            let row = if row_len > 0 { row_len } else { width as usize }.checked_mul(out_bpp)?;
+            let stride = row.checked_next_multiple_of(a)?;
+            let skip = stride
+                .checked_mul(c.pack_skip_rows.max(0) as usize)?
+                .checked_add(out_bpp.checked_mul(c.pack_skip_pixels.max(0) as usize)?)?;
+            let rows = (height as usize - 1).checked_mul(stride)?;
+            skip.checked_add(rows)?.checked_add((width as usize).checked_mul(out_bpp)?)
+        })()
     } else {
-        0
+        Some(0)
     };
+    /* Into a pixel pack buffer, `pixels` is an offset: ES 3.0 4.3.2 makes
+     * it GL_INVALID_OPERATION when the offset is not a multiple of the
+     * type's size, or when the `need` bytes from it would pass the end of
+     * the buffer (pixel_buffer_resolve) -- it was checked as an empty
+     * transfer until 2026-10-10, and a read larger than the buffer wrote
+     * past its store. Client memory is the caller's contract: `need` only
+     * bounds a buffer. */
     let pack_buffer = c.bound_pixel_pack_buffer != 0;
+    let unit = if wide { 4 } else { 1 };
+    let need = match need {
+        Some(0) => 0,
+        Some(n) if !pack_buffer || (pixels as usize).is_multiple_of(unit) => n,
+        None if !pack_buffer => 0,
+        _ => {
+            c.set_error(GL_INVALID_OPERATION, "glReadPixels");
+            return;
+        }
+    };
     let Some(pixels) = super::buffer::pixel_buffer_resolve(c, true, pixels, need, "glReadPixels") else {
         return;
     };
+    let stride = (if row_len > 0 { row_len } else { width.max(0) as usize } * out_bpp).div_ceil(a) * a;
+    let skip = stride * c.pack_skip_rows.max(0) as usize + out_bpp * c.pack_skip_pixels.max(0) as usize;
     let base = pixels as *mut c_void;
     let pixels =
         if pixels.is_null() { pixels as *mut c_void } else { (pixels as *mut u8).wrapping_add(skip) as *mut c_void };
@@ -7669,5 +7710,63 @@ mod tests {
         attach_tex(GL_COLOR_ATTACHMENT0, rgb);
         assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "SRGB8 is not colour-renderable");
         assert_eq!(gl.error(), GL_NO_ERROR);
+    }
+
+    /// An attached integer texture answers its channel widths and INT /
+    /// UNSIGNED_INT (ES 3.0 6.1.13), not 0 bits and GL_NONE. The back ends
+    /// do not sample integer texels yet (formats-* items), so the storage is
+    /// only made with the test's extra sampled formats.
+    #[test]
+    #[cfg(not(feature = "report-es2"))]
+    fn attached_integer_texture_reports_its_image() {
+        use crate::backend::{
+            gles_texfmt_bit, GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA8_SNORM, TEST_EXTRA_SAMPLED,
+        };
+        use crate::gl::texture::glTexStorage2D;
+        let gl = TestGl::new(8, 8);
+        let all_int = (GLES_TEXFMT_RGB10A2UI..=GLES_TEXFMT_RGBA32I)
+            .filter(|&f| f != GLES_TEXFMT_RGBA8_SNORM)
+            .fold(0, |m, f| m | gles_texfmt_bit(f));
+        TEST_EXTRA_SAMPLED.store(all_int, core::sync::atomic::Ordering::Relaxed);
+        let fb = gen_fb();
+        // SAFETY: plain GL call.
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, fb) };
+        for (f, want, ct) in [
+            (GL_RGBA8I, [8; 4], GL_INT),
+            (GL_R8UI, [8, 0, 0, 0], GL_UNSIGNED_INT),
+            (GL_RG16I, [16, 16, 0, 0], GL_INT),
+            (GL_RGBA16UI, [16; 4], GL_UNSIGNED_INT),
+            (GL_RG32UI, [32, 32, 0, 0], GL_UNSIGNED_INT),
+            (GL_R32I, [32, 0, 0, 0], GL_INT),
+            (GL_RGB10_A2UI, [10, 10, 10, 2], GL_UNSIGNED_INT),
+        ] {
+            let mut tex = 0;
+            // SAFETY: room for one name; storage without texels.
+            unsafe {
+                glGenTextures(1, &mut tex);
+                glBindTexture(GL_TEXTURE_2D, tex);
+                glTexStorage2D(GL_TEXTURE_2D, 1, f, 4, 4);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            }
+            assert_eq!(gl.error(), GL_NO_ERROR, "{f:#x}");
+            let q = |p: GLenum| {
+                let mut v = -1;
+                // SAFETY: room for one value.
+                unsafe { glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, p, &mut v) };
+                v
+            };
+            let sizes = [
+                GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+                GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+                GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+                GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+            ]
+            .map(q);
+            assert_eq!(sizes, want, "{f:#x}");
+            assert_eq!(q(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE) as GLenum, ct, "{f:#x}");
+            // SAFETY: a name this test made.
+            unsafe { glDeleteTextures(1, &tex) };
+        }
+        TEST_EXTRA_SAMPLED.store(0, core::sync::atomic::Ordering::Relaxed);
     }
 }
