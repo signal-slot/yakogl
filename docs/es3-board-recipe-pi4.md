@@ -65,7 +65,13 @@ cts-build-zephyr: libraries in <WORK>/build
 ```
 
 and `<WORK>/build/modules/gles3/libdeqp-gles3-package.a` present (the file the
+<<<<<<< HEAD
 image builder checks for). The gles2 stage 1 built it in 101 s on 64 cores and
+=======
+image builder checks for). Measured on 2026-10-11 (`stage1-pi4`,
+`docs/board-sessions/pi4-deqp-stage1-gles3.md`): the stage 1 built in 203 s
+on 12 cores, and image A1 linked at 161,256 KB (61.51 % of the window). The gles2 stage 1 built it in 101 s on 64 cores and
+>>>>>>> 616e87ad144b08fa37533d0418c1026ccb3d7579
 314 s on 12 loaded ones (`pi4-deqp-stage1.md`); gles3 has about 15 % more
 sources. Keep `<WORK>` as `DEQP_WORK` for the farm:
 `<ccfarm-env name="DEQP_WORK_GLES3" ...>` in the session's report, since
@@ -188,6 +194,64 @@ What a row can say instead, and what to do:
   board; the chain stops (`TREE_RETRIES` is 0 on the Pi 4). `rc=5`: the board
   did not come back to Linux; the chain stops, a person looks at the board.
 
+<<<<<<< HEAD
+=======
+### On the farm: `pi4-elegance`
+
+`pi4-elegance` is the farm's Pi 4 (resource kind `pi4`). A ccfarm session
+asks for it with `requirements.resources: ["resource:pi4-elegance"]` (or
+`"target:pi4"` plus `"capability:flash"` and `"capability:serial-console"`),
+and ccfarm fills `${resource.pi4.user}`, `${resource.pi4.host}` and
+`${resource.pi4.device}` the way `.ccfarm/project.toml`'s `deqp-tree-pi4`
+stage does. From the repository root, with stage 1 as `DEQP_WORK_GLES3`
+(`docs/board-sessions/pi4-deqp-stage1-gles3.md`) and the images built by
+section 3 into `build/deqp/pi4-gles3-$HEAD8`, the exact lines are:
+
+```sh
+HEAD8=$(git rev-parse --short=8 HEAD)
+export BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device}
+export BOARD_MUSTPASS=$PWD/tools/cts/gles3-mustpass.txt
+# the first image alone: proves the size, the boot and the ES 3.0 context before 8 h of board time
+TREE_IMAGE_DIR=build/deqp/pi4-gles3-$HEAD8 TREE_ROWS=0 \
+    tools/board.sh pi4 tree tools/cts/pi4-gles3-tree.txt records/pi4/gles3-$HEAD8
+# the rest (resumable: a finished row of the same image is skipped)
+TREE_IMAGE_DIR=build/deqp/pi4-gles3-$HEAD8 \
+    tools/board.sh pi4 tree tools/cts/pi4-gles3-tree.txt records/pi4/gles3-$HEAD8
+tools/board.sh pi4 tally records/pi4/gles3-$HEAD8
+```
+
+and, unset `BOARD_MUSTPASS`, the ES 2.0 rows of section 8 with the gles2
+stage 1 (`DEQP_WORK`):
+
+```sh
+unset BOARD_MUSTPASS
+DEQP_WORK=$DEQP_WORK tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$HEAD8 D FB1 T1 T3 TF
+TREE_IMAGE_DIR=build/deqp/pi4-$HEAD8 TREE_ROWS=1,4,19,21,24 \
+    tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/es2-$HEAD8
+tools/board.sh pi4 tally records/pi4/es2-$HEAD8
+```
+
+The verdict lines to expect, one per image (A1's shown; every other label
+the same form):
+
+```
+board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:deqp_summary resets=0 record=absent back_after=<s>s
+=== A1 rc=0 <date> <time>
+```
+
+for `LT` on a tree without transform-feedback capture,
+`verdict=` other than `done` with a `deqp: fatal:` line in its record (the
+expected first-run outcome above), and after the last row the tally's
+
+```
+== mustpass: 42810 cases in these records' case filters (0 outside them, not run, left out); <r> with a result (<l> case lines seen)
+```
+
+`TREE_ROWS=0` is A1 (rows count from 0 in table order). The lines above
+were checked against `tools/board.sh` and `pi4-deqp-images.sh` at
+`eb911ac`, not run on the board.
+
+>>>>>>> 616e87ad144b08fa37533d0418c1026ccb3d7579
 ## 5. The tally
 
 The authoritative command, over every record's console:
