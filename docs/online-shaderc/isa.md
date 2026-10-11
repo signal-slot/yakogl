@@ -510,6 +510,103 @@ shader itself, including the `smp` sampling family whose five variants
 (`smp_brief` through `smp_extabc`, 2 to 5 bytes) carry the texture-sampling
 encoding. Unverified here.
 
+## The codec in Rust and how it is measured (M1)
+
+Folded from `docs/online-shaderc/design.md` (2026-09), whose M1 measurement
+this is. The counts are of the corpus of that day, the offline table now under
+`tests/reference/blobs.rs`; the test names are current. The code generator's
+input is the IR of `ir.md` (agreed); a generator builds a `Group` and
+encodes it with `encode_group`, it never writes bytes itself.
+
+```
+isa_tables.rs   generated (tools/pco-isa/); bit sets, forms, enums, operations
+isa.rs          what those tables mean, and the bit-level read and write
+decode.rs       USC bytes -> instruction groups
+encode.rs       instruction groups -> USC bytes
+listing.rs      one group as text (yakogl-tools usc-dis)
+```
+
+A shader is a sequence of **instruction groups**. A group's header gives its
+length in 16-bit words, the ALU it is for (main, bitwise, control), and which
+pipeline phases carry an instruction. The instructions follow in reverse
+phase order, then the lower and upper source sections, the ISS byte and the
+destination section, then padding.
+
+Most of that is self-describing: a source section's leading extension bits
+say how many sources it holds and therefore how long it is, an instruction
+form is picked out by its operation bits, and the group's length is in the
+header. Two things are not, and they are the whole design problem:
+
+* **Which phases are present.** The header's `oporg` names a coarse group
+  (`p0_p1_p2`), not the individual phase-2 slots. The decoder tries the
+  possible phase sets and keeps the one that fits. This is not bookkeeping:
+  the same form means a different operation in a different phase — main op 6
+  is FMAD in phase 0 and MOVC in the move phase — so the phase has to be
+  settled before the bytes can be read at all.
+* **Which sections are present.** An ISS byte carries no discriminator
+  whatsoever, so nothing in the bytes distinguishes "an ISS byte" from "a
+  byte of padding". The rule is structural, and it comes from Mesa's variant
+  selectors rather than from the bit layout: an ISS byte on every MAIN group
+  and no other; a lower and an upper source section on every MAIN and BITWISE
+  group, each at least one byte even when nothing is in it; on a CONTROL
+  group, a section only where that half has a source; and a destination
+  section exactly when the header says a write port is used.
+
+Two rules keep the parse honest:
+
+* **The decoder never guesses.** A group that reads two ways returns
+  `DecodeError::Ambiguous` instead of picking one, and a test asserts that no
+  group in the corpus is ambiguous. Without that, "it round-trips" would mean
+  only "some reading of it round-trips".
+* **An instruction form that names no operation is not a parse.** The form
+  `sngl` is FRCP, FRSQ, FLOG, FEXP, MBYP and the derivatives at particular
+  `sngl_op` values, and nothing at the rest; a form whose operation-selecting
+  fields match no operation in that phase is something the compiler cannot
+  have emitted. This is the rule that makes the parse unique: with it,
+  2,042 of 2,042 blobs; without it, 1,834, with 208 blobs holding a group
+  that reads two ways.
+
+#### What M1 is measured by
+
+`cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online` over
+the whole offline blob table:
+
+* `round_trip_every_blob_in_the_offline_table` — 2,042 of 2,042 blobs,
+  576,296 instruction groups, decoded into instructions and written back byte
+  for byte. This is a test of the tables, not of the blobs: the only way a
+  group re-encodes exactly is that every bit of it was accounted for by some
+  field of the form the decoder chose, so a missing field, a misplaced bit
+  piece or a wrong form all surface as a byte that differs. The encoder
+  zeroes each region before writing it, so a bit no field covers cannot
+  survive by accident.
+* `no_group_in_the_corpus_decodes_two_ways` — the uniqueness above.
+* `isa_coverage` — what the corpus uses, counted:
+  `docs/online-shaderc/isa-coverage.md`. 48 operations and 31 instruction
+  forms across those 576,296 groups. That file is the code generator's target
+  list, and it is regenerated from this decoder so the two cannot drift.
+
+The group count is quoted alongside the blob count on purpose: a decoder that
+stopped after each blob's first group would report every blob as
+round-tripped. 576,296 is also what an independent walk of the group framing
+alone (header length field only, no instruction decoding) counts, which is a
+second instrument agreeing with the first.
+
+### Two readings of the encoding, compared
+
+`tools/isa-extract/pco_isa_extract.py` (pvrgpu-platform, for `isa.md`) and
+`tools/pco-isa/extract.py` (this work, for the Rust tables) both read Mesa's
+`pco_isa.py`. `tools/pco-isa/crosscheck.py` compares what they produce, field
+for field:
+
+    0 disagreements about the encoding, 68 notes
+
+Two independently written programs reading the same declarations and agreeing
+on every bit piece, reserved value, form byte count, pinned value and settable
+mapping is worth more than either on its own. The notes are scope, not
+content, and `tools/pco-isa/README.md` says what has to close before the two
+tables become one - chiefly that `usc-isa.json` does not record which reserved
+fields a form pins, which a codec needs and a reference document does not.
+
 ## Regenerating
 
     tools/isa-extract/pco_isa_extract.py -o docs/online-shaderc/isa/usc-isa.json --stats

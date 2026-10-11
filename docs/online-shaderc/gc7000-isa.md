@@ -7,8 +7,9 @@ GC7000UL — model `0x7000`, revision `0x6204`, product `0x70003`, HALTI5 —
 on the Toradex Verdin i.MX8M Plus.
 
 This is the reference the online shader compiler (`src/shaderc/online/`, task
-#55) encodes to for the **first** target. It is the sibling of `isa.md`, which
-documents the PowerVR Rogue USC and is now reference material only.
+#55) encodes to for the GC7000. It is the sibling of `isa.md`, which documents
+the PowerVR Rogue USC, the AM62P's target; the compiler is the product back end
+on both GPUs (README.md, "Shader compilers").
 
 The machine-readable half is [`isa/gc7000-isa.json`](isa/gc7000-isa.json);
 `gc7000-abi.md` covers what the driver loads before a shader runs.
@@ -423,19 +424,108 @@ most of them on `cmp` (634), `add` (290), `select` (268) and `mad` (220).
 
 ## What is NOT established
 
-- **Nothing here has been checked on silicon.** The corpus check shows the
-  table reads what we ship; it does not show the hardware agrees with the
-  naming. M3 is the first time that is tested.
+- **The naming is checked on silicon only for what the compiler emits.** The
+  corpus check shows the table reads what we ship. Our compiler's code runs on
+  the i.MX8MP (dEQP-GLES2 0 failures on `32778b57`, `tools/cts/RESULTS.md`), so
+  the instructions it emits behave as named; one it never emits is unchecked.
 - **52 of 90 instructions are unexercised** (listed above).
-- **The encode direction is untested.** Decoding 13,854 instructions says the
-  table can read them; it does not say a re-encode reproduces the bytes. That
-  is M1's round trip and it is the check that closes this gap.
+- ~~The encode direction is untested.~~ **Done**: the Rust encoder rebuilds
+  every instruction of the corpus byte for byte, from its operands alone
+  ("The codec in Rust and how it is measured" below).
 - ~~No cross-check against Mesa's own disassembler.~~ **Done** — see "Mesa's
   disassembler reads it the same way" below.
 - `etnaviv.xml`'s `encode` blocks reference `struct etna_inst *`, Mesa's own IR.
   The table keeps those expressions verbatim as documentation of intent; they
   are **not** a specification our encoder can execute, and nothing in
   `src/shaderc/online/` should try to.
+
+## The codec in Rust and how it is measured (M1)
+
+Folded from `docs/online-shaderc/design.md` (2026-09), whose M1 measurement
+this is. The counts are of the corpus of that day, the offline table now under
+`tests/reference/`; the test names are current.
+
+```
+vivante/isa_tables.rs   generated (tools/etna-isa/); one row per operation
+vivante/isa.rs          what those tables mean, and the bit-level read and write
+vivante/decode.rs       128-bit instructions -> operations and fields
+vivante/encode.rs       back again, built from zero
+vivante/listing.rs      one instruction as text (yakogl-tools etna-dis)
+```
+
+This machine is far simpler than the PowerVR. An instruction is a fixed 128
+bits, four little-endian dwords. There is no instruction group, no phase
+model, no padding and no framing to work out: each instruction pins its own
+opcode, and the only question is which operation it is. The description
+(Mesa's etnaviv isaspec XML) is a tree of bitsets — a root with the fields
+every instruction has, intermediate bitsets per instruction shape, a leaf per
+operation — and `tools/etna-isa/extract.py` flattens each leaf's inheritance
+so an operation is just a mask, the values it pins, and a list of fields.
+
+Measured by `cargo test --no-default-features
+--features host-test,gpu-vivante,shaderc-online vivante::`:
+
+* `round_trip_every_blob_in_the_offline_table` — **307 of 307 blobs, 13,852
+  instructions**, decoded and written back byte for byte. The encoder builds
+  each instruction from zero, so a bit the tables do not account for comes
+  back zero and the comparison fails.
+* `no_instruction_in_the_corpus_decodes_two_ways` — nothing is claimed by two
+  operations.
+* `every_operation_covers_all_128_bits` — checked on the tables, not on the
+  corpus, so an operation nothing uses yet cannot hide a hole until the code
+  generator emits it. All 90.
+* `no_dont_care_bit_is_set_in_the_corpus` — see below.
+* `isa_coverage` — 38 of the 90 operations appear, counted:
+  `docs/online-shaderc/gc7000-isa-coverage.md`. `mad` 3,358, `mul` 2,584,
+  `mov` 2,164, `add` 1,091, `select` 606 is the head of the list, and that is
+  where a code generator starts.
+
+#### The builder: the direction a code generator needs
+
+`vivante/build.rs` makes an instruction that never existed — name an
+operation, give it a destination and sources, get 128 bits. Its operand model
+is the machine's: a destination is a register index, a write mask and an
+addressing mode; a source is a register file, an index, an addressing mode, a
+per-component swizzle and the negate and absolute modifiers; the data type is
+three bits the encoding splits across bit 53 and bits 95:94, which `ty()`
+writes so no caller has to know. Nothing allocates, nothing panics: an
+operation that does not exist, a field an operation does not have, or a value
+too wide for its field is a `BuildError`.
+
+Three tests, weakest to strongest:
+
+* the bring-up triangle's shader (`driver/src/vivante/gc_shaders.h`) is a
+  single NOP — the hardware loads attributes straight into the shader's
+  temporaries and reads the outputs back out, so a pass-through needs no
+  arithmetic — and the builder produces those exact words. Weak on its own,
+  four zero dwords, and here because it is the one whose *meaning* is
+  independently known: the driver has drawn a triangle with them on silicon.
+* a field the operation does not have is an error rather than a silently
+  dropped operand, and a value too wide is refused rather than truncated.
+* **every one of the 13,854 instructions the driver ships is rebuilt from its
+  operands, bit for bit**: decode it, read the operands back, build a fresh
+  instruction from those operands alone, compare. A decode/encode round trip
+  only shows the fields are preserved. This shows they can be *stated* — that
+  a caller who knows nothing but "this operation, this destination, these
+  sources, this type" reaches the same instruction, which is exactly what a
+  code generator knows and nothing more.
+
+#### Don't-care bits, and why they have their own test
+
+Seven operations declare bits the description marks `x`: bit 34 of the five
+branch forms and of `call`, and nineteen bits of `store` and `img_store`.
+They belong to no field, so nothing names their value. An encoder that builds
+an instruction from zero would decide they were zero and say nothing about
+it — code with no representation for "this was not modelled", substituting a
+value indistinguishable from a real one. So the mask travels with the
+operation, a decoded instruction carries those bits verbatim, and a test
+records what they actually hold in the table today: nothing, across the 303
+instructions that could have had one set. The first shader that sets one is
+then a named failure rather than a silent change in what the compiler emits.
+
+`every_operation_covers_all_128_bits` was written before this was known and is
+what found it: it failed on seven operations, and the fix was to model the
+bits rather than to widen the test.
 
 ## Regenerating
 
