@@ -15,9 +15,18 @@
 #      every static).
 #
 # Everything is written under build/precompiled/prove/. Prints the counts.
+#
+# prove.sh --artefacts FEATURES builds the tool and prints the paths of the
+# tool and of the rlib it links, and stops: tools/check.sh keys the row by
+# their bytes.
 set -euo pipefail
 
-FEATURES="${1:?usage: prove.sh gpu-powervr|gpu-vivante[,report-es2]}"
+ARTEFACTS=0
+if [ "${1-}" = --artefacts ]; then
+  ARTEFACTS=1
+  shift
+fi
+FEATURES="${1:?usage: prove.sh [--artefacts] gpu-powervr|gpu-vivante[,report-es2]}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 TAG="${FEATURES//,/-}"
@@ -42,6 +51,10 @@ if not tool or not rlib:
     sys.exit("prove.sh: cargo named no yakogl-precompile executable or yakogl rlib")
 print(tool, rlib)')
 DEPS="$(dirname "$RLIB")"
+if [ "$ARTEFACTS" = 1 ]; then
+  echo "$TOOL $RLIB"
+  exit 0
+fi
 
 # 1. twice, two processes, the same bytes
 "$TOOL" -o "$OUT/$TAG.rs" --pin "$COUNTS"

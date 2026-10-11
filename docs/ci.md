@@ -54,11 +54,15 @@ After step 2 (a row runs its binaries concurrently, `cargo_test` in
 | `test host-test,gpu-vivante,shaderc-online` (52 binaries) | 405 s (test run) | 63 s (build check and run) |
 
 The binaries' own run-time inputs are part of the cache key, not only
-their bytes: the tests read `tools/shaders`, `tests/fixtures`,
-`tests/reference` and headers at run time, and `src/test_rules.rs` reads
-`src/` and `tests/`. So the key also hashes every tracked file except the
-documents, the CI files and `check.sh` with its self-tests. For every
-binary but the library's own unit tests it also leaves out `tests/*.rs`.
+their bytes. Since step 4 that part of the key is the files the tests
+open while they run (`TEST_TREE_PATHS` in `tools/check.sh`), measured: the
+580 binaries of every test row run under strace opened, inside the
+checkout, only `tools/shaders`, `tests/fixtures`, `tests/reference`, a few
+files under `tools/cts`, `tools/testdata` and `driver/`, the C sources
+`tests/v3d_glmark2_mem.rs` compiles, and the generated glmark2 corpus;
+the library's unit tests also read `src/` and `tests/`
+(`src/test_rules.rs`). Before step 4 it was every tracked file except the
+documents and the CI files.
 
 After step 3 (`[profile.test] opt-level = 3`), the three slow binaries,
 the same binaries back to back (two runs per arm), load 2 to 8:
@@ -109,6 +113,46 @@ measured). The two red rows are the AM62P images (above). nextest found
 one test that passed only when another test of the same process ran
 first (`gl::shader::tests::a_refused_shader_online_logs_one_summary_line_and_no_source_chunks`,
 fixed in `376e3a64`).
+
+After step 4 (rows through a pool, input keys for the slow rows outside
+cargo, the narrower test key), on this host restricted to 8 cores
+(`taskset -c 0-7`, nuc's count), `tools/check.sh --jobs N --changed
+origin/work/ci-fast` on `fc1bb2a6` (a change to `check.sh`, so every row,
+143), 2026-10-12, every run green. This host has kache, a compiler cache,
+in front of rustc and cc (`~/.cargo/config.toml`), so a build here is
+faster than on a runner; cargo-nextest is not installed here, so the test
+rows ran their binaries themselves.
+
+| run | cache | whole run | test binaries | keyed rows |
+|---|---|---|---|---|
+| `--jobs 1` (target already built) | empty | 1174 s | 492 run | 11 run |
+| `--jobs 2` | empty | 877 s | 492 run | 11 run |
+| `--jobs 4` | empty | 593 s, 547 s (two runs) | 492 run | 11 run |
+| `--jobs 4` | recorded by the run before, same commit | 87 s | 492 skipped | 11 not run |
+
+The rows with an input key, before (`--jobs 1`, empty cache: the run
+that recorded, and a second one) and after (read from the record): the
+Mesa table 189 s and 195 s, the GC7000 table proof 156 s and 153 s, the
+PowerVR one 57 s and 56 s, their ES 2.0 builds 37 s/38 s and 4 s/4 s,
+"no Mesa reference in the artefact" 106 s and 8 s (the second run found
+every archive built, with kache), the no-table and no-knob rows 0 to 2 s,
+and three Python checks (16 s, 14 s, 3 s): each 0 s after, the log
+printing `skip  <row> (passed on main fc1bb2a69)`. The first
+recorded run did not let the next one skip the test binaries: their key
+hashed the glmark2 corpus as it was before the run, which the run's own
+glmark2 row then regenerated from a newer tree (the same bytes on every
+regeneration since, checked); from the second recording on they are
+skipped (the last row of the table).
+
+"No Mesa reference in the artefact" builds 26 release archives, one core
+each (`lto = true`, `codegen-units = 1`), and cargo builds one at a time in
+one target directory: 731 s on nuc in the CI run of `5503e1c4`
+(38148174637), 796 s once here. Since step 4 it builds them in 4 target
+directories of its own at once. The row alone, cold (fresh target
+directories, no compiler cache, 8 cores), the row's functions from
+`fc1bb2a6` and from this change: 782 s before, 224 s after, the same
+counts (controls 4800 and 1224 symbols, 24 products with 0) and the same
+2.4 GB of target directories.
 
 Step 6 (the slow one-test binaries), on this host, 2026-10-12, the same
 binary built before and after each commit, warm build, load 5 to 35
@@ -184,15 +228,25 @@ change to `tests/es3_ubo.rs` changes one binary, so one runs; a change to
 main (never by a pull request's run), so a pull request can only reuse
 passes of what is already on main.
 
-**Non-cargo rows** (the precompiled-table proofs, the Mesa table
-reproduction, the Zephyr images, the generated-file reproductions, the
-artefact symbol counts) get an input key: the git tree hash of the paths the
-row reads plus the ids of the tools it runs. The row's `step` function
-looks the key up before running and records it after a green run on main.
-`check.sh` already names a row's scope; the key is the same idea with exact
-inputs instead of a class. A row without a declared input set has no key
-and always runs; the gate lists those rows in its summary, so the list
-shrinks on purpose, never by accident.
+**Non-cargo rows** with a slow run get an input key (`rowkey` in
+`check.sh`, step 4): the files the row reads (git blob ids, and the
+content of what is changed in the working tree), the bytes of the programs
+it runs and of what it builds and reads (with every shared library they
+load: glslangValidator is a front end to libglslang.so), the toolchain,
+the environment, the row's command and the text of its shell functions.
+Each input set was measured with strace, not only read from the code. The
+keyed rows: the four table proofs, the Mesa table, the three release
+archive rows, and three Python checks. The archive rows also check cargo's
+dep-info against their key on every build, so an input added outside the
+key fails the row instead of being missed. The record is
+`$TEST_OK_DIR/rows/<key>` (next to the test binaries'), written only on
+main; a hit prints `skip  <row> (passed on main <commit>)` and the output
+the row printed on main, and the summary counts it as "not run (passed on
+main)". A row whose inputs cannot all be named has no key and its comment
+says why: the Zephyr images (the west workspace and the SDK are outside
+the checkout), common-tally (it runs board.sh, which runs cargo and git
+over the checkout), the board.sh self-test (not traced). The other rows
+take about a second.
 
 Both caches live on the runner (`~/.cache/yakogl/`), next to the cargo
 target directory that already persists between runs. A cache entry is a
@@ -219,11 +273,18 @@ on this host, no cache: the GC7000 online row 44 s (own runner) and
 52 s (nextest); the PowerVR online row 136 s and 97 s, because nextest
 splits `tests/usc_limits.rs` over processes.
 
-**Across rows.** Rows of one scope class are independent processes on one
-target directory. cargo serializes the builds on its directory lock, which
-is short with a warm cache, and the test runs then overlap. `check.sh` runs
-rows through a pool (`--jobs N`), keeping the log per row and the summary
-line as today; a red row is reported the same way.
+**Across rows.** `check.sh --jobs N` (`YAKOGL_CHECK_JOBS`, step 4) runs up
+to N rows at once, each in its own process with its output in files, and
+prints them in the script's order, so the log reads the same with any N
+and a red row's output stays under its FAIL line. cargo serializes builds
+on its directory lock; what the pool must order is a path two rows leave
+different, so a row that shares one names it (`uses w:NAME` / `r:NAME`):
+an uplifted binary or archive rebuilt per feature set, a generated table
+another row reads, a scratch directory, and the checkout itself for the
+rows that edit it. The list is in `check.sh`; one entry was found by the
+strace survey (yakogl-precompile's tests write fixed paths under
+`build/test-tmp`). The CI runs 4 jobs (`gate.yml`): on 8 cores, 4 jobs
+took half the time of 1 (section 1); more was not measured.
 
 **Across machines.** When one machine is not enough, the workflow splits a
 run into shards (one job per scope class: `pvr`, `vivante`, `v3d`,
@@ -274,8 +335,12 @@ the run that writes the caches, so the next pull request starts from it.
    counts skipped-by-cache rows separately from the `--changed` skips.
 3. `Cargo.toml`: `[profile.test] opt-level = 3`, with a measurement of the
    four slow binaries before and after in the commit message.
-4. `check.sh`: rows run through a pool (`--jobs`), and the non-cargo rows
-   get input keys.
+4. Done: `check.sh` runs rows through a pool (`--jobs`, `gate.yml` sets
+   4), the slow rows outside cargo have input keys, the test binaries'
+   tree key holds only what the tests read, and the artefact row builds
+   its archives in four directories at once. Measured in section 1: a full
+   run on 8 cores 1174 s with one job, 547 to 593 s with four, 87 s when
+   the same commit's record exists.
 5. `gate.yml`: shards, one job per scope class, when a second runner
    instance exists. Needs the owner: runner instances (which machines, how
    many), and the farm's slots on them.
