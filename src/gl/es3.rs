@@ -2288,6 +2288,7 @@ mod tests {
     /// a linked program (ES 3.0 2.12.5; dEQP negative_api.state.
     /// get_frag_data_location).
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn program_binary_length_is_zero_and_frag_data_needs_a_link() {
         let gl = fresh();
         let p = gl.program("passthrough.vert", "uniform_color.frag");

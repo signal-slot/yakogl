@@ -189,6 +189,8 @@ pub fn reset_context(index: usize) {
 }
 
 #[cfg(test)]
+// the far-object query test is ES 3.0 only: a report-es2 build leaves its imports idle
+#[cfg_attr(feature = "report-es2", allow(unused_imports, dead_code))]
 mod tests {
     use super::*;
     use crate::gl::buffer::{glBindBuffer, glBufferData, glDeleteBuffers, glIsBuffer};
@@ -276,6 +278,7 @@ mod tests {
     /// attachment, the attachment's OBJECT_NAME, a vertex array and an
     /// indexed uniform-buffer point all answer the application's name.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn far_objects_are_usable_and_every_query_answers_their_name() {
         let gl = TestGl::new(8, 8);
         let (fb, tex, rb, buf) = (FAR, FAR + 1, FAR + 2, FAR + 3);

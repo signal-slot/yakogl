@@ -7083,6 +7083,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn tex_sub_image_honours_unpack_row_length() {
         /* a 2x2 sub-rectangle at (1,1) of a 4-wide client image (the Qt RHI pattern) */
         let gl = TestGl::new(4, 4);
@@ -7105,6 +7106,7 @@ mod tests {
     /// the skipped texels too. The skips were read back as 0 and ignored
     /// until 2026-09-24.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn tex_sub_image_honours_the_unpack_skips() {
         let gl = TestGl::new(4, 4);
         let name = new_tex();
@@ -7124,6 +7126,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn tex_image_honours_unpack_row_length_with_alignment() {
         let gl = TestGl::new(4, 4);
         let name = new_tex();
@@ -7257,6 +7260,7 @@ mod tests {
     /// that far apart, and a backend tiling from them at w*4 would read the
     /// wrong texels.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn the_upload_hooks_stride_follows_unpack_row_length() {
         let gl = TestGl::new(8, 8);
         let name = new_tex();
@@ -9275,6 +9279,7 @@ mod tests {
 
     /* ---- 3D textures: slices tiled in a grid (upstream c1e6084) ------------------------------------- */
 
+    #[cfg(not(feature = "report-es2"))]
     fn binding_3d() -> GLint {
         let mut v: GLint = -1;
         // SAFETY: room for one value.
@@ -9283,6 +9288,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn a_3d_texture_has_its_own_binding() {
         let gl = TestGl::new(4, 4);
         let arr = bind_new(GL_TEXTURE_2D_ARRAY);

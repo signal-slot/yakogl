@@ -2714,6 +2714,16 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
         /* no program binary format exists (GL_NUM_PROGRAM_BINARY_FORMATS 0),
          * so a binary has no length; dEQP's program_binary TCU_CHECKs the
          * query answered */
+        GL_PROGRAM_BINARY_LENGTH
+        | GL_PROGRAM_BINARY_RETRIEVABLE_HINT
+        | GL_ACTIVE_UNIFORM_BLOCKS
+        | GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH
+            if crate::REPORT_ES2 =>
+        {
+            /* ES 2.0 6.1.8 has the nine other pnames only */
+            c.set_error(GL_INVALID_ENUM, FUNC);
+            return;
+        }
         GL_PROGRAM_BINARY_LENGTH => 0,
         GL_PROGRAM_BINARY_RETRIEVABLE_HINT => 0,
         GL_ATTACHED_SHADERS => (p.vs != 0) as GLint + (p.fs != 0) as GLint,

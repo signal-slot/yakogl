@@ -422,8 +422,19 @@ pub unsafe extern "C" fn glColorMask(r: GLboolean, g: GLboolean, b: GLboolean, a
 
 /* --------------------------------------------------------------------------- */
 
+/// The capabilities ES 3.0 adds to the nine of ES 2.0 (4.1 and 6.1.1): a
+/// `report-es2` build refuses them with GL_INVALID_ENUM in glEnable, glDisable,
+/// glIsEnabled and the glGet* queries.
+fn es3_only_cap(cap: GLenum) -> bool {
+    crate::REPORT_ES2 && matches!(cap, GL_PRIMITIVE_RESTART_FIXED_INDEX | GL_RASTERIZER_DISCARD)
+}
+
 fn set_cap(cap: GLenum, on: bool) {
     let Some(c) = context::current() else { return };
+    if es3_only_cap(cap) {
+        c.set_error(GL_INVALID_ENUM, "set_cap");
+        return;
+    }
     match cap {
         GL_DEPTH_TEST => c.depth_test = on,
         GL_BLEND => c.blend = on,
@@ -482,10 +493,30 @@ pub unsafe extern "C" fn glHint(target: GLenum, mode: GLenum) {
     }
 }
 
+/// The pixel-store names ES 3.0 adds to PACK/UNPACK_ALIGNMENT.
+fn es3_pixel_store(pname: GLenum) -> bool {
+    matches!(
+        pname,
+        GL_UNPACK_ROW_LENGTH
+            | GL_UNPACK_SKIP_ROWS
+            | GL_UNPACK_SKIP_PIXELS
+            | GL_UNPACK_SKIP_IMAGES
+            | GL_UNPACK_IMAGE_HEIGHT
+            | GL_PACK_ROW_LENGTH
+            | GL_PACK_SKIP_ROWS
+            | GL_PACK_SKIP_PIXELS
+    )
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glPixelStorei(pname: GLenum, param: GLint) {
     gl_trace!(glPixelStorei);
     let Some(c) = context::current() else { return };
+    if crate::REPORT_ES2 && es3_pixel_store(pname) {
+        /* ES 2.0 3.6.1 Table 3.1 has the two alignments only */
+        c.set_error(GL_INVALID_ENUM, "glPixelStorei");
+        return;
+    }
     match pname {
         GL_UNPACK_ALIGNMENT | GL_PACK_ALIGNMENT => {
             if param != 1 && param != 2 && param != 4 && param != 8 {
@@ -543,6 +574,9 @@ pub unsafe extern "C" fn glDisable(cap: GLenum) {
 
 /// The enable flag of `cap`, `None` when `cap` is not a capability.
 fn is_enabled(c: &GlContext, cap: GLenum) -> Option<bool> {
+    if es3_only_cap(cap) {
+        return None;
+    }
     Some(match cap {
         GL_DEPTH_TEST => c.depth_test,
         GL_BLEND => c.blend,
@@ -641,8 +675,12 @@ pub unsafe extern "C" fn glBlendFunc(sfactor: GLenum, dfactor: GLenum) {
 pub unsafe extern "C" fn glBlendEquationSeparate(modeRGB: GLenum, modeAlpha: GLenum) {
     gl_trace!(glBlendEquationSeparate);
     let Some(c) = context::current() else { return };
-    /* ES 3.0 4.1.7 adds MIN and MAX to the ES 2.0 three */
-    let valid = |m: GLenum| matches!(m, GL_FUNC_ADD | GL_FUNC_SUBTRACT | GL_FUNC_REVERSE_SUBTRACT | GL_MIN | GL_MAX);
+    /* ES 3.0 4.1.7 adds MIN and MAX to the ES 2.0 three; GL_EXT_blend_minmax
+     * is not in ALL_EXTENSION_NAMES, so a report-es2 build refuses them */
+    let valid = |m: GLenum| {
+        matches!(m, GL_FUNC_ADD | GL_FUNC_SUBTRACT | GL_FUNC_REVERSE_SUBTRACT)
+            || (!crate::REPORT_ES2 && matches!(m, GL_MIN | GL_MAX))
+    };
     if !valid(modeRGB) || !valid(modeAlpha) {
         c.set_error(GL_INVALID_ENUM, "glBlendEquationSeparate");
         return;
@@ -965,6 +1003,60 @@ fn normalized_to_int(f: GLfloat) -> GLint {
     (f as f64 * GLint::MAX as f64) as GLint
 }
 
+/// The glGet* pnames ES 3.0 adds (audit Table A row 20, with the two caps of
+/// row 14 and the pixel-store names of row 19). `report-es2` answers them with
+/// GL_INVALID_ENUM; the version queries and GL_MAX_DRAW_BUFFERS have their own
+/// arms in `get_integerv`.
+fn es3_only_pname(pname: GLenum) -> bool {
+    es3_only_cap(pname)
+        || es3_pixel_store(pname)
+        || matches!(
+            pname,
+            GL_COPY_READ_BUFFER_BINDING
+                | GL_COPY_WRITE_BUFFER_BINDING
+                | GL_PIXEL_PACK_BUFFER_BINDING
+                | GL_PIXEL_UNPACK_BUFFER_BINDING
+                | GL_UNIFORM_BUFFER_BINDING
+                | GL_SAMPLER_BINDING
+                | GL_TRANSFORM_FEEDBACK_BINDING
+                | GL_MAX_VARYING_COMPONENTS
+                | GL_MAX_VERTEX_OUTPUT_COMPONENTS
+                | GL_MAX_FRAGMENT_INPUT_COMPONENTS
+                | GL_MAX_VERTEX_UNIFORM_COMPONENTS
+                | GL_MAX_FRAGMENT_UNIFORM_COMPONENTS
+                | GL_MAX_VERTEX_UNIFORM_BLOCKS
+                | GL_MAX_FRAGMENT_UNIFORM_BLOCKS
+                | GL_MAX_COMBINED_UNIFORM_BLOCKS
+                | GL_MAX_UNIFORM_BUFFER_BINDINGS
+                | GL_MAX_UNIFORM_BLOCK_SIZE
+                | GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT
+                | GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS
+                | GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS
+                | GL_MAX_SAMPLES
+                | GL_NUM_PROGRAM_BINARY_FORMATS
+                | GL_PROGRAM_BINARY_FORMATS
+                | GL_MAX_ARRAY_TEXTURE_LAYERS
+                | GL_MAX_3D_TEXTURE_SIZE
+                | GL_MAX_ELEMENT_INDEX
+                | GL_MAX_ELEMENTS_VERTICES
+                | GL_MAX_ELEMENTS_INDICES
+                | GL_MAX_TEXTURE_LOD_BIAS
+                | GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS
+                | GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS
+                | GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS
+                | GL_TRANSFORM_FEEDBACK_ACTIVE
+                | GL_TRANSFORM_FEEDBACK_PAUSED
+                | GL_MIN_PROGRAM_TEXEL_OFFSET
+                | GL_MAX_PROGRAM_TEXEL_OFFSET
+                | GL_MAX_SERVER_WAIT_TIMEOUT
+                | GL_READ_FRAMEBUFFER_BINDING
+                | GL_READ_BUFFER
+                | GL_TEXTURE_BINDING_2D_ARRAY
+                | GL_TEXTURE_BINDING_3D
+                | 0x90EB /* GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS (ES 3.1) */
+        )
+}
+
 /// The body of glGetIntegerv: fills `out` and returns how many values pname
 /// wrote (0 for an unknown pname, after recording GL_INVALID_ENUM, and for
 /// the empty GL_PROGRAM_BINARY_FORMATS list).
@@ -983,6 +1075,11 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
             };
         }
         return n;
+    }
+
+    if crate::REPORT_ES2 && es3_only_pname(pname) {
+        c.set_error(GL_INVALID_ENUM, "glGetIntegerv");
+        return 0;
     }
 
     let v: GLint = match pname {
@@ -1595,6 +1692,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn transform_feedback_is_never_active_and_says_so() {
         let gl = TestGl::new(8, 8);
         assert_eq!(geti1(GL_TRANSFORM_FEEDBACK_ACTIVE), 0);
@@ -2016,6 +2114,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn min_and_max_blend_equations_are_recorded_like_the_others() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -2030,6 +2129,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn the_es3_pixel_store_parameters_can_be_queried() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -2599,6 +2699,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn blend_equation_accepts_min_and_max() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -2803,6 +2904,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn pixel_store_row_length_is_recorded() {
         let gl = TestGl::new(8, 8);
         assert_eq!(gl.ctx().unpack_row_length, 0);
@@ -2820,6 +2922,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn pixel_store_row_length_can_be_queried() {
         let gl = TestGl::new(8, 8);
         // SAFETY: plain GL calls.
@@ -2829,6 +2932,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn pixel_store_unmodelled_es3_parameters_are_accepted() {
         let gl = TestGl::new(8, 8);
         for p in [
@@ -3018,6 +3122,7 @@ mod tests {
     /// from the 3.0.6 text) is a listed gap in tools/cts/RESULTS.md, "ES 3.0
     /// conformance gaps"; raising one moves both this pin and that row.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn the_es3_limits_are_what_this_gpu_carries_and_programs() {
         let _gl = TestGl::new(8, 8);
         let vivante = cfg!(feature = "gpu-vivante");
@@ -3083,6 +3188,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn limits_match_the_context_capacities() {
         let gl = TestGl::new(8, 8);
         assert_eq!(geti1(GL_MAX_VERTEX_ATTRIBS) as usize, gl.ctx().attribs.len());
@@ -3152,6 +3258,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn program_binary_formats_is_an_empty_list() {
         let gl = TestGl::new(8, 8);
         assert_eq!(geti1(GL_NUM_PROGRAM_BINARY_FORMATS), 0);
@@ -3187,6 +3294,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn binding_queries_report_the_context_bindings() {
         let gl = TestGl::new(8, 8);
         assert_eq!(geti1(GL_ACTIVE_TEXTURE), GL_TEXTURE0 as GLint);
@@ -3260,6 +3368,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn get_floatv_and_booleanv_unknown_pname_is_invalid_enum_and_writes_nothing() {
         /* the C library (and the port before this) wrote one zero: a failing command has no effect */
         let gl = TestGl::new(8, 8);
@@ -3324,6 +3433,7 @@ mod tests {
     /// allows and ES 2.0 4.1.6 does not (state_query.integers.blend_dst_*).
     /// The bindings were GL_INVALID_ENUM until 2026-09-24.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn es3_bindings_and_the_saturate_destination_factor_are_queryable() {
         use crate::gl::buffer::{glBindBuffer, glGenBuffers};
         let gl = TestGl::new(8, 8);
@@ -3371,6 +3481,7 @@ mod tests {
     /// honours the restart (`draw::tests::primitive_restart_*`), and the
     /// discard waits for transform feedback.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn es3_caps_are_recorded_and_queryable() {
         let gl = TestGl::new(8, 8);
         for cap in [GL_PRIMITIVE_RESTART_FIXED_INDEX, GL_RASTERIZER_DISCARD] {
@@ -3390,6 +3501,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn cube_and_array_texture_bindings_are_queryable_per_unit() {
         let gl = TestGl::new(8, 8);
         let mut t = [0 as GLuint; 2];
