@@ -585,9 +585,12 @@ CLAMP_TO_EDGE and do not read the extension list.
   `src/gl/texture.rs` ("dEQP texture.completeness.2d.npot_size expects it",
   two places) and the `cube_chain_is_complete` comment ("which dEQP expects
   too"). With the extension listed the CTS expects `GL_NO_ERROR`.
-- No host test replays the CTS sequences at their sizes
-  (`Incomplete2DSizeCase` at 255x255, the cube size and wrap cases with the
-  texture bound to `GL_TEXTURE_2D`). The boards pass them; a host test
-  would keep it so.
+- Closed: `tests/es2_npot.rs` replays the 18 cases on the host, one test
+  per case, in the CTS's order and at its sizes (`Incomplete2DSizeCase` at
+  255x255, the cube size and wrap cases with the texture bound to
+  `GL_TEXTURE_2D`), on the PowerVR shape and the layered (GC7000, V3D)
+  shape. It asserts `GL_NO_ERROR` after every call and the completeness and
+  sampling of the bind the back end receives, not pixels (the stand-in back
+  end draws nothing). It needs `shaderc-online`.
 - The PowerVR's level arithmetic for an NPOT 2D chain is exercised only by
   `2d.npot_size` (a 63x63 level 2 at a 64-texel pitch) and glmark2's terrain.

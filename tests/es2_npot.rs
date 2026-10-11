@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! GL_OES_texture_npot: the 18 dEQP-GLES2 cases that depend on it, replayed
 //! on the host (item es2-npot-cases; the case list and what the CTS source
-//! checks are in docs/investigations/es2-npot-cases.md, section 3.1).
+//! checks are in docs/es2-cts-failures.md, section H.2 and H.3).
 //!
 //! Every test is named after its case (`texture_completeness_2d_npot_t_repeat`
 //! is `dEQP-GLES2.functional.texture.completeness.2d.npot_t_repeat`) and makes
@@ -152,6 +152,9 @@ const fn backend(name: &'static CStr, native_layered: bool) -> YakoglBackend {
         samples_texel_copies: false,
         attachment_gone: None,
         depth_resolve: None,
+        query_begin: None,
+        query_end: None,
+        query_result: None,
     }
 }
 
