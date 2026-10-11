@@ -342,7 +342,8 @@ values! {
     GLMARK2_WHY_FILE = 4;
     GLMARK2_WHY_OTHER = 15;
     // kind GPU_STOP: the cause (gpu::pvr::freelist STOP_*).
-    // 1 is not a cause: a refused grow is survived (pvr-render-pool.md).
+    // 1 is not a cause: a refused grow is survived
+    // (tools/cts/log/investigations/pvr-render-pool.md).
     GPU_STOP_AT_MAXIMUM = 2;
     GPU_STOP_GROW_TABLE_FULL = 3;
     GPU_STOP_KICK_TIMEOUT = 4;

@@ -53,8 +53,8 @@ hash mismatch, rebuild the C records (`tools/pvr/km/record_c.sh <dir>`, needs
   reconstructed: 3072 pages listed; firmware current 2048 ready 0, stack
   top 2047; 0 HWRT datas reset to HWR").
   The third: the render service's stops apply without the grow knob too
-  (driver/docs/pvr-render-pool.md, the common set's round 2). The
-  scenario asks list 6, at its maximum of 16 pages with no room for a
+  (tools/cts/log/investigations/pvr-render-pool.md, the common set's round 2).
+  The scenario asks list 6, at its maximum of 16 pages with no room for a
   grow, to grow 22 times. Each "no grow (reserve 8, pool 1024/1024, 16/16
   pages)" is now followed by "render: stopped: the parameter manager out
   of memory with its freelist at the maximum (list 6, 0 KiB); ..." (22

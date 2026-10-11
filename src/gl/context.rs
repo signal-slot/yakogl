@@ -908,10 +908,11 @@ static GROUP_REFS: Global<[u8; MAX_CONTEXTS]> = Global::zeroed();
 static ERRORS_LOGGED: Global<u32> = Global::zeroed();
 
 /// The GL core's lines of the run-end owner report
-/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`, driver/docs/pvr-render-pool.md): the
-/// objects of every share group in use by kind, every context's own default
-/// surface, and the draw path's programs and staging. Storage an EGLImage
-/// owns (`external`) is not the object's and is left out. Returns their KiB.
+/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
+/// tools/cts/log/investigations/pvr-render-pool.md): the objects of every share
+/// group in use by kind, every context's own default surface, and the draw
+/// path's programs and staging. Storage an EGLImage owns (`external`) is not
+/// the object's and is left out. Returns their KiB.
 #[no_mangle]
 pub extern "C" fn yakogl_pool_owners() -> u64 {
     use crate::osal::OwnerTally;

@@ -527,9 +527,9 @@ fn a_random_run_over_three_heaps_conserves_each_heap() {
 
 /* ---- what the C checks could not see -------------------------------------- */
 
-/// Mechanism 3 of driver/docs/pvr-render-pool.md, on the driver's own
-/// cursors: GENERAL A, a USC page, GENERAL B are allocated in turn (a
-/// program compiled between two buffers), then all three are freed. A and B
+/// Mechanism 3 of tools/cts/log/investigations/pvr-render-pool.md, on the
+/// driver's own cursors: GENERAL A, a USC page, GENERAL B are allocated in turn
+/// (a program compiled between two buffers), then all three are freed. A and B
 /// are adjacent in the GENERAL heap's VA but not in the carveout, so they
 /// never merge, and a request of A + B bytes goes to the bump although
 /// A + B bytes of GENERAL are free.

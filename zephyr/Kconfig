@@ -84,15 +84,15 @@ config YAKOGL_PVR_POOL_RECLAIM
 	  last one submitted completes, even when nothing is being recorded:
 	  memory an application deletes between two scenes cannot be reused
 	  while it sets up the next one (glmark2's terrain,
-	  driver/docs/pvr-render-pool.md, mechanism 2). With this, a free made
-	  while no frame is open waits only for the last submitted kick
-	  (pvr_backend_free_fence). An allocation the pool refuses first gets
-	  back, without waiting, what completed kicks held, and is tried again.
-	  If it is still refused, it waits for the submitted kicks (bounded by
-	  the backend's own submit wait; the allocating GL call blocks for
-	  it), gets back what they held, and is tried once more. On by
-	  default: without it glmark2's shadow depth texture (1600x1200) was
-	  refused beside 23932 KiB of held frees and its framebuffer read
+	  tools/cts/log/investigations/pvr-render-pool.md, mechanism 2). With
+	  this, a free made while no frame is open waits only for the last
+	  submitted kick (pvr_backend_free_fence). An allocation the pool
+	  refuses first gets back, without waiting, what completed kicks held,
+	  and is tried again. If it is still refused, it waits for the submitted
+	  kicks (bounded by the backend's own submit wait; the allocating GL
+	  call blocks for it), gets back what they held, and is tried once more.
+	  On by default: without it glmark2's shadow depth texture (1600x1200)
+	  was refused beside 23932 KiB of held frees and its framebuffer read
 	  GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT (AM62P, 2026-10-04; gl_test 178
 	  heldfree reproduces it). n keeps the old hold, for measurement.
 
@@ -108,12 +108,12 @@ config YAKOGL_PVR_FRAME_SETS
 	  others. At the defaults, 4 x (1024 KiB GENERAL + 768 KiB PDS), this is
 	  7488 KiB of the render pool: the arenas are 2.0 and 2.4 times
 	  glmark2's largest frame on the AM62P, measured
-	  (driver/docs/pvr-render-pool.md; 4 x (4096 + 1024) took 20800 KiB).
-	  Another configuration is a measurement until the regression set has
-	  run with it; judge it by "pool owner backend frame arenas high-water"
-	  (YAKOGL_PVR_POOL_OWNERS). A frame that overflows an arena is split,
-	  and a draw that does not fit an empty frame is refused, naming the
-	  arena.
+	  (tools/cts/log/investigations/pvr-render-pool.md; 4 x (4096 + 1024)
+	  took 20800 KiB). Another configuration is a measurement until the
+	  regression set has run with it; judge it by "pool owner backend frame
+	  arenas high-water" (YAKOGL_PVR_POOL_OWNERS). A frame that overflows an
+	  arena is split, and a draw that does not fit an empty frame is
+	  refused, naming the arena.
 
 config YAKOGL_PVR_ARENA_GEN_KB
 	int "PowerVR: each frame set's GENERAL arena, KiB"
@@ -139,8 +139,8 @@ config YAKOGL_PVR_POOL_OWNERS
 	  depth/stencil) and the GL core (buffers, textures, renderbuffers,
 	  default surfaces, programs, draw staging). Then one balance line
 	  against the pool's live bytes, with what no owner claims printed as
-	  "unaccounted" (driver/docs/pvr-render-pool.md, the fixed ~36 MiB).
-	  Off by default; it walks every table once, at the end.
+	  "unaccounted" (tools/cts/log/investigations/pvr-render-pool.md, the
+	  fixed ~36 MiB). Off by default; it walks every table once, at the end.
 
 config YAKOGL_GC_POOL_NO_REUSE
 	bool "GC7000: never reuse freed GPU memory (a measurement; leaks)"

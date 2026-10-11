@@ -44,8 +44,9 @@ config SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND
 	  the 64 MiB carveout's sizing. A grow is refused only when the pool
 	  refused the refill and refuses again when the firmware asks; a
 	  refused grow is answered with zero pages, and what the firmware
-	  then does is unmeasured (driver/docs/pvr-render-pool.md). Off until
-	  gl_test and glmark2 have run with it.
+	  then does is unmeasured
+	  (tools/cts/log/investigations/pvr-render-pool.md). Off until gl_test
+	  and glmark2 have run with it.
 
 config SAFEUI_GPU_PVR_FL_READY_PAGES
 	bool "Keep the firmware's ready pages in the growable freelists (opt-in)"
@@ -61,9 +62,9 @@ config SAFEUI_GPU_PVR_FL_READY_PAGES
 	  firmware uses build's READY as a reserve at its first
 	  out-of-memory event; in a grow answer it takes NEW and sets ready
 	  to the grow's own pages, whatever READY says
-	  (driver/docs/pvr-render-pool.md, "The firmware's counts before the
-	  answer"). So only build's share has an effect. Independent of
-	  SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND; opt-in.
+	  (tools/cts/log/investigations/pvr-render-pool.md, "The firmware's
+	  counts before the answer"). So only build's share has an effect.
+	  Independent of SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND; opt-in.
 
 config SAFEUI_GPU_PVR_GROW_SCENE
 	bool "Say the scene's kicks and time at every freelist grow request (instrument)"
@@ -73,9 +74,10 @@ config SAFEUI_GPU_PVR_GROW_SCENE
 	  and the time (ARM generic timer) since the application last called
 	  pvr_render_scene_begin(). The glmark2 sample calls it as each
 	  scene's frames start. The firmware's freelist words are not a live
-	  measure of the TA's use (driver/docs/pvr-render-pool.md, "the grow
-	  scene"), so this is the host's side. The yakogl-drivers feature
-	  pvr-grow-scene. Off for applications.
+	  measure of the TA's use
+	  (tools/cts/log/investigations/pvr-render-pool.md, "the grow scene"),
+	  so this is the host's side. The yakogl-drivers feature pvr-grow-scene.
+	  Off for applications.
 
 config SAFEUI_GPU_PVR_FL_PROBE_MAX_PAGES
 	int "Probe: cap the global freelists at this many pages (0: off)"
@@ -87,8 +89,9 @@ config SAFEUI_GPU_PVR_FL_PROBE_MAX_PAGES
 	  listed + 64 ready), a list cannot grow at all, and the firmware
 	  asks for no grow: the AM62P measured the parameter manager out of
 	  memory at the list's maximum, one UPDATE_STATS notice and a kick
-	  that never completed (driver/docs/pvr-render-pool.md, the probe).
-	  For an unserved grow use SAFEUI_GPU_PVR_FL_PROBE_NO_RESERVE.
+	  that never completed (tools/cts/log/investigations/pvr-render-pool.md,
+	  the probe). For an unserved grow use
+	  SAFEUI_GPU_PVR_FL_PROBE_NO_RESERVE.
 
 config SAFEUI_GPU_PVR_FL_PROBE_SERVE_MAX
 	int "Probe: refuse freelist grows after this many served (0: off)"
@@ -99,7 +102,8 @@ config SAFEUI_GPU_PVR_FL_PROBE_SERVE_MAX
 	  served grows"), as the render pool refused glmark2's grows at 1280
 	  pages. With the grow knob on and 3 here, gl_test case 174 makes
 	  glmark2's FWCCB sequence before its lost command: three served
-	  grows, then refusals (driver/docs/pvr-render-pool.md).
+	  grows, then refusals
+	  (tools/cts/log/investigations/pvr-render-pool.md).
 
 config SAFEUI_GPU_PVR_FL_PROBE_NO_RESERVE
 	bool "Probe: no grow reserve, so every grow is answered with zero pages"
@@ -110,8 +114,9 @@ config SAFEUI_GPU_PVR_FL_PROBE_NO_RESERVE
 	  off, at the usual maximum (4096 pages at the 64 MiB carveout). The
 	  firmware asks for a grow and the host answers zero pages ("no grow
 	  (reserve 0, pool 0/0, ...)"). It settles what the firmware does
-	  with that answer (driver/docs/pvr-render-pool.md): a partial render
-	  (freelist.rs's old comment) or a kick that never completes.
+	  with that answer (tools/cts/log/investigations/pvr-render-pool.md): a
+	  partial render (freelist.rs's old comment) or a kick that never
+	  completes.
 
 config SAFEUI_GPU_PVR_FW_UNCACHED
 	bool "Give the firmware the uncached window for the host's objects"
@@ -127,18 +132,18 @@ config SAFEUI_GPU_PVR_FW_UNCACHED
 	  appeared 240 us after the write offset passed it, in 5 of 20 runs of
 	  gl_test 174, against 0 of 20 with this on (same tree); and the
 	  firmware took our KCCB posts 5-8 ms late, against 1 ms with this on
-	  (gpu::pvr::mem heap_fwaddr, driver/docs/pvr-render-pool.md). If the
-	  firmware does not map region 0x4 over its heap, it faults at its
-	  first read of a host object. n gives the cached window back, for
-	  measurement only.
+	  (gpu::pvr::mem heap_fwaddr,
+	  tools/cts/log/investigations/pvr-render-pool.md). If the firmware does
+	  not map region 0x4 over its heap, it faults at its first read of a
+	  host object. n gives the cached window back, for measurement only.
 
 config SAFEUI_GPU_PVR_FWCCB_CHECK
 	bool "Re-read an empty FWCCB slot and watch the write offset (instrument)"
 	help
 	  An instrument for the named defect "FWCCB slot read empty (a lost
-	  command)" (driver/docs/pvr-render-pool.md): twice on the AM62P the
-	  host read a firmware CCB slot whose type had no command magic,
-	  skipped it, and the firmware's request was never answered. With
+	  command)" (tools/cts/log/investigations/pvr-render-pool.md): twice on
+	  the AM62P the host read a firmware CCB slot whose type had no command
+	  magic, skipped it, and the firmware's request was never answered. With
 	  this on, such a slot is re-read every 20 us for up to 2 ms before
 	  it is consumed ("FWCCB: slot S read empty; type 0x... after N us",
 	  or "still empty after 2000 us"), and the write offset is checked
@@ -163,7 +168,7 @@ config SAFEUI_GPU_PVR_FINE_WAIT
 	  swap). With this option it reads it every 20 us (the yakogl-drivers
 	  feature pvr-fine-wait); the FWCCB service, the HWR check and the
 	  timeout stay per millisecond. Opt-in until gl_test and glmark2 have
-	  run with it (driver/docs/pvr-fence-wait.md).
+	  run with it (tools/cts/log/investigations/pvr-fence-wait.md).
 
 config SAFEUI_GPU_PVR_KICK_TIMES
 	bool "Keep per-kick timestamps (instrument)"
@@ -176,7 +181,7 @@ config SAFEUI_GPU_PVR_KICK_TIMES
 	  microseconds; the glmark2 sample prints it per frame. The yakogl-
 	  drivers feature pvr-kick-times. Adds reads of the UFO words to every
 	  poll of the fence wait; off for applications
-	  (driver/docs/pvr-fence-wait.md).
+	  (tools/cts/log/investigations/pvr-fence-wait.md).
 
 config SAFEUI_GPU_PVR_SELFTEST
 	bool "Run the driver's self-test render at boot"

@@ -284,9 +284,10 @@ pub fn gpu_free(mem: &mut OsalGpuMem) {
 }
 
 /// Live pool memory of one owner, for the run-end owner lines
-/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`, driver/docs/pvr-render-pool.md):
-/// blocks and page-rounded bytes per device-VA heap, the heap read from the
-/// block's address (the backend's GLES_HEAP_* bases, each a 1 GiB window).
+/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
+/// tools/cts/log/investigations/pvr-render-pool.md): blocks and page-rounded
+/// bytes per device-VA heap, the heap read from the block's address (the
+/// backend's GLES_HEAP_* bases, each a 1 GiB window).
 #[derive(Clone, Copy, Default)]
 pub struct OwnerTally {
     pub blocks: u32,

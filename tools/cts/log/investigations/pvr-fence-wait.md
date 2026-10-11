@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The PowerVR fence wait: where a swap spends its time
+
+Status: finished record, moved here from `driver/docs/pvr-fence-wait.md` on 2026-10-11. Measurements of 2026-10-03 and 10-04 on the AM62P. The defaults they led to (the 1 ms poll, the swap dropping depth/stencil) and the open knobs are driver/docs/pvr-render.md.
 
 Written 2026-10-03 from the code at 5398fb14 (line numbers are that commit's) and
 the glmark2-es2 run on the AM62P of 2026-10-03 23:09 (image 9d4f63c8, U-Boot

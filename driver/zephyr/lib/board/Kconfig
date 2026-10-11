@@ -79,12 +79,12 @@ config YAKOGL_BOARD_WINDOW_RGB565
 	  --visual-config red=5:green=6:blue=5:alpha=0). Half the bytes the
 	  PBE writes at the same tile count: the measurement that splits the
 	  fragment phase's per-tile time into store and walk
-	  (driver/docs/pvr-fence-wait.md). board_show() of it returns
-	  -ENOTSUP: the DSS path is set up for 32-bit pixels, so the window is
-	  rendered but not shown. AM62P only: the i.MX8MP and Pi 4 board
-	  layers hard-code XRGB8888 too, and their board_show() copies 32-bit
-	  pixels into the screen; the symbol extends to them when a 565 copy
-	  exists.
+	  (tools/cts/log/investigations/pvr-fence-wait.md). board_show() of it
+	  returns -ENOTSUP: the DSS path is set up for 32-bit pixels, so the
+	  window is rendered but not shown. AM62P only: the i.MX8MP and Pi 4
+	  board layers hard-code XRGB8888 too, and their board_show() copies
+	  32-bit pixels into the screen; the symbol extends to them when a 565
+	  copy exists.
 config YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT
 	int "Pi 4: the framebuffer's rows in memory (0: the screen's)"
 	default 0

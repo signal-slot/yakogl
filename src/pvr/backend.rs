@@ -180,9 +180,10 @@ pub const PVR_BACKEND_OPT_PBE_TWIDDLE: PvrBackendOption = 12;
 /// MEASUREMENT: 1 = one kick in flight. The swap's wait
 /// (`pvr_backend_finish_previous`) waits for the most recent kick too, not
 /// only for the ones before it, so every kick starts on an idle GPU
-/// (driver/docs/pvr-fence-wait.md, "The next experiment"). It changes only
-/// that wait's target; glFinish, the frame-set reuse and every kick are
-/// untouched. Off by default (0: wait for all but the most recent kick).
+/// (tools/cts/log/investigations/pvr-fence-wait.md, "The next experiment"). It
+/// changes only that wait's target; glFinish, the frame-set reuse and every
+/// kick are untouched. Off by default (0: wait for all but the most recent
+/// kick).
 pub const PVR_BACKEND_OPT_ONE_IN_FLIGHT: PvrBackendOption = 13;
 /// 1 = the swap drops the window's depth/stencil (EGL 1.5 3.10.1: they are
 /// undefined after `eglSwapBuffers`). When the frame being swapped renders
@@ -262,11 +263,12 @@ const PRIMS_PER_KICK_MAX: u32 = 1_500_000;
 /// transform from dword 64 on, and the truncated block left the transform
 /// zero, so the pass drew nothing (sceneeffects rendered a black view).
 const PVR_BACKEND_UNIFORM_PREFIX: bool = false;
-/// The default arenas, measured (driver/docs/pvr-render-pool.md, the
-/// frame-set run): glmark2's largest frame on the AM62P used 325896 bytes of
-/// PDS and 516768 of GENERAL. 768 KiB and 1024 KiB are 2.4 and 2.0 times
-/// that, so its frames are not split. With 4 sets that is 7488 KiB of the
-/// render pool, where 4 x (4 MiB + 1 MiB) took 20800 KiB.
+/// The default arenas, measured
+/// (tools/cts/log/investigations/pvr-render-pool.md, the frame-set run):
+/// glmark2's largest frame on the AM62P used 325896 bytes of PDS and 516768 of
+/// GENERAL. 768 KiB and 1024 KiB are 2.4 and 2.0 times that, so its frames are
+/// not split. With 4 sets that is 7488 KiB of the render pool, where
+/// 4 x (4 MiB + 1 MiB) took 20800 KiB.
 const ARENA_PDS_BYTES: u32 = 768 * 1024;
 const ARENA_GEN_BYTES: u32 = 1024 * 1024;
 /// The largest arenas [`pvr_backend_set_frame_arenas`] accepts: the sizes
@@ -278,8 +280,8 @@ const ARENA_GEN_MAX: u32 = 4096 * 1024;
 /// The frame sets a backend init builds ([`pvr_backend_set_frame_arenas`]):
 /// how many, and each one's GENERAL and PDS arena bytes. The defaults are
 /// the constants above; a smaller configuration takes less of the render
-/// pool (driver/docs/pvr-render-pool.md, the frame sets are 20.3 MiB of
-/// the fixed use).
+/// pool (tools/cts/log/investigations/pvr-render-pool.md, the frame sets are
+/// 20.3 MiB of the fixed use).
 #[derive(Clone, Copy)]
 struct ArenaCfg {
     sets: usize,
@@ -7369,9 +7371,9 @@ pub unsafe extern "C" fn pvr_backend_ds_report(buf: *mut c_char, cap: usize) {
 /// open, else `last_submitted` itself. The backend submits only from
 /// [`flush`], which closes the frame, so with no frame open no unsubmitted
 /// kick holds anything; the memory is free once `last_submitted` completes
-/// (driver/docs/pvr-render-pool.md, mechanism 2). The OSAL uses it under
-/// `CONFIG_YAKOGL_PVR_POOL_RECLAIM`; it tags every free `last_submitted + 1`
-/// otherwise.
+/// (tools/cts/log/investigations/pvr-render-pool.md, mechanism 2). The OSAL
+/// uses it under `CONFIG_YAKOGL_PVR_POOL_RECLAIM`; it tags every free
+/// `last_submitted + 1` otherwise.
 #[no_mangle]
 pub extern "C" fn pvr_backend_free_fence(last_submitted: u32) -> u32 {
     // SAFETY: single-threaded by contract; taken once per entry point.
@@ -7426,9 +7428,10 @@ fn note_arena_hw(b: &mut Backend) {
 }
 
 /// The backend's lines of the run-end owner report
-/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`, driver/docs/pvr-render-pool.md): the
-/// frame sets with their arenas' high-water marks, the persistent programs
-/// and tables, and the depth/stencil buffers. Returns their KiB.
+/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
+/// tools/cts/log/investigations/pvr-render-pool.md): the frame sets with their
+/// arenas' high-water marks, the persistent programs and tables, and the
+/// depth/stencil buffers. Returns their KiB.
 #[no_mangle]
 pub extern "C" fn pvr_backend_pool_owners() -> u64 {
     use crate::osal::OwnerTally;
