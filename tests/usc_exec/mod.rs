@@ -290,6 +290,38 @@ pub const POISON_BINARY: u32 = 0xf217_7617;
 /// `whole`: the image must end exactly at the end of task (our own shader);
 /// a reference blob may carry further programs after it, so it stops there.
 pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u32, u32>, String> {
+    /* The cache of the last image this thread ran (see `Decoded`): the same
+     * image comes back once per input set and per variant, so it is kept
+     * across calls, and any other image starts it empty. */
+    std::thread_local! {
+        static LAST: std::cell::RefCell<(Vec<u8>, Decoded)> = const { std::cell::RefCell::new((Vec::new(), BTreeMap::new())) };
+    }
+    let mut decoded = LAST.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != image {
+            c.0 = image.to_vec();
+            c.1.clear();
+        }
+        std::mem::take(&mut c.1)
+    });
+    let r = run_binary_decoded(image, inp, whole, &mut decoded);
+    LAST.with(|c| c.borrow_mut().1 = decoded);
+    r
+}
+
+/// A group's decode and its operation names, by offset into one image. A
+/// group is a function of the image's bytes and the offset alone, so a
+/// group decoded once is the group every time the program comes back to it:
+/// a loop run to the cap used to decode its body again on every pass, and
+/// that was most of the survey's time (`tests/usc_limits.rs`).
+type Decoded = BTreeMap<usize, (yakogl::shaderc::online::powervr::decode::Group, Vec<&'static str>)>;
+
+fn run_binary_decoded(
+    image: &[u8],
+    inp: &Inputs,
+    whole: bool,
+    decoded: &mut Decoded,
+) -> Result<BTreeMap<u32, u32>, String> {
     let mut temp: BTreeMap<u32, u32> = BTreeMap::new();
     let mut out: BTreeMap<u32, u32> = BTreeMap::new();
     /* The attribute file is writable: the reference reuses it as scratch. */
@@ -359,9 +391,16 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
             return Err("the program ran more groups than its loops allow without ending".into());
         }
         let mut jump: Option<i64> = None;
-        let g = decode_group(image, off).map_err(|e| format!("decode at {off:#x}: {e:?}"))?;
-        let names: Vec<&str> =
-            g.instrs().map(|(_, ph, x)| ops_for(x, ph).next().map(|o| o.name).unwrap_or("<unknown>")).collect();
+        let (g, names) = match decoded.entry(off) {
+            std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::btree_map::Entry::Vacant(e) => {
+                let g = decode_group(image, off).map_err(|e| format!("decode at {off:#x}: {e:?}"))?;
+                let names =
+                    g.instrs().map(|(_, ph, x)| ops_for(x, ph).next().map(|o| o.name).unwrap_or("<unknown>")).collect();
+                e.insert((g, names))
+            }
+        };
+        let (g, names) = (*g, names.as_slice());
         let (_, phase, r) = g.instrs().next().ok_or("a group with no operation")?;
         /* The execution condition. A group whose condition fails does
          * nothing: its registers, outputs and feedback are left as they
@@ -383,7 +422,7 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
          *   cndlt  adjust: c == 0 -> p0 set (around again); else c -= adjust
          *                  and p0 clear (out of the loop)
          *   cndend adjust: c -= adjust, not below 0 */
-        if let [op @ ("cndst" | "cndef" | "cndsm" | "cndlt" | "cndend")] = names.as_slice() {
+        if let [op @ ("cndst" | "cndef" | "cndsm" | "cndlt" | "cndend")] = names {
             let lo = g.lower.as_ref().map(srcs).unwrap_or([None; 6]);
             let c = read(lo[0].ok_or("a cnd group with no s0")?, &temp, &vtx)?;
             let adjust = r.get("adjust").unwrap_or(0);
@@ -428,7 +467,7 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
             off += g.total;
             continue;
         }
-        if !runs && !matches!(names.as_slice(), ["br" | "br.next"]) {
+        if !runs && !matches!(names, ["br" | "br.next"]) {
             off += g.total;
             continue;
         }
@@ -468,7 +507,7 @@ pub fn run_binary(image: &[u8], inp: &Inputs, whole: bool) -> Result<BTreeMap<u3
         /* One operation per group, except `flush_p0`'s imadd32 + tst and the
          * select/compare shapes, modelled below. */
         if names.len() > 1 && names != ["imadd32", "tst"] {
-            let val = run_wired(&g, &names, &|o| read(o, &temp, &vtx))?;
+            let val = run_wired(&g, names, &|o| read(o, &temp, &vtx))?;
             let d = g.dst.as_ref().map(dsts).unwrap_or([None; 2])[0].ok_or("no destination")?;
             match regbank.name_of(d.bank) {
                 Some("temp") => {
