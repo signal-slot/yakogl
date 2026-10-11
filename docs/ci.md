@@ -89,6 +89,27 @@ gl_test images, whose generated linker script includes Zephyr's
 `swi_tables.ld` by a relative path that does not resolve from a build
 directory under `/tmp`.
 
+With cargo-nextest 0.9.148 (built into a scratch directory here; this
+host is not a runner) on `376e3a64`, which is main `5ad2fa0e` with these
+changes merged, every row, 142:
+
+| | first run (records) | second run (reads) |
+|---|---|---|
+| summary | 140 ok, 2 failed | 140 ok, 2 failed |
+| whole run | 3100 s | 615 s |
+| test binaries | 492 run | 0 run, 492 skipped |
+| the 34 `test` rows | 1065 s | 20 s |
+| slowest rows | "no Mesa reference in the artefact" 796 s, Mesa table 197 s, `test` PowerVR online 161 s | Mesa table 196 s, GC7000 table proof 154 s, PowerVR table proof 53 s |
+
+The first run followed a change to `src/`, so every build was redone; an
+earlier pair on `7020a32c` without a source change took 1325 s (test rows
+545 s) and 755 s. The 796 s artefact row is not explained yet (99 to 154 s
+in the other runs; a rebuild of the release archives is the guess, not
+measured). The two red rows are the AM62P images (above). nextest found
+one test that passed only when another test of the same process ran
+first (`gl::shader::tests::a_refused_shader_online_logs_one_summary_line_and_no_source_chunks`,
+fixed in `376e3a64`).
+
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
 change: `src/gl/draw.rs`, `src/shaderc/online/*` and `tools/check.sh`
 select all 134 rows ("scopes: all"); `src/vivante/*` selects 38; a document
