@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_clear
 
 Milestone 4 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: fill a linear XRGB8888 surface
@@ -20,7 +22,8 @@ stride or window size looks like.
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_clear \
     yakogl/driver/samples/zephyr/gc_clear
-# on the board (Torizon): kexec_zephyr zephyr.bin 0x42000000
+# on the board, the development route (kexec from Torizon, driver/tools/kexec-zephyr/):
+#   kexec_zephyr zephyr.bin 0x42000000
 ```
 
 Expected console lines:
@@ -39,4 +42,7 @@ gc_clear: PASS
 refuses any other width, and the driver rejects it rather than letting the
 GPU do something undefined.
 
-Not run on hardware yet (2026-09-20).
+Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
+(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
+`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+side became Rust (`driver/docs/vivante-kernel-rust.md`).

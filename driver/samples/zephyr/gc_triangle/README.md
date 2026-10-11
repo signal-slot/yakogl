@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_triangle
 
 Milestone 5 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: clear a surface, then draw one
@@ -24,7 +26,8 @@ single-colour triangle cannot:
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_triangle \
     yakogl/driver/samples/zephyr/gc_triangle
-# on the board (Torizon): kexec_zephyr zephyr.bin 0x42000000
+# on the board, the development route (kexec from Torizon, driver/tools/kexec-zephyr/):
+#   kexec_zephyr zephyr.bin 0x42000000
 ```
 
 Run `gc_clear` first: this sample starts with the same clear, and if that
@@ -49,4 +52,7 @@ other two", and for the centroid "all three are between 0x20 and 0xe0".
 On a failure the sample prints `gc_triangle: FAIL <reason>` and the stall
 dump before resetting the SoC.
 
-Not run on hardware yet (2026-09-20).
+Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
+(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
+`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+side became Rust (`driver/docs/vivante-kernel-rust.md`).
