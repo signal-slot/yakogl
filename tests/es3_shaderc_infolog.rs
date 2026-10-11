@@ -512,11 +512,13 @@ fn every_refusal_has_an_info_log() {
         match build(&c) {
             Ok(()) => linked.push(c.name),
             Err(r) => {
-                let log = match &r {
-                    Refusal::Compile(_, log) | Refusal::Link(log) => log,
+                let (step, log) = match &r {
+                    Refusal::Compile(GL_VERTEX_SHADER, log) => ("vertex compile", log),
+                    Refusal::Compile(_, log) => ("fragment compile", log),
+                    Refusal::Link(log) => ("link", log),
                 };
-                assert!(!log.trim().is_empty(), "{}: refused with an empty info log: {r:?}", c.name);
-                assert!(!log.trim_end().ends_with(':'), "{}: a log with no message: {r:?}", c.name);
+                assert!(!log.trim().is_empty(), "{}: {step} refused with an empty info log", c.name);
+                assert!(!log.trim_end().ends_with(':'), "{}: {step} log with no message: {log:?}", c.name);
                 refused.push((c.name, c.vectors, r));
             }
         }
