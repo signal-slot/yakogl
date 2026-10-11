@@ -174,7 +174,7 @@ dEQP exercises only the defined pairs. Task T1 adds the type tag.
 
 ## Host measurement to take (HOST-ONLY: API verdicts only)
 
-The run needs the VK-GL-CTS checkout of `tools/cts/log/es3-host-env.md`
+The run needs the VK-GL-CTS checkout of `tools/cts/README.md` section 2b
 (`<VK-GL-CTS>`) and a working `cargo` and `cmake`:
 
 ```sh

@@ -24,8 +24,8 @@ The pieces:
 ## 1. Environment
 
 Nothing in a file names a machine, a device or an address. The session sets,
-in its shell, from the lab (the values of 2026-10-03 are in
-`tools/cts/README.md` section 6; the farm's `.ccfarm/project.toml` passes
+in its shell, from the lab (the variables are listed in
+`tools/cts/README.md` section 5; the farm's `.ccfarm/project.toml` passes
 `${resource.pi4.user}@${resource.pi4.host}` and `${resource.pi4.device}`):
 
 ```sh

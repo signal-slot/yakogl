@@ -18,7 +18,7 @@ cases never began, because a draw was refused for a large cube texture (below).
   accepts `v3d`). The cargo rows of `tools/check.sh` (`gpu-v3d,report-es2` etc.) were not what
   was run; `cargo build --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --lib`
   also builds.
-- dEQP: VK-GL-CTS at `93bca01` (pinned in `tools/cts/log/es3-host-env.md`), cloned into the workspace's
+- dEQP: VK-GL-CTS at `93bca01` (the revision of `tools/cts/README.md` section 2b), cloned into the workspace's
   `build/VK-GL-CTS` (the deps directory was not writable by an approved command), 
   `external/fetch_sources.py` run, `tools/cts/cts-yakogl-target.patch` applied.
   `deqp-gles2` built by the script into `build/host-deqp/deqp`.
@@ -29,7 +29,7 @@ cases never began, because a draw was refused for a large cube texture (below).
 ## Commands
 
 ```sh
-# dEQP, per tools/cts/log/es3-host-env.md (into build/ here)
+# dEQP, per tools/cts/README.md section 2b (into build/ here)
 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
   git clone https://github.com/KhronosGroup/VK-GL-CTS build/VK-GL-CTS
 git -C build/VK-GL-CTS checkout 93bca01
