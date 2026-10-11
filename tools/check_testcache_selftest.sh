@@ -136,6 +136,70 @@ echo probe > tools/shaders/.testcache-selftest-probe
 same "a shader the tests read: the tree key" "$tree0" "$(key tree)" differ
 same "a shader the tests read: the library's tree key" "$lib0" "$(key lib-tree)" differ
 same "the environment key does not read the tree" "$env0" "$(key env)" same
+rm -f tools/shaders/.testcache-selftest-probe
+# The tree key holds what the tests read (TEST_TREE_PATHS), not the whole
+# checkout: a file outside it moves neither key, one inside moves both, a
+# library source the library's key only (src/test_rules.rs reads src/).
+tprobe() {
+  probes+=("$1")
+  mkdir -p "$(dirname "$1")"
+  echo probe > "$1"
+  same "$2: the tree key" "$tree0" "$(key tree)" "$3"
+  same "$2: the library's tree key" "$lib0" "$(key lib-tree)" "$4"
+  rm -f "$1"
+}
+tprobe driver/zephyr/.testcache-selftest-probe "a driver file no test reads" same same
+tprobe tools/cts/.testcache-selftest-probe "a tool no test reads" same same
+tprobe src/gl/.testcache-selftest-probe "a library source" same differ
+tprobe src/osal/.testcache-selftest-probe "an OSAL header a test compiles" differ differ
+tprobe driver/src/v3d/.testcache-selftest-probe "a V3D source a test compiles" differ differ
+tprobe tests/fixtures/.testcache-selftest-probe "a fixture" differ differ
+tprobe tools/cts/wedge_probe/.testcache-selftest-probe "a wedge probe source" differ differ
+had_corpus=0
+[ -e build/glmark2-host/shaders ] && had_corpus=1
+tprobe build/glmark2-host/shaders/.testcache-selftest-probe "the generated glmark2 corpus (outside git)" differ differ
+[ "$had_corpus" = 1 ] || rmdir build/glmark2-host/shaders build/glmark2-host 2>/dev/null
+# Every path a literal in the test code names at run time is under the tree
+# key, or is listed below with the reason it is not read by a test. A new
+# file read in a test that is not under TEST_TREE_PATHS fails here instead
+# of leaving the key blind to it. The control: a probe test that reads a
+# file outside them is named.
+literal_paths() {
+  python3 - "$(key paths)" <<'PY'
+import re, subprocess, sys
+keyed = sys.argv[1].split() + ["build/glmark2-host/shaders"]
+# Literals that tests never read, by file: yakogl-tools commands (their
+# tests do not run them: strace of the test binary, 2026-10-12) and the
+# coverage documents the round trips write under YAKOGL_WRITE_ISA_COVERAGE.
+not_read = {"tools/yakogl-tools/src/abilayout.rs", "tools/yakogl-tools/src/glconsts.rs",
+            "tools/yakogl-tools/src/csbgen.rs", "src/shaderc/online/powervr/roundtrip.rs",
+            "src/shaderc/online/vivante/roundtrip.rs"}
+files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "--", "src", "tests",
+                        "tools/yakogl-tools/src", "tools/precompile/src", "driver/rust/src",
+                        ":(glob)driver/samples/zephyr/*/check/src/**"],
+                       capture_output=True, text=True, check=True).stdout.split()
+lit = re.compile(r'"((?:\.\./)*(?:src|tests|tools|driver|third_party|include|capi|build|docs|zephyr)/[^"\s]*)"')
+for f in sorted(x for x in files if x.endswith(".rs") and x not in not_read):
+    for n, line in enumerate(open(f, errors="replace"), 1):
+        s = line.strip()
+        if s.startswith(("//", "*", "/*")):
+            continue
+        for m in lit.finditer(line):
+            before = line[:m.start()]
+            if re.search(r"(include_str!|include_bytes!|include!)\(\s*$|#\[path\s*=\s*$", before):
+                continue
+            p = re.sub(r"^(\.\./)+", "", m.group(1)).split("{")[0].rstrip("/")
+            if not any(p == k or p.startswith(k + "/") or k.startswith(p + "/") for k in keyed):
+                print("%s:%d %s" % (f, n, m.group(1)))
+PY
+}
+out=$(literal_paths)
+checks=$((checks + 1))
+[ -z "$out" ] || { echo "FAIL a test names a path outside the tree key:"; printf '%s\n' "$out" | sed 's/^/    /'; fails=$((fails + 1)); }
+probes+=(tests/testcache_selftest_probe.rs)
+echo 'fn f() { let _ = std::fs::read("driver/zephyr/testcache-probe.txt"); }' > tests/testcache_selftest_probe.rs
+expect "the control: a read outside the tree key is named" 'testcache_selftest_probe.rs:1 driver/zephyr/testcache-probe.txt' "$(literal_paths)"
+rm -f tests/testcache_selftest_probe.rs
 rm -f "${probes[@]}"
 probes=()
 

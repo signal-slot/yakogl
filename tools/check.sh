@@ -697,34 +697,47 @@ test_env_key() {
   sha256sum < "$f" | cut -c1-64
 }
 
-# The files a test may read at run time, as one hash: every tracked file
-# (its blob id; a file changed or added in the working tree by its content)
-# except the paths no test reads. The tests read the tree at run time
-# (tools/shaders, tests/fixtures, tests/reference, headers, and
-# src/test_rules.rs reads src/ and tests/ themselves), so the binary's bytes
-# alone are not its inputs. The exceptions: the documents, the CI files,
-# this script and its self-tests; and for every binary but the library's
-# own unit tests (src/lib.rs, which holds test_rules), the integration test
-# sources tests/*.rs, each compiled into its own binary. So a change to one
-# integration test reruns that binary and the library's unit tests.
+# The files the test binaries read at run time. A binary's bytes already
+# hold what it was compiled from (include_str!, #[path]); these are what the
+# tests open while they run. Derived from the code (every fs::read,
+# read_dir, File::open, Command and path literal in the test code of the
+# workspace) and measured: every test binary of every test row of this
+# script (580 binaries, 2026-10-12) run under strace opened, inside the
+# checkout, these paths and its own scratch under build/test-tmp, and
+# nothing else. tools/check_testcache_selftest.sh fails when a path literal
+# in test code names a file outside them.
+TEST_TREE_PATHS=(
+  tools/shaders                                  # the corpus tests and the source lists
+  tests/fixtures tests/reference                 # pinned results; the triangle check's tables
+  tools/cts/testdata tools/cts/wedge_probe       # tests/temps_survey.rs, usc_survey.rs
+  tools/cts/gles2-mustpass.txt tools/testdata/record-decode.txt
+  driver/zephyr/lib/board/imx8mp/gc_result.h     # yakogl-tools record (these three)
+  driver/zephyr/lib/board/include/yakogl_record.h driver/rust/include/yakogl_drivers.h
+  driver/samples/zephyr/v3d_triangle/shaders     # the V3D chain tests (library)
+  driver/src/v3d src/osal third_party/mesa-26.2.1 # tests/v3d_glmark2_mem.rs compiles C with cc
+)
+# The hash of those files (their blob ids; a file changed or added in the
+# working tree by its content). The library's own unit tests (src/lib.rs)
+# also read src/ and tests/ (src/test_rules.rs). Outside git, the glmark2
+# corpus tests/glmark2_corpus.rs reads when an earlier glmark2 row generated
+# it (build/glmark2-host/shaders), by content. Left out: the commit and
+# `git status`, which yakogl-precompile's tests ask git for; they become the
+# mark in a generated table's header, and no test compares a mark with
+# anything but another table made from the same tree.
 # $1: lib or other.
 test_tree_key() {
-  local f="$TEST_STATE/tree-key-$1" ex p ok_rel tmp
+  local f="$TEST_STATE/tree-key-$1" tmp g=build/glmark2-host/shaders
+  local -a paths=("${TEST_TREE_PATHS[@]}")
+  [ "$1" = lib ] && paths+=(src tests)
   if [ ! -s "$f" ]; then
     tmp="$f.tmp.$BASHPID"
-    ex=(':(exclude)docs' ':(exclude)website' ':(exclude)records' ':(exclude).github' ':(exclude).ccfarm'
-      ':(exclude,glob)*.md' ':(exclude)tools/check.sh' ':(exclude)tools/check_scope_selftest.sh'
-      ':(exclude)tools/check_testcache_selftest.sh')
-    [ "$1" = lib ] || ex+=(':(exclude,glob)tests/*.rs')
-    ok_rel=$(realpath -m --relative-base="$PWD" "$TEST_OK_DIR")
-    case "$ok_rel" in /*) ;; *) ex+=(":(exclude)$ok_rel") ;; esac
     {
-      git ls-files -s -- . "${ex[@]}"
-      { git ls-files -m -- . "${ex[@]}"; git ls-files -o --exclude-standard -- . "${ex[@]}"; } | sort -u |
-        while IFS= read -r p; do
-          if [ -f "$p" ]; then echo "worktree $(git hash-object -- "$p") $p"; else echo "worktree deleted $p"; fi
-        done
-    } | sha256sum | cut -c1-64 > "$tmp" || return 1
+      tree_listing "${paths[@]}" || return 1
+      if [ -d "$g" ]; then
+        find "$g" -type f -print0 | sort -z | xargs -0 -r sha256sum || return 1
+      fi
+    } > "$tmp.list" || return 1
+    sha256sum < "$tmp.list" | cut -c1-64 > "$tmp" && rm -f "$tmp.list" || return 1
     mv "$tmp" "$f" || return 1
   fi
   cat "$f"
@@ -951,6 +964,7 @@ if [ "${1-}" = "--test-keys" ]; then
   echo "tree $(test_tree_key other)"
   echo "lib-tree $(test_tree_key lib)"
   echo "names $(test_env_names | tr '\n' ' ')"
+  echo "paths ${TEST_TREE_PATHS[*]}"
   exit 0
 fi
 if [ "${1-}" = "--cargo-test" ]; then
