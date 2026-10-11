@@ -53,8 +53,9 @@ glmark2-es2 at 800x600 runs all 33 scenes on every board:
 Two scenes drew wrong: terrain sampled a black texture on every board, and refract
 missed its depth pass on the AM62P and Raspberry Pi 4. Both are fixed on the host;
 on the AM62P the depth pass now resolves, but no picture of either scene has been
-checked yet, and on the Raspberry Pi 4 refract's draw is still refused once a frame
-(see the Issues). The i.MX8MP's score is probably capped by a wait for the panel's
+checked yet. On the Raspberry Pi 4 refract's draw was refused once a frame; the
+host harness no longer refuses it with the image's 24 MiB tiled-copy budget, but
+the board has not run it yet (see the Issues). The i.MX8MP's score is probably capped by a wait for the panel's
 VSYNC on every frame (a prediction from the code,
 `tools/cts/log/investigations/imx8mp-frame-floor.md`). Performance work has not
 started yet.
