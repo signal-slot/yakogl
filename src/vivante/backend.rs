@@ -424,13 +424,8 @@ pub fn mrt_targets(gl: &GlesDraw) -> usize {
 pub fn hw_targets(gl: &GlesDraw) -> ([u8; 4], usize) {
     let mut slots = [0u8; 4];
     let mut n = 1;
-<<<<<<< HEAD
     for (slot, t) in gl.targets.iter().enumerate().take(mrt_targets(gl)).skip(1) {
         if t.gpu != 0 {
-=======
-    for (slot, target) in gl.targets.iter().enumerate().take(mrt_targets(gl)).skip(1) {
-        if target.gpu != 0 {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
             slots[n] = slot as u8;
             n += 1;
         }
@@ -1917,11 +1912,7 @@ pub extern "C" fn gc_init() -> i32 {
     /* Unknown until written: the first draw of the process writes
      * GL_VARYING_COMPONENT_USE GENERIC, whatever an earlier client left. */
     g.component_use_marked = true;
-<<<<<<< HEAD
     for f in g.frames.iter_mut().take(GC_FRAMES) {
-=======
-    for f in g.frames.iter_mut() {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if osal::gpu_alloc(GC_HEAP_COMMAND, GC_CMD_WORDS * 4, OSAL_MEM_DATA, &mut f.cmd) != 0
             || osal::gpu_alloc(GC_HEAP_COMMAND, GC_ARENA_BYTES, OSAL_MEM_DATA, &mut f.arena) != 0
         {
@@ -1962,11 +1953,7 @@ pub extern "C" fn gc_shutdown() {
     if !g.inited {
         return;
     }
-<<<<<<< HEAD
     for f in g.frames.iter_mut().take(GC_FRAMES) {
-=======
-    for f in g.frames.iter_mut() {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         osal::gpu_free(&mut f.cmd);
         osal::gpu_free(&mut f.arena);
         if !f.extra.impl_.is_null() {

@@ -1072,7 +1072,6 @@ table_symbols() {
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
-<<<<<<< HEAD
   local rlib="$dir/release/libyakogl.rlib" n
   n=$(nm --defined-only "$rlib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true)
   # The release profile is `lto = true`, and cargo may then build the rlib's
@@ -1085,15 +1084,6 @@ table_symbols() {
     n=$(grep -c -a -E '14mesa_reference|SHC_BLOB_TABLE' "$rlib" || true)
   fi
   echo "$n"
-=======
-  # Not `nm`: the release profile is LTO (Cargo.toml), so the rlib's one
-  # object is LLVM bitcode, which a binutils `nm` without LLVMgold.so (the
-  # plugin Debian and Ubuntu install and a stock or Nix binutils may not)
-  # lists as no symbols at all -- the control then read 0 on a tree whose
-  # archive held 1,226 of them. The names are in the bitcode's string table
-  # whichever way the object is stored, so they are read there.
-  grep -a -o -E '14mesa_reference|SHC_BLOB_TABLE' "$dir/release/libyakogl.rlib" | wc -l
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
 }
 
 check_table_absent() {

@@ -2946,11 +2946,7 @@ fn ds_get(b: &mut Backend, id: DsKey, w: u32, h: u32, samples: u32) -> Option<us
     b.ds_clock = b.ds_clock.wrapping_add(1);
     let now = b.ds_clock;
 
-<<<<<<< HEAD
     for (i, s) in b.ds.iter_mut().enumerate().take(PVR_BACKEND_MAX_DS) {
-=======
-    for (i, s) in b.ds.iter_mut().enumerate() {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if !s.mem.impl_.is_null() && s.id == id {
             if s.w == w && s.h == h && s.samples == samples {
                 s.used = now;

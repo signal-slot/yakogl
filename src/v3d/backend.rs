@@ -1220,11 +1220,7 @@ fn zs_buf(
     g.zs_clock = g.zs_clock.wrapping_add(1);
     let now = g.zs_clock;
     let mut slot = None;
-<<<<<<< HEAD
     for (i, b) in g.zsbufs.iter_mut().enumerate().take(ZS_BUFS) {
-=======
-    for (i, b) in g.zsbufs.iter_mut().enumerate() {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if b.live() && b.id == id {
             if (b.w, b.h, b.msaa, b.s8) == (w, h, msaa, s8) {
                 (b.used, b.owners) = (now, owners);

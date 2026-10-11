@@ -34,7 +34,7 @@ use core::ffi::c_void;
 use super::consts::*;
 use super::context::{
     self, gl_trace, tex_pitch, GlAttachment, GlContext, GlFramebuffer, GlRenderbuffer, CAP_COLOR_ATTACHMENTS,
-    CAP_MIP_LEVELS, MAX_CONTEXTS, MAX_RENDERBUFFERS, MAX_TEXTURES, RGBA8_BPP,
+    CAP_MIP_LEVELS, MAX_CONTEXTS, MAX_FRAMEBUFFERS, MAX_RENDERBUFFERS, MAX_TEXTURES, RGBA8_BPP,
 };
 use super::names::{self, Kind};
 use super::types::*;
@@ -1283,11 +1283,7 @@ pub unsafe extern "C" fn glGenFramebuffers(n: GLsizei, framebuffers: *mut GLuint
     let n = n as usize;
     let mut made = 0;
 
-<<<<<<< HEAD
     for (h, fb) in c.framebuffers.iter_mut().enumerate().take(MAX_FRAMEBUFFERS).skip(1) {
-=======
-    for (h, fb) in c.framebuffers.iter_mut().enumerate().skip(1) {
->>>>>>> feace3b018878aa4f6f5201da2eb14d5e987f2e3
         if made >= n {
             break;
         }
@@ -3300,7 +3296,6 @@ pub(crate) fn reset_for_tests() {
 
 #[cfg(test)]
 mod tests {
-    use super::context::MAX_FRAMEBUFFERS;
     use super::*;
     use crate::gl::state::{glClear, glClearColor, glFlush, glGetError, glPixelStorei};
     use crate::gl::texture::{
