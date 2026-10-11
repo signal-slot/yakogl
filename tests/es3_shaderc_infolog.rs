@@ -617,7 +617,7 @@ fn every_refusal_has_an_info_log() {
 
     /* PowerVR (the AM62P): every mustpass program links, the 48 of §1r
      * included (`centroid` was refused with Usc(FragmentInputsNotBuilt)
-     * until chain.rs took it as smooth). The one refusal left is the
+     * until chain.rs iterated it, e58745272). The one refusal left is the
      * fragment iterator tables' 16 vectors, named as such. Only the
      * `array_element.*` matrices exceed it (3 + 4 elements of 3 or 4
      * columns); that group is not in the mustpass. */
