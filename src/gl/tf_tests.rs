@@ -707,14 +707,22 @@ fn es2_answers_are_unchanged() {
     use crate::gl::state::*;
     let gl = TestGl::new(8, 8);
     let geti = |pname| {
-        let mut v = -1;
+        let mut v: GLint = -1;
         unsafe { glGetIntegerv(pname, &mut v) };
         v
     };
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS), 0);
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS), 0);
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 0);
-    assert_eq!((geti(GL_TRANSFORM_FEEDBACK_ACTIVE), geti(GL_TRANSFORM_FEEDBACK_PAUSED)), (0, 0));
+    /* the ES 3.0 pnames are GL_INVALID_ENUM in the ES 2.0 report
+     * (tests/es2_error_rules_state.rs row 20) */
+    for pname in [
+        GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS,
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS,
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS,
+        GL_TRANSFORM_FEEDBACK_ACTIVE,
+        GL_TRANSFORM_FEEDBACK_PAUSED,
+    ] {
+        assert_eq!(geti(pname), -1, "{pname:#x}: nothing written");
+        assert_eq!(gl.error(), GL_INVALID_ENUM, "{pname:#x}");
+    }
     let mut b = 0;
     unsafe {
         glGenBuffers(1, &mut b);
@@ -738,6 +746,6 @@ fn es2_answers_are_unchanged() {
         glGetIntegeri_v(GL_TRANSFORM_FEEDBACK_BUFFER_BINDING, 0, &mut v);
         assert_eq!((gl.error(), v), (GL_NO_ERROR, 0));
         glEnable(GL_RASTERIZER_DISCARD);
-        assert_eq!(glIsEnabled(GL_RASTERIZER_DISCARD), GL_TRUE_B, "recorded, as before");
+        assert_eq!(gl.error(), GL_INVALID_ENUM, "not an ES 2.0 capability (row 14)");
     }
 }

@@ -6927,6 +6927,7 @@ mod tests {
     /// the first pixel written; both were read back as 0 and ignored until
     /// 2026-09-24.
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn read_pixels_honours_the_pack_row_length_and_skips() {
         let gl = TestGl::new(8, 8);
         bound_fb();

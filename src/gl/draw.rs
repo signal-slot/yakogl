@@ -5566,6 +5566,7 @@ mod tests {
     /// staged indices and vertex count below are wrong (or the draw reads
     /// past TRI).
     #[test]
+    #[cfg(not(feature = "report-es2"))]
     fn primitive_restart_ends_the_primitive_and_is_no_vertex() {
         let gl = Gl::new(16, 16);
         basic(&gl);

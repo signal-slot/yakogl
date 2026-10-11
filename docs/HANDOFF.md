@@ -108,7 +108,7 @@ is kept and pinned by tests.
 | Stage-interface link rules | interpolation and block mismatches refused (`b88fea5`, `03ff7a6`) | none |
 | GLSL ES 3.00 in the compiler | measured over dEQP's 5,596 programs (`4ab482e`, `79fe171`, `ed0c81d`) | `docs/es3-shaderc-coverage.md` |
 | PowerVR 2D-array and shadow sampling | designed, not built | `docs/es3-pvr-2darray.md` |
-| ES 2.0 report guard | `tests/es2_report_guard.rs` pins what an ES 2.0 client sees; four pins are `#[ignore = "BUG: ..."]` (es2-report-gaps) (`6c9e9ee`) | none |
+| ES 2.0 report guard | `tests/es2_report_guard.rs` pins what an ES 2.0 client sees; two pins are `#[ignore = "BUG: ..."]` (framebuffer and texture rows; the two state pins run since the state/program tranche, `tests/es2_error_rules_state.rs`) (`6c9e9ee`) | none |
 | ES 3.0 limits test | reverted for review (`3f78982`); es3-caps redoes it | none |
 
 ## Open work, in order

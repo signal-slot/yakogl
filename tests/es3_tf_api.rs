@@ -184,16 +184,24 @@ fn geti_i(pname: GLenum, i: GLuint) -> GLint {
 
 /* ---------------------------------------------------------------- ES 2.0 -- */
 
-/// The ES 2.0 report answers as before: every limit 0, nothing ever active,
-/// the same refusals, and discard only recorded.
+/// The ES 2.0 report refuses the ES 3.0 limit and state queries and
+/// GL_RASTERIZER_DISCARD, and keeps its other refusals.
 #[cfg(feature = "report-es2")]
 #[test]
 fn es2_build_keeps_its_answers() {
     let _g = context();
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS), 0);
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS), 0);
-    assert_eq!(geti(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS), 0);
-    assert_eq!((geti(GL_TRANSFORM_FEEDBACK_ACTIVE), geti(GL_TRANSFORM_FEEDBACK_PAUSED)), (0, 0));
+    // the ES 3.0 pnames are GL_INVALID_ENUM in the ES 2.0 report
+    // (tests/es2_error_rules_state.rs row 20)
+    for pname in [
+        GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS,
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS,
+        GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS,
+        GL_TRANSFORM_FEEDBACK_ACTIVE,
+        GL_TRANSFORM_FEEDBACK_PAUSED,
+    ] {
+        geti(pname);
+        assert_eq!(err(), GL_INVALID_ENUM, "{pname:#x}");
+    }
     let mut b = 0;
     // SAFETY: plain GL calls; one name.
     unsafe {
@@ -219,7 +227,7 @@ fn es2_build_keeps_its_answers() {
         assert_eq!(geti_i(GL_TRANSFORM_FEEDBACK_BUFFER_BINDING, 0), 0);
         assert_eq!(err(), GL_NO_ERROR);
         glEnable(GL_RASTERIZER_DISCARD);
-        assert_eq!(glIsEnabled(GL_RASTERIZER_DISCARD), GL_TRUE_B, "recorded, as before");
+        assert_eq!(err(), GL_INVALID_ENUM, "not an ES 2.0 capability (row 14)");
     }
 }
 
