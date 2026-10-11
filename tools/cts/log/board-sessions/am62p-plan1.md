@@ -2,6 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P board session: plan #1 on the integration image
 
+**Status (2026-10-11): finished.** The 9 invariance failures it found were
+fixed in `e17fb6a7`; image 1 on that commit passes 1,379 / 0 on the board
+(`tools/cts/RESULTS.md`, 2026-10-10). The `am62p-deqp-images.sh` exit-1
+quirk it reported is fixed (the script ends with `BUILD-EXIT`). This record
+stays because `website/data.js` cites it as the source of the
+images 1 to 7 figure.
+
 **Integration image, not a landing proof.** Source: the integration
 snapshot, HEAD `b83216d4003b3e0b4764adc067dbbc843083c8f0` (`b83216d4`, the
 integration tip this session ran; it replaces the earlier label

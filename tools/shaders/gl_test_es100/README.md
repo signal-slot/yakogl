@@ -2,17 +2,21 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The ES 1.00 twins of gl_test's GLSL 450 shaders
 
-`driver/tools/pvrlab/gl_test_shaders.h` holds gl_test's shaders, and thirteen
+`driver/tools/pvrlab/gl_test_shaders.h` holds gl_test's shaders, and fourteen
 of them are `#version 450` written for SPIR-V: `layout` locations, Vulkan
 `push_constant` blocks, descriptor-set samplers, a user fragment output. An
 ES 2.0 application cannot write any of that, and the in-process compiler is an
 ES 2.0 compiler, so gl_test refused at line 1 through the online path — case 0
 and case 1 included.
 
-These are the same thirteen shaders as an ES 2.0 application would write them:
+These are the same fourteen shaders as an ES 2.0 application would write them:
 `attribute` / `varying` / `uniform`, precision qualifiers, `gl_FragColor`,
-`texture2D`. They are **twins, not replacements**. The 450 set stays the
-default and the switch that selects these is off unless asked for.
+`texture2D`. They are **twins, not replacements**. `gl_test.c` takes this set
+in every build that compiles its shaders: when `GL_TEST_ES100` is defined,
+or in a Zephyr image with the in-process compiler
+(`CONFIG_YAKOGL_SHADERC_ONLINE`) or with the precompiled shaders
+(`CONFIG_YAKOGL_PRECOMPILED_SHADERS`). Only a build without either takes
+the 450 set, through the Mesa reference table.
 
 Two rules make the set an oracle rather than a rewrite, and both are checked
 rather than intended:

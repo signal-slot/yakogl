@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# Where `src/shaderc/online/isa_tables.rs` comes from
+# Where `src/shaderc/online/powervr/isa_tables.rs` comes from
 
 The online shader compiler encodes and decodes PowerVR Rogue USC. The
 instruction encoding is not something we invented and not something we can
@@ -32,18 +32,19 @@ generated file carries the MIT notice for the derived data.
 ## Regenerating
 
 ```sh
-MESA=~/pvr-lab/mesa-build/mesa-26.2.1/src/imagination/pco      # a Mesa checkout
+MESA=<mesa-26.2.1>/src/imagination/pco      # a Mesa checkout
 tools/pco-isa/extract.py    "$MESA" build/isa.json
-tools/pco-isa/gen_tables.py build/isa.json src/shaderc/online/isa_tables.rs
+tools/pco-isa/gen_tables.py build/isa.json src/shaderc/online/powervr/isa_tables.rs
 cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online online::
 ```
 
-The last line is the point. The round trip decodes all 2,042 blobs of the
-offline table into instructions and writes them back byte for byte, so a
+The last line is the point. The round trip decodes every blob of the
+PowerVR reference table into instructions and writes them back byte for byte, so a
 table that lost a field, moved a bit piece or picked the wrong form shows up
 as a byte that differs — a transcription defect cannot pass quietly. Check
-the numbers the test prints (`2042/2042 blobs, 576296 instruction groups`)
-rather than only its exit status: a decoder that stopped after each blob's
+the numbers the test prints (`N/N blobs, M instruction groups`; it was
+`2042/2042 blobs, 576296 instruction groups` when this was written, and the
+table has grown since) rather than only its exit status: a decoder that stopped after each blob's
 first group would also exit zero.
 
 `extract.py` needs nothing but CPython and the Mesa tree; neither script is

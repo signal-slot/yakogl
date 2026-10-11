@@ -335,7 +335,7 @@ of the main checkout (2500 lines; the runner was the lead's).
      the group is 370 / 370 on the AM62P (a3856a06) and the i.MX8MP (f83a7361)
      (`tools/cts/RESULTS.md:111,120`). On the Pi 4 its 27 stencil-texture cases
      were NotSupported for another reason, the depth-texture claim the V3D
-     withheld until v3d/depth-texture (`tools/cts/STATUS.md:94`). The cost is in applications: glmark2's
+     withheld until v3d/depth-texture (`tools/cts/log/status-2026-09-25-to-10-07.md:99`). The cost is in applications: glmark2's
      shadow, and shadow maps in general.
   4. The direction: a depth-only framebuffer renders with an internal colour
      target and colour writes off, which every backend handles today; a

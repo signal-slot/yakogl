@@ -71,7 +71,7 @@ selected() { # the images, narrowed to the labels given (all when none)
 	images | while IFS=$'\t' read -r l c f; do
 		# an if, not an && list: under pipefail the loop's status was the last
 		# row's failed test, so a selective build exited 1 with every image
-		# built (docs/board-sessions/pi4-deqp-stage1.md)
+		# built (found by the Pi 4 stage 1 session, 2026-10-08)
 		if [ $# -eq 0 ] || [[ $want == *" $l "* ]]; then printf '%s\t%s\t%s\n' "$l" "$c" "$f"; fi
 	done
 }

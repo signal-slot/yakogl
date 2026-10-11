@@ -2,6 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Two vertex shaders that separate "registers" from "instruction count"
 
+**Status (2026-10-11): closed.** These cases no longer hang. The i.MX8MP's
+whole dEQP-GLES2 tree on main `32778b57` runs `shaders.algorithm.*` with our
+compiler and has 0 failures (`tools/cts/STATUS.md`). The investigation is in
+`driver/src/vivante/NOTES.md` and `tools/cts/RESULTS.md`. What follows is
+the record as it was written while the hang was open.
+
 The online pair hangs the GC7000 on `dEQP-GLES2.functional.shaders.algorithm`
 `hsl_to_rgb_vertex` and `rgb_to_hsl_vertex`; the reference compiler's pair passes the same
 four cases on the same driver, and the `*_fragment` twins pass on both.

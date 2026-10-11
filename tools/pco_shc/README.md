@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # pco_shc: the offline shader compiler harness
 
 `yakogl-tools glsl2usc` (tools/glsl2usc.sh) compiles GLSL with glslang to SPIR-V and hands that to

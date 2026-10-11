@@ -24,8 +24,8 @@ The pieces:
 ## 1. Environment
 
 Nothing in a file names a machine, a device or an address. The session sets,
-in its shell, from the lab (the values of 2026-10-03 are in
-`tools/cts/README.md` section 6; the farm's `.ccfarm/project.toml` passes
+in its shell, from the lab (the variables are listed in
+`tools/cts/README.md` section 5; the farm's `.ccfarm/project.toml` passes
 `${resource.pi4.user}@${resource.pi4.host}` and `${resource.pi4.device}`):
 
 ```sh
@@ -34,8 +34,8 @@ export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<se
 export BOARD_HDMI_TIMINGS='<the panel's 17 hdmi_timings fields>'
 ```
 
-and the build inputs (`docs/board-sessions/pi4-deqp-stage1.md` lists where the
-farm workers keep them):
+and the build inputs (each farm worker keeps them in its own dependency
+cache; `tools/cts/deps-env.sh` prints the layout):
 
 ```sh
 export ZEPHYR_WS=<west workspace, Zephyr af17c0c8>   WEST_VENV=$ZEPHYR_WS/.venv
@@ -66,10 +66,38 @@ cts-build-zephyr: libraries in <WORK>/build
 
 and `<WORK>/build/modules/gles3/libdeqp-gles3-package.a` present (the file the
 image builder checks for). The gles2 stage 1 built it in 101 s on 64 cores and
-314 s on 12 loaded ones (`pi4-deqp-stage1.md`); gles3 has about 15 % more
+314 s on 12 loaded ones (2026-10-08, see "Notes from the gles2 stage 1"); gles3 has about 15 % more
 sources. Keep `<WORK>` as `DEQP_WORK` for the farm:
 `<ccfarm-env name="DEQP_WORK_GLES3" ...>` in the session's report, since
 `DEQP_WORK` is the gles2 stage 1 that the ES 2.0 regression rows still need.
+
+### Notes from the gles2 stage 1 (2026-10-08, two farm workers)
+
+Measured when the gles2 stage 1 for `rpi_4b` was built and its row D image
+was linked as a proof (no board was used):
+
+- Stage 1: rc 0 in 100.7 s on 64 cores and 313.8 s on 12 cores at load 15
+  to 30; 417 or 418 ninja steps. `WORK` is 2.0 GB (`cts` 1.7 GB, `build`
+  87 MB, `flags` 167 MB). The inputs it uses take 4.2 GB (VK-GL-CTS),
+  3.5 GB (the west workspace) and 1.5 GB (the SDK), shared with the other
+  boards.
+- Row D (`# image D: 292`): `D rc=0`, the image links at RAM 155,444 KB of
+  256 MB (59.30 %). Cold build 59.8 s, warm (ccache) 16.1 s. A second build
+  gave the same sha256: the image build is reproducible.
+- `capi/yakogl_capi.cmake` needs a `cargo` with `rustc` beside it. A cargo
+  shim (kache) without one fails; put `~/.cargo/bin` first on `PATH`.
+- A host cmake 4.x rejects CTS's zlib (`cmake_minimum_required(VERSION
+  2.4.4)`): set `CMAKE_POLICY_VERSION_MINIMUM=3.5` (section 1), or use the
+  venv's cmake 3.31.
+- A Zephyr tree imported from a tarball (no git history) must still be a git
+  repository with `refs/heads/manifest-rev` at HEAD, or `west list` and
+  `zephyr_module.py` fail the manifest import from `west.yml`.
+- The image's `build=` stamp comes from the checkout the script runs from
+  (`git -C "$REPO" describe`), so run it from the checkout whose stamp the
+  image should carry.
+- The stage 1 CTS copy is a `--shared` clone of the CTS checkout, and its
+  externals are symlinks into the checkout's `external/*/src`. Keep the
+  checkout while `WORK/cts` is in use.
 
 ## 3. The images
 
@@ -123,7 +151,7 @@ What else a line can say: `rc=not-conformance` (the resolved `.config` failed
 table back end on; read the FAIL line at the end of the log), `rc=exists` (the
 directory was there: the builder never reuses one), `rc=1` with a cmake or
 ninja error in the log. The one risk specific to gles3 is size: the gles2
-image D linked at 59 % of the 256 MiB window (`pi4-deqp-stage1.md`), the gles3
+image D linked at 59 % of the 256 MiB window ("Notes from the gles2 stage 1"), the gles3
 functional library and test data are larger, and `tools/board.sh pi4` refuses
 an image past the window (`LOAD_END`), so read the `RAM:` line of the first
 image before building the other 90 (`... A1` builds that one alone).

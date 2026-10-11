@@ -2,6 +2,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P: why the serial console captured nothing in am62p-es2-r1
 
+**Status (2026-10-11): finished.** The cause was the lease: it named the
+bridge port wired to mcu_uart0, while Zephyr, U-Boot and the getty print on
+main_uart0. AM62P runs since then use the main_uart0 port and capture
+(the 2026-10-10 and 2026-10-11 trees in `tools/cts/RESULTS.md`). The gawk
+dependency of section 7 is gone: `tools/board.sh` `console_from_ts` uses
+python3. The two session records this note quotes, `am62p-es2-r1.md` and
+`am62p-gles3-percase.md`, were removed because no case ran in them; git
+history keeps them. The board probe they made is section 8 below.
+
 Host-only diagnosis (item am62p-console-diag, 2026-10-09, integration tip
 `d23ed8d`). No board was touched. Every fact is marked **measured** (a number
 or output in a committed record), **read** (read in the code or a document
@@ -274,3 +283,27 @@ driver/samples/zephyr/deqp tools/cts/am62p-deqp-images.sh` prints nothing.
   lease's port (main_uart0, not mcu_uart0)" instead of rebooting the board and
   waiting `RUN_BOUND` (420 s) for nothing. The 426 s wait and an unnecessary
   reboot in `am62p-gles3-percase.md` are what such a guard would save.
+
+## 8. The UART probe on the board (2026-10-08, from am62p-gles3-percase)
+
+Measured from Linux on the board (ssh, `sudo -n`), each UART at 115200 in
+turn, with the lease's console client reading the leased port (port-32):
+
+| Linux tty | controller | Linux alias | what port-32 received |
+|---|---|---|---|
+| ttyS2 (getty, U-Boot/Linux console) | `serial@2800000` (main_uart0) | serial2 | nothing |
+| ttyS0 | `serial@2810000` (main_uart1) | serial0 | nothing |
+| ttyS1 | `serial@0` in the `2b300050` target module (wkup_uart0) | serial1 | nothing |
+| ttyS3 | `serial@4a00000` (mcu_uart0) | serial3 | `YAKOGL-PROBE-S3`, verbatim |
+
+A first probe, written to all four while ttyS0, ttyS1 and ttyS3 were still
+at 9600 baud, arrived as 74 NUL bytes: the 9600 baud ttyS3 text read at
+115200. A newline typed into port-32 gave no login prompt, because the
+getty is on ttyS2. The Zephyr image prints on main_uart0
+(`zephyr,console = &main_uart0` in the board's dts), which Linux calls
+ttyS2. So port-32 carries mcu_uart0 only. The check before any build:
+`echo probe | sudo tee /dev/ttyS2` from Linux must show up on the leased
+port.
+
+On 2026-10-09 (am62p-es2-r1) the same probe of ttyS3 did not arrive on
+port-32 either, so the bridge's mcu_uart0 path was silent that day too.

@@ -2,6 +2,11 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GLSL ES 1.00 preprocessor: the dEQP-GLES2 `define_value_and_function` and macro-order cases
 
+**Status (2026-10-11): finished, no defect.** The two failures were one stale
+row of `tools/cts/RESULTS.md`, and all 534 preprocessor shaders get the CTS's
+compile outcome on the host; HANDOFF records this. Not landed: the guard test
+of section 7 (`tests/es2_preprocessor.rs` does not exist).
+
 Item `es2-preprocessor-diag` of plan #4. Host only, no source changed. Every claim is marked
 **[measured]** (run on the host in this session), **[recorded]** (read from a committed record, not re-run) or
 **[inferred]** (reasoning from code or the spec, not run).

@@ -27,7 +27,9 @@ name: gate
 
 on:
   pull_request:
-    branches: [main]
+    # ccfarm's result pull requests target ccfarm/integration; they get the
+    # same gate, so the review there is reading, not checking.
+    branches: [main, ccfarm/integration]
   push:
     branches: [main]
   schedule:
