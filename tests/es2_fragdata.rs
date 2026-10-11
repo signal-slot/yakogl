@@ -9,7 +9,7 @@
 //! is replayed here. The GL query half, `glGetIntegerv(GL_MAX_DRAW_BUFFERS)`,
 //! needs a GL context, which `testutil::TestGl` gives only to the library's
 //! own unit tests (it is `cfg(test)`): it is pinned in src/gl/state.rs
-//! `draw_buffer_queries_are_es3_only`. docs/investigations/es2-fragdata.md has
+//! `draw_buffer_queries_are_es3_only`. tools/cts/log/investigations/es2-fragdata.md has
 //! the whole path.
 //!
 //! ```text
