@@ -62,7 +62,7 @@ should stage an image under that name while the SafeUI boot is in `bootcmd`.
 
 ## 2. The boot flow: a one-shot armed from Linux
 
-The model is the Pi 4's tryboot (`rpi4-v3d-backend-plan.md`, "Board port" and
+The model is the Pi 4's tryboot (`pi4-v3d-bringup.md`, "Board port" and
 the tryboot rows): the next boot runs the test image once, and the boot after
 that is the normal one, whatever happens. U-Boot has no firmware flag like
 tryboot, so the one-shot is an env variable that **U-Boot itself deletes and
