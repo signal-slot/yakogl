@@ -1568,6 +1568,10 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # fit is split in the generator, not in the table.
   step "tools   am62p-gles3-tree: generator self-test and table check" sh -c \
     'python3 tools/cts/gen-am62p-gles3-tree.py --self-test && python3 tools/cts/gen-am62p-gles3-tree.py --check'
+  # tools/cts/cts-selftest.sh: the CTS tools' own checks (refusal parsing,
+  # the image .config check, the tallies, the GLES3 tables, and check 20:
+  # images-selftest.sh, the image builders against a fake west). Host only.
+  step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" tools/cts/cts-selftest.sh
   # R-23: nothing checked the public headers against what the library
   # exports and what eglGetProcAddress answers, so a header could promise an
   # entry point the archive never carried, or eglGetProcAddress could answer
