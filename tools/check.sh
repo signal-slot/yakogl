@@ -291,8 +291,8 @@ gate_t0=$SECONDS
 #   precompile-test-tmp  build/test-tmp/precompile-*, yakogl-precompile-list-*
 #                   (fixed paths yakogl-precompile's tests write)
 #   capi-debug      <target>/debug/libyakogl_capi.a (api_coverage.py reads it)
-#   release         <target>/release/libyakogl.rlib and libyakogl_capi.a,
-#                   <target>/aarch64-unknown-none/release/libyakogl_capi.a
+#   release         <target>/release/libyakogl.rlib and libyakogl_capi.a
+#                   (the no-table and no-knob rows)
 #   rgx-target      build/pvr-check/rgx-target
 #   v3d-mesa        build/v3d-check/mesa and build/v3d-check/tmp
 JOBS=${YAKOGL_CHECK_JOBS:-1}
@@ -2057,6 +2057,7 @@ key_release_archives() {
   key_table build/precompiled/check-powervr.rs
   key_table build/precompiled/check-gc7000.rs
   declare -f table_symbols mesa_reference_symbols knob_symbols tier_tables dep_info_within
+  declare -f artefact_worker check_no_mesa_reference
   echo "quick $QUICK; knobs $KNOB_TEST_SYMBOLS"
 }
 
@@ -2166,22 +2167,22 @@ step "no table in the artefact" check_table_absent
 # every GPU, the in-process compiler with and without `no-shader-table`, on
 # the image target; the host target once (osal-linux). --quick builds the
 # control and the AM62P image only; the full matrix (20 archives and two controls) took 863 s here.
+# mesa_reference_symbols <target|host> <features> <target dir>: build the
+# archive into that cargo target directory and count the reference's symbols.
 mesa_reference_symbols() {
-  local dir target="$1" features="$2" lib table=()
+  local target="$1" features="$2" dir="$3" lib table=()
   case "$features" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
     table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
   *precompiled-shaders*) table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
   esac
-  dir=$(cargo metadata --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
   if [ "$target" = host ]; then
     "${table[@]}" cargo build -q -p yakogl-capi --release --no-default-features --features "$features" \
-      >/dev/null 2>&1 || return 1
+      --target-dir "$dir" >/dev/null 2>&1 || return 1
     lib="$dir/release/libyakogl_capi.a"
   else
     "${table[@]}" cargo build -q -p yakogl-capi --release --target "$target" --no-default-features \
-      --features "$features" >/dev/null 2>&1 || return 1
+      --features "$features" --target-dir "$dir" >/dev/null 2>&1 || return 1
     lib="$dir/$target/release/libyakogl_capi.a"
   fi
   dep_info_within "${lib%.a}.d" || return 1
@@ -2189,50 +2190,94 @@ mesa_reference_symbols() {
     grep -cE '14mesa_reference|13mesa_internal|17mesa_clear_shader|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
 }
 
+# The row builds 26 archives (3 with --quick), each a release build with
+# `lto = true` and `codegen-units = 1`, so one core each, and cargo's lock
+# runs builds in one target directory one at a time: 731 s on nuc in the
+# CI run of 5503e1c4 (38148174637) after a change to src/. So the archives
+# are built in YAKOGL_CHECK_ARTEFACT_JOBS (default 4) target directories of
+# their own at once, <target>/check-artefact/<k>, each archive in the
+# directory of its place in the list modulo that count, so a directory
+# builds the same configurations every run and stays warm. Measured
+# 2026-10-12 without a compiler cache: one archive 39 s cold; two at once in
+# two directories 51 s.
+# artefact_worker <k> <jobs> <dir> <out> <entry>...: the entries at k, k+jobs, ...
+artefact_worker() {
+  local k=$1 jobs=$2 dir=$3 out=$4 i=0 e n
+  shift 4
+  for e in "$@"; do
+    if [ $((i % jobs)) -eq "$k" ]; then
+      if n=$(mesa_reference_symbols "$(cut -d' ' -f2 <<< "$e")" "$(cut -d' ' -f3 <<< "$e")" "$dir/$k"); then
+        echo "$i $n" >> "$out"
+      else
+        echo "$i failed" >> "$out"
+      fi
+    fi
+    i=$((i + 1))
+  done
+}
+
 check_no_mesa_reference() {
-  local t=aarch64-unknown-none n f configs=()
+  local t=aarch64-unknown-none jobs=${YAKOGL_CHECK_ARTEFACT_JOBS:-4} dir out entries=() i k n e
   if ! rustup target list --installed 2>/dev/null | grep -qx "$t"; then
     echo "$t is not installed (rustup target add $t): the image archives were NOT built"
     return 1
   fi
-  for f in "osal-zephyr,gpu-powervr,mesa-reference-table" "osal-zephyr,gpu-vivante,mesa-reference-table"; do
-    n=$(mesa_reference_symbols "$t" "$f") || { echo "the control build [$f] failed"; return 1; }
-    if [ "$n" -eq 0 ]; then
-      echo "the control [$f] links no reference symbol: the pattern no longer matches, so 0 below means nothing"
-      return 1
-    fi
-    echo "control $f: $n reference symbols"
-    [ "$QUICK" -eq 1 ] && break
-  done
   [ -f build/precompiled/check-powervr.rs ] && [ -f build/precompiled/check-gc7000.rs ] || tier_tables || return 1
+  # "<control|product> <target> <features>", the controls first
+  entries=("control $t osal-zephyr,gpu-powervr,mesa-reference-table")
+  [ "$QUICK" -eq 1 ] || entries+=("control $t osal-zephyr,gpu-vivante,mesa-reference-table")
   if [ "$QUICK" -eq 1 ]; then
-    configs=("$t osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
-      "$t osal-zephyr,gpu-powervr,precompiled-shaders")
+    entries+=("product $t osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
+      "product $t osal-zephyr,gpu-powervr,precompiled-shaders")
   else
     for osal in zephyr baremetal linux; do
       for gpu in powervr vivante v3d; do
-        configs+=("$t osal-$osal,gpu-$gpu,shaderc-online,no-shader-table" "$t osal-$osal,gpu-$gpu,shaderc-online")
+        entries+=("product $t osal-$osal,gpu-$gpu,shaderc-online,no-shader-table"
+          "product $t osal-$osal,gpu-$gpu,shaderc-online")
       done
     done
-    configs+=("host osal-linux,gpu-powervr,shaderc-online" "host osal-linux,gpu-vivante,shaderc-online")
+    entries+=("product host osal-linux,gpu-powervr,shaderc-online" "product host osal-linux,gpu-vivante,shaderc-online")
     # the precompiled shaders, alone and in front of the compiler
     for gpu in powervr vivante; do
-      configs+=("$t osal-zephyr,gpu-$gpu,precompiled-shaders"
-        "$t osal-zephyr,gpu-$gpu,shaderc-online,no-shader-table,precompiled-shaders")
+      entries+=("product $t osal-zephyr,gpu-$gpu,precompiled-shaders"
+        "product $t osal-zephyr,gpu-$gpu,shaderc-online,no-shader-table,precompiled-shaders")
     done
   fi
-  for c in "${configs[@]}"; do
-    n=$(mesa_reference_symbols "${c%% *}" "${c#* }") || { echo "the product build [$c] failed"; return 1; }
-    if [ "$n" -ne 0 ]; then
-      echo "the product archive [$c] links $n Mesa reference symbol(s)"
+  dir=$(cargo metadata --no-deps --format-version 1 |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')/check-artefact || return 1
+  out=$(mktemp "${TMPDIR:-/tmp}/check-artefact.XXXXXX") || return 1
+  for ((k = 0; k < jobs; k++)); do
+    artefact_worker "$k" "$jobs" "$dir" "$out" "${entries[@]}" &
+  done
+  wait
+  # Judged in the list's order, every entry: a result missing is a failure.
+  local -A result=()
+  while read -r i n; do result[$i]=$n; done < "$out"
+  rm -f "$out"
+  for ((i = 0; i < ${#entries[@]}; i++)); do
+    e=${entries[i]}
+    n=${result[$i]-missing}
+    case "$n" in
+    failed | missing) echo "the ${e%% *} build [${e#* }] failed ($n)"; return 1 ;;
+    esac
+    if [ "${e%% *}" = control ]; then
+      if [ "$n" -eq 0 ]; then
+        echo "the control [${e#* }] links no reference symbol: the pattern no longer matches, so 0 below means nothing"
+        return 1
+      fi
+      echo "control ${e##* }: $n reference symbols"
+    elif [ "$n" -ne 0 ]; then
+      echo "the product archive [${e#* }] links $n Mesa reference symbol(s)"
       return 1
     fi
   done
-  echo "${#configs[@]} product archive(s), 0 reference symbols each"
+  echo "$(grep -c '^product' <<< "$(printf '%s\n' "${entries[@]}")") product archive(s), 0 reference symbols each, in $jobs target directories"
 }
 
 scope pvr vivante v3d precompile
-uses w:release "$(tier_tables_uses)"
+# Its archives are built in target directories of its own (above), so it
+# shares no `release` path with the two rows around it.
+uses "$(tier_tables_uses)"
 rowkey key_release_archives
 step "no Mesa reference in the artefact" check_no_mesa_reference
 
