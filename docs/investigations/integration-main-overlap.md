@@ -3,10 +3,15 @@
 # Integration, the ccfarm item branches and origin/main: what main already covers (2026-10-12)
 
 Item `es2-invariance` of plan #20 (an audit; the id is reused). Read-only: `git log`, `git show`,
-`git diff` and hunk-range comparison. Nothing was built, run or merged. Every claim cites a sha.
+`git diff`, trial merges with `git merge-tree --write-tree` (nothing written to a ref) and the
+plan states of #136, #137 and #139 from ccfarm's plan tool. Nothing was built or run. Every
+claim cites a sha.
 
-Labels: **[read]** read from a diff or a file; **[inferred]** follows from what was read (hunk
-ranges, struct literals) and was not compiled or merged.
+Labels:
+
+- **[read]**: read from a diff, a file or a plan.
+- **[merge-tree]**: the conflict list of a trial merge. A file not listed merged cleanly.
+- **[inferred]**: follows from what was read (struct literals, hunk ranges); not compiled.
 
 ## 0. What changed since the first audit
 
@@ -91,9 +96,10 @@ es2-invariance-repro) adds `tests/es2_invariance.rs` (642 lines, no `#[ignore]`)
 whole difference from `1c574bb6` is 14 lines of comments (the doc's path, the fix named as
 `f9688bc5`) [read]. The doc goes to `tools/cts/log/investigations/es2-invariance.md`.
 
-**Verdict:** resolved on main. `1c574bb6` duplicates `int-pr44`. Merged together they would
-conflict only in the module comment of `tests/es2_invariance.rs`, lines 7-35 [inferred]. They
-would also leave two copies of the doc (`docs/investigations/` and `tools/cts/log/investigations/`).
+**Verdict:** resolved on main. `1c574bb6` duplicates `int-pr44`. On its own it merges onto main
+cleanly. Against `int-pr44` it gives an add/add conflict in `tests/es2_invariance.rs`, from the
+comment lines [merge-tree]. It would also leave a second copy of the doc under
+`docs/investigations/`.
 
 ## 3. report-es2 refusals (`4e9397c6` and the tranches)
 
@@ -113,8 +119,9 @@ differs only in comments:
 
 Main has no `docs/es3-vertex-gap.md`; it cites `docs/es3-cts-failures.md` Appendix A [read].
 
-Verdict: **resolved on main**. Merging `01a12489` would give a rename/modify conflict on the
-test, comment conflicts in `vertex.rs`, and a dangling doc reference.
+Verdict: **resolved on main**. A trial merge of the branch's own four commits onto main (merge
+base `e984a4c8`) conflicts in `src/gl/vertex.rs` only [merge-tree]. Git takes the test rename
+silently, which would leave the dangling `docs/es3-vertex-gap.md` reference on main.
 
 ### 3.2 State/program (owner PR `int-pr64`)
 
@@ -130,19 +137,13 @@ full `YakoglBackend { ... }` literal ending at `depth_resolve: None`, so it does
 `195fa350` (2026-10-12, branch `01a12b76-651f-...`, based on `db3545fa`) refuses ES 3-only buffer
 and framebuffer values. It also drops the `BUG:` pin at `es2_report_guard.rs:576`. No owner branch
 carries it. Main changed no `YakoglBackend` field after `db3545fa` (`git diff db3545fa origin/main
--- src/backend.rs` adds no `pub` field), so its test literals compile there [inferred]. Expected
-clashes:
+-- src/backend.rs` adds no `pub` field), so its test literals compile there [inferred]. Trial
+merges [merge-tree]:
 
-| File | `195fa350` hunk | Collides with | Kind |
-|---|---|---|---|
-| `src/gl/names.rs` | insert after 191 (`reset_context`), after 277 (tests) | `int-pr64` inserts after 191 and 278 | same insertion point: conflict [inferred] |
-| `tools/cts/log/investigations/es2-error-rules.md` | 363-366 | main `+6` at line 4; `int-pr64` 360-378 | overlapping: conflict [inferred] |
-| `docs/HANDOFF.md` | 55, 130 | main rewrote HANDOFF after `db3545fa` (1,321 lines); `int-pr64` line 111 | conflict [inferred] |
-| `src/gl/buffer.rs` | insert after 573 (`glGetBufferParameteriv`) | main 573-581 (4-line edit) | adjacent: likely conflict [inferred] |
-| `src/gl/tf_tests.rs` | 722 | `int-pr64` 714-717 and 741 (same fn) | close: possible conflict |
-| `tests/es3_tf_api.rs` | 203 | `int-pr64` 193-196, 222 (same fn) | close: possible conflict |
-| `src/gl/framebuffer.rs` | 301, 1382-1954, 2224, tests | main 319-2509 | no overlap found |
-| `tests/es2_report_guard.rs` | 576-579, 695 | `int-pr64` 431-436, 489-492 | no overlap |
+| Merged with | Conflicts | Clean |
+|---|---|---|
+| origin/main `9af3abba` | `docs/HANDOFF.md`; `src/gl/buffer.rs` (one hunk, `glGetBufferParameteriv`, lines 629-642 of the merged file) | `framebuffer.rs`, `draw.rs`, `es3.rs`, `state.rs`, `texture.rs`, `tf_tests.rs`, `tests/es3_tf_api.rs`, `es2-error-rules.md` |
+| `work/int-pr64` `47ab9b2c` | the two above, plus `src/gl/names.rs` (both insert after `reset_context`, line 191) and `tools/cts/log/investigations/es2-error-rules.md` | `tests/es2_report_guard.rs`, `tf_tests.rs`, `tests/es3_tf_api.rs` |
 
 Verdict: **still needed**. Rebase onto main after `int-pr64` lands. The superseded `82cec4f4`
 (branch `01a12a21-932c-...`) is to be dropped.
@@ -155,6 +156,12 @@ today's answers instead of ignoring them. The guards are `336b3dc9` and `00e91bd
 predicates, plus `tests/es2_texture_rules_pred.rs`. Neither main nor any owner branch has them,
 and they are not yet wired into `texture.rs`. Integration's own `tests/es2_error_rules_texture.rs`
 lacks the three `query_*` fields and does not compile on main [inferred].
+
+The guards' two commits merge onto main without a conflict (merge base `39bb67dc`)
+[merge-tree]. Plan #136's item `es2-error-rules-tex` writes the guards into `texture.rs`. It is
+`ready`, waiting on `tex3d-finish` (plan 19), and its `handoff_from` is `es2-tex-rules-pred` (that
+branch) [read]. Its goal still says to remove `#[ignore]` marks. `int-5162a33` replaced those marks
+with pins at today's answers, so the guard has to flip pins, not ignores.
 
 Verdict: the tests are **replaced by `int-5162a33`**. The guards are **still needed**. A guard
 must then flip the pins of `int-5162a33` and the `BUG:` pin at `es2_report_guard.rs:659`
@@ -182,13 +189,26 @@ commits `db5928d1`, `2ff18444`, `c0733494`, merge `a25712f2` (#94). It is a seco
 
 The owner made no `work/int-*` branch for `a25712f2` [read].
 
-**Verdict:** **replaced by main**, and **conflicting** if ever merged:
+**Verdict:** **replaced by main**, and **conflicting** if ever merged. A trial merge of
+`a25712f2`'s own change onto main (merge base `cdb28c04`) gives three conflict hunks in
+`tools/board.sh` [merge-tree]:
 
-- the header lines 127-133;
-- `pi4_uart_free`, main `:794-806` against integration `:752-768`;
-- `pi4_capture_start`, main `:876-893` against integration `:844-865`;
-- `WANT_CHECKS` and the selftest rows near line 267;
-- `tools/serial_capture.py` would land as a dead second reader.
+- the `BOARD_UART` header, merged-file lines 134-144;
+- `pi4_uart_free`, 806-829;
+- `pi4_capture_start`, 906-932.
+
+It also gives one in `tools/board_selftest.sh` (`WANT_CHECKS` 227 against 210, lines 49-53), and
+`tools/serial_capture.py` would land as a dead second reader.
+
+**Plan #137 now** [read]:
+
+- `pi4-console-tcp2` is `done`, merged into integration.
+- `pi4-console-tcp-verify` is done, with no changes.
+- `pi4-es2-tip-r2` is `running` (agent `01a12b18-f2ee-73d4-a52a-be060e767504`). It was
+  redefined to probe the bridge with `tools/serial_capture.py probe` and to run the tree at the
+  integration tip. Its record therefore measures the integration tree with the integration
+  console, not main.
+- Its only prebuilt images are `pi4-4451f136`, an integration commit.
 
 ## 5. NPOT, preprocessor, offline table, fragdata, V3D clear
 
@@ -196,12 +216,17 @@ The owner made no `work/int-*` branch for `a25712f2` [read].
   deleted `tools/cts/log/investigations/es2-npot-cases.md`. `50dd2f1d` (branch `01a12c82-...`,
   running es2-npot-cases) adds `tests/es2_npot.rs` and edits that deleted doc (+51 lines):
   modify/delete. `int-pr50` carries the same test; the whole difference is one comment line, which
-  points at H.2/H.3. It also adds H.5 to the inventory [read]. Verdict: **duplicate of `int-pr50`**.
+  points at H.2/H.3. It also adds H.5 to the inventory [read]. Trial merges [merge-tree]:
+  - `50dd2f1d` onto main: modify/delete on `es2-npot-cases.md`.
+  - `50dd2f1d` against `int-pr50`: the same, plus an add/add conflict on `tests/es2_npot.rs`.
+
+  Verdict: **duplicate of `int-pr50`**.
 - **Preprocessor.** Main has only the record `tools/cts/log/investigations/es2-preprocessor.md`.
   Its `src/shaderc/online/pp.rs` has no `rescan` [read]. `f44a0ff0` (branch `01a11c0d-ccc3-...`,
   based on integration `2c7f8871`, review) fixes `#define G F` / `G(2)` (C99 6.10.3.4) with
   `rescan_tail` and adds `tests/es2_preprocessor.rs`. No dEQP-GLES2 case reaches it (its own
-  message: 532 of 532 preprocessor cases as expected). Verdict: **resolved on main for dEQP**.
+  message: 532 of 532 preprocessor cases as expected). Its own commit merges onto main without
+  a conflict (merge base `2c7f8871`) [merge-tree]. Verdict: **resolved on main for dEQP**.
   `f44a0ff0` is **still needed** only as optional hardening; it is not a stage-1 item.
 - **Offline table (#22).** Main `9224abaf` runs the 8 GL tests without a table, the same change
   as `7151a12a` / `c2c31372`. Main HANDOFF lines 274-278 keep #22 open: 146 of gl_test's 192
@@ -229,8 +254,8 @@ The owner made no `work/int-*` branch for `a25712f2` [read].
   either since `e6b84f7d` (pub-changelog). Take main's.
 - **ROADMAP.md.** On neither tip. Review branches: `01a11bc4-6674-...` (`02017674`) and
   `01a11d2d-0998-...` (`455a8241`: `ROADMAP.md`, one `README.md` line, a `docs/HANDOFF.md` goal
-  list, and an unrelated `src/shaderc/online/sema.rs` line). The HANDOFF hunk conflicts with main's
-  rewrite (`b6d86120`). Verdict: **still needed**. Rebase onto main, drop the HANDOFF and `sema.rs`
+  list, and an unrelated `src/shaderc/online/sema.rs` line). Both branches conflict with main in
+  `docs/HANDOFF.md` only, from main's rewrite `b6d86120`; `README.md` merges [merge-tree]. Verdict: **still needed**. Rebase onto main, drop the HANDOFF and `sema.rs`
   hunks, and take the state from section 7.
 
 ## 7. Main's dEQP-GLES2 numbers per board (mustpass 17,165)
@@ -263,8 +288,10 @@ Reading:
 
 | Duplicate (ccfarm item / branch) | Main or owner PR | Action |
 |---|---|---|
-| **Plan #139 `pvr-vertex-2d-fix`** (own `extra` staging memory in `src/pvr/backend.rs`, not started, no branch) | main `a6fc6f14`; `985592b5` marks that fix "not taken" | **Drop.** Reopen only if AM62P image 9 from a main tree still fails. Main refuses by name a fan, a line loop, a primitive whose window exceeds half an arena, and more than 64 pieces (`MAX_PIECES`); no dEQP-GLES2 case is known to reach them |
-| **Plan #137 `pi4-console-tcp2`** (`a25712f2`: `db5928d1`, `2ff18444`, `c0733494`) | main `28fb55ae` and its follow-ups | **Drop** (do not re-land): main has the feature, with `console.ts` and lossy-capture handling that integration's version lacks. Run `pi4-es2-tip-r2` and `pi4-es2-final-a` from origin/main with `BOARD_UART=host:port` |
+| **Plan #139 `pvr-vertex-2d-fix`** (`ready`, held behind plan 18's `pvr-pool-npot`; own `extra` staging memory in `src/pvr/backend.rs`; no branch) | main `a6fc6f14`; `985592b5` marks that fix "not taken" | **Drop** (cancel the item, then the plan). Its goal expects `#[ignore]`d tests in `tests/es2_pvr_vertex_texture.rs`; the file has none, here or on main. Reopen only if AM62P image 9 from a main tree still fails. Main refuses by name a fan, a line loop, a primitive whose window exceeds half an arena, and more than 64 pieces (`MAX_PIECES`, `src/pvr/backend.rs:4462`); no dEQP-GLES2 case is known to reach them |
+| **Plan #137 `pi4-console-tcp2`** (done, merged into integration: `a25712f2` = `db5928d1`, `2ff18444`, `c0733494`) | main `28fb55ae` and its follow-ups | **Drop** (do not re-land): main has the feature, with `console.ts` and lossy-capture handling that integration's version lacks |
+| Plan #137 `pi4-es2-tip-r2` (running, integration tip) | plan #20 `pi4-es2-final-a` (origin/main) | **Owner decision.** If it has not reached the board, cancel it: its tree is integration's, not main's. If it already has a complete tree, keep it as a record only; `pi4-es2-final-a` from origin/main is the stage-1 result |
+| Plan #136 `es2-error-rules-tex` (ready) | tests in `int-5162a33` | **Rebase onto main** after `int-5162a33`; start from `00e91bdf` (clean onto main); flip pins, not ignores |
 | es2-invariance-repro `1c574bb6` | owner PR `int-pr44` | **Drop**; keep `int-pr44` (tests only) |
 | es2-npot-cases `50dd2f1d` | owner PR `int-pr50` | **Drop**; keep `int-pr50` (tests only) |
 | es2-fragdata-guard `4fa00f0a` | owner PR `int-pr57` | **Drop**; keep `int-pr57` (tests only) |
@@ -289,11 +316,9 @@ Order that avoids repeated work:
 
 ## 9. Not checked
 
-- Nothing was compiled or merged. `git merge-tree` and branch switching were refused in this
-  session, so every conflict above comes from hunk ranges and is marked [inferred].
-- The plans could not be read through ccfarm's plan tool (refused). The plan #137 and #139 item
-  states come from the task text and the git refs.
-- Plan #136 was not read.
+- Nothing was compiled. The trial merges show textual conflicts only; a clean merge may still
+  fail to build (for example the `YakoglBackend` literals of 3.2 and 3.4).
+- Plan states are as of the plan tool's read on 2026-10-12.
 - GitHub could not be queried, so the PR numbers are those quoted in the commit messages; the
   `work/int-*` branches are named instead.
 - `work/int-pr34`, `int-pr49` (ES 3.0) and the `tools/cts/*` script overlaps were not read hunk by
