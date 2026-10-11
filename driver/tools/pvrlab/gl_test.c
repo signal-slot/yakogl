@@ -2877,10 +2877,78 @@ static int case_egl(void)
  * pixel on it is exactly half covered. With 4 samples at (6,2) (14,6) (2,10)
  * (10,14)/16, two samples fall on each side, so the resolved pixel is half
  * magenta; single-sampled it is either full or empty. */
+/* The 4x half's probe readings, kept for a board with no console: the
+ * console lines below are the same numbers in words. gl_test_msaa_page()
+ * hands them out three words at a time, for a PERF-kind record of the
+ * image's own (tools/yakogl-tools `record msaa`; tools/cts/log/
+ * investigations/gc-msaa-record.md has the layout):
+ *   tag 0xf0 x4 inside, outside, edge pixels (0xAABBGGRR as read back)
+ *   tag 0xf1 what was taken (MSAA_REC_*), the scratch's bytes, the two
+ *            maps' chunk counts (clear only | draw only << 16)
+ *   tag 0xf2 / 0xf3 / 0xf4  the scratch after the frame, after the clear
+ *            alone, after the draw alone: non-zero dwords, first non-zero
+ *            index, its value
+ *   tag 0xf8..0xfa  the clear-only map, one bit per 256-byte chunk,
+ *            chunk i at bit i % 32 of word i / 32 (words 0..7: the first
+ *            256 chunks, which is the whole 64 KiB of a 64x64 4x target)
+ *   tag 0xfb..0xfd  the draw-only map, the same */
+#define MSAA_REC_PIXELS   0x01u
+#define MSAA_REC_SCRATCH  0x02u
+#define MSAA_REC_CLEAR    0x04u
+#define MSAA_REC_DRAW     0x08u
+#define MSAA_REC_CLEARMAP 0x10u
+#define MSAA_REC_DRAWMAP  0x20u
+#define MSAA_MAP_WORDS    8u
+
+static struct {
+	uint32_t taken;                 /* MSAA_REC_* */
+	uint32_t px[3];                 /* inside, outside, edge */
+	uint32_t sc[3][4];              /* gc_debug_msaa_scratch: bytes, non-zero, first, value */
+	uint32_t map_n[2];              /* chunks the map returned (clear only, draw only) */
+	uint32_t map[2][MSAA_MAP_WORDS];
+} s_msaa_rec;
+
+/* One page of the record: tag in 0xf0..0xfd, w[0..2] the record's w1..w3.
+ * 0 if the page exists, -1 if not (the case did not run, or not that tag). */
+int gl_test_msaa_page(unsigned int tag, uint32_t *w)
+{
+	w[0] = w[1] = w[2] = 0;
+	if (s_msaa_rec.taken == 0)
+		return -1;
+	if (tag == 0xf0u) {
+		w[0] = s_msaa_rec.px[0];
+		w[1] = s_msaa_rec.px[1];
+		w[2] = s_msaa_rec.px[2];
+		return 0;
+	}
+	if (tag == 0xf1u) {
+		w[0] = s_msaa_rec.taken;
+		w[1] = s_msaa_rec.sc[0][0];
+		w[2] = (s_msaa_rec.map_n[0] & 0xffffu) | s_msaa_rec.map_n[1] << 16;
+		return 0;
+	}
+	if (tag >= 0xf2u && tag <= 0xf4u) {
+		const uint32_t *sc = s_msaa_rec.sc[tag - 0xf2u];
+
+		w[0] = sc[1];
+		w[1] = sc[2];
+		w[2] = sc[3];
+		return 0;
+	}
+	if (tag >= 0xf8u && tag <= 0xfdu) {
+		unsigned int m = (tag - 0xf8u) / 3u, first = ((tag - 0xf8u) % 3u) * 3u;
+
+		for (unsigned int i = 0; i < 3 && first + i < MSAA_MAP_WORDS; i++)
+			w[i] = s_msaa_rec.map[m][first + i];
+		return 0;
+	}
+	return -1;
+}
+
 #if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 /* Which 256-byte chunks of the 4x scratch surface a frame wrote, 64 to a
  * line ('#' written, '.' not), so where the writes landed is visible. */
-static void msaa_print_map(const char *what)
+static void msaa_print_map(const char *what, int slot)
 {
 	extern int gc_debug_msaa_scratch_map(uint8_t *out, uint32_t n);
 	static uint8_t map[1024];
@@ -2889,6 +2957,11 @@ static void msaa_print_map(const char *what)
 
 	if (n <= 0)
 		return;
+	s_msaa_rec.map_n[slot] = (uint32_t)n;
+	for (int i = 0; i < n && i < (int)(32 * MSAA_MAP_WORDS); i++)
+		if (map[i])
+			s_msaa_rec.map[slot][i / 32] |= 1u << (i % 32);
+	s_msaa_rec.taken |= slot ? MSAA_REC_DRAWMAP : MSAA_REC_CLEARMAP;
 	pr_info("gl_test:   x4 %s map, %d chunks of 256 bytes:\n", what, n);
 	for (int i = 0; i < n && i < (int)sizeof(map); i += 64) {
 		int k;
@@ -2941,6 +3014,13 @@ static int case_msaa_at(EGLDisplay dpy, EGLConfig cfg, int samples, bool *ok)
 	out = s_px[(TH - 1 - 40) * TW + 20];
 	edge = s_px[(TH - 1 - 32) * TW + 32];
 	pr_info("gl_test:   x%d: inside 0x%08x outside 0x%08x edge 0x%08x\n", samples, in, out, edge);
+	if (samples > 1) {
+		memset(&s_msaa_rec, 0, sizeof(s_msaa_rec));
+		s_msaa_rec.px[0] = in;
+		s_msaa_rec.px[1] = out;
+		s_msaa_rec.px[2] = edge;
+		s_msaa_rec.taken = MSAA_REC_PIXELS;
+	}
 #if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 	/* Which half of a failed 4x frame failed: samples in the scratch and a
 	 * blank target is the resolve's; an empty scratch is the draw's. The
@@ -2949,10 +3029,12 @@ static int case_msaa_at(EGLDisplay dpy, EGLConfig cfg, int samples, bool *ok)
 		extern int gc_debug_msaa_scratch(uint32_t *out);
 		uint32_t sc[4];
 
-		if (gc_debug_msaa_scratch(sc) == 0)
+		if (gc_debug_msaa_scratch(sc) == 0) {
+			memcpy(s_msaa_rec.sc[0], sc, sizeof(sc));
+			s_msaa_rec.taken |= MSAA_REC_SCRATCH;
 			pr_info("gl_test:   x4 scratch: %u bytes, %u non-zero dwords, first [%u] = 0x%08x\n",
 				sc[0], sc[1], sc[2], sc[3]);
-		else
+		} else
 			pr_info("gl_test:   x4 scratch: none allocated (the draw did not take the 4x path)\n");
 	}
 	/* Then the clear and the draw apart, each into an emptied scratch, so a
@@ -2966,18 +3048,24 @@ static int case_msaa_at(EGLDisplay dpy, EGLConfig cfg, int samples, bool *ok)
 		if (gc_debug_msaa_scratch_zero() == 0) {
 			glClear(GL_COLOR_BUFFER_BIT);
 			glFinish();
-			if (gc_debug_msaa_scratch(sc) == 0)
+			if (gc_debug_msaa_scratch(sc) == 0) {
+				memcpy(s_msaa_rec.sc[1], sc, sizeof(sc));
+				s_msaa_rec.taken |= MSAA_REC_CLEAR;
 				pr_info("gl_test:   x4 clear only: %u non-zero dwords of %u, first [%u] = 0x%08x\n",
 					sc[1], sc[0] / 4, sc[2], sc[3]);
-			msaa_print_map("clear only");
+			}
+			msaa_print_map("clear only", 0);
 		}
 		if (gc_debug_msaa_scratch_zero() == 0) {
 			glDrawArrays(GL_TRIANGLES, 0, 3);
 			glFinish();
-			if (gc_debug_msaa_scratch(sc) == 0)
+			if (gc_debug_msaa_scratch(sc) == 0) {
+				memcpy(s_msaa_rec.sc[2], sc, sizeof(sc));
+				s_msaa_rec.taken |= MSAA_REC_DRAW;
 				pr_info("gl_test:   x4 draw only: %u non-zero dwords of %u, first [%u] = 0x%08x\n",
 					sc[1], sc[0] / 4, sc[2], sc[3]);
-			msaa_print_map("draw only");
+			}
+			msaa_print_map("draw only", 1);
 		}
 	}
 #endif

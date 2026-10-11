@@ -179,6 +179,7 @@ extern int gl_test_first_fail, gl_test_first_fail_at, gl_test_second_fail, gl_te
 extern volatile int gl_test_check_no, gl_test_first_bad_check;
 extern const char *gl_test_skip;
 extern volatile uint32_t gl_test_first_bad_got, gl_test_first_bad_want;
+int gl_test_msaa_page(unsigned int tag, uint32_t *w);
 
 /* A colour as six bits: the marker, then one bit per channel at half scale.
  * Enough to tell red from green from blue, which is what a texture or a mip
@@ -293,9 +294,51 @@ static unsigned parse_list(int k, int *list, unsigned max)
 }
 #endif
 
+/*
+ * Case 16's x4 probes without a console (gl_test.c, gl_test_msaa_page): the
+ * selector GC_RESULT_PERF_SEL | tag, tag 0xf0..0xfd, runs case 16 alone and
+ * ends with that page of its readings as a PERF record, w0's low byte = the
+ * tag, instead of the case's CASE record. Without the selector the run ends
+ * with its CASE record as before. The tag, or -1 when the selector is not
+ * one (or the image does not run case 16).
+ */
+static int msaa_page_tag(void)
+{
+	int sel = gc_result_selector();
+
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+	if (CONFIG_GC_GL_TEST_SWEEP_FIRST > 16 || CONFIG_GC_GL_TEST_SWEEP_FIRST + GC_RESULT_SWEEP_CASES <= 16) {
+		return -1;
+	}
+#else
+	if (CONFIG_GC_GL_TEST_CASE != 16) {
+		return -1;
+	}
+#endif
+	if (sel < (int)GC_RESULT_PERF_SEL + 0xf0 || sel > (int)GC_RESULT_PERF_SEL + 0xfd) {
+		return -1;
+	}
+	return sel - (int)GC_RESULT_PERF_SEL;
+}
+
 static void report_result(int rc)
 {
 	int the_case = CONFIG_GC_GL_TEST_CASE;
+	int page = msaa_page_tag();
+
+	if (page >= 0) {
+		uint32_t w[3];
+
+		if (gl_test_msaa_page((unsigned int)page, w) == 0) {
+			LOG_INF("gc_gl_test: case 16 probe page 0x%02x", page);
+			gc_result_write_tag(GC_RESULT_PERF, (uint8_t)page, w[0], w[1], w[2]);
+			return;
+		}
+		LOG_ERR("gc_gl_test: no case 16 probe page 0x%02x (the 4x half did not run)", page);
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+		return;   /* the sweep's own record stays the verdict */
+#endif
+	}
 
 #ifdef CONFIG_GC_GL_TEST_SWEEP
 	/* The sweep's record is already there, rewritten after every case --
@@ -410,6 +453,10 @@ int main(void)
 			 * previous case left behind on the shared context. */
 			int only = gc_result_selector();
 
+			if (msaa_page_tag() >= 0) {
+				/* a case 16 probe page: case 16 alone, as its own index */
+				only = 16 - CONFIG_GC_GL_TEST_SWEEP_FIRST;
+			}
 			if (only >= GC_RESULT_SWEEP_SEL_LIST) {
 				/* a list of the table, in its own order */
 				n = parse_list(only - GC_RESULT_SWEEP_SEL_LIST, list,
