@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL host tools
 
 `tools/yakogl-tools` is one Rust program (a workspace member; the library build
@@ -488,7 +490,7 @@ patched `main-fs.glsl`.
 
 ## abi-layout — layout pins for the shared structs
 
-`yakogl-tools abi-layout <powervr-bxs-am62p/src>` measures every `#[repr(C)]`
+`yakogl-tools abi-layout <driver src>` (this repository's `driver/src`) measures every `#[repr(C)]`
 struct the C headers share with the crate (26 structs, 365 fields) with the host C
 compiler (`CC`, default `cc`) and writes the numbers twice: `src/abi_layout_check.c`
 (`_Static_assert`s) and `src/abi_layout.rs` (const assertions). A change to a header
@@ -500,8 +502,8 @@ tool when a shared struct changes. LP64 targets only.
 Runs GL/EGL call streams through a library build on the host with a recording
 platform layer (`rec.c`: all 17 OSAL operations, GPU memory hashes at every submit,
 free and exit, decoded kicks) and an interposer on all 222 exported entry points
-(return values, output parameters, read-back data): the driver repository's
-`tools/pvrlab/gl_test.c` (`gltest.c`, 47 cases), API sweeps (`scen.c`) and hostile
+(return values, output parameters, read-back data): `driver/tools/pvrlab/gl_test.c`
+(`gltest.c`, 47 cases), API sweeps (`scen.c`) and hostile
 sequences (`hostile.c`), each in twelve platform modes (lagging fences, no CPU view,
 map_phys, uninitialised pools, a failing wait, the linux OSAL), under AddressSanitizer —
 which covers the library itself, not only the harness.
@@ -546,8 +548,8 @@ restyled: a changed constant or a changed dump format would destroy the diff.
 the runner compiles the library's `.c` files, and here the library is Rust, so
 `build_cs_ours.sh` builds the archive crate with cargo, appends the parts that are
 still C with `ar` and links `cs_ours.c` against that — the same way
-`tools/hostharness/run.sh` builds its C harnesses. It needs a driver-repository
-checkout for `gl_test_shaders.h` and `pvr_render.h`.
+`tools/hostharness/run.sh` builds its C harnesses. It takes `gl_test_shaders.h` and
+`pvr_render.h` from this repository's `driver/` by default.
 
 # yakogl.ver — the shared libraries' exported ABI
 
@@ -569,7 +571,7 @@ assembled `libyakogl.a` with `--whole-archive`, so the archive and the shared
 objects cannot drift apart.
 
 Build them with `-DYAKOGL_SHARED=ON` for any OSAL (it needs
-`YAKOGL_RUST_LINKAGE=staticlib`, the default; it is on by default for `gcgpu`).
+`YAKOGL_RUST_LINKAGE=staticlib`, the default).
 The host `linux` OSAL builds the pair as a `libEGL` that stands in for an
 application under ASan:
 
@@ -640,12 +642,19 @@ compiler, an unreachable server) and is never cached.
 
 ## land.sh — land one branch tip on main
 
-`tools/land.sh <name> <tip> <message-file>` is how a branch tip reaches
-`origin/main`: it merges the tip `--no-ff` into a detached worktree of
+main moves through pull requests: a pull request, the full gate on it
+(`.github/workflows/gate.yml` runs every row of `tools/check.sh` on every pull
+request to main, on every push to main and nightly), a review, a merge. Locally
+a change runs only the rows its diff reaches (`tools/check.sh --changed <base>`).
+
+`tools/land.sh <name> <tip> <message-file>` is the older direct path, and it
+pushes to main itself. It merges the tip `--no-ff` into a detached worktree of
 `origin/main`, asserts `HEAD^2 == <tip>` (a merge that did not take the tip is a
-refusal, not a landing), runs `tools/check.sh` there — the gate that counts is
-the one run on the exact commit pushed — and pushes only on rc 0, then proves
-the *tip* is an ancestor of `origin/main` before removing the worktree. Exit
-codes name what stopped it: 1 gate red, 8 the merge did not take, 2 pushed but
-not proven, 9 a precondition. The merge message is a file because
-`git merge -F -` cannot read stdin.
+refusal, not a landing), and runs `tools/check.sh --local HEAD^1` there: the
+rows the merge can reach, or the local set when it reaches a shared layer.
+`LAND_GATE=changed` runs `--changed HEAD^1` instead and `LAND_GATE=full` every
+row. It pushes only on gate rc 0, then proves the *tip* is an ancestor of
+`origin/main` before removing the worktree. Exit codes name what stopped it:
+1 gate red, 8 the merge did not take, 2 pushed but not proven, 9 a
+precondition. The merge message is a file because `git merge -F -` cannot read
+stdin.

@@ -16,7 +16,13 @@ what that changed on the register bus.
 | `rgxstop.trace` | `RGXStop` on an idle GPU (no former counterpart: the driver never stopped the firmware) |
 
 `tools/check.sh` (row "pvr rgxlayer_check") rebuilds the new traces and
-requires the diff and the stop trace to be these, byte for byte. Same inputs
+requires the diff and the stop trace to be these, byte for byte.
+`record_main.sh`, which rebuilds the old trace, reads the C with
+`git show 38438f4d:...`. That commit is not an ancestor of main (main's
+history starts at the release commit `afb16335`); it is reachable only from
+older branches (`origin/ccfarm/*` held it on 2026-10-11) or the
+pre-release history. The gate does not need it: the old trace is
+committed. Same inputs
 on both sides: page catalogue 0xe0300000, firmware heap at
 `RGX_FIRMWARE_RAW_HEAP_BASE` (0xe1c0000000), `SLC_CTRL_MISC` found as
 PSG-hazard-check | 0xf00000, core clock 800 MHz. Trace lines: `W off val`,

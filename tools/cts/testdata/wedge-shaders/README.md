@@ -1,4 +1,12 @@
-# The four shaders that hang the GC7000 when our compiler builds them
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# The four shaders that hung the GC7000 when our compiler built them
+
+**Status (2026-10-11): closed.** These cases no longer hang. The i.MX8MP's
+whole dEQP-GLES2 tree on main `32778b57` runs `shaders.algorithm.*` with our
+compiler and has 0 failures (`tools/cts/STATUS.md`). The investigation is in
+`driver/src/vivante/NOTES.md` and `tools/cts/RESULTS.md`. What follows is
+the record as it was written while the hang was open.
 
 `dEQP-GLES2.functional.shaders.algorithm.{hsl_to_rgb,rgb_to_hsl}_{vertex,fragment}`,
 as dEQP actually sends them. They are here so the defect can be worked on

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL offline shaders for the Vivante GC7000 (i.MX8MP)
 
 `etna_shc.c` is a host tool built inside a Mesa tree (26.2.1): it turns an
@@ -19,9 +21,8 @@ ninja -C build-etnaviv src/gallium/drivers/etnaviv/etna_shc
 ```
 
 Then `ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc python3 glsl2vivante.py`.
-On the lab host the tree is `~/pvr-lab/mesa-build/mesa-26.2.1` and the tool is built.
-
-Status (2026-09-16): all 40 shaders under `yakogl/tools/shaders` compile
+Measured 2026-09-16, when the directory held 40 shaders (not re-measured on
+today's larger set): all 40 shaders under `yakogl/tools/shaders` compile
 (`40/40 compiled`); the matrix vertex shader is 4 instructions, FemtoVG's gradient
 fragment shader 59, its image filter 369. The tool runs the GL state tracker's
 preparation that the driver compiler expects but does not do itself: system
@@ -30,9 +31,9 @@ shows up as an assertion in the driver's liveness pass or an unhandled ALU op.
 
 ## The shader table
 
-`gen_shader_table.py` turns that JSON into the offline table the backend looks
-shaders up in, `src/shaderc/vivante_shader_blobs.c`: one entry per shader under
-`yakogl/tools/shaders`, found by the SHA-256 of the GLSL text the application
+`gen_shader_table.py` turns that JSON into the GC7000's Mesa reference table,
+`tests/reference/vivante_blobs.rs` (kept for measurement; the product compiles
+with our own compiler): one entry per shader under `tools/shaders`, found by the SHA-256 of the GLSL text the application
 passes to `glShaderSource`, exactly as the PowerVR table works. It also writes
 `tests/reference/gc_clear_shader.rs`, etna's two shaders for the backend's
 clear quad (`tools/shaders/internal/clear.vert` and `clear.frag`): reference
@@ -97,7 +98,7 @@ Output per shader (JSON, then the disassembly): `code` (instruction words),
 constant register file: contents 2 = a GL uniform component, `data` = its index),
 `uniform_names` (name, GL location, vec4 slot / texture unit), `vs_pos_out_reg`,
 `ps_color_out_reg`, `input_count_unk8`, `uses_discard`. What the driver-side
-backend does with these is `docs/imx8mp-backend-plan.md`.
+backend does with these is `driver/docs/imx8mp-backend-plan.md`.
 
 ## The golden command stream: what a working driver tells this part
 
@@ -114,8 +115,8 @@ fragment-uniform bug was found, after three guesses had been spent on it.
 ### Building it
 
 ```sh
-cd ~/pvr-lab/mesa-build/mesa-26.2.1
-patch -p1 < tools/vivante/mesa-cs-golden.patch     # see "what the patch does"
+cd <mesa-26.2.1>
+patch -p1 < <this repository>/tools/vivante/mesa-cs-golden.patch     # see "what the patch does"
 meson setup <build dir>/mesa-etnaviv-host \
     -Dgallium-drivers=etnaviv -Dvulkan-drivers= -Dtools=drm-shim \
     -Degl=enabled -Dgles1=disabled -Dgles2=enabled -Dglx=disabled \
@@ -128,6 +129,14 @@ ninja -C <build dir>/mesa-etnaviv-host
 link against instead of a GLVND vendor library.
 
 ### Running it
+
+The commands below call two runner scripts, `build/run_cs_golden.sh` and
+`build/run_cs_ours.sh`, that lived in the gitignored `build/` of the
+checkout they were written in; they are not in the repository. Our side
+is built by `tools/vivante/build_cs_ours.sh`, and its header shows how to
+run `cs_ours` and decode its dump with `cs_decode.py`. The golden side is
+`cs_golden.c` built against the Mesa tree above. Both take the mode number
+first (the list is in `cs_ours.c`, "the mode numbers, in one place").
 
 ```sh
 build/run_cs_golden.sh 1                  # gl_test case 1's shape
@@ -322,7 +331,8 @@ created, which is how the bug announced itself.
 
 `gl_flush_pending_clear` was gated on the colour clear alone, so a depth- or
 stencil-only clear stayed pending and was applied to whatever draw came next,
-however much later. Fixed in `src/gl_draw.c`, with the colour mask following
+however much later. Fixed in the C-era GL core (`src/gl_draw.c` then; the
+pending clear is in `src/gl/draw.rs` today), with the colour mask following
 the colour clear so that a depth-only clear leaves the colour buffer alone
 (`PE_COLOR_FORMAT` 0x00000006 rather than 0x00010f06: the write-mask field is
 zero).

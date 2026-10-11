@@ -1,8 +1,12 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Qt Quick 3D shaders
 
 The GLSL ES 1.00 sources Qt Quick 3D's GLES 2.0 path hands to `glShaderSource`,
-for YakoGL's offline table (`tools/glsl2usc.sh` compiles this directory like
-`shaders/qt`, opaque plus the ONE/ONE_MINUS_SRC_ALPHA variant):
+for the precompiled shader list (`tools/shaders/precompiled.list`) and the
+Mesa reference table, which is kept for measurement (`tools/glsl2usc.sh`
+compiles this directory like `shaders/qt`, opaque plus the
+ONE/ONE_MINUS_SRC_ALPHA variant):
 
 - `<name>.vert|frag` from the runtime renderer's built-in `.qsb` packs of a
   Stage 1 build (`qt6-for-zephyr/build-qt-zephyr-am62p.sh` with
