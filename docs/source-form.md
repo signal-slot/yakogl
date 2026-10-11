@@ -50,6 +50,21 @@ src/shaderc/online/              our compiler; V3D encode/decode through FFI to 
 LICENSE, LICENSES/, NOTICE       one NOTICE entry per third_party directory
 ```
 
+## State, 2026-10-11
+
+Steps 1 to 7 of "Order" are done. What each group's "State" paragraph below
+records is finished work, kept as the account of how it was done; this table
+is the current state.
+
+| group | state | open |
+|---|---|---|
+| A. PowerVR firmware interface, MMU, boot | done: on the vendored DDK headers (`third_party/ti-img-rogue-ddk-25.2`, through `driver/compat/pvr_ddk.h`), `rgxlayer` and the kernel side in Rust (`driver/rust/src/gpu/pvr/`); board-verified on the AM62P | values marked "value from DDK capture" (derive them as Mesa does) |
+| B. PowerVR command-stream and PDS generators | done: Mesa's PDS and csbgen | |
+| C. Vivante | done: the kernel side is `gpu::vivante` in Rust, the C deleted | |
+| D. V3D | done: the packet generator, the tiling, the register file, the `qpu_pack` FFI | |
+| E. Display and SoC bring-up after GPL-only Linux drivers | steps 0, 1, 2, 4, 6 and 7 done, their C deleted | step 3 (LCDIFv3) and step 5 (Samsung DSIM): code and host tests behind `SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST` and `SAFEUI_DSIM_RUST`, default n, "not yet board-proven" (`driver/zephyr/Kconfig`); step 8, the facade |
+| F. Rust transcriptions in the on-device compiler | F1 done | step 8 of "Order": the F2 generator extensions |
+
 ## Group by group
 
 **A. PowerVR firmware interface, MMU, boot** (`pvr_bringup.c`,
@@ -626,7 +641,8 @@ bring-up paths that used it are removed (step 1).
 5. **E**: in the order of group E's own list (steps 0-8 there): the crate and
    its build, the backlight, SN65DSI8x, LCDIFv3, media power, DSIM, DSS7,
    Cadence DSI, then the facade; Zephyr PRs replace a step when they merge
-   and cover our SoC. Steps 0, 1 (branch `form/5-display-rust`), 2 and 4 are done.
+   and cover our SoC. Steps 0, 1 (branch `form/5-display-rust`), 2, 4, 6 and 7
+   are done; 3 and 5 are code and host tests, not yet board-proven.
    The Vivante kernel side (group C) from rnndb and galcore: done, the C
    deleted (2026-10-03).
 6. **A proper**: `rgxstartstop.c` and `rgxfwimageutils.c` on our

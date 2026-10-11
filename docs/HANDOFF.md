@@ -197,8 +197,8 @@ is kept and pinned by tests.
    - Docs: done. The board-session records, investigations and benchmark
      baselines are under `tools/cts/log/`; a design statement in one of
      them counts only once a `docs/` file or this file says it. The plans
-     and bring-up diaries of `driver/docs` moved there too; `docs/direct-boot.md`
-     is next. The current design documents are `driver/docs/pvr-render.md`,
+     and bring-up diaries of `driver/docs` and `docs/direct-boot.md` (now
+     `tools/cts/log/x2-direct-boot.md`) moved there too. The current design documents are `driver/docs/pvr-render.md`,
      `driver/docs/rpi4-v3d.md`, the "Hardware findings that still hold"
      section of `driver/docs/vivante-kernel-rust.md` and the "What the image
      does on a go entry" section of `docs/standalone-boot.md`.

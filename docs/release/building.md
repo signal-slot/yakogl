@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Building every benchmark image from a clean machine
 
 This guide starts from a machine that has only this repository. It lists every
@@ -21,33 +23,12 @@ Images:
 
 ## How this file was checked
 
-Honest status of each step. "Read" means I read the script or CMake file and
-copied the command. "Run" means I ran it.
-
-- **Run, and red:** `tools/check.sh --quick` on this commit. It checks the host
-  code, not this guide. Result: `76 ok, 17 failed, 2 gap(s)`. The gate is not
-  green.
-  - 13 failures are clippy rows (warnings such as `needless_range_loop` in
-    code this file does not touch).
-  - 4 failures are other rows: "no table in the artefact", "no Mesa reference
-    in the artefact", "tools board.sh dry-run matrix and replays", and "gen
-    src/pvr/csbgen.rs + csbgen_wrap.c == bindgen". I did not investigate them.
-  - 2 gaps (not run, so not passes): no aarch64 target or nightly with
-    rust-src for `yakogl-drivers`, and `HAL_NXP_DIR` not set, so the i.MX8MP
-    generated registers were not checked.
-  - These look like workspace and toolchain problems. I did not run the gate
-    without this file, so I have not proved that. This change only adds a
-    markdown file.
-- **Read only, everything else.** In the session that wrote this file, network
-  commands (`git ls-remote`, `git clone`) and scripts outside `tools/check.sh`
-  were refused, so no fetch and no image build was run. No URL below was
-  contacted, and no commit was seen on the remote.
-- **Seen on disk:** the deps cache already held a `glmark2` and a `hal_nxp`
-  directory. I did not check their commits.
-
-So every command here is copied from the tree, with the file and line it comes
-from. A first run on a clean machine may still find a gap. If it does, fix the
-step here.
+Every command here is copied from the tree, with the file and line it comes
+from; written 2026-10-08. No step has been run on a clean machine, and no image
+was built for this file (network commands and scripts outside `tools/check.sh`
+were refused in the session that wrote it). The gate run of that day and what
+it showed is in `git show 5ad2fa0e:docs/release/building.md`. A first run on a
+clean machine may still find a gap. If it does, fix the step here.
 
 ## The inputs
 
@@ -318,7 +299,13 @@ repository at the commit that added this file.
 
 These are not needed to build an image. They are needed for the full
 `tools/check.sh`. Without them the rows are reported as gaps and the gate is
-red (`.ccfarm/project.toml`).
+red (`.ccfarm/project.toml`). Two tools set a gate host up:
+`tools/setup-gate-host.sh --check` prints one ok / missing line per tool the
+gate needs (`--install` adds what rustup can add), and `tools/cts/deps-env.sh`
+names the dependency layout (one directory per host,
+`~/.local/share/ccfarm/deps/yakogl` unless `CCFARM_DEPS_DIR` is set) and prints
+the variables below from it; `.github/workflows/gate.yml` reads it the same
+way.
 
 | Variable | What | Source and pin | Used at |
 |---|---|---|---|
@@ -478,10 +465,11 @@ the others). Running them on a board is `tools/board.sh <board> tree <table>
 
 ## Check the host side
 
-`tools/check.sh --quick` is the short form of the gate, for an edit loop. It
-is never the landing gate (`.ccfarm/project.toml`). The full `tools/check.sh`
-needs the inputs of section 12, and the AM62P firmware header (input 6).
-Without them it reports gaps and is red.
+`tools/check.sh --quick` is the short form of the gate, for an edit loop, and
+`tools/check.sh --changed <base>` runs the rows a change reaches. Neither is the
+landing gate: the CI runs the full `tools/check.sh` on every pull request
+(`.github/workflows/gate.yml`). The full run needs the inputs of section 12, and
+the AM62P firmware header (input 6). Without them it reports gaps and is red.
 
 ## What did not work or is not settled
 

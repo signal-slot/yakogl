@@ -19,7 +19,7 @@ SPL loads every image, then jumps to the first loadable with an entry point
 0x40200000 in non-secure EL2. Replacing uboot-1's payload with a Zephyr image
 linked at 0x40200000 makes Zephyr the BL33. Everything else (SPL, BL31,
 OP-TEE, fdt-1) is copied unchanged; fdt-1 stays because SPL refuses a FIT
-whose "firmware" has no devicetree to append. See docs/direct-boot.md.
+whose "firmware" has no devicetree to append. See tools/cts/log/x2-direct-boot.md.
 
   x2-mkflash.py info  IMAGE
   x2-mkflash.py build --base IMAGE --bl33 zephyr.bin -o OUT [--limit BYTES]
