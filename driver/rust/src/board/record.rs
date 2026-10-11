@@ -1652,7 +1652,7 @@ mod tests {
     }
 
     /// The old Python decoder's self-test cases, the two board records of
-    /// 2026-10-03 first (driver/docs/imx8mp-netboot-plan.md).
+    /// 2026-10-03 first (tools/cts/log/board-sessions/imx8mp-netboot.md).
     #[test]
     fn classify_known_records() {
         let cases: &[([u32; 4], &str)] = &[

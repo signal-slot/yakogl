@@ -19,13 +19,13 @@ failures included.
 ## WDOG1 armed by the image (`gc_wdog_arm.c`, opt-in)
 
 `CONFIG_GC_BOARD_WDOG_SELF_ARM` (default n) is for an image U-Boot starts with
-`go` (driver/docs/imx8mp-netboot-plan.md), where no earlier stage can be
-relied on to have armed WDOG1. At PRE_KERNEL_1 it arms WDOG1 for 60 s from
-whatever state it finds (the register logic is driver/rust `ip::imx_wdog`),
-leaves a kind WDOG record saying what it found, and from then on every feeder
-here stops at `CONFIG_GC_BOARD_WDOG_SECONDS` of uptime. A refusal resets the
-SoC at once. `CONFIG_GC_BOARD_WDOG_PROOF` builds the image that proves on the
-board that WDOG1 really resets it.
+`go` (docs/standalone-boot.md, "What the image does on a `go` entry"), where no
+earlier stage can be relied on to have armed WDOG1. At PRE_KERNEL_1 it arms
+WDOG1 for 60 s from whatever state it finds (the register logic is driver/rust
+`ip::imx_wdog`), leaves a kind WDOG record saying what it found, and from then
+on every feeder here stops at `CONFIG_GC_BOARD_WDOG_SECONDS` of uptime. A
+refusal resets the SoC at once. `CONFIG_GC_BOARD_WDOG_PROOF` builds the image
+that proves on the board that WDOG1 really resets it.
 
 ## The interrupt guard (`gc_irq_guard.c`)
 

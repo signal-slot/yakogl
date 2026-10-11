@@ -5,15 +5,15 @@
  * earlier stage did, and feed it for a bounded time
  * (CONFIG_YAKOGL_AM62P_RTI_SELF_ARM).
  *
- * Why: an image entered from U-Boot with "go" (driver/docs/am62p-netboot-plan.md)
- * finds the RTI stopped, because this U-Boot has no watchdog driver. The
- * SafeUI feeder (CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT) only feeds a
- * running RTI, so such an image had no way back from a hang. An image
- * entered through kexec finds the RTI running (Linux started it); then this
- * code only feeds it, as the SafeUI feeder would. The two are exclusive
- * (Kconfig): the SafeUI feeder reads the RTI at POST_KERNEL 0, before any
- * TISCI power-on, which on a U-Boot entry may be a read of a module that is
- * off.
+ * Why: an image entered from U-Boot with "go" (docs/standalone-boot.md, "What
+ * the image does on a go entry") finds the RTI stopped, because this U-Boot has
+ * no watchdog driver. The SafeUI feeder
+ * (CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT) only feeds a running RTI, so such
+ * an image had no way back from a hang. An image entered through kexec finds
+ * the RTI running (Linux started it); then this code only feeds it, as the
+ * SafeUI feeder would. The two are exclusive (Kconfig): the SafeUI feeder reads
+ * the RTI at POST_KERNEL 0, before any TISCI power-on, which on a U-Boot entry
+ * may be a read of a module that is off.
  *
  * Order, at POST_KERNEL CONFIG_YAKOGL_AM62P_RTI_SELF_ARM_INIT_PRIORITY
  * (after TISCI):

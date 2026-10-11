@@ -7,7 +7,7 @@
 # The design (the hook in front of bootcmd, the one-shot variable U-Boot
 # deletes and saves before it loads anything, the eMMC source, the default
 # and its boot count) is docs/standalone-boot.md; the TFTP source is
-# driver/docs/am62p-netboot-plan.md and imx8mp-netboot-plan.md. The hook
+# tools/cts/log/board-sessions/am62p-netboot.md and imx8mp-netboot.md. The hook
 # strings are the same on both boards; only the load address and the eMMC
 # partition differ. An installed hook is compared with these strings byte for
 # byte; "install" brings an installed hook of another version to these

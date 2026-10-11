@@ -14468,7 +14468,8 @@ far for landing `ff062a35`; it has not landed.**
 
 ## Batch 105: AM62P netboot host tooling + Z1 RTI self-arm (origin/main `8b854b9d`)
 
-`am62p/netboot` lands as `origin/main` `8b854b9d`, carrying `driver/docs/am62p-netboot-plan.md` (the design and
+`am62p/netboot` lands as `origin/main` `8b854b9d`, carrying `driver/docs/am62p-netboot-plan.md` (since 2026-10-11
+`tools/cts/log/board-sessions/am62p-netboot.md`; the design and
 host tooling; nothing run on the board) and `ed5d47d4` ("am62p Z1: the image arms the RTI watchdog itself", build
 only, default off).
 

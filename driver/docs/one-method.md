@@ -286,7 +286,7 @@ the host decoder, so writer and reader cannot drift.
 one being the verdict). The dEQP case-name mapping (CRC-16 against the
 mustpass list) moves with it. It replaced the Python decoder's `record()`
 and the i.MX8MP tree runner's own decode (both deleted in Step 1). It is self-tested on the records quoted in
-`imx8mp-netboot-plan.md` (`594b040e ff403f80 35706c4e 04000258` = PICTURE)
+`tools/cts/log/board-sessions/imx8mp-netboot.md` (`594b040e ff403f80 35706c4e 04000258` = PICTURE)
 and `gc_result.h` before it is used.
 
 ## 4. The runner
@@ -395,8 +395,8 @@ unmeasured. Each screen is also photographed into the run's INDEX.
 - 1a. Write the board layer, the record module, `yakogl-tools record` and
   `board.sh`, with `--dry-run` on all three boards.
 - 1b. `board.sh` reproduces one proven row per board before any old runner is
-  deleted: AM62P step C (`am62p-netboot-plan.md` §10), Pi 4 any tryboot
-  runner row, i.MX8MP step B (`imx8mp-netboot-plan.md`, step B).
+  deleted: AM62P step C (`tools/cts/log/board-sessions/am62p-netboot.md` §10), Pi 4 any tryboot
+  runner row, i.MX8MP step B (`tools/cts/log/board-sessions/imx8mp-netboot.md`, step B).
 - 1c. Slint on the AM62P (netboot proven), then the Pi 4 (tryboot proven),
   then the i.MX8MP. Its U-Boot entry used to die after the WDOG arm. On
   `imx8mp/cold-entry` (`18487926`) the STAGE breadcrumbs named the stage

@@ -74,8 +74,9 @@ enum gc_result_kind {
 #define GC_RESULT_WDOG_PROOF       YK_RECORD_WDOG_PROOF
 #define GC_RESULT_WDOG_PROOF_ALIVE YK_RECORD_WDOG_PROOF_ALIVE
 
-/* kind STAGE (gc_result_stage(); driver/docs/imx8mp-netboot-plan.md, "Board
- * run 2026-10-03"): a breadcrumb under gc_result_breadcrumb's rule (dropped
+/* kind STAGE (gc_result_stage();
+ * tools/cts/log/board-sessions/imx8mp-netboot.md, "Board run 2026-10-03"):
+ * a breadcrumb under gc_result_breadcrumb's rule (dropped
  * once a result record is stored, replaced by any later record), so the last
  * one left by a run that died names the stage it died in. It never touches
  * the sequence number: an image that reaches its verdict writes exactly the

@@ -2,11 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX8M Plus: boot Zephyr from U-Boot over TFTP (plan, 2026-10-03)
 
+Status: finished record, moved here from `tools/cts/log/board-sessions/imx8mp-netboot.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03 (step C after the LCDIF-read fix at the end). The current design is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c.
+
 Goal (user, 2026-10-03): a result counts only when the board's own boot
 loader started Zephyr, never kexec. Until now the Verdin iMX8M Plus (Mallow
 carrier, GC7000UL) had no such path at all: every run was a crash-kexec from
 Torizon (`imx8mp-backend-plan.md`, "The two things that were actually
-wrong"). This is the AM62P's netboot (`am62p-netboot-plan.md`) ported: a
+wrong"). This is the AM62P's netboot (`am62p-netboot.md`) ported: a
 one-shot U-Boot hook that fetches one image from this host and starts it,
 the board back in Linux by itself on the next boot and on any failure, and an
 image that arms WDOG1 itself.
@@ -78,13 +80,13 @@ Neither outcome is safe to build on, so the image arms WDOG1 itself in every
 case and **reports which case it found** (section 4): WCR as found, in the
 SNVS record. The first image run (step B) settles the question with a
 register read. If U-Boot does autostart, the gap the AM62P has between `go`
-and the arming (`am62p-netboot-plan.md` section 4, "Residual gap") does not
+and the arming (`am62p-netboot.md` section 4, "Residual gap") does not
 exist here: U-Boot's own 60 s watchdog covers it.
 
 ## 2. The boot flow: a one-shot armed from Linux
 
 The same hook as the AM62P, byte for byte (`tools/uboot-netboot-lib.sh`; the
-reasoning is `am62p-netboot-plan.md` section 2). Only `yako_addr` differs:
+reasoning is `am62p-netboot.md` section 2). Only `yako_addr` differs:
 
 ```
 yako_bootcmd_prev = run cm_boot; run distro_bootcmd
@@ -363,7 +365,7 @@ Linux boot afterwards, plus these legs:
 So a one-shot cycle is about 15-25 s **longer** than a crash-route jump. If
 the 3-minute uptime wait is needed by the crash route only (the handoff does
 not say why it is there), the netboot does not need it and wins back far more
-than that. The AM62P plan's chain mode (`am62p-netboot-plan.md` section 6)
+than that. The AM62P plan's chain mode (`am62p-netboot.md` section 6)
 would remove the Linux leg between images on this board too; it is designed
 there, not written.
 
