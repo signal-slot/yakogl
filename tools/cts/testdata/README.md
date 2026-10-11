@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # `tools/cts/testdata/`
 
 Fixtures for the tools in `tools/cts/`, so a parser can be checked without a
@@ -20,6 +22,15 @@ row. The fixture pins:
 - a case dEQP marked `Pass` is counted as a **correct** refusal, not a gap
 - one message over two different tokens splits by construct
 
+`refusals-text-and-notsupported.qpa`: the other refusal forms
+`cts-refusals.py` reads. A code-generator refusal written in a `<Text>`
+element (not an `<InfoLog>`), one in an `<InfoLog>` with an
+entity-escaped message, and a case dEQP marked `NotSupported`. Check 16
+of `cts-selftest.sh` runs `cts-refusals.py` over the whole directory, so it
+reads both `.qpa` files and expects, among others, one refusal on a
+NotSupported case (excused, not a gap) and the
+`Usc(Record(MatrixAttrib { index: 0 }))` reason.
+
 `deqp-config/` — resolved Zephyr configurations in the form a build writes
 its `zephyr/.config` (`CONFIG_X=value` lines, a disabled bool as
 `# CONFIG_X is not set`), fed to `check-deqp-images.py --config` by
@@ -30,6 +41,8 @@ fixtures are its only host evidence:
 - `am62p-sweep.config`, `imx8mp-sweep.config`, `pi4-sweep.config` and
   `am62p-ms4.config` (with `--ms4`) — one conformance image per board plus
   the multisample one; the check must pass each
+- `am62p-gles3.config` — an AM62P dEQP-GLES3 image; the check must pass
+  it with `--gles3`
 - `pi4-gles3-sweep.config` — a Pi 4 dEQP-GLES3 image
   (`pi4-deqp-images.sh` with `DEQP_MODULE=gles3`: both `REPORT_ES2` symbols
   off); the check must pass it with `--gles3` and refuse it without, naming
@@ -67,3 +80,11 @@ probes pass", `resets (console count) 0`, and the throughput line
 `1920x720: 8395 frames in 60019 ms, 139.9 fps, 193.4 Mpx/s; draw 4.9 ms mean,
 3.54 ms/Mpx` — the tool rounds the fps where the cluster's console truncated
 it to 139.8.
+
+`ladder/n4_k*.vert`: the vertex shaders of a GC7000 wedge ladder (N = 4,
+K = 20 to 30). `tests/ladder_rungs_compile.rs` includes each with
+`include_str!` and fails if the compiler refuses one, so a rung read as
+"wedged" on the board was not a compile refusal.
+
+`wedge-shaders/`: the four dEQP shaders of the closed GC7000 hang
+investigation (`wedge-shaders/README.md`). No test reads them.
