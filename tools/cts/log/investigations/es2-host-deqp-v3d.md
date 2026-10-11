@@ -1,6 +1,18 @@
-# ES2 host dEQP-GLES2 on the V3D back end (item es2-host-deqp)
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# ES2 host dEQP-GLES2 on the three back ends (items es2-host-deqp, es2-host-deqp-baseline)
 
-Every number below is **HOST-ONLY**, as in `es2-host-deqp-baseline.md`: the library is built
+**Status (2026-10-11): finished, two small follow-ups open.** On the host the
+online compiler refuses no valid dEQP-GLES2 shader on the GC7000, the PowerVR
+or the V3D (0 gaps, 878 correct refusals each), and negative_api is 237 pass /
+0 fail / 9 NotSupported on all three. The V3D run's abort was the host's
+8 MiB tiled-copy budget; at the Pi 4 image's 16 MiB all 100 cases of the
+aborted chunk begin (section 2). Not landed: the `GPU=v3d` script diff
+(`host-deqp-run.sh` still accepts only vivante or powervr) and a 16 MiB host
+default (`src/osal/linux.c` still reads 8388608). The GC7000 and PowerVR runs,
+formerly `es2-host-deqp-baseline.md`, are section 3.
+
+Every number below is **HOST-ONLY**: the library is built
 with the Linux OSAL, which keeps the command stream instead of executing it, so every
 `glReadPixels` reads black. Only compile/link outcomes, info logs and API error behaviour are
 meaningful. No render verdict is quoted.
@@ -18,7 +30,7 @@ cases never began, because a draw was refused for a large cube texture (below).
   accepts `v3d`). The cargo rows of `tools/check.sh` (`gpu-v3d,report-es2` etc.) were not what
   was run; `cargo build --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --lib`
   also builds.
-- dEQP: VK-GL-CTS at `93bca01` (pinned in `tools/cts/log/es3-host-env.md`), cloned into the workspace's
+- dEQP: VK-GL-CTS at `93bca01` (the revision of `tools/cts/README.md` section 2b), cloned into the workspace's
   `build/VK-GL-CTS` (the deps directory was not writable by an approved command), 
   `external/fetch_sources.py` run, `tools/cts/cts-yakogl-target.patch` applied.
   `deqp-gles2` built by the script into `build/host-deqp/deqp`.
@@ -29,7 +41,7 @@ cases never began, because a draw was refused for a large cube texture (below).
 ## Commands
 
 ```sh
-# dEQP, per tools/cts/log/es3-host-env.md (into build/ here)
+# dEQP, per tools/cts/README.md section 2b (into build/ here)
 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
   git clone https://github.com/KhronosGroup/VK-GL-CTS build/VK-GL-CTS
 git -C build/VK-GL-CTS checkout 93bca01
@@ -95,7 +107,7 @@ the same chunk ran to completion, so this is V3D-specific.
 
 ## What the zero means
 
-Same caveats as the baseline: 0 gaps means the V3D online compiler refuses no valid
+Same caveats as section 3: 0 gaps means the V3D online compiler refuses no valid
 dEQP-GLES2 shader on the host. It says nothing about accepted-but-wrong shaders, invariance,
 clear scissor/mask, texture wrap/completeness or the offline table. The new V3D-specific
 finding is the 8 MiB tiled-copy budget abort above, which the compile/link tool cannot see
@@ -361,3 +373,44 @@ Two conditions keep it true:
 Optional, for the owner: raise the host default (`zephyr/Kconfig:308`, `src/osal/linux.c:585`)
 to 16 MiB so the host run needs no variable. That edits `src/osal/**` and `zephyr/**`, held by
 other items, so it is not done here.
+
+## Section 3: the GC7000 and PowerVR runs (item es2-host-deqp-baseline)
+
+Integration commit `1ad4695d`; the script labelled the runs `49fb653` (GC7000)
+and `01fb562` (PowerVR), each that commit plus docs-only commits. Same
+VK-GL-CTS `93bca01`, same mustpass list, default chunking. The counts are the
+GC7000 and PowerVR columns of the Counts table above: all 17165 cases began,
+172 chunks, 0 aborted, 878 refusals in 92 reasons, 0 gaps, 876 distinct
+cases with a correct refusal (all in `functional.shaders`), negative_api 237
+pass / 0 fail / 9 NotSupported. The nine NotSupported are
+`negative_api.texture.compressedtexsubimage2d_*`, because the library reports
+`GL_NUM_COMPRESSED_TEXTURE_FORMATS` = 0. Neither run showed a code-generator
+refusal.
+
+```sh
+CTS=<VK-GL-CTS> GPU=vivante tools/cts/host-deqp-run.sh
+python3 tools/cts/cts-refusals.py --cases 60 --tokens 3 build/host-deqp/run-49fb653
+CTS=<VK-GL-CTS> GPU=powervr tools/cts/host-deqp-run.sh
+```
+
+What the zero cannot see: shaders we accept but expand or evaluate wrongly
+(the compile succeeds, so there is no refusal), invalid shaders we accept,
+and every render effect (invariance, clears, texture completeness), because
+read-back is black on the host.
+
+The bucket-to-item table as it stood at `1ad4695d` (2026-10-09). The items
+named in the last column have since closed or moved; see `docs/HANDOFF.md`
+for their state today.
+
+| Bucket (HOST-ONLY, GC7000 and PowerVR identical) | Count | Item that closes it |
+|---|---|---|
+| Compile refusals on failed cases | 0 | nothing to close |
+| Correct refusals (negative GLSL, 876 cases) | 878 refusals | not work: implementing any of these reasons would turn passes into failures; `es2-preprocessor` must keep the 26 "undefined identifier in a preprocessor expression", 22 "extra tokens", 20 "#if without #endif", 20 "macro redefined" refusals |
+| negative_api ES 3-only enum/format accepted | 0 failures | `es2-error-rules` (static audit in `es2-error-rules.md`) |
+| Preprocessor accept-but-wrong (define_value_and_function, expansion order) | not visible to this tool | `es2-preprocessor` |
+| shaders.invariance.common_subexpression_1/2/3 | not visible (board only, 9 AM62P failures) | `es2-invariance` |
+| Offline-table / no-table path | not visible (GL suite, board) | `es2-offline-table` |
+| Texture wrap/completeness (NPOT) | not visible | `es2-npot-cases` |
+| Scissored/masked glClear on V3D | not visible, and V3D not a host back end | `es2-v3d-clear` |
+| Pi 4 fbo.completeness `*_tex` | not visible | `es2-v3d-fbo-combos-diag` |
+| PowerVR host compile gaps | 0 | nothing to close |

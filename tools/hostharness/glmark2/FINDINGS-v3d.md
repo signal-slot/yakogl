@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # glmark2 on the host harness: findings for the V3D (Raspberry Pi 4)
 
 What glmark2-es2's default benchmark set does to YakoGL's V3D back end on the
@@ -83,9 +85,9 @@ The V3D carve-out modelled by `src/osal/linux.c` (the Zephyr V3D OSAL's allocato
 | 19 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true` | 19619584, 100134912, 84758016, 0 |
 | 20 | `ideas:speed=duration` | 17380096, 100134912, 84758016, 0 |
 | 21 | `jellyfish` | 29829888, 100134912, 84758016, 0 |
-| 22 | `terrain` | 54360064, 100134912, 84758016, 0 |
+| 22 | `terrain` | 59829248, 100134912, 84758016, 0 |
 | 23 | `shadow` | 40908544, 100134912, 82830080, 0 |
-| 24 | `refract` | 55527424, 100134912, 84758016, 0 |
+| 24 | `refract` | 58087424, 100134912, 84758016, 0 |
 | 25 | `conditionals:vertex-steps=0:fragment-steps=0` | 17388032, 100134912, 84758016, 0 |
 | 26 | `conditionals:vertex-steps=0:fragment-steps=5` | 17388544, 100134912, 84758016, 0 |
 | 27 | `conditionals:vertex-steps=5:fragment-steps=0` | 17388544, 100134912, 84758016, 0 |
@@ -124,18 +126,17 @@ Every GL error (the library's own line, with the entry point), compile or link f
 | 22 | `terrain` | v3d | no such uniform | `yakogl: program <n> has no uniform 'fogNear'` | 1 |
 | 22 | `terrain` | v3d | no such uniform | `yakogl: program <n> has no uniform 'fogFar'` | 1 |
 | 22 | `terrain` | v3d | no such uniform | `yakogl: program <n> has no uniform 'fogColor'` | 1 |
-| 22 | `terrain` | v3d | GL error | `GL error 0x502 in glGenerateMipmap` | 11 |
 | 22 | `terrain` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 1404928 of 8388608 bytes` | 1 |
 | 22 | `terrain` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 3076096 of 8388608 bytes` | 1 |
 | 22 | `terrain` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 6152192 of 8388608 bytes` | 1 |
-| 22 | `terrain` | v3d | incomplete texture | `a texture on unit 0 is incomplete and samples (0,0,0,1): a mipmap min filter, but a level of the chain has no image (target 0xde1, 800x600, levels 1 of 1, min filter 0x2703, wrap 0x812f/0x812f)` | 1 |
 | 23 | `shadow` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 7684096 of 8388608 bytes` | 1 |
 | 23 | `shadow` | v3d | sampler variant | `yakogl/v3d: sampler variants high-water at frame 1: 1 built, 0 refused (a program and key re-link once)` | 1 |
 | 23 | `shadow` | v3d | tiled copy | `yakogl/v3d: a stale tiled copy of 7684096 bytes given back before the job opened (the first; later ones are counted)` | 1 |
 | 24 | `refract` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 1052672 of 8388608 bytes` | 1 |
-| 24 | `refract` | v3d | GL error | `GL error 0x502 in glGenerateMipmap` | 3 |
-| 24 | `refract` | v3d | incomplete texture | `a texture on unit 1 is incomplete and samples (0,0,0,1): a mipmap min filter, but a level of the chain has no image (target 0xde1, 1600x1200, levels 1 of 1, min filter 0x2703, wrap 0x812f/0x812f)` | 1 |
 | 24 | `refract` | v3d | tiled copy | `yakogl/v3d: tiled copies high-water 7684096 of 8388608 bytes` | 1 |
+| 24 | `refract` | v3d | refused draw | `yakogl/v3d: draw refused: a texture larger than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the texture arena (8 MiB tiled)` | 1 |
+| 24 | `refract` | v3d | other | `yakogl: glDrawArrays was not recorded (-22); the frame is missing it` | 3 |
+| 24 | `refract` | v3d | GL error | `GL error 0x505 in glDrawArrays` | 3 |
 | 24 | `refract` | v3d | sampler variant | `yakogl/v3d: sampler variants high-water at frame 1: 1 built, 0 refused (a program and key re-link once)` | 1 |
 | 24 | `refract` | v3d | tiled copy | `yakogl/v3d: a stale tiled copy of 7684096 bytes given back before the job opened (the first; later ones are counted)` | 1 |
 
@@ -148,48 +149,48 @@ Entries with no finding on any GPU: 0, 1, 7, 8, 14, 17, 18, 19, 20, 25, 26, 27, 
 
 ## Notes
 
-Written by hand from the run above (2026-10-07; glmark2 from GitHub's archive
-of `22c527cb`; carve-out 100663296 bytes as in `rpi_4b.conf`; every process
-exited 0). Host evidence only: nothing is rendered and every job completes
-inside `submit()`.
+Written by hand from the run above: 2026-10-11, this tree (origin/main
+`415e6ccc` plus documentation commits), `run.sh` with its defaults, carve-out
+100663296 bytes as in `rpi_4b.conf`, every process exited 0. Host evidence
+only: nothing is rendered and every job completes inside `submit()`.
 
-* **Every entry ran to its end, no draw refused, no shader failed.** All 69
-  texts compiled and linked with the V3D back end of the in-process compiler,
-  as glmark2 used them. No line of kind `refused draw`, `compile failure` or
-  `link failure`; `refused` is 0 in every scene.
+* **Every entry ran to its end and no shader failed.** All 69 texts compiled
+  and linked with the V3D back end of the in-process compiler, as glmark2
+  used them. No line of kind `compile failure` or `link failure`.
+* **refract (24) loses one draw a frame.** `draw refused: a texture larger
+  than the tiled-copy budget (CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES) and the
+  texture arena (8 MiB tiled)`, then `glDrawArrays was not recorded (-22)` and
+  `GL error 0x505 in glDrawArrays` in each of the 3 frames. Since
+  `GL_OES_texture_npot` (`2673197d`) refract's 1600x1200 RGBA8 texture has a
+  mip chain, about 10.2 MB tiled, which is more than both the 8 MiB per-job
+  texture arena and the kept-copy budget. The scene table's `refused` column
+  stays 0 because this refusal is the back end's -22, not the
+  `yakogl_draws_refused` counter. On the board, refract would draw with this
+  draw missing. The budget question is open:
+  [FINDINGS-refract-budget.md](../../cts/log/hostharness/glmark2/FINDINGS-refract-budget.md).
 * **Out of GPU memory: none at 96 MiB.** No allocation was refused in any
-  entry. The largest high-waters are refract (55,527,424 bytes) and terrain
-  (54,360,064), then shadow (40,908,544); every other entry stays under
-  30 MB. Of the carve-out's 100,134,912 allocatable bytes (96 MiB less the
-  512 KiB page table and a scratch page; the 512 KiB of binner overflow
-  blocks count as used), refract leaves about 44.6 MB. That agrees with the
-  board file's figure for refract (about 56.2 MB on the board, where the
-  scenes run one after another in one process). Caveat: one process per
-  entry here, so a scene starts from an empty carve-out; what an earlier
-  scene leaves held or fragmented is not shown (pi4-mem-replay replays the
-  sequence).
-* **Tiled copies: within the 8 MiB budget.** The V3D samples CPU-made tiled
-  copies of textures (`YAKOGL_V3D_TILED_COPIES_BYTES`, 8,388,608). The
-  largest high-water is 7,684,096 bytes in shadow and refract: one copy of a
-  1600x1200 texture at 4 bytes a texel (7,680,000 bytes before tiling), the
-  scenes' off-screen targets at twice the 800x600 window (shadow's depth
-  texture: `scene-shadow.cpp`, `canvas_.width() * 2`). In both, `a stale
-  tiled copy of 7684096 bytes given back before the job opened` follows:
-  the target is drawn into every frame, so its copy goes stale and is made
-  again (a 7.7 MB CPU tiling a frame on the board; the v3d-rt-sample item is
-  about sampling a render target without it).
-  terrain peaks at 6,152,192, the desktop scenes at 5,248,000.
-* **GL errors: the same as the PowerVR and the GC7000 (FINDINGS.md).**
-  terrain raises `GL error 0x502 in glGenerateMipmap` 11 times and refract 3
-  times, on NPOT textures (800x600, 1600x1200) in this report-es2 build, and
-  the textures then sample (0,0,0,1) for their mipmap min filter: the known
-  black terrain and refraction, which the npot item fixes. No other GL error.
-  This run predates npot's merge (GL_OES_texture_npot in report-es2
-  builds); a run on a tree with it should show neither these errors nor
-  the incomplete-texture lines, and terrain's and refract's mip chains add
-  to their GPU-memory high-waters above.
-* **No depth-resolve line.** The PowerVR's `did not resolve its depth (-16)`
-  in shadow and refract (FINDINGS.md) does not appear on the V3D.
+  entry. The largest high-waters are terrain (59,829,248 bytes) and refract
+  (58,087,424), then shadow (40,908,544); every other entry stays under
+  30 MB. Terrain and refract grew with their NPOT mip chains (54,360,064 and
+  55,527,424 before `2673197d`). Of the carve-out's 100,134,912 allocatable
+  bytes (96 MiB less the 512 KiB page table and a scratch page; the 512 KiB
+  of binner overflow blocks count as used), terrain leaves about 40 MB.
+  Caveat: one process per entry here, so a scene starts from an empty
+  carve-out; what an earlier scene leaves held or fragmented is not shown.
+* **Tiled copies: within the 8 MiB budget, except refract's refused one.**
+  The V3D samples CPU-made tiled copies of textures
+  (`YAKOGL_V3D_TILED_COPIES_BYTES`, 8,388,608). The largest high-water is
+  7,684,096 bytes in shadow and refract: one copy of a 1600x1200 texture at
+  4 bytes a texel, the scenes' off-screen targets at twice the 800x600
+  window. In both, `a stale tiled copy of 7684096 bytes given back before
+  the job opened` follows: the target is drawn into every frame, so its copy
+  goes stale and is made again (a 7.7 MB CPU tiling a frame on the board).
+  terrain peaks at 6,152,192.
+* **GL errors: only refract's 0x505 above.** The `0x502` of
+  `glGenerateMipmap` on NPOT textures that terrain and refract raised before
+  `2673197d` is gone, and so are their incomplete-texture lines.
+* **No depth-resolve line.** The PowerVR's former `did not resolve its depth
+  (-16)` (FINDINGS.md) never appeared on the V3D.
 * **Sampler variants:** shadow and refract each build one sampler-key
   variant of a program (a re-link once), none refused.
 * **`no such uniform`: not defects**, the same lines and reasons as in
@@ -202,6 +203,10 @@ inside `submit()`.
   and left out of the table.
 
 ## 48 MiB control
+
+This section is the run of 2026-10-08, on a tree before `GL_OES_texture_npot`
+(`2673197d`), not the run above. It is kept because it is the host evidence
+for the Pi 4's 96 MiB carve-out.
 
 The same run with the Pi 4's former carve-out: `YAKOGL_V3D_CARVEOUT_BYTES=50331648`
 (48 MiB; 49,803,264 allocatable bytes, against 100,134,912 at 96 MiB), every

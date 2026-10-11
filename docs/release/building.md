@@ -108,7 +108,9 @@ repository at the commit that added this file.
   `.ccfarm/project.toml:86`). Download page:
   `https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html`.
   Install the AArch64 toolchain (`aarch64-zephyr-elf`) and the host tools; run
-  the SDK's `setup.sh`. I did not check the archive name.
+  the SDK's `setup.sh` (`./setup.sh -t aarch64-zephyr-elf`). Its `-c` option
+  registers the SDK in `~/.cmake/packages`; it is not needed, because
+  `ZEPHYR_SDK_INSTALL_DIR` is enough. I did not check the archive name.
 - **Variable:** `ZEPHYR_SDK_INSTALL_DIR` (west finds the SDK with it). The
   dEQP stage 1 script reads a second name, `ZEPHYR_SDK`, and its default is
   `$HOME/org/zephyrproject/zephyr-sdk-1.0.1` (`tools/cts/cts-build-zephyr.sh:34,47`).
@@ -254,8 +256,7 @@ repository at the commit that added this file.
   compiler pre-renders the glyphs of the cluster into the image
   (`driver/samples/zephyr/cluster/CMakeLists.txt:55-67,109-110`,
   `driver/samples/zephyr/cluster/rust/build.rs:13-16`).
-- **Source:** Noto Sans from `googlefonts/noto-fonts` (the repository's AM62P
-  baseline note names it, `tools/cts/log/benchmarks-baseline/am62p.md:22`), or your
+- **Source:** Noto Sans from `googlefonts/noto-fonts`, or your
   distro's package of static Noto Sans (SIL OFL 1.1, free to use). **Not
   pinned:** no version is named. A different version can change glyphs, and so
   the picture; keep the same files for a series of runs.
@@ -294,6 +295,11 @@ repository at the commit that added this file.
   and applies the two patches there (`:56-64`). `fetch_sources.py` is needed
   because of that symlink step; the script does not run it. Needs `cmake` and
   `ninja`. About 1.9 GB (`tools/cts/imx8mp-deqp-stage1.sh:10`).
+- **If libpng's NEON file fails** with `arm_neon.h: lane index must be a
+  constant immediate`, the stage 1 was compiled at -O0 (the toolchain file
+  carries no `-O`). Export `CFLAGS=-O2 CXXFLAGS=-O2` and start again with an
+  empty `build/` in the stage 1 directory. Seen once, on 2026-10-08 with the
+  i.MX8MP stage 1; not checked since.
 - **One stage 1 per board family:** `BOARD` selects the compile flags, so use
   `BOARD=verdin_am62p/am62p54/a53` (the script's default) for the AM62P,
   `BOARD=rpi_4b` for the Pi 4 (`tools/cts/pi4-deqp-images.sh:26-27`), and the
@@ -322,6 +328,7 @@ red (`.ccfarm/project.toml`).
 | `GLSL2USC_CACHE` | a cache directory for the shader compile (3.5 min with a warm one) | any writable directory | `tools/glsl2usc.sh:18`, `tools/check.sh:1370` |
 | `MESA_V3D_TREE` | optional: a built Mesa tree to compare V3D checks against | not needed: the Mesa sources are vendored in `third_party/mesa-26.2.1` | `tools/check.sh:345` |
 | `CC_aarch64_unknown_none` | cross C compiler, see 4 | | `build.rs:108-112` |
+| `BINDGEN_EXTRA_CLANG_ARGS` | only when the bindgen row (`csbgen-bindings --check`) fails with `'stdbool.h' file not found`: the host has a libclang but not clang's resource headers | point it at gcc's builtin headers, for example `-isystem $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/lib/gcc/aarch64-zephyr-elf/14.3.0/include` (measured 2026-10-08 on a host without clang) | `tools/check.sh:1479-1480` |
 
 ### 13. Board run inputs (not for building)
 

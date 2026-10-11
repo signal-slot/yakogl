@@ -1,4 +1,13 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP: why glmark2 frames take "about 24 ms" (host investigation)
+
+**Status (2026-10-11): open.** The cause below is a prediction from the
+code; the board recipe (step 1) has not run. Fix F1 is not applied:
+`board_show` in `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` still calls
+`imx8mp_display_set_fb(scan)` on every frame once the display is on.
+Nothing else tracks this item yet; it is proposed for docs/HANDOFF.md
+"Open work" (performance, the user's step 2).
 
 Written 2026-10-08 from the code at `fdff1147`. Line
 numbers are that commit's. Host-only: this item reads code and earlier
@@ -38,7 +47,7 @@ board run and no code change.
 | Run | Score | Scenes | Source |
 |---|---|---|---|
 | common set round 2, copy path | 39 | 30 ran, 1 failed, 2 unsupported | `tools/cts/RESULTS.md:457`, record `594b120e 00000027 021e0102 03200258` |
-| the same with the scan-out view (no copy) | 46 | (not in RESULTS.md) | `tools/cts/STATUS.md:92` |
+| the same with the scan-out view (no copy) | 46 | (not in RESULTS.md) | `tools/cts/log/status-2026-09-25-to-10-07.md:88` |
 | common set round 4, copy path | 37 | 33 ran, 0 failed, 0 unsupported | `tools/cts/RESULTS.md:490-501`, record `594b120e fc3f0025 2184003f 03200258` |
 
 - The common-set glmark2 row is built without the view
@@ -149,7 +158,7 @@ below it.
 Why the copy costs 7 points (39 against 46) but is "not the floor": the copy
 reads 1.92 MB of non-cacheable memory in every frame. That moves about 8 of 30
 scenes from one period to two. It does not set the floor. The VSYNC wait
-does, with or without the copy. This matches STATUS.md:92 ("the floor stays
+does, with or without the copy. This matches tools/cts/log/status-2026-09-25-to-10-07.md:88 ("the floor stays
 when the view removes the copy").
 
 What would reject this candidate: a single light scene (`-b clear`) that
@@ -432,4 +441,4 @@ than the pinned Zephyr's default (candidate 3): at 100, each sleep would be
   from a built image's `.config` (no Zephyr workspace on this machine).
 - Mesa etnaviv was not re-read (no Mesa tree here, and cloning was not
   possible); nothing in the conclusion rests on it.
-- The 46 (view) run has no row in RESULTS.md; its number is STATUS.md:92's.
+- The 46 (view) run has no row in RESULTS.md; its number is tools/cts/log/status-2026-09-25-to-10-07.md:88's.

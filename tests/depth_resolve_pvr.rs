@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! glmark2 `shadow` and `refract` on the PowerVR: the depth texture the
 //! shadow pass renders was sampled with stale depth (pvr-depth-resolve,
-//! fixed on the host; tools/cts/log/hostharness/glmark2/FINDINGS.md rows 23
+//! fixed on the host; tools/hostharness/glmark2/FINDINGS.md rows 23
 //! and 24).
 //!
 //! The sequence is scene-shadow.cpp's, one frame at a time:

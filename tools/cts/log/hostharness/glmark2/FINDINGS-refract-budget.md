@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D refract: which texture is refused, and what budget removes it
 
 **The three harness runs were not made.** This session could not start
@@ -6,7 +8,7 @@ script): every one of them was refused as "requires approval", and nobody
 could grant it. Only `tools/check.sh --quick` and read-only commands ran. So
 this note has **no measured numbers for the three runs**. It has (a) the
 numbers already measured in
-[FINDINGS-post-npot.md](FINDINGS-post-npot.md) for the 8 MiB default,
+[FINDINGS-v3d.md](../../../../hostharness/glmark2/FINDINGS-v3d.md) for the 8 MiB default,
 (b) the tiled size worked out from the layout code, and (c) a prediction for
 16 MiB and 24 MiB from `tiled_copy`'s rules. Predictions are marked. The
 commands to make the real runs are in section 5.
@@ -18,7 +20,7 @@ Source: glmark2 `scene-refract.cpp` (lines 177-210), `DistanceRenderTarget`.
 | | value |
 |---|---|
 | role | the FBO's **colour attachment** (`tex_[COLOR]`), a render target |
-| texture unit | 1 (the "incomplete texture, unit 1, 1600x1200" line of FINDINGS-post-npot.md) |
+| texture unit | 1 (the "incomplete texture, unit 1, 1600x1200" line the harness logged before `2673197d`) |
 | GL name | not known without a run. `glGenTextures(2, tex_)` makes the pair, so it is the depth texture's name + 1 |
 | size | 1600 x 1200: twice the 800x600 canvas (`width_ = canvas_.width() * 2`) |
 | format | `GL_RGBA`, `GL_UNSIGNED_BYTE`: RGBA8, 4 bytes a texel |
@@ -62,7 +64,7 @@ function to a short Python script (not committed) and got:
 * At the 8 MiB budget: `bytes` 11,005,952 > 8,388,608, so `tiled_copy` returns
   `KeptMiss::OverBudget`, and then the arena test above refuses with the
   message at `backend.rs:2913` (`-22`, GL error 0x505 on the draw).
-  This matches FINDINGS-post-npot.md: 1 refusal line, 3 `-22` lines, 3 `0x505`.
+  This matches FINDINGS-v3d.md: 1 refusal line, 3 `-22` lines, 3 `0x505`.
 * The small NPOT chains of terrain are far below the budget: an 800x600 RGBA8
   chain is 2,780,160 bytes (2.65 MiB).
 
@@ -70,8 +72,9 @@ function to a short Python script (not committed) and got:
 
 ### 3.1 8,388,608 (the default): measured earlier
 
-From FINDINGS-post-npot.md (tree `fdff1147`, same code as this tree for the
-V3D; `v3d` row only). Not re-run here.
+From the harness run on tree `fdff1147` (`v3d` row only). The run of
+2026-10-11 on `415e6ccc`, which [FINDINGS-v3d.md](../../../../hostharness/glmark2/FINDINGS-v3d.md) holds, gives the
+same numbers.
 
 | entry | GL errors | refused (scene table) | `-22` lines | stale-tiled-copy lines | GPU peak (of 100,134,912) |
 |---|---|---|---|---|---|

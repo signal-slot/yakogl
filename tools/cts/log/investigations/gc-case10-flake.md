@@ -1,4 +1,12 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP: gl_test cases 10 and 2 pass or fail at random (#9, #25)
+
+**Status (2026-10-11): open.** The first part of the board recipe ran twice
+(section "Board results"). The failure rate fell from 14 of 30 to about 1 in
+10 or less, and neither knob (page alignment, no pool reuse) removes it, so
+(b) and (c) are not separated. The second part needs the K1 knob, which does
+not exist yet. Tracked as #9 and #25 in `docs/HANDOFF.md`.
 
 Host investigation, 2026-10-08, on integration `fdff1147`. Item `gc-case10`
 of plan #2. No code is changed. The open row is tools/cts/RESULTS.md:930
@@ -143,7 +151,7 @@ record shows this address yet (see the end of the board recipe).
   reached memory, and the point drawn over it later in the same kick did
   not. The KICK_DIFF record agrees: the 1 px and 3 px points (4 rows) are
   missing, and the 5 px point, the last vertex, is there
-  (tools/cts/STATUS.md:110).
+  (tools/cts/log/status-2026-09-25-to-10-07.md:106).
 - Case 2 (gl_test.c:1513-1568) has the same shape four times: `glClear`, then
   a quad of 2x2 px (check 22, gl_test.c:1541), then 1x1 px (check 23,
   :1543), then 1x1 px again (checks 24 and 25, :1561, :1568), each followed
@@ -309,18 +317,27 @@ If K1 makes case 10 and case 2 stable, make K1 the default and remove the knob.
 
 ### First part: one session, 30 boots, existing knobs only
 
-This is the HANDOFF i.MX8MP step 5 (docs/HANDOFF.md:371-406), with three
+This is the HANDOFF i.MX8MP step 5, with three
 changes: the arms are interleaved, the reading of the no-reuse arm is fixed
 (it does not move the target, F2), and a fourth list catches case 2's check.
+
+Two corrections from the board sessions are in the commands below. The `;`
+inside the list is written `\;`: with a bare `;` CMake reads the value as a
+list and drops the separators, and the image got
+`CONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10102"`. And every image needs
+`-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`: `imx8mp-gltest-build.sh` does not set it,
+and without the `gc_wdog_arm: armed` marker `tools/board.sh` refuses the image
+(rc=3, "would not arm WDOG1").
 
 ```sh
 # a detached checkout of the integration tip, with ZEPHYR_WORKSPACE,
 # ZEPHYR_VENV, ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT exported
 # (tools/cts/imx8mp-env.sh), BOARD_BOOT=uboot-mmc
-LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10;10;2"'  # SEL 512, 513, 514
-tools/cts/imx8mp-gltest-build.sh gc10-base   0 "$LIST"
-tools/cts/imx8mp-gltest-build.sh gc10-page   0 "$LIST" -DCONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN=y
-tools/cts/imx8mp-gltest-build.sh gc10-reuse0 0 "$LIST" -DCONFIG_YAKOGL_GC_POOL_NO_REUSE=y
+LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'  # SEL 512, 513, 514
+W=-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+tools/cts/imx8mp-gltest-build.sh gc10-base   0 "$LIST" $W
+tools/cts/imx8mp-gltest-build.sh gc10-page   0 "$LIST" $W -DCONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN=y
+tools/cts/imx8mp-gltest-build.sh gc10-reuse0 0 "$LIST" $W -DCONFIG_YAKOGL_GC_POOL_NO_REUSE=y
 for i in 1 2 3 4 5 6 7 8 9 10; do
   for arm in base page reuse0; do          # interleaved: drift hits every arm alike
     SEL=512 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
@@ -373,7 +390,7 @@ Kconfig switch, for example `CONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV` (the name is
 free), build one more image and interleave it with base:
 
 ```sh
-tools/cts/imx8mp-gltest-build.sh gc10-k1 0 "$LIST" -DCONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y
+tools/cts/imx8mp-gltest-build.sh gc10-k1 0 "$LIST" $W -DCONFIG_YAKOGL_GC_FLUSH_AS_ETNAVIV=y
 for i in $(seq 1 10); do for arm in base k1; do
   SEL=512 BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run \
     "$IMX8MP_OUT/gc10-$arm/zephyr/zephyr.bin" build/gc10 "$arm-k1-$i"
@@ -394,6 +411,46 @@ default target's address, but that is the dEQP surface, a different buffer.
 If K1 is added, add the same field to gc_gl_test's counters record from
 `yakogl_debug_default_target_gpu()` (src/gl/context.rs:1128-1137). Expected
 low 12 bits: `0c0` on base and reuse0, `000` on page.
+
+## Board results
+
+All on the Verdin i.MX8M Plus, `BOARD_BOOT=uboot-mmc`, integration images
+(not landing proofs). Every run below had w1 = `00000000` (no lost work, no
+reset, no fence timeout), so every one is a reading. The records were kept
+on the workers, not committed. The session notes were
+`tools/cts/log/board-sessions/imx8mp-plan1.md` and `imx8mp-gc-case10.md`;
+git history keeps them.
+
+| session | image | arm and list | case 10 (#9) failed | case 2 (#25) failed |
+|---|---|---|---|---|
+| 2026-10-08, plan #1 step 5 | `b20e4d11` | base, `1-6,8-10` | 3 / 40 (`base-20`, `base-23`, `base-35`) | 1 / 40 (`base-13`) |
+| | | page | 1 / 10 (`page-3`) | 0 / 10 |
+| | | reuse0 | 1 / 10 (`reuse0-4`) | 1 / 10 (`reuse0-6`) |
+| 2026-10-08, this recipe | `0175bac1` | base, interleaved | 0 / 10 | 0 / 10 |
+| | | page | 1 / 10 (`page-9`, `0000037e`) | 0 / 10 |
+| | | reuse0 | 0 / 10 | 0 / 10 |
+| | | base, case 2 alone (`SEL=2`) | - | 0 / 10 (each `594b010e,0002ff01,0000001d,00000000`, 29 checks) |
+
+The plan #1 session ran its base arm 30 more times when the first 10 gave
+0 / 10 (the table's last row), so its base is 40 boots in all. The earlier
+measurement was 14 / 30.
+
+The default gl_test image (48 cases, the record names only the first
+failure) also shows case 10:
+
+| image | runs | first failure |
+|---|---|---|
+| `b20e4d11` (2026-10-08) | 3 | case 16 in all three (#8's skip, counted as a failure by the set walker then) |
+| `334d4e65` (2026-10-09) | 3 | case 16 once; case 10 twice (45 / 48) |
+| `32778b57` (2026-10-10, main) | 3 | case 10 once (45 / 48); case 16 twice (46 / 48) |
+
+Reading: the rate fell a lot since 14 / 30, but the flake is still there on
+every arm. At these counts the arms do not separate, so (b) and (c) are
+neither confirmed nor ruled out by the board. The closest row of the table
+is "neither; (a) is left", but at a rate far below the one that row assumes.
+The fall itself needs a cause: a re-measure, or a bisect, against the commit
+the 14 / 30 was taken at. One change against the earlier measurement is the
+watchdog self-arm option in the image; it is a candidate.
 
 ## Handoff for the items after this one
 

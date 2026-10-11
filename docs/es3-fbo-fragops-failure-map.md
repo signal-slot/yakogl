@@ -17,7 +17,7 @@ the unit tests pass; no board has run it.
 
 The run is the only GLES3 run there is: AM62P, main `396d667a`, 2026-09-26,
 `tools/cts/RESULTS.md` §1r (heading at line 1437), summarised in
-`tools/cts/STATUS.md:9` and `:250` (Japanese). The i.MX8MP and the Pi 4 have no
+`tools/cts/log/status-2026-09-25-to-10-07.md`, "この先" item 2 (Japanese). The i.MX8MP and the Pi 4 have no
 GLES3 run. Abbreviations used for sources:
 
 - **R-group** = the per-group table, `tools/cts/RESULTS.md:1467` (fbo),

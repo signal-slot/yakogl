@@ -25,8 +25,8 @@ value is one set with `glVertexAttribI4*`; a *packed type* is
   (state_query) and `record_G3-img25-396d667a_eec5b9dfa4d38d9f.txt`
   (vertex_arrays). Each record lists one `deqp: Pass|Fail|NotSupported <case>`
   line per case, so every count below marked *exact* is a count of those
-  lines. (`tools/cts/log/board-sessions/am62p-gles3-percase.md` records that the later
-  per-case session got no data; these records are the 396d667a run itself.)
+  lines. (The later per-case session of 2026-10-08 got no data, because its console
+  was on the wrong UART port, `tools/cts/log/investigations/am62p-console-empty.md`; these records are the 396d667a run itself.)
 - **dEQP source**: VK-GL-CTS `93bca01`, read to see what each case does.
 - **yakogl**: the integration tip `2f69c7d1`. Line numbers are of that tip
   (plus this item's edit of `src/gl/vertex.rs`).
@@ -174,7 +174,7 @@ dEQP exercises only the defined pairs. Task T1 adds the type tag.
 
 ## Host measurement to take (HOST-ONLY: API verdicts only)
 
-The run needs the VK-GL-CTS checkout of `tools/cts/log/es3-host-env.md`
+The run needs the VK-GL-CTS checkout of `tools/cts/README.md` section 2b
 (`<VK-GL-CTS>`) and a working `cargo` and `cmake`:
 
 ```sh
