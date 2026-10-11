@@ -208,7 +208,8 @@ config SAFEUI_GPU_VIVANTE
 	help
 	  Powers the GPU domains through the i.MX8MP GPC, clocks the core
 	  through the CCM, reads the identity registers and resets the GPU
-	  (milestone 1 of docs/imx8mp-backend-plan.md). The device tree node
+	  (milestone 1 of tools/cts/log/board-sessions/imx8mp-gc-bringup.md).
+	  The device tree node
 	  needs the "gpu", "gpc" and "ccm" register ranges and a memory-region
 	  carveout.
 

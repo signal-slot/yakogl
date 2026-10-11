@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL on the i.MX8MP (Vivante GC7000UL): backend plan
+
+Status: finished record, moved here from `driver/docs/imx8mp-backend-plan.md` on 2026-10-11. M1 to M5 ran on the board on 2026-09-20 and the back end draws since. The C kernel side and the gclab harness it names are deleted. The kernel side is driver/docs/vivante-kernel-rust.md; the back end is src/vivante/VIVANTE_NOTES.md.
 
 Note 2026-10-03: the C kernel side named below (`gc_bringup.c`, `gc_hw.c`,
 `gc_mmu.c`, `gc_cmdbuf.c`) is deleted; the kernel side is Rust
@@ -125,13 +129,13 @@ has fewer planes: the safety layer may have to be composited by the A53 instead.
    `etna_shc`. `gc_render.c` is the service the YakoGL backend will call:
    allocate from the carveout, submit a command buffer, wait a monotonic
    fence, and a stall dump on a timeout. Samples `gc_fence`, `gc_clear` and
-   `gc_triangle` check each layer with pixel read-back; `src/vivante/NOTES.md`
+   `gc_triangle` check each layer with pixel read-back; `imx8mp-gc-driver-notes.md`
    has the register list with its references and a numbered list of what only
    the board can answer. Builds: 1688..1692 KiB. Run them in that order after
    `gc_identify`. A Linux harness next to etnaviv unloaded is still the
    fallback if register-level debugging is needed.
 5. M6 and the gl_test suite on silicon, then the samples; the shader table
-   generator once the binding ABI is fixed. `docs/imx8mp-draw-state.md` is the
+   generator once the binding ABI is fixed. `tools/cts/log/investigations/imx8mp-draw-state.md` is the
    preparation for this step: which registers a draw writes, group by group,
    and where each part of YakoGL's resolved draw goes, read out of Mesa's
    etnaviv driver. Blending and colour masks stop being shader variants there,

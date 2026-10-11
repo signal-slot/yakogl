@@ -7,7 +7,7 @@ Status: finished record, moved here from `tools/cts/log/board-sessions/imx8mp-ne
 Goal (user, 2026-10-03): a result counts only when the board's own boot
 loader started Zephyr, never kexec. Until now the Verdin iMX8M Plus (Mallow
 carrier, GC7000UL) had no such path at all: every run was a crash-kexec from
-Torizon (`imx8mp-backend-plan.md`, "The two things that were actually
+Torizon (`imx8mp-gc-bringup.md`, "The two things that were actually
 wrong"). This is the AM62P's netboot (`am62p-netboot.md`) ported: a
 one-shot U-Boot hook that fetches one image from this host and starts it,
 the board back in Linux by itself on the next boot and on any failure, and an
@@ -209,7 +209,7 @@ refuses the load rather than overwriting U-Boot if that is ever wrong.
    watchdog (the Kconfig help says so).
 6. What resets the board: `WCR.WDT` makes the timeout assert `WDOG_B`
    (`fsl,ext-reset-output` in both U-Boot's and Linux's DT). Every kexec run
-   that ended in a watchdog reset went that way (`imx8mp-backend-plan.md`:
+   that ended in a watchdog reset went that way (`imx8mp-gc-bringup.md`:
    "WDOG1 then resets the SoC (128 s on the normal route, sooner on the crash
    route)"). After the reset: SPL -> U-Boot -> the hook finds nothing ->
    Linux.

@@ -496,7 +496,7 @@ How each GPU holds the chain (host-tested, not board-confirmed):
 
 The GC7000 caveat: etnaviv uses NPOT textures with any wrap mode only when
 `chipMinorFeatures1_NON_POWER_OF_TWO` is set. This repository records the
-part's `features` and `minor0` words (driver/src/vivante/NOTES.md) and the
+part's `features` and `minor0` words (tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md) and the
 feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs),
 not `minor_features[1]`. The part is HALTI5 (an ES 3.x-class core, whose ES
 3.0 needs NPOT repeat and mipmaps), and the ES 3.0 build has always sampled

@@ -29,7 +29,8 @@
 //!
 //! The layout (identity-mapped carveout, the import window, one context,
 //! never unmapped, so no per-submit flush) is this driver's own
-//! (driver/src/vivante/NOTES.md "M2: the MMU"). galcore's stream also
+//! (tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md "M2: the MMU").
+//! galcore's stream also
 //! programs two more states (0x3848, 0x3878) and a semaphore/stall before
 //! its END (gc_hal_kernel_hardware_func.c `_ProgramMMUStates`); the board
 //! has run without them.

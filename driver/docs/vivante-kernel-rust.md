@@ -229,7 +229,8 @@ Measured on the Verdin iMX8M Plus in September 2026, with the C kernel side
 and the Linux harness that are now gone. They are facts about the part, so
 they hold for the Rust. The full accounts are in
 `tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md` (the old
-`driver/src/vivante/NOTES.md`) and `imx8mp-gc-bringup.md`.
+`driver/src/vivante/NOTES.md`) and
+`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`.
 
 Registers:
 

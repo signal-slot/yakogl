@@ -1,6 +1,6 @@
 # gc_triangle
 
-Milestone 5 of `docs/imx8mp-backend-plan.md`: clear a surface, then draw one
+Milestone 5 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: clear a surface, then draw one
 smooth-shaded triangle into it through the 3D pipe and check the pixels.
 
 The vertices are red (top), green (bottom left) and blue (bottom right), and

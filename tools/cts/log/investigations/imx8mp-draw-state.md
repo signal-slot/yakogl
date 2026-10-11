@@ -1,6 +1,10 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # What a draw writes on the GC7000, and where YakoGL's state goes
 
-Preparation for M6 of `imx8mp-backend-plan.md`, written from Mesa's etnaviv
+Status: finished record, moved here from `driver/docs/imx8mp-draw-state.md` on 2026-10-11. A map from Mesa's etnaviv written before the board arrived. The back end it planned is src/vivante/ (regs.rs, state.rs, backend.rs) and src/vivante/VIVANTE_NOTES.md.
+
+Preparation for M6 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`, written from Mesa's etnaviv
 driver on this host (`src/gallium/drivers/etnaviv/etnaviv_emit.c`,
 `etnaviv_state.c`, `etnaviv_texture_desc.c`) and the register descriptions in
 `src/etnaviv/hw/`. It was written before any i.MX8MP was in the lab, and it is
@@ -11,7 +15,7 @@ discovered register by register. The board arrived on 2026-09-20 and the backend
 built from this map now draws on it, so most of what is described here has been
 exercised — but the register meanings below remain Mesa's, not readings taken
 from silicon. Where a value has actually been measured, the dated sections of
-`imx8mp-backend-plan.md` say so; that document, not this one, is the record of
+`imx8mp-gc-bringup.md` say so; that document, not this one, is the record of
 what the hardware did.
 
 The shape of the work is different from the PowerVR. There is no firmware and no

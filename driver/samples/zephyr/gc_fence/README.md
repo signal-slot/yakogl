@@ -1,6 +1,6 @@
 # gc_fence
 
-Milestones 2 and 3 of `docs/imx8mp-backend-plan.md` on the real GPU, without
+Milestones 2 and 3 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md` on the real GPU, without
 drawing anything: hardware init, MMU v2, the interrupt, the front end on its
 idle loop, and then a handful of empty submits with a fence wait after each.
 

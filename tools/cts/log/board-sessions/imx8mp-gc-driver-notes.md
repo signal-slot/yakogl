@@ -1,7 +1,11 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The Vivante GC7000UL driver: what is written, where each number came from,
+
+Status: finished record, moved here from `driver/src/vivante/NOTES.md` on 2026-10-11. The C kernel side and the gclab Linux harness it describes were deleted on 2026-10-03. The hardware findings that still hold are driver/docs/vivante-kernel-rust.md, Hardware findings that still hold.
 # and what only the hardware can answer
 
-Status 2026-09-22: milestones 1 to 5 of `docs/imx8mp-backend-plan.md` **run on
+Status 2026-09-22: milestones 1 to 5 of `imx8mp-gc-bringup.md` **run on
 silicon**, both ways this code is built. As Zephyr samples on the board
 (`gc_identify`, `gc_fence`, `gc_clear`, `gc_triangle`, `gc_gl_triangle`, all
 PASS, 2026-09-20), and compiled a second time as an out-of-tree Linux module

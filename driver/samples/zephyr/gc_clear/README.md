@@ -1,6 +1,6 @@
 # gc_clear
 
-Milestone 4 of `docs/imx8mp-backend-plan.md`: fill a linear XRGB8888 surface
+Milestone 4 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: fill a linear XRGB8888 surface
 in the GPU carveout with a colour, then read the pixels back on the CPU.
 
 The clear goes through the **resolve engine**, not a full-screen quad. This
