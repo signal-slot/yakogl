@@ -20,6 +20,14 @@
 #   meson, ninja              -> dev-build/meson, dev-build/ninja
 #   python mako, pyyaml, packaging -> dev-python/mako, dev-python/pyyaml, dev-python/packaging
 #   libdrm, expat, zlib, zstd -> x11-libs/libdrm, dev-libs/expat, sys-libs/zlib, app-arch/zstd
+# On Ubuntu 26.04 (apt) the same list is clang-21 llvm-21-dev libclang-21-dev
+# libclc-21-dev llvm-spirv-21 libllvmspirvlib-21-dev spirv-tools
+# spirv-tools-dev spirv-headers glslang-tools meson ninja-build python3-mako
+# python3-yaml python3-packaging libdrm-dev libexpat1-dev zlib1g-dev
+# libzstd-dev, with LLVM_DIR=/usr/lib/llvm-21 (clang-cpp has no unversioned
+# .so there; meson falls back to the static clang libraries of
+# libclang-21-dev). spirv-tools-dev is the one apt forgets: without it meson
+# stops at 'Dependency "SPIRV-Tools" not found'.
 # Last built (2026-10-07, Gentoo, gcc 16.2.1_p20260926) with LLVM/clang 23.1.2,
 # SPIRV-LLVM-Translator 23.1.1, SPIRV-Tools 1.4.357.0 (no libclc: this Mesa
 # config builds mesa_clc without it): pco_usclib.spv md5
@@ -28,7 +36,10 @@
 # (2026-10-10, gcc 16.2.1_p20260926 p1) give f537fc86b41f, the id
 # tests/reference/blobs.rs records, with the 2026-10-05 build's bytes. Every
 # USC row of the table is byte-identical between the two ids: the id names
-# the binary, and two hosts' builds of one source differ in it.
+# the binary, and two hosts' builds of one source differ in it. The Ubuntu
+# build (2026-10-11, gcc 15.2.0, LLVM/clang 21.1.8, SPIRV-LLVM-Translator
+# 21.1.5, SPIRV-Tools 2026.1, libclc-21-dev installed) gives 78f49122d7fb,
+# and tools/check.sh's blobs.rs row matches every row with it (141 ok).
 # LLVM_DIR (default /usr/lib/llvm/23) selects the LLVM.
 #
 # Meson options: -Dbuildtype=debug -Dvulkan-drivers=imagination
