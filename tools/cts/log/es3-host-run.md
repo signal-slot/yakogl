@@ -1,3 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+
+> Record landed from `ccfarm/integration` (old PR #46, ccfarm `01a11dcf-05a5-759b-ac85-6632d0ce2cd8`, commit `f9916ec2f`). Written on 2026-10-09 as `docs/es3-host-run.md` on an integration branch (library and harness `522c41f`), not on main; the run was made then and is not repeated here. The text is as written. `docs/es3-host-env.md`, which it names, is not on main. Defects it reports may have been fixed on main since (for example `glUnmapBufferOES` on every target: main `03840710`); check the code before relying on a row.
+
 # The whole dEQP-GLES3 mustpass on the host, three GPUs (2026-10-09)
 
 **Every number in this document is HOST-ONLY.** The library is built with the
