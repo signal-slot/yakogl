@@ -23,17 +23,14 @@ name = "yakogl"
 
 [review]
 enabled = true
-# The full gate, exactly as a developer runs it before pushing (README.md:
-# "Run tools/check.sh before pushing"). It is one script: cargo fmt --check,
-# the no_std archive, clippy with zero warnings and the test suite in every
-# feature configuration and pair, the C host checks, the generated-file
-# reproductions (byte for byte against the committed files), the "no table /
-# no Mesa reference / no test knob in the artefact" symbol counts, the three
-# Zephyr -Werror images (ZEPHYR_WS), the precompiled-table proofs, the Mesa
-# table reproduction (PCO_SHC) and the hal_nxp regeneration (HAL_NXP_DIR).
-# `tools/check.sh --quick` is the PowerVR row only, for an edit loop, and is
-# never the landing gate.
-commands = ["tools/check.sh"]
+# A review reads the commit and approves it or requests changes. It runs no
+# check: the gate (tools/check.sh, about an hour) is the CI's job on the pull
+# request (.github/workflows/gate.yml runs it on every pull request to main and
+# to ccfarm/integration). The owner's rule, 2026-10-11: a review that re-ran
+# the whole gate per round took hours per result and told the reviewer nothing
+# the CI does not. The empty list is explicit: no check, and no strict second
+# review for the lack of one.
+commands = []
 merge_into = "ccfarm/integration"
 promote_to = ""
 
@@ -54,6 +51,14 @@ allow = [
   "Bash(git show:*)",
   "Bash(git add:*)",
   "Bash(git commit:*)",
+  # The board recipes (tools/cts/README.md): the layout script, the image
+  # builds, the board runner and west. Without these a task on a board lease
+  # waits ten minutes per call for a decision nobody is there to make.
+  "Bash(tools/cts/*)",
+  "Bash(sh tools/cts/*)",
+  "Bash(tools/board.sh*)",
+  "Bash(west *)",
+  "Bash(git fetch:*)",
 ]
 
 [workspace]
@@ -127,6 +132,11 @@ env_names = [
   "BOARD_UART",
   "PVR_FW_BLOB",
 ]
+# The values a board task writes under (image output, the dEQP stage-1 trees,
+# all under the dependency layout): a sandboxed task may write `$NAME/...`
+# there without asking (ccfarm `[workspace] writable_env_names`; the four
+# board tasks of 2026-10-11 stopped on `mkdir $IMX8MP_OUT/...`).
+writable_env_names = ["IMX8MP_OUT", "DEQP_STAGE1", "DEQP_WORK"]
 
 # The PowerVR firmware header: generated from TI's rgx.fw by
 # driver/tools/mkfwblob.sh, gitignored (driver/.gitignore: src/fw/), never
