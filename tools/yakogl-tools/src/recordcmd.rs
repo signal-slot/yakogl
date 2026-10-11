@@ -14,6 +14,8 @@
 //!     yakogl-tools record crc16 <case name>           the name check of a case name (CRC-16/CCITT-FALSE)
 //!     yakogl-tools record bitmap <prefix> <w1> <w2>   a kind-9 bitmap as names (filter = <prefix>*)
 //!     yakogl-tools record sweep <first> <w1> <w2> <w3>  a gl_test counters record as case numbers
+//!     yakogl-tools record msaa [--log f]... [--nvmem f]... [<w0..w3>]...   case 16's 4x probe pages
+//!                                                     (msaarec.rs) as the console's x4 lines
 //!
 //! The record itself (kinds, which kinds carry a tag, the stage table, the
 //! classes, `describe`, the console line, the CRCs) is
@@ -42,7 +44,8 @@ const USAGE: &str = "usage: yakogl-tools record <w0> <w1> <w2> <w3>
        yakogl-tools record crc <crc16 hex> [prefix]
        yakogl-tools record crc16 <case name>
        yakogl-tools record bitmap <prefix> <w1> <w2>
-       yakogl-tools record sweep <first> <w1> <w2> <w3>";
+       yakogl-tools record sweep <first> <w1> <w2> <w3>
+       yakogl-tools record msaa [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...";
 
 /// Two bits per item, item i at bits 2*(i % 16) of words[i / 16]. Items past
 /// the words given read as 0 (no result): kind DEQP_CASES carries at most 32.
@@ -425,6 +428,7 @@ pub fn main(args: &[String]) -> R<()> {
             }
             return Ok(());
         }
+        "msaa" => return crate::msaarec::main(&args[1..]),
         "crc16" if args.len() == 2 => {
             println!("{:04x}", record::crc16_ccitt_false(args[1].as_bytes()));
             return Ok(());

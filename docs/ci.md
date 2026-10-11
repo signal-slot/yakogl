@@ -154,6 +154,31 @@ directories, no compiler cache, 8 cores), the row's functions from
 counts (controls 4800 and 1224 symbols, 24 products with 0) and the same
 2.4 GB of target directories.
 
+Step 6 (the slow one-test binaries), on this host, 2026-10-12, the same
+binary built before and after each commit, warm build, load 5 to 35
+from other agents (the load moves; each pair ran back to back):
+
+| binary (feature set) | before | after | commit |
+|---|---|---|---|
+| usc_limits (PowerVR online), cargo test | 177.8, 150.6, 174.4 s | 101.0, 101.1, 102.5 s | `3351f98f` |
+| usc_limits (PowerVR online), nextest | 89.6, 88.2 s | 48.7, 48.6, 48.8 s | `3351f98f` |
+| stack_survey (GC7000 online), cargo test | 62.5, 57.6 s | 44.2, 36.0 s | `8ccc05ff` |
+| stack_survey (PowerVR online), cargo test | 20.3, 17.2 s | 8.1, 8.1 s | `8ccc05ff` |
+| es3_ubo (GC7000 online), cargo test | 33.5, 32.0 s | 31.9, 32.0 s | `c95a284c` |
+| es3_ubo (GC7000 online), nextest | 20.3, 20.4 s | 5.4, 5.5, 5.4 s | `c95a284c` |
+
+`usc_limits` was not short of threads: its survey decoded the same
+groups again on every pass of a loop (`3351f98f` caches the decode).
+Every test of `usc_limits` and `es3_ubo` holds one process-wide lock (the
+compiler's scratch arena, the GL context), so under cargo test a split
+runs no faster; under nextest each test is its own process.
+`online_corpus` and `gc_const_map` (GC7000, about 33 s and 31 s) are not
+split: 31.5 s of either is the compiles of the 138 harvested
+`tools/shaders/qt3d` sources, a part no natural split divides, so a
+split by directory gains nothing. Most of that time is the GC7000
+selection's dead-code pass (`select::Sel::eliminate_dead`, 63% of a
+1.4 s refusal of `qt3d/19cb724b4f3f33fa.frag`).
+
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
 change: `src/gl/draw.rs`, `src/shaderc/online/*` and `tools/check.sh`
 select all 134 rows ("scopes: all"); `src/vivante/*` selects 38; a document

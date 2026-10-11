@@ -1511,35 +1511,89 @@ mod es3 {
         assert!(failed.is_empty(), "{} of {n} cases fail:\n{}", failed.len(), failed.join("\n\n"));
     }
 
-    #[test]
-    fn structs_and_nested_structs() {
-        let _g = context();
+    /// The four struct groups of `functional.ubo`, by dEQP group, with their
+    /// case counts: each a test of its own, so cargo-nextest runs them at
+    /// once (under cargo test they take turns at the one context,
+    /// `context()`). The macro makes the list and the tests together, so no
+    /// group is listed without its test.
+    macro_rules! struct_groups {
+        ($($test:ident: $kind:literal, $count:literal;)*) => {
+            const STRUCT_KINDS: [(&str, usize); [$($kind),*].len()] = [$(($kind, $count)),*];
+            $(
+                #[test]
+                fn $test() {
+                    structs_of($kind);
+                }
+            )*
+        };
+    }
+    struct_groups! {
+        structs_single_struct: "single_struct", 24;
+        structs_single_struct_array: "single_struct_array", 24;
+        structs_single_nested_struct: "single_nested_struct", 24;
+        structs_single_nested_struct_array: "single_nested_struct_array", 24;
+    }
+
+    fn struct_cases(kind: &str) -> Vec<(String, Iface, Mode)> {
         let mut cases = Vec::new();
-        for kind in ["single_struct", "single_struct_array", "single_nested_struct", "single_nested_struct_array"] {
-            for (mn, mode) in MODES {
-                for (ln, lf) in LAYOUTS {
-                    for inst in [0u32, 3] {
-                        if mode == Mode::Single && inst == 0 {
-                            continue;
-                        }
-                        let base = format!("{kind}.{mn}.{ln}{}", inst_suffix(inst));
-                        staged(&mut cases, &base, lf, mode, |bits| struct_case(kind, lf | bits, inst, 0, 0));
+        for (mn, mode) in MODES {
+            for (ln, lf) in LAYOUTS {
+                for inst in [0u32, 3] {
+                    if mode == Mode::Single && inst == 0 {
+                        continue;
                     }
+                    let base = format!("{kind}.{mn}.{ln}{}", inst_suffix(inst));
+                    staged(&mut cases, &base, lf, mode, |bits| struct_case(kind, lf | bits, inst, 0, 0));
                 }
             }
         }
+        cases
+    }
+
+    /// One struct group, held to its pinned case count.
+    fn structs_of(kind: &str) {
+        let _g = context();
+        let want = STRUCT_KINDS.iter().find(|k| k.0 == kind).expect("a group of STRUCT_KINDS").1;
+        let cases = struct_cases(kind);
+        assert_eq!(cases.len(), want, "{kind} has {} cases, pinned at {want}", cases.len());
         run_all(cases);
     }
 
     /// `layout(row_major) S s;` and `layout(column_major) T t;`: a struct
     /// member's own matrix layout over the block's, the 192 cases of
-    /// single_nested_struct_mixed_matrix_packing.
-    #[test]
-    fn nested_struct_mixed_matrix_packing() {
-        let _g = context();
+    /// single_nested_struct_mixed_matrix_packing, by buffer mode (the dEQP
+    /// group under it) and block layout (the first part of the case name),
+    /// with their case counts. The macro makes the list and the tests
+    /// together, so no part is listed without its test.
+    macro_rules! mixed_parts {
+        ($($test:ident: $mode:literal, $layout:literal, $count:literal;)*) => {
+            const MIXED_PARTS: [(&str, &str, usize); [$($mode),*].len()] = [$(($mode, $layout, $count)),*];
+            $(
+                #[test]
+                fn $test() {
+                    mixed_of($mode, $layout);
+                }
+            )*
+        };
+    }
+    mixed_parts! {
+        nested_struct_mixed_matrix_packing_per_block_buffer_shared: "per_block_buffer", "shared", 48;
+        nested_struct_mixed_matrix_packing_per_block_buffer_packed: "per_block_buffer", "packed", 32;
+        nested_struct_mixed_matrix_packing_per_block_buffer_std140: "per_block_buffer", "std140", 48;
+        nested_struct_mixed_matrix_packing_single_buffer_shared: "single_buffer", "shared", 24;
+        nested_struct_mixed_matrix_packing_single_buffer_packed: "single_buffer", "packed", 16;
+        nested_struct_mixed_matrix_packing_single_buffer_std140: "single_buffer", "std140", 24;
+    }
+
+    /// The cases of single_nested_struct_mixed_matrix_packing whose buffer
+    /// mode and block layout `keep` accepts.
+    fn mixed_cases(keep: impl Fn(&str, &str) -> bool) -> Vec<(String, Iface, Mode)> {
         let mut cases = Vec::new();
         for (mn, mode) in MODES {
             for (ln, lf) in LAYOUTS {
+                if !keep(mn, ln) {
+                    continue;
+                }
                 for ((bn, bf), (sn, sf), (an, af)) in matrix_triples() {
                     for inst in [0u32, 3] {
                         if mode == Mode::Single && inst == 0 {
@@ -1552,7 +1606,46 @@ mod es3 {
                 }
             }
         }
+        cases
+    }
+
+    /// One part of the mixed group, held to its pinned case count.
+    fn mixed_of(mode: &str, layout: &str) {
+        let _g = context();
+        let want = MIXED_PARTS.iter().find(|p| p.0 == mode && p.1 == layout).expect("a part of MIXED_PARTS").2;
+        let cases = mixed_cases(|m, l| m == mode && l == layout);
+        assert_eq!(cases.len(), want, "{mode}.{layout} has {} cases, pinned at {want}", cases.len());
         run_all(cases);
+    }
+
+    /// The split tests together run each group whole: every case of the
+    /// struct groups (96) and of the mixed group (192) is in exactly one
+    /// part, the parts' pins add up to those totals, and every part list
+    /// names each mode and layout it partitions by.
+    #[test]
+    fn the_split_groups_cover_their_cases() {
+        let names = |v: Vec<(String, Iface, Mode)>| v.into_iter().map(|c| c.0).collect::<Vec<_>>();
+        let mut structs: Vec<String> = STRUCT_KINDS.iter().flat_map(|k| names(struct_cases(k.0))).collect();
+        assert_eq!(STRUCT_KINDS.iter().map(|k| k.1).sum::<usize>(), 96, "STRUCT_KINDS does not add up to 96");
+        assert_eq!(structs.len(), 96, "the struct groups changed size; re-derive STRUCT_KINDS");
+        structs.sort();
+        structs.dedup();
+        assert_eq!(structs.len(), 96, "a struct case is in two groups");
+
+        let whole = names(mixed_cases(|_, _| true));
+        assert_eq!(whole.len(), 192, "single_nested_struct_mixed_matrix_packing changed size; re-derive MIXED_PARTS");
+        let mut parts: Vec<String> =
+            MIXED_PARTS.iter().flat_map(|p| names(mixed_cases(|m, l| m == p.0 && l == p.1))).collect();
+        assert_eq!(MIXED_PARTS.iter().map(|p| p.2).sum::<usize>(), 192, "MIXED_PARTS does not add up to 192");
+        parts.sort();
+        let mut whole_sorted = whole.clone();
+        whole_sorted.sort();
+        assert_eq!(parts, whole_sorted, "the parts of the mixed group are not the group, case for case");
+        for (mn, _) in MODES {
+            for (ln, _) in LAYOUTS {
+                assert!(MIXED_PARTS.iter().any(|p| p.0 == mn && p.1 == ln), "no part runs {mn}.{ln}");
+            }
+        }
     }
 
     /// glGetUniformfv of every matrix type reads back, column-major, what

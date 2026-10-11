@@ -171,6 +171,23 @@ for t in am62p-gles3-tree.txt pi4-gles3-tree.txt; do
     fi
 done
 
+# 20. tools/cts/images-selftest.sh: am62p-deqp-images.sh and
+# imx8mp-gltest-build.sh against a fake west in a scratch layout (TREE_ROWS,
+# a failed or image-less build, the WDOG self-arm flag, refused arguments).
+# Its count of passed checks is pinned, so a selftest that stops checking
+# reads as a failure here, not as a pass.
+IMAGES_SELFTEST_CHECKS=34
+echo
+echo "== 20. images-selftest.sh: the image builders against a fake west"
+iout=$("$HERE/images-selftest.sh" 2>&1)
+irc=$?
+iok=$(printf '%s\n' "$iout" | grep -c '^  ok ')
+if [ "$irc" -eq 0 ] && [ "$iok" -eq "$IMAGES_SELFTEST_CHECKS" ]; then
+    ok "images-selftest.sh: $iok checks passed"
+else
+    bad "images-selftest.sh: rc $irc, $iok of $IMAGES_SELFTEST_CHECKS ok; $(printf '%s\n' "$iout" | grep 'FAIL' | head -3 | paste -sd';' -)"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

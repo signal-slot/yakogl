@@ -256,7 +256,10 @@ is kept and pinned by tests.
      `gc_debug_msaa` bit 3, for a reason still unknown. The `x4 scratch`,
      `x4 clear only` and `x4 draw only` lines that would tell a failed
      resolve from a failed draw are console output, and the i.MX8MP has no
-     console: a probe for #8 needs a record kind for them. The 16
+     console. They now also go into the result record, one page of three
+     words a boot (`SEL=0x1000|tag`, kind PERF; `yakogl-tools record msaa`
+     decodes them): `tools/cts/log/investigations/gc-msaa-record.md` has the
+     two-arm recipe; no board has run it yet. The 16
      `multisample.*` dEQP cases stay NotSupported at 1x.
    - **i.MX8MP glmark2 frames wait for VSYNC** (no issue yet). `board_show`
      (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c`) calls
@@ -280,10 +283,11 @@ is kept and pinned by tests.
      pool's top region, `541c9d3`); on the AM62P at `f2a13877` all 33
      scenes ran, but no capture shows the pictures. The Pi 4 carve-out (#4,
      #5): the Pi 4 glmark2 image takes 96 MiB (`ca4074a`); the host harness
-     (`tools/hostharness/glmark2/FINDINGS-v3d.md`, 2026-10-11) still shows
-     refract's draw refused once a frame (its 1600x1200 mip chain is over
-     the 8 MiB tiled-copy budget) and no allocation refused
-     (`tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`).
+     (`tools/hostharness/glmark2/FINDINGS-v3d.md`, 2026-10-12) shows no
+     refused draw and no refused allocation since the image's tiled-copy
+     budget is 24 MiB (refract's 1600x1200 mip chain was over the 8 MiB
+     default: `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`);
+     not yet run on the board.
    - The i.MX8MP panel at 69.3 MHz (`c1f0e2a6`; its DISPLAY record is
      clean): the viewing by eye is still pending (#23).
    - ES 2.0 builds still accept other ES 3-only renderbuffer formats such
