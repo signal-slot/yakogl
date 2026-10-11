@@ -13,9 +13,14 @@ There is no released version yet; everything below is unreleased.
 - OpenGL ES 2.0 and EGL for embedded GPUs without an OS GPU driver (afb16335).
 - `GL_OES_texture_npot` in ES 2.0 builds; non-power-of-two textures get mip chains (2673197d).
 - Draw-step timing: each step of a draw is timed and the frame's slowest is reported (b0a9c0c8, 068cb628).
-- ES 3.0 transform feedback state: objects with indexed buffer bindings, varyings resolved at link, begin/end/pause/resume with their errors, the primitives-written query, and `GL_RASTERIZER_DISCARD`. Capture is not built yet: a draw that would capture is refused with `GL_INVALID_OPERATION` (16ac8641).
+- ES 3.0 transform feedback state: objects with indexed buffer bindings, varyings resolved at link, begin/end/pause/resume with their errors, the primitives-written query, and `GL_RASTERIZER_DISCARD` (16ac8641).
 - ES 3.0 sized internal formats (snorm, packed float, `RGB9_E5`, `RGB16F`, `RG32F`, `RGB32F`, `RGB10_A2`, the integer formats) are accepted and converted at upload into a class the back end samples; formats no back end samples yet are refused by name (888af5d0, e5c4a180).
-- ES 3.0 integer colour render targets in the GL core: renderbuffer storage, framebuffer completeness, `glClearBuffer{i,ui}v` and integer `glReadPixels`. No back end draws into them yet, so a draw or clear into one is refused by name (b9b2ac00).
+- ES 3.0 integer colour render targets in the GL core: renderbuffer storage, framebuffer completeness, `glClearBuffer{i,ui}v` and integer `glReadPixels` (b9b2ac00). The PowerVR draws into them (below); the GC7000 and the V3D refuse a draw or clear into one by name.
+- ES 3.0 transform-feedback capture on the CPU for the three GPUs: the GL core runs the linked vertex shader for every captured vertex and writes the varyings into the bound buffers; `PRIMITIVES_WRITTEN` counts it, and the separate-components limit is 64 (896ca724, f1d3de02; merged in c4dce912). A vertex shader that samples a texture still refuses its capturing draw.
+- `glBlitFramebuffer` copies colour on the CPU with the ES 3.0 conversions, scaling, flips, cut rectangles and the scissor; a depth or stencil blit is refused (39b18f9b; merged in c4dce912).
+- ES 3.0 buffer mapping and pixel buffers: a draw that fetches from a mapped buffer is `GL_INVALID_OPERATION`, `glCopyBufferSubData` copies on write, `glGetBufferParameteri64v` answers 64 bits (bb1f6327; merged in c4dce912).
+- sRGB colour buffers and textures: `SRGB8_ALPHA8` is its own storage class; the PowerVR renders into it, every sampler decodes it, `glBlitFramebuffer` converts it (3c433ed2; merged in c4dce912).
+- `gl_test` cases 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205 `mappbo`, host only so far (merged in c4dce912).
 - Every level of a non-power-of-two 2D array or `glTexStorage` texture is valid, as ES 3.0 requires (c40414b9).
 - The link refuses a varying whose interpolation qualifier differs between the stages, and a uniform block declared differently in the two (b88fea5e, 03ff7a63).
 
@@ -23,6 +28,7 @@ There is no released version yet; everything below is unreleased.
 - Predicated `if` arms, as pco does, and an optional branched `if` where skipping an arm pays (afa12e9b, 97ba03d4, 5f4d3677).
 - Fused multiply-add and varying-product fusion in the online compiler (18972dcb, 39bd6983).
 - Non-power-of-two 2D textures get real mip chains, laid out at their power-of-two extent as Mesa's PowerVR driver does; this addresses the aliasing seen in glmark2 terrain's minified far field (cc788590).
+- The nineteen ES 3.0 integer colour formats are render targets; int/uint outputs are bit-packed as Mesa does (fc658e64; merged in a27d69c0).
 
 #### Vivante GC7000 (NXP i.MX8MP)
 - Host reproduction and board recipe for the 4x MSAA defect (6bddfc53).
@@ -52,7 +58,7 @@ There is no released version yet; everything below is unreleased.
 
 #### Boards and samples
 - AGL cluster joins the common set: built, run and tallied on every board (c7c80ba1).
-- Per-board benchmark inventory and baselines under `docs/`.
+- Per-board benchmark baselines under `tools/cts/log/benchmarks-baseline/`.
 - A release building guide lists every input of the benchmark images and the build line per board (`docs/release/building.md`, f3da7e9e).
 - CONTRIBUTING.md and SECURITY.md (b4ec4273).
 
@@ -80,7 +86,7 @@ There is no released version yet; everything below is unreleased.
 
 #### GL core
 - Refuse a `DEPTH_COMPONENT24` renderbuffer; ES 2.0 has no `MAX_DRAW_BUFFERS` (4e9397c6).
-- ES 2.0 CTS: the failures recorded on the three boards have host-side fixes; the confirming board runs are pending (`docs/es2-cts-failures.md`).
+- ES 2.0 CTS: the failures recorded on the three boards have host-side fixes. The Pi 4 and the i.MX8MP read 0 failures on the board; on the AM62P the invariance cases pass on the board and the 45 vertex-texture cases await it (`docs/es2-cts-failures.md`).
 - `glGetUniform*` of a `mat2x3`, `mat2x4`, `mat3x4` or `mat4x3` reads its own values instead of the wrong dwords (b0c0fa6b).
 
 #### PowerVR (TI AM62P)
@@ -91,7 +97,7 @@ There is no released version yet; everything below is unreleased.
 - Constant register padding lanes are unused instead of uniform dwords (ba88a0da).
 
 #### V3D (Raspberry Pi 4)
-- Cube maps sample correctly without seamless filtering (ec5ba4fb).
+- Cube maps sample correctly without seamless filtering (ec5ba4fb); a fragment look-up takes each pixel's level from the direction's derivatives (9b24ea28; merged in 1cf946a9), and the Pi 4 reads 0 cube failures on the board.
 
 #### Tools and CTS
 - Host-harness interposer clamps a negative `glGetAttachedShaders` count (7ad89534).

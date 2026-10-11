@@ -111,7 +111,7 @@ host-test = []
 # heap-free (the crate has no allocator): the caller lends it a scratch
 # buffer and owns the output. It also owns the instruction set itself - the USC
 # decoder, encoder and disassembler, gated by a byte-exact round trip over
-# every blob of the offline table (docs/online-shaderc/design.md). It is the
+# every blob of the offline table (docs/online-shaderc/isa.md). It is the
 # only back end that needs neither a build-time table (offline) nor a host on
 # the network, so it is the one a product can ship with an application that
 # writes its shaders at run time; with the feature in it registers as

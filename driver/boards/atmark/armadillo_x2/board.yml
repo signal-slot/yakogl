@@ -4,7 +4,7 @@
 #   armadillo_x2/mimx8ml8/a53/direct  the same image type started by TF-A as
 #                                     BL33 at power-on, no U-Boot and no Linux
 #                                     (armadillo_x2_mimx8ml8_a53_direct.dts,
-#                                     docs/direct-boot.md)
+#                                     tools/cts/log/x2-direct-boot.md)
 board:
   name: armadillo_x2
   full_name: Atmark Techno Armadillo-X2

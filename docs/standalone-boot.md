@@ -7,10 +7,12 @@ two Verdin boards, the SD card on the Raspberry Pi 4. No host, no network.
 This file is that design for each board, and how we test it on the shared
 boards without leaving a board that needs a person to come back.
 
-Tests of everything else boot an image once from the host: U-Boot over TFTP
-on the Verdin boards (`BOARD_BOOT=uboot-tftp`), the firmware's tryboot on the
-Pi 4. Those are development runners; the TFTP side is "The TFTP runner"
-below, and its bring-up records are
+Test runs boot an image once and come back to Linux: on the Verdin boards
+U-Boot loads it from the eMMC where Linux staged it (`BOARD_BOOT=uboot-mmc`,
+the backend the runs of record use; `tools/board.sh` still defaults to
+`uboot-tftp`, which fetches it over TFTP), on the Pi 4 the firmware's tryboot.
+Those are development runners; the TFTP side is "The TFTP runner" below, and
+its bring-up records are
 `tools/cts/log/board-sessions/am62p-netboot.md` and
 `tools/cts/log/board-sessions/imx8mp-netboot.md`.
 

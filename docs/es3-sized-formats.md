@@ -100,12 +100,15 @@ change; the tests state the expectation per mask.
   and the PowerVR's integer samplers of the other dimensions (cube, 3D, 2D
   array: refused by name at compile time) (`docs/HANDOFF.md`, open work 4,
   formats).
-* Integer and `RGB10_A2` render targets, `glGetInternalformativ`'s texture
-  answers (ES 3.0 knows renderbuffers only; the query stays as `b9b2ac00`
-  leaves it): `es3_formats::Es3Format::storage_here()` is the question a
-  caller asks.
-* `SRGB8`/`SRGB8_ALPHA8` are stored as plain `RGBA8` as before (no decode in
-  any sampler); the 32-bit-float filterability of `R32F`/`RGBA32F` is not
+* Integer render targets on the GC7000 and the V3D, and `RGB10_A2` as its
+  own render target (the PowerVR writes the nineteen integer formats since
+  `fc658e64`, merged in `a27d69c0`; `docs/es3-pvr-formats.md` section 10).
+  `glGetInternalformativ`'s texture answers (ES 3.0 knows renderbuffers only;
+  the query stays as `b9b2ac00` leaves it):
+  `es3_formats::Es3Format::storage_here()` is the question a caller asks.
+* sRGB is no longer stored as plain `RGBA8`: `SRGB8`/`SRGB8_ALPHA8` are their
+  own class (`GLES_TEXFMT_SRGB8_A8`, `src/backend.rs`) since `3c433ed2` (merged
+  in `c4dce9125`), decoded by every sampler (`docs/es3-srgb.md`). The 32-bit-float filterability of `R32F`/`RGBA32F` is not
   modelled (it predates the table and is not identifiable from the storage
   class). `RGB5_A1` from `UNSIGNED_INT_2_10_10_10_REV` takes the 10-bit word
   since `e5c4a180`, and every level of a NPOT 3D/2D-array texture is valid

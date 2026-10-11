@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0 vertex attribute state through the public GL API on the host (item
-//! vertex-int-attribs; docs/es3-vertex-gap.md names the dEQP buckets): the
+//! vertex-int-attribs; docs/es3-cts-failures.md, Appendix A names the dEQP buckets): the
 //! argument checks of glVertexAttribPointer / glVertexAttribIPointer /
 //! glVertexAttribDivisor, the ES 3.0 array types (half float, the packed
 //! 2_10_10_10 types with size 4 only), the pure-integer current values of

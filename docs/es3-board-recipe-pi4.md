@@ -205,12 +205,12 @@ What a row can say instead, and what to do:
 - `verdict=done_with_resets` (`resets=<n>` from the OSAL's
   `GPU reset (recovery` lines): a result, never a clean pass; name the row in
   the report.
-- `LT` (lifetime.\*, 56 cases) is expected to end with `deqp: fatal:` until
-  transform-feedback capture lands (`tf-capture`): its init links a program
-  with interleaved transform feedback of `gl_Position` and dEQP ends the run
-  when that fails (RESULTS.md 1r). The tally reads it as FATAL and the 56
-  cases as without a result; that is the expected first-run outcome, not a
-  row to rerun.
+- `LT` (lifetime.\*, 56 cases): its init links a program with interleaved
+  transform feedback of `gl_Position`, and before the capture existed dEQP
+  ended the run there (`deqp: fatal:`, RESULTS.md 1r). The capture is on main
+  since `c4dce9125` (the GL core runs the vertex shader on the CPU, the same
+  on the three GPUs; the host passes `lifetime` 56 / 56), so the row is
+  expected to run. A FATAL here is now a finding.
 - `rc=3` (refused: the board does not answer, another session is on it, the
   UART is held, `/boot/firmware` short of space): nothing changed on the
   board; the chain stops (`TREE_RETRIES` is 0 on the Pi 4). `rc=5`: the board
@@ -307,9 +307,9 @@ ones have V3D counterparts in the plan:
 |---|---|---|
 | integer colour renderbuffers refused (`shaders.builtin_functions` 1,483, `fragment_out` 531) | the same until the V3D integer render targets land | `int-rt-v3d` |
 | sized texture formats refused at upload / sampled wrong (`texture.specification`, `texture.format`, `texture_functions` isampler) | GL core accepts them since `sized-formats-gl`; sampling needs the V3D format map | `formats-v3d` |
-| transform feedback (`transform_feedback` 461, `lifetime` 56) | the API exists (`tf-api`), capture does not: the same failures and the FATAL `LT` image | `tf-capture` |
-| shadow look-ups and 2D-array sampling refused by the PowerVR code generator | the V3D compiler is a different back end: `v3d-shaderc-gaps` counted 159 refused ES3 programs on the host (`tests/es3_shaderc_v3d.rs`); expect those as `Failed to compile shader program` | `v3d-shaderc-gaps` |
-| occlusion queries 62, `rasterizer_discard` 51, `draw_buffers_indexed` 76 n.s. | the same | `oq-v3d`, `tf-capture` (discard), `mrt4` |
+| transform feedback (`transform_feedback` 461, `lifetime` 56) | the API (`tf-api`) and the CPU capture (`c4dce9125`) are on main; the host passes `transform_feedback` 882 / 882 and `lifetime` 56 / 56 | `tf-capture` (built) |
+| shadow look-ups and 2D-array sampling refused by the PowerVR code generator | the V3D compiler is a different back end: on the host it builds 3,453 of the 3,461 dEQP ES 3.00 programs that must build (`docs/es3-shaderc-coverage.md`; the 159 refusals `v3d-shaderc-gaps` once counted came from a test that is not on main); expect the rest as `Failed to compile shader program` | `v3d-shaderc-gaps` |
+| occlusion queries 62, `rasterizer_discard` 51, `draw_buffers_indexed` 76 n.s. | occlusion queries are counted on the V3D since `7526b084` (merged in `452d6c31`; `OCCLUSION_QUERY_COUNTER`), host-proven only; discard is in `tf-api`; `GL_MAX_DRAW_BUFFERS` is 3 | `oq-v3d` (built), `tf-api`, `mrt4` |
 
 What has no AM62P analogue and is V3D's own: the 25 cube cases of the ES 2.0
 sweep are judged by the ES 3.0 rule here (seamless filtering is correct under
@@ -319,10 +319,11 @@ the GLES2 reference-selection difference); ASTC and ETC2 (`texture.compressed`,
 
 ## 8. The ES 2.0 regression rows, the same session
 
-ES 2.0 stays the default and plan #1 left it at zero failures; a board session
-that runs GLES3 images also runs the GLES2 rows `docs/HANDOFF.md` "Next board
-session" names (D, FB1, T1, T3, TF of `pi4-full-tree.txt`), unchanged, with
-the gles2 stage 1 as `DEQP_WORK` and no `DEQP_MODULE`:
+ES 2.0 stays the default, and the Pi 4 reads 0 failures there (17,126 / 0 /
+34, `tools/cts/RESULTS.md`, "Pi 4: the whole dEQP-GLES2 tree, 0 fail"). A board
+session that runs GLES3 images also runs a few GLES2 rows of
+`pi4-full-tree.txt` as a regression check (D, FB1, T1, T3, TF here), unchanged,
+with the gles2 stage 1 as `DEQP_WORK` and no `DEQP_MODULE`:
 
 ```sh
 DEQP_WORK=<gles2 stage 1> tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$HEAD8 D FB1 T1 T3 TF
@@ -330,6 +331,6 @@ TREE_IMAGE_DIR=build/deqp/pi4-$HEAD8 TREE_ROWS=1,4,19,21,24 tools/board.sh pi4 t
 tools/board.sh pi4 tally records/pi4/es2-$HEAD8                    # BOARD_MUSTPASS unset: the GLES2 list
 ```
 
-Expected: each row's tally equal to sweep 30's (`RESULTS.md` "Pi 4: sweep 30")
-with the changes HANDOFF predicts for `ec5ba4f` and `4e9397c`, and nothing
-moved from Pass.
+Expected: each row's tally equal to the whole tree on `a27d69c0`
+(`records/pi4/deqp-a27d69c0/full`), with T3 and TF as on `1cf946a9`
+(`records/pi4/deqp-1cf946a9/rows`: all pass), and nothing moved from Pass.
