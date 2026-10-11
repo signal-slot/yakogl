@@ -31,6 +31,13 @@
 # [tag]          defaults to the checkout's short hash
 # --dry-run      print "<N> <dir name> <filter>" per image and build nothing
 #                (needs none of the environment below)
+# TREE_ROWS      optional, as for tools/board.sh tree: 3,5-9 builds (and prints)
+#                only those rows, counted from 0, so image N is row N-1 and
+#                TREE_ROWS=7-16 is images 8-17. This is how an interrupted
+#                sweep resumes: name the rows that have no "<dir name>.built"
+#                (or "img<N> rc=0") yet, and append to <out-dir>/build.out
+#                (">>") so the finished rows stay in it. A finished image
+#                directory is rebuilt, never reused (west build -p always).
 #
 # Prints "img<N> rc=<rc> bin=<sha256 prefix>" per image (redirect stdout to
 # <out-dir>/build.out), the line
@@ -66,6 +73,24 @@ DRY=0
 [ $# -ge 2 ] || die "usage: $0 [--dry-run] <filters.txt> <out-dir> [tag]"
 FILTERS=$1; OUT=$2; TAG=${3:-$(git -C "$REPO" rev-parse --short=8 HEAD)}
 [ -f "$FILTERS" ] || die "no filter file $FILTERS"
+# in_rows INDEX SPEC: SPEC like 3,5-9 (empty: every row); tools/board.sh's rule
+in_rows() {
+    local i=$1 spec=${2:-} part a b parts=()
+    [ -z "$spec" ] && return 0
+    IFS=, read -ra parts <<<"$spec"
+    for part in "${parts[@]}"; do
+        a=${part%-*}; b=${part#*-}
+        case "$a" in '' | *[!0-9]*) die "TREE_ROWS '$spec' is not like 3,5-9" ;; esac
+        case "$b" in '' | *[!0-9]*) die "TREE_ROWS '$spec' is not like 3,5-9" ;; esac
+    done
+    for part in "${parts[@]}"; do
+        a=${part%-*}; b=${part#*-}
+        [ "$i" -ge "$a" ] && [ "$i" -le "$b" ] && return 0
+    done
+    return 1
+}
+# the rows run in a pipeline subshell, where die would end only the loop: refuse a bad spec here
+in_rows 0 "${TREE_ROWS:-}" || :
 # rows FILTERS: "<N>\t<dir name>\t<labelled 0|1>\t<render config or ->\t<filter>"
 # per image, the label rule of tools/board.sh tree_rows (TREE_IMAGE_DIR)
 rows() {
@@ -80,6 +105,7 @@ rows() {
 }
 if [ "$DRY" = 1 ]; then
     rows "$FILTERS" | while IFS=$'\t' read -r n lab _ conf filt; do
+        in_rows $((n - 1)) "${TREE_ROWS:-}" || continue
         if [ "$conf" = - ]; then echo "$n $lab $filt"; else echo "$n $lab $filt [DEQP_GL_CONFIG_NAME=$conf]"; fi
     done
     exit 0
@@ -94,6 +120,10 @@ fi
     die "driver/src/fw/pvr_fw_blob.h missing: generate it with driver/tools/mkfwblob.sh (never commit it)"
 [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
 command -v west >/dev/null || die "west not on PATH (set WEST_VENV)"
+for tool in python3 sha256sum git; do
+    command -v "$tool" >/dev/null || die "$tool not on PATH"
+done
+[ -f "$HERE/check-deqp-images.py" ] || die "$HERE/check-deqp-images.py missing"
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
 export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
@@ -111,6 +141,7 @@ esac
 
 unset DEQP_GL_CONFIG_NAME
 rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
+    in_rows $((n - 1)) "${TREE_ROWS:-}" || continue
     B=$OUT/$lab
     [ "$conf" = - ] && conf=
     (cd "$ZEPHYR_WS" && west build -p always -b verdin_am62p/am62p54/a53 -d "$B" \
@@ -125,8 +156,11 @@ rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
             $([ "$DEQP_MODULE" = gles3 ] && echo --gles3) >> "$B.log" 2>&1 \
             || rc=not-conformance
     fi
-    bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16)
+    # no zephyr.bin (a failed build) makes sha256sum fail; pipefail with set -e would end the sweep
+    bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16) || bin=
     echo "img$n rc=$rc bin=${bin:-none}"
-    [ "$labelled" = 1 ] && echo "$lab rc=$rc sha256=${bin:-none}" > "$OUT/$lab.built"
+    # an if, not "[ ] &&": as the loop's last command a false test gave the script exit 1
+    # before BUILD-EXIT after the last unlabelled row
+    if [ "$labelled" = 1 ]; then echo "$lab rc=$rc sha256=${bin:-none}" > "$OUT/$lab.built"; fi
 done
 echo "BUILD-EXIT"
