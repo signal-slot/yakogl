@@ -1682,7 +1682,9 @@ glmark2_corpus_tests() {
   done
 }
 if [ "$QUICK" -eq 0 ]; then
-  scope pvr vivante v3d
+  # tools: the row runs tools/hostharness/glmark2/run.sh, so a change there
+  # reaches it (the scope map sends tools/hostharness/* to `tools`).
+  scope pvr vivante v3d tools
   if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
     mkdir -p build
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests

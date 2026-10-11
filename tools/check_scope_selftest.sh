@@ -59,6 +59,7 @@ want driver/rust/src/lib.rs drivers
 want driver/CMakeLists.txt drivers
 want tools/cts/deqp-uart-tally.py tools
 want tools/board.sh tools
+want tools/hostharness/glmark2/run.sh tools
 want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
 want docs/HANDOFF.md docs
 want website/index.html docs
@@ -67,9 +68,11 @@ want tools/cts/log/board-sessions/x.md docs
 # the plan for a given change (YAKOGL_CHECK_PATHS stands in for the diff)
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).
-mkdir -p build/check/plan-ws/zephyr
+# The same for the glmark2 tree (the corpus row needs GLMARK2_SRC/src).
+mkdir -p build/check/plan-ws/zephyr build/check/plan-gm2/src
 plan() {
-  ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --changed HEAD 2>&1 |
+  ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-gm2 YAKOGL_CHECK_PLAN=1 \
+    YAKOGL_CHECK_PATHS="$1" tools/check.sh --changed HEAD 2>&1 |
     sed 's/\x1b\[[0-9;]*m//g'
 }
 expect() {
@@ -86,6 +89,12 @@ expect "v3d: the Mesa reference" '^plan  run     v3d job_check' "$out"
 expect "v3d: no PowerVR row" '^skip  clippy  host-test,gpu-powervr$' "$out"
 expect "v3d: no AM62P image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "v3d: no precompiled tables" '^skip  gen     precompiled table gpu-powervr:' "$out"
+# A harness script runs in the row that calls it: tools/hostharness/glmark2/run.sh
+# is run by the glmark2 corpus row (a change there once passed a gate that
+# skipped the only row able to fail on it).
+out=$(plan tools/hostharness/glmark2/run.sh)
+expect "hostharness: the glmark2 corpus row" '^plan  test    glmark2 corpus generated from GLMARK2_SRC' "$out"
+expect "hostharness: not every row" '^check.sh: .*\(--changed HEAD, scopes: tools \)' "$out"
 out=$(plan driver/tools/pvrlab/gl_test.c)
 expect "gl_test: the three images" '^plan  zephyr  imx8mp ' "$out"
 expect "gl_test: its cc arms" '^plan  cc      gl_test.c ' "$out"

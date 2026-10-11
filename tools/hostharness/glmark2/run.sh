@@ -40,7 +40,11 @@ VERSION=2023.01 # meson.build's project version at that commit
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
 [ $# -ge 1 ] || { sed -n '3,32p' "$0"; exit 2; }
-GM_ROOT="$(cd "$1" && pwd)" || die "no directory $1"
+# The physical path: the tree is often reached through a symlink (ccfarm's
+# dependency layout, ~/.local/share/ccfarm/deps/<project>/glmark2-src, is
+# one), and git reports its top level resolved, so the comparison below
+# must see the same spelling on both sides.
+GM_ROOT="$(cd "$1" && pwd -P)" || die "no directory $1"
 OUT="${2:-$ROOT/build/glmark2-host}"
 shift $(( $# >= 2 ? 2 : 1 ))
 GPUS=("$@")
