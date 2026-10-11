@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The GC7000 kernel side in Rust
 
 Status 2026-10-03: **the only kernel side; the C is deleted.** On the
@@ -28,7 +30,7 @@ from a measurement on the board.
 | rnndb | etna_viv rules-ng-ng headers in `driver/src/vivante/hw/*.xml.h` | MIT | register names, offsets, fields, command words; `regs.rs` is checked against them by a test |
 | galcore | NXP's Vivante kernel driver, `drivers/mxc/gpu-viv` of [nxp-imx/linux-imx](https://github.com/nxp-imx/linux-imx) branch `lf-6.12.y` (commit `df24f942`, 2025-11-21) | dual MIT / GPL-2.0-or-later, used under MIT | documentation of sequences and of the part's database entry; cited by file and function; nothing copied or vendored |
 | RM | i.MX 8M Plus Applications Processor Reference Manual, IMX8MPRM Rev. 3, 08/2024 | NXP document | GPC, CCM, the GPU register block, the interrupt |
-| board | measurements on the Verdin iMX8M Plus (`driver/src/vivante/NOTES.md`, RESULTS) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
+| board | measurements on the Verdin iMX8M Plus ("Hardware findings that still hold" below, RESULTS; the bring-up record `tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
 
 galcore's licence: every `.c` and `.h` of the 112 under `drivers/mxc/gpu-viv`
 carries the same header. It begins "The MIT License (MIT) / Copyright (c) 2014 -
@@ -96,7 +98,7 @@ the shim.
 | `gc_wr_sync` (hw) | etnaviv gpu_write_power_sync | ours (a posted write read back before what follows) |
 | `gc_enable_mlcg` (hw) | etnaviv_gpu_enable_mlcg | HW `gckHARDWARE_InitializeHardware`: PM_POWER_CONTROLS bit 0 set, PM_MODULE_CONTROLS RA_HZ (bit 17) and RA_EZ (bit 16) unconditionally. Board values: see below. `hw::init` |
 | `gc_setup_pulse_eater` (hw) | etnaviv_gpu_setup_pulse_eater | HW `gckHARDWARE_InitializeHardware`: read-modify-write of 0x10C when rev > 0x5420 and a 3D pipe. Board value (bit 18): see below |
-| `gc_reg_absent` (hw) | ours | board: MMUv2_AHB_CONTROL and undecoded addresses read 0xdeadde.. (NOTES.md, 2026-09-22); RM silent |
+| `gc_reg_absent` (hw) | ours | board: MMUv2_AHB_CONTROL and undecoded addresses read 0xdeadde.. ("Hardware findings that still hold", 2026-09-22); RM silent |
 | `gc_hw_init` (hw) | etnaviv_gpu_hw_init | HW `gckHARDWARE_InitializeHardware`: AHB_CONTROL NONSEC_ACCESS (0x2) on a secure-AHB part; INTR_ENBL 0xffffffff. AXI_CONFIG 0x2200: board value, see below |
 | `gc_idle_state_decode` (hw) | ours | ours (rnndb bit names) |
 | `gc_event_alloc` (hw) | etnaviv event_alloc | ours: `irq::claim` under the shim's lock, the wait in the shim |
@@ -221,6 +223,80 @@ what to look at first if a GPU bring-up problem appears.
 
 Everything else is the same traffic as the C, by the host record.
 
+## Hardware findings that still hold
+
+Measured on the Verdin iMX8M Plus in September 2026, with the C kernel side
+and the Linux harness that are now gone. They are facts about the part, so
+they hold for the Rust. The full accounts are in
+`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md` (the old
+`driver/src/vivante/NOTES.md`) and `imx8mp-gc-bringup.md`.
+
+Registers:
+
+- **`MMUv2_AHB_CONTROL` (0x3a8) does not exist on this part.** It reads
+  `0xdeaddeae`, the interconnect's pattern for an address no slave decodes.
+  `hw::init` writes the non-secure grant alone and logs that the register is
+  absent. Whether the grant is needed at all is open: the evidence says the
+  AHB is already non-secure, since everything works.
+- **`HI_AXI_CONFIG` (0x08) reads back 0** after the 0x2200 write. It is
+  write-only or absent. The write stays; it is harmless either way.
+- `HI_INTR_ENBL` does read back, so the register block itself is alive.
+- **Never read the 0x0800+ state space from the CPU.** Two builds that read
+  shader-state registers from the CPU rebooted the board, one of them after
+  a draw that completed. Dozens of runs without such reads, many with
+  deliberate GPU hangs, never did. Neither etnaviv nor the vendor driver
+  reads at or above 0x800 from the CPU. The stall dump reads only the HI,
+  PM and MC registers, and that is safe.
+
+Clock gating:
+
+- Module-level clock gating is on (`PM_POWER_CONTROLS` bit 0), with RA_HZ
+  and RA_EZ excluded. The idea that a unit gated while stalled causes the
+  GPU hang was **refuted** on 2026-09-22: in the stall dumps the gated set
+  (PA, SE, RA, TX) and the busy set (FE, PE, SH) do not intersect. The
+  dumps were from one build and one hang shape, and say nothing about gating
+  during the approach to the hang.
+- The pulse eater after init reads 0x015d0880: the reset constant with
+  `INTERNAL_DFS` (bit 18) set, as the init writes it.
+
+Shaders and hangs:
+
+- `VS_TEMP_REGISTER_CONTROL` (0x080c) and `PS_TEMP_REGISTER_CONTROL`
+  (0x100c) have a 6-bit `NUM_TEMPS` field, so 63 is the largest count either
+  stage can program. A larger count is refused by name
+  (`src/vivante/shader.rs`); it used to be masked (67 went out as 3).
+- `VS/PS_START_PC` and `END_PC` are not programmed, and need not be: Mesa
+  emits them only for parts without unified instruction memory, and this
+  HALTI5 part has it. A program's extent comes from `RANGE_HIGH` and
+  `ICACHE_COUNT`.
+- A vertex shader hang is **correlated with** the temporary-register count
+  but is **not a function of** it: on one ladder 26 temps pass and 27 hang,
+  but a 28-temp, 95-instruction shader draws. So the ceiling the compiler
+  uses is a mitigation, not a rule. Mesa's own bound (64 temps) would emit
+  shaders that hang here. The measurement that would give a rule: run the
+  same ladder at a second `num_out`, since the load-balancing word depends
+  on `num_out` alone.
+- **Recovery.** A fence wait that times out resets the GPU and restores it
+  (`gc_render_recover()` in `driver/src/vivante/gc_render.c`: reset, init,
+  MMU, ring). Work the reset threw away returns `-ECANCELED`; the deferred
+  free treats it as done. On Zephyr the timeout is the OSAL's
+  `GC_WAIT_FOREVER_MS` (2 s, `src/osal/zephyr_gc.c`), and recovery is always
+  on. Measured on 2026-09-22: a dEQP sweep that used to stop the GPU for
+  good at 1,431 cases completed 11,366 results with 2 recoveries. A reset is
+  the floor, not the fix: the compiler must not emit a program that cannot
+  terminate.
+
+Still open (not measured):
+
+1. Whether the GC7000 can bound shader execution in hardware (an
+   instruction-count or watchdog limit).
+2. Whether 24414 is the right idle-loop `WAIT` delay (core clock >> 15 at
+   the assumed 800 MHz). It costs latency only.
+3. Whether the tile-status cache flush in the epilogue is needed with no
+   tile status.
+4. Whether the instruction cache needs code padded or aligned beyond 64
+   bytes.
+
 ## Board runs, and what is left
 
 Done on the Verdin iMX8M Plus, C kernel against Rust kernel, byte-identical
@@ -232,8 +308,8 @@ gate row, the switch and NOTICE's etnaviv mention were removed (2026-10-03).
 Left:
 
 - The Armadillo-X2 `gc_gl_triangle` adopt run with the Rust kernel side.
-- `driver/tools/gclab`: `gcgpu.ko` is retired (it cannot build without the
-  C). The rest of the directory and the `tools/cts` scripts that use
-  `/dev/gcgpu` are to be removed or ported (RESULTS Work list).
+- `driver/tools/gclab` and `gcgpu.ko` are removed (`git ls-files
+  driver/tools/gclab` is empty). The RESULTS Work list row that asks for
+  this follow-up may now be closed.
 - The galcore variants in the table above can be tried one at a time,
   measured, never folded in unmeasured.
