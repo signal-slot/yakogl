@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
-> Record landed from `ccfarm/integration` (old PR #92, ccfarm `01a12b02-b874-70e1-9511-b33ca0b91da5`, commits `9aaa16c0c`, `9ae0ab5fb`). Written on 2026-10-11 against the integration tip `76d349c4` and origin/main `5ad2fa0e`; the text is as written, and the paths in it are the ones of that time (on main, `docs/investigations/` and `docs/board-sessions/` files live under `tools/cts/log/`). The re-landing it recommends was done on 2026-10-12: integration was abandoned, and its results went to main one pull request each (PRs #102 to #126, and #129 to #137 with this record for the result PRs that were still open, #29 to #92). Read the pull requests for what landed, not this audit.
+> Record landed from `ccfarm/integration` (old PR #92, ccfarm `01a12b02-b874-70e1-9511-b33ca0b91da5`, commits `9aaa16c0c`, `9ae0ab5fb`). Written on 2026-10-11 against the integration tip `76d349c4` and origin/main `5ad2fa0e`; the text is as written, and the paths in it are the ones of that time (on main, `docs/investigations/` and `docs/board-sessions/` files live under `tools/cts/log/`). The re-landing it recommends was done on 2026-10-12: integration was abandoned, and its results went to main one pull request each (PRs #102 to #126, and #129 to #138 for the result PRs that were still open, #29 to #92; #138 lands this record). Read the pull requests for what landed, not this audit.
 # Integration against origin/main: which ES 2.0 and publication items main already covers
 
 Item `es2-invariance` of plan #20, 2026-10-11. A read-only audit; no source,
