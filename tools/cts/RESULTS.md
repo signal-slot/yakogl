@@ -14,7 +14,8 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 >   poll's gl_test and glmark2);
 > - glmark2's "GPU resets N" score line;
 > - the runner's `resets=` and the board record's reset word.
-> This applies equally to the glmark2 and pool runs in `driver/docs/glmark2.md`
+> This applies equally to the glmark2 and pool runs in
+> `tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md`
 > and `tools/cts/log/investigations/pvr-render-pool.md`, and to the kt3/zs run (e4cb0903).
 > Recoveries counted from a console's own lines ("render: HWR during fence N",
 > "recover", fence timeouts), as some rows below did, are real counts and are

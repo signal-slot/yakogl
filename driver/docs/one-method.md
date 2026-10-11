@@ -556,7 +556,8 @@ then moved. Driver bring-up samples (`gc_identify`, `gc_fence`, `v3d_clear`,
   probes at tolerance 1. Whether the i.MX8MP meets 1 (it uses 12 today) is
   unmeasured.
 - Whether a 1024x600 window can be shown on the i.MX8MP's 1280x800 panel
-  without a copy (the Pi 4's view is measured: `glmark2.md` 5d,
+  without a copy (the Pi 4's view is measured:
+  `tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md` 5d,
   `tools/cts/RESULTS.md` "Scan-out view"), and whether the AM62P's cold display path
   (`am62p-display-cold.md`) shows the window after a U-Boot entry. Both are
   unmeasured. (The i.MX8MP cold-entry death is fixed on `imx8mp/cold-entry`,
