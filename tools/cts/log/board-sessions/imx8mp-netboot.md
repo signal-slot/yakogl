@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX8M Plus: boot Zephyr from U-Boot over TFTP (plan, 2026-10-03)
 
-Status: finished record, moved here from `tools/cts/log/board-sessions/imx8mp-netboot.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03 (step C after the LCDIF-read fix at the end). The current design is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c.
+Status: finished record, moved here from `driver/docs/imx8mp-netboot-plan.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03 (step C after the LCDIF-read fix at the end). The current design is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c.
 
 Goal (user, 2026-10-03): a result counts only when the board's own boot
 loader started Zephyr, never kexec. Until now the Verdin iMX8M Plus (Mallow

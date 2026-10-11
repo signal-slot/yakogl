@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P: boot Zephyr from U-Boot over TFTP (plan, 2026-09-29)
 
-Status: finished record, moved here from `tools/cts/log/board-sessions/am62p-netboot.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03. The current design (the hook, the go entry, the RTI self-arm, the TFTP runner) is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/am62p/rti_arm.c.
+Status: finished record, moved here from `driver/docs/am62p-netboot-plan.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03. The current design (the hook, the go entry, the RTI self-arm, the TFTP runner) is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/am62p/rti_arm.c.
 
 Goal (user, 2026-09-29): replace "U-Boot -> Linux -> kexec-zephyr" on the Verdin
 AM62P with a host-controlled boot of the Zephyr image straight from U-Boot.
