@@ -2,6 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 2.0 error rules: what a `report-es2` build still accepts
 
+**Status (2026-10-11): open.** Only the vertex-array part landed
+(`tests/es2_error_rules_vertex.rs`). The other ungated ES 3.0 rows of table A
+are still accepted in `report-es2` builds; no dEQP-GLES2 case reaches them
+(finding 3 below). The proposed `src/gl/es2_rules.rs` does not exist. HANDOFF
+tracks it in the row of the `72d16864` regressions ("Not done").
+
 Static audit for plan #4 item `es2-error-rules-diag`, written 2026-10-09 at
 the integration tip `334d4e6`. **Nothing was built or run for this file.** It
 is read from `src/gl/` and from the dEQP-GLES2 sources in

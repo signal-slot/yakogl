@@ -1,4 +1,12 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D on run.sh's own programs (scen, hostile)
+
+**Status (2026-10-11):** findings 3 and 4 are fixed in `tools/hostharness/run.sh`
+(the fail-injection offsets per GPU, and `chmod u+w` on the copied archive).
+Finding 1 (the V3D back end writes through a NULL `mem.cpu`) is open and
+`tools/hostharness/README.md` carries it. Finding 2 is Mesa's code and not
+ours to fix.
 
 Run of 2026-10-08, commit `eab46819` plus the `run.sh` / `rec.c` changes
 below. `gltest` is not run on the V3D build (its host arm is the PowerVR's, see
@@ -123,29 +131,3 @@ build.
    `hostile.alloc_failure_sweep` (relative offsets 1..13) covers the draw
    path. PowerVR `gltest.174` times out after 1200 s in every mode of both PowerVR
    runs: a PowerVR-side case that was not looked into (not this item's).
-
-## Gate runs (2026-10-08)
-
-* `tools/check.sh --quick`: 76 ok, 17 failed, 2 gaps. Not caused by this
-  change (it touches `tools/hostharness/` only):
-  * 12 `clippy` rows with 2..22 warnings (`needless_range_loop` and others in
-    `src/vivante`, `src/shaderc`, `src/gl`; the `clippy-clean` item), 2 of them
-    for the V3D configurations (`host-test,gpu-v3d,shaderc-online,no-shader-table`
-    with and without `report-es2`: 10 warnings each);
-  * `no table in the artefact` and `no Mesa reference in the artefact`:
-    the `aarch64-unknown-none` target is not installed on this worker (absent
-    tool);
-  * `gen src/pvr/csbgen.rs == bindgen`: clang cannot find `stdbool.h` (absent
-    tool/headers); `yakogl-drivers` clippy: 2 warnings and a `lib test`
-    compile error in `src/` that this item does not own;
-  * `tools board.sh dry-run matrix and replays`: `board_selftest: 207
-    checks, 1 failed` (the failing check is `console_from_ts: one 'HH:MM:SS line' per console.ts row, the verdict unchanged with it`; board tooling, not looked into further);
-  * gaps: `yakogl-drivers` for `aarch64-unknown-none-softfloat` (no target, no
-    nightly rust-src) and the i.MX8MP `regs.rs` (`HAL_NXP_DIR` unset).
-  The V3D rows that run tests passed (`host-test,gpu-v3d,...`: only clippy warns).
-* The host rows of `check_no_mesa_reference` (`tools/check.sh` near line 1119)
-  could not run as a step (it stops at the missing aarch64 target), so the
-  same builds were made by hand: `cargo build -p yakogl-capi --release
-  --no-default-features --features osal-linux,gpu-{powervr,vivante,v3d},shaderc-online`
-  all build, and `nm` finds 0 Mesa reference symbols in each archive (the
-  step's control, which needs the aarch64 build, was not run).

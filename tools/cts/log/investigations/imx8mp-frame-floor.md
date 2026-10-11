@@ -1,4 +1,13 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP: why glmark2 frames take "about 24 ms" (host investigation)
+
+**Status (2026-10-11): open.** The cause below is a prediction from the
+code; the board recipe (step 1) has not run. Fix F1 is not applied:
+`board_show` in `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` still calls
+`imx8mp_display_set_fb(scan)` on every frame once the display is on.
+Nothing else tracks this item yet; it is proposed for docs/HANDOFF.md
+"Open work" (performance, the user's step 2).
 
 Written 2026-10-08 from the code at `fdff1147`. Line
 numbers are that commit's. Host-only: this item reads code and earlier
