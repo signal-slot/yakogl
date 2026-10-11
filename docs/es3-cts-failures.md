@@ -442,8 +442,10 @@ The table as it stood at `396d667a`, with each item's state on main
   sRGB): `docs/HANDOFF.md`, "Next board session".
 * The i.MX8MP and the Pi 4 have never run dEQP-GLES3 (the Pi 4 recipe is
   `docs/es3-board-recipe-pi4.md`).
+* The shaders group's failure map on `396d667a` is the record
+  `tools/cts/log/investigations/es3-shaders-396d667a.md`.
 * Documents this file once expected, which were never written:
-  `docs/es3-shader-failure-map.md`, `docs/es3-rest-failure-map.md`,
+  `docs/es3-rest-failure-map.md`,
   `docs/es3-texture-failure-map.md`, `docs/es3-host-run.md`. The ES 3.0
   limits document `docs/es3-backend-caps.md` was reverted (`3f78982`).
 
