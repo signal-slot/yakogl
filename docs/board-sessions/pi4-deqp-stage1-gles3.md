@@ -98,11 +98,20 @@ placeholder board ran A1's full sequence and ended `=== A1 rc=0`. Its output
 included `tree: 91 rows`, `footprint 165126144` and the tryboot staging. The
 dry run accepts the footprint.
 
-`build=unknown`: the build tree was a copy of `eb911ac` without `.git`,
-because this worker's sandbox refused `git merge`, `git worktree` and
-`git clone`. The image is a link proof. Board records should come from images
-that `board-pi4` builds in its own checkout, so that `build=` names the
-commit.
+The first build showed `build=unknown` because its tree was a copy of
+`eb911ac` without `.git`. I rebuilt A1 from a `git worktree` at `eb911ac`
+into `<deps>/deqp-stage1-rpi_4b-gles3/img-eb911ac`. That build took 21 s,
+warm (ccache), and gave:
+
+```
+pi4-deqp-images: build from eb911ac (eb911acb93af598c286996d5baa49795c7aa7b42)
+A1 rc=0 sha256=9a37f65153fc1e75dfa1348be08b21b5953c27ba57f62ed16d101daf24cd731c build=eb911ac
+```
+
+Its RAM line (61.51 %), its size and its verdict are the same as the first
+build's. Only the embedded build string, and with it the hash, changed.
+`board-pi4` should still build its images in its own checkout, so that
+`build=` names the commit under test.
 
 ## Checks
 
@@ -117,5 +126,6 @@ commit.
 | path | what |
 |---|---|
 | `<deps>/deqp-stage1-rpi_4b-gles3/work` | `DEQP_WORK` for `DEQP_MODULE=gles3` (proposed farm name `DEQP_WORK_GLES3`) |
-| `<deps>/deqp-stage1-rpi_4b-gles3/img/A1` | the link-proof image, `build=unknown` |
+| `<deps>/deqp-stage1-rpi_4b-gles3/img-eb911ac/A1` | the link-proof image, `build=eb911ac` |
+| `<deps>/deqp-stage1-rpi_4b-gles3/img/A1` | the first build of A1, `build=unknown` |
 | `<deps>/deqp-stage1-rpi_4b-gles3/logs/` | `stage1.log`, `images.log` |
