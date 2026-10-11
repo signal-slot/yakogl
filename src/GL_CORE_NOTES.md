@@ -29,6 +29,14 @@ Portable GL ES 2.0 state machine that records into `struct gl_context`
 | `gl/vertex.rs`   | `glVertexAttribPointer`/`glEnableVertexAttribArray`/`glDisableVertexAttribArray`/`glVertexAttrib{1..4}f{,v}`/`glGetVertexAttrib{fv,iv,Pointerv}`. |
 | `gl/draw.rs`     | `glDrawArrays`/`glDrawElements`: builds `GlesDraw` from the current context; pending-clear plumbing; per-program GPU (USC + uniform) cache. |
 | `gl/framebuffer.rs` | `glGenFramebuffers`/`glBindFramebuffer`/`glFramebufferTexture2D`/`glFramebufferRenderbuffer`/`glCheckFramebufferStatus`/`glGetFramebufferAttachmentParameteriv`, the renderbuffer API, `glReadPixels`, and `gl_fb_target()` (the draw target: default surface or the bound FBO's colour attachment). |
+| `gl/es3.rs`     | The OpenGL ES 3.0 entry points not implemented elsewhere: `glClearBuffer*`, `glGetUniformuiv`, the program-binary calls, and the names of queries, samplers and transform feedback objects. |
+| `gl/es3_formats.rs` | ES 3.0's sized colour formats the original tables do not hold (snorm, packed float, shared exponent, 10-bit, integer), converted at upload into a class the back end samples (`docs/es3-sized-formats.md`). |
+| `gl/srgb.rs`    | The sRGB transfer function on the CPU for the 8-bit sRGB storage class: glGenerateMipmap's linear-space box filter and `glBlitFramebuffer`'s decode and encode (`docs/es3-srgb.md`). |
+| `gl/blit.rs`    | `glBlitFramebuffer` (ES 3.0.6 4.3.3): colour copied on the CPU, scaled, flipped and converted; depth and stencil refused. |
+| `gl/tf.rs`, `gl/tf_capture.rs` | Transform feedback: the objects, bindings and begin/pause/resume state, and the CPU capture ("Transform feedback" below). |
+| `gl/names.rs`   | Object names past the fixed pools ("Object names past the pools" below). |
+| `gl/etc1.rs`    | ETC1 decoded on the CPU for a back end whose texture unit has none. |
+| `gl/native_cube.rs` | The PowerVR's native cube map, behind `pvr_native_cube` (default off). |
 
 ## How `gl/draw.rs` builds a `GlesDraw`
 
@@ -178,9 +186,14 @@ task list, `glGetError`/`glGetString`/`glGetIntegerv`, and the full draw path
 - Mipmaps: a power-of-two texture owns its whole chain (levels consecutive,
   each tightly packed; the layout the TPU walks with `mipmaps_present`), so
   `glTexImage2D(level > 0)` and `glGenerateMipmap` (CPU box filter) fill it and
-  the `*_MIPMAP_*` min filters select levels on the GPU. NPOT textures have one
-  level (GLES2 rule); `glGenerateMipmap` on them is `GL_INVALID_OPERATION` in a
-  `report-es2` build and a no-op otherwise (ES 3.0 dropped the rule).
+  the `*_MIPMAP_*` min filters select levels on the GPU. NPOT textures have mip
+  chains too: every ES 2.0 build lists `GL_OES_texture_npot` (`state::NPOT_EXTENSION`),
+  so `glGenerateMipmap` fills an NPOT chain in both versions (glmark2's terrain
+  asks for one). The ES 2.0 rules without the extension are kept behind
+  `texture::NPOT_RESTRICTED` (a level above 0 that is not a power of two,
+  completeness only clamped and without a mipmap filter, `GL_INVALID_OPERATION`
+  from `glGenerateMipmap`), which is false in every build today. How each back end
+  holds the chain: the comment on the extension list in `gl/state.rs`.
   `glGenerateMipmap` of a cube map needs all six faces at one size
   (`GlTexture::faces_set`), in both versions.
   Cube maps (six faces, one `glTexImage2D` call each), 2D arrays and 3D
@@ -309,14 +322,17 @@ answer moves with it:
 | `GL_SHADING_LANGUAGE_VERSION` | `OpenGL ES GLSL ES 3.00` | `OpenGL ES GLSL ES 1.00` |
 | `GL_MAJOR_VERSION`, `GL_MINOR_VERSION`, `GL_NUM_EXTENSIONS` | 3, 0, the count | `GL_INVALID_ENUM` |
 | `glUniformMatrix*fv(transpose = GL_TRUE)` | transposes | `GL_INVALID_VALUE` |
-| `glGenerateMipmap` of an NPOT texture | keeps the base level | `GL_INVALID_OPERATION` |
-| an NPOT texture that repeats or mipmaps | sampled | incomplete: (0,0,0,1) |
 
-`GL_EXTENSIONS` is the same either way and lists only what is really here:
+`GL_EXTENSIONS` lists only what is really here: the list is
+`ALL_EXTENSION_NAMES` in `gl/state.rs`, each name with its reason (among them
 EGL images, the ETC1/ETC2 formats the texture path decodes, vertex array
-objects, `GL_OES_fbo_render_mipmap` (a level attachment renders into that
-level, which is how Qt prefilters a light probe), and
-`GL_EXT_texture_format_BGRA8888`.
+objects, `GL_OES_fbo_render_mipmap`, a level attachment rendering into that
+level, which is how Qt prefilters a light probe, and
+`GL_EXT_texture_format_BGRA8888`). Its last three names,
+`GL_OES_texture_npot`, `GL_OES_depth_texture` and
+`GL_OES_packed_depth_stencil`, are listed on the ES 2.0 surface only: ES 3.0
+has them in core. NPOT textures therefore follow the same rules in both
+builds.
 
 BGRA is a format at the API surface only. `glTexImage2D`, `glTexSubImage2D`
 and `glCopyTexImage2D` take `GL_BGRA_EXT` as format and as unsized internal
@@ -371,7 +387,9 @@ context lacks, each checked in the code:
   back ends) but refuses a depth or stencil copy with `GL_INVALID_OPERATION`:
   the back ends keep depth/stencil in buffers of their own with no CPU
   write path.
-- Transform feedback: the limits are 64 / 4 / 4 (ES 3.0 table 6.34) outside
+- Transform feedback: the limits are 64 / 4 / 64 (interleaved components,
+  separate attributes, separate components; ES 3.0 table 6.34 asks for at
+  least 64 / 4 / 4; `gl/tf.rs`) outside
   `report-es2`, where they stay 0; the capture runs the vertex shader on the
   CPU and refuses one that samples a texture ("Transform feedback" below).
 - `GL_MAX_SAMPLES` is 1; ES 3.0 table 6.35 asks for at least 4.
@@ -637,13 +655,10 @@ Deviations, each logged by name:
 - **GL error semantics:** `GlContext::set_error` (C: `gl_set_error_at`) keeps the first error; `glGetError`
   returns and clears it. Bad handles and unbound-program-on-draw →
   `GL_INVALID_OPERATION`.
-- The C core was smoke-tested end-to-end against stub OSAL/shaderc/backend (clear
-  fusion, attribute resolution, uniforms, textures, indexed + client-side draws, cull
-  mapping, error paths) and run on silicon. The Rust core is checked on the host only,
-  two ways. **Unit tests on strict mocks** live next to the code and run with
-  `cargo test --no-default-features --features host-test,gpu-powervr` (1350 crate tests plus the 6
-  in `tests/`: SHA-256 known answers and the shader table's invariants; none ignored).
-  The mocks in `src/testutil.rs` model a non-coherent platform and fail the test on a
+- The Rust core is checked on the host two ways, and runs on silicon on all three
+  boards (gl_test, dEQP-GLES2, glmark2: `tools/cts/RESULTS.md`). **Unit tests on
+  strict mocks** live next to the code and run with
+  `cargo test --no-default-features --features host-test,gpu-powervr`. The mocks in `src/testutil.rs` model a non-coherent platform and fail the test on a
   double free, a cache range outside its allocation, a read of memory the library never
   wrote, a draw whose inputs change before its kick completes, and they can withhold the
   CPU view; read that module's documentation before writing a test. **The host
@@ -652,9 +667,10 @@ Deviations, each logged by name:
   17 operations, GPU memory hashes, decoded kicks) and an interposer on all 222 exported
   entry points, in twelve platform modes, dev and release, with AddressSanitizer on the
   library itself; `compare.sh` repeats the check for any two builds. Nothing is
-  rendered, and the Rust library has not been run on silicon.
-- **The core is no longer bug-compatible with the C.** It follows upstream C `a444fe9`,
-  and a fix round (`git log 669279f..e235fab`) deliberately diverges where the C is
+  rendered there.
+- **The core is no longer bug-compatible with the C.** It was ported from upstream C
+  (`55de113`, after earlier syncs to `a444fe9` and `bfab616`; DESIGN.md's account
+  is in `git show 5ad2fa0e:DESIGN.md`), and a fix round (`git log 669279f..e235fab`) deliberately diverges where the C is
   wrong: a `glIs*` name that nothing ever bound is not an object (ES 3.0 6.1.10; upstream
   `4490ced` adopted this and the driver's `gl_test` case 22 now expects it); immutable storage after `glTexStorage*`;
   `glTexParameteri` value validation; `glReadPixels` distinguishing `INVALID_OPERATION`

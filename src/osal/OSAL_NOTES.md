@@ -8,10 +8,11 @@ over C APIs (Zephyr macros and inlines, board hook pointers, a variadic `log`) t
 stable Rust cannot define.
 
 Zephyr has one such translation unit per GPU, because the driver underneath is
-a different driver: `zephyr.c` for the PowerVR BXS-4-64 and `zephyr_gc.c` for
-the Vivante GC7000UL. Both define `osal_zephyr_ops`, the module build compiles
-exactly one of them (`CONFIG_YAKOGL_GPU_*`), and nothing above the OSAL knows
-which.
+a different driver: `zephyr.c` for the PowerVR BXS-4-64, `zephyr_gc.c` for
+the Vivante GC7000UL and `zephyr_v3d.c` for the Broadcom V3D 4.2. All define
+`osal_zephyr_ops`, the module build compiles exactly one of them
+(`CONFIG_YAKOGL_GPU_*`), and nothing above the OSAL knows which. Two more
+files serve all three: `zephyr_shaderc_scratch.c` and `zephyr_timing.c`.
 
 ## Files (all under `yakogl/src/osal/`)
 
@@ -19,7 +20,10 @@ which.
 |-------------------|---------------------------------------------------------------|
 | `osal_internal.h` | Private backend↔OSAL contract, the C view: `struct osal_kick_desc`, the Zephyr init arg, GPU-MMU L0 PTE flags, and the `g_osal` selection decls. Not part of the public interface. Its Rust mirror is `mod.rs` / `render.rs`; the generated layout pins (`src/abi_layout.rs` / `src/abi_layout_check.c`, `yakogl-tools abi-layout`) fail the build when the two drift. |
 | `zephyr.c`        | Zephyr backend for the PowerVR — wraps the silicon-proven bring-up driver. |
-| `zephyr_gc.c`     | Zephyr backend for the Vivante GC7000UL — wraps the driver's render service (`src/vivante/gc_render.h`). Compiled instead of `zephyr.c` when `CONFIG_YAKOGL_GPU_VIVANTE=y`. |
+| `zephyr_gc.c`     | Zephyr backend for the Vivante GC7000UL — wraps the driver's render service (`driver/src/vivante/gc_render.h`). Compiled instead of `zephyr.c` when `CONFIG_YAKOGL_GPU_VIVANTE=y`. |
+| `zephyr_v3d.c`, `zephyr_v3d.h` | Zephyr backend for the Broadcom V3D 4.2 (Raspberry Pi 4). The V3D has no firmware, no ring and no Zephyr driver, so this file is the whole render service, on the driver's OS-free steps (`driver/src/v3d/v3d_hw.c`). Compiled instead of `zephyr.c` for the V3D. |
+| `zephyr_shaderc_scratch.c` | The memory the in-process shader compiler works in: one static region, lent once at boot, sized by `CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES`. Shared by the three Zephyr backends. |
+| `zephyr_timing.c` | The time answers every Zephyr OSAL gives (`OSAL_QUERY_CLOCK_NS`, `OSAL_QUERY_DRAW_STATS`), in one place so the three cannot drift apart. |
 | `baremetal.c`     | Bare-metal backend skeleton — direct MMIO + static carveout; proves the portability seam (2nd backend, same interface). The board registers its addresses and hooks first (`include/gles_osal_baremetal.h`, `osal_bm_board_config()`); init refuses without them (see below). |
 | `linux.c`         | Host backend with no GPU: malloc'd GPU memory, fake device VAs per heap, submits complete at once. Runs the GL core + PowerVR backend + shader table on a Linux host under ASan/valgrind with a real application's call stream (`-DYAKOGL_OSAL=linux`); the host harness `tools/hostharness/` links it (its recording OSAL can allocate through it). Renders nothing. |
 | `osal_bounds.h`   | `osal_gpu_copy_ok()`: the one argument check every OSAL's `gpu_write` / `gpu_read` makes before its `memcpy` (NULL `mem`, `mem->cpu` or buffer, and `off > size || n > size - off`, a form in which `off + n` cannot wrap). The contract is in `gles_osal.h`; the host checks it with `tools/osal/osal_bounds_check.c` (a `tools/check.sh` row). |
@@ -210,14 +214,10 @@ Integration (done): the Zephyr OSAL forwards `init` -> `pvr_render_init()`,
 the base VA), `submit`/`wait` -> `pvr_render_submit/wait()`, `query` ->
 `pvr_render_static_get()`; the driver exports it needs live in `src/pvr_drv.h`,
 and `pvr_fw_boot()` no longer renders when built with `-DPVR_NO_SELFTEST_RENDER`.
-Verified on silicon (with the C core) through the Linux harness (`tools/pvrlab`,
-`GLES=1`), which compiles `zephyr.c` through its Zephyr API shim. That harness
-compiled YakoGL's `.c` files directly (symlinks + Kbuild); with the core in Rust it
-has to link the cargo-built static library instead, which is not done, and the Rust
-library has not been run on silicon. Nor has the Zephyr module build itself been run:
-the crate compiles for `aarch64-unknown-none` with the `osal-zephyr` feature, but the
-`west build` that puts `zephyr.c`, the driver module and the cargo archive together is
-untested. On the host the port is checked two ways: unit tests on the strict mocks of
+The Rust library runs on silicon through this OSAL on all three boards, built as a
+Zephyr module (gl_test, dEQP-GLES2, glmark2: `tools/cts/RESULTS.md`). The Linux
+harness that once compiled `zephyr.c` through a Zephyr API shim (`tools/pvrlab`,
+`GLES=1`) verified it with the C core and is retired. On the host the port is checked two ways: unit tests on the strict mocks of
 `src/testutil.rs` (`cargo test --no-default-features --features host-test,gpu-powervr`), which model
 this contract — a CPU view and device memory kept apart, synchronised only by
 `cache_flush` / `cache_invd` (both recorded, ranges checked against the live
