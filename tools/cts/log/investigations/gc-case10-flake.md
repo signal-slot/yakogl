@@ -151,7 +151,7 @@ record shows this address yet (see the end of the board recipe).
   reached memory, and the point drawn over it later in the same kick did
   not. The KICK_DIFF record agrees: the 1 px and 3 px points (4 rows) are
   missing, and the 5 px point, the last vertex, is there
-  (tools/cts/STATUS.md:110).
+  (tools/cts/log/status-2026-09-25-to-10-07.md:106).
 - Case 2 (gl_test.c:1513-1568) has the same shape four times: `glClear`, then
   a quad of 2x2 px (check 22, gl_test.c:1541), then 1x1 px (check 23,
   :1543), then 1x1 px again (checks 24 and 25, :1561, :1568), each followed

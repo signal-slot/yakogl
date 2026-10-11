@@ -14,7 +14,7 @@ The only full GLES3 run is AM62P, Zephyr, main `396d667a`, 2026-09-26:
 **31,278 pass, 8,835 fail, 2,636 NotSupported, 5 QualityWarning, 56 with no
 result** (all of `lifetime.*`). Source: `tools/cts/RESULTS.md` §1r (heading at
 line 1437, group table lines 1457-1494, "8,835 failures by message" lines
-1496-1516), and `tools/cts/STATUS.md` lines 9 and 250 (Japanese). The i.MX8MP
+1496-1516), and `tools/cts/log/status-2026-09-25-to-10-07.md`, "この先" item 2 (Japanese). The i.MX8MP
 and the Pi 4 have **no GLES3 run**, so everything below is AM62P only.
 
 There is **no per-case list**. The per-case session of 2026-10-08 got no console
