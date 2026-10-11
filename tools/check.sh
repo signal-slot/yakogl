@@ -536,22 +536,38 @@ row_record() {
 # has them (mode, blob id, path), then each file changed or added (and not
 # ignored) in the working tree, by its content, or `deleted`.
 tree_listing() {
-  local p
+  local p changed
   git ls-files -s -- "$@" || return 1
-  { git ls-files -m -- "$@" && git ls-files -o --exclude-standard -- "$@"; } | sort -u |
-    while IFS= read -r p; do
-      if [ -f "$p" ]; then echo "worktree $(git hash-object -- "$p") $p"; else echo "worktree deleted $p"; fi
-    done
+  changed=$(git ls-files -m -- "$@" && git ls-files -o --exclude-standard -- "$@") || return 1
+  printf '%s\n' "$changed" | sort -u | while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if [ -f "$p" ]; then echo "worktree $(git hash-object -- "$p") $p"; else echo "worktree deleted $p"; fi
+  done
 }
-# key_tree <pathspec>...: one line for the files under the pathspecs.
+# key_tree <pathspec>...: one line for the files under the pathspecs. The
+# listing is made first, so a git that fails is a key not made, never the
+# hash of half a listing.
 key_tree() {
-  local h
-  h=$(tree_listing "$@" | sha256sum | cut -c1-64) || return 1
-  echo "tree $* $h"
+  local l
+  l=$(tree_listing "$@") || return 1
+  echo "tree $* $(printf '%s\n' "$l" | sha256sum | cut -c1-64)"
 }
 # key_file <path>: a file outside git (a generated table), by content.
 key_file() {
   if [ -f "$1" ]; then echo "file $1 $(sha256sum < "$1" | cut -c1-64)"; else echo "file $1 absent"; fi
+}
+# key_table <path>: a precompiled table by content, the commit in its mark
+# masked. yakogl-precompile writes `commit=<hex>[+dirty]` into the table's
+# header and its SHC_PRECOMPILED_TOOLCHAIN strings, so the bytes change with
+# every commit; the rows that read the tables count symbol names in the
+# archives (14mesa_reference, SHC_BLOB_TABLE, ...), which the mark's text
+# cannot hold. Without the mask the key could never match across commits.
+key_table() {
+  if [ -f "$1" ]; then
+    echo "table $1 $(sed -E 's/commit=[0-9a-f]+(\+dirty)?/commit=<mark>/g' "$1" | sha256sum | cut -c1-64)"
+  else
+    echo "table $1 absent"
+  fi
 }
 # key_exe <what> <path>: a program a row runs or a library it reads, by its
 # bytes. A path that is not a file is an error: the key is not made.
@@ -2024,8 +2040,8 @@ key_release_archives() {
   key_toolchain || return 1
   echo "targets: $(rustup target list --installed 2>/dev/null | tr '\n' ' ')"
   key_tree "${RELEASE_KEY_PATHS[@]}" || return 1
-  key_file build/precompiled/check-powervr.rs
-  key_file build/precompiled/check-gc7000.rs
+  key_table build/precompiled/check-powervr.rs
+  key_table build/precompiled/check-gc7000.rs
   declare -f table_symbols mesa_reference_symbols knob_symbols tier_tables dep_info_within
   echo "quick $QUICK; knobs $KNOB_TEST_SYMBOLS"
 }
@@ -2476,9 +2492,12 @@ fi
 # 2026-10-12 (gpu-vivante,report-es2): the list and its sources
 # (tools/shaders), the pinned counts and the refusal lists
 # (tests/fixtures/precompile_*, online_refused_*). Not in the key: the commit
-# and `git status`, which the tool writes into the table's header as its mark;
-# the proof compares a table only with another made by the same tool from the
-# same tree, so the mark cannot change its verdict.
+# and `git status`, which the tool writes into the table as its mark. `--verify`
+# does compare marks, but the two it compares are made by the same row from
+# the same checkout, so the commit's value cannot change the verdict; a
+# checkout that changes during the row can (seen 2026-10-12: a file edited
+# while the GC7000 proof ran gave "+dirty" in one mark only), which is why
+# the rows that edit the checkout run alone (`uses w:tree`).
 key_prove() {
   local out tool rlib
   if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
