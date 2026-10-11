@@ -38,6 +38,11 @@ for line in sys.stdin:
         tool = m["executable"]
     if m["target"]["name"] == "yakogl":
         rlib = [f for f in m["filenames"] if f.endswith(".rlib")][0]
+        # Recent cargo leaves the metadata out of the rlib (a stub: rustc
+        # says "only metadata stub found") and ships it as the sibling
+        # .rmeta; step 4 below emits metadata only, so that file is what it
+        # needs, and an older cargo, which names none, keeps the rlib.
+        rlib = ([f for f in m["filenames"] if f.endswith(".rmeta")] or [rlib])[0]
 if not tool or not rlib:
     sys.exit("prove.sh: cargo named no yakogl-precompile executable or yakogl rlib")
 print(tool, rlib)')

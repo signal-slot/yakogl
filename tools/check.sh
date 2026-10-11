@@ -105,15 +105,23 @@ red() { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 
 # A row that could not run is its own outcome, never folded into ok or failed:
-# `gap <what was not checked>` prints it, counts it, and makes the gate red,
-# because a skipped step that looks green is how a blind spot is born.
+# `gap <what was not checked>` prints it as "skipped: <reason>" and counts it,
+# because a skipped step that looks green is how a blind spot is born. It is
+# for what THIS machine cannot do (no Zephyr workspace, no pco_shc build, no
+# hal_nxp checkout, no aarch64 target), never for a check that ran and
+# failed, so it does not turn the gate red: a machine without a Zephyr SDK
+# must not fail main for it, and rejecting every change over a skip that no
+# change can fix is how unrelated work got turned away. The summary line
+# counts the skips, and YAKOGL_CHECK_STRICT=1 makes each one fail, for the
+# machine that is meant to have everything (the owner's, before a release).
 oks=0
 fails=0
 gaps=0
 gap() {
-  printf '\033[33mgap   %s\033[0m\n' "$*"
+  printf '\033[33mskipped: %s\033[0m\n' "$*"
   gaps=$((gaps + 1))
-  rc=1
+  [ "${YAKOGL_CHECK_STRICT-}" = 1 ] && rc=1
+  return 0
 }
 
 # step <label> <command...>
@@ -1374,11 +1382,20 @@ zephyr_precompiled_only_image() {
 }
 if [ "$QUICK" -eq 0 ]; then
   if [ -n "${ZEPHYR_WS-}" ] && [ -d "${ZEPHYR_WS-}/zephyr" ]; then
-    step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
-      verdin_am62p/am62p54/a53 gl_test am62p \
-      -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
-    step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
-      zephyr_precompiled_only_image
+    # The AM62P images include the PowerVR firmware as a C header
+    # (driver/src/pvr_fw_boot.c: fw/pvr_fw_blob.h), a vendor binary that is
+    # not in the repository: without it they cannot compile, whatever our
+    # sources are, so the two rows are skipped and say so (docs/HANDOFF.md:
+    # copy it in to run them).
+    if [ -f driver/src/fw/pvr_fw_blob.h ]; then
+      step "zephyr  am62p gl_test image, -Werror on our C files" zephyr_werror_image \
+        verdin_am62p/am62p54/a53 gl_test am62p \
+        -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n
+      step "zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror" \
+        zephyr_precompiled_only_image
+    else
+      gap "zephyr am62p images (2): driver/src/fw/pvr_fw_blob.h, the PowerVR firmware blob, is not in this tree: the AM62P C files were NOT compiled with -Werror"
+    fi
     step "zephyr  imx8mp gc_gl_test image, -Werror on our C files" zephyr_werror_image \
       verdin_imx8mp/mimx8ml8/a53 gc_gl_test imx8mp -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
     step "zephyr  rpi4 v3d_gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b v3d_gl_test rpi4
@@ -1420,8 +1437,22 @@ if [ "$QUICK" -eq 0 ]; then
     step "gen     precompiled table $f: deterministic, rows == fresh compiles, counts pinned, compiles" \
       tools/precompile/prove.sh "$f"
   done
+  # The table records the identity of the tools that made it (the first 12
+  # hex digits of the SHA-256 of pco_shc and of glslangValidator, its header's
+  # `toolchain:` line); a different build makes a different table (308 of 324
+  # GC7000 blobs differed in one experiment), so a pco_shc or glslang that is
+  # not the pinned one cannot show anything and the row is skipped, naming
+  # both ids, instead of failing on a diff nobody can act on.
+  pinned_tools=$(sed -n 's|^// toolchain: ||p' tests/reference/blobs.rs | head -1)
+  have_tools=
   if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ]; then
+    glslang_bin=${GLSLANG:-$(command -v glslangValidator || true)}
+    have_tools="pco_shc=$(sha256sum "$PCO_SHC" | cut -c1-12) glslang=$( [ -r "${glslang_bin-}" ] && sha256sum "$glslang_bin" | cut -c1-12 || echo '?missing')"
+  fi
+  if [ -n "$have_tools" ] && [ "$have_tools" = "$pinned_tools" ]; then
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
+  elif [ -n "$have_tools" ]; then
+    gap "tests/reference/blobs.rs from precompiled.list: this host's tools are '$have_tools', the table was made by '$pinned_tools' (tools/pco_shc/build_pco_shc.sh on the recorded gcc/LLVM): the list was NOT shown to make the committed table"
   else
     gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
   fi
@@ -1456,9 +1487,13 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 
 echo
-echo "check.sh: $oks ok, $fails failed, $gaps gap(s) (a gap was not run: it is not a pass)"
+echo "check.sh: $oks ok, $fails failed, $gaps skipped (a skip was not run: it is not a pass; YAKOGL_CHECK_STRICT=1 fails on it)"
 if [ "$rc" -eq 0 ]; then
-  green "check.sh: clean"
+  if [ "$gaps" -gt 0 ]; then
+    green "check.sh: clean, with $gaps environment skip(s) listed above"
+  else
+    green "check.sh: clean"
+  fi
 else
   red "check.sh: fix the above before pushing"
 fi

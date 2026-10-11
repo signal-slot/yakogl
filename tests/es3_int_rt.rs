@@ -169,9 +169,22 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
         }
     });
+    // Finish what the previous test left outstanding before this one starts.
+    // A clear is pending GL state, not a test's private record: the
+    // clear-buffer-type test ends with a float clear pending on the default
+    // framebuffer, and the next test's first clear or glFinish emits it --
+    // the stand-in back end draws it, and a test that asserts its own
+    // refused clear reached no back end
+    // (a_back_end_that_cannot_render_the_format_refuses_the_clear) then
+    // fails on that inherited draw instead. Which test inherits it is
+    // scheduling luck (the gpu-vivante row drew that pairing, the
+    // gpu-powervr and V3D rows did not): carry the leftover out first,
+    // then drop its draw records and errors.
+    // SAFETY: plain GL call on the context made above.
+    unsafe { glFinish() };
+    drain_errors();
     DRAWS.lock().unwrap().clear();
     backend::HOST_INTEGER_RT_FORMATS.store(0, Ordering::Relaxed);
-    drain_errors();
     g
 }
 
