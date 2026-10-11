@@ -1,5 +1,17 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 fbo, fragment_ops and fragment_out: failure map
+
+**Status (2026-10-11): finished record, moved from
+`docs/es3-fbo-fragops-failure-map.md`.** Its subgroup tables (what each
+subgroup needs and which item fixes it) are folded into
+`docs/es3-cts-failures.md`, "Appendix B", which is current. What stays here
+is the 396d667a arithmetic as written. Superseded statements: sRGB is built
+(`c4dce9125`: the PowerVR encodes on write and decodes for blending; the
+GC7000 and V3D sample it), so "no sRGB encode or decode anywhere" and the
+plan item `none` for fbo_srgb are history; the colour blit is built
+(`c4dce9125`). The AM62P GLES3 tree on `f2a13877` reads fbo 872, fragment_ops
+1,109 and fragment_out 595 failures (`tools/cts/RESULTS.md`).
 
 Written 2026-10-08 (`53c7ba34`) as input for the ES 3.0 work of
 `docs/HANDOFF.md`, open work 4. Documentation only: nothing

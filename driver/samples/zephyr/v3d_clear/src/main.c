@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * v3d_clear: milestones M1..M4 of docs/rpi4-v3d-backend-plan.md in one image
- * for the Raspberry Pi 4. The only output is HDMI, so the firmware framebuffer
+ * v3d_clear: milestones M1..M4 of the V3D bring-up
+ * (tools/cts/log/board-sessions/pi4-v3d-bringup.md) in one image for the
+ * Raspberry Pi 4. The only output is HDMI, so the firmware framebuffer
  * is both the console (top half) and the render target (bottom half):
  *
  *   M1  power the V3D behind its bridge and read its identity

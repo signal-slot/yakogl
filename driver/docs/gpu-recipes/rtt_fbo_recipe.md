@@ -1,8 +1,10 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Render-to-texture (offscreen FBO) + MRT on PowerVR Rogue TBDR (BXS-4-64, BVNC 36.53.104.796)
 
 Read-only analysis. Sources:
-- Mesa PVR Vulkan driver: `scratchpad/mesa-build/mesa-26.2.1/src/imagination/` (paths below abbreviated `M/`)
-- DDK KM tree: `scratchpad/ti-img-rogue-driver-25.2/` (abbreviated `D/`)
+- Mesa PVR Vulkan driver: Mesa 26.2.1 `src/imagination/` (paths below abbreviated `M/`)
+- DDK KM tree: the `ti-img-rogue-driver` 25.2 kernel tree (abbreviated `D/`)
 
 Bottom line: **RTT is just "chain two kicks."** Both halves already work in our driver. The
 only new plumbing is (a) point pass-2's texture base at pass-1's PBE output VA, (b) serialize

@@ -1776,9 +1776,10 @@ fn dump_cccb_pending(k: &YdPvrKm, what: &str, ring: *const u8, from: u32, to: u3
 /// The step, in microseconds, between two reads of the fragment UFO inside
 /// each millisecond of [`wait_for`]. Without the feature `pvr-fine-wait` it
 /// is the whole millisecond: one read per ms, so a wait ends on the first
-/// whole millisecond after the fence moved (driver/docs/pvr-fence-wait.md).
-/// With it, the UFO is read every 20 us; the once-per-ms work (FWCCB
-/// service, re-ring, re-post, HWR check) and the timeout stay per ms.
+/// whole millisecond after the fence moved
+/// (tools/cts/log/investigations/pvr-fence-wait.md). With it, the UFO is read
+/// every 20 us; the once-per-ms work (FWCCB service, re-ring, re-post, HWR
+/// check) and the timeout stay per ms.
 #[cfg(feature = "pvr-fine-wait")]
 pub const WAIT_POLL_US: u32 = 20;
 #[cfg(not(feature = "pvr-fine-wait"))]
@@ -1822,9 +1823,9 @@ pub const RUNAWAY_BATCH: u32 = 2;
 /// The runaway batch's dump (feature `pvr-grow-scene`): when one FWCCB
 /// batch served [`RUNAWAY_BATCH`] grows or more, the firmware took each
 /// answer's pages at once and asked again. That is the runaway of fwccb-2
-/// and ab3-on (driver/docs/pvr-render-pool.md), where a bump-height TA used
-/// 3328 pages more and never finished, and the ack words alone could not
-/// say why. One line, after the batch:
+/// and ab3-on (tools/cts/log/investigations/pvr-render-pool.md), where a
+/// bump-height TA used 3328 pages more and never finished, and the ack words
+/// alone could not say why. One line, after the batch:
 /// - the TA's registers the wait's progress line reads;
 /// - the PM's catalogue bases, allocation and stack registers (the stall
 ///   dump's set);
@@ -1886,10 +1887,10 @@ fn runaway_dump(k: &YdPvrKm, r: &YdPvrRender, served: u32) {
 /// K kicks in flight: A with TA done and 3D pending, B with TA pending".
 /// The parameter manager's pages are held by kicks whose geometry has run
 /// and whose fragment has not, so A (and the size of their geometry) is what
-/// makes a list run out (driver/docs/pvr-render-pool.md, "the grow scene").
-/// A kick's geometry is done when its geometry UFO slot holds its sequence
-/// or a later one; the slots are reused every [`GEOM_UFO_SLOTS`] kicks, and
-/// `submit` keeps the kicks in flight within that.
+/// makes a list run out (tools/cts/log/investigations/pvr-render-pool.md, "the
+/// grow scene"). A kick's geometry is done when its geometry UFO slot holds its
+/// sequence or a later one; the slots are reused every [`GEOM_UFO_SLOTS`]
+/// kicks, and `submit` keeps the kicks in flight within that.
 ///
 /// The sample is taken before any command of the batch is handled or said.
 /// 157b76e3 took it after the batch, behind its synchronous console lines
@@ -2509,9 +2510,10 @@ impl DrvTally {
 }
 
 /// The driver's lines of the run-end owner report
-/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`, driver/docs/pvr-render-pool.md): the
-/// render service's one-time objects (`statics`: their page-rounded bytes per
-/// heap [general, pds, usc], counted by the C side that made them, in
+/// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
+/// tools/cts/log/investigations/pvr-render-pool.md): the render service's
+/// one-time objects (`statics`: their page-rounded bytes per heap [general,
+/// pds, usc], counted by the C side that made them, in
 /// `nstatics` blocks), the freelists (backing pages, PFN arrays, the shared
 /// grow pool), the render context's VDM stream, and the HWRT sets with the
 /// target sizes they were built for. Returns their KiB.
@@ -2673,11 +2675,11 @@ mod owner_tests {
     }
 
     /// The driver's owner lines, from the formulas in
-    /// driver/docs/pvr-render-pool.md: two global freelists of the 64 MiB
-    /// carveout (1536 backing pages, 4096-entry PFN arrays) and the local one
-    /// (26 pages, 32 entries), the render context's VDM stream, and one HWRT
-    /// member at its minimum sizes (TPC 16, VHEAP 8, region headers 64,
-    /// macrotile 4 KiB, MList 16 KiB in the PM heap).
+    /// tools/cts/log/investigations/pvr-render-pool.md: two global freelists of
+    /// the 64 MiB carveout (1536 backing pages, 4096-entry PFN arrays) and the
+    /// local one (26 pages, 32 entries), the render context's VDM stream, and
+    /// one HWRT member at its minimum sizes (TPC 16, VHEAP 8, region headers
+    /// 64, macrotile 4 KiB, MList 16 KiB in the PM heap).
     #[test]
     fn the_driver_owner_lines_follow_the_formulas() {
         let ops = Box::new(YdPvrKmOps {

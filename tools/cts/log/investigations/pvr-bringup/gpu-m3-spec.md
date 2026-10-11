@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR BXS-4-64 (RISC-V FW) — M3/M4 bare-metal implementation spec
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/gpu-m3-spec.md` on 2026-10-11. A plan for the MMU and firmware heap written from the mainline driver. The code is driver/rust/src/gpu/pvr/ (mmu.rs, fwinit.rs, fwif.rs); the firmware ABI comes from the vendored DDK headers (third_party/ti-img-rogue-ddk-25.2).
 
 Target: BXS-4-64, BVNC 36.53.104.796, TI AM62P. RISC-V firmware processor.
 FW heap = 32 MiB (shift 25) at GPU dev-vaddr `ROGUE_FW_HEAP_BASE = 0xE1C0000000`.

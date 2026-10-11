@@ -505,7 +505,7 @@ checkout — not the list to use.) The binary knows 19825 cases in all; the
 
 The Pi 4 boots Raspberry Pi OS by default. Each Zephyr image runs once through
 the firmware's tryboot and ends with its PM watchdog reset, which brings the
-board back to Linux (`driver/docs/rpi4-v3d-backend-plan.md`, "On the board").
+board back to Linux (`docs/standalone-boot.md`, "Raspberry Pi 4").
 The record is read from the Pi's UART (GPIO 14/15), never from the HDMI panel:
 `BOARD_UART` is either the serial device wired to it on this host or
 `host:port` of a serial bridge (a raw TCP stream of the UART, one client at a
@@ -573,4 +573,4 @@ the OSAL's `GPU reset (recovery N)` lines, which are printed either way.
 From 2026-10-01 until the commit that disabled Zephyr's own mailbox driver in
 `driver/samples/zephyr/common/rpi_4b_sram.dtsi`, every image built on Zephyr
 af17c0c8 ran that way (the mailbox replies were taken by Zephyr's ISR;
-`driver/docs/rpi4-v3d-backend-plan.md`, "Zephyr").
+`driver/docs/rpi4-v3d.md`, "Measured on the board").

@@ -128,7 +128,7 @@ Evidence:
   histogram had "none under 17 (the flip waits for the latch, so 48 ms of GPU
   becomes three vsync periods)" (`tools/cts/RESULTS.md:15827-15828`).
 - The other boards do not wait in `board_show`. The AM62P's `show` is 3 us a
-  frame (`driver/docs/pvr-fence-wait.md`, "What was measured"). The Pi 4
+  frame (`tools/cts/log/investigations/pvr-fence-wait.md`, "What was measured"). The Pi 4
   presents by a pan of about 0.1 ms and does not use SET_VSYNC
   (`tools/cts/RESULTS.md:10044-10060`, FBFLIP5, "a 60 fps present pans and does not wait
   on SET_VSYNC").
@@ -193,7 +193,7 @@ next limit after candidate 1 is fixed.
   fence (plus one 0.1 ms tick of Zephyr's rounding).
 - This is the same class as the AM62P's 1 ms poll, which cost about 0.1 ms a
   frame there (303 -> 316 with a 20 us poll; commit `78c4c208`,
-  `driver/docs/pvr-fence-wait.md`, "The fine-wait run").
+  `tools/cts/log/investigations/pvr-fence-wait.md`, "The fine-wait run").
 - At most about 1 ms a frame here. It matters only when it pushes a scene
   over T, and after candidate 1 is fixed.
 - The tick rate is 10 000 a second, so the sleep is not tick-rounded to a

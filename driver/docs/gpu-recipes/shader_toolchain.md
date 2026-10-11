@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Offline GLSL/SPIR-V → PowerVR Rogue USC toolchain for BXS-4-64
 
 **Device:** BXS-4-64, BVNC **36.53.104.796** (`pvr_device_info_36_53_104_796`), Mesa arch ROGUE, TI AM62P (Toradex Verdin).
@@ -5,80 +7,19 @@
 driver-integration metadata** a hand-written bare-metal driver needs — no Mesa runtime on target.
 
 **Result:** a reusable harness (`pco_shc`) that takes `<stage> <in.spv>` and emits USC + metadata,
-built on the *production* Mesa PCO backend for this exact device. All six requested shaders
-(F1–F4, V1–V2) compile to **disassembly-verified** USC. Everything lives under the scratchpad.
+built on the *production* Mesa PCO backend for this exact device. The harness and its build
+are `tools/pco_shc/` (its README has the route, the commands and the two code generation
+modes). This file keeps the register model the metadata describes (section 2) and six
+worked examples from the bring-up (section 3).
 
 ---
 
-## 1. How to compile a shader (reproducible)
+## 1. How to compile a shader
 
-### Route chosen: (a) GLSL → SPIR-V → NIR → PCO backend
-
-Route (a) works and is what the harness uses. It runs the *same pipeline the real PVR Vulkan
-driver runs* (`src/imagination/vulkan/pvr_arch_pipeline.c`): `spirv_to_nir` with
-`pco_spirv_options()`, the common `vk_spirv_to_nir` lowering, then
-`pco_preprocess_nir → pco_lower_nir → pco_postprocess_nir → pco_trans_nir → pco_process_ir →
-pco_encode_ir`. The driver's register-allocation helpers (`pvr_alloc_vs_attribs`,
-`pvr_alloc_vs_varyings`, `pvr_alloc_fs_varyings`, push-const/meta allocation) are **copied
-verbatim** into the harness, so the vtxin / coefficient / shared-register layout is identical to
-the real driver. Route (b) (hand-built NIR, à la `capture_smp_fs.c`) remains available for
-one-off intrinsics but was **not needed** for any of these shaders.
-
-### Files (all under `scratchpad/`)
-
-| File | What |
-|---|---|
-| `mesa-build/mesa-26.2.1/src/imagination/vulkan/pco_shc.c` | the harness (route a) |
-| `mesa-build/.../src/imagination/vulkan/meson.build` | adds the `pco_shc` target |
-| `shaders/src/*.frag,*.vert` | GLSL sources |
-| `shaders/compile.sh` | one-shot driver: GLSL→SPV→USC + metadata + disasm + `shaders.h` |
-| `shaders/out/<name>.{spv,bin,meta.txt,dis.txt}` | per-shader outputs |
-| `shaders/out/shaders.h` | all USC dword arrays as C |
-
-### Build the harness (once)
-
-```sh
-cd scratchpad/mesa-build/mesa-26.2.1/build
-ninja src/imagination/vulkan/pco_shc
-```
-
-### Compile one shader
-
-```sh
-glslangValidator -V -S frag shader.frag -o shader.spv
-./src/imagination/vulkan/pco_shc fs shader.spv > shader.bin    # raw USC bytes on stdout
-                                                               # metadata on stderr
-# disassemble (production PCO disassembler; keep stdout clean with NOBIN):
-PCO_SHC_NOBIN=1 PCO_DEBUG_PRINT=fs,vs,internal ./.../pco_shc fs shader.spv
-```
-
-Or compile the whole set and regenerate `shaders.h`:
-
-```sh
-scratchpad/shaders/compile.sh
-```
-
-### Two codegen modes
-
-* **lean (default)** — marks the NIR `internal`, so the backend skips the runtime-gated Vulkan
-  fragment epilogue (alpha-to-coverage / colour-write-enable / alpha-test / ISP feedback that a
-  full FS reads from a per-draw *meta* control word) and the VS implicit point-size/clip-cull
-  outputs. Produces minimal shaders in the exact style of the driver's existing `ddk_interp_fs` /
-  `ddk_vs`. **Use this for the hand driver.**
-* **full (`PCO_SHC_FULL=1`)** — the faithful full-Vulkan-pipeline output; larger, and the FS reads
-  a *meta* control word from a shared register. The harness **auto-selects full mode for any FS
-  that uses `discard`** (the coverage kill is only emitted on that path — see F2).
-
-Output format: FS default target is `R8G8B8A8_UNORM` packed to one `po0` dword (matches
-`ddk_interp_fs`); `PCO_SHC_OUT=f32x4` emits four f32 to `po0..3`.
-
-### How output was verified
-
-The production PCO disassembler (`pco_print.c`, same ISA tables as `pco_isa.py`, the same
-mechanism used to verify `smp_tex_fs`) prints correct mnemonics for every shader — e.g. VS varying
-emit `uvsw.write`, FS iteration `ditrp.pixel cf..`, mat4×vec4 as an `fmul`/`fmad` chain, and the
-`discard` coverage kill as `savmsk.vm` + `alphaf`. Per-shader disassembly is in
-`shaders/out/<name>.dis.txt`.
+`tools/pco_shc/README.md`: the route (GLSL -> SPIR-V -> NIR -> PCO, with the driver's own
+allocation helpers), building the harness, compiling one shader by hand, the lean and full
+modes, and the switches. `tools/glsl2usc.sh` compiles a whole shader list into the offline
+table.
 
 ---
 
@@ -113,8 +54,9 @@ to those shared dwords with a DOUTD program.
 
 ## 3. The shaders (USC + metadata)
 
-Raw dword arrays are also in `shaders/out/shaders.h` as `static const uint32_t <name>_usc[]`.
-GLSL sources are in `shaders/src/`.
+Six shaders compiled during the bring-up (September 2026), kept as worked examples of the
+register model and of the code size and temps each shape costs. Their sources and outputs
+were in a scratchpad and are not in the tree.
 
 ### F1 — uniform/constant colour  *(lean, 16 dwords, temps=5)*
 
@@ -145,7 +87,6 @@ Kill verified as `savmsk.vm` (+ `alphaf` ISP feedback), `uses.discard=1`.
 * **Output:** `po0`. **temps=9, coeffs=12, shareds=1.**
 * **Note:** discard *requires* full mode — in lean mode the coverage kill is silently dropped.
 
-Array: `shaders/out/shaders.h` → `F2_discard_usc[104]` (also `out/F2_discard.meta.txt`).
 
 ### F3 — branch + loop  *(lean, 80 dwords, temps=13)*
 
@@ -223,31 +164,21 @@ Array: `shaders.h` → `V2_mvp_usc[92]`.
 
 ## 4. How to add a new shader later
 
-1. Write GLSL in `shaders/src/<name>.<frag|vert>`.
-   * Uniforms → `layout(push_constant) uniform { … };` (they land at `sh0..`, DOUTD).
-   * Inter-stage varyings → `layout(location=N)` in/out (they get `VARYING_SLOT_VAR0+N`).
-   * Vertex attributes → `layout(location=N) in …` (they get `vi` regs in order).
-2. `glslangValidator -V -S <frag|vert> src/<name>.<ext> -o out/<name>.spv`
-3. `pco_shc <fs|vs> out/<name>.spv > out/<name>.bin`  — USC bytes on stdout, metadata on stderr.
-4. Read the metadata block for the driver wiring: `push_consts` (DOUTD sh layout), `fs_in`
-   (DOUTI cf layout), `attrib`/`vs_out` (vtxin/UVSW), `temps`, `po` output.
-5. Disassemble to sanity-check: `PCO_SHC_NOBIN=1 PCO_DEBUG_PRINT=fs,vs,internal pco_shc …`.
-6. Or just run `shaders/compile.sh` (add a row to its `SHADERS` list) to regenerate `shaders.h`.
+Add the GLSL to the shader list `tools/glsl2usc.sh` reads, or run `pco_shc` by hand
+(`tools/pco_shc/README.md`). Read the metadata block for the driver wiring: `push_consts`
+(the DOUTD shared-register layout), `fs_in` (the DOUTI coefficient layout), `attrib` and
+`vs_out` (vertex inputs and UVSW), `temps`, and the `po` output.
 
 **Gotchas**
-* `discard` ⇒ full mode (auto). The FS then reads a `meta` control word at `sh[meta]`; the driver
-  must supply it. All other shaders here are lean (no meta).
-* Textures/samplers: use the proven `capture_smp_fs.c` route (b) — combined image/sampler state at
-  `sh0..3`/`sh4..7`, coords iterated from `cf`. `pco_shc` covers attributes/varyings/push-const
-  uniforms/colour output; it does **not** yet wire Vulkan descriptor-set UBOs/SSBOs/samplers
-  (those need `pvr_init_descriptors` + a descriptor layout). Push-constant uniforms are the
-  bare-metal-friendly path and are fully supported.
-* Attribute formats default to float32 vecN (inferred from the input type). For integer/packed
-  vertex formats, set `data.vs.attrib_formats[...]` in `pco_shc.c`.
-* Perspective (`smooth`) varyings pull in the w iterator at `cf0..3`; flat varyings would not.
-  Everything here uses default `smooth`.
+* `discard` forces full mode. The FS then reads a `meta` control word at `sh[meta]`, and
+  the driver must supply it.
+* Combined image samplers go to shared registers by binding: `sh[0..19]` for binding 0
+  (image, image meta, sampler, sampler meta, gather; 4 dwords each), `sh[20..39]` for
+  binding 1, and so on (`tools/pco_shc/pco_shc.c`, "descriptor sets").
+* Attribute formats are float32 vecN, inferred from the input type.
+* Perspective (`smooth`) varyings pull in the w iterator at `cf0..3`; flat varyings do not.
 
-## 5. Status / confidence
+## 5. Status / confidence (September 2026)
 
 * **Encoding correctness: very high** — emitted by the production PCO encoder for the exact BVNC and
   decoded back by the production disassembler; the alloc layout is byte-identical to the shipping

@@ -98,7 +98,7 @@ Output per shader (JSON, then the disassembly): `code` (instruction words),
 constant register file: contents 2 = a GL uniform component, `data` = its index),
 `uniform_names` (name, GL location, vec4 slot / texture unit), `vs_pos_out_reg`,
 `ps_color_out_reg`, `input_count_unk8`, `uses_discard`. What the driver-side
-backend does with these is `driver/docs/imx8mp-backend-plan.md`.
+backend does with these is `src/vivante/VIVANTE_NOTES.md`, "The shader ABI".
 
 ## The golden command stream: what a working driver tells this part
 

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Zephyr samples
 
 Everything here builds from this repository alone: the GPU drivers, YakoGL and
@@ -10,7 +12,7 @@ Raspberry Pi 4 uses Zephyr's own `rpi_4b`.
 | Toradex Verdin AM62P (Dahlia) | `verdin_am62p/am62p54/a53` | PowerVR BXS-4-64 |
 | Toradex Verdin iMX8M Plus | `verdin_imx8mp/mimx8ml8/a53` | Vivante GC7000UL |
 | Atmark Armadillo-X2 | `armadillo_x2/mimx8ml8/a53` | Vivante GC7000UL |
-| Atmark Armadillo-X2, direct boot (TF-A BL33, `docs/direct-boot.md`) | `armadillo_x2/mimx8ml8/a53/direct` | Vivante GC7000UL |
+| Atmark Armadillo-X2, direct boot (TF-A BL33, `tools/cts/log/x2-direct-boot.md`) | `armadillo_x2/mimx8ml8/a53/direct` | Vivante GC7000UL |
 | Raspberry Pi 4 | `rpi_4b` | Broadcom V3D 4.2 |
 
 ## The workspace
@@ -42,27 +44,31 @@ case.
 
 ## Three first builds
 
-From the top of the workspace:
+`triangle` is the one triangle sample for all three boards (a nightly cargo
+builds its Rust part: `RUSTUP_TOOLCHAIN=nightly`). From the top of the
+workspace:
 
 ```sh
 # Verdin AM62P: needs the PowerVR firmware header, generated from the board's
 # own firmware file and never committed (TI/Imagination property)
 yakogl/driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796
-west build -p always -b verdin_am62p/am62p54/a53 -d build/gl_triangle \
-    yakogl/driver/samples/zephyr/gl_triangle
+west build -p always -b verdin_am62p/am62p54/a53 -d build/triangle-am62p \
+    yakogl/driver/samples/zephyr/triangle
 
 # Verdin iMX8M Plus
-west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_gl_triangle \
-    yakogl/driver/samples/zephyr/gc_gl_triangle
+west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/triangle-imx8mp \
+    yakogl/driver/samples/zephyr/triangle
 
-# Raspberry Pi 4: the one triangle sample for all three boards (a nightly
-# cargo builds its Rust part: RUSTUP_TOOLCHAIN=nightly)
-west build -p always -b rpi_4b -d build/triangle \
+# Raspberry Pi 4
+west build -p always -b rpi_4b -d build/triangle-pi4 \
     yakogl/driver/samples/zephyr/triangle
 ```
 
-Each sample's README says how the image reaches the board (U-Boot `go`, or
-`kexec` from the vendor Linux).
+How an image reaches the board: the product form is a standalone boot from
+the board's own eMMC or SD card (`docs/standalone-boot.md`); for a test run,
+`tools/board.sh <board> run <zephyr.bin> <logdir>` boots it once (U-Boot on
+the Verdins, the firmware's tryboot on the Pi 4) and reads the result.
+`driver/tools/kexec-zephyr/` is a development route only.
 
 ## What else some samples need
 

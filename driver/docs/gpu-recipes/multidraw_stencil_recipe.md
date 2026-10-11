@@ -1,8 +1,10 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Multi-draw and stencil on BXS-4-64 (BVNC 36.53.104.796)
 
 > **Verified on silicon (2026-09-14):** yakogl drives ISPA.sref / ISPB (compare, ops,
 > masks) and ISPCTL.tagwritedisable per draw from GL stencil state and glColorMask;
-> `tools/pvrlab/gl_test.c` case 9 passes mask/test (EQUAL, NOTEQUAL), INCR x2, the
+> `driver/tools/pvrlab/gl_test.c` case 9 passes mask/test (EQUAL, NOTEQUAL), INCR x2, the
 > glClearStencil background value and the stencil write mask. The mask pass (no colour,
 > TRANSLUCENT pass type as every object) is not discarded; no PUNCH_THROUGH was needed.
 > Two-sided stencil (case 12): header `pres_ispctl_ba`/`pres_ispctl_bb` (bits 3/4),
@@ -13,8 +15,8 @@
 
 READ-ONLY analysis. Sources cited by `file:line`:
 
-- Mesa VDM/PPP field layout: `mesa-build/mesa-26.2.1/src/imagination/csbgen/rogue/vdm.xml`, `.../ppp.xml`
-- Mesa Vulkan cmd-buffer emit: `mesa-build/.../vulkan/pvr_arch_cmd_buffer.c`, `.../pvr_arch_job_render.c`, `.../pvr_csb_enum_helpers.h`
+- Mesa VDM/PPP field layout: Mesa 26.2.1 `src/imagination/csbgen/rogue/vdm.xml`, `.../ppp.xml`
+- Mesa Vulkan cmd-buffer emit: Mesa 26.2.1 `src/imagination/vulkan/pvr_arch_cmd_buffer.c`, `.../pvr_arch_job_render.c`, `.../pvr_csb_enum_helpers.h`
 - Our builder: `driver/src/pvr_vdm_ppp_gen.c`
 
 The single most important structural fact, established from Mesa:

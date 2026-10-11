@@ -249,7 +249,7 @@ impl From<super::v3d::chain::V3dError> for CompileError {
 /// The V3D's VPM in bytes, which the program is compiled for (it sizes
 /// `vcm_cache_size`). The Raspberry Pi 4 reports 65536 (CTL_IDENT1
 /// 0x81001422 read under Linux, 2026-09-24,
-/// driver/docs/rpi4-v3d-backend-plan.md). The backend's init compares the
+/// driver/docs/rpi4-v3d.md). The backend's init compares the
 /// identified value with this and refuses to start on another.
 #[cfg(feature = "gpu-v3d")]
 pub const V3D_VPM_BYTES: u32 = 65536;

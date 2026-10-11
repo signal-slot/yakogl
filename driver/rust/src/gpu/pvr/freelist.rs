@@ -21,8 +21,8 @@
 //! answered with zero pages. What the firmware does then is unmeasured: an
 //! earlier version of this comment said "it renders what it has tiled
 //! (partial render)", and no run has tested it. What was measured
-//! (driver/docs/pvr-render-pool.md, the probe) is a list at its maximum: the
-//! firmware asks for no grow, and the kick never completes.
+//! (tools/cts/log/investigations/pvr-render-pool.md, the probe) is a list at
+//! its maximum: the firmware asks for no grow, and the kick never completes.
 //!
 //! Before docs/source-form.md step 7 this was C in `pvr_fw_boot.c` (ours;
 //! the reconstruction began in a port of Linux drm/imagination's
@@ -94,7 +94,8 @@ pub const GLOBAL_GROW_THRESHOLD: u32 = 13;
 /// the same time, so it renders on while the host answers. On the AM62P
 /// (c18f9bfd) the grow answers' READY changed no word of the firmware's
 /// acks: it kept each grow's own pages as ready either way
-/// (driver/docs/pvr-render-pool.md, "The run with both fixes").
+/// (tools/cts/log/investigations/pvr-render-pool.md, "The run with both
+/// fixes").
 pub fn ready_pages(pages: u32, grow: u32, threshold: u32) -> u32 {
     let r = (u64::from(pages) * u64::from(threshold) / 100) as u32;
     r.min(grow) & !3
@@ -214,13 +215,13 @@ pub type GrowSource<'a> = dyn FnMut(&mut YdPvrKm, u32) -> Option<PvrGpuBo> + 'a;
 /// `CONFIG_SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND`. They were the knob's alone until
 /// the AM62P's default configuration hung with the knob off and the watchdog
 /// ended the run with no record (the common set's round 2, 52be99c3;
-/// driver/docs/pvr-render-pool.md).
+/// tools/cts/log/investigations/pvr-render-pool.md).
 ///
 /// A grow the render pool refused is not one: the firmware renders on
 /// without the pages (the AM62P, 91bde95d: 235 grows answered with zero
 /// pages, every kick completed, bump high-poly at 1.96 times its frame
-/// time; driver/docs/pvr-render-pool.md). It is counted ("unserved") and
-/// said, and the run goes on.
+/// time; tools/cts/log/investigations/pvr-render-pool.md). It is counted
+/// ("unserved") and said, and the run goes on.
 ///
 /// The firmware's out-of-memory notice (UPDATE_STATS element 2, measured:
 /// one per grow request) with no grow request beside it while a list is at
@@ -604,9 +605,9 @@ pub fn grow(k: &mut YdPvrKm, id: u32, c: &[u32; 6], resp: &mut KccbCmd, ondemand
 /// is posted. The ack line after the answer shows the same words, so the
 /// pair shows what the firmware did with the answer. The open item "the
 /// grow answer's READY word has no effect visible in the ack"
-/// (driver/docs/pvr-render-pool.md) needs the words before: at the first
-/// request they show whether the firmware took the READY that `build` gave
-/// it. Reads only; nothing is written.
+/// (tools/cts/log/investigations/pvr-render-pool.md) needs the words before: at
+/// the first request they show whether the firmware took the READY that `build`
+/// gave it. Reads only; nothing is written.
 fn fw_before_the_answer(k: &YdPvrKm, i: usize) {
     let t = k.fls[i];
     let fl = k.heap_cpu(t.heap_off);
@@ -847,9 +848,10 @@ pub unsafe extern "C" fn yd_pvr_fl_audit(k: *const YdPvrKm) -> u32 {
 
 #[cfg(test)]
 mod grow_tests {
-    //! Gate 1 of the on-demand grow (driver/docs/pvr-render-pool.md): where a
-    //! grow's pages come from, how they are listed, and what is counted and
-    //! said, on a host carveout. [`serve`] is the grow without the KCCB post.
+    //! Gate 1 of the on-demand grow
+    //! (tools/cts/log/investigations/pvr-render-pool.md): where a grow's pages
+    //! come from, how they are listed, and what is counted and said, on a host
+    //! carveout. [`serve`] is the grow without the KCCB post.
     use super::*;
     use crate::gpu::pvr::km::YdPvrKmOps;
     use core::ffi::c_void;

@@ -45,15 +45,15 @@ config YAKOGL_AM62P_RTI_SELF_ARM
 	depends on !SOC_AM62PX_A53_FEED_INHERITED_WDT
 	depends on YAKOGL_AM62P_WDT_SECONDS != 0
 	help
-	  For an image entered from U-Boot with "go" (the netboot,
-	  driver/docs/am62p-netboot-plan.md): that U-Boot starts no watchdog,
-	  so without this a hang holds the board until the power is cut. On
-	  a kexec entry the RTI is already running and this only feeds it.
+	  For an image entered from U-Boot with "go" (docs/standalone-boot.md,
+	  "What the image does on a go entry"): that U-Boot starts no watchdog,
+	  so without this a hang holds the board until the power is cut. On a
+	  kexec entry the RTI is already running and this only feeds it.
 	  Replaces the SafeUI feeder (SOC_AM62PX_A53_FEED_INHERITED_WDT, which
-	  must be off): that one reads the RTI before any TISCI power-on.
-	  Feeds for YAKOGL_AM62P_WDT_SECONDS. Refuses (resets the SoC at once)
-	  when it cannot arm the RTI for 60 s. Logs "rti_arm: armed", the
-	  literal tools/board.sh requires before it boots an image.
+	  must be off): that one reads the RTI before any TISCI power-on. Feeds
+	  for YAKOGL_AM62P_WDT_SECONDS. Refuses (resets the SoC at once) when it
+	  cannot arm the RTI for 60 s. Logs "rti_arm: armed", the literal
+	  tools/board.sh requires before it boots an image.
 
 config YAKOGL_AM62P_RTI_PROOF
 	bool "AM62P: RTI proof image: arm, never feed, software reset as a backstop"

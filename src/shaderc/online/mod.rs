@@ -36,8 +36,8 @@
 //!
 //! Still to come: the lowering from the syntax tree to the IR the code
 //! generator consumes, and the built-in function library it expands.
-//! `docs/online-shaderc/frontend.md`, `ir.md`, `design.md` and `backend.md`
-//! are the design records.
+//! `docs/online-shaderc/frontend.md`, `ir.md`, `backend.md`, `isa.md` and
+//! `gc7000-isa.md` are the design records.
 //!
 //! # Diagnostics
 //!
@@ -66,7 +66,8 @@
 //! round trip over that GPU's offline blob table: decode every blob into
 //! instructions, write them back, and require the bytes to be identical.
 //!
-//! `docs/online-shaderc/design.md` is the design record for this half and
+//! `docs/online-shaderc/isa.md` and `gc7000-isa.md` are the design records
+//! for this half ("The codec in Rust and how it is measured") and
 //! `docs/online-shaderc/isa-coverage.md` what the PowerVR table's shaders
 //! actually use.
 //!

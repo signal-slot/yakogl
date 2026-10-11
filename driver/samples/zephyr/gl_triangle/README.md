@@ -1,14 +1,17 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gl_triangle (Zephyr)
 
 The smallest YakoGL application: one EGL window surface over a pixel buffer
 the program owns, one Gouraud triangle, pixels read back through `glReadPixels`.
-On the Verdin AM62P it also puts the window on the DSI panel.
+On the Verdin AM62P it also puts the window on the DSI panel. The one
+triangle sample for all three boards is `../triangle`; this one stays for the
+AM62P until Step 3 of `driver/docs/one-method.md` removes it.
 
 ```sh
 # once: embed the board's DDK firmware (TI/Img property, never committed)
-tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796      # -> src/fw/pvr_fw_blob.h
-# build (the repository root and yakogl/ are Zephyr modules)
-west build -b <board> samples/zephyr/gl_triangle
+driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796   # -> driver/src/fw/pvr_fw_blob.h
+# build: see the workspace in ../README.md
 ```
 
 ## Boards
@@ -46,23 +49,29 @@ west build -b <board> samples/zephyr/gl_triangle
 4. Resets the SoC (`CONFIG_PVR_SAMPLE_REBOOT`) so the boot loader boots its
    default OS again; a fatal error resets too instead of halting.
 
-Steps 3 and 4, the RTI watchdog feeder and the boot trace live in
-`samples/zephyr/common/` and are shared with `samples/zephyr/gl_test`.
+Steps 3 and 4 and the watchdog are the board layer's
+(`driver/zephyr/lib/board/`), shared with `gl_test`. Run the image with
+`tools/board.sh am62p run <zephyr.bin> <logdir>` (U-Boot starts it;
+`docs/standalone-boot.md`).
 
 `CONFIG_GL_TRIANGLE_WINDOW_PHYS` can point the window at an existing scan-out
 buffer instead (XRGB8888 rows); 0 uses the buffer in the image.
 
-## Entering Zephyr from Linux (kexec)
+## Entering Zephyr from Linux (kexec, development only)
 
-`tools/kexec-zephyr/` boots `zephyr.bin` from Torizon without a serial console
-or U-Boot access. Three things a previous Linux leaves behind are handled:
+`driver/tools/kexec-zephyr/` boots `zephyr.bin` from Torizon without a serial
+console or U-Boot access. It is a development route; a result counts only
+when the boot loader started the image. Three things a previous Linux leaves
+behind are handled:
 
 - the GICv3 CPU interface is in split EOI/deactivate mode (`ICC_CTLR_EL1.EOImode`),
-  which Zephyr's driver does not reset; the SafeUI `soc_a53.c` early hook puts it
+  which Zephyr's driver does not reset; the early hook in
+`driver/soc/ti/k3/am62px/soc_a53.c` puts it
   back (without it every interrupt fires once and the kernel hangs in its first
   timed wait);
 - the K3 RTI watchdog keeps running with a 60 s period and cannot be stopped;
-  the SafeUI SoC layer services it in its open window
+  the SoC layer (`driver/soc/ti/k3/am62px/soc_a53_wdt.c`) services it in its
+  open window
   (`CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT`, here for 150 s so a hung
   board still resets);
 - peripherals may be powered down (Linux runtime PM): the `safeui,tisci-power-on`

@@ -10,7 +10,8 @@
 /*
  * V3D 4.2 frame builder: the binning and render control lists of one frame.
  *
- * Milestones M3/M4 of docs/rpi4-v3d-backend-plan.md: a frame with no draws that
+ * Milestones M3/M4 of the bring-up
+ * (tools/cts/log/board-sessions/pi4-v3d-bringup.md): a frame with no draws that
  * clears one RGBA8888 render target through the tile buffer (a TLB clear) and
  * stores it to a raster buffer. M5: the same clear followed by one
  * non-indexed triangle draw with the three QPU programs of a GL program

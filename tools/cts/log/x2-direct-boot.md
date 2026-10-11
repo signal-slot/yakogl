@@ -6,11 +6,20 @@ The Armadillo-X2 powers on into a Zephyr image, with no Linux and no kexec:
 Zephyr takes the place of U-Boot proper as TF-A's BL33. The target is about
 0.5 s from power-on to the first frame.
 
+Status (2026-10-11): an unrun plan, moved from `docs/direct-boot.md`. The
+Armadillo-X2 is not one of the three boards of `README.md`, and
+`tools/cts/RESULTS.md` (the direct-boot rows) has it as NOT RUN. The board
+variant, the flash tool and the sample configuration it describes are in the
+tree: `driver/boards/atmark/armadillo_x2/`, `tools/x2-mkflash.py`,
+`driver/samples/zephyr/gc_gl_triangle/boards/armadillo_x2_mimx8ml8_a53_direct.conf`.
+
 State: the image is built and checked offline. **It has not run on the
 board**, and the board's eMMC has not been read (see "Risks and open
 questions"). The first image is `gc_gl_triangle`, which renders off-screen and
-reports on UART2. It shows no picture: nothing in this chain brings up
-LCDIF3 -> HDMI from cold.
+reports on UART2. It shows no picture: the HDMI bring-up from cold (LCDIF3 ->
+PVI -> DW-HDMI) is written, with host tests, but has never run and is not
+part of this chain (`driver/drivers/display/display_yakogl_imx8mp_hdmi.c`,
+`driver/docs/x2-hdmi-cold.md`).
 
 The three boards of `README.md` boot standalone through their own boot
 loaders instead (`docs/standalone-boot.md`).
@@ -304,4 +313,5 @@ at the verdict.
 - **Cortex-M7**: BL31 releases it from reset with whatever is in its TCM.
   ABOS does the same today.
 - **The display**: the cold LCDIF3 -> PVI -> DW-HDMI bring-up is separate
-  work. Until it exists, this route shows nothing on HDMI.
+  work: written and host-tested, never run (`driver/docs/x2-hdmi-cold.md`).
+  Until it runs in this route, the route shows nothing on HDMI.

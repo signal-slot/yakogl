@@ -444,7 +444,7 @@ pub fn shape_counts(shaders: &[Shader]) -> [(&'static str, usize); 10] {
 }
 
 /// dEQP's own ES 1.00 programs, when `DEQP_PROGRAMS` names the JSON-lines
-/// file of `{name, vert, frag}` that docs/online-shaderc/usc-seam.md
+/// file of `{name, vert, frag}` that tools/cts/log/usc-backend-2026-09-23.md
 /// ("dEQP's shaders against the IR") builds from a VK-GL-CTS checkout's
 /// `data/gles2/shaders/*.test`: (name, vertex source, fragment source) per
 /// line. `None` without the variable: a test then measures nothing and

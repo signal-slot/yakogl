@@ -1,15 +1,25 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # v3d_fb_flip
 
 The display half of direct rendering on the Raspberry Pi 4, with no GPU.
 
-The cluster demo copies each rendered window into the firmware framebuffer
-(113-155 ms of a 167-235 ms frame). The alternative is to render into one half
-of a 1920x1440 virtual framebuffer while the other half is shown, and to switch
-halves with the firmware's `SET_VIRTUAL_OFFSET`. This sample answers two
-questions before any renderer depends on it:
+When this sample was written, the cluster demo copied each rendered window
+into the firmware framebuffer (113-155 ms of a 167-235 ms frame). The
+alternative is to render into one half of a 1920x1440 virtual framebuffer
+while the other half is shown, and to switch halves with the firmware's
+`SET_VIRTUAL_OFFSET`. This sample answers two questions before any renderer
+depends on it:
 
 1. Does a pan tear (switch halves in the middle of a scanout)?
 2. What does one pan cost?
+
+**The answers** (run FBFLIP5, `tools/cts/RESULTS.md`): no tear was seen in 34
+captured frames over arms A to C, and a pan costs one `SET_VIRTUAL_OFFSET`,
+about 0.1 ms. The firmware's `SET_VSYNC` wait averages 31 ms, about two 60 Hz
+periods, so a 60 fps present pans and does not wait on it. Arm D (the whole
+property list) does not pan. The cluster sample now pans between the two
+halves on the Pi 4 (`driver/docs/one-method.md`, Step 5).
 
 ## What it does
 

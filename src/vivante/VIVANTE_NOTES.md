@@ -1,13 +1,12 @@
 # The Vivante GC7000 backend: what is implemented, and what the hardware has to answer
 
-*This is the Rust port's copy of the notes the C library carries
-(`src/vivante/VIVANTE_NOTES.md` on `main`). Everything measured here was
-measured with the C on the board; the port translates that backend module for
-module, and the file names below are the Rust ones. Where the port diverges
-from the C the commit that diverges says so, and the two places it does are
-the ones the C's structure forced: `emit_draw` is handed the depth surface's
-stride and address rather than reading the backend's state while the frame is
-borrowed, and the texture emitters take the frame whole.*
+*These notes began with the C library's GC7000 backend, and the sections dated
+before 2026-09-23 were measured with the C on the board. The Rust backend
+translated it module for module, and the file names below are the Rust ones.
+Where the port diverged from the C the commit that diverges says so; the two
+places it does are the ones the C's structure forced: `emit_draw` is handed the
+depth surface's stride and address rather than reading the backend's state while
+the frame is borrowed, and the texture emitters take the frame whole.*
 
 This is the sibling of `src/pvr/` for the i.MX8MP's **GC7000UL** (model `0x7000`,
 revision `0x6204`, product `0x70003`, HALTI5: 2 shader cores, 1 pixel pipe,
@@ -17,13 +16,14 @@ into a command stream the GPU's front end fetches.
 
 **Most of this has since run on hardware.** It was written before there was a
 board, and the encodings still come from Mesa's etnaviv driver and its register
-descriptions (`driver/docs/imx8mp-draw-state.md` is the map) — but an i.MX8MP
-has been in the lab since 2026-09-20 and this backend draws on it through
-`/dev/gcgpu`: `gl_test` stands at 31 of 38 in one process and 49 of 58 with one
-process per case (2026-09-22). So read a claim here as unverified only where the
-text says so, and take the numbered questions at the end as the ones that were
-open when this was written; several are answered in the dated board sections of
-`driver/docs/imx8mp-backend-plan.md`, which is the current record.
+descriptions (the pre-board map is
+`tools/cts/log/investigations/imx8mp-draw-state.md`) — but an i.MX8MP has been
+in the lab since 2026-09-20, and this backend runs there on Zephyr (the current
+gl_test standing is in `tools/cts/STATUS.md`). So read a claim here as
+unverified only where the text says so, and take the numbered questions at the
+end as the ones that were open when this was written; several are answered in
+`driver/docs/vivante-kernel-rust.md`, "Hardware findings that still hold", and in
+the bring-up record `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`.
 
 ## The shape of the thing
 
@@ -119,13 +119,15 @@ Files:
   needs the tile-status buffers and a resolve, which is also where fast clear
   and framebuffer compression live. `GL_MULTI_SAMPLE_CONFIG` is written as
   single-sampled and `TS_MEM_CONFIG`/`PE_MEM_CONFIG` as zero.
-- **Tiled and supertiled surfaces.** Every colour surface YakoGL renders to or
-  samples is linear. Tiling is a bandwidth optimisation that needs the layout
-  code and the descriptor's addressing mode to agree.
+- **Tiled and supertiled render targets.** Every colour surface YakoGL renders
+  to is linear, and so is every texture the fragment stage alone samples.
+  Tiling is a bandwidth optimisation that needs the layout code and the
+  descriptor's addressing mode to agree. The exceptions are sampled copies:
+  the vertex stage reads every 2D texture from a 4x4-tiled copy, and an
+  RGBA16F texture is sampled from one too (`tiled_copy.rs`; "What used to be
+  a switch is the design now" below).
 - **Dithering, logic ops, the alpha test.** The registers are written with the
   values that disable them (ES 2.0 has no logic op or alpha test anyway).
-- **Multiple render targets.** One colour target; `PS_CONTROL.RT_COUNT` is 0
-  and the `PE_RT_*` and `PE_HALTI5_RT_*` banks are untouched.
 - **Anisotropy, LOD bias, depth compare, seamless cube filtering.** The fields
   exist in `regs.rs` and nothing sets them. Cube, 3D and array textures are no
   longer on this list: the descriptor carries the type, the layer stride and
@@ -1077,8 +1079,11 @@ is not in any of them.
 
 ES 3.0 step 3 on this GPU. Reference: Mesa etnaviv (MIT) at mesa 4550a8d,
 `src/gallium/drivers/etnaviv/`; register addresses from this tree's
-`driver/src/vivante/hw/state_3d.xml.h`. Step 1 is done (below); steps 2-5 are
-not, and nothing here is measured on silicon.
+`driver/src/vivante/hw/state_3d.xml.h`. **Status (2026-10-11): done.** MRT is
+the design since clean-up 2 (`72d16864`, "What used to be a switch is the design
+now" above), and gl_test 106 `mrt3` and 163 `drawbuf0` run on the i.MX8MP from
+that commit on (`tools/cts/RESULTS.md`, "i.MX8MP: the GC7000 debug knobs leave
+the product"). The plan below is kept as it was written.
 
 **What the core allows.** HALTI5 (`REG_Halti5`, so Mesa classifies it halti
 5 -- said above, where the `0x34000`/`0x36000` windows are), one pixel

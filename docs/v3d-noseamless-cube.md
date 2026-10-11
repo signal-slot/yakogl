@@ -8,7 +8,11 @@ day) implements it. The Pi 4's whole tree at `a27d69c0` (2026-10-10) passed
 19 of the 25 and failed 6 cube mipmap cases and 3 `texture.size.cube.15x15`
 cases, all from one cause: the fragment stage's level of detail (section
 "The level of detail"), fixed on the host by computing the level in the
-shader (section "As implemented"). The board run of that fix is open.
+shader (section "As implemented"). That fix ran on the board on `1cf946a9`
+(2026-10-11): T3 304 / 304 and T4 69 / 69 pass, and the six rows whose
+fragment cube look-ups changed pass 934 of 934 mustpass cases
+(`tools/cts/RESULTS.md`, "Pi 4: gl_test on `1cf946a9` and the six cube
+rows").
 
 ## The defect
 
@@ -503,7 +507,11 @@ that changed and must not move.
 
 Expected: the nine pass and nothing else moves (each image equal to its
 `a27d69c0` tally with those cases moved from Fail to Pass); the whole tree
-then 17,092 pass / 0 fail / 34 NotSupported. `v3d_gl_test` is unchanged:
+then 17,092 pass / 0 fail / 34 NotSupported. Measured on `1cf946a9`: the nine
+pass and nothing else moved. With the 34 cases the `a27d69c0` capture lost,
+which pass in a rerun of F1, the tree reads 17,126 pass / 0 fail / 34
+NotSupported / 5 warnings (`tools/cts/RESULTS.md`, "Pi 4: the whole dEQP-GLES2
+tree, 0 fail"). `v3d_gl_test` is unchanged:
 it is an ES 3.0 image (`CONFIG_YAKOGL_REPORT_ES2=n`), which never keys
 the emulation.
 

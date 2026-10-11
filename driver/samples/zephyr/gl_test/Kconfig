@@ -130,7 +130,8 @@ config GL_TEST_PVR_KEEP_ZS
 	  frame swapped into a window stores no depth/stencil (EGL 1.5 3.10.1:
 	  they are undefined after eglSwapBuffers) and the next frame
 	  initialises them; with this the window keeps them, as before
-	  (driver/docs/pvr-fence-wait.md). Case 172 asserts whichever is set.
+	  (tools/cts/log/investigations/pvr-fence-wait.md). Case 172 asserts
+	  whichever is set.
 
 endmenu
 

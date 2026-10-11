@@ -1,70 +1,56 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_gl_triangle
 
 The i.MX8MP sibling of `gl_triangle`: the same Gouraud triangle, drawn through
-the public OpenGL ES 2.0 API on the Vivante GC7000UL.
+the public OpenGL ES 2.0 API on the Vivante GC7000UL. The one triangle sample
+for all three boards is `../triangle`; this one stays until Step 3 of
+`driver/docs/one-method.md` removes it.
 
 `gc_triangle` proves the driver can drive the 3D pipe with its own command
 builders. This proves the stack above it:
 
 ```
-  EGL + GL ES 2.0  (yakogl/src/gl_*.c)
-  Vivante backend  (yakogl/src/vivante/)     -> a GC7000 command stream
-  Zephyr OSAL      (yakogl/src/osal/zephyr_gc.c)
-  render service   (src/vivante/gc_render.c) -> the ring, the event, the fence
+  EGL + GL ES 2.0  (src/gl/)
+  Vivante backend  (src/vivante/)                  -> a GC7000 command stream
+  Zephyr OSAL      (src/osal/zephyr_gc.c)
+  render service   (driver/src/vivante/gc_render.c) -> the ring, the event, the fence
 ```
 
 So a failure here while `gc_triangle` passes is a failure in that stack, not in
-the hardware bring-up. Run `gc_triangle` first.
+the hardware bring-up.
 
-There is no display driver on this target yet, so the window is a linear
-XRGB8888 buffer in the GPU carveout and the check is `glReadPixels`. The
-vertices are red (top), green (bottom left) and blue (bottom right), which
-separates the failures a single-colour triangle cannot -- `gc_triangle`'s README
-has the table.
+The window is a linear XRGB8888 buffer in the GPU carveout, panel-sized by
+default (1280x800, `prj.conf`), and it is shown on the panel through the
+display driver (`driver/src/display/imx8mp_display.c`). The check is
+`glReadPixels`. The vertices are red (top), green (bottom left) and blue
+(bottom right), which separates the failures a single-colour triangle cannot;
+`gc_triangle`'s README has the table.
 
 ## Build and run
-
-YakoGL is the `yakogl/` submodule of this repository. When it is not checked
-out -- in a git worktree, for instance -- name the tree with `YAKOGL_DIR`:
 
 ```sh
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_gl_triangle \
-    yakogl/driver/samples/zephyr/gc_gl_triangle
-# on the board (Torizon): kexec_zephyr zephyr.bin 0x42000000
+    yakogl/driver/samples/zephyr/gc_gl_triangle -- \
+    -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y
+yakogl/tools/board.sh imx8mp run build/gc_gl_triangle/zephyr/zephyr.bin <logdir>
 ```
 
-Expected console lines:
+The board has no UART: the runner reads the result from the SNVS record
+(`yakogl-tools record`). The panel console shows the sample's lines.
 
-```
-gc_gl_triangle: 256x128 window, OpenGL ES 2.0 through YakoGL
-window 256x128 stride 1024 at GPU 0x580600xx
-  corner        (  1,  1) = 000040 (clear is 000040)
-  near red (top)      (128,101) = dd1111      (approximately)
-  near green (left)   ( 46, 19) = 11dd11
-  near blue (right)   (210, 19) = 1111dd
-  centroid              = 4a4a4a
-gc_gl_triangle: PASS
-```
+- `prj_parity.conf` (`-DEXTRA_CONF_FILE=prj_parity.conf`) builds the 1024x600
+  window of the AM62P's `gl_triangle`, so the PICTURE record compares across
+  boards. Its baseline is `594b040e ff403f80 35706c4e 04000258`, the same from
+  a U-Boot entry and from kexec
+  (`tools/cts/log/board-sessions/imx8mp-netboot.md`, step C).
+- `CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD` writes a DISPLAY record (pixel clock,
+  lane rate, the bridge's IRQ_STAT) about a second into the picture.
 
 The probe rows differ from `gc_triangle`'s because `glReadPixels` takes GL
 window coordinates, whose y grows upwards; the GL core flips them for the
 top-down window surface.
 
-Like every sample here, it services the watchdog Linux left armed for
-`CONFIG_GC_SAMPLE_HOLD_SECONDS` and then resets the SoC through PSCI, on the
-failure paths as well as on success.
-
-## Not yet run on silicon
-
-Compile-tested only, like the rest of the i.MX8MP work. Two things this sample
-is the natural place to settle, both from `VIVANTE_NOTES.md`:
-
-- **Question 1, the channel order of a colour target read back by the CPU.**
-  The pixel engine writes B,G,R,A, which is exactly XRGB8888, and the GL core
-  swaps for that format in `glReadPixels`. If the three vertex probes each
-  report the wrong dominant channel, that is the pixel format and not the
-  render.
-- **Question 7, how much flushing a draw really needs.** A picture that is
-  right but stale shows up here as probes holding the 0x7f7f7f pattern the CPU
-  wrote before the frame.
+The image services WDOG1 for `CONFIG_GC_SAMPLE_HOLD_SECONDS` and then resets
+the SoC through PSCI, on the failure paths as well as on success.

@@ -5,8 +5,12 @@ milestone **M2** of the in-process shader compiler (task #55): a real GLSL
 ES 1.00 front end -- lexer, preprocessor, parser, semantic analysis -- that
 produces an IR for the GPU back end and the reflection the GL core reads.
 
-Status, 2026-09-23: lexer, preprocessor, parser, semantic analysis,
-reflection and the lowering to `ir::Module` all done, and running on silicon.
+Status: lexer, preprocessor, parser, semantic analysis, reflection and the
+lowering to `ir::Module` all done, and the compiler is the product back end on
+the three boards (dEQP-GLES2 0 failures on the i.MX8MP and the Pi 4,
+`tools/cts/RESULTS.md`). The figures below are those of 2026-09-23;
+`tools/es100_oracle.py` (with `online_oracle.py` and `online_eval_oracle.py`)
+re-measures them on any checkout.
 Measured against dEQP's own corpus at **0 false rejects in 1,778 must-build
 sub-cases** and **0 false accepts of 1,005 must-fail cases**
 (`tools/online_oracle.py`), with **0 wrong results in 7,317 value sub-cases**
@@ -1021,12 +1025,10 @@ fixed one stops being counted on its own.
    indistinguishable from a real one is substituted.
 2. **Shaders requiring an extension the implementation does not advertise.**
    Fourteen PowerVR-table sources `#extension GL_OES_standard_derivatives :
-   require`, and `src/gl/state.rs` does not list it -- its comment says every
-   name there "is something this library really does". A shader that
+   require`, and `src/gl/state.rs` did not list it then. A shader that
    `require`s an absent extension must fail to compile, so the front end
-   refuses them, correctly. Either the extension should be advertised (the
-   derivative built-ins exist on both GPUs) or those shaders do not belong in
-   the table; that is the GL core's call, not the front end's.
+   refused them, correctly. Settled since: `src/gl/state.rs` lists
+   `GL_OES_standard_derivatives`, so those shaders compile.
 3. **Shaders that declare `#version 100` and use a later version's type.**
    Five sources use `sampler2DArray`, which arrived in ES 3.00. The offline
    pipeline never noticed: it rewrites the text without checking types and

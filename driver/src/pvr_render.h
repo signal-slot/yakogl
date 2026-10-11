@@ -149,10 +149,11 @@ int pvr_render_alloc(enum pvr_render_heap heap, uint32_t size, struct pvr_gpu_bo
  * from pvr_render_map_phys() are counted as dropped (the pool's counters,
  * pvr_render_pool_report). */
 void pvr_render_free(const struct pvr_gpu_bo *bo, uint32_t size);
-/* The pool's summary at INF (driver/docs/pvr-render-pool.md): its size, the
- * bump now and its high-water, per heap the free bytes, ranges and largest
- * range and the allocations and frees so far, and the losses. Printed at the
- * end of every run; an exhausted allocation prints it at ERR itself. */
+/* The pool's summary at INF (tools/cts/log/investigations/pvr-render-pool.md):
+ * its size, the bump now and its high-water, per heap the free bytes, ranges
+ * and largest range and the allocations and frees so far, and the losses.
+ * Printed at the end of every run; an exhausted allocation prints it at ERR
+ * itself. */
 void pvr_render_pool_report(void);
 /* CONFIG_YAKOGL_PVR_POOL_OWNERS: the driver's owner lines (render statics,
  * freelists, render context, HWRT sets; "pool owner ..."), returns their

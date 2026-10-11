@@ -1,15 +1,22 @@
 # Shader back ends — flow, ABI mapping, and how to add shaders
 
 This directory holds the shader back ends (layer 5a of `yakogl/DESIGN.md`). There
-are two, and a build has one of them as `g_shaderc`:
+are three, and a build starts with one of them as `g_shaderc` (`mod.rs` picks it
+from the features):
 
-- **offline** (`offline.rs`): app shaders precompiled at build time and looked
-  up at run time by the SHA-256 of their GLSL source. Its table is the Mesa
-  reference (`tests/reference/`), which only a measurement build links
-  (`mesa-reference-table`).
 - **online** (`online/`, the cargo feature `shaderc-online`): our own compiler,
   no_std and allocation-free, running in the image; it compiles the shaders an
-  application writes as it runs (dEQP-GLES2 does).
+  application writes as it runs (dEQP-GLES2 does). The default.
+- **precompiled** (`precompiled.rs`, the cargo feature `precompiled-shaders`):
+  shaders our own compiler compiled while the image was built
+  (`yakogl-precompile`), found by the compiler's record key (`record_key.rs`).
+  In an image with the compiler they are a tier in front of it; without one
+  (`SHC_PRECOMPILED`) they are the whole back end and a miss is refused by
+  name.
+- **offline** (`offline.rs`): a table compiled on the host, looked up at run
+  time by the SHA-256 of the GLSL source. Its table is the Mesa reference
+  (`tests/reference/`), which only a measurement build links
+  (`mesa-reference-table`).
 
 ## Files
 
@@ -19,36 +26,28 @@ are two, and a build has one of them as `g_shaderc`:
 | `offline.rs` | implements `struct shc_backend` (`compile`, `link`, `blend_variant`) as `SHC_OFFLINE`; `shc_offline_register()`; `gles_offline_shader_source()` (`include/gles_offline.h`) |
 | `link.rs` | the PowerVR link rule itself (pair the FS inputs with the VS outputs by name, bounds-check them against the VS output vector), shared by both back ends: it is about the `ShcShader` pair, not about where the shaders came from. Only the prefix the log carries differs, so the caller passes it. This is the port's `shc_link.c` |
 | `sha256.rs` | self-contained SHA-256 (no dependency) — links on Zephyr/baremetal |
+| `precompiled.rs` | the precompiled back end (`SHC_PRECOMPILED`) and the tier's look-up in front of the compiler |
+| `record_key.rs` | the record key: the source's SHA-256 chained with everything else a compile reads; how the compiler's cache and the precompiled table find a compiled shader |
+| `packing.rs` | the resource budget of a GLSL ES 1.00 program: the packing algorithm of GLSL ES 1.00 Appendix A, section 7 |
+| `es100_twins.rs` | the check that `tools/shaders/gl_test_es100/`'s ES 1.00 twins of gl_test's GLSL 450 shaders are the same programs |
 | `tests/reference/blobs.rs` | **generated** by `yakogl-tools glsl2usc` (`tools/glsl2usc.sh`): `SHC_BLOB_TABLE` (USC + metadata per shader and blend variant) and `SHC_SOURCE_TABLE` (the source texts). The Mesa reference, `shaderc::mesa_reference`: compiled into the host tests and into a build with `mesa-reference-table` (a measurement image), never into another product build |
 
 All of it is part of the Rust crate `yakogl`.
 
-### The online back end in an image (M5)
+### The online back end in an image
 
-The compiler and the offline table are alternatives, so an image that carries
-one drops the other. `CONFIG_YAKOGL_SHADERC_ONLINE` selects it and implies the
-crate's `no-shader-table` feature; the region it works in is a static in
-`src/osal/zephyr_shaderc_scratch.c`, sized by
+An image with the compiler links no Mesa table: `CONFIG_YAKOGL_SHADERC_ONLINE`
+implies the crate's `no-shader-table` feature. The region the compiler works in
+is a static in `src/osal/zephyr_shaderc_scratch.c`, sized by
 `CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES` and lent at boot by `SYS_INIT` so no OSAL
-has to remember to do it.
-
-Measured on `gc_gl_test` for `verdin_imx8mp/mimx8ml8/a53`, the same tree built
-both ways (2026-09-22, commit b56e3d9 + this change):
-
-| | offline | online |
-|---|---|---|
-| `zephyr.bin` | 2,647,304 B | 922,888 B (**-1,724,416**, -65 %) |
-| RAM | 32,520 KiB | 33,396 KiB (**+876 KiB**) |
-| table symbols in the ELF | 1199 | **0** |
-| `yakogl_shaderc_scratch` | absent | 0x200000 B in `.bss` |
-
-The RAM figure is the net of three things, not one: the table leaves, 2 MiB of
-scratch arrives, and the compiler's code arrives with it. The image shrinks and
-the memory grows, which is the trade M5 is.
+has to remember to do it. The trade is that the image shrinks and the memory
+grows: on the AM62P gl_test image the compiler is 884,201 bytes of flash and
+5,244,035 bytes of `.bss` (2026-10-07; `docs/HANDOFF.md`, open work 1). The first
+measurement (2026-09-22, `gc_gl_test` on the i.MX8MP) is in
+`git show 5ad2fa0e:src/shaderc/SHADERC_NOTES.md`.
 
 Booted on the i.MX8MP: the online arm of `gc_gl_test` case 108 alone passed
 there on 2026-10-04 (e835c0dc, record `594b010e 006cff01 00000001 00000000`).
-The size figures above are still the 2026-09-22 ones.
 
 **`gl_VertexID` / `gl_InstanceID` on the GC7000 (online).** Both arrive in
 one register after the attribute registers, the vertex id in `.x` and the
@@ -637,41 +636,16 @@ exactly those sources (LLVM 23.1.1, gcc 16.2.0, `-Dvulkan-drivers=imagination
 -Dgallium-drivers= -Dplatforms=`); the build is reproducible — configuring and
 compiling twice gives the same binary byte for byte.
 
-Against upstream's own `shader_blobs.c` at `a444fe9` (unchanged since `e6c449c`, as are
-`tools/`) the two tables hold the same 2042
-entries, in the same order, keyed by the same source SHAs, with the same 533 source
-texts. **1744 entries are equal field for field and 298 differ, in the USC alone**
-(and in `temps` for the two `texsize.frag` variants). Every wiring field — outputs,
-tile buffers, varyings, attributes, uniforms, shared-register offsets — matches.
-
-The 298 are exactly the entries of the 62 shaders that inline a usclib routine
-(`samplerCube`, `sampler2DArray`, `sampler3D`, `textureSize`, `texelFetch`), and the
-cause is `tools/pco_shc/usclib-tex.cl.patch`, which this repository carries and its
-README tells you to apply: it makes `textureSize()` and the base-level helper skip the
+The table carries one deliberate deviation from what an unpatched Mesa tree
+builds: `tools/pco_shc/usclib-tex.cl.patch`, which `tools/pco_shc/README.md` tells
+you to apply. It makes `textureSize()` and the base-level helper skip the
 `baselevel` field for a STRIDE (linear) image, whose word 1 holds `num_mip_levels`
 there instead. YakoGL samples every texture as STRIDE, so without the patch
-`textureSize()` halves every size once per mip level the texture declares. The extra
-`textype` test costs 10 to 62 dwords of USC in those shaders, which is the whole
-difference: **rebuilt with the patch reverted and nothing else changed, the
-regenerated table is identical to upstream's `shader_blobs.c` in all 2042 entries and
-all 533 source texts.** Upstream's committed table was therefore produced from a Mesa
-tree without upstream's own documented patch (it was added in `1ce44f3`, before the
-last regeneration in `86c9ca1`), so upstream's `textureSize()` on a mipmapped linear
-texture is wrong on silicon and the port's is not. This is the port's one deliberate
-deviation from the upstream table, and it is the same one the previous table had.
-
-Measured against the port's previous table (`2263348`, built with a `pco_shc` from the
-revision of `pco_shc.c` before `99f6c1d`, which configured only `FRAG_RESULT_DATA0`),
-the rebuild changed 175 entries and no others — every one of them towards upstream,
-none away from it:
-
-| what changed | entries | why |
-|---|---|---|
-| `num_outputs`, and the USC with it | 175 | each fragment output now gets its own pixel output registers, so a G-buffer shader reports two, three or four instead of one |
-| `num_tile_buffers`, `tile_buffer_sh` | 2 | `0b4df72d7cd2d1fd.frag` (3 × RGBA16F → 1 spilled) and `lightmapuvraster_300.frag` (4 × RGBA16F → 2 spilled) now mark what does not fit the pixel's four output registers |
-| `num_varyings`, `varyings`, `uniform_sh_dwords` | 10 | those same two shaders keep the varyings and the uniform block that feed the outputs the old compile had dead-coded away |
-
-
+`textureSize()` halves every size once per mip level the texture declares. The
+comparison with the upstream C library's table (`shader_blobs.c` at `a444fe9`:
+the same 2042 entries, 298 differing in the USC by exactly this patch) and with
+the previous table (`2263348`, 175 entries changed by per-output registers) is in
+`git show 5ad2fa0e:src/shaderc/SHADERC_NOTES.md`.
 
 ### The starter set
 

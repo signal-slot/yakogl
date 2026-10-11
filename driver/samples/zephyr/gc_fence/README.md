@@ -1,6 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_fence
 
-Milestones 2 and 3 of `docs/imx8mp-backend-plan.md` on the real GPU, without
+Milestones 2 and 3 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md` on the real GPU, without
 drawing anything: hardware init, MMU v2, the interrupt, the front end on its
 idle loop, and then a handful of empty submits with a fence wait after each.
 
@@ -19,7 +21,8 @@ It is the smallest program that proves the whole submit path:
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_fence \
     yakogl/driver/samples/zephyr/gc_fence
-# on the board (Torizon): kexec_zephyr zephyr.bin 0x42000000
+# on the board, the development route (kexec from Torizon, driver/tools/kexec-zephyr/):
+#   kexec_zephyr zephyr.bin 0x42000000
 ```
 
 Expected console lines:
@@ -39,4 +42,7 @@ MMU status, the events still in flight) before resetting the SoC.
 
 `CONFIG_GC_FENCE_ROUNDS` sets how many submits; more than one is the point.
 
-Not run on hardware yet (2026-09-20).
+Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
+(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
+`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+side became Rust (`driver/docs/vivante-kernel-rust.md`).

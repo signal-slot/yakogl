@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Ground-truth GPU render/transfer on the Verdin AM62P (BXS-4-64)
+
+Status: finished record, moved here from `driver/docs/gpu-recipes/gpu-hw-capture.md` on 2026-10-11. How the vendor stack was observed on 2026-09-07 during bring-up. The driver no longer depends on any capture (docs/source-form.md).
 
 Bring-up note from 2026-09-07, cut to its method and conclusions. The original
 quoted the DDK firmware trace and raw trace words from the vendor stack; those

@@ -20,7 +20,8 @@
  * Nothing in this header refers to a register or a command opcode: the caller
  * only has to know "GPU-visible memory" and "a command buffer".
  *
- * Milestones M2..M5 of docs/imx8mp-backend-plan.md. Compile-tested only; no
+ * Milestones M2..M5 of tools/cts/log/board-sessions/imx8mp-gc-bringup.md.
+ * Compile-tested only; no
  * i.MX8MP board has run this yet.
  */
 #ifndef GC_RENDER_H

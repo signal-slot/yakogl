@@ -1,7 +1,9 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR firmware trace: enable it and decode it
 
 Target: BXS-4-64 with the vendor firmware (DDK 25.2) booted by our driver,
-bare-metal Zephyr or the pvrlab Linux module. The firmware writes a trace of its
+bare-metal Zephyr. The firmware writes a trace of its
 own activity (kicks, HWR, power, MMU faults) into a ring in shared memory; this
 note says how our driver enables it and how to read it, so that a kick that
 hangs can be located without the Linux `pvrsrvkm` debugfs node.
@@ -122,8 +124,9 @@ when they are in a cached mapping, since the firmware wrote them.
 The self-test rig calls it from `pvr_fw_boot.c` when built with
 `-DPVR_EARLY_TRACE`: it waits about 40 ms after the TA/3D kick (the geometry has
 run and stalled, but the roughly 125 ms watchdog HWR has not yet spammed the
-ring over the early lines) and dumps through `LOG_INF("FWT| ...")`. The Linux
-pvrlab module builds the decoder (`tools/pvrlab/Kbuild`).
+ring over the early lines) and dumps through `LOG_INF("FWT| ...")`. The decoder
+is `driver/src/pvr_fw_trace_decode.c`, built into every image with the PowerVR
+driver (`driver/zephyr/CMakeLists.txt` compiles `driver/src/*.c`).
 
 ## 5. Decoding offline: `tools/sfdecode`
 

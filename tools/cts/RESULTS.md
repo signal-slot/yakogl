@@ -14,8 +14,9 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 >   poll's gl_test and glmark2);
 > - glmark2's "GPU resets N" score line;
 > - the runner's `resets=` and the board record's reset word.
-> This applies equally to the glmark2 and pool runs in `driver/docs/glmark2.md`
-> and `driver/docs/pvr-render-pool.md`, and to the kt3/zs run (e4cb0903).
+> This applies equally to the glmark2 and pool runs in
+> `tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md`
+> and `tools/cts/log/investigations/pvr-render-pool.md`, and to the kt3/zs run (e4cb0903).
 > Recoveries counted from a console's own lines ("render: HWR during fence N",
 > "recover", fence timeouts), as some rows below did, are real counts and are
 > unaffected. From 17797907 on, the hook is the firmware's HWR counter since
@@ -51,7 +52,7 @@ throwaway branch pvr/fl-grow-hwrgen (never landed):
 The reset-off arm equals main's own BGTAG run (d93acfad, the old
 reconstruction) case for case. Every follow-on reset after a first recovery
 comes back without the reset, and case 18 goes back to TIMEOUT. One run per
-arm; details in driver/docs/pvr-render-pool.md, "The isolating A/B".
+arm; details in tools/cts/log/investigations/pvr-render-pool.md, "The isolating A/B".
 
 The reconstruction's other rule (the firmware's current and ready counts
 left alone) was exercised by variant B: image 97ddb7ac, glmark2 with BGTAG
@@ -102,7 +103,7 @@ the write offset had passed them.
   - Both runs passed with no event: cached 5 of 22 over all images.
 - **Decision:** the uncached window becomes the default (Linux
   drm/imagination's choice too), landing after the AM62P common round has
-  run on its tip. Details: driver/docs/pvr-render-pool.md, the "AM62P
+  run on its tip. Details: tools/cts/log/investigations/pvr-render-pool.md, the "AM62P
   glmark2 cell" sections from v7 A/B part 1 on.
 
 ### AM62P: the run with both freelist fixes (c18f9bfd, 2026-10-04)
@@ -123,7 +124,7 @@ GPU resets, no stop, unaccounted 0.
   refused-grow runs without the FWCCB check, and 1 clean case with it. On
   a poll with no empty slot the check adds no cache operation, so the
   counts do not show it changes anything. Details:
-  driver/docs/pvr-render-pool.md, "The run with both fixes".
+  tools/cts/log/investigations/pvr-render-pool.md, "The run with both fixes".
 
 ### AM62P: the firmware's freelist counts before the grow answer (70b79a74, 2026-10-04)
 
@@ -268,7 +269,7 @@ Per scene, us per frame (`glmark2-frame:` lines), and the on arm's kick line (th
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 1969 | 1289 | -680 | 1226 | 2544 | 1288 |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 4297 | 3818 | -479 | 2060 | 7617 | 3819 |
 
-The light scenes go from 1.95-2.36 ms to 0.88-1.29 ms per frame, and frag->frag equals the frame. The fragment phase of a light kick is ~0.88 ms where it was ~1.95. Scenes whose frame is the CPU (build use-vbo=false, buffer, ideas, terrain) do not move. Memory traffic bounds the fragment phase (`driver/docs/pvr-fence-wait.md`). The knob stays default off until the policy runs of that doc are done.
+The light scenes go from 1.95-2.36 ms to 0.88-1.29 ms per frame, and frag->frag equals the frame. The fragment phase of a light kick is ~0.88 ms where it was ~1.95. Scenes whose frame is the CPU (build use-vbo=false, buffer, ideas, terrain) do not move. Memory traffic bounds the fragment phase (`tools/cts/log/investigations/pvr-fence-wait.md`). The knob stays default off until the policy runs of that doc are done.
 ## Scan-out view (stride view), branch unify/stride-view (2026-10-04)
 
 The design is in `driver/docs/one-method.md`, section 2, "The scan-out view". Run dirs are in the main checkout's `build/`. All rows: `tools/board.sh`, bootloader boot (Pi 4 tryboot, AM62P U-Boot TFTP).
@@ -311,7 +312,7 @@ i.MX8MP: no slint run on this branch. Its stride-view row is case 171 (queued) p
 
 ## AM62P: the PowerVR fence poll, 1 ms against 20 us (2026-10-04)
 
-The knob `CONFIG_SAFEUI_GPU_PVR_FINE_WAIT` (yakogl-drivers feature `pvr-fine-wait`, default off) reads the fragment UFO every 20 us instead of once per ms (`driver/docs/pvr-fence-wait.md`). Each pair of images differs only by the knob: the `.config` files differ in that one line, and each image's `libyakogl_drivers.a` has `busy_wait_us` with 1000 (ctl) or 20 (fine) in `render::wait_for` (objdump). The images were built in zephyr-ws-yakogl with `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y` and the inherited feeder off, booted from U-Boot (netboot, env route) by `tools/board.sh`, one install per pair. env diff 0 after both pairs. The lead's runs; the lines below were read from the consoles in the main checkout's `build/` run directories.
+The knob `CONFIG_SAFEUI_GPU_PVR_FINE_WAIT` (yakogl-drivers feature `pvr-fine-wait`, default off) reads the fragment UFO every 20 us instead of once per ms (`tools/cts/log/investigations/pvr-fence-wait.md`). Each pair of images differs only by the knob: the `.config` files differ in that one line, and each image's `libyakogl_drivers.a` has `busy_wait_us` with 1000 (ctl) or 20 (fine) in `render::wait_for` (objdump). The images were built in zephyr-ws-yakogl with `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y` and the inherited feeder off, booted from U-Boot (netboot, env route) by `tools/board.sh`, one install per pair. env diff 0 after both pairs. The lead's runs; the lines below were read from the consoles in the main checkout's `build/` run directories.
 
 **gl_test** (regression set, `CONFIG_GL_TEST_CASE=7`), images from 78c4c208, run dir `build/fw-am62p-20261004-000741/{ctl,fine}`:
 
@@ -365,7 +366,7 @@ Per scene, us per frame from the `glmark2-frame:` lines (the same 29 scenes in b
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 2016 | 1929 | -87 | 2049 | 1960 | 4879/5098 |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 4457 | 4266 | -191 | 4489 | 4298 | 2228/2326 |
 
-The six light scenes that sat on 2,016-2,017 us now read 1,909-1,933 and no longer agree. The 1 ms quantisation is gone. They fell by ~85-110 us, not by up to 1 ms: the poll explained ~100 us of the 2.0 ms. The remaining ~1.9 ms per frame is the kick path or the GPU, and it is the next item (`driver/docs/pvr-fence-wait.md`, "The fine-wait run"). Scenes whose previous kick is already complete at the swap (build use-vbo=false, buffer, ideas, terrain) do not move. effect2d 5x5 is GPU-bound above 10 ms and does not move. The knob stays default off until it lands with these rows.
+The six light scenes that sat on 2,016-2,017 us now read 1,909-1,933 and no longer agree. The 1 ms quantisation is gone. They fell by ~85-110 us, not by up to 1 ms: the poll explained ~100 us of the 2.0 ms. The remaining ~1.9 ms per frame is the kick path or the GPU, and it is the next item (`tools/cts/log/investigations/pvr-fence-wait.md`, "The fine-wait run"). Scenes whose previous kick is already complete at the swap (build use-vbo=false, buffer, ideas, terrain) do not move. effect2d 5x5 is GPU-bound above 10 ms and does not move. The knob stays default off until it lands with these rows.
 
 ## dEQP-GLES2 baseline on Zephyr from the bootloader, five groups (2026-10-04)
 
@@ -744,7 +745,7 @@ identical:
   was refused beside 23932 KiB of frees held for an unsubmitted kick
   ("reclaim off"). That is mechanism 2. gl_test 178 heldfree reproduces
   it, and the reclaim default is the fix under test (pvr/glmark2-cell-state).
-- Details: driver/docs/pvr-render-pool.md, "the measurement round".
+- Details: tools/cts/log/investigations/pvr-render-pool.md, "the measurement round".
 
 ## AM62P: glmark2 shadow's depth texture beside held frees, gl_test 178 heldfree, the reclaim off and on (2026-10-04)
 
@@ -805,7 +806,7 @@ is still refused in every frame (110 of 110):
 The knob's saving reached the bump top (+3728 KiB) and leaves it 1932 KiB
 short. No measured configuration fits refract once shadow runs, so
 decision 1 is the scattered-pages fix (about 4.5 days), yes or no
-(driver/docs/pvr-render-pool.md).
+(tools/cts/log/investigations/pvr-render-pool.md).
 
 ## Pi 4: a stale tiled copy given back before the job opens, gl_test case 179 (2026-10-04)
 
@@ -929,7 +930,7 @@ Terrain also logs "GL error 0x502 in glGenerateMipmap" 16 times and "a texture o
 | i.MX8MP | 1 | gl_test case 16 (#8): the failure of the default image was the missing 4x config (`check 255` is the record's none-marker), fixed in the harness (`6bddfc5`: the 4x half is skipped by name without a 4x config). The 4x path itself is OPEN: the viewport / scissor / clip were not scaled to the 2x scratch; `gc_debug_msaa` bit 3 does it, off by default, host test only. Board A/B (arm 1 against arm 9) in docs/HANDOFF.md; if arm 9 passes the scaling becomes the design and the knob goes | gc-msaa |
 | i.MX8MP | 1 + 1 | gl_test case 10 (#9) and case 2 (#25) flip between runs: OPEN, cause not found (`8409419`). Our sync sequence has a counterpart for each etnaviv step (host tests pin it); the hypotheses left are a linear PE target, 64-byte target alignment and history-dependent pool placement. 30-boot board recipe in docs/HANDOFF.md ("Next board session", i.MX8MP step 5) | gc-nondeterminism |
 | AM62P | 0 | `c6aa6ba` (2026-10-07, host): a PowerVR vertex-shader attribute read only in code the unroller drops took no registers and later attributes were read four registers early (wrong code; no dEQP-GLES2 case known to reach it). Fixed; the AM62P whole tree is re-run in the board session (last tree `d60b9d76`, 17,141 / 0 / 19 / 5) | compiler-regression-host |
-| Pi 4 | follow-up | rpi_mbox.c onto Zephyr's rpi_fw API, removing our own mailbox C. Until then `driver/samples/zephyr/common/rpi_4b_sram.dtsi` disables Zephyr's `&mbox0` and `/firmware`: with both clients, rpi_fw's ISR drained MAIL0 and every call of ours timed out (-116; driver/docs/rpi4-v3d-backend-plan.md, "Zephyr") | open |
+| Pi 4 | follow-up | rpi_mbox.c onto Zephyr's rpi_fw API, removing our own mailbox C. Until then `driver/samples/zephyr/common/rpi_4b_sram.dtsi` disables Zephyr's `&mbox0` and `/firmware`: with both clients, rpi_fw's ISR drained MAIL0 and every call of ours timed out (-116; driver/docs/rpi4-v3d.md, "Measured on the board") | open |
 | i.MX8MP | next | gl_test 104 fixed (1787af61, section "The GC7000 loop guard"): 104 PASS, chunk 96..143 0 resets. NEXT: narrow L8 by default (separate item) | imx8mp (the build host) |
 | i.MX8MP | follow-up | (D'): compile the shared unroller's output on the GC7000 as the V3D does (chain.rs -> prepare.rs counted loops): one loop analysis for three GPUs instead of the GC7000's own recognizer; every GC7000 loop shader's stream changes, so it needs dEQP shaders.loops / random / indexing re-run on the board | imx8mp |
 | i.MX8MP | 0 | CLOSED: operator.sequence.side_effects.affect_and (37f02bcd); operator rest 1,631 / 0 in the Zephyr whole tree at 04a0e2c2 (section "batch 1 of the dEQP-GLES2 residue, whole tree on Zephyr at 04a0e2c2") | gc-backend |
@@ -14468,7 +14469,8 @@ far for landing `ff062a35`; it has not landed.**
 
 ## Batch 105: AM62P netboot host tooling + Z1 RTI self-arm (origin/main `8b854b9d`)
 
-`am62p/netboot` lands as `origin/main` `8b854b9d`, carrying `driver/docs/am62p-netboot-plan.md` (the design and
+`am62p/netboot` lands as `origin/main` `8b854b9d`, carrying `driver/docs/am62p-netboot-plan.md` (since 2026-10-11
+`tools/cts/log/board-sessions/am62p-netboot.md`; the design and
 host tooling; nothing run on the board) and `ed5d47d4` ("am62p Z1: the image arms the RTI watchdog itself", build
 only, default off).
 

@@ -7,12 +7,12 @@
     tools/tftp_oneshot.py --self-test
 
 Why "once": U-Boot on the Verdin AM62P fetches the next Zephyr image from this
-server (driver/docs/am62p-netboot-plan.md). A file that could be fetched twice
-could boot Zephyr on a reboot nobody asked for (another agent reboots the
-shared board into Linux, and U-Boot finds our image still offered). So after a
-COMPLETE transfer (the client acknowledged the last block) the file is renamed
-to "<name>.served" and the next request for it gets "File not found", which
-makes U-Boot fall back to Linux at once.
+server (docs/standalone-boot.md, "The TFTP runner"). A file that could be
+fetched twice could boot Zephyr on a reboot nobody asked for (another agent
+reboots the shared board into Linux, and U-Boot finds our image still offered).
+So after a COMPLETE transfer (the client acknowledged the last block) the file
+is renamed to "<name>.served" and the next request for it gets "File not found",
+which makes U-Boot fall back to Linux at once.
 
 A file is also refused when it was staged (its mtime) more than --max-age
 seconds ago (default 300). The runner stages an image seconds before it
@@ -496,7 +496,8 @@ def main():
     except PermissionError:
         print("tftp: failed cause=bind_permission port=%d (a port below "
               "net.ipv4.ip_unprivileged_port_start needs a privilege; "
-              "see driver/docs/am62p-netboot-plan.md)" % a.port, file=sys.stderr)
+              "see docs/standalone-boot.md, The TFTP runner)" % a.port,
+              file=sys.stderr)
         return 3
     try:
         srv.serve_forever()

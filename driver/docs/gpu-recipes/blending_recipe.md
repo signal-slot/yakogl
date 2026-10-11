@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Alpha blending on PowerVR Rogue/Volcanic TBDR (BXS-4-64, BVNC 36.53.104.796)
 
 Scope: how standard GL-ES over-blending (`src_alpha`, `one_minus_src_alpha`) is realized on
@@ -5,8 +7,8 @@ this arch, derived from the Mesa PCO/PVR driver and DDK 25.2. **Read-only analys
 
 > **Verified on silicon (2026-09-14):** `yakogl` implements exactly this. `pco_shc`
 > (`PCO_SHC_BLEND=...`) lowers the blend state into fragment-shader variants
-> (`glsl2usc.sh --blend`), the GL core picks the variant for `glBlendFunc`, every object
-> is already submitted TRANSLUCENT, and `tools/pvrlab/gl_test.c` case 8 reads back
+> (the `blend` lines of the shader list `tools/glsl2usc.sh` reads), the GL core picks the variant for `glBlendFunc`, every object
+> is already submitted TRANSLUCENT, and `driver/tools/pvrlab/gl_test.c` case 8 reads back
 > over (0xbf008080), additive (0xff00ffff) and premultiplied (0xff00ff80) results that
 > match the GL arithmetic exactly. No PBE/PPP change was needed. Blend constants
 > (`PCO_SHC` allocates `blend_consts` shared registers after the push constants, the GL
@@ -15,7 +17,7 @@ this arch, derived from the Mesa PCO/PVR driver and DDK 25.2. **Read-only analys
 > way (case 8 frames 5..7: 0x800080bf, 0x8000ffff, 0xff008080).
 
 Path prefix used below:
-`MB = scratchpad/mesa-build/mesa-26.2.1/src/imagination`
+`MB = <Mesa 26.2.1>/src/imagination`
 
 ---
 

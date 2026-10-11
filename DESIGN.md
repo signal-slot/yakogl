@@ -18,11 +18,13 @@ Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom
   below). All OS/platform coupling is behind one interface (`gles_osal.h`). Targets, in priority order:
   **Zephyr** (primary — this is the SafeUI platform), **bare-metal**, then other OSes
   (**Linux**). One `.a` of portable core + one small OSAL `.o` (C) per platform.
-- **Conformance.** Zero dEQP-GLES2 failures on the three boards is the first goal of
-  the current plan (`docs/HANDOFF.md`, plan #1). The last full trees stand as the
-  record (`docs/es2-cts-failures.md`): AM62P and i.MX8MP with zero failures,
-  Raspberry Pi 4 with 25 cube-map failures; the host-proved fixes await their
-  confirming board runs.
+- **Conformance.** Zero dEQP-GLES2 failures on the three boards is the first goal
+  (`docs/HANDOFF.md`, "Goal, in order"). The i.MX8MP has 0 (full tree on `32778b57`)
+  and the Raspberry Pi 4 0 (17,126 pass, composed of the tree on `a27d69c0` and the
+  cube rows rerun on `1cf946a9`). The AM62P's tree on `32778b57` has 54: 9 pass on
+  the board since `e17fb6a7`, 45 are fixed on the host and await the board. The
+  per-board state is `docs/HANDOFF.md`, "State of main"; the per-case detail is
+  `docs/es2-cts-failures.md`.
 - **GLES3.** The API dispatch, state object model, and backend are structured so
   GLES3 (VAOs, UBOs, MRT, instancing, transform feedback, 3D/array textures, sampler
   objects, integer/GLSL-ES-3.00 shaders) needs no reworking of the core. The ES 3.0
@@ -82,22 +84,27 @@ OS-free command generators (`pvr_vdm_ppp_gen.c`, `pvr_fw_boot.c`) live in
 
 `glShaderSource(GLSL ES)` + `glCompileShader` must turn GLSL text into USC at the API
 boundary. GLSL→USC = glslang(GLSL→SPIR-V) → `spirv_to_nir` → PCO backend, which we already
-run offline (`pco_shc`, silicon-verified via F1). Two backends behind one interface
+run offline (`pco_shc`, silicon-verified via F1). Three back ends behind one interface
 (`gles_shaderc.h`: `struct shc_backend` — `compile`, `link`, `blend_variant`,
 `compile_vs_linked`, `lod_sensitivity`, `sampler_variant` — reached through
-`g_shaderc`; `shc_offline_register()` / `shc_online_register()` pick it):
+`g_shaderc`, whose initial value `src/shaderc/mod.rs` picks from the build's features;
+`shc_offline_register()` / `shc_online_register()` switch it):
 
 - **`shaderc_online` (the shipping back end, the cargo feature `shaderc-online`):** our own
   `no_std`, allocation-free GLSL ES compiler in the library (`src/shaderc/online/`), so a
   shader an application writes at run time compiles on the board; dEQP-GLES2 writes
   thousands of them. It is the only shader back end the V3D build has.
-- **`shaderc_offline` (`src/shaderc/offline.rs`):** the PCO+glslang toolchain is too large
-  to run on-target. At build time, app shaders are compiled to USC+metadata blobs and
-  embedded; at runtime `glShaderSource` hashes the source and looks it up. Fits the SafeUI
-  model (apps are known and signed). The product table is made by `yakogl-precompile`
-  (`tools/precompile`) and linked with the `precompiled-shaders` feature; the Mesa
-  reference table under `tests/reference/` (made by `glsl2usc` in `yakogl-tools`, wrapping
-  `pco_shc`) is linked with `mesa-reference-table` for measurement only.
+- **precompiled (`src/shaderc/precompiled.rs`, the cargo feature
+  `precompiled-shaders`):** app shaders compiled by our own compiler while the image is
+  built (`yakogl-precompile`, `tools/precompile`) and looked up by the compiler's record
+  key. In front of the compiler a hit runs no compile; without the compiler
+  (`YAKOGL_SHADERC_PRECOMPILED_ONLY`) it is the whole back end and refuses a miss by
+  name. Fits the SafeUI model (apps are known and signed).
+- **`shaderc_offline` (`src/shaderc/offline.rs`):** a table compiled on the host, looked
+  up by the SHA-256 of the GLSL text. Its only table is the Mesa reference under
+  `tests/reference/` (made by `glsl2usc` in `yakogl-tools`, wrapping `pco_shc`), linked
+  with `mesa-reference-table` for measurement only: the PCO+glslang toolchain is too
+  large to run on-target.
 
 Both emit the same **shader ABI** the backend consumes: USC dwords, temp count, the DOUTI
 coefficient layout for varyings (w iterator @cf0..3 then VAR0.., per the toolchain), the
@@ -140,6 +147,8 @@ yakogl/
                                 (yakogl-tools gl-consts)
   src/gl/{es3,etc1,names,native_cube}.rs        the ES 3.0 entry points, ETC1, the name
                                 pools, the cube-map path
+  src/gl/{es3_formats,srgb,blit,tf,tf_capture}.rs  ES 3.0 sized formats, sRGB,
+                                glBlitFramebuffer, transform feedback and its CPU capture
   src/backend.rs                the backend contract (C view: src/backend.h)
   src/pvr/{backend,internal,csbgen,ffi}.rs  PowerVR backend (cargo feature gpu-powervr), its own programs (our
                                 compiler's, yakogl-precompile --internal), the FFI to the driver's command
@@ -151,8 +160,11 @@ yakogl/
                                 feature gpu-v3d); v3d_kick.h is the OSAL's view of the kick
   src/osal/mod.rs               g_osal + osal_set_ops; render.rs the kick descriptor types
   src/osal/{zephyr,zephyr_gc,zephyr_v3d,baremetal,linux}.c the OSALs (C; zephyr_gc is the
-                                GC7000's, zephyr_v3d the V3D's)
+                                GC7000's, zephyr_v3d the V3D's); zephyr_shaderc_scratch.c
+                                (the compiler's regions) and zephyr_timing.c beside them
   src/shaderc/{mod,offline,link,sha256}.rs      offline shader back end + the shared link rule
+  src/shaderc/{precompiled,record_key,packing,es100_twins}.rs  the precompiled back end,
+                                its record key, and helpers the back ends share
   src/shaderc/online/                           the in-process compiler (`shaderc-online`)
   tests/reference/{blobs,vivante_blobs}.rs      the Mesa reference tables (measurement-only,
                                 `mesa-reference-table`)
@@ -177,23 +189,12 @@ yakogl/
   CMakeLists.txt / baremetal.mk / zephyr/       run cargo, assemble libyakogl.a (README "Linking")
 ```
 
-## Incremental plan (vertical slices, each silicon-tested)
+## The on-silicon reference
 
-1. **Scaffolding**: Khronos headers, `gles_osal.h`, `gles_shaderc.h`, context skeleton,
-   Zephyr OSAL wrapping the proven render path.
-2. **Slice A — clear + solid draw**: `glViewport/glClearColor/glClear` + `glDrawArrays` of a
-   triangle with a precompiled solid-color program (uses the proven backend). First app
-   linking `libyakogl.a` that renders on silicon.
-3. **Slice B — attributes + uniforms + varyings**: `glVertexAttribPointer`, `glUniform4f`,
-   a GLSL passthrough+interp program (multi-varying backend).
-4. **Slice C — textures**: `glTexImage2D` + `glBindTexture` + a sampling program.
-5. **Slice D — render state**: `glEnable(DEPTH_TEST/CULL_FACE/SCISSOR_TEST/BLEND)`,
-   `glDepthFunc/glCullFace/glScissor/glBlendFunc` mapped onto the backend paths.
-6. **Slice E — FBO / render-to-texture**, then stencil, then GLES3 groundwork.
-
-Each slice keeps the standalone `PVR_*` build knobs working until the equivalent GL
-path is verified; the silicon test rig is now `driver/tools/pvrlab/gl_test.c`, so we
-never lose a known-good reference.
+The library was built in vertical slices, each tested on silicon (clear and a solid
+draw, attributes and varyings, textures, render state, framebuffer objects); the plan
+is in git history (`git show 5ad2fa0e:DESIGN.md`, "Incremental plan"). The silicon test rig is
+`driver/tools/pvrlab/gl_test.c`, so a known-good reference is never lost.
 
 ## The backend contract (`src/backend.h`, 2026-09-16)
 
@@ -209,8 +210,8 @@ backend of the build (`g_backend`, the PowerVR table `yakogl_backend_pvr` from
 `src/pvr/backend.rs`). Everything PowerVR-specific (the options, the debug hooks,
 `pvr_backend_counters`) stays in `src/pvr/pvr_backend.h`; only the on-silicon test
 suite and the samples' diagnostics include it. Each further GPU adds `src/<gpu>/` with
-its own table and shader back end (`driver/docs/imx8mp-backend-plan.md`,
-`driver/docs/rpi4-v3d-backend-plan.md`).
+its own table and shader back end (`driver/docs/vivante-kernel-rust.md` and
+`src/vivante/VIVANTE_NOTES.md` for the GC7000, `driver/docs/rpi4-v3d.md` for the V3D).
 
 Kicks: `kick_id` is the kick being recorded, and `kick_pending(id)` whether a
 kick has still to complete. The GL core stamps what a draw renders into and reads
@@ -235,9 +236,10 @@ are `extern "C"` / `#[repr(C)]`.
 
 What deliberately stays C:
 
-- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,baremetal,linux}.c`: thin glue over C
-  APIs (Zephyr macros and inlines, board hook pointers, a variadic log), none of which
-  stable Rust can define;
+- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
+  thin glue over C APIs (Zephyr macros and inlines, board hook pointers, a variadic log),
+  none of which stable Rust can define (their move to Rust is open work in
+  `docs/HANDOFF.md`);
 - the driver's OS-free command generators in `driver/src/`
   (`pvr_vdm_ppp_gen.c`, `pvr_pds_render_gen.c`, `pvr_pds_pixel_event_gen.c`), shared
   with the driver's own render path and called through the FFI declared in
@@ -246,7 +248,7 @@ What deliberately stays C:
   driver structs, constants and prototypes that `ffi.rs` mirrors, so a driver header
   change fails the build. `src/abi_layout_check.c` (generated, with its Rust twin
   `src/abi_layout.rs`, by `yakogl-tools abi-layout <driver src dir>`) does the same
-  for the 35 `#[repr(C)]` structs (556 fields) the C headers share with the crate:
+  for the 35 `#[repr(C)]` structs (563 fields, 2026-10-11) the C headers share with the crate:
   size and every offset are asserted on both sides, so header/Rust drift fails the
   build; re-run the tool when a shared struct changes;
 - the headers `src/gl_internal.h`, `src/gl_context.h`, `src/backend.h`,
@@ -264,54 +266,17 @@ the C parts are built and a Rust application links the `yakogl` crate itself. Th
 default cross target is `aarch64-unknown-none` (hard float: `CONFIG_FPU` /
 `CONFIG_FPU_SHARING` on Zephyr). README.md, "Building" and "Linking", has the details.
 
-Where the port stands against the C: it follows upstream C **55de113** with the driver
-**0e1d975**, and it is **not** bug-compatible with that C any more. A fix round of 32
-commits (`git log 669279f..e235fab`) diverges from the C wherever the C is wrong —
-memory-safety defects reachable through the public API (uniform blocks sized to
-`uniform_dwords` while the reflection reaches past them, EGLImage storage with no owner,
-allocations sized `w * h * bpp` while the GPU works at the padded pitch, vertex and index
-ranges checked with wrapping arithmetic or not at all, any texture accepted as an RGBA8
-colour attachment), silent data loss (unrecordable draws dropped without a word, GPU pool
-memory handed out with the previous user's contents) and ES 3.0 / EGL 1.5 conformance
-gaps. Each divergence is named in the commit that makes it and pinned by a regression
-test. Upstream has since adopted seven of them (the sync to `a444fe9`: the uniform
-arrays, the EGLImage's storage lifetime, the GPU's pitch, the vertex and index ranges,
-an unrecordable draw, cleared storage and `glIs*`) and, with the sync to `bfab616`, most
-of the ES 3.0 conformance gaps as well: upstream's own dEQP round added the whole ES 3.0
-entry point surface, the default texture objects, the eight buffer binding points and the
-error state EGL 1.5 3.1 asks for. The attachment-format check and the full per-frame
-tables are still open in upstream C. The sync to `bfab616` added two divergences of its
-own (the range check of an in-place vertex fetch, and the alpha of an RGBA8888 target
-read back from a pixel engine that stores it B,G,R,A); the sync to `55de113` adds none
-in the library, and three in the tools and the notes: two harness modes renumbered off
-the numbers the new texture modes took, the table checker's upstream ref made
-configurable, and comments this round made false. The claim is therefore
-byte-identical to the C library *up to those divergences*, and identical for the GPU
-command stream wherever no fix applies — not byte-identical outright.
+The port began as a translation of the upstream C library (`55de113`) and diverged
+from it wherever the C was wrong; that account (the fix round, the syncs to `a444fe9`,
+`bfab616` and `55de113`, and what upstream adopted) is in git history
+(`git show 5ad2fa0e:DESIGN.md`, "The Rust crate").
 
-Verification, all of it on the host: unit tests on the strict mocks of `src/testutil.rs`
-(`cargo test --no-default-features --features host-test,gpu-powervr`: 1889 crate tests plus 6
-integration tests, none ignored, and 1781 in the `gpu-vivante` build; `cargo test -p
-yakogl-tools`: 100), and the host
-differential harness (`tools/hostharness/`, whose README lists what is and is not
-compared): gl_test.c, API sweeps and hostile sequences over a recording OSAL (all 17
-operations, GPU memory hashes, decoded kicks) and an interposer on all 222 exported entry
-points (return values, output parameters, read-backs), in twelve platform modes, dev and
-release, with AddressSanitizer on the libraries themselves. Against the C at `c1e6084`
-the pre-fix port was identical in the release profile over all 1344 runs but the 12 where
-the C aborts on an ASan heap-buffer-overflow read in `glGetUniformfv`; the fix round then
-took that build's 14 ASan reports, 14 panics and 8 `HH-ERROR` runs to zero. See
-README.md, "Status", for the current report numbers. Nothing is rendered, and **the Rust
-library's PowerVR half has run on silicon**: built as a Zephyr module for the
-Verdin AM62P and run through `driver/tools/pvrlab/gl_test.c` case 7 on 2026-09-22, it
-passes 34 of 34 cases with no fence timeout, where upstream C `55de113` on the
-same board and driver passes 31 and fails 3. README.md, "Status", has the
-conditions that run needs. Open items (the current list is `docs/HANDOFF.md`
-"Known defects" and "Open work"): the confirming board runs for the host-proved
-CTS fixes are pending — no full dEQP tree has run on any board since the plan
-began (`docs/es2-cts-failures.md`); the i.MX8MP `gl_test` is nondeterministic
-(case 10 about 1 run in 3, issue #9; case 2 intermittent, #25); the 4x MSAA path
-awaits its i.MX8MP A/B (#8); the Pi 4 cube-map failures (#12) are fixed on the
-host and await the board run; the GC7000 precompiled table lags on `matattr`
-(#22); panel viewing by eye is pending (#23); and the bare-metal OSAL is still a
-skeleton whose board hooks are `TODO(board)`.
+Verification on the host: unit tests on the strict mocks of `src/testutil.rs`, in every
+feature configuration `tools/check.sh` lists, and the host differential harness
+(`tools/hostharness/`, whose README lists what is and is not compared): gl_test.c, API
+sweeps and hostile sequences over a recording OSAL (GPU memory hashes, decoded kicks)
+and an interposer on the exported entry points, in every platform mode, dev and
+release, with AddressSanitizer on the libraries themselves. Nothing is rendered there.
+On silicon the library runs on all three boards, built as a Zephyr module: gl_test,
+dEQP-GLES2, glmark2 and the Slint samples (`tools/cts/RESULTS.md`). The open items are
+`docs/HANDOFF.md`, "Known defects" and "Open work".

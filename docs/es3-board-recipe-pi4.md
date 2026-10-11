@@ -67,7 +67,9 @@ cts-build-zephyr: libraries in <WORK>/build
 and `<WORK>/build/modules/gles3/libdeqp-gles3-package.a` present (the file the
 image builder checks for). The gles2 stage 1 built it in 101 s on 64 cores and
 314 s on 12 loaded ones (2026-10-08, see "Notes from the gles2 stage 1"); gles3 has about 15 % more
-sources. Keep `<WORK>` as `DEQP_WORK` for the farm:
+sources. Measured on 2026-10-11 (`stage1-pi4`,
+`tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md`): the gles3 stage 1 built
+in 203 s on 12 cores, and image A1 linked at 161,256 KB (61.51 % of the window). Keep `<WORK>` as `DEQP_WORK` for the farm:
 `<ccfarm-env name="DEQP_WORK_GLES3" ...>` in the session's report, since
 `DEQP_WORK` is the gles2 stage 1 that the ES 2.0 regression rows still need.
 
@@ -205,16 +207,71 @@ What a row can say instead, and what to do:
 - `verdict=done_with_resets` (`resets=<n>` from the OSAL's
   `GPU reset (recovery` lines): a result, never a clean pass; name the row in
   the report.
-- `LT` (lifetime.\*, 56 cases) is expected to end with `deqp: fatal:` until
-  transform-feedback capture lands (`tf-capture`): its init links a program
-  with interleaved transform feedback of `gl_Position` and dEQP ends the run
-  when that fails (RESULTS.md 1r). The tally reads it as FATAL and the 56
-  cases as without a result; that is the expected first-run outcome, not a
-  row to rerun.
+- `LT` (lifetime.\*, 56 cases): its init links a program with interleaved
+  transform feedback of `gl_Position`, and before the capture existed dEQP
+  ended the run there (`deqp: fatal:`, RESULTS.md 1r). The capture is on main
+  since `c4dce9125` (the GL core runs the vertex shader on the CPU, the same
+  on the three GPUs; the host passes `lifetime` 56 / 56), so the row is
+  expected to run. A FATAL here is now a finding.
 - `rc=3` (refused: the board does not answer, another session is on it, the
   UART is held, `/boot/firmware` short of space): nothing changed on the
   board; the chain stops (`TREE_RETRIES` is 0 on the Pi 4). `rc=5`: the board
   did not come back to Linux; the chain stops, a person looks at the board.
+
+### On the farm: `pi4-elegance`
+
+`pi4-elegance` is the farm's Pi 4 (resource kind `pi4`). A ccfarm session
+asks for it with `requirements.resources: ["resource:pi4-elegance"]` (or
+`"target:pi4"` plus `"capability:flash"` and `"capability:serial-console"`),
+and ccfarm fills `${resource.pi4.user}`, `${resource.pi4.host}` and
+`${resource.pi4.device}` the way `.ccfarm/project.toml`'s `deqp-tree-pi4`
+stage does. From the repository root, with stage 1 as `DEQP_WORK_GLES3`
+(`tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md`) and the images built by
+section 3 into `build/deqp/pi4-gles3-$HEAD8`, the exact lines are:
+
+```sh
+HEAD8=$(git rev-parse --short=8 HEAD)
+export BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device}
+export BOARD_MUSTPASS=$PWD/tools/cts/gles3-mustpass.txt
+# the first image alone: proves the size, the boot and the ES 3.0 context before 8 h of board time
+TREE_IMAGE_DIR=build/deqp/pi4-gles3-$HEAD8 TREE_ROWS=0 \
+    tools/board.sh pi4 tree tools/cts/pi4-gles3-tree.txt records/pi4/gles3-$HEAD8
+# the rest (resumable: a finished row of the same image is skipped)
+TREE_IMAGE_DIR=build/deqp/pi4-gles3-$HEAD8 \
+    tools/board.sh pi4 tree tools/cts/pi4-gles3-tree.txt records/pi4/gles3-$HEAD8
+tools/board.sh pi4 tally records/pi4/gles3-$HEAD8
+```
+
+and, unset `BOARD_MUSTPASS`, the ES 2.0 rows of section 8 with the gles2
+stage 1 (`DEQP_WORK`):
+
+```sh
+unset BOARD_MUSTPASS
+DEQP_WORK=$DEQP_WORK tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$HEAD8 D FB1 T1 T3 TF
+TREE_IMAGE_DIR=build/deqp/pi4-$HEAD8 TREE_ROWS=1,4,19,21,24 \
+    tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/es2-$HEAD8
+tools/board.sh pi4 tally records/pi4/es2-$HEAD8
+```
+
+The verdict lines to expect, one per image (A1's shown; every other label
+the same form):
+
+```
+board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:deqp_summary resets=0 record=absent back_after=<s>s
+=== A1 rc=0 <date> <time>
+```
+
+for `LT` on a tree without transform-feedback capture,
+`verdict=` other than `done` with a `deqp: fatal:` line in its record (the
+expected first-run outcome above), and after the last row the tally's
+
+```
+== mustpass: 42810 cases in these records' case filters (0 outside them, not run, left out); <r> with a result (<l> case lines seen)
+```
+
+`TREE_ROWS=0` is A1 (rows count from 0 in table order). The lines above
+were checked against `tools/board.sh` and `pi4-deqp-images.sh` at
+`eb911ac`, not run on the board.
 
 ## 5. The tally
 
@@ -307,9 +364,9 @@ ones have V3D counterparts in the plan:
 |---|---|---|
 | integer colour renderbuffers refused (`shaders.builtin_functions` 1,483, `fragment_out` 531) | the same until the V3D integer render targets land | `int-rt-v3d` |
 | sized texture formats refused at upload / sampled wrong (`texture.specification`, `texture.format`, `texture_functions` isampler) | GL core accepts them since `sized-formats-gl`; sampling needs the V3D format map | `formats-v3d` |
-| transform feedback (`transform_feedback` 461, `lifetime` 56) | the API exists (`tf-api`), capture does not: the same failures and the FATAL `LT` image | `tf-capture` |
-| shadow look-ups and 2D-array sampling refused by the PowerVR code generator | the V3D compiler is a different back end: `v3d-shaderc-gaps` counted 159 refused ES3 programs on the host (`tests/es3_shaderc_v3d.rs`); expect those as `Failed to compile shader program` | `v3d-shaderc-gaps` |
-| occlusion queries 62, `rasterizer_discard` 51, `draw_buffers_indexed` 76 n.s. | the same | `oq-v3d`, `tf-capture` (discard), `mrt4` |
+| transform feedback (`transform_feedback` 461, `lifetime` 56) | the API (`tf-api`) and the CPU capture (`c4dce9125`) are on main; the host passes `transform_feedback` 882 / 882 and `lifetime` 56 / 56 | `tf-capture` (built) |
+| shadow look-ups and 2D-array sampling refused by the PowerVR code generator | the V3D compiler is a different back end: on the host it builds 3,453 of the 3,461 dEQP ES 3.00 programs that must build (`docs/es3-shaderc-coverage.md`; the 159 refusals `v3d-shaderc-gaps` once counted came from a test that is not on main); expect the rest as `Failed to compile shader program` | `v3d-shaderc-gaps` |
+| occlusion queries 62, `rasterizer_discard` 51, `draw_buffers_indexed` 76 n.s. | occlusion queries are counted on the V3D since `7526b084` (merged in `452d6c31`; `OCCLUSION_QUERY_COUNTER`), host-proven only; discard is in `tf-api`; `GL_MAX_DRAW_BUFFERS` is 3 | `oq-v3d` (built), `tf-api`, `mrt4` |
 
 What has no AM62P analogue and is V3D's own: the 25 cube cases of the ES 2.0
 sweep are judged by the ES 3.0 rule here (seamless filtering is correct under
@@ -319,10 +376,11 @@ the GLES2 reference-selection difference); ASTC and ETC2 (`texture.compressed`,
 
 ## 8. The ES 2.0 regression rows, the same session
 
-ES 2.0 stays the default and plan #1 left it at zero failures; a board session
-that runs GLES3 images also runs the GLES2 rows `docs/HANDOFF.md` "Next board
-session" names (D, FB1, T1, T3, TF of `pi4-full-tree.txt`), unchanged, with
-the gles2 stage 1 as `DEQP_WORK` and no `DEQP_MODULE`:
+ES 2.0 stays the default, and the Pi 4 reads 0 failures there (17,126 / 0 /
+34, `tools/cts/RESULTS.md`, "Pi 4: the whole dEQP-GLES2 tree, 0 fail"). A board
+session that runs GLES3 images also runs a few GLES2 rows of
+`pi4-full-tree.txt` as a regression check (D, FB1, T1, T3, TF here), unchanged,
+with the gles2 stage 1 as `DEQP_WORK` and no `DEQP_MODULE`:
 
 ```sh
 DEQP_WORK=<gles2 stage 1> tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$HEAD8 D FB1 T1 T3 TF
@@ -330,6 +388,6 @@ TREE_IMAGE_DIR=build/deqp/pi4-$HEAD8 TREE_ROWS=1,4,19,21,24 tools/board.sh pi4 t
 tools/board.sh pi4 tally records/pi4/es2-$HEAD8                    # BOARD_MUSTPASS unset: the GLES2 list
 ```
 
-Expected: each row's tally equal to sweep 30's (`RESULTS.md` "Pi 4: sweep 30")
-with the changes HANDOFF predicts for `ec5ba4f` and `4e9397c`, and nothing
-moved from Pass.
+Expected: each row's tally equal to the whole tree on `a27d69c0`
+(`records/pi4/deqp-a27d69c0/full`), with T3 and TF as on `1cf946a9`
+(`records/pi4/deqp-1cf946a9/rows`: all pass), and nothing moved from Pass.

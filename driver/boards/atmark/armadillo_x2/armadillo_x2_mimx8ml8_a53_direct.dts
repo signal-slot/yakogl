@@ -4,7 +4,7 @@
  *
  * Atmark Techno Armadillo-X2, Cortex-A53 cluster, started at power-on:
  * Boot ROM -> U-Boot SPL -> TF-A BL31 (-> OP-TEE, which returns) -> this image
- * as BL33, with no U-Boot proper and no Linux (docs/direct-boot.md).
+ * as BL33, with no U-Boot proper and no Linux (tools/cts/log/x2-direct-boot.md).
  *
  * The kexec variant's devicetree with three differences:
  *

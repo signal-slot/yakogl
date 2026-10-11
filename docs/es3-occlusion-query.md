@@ -13,7 +13,8 @@ Scope: `GL_ANY_SAMPLES_PASSED` and `GL_ANY_SAMPLES_PASSED_CONSERVATIVE`
 (`glBeginQuery`, `glEndQuery`, `glGetQueryiv`, `glGetQueryObjectuiv`,
 `glIsQuery`, `glDeleteQueries`). `GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN`
 shares the query objects but belongs to transform feedback (`tf-api`, built
-in `16ac8641`; `tf-capture`, open; `docs/es3-transform-feedback.md`).
+in `16ac8641`; `tf-capture`, built in `896ca724`, merged in `c4dce9125`;
+`docs/es3-transform-feedback.md`).
 
 dEQP-GLES3 `functional.occlusion_query.*` fails all 62 cases on the AM62P
 (`tools/cts/RESULTS.md:1476`); `negative_api` loses 4 more cases to the same

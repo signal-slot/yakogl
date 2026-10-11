@@ -3,13 +3,15 @@
 The design record for the back-end half of `src/shaderc/online/`: our own
 GLSL ES 1.00 compiler, compiled into the image and run on the target. Written
 as the work happens, so a decision that is still a proposal says so.
-`frontend.md` is the front end's record and `design.md` the instruction set's.
+`frontend.md` is the front end's record; `isa.md` and `gc7000-isa.md` are the
+instruction sets' ("The codec in Rust and how it is measured").
 
 **Target.** Task #55 was retargeted on 2026-09-22 to the **Vivante GC7000UL**
-(i.MX8MP) first; the PowerVR USC material already on main stays as reference.
-Everything in this file is GPU-neutral unless it says otherwise, and where the
-two GPUs differ the difference is named -- the biggest one being where the
-reflection lives, below.
+(i.MX8MP) first, and much of this file was written for it. The compiler is now
+the product back end on all three GPUs: the PowerVR (`powervr/`), the GC7000
+(`vivante/`) and the V3D (`v3d/`, `v3d-backend.md`). Everything in this file is
+GPU-neutral unless it says otherwise, and where the GPUs differ the difference
+is named -- the biggest one being where the reflection lives, below.
 
 The milestone split (task #55): **M1** the USC decoder/encoder,
 **M2** the GLSL ES 1.00 front end and reflection
@@ -35,9 +37,9 @@ that gap on the target.
 | `arena.rs` / `store.rs` — the memory model | **done** |
 | `ir.rs` — the front end / code generator contract | **agreed** and implemented; `ir.md` is the contract |
 | `backend.rs` — `ShcBackend`, cache, selection, blend variants | **done** |
-| the front end (M2, es100-frontend) | **running**: preprocessor, parser, sema, lowering to IR, reflection |
+| the front end (M2, es100-frontend) | **done** for GLSL ES 1.00: preprocessor, parser, sema, lowering to IR, reflection; scored by `tools/es100_oracle.py`. GLSL ES 3.00: `docs/es3-shaderc-coverage.md` |
 | the encoder and allocator (M1) | **done**: round-trip over the table's blobs, `allocate_and_build` |
-| `select.rs` — instruction selection | io, literals, uniforms, and the `native` arithmetic; `lower` blocked, below |
+| `select.rs` — instruction selection | **done**: io, literals, uniforms, the `native` arithmetic and the `lower` library (the block below is resolved) |
 | `abi.rs` — the `ShcShader` assembly | **done**, eight named refusals |
 | `codegen.rs` — the chain | **closed end to end**: GLSL text in, `ShcShader` out |
 | the oracle harness (`tests/online_oracle.rs`) | **running**, on both GPUs; see below |
@@ -45,6 +47,11 @@ that gap on the target.
 The chain is whole: a `shaderc-online` build compiles GLSL ES 1.00 text to a
 `ShcShader` in process, with no table and no network. What limits it now is
 coverage, which the oracle counts, and not a missing stage.
+
+**Resolved since (2026-10-11 reading of the code): `vivante/builtins.rs` now
+uses `alloc.rs`'s own `SelInstr`, `SelDst`, `SelSrc` and `VReg`
+(`builtins.rs:85`), so there is one definition. The account of the block, as
+written then, follows.**
 
 **One thing is blocked, and it is worth naming rather than routing around.**
 `builtins.rs` (the lowering library) declares its own `SelInstr`, `SelDst`,
@@ -769,6 +776,13 @@ holds a texture fetch selects a real branch, and `src()` gives that branch a
 constant-file condition, which the reference's 208 branch operands never are.
 
 ## What is next, in order
+
+As written on 2026-09-23. Items 1 and 2 are done: the compiler draws on all
+three boards (gl_test, dEQP-GLES2 with 0 failures on the i.MX8MP and the Pi 4,
+`tools/cts/RESULTS.md`), through Zephyr images (the `/dev/gcgpu` harness item 1
+names is retired), and the front end compiles dEQP-GLES2's shaders
+(`tools/es100_oracle.py`). Items 3 and 4 stand as the record of how the matrix
+pairing was settled.
 
 1. **The first program end to end on silicon**: a passthrough VS and a
    solid-colour FS compiled in process, drawing on the i.MX8MP through

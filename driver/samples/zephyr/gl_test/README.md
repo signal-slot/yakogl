@@ -1,12 +1,13 @@
-# gl_test (Zephyr)
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# gl_test (Zephyr, Verdin AM62P)
 
-Runs `tools/pvrlab/gl_test.c`, the on-silicon YakoGL test suite of the Linux
-harness, on Zephyr: the same source file (printk instead of pr_info), every
-case reading its pixels back and printing `gl_test: case N <name>: PASS/FAIL`,
-then `gl_test: all: N of 24 cases failed` (the regression set; the header comment of
-`gl_test.c` lists every case). Verified on the Verdin AM62P on 2026-09-14: 0 of 23
-cases failed (0 of 20 before cases 21..24 were added; case 34 came later and was
-verified through the Linux harness).
+Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
+Verdin AM62P's PowerVR. Every case reads its pixels back and prints
+`gl_test: case N <name>: PASS/FAIL`; a run ends with
+`gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
+every case. The same file runs on the i.MX8MP (`gc_gl_test`) and the Pi 4
+(`v3d_gl_test`). Current results are in `tools/cts/STATUS.md`.
 
 ```sh
 # once per checkout: embed the board's DDK firmware (TI/Img property, never
@@ -19,12 +20,15 @@ driver/tools/mkfwblob.sh /path/to/rgx.fw.36.53.104.796   # -> driver/src/fw/pvr_
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_am62p/am62p54/a53 -d build/gl_test \
     yakogl/driver/samples/zephyr/gl_test
-BOARD_HOST=torizon@<board> yakogl/driver/tools/kexec-zephyr/kexec_run.sh \
-    build/gl_test/zephyr/zephyr.bin
+yakogl/tools/board.sh am62p run build/gl_test/zephyr/zephyr.bin <logdir>
 ```
 
-Kconfig: `GL_TEST_CASE` (7 = all), `GL_TEST_PANEL` (1 = demo scene, 2 = spinning
-MSAA cube on the DSI panel, shown through the DSS application plane),
-`GL_TEST_DEBUG` (1 = command-stream dumps, 2 = depth/stencil dumps),
-`GL_TEST_PRETRANSFORM`. The shared board glue (`samples/zephyr/common`: hold,
-reset, RTI watchdog feed, DSS plane) is the same as in `gl_triangle`.
+`tools/board.sh` needs an image with the RTI self-arm
+(`CONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y`); `tools/cts/common-images.sh` builds
+the common-set image that way.
+
+Kconfig: `GL_TEST_CASE` (7 = all), `GL_TEST_CASES`, `GL_TEST_PANEL` (1 = demo
+scene, 2 = spinning MSAA cube on the DSI panel, shown through the DSS
+application plane), `GL_TEST_DEBUG` (1 = command-stream dumps, 2 =
+depth/stencil dumps), `GL_TEST_PRETRANSFORM`. The board glue (watchdog, hold
+and reset, the DSS plane) is the board layer, `driver/zephyr/lib/board/`.

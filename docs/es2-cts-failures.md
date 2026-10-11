@@ -12,7 +12,9 @@ Every number below comes from what is committed: `docs/HANDOFF.md` (2026-10-06),
 `tools/cts/imx8mp-full-tree-29460f96.results.tsv`, `tools/cts/pi4-full-tree.txt`,
 `tools/cts/am62p-full-tree.txt`. Nothing was run for this file. The raw
 records (`records/...`) are not in the repository (they are gitignored), so the
-case names come from the prose of RESULTS.md and from the `.tsv`.
+case names come from the prose of RESULTS.md and from the `.tsv`. Updated
+2026-10-11 with the 2026-10-10 trees of the AM62P and the i.MX8MP and the Pi 4
+rows of 2026-10-10 and 10-11 (`tools/cts/RESULTS.md`).
 
 ## Decision that is superseded
 
@@ -25,20 +27,26 @@ fixed (items `v3d-cube-design`, `v3d-cube-fix`).
 
 | Board | Last full tree | Date | Pass | Fail | NotSupported | QualityWarning |
 |---|---|---|---:|---:|---:|---:|
-| AM62P (PowerVR) | `d60b9d76` | 2026-10-02 | 17,141 | 0 | 19 | 5 |
-| i.MX8MP (GC7000) | `d8583f20` | 2026-10-01 | 17,112 to 17,116 | 0 | 30 to 34 | 19 |
+| AM62P (PowerVR) | `32778b57` | 2026-10-10 | 17,070 (was 17,141 at `d60b9d76`) | 54 (was 0) | 34 (was 19) | 7 (5 QualityWarning, 2 CompatibilityWarning) |
+| i.MX8MP (GC7000) | `32778b57` | 2026-10-10 | 17,112 to 17,116 | 0 | 30 to 34 | 19 |
 | Pi 4 (V3D) | `a27d69c0` tree, with the nine cube cases and the F1 rerun on later builds (composed, section A) | 2026-10-10 and 10-11 | 17,126 (was 17,075) | 0 (was 25) | 34 (was 62) | 5 (was 3) |
 
 Each row adds up to 17,165. The i.MX8MP range exists because the run covered
 206 cases that are not in the mustpass list, and four of them sit in the
-NotSupported group (see below).
+NotSupported group (see below). Every i.MX8MP selector equals the `d8583f20`
+tree's (2026-10-01).
 
-Known regressions after the last full tree (not in the table above):
-
-- i.MX8MP, on `72d16864` (a 12-row subset, not a full tree): 1 fail, 1
-  NotSupported bucket.
-- gl_test (our own suite, not dEQP) on the i.MX8MP: 44 to 46 of 48, with
-  intermittent failures (see section E).
+The AM62P's 54 are regressions against `d60b9d76`: 9
+`shaders.invariance.*.common_subexpression_*` (image 1; fixed in `e17fb6a7`,
+and image 1 on `e17fb6a7` passes 1,379 / 0 on the board) and 45
+`texture.vertex.2d.*` (image 9; fixed on the host in `a6fc6f14`, awaiting the
+board). Its NotSupported 34 count the 16 `multisample.*` cases of the 1x
+config; the ms4 image measures those, 14 / 2 on `32778b57` and 16 / 16 on
+`452d6c31` after the PDS fix (`a4f64950`). The i.MX8MP's two regressions of
+`72d16864` (a 12-row subset) are fixed on the board (the `32778b57` tree: fbo
+711 / 711, the shaders tail 1,512 pass, 0 NotSupported). gl_test (our own
+suite, not dEQP) on the i.MX8MP: 47 of 48 run with case 16 skipped, case 44
+failing (#6), and intermittent failures of cases 2 and 10 (see section E).
 
 The Pi 4 row is composed of three records, not one image set (section A): the
 whole tree on `a27d69c0` (17,083 pass, 9 fail, 34 NotSupported, 3
@@ -46,44 +54,45 @@ QualityWarning, 2 CompatibilityWarning, 34 cases without a result), whose 9
 failures pass on `1cf946a9` and whose 34 lost cases pass in a rerun. The 5 in
 the QualityWarning column are those 3 and the 2 CompatibilityWarnings
 (`flush_finish.flush`, `flush_wait`; a timing check that flips between runs).
-The AM62P row is its 2026-10-02 tree: the 2026-10-10 tree on `32778b57` (54
-failures, since fixed on the host) is in `tools/cts/RESULTS.md` and
-`docs/HANDOFF.md`.
 
 ## Status after plan #1's fixes (docs-sync, 2026-10-07)
 
-Sections A to F below are the inventory as written before the fixes; their
-numbers are the last board records and do not change here. This section is
-the current state of each failure. "Fixed on the host" means a host test
-passes at that commit; no board has run any of these commits, so none of them
-is a board pass. The combined board recipe is `docs/HANDOFF.md`, "Next board
-session".
+Sections B to F below are the inventory as written before the fixes. This
+section is the current state of each failure (updated 2026-10-11). "Fixed on
+the host" means a host test passes at that commit; a row says when a board has
+run it. The combined board recipe is `docs/HANDOFF.md`, "Next board session".
 
 | Failure (section B/C/E row) | State | Commit and evidence |
 |---|---|---|
-| i.MX8MP `fbo...renderbuffer.depth.depth_component24` (B row 1) | fixed on the host, awaiting board | `4e9397c` (`es2-gl-core`). In `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`, ungated; `advertises()` calls it, so a GPU that lists the extension later gets the format with no further code change). Host tests `depth_component24_renderbuffer_follows_the_extension_list` (`src/gl/framebuffer.rs`), `draw_buffer_queries_are_es3_only` (`src/gl/state.rs`). Board expectation: fbo row 711 pass, 0 fail (was 710 + 1 fail at `72d16864`). |
-| i.MX8MP `shaders.fragdata.*`, one NotSupported (B row 2) | fixed on the host, awaiting board | `4e9397c`. In `report-es2` builds `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1 (`src/shaderc/online/lower.rs`, host test `deqp_fragdata_uniform_index_compiles_in_an_es100_context`). Board expectation: shaders tail row 1512 pass, 0 NotSupported (was 1511 + 1). |
-| `shaders.fragdata.invalid_assign_to_1` on the AM62P and the Pi 4 (C) | expected pass, awaiting board | Same commit: the case needs exactly one draw buffer, which an ES 2.0 context now reports. It is a prediction from the dEQP message, not a measurement. |
+| i.MX8MP `fbo...renderbuffer.depth.depth_component24` (B row 1) | **fixed and confirmed on the board** (`32778b57` tree: fbo 711 / 711) | `4e9397c` (`es2-gl-core`). In `report-es2` builds `glRenderbufferStorage(GL_DEPTH_COMPONENT24)` raises GL_INVALID_ENUM unless `GL_OES_depth24` is listed (`state::extension_listed`, ungated; `advertises()` calls it, so a GPU that lists the extension later gets the format with no further code change). Host tests `depth_component24_renderbuffer_follows_the_extension_list` (`src/gl/framebuffer.rs`), `draw_buffer_queries_are_es3_only` (`src/gl/state.rs`). Board expectation: fbo row 711 pass, 0 fail (was 710 + 1 fail at `72d16864`). |
+| i.MX8MP `shaders.fragdata.*`, one NotSupported (B row 2) | **fixed and confirmed on the board** (`32778b57` tree: the shaders tail 1,512 pass, 0 NotSupported) | `4e9397c`. In `report-es2` builds `GL_MAX_DRAW_BUFFERS` and `GL_DRAW_BUFFERi` are refused and `gl_MaxDrawBuffers` is 1 (`src/shaderc/online/lower.rs`, host test `deqp_fragdata_uniform_index_compiles_in_an_es100_context`). Board expectation: shaders tail row 1512 pass, 0 NotSupported (was 1511 + 1). |
+| `shaders.fragdata.invalid_assign_to_1` on the AM62P and the Pi 4 (C) | **passes on the board** (AM62P `32778b57`, Pi 4 `a27d69c0`) | Same commit: the case needs exactly one draw buffer, which an ES 2.0 context now reports. |
 | Pi 4 25 cube cases (B rows 3 to 27, #12) | **fixed and confirmed on the board** (0 of 25 fail) | design `c3e4146` (`docs/v3d-noseamless-cube.md`; failing-then-passing host test `tests/v3d_cube_noseamless.rs`), implementation `ec5ba4f`, review fixes `53ef6d7`, doc `d8ce931`. In ES 2.0 builds a cube look-up whose filters can see seams is compiled as a 2D-array look-up of the selected face (`LodKey::cube_noseam`; `LodKey::mag_switch` narrowed to bits 32..47). Host evidence: 7 tests in `tests/v3d_cube_noseamless.rs` on the QPU/TMU interpreter in both builds, `an_unkeyed_program_is_unchanged` (FNV-1a of the code and uniform streams equal to `0252e9d`), backend and draw unit tests. The owner's 2026-09-25 exclusion of these cases is replaced by this fix. The Pi 4's tree on `a27d69c0` (2026-10-10) answered the TMUI question (float: 19 of the 25 pass) and failed 9: the 6 `mipmap.cube.*.linear_*` and `size.cube.15x15_{l8,rgb888,rgba8888}`, all the fragment stage's level from the per-face (s, t) in quads that straddle a face edge. Fixed since: the fragment variant computes dEQP's cube level from FDX / FDY of the direction and the face size word (`QUNIFORM_TEXTURE_WIDTH`, now filled by the job builder) and retires with TMUSLOD (`docs/v3d-noseamless-cube.md`). Board, main `1cf946a9` (2026-10-11): T3 304 / 304 and T4 69 / 69 pass (`records/pi4/deqp-1cf946a9/rows`, tally `build/pi4-rows-tally-1cf946a9.txt`), as do the other four rows whose fragment cube look-ups changed (RT 200, S5f 100, T2 248, TF 20 cases): 941 pass, 0 fail, 0 lost over the six rows, 934 of them in the mustpass list. |
 | i.MX8MP gl_test case 16 (#8) | harness fixed on the host; the 4x path itself open | `6bddfc5` (`gc-msaa`). It failed in the default image only because that image offers no 4x config: `CONFIG_GC_GL_TEST_MSAA` is off, `gc_debug_msaa` is 0, `eglChooseConfig samples 4` reads 0 and the case returns before any draw. "Check 255" is the record's none-marker (`gc_result_case` stores 255 for "no check"; a SET_FAIL record has no check). Case 16 now runs its 1x half and skips its 4x half by name (-3, not a failure) when no 4x config is offered; the set walker counts that skip as skipped, and the set's record (`CASE_SET`) says so (until then it counted it as a failure: 47 / 49 on `c4ccc966`). Separately the driver did not scale viewport, scissor and clip to the 2x scratch surface (found on the host; explains "the resolve writes nothing"): the fix is behind `gc_debug_msaa` bit 3, off by default, host test `msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples`. Nothing proves yet that the core wants it. Awaiting the 4x-config A/B (HANDOFF). |
 | i.MX8MP `multisample.*` NotSupported (C) | still open, acceptable at 1x | Depends on bit 3 passing, then the design change and a dEQP run on a 4x-config image. No board proof. |
 | i.MX8MP gl_test case 10 (#9) and case 2 (#25) | cause not found; diagnostic recipe, no product change | `8409419` (`gc-nondeterminism`). Reading our sync sequence against etnaviv's (12 steps; `src/vivante/VIVANTE_NOTES.md`, "Draw, resolve, read back") finds no missing stall, flush or CPU cache operation: each etnaviv step has a counterpart in ours, at the same place or earlier, with the same or a larger flush set. Two host tests pin our column word for word (`a_frame_flushes_and_stalls_as_etnaviv_does`, `a_submit_flushes_and_stalls_before_its_event_as_etnaviv_does`). Three surface hypotheses, none proven: (a) a linear PE target, (b) 64-byte target alignment against etnaviv's page-aligned buffers, (c) placement that depends on the pool's history. The board recipe (10 runs of each of three images, `CONFIG_YAKOGL_GC_ALLOC_PAGE_ALIGN`, `CONFIG_YAKOGL_GC_POOL_NO_REUSE`) separates (b), (c) and "neither". |
-| Compiler changes since the last full trees (D) | host check done; one wrong-code defect found and fixed; no board run | `c6aa6ba` (`compiler-regression-host`), see the paragraph under section D. |
+| Compiler changes since the last full trees (D) | host check done; one wrong-code defect found and fixed; the AM62P `32778b57` tree then showed 9 invariance failures, fixed in `e17fb6a7` and passing on the board | `c6aa6ba` (`compiler-regression-host`), see the paragraph under section D. The invariance cause: the PowerVR fused `a * b + c` into one `fmad` only where the product had one reader; a sum on the way to an `invariant` output is no longer fused. |
+| AM62P `texture.vertex.2d.*`, 45 (the `32778b57` tree, image 9) | fixed on the host, awaiting board | `a6fc6f14`: an indexed draw whose client data is over half the 1 MiB general arena is cut into pieces of its index list; gl_test 197 `vtxgrid` draws the same grid. |
+| AM62P ms4 `multisample.constancy_alpha_to_coverage`, `constancy_both_inverted` (the `32778b57` ms4 image) | **fixed and confirmed on the board** (16 / 16 on `452d6c31`) | `a4f64950`: a frame uploads a PDS program it already holds once, so dEQP's 1024-draw 4x frame is one kick. |
 | dEQP image recipes against the current defaults (D risk list) | checked on the host | `e6e5f14`, `292310c`, `688a574` (`deqp-images-current`, `deqp-config-check-test`): `tools/cts/check-deqp-images.py` checks symbols, conformance options, carve-outs and table coverage, on the recipes and on each built image's `.config`; `board_selftest` pins 206 checks; fixture `.config` files in `tools/cts/testdata/deqp-config`. AM62P 4x image table `tools/cts/am62p-ms4-tree.txt`. |
-| Pi 4 27 `fbo...attachment_combinations` NotSupported (C) | still to verify on the board | No change in this plan. Expected to pass since the V3D claims `GL_OES_depth_texture` (tools/cts/log/status-2026-09-25-to-10-07.md, 10/3); recorded in the Pi 4 session. |
+| Pi 4 27 `fbo...attachment_combinations` NotSupported (C) | **pass on the board** (`a27d69c0` tree) | No change in this plan: the V3D claims `GL_OES_depth_texture` (tools/cts/log/status-2026-09-25-to-10-07.md, 10/3). |
 | #22 GC7000 `matattr` table, #23 panel | unchanged, outside this plan | |
 | Acceptable buckets of section C (compressedtexsubimage2d 9, clip_control 8, multisample at 1x, `multisampled_render_to_texture.readpixels`, the QualityWarnings) | acceptable, unchanged | Not touched. |
 
-No full tree has run on any board since the plan began. Every
-"awaiting board" row is confirmed in one session per board
-(HANDOFF "Next board session"); until then the summary table at the top is
-the last record. The Pi 4's 25 failures are the exception: they are 0 on the
-board (row "Pi 4 25 cube cases" above, section A).
+Every board has run a full tree since the plan began (the summary table). The
+rows still "awaiting board" are confirmed in one session per board (HANDOFF
+"Next board session").
 
 ## A. Per board: last full tree, counts, record names
 
 ### AM62P (PowerVR BXS-4-64)
 
+- Latest: `32778b57`, 2026-10-10, 17 images and the ms4 image
+  (`records/am62p/deqp-32778b57/full/`, `ms4/`): **17,070 pass / 54 fail / 34
+  NotSupported / 5 QualityWarning / 2 CompatibilityWarning**, 0 resets, every
+  case with a result. RESULTS.md, "AM62P: the whole dEQP-GLES2 tree on
+  origin/main `32778b57`: 54 fail (2026-10-10)" and the ms4 entry after it.
+  The 54 and their fixes: the summary above. The previous tree follows.
 - Commit `d60b9d76`, 2026-10-02. RESULTS.md section 1z2 ("AM62P whole tree at
   d60b9d76"). Earlier full trees: 1y (`db7a2085`, 10/1: 17,123 / 0 / 35 / 7),
   1x (9/30).
@@ -110,6 +119,11 @@ board (row "Pi 4 25 cube cases" above, section A).
 
 ### i.MX8MP (Vivante GC7000)
 
+- Latest: `32778b57`, 2026-10-10, the 29 selectors
+  (`records/imx8mp/deqp-32778b57/full`): the same numbers as `d8583f20` below,
+  selector by selector (diffed, 29 of 29). RESULTS.md, "i.MX8MP: the whole
+  dEQP-GLES2 tree on Zephyr at origin/main `32778b57`: 0 fail (2026-10-10)".
+  The previous tree follows.
 - Commit `d8583f20`, 2026-10-01. RESULTS.md section "i.MX8MP: the whole
   dEQP-GLES2 tree on Zephyr at `d8583f20` (2026-10-01, gc-vsunits)". Image
   `wt-d8583f20`, zephyr.bin sha256 `3bf5391bcd3741c0`. Table: batch 1's
@@ -503,7 +517,7 @@ texture on every board (`tools/cts/RESULTS.md`, 2026-10-04).
 
 The GC7000 caveat: etnaviv uses NPOT textures with any wrap mode only when
 `chipMinorFeatures1_NON_POWER_OF_TWO` is set. This repository records the
-part's `features` and `minor0` words (driver/src/vivante/NOTES.md) and the
+part's `features` and `minor0` words (tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md) and the
 feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs),
 not `minor_features[1]`. The part is HALTI5 (an ES 3.x-class core, whose ES
 3.0 needs NPOT repeat and mipmaps), and the ES 3.0 build has always sampled

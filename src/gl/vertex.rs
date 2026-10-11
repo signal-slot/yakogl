@@ -13,7 +13,7 @@
 //! (glVertexAttribI4*). A build that reports ES 2.0 (`report-es2`) answers
 //! GL_INVALID_ENUM for the ES 3.0 array types and the ES 3.0 query pnames,
 //! as ES 2.0 does; the ES 3.0 entry points themselves stay exported, as the
-//! rest of the ES 3.0 API does in that build (docs/es3-vertex-gap.md).
+//! rest of the ES 3.0 API does in that build (docs/es3-cts-failures.md, Appendix A).
 #![allow(non_snake_case)]
 
 use core::ffi::c_void;
@@ -355,7 +355,7 @@ pub unsafe extern "C" fn glGetVertexAttribiv(index: GLuint, pname: GLenum, param
  * integer input or glGetVertexAttribI{i,ui}v on a value set with
  * glVertexAttrib*f (the initial (0, 0, 0, 1) included). Here such a read
  * returns the stored bits reinterpreted; the context does not record which
- * family set a value (docs/es3-vertex-gap.md, task T1). */
+ * family set a value (docs/es3-cts-failures.md, Appendix A, task T1). */
 
 /// The dwords `index`'s input reads while its array is disabled, set from a
 /// pure-integer value: `[x, y, z, w]` as 32-bit patterns.
