@@ -48,7 +48,7 @@ A new contributor follows the host-side steps of `README.md` and
 | 15 | README.md:297, CONTRIBUTING.md:24 | `tools/check.sh --quick` | 0 | 823 s | P7: 110 ok, 0 failed. It runs far more than "the PowerVR row and the AM62P archive only" |
 | 16 | README.md:278 | `tools/api_coverage.py` | 0 | 1 s | none (it ran inside step 14: 0 core entry points missing) |
 | 17 | README.md:344 | `grep -rn 'ignore = "BUG' src` | 0 (1 match) | 0 s | P8: README says there are none left; `src/pvr/backend_tests.rs:4601` has one |
-| 18 | README.md:348 | `tools/hostharness/compare.sh <out> rust:. rust:. driver` (the driver checkout is the in-tree `driver/`; `<out>` and `CARGO_TARGET_DIR` under the workspace's ignored `build/`) | 1 | 2519 s (42 min) with `HH_TIMEOUT=60` | P9, P10. Literal run (default 1200 s timeout) stopped by me after 11 min with 21 GB of logs and no end in sight: gl_test case 174 (`fwccbloss`) writes about 1.9 GB per mode, per 10 min, in each of 12 modes, on the fake GPU; 4 runs would need well over the 73 GB free. Rerun with `HH_TIMEOUT=60` (documented in tools/hostharness/run.sh:26): 2,832 runs per profile, dev 14 unexpected, release 16 unexpected, all in gltest.174 and gltest.25, which hit the timeout in both builds and are cut at different lines. Every other job agrees between A and B (identical library, so no real regression is expected). The `gl_test` cases that fail on the fake GPU (case 1 `uniform`, case 10 `prims`, and others) fail the same way on both sides and are not counted |
+| 18 | README.md:348 (README.md:363 on main at `ba25def`) | `HH_TIMEOUT=60 tools/hostharness/compare.sh build/hh-out rust:. rust:. driver` (the driver checkout is the in-tree `driver/`; `<out>` under the workspace's ignored `build/`; `HH_TIMEOUT` set through `bash -c 'export HH_TIMEOUT=60; ...'`) | 1 | 3436 s (57 min) | P9, P10. Ran to the end and wrote the report: 2,952 runs per profile (dev and release, A and B), 17 GB of logs, free disk fell by about 10 GB. A against B: dev 35 unexpected, release 25 unexpected. All 60 are timeouts, none a real difference: `gltest.174` both sides timed out (23), `gltest.25` both sides timed out (20) and cut at different lines, `scen.progs-qt3d` A timed out and B finished (15; the 60 s limit under 12 parallel jobs), and one each of `gltest.26` and `gltest.25` with A timed out and B ok. Both sides are the same library (`rust:.` against itself), so no regression is expected and none was seen outside timeouts. The `gl_test` cases that fail on the fake GPU fail the same way on both sides. Without `HH_TIMEOUT` (the default 1200 s) the run is not practical: an earlier literal run was stopped after 11 minutes with 21 GB of logs, and a later one after 25 minutes at 140 GB in the first of four runs, because `gltest.174` (`fwccbloss`) writes about 1.9 GB per mode per 10 minutes. Not done: a comparison against `HEAD~1` as a git worktree, because `git worktree add` was refused in this session |
 | 19 | CONTRIBUTING.md:29-39 | branch, rebase and commit rules; regenerate generated files | n/a | - | no command; the gate's `gen` rows (step 14) passed |
 | 20 | CONTRIBUTING.md:50-62 | `tools/board.sh` and the board rules | not run | - | skipped: needs board |
 | 21 | CONTRIBUTING.md:64-69 | `driver/tools/mkfwblob.sh` with `rgx.fw` | not run | - | skipped: needs TI's firmware (licensed, not in the repository) |
@@ -97,14 +97,15 @@ Each fix names the line and the exact change. Neither file was edited here.
 - **P9, README.md:348-358 (and tools/hostharness/README.md:43-66).** The command works
   literally with `driver` (this repository's `driver/`) as the driver checkout, but the text
   says nothing of its cost: with the default 1200 s timeout, case 174 alone writes tens of
-  GB per run and fills a disk. Add after line 358: `Plan for 40 minutes and about 20 GB
-  of free disk with HH_TIMEOUT=60; the default timeout (1200 s) lets gl_test case 174 write
+  GB per run and fills a disk. Add after line 358: `Plan for an hour and about 20 GB
+  of free disk with HH_TIMEOUT=60 (3436 s and 17 GB on a 12-thread host); the default timeout (1200 s) lets gl_test case 174 write
   more than 20 GB per library and profile. The driver checkout is driver/ in this
   repository.`
 - **P10, README.md:353-355.** `exits non-zero when a log differs in a way allow.txt does not
   explain` is true, but a clean comparison needs the timeout out of the picture: with
-  `HH_TIMEOUT=60` the same library against itself exits 1, because the two jobs that hit the
-  timeout (gltest.174, gltest.25) are cut at different lines. Either list those two jobs in
+  `HH_TIMEOUT=60` the same library against itself exits 1 (35 unexpected in dev, 25 in
+  release on the latest run), because the jobs that hit the timeout (gltest.174, gltest.25,
+  and scen.progs-qt3d on one side only) are cut at different lines. Either list those two jobs in
   tools/hostharness/allow.txt for a timed-out run, or have tools/hostharness/compare.sh
   (the `report.py compare` call at line 44) skip a pair in which both sides timed out.
   Say so in the README line quoted above.
