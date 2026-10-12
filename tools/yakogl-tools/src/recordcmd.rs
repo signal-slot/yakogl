@@ -16,6 +16,8 @@
 //!     yakogl-tools record sweep <first> <w1> <w2> <w3>  a gl_test counters record as case numbers
 //!     yakogl-tools record msaa [--log f]... [--nvmem f]... [<w0..w3>]...   case 16's 4x probe pages
 //!                                                     (msaarec.rs) as the console's x4 lines
+//!     yakogl-tools record kickdiff [--log f]... [--nvmem f]... [<w0..w3>]...   cases 2 and 10's
+//!                                                     KICK_DIFF pages (kickdiffrec.rs), one line a page
 //!
 //! The record itself (kinds, which kinds carry a tag, the stage table, the
 //! classes, `describe`, the console line, the CRCs) is
@@ -45,7 +47,8 @@ const USAGE: &str = "usage: yakogl-tools record <w0> <w1> <w2> <w3>
        yakogl-tools record crc16 <case name>
        yakogl-tools record bitmap <prefix> <w1> <w2>
        yakogl-tools record sweep <first> <w1> <w2> <w3>
-       yakogl-tools record msaa [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...";
+       yakogl-tools record msaa [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...
+       yakogl-tools record kickdiff [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...";
 
 /// Two bits per item, item i at bits 2*(i % 16) of words[i / 16]. Items past
 /// the words given read as 0 (no result): kind DEQP_CASES carries at most 32.
@@ -364,6 +367,48 @@ pub fn from_log(text: &str) -> Vec<[u32; 4]> {
         .collect()
 }
 
+/// The records a page decoder (`record msaa`, `record kickdiff`) is given:
+/// `--log <file>` (every record line), `--nvmem <file>` (one record) and
+/// loose hex words, four to a record, in any mix and order. None for
+/// `-h`/`--help` (the usage is printed); a usage error for no record at all
+/// or a word count that is not a multiple of four.
+pub fn records_from_args(args: &[String], usage: &str) -> R<Option<Vec<[u32; 4]>>> {
+    let mut recs: Vec<[u32; 4]> = Vec::new();
+    let mut loose: Vec<u32> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "-h" | "--help" => {
+                println!("{usage}");
+                return Ok(None);
+            }
+            "--log" | "--nvmem" => {
+                let f = it.next().ok_or_else(|| Error::Usage(usage.into()))?;
+                let b = py::read_bytes(f)?;
+                if a == "--log" {
+                    recs.extend(from_log(&py::lossy_text(&b)));
+                } else {
+                    recs.push(from_nvmem(&b)?);
+                }
+            }
+            w => {
+                let t = w.trim_start_matches("0x").trim_start_matches("0X");
+                let v = u32::from_str_radix(t, 16)
+                    .map_err(|_| Error::Usage(format!("{usage}\n\n'{w}' is not a 32-bit hex word")))?;
+                loose.push(v);
+            }
+        }
+    }
+    if !loose.len().is_multiple_of(4) {
+        return Err(Error::Usage(format!("{usage}\n\nrecords are four words each; {} words given", loose.len())));
+    }
+    recs.extend(loose.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]));
+    if recs.is_empty() {
+        return Err(Error::Usage(usage.into()));
+    }
+    Ok(Some(recs))
+}
+
 /// The verdict record of a log's records: the last one whose class is not
 /// FINGERPRINT's (record.rs classify; a fingerprint is written beside a
 /// verdict, never instead), else the last one.
@@ -429,6 +474,7 @@ pub fn main(args: &[String]) -> R<()> {
             return Ok(());
         }
         "msaa" => return crate::msaarec::main(&args[1..]),
+        "kickdiff" => return crate::kickdiffrec::main(&args[1..]),
         "crc16" if args.len() == 2 => {
             println!("{:04x}", record::crc16_ccitt_false(args[1].as_bytes()));
             return Ok(());
