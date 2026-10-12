@@ -28,9 +28,9 @@ The PR touches two files: `src/gl/texture.rs` (+490/-60) and the new
 `tests/es3_tex_levels.rs` (686 lines). Main's `texture.rs` and `draw.rs`
 differ from the PR base only by `#[cfg(not(feature = "report-es2"))]` on
 tests (`git diff 136659c origin/main -- src/gl/texture.rs src/gl/draw.rs`), so
-the PR's hunks do not overlap anything main changed. I did not run the merge
-(`git merge-tree` was refused on this node); the case item's merge will show
-whether that holds.
+the PR's hunks do not overlap anything main changed. `git merge-tree
+--write-tree origin/main pr133` (run 2026-10-12) merges them with no
+conflict (result tree `b81e9847805d`).
 
 ## 1. The GPUs, in the PR's terms
 
