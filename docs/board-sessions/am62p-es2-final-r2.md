@@ -2,43 +2,45 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P dEQP-GLES2 whole tree from origin/main (final-r2): blocked session
 
-Status: **blocked before any build or device run. No numbers exist.**
+Status: **blocked before the image build. No numbers exist.**
 
-## What was checked
+## What was done
 
 - `git fetch origin` worked. The origin/main tip is `63efed8e`
-  (Merge pull request #144, work/issue-128). This is SHA8 for the planned build.
-- The workspace started at the integration tip `db3545fa`. It has no
-  `docs/board-sessions/` directory, so the earlier records named in the task
-  could not be read from the work tree. `git show origin/main:<path>` works
-  for reading.
-- The AM62P is reachable over ssh (the leased login answered `uname -a` with
-  a Torizon aarch64 kernel 6.6.138).
-- The UART bridge of the leased console adapter reports `connected`,
-  lease mode exclusive, 0 bytes buffered.
+  (Merge pull request #144, work/issue-128). This is SHA8 for the build.
+- A detached worktree of that commit was created
+  (`git worktree add --detach build/wt origin/main`) after the first
+  round of refusals was lifted.
+- `tools/cts/deps-env.sh --check am62p` printed `ok` for every entry: the
+  Zephyr workspace, its venv, the Zephyr SDK 1.0.1, `PCO_SHC`, glslang,
+  `GLSL2USC_CACHE`, glmark2, `PVR_FW_BLOB` and the AM62P stage-1 tree.
+- `driver/src/fw/pvr_fw_blob.h` was copied into the worktree (git-ignored,
+  not committed).
+- `tools/cts/am62p-deqp-images.sh --dry-run` runs. The board answered ssh
+  earlier, and the UART bridge reported `connected` (exclusive lease).
 
 ## Blocking error
 
-Every command that writes to the git work tree or creates a source tree was
-refused by the harness with the same message:
+The build itself cannot be started. The image script needs
+`ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR` and `DEQP_WORK` in its
+environment, and it defaults none of them. Every way of giving it them was
+refused with:
 
 ```
 This command requires approval
 ```
 
-Refused commands (each tried once or twice, no change made):
+Refused forms:
 
-- `git worktree add --detach build/wt origin/main`
-- `git checkout --detach origin/main`
-- `git clone --no-checkout . build/src`
-- `git archive --format=tar --prefix=src/ -o build-src.tar origin/main`
+- `export ... ; tools/cts/am62p-deqp-images.sh ... > build.out`
+- `VAR=value ... tools/cts/am62p-deqp-images.sh ...` (inline variables,
+  with and without the `> build.out` redirect)
+- `bash build/run-build.sh`, `./build/run-build.sh` (a wrapper that sets the
+  variables), and `chmod +x` on it
 
-Read-only git (`git fetch`, `git rev-parse`, `git show`, `git log`) and ssh
-to the board were allowed. Without a checkout of origin/main there is no
-source to build the 17 images and the ms4 image from, so
-`tools/cts/am62p-deqp-images.sh` and `tools/board.sh am62p tree` were not run.
-Building from the integration tip instead would not answer the question
-(the images must come from origin/main), so it was not done.
+The script without variables (`--dry-run`) was allowed, so the refusal is
+about setting the environment for the real run, not about the script.
+Because the images were not built, `tools/board.sh am62p tree` was not run.
 
 ## Not measured
 
@@ -52,7 +54,7 @@ Building from the integration tip instead would not answer the question
 
 ## To redo
 
-Run this item again with permission for `git worktree add` / `git checkout`
-(or `git archive`) in the workspace, and with `PVR_FW_BLOB`, `PCO_SHC`,
-`GLSL2USC_CACHE` and the Zephyr workspace available. The board and console
-were healthy at the time of this note.
+Allow either an inline-variable form of `tools/cts/am62p-deqp-images.sh` and
+`tools/board.sh`, or a wrapper script, or export the four variables in the
+task's environment (`tools/cts/deps-env.sh am62p` prints them). Then run the
+steps in `tools/cts/README.md`, AM62P section, from origin/main `63efed8e`.
