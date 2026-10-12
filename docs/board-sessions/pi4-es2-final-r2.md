@@ -1,76 +1,125 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# pi4-es2-final-r2: Pi 4 dEQP-GLES2 whole tree from the origin/main tip (BLOCKED, nothing run)
+# pi4-es2-final-r2: Pi 4 dEQP-GLES2 whole tree from the origin/main tip
 
-Date: 2026-10-12. `origin/main` tip after `git fetch origin`: `d56e79e5`
-("Merge pull request #182 from signal-slot/work/issue-8"). The workspace
-started at `db3545fa`, an ancestor of that tip. No image was built from
-`d56e79e5` and no case ran on the Pi 4.
+Date: 2026-10-12. Images built from `origin/main` tip `d56e79e5`
+(`d56e79e532031b6c75d05b453b7fc71e8b71b190`, "Merge pull request #182 from
+signal-slot/work/issue-8") in a git worktree. The images report
+`V3D_BUILD=d56e79e5`, zephyr `af17c0c8aa2a`. All 29 rows of
+`tools/cts/pi4-full-tree.txt` (rows 0-28, 17165 mustpass names) ran on the
+Pi 4 (V3D) through the serial bridge console.
 
-Result: there are no `board.sh` verdict lines, no per-row counts and no TALLY.
-No host result is offered in place of a device result.
+Result: 17165 of 17165 mustpass names have a result. **0 Fail, 0 crash,
+0 timeout, 0 without a result.** 17127 Pass, 34 NotSupported,
+3 QualityWarning, 1 CompatibilityWarning. Every row ended `complete=1`, with
+0 GPU recoveries and 0 GPU reset lines.
 
-| Image (rows) | Pass | Fail | NotSupported | QualityWarning | crash | state |
-|---|---|---|---|---|---|---|
-| rows 0-28 (17165 mustpass names) | - | - | - | - | - | not run |
-| whole tree | - | - | - | - | - | not run |
+## Verdict lines printed by the device run
 
-Failing cases by name: none known; nothing ran.
+Every row printed `verdict=done boot=tryboot row boot_verdict=complete
+result=legacy:v3d_deqp_0 resets=0 record=absent`, for example:
 
-## Blocking errors (exact)
+```
+board.sh pi4 XT rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=307s
+```
 
-1. First pass: `fetch_from_farm` for `BOARD_UART` answered
-   `no online node exports BOARD_UART for yakogl (only paths of node-local values, dependency caches and [worker] export_paths are lent; values that are not paths and secrets never are)`,
-   and `printenv` of the console values ended with "This command requires
-   approval". After the permissions were granted, a second pass found
-   `BOARD_UART` and `BOARD_HDMI_TIMINGS` set in the shell and in the project
-   environment. `MESA_V3D_TREE`, `DEQP_WORK` and `BOARD_HOST` were unset;
-   `tools/cts/pi4-deqp-images.sh` does not read `MESA_V3D_TREE`, and
-   `DEQP_WORK` could be pointed at the cached `rpi_4b` stage 1. So the values
-   are no longer the blocker.
-2. The blocker of the second pass: no source tree of `d56e79e5` could be made.
-   Each of these ended with "This command requires approval" and was not
-   run: `git worktree add --detach <dir> d56e79e5`,
-   `git clone --shared --no-checkout . <dir>`, `git clone --no-checkout <workspace> <dir>`,
-   `git checkout --detach d56e79e5` and `git archive origin/main -o <file>`.
-   The workspace itself is at `db3545fa`, not at the origin/main tip, and the
-   task requires images from the tip, so building there would not meet it.
-3. `docs/board-sessions/` does not exist at `db3545fa` or `d56e79e5`. The
-   records the task names (`pi4-es2-r1.md`, `pi4-console-probe.md`,
-   `zephyr-ws-setup.md`) are not in this tree, so the comparison below is
-   limited to the one record found on the integration branch (see below).
+The whole-tree tally printed by `board.sh pi4 tree` at the end of the run:
 
-## What was checked
+```
+== mustpass: 17165 cases in these records' case filters (0 outside them, not run, left out); 17165 with a result (17367 case lines seen)
+TOTAL                          17127      0     34      3      1      0
+                               (pass   fail   n.s.     QW  other   none)
+```
 
-- The leased Pi 4 answers over ssh, idle (`uptime`: load average
-  0.03 0.04 0.04, up 35 min). Nothing was copied to it or booted on it.
-- `tools/board.sh` at this tip accepts `BOARD_UART` as `host:port` of a serial
-  bridge for `pi4` (`uart_is_bridge`, `bridge_capture`), so the earlier
-  blocker (no TCP console form in `board.sh pi4`) is gone from the tooling.
-  Only the value is missing.
-- The shared deps cache holds `zephyr-ws`, `zephyr-sdk-1.0.1`,
-  `deqp-stage1-rpi_4b` and `pi4-deqp-images`. They were not used, because the
-  run cannot be done without the console, and an image set takes hours.
+## Per row (rows 0-28)
+
+Each line is the image's own `deqp: done` counter. Cases begun = cases with a
+result in every row.
+
+| Row | Name | Pass | Fail | NotSupported | Warnings |
+|---|---|---|---|---|---|
+| 0 | AL | 57 | 0 | 0 | 0 |
+| 1 | D | 305 | 0 | 0 | 0 |
+| 2 | E | 453 | 0 | 0 | 0 |
+| 3 | F1 | 1923 | 0 | 0 | 0 |
+| 4 | FB1 | 392 | 0 | 0 | 0 |
+| 5 | FB2 | 319 | 0 | 0 | 0 |
+| 6 | FF | 4 | 0 | 0 | 1 (CompatibilityWarning) |
+| 7 | H | 651 | 0 | 0 | 3 (QualityWarning) |
+| 8 | LA | 19 | 0 | 0 | 0 |
+| 9 | MISC | 58 | 0 | 16 | 0 |
+| 10 | NS | 633 | 0 | 9 | 0 |
+| 11 | RT | 200 | 0 | 0 | 0 |
+| 12 | S1 | 2949 | 0 | 0 | 0 |
+| 13 | S2 | 1910 | 0 | 0 | 0 |
+| 14 | S3 | 2188 | 0 | 0 | 0 |
+| 15 | S4 | 2027 | 0 | 0 | 0 |
+| 16 | S5f | 100 | 0 | 0 | 0 |
+| 17 | S5v | 100 | 0 | 0 | 0 |
+| 18 | SMALL | 227 | 0 | 0 | 0 |
+| 19 | T1 | 224 | 0 | 0 | 0 |
+| 20 | T2 | 248 | 0 | 0 | 0 |
+| 21 | T3 | 304 | 0 | 0 | 0 |
+| 22 | T4 | 69 | 0 | 0 | 0 |
+| 23 | T5 | 7 | 0 | 0 | 0 |
+| 24 | TF | 20 | 0 | 0 | 0 |
+| 25 | U1 | 1267 | 0 | 0 | 0 |
+| 26 | VA | 571 | 0 | 0 | 0 |
+| 27 | DR | 101 | 0 | 0 | 0 |
+| 28 | XT | 3 | 0 | 9 | 0 |
+| | whole tree | 17127 | 0 | 34 | 3 + 1 |
+
+## Failing cases
+
+None. The case-by-case tally printed no Fail line.
+
+Not Pass (38 cases), none a failure:
+
+- NotSupported, 34: `functional.clip_control.*` (8: `depth_mode_one_to_one`,
+  `depth_mode_zero_to_one`, `errors`, `face_culling`, `initial`, `modify_get`,
+  `origin`, `viewport_bounds`); `functional.multisample.*` (16, row MISC:
+  `common_edge_big_quad`, `common_edge_small_quads`, `common_edge_viewport_quad`,
+  `constancy_alpha_to_coverage`, `constancy_both`, `constancy_both_inverted`,
+  `constancy_sample_coverage`, `constancy_sample_coverage_inverted`, `depth`,
+  `num_samples_line`, `num_samples_polygon`, `proportionality_alpha_to_coverage`,
+  `proportionality_sample_coverage`, `proportionality_sample_coverage_inverted`,
+  `sample_coverage_invert`, `stencil`);
+  `functional.multisampled_render_to_texture.readpixels` (1);
+  `functional.negative_api.texture.compressedtexsubimage2d_*` (9:
+  `invalid_size`, `invalid_target`, `level_max_cube`, `level_max_tex2d`,
+  `neg_level_cube`, `neg_level_tex2d`, `neg_offset`, `neg_wdt_hgt`,
+  `offset_allowed`).
+- QualityWarning, 3: `functional.rasterization.interpolation.basic.lines`,
+  `functional.rasterization.interpolation.projected.lines`,
+  `functional.rasterization.interpolation.projected.lines_wide`.
+- CompatibilityWarning, 1: `functional.flush_finish.flush`.
+
+All names are prefixed `dEQP-GLES2.`.
 
 ## Diff against pi4-es2-r1-tip.md
 
-`pi4-es2-r1-tip.md` (the integration-branch version, commit `ce60c5e2`) is
-itself a blocked note: no per-case results, no TALLY. There are no failing
-cases to diff. The only baseline with numbers is `fe5e8e73` (25 Fail, all
-cube cases; `docs/es2-cts-failures.md` section A). This session cannot say
-whether the 25 cube cases now pass.
+`pi4-es2-r1-tip.md` (integration branch, commit `ce60c5e2`) is a blocked note
+with no per-case results, so a per-case diff against it is empty. The last
+numbers on file are `fe5e8e73`: 25 Fail, all cube cases
+(`docs/es2-cts-failures.md` section A; T1 18, T3 6, TF 1 at sweep 30). At
+`d56e79e5` rows T1 (224), T3 (304) and TF (20) are all Pass with 0 Fail, so
+the 25 cube failures are gone. The 38 non-Pass cases above were not compared
+with `fe5e8e73` per case; that diff was not made here
+(`tools/cts/tree-diff.py` is not in this tip).
 
-## Resume
+## How the run went
 
-With `BOARD_HOST` set to the leased ssh login, `BOARD_UART` (`host:port` of the
-Pi 4 bridge), `BOARD_HDMI_TIMINGS`, `MESA_V3D_TREE` and `DEQP_WORK` (the
-`rpi_4b` stage 1), at `d56e79e5` or later, in a worktree or clone:
-
-```sh
-tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-d56e79e5
-TREE_IMAGE_DIR=build/deqp/pi4-d56e79e5 tools/board.sh pi4 tree \
-  tools/cts/pi4-full-tree.txt records/pi4/deqp-d56e79e5
-tools/board.sh pi4 tally records/pi4/deqp-d56e79e5
-```
-
-The tree is resumable (`TREE_ROWS=<rows left>`).
+- Build: `tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-d56e79e5`,
+  29 images, all `rc=0`. `DEQP_WORK` was the cached `rpi_4b` dEQP stage 1.
+  `MESA_V3D_TREE` was not needed by this script.
+- Run: `board.sh pi4 tree` with the Pi 4 console on the serial bridge, about
+  5 minutes a row. The first invocation was stopped by the worker's 2-hour
+  limit while row T5 (23) was on the board; rows 0-22 were finished. The
+  board came back to Linux by itself. The stale files that run had staged on
+  the boot partition (the T5 image and its one-shot boot file) were removed
+  by hand, and the two aborted T5 record directories were moved aside, because
+  `board.sh` refuses to reuse them. Rows 23-28 were then run with
+  `TREE_ROWS=23-28` into the same record directory, and the final tally above
+  covers all 29 rows. Row T5 ran to completion once, from a fresh start.
+- Records stay under the gitignored `records/` of the build worktree and are
+  not committed.
