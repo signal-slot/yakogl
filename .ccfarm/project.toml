@@ -12,11 +12,14 @@
 # in the same commit as any result that changes it, tools/cts/RESULTS.md and
 # STATUS.md in the same push as the numbers they cite.
 #
-# Until ccfarm's review workspace has that environment (fw blob, Zephyr
-# workspace, hal_nxp, pco_shc, board access), the full gate is red on gaps
-# and ccfarm does NOT touch main: promotion stays off here (promote_to = "").
-# When the environment is there, set promote_to = "main" and the [landing]
-# push flag together.
+# Landing (2026-10-12): the project is mirrored to GitHub, so every result
+# that changes files goes up as a pull request from ccfarm/<id> straight to
+# main (promote_to); ccfarm posts its reviews on the pull request and merges
+# it through GitHub only when the review approves, the CI gate on the pull
+# request is green and there is no conflict (the owner's rule of 2026-10-11).
+# There is no integration branch and no promotion stage any more: the 49
+# results that ccfarm/integration held were re-landed by hand on
+# 2026-10-12 (PRs #102-#138), and the branch is abandoned.
 
 [project]
 name = "yakogl"
@@ -31,8 +34,9 @@ enabled = true
 # the CI does not. The empty list is explicit: no check, and no strict second
 # review for the lack of one.
 commands = []
-merge_into = "ccfarm/integration"
-promote_to = ""
+# The pull requests' target. No merge_into: a mirrored project has no
+# integration branch (ccfarm docs/design/issues-record.md, section 7).
+promote_to = "main"
 
 [permissions]
 allow = [
@@ -290,12 +294,10 @@ on_fail = "report"
 
 [landing]
 conventions = "main is the landing branch and origin/main (github.com/signal-slot/yakogl) the truth: board images are built only from commits on origin/main, and HANDOFF.md names main's commit under test. Work happens on short topic branches landed through a pull request (the CI gate runs on the pull request, a reviewer merges; main is never pushed by hand), lately work/<topic> (work/pco-driver-programs, work/cleanup-1-vivante-knobs; earlier <area>/<topic> such as pvr/fl-grow-on-demand, unify/cluster), rebased onto origin/main; locally only the rows the diff reaches run (tools/check.sh --changed <base>), the full tools/check.sh (green means 0 failed and 0 gaps) is the CI's job on the pull request and on main after the merge; when a branch has merged main before, resolve conflicts against the newest common ancestor of the file, not git's merge base (tools/cts/RESULTS.md, 2026-10-04). Commit subjects are '<area>: <what changed, stated as a result>' in lower case with no type prefix ('shaderc: ...', 'pvr online: ...', 'vivante: ...', 'docs: ...'), the body explains the design and names the records and commits it rests on, and agent commits end with a Co-Authored-By trailer. Generated files that the gate reproduces byte for byte (src/pvr/internal.rs, src/vivante/internal.rs, tests/reference/*.rs, src/pvr/csbgen.rs, driver/rust/src/soc/imx8mp/regs.rs, the pinned count fixtures under tests/fixtures/) are regenerated in the same commit as the change that moves them, and a new feature or knob joins check.sh's lists in the same commit. docs/HANDOFF.md ('State of main', the open work in order, the known defects with their GitHub issue numbers) is updated in the same commit as any result that changes it; tools/cts/RESULTS.md (the measurement log, cells citing the commit and the record directory) and tools/cts/STATUS.md (the summary, in Japanese) in the same push as the numbers they describe; README.md's Status tables when a board's conformance or glmark2 figure changes. Records (records/<board>/<YYYYMMDD-HHMM>-<name>-<sha8>/) are gitignored and redacted; board addresses, UART paths and credentials come from the environment and never go in a file; driver/src/fw/pvr_fw_blob.h is never committed."
-# No stage runs after the merge into the integration branch: the whole
-# pre-landing proof is the review gate (tools/check.sh), and the board stages
-# above run only from the promoted branch.
+# The pre-landing proof is the CI gate on the pull request; the board stages
+# above run from main after the merge.
 promote_requires = []
-# main moves only through pull requests (the gate runs on the pull request
-# and again on main after the merge, .github/workflows/gate.yml); nobody
-# pushes main by hand. ccfarm does not promote here (promote_to = ""), so it
-# pushes nothing; turn this on together with promote_to = "main".
+# main moves only through pull requests merged on GitHub (the gate runs on
+# the pull request and again on main after the merge,
+# .github/workflows/gate.yml); nobody, ccfarm included, pushes main.
 push = false
