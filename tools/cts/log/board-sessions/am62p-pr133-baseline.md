@@ -120,6 +120,41 @@ use a farm resource it was not leased. The project's stored `BOARD_UART`
 value names yet another port, 35931, which console-map lists as "not
 recorded".
 
+## Re-run attempt (item base-am62p-run, 2026-10-12): console probe failed, nothing ran
+
+**Outcome: nothing ran.** No boot, no `board.sh` run (not even `--dry-run`
+again), no record directory, recoveries 0 (no reboot, RTI reset or power
+cycle). The board was not touched except for the two probe writes below.
+
+Console probe (before any boot):
+
+- Port **35932** (the address the lease actually holds; the task text said
+  35931, which is the stored `BOARD_UART` value): `YK-PROBE-S2` was written
+  to the board's `/dev/ttyS2` over ssh (after `stty -F /dev/ttyS2 115200`,
+  rc=0), twice. The console bridge showed **0 bytes** both times
+  (`serial_read` next_offset 0, `bytes_buffered` 0). The marker did not
+  arrive. Same result as the first session: 35932 is not main_uart0.
+- Port **35933**: **not probed.** The only way to reach it from this task
+  is a raw TCP connection (`nc`) to a port the lease does not list, and the
+  sandbox refused that command ("requires approval"; no one is there to
+  approve). The MCP serial tool is bound to 35932 and cannot be re-pointed.
+  So whether 35933 carries the marker is still unverified in this session
+  (the owner verified it on 2026-10-09, see `console-map.md`).
+
+So no address reached the board's main_uart0 here, and the run was not
+started: a `board.sh` run on 35932 would reboot the board to capture an
+empty console (`verdict=empty`).
+
+For the farm's resource entry: stored `BOARD_UART` port 35931 (wrong; no
+bridge answer recorded), lease/MCP port 35932 (mcu_uart0, ttyS3), wanted
+port 35933 (main_uart0, ttyS2).
+
+To finish this baseline: lease the console at 35933 (or approve `nc`/ssh
+access to it), repeat the probe, then run the "run line" above from the
+worktree with the kept image `img-wt` (sha256 `c42e6f58...`, unchanged),
+then the tally. The verdict lines, recovery counts and record directory go
+in this section; there are none yet.
+
 ## Comparison with the last AM62P set
 
 There is no number to compare: nothing ran. The last AM62P gl_test sets on
