@@ -19,19 +19,22 @@ Failing cases by name: none known; nothing ran.
 
 ## Blocking errors (exact)
 
-1. The console value is not available to this worker. The farm's
-   `fetch_from_farm` for `BOARD_UART` answered:
-   `no online node exports BOARD_UART for yakogl (only paths of node-local values, dependency caches and [worker] export_paths are lent; values that are not paths and secrets never are)`.
-   It is a `host:port`, not a path, so it cannot be lent. `BOARD_HDMI_TIMINGS`
-   is the same kind of value.
-2. Reading the environment is refused in this session: `printenv BOARD_UART`,
-   `printenv BOARD_HDMI_TIMINGS`, `printenv MESA_V3D_TREE`,
-   `printenv DEQP_WORK` and a shell loop testing whether they are set each
-   ended with "This command requires approval". `get_project_env` ended with
-   "Claude requested permissions to use mcp__ccfarm__get_project_env, but you
-   haven't granted it yet." So it could not be shown that any of the four is
-   set. The task statement says `MESA_V3D_TREE` and `DEQP_WORK` have no value
-   on this machine.
+1. First pass: `fetch_from_farm` for `BOARD_UART` answered
+   `no online node exports BOARD_UART for yakogl (only paths of node-local values, dependency caches and [worker] export_paths are lent; values that are not paths and secrets never are)`,
+   and `printenv` of the console values ended with "This command requires
+   approval". After the permissions were granted, a second pass found
+   `BOARD_UART` and `BOARD_HDMI_TIMINGS` set in the shell and in the project
+   environment. `MESA_V3D_TREE`, `DEQP_WORK` and `BOARD_HOST` were unset;
+   `tools/cts/pi4-deqp-images.sh` does not read `MESA_V3D_TREE`, and
+   `DEQP_WORK` could be pointed at the cached `rpi_4b` stage 1. So the values
+   are no longer the blocker.
+2. The blocker of the second pass: no source tree of `d56e79e5` could be made.
+   Each of these ended with "This command requires approval" and was not
+   run: `git worktree add --detach <dir> d56e79e5`,
+   `git clone --shared --no-checkout . <dir>`, `git clone --no-checkout <workspace> <dir>`,
+   `git checkout --detach d56e79e5` and `git archive origin/main -o <file>`.
+   The workspace itself is at `db3545fa`, not at the origin/main tip, and the
+   task requires images from the tip, so building there would not meet it.
 3. `docs/board-sessions/` does not exist at `db3545fa` or `d56e79e5`. The
    records the task names (`pi4-es2-r1.md`, `pi4-console-probe.md`,
    `zephyr-ws-setup.md`) are not in this tree, so the comparison below is
