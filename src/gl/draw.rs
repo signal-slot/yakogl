@@ -2645,6 +2645,29 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
 /// conformance run, where incomplete textures are tested on purpose.
 static INCOMPLETE_TEXTURE_WARNED: Global<bool> = Global::zeroed();
 
+/// Draws that sampled an incomplete texture: one per draw call (glDrawArrays,
+/// glDrawElements and their instanced forms) whose program samples, on at
+/// least one unit, a texture that is incomplete under the filters the draw
+/// uses, and so reads (0,0,0,1) (ES 2.0 3.8.2). The warning above names only
+/// the first; this counts every one, for a run whose only result is a
+/// record (issue #13). Saturates at u32::MAX. Counted when the draw's
+/// textures are resolved, before the backend: a draw refused later
+/// (backend::draws_refused) is still counted here.
+static INCOMPLETE_TEXTURE_DRAWS: AtomicU32 = AtomicU32::new(0);
+
+/// See [`INCOMPLETE_TEXTURE_DRAWS`].
+pub fn incomplete_texture_draws() -> u32 {
+    INCOMPLETE_TEXTURE_DRAWS.load(Ordering::Relaxed)
+}
+
+/// C view of [`incomplete_texture_draws`]: the draws in this process that
+/// sampled an incomplete texture, saturating at 0xffffffff. In every build
+/// (a product record carries it: driver/samples/zephyr/glmark2).
+#[no_mangle]
+pub extern "C" fn yakogl_incomplete_texture_draws() -> u32 {
+    incomplete_texture_draws()
+}
+
 /// GL's wrap enum as the backend contract's [`GlesWrap`].
 fn map_wrap(wrap: GLenum) -> u8 {
     match wrap {
@@ -3656,6 +3679,9 @@ fn build_common(
      * interleaved. */
     let mut cube_bindings = [(0usize, 0u8); GLES_MAX_TEX_BINDS];
     let mut num_cube_bindings = 0usize;
+    /* a sampler the program uses reads an incomplete texture: counted once
+     * per draw below (INCOMPLETE_TEXTURE_DRAWS) */
+    let mut samples_incomplete = false;
     for stage in 0..2u8 {
         let (sh, units) = if stage == 1 { (&p.rfs, &p.fs_sampler_unit) } else { (&p.rvs, &p.vs_sampler_unit) };
         let dst_max = if stage == 1 { GLES_MAX_TEX_BINDS } else { crate::backend::GLES_VS_TEX_UNITS };
@@ -3814,6 +3840,7 @@ fn build_common(
             (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t) = own;
             if let Some(why) = incomplete {
                 tb.incomplete = 1;
+                samples_incomplete = true;
                 // SAFETY: single-threaded by contract; no other reference is live.
                 let warned = unsafe { INCOMPLETE_TEXTURE_WARNED.get() };
                 if !*warned {
@@ -3851,6 +3878,9 @@ fn build_common(
         }
     }
 
+    if samples_incomplete {
+        context::count_saturating(&INCOMPLETE_TEXTURE_DRAWS);
+    }
     clock.lap(Step::GlTextures);
 
     /* fixed-function render state */
@@ -12703,6 +12733,66 @@ mod tests {
         // SAFETY: plain GL calls.
         unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint) };
         assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 0);
+    }
+
+    /// The counters a board record carries (issue #13: the i.MX8MP has no
+    /// console, so its glmark2 record said "0 failed" while terrain raised
+    /// GL errors and sampled an incomplete texture). Read as differences:
+    /// they are process-wide totals.
+    #[test]
+    fn the_record_counters_count_incomplete_texture_draws_and_gl_errors() {
+        let gl = Gl::new(16, 16);
+        textured(&gl);
+        texture_rgba(4, 4); /* one level */
+        let draws = incomplete_texture_draws();
+        let (raised, recorded) = (context::gl_errors_raised(), context::gl_errors_recorded());
+
+        /* incomplete under a mipmap filter: counted once per draw */
+        // SAFETY: plain GL calls.
+        unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as GLint) };
+        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 1);
+        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 1);
+        assert_eq!(incomplete_texture_draws() - draws, 2, "two draws sampled an incomplete texture");
+        /* complete again: not counted */
+        // SAFETY: plain GL calls.
+        unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint) };
+        assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 0);
+        assert_eq!(incomplete_texture_draws() - draws, 2, "a complete texture is not counted");
+        assert_eq!(
+            (context::gl_errors_raised() - raised, context::gl_errors_recorded() - recorded),
+            (0, 0),
+            "nothing so far raised a GL error"
+        );
+
+        /* two errors with no glGetError between them: both raised, only the
+         * first recorded (ES 2.0 2.5, the first error is kept) */
+        // SAFETY: plain GL calls; the enum is invalid on purpose.
+        unsafe {
+            glTexParameteri(GL_TEXTURE_2D, 0x1234, 0);
+            glTexParameteri(GL_TEXTURE_2D, 0x1234, 0);
+        }
+        assert_eq!(context::gl_errors_raised() - raised, 2);
+        assert_eq!(context::gl_errors_recorded() - recorded, 1, "the second error was masked by the first");
+        assert_eq!(gl.error(), GL_INVALID_ENUM);
+        /* after the read, the next error is recorded again */
+        // SAFETY: as above.
+        unsafe { glTexParameteri(GL_TEXTURE_2D, 0x1234, 0) };
+        assert_eq!(gl.error(), GL_INVALID_ENUM);
+        assert_eq!((context::gl_errors_raised() - raised, context::gl_errors_recorded() - recorded), (3, 2));
+        /* the C views read the same counters */
+        assert_eq!(yakogl_incomplete_texture_draws(), incomplete_texture_draws());
+        assert_eq!(context::yakogl_gl_errors_raised(), context::gl_errors_raised());
+        assert_eq!(context::yakogl_gl_errors_recorded(), context::gl_errors_recorded());
+    }
+
+    /// The counters saturate instead of wrapping.
+    #[test]
+    fn a_record_counter_stays_at_its_maximum() {
+        let n = AtomicU32::new(u32::MAX - 1);
+        context::count_saturating(&n);
+        assert_eq!(n.load(Ordering::Relaxed), u32::MAX);
+        context::count_saturating(&n);
+        assert_eq!(n.load(Ordering::Relaxed), u32::MAX, "no wrap to 0");
     }
 
     /// A cube map needs all six faces at one size.

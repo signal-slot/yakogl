@@ -575,12 +575,12 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 57 blocks (45 + GLMARK2 on- and off-screen and with
-        // GLMARK2_SCENES + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
+        // the population: the golden file's 58 blocks (45 + GLMARK2 on- and off-screen, with
+        // GLMARK2_SCENES and with GLMARK2_GL + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
         // timeout, a frame over the budget with its slowest step, and nothing measured
         // + DISPLAY + three set records: CASE_SET failed and passed, and the earlier
         // CASE_SET_FAIL form), every kind of record.rs's table among them
-        assert_eq!(blocks, 57, "the golden file's block count changed: re-derive the pin");
+        assert_eq!(blocks, 58, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }

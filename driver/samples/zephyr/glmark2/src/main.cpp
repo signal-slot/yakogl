@@ -54,7 +54,10 @@
  * the status, the scene counts, the size, and which benchmark-list entries did
  * not run: the first failed one with why its setup failed, from glmark2's
  * first error line, and the first two unsupported ones; each is also printed
- * as a "glmark2: entry N <scene>:" line), the run's last record, which the i.MX8MP keeps
+ * as a "glmark2: entry N <scene>:" line; and the GL core's counters, the GL
+ * errors raised and the draws that sampled an incomplete texture, 4 bits
+ * each, also printed as a "glmark2: GL errors raised" line; they do not
+ * change the verdict), the run's last record, which the i.MX8MP keeps
  * in its SNVS (it has no UART); board_finish then keeps it as the verdict.
  */
 #include <zephyr/kernel.h>
@@ -86,6 +89,10 @@ extern "C" {
 }
 #include "osal_internal.h" /* YakoGL src/osal: osal_mem_line (its own extern "C") */
 extern "C" {
+/* the GL core's counters for the record (issue #13), totals since start */
+uint32_t yakogl_gl_errors_raised(void);         /* src/gl/context.rs */
+uint32_t yakogl_gl_errors_recorded(void);       /* src/gl/context.rs */
+uint32_t yakogl_incomplete_texture_draws(void); /* src/gl/draw.rs */
 }
 #if defined(CONFIG_YAKOGL_GPU_V3D)
 extern "C" {
@@ -714,6 +721,15 @@ int run()
            w, h, Options::offscreen ? " off-screen" : "", native.shown() ? "yes" : "no",
            board_gpu_resets());
     const bool pass = seen != 0 && out.ran != 0 && out.failed == 0 && score != 0;
+    /* What the GL core counted over the whole run: glmark2 never calls
+     * glGetError, so a GL error it hits is otherwise only a console line,
+     * and the i.MX8MP has no console (issue #13). Recorded is the part
+     * glGetError could have returned (the first error masks the rest). */
+    const uint32_t gl_errors = yakogl_gl_errors_raised();
+    const uint32_t incomplete_draws = yakogl_incomplete_texture_draws();
+    printk("glmark2: GL errors raised %u, draws that sampled an incomplete texture %u (GL "
+           "errors recorded %u)\n",
+           gl_errors, incomplete_draws, yakogl_gl_errors_recorded());
     if (pass && out.unsupported != 0) {
         printk("glmark2: no scene failed; %u unsupported, left out of the score (not a pass or "
                "a fail)\n",
@@ -721,7 +737,7 @@ int run()
     }
     struct yd_glmark2_outcome o {};
     o.score = score;
-    o.flags = Options::offscreen ? YK_RECORD_GLMARK2_OFFSCREEN : 0u;
+    o.flags = (Options::offscreen ? YK_RECORD_GLMARK2_OFFSCREEN : 0u) | YK_RECORD_GLMARK2_GL;
     o.status = pass ? YK_RECORD_STATUS_PASS : YK_RECORD_STATUS_FAIL;
     o.ran = out.ran;
     o.failed = out.failed;
@@ -732,6 +748,8 @@ int run()
     o.unsupported_entries[1] = out.unsupported_entries[1];
     o.w = w;
     o.h = h;
+    o.gl_errors = gl_errors;
+    o.incomplete_draws = incomplete_draws;
     uint32_t rec[3];
     yd_record_glmark2_words(&o, rec);
     board_result(YK_RECORD_KIND_GLMARK2, rec[0], rec[1], rec[2]);

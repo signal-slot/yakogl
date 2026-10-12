@@ -64,7 +64,11 @@ NOISE = re.compile(
     r"|^yakogl/v3d: (depth and stencil (apart|in one buffer)|job arenas for |two job arena sets"
     r"|clear program built|job arenas high-water at frame |binner tile pool high-water at frame \d+: not read)"
     r"|^gm2: (shader|scene-begin|scene-end|egl-config|draw) ")
-SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)$")
+SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)"
+                       r" gl_errors=(\d+) incomplete_draws=(\d+)$")
+# The library's warning for the first draw that sampled an incomplete texture
+# (src/gl/draw.rs; once per process, so once per entry here).
+INCOMPLETE_LINE = "is incomplete and samples (0,0,0,1)"
 # The V3D carve-out's line at exit (src/osal/linux.c report_heaps): one
 # process per entry, so the entry's high-water.
 CARVE = re.compile(r"^osal\(linux\): v3d carve-out: (\d+) bytes used at close, (\d+) at most, of (\d+); "
@@ -109,7 +113,7 @@ def read_runs(out, gpus):
                         ln = ln[len(p):]
                 m = SCENE_END.match(ln)
                 if m:
-                    r["end"] = (m.group(2), int(m.group(3)), int(m.group(4)), int(m.group(5)))
+                    r["end"] = (m.group(2),) + tuple(int(x) for x in m.groups()[2:])
                     continue
                 m = SHADER.match(ln)
                 if m:
@@ -129,12 +133,30 @@ def read_runs(out, gpus):
             if rc != 0:
                 why = {124: "timed out"}.get(rc, "exit status %d" % rc)
                 r["findings"][("run", "the process ended with %s" % why)] += 1
+            if r["end"] is not None:
+                check_counters(r)
             if r["end"] is None:
                 r["findings"][("run", "no scene-end line: the scene never finished")] += 1
             elif r["end"][0] != "ok":
                 r["findings"][("scene", "glmark2: scene %s" % r["end"][0])] += 1
             runs[(g, i)] = r
     return entries, runs
+
+
+def check_counters(r):
+    """The scene-end line's GL core counters against the library's own lines
+    of the same process: every GL error is logged here (run.sh sets
+    YAKOGL_ERROR_LOG), and the incomplete-texture warning comes with the
+    first such draw. A disagreement is a finding, so a counter that stops
+    counting cannot pass as a zero."""
+    gl_errors, incomplete = r["end"][4], r["end"][5]
+    lines = sum(n for (kind, _), n in r["findings"].items() if kind == "GL error")
+    if gl_errors != lines:
+        r["findings"][("counter", "gl_errors=%d but %d GL error lines" % (gl_errors, lines))] += 1
+    warned = any(INCOMPLETE_LINE in text for (kind, text) in r["findings"] if kind == "incomplete texture")
+    if (incomplete > 0) != warned:
+        r["findings"][("counter", "incomplete_draws=%d but the incomplete-texture line is %s"
+                       % (incomplete, "there" if warned else "absent"))] += 1
 
 
 def scene_of(entry):
@@ -204,13 +226,14 @@ def generated(args, entries, runs, found, names):
     o.append("")
     o.append("### Scenes")
     o.append("")
-    o.append("| # | entry | " + " | ".join("%s: status, frames, draws, refused" % g for g in g_all) + " |")
+    o.append("| # | entry | " + " | ".join("%s: status, frames, draws, refused, GL errors, incomplete-texture draws" % g
+                                         for g in g_all) + " |")
     o.append("|---|---|" + "---|" * len(g_all))
     for i, e in enumerate(entries):
         cells = []
         for g in g_all:
             end = runs[(g, i)]["end"]
-            cells.append("%s, %d, %d, %d" % end if end else "**no end** (rc %d)" % runs[(g, i)]["rc"])
+            cells.append("%s, %d, %d, %d, %d, %d" % end if end else "**no end** (rc %d)" % runs[(g, i)]["rc"])
         o.append("| %d | `%s` | %s |" % (i, md_escape(e), " | ".join(cells)))
     o.append("")
     carve_gpus = [g for g in g_all if any(runs[(g, i)]["carve"] for i in range(len(entries)))]
