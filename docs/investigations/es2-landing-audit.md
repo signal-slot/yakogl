@@ -38,6 +38,7 @@ git merge-base <branch> origin/main | origin/ccfarm/integration   # each branch'
 git log --right-only --cherry-pick --format='%h %s' origin/main...<branch>        # patch-id containment
 git log --right-only --cherry-pick --format='%h %s' origin/ccfarm/integration...<branch>
 git merge-base --is-ancestor <commit> origin/main | origin/ccfarm/integration
+git merge-tree --write-tree --name-only --no-messages [--merge-base=<branch parent>] <target> <branch>   # trial merge
 git diff --stat <base> <target> -- <files the branch changes>     # empty = target has the base's blob
 git diff <base> <branch> -- <file>; git diff <base> <target> -- <file>   # hunk overlap
 git diff origin/main <branch> -- <file>                           # content equivalence
@@ -45,12 +46,17 @@ git grep -c / -n <pattern> <ref> -- <file>; git cat-file -e <ref>:<path>
 git log --format=... <a>..<b> -- <paths>
 ```
 
-**Limit of the method.** `git merge-tree`, `git worktree add` and writing a
-patch file were all refused by this sandbox's permission layer, so no trial
-merge was run. "Applies cleanly" below is **predicted** from the commands above:
-a file is clean when the target still has the branch base's blob, or when the
-target's hunks and the branch's do not touch the same lines; anything else is
-named as a conflict. Where only the file set was compared, the cell says so.
+**Method for "applies cleanly".** A trial merge with `git merge-tree
+--write-tree --name-only --no-messages` (object writes only; no ref, index or
+work tree changes), always as a cherry-pick of the branch's own commits:
+`--merge-base=<branch's own parent>`, because a plain merge onto integration
+also drags in the 2f69c7d1..db3545fa divergence and lists dozens of files that
+have nothing to do with the branch. Onto main the real merge base was used
+for the six branches based on `db3545fa` and the audit branch; for the vertex
+branch `--merge-base=e984a4c8`. Where the result lists files, those conflict
+(git's rename detection is on, so a document that main or integration moved
+is followed). The gate and the build were not run: "clean" is a clean text
+merge, not a green tree.
 Patch-id containment (`--cherry-pick`) said "not contained" for all eight
 branches, because every landed equivalent was re-done (resolved, re-based on
 main's layout), so containment was decided by content, per row.
@@ -59,14 +65,14 @@ main's layout), so containment was decided by content, per row.
 
 | # | Branch (item) | Commits | Contained in origin/main | Contained in integration | Applies onto origin/main | Applies onto integration | Recommendation |
 |---|---|---|---|---|---|---|---|
-| 1 | `01a12489-2eba` (es2-error-rules, vertex/VAO) | 4: `8c052337` `d70f8ee7` `b9116dc8` `209b8c89` | partial: the tranche yes (`8b3e7039`, `fdc3b692`); these 4 cosmetic commits no | partial: the tranche yes (`289fb9c4`); the 4 commits no | conflict: `src/gl/shader.rs`, `src/gl/vertex.rs`, the renamed test, the doc (moved) | conflict: `src/gl/shader.rs` only | **obsolete** |
-| 2 | `01a12c92-c0d5` (changelog-es2-final, state/program, `fe45a813`) | 1 | **yes**, by equivalent content (`1bad5754` + `47ab9b2c`) | no | conflict: the same 10 files, hunks already applied in another shape | conflict (predicted): `draw.rs`, `es3.rs`, `framebuffer.rs`, `program.rs`, `state.rs`, `tf_tests.rs`; and the tests do not compile there | **already landed** |
-| 3 | `01a12c67-d898` (es2-offline-table, GC7000 table, `83d971fe`) | 1 | no | no | conflict: `tools/cts/log/investigations/es2-offline-table.md` (main deleted it); rest clean | doc path conflict (`docs/investigations/`); code text-clean, count pins not meaningful (3.3) | **re-land** after its doc is resolved |
-| 4 | `01a12c82-a318` (es2-npot-cases, `50dd2f1d`) | 1 | partial: the test yes (`10b20bd0` + `2f2227ca`, one header comment differs); the doc section 8 no | no | conflict: `tests/es2_npot.rs` add/add (comment only); doc clean | test does not compile there (`query_begin`); doc path conflict | **re-land the doc part** (test already landed) |
-| 5 | `01a12c84-4055` (es2-fragdata-guard, `bafbf5e5`) | 1 | partial: same 7 cases covered by an earlier result (`a1189436` + `53fe3973`) with a different test; this one adds the GL-API replay and a fuller doc | no | conflict: `tests/es2_fragdata.rs` and `tools/cts/log/investigations/es2-fragdata.md`, add/add | test: no conflict, but needs main's back end literal (`query_begin`) to build (3.5); doc path | **optional re-land** after deciding which test stays |
-| 6 | `01a12c70-a6f9` (es2-invariance-repro, `1c574bb6`) | 1 | **yes**, by equivalent content (`dadda3bf` + `2b76b6b1` + `13eb8a90`) | no | conflict: add/add, comments only | applies, but its 9 PowerVR cases would fail there (no `f9688bc5`) | **already landed** |
-| 7 | `01a11e01-9ded` (es2-offline-tests, `7151a12a`) | 1 | partial: all but `src/gl/draw.rs` (`9224abaf`, `82bffc50`, the `mesa_reference` cfgs) | partial: all but `src/gl/draw.rs` (`c2c31372`, said "without the draw.rs part") | clean (predicted): the 5 `draw.rs` attribute lines | clean (predicted) | **re-land the `draw.rs` part only**, if the 5 tests still fail |
-| 8 | `01a12c93-41ce` (es2-invariance, overlap audit, `2bc29a6e`) | 3: `6ce2f169` `d0bafcdc` `2bc29a6e` | partial: the 2026-10-11 version is on main (`171681be`, `62c70c5c`); this redo is not | no | clean as a new file, but at a path main removed | clean | **obsolete** as a work item; land only as a record |
+| 1 | `01a12489-2eba` (es2-error-rules, vertex/VAO) | 4: `8c052337` `d70f8ee7` `b9116dc8` `209b8c89` | partial: the tranche yes (`8b3e7039`, `fdc3b692`); these 4 cosmetic commits no | partial: the tranche yes (`289fb9c4`); the 4 commits no | conflict: `src/gl/vertex.rs`, `tools/cts/log/investigations/es2-error-rules.md` | conflict: `src/gl/shader.rs` | **obsolete** |
+| 2 | `01a12c92-c0d5` (changelog-es2-final, state/program, `fe45a813`) | 1 | **yes**, by equivalent content (`1bad5754` + `47ab9b2c`) | no | conflict: `src/gl/state.rs`, `src/gl/tf_tests.rs`, `tests/es2_error_rules_state.rs`, `tests/es3_tf_api.rs` | conflict: `src/gl/tf_tests.rs`; the test names `query_begin`, which integration's back end lacks | **already landed** |
+| 3 | `01a12c67-d898` (es2-offline-table, GC7000 table, `83d971fe`) | 1 | no | no | conflict: `tools/cts/log/investigations/es2-offline-table.md` only (main deleted it) | clean | **re-land** after its doc is resolved |
+| 4 | `01a12c82-a318` (es2-npot-cases, `50dd2f1d`) | 1 | partial: the test yes (`10b20bd0` + `2f2227ca`, one header comment differs); the doc section 8 no | no | conflict: `tests/es2_npot.rs` (add/add, comment only), `tools/cts/log/investigations/es2-npot-cases.md` (main deleted it) | clean text; the test does not build there (`query_begin`) | **re-land the doc part** (test already landed) |
+| 5 | `01a12c84-4055` (es2-fragdata-guard, `bafbf5e5`) | 1 | partial: same 7 cases covered by an earlier result (`a1189436` + `53fe3973`) with a different test; this one adds the GL-API replay and a fuller doc | no | conflict: `tests/es2_fragdata.rs`, `tools/cts/log/investigations/es2-fragdata.md` (add/add) | conflict: `docs/investigations/es2-fragdata.md`; test text-clean, needs `query_begin` to build | **optional re-land** after deciding which test stays |
+| 6 | `01a12c70-a6f9` (es2-invariance-repro, `1c574bb6`) | 1 | **yes**, by equivalent content (`dadda3bf` + `2b76b6b1` + `13eb8a90`) | no | conflict: `tests/es2_invariance.rs` (comments only); its doc lands as a second copy at `docs/investigations/` | clean text; its 9 PowerVR cases would fail there (no `f9688bc5`) | **already landed** |
+| 7 | `01a11e01-9ded` (es2-offline-tests, `7151a12a`) | 1 | partial: all but `src/gl/draw.rs` (`9224abaf`, `82bffc50`, the `mesa_reference` cfgs) | partial: all but `src/gl/draw.rs` (`c2c31372`, said "without the draw.rs part") | conflict: `src/gl/shader.rs`, `src/testutil.rs` (the same change landed differently); `draw.rs` merges | conflict: `src/testutil.rs`; `draw.rs` merges | **re-land the `draw.rs` part only**, if the 5 tests still fail |
+| 8 | `01a12c93-41ce` (es2-invariance, overlap audit, `2bc29a6e`) | 3: `6ce2f169` `d0bafcdc` `2bc29a6e` | partial: the 2026-10-11 version is on main (`171681be`, `62c70c5c`); this redo is not | no | clean (a new file, at a path main removed) | clean | **obsolete** as a work item; land only as a record |
 
 ## 3. One section per branch
 
@@ -89,12 +95,11 @@ main's layout), so containment was decided by content, per row.
 - **The import gate is in both, written differently**: main
   `src/gl/shader.rs:563-570` and integration `:565-574` already gate
   `glGetProgramInfoLog` and `format` (`82bffc50`; `e9300f9c`).
-- **Clean apply**: onto integration only `src/gl/shader.rs` conflicts
-  (`e9300f9c` rewrote the same import block; no other commit since `e984a4c8`
-  touched the four paths). Onto main: `shader.rs`, `vertex.rs`, the doc (now at
+- **Clean apply** (trial merge, `--merge-base=e984a4c8`): onto integration
+  only `src/gl/shader.rs` conflicts (`e9300f9c` rewrote the same import
+  block). Onto main `src/gl/vertex.rs` and the doc (now
   `tools/cts/log/investigations/es2-error-rules.md`, rewritten by `47ab9b2c`)
-  and the renamed test (main's `es2_error_rules_vertex.rs` is a different
-  file) all conflict.
+  conflict; the rename and `shader.rs` merge.
 - **Recommendation: obsolete.** Do not re-land. The rename to
   `es2_error_rules.rs` is also wrong for the tree as it is: main and the open
   tranches name their files `es2_error_rules_<group>.rs` (`_state`, `_texture`,
@@ -113,13 +118,13 @@ main's layout), so containment was decided by content, per row.
   implementation of the same task, written after `01a12a21` had landed.
 - **Not in integration**: `git merge-base --is-ancestor 1bad5754` is false and
   integration has no `tests/es2_error_rules_state.rs`.
-- **Clean apply**: onto main every one of the 10 files conflicts (the same
-  hunks, applied once already). Onto integration the six source files
-  integration changed since the merge base (`draw.rs`, `es3.rs`,
-  `framebuffer.rs`, `program.rs`, `state.rs`, `tf_tests.rs`) are predicted to
-  conflict (file set only; hunks not compared), and
+- **Clean apply** (trial merges): onto main `src/gl/state.rs`,
+  `src/gl/tf_tests.rs`, `tests/es2_error_rules_state.rs` and
+  `tests/es3_tf_api.rs` conflict (the same hunks, applied once already; the
+  other six files merge because the two edits are textually the same or
+  adjacent). Onto integration only `src/gl/tf_tests.rs` conflicts, but
   `tests/es2_error_rules_state.rs` names `query_begin`, which integration's
-  back end contract lacks.
+  back end contract lacks, so it would not build.
 - **Recommendation: already landed.** Nothing to do. Its test names are the
   only difference; if the owner wants them, rename in a one-line follow-up.
 
@@ -134,20 +139,17 @@ main's layout), so containment was decided by content, per row.
   `tools/vivante/` sources or `tests/reference/vivante_blobs.rs`;
   `git diff --stat db3545fa origin/main` over the 18 code files is empty
   except `tools/vivante/README.md`.
-- **Clean apply onto main**: the 18 code files are byte-identical to
-  `db3545fa` on main, so they apply; `tools/vivante/README.md` differs on main
-  (SPDX header, today's paths) but its hunks (lines 1-31, 97-139, 331) do not
-  meet the branch's (line 51): clean. **Conflict: the doc.** `746b24cc`
-  (2026-10-11) deleted `tools/cts/log/investigations/es2-offline-table.md`
-  ("its open part goes to HANDOFF #22"), so the branch's +140 lines are a
-  modify/delete.
-- **Onto integration**: the file blobs equal `db3545fa` except `select.rs` and
-  `tests/backend_differential.rs`, where integration removed the `invariant`
-  field (different hunks from the branch's), so a text merge is clean; but
-  `backend_differential.rs` pins population counts (244/347, 126/209) measured
-  on a tree with main's changes, so they are not meaningful on integration.
-  The doc is at `docs/investigations/es2-offline-table.md` there: a path
-  conflict.
+- **Clean apply onto main** (trial merge): the 18 code files merge, among
+  them `tools/vivante/README.md` (main's hunks at lines 1-31, 97-139 and 331
+  do not meet the branch's at line 51). **The one conflict is the doc**:
+  `746b24cc` (2026-10-11) deleted
+  `tools/cts/log/investigations/es2-offline-table.md` ("its open part goes to
+  HANDOFF #22"), so the branch's +140 lines are a modify/delete.
+- **Onto integration**: the whole commit merges cleanly, the doc too (git
+  follows it to `docs/investigations/es2-offline-table.md`). But
+  `tests/backend_differential.rs` pins population counts (244/347, 126/209)
+  measured on a tree with main's changes, so they are not meaningful on
+  integration.
 - **The gate**: `tests/reference/vivante_blobs.rs` is generated and the gate
   reproduces it byte for byte; this audit did not run the gate.
 - **Recommendation: re-land onto main as is**, taking the 18 code files and
@@ -168,15 +170,18 @@ main's layout), so containment was decided by content, per row.
   `tests/es2_npot.rs`; `git diff origin/main 50dd2f1d -- tests/es2_npot.rs`
   is one comment line (the header's pointer: main says
   `docs/es2-cts-failures.md` H.2/H.3, the branch says the investigation's
-  section 3.1). **The doc's section 8 is not in main**: main's file ends at
-  the old section 7 and has no `es2_npot` text (`git grep` empty).
+  section 3.1). **The doc's section 8 is not in main**: main has no
+  `es2-npot-cases.md` at all (deleted with the finished investigations,
+  `358ca532`/`0d7af868`).
 - **Integration**: neither the test nor the doc section is there, and the test
   names `query_begin`, so it would not compile on integration's back end.
-- **Clean apply**: onto main the test is an add/add that differs by that one
-  comment; the doc hunk (an append at the end, file unchanged on main since
-  `db3545fa`) is clean. Onto integration: the test file is new but does not
-  build; the doc is at `docs/investigations/es2-npot-cases.md` there (path
-  conflict).
+- **Clean apply** (trial merges): onto main `tests/es2_npot.rs` (add/add,
+  that one comment) and `tools/cts/log/investigations/es2-npot-cases.md`
+  conflict: main deleted the doc (it is a modify/delete, not an append; the
+  file is not on main at all). The doc section therefore needs a new home
+  (record file or `docs/es2-cts-failures.md` H.2/H.3). Onto integration the
+  text merges (the doc is followed to `docs/investigations/`), but the test
+  does not build.
 - **Another copy exists**: `origin/ccfarm/01a12e48-056d-778b-9b0c-451f27e10ea7`
   ("tests: replay the 18 NPOT dEQP-GLES2 setups on the host", 2026-10-12
   13:09) carries a 650-line `tests/es2_npot.rs` and a 40-line doc change
@@ -200,9 +205,9 @@ main's layout), so containment was decided by content, per row.
   (`git diff --stat origin/main bafbf5e5`: 482 test lines, 281 doc lines).
 - **Integration**: not there; the test is new on integration, and needs the
   back end literal of main (`query_begin`) to build.
-- **Clean apply**: onto main both files are add/add conflicts. Onto
-  integration, no code conflict; the doc is under `docs/investigations/`
-  there.
+- **Clean apply** (trial merges): onto main both files are add/add
+  conflicts. Onto integration the test merges; the doc conflicts with
+  `docs/investigations/es2-fragdata.md`, the older version integration has.
 - **Recommendation: optional re-land after an owner or reviewer choice**
   between main's front-end test and this API-level one (they cannot both be
   `tests/es2_fragdata.rs`); the doc is the part worth keeping. No CTS failure
@@ -220,8 +225,9 @@ main's layout), so containment was decided by content, per row.
   `tools/cts/log/investigations/es2-invariance.md` (237 lines).
 - **Integration**: neither file; and without `f9688bc5` the 9 PowerVR cases
   fail there, so landing it on integration would turn the tree red.
-- **Clean apply**: onto main add/add, comments only; onto integration text
-  clean.
+- **Clean apply** (trial merges): onto main `tests/es2_invariance.rs`
+  conflicts (comments only) and the doc would land as a second copy under
+  `docs/investigations/`; onto integration it merges.
 - **Recommendation: already landed.**
 
 ### 3.7 `01a11e01-9ded-7172-9d12-f09a91212514`: offline-table GL tests without a table (`7151a12a`)
@@ -241,9 +247,11 @@ main's layout), so containment was decided by content, per row.
   `odd_sized_vs_block_pads_the_fs_block_to_16_bytes`) are in neither
   (`git grep -F` finds the old attribute comments one for one on both). The
   integration commit says "without the draw.rs part" itself.
-- **Clean apply**: the five old attribute lines are present verbatim on main
-  and integration, and neither changed those lines; predicted clean on both
-  (offset hunks).
+- **Clean apply** (trial merges of the whole commit): `src/gl/draw.rs` and
+  `alloc.rs`/`roundtrip.rs`/`program.rs` merge on both; `src/gl/shader.rs`
+  and `src/testutil.rs` conflict on main and `src/testutil.rs` on
+  integration, because the same change landed there in another shape. So the
+  commit cannot be taken whole; the `draw.rs` hunks alone apply.
 - **Recommendation: re-land the `draw.rs` part only**, after one check that
   the five tests still fail or are skipped wrongly under
   `--features host-test,gpu-powervr,no-shader-table` on main (the branch
@@ -258,8 +266,8 @@ main's layout), so containment was decided by content, per row.
   2026-10-11 ... unchanged". This branch is the redo at main `9af3abba`
   with the trial-merge results and the plan #136/#137/#139 states; its text
   ("pi4-es2-tip-r2 finishes as a record only") is not in main.
-- **Clean apply**: a new file on both, so no text conflict, but at a path
-  main removed.
+- **Clean apply** (trial merges, `--merge-base=6ce2f169~1`): clean on both
+  (a new file), but at a path main removed.
 - **Recommendation: obsolete as work.** Its recommendation, re-landing, was
   carried out (PRs #102-#138 on main), and this audit supersedes it for the
   eight branches above. If a record is wanted, land it as
@@ -275,7 +283,7 @@ titles and from the closest branches that exist.
 
 | In-review item | Files (source) | Overlaps which branch |
 |---|---|---|
-| `cts-tree-diff-readme` (buffer/framebuffer tranches), `01a12b76-651f` | `src/gl/{buffer,framebuffer,draw,es3,names,state,texture,tf_tests}.rs`, `tests/es2_error_rules_{buffer,fbo}.rs`, `tests/es2_report_guard.rs`, `tests/es3_tf_api.rs`, `tools/cts/log/investigations/es2-error-rules.md`, `docs/HANDOFF.md` (`git diff --stat origin/main...<it>`) | #2 state tranche on 8 source files, `tests/es3_tf_api.rs` and the error-rules doc, but #2 is obsolete; #1 on the error-rules doc (obsolete); #7 on `src/gl/draw.rs` (different hunks: 1 line vs five attribute lines, no conflict predicted); `docs/HANDOFF.md` with #3's #22 text |
+| `cts-tree-diff-readme` (buffer/framebuffer tranches), `01a12b76-651f` | `src/gl/{buffer,framebuffer,draw,es3,names,state,texture,tf_tests}.rs`, `tests/es2_error_rules_{buffer,fbo}.rs`, `tests/es2_report_guard.rs`, `tests/es3_tf_api.rs`, `tools/cts/log/investigations/es2-error-rules.md`, `docs/HANDOFF.md` (`git diff --stat origin/main...<it>`) | #2 state tranche on 8 source files, `tests/es3_tf_api.rs` and the error-rules doc, but #2 is obsolete; #1 on the error-rules doc (obsolete); #7 on `src/gl/draw.rs` (different hunks: 1 line vs five attribute lines; file set only); `docs/HANDOFF.md` with #3's #22 text |
 | `es2-fbo-combos-test` | its own test file (title) | none |
 | `es2-preprocessor` | the GLSL ES 1.00 front end (title; no branch visible) | #3 touches `src/shaderc/es100_twins.rs` and `src/shaderc/online/select.rs`: only if the preprocessor change reaches them; unknown |
 | `clippy-gate-fix` | `tools/cts/host-deqp-run.sh`, `docs/investigations/es2-host-deqp-v3d-tip.md` (`01a12e19`) | none |
@@ -283,8 +291,9 @@ titles and from the closest branches that exist.
 ## 5. Order and what is left
 
 1. Nothing needs to land for rows 2 and 6 (and 1, 8 are obsolete).
-2. Row 7 (`draw.rs` five attributes) and row 4 (doc section 8) are small and
-   independent of the open items: land first.
+2. Row 7 (`draw.rs` five attributes) and row 4 (doc section 8, which needs a
+   home since main deleted `es2-npot-cases.md`) are small and independent of
+   the open items: land first.
 3. Row 3 touches `docs/HANDOFF.md` #22 (and `es2-docs-final` is the item
    that rewrites HANDOFF): land with or just before `es2-docs-final`.
 4. Row 5 waits for a choice of test.
@@ -292,7 +301,8 @@ titles and from the closest branches that exist.
    and the invariance fix that four of these tests assume. Rows 3, 4 and 7 are
    the only ones that make sense there at all, and only for code.
 
-What this audit could not establish: a real trial merge (`merge-tree` and
-`worktree` were refused), whether the row 3 count pins and the generated
-`vivante_blobs.rs` pass the gate, and the branches of the two in-review items
-that are not visible.
+What this audit could not establish: whether anything builds or passes the
+gate after a clean text merge (rows 3 and 7 in particular: the generated
+`vivante_blobs.rs`, the count pins), and the branches of the two in-review
+items that are not visible. The in-review overlap in section 4 is by file set
+only; no trial merge of those branches against these eight was run.
