@@ -19,6 +19,18 @@ plan 18's `release-license-audit`). Host work only, at the integration tip
 `89d518ee`. No board run and no source change. The fix below is for a
 follow-up item.
 
+## Fixed in
+
+`a6fc6f14` ("pvr: an indexed draw too big for the GENERAL arena is drawn in
+pieces of its index list"). `draw_dispatch` calls `draw_indexed_pieces`
+(`src/pvr/backend.rs`) for such a draw. The host test is
+`a_deqp_vertex_texture_grid_of_client_arrays_is_drawn_in_index_pieces`
+(`src/pvr/backend_tests.rs`); it covers the 2D cell (127 x 127 quads, two
+vec2 client arrays, 193,548 bytes of indices). The board check is image 9
+of `tools/cts/am62p-full-tree.txt` in plan #20's AM62P final tree: expect
+452 passed, 0 failed and no "does not fit an empty frame" line. This item
+does not run it.
+
 ## Result in short
 
 - **Cause: the draws are refused, not sampled wrongly.** Each cell of a
