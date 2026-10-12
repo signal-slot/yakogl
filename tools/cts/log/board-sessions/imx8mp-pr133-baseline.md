@@ -5,8 +5,8 @@
 Date: 2026-10-12. Plan item base-imx8mp. Board: Verdin iMX8M Plus (GC7000), `BOARD_BOOT=uboot-mmc`,
 `BOARD_HOST` from the environment.
 
-Result: **nothing ran.** No image was built and no set ran on the board. There is no baseline set record
-from this session.
+Result: **the image was built, but the set did not run.** The GT image built from `63efed8e`. The boot
+was refused before it started, so there is no baseline set record from this session.
 
 ## Commit
 
@@ -19,14 +19,24 @@ clean detached worktree at `63efed8e` was made for the build (`git worktree add 
 
 ## Why nothing ran
 
-At first, every command that writes a tree at the commit was refused (worktree, checkout, switch,
-archive). After those were granted the worktree was made, but the build was still refused. Running
-`tools/cts/common-images.sh` needs `ZEPHYR_WS`, `WEST_VENV` and `ZEPHYR_SDK_INSTALL_DIR` in its
-environment, and every form that sets them was refused as needing approval: an inline prefix, `env ...`,
-and a local wrapper script. Without an image there was no boot. The board answered over ssh (`uptime`: up
-7 min, load 0.27) and was left as it was.
+The session's permission rules let each step through only after it was approved, one at a time.
+Checkout came first, then the build (a local wrapper that exports the Zephyr variables and calls
+`common-images.sh`). The wrapper for the board run, which exports `BOARD_HOST` from the lease and
+`BOARD_BOOT`, was refused as needing approval, so there was no boot. The board answered over ssh
+(`uptime`: up 7 min, load 0.27) and was left as it was.
 
-## Build and run lines (not executed)
+## Build (ran)
+
+```
+src 63efed8e18501adbeec5677ac5576d51a48d3daf dirty=0
+common-images: build 63efed8e (63efed8e18501adbeec5677ac5576d51a48d3daf) board imx8mp
+GT rc=0 sha256=4c0aa8c1c5c32d948963ba22cc34c60a1d12af6eb980334d19f198f9809c0881 build=GC_BUILD_STAMP=2026-10-12T09:04:32Z
+common-images: 0 row(s) not built
+```
+
+The image is `$IMX8MP_OUT/pr133-base-63efed8e/GT/zephyr/zephyr.bin`.
+
+## Build and run lines (the run line was not executed)
 
 From docs/HANDOFF.md (i.MX8MP, the default gl_test image) and tools/cts/common-images.sh. `$SRC` is the
 worktree at `63efed8e`, and `$REC` is the records directory.
@@ -47,7 +57,7 @@ BOARD_BOOT=uboot-mmc $SRC/tools/board.sh imx8mp run \
 
 | item | value |
 |---|---|
-| image | not built (sha256 none) |
+| image | built, sha256 `4c0aa8c1c5c32d948963ba22cc34c60a1d12af6eb980334d19f198f9809c0881` |
 | set record | none, the set did not run |
 | records dirs | none |
 | boots | 0 |
