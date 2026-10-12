@@ -31,7 +31,8 @@
 #   BOARD      Zephyr board (default verdin_am62p/am62p54/a53)
 #   ZEPHYR_BASE, ZEPHYR_MODULES and/or ZEPHYR_EXTRA_MODULES   as for any sample of
 #              this repository (at least one of the two module variables)
-#   ZEPHYR_SDK (default ~/org/zephyrproject/zephyr-sdk-1.0.1)
+#   ZEPHYR_SDK_INSTALL_DIR   the Zephyr SDK (default <deps>/zephyr-sdk-1.0.1, where <deps> is
+#              $CCFARM_DEPS_DIR or ~/.local/share/ccfarm/deps/yakogl, as in deps-env.sh)
 #   MODULE     gles2 (default) or gles3: which dEQP package the libraries are
 #              for. gles3 also turns on the target's GLES3 direct link, so
 #              every ES 3.0 entry point dEQP's table names must resolve at the
@@ -44,7 +45,7 @@ MODULE=${MODULE:-gles2}
 case "$MODULE" in gles2|gles3) ;; *) echo "MODULE must be gles2 or gles3, not '$MODULE'" >&2; exit 1 ;; esac
 WORK=${WORK:-$REPO/build/deqp-zephyr}
 BOARD=${BOARD:-verdin_am62p/am62p54/a53}
-SDK=${ZEPHYR_SDK:-$HOME/org/zephyrproject/zephyr-sdk-1.0.1}
+SDK=${ZEPHYR_SDK_INSTALL_DIR:-${CCFARM_DEPS_DIR:-$HOME/.local/share/ccfarm/deps/yakogl}/zephyr-sdk-1.0.1}
 : "${ZEPHYR_BASE:?set ZEPHYR_BASE}"
 [ -n "${ZEPHYR_MODULES:-}${ZEPHYR_EXTRA_MODULES:-}" ] || \
     { echo "set ZEPHYR_MODULES (tools/cts/zephyr-modules.sh) or ZEPHYR_EXTRA_MODULES" >&2; exit 1; }
