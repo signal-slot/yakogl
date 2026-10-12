@@ -6,7 +6,11 @@ The rule (2026-10-11): a pull request is merged when the review is OK, the CI
 is OK and there is no conflict. A review reads the commit. The CI runs the
 gate. So the gate's wall time is the time every change waits. Today that is
 36 to 76 minutes per run. The target is a few minutes for most changes and
-under 15 minutes for a change to a shared layer.
+under 15 minutes for a change to a shared layer. (Where it stands on
+2026-10-12, after steps 1 to 4 and 6 and the third runner: a document
+change 4 s, a change to one tool or GPU 10 to 25 minutes, a change to a
+shared layer 20 to 35 minutes while the test binaries it rebuilds run;
+main's full run 32 minutes on hx90, writing the caches.)
 
 ## 1. What a run costs today
 
@@ -297,6 +301,20 @@ matter of registering more runner instances: a machine can run several
 by default, and the runner units will be set below that. So a gate run
 on a busy machine is slower by design, and the gate makes up for it by
 doing less and running in parallel.
+
+**The third runner (2026-10-12).** hx90 (Minisforum HX90, Ryzen 9 5900HX,
+8 cores / 16 threads, 16 GB, Gentoo) runs the gate alone: `gate.yml`'s
+`runs-on` names the label `gate-primary`, which only hx90 carries, so the
+gate never waits behind or beside a farm agent; nuc and system76 keep
+their runner registration for the other project (label `yakogl-gate`),
+and giving one of them `gate-primary` adds it to the gate again. GitHub
+has no priority among runners: the label is the only lever. Measured on
+hx90 the same day, every row: 2009 s cold on its first run (five rows
+red for the host, since fixed: the table proofs needed the library's
+`.rmeta`, #222, and a glmark2 tree copied with two directories missing)
+and 1900 s green on main `bf6c98ca6` (run 38248051277, 144 ok, the
+cache-writing run); nuc's run of the same main took 2261 s. A document
+pull request's gate took 4 s there (#225).
 
 ### 3.4 Make the slow tests faster
 
