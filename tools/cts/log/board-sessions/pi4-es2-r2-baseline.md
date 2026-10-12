@@ -267,3 +267,68 @@ the fragment stage's implicit level) are the board's.
   (row 1).
 - Record the commit, the verdict lines and the TALLY that `board.sh` printed;
   no addresses, UART paths or credentials.
+
+## 6. Addendum, 2026-10-12: what main records since this file was written
+
+Written on the host at main `40dd2107fa2c`. Nothing here ran on the Pi 4 by
+this item. Sections 1 to 5 stay as written: `fe5e8e73` is still the last
+single-commit full tree, and the table in section 1 is still the one to
+compare against. Since then `tools/cts/RESULTS.md` has gained three Pi 4
+records (read only; sections "Pi 4: the whole dEQP-GLES2 tree, 0 fail
+(2026-10-10 and 10-11)" and "Pi 4: gl_test on `1cf946a9` and the six cube rows
+(2026-10-11)"), and `docs/es2-cts-failures.md` was updated to match.
+
+| Record | What it ran | Result |
+|---|---|---|
+| tree on `a27d69c0`, 29 images | whole tree | 17,083 pass / 9 fail / 34 NotSupported / 3 QualityWarning / 2 CompatibilityWarning / 34 without a result (all in row 3, F1) |
+| rows on `1cf946a9` | rows 11 RT, 16 S5f, 20 T2, 21 T3, 22 T4, 24 TF | 934 mustpass cases, 934 pass, 0 fail, 0 lost |
+| F1 rerun on `a27d69c0` | row 3 | the 34 cases without a result pass; capture lost 260 other cases (console bridge drop, not a GPU result) |
+
+Composed result (three records, not one commit): **17,126 pass / 0 fail / 34
+NotSupported / 5 warnings (3 QualityWarning, 2 CompatibilityWarning)** of
+17,165. A single-commit tree has not run since `fe5e8e73`; that is what
+`pi4-es2-tip-r2` adds.
+
+How this changes the expectations of sections 2 and 3:
+
+- Section 2a, 25 cube cases: 19 passed on `a27d69c0` (the 18
+  `texture.vertex.cube.*` and `texturecubelod`). The 6 `texture.mipmap.cube.*`
+  linear cases and 3 `texture.size.cube.15x15_{l8,rgb888,rgba8888}` (row 22,
+  T4; they were not in section 2a and passed at `fe5e8e73`) failed on
+  `a27d69c0` and pass on `1cf946a9`. So the board session should expect all 25
+  to pass, and also `size.cube.15x15_*` to stay a pass: row 22 is 69 / 69.
+- Section 2b, 27 `*_tex` cases: pass on the `a27d69c0` tree. Expected to
+  pass.
+- Section 3: `shaders.fragdata.invalid_assign_to_1` passes on `a27d69c0`
+  (it was only a prediction above). The other 34 NotSupported cases (clip_control 8,
+  multisample 16, `multisampled_render_to_texture.readpixels` 1,
+  `negative_api.texture.compressedtexsubimage2d_*` 9) are as at `fe5e8e73`.
+  New warnings: `functional.flush_finish.flush` and `.flush_wait` read as
+  CompatibilityWarning on `a27d69c0` (row 6, FF); they were Pass at
+  `fe5e8e73`. dEQP counts them as pass; note them if they appear.
+- Expected tally for the tip run, from the composed result: 17,126 pass / 0 fail /
+  34 NotSupported / 3 QualityWarning, with 2 CompatibilityWarning (counted
+  in the 17,126 or beside it, as `board.sh` prints). Section 3's figure of 17,127 pass
+  / 35 NotSupported is superseded: fragdata is a pass, which makes it 17,128 by that
+  arithmetic less the 2 warnings the tally keeps separate; read the
+  printed TALLY line, not this sum, and compare class by class.
+- Lost cases: the console bridge can drop lines. `tools/board.sh` marks such a
+  run `done_lossy` and `deqp-uart-tally.py` counts Lost cases. A lossy row is a
+  rerun, not a failure.
+
+### Host check at main `40dd2107fa2c`
+
+Same two commands as section 4 (the bare `cargo test --test
+v3d_cube_noseamless` needs the feature set, as noted there):
+
+    cargo test --no-fail-fast --no-default-features \
+      --features "host-test,gpu-v3d,shaderc-online,no-shader-table" \
+      --test v3d_cube_noseamless
+    cargo test --no-fail-fast --no-default-features \
+      --features "host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2" \
+      --test v3d_cube_noseamless
+
+Result: 8 passed, 0 failed, 0 ignored in each build (section 4 had 7; the
+eighth is `a_fragment_lookup_takes_each_pixels_level_from_the_direction`, the
+fragment level fix of `1cf946a9`). `an_unkeyed_program_is_unchanged` passes.
+The cube fix is still in at the tip.
