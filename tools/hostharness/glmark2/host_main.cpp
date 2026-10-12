@@ -17,8 +17,13 @@
  * Around every scene, on stderr with the library's lines:
  *   gm2: scene-begin <entry index>
  *   gm2: scene-end <info string>: <ok|failed|unsupported> frames=F draws=D refused=R
- * draws counts glDrawArrays/glDrawElements calls, refused the draws the
- * library refused (yakogl_draws_refused, src/backend.rs) during the scene.
+ *        gl_errors=E incomplete_draws=I
+ * (one line) draws counts glDrawArrays/glDrawElements calls, refused the draws the
+ * library refused (yakogl_draws_refused, src/backend.rs) during the scene,
+ * gl_errors the GL errors its entry points raised (yakogl_gl_errors_raised,
+ * src/gl/context.rs) and incomplete_draws the draws that sampled an
+ * incomplete texture (yakogl_incomplete_texture_draws, src/gl/draw.rs):
+ * the counters the board's GLMARK2 record carries.
  */
 #include <cstdio>
 #include <cstdlib>
@@ -42,6 +47,8 @@
 #include "shim.h"
 
 extern "C" unsigned int yakogl_draws_refused(void);
+extern "C" unsigned int yakogl_gl_errors_raised(void);
+extern "C" unsigned int yakogl_incomplete_texture_draws(void);
 
 namespace {
 
@@ -115,6 +122,8 @@ public:
         frames_ = 0;
         draws_ = gm2_draws();
         refused_ = yakogl_draws_refused();
+        gl_errors_ = yakogl_gl_errors_raised();
+        incomplete_ = yakogl_incomplete_texture_draws();
     }
 
     void log_scene_result() override
@@ -124,15 +133,20 @@ public:
                          : scene_setup_status_ == SceneSetupStatusUnsupported ? "unsupported"
                                                                               : "failed";
         failed += scene_setup_status_ == SceneSetupStatusFailure;
-        std::fprintf(stderr, "gm2: scene-end %s: %s frames=%u draws=%lu refused=%u\n",
+        std::fprintf(stderr,
+                     "gm2: scene-end %s: %s frames=%u draws=%lu refused=%u gl_errors=%u "
+                     "incomplete_draws=%u\n",
                      scene_->info_string().c_str(), st, frames_, gm2_draws() - draws_,
-                     yakogl_draws_refused() - refused_);
+                     yakogl_draws_refused() - refused_, yakogl_gl_errors_raised() - gl_errors_,
+                     yakogl_incomplete_texture_draws() - incomplete_);
     }
 
 private:
     unsigned frames_ = 0;
     unsigned long draws_ = 0;
     unsigned refused_ = 0;
+    unsigned gl_errors_ = 0;
+    unsigned incomplete_ = 0;
 };
 
 } // namespace

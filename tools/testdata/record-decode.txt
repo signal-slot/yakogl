@@ -182,7 +182,11 @@ GLMARK2 (18) seq 1: score 306 status 1 (pass) scenes ran 33 failed 0 unsupported
 ### classify verdict
 # GLMARK2 with GLMARK2_SCENES: a synthetic outcome (record.rs packing example), not a run
 ### 594b120e 44960027 22781093 03200258
-GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported 2 size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); unsupported: entry 17 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false), entry 19 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true)
+GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported 2 size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); unsupported: entry 17 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false), entry 19 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true); GL errors raised and draws that sampled an incomplete texture: not recorded
+### classify verdict
+# GLMARK2 with GLMARK2_GL as well: the same synthetic outcome with the GL core's counters (11 GL errors, 40 incomplete-texture draws stored as 15), not a run
+### 594b120e 44960027 62781093 fb258320
+GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported 2 size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); unsupported: entry 17 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false), entry 19 (default list: buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true); GL errors raised 11, draws that sampled an incomplete texture 15 or more
 ### classify verdict
 ### 594b1402 00007897 00000000 01000000
 GPU_STOP (20) tag 2: cause 2 (out of memory with the freelist at its maximum) fence 30871 GPU recoveries 0 list 1 KiB 0

@@ -299,6 +299,11 @@ is kept and pinned by tests.
      budget is 24 MiB (refract's 1600x1200 mip chain was over the 8 MiB
      default: `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`);
      not yet run on the board.
+   - The glmark2 record carries the GL core's counters (#13): GL errors
+     raised and draws that sampled an incomplete texture, 4 bits each in
+     w3 (`driver/docs/glmark2.md`, "The record"). The host harness shows
+     both per scene. Next: an i.MX8MP glmark2 run, whose record shows them
+     (also #1's check on that board).
    - The i.MX8MP panel at 69.3 MHz (`c1f0e2a6`; its DISPLAY record is
      clean): the viewing by eye is still pending (#23).
    - ES 2.0 builds still accept other ES 3-only renderbuffer formats such

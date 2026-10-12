@@ -101,13 +101,17 @@ int yd_record_breadcrumb(struct yd_record_writer *w, uint32_t kind, uint32_t tag
  * yd_record_glmark2_why gives for one line glmark2 logged. */
 struct yd_glmark2_outcome {
 	uint32_t score;
-	uint32_t flags;        /* YK_RECORD_GLMARK2_OFFSCREEN or 0 */
+	uint32_t flags;        /* YK_RECORD_GLMARK2_OFFSCREEN, YK_RECORD_GLMARK2_GL */
 	uint32_t status;       /* YK_RECORD_STATUS_PASS / _FAIL */
 	uint32_t ran, failed, unsupported;
 	uint32_t failed_entry; /* the first failed entry */
 	uint32_t why;          /* for failed_entry */
 	uint32_t unsupported_entries[2];
 	uint32_t w, h;
+	/* stored only with YK_RECORD_GLMARK2_GL in flags: the GL core's
+	 * yakogl_gl_errors_raised() and yakogl_incomplete_texture_draws() */
+	uint32_t gl_errors;
+	uint32_t incomplete_draws;
 };
 
 void yd_record_glmark2_words(const struct yd_glmark2_outcome *o, uint32_t out[3]);
@@ -1149,11 +1153,14 @@ _Static_assert(offsetof(struct yd_imx8mp_hold, reset_max) == 32, "yd_imx8mp_hold
 _Static_assert(offsetof(struct yd_record_writer, seq) == 0, "yd_record_writer.seq");
 _Static_assert(offsetof(struct yd_record_writer, have_result) == 1, "yd_record_writer.have_result");
 _Static_assert(offsetof(struct yd_record_writer, progress_count) == 4, "yd_record_writer.progress_count");
-_Static_assert(sizeof(struct yd_glmark2_outcome) == 48, "struct yd_glmark2_outcome");
+_Static_assert(sizeof(struct yd_glmark2_outcome) == 56, "struct yd_glmark2_outcome");
 _Static_assert(offsetof(struct yd_glmark2_outcome, failed_entry) == 24, "yd_glmark2_outcome.failed_entry");
 _Static_assert(offsetof(struct yd_glmark2_outcome, unsupported_entries) == 32,
 	       "yd_glmark2_outcome.unsupported_entries");
 _Static_assert(offsetof(struct yd_glmark2_outcome, h) == 44, "yd_glmark2_outcome.h");
+_Static_assert(offsetof(struct yd_glmark2_outcome, gl_errors) == 48, "yd_glmark2_outcome.gl_errors");
+_Static_assert(offsetof(struct yd_glmark2_outcome, incomplete_draws) == 52,
+	       "yd_glmark2_outcome.incomplete_draws");
 _Static_assert(sizeof(struct yd_record_display) == 32, "struct yd_record_display");
 _Static_assert(offsetof(struct yd_record_display, irq_now) == 12, "yd_record_display.irq_now");
 _Static_assert(offsetof(struct yd_record_display, pitch) == 28, "yd_record_display.pitch");

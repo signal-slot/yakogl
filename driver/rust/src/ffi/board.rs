@@ -95,10 +95,12 @@ pub unsafe extern "C" fn yd_record_breadcrumb(
 
 // ---- kind GLMARK2 (driver/samples/zephyr/glmark2) ---------------------------
 
-const _: () = assert!(size_of::<Glmark2Outcome>() == 48);
+const _: () = assert!(size_of::<Glmark2Outcome>() == 56);
 const _: () = assert!(offset_of!(Glmark2Outcome, failed_entry) == 24);
 const _: () = assert!(offset_of!(Glmark2Outcome, unsupported_entries) == 32);
 const _: () = assert!(offset_of!(Glmark2Outcome, h) == 44);
+const _: () = assert!(offset_of!(Glmark2Outcome, gl_errors) == 48);
+const _: () = assert!(offset_of!(Glmark2Outcome, incomplete_draws) == 52);
 
 /// kind GLMARK2's w1..w3 for a run's outcome ([`record::glmark2_words`]).
 ///
@@ -249,7 +251,7 @@ mod tests {
     fn glmark2_entry_points_are_the_record_functions() {
         let o = Glmark2Outcome {
             score: 39,
-            flags: 0,
+            flags: record::GLMARK2_GL,
             status: record::STATUS_FAIL,
             ran: 30,
             failed: 1,
@@ -259,6 +261,8 @@ mod tests {
             unsupported_entries: [17, 19],
             w: 800,
             h: 600,
+            gl_errors: 11,
+            incomplete_draws: 3,
         };
         let mut out = [0u32; 3];
         let line = b"Error: Failed to link program created from files a and b";

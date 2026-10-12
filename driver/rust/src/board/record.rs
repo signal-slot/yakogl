@@ -157,9 +157,13 @@ kinds! {
          entry << 16 | why it failed (GLMARK2_WHY_*) << 22 | the first unsupported entry << \
          26; w2 = flags << 28 | status << 24 | ran << 18 | failed << 12 | unsupported << 6 | \
          the second unsupported entry; counts saturate at 63, an entry is the index in the \
-         benchmark list (GLMARK2_ENTRY_NONE none). Without it (before 2026-10-04): w1 = \
-         score; w2 = flags << 28 | status << 24 | ran << 16 | failed << 8 | unsupported, \
-         8 bits each";
+         benchmark list (GLMARK2_ENTRY_NONE none). With GLMARK2_GL as well (2026-10-12, \
+         issue #13): w3 = W (12 bits) | H << 12 (12 bits) | the GL errors the entry points \
+         raised (yakogl_gl_errors_raised) << 24 | the draws that sampled an incomplete \
+         texture (yakogl_incomplete_texture_draws) << 28, 4 bits each, saturating at 15 \
+         (15 or more); without GLMARK2_GL the counters were not recorded. Without \
+         GLMARK2_SCENES (before 2026-10-04): w1 = score; w2 = flags << 28 | status << 24 | \
+         ran << 16 | failed << 8 | unsupported, 8 bits each";
     // 19 = KICK_DIFF is reserved for vivante/gc-ab-knobs.
     GPU_STOP = 20, Tag,
         "the GPU driver ended the run: a kick it cannot complete (the PowerVR render \
@@ -330,6 +334,13 @@ values! {
     // kind GLMARK2: w2's flags (bits 28..31).
     GLMARK2_OFFSCREEN = 0x1;
     GLMARK2_SCENES = 0x2;
+    GLMARK2_GL = 0x4;
+    // kind GLMARK2 with GLMARK2_GL: w3's size fields (12 bits each) and the
+    // two GL core counters (4 bits each, 15 = 15 or more).
+    GLMARK2_GL_SIZE_MAX = 0xfff;
+    GLMARK2_GL_COUNT_MAX = 15;
+    GLMARK2_GL_ERRORS_SHIFT = 24;
+    GLMARK2_GL_INCOMPLETE_SHIFT = 28;
     // kind GLMARK2 with GLMARK2_SCENES: a benchmark-list entry (6 bits).
     GLMARK2_ENTRY_NONE = 0x3f;
     // kind GLMARK2 with GLMARK2_SCENES: why the first failed entry failed,
@@ -722,10 +733,21 @@ pub struct Glmark2Outcome {
     pub unsupported_entries: [u32; 2],
     pub w: u32,
     pub h: u32,
+    /// The GL errors the entry points raised (yakogl_gl_errors_raised);
+    /// stored only when `flags` has GLMARK2_GL.
+    pub gl_errors: u32,
+    /// The draws that sampled an incomplete texture
+    /// (yakogl_incomplete_texture_draws); stored only when `flags` has
+    /// GLMARK2_GL.
+    pub incomplete_draws: u32,
 }
 
 /// kind GLMARK2's w1..w3 with GLMARK2_SCENES: the score saturating at
-/// 0xffff, the counts at 63, an entry above 62 stored as none.
+/// 0xffff, the counts at 63, an entry above 62 stored as none. With
+/// GLMARK2_GL in `o.flags` (the caller read the two GL core counters), w3
+/// carries them beside a 12-bit size; a size that does not fit in 12 bits
+/// is not narrowed: GLMARK2_GL is dropped and w3 keeps the full size, so
+/// the counters read "not recorded" rather than a wrong size.
 pub const fn glmark2_words(o: &Glmark2Outcome) -> [u32; 3] {
     const fn sat(x: u32, max: u32) -> u32 {
         if x > max {
@@ -745,13 +767,42 @@ pub const fn glmark2_words(o: &Glmark2Outcome) -> [u32; 3] {
         | entry(o.failed_entry) << 16
         | (o.why & 0xf) << 22
         | entry(o.unsupported_entries[0]) << 26;
-    let w2 = ((o.flags | GLMARK2_SCENES) & 0xf) << 28
+    let gl = o.flags & GLMARK2_GL != 0 && o.w <= GLMARK2_GL_SIZE_MAX && o.h <= GLMARK2_GL_SIZE_MAX;
+    let flags = if gl { o.flags } else { o.flags & !GLMARK2_GL };
+    let w2 = ((flags | GLMARK2_SCENES) & 0xf) << 28
         | (o.status & 0xf) << 24
         | sat(o.ran, 63) << 18
         | sat(o.failed, 63) << 12
         | sat(o.unsupported, 63) << 6
         | entry(o.unsupported_entries[1]);
-    [w1, w2, size_word(o.w, o.h)]
+    let w3 = if gl {
+        o.w | o.h << 12
+            | sat(o.gl_errors, GLMARK2_GL_COUNT_MAX) << GLMARK2_GL_ERRORS_SHIFT
+            | sat(o.incomplete_draws, GLMARK2_GL_COUNT_MAX) << GLMARK2_GL_INCOMPLETE_SHIFT
+    } else {
+        size_word(o.w, o.h)
+    };
+    [w1, w2, w3]
+}
+
+/// kind GLMARK2's window size `(W, H)` from w2 and w3, in any layout.
+pub const fn glmark2_size(w2: u32, w3: u32) -> (u32, u32) {
+    if (w2 >> 28) & GLMARK2_GL != 0 {
+        (w3 & GLMARK2_GL_SIZE_MAX, (w3 >> 12) & GLMARK2_GL_SIZE_MAX)
+    } else {
+        (w3 >> 16, w3 & 0xffff)
+    }
+}
+
+/// kind GLMARK2's GL core counters `[GL errors raised, draws that sampled
+/// an incomplete texture]` (each saturating at GLMARK2_GL_COUNT_MAX, which
+/// means that many or more), or None when the record does not carry them
+/// (no GLMARK2_GL: an image before 2026-10-12, or a size wider than 12 bits).
+pub const fn glmark2_gl_counts(w2: u32, w3: u32) -> Option<[u32; 2]> {
+    if (w2 >> 28) & GLMARK2_GL == 0 {
+        return None;
+    }
+    Some([(w3 >> GLMARK2_GL_ERRORS_SHIFT) & 0xf, (w3 >> GLMARK2_GL_INCOMPLETE_SHIFT) & 0xf])
 }
 
 /// kind GLMARK2's `[score, ran, failed, unsupported]` from w1 and w2, in
@@ -838,6 +889,26 @@ pub const GLMARK2_DEFAULT_LIST: [&str; 33] = [
     "loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false",
     "loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true",
 ];
+
+/// The GL core counters of a GLMARK2 record, in the words of the sample's
+/// console line ("glmark2: GL errors raised N, draws that sampled an
+/// incomplete texture M"); absent counters are said to be absent, never 0.
+fn write_glmark2_gl_counts(out: &mut impl fmt::Write, c: Option<[u32; 2]>) -> fmt::Result {
+    let Some([errors, incomplete]) = c else {
+        return out.write_str("; GL errors raised and draws that sampled an incomplete texture: not recorded");
+    };
+    fn n(out: &mut impl fmt::Write, v: u32) -> fmt::Result {
+        if v >= GLMARK2_GL_COUNT_MAX {
+            write!(out, "{v} or more")
+        } else {
+            write!(out, "{v}")
+        }
+    }
+    out.write_str("; GL errors raised ")?;
+    n(out, errors)?;
+    out.write_str(", draws that sampled an incomplete texture ")?;
+    n(out, incomplete)
+}
 
 /// `entry N (<name in the default list>)`, or `none`.
 fn write_glmark2_entry(out: &mut impl fmt::Write, e: u32) -> fmt::Result {
@@ -1329,13 +1400,12 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
         kind::GLMARK2 => {
             let scenes = (w2 >> 28) & GLMARK2_SCENES != 0;
             let [score, ran, failed, unsupported] = glmark2_counts(w1, w2);
+            let (width, height) = glmark2_size(w2, w3);
             write!(
                 out,
-                "score {score} status {} ({}) scenes ran {ran} failed {failed} unsupported {unsupported} size {}x{} {}",
+                "score {score} status {} ({}) scenes ran {ran} failed {failed} unsupported {unsupported} size {width}x{height} {}",
                 (w2 >> 24) & 0xf,
                 status_name((w2 >> 24) & 0xf),
-                hi(w3),
-                lo(w3),
                 if (w2 >> 28) & GLMARK2_OFFSCREEN != 0 { "off-screen" } else { "on-screen" }
             )?;
             if !scenes {
@@ -1350,7 +1420,8 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             out.write_str("; unsupported: ")?;
             write_glmark2_entry(out, w1 >> 26)?;
             out.write_str(", ")?;
-            write_glmark2_entry(out, w2 & 0x3f)
+            write_glmark2_entry(out, w2 & 0x3f)?;
+            write_glmark2_gl_counts(out, glmark2_gl_counts(w2, w3))
         }
         kind::GPU_STOP => write!(
             out,
@@ -1817,8 +1888,34 @@ mod tests {
             unsupported_entries: [17, 19],
             w: 800,
             h: 600,
+            gl_errors: 11,
+            incomplete_draws: 3,
         };
-        assert_eq!(glmark2_words(&o), [0x4496_0027, 0x2278_1093, 0x0320_0258]);
+        assert_eq!(
+            glmark2_words(&o),
+            [0x4496_0027, 0x2278_1093, 0x0320_0258],
+            "without GLMARK2_GL the counters are not stored"
+        );
+        // with GLMARK2_GL: the 11 GL errors terrain raised before
+        // GL_OES_texture_npot (tools/hostharness/glmark2/FINDINGS.md) and a
+        // count past the field (40 draws), on-screen at 800x600
+        let gl = Glmark2Outcome { flags: GLMARK2_GL, incomplete_draws: 40, ..o };
+        let w = glmark2_words(&gl);
+        assert_eq!(w, [0x4496_0027, 0x6278_1093, 0xfb25_8320]);
+        assert_eq!(glmark2_size(w[1], w[2]), (800, 600));
+        assert_eq!(glmark2_gl_counts(w[1], w[2]), Some([11, GLMARK2_GL_COUNT_MAX]), "40 saturates at 15");
+        assert_eq!(glmark2_counts(w[0], w[1]), [39, 30, 1, 2], "the scene counts are unchanged");
+        assert_eq!(glmark2_gl_counts(0x2278_1093, 0x0320_0258), None, "a record without GLMARK2_GL");
+        assert_eq!(glmark2_size(0x2278_1093, 0x0320_0258), (800, 600));
+        // a size that does not fit in 12 bits keeps the full size word and
+        // drops the counters (not recorded), never a narrowed size
+        let wide = Glmark2Outcome { w: 4096, ..gl };
+        let w = glmark2_words(&wide);
+        assert_eq!(w[1] >> 28, GLMARK2_SCENES, "GLMARK2_GL dropped");
+        assert_eq!(w[2], size_word(4096, 600));
+        assert_eq!((glmark2_size(w[1], w[2]), glmark2_gl_counts(w[1], w[2])), ((4096, 600), None));
+        let zero = glmark2_words(&Glmark2Outcome { gl_errors: 0, incomplete_draws: 0, ..gl });
+        assert_eq!(glmark2_gl_counts(zero[1], zero[2]), Some([0, 0]), "0 counted is not absent");
         let none = Glmark2Outcome {
             score: 70000,
             flags: GLMARK2_OFFSCREEN,
@@ -1831,6 +1928,8 @@ mod tests {
             unsupported_entries: [GLMARK2_ENTRY_NONE, 200],
             w: 1920,
             h: 1080,
+            gl_errors: 0,
+            incomplete_draws: 0,
         };
         assert_eq!(
             glmark2_words(&none),
@@ -1909,13 +2008,39 @@ mod tests {
              unsupported: entry 17 (default list: \
              buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false), \
              entry 19 (default list: \
-             buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true)"
+             buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true); \
+             GL errors raised and draws that sampled an incomplete texture: not recorded"
+        );
+        // with GLMARK2_GL (glmark2_words' packing example): absent, zero and
+        // saturated read apart
+        let d = text(|b| describe(b, [w0(kind::GLMARK2, 14), 0x4496_0027, 0x6278_1093, 0xfb25_8320]));
+        assert!(
+            d.as_str().ends_with(
+                "size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); \
+                 unsupported: entry 17 (default list: \
+                 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false), \
+                 entry 19 (default list: \
+                 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true); \
+                 GL errors raised 11, draws that sampled an incomplete texture 15 or more"
+            ),
+            "{}",
+            d.as_str()
+        );
+        let d = text(|b| describe(b, [w0(kind::GLMARK2, 1), 0xfc3f_ffff, 0x71fc_003f, 0x002d_0500]));
+        assert!(
+            d.as_str().ends_with(
+                "size 1280x720 off-screen; first failed: none; unsupported: none, none; \
+                 GL errors raised 0, draws that sampled an incomplete texture 0"
+            ),
+            "{}",
+            d.as_str()
         );
         let d = text(|b| describe(b, [w0(kind::GLMARK2, 1), 0xfc3f_ffff, 0x31fc_003f, 0x0780_0438]));
         assert_eq!(
             d.as_str(),
             "GLMARK2 (18) seq 1: score 65535 status 1 (pass) scenes ran 63 failed 0 unsupported 0 size 1920x1080 off-screen; \
-             first failed: none; unsupported: none, none"
+             first failed: none; unsupported: none, none; \
+             GL errors raised and draws that sampled an incomplete texture: not recorded"
         );
         assert_eq!(classify([w0(kind::GLMARK2, 3), 697, 0, 0]), Class::Verdict, "the run's verdict");
         // the AM62P stop probe's record (d9e225eb, 2026-10-04)

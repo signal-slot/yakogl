@@ -18,41 +18,41 @@ Run: glmark2 `22c527cb0556f3a1ac4445aaa52cc532760928d5`, the default benchmark l
 
 ### Scenes
 
-| # | entry | powervr: status, frames, draws, refused | vivante: status, frames, draws, refused |
+| # | entry | powervr: status, frames, draws, refused, GL errors, incomplete-texture draws | vivante: status, frames, draws, refused, GL errors, incomplete-texture draws |
 |---|---|---|---|
-| 0 | `build:use-vbo=false` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 1 | `build:use-vbo=true` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 2 | `texture:texture-filter=nearest` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 3 | `texture:texture-filter=linear` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 4 | `texture:texture-filter=mipmap` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 5 | `shading:shading=gouraud` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 6 | `shading:shading=blinn-phong-inf` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 7 | `shading:shading=phong` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 8 | `shading:shading=cel` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 9 | `bump:bump-render=high-poly` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 10 | `bump:bump-render=normals` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 11 | `bump:bump-render=height` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 13 | `effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 14 | `pulsar:quads=5:texture=false:light=false` | ok, 3, 15, 0 | ok, 3, 15, 0 |
-| 15 | `desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true` | ok, 3, 56, 0 | ok, 3, 56, 0 |
-| 16 | `desktop:windows=4:effect=shadow` | ok, 3, 107, 0 | ok, 3, 107, 0 |
-| 17 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 18 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 19 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 20 | `ideas:speed=duration` | ok, 3, 540, 0 | ok, 3, 540, 0 |
-| 21 | `jellyfish` | ok, 3, 6, 0 | ok, 3, 6, 0 |
-| 22 | `terrain` | ok, 3, 25, 0 | ok, 3, 25, 0 |
-| 23 | `shadow` | ok, 3, 9, 0 | ok, 3, 9, 0 |
-| 24 | `refract` | ok, 3, 6, 0 | ok, 3, 6, 0 |
-| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 28 | `function:fragment-steps=5:fragment-complexity=low` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 29 | `function:fragment-steps=5:fragment-complexity=medium` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 30 | `loop:vertex-steps=5:fragment-steps=5:fragment-loop=false` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 31 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false` | ok, 3, 3, 0 | ok, 3, 3, 0 |
-| 32 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true` | ok, 3, 3, 0 | ok, 3, 3, 0 |
+| 0 | `build:use-vbo=false` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 1 | `build:use-vbo=true` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 2 | `texture:texture-filter=nearest` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 3 | `texture:texture-filter=linear` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 4 | `texture:texture-filter=mipmap` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 5 | `shading:shading=gouraud` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 6 | `shading:shading=blinn-phong-inf` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 7 | `shading:shading=phong` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 8 | `shading:shading=cel` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 9 | `bump:bump-render=high-poly` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 10 | `bump:bump-render=normals` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 11 | `bump:bump-render=height` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 13 | `effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 14 | `pulsar:quads=5:texture=false:light=false` | ok, 3, 15, 0, 0, 0 | ok, 3, 15, 0, 0, 0 |
+| 15 | `desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true` | ok, 3, 56, 0, 0, 0 | ok, 3, 56, 0, 0, 0 |
+| 16 | `desktop:windows=4:effect=shadow` | ok, 3, 107, 0, 0, 0 | ok, 3, 107, 0, 0, 0 |
+| 17 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 18 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 19 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 20 | `ideas:speed=duration` | ok, 3, 540, 0, 0, 0 | ok, 3, 540, 0, 0, 0 |
+| 21 | `jellyfish` | ok, 3, 6, 0, 0, 0 | ok, 3, 6, 0, 0, 0 |
+| 22 | `terrain` | ok, 3, 25, 0, 0, 0 | ok, 3, 25, 0, 0, 0 |
+| 23 | `shadow` | ok, 3, 9, 0, 0, 0 | ok, 3, 9, 0, 0, 0 |
+| 24 | `refract` | ok, 3, 6, 0, 0, 0 | ok, 3, 6, 0, 0, 0 |
+| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 28 | `function:fragment-steps=5:fragment-complexity=low` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 29 | `function:fragment-steps=5:fragment-complexity=medium` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 30 | `loop:vertex-steps=5:fragment-steps=5:fragment-loop=false` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 31 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
+| 32 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true` | ok, 3, 3, 0, 0, 0 | ok, 3, 3, 0, 0, 0 |
 
 ### Findings
 
@@ -94,7 +94,9 @@ completes every submit at once.
   raised `0x502` (11 and 3 times), and the textures sampled (0,0,0,1): the
   black terrain and refraction seen on every board. Every ES 2.0 build now
   claims the extension, and the table above has neither the error nor the
-  incomplete-texture line.
+  incomplete-texture line. Since 2026-10-12 the Scenes table also shows the
+  GL core's two counters (#13), checked by `report.py` against those lines:
+  0 GL errors and 0 incomplete-texture draws in every scene on both GPUs.
 * **shadow (23) and refract (24) on the PowerVR: no depth-resolve line.**
   Before the fix (`draw::restamp_draw`, 2026-10-10) the PowerVR logged
   `texture <n>: the backend did not resolve its depth (-16)` once a frame in

@@ -14,7 +14,9 @@ built. What it records per GPU:
 * every GL error with its entry point (the library's own `GL error 0x… in gl…`
   line, every one: `YAKOGL_ERROR_LOG`);
 * every refused draw and every incomplete-texture line the library logs,
-  plus the draws refused per scene (`yakogl_draws_refused`);
+  plus the draws refused, the GL errors raised and the draws that sampled an
+  incomplete texture per scene (`yakogl_draws_refused`,
+  `yakogl_gl_errors_raised`, `yakogl_incomplete_texture_draws`);
 * the EGL config glmark2 chose.
 
 On the V3D it also records the GPU memory: linux.c models the Pi 4's
@@ -90,7 +92,7 @@ section of `FINDINGS-v3d.md`.
 | file | what it is |
 |---|---|
 | `run.sh` | Compiles glmark2's sources unchanged (the list the Zephyr image compiles, with upstream's own `libmatrix/util.cc`), builds `libyakogl.a` per GPU with the top-level CMake (`YAKOGL_OSAL=linux`, `YAKOGL_GPU=powervr\|vivante\|v3d`, `YAKOGL_SHADERC=online`, `YAKOGL_REPORT_ES2=ON`, release: the board images' shader back end and reported version), links, and runs one process per list entry: `--size 800x600 -b :nframes=3 -b <entry>`. Then it calls `report.py`, once for the PowerVR and the GC7000 and once for the V3D. |
-| `host_main.cpp` | Upstream's `main.cpp` with a window system of its own. The native window is a `struct gles_native_window` over a malloc'd XRGB8888 buffer, which linux.c maps at its host address (the V3D: with `map_phys`, at a GPU VA of its own, as the Pi 4's OSAL does). A `MainLoop` subclass prints `gm2: scene-begin` and `gm2: scene-end <scene>: <status> frames= draws= refused=`. |
+| `host_main.cpp` | Upstream's `main.cpp` with a window system of its own. The native window is a `struct gles_native_window` over a malloc'd XRGB8888 buffer, which linux.c maps at its host address (the V3D: with `map_phys`, at a GPU VA of its own, as the Pi 4's OSAL does). A `MainLoop` subclass prints `gm2: scene-begin` and `gm2: scene-end <scene>: <status> frames= draws= refused= gl_errors= incomplete_draws=` (the last two are the GL core counters the board's GLMARK2 record carries; `report.py` checks them against the library's own lines). |
 | `shim.c`, `shim.h` | `dlopen`/`dlsym` for glmark2's `SharedLibrary` (renamed in `shared-library.o` only, with `objcopy --redefine-sym`): YakoGL is linked in, as on the Zephyr image. Every symbol is a wrapper of this file or what `eglGetProcAddress` answers. The wrappers log `gm2:` lines on stderr, where linux.c logs the library's own lines, so the order is kept. They also write each shader text to `out/capture/<gpu>/<fnv64>.<stage>`. |
 | `report.py` | Reads the logs and captures. It writes `<out>/shaders/*.glsl` and `index.txt` (with `--shaders`), and the generated parts of `FINDINGS.md` and `FINDINGS-v3d.md` (the V3D's with a GPU memory table: each entry's carve-out high-water, the longest free run at exit, the allocations refused). |
 

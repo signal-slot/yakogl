@@ -1057,6 +1057,75 @@ pub fn heap_data() -> u64 {
 #[no_mangle]
 pub static mut g_gl_error_log_limit: core::ffi::c_uint = 16;
 
+/* ---- the GL error counters ---------------------------------------------------
+ * How many GL errors the entry points raised, for a run whose only result is
+ * a record (the i.MX8MP has no console, so the "GL error" lines below are
+ * lost there; issue #13). Two counts, because GL keeps only the first error
+ * since the last glGetError (ES 2.0 2.5):
+ *
+ *   raised    every error an entry point raised, with or without a current
+ *             context: what the "GL error 0x.. in gl.." lines count when
+ *             every one is logged (YAKOGL_ERROR_LOG). A client that never
+ *             calls glGetError (glmark2) sees none of them.
+ *   recorded  the errors that became the context's error, that is, the ones
+ *             glGetError can return. Without glGetError calls this stops at
+ *             one: the first error is kept and masks every later one.
+ *
+ * Both saturate at u32::MAX instead of wrapping, so a read is a total since
+ * the process started, never a value that went round. Process-global like
+ * the other instruments (backend::draws_refused). */
+
+/// See "the GL error counters" above: every GL error an entry point raised.
+static GL_ERRORS_RAISED: AtomicU32 = AtomicU32::new(0);
+/// See "the GL error counters" above: the errors that became the context's
+/// error (first-error-wins let them through).
+static GL_ERRORS_RECORDED: AtomicU32 = AtomicU32::new(0);
+
+/// Add one to `n`, staying at u32::MAX once there.
+pub(crate) fn count_saturating(n: &AtomicU32) {
+    /* a compare-exchange loop rather than fetch_update: the newer nightly
+     * deprecates fetch_update for try_update, which the older stable lacks,
+     * and the gate counts every warning */
+    let mut v = n.load(Ordering::Relaxed);
+    while v != u32::MAX {
+        match n.compare_exchange_weak(v, v + 1, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            Err(now) => v = now,
+        }
+    }
+}
+
+/// Every GL error an entry point raised in this process (saturating).
+pub fn gl_errors_raised() -> u32 {
+    GL_ERRORS_RAISED.load(Ordering::Relaxed)
+}
+
+/// The GL errors that became a context's error in this process (saturating).
+pub fn gl_errors_recorded() -> u32 {
+    GL_ERRORS_RECORDED.load(Ordering::Relaxed)
+}
+
+/// C view of [`gl_errors_raised`]: every GL error an entry point raised in
+/// this process, saturating at 0xffffffff. In every build (a product
+/// record carries it: driver/samples/zephyr/glmark2).
+#[no_mangle]
+pub extern "C" fn yakogl_gl_errors_raised() -> u32 {
+    gl_errors_raised()
+}
+
+/// C view of [`gl_errors_recorded`]: the GL errors that became a context's
+/// error (the ones glGetError could return), saturating at 0xffffffff.
+#[no_mangle]
+pub extern "C" fn yakogl_gl_errors_recorded() -> u32 {
+    gl_errors_recorded()
+}
+
+/// An entry point raised `e`: count it and log it (the first few).
+fn note_raised(e: GLenum, func: &str) {
+    count_saturating(&GL_ERRORS_RAISED);
+    log_error(e, func);
+}
+
 /// Log the first few GL errors with the entry point that raised them: a
 /// client such as Qt's RHI only ever reports "glGetError 0x500" per frame.
 fn log_error(e: GLenum, func: &str) {
@@ -1221,7 +1290,7 @@ pub fn set_error_no_ctx(e: GLenum, func: &str) {
     }
     match current() {
         Some(c) => c.set_error(e, func),
-        None => log_error(e, func),
+        None => note_raised(e, func),
     }
 }
 
@@ -1351,9 +1420,10 @@ impl GlContext {
 
     /// Record `e` (the first error wins) and log the entry point.
     pub fn set_error(&mut self, e: GLenum, func: &str) {
-        log_error(e, func);
+        note_raised(e, func);
         if self.error == GL_NO_ERROR {
             self.error = e;
+            count_saturating(&GL_ERRORS_RECORDED);
         }
     }
 

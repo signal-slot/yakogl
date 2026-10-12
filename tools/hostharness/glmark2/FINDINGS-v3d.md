@@ -21,41 +21,41 @@ Run: glmark2 `22c527cb0556f3a1ac4445aaa52cc532760928d5`, the default benchmark l
 
 ### Scenes
 
-| # | entry | v3d: status, frames, draws, refused |
+| # | entry | v3d: status, frames, draws, refused, GL errors, incomplete-texture draws |
 |---|---|---|
-| 0 | `build:use-vbo=false` | ok, 3, 3, 0 |
-| 1 | `build:use-vbo=true` | ok, 3, 3, 0 |
-| 2 | `texture:texture-filter=nearest` | ok, 3, 3, 0 |
-| 3 | `texture:texture-filter=linear` | ok, 3, 3, 0 |
-| 4 | `texture:texture-filter=mipmap` | ok, 3, 3, 0 |
-| 5 | `shading:shading=gouraud` | ok, 3, 3, 0 |
-| 6 | `shading:shading=blinn-phong-inf` | ok, 3, 3, 0 |
-| 7 | `shading:shading=phong` | ok, 3, 3, 0 |
-| 8 | `shading:shading=cel` | ok, 3, 3, 0 |
-| 9 | `bump:bump-render=high-poly` | ok, 3, 3, 0 |
-| 10 | `bump:bump-render=normals` | ok, 3, 3, 0 |
-| 11 | `bump:bump-render=height` | ok, 3, 3, 0 |
-| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | ok, 3, 3, 0 |
-| 13 | `effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | ok, 3, 3, 0 |
-| 14 | `pulsar:quads=5:texture=false:light=false` | ok, 3, 15, 0 |
-| 15 | `desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true` | ok, 3, 56, 0 |
-| 16 | `desktop:windows=4:effect=shadow` | ok, 3, 107, 0 |
-| 17 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false` | ok, 3, 3, 0 |
-| 18 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false` | ok, 3, 3, 0 |
-| 19 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true` | ok, 3, 3, 0 |
-| 20 | `ideas:speed=duration` | ok, 3, 540, 0 |
-| 21 | `jellyfish` | ok, 3, 6, 0 |
-| 22 | `terrain` | ok, 3, 25, 0 |
-| 23 | `shadow` | ok, 3, 9, 0 |
-| 24 | `refract` | ok, 3, 6, 0 |
-| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | ok, 3, 3, 0 |
-| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | ok, 3, 3, 0 |
-| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | ok, 3, 3, 0 |
-| 28 | `function:fragment-steps=5:fragment-complexity=low` | ok, 3, 3, 0 |
-| 29 | `function:fragment-steps=5:fragment-complexity=medium` | ok, 3, 3, 0 |
-| 30 | `loop:vertex-steps=5:fragment-steps=5:fragment-loop=false` | ok, 3, 3, 0 |
-| 31 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false` | ok, 3, 3, 0 |
-| 32 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true` | ok, 3, 3, 0 |
+| 0 | `build:use-vbo=false` | ok, 3, 3, 0, 0, 0 |
+| 1 | `build:use-vbo=true` | ok, 3, 3, 0, 0, 0 |
+| 2 | `texture:texture-filter=nearest` | ok, 3, 3, 0, 0, 0 |
+| 3 | `texture:texture-filter=linear` | ok, 3, 3, 0, 0, 0 |
+| 4 | `texture:texture-filter=mipmap` | ok, 3, 3, 0, 0, 0 |
+| 5 | `shading:shading=gouraud` | ok, 3, 3, 0, 0, 0 |
+| 6 | `shading:shading=blinn-phong-inf` | ok, 3, 3, 0, 0, 0 |
+| 7 | `shading:shading=phong` | ok, 3, 3, 0, 0, 0 |
+| 8 | `shading:shading=cel` | ok, 3, 3, 0, 0, 0 |
+| 9 | `bump:bump-render=high-poly` | ok, 3, 3, 0, 0, 0 |
+| 10 | `bump:bump-render=normals` | ok, 3, 3, 0, 0, 0 |
+| 11 | `bump:bump-render=height` | ok, 3, 3, 0, 0, 0 |
+| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | ok, 3, 3, 0, 0, 0 |
+| 13 | `effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | ok, 3, 3, 0, 0, 0 |
+| 14 | `pulsar:quads=5:texture=false:light=false` | ok, 3, 15, 0, 0, 0 |
+| 15 | `desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true` | ok, 3, 56, 0, 0, 0 |
+| 16 | `desktop:windows=4:effect=shadow` | ok, 3, 107, 0, 0, 0 |
+| 17 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false` | ok, 3, 3, 0, 0, 0 |
+| 18 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false` | ok, 3, 3, 0, 0, 0 |
+| 19 | `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true` | ok, 3, 3, 0, 0, 0 |
+| 20 | `ideas:speed=duration` | ok, 3, 540, 0, 0, 0 |
+| 21 | `jellyfish` | ok, 3, 6, 0, 0, 0 |
+| 22 | `terrain` | ok, 3, 25, 0, 0, 0 |
+| 23 | `shadow` | ok, 3, 9, 0, 0, 0 |
+| 24 | `refract` | ok, 3, 6, 0, 0, 0 |
+| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | ok, 3, 3, 0, 0, 0 |
+| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | ok, 3, 3, 0, 0, 0 |
+| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | ok, 3, 3, 0, 0, 0 |
+| 28 | `function:fragment-steps=5:fragment-complexity=low` | ok, 3, 3, 0, 0, 0 |
+| 29 | `function:fragment-steps=5:fragment-complexity=medium` | ok, 3, 3, 0, 0, 0 |
+| 30 | `loop:vertex-steps=5:fragment-steps=5:fragment-loop=false` | ok, 3, 3, 0, 0, 0 |
+| 31 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false` | ok, 3, 3, 0, 0, 0 |
+| 32 | `loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true` | ok, 3, 3, 0, 0, 0 |
 
 ### GPU memory
 

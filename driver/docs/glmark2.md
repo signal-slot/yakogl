@@ -201,19 +201,48 @@ drop this line and go back to the 8 MiB default.
 
 The i.MX8MP has no UART and its SNVS keeps only the last record, so the run
 ends with one record that is also its verdict, stored after the summary
-line and kept by `board_finish`:
+line and kept by `board_finish`. `record.rs` (the `GLMARK2` row of `KINDS`,
+`glmark2_words`) is the definition; today's images write this layout (flags
+`GLMARK2_SCENES` and `GLMARK2_GL`, plus `GLMARK2_OFFSCREEN` = 1 off-screen):
 
-- w1 = glmark2's score;
-- w2 = flags << 28 | status (1 pass, 2 fail) << 24 | scenes ran << 16 |
-  failed << 8 | unsupported (each count saturating at 255; flag
-  `GLMARK2_OFFSCREEN` = 1);
-- w3 = W << 16 | H.
+- w1 = score (16 bits, saturating) | the first failed entry << 16 | why it
+  failed (`GLMARK2_WHY_*`) << 22 | the first unsupported entry << 26;
+- w2 = flags << 28 | status (1 pass, 2 fail) << 24 | scenes ran << 18 |
+  failed << 12 | unsupported << 6 | the second unsupported entry (counts
+  saturate at 63; an entry is its index in the benchmark list, 63 none);
+- w3 = W (12 bits) | H << 12 (12 bits) | GL errors raised << 24 | draws that
+  sampled an incomplete texture << 28.
 
-`yakogl-tools record 594b1203 000002b9 021f0002 03200258` prints
-`GLMARK2 (18) seq 3: score 697 status 2 (fail) scenes ran 31 failed 0 unsupported 2 size 800x600 on-screen`.
+The last two are the GL core's counters for the whole run (issue #13):
+`yakogl_gl_errors_raised` (`src/gl/context.rs`: every GL error an entry
+point raised, the ones the console's `GL error 0x.. in gl..` lines name) and
+`yakogl_incomplete_texture_draws` (`src/gl/draw.rs`: every draw whose
+program sampled an incomplete texture, which reads (0,0,0,1)). Each has 4
+bits and saturates at 15, which reads "15 or more". They are not a verdict:
+a run with GL errors still passes when no scene failed. glmark2 never calls
+`glGetError`, so the errors the context kept (`yakogl_gl_errors_recorded`,
+at most one without a `glGetError`) are printed on the console line only:
+
+```text
+glmark2: GL errors raised 0, draws that sampled an incomplete texture 0 (GL errors recorded 0)
+```
+
+The kind-18 words had no free bit, so the size shares w3 with the counters;
+a window wider or taller than 4095 drops `GLMARK2_GL` and keeps the full
+size, and the decoder then says the counters were not recorded (never 0).
+Records from images before 2026-10-12 decode the same way ("not recorded"),
+and those before 2026-10-04 (no `GLMARK2_SCENES`) as w1 = score,
+w2 = flags << 28 | status << 24 | ran << 16 | failed << 8 | unsupported,
+w3 = W << 16 | H.
+
+`yakogl-tools record 594b120e 44960027 62781093 fb258320` (a synthetic
+outcome, `record.rs`'s packing example) prints
+`GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported 2 size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); unsupported: entry 17 (...), entry 19 (...); GL errors raised 11, draws that sampled an incomplete texture 15 or more`.
 A run that fails before the benchmark loop ends with `board_finish`'s APP
 record instead. Per-scene numbers on the i.MX8MP would need pages chosen by
-the selector, as DEQP_FAILS does; not done.
+the selector, as DEQP_FAILS does; not done. The host harness prints the two
+counters per scene (`tools/hostharness/glmark2`, the `gm2: scene-end` line)
+and checks them against the library's own lines.
 
 ## 3. Public scores (opened 2026-10-03)
 
