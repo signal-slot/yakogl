@@ -721,6 +721,7 @@ fn tex_parameter(pname: GLenum, v: GLenum) {
 /// texsubimage2d_pbo, *_unpack_params, *_align, texstorage2d with a short
 /// chain) read (0,0,0,1) on the AM62P.
 #[test]
+#[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
 fn a_mipmap_filter_needs_the_levels_up_to_max_level_only() {
     let gl = TestGl::new(16, 16);
     let px = vec![0x40u8; 65 * 37 * 4];

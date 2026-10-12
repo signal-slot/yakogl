@@ -9478,6 +9478,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn the_sampler_stops_at_the_last_level_anyone_filled() {
         /* glTexStorage2D declares the whole chain; only the levels the
          * application uploads may be sampled (Qt prefilters part of a light
@@ -11515,6 +11516,7 @@ mod tests {
     /// no-table build); what it checks does not depend on the GPU.
     #[cfg(not(feature = "no-shader-table"))]
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn the_depth_compare_comes_from_the_texture_or_the_bound_sampler() {
         let gl = Gl::new(16, 16);
         textured(&gl);
@@ -11666,6 +11668,7 @@ mod tests {
         all(feature = "no-shader-table", feature = "report-es2"),
         ignore = "GLSL ES 3.00 test shader (cube.vert) in a build that reports ES 2.0"
     )]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_sampled_cube_map_is_dumped_face_by_face_and_level_by_level() {
         /* upstream 7d1e16c: a light probe that renders flat is either flat in
          * memory, prefiltered into fewer levels than the sampler is allowed
@@ -11752,6 +11755,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn an_array_sampler_gets_its_layer_count_in_the_same_draw() {
         let gl = Gl::new(16, 16);
         /* glTexStorage leaves the texels undefined: the test checks the binding only */
@@ -11786,6 +11790,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_vertex_stage_array_sampler_gets_its_layer_count_too() {
         /* Qt Quick 3D's morph targets are a sampler2DArray read in the
          * VERTEX shader (texelFetch indexed by gl_VertexID): its block needs
@@ -11825,6 +11830,7 @@ mod tests {
     /// array.frag with its sampler reported as a sampler3D: what the translator makes of vol.frag (a sampler2D
     /// plus the hidden pvr_layers_ count), which upstream's committed table does not carry.
     #[cfg(feature = "gpu-powervr")] /* only the PowerVR table has these shaders */
+    #[cfg(not(feature = "report-es2"))] /* only the ES 3.0 tests use it */
     fn vol_prog(gl: &Gl) -> GLuint {
         let prog = es3_prog(gl, "array.frag");
         let p = &mut gl.ctx().objs().programs[obj_index(prog)];
@@ -11839,6 +11845,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_sampler3d_reads_the_3d_binding_as_its_grid() {
         let gl = Gl::new(16, 16);
         gl.allow_uninit_reads(true); /* glTexStorage leaves the texels undefined */
@@ -11868,6 +11875,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_3d_texture_is_not_sampled_by_a_2d_array_sampler() {
         let gl = Gl::new(16, 16);
         gl.allow_uninit_reads(true);
@@ -12056,6 +12064,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_draw_into_an_array_layer_targets_the_layer() {
         let gl = Gl::new(16, 16);
         basic(&gl);

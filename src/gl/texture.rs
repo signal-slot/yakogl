@@ -31,9 +31,30 @@ use crate::backend::{
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::{self, Global};
 
+/// The texture targets ES 3.0 adds to the two of ES 2.0: a `report-es2` build
+/// refuses them with GL_INVALID_ENUM in every call that takes a texture target
+/// (through [`binding_for`], and in glBindTexture).
+///
+/// ES 2.0.25 (read from the extracted build/es_full_spec_2.0.25.txt), 3.7.13:
+///
+/// ```text
+/// A texture object is created by binding an unused name to TEXTURE_2D or
+/// TEXTURE_CUBE_MAP.
+/// ```
+///
+/// 3.7.4 and 3.7.11 say the same of TexParameter and GenerateMipmap ("target
+/// is the target, which must be TEXTURE_2D or TEXTURE_CUBE_MAP"), 6.1.3 of
+/// GetTexParameter; any other value is GL_INVALID_ENUM (2.5).
+fn es3_only_texture_target(target: GLenum) -> bool {
+    crate::REPORT_ES2 && matches!(target, GL_TEXTURE_3D | GL_TEXTURE_2D_ARRAY)
+}
+
 /// The binding slot of the active unit for a texture target (a cube map face
-/// target names the cube map binding); None for a target this core lacks.
+/// target names the cube map binding); None for a target this GL lacks.
 fn binding_for(c: &mut GlContext, target: GLenum) -> Option<&mut GLuint> {
+    if es3_only_texture_target(target) {
+        return None;
+    }
     let unit = c.active_texture as usize;
     if target == GL_TEXTURE_2D {
         return Some(&mut c.bound_texture_2d[unit]);
@@ -476,6 +497,42 @@ pub(crate) fn is_pixel_type_enum(type_: GLenum) -> bool {
     )
 }
 
+/// A pixel type ES 3.0 knows that the ES 2.0 surface does not take: a
+/// `report-es2` build refuses it with GL_INVALID_ENUM in every unpacking call
+/// (`check_format_type`: glTexImage2D, glTexSubImage2D, glTexImage3D,
+/// glTexSubImage3D).
+///
+/// ES 2.0.25 (read from the extracted build/es_full_spec_2.0.25.txt), 3.6.2
+/// Table 3.2 "TexImage2D and ReadPixels type parameter values" lists
+/// UNSIGNED_BYTE, UNSIGNED_SHORT_5_6_5, UNSIGNED_SHORT_4_4_4_4 and
+/// UNSIGNED_SHORT_5_5_5_1; 3.7.1 takes `type` "as described in section 3.6.2"
+/// for TexImage2D, and 3.7.2 for TexSubImage2D. 2.5:
+///
+/// ```text
+/// If a command that requires an enumerated value is passed a symbolic con-
+/// stant that is not one of those specified as allowable for that command, the er-
+/// ror INVALID_ENUM error is generated.
+/// ```
+///
+/// The extensions this surface claims add types: GL_OES_texture_half_float
+/// HALF_FLOAT_OES (0x8D61, not ES 3.0's HALF_FLOAT 0x140B),
+/// GL_OES_depth_texture UNSIGNED_SHORT and UNSIGNED_INT, and
+/// GL_OES_packed_depth_stencil UNSIGNED_INT_24_8_OES. A type one of them adds
+/// is allowable, so a format it does not pair with is GL_INVALID_OPERATION
+/// (the pair check), not GL_INVALID_ENUM. GL_FLOAT is GL_OES_texture_float's,
+/// which this surface does not claim (`state::ALL_EXTENSION_NAMES`).
+fn es3_only_pixel_type(type_: GLenum) -> bool {
+    const GL_HALF_FLOAT_OES: GLenum = 0x8D61;
+    let es2 = matches!(
+        type_,
+        GL_UNSIGNED_BYTE | GL_UNSIGNED_SHORT_5_6_5 | GL_UNSIGNED_SHORT_4_4_4_4 | GL_UNSIGNED_SHORT_5_5_5_1
+    );
+    let extension = type_ == GL_HALF_FLOAT_OES
+        || (super::state::DEPTH_TEXTURE_EXTENSIONS
+            && matches!(type_, GL_UNSIGNED_SHORT | GL_UNSIGNED_INT | GL_UNSIGNED_INT_24_8));
+    crate::REPORT_ES2 && is_pixel_type_enum(type_) && !es2 && !extension
+}
+
 /// A pixel transfer format enum GL ES 3.0 knows (see [`is_pixel_type_enum`]).
 pub(crate) fn is_pixel_format_enum(format: GLenum) -> bool {
     is_texture_format(format)
@@ -829,7 +886,9 @@ pub unsafe extern "C" fn glActiveTexture(texture: GLenum) {
 pub unsafe extern "C" fn glBindTexture(target: GLenum, texture: GLuint) {
     gl_trace!(glBindTexture);
     let Some(c) = context::current() else { return };
-    if !matches!(target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY | GL_TEXTURE_3D) {
+    if !matches!(target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY | GL_TEXTURE_3D)
+        || es3_only_texture_target(target)
+    {
         c.set_error(GL_INVALID_ENUM, "glBindTexture");
         return;
     }
@@ -1899,7 +1958,7 @@ fn es2_integer_format(format: GLenum) -> bool {
 /// GL_INVALID_OPERATION (ES 3.0 3.7.1 / table 3.2). Depth uploads: the
 /// ES 3.0 pairs (the texels are not modelled: they read as black).
 fn check_format_type(c: &mut GlContext, format: GLenum, type_: GLenum, func: &str) -> bool {
-    if !is_pixel_format_enum(format) || !is_pixel_type_enum(type_) {
+    if !is_pixel_format_enum(format) || !is_pixel_type_enum(type_) || es3_only_pixel_type(type_) {
         c.set_error(GL_INVALID_ENUM, func);
         return false;
     }
@@ -2044,22 +2103,6 @@ unsafe fn tex_image_2d(
         }
         if sized_format(internalformat as GLenum).is_none() {
             c.set_error(GL_INVALID_VALUE, FUNC);
-            return false;
-        }
-        /* An UNSIZED internal format with a float type is GL_OES_texture_float
-         * (GL_FLOAT) or ES 3.0 (GL_HALF_FLOAT, 0x140B). This surface claims
-         * neither -- it claims GL_OES_texture_half_float, whose type is
-         * GL_HALF_FLOAT_OES (0x8D61) -- so those two combinations are not
-         * ones it unpacks. dEQP's fbo.completeness read a COMPLETE framebuffer
-         * built on a (GL_RGBA, GL_FLOAT) texture where it required an
-         * incomplete one, because the upload was taken.
-         *
-         * Only here, as with the sized names above: glTexSubImage2D into a
-         * GL_RGBA16F texture that glTexStorage2D made is a different call
-         * with a different rule, and `valid_format_type` is shared with it. */
-        if crate::REPORT_ES2 && is_texture_format(internalformat as GLenum) && matches!(type_, GL_FLOAT | GL_HALF_FLOAT)
-        {
-            c.set_error(GL_INVALID_OPERATION, FUNC);
             return false;
         }
         if is_texture_format(internalformat as GLenum) && internalformat as GLenum != format {
@@ -3623,6 +3666,26 @@ pub(super) fn valid_tex_param(pname: GLenum, param: GLint) -> bool {
     }
 }
 
+/// The texture parameter names ES 3.0 adds to the four of ES 2.0: a
+/// `report-es2` build refuses them with GL_INVALID_ENUM in glTexParameter*
+/// and glGetTexParameter* alike (the immutable-state names included: they
+/// are not in the table either).
+///
+/// ES 2.0.25 (read from the extracted build/es_full_spec_2.0.25.txt), 3.7.4:
+///
+/// ```text
+/// pname is a symbolic constant indicating the parameter to be set; the
+/// possible constants and corresponding parameters are summarized in table 3.10.
+/// ```
+///
+/// Table 3.10 lists TEXTURE_WRAP_S, TEXTURE_WRAP_T, TEXTURE_MIN_FILTER and
+/// TEXTURE_MAG_FILTER. 6.1.3, GetTexParameter: "value must be one of the
+/// symbolic values in table 3.10."
+fn es3_only_tex_param(pname: GLenum) -> bool {
+    crate::REPORT_ES2
+        && !matches!(pname, GL_TEXTURE_WRAP_S | GL_TEXTURE_WRAP_T | GL_TEXTURE_MIN_FILTER | GL_TEXTURE_MAG_FILTER)
+}
+
 /// glTexParameteri on the fetched context (the callers trace glTexParameteri).
 fn tex_parameter_i(c: &mut GlContext, target: GLenum, pname: GLenum, param: GLint) {
     tex_parameter(c, target, pname, param, param as GLfloat);
@@ -3633,7 +3696,7 @@ fn tex_parameter_i(c: &mut GlContext, target: GLenum, pname: GLenum, param: GLin
 fn tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum, param: GLint, fv: GLfloat) {
     const FUNC: &str = "glTexParameteri";
 
-    if binding_for(c, target).is_none() {
+    if binding_for(c, target).is_none() || es3_only_tex_param(pname) {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return;
     }
@@ -3756,7 +3819,7 @@ enum TexParam {
 fn get_tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum) -> Option<TexParam> {
     const FUNC: &str = "glGetTexParameteriv";
 
-    if binding_for(c, target).is_none() {
+    if binding_for(c, target).is_none() || es3_only_tex_param(pname) {
         c.set_error(GL_INVALID_ENUM, FUNC);
         return None;
     }
@@ -3766,7 +3829,6 @@ fn get_tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum) -> Option
     };
     let t = &c.objs_ref().textures[ti];
 
-    let es3 = !crate::REPORT_ES2;
     let v = match pname {
         GL_TEXTURE_MIN_FILTER => t.min_filter as GLint,
         GL_TEXTURE_MAG_FILTER => t.mag_filter as GLint,
@@ -3782,17 +3844,17 @@ fn get_tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum) -> Option
                 0
             }
         }
-        GL_TEXTURE_WRAP_R if es3 => t.wrap_r as GLint,
-        GL_TEXTURE_BASE_LEVEL if es3 => t.base_level,
-        GL_TEXTURE_MAX_LEVEL if es3 => t.max_level_set,
-        GL_TEXTURE_COMPARE_MODE if es3 => t.compare_mode as GLint,
-        GL_TEXTURE_COMPARE_FUNC if es3 => t.compare_func as GLint,
-        GL_TEXTURE_SWIZZLE_R if es3 => t.swizzle[0] as GLint,
-        GL_TEXTURE_SWIZZLE_G if es3 => t.swizzle[1] as GLint,
-        GL_TEXTURE_SWIZZLE_B if es3 => t.swizzle[2] as GLint,
-        GL_TEXTURE_SWIZZLE_A if es3 => t.swizzle[3] as GLint,
-        GL_TEXTURE_MIN_LOD if es3 => return Some(TexParam::F(t.min_lod)),
-        GL_TEXTURE_MAX_LOD if es3 => return Some(TexParam::F(t.max_lod)),
+        GL_TEXTURE_WRAP_R => t.wrap_r as GLint,
+        GL_TEXTURE_BASE_LEVEL => t.base_level,
+        GL_TEXTURE_MAX_LEVEL => t.max_level_set,
+        GL_TEXTURE_COMPARE_MODE => t.compare_mode as GLint,
+        GL_TEXTURE_COMPARE_FUNC => t.compare_func as GLint,
+        GL_TEXTURE_SWIZZLE_R => t.swizzle[0] as GLint,
+        GL_TEXTURE_SWIZZLE_G => t.swizzle[1] as GLint,
+        GL_TEXTURE_SWIZZLE_B => t.swizzle[2] as GLint,
+        GL_TEXTURE_SWIZZLE_A => t.swizzle[3] as GLint,
+        GL_TEXTURE_MIN_LOD => return Some(TexParam::F(t.min_lod)),
+        GL_TEXTURE_MAX_LOD => return Some(TexParam::F(t.max_lod)),
         _ => {
             c.set_error(GL_INVALID_ENUM, FUNC);
             return None;
@@ -3822,11 +3884,13 @@ pub unsafe extern "C" fn glGetTexParameterfv(target: GLenum, pname: GLenum, para
         return;
     }
     gl_trace!(glGetTexParameteriv);
-    /* on an error (or without a context) the value written is 0 */
+    /* on an error (or without a context) nothing is written: "If the
+     * generating command modifies values through a pointer argument, no
+     * change is made to these values" (ES 2.0.25 2.5) */
     let v = match context::current().and_then(|c| get_tex_parameter(c, target, pname)) {
         Some(TexParam::I(i)) => i as GLfloat,
         Some(TexParam::F(f)) => f,
-        None => 0.0,
+        None => return,
     };
     // SAFETY: non-null; the application passes room for one value (not
     // necessarily aligned).
@@ -5974,6 +6038,7 @@ mod tests {
     /// GL_INVALID_ENUM) and refuses one into a 3D texture with
     /// GL_INVALID_OPERATION, as glTexImage3D does (ES 3.0.6 3.8.3).
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_depth_sub_image_goes_into_a_2d_array_and_not_a_3d_texture() {
         let gl = TestGl::new(4, 4);
         let one = 0x8000u16.to_ne_bytes();
@@ -6069,14 +6134,15 @@ mod tests {
         ] {
             assert_eq!(img(GL_TEXTURE_2D, ifmt, fmt, ty), GL_INVALID_OPERATION, "0x{ifmt:x} 0x{fmt:x} 0x{ty:x}");
         }
-        /* a float depth: ES 3.0 has it, the extension only the two integer types */
+        /* a float depth: ES 3.0 has it; the ES 2.0 surface has no GL_FLOAT
+         * type at all (`es3_only_pixel_type`), so the type is refused first */
         assert_eq!(
             img(GL_TEXTURE_2D, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT),
-            es2(GL_INVALID_OPERATION, GL_NO_ERROR)
+            es2(GL_INVALID_ENUM, GL_NO_ERROR)
         );
         assert_eq!(
             img(GL_TEXTURE_2D, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT),
-            es2(GL_INVALID_VALUE, GL_NO_ERROR)
+            es2(GL_INVALID_ENUM, GL_NO_ERROR)
         );
         assert_eq!(
             img(GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT),
@@ -6121,9 +6187,10 @@ mod tests {
         let d = new_tex();
         tex_image(0, 2, 2, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, &[]);
         assert_eq!(sub(GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, &four), GL_NO_ERROR, "either integer type");
+        /* the ES 2.0 surface has no GL_FLOAT type (`es3_only_pixel_type`) */
         assert_eq!(
             sub(GL_DEPTH_COMPONENT, GL_FLOAT, &four),
-            if crate::REPORT_ES2 { GL_INVALID_OPERATION } else { GL_NO_ERROR }
+            if crate::REPORT_ES2 { GL_INVALID_ENUM } else { GL_NO_ERROR }
         );
         let colour = new_tex();
         tex_image(0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, &[]);
@@ -6279,7 +6346,10 @@ mod tests {
             unsafe {
                 glTexImage2D(GL_TEXTURE_2D, 0, format as GLint, 2, 2, 0, format, type_, core::ptr::null());
             }
-            assert_eq!(gl.error(), GL_INVALID_OPERATION, "0x{format:x} with type 0x{type_:x}");
+            /* not a type of this surface (`es3_only_pixel_type`); the
+             * INVALID_OPERATION of the (unsized, float) pair it gave until
+             * issue #128 is the same refusal under the ES 2.0 error */
+            assert_eq!(gl.error(), GL_INVALID_ENUM, "0x{format:x} with type 0x{type_:x}");
         }
         /* the type the advertised extension does define is taken */
         // SAFETY: as above.
@@ -6787,6 +6857,7 @@ mod tests {
     /// side, an array up to 4096 a side and 256 layers, an unsized internal
     /// format names `format`'s base, and a depth format has no 3D image.
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_image_3d_limits_and_pairings() {
         let gl = TestGl::new(4, 4);
         let mut n: GLuint = 0;
@@ -6835,6 +6906,7 @@ mod tests {
     /// any chain with GL_INVALID_VALUE (compressedtexsubimage2d_max_level).
     /// Every one was GL_INVALID_OPERATION or GL_INVALID_ENUM until 2026-09-24.
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn compressed_3d_and_cube_sub_image_arguments_come_first() {
         let gl = TestGl::new(4, 4);
         let etc2 = GL_COMPRESSED_RGBA8_ETC2_EAC;
@@ -6884,6 +6956,11 @@ mod tests {
             assert_eq!(gl.error(), GL_NO_ERROR, "a sized internal format");
             let t = &gl.ctx().objs_ref().textures[name as usize];
             assert_eq!((t.width, t.height), (2, 2));
+        }
+        /* a 3D texture is ES 3.0's: the ES 2.0 surface cannot bind one */
+        #[cfg(not(feature = "report-es2"))]
+        // SAFETY: plain GL calls; no pixels are read.
+        unsafe {
             let mut n: GLuint = 0;
             glGenTextures(1, &mut n);
             glBindTexture(GL_TEXTURE_3D, n);
@@ -7829,6 +7906,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_3d_texture_is_stacked_for_a_backend_that_walks_the_stack() {
         /* upstream b0e3e4a: the GC7000's texture unit looks for slice k at
          * k * SLICE, which a grid is not; stacked is what a 2D array already
@@ -8515,7 +8593,9 @@ mod tests {
             glGenerateMipmap(BAD_TARGET);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
             glGenerateMipmap(GL_TEXTURE_3D);
-            assert_eq!(gl.error(), GL_INVALID_OPERATION, "no 3D texture bound");
+            /* not an ES 2.0 target (`es3_only_texture_target`) */
+            let want = if crate::REPORT_ES2 { GL_INVALID_ENUM } else { GL_INVALID_OPERATION };
+            assert_eq!(gl.error(), want, "no 3D texture bound");
             glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "no cube map bound");
         }
@@ -8596,6 +8676,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_parameter_es3_names_are_accepted_and_ignored() {
         let gl = TestGl::new(4, 4);
         let name = new_tex();
@@ -8714,14 +8795,15 @@ mod tests {
     }
 
     #[test]
-    fn get_tex_parameterfv_writes_zero_on_an_error() {
-        /* documented in the code: on an error the value written is 0 */
+    fn get_tex_parameterfv_writes_nothing_on_an_error() {
+        /* ES 2.0.25 2.5: "no change is made to these values" (0 was written
+         * until issue #128) */
         let gl = TestGl::new(4, 4);
         new_tex();
         let mut f: GLfloat = -1.0;
         // SAFETY: room for one value.
         unsafe { glGetTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_2D, &mut f) };
-        assert_eq!(f, 0.0);
+        assert_eq!(f, -1.0);
         assert_eq!(gl.error(), GL_INVALID_ENUM);
     }
 
@@ -8959,6 +9041,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_storage_rgba16f_then_half_float_sub_image() {
         let gl = TestGl::new(4, 4);
         let name = new_tex();
@@ -9088,6 +9171,7 @@ mod tests {
     /// up their texture until 2026-09-24). imageSize is checked for every
     /// ES 3.0 format, stored or not (compressedteximage2d_invalid_size).
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_compressed_2d_array_holds_its_layers_level_by_level() {
         let gl = TestGl::new(4, 4);
         gl.backend_like_gc7000();
@@ -9174,6 +9258,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn bind_sets_the_target_and_layer_count_once() {
         let gl = TestGl::new(4, 4);
         let cube = bind_new(GL_TEXTURE_CUBE_MAP);
@@ -9323,6 +9408,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_storage_3d_allocates_one_level_of_the_whole_grid() {
         let gl = TestGl::new(4, 4);
         let vol = bind_new(GL_TEXTURE_3D);
@@ -9386,6 +9472,7 @@ mod tests {
     /// (texsubimage3d_max_level). All three passed or answered
     /// GL_INVALID_OPERATION until 2026-09-24.
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_storage_level_counts_and_the_3d_level_cap() {
         let gl = TestGl::new(4, 4);
         bind_new(GL_TEXTURE_2D);
@@ -9461,6 +9548,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_storage_3d_limits() {
         let gl = TestGl::new(4, 4);
         let vol = bind_new(GL_TEXTURE_3D);
@@ -9482,6 +9570,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_image_3d_writes_each_slice_into_its_tile() {
         let gl = TestGl::new(4, 4);
         let vol = bind_new(GL_TEXTURE_3D);
@@ -9514,6 +9603,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_sub_image_3d_checks_the_slice_size_not_the_grid() {
         let gl = TestGl::new(4, 4);
         bind_new(GL_TEXTURE_3D);
@@ -9533,6 +9623,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_image_3d_stacks_the_layers_of_an_array() {
         let gl = TestGl::new(4, 4);
         let arr = bind_new(GL_TEXTURE_2D_ARRAY);
@@ -9603,6 +9694,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn tex_storage_3d_lays_out_the_array_chain() {
         let gl = TestGl::new(4, 4);
         let arr = bind_new(GL_TEXTURE_2D_ARRAY);
@@ -9708,6 +9800,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn out_of_memory_storage_logs_the_layout() {
         let gl = TestGl::new(4, 4);
         bind_new(GL_TEXTURE_2D_ARRAY);
@@ -9724,6 +9817,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn generate_mipmap_fills_the_chain_of_a_cube_map_and_of_a_float_array() {
         let gl = TestGl::new(4, 4);
         let cube = bind_new(GL_TEXTURE_CUBE_MAP);
@@ -9996,6 +10090,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn copy_tex_sub_image_3d_writes_one_slice_of_an_array() {
         let gl = TestGl::new(4, 4);
         fill_surface(&gl, 4, 4);
@@ -10028,6 +10123,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn compressed_tex_sub_image_3d_has_no_storage_to_write_into() {
         let gl = TestGl::new(4, 4);
         bind_new(GL_TEXTURE_2D_ARRAY);
@@ -10089,6 +10185,7 @@ mod tests {
     /// 3D upload below reads 1 MiB past a 512-byte buffer (a crash here, as
     /// in dEQP); drop the datum check and the offset-3 upload succeeds.
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn an_upload_past_the_unpack_buffer_or_misaligned_is_refused() {
         let gl = TestGl::new(4, 4);
         let mut buf: GLuint = 0;
@@ -10157,11 +10254,13 @@ mod tests {
     }
 
     /// The four halves of an RGBA16F texel at byte offset `off`.
+    #[cfg(not(feature = "report-es2"))] /* only the ES 3.0 tests use it */
     fn halves4(s: &[u8], off: usize) -> [f32; 4] {
         core::array::from_fn(|c| draw::half_to_float(u16::from_le_bytes([s[off + c * 2], s[off + c * 2 + 1]])))
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn generate_mipmap_averages_rgba16f_texels_as_floats() {
         /* upstream 2c48538: the box filter averages halves as floats */
         let gl = TestGl::new(4, 4);
@@ -10184,6 +10283,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn generate_mipmap_averages_r32f_rows_at_the_padded_pitch() {
         /* a 4 x 1 R32F texture: level 1 is 2 x 1, level 2 is 1 x 1 but
          * stored 2 texels wide (GL_TEX_PITCH) */
@@ -10600,6 +10700,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_texture_whose_chain_does_not_fit_the_offsets_is_out_of_memory() {
         /* checked arithmetic: the level offsets are u32, and the shipped
          * profile has no overflow checks */
@@ -10804,16 +10905,23 @@ mod tests {
         let gl = TestGl::new(8, 8);
         let t = bind_new(GL_TEXTURE_2D);
         let _ = t;
-        for (internal, format, type_) in [
-            (GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE),
-            (GL_SRGB8, GL_RGB, GL_UNSIGNED_BYTE),
-            (GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT),
-            (GL_R16F, GL_RED, GL_HALF_FLOAT),
-            (GL_RGBA32F, GL_RGBA, GL_FLOAT),
+        /* the float names with the extension's GL_HALF_FLOAT_OES: with ES 3.0's
+         * GL_HALF_FLOAT or GL_FLOAT the type is refused first, GL_INVALID_ENUM
+         * (`es3_only_pixel_type`) */
+        const GL_HALF_FLOAT_OES: GLenum = 0x8D61;
+        for (internal, format, type_, want) in [
+            (GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, GL_INVALID_VALUE),
+            (GL_SRGB8, GL_RGB, GL_UNSIGNED_BYTE, GL_INVALID_VALUE),
+            (GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT_OES, GL_INVALID_VALUE),
+            (GL_R16F, GL_RED, GL_HALF_FLOAT_OES, GL_INVALID_VALUE),
+            (GL_RGBA32F, GL_RGBA, GL_HALF_FLOAT_OES, GL_INVALID_VALUE),
+            (GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, GL_INVALID_ENUM),
+            (GL_R16F, GL_RED, GL_HALF_FLOAT, GL_INVALID_ENUM),
+            (GL_RGBA32F, GL_RGBA, GL_FLOAT, GL_INVALID_ENUM),
         ] {
             // SAFETY: null pixels only allocate.
             unsafe { glTexImage2D(GL_TEXTURE_2D, 0, internal as GLint, 2, 2, 0, format, type_, core::ptr::null()) };
-            assert_eq!(gl.error(), GL_INVALID_VALUE, "0x{internal:x}");
+            assert_eq!(gl.error(), want, "0x{internal:x} type 0x{type_:x}");
         }
         /* and the ones an advertised extension does cover are taken */
         for (internal, format) in [(GL_RGBA8, GL_RGBA), (GL_RGB565, GL_RGB), (GL_R8, GL_RED), (GL_RG8, GL_RG)] {
@@ -11599,7 +11707,9 @@ mod tests {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT as GLint, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "and the other way round");
             glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT as GLint, 1, 1, 0, GL_BGRA_EXT, GL_FLOAT, core::ptr::null());
-            assert_eq!(gl.error(), GL_INVALID_OPERATION, "the extension has no float BGRA");
+            /* the ES 2.0 surface has no GL_FLOAT type at all (`es3_only_pixel_type`) */
+            let want = if crate::REPORT_ES2 { GL_INVALID_ENUM } else { GL_INVALID_OPERATION };
+            assert_eq!(gl.error(), want, "the extension has no float BGRA");
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,

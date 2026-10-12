@@ -6193,6 +6193,7 @@ mod tests {
     /// hands a 2D one and expects GL_INVALID_OPERATION); a layer past the
     /// limit is GL_INVALID_VALUE.
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn framebuffer_texture_layer_takes_3d_and_array_textures_only() {
         let gl = TestGl::new(8, 8);
         bound_fb();
@@ -6542,6 +6543,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn texture_layer_attachment_of_a_float_array() {
         let gl = TestGl::new(8, 8);
         let arr = bind_new_texture(GL_TEXTURE_2D_ARRAY);
@@ -7129,6 +7131,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
     fn a_3d_texture_attachment_is_incomplete() {
         /* a 3D texture's slices are tiled in a grid: there is no level the
          * PBE could write at the target's row pitch */
