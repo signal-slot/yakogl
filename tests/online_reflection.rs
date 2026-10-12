@@ -181,9 +181,21 @@ fn table_varyings(b: &ShcBlob) -> Result<Vec<(u8, String)>, String> {
         /* A vertex shader's outputs include gl_Position and gl_PointSize,
          * which are below VAR0 and are not user varyings. */
         if x.slot < VARYING_SLOT_VAR0 {
+            /* gl_PointCoord's fragment row (slot 25, named for the link)
+             * is made by the rasteriser: it is no varying either. */
+            if b.stage == yakogl::shaderc::SHC_STAGE_FRAGMENT && cname(&x.name) == "gl_PointCoord" {
+                continue;
+            }
             if b.stage == yakogl::shaderc::SHC_STAGE_FRAGMENT {
                 return Err(format!("fragment input '{}' has slot {} below VAR0", cname(&x.name), x.slot));
             }
+            continue;
+        }
+        /* A matrix or array varying takes one register per column or
+         * element; only the first row carries the declaration's name. The
+         * rest are register wiring, paired by slot in the link
+         * (shaderc::link::by_register), and not a declaration. */
+        if x.name[0] == 0 {
             continue;
         }
         out.push((x.slot - VARYING_SLOT_VAR0, cname(&x.name)));

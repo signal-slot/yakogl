@@ -305,10 +305,13 @@ fn moving_a_value_to_another_lane_changes_no_output() {
      * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
      * dsy (SRC2) and `%` (builtins::imod), so more table sources get
      * through; every one runs (the interpreter models txf, dsx, dsy and the front-facing register now) and matches. */
+    /* 2026-10-12 (issue #22): 220 rows appended to the GC7000 table
+     * (tools/vivante/README.md, "The table against its sources"); every one
+     * runs and matches. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         with_moves,
-        if es2 { 58 } else { 135 },
+        if es2 { 165 } else { 249 },
         "the population moved: {with_moves} programs move a lane; re-derive the pin"
     );
     assert_eq!(

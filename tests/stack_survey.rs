@@ -229,8 +229,8 @@ macro_rules! parts {
     };
 }
 parts! {
-    the_compilers_stack_by_phase_table_vertex: "table vertex", if cfg!(feature = "gpu-vivante") { 179 } else { 219 };
-    the_compilers_stack_by_phase_table_fragment: "table fragment", if cfg!(feature = "gpu-vivante") { 151 } else { 335 };
+    the_compilers_stack_by_phase_table_vertex: "table vertex", 219; // both GPUs' tables, by chance
+    the_compilers_stack_by_phase_table_fragment: "table fragment", if cfg!(feature = "gpu-vivante") { 331 } else { 335 };
     the_compilers_stack_by_phase_shaders_top: "tools/shaders", 20;
     the_compilers_stack_by_phase_shaders_es100: "tools/shaders/es100", 113;
     the_compilers_stack_by_phase_shaders_es300: "tools/shaders/es300", 30;
@@ -243,7 +243,9 @@ parts! {
     the_compilers_stack_by_phase_shaders_qt3d: "tools/shaders/qt3d", 332;
     the_compilers_stack_by_phase_adversarial: "adversarial", 10;
 }
-const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 1138 } else { 1362 };
+/* The GC7000 table rows: 179 + 151 until 2026-10-12, when 220 were appended
+ * (issue #22; tools/vivante/README.md, "The table against its sources"). */
+const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 1358 } else { 1362 };
 
 /// The parts together are the whole corpus: every source is in exactly one
 /// part (`corpus` refuses a directory no part names), each part holds the

@@ -224,11 +224,13 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
      * (none); e0880's second indexed read reuses that byte offset and is one
      * `load` where it was another movar + mov. dynidx: 8/3 -> 7/4 over 11
      * instructions; e0880: 25/8 -> 23/9, 33 -> 32 instructions. */
-    assert_eq!(instrs, 14104, "instructions in the table");
+    /* 2026-10-12 (issue #22): 220 rows appended to the table
+     * (tools/vivante/README.md, "The table against its sources"). */
+    assert_eq!(instrs, 19364, "instructions in the table");
     let imm = hist.get(&7).expect("the immediate group has a row");
-    assert_eq!(imm.get(&0).copied().unwrap_or(0), 12249, "immediates: none");
-    assert_eq!(imm.get(&1).copied().unwrap_or(0), 1509, "immediates: one");
-    assert_eq!(imm.get(&2).copied().unwrap_or(0), 346, "immediates: two");
+    assert_eq!(imm.get(&0).copied().unwrap_or(0), 16330, "immediates: none");
+    assert_eq!(imm.get(&1).copied().unwrap_or(0), 2541, "immediates: one");
+    assert_eq!(imm.get(&2).copied().unwrap_or(0), 493, "immediates: two");
     assert_eq!(imm.get(&3).copied().unwrap_or(0), 0, "immediates: three, which the reference never emits");
 
     /* Three source slots is the encoding's own shape; a row above that means
@@ -264,6 +266,27 @@ fn how_many_operands_of_one_group_an_instruction_holds() {
 /// silence is not the machine's refusal -- but it is a place where we do
 /// something no shipped shader does, and those are worth knowing by name.
 fn which_operations_the_reference_gives_a_non_temporary_operand() {
+    /* Pairs the table shows only since 220 rows were appended to it
+     * (2026-10-12, issue #22): Mesa does give these operations a uniform or
+     * an immediate operand. `OpId::takes_group` still refuses them, which
+     * costs an instruction each (the move into a temporary) and changes no
+     * output; widening it would change what the online compiler emits for
+     * every shader that uses them, and nothing has run that on a board. The
+     * other direction stays strict: an operand we allow that the reference
+     * never shows still fails, and so does an entry here that the reference
+     * no longer shows or the rule now allows. A follow-up can widen the rule
+     * with a board run. */
+    const STILL_REFUSED: &[(&str, u32)] = &[
+        ("exp", 2),
+        ("frc", 2),
+        ("log", 2),
+        ("or", 2),
+        ("rsq", 2),
+        ("set", 7),
+        ("texld", 2),
+        ("texldb", 2),
+        ("xor", 7),
+    ];
     use yakogl::shaderc::online::vivante::build::op_id;
 
     let mut seen: BTreeMap<(&'static str, u32), usize> = BTreeMap::new();
@@ -284,11 +307,21 @@ fn which_operations_the_reference_gives_a_non_temporary_operand() {
      * it, and one it shows in quantity must be allowed. */
     let ops: std::collections::BTreeSet<&str> = seen.keys().map(|(o, _)| *o).collect();
     let mut drift: Vec<String> = Vec::new();
+    for (op, g) in STILL_REFUSED {
+        let n = seen.get(&(*op, *g)).copied().unwrap_or(0);
+        let allowed = op_id(op).is_some_and(|id| id.takes_group(*g as u8));
+        if n == 0 || allowed {
+            drift.push(format!("STILL_REFUSED {op} group {g} is stale: reference {n}, takes_group {allowed}"));
+        }
+    }
     for op in &ops {
         let Some(id) = op_id(op) else { continue };
         for g in [1u32, 2, 3, 4, 7] {
             let n = seen.get(&(op, g)).copied().unwrap_or(0);
             let allowed = id.takes_group(g as u8);
+            if n > 0 && !allowed && STILL_REFUSED.contains(&(*op, g)) {
+                continue;
+            }
             if (n > 0) != allowed {
                 drift.push(format!("{op} group {g}: reference {n}, takes_group {allowed}"));
             }

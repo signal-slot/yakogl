@@ -52,11 +52,16 @@ source entry byte for byte (the header names the toolchain that compiled the
 appended rows). That is how a new shader gets a row on a host whose etna_shc
 does not reproduce the committed table: this laptop's (e224bebc...) reproduces
 none of the 324 rows, so a regeneration there would be a new reference. The
-FemtoVG NO_SCISSOR programs were added this way on 2026-10-02.
+FemtoVG NO_SCISSOR programs were added this way on 2026-10-02, and on
+2026-10-12 every table-directory source that compiles (219, issue #22; see
+"The table against its sources" below). A fragment shader that reads
+`gl_FrontFacing` is appended with its second row, as a full run places it.
 
 `--replace <path under tools/shaders>...` recompiles named rows that are
-already in the table, in place: each keeps its position, symbol number and
-source entry, every other row stays byte for byte, and the header names the
+already in the table, in place: each keeps its position and symbol number, and
+its key (SHA-256) and stored source follow the file as it is now, so a row
+whose source was edited after it was made gets the key the runtime computes.
+Every other row stays byte for byte, and the header names the
 toolchain that compiled the replaced rows. It refuses the result if any other
 row changed. That is how a toolchain fix reaches only the rows it changes:
 on 2026-10-04 etna_shc started lowering uniforms to UBO 0 as Mesa's GL state
@@ -69,6 +74,122 @@ them (`es300/dynidx.frag`, `qt3d/e0880dcd5582d4de.frag`) were replaced, and
 the two Qt particle vertex shaders are refused by the generator's layout
 check (their `ubuf.sizetable` is packed in the GL core's block where Mesa's
 offsets assume a vec4 per element) and keep `movar`, an open item.
+
+### The table against its sources (issue #22, 2026-10-12)
+
+Issue #22 was "the GC7000 table lags the shader sources". Measured on the
+main tip `ba25def7` (2026-10-13) before this change, by comparing each
+source's SHA-256 with the row keys: the table had 330 rows (325 distinct
+keys); of the 714 sources in the `gc7000` directories of
+`tools/shaders/precompiled.list`, 326 had a row under their current key, 387
+had no row, and one row (`es300/texsize.frag`) had a stale key, because a
+precision line was added to the file after its row was made. The `matattr`
+rows were current.
+
+Generator fixes (all in this directory):
+
+1. `glsl2vivante.py` `translate_es100_gl` translates three ES 1.00 forms that
+   glslang refused before: `gl_FragData[0]` (now an `out vec4`), `textureCube`
+   and `textureCubeLod`, and an array size written as a sum (`u_lights[0 +
+   16]`, resolved in `es100.py` `_resolve_size`).
+2. `etna_shc.c` makes `gl_PointCoord` a fragment input at `VARYING_SLOT_PNTC`,
+   as the GL state tracker does, and splits matrix and array varyings per
+   element. `gen_shader_table.py` names the PNTC row `gl_PointCoord`, the name
+   the link looks for.
+3. `--replace` rewrites the row's key and stored source (see above).
+4. `--append` takes a fragment shader that reads `gl_FrontFacing` and appends
+   both of its rows.
+5. `check_gl_test_blobs.py` reports gl_test sources whose directory has no
+   `gc7000` role (`gltest/`, `offarm/`) on a `LISTED OUT` line, not as
+   `NO ROW`: leaving them out is the list's decision, not a lag.
+
+The commands and what they printed (etna_shc built from this directory's
+`etna_shc.c` in Mesa 26.2.1 as "Set up once" above says, binary sha256
+`c9845f2b...`; glslang 16.2.0; the table's own header lines name both):
+
+```sh
+ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc \
+    python3 tools/vivante/gen_shader_table.py --append <the 219 sources>
+  -> kept 330 committed rows byte for byte, appended 220
+ETNA_SHC=... python3 tools/vivante/gen_shader_table.py --replace es300/texsize.frag
+  -> kept 549 committed rows byte for byte, replaced 1: es300/texsize.frag
+python3 tools/vivante/gen_shader_table.py --self-test
+  -> allowlist self-test ok (11 directories accounted for)
+     550 committed rows parse; row comparison ok
+python3 -I tools/vivante/check_gl_test_blobs.py        (exit 0)
+  -> table tests/reference/vivante_blobs.rs: 544 rows  (distinct keys)
+     gl_test_shaders.h  192 shaders, 0 without a row, 12 with an empty
+       program, 82 left out by the source list, 3 refused by the compiler
+         LISTED OUT 69 from tools/shaders/gltest/, 13 from tools/shaders/offarm/
+         REFUSED  gl_test_uniidx_a_fs_src, _b_, _c_  (layout check)
+     gl_test_shaders_es100.h  the same
+     glsl2usc.sh inputs 587 sources, 0 stale, 32 excused
+ETNA_SHC=... python3 tools/vivante/gen_shader_table.py      (the full run, exit 1)
+  -> FAIL <source> <message>, one line per source the toolchain refuses
+     (176: the 168 below, the three `matattr` and two Qt particle vertex
+     shaders whose rows an older etna_shc made, `gltest/isamp.frag`,
+     `gltest/usamp.frag` and `internal/es/fbload_int.frag`);
+     reproduced 56 of 550 committed rows byte for byte; REFUSING to overwrite
+```
+
+The full run is the enumeration of what the toolchain refuses, not a
+regeneration: this host's etna_shc does not reproduce the rows an older build
+made, so the generator refuses to overwrite the reference (that is its design,
+see "THE COMMITTED TABLE IS THE REFERENCE" in `gen_shader_table.py`). "The 219
+sources" are the table-directory sources without a row that the full run does
+not FAIL; `es100/frontfacing.frag` brings its `@front_cw` row, so 220 rows were
+appended. The same 220 rows were made twice, on two hosts with different builds
+of etna_shc (`c9845f2b...` with glslang 16.2.0, which is the committed table,
+and `1d52afef...` with glslang 16.4.0): the two tables differ only in the two
+header lines that name the toolchain.
+
+After it: 550 rows under 544 distinct keys (the check counts keys): the four
+`@front_cw` rows share their shader's key, and two pairs of files have the
+same text, so one row per file gives 546 sources but 544 keys
+(`qt3d/dd68cd85f59b3ec6.vert` = `qt3d/offlineshaders_es3_qtappshaders_1.vert`,
+`qt3d/helloqtquick3d_qtappshaders_0.frag` = `qt3d/qtappshaders_0.frag`). Every one of the 714 sources in a `gc7000` directory
+either has a row under its current SHA-256 (546), or is refused (168); no row
+has a stale key, and the only rows with no file of their own are the four
+`@front_cw` rows. The 168 refused sources, each compiled again and its message
+read:
+
+| Class | Count | Sources | Message |
+|---|---|---|---|
+| layout check | 3 | `es100/uniidx_a/b/c.frag` | a run-time uniform index reads block dword 4 or 1 where Mesa's offsets point at 16 or 4 |
+| constant file | 2 | `es100/light_amount_0_16.vert`, `light_amount_2_2.vert` | constant register 44 reads uniform index 0, which no declared uniform covers |
+| Mesa assertion | 2 | `es100/vtex_struct_sampler(_array).vert` | `nir_lower_samplers.c:45` (a sampler in a struct) |
+| etna_shc assertion | 14 | 13 `qt/*.vert`, `qt3d/27371573a9ac1abd.frag` | `etnaviv_compiler_nir_liveness.c:94` |
+| reflection | 83 | 51 `qt3d/<hash>.frag`, 32 `qt3d/qtparticleshaders_*.frag` | nested structs are not reflected |
+| glslang | 64 | `qt3d/qtparticleshaders_*.vert` | glslang: SPIR-V is not generated for failed compile or link (the earlier record read `_94.vert`'s cause: `num_views` needs an extension; the others were not read one by one) |
+
+Only `uniidx_a/b/c` are gl_test sources. `check_gl_test_blobs.py` names them
+in `GC7000_REFUSED` with this message and reports them as `REFUSED`, not as a
+lagging table, so it exits 0; a listed file that is edited (its SHA-256 no
+longer matches) or that gains a row fails the check again. A row for them
+needs the GL core's uniform block to match Mesa's offsets, or a generator
+that rewrites the offsets.
+
+The table is the corpus of several host tests, so their population pins
+moved with it (`alloc_clobber`, `backend_differential`,
+`lane_move_equivalence`, `undefined_lanes`, `operand_banks`,
+`online/vivante/roundtrip.rs`, `es100_twins`, `source_use_bits`). When the
+table changes again, take the new numbers from the failing tests' messages.
+
+Still open after this change:
+
+- `tools/check.sh` does not run `check_gl_test_blobs.py`, and nothing checks
+  the table's keys against `tools/shaders` in the gate. `check_table_absent`
+  under LTO is open too. Both are later work.
+- `gltest/` (69 gl_test sources) and `offarm/` (13, PowerVR only) have role
+  `-` in `precompiled.list`, so they get no GC7000 row. Giving `gltest` the
+  `gc7000` role needs an i.MX8MP gl_test run with no compiler afterwards.
+- The 168 refused sources above.
+- No new row has run on a board. The table is the Mesa reference
+  (`shaderc::offline`): host tests and the `mesa-reference-table`
+  measurement images use it. The dEQP images use the compiler, so no
+  dEQP-GLES2 result can move because of it. `src/shaderc/precompiled.rs` (our
+  compiler's table, made per build) cannot lag the sources and needed no
+  change.
 
 Two differences from `tools/glsl2usc.sh`, which builds the PowerVR table:
 blending and colour masks are pixel-engine state on this GPU, so there are no

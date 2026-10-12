@@ -38,7 +38,7 @@ def translate_es100_gl(text, stage):
             continue
         invariant, storage, typ, declarators = m.group(1), m.group(2), m.group(3), m.group(4)
         for d in [x.strip() for x in declarators.split(",")]:
-            dm = re.match(r"(\w+)\s*(\[\s*(\w+)\s*\])?$", d)
+            dm = re.match(r"(\w+)\s*(\[\s*([\w\s+]+?)\s*\])?$", d)
             if not dm:
                 raise SystemExit("cannot parse declarator '%s'" % d)
             name, array = dm.group(1), dm.group(2) or ""
@@ -63,8 +63,16 @@ def translate_es100_gl(text, stage):
     if stage == "fs" and uses_fragcolor:
         header.append("layout(location = 0) out vec4 yk_FragColor;\n#define gl_FragColor yk_FragColor\n")
     header.append("#define texture2D texture\n#define texture2DProj textureProj\n"
-                  "#define texture2DLod textureLod\n#define texture2DProjLod textureProjLod\n")
+                  "#define texture2DLod textureLod\n#define texture2DProjLod textureProjLod\n"
+                  "#define textureCube texture\n#define textureCubeLod textureLod\n")
     body = "".join(out)
+    if stage == "fs" and re.search(r"\bgl_FragData\b", body):
+        # ES 2.0 has one colour attachment, so gl_FragData[0] is the only
+        # element a shader may write; 4.60 has no gl_FragData, it is an `out`.
+        if re.search(r"\bgl_FragData\s*\[\s*[1-9]", body):
+            raise SystemExit("gl_FragData[n] with n > 0 is not ES 2.0")
+        body = re.sub(r"\bgl_FragData\s*\[\s*0\s*\]", "yk_FragData0", body)
+        header.append("layout(location = 0) out vec4 yk_FragData0;\n")
     if stage == "vs":
         body = u._hoist_gl_position(body, attrib_names)
     return "".join(header) + body

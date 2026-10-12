@@ -136,8 +136,9 @@ is kept and pinned by tests.
      with GLSL at run time (149 `case_vsunits`, 150 `shprobe`, 166
      `fshprobe`'s `shp_arm` and `fshp_arm_units`); no table can name those
      programs, so those cases need the compiler.
-   - Open: the GC7000 has no table row for most gl_test sources (issue
-     #22, in "Known defects"); a `gc7000` role for `dir gltest` needs
+   - Open: the GC7000 has no table row for the 69 gl_test sources in
+     `tools/shaders/gltest/`, whose `dir` line has no `gc7000` role (issue
+     #22, in "Known defects"); that role needs
      `gen_shader_table.py --append` with etna_shc, then an i.MX8MP run with
      no compiler. The V3D table cannot be regenerated while the pair reader
      has unresolved sites (`tools/v3d/glsl2v3d.py`).
@@ -283,12 +284,17 @@ is kept and pinned by tests.
      one board run and no code change. Fix F1 there: skip the flip when the
      LCDIF already scans the buffer (and F2: honour the swap interval
      through `yakogl_zephyr_wait_vblank`).
-   - The GC7000 Mesa table (`tests/reference/vivante_blobs.rs`) lags the
-     gl_test source list (#22): the four `matattr` keys are current, but
-     `tools/vivante/check_gl_test_blobs.py` exits 1 with 146 of gl_test's
-     192 shaders without a row (325 rows, 2026-10-11). The script is not in
-     `tools/check.sh`. It matters only for images that use the table; the
-     dEQP images use the compiler.
+   - The GC7000 Mesa table (`tests/reference/vivante_blobs.rs`) no longer
+     lags its sources (#22, 2026-10-13): 550 rows, every source in a
+     `gc7000` directory has a row under its current SHA-256 or is refused
+     by the toolchain (168, by class in `tools/vivante/README.md`, "The
+     table against its sources"). `tools/vivante/check_gl_test_blobs.py`
+     exits 0: it reports the three `uniidx` sources as refused (named in
+     its `GC7000_REFUSED` with the toolchain's message), and lists `gltest/` (69)
+     and `offarm/` (13) as left out by `precompiled.list`. Open: the script
+     and a key check are not in `tools/check.sh`, and `check_table_absent`
+     under LTO. It matters only for images that use the table; the dEQP
+     images use the compiler.
    - glmark2 terrain black (#1) and the AM62P refract depth pass (#2) are
      fixed on the host (NPOT chains, `2673197`, `77693ff`, `cc78859`; the
      pool's top region, `541c9d3`); on the AM62P at `f2a13877` all 33

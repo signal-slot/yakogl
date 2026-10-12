@@ -3595,7 +3595,12 @@ impl<'a> Sel<'a> {
                 /* Read back whole and unmodified: the move already applied
                  * whatever the operand carried, including an immediate's
                  * broadcast. */
-                *slot = Some(SelSrc::Virtual { v, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false });
+                /* A branch's condition is one lane, fed in all four swizzle
+                 * positions (`branch_convert`, tests/branch_splat.rs): a
+                 * constant `if (false)` is materialised here, not splatted
+                 * there. */
+                let swizzle = if ins.op.op().name == "branch_unary" { [0; 4] } else { ir::SWIZZLE_IDENTITY };
+                *slot = Some(SelSrc::Virtual { v, swizzle, neg: false, abs: false });
                 note_site(|k| k.legalised += 1);
             }
             out.push(self.arena, ins)?;

@@ -212,7 +212,7 @@ fn differences(orig: &ShcShader, twin: &ShcShader) -> Vec<String> {
     out
 }
 
-/// The thirteen pairs, found in the table rather than listed here: any source
+/// The fourteen pairs, found in the table rather than listed here: any source
 /// under `gl_test_es100/` must have a same-basename original beside it. A twin
 /// added without its original, or an original renamed out from under a twin,
 /// is a failure and not a silently shorter run.
@@ -240,7 +240,7 @@ fn every_es100_twin_reflects_exactly_like_its_glsl_450_original() {
     }
 
     assert!(problems.is_empty(), "{} twin(s) differ from their original:\n  {}", problems.len(), problems.join("\n  "));
-    assert_eq!(pairs, 13, "expected 13 ES 1.00 twins in the table, found {pairs}");
+    assert_eq!(pairs, 14, "expected 14 ES 1.00 twins in the table, found {pairs}");
 }
 
 /// The AM62P's table is not ours and this work must not change it. The twins

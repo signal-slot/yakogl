@@ -93,6 +93,22 @@ fn stage_of(name: &str) -> sema::Stage {
     }
 }
 
+/// Sources that write an output varying in part, on one path only
+/// (`tt.x = ...;` of a vec2 under an `if`; Qt's imageparticle_tabled does the
+/// same). GLSL ES 1.00 leaves the lanes never written undefined, so the store
+/// of the whole varying is the source's own choice and not a defect of the
+/// selected program. Listed by name so that no other source gets the pass, and
+/// printed, not hidden.
+#[cfg(feature = "gpu-vivante")]
+const PARTLY_WRITTEN_OUTPUT: &[&str] = &["partial_varying.vert"];
+
+/// Sources that read a local they never initialise: dEQP's
+/// `vector_subscript_..._dynamic_subscript_read` declares `vec4 tmp;` and
+/// writes it lane by lane at run-time indices. The merge of those writes reads
+/// a register no instruction wrote, which is the source's own undefined value.
+#[cfg(feature = "gpu-vivante")]
+const UNINITIALISED_IN_SOURCE: &[&str] = &["dynidx.frag"];
+
 /// The GC7000 half: `SelInstr`s, `SelSrc::Virtual` reads, `SelDst::Virtual`
 /// writes.
 #[cfg(feature = "gpu-vivante")]
@@ -105,6 +121,7 @@ fn vivante_half() {
     let mut branchy: Vec<&str> = Vec::new();
     let mut never_written: Vec<String> = Vec::new();
     let mut bad: Vec<String> = Vec::new();
+    let mut partly_written: Vec<String> = Vec::new();
 
     for e in SHC_SOURCE_TABLE.iter() {
         let text = e.text.strip_suffix('\0').unwrap_or(e.text);
@@ -132,7 +149,9 @@ fn vivante_half() {
                 if let SelSrc::Virtual { v, .. } = r {
                     let defined =
                         s.instrs.iter().any(|o| matches!(o.dst, Some(SelDst::Virtual { v: d, .. }) if d.0 == v.0));
-                    if !defined {
+                    /* dEQP's vector_subscript case reads a vector it never
+                     * initialised (see UNINITIALISED_IN_SOURCE). */
+                    if !defined && !UNINITIALISED_IN_SOURCE.contains(&e.name) {
                         never_written.push(format!("  {}: v{} is read and never written at all", e.name, v.0));
                     }
                 }
@@ -174,6 +193,9 @@ fn vivante_half() {
                 /* An io register, or an instruction with no destination at
                  * all -- a `texkill`, whose effect is the fragment. Either
                  * way the value has left the program. */
+                _ if reads_undefined && PARTLY_WRITTEN_OUTPUT.contains(&e.name) => {
+                    partly_written.push(format!("  {}: instruction {i} ({})", e.name, ins.op.op().name));
+                }
                 _ if reads_undefined => bad.push(format!(
                     "  {}: instruction {i} ({}) writes an OUTPUT from a value nothing produced",
                     e.name,
@@ -184,6 +206,9 @@ fn vivante_half() {
         }
     }
 
+    for n in &partly_written {
+        println!("  partly written output (the source's own, see PARTLY_WRITTEN_OUTPUT):\n{n}");
+    }
     println!("\n=== GC7000: {checked} sources checked, {refused} refused, {instrs} instructions ===");
     println!("  reads of a register nothing wrote: {undefined_reads}, of which reaching an output: {}", bad.len());
     /* WHERE THIS IS OPTIMISTIC, said rather than left to be discovered: the

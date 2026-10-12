@@ -663,11 +663,22 @@ for L in TF XT GT21; do
 done
 # the same record captured through a serial bridge (BOARD_UART=host:port):
 # console.ts rows "<unix time> line", console.txt derived by board.sh's own
-# console_from_ts, line for line the device capture's, and the same verdict
+# console_from_ts, line for line the device capture's, and the same verdict.
+# The rows are made by python3, as console_from_ts reads them: gawk (mktime)
+# is not on every gate host, and a missing gawk failed these two checks on
+# hosts with only mawk (2026-10-12).
 d="$S/pi4/bridge/20261003-1300-GT21-0123abcd"
 mkrun "$d" board=pi4 boot=tryboot name=GT21 probe=0 back=1 t_reboot=100 t_back=370
-TZ=UTC gawk '{ split($1, h, ":"); t = mktime("2026 10 03 " h[1] " " h[2] " " h[3]); sub(/^[^ ]+ /, ""); printf "%d.%03d %s\n", t, NR % 1000, $0 }' \
-    "$TD/pi4-tryboot-GT21-29460f96.console.txt" > "$d/console.ts"
+python3 - "$TD/pi4-tryboot-GT21-29460f96.console.txt" > "$d/console.ts" <<'EOF'
+import calendar, sys
+# "HH:MM:SS line" -> "<unix time of 2026-10-03 HH:MM:SS UTC>.<row % 1000> line"
+for n, line in enumerate(open(sys.argv[1], "rb"), 1):
+    line = line.rstrip(b"\n")
+    hms, _, rest = line.partition(b" ")
+    h, m, s = (int(x) for x in hms.split(b":"))
+    t = calendar.timegm((2026, 10, 3, h, m, s, 0, 0, 0))
+    sys.stdout.buffer.write(b"%d.%03d %s\n" % (t, n % 1000, rest))
+EOF
 RD=$d TZ=UTC console_from_ts
 same "pi4 bridge capture: console.txt derived from console.ts equals the device capture's" "$TD/pi4-tryboot-GT21-29460f96.console.txt" "$d/console.txt"
 check "pi4 bridge capture: the same verdict as the device capture (done rc 0)" says pi4 "$d" "rc=0 verdict=done"

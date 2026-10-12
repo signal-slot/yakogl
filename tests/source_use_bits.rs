@@ -100,17 +100,15 @@ fn every_source_use_bit_we_emit_is_the_references() {
         })
         .collect();
     println!("{counted} instructions with use fields; ours {ours:?}");
-    /* The population, per build: the table's texldl all come from GLSL ES
-     * 3.00 sources (es300/cube.frag and its kin), which a report-es2 build
-     * refuses in the front end (pp.rs out_of_scope); texld reaches the check
-     * in both. dEQP's ES 1.00 shapes below check texldl and texldb in both. */
-    let es2 = cfg!(feature = "report-es2");
+    /* The population: texld and texldl reach the check in both builds. The
+     * table's texldl once came only from GLSL ES 3.00 sources (es300/cube.frag
+     * and its kin), which a report-es2 build refuses in the front end (pp.rs
+     * out_of_scope); es100/cubelod.* and cubebias.*, appended to the table
+     * with textureCube / textureCubeLod translated (2026-10-12, issue #22),
+     * give an ES 1.00 source with texldl, so a report-es2 build checks it too.
+     * dEQP's ES 1.00 shapes below check texldl and texldb in both. */
     assert!(ours.get("texld").is_some_and(|p| !p.is_empty()), "no texld reached the check");
-    assert_eq!(
-        ours.get("texldl").is_some_and(|p| !p.is_empty()),
-        !es2,
-        "the table's texldl population moved (report-es2: {es2})"
-    );
+    assert!(ours.get("texldl").is_some_and(|p| !p.is_empty()), "no texldl reached the check");
     assert!(foreign.is_empty(), "use bits the reference never emits: {foreign:#?}");
 
     /* texldb has no reference instance at all, so dEQP's shapes are checked
