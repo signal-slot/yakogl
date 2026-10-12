@@ -306,12 +306,11 @@ How this changes the expectations of sections 2 and 3:
   New warnings: `functional.flush_finish.flush` and `.flush_wait` read as
   CompatibilityWarning on `a27d69c0` (row 6, FF); they were Pass at
   `fe5e8e73`. dEQP counts them as pass; note them if they appear.
-- Expected tally for the tip run, from the composed result: 17,126 pass / 0 fail /
-  34 NotSupported / 3 QualityWarning, with 2 CompatibilityWarning (counted
-  in the 17,126 or beside it, as `board.sh` prints). Section 3's figure of 17,127 pass
-  / 35 NotSupported is superseded: fragdata is a pass, which makes it 17,128 by that
-  arithmetic less the 2 warnings the tally keeps separate; read the
-  printed TALLY line, not this sum, and compare class by class.
+- Expected tally for the tip run, from the composed result: 17,126 pass / 0
+  fail / 34 NotSupported / 3 QualityWarning / 2 CompatibilityWarning (they sum
+  to 17,165). Section 3's 17,127 pass / 35 NotSupported is superseded, because
+  fragdata and the 2 flush cases moved. Compare class by class with the TALLY
+  line `board.sh` prints.
 - Lost cases: the console bridge can drop lines. `tools/board.sh` marks such a
   run `done_lossy` and `deqp-uart-tally.py` counts Lost cases. A lossy row is a
   rerun, not a failure.
