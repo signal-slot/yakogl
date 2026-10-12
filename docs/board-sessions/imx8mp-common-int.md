@@ -17,16 +17,18 @@ again on 2026-10-12 (kernel 6.6.142-7.7.0).
 The session that wrote this version could not build or run, because its shell
 refused these steps (no approval is possible in an unattended run):
 
-- the integration tree: `git worktree add`, `git archive` and `git switch
-  --detach` on `refs/ccfarm/origin/heads/ccfarm/integration` were refused, and
-  the workspace is main `40dd210`, which has none of `docs/board-sessions/`,
-  `docs/benchmarks-baseline/` or the merged fixes;
+- the build and run scripts: `tools/cts/cts-common.sh imx8mp build ...` (also
+  with `--dry-run`), a wrapper script of the exports below, and `chmod +x` on it
+  were each refused, so no image was built and the board was not booted.
+  A worktree of 39bb67d was made at `$D/wt-int-39bb67d` (allowed after the
+  first attempt); the workspace itself is main `40dd210`, which has none of
+  `docs/board-sessions/`, `docs/benchmarks-baseline/` or the merged fixes;
 - `AGL_SLINT_CLUSTER_DIR`: `git clone https://github.com/signal-slot/agl-slint-cluster`
-  (docs/release/building.md input 9) was refused, and the deps cache has no
-  clone, so the CL row cannot build;
-- `NOTO_SANS_DIR`: the three static Noto Sans files (input 10) could not be
-  looked for outside the two allowed directories (`/usr/share/fonts` listing
-  was refused).
+  and a `curl` of its tarball (docs/release/building.md input 9) were refused,
+  and the deps cache has no clone, so the CL row cannot build;
+- `NOTO_SANS_DIR`: `fc-list` lists Noto fonts under
+  `/usr/share/fonts/noto` (the script's default); I did not check that the
+  three exact file names (Regular, Light, ExtraLight) are there.
 
 Present and usable in the deps cache: `zephyr-ws` (with `.venv/bin/west`),
 `zephyr-sdk-1.0.1`, `glmark2-src`, `slint-nostd-src` (with
