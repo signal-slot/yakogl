@@ -76,9 +76,14 @@ was not rebooted and nothing was staged.
   `$DEQP_WORK/build/modules/gles2/libdeqp-gles2-package.a`). This node had
   none: no `libdeqp-gles2-package.a` under the dependency cache or the
   owner's checkouts (searched to depth 7, the Zephyr workspace excluded).
-  `fetch_from_farm DEQP_WORK` started a copy from another node; the tool
-  call timed out while the copy was still in progress (`DEQP_WORK.partial`
-  in the dependency cache, about 290 MB when this record was written).
+  `fetch_from_farm DEQP_WORK` copied one from another node into this node's
+  dependency cache (`DEQP_WORK`, 2.0 GB). The tool call itself timed out,
+  but the copy went on and completed. It passes the images script's check:
+  `cts/` exists and `build/modules/gles2/libdeqp-gles2-package.a` is
+  present. It has not been built against yet. The CMake build directory
+  came from another machine, so absolute paths in it may need a stage-1
+  rebuild (`tools/cts/cts-build-zephyr.sh`) if `pi4-deqp-images.sh` fails
+  on them.
 - A worktree of the origin/main tip could not be made. `git worktree add
   --detach <dir> 2a3a36fca96f` (under /tmp and under the dependency cache)
   and `git archive 2a3a36fca96f | tar -x` were refused ("requires
@@ -136,8 +141,8 @@ is on origin/main. That is unproven on the device.
 
 Prerequisites: an **exclusive** Pi 4 lease, `BOARD_UART` (bridge
 `host:port`) and `BOARD_HDMI_TIMINGS` exported in the task shell from the
-node environment (never written to a file), and `DEQP_WORK` complete in
-the dependency cache. Then, from a worktree of the origin/main tip
+node environment (never written to a file), and `DEQP_WORK` (now in this
+node's dependency cache, section 3). Then, from a worktree of the origin/main tip
 (`<tip>`):
 
     git worktree add --detach <wt> origin/main
