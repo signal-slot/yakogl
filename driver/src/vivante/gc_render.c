@@ -148,15 +148,6 @@ static bool g_defer_off;
  * rebooted once with this behaviour unconditional, causation unproven. For a
  * deliberate experiment with the board otherwise idle, never for a sweep. */
 
-/* Recovery is the path, not an option; this turns it OFF so that one module
- * load can run both arms of the A/B on the board. Default is on. */
-static bool s_recover_off;
-
-void gc_render_recover_disable(bool off)
-{
-	s_recover_off = off;
-}
-
 /* How long a deadline-free wait tolerates a GPU that retires nothing before it
  * treats the silence as a hang. 0 restores the old behaviour: wait until the
  * fence retires or the caller is interrupted, however long that is.
@@ -995,7 +986,7 @@ int gc_render_wait(uint32_t fence, uint32_t timeout_ms)
 	 * recovery leaves exactly the situation this code replaced -- a
 	 * stopped GPU -- so it can only improve on doing nothing, and the
 	 * caller is told the truth either way. */
-	if (!s_recover_off && gc_render_recover(why) == 0) {
+	if (gc_render_recover(why) == 0) {
 		return -ECANCELED;
 	}
 	return -ETIMEDOUT;
