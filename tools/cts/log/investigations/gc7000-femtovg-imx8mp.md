@@ -8,10 +8,10 @@ layer are as on `origin/main`). Host only: it ran nothing on a board and changed
 table. Each finding is marked **[read]** (read from a file at that commit), **[inferred]** (follows
 from what was read; not run) or **[not run]**.
 
-**The build itself was not run.** The cross-build command below was refused here (`This command
-requires approval`, three tries, the farm's permission layer; `west`, the build script and `printenv`
-all refused). So there is no compiler output in this file, and the "first error" is the one the files
-say comes first, marked [inferred]. Whoever can run it should replace section 2 with the log.
+**The build was run** (item femtovg-build-evidence, 2026-10-12): section 2 quotes the observed
+commands, their exit status 1 and the errors. An earlier attempt on another node was refused by the
+farm's permission layer; the "inferred" first error of that version has been replaced by the
+observed one.
 
 ## Answer in short
 
@@ -22,7 +22,8 @@ both tables. The same patched femtovg and glow run on this board inside the `sli
 
 ## Quotable line for the board-session record
 
-> gl_femtovg: nothing ran: not buildable for the GC7000 (no i.MX8MP board configuration; prj.conf sets
+> gl_femtovg: nothing ran: not buildable for the GC7000 (west build for verdin_imx8mp exits 1: first
+> `FVG_NOSTD_DIR is not set`, then with it `pvr_ddk.h: No such file`; no i.MX8MP board configuration; prj.conf sets
 > CONFIG_SAFEUI_GPU_PVR=y and main.c drives the AM62P DSS; driver/docs/one-method.md lists the
 > GC7000 femtovg sample as "none"; investigations/gc7000-femtovg-imx8mp.md). Its shaders are the
 > 36 femtovg rows that gl_slint compiles, 36 of 36 in the table on main and on PR #129.
@@ -67,22 +68,52 @@ show: `ZEPHYR_WS=/home/tasuku/org/zephyrproject/zephyrproject` (Zephyr 4.4.99),
 `WEST_VENV=/home/tasuku/org/zephyrproject/.venv`,
 `ZEPHYR_SDK_INSTALL_DIR=/home/tasuku/org/zephyrproject/zephyr-sdk-1.0.1`.
 
-**Result: [not run]** (permission refused, see the top).
+**Result: observed, 2026-10-12, exit status 1, no image.** Run on the farm node that has the
+Zephyr workspace (Zephyr 4.4.99, SDK 1.0.1, GCC 14.3.0), with the script above and
+`<repo>` = this tree (`a9c0191`), out dir under `/tmp`. The first run's last lines, verbatim and
+trimmed (the Kconfig warnings come first and do not stop the configure):
 
-**The first error, [inferred] from the order Zephyr works in:**
+```
+warning: SAFEUI_GPU_PVR (defined at <repo>/driver/zephyr/Kconfig:5) was assigned the value 'y' but
+got the value 'n'. Check these unsatisfied dependencies: DT_HAS_IMG_IMG_ROGUE_ENABLED (=n).
 
-1. Configure reaches Kconfig before the sample's `CMakeLists.txt` runs `FVG_NOSTD_DIR`'s check. The
-   board's devicetree has no `img,img-rogue` node (`git grep` finds it only in
-   `verdin_am62p_am62p54_a53.dts` and `ti_am62p54_a53.dtsi`), so `SAFEUI_GPU_PVR` (`driver/zephyr/Kconfig:5-9`,
-   `depends on DT_HAS_IMG_IMG_ROGUE_ENABLED`) is `n`, and `prj.conf` line 1 assigns it `y`. Zephyr's
-   `kconfig.py` stops the configure with "CONFIG_SAFEUI_GPU_PVR was assigned the value y but got the
-   value n" and "Aborting due to Kconfig warnings". With the PVR line out, nothing else of `prj.conf` is board-specific; the AM62P symbols are in
-   the board file, which an i.MX8MP build does not read.
-2. Past Kconfig, if the PVR lines were removed: `gl_femtovg: FVG_NOSTD_DIR is not set` (`FATAL_ERROR`,
-   `CMakeLists.txt:21-26`).
-3. Past both: the image would pick the PowerVR backend, because `prj.conf` does not set
-   `YAKOGL_GPU_VIVANTE` and the `YAKOGL_GPU` choice defaults to `YAKOGL_GPU_POWERVR`
-   (`zephyr/Kconfig:42-46`). That is a link or a runtime failure, not a configure error.
+warning: GC_BOARD_WDOG_SELF_ARM (defined at <repo>/driver/zephyr/lib/board/imx8mp/Kconfig:188) was
+assigned the value 'y' but got the value 'n'. Check these unsatisfied dependencies:
+(GC_SAMPLE_WDOG_BASE = 0x30280000) (=n), YAKOGL_GC_BOARD (=n).
+...
+-- YakoGL: GPU=powervr shaderc=offline no-table=OFF test-knobs=OFF linkage=staticlib rust-target=aarch64-unknown-none cpu='cortex-a53'
+CMake Error at CMakeLists.txt:31 (message):
+  gl_femtovg: FVG_NOSTD_DIR is not set.  Point it at the no_std FemtoVG
+  workspace (fvg_demo + patched femtovg/glow): -DFVG_NOSTD_DIR=<path> or
+  export FVG_NOSTD_DIR=<path>.
+
+-- Configuring incomplete, errors occurred!
+rc=1
+```
+
+**The first real error is `FVG_NOSTD_DIR is not set`** (`CMakeLists.txt:31`), exit status 1. The
+`SAFEUI_GPU_PVR` assignment is only a Kconfig *warning* here (the earlier inference that it aborts
+the configure was wrong), and the configure also shows `GPU=powervr`: the image would use the PowerVR
+backend, as `prj.conf` leaves the `YAKOGL_GPU` choice at its default. `GC_BOARD_WDOG_SELF_ARM=y` from
+the recipe is dropped for the same reason (`YAKOGL_GC_BOARD=n`).
+
+**Second run, to see the next error**: the same command plus
+`-DFVG_NOSTD_DIR=<NOSTD_PATCH_DIR>` (the farm's no_std workspace). Configure passes; the build
+reaches 129 of 175 steps and stops, exit status 1, no image:
+
+```
+FAILED: [code=1] modules/yakogl/CMakeFiles/yakogl.dir/<repo>/src/osal/zephyr.c.obj
+In file included from <repo>/src/osal/zephyr.c:43:
+<repo>/driver/src/pvr_drv.h:26:10: fatal error: pvr_ddk.h: No such file or directory
+   26 | #include "pvr_ddk.h"
+compilation terminated.
+ninja: build stopped: subcommand failed.
+rc=1
+```
+
+That is the PowerVR backend (`-DYAKOGL_GPU_POWERVR`) asking for the PowerVR DDK header on a board
+that has none. So without the board configuration of section 3 the sample does not build for the
+GC7000 even with `FVG_NOSTD_DIR` given.
 
 ## 3. What it would take
 
@@ -92,7 +123,7 @@ show: `ZEPHYR_WS=/home/tasuku/org/zephyrproject/zephyrproject` (Zephyr 4.4.99),
 | **Vivante backend code** | **No.** `YAKOGL_GPU_VIVANTE` is the backend `gc_gl_test` and `slint` already run on this board, and femtovg's calls are the same GL ES 2.0 calls (Slint's renderer is femtovg). | 0 |
 | **The sample's board glue** | Yes. `main.c` calls the AM62P-only `pvr_sample_*` glue. On the i.MX8MP `show_on_dss` compiles to a no-op returning 0, so a built image would draw into a buffer and show nothing, print through `LOG_INF` (no UART on the Mallow) and write **no SNVS record**, so no verdict could reach `tools/board.sh imx8mp`. It needs the board layer API of `slint` (`board_window`, `board_show`, `board_result`, `board_progress`, `yakogl_board.h:141-221`) and a pass/fail from its four read-back points. | `main.c` rewritten, about 100 lines (`slint`'s `main.c` is 299 lines for a larger job) |
 | **Shaders missing from the table** | **No.** See the list below: 36 of 36 on main and on PR #129. | 0 rows |
-| **femtovg's no_std deps** | Not missing. `FVG_NOSTD_DIR` wants `fvg_demo/` + patched `femtovg/` + `glow/`. The farm's `NOSTD_PATCH_DIR` (`$CCFARM_DEPS_DIR/yakogl/NOSTD_PATCH_DIR`) holds exactly `Cargo.toml`, `femtovg/`, `fvg_demo/`, `glow/`, and `fvg_demo` depends on `../femtovg` and `../glow`. So `-DFVG_NOSTD_DIR=$NOSTD_PATCH_DIR` is the value [inferred; not built]. The staticlib crate is target-generic (`aarch64-unknown-none`, `aligned_alloc` from Zephyr's libc heap). | an option on the command line, 0 lines |
+| **femtovg's no_std deps** | Not missing. `FVG_NOSTD_DIR` wants `fvg_demo/` + patched `femtovg/` + `glow/`. The farm's `NOSTD_PATCH_DIR` (`$CCFARM_DEPS_DIR/yakogl/NOSTD_PATCH_DIR`) holds exactly `Cargo.toml`, `femtovg/`, `fvg_demo/`, `glow/`, and `fvg_demo` depends on `../femtovg` and `../glow`. So `-DFVG_NOSTD_DIR=$NOSTD_PATCH_DIR` is the value (observed: the configure passes with it, section 2). The staticlib crate is target-generic (`aarch64-unknown-none`, `aligned_alloc` from Zephyr's libc heap). | an option on the command line, 0 lines |
 | **Build recipe** | Yes. A `femtovg` row in `common-images.sh` / `common-tree.txt` (a `-DFVG_NOSTD_DIR` argument), and the farm's `build-main-offline.sh` row. | about 10 lines |
 | **A run** | Yes. A host check that the image's SNVS record carries a verdict; `board.sh imx8mp` reads the record, not a console. | with the glue above |
 
