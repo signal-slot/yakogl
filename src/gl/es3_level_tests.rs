@@ -31,11 +31,13 @@ fn bind_new(target: GLenum) -> GLuint {
 }
 
 /// The levels of a chain whose largest side is `size`: 57 -> 6.
+#[cfg(not(feature = "report-es2"))] /* only the ES 3.0 tests use it */
 fn levels_of(size: u32) -> u32 {
     size.ilog2() + 1
 }
 
 #[test]
+#[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
 fn every_level_of_a_npot_2d_array_takes_an_image() {
     let gl = TestGl::new(4, 4);
     bind_new(GL_TEXTURE_2D_ARRAY);
@@ -99,6 +101,7 @@ fn every_level_of_a_npot_2d_array_takes_an_image() {
 }
 
 #[test]
+#[cfg(not(feature = "report-es2"))] /* an ES 3.0 target, entry point or type */
 fn tex_storage_gives_every_level_of_a_npot_texture() {
     let gl = TestGl::new(4, 4);
     for (target, w, h, d) in [

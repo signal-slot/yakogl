@@ -90,16 +90,23 @@ fn report_es2_knows_none_of_them() {
         let data = bytes_of(e, 2, 2);
         tex_image_2d(e.internalformat, 2, 2, e.base, e.types[0], &data);
         let err = gl.error();
-        /* the pair is unknown to ES 2.0 (INVALID_OPERATION; INVALID_ENUM for an
-         * integer base), or a known pair (half/float) with a name ES 2.0
-         * lacks (INVALID_VALUE): both as before this module existed */
-        let want = if es3_formats::is_integer_format(e.base) {
-            GL_INVALID_ENUM
-        } else if matches!(e.types[0], GL_HALF_FLOAT | GL_FLOAT) {
-            GL_INVALID_VALUE
-        } else {
-            GL_INVALID_OPERATION
-        };
+        /* an integer base or a type ES 2.0 lacks is GL_INVALID_ENUM (the
+         * types of ES 2.0 3.6.2 Table 3.2 and of the claimed
+         * GL_OES_depth_texture / GL_OES_packed_depth_stencil are the ones
+         * listed here); a pair of known enums ES 2.0 lacks is
+         * GL_INVALID_OPERATION */
+        let es2_type = matches!(
+            e.types[0],
+            GL_UNSIGNED_BYTE
+                | GL_UNSIGNED_SHORT_5_6_5
+                | GL_UNSIGNED_SHORT_4_4_4_4
+                | GL_UNSIGNED_SHORT_5_5_5_1
+                | GL_UNSIGNED_SHORT
+                | GL_UNSIGNED_INT
+                | GL_UNSIGNED_INT_24_8
+        );
+        let want =
+            if es3_formats::is_integer_format(e.base) || !es2_type { GL_INVALID_ENUM } else { GL_INVALID_OPERATION };
         assert_eq!(err, want, "{} under ES 2.0 reporting", e.name);
     }
 }
