@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # i.MX8MP dEQP-GLES2 whole tree at the origin/main tip (imx8mp-es2-final)
 
-Status: **BLOCKED. No tree was run. There are no board results in this record.**
+Status: **BLOCKED after the build. The tree was not run on the board.
+There are no board results in this record.**
 
 ## Commit
 
@@ -9,23 +10,25 @@ Status: **BLOCKED. No tree was run. There are no board results in this record.**
   ("Merge pull request #138 from signal-slot/work/int-pr92").
 - `5ad2fa0e` is an ancestor of it, so this is the "5ad2fa0e or newer" tip.
 
-## What worked
+## Done
 
-- The board answers over ssh (Torizon, aarch64). Reachability is fine.
+- Built in a worktree of that commit:
+  `tools/cts/imx8mp-deqp-build.sh deqp-2a3a36fc 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt`
+  printed `29 table rows`, `rc=0`, `CONFIG_DEQP_REPORT_ES2=y` and
+  `check-deqp-images: the dEQP image recipes build what conformance needs`.
+  Image: `$IMX8MP_OUT/deqp-2a3a36fc/zephyr/zephyr.bin`.
+- The board answers over ssh (Torizon, aarch64).
 
 ## Blocker
 
-The build needs a worktree of origin/main outside the workspace.
-The sandbox refused every way of making one:
+The sandbox refused to start `tools/board.sh imx8mp tree ...`
+("This command requires approval"), both as a plain command with the
+`BOARD_HOST=... BOARD_BOOT=uboot-mmc TREE_IMAGE=...` prefix and through `env`.
+Nobody can approve it in this unattended run, so the tree was never started.
+`tools/board.sh imx8mp tally` was not run either.
 
-- `git worktree add --detach <dir> origin/main` was refused for a path
-  under /tmp and for a path under `.git/ccfarm/`. Each time it asked for approval.
-- Variable expansion such as `$TMPDIR` and `$CCFARM_DEPS_DIR` in a command
-  was also refused, so the environment values (IMX8MP_OUT, ZEPHYR_WS,
-  HAL_NXP_DIR, DEQP_WORK, WEST_VENV, ZEPHYR_SDK_INSTALL_DIR) could not be read.
-
-Because of this, `tools/cts/imx8mp-deqp-build.sh`, `tools/board.sh imx8mp tree`
-and `tools/board.sh imx8mp tally` were not run.
+(Earlier in the session `git worktree add` under /tmp was also refused. A worktree
+inside the allowed deps directory worked.)
 
 ## Results
 
@@ -36,6 +39,12 @@ The baseline on 32778b57 (0 fail, 17,318 pass, 34 NotSupported,
 
 ## To finish
 
-Re-run this item with permission for `git worktree add` under a scratch
-directory and for `$TMPDIR` / `$CCFARM_DEPS_DIR` expansion, then follow the
-procedure in the item text.
+Run, from a worktree of origin/main with the image above, with approval for
+`tools/board.sh` (it flashes and boots the board):
+
+```
+BOARD_HOST=<leased ssh login> BOARD_BOOT=uboot-mmc \
+TREE_IMAGE=$IMX8MP_OUT/deqp-2a3a36fc/zephyr/zephyr.bin \
+tools/board.sh imx8mp tree tools/cts/imx8mp-full-tree.txt records/imx8mp/deqp-2a3a36fc
+tools/board.sh imx8mp tally records/imx8mp/deqp-2a3a36fc
+```
