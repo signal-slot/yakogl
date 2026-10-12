@@ -38,47 +38,56 @@ Inputs, all from the dependency cache `<deps>`
 environment, and a real `cargo`/`rustc` first on PATH (`$HOME/.cargo/bin`;
 the kache cargo shim has no rustc beside it).
 
-- Source tree: `git archive 2fe4b879` unpacked to
-  `<deps>/base-am62p-2fe4b879/src`. This session could not run
-  `git worktree add` (not approved in the session). A check against
-  `git ls-tree -r 2fe4b879` matched all 2,330 blobs (0 mismatches). Because
-  the tree has no `.git`, the image's build line reads `tree=unknown`
-  (`sample.cmake` takes it from `git describe`). The commit is the one named
-  above.
+- Source tree: `git worktree add --detach <deps>/base-am62p-2fe4b879/wt
+  2fe4b879`. (A first build came from a `git archive` export, before
+  `git worktree add` was approved. Its image says `tree=unknown`. It is
+  superseded and listed at the end of this section only for completeness.)
 - `driver/src/fw/pvr_fw_blob.h`: `<deps>/pvr_fw_blob.h`. The bytes it holds
   have sha256 `32c8b3d7730a523b...`, the same as the board's
   `/lib/firmware/rgx.fw.36.53.104.796` (read over ssh today). Not committed.
 - Build: `tools/cts/common-images.sh am62p tools/cts/common-tree.txt
-  <deps>/base-am62p-2fe4b879/img GT` (the common set's GT row: the `gl_test`
-  sample with its default case list, `-DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y
+  <deps>/base-am62p-2fe4b879/img-wt GT`, run in the worktree (the common
+  set's GT row: the `gl_test` sample with its default case list,
+  `-DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y
   -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n`).
 
 ```
-common-images: build unknown (unknown) board am62p
-GT rc=0 sha256=fead30c56d38458f9faf413779fe988732031e1c3a59cba966914c1ce2eabd6a build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=unknown
+common-images: build 2fe4b879 (2fe4b8798b5faf2807f31dd486296f21045f4abf) board am62p
+GT rc=0 sha256=c42e6f5820e7c576f02ea629395bb13fb219157cc3f1abc87cc3a67d753df5a1 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=2fe4b879
 common-images: 0 row(s) not built
 ```
 
-The image is `<deps>/base-am62p-2fe4b879/img/GT/zephyr/zephyr.bin`
-(2,599,552 bytes, `.config`: `CONFIG_GL_TEST_CASE=7`,
-`CONFIG_GL_TEST_CASES=""`). It is kept, so a later session can run it as
-built.
+The image to run is `<deps>/base-am62p-2fe4b879/img-wt/GT/zephyr/zephyr.bin`
+(the default set: `CONFIG_GL_TEST_CASE=7`, `CONFIG_GL_TEST_CASES=""`). It is
+kept, so a later session can run it as built.
+
+The superseded export build: `<deps>/base-am62p-2fe4b879/img/GT`, sha256
+`fead30c56d38458f...`, `PVR_SAMPLE_TREE=unknown`. Its source matched
+`git ls-tree -r 2fe4b879` on all 2,330 blobs. Do not run it; it does not
+name its commit.
 
 ## The run line (dry run only)
 
 ```
 BOARD_HOST=$BOARD_HOST BOARD_UART=$BOARD_UART BOARD_BOOT=uboot-mmc \
-TREE_IMAGE_DIR=<deps>/base-am62p-2fe4b879/img TREE_TAG=2fe4b879 \
+TREE_IMAGE_DIR=<deps>/base-am62p-2fe4b879/img-wt TREE_TAG=2fe4b879 TREE_ROWS=4 \
   tools/board.sh --dry-run am62p tree tools/cts/common-tree.txt records/am62p/pr133-baseline-2fe4b879
 ```
 
-GT's dry run printed every step with no error: `image sha256
-fead30c56d38458f footprint 40812544`, `image build: PVR_SAMPLE_TABLE=c95547a1
-PVR_SAMPLE_TREE=unknown; zephyr: af17c0c8aa2a`, `route env source mmc`, then
-the lock, stage, `fw_setenv`, reboot, wait, return and clean-up commands.
-`=== GT rc=0`. The other four rows (GM, SO, SV, CL) are not this item's.
-They were not built and print `no image`. To run GT alone without the dry
-run, add `TREE_ROWS=4`.
+The dry run, run in the worktree, printed every step of the GT row with no
+error:
+
+```
+board.sh am62p: tree: 5 rows from tools/cts/common-tree.txt, build 2fe4b879
+board.sh am62p: GT: build 2fe4b879 boot uboot-mmc (row) image sha256 c42e6f5820e7c576 footprint 40812544
+board.sh am62p: GT: image build: PVR_SAMPLE_TABLE=c95547a1 PVR_SAMPLE_TREE=2fe4b879; zephyr: af17c0c8aa2a
+=== GT rc=0 2026-10-12 17:09:13
+```
+
+Between those lines it printed the lock, stage, `fw_setenv`, reboot, wait,
+return and clean-up commands. `TREE_ROWS=4` selects GT alone. The other
+four rows (GM, SO, SV, CL) are not this item's, and they were not built.
+The real run is the same line without `--dry-run`.
 
 Before the run, `ps` on the board showed no gl_test, deqp or labrun
 process: the board was idle.
@@ -132,12 +141,13 @@ A baseline run of this image would compare against those numbers.
   leased at port 35933 (main_uart0) for any AM62P run. At port 35932 every
   board.sh run captures nothing. Also correct the stored `BOARD_UART`
   (35931). After that, re-run this item. The image needs no rebuild:
-  `<deps>/base-am62p-2fe4b879/img/GT` (sha256 `fead30c5...`), with the run
-  line above and `TREE_ROWS=4`. Before the reboot, check the port: the
+  `<deps>/base-am62p-2fe4b879/img-wt/GT` (sha256 `c42e6f58...`,
+  `tree=2fe4b879`), with the run line above. Run it from the worktree
+  `<deps>/base-am62p-2fe4b879/wt`. Before the reboot, check the port: the
   `YK-PROBE-S2` marker written to ttyS2 must arrive on the leased console.
+  The farm's own notes agree that 35933 is main_uart0 and that no ccfarm
+  resource names it (ask_farm, 2026-10-12).
 - The board-am62p item (work/int-pr49-board) has **no AM62P baseline from
   this session**. Until one runs, its regression set can only be compared
   with the `32778b57` 48 / 48 row above, which mixes in drift since
   `32778b57`.
-- A worktree build would print `tree=2fe4b879` instead of `tree=unknown`.
-  A session that is allowed to run `git worktree add` should prefer one.
