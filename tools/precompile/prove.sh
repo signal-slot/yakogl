@@ -83,6 +83,12 @@ mod util {
 #[path = "$ROOT/$OUT/$TAG.rs"]
 mod table;
 EOF
+# The library's metadata for rustc: the .rmeta beside the rlib. A nightly
+# since 2026-10 no longer embeds the full metadata in the rlib (cargo's
+# no-embed-metadata), and rustc then refuses the rlib alone ("only metadata
+# stub found for rlib dependency"); the .rmeta is what --emit=metadata reads.
+RMETA="${RLIB%.rlib}.rmeta"
+[ -f "$RMETA" ] || RMETA="$RLIB"
 rustc --edition 2021 --crate-type lib --crate-name precompiled_check --emit=metadata -C panic=abort -D warnings \
-  -L "dependency=$DEPS" --extern "yakogl=$RLIB" -o "$OUT/$TAG.check.rmeta" "$OUT/$TAG.check.rs"
+  -L "dependency=$DEPS" --extern "yakogl=$RMETA" -o "$OUT/$TAG.check.rmeta" "$OUT/$TAG.check.rs"
 echo "prove.sh: $TAG: the table compiles against the library (rustc -D warnings)"
