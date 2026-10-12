@@ -249,7 +249,10 @@ is kept and pinned by tests.
      did not separate the three surface hypotheses
      (`tools/cts/log/investigations/gc-case10-flake.md`). The next step is
      the KICK_DIFF instrument with a second read-back about 10 ms after the
-     fence.
+     fence. Rate without it (integration image `e3efeaad`, 2026-10-11, 32
+     boots): case 10 failed 4 of 32, case 2 0 of 32
+     (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`); no caller of the
+     instrument exists in gl_test yet.
    - i.MX8MP case 16, 4x MSAA (#8): the default image has no 4x config, so
      the case skips its 4x half by name (`6bddfc5`). On the 4x image the
      path fails at check 4 (`x4 inside` reads 0x00000000) with and without
@@ -259,7 +262,11 @@ is kept and pinned by tests.
      console. They now also go into the result record, one page of three
      words a boot (`SEL=0x1000|tag`, kind PERF; `yakogl-tools record msaa`
      decodes them): `tools/cts/log/investigations/gc-msaa-record.md` has the
-     two-arm recipe; no board has run it yet. The 16
+     two-arm recipe. Run once on the integration image `e3efeaad`
+     (2026-10-11, `tools/cts/log/board-sessions/imx8mp-gltest-r2.md`): arms
+     1 and 9 both fail check 4, and the 4x scratch is empty after the frame,
+     after the clear alone and after the draw alone, so nothing the frame
+     does reaches the surface the probes read. The 16
      `multisample.*` dEQP cases stay NotSupported at 1x.
    - **i.MX8MP glmark2 frames wait for VSYNC** (no issue yet). `board_show`
      (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c`) calls
