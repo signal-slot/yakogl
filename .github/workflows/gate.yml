@@ -51,7 +51,11 @@ concurrency:
 
 jobs:
   check:
-    runs-on: [self-hosted, Linux, X64]
+    # The runner with the label gate-primary (hx90, a machine of its own: no
+    # farm agents share it). nuc and system76 keep their label yakogl-gate but
+    # do not take the gate any more; give one of them gate-primary to add it
+    # back.
+    runs-on: [self-hosted, Linux, X64, gate-primary]
     timeout-minutes: 180
     env:
       PYTHONDONTWRITEBYTECODE: "1"
