@@ -207,7 +207,7 @@ fn es2_build_keeps_its_answers() {
     unsafe {
         glGenBuffers(1, &mut b);
         glBindBuffer(GL_ARRAY_BUFFER, b);
-        glBufferData(GL_ARRAY_BUFFER, 64, core::ptr::null(), GL_DYNAMIC_COPY);
+        glBufferData(GL_ARRAY_BUFFER, 64, core::ptr::null(), GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, 0);
         assert_eq!(err(), GL_NO_ERROR, "zero is an unbind");
         glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, b);

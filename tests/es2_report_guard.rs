@@ -572,10 +572,20 @@ fn renderbuffer_formats() {
 /// which adds no renderbuffer storage (GL_CORE_NOTES.md says so, the code
 /// takes it anyway). ES 2.0 4.4.3: GL_INVALID_ENUM.
 #[test]
-#[ignore = "BUG: framebuffer.rs is_renderable_format takes these four under report-es2; ES 2.0 4.4.3 says GL_INVALID_ENUM"]
 fn es3_only_renderbuffer_formats_are_invalid_enum() {
     let _g = context();
-    for (n, f) in named![GL_R32F, GL_DEPTH_COMPONENT32F, GL_DEPTH32F_STENCIL8, GL_BGRA8_EXT] {
+    for (n, f) in named![GL_R32F, GL_DEPTH_COMPONENT32F, GL_DEPTH32F_STENCIL8] {
+        assert_eq!(name_of(renderbuffer_storage(f)), name_of(GL_INVALID_ENUM), "glRenderbufferStorage({n})");
+    }
+}
+
+/// GL_BGRA8_EXT as renderbuffer storage is still accepted: the extension
+/// GL_EXT_texture_format_BGRA8888 is advertised (es2-error-rules row 36).
+#[test]
+#[ignore = "BUG: GL_BGRA8_EXT renderbuffer storage is taken under report-es2 (kept on purpose, es2-error-rules row 36); ES 2.0 4.4.3 says GL_INVALID_ENUM"]
+fn the_bgra8_renderbuffer_is_invalid_enum() {
+    let _g = context();
+    for (n, f) in named![GL_BGRA8_EXT] {
         assert_eq!(name_of(renderbuffer_storage(f)), name_of(GL_INVALID_ENUM), "glRenderbufferStorage({n})");
     }
 }
@@ -691,7 +701,7 @@ fn es3_entry_points_are_refused() {
         assert_eq!(name_of(err()), name_of(GL_INVALID_OPERATION), "glEndTransformFeedback");
         glGenBuffers(1, &mut b);
         glBindBuffer(GL_ARRAY_BUFFER, b);
-        glBufferData(GL_ARRAY_BUFFER, 64, core::ptr::null(), GL_DYNAMIC_COPY);
+        glBufferData(GL_ARRAY_BUFFER, 64, core::ptr::null(), GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, b);
         assert_eq!(name_of(err()), name_of(GL_INVALID_OPERATION), "glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER)");
         glGenQueries(1, &mut q);

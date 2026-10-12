@@ -5016,6 +5016,7 @@ pub(crate) fn reset_for_tests() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg_attr(feature = "report-es2", allow(unused_imports))]
     use crate::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
     use crate::gl::framebuffer::{glBindFramebuffer, glFramebufferTexture2D, glGenFramebuffers};
     use crate::gl::state::glPixelStorei;
@@ -10147,6 +10148,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "report-es2"))] /* an ES 3.0 buffer target */
     fn a_texture_upload_reads_a_bound_unpack_buffer_at_its_offset() {
         /* ES 3.0 3.7.1: with PIXEL_UNPACK_BUFFER bound the pointer argument
          * is a byte offset into that buffer. Reading it as a pointer
