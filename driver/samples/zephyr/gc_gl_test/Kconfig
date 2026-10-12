@@ -202,14 +202,16 @@ config GC_GL_TEST_MSAA
 config GC_GL_TEST_MSAA_BITS
 	int "gc_debug_msaa value case 16 runs with (1 = the 4x resolve)"
 	depends on GC_GL_TEST_MSAA
-	range 1 15
+	range 1 31
 	default 1
 	help
 	  The argument of gc_debug_set_msaa. Bit 0 is the 4x path, bit 1
-	  etnaviv's SMALL_MSAA extras, bit 2 its per-draw PS_MSAA_CONFIG, bit 3
-	  the viewport and clip scaled to the 2x scratch surface (9 = bit 0 + 3,
-	  the arm that should pass: src/vivante/VIVANTE_NOTES.md, "4x MSAA, gl_test
-	  case 16").
+	  etnaviv's SMALL_MSAA settings (PS input and temporary + 1, PE_LOGIC_OP
+	  UNK24 = 5), bit 2 a per-draw PS_MSAA_CONFIG, bit 3 the viewport and
+	  clip scaled to the 2x scratch surface, bit 4 etnaviv's PE_LOGIC_OP
+	  SINGLE_BUFFER value for the supertiled scratch. 19 = bits 0, 1 and 4
+	  is what Mesa writes for a 4x target on this core; bits 2 and 3 are not
+	  Mesa's (tools/cts/log/investigations/gc-msaa-addresses.md).
 
 config GC_GL_TEST_UNIIDX_NO_CLAMP
 	bool "gl_test 108: no clamp before the movar (a measurement)"

@@ -13,6 +13,15 @@ the AM62P `gl_test` and the Pi 4 `v3d_gl_test` images build with
 `-DYAKOGL_WERROR=ON`. The "Verification" section below is the state at
 integration. No board has produced a page yet.
 
+**Next arms (2026-10-12): 1, 3, 17 and 19.** Round 2 (arms 1 and 9) left
+the scratch empty. The host comparison against Mesa's etnaviv
+(`gc-msaa-addresses.md`) found the probe reads the surface the PE and RS are
+given, and that arms 1 and 9 lack three things Mesa writes for every 4x
+target on this core: the extra PS input and temporary and PE_LOGIC_OP
+UNK24 = 5 (bit 1), and SINGLE_BUFFER 2 for the supertiled scratch (new bit 4).
+Bits 2 and 3 are not Mesa's. The build and run commands for the four arms
+are in `gc-msaa-addresses.md`, "The board A/B"; the pages are read as below.
+
 ## Why
 
 The #8 A/B (docs/HANDOFF.md, the 4x MSAA step, "the `gc_debug_msaa` bit 3

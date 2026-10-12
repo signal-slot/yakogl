@@ -1349,6 +1349,19 @@ A fence timeout or fault: dmesg, then tile status and RS_EXTRA_CONFIG are the
 next suspects. If arm 9 passes, make bit 3 the design (drop the knob bit),
 turn `GC_MSAA_ENABLE` on, and run dEQP multisample with the 4x config image.
 
+**Update 2026-10-12 (round 2 and the Mesa comparison).** Arms 1 and 9 both
+failed with an empty scratch (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`).
+On the host, every PE colour address of the 4x frame is the scratch the probe
+reads, and the resolve matches Mesa 26.2.1 register by register. The
+recipe above was written from memory; read against the source
+(`tools/cts/log/investigations/gc-msaa-addresses.md`), Mesa never scales the
+viewport or scissor for 4x (bit 3 is not Mesa's) and writes only the
+alpha-to-coverage bits of PS_MSAA_CONFIG (bit 2 is not Mesa's), while it
+always writes what bit 1 holds (PS input and temporary + 1, PE_LOGIC_OP
+UNK24 = 5) and SINGLE_BUFFER 2 for the supertiled target (bit 4, new). The
+next board arms are 1, 3, 17 and 19; that record has the commands and the
+reading of each outcome.
+
 ## RGBA16F targets, gl_test case 44 `es3hdr` (#6, 2026-10-10)
 
 Case 44 clears an RGBA8 and then an RGBA16F texture through an FBO, draws
