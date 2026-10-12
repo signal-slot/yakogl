@@ -2,12 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # KICK_DIFF: the second read-back for i.MX8MP gl_test #9 and #25
 
-**Status (2026-10-12): instrument on main, not yet called.** Re-landed from
-integration (`af9767d5b`, ccfarm `01a12497-6bbf-7511-9885-19689ca6bd93`).
-Nothing calls `gc_kick_diff_after_fence()` yet: the gl_test call site and
-the record words are still owed ("Call site" below), and no board has run
-it. The record `imx8mp-es2-r1.md` cited below is re-landed separately under
-`tools/cts/log/board-sessions/`.
+**Status (2026-10-12): wired into gl_test, not yet run on a board.**
+The instrument was re-landed from integration (`af9767d5b`, ccfarm
+`01a12497-6bbf-7511-9885-19689ca6bd93`). gl_test cases 2 and 10 now call it
+when the gc_gl_test selector asks for its page, and a PERF record page
+carries the result ("How to run it on the board" below). No board has run
+it yet. The record `imx8mp-es2-r1.md` cited below is re-landed separately
+under `tools/cts/log/board-sessions/`.
 
 Item `gc-flake-instrument` of plan #20. Host only: no board was run. The code
 is in `src/vivante/kick.rs` (module `diff`), the tests in
@@ -53,7 +54,25 @@ void gc_kick_diff_enable(const uint32_t *target_cpu, uint32_t words,
                          void (*delay)(uint32_t us));  /* NULL ptr disarms */
 int  gc_kick_diff_after_fence(void);   /* 0 off, 1 stable, 2 late */
 void gc_kick_diff_stats(uint32_t out[3]); /* checks, late, most words changed */
+int  gc_kick_diff_arm_target(uint32_t delay_us, void (*delay)(uint32_t us));
 ```
+
+`gc_kick_diff_arm_target` (src/gl/framebuffer.rs) arms the instrument on the
+current render target: the CPU view, offset and row pitch glReadPixels
+uses. It returns 0, or one negative value per cause: -1 no current context,
+-2 no colour target, -3 not 4 bytes per pixel, -4 no CPU view, -5 larger
+than the instrument holds (refused, not watched in part). gl_test uses it,
+so it does not need to know where the library keeps its surfaces.
+
+Each read first invalidates the CPU's view of the target, as
+`read_pixels_sync` does before glReadPixels. Without that, on a cached
+mapping both reads could hit the same stale cache lines and always say
+"stable". The host test
+`gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache`
+shows it: the mock's CPU view is a cache, and the late write is seen only
+with the invalidate (verdict 2; 1 without it). The i.MX8MP maps the
+carveout Normal non-cacheable (`gc_render.c`), so there the invalidate
+changes nothing.
 
 - `target_cpu` is the CPU view of the colour target, `words` its size in
   32-bit words (at most 4096, the 64x64 RGBA8 surface gl_test uses; more is
@@ -71,16 +90,24 @@ Host build and test:
 cargo test --no-default-features --features host-test,gpu-vivante,test-knobs --test gc_kick_diff
 ```
 
-**Call site.** This item may not edit `src/vivante/backend.rs` (the K1 item
-holds it), so the backend does not call the instrument. The harness does
-(gl_test, after `glFinish`). A later item that owns `backend.rs` can call
+**Call site.** The backend does not call the instrument; the harness does.
+`driver/tools/pvrlab/gl_test.c` (the KICK_DIFF block above `read_topdown`):
+when bit c of `gl_test_kick_diff_cases` is set and c is 2 or 10,
+`run_case` arms it before the case (`gc_kick_diff_arm_target`, 2000 us,
+the harness's busy wait: `k_busy_wait` on Zephyr, `nanosleep` in the hosted
+builds). While armed, every `read_topdown()` first calls `glFinish()` and
+then `gc_kick_diff_after_fence()`, before its glReadPixels: one check per
+read-back (case 10 makes 8, one per frame; the points are the eighth). At the end of the case
+`run_case` takes `gc_kick_diff_stats`, keeps the page, prints the console
+line and disarms. A later item that owns `backend.rs` can call
 `gc_kick_diff_after_fence()` once in `frame_submit` after the fence is seen,
 if the harness call turns out too late to matter. `cmd.rs` is not changed:
 the instrument only reads memory, it adds no command to the stream.
 
-A board run additionally needs the gl_test source to call these three
-functions and put `gc_kick_diff_stats` into its counters record. That is a
-change in `driver/` and belongs to `imx8mp-gltest-r2`.
+The delay is 2000 us, not the 10 ms of the older notes: a case 10 run makes
+8 checks, and the wait sits inside the case. If 2 ms turns out too short
+(every failing run says `stable`), the next arm is a longer
+`KICK_DIFF_DELAY_US`, not a conclusion.
 
 ## How to read its output
 
@@ -100,11 +127,92 @@ Two places, both existing:
    show as 4 changed rows if the late-write story is right (`tools/cts/STATUS.md` at the time, line 110).
 
 2. **The counters** from `gc_kick_diff_stats`: checks made, checks with a late
-   write, the most words one check saw change. The harness puts them in its
-   record. The record kind 19 (KICK_DIFF) is reserved in
-   `driver/rust/src/board/record.rs` but not defined; this item does not
-   define it (that file is not in its scope). Until it is, put the three
-   words in the sweep's spare words.
+   write, the most words one check saw change. gl_test prints them at the
+   end of the armed case:
+
+   ```
+   gl_test:   kick_diff case 10: late, checks 8 late 1 max_changed 4
+   ```
+
+   and keeps them, with the case's own result, in a PERF record page for a
+   board with no console (below).
+
+## How to run it on the board
+
+The i.MX8MP has no console, so the result is the SNVS record. The
+gc_gl_test image already links the library with `test-knobs`
+(`GC_GL_TEST_KNOBS`, default y), so no extra build switch is needed.
+
+**Selector.** `SEL = 0x1000 | list << 8 | tag` (`GC_RESULT_PERF_SEL`),
+tag `0xe0 | case`: `0xe2` for case 2, `0xea` for case 10. It arms the
+instrument for that case only and ends the run with that case's page
+instead of the run's usual record (gc_gl_test `main.c`, `kick_diff_tag`).
+
+- `list` 0 runs the case alone.
+- `list` k (1 to 15) runs entry k - 1 of `CONFIG_GC_GL_TEST_SWEEP_LISTS`.
+  That is the same run the selector `512 + k - 1` makes without the
+  instrument, so one image gives the base arm and the KICK_DIFF arm, and
+  the selector is the only difference between them.
+
+**Image** (the round-2 image recipe, `imx8mp-gltest-r2.md`):
+
+```sh
+tools/cts/imx8mp-gltest-build.sh kd-$(git rev-parse --short=8 HEAD) 0 \
+  '-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'
+```
+
+**Boots**, interleaved, about 40 per arm (at 4 of 32 a smaller arm cannot
+tell 1 failure from 2):
+
+```sh
+SEL=512                        tools/board.sh imx8mp run <image> <rec> base-<i>    # list 0, no instrument: SWEEP record
+SEL=$((0x1000 + 0x100 + 0xea)) tools/board.sh imx8mp run <image> <rec> kd10-<i>    # SEL=4586: list 0, case 10 armed
+SEL=$((0x1000 + 0x100 + 0xe2)) tools/board.sh imx8mp run <image> <rec> kd2-<i>     # SEL=4578: list 0, case 2 armed
+```
+
+**Tally.** Feed the `record=` words of the KICK_DIFF runs to the decoder
+and count the lines:
+
+```sh
+grep -ho 'record=[0-9a-f,]*' <runner outputs of the kd runs> | cut -d= -f2 | tr ',' ' ' |
+  xargs yakogl-tools record kickdiff | sort | uniq -c
+```
+
+The base arm is read as in round 2 (`yakogl-tools record sweep 0 <w1> <w2>
+<w3>`; case 10 is bit 9 of the pass bits). A run that ends without a
+KICK_DIFF page (case not run, a hang) leaves its usual record; the decoder
+then says "no PERF record with a KICK_DIFF tag", and that boot is its own
+row, not a pass.
+
+**The page** (PERF record, w0's low byte = the tag; gl_test.c, the block
+above `gl_test_kick_diff_page`, has the same layout):
+
+| word | bits | meaning |
+|---|---|---|
+| w1 | 0..7 | verdict: 0 armed but no check, 1 stable (every check), 2 late (at least one); `0x80 \| n`: not armed, `gc_kick_diff_arm_target` returned -n |
+| w1 | 8..15 | first late check, counted from 1 (0 none) |
+| w1 | 16..23 | the case's own result: 1 pass, 2 fail, 3 neither |
+| w1 | 24..31 | the case's first failing check (0xff none, 0xfe for 254 or more) |
+| w2 | 0..15 / 16..31 | checks made / late checks (each saturating at 0xffff) |
+| w3 | all | the most words one check saw change |
+
+`yakogl-tools record kickdiff` prints the console's line and a `record:`
+line, for example:
+
+```
+gl_test:   kick_diff case 10: late, checks 8 late 1 max_changed 4
+record: case 10 FAIL, first failing check 23; first late check 8
+```
+
+**Reading it.** The wait sits before the case's own glReadPixels, so in
+the KICK_DIFF arm a late write is caught by the instrument *and* is
+already in memory when the case checks its pixels: the case can pass.
+So compare the verdicts, not the KICK_DIFF arm's failure rate, with the
+base arm. Any `late` supports the late-write story; first late check 8 is
+the points frame (the eighth read-back of case 10), and failing check 23
+is its 1 px point. A KICK_DIFF arm that still fails with `stable` means
+the write was lost, or 2 ms was too short (see "Call site"). Every board
+row names the GPU recovery count, as the round-2 rows do (`resets=`).
 
 ## How it combines with K1
 
@@ -181,6 +289,15 @@ older recipe quotes. Do not bisect on 3 boots.
   write during the wait (verdict 2, then 1; counters; disarm).
 - `tools/check.sh --quick`: see the report of this item for the output and
   the base comparison.
+- The gl_test wiring (2026-10-12): the host test
+  `gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache`
+  (fails with verdict 1 when the invalidate is removed); the decoder's
+  tests in `tools/yakogl-tools/src/kickdiffrec.rs` (round trip of the
+  page as gl_test.c packs it, and the layout read out of gl_test.c);
+  gl_test.c compiled by the gate's host rows. The Zephyr images were not
+  built on that host (no Zephyr SDK there): gc_gl_test's `main.c` and
+  gl_test.c's Zephyr arm were only syntax-checked against stub Zephyr
+  headers, so the first image build is still owed.
 - Not checked: any board behaviour. The instrument has not read a real GC7000
   target. The `dmb ishld` is aarch64-only and is not exercised on the host.
   The claim that the older notes make, that a 10 ms wait is long enough for a

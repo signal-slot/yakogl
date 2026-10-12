@@ -1111,6 +1111,7 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
+  gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
 )
 knobs_lib_tests() {
   local out t
@@ -2074,7 +2075,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # (check_knobs_absent, below); here because that row's key holds it.
 KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
   tools/precompile tools/shaders tools/yakogl-tools/src/shc_print.rs)
