@@ -13,6 +13,15 @@ requires approval`, three tries, the farm's permission layer; `west`, the build 
 all refused). So there is no compiler output in this file, and the "first error" is the one the files
 say comes first, marked [inferred]. Whoever can run it should replace section 2 with the log.
 
+**Second attempt, item femtovg-build-evidence (2026-10-12), refused again.** On a second node, with
+the same build script (`build-femtovg-probe.sh <repo> /tmp/femtovg-build-evidence`) the call
+`bash .../build-femtovg-probe.sh ...` answered `This command requires approval` twice, and
+`<WEST_VENV>/bin/west --version` answered the same. Commands containing `$VAR` expansions were
+refused as "a variable in this command can't be checked before it runs", and a plain `west` is not
+on `PATH` (exit 127). So the build did not run on that node either: the first error below stays
+**[inferred]**, and this is a refusal of the permission layer, not a compiler result. A node
+that is allowed to run `west build` has to produce the log.
+
 ## Answer in short
 
 `gl_femtovg` has no i.MX8MP board configuration and its one board configuration drives the PowerVR
