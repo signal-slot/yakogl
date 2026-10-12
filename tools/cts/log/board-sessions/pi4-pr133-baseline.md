@@ -6,8 +6,8 @@ Date: 2026-10-12. Plan #141, item base-pi4: the whole default `v3d_gl_test`
 set on origin/main, without PR #133, as the Pi 4 baseline the later
 board-pi4 item compares work/int-pr49-board against.
 
-Status: **nothing ran.** No image was built and the board was not rebooted.
-There is no `gl_test: all: ...` line, no failing case line, no records/...
+Status: **the image was built; nothing ran on the board.** The board was not
+rebooted. There is no `gl_test: all: ...` line, no failing case line, no records/...
 directory and no recovery count from this session. No host result is offered
 in place of a device result.
 
@@ -20,25 +20,40 @@ from signal-slot/work/issue-127"), fetched in this session; the plan named
 `driver/samples/zephyr/v3d_gl_test/`. The sample's default list is
 `CONFIG_V3D_GL_TEST_CASES` = `5,58,59,66,67,102,3,9,11,12,13,4` (12 cases).
 
-## Why it did not run
+## Build
 
-- No console. `v3d_gl_test` reports only on its UART and the HDMI screen
-  (the frozen record, `v3d_gl_test RECORD` ... `RECORD end`); `board.sh pi4`
-  needs `BOARD_UART` (the Debug Probe's device, or `host:port` of its serial
-  bridge) and refuses without it. This worker has no value for it: the
-  farm's environment lists `BOARD_UART` as missing here, the pty link an
-  older session left in the deps cache points at a pty that no longer
-  exists, and the lab's own run script on this machine says that it has no
-  path to the Pi 4's UART. The lease gives ssh to the board only, so a
-  bridge on another host is out of reach. A tryboot without a capture
-  would have been a reboot that measures nothing, so the board was not
-  rebooted.
-- No build. Building from `2fe4b879` needs a checkout of that commit (the
-  sample stamps `git describe` as `V3D_BUILD`). Every way to make one was
-  refused in this unattended session (`git worktree add`, `git clone`,
-  `git checkout`/`switch --detach` in the workspace, `cp` of the workspace),
-  and `ask_farm` (to locate the bridge or another node with the inputs) was
-  not granted. So there is no image sha256 and no build line.
+From a detached worktree of `2fe4b879` (clean), with `ZEPHYR_WS`,
+`WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR` and `RUSTUP_TOOLCHAIN=nightly` from the
+environment:
+
+```sh
+$SW/tools/cts/common-images.sh pi4 $SW/tools/cts/common-tree.txt <img> GT
+```
+
+```
+common-images: build 2fe4b879 (2fe4b8798b5faf2807f31dd486296f21045f4abf) board pi4
+GT rc=0 sha256=a429543dc4c803224e186229586152a96209089c403fd6d804727a7eb42fd1b5 build=V3D_BUILD=2fe4b879
+common-images: 0 row(s) not built
+```
+
+The image is 2,128,664 bytes, on Zephyr `af17c0c8` (the workspace's pin).
+
+## Why it did not run on the board
+
+`v3d_gl_test` reports only on its UART and the HDMI screen (the frozen
+record, `v3d_gl_test RECORD` ... `RECORD end`). So `board.sh pi4` needs
+`BOARD_UART`: here that is the `host:port` of the serial bridge in front of the
+Pi 4's Debug Probe, which the farm's notes name. This worker's environment has
+no `BOARD_UART`, and the unattended session refused every `board.sh pi4 run`
+invocation that passed `BOARD_HOST` and `BOARD_UART` into its environment,
+the `--dry-run` included. So there is no verdict line. A tryboot without the
+capture would have been a reboot that measures nothing, so the board was not
+rebooted.
+
+Earlier in the session the build was refused too (`git worktree add`, `git
+clone`, `git checkout`, `cp` of the workspace, and `ask_farm` not granted).
+After the permission decisions the worktree and `ask_farm` worked; `git clone`
+and `cp` stayed denied and were not needed.
 
 ## What was checked on the board (ssh, read-only)
 
@@ -51,7 +66,7 @@ Nothing was copied to it or run on it.
 
 | row | image | verdict line | gl_test line | records | recoveries |
 |---|---|---|---|---|---|
-| GT `v3d_gl_test`, default set | not built | not run | not run | none | not counted (no run) |
+| GT `v3d_gl_test`, default set | `a429543dc4c80322...`, `V3D_BUILD=2fe4b879` | not run | not run | none | not counted (no run) |
 
 ## Comparison with the last Pi 4 set
 
