@@ -46,7 +46,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=227
+WANT_CHECKS=229
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -289,6 +289,15 @@ out=$(TREE_IMAGE_DIR=$S/pi4img dry pi4 tree "$S/pi4.txt" "$S/tree" 2>&1)
 rc=$?
 check "pi4 tree (# image labels): rc 0, rows AA and BB each booted" \
     eval '[ "$rc" = 0 ] && grep -q "^=== AA " <<<"$out" && grep -q "^=== BB " <<<"$out" && [ "$(grep -c "0 tryboot\"$" <<<"$out")" = 2 ]'
+out=$(BOARD_UART=/dev/ttyUSB9 TREE_IMAGE_DIR=$S/pi4img dry pi4 tree "$S/pi4.txt" "$S/tree" 2>&1)
+rc=$?
+check "pi4 tree, BOARD_UART a device: the /proc scan and the stty reader, no bridge command" \
+    eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyUSB9" <<<"$out" && grep -q "stty -F /dev/ttyUSB9" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
+out=$(BOARD_UART=bridge.invalid:1 TREE_IMAGE_DIR=$S/pi4img dry pi4 tree "$S/pi4.txt" "$S/tree" 2>&1)
+rc=$?
+check "pi4 tree, BOARD_UART host:port: probe and TCP capture commands, no stty, no /proc scan" \
+    eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
+          grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
 out=$(TREE_IMAGE_DIR=$S/amimg TREE_TAG=t dry am62p tree "$S/am.txt" "$S/tree" 2>&1)
 rc=$?
 check "am62p tree (img<N>-<tag>): rc 0, rows img1-t and img2-t each booted" \

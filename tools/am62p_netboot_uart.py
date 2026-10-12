@@ -11,6 +11,11 @@
         reports no match, which looked like lost lines on 2026-10-03. Exits 4 when the bridge answers
         "busy" (held by another client) or cannot be reached; otherwise runs
         until killed (the runner kills it by PID) or the bridge closes.
+    am62p_netboot_uart.py probe HOST:PORT
+        Opens the bridge once and closes it (the "nobody holds the UART" check
+        of tools/board.sh pi4). Exit 0: it accepted and held the connection.
+        3: refused or unreachable. 4: it answered "busy". 5: it accepted and
+        closed at once. The messages name the reason, never the address.
     am62p_netboot_uart.py typed HOST:PORT RAW STAMPED LINE
         "capture", and it also types: the typed route, which writes nothing
         to the board's env (see "Typed route" below). Events go to stderr.
@@ -242,6 +247,32 @@ def capture(addr, raw_path, stamped_path):
         finally:
             if state["pending"]:
                 st.write("%.3f %s\n" % (time.time(), _clean(state["pending"])))
+
+
+def probe(addr):
+    host, port = addr.rsplit(":", 1)
+    try:
+        s = socket.create_connection((host, int(port)), timeout=5)
+    except (OSError, ValueError) as e:
+        print("probe: cannot connect: %s" % (getattr(e, "strerror", None) or type(e).__name__), file=sys.stderr)
+        return 3
+    s.settimeout(1.5)
+    try:
+        data = s.recv(256)
+    except socket.timeout:
+        return 0  # held open and quiet: a free console with nothing to say
+    except OSError as e:
+        print("probe: connection failed: %s" % (e.strerror or type(e).__name__), file=sys.stderr)
+        return 5
+    finally:
+        s.close()
+    if b"busy" in data:
+        print("probe: busy (another client holds the bridge)", file=sys.stderr)
+        return 4
+    if not data:
+        print("probe: accepted and closed at once", file=sys.stderr)
+        return 5
+    return 0
 
 
 def _capture_loop(s, addr, raw, st, state):
@@ -742,6 +773,39 @@ def capture_self_test(check):
     srv.close()
 
 
+def probe_self_test(check):
+    """probe() against a fake bridge: free (quiet) 0, refused 3, busy 4,
+    closed at once 5; the messages never carry the address."""
+    import contextlib
+    import io
+
+    def serve(payload, linger):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+
+        def run():
+            c, _ = srv.accept()
+            if payload:
+                c.sendall(payload)
+            time.sleep(linger)
+            c.close()
+            srv.close()
+
+        threading.Thread(target=run, daemon=True).start()
+        return "127.0.0.1:%d" % srv.getsockname()[1]
+
+    dead = socket.socket()
+    dead.bind(("127.0.0.1", 0))
+    refused = "127.0.0.1:%d" % dead.getsockname()[1]
+    dead.close()
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        got = [probe(serve(b"", 2.5)), probe(refused), probe(serve(b"busy\r\n", 0.3)), probe(serve(b"", 0))]
+    check(got == [0, 3, 4, 5], "probe: quiet bridge 0, refused 3, busy 4, closed at once 5 (got %s)" % got)
+    check("127.0.0.1" not in err.getvalue(), "probe: no message names the address")
+
+
 def self_test(saved_log=None):
     ok = True
 
@@ -815,6 +879,7 @@ def self_test(saved_log=None):
     real_capture_self_test(check)
     rti_format_self_test(check)
     capture_self_test(check)
+    probe_self_test(check)
     if saved_log:
         # A real kexec cycle (Zephyr, then a reset, then Linux): no U-Boot
         # before the image, so no netboot phase may be claimed.
@@ -829,6 +894,8 @@ def self_test(saved_log=None):
 def main(argv):
     if argv[:1] == ["--self-test"]:
         return self_test(argv[1] if len(argv) > 1 else None)
+    if len(argv) == 2 and argv[0] == "probe":
+        return probe(argv[1])
     if len(argv) == 4 and argv[0] == "capture":
         return capture(argv[1], argv[2], argv[3])
     if len(argv) == 5 and argv[0] == "typed":
