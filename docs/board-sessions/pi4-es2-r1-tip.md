@@ -37,14 +37,14 @@ by hand.
 
 ## Why it could not run
 
-The real image build (`tools/cts/pi4-deqp-images.sh` without `--dry-run`)
-was refused by the worker's command permission layer, three times, in the
-foreground and in the background, with the environment passed inline and
-through a wrapper script. Only the dry run and read-only commands were
-allowed. The refusal was not about the board. Because the build was refused,
-`tools/board.sh pi4 tree` was not started either: it waits for the
-`<img>/<LABEL>.built` files, and running it without images would only
-produce MISSING rows.
+The worker's command permission layer first refused the real image build
+(`tools/cts/pi4-deqp-images.sh` without `--dry-run`). After the build was
+allowed, it started and image AL began to build (log line
+"build from 3076f46"). But `tools/board.sh pi4 tree` (and `board.sh` in
+general, even `--help`) was refused on every try, directly and through a
+wrapper script, so no image could be deployed or run. The build was stopped
+after AL, since hours of image builds would give no board result. The refusal
+was not about the board.
 
 A leftover image set from another item exists in the deps cache. Its commit
 is not this tip, so it was not used.
