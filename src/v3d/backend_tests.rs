@@ -7409,3 +7409,103 @@ fn query_handles_are_checked_and_no_memory_is_enomem() {
     assert_eq!(rig.draws()[0].st.oq_addr, 0, "no counter: no address");
     assert_eq!(n, 7);
 }
+
+/// Doc 5.2, the 500-quad frame (dEQP `long_masked`): 500 scissored
+/// `clear_quad` draws in one frame. The job builder reports the job full
+/// after 300; the back end submits that job and records the rest in a new
+/// one, and the continuation loads the colour the first job drew.
+///
+/// The fake builder has no capacity of its own, so the "full" is its answer
+/// (`V3D_JOB_FULL`), as in `a_full_job_is_submitted_and_the_draw_goes_into_the_next`.
+#[test]
+fn a_500_quad_frame_flushes_when_the_job_is_full_and_continues_loading_the_colour() {
+    const QUADS: usize = 500;
+    const FIT: usize = 300;
+    let rig = Rig::new();
+    rig.init();
+    let quad = |i: usize| {
+        let mut c = clear_only(&rig);
+        c.clear_quad = true;
+        (c.scissor, c.scissor_rect) = (true, [(i % 32) as i32, 0, 8, 8]);
+        c.clear_rgba = [0.0, 1.0, 0.0, 1.0];
+        c
+    };
+    for i in 0..QUADS {
+        if i == FIT {
+            assert!(rig.kicks().is_empty(), "nothing is submitted while the job has room");
+            rig.answer(&[V3D_JOB_FULL]);
+        }
+        assert_eq!(draw(&quad(i)), 0, "quad {i}: {:?}", rig.gl.logs());
+    }
+    /* the full job went to the GPU when the 301st quad did not fit */
+    assert_eq!(rig.kicks().len(), 1, "the full job is submitted");
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(rig.kicks().len(), 2, "and the continuation at the flush");
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!(jobs.iter().map(|j| j.draws as usize).collect::<Vec<_>>(), [FIT, QUADS - FIT]);
+    assert_eq!(draws.len(), QUADS, "every quad is recorded once, none twice");
+    for (i, q) in draws.iter().enumerate() {
+        let want = state::scissor(&quad(i)).expect("the clear's box");
+        assert_eq!(
+            [q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy],
+            want,
+            "quad {i} keeps its own box across the flush"
+        );
+        assert_is_the_quad(&rig, q, 1.0, [0.0, 1.0, 0.0, 1.0]);
+    }
+    for (n, j) in jobs.iter().enumerate() {
+        assert!(j.clear.unwrap().load_rt0, "job {n}: a quad clear never clears the colour in the TLB");
+    }
+}
+
+/// Doc 5.2, `depth_stencil_clear` in the recorded jobs: a scissored depth
+/// quad, a scissored stencil quad, then a full unscissored clear. The quads
+/// are drawn into one job, in that order; the full clear is a TLB clear and
+/// opens the job after them (a TLB clear cannot follow draws in its job),
+/// with no draw of its own and no load of the colour.
+#[test]
+fn a_depth_quad_a_stencil_quad_then_a_full_clear_are_quad_quad_then_the_tlb_clear() {
+    let rig = Rig::new();
+    rig.init();
+    let mut depth = clear_only(&rig);
+    depth.clear_quad = true;
+    (depth.do_clear, depth.clear_color_mask) = (false, 0);
+    (depth.do_clear_depth, depth.clear_depth) = (true, 0.25);
+    (depth.scissor, depth.scissor_rect) = (true, [4, 4, 16, 16]);
+    assert_eq!(draw(&depth), 0, "{:?}", rig.gl.logs());
+    let mut stencil = clear_only(&rig);
+    stencil.clear_quad = true;
+    (stencil.do_clear, stencil.clear_color_mask) = (false, 0);
+    (stencil.do_clear_stencil, stencil.clear_stencil) = (true, 0x33);
+    (stencil.stencil_write_mask, stencil.stencil_back_write_mask) = (0xff, 0xff);
+    (stencil.scissor, stencil.scissor_rect) = (true, [20, 20, 16, 16]);
+    assert_eq!(draw(&stencil), 0, "{:?}", rig.gl.logs());
+    assert!(rig.kicks().is_empty(), "the quads share the open job");
+    let mut full = clear_only(&rig);
+    (full.do_clear_depth, full.clear_depth) = (true, 0.75);
+    (full.do_clear_stencil, full.clear_stencil) = (true, 0x44);
+    (full.stencil_write_mask, full.stencil_back_write_mask) = (0xff, 0xff);
+    full.clear_rgba = [0.0, 0.0, 1.0, 1.0];
+    assert_eq!(draw(&full), 0, "{:?}", rig.gl.logs());
+    assert_eq!(rig.kicks().len(), 1, "the full clear ends the job holding the quads");
+    assert_eq!(v3d_flush(), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!(jobs.len(), 2);
+    assert_eq!((jobs[0].draws, jobs[1].draws), (2, 0), "quad, quad | TLB clear");
+    assert_eq!(draws.len(), 2, "the full clear draws nothing");
+    let (d, s) = (&draws[0], &draws[1]);
+    assert!(d.st.depth_enabled && d.st.depth_writemask && !d.st.stencil_enabled, "the first quad is the depth's");
+    assert!(s.st.stencil_enabled && !s.st.depth_enabled, "the second quad is the stencil's");
+    assert_eq!(s.st.stencil_front.ref_, 0x33);
+    for (q, c) in [(d, &depth), (s, &stencil)] {
+        let want = state::scissor(c).expect("the clear's box");
+        assert_eq!([q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy], want);
+    }
+    assert_ne!([d.st.scissor_minx, d.st.scissor_miny], [s.st.scissor_minx, s.st.scissor_miny], "each its own box");
+    let (q, c) = (jobs[0].clear.unwrap(), jobs[1].clear.unwrap());
+    assert!(q.load_rt0, "the quad job clears nothing in the TLB");
+    assert!(!c.load_rt0, "the TLB clear clears the colour");
+    assert_eq!(c.rgba8, 0xffff_0000, "blue, R in the low byte");
+    assert_eq!((c.z, c.stencil), (0.75, 0x44), "and the depth and stencil of the full clear");
+    assert_eq!(rig.kicks().len(), 2);
+}
