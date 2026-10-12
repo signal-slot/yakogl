@@ -710,7 +710,9 @@ TEST_TREE_PATHS=(
   tools/shaders                                  # the corpus tests and the source lists
   tests/fixtures tests/reference                 # pinned results; the triangle check's tables
   tools/cts/testdata tools/cts/wedge_probe       # tests/temps_survey.rs, usc_survey.rs
-  tools/cts/gles2-mustpass.txt tools/testdata/record-decode.txt
+  tools/cts/gles2-mustpass.txt tools/cts/gles3-mustpass.txt  # tests/es3_shaderc_infolog.rs reads the GLES3 list
+  tools/testdata/record-decode.txt
+  driver/tools/pvrlab/gl_test.c                  # yakogl-tools msaarec: the record layout's constants
   driver/zephyr/lib/board/imx8mp/gc_result.h     # yakogl-tools record (these three)
   driver/zephyr/lib/board/include/yakogl_record.h driver/rust/include/yakogl_drivers.h
   driver/samples/zephyr/v3d_triangle/shaders     # the V3D chain tests (library)
