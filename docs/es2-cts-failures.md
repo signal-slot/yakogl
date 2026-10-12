@@ -55,6 +55,14 @@ failures pass on `1cf946a9` and whose 34 lost cases pass in a rerun. The 5 in
 the QualityWarning column are those 3 and the 2 CompatibilityWarnings
 (`flush_finish.flush`, `flush_wait`; a timing check that flips between runs).
 
+Newer records (Round 1, 2026-10-12 note): the rows above are the origin/main
+readings of 2026-10-10 and 10-11. The only newer full record in this tree is
+the i.MX8MP integration tree `334d4e65` (same 17,318 / 0 / 34 / 19). The
+AM62P has a partial one, images 8-17 on `f013dbbb` (45 fail, the same 45
+`texture.vertex.2d` cases), and the Pi 4 a partial one, six rows on
+`1cf946a9` (934 / 0). None is a final tree, so no row is a zero-failure
+claim; see "Round 1" below.
+
 ## Status after plan #1's fixes (docs-sync, 2026-10-07)
 
 Sections B to F below are the inventory as written before the fixes. This
@@ -82,6 +90,113 @@ run it. The combined board recipe is `docs/HANDOFF.md`, "Next board session".
 Every board has run a full tree since the plan began (the summary table). The
 rows still "awaiting board" are confirmed in one session per board (HANDOFF
 "Next board session").
+
+## Round 1 (2026-10-08 to 2026-10-11)
+
+Written 2026-10-12 for roadmap stage 1 (zero dEQP-GLES2 failures on the
+AM62P, the i.MX8MP and the Pi 4). Nothing was run for this section. It folds
+in board-session and investigation documents that are merged in this tree
+(`tools/cts/log/board-sessions/`, `tools/cts/log/investigations/`,
+`docs/board-sessions/`), and no other source. Sections A to F stay as the
+historical inventory of 2026-10-07; the Summary and Status tables above
+already carry the origin/main readings of 2026-10-10 and 10-11.
+
+**No board has a recorded final tree.** A final tree is a whole-tree run of
+one origin/main tip that closes the plan. The only final-tree record in this
+tree, `docs/board-sessions/pi4-es2-final.md`, ran nothing. So this file
+makes no zero-failure claim for any board. The i.MX8MP reads 0 failures on
+two commits (`334d4e65`, `32778b57`); that is a reading, not a final tree.
+`am62p-es2-final.md`, `imx8mp-es2-final.md` and `pi4-es2-tip-r2.md` are not
+in this tree and are not cited.
+
+### Per board: what ran
+
+| Board | Commit (date) | Rows covered | Pass / Fail / NotSupported / QualityWarning | Record (commit) |
+|---|---|---|---|---|
+| AM62P | integration `b83216d4` (10-08) | images 1-7 (10,101 mustpass cases in their filters) | 10,092 / **9** / 0 / 0; every case has a result | `tools/cts/log/board-sessions/am62p-plan1.md` (`7a57c78`) |
+| AM62P | integration `f013dbbb` (10-11) | images 8-17 (7,064 mustpass cases), `ms4`, gl_test default list, gl_test 171 | images 8-17: 6,978 / **45** / 34 / 5 (+ 2 CompatibilityWarning); `ms4`: 14 pass / **2 fail**; gl_test 48 of 48; case 171 alone passes; 0 resets | `tools/cts/log/board-sessions/am62p-es2-r1c.md` (`c2dfdc0`) |
+| AM62P | integration `47ad0712` (10-09), and `89d518ee` / `64e1714e` (10-11) | none: console silent (the lease named the wrong UART, later fixed), nothing built or run. Covers the sessions `am62p-es2-r1` and `am62p-es2-tip-img1-7` | - | `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md` (`b406de0`) |
+| AM62P (main) | origin/main `32778b57` (10-10) | whole tree, 17 images, `ms4`, gl_test | 17,070 / **54** / 34 / 5 (+ 2 CompatibilityWarning); `ms4` 14 / **2** | no session document: `docs/HANDOFF.md` "State of main", `tools/cts/RESULTS.md` |
+| AM62P (main) | origin/main `e17fb6a7` (10-10); `452d6c31`, `a27d69c0` (10-10) | image 1; the `ms4` image | image 1: 1,379 / 0 / 0 / 0; `ms4`: 16 pass / 0 fail | no session document: `docs/HANDOFF.md`, `tools/cts/RESULTS.md` |
+| i.MX8MP | integration `334d4e65` (10-09) | whole tree, 29 entries, one image; gl_test x3 | 17,318 / **0** / 34 / 19 of 17,371 begun (206 are not in the mustpass list); every entry equal to `tools/cts/imx8mp-full-tree-29460f96.results.tsv`; gl_test 46, 45, 45 of 48 | `tools/cts/log/board-sessions/imx8mp-es2-r1.md` (`348de58`) |
+| i.MX8MP (main) | origin/main `32778b57` (10-10) | whole tree, 29 entries | the same 17,318 / **0** / 34 / 19, 29 of 29 entries equal | no session document: `tools/cts/RESULTS.md`, `tools/cts/STATUS.md` |
+| Pi 4 | integration `7bc37edc`, `c4a4d7fa`, `e3efeaad` (10-08 to 10-11) | none: no inputs on the worker, then no console path; nothing built or run. Covers `pi4-es2-r1` and `pi4-es2-r1-tip` | - | `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md` (`b406de0`) |
+| Pi 4 | integration `76d349c4` (10-11) | none: a console-bridge probe. The connection was accepted, 0 bytes while idle, and a marker written on the board's console UART did not arrive as text | - | `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md` (`b406de0`, row `pi4-console-probe`) |
+| Pi 4 | integration `89d518ee` (10-11) | none: the host-written comparison baseline for the next Pi 4 tree (the `fe5e8e73` per-row table, expected changes) | the `fe5e8e73` figures (17,075 / 25 / 62 / 3), not re-measured | `tools/cts/log/board-sessions/pi4-es2-r2-baseline.md` (`9179ffa`) |
+| Pi 4 | origin/main tip `2a3a36fc` (10-12) | none: no console value could be read, the lease is shared; nothing built or run. It found no `pi4-es2-tip-r2` record to cite | - | `docs/board-sessions/pi4-es2-final.md` (`1b9452e`, `c9b4f8b`) |
+| Pi 4 (main) | origin/main `a27d69c0` (10-10), rows on `1cf946a9` (10-11) | whole tree (29 images) on `a27d69c0`; six rows on `1cf946a9` | `a27d69c0`: 17,083 / **9** / 34 / 3 (+ 2 CompatibilityWarning, 34 without a result, which pass in a rerun); the six rows on `1cf946a9`: 934 / 0 | no session document: section A (Pi 4), `docs/HANDOFF.md` |
+
+Reading the table:
+
+- The AM62P's two integration readings are of different commits (`b83216d4`
+  images 1-7, `f013dbbb` images 8-17); 10,101 + 7,064 = 17,165 cases are
+  covered, but not at one commit, so they are not a whole-tree total. The
+  only whole AM62P tree of the round is origin/main `32778b57`, before the
+  host fixes of the 45 and the 2.
+- The Pi 4 has no board-session record of any run. Its readings are the
+  origin/main ones already in the Summary. The Pi 4 numbers of `a27d69c0`
+  add up to 17,165 only with the 34 cases the capture lost
+  (17,083 + 9 + 34 + 3 + 2 + 34 = 17,165); those 34 pass in a rerun of the
+  F1 image, by that image's own counters. There is no per-image record in
+  the repository, so the figures are quoted from section A. `pi4-es2-r2-baseline.md` compares against `fe5e8e73`,
+  because the integration branch did not carry the `a27d69c0` run.
+- A reading on an "integration image" is not a landing proof.
+
+### Per failure
+
+State vocabulary. **Fixed on origin/main, awaiting the final tree**: the
+commit is on origin/main and a board has read it, or it is host-proved; no
+final tree has confirmed it. **Host-fixed, in review**: a fix or a pin
+exists in an unmerged item. **Diagnosed only**: the cause or the expected
+verdict is written down, no fix is needed or made. **Open**: not fixed.
+
+| Failure (cases) | Board and record | State | Evidence and commit |
+|---|---|---|---|
+| `shaders.invariance.{lowp,mediump,highp}.common_subexpression_{1,2,3}` (9), a regression against `d60b9d76` | AM62P image 1: `am62p-plan1.md` (`b83216d4`); again in the main tree `32778b57` (image 1: 1,370 / 9) | **fixed on origin/main, awaiting the final tree** (board-read) | `f9688bc5` (a sum on the way to an `invariant` output is not fused into an `fmad`), merged by `e17fb6a7`. Board: image 1 at `e17fb6a7` 1,379 pass / 0 fail. `tools/cts/log/investigations/es2-invariance.md` (`13eb8a9`) is the diagnosis; main took the alternative that record lists, and `tests/es2_invariance.rs` runs all twelve cases. Closed by `am62p-es2-final-a` (image 1) |
+| `texture.vertex.2d.{filtering (36), wrap (9)}.*` (45), a regression against `d60b9d76` | AM62P image 9: `am62p-es2-r1c.md` (`f013dbbb`: "Image comparison failed", all 45 and nothing else in the image); main `32778b57` image 9 | **fixed on origin/main, awaiting the final tree** (host-proved; `tools/cts/STATUS.md` says the image 9 confirmation is not done) | Cause (`tools/cts/log/investigations/es2-pvr-vertex-texture.md`, `985592b`): each cell is one `glDrawElements` of 127 x 127 quads, 1,225,804 bytes of client data, refused by the 1 MiB GENERAL arena (`dcaafa41`; 4 MiB at `d60b9d76`). The record proposed a frame of its own for such a draw; main took `a6fc6f14` (an indexed draw over half an empty arena is cut into pieces of its index list; gl_test 197 `vtxgrid`). A draw that cannot be cut is still refused by name. Closed by `am62p-es2-final-a` (image 9) |
+| `multisample.constancy_alpha_to_coverage`, `multisample.constancy_both_inverted` (2), on the `ms4` image | AM62P: `am62p-es2-r1c.md` (`f013dbbb`: 14 / 2); main `32778b57`, two identical runs | **fixed on origin/main, awaiting the final tree** (board-read: `ms4` 16 / 0 on `452d6c31` and `a27d69c0`, per HANDOFF) | `a4f64950` (a frame uploads a PDS program it already holds once, so dEQP's 1024-draw 4x frame is one kick; the 768 KiB PDS arena had split the frame at draw 1015). `tools/cts/log/investigations/es2-pvr-ms4-constancy.md` (`52c322f`) is superseded: it did not find this cause, and keeps three program-level host tests. Closed by `am62p-es2-final-b` (`ms4` tree) |
+| `shaders.fragdata.invalid_assign_to_1` (NotSupported at `fe5e8e73` on the Pi 4, and before `4e9397c` on the AM62P) | AM62P: Pass in `am62p-plan1.md` (`b83216d4`) and in `32778b57`; Pi 4: Pass on `a27d69c0` per section A | **fixed on origin/main, awaiting the final tree** (board-read on the AM62P and the Pi 4) | `4e9397c` (`gl_MaxDrawBuffers` 1 in `report-es2`). `tools/cts/log/investigations/es2-fragdata.md` (`a118943`), host pin `tests/es2_fragdata.rs`. Closed by `am62p-es2-final-a` and `pi4-es2-final-a` |
+| i.MX8MP `fbo...renderbuffer.depth.depth_component24` and one `shaders.fragdata.*` NotSupported (section B rows 1 and 2) | i.MX8MP: `imx8mp-es2-r1.md` (`334d4e65`: fbo and shaders-tail entries equal to the baseline, 0 fail); the same on main `32778b57` | **fixed on origin/main, awaiting the final tree** (board-read on two commits) | `4e9397c`. Closed by `imx8mp-es2-final` |
+| Pi 4 `texture.vertex.cube.{filtering (10), wrap (8)}` and `shaders.texture_functions.vertex.texturecubelod` (19 of section B rows 3 to 27) | Pi 4 main `a27d69c0`: all 19 pass (section A); `fe5e8e73`: Fail | **fixed on origin/main, awaiting the final tree** (board-read on `a27d69c0`) | `ec5ba4f`, `53ef6d7` (non-seamless cube emulation; `docs/v3d-noseamless-cube.md`). `pi4-es2-r2-baseline.md` expects them Fail to Pass. Closed by `pi4-es2-final-a` (rows 19 and 24) |
+| Pi 4 `texture.mipmap.cube.{basic,bias,projected}.{linear_linear,linear_nearest}` (6) and `texture.size.cube.15x15_{l8,rgb888,rgba8888}` (3) | Pi 4 main `a27d69c0`: 9 fail; main `1cf946a9`: T3 304 / 304 and T4 69 / 69 pass (section A) | **fixed on origin/main, awaiting the final tree** (board-read on the rows on `1cf946a9`; no whole-tree run of that commit) | `9b24ea2` (the fragment variant computes dEQP's cube level from FDX / FDY of the direction and the face size word); `tests/v3d_cube_noseamless.rs`. Closed by `pi4-es2-final-a` (T3 row 21, T4 row 22; T2, TF, RT, S5f unchanged) |
+| Pi 4 `fbo.completeness.attachment_combinations.<a>_<b>_<c>_tex` (27 NotSupported at `fe5e8e73`) | Pi 4 main `a27d69c0`: pass (section A) | **fixed on origin/main, awaiting the final tree** (board-read on `a27d69c0`; no code change in this plan) | The V3D claims `GL_OES_depth_texture` (`tools/cts/log/status-2026-09-25-to-10-07.md`, 10/3). The host investigation of the 81 combinations (`es2-v3d-fbo-combos`) is not in this tree. Closed by `pi4-es2-final-a` (FB1 row 4) |
+| `texture.completeness.{2d,cube}.npot_*`, `negative_api.texture.generatemipmap_npot_wdt_hgt` (18, section H) | i.MX8MP: Pass (`imx8mp-es2-r1.md`: entry 10 40 / 40; entry 22 237 pass / 9 NotSupported). AM62P and Pi 4: none among the named failures | no failure on any board; **diagnosed only** for the AM62P and the Pi 4 by name | Section H's first prediction (Pass to NotSupported) is withdrawn there. Host replay `tests/es2_npot.rs` is in the tree. The investigation record `es2-npot-cases` is not in this tree. Residual risk no record has hit: the PowerVR TPU's level arithmetic for `2d.npot_size`, the GC7000's REPEAT on NPOT sizes |
+| `flush_finish.flush`, `flush_finish.flush_wait` (CompatibilityWarning) | AM62P: `am62p-es2-r1c.md`, main `32778b57`; Pi 4 `a27d69c0` | **open**, acceptable (not a failure) | dEQP's own timing check; it flips between runs (none at `d60b9d76`, two at `32778b57` and `f013dbbb`) |
+| i.MX8MP gl_test cases 10 (#9), 2 (#25), 16 (#8) | `imx8mp-es2-r1.md` (46, 45, 45 of 48; case 10 first in two of three), main `32778b57` (45, 46, 46) | **open** (not a dEQP case) | Case 16 is the skipped 4x half, fixed in the count by `6bddfc5`. The cause of #9 and #25 is not found (`8409419`); the later round is `tools/cts/log/board-sessions/imx8mp-gltest-r2.md` (`938e29a`) |
+| AM62P gl_test 198 `a2cconst`, 197 `vtxgrid`, 171 `viewwin` | `am62p-es2-r1c.md`: 48 of 48 default list; 171 alone passes | 171: passes at `f013dbbb` (the earlier stop is not reproduced); 198: **fixed on origin/main, awaiting the final tree** (`a4f64950`); 197: no board reading | `am62p-es2-final-b` runs 198, 197 and 171 |
+| `negative_api.texture.compressedtexsubimage2d_*` (9), `clip_control.*` (8), `multisampled_render_to_texture.readpixels` (1), `multisample.*` at the 1x config (16), the QualityWarning buckets | all three boards, unchanged in every reading of the round (AM62P 34 NotSupported and 5 QualityWarning; i.MX8MP 34 and 19; Pi 4 34 at `a27d69c0`) | acceptable buckets, unchanged (section C) | No commit |
+
+Groups that no record of the round shows failing:
+
+| Group | What the sources say | State |
+|---|---|---|
+| `shaders.preprocessor.*`, `define_value_and_function_{fragment,vertex}`, macro order | `tools/cts/log/investigations/es2-preprocessor.md` (`0d7af86`): the two failures were one stale row of `RESULTS.md`; all 534 preprocessor shaders get the CTS's compile outcome on the host. No record of the round fails a preprocessor case | diagnosed only (no defect) |
+| ES error rules (ES 3-only values accepted by a `report-es2` build) | `tools/cts/log/investigations/es2-error-rules.md` (`47ab9b2`): status open; the vertex-array part landed (`tests/es2_error_rules_vertex.rs`); the other ungated ES 3.0 rows are reached by no dEQP-GLES2 case. Host `negative_api` is 237 pass / 0 fail / 9 NotSupported on all three back ends | conformance debt, not a CTS failure; open |
+| `glClear` with scissor and mask on the V3D | Not in a record of this tree (`es2-v3d-clear` is not merged here). No `color_clear` or `depth_stencil_clear` case is among the failures of any reading | no failure seen; diagnosis not in this tree |
+| Offline shader table | Not in a record of this tree (`es2-offline-table`). The dEQP images use the on-device compiler, so this is not a CTS case | outside the CTS; diagnosis not in this tree |
+| Compile and link of the whole mustpass list on the host | `tools/cts/log/investigations/es2-host-deqp-v3d.md` (`1cc069b`): 0 gaps and 878 correct refusals on each back end; the V3D run aborted one chunk at the host's 8 MiB tiled-copy budget, and at the Pi 4 image's 16 MiB all 100 cases begin. Host only: compile and link, no rendering | diagnosed only (no gap) |
+
+### Which final session is expected to close which rows
+
+The final sessions build the origin/main tip. Until a record exists, none of
+these rows is closed.
+
+- `am62p-es2-final-a` (images 1-9): the 9 invariance cases (image 1), the 45
+  `texture.vertex.2d` cases (image 9), `fragdata.invalid_assign_to_1`; images
+  2-8 against `d60b9d76` for anything new.
+- `am62p-es2-final-b` (images 10-17, `ms4`, whole-tree total, then gl_test
+  198, 197, 171): the 2 `ms4` constancy cases, the NotSupported and
+  QualityWarning buckets, the `flush_finish` warnings, and the AM62P
+  whole-tree total, which only the two sessions together give.
+- `imx8mp-es2-final` (29 entries): the i.MX8MP zero-failure reading on a
+  final tree, and the 18 NPOT cases by entry. The gl_test flake is not its
+  business (`imx8mp-gltest-r2`).
+- `pi4-es2-final-a` (rows 0-28): the 9 cube cases (T3 row 21, T4 row 22),
+  the 19 vertex cube cases (rows 19 and 24), the 27 `fbo` combinations
+  (FB1 row 4), `fragdata.invalid_assign_to_1`, and the Pi 4 whole-tree total.
+  Its first attempt (`docs/board-sessions/pi4-es2-final.md`) ran nothing: no
+  console value, a shared lease. It found no complete `pi4-es2-tip-r2`
+  record to cite, so the tree has to run.
 
 ## A. Per board: last full tree, counts, record names
 
