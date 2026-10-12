@@ -1242,6 +1242,11 @@ step "test    $V3D_CONFIG (tests/es3_tf_api.rs)" \
 # have no sRGB format.
 step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_srgb
+# ES 3.0 occlusion queries through the GL API against a sample-counting
+# fake back end (results across kicks, the waits before a counter is reset
+# or read, the errors); the ES 2.0 report below must refuse them.
+step "test    $V3D_CONFIG (tests/es3_occlusion_gl.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_occlusion_gl
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
@@ -1258,6 +1263,8 @@ step "test    $V3D_ES2_CONFIG (tests/es3_tf_api.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_tf_api
 step "test    $V3D_ES2_CONFIG (tests/es3_srgb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_srgb
+step "test    $V3D_ES2_CONFIG (tests/es3_occlusion_gl.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_occlusion_gl
 # The FFI pins of src/v3d/ffi.rs, asserted against the real headers, and the
 # job builder the image links, both with the host C compiler: a header that
 # moved, or a warning in the builder, fails here rather than in an image.
