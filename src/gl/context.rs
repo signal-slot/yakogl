@@ -1083,8 +1083,16 @@ static GL_ERRORS_RECORDED: AtomicU32 = AtomicU32::new(0);
 
 /// Add one to `n`, staying at u32::MAX once there.
 pub(crate) fn count_saturating(n: &AtomicU32) {
-    /* checked_add gives None at u32::MAX: fetch_update then stores nothing */
-    let _ = n.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1));
+    /* a compare-exchange loop rather than fetch_update: the newer nightly
+     * deprecates fetch_update for try_update, which the older stable lacks,
+     * and the gate counts every warning */
+    let mut v = n.load(Ordering::Relaxed);
+    while v != u32::MAX {
+        match n.compare_exchange_weak(v, v + 1, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            Err(now) => v = now,
+        }
+    }
 }
 
 /// Every GL error an entry point raised in this process (saturating).
