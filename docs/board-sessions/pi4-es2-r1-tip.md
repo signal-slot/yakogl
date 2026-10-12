@@ -1,71 +1,143 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# pi4-es2-final-b: Pi 4 dEQP-GLES2 whole tree at the integration tip (BLOCKED, nothing run)
+# pi4-es2-final-b: Pi 4 dEQP-GLES2 whole tree at the integration tip
 
-Date: 2026-10-12. Tree base: `40dd2107fa2c` (main when this item was redone;
-the earlier try started from `e3efeaadccd4`). Rows 0-28 of
-`tools/cts/pi4-full-tree.txt` are all unrun.
+Date: 2026-10-12 22:59 to 2026-10-13 01:34 (JST). Raspberry Pi 4 (V3D 4.2),
+backend tryboot. Tree base `40dd2107fa2c` (main); the images were built from
+`6451057`, which is `40dd2107fa2c` plus this record only (the build string in
+every image is `V3D_BUILD=6451057`; Zephyr `af17c0c8aa2a`).
 
-Result: no image was built and no case ran on the Pi 4. There are no
-`board.sh` verdict lines, no per-image counts and no TALLY. The 25 cube
-cases have no verdict, so the comparison with `fe5e8e73` (25 Fail, all cube;
-`docs/es2-cts-failures.md` section A) cannot be made. No host result is offered
-in place of a device result.
+Result: **0 Fail, 0 crash, 0 reset.** All 29 images ran to `verdict=done`, all
+17,165 mustpass cases have a result. The 25 cube cases of `fe5e8e73` all pass.
 
-| Image (rows) | Pass | Fail | NotSupported | QualityWarning | crash | state |
-|---|---|---|---|---|---|---|
-| AL ... XT (rows 0-28, 17165 mustpass names) | - | - | - | - | - | not run |
-| whole tree | - | - | - | - | - | not run |
+## Recipe
 
-Failing cases by name: none known; nothing ran.
-`tools/cts/tree-diff.py` does not exist at this tip; the comparison would be
-by hand.
+- Images: `tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt <img>`
+  (29 images, rc=0 each; T5 built with `texture-2048.conf` by the script).
+- Run: `TREE_IMAGE_DIR=<img> tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt <rec>/full`.
+- Tally: `tools/board.sh pi4 tally <rec>/full`.
+- The first run was stopped by the worker's two-hour background limit during
+  row 23 (T5); that attempt left a staged image on the board's boot partition
+  and two partial record directories. The board had already rebooted into
+  Linux. I removed the staged files (boot partition) and moved the two partial
+  T5 records aside (not into the tally), then resumed with `TREE_ROWS=23-28`
+  into the same record directory. Rows 0-22 come from the first run, rows
+  23-28 from the second. All 29 rows ran at the same image set.
 
-## What was checked
+## Per-image counts
 
-- The lease gave ssh to the Pi 4. It answered and was idle (load average
-  0.02 0.02 0.04, `uptime` over ssh). Nothing was copied to it or booted on it.
-- This time `BOARD_UART` was set to a serial bridge (`host:port` form) and
-  `BOARD_HDMI_TIMINGS` was set. `tools/board.sh` at this tip supports the
-  bridge form for `pi4` (`uart_is_bridge`, `bridge_capture`), which the
-  earlier try found missing. A TCP connect to the bridge succeeded and the
-  bridge was not busy.
-- The shared deps cache holds the Zephyr workspace with `west`, the SDK and
-  the Pi 4 dEQP stage 1 (`DEQP_WORK`: `build/`, `cts/`). The `--dry-run` of
-  `tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt <img>` printed
-  all 29 labels (AL ... XT), with `-DEXTRA_CONF_FILE=texture-2048.conf` on T5.
+"Cases" are the result lines the image printed (its filter also selects names
+outside the mustpass list, so the sum is 17,367 lines for 17,165 mustpass
+cases). Pass / Fail / NotSupported / Warning are the image's own counters
+(`deqp: done`). Crash is 0 everywhere (`resets=0`, `boot_verdict=complete`).
 
-## Why it could not run
+| Row | Image | sha256 prefix | Cases | Pass | Fail | NotSupported | Warning | Crash |
+|---|---|---|---|---|---|---|---|---|
+| 0 | AL | 1d57528c | 57 | 57 | 0 | 0 | 0 | 0 |
+| 1 | D | fdedd321 | 305 | 305 | 0 | 0 | 0 | 0 |
+| 2 | E | 8bf0d58c | 453 | 453 | 0 | 0 | 0 | 0 |
+| 3 | F1 | b3227fd8 | 1923 | 1923 | 0 | 0 | 0 | 0 |
+| 4 | FB1 | 16ca5d96 | 392 | 392 | 0 | 0 | 0 | 0 |
+| 5 | FB2 | 38174109 | 319 | 319 | 0 | 0 | 0 | 0 |
+| 6 | FF | 51c1c95d | 5 | 4 | 0 | 0 | 1 (Compatibility) | 0 |
+| 7 | H | cd5aa88d | 654 | 651 | 0 | 0 | 3 (Quality) | 0 |
+| 8 | LA | 4716efa6 | 19 | 19 | 0 | 0 | 0 | 0 |
+| 9 | MISC | 2292675d | 74 | 58 | 0 | 16 | 0 | 0 |
+| 10 | NS | 51c2b20b | 642 | 633 | 0 | 9 | 0 | 0 |
+| 11 | RT | 224f4b1b | 200 | 200 | 0 | 0 | 0 | 0 |
+| 12 | S1 | 1e2f2490 | 2949 | 2949 | 0 | 0 | 0 | 0 |
+| 13 | S2 | db5e14b4 | 1910 | 1910 | 0 | 0 | 0 | 0 |
+| 14 | S3 | b8c57045 | 2188 | 2188 | 0 | 0 | 0 | 0 |
+| 15 | S4 | 36434ec2 | 2027 | 2027 | 0 | 0 | 0 | 0 |
+| 16 | S5f | 268b8d6d | 100 | 100 | 0 | 0 | 0 | 0 |
+| 17 | S5v | 810cb3f9 | 100 | 100 | 0 | 0 | 0 | 0 |
+| 18 | SMALL | fb67bb4f | 227 | 227 | 0 | 0 | 0 | 0 |
+| 19 | T1 | 9781b63e | 224 | 224 | 0 | 0 | 0 | 0 |
+| 20 | T2 | 0b229d18 | 248 | 248 | 0 | 0 | 0 | 0 |
+| 21 | T3 | 8395ab36 | 304 | 304 | 0 | 0 | 0 | 0 |
+| 22 | T4 | 572fb41a | 69 | 69 | 0 | 0 | 0 | 0 |
+| 23 | T5 | 56ef7063 | 7 | 7 | 0 | 0 | 0 | 0 |
+| 24 | TF | 042737f4 | 20 | 20 | 0 | 0 | 0 | 0 |
+| 25 | U1 | f509b99d | 1267 | 1267 | 0 | 0 | 0 | 0 |
+| 26 | VA | e147fbe0 | 571 | 571 | 0 | 0 | 0 | 0 |
+| 27 | DR | 3caac930 | 101 | 101 | 0 | 0 | 0 | 0 |
+| 28 | XT | a7ed92dd | 12 | 3 | 0 | 9 | 0 | 0 |
+| | whole tree | | 17,367 | 17,329 | 0 | 34 | 4 | 0 |
 
-The worker's command permission layer first refused the real image build
-(`tools/cts/pi4-deqp-images.sh` without `--dry-run`). After the build was
-allowed, it started and image AL began to build (log line
-"build from 3076f46"). But `tools/board.sh pi4 tree` (and `board.sh` in
-general, even `--help`) was refused on every try, directly and through a
-wrapper script, so no image could be deployed or run. The build was stopped
-after AL, since hours of image builds would give no board result. The refusal
-was not about the board.
+## Whole-tree TALLY (`board.sh pi4 tally`, scoped to the mustpass list)
 
-A leftover image set from another item exists in the deps cache. Its commit
-is not this tip, so it was not used.
-
-## Resume command
-
-Needs a worker where the image build is allowed. Then, with `BOARD_HOST` (the
-leased ssh login), `BOARD_UART` (the bridge) and `BOARD_HDMI_TIMINGS` set, at
-the tip or later:
-
-```sh
-export DEQP_WORK=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b RUSTUP_TOOLCHAIN=nightly
-export ZEPHYR_WS=$CCFARM_DEPS_DIR/zephyr-ws WEST_VENV=$ZEPHYR_WS/.venv
-export ZEPHYR_SDK_INSTALL_DIR=$CCFARM_DEPS_DIR/zephyr-sdk-1.0.1
-tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt <img>      # <img> must not exist; T5 gets texture-2048.conf itself
-TREE_IMAGE_DIR=<img> tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt <rec>/full
-tools/board.sh pi4 tally <rec>/full
+```
+== mustpass: 17165 cases in these records' case filters (0 outside them, not run, left out); 17165 with a result (17367 case lines seen)
+TOTAL                          17127      0     34      3      1      0
+                               pass   fail   n.s.     QW  other   none
 ```
 
-The tree is resumable (`TREE_ROWS=<rows left>`, `tools/cts/cts_resume.py`).
-Expected time: 29 images at about 5.4 min each on the board, about 2 h 40 min
-(`tools/cts/README.md`), plus the image builds. Then compare with `fe5e8e73`
-by hand and expect the 25 cube cases (T1 18, T3 6, TF 1 at sweep 30) to move
-from Fail to Pass.
+17,127 pass / 0 fail / 34 NotSupported / 3 QualityWarning / 1
+CompatibilityWarning / 0 without a result = 17,165.
+
+## Verdict lines the runner printed
+
+All 29 rows have the form (here AL, FF, H, XT; the others differ only in
+`back_after` 295-307 s and `result=legacy:v3d_deqp_0`):
+
+```
+board.sh pi4 AL rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=301s
+board.sh pi4 FF rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_1 resets=0 record=absent back_after=300s
+board.sh pi4 H rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_3 resets=0 record=absent back_after=299s
+board.sh pi4 XT rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=301s
+```
+
+`legacy:v3d_deqp_N` is the image's warning count (FF 1, H 3). Image
+counters, for example: `deqp: done 4 passed, 0 failed, 0 not supported, 1
+warnings` (FF), `deqp: done 651 passed, 0 failed, 0 not supported, 3 warnings`
+(H), `deqp: done 3 passed, 0 failed, 9 not supported, 0 warnings` (XT).
+
+## Every Fail by name
+
+None.
+
+## Cases that are not Pass (38, all with a result)
+
+NotSupported (34):
+- `clip_control.{depth_mode_one_to_one,depth_mode_zero_to_one,errors,face_culling,initial,modify_get,origin,viewport_bounds}` (8)
+- `multisample.{common_edge_big_quad,common_edge_small_quads,common_edge_viewport_quad,constancy_alpha_to_coverage,constancy_both,constancy_both_inverted,constancy_sample_coverage,constancy_sample_coverage_inverted,depth,num_samples_line,num_samples_polygon,proportionality_alpha_to_coverage,proportionality_sample_coverage,proportionality_sample_coverage_inverted,sample_coverage_invert,stencil}` (16)
+- `multisampled_render_to_texture.readpixels` (1)
+- `negative_api.texture.compressedtexsubimage2d_{invalid_size,invalid_target,level_max_cube,level_max_tex2d,neg_level_cube,neg_level_tex2d,neg_offset,neg_wdt_hgt,offset_allowed}` (9)
+
+QualityWarning (3):
+`rasterization.interpolation.basic.lines`,
+`rasterization.interpolation.projected.lines`,
+`rasterization.interpolation.projected.lines_wide`.
+
+CompatibilityWarning (1): `flush_finish.flush`.
+
+(All names are under `dEQP-GLES2.functional.`.)
+
+## Comparison with `fe5e8e73` (docs/es2-cts-failures.md section A)
+
+`tools/cts/tree-diff.py` does not exist at this tip; compared by hand.
+
+| | `fe5e8e73` (2026-10-01) | this tree (`6451057`) |
+|---|---|---|
+| Pass | 17,075 | 17,127 |
+| Fail | 25 | 0 |
+| NotSupported | 62 | 34 |
+| QualityWarning | 3 | 3 |
+| CompatibilityWarning | 0 | 1 |
+
+- The 25 cube cases (T1 18, T3 6, TF 1) all pass: T1, T3 and TF show 0 Fail.
+- NotSupported fell from 62 to 34: the 27
+  `fbo.completeness.attachment_combinations` cases and
+  `shaders.fragdata.invalid_assign_to_1` are Pass now; `debug_marker.*` is Pass
+  (XT: 3 pass). The 34 left are the same classes as in the section A "Current"
+  entry (`clip_control` 8, `multisample` 16,
+  `multisampled_render_to_texture.readpixels` 1,
+  `negative_api.texture.compressedtexsubimage2d_*` 9).
+- Against the section A "Current" composed result (17,126 / 0 / 34 / 5
+  warnings), this is the first single-commit tree: one more Pass and one
+  warning fewer (that entry had 2 CompatibilityWarnings, this tree has 1;
+  the `flush_finish` timing warning is intermittent, per the earlier notes).
+- The F1 image ran with no lost result line in this capture (1,923 of 1,923).
+
+Remaining for stage 1 on the Pi 4: nothing that fails. The 34 NotSupported
+and 4 warnings are the same classes as before and are not failures.
