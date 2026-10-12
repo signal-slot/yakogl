@@ -24,9 +24,7 @@ fn target_kept() {
 fn param_set_refused() {
     // WRAP_R, BASE_LEVEL, MAX_LEVEL, MIN_LOD, MAX_LOD, COMPARE_MODE,
     // COMPARE_FUNC, SWIZZLE_R/G/B/A
-    for p in [
-        0x8072u32, 0x813c, 0x813d, 0x813a, 0x813b, 0x884c, 0x884d, 0x8e42, 0x8e43, 0x8e44, 0x8e45,
-    ] {
+    for p in [0x8072u32, 0x813c, 0x813d, 0x813a, 0x813b, 0x884c, 0x884d, 0x8e42, 0x8e43, 0x8e44, 0x8e45] {
         assert!(es3_only_tex_param_set(p), "set {}", p);
         assert!(es3_only_tex_param_get(p), "get {}", p);
     }

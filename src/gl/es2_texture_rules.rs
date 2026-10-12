@@ -60,8 +60,7 @@ pub(crate) const fn es3_only_tex_param_set(pname: u32) -> bool {
 /// Table A rows 25 and 26: parameter names ES 2.0 refuses in glGetTexParameter*.
 /// This is the row 25 set plus TEXTURE_IMMUTABLE_FORMAT and TEXTURE_IMMUTABLE_LEVELS.
 pub(crate) const fn es3_only_tex_param_get(pname: u32) -> bool {
-    es3_only_tex_param_set(pname)
-        || matches!(pname, TEXTURE_IMMUTABLE_FORMAT | TEXTURE_IMMUTABLE_LEVELS)
+    es3_only_tex_param_set(pname) || matches!(pname, TEXTURE_IMMUTABLE_FORMAT | TEXTURE_IMMUTABLE_LEVELS)
 }
 
 /// Table A row 27: pixel types ES 2.0 refuses with GL_INVALID_ENUM.
