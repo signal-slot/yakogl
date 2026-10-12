@@ -710,7 +710,9 @@ TEST_TREE_PATHS=(
   tools/shaders                                  # the corpus tests and the source lists
   tests/fixtures tests/reference                 # pinned results; the triangle check's tables
   tools/cts/testdata tools/cts/wedge_probe       # tests/temps_survey.rs, usc_survey.rs
-  tools/cts/gles2-mustpass.txt tools/testdata/record-decode.txt
+  tools/cts/gles2-mustpass.txt tools/cts/gles3-mustpass.txt  # tests/es3_shaderc_infolog.rs reads the GLES3 list
+  tools/testdata/record-decode.txt
+  driver/tools/pvrlab/gl_test.c                  # yakogl-tools msaarec: the record layout's constants
   driver/zephyr/lib/board/imx8mp/gc_result.h     # yakogl-tools record (these three)
   driver/zephyr/lib/board/include/yakogl_record.h driver/rust/include/yakogl_drivers.h
   driver/samples/zephyr/v3d_triangle/shaders     # the V3D chain tests (library)
@@ -1030,23 +1032,22 @@ tier_tables() {
       -o "build/precompiled/check-$gpu.rs" || return 1
   done
 }
-# The lane of a row that reads the tier tables and makes them itself when
-# they are missing (target_precompiled, check_no_mesa_reference): a reader
-# when a row of this run writes them, else a writer of them and of the tool.
-tier_tables_uses() {
-  if [ -n "${LANE_W[tier-tables]-}" ]; then echo r:tier-tables; else echo w:tier-tables w:precompile-bin; fi
-}
-tier=()
-scope pvr vivante precompile
-for f in "${CONFIGS[@]}"; do
-  case "$f" in
-  *precompiled-shaders*)
+# Every row that reads the tier tables says so with `uses_tier_tables` (in
+# place of a `uses` line). The first selected reader plans the row that
+# makes the tables, just before itself, so the tables are made exactly when a
+# row of the run reads them: not only when CONFIGS names `precompiled-shaders`
+# (the no-compiler, aarch64 and artefact rows are not CONFIGS rows; a
+# narrowed YAKOGL_CHECK_CONFIGS left them reading a table nothing made, #127),
+# and not at all when no reader is selected.
+TIER_TABLES_ROW=0
+uses_tier_tables() {
+  if [ "$TIER_TABLES_ROW" -eq 0 ] && wanted; then
+    TIER_TABLES_ROW=1
     uses w:precompile-bin w:tier-tables
     step "gen     precompiled tables for the tier configurations" tier_tables
-    break
-    ;;
-  esac
-done
+  fi
+  uses r:tier-tables
+}
 for f in "${CONFIGS[@]}"; do
   tier=()
   scope "$(config_scopes "$f")"
@@ -1056,13 +1057,13 @@ for f in "${CONFIGS[@]}"; do
     tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
   *precompiled-shaders*) tier=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
   esac
-  [ "${#tier[@]}" -eq 0 ] || uses r:tier-tables
+  [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
   step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" --all-targets
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
-  [ "${#tier[@]}" -eq 0 ] || uses r:tier-tables
+  [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
   step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f"
 done
 
@@ -1079,10 +1080,10 @@ if [ "$QUICK" -eq 0 ]; then
     c="host-test,$feature,precompiled-shaders,no-shader-table"
     alone=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-$gpu.rs")
     scope "$(config_scopes "$c")"
-    uses r:tier-tables
+    uses_tier_tables
     step "clippy  $c (no compiler; lib and its tests)" "${alone[@]}" \
       cargo clippy --no-default-features --features "$c" --lib --profile test
-    uses r:tier-tables
+    uses_tier_tables
     step "test    $c (no compiler: shaderc::precompiled)" \
       cargo_test "${alone[@]}" --no-default-features --features "$c" --lib shaderc::precompiled
   done
@@ -1111,6 +1112,7 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
+  gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
 )
 knobs_lib_tests() {
   local out t
@@ -1878,7 +1880,6 @@ TARGET_CONFIGS=(
 # The compiler-less image (`precompiled-shaders` alone), with the PowerVR
 # gl_test_es100 table the tier rows use.
 target_precompiled() {
-  [ -f build/precompiled/check-powervr.rs ] || tier_tables || return 1
   env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs" \
     cargo check -p yakogl --no-default-features --features osal-zephyr,gpu-powervr,precompiled-shaders \
     --target aarch64-unknown-none
@@ -1891,7 +1892,7 @@ if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none; t
         --target aarch64-unknown-none
   done
   scope pvr precompile
-  uses "$(tier_tables_uses)"
+  uses_tier_tables
   step "check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)" target_precompiled
 else
   queue_line "$(red "check.sh: aarch64-unknown-none is NOT installed -- the product arms were NOT compiled")"
@@ -2074,7 +2075,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # (check_knobs_absent, below); here because that row's key holds it.
 KNOB_TEST_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
   tools/precompile tools/shaders tools/yakogl-tools/src/shc_print.rs)
@@ -2084,7 +2085,7 @@ key_release_archives() {
   key_tree "${RELEASE_KEY_PATHS[@]}" || return 1
   key_table build/precompiled/check-powervr.rs
   key_table build/precompiled/check-gc7000.rs
-  declare -f table_symbols mesa_reference_symbols knob_symbols tier_tables dep_info_within
+  declare -f table_symbols mesa_reference_symbols knob_symbols dep_info_within
   declare -f artefact_worker check_no_mesa_reference
   echo "quick $QUICK; knobs $KNOB_TEST_SYMBOLS"
 }
@@ -2250,7 +2251,6 @@ check_no_mesa_reference() {
     echo "$t is not installed (rustup target add $t): the image archives were NOT built"
     return 1
   fi
-  [ -f build/precompiled/check-powervr.rs ] && [ -f build/precompiled/check-gc7000.rs ] || tier_tables || return 1
   # "<control|product> <target> <features>", the controls first
   entries=("control $t osal-zephyr,gpu-powervr,mesa-reference-table")
   [ "$QUICK" -eq 1 ] || entries+=("control $t osal-zephyr,gpu-vivante,mesa-reference-table")
@@ -2305,7 +2305,7 @@ check_no_mesa_reference() {
 scope pvr vivante v3d precompile
 # Its archives are built in target directories of its own (above), so it
 # shares no `release` path with the two rows around it.
-uses "$(tier_tables_uses)"
+uses_tier_tables
 rowkey key_release_archives
 step "no Mesa reference in the artefact" check_no_mesa_reference
 

@@ -247,12 +247,16 @@ is kept and pinned by tests.
      (`8409419`): our sync sequence has a counterpart for every etnaviv
      step, and repeat runs on integration images (`b20e4d11`, `0175bac1`)
      did not separate the three surface hypotheses
-     (`tools/cts/log/investigations/gc-case10-flake.md`). The next step is
-     the KICK_DIFF instrument with a second read-back about 10 ms after the
-     fence. Rate without it (integration image `e3efeaad`, 2026-10-11, 32
-     boots): case 10 failed 4 of 32, case 2 0 of 32
-     (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`); no caller of the
-     instrument exists in gl_test yet.
+     (`tools/cts/log/investigations/gc-case10-flake.md`). Rate without an
+     instrument (integration image `e3efeaad`, 2026-10-11, 32 boots): case
+     10 failed 4 of 32, case 2 0 of 32
+     (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`). gl_test now
+     calls the KICK_DIFF instrument (a second read-back 2 ms after the
+     fence) for cases 2 and 10 when the selector asks for its page; the
+     next step is the board run: about 40 interleaved boots each of the
+     base arm and the KICK_DIFF arm from one image
+     (`tools/cts/log/investigations/gc-kick-diff.md`, "How to run it on the
+     board").
    - i.MX8MP case 16, 4x MSAA (#8): the default image has no 4x config, so
      the case skips its 4x half by name (`6bddfc5`). On the 4x image the
      path fails at check 4 (`x4 inside` reads 0x00000000) with and without

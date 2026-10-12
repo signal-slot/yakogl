@@ -4081,6 +4081,88 @@ fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
     assert_eq!(fallback.reg(GC_PE_COLOR_STRIDE), w * bpp);
 }
 
+/// Issue #8's first host question: is the surface the probes read the one
+/// the frame writes? Every PE colour address of a 4x frame -- the clear
+/// quad's and the draw's, both pipes -- is the scratch allocation that
+/// `gc_debug_msaa_scratch` reads (`g().msaa`), the resolve reads that same
+/// address and writes the target, and the probe's size is the supertiled
+/// 128x128 scratch (512-byte rows, 64 KiB). Case 16's shape: a 64x64 RGBA8
+/// target cleared and drawn in one frame, arms 1 and 9 of the board record
+/// (tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
+#[cfg(feature = "test-knobs")]
+#[test]
+fn every_4x_colour_address_is_the_scratch_the_probe_reads() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    d.do_clear = true;
+    d.clear_rgba = [0.0, 0.0, 0.0, 1.0];
+    for bits in [1, 9] {
+        gc_debug_set_msaa(bits);
+        let s = rig.submit(&d);
+        let mut probe = [0u32; 4];
+        // SAFETY: four writable u32s.
+        let probed = unsafe { gc_debug_msaa_scratch(probe.as_mut_ptr()) };
+        let scratch = g().msaa.gpu as u32;
+        gc_debug_set_msaa(0);
+
+        assert_eq!(probed, 0, "arm {bits}: the probe answers");
+        assert_eq!(probe[0], 512 * 128, "arm {bits}: 128 rows of 512 bytes");
+        assert_eq!(s.draws().len(), 2, "arm {bits}: the clear quad and the draw");
+        let mut colour = Vec::new();
+        walk(&s.0, |r, v, _| {
+            if r == pe_pipe_color_addr(0) || r == pe_pipe_color_addr(1) {
+                colour.push(v);
+            }
+        });
+        assert_eq!(colour.len(), 4, "arm {bits}: two pipes, two draws");
+        assert!(colour.iter().all(|a| *a == scratch), "arm {bits}: {colour:x?} vs scratch {scratch:#x}");
+        assert_eq!(s.writes(rs_pipe_source_addr(0)), (Some(scratch), 1), "arm {bits}: one resolve, from the scratch");
+        assert_eq!(s.writes(rs_pipe_dest_addr(0)), (Some(TARGET_GPU as u32), 1), "arm {bits}: into the target");
+        assert_eq!(s.reg(GC_PE_COLOR_STRIDE), 512, "arm {bits}");
+    }
+}
+
+/// gc_debug_msaa bit 4 (16) gives a 4x draw the PE_LOGIC_OP word Mesa's
+/// etnaviv writes for a supertiled target on this SINGLE_BUFFER core:
+/// SINGLE_BUFFER 2 for 32 bits a pixel, 3 for 16 (etnaviv_state.c:536-539);
+/// with bit 1 as well, UNK24 = 5 (etnaviv_state.c:524-525) and Mesa's
+/// PS_INPUT_COUNT_MSAA / PS_TEMP_REGISTER_CONTROL_MSAA (etnaviv_shader.c:
+/// 236-241): one more input and one more temporary. Without bit 4, or on a
+/// single-sampled draw, the field stays 1 (the linear value). The words are
+/// read back out of the stream, whole.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn msaa_bit_four_writes_etnaviv_s_single_buffer_value_for_the_scratch() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    let logic = |bits: i32, d: &GlesDraw| {
+        gc_debug_set_msaa(bits);
+        let s = rig.submit(d);
+        gc_debug_set_msaa(0);
+        (s.reg(GC_PE_LOGIC_OP), s.reg(GC_PS_INPUT_COUNT), s.reg(GC_PS_TEMP_REGISTER_CONTROL))
+    };
+    let base = GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY);
+
+    let (one, in1, tmp1) = logic(1, &d);
+    assert_eq!(one, base | pe_logic_op_single_buffer(1), "bit 0 alone: the linear value, as before");
+    assert_eq!(one, 0x000e_410c);
+    assert_eq!(logic(17, &d).0, 0x000e_420c, "bit 4: SINGLE_BUFFER 2");
+    let (all, in19, tmp19) = logic(19, &d);
+    assert_eq!(all, 0x050e_420c, "bits 1 and 4: Mesa's whole 4x word, UNK24 = 5 and SINGLE_BUFFER 2");
+    assert_eq!(in19 & 0x1f, (in1 & 0x1f) + 1, "bit 1: PS_INPUT_COUNT_MSAA, one more input");
+    assert_eq!(tmp19 & 0x3f, (tmp1 & 0x3f) + 1, "bit 1: PS_TEMP_REGISTER_CONTROL_MSAA, one more temporary");
+
+    let mut small = rig.draw(3);
+    small.samples = 4;
+    small.target_format = GLES_SURF_RGB565;
+    small.targets[0].format = GLES_SURF_RGB565;
+    assert_eq!(logic(17, &small).0, 0x000e_430c, "a 16-bit 4x target: SINGLE_BUFFER 3");
+
+    assert_eq!(logic(17, &rig.draw(3)).0, 0x000e_410c, "a single-sampled draw keeps 1");
+}
+
 /// A draw's descriptor writes are Mesa's order (the i.MX8MP stale vertex
 /// descriptor fix): every descriptor address of the draw, then every
 /// invalidate in slot order, then emit_draw's RA-PE stall before the draw --

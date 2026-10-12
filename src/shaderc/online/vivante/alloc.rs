@@ -1888,10 +1888,10 @@ fn lanes_needed_skipping(sel: &[SelInstr], dead: &[u64], need: &mut [u8]) {
 /// lands on the next survivor, which is where control arrived after the
 /// deleted, effect-free run; a target at the old end becomes the new end.
 ///
-/// Programs longer than [`MAX_LIVE_INSTRS`] are left alone: the
-/// flow-sensitive half is per value over every instruction, and that bound is
-/// what keeps its cost acceptable. Its tables come from `scratch`, sized by
-/// the program.
+/// Programs longer than [`MAX_LIVE_INSTRS`] are left alone, as they always
+/// were (the flow-sensitive half once swept every instruction per value; it
+/// now costs each value's live range, and its tables index instructions in
+/// `u16`). Its tables come from `scratch`, sized by the program.
 pub fn eliminate_dead(
     scratch: &Arena<'_>,
     sel: &mut [SelInstr],
@@ -1906,9 +1906,35 @@ pub fn eliminate_dead(
     let need = scratch.alloc_filled(values, 0u8).map_err(mem)?;
     lanes_needed(sel, need);
     let dead = scratch.alloc_filled(n.div_ceil(64), 0u64).map_err(mem)?;
+    /* The branch edges by target, counted then filled (a CSR). */
+    let pred_at = scratch.alloc_filled(n + 1, 0u16).map_err(mem)?;
+    for s in sel.iter() {
+        if let Some(t) = s.target.filter(|&t| (t as usize) < n) {
+            pred_at[t as usize + 1] += 1;
+        }
+    }
+    for j in 0..n {
+        pred_at[j + 1] += pred_at[j];
+    }
+    let pred_from = scratch.alloc_filled(pred_at[n] as usize, 0u16).map_err(mem)?;
+    /* How many of each target's slots are filled; free afterwards, it is the
+     * liveness solve's stack. */
+    let fill = scratch.alloc_filled(n, 0u16).map_err(mem)?;
+    for (i, s) in sel.iter().enumerate() {
+        if let Some(t) = s.target.filter(|&t| (t as usize) < n) {
+            let t = t as usize;
+            pred_from[(pred_at[t] + fill[t]) as usize] = i as u16;
+            fill[t] += 1;
+        }
+    }
     let mut work = Liveness {
         need: scratch.alloc_filled(values, 0u8).map_err(mem)?,
-        live: scratch.alloc_filled(4 * n.div_ceil(64), 0u64).map_err(mem)?,
+        live: scratch.alloc_filled(n, 0u8).map_err(mem)?,
+        span: scratch.alloc_filled(values, (u16::MAX, 0u16)).map_err(mem)?,
+        pred_at,
+        pred_from,
+        stack: fill,
+        touched: scratch.alloc_filled(n, 0u16).map_err(mem)?,
     };
     let mut removed = 0usize;
     for (i, s) in sel.iter().enumerate() {
@@ -1932,6 +1958,21 @@ pub fn eliminate_dead(
             break;
         }
         removed += more;
+    }
+    /* The solve's tables are done with: give them back, latest first, so the
+     * bump pointer returns to where it was before `pred_at` and the
+     * allocator after this pass reuses the space. */
+    let Liveness { need: solve_need, live, span, pred_at, pred_from, stack, touched } = work;
+    // SAFETY: nothing reads or writes these tables after this point; only
+    // `dead` and `need`, allocated before them, are used below.
+    unsafe {
+        scratch.give_back(touched);
+        scratch.give_back(span);
+        scratch.give_back(live);
+        scratch.give_back(solve_need);
+        scratch.give_back(stack);
+        scratch.give_back(pred_from);
+        scratch.give_back(pred_at);
     }
     if removed == 0 {
         return Ok(0);
@@ -1958,13 +1999,30 @@ pub fn eliminate_dead(
     Ok(removed)
 }
 
-/// [`dead_after_liveness`]'s working tables, lent once for every round:
-/// `need` one entry per value, `live` four bitsets (one per lane) of one bit
-/// per instruction.
+/// [`dead_after_liveness`]'s working tables, lent once for every round.
+/// Instruction indices fit `u16`: [`eliminate_dead`] leaves programs longer
+/// than [`MAX_LIVE_INSTRS`] alone.
 struct Liveness<'a> {
+    /// Per value: the lanes of its result anybody needs.
     need: &'a mut [u8],
-    live: &'a mut [u64],
+    /// Per instruction: the value's lanes live on entry (bits 0..3), and bit
+    /// [`QUEUED`] while it waits on `stack`. All zero between values.
+    live: &'a mut [u8],
+    /// Per value: the lowest and highest index of a surviving instruction
+    /// that names it; `(u16::MAX, 0)` when none does.
+    span: &'a mut [(u16, u16)],
+    /// The branches into each instruction: those into `j` are
+    /// `pred_from[pred_at[j] as usize..pred_at[j + 1] as usize]`.
+    pred_at: &'a [u16],
+    pred_from: &'a [u16],
+    /// The instructions waiting to pass their liveness to their predecessors.
+    stack: &'a mut [u16],
+    /// Every instruction whose `live` the current value set, to clear after.
+    touched: &'a mut [u16],
 }
+
+/// [`Liveness::live`]'s "on the stack" bit, above the four lanes.
+const QUEUED: u8 = 1 << 4;
 
 /// One round of the flow-sensitive half of [`eliminate_dead`]: for every
 /// virtual register, per-lane liveness over the instructions not yet marked
@@ -1973,9 +2031,20 @@ struct Liveness<'a> {
 ///
 /// Successors as in [`extend_across_back_edges`]; nothing virtual is live at
 /// the program's end. A guarded write does not end the value it overwrites.
+///
+/// The equations, per instruction `i` and value `v`, are
+/// `live_in(i) = read(i) | (live_out(i) & !kill(i))` with `live_out(i)` the
+/// union over its successors, and the answer is their least fixed point. It
+/// is solved from the reads outward: each reader starts with the lanes it
+/// reads, and an instruction that gains lanes passes them to its
+/// predecessors (the one before it when that falls through, and every branch
+/// to it) until a write kills them. The work is the value's live range, not
+/// the program: sweeping every instruction for every value until nothing
+/// changed was 63% of a 1.4 s compile with 6,816 values over 3,782
+/// instructions (issue #101). Which order the gains are passed in does not
+/// change the least fixed point.
 fn dead_after_liveness(sel: &[SelInstr], dead: &mut [u64], work: &mut Liveness<'_>) -> usize {
     let n = sel.len();
-    let w = n.div_ceil(64);
     let is_dead = |d: &[u64], i: usize| d[i / 64] >> (i % 64) & 1 != 0;
     let mut marked = 0usize;
     let top = work.need.len();
@@ -1987,93 +2056,133 @@ fn dead_after_liveness(sel: &[SelInstr], dead: &mut [u64], work: &mut Liveness<'
     work.need.fill(0);
     lanes_needed_skipping(sel, dead, work.need);
     let need = &*work.need;
-    for k in 0..top {
-        let v = VReg(k as u32);
-        if !sel
-            .iter()
-            .enumerate()
-            .any(|(i, s)| !is_dead(dead, i) && matches!(s.dst, Some(SelDst::Virtual { v: d, .. }) if d == v))
-        {
+    /* Where each value is named among this round's survivors: one pass, so
+     * finding a value's reads and writes scans its span, not the program.
+     * A write marked dead later in the round only shrinks what is in it. */
+    work.span.fill((u16::MAX, 0));
+    for (i, s) in sel.iter().enumerate() {
+        if is_dead(dead, i) {
             continue;
         }
-        /* live_in per lane, one bitset each. */
-        let live = &mut work.live[..4 * w];
-        live.fill(0);
-        let bit = |set: &[u64], i: usize| set[i / 64] >> (i % 64) & 1 != 0;
-        let out_lanes = |live: &[u64], i: usize| -> u8 {
+        let dst = match s.dst {
+            Some(SelDst::Virtual { v, .. }) => Some(v),
+            _ => None,
+        };
+        let srcs =
+            s.srcs.iter().flatten().filter_map(|x| if let SelSrc::Virtual { v, .. } = *x { Some(v) } else { None });
+        for v in dst.into_iter().chain(srcs) {
+            if let Some(sp) = work.span.get_mut(v.0 as usize) {
+                *sp = (sp.0.min(i as u16), sp.1.max(i as u16));
+            }
+        }
+    }
+    let falls = |s: &SelInstr| s.target.is_none() || !matches!(s.cond, None | Some(Cond::True));
+    for k in 0..top {
+        let v = VReg(k as u32);
+        let (lo, hi) = work.span[k];
+        if lo > hi {
+            continue;
+        }
+        let (lo, hi) = (lo as usize, hi as usize);
+        let writes_v = |s: &SelInstr| matches!(s.dst, Some(SelDst::Virtual { v: d, .. }) if d == v);
+        if !(lo..=hi).any(|i| !is_dead(dead, i) && writes_v(&sel[i])) {
+            continue;
+        }
+        let live = &mut *work.live;
+        let (mut sp, mut nt) = (0usize, 0usize);
+        /* The reads: each reader is live on entry in the lanes it consumes. */
+        for i in lo..=hi {
+            if is_dead(dead, i) {
+                continue;
+            }
             let s = &sel[i];
-            let falls = s.target.is_none() || !matches!(s.cond, None | Some(Cond::True));
-            let mut m = 0u8;
-            for (c, set) in live.chunks_exact(w).enumerate() {
-                let mut on = falls && i + 1 < n && bit(set, i + 1);
-                if let Some(t) = s.target {
-                    on |= (t as usize) < n && bit(set, t as usize);
+            let eff = match s.dst {
+                Some(SelDst::Virtual { v: d, write_mask }) => {
+                    write_mask & need.get(d.0 as usize).copied().unwrap_or(0xf)
                 }
-                m |= (on as u8) << c;
+                Some(SelDst::Fixed { write_mask, .. }) => write_mask,
+                _ => 0xf,
+            };
+            let mut r = 0u8;
+            for src in s.srcs.iter().flatten() {
+                if let SelSrc::Virtual { v: u, swizzle, .. } = *src {
+                    if u == v {
+                        r |= consumed_lanes_live(s, swizzle, eff);
+                    }
+                }
+            }
+            if r != 0 {
+                live[i] = r | QUEUED;
+                work.touched[nt] = i as u16;
+                nt += 1;
+                work.stack[sp] = i as u16;
+                sp += 1;
+            }
+        }
+        /* Backwards to the fixed point: what is live on entry to `j` is live
+         * on exit from each predecessor, and on entry to it unless it kills
+         * those lanes. A dead instruction is transparent. */
+        while sp > 0 {
+            sp -= 1;
+            let j = work.stack[sp] as usize;
+            live[j] &= !QUEUED;
+            let lanes = live[j];
+            let fall = (j > 0 && falls(&sel[j - 1])).then(|| j - 1);
+            let branches = &work.pred_from[work.pred_at[j] as usize..work.pred_at[j + 1] as usize];
+            for p in fall.into_iter().chain(branches.iter().map(|&b| b as usize)) {
+                let s = &sel[p];
+                let kill = match s.dst {
+                    Some(SelDst::Virtual { v: d, write_mask }) if d == v && !is_dead(dead, p) => {
+                        let guarded =
+                            !matches!(s.cond, None | Some(Cond::True)) && !matches!(s.op.op().name, "select" | "cmp");
+                        if guarded {
+                            0
+                        } else {
+                            write_mask
+                        }
+                    }
+                    _ => 0,
+                };
+                let gain = lanes & !kill & !live[p] & 0xf;
+                if gain == 0 {
+                    continue;
+                }
+                if live[p] & 0xf == 0 {
+                    work.touched[nt] = p as u16;
+                    nt += 1;
+                }
+                live[p] |= gain;
+                if live[p] & QUEUED == 0 {
+                    live[p] |= QUEUED;
+                    work.stack[sp] = p as u16;
+                    sp += 1;
+                }
+            }
+        }
+        let out_lanes = |i: usize| -> u8 {
+            let s = &sel[i];
+            let mut m = 0u8;
+            if falls(s) && i + 1 < n {
+                m |= live[i + 1];
+            }
+            if let Some(t) = s.target.filter(|&t| (t as usize) < n) {
+                m |= live[t as usize];
             }
             m
         };
-        loop {
-            let mut changed = false;
-            for i in (0..n).rev() {
-                if is_dead(dead, i) {
-                    /* Transparent: whatever is live after it is live before. */
-                    let o = out_lanes(live, i);
-                    for (c, set) in live.chunks_exact_mut(w).enumerate() {
-                        if o & (1 << c) != 0 && !bit(set, i) {
-                            set[i / 64] |= 1 << (i % 64);
-                            changed = true;
-                        }
-                    }
-                    continue;
-                }
-                let s = &sel[i];
-                let o = out_lanes(live, i);
-                let (wm, guarded) = match s.dst {
-                    Some(SelDst::Virtual { v: d, write_mask }) if d == v => (
-                        write_mask,
-                        !matches!(s.cond, None | Some(Cond::True)) && !matches!(s.op.op().name, "select" | "cmp"),
-                    ),
-                    _ => (0, false),
-                };
-                let eff = match s.dst {
-                    Some(SelDst::Virtual { v: d, write_mask }) => {
-                        write_mask & need.get(d.0 as usize).copied().unwrap_or(0xf)
-                    }
-                    Some(SelDst::Fixed { write_mask, .. }) => write_mask,
-                    _ => 0xf,
-                };
-                let mut r = 0u8;
-                for src in s.srcs.iter().flatten() {
-                    if let SelSrc::Virtual { v: u, swizzle, .. } = *src {
-                        if u == v {
-                            r |= consumed_lanes_live(s, swizzle, eff);
-                        }
-                    }
-                }
-                let kill = if guarded { 0 } else { wm };
-                let inn = r | (o & !kill);
-                for (c, set) in live.chunks_exact_mut(w).enumerate() {
-                    if inn & (1 << c) != 0 && !bit(set, i) {
-                        set[i / 64] |= 1 << (i % 64);
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        for i in 0..n {
+        for i in lo..=hi {
             if is_dead(dead, i) || sel[i].target.is_some() {
                 continue;
             }
             if let Some(SelDst::Virtual { v: d, write_mask }) = sel[i].dst {
-                if d == v && write_mask & out_lanes(live, i) == 0 {
+                if d == v && write_mask & out_lanes(i) == 0 {
                     dead[i / 64] |= 1 << (i % 64);
                     marked += 1;
                 }
             }
+        }
+        for &t in &work.touched[..nt] {
+            live[t as usize] = 0;
         }
     }
     marked
@@ -4506,6 +4615,55 @@ mod loop_and_io_tests {
         let mut calm = [def(0), live(0)];
         let mut none: [usize; 0] = [];
         assert_eq!(eliminate_dead(&Arena::new(&mut vec![0u8; 1 << 20]), &mut calm, &mut none).unwrap(), 0);
+    }
+
+    /// A value read at the loop top and rewritten later in the body is live
+    /// only through the back edge: the read at 1 sees the write at 2 on the
+    /// next trip. The liveness solve passes what is live at the top back to
+    /// the branch at 4 and so to the write, which stays. The control is the
+    /// same program with the back edge made a forward jump: no trip reads the
+    /// write, and it goes.
+    #[test]
+    fn a_write_read_only_on_the_next_trip_round_the_loop_stays() {
+        let (add, br) = (op_id("add").expect("add"), op_id("branch").expect("branch"));
+        let program = |back_to: u16| {
+            [
+                /* 0 */
+                SelInstr::new(add, OpType::F32)
+                    .dst(SelDst::Virtual { v: VReg(1), write_mask: 0xf })
+                    .src(0, konst(0))
+                    .src(2, konst(1)),
+                /* 1: loop top, reads v1 */
+                SelInstr::new(add, OpType::F32)
+                    .dst(SelDst::Fixed { reg: 1, write_mask: 0xf })
+                    .src(0, vr(1, XYZW))
+                    .src(2, konst(1)),
+                /* 2: rewrites v1, read only at 1 */
+                SelInstr::new(add, OpType::F32)
+                    .dst(SelDst::Virtual { v: VReg(1), write_mask: 0xf })
+                    .src(0, vr(1, XYZW))
+                    .src(2, konst(1)),
+                /* 3: break -> end */
+                {
+                    let mut b = SelInstr::new(br, OpType::U32).target(5).src(0, konst(3));
+                    b.cond = Some(Cond::Not);
+                    b
+                },
+                /* 4 */ SelInstr::new(br, OpType::F32).target(back_to),
+            ]
+        };
+        let mut sel = program(1);
+        let mut back = [4usize];
+        let removed = eliminate_dead(&Arena::new(&mut vec![0u8; 1 << 20]), &mut sel, &mut back).unwrap();
+        assert_eq!(removed, 0, "the write at 2 is read at 1 on the next trip, through the back edge at 4");
+
+        let mut sel = program(5);
+        let removed = eliminate_dead(&Arena::new(&mut vec![0u8; 1 << 20]), &mut sel, &mut []).unwrap();
+        assert_eq!(removed, 1, "without the back edge nothing reads the write at 2 after it");
+        assert!(
+            sel[2].dst.is_none() && sel[2].target == Some(4),
+            "the survivors close up: the break is now instruction 2 and lands on the new end"
+        );
     }
 
     /// The join of an `if` rewrites a slot that was read inside an arm and is

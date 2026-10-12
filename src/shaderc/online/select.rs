@@ -3156,44 +3156,43 @@ impl<'a> Sel<'a> {
     /// * only when no surviving instruction reads that register.
     ///
     /// Iterated to a fixed point, because deleting one write can make the
-    /// instruction that produced ITS operand dead in turn. The corpus
-    /// converges in two passes; the loop is bounded by the instruction count
-    /// so a bug cannot hang the compiler.
+    /// instruction that produced ITS operand dead in turn. The deleted set is
+    /// the least fixed point, so it does not depend on the order instructions
+    /// are looked at; the order only decides how many rounds it takes.
+    ///
+    /// The cost, measured (issue #101): asking "does any other survivor read
+    /// this register?" by scanning the whole program for every instruction
+    /// made a round O(n^2), and visiting in program order needed one round
+    /// per link of a producer-to-consumer chain: 20 rounds over the 4,018
+    /// instructions of `qt3d/19cb724b4f3f33fa.frag`. So each register keeps
+    /// the count of operands that read it among the survivors, decremented
+    /// when a reader is deleted, which makes the question O(1); and each round
+    /// visits the program BACKWARDS, so a consumer is deleted before its
+    /// producer is asked about, and a whole forward chain goes in one round.
+    /// A further round is needed only for a read at a lower index than the
+    /// write it reads (a loop-carried value). The loop is bounded by the
+    /// instruction count so a bug cannot hang the compiler.
     fn eliminate_dead(&mut self) -> Result<(), SelectError> {
         let n = self.instrs.len();
         if n == 0 {
             return Ok(());
         }
+        /* readers[v]: operands of surviving instructions that read v. */
+        let regs = self
+            .instrs
+            .as_slice()
+            .iter()
+            .flat_map(|ins| ins.srcs.iter().flatten())
+            .filter_map(|r| if let SelSrc::Virtual { v, .. } = r { Some(v.0 as usize + 1) } else { None })
+            .max()
+            .unwrap_or(0);
         let dead = self.arena.alloc_filled(n, false)?;
-        let mut again = true;
-        let mut rounds = 0;
-        while again && rounds <= n {
-            again = false;
-            rounds += 1;
-            for i in 0..n {
-                if dead[i] {
-                    continue;
-                }
-                let ins = self.instrs.as_slice()[i];
-                /* A side effect is not a value: `texkill` and every branch
-                 * stay whatever else is true of them. */
-                if ins.target.is_some() || ins.dst.is_none() {
-                    continue;
-                }
-                let Some(SelDst::Virtual { v, .. }) = ins.dst else { continue };
-                let read = (0..n).filter(|j| !dead[*j] && *j != i).any(|j| {
-                    self.instrs.as_slice()[j]
-                        .srcs
-                        .iter()
-                        .flatten()
-                        .any(|r| matches!(r, SelSrc::Virtual { v: rv, .. } if *rv == v))
-                });
-                if !read {
-                    dead[i] = true;
-                    again = true;
-                }
-            }
-        }
+        let readers = self.arena.alloc_filled(regs, 0u32)?;
+        mark_unread(self.instrs.as_slice(), readers, dead);
+        /* The counts are done with; given back, the latest allocation, so
+         * what follows reuses the space. */
+        // SAFETY: nothing reads or writes `readers` after this point.
+        unsafe { self.arena.give_back(readers) };
         let gone = dead.iter().filter(|d| **d).count();
         if gone == 0 {
             return Ok(());
@@ -3707,6 +3706,56 @@ impl<'a> Sel<'a> {
         }
         Ok(())
     }
+}
+
+/// The marking half of [`Sel::eliminate_dead`]: sets `dead[i]` for every
+/// instruction that writes a virtual register no surviving instruction other
+/// than itself reads, to the fixed point, and returns how many rounds that
+/// took. `readers` has one zeroed entry per virtual register any operand
+/// names; `dead` one false entry per instruction.
+fn mark_unread(instrs: &[SelInstr], readers: &mut [u32], dead: &mut [bool]) -> usize {
+    let n = instrs.len();
+    for ins in instrs {
+        for r in ins.srcs.iter().flatten() {
+            if let SelSrc::Virtual { v, .. } = r {
+                readers[v.0 as usize] += 1;
+            }
+        }
+    }
+    let reads_of = |ins: &SelInstr, v: VReg| {
+        ins.srcs.iter().flatten().filter(|r| matches!(r, SelSrc::Virtual { v: rv, .. } if *rv == v)).count()
+    };
+    let mut again = true;
+    let mut rounds = 0;
+    while again && rounds <= n {
+        again = false;
+        rounds += 1;
+        for i in (0..n).rev() {
+            if dead[i] {
+                continue;
+            }
+            let ins = &instrs[i];
+            /* A side effect is not a value: `texkill` and every branch
+             * stay whatever else is true of them. */
+            if ins.target.is_some() || ins.dst.is_none() {
+                continue;
+            }
+            let Some(SelDst::Virtual { v, .. }) = ins.dst else { continue };
+            /* Read by a survivor other than itself: its own operands are the
+             * only reads of `v` the count may still hold. */
+            let read = readers.get(v.0 as usize).copied().unwrap_or(0) as usize != reads_of(ins, v);
+            if !read {
+                dead[i] = true;
+                again = true;
+                for r in ins.srcs.iter().flatten() {
+                    if let SelSrc::Virtual { v: rv, .. } = r {
+                        readers[rv.0 as usize] -= 1;
+                    }
+                }
+            }
+        }
+    }
+    rounds
 }
 
 /// Select instructions for `m`, in virtual registers.
@@ -6784,5 +6833,78 @@ mod loop_guard_tests {
             );
         }
         assert_eq!(vec4, 4, "the accumulator, the write index and the two counters: {seeds:?}");
+    }
+}
+
+#[cfg(test)]
+mod dead_marking_tests {
+    use super::*;
+    use crate::shaderc::online::vivante::build::{op_id, Src as BSrc, RGROUP_TEMP};
+
+    const XYZW: [u8; 4] = [0, 1, 2, 3];
+
+    fn vr(v: u32) -> SelSrc {
+        SelSrc::Virtual { v: VReg(v), swizzle: XYZW, neg: false, abs: false }
+    }
+
+    fn konst() -> SelSrc {
+        SelSrc::Physical(BSrc { group: RGROUP_TEMP, reg: 1, amode: 0, swizzle: XYZW, neg: false, abs: false })
+    }
+
+    /// `dst = a + b` into virtual register `v`, or into the fixed output
+    /// register 1 when `v` is None.
+    fn add(v: Option<u32>, a: SelSrc, b: SelSrc) -> SelInstr {
+        let dst = match v {
+            Some(v) => SelDst::Virtual { v: VReg(v), write_mask: 0xf },
+            None => SelDst::Fixed { reg: 1, write_mask: 0xf },
+        };
+        SelInstr::new(op_id("add").expect("add"), OpType::F32).dst(dst).src(0, a).src(2, b)
+    }
+
+    fn marked(instrs: &[SelInstr]) -> (Vec<bool>, usize) {
+        let mut readers = vec![0u32; 8];
+        let mut dead = vec![false; instrs.len()];
+        let rounds = mark_unread(instrs, &mut readers, &mut dead);
+        (dead, rounds)
+    }
+
+    /// A chain of producers, each read only by the next, ending in a value
+    /// nobody reads: all of it is dead. Visited backwards the consumer goes
+    /// before its producer is asked about, so one round deletes the whole
+    /// chain and a second finds nothing more (issue #101: in program order
+    /// this took one round per link).
+    #[test]
+    fn a_forward_chain_nobody_reads_goes_in_one_round() {
+        let prog = [
+            add(Some(1), konst(), konst()),
+            add(Some(2), vr(1), konst()),
+            add(Some(3), vr(2), konst()),
+            add(None, konst(), konst()),
+        ];
+        let (dead, rounds) = marked(&prog);
+        assert_eq!(dead, [true, true, true, false], "v1, v2 and v3 feed nothing that stays; the output stays");
+        assert_eq!(rounds, 2, "one round deletes the chain, the second confirms the fixed point");
+    }
+
+    /// A read at a LOWER index than the write it reads (a loop-carried value):
+    /// the backwards visit meets the write while its reader still stands, so
+    /// the write goes in the next round. The result is the fixed point
+    /// whatever the order; only the round count shows the order.
+    #[test]
+    fn a_write_read_only_by_a_dead_earlier_instruction_goes_a_round_later() {
+        let prog = [add(Some(2), vr(1), konst()), add(Some(1), konst(), konst())];
+        let (dead, rounds) = marked(&prog);
+        assert_eq!(dead, [true, true], "v2 is never read, and v1 was read only by it");
+        assert_eq!(rounds, 3, "v2 in the first round, v1 in the second, nothing in the third");
+    }
+
+    /// An instruction that reads its own destination is not kept alive by
+    /// that read; a read by another survivor, here the output, keeps it.
+    #[test]
+    fn only_another_survivor_s_read_keeps_a_write() {
+        let (dead, _) = marked(&[add(Some(1), vr(1), konst())]);
+        assert_eq!(dead, [true], "v1 feeds only itself");
+        let (dead, _) = marked(&[add(Some(1), konst(), konst()), add(None, vr(1), konst())]);
+        assert_eq!(dead, [false, false], "the output reads v1");
     }
 }

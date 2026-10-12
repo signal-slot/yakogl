@@ -302,7 +302,11 @@ const GC_MSAA_RASTERISE: bool = true;
 /// Turns 4x multisampling on for measurement (gl_test case 16,
 /// CONFIG_GC_GL_TEST_MSAA), and with it the EGL 4x config (gl/egl.rs
 /// `offered_configs`). Bit 1 adds etnaviv's SMALL_MSAA settings
-/// ([`msaa_extras`]), bit 2 its per-draw PS_MSAA_CONFIG. A test knob: it and
+/// ([`msaa_extras`]), bit 2 a per-draw PS_MSAA_CONFIG, bit 3 the window-space
+/// scaling ([`vp_scale`]), bit 4 etnaviv's SINGLE_BUFFER value for the
+/// supertiled scratch ([`single_buffer`]). Bits 1 and 4 are what Mesa 26.2.1
+/// writes for every 4x target on this core; bits 2 and 3 are not
+/// (tools/cts/log/investigations/gc-msaa-addresses.md). A test knob: it and
 /// its setter exist only with the `test-knobs` feature, and without it 4x is
 /// [`GC_MSAA_ENABLE`]'s, off, until the board has run it (issue #8).
 #[cfg(feature = "test-knobs")]
@@ -453,17 +457,40 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
     ms_scale(gl) > 1 && msaa_bits() & 2 != 0
 }
 
+/// PE_LOGIC_OP's SINGLE_BUFFER field for this draw. 1, the linear-surface
+/// value, for every draw; with `gc_debug_msaa` bit 4 (a value of 16), a 4x
+/// draw into the supertiled scratch takes the value Mesa's etnaviv gives a
+/// target that is not linear on a SINGLE_BUFFER core: 2, or 3 for a 16-bit
+/// target (etnaviv_state.c:536-539, Mesa 26.2.1, MIT; this core has the
+/// feature: hwdb gc7000 0x6204, `REG_PEEnhancements3` = 1, which
+/// etna_hwdb.c:84 maps to SINGLE_BUFFER). The 4x path wrote 1 with a
+/// SUPER_TILED colour format, a pair Mesa never emits. Issue #8; opt-in
+/// until the board has run it.
+fn single_buffer(gl: &GlesDraw) -> u32 {
+    if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
+        if gles_surf_bytes_per_pixel(gl.target_format) <= 2 {
+            3
+        } else {
+            2
+        }
+    } else {
+        1
+    }
+}
+
 /// The factor the window-space state (viewport, scissor, clip) is scaled by
 /// on a 4x draw: 2 with `gc_debug_msaa` bit 3 (a value of 8), else 1. The
-/// scratch surface is twice the target on each axis and the rasteriser works
+/// hypothesis behind it: the scratch surface is twice the target on each axis and the rasteriser works
 /// in its samples, so a viewport, scissor and clip left in target pixels
 /// cover only the scratch's top-left quarter: a clear fills that quarter and
 /// the triangle lands in it, which the resolve then shows as a picture a
 /// quarter of its size in the corner (gl_test 16's "x4 inside" reads the
-/// clear colour). etnaviv's msaa_xscale / msaa_yscale (etnaviv_state.c,
-/// from memory; not in third_party) does this scaling; whether this core
-/// wants it from the driver is the board's to say (VIVANTE_NOTES.md,
-/// "4x MSAA, issue #8").
+/// clear colour). Not Mesa's: etnaviv 26.2.1 writes the viewport
+/// (etnaviv_state.c:585-590) and the scissor and clip (etnaviv_emit.c:440-457)
+/// in target pixels for a 4x target too; its msaa_xscale / msaa_yscale only
+/// size the surface (etnaviv_resource.c:327-328) and the resolve window
+/// (etnaviv_rs.c:809-810). Board arms 1 and 9 read the same
+/// (tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
 fn vp_scale(gl: &GlesDraw) -> u32 {
     if ms_scale(gl) > 1 && msaa_bits() & 8 != 0 {
         ms_scale(gl)
@@ -649,10 +676,12 @@ fn ensure_msaa(w: u32, h: u32, bpp: u32) -> i32 {
 
 /// The sample positions and centroid table a 4x draw needs, or the single
 /// sampled state. The values are the blob's, by way of Mesa.
-/// etnaviv's per-draw PS_MSAA_CONFIG for a multisampled draw (etnaviv_emit.c,
-/// MIT): sample coverage on at 16/16, the sample mask enabled and all four
-/// samples in it -- written, where the context word leaves every one of
-/// these fields at the hardware's default. Only with gc_debug_msaa bit 2.
+/// A per-draw PS_MSAA_CONFIG for a multisampled draw: sample coverage on at
+/// 16/16, the sample mask enabled and all four samples in it -- written,
+/// where the context word leaves every one of these fields at the hardware's
+/// default. Only with gc_debug_msaa bit 2. Not Mesa's: etnaviv 26.2.1 writes
+/// only the alpha-to-coverage bits of this register (etnaviv_blend.c:104-108,
+/// emitted at etnaviv_emit.c:484), the context word's value.
 fn ps_msaa_config_written() -> u32 {
     let written = GC_PS_MSAA_SAMPLE_COVERAGE_MASK
         | GC_PS_MSAA_SAMPLE_COVERAGE_VALUE_MASK
@@ -1544,11 +1573,11 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
 
     c.state(GC_PE_STENCIL_CONFIG_EXT, pe_stencil_ref_back(ref_back));
     /* SINGLE_BUFFER(1) is what a linear colour surface needs; every surface
-     * YakoGL renders to is linear. */
+     * YakoGL renders to is linear, except the 4x scratch ([`single_buffer`]). */
     let unk24 = if msaa_extras(gl) { pe_logic_op_unk24(5) } else { 0 };
     c.state(
         GC_PE_LOGIC_OP,
-        GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY) | pe_logic_op_single_buffer(1) | unk24,
+        GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY) | pe_logic_op_single_buffer(single_buffer(gl)) | unk24,
     );
     c.state(pe_dither(0), 0xffff_ffff); /* dithering off */
     c.state(pe_dither(1), 0xffff_ffff);

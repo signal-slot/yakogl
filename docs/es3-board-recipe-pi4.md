@@ -39,7 +39,7 @@ cache; `tools/cts/deps-env.sh` prints the layout):
 
 ```sh
 export ZEPHYR_WS=<west workspace, Zephyr af17c0c8>   WEST_VENV=$ZEPHYR_WS/.venv
-export ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1>     ZEPHYR_SDK=$ZEPHYR_SDK_INSTALL_DIR
+export ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1>
 export RUSTUP_TOOLCHAIN=nightly                      # every V3D sample
 export CTS=<VK-GL-CTS checkout at 93bca01 with its externals fetched>
 export CMAKE_POLICY_VERSION_MINIMUM=3.5               # a host cmake 4.x configuring CTS's zlib

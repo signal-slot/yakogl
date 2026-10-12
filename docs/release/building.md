@@ -92,10 +92,8 @@ repository at the commit that added this file.
   the SDK's `setup.sh` (`./setup.sh -t aarch64-zephyr-elf`). Its `-c` option
   registers the SDK in `~/.cmake/packages`; it is not needed, because
   `ZEPHYR_SDK_INSTALL_DIR` is enough. I did not check the archive name.
-- **Variable:** `ZEPHYR_SDK_INSTALL_DIR` (west finds the SDK with it). The
-  dEQP stage 1 script reads a second name, `ZEPHYR_SDK`, and its default is
-  `$HOME/org/zephyrproject/zephyr-sdk-1.0.1` (`tools/cts/cts-build-zephyr.sh:34,47`).
-  On a clean machine set **both** to the same directory.
+- **Variable:** `ZEPHYR_SDK_INSTALL_DIR` (west and the dEQP stage 1 script
+  both read it).
 - **Needed by:** every image.
 
 ### 4. A nightly Rust toolchain
@@ -334,7 +332,6 @@ export REPO=/path/to/yakogl               # this repository
 export ZEPHYR_WS=$WORK/ws                 # input 1
 export WEST_VENV=$WORK/venv               # input 2
 export ZEPHYR_SDK_INSTALL_DIR=$WORK/zephyr-sdk-1.0.1   # input 3
-export ZEPHYR_SDK=$ZEPHYR_SDK_INSTALL_DIR              # input 3 (stage 1 script)
 export RUSTUP_TOOLCHAIN=nightly           # input 4
 export GLMARK2_SRC=$WORK/glmark2          # input 5
 export SLINT_NOSTD_DIR=$WORK/slint-nostd/slint   # input 7
@@ -477,7 +474,5 @@ the AM62P firmware header (input 6). Without them it reports gaps and is red.
 - `agl-slint-cluster` and Noto Sans are not pinned (inputs 9 and 10).
 - The Zephyr SDK archive name, and the `static.crates.io` download URLs, are
   from general knowledge, not from the tree.
-- `tools/cts/cts-build-zephyr.sh` reads `ZEPHYR_SDK`, every other script reads
-  `ZEPHYR_SDK_INSTALL_DIR`; `tools/check.sh` looks for `$ZEPHYR_WS/.venv`
-  and ignores `WEST_VENV`. This guide works around both; a script change
-  would remove the need.
+- `tools/check.sh` looks for `$ZEPHYR_WS/.venv` and ignores `WEST_VENV`.
+  This guide works around it; a script change would remove the need.

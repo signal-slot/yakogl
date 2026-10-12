@@ -976,10 +976,151 @@ static void dump_map(const uint32_t *px, uint32_t w, uint32_t h)
 	}
 }
 
+/*
+ * KICK_DIFF (#9, #25): does the fence fire before the pixel engine's write
+ * reaches memory? The library's instrument (src/vivante/kick.rs `diff`, a
+ * test knob; tools/cts/log/investigations/gc-kick-diff.md) reads the render
+ * target twice after the fence, KICK_DIFF_DELAY_US apart; a difference means
+ * the first read came too early (a late write).
+ *
+ * gl_test_kick_diff_cases: bit c arms it for case c. The harness sets it
+ * (gc_gl_test's main.c, from the selector); 0 leaves every case as it is.
+ * Only the cases KICK_DIFF_WIRED names arm (2 and 10, the two that lose
+ * pixels); other bits are ignored. While a case is armed, read_topdown()
+ * finishes (glFinish, so the fence has been seen) and calls
+ * gc_kick_diff_after_fence() before its glReadPixels: one check per
+ * read-back. The wait sits before the case's own read, so in an armed run a
+ * late write is seen by the instrument AND can make the case pass: compare
+ * the verdicts, not the armed arm's failure rate, with the base arm.
+ *
+ * The record page for a board with no console (gl_test_kick_diff_page): a
+ * PERF record, tag KICK_DIFF_TAG_BASE | case (0xe0..0xef, beside the case
+ * 16 pages 0xf0..0xfd below), three words:
+ *   w1 bits 0..7   the verdict: 0 armed but no check made, 1 stable (every
+ *                  check), 2 late (at least one check); 0x80 | n: not armed,
+ *                  gc_kick_diff_arm_target returned -n
+ *        bits 8..15  the first late check, counted from 1 (0 none)
+ *        bits 16..23 the case's result: 1 pass, 2 fail, 3 neither (a skip)
+ *        bits 24..31 the case's first failing check (0xff none, 0xfe for
+ *                  254 or more)
+ *   w2   checks made (bits 0..15) | late checks (bits 16..31), each
+ *        saturating at 0xffff (gc_kick_diff_stats words 0 and 1)
+ *   w3   the most words one check saw change (gc_kick_diff_stats word 2)
+ * tools/yakogl-tools `record kickdiff` decodes it.
+ */
+#define KICK_DIFF_TAG_BASE 0xe0u
+#define KICK_DIFF_CASES    16u
+#define KICK_DIFF_WIRED(c) ((c) == 2 || (c) == 10)
+#define KICK_DIFF_DELAY_US 2000u
+#define KICK_DIFF_NOT_ARMED 0x80u
+
+unsigned int gl_test_kick_diff_cases;
+
+static struct {
+	bool taken;
+	uint32_t w[3];
+} s_kd_rec[KICK_DIFF_CASES];
+
+/* One page: tag 0xe0..0xef, w[0..2] the record's w1..w3. 0 if the case ran
+ * armed (or failed to arm) in this run, -1 if not. */
+int gl_test_kick_diff_page(unsigned int tag, uint32_t *w)
+{
+	unsigned int c = tag - KICK_DIFF_TAG_BASE;
+
+	w[0] = w[1] = w[2] = 0;
+	if (tag < KICK_DIFF_TAG_BASE || c >= KICK_DIFF_CASES || !s_kd_rec[c].taken)
+		return -1;
+	memcpy(w, s_kd_rec[c].w, sizeof(s_kd_rec[c].w));
+	return 0;
+}
+
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
+extern int gc_kick_diff_arm_target(uint32_t delay_us, void (*delay)(uint32_t us));
+extern void gc_kick_diff_enable(const uint32_t *target_cpu, uint32_t words, uint32_t pitch_words,
+				uint32_t delay_us, void (*delay)(uint32_t us));
+extern int gc_kick_diff_after_fence(void);
+extern void gc_kick_diff_stats(uint32_t *out);
+
+static void kick_diff_delay(uint32_t us)
+{
+#if defined(GL_TEST_HOST) || defined(GL_TEST_USER)
+	struct timespec ts = { .tv_sec = us / 1000000u, .tv_nsec = (long)(us % 1000000u) * 1000L };
+
+	nanosleep(&ts, NULL);
+#else
+	k_busy_wait(us);
+#endif
+}
+
+static int s_kd_case = -1;         /* the case armed now, -1 none */
+static uint32_t s_kd_verdict;      /* the worst check: 0 none, 1 stable, 2 late */
+static uint32_t s_kd_n, s_kd_first_late;
+
+static void kick_diff_begin(int c)
+{
+	int rc;
+
+	if (c < 0 || c >= (int)KICK_DIFF_CASES || !KICK_DIFF_WIRED(c) ||
+	    !(gl_test_kick_diff_cases & (1u << c)))
+		return;
+	memset(&s_kd_rec[c], 0, sizeof(s_kd_rec[c]));
+	s_kd_rec[c].taken = true;
+	rc = gc_kick_diff_arm_target(KICK_DIFF_DELAY_US, kick_diff_delay);
+	if (rc != 0) {
+		s_kd_rec[c].w[0] = KICK_DIFF_NOT_ARMED | ((uint32_t)-rc & 0x7fu);
+		pr_info("gl_test:   kick_diff case %d: not armed (gc_kick_diff_arm_target %d)\n", c, rc);
+		return;
+	}
+	s_kd_case = c;
+	s_kd_verdict = s_kd_n = s_kd_first_late = 0;
+}
+
+/* read_topdown's half: the fence, then the instrument's two reads */
+static void kick_diff_check(void)
+{
+	int v;
+
+	if (s_kd_case < 0)
+		return;
+	glFinish();
+	v = gc_kick_diff_after_fence();
+	s_kd_n++;
+	if (v == 2 && s_kd_first_late == 0)
+		s_kd_first_late = s_kd_n;
+	if (v > 0 && (uint32_t)v > s_kd_verdict)
+		s_kd_verdict = (uint32_t)v;
+}
+
+static void kick_diff_end(int c, int rc)
+{
+	uint32_t st[3] = { 0, 0, 0 };
+	int bad = gl_test_first_bad_check;
+
+	if (s_kd_case != c)
+		return;
+	gc_kick_diff_stats(st);
+	gc_kick_diff_enable(NULL, 0, 0, 0, NULL);
+	s_kd_case = -1;
+	s_kd_rec[c].w[0] = s_kd_verdict | (s_kd_first_late > 0xffu ? 0xffu : s_kd_first_late) << 8 |
+			   (rc == 0 ? 1u : rc == -1 ? 2u : 3u) << 16 |
+			   (bad < 0 ? 0xffu : bad > 0xfe ? 0xfeu : (uint32_t)bad) << 24;
+	s_kd_rec[c].w[1] = (st[0] > 0xffffu ? 0xffffu : st[0]) | (st[1] > 0xffffu ? 0xffffu : st[1]) << 16;
+	s_kd_rec[c].w[2] = st[2];
+	pr_info("gl_test:   kick_diff case %d: %s, checks %u late %u max_changed %u\n", c,
+		s_kd_verdict == 2 ? "late" : s_kd_verdict == 1 ? "stable" : "no check",
+		(unsigned)st[0], (unsigned)st[1], (unsigned)st[2]);
+}
+#else
+static inline void kick_diff_begin(int c) { (void)c; }
+static inline void kick_diff_check(void) {}
+static inline void kick_diff_end(int c, int rc) { (void)c; (void)rc; }
+#endif
+
 /* Read the bound framebuffer (64x64) through glReadPixels and store it
  * top-down in s_px (glReadPixels rows are bottom-up in GL window space). */
 static const uint32_t *read_topdown(void)
 {
+	kick_diff_check();
 	glReadPixels(0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE, s_rows);
 	for (uint32_t y = 0; y < TH; y++)
 		memcpy(&s_px[y * TW], &s_rows[(TH - 1 - y) * TW], TW * 4);
@@ -20910,6 +21051,7 @@ static int run_case(int c, int pretransform, int debug)
 	gl_test_first_bad_got = 0;
 	gl_test_first_bad_want = 0;
 	reset_state(prev);
+	kick_diff_begin(c);
 	switch (c) {
 	case 0: rc = case_triangle(pretransform, debug); break;
 	case 1: rc = case_uniform(); break;
@@ -21185,6 +21327,7 @@ static int run_case(int c, int pretransform, int debug)
 	 * unused), and counting a gap as a failure invents one. */
 	default: pr_err("gl_test: no case %d\n", c); return -2;
 	}
+	kick_diff_end(c, rc);
 	{
 		const char *verdict = rc == 0 ? "PASS" : "FAIL";
 
