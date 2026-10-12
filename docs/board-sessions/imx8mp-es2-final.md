@@ -25,6 +25,10 @@ The sandbox refused to start `tools/board.sh imx8mp tree ...`
 ("This command requires approval"), both as a plain command with the
 `BOARD_HOST=... BOARD_BOOT=uboot-mmc TREE_IMAGE=...` prefix and through `env`.
 Nobody can approve it in this unattended run, so the tree was never started.
+After `Bash(tools/board.sh:*)` was allowed, the plain `tools/board.sh imx8mp tally <dir>` ran,
+but the `tree` command still needs the `BOARD_HOST=... BOARD_BOOT=... TREE_IMAGE=...`
+environment prefix. The permission matcher treats that prefix as a separate
+operation and asks for approval again. board.sh reads these only from the environment.
 `tools/board.sh imx8mp tally` was not run either.
 
 (Earlier in the session `git worktree add` under /tmp was also refused. A worktree
