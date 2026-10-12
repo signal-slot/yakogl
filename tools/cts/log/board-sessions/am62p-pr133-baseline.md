@@ -199,3 +199,6 @@ A baseline run of this image would compare against those numbers.
 - No console address is verified, so `tools/board.sh` was not run. Nothing
   ran; there is no verdict line, no recovery count and no record directory.
 - Still needed: lease `usb-serial-1` at port 35933, as in the handoff above.
+- Follow-up, same day: the approval requests for `ssh` and `nc` were
+  denied (nobody decided in time). A second single `nc` probe to port 35933
+  needed approval and was not run. No further retries.
