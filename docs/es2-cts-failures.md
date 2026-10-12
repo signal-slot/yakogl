@@ -581,10 +581,31 @@ CLAMP_TO_EDGE and do not read the extension list.
 
 ### H.5 Still open
 
-- Source comments still say dEQP expects the ES 2.0 error:
-  `src/gl/texture.rs` ("dEQP texture.completeness.2d.npot_size expects it",
-  two places) and the `cube_chain_is_complete` comment ("which dEQP expects
-  too"). With the extension listed the CTS expects `GL_NO_ERROR`.
+- Source comments still say dEQP expects the ES 2.0 error. With the
+  extension listed the CTS expects `GL_NO_ERROR` (H.2). Follow-up for
+  another item (this one changes no file under `src/`); lines at `9390731`:
+  - `src/gl/texture.rs:2197`, in `glTexImage2D`'s level check: "dEQP
+    texture.completeness.2d.npot_size expects it".
+  - `src/gl/texture.rs:6974-6976`, the doc of
+    `tex_image_level_on_npot_texture_follows_the_version`: "dEQP
+    texture.completeness's npot_size expects it".
+  - `src/gl/texture.rs:11294-11295`, the doc of `cube_chain_is_complete`:
+    "GL_INVALID_VALUE, which dEQP expects too".
+  - `src/gl/texture.rs:11582-11583`, the doc of
+    `generate_mipmap_of_a_npot_texture_follows_the_reported_version`:
+    "what dEQP's case is predicted to do then"; the prediction was wrong
+    (H, status): the case returns early and is Pass.
+  - `src/gl/draw.rs:13040-13044`, the doc of
+    `a_npot_level_above_0_follows_the_version`: correct, but it calls a
+    15x15 chain "npot_size"; the CTS's 255x255 chain is
+    `tests/es2_npot.rs` `texture_completeness_2d_npot_size`.
+  - The `NPOT_RESTRICTED` branches in the tests above
+    (`src/gl/texture.rs:6989`, `src/gl/texture.rs:11593`,
+    `src/gl/draw.rs:12867`, `src/gl/draw.rs:13055`) never take the
+    restricted side in any build. They are revert checks, not stale text.
+  - Correct, no change: `src/gl/texture.rs:946` (the constant),
+    `src/gl/texture.rs:3464` and `src/gl/draw.rs:2542` (they say no build
+    is restricted).
 - Closed: `tests/es2_npot.rs` replays the 18 cases on the host, one test
   per case, in the CTS's order and at its sizes (`Incomplete2DSizeCase` at
   255x255, the cube size and wrap cases with the texture bound to
@@ -594,3 +615,46 @@ CLAMP_TO_EDGE and do not read the extension list.
   end draws nothing). It needs `shaderc-online`.
 - The PowerVR's level arithmetic for an NPOT 2D chain is exercised only by
   `2d.npot_size` (a 63x63 level 2 at a 64-texel pitch) and glmark2's terrain.
+
+### H.6 Each case and its host test
+
+One test per case in `tests/es2_npot.rs`. The test name is the case name
+after `dEQP-GLES2.functional.`, with the dots as underscores. Every test
+runs on a fresh context on the PowerVR shape and on the layered (GC7000,
+V3D) shape. After every GL call it asserts `GL_NO_ERROR`. In a `report-es2`
+build it also asserts that `GL_OES_texture_npot` is in `GL_EXTENSIONS`.
+"Complete" means the bind the back end receives has `incomplete == 0` (the
+CTS's blue). "Incomplete" means `incomplete == 1` (the CTS's black).
+
+| Case (`dEQP-GLES2.functional.` ...) | Test | What it asserts |
+|---|---|---|
+| `texture.completeness.2d.npot_t_repeat` | `texture_completeness_2d_npot_t_repeat` | 127x127, S clamp, T repeat, NEAREST: complete, the wrap as set |
+| `texture.completeness.2d.npot_s_repeat` | `texture_completeness_2d_npot_s_repeat` | the same with S repeat, T clamp |
+| `texture.completeness.2d.npot_all_repeat` | `texture_completeness_2d_npot_all_repeat` | REPEAT on both axes |
+| `texture.completeness.2d.npot_mirrored_repeat` | `texture_completeness_2d_npot_mirrored_repeat` | MIRRORED_REPEAT on both axes |
+| `texture.completeness.2d.repeat_width_npot` | `texture_completeness_2d_repeat_width_npot` | 127x128, REPEAT: complete |
+| `texture.completeness.2d.repeat_height_npot` | `texture_completeness_2d_repeat_height_npot` | 128x127, REPEAT: complete |
+| `texture.completeness.cube.npot_t_repeat` | `texture_completeness_cube_npot_t_repeat` | new texture bound to 2D, six 127x127 faces on the default cube texture (name 0): complete, a cube bind |
+| `texture.completeness.cube.npot_s_repeat` | `texture_completeness_cube_npot_s_repeat` | the same |
+| `texture.completeness.cube.npot_all_repeat` | `texture_completeness_cube_npot_all_repeat` | the same |
+| `texture.completeness.cube.npot_mirrored_repeat` | `texture_completeness_cube_npot_mirrored_repeat` | the same |
+| `texture.completeness.2d.npot_size` | `texture_completeness_2d_npot_size` | 255x255, levels 255 down to 1: complete, a nearest-level mip filter, REPEAT; 8 levels on the layered shape |
+| `texture.completeness.2d.npot_size_level_0` | `texture_completeness_2d_npot_size_level_0` | 256 chain with a 255x255 level 0: incomplete |
+| `texture.completeness.2d.npot_size_level_1` | `texture_completeness_2d_npot_size_level_1` | 256 chain with a 127x127 level 1: incomplete |
+| `texture.completeness.cube.npot_size_level_0` | `texture_completeness_cube_npot_size_level_0` | 64 chain, level 0 63x63 on all six faces: incomplete |
+| `texture.completeness.cube.npot_size_level_1` | `texture_completeness_cube_npot_size_level_1` | level 1 31x31 on all six faces: incomplete |
+| `texture.completeness.cube.npot_size_level_0_pos_x` | `texture_completeness_cube_npot_size_level_0_pos_x` | only +X level 0 63x63: incomplete |
+| `texture.completeness.cube.npot_size_level_1_neg_x` | `texture_completeness_cube_npot_size_level_1_neg_x` | only -X level 1 31x31: incomplete |
+| `negative_api.texture.generatemipmap_npot_wdt_hgt` | `negative_api_texture_generatemipmap_npot_wdt_hgt` | the extension is listed (the CTS returns early: Pass); the body it skips (256x257, 257x256, 257x257 RGB, then `glGenerateMipmap`) gives `GL_NO_ERROR` |
+
+No test is `#[ignore]`d. The file is
+`#![cfg(all(feature = "host-test", feature = "shaderc-online"))]`, because
+the quad's programs are not in the offline shader table. Runs on `9390731`
+(2026-10-12), each `18 passed; 0 failed; 0 ignored`:
+
+```text
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_npot
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es2_npot
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test es2_npot
+cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es2_npot
+```
