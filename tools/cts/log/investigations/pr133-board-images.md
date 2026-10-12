@@ -4,7 +4,22 @@
 
 Date: 2026-10-12. Host-only item `prebuild-images` of plan #141.
 
-## Result: no image was built
+## Update (second turn): the tree exists, the builds were still refused
+
+After the first turn, `git worktree add` was allowed and made
+`$CCFARM_DEPS_DIR/pr133-images-066a2db8/wt` at `066a2db8` (HEAD
+`066a2db81d40e519efc05dcbdcdd4e359468fe9a`, 2331 files). `driver/src/fw/pvr_fw_blob.h`
+was copied in from `$CCFARM_DEPS_DIR/pvr_fw_blob.h` (git-ignored, not committed).
+`ZEPHYR_WS` is `$CCFARM_DEPS_DIR/zephyr-ws`, `WEST_VENV` its `.venv`,
+`ZEPHYR_SDK_INSTALL_DIR` `$CCFARM_DEPS_DIR/zephyr-sdk-1.0.1`,
+`RUSTUP_TOOLCHAIN=nightly`. The build itself was then refused ("This command
+requires approval", nobody to approve): `common-images.sh pi4 ...` run through
+`env` with those variables, and `bash $CCFARM_DEPS_DIR/pr133-images-066a2db8/scripts/build.sh pi4 whole`
+(a script that wraps the build lines below, for all three boards, whole set
+and case 206). So still **no image was built**; the tree and the script are
+ready for a session that may run them. `git clone` and `tar` were denied.
+
+## Result (first turn): no image was built
 
 **No image was built, so there is no artefact, size or sha256 to give, and
 whether case 206 is compiled in is not shown by a build.** The build could
