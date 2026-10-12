@@ -8,6 +8,10 @@
 # break, so the map is pinned here and read in the gate (scope tools).
 set -u
 cd "$(dirname "$0")/.." || exit 2
+# The plans below pin the default CONFIGS. The gate runs this selftest with
+# its own environment, so a narrowed YAKOGL_CHECK_CONFIGS would otherwise
+# change every plan here (the narrowed plan below sets it itself).
+unset YAKOGL_CHECK_CONFIGS
 fails=0
 checks=0
 want() {
@@ -81,7 +85,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/HANDOFF.md)
-expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 145 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 144 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -103,6 +107,43 @@ expect "gl_test: no host suite" '^skip  test    host-test,gpu-powervr$' "$out"
 out=$(plan "src/gl/draw.rs docs/x.md")
 expect "a shared layer: every row" '^check.sh: 1[0-9][0-9] ok, 0 failed, [0-9] gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
 expect "a shared layer: the path is named" '^      every row: src/gl/draw.rs$' "$out"
+# The tier tables are made exactly when a selected row reads them (#127):
+# with CONFIGS narrowed to a set without `precompiled-shaders`, the
+# no-compiler rows (not CONFIGS rows) still run, so the table row is planned,
+# once and before them.
+line_of() { printf '%s\n' "$2" | grep -nxF -m1 "$1" | cut -d: -f1; }
+order() {
+  local label=$1 first=$2 second=$3 out=$4 a b
+  checks=$((checks + 1))
+  a=$(line_of "$first" "$out")
+  b=$(line_of "$second" "$out")
+  if [ -z "$a" ] || [ -z "$b" ] || [ "$a" -ge "$b" ]; then
+    echo "FAIL $label: '$first' (line ${a:-absent}) is not before '$second' (line ${b:-absent})"
+    fails=$((fails + 1))
+  fi
+}
+count() {
+  local label=$1 pattern=$2 want=$3 out=$4 got
+  checks=$((checks + 1))
+  got=$(printf '%s\n' "$out" | grep -cE "$pattern")
+  [ "$got" -eq "$want" ] || { echo "FAIL $label: $got line(s) match '$pattern', expected $want"; fails=$((fails + 1)); }
+}
+gen='plan  gen     precompiled tables for the tier configurations'
+nocomp='plan  clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests)'
+out=$(YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr" plan src/pvr/draw.rs)
+expect "narrowed CONFIGS: the no-compiler rows" "^${nocomp//[()]/.}\$" "$out"
+order "narrowed CONFIGS: the tables before their first reader" "$gen" "$nocomp" "$out"
+count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
+# the control: the full plan keeps its rows, the table row once, before the
+# first CONFIGS row that reads the tables
+out=$(plan src/gl/draw.rs)
+expect "full plan: its row count" '^check.sh: 145 ok, 0 failed, 2 gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
+count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
+order "full plan: the tables before their first reader" "$gen" \
+  'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
+# no reader selected, no table row (a docs change)
+out=$(plan docs/HANDOFF.md)
+count "docs: no table row" "precompiled tables for the tier" 0 "$out"
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
