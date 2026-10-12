@@ -10,7 +10,14 @@ list(APPEND ZEPHYR_EXTRA_MODULES "${PVR_REPO}" "${PVR_REPO}/..")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(gl_femtovg)
 
-target_sources(app PRIVATE src/main.c)
+# A board whose board file turns the board layer on (yakogl_board.h; the
+# Verdin iMX8M Plus) runs main_board.c. The AM62P keeps main.c and the
+# pvr_sample_* glue.
+if(CONFIG_YAKOGL_BOARD)
+  target_sources(app PRIVATE src/main_board.c)
+else()
+  target_sources(app PRIVATE src/main.c)
+endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/sample.cmake")
 
 # ---------------------------------------------------------------------------
