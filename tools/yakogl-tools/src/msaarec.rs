@@ -17,8 +17,8 @@
 use std::collections::BTreeMap;
 
 use crate::record::{self, kind};
-use crate::recordcmd::{from_log, from_nvmem};
-use crate::{py, Error, R};
+use crate::recordcmd::records_from_args;
+use crate::{Error, R};
 
 pub const USAGE: &str =
     "usage: yakogl-tools record msaa [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...";
@@ -148,39 +148,9 @@ pub fn decode(p: &BTreeMap<u8, [u32; 3]>) -> Vec<String> {
 }
 
 pub fn main(args: &[String]) -> R<()> {
-    let mut recs: Vec<[u32; 4]> = Vec::new();
-    let mut loose: Vec<u32> = Vec::new();
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "-h" | "--help" => {
-                println!("{USAGE}");
-                return Ok(());
-            }
-            "--log" | "--nvmem" => {
-                let f = it.next().ok_or_else(|| Error::Usage(USAGE.into()))?;
-                let b = py::read_bytes(f)?;
-                if a == "--log" {
-                    recs.extend(from_log(&py::lossy_text(&b)));
-                } else {
-                    recs.push(from_nvmem(&b)?);
-                }
-            }
-            w => {
-                let t = w.trim_start_matches("0x").trim_start_matches("0X");
-                let v = u32::from_str_radix(t, 16)
-                    .map_err(|_| Error::Usage(format!("{USAGE}\n\n'{w}' is not a 32-bit hex word")))?;
-                loose.push(v);
-            }
-        }
-    }
-    if !loose.len().is_multiple_of(4) {
-        return Err(Error::Usage(format!("{USAGE}\n\nrecords are four words each; {} words given", loose.len())));
-    }
-    recs.extend(loose.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]));
-    if recs.is_empty() {
-        return Err(Error::Usage(USAGE.into()));
-    }
+    let Some(recs) = records_from_args(args, USAGE)? else {
+        return Ok(());
+    };
     let p = pages(&recs);
     if p.is_empty() {
         return Err(Error::Exit("no PERF record with a case 16 probe tag (0xf0..0xfd) in the input".into()));
@@ -194,6 +164,7 @@ pub fn main(args: &[String]) -> R<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::py;
 
     fn rec(tag: u8, w: [u32; 3]) -> [u32; 4] {
         [record::w0(kind::PERF, tag), w[0], w[1], w[2]]

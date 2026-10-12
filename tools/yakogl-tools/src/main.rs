@@ -39,6 +39,7 @@ mod py;
 // The result record's one definition (driver/docs/one-method.md section 3),
 // compiled here as it is in the board layer; recordcmd.rs is the host side.
 // The board layer's writer half is unused by a host tool.
+mod kickdiffrec;
 mod msaarec;
 #[allow(dead_code)]
 #[path = "../../../driver/rust/src/board/record.rs"]

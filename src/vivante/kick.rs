@@ -223,7 +223,17 @@ pub mod diff {
         core::sync::atomic::fence(Ordering::Acquire);
     }
 
+    /// Read `dst.len()` words at `src` as glReadPixels would see them: the
+    /// CPU's view is invalidated first (`read_pixels_sync` does the same), so
+    /// on a cached mapping the read reaches memory instead of a line the
+    /// cache kept from before the kick. Without it a late write could never
+    /// show: both reads would hit the same stale lines and compare equal.
+    /// The i.MX8MP maps the carveout Normal non-cacheable, where the
+    /// invalidate changes nothing.
     fn read_into(dst: &mut [u32], src: *const u32) {
+        // SAFETY: `gc_kick_diff_enable`'s contract: `src` is readable (and
+        // the target's memory) for `dst.len()` words.
+        unsafe { crate::osal::cache_invd(src as *mut core::ffi::c_void, core::mem::size_of_val(dst)) };
         for (i, w) in dst.iter_mut().enumerate() {
             // SAFETY: `gc_kick_diff_enable`'s contract: `src` is readable for
             // `dst.len()` words. Volatile: the GPU writes it, not this thread.

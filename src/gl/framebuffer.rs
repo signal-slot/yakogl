@@ -2566,6 +2566,49 @@ pub fn read_pixels_sync(c: &mut GlContext) -> bool {
     true
 }
 
+/// KICK_DIFF on the current render target (src/vivante/kick.rs `diff`,
+/// tools/cts/log/investigations/gc-kick-diff.md): arms the instrument on the
+/// CPU view glReadPixels reads -- the same descriptor, the attached level's
+/// offset and the same row pitch -- so gl_test does not need to know where
+/// the library keeps its surfaces. The bound framebuffer at the call is the
+/// one watched; arm again after binding another.
+///
+/// `delay` waits `delay_us` microseconds between the two reads (the
+/// harness's busy wait; None: the second read follows at once).
+///
+/// Returns 0 when armed, or why not, one value per cause (nothing is armed
+/// then): -1 no current context, -2 no colour target (no surface, an
+/// incomplete or depth-only framebuffer), -3 not 4 bytes per pixel (the
+/// instrument compares 32-bit words), -4 the target has no CPU view, -5 the
+/// target is larger than the instrument holds (KICK_DIFF_MAX_WORDS): refused
+/// rather than watched in part.
+#[cfg(all(feature = "test-knobs", feature = "gpu-vivante"))]
+#[no_mangle]
+pub extern "C" fn gc_kick_diff_arm_target(delay_us: u32, delay: Option<unsafe extern "C" fn(u32)>) -> i32 {
+    use crate::vivante::kick::diff::{gc_kick_diff_enable, KICK_DIFF_MAX_WORDS};
+
+    let Some(c) = super::context::current() else { return -1 };
+    let Some((loc, tw, th, toff)) = target_loc(c) else { return -2 };
+    if gles_surf_bytes_per_pixel(fb_target_format(c)) != 4 {
+        return -3;
+    }
+    let cpu = mem_at(c, loc).cpu as *const u8;
+    if cpu.is_null() {
+        return -4;
+    }
+    let pitch = loc_pitch(c, loc, tw);
+    let words = match pitch.checked_mul(th) {
+        Some(n) if n as usize <= KICK_DIFF_MAX_WORDS => n,
+        _ => return -5,
+    };
+    // SAFETY: the target's CPU mapping covers `pitch` x `th` pixels of 4
+    // bytes from `toff` on (read_pixels_sync invalidates the same range);
+    // it stays mapped while the target exists, and gl_test disarms at the
+    // end of the case, before the surface can go.
+    unsafe { gc_kick_diff_enable(cpu.add(toff as usize) as *const u32, words, pitch, delay_us, delay) };
+    0
+}
+
 /// The first half of [`read_pixels_sync`], for every target at once: the
 /// pending clear goes out, everything recorded is submitted and waited for.
 /// False when that GPU work did not complete, or work since this context's
@@ -7772,5 +7815,51 @@ mod tests {
             unsafe { glDeleteTextures(1, &tex) };
         }
         TEST_EXTRA_SAMPLED.store(0, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /* ---- KICK_DIFF on the render target (test knob) ------------------------------------------------ */
+
+    /// The surface the delay below writes to, as the GPU would.
+    #[cfg(all(feature = "test-knobs", feature = "gpu-vivante"))]
+    static KICK_DIFF_TARGET: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+    /// The harness's delay: the pixel engine lands one pixel (word 1) while
+    /// the CPU waits, after the fence -- a late write.
+    #[cfg(all(feature = "test-knobs", feature = "gpu-vivante"))]
+    unsafe extern "C" fn gpu_lands_late(_us: u32) {
+        gpu_render(KICK_DIFF_TARGET.load(core::sync::atomic::Ordering::Relaxed) + 4, &[0x11, 0x22, 0x33, 0x44]);
+    }
+
+    /// gc_kick_diff_arm_target watches the memory glReadPixels reads, and
+    /// reads it the way glReadPixels does: through an invalidate. The mock's
+    /// CPU view is a cache (a GPU write is not seen until invalidated), so a
+    /// late write shows only if each read invalidates first; without that
+    /// both reads hit the same stale view and say "stable", whatever the GPU
+    /// did.
+    #[cfg(all(feature = "test-knobs", feature = "gpu-vivante"))]
+    #[test]
+    fn kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache() {
+        use crate::vivante::kick::diff::{gc_kick_diff_after_fence, gc_kick_diff_enable, gc_kick_diff_stats};
+
+        let gl = TestGl::new(4, 3);
+        let surf = gl.ctx().default_surface;
+        fill_rgba(&surf, 4, 4, 3);
+        /* control: the drawn frame is in the CPU's view once glReadPixels ran */
+        let before = read(0, 0, 4, 3);
+        assert!(before.iter().any(|b| *b != SENTINEL));
+        KICK_DIFF_TARGET.store(surf.gpu, core::sync::atomic::Ordering::Relaxed);
+
+        assert_eq!(gc_kick_diff_arm_target(2000, Some(gpu_lands_late)), 0);
+        assert_eq!(gc_kick_diff_after_fence(), 2, "the write that landed during the delay is seen");
+        assert_eq!(gc_kick_diff_after_fence(), 1, "the next first read already holds it");
+        let mut stats = [0u32; 3];
+        // SAFETY: three words.
+        unsafe { gc_kick_diff_stats(stats.as_mut_ptr()) };
+        assert_eq!(stats, [2, 1, 1], "checks, late, most words changed");
+
+        // SAFETY: a null pointer disarms.
+        unsafe { gc_kick_diff_enable(core::ptr::null(), 0, 0, 0, None) };
+        assert_eq!(gc_kick_diff_after_fence(), 0);
+        KICK_DIFF_TARGET.store(0, core::sync::atomic::Ordering::Relaxed);
     }
 }

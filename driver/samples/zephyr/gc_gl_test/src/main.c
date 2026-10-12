@@ -180,6 +180,8 @@ extern volatile int gl_test_check_no, gl_test_first_bad_check;
 extern const char *gl_test_skip;
 extern volatile uint32_t gl_test_first_bad_got, gl_test_first_bad_want;
 int gl_test_msaa_page(unsigned int tag, uint32_t *w);
+int gl_test_kick_diff_page(unsigned int tag, uint32_t *w);
+extern unsigned int gl_test_kick_diff_cases;
 
 /* A colour as six bits: the marker, then one bit per channel at half scale.
  * Enough to tell red from green from blue, which is what a texture or a mip
@@ -321,10 +323,61 @@ static int msaa_page_tag(void)
 	return sel - (int)GC_RESULT_PERF_SEL;
 }
 
+/*
+ * KICK_DIFF pages for cases 2 and 10 (#9, #25; gl_test.c, the block above
+ * gl_test_kick_diff_page; tools/cts/log/investigations/gc-kick-diff.md): the
+ * selector GC_RESULT_PERF_SEL | list << 8 | tag, tag 0xe0 | case (0xe2 case
+ * 2, 0xea case 10), arms the instrument for that case only and ends the run
+ * with its page as a PERF record, w0's low byte = the tag, instead of the
+ * run's usual record. `list` 0 runs the case alone; `list` k (1..15) runs
+ * entry k - 1 of CONFIG_GC_GL_TEST_SWEEP_LISTS, the run the selector
+ * GC_RESULT_SWEEP_SEL_LIST + k - 1 makes without the instrument: one image,
+ * the knob toggled by the selector alone, is the base arm and the KICK_DIFF
+ * arm. A selector outside 0x1000..0x1fff, a tag outside 0xe0..0xef, or a
+ * case this image does not run is not one (-1). *list gets `list`.
+ */
+static int kick_diff_tag(int *list)
+{
+	int sel = gc_result_selector();
+	int tag = sel & 0xff, c = tag & 0xf;
+
+	if (sel < 0 || (sel & ~0xfff) != (int)GC_RESULT_PERF_SEL || tag < 0xe0 || tag > 0xef) {
+		return -1;
+	}
+	*list = (sel >> 8) & 0xf;
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+	if (c < CONFIG_GC_GL_TEST_SWEEP_FIRST || c >= CONFIG_GC_GL_TEST_SWEEP_FIRST + GC_RESULT_SWEEP_CASES) {
+		return -1;
+	}
+#else
+	if (*list != 0 || CONFIG_GC_GL_TEST_CASE != c) {
+		return -1;
+	}
+#endif
+	return tag;
+}
+
 static void report_result(int rc)
 {
 	int the_case = CONFIG_GC_GL_TEST_CASE;
 	int page = msaa_page_tag();
+	int kd_list;
+	int kd_page = kick_diff_tag(&kd_list);
+
+	if (kd_page >= 0) {
+		uint32_t w[3];
+
+		if (gl_test_kick_diff_page((unsigned int)kd_page, w) == 0) {
+			LOG_INF("gc_gl_test: case %d KICK_DIFF page 0x%02x", kd_page & 0xf, kd_page);
+			gc_result_write_tag(GC_RESULT_PERF, (uint8_t)kd_page, w[0], w[1], w[2]);
+			return;
+		}
+		LOG_ERR("gc_gl_test: no KICK_DIFF page 0x%02x (case %d did not run)", kd_page,
+			kd_page & 0xf);
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+		return;   /* the sweep's own record stays the verdict */
+#endif
+	}
 
 	if (page >= 0) {
 		uint32_t w[3];
@@ -457,6 +510,18 @@ int main(void)
 				/* a case 16 probe page: case 16 alone, as its own index */
 				only = 16 - CONFIG_GC_GL_TEST_SWEEP_FIRST;
 			}
+			{
+				int kd_list, kd = kick_diff_tag(&kd_list);
+
+				if (kd >= 0) {
+					/* a KICK_DIFF page: that case alone, or a list */
+					gl_test_kick_diff_cases = 1u << (kd & 0xf);
+					only = kd_list == 0 ? (kd & 0xf) - CONFIG_GC_GL_TEST_SWEEP_FIRST
+							    : GC_RESULT_SWEEP_SEL_LIST + kd_list - 1;
+					LOG_INF("gc_gl_test: KICK_DIFF armed for case %d (list %d)",
+						kd & 0xf, kd_list);
+				}
+			}
 			if (only >= GC_RESULT_SWEEP_SEL_LIST) {
 				/* a list of the table, in its own order */
 				n = parse_list(only - GC_RESULT_SWEEP_SEL_LIST, list,
@@ -481,6 +546,14 @@ int main(void)
 			rc = gl_test_run(gl_test_set_list(list, n, NULL), 0, 0, 0, 0, 0, 0);
 		}
 #else
+		{
+			int kd_list, kd = kick_diff_tag(&kd_list);
+
+			if (kd >= 0) {
+				gl_test_kick_diff_cases = 1u << (kd & 0xf);
+				LOG_INF("gc_gl_test: KICK_DIFF armed for case %d", kd & 0xf);
+			}
+		}
 		rc = gl_test_run(CONFIG_GC_GL_TEST_CASE, 0, 0, 0, 0, 0, 0);
 #endif
 		s_stage = 2;
