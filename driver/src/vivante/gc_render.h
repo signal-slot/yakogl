@@ -259,11 +259,6 @@ void gc_render_pool_usage(size_t *live, size_t *bumped, size_t *total, size_t *d
  * i.e. between clients, which is what the chardev calls it for. */
 void gc_render_pool_reset(void);
 
-/* Turn the recovery off, so that a board run can measure the old behaviour
- * (a timeout leaves the GPU stopped) against the new one in a single module
- * load. There is no call to turn it on: recovering is the path. */
-void gc_render_recover_disable(bool off);
-
 /* A GC_WAIT_FOREVER wait that sees no fence retire for this long treats the GPU
  * as hung: stall dump, recovery, -ECANCELED. 0 = never (the old behaviour).
  * Wall-clock milliseconds. 5000 since the regression set ran with it on the

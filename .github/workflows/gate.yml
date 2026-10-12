@@ -40,11 +40,14 @@ on:
 permissions:
   contents: read
 
-# One run per commit; two runners can gate two commits at once. A pull
-# request's run is replaced by the next push to it.
+# A pull request's run is replaced by the next push to it, and main's run by
+# the next merge: only the newest main is the state of main, and it is the
+# run that writes the caches (on 2026-10-11 twelve merges queued twelve full
+# runs behind two runners, ten of them for a main that no longer existed).
+# The nightly and a dispatched run are one per commit and never cancelled.
 concurrency:
-  group: gate-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: gate-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'push' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   check:
