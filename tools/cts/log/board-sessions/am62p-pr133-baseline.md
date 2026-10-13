@@ -186,3 +186,19 @@ A baseline run of this image would compare against those numbers.
   this session**. Until one runs, its regression set can only be compared
   with the `32778b57` 48 / 48 row above, which mixes in drift since
   `32778b57`.
+
+## retry 2026-10-13: nothing ran
+
+- ssh to the leased verdin-am62p worked (`uname -a`: Linux aarch64,
+  6.6.138-7.6.1 Torizon).
+- The leased console is `usb-serial-1:35932` (connected, exclusive). The
+  marker `YK-PROBE-S2` was written to ttyS2 over ssh twice (both writes
+  returned 0). Nothing arrived on port 35932 (0 of 2, 0 bytes read).
+- Port 35933 (the expected A53 main_uart0): a single `nc` probe was denied
+  by the sandbox, so it was not tested. It was not retried.
+- No console address is verified, so `tools/board.sh` was not run. Nothing
+  ran; there is no verdict line, no recovery count and no record directory.
+- Still needed: lease `usb-serial-1` at port 35933, as in the handoff above.
+- Follow-up, same day: the approval requests for `ssh` and `nc` were
+  denied (nobody decided in time). A second single `nc` probe to port 35933
+  needed approval and was not run. No further retries.
