@@ -15,8 +15,8 @@ The pieces:
 | piece | what |
 |---|---|
 | `tools/cts/pi4-gles3-tree.txt` | the table: 91 images, every one of the 42,810 cases of `tools/cts/gles3-mustpass.txt` selected by exactly one `CONFIG_DEQP_CASE` line |
-| `tools/cts/check-gles3-tree.py` | proves that (`91 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`) and pins each `# image <LABEL>: <count>`; `check-deqp-images.py` runs it on both GLES3 tables, so `tools/board_selftest.sh` and the gate see a broken table |
-| `tools/cts/pi4-deqp-images.sh` with `DEQP_MODULE=gles3` | builds the images (`-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n`), checks each resolved `.config` with `check-deqp-images.py --config --gles3`; `--dry-run` lists the images and their arguments without any environment |
+| `tools/cts/check-gles3-tree.py` | proves that (`91 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`) and pins each `# image <LABEL>: <count>`; `check-deqp-images.py` (repo rule 6) and `cts-selftest.sh` check 19 run it on the three GLES3 tables (AM62P, Pi 4, i.MX8MP), so `tools/board_selftest.sh` and the gate see a broken table |
+| `tools/cts/pi4-deqp-images.sh` with `DEQP_MODULE=gles3` | builds the images (`-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n`), checks each resolved `.config` with `check-deqp-images.py --config --gles3`; `--dry-run` lists the images and their arguments without any environment. `tools/cts/images-selftest.sh` section 7 (run by `cts-selftest.sh` check 20, in the gate) pins both paths against a fake cmake/ninja: the gles2 dry run and build exactly as before (no module argument, the ES 2.0 check), the gles3 path's three arguments and `--gles3`, and the stage 1 check |
 | `driver/samples/zephyr/v3d_deqp` | takes `-DDEQP_MODULE=gles2|gles3` (default gles2, as before): the gles3 package, `tes3TestPackageEntry.cpp`, the gles3 test data; refuses a gles3 build whose configuration still reports ES 2.0 |
 | `tools/board.sh pi4 tree` | runs the table, one tryboot per image, resumable; `BOARD_MUSTPASS=<abs path>/tools/cts/gles3-mustpass.txt` makes its tally and diff read the GLES3 list (new in this item; unset, the GLES2 list as before) |
 | `tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt` | the tally over the records' consoles |
@@ -271,7 +271,9 @@ expected first-run outcome above), and after the last row the tally's
 
 `TREE_ROWS=0` is A1 (rows count from 0 in table order). The lines above
 were checked against `tools/board.sh` and `pi4-deqp-images.sh` at
-`eb911ac`, not run on the board.
+`eb911ac` and again at `c3f4820` (both dry runs, `check-gles3-tree.py` on
+the table, `tools/board_selftest.sh`, `cts-selftest.sh`), not run on the
+board.
 
 ## 5. The tally
 
