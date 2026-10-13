@@ -7393,7 +7393,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* blend variants are this GPU's */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the offline table's blend variants */
     fn a_fifth_blend_state_evicts_the_least_recently_used_variant() {
         let gl = Gl::new(16, 16);
         let fake = FakeVariants::install();
@@ -7466,6 +7466,7 @@ mod tests {
     /// a backend that compiles the winding in. Returns the key the draw asked
     /// the shader backend for (0 = it asked for none), read out of the log the
     /// miss leaves: no offline table here holds a variant of basic().
+    #[cfg(not(feature = "no-shader-table"))]
     fn front_facing_key(flip_y: bool, front_face: GLenum) -> u32 {
         let gl = Gl::new(16, 16);
         gl.backend_like_gc7000();
@@ -7495,6 +7496,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "no-shader-table"))] /* reads the table's "no variant" miss log; the online compiler makes the variant */
     fn a_compiled_in_winding_takes_a_variant_when_exactly_one_of_two_things_holds() {
         /* upstream 6c8044b: this GPU hands the fragment a raw 0.0/1.0 for
          * gl_FrontFacing and the comparison is compiled in, so there is one
@@ -7531,7 +7533,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* blends in the shader */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* a table row with no blend variant */
     fn blend_state_without_a_variant_refuses_the_draw_and_logs_once() {
         /* Drawn with the plain FS, the draw would be a picture of another
          * blend state (the PowerVR's subtract variants, 2026-09-24): refused,
@@ -7562,7 +7564,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* blends in the shader */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* a table row with no blend variant */
     fn a_refused_draw_leaves_its_pending_clear_for_the_next() {
         /* The glClear fused into a draw must not vanish with the draw. */
         let gl = Gl::new(16, 16);
@@ -7924,7 +7926,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu-powervr")] /* the PowerVR table's own values */
+    #[cfg(all(feature = "gpu-powervr", not(feature = "no-shader-table")))] /* the PowerVR table's own values */
     fn odd_sized_vs_block_pads_the_fs_block_to_16_bytes() {
         let gl = Gl::new(16, 16);
         /* femtovg main.vert: uniform vec2 viewSize (2 dwords) */
