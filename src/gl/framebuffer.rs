@@ -685,10 +685,14 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
             _ => return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
         }
     }
+    /* Depth and stencil images need not be the colour's size in ES 3.0
+     * (4.4.4.2 has no size rule; the back ends are told the depth size
+     * apart, `GlesDraw::ds_w`, and render the intersection): dEQP
+     * fbo.completeness.size.distinct. ES 2.0 requires one size. */
     if fb.depth.type_ != GL_NONE {
         match attachment_storage(c, &fb.depth) {
             Some(s) if is_depth_format(s.internalformat) => {
-                if any && (s.w != cw || s.h != ch) {
+                if crate::REPORT_ES2 && any && (s.w != cw || s.h != ch) {
                     return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS;
                 }
                 cw = s.w;
@@ -701,7 +705,7 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
     if fb.stencil.type_ != GL_NONE {
         match attachment_storage(c, &fb.stencil) {
             Some(s) if is_stencil_format(s.internalformat) => {
-                if any && (s.w != cw || s.h != ch) {
+                if crate::REPORT_ES2 && any && (s.w != cw || s.h != ch) {
                     return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS;
                 }
                 any = true;
@@ -718,12 +722,36 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
     if attached_samples(c, fb).is_none() {
         return GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE;
     }
+    /* ES 3.0 4.4.4.2: "the depth and stencil attachments, if present, are
+     * the same image" (GL_EXT_separate_depth_stencil, which would lift it,
+     * is not claimed), else GL_FRAMEBUFFER_UNSUPPORTED. Applied here only
+     * where colour attachment 0 is empty: that keeps the answer these
+     * framebuffers had while colour on 1.. alone was unsupported (dEQP
+     * attachment_combinations.none_*_{rbo_tex,tex_rbo}). With a colour 0 the
+     * rule is open, because unit tests of draw.rs and v3d/backend_tests.rs
+     * build ES 2.0-style separate depth and stencil renderbuffers on an
+     * ES 3.0 build: docs/handoff/20261014-es3-fbo-completeness.md. */
+    if !crate::REPORT_ES2
+        && fb.color.type_ == GL_NONE
+        && fb.depth.type_ != GL_NONE
+        && fb.stencil.type_ != GL_NONE
+        && (fb.depth.type_, fb.depth.name, fb.depth.level, fb.depth.layer)
+            != (fb.stencil.type_, fb.stencil.name, fb.stencil.level, fb.stencil.layer)
+    {
+        return GL_FRAMEBUFFER_UNSUPPORTED;
+    }
     /* No colour attachment 0. A framebuffer with no colour attachment at
      * all (glmark2's shadow pass) is the backend's question: complete where
      * it draws without one (backend::DEPTH_ONLY_TARGETS, which each backend
      * declares), GL_FRAMEBUFFER_UNSUPPORTED where it does not (ES 2.0 4.4.5).
-     * One with colour only on attachments 1.. stays unsupported. */
-    if fb.color.type_ == GL_NONE && !(crate::backend::DEPTH_ONLY_TARGETS && is_depth_stencil_only(fb)) {
+     * One with colour only on attachments 1.. stays unsupported in ES 2.0;
+     * ES 3.0 asks nothing of attachment 0 (4.4.4.2), so it is complete there
+     * (a draw into it still has no colour target, `target_loc`; the draw
+     * buffers that select attachments 1.. are the MRT item's). */
+    if fb.color.type_ == GL_NONE
+        && !(crate::backend::DEPTH_ONLY_TARGETS && is_depth_stencil_only(fb))
+        && (crate::REPORT_ES2 || !fb.color_n.iter().any(|a| a.type_ != GL_NONE))
+    {
         return GL_FRAMEBUFFER_UNSUPPORTED;
     }
     GL_FRAMEBUFFER_COMPLETE
@@ -4560,7 +4588,9 @@ mod tests {
         let rb = rb_with_storage(GL_DEPTH_COMPONENT16, 4, 8);
         attach_tex(GL_COLOR_ATTACHMENT0, tex);
         attach_rb(GL_DEPTH_ATTACHMENT, rb);
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+        /* ES 3.0 has no size rule (tests/es3_fbo_fragops.rs, size.distinct) */
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(status(), want);
     }
 
     #[test]
@@ -4571,7 +4601,8 @@ mod tests {
         let rb = rb_with_storage(GL_STENCIL_INDEX8, 2, 4);
         attach_tex(GL_COLOR_ATTACHMENT0, tex);
         attach_rb(GL_STENCIL_ATTACHMENT, rb);
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(status(), want);
     }
 
     #[test]
@@ -4582,7 +4613,10 @@ mod tests {
         let stencil = rb_with_storage(GL_STENCIL_INDEX8, 8, 8);
         attach_rb(GL_DEPTH_ATTACHMENT, depth);
         attach_rb(GL_STENCIL_ATTACHMENT, stencil);
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+        /* ES 3.0 has no size rule, but with no colour 0 two images on depth
+         * and stencil are unsupported there */
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS } else { GL_FRAMEBUFFER_UNSUPPORTED };
+        assert_eq!(status(), want);
     }
 
     /// The status of a depth-only framebuffer: complete where the backend
@@ -4614,7 +4648,8 @@ mod tests {
         unsafe {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
         }
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(status(), want);
     }
 
     /* ---- colour attachments 1.. (ES 2.0.25 4.4.5, ES 3.0.6 4.4.4) ------------------ */
@@ -4674,13 +4709,16 @@ mod tests {
     /// Attachment 1 alone, attachment 0 empty: an image is attached, so not
     /// INCOMPLETE_MISSING_ATTACHMENT (which it read while attachment 1 went
     /// unchecked); every render writes attachment 0 here, so UNSUPPORTED, the
-    /// implementation-dependent restriction ES 2.0 4.4.5 allows.
+    /// implementation-dependent restriction ES 2.0 4.4.5 allows. ES 3.0 4.4.4.2
+    /// asks nothing of attachment 0: complete (dEQP
+    /// fbo.completeness.attachment_combinations.none_tex_*).
     #[test]
     fn status_colour_attachment_1_alone_is_unsupported() {
         let _gl = TestGl::new(8, 8);
         bound_fb();
         attach_tex(GL_COLOR_ATTACHMENT1, tex_with_storage(4, 4));
-        assert_eq!(status(), GL_FRAMEBUFFER_UNSUPPORTED);
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_UNSUPPORTED } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(status(), want);
     }
 
     /* ---- deleting attached objects ----------------------------------------------- */
@@ -7431,10 +7469,12 @@ mod tests {
         let want =
             if crate::backend::DEPTH_ONLY_TARGETS { GL_FRAMEBUFFER_COMPLETE } else { GL_FRAMEBUFFER_UNSUPPORTED };
         assert_eq!(status(), want);
-        /* another size is another size, texture or not */
+        /* another size is another size, texture or not (ES 2.0 4.4.5; ES 3.0
+         * has no size rule) */
         attach_tex(GL_COLOR_ATTACHMENT0, colour);
         attach_tex(GL_STENCIL_ATTACHMENT, depth_tex(GL_DEPTH_STENCIL, 4, 4));
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+        let want = if crate::REPORT_ES2 { GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(status(), want);
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
