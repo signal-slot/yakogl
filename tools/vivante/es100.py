@@ -109,10 +109,16 @@ def _resolve_size(tok, defines):
     """An array size token: a literal, or a #define'd integer macro."""
     if tok is None:
         return None
+    tok = tok.strip()
     if tok.isdigit():
         return int(tok)
     if tok in defines:
         return defines[tok]
+    if "+" in tok:
+        # A constant sum such as dEQP's `u_lights[NUM_DIR + NUM_OMNI]`
+        # (es100/light_amount_*.vert writes the operands out): each term is
+        # itself a literal or a #define'd integer.
+        return sum(_resolve_size(t, defines) for t in tok.split("+"))
     raise SystemExit("glsl2usc: array size '%s' is not an integer literal or a "
                      "#define'd integer" % tok)
 

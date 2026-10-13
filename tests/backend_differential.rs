@@ -437,9 +437,12 @@ fn the_back_end_computes_what_the_ir_says() {
     let es2 = cfg!(feature = "report-es2");
     /* +1 in the ES 3.00 build (2026-10-04): imod.frag, `%` through
      * builtins::imod, agrees (a mutation swapping its select arms differs). */
+    /* 2026-10-12 (issue #22): 220 rows appended to the GC7000 table
+     * (tools/vivante/README.md, "The table against its sources"); every
+     * compared one agrees. */
     assert_eq!(
         agreed + differed,
-        if es2 { 141 } else { 232 },
+        if es2 { 244 } else { 347 },
         "the compared population moved ({agreed} agree, {differed} differ)"
     );
     /* +18 with the cube level/bias arm (f3eeea0): the Quick 3D sources it lets
@@ -455,7 +458,9 @@ fn the_back_end_computes_what_the_ir_says() {
      * GC7000 now selects (see above): textures (texelFetch, 3D and array
      * look-ups), derivatives, gl_VertexID and gl_InstanceID, none of which
      * the evaluator models or this harness supplies. */
-    assert_eq!(skipped, if es2 { 28 } else { 104 }, "the skipped population moved: {skips:?}");
+    /* 2026-10-12 (issue #22): the appended rows skipped for the same
+     * reasons. */
+    assert_eq!(skipped, if es2 { 126 } else { 209 }, "the skipped population moved: {skips:?}");
     assert!(bad.is_empty(), "{} programs compute something other than their IR", bad.len());
 }
 

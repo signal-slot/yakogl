@@ -406,8 +406,11 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
      * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
      * dsy (SRC2) and `%` (builtins::imod), so more table sources get
      * through; one more loops, none clobbers. */
-    assert_eq!(checked, if es2 { 151 } else { 316 }, "the population moved: {checked} programs reached the check");
-    assert_eq!(looped, if es2 { 7 } else { 13 }, "the loop population moved: {looped} programs with a back edge");
+    /* 2026-10-12 (issue #22): 220 rows appended to the GC7000 table
+     * (tools/vivante/README.md, "The table against its sources"); none
+     * clobbers. */
+    assert_eq!(checked, if es2 { 352 } else { 536 }, "the population moved: {checked} programs reached the check");
+    assert_eq!(looped, if es2 { 29 } else { 39 }, "the loop population moved: {looped} programs with a back edge");
     assert!(bad.is_empty(), "{} programs overwrite a live register", bad.len());
 }
 

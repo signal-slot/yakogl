@@ -79,6 +79,14 @@ fn no_selected_instruction_reads_a_lane_nothing_writes() {
                 source_undefined += 1;
                 continue;
             }
+            /* Also the source's own: dEQP's vector_subscript case
+             * (es100/dynidx.frag) declares `tmp` with no initialiser and
+             * writes it lane by lane at run-time indices, so the select that
+             * merges the writes reads the lanes none of them reached. */
+            if name == "dynidx.frag" {
+                source_undefined += 1;
+                continue;
+            }
             bad.push(format!(
                 "{name}: instruction {i} ({}) source {n} reads lanes {lanes:#06b} nothing writes; dst {:?}",
                 sel.instrs[i].op.op().name,
@@ -111,7 +119,13 @@ fn no_selected_instruction_reads_a_lane_nothing_writes() {
      * gl_VertexID, texelFetch / textureSize / 3D and array look-ups, dsx and
      * dsy (SRC2) and `%` (builtins::imod), so more table sources get
      * through; 0 undefined reads among them. */
-    assert_eq!(checked, if es2 { 165 } else { 331 }, "the population moved: {checked} programs selected");
-    assert_eq!(source_undefined, 1, "the one source-level undefined lane (imageparticle_tabled's tt.y) moved");
+    /* 2026-10-12 (issue #22): 220 rows appended to the GC7000 table
+     * (tools/vivante/README.md, "The table against its sources"); one of
+     * them, es100/dynidx.frag, is undefined in its own text. */
+    assert_eq!(checked, if es2 { 366 } else { 551 }, "the population moved: {checked} programs selected");
+    assert_eq!(
+        source_undefined, 2,
+        "the source-level undefined lanes (imageparticle_tabled's tt.y, dynidx.frag's tmp) moved"
+    );
     assert!(bad.is_empty(), "{} reads of lanes nothing computes", bad.len());
 }

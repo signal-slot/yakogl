@@ -449,13 +449,13 @@ mod builder_default_audit {
          * would turn this into a clean invariant and hide the fact that the
          * builder has to special-case them -- which is how the rebuild test
          * caught this the moment the default moved. */
-        ("PMODE", 1, Expect::MajorityWith(1, "`nop`, whose whole encoding is zero", 16)),
+        ("PMODE", 1, Expect::MajorityWith(1, "`nop`, whose whole encoding is zero", 34)),
         ("SKPHP", 0, Expect::Invariant(0)),
         ("UNK", 0, Expect::Invariant(0)),
         ("DST_FULL", 0, Expect::Invariant(0)),
         ("LOW_HALF", 0, Expect::Invariant(0)),
         ("HIGH_HALF", 0, Expect::Invariant(0)),
-        ("RMODE", 0, Expect::MajorityWith(0, "the transcendentals, which Mesa rounds toward zero", 83)),
+        ("RMODE", 0, Expect::MajorityWith(0, "the transcendentals, which Mesa rounds toward zero", 100)),
     ];
 
     /// Value counts per field over EVERY corpus instruction, nops included.
@@ -463,7 +463,7 @@ mod builder_default_audit {
     /// Nothing is excluded. An earlier version dropped the all-zero nops, and
     /// that exclusion was doing real work: it turned PMODE into a clean
     /// invariant and hid the fact that `nop` genuinely carries 0. The nops are
-    /// counted and returned so a reader can see there are sixteen of them.
+    /// counted and returned so a reader can see there are thirty-four of them.
     fn distributions() -> (BTreeMap<&'static str, BTreeMap<u32, usize>>, usize) {
         let mut out: BTreeMap<&'static str, BTreeMap<u32, usize>> = BTreeMap::new();
         let mut nops = 0usize;
@@ -487,7 +487,7 @@ mod builder_default_audit {
     #[test]
     fn every_builder_default_matches_the_corpus() {
         let (dist, nops) = distributions();
-        assert_eq!(nops, 16, "the corpus's nop count is what PMODE's exception count must match");
+        assert_eq!(nops, 34, "the corpus's nop count is what PMODE's exception count must match");
         let mut wrong: Vec<String> = Vec::new();
 
         for (name, default, expect) in DEFAULTS {

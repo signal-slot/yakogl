@@ -279,6 +279,7 @@ MAX_ATTRIBS = 16
 VERT_ATTRIB_GENERIC0 = 15
 VARYING_SLOT_POS = 0
 VARYING_SLOT_PSIZ = 6
+VARYING_SLOT_PNTC = 25
 VARYING_SLOT_VAR0 = 32
 
 # nir's enum glsl_interp_mode -> the hardware's VARYING_INTERPOLATION_MODE_*
@@ -496,6 +497,11 @@ def reflect(path, text=None, sha_text=None):
     for m in DECL_OUT.finditer(translated):
         out_names[VARYING_SLOT_VAR0 + int(m.group(1))] = m.group(3)
     in_types = {int(m.group(1)): m.group(2) for m in DECL_IN.finditer(translated)}
+    if not vs:
+        # etna_shc makes gl_PointCoord a fragment input at VARYING_SLOT_PNTC
+        # (as the GL state tracker does). The link and the driver find that
+        # row by this name (SHC_VIV_POINT_COORD), not by a vertex output.
+        in_names[VARYING_SLOT_PNTC] = "gl_PointCoord"
 
     sh = {"name": os.path.relpath(path, SHADERS), "stage": stage,
           "code": [int(w, 16) for w in js["code"]], "temps": js["num_temps"],
@@ -972,9 +978,24 @@ def append_rows(old_text, shaders):
     return text
 
 
+def front_flipped(p, sh):
+    """The second binary of a fragment shader that reads gl_FrontFacing:
+    compiled from the source with the sense negated and keyed under the
+    ORIGINAL source's sha256, so the runtime finds it from the shader the
+    application actually compiled."""
+    text = open(p).read()
+    var = reflect(p, text.replace(READS_FRONT_FACING, "(!%s)" % READS_FRONT_FACING),
+                  sha_text=text)
+    var["key"] = KEY_FRONT_FLIPPED
+    var["name"] = sh["name"] + " @front_cw"
+    return var
+
+
 def main_append(rels):
     """`--append <path under tools/shaders>...`: compile those shaders and add
-    them to the committed table (append_rows), refusing any already in it."""
+    them to the committed table (append_rows), refusing any already in it.
+    A fragment shader that reads gl_FrontFacing brings its second row
+    (front_flipped) right after its first, as a full run places it."""
     with open(OUT_TABLE) as f:
         old_text = f.read()
     shaders = []
@@ -982,14 +1003,14 @@ def main_append(rels):
         p = os.path.join(SHADERS, rel)
         try:
             sh = reflect(p)
+            two = [sh]
+            if sh["stage"] == "fs" and sh["reads_front_facing"]:
+                two.append(front_flipped(p, sh))
         except (Fail, SystemExit) as e:
             raise SystemExit("gen_shader_table --append: %s did not compile: %s" % (rel, e))
-        if sh["stage"] == "fs" and sh["reads_front_facing"]:
-            raise SystemExit("gen_shader_table --append: %s reads gl_FrontFacing (two rows); "
-                             "regenerate the table instead" % rel)
         if ('name: "%s\\0"' % sh["name"]) in old_text:
             raise SystemExit("gen_shader_table --append: %s is already in the table" % rel)
-        shaders.append(sh)
+        shaders += two
     new_text = append_rows(old_text, shaders)
     same, changed, added, removed = rows_that_change(old_text, new_text)
     if changed or removed or len(added) != len(shaders):
@@ -999,6 +1020,20 @@ def main_append(rels):
         f.write(new_text)
     print("kept %d committed rows byte for byte, appended %d" % (len(same), len(added)))
     return 0
+
+
+def replace_source_entry(text, index, sh):
+    """`text` with the index-th ShcSource entry holding `sh`'s current source."""
+    at = text.index("pub static SHC_SOURCE_TABLE")
+    entries = list(re.finditer(r"    ShcSource \{\n        name: \"(.*?)\",\n        text: concat!\(\n.*?\n        \),\n    \},",
+                               text[at:], re.S))
+    if index >= len(entries) or entries[index].group(1) != os.path.basename(sh["name"]):
+        raise SystemExit("gen_shader_table --replace: %s: source entry %d is not %s"
+                         % (sh["name"], index, os.path.basename(sh["name"])))
+    m = entries[index]
+    entry = ("    ShcSource {\n        name: \"%s\",\n        text: concat!(\n%s\n        ),\n    },"
+             % (os.path.basename(sh["name"]), rs_string(sh["text"], " " * 12)))
+    return text[:at + m.start()] + entry + text[at + m.end():]
 
 
 def replace_rows(old_text, shaders):
@@ -1026,8 +1061,21 @@ def replace_rows(old_text, shaders):
         head, sep, _ = row.group(1).partition("\n        shader: ShcShader {\n")
         if not sep:
             raise SystemExit("gen_shader_table --replace: %s: the row has no ShcShader body" % sh["name"])
+        # The row is found by its name, so the source it was compiled from may
+        # have changed since: the key (sha256 of the text the application
+        # passes) and the stored text follow the file, or the runtime would
+        # look up a digest nobody computes any more (es300/texsize.frag, whose
+        # precision line was added after its row).
+        head, n_sha = re.subn(r"(        sha256: \[)[^\]]*(\],)",
+                              lambda m: m.group(1) + ", ".join("0x%02x" % b for b in sh["sha256"]) + m.group(2),
+                              head, count=1)
+        if n_sha != 1:
+            raise SystemExit("gen_shader_table --replace: %s: the row has no sha256 line" % sh["name"])
         new_row = "    ShcBlob {\n" + head + sep + body + "\n        },\n    },"
+        # the source table runs in the blob table's order (emit_table, append_rows)
+        index = sum(1 for m in ROW_RE.finditer(text) if m.start() < row.start())
         text = text[:row.start()] + new_row + text[row.end():]
+        text = replace_source_entry(text, index, sh)
         # the old arrays of that number, then the new ones where CODE was
         sym = re.compile(r"static (?:CODE|CC|CD|UNI)_%s: \[[^\]]*\] = \[.*?\n\];\n\n?" % tag, re.S)
         olds = list(sym.finditer(text))
@@ -1131,23 +1179,14 @@ def main():
             # shader left out, as README.md says, not the end of the table.
             failed.append((os.path.relpath(p, SHADERS), str(e)))
             continue
-        # A fragment shader that reads gl_FrontFacing gets its second binary,
-        # compiled from the source with the sense negated and keyed under the
-        # ORIGINAL source's sha256, so the runtime finds it from the shader the
-        # application actually compiled.
+        # A fragment shader that reads gl_FrontFacing gets its second binary.
         if sh["stage"] == "fs" and sh["reads_front_facing"]:
-            text = open(p).read()
             try:
-                var = reflect(p, text.replace(READS_FRONT_FACING,
-                                              "(!%s)" % READS_FRONT_FACING),
-                              sha_text=text)
+                shaders.append(front_flipped(p, sh))
             except Fail as e:
                 failed.append((os.path.relpath(p, SHADERS),
                                "front-facing variant: %s" % e))
                 continue
-            var["key"] = KEY_FRONT_FLIPPED
-            var["name"] = sh["name"] + " @front_cw"
-            shaders.append(var)
     for rel, why in failed:
         print("FAIL %-52s %s" % (rel, why))
 

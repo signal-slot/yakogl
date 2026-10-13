@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Every branch the online compiler emits reads its condition through one
-//! lane, splatted -- the only form in the reference table (208 of 208
-//! `branch_unary`). Any other swizzle makes lanes nobody computed part of the
+//! lane, splatted -- the only form in the reference table (every
+//! `branch_unary` in it). Any other swizzle makes lanes nobody computed part of the
 //! test.
 //!
 //! Over the whole corpus plus the gl_test shapes that branch, on the bytes the

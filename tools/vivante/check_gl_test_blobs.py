@@ -112,6 +112,56 @@ def empty_rows(path):
     return out
 
 
+# gl_test sources in a gc7000 directory that etna_shc refuses, each with the
+# message it gives (tools/vivante/README.md, "The 168 refused sources"). Only
+# these are gl_test sources; the other 165 refusals are not in the headers.
+# Matched by the file's SHA-256, so an edited source is checked afresh, and a
+# listed source that gains a row fails the check until it is dropped here.
+LAYOUT = ("layout check: a run-time uniform index reads block dword 4 or 1 "
+          "where Mesa's offsets point at 16 or 4")
+GC7000_REFUSED = {
+    "es100/uniidx_a.frag": LAYOUT,
+    "es100/uniidx_b.frag": LAYOUT,
+    "es100/uniidx_c.frag": LAYOUT,
+}
+
+
+def refused_digests():
+    """sha256 of each GC7000_REFUSED file -> its path under tools/shaders."""
+    out = {}
+    for rel in GC7000_REFUSED:
+        path = os.path.join(REPO, "tools", "shaders", rel)
+        if os.path.exists(path):
+            out[hashlib.sha256(open(path, "rb").read()).hexdigest()] = rel
+        else:
+            print("    REFUSED BUT ABSENT  tools/shaders/%s -- drop it from GC7000_REFUSED" % rel)
+    return out
+
+
+def list_roles():
+    """dir -> its role in tools/shaders/precompiled.list (`dir NAME ROLE`)."""
+    out = {}
+    for line in open(os.path.join(REPO, "tools", "shaders", "precompiled.list")):
+        f = line.split("#", 1)[0].split()
+        if len(f) == 3 and f[0] == "dir":
+            out[f[1] if f[1] != "." else ""] = f[2]
+    return out
+
+
+def shader_dirs():
+    """sha256 of a file under tools/shaders -> the directories holding it."""
+    root = os.path.join(REPO, "tools", "shaders")
+    out = {}
+    for d, _, files in os.walk(root):
+        rel = os.path.relpath(d, root)
+        rel = "" if rel == "." else rel
+        for f in files:
+            if f.endswith((".vert", ".frag")):
+                digest = hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest()
+                out.setdefault(digest, set()).add(rel)
+    return out
+
+
 def glsl2usc_inputs():
     """The sources glsl2usc.sh compiles: the `src` lines of the source list
     (tools/shaders/precompiled.list; a glob in a file name expands in byte
@@ -186,6 +236,14 @@ def main():
     print("table %s: %d rows" % (os.path.relpath(args.table, REPO), len(have)))
 
     rc = 0
+    roles, dirs_of = list_roles(), shader_dirs()
+    refused = refused_digests()
+    if len(refused) != len(GC7000_REFUSED):
+        rc = 1
+    for d, rel in sorted(refused.items(), key=lambda kv: kv[1]):
+        if d in have:
+            print("    NOW HAS A ROW  tools/shaders/%s -- drop it from GC7000_REFUSED" % rel)
+            rc = 1
     for h in HEADERS:
         if not os.path.exists(h):
             print("MISSING HEADER %s" % os.path.relpath(h, REPO))
@@ -196,12 +254,35 @@ def main():
             print("no shaders parsed out of %s" % os.path.relpath(h, REPO), file=sys.stderr)
             return 2
         digests = {n: hashlib.sha256(t.encode()).hexdigest() for n, t in srcs.items()}
-        missing = sorted(n for n, d in digests.items() if d not in have)
+        absent = sorted(n for n, d in digests.items() if d not in have)
+        # A source that lives only in a directory the list gives no gc7000 role
+        # (gltest/, offarm/) has no GC7000 row by the list's own decision. That
+        # is an open item or a PowerVR-only series, not a table that lags the
+        # sources: reported on its own line, and not a failure.
+        missing, by_list, by_compiler = [], [], []
+        for n in absent:
+            dirs = dirs_of.get(digests[n], set())
+            if digests[n] in refused:
+                by_compiler.append((n, refused[digests[n]]))
+            elif dirs and not any(roles.get(x) == "gc7000" for x in dirs):
+                by_list.append((n, sorted(dirs)))
+            else:
+                missing.append(n)
         empties = sorted(n for n, d in digests.items() if d in blank)
-        print("%-32s %3d shaders, %d without a row, %d with an empty program"
-              % (os.path.basename(h), len(srcs), len(missing), len(empties)))
+        print("%-32s %3d shaders, %d without a row, %d with an empty program, "
+              "%d left out by the source list, %d refused by the compiler"
+              % (os.path.basename(h), len(srcs), len(missing), len(empties), len(by_list),
+                 len(by_compiler)))
         for n in missing:
             print("    NO ROW  %s" % n)
+        per_dir = {}
+        for n, dirs in by_list:
+            per_dir.setdefault(", ".join(dirs), []).append(n)
+        for d, names in sorted(per_dir.items()):
+            print("    LISTED OUT  %3d from tools/shaders/%s/ (no gc7000 role), e.g. %s"
+                  % (len(names), d, names[0]))
+        for n, rel in by_compiler:
+            print("    REFUSED %s  (tools/shaders/%s: %s)" % (n, rel, GC7000_REFUSED[rel]))
         for n in empties:
             print("    EMPTY   %s  (pass-through: one nop, no ALU work needed)" % n)
         if missing:

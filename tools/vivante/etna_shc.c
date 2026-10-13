@@ -150,6 +150,25 @@ int main(int argc, char **argv)
 	/* what the GL state tracker does before the driver (st_glsl_to_nir.cpp):
 	 * system values become intrinsics (etnaviv reads load_frag_coord, not a
 	 * gl_FragCoord variable) and texelFetch on a plain 2D texture stays txf */
+	/* gl_PointCoord is a fragment INPUT at VARYING_SLOT_PNTC to the GL state
+	 * tracker, and etnaviv reads it as one (etnaviv_compiler_nir.c, the
+	 * VARYING_SLOT_PNTC case). SPIR-V says it is a system value, and
+	 * nir_lower_system_values would make it a load_point_coord intrinsic the
+	 * driver has no emitter for: the liveness pass then asserts on a source
+	 * that was never defined. So make the variable the input it is. */
+	if (stage == MESA_SHADER_FRAGMENT) {
+		bool moved = false;
+
+		nir_foreach_variable_with_modes(var, nir, nir_var_system_value) {
+			if (var->data.location != SYSTEM_VALUE_POINT_COORD)
+				continue;
+			var->data.mode = nir_var_shader_in;
+			var->data.location = VARYING_SLOT_PNTC;
+			moved = true;
+		}
+		if (moved)
+			nir_fixup_deref_modes(nir);
+	}
 	NIR_PASS(_, nir, nir_lower_system_values);
 	/* the tail of gl_nir_opts (gl_nir_linker.c): flrp is lowered by the frontend,
 	 * not by the driver (etnaviv sets lower_flrp32 and has no flrp emitter) */
@@ -159,6 +178,12 @@ int main(int argc, char **argv)
 		struct nir_lower_tex_options tex_opts = { .lower_rect = true };
 		NIR_PASS(_, nir, nir_lower_tex, &tex_opts);
 	}
+	/* A matrix or array varying is one variable over several slots. The GL
+	 * linker hands the driver one variable per element (gl_nir_linker.c and
+	 * the state tracker run this lowering); etnaviv's output list does not
+	 * cope with the wide one -- a mat2 varying came out as two registers
+	 * with slot 21905 and no components -- so split them the same way. */
+	NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects, false);
 	/*
 	 * The driver asserts that a FRAGMENT shader's input variables carry
 	 * driver_locations 0..n-1 with no gaps: it removes the dead ones
