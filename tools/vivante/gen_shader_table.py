@@ -1115,7 +1115,15 @@ def main_replace(rels):
     new_text = replace_rows(old_text, shaders)
     same, changed, added, removed = rows_that_change(old_text, new_text)
     want = sorted(sh["name"] for sh in shaders)
-    if added or removed or sorted(changed) != want:
+    if not (changed or added or removed):
+        # The toolchain remakes the committed rows byte for byte. Writing would
+        # only add a header that names a toolchain which changed nothing.
+        print("all %d asked rows already match the committed table; not written: %s"
+              % (len(want), ", ".join(want)))
+        return 0
+    # An asked row that came out the same is not another row; only a change
+    # outside `want` is.
+    if added or removed or not set(changed) <= set(want):
         raise SystemExit("gen_shader_table --replace: the splice changed other rows "
                          "(changed %s, added %s, removed %s; asked for %s)" % (changed, added, removed, want))
     with open(OUT_TABLE, "w") as f:

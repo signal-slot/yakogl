@@ -182,8 +182,17 @@ int main(int argc, char **argv)
 	 * linker hands the driver one variable per element (gl_nir_linker.c and
 	 * the state tracker run this lowering); etnaviv's output list does not
 	 * cope with the wide one -- a mat2 varying came out as two registers
-	 * with slot 21905 and no components -- so split them the same way. */
-	NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects, false);
+	 * with slot 21905 and no components -- so split them the same way.
+	 *
+	 * Not the vertex shader's inputs, though: those are the attributes, and
+	 * the pass would turn a matrix attribute into one input per column at
+	 * location + k. The table keeps a matrix attribute as one input with its
+	 * columns in vi_reg + k, which is what src/vivante/shader.rs binds, and
+	 * a column at a location no declaration names cannot be reflected (the
+	 * matattr rows, issue #22). Mesa's PowerVR compiler makes the same
+	 * choice (pco_nir.c: outputs_only for MESA_SHADER_VERTEX). */
+	NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects,
+	         stage == MESA_SHADER_VERTEX);
 	/*
 	 * The driver asserts that a FRAGMENT shader's input variables carry
 	 * driver_locations 0..n-1 with no gaps: it removes the dead ones
