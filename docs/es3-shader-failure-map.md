@@ -28,8 +28,8 @@ history (squashed), so no code is cited at it. Abbreviations for sources:
   HOST-ONLY: compile/link verdicts at `008b4652`, GC back end, no pixels.
 - **COV**: `docs/es3-shaderc-coverage.md`, the per-`.test`-file compile/link
   table at 3f78982e (2026-10-08, after the run). PowerVR table at lines 59-84.
-- **dEQP**: `$CCFARM_DEPS_DIR/VK_GL_CTS/modules/gles3/functional/` (pinned
-  93bca01). **data**: `$CCFARM_DEPS_DIR/VK_GL_CTS/data/gles3/shaders/`.
+- **dEQP**: `$CCFARM_DEPS_DIR/VK-GL-CTS/modules/gles3/functional/` (pinned
+  93bca01). **data**: `$CCFARM_DEPS_DIR/VK-GL-CTS/data/gles3/shaders/`.
   Group registration: `es3fFunctionalTests.cpp:188-234`. The `.test` groups
   are loaded by `ShaderLibraryTest` (`:153-170`, file `shaders/<name>.test`).
 
@@ -86,7 +86,7 @@ the subgroups that share image k. Bucket messages are quoted from R-bucket.
 | constants | 143 | unknown; ≤ 225 together with the other img 8 subgroups except derivate (img 8: 328 − 103; `:1559`) | none of the 16 names it | L `constants.test` | unknown; COV `:64` 0 refused | `tests/es3_shaderc_corpus.rs` |
 | conversions | 1,156 | unknown (img 8 bound) | none of the 16 | L `conversions.test` | unknown on the AM62P (COV `:65`: 0 refused on PowerVR; on V3D 108 refused, COV `:103`, `:137`) | `tests/es3_shaderc_corpus.rs` |
 | declarations | 50 | unknown (img 8 bound) | none of the 16 | L `declarations.test` | unknown; COV `:66` all expected refusals refused | `tests/es3_shaderc_corpus.rs` |
-| derivate | 282 | **≥ 103** (`:1516`). ≤ 328 (img 8) | "checkFramebufferStatus == COMPLETE (es3fShaderDerivateTests)" (`:1516`); also among "Fail (no message)" 133 (`:1515`, share unknown) | G `es3fShaderDerivateTests.cpp` | **missing GL API**: the `fbo_float` surface renders into an RGBA32UI FBO (es3fShaderDerivateTests.cpp:92, `:732`, check at `:757`/`:880`), the same integer render-target gap. The `fbo` surface uses RGBA32F/RGBA16F (`:1411`). Example: `derivate.dfdx.fbo_float.float_mediump`. R-host `:1989` also lists "derivatives 282" among compile refusals at 008b4652 (HOST-ONLY; it is not known whether `396d667a` refused them) | host-deqp-run.sh `derivate` (the FBO status is an API verdict); `tests/es3_int_rt.rs` for the RGBA32UI completeness |
+| derivate | 282 | **≥ 103** (`:1516`). ≤ 328 (img 8) | "checkFramebufferStatus == COMPLETE (es3fShaderDerivateTests)" (`:1516`); also among "Fail (no message)" 133 (`:1515`, share unknown) | G `es3fShaderDerivateTests.cpp` | **missing GL API**: the `fbo_float` surface renders into an RGBA32UI FBO (es3fShaderDerivateTests.cpp:92, `:732`, check at `:757`/`:880`), the same integer render-target gap. The `fbo` surface uses RGBA32F/RGBA16F (`:1411`). Only 48 of the 282 cases are `fbo_float`, so at least 55 of the 103 come from the other surfaces (R-bucket says "float render targets"). Example: `derivate.dfdx.fbo_float.float_mediump`. R-host `:1989` also lists "derivatives 282" among compile refusals at 008b4652 (HOST-ONLY; it is not known whether `396d667a` refused them) | host-deqp-run.sh `derivate` (the FBO status is an API verdict); `tests/es3_int_rt.rs` for the RGBA32UI completeness |
 | discard | 25 | unknown (img 8 bound) | none of the 16 | G `es3fShaderDiscardTests.cpp` | unknown | host-deqp-run.sh `discard` (compile part only) |
 | fragdata | 7 | unknown (img 8 bound) | none of the 16 | G `es3fShaderFragDataTests.cpp` (`valid_*`, 3) + L `fragdata.test` (4, loaded at `es3fShaderFragDataTests.cpp:372`) | unknown. `gl_MaxDrawBuffers` 1 bears on the `valid_*_index` cases (STATUS `:16` for the ES2 analogue). COV `:67`: the 4 `.test` cases refused as expected | host-deqp-run.sh `fragdata` |
 | fragdepth | 17 | unknown (img 8 bound) | none of the 16 | G `es3fFragDepthTests.cpp` | unknown | host-deqp-run.sh `fragdepth` (compile part only) |
