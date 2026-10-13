@@ -1240,8 +1240,8 @@ pub(super) fn const_int_expr(ast: &Ast<'_>, e: ExprId) -> Option<i64> {
 /// - ES 3.00 section 7.3 drops `gl_MaxVaryingVectors` and adds
 ///   `gl_MaxVertexOutputVectors`, `gl_MaxFragmentInputVectors` and the texel
 ///   offset range; its `gl_MaxDrawBuffers` is `GL_MAX_DRAW_BUFFERS`, the
-///   per-GPU `MAX_DRAW_BUFFERS` (1 on the GC7000, 3 on the PowerVR and the
-///   V3D -- all below ES 3.0's minimum of 4; see RESULTS.md's gap list).
+///   back end's `max_draw_buffers()` (`backend::draw_targets`: 3 on every
+///   GPU today, below ES 3.0's minimum of 4; see RESULTS.md's gap list).
 pub fn builtin_constant(name: &str, es3: bool) -> Option<i64> {
     use crate::gl::context::{
         CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_FRAGMENT_UNIFORM_VECTORS, MAX_VARYING_VECTORS,
@@ -1259,7 +1259,7 @@ pub fn builtin_constant(name: &str, es3: bool) -> Option<i64> {
         /* Section 7.3 defines them from the component limits. */
         "gl_MaxVertexOutputVectors" if es3 => (crate::gl::context::MAX_VERTEX_OUTPUT_COMPONENTS / 4) as i64,
         "gl_MaxFragmentInputVectors" if es3 => (crate::gl::context::MAX_FRAGMENT_INPUT_COMPONENTS / 4) as i64,
-        "gl_MaxDrawBuffers" => crate::gl::context::MAX_DRAW_BUFFERS as i64,
+        "gl_MaxDrawBuffers" => crate::gl::context::max_draw_buffers() as i64,
         "gl_MinProgramTexelOffset" if es3 => crate::gl::context::MIN_PROGRAM_TEXEL_OFFSET as i64,
         "gl_MaxProgramTexelOffset" if es3 => crate::gl::context::MAX_PROGRAM_TEXEL_OFFSET as i64,
         _ => return None,

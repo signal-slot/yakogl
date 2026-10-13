@@ -1497,6 +1497,9 @@ unsafe fn reset_library_statics() {
         /* a test that stood in for a back end rendering the sRGB class */
         #[cfg(feature = "host-test")]
         crate::backend::HOST_SRGB_RT.store(false, core::sync::atomic::Ordering::Relaxed);
+        /* a test that stood in for a back end drawing more colour targets */
+        #[cfg(feature = "host-test")]
+        crate::backend::HOST_DRAW_TARGETS.store(0, core::sync::atomic::Ordering::Relaxed);
         set_thread_ids(true); /* the owner itself is in context::reset_for_tests */
         /* the narrow luminance/alpha switch: PowerVR tests start from the
          * expanded store and the narrow ones turn it on (the product default
@@ -1906,6 +1909,15 @@ impl TestGl {
         // SAFETY: tests are serialised by SERIAL; the table is a static
         // that outlives the test.
         unsafe { crate::backend::g_backend = &MOCK_BACKEND_TEXEL_COPIES };
+    }
+
+    /// Answer as a back end that writes `n` colour targets in one draw
+    /// (`backend::HOST_DRAW_TARGETS`, at most `GLES_MAX_TARGETS`): what
+    /// GL_MAX_DRAW_BUFFERS, GL_MAX_COLOR_ATTACHMENTS and gl_MaxDrawBuffers
+    /// report, and the draw targets the mock is handed. Set it before the
+    /// first shader is compiled; the guard puts the build's own count back.
+    pub fn backend_draws_targets(&self, n: u8) {
+        crate::backend::HOST_DRAW_TARGETS.store(n, core::sync::atomic::Ordering::Relaxed);
     }
 
     /// Install the mock backend variant that counts occlusion samples

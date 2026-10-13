@@ -6753,7 +6753,7 @@ mod tests {
         basic(&gl);
         fbo_8x8();
         let red = [1.0f32, 0.0, 0.0, 1.0];
-        let n = (context::MAX_DRAW_BUFFERS as u32 - 1).min(2);
+        let n = (context::max_draw_buffers() as u32 - 1).min(2);
         // SAFETY: four readable floats; plain GL calls.
         unsafe {
             /* the last draw buffer this GPU has (2 on the PowerVR, 0 where
@@ -12172,6 +12172,32 @@ mod tests {
         let gpu = |t: GLuint| gl.ctx().objs().textures[t as usize].mem.gpu;
         assert_eq!((d.targets[0].gpu, d.targets[1].gpu, d.targets[2].gpu), (gpu(t0), gpu(t1), gpu(t2)));
         assert!(d.targets[..3].iter().all(|t| (t.w, t.h, t.format) == (8, 8, GLES_SURF_RGBA8888)));
+    }
+
+    /// A back end that draws four colour targets (the mock set to four, as
+    /// ES 3.0's minimum asks) is handed all four attachments in one draw;
+    /// the build's own back end (3 targets) never sees a fourth: the point
+    /// does not exist there (tests/es3_mrt_gl.rs holds the API half).
+    #[test]
+    fn a_four_target_back_end_is_handed_four_colour_attachments() {
+        let gl = Gl::new(8, 8);
+        gl.backend_draws_targets(4);
+        let (_, t0) = fbo_8x8();
+        let t = [texture_rgba(8, 8), texture_rgba(8, 8), texture_rgba(8, 8)];
+        // SAFETY: plain GL calls.
+        unsafe {
+            for (i, &ti) in t.iter().enumerate() {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1 + i as GLenum, GL_TEXTURE_2D, ti, 0);
+            }
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR, "GL_COLOR_ATTACHMENT3 is a point");
+        basic(&gl);
+        let d = draw_tri(&gl).draw;
+        let gpu = |t: GLuint| gl.ctx().objs().textures[t as usize].mem.gpu;
+        assert_eq!(d.num_targets, 4);
+        let got: Vec<u64> = d.targets.iter().map(|t| t.gpu).collect();
+        assert_eq!(got, [gpu(t0), gpu(t[0]), gpu(t[1]), gpu(t[2])]);
+        assert!(d.targets.iter().all(|t| (t.w, t.h, t.format) == (8, 8, GLES_SURF_RGBA8888)));
     }
 
     /// glDrawBuffers(ATT0, NONE, ATT2): slot 2 draws into attachment 2 (ES

@@ -1328,7 +1328,7 @@ fn clear_buffer_args_ok(c: &mut GlContext, buffer: GLenum, drawbuffer: GLint, ta
         return false;
     }
     let ok = if buffer == GL_COLOR {
-        (0..context::MAX_DRAW_BUFFERS as GLint).contains(&drawbuffer)
+        (0..context::max_draw_buffers() as GLint).contains(&drawbuffer)
     } else {
         drawbuffer == 0
     };
@@ -2260,7 +2260,7 @@ mod tests {
     fn clear_buffer_checks_the_buffer_before_the_draw_buffer() {
         let gl = fresh();
         let (f, i, u) = ([0.0f32; 4], [0i32; 4], [0u32; 4]);
-        let max = context::MAX_DRAW_BUFFERS as GLint;
+        let max = context::max_draw_buffers() as GLint;
         // SAFETY: plain GL calls; each value array has four entries.
         unsafe {
             glClearBufferfv(GL_STENCIL, 1, f.as_ptr());
@@ -3015,7 +3015,7 @@ mod tests {
              * range and a no-op on the PowerVR (3); this pinned
              * GL_INVALID_VALUE for both until 2026-09-24 */
             glClearBufferuiv(GL_COLOR, 1, [0u32; 4].as_ptr());
-            let want = if context::MAX_DRAW_BUFFERS == 1 { GL_INVALID_VALUE } else { GL_NO_ERROR };
+            let want = if context::max_draw_buffers() == 1 { GL_INVALID_VALUE } else { GL_NO_ERROR };
             assert_eq!(gl.error(), want, "draw buffer 1 against MAX_DRAW_BUFFERS");
             /* draw buffer 0 of the default framebuffer is fixed point, so a null value is the only no-op */
             glClearBufferuiv(GL_COLOR, 0, core::ptr::null());
@@ -3051,7 +3051,7 @@ mod tests {
         unsafe {
             /* as in clear_bufferuiv_clears_the_colour_only: the range is
              * GL_MAX_DRAW_BUFFERS' (this pinned one draw buffer everywhere) */
-            let want = if context::MAX_DRAW_BUFFERS == 1 { GL_INVALID_VALUE } else { GL_NO_ERROR };
+            let want = if context::max_draw_buffers() == 1 { GL_INVALID_VALUE } else { GL_NO_ERROR };
             glClearBufferfv(GL_COLOR, 1, [0.0f32; 4].as_ptr());
             assert_eq!(gl.error(), want);
             glClearBufferiv(GL_COLOR, 1, [0i32; 4].as_ptr());

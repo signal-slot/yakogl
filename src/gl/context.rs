@@ -133,23 +133,32 @@ pub const MAX_VARYING_VECTORS: usize = 8;
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// Sampler bindings per fragment shader.
 pub const CAP_SAMPLERS: usize = 16;
-/// Colour attachments a framebuffer may carry. One render can write them all
-/// (a G-buffer pass writes three), which the backend and the driver's
-/// end-of-tile programs support up to this many.
-pub const CAP_COLOR_ATTACHMENTS: usize = 3;
-/// GL_MAX_DRAW_BUFFERS: the colour outputs one draw WRITES, which is not the
-/// attachment points a framebuffer offers; on every GPU here, all of them.
-/// PowerVR: through the end-of-tile programs. GC7000: the part has 4 render
-/// targets (etnaviv's num_rts, halved for 64-bit formats) and the backend
-/// programs every one the GL core gives it (vivante/backend.rs
-/// `mrt_targets`). V3D: the TLB takes four render targets, and since the MRT
-/// steps 1-3 (docs/online-shaderc/v3d-backend.md, "Multiple render
-/// targets": the compiler's TLB write per RT, the job builder's RTs, the
-/// backend's attachments up to four) every attachment a draw names is
-/// written. The query, glDrawBuffers, glClearBuffer and the shader's
-/// gl_MaxDrawBuffers all read this one constant; arrays are sized by
-/// [`CAP_COLOR_ATTACHMENTS`].
-pub const MAX_DRAW_BUFFERS: usize = CAP_COLOR_ATTACHMENTS;
+/// Colour attachment points a framebuffer object STORES: the size of its
+/// arrays (`GlFramebuffer::color_n`, `draw_buf`), one per slot of the
+/// draw's [`GlesDrawTarget`](crate::backend::GlesDrawTarget) array. It is
+/// not what the GL reports: [`max_color_attachments`] and
+/// [`max_draw_buffers`] are, and they are the back end's
+/// ([`crate::backend::draw_targets`]), at most this.
+pub const CAP_COLOR_ATTACHMENTS: usize = crate::backend::GLES_MAX_TARGETS;
+const _: () = assert!(crate::backend::DRAW_TARGETS <= CAP_COLOR_ATTACHMENTS);
+/// GL_MAX_DRAW_BUFFERS: the colour outputs one draw WRITES, which is what
+/// the back end draws ([`crate::backend::draw_targets`]; 3 on every GPU
+/// until each back end's half of ES 3.0's 4 lands). The query,
+/// glDrawBuffers, glClearBuffer and the shader's gl_MaxDrawBuffers all read
+/// this one function; arrays are sized by [`CAP_COLOR_ATTACHMENTS`].
+pub fn max_draw_buffers() -> usize {
+    crate::backend::draw_targets()
+}
+/// GL_MAX_COLOR_ATTACHMENTS: the attachment points a framebuffer object
+/// names, GL_COLOR_ATTACHMENT0 up to this. The same number as
+/// [`max_draw_buffers`]: one draw writes every point (a G-buffer pass writes
+/// them all), and a point past what the back end draws would be one an
+/// application could attach to and never see written. Every attachment
+/// check (glFramebufferTexture*, glFramebufferRenderbuffer, the attachment
+/// query, glInvalidateFramebuffer, glReadBuffer, glDrawBuffers) reads it.
+pub fn max_color_attachments() -> usize {
+    max_draw_buffers()
+}
 /// GL_MAX_VERTEX_OUTPUT_COMPONENTS and GL_MAX_FRAGMENT_INPUT_COMPONENTS:
 /// four components per varying vector, per GPU with MAX_VARYING_VECTORS.
 /// The shader's gl_MaxVertexOutputVectors / gl_MaxFragmentInputVectors are

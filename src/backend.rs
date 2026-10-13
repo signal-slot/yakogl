@@ -635,6 +635,57 @@ pub const FRAGMENT_HIGHP: bool = true;
 /// Colour attachments one draw may write.
 pub const GLES_MAX_TARGETS: usize = 4;
 
+/// The colour targets one draw of this build's back end writes, in
+/// [`GlesDraw::targets`]: what the GL core reports as GL_MAX_DRAW_BUFFERS
+/// and GL_MAX_COLOR_ATTACHMENTS, and the shader's `gl_MaxDrawBuffers`
+/// ([`draw_targets`]). The GL core's arrays hold [`GLES_MAX_TARGETS`]; a
+/// back end that writes fewer keeps the points past its count unnamed, so
+/// nothing is advertised that it cannot draw. ES 3.0 asks for 4 (Table
+/// 6.34); all three stay at 3 until their own half lands:
+///
+/// - PowerVR: the end-of-tile programs and the kick's PBE words exist for
+///   three targets (`PVR_RENDER_MAX_RT`, driver/src/pvr_render.h); a fourth
+///   needs its PBE state per render target (docs/es3-pvr-formats.md).
+/// - GC7000: the PE has four render targets (etnaviv `num_rts`) and
+///   `vivante::backend::mrt_targets` takes four, but no board has drawn four.
+/// - V3D: the TLB takes targets 0-3 and the compiler writes four
+///   (`MAX_RTS`), but no board has drawn four.
+pub const DRAW_TARGETS: usize = {
+    #[cfg(feature = "gpu-vivante")]
+    {
+        3
+    }
+    #[cfg(feature = "gpu-v3d")]
+    {
+        3
+    }
+    #[cfg(feature = "gpu-powervr")]
+    {
+        3
+    }
+};
+const _: () = assert!(DRAW_TARGETS >= 1 && DRAW_TARGETS <= GLES_MAX_TARGETS);
+
+/// Host tests only: a test back end that writes this many colour targets in
+/// one draw stands in for [`DRAW_TARGETS`] (0: not set; at most
+/// [`GLES_MAX_TARGETS`]). The host back ends draw nothing, so the test says
+/// what a back end that can would.
+#[cfg(feature = "host-test")]
+pub static HOST_DRAW_TARGETS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// The colour targets one draw of this build's back end writes:
+/// [`DRAW_TARGETS`], or a host test's [`HOST_DRAW_TARGETS`].
+pub fn draw_targets() -> usize {
+    #[cfg(feature = "host-test")]
+    {
+        let n = HOST_DRAW_TARGETS.load(core::sync::atomic::Ordering::Relaxed) as usize;
+        if n != 0 {
+            return n.min(GLES_MAX_TARGETS);
+        }
+    }
+    DRAW_TARGETS
+}
+
 /// Occlusion query handles are 1 .. this ([`GlesDraw::occlusion_query`],
 /// [`YakoglBackend::query_begin`]); a backend sizes its counter storage for
 /// all of them. The GL core gives each (context, query name) its own handle.
