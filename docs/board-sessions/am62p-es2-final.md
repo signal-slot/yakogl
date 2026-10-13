@@ -1,105 +1,113 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# am62p-es2-final-b: AM62P dEQP-GLES2 images 10-17, ms4 tree, gl_test (dEQP covered by final-r2; gl_test BLOCKED, not run)
+# am62p-es2-final-a: AM62P dEQP-GLES2 images 1-9 at origin/main `cd738b1a` (BLOCKED, not run)
 
-Date: 2026-10-13. Newest `origin/main` seen: `f8741799`.
+Date: 2026-10-14. Board: Verdin AM62P, lease `usb-serial-1` (serial console
+only).
 
 ## Result in short
 
-- **dEQP (images 1-17, ms4 tree, whole-tree TOTAL, comparison with
-  `32778b57`) is covered by `docs/board-sessions/am62p-es2-final-r2.md`** on
-  `origin/main`: a whole-tree run at `63efed8e`, 17 images 17,125 pass / 0 fail
-  / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning; ms4 16 / 16;
-  combined 17,141 pass / 0 fail. Cite the numbers from that record. This item
-  ran no dEQP and produced no `board.sh` verdict or TOTAL line of its own.
-- **gl_test 198 / 197 / 171 were not run**: no CASE record words exist. The
-  console was silent and ssh was not granted (below).
-- `docs/board-sessions/am62p-es2-r1c.md` and `docs/boards/am62p-console-lease.md`,
-  named as the console procedure, were not readable in this tree.
+- **Commit.** `git fetch origin` worked. The newest `origin/main` tip is
+  **`cd738b1ae7cf99166a6bdd86cf24dac04c4c4328`** (2026-10-13, "ccfarm: merge
+  ccfarm/01a13623-0a20-7578-bba9-a6ab4290251a (#533)"). This is the same
+  commit as this item's workspace (clean, no local changes).
+- **No image was built and no image was run.** There is no `board.sh` verdict
+  line and no TALLY line for this commit. No number below is a device result.
+- The newest whole-tree device result is still
+  `docs/board-sessions/am62p-es2-final-r2.md`: `63efed8e`, 17 images,
+  17,125 pass / 0 fail, ms4 16 / 16. Cite that record until this item is
+  re-run.
 
 ## Blocker (exact)
 
-1. **The leased console is silent.** The lease is `usb-serial-1` (the bridge
-   port the earlier records identify as the mcu_uart0 one). The MCP console
-   client reported `connected`, offset 0, 0 bytes buffered. A CR/LF written to
-   it and a 6 s `serial_expect` on `.+` gave 0 bytes (timeout), re-checked in
-   this round with the same result. The proven form (bridge port-33,
-   main_uart0) is not in this lease.
-2. **ssh to the board is refused.** `ssh -o BatchMode=yes torizon@<am62p>
-   uname -r` returned "This command requires approval" and was not granted, so
-   neither a console probe nor `BOARD_HOST` for `tools/board.sh` is available.
-   The lease carries no `RESOURCE_*` ssh value for the AM62P.
+1. **The leased console is silent.** The MCP console client of
+   `usb-serial-1` reported `connected`, offset 0, 0 bytes buffered. Two
+   writes (CR LF, then CR alone) and two `serial_expect` waits (10 s on
+   `login:|# |\$ |=>|\w`, 30 s on any byte) gave 0 bytes. A final
+   `serial_read` from offset 0 also gave 0 bytes. This is the same result as
+   the attempts in `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md`,
+   where the leased bridge port was the one wired to mcu_uart0. Zephyr and
+   U-Boot print on main_uart0
+   (`tools/cts/log/investigations/am62p-console-empty.md`). A silent
+   console can also mean the board is off, or is sitting in a finished
+   Zephyr image that does not echo. Without ssh (point 2) these causes
+   cannot be told apart from here.
+2. **ssh to the board was refused.** `ssh -o BatchMode=yes verdin-am62p ...`
+   returned "This command requires approval" twice. `BOARD_BOOT=uboot-mmc`
+   stages the image on the eMMC over ssh, so `tools/board.sh am62p tree`
+   cannot run without it (pre-check "ssh and sudo -n").
+3. **The build wrapper was refused.** The deps layout is complete
+   (`tools/cts/deps-env.sh --check am62p`: every entry `ok`). But the
+   wrapper script that exports that environment and calls
+   `tools/cts/am62p-deqp-images.sh` returned "This command requires
+   approval" three times (background, foreground, relative path). So did
+   `git worktree add --detach` under the deps directory. The image script
+   without the environment runs only as `--dry-run` (below).
+4. The farm tools `ask_farm` and `get_project_env` were not granted, so the
+   lease's UART wiring and `BOARD_HOST` could not be confirmed.
 
-With a console that carries no output the procedure stops here. Nothing was
-flashed, rebooted or written to the board other than one CR/LF.
+## What was checked
 
-## To unblock (gl_test only)
-
-Add the main_uart0 bridge port and the ssh login of the AM62P to the lease, or
-allow ssh for the task. Then, in a worktree of `origin/main` under `$TMPDIR`,
-use commit `63efed8e` so gl_test shares the commit of final-r2 (or the newest
-tip, `f8741799`, if the owner prefers; record which). Build the gl_test image
-as the GT row of `tools/cts/common-tree.txt` / `tools/cts/cts-common.sh am62p
-build/run` do, and run cases 198, 197 and 171 **one at a time** with the knob
-the gl_test sample documents (as `cases 196,198` was run on `452d6c31`). Record
-each run's CASE record words and any FWCCB / CONTEXT_RESET lines.
-
-## gl_test
-
-| case | verdict | CASE record words | CONTEXT_RESET / FWCCB |
-|------|---------|-------------------|-----------------------|
-| 198 a2cconst | not run | - | - |
-| 197 vtxgrid | not run | - | - |
-| 171 | not run | - | - |
-
-# am62p-es2-final-a: images 1-9 from the origin/main tip (BLOCKED again, nothing built, nothing run)
-
-Date: 2026-10-13. Newest `origin/main` after `git fetch origin`: `b7d7a79d`
-(commit M; equal to this workspace's base). No image was built and no dEQP
-case ran on the board in this item. No `board.sh tree` or `tally` verdict line
-was printed, because `board.sh` was never started. There are no per-image
-counts from this session.
-
-## Blocker (exact)
-
-1. **ssh to the board is refused.** `ssh -o BatchMode=yes ... true` to the
-   leased device returned "This command requires approval". The session is
-   unattended, so it was not granted. The console probe
-   (`echo probe | sudo tee /dev/ttyS2` on the board) and `BOARD_HOST` for
-   `tools/board.sh` both need ssh.
-2. **The leased console is silent.** The lease is the bridge port that
-   `docs/boards/am62p-console-lease.md` says carries mcu_uart0.
-   `serial_status` showed `connected`, offset 0, 0 bytes buffered. A 6 s
-   `serial_expect` on `.+` timed out with 0 bytes. The proven main_uart0 form
-   (bridge port 33, `am62p-es2-r1c`) is not part of this lease.
-
-The console was not shown to carry output, so the procedure stops here, as the
-item requires. Nothing was flashed, rebooted or written to the board.
-
-## What existing records already answer
-
-This session adds no board data. The two questions of this item are answered
-by `docs/board-sessions/am62p-es2-final-r2.md` (whole tree on `63efed8e`, run
-on the board through port 33). Those numbers are from that record, not from
-this item:
-
-- The 9 `shaders.invariance.*.common_subexpression_*` cases pass (image 1:
-  1512 / 1512).
-- The 45 `texture.vertex.2d.*` cases pass (image 9: 452 / 452).
-- Whole tree 17,125 pass / 0 fail.
-
-Not confirmed by this item, and not stated in final-r2 in the form asked: that
-image 9's console has no "does not fit an empty frame" line, and a run built
-from the newer tip `b7d7a79d`.
-
-## To run it
-
-Give the task ssh to the AM62P and the main_uart0 bridge port (or fix the
-lease as in `docs/boards/am62p-console-lease.md`). Then, from a worktree of
-`origin/main` under `$TMPDIR`:
+`tools/cts/am62p-deqp-images.sh --dry-run tools/cts/am62p-full-tree.txt
+records/final-a/images cd738b1a` lists the 17 images at this commit.
+Images 1-9 (rows 0-8) are this item's:
 
 ```
-TREE_ROWS=0-8 tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-M M
-BOARD_BOOT=uboot-mmc TREE_ROWS=0-8 tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-M
-tools/board.sh am62p tally records/am62p/deqp-M
+1 img1-cd738b1a shaders.{struct, keywords, scoping, linkage, conditionals, return, qualification_order, reserved_operators, discard, invariance, builtin_variable, texture_functions, declarations, function, algorithm, fragdata, misc, functions, constant_expressions, constants}.*
+2 img2-cd738b1a shaders.{matrix, invalid_implicit_conversions}.*
+3 img3-cd738b1a shaders.{swizzles, conversions}.*
+4 img4-cd738b1a shaders.{indexing, preprocessor}.*
+5 img5-cd738b1a shaders.{loops, random}.*
+6 img6-cd738b1a shaders.operator.binary_operator.*
+7 img7-cd738b1a shaders.operator.{unary_operator, common_functions, angle_and_trigonometry, geometric, exponential, float_compare, int_compare, selection, sequence, bool_compare}.*
+8 img8-cd738b1a texture.{completeness, filtering, format}.*
+9 img9-cd738b1a texture.{mipmap, specification, vertex, wrap}.*
 ```
+
+(The dry run prints full `dEQP-GLES2.functional.` filters. They are
+shortened here.) The split is the same as in final-r2, so the per-image
+results can be compared one to one.
+
+## Image build lines
+
+None. No image was built.
+
+## Device verdict lines and TALLY
+
+None. No image was run.
+
+## Failing cases
+
+Not determined at `cd738b1a`. At `63efed8e` (final-r2) images 1-9 had
+0 failures (11,028 pass, 0 NotSupported).
+
+## Comparison with `63efed8e`
+
+Not possible without a run.
+
+## Commands still to run
+
+Prerequisites: a lease whose console shows the board (a CR on it must
+return a U-Boot prompt or a login prompt), ssh with `sudo -n` to the
+board's Linux as `BOARD_HOST`, and permission to run a script from the
+workspace. Then, from a checkout at `cd738b1ae7cf`:
+
+```bash
+# records/final-a/run.sh   (records/ is git-ignored)
+set -euo pipefail
+export CCFARM_DEPS_DIR=<deps dir>          # the yakogl deps layout
+set -a; eval "$(tools/cts/deps-env.sh am62p)"; set +a
+cp "$PVR_FW_BLOB" driver/src/fw/pvr_fw_blob.h       # git-ignored
+OUT=records/final-a/images; mkdir -p "$OUT"
+TREE_ROWS=0-8 tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt "$OUT" cd738b1a >> "$OUT/build.out"
+export BOARD_BOOT=uboot-mmc BOARD_HOST=<user@board> BOARD_UART=<bridge host:port of main_uart0>
+export TREE_IMAGE_DIR=$OUT TREE_TAG=cd738b1a TREE_ROWS=0-8
+tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/final-a/tree
+tools/board.sh am62p tally records/final-a/tree
+```
+
+Run it with `bash records/final-a/run.sh`. Before the tree, prove the
+console: write a CR on the lease and see the U-Boot or login prompt. Then
+`tools/board.sh am62p disarm` removes any one-shot that an earlier stopped
+run left behind. The tree can start on image 1 while later images build
+(it waits for each `img<N> rc=` line).
