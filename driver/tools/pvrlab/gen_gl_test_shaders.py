@@ -342,7 +342,7 @@ ES100_TWINS = {
 # every case that mentions one of the fourteen ES 3.00 symbols, read out of
 # gl_test.c's own text (case 54 is called es3chain and is absent from this list
 # because it draws with the base pair, which does have ES 1.00 twins).
-ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199, 200, 201)
+ES300_CASES = (41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199, 200, 201, 206)
 
 
 def es300_cases_used():

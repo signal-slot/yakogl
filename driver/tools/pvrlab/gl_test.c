@@ -543,6 +543,14 @@
  *               The render half the PowerVR's, the sample half all three
  *               GPUs (skipped by name in a table build and in an ES 2.0
  *               context); not in the set until it has passed on a board
+ * 206 es3levels mip levels 1 and 2 of a 3D texture and of a 2D array (PR
+ *               #133): a 16x16x4 3D texture and a 16x16x2 array, levels 0, 1
+ *               and 2 each one colour, MAX_LEVEL 2, NEAREST_MIPMAP_NEAREST,
+ *               drawn by case 48's and 42's programs into a 16x16, 8x8 and
+ *               4x4 viewport (LOD 0, 1, 2) and read back: each level's
+ *               colour. The PowerVR's 3D wants level 0's (its grid has no
+ *               chain). GC7000 and PowerVR; skipped by name on the V3D and in
+ *               an ES 2.0 library; not in the set
  * 187 predarm   186 with scissorRadius 4: fill_color's other scissor arm. The
  *               table predicates the two arms (32 and 22 groups) and ours
  *               computes both; the table should cost about 10 groups more
@@ -7167,6 +7175,133 @@ static int case_es3vol(void)
 	return ok && check_gl_error("es3vol teardown") ? 0 : -1;
 }
 
+/* ---- case 206: 3D and 2D-array mip levels 1 and 2 (es3levels) -------------
+ *
+ * PR #133 (yakogl issue #133). Before it, glTexImage3D at a level >= 1 of a
+ * 3D texture returned without keeping the texels, so a mipmapped 3D texture
+ * was incomplete and sampled (0,0,0,1). This case uploads a 16x16x4 3D
+ * texture and a 16x16x2 2D array, levels 0, 1 and 2, each level one colour
+ * in every slice and layer, with GL_TEXTURE_MAX_LEVEL 2 and
+ * NEAREST_MIPMAP_NEAREST. Case 48's and case 42's programs (es300/vol.frag,
+ * es300/array.frag) draw them into a 16x16, an 8x8 and a 4x4 viewport: 16
+ * texels over 16, 8 and 4 pixels make texture()'s implicit LOD exactly 0, 1
+ * and 2. The viewport picks the level because the draw does not read
+ * GL_TEXTURE_BASE_LEVEL and neither program has a textureLod at a level
+ * other than 0.
+ *
+ * vol.frag gives (texture().r, textureLod(0).r, texelFetch(level 0).b,
+ * depth / 255): the level's red, then level 0's red and blue, then 4.
+ * array.frag gives the level's rgb and level 0's alpha (texelFetch).
+ * r = 0.125 and layer 0 read the first slice at every level, whether the
+ * texture unit steps a level's slices by that level's depth or by level 0's.
+ * Each level is its own check: "3D L0" and "array L0" are the reference,
+ * "3D L1", "3D L2", "array L1" and "array L2" the levels PR #133 is about.
+ *
+ * Per GPU. The GC7000 samples both stacks itself: every check wants the
+ * level's colour. The PowerVR samples a 3D texture as one 2D grid of slices
+ * with no mip chain; PR #133 keeps the texels of levels >= 1 there, but a
+ * draw still samples level 0 (src/gl/texture.rs, texture_alloc_storage_3d).
+ * So its 3D checks want level 0's colour -- the texture complete, not the
+ * incomplete (0,0,0,1) -- and their labels say so. Its array is a tall
+ * power-of-two stack whose chain is the array's: those checks want the
+ * level. The V3D refuses every 3D and 2D-array binding (src/v3d/texture.rs,
+ * refusal_for), so the case is skipped by name there.
+ * Host: tests/es3_tex_levels.rs (where the core keeps each level).
+ * ES 3.0 only (skipped by name in an ES 2.0 library); not in the set.
+ * ------------------------------------------------------------------------- */
+static int case_es3levels(void)
+{
+#ifdef GL_TEST_V3D
+	pr_info("gl_test: case 206 es3levels: SKIP (the V3D does not sample 3D or 2D-array textures)\n");
+	return -3;
+#else
+	enum { SIDE = 16, DEPTH = 4, LAYERS = 2, LEVELS = 3 };
+	/* level l's colour, RGBA */
+	static const uint8_t col[LEVELS][4] = {
+		{ 0x20, 0xe0, 0x60, 0xff }, { 0x90, 0x40, 0xc0, 0xff }, { 0xf0, 0x80, 0x10, 0xff },
+	};
+	static uint8_t texels[SIDE * SIDE * DEPTH * 4];
+	static const GLenum targets[2] = { GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY };
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	GLuint prog[2], tex[2] = { 0, 0 };
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 206 es3levels: SKIP (an ES 2.0 library has no 3D or 2D-array textures)\n");
+		return -3;
+	}
+	free_all_objects();
+	prog[0] = link_program(gl_test_es300_cube_vs_src, gl_test_es300_vol_fs_src);
+	prog[1] = link_program(gl_test_es300_cube_vs_src, gl_test_es300_array_fs_src);
+	if (!prog[0] || !prog[1])
+		return -1;
+	glGenTextures(2, tex);
+	for (int i = 0; i < 2; i++) {
+		glBindTexture(targets[i], tex[i]);
+		for (int l = 0; l < LEVELS; l++) {
+			/* a 3D level halves its depth, an array keeps its layers */
+			const int side = SIDE >> l, depth = i == 0 ? (DEPTH >> l > 0 ? DEPTH >> l : 1) : LAYERS;
+
+			fill_texels(texels, (uint32_t)(side * side * depth), col[l][0], col[l][1], col[l][2], col[l][3]);
+			glTexImage3D(targets[i], l, GL_RGBA8, side, side, depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, texels);
+		}
+		glTexParameteri(targets[i], GL_TEXTURE_MAX_LEVEL, LEVELS - 1);
+		glTexParameteri(targets[i], GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+		glTexParameteri(targets[i], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(targets[i], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(targets[i], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(targets[i], GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	}
+	if (!check_gl_error("es3levels upload"))
+		return -1;
+	puv_quad_setup();
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	for (int i = 0; i < 2; i++) {
+		glUseProgram(prog[i]);
+		if (i == 0) {
+			glUniform1i(glGetUniformLocation(prog[i], "vol"), 0);
+			glUniform1f(glGetUniformLocation(prog[i], "zz"), 0.125f);
+		} else {
+			glUniform1i(glGetUniformLocation(prog[i], "layers"), 0);
+			glUniform1f(glGetUniformLocation(prog[i], "layer"), 0.0f);
+		}
+		for (int l = 0; l < LEVELS; l++) {
+			const uint32_t vp = (uint32_t)SIDE >> l;
+			char what[GL_TEST_LABEL];
+			uint32_t want;
+
+			glClear(GL_COLOR_BUFFER_BIT);   /* the whole window: glClear ignores the viewport */
+			glViewport(0, 0, (GLsizei)vp, (GLsizei)vp);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glFinish();
+			if (!check_gl_error("es3levels draw"))
+				return -1;
+			read_topdown();
+			if (i == 0) {
+#ifdef GL_TEST_PVR
+				const int s = 0;   /* the grid has no chain: level 0, complete */
+
+				snprintf(what, sizeof(what), "3D L%d (PowerVR grid: level 0)", l);
+#else
+				const int s = l;
+
+				snprintf(what, sizeof(what), "3D L%d", l);
+#endif
+				want = rgba_u32(col[s][0], col[0][0], col[0][2], DEPTH);
+			} else {
+				snprintf(what, sizeof(what), "array L%d", l);
+				want = rgba_u32(col[l][0], col[l][1], col[l][2], col[0][3]);
+			}
+			/* the viewport's centre pixel, top-down */
+			ok &= expect_px(what, vp / 2, TH - 1 - vp / 2, want, 2);
+		}
+	}
+	glViewport(0, 0, TW, TH);
+	glDeleteTextures(2, tex);
+	return ok && check_gl_error("es3levels teardown") ? 0 : -1;
+#endif
+}
+
 /* ---- case 49: gl_FrontFacing -------------------------------------------- */
 /* es300/facing.frag: green where gl_FrontFacing, red elsewhere. puv's quad
  * is counter-clockwise in GL window space. */
@@ -8309,7 +8444,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -21300,6 +21435,11 @@ static int run_case(int c, int pretransform, int debug)
 		rc = case_mappbo();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library */
+		break;
+	case 206:
+		rc = case_es3levels();
+		if (rc == -3)
+			return -3; /* skipped by name: the V3D, or an ES 2.0 library */
 		break;
 	case 179:
 		rc = case_retile();
