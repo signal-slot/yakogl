@@ -98,9 +98,9 @@ nothing, so it is not replayed here.
 
 | Board | Predicted result | Basis |
 |---|---|---|
-| AM62P (PowerVR) | Pass | Both queries refused, shader refused. The earlier NotSupported was measured on a build older than commit `4e9397c` (`es2-gl-core`), which is an ancestor of the integration tip; `GL_MAX_DRAW_BUFFERS` answered 3 then. |
-| i.MX8MP (GC7000) | Pass | Same front end and queries. `docs/es2-cts-failures.md:203` already records a pass at `d8583f20`. |
-| Pi 4 (V3D) | Pass | Same as the AM62P. |
+| AM62P (PowerVR) | Pass (recorded, `docs/es2-cts-failures.md:77`, tree `32778b57`) | Both queries refused, shader refused. The earlier NotSupported was measured on a build older than commit `4e9397c` (`es2-gl-core`), which is an ancestor of the integration tip; `GL_MAX_DRAW_BUFFERS` answered 3 then. |
+| i.MX8MP (GC7000) | Pass | Same front end and queries. `docs/es2-cts-failures.md:76` records the fix confirmed on the board (tree `32778b57`, 0 NotSupported). |
+| Pi 4 (V3D) | Pass (recorded, `docs/es2-cts-failures.md:77`, tree `a27d69c0`) | Same as the AM62P. |
 
 The `valid_*` and `write_fragcolor_*` cases are not listed as failing on any
 board in `docs/es2-cts-failures.md` and the front end behaves as the case
