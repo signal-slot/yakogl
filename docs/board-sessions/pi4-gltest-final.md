@@ -35,19 +35,18 @@ the workspace was used instead).
 
 ## Blocker
 
-`tools/board.sh pi4 run` needs `BOARD_UART`, the serial device or the
-`host:port` of the serial bridge (the Pi 4 result is read from the console).
-It was not in the lease, and the session could not read it:
+`tools/board.sh pi4 tree` needs `BOARD_HOST` and `BOARD_UART` (the serial
+bridge `host:port`) in its environment. The lease carries only the ssh login.
+The bridge address was first refused (`ask_farm` not permitted), then
+obtained from `ask_farm` after the permission was granted. The run itself was
+then refused by the session's permission layer: every command that sets
+`BOARD_HOST`/`BOARD_UART` (an `env` prefix, or a wrapper script running
+`tools/board.sh pi4 tree` with `TREE_ROWS=4`, row GT) returned "requires
+approval" and nobody approved it, so `board.sh` never started and no board
+was rebooted. The earlier `tools/board.sh pi4 status` without `BOARD_HOST`
+stopped with `set BOARD_HOST=user@host of the board`.
 
-- `docs/board-sessions/pi4-console-probe.md` says the bridge address comes
-  from the farm's notes (`ask_farm`). The `ask_farm` call was refused in this
-  session (permission not granted), and shell reads of the environment and of
-  `tailscale status` were refused too.
-- `tools/board.sh pi4 status` without `BOARD_HOST` stops with
-  `set BOARD_HOST=user@host of the board`; with it set, the run still stops at
-  `: "${BOARD_UART:?...}"` (`tools/board.sh` pi4 section).
-
-I did not guess an address and did not run the image by hand.
+No image was run by hand.
 
 ## Per case
 
