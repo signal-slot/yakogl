@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `20a48791` (2026-10-14). The numbers below are read from
+main is `cd738b1a` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -259,7 +259,28 @@ is kept and pinned by tests.
      next step is the board run: about 40 interleaved boots each of the
      base arm and the KICK_DIFF arm from one image
      (`tools/cts/log/investigations/gc-kick-diff.md`, "How to run it on the
-     board").
+     board"). The instrument was read end to end at main `a63fcc5b` and is
+     complete for that run; none of its seven gaps (G1 to G7) needs a code
+     change. Selectors: base `SEL=512`; KICK_DIFF case 10 `SEL=4586`
+     (`0x11ea`); case 2 `SEL=4578` (`0x11e2`); pages decode with
+     `yakogl-tools record kickdiff`. Corrections to `gc-kick-diff.md`, not
+     yet made: the two commands' comment "list 0" is list 1 (`0x11ea`);
+     case 10 is bit 10 of the sweep pass word, not bit 9; the sample
+     output's "10000 us" is 2000 us.
+   - **GC7000 `TEXDESC_LOG_SIZE_EXT` for NPOT sizes** (no issue yet, low
+     severity): `log2_fixp88` (`src/vivante/texture.rs`) is a linear
+     approximation of log2; Mesa writes the exact value. The CTS sizes are
+     within one unit; a size like 90 is 0.086 octave low. Pinned by the
+     ignored test `bug_log_size_ext_is_a_linear_approximation_of_log2`; the
+     fix is one function and removes the `ignore`.
+   - GC7000 REPEAT on NPOT sizes (stage 1 residual risk,
+     `docs/es2-cts-failures.md` H.2/H.3): `tests/gc_npot_repeat.rs` pins the
+     texture descriptor and sampler registers the Vivante back end emits for
+     the 17 NPOT wrap and size cases against the rnndb headers and Mesa
+     26.2.1. All 17 pass; nothing is wrong at the CTS sizes
+     (`docs/investigations/gc-npot-repeat.md`). No board check is needed; a
+     texel read-back across a REPEAT seam would show more than the
+     solid-colour CTS cases do.
    - i.MX8MP case 16, 4x MSAA (#8): the default image has no 4x config, so
      the case skips its 4x half by name (`6bddfc5`). On the 4x image the
      path fails at check 4 (`x4 inside` reads 0x00000000) with and without
@@ -436,6 +457,15 @@ the PowerVR's only (`GL_TEST_PVR`); its sample half runs on all three. Each
 of these cases skips by name in an ES 2.0 context.
 
 ### i.MX8MP (Verdin, no UART: records are read from the SNVS)
+
+`imx8mp-gltest-r2` can run its #9/#25 part (the KICK_DIFF arms, "Known
+defects") as it is, with one condition: build the image first and read `rc=`.
+The Zephyr arm of `gc_gl_test` and `gl_test.c` has never been built from this
+code (`gc-kick-diff.md`, "What was checked"), so a compile error shows at the
+build, not at a boot. Use the selector values in "Known defects", not the
+comments in `gc-kick-diff.md`. The loop that interleaves the two arms is the
+session's to write. Image recipe:
+`tools/cts/imx8mp-gltest-build.sh kd-<sha8> 0 '-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'`.
 
 The gl_test builds need `-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`, or
 `tools/board.sh` refuses the image (rc=3), and a `;` inside a sweep list
