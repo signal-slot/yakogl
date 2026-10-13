@@ -15,17 +15,19 @@ tree. It does not copy the record.
 
 ## How the CTS case decides "exactly one draw buffer"
 
-These are the CTS lines that the record cites, **[read]** from the record. This session could not
-fetch VK-GL-CTS again because the network was refused, so the line numbers are those of the record's
-checkout.
+**[read]** from VK-GL-CTS `main` on raw.githubusercontent.com on 2026-10-14 (the files were fetched one
+by one, not cloned, so no commit is pinned). The line numbers are counted from the raw files and may be
+off by one. Upstream has shifted lines by about 6 since the checkout that the full record used (for
+example, the record cites `glsShaderLibraryCase.cpp:1041-1052`). The code itself is the same as the
+record describes.
 
-| Step | CTS source | What happens |
+| Step | CTS source (upstream `main`, 2026-10-14) | What happens |
 |---|---|---|
-| The case | `data/gles2/shaders/fragdata.test:2-19` | `invalid_assign_to_1`: `require only_glsl_es_100_support`, `require exactly_one_draw_buffer`, `expect compile_fail`. The fragment shader is `gl_FragData[1] = vec4(1.0)`. |
-| ES 3 skip | `modules/glshared/glsShaderLibraryCase.cpp:1041-1042`, `framework/opengl/gluContextInfo.cpp:64-73` | If `glGetIntegerv(GL_MAJOR_VERSION)` raises no error, the context counts as ES 3 and the case returns a pass without compiling anything. |
-| One draw buffer | `glsShaderLibraryCase.cpp:1044-1052` (the throw is at line 1051) | `glGetIntegerv(GL_MAX_DRAW_BUFFERS, &n)`. The case is NotSupported ("Test requires exactly one draw buffer") only when the query raises **no error and** `n > 1`. An error (`GL_INVALID_ENUM`) or `n <= 1` lets the case run. The case does not check the extension string. |
-| Verdict | `glsShaderLibraryCase.cpp:1174-1178` | `compile_fail` passes when a stage fails to compile. |
-| Other cases | `modules/gles2/functional/es2fShaderFragDataTests.cpp:221-238` (the group), `:106-209` (`FragDataIndexingCase`), `fragdata.test:21-78` | `valid_{static,uniform,dynamic}_index` compile `gl_FragData[0 / u_index / int(v_index)]`, draw a green quad and compare the pixels. `write_fragcolor_and_fragdata_*` must fail to compile. Neither group makes the two queries. There is no `invalid_assign_to_N` for N > 1. |
+| The case | `data/gles2/shaders/fragdata.test:1-18` | `invalid_assign_to_1`: `require only_glsl_es_100_support`, `require exactly_one_draw_buffer`, `expect compile_fail`. The fragment shader is `gl_FragData[1] = vec4(1.0)`. |
+| ES 3 skip | `modules/glshared/glsShaderLibraryCase.cpp:1047-1048`, `framework/opengl/gluContextInfo.cpp:64-73` | `if (isCapabilityRequired(CAPABILITY_ONLY_GLSL_ES_100_SUPPORT, m_spec) && glu::IsES3Compatible(gl)) return true;`. `IsES3Compatible` clears the error, calls `getIntegerv(GL_MAJOR_VERSION)` and returns `getError() == GL_NO_ERROR`. If that query succeeds, the case passes without compiling anything. |
+| One draw buffer | `glsShaderLibraryCase.cpp:1050-1058` | `getIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers)`, then `if ((gl.getError() == GL_NO_ERROR) && (maxDrawBuffers > 1)) throw tcu::NotSupportedError("Test requires exactly one draw buffer")`. An error (`GL_INVALID_ENUM`, the unextended ES 2.0 answer) or `n <= 1` lets the case run. The case does not check the extension string. |
+| Verdict | `glsShaderLibraryCase.cpp:1181-1185` | For `EXPECT_COMPILE_FAIL`, any stage that fails to compile is a pass. If everything compiled, the result is a fail ("compiled correctly"), or a quality warning when the link failed. |
+| Other cases | `modules/gles2/functional/es2fShaderFragDataTests.cpp:220-237` (`ShaderFragDataTests::init`), `:105-208` (`FragDataIndexingCase`), `fragdata.test:20-77` | `valid_{static,uniform,dynamic}_index` compile `gl_FragData[0 / u_index / int(v_index)]` (`:136-144`). A failed compile is Fail for the static index and NotSupported for the other two (`:169-175`). The case then draws a quad (`:184-185`), reads the pixels and requires them green (`:194-197`). `write_fragcolor_and_fragdata_*` must fail to compile. Neither group makes the two queries. There is no `invalid_assign_to_N` for N > 1. |
 
 ## What yakogl does at `fa4751b` (report-es2)
 
