@@ -679,6 +679,26 @@ together, never in one place only. Other `*_npot` cases
 `texture.size.cube.15x15_*`, `fbo.render.*npot*`) use one level and
 CLAMP_TO_EDGE and do not read the extension list.
 
+### H.3.1 Case to test (`tests/es2_npot.rs`)
+
+One test per case, named after it with the dots as underscores (for
+example `texture_completeness_2d_npot_t_repeat`), each on a fresh context
+and on both back end shapes (PowerVR, native-layered). Each asserts
+`GL_NO_ERROR` after every call and the bind the back end receives:
+complete (blue) or incomplete (black). Run with
+`cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_npot`
+(and without `report-es2`): 18 passed, 0 ignored. No defect was found, so
+no test is `#[ignore]`d.
+
+| dEQP case | Test | Outcome asserted |
+|---|---|---|
+| `texture.completeness.2d.npot_t_repeat`, `npot_s_repeat`, `npot_all_repeat`, `npot_mirrored_repeat`, `repeat_width_npot`, `repeat_height_npot` | `texture_completeness_2d_<case>` | no error, complete |
+| `texture.completeness.cube.npot_t_repeat`, `npot_s_repeat`, `npot_all_repeat`, `npot_mirrored_repeat` | `texture_completeness_cube_<case>` | no error, complete (default cube texture, new texture bound to 2D) |
+| `texture.completeness.2d.npot_size` | `texture_completeness_2d_npot_size` | 255..1 chain, no error, complete |
+| `texture.completeness.2d.npot_size_level_0`, `npot_size_level_1` | `texture_completeness_2d_<case>` | no error, incomplete |
+| `texture.completeness.cube.npot_size_level_0`, `npot_size_level_1`, `npot_size_level_0_pos_x`, `npot_size_level_1_neg_x` | `texture_completeness_cube_<case>` | no error, incomplete |
+| `negative_api.texture.generatemipmap_npot_wdt_hgt` | `negative_api_texture_generatemipmap_npot_wdt_hgt` | extension listed; the skipped body is `GL_NO_ERROR` |
+
 ### H.4 Board results
 
 - **i.MX8MP**, integration image `334d4e65` (2026-10-09), the whole tree: entry
@@ -728,6 +748,18 @@ CLAMP_TO_EDGE and do not read the extension list.
   shape. It asserts `GL_NO_ERROR` after every call and the completeness and
   sampling of the bind the back end receives, not pixels (the stand-in back
   end draws nothing). It needs `shaderc-online`.
+- Follow-up, stale NPOT comments (`src/` is outside the test item; other
+  items fix them). Line numbers at the tip of 2026-10-12:
+  `src/gl/texture.rs:2197` ("dEQP texture.completeness.2d.npot_size expects
+  it"), `src/gl/texture.rs:6976` (doc of the level-above-0 test, same claim),
+  `src/gl/texture.rs:11295` (`cube_chain_is_complete`: "which dEQP expects
+  too"), `src/gl/texture.rs:11581-11583` ("what dEQP's case is predicted to
+  do then"; superseded by H.2), `src/gl/draw.rs:13040-13046` (doc of
+  `a_npot_level_above_0_follows_the_version`: the refusal is the ES 2.0
+  rule, not what the CTS expects; the CTS case is replayed in
+  `tests/es2_npot.rs`). `NPOT_RESTRICTED` is false in every build, so the
+  `restricted` branches of the tests (`src/gl/draw.rs:13055`,
+  `src/gl/texture.rs:6989`, `:11593`) are dead.
 - The PowerVR's level arithmetic for an NPOT 2D chain is exercised only by
   `2d.npot_size` (a 63x63 level 2 at a 64-texel pitch) and glmark2's terrain.
 
