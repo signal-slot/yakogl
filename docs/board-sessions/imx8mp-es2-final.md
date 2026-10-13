@@ -3,8 +3,9 @@
 
 Plan #20 item `imx8mp-es2-final`, roadmap stage 1 (zero dEQP-GLES2 failures).
 Date: 2026-10-14. Board: Verdin i.MX8M Plus (GC7000), the leased i.MX8MP farm
-resource, `BOARD_BOOT=uboot-mmc`. The board has no UART in this setup: every result
-is the SNVS record `tools/board.sh` reads after each cycle. No board address,
+resource, `BOARD_BOOT=uboot-mmc`. `tools/board.sh` reads no UART for i.MX8MP
+(`BOARD_UART` is a pi4/am62p setting): every result is the SNVS record it reads
+after each cycle. No board address,
 credential or UART path is written here.
 
 ## Summary
