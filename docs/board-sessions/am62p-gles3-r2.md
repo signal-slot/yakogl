@@ -41,3 +41,5 @@ mcu_uart0, this one is `ttyS3`.
 Move the bridge's UART cable to main_uart0 (the pins that appear as `ttyS2`
 at 115200), then re-run this item. Check again with
 `echo probe | sudo tee /dev/ttyS2` and look for the text on the bridge port.
+
+Note: the earlier session record is tools/cts/log/board-sessions/am62p-plan1.md. It gives no tty wiring, so it does not change this finding.
