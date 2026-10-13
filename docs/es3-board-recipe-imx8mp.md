@@ -127,8 +127,9 @@ The image is `$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin`. Name it after the commi
 results are reported against that hash.
 
 **Footprint.** The gles2 table image was 221,282,304 bytes in the 256 MiB `a53_ddr_section`
-(imx8mp-plan1.md). Measured for the gles3 table image: `zephyr.bin` 15,870,328 bytes (`es3-83115f91`), RAM 221,976 KB of
-256 MB (84.68 %), footprint checked by `board.sh` 227,303,424 bytes.
+(imx8mp-plan1.md). Measured for the gles3 table image: `zephyr.bin` 15,878,520 bytes (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`), RAM about
+221,976 KB of 256 MB (84.7 %), footprint checked by `board.sh` 227,311,616 bytes. Details:
+`docs/board-sessions/imx8mp-deqp-stage1-gles3.md`.
 
 ## 3. Run the tree on the board
 
@@ -142,8 +143,8 @@ tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8
 
 - **Preview:** `tools/board.sh --dry-run imx8mp tree ...` (with the same `TREE_IMAGE`; or
   `tools/cts/imx8mp-gles3-board.sh --dry-run tree <dir>`) prints the `DRY host$ ...` steps for every row and
-  touches no board. Done for the built image: 133 rows `e00`..`e132`, selectors 0..132, sha256
-  `1f1e7881...`; see the session doc.
+  touches no board. Done for the built image (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`): 133 rows
+  `e00`..`e132`, selectors 0..132; see the session doc.
 - **Subset:** `TREE_ROWS=0-9` or `TREE_ROWS=57,60-66` runs only those rows.
 - **Resume:** a row whose run directory already has an `INDEX.txt` is skipped.
 
