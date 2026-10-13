@@ -377,6 +377,7 @@ struct gles_draw {
 	 * buffer. 0: the packed pitch (every FBO and pbuffer). Sits in what was
 	 * tail padding. */
 	uint32_t target_pitch;
+<<<<<<< HEAD
 	/* The ES 3.0 occlusion query (GL_ANY_SAMPLES_PASSED[_CONSERVATIVE])
 	 * that counts this draw's samples: a backend query handle (1 ..
 	 * GLES_QUERY_HANDLES, started by query_begin), 0 for none. The GL core
@@ -384,6 +385,10 @@ struct gles_draw {
 	 * (do_clear, clear_quad) is never counted (ES 3.0 4.2.3: a clear is
 	 * not a draw), whatever path the backend clears with. Sits in what was
 	 * tail padding. */
+=======
+	/* The occlusion query (backend handle, 1..) this draw counts towards; 0:
+	 * none. */
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 	uint32_t occlusion_query;
 };
 
@@ -580,6 +585,7 @@ struct yakogl_backend {
 	 * undefined), the texels are left as they are; a negative errno
 	 * otherwise. Optional: NULL answers 1. */
 	int (*depth_resolve)(uint32_t id, float *dst, uint32_t w, uint32_t h, uint32_t pitch);
+<<<<<<< HEAD
 	/* ES 3.0 occlusion queries. query_begin: a query starts counting on
 	 * `handle` (1 .. GLES_QUERY_HANDLES - 1); reset its counter. Every kick
 	 * that counted on the handle before has completed (the GL core waits).
@@ -595,6 +601,20 @@ struct yakogl_backend {
 	int (*query_begin)(uint32_t handle);
 	void (*query_end)(uint32_t handle);
 	int (*query_result)(uint32_t handle, uint64_t *samples);
+=======
+	/* Occlusion queries (GL_ANY_SAMPLES_PASSED[_CONSERVATIVE]); all four
+	 * optional, and NULL query_begin keeps glBeginQuery GL_INVALID_OPERATION.
+	 * query_begin: zero the count of `handle` (1..32); 0, or a negative errno.
+	 * Draws with gles_draw.occlusion_query == handle count into it, across
+	 * any number of kicks. query_end: no more draws count. query_result: the
+	 * samples counted, summed over those kicks; only called after the last
+	 * of them completed; 0 or a negative errno. query_free: `handle` is no
+	 * longer used. */
+	int (*query_begin)(uint32_t handle);
+	void (*query_end)(uint32_t handle);
+	int (*query_result)(uint32_t handle, uint64_t *out);
+	void (*query_free)(uint32_t handle);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 extern const struct yakogl_backend *g_backend;   /* the backend of this build (src/backend.rs) */

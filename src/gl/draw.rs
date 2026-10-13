@@ -3170,6 +3170,7 @@ fn build_common(
         resolve_sampled_depth(c, program);
     }
     resolve_target(c, d)?;
+    d.occlusion_query = super::es3::occlusion_handle(c);
     set_target_format(c, d);
     d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
     set_sample_state(c, d);
@@ -4005,9 +4006,13 @@ fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, firs
     /* ES 3.0 transform feedback and rasterizer discard: the argument and
      * capture rules first, then a discarded draw stops here (no back end
      * sees it). Neither is reachable under report-es2 / with default state. */
+<<<<<<< HEAD
     if !crate::REPORT_ES2
         && (!tf::pre_draw(c, mode, false, first, count, draw_instances(), FUNC) || c.rasterizer_discard)
     {
+=======
+    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, false, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         return;
     }
     if count == 0 {
@@ -4182,7 +4187,11 @@ fn draw_elements(
     }
     /* ES 3.0 transform feedback (an indexed draw while a capture is on is an
      * error) and rasterizer discard: see draw_arrays */
+<<<<<<< HEAD
     if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, true, 0, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+=======
+    if !crate::REPORT_ES2 && (!tf::pre_draw(c, mode, true, count, draw_instances(), FUNC) || c.rasterizer_discard) {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         return;
     }
     if count == 0 {

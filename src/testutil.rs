@@ -1377,6 +1377,10 @@ static MOCK_BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+<<<<<<< HEAD
+=======
+    query_free: None,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 /// [`MOCK_BACKEND`] with the capabilities of the GC7000: a vertex fetch that
@@ -1412,6 +1416,10 @@ static MOCK_BACKEND_GC7000: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+<<<<<<< HEAD
+=======
+    query_free: None,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 /// [`MOCK_BACKEND`] whose texture unit has no ETC1, as the V3D's has none:
@@ -1448,6 +1456,10 @@ static MOCK_BACKEND_ETC1_DECODED: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+<<<<<<< HEAD
+=======
+    query_free: None,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 /// [`MOCK_BACKEND`] that takes an instanced draw's arrays with any divisor up

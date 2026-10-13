@@ -153,6 +153,10 @@ static BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+<<<<<<< HEAD
+=======
+    query_free: None,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 /// One context for the whole file; the tests take turns on it.
@@ -172,11 +176,16 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
         }
     });
+<<<<<<< HEAD
     /* What an earlier test left recorded and unflushed (a pending clear: the
      * clear checks end on the default framebuffer) is settled here, under the
      * previous test's mask, before this test's draws are counted; else it
      * reaches the back end at this test's glFinish, in whatever order the
      * threads took the lock. */
+=======
+    /* a clear the previous test left pending settles now, under that test's
+     * formats, not inside this test's draw record (the tests run in any order) */
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     // SAFETY: plain GL call.
     unsafe { glFinish() };
     DRAWS.lock().unwrap().clear();

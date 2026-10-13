@@ -360,7 +360,11 @@ _Static_assert(offsetof(struct gles_draw, sample_mask) == 3184, "struct gles_dra
 _Static_assert(offsetof(struct gles_draw, alpha_to_coverage) == 3185, "struct gles_draw.alpha_to_coverage");
 _Static_assert(offsetof(struct gles_draw, target_pitch) == 3188, "struct gles_draw.target_pitch");
 _Static_assert(offsetof(struct gles_draw, occlusion_query) == 3192, "struct gles_draw.occlusion_query");
+<<<<<<< HEAD
 _Static_assert(sizeof(struct yakogl_backend) == 192, "struct yakogl_backend");
+=======
+_Static_assert(sizeof(struct yakogl_backend) == 200, "struct yakogl_backend");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 _Static_assert(offsetof(struct yakogl_backend, name) == 0, "struct yakogl_backend.name");
 _Static_assert(offsetof(struct yakogl_backend, native_attrib_formats) == 8, "struct yakogl_backend.native_attrib_formats");
 _Static_assert(offsetof(struct yakogl_backend, rt_rgba8888_is_bgra) == 12, "struct yakogl_backend.rt_rgba8888_is_bgra");
@@ -390,6 +394,10 @@ _Static_assert(offsetof(struct yakogl_backend, depth_resolve) == 160, "struct ya
 _Static_assert(offsetof(struct yakogl_backend, query_begin) == 168, "struct yakogl_backend.query_begin");
 _Static_assert(offsetof(struct yakogl_backend, query_end) == 176, "struct yakogl_backend.query_end");
 _Static_assert(offsetof(struct yakogl_backend, query_result) == 184, "struct yakogl_backend.query_result");
+<<<<<<< HEAD
+=======
+_Static_assert(offsetof(struct yakogl_backend, query_free) == 192, "struct yakogl_backend.query_free");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 _Static_assert(sizeof(struct gl_buffer) == 104, "struct gl_buffer");
 _Static_assert(offsetof(struct gl_buffer, used) == 0, "struct gl_buffer.used");
 _Static_assert(offsetof(struct gl_buffer, target) == 4, "struct gl_buffer.target");

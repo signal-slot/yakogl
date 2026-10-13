@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+<<<<<<< HEAD
 //! ES 3.0 occlusion queries through the GL API on the host, against a back
 //! end of the test's own (docs/es3-occlusion-query.md sections 4, 5 and 8):
 //! the query state machine, the per-draw `GlesDraw::occlusion_query`,
@@ -14,12 +15,28 @@
 //! completes on `wait_kick` / `finish`, or when the test says so). Its
 //! `query_begin` and `query_result` assert the contract of `src/backend.h`:
 //! no kick holding a draw counted on the handle is still unfinished.
+=======
+//! ES 3.0 occlusion queries through the GL API on the host (item oq-gl,
+//! docs/es3-occlusion-query.md sections 4, 5 and 8): the query state machine,
+//! the back end handle and the per-draw `GlesDraw::occlusion_query`, RESULT /
+//! RESULT_AVAILABLE across several kicks, and the errors of ES 3.0 section 2.14.
+//!
+//! The back end is a fake whose "GPU" counts samples: each draw it is handed
+//! with a non-zero `occlusion_query` adds `SAMPLES` to the counter of that
+//! handle, but only when the kick that holds the draw completes (a kick
+//! completes on `wait_kick` / `finish`, or when the test says so), so a read
+//! that did not wait for the last kick sees a short count.
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 //!
 //! An ES 2.0-reporting build (`report-es2`) must answer as before:
 //! `es2_build_keeps_its_answers` is the only test it runs.
 //!
 //! ```text
+<<<<<<< HEAD
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_occlusion_gl
+=======
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_occlusion_gl
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 //! ```
 
 #![cfg(feature = "host-test")]
@@ -29,7 +46,11 @@
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
 use std::sync::{Mutex, MutexGuard, Once};
+<<<<<<< HEAD
 use yakogl::backend::{GlesDraw, GlesHeap, YakoglBackend, GLES_QUERY_HANDLES};
+=======
+use yakogl::backend::{GlesDraw, GlesHeap, YakoglBackend};
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
 use yakogl::gl::es3::*;
@@ -84,8 +105,11 @@ static OSAL: OsalOps = OsalOps {
 
 /* ---- the fake back end ---------------------------------------------------- */
 
+<<<<<<< HEAD
 const HANDLES: usize = GLES_QUERY_HANDLES as usize;
 
+=======
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 struct Fake {
     /// The kick being recorded (ids start at 1; 0 is "completed" at start).
     cur: u32,
@@ -96,18 +120,28 @@ struct Fake {
     cur_items: Vec<(u32, u64)>,
     /// Submitted, not yet completed: (kick id, counted draws).
     kicks: Vec<(u32, Vec<(u32, u64)>)>,
+<<<<<<< HEAD
     counters: [u64; HANDLES],
     /// Handles query_begin was called for.
     begun: Vec<u32>,
+=======
+    counters: [u64; 40],
+    live: [bool; 40],
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     /// `occlusion_query` of every draw handed over, in order.
     seen: Vec<u32>,
     /// Samples each counted draw "passes".
     samples: u64,
     begin_rc: i32,
     wait_rc: i32,
+<<<<<<< HEAD
     ends: Vec<u32>,
     /// query_end submits the open kick, as a tile-based back end may.
     submit_at_end: bool,
+=======
+    frees: Vec<u32>,
+    ends: Vec<u32>,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 }
 
 static FAKE: Mutex<Fake> = Mutex::new(Fake {
@@ -116,14 +150,24 @@ static FAKE: Mutex<Fake> = Mutex::new(Fake {
     cur_draws: 0,
     cur_items: Vec::new(),
     kicks: Vec::new(),
+<<<<<<< HEAD
     counters: [0; HANDLES],
     begun: Vec::new(),
+=======
+    counters: [0; 40],
+    live: [false; 40],
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     seen: Vec::new(),
     samples: 1,
     begin_rc: 0,
     wait_rc: 0,
+<<<<<<< HEAD
     ends: Vec::new(),
     submit_at_end: false,
+=======
+    frees: Vec::new(),
+    ends: Vec::new(),
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 });
 
 fn fake() -> MutexGuard<'static, Fake> {
@@ -149,12 +193,15 @@ impl Fake {
         }
         self.completed = self.completed.max(id.min(self.cur - 1));
     }
+<<<<<<< HEAD
     /// The contract of query_begin and query_result: no draw counted on
     /// `h` is still unrecorded-unsubmitted or in a kick that has not
     /// completed.
     fn settled(&self, h: u32) -> bool {
         !self.cur_items.iter().any(|i| i.0 == h) && !self.kicks.iter().any(|k| k.1.iter().any(|i| i.0 == h))
     }
+=======
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 }
 
 /// Let the "GPU" finish every submitted kick.
@@ -199,6 +246,7 @@ unsafe extern "C" fn b_wait_kick(id: u32) -> i32 {
 }
 unsafe extern "C" fn b_query_begin(h: u32) -> i32 {
     let mut f = fake();
+<<<<<<< HEAD
     assert!((1..GLES_QUERY_HANDLES).contains(&h), "handle {h}");
     assert!(f.settled(h), "query_begin({h}) while a kick counting on it is unfinished");
     if f.begin_rc != 0 {
@@ -224,6 +272,35 @@ unsafe extern "C" fn b_query_result(h: u32, out: *mut u64) -> i32 {
 
 macro_rules! table {
     ($name:expr, $begin:expr, $end:expr, $result:expr) => {
+=======
+    if f.begin_rc != 0 {
+        return f.begin_rc;
+    }
+    assert!((1..=32).contains(&h), "handle {h}");
+    assert!(!f.live[h as usize], "handle {h} given out twice");
+    f.live[h as usize] = true;
+    f.counters[h as usize] = 0;
+    0
+}
+unsafe extern "C" fn b_query_end(h: u32) {
+    fake().ends.push(h);
+}
+unsafe extern "C" fn b_query_result(h: u32, out: *mut u64) -> i32 {
+    let f = fake();
+    assert!(f.live[h as usize]);
+    *out = f.counters[h as usize];
+    0
+}
+unsafe extern "C" fn b_query_free(h: u32) {
+    let mut f = fake();
+    assert!(f.live[h as usize], "free of a dead handle {h}");
+    f.live[h as usize] = false;
+    f.frees.push(h);
+}
+
+macro_rules! table {
+    ($name:expr, $begin:expr, $end:expr, $result:expr, $free:expr) => {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         YakoglBackend {
             name: $name.as_ptr() as *const c_char,
             native_attrib_formats: 0,
@@ -254,14 +331,26 @@ macro_rules! table {
             query_begin: $begin,
             query_end: $end,
             query_result: $result,
+<<<<<<< HEAD
+=======
+            query_free: $free,
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         }
     };
 }
 
 /// A back end that counts samples.
+<<<<<<< HEAD
 static COUNTING: YakoglBackend = table!(c"es3-oq", Some(b_query_begin), Some(b_query_end), Some(b_query_result));
 /// A back end without the query entries.
 static BARE: YakoglBackend = table!(c"es3-oq-bare", None, None, None);
+=======
+static COUNTING: YakoglBackend =
+    table!(c"es3-oq", Some(b_query_begin), Some(b_query_end), Some(b_query_result), Some(b_query_free));
+/// A back end without the query entries: what the three real ones are until
+/// their own items.
+static BARE: YakoglBackend = table!(c"es3-oq-bare", None, None, None, None);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 
 static LOCK: Mutex<()> = Mutex::new(());
 static ONCE: Once = Once::new();
@@ -284,14 +373,22 @@ fn context() -> MutexGuard<'static, ()> {
     g
 }
 
+<<<<<<< HEAD
 /// Back to a known state: no query active, every name deleted, the fake
 /// empty and finished.
+=======
+/// Back to a known state: no query active, the fake empty and finished.
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 fn reset() {
     // SAFETY: plain GL calls on the one context.
     unsafe {
         yakogl::backend::g_backend = &COUNTING;
+<<<<<<< HEAD
         fake().submit_at_end = false;
         for t in [GL_ANY_SAMPLES_PASSED, GL_ANY_SAMPLES_PASSED_CONSERVATIVE, GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN] {
+=======
+        for t in [GL_ANY_SAMPLES_PASSED, GL_ANY_SAMPLES_PASSED_CONSERVATIVE] {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             let mut v = 0;
             glGetQueryiv(t, GL_CURRENT_QUERY, &mut v);
             if v != 0 {
@@ -307,11 +404,18 @@ fn reset() {
     }
     let mut f = fake();
     f.seen.clear();
+<<<<<<< HEAD
     f.begun.clear();
     f.counters = [0; HANDLES];
     f.samples = 1;
     f.begin_rc = 0;
     f.wait_rc = 0;
+=======
+    f.samples = 1;
+    f.begin_rc = 0;
+    f.wait_rc = 0;
+    f.frees.clear();
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     f.ends.clear();
 }
 
@@ -360,7 +464,11 @@ fn es2_build_keeps_its_answers() {
         glEndQuery(GL_ANY_SAMPLES_PASSED);
         assert_eq!(err(), GL_INVALID_OPERATION);
     }
+<<<<<<< HEAD
     assert!(fake().begun.is_empty(), "the back end was not asked for a counter");
+=======
+    assert!(fake().live.iter().all(|l| !l), "the back end was not asked for a counter");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 }
 
 /* ------------------------------------------------------------- ES 3.0 -- */
@@ -407,6 +515,13 @@ mod es3 {
         unsafe { glDrawArrays(GL_TRIANGLES, 0, 3) };
     }
 
+<<<<<<< HEAD
+=======
+    fn live_handles() -> usize {
+        fake().live.iter().filter(|l| **l).count()
+    }
+
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     #[test]
     fn a_count_above_zero_is_true_and_zero_is_false() {
         let _g = context();
@@ -417,7 +532,11 @@ mod es3 {
             glBeginQuery(GL_ANY_SAMPLES_PASSED, a);
             assert_eq!(err(), GL_NO_ERROR);
             assert_eq!(current(GL_ANY_SAMPLES_PASSED), a as GLint);
+<<<<<<< HEAD
             assert_eq!(current(GL_ANY_SAMPLES_PASSED_CONSERVATIVE), 0, "CURRENT_QUERY names the exact target");
+=======
+            assert_eq!(current(GL_ANY_SAMPLES_PASSED_CONSERVATIVE), a as GLint, "one slot for both targets");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             assert_eq!(glIsQuery(a), GL_TRUE_B);
             draw();
             glEndQuery(GL_ANY_SAMPLES_PASSED);
@@ -428,16 +547,25 @@ mod es3 {
 
             fake().samples = 0;
             glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, b);
+<<<<<<< HEAD
             assert_eq!(current(GL_ANY_SAMPLES_PASSED_CONSERVATIVE), b as GLint);
+=======
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             draw();
             draw();
             glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
             assert_eq!(obj(b, GL_QUERY_RESULT), GL_FALSE);
             assert_eq!(err(), GL_NO_ERROR);
         }
+<<<<<<< HEAD
         let f = fake();
         assert_eq!(f.begun.len(), 2);
         assert_ne!(f.begun[0], f.begun[1], "each name has its own handle");
+=======
+        assert_eq!(live_handles(), 0, "every handle was given back after the read");
+        let f = fake();
+        assert_eq!(f.frees.len(), 2);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     }
 
     #[test]
@@ -496,6 +624,7 @@ mod es3 {
             glFlush(); /* kick 1 */
             draw();
             glFlush(); /* kick 2 */
+<<<<<<< HEAD
             draw(); /* kick 3, still being recorded at glEndQuery */
             glEndQuery(GL_ANY_SAMPLES_PASSED);
             assert_eq!(err(), GL_NO_ERROR);
@@ -524,18 +653,42 @@ mod es3 {
 
     #[test]
     fn reading_the_result_waits_for_the_query_kick_alone() {
+=======
+            draw();
+            glEndQuery(GL_ANY_SAMPLES_PASSED); /* kick 3 */
+            assert_eq!(err(), GL_NO_ERROR);
+        }
+        assert_eq!(fake().kicks.len(), 3, "three kicks are in flight");
+        /* the first two complete: the query is not available yet */
+        fake().complete_to(2);
+        assert_eq!(obj(q, GL_QUERY_RESULT_AVAILABLE), GL_FALSE);
+        gpu_completes();
+        assert_eq!(obj(q, GL_QUERY_RESULT_AVAILABLE), GL_TRUE);
+        assert_eq!(live_handles(), 1, "reading availability does not release the counter");
+        assert_eq!(fake().counters.iter().sum::<u64>(), 9, "three draws of three samples");
+        assert_eq!(obj(q, GL_QUERY_RESULT), GL_TRUE);
+        assert_eq!(live_handles(), 0);
+    }
+
+    #[test]
+    fn reading_the_result_waits_for_the_last_kick_alone() {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         let _g = context();
         program();
         let q = gen();
         // SAFETY: plain GL calls.
         unsafe {
+<<<<<<< HEAD
             fake().submit_at_end = true; /* the back end splits the frame at End */
+=======
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
             draw();
             glEndQuery(GL_ANY_SAMPLES_PASSED);
             draw(); /* recorded after the end, not part of the query */
         }
         assert_eq!(obj(q, GL_QUERY_RESULT), GL_TRUE, "the draw before End was waited for");
+<<<<<<< HEAD
         let f = fake();
         assert_eq!(f.cur_draws, 1, "the later draw is still unsubmitted");
         assert_eq!(f.seen.last(), Some(&0), "and not counted");
@@ -557,6 +710,9 @@ mod es3 {
         }
         assert_eq!(obj(q, GL_QUERY_RESULT), GL_FALSE);
         assert_eq!(err(), GL_NO_ERROR);
+=======
+        assert!(fake().cur_draws == 1, "the later draw is still unsubmitted");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     }
 
     #[test]
@@ -604,12 +760,19 @@ mod es3 {
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
             draw();
             glEndQuery(GL_ANY_SAMPLES_PASSED);
+<<<<<<< HEAD
             /* begun again before the first result was read: the counter is
              * reset only after the first use's kick (the fake asserts it) */
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
             assert_eq!(err(), GL_NO_ERROR);
             glEndQuery(GL_ANY_SAMPLES_PASSED);
             assert_eq!(obj(q, GL_QUERY_RESULT), GL_FALSE, "the second use counted nothing");
+=======
+            assert_eq!(obj(q, GL_QUERY_RESULT), GL_TRUE);
+            glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+            glEndQuery(GL_ANY_SAMPLES_PASSED);
+            assert_eq!(obj(q, GL_QUERY_RESULT), GL_FALSE);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             /* the target is fixed by the first use */
             glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, q);
             assert_eq!(err(), GL_INVALID_OPERATION);
@@ -639,7 +802,11 @@ mod es3 {
             glBeginQuery(GL_ANY_SAMPLES_PASSED, b);
             assert_eq!(err(), GL_INVALID_OPERATION, "same target already active");
             glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, b);
+<<<<<<< HEAD
             assert_eq!(err(), GL_INVALID_OPERATION, "the two occlusion targets share a binding point");
+=======
+            assert_eq!(err(), GL_INVALID_OPERATION, "the two occlusion targets are one");
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             glBeginQuery(GL_ANY_SAMPLES_PASSED, a);
             assert_eq!(err(), GL_INVALID_OPERATION, "id already active");
             glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, a);
@@ -648,10 +815,14 @@ mod es3 {
             assert_eq!(err(), GL_NO_ERROR, "another target does not collide");
             assert_eq!(current(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN), b as GLint);
             glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+<<<<<<< HEAD
             glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
             assert_eq!(err(), GL_INVALID_OPERATION, "ended with the other occlusion target");
             assert_eq!(current(GL_ANY_SAMPLES_PASSED), a as GLint, "and still active");
             glEndQuery(GL_ANY_SAMPLES_PASSED);
+=======
+            glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE); /* ends the ANY query: one slot */
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
             assert_eq!(err(), GL_NO_ERROR);
             glEndQuery(GL_ANY_SAMPLES_PASSED);
             assert_eq!(err(), GL_INVALID_OPERATION);
@@ -686,7 +857,11 @@ mod es3 {
     }
 
     #[test]
+<<<<<<< HEAD
     fn deleting_an_active_query_ends_it_and_its_handle_waits_before_reuse() {
+=======
+    fn deleting_a_query_ends_it_and_frees_the_counter_after_its_kick() {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         let _g = context();
         program();
         let q = gen();
@@ -698,6 +873,7 @@ mod es3 {
             assert_eq!(err(), GL_NO_ERROR);
             assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
             assert_eq!(glIsQuery(q), GL_FALSE_B);
+<<<<<<< HEAD
             assert_eq!(fake().ends.len(), 1, "the deleted query was ended");
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
             assert_eq!(err(), GL_INVALID_OPERATION, "a deleted name is not a query");
@@ -740,11 +916,46 @@ mod es3 {
             for (i, q) in names.iter().enumerate() {
                 assert_eq!(obj(*q, GL_QUERY_RESULT), (i % 2) as GLuint, "query {i}");
             }
+=======
+            glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+            assert_eq!(err(), GL_INVALID_OPERATION, "a deleted name is not a query");
+        }
+        assert_eq!(live_handles(), 0);
+        let f = fake();
+        assert_eq!(f.frees.len(), 1);
+        assert!(f.kicks.is_empty(), "the kick was waited for before the handle went back");
+    }
+
+    #[test]
+    fn handles_run_out_cleanly_and_come_back() {
+        let _g = context();
+        let mut names = Vec::new();
+        // SAFETY: plain GL calls.
+        unsafe {
+            /* 31 names exist; leave each query pending so each holds a handle */
+            for _ in 0..31 {
+                let q = gen();
+                glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+                assert_eq!(err(), GL_NO_ERROR);
+                glEndQuery(GL_ANY_SAMPLES_PASSED);
+                names.push(q);
+            }
+            assert_eq!(live_handles(), 31);
+            for q in &names {
+                assert_eq!(obj(*q, GL_QUERY_RESULT), GL_FALSE);
+            }
+            assert_eq!(live_handles(), 0);
+            glDeleteQueries(names.len() as GLsizei, names.as_ptr());
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         }
     }
 
     #[test]
+<<<<<<< HEAD
     fn a_back_end_that_cannot_allocate_gives_out_of_memory_and_no_active_query() {
+=======
+    fn a_back_end_that_cannot_allocate_gives_out_of_memory_and_no_object_state() {
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         let _g = context();
         let q = gen();
         // SAFETY: plain GL calls.
@@ -755,9 +966,14 @@ mod es3 {
             assert_eq!(current(GL_ANY_SAMPLES_PASSED), 0);
             fake().begin_rc = 0;
             glBeginQuery(GL_ANY_SAMPLES_PASSED, q);
+<<<<<<< HEAD
             assert_eq!(err(), GL_NO_ERROR, "the next Begin succeeds");
             glEndQuery(GL_ANY_SAMPLES_PASSED);
             assert_eq!(err(), GL_NO_ERROR);
+=======
+            assert_eq!(err(), GL_NO_ERROR, "the handle of the failed Begin was returned");
+            glEndQuery(GL_ANY_SAMPLES_PASSED);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         }
     }
 
@@ -775,6 +991,10 @@ mod es3 {
         }
         fake().wait_rc = -5;
         assert_eq!(obj(q, GL_QUERY_RESULT), GL_TRUE, "the conservative answer");
+<<<<<<< HEAD
+=======
+        assert_eq!(live_handles(), 0);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     }
 
     #[test]
@@ -799,6 +1019,10 @@ mod es3 {
             glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
             yakogl::backend::g_backend = &COUNTING;
         }
+<<<<<<< HEAD
         assert!(fake().begun.is_empty());
+=======
+        assert_eq!(live_handles(), 0);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     }
 }

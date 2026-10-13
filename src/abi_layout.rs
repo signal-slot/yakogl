@@ -336,7 +336,11 @@ const _: () = assert!(offset_of!(crate::backend::GlesDraw, sample_mask) == 3184)
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, alpha_to_coverage) == 3185);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_pitch) == 3188);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, occlusion_query) == 3192);
+<<<<<<< HEAD
 const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 192);
+=======
+const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 200);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, name) == 0);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, native_attrib_formats) == 8);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, rt_rgba8888_is_bgra) == 12);
@@ -366,6 +370,10 @@ const _: () = assert!(offset_of!(crate::backend::YakoglBackend, depth_resolve) =
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_begin) == 168);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_end) == 176);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_result) == 184);
+<<<<<<< HEAD
+=======
+const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_free) == 192);
+>>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 const _: () = assert!(size_of::<crate::gl::context::GlBuffer>() == 104);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, used) == 0);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, target) == 4);
