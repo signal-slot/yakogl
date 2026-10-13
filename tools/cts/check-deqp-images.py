@@ -337,6 +337,12 @@ def self_test():
     ok(any('REPORT_ES2=y (a dEQP-GLES3 image' in b
            for b in check_dotconfig(os.path.join(fixtures, 'pi4-sweep.config'), False, gles3=True)),
        'fixture pi4-sweep.config with --gles3: refused, the message names REPORT_ES2')
+    # --gles3: both REPORT_ES2 symbols off passes; DEQP_REPORT_ES2=n alone (YAKOGL_REPORT_ES2 left y) is refused
+    ok(check_dotconfig(os.path.join(fixtures, 'bad-report-es3.config'), False, gles3=True) == [],
+       'fixture bad-report-es3.config: a GLES3 image (both REPORT_ES2 off) passes --gles3')
+    g3 = check_dotconfig(os.path.join(fixtures, 'bad-gles3-report.config'), False, gles3=True)
+    ok(any('YAKOGL_REPORT_ES2' in b for b in g3),
+       'fixture bad-gles3-report.config: --gles3 refuses it, naming YAKOGL_REPORT_ES2 (still ES 2.0)')
     for f, ms4, sym in (('bad-compiler-missing.config', False, 'YAKOGL_SHADERC_ONLINE'),
                         ('bad-shaderc-offline.config', False, 'YAKOGL_SHADERC_OFFLINE'),
                         ('bad-precompiled-only.config', False, 'YAKOGL_SHADERC_PRECOMPILED_ONLY'),
