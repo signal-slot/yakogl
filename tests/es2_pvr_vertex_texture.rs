@@ -27,11 +27,11 @@
 //! - a 2D cell stages 1,225,804 bytes of client data (indices and two
 //!   arrays), which the PowerVR copies into the frame's GENERAL arena
 //!   (src/pvr/backend.rs record_draw). The default arena is 1024 KiB since
-//!   the frame-set default (zephyr/Kconfig YAKOGL_PVR_ARENA_GEN_KB), so at
-//!   the integration tip the draw did not fit an empty frame and was
-//!   refused, not drawn. Main draws it since a6fc6f14: draw_dispatch cuts
-//!   an indexed draw whose staged bytes pass half an empty arena into index
-//!   pieces (draw_indexed_pieces; its tests are in src/pvr/backend_tests.rs).
+//!   the frame-set default (zephyr/Kconfig YAKOGL_PVR_ARENA_GEN_KB), so the
+//!   draw does not fit an empty frame as one piece. Since a6fc6f14 the
+//!   back end draws it: draw_dispatch cuts an indexed draw whose staged
+//!   bytes pass half an empty arena into index pieces (draw_indexed_pieces;
+//!   its tests are in src/pvr/backend_tests.rs).
 //!   A cube cell stages 365,148 bytes and fits;
 //! - the vertex-stage texture binding is right (size, stride, levels and
 //!   their offsets, filters, wraps): not the texture state;
@@ -448,12 +448,13 @@ fn staged_bytes(s: &Seen) -> u64 {
 /// and two client arrays of 516,128 bytes (64,516 vertices of a vec2 each):
 /// 1,225,804 bytes, the figure tools/cts/RESULTS.md records for the same
 /// grid on the i.MX8MP. That is more than the PowerVR's default GENERAL
-/// arena holds empty (1,048,576 bytes), and an indexed draw is not cut
-/// into pieces (src/pvr/backend.rs draw_dispatch), so at the integration
-/// tip the back end refuses it: "does not fit an empty frame ... not drawn",
-/// -ENOMEM. Every cell of every 2D case is such a draw, so all 45 cases
-/// read the clear colour. This test pins the GL core's side, which the fix
-/// (the doc) does not change: the draw stays this size.
+/// arena holds empty (1,048,576 bytes). The draw stays this size on the GL
+/// core side; it is one glDrawElements and the core does not cut it. Since
+/// a6fc6f14 the PowerVR back end draws it in pieces of its index list
+/// (src/pvr/backend.rs draw_dispatch, draw_indexed_pieces), so every cell
+/// of every 2D case is drawn. Before that the back end refused it ("does not
+/// fit an empty frame ... not drawn", -ENOMEM) and all 45 cases read the
+/// clear colour. This test pins the GL core's side: the draw stays this size.
 #[test]
 fn a_2d_cell_stages_more_than_an_empty_general_arena_holds() {
     let (_g, _ctx) = start();
