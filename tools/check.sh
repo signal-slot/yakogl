@@ -1212,6 +1212,7 @@ scope v3d
 step "test    $V3D_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
+<<<<<<< HEAD
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
 # glClear on the V3D (tests/v3d_clear.rs, from the investigation
 # es2-v3d-clear.md section 5.1, removed by 358ca5324): the TLB/quad
@@ -1220,6 +1221,13 @@ step "test    $V3D_CONFIG (tests/v3d_cube_noseamless.rs)" \
 # dEQP-GLES2 runs on the report-es2 one.
 step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_clear
+=======
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_cube_noseamless
+# glClear's TLB/quad decision, the clear quad's state and the scissor geometry
+# (docs/investigations/es2-v3d-clear.md, 5.1).
+step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_clear
+>>>>>>> 74f80e66161c03758a8d19d91c0a3f3cb5181126
 # glmark2's V3D allocations replayed through the OSAL's carve-out allocator
 # (src/osal/v3d_granules.h) and Mesa's layout (driver/src/v3d/v3d_tex.c), both
 # built from C by the test with `cc`: every large request fits the Pi 4's
@@ -1254,6 +1262,7 @@ step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
 step "test    $V3D_ES2_CONFIG (tests/v3d_sim_mesa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_sim_mesa
 step "test    $V3D_ES2_CONFIG (tests/v3d_cube_noseamless.rs)" \
+<<<<<<< HEAD
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
 step "test    $V3D_ES2_CONFIG (tests/v3d_clear.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_clear
@@ -1265,6 +1274,17 @@ step "test    $V3D_ES2_CONFIG (tests/es3_srgb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_srgb
 step "test    $V3D_ES2_CONFIG (tests/es3_occlusion_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_occlusion_gl
+=======
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_cube_noseamless
+# The same clear tests in the ES 2.0 build (docs/investigations/es2-v3d-clear.md, 5.1).
+step "test    $V3D_ES2_CONFIG (tests/v3d_clear.rs)" \
+  cargo test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_clear
+# The ignored population of the row above, by name: never silent.
+if [ -s "$V3D_IGNORED" ]; then
+  echo "      $V3D_CONFIG: $(wc -l < "$V3D_IGNORED") ignored test(s), listed in $V3D_IGNORED:"
+  sed 's/^/      /' "$V3D_IGNORED"
+fi
+>>>>>>> 74f80e66161c03758a8d19d91c0a3f3cb5181126
 # The FFI pins of src/v3d/ffi.rs, asserted against the real headers, and the
 # job builder the image links, both with the host C compiler: a header that
 # moved, or a warning in the builder, fails here rather than in an image.
