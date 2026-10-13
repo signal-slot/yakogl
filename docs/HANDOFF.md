@@ -2,8 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Handoff
 
-The state of the work and what comes next. Update this file in the same
-commit as any result that changes it. Last update: 2026-10-11.
+The state of the work and what comes next. A result does not edit this
+file: it adds a note under `docs/handoff/` (one file per result,
+`docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
+in after the merge; a person folds the same way. Last update: 2026-10-13.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
@@ -646,6 +648,12 @@ the new numbers and record names.
   main and nightly, on self-hosted runners that carry the environment
   below; the file's header says which rows each event runs. The review
   reads the commit; it runs no check.
+- A result's hand-over goes in `docs/handoff/<YYYYMMDD>-<topic>.md`, never
+  in this file: two results landing in the same days always changed the
+  same lines here, so every second pull request conflicted with main and
+  was redone (`docs/handoff/README.md` has the note's shape). The
+  `handoff-fold` stage folds the notes in after the merge;
+  `tools/handoff-notes.sh` lists what waits.
 - Locally, run only the rows the change reaches:
   `tools/check.sh --changed <base>` maps each changed path to the parts it
   can break (a GPU back end, gl_test, the tools, the precompiled tables,
