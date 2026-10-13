@@ -17286,6 +17286,7 @@ Not plain `origin/main` builds: the port was not yet on main. The record words s
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
 
+<<<<<<< HEAD
 ## i.MX8MP: common set on `cd738b1a` (2026-10-14)
 
 Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not built), run from U-Boot
@@ -17300,3 +17301,22 @@ Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not b
 | GT | failed | `594b010e 002c0107 ffff0030 00100031` | 48 of 49 run passed, 1 skipped (case 16), case 44 fails (#6) |
 
 `resets=absent` on every row. The only failure is the known gl_test case 44 (RGBA16F target, #6).
+=======
+## i.MX8MP: the five common rows on `ef00b291` (2026-10-14)
+
+`tools/cts/cts-common.sh imx8mp build` then `run`, `BOARD_BOOT=uboot-mmc`, images from origin/main
+`ef00b291` (`build/common/imx8mp-ef00b291`, 0 rows not built). Records
+`records/imx8mp/common-ef00b291/` (SNVS records, no console).
+
+| row | verdict | record |
+|---|---|---|
+| GM glmark2 | done | score 43, 33 scenes ran, 0 failed, 0 unsupported, 800x600 on-screen |
+| SO slint | done | `PROBES` pass, crc16 `c592` |
+| SV slint-view | done | `PROBES` pass, crc16 `c592` |
+| CL cluster | done | `PROBES` pass, crc16 `b107` |
+| GT gl_test | failed (rc=4) | `CASE` seq 14: 48 of 49 run pass; case 16 skipped (#8); case 44 fails (#6) |
+
+GM, SO, SV and CL pass. GT's only failure is case 44, the known RGBA16F layout defect (#6),
+unchanged from `f2a13877`. The run count is 49 against the 48 of the earlier record because
+`ef00b291` has one more case; the failing and skipped cases are the same.
+>>>>>>> a6d1528efbc1aa4a889d0c8b161805d44293bf0c
