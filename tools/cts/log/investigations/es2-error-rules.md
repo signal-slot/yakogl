@@ -357,8 +357,8 @@ proposed.
 
 ## Status
 
-Two tranches are done. Each test asserts the error in `report-es2` and the
-unchanged result in the ES 3.0 build. (Status rewritten 2026-10-12 from the
+Five tranches are done (vertex, state/program, buffer, framebuffer,
+texture). Each test asserts the error in `report-es2` and the unchanged result in the ES 3.0 build. (Status rewritten 2026-10-12 from the
 integration results of old PRs #35 and #64.)
 
 | Rows | State | File |
@@ -375,10 +375,11 @@ integration results of old PRs #35 and #64.)
 | 34 | done (framebuffer tranche): `GL_READ_FRAMEBUFFER` / `GL_DRAW_FRAMEBUFFER` are refused by the public entry points (`is_public_fb_target`); `glInvalidateFramebuffer`, an ES 3.0 entry point, keeps the three. Pinned by `tests/es2_error_rules_fbo.rs` | `src/gl/framebuffer.rs` |
 | 35 | done: `GL_DEPTH_STENCIL_ATTACHMENT` is refused (`is_public_attachment_point`) | `src/gl/framebuffer.rs` |
 | 36 | done: `renderbuffer_format_advertised` is an allowlist under `report-es2`: the ES 2.0 five plus the formats of the advertised extensions. `GL_BGRA8_EXT` stays accepted (`GL_EXT_texture_format_BGRA8888` is advertised) | `src/gl/framebuffer.rs` |
+| 24-27 | done (texture tranche, a14f341): under `report-es2` `GL_TEXTURE_3D` and `GL_TEXTURE_2D_ARRAY` (`glBindTexture`, `glGenerateMipmap`, `glTexParameter*`, `glGetTexParameter*` via `binding_for`), the names outside Table 3.10 (`WRAP_R`, `BASE/MAX_LEVEL`, `MIN/MAX_LOD`, `COMPARE_MODE/FUNC`, `SWIZZLE_*`; getting `TEXTURE_IMMUTABLE_FORMAT/LEVELS`) and the ES 3.0-only pixel types (`BYTE`, `SHORT`, `INT`, `GL_HALF_FLOAT` 0x140B, the packed 2_10_10_10 / 10F_11F_11F / 5_9_9_9 / `FLOAT_32_UNSIGNED_INT_24_8` types) give `GL_INVALID_ENUM`. Stay accepted: `GL_MIRRORED_REPEAT`, `GL_HALF_FLOAT_OES` (0x8D61), the `GL_OES_depth_texture` depth types. Two spec-based choices: `GL_UNSIGNED_INT`/`GL_UNSIGNED_SHORT` with a colour format stays `GL_INVALID_OPERATION` (`GL_OES_depth_texture` is claimed); `GL_FLOAT` is refused (`GL_OES_texture_float` is not claimed). Predicates `es3_only_texture_target`, `es3_only_tex_param`, `es3_only_pixel_type`. Pinned by `tests/es2_error_rules_texture.rs`; the `tests/es2_report_guard.rs` pin `es3_only_pixel_types_are_invalid_enum` runs (no longer ignored) | `src/gl/texture.rs` |
 
 ### Next tranche (not done)
 
-- `src/gl/draw.rs`: row 11 (`GL_UNSIGNED_INT` index type; also row 8's draw calls, row 12). `src/gl/texture.rs`: rows 24-27 (`es3_only_pixel_types_are_invalid_enum` is still an ignored `BUG:` pin).
+- `src/gl/draw.rs`: row 11 (`GL_UNSIGNED_INT` index type; also row 8's draw calls, row 12).
 - the shared `src/gl/es2_rules.rs` of the proposal, once more than one file needs the same predicate.
 
 Rows 4, 5, 33, 43, 44 stay as decided in the proposal (no enum rule).
