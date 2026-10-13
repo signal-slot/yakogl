@@ -73,10 +73,12 @@ want tools/cts/log/board-sessions/x.md docs
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).
 # The same for the glmark2 tree (the corpus row needs GLMARK2_SRC/src).
+# MESA_V3D_TREE is emptied: set, it replaces the v3d Mesa reference build row
+# with nothing, so the plan's row count would depend on the host.
 mkdir -p build/check/plan-ws/zephyr build/check/plan-gm2/src
 plan() {
-  ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-gm2 YAKOGL_CHECK_PLAN=1 \
-    YAKOGL_CHECK_PATHS="$1" tools/check.sh --changed HEAD 2>&1 |
+  ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-gm2 MESA_V3D_TREE= \
+    YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --changed HEAD 2>&1 |
     sed 's/\x1b\[[0-9;]*m//g'
 }
 expect() {
