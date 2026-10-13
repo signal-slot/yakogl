@@ -211,8 +211,9 @@ name = "handoff-fold"
 # this stage, the only writer of HANDOFF.md, folds the notes in after a
 # merge into main that left some; its change lands as a pull request like
 # any other. `after = "merge"`: a mirrored project's merge target is main
-# itself (ccfarm docs/design/issues-record.md §7), and it has no promotion,
-# so an `after = "promote"` stage never runs for it.
+# itself (ccfarm docs/design/issues-record.md §7); since ccfarm's fix of
+# 2026-10-13 an `after = "promote"` stage runs on the same tip for such a
+# project (it has no promotion), so the board stages below are live again.
 after = "merge"
 description = "Folds the hand-over notes under docs/handoff/ into docs/HANDOFF.md"
 instructions = """
