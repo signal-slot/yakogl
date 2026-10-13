@@ -30,6 +30,13 @@ were refused in the session that wrote it). The gate run of that day and what
 it showed is in `git show 5ad2fa0e:docs/release/building.md`. A first run on a
 clean machine may still find a gap. If it does, fix the step here.
 
+Re-checked on 2026-10-14 at `a63fcc5b` without running a build (the session
+could not run build tools): every repository path named here exists, and the
+`file:line` references that had moved were corrected to the lines of this commit
+(`tools/check.sh` grew by about 1,200 lines since). Line numbers drift; when
+one is wrong, search the file for the name beside it. The external inputs
+(URLs, hashes, versions) were not fetched.
+
 ## The inputs
 
 "Pin" is what the repository fixes. "Not pinned" means the tree names no
@@ -76,8 +83,8 @@ repository at the commit that added this file.
   `ZEPHYR_VENV` and source `$ZEPHYR_VENV/bin/activate`
   (`tools/cts/imx8mp-env.sh:10,35-37`); give both the same value.
 - **Needed by:** every image.
-- **Caution:** `tools/check.sh:1315-1317` ignores `WEST_VENV` and looks for
-  `$ZEPHYR_WS/.venv`. If you run the full gate, make the venv there, or link
+- **Caution:** the Zephyr rows of `tools/check.sh` (`:2517-2519`) ignore
+  `WEST_VENV` and look for `$ZEPHYR_WS/.venv`. If you run the full gate, make the venv there, or link
   it (`ln -s $WORK/venv $ZEPHYR_WS/.venv`).
 
 ### 3. The Zephyr SDK
@@ -101,7 +108,8 @@ repository at the commit that added this file.
 - **What:** the Rust part of YakoGL (`libyakogl.a`) and the Slint and cluster
   staticlibs are built with `-Z build-std` for `aarch64-unknown-none`.
 - **Source:** `rustup`. Use `nightly` with the `rust-src` component. The
-  tree does not pin a nightly date (`README.md:207-208`,
+  tree does not pin a nightly date (`README.md`, the `YAKOGL_RUSTUP_TOOLCHAIN`
+  and `YAKOGL_CARGO_BUILD_STD` rows of the options table,
   `capi/yakogl_capi.cmake:13-14`, `.ccfarm/project.toml:84`). The cluster
   build also needs `-Z build-std=core,alloc` (`driver/samples/zephyr/cluster/CMakeLists.txt:113`).
   Minimum stable for the host crates: `rust-version` 1.88 (`Cargo.toml`).
@@ -145,7 +153,7 @@ repository at the commit that added this file.
   reproducible without the firmware file.
 - **How you get it:** take `rgx.fw` for BVNC 36.53.104.796 (the file name
   used in the docs is `rgx.fw.36.53.104.796`) under its licence from one of:
-  TI's Processor SDK (`README.md:104-106`), the board's own
+  TI's Processor SDK (`README.md:112`), the board's own
   `/lib/firmware`, or the matching upstream linux-firmware or Mesa
   open-firmware package (`driver/tools/mkfwblob.sh:6-8`). I did not check
   that the upstream package carries this exact version. You must accept the
@@ -158,7 +166,7 @@ repository at the commit that added this file.
 - **Variable:** none. The file must be at that path in the checkout you build.
   A git worktree or a fresh clone has no copy; copy it in.
 - **Needed by:** every **AM62P** image (the scripts stop without it:
-  `tools/cts/common-images.sh:141`, `tools/cts/am62p-deqp-images.sh:93`).
+  `tools/cts/common-images.sh:141`, `tools/cts/am62p-deqp-images.sh:119`).
   The i.MX8MP and the Pi 4 do not need it. The full gate also needs it
   (`.ccfarm/project.toml`, `copy_from_origin`).
 
@@ -286,8 +294,8 @@ repository at the commit that added this file.
   `verdin_imx8mp/mimx8ml8/a53`, `tools/cts/imx8mp-env.sh:30`). Give each its
   own `WORK`.
 - **Variables:** `DEQP_WORK` for the AM62P and the Pi 4 (the stage 1 `WORK`;
-  it holds `cts/` and `build/`, checked at `tools/cts/am62p-deqp-images.sh:33`
-  and `tools/cts/pi4-deqp-images.sh:56`). `DEQP_STAGE1` for the i.MX8MP (the
+  it holds `cts/` and `build/`, checked at `tools/cts/am62p-deqp-images.sh:115-118`
+  and `tools/cts/pi4-deqp-images.sh:96-98`). `DEQP_STAGE1` for the i.MX8MP (the
   same directory layout, `tools/cts/imx8mp-deqp-stage1.sh:9-10`).
   `IMX8MP_OUT`: any empty directory; the i.MX8MP scripts write images and logs
   there (`tools/cts/imx8mp-env.sh:12,40`).
@@ -307,19 +315,19 @@ way.
 
 | Variable | What | Source and pin | Used at |
 |---|---|---|---|
-| `HAL_NXP_DIR` | Zephyr's `modules/hal/nxp` | made by `west update` in 1; the generator pins hal_nxp `1e91007b` and refuses another | `tools/check.sh:1398-1413` |
-| `PCO_SHC` | Mesa's PowerVR compiler `pco_shc`, built from Mesa 26.2.1 | tarball `https://archive.mesa3d.org/mesa-26.2.1.tar.xz`, sha256 `c47e81bddc4760360a41ac3c5acec38acb81f9d750ecef47e7f3adc7021a4442` (`third_party/mesa-26.2.1/UPSTREAM`); build with `tools/pco_shc/build_pco_shc.sh <tarball> <work dir>`; it must print id `f537fc86b41f` (same id only on a similar toolchain: LLVM/clang/libclc 23.1.2 and SPIRV-LLVM-Translator 23.1.1 were used, `tools/pco_shc/build_pco_shc.sh:24-26`) | `tools/check.sh:1370-1394` |
+| `HAL_NXP_DIR` | Zephyr's `modules/hal/nxp` | made by `west update` in 1; the generator pins hal_nxp `1e91007b` and refuses another | `tools/check.sh:2717-2731` |
+| `PCO_SHC` | Mesa's PowerVR compiler `pco_shc`, built from Mesa 26.2.1 | tarball `https://archive.mesa3d.org/mesa-26.2.1.tar.xz`, sha256 `c47e81bddc4760360a41ac3c5acec38acb81f9d750ecef47e7f3adc7021a4442` (`third_party/mesa-26.2.1/UPSTREAM`); build with `tools/pco_shc/build_pco_shc.sh <tarball> <work dir>`; it must print id `f537fc86b41f` (same id only on a similar toolchain: LLVM/clang/libclc 23.1.2 and SPIRV-LLVM-Translator 23.1.1 were used, `tools/pco_shc/build_pco_shc.sh:24-26`) | `tools/check.sh:2579-2673` |
 | `GLSLANG` | `glslangValidator` >= 16.4 | distro package `glslang` | `tools/glsl2usc.sh:17`, `.ccfarm/project.toml` (`env`) |
-| `GLSL2USC_CACHE` | a cache directory for the shader compile (3.5 min with a warm one) | any writable directory | `tools/glsl2usc.sh:18`, `tools/check.sh:1370` |
-| `MESA_V3D_TREE` | optional: a built Mesa tree to compare V3D checks against | not needed: the Mesa sources are vendored in `third_party/mesa-26.2.1` | `tools/check.sh:345` |
+| `GLSL2USC_CACHE` | a cache directory for the shader compile (3.5 min with a warm one) | any writable directory | `tools/glsl2usc.sh:18`, `tools/check.sh:2579` |
+| `MESA_V3D_TREE` | optional: a built Mesa tree to compare V3D checks against | not needed: the Mesa sources are vendored in `third_party/mesa-26.2.1` | `tools/check.sh:1274`, `:1679` |
 | `CC_aarch64_unknown_none` | cross C compiler, see 4 | | `build.rs:108-112` |
-| `BINDGEN_EXTRA_CLANG_ARGS` | only when the bindgen row (`csbgen-bindings --check`) fails with `'stdbool.h' file not found`: the host has a libclang but not clang's resource headers | point it at gcc's builtin headers, for example `-isystem $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/lib/gcc/aarch64-zephyr-elf/14.3.0/include` (measured 2026-10-08 on a host without clang) | `tools/check.sh:1479-1480` |
+| `BINDGEN_EXTRA_CLANG_ARGS` | only when the bindgen row (`csbgen-bindings --check`) fails with `'stdbool.h' file not found`: the host has a libclang but not clang's resource headers | point it at gcc's builtin headers, for example `-isystem $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/lib/gcc/aarch64-zephyr-elf/14.3.0/include` (measured 2026-10-08 on a host without clang) | `tools/check.sh:2432` |
 
 ### 13. Board run inputs (not for building)
 
 `BOARD_HOST`, `BOARD_UART`, `BOARD_BOOT`, `BOARD_HDMI_TIMINGS` (the Pi 4
 panel's `hdmi_timings`) are read by `tools/board.sh` at run time
-(`tools/board.sh:138-148`). They never go into a file. They are not needed to
+(`tools/board.sh:133-149`). They never go into a file. They are not needed to
 build.
 
 ## Set up the environment
@@ -462,7 +470,9 @@ the others). Running them on a board is `tools/board.sh <board> tree <table>
 
 ## Check the host side
 
-`tools/check.sh --quick` is the short form of the gate, for an edit loop, and
+`tools/check.sh --quick` is the short form of the gate, for an edit loop (about
+120 rows; 14 minutes in the first walk and 4 minutes on a warm tree in the
+second, see `docs/release/readme-walkthrough.md`), and
 `tools/check.sh --changed <base>` runs the rows a change reaches. Neither is the
 landing gate: the CI runs the full `tools/check.sh` on every pull request
 (`.github/workflows/gate.yml`). The full run needs the inputs of section 12, and

@@ -155,10 +155,11 @@ yakogl/
                                 generators; ffi_layout_check.c pins it
   src/vivante/{backend,shader,texture,cmd,regs,state,kick,internal,ds_cache,tiled_copy}.rs
                                 the i.MX8MP's GC7000 backend (cargo feature gpu-vivante);
-                                VIVANTE_NOTES.md; gc_kick.h is the OSAL's view of the kick
+                                src/vivante/VIVANTE_NOTES.md; src/vivante/gc_kick.h is the
+                                OSAL's view of the kick
   src/v3d/{backend,state,texture,kick,ffi}.rs   the Raspberry Pi 4's V3D 4.2 backend (cargo
-                                feature gpu-v3d); v3d_kick.h is the OSAL's view of the kick
-  src/osal/mod.rs               g_osal + osal_set_ops; render.rs the kick descriptor types
+                                feature gpu-v3d); src/v3d/v3d_kick.h is the OSAL's view of the kick
+  src/osal/mod.rs               g_osal + osal_set_ops; src/osal/render.rs the kick descriptor types
   src/osal/{zephyr,zephyr_gc,zephyr_v3d,baremetal,linux}.c the OSALs (C; zephyr_gc is the
                                 GC7000's, zephyr_v3d the V3D's); zephyr_shaderc_scratch.c
                                 (the compiler's regions) and zephyr_timing.c beside them
@@ -266,10 +267,11 @@ the C parts are built and a Rust application links the `yakogl` crate itself. Th
 default cross target is `aarch64-unknown-none` (hard float: `CONFIG_FPU` /
 `CONFIG_FPU_SHARING` on Zephyr). README.md, "Building" and "Linking", has the details.
 
-The port began as a translation of the upstream C library (`55de113`) and diverged
-from it wherever the C was wrong; that account (the fix round, the syncs to `a444fe9`,
-`bfab616` and `55de113`, and what upstream adopted) is in git history
-(`git show 5ad2fa0e:DESIGN.md`, "The Rust crate").
+The port began as a translation of the upstream C library and diverged from it
+wherever the C was wrong. That account (the fix round, the syncs to the upstream
+commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) is in git
+history (`git show 5ad2fa0e:DESIGN.md`, "The Rust crate"). Those three commits are
+of the old C repository and are not in this one.
 
 Verification on the host: unit tests on the strict mocks of `src/testutil.rs`, in every
 feature configuration `tools/check.sh` lists, and the host differential harness

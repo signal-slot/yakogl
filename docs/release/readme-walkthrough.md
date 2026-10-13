@@ -1,235 +1,182 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
-> Record landed from `ccfarm/integration` (merge `77c860056`, ccfarm `01a12a9b-34ae-72d8-b1f7-d34954f8dccf`). Written on 2026-10-11 on the integration branch, not on main; the text is as written. Only file paths are changed to main's layout. A file this record names that is not on main stayed on the integration branch or was removed from main; check it with git before relying on it.
+# README and CONTRIBUTING walkthrough
 
-# README and CONTRIBUTING walkthrough on a fresh clone
+Base commit: `a63fcc5b48c5` (main, 2026-10-13); the commands were run there. Main has
+since moved to `20a487918c74`; the 8 files that changed in between (a shader
+preprocessor fix, CTS notes, a Pi 4 record) touch no path or command named here, and
+this change was rebuilt on that tip. Written 2026-10-14. This file
+replaces the earlier version, which recorded two walks (`ea984992`, 2026-10-11, and
+`ca4288a8`, 2026-10-13). Their measured numbers are kept below, marked with the walk
+they come from.
 
-> Status added when landed on main (2026-10-12): the findings are of commit `ea984992` (2026-10-11). Read against main's README.md and CONTRIBUTING.md before acting: P1 (the `/path/to/powervr-bxs-am62p/src` placeholder) is gone from README.md; P2 (`aarch64.cmake`, README.md line 191) and P5 ("about 45 minutes", CONTRIBUTING.md line 31) are still in the text. The other findings were not re-checked.
+## What was done in this pass
 
-> Added 2026-10-13: a second walk, of commit `ca4288a8` (2026-10-13), is in "Second walk" at the end of this file. Its line references are of current main. Where the two walks differ, use the second one.
+- **Done:** every repository path, script, cargo feature and subcommand named in
+  `DESIGN.md`, `SECURITY.md`, `CONTRIBUTING.md` and `docs/release/building.md` was
+  checked against the tree at the base (`git ls-files`, `ls`, `Cargo.toml`,
+  `.gitignore`, file modes). Every earlier finding was re-read against the text at
+  the base. Stale references in `DESIGN.md`, `CONTRIBUTING.md` and
+  `docs/release/building.md` were fixed.
+- **Commands run (second part of this pass).** The host commands of the README were
+  run as written, one after the other, in the workspace (a fresh checkout of the base
+  with no build directory). Each has its exit status and wall-clock time in "Steps run".
+  Host: Linux 7.2.8 x86-64 (Gentoo), rustc 1.98.0-nightly (2026-07-01). The cargo and
+  build caches were warm from other sessions, so the test and gate times are warm times.
+  `tools/check.sh --quick` was run to its end twice.
+- **Result in one line:** README steps 4, 5 and 6 fail as written; the CMake host build
+  and the five `cargo test` rows pass; `tools/check.sh --quick` fails on this host with
+  its environment as it is (two rows, both caused by `MESA_V3D_TREE`) and is **clean, 119
+  ok, 0 failed, 0 gaps, 236 s**, with that variable unset.
+- **Not run:** the Zephyr build, the host-harness compare (about an hour and 17 to 50 GB,
+  S12), the full `tools/check.sh`, `--changed` (see row 18), board steps, serial consoles,
+  credentials, the PowerVR firmware.
 
-A new contributor follows the host-side steps of `README.md` and
-`CONTRIBUTING.md`, in order, without installing any system package.
+## Paths checked (DESIGN.md, SECURITY.md, CONTRIBUTING.md)
 
-- Date: 2026-10-11.
-- Clone: `git clone` of the repository's `origin` (it could be fetched), into a new
-  directory under the system temp directory. `CARGO_TARGET_DIR` was `.target` inside
-  the clone. The clone was at commit `ea984992`. The README and CONTRIBUTING lines
-  quoted below are the same in that commit and in the integration tip `e3efeaa`, except
-  `README.md` lines 40-42 (status table) and `CONTRIBUTING.md` lines 6-7, which origin
-  already fixed.
-- Host: Linux 7.2.8 (x86-64, Gentoo), rustc 1.98.0-nightly (2026-07-01),
-  cargo 1.98.0-nightly, cmake 4.3.5, ninja 1.13.2. The Rust target
-  `aarch64-unknown-none-softfloat` was already installed. The host already had the
-  Zephyr, NXP HAL, `pco_shc` and firmware-header setup that `CONTRIBUTING.md` lists, so
-  the full gate showed 0 gaps. A contributor without it will get named gaps.
-- Times are wall-clock seconds. The `cargo test` rows ran on a target directory that a
-  first `cargo test` run had already warmed, so the cold time is longer (the
-  `shaderc-online` rows were cold: about 6 minutes each).
-- Not done, by rule: board steps, serial consoles, credentials, the PowerVR firmware.
+132 distinct paths were checked (brace lists expanded), plus the cargo features, the
+`yakogl-tools` subcommands and the scripts' modes. Result at the base:
 
-## Steps
+| File | Checked | Result |
+| --- | --- | --- |
+| `DESIGN.md` | the layout block (lines 131-190): `include/` headers (GLES2, GLES3, KHR, EGL, `gles_*.h`), `Cargo.toml`, `src/lib.rs`, `src/util.rs`, `capi/` and `capi/assemble.cmake`, `src/gl/*.rs` (all 23 names), `src/backend.rs`/`.h`, `src/pvr/*`, `src/vivante/*`, `src/v3d/*`, `src/osal/*`, `src/shaderc/*` and `online/`, `tests/reference/{blobs,vivante_blobs}.rs`, the five C headers, `src/abi_layout*`, `tools/{yakogl-tools,precompile,vivante,cts,hostharness}`, `tools/cts/{RESULTS,STATUS}.md`, `tools/hostharness/{compare,run}.sh`, `driver/{src,docs,tools,rust}`, `driver/tools/pvrlab/gl_test.c`, the three command generators and `pvr_fw_boot.c` in `driver/src/`, `CMakeLists.txt`, `baremetal.mk`, `zephyr/`, `README.md`, `docs/HANDOFF.md`, `docs/es2-cts-failures.md`, `docs/online-shaderc/{abi,gc7000-abi}.md`, `driver/docs/{vivante-kernel-rust,rpi4-v3d}.md` | all exist |
+| `DESIGN.md` | `src/osal/gc_kick.h`, `src/osal/v3d_kick.h` (as read in the layout block) | **stale**: the files are `src/vivante/gc_kick.h` and `src/v3d/v3d_kick.h`. Fixed: full paths now. Also `render.rs` is `src/osal/render.rs`; made explicit |
+| `DESIGN.md` | commits `55de113`, `a444fe9`, `bfab616` | **not in this repository** (they are commits of the old C repository). Reworded to say so. `5ad2fa0e` exists and holds the quoted sections ("Incremental plan", "The Rust crate") |
+| `DESIGN.md` | `docs/HANDOFF.md` headings "Goal, in order", "State of main", "Open work", "Known defects" | "Goal, in order", "State of main", "Open work, in order" are headings; "Known defects" is item 3 inside "Open work", not a heading. Left as is: the name is findable |
+| `DESIGN.md` | `yakogl-tools` subcommands `glsl2usc`, `usc-blob`, `femtovg-shaders`, `gl-consts`, `abi-layout`, `record` | all in `tools/yakogl-tools/src/main.rs` |
+| `DESIGN.md` | cargo features `gpu-powervr`, `gpu-vivante`, `gpu-v3d`, `osal-linux`, `osal-zephyr`, `osal-baremetal`, `host-test`, `shaderc-online`, `precompiled-shaders`, `mesa-reference-table` | all in `Cargo.toml` |
+| `DESIGN.md` | `YAKOGL_SHADERC_PRECOMPILED_ONLY`, `YAKOGL_RUST_LINKAGE` | the first is a Zephyr option (`zephyr/CMakeLists.txt`), the second a CMake cache variable; both exist |
+| `SECURITY.md` | `tools/`, `driver/tools/`, `docs/HANDOFF.md` "Known defects" | exist. The text has no other path |
+| `SECURITY.md` | `<security-contact@example.invalid>` and three `TODO(owner)` lines (contact, response times, supported versions) | placeholders by design: owner decisions, not path problems. They block checklist line 4 |
+| `CONTRIBUTING.md` | `README.md`, `docs/HANDOFF.md` ("How to work here" exists, line 641), `tools/check.sh` (executable), `.github/workflows/gate.yml`, `docs/handoff/README.md`, `tools/cts/RESULTS.md`, `tools/cts/STATUS.md`, `tools/board.sh` (executable), `driver/tools/mkfwblob.sh` (executable), `docs/source-form.md`, `LICENSE`, `NOTICE`, `LICENSES/`, `third_party/README.md`, `SECURITY.md` | all exist |
+| `CONTRIBUTING.md` | `driver/src/fw/pvr_fw_blob.h`, `records/` | not in git by design: `driver/.gitignore` ignores `src/fw/`, `.gitignore` ignores `records/*` |
+| `CONTRIBUTING.md` | `tools/check.sh --changed`, `--quick`, `--local` | all three modes exist (`tools/check.sh:12-17`) |
+| `docs/release/building.md` | all repository paths; the `file:line` references | all paths exist; 10 line references had moved and were corrected (see `building.md`, "How this file was checked") |
 
-| # | Source | Command | Exit | Time | Problem |
+Also executable: `tools/check.sh`, `tools/board.sh`, `tools/api_coverage.py`,
+`tools/handoff-notes.sh`, `tools/hostharness/{compare,run}.sh`, `driver/tools/mkfwblob.sh`.
+
+## Steps run (README order, then CONTRIBUTING)
+
+Times are wall-clock seconds of the whole command. "Walk 1" and "walk 2" are the
+earlier walks.
+
+| # | Source | Command | Exit | Time | Note |
 | --- | --- | --- | --- | --- | --- |
-| 1 | README.md:175 | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux -DYAKOGL_PVR_DRIVER_DIR=/path/to/powervr-bxs-am62p/src` (literally) | 1 | 0 s | P1: the path does not exist; CMake says "point it at driver/src" |
-| 2 | README.md:175 | the same with `-DYAKOGL_PVR_DRIVER_DIR=<clone>/driver/src` | 0 | 0 s | none |
-| 3 | README.md:177 | `cmake --build build` | 0 | 31 s | none |
-| 4 | README.md:182 | `cmake -S . -B build-a64 --toolchain aarch64.cmake ...` | not run | - | P2: no `aarch64.cmake` in the clone; also needs a cross compiler |
-| 5 | README.md:184 | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=<clone>/driver/src` | 2 | 1 s | P3: `aarch64-none-elf-gcc` is not installed; the README does not list it |
-| 6 | README.md:185 | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' ...` | not run | - | skipped: needs a cross C toolchain (the install of system packages is not allowed) |
-| 7 | README.md:187 | Zephyr build from `west.yml` | not run | - | skipped: needs a Zephyr workspace and a board image. The Zephyr rows of step 14 did build images |
-| 8 | README.md:299 | `cargo test --no-default-features --features host-test,gpu-powervr` | 0 | 25 s | P4: 1,986 + 6 tests passed, 1 ignored; README says 1492 + 6, 2 ignored |
-| 9 | README.md:300 | `... --features host-test,gpu-powervr,report-es2` | 0 | 52 s | none (1,949 passed, 1 ignored) |
-| 10 | README.md:301 | `... --features host-test,gpu-vivante` | 0 | 26 s | none (1,864 passed) |
-| 11 | README.md:302 | `... --features host-test,gpu-powervr,shaderc-online` | 0 | 337 s | none (2,778 passed, 2 ignored); slow on a cold tree |
-| 12 | README.md:303 | `... --features host-test,gpu-vivante,shaderc-online` | 0 | 340 s | none (2,724 passed, 2 ignored) |
-| 13 | README.md:304 | `cargo test -p yakogl-tools` | 0 | 1 s | P4: 102 tests passed; README says 74 |
-| 14 | README.md:296, CONTRIBUTING.md:11 | `tools/check.sh` (full gate) | 1 | 2937 s | P5, P6: 139 ok, 2 failed, 0 gaps. Both failures are the AM62P Zephyr `-Werror` rows (swi_tables.ld not found). CONTRIBUTING says about 45 minutes; it took 49 |
-| 15 | README.md:297, CONTRIBUTING.md:24 | `tools/check.sh --quick` | 0 | 823 s | P7: 110 ok, 0 failed. It runs far more than "the PowerVR row and the AM62P archive only" |
-| 16 | README.md:278 | `tools/api_coverage.py` | 0 | 1 s | none (it ran inside step 14: 0 core entry points missing) |
-| 17 | README.md:344 | `grep -rn 'ignore = "BUG' src` | 0 (1 match) | 0 s | P8: README says there are none left; `src/pvr/backend_tests.rs:4601` has one |
-| 18 | README.md:348 (README.md:363 on main at `ba25def`) | `HH_TIMEOUT=60 tools/hostharness/compare.sh build/hh-out rust:. rust:. driver` (the driver checkout is the in-tree `driver/`; `<out>` under the workspace's ignored `build/`; `HH_TIMEOUT` set through `bash -c 'export HH_TIMEOUT=60; ...'`) | 1 | 3436 s (57 min) | P9, P10. Ran to the end and wrote the report: 2,952 runs per profile (dev and release, A and B), 17 GB of logs, free disk fell by about 10 GB. A against B: dev 35 unexpected, release 25 unexpected. All 60 are timeouts, none a real difference: `gltest.174` both sides timed out (23), `gltest.25` both sides timed out (20) and cut at different lines, `scen.progs-qt3d` A timed out and B finished (15; the 60 s limit under 12 parallel jobs), and one each of `gltest.26` and `gltest.25` with A timed out and B ok. Both sides are the same library (`rust:.` against itself), so no regression is expected and none was seen outside timeouts. The `gl_test` cases that fail on the fake GPU fail the same way on both sides. Without `HH_TIMEOUT` (the default 1200 s) the run is not practical: an earlier literal run was stopped after 11 minutes with 21 GB of logs, and a later one after 25 minutes at 140 GB in the first of four runs, because `gltest.174` (`fwccbloss`) writes about 1.9 GB per mode per 10 minutes. Not done: a comparison against `HEAD~1` as a git worktree, because `git worktree add` was refused in this session |
-| 19 | CONTRIBUTING.md:29-39 | branch, rebase and commit rules; regenerate generated files | n/a | - | no command; the gate's `gen` rows (step 14) passed |
-| 20 | CONTRIBUTING.md:50-62 | `tools/board.sh` and the board rules | not run | - | skipped: needs board |
-| 21 | CONTRIBUTING.md:64-69 | `driver/tools/mkfwblob.sh` with `rgx.fw` | not run | - | skipped: needs TI's firmware (licensed, not in the repository) |
-| 22 | CONTRIBUTING.md:71-85 | licensing and security rules | n/a | - | no command |
+| 1 | README.md:171 | `rustc --version` | 0 | 0 s | 1.98.0-nightly |
+| 2 | README.md:186 | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | 0.3 s | |
+| 3 | README.md:187 | `cmake --build build` | 0 | 35.9 s | cold; walk 2: 31.3 s |
+| 4 | README.md:192 | `cmake -S . -B build/a64 --toolchain aarch64.cmake -DYAKOGL_OSAL=baremetal` (the `...` left out; `build/a64` instead of `build-a64` to keep the tree clean) | 1 | 0.1 s | "Could not find toolchain file: aarch64.cmake" (S1) |
+| 5 | README.md:194 | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src` | 2 | 0.4 s | no `aarch64-none-elf-gcc` on this host (S3) |
+| 6 | README.md:195-196 | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=driver/src` | 2 | 22.9 s | `src/osal/baremetal.c:25: 'string.h' file not found` (S4) |
+| 7 | README.md:197-199 | Zephyr build from `west.yml` | not run | | needs a Zephyr workspace; the gate's Zephyr rows build the images |
+| 8 | README.md:288 | `tools/api_coverage.py` | 0 | 0.1 s | source fallback, no archive (S5). 304 exported, 304 resolvable (S6), 0 declared but not exported |
+| 9 | README.md:310 | `cargo test --no-default-features --features host-test,gpu-powervr` | 0 | 47.6 s | 2,094 passed, 1 ignored |
+| 10 | README.md:311 | `... host-test,gpu-powervr,report-es2` | 0 | 56.9 s | 1,963 passed, 2 ignored |
+| 11 | README.md:312 | `... host-test,gpu-vivante` | 0 | 35.2 s | 1,966 passed |
+| 12 | README.md:313 | `... host-test,gpu-powervr,shaderc-online` | 0 | 251.5 s | 3,106 passed, 3 ignored (walk 1: 337 s) |
+| 13 | README.md:314 | `... host-test,gpu-vivante,shaderc-online` | 0 | 245.0 s | 2,976 passed, 3 ignored (walk 1: 340 s) |
+| 14 | README.md:315 | `cargo test -p yakogl-tools` | 0 | 5.7 s | 113 passed |
+| 15 | README.md:307, CONTRIBUTING.md | `tools/check.sh --quick` | **1** | 565.3 s | 114 ok, 2 failed, 0 gaps (116 rows). Failed: `run v3d tex_check, cl_golden, job_check` (this host's `MESA_V3D_TREE` has no `build-v3d`) and the `check.sh --changed` self-test (3 of 75 checks: it counts 146 rows where it expects 149, because the v3d rows are missing for the same reason). Host environment, see N9 |
+| 16 | the same | `env -u MESA_V3D_TREE tools/check.sh --quick` | 0 | 236.3 s | **119 ok, 0 failed, 0 gaps: clean**; 95 test binaries run; warm tree |
+| 17 | CONTRIBUTING.md | `tools/check_scope_selftest.sh` alone | 1 | 4.3 s | the same 3 failed checks as row 15 |
+| 18 | README.md:306 | `tools/check.sh --changed <base>` | stopped | 20 min | an untracked helper file made the scope "all" (6 paths, every row), so it was stopped. Not repeated, see N10 |
+| 19 | README.md:357-358 | `git grep -n 'ignore = "BUG' -- src tests` | 0 | 0.1 s | 2 matches |
+| 20 | docs/handoff/README.md | `tools/handoff-notes.sh --check` | 0 at the base | | "nothing waits". With the note of this pass it exits 1 until the fold removes it (by design) |
+| 21 | README.md:363 | `HH_TIMEOUT=60 tools/hostharness/compare.sh ...` | not run | | walk 1: exit 1, 3,436 s, 17 GB; walk 2: exit 1, 2,529 s, 50 GB |
+| 22 | CONTRIBUTING.md:68-80 | `tools/board.sh` | not run | | needs a board |
+| 23 | CONTRIBUTING.md | `driver/tools/mkfwblob.sh` with `rgx.fw` | not run | | needs TI's firmware |
+| 24 | CONTRIBUTING.md | `tools/check.sh` (full gate) | not run | | walk 1: exit 1, 2,937 s (49 min); walk 2: exit 1, 620 s (S8, now fixed in the source) |
 
-## Fixes proposed
+The full-gate time is not re-measured; CONTRIBUTING.md keeps the two walk numbers.
 
-Each fix names the line and the exact change. Neither file was edited here.
+## Earlier findings (P1-P10, S1-S13): fixed or open at `a63fcc5b`
 
-- **P1, README.md:175-176 and README.md:184, 186.** The placeholder
-  `/path/to/powervr-bxs-am62p/src` fails at configure time on a fresh clone. The driver
-  is in the repository. Replace `-DYAKOGL_PVR_DRIVER_DIR=/path/to/powervr-bxs-am62p/src`
-  with `-DYAKOGL_PVR_DRIVER_DIR=driver/src`, and `DRVSRC=/path/to/powervr-bxs-am62p/src`
-  (line 184) and `DRVSRC=...` (line 186) with `DRVSRC=$PWD/driver/src`. Also check the
-  default `../src` in the Options table (README.md:201); a fresh clone has no such
-  directory, so the default should read `driver/src`.
-- **P2, README.md:181-182.** `aarch64.cmake` is not in the repository. Change the comment
-  to `# cross build: a CMake toolchain file of your own (none is shipped); the Rust target`
-  and keep the rest.
-- **P3, README.md:183-184.** Add after line 183: `# needs an aarch64-none-elf GCC
-  (aarch64-none-elf-gcc, -ar) on PATH; without one, use the clang form below`.
-- **P4, README.md:299 and README.md:304.** The counts are out of date and will drift
-  again. Change `# 1492 + 6 tests, 2 ignored` to `# about 2,000 tests`, and
-  `# 74 tests, the host tools` to `# the host tools`. Add to line 302: `# about 6
-  minutes on a cold tree`.
-- **P5, CONTRIBUTING.md:16-17.** Change `about 45 minutes on a warm tree` to
-  `about 50 minutes on a warm tree`.
-- **P6, CONTRIBUTING.md:18-23.** The gate failed on the two AM62P Zephyr `-Werror` rows
-  with zero gaps: the generated `snippets-rodata.ld` holds a relative path to the Zephyr
-  workspace that no longer resolves from a clone in the temp directory. I did not find
-  the cause, so this is a lead: it may depend on where the clone sits relative to
-  `ZEPHYR_WS`. Until the owner decides, add after line 23: `Keep the clone and ZEPHYR_WS
-  under one parent directory: the AM62P Zephyr rows failed on a clone in another tree
-  (see docs/release/readme-walkthrough.md).` The i.MX8MP and Raspberry Pi 4 Zephyr rows
-  passed in the same run.
-- **P7, README.md:297 and CONTRIBUTING.md:24-25.** `--quick` ran 110 rows in 823 s: the
-  fmt check, the PowerVR, GC7000 and V3D configurations, the build checks, the drivers and
-  the generated-file checks. Change `#    the PowerVR build only, for a tight edit loop`
-  to `#    the short gate (about 14 minutes), not the landing gate`, and change
-  `(the PowerVR row and the AM62P archive only)` to `(about 14 minutes; fewer rows than
-  the full run)`.
-- **P8, README.md:343-346.** Change `there are none left (`grep -rn 'ignore = "BUG' src`),
-  because the fix round either fixed the bug or ...` to `there is one left
-  (`grep -rn 'ignore = "BUG' src`: pvr-msaa-split, see docs/HANDOFF.md), ...`, or fix that
-  defect and keep the text.
-- **P9, README.md:348-358 (and tools/hostharness/README.md:43-66).** The command works
-  literally with `driver` (this repository's `driver/`) as the driver checkout, but the text
-  says nothing of its cost: with the default 1200 s timeout, case 174 alone writes tens of
-  GB per run and fills a disk. Add after line 358: `Plan for an hour and about 20 GB
-  of free disk with HH_TIMEOUT=60 (3436 s and 17 GB on a 12-thread host); the default timeout (1200 s) lets gl_test case 174 write
-  more than 20 GB per library and profile. The driver checkout is driver/ in this
-  repository.`
-- **P10, README.md:353-355.** `exits non-zero when a log differs in a way allow.txt does not
-  explain` is true, but a clean comparison needs the timeout out of the picture: with
-  `HH_TIMEOUT=60` the same library against itself exits 1 (35 unexpected in dev, 25 in
-  release on the latest run), because the jobs that hit the timeout (gltest.174, gltest.25,
-  and scen.progs-qt3d on one side only) are cut at different lines. Either list those two jobs in
-  tools/hostharness/allow.txt for a timed-out run, or have tools/hostharness/compare.sh
-  (the `report.py compare` call at line 44) skip a pair in which both sides timed out.
-  Say so in the README line quoted above.
-- **Not a README problem, for the owner.** The Zephyr, firmware and board
-  steps (7, 20, 21) need setup that a host-only contributor cannot do; the two docs say so
-  already.
+Status is from reading the text at the base, not from a run, unless a count is given.
 
-## Second walk (commit `ca4288a8`)
+| Finding | What | Status | Where |
+| --- | --- | --- | --- |
+| P1 | README placeholder `/path/to/powervr-bxs-am62p/src` | **fixed** (no such text; README.md:211 says `driver/src`) | README |
+| P2, S1 | `aarch64.cmake` is not shipped | **open** | README.md:188, 192 |
+| S2 | `build-a64/` is not ignored; after step 4 `--changed` runs every row | **open** (`.gitignore` has `build/` only) | README.md:192 |
+| P3, S3 | `baremetal.mk` needs an `aarch64-none-elf` GCC; not said | **open** | README.md:193-194 |
+| S4 | `DRVSRC=...` placeholder; clang needs bare-metal C headers | **open** | README.md:195-196 |
+| P4 | stale test counts (1492 + 6, 74) | **fixed** (no counts in the text any more) | README |
+| S5 | `api_coverage.py` falls back to the source without the archive | **open** | README.md:288 |
+| S6 | 298 names vs 304 measured | **open**, 304 re-measured (step 8) | README.md:291, 293 |
+| P5, S10 | "about 45 minutes" | **fixed** here: "35 to 50 minutes, depending on the host" with the two measurements | CONTRIBUTING.md:30 |
+| P6, S7 | AM62P Zephyr rows: `swi_tables.ld` not found | CONTRIBUTING **fixed** (needs a real `ZEPHYR_WS` path, no symbolic link). The cause in `tools/check.sh:2519` is **open** (outside this item) | CONTRIBUTING.md, tools/check.sh |
+| P7, S9 | `--quick` described as "the PowerVR build only" | CONTRIBUTING **fixed** (about 120 rows, 14 and 4 minutes). README **open**; `tools/check.sh:17` has the same stale wording, **open** | README.md:307, tools/check.sh:17 |
+| S8 | `tests/es3_tex_levels.rs` does not set `query_begin`/`query_end`/`query_result` | **fixed in the source** (`query_begin: None` now at line 128), confirmed: the six test rows and `--quick` build (steps 9-16) | tests |
+| P8, S11 | the count of open `ignore = "BUG` tests | **open**, and the count changed again: **two** today (`src/pvr/backend_tests.rs:4601` and `tests/es2_report_guard.rs:672`) | README.md:357-359 |
+| P9, S12 | cost of the host-harness run | **open** | README.md:363-373 |
+| P10, S13 | a clean comparison is not quiet when jobs time out | **open** | README.md:367-368 |
 
-The same walk, two days later, on a new clone. The text above is kept as the record of
-the first walk. Problems found in this walk are named S1 to S13, so they do not mix with
-P1 to P10 above.
+## New findings
 
-- Date: 2026-10-13. Every row below was run and measured on this date.
-- Clone: `git clone` of `origin` (it could be fetched) into a new directory under the
-  system temp directory. The clone was at `ca4288a8`, the tip of `origin/main` at that
-  time. Cargo's target directory was `.target` inside the clone (`CARGO_TARGET_DIR`).
-  `README.md` and `CONTRIBUTING.md` are the same on `ca4288a8` and on `b7d7a79`, the
-  base of this change (`git diff` is empty), so every line reference below holds on both.
-- Host: Linux 7.2.8 (x86-64, Gentoo), rustc 1.98.0-nightly (2026-07-01),
-  cargo 1.98.0-nightly, cmake 4.3.5, ninja 1.13.2, GCC 16.2.1, Python 3.14.8,
-  clang and LLVM 23. Cargo and `cc` ran through a build-cache shim on `PATH`. The Rust
-  targets `aarch64-unknown-none` and `aarch64-unknown-none-softfloat` were installed.
-  No `aarch64-none-elf` GCC. The Zephyr workspace, NXP HAL, `pco_shc` and firmware
-  header that CONTRIBUTING.md:32-37 lists were set up, so no row was a gap.
-- Order: the README order, then the CONTRIBUTING steps that README does not cover. All
-  rows ran one after the other from one script; nothing else ran on the clone.
-- Times: wall-clock time of the whole command. The first gate run (row 9) built
-  everything cold; later rows reuse its build. Exit: the command's own exit status.
-- Not done, by rule: board steps, serial consoles, credentials, the PowerVR firmware.
+- **N1 (README, open).** Same set as above; proposed texts follow.
+- **N2 (tools, outside this item).** `tools/check.sh:17` says `--quick` is "the PowerVR
+  build only". It runs about 120 rows. Change to `the short gate (about 120 rows)`.
+- **N3 (tools, outside this item).** `tools/check.sh:2519`: `ZEPHYR_BASE="$ZEPHYR_WS/zephyr"`
+  with `cd "$ZEPHYR_WS"`. Walk 2's lead: use `$(cd "$ZEPHYR_WS" && pwd -P)` so a linked
+  workspace works. Not confirmed by a build. `tools/check.sh:2719` also defaults
+  `HAL_NXP_DIR` to a path under `$HOME/com/github/`, which fits one host only; a
+  contributor sees a gap that names `HAL_NXP_DIR` (fine), but the default is a local layout.
+- **N4 (owner).** `CONTRIBUTING.md` says "a pushed branch is never rebased; bring main in
+  with a merge". The `conventions` text of `.ccfarm/project.toml` says branches are "rebased
+  onto origin/main". One of them is wrong. CONTRIBUTING.md was not changed for this.
+- **N5 (owner).** `SECURITY.md` has the contact placeholder and three `TODO(owner)` lines
+  (contact, response times, supported versions). Checklist line 4 stays partial until
+  they are filled.
+- **N6 (done).** `docs/release/building.md` line references had drifted by up to 1,200
+  lines (`tools/check.sh` grew). Ten were corrected; the file now says line numbers drift.
+- **N7 (other item).** `DESIGN.md` lines 17-25 state per-board conformance numbers (AM62P
+  54 failures on `32778b57`, and so on). They belong to es2-docs-final and move with the final
+  trees; not touched here.
+- **N9 (tools, measured).** `tools/check.sh --quick` exits 1 on a host whose
+  `MESA_V3D_TREE` names a Mesa tree without `build-v3d`: the v3d row fails ("is not a
+  Mesa tree"), and `tools/check_scope_selftest.sh` fails 3 of 75 checks because it
+  counts 146 rows, not 149. Proposed for a `tools/` item: treat such a tree as a gap
+  or ignore it in the v3d row, and make the self-test independent of the variable.
+  Until then a reader on such a host runs `env -u MESA_V3D_TREE tools/check.sh --quick`.
+- **N10 (CONTRIBUTING.md, open).** An untracked file outside the ignored paths makes
+  `tools/check.sh --changed` select every row (here 6 paths, scope "all"; stopped after
+  20 minutes). Same cause as S2. Proposed line for step 1 of "How a change reaches
+  main": "Keep scratch files in `build/` (ignored); an untracked file elsewhere runs
+  every row." Not added: the run was stopped, not completed.
+- **N8 (other item).** `CONTRIBUTING.md:16` says a docs-only change runs two rows, and
+  `--local` "13 rows". Neither count was re-measured; both are left as written.
 
-### Steps
+## README findings, all open (README.md is held by pub-roadmap)
 
-| # | Source | Command | Exit | Time | Problem |
-| --- | --- | --- | --- | --- | --- |
-| 1 | README.md:171 | `rustc --version` (Rust 1.88 or newer) | 0 | 0 s | none (1.98.0-nightly) |
-| 2 | README.md:186 | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | 0.3 s | none |
-| 3 | README.md:187 | `cmake --build build` | 0 | 31.3 s | none (cold) |
-| 4 | README.md:192 | `cmake -S . -B build-a64 --toolchain aarch64.cmake -DYAKOGL_OSAL=baremetal` (the `...` left out) | 1 | 0.0 s | S1: "Could not find toolchain file: aarch64.cmake". S2: the failed step leaves a `build-a64/` directory that git does not ignore |
-| 5 | README.md:194 | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src` | 2 | 0.3 s | S3: `aarch64-none-elf-gcc` is not installed, and the README does not say it is needed (cc-rs fails, then make stops) |
-| 6 | README.md:195-196 | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=...` (literally) | 2 | 20.1 s | S4: `src/osal/baremetal.c:25:10: fatal error: 'string.h' file not found`: clang has no bare-metal C headers here, and the README does not say a sysroot is needed. `DRVSRC=...` is also a placeholder |
-| 7 | README.md:197-199 | Zephyr build from `west.yml` | not run | - | skipped: needs a Zephyr workspace build of its own. The gate's Zephyr rows (rows 9 and 11) build the images |
-| 8 | README.md:288 | `tools/api_coverage.py` | 0 | 0.1 s | S5: run on its own after rows 2-3, it finds no `.target/debug/libyakogl_capi.a` and falls back to parsing the source (its output says to run `cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table` first). S6: it reports 304 exported and 304 resolvable names; README.md:291 and 293 say 298 |
-| 9 | README.md:306, CONTRIBUTING.md:14-15 | `tools/check.sh --changed origin/main` | 1 | 2,146 s (36 min) | S2, S7, S8. It saw one changed path, `build-a64/` from row 4, and so ran every row: "126 ok, 23 failed, 0 gap(s)". CONTRIBUTING.md:15 says a clean tree runs two rows. 21 failures are S8, 2 are S7 |
-| 10 | README.md:307, CONTRIBUTING.md:38 | `tools/check.sh --quick` | 1 | 258 s (4.3 min, warm) | S8, S9: "114 ok, 5 failed, 0 gap(s)", 119 rows, not "the PowerVR row and the AM62P archive only". The 5 failures are S8 |
-| 11 | README.md:308, CONTRIBUTING.md:26-37 | `tools/check.sh` (full gate) | 1 | 620 s (10.3 min, warm) | S7, S8, S10: "126 ok, 23 failed, 0 gap(s)", the same rows as row 9. The time is low because the failing rows stop at the build |
-| 12 | README.md:310 | `cargo test --no-default-features --features host-test,gpu-powervr` | 101 | 0.8 s | S8: `error[E0063]: missing fields query_begin, query_end and query_result in initializer of YakoglBackend` at `tests/es3_tex_levels.rs:93`; no test ran |
-| 13 | README.md:311 | `... --features host-test,gpu-powervr,report-es2` | 101 | 0.4 s | S8: the same error |
-| 14 | README.md:312 | `... --features host-test,gpu-vivante` | 101 | 0.3 s | S8: the same error |
-| 15 | README.md:313 | `... --features host-test,gpu-powervr,shaderc-online` | 101 | 0.4 s | S8: the same error |
-| 16 | README.md:314 | `... --features host-test,gpu-vivante,shaderc-online` | 101 | 0.3 s | S8: the same error |
-| 17 | README.md:315 | `cargo test -p yakogl-tools` | 0 | 0.2 s | none (113 passed; built by row 9) |
-| 18 | README.md:357-358 | `git grep -n 'ignore = "BUG' -- src tests` | 0 | 0.1 s | S11: 3 matches (one in `src/pvr/backend_tests.rs`, two in `tests/es2_report_guard.rs`); README says five, four of them in `tests/es2_report_guard.rs` |
-| 19 | README.md:363 | `HH_TIMEOUT=60 tools/hostharness/compare.sh <out> rust:. rust:. driver` | 1 | 2,529 s (42 min) | S12, S13: the clone as both libraries, `driver/` as the driver checkout, `<out>` in the temp directory. It wrote 50 GB and ended "UNEXPECTED DIFFERENCES": 2,952 runs per profile; 9 unexpected in dev and 11 in release. All 20 are `gltest.174` with both sides timed out and cut at different lines; nothing else differed. The default timeout (1,200 s) was not run: both earlier walks stopped it when it filled the disk (P9 above) |
-| 20 | CONTRIBUTING.md:43-55 | branch, commit and generated-file rules | n/a | - | no command; the gate's generated-file rows passed in rows 9 and 11 |
-| 21 | CONTRIBUTING.md:66-78 | `tools/board.sh` and the board rules | not run | - | skipped: needs board |
-| 22 | CONTRIBUTING.md:80-85 | `driver/tools/mkfwblob.sh` with `rgx.fw` | not run | - | skipped: needs TI's firmware (licensed, not in the repository) |
-| 23 | CONTRIBUTING.md:87-101 | licensing and security rules | n/a | - | no command |
+Line numbers are of README.md at the base. Each proposed text replaces the quoted one.
 
-### Fixes proposed (second walk)
+1. **Line 188** (S1). `# cross build: a CMake toolchain file; the Rust target is derived from`
+   becomes `# cross build: a CMake toolchain file of your own (none is shipped); the Rust target is derived from`.
+2. **Line 192** (S1, S2). `-B build-a64` becomes `-B build/a64` (inside the ignored `build/`).
+   The `aarch64.cmake` argument stays, as "of your own" now says it is yours.
+3. **Line 193** (P3, S3). `# bare metal (RUST_TARGET defaults to aarch64-unknown-none)` becomes
+   `# bare metal (RUST_TARGET defaults to aarch64-unknown-none); needs an aarch64-none-elf GCC on PATH, or use the clang form below`.
+4. **Lines 195-196** (S4). `DRVSRC=...` becomes `DRVSRC=driver/src`; add after line 196:
+   `# clang needs bare-metal C headers (a newlib sysroot, given with --sysroot in CC)`.
+5. **Line 288** (S5). After `tools/api_coverage.py` add `(after cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table; without that archive it parses the source instead)`.
+6. **Lines 291 and 293** (S6). `298 names` becomes `304 names` (walk 2), or drop both counts: `the names it exports` and `the names it resolves`. Counts drift; dropping is better.
+7. **Line 307** (P7, S9). `#    the PowerVR build only, for a tight edit loop` becomes
+   `#    the short gate (about 120 rows; 4 to 14 minutes), for a tight edit loop`.
+8. **Lines 357-358** (P8, S11). `Five are open today` becomes `Two are open today`, and
+   `four ES 2.0 report pins in `tests/es2_report_guard.rs` and the PowerVR's split 4x frame in
+   `src/pvr/backend_tests.rs`` becomes `one ES 2.0 report pin in `tests/es2_report_guard.rs` and
+   the PowerVR's split 4x frame in `src/pvr/backend_tests.rs``. Better: drop the count and
+   keep the `git grep` command.
+9. **After line 373** (P9, S12). Add: `With HH_TIMEOUT=60 a run takes 40 to 60 minutes and 17 to 50 GB of disk. With the default timeout (1200 s), gl_test case 174 fills a disk. Pass your own checkout of the driver as the last argument; in this repository it is driver/.`
+10. **Line 367** (P10, S13). After `does not explain` add: `(a job that times out on both sides is reported too; read the report before you call a difference a regression)`.
 
-`README.md` and `CONTRIBUTING.md` were not edited here.
+## Checklist: what can change (checklist.md is held by pub-checklist)
 
-- **S1, README.md:188 and 192.** `aarch64.cmake` is not shipped. Change line 188
-  `# cross build: a CMake toolchain file; the Rust target is derived from` to
-  `# cross build: a CMake toolchain file of your own (none is shipped); the Rust target is derived from`.
-- **S2, README.md:192.** `build-a64/` is outside the ignored `build/`, so after this
-  step `tools/check.sh --changed origin/main` sees a changed path and runs every row
-  (row 9: 36 minutes, not seconds). Change `-B build-a64` to `-B build/a64`.
-- **S3, README.md:193-194.** Change `# bare metal (RUST_TARGET defaults to aarch64-unknown-none)`
-  to `# bare metal (RUST_TARGET defaults to aarch64-unknown-none); needs an
-  aarch64-none-elf GCC on PATH, or use the clang form below`.
-- **S4, README.md:195-196.** Change `DRVSRC=...` to `DRVSRC=driver/src`, as on line 194,
-  and add after line 196: `# clang needs bare-metal C headers (a newlib sysroot, given
-  with --sysroot in CC)`.
-- **S5, README.md:288.** After `tools/api_coverage.py` add `(after cargo build -p
-  yakogl-capi --features gpu-powervr,mesa-reference-table; without that archive it
-  parses the source instead)`.
-- **S6, README.md:291 and 293.** Change both `(298 names` to `(304 names`, or drop the
-  counts, since they drift: `the names it exports` and `the names it resolves`.
-- **S7, CONTRIBUTING.md:32-37.** The two AM62P Zephyr `-Werror` rows failed with
-  `fatal error: ... swi_tables.ld: No such file or directory`; the i.MX8MP and
-  Raspberry Pi 4 rows passed. This is the failure the first walk saw (P6 above). Its
-  likely cause, read from the generated `snippets-rodata.ld` and Zephyr's code in this
-  walk, but not yet confirmed by a build with the real path: Zephyr writes the `#include` of a linker snippet relative
-  to `${ZEPHYR_BASE}/include` (`zephyr_linker_sources()`, Zephyr's
-  `cmake/modules/extensions.cmake:1456`). `tools/check.sh:2519` sets
-  `ZEPHYR_BASE="$ZEPHYR_WS/zephyr"`. On this host `ZEPHYR_WS` is a symbolic link, while
-  CMake gives the snippet's real path. The relative path is right on paper, but the
-  compiler follows the link before it reads `..`, so the `..` steps end at the file
-  system root and the file is looked for there. Only AM62P uses `swi_tables.ld`, so only its rows fail. It does
-  not depend on where the clone is, so P6's proposal above is wrong. Add after
-  CONTRIBUTING.md:37: `ZEPHYR_WS must be a real path, not a path through a symbolic
-  link: the AM62P Zephyr rows fail on a linked one (swi_tables.ld not found).` The
-  better fix is in `tools/check.sh:2519`: use `ZEPHYR_BASE="$(cd "$ZEPHYR_WS" && pwd
-  -P)/zephyr"` (and the same for `cd`), so the rows work with a linked workspace too.
-- **S8, not a README problem: `tests/es3_tex_levels.rs:93`.** `YakoglBackend` now has
-  `query_begin`, `query_end` and `query_result` (`src/backend.rs:1261-1269`). The
-  `backend()` initializer in that test does not set them, so no `cargo test` row of
-  the README builds. This is the same on `b7d7a79`. Add `query_begin: None,
-  query_end: None, query_result: None,` to that initializer, as
-  `tests/es2_fragdata.rs:256` does. Nothing in README.md or CONTRIBUTING.md has to
-  change for this.
-- **S9, README.md:307 and CONTRIBUTING.md:38.** `--quick` ran 119 rows. Change
-  `the PowerVR build only, for a tight edit loop` to `the short gate (about 120 rows),
-  for a tight edit loop`, and `(the PowerVR row and the AM62P archive only)` to
-  `(about 120 rows; fewer than the full run)`. No time is proposed: this walk only ran
-  it warm (4.3 minutes), the first walk took 14 minutes.
-- **S10, CONTRIBUTING.md:31.** Change `about 45 minutes on a warm tree` to
-  `about 35 minutes from a cold tree and 10 to 50 minutes on a warm one, depending on
-  the host`. This walk: 36 minutes cold (row 9, every row), 10 minutes warm (row 11,
-  but with the S8 rows failing early); the first walk: 49 minutes.
-- **S11, README.md:357-359.** Change `Five are open today` to `Three are open today`,
-  and `four ES 2.0 report pins` to `two ES 2.0 report pins`. Or drop the counts and keep
-  the `git grep` command.
-- **S12, README.md:363-373.** Add after line 373: `With HH_TIMEOUT=60 a run takes about
-  45 minutes and 50 GB of disk. With the default timeout (1200 s), gl_test case 174
-  fills a disk. Pass your own checkout of the driver as the last argument; in this
-  repository it is driver/.`
-- **S13, README.md:366-367.** A tree compared with itself is not quiet: here all 20
-  unexpected differences were `gltest.174` timing out on both sides, cut at different
-  lines (the first walk saw more such timeout pairs, P10 above). Add after `does not
-  explain`: `(a job that times out on both sides is reported too; read the report
-  before you call a difference a regression)`. Or, as P10 says, have the compare skip a
-  pair in which both sides timed out.
+| Line | Now | Can change to | Condition |
+| --- | --- | --- | --- |
+| 3 CONTRIBUTING.md | met (text) | **partial** (not met) | the README commands were run (steps 1-14): steps 4-6 fail as written (S1, S3, S4). `tools/check.sh --quick` is clean only with `MESA_V3D_TREE` unset (steps 15-16, N9). The gate times in CONTRIBUTING.md come from walks 1 and 2 |
+| 5 DESIGN.md | met (text) | **met** | all named paths exist after this change (3 stale references fixed); proof: the table "Paths checked" |
+| 6 walkthrough | partial | stays **partial** | README findings 1-10 are open. The quick gate reaches clean (step 16) only after unsetting `MESA_V3D_TREE`; a host that sets it ends red (step 15) |
+| 4 SECURITY.md | partial | stays partial | no stale path; the contact is the owner's |
