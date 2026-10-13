@@ -175,6 +175,12 @@ moved with it (`alloc_clobber`, `backend_differential`,
 `online/vivante/roundtrip.rs`, `es100_twins`, `source_use_bits`). When the
 table changes again, take the new numbers from the failing tests' messages.
 
+Measured again on main `5466c8dc` (2026-10-13), the same SHA-256 comparison:
+neither the table nor `tools/shaders/` changed since `01fbbf17`, and the
+counts are the same: 550 rows, 544 keys; 714 sources, 546 with a current row,
+0 with a stale key, 168 without a row, and those 168 are exactly the six
+classes above (3 + 2 + 2 + 14 + 83 + 64).
+
 Still open after this change:
 
 - `tools/check.sh` does not run `check_gl_test_blobs.py`, and nothing checks
