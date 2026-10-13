@@ -29,20 +29,43 @@
 //! Each vertex is evaluated once per instance (a strip's are read from a
 //! small cache) and its record written once per primitive it is part of.
 //!
+//! Texture look-ups read the GL texture storage on the CPU ([`GlTexels`],
+//! the evaluator's `TexelSource`): the texture bound to the unit the
+//! sampler's glUniform1i names, with the sampler object's filters and wraps
+//! when one is bound, as the draw binds it (`draw.rs` `build_common`). The
+//! filtering is ES 3.0.6 section 3.8.10-3.8.11 on the texels as stored:
+//! NEAREST and LINEAR, the four mipmap filters, REPEAT / CLAMP_TO_EDGE /
+//! MIRRORED_REPEAT, seamless cube maps (3.8.9.1), GL_TEXTURE_MIN_LOD /
+//! MAX_LOD / MAX_LEVEL and the texture swizzle. A vertex shader's
+//! `texture()` reads level of detail 0. An incomplete texture reads
+//! (0, 0, 0, 1) (3.8.13).
+//!
 //! What it refuses (GL_INVALID_OPERATION, the reason in the log; nothing is
-//! counted and the draw is not drawn): a vertex shader that samples a
-//! texture (the evaluator reads no texture storage), an attribute element
-//! outside its buffer, a uniform the evaluated shader reads that the linked
-//! stage does not lay out the same way, and anything the evaluator itself
-//! stops at. ES 3.0 has no such error; `src/GL_CORE_NOTES.md` lists it.
+//! counted and the draw is not drawn): a shadow look-up, textureGrad, a
+//! compressed texture or a storage class it does not decode (named), a
+//! texture whose GL_TEXTURE_BASE_LEVEL is not 0 (the draw does not apply it
+//! either), a sampler whose return type does not match the texture's
+//! (an `isampler2D` on an RGBA8 texture: undefined in GL), storage with no
+//! CPU view, an attribute element outside its buffer, a uniform the
+//! evaluated shader reads that the linked stage does not lay out the same
+//! way, and anything the evaluator itself stops at. ES 3.0 has no such
+//! error; `src/GL_CORE_NOTES.md` lists it.
 
 use super::consts::*;
-use super::context::{obj_index, GlContext, MAX_VERTEX_ATTRIBS};
+use super::context::{obj_index, GlContext, GlTexture, CAP_MIP_LEVELS, MAX_VERTEX_ATTRIBS, TEXTURE_SLOTS};
+use super::es3_formats::Texel;
 use super::tf::TfRow;
 use super::types::*;
+use crate::backend::{
+    self, GLES_TEXFMT_A8, GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
+    GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_RGBA16I, GLES_TEXFMT_RGBA16UI, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI,
+    GLES_TEXFMT_RGBA8, GLES_TEXFMT_RGBA8I, GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8,
+};
 use crate::shaderc::online::arena::{AVec, Arena};
-use crate::shaderc::online::eval::{self, Fault, Frame, Inputs, Sink};
-use crate::shaderc::online::ir::{IoSlot, Module, Op};
+use crate::shaderc::online::eval::{self, Fault, Frame, Inputs, Sink, TexLevel, TexLookup, TexelSource};
+use crate::shaderc::online::fmath;
+use crate::shaderc::online::ir::{IoSlot, Module, Op, ScalarType, TexDim};
 use crate::shaderc::online::{lower, sema::Stage, store};
 use crate::shaderc::SHC_UNIFORM_NO_BLOCK;
 use crate::util;
@@ -229,10 +252,8 @@ fn capture_in(
     let l = lower::compile_to_ir(a, Stage::Vertex, text)
         .map_err(|e| refuse!("the vertex shader does not lower again (line {}: {})", e.line, e.msg))?;
     let m = &l.module;
-    if m.instrs.iter().any(|op| matches!(op, Op::Tex { .. } | Op::TexSize { .. })) {
-        return Err(refuse!("the vertex shader samples a texture, which the capture does not evaluate"));
-    }
     let uniforms = uniform_block(c, a, m, d.program)?;
+    let mut texels = GlTexels::new(bind_textures(c, a, m, d.program)?);
 
     /* the pieces each vertex's records are made of */
     let mut pieces = arena_vec::<Piece>(a, 0)?;
@@ -317,8 +338,14 @@ fn capture_in(
                         locals: &mut *frame_locals,
                         ldef: &mut *frame_ldef,
                     };
-                    eval::run_in(m, &Inputs { io: io.as_slice(), uniforms }, frame, &mut sink)
-                        .map_err(|f| refuse!("vertex {}: {f}", d.first + vi))?;
+                    eval::run_in_with_textures(
+                        m,
+                        &Inputs { io: io.as_slice(), uniforms },
+                        frame,
+                        &mut sink,
+                        &mut texels,
+                    )
+                    .map_err(|f| refuse!("vertex {}: {f}", d.first + vi))?;
                     let rec = &mut cache[w * record..(w + 1) * record];
                     rec.fill(0);
                     for (p, (v, def)) in pieces.iter().zip(values.iter().zip(defined.iter())) {
@@ -454,4 +481,858 @@ fn attrib_value(c: &mut GlContext, app: usize, vertex: u32, instance: u32) -> Re
     let element = u64::from(instance.checked_div(ga.divisor).unwrap_or(vertex));
     super::draw::attrib_element(c, &ga, element)
         .ok_or_else(|| refuse!("attribute {app}: element {element} is outside its array"))
+}
+
+/* ---- textures: the vertex shader's look-ups, from the GL texture storage ---- */
+
+/// What a texture's components are, which decides the sampler type that may
+/// read it (ES 3.0.6 3.8.14: a float sampler reads a float or normalised
+/// texture, an `isampler*` a signed integer one, a `usampler*` an unsigned
+/// one; any other pairing is undefined, and refused here).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Comp {
+    Float,
+    Int,
+    Uint,
+}
+
+/// One sampler binding the vertex shader reads, resolved before the first
+/// vertex: where the texture's texels are (the layout `texture.rs` gives
+/// them, read but not changed here) and the sampler state the look-ups
+/// apply. `base` is the storage's CPU view: nothing in a capture frees or
+/// lays out a texture again, so it stays valid for the capture's length.
+#[derive(Clone, Copy)]
+pub(super) struct Bound {
+    sampler: u8,
+    dim: TexDim,
+    /// No complete texture: every look-up reads (0, 0, 0, 1) (3.8.13), and
+    /// textureSize reads the storage's size (0 without one).
+    incomplete: bool,
+    base: *const u8,
+    bytes: usize,
+    /// Level 0, one face or layer or slice.
+    width: u32,
+    height: u32,
+    /// Level 0's depth (3D), its layer count (2D array), 6 (cube) or 1.
+    layers: u32,
+    /// A 3D texture's slice grid (`GlTexture::grid_cols`), 0 when stacked.
+    grid_cols: u32,
+    level_off: [u32; CAP_MIP_LEVELS],
+    /// Each level's row pitch in texels (`texture.rs` `level_row_pitch`).
+    pitch: [u32; CAP_MIP_LEVELS],
+    /// One bit per level a look-up may read: specified, of the chain's
+    /// size and format, held by the storage, at most `q`.
+    level_ok: u16,
+    /// The chain's last level q (3.8.10.4): min(p, GL_TEXTURE_MAX_LEVEL).
+    q: u32,
+    bpp: usize,
+    texfmt: u8,
+    comp: Comp,
+    /// The texture's format (GL_RGB, GL_LUMINANCE, GL_DEPTH_COMPONENT, ...).
+    format: GLenum,
+    /// Stored B,G,R (`bgra` or `pe_order`).
+    bgra: bool,
+    /// Alpha reads 1 (`draw::texture_has_no_alpha`).
+    no_alpha: bool,
+    /// A depth texture samples (d, d, d, 1) (`draw::texture_depth_luminance`).
+    depth_luminance: bool,
+    min_filter: GLenum,
+    mag_filter: GLenum,
+    /// S, T, R.
+    wrap: [GLenum; 3],
+    min_lod: f32,
+    max_lod: f32,
+    swizzle: [u16; 4],
+}
+
+impl Bound {
+    const NONE: Bound = Bound {
+        sampler: 0,
+        dim: TexDim::D2,
+        incomplete: true,
+        base: core::ptr::null(),
+        bytes: 0,
+        width: 0,
+        height: 0,
+        layers: 0,
+        grid_cols: 0,
+        level_off: [0; CAP_MIP_LEVELS],
+        pitch: [0; CAP_MIP_LEVELS],
+        level_ok: 0,
+        q: 0,
+        bpp: 0,
+        texfmt: 0,
+        comp: Comp::Float,
+        format: 0,
+        bgra: false,
+        no_alpha: false,
+        depth_luminance: false,
+        min_filter: GL_NEAREST,
+        mag_filter: GL_NEAREST,
+        wrap: [GL_REPEAT; 3],
+        min_lod: -1000.0,
+        max_lod: 1000.0,
+        swizzle: [GL_RED as u16, GL_GREEN as u16, GL_BLUE as u16, GL_ALPHA as u16],
+    };
+}
+
+/// The capture's [`TexelSource`]: the bindings [`bind_textures`] resolved.
+pub(super) struct GlTexels<'a> {
+    bound: &'a [Bound],
+}
+
+impl<'a> GlTexels<'a> {
+    /// The source of `bound` (each from [`bound_of`]).
+    pub(super) fn new(bound: &'a [Bound]) -> GlTexels<'a> {
+        GlTexels { bound }
+    }
+}
+
+/// GL's side of level `l`: max(side >> l, 1).
+fn side(s: u32, l: u32) -> u32 {
+    super::context::pot_level_side(s, l)
+}
+
+fn fault(args: core::fmt::Arguments) -> Fault {
+    Fault::new(args)
+}
+
+impl GlTexels<'_> {
+    fn get(&self, sampler: u8) -> Result<&Bound, Fault> {
+        self.bound
+            .iter()
+            .find(|b| b.sampler == sampler)
+            .ok_or_else(|| fault(format_args!("sampler binding {sampler} was not resolved")))
+    }
+}
+
+impl TexelSource for GlTexels<'_> {
+    fn sample(&mut self, q: &TexLookup) -> Result<[u32; 4], Fault> {
+        let b = self.get(q.sampler)?;
+        if b.dim != q.dim {
+            return Err(fault(format_args!("sampler binding {} is read as two texture targets", q.sampler)));
+        }
+        if b.incomplete {
+            return Ok(b.finish(b.opaque_black()));
+        }
+        let v = match q.level {
+            TexLevel::Fetch(l) => b.fetch(q, l)?,
+            TexLevel::Lod(lod) => b.filtered(q, lod)?,
+        };
+        Ok(b.finish(v))
+    }
+
+    fn size(&mut self, sampler: u8, dim: TexDim, lod: i32) -> Result<[u32; 4], Fault> {
+        let b = self.get(sampler)?;
+        /* undefined past the chain (GLSL ES 3.00 8.9.1): the minified size,
+         * and 0 for a texture with no image */
+        if b.width == 0 || !(0..32).contains(&lod) {
+            return Ok([0; 4]);
+        }
+        let l = lod as u32;
+        let (w, h) = (side(b.width, l), side(b.height, l));
+        Ok(match dim {
+            TexDim::D3 => [w, h, side(b.layers, l), 0],
+            TexDim::D2Array => [w, h, b.layers, 0],
+            _ => [w, h, 0, 0],
+        })
+    }
+}
+
+impl Bound {
+    /// (0, 0, 0, 1) in the texture's component type.
+    fn opaque_black(&self) -> Texel {
+        match self.comp {
+            Comp::Float => Texel::F([0.0, 0.0, 0.0, 1.0]),
+            _ => Texel::I([0, 0, 0, 1]),
+        }
+    }
+
+    /// (0, 0, 0, 0): what an undefined texelFetch (a level or a texel
+    /// outside the image, GLSL ES 3.00 8.9.2) reads here.
+    fn zero(&self) -> Texel {
+        match self.comp {
+            Comp::Float => Texel::F([0.0; 4]),
+            _ => Texel::I([0; 4]),
+        }
+    }
+
+    /// The texture swizzle (ES 3.0.6 3.8.14.2), then the lanes' bits.
+    fn finish(&self, v: Texel) -> [u32; 4] {
+        let (bits, one): ([u32; 4], u32) = match v {
+            Texel::F(f) => (f.map(f32::to_bits), 1.0f32.to_bits()),
+            Texel::I(i) => (i, 1),
+        };
+        core::array::from_fn(|k| match u32::from(self.swizzle[k]) {
+            GL_RED => bits[0],
+            GL_GREEN => bits[1],
+            GL_BLUE => bits[2],
+            GL_ALPHA => bits[3],
+            GL_ZERO => 0,
+            GL_ONE => one,
+            _ => bits[k],
+        })
+    }
+
+    /// The size of level `l`: width, height, and the depth (3D) or the
+    /// layer count (array, cube).
+    fn level_size(&self, l: u32) -> (u32, u32, u32) {
+        let d = match self.dim {
+            TexDim::D3 => side(self.layers, l),
+            TexDim::D2 => 1,
+            _ => self.layers,
+        };
+        (side(self.width, l), side(self.height, l), d)
+    }
+
+    /// Texel (x, y) of slice, layer or face `z` of level `level`, decoded
+    /// as the format samples it (ES 3.0.6 3.8.14.1 and table 3.15: the
+    /// components a format lacks read 0, alpha 1). The caller keeps the
+    /// coordinates inside the level.
+    fn texel(&self, level: u32, x: u32, y: u32, z: u32) -> Result<Texel, Fault> {
+        let l = level as usize;
+        let (lw, lh) = (side(self.width, level) as usize, side(self.height, level) as usize);
+        /* texture.rs `texel_offset_3d` / `slice_origin`: a grid tiles a 3D
+         * level's slices in `grid_cols` columns, a stack puts slices,
+         * layers and faces one under the other */
+        let (x0, y0) = if self.grid_cols != 0 {
+            ((z % self.grid_cols) as usize * lw, (z / self.grid_cols) as usize * lh)
+        } else {
+            (0, z as usize * lh)
+        };
+        let off =
+            self.level_off[l] as usize + ((y0 + y as usize) * self.pitch[l] as usize + x0 + x as usize) * self.bpp;
+        if off.checked_add(self.bpp).is_none_or(|end| end > self.bytes) {
+            return Err(fault(format_args!(
+                "texel ({x}, {y}, {z}) of level {level} lies outside the texture's storage"
+            )));
+        }
+        // SAFETY: `base` is the texture's CPU view of `bytes` bytes (valid
+        // for the capture, see `Bound`); `off .. off + bpp` lies inside it.
+        let p = unsafe { core::slice::from_raw_parts(self.base.add(off), self.bpp) };
+        let Some(v) = decode(p, self.texfmt, self.bgra) else {
+            return Err(fault(format_args!("storage class {} is not decoded", self.texfmt)));
+        };
+        Ok(match v {
+            Texel::F(mut f) => {
+                if matches!(self.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL) {
+                    let d = f[0];
+                    f = if self.depth_luminance { [d, d, d, 1.0] } else { [d, 0.0, 0.0, 1.0] };
+                } else if matches!(self.texfmt, GLES_TEXFMT_R16F | GLES_TEXFMT_R32F) {
+                    /* a one-channel float store of a luminance or alpha image */
+                    let r = f[0];
+                    match self.format {
+                        GL_LUMINANCE => f = [r, r, r, 1.0],
+                        GL_ALPHA => f = [0.0, 0.0, 0.0, r],
+                        _ => {}
+                    }
+                }
+                if self.no_alpha {
+                    f[3] = 1.0;
+                }
+                Texel::F(f)
+            }
+            i => i,
+        })
+    }
+
+    /// `texelFetch(s, P, lod)` (GLSL ES 3.00 8.9.2; ES 3.0.6 3.8.10 "texel
+    /// fetches"): the texel at integer coordinates of level `lod`, no
+    /// filtering, no wrap. Outside the image or the chain the result is
+    /// undefined; it reads (0, 0, 0, 0).
+    fn fetch(&self, q: &TexLookup, lod: i32) -> Result<Texel, Fault> {
+        if q.dim == TexDim::Cube {
+            return Err(fault(format_args!("a texelFetch on a cube map (no such function in GLSL ES 3.00)")));
+        }
+        if !(0..16).contains(&lod) || self.level_ok & (1 << lod) == 0 {
+            return Ok(self.zero());
+        }
+        let l = lod as u32;
+        let (w, h, d) = self.level_size(l);
+        let i = |k: usize| q.coord[k] as i32;
+        let x = i(0).wrapping_add(q.offset[0]);
+        let y = i(1).wrapping_add(q.offset[1]);
+        let z = match q.dim {
+            TexDim::D3 => i(2).wrapping_add(q.offset[2]),
+            TexDim::D2Array => i(2), /* the layer takes no offset */
+            _ => 0,
+        };
+        let inside = |v: i32, n: u32| v >= 0 && (v as u32) < n;
+        if !(inside(x, w) && inside(y, h) && inside(z, d)) {
+            return Ok(self.zero());
+        }
+        self.texel(l, x as u32, y as u32, z as u32)
+    }
+
+    /// A filtered look-up at level of detail `lod` (ES 3.0.6 3.8.10-3.8.11):
+    /// lambda clamped to [MIN_LOD, MAX_LOD], magnification at lambda <= 0
+    /// (c = 0 in ES 3.0), the level or the two levels the minification
+    /// filter selects, blended by the fraction of lambda.
+    fn filtered(&self, q: &TexLookup, lod: f32) -> Result<Texel, Fault> {
+        let lam = if lod.is_nan() { 0.0 } else { lod }.max(self.min_lod).min(self.max_lod);
+        let qmax = self.q;
+        let (filter, d1, d2, frac) = if lam <= 0.0 {
+            (self.mag_filter, 0, 0, 0.0)
+        } else {
+            let lin = matches!(self.min_filter, GL_LINEAR | GL_LINEAR_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_LINEAR);
+            let f = if lin { GL_LINEAR } else { GL_NEAREST };
+            match self.min_filter {
+                GL_NEAREST_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_NEAREST => {
+                    /* 3.8.10.4: the nearest level, ceil(lambda + 1/2) - 1 */
+                    let d = if lam <= 0.5 { 0 } else { (fmath::ceil(lam + 0.5) - 1.0) as u32 };
+                    (f, d.min(qmax), d.min(qmax), 0.0)
+                }
+                GL_NEAREST_MIPMAP_LINEAR | GL_LINEAR_MIPMAP_LINEAR => {
+                    if lam >= qmax as f32 {
+                        (f, qmax, qmax, 0.0)
+                    } else {
+                        let fl = fmath::floor(lam);
+                        let d = fl as u32;
+                        (f, d, (d + 1).min(qmax), lam - fl)
+                    }
+                }
+                _ => (f, 0, 0, 0.0),
+            }
+        };
+        let t1 = self.at_level(q, filter, d1)?;
+        if d2 == d1 || frac == 0.0 {
+            return Ok(t1);
+        }
+        let t2 = self.at_level(q, filter, d2)?;
+        match (t1, t2) {
+            (Texel::F(a), Texel::F(b)) => Ok(Texel::F(lerp(a, b, frac))),
+            _ => Err(fault(format_args!("a mipmap-linear look-up of an integer texture"))),
+        }
+    }
+
+    /// One level's NEAREST or LINEAR sample (3.8.11).
+    fn at_level(&self, q: &TexLookup, filter: GLenum, level: u32) -> Result<Texel, Fault> {
+        if self.level_ok & (1 << level) == 0 {
+            return Err(fault(format_args!(
+                "level {level} of the texture at sampler binding {} is not stored here",
+                self.sampler
+            )));
+        }
+        let c = q.coord.map(f32::from_bits);
+        if q.dim == TexDim::Cube {
+            let (face, s, t) = cube_face(c[0], c[1], c[2]);
+            return self.cube_level(level, filter, face, s, t);
+        }
+        let (w, h, d) = self.level_size(level);
+        let o = q.offset.map(|v| v as f32);
+        let u = c[0] * w as f32 + o[0];
+        let v = c[1] * h as f32 + o[1];
+        /* the third texel coordinate: a 3D texture's, filtered like the
+         * other two; an array's layer, floor(r + 1/2) clamped (3.8.10),
+         * never filtered */
+        let (wc, layer) = match q.dim {
+            TexDim::D3 => (Some(c[2] * d as f32 + o[2]), 0),
+            TexDim::D2Array => (None, (fmath::floor(c[2] + 0.5) as i32).clamp(0, d as i32 - 1) as u32),
+            _ => (None, 0),
+        };
+        let [ws, wt, wr] = self.wrap;
+        if filter != GL_LINEAR {
+            let i = wrap(fmath::floor(u) as i32, w, ws);
+            let j = wrap(fmath::floor(v) as i32, h, wt);
+            let k = wc.map_or(layer, |wc| wrap(fmath::floor(wc) as i32, d, wr));
+            return self.texel(level, i, j, k);
+        }
+        /* 3.8.11: the 2x2 (2x2x2) texels around the sample point */
+        let (i0, a) = split(u);
+        let (j0, b) = split(v);
+        let (k0, g) = wc.map_or((0, 0.0), split);
+        let mut sum = [0.0f32; 4];
+        let ks: &[(i32, f32)] = if wc.is_some() { &[(0, 1.0 - g), (1, g)] } else { &[(0, 1.0)] };
+        for &(dk, wk) in ks {
+            for (dj, wj) in [(0, 1.0 - b), (1, b)] {
+                for (di, wi) in [(0, 1.0 - a), (1, a)] {
+                    let i = wrap(i0.wrapping_add(di), w, ws);
+                    let j = wrap(j0.wrapping_add(dj), h, wt);
+                    let k = if wc.is_some() { wrap(k0.wrapping_add(dk), d, wr) } else { layer };
+                    let Texel::F(t) = self.texel(level, i, j, k)? else {
+                        return Err(fault(format_args!("LINEAR filtering of an integer texture")));
+                    };
+                    let weight = wi * wj * wk;
+                    for (s, v) in sum.iter_mut().zip(t) {
+                        *s += weight * v;
+                    }
+                }
+            }
+        }
+        Ok(Texel::F(sum))
+    }
+
+    /// One level of a cube map at face `face`, (s, t) in [0, 1]: NEAREST
+    /// clamps to the face; LINEAR reads the 2x2 texels around the sample,
+    /// those past an edge from the face across it (seamless filtering,
+    /// ES 3.0.6 3.8.9.1, always on in ES 3.0).
+    fn cube_level(&self, level: u32, filter: GLenum, face: u32, s: f32, t: f32) -> Result<Texel, Fault> {
+        let n = side(self.width, level);
+        let (u, v) = (s * n as f32, t * n as f32);
+        if filter != GL_LINEAR {
+            let i = (fmath::floor(u) as i32).clamp(0, n as i32 - 1) as u32;
+            let j = (fmath::floor(v) as i32).clamp(0, n as i32 - 1) as u32;
+            return self.texel(level, i, j, face);
+        }
+        let (i0, a) = split(u);
+        let (j0, b) = split(v);
+        let mut sum = [0.0f32; 4];
+        for (dj, wj) in [(0, 1.0 - b), (1, b)] {
+            for (di, wi) in [(0, 1.0 - a), (1, a)] {
+                let t = self.cube_texel(level, face, i0.wrapping_add(di), j0.wrapping_add(dj), n)?;
+                for (s, v) in sum.iter_mut().zip(t) {
+                    *s += wi * wj * v;
+                }
+            }
+        }
+        Ok(Texel::F(sum))
+    }
+
+    /// Texel (i, j) of face `face` of an n x n level, where i or j may be
+    /// one texel past the face: then the texel across that edge, found by
+    /// projecting the texel's centre onto the cube again; past a corner,
+    /// the average of the three texels that meet there (OpenGL 4.6 8.14.1,
+    /// the rule ES 3.0's seamless filtering takes from
+    /// ARB_seamless_cube_map).
+    fn cube_texel(&self, level: u32, face: u32, i: i32, j: i32, n: u32) -> Result<[f32; 4], Fault> {
+        let inside = |v: i32| v >= 0 && (v as u32) < n;
+        let flt = |t: Texel| match t {
+            Texel::F(f) => Ok(f),
+            Texel::I(_) => Err(fault(format_args!("LINEAR filtering of an integer texture"))),
+        };
+        let across = |i: i32, j: i32| -> Result<[f32; 4], Fault> {
+            let (f2, i2, j2) = cube_across(face, i, j, n);
+            flt(self.texel(level, i2, j2, f2)?)
+        };
+        match (inside(i), inside(j)) {
+            (true, true) => flt(self.texel(level, i as u32, j as u32, face)?),
+            (false, true) | (true, false) => across(i, j),
+            (false, false) => {
+                let (ci, cj) = (i.clamp(0, n as i32 - 1), j.clamp(0, n as i32 - 1));
+                let a = flt(self.texel(level, ci as u32, cj as u32, face)?)?;
+                let b = across(i, cj)?;
+                let c = across(ci, j)?;
+                Ok(core::array::from_fn(|k| (a[k] + b[k] + c[k]) / 3.0))
+            }
+        }
+    }
+}
+
+/// `(1 - t) a + t b`, lane by lane (3.8.10.4).
+fn lerp(a: [f32; 4], b: [f32; 4], t: f32) -> [f32; 4] {
+    core::array::from_fn(|k| (1.0 - t) * a[k] + t * b[k])
+}
+
+/// A LINEAR coordinate's first texel and the second's weight: floor(u - 1/2)
+/// and its fraction (3.8.11).
+fn split(u: f32) -> (i32, f32) {
+    let x = u - 0.5;
+    let f = fmath::floor(x);
+    (f as i32, x - f)
+}
+
+/// A texel coordinate wrapped into 0 .. n (ES 3.0.6 table 3.19).
+pub(super) fn wrap(i: i32, n: u32, mode: GLenum) -> u32 {
+    let n = i64::from(n.max(1));
+    let i = i64::from(i);
+    let r = match mode {
+        GL_CLAMP_TO_EDGE => i.clamp(0, n - 1),
+        GL_MIRRORED_REPEAT => {
+            let m = i.rem_euclid(2 * n) - n;
+            (n - 1) - if m >= 0 { m } else { -(1 + m) }
+        }
+        _ => i.rem_euclid(n),
+    };
+    r as u32
+}
+
+/// The face (0 = +X .. 5 = -Z, the stacked order) and (s, t) a cube map
+/// direction selects (ES 3.0.6 table 3.21). A tie goes to X, then Y.
+pub(super) fn cube_face(x: f32, y: f32, z: f32) -> (u32, f32, f32) {
+    let (ax, ay, az) = (x.abs(), y.abs(), z.abs());
+    let (face, sc, tc, ma) = if ax >= ay && ax >= az {
+        if x >= 0.0 {
+            (0, -z, -y, ax)
+        } else {
+            (1, z, -y, ax)
+        }
+    } else if ay >= az {
+        if y >= 0.0 {
+            (2, x, z, ay)
+        } else {
+            (3, x, -z, ay)
+        }
+    } else if z >= 0.0 {
+        (4, x, -y, az)
+    } else {
+        (5, -x, -y, az)
+    };
+    (face, 0.5 * (sc / ma + 1.0), 0.5 * (tc / ma + 1.0))
+}
+
+/// Texel (i, j) of face `face`, one past an edge of the n x n face: the
+/// face and texel its centre falls on when projected through the cube
+/// (table 3.21 inverted, then applied again).
+pub(super) fn cube_across(face: u32, i: i32, j: i32, n: u32) -> (u32, u32, u32) {
+    let sc = 2.0 * (i as f32 + 0.5) / n as f32 - 1.0;
+    let tc = 2.0 * (j as f32 + 0.5) / n as f32 - 1.0;
+    let (x, y, z) = match face {
+        0 => (1.0, -tc, -sc),
+        1 => (-1.0, -tc, sc),
+        2 => (sc, 1.0, tc),
+        3 => (sc, -1.0, -tc),
+        4 => (sc, -tc, 1.0),
+        _ => (-sc, -tc, -1.0),
+    };
+    let (f, s, t) = cube_face(x, y, z);
+    let at = |c: f32| (fmath::floor(c * n as f32) as i32).clamp(0, n as i32 - 1) as u32;
+    (f, at(s), at(t))
+}
+
+/// One stored texel of storage class `texfmt` (`backend::GLES_TEXFMT_*`),
+/// as the texture unit reads it: normalised and float classes as floats,
+/// integer classes as their bits (signed ones sign-extended). `bgra`: the
+/// RGBA8 bytes are B,G,R,A. None for a class not decoded here (the ETC
+/// block formats).
+pub(super) fn decode(p: &[u8], texfmt: u8, bgra: bool) -> Option<Texel> {
+    use super::es3_formats::{half_to_f32, unpack_r11g11b10f, unpack_rgb9e5};
+    let u16_at = |o: usize| u16::from_ne_bytes([p[o], p[o + 1]]);
+    let u32_at = |o: usize| u32::from_ne_bytes([p[o], p[o + 1], p[o + 2], p[o + 3]]);
+    let h = |o: usize| half_to_f32(u16_at(o));
+    let f = |o: usize| f32::from_bits(u32_at(o));
+    let n8 = |b: u8| f32::from(b) / 255.0;
+    let swap = |v: [f32; 4]| if bgra { [v[2], v[1], v[0], v[3]] } else { v };
+    Some(match texfmt {
+        GLES_TEXFMT_RGBA8 => Texel::F(swap([n8(p[0]), n8(p[1]), n8(p[2]), n8(p[3])])),
+        GLES_TEXFMT_SRGB8_A8 => {
+            let d = super::srgb::decode;
+            Texel::F(swap([d(p[0]), d(p[1]), d(p[2]), n8(p[3])]))
+        }
+        GLES_TEXFMT_L8 => Texel::F([n8(p[0]), n8(p[0]), n8(p[0]), 1.0]),
+        GLES_TEXFMT_A8 => Texel::F([0.0, 0.0, 0.0, n8(p[0])]),
+        GLES_TEXFMT_LA8 => Texel::F([n8(p[0]), n8(p[0]), n8(p[0]), n8(p[1])]),
+        GLES_TEXFMT_RGB565 => {
+            let v = u32::from(u16_at(0));
+            Texel::F([(v >> 11) as f32 / 31.0, ((v >> 5) & 0x3f) as f32 / 63.0, (v & 0x1f) as f32 / 31.0, 1.0])
+        }
+        GLES_TEXFMT_RGBA16F => Texel::F([h(0), h(2), h(4), h(6)]),
+        GLES_TEXFMT_R16F => Texel::F([h(0), 0.0, 0.0, 1.0]),
+        GLES_TEXFMT_R32F => Texel::F([f(0), 0.0, 0.0, 1.0]),
+        GLES_TEXFMT_RGBA32F => Texel::F([f(0), f(4), f(8), f(12)]),
+        GLES_TEXFMT_R11G11B10F => {
+            let [r, g, b] = unpack_r11g11b10f(u32_at(0));
+            Texel::F([r, g, b, 1.0])
+        }
+        GLES_TEXFMT_RGB9E5 => {
+            let [r, g, b] = unpack_rgb9e5(u32_at(0));
+            Texel::F([r, g, b, 1.0])
+        }
+        GLES_TEXFMT_RGB10A2 => {
+            let v = u32_at(0);
+            let c = |s: u32, m: u32| ((v >> s) & m) as f32 / m as f32;
+            Texel::F([c(0, 0x3ff), c(10, 0x3ff), c(20, 0x3ff), c(30, 3)])
+        }
+        /* ES 3.0.6 equation 2.2: max(c / 127, -1) */
+        GLES_TEXFMT_RGBA8_SNORM => Texel::F(core::array::from_fn(|k| (p[k] as i8 as f32 / 127.0).max(-1.0))),
+        GLES_TEXFMT_RGB10A2UI => {
+            let v = u32_at(0);
+            Texel::I([v & 0x3ff, (v >> 10) & 0x3ff, (v >> 20) & 0x3ff, v >> 30])
+        }
+        GLES_TEXFMT_RGBA8UI => Texel::I(core::array::from_fn(|k| u32::from(p[k]))),
+        GLES_TEXFMT_RGBA8I => Texel::I(core::array::from_fn(|k| p[k] as i8 as i32 as u32)),
+        GLES_TEXFMT_RGBA16UI => Texel::I(core::array::from_fn(|k| u32::from(u16_at(2 * k)))),
+        GLES_TEXFMT_RGBA16I => Texel::I(core::array::from_fn(|k| u16_at(2 * k) as i16 as i32 as u32)),
+        GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I => Texel::I(core::array::from_fn(|k| u32_at(4 * k))),
+        _ => return None,
+    })
+}
+
+/// The name a refusal gives a texture's format: its ES 3.0 sized format,
+/// or the format it was specified with.
+fn format_name(t: &GlTexture) -> &'static str {
+    if let Some(e) = super::es3_formats::by_index(t.es3_fmt) {
+        return e.name;
+    }
+    match t.format {
+        GL_RGBA => "GL_RGBA",
+        GL_RGB => "GL_RGB",
+        GL_RG => "GL_RG",
+        GL_RED => "GL_RED",
+        GL_LUMINANCE => "GL_LUMINANCE",
+        GL_ALPHA => "GL_ALPHA",
+        GL_LUMINANCE_ALPHA => "GL_LUMINANCE_ALPHA",
+        GL_DEPTH_COMPONENT => "GL_DEPTH_COMPONENT",
+        GL_DEPTH_STENCIL => "GL_DEPTH_STENCIL",
+        GL_ETC1_RGB8_OES => "GL_ETC1_RGB8_OES",
+        GL_COMPRESSED_RGB8_ETC2 => "GL_COMPRESSED_RGB8_ETC2",
+        GL_COMPRESSED_RGBA8_ETC2_EAC => "GL_COMPRESSED_RGBA8_ETC2_EAC",
+        GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 => "GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        _ => "a format without a name here",
+    }
+}
+
+/// Does minification filter `f` read mipmaps?
+fn mipmapped(f: GLenum) -> bool {
+    matches!(
+        f,
+        GL_NEAREST_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_NEAREST | GL_NEAREST_MIPMAP_LINEAR | GL_LINEAR_MIPMAP_LINEAR
+    )
+}
+
+fn comp_name(k: Comp) -> &'static str {
+    match k {
+        Comp::Float => "float",
+        Comp::Int => "signed integer",
+        Comp::Uint => "unsigned integer",
+    }
+}
+
+/// Resolve every sampler binding the module reads, as the draw binds it
+/// (`draw.rs` `build_common`): the binding's sampler named in the linked
+/// vertex stage, the unit its glUniform1i chose, the texture bound there at
+/// the sampler's target (0: the target's default texture), the sampler
+/// object's filters and wraps when one is bound. What the capture cannot
+/// read is refused here, before any vertex runs.
+fn bind_textures<'a>(
+    c: &mut GlContext,
+    a: &Arena<'a>,
+    m: &Module<'_>,
+    program: GLuint,
+) -> Result<&'a [Bound], Refusal> {
+    let oom = |_| refuse!("out of the shader compiler's scratch memory");
+    let mut list = arena_vec::<Bound>(a, 0)?;
+    for op in m.instrs.iter() {
+        let (sampler, dim, ret) = match *op {
+            Op::Tex { sampler, dim, ret, .. } => (sampler, dim, Some(ret)),
+            Op::TexSize { sampler, dim, .. } => (sampler, dim, None),
+            _ => continue,
+        };
+        let at = match list.as_slice().iter().position(|b| b.sampler == sampler) {
+            Some(k) => k,
+            None => {
+                let b = resolve_sampler(c, m, program, sampler, dim)?;
+                list.push(a, b).map_err(oom)?;
+                list.len() - 1
+            }
+        };
+        let b = list[at];
+        if b.dim != dim {
+            return Err(refuse!("sampler binding {sampler} is read as two texture targets"));
+        }
+        let want = match ret {
+            Some(ScalarType::I32) => Comp::Int,
+            Some(ScalarType::U32) => Comp::Uint,
+            Some(_) => Comp::Float,
+            None => continue, /* textureSize reads any texture */
+        };
+        if !b.incomplete && b.comp != want {
+            return Err(refuse!(
+                "sampler binding {sampler}: a {} sampler reads a {} texture (undefined in GL)",
+                comp_name(want),
+                comp_name(b.comp)
+            ));
+        }
+    }
+    Ok(list.into_slice())
+}
+
+/// One sampler binding of the module, resolved ([`bind_textures`]).
+fn resolve_sampler(
+    c: &mut GlContext,
+    m: &Module<'_>,
+    program: GLuint,
+    sampler: u8,
+    dim: TexDim,
+) -> Result<Bound, Refusal> {
+    /* the IR's sampler (element k of an array), then the linked stage's
+     * binding of the same name: the two layouts are one compiler's when the
+     * stage was compiled online, and may differ when it came from the table */
+    let Some(decl) = m.uniforms.iter().find(|u| {
+        u.dword_off == SHC_UNIFORM_NO_BLOCK
+            && sampler >= u.binding
+            && u32::from(sampler) < u32::from(u.binding) + u32::from(u.array_len.max(1))
+    }) else {
+        return Err(refuse!("sampler binding {sampler} is no sampler of the lowered vertex shader"));
+    };
+    let k = usize::from(sampler - decl.binding);
+    let unit = {
+        let p = &c.objs_ref().programs[obj_index(program)];
+        let row = p
+            .rvs
+            .uniform_table()
+            .iter()
+            .find(|r| r.dword_off == SHC_UNIFORM_NO_BLOCK && util::name_bytes(&r.name) == decl.name.as_bytes());
+        let Some(row) = row else {
+            return Err(refuse!("sampler {} is not a sampler of the linked vertex stage", decl.name));
+        };
+        match p.vs_sampler_unit.get(usize::from(row.binding) + k) {
+            Some(&u) => usize::from(u),
+            None => return Err(refuse!("sampler {} has binding {}, past the samplers", decl.name, row.binding)),
+        }
+    };
+    let (bound, target) = match dim {
+        TexDim::Cube => (c.bound_texture_cube.get(unit), GL_TEXTURE_CUBE_MAP),
+        TexDim::D2Array => (c.bound_texture_2d_array.get(unit), GL_TEXTURE_2D_ARRAY),
+        TexDim::D3 => (c.bound_texture_3d.get(unit), GL_TEXTURE_3D),
+        TexDim::D2 => (c.bound_texture_2d.get(unit), GL_TEXTURE_2D),
+    };
+    let Some(&bound) = bound else {
+        return Err(refuse!("sampler {} reads texture unit {unit}, past the units", decl.name));
+    };
+    let slot = if bound == 0 { super::texture::default_slot(target) } else { Some(bound as usize) };
+    let none = Bound { sampler, dim, ..Bound::NONE };
+    let Some(ti) = slot.filter(|&s| s < TEXTURE_SLOTS && c.objs_ref().textures[s].used) else {
+        return Ok(none); /* no texture object: (0, 0, 0, 1), as the draw's black 1x1 */
+    };
+    if c.objs_ref().textures[ti].mem.impl_.is_null() {
+        return Ok(none); /* no storage: no image was ever specified */
+    }
+    settle_for_read(c, ti)?;
+    let sampler_state = super::es3::sampler_state(c.index, unit);
+    let t = &c.objs_ref().textures[ti];
+    let b = bound_of(t, sampler, dim, sampler_state).map_err(|why| refuse!("sampler {}: {why}", decl.name))?;
+    // SAFETY: the texture's whole CPU mapping; the kick that rendered into
+    // it completed (settle_for_read).
+    unsafe { crate::osal::cache_invd(t.mem.cpu, t.mem.size) };
+    Ok(b)
+}
+
+/// The [`Bound`] of texture `t` read at sampler binding `sampler` as a
+/// `dim` sampler, with `sampler_state` (a sampler object's min, mag, wrap S
+/// and wrap T) in place of the texture's own when one is bound; or why the
+/// capture cannot read it. The caller settled the texels
+/// ([`settle_for_read`]) and keeps `t` alive and its storage in place while
+/// the bound is used.
+pub(super) fn bound_of(
+    t: &GlTexture,
+    sampler: u8,
+    dim: TexDim,
+    sampler_state: Option<(GLenum, GLenum, GLenum, GLenum)>,
+) -> Result<Bound, Fault> {
+    let name = format_name(t);
+    if t.block_bytes != 0 {
+        return Err(fault(format_args!("a compressed texture ({name}), which the capture does not decode")));
+    }
+    if decode(&[0u8; 16], t.texfmt, false).is_none() {
+        return Err(fault(format_args!("texture format {name} (storage class {}) is not decoded", t.texfmt)));
+    }
+    if t.mem.cpu.is_null() {
+        return Err(fault(format_args!("the texture's storage has no CPU view")));
+    }
+    if t.base_level != 0 {
+        return Err(fault(format_args!(
+            "GL_TEXTURE_BASE_LEVEL {}, which the draw does not apply either",
+            t.base_level
+        )));
+    }
+    let (min_filter, mag_filter, wrap_s, wrap_t) =
+        sampler_state.unwrap_or((t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t));
+    let comp = match super::es3_formats::by_index(t.es3_fmt).map(|e| e.class) {
+        Some(super::es3_formats::Class::Int) => Comp::Int,
+        Some(super::es3_formats::Class::Uint) => Comp::Uint,
+        _ => Comp::Float,
+    };
+    let layers = if dim == TexDim::D2 { 1 } else { u32::from(t.layers).max(1) };
+    /* the chain's levels, q + 1 (draw.rs `mip_levels_needed`, with a 3D
+     * texture's depth in p as ES 3.0.6 3.8.14 has it) */
+    let deep = if dim == TexDim::D3 { layers } else { 1 };
+    let p = u32::from(super::context::gl_mip_levels(t.width.max(deep), t.height)).min(CAP_MIP_LEVELS as u32);
+    let mut needed = p.min(u32::try_from(t.max_level_set).unwrap_or(0).saturating_add(1));
+    if t.immutable && t.immutable_levels > 0 {
+        needed = needed.min(u32::from(t.immutable_levels));
+    }
+    let needed = needed.max(1);
+    let mut b = Bound {
+        sampler,
+        dim,
+        incomplete: incomplete(t, min_filter, mag_filter, needed),
+        base: t.mem.cpu as *const u8,
+        bytes: t.mem.size,
+        width: t.width,
+        height: t.height,
+        layers,
+        grid_cols: u32::from(t.grid_cols),
+        level_off: t.level_off,
+        pitch: [0; CAP_MIP_LEVELS],
+        level_ok: 0,
+        q: needed - 1,
+        bpp: usize::from(t.bpp.max(1)),
+        texfmt: t.texfmt,
+        comp,
+        format: t.format,
+        bgra: t.bgra || t.pe_order,
+        no_alpha: comp == Comp::Float && super::draw::texture_has_no_alpha(t),
+        depth_luminance: super::draw::texture_depth_luminance(t),
+        min_filter,
+        mag_filter,
+        wrap: [wrap_s, wrap_t, t.wrap_r],
+        min_lod: t.min_lod,
+        max_lod: t.max_lod,
+        swizzle: t.swizzle,
+    };
+    for l in 0..needed {
+        let lw = side(t.width, l);
+        /* texture.rs `level_row_pitch` of the level's rows: a grid's rows
+         * hold `grid_cols` slices side by side */
+        let rows = if t.grid_cols != 0 { lw * u32::from(t.grid_cols) } else { lw };
+        b.pitch[l as usize] = if t.pot_chain { t.level_pitch_at(l) } else { t.level_pitch(rows) };
+        let bit = 1u16 << l;
+        let held =
+            if t.grid_cols != 0 { l == 0 || t.level_off[l as usize] != 0 } else { l < u32::from(t.chain_levels) };
+        let faces = dim != TexDim::Cube || l == 0 || t.level_faces[l as usize] == 0x3f;
+        if t.level_defined & bit != 0 && t.level_bad & bit == 0 && held && faces {
+            b.level_ok |= bit;
+        }
+    }
+    Ok(b)
+}
+
+/// Is the texture incomplete under these filters (ES 3.0.6 3.8.13)? The
+/// rules of `draw.rs` `incomplete_reason`, which a draw applies to the same
+/// texture, with `needed` levels for a mipmap filter.
+fn incomplete(t: &GlTexture, min_filter: GLenum, mag_filter: GLenum, needed: u32) -> bool {
+    if t.target == GL_TEXTURE_CUBE_MAP && t.faces_set != 0x3f {
+        return true;
+    }
+    if t.level_defined & 1 == 0 || t.level_bad & 1 != 0 || t.width == 0 || t.height == 0 {
+        return true;
+    }
+    if super::es3_formats::by_index(t.es3_fmt).is_some_and(|e| e.incomplete_with(min_filter, mag_filter)) {
+        return true;
+    }
+    if mipmapped(min_filter) {
+        let chain = ((1u32 << needed) - 1) as u16;
+        if t.level_defined & chain != chain || t.level_bad & chain != 0 {
+            return true;
+        }
+        let levels = (needed as usize).min(t.level_faces.len());
+        if t.target == GL_TEXTURE_CUBE_MAP && t.level_faces[1..levels.max(1)].iter().any(|&f| f != 0x3f) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Before the CPU reads texture `ti`'s texels: the glClear waiting to be
+/// merged into the next draw goes out when the texture is its target, the
+/// depth a kick rendered into it is resolved into its texels, and the kick
+/// that last rendered into it is waited for (`texture.rs` `settle_texture`,
+/// the read half: a kick that only samples it changes nothing).
+fn settle_for_read(c: &mut GlContext, ti: usize) -> Result<(), Refusal> {
+    let is_target = c.bound_framebuffer != 0
+        && c.framebuffer_ref(c.bound_framebuffer).is_some_and(|fb| {
+            core::iter::once(&fb.color)
+                .chain(fb.color_n.iter())
+                .chain(core::iter::once(&fb.depth))
+                .any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti)
+        });
+    if is_target {
+        super::draw::flush_pending_clear(c);
+    }
+    super::texture::resolve_depth(c, ti);
+    let kick = super::framebuffer::texture_target_use(c, ti);
+    if backend::kick_pending(kick) && (backend::flush() != 0 || backend::finish() != 0) {
+        return Err(refuse!("the kick rendering into a texture the vertex shader samples did not complete"));
+    }
+    Ok(())
 }
