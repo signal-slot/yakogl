@@ -43,7 +43,13 @@
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
 #             applies it)                (default ~/com/github/KhronosGroup/VK-GL-CTS)
 #   GPU       vivante | powervr | v3d: whose online back end compiles (default vivante,
-#             the GC7000's); each GPU gets its own library directory
+#             the GC7000's); each GPU gets its own library directory.
+#             v3d's tiled-copy budget is the library's runtime setting
+#             YAKOGL_V3D_TILED_COPIES_BYTES (library default 8388608; the Pi 4
+#             dEQP image sets 16777216). For GPU=v3d this script exports
+#             16777216 unless the caller set it, so the host run matches the
+#             image: at 8 MiB dEQP aborts chunk c_150 at
+#             texture.size.cube.512x512_rgb888_mipmap
 #   MODULE    gles2 | gles3 (default gles2). gles3 builds deqp-gles3 in its own
 #             directory, runs the union of VK-GL-CTS's android/cts/main/gles3-main-*.txt
 #             (the yearly lists are increments; read from the checkout, not
@@ -82,7 +88,8 @@ GPU=${GPU:-vivante}
 case "$GPU" in
     vivante) LIB=$BASE/lib; SUFFIX= ;;
     powervr) LIB=$BASE/lib-powervr; SUFFIX=-powervr ;;
-    v3d) LIB=$BASE/lib-v3d; SUFFIX=-v3d ;;
+    v3d) LIB=$BASE/lib-v3d; SUFFIX=-v3d
+         export YAKOGL_V3D_TILED_COPIES_BYTES=${YAKOGL_V3D_TILED_COPIES_BYTES:-16777216} ;;
     *) echo "host-deqp-run: GPU must be vivante, powervr or v3d, not '$GPU'" >&2; exit 1 ;;
 esac
 MODULE=${MODULE:-gles2}
@@ -109,6 +116,8 @@ if [ -n "${REPORT:-}" ]; then
     echo "host-deqp-run: report of $OUT, run from $(cat "$OUT/commit" 2>/dev/null) (HOST-ONLY)"
 else
 echo "host-deqp-run: library and harness from $COMMIT, GPU $GPU, $MODULE (HOST-ONLY: compile/link outcomes only)"
+[ "$GPU" != v3d ] ||
+    echo "host-deqp-run: YAKOGL_V3D_TILED_COPIES_BYTES=$YAKOGL_V3D_TILED_COPIES_BYTES (the Pi 4 image uses 16777216)"
 
 # 1. deqp-<module> for the host, against the YakoGL target (dlopen()s our libs).
 if [ ! -x "$DEQP_DIR/modules/$MODULE/deqp-$MODULE" ]; then
