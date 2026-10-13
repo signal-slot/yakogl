@@ -51,3 +51,55 @@ each run's CASE record words and any FWCCB / CONTEXT_RESET lines.
 | 198 a2cconst | not run | - | - |
 | 197 vtxgrid | not run | - | - |
 | 171 | not run | - | - |
+
+# am62p-es2-final-a: images 1-9 from the origin/main tip (BLOCKED again, nothing built, nothing run)
+
+Date: 2026-10-13. Newest `origin/main` after `git fetch origin`: `b7d7a79d`
+(commit M; equal to this workspace's base). No image was built and no dEQP
+case ran on the board in this item. No `board.sh tree` or `tally` verdict line
+was printed, because `board.sh` was never started. There are no per-image
+counts from this session.
+
+## Blocker (exact)
+
+1. **ssh to the board is refused.** `ssh -o BatchMode=yes ... true` to the
+   leased device returned "This command requires approval". The session is
+   unattended, so it was not granted. The console probe
+   (`echo probe | sudo tee /dev/ttyS2` on the board) and `BOARD_HOST` for
+   `tools/board.sh` both need ssh.
+2. **The leased console is silent.** The lease is the bridge port that
+   `docs/boards/am62p-console-lease.md` says carries mcu_uart0.
+   `serial_status` showed `connected`, offset 0, 0 bytes buffered. A 6 s
+   `serial_expect` on `.+` timed out with 0 bytes. The proven main_uart0 form
+   (bridge port 33, `am62p-es2-r1c`) is not part of this lease.
+
+The console was not shown to carry output, so the procedure stops here, as the
+item requires. Nothing was flashed, rebooted or written to the board.
+
+## What existing records already answer
+
+This session adds no board data. The two questions of this item are answered
+by `docs/board-sessions/am62p-es2-final-r2.md` (whole tree on `63efed8e`, run
+on the board through port 33). Those numbers are from that record, not from
+this item:
+
+- The 9 `shaders.invariance.*.common_subexpression_*` cases pass (image 1:
+  1512 / 1512).
+- The 45 `texture.vertex.2d.*` cases pass (image 9: 452 / 452).
+- Whole tree 17,125 pass / 0 fail.
+
+Not confirmed by this item, and not stated in final-r2 in the form asked: that
+image 9's console has no "does not fit an empty frame" line, and a run built
+from the newer tip `b7d7a79d`.
+
+## To run it
+
+Give the task ssh to the AM62P and the main_uart0 bridge port (or fix the
+lease as in `docs/boards/am62p-console-lease.md`). Then, from a worktree of
+`origin/main` under `$TMPDIR`:
+
+```
+TREE_ROWS=0-8 tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-M M
+BOARD_BOOT=uboot-mmc TREE_ROWS=0-8 tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-M
+tools/board.sh am62p tally records/am62p/deqp-M
+```
