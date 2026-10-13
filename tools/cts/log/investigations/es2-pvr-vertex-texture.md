@@ -14,6 +14,16 @@ confirmation is HANDOFF's (image 9 of the AM62P tree). The host tests
 `tests/es2_pvr_vertex_texture.rs` stay: they pin the GL core's side (the
 staged bytes, the vertex-stage binding, the compiled program).
 
+Checked again on main `40dd2107` (2026-10-12, host only): the four tests
+of `tests/es2_pvr_vertex_texture.rs` pass, with and without `report-es2`,
+and none is `#[ignore]`. The recorder side of the fix is pinned by the rig
+test `a_deqp_vertex_texture_grid_of_client_arrays_is_drawn_in_index_pieces`
+(`src/pvr/backend_tests.rs`, `--features host-test,gpu-powervr --lib`): the
+same 127 x 127 grid is drawn in three index pieces, with no "not drawn"
+line. It passes. The failing run at `89d518ee` in evidence 2 is from before
+the fix. The board check is still open: image 9 of
+`tools/cts/am62p-full-tree.txt` should give 452 passed, 0 failed.
+
 Item `pub-license-audit` of plan #20 (the id is reused; the licence audit is
 plan 18's `release-license-audit`). Host work only, at the integration tip
 `89d518ee`. No board run and no source change. The fix below is for a
