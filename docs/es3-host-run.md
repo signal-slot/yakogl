@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
-# The whole dEQP-GLES3 mustpass on the host, three GPUs (2026-10-12)
+# The whole dEQP-GLES3 mustpass on the host, three GPUs (2026-10-14)
 
 **Every number in this document is HOST-ONLY.** The library is built with the
 LINUX OSAL. It records the command stream and does not execute it, so every
@@ -20,9 +20,11 @@ This run replaces its numbers for main.
 
 ## What ran
 
-- Library and harness: main `9390731` (this branch's base; `src/` is not
-  changed here), for each of `GPU=powervr`, `vivante` and `v3d`, gles3
-  (`YAKOGL_REPORT_ES2=OFF`, the online compiler, `YAKOGL_OSAL=linux`).
+- Library and harness: main `5ff06a2` (2026-10-14; `src/` is not changed
+  here), for each of `GPU=powervr`, `vivante` and `v3d`, gles3
+  (`YAKOGL_REPORT_ES2=OFF`, the online compiler, `YAKOGL_OSAL=linux`). This
+  document first measured main `9390731` (2026-10-12); what moved since then
+  is in "Since main 9390731" below.
 - dEQP: VK-GL-CTS `93bca018` (the revision of §1r; deqp-gles3 prints
   `vulkan-cts-1.4.6.2-555-g93bca01861b0`), the checkout in
   `$CCFARM_DEPS_DIR/VK_GL_CTS` with the yakogl target. deqp-gles3 was built by
@@ -30,7 +32,11 @@ This run replaces its numbers for main.
 - Case list: the union of `android/cts/main/gles3-main-*.txt`, **42,810
   cases**, the same list as §1r's mustpass (`tools/cts/gles3-mustpass.txt`).
   429 chunks of 100 cases, 20 chunks in parallel per GPU, a 256x256 pbuffer.
-- About two minutes per GPU, the three GPUs at once on one 64-thread host.
+- A few minutes per GPU on one 64-thread host, after the first GPU's run
+  built deqp-gles3.
+- For `GPU=v3d` the script sets `YAKOGL_V3D_TILED_COPIES_BYTES=16777216`,
+  the Pi 4 image's tiled-copy budget (the library default is 8 MiB). The
+  `9390731` run had no such setting.
 
 ```sh
 CTS=$CCFARM_DEPS_DIR/VK_GL_CTS
@@ -60,7 +66,7 @@ began.
 |---|---:|---:|---:|---:|---:|---:|---:|---|
 | powervr | 42,810 | 42,810 | 0 | 477 | 5 | 48 | 0 | none |
 | vivante | 42,810 | 42,810 | 0 | 1,569 | 13 | 0 | 1,152 | none |
-| v3d | 42,810 | 42,810 | 0 | 1,893 | 47 | 330 | 1,152 | none |
+| v3d | 42,810 | 42,810 | 0 | 1,890 | 46 | 327 | 1,152 | none |
 
 Every process ended with exit 0 or 1. **No chunk crashed (no exit 134, no
 panic line), none was killed (137) and none reached the 600 s timeout**, on
@@ -111,8 +117,8 @@ whole image after the first fbo_srgb case**; a GC7000 or V3D board recipe
 must give fragment_ops.blend.fbo_srgb its own image, or one image per case,
 until sRGB targets render.
 
-**V3D** (47 chunks: the same 13 fbo_srgb chunks as the GC7000, 1,152 deinit
-errors, plus 34 chunks with 330 ResourceError):
+**V3D** (46 chunks: the same 13 fbo_srgb chunks as the GC7000, 1,152 deinit
+errors, plus 33 chunks with 327 ResourceError):
 
 | chunk | processes | stops | cases the processes stopped after |
 |---|---:|---:|---|
@@ -124,7 +130,6 @@ errors, plus 34 chunks with 330 ResourceError):
 | c_296 .. c_299 | 7, 5, 10, 9 | 6, 5, 9, 8 | shaders.texture_functions.{texture,texturelod,textureproj,textureprojlod,texturesize}.\* |
 | c_313, c_314, c_317 | 7, 6, 13 | 7, 5, 12 | texture.filtering.{2d,cube}.\* |
 | c_318, c_319, c_322, c_323 | 7, 11, 9, 5 | 6, 10, 8, 4 | texture.format.compressed.etc2_\*, texture.format.sized.{2d,cube}.\* |
-| c_330 | 4 | 3 | texture.size.cube.512x512_\*_mipmap |
 | c_343, c_344 | 2, 2 | 1, 1 | texture.units.{2_units.only_cube.5, 4_units.only_cube.5} |
 | c_358, c_359 | 36, 37 | 36, 36 | texture.wrap.etc2_eac_rgba8.\*, texture.wrap.etc2_rgb8.\* |
 | c_361 .. c_368, c_423 | 28, 34, 20, 19, 6, 6, 5, 4, 13 | 28, 33, 20, 18, 5, 5, 5, 3, 12 | transform_feedback.{array,basic_types,random_full_array_capture}.\* |
@@ -133,15 +138,18 @@ Every ResourceError is a draw or clear the V3D back end refuses, which the
 context reports as GL_OUT_OF_MEMORY: "an R16F / RGBA16F colour target is not
 written yet", "a texture format other than RGBA8, SRGB8_ALPHA8, L8, A8, LA8
 and R32F (RGB565, half float, ETC2) is not sampled yet", "the texture state
-does not fit its record", "a texture larger than the tiled-copy budget", and
-for transform feedback (129) "the job builder refused the draw (a uniform,
-program or primitive it does not write)".
+does not fit its record", and for transform feedback (129) "the job builder
+refused the draw (a uniform, program or primitive it does not write)". At
+the 16 MiB tiled-copy budget no case stops on "a texture larger than the
+tiled-copy budget" any more. The draw is still refused for
+texture.size.2d.2048x2048_rgb888 (`c_330.out`), but that case reads the
+picture, so it is an "Image comparison failed" here.
 
 ## The groups (HOST-ONLY except the AM62P column)
 
 p / f / ns / other = Pass / Fail / NotSupported / any other status. Other is
 915 QualityWarning (all in shaders) and 48 ResourceError on the PowerVR, and
-330 ResourceError on the V3D. No case is missing on any GPU. **The Pass and
+327 ResourceError on the V3D. No case is missing on any GPU. **The Pass and
 Fail columns of the render groups mean nothing on the host.** Compare only
 NotSupported, the API groups and the message tables below.
 
@@ -165,7 +173,7 @@ NotSupported, the API groups and the message tables below.
 | instanced | 45 | 39 / 6 / 0 / 0 | 0 / 45 / 0 / 0 | 0 / 45 / 0 / 0 | 0 / 45 / 0 / 0 |
 | lifetime | 56 | 0 / 0 / 0 / 0 (56 no result) | 56 / 0 / 0 / 0 | 56 / 0 / 0 / 0 | 56 / 0 / 0 / 0 |
 | multisample | 64 | 0 / 16 / 48 / 0 | 9 / 7 / 48 / 0 | 9 / 7 / 48 / 0 | 9 / 7 / 48 / 0 |
-| negative_api | 312 | 277 / 31 / 4 / 0 | 299 / 9 / 4 / 0 | 300 / 8 / 4 / 0 | 300 / 8 / 4 / 0 |
+| negative_api | 312 | 277 / 31 / 4 / 0 | 301 / 7 / 4 / 0 | 300 / 8 / 4 / 0 | 300 / 8 / 4 / 0 |
 | occlusion_query | 62 | 0 / 62 / 0 / 0 | 62 / 0 / 0 / 0 | 62 / 0 / 0 / 0 | 62 / 0 / 0 / 0 |
 | pbo | 49 | 17 / 26 / 6 / 0 | 43 / 0 / 6 / 0 | 15 / 28 / 6 / 0 | 11 / 28 / 6 / 4 |
 | polygon_offset | 20 | 20 / 0 / 0 / 0 | 0 / 20 / 0 / 0 | 0 / 20 / 0 / 0 | 0 / 20 / 0 / 0 |
@@ -178,14 +186,14 @@ NotSupported, the API groups and the message tables below.
 | shader_api | 52 | 38 / 0 / 14 / 0 | 38 / 0 / 14 / 0 | 38 / 0 / 14 / 0 | 38 / 0 / 14 / 0 |
 | shaders | 20616 | 18385 / 2231 / 0 / 0 | 2488 / 17165 / 0 / 963 | 2241 / 18375 / 0 / 0 | 2248 / 18325 / 0 / 43 |
 | state_query | 946 | 874 / 63 / 9 / 0 | 912 / 25 / 9 / 0 | 916 / 21 / 9 / 0 | 909 / 28 / 9 / 0 |
-| texture | 5105 | 835 / 2612 / 1658 / 0 | 22 / 3425 / 1658 / 0 | 19 / 3428 / 1658 / 0 | 22 / 3296 / 1658 / 129 |
+| texture | 5105 | 835 / 2612 / 1658 / 0 | 22 / 3425 / 1658 / 0 | 19 / 3428 / 1658 / 0 | 22 / 3299 / 1658 / 126 |
 | transform_feedback | 882 | 0 / 461 / 421 / 0 | 882 / 0 / 0 / 0 | 880 / 2 / 0 / 0 | 740 / 1 / 12 / 129 |
 | ubo | 2355 | 2168 / 187 / 0 / 0 | 0 / 2355 / 0 / 0 | 0 / 2355 / 0 / 0 | 0 / 2355 / 0 / 0 |
 | uniform_api | 2181 | 2136 / 27 / 18 / 0 | 1605 / 576 / 0 / 0 | 1604 / 577 / 0 / 0 | 1605 / 576 / 0 / 0 |
 | vertex_array_objects | 10 | 10 / 0 / 0 / 0 | 10 / 0 / 0 / 0 | 10 / 0 / 0 / 0 | 10 / 0 / 0 / 0 |
 | vertex_arrays | 1005 | 964 / 41 / 0 / 0 | 40 / 965 / 0 / 0 | 40 / 965 / 0 / 0 | 40 / 965 / 0 / 0 |
 | info | 6 | 6 / 0 / 0 / 0 | 6 / 0 / 0 / 0 | 6 / 0 / 0 / 0 | 6 / 0 / 0 / 0 |
-| TOTAL | 42810 | **31278 / 8835 / 2636 / 5** (+56 no result) | **8107 / 31543 / 2197 / 963** | **7777 / 32836 / 2197 / 0** | **7597 / 32674 / 2209 / 330** |
+| TOTAL | 42810 | **31278 / 8835 / 2636 / 5** (+56 no result) | **8109 / 31541 / 2197 / 963** | **7777 / 32836 / 2197 / 0** | **7597 / 32677 / 2209 / 327** |
 
 What the columns can say:
 
@@ -203,8 +211,8 @@ What the columns can say:
   transform_feedback verdicts are real even on the host: the GL core captures
   on the CPU on every GPU (docs/es3-transform-feedback.md §4.1), so the values
   dEQP reads back do not come from the GPU. The occlusion_query Pass is not
-  checked here to be more than an API pass. negative_api is 9 / 8 / 8 failures against 31 on
-  the board, state_query 25 / 21 / 28 against 63.
+  checked here to be more than an API pass. negative_api is 7 / 8 / 8
+  failures against 31 on the board, state_query 25 / 21 / 28 against 63.
 - The 7,600 to 8,100 Pass are API and compile cases plus whatever a black
   read-back happens to satisfy. They are not a pass rate.
 
@@ -234,8 +242,8 @@ is our GL layer or a back end refusing something, which the board does too.
 | 1,483 | Failed to set up framebuffer object: GL_INVALID_ENUM (glsShaderExecUtil) | 54 | 54 | 18 | **§1r row 1, mostly gone**: integer renderbuffers are made now. The rest is a new cause: 54 builtin_functions.precision.{matrixcompmult,outerproduct,transpose} mat4 cases need four colour attachments, and `CAP_COLOR_ATTACHMENTS` (src/gl/context.rs) is 3 on every GPU, so glFramebufferRenderbuffer(GL_COLOR_ATTACHMENT3) is GL_INVALID_ENUM. ES 3.0 asks for at least 4 (implementation_limits.max_color_attachments and max_draw_buffers fail on every GPU: "Reported: 3") |
 | (1,483) | the same cases, next error: Error in draw: GL_INVALID_OPERATION (glsShaderExecUtil) | 0 | 1,507 | 705 | **new (GC7000, V3D)**: these cases now reach the draw, and the GC7000 and V3D back ends refuse integer colour targets ("draw refused: this back end cannot render into a R32UI colour attachment") |
 | 1,293 | Image compare failed | 4,570 | 4,565 | 4,569 | render verdict, not measurable. But on the GC7000 and V3D, 1,107 of them (fragment_ops.blend.fbo_srgb) carry a real refusal: **new (GC7000, V3D)**, "cannot render into a SRGB8_ALPHA8 colour attachment" (and the deinit stop above) |
-| 736 | Runtime check failed: glGetError() == GL_NO_ERROR (es3fTextureSpecificationTests) | 49 | 472 | 618 | **§1r row 3**. PowerVR: 687 fewer, 6 of the rest are glTexSubImage3D GL_INVALID_OPERATION. GC7000 and V3D: their back ends refuse the formats at upload ("GL_RG8I is not supported: this back end samples none of its storage classes", RG8_SNORM, ...) |
-| 675 | Image comparison failed | 9,612 (+1,254 "Image comparison failed.") | 8,576 (+1,254) | 7,540 (+1,254) | render verdict, not measurable |
+| 736 | Runtime check failed: glGetError() == GL_NO_ERROR (es3fTextureSpecificationTests) | 0 | 448 | 603 | **§1r row 3: gone on the PowerVR** (49 at `9390731`; every 3D mip level keeps its texels now, tex3d-finish). GC7000 and V3D: their back ends refuse the formats at upload ("GL_RG8I is not supported: this back end samples none of its storage classes", RG8_SNORM, ...) |
+| 675 | Image comparison failed | 9,636 (+1,254 "Image comparison failed.") | 8,600 (+1,254) | 7,543 (+1,254) | render verdict, not measurable |
 | 531 | After framebuffer setup: GL_INVALID_ENUM (es3fFragmentOutputTests) | 13 | 26 | 1 | **§1r row 5, mostly gone**. The rest are fragment_out.random cases with a 4th colour attachment (GL_INVALID_ENUM in glFramebufferRenderbuffer): the attachment cap of 3, as row 1 |
 | (531) | the same cases, next error: glDrawElements: GL_INVALID_OPERATION (es3fFragmentOutputTests) | 0 | 531 | 123 | **new (GC7000, V3D)**: integer and sRGB colour targets refused at the draw |
 | 522 | Texture upload failed: GL_INVALID_OPERATION (gluTexture) | 0 | 370 | 514 | **§1r row 6: gone on the PowerVR**. GC7000 and V3D: their back ends refuse integer formats at upload (GL_RGBA8UI, GL_RGBA8I, ...: "samples none of its storage classes") |
@@ -245,7 +253,7 @@ is our GL layer or a back end refusing something, which the board does too.
 | 270 | Got GL_INVALID_ENUM (es3fFboTestCase) | 0 | 0 | 0 | **§1r row 10: gone** |
 | 252 | Got GL_INVALID_OPERATION (es3fFboTestCase) | 34 | 308 | 307 | **§1r row 11**. PowerVR: fbo.msaa 34, every format at 2 and 4 samples: glRenderbufferStorageMultisample sets GL_INVALID_OPERATION (the case's GL log shows it right after that call). GC7000 and V3D: fbo.blit 210 / 207 and fbo.color 64 / 66 as well, integer and sRGB targets refused at the draw. V3D also has 95 "Got GL_OUT_OF_MEMORY" (below) |
 | 189 | Failed to compile shader program (glsShaderRenderCase) | 226 | 178 | 194 | **§1r row 12**, all shaders.texture_functions. PowerVR: integer look-ups on a cube, 3D or array texture (121 fragment, 105 vertex). GC7000: the ES 3.00 look-up refusal. V3D: non-2D/cube 97, offsets 46, shadow 31 |
-| 181 | Compile failed (sglrGLContext) | 468 | 181 | 397 | **§1r row 13, more on the PowerVR**: texture.specification 298 and texture.units 103 upload integer textures now and fail one step later, at the integer look-up on a 3D, array or cube texture (458); fbo.depth 10 is gl_FragDepth (`Usc(FragmentOutputsNotBuilt)`). GC7000: fbo.color / render / depth, the ES 3.00 look-up refusal. V3D: non-2D/cube 254, integer look-up 133, gl_FragDepth 10 |
+| 181 | Compile failed (sglrGLContext) | 493 | 181 | 412 | **§1r row 13, more on the PowerVR**: texture.specification 323, texture.units 103 and fbo.color 57 upload integer textures now and fail one step later, at the integer look-up on a 3D, array or cube texture (483); fbo.depth 10 is gl_FragDepth (`Usc(FragmentOutputsNotBuilt)`). GC7000: fbo.color / render / depth, the ES 3.00 look-up refusal. V3D: non-2D/cube 269, integer look-up 133, gl_FragDepth 10 |
 | 159 | Texture upload failed: GL_INVALID_ENUM (gluTexture) | 0 | 0 | 0 | **§1r row 14: gone** (depth texture formats upload) |
 | 133 | Fail (no message) | 11,216 | 11,019 | 10,969 | render verdict, not measurable |
 | 103 | checkFramebufferStatus == COMPLETE (es3fShaderDerivateTests) | 15 | 15 | 15 | **§1r row 16**, 88 fewer. PowerVR and V3D: GL_INVALID_OPERATION in glRenderbufferStorageMultisample |
@@ -281,7 +289,7 @@ These are real on the host. powervr / vivante / v3d are case counts.
 | 0 | 0 | 129 | ResourceError: render: GL_OUT_OF_MEMORY (es3fTransformFeedbackTests) | transform_feedback.{array,basic_types,random_full_array_capture} | "the job builder refused the draw (a uniform, program or primitive it does not write)" | new (V3D) |
 | 48 | 0 | 0 | ResourceError: Error in draw: GL_OUT_OF_MEMORY (glsShaderExecUtil) | shaders.builtin_functions.precision vec3/vec4 | the PowerVR's 1 MiB general arena (above) | new (PowerVR); whether the board reached these draws in §1r is not separated |
 | 0 | 0 | 95 + 11 | Got GL_OUT_OF_MEMORY / GL_OUT_OF_MEMORY (es3fFboTestCase) | fbo.blit 82, fbo.color 24 | V3D draws refused (RGBA16F targets, unsampled formats) | new (V3D) |
-| 0 | 0 | 201 | ResourceError, GL_OUT_OF_MEMORY at texturing state / draw / glReadPixels / glCreateProgram / glClearBufferfv / glDrawArrays / TexStorage (14 messages) | texture.wrap 72, texture.format 28, shaders.texture_functions 28, fragment_out 19, texture.filtering 24, shaders.derivate 15, fbo 6, pbo 4, texture.size 3, texture.units 2 | V3D draws and clears refused (above) | new (V3D) |
+| 0 | 0 | 198 | ResourceError, GL_OUT_OF_MEMORY at texturing state / draw / glReadPixels / glCreateProgram / glClearBufferfv / glDrawArrays / TexStorage (13 messages) | texture.wrap 72, texture.format 28, shaders.texture_functions 28, fragment_out 19, texture.filtering 24, shaders.derivate 15, fbo 6, pbo 4, texture.units 2 | V3D draws and clears refused (above) | new (V3D) |
 | 0 | 40 + 30 + 31 + 29 | 44 + 35 + 35 + 32 | Set {3d, 2d array, cube map, 2d} texture image data: GL_INVALID_OPERATION (es3fTextureUnitTests) | texture.units | the back end refuses the format at upload (R8UI, R32I, RG32I, RGB8_SNORM, ...) | §1r group (texture); new (GC7000, V3D) as a cause |
 | 102 | 33 | 27 | Framebuffer is not complete: INCOMPLETE_ATTACHMENT (es3fFboTestCase) | fbo.color, fbo.invalidate | PowerVR: GL_INVALID_OPERATION in glRenderbufferStorageMultisample; GC7000 and V3D: glTexImage2D refusals | §1r group (fbo) |
 | 44 | 6 | 1 | Framebuffer is not complete: INCOMPLETE_ATTACHMENT (es3fFboRenderTest) | fbo.render | (no stderr line) | §1r group (fbo) |
@@ -300,7 +308,7 @@ These are real on the host. powervr / vivante / v3d are case counts.
 | 38 | 0 | 12 | Got unexpected texture size | shaders.texture_functions | V3D: glTexStorage2D refuses RGBA8I / RGBA8UI | §1r group (shaders) |
 | 20 | 20 | 20 | glDrawArrays(): GL_INVALID_OPERATION (glsVertexArrayTests) | vertex_arrays.single_attribute | "attribute 0 fetches ... out of range" (`build_common`) | §1r group (vertex_arrays, 41 there) |
 | 1 | 1 | 1 | glDrawElementsInstanced(): GL_INVALID_OPERATION (glsDrawTest) | draw.random | the same range check | §1r group (draw) |
-| 9 | 10 | 10 | Got invalid error | negative_api, state_query.fbo | GC7000 / V3D: glTexImage2D RGBA32I refusals | §1r group (negative_api, 31 there) |
+| 7 | 10 | 10 | Got invalid error | negative_api, state_query.fbo | GC7000 / V3D: glTexImage2D RGBA32I refusals | §1r group (negative_api, 31 there) |
 | 12 / 11 | 9 / 8 | 12 / 11 | Got invalid integer / float value | state_query.integers, integers64 | | §1r group (state_query, 63 there) |
 | 2 | 2 | 3 | got invalid value | state_query.rbo, state_query.shader | | §1r group (state_query) |
 | 11 | 8 | 11 | Requirement not satisfied | implementation_limits (max_color_attachments, max_draw_buffers, compressed_texture_formats, uniform components, ...) | | §1r group (16 there) |
@@ -326,9 +334,9 @@ host-only row for buffer.map (glUnmapBufferOES refused the ES 3.0 targets,
 
 | GPU | refusals | on cases dEQP failed (the work list) | reasons | on cases dEQP passed (negative tests, correct) |
 |---|---:|---:|---:|---:|
-| powervr | 2,943 | 912 | 7 | 2,031 in 140 reasons |
+| powervr | 2,968 | 937 | 7 | 2,031 in 140 reasons |
 | vivante | 2,914 | 883 | 15 | 2,031 in 140 reasons |
-| v3d | 5,128 | 3,085 (+12 on NotSupported cases) | 38 | 2,031 in 140 reasons |
+| v3d | 5,143 | 3,100 (+12 on NotSupported cases) | 38 | 2,031 in 140 reasons |
 
 The correct refusals are the same front end on every GPU (796 "no implicit
 conversion in GLSL ES 1.00", 150 "expected a name", 126 "reserved for future
@@ -338,7 +346,7 @@ use", ...). The work lists are the back ends:
 
 | cases | reason | mapping |
 |---:|---|---|
-| 729 + 105 | `Usc(Select(Unsupported("a texture fetch with an integer result on a cube, a 3D texture or an array, gradients, a projective cube or array, or an offset on a stacked texture, is not selected ...")))` fragment + vertex | §1r rows 9, 12, 13: the integer textures that upload now, sampled on a cube, 3D or array |
+| 754 + 105 | `Usc(Select(Unsupported("a texture fetch with an integer result on a cube, a 3D texture or an array, gradients, a projective cube or array, or an offset on a stacked texture, is not selected ...")))` fragment + vertex | §1r rows 9, 12, 13: the integer textures that upload now, sampled on a cube, 3D or array |
 | 50 | `Usc(Select(Unsupported("a register read that nothing writes")))` | new (fragment_out.random, shaders.precision) |
 | 25 | `Usc(FragmentOutputsNotBuilt)` | new (gl_FragDepth: fbo.depth.depth_test_clamp, shaders.fragdepth) |
 | 1 + 1 | a uniform named with 63 'a's, as long as the reflection's 64-byte name field | new (uniform_block.valid.long_instance_name_*) |
@@ -361,7 +369,7 @@ AM62P counterpart.
 | cases | reason |
 |---:|---|
 | 1,520 | `Prepare(Undefined(ValueId(n)))`, 25 values of n: a value used before it is defined in the program the back end is given (builtin_functions, fragment_out, precision, builtin_variable) |
-| 998 | `NotYet("a texture look-up other than 2D or cube")` |
+| 1,013 | `NotYet("a texture look-up other than 2D or cube")` |
 | 319 | `NotYet("a shadow look-up")` |
 | 133 | `NotYet("an integer texture look-up")` |
 | 46 / 25 / 20 / 18 | NotYet: an offset / gl_FragDepth / gradients / textureSize of a 3D or array sampler |
@@ -382,10 +390,32 @@ The earlier host run's largest V3D row, `NotYet` on integer and trunc ALU ops
   shader executor alone). The sRGB refusal also ends a board image after one
   case (the deinit stop above).
 - **GC7000 and V3D: integer, snorm and packed-float sampling formats** are
-  refused at upload (texture.specification 472 / 618, gluTexture 370 / 514,
+  refused at upload (texture.specification 448 / 603, gluTexture 370 / 514,
   texture.units).
-- **V3D: `Prepare(Undefined(..))`** (1,520) and non-2D/cube look-ups (998).
-- **V3D: draws refused as GL_OUT_OF_MEMORY** end dEQP's run (330
+- **V3D: `Prepare(Undefined(..))`** (1,520) and non-2D/cube look-ups (1,013).
+- **V3D: draws refused as GL_OUT_OF_MEMORY** end dEQP's run (327
   ResourceError). A board image would stop at each one.
-- **PowerVR: integer look-ups on a cube, 3D or array texture** (834
+- **PowerVR: integer look-ups on a cube, 3D or array texture** (859
   refusals); the 1 MiB general arena for large non-indexed draws (48).
+
+## Since main 9390731
+
+The first version of this document measured main `9390731` (2026-10-12).
+Main `5ff06a2` (2026-10-14) moves these buckets and no other. Every other
+group row and message count above is the same at both commits.
+
+| GPU | bucket | 9390731 | 5ff06a2 | why |
+|---|---|---:|---:|---|
+| powervr | glGetError() == GL_NO_ERROR (es3fTextureSpecificationTests) | 49 | 0 | tex3d-finish (`b80ed8a`, `4a55acc`): every 3D mip level keeps its texels. It is the only change to texture storage between the two commits (the other `src/gl` change, `8bbf9ba`, is the error rules of the buffer and framebuffer entry points). Read from the two runs, not checked case by case |
+| powervr | Compile failed (sglrGLContext), texture.specification | 298 | 323 | 25 of those cases now reach the integer look-up on a 3D texture, which the USC refuses (the work-list row 729 -> 754) |
+| powervr | Image comparison failed | 9,612 | 9,636 | the other 24 reach the draw: a render verdict |
+| powervr | Got invalid error (negative_api) | 9 | 7 | two negative_api cases pass now. This run cannot name them: the 9390731 failures.tsv is not on this host. `8bbf9ba` (buffer and framebuffer error rules) is the likely change, not checked |
+| vivante | glGetError() == GL_NO_ERROR (es3fTextureSpecificationTests) | 472 | 448 | tex3d-finish, as above |
+| vivante | Image comparison failed | 8,576 | 8,600 | those 24 reach the draw |
+| v3d | glGetError() == GL_NO_ERROR (es3fTextureSpecificationTests) | 618 | 603 | tex3d-finish, as above |
+| v3d | Compile failed (sglrGLContext) | 397 | 412 | those 15 reach a 3D look-up, which the V3D refuses (`NotYet("a texture look-up other than 2D or cube")` 998 -> 1,013) |
+| v3d | ResourceError (texture.size) | 3 | 0 | texture.size.cube.512x512_\*_mipmap. The script now runs the V3D at the Pi 4 image's 16 MiB tiled-copy budget (`f957d3b`); at 8 MiB those draws were refused. Chunk c_330 no longer stops (47 -> 46 resumed chunks, 1,893 -> 1,890 processes) |
+| v3d | Image comparison failed | 7,540 | 7,543 | those 3 reach the draw |
+
+The mapping onto §1r does not change: the §1r rows above keep their reading,
+and no new bucket appears.
