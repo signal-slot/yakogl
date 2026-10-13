@@ -1023,8 +1023,11 @@ mod gl_api {
                 };
                 let t = BASIC_TYPES[RANDOM_TYPES[rng.range(0, end - 1)]];
                 let prec = PRECISIONS[rng.range(0, 2)];
-                let interp =
-                    if t.float { [Interp::Flat, Interp::Smooth, Interp::Centroid][rng.range(0, 2)] } else { Interp::Flat };
+                let interp = if t.float {
+                    [Interp::Flat, Interp::Smooth, Interp::Centroid][rng.range(0, 2)]
+                } else {
+                    Interp::Flat
+                };
                 let vecs = t.cols;
                 let max_len = 1.max(if separate { 4 / (t.cols * t.rows) } else { max_vecs / vecs });
                 let array = if rng.float() < 0.3 { rng.range(1, max_len) } else { 0 };
