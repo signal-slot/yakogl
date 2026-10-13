@@ -216,6 +216,7 @@ the console's baud rate: a slice, never a suite.
 tools/cts/host-deqp-run.sh                   # the whole mustpass list
 tools/cts/host-deqp-run.sh shaders.struct    # cases whose name contains this
 GPU=powervr tools/cts/host-deqp-run.sh       # the PowerVR's online back end
+GPU=v3d tools/cts/host-deqp-run.sh           # the V3D's online back end
 ```
 
 Builds deqp-gles2 for the host (`build/host-deqp/deqp`, once) and the library
@@ -231,8 +232,11 @@ from correct refusals (negative cases it passed). The script prints how many
 cases began against how many were asked for, and each chunk's exit status: a
 134 is a panic that cost that chunk. Label every number from it HOST-ONLY.
 
-`GPU` is `vivante` (the default) or `powervr`; the script has no V3D
-selection. `MODULE=gles3` runs dEQP-GLES3 instead: it builds `deqp-gles3` in
+`GPU` is `vivante` (the default), `powervr` or `v3d` (`build/host-deqp/lib-v3d`,
+the run in `run-<commit>-v3d`; the script exports
+`YAKOGL_V3D_TILED_COPIES_BYTES=16777216` unless the caller set it, as the Pi 4
+image does). The whole gles3 mustpass on all three: `docs/es3-host-run.md`.
+`MODULE=gles3` runs dEQP-GLES3 instead: it builds `deqp-gles3` in
 its own directory, links a library that reports ES 3.0
 (`YAKOGL_REPORT_ES2=OFF`), and runs the union of the checkout's
 `android/cts/main/gles3-main-*.txt`. The argument is a substring filter on
@@ -248,8 +252,8 @@ MODULE=gles3 tools/cts/host-deqp-run.sh dEQP-GLES3.info. # gles3
 
 | module | deqp build dir | library dir | run dir |
 |---|---|---|---|
-| gles2 | `build/host-deqp/deqp` | `build/host-deqp/lib` (`lib-powervr` for the PowerVR) | `build/host-deqp/run-<commit>` |
-| gles3 | `build/host-deqp/deqp-gles3` | `build/host-deqp/lib-es3` (`lib-powervr-es3`) | `build/host-deqp/run-<commit>-gles3` |
+| gles2 | `build/host-deqp/deqp` | `build/host-deqp/lib` (`lib-powervr`, `lib-v3d`) | `build/host-deqp/run-<commit>` (`-powervr`, `-v3d`) |
+| gles3 | `build/host-deqp/deqp-gles3` | `build/host-deqp/lib-es3` (`lib-powervr-es3`, `lib-v3d-es3`) | `build/host-deqp/run-<commit>-gles3` (`-powervr-gles3`, `-v3d-gles3`) |
 
 A run removes and recreates its run directory, so two runs of the same module
 and commit at once need their own `OUT=`. On 2026-10-08 the gles3 `info`
