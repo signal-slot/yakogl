@@ -669,7 +669,6 @@ fn tex_image_2d_formats() {
 /// enums (texture.rs is_pixel_type_enum) and answers GL_INVALID_OPERATION,
 /// the error of a known-but-mismatched pair.
 #[test]
-#[ignore = "BUG: tex_image_2d answers GL_INVALID_OPERATION to the ES 3.0-only types; ES 2.0 3.7.1 says GL_INVALID_ENUM"]
 fn es3_only_pixel_types_are_invalid_enum() {
     let _g = context();
     for (n, format, type_) in [
