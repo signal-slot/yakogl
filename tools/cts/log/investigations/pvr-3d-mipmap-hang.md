@@ -21,6 +21,14 @@ is dEQP itself: it spends minutes on the A53 checking a wrong 3D
 `LINEAR_MIPMAP_LINEAR` picture. The image then reaches its 600 s watchdog
 bound before the case ends.
 
+Measured on the host (section 5): with the PowerVR's picture, every 3D
+`linear_mipmap_linear` case takes 8.8 to 18.8 s of dEQP checking, and
+every other 3D case takes under 0.07 s. The board took 337 s for a case
+that takes 18.8 s here, so the factor is about 18. At that factor, the two
+`linear_mipmap_linear` cases before case 14 take about 550 s (image 20)
+and 590 s (image 21) on the board. Case 14 then begins at about the 600 s
+bound and cannot finish. That is exactly what the board recorded.
+
 1. The PowerVR back end gets **bit-identical texture and sampler words** for
    case 14 (`linear_mipmap_linear`, "hung") and case 13 (`linear`, finished).
    This holds in both images (host repro below). On the PowerVR a 3D texture
@@ -38,7 +46,8 @@ bound before the case ends.
    texel loops). The PowerVR samples level 0 only and clamps the coordinates
    instead of wrapping them. That makes a plausible but wrong picture, so
    almost every pixel takes the full search. A black picture (the host build)
-   fails at the first bounds test and takes milliseconds.
+   fails at the first bounds test and takes milliseconds. A correct picture
+   (plain Mesa) passes in milliseconds.
 4. A real GPU hang leaves a line on the console within about 20 s: the
    firmware recovery (`render: HWR during fence ...`, counted by
    `tools/board.sh` `pvr_resets`) or the back end's fence timeout
@@ -59,8 +68,8 @@ bound before the case ends.
    60 s after that. A capture that ends at 602 s or 612 s can end before
    that reset, whether the GPU or the CPU is busy.
 
-The verification recipe (last section) separates the hypotheses with three
-single-case images and a check of the existing console timestamps.
+The verification recipe (section 7) confirms or rejects this on the board:
+a check of the existing console timestamps, then three single-case images.
 
 ## 1. The case sequence of each image
 
@@ -72,14 +81,16 @@ the mustpass list (`am62p-gles3-tree.txt` header). So the order is:
 
 | # | image 20 (`3d.formats`, 64x64x64, 7 levels) | image 21 (`3d.sizes`, RGBA8) |
 |---:|---|---|
-| 1-6 | `bgra_*` (GL_BGRA, not in the mustpass) | `128x32x64_*` (8 levels) |
-| 7-12 | `bgra8_*` (GL_BGRA8_EXT, not in the mustpass) | `32x64x16_*` (7 levels) |
+| 1-6 | `bgra8_*` (GL_BGRA8_EXT, not in the mustpass) | `128x32x64_*` (8 levels) |
+| 7-12 | `bgra_*` (GL_BGRA, not in the mustpass) | `32x64x16_*` (7 levels) |
 | 13 | `r11f_g11f_b10f_linear` | `3x7x5_linear` |
 | **14** | **`r11f_g11f_b10f_linear_mipmap_linear`** | **`3x7x5_linear_mipmap_linear`** (3 levels) |
 
 Within each prefix the six cases are `linear`, `linear_mipmap_linear`,
 `linear_mipmap_nearest`, `nearest`, `nearest_mipmap_linear`,
-`nearest_mipmap_nearest`. Before case 14, each image ran two other
+`nearest_mipmap_nearest`. (`bgra8` sorts before `bgra` because `8` comes
+before `_`; the host run of section 5 printed them in that order.) Before
+case 14, each image ran two other
 `linear_mipmap_linear` cases (#2 and #8). The BGRA cases are not skipped:
 the library advertises `GL_EXT_texture_format_BGRA8888`, and the host repro
 shows their 3D uploads succeed and draw.
@@ -332,9 +343,58 @@ tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3 --cts=<VK-GL-CTS with th
 | all 26 cases | 0.011 to 0.041 s each, all Fail (black) |
 
 So the host build reproduces the sequence and does **not** hang. It cannot
-reproduce the slow path, because its picture is black. A host run that
-renders the PowerVR's picture is written down but not run (section 7,
-step 3).
+reproduce the slow path, because its picture is black.
+
+### The PowerVR's picture on the host (measured)
+
+Section 7 step 3 (shim in the appendix) runs the host dEQP-GLES3 on the
+host's Mesa (llvmpipe, surfaceless pbuffer, no window). Before every draw
+it makes the bound 3D texture sample as the PowerVR does: level 0 only
+(`GL_TEXTURE_MAX_LEVEL` 0), every wrap `CLAMP_TO_EDGE`, and the min filter
+without its mipmap part. The shim reported every draw forced (`120 draws, 120
+with a 3D texture forced to level 0` for image 21). With `PVR3D_SHIM=0` the
+same run is plain Mesa. Filters as the board's (`--deqp-case=<pattern>`).
+
+Image 21 (`3d.sizes.*`, 30 cases):
+
+| case | PowerVR picture | plain Mesa |
+|---|---:|---:|
+| 128x32x64_linear / **_linear_mipmap_linear** / other 4 | 0.062 / **17.554** / 0.042-0.054 s, all Fail | 0.033-0.050 s, all Pass |
+| 32x64x16_linear / **_linear_mipmap_linear** / other 4 | 0.025 / **15.479** / 0.016-0.027 s, all Fail | 0.009-0.014 s, all Pass |
+| 3x7x5_linear / **_linear_mipmap_linear** / other 4 | 0.023 / **14.755** / 0.010-0.022 s, all Fail | 0.004-0.009 s, all Pass |
+| 4x8x8_linear / **_linear_mipmap_linear** / other 4 | 0.020 / **16.243** / 0.011-0.022 s, all Fail | 0.005-0.010 s, all Pass |
+| 63x63x63_linear / **_linear_mipmap_linear** / other 4 | 0.058 / **14.991** / 0.030-0.049 s, all Fail | 0.032-0.039 s, all Pass |
+
+Image 20, its first 14 cases in board order (filter
+`3d.formats.bgra*`, `r11f_g11f_b10f_linear`, `r11f_g11f_b10f_linear_mipmap_linear`):
+
+| case | PowerVR picture |
+|---|---:|
+| bgra8_linear, _linear_mipmap_nearest, _nearest, _nearest_mipmap_linear, _nearest_mipmap_nearest | 0.038-0.063 s, Fail |
+| **bgra8_linear_mipmap_linear** (#2) | **15.085 s**, Fail |
+| bgra_linear, _linear_mipmap_nearest, _nearest, _nearest_mipmap_linear, _nearest_mipmap_nearest | 0.052-0.068 s, Fail |
+| **bgra_linear_mipmap_linear** (#8) | **15.458 s**, Fail |
+| r11f_g11f_b10f_linear (#13) | 0.058 s, Fail |
+| **r11f_g11f_b10f_linear_mipmap_linear** (#14) | **8.760 s**, Fail |
+
+Calibration against the board: `3d.combinations.linear_mipmap_linear_linear_clamp_clamp_clamp`,
+which took 337 s on the AM62P (`c4ccc966`), takes **18.774 s** here
+(`linear_linear_clamp_clamp_clamp`: 0.052 s, Pass). Factor about 18. The
+host is an x86-64 desktop core and the board an A53 core. The two pictures
+are not bit-identical (Mesa's level-0 filtering against the PowerVR's
+two-slice emulation), so the factor is an estimate.
+
+Board time this predicts (host time x 18, rounded):
+
+| image | before case 14 | case 14 itself |
+|---|---:|---:|
+| 20 | #2 270 s + #8 280 s + 11 cases about 12 s = **about 560 s** | about 160 s |
+| 21 | #2 315 s + #8 280 s + 11 cases about 7 s = **about 600 s** | about 265 s |
+
+Both images reach case 14 at about the 600 s bound and neither can finish
+it. This matches the board's record (13 results, the 14th begun, no result)
+without any GPU hang. Only `linear_mipmap_linear` is slow; the other mipmap
+filters cost no more than `linear`.
 
 ## 6. Hypotheses, ranked
 
@@ -343,14 +403,16 @@ step 3).
 The image keeps working, alone on one A53 core, until the RTI feeder stops
 at 600 s and the RTI resets the SoC.
 For:
-- the board measured 337 s for one such case (section 5);
+- the board measured 337 s for one such case, and on the host with the
+  PowerVR's picture every 3D `linear_mipmap_linear` case takes 9 to 19 s
+  while every other case takes under 0.07 s; scaled to the board, both
+  images reach case 14 at about 600 s (section 5);
 - the GPU words of case 14 are those of case 13, which finished;
 - no recovery was recorded for either image, while a GPU hang produces an
   HWR or fence-timeout line within about 20 s (to be confirmed from the
   consoles, step 1);
 - "the 14th case" is a consequence of the sorted order, and each image had
-  already run two other `linear_mipmap_linear` cases (#2, #8) and four
-  `nearest_mipmap_*`/`linear_mipmap_nearest` cases per prefix, which use up
+  already run two other `linear_mipmap_linear` cases (#2, #8), which use up
   the time;
 - old image 19 showed the same picture and was read as the watchdog, not a
   hang;
@@ -358,8 +420,9 @@ For:
   before the RTI's reset, at up to 660 s after arming plus the boot.
 
 Against, or not known: no per-case timestamps of the `f2a13877` console were
-read for this note (the records are not reachable from this machine). The
-time of the 3x7x5 check on the A53 is not measured.
+read for this note (the farm does not know where the records are). The board
+times above are host times scaled by one calibration case, not board
+measurements.
 
 **H2. A GPU hang caused by state that builds up over the image** (the kick
 count, frame-set reuse, a firmware ring, freelist growth).
@@ -410,8 +473,8 @@ Expected:
 
 | | H1 | H2 / H3 / H4 |
 |---|---|---|
-| gaps of #2 and #8 (`*_linear_mipmap_linear`) | long: tens to hundreds of seconds | short, like their `linear` siblings (about 1 s or less) |
-| time of the 14th `Test case` line after `rti_arm: armed` | late: most of the 600 s used | early: it begins well before 600 s, then silence |
+| gaps of #2 and #8 (`*_linear_mipmap_linear`) | long: about 270 to 315 s each (section 5) | short, like their `linear` siblings (about 1 s or less) |
+| time of the 14th `Test case` line after `rti_arm: armed` | late: about 560 s (image 20), about 600 s (image 21) | early: it begins well before 600 s, then silence |
 | after the 14th line | nothing until `rti_arm: feeding bound of 600 s over after N feeds; the RTI resets the SoC` (if the capture reached it) | H2/H3: `render: HWR during fence ...` or `pvr_backend: kick N did not complete (...)` about 20 s after the 14th line; H4: silence |
 
 If the gaps show H1, step 2 only measures the time. If they show "early
@@ -449,38 +512,38 @@ Expected:
 | image | H1 | H2 (cumulative) | H3 (the case's words) | H4 (driver stall) |
 |---|---|---|---|---|
 | P3 (`3x7x5_linear`, control) | result in seconds, `done` | `done` | `done` | `done` |
-| P1 (`3x7x5_linear_mipmap_linear` alone) | `Test case` line, then a long silence (the check), then `Fail (Image verification failed)` or `QualityWarning`, `deqp: summary`, verdict `done`, resets 0. If the check alone needs more than 600 s: no result, then `rti_arm: feeding bound ... the RTI resets the SoC`, `U-Boot SPL`, no HWR line, no `did not complete` | result in seconds, `done` (the case alone does not build up the state) | no result; `render: HWR during fence ...` or `pvr_backend: kick N did not complete` within about 20 s of the `Test case` line | no result, no HWR or timeout line, ever |
-| P2 (r11f `linear_mipmap_linear` alone) | as P1, with its own time | as P1 under H2 | as P1 under H3 | as P1 under H4 |
+| P1 (`3x7x5_linear_mipmap_linear` alone) | `Test case` line, then a silence of about 265 s (the check; host 14.8 s x 18), then `Fail (Image verification failed)`, `deqp: summary`, verdict `done`, resets 0, no HWR line, no `did not complete` | result in seconds, `done` (the case alone does not build up the state) | no result; `render: HWR during fence ...` or `pvr_backend: kick N did not complete` within about 20 s of the `Test case` line | no result, no HWR or timeout line, ever |
+| P2 (r11f `linear_mipmap_linear` alone) | as P1, silence about 160 s (host 8.8 s x 18) | as P1 under H2 | as P1 under H3 | as P1 under H4 |
 
-H1 and H4 both give silence. They differ in the end: H1 ends with a dEQP
-result (if the check fits in 600 s), H4 never does. If P1 and P2 both run
-past 600 s with no line at all, run step 3 on a host to measure how long the
-check takes, then decide.
+H1 and H4 both start with silence. They differ in the end: H1 ends with a
+dEQP result after a few minutes, H4 never does.
 
-### Step 3: host, the PowerVR's picture on Mesa (written, not run here)
+### Step 3: host, the PowerVR's picture on Mesa (run, section 5)
 
-This shows the cost of the check without a board. The yakogl dEQP target
-`dlopen`s `libGLESv2.so.2` and takes each GL symbol from it first, then from
-`eglGetProcAddress` (`framework/egl/egluGLFunctionLoader.cpp`). So a shim
-that exports only `glDrawElements` and `glDrawArrays` can run every case on
-the host's Mesa (llvmpipe, surfaceless pbuffer, no window). Before each draw
-it makes the bound 3D texture sample as the PowerVR does: `GL_TEXTURE_MAX_LEVEL`
-0, every wrap `CLAMP_TO_EDGE`, and the min filter without its mipmap part.
-Source in the appendix ("shim.c" and "run.sh"). Not run here: compiling and
-running programs outside the repository's own scripts needs approval on this
-machine.
+This measures the cost of the check without a board. With
+`EGL_KHR_get_all_proc_addresses` (Mesa has it), dEQP takes every GL function
+from `eglGetProcAddress` (`framework/egl/egluGLContextFactory.cpp:425`), and
+the yakogl target `dlopen`s `libEGL.so.1` by soname. So a shim built as
+`libEGL.so.1` and put first on `LD_LIBRARY_PATH` sees every GL look-up. It
+forwards every EGL entry point to the system libEGL (an ifunc per symbol)
+and returns two wrappers from `eglGetProcAddress`: `glDrawElements` and
+`glDrawArrays`. Before each draw the wrapper makes the bound 3D texture
+sample as the PowerVR does: `GL_TEXTURE_MAX_LEVEL` 0, every wrap
+`CLAMP_TO_EDGE`, and the min filter without its mipmap part. A first try
+with a `libGLESv2.so.2` shim had no effect for that reason. Source in the
+appendix (`egl_shim.c`, `run.sh`). The dEQP binary is the host build of
+`tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3`.
 
 ```sh
-bash run.sh img21 'dEQP-GLES3.functional.texture.filtering.3d.sizes.*' 1   # PowerVR-like picture
+bash run.sh img21-pvr  'dEQP-GLES3.functional.texture.filtering.3d.sizes.*' 1   # PowerVR's picture
 bash run.sh img21-mesa 'dEQP-GLES3.functional.texture.filtering.3d.sizes.*' 0   # plain Mesa, control
+bash run.sh img20-pvr  'dEQP-GLES3.functional.texture.filtering.3d.formats.bgra*,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear' 1
+bash run.sh calib 'dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_mipmap_linear_linear_clamp_clamp_clamp,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_clamp_clamp' 1
 ```
 
-Expected under H1: with `1`, the six `*_linear_mipmap_linear` cases take
-much longer than their `*_linear` siblings (seconds or more on the host
-against tens of milliseconds) and fail. With `0`, all cases pass quickly.
-The host-to-A53 ratio can then be calibrated against the board's 337 s
-(`3d.combinations.linear_mipmap_linear_linear_clamp_clamp_clamp`, same
-command with that filter).
+Result (section 5 has the tables): with `1`, every `*_linear_mipmap_linear`
+case takes 8.8 to 18.8 s and fails, every other case under 0.07 s; with `0`,
+all 30 cases of image 21 pass in under 0.05 s.
 
 ## 8. What follows, for other items (not done here)
 
@@ -578,7 +641,8 @@ fn run_case(name: &str, ifmt: GLenum, w: i32, h: i32, d: i32, min: GLenum, mag: 
 #[test]
 fn image20_and_21_first_14_cases() {
     // context 256x256 on the stand-in; then, in the board's (sorted) order:
-    // image 20: for fmt in [bgra (GL_BGRA_EXT), bgra8 (GL_BGRA8_EXT), r11f_g11f_b10f] x 64x64x64,
+    // image 20: for fmt in [bgra (GL_BGRA_EXT), bgra8 (GL_BGRA8_EXT), r11f_g11f_b10f] x 64x64x64
+    //   (the board runs bgra8 first; the two give the same binds, so the order does not change the dump),
     // image 21: for size in [128x32x64, 32x64x16, 3x7x5] x GL_RGBA8,
     // each over [linear, linear_mipmap_linear, linear_mipmap_nearest, nearest, nearest_mipmap_linear,
     // nearest_mipmap_nearest] (mag = min for linear/nearest, else LINEAR), stopping after case 14.
@@ -602,15 +666,124 @@ fn zz_scratch_pvr3d_words() {
 }
 ```
 
-### `shim.c` and `run.sh` (step 3)
+### `egl_shim.c` and `run.sh` (step 3)
+
+Both sit in one directory; `run.sh` takes the host dEQP from the checkout's
+`build/host-deqp/` (made by `tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3`).
 
 ```c
-/* Built as libGLESv2.so.2, first on LD_LIBRARY_PATH for the host deqp-gles3
- * (yakogl target). Exports only the two draws; every other GL symbol comes
- * from the host Mesa through eglGetProcAddress. PVR3D_SHIM=0: plain Mesa. */
-#include <EGL/egl.h>
-#include <GLES3/gl3.h>
+/* pvr-3d-hang investigation shim (gitignored build/, not part of the repo).
+ *
+ * Built as libEGL.so.1 and put first on LD_LIBRARY_PATH for the host
+ * dEQP-GLES3 (yakogl target, which dlopen()s libEGL.so.1 by soname). With
+ * EGL_KHR_get_all_proc_addresses (Mesa has it) dEQP takes EVERY GL function
+ * from eglGetProcAddress (framework/egl/egluGLContextFactory.cpp:425), so the
+ * interception is here: eglGetProcAddress returns the two draw wrappers below
+ * and the real Mesa function for everything else. Every other EGL entry point
+ * is an ifunc that resolves to the system libEGL's own symbol.
+ *
+ * Before each draw that samples a GL_TEXTURE_3D on unit 0, the texture is
+ * made to sample the way the AM62P's PowerVR samples a 3D texture today
+ * (yakogl texture_alloc_storage_3d: level 0 only; select.rs vol_uv: s,t
+ * clamped into the slice, r clamped to the slices): GL_TEXTURE_MAX_LEVEL 0,
+ * every wrap CLAMP_TO_EDGE, the min filter without its mipmap part.
+ * PVR3D_SHIM=0 forwards everything unchanged (plain Mesa).
+ */
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <GLES3/gl3.h>
+
+static void *real_lib(void)
+{
+	static void *h;
+	static const char *const paths[] = { "/usr/lib64/libEGL.so.1", "/usr/lib/x86_64-linux-gnu/libEGL.so.1",
+					     "/usr/lib/libEGL.so.1" };
+
+	for (unsigned i = 0; !h && i < sizeof(paths) / sizeof(paths[0]); i++)
+		h = dlopen(paths[i], RTLD_NOW | RTLD_GLOBAL);
+	if (!h) {
+		fprintf(stderr, "pvr3d-shim: no system libEGL.so.1\n");
+		abort();
+	}
+	return h;
+}
+
+static void *real(const char *name)
+{
+	return dlsym(real_lib(), name);
+}
+
+#define FWD(n)                              \
+	static void *r_##n(void)            \
+	{                                   \
+		return real(#n);            \
+	}                                   \
+	void n(void) __attribute__((ifunc("r_" #n)));
+
+FWD(eglChooseConfig)
+FWD(eglCopyBuffers)
+FWD(eglCreateContext)
+FWD(eglCreatePbufferSurface)
+FWD(eglCreatePixmapSurface)
+FWD(eglCreateWindowSurface)
+FWD(eglDestroyContext)
+FWD(eglDestroySurface)
+FWD(eglGetConfigAttrib)
+FWD(eglGetConfigs)
+FWD(eglGetCurrentDisplay)
+FWD(eglGetCurrentSurface)
+FWD(eglGetDisplay)
+FWD(eglGetError)
+FWD(eglInitialize)
+FWD(eglMakeCurrent)
+FWD(eglQueryContext)
+FWD(eglQueryString)
+FWD(eglQuerySurface)
+FWD(eglSwapBuffers)
+FWD(eglTerminate)
+FWD(eglWaitGL)
+FWD(eglWaitNative)
+FWD(eglBindTexImage)
+FWD(eglReleaseTexImage)
+FWD(eglSurfaceAttrib)
+FWD(eglSwapInterval)
+FWD(eglBindAPI)
+FWD(eglQueryAPI)
+FWD(eglCreatePbufferFromClientBuffer)
+FWD(eglReleaseThread)
+FWD(eglWaitClient)
+FWD(eglGetCurrentContext)
+FWD(eglCreateSync)
+FWD(eglDestroySync)
+FWD(eglClientWaitSync)
+FWD(eglGetSyncAttrib)
+FWD(eglCreateImage)
+FWD(eglDestroyImage)
+FWD(eglGetPlatformDisplay)
+FWD(eglCreatePlatformWindowSurface)
+FWD(eglCreatePlatformPixmapSurface)
+FWD(eglWaitSync)
+
+typedef void (*(*gpa_fn)(const char *))(void);
+
+static void (*gpa(const char *name))(void)
+{
+	static gpa_fn f;
+
+	if (!f)
+		f = (gpa_fn)real("eglGetProcAddress");
+	return f(name);
+}
+
+static unsigned long g_draws, g_forced;
+
+static void report(void)
+{
+	fprintf(stderr, "pvr3d-shim: %lu draws, %lu with a 3D texture forced to level 0\n", g_draws, g_forced);
+}
 
 static void force_level0(void)
 {
@@ -618,21 +791,21 @@ static void force_level0(void)
 	static void (*tp)(GLenum, GLenum, GLint);
 	static void (*gtp)(GLenum, GLenum, GLint *);
 	static void (*at)(GLenum);
-	const char *on = getenv("PVR3D_SHIM");
 	GLint active = 0, tex = 0, min = 0;
 
-	if (on && on[0] == '0')
-		return;
 	if (!gi) {
-		gi = (void (*)(GLenum, GLint *))eglGetProcAddress("glGetIntegerv");
-		tp = (void (*)(GLenum, GLenum, GLint))eglGetProcAddress("glTexParameteri");
-		gtp = (void (*)(GLenum, GLenum, GLint *))eglGetProcAddress("glGetTexParameteriv");
-		at = (void (*)(GLenum))eglGetProcAddress("glActiveTexture");
+		gi = (void (*)(GLenum, GLint *))gpa("glGetIntegerv");
+		tp = (void (*)(GLenum, GLenum, GLint))gpa("glTexParameteri");
+		gtp = (void (*)(GLenum, GLenum, GLint *))gpa("glGetTexParameteriv");
+		at = (void (*)(GLenum))gpa("glActiveTexture");
+		atexit(report);
 	}
+	g_draws++;
 	gi(GL_ACTIVE_TEXTURE, &active);
 	at(GL_TEXTURE0);
 	gi(GL_TEXTURE_BINDING_3D, &tex);
 	if (tex) {
+		g_forced++;
 		gtp(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, &min);
 		tp(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
 		tp(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -646,42 +819,63 @@ static void force_level0(void)
 	at((GLenum)active);
 }
 
-GL_APICALL void GL_APIENTRY glDrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
+static void w_draw_elements(GLenum mode, GLsizei count, GLenum type, const void *indices)
 {
 	static void (*f)(GLenum, GLsizei, GLenum, const void *);
 
 	if (!f)
-		f = (void (*)(GLenum, GLsizei, GLenum, const void *))eglGetProcAddress("glDrawElements");
+		f = (void (*)(GLenum, GLsizei, GLenum, const void *))gpa("glDrawElements");
 	force_level0();
 	f(mode, count, type, indices);
 }
 
-GL_APICALL void GL_APIENTRY glDrawArrays(GLenum mode, GLint first, GLsizei count)
+static void w_draw_arrays(GLenum mode, GLint first, GLsizei count)
 {
 	static void (*f)(GLenum, GLint, GLsizei);
 
 	if (!f)
-		f = (void (*)(GLenum, GLint, GLsizei))eglGetProcAddress("glDrawArrays");
+		f = (void (*)(GLenum, GLint, GLsizei))gpa("glDrawArrays");
 	force_level0();
 	f(mode, first, count);
+}
+
+typedef void (*egl_fn)(void);
+
+egl_fn eglGetProcAddress(const char *name)
+{
+	const char *on = getenv("PVR3D_SHIM");
+
+	if (!(on && on[0] == '0')) {
+		if (!strcmp(name, "glDrawElements"))
+			return (egl_fn)w_draw_elements;
+		if (!strcmp(name, "glDrawArrays"))
+			return (egl_fn)w_draw_arrays;
+	}
+	return (egl_fn)gpa(name);
 }
 ```
 
 ```sh
 #!/bin/bash
-# run.sh <out-name> <deqp case pattern> [PVR3D_SHIM=0|1], next to shim.c;
-# DEQP = the host deqp-gles3 module directory host-deqp-run.sh builds
-# (build/host-deqp/deqp-gles3/modules/gles3).
+# pvr-3d-hang scratch (gitignored build/): build the level-0 shim and run host
+# dEQP-GLES3 on the host Mesa (llvmpipe, surfaceless pbuffer: no window) with
+# one board image's case filter, as the board runs it (--deqp-case=<pattern>).
+#   build/pvr3d-shim/run.sh <out-name> <deqp case pattern> [PVR3D_SHIM=0|1]
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-gcc -shared -fPIC -O2 -Wall -o "$HERE/libGLESv2.so.2" "$HERE/shim.c" -lEGL
-unset DISPLAY WAYLAND_DISPLAY                     # never a window on the host
+REPO=$(cd "$HERE/../.." && pwd)
+DEQP=$REPO/build/host-deqp/deqp-gles3/modules/gles3
+rm -f "$HERE/libGLESv2.so.2"
+gcc -shared -fPIC -O2 -Wall -o "$HERE/libEGL.so.1" "$HERE/egl_shim.c" -ldl
+unset DISPLAY WAYLAND_DISPLAY
 export EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe
 export PVR3D_SHIM=${3:-1}
 cd "$DEQP"
-LD_LIBRARY_PATH="$HERE" timeout 3000 ./deqp-gles3 "--deqp-case=$2" \
+LD_LIBRARY_PATH="$HERE" timeout "${PVR3D_TIMEOUT:-3000}" ./deqp-gles3 "--deqp-case=$2" \
     --deqp-log-filename="$HERE/$1.qpa" --deqp-log-images=disable --deqp-log-shader-sources=disable \
-    --deqp-surface-type=pbuffer --deqp-surface-width=256 --deqp-surface-height=256 > "$HERE/$1.out" 2>&1 || true
-# per case: name, TestDuration (us) and status from the .qpa
-grep -o 'TestCaseResult CasePath="[^"]*"\|Unit="us">[0-9]*<\|StatusCode="[A-Za-z]*"' "$HERE/$1.qpa" | paste - - -
+    --deqp-surface-type=pbuffer --deqp-surface-width=256 --deqp-surface-height=256 \
+    > "$HERE/$1.out" 2>&1 || echo "deqp exit $?"
+grep -o 'TestCaseResult CasePath="[^"]*"\|Unit="us">[0-9]*<\|StatusCode="[A-Za-z]*"' "$HERE/$1.qpa" |
+    sed 's/TestCaseResult CasePath="dEQP-GLES3.functional.texture.filtering.//; s/"$//; s/Unit="us">//; s/<$//; s/StatusCode=//' |
+    paste - - - | awk '{printf "%-60s %10.3f s  %s\n", $1, $2/1e6, $3}'
 ```
