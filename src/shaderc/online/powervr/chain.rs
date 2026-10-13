@@ -31,8 +31,13 @@ pub enum ChainError {
     /// A fragment shader that reads a varying: the iterators that evaluate
     /// one are not built.
     FragmentInputsNotBuilt,
+<<<<<<< HEAD
     /// A fragment shader reading more than 16 varying vectors (each array
     /// element and each matrix column counts as one): the iterator tables
+=======
+    /// A fragment shader reading more than 16 varying vectors (array
+    /// elements and matrix columns each count one): the iterator tables
+>>>>>>> 022d81634e738d55aefd29723d2c0ca65f17515c
     /// hold 16.
     TooManyFragmentVaryings,
     /// A fragment shader writing anything but one `gl_FragColor` vec4: the
