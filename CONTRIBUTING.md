@@ -28,15 +28,22 @@ CI, a review, then the merge. Never push main by hand.
 - The full run checks formatting, clippy (no warnings), the tests in every
   feature configuration, the C check programs, the generated files, the
   product archives, the Python tools, and the Zephyr image builds. It takes
-  about 45 minutes on a warm tree.
+  35 to 50 minutes, depending on the host (measured: 36 minutes from a cold
+  tree and 49 minutes on another host;
+  `docs/release/readme-walkthrough.md`).
 - It is green only at "N ok, 0 failed, 0 gap(s)". A step that could not run
   is a **gap**, and a gap makes the gate red. These need setup: `ZEPHYR_WS`,
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
   firmware header, and the `aarch64-unknown-none-softfloat` Rust target
   (`rustup target add`). Without them you get a red run with named gaps;
-  read which rows failed and which were gaps.
-- `tools/check.sh --quick` (the PowerVR row and the AM62P archive only) is
-  for the edit loop. `tools/check.sh --local <base>` runs the local set (13
+  read which rows failed and which were gaps. `ZEPHYR_WS` must be a real
+  path, not one through a symbolic link: the AM62P Zephyr rows failed on a
+  linked one (`swi_tables.ld` not found).
+- `tools/check.sh --quick` (about 120 rows, fewer than the full run; 14
+  minutes in one walk, 4 to 10 minutes on a warm tree in others) is for the
+  edit loop. If `MESA_V3D_TREE` is set on your host to a Mesa tree without
+  `build-v3d`, two rows fail; run `env -u MESA_V3D_TREE tools/check.sh --quick`
+  (measured: 119 ok, 0 failed, 0 gaps, 236 s). `tools/check.sh --local <base>` runs the local set (13
   rows) when a change reaches everything. Neither is the landing gate: the
   CI is.
 
