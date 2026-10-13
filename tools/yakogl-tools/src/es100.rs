@@ -104,7 +104,7 @@ fn glslang_path() -> String {
 /// and dEQP asks.
 fn limits_overrides() -> Vec<(&'static str, i64)> {
     use yakogl::gl::context::{
-        CAP_COLOR_ATTACHMENTS, CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_FRAGMENT_UNIFORM_VECTORS,
+        max_draw_buffers, CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_FRAGMENT_UNIFORM_VECTORS,
         MAX_UNIFORM_DWORDS, MAX_VERTEX_ATTRIBS, MAX_VERTEX_UNIFORM_VECTORS,
     };
     let vs_tex = yakogl::backend::GLES_VS_TEX_UNITS as i64;
@@ -119,7 +119,8 @@ fn limits_overrides() -> Vec<(&'static str, i64)> {
         ("MaxTextureImageUnits", CAP_TEXTURE_UNITS as i64),
         ("MaxVertexTextureImageUnits", vs_tex),
         ("MaxCombinedTextureImageUnits", CAP_COMBINED_TEXTURE_UNITS as i64),
-        ("MaxDrawBuffers", CAP_COLOR_ATTACHMENTS as i64),
+        /* GL_MAX_DRAW_BUFFERS: the back end's draw targets, not the storage */
+        ("MaxDrawBuffers", max_draw_buffers() as i64),
     ]
 }
 
