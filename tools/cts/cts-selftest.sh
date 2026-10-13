@@ -148,11 +148,13 @@ fi
 echo
 # ---- 19: check-gles3-tree.py: every GLES3 mustpass case once per table -------
 #
-# The dEQP-GLES3 tables (am62p-gles3-tree.txt, pi4-gles3-tree.txt) are split
-# by hand to fit each board's watchdog window, and a split by hand drops or
-# doubles a case easily (RESULTS.md 1r split its line 19 into 19a-19g and
-# named 3D lists). The checker's self-test covers its rules; the two tables
-# must then each select the 42,810 cases of gles3-mustpass.txt exactly once.
+# The dEQP-GLES3 tables (am62p-gles3-tree.txt, pi4-gles3-tree.txt,
+# imx8mp-gles3-tree.txt) are split by hand to fit each board's watchdog
+# window, and a split by hand drops or doubles a case easily (RESULTS.md 1r
+# split its line 19 into 19a-19g and named 3D lists). The checker's self-test
+# covers its rules; the three tables must then each select the 42,810 cases of
+# gles3-mustpass.txt exactly once (the same three check-deqp-images.py's repo
+# rule 6 reads).
 echo
 echo "== 19. check-gles3-tree.py: self-test, then the GLES3 tables against gles3-mustpass.txt"
 if python3 -I "$HERE/check-gles3-tree.py" --self-test > /dev/null 2>&1; then
@@ -160,7 +162,7 @@ if python3 -I "$HERE/check-gles3-tree.py" --self-test > /dev/null 2>&1; then
 else
     bad "check-gles3-tree.py --self-test failed: $(python3 -I "$HERE/check-gles3-tree.py" --self-test 2>&1 | grep FAIL)"
 fi
-for t in am62p-gles3-tree.txt pi4-gles3-tree.txt; do
+for t in am62p-gles3-tree.txt pi4-gles3-tree.txt imx8mp-gles3-tree.txt; do
     gout=$(python3 -I "$HERE/check-gles3-tree.py" "$HERE/$t" 2>&1)
     grc=$?
     gline=$(printf '%s\n' "$gout" | grep '^check-gles3-tree: ')
@@ -173,10 +175,12 @@ done
 
 # 20. tools/cts/images-selftest.sh: am62p-deqp-images.sh and
 # imx8mp-gltest-build.sh against a fake west in a scratch layout (TREE_ROWS,
-# a failed or image-less build, the WDOG self-arm flag, refused arguments).
-# Its count of passed checks is pinned, so a selftest that stops checking
-# reads as a failure here, not as a pass.
-IMAGES_SELFTEST_CHECKS=34
+# a failed or image-less build, the WDOG self-arm flag, refused arguments),
+# and pi4-deqp-images.sh against a fake cmake/ninja (the gles2 dry run and
+# build exactly as before, the gles3 path's three arguments and --gles3
+# check, the stage 1 check). Its count of passed checks is pinned, so a
+# selftest that stops checking reads as a failure here, not as a pass.
+IMAGES_SELFTEST_CHECKS=74
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)
