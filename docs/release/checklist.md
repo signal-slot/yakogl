@@ -42,6 +42,8 @@ Do not close them before the final trees are recorded.
 |---|---|---|
 | Promote the integration branch to `main` | `main` is the branch to publish; ccfarm does not push it | before lines 7 and 8 are final |
 | Make the repository public | Irreversible: copies and caches cannot be recalled | after all lines above are met |
+| Licence of each component: library (`src/`, `capi/`), kernel driver (`driver/`; `LICENSES/GPL-2.0-only.txt` exists), `third_party/`, `tools/`, `website/`, `zephyr/` | One licence per directory must be stated in `LICENSE`/`NOTICE`; line 7 can only check files against that choice | before line 7 can reach zero |
+| What the README conformance table claims (`README.md` lines 37-66: per-board dEQP-GLES2 results, "17,165-case mustpass list") | It is a public claim; today it mixes trees from different commits (line 2). Choose: claim only one recorded tree per board, or list the failures explicitly | before line 2 |
 | Licence for vendored code (Slint licences, Imagination DDK MIT text, and anything line 7 finds) | A legal choice, not a code fix | before line 7 can reach zero |
 | Publication date | Depends on stage 1 and 2 results | last |
 | Security contact address in SECURITY.md | It becomes public | before line 4 |
