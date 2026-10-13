@@ -56,6 +56,18 @@ Integration merges that have **no** re-landing branch: `a25712f2` (`pi4-console-
 4), `76d349c4` (`17d4220c`, an earlier AM62P images 1-7 record superseded by `int-e50d4ee`) and
 `77c86005` (`9625abd0`, readme walkthrough host-harness step).
 
+## 0.1 Recheck at origin/main `e51de0af` (2026-10-13)
+
+Main moved four commits past this workspace's base `5466c8dc` (`3e7aadc7`, `ec8ff4fd`, `44d89d95`,
+`e51de0af`). `git diff 5466c8dc e51de0af` touches `.ccfarm/project.toml`, `CONTRIBUTING.md`,
+`docs/HANDOFF.md` (the handoff-note rule only, no number), `docs/handoff/*`, `tools/handoff-notes.sh`
+and a new `docs/board-sessions/imx8mp-es2-r1.md` [read]. No file named in sections 2 to 6 changed, so
+no verdict changes. The new record (`3e7aadc7`) is an i.MX8MP run of the integration snapshot
+`334d4e65`, not of main: 17,318 pass / 0 fail / 34 NotSupported / 19 other of 17,371 begun,
+every entry identical to `29460f96`. Section 7's per-board numbers for main stay as listed. One
+more note: HANDOFF now says a result adds a note under `docs/handoff/` instead of editing
+HANDOFF.md, which lowers the `docs/HANDOFF.md` conflicts named in 3.3 and 6.
+
 ## 1. Summary
 
 "Where" uses these labels:
