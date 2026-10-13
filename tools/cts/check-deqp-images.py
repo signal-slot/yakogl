@@ -134,16 +134,6 @@ def conformance_rules(c, name, gles3=False, ms4=None):
 def check_dotconfig(path, ms4, gles3=False):
     c = parse_dotconfig(path)
     bad = conformance_rules(c, path, gles3=gles3, ms4=ms4)
-<<<<<<< HEAD
-=======
-    if gles3:
-        # a GLES3 image reports ES 3.0: Kconfig writes a disabled bool as "# CONFIG_X is not set".
-        # Both symbols: YAKOGL_REPORT_ES2 is default y, so DEQP_REPORT_ES2=n alone still reports ES 2.0.
-        for s in ('DEQP_REPORT_ES2', 'YAKOGL_REPORT_ES2'):
-            if c.get(s) == 'y':
-                bad.append('%s: CONFIG_%s=y (dEQP-GLES3 needs an ES 3.0 context)' % (path, s))
-        return bad
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
     for s in ('YAKOGL_REPORT_ES2', 'DEQP_REPORT_ES2'):
         if gles3:
             # a dEQP-GLES3 image must report ES 3.0: dEQP's GLES3 context
@@ -337,7 +327,6 @@ def self_test():
                    ('imx8mp-sweep.config', False), ('pi4-sweep.config', False)):
         ok(check_dotconfig(os.path.join(fixtures, f), ms4) == [],
            'fixture %s: a conformance image passes' % f)
-<<<<<<< HEAD
     # the dEQP-GLES3 image (pi4-deqp-images.sh DEQP_MODULE=gles3): both REPORT_ES2
     # symbols off, which --gles3 wants and the GLES2 rule refuses; a GLES2 sweep
     # image judged with --gles3 is refused the other way round
@@ -348,14 +337,12 @@ def self_test():
     ok(any('REPORT_ES2=y (a dEQP-GLES3 image' in b
            for b in check_dotconfig(os.path.join(fixtures, 'pi4-sweep.config'), False, gles3=True)),
        'fixture pi4-sweep.config with --gles3: refused, the message names REPORT_ES2')
-=======
     # --gles3: both REPORT_ES2 symbols off passes; DEQP_REPORT_ES2=n alone (YAKOGL_REPORT_ES2 left y) is refused
     ok(check_dotconfig(os.path.join(fixtures, 'bad-report-es3.config'), False, gles3=True) == [],
        'fixture bad-report-es3.config: a GLES3 image (both REPORT_ES2 off) passes --gles3')
     g3 = check_dotconfig(os.path.join(fixtures, 'bad-gles3-report.config'), False, gles3=True)
     ok(any('YAKOGL_REPORT_ES2' in b for b in g3),
        'fixture bad-gles3-report.config: --gles3 refuses it, naming YAKOGL_REPORT_ES2 (still ES 2.0)')
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
     for f, ms4, sym in (('bad-compiler-missing.config', False, 'YAKOGL_SHADERC_ONLINE'),
                         ('bad-shaderc-offline.config', False, 'YAKOGL_SHADERC_OFFLINE'),
                         ('bad-precompiled-only.config', False, 'YAKOGL_SHADERC_PRECOMPILED_ONLY'),
@@ -378,17 +365,10 @@ def main(argv):
     if argv[1:] == ['--self-test']:
         return 1 if self_test() else 0
     if argv[1:2] == ['--config']:
-<<<<<<< HEAD
         if len(argv) < 3 or not os.path.isfile(argv[2]) or any(a not in ('--ms4', '--gles3') for a in argv[3:]):
             print('usage: check-deqp-images.py --config <.config> [--ms4] [--gles3]', file=sys.stderr)
             return 2
         bad = check_dotconfig(argv[2], '--ms4' in argv[3:], '--gles3' in argv[3:])
-=======
-        if len(argv) < 3 or not os.path.isfile(argv[2]):
-            print('usage: check-deqp-images.py --config <.config> [--ms4 | --gles3]', file=sys.stderr)
-            return 2
-        bad = check_dotconfig(argv[2], True if '--ms4' in argv[3:] else False, gles3='--gles3' in argv[3:])
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
     elif len(argv) == 1:
         bad, notes = check_repo()
         for n in notes:

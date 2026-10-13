@@ -2,20 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-<<<<<<< HEAD
 Plan #3, items imx8mp-gles3-tree and stage1-imx8mp. The i.MX8MP has never run dEQP-GLES3. This is the
 recipe for the first run. **The gles3 stage 1 and the 133-row table image are built (host only,
 `docs/board-sessions/imx8mp-deqp-stage1-gles3.md`); nothing has run on the board yet.** The commands are
 the existing gles2 ones plus the gles3 switch. The expected lines have the shape of real gles2 lines from
 `docs/board-sessions/imx8mp-plan1.md`, which went through the same `board.sh` code path. The board session
 (item board-imx8mp) replaces them with what it sees.
-=======
-Plan #3, item imx8mp-gles3-tree. The i.MX8MP has never run dEQP-GLES3. This is the recipe for the first
-run. **Nothing here has been built or run on the board yet.** The machine that wrote it ran only the host
-checks below. The commands are the existing gles2 ones plus `DEQP_MODULE=gles3`. The expected lines have
-the shape of real gles2 lines from `docs/board-sessions/imx8mp-plan1.md`, which went through the same
-`board.sh` code path. The board session (item board-imx8mp) replaces them with what it sees.
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 
 ## What is in the tree
 
@@ -87,7 +79,6 @@ side, set `BOARD_HOST=<user@host>` from the environment (never write it into a f
 ```sh
 export ZEPHYR_WORKSPACE=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
        ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out>
-<<<<<<< HEAD
 tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3
 ```
 
@@ -95,11 +86,6 @@ The `gles3` argument uses `$DEQP_STAGE1_GLES3` if set, else `$IMX8MP_OUT/deqp-st
 exports `ZEPHYR_SDK` (from `ZEPHYR_SDK_INSTALL_DIR`) and `-O2` flags, which `cts-build-zephyr.sh` needs.
 Measured: 453 ninja steps, about 15 minutes on a 12-thread worker, 2.0 GB.
 
-=======
-DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3 tools/cts/imx8mp-deqp-stage1.sh
-```
-
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (VK-GL-CTS 93bca01, with the same patches as
 gles2). The log goes to `$IMX8MP_OUT/deqp-stage1.log`, the same file as for gles2.
 
@@ -111,13 +97,8 @@ did.
 
 ```sh
 HEAD8=$(git rev-parse --short=8 HEAD)
-<<<<<<< HEAD
 tools/cts/imx8mp-deqp-build.sh --gles3 es3-$HEAD8 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt
 # (--gles3 = DEQP_MODULE=gles3 and DEQP_STAGE1=$DEQP_STAGE1_GLES3, default $IMX8MP_OUT/deqp-stage1-gles3)
-=======
-DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3 \
-  tools/cts/imx8mp-deqp-build.sh es3-$HEAD8 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 ```
 
 What this adds:
@@ -146,14 +127,8 @@ The image is `$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin`. Name it after the commi
 results are reported against that hash.
 
 **Footprint.** The gles2 table image was 221,282,304 bytes in the 256 MiB `a53_ddr_section`
-<<<<<<< HEAD
 (imx8mp-plan1.md). Measured for the gles3 table image: `zephyr.bin` 15,870,328 bytes (`es3-83115f91`), RAM 221,976 KB of
 256 MB (84.68 %), footprint checked by `board.sh` 227,303,424 bytes.
-=======
-(imx8mp-plan1.md). In the cached stage 1s, the gles3 functional library is 13 MB against 7.4 MB for gles2,
-and the embedded data is 2.3 MB against 1.1 MB. Expect the image to grow by a few MB. Check the build
-log's memory report before flashing.
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 
 ## 3. Run the tree on the board
 
@@ -161,7 +136,6 @@ log's memory report before flashing.
 export BOARD_HOST=<user@host> BOARD_BOOT=uboot-mmc
 TREE_IMAGE=$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin \
   tools/board.sh imx8mp tree tools/cts/imx8mp-gles3-tree.txt records/imx8mp/es3-$HEAD8
-<<<<<<< HEAD
 # the same, with the table and the newest $IMX8MP_OUT/es3-*/zephyr/zephyr.bin filled in:
 tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8
 ```
@@ -170,12 +144,6 @@ tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8
   `tools/cts/imx8mp-gles3-board.sh --dry-run tree <dir>`) prints the `DRY host$ ...` steps for every row and
   touches no board. Done for the built image: 133 rows `e00`..`e132`, selectors 0..132, sha256
   `1f1e7881...`; see the session doc.
-=======
-```
-
-- **Preview:** `tools/board.sh --dry-run imx8mp tree ...` (with the same `TREE_IMAGE`) prints the
-  `DRY host$ ...` steps for every row and touches no board.
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 - **Subset:** `TREE_ROWS=0-9` or `TREE_ROWS=57,60-66` runs only those rows.
 - **Resume:** a row whose run directory already has an `INDEX.txt` is skipped.
 

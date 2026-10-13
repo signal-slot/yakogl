@@ -23,13 +23,10 @@ if [ "${1:-}" = gles3 ]; then
 fi
 imx8mp_need DEQP_STAGE1
 export BOARD WORK=$DEQP_STAGE1
-<<<<<<< HEAD
 # cts-build-zephyr.sh reads ZEPHYR_SDK, not ZEPHYR_SDK_INSTALL_DIR; and its toolchain file passes no -O, so
 # libpng's NEON code (needs constant lane indices) fails at -O0 unless the environment supplies one.
 export ZEPHYR_SDK=${ZEPHYR_SDK:-$ZEPHYR_SDK_INSTALL_DIR}
 export CFLAGS=${CFLAGS:--O2} CXXFLAGS=${CXXFLAGS:--O2}
-=======
->>>>>>> c9cae04f4dd63f8467cb9505c146a72a7d3f9271
 case "${DEQP_MODULE:-gles2}" in
 	gles2) ;;
 	gles3) export MODULE=gles3 ;;
