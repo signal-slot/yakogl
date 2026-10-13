@@ -5,7 +5,7 @@
 The state of the work and what comes next. A result does not edit this
 file: it adds a note under `docs/handoff/` (one file per result,
 `docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
-in after the merge; a person folds the same way. Last update: 2026-10-13.
+in after the merge; a person folds the same way. Last update: 2026-10-14.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `5ad2fa0e` (2026-10-11). The numbers below are read from
+main is `20a48791` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -48,7 +48,7 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 |---|---|---|---|---|
 | AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. | 465, 33 scenes ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | Slint pass, cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
 | i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 47 / 48 run, 1 skipped (case 16, #8), first failure case 44 (#6), on `a0f439d6` (2026-10-10; no RESULTS.md entry). Case 44 alone still fails on `f2a13877` (RESULTS.md). Cases 2 and 10 fail now and then (#25, #9). | 42, 33 ran, 0 failed, on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | probes pass on `8abeaabb`; no fps (no console). |
-| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12 on `1cf946a9` (2026-10-11). | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
+| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The NotSupported 34 are the same on the three boards: `clip_control` 8,
 `negative_api.texture.compressedtexsubimage2d_*` 9,
