@@ -175,6 +175,9 @@ fn colour_needs_quad_is_the_tlb_decision() {
         }
     }
     assert_eq!(tlb, 1, "the TLB takes exactly one row: colour, no clear_quad, mask 0xf");
+    /* only the low four bits are channels */
+    let d = GlesDraw { do_clear: true, clear_color_mask: 0xff, ..target(64, 48, true) };
+    assert!(!state::colour_needs_quad(&d));
 }
 
 /* ---- 3. the quad's state ------------------------------------------------------ */
