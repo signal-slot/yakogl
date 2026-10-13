@@ -17270,3 +17270,17 @@ failures nor as NoResult.
 Not run on a board: the pending landing (transform-feedback capture on the CPU, colour
 `glBlitFramebuffer` on the CPU, buffer mapping and PBO fixes, sRGB on the PowerVR) is host-only;
 none of these numbers is a result of it.
+
+## i.MX8MP: gl_femtovg A/B on the GC7000 offline table, PR #129 vs main (2026-10-12 and 10-13 JST)
+
+Record `tools/cts/log/board-sessions/imx8mp-gc7000-table-20261012.md`, section gl_femtovg.
+`tools/board.sh imx8mp`, `BOARD_BOOT=uboot-mmc`, offline table, `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`.
+
+| run | arms | result |
+|---|---|---|
+| first, 2026-10-12 | `origin/work/int-pr31` `419b0159` + `origin/main` `f8741799`; `f8741799` | did not build on either side: `FVG_NOSTD_DIR` unset, then `pvr_ddk.h` missing (the sample had no i.MX8MP config). Nothing ran |
+| with the board port `4ed947b3`, 2026-10-13 JST (about 15:10 to 15:50 UTC on 10-12) | PR = int-pr31 merged with `f8741799` + port (tree `dfde14bd`); main = `f8741799` + port | both `verdict=done`, `result=record:APP`, record `594b0213 00010001 00000000 00000000`, `resets=absent`; back after 97 s / 89 s. No diff |
+
+Not plain `origin/main` builds: the port was not yet on main. The record words show the sample ran to
+its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
+gl_femtovg here.
