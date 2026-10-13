@@ -17285,3 +17285,17 @@ Record `tools/cts/log/board-sessions/imx8mp-gc7000-table-20261012.md`, section g
 Not plain `origin/main` builds: the port was not yet on main. The record words show the sample ran to
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
+
+## i.MX8MP: common set on `cd738b1a`, U-Boot from eMMC (2026-10-14)
+
+Images from origin/main `cd738b1a` (`cts-common.sh imx8mp build`), run by `cts-common.sh imx8mp run` with `BOARD_BOOT=uboot-mmc`, one boot per row. Records `records/imx8mp/common-cd738b1a/`.
+
+| row | image | verdict | record | reading |
+|---|---|---|---|---|
+| GM | `722c5e70` | done | `594b120e fc3f002a 6184003f 0f258320` | glmark2 score 42; 33 ran, 0 failed, 0 unsupported; status pass; back after 403 s |
+| SO | `0154f978` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| SV | `0135d345` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| CL | `def54f55` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | cluster probes pass |
+| GT | `c35b0ceb` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
+
+Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run.
