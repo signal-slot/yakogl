@@ -17280,6 +17280,7 @@ Record `tools/cts/log/board-sessions/imx8mp-gc7000-table-20261012.md`, section g
 |---|---|---|
 | first, 2026-10-12 | `origin/work/int-pr31` `419b0159` + `origin/main` `f8741799`; `f8741799` | did not build on either side: `FVG_NOSTD_DIR` unset, then `pvr_ddk.h` missing (the sample had no i.MX8MP config). Nothing ran |
 | with the board port `4ed947b3`, 2026-10-13 JST (about 15:10 to 15:50 UTC on 10-12) | PR = int-pr31 merged with `f8741799` + port (tree `dfde14bd`); main = `f8741799` + port | both `verdict=done`, `result=record:APP`, record `594b0213 00010001 00000000 00000000`, `resets=absent`; back after 97 s / 89 s. No diff |
+| confirmation, 2026-10-13 (back to back, rebuilt images) | PR = int-pr31 merged with `ba25def7` + port `4ed947b3` (tree `dfde14bdd5082e3ac0d29b781973b5003769ec92`, zephyr.bin `2a81fc00`); main = `ba25def7` + port (tree `4a6041ea7e703a1561630a03f3af15ba76b7bea4`, zephyr.bin `6418e8ae`) | both `verdict=done`, `result=record:APP`, record `594b0213 00010001 00000000 00000000`, `resets=absent`; back after 97 s / 143 s. No diff; same as the 10-12 run. Records `records/imx8mp/20261013-0306-femtovg-pr-2a81fc00/` and `records/imx8mp/20261013-0308-femtovg-main-6418e8ae/` |
 
 Not plain `origin/main` builds: the port was not yet on main. The record words show the sample ran to
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
