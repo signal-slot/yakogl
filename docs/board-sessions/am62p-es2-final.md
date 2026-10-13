@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# am62p-es2-final-a: AM62P dEQP-GLES2 images 1-9 at origin/main `cd738b1a` (BLOCKED, not run)
+# am62p-es2-final-a: AM62P dEQP-GLES2 images 1-9 at origin/main `cd738b1a` (built; BLOCKED, not run)
 
 Date: 2026-10-14. Board: Verdin AM62P, lease `usb-serial-1` (serial console
 only).
@@ -11,8 +11,9 @@ only).
   **`cd738b1ae7cf99166a6bdd86cf24dac04c4c4328`** (2026-10-13, "ccfarm: merge
   ccfarm/01a13623-0a20-7578-bba9-a6ab4290251a (#533)"). This is the same
   commit as this item's workspace (clean, no local changes).
-- **No image was built and no image was run.** There is no `board.sh` verdict
-  line and no TALLY line for this commit. No number below is a device result.
+- **Images 1-9 were built (all `rc=0`) but none was run.** There is no
+  `board.sh` verdict line and no TALLY line for this commit. No number below
+  is a device result.
 - The newest whole-tree device result is still
   `docs/board-sessions/am62p-es2-final-r2.md`: `63efed8e`, 17 images,
   17,125 pass / 0 fail, ms4 16 / 16. Cite that record until this item is
@@ -28,23 +29,21 @@ only).
    the attempts in `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md`,
    where the leased bridge port was the one wired to mcu_uart0. Zephyr and
    U-Boot print on main_uart0
-   (`tools/cts/log/investigations/am62p-console-empty.md`). A silent
-   console can also mean the board is off, or is sitting in a finished
-   Zephyr image that does not echo. Without ssh (point 2) these causes
-   cannot be told apart from here.
+   (`tools/cts/log/investigations/am62p-console-empty.md`). In the second
+   round `ask_farm` confirmed it from the farm's resource records: the port
+   leased as `usb-serial-1` is **mcu_uart0**, and the board's console
+   (main_uart0) is on another port of the same bridge. The lease does not
+   name that port, so this session did not use it. **Fix (farm side):**
+   point `usb-serial-1` at the main_uart0 port, or add that port as the
+   AM62P console resource.
 2. **ssh to the board was refused.** `ssh -o BatchMode=yes verdin-am62p ...`
-   returned "This command requires approval" twice. `BOARD_BOOT=uboot-mmc`
+   returned "This command requires approval" twice, and the farm then
+   denied `Bash(ssh:*)` ("nobody decided in time"). `BOARD_BOOT=uboot-mmc`
    stages the image on the eMMC over ssh, so `tools/board.sh am62p tree`
    cannot run without it (pre-check "ssh and sudo -n").
-3. **The build wrapper was refused.** The deps layout is complete
-   (`tools/cts/deps-env.sh --check am62p`: every entry `ok`). But the
-   wrapper script that exports that environment and calls
-   `tools/cts/am62p-deqp-images.sh` returned "This command requires
-   approval" three times (background, foreground, relative path). So did
-   `git worktree add --detach` under the deps directory. The image script
-   without the environment runs only as `--dry-run` (below).
-4. The farm tools `ask_farm` and `get_project_env` were not granted, so the
-   lease's UART wiring and `BOARD_HOST` could not be confirmed.
+3. (Solved in the second round.) The build wrapper and `git worktree add`
+   were refused at first and allowed later. The images were then built; see
+   "Image build lines".
 
 ## What was checked
 
@@ -70,7 +69,30 @@ results can be compared one to one.
 
 ## Image build lines
 
-None. No image was built.
+Built from a detached worktree of `origin/main` at `cd738b1a`, in the
+yakogl deps directory (`wt-am62p-final-cd738b1a/`). The command was
+`TREE_ROWS=0-8 tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt
+<deps>/am62p-final-cd738b1a-images cd738b1a`, with the environment from
+`tools/cts/deps-env.sh am62p` and the firmware header copied to
+`driver/src/fw/` (git-ignored). The build log line was
+`build HEAD=cd738b1ae7cf99166a6bdd86cf24dac04c4c4328 status=[0 changed]`.
+`build.out`:
+
+```
+img1 rc=0 bin=bb7438158eecadfc
+img2 rc=0 bin=6ce69557a3895de9
+img3 rc=0 bin=1f763469ac76862d
+img4 rc=0 bin=feb3d2fc30c122fe
+img5 rc=0 bin=88b8fefded184d63
+img6 rc=0 bin=eebf683bc05f1f93
+img7 rc=0 bin=56e4db97fc4f0750
+img8 rc=0 bin=98516ce87d982e33
+img9 rc=0 bin=edb31ef2003f6e1d
+```
+
+The images stay in that deps directory, so a re-run on this machine can use
+them without a rebuild. A fresh checkout has no `driver/src/fw/` directory,
+so create it before you copy the header.
 
 ## Device verdict lines and TALLY
 
@@ -87,27 +109,21 @@ Not possible without a run.
 
 ## Commands still to run
 
-Prerequisites: a lease whose console shows the board (a CR on it must
-return a U-Boot prompt or a login prompt), ssh with `sudo -n` to the
-board's Linux as `BOARD_HOST`, and permission to run a script from the
-workspace. Then, from a checkout at `cd738b1ae7cf`:
+Prerequisites: a console lease on the board's **main_uart0** port (a CR on
+it must return a U-Boot prompt or a login prompt), and ssh with `sudo -n` to
+the board's Linux as `BOARD_HOST`. Then, from the worktree at
+`cd738b1ae7cf`:
 
 ```bash
-# records/final-a/run.sh   (records/ is git-ignored)
+# <script>.sh, run as: bash <script>.sh   (records/ is git-ignored)
 set -euo pipefail
-export CCFARM_DEPS_DIR=<deps dir>          # the yakogl deps layout
-set -a; eval "$(tools/cts/deps-env.sh am62p)"; set +a
-cp "$PVR_FW_BLOB" driver/src/fw/pvr_fw_blob.h       # git-ignored
-OUT=records/final-a/images; mkdir -p "$OUT"
-TREE_ROWS=0-8 tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt "$OUT" cd738b1a >> "$OUT/build.out"
+OUT=<deps dir>/am62p-final-cd738b1a-images   # the built images 1-9 (or rebuild, see above)
 export BOARD_BOOT=uboot-mmc BOARD_HOST=<user@board> BOARD_UART=<bridge host:port of main_uart0>
+tools/board.sh am62p disarm                  # remove any one-shot an earlier stopped run left
 export TREE_IMAGE_DIR=$OUT TREE_TAG=cd738b1a TREE_ROWS=0-8
 tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/final-a/tree
 tools/board.sh am62p tally records/final-a/tree
 ```
 
-Run it with `bash records/final-a/run.sh`. Before the tree, prove the
-console: write a CR on the lease and see the U-Boot or login prompt. Then
-`tools/board.sh am62p disarm` removes any one-shot that an earlier stopped
-run left behind. The tree can start on image 1 while later images build
-(it waits for each `img<N> rc=` line).
+Before the tree, prove the console: write a CR on the lease and see the
+U-Boot or login prompt.
