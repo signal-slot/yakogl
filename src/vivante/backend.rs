@@ -2890,16 +2890,9 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),
     depth_resolve: Some(gc_depth_resolve),
-<<<<<<< HEAD
     query_begin: Some(gc_query_begin),
     query_end: None,
     query_result: Some(gc_query_result),
-=======
-    query_begin: None,
-    query_end: None,
-    query_result: None,
-    query_free: None,
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 };
 
 /// The backend's own tests (the module is large enough to keep them apart, as

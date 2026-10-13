@@ -51,11 +51,7 @@ const BINDINGS: usize = TF_MAX_SEPARATE_ATTRIBS as usize;
 pub(super) const NAME_MAX: usize = 64;
 /// Rows a program keeps: one per captured varying; every row takes at least
 /// one component and the interleaved limit is 64.
-<<<<<<< HEAD
 #[cfg(feature = "shaderc-online")]
-=======
-#[cfg_attr(not(feature = "shaderc-online"), allow(dead_code))]
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 const MAX_ROWS: usize = TF_MAX_INTERLEAVED_COMPONENTS as usize;
 
 /* ------------------------------------------------------------------ objects */
@@ -556,11 +552,7 @@ pub(super) fn link_begin(group: u8, program: GLuint) {
 }
 
 /// Scalar components of a GLSL type given by its GL token.
-<<<<<<< HEAD
 #[cfg(feature = "shaderc-online")]
-=======
-#[cfg_attr(not(feature = "shaderc-online"), allow(dead_code))]
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 fn type_components(t: GLenum) -> u32 {
     match t {
         GL_FLOAT | GL_INT | GL_UNSIGNED_INT => 1,
@@ -577,11 +569,7 @@ fn type_components(t: GLenum) -> u32 {
 }
 
 /// `v[3]`: the name before the subscript and the index.
-<<<<<<< HEAD
 #[cfg(feature = "shaderc-online")]
-=======
-#[cfg_attr(not(feature = "shaderc-online"), allow(dead_code))]
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 fn split_element(name: &[u8]) -> Option<(&[u8], u32)> {
     let body = name.strip_suffix(b"]")?;
     let lb = body.iter().rposition(|&b| b == b'[')?;
@@ -956,7 +944,6 @@ pub(super) fn captured_vertices(mode: GLenum, count: u32) -> u64 {
     u64::from(prims) * per
 }
 
-<<<<<<< HEAD
 /// Whether the capture of `instances` instances of a `count`-vertex draw in
 /// `mode` fits every buffer the program writes (ES 3.0 2.15.2: "the
 /// transform feedback buffers ... do not have enough space" is
@@ -996,21 +983,11 @@ pub(super) fn fits(c: &mut GlContext, mode: GLenum, count: GLsizei, instances: u
 /// captured here (`tf_capture.rs`), the bytes written and the primitives
 /// counted, before the caller draws it (or, under rasterizer discard, does
 /// not). Returns whether the draw may go on.
-=======
-/// The rules every draw meets while capture is on (ES 3.0 2.15.2, 2.8.3):
-/// an indexed draw, a mode that does not match Begin's primitive, and a
-/// capture that does not fit the buffers are GL_INVALID_OPERATION. Returns
-/// whether the draw may go on. Capture itself is not built (tf-capture): a
-/// draw that gets through is refused, loudly, with GL_INVALID_OPERATION.
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
 pub(super) fn pre_draw(
     c: &mut GlContext,
     mode: GLenum,
     indexed: bool,
-<<<<<<< HEAD
     first: GLint,
-=======
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
     count: GLsizei,
     instances: u32,
     func: &str,
@@ -1068,7 +1045,6 @@ fn capture(c: &mut GlContext, mode: GLenum, first: u32, count: u32, instances: u
     let mut targets = [super::tf_capture::Target::NONE; BINDINGS];
     for (i, t) in targets.iter_mut().enumerate().take(used) {
         let b = o.bind[i];
-<<<<<<< HEAD
         *t = super::tf_capture::Target {
             slot: b.buffer,
             at: b.offset as usize + o.written[i] as usize,
@@ -1097,16 +1073,6 @@ fn capture(c: &mut GlContext, mode: GLenum, first: u32, count: u32, instances: u
             glog!("{func}: transform feedback capture: {why}");
             c.set_error(why.error(), func);
             false
-=======
-        let avail = if b.size > 0 { b.size as i64 } else { buffer_size(c, b.buffer) - b.offset as i64 };
-        let need = vertices as i64 * i64::from(stride(rows, buffer_mode, i)) + i64::from(o.written[i]);
-        if need > avail {
-            glog!(
-                "{func}: transform feedback buffer {i} is too small for the draw ({need} bytes needed, {avail} bound)"
-            );
-            c.set_error(GL_INVALID_OPERATION, func);
-            return false;
->>>>>>> d5e83690dd528b053a275bbf709c739f6f7b4a7d
         }
     }
 }
