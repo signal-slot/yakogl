@@ -63,7 +63,7 @@ its key (SHA-256) and stored source follow the file as it is now, so a row
 whose source was edited after it was made gets the key the runtime computes.
 Every other row stays byte for byte, and the header names the
 toolchain that compiled the replaced rows. It refuses the result if any other
-row changed. That is how a toolchain fix reaches only the rows it changes:
+row changed. If no row changes at all, it writes nothing and says so. That is how a toolchain fix reaches only the rows it changes:
 on 2026-10-04 etna_shc started lowering uniforms to UBO 0 as Mesa's GL state
 tracker does (st_glsl_to_nir.cpp st_nir_lower_uniforms), so a run-time
 index into a uniform array is a `load` from the stage's uniform block
@@ -187,16 +187,17 @@ Issue #22 first said "the GC7000 table lags on `matattr`". The keys of the
 four rows (`es100/matattr.frag`, `matattr2.vert`, `matattr3.vert`,
 `matattr4.vert`) match the files, and `check_gl_test_blobs.py` finds them, so
 gl_test case 63 has no table miss. The other half of the question was
-whether the code in the rows is what today's etna_shc makes. The answer is
-that today's etna_shc cannot remake the three vertex rows, and the cause is
-in this directory, not in the shaders:
+whether the code in the rows is what today's etna_shc makes. The first
+answer was that etna_shc could not remake the three vertex rows, and the
+cause was in this directory, not in the shaders. That cause is now fixed
+(below):
 
 - The committed rows describe a matrix attribute as one input: `a_xf` is
   one `ShcVivIo` at slot 16 (location 1), `vi_reg` 1, and the code reads
   the columns from registers 1, 2, ... That is the shape the runtime
   expects: `src/vivante/shader.rs` puts column k of a matrix attribute in
   register `vi_reg + k`, one row per attribute. [read]
-- `etna_shc.c` now calls
+- `etna_shc.c` called
   `nir_lower_io_array_vars_to_elements_no_indirects(nir, false)`, added to
   split matrix and array varyings (fix 2 above). With `outputs_only` false
   it also splits shader inputs, and in a vertex shader the inputs are the
@@ -218,21 +219,30 @@ in this directory, not in the shaders:
   touch it.
 
 The committed rows are kept: they are the shape the runtime uses, and
-the dEQP images do not read this table. To remake them, keep vertex
-attributes whole in `etna_shc.c`: pass `outputs_only` true for the vertex
-stage, so only varyings are split. That is what Mesa's PowerVR compiler
-does (`pco_nir.c`:
+the dEQP images do not read this table. The fix is in the tool:
+`etna_shc.c` now keeps vertex attributes whole. It passes `outputs_only`
+true for the vertex stage, so only varyings are split. That is what Mesa's
+PowerVR compiler does (`pco_nir.c`:
 `nir_lower_io_array_vars_to_elements_no_indirects(nir, stage ==
-MESA_SHADER_VERTEX)`). Then run `gen_shader_table.py --replace
-es100/matattr2.vert es100/matattr3.vert es100/matattr4.vert` and compare
-the rows with the committed ones. That change is not made here: it needs a
-Mesa 26.2.1 tree to rebuild etna_shc ("Set up once" above), and the hosts
-that worked on this had none (`third_party/mesa-26.2.1` holds no etnaviv
-sources). The binary the measurement above used is the farm's `ETNA_SHC`
-value (sha256 `1d52afef...`), so a host with that value can re-run the
-refusal without a Mesa tree, as long as it has `libdrm.so.2`, which the
-binary loads (a host without libdrm stops with "error while loading shared
-libraries: libdrm.so.2", 2026-10-14).
+MESA_SHADER_VERTEX)`). Fragment shaders are compiled as before.
+
+[measured 2026-10-14, etna_shc `87ecbb38...` built from this directory's
+`etna_shc.c` with that change, in a copy of the same Mesa 26.2.1 tree,
+glslang 16.4.0]
+
+- `reflect` accepts all four `matattr` sources, and their rows are the
+  committed ones byte for byte: `replace_rows` with the four new rows
+  changes no row. Only the header would change, by naming the toolchain.
+  `--replace` used to stop here with "the splice changed other rows
+  (changed [] ...)", although nothing had changed. It now prints "all N
+  asked rows already match the committed table; not written" and exits
+  0, leaving the table as it is.
+- Every `.vert` under `tools/shaders` except `internal/` (324 sources)
+  was compiled with the old binary (`1d52afef...`) and the new one. 306
+  results are the same. 3 differ: `matattr2/3/4.vert`, refused before and
+  accepted now. In the other 15, the same source fails with the same Mesa
+  assertion in both, and the message differs only in the Mesa tree's path
+  (`vtex_struct_sampler(_array).vert`, 13 `qt/*.vert`).
 
 Still open after this change:
 
