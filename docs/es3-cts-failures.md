@@ -7,7 +7,9 @@ on the AM62P (PowerVR). Written 2026-10-10 for plan #3 (OpenGL ES 3.0, item
 `es3-inventory`) from the `396d667a` run, and modelled on
 `docs/es2-cts-failures.md`. The root causes below keep that run's counts; the
 section "State on `f2a13877`" says which of them have a fix on main and what the
-latest tree reads. Appendix A (the vertex groups) and Appendix B (fbo,
+latest tree reads. The last sections ("Ledger", "Ranked fix order") put every failure,
+NotSupported and no-result case in exactly one row and close the document.
+Appendix A (the vertex groups) and Appendix B (fbo,
 fragment_ops and fragment_out by subgroup) were separate documents until
 2026-10-11.
 
@@ -446,7 +448,8 @@ The table as it stood at `396d667a`, with each item's state on main
   `tools/cts/log/investigations/es3-shaders-396d667a.md`.
 * Documents this file once expected, which were never written:
   `docs/es3-rest-failure-map.md`,
-  `docs/es3-texture-failure-map.md`, `docs/es3-host-run.md`. The ES 3.0
+  `docs/es3-texture-failure-map.md`. The host run is the record
+  `tools/cts/log/es3-host-run.md`. The ES 3.0
   limits document `docs/es3-backend-caps.md` was reverted (`3f78982`).
 
 ## Assumptions made writing this
@@ -754,4 +757,164 @@ Ranked by AM62P failures at `396d667a` (rank 1 now has an item).
 | 5 | fbo.depth float-depth and D32F cases | not recorded | `GL_DEPTH_COMPONENT32F` and `DEPTH32F_STENCIL8` as rbo / texture and as blit source (hardware support unverified here) | the depth-format list of `is_depth_format`, not read here |
 | 6 | fbo.completeness.layer (8), fbo.completeness.size (2) | not recorded | layer attach rules on 3D / array, `size.distinct` | small; read the cases |
 | – | the 88 unexplained fragment_out failures | 88 (derived) | not a cause: unaccounted (the record) | rerun fragment_out.basic.fixed / float and array.fixed / float, and read the "Image comparison failed" cases |
+
+## Ledger: every case in exactly one row
+
+Added 2026-10-13 on the tree after `f2a13877`. It pulls three things together
+that the sections above keep apart: the vertex appendix's exact counts (the
+summary table above still lists them as unclassified), the host run of
+`tools/cts/log/es3-host-run.md` (all 42,810 names on the host, three GPUs,
+2026-10-09), and the NotSupported and no-result cases. Counts are the
+`396d667a` board run's; "host" columns say what was reproduced with the
+host harness. Host verdicts are API and compile verdicts only: a picture
+verdict is never quoted from the host.
+
+Host reproduction, in general (needs the pinned VK-GL-CTS checkout; the
+script builds `deqp-gles3` itself):
+
+```sh
+CTS=<VK-GL-CTS> MODULE=gles3 GPU=powervr tools/cts/host-deqp-run.sh <filter>
+# the whole list, as in the record:
+tools/cts/host-deqp-run.sh --cts=<VK-GL-CTS> --gpu=powervr --module=gles3 --jobs=6 --out=build/host-deqp/full-powervr
+```
+
+`<filter>` is a substring of the case name. The failing cases and their
+messages are in `<out>/failures.tsv` and `summary.txt`. The record's PowerVR
+column equals the board's for every API bucket it lists (for example 1,483,
+531, 522, 413, 270, 252, 181, 103 exact), so those rows are reproduced, not
+only argued. This run did not build `deqp-gles3` again; the commands are
+those of the record.
+
+### Failures (8,835)
+
+Owner: GL = `src/gl/**`, shaderc = `src/shaderc/**`, pvr, vivante, v3d =
+`src/<name>/**`. "Count" is exact unless it says otherwise. State is on the
+tree after `f2a13877`.
+
+| row | count | groups | evidence | host reproduction | owner | state / fixing commit |
+|---|---:|---|---|---|---|---|
+| RC1 integer and ES 3.0 colour targets | 2,374 = 1,483 + 531 + 270 + 26 (pbo) + 24 (read_pixels) + 40 (shaders.precision) | shaders.builtin_functions / builtin_variable, fragment_out, fbo, pbo.renderbuffer, read_pixels, shaders.precision | the first three: board buckets. The last three: host rows "glRenderbufferStorage: GL_INVALID_ENUM" 26 + 24 and "Post framebuffer setup: GL_INVALID_ENUM (es3fShaderPrecisionTests)" 40 on the PowerVR; the board's `pbo` 26 and `read_pixels` 24 equal them, the 40 is a host count inside shaders' unlisted buckets | yes: `... GPU=powervr tools/cts/host-deqp-run.sh functional.pbo.renderbuffer`, `.read_pixels`, `.shaders.precision` | GL, then pvr / vivante / v3d | GL `b9b2ac00`, pvr `fc658e64`: shaders 2,231 -> 412, read_pixels 24 -> 0 on `f2a13877`; vivante and v3d refuse by name |
+| RC2 sized texture formats | 736 | texture.specification | bucket "Runtime check failed: glGetError() == GL_NO_ERROR" (host 720 of 736) | yes: `... host-deqp-run.sh functional.texture.specification` | GL, pvr (sampling) | GL `888af5d0`, `e5c4a180`; pvr `25267d17`; vivante, v3d: none |
+| RC3 transform feedback | 419 = 413 + 6 | transform_feedback, negative_api.vertex_array.draw_*  | bucket `glTransformFeedbackVaryings(): GL_INVALID_VALUE`; the 6 from Appendix A | yes, exact: `... functional.transform_feedback` (host 882 / 882 pass after `c4dce9125`) | GL | API `16ac8641`, capture `896ca724`; capture is not on a board yet |
+| RC3b rasterizer discard | 51 | rasterizer_discard | rows above | yes: `... functional.rasterizer_discard` | GL | in `tf-api` |
+| RC4 empty compile info log | 48 | transform_feedback | host: PowerVR refuses 48 programs at compile time ("Compile failed", es3fTransformFeedbackTests.cpp:1043) | yes: `... functional.transform_feedback.random_full_array_capture` and `.interpolation` | shaderc | not found on main |
+| RC5 shadow look-ups | 432 | texture.shadow | 288 compile + 144 upload | yes (compile): `... functional.texture.shadow`; the picture needs the board | shaderc, GL | compiles on the PowerVR since `a27d69c0`; vivante and v3d still refuse (host refusal list) |
+| RC6 2D array textures | 210 | texture.*.2d_array | design `docs/es3-pvr-2darray.md` | picture: needs hardware (the PowerVR samples the array as one tall image) | pvr | none |
+| RC7 sRGB blending | 1,106 | fragment_ops.blend.fbo_srgb | rows above | picture: needs hardware | GL, pvr | `3c433ed2`; not on a board |
+| RC8 blit and multisample renderbuffers | 280 = 252 (fbo, bound) + 16 (multisample.fbo_max_samples) + 12 (rasterization.fbo) | fbo, multisample, rasterization | host rows "glBlitFramebuffer: GL_INVALID_OPERATION (es3fMultisampleTests)" 16 and "blit: GL_INVALID_OPERATION (es3fRasterizationTests)" 12; each equals a failing set on the board | yes (API): `... functional.fbo.blit`, `.multisample.fbo_max_samples`, `.rasterization.fbo` | GL, then every back end | colour blit `39b18f9b`; depth/stencil blit and MSAA storage: none |
+| RC9 fbo "Compile failed" | 181 | fbo.color / depth / render | host 181 on the PowerVR, same count | yes: `... functional.fbo.color`, `.fbo.render` | shaderc, pvr | partly RC1/RC2 |
+| RC10 state_query | 63 | state_query | Section RC10 | yes (API) | GL | 26 left on `f2a13877` |
+| RC11 occlusion queries | 62 | occlusion_query | host: "Occlusion query started: GL_INVALID_OPERATION" 62 | yes: `... functional.occlusion_query` | GL, back ends | `452d6c31`; on the board in the unrun tail of image 5 |
+| RC12 default_vertex_attrib | 16 | default_vertex_attrib | Appendix A | yes (picture needs hardware) | GL | `8b3e7039`: 16 -> 0 |
+| V1 packed attribute arrays in a buffer | 20 | vertex_arrays.single_attribute | Appendix A, exact | draw call verdict only | GL | none (task T2) |
+| V2 integer array narrower than its input | 21 | vertex_arrays.single_attribute.output_types | Appendix A, exact | as V1 | GL | none (task T3) |
+| V3 glBindAttribLocation over layout(location) | 28 | attribute_location.mixed, mixed_time | Appendix A, exact; host 48 fail with V4 | yes: `... functional.attribute_location.mixed` | GL | none (task T4) |
+| V4 mixed max attributes | 20 | attribute_location.mixed_max_attributes | Appendix A, exact | yes: `... functional.attribute_location.mixed_max` | GL, shaderc | none |
+| V5 instance divisor with gl_InstanceID | 6 | instanced.*.mixed | Appendix A, exact | no: needs the PowerVR PDS | pvr, vivante | none |
+| **unclassified** | **2,762** | texture 1,234; shaders 708; fbo 413; ubo 187; fragment_out 88; draw 50 (14 on `f2a13877`); uniform_api 27 (1 on `f2a13877`); negative_api 25; implementation_limits 16; rasterization 9; fragment_ops 5 | no bucket names a cause; the causes above are exhausted | the failing cases and messages are in the host run: `tools/cts/log/es3-host-run.md` (API messages), so a rerun with the filter of each group lists the names. Picture verdicts need a per-case board run | GL, shaderc, back ends | open |
+
+Check: 2,374 + 736 + 419 + 51 + 48 + 432 + 210 + 1,106 + 280 + 181 + 63 + 62
++ 16 + 20 + 21 + 28 + 20 + 6 = **6,073**; 6,073 + 2,762 = **8,835**. The
+unclassified column sums: 1,234 + 708 + 413 + 187 + 88 + 50 + 27 + 25 + 16 + 9
++ 5 = 2,762. Against the summary table above, 219 moved out of
+"unclassified": 95 from Appendix A (vertex_arrays 41, attribute_location 48,
+instanced 6), 6 negative_api (tf), 26 pbo, 24 read_pixels, 16 multisample, 12
+rasterization, 40 shaders.precision.
+
+What the host run adds to the unclassified row (named, not counted): "Texture
+upload failed: GL_INVALID_VALUE" 50 + 18 (texture.filtering, texture.format),
+texture.units 139 + 8 (image data GL_INVALID_OPERATION / _VALUE), "Got
+invalid error" 40 (negative_api all, state_query 14), vertex_arrays 20
+(`glDrawArrays: GL_INVALID_OPERATION`, V1). They are host-exact messages whose
+cause nobody has read yet.
+
+Changed on the host since `396d667a`: `buffer.map` (343) and `pbo` unmap (17)
+fail on the host with `glUnmapBuffer: GL_INVALID_ENUM` because of
+`GL_OES_mapbuffer` (a regression after the board run, fixed on main
+`03840710` according to the record); `GL_MAX_DRAW_BUFFERS` is 3 (was 1);
+"Texture upload failed: GL_INVALID_ENUM" 159 (depth formats) is 0 on the host.
+
+### NotSupported (2,636)
+
+Not failures. Exact per group (board group table, sum checked: 76 + 255 + 115
++ 48 + 4 + 6 + 12 + 14 + 9 + 1,658 + 421 + 18 = 2,636). The PowerVR host run
+has 2,618: equal group by group, except uniform_api 18 (0 on the host). Cause
+is read from the dEQP source in the pinned checkout
+(`modules/gles3/functional`), not from the case messages (not recorded).
+
+| row | count | group | cause (source) | host reproduction | owner | state |
+|---|---:|---|---|---|---|---|
+| NS-astc | 1,274 of texture's 1,658 | texture.compressed.astc 266, texture.wrap astc 1,008 | `isASTCSupported` false: `es3fTextureWrapTests.cpp:288` | yes: `... functional.texture.wrap.astc` | GL / back ends | legitimate: ES 3.0 does not require ASTC. Leave unless the GPUs decode it |
+| NS-texture-rest | 384 | texture | not attributed (not ASTC); names are in the host run | yes: `... functional.texture` and read the NotSupported statuses in the qpa | GL | open |
+| NS-tf | 421 (191 on `f2a13877`) | transform_feedback | "Implementation limits exceeded" (`es3fTransformFeedbackTests.cpp:1035`) while `MAX_TRANSFORM_FEEDBACK_*` was 0 | yes: `... functional.transform_feedback` | GL | `16ac8641` |
+| NS-fbo | 255 | fbo | "Format not supported", "Sample count not supported" (`es3fFboTestCase.cpp:278, :375`); MSAA is RC8 | yes: `... functional.fbo` | GL, back ends | with RC8, RC1 |
+| NS-fragout | 115 | fragment_out | "Unsupported attachment format", "Framebuffer not supported" (`es3fFragmentOutputTests.cpp:248, :290`) | yes: `... functional.fragment_out` | GL | integer targets and `GL_MAX_DRAW_BUFFERS` 4 |
+| NS-indexed | 76 | draw_buffers_indexed | `GL_EXT_draw_buffers_indexed` not claimed (`es3fDrawBuffersIndexedTests.cpp:1248`) | yes: `... functional.draw_buffers_indexed` | GL | legitimate: not ES 3.0 core |
+| NS-ms | 48 | multisample | "No multisample buffers" and "Test requires depth/stencil buffer" (`es3fMultisampleTests.cpp:440, :1072, :1138`): the runner's EGL config has no samples | partly: `... functional.multisample` | board config, GL | ES 2.0 ran them with an `rgba8888d24s8ms4` image (`tools/cts/am62p-ms4-tree.txt`) |
+| NS-uniform | 18 | uniform_api | "N texture units required, M supported" (`es3fUniformApiTests.cpp:1204-1210`) | no: 0 on the host, a board limit | pvr | open |
+| NS-shader_api, negative_api, state_query | 14 + 4 + 9 | shader_api, negative_api, state_query | reading only: program-binary entry points and their limits (17 mustpass names mention binary); not verified | yes: `... functional.shader_api` | GL | open |
+| NS-raster | 12 | rasterization | wide line / wide point support (`es3fRasterizationTests.cpp:575, :726, :2066`) | yes: `... functional.rasterization` | GL, back ends | legitimate while `ALIASED_LINE_WIDTH_RANGE` is 1 |
+| NS-pbo | 6 | pbo | "Renderbuffer format not supported" (`es3fPixelBufferObjectTests.cpp:200`) | yes: `... functional.pbo` | GL | with RC1 |
+
+### No result (56)
+
+All of `lifetime.*`. Its init links a program with transform feedback of
+`gl_Position` (`es3fLifetimeTests.cpp:97`) and dEQP ends the process when
+that link fails. The host reproduces it: on all three GPUs 56 never begin
+(record, "The chunks that stopped early"). Host command:
+`... host-deqp-run.sh functional.lifetime`. Owner: GL. State: the transform
+feedback API (`16ac8641`) lets the link pass; the record of `c4dce9125`
+reads `lifetime` 56 / 56 on the host. Not run on a board since.
+
+Sums for the three kinds: 8,835 failures (6,073 classified + 2,762
+unclassified), 2,636 NotSupported (all in the table above: 1,274 + 384 + 421
++ 255 + 115 + 76 + 48 + 18 + 27 + 12 + 6 = 2,636), 56 no result.
+
+## Ranked fix order
+
+Rank = cases a fix is expected to turn into a pass, per unit of work, with
+what is already built first. Counts are the `396d667a` ledger above.
+
+1. **Run what is built on the board** (AM62P first): sRGB RC7 1,106,
+   transform feedback RC3 / RC3b / RC4 and `lifetime` (419 + 51 + 48 + 56),
+   colour blit and occlusion queries RC11 62. They are on the host only
+   (`c4dce9125`, `452d6c31`). A whole-tree run that writes a **per-case
+   list** comes with it: the 2,762 unclassified cannot be split without one
+   (the per-case session of 2026-10-08 got no console output).
+2. **Integer targets and sized formats on the GC7000 and the V3D**
+   (RC1 2,374, RC2 736; i.MX8MP and Pi 4 have no GLES3 run, so the same rows
+   are predicted, not measured). The PowerVR has them: shaders 2,231 -> 412.
+3. **texture, the largest unclassified group** (1,234): read the host's
+   upload refusals (INVALID_VALUE 68, texture.units 147) and the
+   isampler / usampler look-ups; most will join RC2.
+4. **2D-array sampling on the PowerVR** (RC6 210) and the shadow board
+   verdict (RC5 432); `docs/es3-pvr-2darray.md`.
+5. **Depth / stencil blit and multisample storage** (RC8 280, NS-fbo 255,
+   NS-ms 48): GL core first, then each back end. `MAX_SAMPLES` is 1.
+6. **MRT, `GL_MAX_DRAW_BUFFERS` 4** (NS-fragout 115 and the 4-target seeds of
+   fragment_out.random): 3 today on every GPU.
+7. **Vertex GL-core fixes V1 to V5** (95): small, host-testable, no back end
+   change except V5. Order V3 / V4 (48), V1 / V2 (41), V5 (6).
+8. **The remaining unclassified rows** (ubo 187, fbo 413, shaders 708,
+   fragment_out 88, draw 50, uniform_api 27, negative_api 25,
+   implementation_limits 16, rasterization 9, fragment_ops 5): each needs a
+   named cause from the per-case list of rank 1.
+9. **Decide, do not fix**: ASTC 1,274 and `draw_buffers_indexed` 76 stay
+   NotSupported (not ES 3.0 core); wide lines (12) while the range is 1.
+
+Rank 1 comes before everything else because it costs no new code and also
+gives the data the other ranks need.
+
+Assumptions made in this ledger:
+
+* Host message counts (pbo 26, read_pixels 24, shaders.precision 40,
+  multisample 16, rasterization.fbo 12) are taken as the board's counts
+  because the board's group counts are equal (pbo, read_pixels, multisample)
+  or the message belongs to cases whose group failed on the board
+  (shaders.precision, rasterization.fbo). A different board count would move
+  cases between the RC rows and the unclassified row, not change the totals.
+* NotSupported causes come from reading the dEQP source, not from the
+  recorded status messages.
+* `docs/es3-backend-caps.md` is not on main, so the per-back-end limits are
+  not cited here.
 
