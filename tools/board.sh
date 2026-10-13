@@ -792,12 +792,22 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 
 # ---- tryboot (pi4) ----------------------------------------------------------------
 pi4_uart_free() {
-    local uart p f holders=
+    local uart p f holders= rc
     if uart_is_bridge; then
-        # no device on this host: the bridge answers a second client "busy",
-        # which the capture retries and refuses on
-        [ "$DRY" = 1 ] && echo "DRY host\$ (no local device: $BOARD_UART is a serial bridge; a 'busy' answer refuses at the capture)"
-        return 0
+        # no device on this host: the bridge must accept a connection and not
+        # answer "busy" (the capture retries "busy" later; this refuses early)
+        if [ "$DRY" = 1 ]; then
+            echo "DRY host\$ python3 tools/am62p_netboot_uart.py probe $BOARD_UART   # the bridge must accept and not be busy"
+            return 0
+        fi
+        python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" && return 0
+        rc=$?
+        case $rc in
+        3) die "BOARD_UART bridge refused or unreachable" ;;
+        4) die "BOARD_UART bridge is busy (another client holds it)" ;;
+        5) die "BOARD_UART bridge accepted and closed at once" ;;
+        *) die "BOARD_UART bridge probe failed (rc $rc)" ;;
+        esac
     fi
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ scan every /proc/<pid>/fd for $BOARD_UART (nobody may hold it)"
