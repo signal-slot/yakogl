@@ -446,8 +446,10 @@ The table as it stood at `396d667a`, with each item's state on main
   `docs/es3-board-recipe-pi4.md`).
 * The shaders group's failure map on `396d667a` is the record
   `tools/cts/log/investigations/es3-shaders-396d667a.md`.
-* Documents this file once expected, which were never written:
-  `docs/es3-rest-failure-map.md`,
+* The failure map of the other groups (all but shaders, texture, fbo,
+  fragment_ops and fragment_out) on `396d667a` is the record
+  `tools/cts/log/investigations/es3-rest-396d667a.md`.
+* A document this file once expected, which was never written:
   `docs/es3-texture-failure-map.md`. The host run is the record
   `tools/cts/log/es3-host-run.md`. The ES 3.0
   limits document `docs/es3-backend-caps.md` was reverted (`3f78982`).
