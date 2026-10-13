@@ -58,7 +58,12 @@ CI, a review, then the merge. Never push main by hand.
 
 When a change produces a result, update the docs in the same pull request:
 
-- `docs/HANDOFF.md` (state of main, open work, known defects),
+- a hand-over note `docs/handoff/<YYYYMMDD>-<topic>.md` saying what
+  `docs/HANDOFF.md` should say after the change (state of main, open work,
+  known defects; `docs/handoff/README.md` has the shape). Never edit
+  `docs/HANDOFF.md` in a result's pull request: every result did, and two
+  results in the same days always conflicted there. ccfarm's `handoff-fold`
+  stage folds the notes in after the merge,
 - `tools/cts/RESULTS.md` (the measurement log; cite the commit and record),
 - `tools/cts/STATUS.md` (the summary),
 - `README.md` status tables, where they apply.
