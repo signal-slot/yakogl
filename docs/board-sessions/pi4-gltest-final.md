@@ -2,70 +2,81 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # pi4-gltest-final: Pi 4 gl_test default list from the origin/main tip
 
-Date: 2026-10-13. **Result: not run. The image was built, but no case ran on
-the Pi 4, because the serial console address was not available to this
-session.** There is no pass/fail for any case and no `verdict=` line. Nothing
-below is a device result.
+Date: 2026-10-14. Image built from `origin/main` tip `a63fcc5b`
+(`a63fcc5b48c58849267dc3f3299c8514bdf861ba`, "Merge pull request #439 from
+signal-slot/work/stage-after-note"). The image reports `V3D_BUILD=a63fcc5b`,
+zephyr `af17c0c8aa2a`. It was built in the ccfarm workspace checkout, which
+was clean and at exactly this commit (a detached worktree was refused at the
+time). `board.sh` printed `build b1004e35` for itself because by then the
+workspace held this record's own commit on top of `a63fcc5b`; the image is
+the one built from `a63fcc5b` (sha256 `25548c99d50e4c2a...`, as printed).
 
-## Commit
+**Result: 12 of 12 default-list cases passed on the Pi 4 (V3D). 0 failed,
+0 timed out, 0 skipped.** 0 MMU faults, 0 GPU recoveries, 0 resets.
 
-`origin/main` tip `a63fcc5b` (`a63fcc5b48c58849267dc3f3299c8514bdf861ba`,
-"Merge pull request #439 from signal-slot/work/stage-after-note"). The image
-was built from the ccfarm workspace checkout, which was clean and at exactly
-this commit (the detached `git worktree add` was refused in this session, so
-the workspace was used instead).
+## Build
 
-## What ran
+```
+tools/cts/common-images.sh pi4 tools/cts/common-tree.txt build/gltest-final GT
+common-images: build a63fcc5b (a63fcc5b48c58849267dc3f3299c8514bdf861ba) board pi4
+GT rc=0 sha256=25548c99d50e4c2aacd3f77e01c987be3ea489affc6ee929ab176a3cad5f3d1c build=V3D_BUILD=a63fcc5b
+common-images: 0 row(s) not built
+```
 
-- Dependencies: `tools/cts/deps-env.sh --check rpi_4b` printed `ok` for every
-  entry (west workspace, SDK, PCO_SHC, glmark2, DEQP_WORK, ...).
-  `MESA_V3D_TREE` was not needed.
-- Build, row GT (the default case list of `v3d_gl_test`):
+## Verdict line printed by the device run
 
-  ```
-  tools/cts/common-images.sh pi4 tools/cts/common-tree.txt build/gltest-final GT
-  common-images: build a63fcc5b (a63fcc5b48c58849267dc3f3299c8514bdf861ba) board pi4
-  GT rc=0 sha256=25548c99d50e4c2aacd3f77e01c987be3ea489affc6ee929ab176a3cad5f3d1c build=V3D_BUILD=a63fcc5b
-  common-images: 0 row(s) not built
-  ```
+Run: `tools/board.sh pi4 tree tools/cts/common-tree.txt <outdir>` with
+`TREE_IMAGE_DIR=build/gltest-final`, `TREE_ROWS=4` (row GT), `BOARD_BOOT=tryboot`,
+the lease's ssh login and the serial bridge as the console. The verdict line,
+printed twice (once after the row, once in the tree's per-run list):
 
-  The image is `build/gltest-final/GT/zephyr/zephyr.bin` (gitignored).
-- The board answers over ssh with the lease's login (`uname -a`: aarch64
-  Linux, Raspberry Pi kernel).
+```
+board.sh pi4 GT rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:gl_test_record_end resets=0 record=absent back_after=261s
+```
 
-## Blocker
-
-`tools/board.sh pi4 tree` needs `BOARD_HOST` and `BOARD_UART` (the serial
-bridge `host:port`) in its environment. The lease carries only the ssh login.
-The bridge address was first refused (`ask_farm` not permitted), then
-obtained from `ask_farm` after the permission was granted. The run itself was
-then refused by the session's permission layer: every command that sets
-`BOARD_HOST`/`BOARD_UART` (an `env` prefix, or a wrapper script running
-`tools/board.sh pi4 tree` with `TREE_ROWS=4`, row GT) returned "requires
-approval" and nobody approved it, so `board.sh` never started and no board
-was rebooted. The earlier `tools/board.sh pi4 status` without `BOARD_HOST`
-stopped with `set BOARD_HOST=user@host of the board`.
-
-No image was run by hand.
+`record=absent`: the image prints no `yk-record:` line; the verdict comes from
+the console's own end line (`result=legacy:gl_test_record_end`).
 
 ## Per case
 
-| Case | Result |
-|---|---|
-| (all of the default list) | not run |
+Console line `v3d_gl_test: the list 5,58,59,66,67,102,3,9,11,12,13,4 (12 cases)
+on one context`, then:
+
+| Case | Name | Result |
+|---|---|---|
+| 5 | scissor | PASS |
+| 58 | clearscis | PASS |
+| 59 | clearmask | PASS |
+| 66 | clearvp | PASS |
+| 67 | fbods | PASS |
+| 102 | maskclear | PASS |
+| 3 | depth | PASS |
+| 9 | stencil | PASS |
+| 11 | persist | PASS |
+| 12 | stencil2 | PASS |
+| 13 | zls | PASS |
+| 4 | cull | PASS |
+
+Console summary lines:
+
+```
+gl_test: all: 0 of 12 cases failed (12 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 18
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+v3d_gl_test: 12 of 12 cases passed (2700 ms)
+```
 
 ## Failing cases
 
-None observed, because nothing ran. No console excerpt exists.
+None. The console printed `FIRST FAILURE: none (no timeout)`.
 
-## To finish
+## How the run went
 
-Run, from `origin/main` (or this image), with `BOARD_HOST` from the lease and
-`BOARD_UART` from the farm's notes:
-
-```
-tools/board.sh pi4 tree tools/cts/common-tree.txt <outdir>   # row GT, TREE_IMAGE_DIR=build/gltest-final
-```
-
-then replace this record with the printed `board.sh pi4 ... verdict=` lines
-and the per-case table.
+- Dependencies: `tools/cts/deps-env.sh --check rpi_4b` printed `ok` for every
+  entry; `MESA_V3D_TREE` was not needed.
+- An earlier attempt of this session did not run the board: the serial bridge
+  address was not yet known and the runner was refused by the session's
+  permission layer. After that was granted the run above was the first and
+  only run; the board returned to Linux by itself (`back_after=261s`).
+- The board's records stay under the gitignored `records/` of the workspace
+  (directory `records/pi4-gltest-final/20261014-0000-GT-25548c99`); they are
+  not committed.

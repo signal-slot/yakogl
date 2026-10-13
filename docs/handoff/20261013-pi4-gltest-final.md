@@ -1,16 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# pi4-gltest-final, 2026-10-13, a63fcc5b
+# pi4-gltest-final, 2026-10-14, a63fcc5b
 
 ## Open work
-- Pi 4 `gl_test` default list from `origin/main` is still not run. The
-  `v3d_gl_test` image builds at `a63fcc5b` (`rc=0`, sha256
-  `25548c99d50e4c2aacd3f77e01c987be3ea489affc6ee929ab176a3cad5f3d1c`), but the
-  board session stopped: `BOARD_UART` (the serial bridge) was not in the lease
-  and `ask_farm` was refused. See `docs/board-sessions/pi4-gltest-final.md`.
-
-## Next board session
-- Pi 4: give the session `BOARD_UART` (bridge `host:port`, see
-  `docs/board-sessions/pi4-console-probe.md`) and run row GT of
-  `tools/cts/common-tree.txt` with `tools/board.sh pi4`; then replace the
-  record with the verdict lines and the per-case results.
+- Pi 4 `gl_test` default list from `origin/main` `a63fcc5b`: done. 12 of 12
+  cases passed on the Pi 4 (V3D), 0 failed, 0 MMU faults, 0 recoveries
+  (`board.sh pi4 GT rc=0 verdict=done ... back_after=261s`). Record:
+  `docs/board-sessions/pi4-gltest-final.md`. Together with
+  `docs/board-sessions/pi4-es2-final-r2.md` (dEQP-GLES2 whole tree, 0 Fail)
+  the Pi 4 has no open stage-1 gap.
