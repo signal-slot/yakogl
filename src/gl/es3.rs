@@ -2845,6 +2845,7 @@ mod tests {
     ///
     /// Revert check: make `bind_uniform_buffer` record nothing and the
     /// queried binding stays 0.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_uniform_buffer_point_records_its_buffer_and_range() {
         use crate::gl::context::MAX_UNIFORM_BUFFER_BINDINGS;

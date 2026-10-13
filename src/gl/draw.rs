@@ -6593,6 +6593,7 @@ mod tests {
 
     /// (c) a D24S8 on both points is one object: stencil_id == depth_id;
     /// (d) specifying its storage again changes the generation, not the id.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn one_packed_depth_stencil_object_and_its_generation() {
         let gl = Gl::new(16, 16);

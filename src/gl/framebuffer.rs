@@ -299,6 +299,21 @@ fn is_fb_target(target: GLenum) -> bool {
     target == GL_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER || target == GL_READ_FRAMEBUFFER
 }
 
+/// The framebuffer targets a public entry point takes: only GL_FRAMEBUFFER
+/// (ES 2.0 4.4.1) in a `report-es2` build, the ES 3.0 three otherwise. The
+/// file's own re-entries pass GL_FRAMEBUFFER, and glInvalidateFramebuffer, an
+/// ES 3.0 entry point, keeps `is_fb_target`.
+fn is_public_fb_target(target: GLenum) -> bool {
+    is_fb_target(target) && (!crate::REPORT_ES2 || target == GL_FRAMEBUFFER)
+}
+
+/// `is_attachment_point` for a public entry point: GL_DEPTH_STENCIL_ATTACHMENT
+/// is ES 3.0 (OES_packed_depth_stencil attaches the packed renderbuffer to
+/// DEPTH and STENCIL separately), so a `report-es2` build refuses it.
+fn is_public_attachment_point(attachment: GLenum) -> bool {
+    is_attachment_point(attachment) && (!crate::REPORT_ES2 || attachment != GL_DEPTH_STENCIL_ATTACHMENT)
+}
+
 /// Set (name != 0) or clear an attachment point; GL_DEPTH_STENCIL_ATTACHMENT
 /// (ES 3.0, a packed depth/stencil renderbuffer) is both the depth and the
 /// stencil point.
@@ -1390,7 +1405,7 @@ pub unsafe extern "C" fn glIsFramebuffer(framebuffer: GLuint) -> GLboolean {
 pub unsafe extern "C" fn glBindFramebuffer(target: GLenum, framebuffer: GLuint) {
     gl_trace!(glBindFramebuffer);
     let Some(c) = context::current() else { return };
-    if !is_fb_target(target) {
+    if !is_public_fb_target(target) {
         c.set_error(GL_INVALID_ENUM, "glBindFramebuffer");
         return;
     }
@@ -1510,7 +1525,7 @@ pub unsafe extern "C" fn glFramebufferTexture2D(
     let Some(c) = context::current() else { return };
     let face = (GL_TEXTURE_CUBE_MAP_POSITIVE_X..=GL_TEXTURE_CUBE_MAP_NEGATIVE_Z).contains(&textarget);
 
-    if !is_fb_target(target) || (textarget != GL_TEXTURE_2D && !face) {
+    if !is_public_fb_target(target) || (textarget != GL_TEXTURE_2D && !face) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1521,7 +1536,7 @@ pub unsafe extern "C" fn glFramebufferTexture2D(
 
     let bound = c.bound_framebuffer;
 
-    if c.framebuffer_ref(bound).is_none() || !is_attachment_point(attachment) {
+    if c.framebuffer_ref(bound).is_none() || !is_public_attachment_point(attachment) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1590,7 +1605,7 @@ pub unsafe extern "C" fn glFramebufferTextureLayer(
     }
     gl_trace!(glFramebufferTextureLayer);
     let Some(c) = context::current() else { return };
-    if !is_fb_target(target) {
+    if !is_public_fb_target(target) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1601,7 +1616,7 @@ pub unsafe extern "C" fn glFramebufferTextureLayer(
 
     let bound = c.bound_framebuffer;
 
-    if c.framebuffer_ref(bound).is_none() || !is_attachment_point(attachment) {
+    if c.framebuffer_ref(bound).is_none() || !is_public_attachment_point(attachment) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1652,7 +1667,7 @@ pub unsafe extern "C" fn glFramebufferRenderbuffer(
     gl_trace!(glFramebufferRenderbuffer);
     const FN: &str = "glFramebufferRenderbuffer";
     let Some(c) = context::current() else { return };
-    if !is_fb_target(target) || renderbuffertarget != GL_RENDERBUFFER {
+    if !is_public_fb_target(target) || renderbuffertarget != GL_RENDERBUFFER {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1663,7 +1678,7 @@ pub unsafe extern "C" fn glFramebufferRenderbuffer(
 
     let bound = c.bound_framebuffer;
 
-    if c.framebuffer_ref(bound).is_none() || !is_attachment_point(attachment) {
+    if c.framebuffer_ref(bound).is_none() || !is_public_attachment_point(attachment) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1694,7 +1709,7 @@ pub unsafe extern "C" fn glCheckFramebufferStatus(target: GLenum) -> GLenum {
     gl_trace!(glCheckFramebufferStatus);
     let Some(c) = context::current() else { return 0 };
     /* ES 3.0: the draw and read targets name the one binding (see glBindFramebuffer) */
-    if !is_fb_target(target) {
+    if !is_public_fb_target(target) {
         c.set_error(GL_INVALID_ENUM, "glCheckFramebufferStatus");
         return 0;
     }
@@ -1931,7 +1946,7 @@ pub unsafe extern "C" fn glGetFramebufferAttachmentParameteriv(
     if params.is_null() {
         return;
     }
-    if !is_fb_target(target) {
+    if !is_public_fb_target(target) {
         c.set_error(GL_INVALID_ENUM, FN);
         return;
     }
@@ -1977,7 +1992,7 @@ pub unsafe extern "C" fn glGetFramebufferAttachmentParameteriv(
         GL_STENCIL_ATTACHMENT => fb.stencil,
         /* ES 3.0 6.1.13: the packed point is queryable when depth and
          * stencil name the same object */
-        GL_DEPTH_STENCIL_ATTACHMENT => {
+        GL_DEPTH_STENCIL_ATTACHMENT if es3 => {
             let (d, s) = (fb.depth, fb.stencil);
             if (d.type_, d.name, d.level, d.layer) != (s.type_, s.name, s.level, s.layer) {
                 c.set_error(GL_INVALID_OPERATION, FN);
@@ -2247,7 +2262,25 @@ fn is_renderable_format(f: GLenum) -> bool {
 /// `fbo.completeness.renderable.renderbuffer.depth.depth_component24` expects
 /// the refusal exactly then. ES 3.0 has the format in core.
 fn renderbuffer_format_advertised(f: GLenum) -> bool {
-    f != GL_DEPTH_COMPONENT24 || !crate::REPORT_ES2 || crate::gl::state::extension_listed("GL_OES_depth24")
+    if !crate::REPORT_ES2 {
+        return true;
+    }
+    let listed = crate::gl::state::extension_listed;
+    match f {
+        GL_DEPTH_COMPONENT24 => listed("GL_OES_depth24"),
+        /* ES 2.0 4.4.2 and the advertised OES/EXT renderbuffer formats */
+        GL_RGBA4 | GL_RGB5_A1 | GL_RGB565 | GL_DEPTH_COMPONENT16 | GL_STENCIL_INDEX8 => true,
+        GL_RGB8 | GL_RGBA8 => listed("GL_OES_rgb8_rgba8"),
+        GL_DEPTH24_STENCIL8 => listed("GL_OES_packed_depth_stencil"),
+        /* GL_EXT_texture_rg, GL_EXT_color_buffer_half_float (RG16F and R16F
+         * need both) and the BGRA8 name of GL_EXT_texture_format_BGRA8888 */
+        GL_R8 | GL_RG8 => listed("GL_EXT_texture_rg"),
+        GL_RGBA16F | GL_RGB16F => listed("GL_EXT_color_buffer_half_float"),
+        GL_RG16F | GL_R16F => listed("GL_EXT_color_buffer_half_float") && listed("GL_EXT_texture_rg"),
+        GL_BGRA8_EXT => listed("GL_EXT_texture_format_BGRA8888"),
+        /* anything else ES 3.0 names (R32F, DEPTH_COMPONENT32F, DEPTH32F_STENCIL8, the integer formats, ...) */
+        _ => false,
+    }
 }
 
 /// glRenderbufferStorage's argument rules (ES 3.0 4.4.2), shared with the
@@ -4118,6 +4151,7 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn bind_framebuffer_records_the_binding_for_every_target() {
         let gl = TestGl::new(8, 8);
@@ -4317,6 +4351,7 @@ mod tests {
         assert_eq!((f.stencil.type_, f.stencil.name), (GL_RENDERBUFFER, stencil));
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn framebuffer_renderbuffer_depth_stencil_point_sets_depth_and_stencil() {
         let gl = TestGl::new(8, 8);
@@ -4371,6 +4406,7 @@ mod tests {
         assert_eq!(gl.error(), GL_INVALID_ENUM);
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn status_accepts_the_es3_draw_and_read_targets() {
         let gl = TestGl::new(8, 8);
@@ -4890,6 +4926,7 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn attachment_query_depth_stencil_point() {
         let gl = TestGl::new(8, 8);
@@ -6517,6 +6554,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_float_renderbuffer_is_stored_in_its_own_surface() {
         /* GL_EXT_color_buffer_half_float names four sized formats; all four
@@ -6901,6 +6939,7 @@ mod tests {
     /// through GL_READ_FRAMEBUFFER, and glReadBuffer(GL_NONE) is recorded
     /// per framebuffer. dEQP-GLES3 state_query.integers.framebuffer_binding /
     /// read_buffer read one binding and a fixed read buffer until 2026-09-24.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn the_read_framebuffer_is_its_own_binding() {
         let gl = TestGl::new(8, 8);
@@ -7519,6 +7558,7 @@ mod tests {
     /// format. The unsized base formats belong to textures -- and a texture
     /// attachment reports GL_RGBA, so the colour-attachment predicate keeps
     /// it and this one does not.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn the_sized_bgra_name_is_taken_wherever_the_unsized_one_is() {
         /* GL_EXT_texture_format_BGRA8888 is in GL_EXTENSIONS, and dEQP's FBO

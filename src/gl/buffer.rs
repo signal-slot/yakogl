@@ -59,6 +59,8 @@ fn binding_for_target(c: &mut GlContext, target: GLenum) -> Option<&mut GLuint> 
     match target {
         GL_ARRAY_BUFFER => Some(&mut c.bound_array_buffer),
         GL_ELEMENT_ARRAY_BUFFER => Some(&mut c.bound_element_buffer),
+        /* ES 2.0 2.9 names only the two targets above */
+        _ if crate::REPORT_ES2 => None,
         GL_PIXEL_PACK_BUFFER => Some(&mut c.bound_pixel_pack_buffer),
         GL_PIXEL_UNPACK_BUFFER => Some(&mut c.bound_pixel_unpack_buffer),
         GL_COPY_READ_BUFFER => Some(&mut c.bound_copy_read_buffer),
@@ -236,6 +238,9 @@ unsafe fn name_at(p: *const GLuint, i: usize) -> GLuint {
 /// are recorded for the query and otherwise ignored: the store is always
 /// GPU-resident.
 fn is_buffer_usage(usage: GLenum) -> bool {
+    if crate::REPORT_ES2 {
+        return matches!(usage, GL_STREAM_DRAW | GL_STATIC_DRAW | GL_DYNAMIC_DRAW);
+    }
     matches!(
         usage,
         GL_STREAM_DRAW
@@ -620,6 +625,10 @@ pub(super) fn buffer_parameter(c: &mut GlContext, target: GLenum, pname: GLenum,
         GL_BUFFER_USAGE => (if b.usage != 0 { b.usage } else { GL_STATIC_DRAW }) as i64,
         /* ES 3.0 6.1.9: the mapping state */
         GL_BUFFER_MAPPED => !b.mapped.is_null() as i64,
+        GL_BUFFER_ACCESS_FLAGS | GL_BUFFER_MAP_OFFSET | GL_BUFFER_MAP_LENGTH if crate::REPORT_ES2 => {
+            c.set_error(GL_INVALID_ENUM, func);
+            return None;
+        }
         GL_BUFFER_ACCESS_FLAGS => b.map_access as i64,
         GL_BUFFER_MAP_OFFSET => b.map_off as i64,
         GL_BUFFER_MAP_LENGTH => b.map_len as i64,
@@ -1097,6 +1106,7 @@ mod tests {
 
     /* ---- the ES 3.0 binding points, copies and pixel buffers ----------------- */
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn every_es3_buffer_target_has_a_binding_point() {
         /* ES 3.0 has eight. Binding zero to GL_PIXEL_PACK_BUFFER, which a
@@ -1141,6 +1151,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn copy_buffer_sub_data_copies_between_two_buffers() {
         let gl = TestGl::new(8, 8);
@@ -1153,6 +1164,7 @@ mod tests {
         assert_eq!(contents(&gl, src), [1, 2, 3, 4, 5, 6, 7, 8], "the source is untouched");
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn copy_buffer_sub_data_refuses_what_the_spec_refuses() {
         let gl = TestGl::new(8, 8);
@@ -1195,6 +1207,7 @@ mod tests {
         assert_eq!(gl.ctx().objs().buffers[h as usize].mapped, core::ptr::null_mut());
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_pixel_transfer_takes_its_pointer_as_an_offset_into_a_bound_buffer() {
         let gl = TestGl::new(8, 8);
@@ -1217,6 +1230,7 @@ mod tests {
         assert_eq!(pixel_buffer_resolve(gl.ctx(), true, p, 8, "test"), Some(p), "no buffer: a client address");
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_mapped_buffer_is_not_a_pixel_transfer_source() {
         let gl = TestGl::new(8, 8);
@@ -1587,6 +1601,7 @@ mod tests {
         assert_eq!(param(GL_ARRAY_BUFFER, GL_BUFFER_USAGE), GL_STATIC_DRAW as GLint);
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn buffer_data_accepts_the_es3_usages() {
         let gl = TestGl::new(8, 8);
@@ -1895,6 +1910,7 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn get_buffer_parameter_reports_the_mapping() {
         let gl = TestGl::new(8, 8);
@@ -3022,6 +3038,7 @@ mod tests {
     ///
     /// Revert check: drop `detach_from_pending_kick` from
     /// glCopyBufferSubData and the old pages read the copied bytes.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_copy_into_a_buffer_a_kick_reads_copies_on_write() {
         let gl = TestGl::new(8, 8);
@@ -3051,6 +3068,7 @@ mod tests {
 
     /// Without a CPU view of GPU memory the copy goes through the OSAL. It
     /// copied nothing and reported nothing.
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn a_copy_without_a_cpu_view_goes_through_the_osal() {
         let gl = TestGl::new(8, 8);
