@@ -132,6 +132,38 @@ struct Case {
     fragment: Vec<String>,
 }
 
+/// gluShaderLibrary's `removeExtraIndentation`: the indentation of the source's
+/// first line (a tab counts 4) is taken off every line, after the escapes are
+/// resolved. It matters for a line continuation: `#def\` / `    ine` is the
+/// directive `#define` only once the second line's indentation is gone
+/// (dEQP `preprocessor.line_continuation`).
+fn remove_extra_indentation(src: &str) -> String {
+    let is_ws = |c: char| matches!(c, ' ' | '\t' | '\n' | '\r');
+    let width = |c: char| if c == '\t' { 4 } else { 1 };
+    let indent: usize = src.chars().take_while(|&c| is_ws(c)).map(width).sum();
+    let mut out = String::with_capacity(src.len());
+    let (mut at_start, mut omitted) = (true, 0usize);
+    let mut it = src.chars().peekable();
+    while let Some(c) = it.next() {
+        if at_start && omitted < indent && (c == ' ' || c == '\t') {
+            omitted += width(c);
+        } else if c == '\n' || c == '\r' {
+            if c == '\r' && it.peek() == Some(&'\n') {
+                it.next();
+                out.push('\n');
+            } else {
+                out.push(c);
+            }
+            at_start = true;
+            omitted = 0;
+        } else {
+            out.push(c);
+            at_start = false;
+        }
+    }
+    out
+}
+
 /// Cursor over a .test file (gluShaderLibrary's tokenizer: words, `"..."`
 /// strings, `""..""` shader sources, `#` comments to the end of the line).
 struct Cursor<'a> {
@@ -180,7 +212,7 @@ impl<'a> Cursor<'a> {
                 }
             }
             self.p += 2;
-            return Some(String::from_utf8_lossy(&out).into_owned());
+            return Some(remove_extra_indentation(&String::from_utf8_lossy(&out)));
         }
         if b[self.p] == b'"' {
             let start = self.p + 1;
