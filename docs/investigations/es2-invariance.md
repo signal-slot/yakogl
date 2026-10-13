@@ -245,3 +245,18 @@ item).
 - The next AM62P tree from origin/main is expected to show the 9 cases passing, as image 1 on `e17fb6a7`
   did. The i.MX8MP and the Pi 4 are unaffected: neither back end ever computed the pairs differently.
 - Open outside this item: a `--test es2_invariance` row for the V3D configurations of `tools/check.sh`.
+
+## 7. Re-check at main `c3f4820` (2026-10-13) [measured]
+
+The item was run again on main `c3f4820` (its earlier result, ccfarm `01a11d80`, conflicted with main). Nothing in
+`powervr/prepare.rs`, `powervr/chain.rs` or `tests/es2_invariance.rs` changed after `9390731`, and the line
+references in sections 3 and 4 still hold (`fusion_pairs` :1101, `once(v, read)` :1196/:1199, `mark_exact`
+:1039 called at :1147, the `EXACT` skip at :1266, `chain.rs` :84-86 and :468-470).
+
+- The three configurations of section 5 run 12 passed each (36 / 36).
+- The deliberate break was repeated: the call at `prepare.rs:1147` was replaced by `let _ = (&invariant, &seen);`,
+  the PowerVR configuration ran, and the call was restored (`git status` clean, 12 passed again). The result
+  was the same as in section 5: `common_subexpression_0` passed at the three precisions, the 9 cases of
+  `common_subexpression_{1,2,3}` FAILED, and `mediump_common_subexpression_1` reported "of 4096 vertices,
+  4096 get a different gl_Position with fmad rounded once, 0 with fmad rounded as a product then a sum".
+- `tools/check.sh` still has no `--test es2_invariance` line for the V3D configurations.
