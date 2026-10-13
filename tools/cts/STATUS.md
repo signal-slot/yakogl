@@ -20,7 +20,8 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 - **AM62P: dEQP-GLES3 の全ツリー（28 画像、f2a13877）。** 必須 42,810 件のうち **32,669 合格 / 失敗 5,549 / 未対応 2,318 / 品質警告 185 / 結果なし 2,089**（10/10 の c4ccc966 は 30,431 / 7,011 / 2,274 / 5 / 3,088）。失敗のグループ別: shaders 412（1,603 から）、texture 1,752（未対応 1,646）、fragment_ops 1,109、fbo 872、transform_feedback 640（未対応 191）、fragment_out 595、attribute_location 48、vertex_arrays 41、state_query 26、rasterization 21、draw 14、implementation_limits 11、instanced 6、lifetime 1、uniform_api 1。buffer 0 と read_pixels 0（300 と 24 から）。結果なしの内訳: 画像 5 の末尾 558（lifetime のあと、transform feedback の取り込み未実装で dEQP が打ち切り）、画像 7 の末尾 1,397（builtin_functions.precision.clamp の描画が GENERAL アリーナ 1 MiB に入らず ResourceError）、画像 20 と 21 の末尾 83、**Lost 51**（画像 25、transform_feedback.basic_types。ボードは走らせたので失敗にも NoResult にも数えない。イメージのカウンタでは失敗 35 / 未対応 16）。
   - **GPU がハングする 2 ケース: `texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear`（画像 20）と `texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear`（画像 21）。** どちらも 13 ケースのあと 14 ケース目で止まり、ボードは RTI のリセットでしか戻らない（ランナーの判定は 602 s / 612 s で no_reset。RUN_BOUND=720 RETURN_BOUND=240 ならそれより長く待つ）。画像 11 は 4 回のリセットつきで最後まで走る（done_with_resets、2 回とも）。
   - 次の足場: 保留中の着地（work/land9: transform feedback の取り込み、glBlitFramebuffer の色、バッファのマップと PBO、PowerVR の sRGB）はホストだけで、ここに載せた数字は何も含まない。
-- **i.MX8MP: gl_test の 44 番（es3hdr、#6）は f2a13877 でも失敗。** check 3 が 0x40042814 で、期待は 0x40043904。(5,0) の色が 8 画素幅のリニアな RGBA16F ターゲットの (7,0) に書かれている（64 ビット画素のピクセルエンジン側の置き方で、サンプラではない）。調べる gl_test 44 の GC7000 側の探りは保留中の着地にあり、ボードではまだ走らせていない（records/imx8mp/gc44-f2a13877）。
+- **i.MX8MP: gl_test の 44 番（es3hdr、#6）は f2a13877 でも cd738b1a でも失敗。** check 3 が 0x40042814 で、期待は 0x40043904。(5,0) の色が 8 画素幅のリニアな RGBA16F ターゲットの (7,0) に書かれている（64 ビット画素のピクセルエンジン側の置き方で、サンプラではない）。調べる gl_test 44 の GC7000 側の探りは保留中の着地にあり、ボードではまだ走らせていない（records/imx8mp/gc44-f2a13877）。
+- **i.MX8MP: 共通セット（cd738b1a、2026-10-14、U-Boot 起動、records/imx8mp/common-cd738b1a）。** glmark2 は 43（33 シーン、失敗 0）、SO / SV / CL のプローブは合格、GT は 49 件中 48 件が合格（16 番は飛ばし、44 番が失敗、#6）。全行でリセット 0。
 
 ## 10/10 のボード実測（main 32778b57、nuc、tools/board.sh、uboot-mmc。記録は RESULTS.md の 2026-10-10 の各節）
 
@@ -41,7 +42,7 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 
 - **AM62P、dEQP-GLES2**: `texture.vertex.2d` の 45 件（画像 9）はホストで修正済み（a6fc6f14、インデックスを分割して描く）、ボード確認待ち。ms4 の `multisample.constancy_alpha_to_coverage` と `constancy_both_inverted` の 2 件は、フレームの PDS プログラムを共有する修正がホストにある（HANDOFF「State of main」）、ボード確認待ち。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
 - **AM62P、dEQP-GLES3**: 画像 20 と 21 の 3D テクスチャの 2 ケースで GPU がハングする。画像 7 は GENERAL アリーナ 1 MiB に入らない描画で打ち切り（ResourceError）。画像 5 は transform feedback の取り込みが未実装で打ち切り（保留中の着地はホストだけ）。
-- **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
+- **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも cd738b1a でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
 - **Pi 4**: dEQP-GLES2 の失敗は 0。GLES3 は未実行。
 - **キャプチャの欠落（Pi 4、AM62P とも）**: シリアルブリッジが行を落とす。集計は Lost、ランナーは done_lossy と読む。直すのはブリッジのファームウェア。
 
