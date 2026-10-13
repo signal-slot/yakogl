@@ -17285,3 +17285,18 @@ Record `tools/cts/log/board-sessions/imx8mp-gc7000-table-20261012.md`, section g
 Not plain `origin/main` builds: the port was not yet on main. The record words show the sample ran to
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
+
+## i.MX8MP: common set on `cd738b1a` (2026-10-14)
+
+Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not built), run from U-Boot
+(`BOARD_BOOT=uboot-mmc`), one boot per row. Run dir `records/imx8mp/common-cd738b1a/`.
+
+| row | verdict | record | note |
+|---|---|---|---|
+| GM | done | `594b120e fc3f002b 6184003f 0f258320` | glmark2 score 43, 33 scenes ran, 0 failed, 0 unsupported; GL errors raised 15 or more; back after 403 s |
+| SO | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592 |
+| SV | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592 |
+| CL | done | `594b0601 10c410c4 1905f7bf b1076d5f` | probes pass, crc16 b107 |
+| GT | failed | `594b010e 002c0107 ffff0030 00100031` | 48 of 49 run passed, 1 skipped (case 16), case 44 fails (#6) |
+
+`resets=absent` on every row. The only failure is the known gl_test case 44 (RGBA16F target, #6).
