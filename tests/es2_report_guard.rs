@@ -579,15 +579,19 @@ fn es3_only_renderbuffer_formats_are_invalid_enum() {
     }
 }
 
-/// GL_BGRA8_EXT as renderbuffer storage is still accepted: the extension
-/// GL_EXT_texture_format_BGRA8888 is advertised (es2-error-rules row 36).
+/// GL_BGRA8_EXT as renderbuffer storage is still accepted under report-es2,
+/// kept on purpose (es2-error-rules row 36): ES 2.0 4.4.3 lists no such
+/// renderbuffer format, so the ES 2.0 answer is GL_INVALID_ENUM. Pinned at
+/// today's answer, so a change to it is seen.
 #[test]
-#[ignore = "BUG: GL_BGRA8_EXT renderbuffer storage is taken under report-es2 (kept on purpose, es2-error-rules row 36); ES 2.0 4.4.3 says GL_INVALID_ENUM"]
-fn the_bgra8_renderbuffer_is_invalid_enum() {
+fn the_bgra8_renderbuffer_is_accepted_for_now() {
     let _g = context();
-    for (n, f) in named![GL_BGRA8_EXT] {
-        assert_eq!(name_of(renderbuffer_storage(f)), name_of(GL_INVALID_ENUM), "glRenderbufferStorage({n})");
-    }
+    assert_eq!(
+        name_of(renderbuffer_storage(GL_BGRA8_EXT)),
+        name_of(GL_NO_ERROR),
+        "glRenderbufferStorage(GL_BGRA8_EXT): today accepted (es2-error-rules row 36, kept on purpose); \
+         ES 2.0 4.4.3 wants GL_INVALID_ENUM: waits for the owner's decision on row 36"
+    );
 }
 
 /// ES 2.0 3.7.1: glTexImage2D takes the unsized internal formats of table
