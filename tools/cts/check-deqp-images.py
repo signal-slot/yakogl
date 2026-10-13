@@ -282,7 +282,7 @@ def check_repo():
 
     # 6. the dEQP-GLES3 tables select every case of gles3-mustpass.txt exactly
     # once (check-gles3-tree.py, as a process: under -I a sibling import fails)
-    for tname in ('am62p-gles3-tree.txt', 'pi4-gles3-tree.txt'):
+    for tname in ('am62p-gles3-tree.txt', 'pi4-gles3-tree.txt', 'imx8mp-gles3-tree.txt'):
         r = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'check-gles3-tree.py'), os.path.join(HERE, tname)],
                            capture_output=True, text=True)
         verdict = [l for l in r.stdout.splitlines() if l.startswith('check-gles3-tree: ')]
