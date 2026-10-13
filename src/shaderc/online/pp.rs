@@ -804,18 +804,30 @@ impl<'a> Pp<'_, 'a> {
             return Err(Error::new(t.line, t.text, "macro expansion nested too deeply"));
         }
         let mut i = 0usize;
-        while i < toks.len() {
-            let t = toks[i];
-            if t.kind != Tok::Ident {
-                out.push(self.a, t)?;
-                i += 1;
-                continue;
-            }
-            if let Some(v) = self.predefined_value(&t) {
-                out.push(self.a, v)?;
-                i += 1;
-                continue;
-            }
+        /* A function-like macro name that an expansion ended on, when the
+         * source token after that expansion (at `i`) is `(`: C99 6.10.3.4
+         * rescans the replacement list together with the rest of the source,
+         * so the name is invoked with those tokens (`#define G F`, `G(2)`).
+         * The macro just expanded is no longer disabled by then. */
+        let mut carried: Option<Token<'a>> = None;
+        while carried.is_some() || i < toks.len() {
+            let (t, lparen) = match carried.take() {
+                Some(t) => (t, i),
+                None => {
+                    let t = toks[i];
+                    if t.kind != Tok::Ident {
+                        out.push(self.a, t)?;
+                        i += 1;
+                        continue;
+                    }
+                    if let Some(v) = self.predefined_value(&t) {
+                        out.push(self.a, v)?;
+                        i += 1;
+                        continue;
+                    }
+                    (t, i + 1)
+                }
+            };
             let Some(mac) = self.find_macro(t.text) else {
                 out.push(self.a, t)?;
                 i += 1;
@@ -826,6 +838,7 @@ impl<'a> Pp<'_, 'a> {
                  * fixed point (dEQP recursion.recursion_1..5). */
                 return Err(Error::new(t.line, t.text, "recursive macro definition"));
             }
+            let start = out.len();
             if !mac.function_like {
                 self.active_macros.push(self.a, mac.name)?;
                 let outer = self.invocation_line;
@@ -835,16 +848,17 @@ impl<'a> Pp<'_, 'a> {
                 self.active_macros.pop();
                 r?;
                 i += 1;
+                carried = self.tail_name(toks, i, out, start);
                 continue;
             }
             /* A function-like macro name not followed by '(' is an ordinary
              * identifier (section 3.4), not an error. */
-            if !toks.get(i + 1).is_some_and(|t| t.kind == Tok::LParen) {
+            if !toks.get(lparen).is_some_and(|t| t.kind == Tok::LParen) {
                 out.push(self.a, t)?;
                 i += 1;
                 continue;
             }
-            let (args, next) = self.collect_args(&t, toks, i + 1)?;
+            let (args, next) = self.collect_args(&t, toks, lparen)?;
             if args.len() != mac.params.len() {
                 return Err(Error::new(t.line, t.text, "wrong number of arguments to a macro"));
             }
@@ -858,8 +872,35 @@ impl<'a> Pp<'_, 'a> {
             self.active_macros.pop();
             r?;
             i = next;
+            carried = self.tail_name(toks, i, out, start);
         }
         Ok(())
+    }
+
+    /// If the expansion that began at `out[start]` ended on the name of a
+    /// function-like macro, and `toks[next]` is `(`, take that name back out
+    /// of `out` so the caller invokes it with the following source tokens.
+    /// Only a name this expansion produced counts: an expansion of no tokens
+    /// leaves what came before it alone (`F E (2)` with an empty `E`).
+    fn tail_name(
+        &self,
+        toks: &[Token<'a>],
+        next: usize,
+        out: &mut AVec<'a, Token<'a>>,
+        start: usize,
+    ) -> Option<Token<'a>> {
+        if out.len() <= start || !toks.get(next).is_some_and(|t| t.kind == Tok::LParen) {
+            return None;
+        }
+        let last = *out.as_slice().last()?;
+        if last.kind != Tok::Ident || self.active_macros.as_slice().contains(&last.text) {
+            return None;
+        }
+        if !self.find_macro(last.text).is_some_and(|m| m.function_like) {
+            return None;
+        }
+        out.pop();
+        Some(last)
     }
 
     /// `__LINE__`, `__FILE__`, `__VERSION__`, `GL_ES` and
