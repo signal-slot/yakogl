@@ -17285,3 +17285,21 @@ Record `tools/cts/log/board-sessions/imx8mp-gc7000-table-20261012.md`, section g
 Not plain `origin/main` builds: the port was not yet on main. The record words show the sample ran to
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
+
+## i.MX8MP: the five common rows on `ef00b291` (2026-10-14)
+
+`tools/cts/cts-common.sh imx8mp build` then `run`, `BOARD_BOOT=uboot-mmc`, images from origin/main
+`ef00b291` (`build/common/imx8mp-ef00b291`, 0 rows not built). Records
+`records/imx8mp/common-ef00b291/` (SNVS records, no console).
+
+| row | verdict | record |
+|---|---|---|
+| GM glmark2 | done | score 43, 33 scenes ran, 0 failed, 0 unsupported, 800x600 on-screen |
+| SO slint | done | `PROBES` pass, crc16 `c592` |
+| SV slint-view | done | `PROBES` pass, crc16 `c592` |
+| CL cluster | done | `PROBES` pass, crc16 `b107` |
+| GT gl_test | failed (rc=4) | `CASE` seq 14: 48 of 49 run pass; case 16 skipped (#8); case 44 fails (#6) |
+
+GM, SO, SV and CL pass. GT's only failure is case 44, the known RGBA16F layout defect (#6),
+unchanged from `f2a13877`. The run count is 49 against the 48 of the earlier record because
+`ef00b291` has one more case; the failing and skipped cases are the same.
