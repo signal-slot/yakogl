@@ -15,8 +15,8 @@
  * reflection of its original field by field (src/shaderc/es100_twins.rs),
  * and either set must read back the same pixels from the same case.
  *
- * 24 cases have no ES 1.00 form, because their GLSL is "#version 300 es":
- * 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199, 200, 201.
+ * 25 cases have no ES 1.00 form, because their GLSL is "#version 300 es":
+ * 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 55, 57, 89, 98, 100, 104, 106, 114, 141, 163, 199, 200, 201, 206.
  * GL_TEST_SHADERS_SKIP_REASON names them, so they are skipped with a reason
  * printed rather than failing at the version line or passing silently. */
 
@@ -24,7 +24,7 @@
 
 /* Non-NULL for a case this set cannot serve; the string is the reason. */
 #define GL_TEST_SHADERS_SKIP_REASON(c) \
-	((c) == 41 || (c) == 42 || (c) == 43 || (c) == 44 || (c) == 45 || (c) == 46 || (c) == 47 || (c) == 48 || (c) == 49 || (c) == 51 || (c) == 52 || (c) == 55 || (c) == 57 || (c) == 89 || (c) == 98 || (c) == 100 || (c) == 104 || (c) == 106 || (c) == 114 || (c) == 141 || (c) == 163 || (c) == 199 || (c) == 200 || (c) == 201 \
+	((c) == 41 || (c) == 42 || (c) == 43 || (c) == 44 || (c) == 45 || (c) == 46 || (c) == 47 || (c) == 48 || (c) == 49 || (c) == 51 || (c) == 52 || (c) == 55 || (c) == 57 || (c) == 89 || (c) == 98 || (c) == 100 || (c) == 104 || (c) == 106 || (c) == 114 || (c) == 141 || (c) == 163 || (c) == 199 || (c) == 200 || (c) == 201 || (c) == 206 \
 	 ? "ES 3.00 source, outside the ES 2.0 compiler" : (const char *)0)
 
 static const char gl_test_vs_src[] =
