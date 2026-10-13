@@ -1336,12 +1336,210 @@ fn attribs_unfit(log: &mut [u8; INFO_LOG_SIZE], detail: core::fmt::Arguments<'_>
     glog!("yakogl: {}", Bytes(log_text(log)));
 }
 
+/// The vertex inputs a vertex shader gives `layout(location = N)`, by name.
+///
+/// ES 3.0 section 2.12.3 and GLSL ES 3.00 section 4.3.8.1: such a location
+/// wins over glBindAttribLocation, which is ignored for that name. The
+/// compiler's reflection does not say whether a location was written or
+/// counted on from the previous input, so the link reads the qualifier from
+/// the source itself.
+struct ExplicitAttribs {
+    count: usize,
+    name: [[c_char; 32]; SHC_MAX_DECLARED_ATTRIBS],
+    location: [u8; SHC_MAX_DECLARED_ATTRIBS],
+}
+
+impl ExplicitAttribs {
+    const NONE: ExplicitAttribs = ExplicitAttribs {
+        count: 0,
+        name: [[0; 32]; SHC_MAX_DECLARED_ATTRIBS],
+        location: [0; SHC_MAX_DECLARED_ATTRIBS],
+    };
+
+    fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    /// The qualifier's location for the input `name`, if it has one.
+    fn get(&self, name: &[u8]) -> Option<u8> {
+        (0..self.count).find(|&i| util::name_bytes(&self.name[i]) == name).map(|i| self.location[i])
+    }
+
+    fn push(&mut self, name: &[u8], location: u32) {
+        if self.count < self.name.len() && name.len() < 32 && location <= u8::MAX as u32 {
+            util::set_name(&mut self.name[self.count], name);
+            self.location[self.count] = location as u8;
+            self.count += 1;
+        }
+    }
+
+    /// Read `layout(location = N) in <type> name` declarations out of a
+    /// vertex shader's NUL-terminated source. Comments and preprocessor
+    /// lines are skipped; a location written through a macro is not seen
+    /// (the input then counts as unqualified). ES 2.0 has no layout
+    /// qualifier, so nothing is read there and its answers cannot change.
+    fn scan(src: *const c_char) -> ExplicitAttribs {
+        let mut out = ExplicitAttribs::NONE;
+        if crate::REPORT_ES2 || src.is_null() {
+            return out;
+        }
+        // SAFETY: the shader object's NUL-terminated copy of its source.
+        let text = unsafe { util::cstr_bytes(src) };
+        /* the rule is GLSL ES 3.00's: a `#version 450` source (the test
+         * suite's SPIR-V-style fixtures) is not read */
+        if !is_glsl_es300(text) {
+            return out;
+        }
+        let mut toks = AttribTokens { text, pos: 0 };
+        while let Some(t) = toks.next() {
+            if t != b"layout" || toks.next() != Some(&b"("[..]) {
+                continue;
+            }
+            let mut location = None;
+            let mut depth = 1;
+            while let Some(t) = toks.next() {
+                match t {
+                    b"(" => depth += 1,
+                    b")" => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    b"location" if toks.next() == Some(&b"="[..]) => {
+                        location = toks.next().and_then(parse_decimal);
+                    }
+                    _ => {}
+                }
+            }
+            /* the rest of the declaration: it is an input when `in` comes
+             * before the type, and the first identifier after the type is
+             * the name */
+            let (mut is_in, mut seen_type) = (false, false);
+            while let Some(t) = toks.next() {
+                match t {
+                    b";" | b"{" | b"=" | b"out" | b"uniform" => break,
+                    b"in" => is_in = true,
+                    b"flat" | b"smooth" | b"centroid" | b"highp" | b"mediump" | b"lowp" | b"invariant" => {}
+                    id if is_ident(id) => {
+                        if seen_type {
+                            if let (true, Some(l)) = (is_in, location) {
+                                out.push(id, l);
+                            }
+                            break;
+                        }
+                        seen_type = true;
+                    }
+                    _ => break,
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Tokens of GLSL source for [`ExplicitAttribs::scan`]: identifiers and
+/// numbers whole, any other byte alone, no whitespace, comments or `#` lines.
+struct AttribTokens<'a> {
+    text: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> AttribTokens<'a> {
+    fn next(&mut self) -> Option<&'a [u8]> {
+        let t = self.text;
+        loop {
+            let c = *t.get(self.pos)?;
+            if c.is_ascii_whitespace() {
+                self.pos += 1;
+            } else if c == b'/' && t.get(self.pos + 1) == Some(&b'/') {
+                while t.get(self.pos).is_some_and(|&b| b != b'\n') {
+                    self.pos += 1;
+                }
+            } else if c == b'/' && t.get(self.pos + 1) == Some(&b'*') {
+                self.pos += 2;
+                while self.pos < t.len() && !(t[self.pos] == b'*' && t.get(self.pos + 1) == Some(&b'/')) {
+                    self.pos += 1;
+                }
+                self.pos = (self.pos + 2).min(t.len());
+            } else if c == b'#' {
+                /* a directive runs to its line's end, a backslash continuing it */
+                while let Some(&b) = t.get(self.pos) {
+                    if b == b'\n' && (self.pos == 0 || t[self.pos - 1] != b'\\') {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+            } else {
+                break;
+            }
+        }
+        let start = self.pos;
+        let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        if word(t[start]) {
+            while t.get(self.pos).is_some_and(|&b| word(b)) {
+                self.pos += 1;
+            }
+        } else {
+            self.pos += 1;
+        }
+        Some(&t[start..self.pos])
+    }
+}
+
+/// Whether the source's `#version` line says `300 es`.
+fn is_glsl_es300(text: &[u8]) -> bool {
+    /* the tokenizer skips directives, so find the line by hand */
+    let Some(at) = text.windows(8).position(|w| w == b"#version") else {
+        return false;
+    };
+    let line = text[at + 8..].split(|&b| b == b'\n').next().unwrap_or(&[]);
+    let mut toks = AttribTokens { text: line, pos: 0 };
+    matches!((toks.next(), toks.next()), (Some(b"300"), Some(b"es")))
+}
+
+fn is_ident(t: &[u8]) -> bool {
+    t.first().is_some_and(|&b| b.is_ascii_alphabetic() || b == b'_')
+}
+
+fn parse_decimal(t: &[u8]) -> Option<u32> {
+    let t = t.strip_suffix(b"u").unwrap_or(t);
+    if t.is_empty() || !t.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    t.iter().try_fold(0u32, |a, &d| a.checked_mul(10)?.checked_add((d - b'0') as u32))
+}
+
+/// Whether `map` puts an active attribute somewhere other than the compile's
+/// reflection rows do, and every active attribute has a row to compare with.
+///
+/// The record keeps one row per location, so two inputs the compile placed on
+/// one location (an unqualified input counted onto a qualified one's
+/// location; reflect.rs) have one row between them. The map built from the
+/// rows then lacks the other, and compiling again with it would be refused;
+/// that shader keeps the placement the compile decided.
+fn layout_differs(p: &GlProgram, map: &ShcAttribMap) -> bool {
+    let n = (p.rvs.num_attribs as usize).min(p.rvs.attribs.len());
+    let base = |d: &ShcAttribBinding| {
+        let name = util::name_bytes(&d.name);
+        p.rvs.attribs[..n].iter().filter(|a| util::name_bytes(&a.name) == name).map(|a| a.location).min()
+    };
+    let mut active = map.b[..map.count as usize].iter().filter(|d| attrib_is_active(d));
+    active.clone().all(|d| base(d).is_some()) && active.any(|d| base(d).is_some_and(|b| b != d.location))
+}
+
 /// Every attribute the vertex shader `vs` declares, with the location the link
 /// gives it (`ShcAttribMap`), and whether two of them alias. A bound attribute
-/// takes glBindAttribLocation's index (a matrix its columns from there); an
+/// takes glBindAttribLocation's index (a matrix its columns from there), unless
+/// the shader gives it `layout(location = N)`: that wins (`explicit`); an
 /// unbound one the lowest run of free locations, in declaration order. Err
 /// (with a log line) when an unbound attribute finds no room.
-fn attrib_layout(p: &GlProgram, vs: &ShcShader, log: &mut [u8; INFO_LOG_SIZE]) -> Result<(ShcAttribMap, bool), ()> {
+fn attrib_layout(
+    p: &GlProgram,
+    vs: &ShcShader,
+    explicit: &ExplicitAttribs,
+    log: &mut [u8; INFO_LOG_SIZE],
+) -> Result<(ShcAttribMap, bool), ()> {
     let mut map = ShcAttribMap::ZERO;
     /* the declared attributes: the compile's own list when it left the
      * layout to the link, else its rows (a matrix is one row per column,
@@ -1384,10 +1582,11 @@ fn attrib_layout(p: &GlProgram, vs: &ShcShader, log: &mut [u8; INFO_LOG_SIZE]) -
         let bound = p.attrib_binds[..p.num_attrib_binds as usize]
             .iter()
             .rfind(|b| util::name_bytes(&b.name) == util::name_bytes(&d.name));
-        if let Some(b) = bound {
-            d.location = b.index;
-            let end = (b.index as usize + d.columns.max(1) as usize).min(LOCS);
-            for t in taken.iter_mut().take(end).skip(b.index as usize) {
+        let at = explicit.get(util::name_bytes(&d.name)).or(bound.map(|b| b.index));
+        if let Some(at) = at {
+            d.location = at;
+            let end = (at as usize + d.columns.max(1) as usize).min(LOCS);
+            for t in taken.iter_mut().take(end).skip(at as usize) {
                 aliases |= *t;
                 *t = true;
             }
@@ -1422,11 +1621,17 @@ fn attrib_is_active(d: &ShcAttribBinding) -> bool {
 fn link_attrib_layout(
     p: &mut GlProgram,
     vs_src: *const c_char,
+    explicit: &ExplicitAttribs,
     log: &mut [u8; INFO_LOG_SIZE],
 ) -> Result<Option<ShcAttribMap>, ()> {
     let deferred = p.rvs.layout_at_link != 0;
-    let (map, aliases) = attrib_layout(p, &p.rvs, log)?;
-    if !deferred && !aliases {
+    let (map, aliases) = attrib_layout(p, &p.rvs, explicit, log)?;
+    /* A shader with layout(location) qualifiers has its unqualified inputs
+     * counted on from the qualified ones by the compiler, which may land on a
+     * location a later qualifier or a binding takes: the layout is decided
+     * here whenever it differs from what the compile placed. */
+    let moved = !explicit.is_empty() && layout_differs(p, &map);
+    if !deferred && !aliases && !moved {
         return Ok(None);
     }
     let Some(relink) = shaderc::backend().and_then(|b| b.compile_vs_linked) else {
@@ -1513,9 +1718,10 @@ fn relinked_attribs(group: usize, program: GLuint) -> Option<&'static ShcAttribM
 
 /// Generic attribute index per VS input: the GLSL location, unless the app
 /// bound the name to another index before the link (glBindAttribLocation).
+/// An input with `layout(location = N)` (`explicit`) ignores the binding.
 /// A VS input location beyond the 16-entry table fails the link: the C read
 /// `attrib_app_index[location]` past the array for it.
-fn build_attrib_indices(p: &mut GlProgram, log: &mut [u8; INFO_LOG_SIZE]) -> i32 {
+fn build_attrib_indices(p: &mut GlProgram, explicit: &ExplicitAttribs, log: &mut [u8; INFO_LOG_SIZE]) -> i32 {
     for (i, a) in p.attrib_app_index.iter_mut().enumerate() {
         *a = i as u8;
     }
@@ -1542,7 +1748,8 @@ fn build_attrib_indices(p: &mut GlProgram, log: &mut [u8; INFO_LOG_SIZE]) -> i32
          * Giving every column the same index would make them collide with
          * each other and fail the link below. */
         let column = attrib_column(p, i);
-        for b in &p.attrib_binds[..p.num_attrib_binds as usize] {
+        let qualified = explicit.get(util::name_bytes(&a.name)).is_some();
+        for b in p.attrib_binds[..p.num_attrib_binds as usize].iter().filter(|_| !qualified) {
             if util::name_bytes(&b.name) == util::name_bytes(&a.name) {
                 app = b.index.saturating_add(column);
             }
@@ -1704,7 +1911,8 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
      * again with it. */
     let vs_src = c.shader_ref(vs).map_or(core::ptr::null(), |s| s.source);
     let p = &mut c.objs().programs[obj_index(program)];
-    match link_attrib_layout(p, vs_src, log) {
+    let explicit = ExplicitAttribs::scan(vs_src);
+    match link_attrib_layout(p, vs_src, &explicit, log) {
         Err(()) => return,
         Ok(None) => {}
         Ok(Some(map)) => {
@@ -1757,7 +1965,7 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
     if build_blocks(p, blocks, log) != 0 {
         return;
     }
-    if build_attrib_indices(p, log) != 0 {
+    if build_attrib_indices(p, &explicit, log) != 0 {
         return;
     }
     p.linked = true;
@@ -4690,6 +4898,40 @@ mod tests {
         unsafe { glBindAttribLocation(prog, index, name.as_ptr()) }
     }
 
+    /* ---- layout(location) scan ---- */
+
+    fn scan(src: &str) -> std::vec::Vec<(String, u8)> {
+        let c = CString::new(src).unwrap();
+        let e = ExplicitAttribs::scan(c.as_ptr());
+        (0..e.count)
+            .map(|i| (String::from_utf8_lossy(util::name_bytes(&e.name[i])).into_owned(), e.location[i]))
+            .collect()
+    }
+
+    #[test]
+    fn scan_reads_qualified_inputs_of_an_es300_source() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let src = "#version 300 es\n\
+            // layout(location = 9) in vec4 hidden;\n\
+            /* layout(location = 8) in vec4 hidden2; */\n\
+            layout(location = 3) in highp vec4 a_0;\n\
+            layout (location=0) in mat3 m;\n\
+            layout(location = 2, component = 0) flat in ivec2 i_0;\n\
+            in vec4 plain;\n\
+            layout(location = 1) out vec4 not_an_input;\n";
+        assert_eq!(scan(src), [("a_0".into(), 3), ("m".into(), 0), ("i_0".into(), 2)]);
+    }
+
+    #[test]
+    fn scan_reads_nothing_from_other_versions() {
+        let q = "layout(location = 1) in vec4 a;\n";
+        assert!(scan(&format!("#version 450\n{q}")).is_empty());
+        assert!(scan(&format!("#version 100\n{q}")).is_empty());
+        assert!(scan(q).is_empty());
+    }
+
     /* ---- pure helpers ---- */
 
     #[test]
@@ -5162,7 +5404,7 @@ mod tests {
         util::set_name(&mut p.rvs.attribs[0].name, b"pos");
         p.rvs.num_attribs = 1;
         matrix_attrib(&mut p, 1, 4, b"xf", GL_FLOAT_MAT4 as u16);
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0);
         let whole: std::vec::Vec<usize> = (0..p.rvs.num_attribs as usize).filter(|&i| attrib_is_whole(&p, i)).collect();
         assert_eq!(whole, std::vec![0, 1], "pos and the matrix's first column, not its other three");
         assert_eq!(attrib_base_location(&p, &p.rvs.attribs[1]), 1);
@@ -5182,7 +5424,7 @@ mod tests {
         util::set_name(&mut p.attrib_binds[0].name, b"xf");
         p.attrib_binds[0].index = 5;
         p.num_attrib_binds = 1;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0, "{:?}", log_text(&log));
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0, "{:?}", log_text(&log));
         assert_eq!(&p.attrib_app_index[1..5], &[5, 6, 7, 8]);
         assert_eq!(p.attrib_app_index[0], 0, "the other attribute is where it was");
     }
@@ -5195,7 +5437,7 @@ mod tests {
         util::set_name(&mut p.attrib_binds[0].name, b"xf");
         p.attrib_binds[0].index = MAX_VERTEX_ATTRIBS as u8 - 2;
         p.num_attrib_binds = 1;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), -1);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), -1);
         let text = String::from_utf8(log_text(&log).to_vec()).unwrap();
         assert!(text.contains("'xf'") && text.contains("beyond"), "{text}");
     }
@@ -5217,7 +5459,7 @@ mod tests {
             a.gl_type = GL_FLOAT_VEC4 as u16;
             util::set_name(&mut a.name, name);
         }
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0);
         assert_eq!(&p.attrib_app_index[..2], &[0, 1]);
         assert!(attrib_is_whole(&p, 0) && attrib_is_whole(&p, 1), "neither is a column of the other");
     }
@@ -5230,7 +5472,7 @@ mod tests {
         p.rvs.attribs[1].location = 3;
         util::set_name(&mut p.rvs.attribs[0].name, b"a");
         util::set_name(&mut p.rvs.attribs[1].name, b"b");
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0);
         let identity: [u8; 16] = core::array::from_fn(|i| i as u8);
         assert_eq!(p.attrib_app_index, identity);
     }
@@ -5248,7 +5490,7 @@ mod tests {
         util::set_name(&mut p.attrib_binds[1].name, b"unused");
         p.attrib_binds[1].index = 0;
         p.num_attrib_binds = 2;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0);
         assert_eq!(&p.attrib_app_index[..2], &[0, 7]);
 
         /* `b` onto 0, where `a` already is: aliasing, which the GL allows
@@ -5256,7 +5498,7 @@ mod tests {
          * read vertex attribute 0, and the draw path stages each separately.
          * dEQP's `bind_aliasing.cond_*` is this case. */
         p.attrib_binds[0].index = 0;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0, "aliasing links");
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0, "aliasing links");
         assert_eq!(&p.attrib_app_index[..2], &[0, 0], "both inputs read attribute 0");
         assert_eq!(log_text(&log), b"", "and a link that succeeds writes no error");
     }
@@ -5272,7 +5514,7 @@ mod tests {
         util::set_name(&mut p.attrib_binds[0].name, b"a");
         p.attrib_binds[0].index = 3;
         p.num_attrib_binds = 1;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), 0);
+        assert_eq!(build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log), 0);
         assert_eq!((p.attrib_app_index[15], p.attrib_app_index[0]), (3, 0));
     }
 
@@ -5286,7 +5528,11 @@ mod tests {
         util::set_name(&mut p.rvs.attribs[1].name, b"b");
         util::set_name(&mut p.attrib_binds[0].name, b"\x03"); /* what the emulated read finds for location 16 */
         p.num_attrib_binds = 1;
-        assert_eq!(build_attrib_indices(&mut p, &mut log), -1, "location 16 has no attribute index");
+        assert_eq!(
+            build_attrib_indices(&mut p, &ExplicitAttribs::NONE, &mut log),
+            -1,
+            "location 16 has no attribute index"
+        );
         let text = String::from_utf8(log_text(&log).to_vec()).unwrap();
         assert!(text.contains("location") && !text.contains("same index"), "{text}");
     }
