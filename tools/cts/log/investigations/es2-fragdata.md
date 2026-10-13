@@ -11,10 +11,15 @@ no board was used and nothing under `src/` changed. The tests are
 ```text
 cargo test --no-default-features \
     --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_fragdata
+cargo test --no-default-features \
+    --features host-test,gpu-vivante,shaderc-online,report-es2 --test es2_fragdata
+cargo test --no-default-features \
+    --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es2_fragdata
 ```
 
-(8 pass with `report-es2`; 7 pass without it, the one `gl_MaxDrawBuffers` test
-is `report-es2` only. Also run with `gpu-vivante`.) CTS source: the
+(2026-10-12, at main `9390731`: 12 pass in each of the three `report-es2`
+builds; 5 pass without `report-es2`, where only the front-end tests are
+built.) CTS source: the
 `VK-GL-CTS` checkout in the machine's dependency cache; line numbers below are
 that tree's.
 
@@ -37,7 +42,7 @@ exists.
 
 `ShaderLibraryCase::execute`, `modules/glshared/glsShaderLibraryCase.cpp`:
 
-1. **line 1040**: `isCapabilityRequired(ONLY_GLSL_ES_100_SUPPORT) &&
+1. **lines 1041-1042**: `isCapabilityRequired(ONLY_GLSL_ES_100_SUPPORT) &&
    glu::IsES3Compatible(gl)` returns `true` (a pass) at once.
    `IsES3Compatible` (`framework/opengl/gluContextInfo.cpp:64-73`) clears the
    error, calls `glGetIntegerv(GL_MAJOR_VERSION)` and says "ES 3" iff the
@@ -60,26 +65,34 @@ version query nor the draw-buffer query is made.
 - `glGetIntegerv(GL_MAJOR_VERSION)`: `GL_INVALID_ENUM` in `report-es2`
   (Cargo.toml feature comment). The context is therefore taken for ES 2.0.
 - `glGetIntegerv(GL_MAX_DRAW_BUFFERS)`: `GL_INVALID_ENUM`, value untouched
-  (`src/gl/state.rs:1125-1128`; in-crate test `draw_buffer_queries_are_es3_only`,
-  run: passes). The case therefore runs rather than reporting NotSupported.
+  (`src/gl/state.rs:1245-1248`; in-crate test `draw_buffer_queries_are_es3_only`,
+  run: passes; host test `gl_api::invalid_assign_to_1_requirements_let_the_case_run`).
+  Neither `GL_EXT_draw_buffers` nor `GL_NV_draw_buffers` is claimed, so
+  nothing brings the query back. The case therefore runs rather than reporting NotSupported.
   Without `report-es2` the query answers `MAX_DRAW_BUFFERS` (3), but then the
   version query also answers and step 1 passes the case.
 - Shader: `gl_FragData[1] = ...` is refused at lowering with "OpenGL ES 2.0 has
   one draw buffer, so only gl_FragData[0] exists"
-  (`src/shaderc/online/lower.rs:2740-2745`), so `glCompileShader` fails and
+  (`src/shaderc/online/lower.rs:2768-2774`), so `glCompileShader` fails and
   the case passes. `gl_FragData[0]`, `[u_index]` and `[int(v_index)]` lower to
-  the one colour store (`lower.rs:2722-2747`), and `gl_MaxDrawBuffers` is 1 in
-  `report-es2` (`lower.rs:12475`). The three `write_fragcolor_and_fragdata_*`
+  the one colour store (`lower.rs:2750-2780`), and `gl_MaxDrawBuffers` is 1 in
+  `report-es2` (`lower.rs:12569`). The three `write_fragcolor_and_fragdata_*`
   shaders are refused too (measured; all three tests pass).
 - The offline-table path is not involved: these sources are not in the
   table, so a GPU back end with `shaderc-online` compiles them (PowerVR,
   GC7000, V3D all use the same front end; only the front end is under test).
 
-Host tests replay all of it except the two GL queries, which need a GL
-context: `testutil::TestGl` is `cfg(test)` (src/lib.rs:111), so an
-integration test cannot make one. Those two are pinned by the in-crate test
-above. The pixel check of `valid_*` (green quad) is a back-end matter and not
-replayed here.
+The host tests have two layers. The top of `tests/es2_fragdata.rs` compiles
+the case shaders with the front end (`compile_to_ir`). `mod gl_api` makes a
+host context (a do-nothing OSAL and back end, as `tests/es2_error_rules_state.rs`
+does) and replays each case through the public GL entry points in a
+`report-es2` + `shaderc-online` build: the two queries of the shader library
+and the extension string, `glCompileShader`/`glLinkProgram` with the
+`compile_fail` verdict of `glsShaderLibraryCase.cpp:1174-1178`, and for
+`valid_*` the clear, `u_index = 0`, the indexed quad draw (no GL error, the
+draw reaches the back end with 6 indices) and `glReadPixels`. The pixel check
+of `valid_*` (green quad) is a back-end matter: the host back end draws
+nothing, so it is not replayed here.
 
 ## Prediction per board
 
