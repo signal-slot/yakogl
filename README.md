@@ -48,7 +48,7 @@ glmark2-es2 at 800x600 runs all 33 scenes on every board:
 | --- | --- |
 | AM62P | 465 (`f2a13877`, 2026-10-11) |
 | Raspberry Pi 4 | 183 (2026-10-04) |
-| i.MX8MP | 42 (`8abeaabb`, 2026-10-08) |
+| i.MX8MP | 43 (`a63fcc5b`, 2026-10-14) |
 
 Two scenes drew wrong: terrain sampled a black texture on every board, and refract
 missed its depth pass on the AM62P and Raspberry Pi 4. Both are fixed on the host;

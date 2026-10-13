@@ -22,6 +22,8 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
   - 次の足場: 保留中の着地（work/land9: transform feedback の取り込み、glBlitFramebuffer の色、バッファのマップと PBO、PowerVR の sRGB）はホストだけで、ここに載せた数字は何も含まない。
 - **i.MX8MP: gl_test の 44 番（es3hdr、#6）は f2a13877 でも失敗。** check 3 が 0x40042814 で、期待は 0x40043904。(5,0) の色が 8 画素幅のリニアな RGBA16F ターゲットの (7,0) に書かれている（64 ビット画素のピクセルエンジン側の置き方で、サンプラではない）。調べる gl_test 44 の GC7000 側の探りは保留中の着地にあり、ボードではまだ走らせていない（records/imx8mp/gc44-f2a13877）。
 
+- **i.MX8MP: 共通セットを a63fcc5b（10/14）で実測。** glmark2 は **スコア 43（33 シーン実行 / 失敗 0 / 未対応 0）**、探りの SO・SV・CL はいずれも合格。gl_test は **49 件中 48 件合格**で、44 番（es3hdr、#6）が引き続き失敗、16 番（4x MSAA、#8）は未対応のままスキップ。新しい失敗ケースはない。記録は RESULTS.md の「i.MX8MP: common set on main a63fcc5b」の節。
+
 ## 10/10 のボード実測（main 32778b57、nuc、tools/board.sh、uboot-mmc。記録は RESULTS.md の 2026-10-10 の各節）
 
 10/7 の変更（計画 #1、log/status-2026-09-25-to-10-07.md）を載せた main のイメージを、初めてボードで走らせた。AM62P と i.MX8MP だけ。Pi 4 は上の 10/11 の節。
