@@ -1016,6 +1016,18 @@ fn map_attrib_format(type_: GLenum) -> GlesAttribFormat {
     }
 }
 
+/// Does the array's element have the layout the vertex fetch reads, whatever
+/// the back end? The packed and half-float types, and the 32-bit integers a
+/// glVertexAttribPointer call converts to float (ES 3.0 2.9), are rewritten
+/// by [`convert_attrib`]; fetched in place they would be read as float words.
+fn attrib_in_place_layout(ga: &GlVertexAttrib) -> bool {
+    match ga.type_ {
+        GL_INT_2_10_10_10_REV | GL_UNSIGNED_INT_2_10_10_10_REV | GL_HALF_FLOAT => false,
+        GL_INT | GL_UNSIGNED_INT => ga.integer,
+        _ => true,
+    }
+}
+
 /// Can the backend fetch this array as it lies in the vertex buffer?
 fn attrib_format_is_native(fmt: GlesAttribFormat) -> bool {
     fmt == GLES_ATTRIBF_FLOAT32 || backend::native_attrib_formats() & gles_attribf_bit(fmt) != 0
@@ -1055,7 +1067,13 @@ fn attrib_row(vsrc: &[u8], ga: &GlVertexAttrib, comps: u32, tsz: u32, out_comps:
             let at = (c * tsz) as usize;
             attrib_component(&vsrc[at..at + tsz as usize], ga.type_, ga.normalized, ga.integer)
         } else if c == 3 {
-            1.0f32.to_bits()
+            /* ES 3.0 2.8: the missing w is 1 in the input's type; an integer
+             * array feeds an integer input (glVertexAttribIPointer) */
+            if ga.integer {
+                1
+            } else {
+                1.0f32.to_bits()
+            }
         } else {
             0.0f32.to_bits()
         };
@@ -3525,7 +3543,10 @@ fn build_common(
             let last = (a_first as u64 + a_count as u64).checked_sub(1)?;
             (ga.offset as u64).checked_add(last * attrib_stride(&ga) as u64 + elem)
         };
-        if let Some(vb) = vb.as_deref_mut().filter(|_| attrib_format_is_native(src_fmt) && comps >= sa.components) {
+        if let Some(vb) = vb
+            .as_deref_mut()
+            .filter(|_| attrib_in_place_layout(&ga) && attrib_format_is_native(src_fmt) && comps >= sa.components)
+        {
             /* a format the backend's vertex fetch reads, in a VBO, at least
              * as wide as the input: fetched in place (only the input's
              * components, so a wider array never spills into the next

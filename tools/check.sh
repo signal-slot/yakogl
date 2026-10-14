@@ -1311,6 +1311,12 @@ step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
 # or read, the errors); the ES 2.0 report below must refuse them.
 step "test    $V3D_CONFIG (tests/es3_occlusion_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_occlusion_gl
+# ES 3.0 vertex arrays in buffer objects (packed 2_10_10_10 and half-float
+# converted to float32 rows, the integer w of a narrow ivec4/uvec4 array)
+# through the GL API against a recording stand-in back end. Not an ES 2.0
+# report row: the test compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_vertex_arrays
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
