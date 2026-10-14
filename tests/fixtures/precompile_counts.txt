@@ -3,10 +3,10 @@
 # (tools/check.sh runs the whole list and two applications' sublists for each
 # build). A compiler change that moves one moves these: re-pin with
 # PRECOMPILE_PIN_WRITE=1 and say in the commit why the table grew or shrank.
-gc7000 es2=0 app=all: rows=595 code_bytes=741968
+gc7000 es2=0 app=all: rows=595 code_bytes=741888
 gc7000 es2=0 app=femtovg: rows=36 code_bytes=48304
 gc7000 es2=0 app=gl_test_es100: rows=111 code_bytes=32512
-gc7000 es2=1 app=all: rows=365 code_bytes=245312
+gc7000 es2=1 app=all: rows=365 code_bytes=245232
 gc7000 es2=1 app=femtovg: rows=36 code_bytes=48304
 gc7000 es2=1 app=gl_test_es100: rows=82 code_bytes=25792
 powervr es2=0 app=all: rows=3433 code_bytes=4096960
