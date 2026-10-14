@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `4e62d171` (2026-10-14). The numbers below are read from
+main is `e6fb51b7` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -47,7 +47,7 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
 | AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. | 465, 33 scenes ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | Slint pass, cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
-| i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 47 / 48 run, 1 skipped (case 16, #8), first failure case 44 (#6), on `a0f439d6` (2026-10-10; no RESULTS.md entry). Case 44 alone still fails on `f2a13877` (RESULTS.md). Cases 2 and 10 fail now and then (#25, #9). | 42, 33 ran, 0 failed, on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | probes pass on `8abeaabb`; no fps (no console). |
+| i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) passed on both boots; they fail now and then. | 42, 33 ran, 0 failed, on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | probes pass on `8abeaabb`; no fps (no console). |
 | Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
@@ -100,7 +100,7 @@ Each item waits for hardware. The commands and expected values are in
   rows, buffer and PBO, the `texture.specification`, `fragment_out` and
   `shaders.builtin_functions` buckets (transform feedback, `occlusion_query`
   and blit ran on `cd738b1a`).
-- AM62P dEQP-GLES3: the GPU hang of images 20 and 21, and image 7's
+- AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
 - The i.MX8MP panel by eye (#23).
@@ -150,7 +150,11 @@ never run on the board. Every
 other ES 3.0 number is HOST-ONLY: the Linux OSAL runs no command stream, so
 only API errors and compile and link outcomes mean anything there
 (`tools/cts/README.md` section 2b). Under `report-es2` every ES 2.0 answer
-is kept and pinned by tests.
+is kept and pinned by tests. The design for `gl_InstanceID` in
+instance-by-instance draws (the six `instanced.*.mixed.{2,4,20}_instances`
+cases) is chosen, with no source change yet:
+`tools/cts/log/investigations/instanceid-per-draw.md` ("Open work" item 4,
+es3-vertex).
 
 | Feature | State | Design |
 |---|---|---|
@@ -165,7 +169,7 @@ is kept and pinned by tests.
 | NPOT levels of arrays and storage textures | valid at every level (`c40414b`) | none |
 | Framebuffer completeness | host dEQP `fbo.completeness`: 17 cases Fail to Pass on the PowerVR and the GC7000UL, 0 regressions (depth larger than colour, colour on attachments 1.. alone, separate depth and stencil with no colour); `src/gl/framebuffer.rs` `check_status` under `!REPORT_ES2`; HOST-ONLY (reads no pixels); causes left in "Open work" item 4 | none (`tests/es3_fbo_fragops.rs`) |
 | Stage-interface link rules | interpolation and block mismatches refused (`b88fea5`, `03ff7a6`) | none |
-| GLSL ES 3.00 in the compiler | measured over dEQP's 5,596 programs (`4ab482e`, `79fe171`, `ed0c81d`) | `docs/es3-shaderc-coverage.md` |
+| GLSL ES 3.00 in the compiler | measured over dEQP's 5,596 programs (`4ab482e`, `79fe171`, `ed0c81d`); the GC7000UL now builds `large_constant_arrays.indexing.{float,vec4}_128_vertex` (gc-const-array, 2026-10-14), so its expected-build count equals the PowerVR's and the V3D's | `docs/es3-shaderc-coverage.md` |
 | PowerVR 2D-array and shadow sampling | designed, not built | `docs/es3-pvr-2darray.md` |
 | ES 2.0 report guard | `tests/es2_report_guard.rs` pins what an ES 2.0 client sees; two pins are `#[ignore = "BUG: ..."]` (framebuffer and texture rows; the two state pins run since the state/program tranche, `tests/es2_error_rules_state.rs`) (`6c9e9ee`) | none |
 | ES 3.0 limits test | reverted for review (`3f78982`); es3-caps redoes it | none |
@@ -267,15 +271,41 @@ is kept and pinned by tests.
      batches), `driver/src` (about 16k lines).
 3. **Known defects.** Each has a GitHub issue unless marked "no issue yet".
    Unless a line says "board", the fix is proved on the host only.
-   - **GLES3 hang** (no issue yet): two dEQP-GLES3 cases hang the AM62P's
-     GPU, and the board comes back only with the RTI reset:
+   - **GLES3 hang** (no issue yet): two dEQP-GLES3 images stop, and the
+     AM62P comes back only with the RTI reset:
      `texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear`
      (image 20) and `texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear`
      (image 21), each the 14th case of its image (`f2a13877`, 2026-10-11).
-     Both are 3D textures filtered `linear_mipmap_linear`. Cause not found:
-     nothing has decoded the hang yet (the HWR record, as for gl_test 198).
-     Until it is fixed the two images' tails (83 cases) have no result.
-     Image 11 needs 4 resets (`done_with_resets`) to complete.
+     Both are 3D textures filtered `linear_mipmap_linear`. The cause is most
+     likely **not a GPU hang** (hypothesis H1 of
+     `tools/cts/log/investigations/pvr-3d-mipmap-hang.md`). On the host, the
+     PowerVR back end gets bit-identical texture and sampler words for the
+     14th case (`linear_mipmap_linear`) and the 13th (`linear`, which
+     finished), in both images, from the same program. A 3D texture is a
+     one-level slice grid there, so the min filter never reaches the TPU. The
+     board picture of a 3D mipmap case is wrong: level 0 only, and REPEAT
+     lost on all three axes. dEQP's check of a wrong 3D
+     `LINEAR_MIPMAP_LINEAR` picture is a six-deep search per pixel and took
+     337 s for one case on `c4ccc966` (`tools/cts/README.md` 2e). "The 14th
+     case" in both images follows from dEQP's sorted case order (each
+     image's third prefix, second filter). `no_reset` at 602/612 s cannot
+     tell this from a hang, because the RTI resets up to 660 s after arming.
+     Measured on the host with the PowerVR's picture (host Mesa forced to
+     level 0 and clamped coordinates): every 3D `linear_mipmap_linear` case
+     takes 8.8 to 18.8 s of dEQP checking, every other case under 0.07 s,
+     and plain Mesa passes all in milliseconds. The board's 337 s case takes
+     18.8 s on the host (factor about 18), so both images reach case 14 at
+     about 560 s and 600 s. Not yet confirmed on the board: the
+     investigation's section 7 has the check. Until it is fixed the two
+     images' tails (83 cases) have no result. Image 11 needs 4 resets
+     (`done_with_resets`) to complete.
+   - **PowerVR 3D textures sample level 0 only and lose REPEAT** (no issue
+     yet; the defect behind the GLES3 hang): `src/gl/texture.rs`
+     `texture_alloc_storage_3d`, `src/shaderc/online/powervr/select.rs`
+     `vol_uv`. Mesa's path is the TPU's own 3D type (`TEXTYPE_3D`,
+     3D-twiddled layout, IMAGE_WORD1 `depth`, the full chain, `addrmode_w`).
+     The investigation's section 3 compares the fields one by one. Work:
+     "Open work" item 4, pvr-3d.
    - **AM62P GLES3 image 7** (no issue yet): a 24,384-vertex `glDrawArrays`
      in `shaders.builtin_functions.precision.clamp.highp_fragment.vec3`
      does not fit the 1 MiB general arena, and dEQP stops at the
@@ -314,7 +344,8 @@ is kept and pinned by tests.
      (`src/vivante/state.rs`, `GcFrame::extra`); the PowerVR keeps its fixed render pool.
    - i.MX8MP gl_test case 44 `es3hdr`, an RGBA16F render target (#6):
      still fails on `f2a13877` at check 3 (texel (5,0)'s colour stored at
-     (7,0) of an 8-wide linear target). `466e1b00`'s two fixes did not move
+     (7,0) of an 8-wide linear target), and in the default list at
+     `e0eb883d` (`failing 1: first case 44`; the same on both boots). `466e1b00`'s two fixes did not move
      it. The ranked hypotheses: `src/vivante/VIVANTE_NOTES.md`, "RGBA16F
      targets". The layout probe (case 44's check 3 on the GC7000,
      `hdr_layout_probe`, decode pinned by `tests/gltest_hdr_probe.c`) is
@@ -347,6 +378,28 @@ is kept and pinned by tests.
      within one unit; a size like 90 is 0.086 octave low. Pinned by the
      ignored test `bug_log_size_ext_is_a_linear_approximation_of_log2`; the
      fix is one function and removes the `ignore`.
+   - **GC7000 `take_uniforms` truncates** (no issue yet):
+     `take_uniforms` (`src/vivante/backend.rs:2287`) cuts a stage's uniform
+     block at `GC_MAX_UNIFORM_DWORDS` (1280 dwords). Harmless while the
+     whole block must fit the 320 registers; it becomes a silent truncation
+     as soon as blocks are read from memory. The fix in "Open work" item 4
+     (the GC7000 `ubo` cases) lifts it.
+   - **GC7000UL: a split instanced draw that reads `gl_InstanceID` is drawn
+     wrong without any message, not refused** (no issue yet). The refusal at
+     `src/vivante/backend.rs:2353` tests `vs_instance_id_reg1`, and only the
+     PowerVR compiler sets that field (`src/shaderc/online/powervr/chain.rs:212`).
+     On the host, the dEQP mixed shader compiles to `viv.vs_id_in_reg` 3 and
+     `vs_instance_id_reg1` 0. `gc_draw` takes instances 1..3, and
+     `gc_refused_draws` stays 0. The six `instanced.*.mixed` cases still
+     fail, but because the image is wrong. The unit test
+     `an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused`
+     (`src/vivante/backend_tests.rs`) sets the field by hand, so it does not
+     catch this. Fixed by V0 (or by V1 for divisors up to 0xffff; "Open
+     work" item 4, es3-vertex). The PowerVR refuses as designed, confirmed
+     on the host: instances 1..3 of the dEQP mixed shader return `-EINVAL`
+     with `yakogl/pvr: draw refused: an instance drawn on its own (a divisor
+     past 1) whose program reads gl_InstanceID`
+     (`tools/cts/log/investigations/instanceid-per-draw.md`).
    - GC7000 REPEAT on NPOT sizes (stage 1 residual risk,
      `docs/es2-cts-failures.md` H.2/H.3): `tests/gc_npot_repeat.rs` pins the
      texture descriptor and sampler registers the Vivante back end emits for
@@ -532,7 +585,7 @@ is kept and pinned by tests.
      groups need `pvr-2darray`, and the depth ones the PowerVR's depth
      sampling.
    - **es3-shaderc**: the online compiler's GLSL ES 3.00 gaps
-     (`docs/es3-shaderc-coverage.md`: PowerVR 3,457 / GC7000UL 3,455 / V3D
+     (`docs/es3-shaderc-coverage.md`: PowerVR 3,457 / GC7000UL 3,457 / V3D
      3,457 of 3,461 expected-build programs build, `tests/es3_shaderc_corpus.rs`
      with `DEQP_GLES3_TEST_DIR` = VK-GL-CTS `93bca018`; the V3D's base was
      not run). Backslash-newline inside a preprocessing token is closed (the
@@ -545,12 +598,40 @@ is kept and pinned by tests.
      `preprocessor` row is 292 built, 0 refused). Remaining expected-pass
      refusals on the PowerVR: 2 `constant_expressions.other.complex_*` (case
      labels) and 2 `uniform_block.valid.long_instance_name_*` (reflection
-     name). Open: the rest of its "Work that closes the table"; two need a
+     name). Open: the rest of its "Work that closes the table"; one needs a
      decision first: names of 63
      characters or more (an instance block's default-block rows are named
      after the instance, so a 1,024-character instance name fills the
-     64-byte field), and the GC7000UL's 128-element constant array (it
-     wants the constant file with relative addressing, as etnaviv takes it).
+     64-byte field).
+     - Item 4 of that table, the GC7000UL's 128-element constant array, is
+       done (gc-const-array, 2026-10-14; `alloc.rs` `sink_definitions`,
+       `tests/es3_gc_const_array.rs`), and not the way the item said: the
+       cause was register pressure made by a scheduling pass, not a missing
+       relative addressing into the constant file. The front end reads
+       `array[i]` as the chain `acc = (i == k) ? c_k : acc` (`lower.rs`
+       `select_among`), which needs 3 temporaries for any length;
+       `sink_definitions` moved each select past the next compare, so all
+       127 compares ended up before all selects (35 and 34 temporaries,
+       over `abi.rs`'s 21). The pass now does not move an instruction past
+       a sibling when the move keeps two or more of its own sources alive;
+       both programs need 3. Over the 809 shaders under `tools/shaders` and
+       `tests` on the GC7000: no compile verdict changed, 26 need fewer
+       temporaries, 4 need one more. The precompiled GC7000 tables lost 80
+       code bytes each (`es2=0 app=all` 741,888, `es2=1 app=all` 245,232);
+       `src/vivante/internal.rs` is unchanged.
+     - Why not the address register: `src/vivante/VIVANTE_NOTES.md` (gl_test
+       108) measured that `movar` then `u[base][a.x]` reads element 0 on the
+       i.MX8MP whatever the index. Mesa etnaviv reads constant data from
+       memory with `load` (`load_constant` from
+       `ETNA_UNIFORM_CONSTANT_DATA_ADDR`); if an array ever needs memory,
+       that is the path to copy, like the `SHC_VIV_CONST_UBO_ADDR`
+       uniform-block copy.
+     - Possible follow-up, not done: a stricter rule also builds 5 more
+       Qt3D vertex shaders
+       (`tools/shaders/qt3d/{0d972b456ed599d1,56105a9f4a2e536b,928dc4e0891ab537,a9805e68997ed2ee,c667c97598a82c1b}.vert`)
+       but raises 17 others by up to 3 (particle vertex shaders 17 → 19,
+       against the limit of 21). A real fix is a scheduler that tracks
+       register pressure, not another rule in this pass.
    - **blit-ds**: the depth/stencil half of `glBlitFramebuffer` (the 16
      AM62P `fbo.blit.depth_stencil` failures). It needs a back-end entry
      that copies a rectangle between two objects' planes
@@ -605,19 +686,62 @@ is kept and pinned by tests.
        The PowerVR and the GC7000UL take divisor 1 only, so `draw_instanced`
        (`src/gl/draw.rs`) draws instance by instance and feeds each
        instance's divisor-array value as a constant, with
-       `GlesDraw::instance_id` set to the instance number; the back end then
-       refuses the draw, because the PDS / FE starts `gl_InstanceID` at 0 in
-       every draw (`src/pvr/backend.rs` draw entry ~4590 and chunking
-       exception ~4826; `src/vivante/backend.rs` ~2353, `-EINVAL`). The V3D
-       takes any divisor (`0xffff`), draws once and is predicted to pass.
-       `tests/es3_instanced.rs` (host only) pins the part the GL core owns.
-       Options, owned by the back-end items (T6): A, program the PDS instance
-       step by the divisor as Mesa pvr does, so `max_instance_divisor` > 1
-       (`src/pvr/backend.rs`); B, feed `gl_InstanceID` as a per-draw constant
-       in the emulated path (the back ends use the `instance_id`
-       `draw_instanced` already sets; the draw.rs holder). dEQP was not run.
-   - The GC7000 refuses four `ubo` cases at link for constant registers
-     (`tests/es3_ubo.rs` `KNOWN_LIMITS`).
+       `GlesDraw::instance_id` set to the instance number, while the PDS /
+       FE starts `gl_InstanceID` at 0 in every draw. The PowerVR then
+       refuses the draw (`src/pvr/backend.rs` draw entry ~4590 and chunking
+       exception ~4826, `-EINVAL`); the GC7000UL draws it wrong without a
+       message ("Known defects"). The V3D takes any divisor (`0xffff`),
+       draws once and is predicted to pass. `tests/es3_instanced.rs` (host
+       only) pins the part the GL core owns. The design is chosen
+       (`tools/cts/log/investigations/instanceid-per-draw.md`):
+       - PowerVR (plan #18): **P1**, Mesa's PDS `instance_id_modifier` set
+         to `GlesDraw::instance_id`. It is a new parameter of
+         `pvr_pds_render_vertex_program_ids` (`driver/src/pvr_pds_render_gen.{c,h}`,
+         `src/pvr/ffi.rs`, `src/pvr/ffi_layout_check.c`), the refusal at
+         `src/pvr/backend.rs:4585-4599` is removed, and `VDATA_DWORDS`
+         grows. About 60 lines plus tests. Then **P3**: hardware divisors
+         through the PDS stream `multiplier`/`shift`, with
+         `max_instance_divisor` 0xffff.
+       - GC7000UL (plan #18, compiler part plan #19): **V0**, the GC7000UL
+         online compiler sets `ShcShader::vs_instance_id_reg1` when the
+         program reads `gl_InstanceID` (`src/shaderc/online/select.rs:3983-3987`,
+         `src/shaderc/online/abi.rs`). Plus **V1**, the stream divisor from
+         `GlesAttrib::divisor` (`src/vivante/backend.rs:2261`) and
+         `max_instance_divisor` 0xffff (`:2886`). The FE already gets the
+         divisor register 0x14680 on every draw. This is what Mesa etnaviv
+         does on HALTI2+.
+       - `src/gl/draw.rs` (plan #19) needs no change for any of these.
+         dEQP was not run.
+   - The GC7000 refuses four `ubo` cases at link for constant registers:
+     `functional.ubo` `single_nested_struct_array.{per_block_buffer,single_buffer}.{shared,std140}_instance_array_both`
+     (the four `KNOWN_LIMITS` of `tests/es3_ubo.rs`). Each stage needs 184
+     constant registers (108 for the copied block, 76 for literals), 368
+     against the 320 the i.MX8MP's GC7000UL has (`NumberOfConstants` 0x140
+     in Mesa 26.2.1's hwdb). The 320 is real; the cases are fixable. Mesa
+     etnaviv reads every user UBO from memory with `LOAD` and puts only
+     default-block uniforms in the constant file
+     (`etnaviv_nir_lower_ubo_to_uniform.c`, `block > 0` stays a load).
+     Reading block-member rows with `load` here (the path of
+     `LoadUniformIdx`, `SHC_VIV_CONST_UBO_ADDR`, `ubo_copy`) would need
+     about 77 registers per stage. The fix design (files and sizes) is in
+     `tools/cts/log/investigations/gc-ubo-const-limit.md`:
+     `src/shaderc/online/codegen.rs` (~25 lines), `select.rs`
+     (`uniform_block`, `uniform_src`, ~80), `src/vivante/backend.rs`
+     (`take_uniforms` cap of 1280 dwords, ~30; "Known defects"). gc-const-array
+     has merged, so nothing else holds the vivante code generator now. One
+     i.MX8MP board run is needed for a constant-offset `load` from a user
+     block; it is not yet done.
+   - **pvr-3d** (new, not in any plan;
+     `tools/cts/log/investigations/pvr-3d-mipmap-hang.md`): (a) native 3D
+     textures on the PowerVR, or levels and wrap modes in the grid
+     emulation (fixes most 3D filtering failures and the slow check;
+     "Known defects", GLES3 hang); (b) `tools/cts/gen-am62p-gles3-tree.py`:
+     name only the mustpass prefixes in `3d.formats` (image 20 runs 12 BGRA
+     cases and `rgba16f_linear_mipmap_linear` outside the mustpass), and put
+     the 3D `*_linear_mipmap_linear` cases in images of their own, so the 83
+     tail cases report; (c) `tools/board.sh`: an AM62P dEQP image's
+     `RUN_BOUND` should be at least the 600 s watchdog bound + 60 s + the
+     boot, so the RTI reset is inside the capture.
    - **fbo-completeness** (plan #19 item `fbo-fragops`): done on the host
      for the three rules in the ES 3.0 table (base integration tip `20a4879`).
      Left, each with its file: separate depth and stencil images with a
@@ -816,6 +940,17 @@ export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out>
 (Steps 1 to 5 ran: 1 and 4 on `32778b57`, 2 on `a0f439d6`, 3 and 5 on
 integration images. Their recipes are in the record file.)
 
+The gl_test default list ran at `e0eb883d` (`docs/board-sessions/imx8mp-gltest-final.md`).
+`common-images.sh` cannot pass `-pipe`, and the worker's `/tmp` quota
+stopped the compile of `gl_test.c`; on a worker with enough `/tmp` the GT
+image builds without the workaround. Cases 10 and 2 are flaky
+(`gc-kick-diff.md`): more boots are needed before calling them fixed.
+
+Optional, not needed to accept gc-const-array: a run of
+`dEQP-GLES3.functional.shaders.large_constant_arrays.*` would confirm that
+the two newly built programs draw (the host interpreter says they compute
+every element: `tests/es3_gc_const_array.rs` `every_element_reads_back`).
+
 dEQP-GLES3 (never run on the board): the 133 table rows `e00` to `e132` of
 `tools/cts/imx8mp-gles3-tree.txt`, as in `docs/es3-board-recipe-imx8mp.md`
 section 3, from an image rebuilt at the commit the board runs
@@ -883,11 +1018,16 @@ After the `layout(location)` change (`src/gl/program.rs`), re-run
 `functional.attribute_location.mixed` and `mixed_time` on the AM62P (expect 0
 failures), and `mixed_max_attributes` after the `reflect.rs` change ("Open
 work" item 4, es3-vertex). After a back-end fix for `gl_InstanceID` in an
-emulated instance, re-check
-`dEQP-GLES3.functional.instanced.draw_arrays_instanced.mixed.{2,4,20}_instances`
-and `...draw_elements_instanced.mixed.{2,4,20}_instances` on the AM62P and the
-i.MX8MP (same refusal predicted); the 39 other instanced cases must stay
-passing, and the Pi 4 should pass already.
+emulated instance (P1/P3, V0/V1), run the `dEQP-GLES3.functional.instanced.*`
+group (45 cases) on the AM62P and the i.MX8MP; the commands and the expected
+verdict table are in section 5 of
+`tools/cts/log/investigations/instanceid-per-draw.md`. The six
+`{draw_arrays_instanced,draw_elements_instanced}.mixed.{2,4,20}_instances`
+cases must pass, and the 39 others must stay passing; the Pi 4 should pass
+already. Watch the `attrib_divisor` cases after P3 or V1, because they then
+use the hardware divide. If they fail on the i.MX8MP after V1, the GC7000UL
+FE ignores divisors > 1: set `max_instance_divisor` back to 1 and use V2 (a
+per-draw uniform).
 
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
@@ -913,12 +1053,19 @@ at most about 11 min an image, 18 images.
 
 dEQP-GLES3 (the tree ran on `f2a13877`; "State of main"). Next, by size:
 
-- the GPU hang of images 20 and 21 (Known defects): decode the hang first
-  (the HWR record and trace through `driver/tools/sfdecode`, as for gl_test
-  198), since the board needs the RTI reset to return and each run costs
-  about ten minutes; a gl_test case that draws one 3D
-  `linear_mipmap_linear` texture would be the smaller reproduction (not
-  written). Run those images with `RUN_BOUND=720 RETURN_BOUND=240`;
+- the "hang" of images 20 and 21 (Known defects, most likely dEQP's slow
+  check): before booting anything, read the `f2a13877` consoles of images
+  20 and 21 (`records/am62p/deqp-gles3-f2a13877/full/20261011-0232-img20-*`,
+  `full2/20261011-0251-img21-*`): the time of every `Test case` line and
+  any `render: HWR during fence` or `pvr_backend: kick N did not complete`
+  line. Gaps of about 270 to 315 s at cases 2 and 8 (the earlier
+  `linear_mipmap_linear` cases), and no HWR or timeout line, confirm H1
+  without a board run. If a board run is still needed: three one-case
+  images (`3x7x5_linear_mipmap_linear`,
+  `r11f_g11f_b10f_linear_mipmap_linear`, control `3x7x5_linear`) with
+  `RUN_BOUND=900 RETURN_BOUND=240`; the commands and the expected output
+  per hypothesis are in section 7 of
+  `tools/cts/log/investigations/pvr-3d-mipmap-hang.md`;
 - image 7's tail (Known defects): re-run image 7 (`TREE_ROWS=6`) after the
   non-indexed draw is cut into pieces;
 - the failing groups, by size: texture 1,752 (and 1,646 NotSupported),
