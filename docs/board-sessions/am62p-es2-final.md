@@ -155,7 +155,9 @@ pinned to `cd738b1a`, final-a's commit.
   `connected` but is the bridge's mcu_uart0 port and delivers 0 bytes, as in
   final-r2. `BOARD_BOOT=uboot-mmc` needs ssh with `sudo -n`, so
   `tools/board.sh am62p tree` cannot start.
-- `mcp__ccfarm__ask_farm` was refused, so the address could not be looked up.
+- Cause (farm notes): the worker that ran this item cannot reach the board; it
+  is reachable only from other farm nodes (this worker has no tailnet DNS).
+  The board must be placed on a node that reaches it.
 - An earlier attempt of this item (not kept) did run images 10 and 11 with
   the bridge's port 32 (mcu_uart0): both `verdict=empty`, 0 console bytes.
   That is a wrong-port result, not a case result.
@@ -179,5 +181,5 @@ python3 tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles2-mustpass.txt <co
 Then check the NotSupported list against section C of
 `docs/es2-cts-failures.md` plus the npot cases.
 
-Assumptions: the main_uart0 port is the bridge's port 33, as in final-r2 and
+Assumptions: the farm notes say main_uart0 is the bridge's port after the leased one; the main_uart0 port is the bridge's port 33, as in final-r2 and
 am62p-es2-r1c; no port was used successfully in this attempt.
