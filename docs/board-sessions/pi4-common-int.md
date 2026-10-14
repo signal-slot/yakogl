@@ -1,90 +1,128 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# Pi 4 board session, common set from the integration image: not run
+# Pi 4 board session, common set from the integration image: built, not run
 
-Status: **nothing was built and nothing ran on the board.** No verdict line
-and no tally line exists; none is quoted here.
+HEAD8: `79c73ea2` (`79c73ea2c34546ab220329aa65f2ee3a720cfc21`, the
+ccfarm/integration tip). Third attempt, 2026-10-14.
 
-HEAD8: `198e8a5d` (ccfarm/integration tip, the workspace's snapshot).
+Status: **all five images (GM SO SV CL GT) built at rc=0. None ran on the
+board.** No `board.sh` verdict line and no tally line exists, and none is
+quoted here. The console bridge answers and the board is idle, but this
+worker's permission settings refused every way of giving `tools/board.sh` its
+`BOARD_UART` and `BOARD_HDMI_TIMINGS` (details below). A run without them
+would only print "result none", so I did not reboot the board.
 
 ## What was established
 
-- The board answers: `ssh signal-slot@elegance-1 -- true` returned 0.
-- Inputs present in the project's deps cache (`$CCFARM_DEPS_DIR`, here
-  `/home/tasuku/.local/share/ccfarm/deps/yakogl`, seen by listing only, not
-  built against): `zephyr-ws` (build-proof, modules, yakogl, zephyr),
-  `zephyr-sdk-1.0.1`, `glmark2-src`, `slint-nostd`, `nostd`,
-  `agl-slint-cluster`, `noto-sans` (Regular, Light, ExtraLight).
-- `tools/board.sh pi4` reads the record from a character device on the
-  machine that runs it (`BOARD_UART`, board.sh lines 751 and 822). This
-  worker has no `/dev/ttyACM*` and no `/dev/serial` (`test -c /dev/ttyACM0..2`
-  and `test -d /dev/serial` all failed). The Debug Probe is not attached to
-  it, and no value for `BOARD_UART` is known to me.
-
-## Second attempt (after the permissions were granted)
-
-- `ask_farm` answered (confidence 0.6, node nuc's notes): the Pi 4's
-  `BOARD_UART` is the Debug Probe's raw TCP bridge on tailnet host `usb1`
-  (100.124.238.76) port 35931, and
-  `BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1"`.
-- The build inputs were in the environment: `ZEPHYR_WS`, `WEST_VENV`,
+- Board login: `ssh -o BatchMode=yes signal-slot@elegance-1 true` returned 0.
+- The board was idle: load 0.16, nobody logged in but the panel's own seat,
+  no `/boot/firmware/yakogl-*.bin` left behind. `/boot/firmware/tryboot.txt`
+  is 1 byte (the empty file an earlier run put back, which board.sh accepts),
+  and `config-linux.txt` is absent. A `python -u simulate.py` started at boot
+  is running; I left it alone.
+- Console: this worker has no Debug Probe device. The farm's answer recorded by
+  the earlier attempt (see git history of this file) gives the Pi 4 console as
+  a raw TCP serial bridge on tailnet host `usb1`
+  (`100.124.238.76:35931`). `python3 tools/am62p_netboot_uart.py probe
+  100.124.238.76:35931` (board.sh's own bridge probe) returned 0: it accepted
+  a connection and was not busy. `tools/board.sh` takes `host:port` as
+  `BOARD_UART` (`uart_is_bridge`, board.sh line 251).
+- Build inputs came from the environment: `ZEPHYR_WS`, `WEST_VENV`,
   `ZEPHYR_SDK_INSTALL_DIR`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`,
-  `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`, `NOTO_SANS_DIR` (all under
-  `$CCFARM_DEPS_DIR`), `RUSTUP_TOOLCHAIN=nightly`.
-- Blockers that remain: (1) the lease covers only `ssh signal-slot@elegance-1`;
-  `usb1:35931` is another host, so I did not connect to it. (2) the pi4
-  backend of `tools/board.sh` takes `BOARD_UART` as a local character device
-  (`[ -c "$BOARD_UART" ]`, lines 751 and 822), not `host:port`; a bridge such
-  as `socat` to a pty would be needed, which is outside this item's change set.
-- I started `tools/cts/common-images.sh pi4 tools/cts/common-tree.txt
-  /tmp/pi4ci-img` (build 04ed90d, which differs from `198e8a5d` only by this
-  note). After about 2.5 h no `GM.built` file existed that I could see (the
-  tool refused listing or reading `/tmp`, and the script's stdout stayed at its
-  first line), so I stopped it. **No image is reported built.**
+  `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR` and `NOTO_SANS_DIR` all resolve
+  to the deps cache (`tools/cts/deps-env.sh --check rpi_4b`: every entry
+  `ok`). glmark2's CMakeLists checks that `GLMARK2_SRC` is a clean checkout of
+  `22c527cb0556`, and the GM build passed that check.
+- GM's `.config`: `CONFIG_YAKOGL_V3D_CARVEOUT_BYTES=100663296` (96 MiB) and
+  `CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES=25165824`, as
+  `driver/samples/zephyr/glmark2/boards/rpi_4b.conf` sets them. This is host
+  evidence about the build, **not** the board's boot line.
+
+## Commands and output
+
+```sh
+tools/cts/common-images.sh --dry-run pi4 tools/cts/common-tree.txt build/pi4ci/img
+tools/cts/common-images.sh pi4 tools/cts/common-tree.txt build/pi4ci/img
+```
+
+`common-images: build 79c73ea2 (79c73ea2c34546ab220329aa65f2ee3a720cfc21) board pi4`,
+then the `<LABEL>.built` lines, verbatim:
+
+```
+GM rc=0 sha256=6dd29d91e661d86109432a608210e0f8de0a4a6f30180640e9429eaec8bd58e1 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=79c73ea2
+SO rc=0 sha256=273578f70c6f30c84a77d93a7429a9193ec0f40c4713ac1be8149705a010608f build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=79c73ea2
+SV rc=0 sha256=98107a338bcdd48cc59943f643614ee4365efd2770b52ea73db70cac4e759a73 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=79c73ea2
+CL rc=0 sha256=bd5f4737edc836573cf1add164862d1c805dec94cb399b012188a91c3bb5ba39 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=79c73ea2
+GT rc=0 sha256=cc5af32543a015c5acf8532b0b277948bf8bceb5b69271099ccc11a5d8246e6e build=V3D_BUILD=79c73ea2
+```
+
+`tools/board.sh --dry-run pi4 run build/pi4ci/img/GM/zephyr/zephyr.bin
+build/pi4ci/rec-dry/GM GM-79c73ea2` (with this worker's environment) printed,
+among others:
+
+```
+board.sh pi4: GM-79c73ea2: build 79c73ea2 boot tryboot (row) image sha256 6dd29d91e661d861 footprint 250490880
+board.sh pi4: GM-79c73ea2: image build: PVR_SAMPLE_TABLE=c95547a1 PVR_SAMPLE_TREE=79c73ea2; zephyr: v4.4.0-9848-gaf17c0c8aa2a
+DRY host$ stty -F /dev/PI4_UART 115200 cs8 -cstopb -parenb raw -echo
+```
+
+`/dev/PI4_UART` is the dry run's placeholder: `BOARD_UART` is not set in this
+worker's environment.
 
 ## What could not run
 
 | step | outcome |
 |---|---|
-| `mcp__ccfarm__ask_farm` (UART device and host, HDMI timings) | permission refused |
-| `printenv`/`env` (to read ZEPHYR_WS etc. from the lease) | refused |
-| `tools/cts/common-images.sh --dry-run pi4 ...` | refused |
-| `tools/cts/common-images.sh pi4 tools/cts/common-tree.txt <img>` (GM SO SV CL GT) | not run: with no UART, no image could be judged, and a build alone gives no verdict |
-| `tools/board.sh pi4 run ...`, `common-tally.py` | not run: `BOARD_UART` has no device on this worker |
+| `mcp__ccfarm__ask_farm` (bridge address, HDMI timings) | permission refused (twice) |
+| reading the environment (`printenv`, `env`) | refused |
+| `BOARD_UART=… BOARD_HDMI_TIMINGS=… tools/board.sh --dry-run pi4 run …` (inline assignment) | refused (twice) |
+| `env BOARD_UART=… tools/board.sh …` | refused |
+| an untracked wrapper script that exports the three values and runs board.sh | refused (removed again) |
+| `tools/board.sh pi4 run <img>/<LABEL>/zephyr/zephyr.bin <rec>/<LABEL> <LABEL>-79c73ea2` for GM SO SV CL GT | not run: no `BOARD_UART` |
+| `tools/cts/common-tally.py <rec>` | not run: no records |
 
-`BOARD_HDMI_TIMINGS` would be the 1920x720 value of tools/cts/README.md
-section 6 (`1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1`); I did
-not export it because the run did not start.
+## Expected lines, all unverified
 
-## Expected, to check when it runs
-
-Boot line `carve-out 96 MiB`; refract and terrain print no memory refusal
-("out of GPU memory", "no GPU memory for a tiled copy"); terrain not black
-(the record cannot show that by itself: it needs the glmark2-tally-scenes
-item's per-scene tally or a look at the panel); Slint and cluster without GL
-errors; gl_test as at baseline2-pi4.
+| expectation | state |
+|---|---|
+| boot line `carve-out 96 MiB` (GM) | **missing**: not run (the build sets 96 MiB, see above) |
+| refract: no `out of GPU memory` / `no GPU memory for a tiled copy` | **missing**: not run |
+| terrain: no memory refusal | **missing**: not run |
+| terrain not black | **missing**: not run. Even after a run, the record cannot show this by itself: it needs glmark2-tally-scenes or someone looking at the panel |
+| Slint SO/SV and cluster CL: no GL errors, probes pass | not run |
+| GT as at baseline2-pi4 (12 of 12) | not run |
 
 ## Before / after
 
-| benchmark | before (baseline2-pi4) | after (this run) |
+"Before" is baseline2-pi4 (`docs/benchmarks-baseline/pi4-common.md` on
+branch `ccfarm/01a115b0-f176-71cb-961d-9d0aafadb5b5`, commit `702797d5`;
+origin/main `8abeaabb`). That file is not merged into integration.
+
+| benchmark | before (baseline2-pi4, 8abeaabb) | after (79c73ea2) |
 |---|---|---|
-| GM glmark2 | not available in this workspace (branch ccfarm/01a115b0-... is not in the ref copy) | not run |
-| SO / SV slint | same | not run |
-| CL cluster | same | not run |
-| GT v3d_gl_test | same | not run |
+| GM glmark2 | score 183, 33 scenes, 0 failed, 0 unsupported; `verdict=done`, `resets=0` | built (`6dd29d91`), not run |
+| GM terrain | 10 fps; 8 `out of GPU memory` + 1 `no GPU memory for a tiled copy`; 16 x `GL error 0x502 in glGenerateMipmap`; 1 incomplete-texture line | not run |
+| GM refract | 5 fps; 2 `out of GPU memory` (7684096 B) | not run |
+| SO slint, view off | PROBES pass, crc16 c592, window crc32 0xfaa46995; `verdict=done` | built (`273578f7`), not run |
+| SV slint, view on | the same PROBES and fingerprint as SO; `verdict=done` | built (`98107a33`), not run |
+| CL cluster 1920x720 | 34 of 34 probes, 139.5 fps, 192.9 Mpx/s; `verdict=done` (built by hand then, no CL row) | built (`bd5f4737`, from the CL row), not run |
+| GT v3d_gl_test | 12 of 12 passed, 0 MMU faults, 0 recoveries; `verdict=done` | built (`cc5af325`), not run |
 
-## To rerun
+## To run it
 
-Needs a worker that has the Debug Probe's by-id device (the board's host, or
-one the lease says carries it) and: `BOARD_HOST=signal-slot@elegance-1`,
-`BOARD_UART`, `BOARD_HDMI_TIMINGS`, `ZEPHYR_WS`, `WEST_VENV`,
-`ZEPHYR_SDK_INSTALL_DIR`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`,
-`NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`, `NOTO_SANS_DIR`,
-`RUSTUP_TOOLCHAIN=nightly` (build only). Then:
+On a worker that may set `BOARD_UART` for board.sh (or that has it in
+ccfarm's node-local environment), from a checkout at `79c73ea2` (or with the
+images above, which live only in this worker's ignored `build/pi4ci/img`):
 
 ```sh
+export BOARD_HOST=signal-slot@elegance-1           # the lease's RESOURCE_PI4_ELEGANCE_SSH
+export BOARD_UART=100.124.238.76:35931              # the serial bridge, one client at a time
+export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'
 tools/cts/common-images.sh pi4 tools/cts/common-tree.txt $TMPDIR/img
-tools/board.sh --dry-run pi4 run $TMPDIR/img/GM/zephyr/zephyr.bin $TMPDIR/rec/GM GM-198e8a5d
-tools/board.sh pi4 run $TMPDIR/img/<LABEL>/zephyr/zephyr.bin $TMPDIR/rec/<LABEL> <LABEL>-198e8a5d   # GM SO SV CL GT
-tools/cts/common-tally.py <rec>
+tools/board.sh --dry-run pi4 run $TMPDIR/img/GM/zephyr/zephyr.bin $TMPDIR/rec/GM GM-79c73ea2
+for l in GM SO SV CL GT; do
+  tools/board.sh pi4 run $TMPDIR/img/$l/zephyr/zephyr.bin $TMPDIR/rec/$l $l-79c73ea2
+done
+tools/cts/common-tally.py $TMPDIR/rec        # as tools/cts/README.md section 2 says
+grep -h -e 'carve-out' -e 'out of GPU memory' -e 'no GPU memory for a tiled copy' $TMPDIR/rec/GM/*/console.txt
 ```
