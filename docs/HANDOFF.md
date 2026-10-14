@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `e3477a9d` (2026-10-14). The numbers below are read from
+main is `fa497e8f` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -684,6 +684,34 @@ es3-vertex).
        but raises 17 others by up to 3 (particle vertex shaders 17 → 19,
        against the limit of 21). A real fix is a scheduler that tracks
        register pressure, not another rule in this pass.
+     - shaders-fold (2026-10-14; `tests/es3_shaderc_fold.rs`): `round` was
+       floor(x + 0.5), which rounds before the floor (0.49999997 + 0.5 is
+       1.0; above 2^23 an odd integer + 0.5 goes to the even one above), and
+       `roundEven` built on it. `builtin_call.rs` now takes t = trunc(x) and
+       d = x - t, both exact, and adds `+ 0.0` so a zero is +0.0 (ES 3.00
+       only; no ES 2.0 answer changes). Host: 4 / 4 on the PowerVR, the
+       GC7000UL and the V3D; `es3_shaderc_corpus` unchanged (3457, 3455,
+       3457); no fixture moved. Expected on the AM62P, not run on a board:
+       the 16 `builtin_functions.common.round` / `roundeven`
+       `{float,vec2,vec3,vec4}_highp_{vertex,fragment}` cases turn green
+       (image 7, line 14 of `tools/cts/am62p-gles3-tree.txt`), and the same
+       lowering serves `builtin_functions.precision.round*` /
+       `roundeven*` among image 7's 987 cases without a result. The 16 were
+       the largest bucket whose cause is in `src/shaderc/online/{fold,
+       fmath,builtin_call,loop_count}.rs` in the 2026-10-13 per-case list
+       (`git show cd238b6:tools/cts/log/board-sessions/am62p-gles3-percase-2026-10-13.notpass.tsv`);
+       no other bucket is there. The next value bucket of `shaders` is
+       `builtin_functions.common.modf` (24 cases, "Result comparison
+       failed"), not in those files: the IR evaluator gives the exact modf,
+       and dEQP's executor binds two integer colour attachments for modf's
+       two outputs, which the PowerVR back end does not draw
+       (`src/pvr/backend.rs`, "an integer colour attachment beside
+       another"; owner: int-rt-pvr follow-up; why the case reads "Result
+       comparison failed" and not "Error in draw" is not traced). Not on
+       the board list: `packSnorm2x16` / `packUnorm2x16` still round with
+       floor(x + 0.5) (`builtin_call.rs` `pack2x16`; only an input just below
+       .5 of a step goes the wrong way; dEQP's pack_unpack cases pass on the
+       AM62P).
    - **blit-ds**: the depth/stencil half of `glBlitFramebuffer` (the 16
      AM62P `fbo.blit.depth_stencil` failures). It needs a back-end entry
      that copies a rectangle between two objects' planes
