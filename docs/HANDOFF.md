@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `b5689400` (2026-10-14). The numbers below are read from
+main is `4e62d171` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -48,7 +48,7 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 |---|---|---|---|---|
 | AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. | 465, 33 scenes ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | Slint pass, cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
 | i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 47 / 48 run, 1 skipped (case 16, #8), first failure case 44 (#6), on `a0f439d6` (2026-10-10; no RESULTS.md entry). Case 44 alone still fails on `f2a13877` (RESULTS.md). Cases 2 and 10 fail now and then (#25, #9). | 42, 33 ran, 0 failed, on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | probes pass on `8abeaabb`; no fps (no console). |
-| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
+| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
 in `tools/cts/log/board-sessions/es2-final-expected.md`: one table per board
@@ -82,9 +82,14 @@ Each item waits for hardware. The commands and expected values are in
 - Pi 4: one whole GLES2 tree from one main commit (it replaces the composed
   row).
 - gl_test 196 `occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205
-  `mappbo` (the `work/land9` cases, on main since `c4dce9125`) on the Pi 4 and
-  the i.MX8MP (the AM62P ran them at `cd738b1a`); 199 to 201 on the i.MX8MP
-  and the Pi 4 where the GPU runs them.
+  `mappbo` (the `work/land9` cases, on main since `c4dce9125`) on the
+  i.MX8MP (the AM62P ran them at `cd738b1a` and again at `9b525867`, 5 of 5;
+  the Pi 4 ran them at `cd738b1a`: 202, 203 and 205 pass, 196 and 204 wait
+  for their defects, "Known defects"); 199 to 201 on the i.MX8MP and the
+  Pi 4 where the GPU runs them.
+- i.MX8MP dEQP-GLES3: the 133 table rows `e00` to `e132`
+  (`docs/es3-board-recipe-imx8mp.md`), from an image rebuilt at the commit
+  the board runs.
 - AM62P final GLES2 tree (`am62p-es2-final-a`):
   `texture.completeness.2d.npot_size` must still read Pass and glmark2
   terrain must still render (`docs/investigations/pvr-npot-levels.md`).
@@ -120,11 +125,28 @@ gl_test cases 196 `occl`, 200 `intrt`, 201 `usamp`, 202 `blitconv`, 203
 `tfcap`, 204 `srgb` and 205 `mappbo` are board-proven on the AM62P at
 `cd738b1a` (7 of 7 pass, 0 resets; 196 q0 to q4 `available 1` with 0, 1, 0,
 1, 1; 200 16 / 16, 201 8 / 8, 202 12 / 12, 203 9 / 9, 204 8 / 8, 205 15 /
-15); the ES 2.0 default set still passes there, 0 of 50 failed. Fail by group
+15); the ES 2.0 default set still passes there, 0 of 50 failed. On the same
+commit the default list passes 50 of 50 with cases 198 `a2cconst`, 197
+`vtxgrid` and 171 `viewwin` 3 of 3 (0 resets; uboot-mmc, console on
+main_uart0; `docs/board-sessions/am62p-gltest-final.md`), and 196 and 202 to
+205 pass again at the integration tip `9b525867` (5 of 5, 0 resets, same
+values; image sha256 `4acb9d77...`; run record
+`records/am62p/20261014-0910-es3gl-4acb9d77`), so the AM62P part of the
+stage-1 gl_test gap is closed. Fail by group
 and the 2,089 by group: `tools/cts/RESULTS.md`, "AM62P: the
 whole dEQP-GLES3 tree on `f2a13877`". The Pi 4 GLES3 tree
 (`tools/cts/pi4-gles3-tree.txt`, 91 images; recipe
-`docs/es3-board-recipe-pi4.md`) and the i.MX8MP's have never run. Every
+`docs/es3-board-recipe-pi4.md`) ran its first baseline on `cd738b1a`
+(2026-10-14): 7 of the 91 images (A1, B1, C1, D1, FB1, FB2, FB3) ran, 3,807
+cases, 2,798 pass / 744 fail / 265 NotSupported, every case with a result, 0
+resets; B1 (`buffer`, 695) and C1 (`clipping`, 602) pass in full
+(`docs/board-sessions/pi4-gles3-baseline.md`, per-case failures in
+`pi4-gles3-baseline-fails.tsv`). The i.MX8MP's table
+(`tools/cts/imx8mp-gles3-tree.txt`) covers every `gles3-mustpass.txt` case
+once (`check-imx8mp-gles3-tree.py`); its GLES3 stage 1 and table image were
+built at `ba8b242a` (`docs/board-sessions/imx8mp-deqp-stage1-gles3.md`), and
+only `--gles3` turns `REPORT_ES2` off, so ES 2.0 stays the default; it has
+never run on the board. Every
 other ES 3.0 number is HOST-ONLY: the Linux OSAL runs no command stream, so
 only API errors and compile and link outcomes mean anything there
 (`tools/cts/README.md` section 2b). Under `report-es2` every ES 2.0 answer
@@ -132,7 +154,7 @@ is kept and pinned by tests.
 
 | Feature | State | Design |
 |---|---|---|
-| Transform feedback | built on the host for the three GPUs: the GL core runs the vertex shader on the CPU for every captured vertex (`c4dce9125`; API `16ac864`). Host dEQP-GLES3 `transform_feedback` 882 / 882, `lifetime` 56 / 56. | `docs/es3-transform-feedback.md` |
+| Transform feedback | built on the host for the three GPUs: the GL core runs the vertex shader on the CPU for every captured vertex (`c4dce9125`; API `16ac864`). Host dEQP-GLES3 `transform_feedback` 882 / 882, `lifetime` 56 / 56. The capture also evaluates a vertex shader's texture look-ups (`texture`, `textureLod`, `textureOffset`, `textureProj`, `texelFetch`, `texelFetchOffset`, `textureSize`) on 2D, cube, 3D and 2D-array samplers (float, `isampler*`, `usampler*`) from the GL texture storage (`TexelSource` in `src/shaderc/online/eval.rs`, `GlTexels` in `src/gl/tf_capture.rs`); host only, `tests/es3_tf_sampler.rs`. | `docs/es3-transform-feedback.md` |
 | Uniform blocks | host: `tests/es3_ubo.rs` ports dEQP's `functional.ubo` (2,032 cases); the GC7000 refuses four at link (`KNOWN_LIMITS`) (`1b0e431`, `b0c0fa6`) | none |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`; the GC7000 and V3D refuse the integer ones by name (`888af5d`, `e5c4a18`; PowerVR `25267d17`, merged in `a27d69c0`) | `docs/es3-sized-formats.md`, `docs/es3-pvr-formats.md` |
 | Occlusion queries | counted on the three back ends, host only (`2241cd84` GL core, `d9573ab9` PowerVR, `dcac96cb` GC7000, `7526b084` V3D; merged in `452d6c31`) | `docs/es3-occlusion-query.md` |
@@ -405,18 +427,83 @@ is kept and pinned by tests.
      `check.sh` now keeps a failed row's whole output in
      `build/check-fail/<n>.log`. Open until a red names its test; the next
      red of this row is read from that file, never rerun first.
+   - **Pi 4 gl_test 196 `occl`** (no issue yet): the V3D occlusion counter
+     reads 0 for every query on the board (q0..q4 `available 1`, results
+     0,0,0,0,0; want 0,1,0,1,1), though it counts on the host (`cd738b1a`).
+     Check `OCCLUSION_QUERY_COUNTER`'s enable and read path on hardware.
+   - **Pi 4 gl_test 204 `srgb`** (no issue yet): the case prints "the render
+     half is the PowerVR's (this GPU refuses an sRGB target by name)" and
+     then FAIL, with no checks, although the sample half is meant to run on
+     all three boards. Read case 204 in `driver/tools/pvrlab/gl_test.c` for
+     the V3D guard.
+   - **`board.sh pi4 tree` as a background job** (no issue yet): run as a
+     session's background job it is killed at the tool's time limit; it died
+     while FB3 was on the board, left the staged `yakogl-FB3.bin` and
+     `tryboot.txt` on `/boot/firmware` (a leftover refuses the next run) and
+     printed no tally. Run the tree in rows of at most four, or in a job with
+     the longest timeout.
+   - **`tools/check_scope_selftest.sh` fails at the tip** (no issue yet; lines
+     88 and 145): full `tools/check.sh --jobs 3` at `cd738b1a` read 148 rows,
+     145 ok, 3 failed, 0 gaps (`docs/investigations/gate-red-tip.md`). The
+     self-test pins the row count at 149 (real 148); the other two red rows
+     are the AM62P Zephyr image rows, which need the git-ignored
+     `driver/src/fw/pvr_fw_blob.h` (absent on that worker). The clippy lints,
+     the `tf.rs` / `tf_tests.rs` lints and the `report-es2` `--lib` failure of
+     earlier reviews do not exist at the tip: `clippy-gate-fix` has nothing
+     to fix on main. The tools-only item is in "Open work" item 7.
+   - **i.MX8MP GLES3 stage-1 tooling** (no issue yet): failing GLES3 case
+     names print as `crc:<hex>`, not as dEQP names (map them with the table);
+     `tools/cts/am62p-deqp-images.sh` lacks `-DCONFIG_YAKOGL_REPORT_ES2=n`;
+     `cts-build-zephyr.sh` now drops a stale CMake cache and prints the
+     failing ninja step, and the same fix applies to the AM62P and Pi 4
+     stage 1 builds.
+   - **PowerVR vertex-shader `textureSize` sampler** (no issue yet): a
+     `sampler2DArray` that a vertex shader reads only through `textureSize`
+     has no uniform location (`glGetUniformLocation` answers -1), so the
+     application cannot set its unit.
+     `src/shaderc/online/powervr/chain.rs` keeps only the sampler rows a `Tex`
+     op samples (`row_sampled`); `tests/es3_tf_sampler.rs`
+     (`texture_size_of_each_target`) works around it with an extra
+     `texture()` read.
+   - Capture against draw, differences by design (`tests/es3_tf_sampler.rs`):
+     the capture applies the texture swizzle and GL_TEXTURE_MIN_LOD / MAX_LOD,
+     which the draw does not yet (`GlTexture` comment "the draw does not apply
+     them yet"); it filters cube maps seamlessly (ES 3.0 3.8.9.1); it computes
+     a 3D texture's chain length from max(w, h, d) where `draw.rs`
+     `mip_levels_needed` uses w and h. A sampler object's WRAP_R and LOD range
+     are not exposed by `es3.rs` (`sampler_state` returns min, mag, wrap S,
+     wrap T), so the capture uses the texture's, as the draw does.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured. Each item keeps every `report-es2` answer and adds a test that
    pins it. What each item built is in the ES 3.0 table above; here is what
    remains. The full wording as of 2026-10-11 is in the record file.
    - **tf-capture**: gl_test 203 `tfcap` passes on the AM62P and the GLES3
      `transform_feedback` rows pass (882 / 882, `cd738b1a`); the board next:
-     203 on the Pi 4 and the i.MX8MP.
+     203 passes on the Pi 4 (9 / 9, `cd738b1a`); the i.MX8MP next.
      `lifetime.attach.deleted_output.buffer_transform_feedback` still fails
-     on the AM62P. Left: a
-     vertex shader that samples a texture refuses its capturing draw; the
-     V3D's hardware path (`docs/es3-transform-feedback.md` section 4.3)
-     only if an application needs the speed.
+     on the AM62P. Left: the V3D's hardware path
+     (`docs/es3-transform-feedback.md` section 4.3) only if an application
+     needs the speed. A vertex shader that samples a texture is evaluated
+     now (host only); still refused, each by name in the log: a shadow
+     look-up, `textureGrad`, a compressed texture (its format named), a
+     texture with GL_TEXTURE_BASE_LEVEL other than 0 (the draw does not apply
+     it either), a sampler whose component type does not match the texture's,
+     storage with no CPU view. What each code generator lets reach a capture
+     (the capture is the same on the three GPUs; a program the code generator
+     or the link refuses never draws): the PowerVR refuses `texelFetchOffset`,
+     `textureGrad` and an integer result from a 2D array (and cube, 3D); the
+     GC7000 refuses `textureOffset`, `texelFetchOffset`, `textureProj`,
+     `textureGrad`, shadow samplers, integer results and `textureSize` at a
+     level other than a literal 0; the V3D refuses 3D and 2D-array samplers,
+     `texelFetch`, offsets, `textureGrad`, shadow samplers and integer
+     results. `texelFetchOffset` and an integer 2D array reach no capture on
+     any GPU yet (`the_texel_source_reads_what_no_code_generator_selects_yet`
+     in `tf_capture_tests.rs` asks the texel source for them directly): these
+     are code-generator items, not capture items. Stale text for the next
+     item that owns the files: `src/GL_CORE_NOTES.md` lines 394 and 634 and
+     `docs/es3-transform-feedback.md` section 4.1 "Vertex textures" (line
+     228) and section 5.7 still say the capture refuses a vertex shader that
+     samples.
    - **int-rt**: the PowerVR's is built; its proof is the AM62P (gl_test
      200, and the `texture.specification`, `fragment_out` and
      `shaders.builtin_functions` buckets). Left on the PowerVR: an integer
@@ -432,21 +519,34 @@ is kept and pinned by tests.
      sRGB render targets (`docs/es3-srgb.md` 5.1, 6.1), an sRGB attachment
      beside another on the PowerVR, compressed sRGB.
    - **occlusion-query**: gl_test 196 and `functional.occlusion_query` (62 /
-     62) pass on the AM62P (`cd738b1a`); the board next: 196 on the Pi 4 and
-     the i.MX8MP, and the 4 `negative_api` cases on the AM62P. The unverified
+     62) pass on the AM62P (`cd738b1a`); 196 fails on the Pi 4 (the counter
+     reads 0, "Known defects"); the board next: 196 on the i.MX8MP and the
+     Pi 4 after its fix, and the 4 `negative_api` cases on the AM62P. The unverified
      points are `docs/es3-occlusion-query.md` section 9.
    - **pvr-2darray**: PowerVR 2D-array and shadow sampling, designed in
      `docs/es3-pvr-2darray.md`.
    - **buffer-pbo**: gl_test 205 `mappbo` passes on the AM62P (15 / 15,
-     `cd738b1a`); the board next: 205 on the Pi 4 and the i.MX8MP, then the AM62P
-     GLES3 tree's images 1 `buffer.*`, 5 `pbo.*`, 6 `read_pixels.*` and 23
+     `cd738b1a`), and on the Pi 4 (15 / 15, `cd738b1a`); the board next: 205
+     on the i.MX8MP, then the AM62P GLES3 tree's images 1 `buffer.*`, 5 `pbo.*`, 6 `read_pixels.*` and 23
      `texture.specification.*`). Left: the 3D and 2D-array cases of those
      groups need `pvr-2darray`, and the depth ones the PowerVR's depth
      sampling.
    - **es3-shaderc**: the online compiler's GLSL ES 3.00 gaps
-     (`docs/es3-shaderc-coverage.md`: PowerVR 3,453 / GC7000UL 3,451 / V3D
-     3,453 of 3,461 expected-build programs build). Open: the rest of its
-     "Work that closes the table"; two need a decision first: names of 63
+     (`docs/es3-shaderc-coverage.md`: PowerVR 3,457 / GC7000UL 3,455 / V3D
+     3,457 of 3,461 expected-build programs build, `tests/es3_shaderc_corpus.rs`
+     with `DEQP_GLES3_TEST_DIR` = VK-GL-CTS `93bca018`; the V3D's base was
+     not run). Backslash-newline inside a preprocessing token is closed (the
+     4 `line_continuation.preprocessing_token_*` / `.token_*` programs on each
+     GPU), but the cause was the harness, not the compiler: dEQP's
+     `parseShaderSource` removes the extra indentation, so the line after the
+     backslash starts in column 0, and the corpus now has
+     `remove_extra_indentation`; `lexer.rs` `splice_lines` already spliced
+     (`tests/es3_shaderc_pp_splice.rs` pins it, ES 1.00 unchanged; the
+     `preprocessor` row is 292 built, 0 refused). Remaining expected-pass
+     refusals on the PowerVR: 2 `constant_expressions.other.complex_*` (case
+     labels) and 2 `uniform_block.valid.long_instance_name_*` (reflection
+     name). Open: the rest of its "Work that closes the table"; two need a
+     decision first: names of 63
      characters or more (an instance block's default-block rows are named
      after the instance, so a 1,024-character instance name fills the
      64-byte field), and the GC7000UL's 128-element constant array (it
@@ -464,6 +564,58 @@ is kept and pinned by tests.
    - **es3-vertex**: the AM62P vertex groups, `attribute_location` 48,
      `vertex_arrays` 41, `instanced` 6 fail on `f2a13877`; the task list
      and causes are in `docs/es3-cts-failures.md`.
+     - `attribute_location`: `glBindAttribLocation` no longer moves a vertex
+       input that has `layout(location = N)` (`src/gl/program.rs`:
+       `ExplicitAttribs::scan` reads the qualifiers of a `#version 300 es`
+       vertex shader, `attrib_layout` and `build_attrib_indices` honour them,
+       `link_attrib_layout` recompiles with the decided layout when it
+       differs; ES 2.0 and `#version 450` sources read nothing, so
+       `report-es2` answers do not change). `tests/es3_attrib_location.rs`
+       reproduces `mixed` and `mixed_time.*`; expected effect on the AM62P:
+       the 28 `mixed` / `mixed_time` failures (task T4), not run on a board.
+       Still open: `mixed_max_attributes.*` (20 AM62P cases). When the
+       compile puts two inputs on one location the record has one row for it
+       (`src/shaderc/online/powervr/abi.rs`, the `find(|d| d.location ==
+       ...)` merge), so the link keeps the compile's placement for such
+       shaders (`layout_differs` returns false when an active input has no
+       row). **`src/shaderc/online/reflect.rs` must change** (held by
+       tf-infolog when written): in `reflect()`, the
+       `StorageQualifier::Attribute` branch, an input without
+       `layout(location)` must get the lowest run of free locations that no
+       `layout(location)` of the shader uses and no earlier input took,
+       instead of `attrib_loc`. Sketch (proven on a throw-away patch, not
+       committed): collect a bit mask `explicit` of `l .. l + locations(base)
+       * array_len` for every top-level attribute with `io.location ==
+       Some(l)`; keep a mask `placed` of the locations earlier unqualified
+       inputs took; for an unqualified input of `n = locations(base) * count`
+       locations start at 0, advance while any of `loc .. loc + n` is in
+       `explicit | placed`, use `loc` and add it to `placed`; an input with a
+       qualifier keeps `attrib_loc = l`. A shader with no qualifier reflects
+       as before. With it `mixed_max_attributes_vec4` and
+       `unqualified_unbound_inputs_avoid_every_qualifier` in
+       `tests/es3_attrib_location.rs` pass: remove their `#[ignore]` in the
+       same change and add the reflect.rs unit test. Limit of the source
+       scan: a location written through a macro, or `#if`-ed out qualifiers,
+       are not seen (the input then counts as unqualified); dEQP writes the
+       plain form.
+     - `instanced`: the 6 failures are `{draw_arrays_instanced,
+       draw_elements_instanced}.mixed.{2,4,20}_instances`; the other 39 pass.
+       The cause is in the back ends, not in `src/gl/vertex.rs` (divisors 0,
+       1, 2 are stored and returned correctly, `tests/es3_vertex_api.rs`).
+       The PowerVR and the GC7000UL take divisor 1 only, so `draw_instanced`
+       (`src/gl/draw.rs`) draws instance by instance and feeds each
+       instance's divisor-array value as a constant, with
+       `GlesDraw::instance_id` set to the instance number; the back end then
+       refuses the draw, because the PDS / FE starts `gl_InstanceID` at 0 in
+       every draw (`src/pvr/backend.rs` draw entry ~4590 and chunking
+       exception ~4826; `src/vivante/backend.rs` ~2353, `-EINVAL`). The V3D
+       takes any divisor (`0xffff`), draws once and is predicted to pass.
+       `tests/es3_instanced.rs` (host only) pins the part the GL core owns.
+       Options, owned by the back-end items (T6): A, program the PDS instance
+       step by the divisor as Mesa pvr does, so `max_instance_divisor` > 1
+       (`src/pvr/backend.rs`); B, feed `gl_InstanceID` as a per-draw constant
+       in the emulated path (the back ends use the `instance_id`
+       `draw_instanced` already sets; the draw.rs holder). dEQP was not run.
    - The GC7000 refuses four `ubo` cases at link for constant registers
      (`tests/es3_ubo.rs` `KNOWN_LIMITS`).
    - **fbo-completeness** (plan #19 item `fbo-fragops`): done on the host
@@ -493,7 +645,20 @@ is kept and pinned by tests.
      sessions should run `fbo.completeness.size.distinct` and `fbo.depth.*`
      with a watch for MMU faults (a depth image of another size than the
      colour has not been drawn into on a board).
-   - Then the dEQP-GLES3 tree on each board, after its ES 2.0 tree.
+   - Then the dEQP-GLES3 tree on each board, after its ES 2.0 tree. The Pi 4
+    has 84 of its 91 images left (FB4 is built, `build/` only); each ran in
+    under 30 s of its 240 s window, so the table could be re-split into far
+    fewer images. Its failures so far, not yet classified case by case, are
+    `fbo.blit.conversion` 261, `fbo.completeness.renderable` 105,
+    `fbo.color.*` about 190, `blit.default_framebuffer` 31,
+    `attribute_location.mixed*` 48, `implementation_limits.*` 11 and
+    `draw.random.*` 14: the integer, MRT, 2D-array and layout items of the
+    plan. `tools/cts/common-images.sh` cannot set `CONFIG_V3D_GL_TEST_CASE(S)`;
+    a case option would save editing the Kconfig for every build. The
+    i.MX8MP's board run follows `docs/es3-board-recipe-imx8mp.md`, with an
+    image named `es3-<hash8>` rebuilt at the commit the board runs
+    (`tools/cts/imx8mp-gles3-artefacts.sh es3-<hash8>` prints its size and
+    sha256).
 5. **ES 2.0 final sessions** (plan #20). `es2-invariance` is done: the
    PowerVR fix (`f9688bc5`, merged by `e17fb6a7`) needs no further source
    change. The final sessions (`am62p-es2-final-a`, `am62p-es2-final-b`,
@@ -532,6 +697,11 @@ is kept and pinned by tests.
      rows; cause not confirmed by a build).
    - Owner: CONTRIBUTING.md says a pushed branch is never rebased; the ccfarm
      `conventions` text says branches are rebased onto origin/main.
+7. **Gate rows at the tip** (tools only; `docs/investigations/gate-red-tip.md`):
+   fix the two row-count pins in `tools/check_scope_selftest.sh` (pinned 149,
+   real 148); make the AM62P Zephyr image rows a `gap` when
+   `driver/src/fw/pvr_fw_blob.h` is absent; stop nested runs clobbering
+   `build/check-fail/<n>.log`; correct the `--quick` comment.
 
 ## Next board session
 
@@ -559,8 +729,10 @@ Every dEQP build prints `rc=0` and the `check-deqp-images.py` verdict for its
 `.config` (an image that fails it reports `rc=not-conformance`). Record
 `$HEAD8` with each result: an image from any other commit proves nothing here.
 
-The gl_test cases below passed on the AM62P at `cd738b1a`; they are still to
-run on the Pi 4 and the i.MX8MP. An ES 3.0 gl_test image needs
+The gl_test cases below passed on the AM62P at `cd738b1a` (and 196, 202 to 205
+again at `9b525867`). On the Pi 4 they ran at `cd738b1a`: 202, 203 and 205
+pass, 196 and 204 fail ("Known defects"); they are still to run on the
+i.MX8MP, and 196 and 204 on the Pi 4 after their fixes. An ES 3.0 gl_test image needs
 `CONFIG_GL_TEST_CASES` for `gl_test`; `tools/cts/common-images.sh` has no
 case override, so append the line to `prj.conf` for the build and remove it
 (a `-D` option on the `west build` line does the same).
@@ -644,6 +816,11 @@ export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out>
 (Steps 1 to 5 ran: 1 and 4 on `32778b57`, 2 on `a0f439d6`, 3 and 5 on
 integration images. Their recipes are in the record file.)
 
+dEQP-GLES3 (never run on the board): the 133 table rows `e00` to `e132` of
+`tools/cts/imx8mp-gles3-tree.txt`, as in `docs/es3-board-recipe-imx8mp.md`
+section 3, from an image rebuilt at the commit the board runs
+(`tools/cts/imx8mp-gles3-artefacts.sh es3-<hash8>`).
+
 ### Raspberry Pi 4 (tryboot, no `BOARD_BOOT`)
 
 Still to run on the Pi 4:
@@ -654,11 +831,18 @@ Still to run on the Pi 4:
   QualityWarning, 2 CompatibilityWarning). A row whose verdict is
   `done_lossy` has lost result lines in the bridge: read it against the
   image's counters and rerun the row (the bridge's fix is firmware work);
-- the gl_test cases of `c4dce9125` (`v3d_gl_test` sets: 203 `tfcap`, 202
-  `blitconv`) and 196 `occl` (above);
-- the dEQP-GLES3 tree (`tools/cts/pi4-gles3-tree.txt`, 91 images; never
-  run, `docs/es3-board-recipe-pi4.md`), after the transform-feedback and
-  blit rows pass on the Pi 4.
+- gl_test 196 `occl` after the V3D counter is looked at, and 204 `srgb` after
+  its guard (above; 202, 203 and 205 passed at `cd738b1a`);
+- the remaining dEQP-GLES3 tree images (`tools/cts/pi4-gles3-tree.txt`, 91
+  images, `docs/es3-board-recipe-pi4.md`; rows 0 to 7 ran, row 7 is FB4,
+  built and not run):
+  `TREE_IMAGE_DIR=<dir> BOARD_MUSTPASS=<abs path of gles3-mustpass.txt>
+  tools/board.sh pi4 tree tools/cts/pi4-gles3-tree.txt <outdir>` with
+  `TREE_ROWS=<a>-<b>` (at most four rows a run, "Known defects"),
+  `DEQP_MODULE=gles3` and `DEQP_WORK` set to the gles3 stage 1 for the image
+  build. One row costs about 5 min 15 s (the run itself under 30 s). Run the
+  five GLES2 regression rows (D, FB1, T1, T3, TF) in the same session; they
+  did not run in the baseline session.
 
 The whole tree needs `RUSTUP_TOOLCHAIN=nightly`, stage 1 for `rpi_4b`
 (`DEQP_WORK`), `BOARD_UART` (the debug probe's device, or `host:port` of
@@ -687,6 +871,23 @@ port the lease and the task's `BOARD_UART` named was not it either (both gave
 no bytes). Probe the port with
 `python3 tools/am62p_netboot_uart.py probe <host:port>` and check that the
 console shows bytes before the first image.
+
+`board.sh am62p tree` refuses (rc=3) when a dead run left a one-shot image in
+the eMMC staging directory (a stale `/var/yakogl/once-*.bin`): `board.sh am62p
+disarm` clears it. A bridge capture timeout (`verdict=scan_failed`, rc 4) is a
+transport problem, not a case failure: rerun the row. An image build with the
+image directory under `/tmp` failed once with rc=101 (cause unknown, not
+reproduced with the directory in the dependency cache).
+
+After the `layout(location)` change (`src/gl/program.rs`), re-run
+`functional.attribute_location.mixed` and `mixed_time` on the AM62P (expect 0
+failures), and `mixed_max_attributes` after the `reflect.rs` change ("Open
+work" item 4, es3-vertex). After a back-end fix for `gl_InstanceID` in an
+emulated instance, re-check
+`dEQP-GLES3.functional.instanced.draw_arrays_instanced.mixed.{2,4,20}_instances`
+and `...draw_elements_instanced.mixed.{2,4,20}_instances` on the AM62P and the
+i.MX8MP (same refusal predicted); the 39 other instanced cases must stay
+passing, and the Pi 4 should pass already.
 
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
