@@ -17286,7 +17286,6 @@ Not plain `origin/main` builds: the port was not yet on main. The record words s
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
 
-<<<<<<< HEAD
 ## i.MX8MP: common set on `cd738b1a` (2026-10-14)
 
 Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not built), run from U-Boot
@@ -17437,7 +17436,7 @@ and the `render.*.rbo_bgra*` families). This is the failure set of `cd738b1a` (s
 still unfixed at `835cf9c`. Resets were absent; the entry 14 run needed 30 refused attempts
 because a first, killed run (background time limit) left a one-shot image in `/var/yakogl`;
 `board.sh imx8mp disarm` cleared it and the tree resumed.
-=======
+
 ## i.MX8MP: common set on main a63fcc5b (2026-10-14 JST)
 
 Images from `origin/main` `a63fcc5b` (`cts-common.sh imx8mp build`), run by `tools/board.sh imx8mp`
@@ -17456,4 +17455,3 @@ were deleted, so the records above are one clean pass.
 
 `resets=absent` on every row. GT's failure is the known case 44 (es3hdr, #6) and the known skip of
 case 16; no new failing case. The glmark2 cell stays green (33 ran, 0 failed, 0 unsupported).
->>>>>>> 6f3c20afeac4242a73d3d638d030767c7f74146e
