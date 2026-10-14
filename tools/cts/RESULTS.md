@@ -39,6 +39,25 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 > the crate compiles. The compiler caught a brace this resolution lost at a
 > "both" hunk's seam; a name check alone would not have.
 
+
+## dEQP-GLES2 final trees: AM62P `63efed8e`, i.MX8MP `c345ab74`, Pi 4 `20a48791` rows 0-14 (2026-10-14)
+
+Folded from the board-session records; this file adds no new measurement. Per-case names and causes: `docs/es2-cts-failures.md`.
+
+| Board | Commit | Record (commit) | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning |
+|---|---|---|---:|---:|---:|---|
+| AM62P, 17 images 1x | `63efed8e` (10-12) | `docs/board-sessions/am62p-es2-final-r2.md` (`ca56dbc`) | 17,125 | **0** | 34 | 5 / 1 |
+| AM62P, ms4 image | `63efed8e` | same | 16 | **0** | 0 | 0 / 0 |
+| AM62P combined (ms4 replaces the 16 1x `multisample.*`) | `63efed8e` | same | 17,141 | **0** | 18 | 5 / 1 |
+| i.MX8MP, 29 entries | `c345ab74` (10-12) | `docs/board-sessions/imx8mp-es2-final-r2.md` (`b3dad33`) | 17,318 of 17,371 begun (17,112 to 17,116 of the 17,165 list) | **0** | 34 (30 to 34 on the list) | 19 / 0 |
+| Pi 4, rows 0-14 | `20a48791` (10-14) | `docs/board-sessions/pi4-es2-final.md` (`1344748`) | 11,877 of 11,953 | **46** | 25 | 3 / 2 |
+| Pi 4, rows 15-28 | `20a48791` | not run (`pi4-es2-final-b` stopped) | - | - | - | - |
+| Pi 4, whole tree (last) | `d56e79e5` (10-12) | `docs/board-sessions/pi4-es2-final-r2.md` (`ce16942`) | 17,127 | **0** | 34 | 3 / 1 |
+
+- The 46 Pi 4 Fail: `fbo.completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra` (3) and 43 `fbo.render.*.rbo_bgra*` cases. Cause: `8bbf9ba2` (`renderbuffer_format_advertised` in `src/gl/framebuffer.rs` does not list `GL_BGRA_EXT`). `8bbf9ba2` is not in `63efed8e`, `c345ab74` or `d56e79e5`.
+- i.MX8MP: every entry's counts and failing-name column equal `tools/cts/imx8mp-full-tree-29460f96.results.tsv`.
+- AM62P gl_test 198 / 197 / 171: not run (`docs/board-sessions/am62p-es2-final.md`, `146f856`).
+
 ## AM62P: the freelist reconstruction's HWRT reset, isolated (2026-10-04)
 
 On the BGTAG HWR generator (gl_test with pvr/bgtag's opt-in, knob off),
