@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # Atmark Techno Armadillo-X2 (i.MX8M Plus), Cortex-A53 cluster only.
 #   armadillo_x2/mimx8ml8/a53         an image kexec'd out of Armadillo Base OS
 #                                     (armadillo_x2_mimx8ml8_a53.dts)

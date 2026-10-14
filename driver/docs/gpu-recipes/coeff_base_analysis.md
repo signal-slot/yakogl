@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Fragment coefficient-store fault (0x4c4000000) and the CMD3D layout
 
 Conclusions of an early bring-up analysis, cut down to what is still true.

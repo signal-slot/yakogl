@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P dEQP-GLES3 per-case run r2 — BLOCKER (console)
 
 Date: 2026-10-14. Plan #19, item oq-gc. Integration tip dc51401.

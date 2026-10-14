@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Near/far clipping: which z convention the TA applies
 
 GL ES 2.0 clips against `-w <= z <= w`. Vulkan and D3D clip against `0 <= z <= w`.

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 console bridge probe (2026-10-13)
 
 Integration commit: 40dd2107fa2c

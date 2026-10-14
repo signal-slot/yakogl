@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Work list (maintained by the agents; the user-facing summary is STATUS.md)
 
 Cells and rows here may cite commits. Update this section in the same push as the number or fix it describes.

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 plan #1 confirmation from the integration image: not run (no console)
 
 HEAD8=0175bac1 (integration tip, ccfarm/integration)

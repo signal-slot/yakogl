@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The Vivante GC7000 backend: what is implemented, and what the hardware has to answer
 
 *These notes began with the C library's GC7000 backend, and the sections dated

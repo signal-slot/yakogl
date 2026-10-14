@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 sized texture formats in the GL core
 
 Built in `888af5d0` and `e5c4a180`. What `glTexImage2D/3D`, `glTexStorage2D/3D`,

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # no_std Slint / FemtoVG / glow forks for the GPU samples
 
 `samples/zephyr/slint` (the one Slint sample), `cluster`, `v3d_gl_femtovg` and
