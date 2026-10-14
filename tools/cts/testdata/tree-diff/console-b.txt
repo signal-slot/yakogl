@@ -1,0 +1,11 @@
+13:28:30 # SPDX-License-Identifier: Apache-2.0
+13:28:30 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+13:28:31 deqp: case filter 'dEQP-GLES2.functional.treediff.*'
+13:28:32 deqp: Pass dEQP-GLES2.functional.treediff.same_pass
+13:28:32 deqp: Fail dEQP-GLES2.functional.treediff.regress_fail
+13:28:33 deqp: Pass dEQP-GLES2.functional.treediff.fixed_case
+13:28:33 deqp: Fail dEQP-GLES2.functional.treediff.still_fail
+13:28:34 deqp: NotSupported dEQP-GLES2.functional.treediff.accepted_ns
+13:28:34 deqp: NotSupported dEQP-GLES2.functional.treediff.accepted_stays
+13:28:35 deqp: done: 2 passed, 2 failed, 2 not supported, 0 warnings, complete=1
+13:28:35 deqp: summary: 7 cases begun, 6 with a result, 1 without
