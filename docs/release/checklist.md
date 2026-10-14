@@ -40,28 +40,15 @@ commit that touched the file (`git log -1 --format=%h -- <path>`).
 
 ## Decisions only the owner can make
 
-<<<<<<< HEAD
-| Decision | Why it is the owner's | Needed by |
-|---|---|---|
-| Promote the integration branch to `main` | `main` is the branch to publish; ccfarm does not push it | before lines 7 and 8 are final |
-| Make the repository public | Irreversible: copies and caches cannot be recalled | after all lines above are met |
-| Licence of each component: library (`src/`, `capi/`), kernel driver (`driver/`; `LICENSES/GPL-2.0-only.txt` exists), `third_party/`, `tools/`, `website/`, `zephyr/` | One licence per directory must be stated in `LICENSE`/`NOTICE`; line 7 can only check files against that choice | before line 7 can reach zero |
-| What the README conformance table claims (`README.md` lines 37-66: per-board dEQP-GLES2 results, "17,165-case mustpass list") | It is a public claim; today it mixes trees from different commits (line 2). Choose: claim only one recorded tree per board, or list the failures explicitly | before line 2 |
-| Licence for vendored code (Slint licences, Imagination DDK MIT text, and anything line 7 finds) | A legal choice, not a code fix | before line 7 can reach zero |
-| Publication date | Depends on stage 1 and 2 results | last |
-| Security contact address in SECURITY.md | It becomes public | before line 4 |
-| Publish rewritten history or a fresh history, if line 8 finds a leak in old commits | Rewriting changes every hash quoted in the docs | after line 8 |
-=======
 | # | Decision | Why it is the owner's | Needed by |
 |---|---|---|---|
-| D1 | Licence of each component: YakoGL's own code (Apache-2.0 today, `LICENSE`); the Mesa-derived parts (MIT); the Imagination DDK material (MIT with the GPLv2 alternative); the NXP `hal_nxp` part (BSD-3-Clause); the Slint parts (GPL-3.0 / Slint Royalty-free 2.0 / Slint Software 3.0, which one applies to the samples); the Zephyr PR snapshot; and whatever line 7 finds | A legal choice; the audit only reports | before line 7 can reach zero |
+| D1 | Licence of each component: YakoGL's own code (Apache-2.0 today, `LICENSE`); the Mesa-derived parts (MIT); the Imagination DDK material (MIT with the GPLv2 alternative); the NXP `hal_nxp` part (BSD-3-Clause); the Slint parts (GPL-3.0 / Slint Royalty-free 2.0 / Slint Software 3.0, which one applies to the samples); the Zephyr PR snapshot; and whatever line 7 finds. One licence per directory, stated in `LICENSE`/`NOTICE`: library (`src/`, `capi/`), kernel driver (`driver/`; `LICENSES/GPL-2.0-only.txt` exists), `third_party/`, `tools/`, `website/`, `zephyr/` | A legal choice; the audit only reports, and line 7 can only check files against that choice | before line 7 can reach zero |
 | D2 | Data files without an SPDX line (the 799 under `tools/shaders/`, test fixtures): a header in each, or a `REUSE.toml` that covers them | Changes many files or adds a licensing convention | before line 7 |
 | D3 | History: publish the existing history, a rewritten one (filter out what line 8 finds), or a fresh single-commit history | Rewriting changes every hash quoted in the docs; a fresh history loses provenance | after line 8 |
-| D4 | What the README conformance table claims: per-board whole-tree counts from one commit each (as line 13 asks), or the newest reading per row; and whether a board with a known open regression may be published as "close to complete" | It is the public claim of the project | before lines 2, 5 and 9 close |
+| D4 | What the README conformance table claims (`README.md` lines 37-66: per-board dEQP-GLES2 results, "17,165-case mustpass list"): per-board whole-tree counts from one commit each (as line 13 asks), the newest reading per row, or the failures listed explicitly; and whether a board with a known open regression may be published as "close to complete" | It is the public claim of the project | before lines 2, 5 and 9 close |
 | D5 | Security contact address, response times and supported versions in SECURITY.md | They become public | before line 4 |
 | D6 | Merge or rebase rule for contributors (walk finding N4: CONTRIBUTING.md and the project settings disagree) | A project policy | before line 3 |
 | D7 | Promote the branch to publish to `main` and make the repository public | Irreversible: copies and caches cannot be recalled | after every line above is met |
 | D8 | Publication date | Depends on stage 1 and stage 2 | last |
->>>>>>> e811bae5203984596a650db9b1ef9fc0a1d3dd27
 
 No board address, login, user name or credential is written in this file.
