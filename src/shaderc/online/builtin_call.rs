@@ -210,9 +210,7 @@ pub fn lower_call<'a, E: Emit<'a>>(e: &mut E, name: &'a str, args: &[Operand<'a>
 /// source only -- the caller asks -- since ES 1.00 leaves the names free.
 /// `None`: not one of them.
 ///
-/// - `trunc` is `Ftrunc`; `round` is floor(x + 0.5), the specification
-///   leaving the direction of a .5 to the implementation; `roundEven` is
-///   that, one less where x is exactly halfway and the result odd.
+/// - `trunc` is `Ftrunc`; `round` and `roundEven` are [`round`]'s.
 /// - `isnan` and `isinf` test the BITS, with integer operations: a float
 ///   compare's behaviour with a NaN is the hardware's (x != x holds only
 ///   under IEEE rules neither back end promises), and an integer compare's
@@ -288,27 +286,7 @@ pub fn lower_es3<'a, E: Emit<'a>>(e: &mut E, name: &'a str, args: &[Operand<'a>]
                 alu(e, AluOp::Fmul, [l, half, half])
             }
             "trunc" => alu(e, AluOp::Ftrunc, [x, x, x]),
-            "round" | "roundEven" => {
-                let half = e.constant([0.5; 4])?;
-                let t = alu(e, AluOp::Fadd, [x, half, half])?;
-                let r = alu(e, AluOp::Ffloor, [t, t, t])?;
-                if name == "round" {
-                    return Ok(r);
-                }
-                /* halfway: fract(x) == 0.5 (fract(-2.5) is 0.5 as well);
-                 * odd: fract(r / 2) != 0 */
-                let f = alu(e, AluOp::Ffract, [x, x, x])?;
-                let tie = alu(e, AluOp::Feq, [f, half, half])?;
-                let h = alu(e, AluOp::Fmul, [r, half, half])?;
-                let hf = alu(e, AluOp::Ffract, [h, h, h])?;
-                let zero = e.constant([0.0; 4])?;
-                let odd = alu(e, AluOp::Fne, [hf, zero, zero])?;
-                let both = alu(e, AluOp::Bcsel, [tie, odd, tie])?;
-                let one = e.constant([1.0; 4])?;
-                let n1 = alu(e, AluOp::Fneg, [one, one, one])?;
-                let down = alu(e, AluOp::Fadd, [r, n1, n1])?;
-                alu(e, AluOp::Bcsel, [both, down, r])
-            }
+            "round" | "roundEven" => round(e, name, x),
             "isnan" | "isinf" => {
                 let mask = e.emit(Op::ConstI32([0x7fff_ffff; 4]))?;
                 let inf = e.emit(Op::ConstI32([0x7f80_0000; 4]))?;
@@ -330,6 +308,49 @@ pub fn lower_es3<'a, E: Emit<'a>>(e: &mut E, name: &'a str, args: &[Operand<'a>]
 
 fn ci<'a, E: Emit<'a>>(e: &mut E, lanes: [i32; 4]) -> R<'a, Src> {
     e.emit(Op::ConstI32(lanes))
+}
+
+/// ES 3.00 section 8.3's `round` and `roundEven`, exact for every finite x.
+///
+/// t = trunc(x) and d = x - t are both exact, so the choice between t and
+/// t + sign(x) reads the true fraction: |d| > 0.5 rounds away from zero,
+/// |d| < 0.5 keeps t. At |d| == 0.5, `round` goes away from zero (the
+/// section leaves the direction to the implementation) and `roundEven`
+/// keeps whichever of t and t + sign(x) is even. t + sign(x) is exact,
+/// because a non-zero d means |x| < 2^23.
+///
+/// floor(x + 0.5) is not this: the sum rounds before the floor sees it.
+/// 0.49999997 + 0.5 rounds to 1.0, and 8388609 + 0.5 (past 2^23, where the
+/// float step is 1) rounds to 8388610. dEQP-GLES3
+/// builtin_functions.common.round / roundeven highp require the exact
+/// result, and draw x up to 1e7.
+///
+/// A zero result is +0.0 (the `+ 0.0` at the end): dEQP's reference for
+/// these cases is float(int(...)), so roundEven(-0.5) and round(-0.3) are
+/// +0.0, and highp compares the sign of zero.
+fn round<'a, E: Emit<'a>>(e: &mut E, name: &'a str, x: Src) -> R<'a, Src> {
+    let half = e.constant([0.5; 4])?;
+    let zero = e.constant([0.0; 4])?;
+    let t = alu(e, AluOp::Ftrunc, [x, x, x])?;
+    let nt = alu(e, AluOp::Fneg, [t, t, t])?;
+    let d = alu(e, AluOp::Fadd, [x, nt, nt])?;
+    let ad = alu(e, AluOp::Fabs, [d, d, d])?;
+    let s = alu(e, AluOp::Fsign, [x, x, x])?;
+    let away = alu(e, AluOp::Fadd, [t, s, s])?;
+    /* |d| >= 0.5: away from zero */
+    let up = alu(e, AluOp::Fle, [half, ad, ad])?;
+    let mut r = alu(e, AluOp::Bcsel, [up, away, t])?;
+    if name == "roundEven" {
+        /* halfway, and `away` odd: fract(away / 2) != 0 (exact: away is an
+         * integer below 2^23 here). Then t, which is even. */
+        let tie = alu(e, AluOp::Feq, [ad, half, half])?;
+        let h = alu(e, AluOp::Fmul, [away, half, half])?;
+        let hf = alu(e, AluOp::Ffract, [h, h, h])?;
+        let odd = alu(e, AluOp::Fne, [hf, zero, zero])?;
+        let both = alu(e, AluOp::Bcsel, [tie, odd, tie])?;
+        r = alu(e, AluOp::Bcsel, [both, t, r])?;
+    }
+    alu(e, AluOp::Fadd, [r, zero, zero])
 }
 
 /// ES 3.00 section 8.4's pack functions: the two lanes of a vec2 as two
