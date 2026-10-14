@@ -264,4 +264,26 @@ struct v3d_tex_tfu_job {
 bool v3d_tex_tfu_pack(const struct v3d_tex_layout *l, uint32_t ttype, uint32_t src_gpu, uint32_t src_stride,
 		      uint32_t dst_gpu, struct v3d_tex_tfu_job *j);
 
+/* Pack the job that generates levels 1 .. levels - 1 of the tiled image at
+ * GPU address `image_gpu`, laid out as `l`, from its own level 0, with data
+ * type `ttype` (the texture's real type, as Mesa's v3d_generate_mipmap
+ * passes the resource's format: RGBA8 for an RGBA8 texture, so the filter
+ * averages channels, not bytes). Mesa's v3dX(tfu) with for_mipmap, src ==
+ * dst, src_level == base_level == 0 and last_level == levels - 1
+ * (gallium/drivers/v3d/v3dx_tfu.c at b739817b): the source is level 0 in its
+ * own tiling (ICFG's format field: LINEARTILE 11 + the tiling's distance from
+ * LINEARTILE; IIS the padded height in UIF blocks for a UIF source, 0 for
+ * LT and UB-linear); NUMMM (ICFG bits 5..) is the levels after the first;
+ * IOA is level 0's address with the same tiling in its format field and
+ * DIMTW (bit 0) set, which keeps the TFU from writing level 0 over itself
+ * and sends the levels it makes to where Mesa's v3d_setup_slices lays them
+ * (the layout `l` is, so the TMU finds them); a UIF level 0 carries its
+ * padding rows in OPAD (ICFG bits 22..) as v3dx_tfu.c:154-162 does for every
+ * UIF destination. False,
+ * with `j` untouched, for a layout of one level, a texel size `ttype` does
+ * not name (RGBA8 is 4 bytes), a size of 16384 or more, or a level 0 whose
+ * address would fall into IOA's low 6 bits. */
+bool v3d_tex_tfu_pack_mipmap(const struct v3d_tex_layout *l, uint32_t ttype, uint32_t image_gpu,
+			     struct v3d_tex_tfu_job *j);
+
 #endif

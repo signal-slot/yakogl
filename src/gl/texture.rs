@@ -735,10 +735,11 @@ pub(crate) fn resolve_depth(c: &mut GlContext, ti: usize) {
     framebuffer::set_depth_resolved(c, ti, kick);
 }
 
-fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
-    /* A glClear waiting to be merged into the next draw renders into the
-     * texture before this write in GL's order, so it goes out first (it
-     * then is one of the kicks waited for). */
+/// A glClear waiting to be merged into the next draw renders into texture
+/// `ti` when it is the bound framebuffer's colour or depth attachment: it
+/// goes out now, before a CPU access of the texels that comes after it in
+/// GL's order (it then is one of the kicks waited for).
+fn flush_clear_into(c: &mut GlContext, ti: usize) {
     let is_target = c.bound_framebuffer != 0
         && c.framebuffer_ref(c.bound_framebuffer).is_some_and(|fb| {
             [&fb.color, &fb.depth].into_iter().any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti)
@@ -746,6 +747,24 @@ fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
     if is_target {
         draw::flush_pending_clear(c);
     }
+}
+
+/// The CPU is about to read or write levels 1.. of texture `ti`, whose last
+/// glGenerateMipmap the backend made in its own image
+/// (`GlTexture::chain_in_backend`): the backend writes the chain back into
+/// the storage first (`backend::return_mipmap_chain`), and the storage is
+/// GL's chain again. Nothing for any other texture.
+pub(super) fn chain_back(c: &mut GlContext, ti: usize) {
+    let Some(t) = c.objs_ref().textures.get(ti) else { return };
+    if !t.used || !t.chain_in_backend {
+        return;
+    }
+    backend::return_mipmap_chain(&draw::texture_bind_2d(t), t.chain_levels as u32);
+    c.objs().textures[ti].chain_in_backend = false;
+}
+
+fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
+    flush_clear_into(c, ti);
     resolve_depth(c, ti);
     let t = &c.objs_ref().textures[ti];
     /* A pending kick that only SAMPLED the texture reads a copy on a backend
@@ -761,6 +780,10 @@ fn settle_texture(c: &mut GlContext, ti: usize) -> bool {
         glog!("texture {}: the kicks using it did not complete; the update is dropped", ti);
         return false;
     }
+    /* a chain the backend made in its own image comes back into the
+     * storage before the storage is written (the write may be into one of
+     * its levels, or into level 0 under them) */
+    chain_back(c, ti);
     /* every CPU write of the texels comes through here first */
     stamp_texels(&mut c.objs().textures[ti]);
     true
@@ -1575,6 +1598,7 @@ fn texture_alloc_laid_out(
         context::release_storage(&mut t.mem, &mut t.external); /* an image's texture gets its own storage again */
         t.bgra = false;
         t.pe_order = false;
+        t.chain_in_backend = false; /* the backend dropped its image with the storage */
         if bytes > 0 && osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut t.mem) != 0 {
             /* the C prints the byte count as unsigned (truncated) */
             glog!(
@@ -3283,6 +3307,7 @@ unsafe fn compressed_tex_image(
             t.storage_gen = context::respecified(t.serial, true);
             t.chain_pitch = 0; /* every level its own block rows */
             t.pot_chain = false;
+            t.chain_in_backend = false;
             t.chain_levels = chain_levels;
             t.levels = 1;
             t.levels_written = 1;
@@ -3770,6 +3795,41 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
          * level): the texture keeps its base level and samples without
          * mipmaps */
         return;
+    }
+    /* A backend that keeps level 0 of a render target as its jobs rendered
+     * it (the V3D's render image) may make the chain there, on the GPU
+     * (backend::generate_mipmap): nothing is filtered or stamped here, the
+     * storage's levels 1.. stay as they are until the backend hands the
+     * chain back (chain_back, before any CPU read or write of them), and the
+     * record says the chain exists, as below. A level above 0 attached to a
+     * framebuffer is read and written by the GPU through the storage, so
+     * such a texture keeps the CPU's chain. The clear waiting to be merged
+     * into the next draw renders into the texture before this call in GL's
+     * order, so it goes out first, as settle_texture sends it. */
+    let t = &c.objs_ref().textures[ti];
+    if t.target == GL_TEXTURE_2D
+        && t.texfmt == GLES_TEXFMT_RGBA8
+        && t.es3_fmt == 0
+        && t.layers <= 1
+        && t.chain_levels >= 2
+        && t.chain_pitch == 0
+        && !t.pot_chain
+        && !t.bgra
+        && !t.pe_order
+        && !framebuffer::level_above_zero_attached(c, ti)
+    {
+        flush_clear_into(c, ti);
+        let t = &c.objs_ref().textures[ti];
+        if backend::generate_mipmap(&draw::texture_bind_2d(t), t.chain_levels as u32) {
+            let t = &mut c.objs().textures[ti];
+            t.chain_in_backend = true;
+            t.levels = t.chain_levels;
+            t.levels_written = t.chain_levels;
+            t.level_defined = ((1u32 << u32::from(context::gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
+            t.level_bad = 0;
+            t.level_faces = [0x3f; CAP_MIP_LEVELS];
+            return;
+        }
     }
     /* the chain is rewritten in place: no kick may still read or write it */
     if !settle_texture(c, ti) {
@@ -4285,6 +4345,7 @@ pub fn texture_attach_external(c: &mut GlContext, mem: &OsalGpuMem, w: u32, h: u
     t.external = true;
     stamp_texels(t); /* 0: an EGLImage's storage is never cached */
     t.storage_gen = context::respecified(t.serial, true);
+    t.chain_in_backend = false;
     t.bgra = surf_format == GLES_SURF_XRGB8888;
     /* the image's own order says whether a render wrote it (the caller sets
      * it from the image, egl.rs); a native buffer's is the CPU's */
@@ -8605,6 +8666,97 @@ mod tests {
         assert_eq!(s[80..84], [65, 100, 24, 255]);
         let t = &gl.ctx().objs_ref().textures[name as usize];
         assert_eq!((t.levels, t.chain_levels), (3, 3));
+    }
+
+    /// A backend that makes the chain itself (`YakoglBackend::generate_mipmap`
+    /// answering 1: the V3D's render image, filled by the TFU): glGenerateMipmap
+    /// filters nothing and moves no stamp, the record says the whole chain
+    /// exists, and the chain is asked back (`return_mipmap_chain`) once,
+    /// before the next CPU write of the texels. A backend answering 0 keeps
+    /// the CPU filter and is asked nothing back.
+    #[test]
+    fn generate_mipmap_delegated_to_the_backend_filters_nothing_and_asks_the_chain_back_once() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let img: Vec<u8> = (0..4 * 4 * 4).map(|i| i as u8).collect();
+        tex_image(0, 4, 4, GL_RGBA, GL_UNSIGNED_BYTE, &img);
+        let before = storage(&gl, name);
+        let stamp = gl.ctx().objs_ref().textures[name as usize].content_gen;
+        gl.answer_generate_mipmap(1);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let calls = gl.mipmap_generates();
+        assert_eq!(calls.len(), 1);
+        assert_eq!((calls[0].levels, calls[0].b.width, calls[0].b.height, calls[0].b.content_gen), (3, 4, 4, stamp));
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert_eq!(calls[0].b.base_gpu, t.mem.gpu);
+        assert!(t.chain_in_backend);
+        assert_eq!((t.levels, t.levels_written, t.chain_levels), (3, 3, 3));
+        assert_eq!((t.level_defined, t.level_bad), (0b111, 0));
+        assert_eq!(t.content_gen, stamp, "nothing was written: the stamp stays");
+        assert_eq!(storage(&gl, name)[64..84], before[64..84], "levels 1 and 2 of the storage are untouched");
+        assert!(gl.chain_returns().is_empty());
+        /* a CPU write asks for the chain first, once */
+        tex_sub_image(0, 0, 0, 1, 1, GL_RGBA, &ramp(1));
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let back = gl.chain_returns();
+        assert_eq!(back.len(), 1);
+        assert_eq!((back[0].levels, back[0].b.width, back[0].b.base_gpu), (3, 4, calls[0].b.base_gpu));
+        assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+        tex_sub_image(0, 0, 0, 1, 1, GL_RGBA, &ramp(1));
+        assert!(gl.chain_returns().is_empty(), "nothing to ask back twice");
+        /* answering 0: the CPU filters as before, and nothing is asked back */
+        gl.answer_generate_mipmap(0);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.mipmap_generates().len(), 1, "asked, and refused");
+        assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+        assert_ne!(storage(&gl, name)[64..68], before[64..68], "the CPU filtered level 1");
+        tex_sub_image(0, 0, 0, 1, 1, GL_RGBA, &ramp(1));
+        assert!(gl.chain_returns().is_empty());
+        /* a new level 0 lays the storage out again: the backend's chain is
+         * forgotten with it (the backend dropped its image with the storage) */
+        gl.answer_generate_mipmap(1);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert!(gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+        tex_image(0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, &[]);
+        assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+    }
+
+    /// A level above 0 attached to a framebuffer is rendered into and read
+    /// through the storage: attaching one asks a delegated chain back, and
+    /// glGenerateMipmap is not delegated while one is attached (ES 3.0
+    /// attaches levels above 0; ES 2.0 cannot).
+    #[test]
+    fn a_level_above_zero_attached_keeps_the_mip_chain_on_the_cpu() {
+        if crate::REPORT_ES2 {
+            return;
+        }
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        tex_image(0, 4, 4, GL_RGBA, GL_UNSIGNED_BYTE, &[]);
+        gl.answer_generate_mipmap(1);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.mipmap_generates().len(), 1, "delegated with no level above 0 attached");
+        assert!(gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+        let mut fb = 0;
+        // SAFETY: plain GL calls; `fb` receives one name.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 1);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(gl.chain_returns().len(), 1, "attaching level 1 asks the chain back");
+        assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert!(gl.mipmap_generates().is_empty(), "not delegated while level 1 is attached");
+        assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
     }
 
     /// An sRGB texture's chain is filtered in linear space: red, green and

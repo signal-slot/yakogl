@@ -152,6 +152,14 @@ bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d
 		j->broken = true;
 		return false;
 	}
+	/* a render image (uif_address) is RT 0's RGBA8 texels, sample 0: not
+	 * at 4x (the resolve's 4X decimate is the only store there), not of a
+	 * bgr565 target (the TMU samples RGBA8), and not without a colour
+	 * buffer to copy */
+	if (t->uif_address && (t->msaa || t->rgb565 || !t->address)) {
+		j->broken = true;
+		return false;
+	}
 
 	/* v3dx_draw.c v3dX(start_binning), V3D_VERSION 42: the RT count and
 	 * the max bpp decide the hardware's tile size (v3d_frame_tiling_rts) */
@@ -951,6 +959,21 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 			st.address = j->t.address;
 			st.r_b_swap = c->r_b_swap;
 			st.decimate_mode = j->t.msaa ? V3D_DECIMATE_MODE_4X : V3D_DECIMATE_MODE_SAMPLE_0;
+		}
+	}
+	/* RT 0 again, into its render image (v3d_job.h uif_*): the tiled copy
+	 * the TMU samples, written by the TLB instead of the CPU. RGBA8 as the
+	 * TMU reads it, no R/B swap (v3d_job_begin refuses the targets that
+	 * swap), sample 0 (never at 4x). */
+	if (rt0 && !j->t.msaa && j->t.uif_address) {
+		stores++;
+		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, ui) {
+			ui.buffer_to_store = V3D_STORE_BUFFER_RT0;
+			ui.memory_format = j->t.uif_memory_format;
+			ui.output_image_format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+			ui.height_in_ub_or_stride = j->t.uif_height_in_ub;
+			ui.address = j->t.uif_address;
+			ui.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
 		}
 	}
 	/* RT 1..3 (v3d_rcl_emit_stores, v3dx_rcl.c:258-283, in RT order), each

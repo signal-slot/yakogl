@@ -243,6 +243,12 @@ struct Mock {
     /// What depth_resolve writes into every texel (`None`: it holds
     /// nothing, and answers 1).
     resolve_depth: Option<f32>,
+    /// Every generate_mipmap call: the binding and the chain's levels; and
+    /// what the mock answers (1: it made the chain itself).
+    mipmap_generates: Vec<ChainCall>,
+    generate_mipmap_answer: i32,
+    /// Every return_mipmap_chain call.
+    chain_returns: Vec<ChainCall>,
     /// Every query_begin / query_end / query_result call
     /// ([`MOCK_BACKEND_QUERIES`]), in order.
     query_calls: Vec<QueryCall>,
@@ -322,6 +328,9 @@ impl Default for Mock {
             waited_kicks: Vec::new(),
             depth_resolves: Vec::new(),
             resolve_depth: None,
+            mipmap_generates: Vec::new(),
+            generate_mipmap_answer: 0,
+            chain_returns: Vec::new(),
             query_calls: Vec::new(),
             query_counts: BTreeMap::new(),
             draw_samples: 0,
@@ -1201,6 +1210,37 @@ unsafe extern "C" fn b_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u32, pit
     0
 }
 
+/// One generate_mipmap or return_mipmap_chain call as the mock backend saw
+/// it: the binding and the chain's levels.
+#[derive(Clone)]
+pub struct ChainCall {
+    pub b: GlesTextureBind,
+    pub levels: u32,
+}
+
+// SAFETY: the binding's `cpu` pointer is never dereferenced after recording;
+// tests are serialised.
+unsafe impl Send for ChainCall {}
+
+/// `generate_mipmap`: recorded with the chain's levels, answered as the
+/// test set (`TestGl::answer_generate_mipmap`; 0 by default, the CPU filter).
+unsafe extern "C" fn b_generate_mipmap(b: *const GlesTextureBind, levels: u32) -> i32 {
+    // SAFETY: the GL core's live binding.
+    let b = unsafe { *b };
+    with_mock(|m| {
+        m.mipmap_generates.push(ChainCall { b, levels });
+        m.generate_mipmap_answer
+    })
+}
+
+/// `return_mipmap_chain`: recorded; the mock writes nothing back (a test
+/// looks at the call, not the texels).
+unsafe extern "C" fn b_return_mipmap_chain(b: *const GlesTextureBind, levels: u32) {
+    // SAFETY: the GL core's live binding.
+    let b = unsafe { *b };
+    with_mock(|m| m.chain_returns.push(ChainCall { b, levels }));
+}
+
 /// One texture_uploaded call as the mock backend saw it: the binding, the
 /// level and box, the source pointer and pitch, and the first row's bytes.
 #[derive(Clone)]
@@ -1377,6 +1417,8 @@ static MOCK_BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: Some(b_generate_mipmap),
+    return_mipmap_chain: Some(b_return_mipmap_chain),
 };
 
 /// [`MOCK_BACKEND`] with the capabilities of the GC7000: a vertex fetch that
@@ -1412,6 +1454,8 @@ static MOCK_BACKEND_GC7000: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: Some(b_generate_mipmap),
+    return_mipmap_chain: Some(b_return_mipmap_chain),
 };
 
 /// [`MOCK_BACKEND`] whose texture unit has no ETC1, as the V3D's has none:
@@ -1448,6 +1492,8 @@ static MOCK_BACKEND_ETC1_DECODED: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: Some(b_generate_mipmap),
+    return_mipmap_chain: Some(b_return_mipmap_chain),
 };
 
 /// [`MOCK_BACKEND`] that takes an instanced draw's arrays with any divisor up
@@ -1949,6 +1995,23 @@ impl TestGl {
     /// Take the backend's depth_resolve calls so far.
     pub fn depth_resolves(&self) -> Vec<DepthResolve> {
         with_mock(|m| core::mem::take(&mut m.depth_resolves))
+    }
+
+    /// Take the backend's generate_mipmap calls so far: each binding and the
+    /// chain's levels.
+    pub fn mipmap_generates(&self) -> Vec<ChainCall> {
+        with_mock(|m| core::mem::take(&mut m.mipmap_generates))
+    }
+
+    /// What the mock's generate_mipmap answers from now on (1: it made the
+    /// chain itself, the GL core filters nothing; 0: the default).
+    pub fn answer_generate_mipmap(&self, answer: i32) {
+        with_mock(|m| m.generate_mipmap_answer = answer);
+    }
+
+    /// Take the backend's return_mipmap_chain calls so far.
+    pub fn chain_returns(&self) -> Vec<ChainCall> {
+        with_mock(|m| core::mem::take(&mut m.chain_returns))
     }
 
     /// What the mock's depth_resolve writes into every texel (`None`: it

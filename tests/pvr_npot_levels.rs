@@ -153,6 +153,8 @@ static PVR_SHAPE: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
 };
 
 /// Pointer-valued device addresses: `base_gpu` is the CPU address of level 0.

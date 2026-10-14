@@ -262,6 +262,31 @@ pub fn layout(b: &GlesTextureBind) -> Option<V3dTexLayout> {
     unsafe { v3d_tex_layout(b.width, b.height, levels_sampled(b), texel_bytes(b), &mut l) }.then_some(l)
 }
 
+/// The layout of a render image (`backend::RtImage`): `levels` levels of a
+/// `w` x `h` RGBA8 texture as Mesa's v3d_setup_slices lays out a tiled
+/// resource (`v3d_tex_layout`), with level 0's UIF XOR dropped as the
+/// depth/stencil and 4x buffers drop it (`backend::zs_layout`): the TLB
+/// stores level 0, the TMU reads it and the TFU reads it to make the levels
+/// below, all three told one layout (NO_XOR is that layout without the
+/// page-cache swizzle), and the CPU never tiles into it. The levels below 0
+/// keep Mesa's tilings: the TFU writes them and the TMU reads them by the
+/// hardware's own rule, which Mesa's layout transcribes, and the CPU reads
+/// them back through that layout alone (`v3d_tex_load_box`). A target
+/// narrower than 32 texels or shorter than 8 is UB-linear or LT, which the
+/// TLB stores as well (v3d_packet.xml "Memory Format"). `None` when the
+/// layout refuses the size (0, or 16384 or more) or the level count.
+pub fn rt_layout(w: u32, h: u32, levels: u32) -> Option<V3dTexLayout> {
+    let mut l = V3dTexLayout::default();
+    // SAFETY: `l` is a live value of the mirrored type.
+    if !unsafe { v3d_tex_layout(w, h, levels, 4, &mut l) } {
+        return None;
+    }
+    if l.slices[0].tiling == V3D_TEX_TILING_UIF_XOR {
+        l.slices[0].tiling = V3D_TEX_TILING_UIF_NO_XOR;
+    }
+    Some(l)
+}
+
 /// The bytes of the tiled image for `b` laid out as `layout`: one mip tree,
 /// or a cube's six of them `v3d_tex_layer_stride` apart
 /// (`v3d_tex_layers_size`); `None` past 32 bits.

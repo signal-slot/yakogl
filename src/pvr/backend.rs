@@ -7527,6 +7527,8 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: Some(pvr_backend_surface_swapped),
     texture_uploaded: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
     max_instance_divisor: 1,
     /* the sync waits keep finish() until this backend waits for one kick */
