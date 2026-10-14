@@ -28,6 +28,11 @@ How the session went (all on `system76`, 2026-10-15):
    the UART on its command line), never in a file. The run started from the
    `1e0c7566` images. `git worktree add` was not retried, because the images
    already existed.
+4. Fourth turn: the task was again said to have moved to `nuc`, and again
+   ran on `system76`. `BOARD_UART` was unset and `BOARD_HDMI_TIMINGS` was
+   still `1920x720`. The board still did not answer ssh (two tries, 10 s and
+   20 s connect timeouts: `Connection timed out`), so the power cycle had not
+   happened yet. Nothing ran and nothing on the board changed.
 
 HEAD8: `3cc4b60a` (the integration tip, `3cc4b60acf33ef757a754c99827962fbbced0446`;
 board.sh printed `build 3cc4b60a`). The run's images carry `1e0c7566` (the

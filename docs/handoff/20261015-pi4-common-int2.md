@@ -12,6 +12,8 @@
   `board.sh pi4 GM rc=5 verdict=not_back boot=tryboot row boot_verdict=not_back result=none resets=0 record=absent back_after=?s`.
   The board hung in the firmware before the kernel, and the chain stopped,
   so SO, SV, CL and GT did not run (`docs/board-sessions/pi4-common-int2.md`).
+  A later turn the same day still found no ssh answer from the board (no
+  power cycle yet), so nothing more ran.
 - No board figure changes. The cells stay as they are:
   - `README.md` Status table, glmark2 score row: keep
     `| Raspberry Pi 4 | 183 (2026-10-04) |` unchanged.
