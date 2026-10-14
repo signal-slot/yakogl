@@ -1,11 +1,17 @@
 # imx8mp-gltest-final, 2026-10-14, origin/main e0eb883d
 
+## State of main
+i.MX8MP gl_test default list at `e0eb883d` (two boots, identical): 48 of 49 run
+passed, case 44 (#6) fails, case 16 skipped (`docs/board-sessions/imx8mp-gltest-final.md`).
+Case 16 (#8) passes when run alone (`SEL=16`); cases 10 (#9) and 2 (#25) passed on both
+boots. No GPU resets.
+
+## Known defects
+- gl_test case 44 (#6) fails on the i.MX8MP default list at `e0eb883d`
+  (`failing 1: first case 44`); the same on both boots.
+
 ## Next board session
-The i.MX8MP gl_test default list from origin/main has still not been run
-(`docs/board-sessions/imx8mp-gltest-final.md`). Two things blocked the session: the worker
-could not start `tools/board.sh` with `BOARD_HOST`/`BOARD_BOOT` set, and the GT image
-would not build there because the sandbox's `/tmp` quota ran out while compiling
-`gl_test.c` (`common-images.sh` cannot pass `-pipe`; a case-16 image built with
-`imx8mp-gltest-build.sh ... -DEXTRA_CFLAGS=-pipe` did). Redo it on a worker that may run
-`BOARD_HOST=<lease> BOARD_BOOT=uboot-mmc tools/board.sh imx8mp run ...` and can write
-enough to `/tmp`; report cases #8 (16, run alone), #9 (10) and #25 (2) explicitly.
+`common-images.sh` cannot pass `-pipe`, and the worker's `/tmp` quota stopped the
+compile of `gl_test.c`; on a worker with enough `/tmp` the GT image builds without the
+workaround. Cases 10 and 2 are flaky (`docs/investigations/gc-kick-diff.md`): more boots
+are needed before calling them fixed.
