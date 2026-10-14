@@ -176,7 +176,16 @@ layer has no scan-out view, so its SV row is the copy path again (the cluster
 sample's own `prj.conf` turns the view on where the board layer has one). `run` is
 `tools/board.sh <board> tree` on the table, then `tools/cts/common-tally.py`:
 per row the record words, board.sh's verdict recomputed from the files, the
-glmark2 score with its failed and unsupported scenes, the slint and cluster
+glmark2 score with its failed and unsupported scenes and, from the GM run's
+`console.txt` (the AM62P and the Pi 4), a per-scene verdict: the lines of the
+`GLMARK2_BAD_LINES` table at the top of the script (a GL error, an incomplete
+texture sampled, a refused or unrecorded draw, out of GPU memory, a refused
+tiled copy; each row cites its RESULTS.md section) are given to their scene by
+the `glmark2-mem:` lines (or, in a console without them, to the next scene's
+result line), and the cell reads `amber` with each scene and its line counts
+when one has any and the verdict is done, `failed` when the verdict is, else
+`green` (`green (record only)` on the i.MX8MP, which has no console; amber
+does not change the exit status), the slint and cluster
 probes (the cluster row also reports its throughput — frames, fps, Mpx/s and
 mean draw, from the console's FINGERPRINT, PERF and APP records, computed by
 `yakogl-tools record --log`, which rounds where the cluster's own console line
@@ -187,9 +196,12 @@ numbers (on the i.MX8MP only the
 first: its CASE record carries no more), the GPU resets with their source
 (`resets (record) N` when the record carries a count, `resets (console count) N`
 from board.sh's count of the console's recovery lines, else `resets absent`) and the image's sha256
-and build ids; with an earlier common run, the row-by-row diff. `--dry-run`
+and build ids; with an earlier common run, the row-by-row diff (for the GM row
+also the cell and each scene's changed line counts). `--dry-run`
 prints every command and does nothing. `common-tally.py --self-test` runs in
-`tools/check.sh` (it replays the cluster fixture in `tools/cts/testdata`);
+`tools/check.sh` (it replays the cluster fixture and the `glmark2-*.txt`
+console snippets in `tools/cts/testdata`; `cts-selftest.sh` check 22 runs the
+GM row and its diff through the command line);
 `tools/board_selftest.sh` checks the three boards' dry runs.
 
 The board images compile shaders in the image (the online compiler) or look

@@ -1,0 +1,23 @@
+15:24:40 glmark2-mem: entry 21 [jellyfish] <default>: before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:24:50 [jellyfish] <default>: FPS: 40 FrameTime: 25.112 ms
+15:24:50 glmark2-frame: [jellyfish] <default>: 401 frames; us per frame: gl 1210, swap 22350, show 310, other 1242, frame 25112; v3d last completed job per frame: prep 40, bin 310, render 20110, total 20460 (end waited for in 401 of 401)
+15:24:50 glmark2-mem: entry 21 [jellyfish] <default>: end: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:24:50 glmark2-mem: entry 22 [terrain] <default>: before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:00 [terrain] <default>: FPS: 6 FrameTime: 166.667 ms
+15:25:00 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 9120, swap 154200, show 320, other 3027, frame 166667; v3d last completed job per frame: prep 60, bin 2100, render 150310, total 152470 (end waited for in 61 of 61)
+15:25:00 glmark2-mem: entry 22 [terrain] <default>: end: osal(v3d) mem: carve-out used 17833984, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 29880064 bytes (2 runs)
+15:25:00 glmark2-mem: entry 23 [shadow] <default>: before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:10 [shadow] <default>: FPS: 5 FrameTime: 200.000 ms
+15:25:10 glmark2-frame: [shadow] <default>: 51 frames; us per frame: gl 8200, swap 188300, show 330, other 3170, frame 200000; v3d last completed job per frame: prep 50, bin 1500, render 180200, total 181750 (end waited for in 51 of 51)
+15:25:10 glmark2-mem: entry 23 [shadow] <default>: end: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:10 glmark2-mem: entry 24 [refract] <default>: before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:20 [refract] <default>: FPS: 12 FrameTime: 83.333 ms
+15:25:20 glmark2-frame: [refract] <default>: 121 frames; us per frame: gl 7300, swap 72100, show 320, other 3613, frame 83333; v3d last completed job per frame: prep 50, bin 1200, render 69800, total 71050 (end waited for in 121 of 121)
+15:25:20 glmark2-mem: entry 24 [refract] <default>: end: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:20 glmark2-mem: entry 25 [conditionals] fragment-steps=0:vertex-steps=0: before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:30 [conditionals] fragment-steps=0:vertex-steps=0: FPS: 58 FrameTime: 17.241 ms
+15:25:30 glmark2-frame: [conditionals] fragment-steps=0:vertex-steps=0: 581 frames; us per frame: gl 610, swap 15900, show 300, other 431, frame 17241; v3d last completed job per frame: prep 30, bin 120, render 15100, total 15250 (end waited for in 581 of 581)
+15:25:30 glmark2-mem: entry 25 [conditionals] fragment-steps=0:vertex-steps=0: end: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:25:30 glmark2: score 183: 33 scenes ran, 0 failed, 0 unsupported (33 list entries); window 800x600, shown yes, GPU resets 0
+15:25:30 glmark2: GL errors raised 0, draws that sampled an incomplete texture 0 (GL errors recorded 0)
+15:25:30 glmark2: PASS
