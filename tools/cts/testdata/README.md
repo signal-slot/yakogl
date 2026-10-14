@@ -90,6 +90,32 @@ probes pass", `resets (console count) 0`, and the throughput line
 3.54 ms/Mpx` — the tool rounds the fps where the cluster's console truncated
 it to 139.8.
 
+`glmark2-*.txt`: GM console snippets in board.sh's `console.txt` form
+(`HH:MM:SS line`), for `common-tally.py`'s per-scene verdict
+(`--self-test`, and `cts-selftest.sh` check 22, which wraps two of them in
+Pi 4 run directories with the round-3 GLMARK2 record). The known-bad lines
+are in their source's format string and quoted in `tools/cts/RESULTS.md`; the
+scene lines are the glmark2 sample's (`main.cpp` print_mem and print_cost,
+upstream's `[scene] <options>: FPS:` line). The numbers in the memory and
+frame lines, the times and the repeat counts below the real ones are
+scaffolding:
+
+- `glmark2-clean.txt`: five scenes (jellyfish, terrain, shadow, refract,
+  conditionals) inside their `glmark2-mem:` before setup / end lines, no
+  known-bad line: cell green
+- `glmark2-terrain-0x502.txt`: terrain's 16 `GL error 0x502 in
+  glGenerateMipmap` and its `a texture on unit 0 is incomplete and samples
+  (0,0,0,1)` line (RESULTS.md, the gl_test case 180 section); shadow clean
+- `glmark2-refract-refused.txt`: the AM62P reclaim round's refract (RESULTS.md
+  "glmark2 cell AMBER"): `yakogl/pvr: draw refused: no depth/stencil buffer
+  for a 1600x1200 target; ...` once and `glDrawArrays was not recorded (-12);
+  the frame is missing it` per frame (4 here, 110 on the board), with no
+  `glmark2-mem:` lines, so a line goes to the next scene's result line
+- `glmark2-pi4-oom.txt`: the Pi 4's refract `osal(v3d): out of GPU memory
+  for 7684096 bytes (...)` and `no GPU memory for a tiled copy of 7684096
+  bytes (...)` (3 here, 39 on the board), terrain's tiled-copy refusals of
+  1404928 and 356352 bytes (2 here, 399 on the board); shadow clean
+
 `ladder/n4_k*.vert`: the vertex shaders of a GC7000 wedge ladder (N = 4,
 K = 20 to 30). `tests/ladder_rungs_compile.rs` includes each with
 `include_str!` and fails if the compiler refuses one, so a rung read as

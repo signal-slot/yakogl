@@ -218,6 +218,50 @@ else
     echo "  skip  no VK-GL-CTS log parser under \$CTS"
 fi
 
+echo
+# ---- 22: common-tally.py judges the GM row per scene (testdata/glmark2-*) ----
+#
+# A GLMARK2 record says how many scenes ran, not whether they drew right:
+# terrain's "GL error 0x502 in glGenerateMipmap", refract's refused
+# depth-pass draw and the Pi 4's "out of GPU memory" lines all sat under a
+# green record (tools/cts/RESULTS.md). The tally reads the GM run's
+# console.txt, gives each such line to its scene, and makes the cell amber.
+# Two Pi 4 GM run directories are built in a scratch directory from the
+# fixtures, with the round-3 record (183, 33/0/0, pass): the Pi 4
+# out-of-memory console as the earlier run, the terrain console as the new
+# one. The row and the --prev diff must name the scenes; the exit stays 0
+# (amber is a cell, the verdict is done).
+echo
+echo "== 22. common-tally.py: the GM row per scene, and its --prev diff (testdata/glmark2-*)"
+gmtmp=$(mktemp -d)
+gm_dir() { # <fixture> <subdir>: a Pi 4 GM run directory whose console is the fixture and the record
+    local d=$gmtmp/$2/20261004-1520-GM-d0932b24
+    mkdir -p "$d"
+    printf 'board=pi4\nboot=tryboot\nname=glmark2\nprobe=0\nimage=zephyr.bin\nimage_sha256=d0932b243a844247\nimage_build=PVR_SAMPLE_TREE=42bd90ff\nt_reboot=100\nt_back=417\nback=1\n' > "$d/meta.txt"
+    { cat "$HERE/testdata/glmark2-$1.txt"; echo "15:47:01 yk-record: 594b1201 fc3f00b7 2184003f 03200258"; } > "$d/console.txt"
+    echo "$d"
+}
+gm_prev=$(gm_dir pi4-oom prev)
+gm_now=$(gm_dir terrain-0x502 now)
+gout=$(python3 "$HERE/common-tally.py" pi4 --row "GM=$gm_now" --prev-row "GM=$gm_prev" 2>&1)
+grc=$?
+rm -rf "$gmtmp"
+for want in "GM glmark2 rc=0 verdict=done result=record:GLMARK2" \
+            "glmark2 cell amber; scenes in the console 2, clean 1, with known-bad lines 1" \
+            "scene [terrain] <default>: amber, 17 lines (gl-error 16, incomplete-texture 1)" \
+            "scene [terrain] <default>: gl-error 0 -> 16, incomplete-texture 0 -> 1, tiled-copy 2 -> 0" \
+            "scene [refract] <default>: out-of-memory 1 -> 0, tiled-copy 3 -> 0"; do
+    case "$gout" in
+        *"$want"*) ok   "GM row: reports \"$want\"" ;;
+        *)         bad  "GM row: MISSING \"$want\"" ;;
+    esac
+done
+if [ "$grc" -eq 0 ]; then
+    ok "GM row: exit 0 (amber is the cell; the verdict is done)"
+else
+    bad "GM row: exit $grc, expected 0"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
