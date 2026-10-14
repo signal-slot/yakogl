@@ -118,6 +118,13 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 TC
+# CMake reads CMAKE_<LANG>_FLAGS_INIT only when it creates its cache. A stage-1 directory configured from
+# another checkout or workspace keeps that one's -I paths (and then fails on a missing GLES2/gl2.h), so a cache
+# that lacks the current flags is dropped; ninja then rebuilds what the new flags touch.
+if [ -f "$WORK/build/CMakeCache.txt" ] && ! grep -qF -- "-fno-pic $FLAGS" "$WORK/build/CMakeCache.txt"; then
+    echo "cts-build-zephyr: the cached CMake flags are stale; dropping $WORK/build/CMakeCache.txt"
+    rm -f "$WORK/build/CMakeCache.txt"
+fi
 
 # --- 3. configure and build the libraries the sample links -------------------
 cmake -S "$WORK/cts" -B "$WORK/build" -G Ninja \

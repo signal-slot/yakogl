@@ -38,4 +38,7 @@ sh tools/cts/cts-build-zephyr.sh > "$IMX8MP_OUT/deqp-stage1.log" 2>&1
 rc=$?
 echo "rc=$rc"
 tail -5 "$IMX8MP_OUT/deqp-stage1.log"
+# A failed ninja step prints its error lines after "FAILED:", far above the tail: show them.
+[ "$rc" -eq 0 ] || grep -m1 -A30 '^FAILED:' "$IMX8MP_OUT/deqp-stage1.log" | cut -c1-400
+[ "$rc" -eq 0 ] || grep -m1 -A1 '^FAILED:' "$IMX8MP_OUT/deqp-stage1.log" | tr ' ' '\n' | grep -i 'include' | sort -u | head -40
 exit $rc
