@@ -17453,3 +17453,22 @@ and the `render.*.rbo_bgra*` families). This is the failure set of `cd738b1a` (s
 still unfixed at `835cf9c`. Resets were absent; the entry 14 run needed 30 refused attempts
 because a first, killed run (background time limit) left a one-shot image in `/var/yakogl`;
 `board.sh imx8mp disarm` cleared it and the tree resumed.
+
+## i.MX8MP: common set on main a63fcc5b (2026-10-14 JST)
+
+Images from `origin/main` `a63fcc5b` (`cts-common.sh imx8mp build`), run by `tools/board.sh imx8mp`
+from U-Boot (`BOARD_BOOT=uboot-mmc`), one boot per row. Records `records/imx8mp/common-a63fcc5b/`
+(gitignored). Two earlier attempts the same day left a one-shot image on the board's eMMC staging
+directory (a worker kill / interrupt); it was removed by hand and the records of the refused tries
+were deleted, so the records above are one clean pass.
+
+| row | image | verdict | record | result |
+|---|---|---|---|---|
+| GM glmark2 | `a54c4eb53459bdf0` | done | `594b120e fc3f002b 6184003f 0f258320` | score 43, 33 ran, 0 failed, 0 unsupported, status pass; GL errors raised 15 or more; back after 404 s |
+| SO slint offline | `05fdd56f21e7c7f9` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; back after 119 s |
+| SV slint online | `23c66a46565688a2` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; back after 148 s |
+| CL cluster | `518c90611972fc3e` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | probes pass, crc16 b107; no throughput (no console); back after 209 s |
+| GT gl_test | `ed053eaa7a463ec4` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | set failed: 48 of 49 run passed, 1 skipped (case 16, #8), 1 failing (case 44, #6); back after 123 s |
+
+`resets=absent` on every row. GT's failure is the known case 44 (es3hdr, #6) and the known skip of
+case 16; no new failing case. The glmark2 cell stays green (33 ran, 0 failed, 0 unsupported).
