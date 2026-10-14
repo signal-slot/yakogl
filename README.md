@@ -39,7 +39,7 @@ dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list):
 | Board | Failures | Notes |
 | --- | --- | --- |
 | AM62P | 54 | 17,070 pass, 34 not supported, 7 warnings (full tree on `32778b57`, 2026-10-10). The 54: 9 `shaders.invariance` cases, fixed in `e17fb6a7` and passing on the board, and 45 `texture.vertex.2d` cases, fixed on the host, board confirmation pending. The 4x multisample image's 2 failures of that tree (alpha to coverage) pass since `452d6c31`. The last tree before it (2026-10-02, `d60b9d76`) had 0 |
-| i.MX8MP | 0 | 17,318 of 17,371 cases pass, 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `32778b57`, 2026-10-10; identical to 2026-10-01) |
+| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14; `32778b57` had 0 fail) |
 | Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings: the full tree on `a27d69c0` (2026-10-10) with its 9 cube-map failures rerun and passing on `1cf946a9`, and one row rerun for 34 cases the serial capture lost (2026-10-11). Not yet one tree from one commit |
 
 glmark2-es2 at 800x600 runs all 33 scenes on every board:
