@@ -425,6 +425,10 @@ does. Until then:
   west build (into `build/ck-head/GM-waits`), rc=0, `.config` with
   `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`, `zephyr.bin` sha256
   `b394bd1641c57cb727a68e9403034968b5eee7bf4c55ac658292da23f3f5dcdc`.
+- `tools/check.sh --quick` on this tree (system76): 116 ok, 1 failed. The
+  failure is from the environment: "v3d tex_check, cl_golden, job_check
+  (MESA_V3D_TREE is not a Mesa tree)", because that machine's
+  `MESA_V3D_TREE` has no `build-v3d`. That row covers the V3D only.
 
 ## The frame-breakdown record (design, not built)
 

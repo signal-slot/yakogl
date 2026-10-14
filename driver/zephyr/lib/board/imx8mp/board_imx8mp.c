@@ -187,10 +187,10 @@ int board_show(const struct board_window *win)
  * weak default, -ENOTSUP). Not called yet: the GC7000's OSAL,
  * src/osal/zephyr_gc.c, has no .wait_vblank, so EGL sees -ENOTSUP and the
  * linker drops this until that OSAL calls it. It latches the address the
- * LCDIF already scans again: set_fb sets the shadow-load bit, which the LCDIF clears at its next
- * VSYNC, and returns then. The picture does not change; it is the wait
- * board_show() did every frame before, now only for a swap interval of 1 or
- * more. It works on both LCDIF builds (imx8mp_lcdif.c and the Rust
+ * LCDIF already scans again: set_fb sets the shadow-load bit, which the
+ * LCDIF clears at its next VSYNC, and returns then. The picture does not
+ * change; it is the wait board_show() did every frame before, now only for a
+ * swap interval of 1 or more. It works on both LCDIF builds (imx8mp_lcdif.c and the Rust
  * yakogl,imx8mp-lcdif, whose interrupt only a cold bring-up enables).
  *
  * The wait cannot be cut short: it ends at the VSYNC or at the LCDIF
