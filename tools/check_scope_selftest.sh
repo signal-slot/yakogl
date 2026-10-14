@@ -12,6 +12,10 @@ cd "$(dirname "$0")/.." || exit 2
 # its own environment, so a narrowed YAKOGL_CHECK_CONFIGS would otherwise
 # change every plan here (the narrowed plan below sets it itself).
 unset YAKOGL_CHECK_CONFIGS
+# The same for MESA_V3D_TREE: with a built Mesa tree, check.sh plans three V3D
+# Mesa rows instead of four (no "build v3d mesa reference"), so every row
+# count below would be one less on a host that sets it.
+unset MESA_V3D_TREE
 fails=0
 checks=0
 want() {
