@@ -131,8 +131,25 @@ Why every frame: glmark2's canvas starts a frame with `glClear` of the window su
 * `tests/depth_resolve_pvr.rs`: the GL core on a back end that follows the PowerVR's `kick_id` / `kick_pending` / frame split / -EBUSY contract, glmark2 shadow's frame (window clear, depth-only FBO pass, ground draw sampling the depth). `window_clear_before_the_depth_pass_today` passes: each frame has exactly one resolve, -EBUSY, and the sampling draw reads texels never written. `no_frame_open_before_the_depth_pass_resolves` (no frame open before the depth pass: the stamp is right) resolves with 0. `cargo test ... --test depth_resolve_pvr -- --ignored` fails on `window_clear_before_the_depth_pass_resolves` with `frame 0: [(1073741825, -16)]`.
 * A retry patch (the first proposal, not taken), applied to a scratch copy of `src/gl/texture.rs` and reverted: the ignored test passes (`[(id, -16), (id, 0)]`, texels 0.5) and `..._today` fails as designed.
 * Ruled out: the id (`ds_object_id(serial, true)` is the `depth_id` the draws carry, `draw.rs:2034-2045`); the level (0); `resolve_depth` not being called (once a frame, before the sampling draw); `target.resolved` stale (the first frame fails); the depth plane not kept (the -EBUSY comes before that check); a clear-only depth pass; a second FBO.
-* Real PowerVR back end inside `cargo test`: not possible from `tests/` (its C command generators are linked only in the C builds; `src/pvr/backend_tests.rs` fakes them under `cfg(test)`), so the harness run above is the real-back-end evidence.
+* Real PowerVR back end inside `cargo test`: `tests/depth_resolve_pvr_backend.rs` runs glmark2's shadow frame call by call (canvas clear, `enable` with re-attach, colour mask off, depth clear, the horse, `disable`, the ground sampling unit 0, the horse in the canvas) on `yakogl_backend_pvr` (`host-test,gpu-powervr`). The test defines its own platform and `#[no_mangle]` stand-ins for the C command generators (the same ones `src/pvr/backend_tests.rs` uses). Its "GPU" stores a different depth at every storing kick, so a texel shows which kick's depth it holds. Measured before the fix (2026-10-09, `cargo test --no-default-features --features host-test,gpu-powervr --test depth_resolve_pvr -- --ignored`, the file's name then):
+  ```
+  frame 0: stamp 1, recording 2: Frame { stamp: (1, 2), stored: 4227072, sampled: 0, lines: ["texture 1: the backend did not resolve its depth (-16)"] }
+  stamp 10 has completed while kick 11 still draws the depth: []
+  ```
+  With the retry patch applied, the shadow reproducer passed but the stamp test still failed (`stamp 25 has completed while kick 26 still draws the depth`), so only the stamp fix corrects the stamp. Since the root fix, both reproducers (`glmark2_shadow_samples_the_depth_its_frame_rendered`, `the_depth_draws_stamp_names_a_kick_still_to_complete`) are enabled as regression guards; on `e40e3835` all 5 tests of the file pass. The same file holds the ruled-out candidates on the real back end: the canvas kick still in flight, the depth pass submitted before the ground, no frame open before the depth pass.
 
 The first fix proposed here, a retry of the resolve after a flush, was not
-taken; the root fix above replaced it. Git history keeps the proposal and
-the board recipe written before the fix.
+taken; the root fix above replaced it. Git history keeps the proposal.
+
+**AM62P board recipe** (bench-recipes). The image carries the 256 MiB carve-out (`504d4fae`): with the old 64 MiB one, shadow's 1600x1200 depth chain and refract's targets could not be allocated, which hides this defect behind another.
+
+```sh
+git clone https://github.com/glmark2/glmark2 build/glmark2-upstream
+git -C build/glmark2-upstream checkout 22c527cb0556f3a1ac4445aaa52cc532760928d5
+west build -p always -d <ws>/build/gm2-am62p -b verdin_am62p/am62p54/a53 \
+    driver/samples/zephyr/glmark2 -- \
+    "-DZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh <ws>)" -DGLMARK2_SRC=$PWD/build/glmark2-upstream
+RUN_BOUND=960 tools/board.sh am62p run <ws>/build/gm2-am62p/zephyr/zephyr.bin <logdir> glmark2
+```
+
+Expected on the console capture in `<logdir>`: no `the backend did not resolve its depth` line in any scene; `shadow` and `refract` run (not `Unsupported`), with no GL error and no `framebuffer ... incomplete` line; the picture shows the horse's shadow on the ground (shadow) and the refracted floor through the horse (refract), a check by eye on the display, since the record carries no pixels. A `(-16)` line is this defect back, whatever the frame rate.
