@@ -17346,3 +17346,25 @@ Images from origin/main `d32d190a` (`cts-common.sh imx8mp build`), run by `cts-c
 | GT | `94833fdc` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
 
 Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (#6, section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. The first build attempt failed on GM and GT with "Disk quota exceeded" in /tmp; the images used here were rebuilt with `TMPDIR` on the workspace disk.
+
+## i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main `835cf9cc`: 46 fail, all `GL_BGRA_EXT` renderbuffers (2026-10-14)
+
+`tools/cts/imx8mp-deqp-build.sh deqp-835cf9cc 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt`,
+then `tools/board.sh imx8mp tree tools/cts/imx8mp-full-tree.txt records/imx8mp/deqp-835cf9cc` with
+`BOARD_BOOT=uboot-mmc` (the stage `deqp-tree-imx8mp`). One image, zephyr.bin sha256 prefix `43f7bad4`
+(`PVR_SAMPLE_TABLE=c95547a1`), 29 selectors, one boot per entry. Record
+`records/imx8mp/deqp-835cf9cc` (gitignored). The board has no console: the result is the SNVS
+record (`result=record:DEQP`), `resets=absent`. Entries 14, 21 and 27 were also read per case
+(`e14-p0..p2`, `e21-p0..p7`, `e27-p0`, `DEQP_FAILS` records).
+
+**TALLY (29 entries): begun 17,371, passed 17,272, failed 46, notsup 34, other 19, noresult 0.**
+Against the `32778b57` entry (2026-10-10, 17,318 pass, 0 fail) the only change is entry 21
+(`fbo`): 711 begun, 665 pass, **46 fail** (was 711 of 711). Every other entry is identical
+(e14 14 other, e22 9 NotSupported, e27 5 other, e28 25 NotSupported). All 46 failing names are
+`GL_BGRA_EXT` renderbuffer cases (`completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra`
+and the `render.*.rbo_bgra*` families). This is the failure set of `cd738b1a` (section
+"docs/board-sessions/imx8mp-es2-final.md", `da842c6`): the report-es2 renderbuffer allowlist of
+`8bbf9ba2` names `GL_BGRA8_EXT` but not the unsized `GL_BGRA_EXT` that dEQP-GLES2 uses. It is
+still unfixed at `835cf9c`. Resets were absent; the entry 14 run needed 30 refused attempts
+because a first, killed run (background time limit) left a one-shot image in `/var/yakogl`;
+`board.sh imx8mp disarm` cleared it and the tree resumed.

@@ -34,7 +34,7 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
   - 未対応 34 は clip_control 8、negative_api.texture.compressedtexsubimage2d_* 9、multisampled_render_to_texture.readpixels 1、multisample 16（1x の設定。上の ms4 で測る）。fragdata.invalid_assign_to_1 は合格になった（4e9397c）。
   - 合わせると（ms4 の結果で multisample 16 を置き換えて）17,084 合格 / 失敗 56 / 未対応 18 / 警告 7。vertex 修正と a2c の診断が済むまで失敗 0 には戻らない。
   - gl_test の既定セット: 48/48（タイムアウト 0、リセット 0、precompiled hits 0 / compiler runs 197）。
-- **i.MX8MP: 失敗 0。** 全ツリー（29 セレクタ）は 17,371 件が走り、17,318 合格 / 失敗 0 / 未対応 34 / その他 19（品質警告）/ 結果なし 0。10/1 の d8583f20 の記録（tools/cts/imx8mp-full-tree-29460f96.results.tsv）と 29 セレクタすべて数字が同じ（e14 の 14 件、e27 の 5 件が警告、e22 の 9 件と e28 の 25 件が未対応）。変わらなかったことが結果で、72d16864 の退行 2 件（fbo depth_component24、fragdata）はボードでも直っている（fbo 711/711、shaders 1512 合格）。
+- **i.MX8MP: 失敗 46（すべて fbo の GL_BGRA_EXT レンダーバッファ）。** 全ツリー（29 セレクタ、835cf9cc、2026-10-14）は 17,371 件が走り、17,272 合格 / 失敗 46 / 未対応 34 / その他 19（品質警告）/ 結果なし 0。32778b57 の失敗 0 と比べて変わったのは e21（fbo）だけで、711 件中 665 合格 / 失敗 46。原因は 8bbf9ba2 の report-es2 のレンダーバッファ許可リストが GL_BGRA8_EXT だけを挙げ、dEQP-GLES2 が使う GL_BGRA_EXT を挙げていないこと（cd738b1a の記録と同じ 46 件、docs/board-sessions/imx8mp-es2-final.md）。未修正。e14 の 14 件、e27 の 5 件が警告、e22 の 9 件と e28 の 25 件が未対応で、これは前回と同じ。
   - gc_gl_test: 3 回走らせて 45/48（最初の失敗は 10 番、不確定の #9）、46/48 と 46/48（最初の失敗は 16 番、#8: 4x の半分を名前つきで飛ばし、セットの集計が飛ばしを失敗に数える。2 つ目の失敗はこの記録に名前がない）。8abeaabb の基準（46/48、16 番が最初）と同じ。
 - 注: AM62P の dEQP-GLES3 を 32778b57 で試みたが結果は出なかった。イメージが ES 2.0 を報告していたため。`tools/cts/am62p-deqp-images.sh` が `-DCONFIG_YAKOGL_REPORT_ES2=n` を渡すように直した（測定ではない）。
 
