@@ -400,11 +400,13 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 /// requires the formats) and refuses to draw into it, by name, rather than
 /// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs
 /// `pbe_int_packmode`, the online compiler's packed integer output) as the
-/// one colour attachment of a draw; the GC7000 and the V3D none yet.
+/// one colour attachment of a draw; the GC7000 the thirteen of 1, 2 and 4
+/// bytes a pixel (src/vivante/backend.rs `GC_INTEGER_RT_FORMATS`); the V3D
+/// none yet.
 pub const INTEGER_RT_FORMATS: u32 = {
     #[cfg(feature = "gpu-vivante")]
     {
-        0
+        crate::vivante::backend::GC_INTEGER_RT_FORMATS
     }
     #[cfg(feature = "gpu-v3d")]
     {
