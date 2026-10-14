@@ -31,7 +31,8 @@
 //!   becomes a reference;
 //! - the capture ([`run_in`]: every build but `report-es2`) lends the
 //!   working memory (a [`Frame`] in the compile scratch), takes the stores
-//!   through a [`Sink`], computes with [`super::fmath`] (no libm in the
+//!   through a [`Sink`], reads textures through a [`TexelSource`]
+//!   ([`run_in_with_textures`]), computes with [`super::fmath`] (no libm in the
 //!   product) and, being a GL draw rather than an oracle, gives an undefined
 //!   result a value as the hardware would (GLSL ES 3.00 section 5.9:
 //!   undefined, not an error).
@@ -177,6 +178,51 @@ pub struct Inputs<'x> {
     pub uniforms: &'x [u32],
 }
 
+/// The level of detail of a [`TexLookup`].
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum TexLevel {
+    /// A filtered look-up at this level of detail (lambda before the
+    /// sampler's clamps, ES 3.0.6 3.8.10): `textureLod`'s operand, or 0 for
+    /// `texture()` in a vertex shader, which has no derivatives (GLSL ES 3.00
+    /// section 8.8: "the base level ... is used").
+    Lod(f32),
+    /// `texelFetch`: this integer level, integer coordinates, no filtering.
+    Fetch(i32),
+}
+
+/// One texture look-up a [`TexelSource`] answers: an `Op::Tex` with its
+/// operands read. A shadow look-up, a bias and explicit gradients never get
+/// here (the evaluator stops at them by name).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct TexLookup {
+    /// The sampler binding (`Op::Tex::sampler`).
+    pub sampler: u8,
+    pub dim: ir::TexDim,
+    /// What the sampler returns: F32 (`sampler*`), I32 (`isampler*`) or U32
+    /// (`usampler*`).
+    pub ret: ir::ScalarType,
+    /// The coordinate's lanes: floats for a filtered look-up, already divided
+    /// by the projection's divisor (`textureProj`); ints for a fetch. Lanes
+    /// past the dimension's width are not defined.
+    pub coord: [u32; 4],
+    pub level: TexLevel,
+    /// The texel offset (`textureOffset`, `texelFetchOffset`; 0 without one).
+    pub offset: [i32; 3],
+}
+
+/// The textures of a run: what [`run_in_with_textures`] asks for every
+/// `Op::Tex` and `Op::TexSize`. The transform-feedback capture answers it
+/// from the GL texture storage (`gl/tf_capture.rs`).
+pub trait TexelSource {
+    /// The four lanes of a look-up: float bits for a float sampler, int or
+    /// uint bits for an integer one. `Err` names what the source cannot
+    /// sample, and stops the run.
+    fn sample(&mut self, q: &TexLookup) -> Result<[u32; 4], Fault>;
+    /// `textureSize(sampler, lod)`: the level's width, height and (D3, D2Array)
+    /// depth or layer count, as ints.
+    fn size(&mut self, sampler: u8, dim: ir::TexDim, lod: i32) -> Result<[u32; 4], Fault>;
+}
+
 /// A texture for [`run_with_textures`]: 2D or cube, its levels and its
 /// minification filter, as the V3D interpreter reads it (one model,
 /// [`super::texref`]). Every value must be exact in f16 (an RGBA16F
@@ -213,6 +259,8 @@ struct Machine<'m, 'x, 'f> {
     /// By sampler binding (`Op::Tex::sampler`); empty for [`run`].
     #[cfg(any(test, feature = "host-test"))]
     textures: &'x [Texture],
+    /// The capture's textures ([`run_in_with_textures`]); `None` otherwise.
+    texels: Option<&'f mut dyn TexelSource>,
     /// [`run_with_trig_error`]'s shift of every sin/cos result, relative
     /// to max(1, |x|); 0 for the exact functions.
     trig: f32,
@@ -293,6 +341,7 @@ pub fn run_with_trig_error(
         out: &mut out,
         discarded: false,
         fault: None,
+        texels: None,
         trig,
         oracle: true,
     };
@@ -310,9 +359,35 @@ pub fn run_with_trig_error(
 /// Run `m` once for the transform-feedback capture: `frame` is the working
 /// memory (reset here; at least `m.instrs.len()` and `m.locals.len()`
 /// entries), the stores go to `out`. The capture's rules (see the module
-/// note): `fmath`'s functions, an undefined result is a value, no textures.
+/// note): `fmath`'s functions, an undefined result is a value, no textures
+/// (a look-up stops the run; [`run_in_with_textures`] supplies them).
 /// `Ok(discarded)`, or why the run stopped.
 pub fn run_in(m: &Module<'_>, input: &Inputs<'_>, frame: Frame<'_>, out: &mut dyn Sink) -> Result<bool, Fault> {
+    run_in_inner(m, input, frame, out, None)
+}
+
+/// [`run_in`] with `texels` answering every texture look-up and
+/// `textureSize`. The evaluator reads the operands (a coordinate or level no
+/// instruction defined stops the run), divides a projected coordinate by its
+/// divisor, and stops by name at what no [`TexLookup`] carries: a shadow
+/// look-up, a bias, explicit gradients.
+pub fn run_in_with_textures(
+    m: &Module<'_>,
+    input: &Inputs<'_>,
+    frame: Frame<'_>,
+    out: &mut dyn Sink,
+    texels: &mut dyn TexelSource,
+) -> Result<bool, Fault> {
+    run_in_inner(m, input, frame, out, Some(texels))
+}
+
+fn run_in_inner<'f>(
+    m: &Module<'_>,
+    input: &Inputs<'_>,
+    frame: Frame<'f>,
+    out: &'f mut dyn Sink,
+    texels: Option<&'f mut dyn TexelSource>,
+) -> Result<bool, Fault> {
     let (ni, nl) = (m.instrs.len(), m.locals.len());
     if frame.values.len() < ni || frame.def.len() < ni || frame.locals.len() < nl || frame.ldef.len() < nl {
         return Err(Fault::new(format_args!("the frame is smaller than the module")));
@@ -333,6 +408,7 @@ pub fn run_in(m: &Module<'_>, input: &Inputs<'_>, frame: Frame<'_>, out: &mut dy
         out,
         discarded: false,
         fault: None,
+        texels,
         trig: 0.0,
         oracle: false,
     };
@@ -520,6 +596,24 @@ impl Machine<'_, '_, '_> {
                     Some(None) => return self.stop(format_args!("textureSize of level {l}: the texture has fewer")),
                 }
             }
+            Op::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset } if self.texels.is_some() => {
+                match self.look_up(dim, shadow, proj, ret, sampler, coord, lod, offset) {
+                    Ok(v) => (v, all),
+                    Err(why) => return self.stop(format_args!("{why}")),
+                }
+            }
+            Op::TexSize { sampler, dim, lod } if self.texels.is_some() => {
+                if !self.read_def(lod)[0] {
+                    return self.stop(format_args!("unset lane: a textureSize level no instruction defined"));
+                }
+                let l = self.read(lod)[0] as i32;
+                let lanes = if matches!(dim, ir::TexDim::D2 | ir::TexDim::Cube) { 2 } else { 3 };
+                match self.texels.as_deref_mut().map(|t| t.size(sampler, dim, l)) {
+                    Some(Ok(v)) => (v, Self::first(lanes)),
+                    Some(Err(why)) => return self.stop(format_args!("{why}")),
+                    None => return self.stop(format_args!("the evaluator has no textures")),
+                }
+            }
             Op::Tex { .. } | Op::TexSize { .. } => return self.stop(format_args!("the evaluator has no textures")),
             Op::Discard => {
                 self.discarded = true;
@@ -572,6 +666,67 @@ impl Machine<'_, '_, '_> {
             sample_2d(t, f(c[0]) / q, f(c[1]) / q, lod)
         };
         v.map(|v| v.map(f32::to_bits)).map_err(why)
+    }
+
+    /// One `Op::Tex` through [`Machine::texels`]: the operands read and
+    /// checked, the projection divided out, the look-up handed over. What a
+    /// [`TexLookup`] cannot carry stops the run by name.
+    #[allow(clippy::too_many_arguments)]
+    fn look_up(
+        &mut self,
+        dim: ir::TexDim,
+        shadow: bool,
+        proj: bool,
+        ret: ir::ScalarType,
+        sampler: u8,
+        coord: Src,
+        lod: ir::TexLod,
+        offset: Option<[i8; 3]>,
+    ) -> Result<[u32; 4], Fault> {
+        use ir::{TexDim, TexLod};
+        let fault = |args: core::fmt::Arguments| Err(Fault::new(args));
+        if shadow {
+            return fault(format_args!("a shadow look-up (a sampler*Shadow), which the capture does not evaluate"));
+        }
+        /* the coordinate's base width (ir.rs, `Op::Tex`) */
+        let width = if dim == TexDim::D2 { 2 } else { 3 };
+        let cd = self.read_def(coord);
+        if !(cd[..width].iter().all(|&d| d) && (!proj || cd[3])) {
+            return fault(format_args!("unset lane: a texture coordinate no instruction defined"));
+        }
+        let mut c = self.read(coord);
+        let level = match lod {
+            /* a vertex module never has one (the front end lowers a vertex
+             * `texture()` to Lod(0.0)); a hand-built one reads the base level */
+            TexLod::Implicit => TexLevel::Lod(0.0),
+            TexLod::Lod(l) => {
+                if !self.read_def(l)[0] {
+                    return fault(format_args!("unset lane: a level of detail no instruction defined"));
+                }
+                TexLevel::Lod(f32::from_bits(self.read(l)[0]))
+            }
+            TexLod::Fetch(l) => {
+                if !self.read_def(l)[0] {
+                    return fault(format_args!("unset lane: a texelFetch level no instruction defined"));
+                }
+                TexLevel::Fetch(self.read(l)[0] as i32)
+            }
+            TexLod::Bias(_) => return fault(format_args!("a look-up with a bias (fragment shaders only)")),
+            TexLod::Grad { .. } => return fault(format_args!("textureGrad (explicit gradients)")),
+        };
+        if proj {
+            /* textureProj: the coordinate's lanes over its last (w, always) */
+            let q = f32::from_bits(c[3]);
+            for l in c.iter_mut().take(width) {
+                *l = (f32::from_bits(*l) / q).to_bits();
+            }
+        }
+        let o = offset.unwrap_or([0; 3]);
+        let q = TexLookup { sampler, dim, ret, coord: c, level, offset: o.map(i32::from) };
+        match self.texels.as_deref_mut() {
+            Some(t) => t.sample(&q),
+            None => fault(format_args!("the evaluator has no textures")),
+        }
     }
 
     /// A float function of one operand: the host's `std` for the oracle
@@ -1139,6 +1294,110 @@ mod texture_tests {
         };
         assert_eq!(size(0).unwrap(), Some([2, 1, 0, 0]));
         assert!(size(1).is_err());
+    }
+
+    /// A [`TexelSource`] that records the look-ups it is asked and answers
+    /// (1, 2, 3, 4) and the size (5, 6, 7).
+    #[derive(Default)]
+    struct Recorder {
+        asked: std::vec::Vec<TexLookup>,
+        sizes: std::vec::Vec<(u8, TexDim, i32)>,
+    }
+
+    impl TexelSource for Recorder {
+        fn sample(&mut self, q: &TexLookup) -> Result<[u32; 4], Fault> {
+            self.asked.push(*q);
+            Ok([1, 2, 3, 4])
+        }
+        fn size(&mut self, sampler: u8, dim: TexDim, lod: i32) -> Result<[u32; 4], Fault> {
+            self.sizes.push((sampler, dim, lod));
+            Ok([5, 6, 7, 0])
+        }
+    }
+
+    /// `op` reading the constants (coordinate, level) and its value stored,
+    /// through [`run_in_with_textures`]: the stored lanes and their defined
+    /// mask, or why the run stopped.
+    fn hooked(op: Op, rec: &mut Recorder) -> Result<([u32; 4], [bool; 4]), Fault> {
+        struct Last(Option<([u32; 4], [bool; 4])>);
+        impl Sink for Last {
+            fn store(&mut self, _slot: IoSlot, value: [u32; 4], defined: [bool; 4]) {
+                self.0 = Some((value, defined));
+            }
+        }
+        let instrs = [
+            Op::ConstF32(f32x4([0.5, 1.0, 2.0, 4.0])),
+            Op::ConstI32([3; 4]),
+            op,
+            Op::StoreOutput { slot: IoSlot::Varying(0), src: Src::id(ValueId(2)) },
+        ];
+        let nodes: std::vec::Vec<Node> = (0..4).map(|i| Node::Instr(InstrId(i))).collect();
+        let m = Module {
+            instrs: &instrs,
+            nodes: &nodes,
+            body: Range { first: 0, len: 4 },
+            ..Module::empty(crate::shaderc::SHC_STAGE_VERTEX)
+        };
+        let (mut v, mut d) = ([[0u32; 4]; 4], [[false; 4]; 4]);
+        let frame = Frame { values: &mut v, def: &mut d, locals: &mut [], ldef: &mut [] };
+        let mut out = Last(None);
+        run_in_with_textures(&m, &Inputs { io: &[], uniforms: &[] }, frame, &mut out, rec)?;
+        Ok(out.0.expect("stored"))
+    }
+
+    fn tex(dim: TexDim, proj: bool, shadow: bool, lod: TexLod, offset: Option<[i8; 3]>) -> Op {
+        Op::Tex { dim, shadow, proj, ret: ScalarType::F32, sampler: 2, coord: Src::id(ValueId(0)), lod, offset }
+    }
+
+    /// The hook gets the look-up with its operands read: a projected
+    /// coordinate divided by w, an implicit level as level of detail 0 (a
+    /// vertex shader's base level), textureLod's operand, a fetch's integer
+    /// level and the offset; all four lanes are defined. textureSize gets
+    /// its level and defines two lanes (2D, cube) or three (3D, array).
+    #[test]
+    fn the_texel_hook_gets_each_look_up_with_its_operands_read() {
+        let mut rec = Recorder::default();
+        let lod1 = TexLod::Lod(Src::splat(ValueId(0)));
+        assert_eq!(
+            hooked(tex(TexDim::D2, true, false, TexLod::Implicit, None), &mut rec).unwrap(),
+            ([1, 2, 3, 4], [true; 4])
+        );
+        hooked(tex(TexDim::D3, false, false, lod1, Some([1, -2, 3])), &mut rec).unwrap();
+        hooked(tex(TexDim::D2Array, false, false, TexLod::Fetch(Src::id(ValueId(1))), None), &mut rec).unwrap();
+        let q = &rec.asked;
+        assert_eq!(q[0].coord[..2], f32x4([0.125, 0.25, 0.0, 0.0])[..2], "(0.5, 1) / 4");
+        assert_eq!((q[0].level, q[0].offset, q[0].sampler, q[0].dim), (TexLevel::Lod(0.0), [0; 3], 2, TexDim::D2));
+        assert_eq!(
+            (q[1].coord, q[1].level, q[1].offset),
+            (f32x4([0.5, 1.0, 2.0, 4.0]), TexLevel::Lod(0.5), [1, -2, 3])
+        );
+        assert_eq!(q[2].level, TexLevel::Fetch(3));
+        let size = |dim| Op::TexSize { sampler: 1, dim, lod: Src::id(ValueId(1)) };
+        assert_eq!(hooked(size(TexDim::Cube), &mut rec).unwrap(), ([5, 6, 7, 0], [true, true, false, false]));
+        assert_eq!(hooked(size(TexDim::D2Array), &mut rec).unwrap().1, [true, true, true, false]);
+        assert_eq!(rec.sizes, [(1, TexDim::Cube, 3), (1, TexDim::D2Array, 3)]);
+    }
+
+    /// What a [`TexLookup`] cannot carry stops the run by name, and the hook
+    /// is not asked: a shadow look-up, a bias, explicit gradients.
+    #[test]
+    fn the_texel_hook_is_not_asked_what_it_cannot_answer() {
+        let mut rec = Recorder::default();
+        let mut why = |op| hooked(op, &mut rec).unwrap_err().as_str().to_owned();
+        assert!(why(tex(TexDim::D2, false, true, TexLod::Implicit, None)).contains("shadow"));
+        assert!(why(tex(TexDim::D2, false, false, TexLod::Bias(Src::id(ValueId(0))), None)).contains("bias"));
+        let grad = TexLod::Grad { ddx: ValueId(0), ddy: ValueId(0) };
+        assert!(why(tex(TexDim::D2, false, false, grad, None)).contains("textureGrad"));
+        assert!(rec.asked.is_empty(), "the hook was not asked");
+        /* without a hook the capture's evaluator still has no textures */
+        let instrs = [Op::ConstF32([0; 4]), tex(TexDim::D2, false, false, TexLod::Implicit, None)];
+        let nodes = [Node::Instr(InstrId(0)), Node::Instr(InstrId(1))];
+        let m = Module { instrs: &instrs, nodes: &nodes, body: Range { first: 0, len: 2 }, ..Module::empty(0) };
+        let (mut v, mut d) = ([[0u32; 4]; 2], [[false; 4]; 2]);
+        let frame = Frame { values: &mut v, def: &mut d, locals: &mut [], ldef: &mut [] };
+        let mut out = Outcome::default();
+        let e = run_in(&m, &Inputs { io: &[], uniforms: &[] }, frame, &mut out).unwrap_err();
+        assert_eq!(e.as_str(), "the evaluator has no textures");
     }
 
     /// run() keeps stopping at a look-up; a missing binding, a texel an

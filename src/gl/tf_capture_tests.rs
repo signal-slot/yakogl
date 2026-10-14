@@ -363,10 +363,12 @@ fn a_buffer_a_pending_kick_reads_is_copied_first() {
     assert_eq!(floats(&gl, b, 3), [3.0, 3.0, f32::from_bits(0xcdcd_cdcd)]);
 }
 
-/// C-refuse: a vertex shader that samples a texture cannot be evaluated:
-/// GL_INVALID_OPERATION with the reason, nothing written, drawn or counted.
+/// C-sample (tf-sampler): a vertex shader that samples is evaluated now. A
+/// sampler with no texture bound reads the default texture, which has no
+/// image: (0, 0, 0, 1), counted and drawn like any capture. Until the
+/// texel hook it was refused ("samples a texture").
 #[test]
-fn a_vertex_shader_that_samples_is_refused() {
+fn a_vertex_shader_that_samples_an_unbound_texture_reads_opaque_black() {
     let (gl, _be) = fresh();
     let vs = "#version 300 es\nuniform sampler2D s;\nout vec4 v;\n\
               void main() { v = textureLod(s, vec2(0.5), 0.0); gl_Position = vec4(0.0); }\n";
@@ -376,13 +378,354 @@ fn a_vertex_shader_that_samples_is_refused() {
         let q = query_begin();
         glBeginTransformFeedback(GL_POINTS);
         glDrawArrays(GL_POINTS, 0, 1);
-        assert_eq!(gl.error(), GL_INVALID_OPERATION);
+        assert_eq!(gl.error(), GL_NO_ERROR, "{:?}", gl.logs());
         glEndTransformFeedback();
-        assert_eq!(query_result(q), 0);
+        assert_eq!(query_result(q), 1);
     }
-    assert!(gl.logs().iter().any(|l| l.contains("samples a texture")), "{:?}", gl.logs());
-    assert_eq!(words(&gl, b, 1), [0xcdcd_cdcd]);
-    assert!(gl.draws().is_empty());
+    assert_eq!(floats(&gl, b, 5), [0.0, 0.0, 0.0, 1.0, f32::from_bits(0xcdcd_cdcd)]);
+    assert_eq!(gl.draws().len(), 1);
+}
+
+/* ---- textures (tf-sampler) ------------------------------------------------ */
+
+use super::framebuffer::{glBindFramebuffer, glFramebufferTexture2D, glGenFramebuffers};
+use super::texture::{glBindTexture, glCompressedTexImage2D, glGenTextures, glTexImage2D, glTexParameteri};
+
+/// `vs` with the plain fragment shader, capturing `v`, linked and current;
+/// None when this build's GPU does not take it. A look-up its code
+/// generator does not select yet (an integer result or a shadow sampler on
+/// the GC7000 and the V3D, refused at compile or at link) never reaches a
+/// draw, so its capture cannot be asked.
+fn try_program(vs: &str) -> Option<GLuint> {
+    let text = CString::new(vs).unwrap();
+    unsafe {
+        let s = glCreateShader(GL_VERTEX_SHADER);
+        let p: [*const core::ffi::c_char; 1] = [text.as_ptr()];
+        glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+        glCompileShader(s);
+        let mut ok: GLint = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+        if ok != 1 {
+            return None;
+        }
+        let prog = glCreateProgram();
+        glAttachShader(prog, s);
+        glAttachShader(prog, shader(GL_FRAGMENT_SHADER, FS));
+        let name = CString::new("v").unwrap();
+        let names = [name.as_ptr()];
+        glTransformFeedbackVaryings(prog, 1, names.as_ptr(), GL_INTERLEAVED_ATTRIBS);
+        glLinkProgram(prog);
+        glGetProgramiv(prog, GL_LINK_STATUS, &mut ok);
+        if ok != 1 {
+            return None;
+        }
+        glUseProgram(prog);
+        Some(prog)
+    }
+}
+
+/// A texture bound to GL_TEXTURE_2D on unit 0, NEAREST and CLAMP_TO_EDGE
+/// unless `min` says otherwise.
+fn texture_2d(min: GLenum) -> GLuint {
+    let mut t = 0;
+    unsafe {
+        glGenTextures(1, &mut t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
+    }
+    t
+}
+
+/// One point drawn with the current program capturing a vec4: the four
+/// floats, or the draw's error and the log (nothing written: the guard).
+fn capture_point(gl: &TestGl) -> Result<[f32; 4], (GLenum, Vec<String>)> {
+    let b = tf_buffer(0, 16);
+    unsafe {
+        glBeginTransformFeedback(GL_POINTS);
+        glDrawArrays(GL_POINTS, 0, 1);
+        let e = gl.error();
+        glEndTransformFeedback();
+        if e != GL_NO_ERROR {
+            assert_eq!(words(gl, b, 4), [0xcdcd_cdcd; 4], "a refused capture writes nothing");
+            return Err((e, gl.logs()));
+        }
+    }
+    let v = floats(gl, b, 4);
+    Ok([v[0], v[1], v[2], v[3]])
+}
+
+/// The vertex shader `v = <body>;` with `decls`, linked to capture `v`.
+fn sampling_program(decls: &str, out_ty: &str, body: &str) -> String {
+    let flat = if out_ty == "vec4" { "" } else { "flat " };
+    format!(
+        "#version 300 es\nprecision highp float;\nprecision highp int;\n{decls}\n{flat}out {out_ty} v;\n\
+         void main() {{ v = {body}; gl_Position = vec4(0.0); }}\n"
+    )
+}
+
+/// The refusals name what they refuse: a compressed format by its name,
+/// GL_TEXTURE_BASE_LEVEL by its value, a sampler of the wrong component
+/// type, a shadow look-up. The shapes the GPU's code generator refuses
+/// itself are asked only where it compiles them.
+#[test]
+fn a_refusal_names_the_format_or_the_feature() {
+    let (gl, _be) = fresh();
+    let plain = sampling_program("uniform sampler2D s;", "vec4", "texture(s, vec2(0.5))");
+    program(&plain, FS, &["v"], GL_INTERLEAVED_ATTRIBS);
+    let why = |gl: &TestGl, needle: &str| {
+        let (e, logs) = capture_point(gl).expect_err("refused");
+        assert_eq!(e, GL_INVALID_OPERATION);
+        assert!(logs.iter().any(|l| l.contains(needle)), "{needle:?} in {logs:?}");
+    };
+    texture_2d(GL_NEAREST);
+    unsafe { glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGB8_ETC2, 4, 4, 0, 8, [0u8; 8].as_ptr().cast()) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    why(&gl, "a compressed texture (GL_COMPRESSED_RGB8_ETC2)");
+    texture_2d(GL_NEAREST);
+    unsafe {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8 as GLint, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, [9u8; 4].as_ptr().cast());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 1);
+    }
+    why(&gl, "GL_TEXTURE_BASE_LEVEL 1");
+    unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0) };
+    assert_eq!(capture_point(&gl).expect("captured"), [9.0 / 255.0; 4]);
+    let int = sampling_program("uniform highp isampler2D s;", "ivec4", "texture(s, vec2(0.5))");
+    if try_program(&int).is_some() {
+        why(&gl, "a signed integer sampler reads a float texture");
+    }
+    let shadow = sampling_program("uniform highp sampler2DShadow s;", "vec4", "vec4(texture(s, vec3(0.5)))");
+    if try_program(&shadow).is_some() {
+        why(&gl, "a shadow look-up");
+    }
+}
+
+/// The GC7000's layout questions: every level at level 0's row pitch on a
+/// 64-byte boundary (`chain_pitch`, `mip_level_align`), and an RGBA8
+/// texture a draw rendered into stored B,G,R,A (`pe_order`). The capture
+/// reads both as the application wrote them.
+#[test]
+fn the_gc7000_layout_and_pixel_engine_order_are_read_as_written() {
+    let (gl, _be) = fresh();
+    gl.backend_like_gc7000();
+    let mips = sampling_program("uniform sampler2D s;", "vec4", "textureLod(s, vec2(0.6, 0.3), float(gl_VertexID))");
+    program(&mips, FS, &["v"], GL_INTERLEAVED_ATTRIBS);
+    let t = texture_2d(GL_NEAREST_MIPMAP_NEAREST);
+    for (level, w) in [4, 2, 1].into_iter().enumerate() {
+        let texels: Vec<u8> = (0..w * w).flat_map(|_| [10 * (level as u8 + 1), 0, 0, 255]).collect();
+        unsafe {
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                level as GLint,
+                GL_RGBA8 as GLint,
+                w,
+                w,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                texels.as_ptr().cast(),
+            );
+        }
+    }
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    let tex = &gl.ctx().objs_ref().textures[t as usize];
+    assert!(tex.chain_pitch != 0 && tex.level_off[1] % 64 == 0, "the one-pitch chain");
+    let b = tf_buffer(0, 48);
+    unsafe {
+        glBeginTransformFeedback(GL_POINTS);
+        glDrawArrays(GL_POINTS, 0, 3);
+        assert_eq!(gl.error(), GL_NO_ERROR, "{:?}", gl.logs());
+        glEndTransformFeedback();
+    }
+    let red: Vec<f32> = floats(&gl, b, 12).chunks(4).map(|v| v[0]).collect();
+    assert_eq!(red, [10.0 / 255.0, 20.0 / 255.0, 30.0 / 255.0], "levels 0, 1, 2");
+
+    /* a draw into the texture turns its texels to B,G,R,A */
+    let plain = sampling_program("uniform sampler2D s;", "vec4", "texture(s, vec2(0.5))");
+    let p = program(&plain, FS, &["v"], GL_INTERLEAVED_ATTRIBS);
+    let t = texture_2d(GL_NEAREST);
+    unsafe {
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8 as GLint,
+            1,
+            1,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            [10u8, 20, 30, 40].as_ptr().cast(),
+        );
+        let mut fb = 0;
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+        glUseProgram(p);
+        glDrawArrays(GL_POINTS, 0, 1);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    let tex = &gl.ctx().objs_ref().textures[t as usize];
+    assert!(tex.pe_order, "rendered into: stored B,G,R,A");
+    let stored = gl.cpu_view(tex.mem.gpu, 4);
+    assert_eq!(stored, [30, 20, 10, 40]);
+    assert_eq!(capture_point(&gl).expect("captured"), [10.0 / 255.0, 20.0 / 255.0, 30.0 / 255.0, 40.0 / 255.0]);
+}
+
+/// The texel source asked directly, without a program: the look-ups no
+/// GPU's code generator selects yet still have to be right when one does
+/// (texelFetchOffset, an integer result from a 2D array), and a 3D texture
+/// is read in both layouts `texture.rs` gives it -- the PowerVR's grid of
+/// slices (the mock's default) and the GC7000's stack.
+#[test]
+fn the_texel_source_reads_what_no_code_generator_selects_yet() {
+    use super::texture::glTexImage3D;
+    use super::tf_capture::{bound_of, GlTexels};
+    use crate::shaderc::online::eval::{TexLevel, TexLookup, TexelSource};
+    use crate::shaderc::online::ir::{ScalarType, TexDim};
+    let (gl, _be) = fresh();
+    let ask = |name: GLuint, dim: TexDim, ret: ScalarType, coord: [u32; 4], level: TexLevel, offset: [i32; 3]| {
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        let b = [bound_of(t, 0, dim, None).unwrap_or_else(|e| panic!("{e}"))];
+        GlTexels::new(&b).sample(&TexLookup { sampler: 0, dim, ret, coord, level, offset }).expect("sampled")
+    };
+    let f = |v: [u32; 4]| v.map(f32::from_bits);
+    let fl = |c: [f32; 4]| c.map(f32::to_bits);
+
+    /* texelFetchOffset: (3, 1) moved by (-1, 0) is texel 6; out of the image
+     * (undefined) it reads 0 */
+    let t2 = texture_2d(GL_NEAREST);
+    let texels: Vec<[f32; 4]> = (0..8).map(|i| [i as f32, 0.0, 0.0, 1.0]).collect();
+    unsafe { glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F as GLint, 4, 2, 0, GL_RGBA, GL_FLOAT, texels.as_ptr().cast()) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    let fetch = |x: i32, y: i32, o: [i32; 3]| {
+        f(ask(t2, TexDim::D2, ScalarType::F32, [x as u32, y as u32, 0, 0], TexLevel::Fetch(0), o))[0]
+    };
+    assert_eq!(fetch(3, 1, [-1, 0, 0]), 6.0);
+    assert_eq!(fetch(0, 0, [-1, 0, 0]), 0.0);
+    assert_eq!(fetch(3, 1, [0, 0, 0]), 7.0);
+
+    /* an integer 2D array, by fetch and by texture(): no conversion */
+    let mut arr = 0;
+    let layers: [i8; 8] = [-1, 2, 3, 4, -5, 6, 7, 8];
+    unsafe {
+        glGenTextures(1, &mut arr);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, arr);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+        glTexImage3D(
+            GL_TEXTURE_2D_ARRAY,
+            0,
+            GL_RGBA8I as GLint,
+            1,
+            1,
+            2,
+            0,
+            GL_RGBA_INTEGER,
+            GL_BYTE,
+            layers.as_ptr().cast(),
+        );
+    }
+    if gl.error() == GL_NO_ERROR {
+        let want = [-5i32 as u32, 6, 7, 8];
+        assert_eq!(ask(arr, TexDim::D2Array, ScalarType::I32, [0, 0, 1, 0], TexLevel::Fetch(0), [0; 3]), want);
+        let c = fl([0.5, 0.5, 1.2, 0.0]);
+        assert_eq!(ask(arr, TexDim::D2Array, ScalarType::I32, c, TexLevel::Lod(0.0), [0; 3]), want);
+    } /* else: this GPU stores no integer class */
+
+    /* a 2x2x2 3D texture of reds x + 2y + 4z: LINEAR at the centre is the
+     * mean, NEAREST picks (0, 1, 1), a fetch (1, 1, 1); grid, then stack */
+    let cube8: Vec<[f32; 4]> = (0..8).map(|i| [i as f32, 0.0, 0.0, 1.0]).collect();
+    for gc7000 in [false, true] {
+        if gc7000 {
+            gl.backend_like_gc7000();
+        }
+        let mut t3 = 0;
+        unsafe {
+            glGenTextures(1, &mut t3);
+            glBindTexture(GL_TEXTURE_3D, t3);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR as GLint);
+            glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F as GLint, 2, 2, 2, 0, GL_RGBA, GL_FLOAT, cube8.as_ptr().cast());
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let grid = gl.ctx().objs_ref().textures[t3 as usize].grid_cols != 0;
+        assert_eq!(grid, !gc7000, "the layout under test");
+        let centre = ask(t3, TexDim::D3, ScalarType::F32, fl([0.5; 4]), TexLevel::Lod(0.0), [0; 3]);
+        assert_eq!(f(centre)[0], 3.5, "grid {grid}");
+        let fetched = ask(t3, TexDim::D3, ScalarType::F32, [1, 1, 1, 0], TexLevel::Fetch(0), [0; 3]);
+        assert_eq!(f(fetched)[0], 7.0, "grid {grid}");
+        let off = ask(t3, TexDim::D3, ScalarType::F32, [0, 1, 0, 0], TexLevel::Fetch(0), [0, 0, 1]);
+        assert_eq!(f(off)[0], 6.0, "grid {grid}: (0, 1, 0) moved by (0, 0, 1)");
+    }
+}
+
+/// ES 3.0.6 table 3.19 on a 4-texel axis: REPEAT is i mod 4,
+/// CLAMP_TO_EDGE clamps, MIRRORED_REPEAT runs 0 1 2 3 3 2 1 0 with period 8.
+#[test]
+fn wrap_modes_follow_table_3_19() {
+    use super::tf_capture::wrap;
+    let mirrored = [3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 0, 0, 1];
+    for (k, i) in (-5..=9).enumerate() {
+        assert_eq!(wrap(i, 4, GL_REPEAT), i.rem_euclid(4) as u32, "REPEAT {i}");
+        assert_eq!(wrap(i, 4, GL_CLAMP_TO_EDGE), i.clamp(0, 3) as u32, "CLAMP_TO_EDGE {i}");
+        assert_eq!(wrap(i, 4, GL_MIRRORED_REPEAT), mirrored[k], "MIRRORED_REPEAT {i}");
+    }
+    /* far out, no overflow: -2^31 mod 6 is 4, and 0 1 2 2 1 0 at 4 is 1 */
+    assert_eq!(wrap(i32::MIN, 3, GL_MIRRORED_REPEAT), 1);
+}
+
+/// Table 3.21's face selection, and the texel across an edge for seamless
+/// filtering: +X's column -1 is +Z's last column, its column 2 (of 2) -Z's
+/// first; +Y's row -1 is -Z's first row.
+#[test]
+fn cube_faces_and_the_texel_across_an_edge() {
+    use super::tf_capture::{cube_across, cube_face};
+    assert_eq!(cube_face(1.0, 0.5, -0.5), (0, 0.75, 0.25));
+    assert_eq!(cube_face(-1.0, 0.0, 0.0).0, 1);
+    assert_eq!(cube_face(0.0, 1.0, 0.0), (2, 0.5, 0.5));
+    assert_eq!(cube_face(0.0, -2.0, 1.0).0, 3);
+    assert_eq!(cube_face(0.0, 0.0, 1.0).0, 4);
+    assert_eq!(cube_face(0.3, 0.2, -1.0).0, 5);
+    assert_eq!(cube_face(1.0, 1.0, 1.0).0, 0, "a tie goes to X");
+    assert_eq!(cube_across(0, -1, 0, 2), (4, 1, 0));
+    assert_eq!(cube_across(0, 2, 0, 2), (5, 0, 0));
+    assert_eq!(cube_across(2, 0, -1, 2), (5, 1, 0));
+}
+
+/// Each storage class decodes as ES 3.0.6 3.8.14.1 reads it: signed
+/// normalised max(c / 127, -1), the packed classes unpacked, B,G,R,A
+/// swapped back, signed integers sign-extended; a block class is None.
+#[test]
+fn every_storage_class_decodes() {
+    use super::es3_formats::{pack_r11g11b10f, Texel};
+    use super::tf_capture::decode;
+    use crate::backend::*;
+    let f = |p: &[u8], fmt| match decode(p, fmt, false) {
+        Some(Texel::F(v)) => v,
+        other => panic!("{fmt}: {other:?}"),
+    };
+    let i = |p: &[u8], fmt| match decode(p, fmt, false) {
+        Some(Texel::I(v)) => v,
+        other => panic!("{fmt}: {other:?}"),
+    };
+    assert_eq!(f(&[0x80, 0x81, 0, 0x7f], GLES_TEXFMT_RGBA8_SNORM), [-1.0, -1.0, 0.0, 1.0]);
+    assert_eq!(f(&pack_r11g11b10f(1.5, 0.25, 2.0).to_ne_bytes(), GLES_TEXFMT_R11G11B10F), [1.5, 0.25, 2.0, 1.0]);
+    let word = 1023u32 | (3 << 30);
+    assert_eq!(f(&word.to_ne_bytes(), GLES_TEXFMT_RGB10A2), [1.0, 0.0, 0.0, 1.0]);
+    assert_eq!(f(&[0x00, 0x3c, 0, 0], GLES_TEXFMT_R16F), [1.0, 0.0, 0.0, 1.0], "half 1.0");
+    assert_eq!(f(&[51, 128], GLES_TEXFMT_LA8), [0.2, 0.2, 0.2, 128.0 / 255.0]);
+    assert_eq!(f(&[51], GLES_TEXFMT_A8), [0.0, 0.0, 0.0, 0.2]);
+    assert_eq!(
+        decode(&[1, 2, 3, 4], GLES_TEXFMT_RGBA8, true),
+        Some(Texel::F([3.0 / 255.0, 2.0 / 255.0, 1.0 / 255.0, 4.0 / 255.0]))
+    );
+    assert_eq!(i(&[0xff, 0xff, 2, 0, 0, 0x80, 7, 0], GLES_TEXFMT_RGBA16I), [u32::MAX, 2, 0xffff_8000, 7]);
+    assert_eq!(i(&[0xff, 0xff, 2, 0, 0, 0x80, 7, 0], GLES_TEXFMT_RGBA16UI), [0xffff, 2, 0x8000, 7]);
+    assert_eq!(i(&[0x80, 1, 2, 3], GLES_TEXFMT_RGBA8I), [0xffff_ff80, 1, 2, 3]);
+    assert_eq!(decode(&[0; 16], GLES_TEXFMT_ETC2_RGB, false), None);
 }
 
 /// C-feedback-loop, and the uniform block: capture into A, then draw from
