@@ -42,7 +42,9 @@ ssh: connect to host <bridge-host> port 22: Connection refused
    an image.
 
 `tools/board.sh pi4 tree` needs both `BOARD_HOST` (ssh + sudo) and
-`BOARD_UART`; `BOARD_UART` is not set in the worker environment. It dies in
+`BOARD_UART`. A third try after the ssh approval gave the same two errors,
+and `tailscale status` lists the board as `offline, last seen 2h ago`, so it
+is powered off or has lost its network. `BOARD_UART` is not set in the worker environment. It dies in
 its pre-checks without them, so it was not started.
 
 ## Per row, against pi4-es2-final-r2.md
