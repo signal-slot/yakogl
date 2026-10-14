@@ -38,15 +38,9 @@ dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list):
 
 | Board | Failures | Notes |
 | --- | --- | --- |
-<<<<<<< HEAD
-| AM62P | 54 | 17,070 pass, 34 not supported, 7 warnings (full tree on `32778b57`, 2026-10-10). The 54: 9 `shaders.invariance` cases, fixed in `e17fb6a7` and passing on the board, and 45 `texture.vertex.2d` cases, fixed on the host, board confirmation pending. The 4x multisample image's 2 failures of that tree (alpha to coverage) pass since `452d6c31`. The last tree before it (2026-10-02, `d60b9d76`) had 0 |
-| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14; `32778b57` had 0 fail) |
-| Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings: the full tree on `a27d69c0` (2026-10-10) with its 9 cube-map failures rerun and passing on `1cf946a9`, and one row rerun for 34 cases the serial capture lost (2026-10-11). Not yet one tree from one commit |
-=======
 | AM62P | 0 | Final tree on `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`): 17,141 pass, 18 not supported, 6 warnings (5 quality, 1 compatibility). The 17 images at 1x give 17,125 pass and 34 not supported; the 4x multisample image passes its 16 cases. `GL_BGRA_EXT` renderbuffers (see the Pi 4) are not covered: the commit predates the change that broke them |
-| i.MX8MP | 0 | Final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`): 17,318 of 17,371 cases pass, 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver; identical to the trees of 2026-10-01 and 2026-10-10. Same BGRA caveat as the AM62P |
+| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`), which predates `8bbf9ba2`, had 0 fail: 17,318 of 17,371 pass, identical to the trees of 2026-10-01 and 2026-10-10 |
 | Raspberry Pi 4 | 46 | Rows 0-14 of the tree on `20a48791` (2026-10-14; `docs/board-sessions/pi4-es2-final.md`): 11,877 pass, 46 fail, 25 not supported; every failure is a `GL_BGRA_EXT` renderbuffer case, a regression of `8bbf9ba2`; rows 15-28 have not run at that commit. The last whole tree (`d56e79e5`, 2026-10-12) had 17,127 pass, 0 fail, 34 not supported, 4 warnings |
->>>>>>> 146a27e72a61bc8802d8c54ddf1d9c356b414a61
 
 glmark2-es2 at 800x600 runs all 33 scenes on every board:
 
