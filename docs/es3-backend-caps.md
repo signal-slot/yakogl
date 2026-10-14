@@ -9,7 +9,12 @@ History: the first version (b6004e1, item `es3-caps`) was vetoed and
 reverted in 3f78982. The redo (item `caps-redo`, 46d5f80 and 231c5aa) was
 never merged. This version (item `caps-land`, plan item id `pvr-shadow`)
 lands it. §9 says why the first version was vetoed and how this one avoids
-it.
+it. A later caps-redo branch (6853b41, written on 3603eb2) was merged into
+this text afterwards: its rows that still hold were added with re-read
+cites (V3D stream-output pause/resume, GC7000 primitive modes); its
+transform feedback 0/0/0, `INTEGER_RT_FORMATS` = 0 everywhere and "ETC2
+emulated on the GC7000" claims are stale or wrong at this tip and were
+not taken (§1.2 ETC2 row, §2, §4).
 
 ## 0. How to read this
 
@@ -73,7 +78,7 @@ API's choices.
 | Filtering of 32-bit float and integer formats | the gallium table has no filtering column (6 columns, macro at `v3dx_format_table.c:37-45`). The Vulkan table has one, `false` for the 32F and integer formats (`src/broadcom/vulkan/v3dvx_formats.c:42`, e.g. `:134,142,179`). Matches ES 3.0: NEAREST only | as listed |
 | ASTC rows | in the table (`v3dx_format_table.c:179-207`); whether the screen exposes them on 4.2 was not traced | [U] |
 | Transform feedback | hardware: the wait, flush-and-count, buffer, specs, flush-data and primitive-counts packets; output spec struct | `V/cle/v3d_packet.xml:440,560,700,724,730,735,750-755` |
-| Stream-output buffers | `max_stream_output_buffers = 4` | `v3d_screen.c:321` |
+| Stream-output buffers | `max_stream_output_buffers = 4`; `stream_output_pause_resume` | `v3d_screen.c:321,250` |
 | Occlusion queries | hardware counter packet; `occlusion_query` cap | `v3d_packet.xml:822`; `v3d_screen.c:249` |
 | Primitive restart | flag on the indexed list packets; fixed-index cap | `v3d_packet.xml:565,580,595`; `v3d_screen.c:246-248` |
 | Shading-language level | GLSL 3.30, ESSL 3.10 | `v3d_screen.c:307,309` |
@@ -95,7 +100,7 @@ The hwdb row is the i.MX8MP one: `H:18841` (ChipID 0x7000, revision
 | Independent blend | halti >= 5 | `etnaviv_screen.c:305-306` |
 | Colour RT formats (`gpu_supports_render_format`) | integer and float RTs with HALTI2; R8 / R8I / R8UI need HALTI5 (met); sRGB RT needs HALTI3 (met); 128-bit formats need HALF_FLOAT, and the row has HalfFloatPipe (`H:19026`) | `etnaviv_screen.c:470-515` (`:490-495,497-498,500-502,504-505`) |
 | Sampled formats (`gpu_supports_texture_format`) | sRGB and EXT formats HALTI0; snorm HALTI1; integer and float HALTI2; 128-bit integer HALTI5; ASTC off (`NO_ASTC` = 1, `H:19200`) | `etnaviv_screen.c:394-449` (`:406-410,412-414,416-417,419-421,426-429`) |
-| ETC2/EAC | hardware EXT formats in the format table (ETC2_RGB8, RGB8A1, RGBA8, R11, RG11, signed and unsigned), gated by HALTI0 | `E/etnaviv_format.c:244-250`; `etnaviv_screen.c:409-410` |
+| ETC2/EAC | hardware EXT formats in the format table (ETC2_RGB8, RGB8A1, RGBA8, R11, RG11, signed and unsigned), gated by HALTI0. Not emulated here: `etnaviv_etc2.c` patches ETC2 blocks only on parts without HALTI1 (`etna_etc2_needs_patching`), and this row has HALTI1 | `E/etnaviv_format.c:244-250`; `etnaviv_screen.c:409-410`; `E/etnaviv_etc2.c:33-56` (HALTI1 test at `:41-42`) |
 | Half-float linear filtering | needs `HALF_FLOAT` | `etnaviv_screen.c:280` |
 | Max texture / RT size | 8192 with `Texture8K` (set), RT 8192 with `Render8K` (set) | `etnaviv_screen.c:970-973`; `H:18986,18992` |
 | 3D / array textures | from HALTI0; array layers = max texture size (comment "TODO: verify"); 3D levels = log2(size) | `etnaviv_screen.c:283-288` |
@@ -106,6 +111,7 @@ The hwdb row is the i.MX8MP one: `H:18841` (ChipID 0x7000, revision
 | Occlusion queries, primitive restart (fixed index) | HALTI0 | `etnaviv_screen.c:309-311,254-255` |
 | Instance id / divisor | HALTI2 | `etnaviv_screen.c:275-276` |
 | Shadow samplers | `texture_shadow_map = true` | `etnaviv_screen.c:281` |
+| Primitive modes | triangle strips only with `BUG_FIXES8`, line loops only with `LINE_LOOP`; the row sets both, so all ES primitive modes | `etnaviv_screen.c:341-345`; `H:19047,19078` |
 | Uniform blocks | none in hardware; `max_const_buffer0_size` is 16384 "so state tracker enables UBOs", lowered to uniforms | `etnaviv_screen.c:195-199` |
 | Shading-language level | etnaviv sets none; the gallium default is GLSL 1.20 | `src/gallium/auxiliary/util/u_screen.c:64-65` |
 | Vertex-stage textures | read from 4x4-tiled copies only (yakogl finding) | `src/vivante/VIVANTE_NOTES.md:243-246` [C] |
