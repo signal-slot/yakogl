@@ -91,11 +91,33 @@ to main. 26 others are in `ccfarm/integration` (re-landed through it). That
 leaves **256 branches whose commits are on neither main nor integration**
 (ahead of main by 1: 103, 2: 31, 3: 53, 4: 18, 5 or more: 51; last commit
 dates 10-07 to 10-15, 84 on 10-14). The repository does not say why they
-stopped (review abandoned, closed and redone under a new id, held for an
-environment, still in review). That state is kept by ccfarm, which was not
-readable from this host. `docs/handoff/README.md` records one cause: on
-2026-10-13, 77 of 79 redos in 36 hours were conflicts, most in
-`docs/HANDOFF.md`.
+stopped; ccfarm's own state does (its `farm_status`, read on 2026-10-15 for
+the last 24 hours):
+
+- 86 results merged, 8 abandoned, 16 reworked (rework rate 17 %).
+- Of the 50 latest review items: 13 merged, **15 approved and waiting for
+  the CI on their pull request**, 10 being redone, 3 resolving conflicts
+  with main, 3 held for a missing environment (`ZEPHYR_VENV`, `WEST_VENV`,
+  `GLSLANG`; `shellcheck`; `MESA_V3D_TREE`), 2 in review, 3 cancelled, 1
+  with the arbiter.
+- At least four of the redos are "CI failed on pull request #767 / #791 /
+  #795 / #820 ... closed; made again as a new pull request", and two review
+  rounds failed on `cargo test --no-run ... error[E0...]`: the red main of
+  section 3 sends results back to be redone.
+- The promotions from `ccfarm/integration`: the last one that reached main
+  was on 2026-10-09 (114 tasks, `2f69c7d1`); the next (2026-10-10, candidate
+  `a35b4a68`) failed its checks (126 ok, 8 failed), so nothing more went
+  from integration to main before the branch was dropped on 2026-10-12.
+- `tools/handoff-notes.sh --check` is listed 14 times as failing on main
+  too. It is not part of `check.sh` or the CI: it exits 1 by design while a
+  note waits for the handoff-fold stage.
+
+`docs/handoff/README.md` records one more cause: on 2026-10-13, 77 of 79
+redos in 36 hours were conflicts, most in `docs/HANDOFF.md`.
+
+After the snapshot main moved three more merges (#477, #813, #761, to
+`769aed82` at 2026-10-14T20:37Z); the two test files are still unfixed
+there, and none of the three touches a file this change does.
 
 ## 5. Every named branch against main `81bffb65`
 
