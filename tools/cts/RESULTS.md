@@ -17361,6 +17361,20 @@ Images from origin/main `dd40b29b` (`cts-common.sh imx8mp build`), run by `cts-c
 
 Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (#6); it was not investigated in this run. The figures equal those of `d32d190a`.
 
+## i.MX8MP: common set on `a9cf7918`, U-Boot from eMMC (2026-10-14)
+
+Images from origin/main `a9cf7918` (`cts-common.sh imx8mp build`), run by `cts-common.sh imx8mp run` with `BOARD_BOOT=uboot-mmc`, one boot per row. Records `records/imx8mp/common-a9cf7918/`.
+
+| row | image | verdict | record | reading |
+|---|---|---|---|---|
+| GM | `74e47d07` | done | `594b120e fc3f002b 6184003f 0f258320` | glmark2 score 43; 33 ran, 0 failed, 0 unsupported; status pass; back after 402 s |
+| SO | `61f43122` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| SV | `ff244a69` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| CL | `64059d82` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | cluster probes pass |
+| GT | `60d07f7b` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
+
+Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (#6); it was not investigated in this run. The figures equal those of `dd40b29b`.
+
 ## i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main `835cf9cc`: 46 fail, all `GL_BGRA_EXT` renderbuffers (2026-10-14)
 
 `tools/cts/imx8mp-deqp-build.sh deqp-835cf9cc 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt`,
