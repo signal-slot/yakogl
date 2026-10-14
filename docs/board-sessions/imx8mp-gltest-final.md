@@ -28,7 +28,10 @@ there are no results.** Nothing below is a measurement.
 `ssh: Could not resolve hostname verdin-imx8mp: Name or service not known`.
 `mcp__ccfarm__ask_farm` answered that ccfarm's access records list the board as
 reachable from the nodes Lepton and nuc and as unreachable from this node (hx90); no
-other route is recorded for hx90. A second, earlier worker of this item did reach the
+other route is recorded for hx90. `tailscale status` on this node lists `verdin-imx8mp` as
+active, but the name still does not resolve here (`getent hosts` is empty and ssh failed
+again with the same error); the lease allows only the literal name, so no address was
+substituted. A second, earlier worker of this item did reach the
 board and built the image, but was refused `BOARD_HOST=... BOARD_BOOT=... tools/board.sh`
 as a command prefix, so it did not boot it either. Rerun this item on a node that reaches
 the board and may start `tools/board.sh`.
