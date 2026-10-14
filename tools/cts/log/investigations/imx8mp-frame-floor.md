@@ -420,9 +420,11 @@ does. Until then:
   `board_imx8mp.c` (aarch64-zephyr-elf-gcc, from `compile_commands.json`),
   run again with `-fsyntax-only -Wall -Wextra -Wno-unused-parameter`, once
   as built and once with `-DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1`.
-  Both rc=0 with no diagnostics. A full image of the A/B arm was not built
-  here: the task's sandbox refused the extra west/cmake command lines.
-  Step 2 builds it.
+  Both rc=0 with no diagnostics. The full image of the A/B arm, from
+  `9562c58a`: step 2's `gm GM-waits -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`
+  west build (into `build/ck-head/GM-waits`), rc=0, `.config` with
+  `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`, `zephyr.bin` sha256
+  `b394bd1641c57cb727a68e9403034968b5eee7bf4c55ac658292da23f3f5dcdc`.
 
 ## The frame-breakdown record (design, not built)
 
