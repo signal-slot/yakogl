@@ -5,7 +5,7 @@
 The state of the work and what comes next. A result does not edit this
 file: it adds a note under `docs/handoff/` (one file per result,
 `docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
-in after the merge; a person folds the same way. Last update: 2026-10-14.
+in after the merge; a person folds the same way. Last update: 2026-10-15.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `8d0b4132` (2026-10-14). The numbers below are read from
+main is `43fee551` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -165,7 +165,7 @@ es3-vertex).
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`; the GC7000 and V3D refuse the integer ones by name (`888af5d`, `e5c4a18`; PowerVR `25267d17`, merged in `a27d69c0`) | `docs/es3-sized-formats.md`, `docs/es3-pvr-formats.md` |
 | Occlusion queries | counted on the three back ends, host only (`2241cd84` GL core, `d9573ab9` PowerVR, `dcac96cb` GC7000, `7526b084` V3D; merged in `452d6c31`) | `docs/es3-occlusion-query.md` |
 | Integer colour render targets | GL half built; the PowerVR writes all nineteen as a draw's one colour attachment (`fc658e64`, merged in `a27d69c0`); the GC7000 and V3D refuse by name | `docs/es3-pvr-formats.md` section 10 |
-| `glBlitFramebuffer` | colour on the CPU, shared by the three back ends (`c4dce9125`); depth and stencil refused by name (blit-ds) | `src/gl/blit.rs` |
+| `glBlitFramebuffer` | colour on the CPU, shared by the three back ends (`c4dce9125`); depth on the CPU into a depth texture's texels, from a depth texture or a depth renderbuffer (blit-ds, host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs` |
 | sRGB | PowerVR renders and samples; the GC7000 and V3D sample and refuse a draw into sRGB by name (`c4dce9125`) | `docs/es3-srgb.md` |
 | Buffer mapping and pixel buffers | host-proven (`c4dce9125`) | none |
 | NPOT levels of arrays and storage textures | valid at every level (`c40414b`) | none |
@@ -573,6 +573,15 @@ es3-vertex).
      `mip_levels_needed` uses w and h. A sampler object's WRAP_R and LOD range
      are not exposed by `es3.rs` (`sampler_state` returns min, mag, wrap S,
      wrap T), so the capture uses the texture's, as the draw does.
+   - **Depth blit and the back end's buffer** (no issue yet; host):
+     A depth blit into a depth texture changes the texels, which is what a
+     sampler reads. It does not change the back end's depth/stencil buffer
+     for that texture. A draw that later depth-tests against the texture,
+     with the texture as its depth attachment, still sees the depth it had
+     before the blit. The next resolve after such a draw also overwrites
+     the texels with that buffer. `glTexSubImage2D` of depth has the same
+     gap today (`src/gl/texture.rs` `resolve_depth`: "Not the other way
+     round"). The `ds_write` entry of blit-ds (item 4) closes both.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured. Each item keeps every `report-es2` answer and adds a test that
    pins it. What each item built is in the ES 3.0 table above; here is what
@@ -718,10 +727,37 @@ es3-vertex).
        floor(x + 0.5) (`builtin_call.rs` `pack2x16`; only an input just below
        .5 of a step goes the wrong way; dEQP's pack_unpack cases pass on the
        AM62P).
-   - **blit-ds**: the depth/stencil half of `glBlitFramebuffer` (the 16
-     AM62P `fbo.blit.depth_stencil` failures). It needs a back-end entry
-     that copies a rectangle between two objects' planes
-     (`src/ds_retention.rs`) with the blit's mapping, NEAREST only.
+   - **blit-ds**: the depth/stencil half of `glBlitFramebuffer`. Done on
+     the host for the planes the GL core holds: depth copied on the CPU
+     into the R32F texels of a 2D depth texture, read from a 2D depth
+     texture's texels or from a depth renderbuffer's depth
+     (`backend::depth_resolve`), with the colour path's mapping, flips,
+     cut and scissor (`src/gl/blit.rs` `copy_depth`). Still
+     GL_INVALID_OPERATION, each cause logged once: (a) depth into a
+     renderbuffer or the window, (b) all stencil, (c) depth from the
+     window or from a cube/array depth texture. These are all 16 AM62P
+     `fbo.blit.depth_stencil` failures, because dEQP blits between
+     renderbuffers. (a) and (b) need two new back-end entries
+     (`src/backend.rs`, one per back end):
+     - `ds_write(id, plane, src, x, y, w, h, pitch) -> i32`: write a
+       rectangle of plane DEPTH (f32 in [0, 1]) or STENCIL (u8) of
+       object `id`'s buffer from the CPU. Take a buffer for `id` if it
+       has none (refuse as `ds_retention::refuse` does when the table is
+       full), and leave the plane `Plane::LIVE`. If the plane is
+       `CLEARED(v)`, fill the buffer with `v` before the rectangle is
+       written. The layouts are the ones `depth_resolve` reads: on the
+       PowerVR, packed D24S8 rows at the ZLS-tile-aligned width; on the
+       GC7000, D24S8 row-linear at the surface stride, depth in bits
+       31..8 and stencil in 7..0; on the V3D, UIF D24S8 without XOR
+       (the store side of `v3d_tex_load_box`).
+     - `stencil_resolve(id, dst: *mut u8, w, h, pitch) -> i32`: the
+       stencil half of `depth_resolve`, with the same answers (0 / 1 /
+       negative errno).
+     With these two entries, `copy_depth` writes through `ds_write`
+     instead of into texels. A stencil copy is the same loop over u8.
+     (c) also needs a measurement: which way up each back end keeps the
+     window's depth (the window's colour is stored top-down;
+     `default_y_up`).
    - **es3-caps**: redo the ES 3.0 limits test, reverted for review
      (`3f78982`).
    - **es2-report-gaps**: the four `BUG` pins of `tests/es2_report_guard.rs`
