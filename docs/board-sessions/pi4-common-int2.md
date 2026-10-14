@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 board session 2, common set from the integration tip
 
-Status: **the five images built (rc=0 each), but nothing ran on the board.**
+Status: **the five images built (rc=0 each, twice), but nothing ran on the board.**
 The Pi 4's console is reachable only through `BOARD_UART`, and the machine
 that held the lease (`system76`) had no value for it. `tools/board.sh pi4
 run|tree` needs `BOARD_UART` for every row, because the Pi 4's results come
@@ -10,6 +10,16 @@ back only on its serial console. No verdict line, glmark2 score, per-scene
 fps, carve-out boot line, Slint or cluster crc16, or gl_test tally comes from
 this session. Every figure in "Expected" below is a reference from earlier
 records, not a reading.
+
+Second turn (same day): the task was resumed with the message that it had
+moved to `nuc`, which has `BOARD_UART`. The shell still ran on `system76`.
+`board.sh --dry-run` printed the placeholder `/dev/PI4_UART`, so `BOARD_UART`
+was still unset. `BOARD_HOST` could not be set either: the command prefix,
+`env`, `export` and a wrapper script were all refused by the worker's
+permission policy. `git worktree add` was refused too, so the second build
+ran from the workspace itself (HEAD `1e0c7566`). That commit adds only this
+document and the handoff note on top of `3cc4b60a`, so the sources are
+identical. Its five images are listed below the first build's.
 
 HEAD8: `3cc4b60a` (the integration tip, `3cc4b60acf33ef757a754c99827962fbbced0446`;
 board.sh printed `build 3cc4b60a`). Board: Raspberry Pi 4 (the farm's
@@ -28,6 +38,21 @@ CL rc=0 sha256=83abd1fae10dc78061efaf9a594ec3ac69a82fcc4fa8bc6240427db1c71ab413 
 GT rc=0 sha256=c0dfb81cbde883d9804f1346be28972dfdb9b3ab03de4dfca6b034df779230d0 build=V3D_BUILD=3cc4b60a
 ```
 
+Second build, `tools/cts/cts-common.sh pi4 build build/common/pi4-1e0c7566`
+(workspace HEAD `1e0c7566`, same sources as `3cc4b60a`; the sha256 values
+differ only because the tree id compiled into the image differs):
+
+```
+GM rc=0 sha256=d330355f306ce35eb540522cb534ee6fd8ba667e67326a0b35573d41657f70c8 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=1e0c7566
+SO rc=0 sha256=ca3eea9359c2b6be2cbad8ecd23ac6b1fb7fafbd1d1f9853ed0baff7c99e8a31 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=1e0c7566
+SV rc=0 sha256=17d8424d2d6b943aa58b93113b3e35ff111cd3070120acd3b1640da56b2fb76c build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=1e0c7566
+CL rc=0 sha256=3045a80ce94d83db03e01038d9eacb5a11267508d6ae777c36afd365154f2c26 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=1e0c7566
+GT rc=0 sha256=4155a2925ea2306bcd0a9186a8c7d080fcc8f04dac229808f51a1b32a9cf9bb3 build=V3D_BUILD=1e0c7566
+```
+
+`tools/board.sh --dry-run pi4 run .../GM/zephyr/zephyr.bin` read GM's footprint
+again as 250,490,880 bytes (`build 1e0c7566 boot tryboot (row)`).
+
 GM's `.config` has `CONFIG_YAKOGL_V3D_CARVEOUT_BYTES=100663296` (96 MiB) and
 `CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES=25165824` (24 MiB), as
 `driver/samples/zephyr/glmark2/boards/rpi_4b.conf` sets. The carve-out does
@@ -40,7 +65,10 @@ footprint as 250,490,880 bytes, inside the Pi 4's load window
 The board was idle: up 5 h 10 min, load 0.00, no GL client running, no
 `yakogl-*.bin` left in `/boot/firmware`. `tryboot.txt` was the empty file a
 clean board.sh run leaves. The board's Linux has no `/dev/serial/by-id`.
-Nothing was staged and the board was not rebooted.
+Nothing was staged and the board was not rebooted. On the second turn it was
+again idle: up 7 h 08 min, load 0.00, no GL client, no `yakogl-*.bin`, an
+empty `tryboot.txt`; the only sessions were the board's own seat0/tty1 login
+and the check's own ssh.
 
 `tools/cts/cts-common.sh --dry-run pi4 run build/common/pi4-3cc4b60a
 records/pi4/common-3cc4b60a` printed the full sequence for all five rows

@@ -11,6 +11,10 @@
   budget and links (footprint 250,490,880 bytes). No row ran: the machine
   holding the Pi 4 lease had no `BOARD_UART`, and the Pi 4's results come
   back only on its console (`docs/board-sessions/pi4-common-int2.md`).
+  A second turn rebuilt all five rc=0 from the same sources (workspace HEAD
+  `1e0c7566`, docs only on top of `3cc4b60a`). It still ran on `system76`,
+  with `BOARD_UART` unset, and the worker's permission policy refused every
+  way of passing `BOARD_HOST` to `board.sh`. Again no row ran.
 - No board figure changes. The cells stay as they are:
   - `README.md` Status table, glmark2 score row: keep
     `| Raspberry Pi 4 | 183 (2026-10-04) |` unchanged.
@@ -41,8 +45,10 @@
 ## Next board session
 
 - Pi 4: the common set from the integration tip is still to run. The images
-  build cleanly at `3cc4b60a`. Run it where `BOARD_UART` (the Pi 4's console
-  device or serial-bridge `host:port`) and `BOARD_HDMI_TIMINGS` are set,
+  build cleanly at `3cc4b60a`. Run it on the machine that has the Pi 4's
+  console, where `BOARD_UART` (the console device or serial-bridge
+  `host:port`) and `BOARD_HDMI_TIMINGS` are set, and where the worker may set
+  `BOARD_HOST` (a command prefix or an export),
   using the commands in "Commands to rerun" of
   `docs/board-sessions/pi4-common-int2.md`. Check the GM boot line for
   `carve-out 96 MiB`, check refract and terrain for memory and GL-error
