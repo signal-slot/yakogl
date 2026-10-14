@@ -546,10 +546,6 @@ es3-vertex).
      op samples (`row_sampled`); `tests/es3_tf_sampler.rs`
      (`texture_size_of_each_target`) works around it with an extra
      `texture()` read.
-   - **`docs/es3-cts-failures.md` RC13 is stale** (no issue yet): its table
-     row "Indexed element passed as out/inout argument" (8 / 0 / 8) and the
-     "no item yet" line (about line 435) still list the indexed out/inout
-     arguments, which build at `cd738b1ae7cf` (es3-shaderc, "Open work" item 4).
    - Capture against draw, differences by design (`tests/es3_tf_sampler.rs`):
      the capture applies the texture swizzle and GL_TEXTURE_MIN_LOD / MAX_LOD,
      which the draw does not yet (`GlTexture` comment "the draw does not apply
@@ -643,9 +639,9 @@ es3-vertex).
        both stages) build on the PowerVR, the GC7000UL and the V3D. They were
        refused for the missing `trunc` (`modf`), fixed by `b1cf9e4`; the
        indexed copy-in/out (`LRef` in `lower.rs`) was already correct
-       (`tools/cts/log/investigations/shaderc-inout-indexed.md`). Left: in
-       `docs/es3-cts-failures.md`, remove "indexed out/inout arguments" from
-       the "no item yet" line and set the RC13 row to 0 / 0 / 0.
+       (`tools/cts/log/investigations/shaderc-inout-indexed.md`).
+       `docs/es3-cts-failures.md` sets the RC13 row to 0 / 0 / 0 and no
+       longer lists "indexed out/inout arguments" in the "no item yet" line.
      - Item 4 of that table, the GC7000UL's 128-element constant array, is
        done (gc-const-array, 2026-10-14; `alloc.rs` `sink_definitions`,
        `tests/es3_gc_const_array.rs`), and not the way the item said: the
@@ -1169,7 +1165,8 @@ Common set (ran at `cd738b1a`, `docs/board-sessions/am62p-common-int.md`):
 re-run SV alone (it was empty). After the render pool fix ("Open work" item
 9), re-run GM and watch the console for `render pool exhausted` and `out of
 GPU memory`; the tally's "GL errors raised" reads `15 or more` and does not
-name the scene.
+name the scene. The console is the bridge's main_uart0 port, not the lease's
+mcu_uart0 port.
 
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
