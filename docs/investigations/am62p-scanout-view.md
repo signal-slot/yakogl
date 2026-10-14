@@ -3,9 +3,11 @@
 # AM62P: a scan-out view for Slint and the cluster?
 
 Plan #2, item am62p-view. Design only; this note changes no code. Line
-numbers are of the integration tree at `fdff1147`. The git history of the
-tree is one squashed root commit (`afb16335`), so `git log -S` names only that
-commit; the evidence below is the tree and the board records.
+numbers were first taken on the integration tree at `fdff1147`. Every
+file:line below was checked again by hand on `81bffb65` and moved where the
+code had moved. The git history of the tree is one squashed root commit
+(`afb16335`), so `git log -S` names only that commit; the evidence below is
+the tree and the board records.
 
 ## Answer
 
@@ -17,12 +19,14 @@ needs no scan-out view for Slint or the cluster.
 The opposite claim comes from three lines that use "copy path" to mean "not
 a view". On the Pi 4 those two things are the same. On the AM62P they are not:
 
-- `docs/benchmarks.md:88`: "The board layer has no scan-out view, so the view
-  row is the copy path again".
-- `tools/cts/common-tree.txt:9-13`: "slint: the window copied to the screen";
+- `docs/benchmarks.md:88` (at `fdff1147`): "The board layer has no scan-out
+  view, so the view row is the copy path again". The file was deleted in
+  `432cd2c9` and is no longer in the tree.
+- `tools/cts/common-tree.txt:9-13` (before this note's follow-up corrected
+  those lines, now 9-16; see 5.A): "slint: the window copied to the screen";
   "the AM62P's board layer has no view ... there the row is the copy path
   again".
-- `tools/cts/RESULTS.md:437` and `:448`: "the copy path, as predicted".
+- `tools/cts/RESULTS.md:440` and `:451`: "the copy path, as predicted".
 
 The code and the design say no copy happens:
 
@@ -30,7 +34,7 @@ The code and the design say no copy happens:
   because there is no copy to remove: board_show() is a DSS
   application-plane flip by address with the window's own stride ... measured
   board_show at 0.0 ms mean and worst over 5971 frames".
-- `driver/docs/one-method.md:186-187`: the same.
+- `driver/docs/one-method.md:188-189`: the same.
 - `driver/zephyr/lib/board/am62p/board_am62p.c:69-87`: `board_show()` only
   calls `pvr_sample_show_window` / `pvr_sample_flip_window`. It never calls
   `board_show_copied()`. Only the Pi 4 (`rpi4/board_rpi4.c:312`) and the
@@ -52,9 +56,9 @@ cost about 8.6 ms of a 15 ms frame. The AM62P has no such cost to remove.
 | surface | maps the window's pages at a new GPU VA, no pool memory; stores the wide pitch per surface (0 = packed) | `src/gl/egl.rs:1279-1285`, `:1310` |
 | show | a part of the view: pan to its row (`SET_VIRTUAL_OFFSET`), no copy; anything else: `board_show_copied()` and a row-by-row `memcpy` | `rpi4/board_rpi4.c:279-319` (copy at `:312-317`) |
 | count | the first copy prints "board: board_show copies the WxH window ..."; `board_show_copies()` counts | `common/board.c:48-61` |
-| APP bit 16 | `board_finish()` writes kind APP with `YK_RECORD_APP_SHOWN_BY_COPY` (0x10000) only when the run stored no result record of its own | `common/board.c:171-179`, `driver/rust/src/board/record.rs:92-96`, `:294` |
+| APP bit 16 | `board_finish()` writes kind APP with `YK_RECORD_APP_SHOWN_BY_COPY` (0x10000) only when the run stored no result record of its own | `common/board.c:171-179`, `driver/rust/src/board/record.rs:97-102`, `:306` |
 | Slint | hands `stride` to EGL as is; the check walks rows at `stride` | `driver/samples/zephyr/slint/src/main.c:172-214`, `:242` |
-| cluster | the knob is on in `prj.conf`; the cluster writes its own APP record with `board_show_copies() != 0` | `driver/samples/zephyr/cluster/prj.conf:16-21`, `cluster/src/main.c:943`, `cluster/rust/src/board.rs:272-298` |
+| cluster | the knob is on in `prj.conf`; the cluster writes its own APP record with `board_show_copies() != 0` | `driver/samples/zephyr/cluster/prj.conf:18-23`, `cluster/src/main.c:1024`, `cluster/rust/src/board.rs:289-324` |
 
 Note on bit 16: Slint stores PROBES as its result, so `board_finish()` writes
 no APP record for Slint (`common/board.c:174`). For Slint, the proof of "no
@@ -77,31 +81,31 @@ cluster carries bit 16 in a record.
 
 Every window the three benchmarks ask for fits the plane as it is: Slint
 1024x600 (`slint/src/main.c:45-46`), the cluster's two 1024x600 halves
-(`cluster/boards/verdin_am62p_am62p54_a53.conf:15-19`), glmark2 800x600 (a
+(`cluster/boards/verdin_am62p_am62p54_a53.conf:17-21`), glmark2 800x600 (a
 plane smaller than the screen, at (0,0)).
 
 ## 3. What the PowerVR window needs, and whether the DSS takes it
 
 | need | PowerVR | DSS | match |
 |---|---|---|---|
-| layout | linear: the PBE writes `ROGUE_PBESTATE_MEMLAYOUT_LINEAR` unless the twiddle option is set for a power-of-two target | linear only | yes (`src/pvr/backend.rs:737-765`) |
+| layout | linear: the PBE writes `ROGUE_PBESTATE_MEMLAYOUT_LINEAR` unless the twiddle option is set for a power-of-two target | linear only | yes (`src/pvr/backend.rs:800-834`, `pbe_reg_words`) |
 | pitch | even pixels, at least `tex_pitch(w)`, at most 16384 (PBE linestride counts pixel pairs) | any pitch of at least `w * 4` | yes (`src/gl/egl.rs:447-473`) |
-| format | XRGB8888 (PBE packmode U8U8U8U8) | `AM62P_DSS_FMT_XRGB8888` (0x27) | yes (`src/pvr/backend.rs:795-799`, `common/sample_glue.c:75`) |
+| format | XRGB8888 (PBE packmode U8U8U8U8) | `AM62P_DSS_FMT_XRGB8888` (0x27) | yes (`src/pvr/backend.rs:926-933`, `pbe_emit_words`; `common/sample_glue.c:75`) |
 | address | `pvr_render_map_phys` refuses a `phys` that is not 4 KiB aligned; maps any DDR page through the GPU MMU | 4-byte aligned, 48-bit bus address; the A53 maps DDR 1:1 | yes (`driver/src/pvr_render.c:120-136`; `dss.rs:106`) |
 | contiguity | none needed (page by page through the GPU MMU) | one contiguous range | `s_win` is one static array: yes |
-| pool | the window uses a fresh GPU VA, **no render-pool pages** | - | `src/gl/egl.rs:1279-1285`, `src/osal/zephyr.c:447-471` |
+| pool | the window uses a fresh GPU VA, **no render-pool pages** | - | `src/gl/egl.rs:1279-1285`, `src/osal/zephyr.c:448-473` |
 
 Board proof that the DSS shows what the PowerVR wrote, in place:
-`tools/cts/RESULTS.md:591` (cluster, 1024x600, "two halves at 0x84d44000
+`tools/cts/RESULTS.md:594` (cluster, 1024x600, "two halves at 0x84d44000
 and 0x84f9c000, stride 4096 (no view line: the DSS flips the packed halves)",
 15/15 probes, APP `594b0209 00000701 ...` with bit 16 clear) and
-`tools/cts/RESULTS.md:16803-16812` (Slint and the cluster at `17605c36`).
+`tools/cts/RESULTS.md:16798-16815` (Slint and the cluster at `17605c36`).
 Mesa pvr and Linux tidss were not cloned: the tree and these records already
 answer the question.
 
 Why the AM62P's SO and SV rows are one image: no source file in the AM62P
 build reads `CONFIG_YAKOGL_BOARD_SCANOUT_VIEW`, so both images have the same
-sha256 (`docs/benchmarks-baseline/am62p.md:33-34`). The two rows are the same
+sha256 (`tools/cts/log/benchmarks-baseline/am62p.md:45-46`). The two rows are the same
 copy-free run twice.
 
 ## 4. What is really open on the AM62P display path: tearing, not copies
@@ -111,19 +115,19 @@ is a copy.
 
 1. **Slint draws into the buffer the DSS is scanning.** Slint has one window
    (`slint/src/main.c:172-214`). `eglSwapBuffers` submits frame N and waits
-   only for frame N-1 (`src/gl/egl.rs:2110-2118`), so frame N+1 renders
+   only for frame N-1 (`src/gl/egl.rs:2111-2119`), so frame N+1 renders
    into the same buffer during scan-out. A frame can show part old, part
    new. The Pi 4 view has the same single buffer.
 2. **The cluster may draw into a half that the DSS still scans.** The
    cluster submits N+1 into the other half right after `board_show(N)`. The
-   flip only latches at the next vsync (`cluster/src/main.c:37-48` says so;
+   flip only latches at the next vsync (`cluster/src/main.c:40-51` says so;
    `dss.rs:243-261`, `:326-335`). `plane_init` always sends `seq = 0`
    (`common/sample_glue.c:70-82`), so `am62p_dss_app_seq_shown()` cannot tell
    when a flip has latched.
 3. **The swap interval is ignored.** `yakogl_zephyr_wait_vblank` is a weak
    function that returns -ENOTSUP, and no board defines it
-   (`src/osal/zephyr.c:602-610`). So EGL's default interval 1
-   (`src/gl/egl.rs:276`, `:2122-2134`) does not wait on any board. glmark2
+   (`src/osal/zephyr.c:596-607`). So EGL's default interval 1
+   (`src/gl/egl.rs:276`, `:2123-2135`) does not wait on any board. glmark2
    asks for interval 0 anyway (glmark2 `src/gl-state-egl.cpp:426-427` at
    `22c527cb`). Slint and the cluster never call `eglSwapInterval`, so a
    working vblank wait would limit them to 58.8 frames/s on this panel.
@@ -138,11 +142,39 @@ is a copy.
 | `docs/benchmarks.md:90` (and the gaps list) | keep the Pi 4 numbers; add nothing for the AM62P |
 | `tools/cts/common-tree.txt:9-13` | "slint: the window copied to the screen" -> "shown by a copy where the board copies (Pi 4, i.MX8MP); scanned in place on the AM62P"; "there the row is the copy path again" -> "there the row is the same copy-free image as SO" |
 | `driver/zephyr/lib/board/Kconfig:101-116` (help) | add: "AM62P: no effect; its window is already scanned in place" |
-| `tools/cts/STATUS.md:110` | "クラスタのブランチとビューの板レイヤーの統合" is done: the cluster is on the view (`cluster/prj.conf:21`) and in the common set (`common-tree.txt:28-29`) |
-| `tools/cts/RESULTS.md:437`, `:448` | these are history: do not edit them; add one dated line under them, "on the AM62P the SV row is not a copy path: same sha256 as SO, board_show is a flip" |
+| `tools/cts/STATUS.md:110` | "クラスタのブランチとビューの板レイヤーの統合" is done: the cluster is on the view (`cluster/prj.conf:23`) and in the common set (`common-tree.txt:31-32`) |
+| `tools/cts/RESULTS.md:440`, `:451` | these are history: do not edit them; add one dated line under them, "on the AM62P the SV row is not a copy path: same sha256 as SO, board_show is a flip" |
 
 The `bench-recipes` item owns HANDOFF, README, RESULTS and STATUS sync, so A
 fits there.
+
+**Status of A (2026-10-15, item am62p-view's doc follow-up, on `81bffb65`):**
+
+- Done: `tools/cts/common-tree.txt` (comment lines only; the rows are as
+  they were): slint is shown by a copy where the board copies (Pi 4,
+  i.MX8MP) and scanned in place on the AM62P; on the AM62P the slint-view
+  row is the same copy-free image as SO.
+- Done: `tools/cts/STATUS.md`. The 残り list of line 110 is now in the dated
+  diary `tools/cts/log/status-2026-09-25-to-10-07.md:106`, which is left as
+  history. Instead STATUS.md has a 済み bullet: the cluster uses the view
+  (`driver/samples/zephyr/cluster/prj.conf:23`) and is the CL row of the
+  common set (`tools/cts/common-tree.txt:31-32`).
+- Dropped: the two `docs/benchmarks.md` rows. `432cd2c9` deleted that file
+  (plan #2's inventory, kept in git history), so there is nothing to
+  correct. It was not brought back. Its sentence lived on in the build
+  recipe, `docs/release/building.md:394` ("the AM62P has no view; there the
+  row is the copy path again"); that row now says the AM62P makes no copy
+  and that "view on" and "view off" are the same copy-free image there.
+- STILL TO DO: the same sentence in `tools/cts/README.md:175` ("its SV row
+  is the copy path again"); the README is another item's. The board session
+  record `docs/board-sessions/am62p-common-int.md:27` and the RESULTS.md
+  rows are history and stay as written.
+- STILL TO DO: the help of `YAKOGL_BOARD_SCANOUT_VIEW` in
+  `driver/zephyr/lib/board/Kconfig:101-116` should say "AM62P: no effect; its
+  window is already scanned in place". Another item owns the Kconfig.
+- STILL TO DO: the A items that touch HANDOFF, README, RESULTS (the dated
+  line under `RESULTS.md:440` and `:451`) or the root STATUS. The
+  `bench-recipes` item owns them.
 
 ### B. Recommended: a positive console line on the AM62P (small code)
 
@@ -192,7 +224,7 @@ It needs a decision first, because it changes the frame counts.
 - **Tearing:** as in section 4. The present path already tears, and so does
   the Pi 4 Slint view. B does not change it; C does.
 - **Buffer count:** the cluster uses 2 halves, which is the whole 4800 KiB
-  (`cluster/boards/verdin_am62p_am62p54_a53.conf:15-17`). A third half needs
+  (`cluster/boards/verdin_am62p_am62p54_a53.conf:17-19`). A third half needs
   7200 KiB in `zephyr,sram`, which has 344 MiB (dts `:62-64`).
 - **Pool against the refract fix:** none. The window is in `zephyr,sram`, not
   in the 64 MiB carve-out, and EGL maps it with no pool pages
@@ -202,7 +234,7 @@ It needs a decision first, because it changes the frame counts.
   stencil 8) is in the pool, and it is the same size with or without B or C.
 - **GPU VA:** each window surface takes new VA from the bump in
   `pvr_render_map_phys` and does not give it back (`pvr_render.c:129-131`;
-  `src/gl/egl.rs:5209` keeps the VA range on destroy). That is fine for 2 or 3
+  `src/gl/egl.rs:5210`, `destroying_a_window_surface_keeps_its_va_range`). That is fine for 2 or 3
   surfaces made once.
 - **Alignment:** every surface `phys` must be 4 KiB aligned
   (`pvr_render.c:127`); the DSS needs only 4 bytes.
@@ -212,7 +244,7 @@ It needs a decision first, because it changes the frame counts.
 This needs the board, `ZEPHYR_WS`, `WEST_VENV`, `SLINT_NOSTD_DIR`,
 `NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`, `NOTO_SANS_DIR`, and
 `driver/src/fw/pvr_fw_blob.h` (`tools/cts/common-images.sh:47-59`), and
-`BOARD_HOST` for `tools/board.sh` (`tools/board.sh:129`). It was
+`BOARD_HOST` for `tools/board.sh` (`tools/board.sh:133`). It was
 not run by this item.
 
 Build the three rows from the tree under test:
@@ -232,17 +264,17 @@ Run (the default boot is `uboot-tftp`; the recent records used `uboot-mmc`):
 
 or the whole set: `tools/cts/cts-common.sh am62p run <img> <outdir>`.
 
-Expected (the latest AM62P records, `tools/cts/RESULTS.md:16803-16812`,
+Expected (the latest AM62P records, `tools/cts/RESULTS.md:16798-16815`,
 tree `17605c36`):
 
 | row | verdict line | PROBES words | frames | no-copy proof |
 |---|---|---|---|---|
-| SV slint-view | `rc=0 verdict=done ... result=record:PROBES resets=0` | `594b0601,08420862,00210842,c5920883` | `slint: animation: ~700 frames in ~10000 ms` (703 at `17605c36`; 715 and 741 in older trees, RESULTS.md:437, :448). Not 1500: the AM62P is GPU-bound, not copy-bound | console has `slint: window 1024x600 at phys 0x..., stride 4096, ...` and **no** `board: board_show copies` line (count 0). No APP record (PROBES is the result). With B: also the "scanned in place" line once |
+| SV slint-view | `rc=0 verdict=done ... result=record:PROBES resets=0` | `594b0601,08420862,00210842,c5920883` | `slint: animation: ~700 frames in ~10000 ms` (703 at `17605c36`; 715 and 741 in older trees, RESULTS.md:440, :451). Not 1500: the AM62P is GPU-bound, not copy-bound | console has `slint: window 1024x600 at phys 0x..., stride 4096, ...` and **no** `board: board_show copies` line (count 0). No APP record (PROBES is the result). With B: also the "scanned in place" line once |
 | SO slint | the same as SV | the same as SV | the same as SV, within run-to-run noise | the same as SV |
 | CL cluster | `rc=0 verdict=done ... result=record:PROBES resets=0` | `594b0601,008510c4,19050085,110c6d5f` | `cluster: throughput: 1024x600: ~5500 frames in ~60000 ms, ~92 fps` (5509 / 60014 ms, 91.8 fps, 56.4 Mpx/s), so about 917 frames per 10 s | the APP record in INDEX.txt: `594b02xx 00000701 <frames> <ms>`, decoded `APP (2) ... stage 7 status 1 (pass)` with **no** "shown by copy": bit 16 (0x10000) of w1 is clear. Console: two halves at `stride 4096`, no `board: board_show copies` line |
 
 If the PROBES words differ from these but match the older AM62P words
-(`594b0601 08420882 00210842 98080883`, RESULTS.md:437), the picture changed
+(`594b0601 08420882 00210842 98080883`, RESULTS.md:440), the picture changed
 with the tree, not with the display path. Compare the FINGERPRINT record
 before you call it a display fault. With C landed, the cluster expects at
 most 58.8 fps (about 588 frames per 10 s) with two halves, or about 92 fps
