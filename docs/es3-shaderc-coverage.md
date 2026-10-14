@@ -2,9 +2,10 @@
 
 How much of GLSL ES 3.00 `src/shaderc/online/**` takes, measured over the
 dEQP `data/gles3/shaders/*.test` corpus (23 files). Measured on the host with
-`tests/es3_shaderc_corpus.rs`, 2026-10-10, on main 32778b57 and each commit of
-the ES 3.00 gap work after it (the tables are the latest; the commit messages
-carry each step's before and after).
+`tests/es3_shaderc_corpus.rs`, first on 2026-10-10 on main 32778b57. The tables
+below were last re-measured on 2026-10-14 at commit `fa497e8` (it holds
+gc-const-array, pp-splice and shaders-fold), on all three GPU features; the
+commit messages of the gap work carry each step's before and after.
 
 * Corpus: VK-GL-CTS commit `93bca01861b0e3ef3c387027a9791e6d065f900c`
   (the pinned checkout in the deps cache, `VK-GL-CTS/data/gles3/shaders/`).
@@ -75,16 +76,16 @@ needs a link error, `pass` needs both to succeed.
 | linkage | 85 | 0 | 34 | 0 |
 | loops | 9 | 0 | 0 | 0 |
 | negative | 0 | 0 | 12 | 0 |
-| preprocessor | 288 | 4 | 264 | 0 |
+| preprocessor | 292 | 0 | 264 | 0 |
 | qualification_order | 15 | 0 | 64 | 0 |
 | scoping | 34 | 0 | 48 | 0 |
 | switch | 0 | 0 | 52 | 0 |
 | swizzle_math_operations | 544 | 0 | 0 | 0 |
 | swizzles | 648 | 0 | 0 | 0 |
 | uniform_block | 64 | 2 | 72 | 0 |
-| **total** | **3453** | **8** | **2135** | **0** |
+| **total** | **3457** | **4** | **2135** | **0** |
 
-So of the 3,461 programs that must build, 3,453 (99.8 %) do; of the 2,135 that
+So of the 3,461 programs that must build, 3,457 (99.9 %) do; of the 2,135 that
 must be refused, all are (but see the caveat). The front end is
 not what stands in front of the 8,835 AM62P GLES3 CTS failures: these are
 compile/link-time verdicts only. Feature gaps that need a *draw* (integer
@@ -109,18 +110,18 @@ code generator, which refuses at link).
 | invalid_implicit_conversions | 0 / 0 / 768 / 0 | 0 / 0 / 768 / 0 |
 | invalid_texture_functions | 0 / 0 / 120 / 0 | 0 / 0 / 120 / 0 |
 | keywords | 8 / 0 / 348 / 0 | 8 / 0 / 348 / 0 |
-| large_constant_arrays | 14 / 2 / 0 / 0 | 16 / 0 / 0 / 0 |
+| large_constant_arrays | 16 / 0 / 0 / 0 | 16 / 0 / 0 / 0 |
 | linkage | 85 / 0 / 34 / 0 | 85 / 0 / 34 / 0 |
 | loops | 9 / 0 / 0 / 0 | 9 / 0 / 0 / 0 |
 | negative | 0 / 0 / 12 / 0 | 0 / 0 / 12 / 0 |
-| preprocessor | 288 / 4 / 264 / 0 | 288 / 4 / 264 / 0 |
+| preprocessor | 292 / 0 / 264 / 0 | 292 / 0 / 264 / 0 |
 | qualification_order | 15 / 0 / 64 / 0 | 15 / 0 / 64 / 0 |
 | scoping | 34 / 0 / 48 / 0 | 34 / 0 / 48 / 0 |
 | switch | 0 / 0 / 52 / 0 | 0 / 0 / 52 / 0 |
 | swizzle_math_operations | 544 / 0 / 0 / 0 | 544 / 0 / 0 / 0 |
 | swizzles | 648 / 0 / 0 / 0 | 648 / 0 / 0 / 0 |
 | uniform_block | 64 / 2 / 72 / 0 | 64 / 2 / 72 / 0 |
-| **total** | **3451 / 10 / 2135 / 0** | **3453 / 8 / 2135 / 0** |
+| **total** | **3457 / 4 / 2135 / 0** | **3457 / 4 / 2135 / 0** |
 
 ## Expected-pass programs refused, by root cause
 
@@ -131,14 +132,15 @@ no stage or construct more precise than that.
 | cause | class | PowerVR | GC7000UL | V3D | files | example (first error) |
 |---|---|---:|---:|---:|---|---|
 | `gl_MaxDrawBuffers` is 1 | back-end limit | 2 | 2 | 2 | constant_expressions | `other.complex_{vertex,fragment}`: `'case' : two case labels have the same value` |
-| Backslash-newline inside a preprocessing token | unsupported construct | 4 | 4 | 4 | preprocessor | `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
+| Backslash-newline inside a preprocessing token (done: pp-splice) | unsupported construct | 0 | 0 | 0 | preprocessor | was 4 each: `line_continuation.preprocessing_token_*` (`#def\` + newline + `ine`): `'def' : invalid preprocessor directive`; `line_continuation.token_*`: `'oo' : expected ';'` |
 | Uniform (instance) name of 63+ characters | back-end limit | 2 | 2 | 2 | uniform_block | `valid.long_instance_name_*`: link: the name is as long as the 64-byte reflection field (yakogl task #47) |
-| Register pressure of a 128-element constant array index | back-end limit (GC7000UL) | 0 | 2 | 0 | large_constant_arrays | `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
+| Register pressure of a 128-element constant array index (done: gc-const-array) | back-end limit (GC7000UL) | 0 | 0 | 0 | large_constant_arrays | was 2 on the GC7000UL: `indexing.vec4_128_vertex`: `Abi(LoadBalancingTempsUnmeasured { temps: 34, temps_max: 21 })` |
 
 No expected-pass program was refused by the
-type checker (sema) on any GPU: there is no "sema bug" among the 8/10/8
-refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
-"unsupported construct" class; no `#version 300 es` *syntax* is refused.
+type checker (sema) on any GPU: there is no "sema bug" among the 4/4/4
+refusals (8/10/8 before pp-splice and gc-const-array). The `\` splice
+was in `pp.rs`/the lexer, the "unsupported construct" class; no
+`#version 300 es` *syntax* is refused.
 
 ### Notes behind the rows
 
@@ -158,7 +160,8 @@ refusals. The `\` splice (row 4) is in `pp.rs`/the lexer, which is the
   core's `draw.rs vertex_inputs` per column); the V3D refused the
   non-square ones until then (132 programs: `conversions.matrix_to_*` and
   the matrix inputs of `functions` and `linkage`).
-* GC7000UL is the only GPU refusing a large constant array.
+* No GPU refuses a large constant array any more; the GC7000UL was the only one
+  that did, until gc-const-array.
 * `trunc` (`Ftrunc`) is selected on every back end: the PowerVR as pco's
   `lower_ftrunc` select (`x < 0 ? ceil(x) : floor(x)`, four groups), the V3D as
   `FTRUNC`; the V3D also selects the integer shifts (`SHL`, `ASR`, `SHR`),
@@ -228,14 +231,35 @@ the form in the log):
 ## What this says for ES 3.0
 
 * The ES 3.00 front end (preprocessor, lexer, parser, sema, constant folder) is
-  in good shape: 3,453 of 3,461 expected-build programs build on the PowerVR.
+  in good shape: 3,457 of 3,461 expected-build programs build on each of the three GPUs.
   Shader compilation is not where most of the AM62P's GLES3 failures come from;
   the handful below is what this corpus can show. Failures that need a draw or
   the API (integer targets, MRT, transform feedback varyings) are not in it.
 * Work that closes the table:
-  1. `mrt4`: `gl_MaxDrawBuffers` of 4 turns the two `complex` cases green.
-  2. Preprocessor: backslash-newline splice inside a token (4).
-  3. Reflection names of 64 or more characters (2).
-  4. GC7000UL: the 128-element constant array index (2).
+  1. `mrt4`: `gl_MaxDrawBuffers` of 4 turns the two `complex` cases green
+     (open, 2 programs per GPU).
+  2. Preprocessor: backslash-newline splice inside a token (4). **Done**
+     (pp-splice, 2026-10-14): all 4 programs build on the three GPUs.
+  3. Reflection names of 64 or more characters (open, 2 programs per GPU).
+  4. GC7000UL: the 128-element constant array index (2). **Done**
+     (gc-const-array, 2026-10-14): `large_constant_arrays` is 16 / 0 on the
+     GC7000UL, as on the other two (3,457 / 4 / 2,135 / 0; 3,453 / 8 before
+     pp-splice). It did not use the address register with relative
+     addressing that this item proposed: on the i.MX8MP `movar` then
+     `u[base][a.x]` read element 0 for every index
+     (`src/vivante/VIVANTE_NOTES.md`). The refusal was register pressure made
+     by `alloc.rs` `sink_definitions`, which moved all 127 compares of the
+     `acc = (i == k) ? c_k : acc` chain before the selects (35 and 34
+     temporaries, limit 21); it now keeps the chain in order (3
+     temporaries). See `docs/handoff/20261014-gc-const-array.md` (folded
+     into `docs/HANDOFF.md`).
   5. Sema, behind refusals that come from a later stage today: recursion by
-     call graph (10, refused by the inliner's depth bound).
+     call graph (10, refused by the inliner's depth bound; open).
+  6. shaders-fold (the largest dEQP-GLES3 `shaders` bucket in `fold`,
+     `fmath`, `builtin_call` and `loop_count`): **done** (2026-10-14).
+     `round` / `roundEven` at highp were exact only below 2^23
+     (`floor(x + 0.5)`); 16 `builtin_functions.common.round*` /
+     `roundeven*` cases on the AM62P. It is a value fix, so no count in
+     this table moves (`es3_shaderc_corpus` pass ok is 3,457 before and
+     after); `tests/es3_shaderc_fold.rs` pins it. See
+     `docs/handoff/20261014-shaders-fold.md`.
