@@ -105,6 +105,8 @@ static BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
 };
 
 static LIBRARY: std::sync::Mutex<()> = std::sync::Mutex::new(());
