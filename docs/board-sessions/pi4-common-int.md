@@ -51,7 +51,8 @@ not find the Debug Probe's interface. board.sh's `probe` still returns 0,
 because the message arrives after the probe's 1.5 s read. A separate 20 s
 capture about 15 minutes later (`timeout 20 python3
 tools/am62p_netboot_uart.py capture 100.124.238.76:35931 …`) got the same
-single line, so the condition persisted. The fault is on the bridge/probe side
+single line, and so did a 15 s capture at 21:58 JST (about 30 minutes after
+the run), so the condition persisted. The fault is on the bridge/probe side
 (probe unplugged, not enumerated, or the bridge needs a reset), outside the
 ssh lease. Afterwards the board was in Linux, untouched: no
 `/boot/firmware/yakogl-*.bin`, `tryboot.txt` 1 byte again, load 0.02.
