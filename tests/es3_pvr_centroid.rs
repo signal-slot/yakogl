@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! `centroid in` fragment inputs on the PowerVR back end. Without
-//! multisampling the centroid is the pixel centre, so a program that declares
-//! an input `centroid` must build the same fragment program and the same
-//! varying layout as its twin without the qualifier.
+//! `centroid in` fragment inputs on the PowerVR back end. Centroid is a
+//! qualifier: the varying is iterated at the centroid (`ditrp` at
+//! `iter_mode` centroid, as pco does), but a program that declares an input
+//! `centroid` must build with the same varying layout as its twin without
+//! the qualifier.
 //!
 //! The sources are modelled on the dEQP linkage `varying.interpolation.centroid*`
 //! and `qualification_order` cases (VK-GL-CTS, Apache-2.0, Copyright (c) 2014
@@ -38,10 +39,11 @@ fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
     }
 }
 
-/// The program's layout: the fragment program words, per stage each varying's
-/// (location, components, vertex-output offset), the vertex output size and
-/// the W flag.
-type Layout = (Vec<u32>, Vec<(u8, u8, u8)>, Vec<(u8, u8, u8)>, u8, u8);
+/// The program's layout: per stage each varying's (location, components,
+/// vertex-output offset), the vertex output size and the W flag. The
+/// fragment program words are not compared: a centroid input's `ditrp`
+/// carries the centroid iteration mode.
+type Layout = (Vec<(u8, u8, u8)>, Vec<(u8, u8, u8)>, u8, u8);
 
 fn build(vs: &str, fs: &str) -> Result<Layout, String> {
     let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
@@ -58,9 +60,7 @@ fn build(vs: &str, fs: &str) -> Result<Layout, String> {
     let var = |s: &ShcShader| -> Vec<(u8, u8, u8)> {
         s.varyings[..s.num_varyings as usize].iter().map(|v| (v.location, v.components, v.vtxout_off)).collect()
     };
-    // SAFETY: `usc` points at `usc_dw` words of the compiled program.
-    let words = unsafe { std::slice::from_raw_parts(fso.usc, fso.usc_dw as usize) }.to_vec();
-    Ok((words, var(&vso), var(&fso), vso.vs_output_size, fso.uses_w))
+    Ok((var(&vso), var(&fso), vso.vs_output_size, fso.uses_w))
 }
 
 const VS: &str = "#version 300 es
