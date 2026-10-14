@@ -25,7 +25,7 @@
 //   unverified  present and true when part of the provenance could not be checked
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
-  "checkedAgainst": { "commit": "1cf946a9", "date": "2026-10-11", "source": "docs/HANDOFF.md" },
+  "checkedAgainst": { "commit": "79c73ea2", "date": "2026-10-14", "source": "README.md" },
   "boards": [
     {
       "id": "am62p",
@@ -81,15 +81,15 @@ window.YAKOGL_DATA = {
     "deqp2.imx8mp": {
       "label": "dEQP-GLES2, whole tree",
       "board": "imx8mp",
-      "value": { "pass": "17,112–17,116", "fail": 0, "notSupported": "30–34", "warnings": 19, "total": 17165 },
-      "unit": "cases of the mustpass list",
-      "commit": "32778b57",
+      "value": { "pass": 17272, "fail": 46, "notSupported": 34, "warnings": 19, "total": 17371 },
+      "unit": "cases begun (the 17,165 of the mustpass list plus 206 outside it)",
+      "commit": "835cf9cc",
       "onMain": true,
-      "date": "2026-10-10",
+      "date": "2026-10-14",
       "source": "tools/cts/RESULTS.md",
-      "section": "i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main 32778b57",
-      "status": "pass",
-      "note": "17,371 cases began (17,318 pass, 0 fail, 34 not supported, 19 quality warnings), every selector identical to the 2026-10-01 tree. The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
+      "section": "i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main 835cf9cc: 46 fail, all GL_BGRA_EXT renderbuffers",
+      "status": "fail",
+      "note": "All 46 failures are GL_BGRA_EXT renderbuffer cases in the fbo group (665 of 711 pass): the report-es2 renderbuffer allowlist names GL_BGRA8_EXT but not the unsized GL_BGRA_EXT that dEQP-GLES2 uses. Not fixed yet. Every other entry equals the 32778b57 tree, which had 0 failures. The 19 warnings appear on NXP's own driver too."
     },
     "deqp2.am62p.ms4": {
       "label": "dEQP-GLES2, multisample on the 4x image",
@@ -133,15 +133,15 @@ window.YAKOGL_DATA = {
     "gltest.imx8mp": {
       "label": "gc_gl_test regression set",
       "board": "imx8mp",
-      "value": "45–46 / 48",
-      "unit": "cases passed in three runs (45, 46, 46)",
-      "commit": "32778b57",
+      "value": "48 / 49",
+      "unit": "cases run passed; case 16 skipped (#8), case 44 fails",
+      "commit": "cd738b1a",
       "onMain": true,
-      "date": "2026-10-10",
+      "date": "2026-10-14",
       "source": "tools/cts/RESULTS.md",
-      "section": "i.MX8MP: gc_gl_test on 32778b57, three runs",
+      "section": "i.MX8MP: common set on cd738b1a (2026-10-14)",
       "status": "warn",
-      "note": "Run 1: first failure case 10 (intermittent, #9). Runs 2 and 3: first failure case 16 (#8: the skipped 4x half is counted as a failure). Same as the 8abeaabb baseline (46 / 48). Case 44 (es3hdr, #6) alone on f2a13877 (2026-10-11) still fails: check 3 got 0x40042814, wanted 0x40043904, the colour of texel (5,0) stored where (7,0) belongs in an 8-wide linear RGBA16F target."
+      "note": "The only failure is case 44 (#6): the RGBA16F target layout, unchanged since f2a13877. Cases 2 and 10 failed intermittently in the 32778b57 runs of 2026-10-10 (#25, #9); they did not in this run."
     },
     "deqp2.am62p.previous": {
       "label": "dEQP-GLES2, last whole tree",
@@ -170,17 +170,17 @@ window.YAKOGL_DATA = {
       "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed at d60b9d76 fail. Fixed on main in e17fb6a7 (2026-10-10, no fusion on the way to an invariant output): image 1 of the AM62P tree on e17fb6a7 gives 1,379 pass / 0 fail."
     },
     "deqp2.imx8mp.previous": {
-      "label": "dEQP-GLES2, last whole tree",
+      "label": "dEQP-GLES2, previous whole tree",
       "board": "imx8mp",
-      "value": { "pass": "17,112–17,116", "fail": 0, "notSupported": "30–34", "warnings": 19, "total": 17165 },
-      "unit": "cases of the mustpass list",
-      "commit": "d8583f20",
-      "onMain": false,
-      "date": "2026-10-01",
-      "source": "docs/es2-cts-failures.md",
-      "section": "A. i.MX8MP",
+      "value": { "pass": 17318, "fail": 0, "notSupported": 34, "warnings": 19, "total": 17371 },
+      "unit": "cases begun (the 17,165 of the mustpass list plus 206 outside it)",
+      "commit": "32778b57",
+      "onMain": true,
+      "date": "2026-10-10",
+      "source": "tools/cts/RESULTS.md",
+      "section": "i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main 32778b57",
       "status": "pass",
-      "note": "Superseded by the 2026-10-10 tree on 32778b57, which has the same counts in every selector. The range: the run covered 206 cases outside the mustpass list, four of them in the not-supported group. The 19 warnings appear on NXP's own driver too."
+      "note": "Superseded by the 2026-10-14 tree on 835cf9cc (the row above), which has 46 failures in the fbo group; every other entry is identical."
     },
     "deqp2.pi4": {
       "label": "dEQP-GLES2, whole tree",
@@ -276,15 +276,15 @@ window.YAKOGL_DATA = {
     "glmark2.imx8mp": {
       "label": "glmark2-es2",
       "board": "imx8mp",
-      "value": 42,
+      "value": 43,
       "unit": "score, 800x600 on-screen, 33 of 33 scenes ran",
-      "commit": "8abeaabb",
+      "commit": "cd738b1a",
       "onMain": true,
-      "date": "2026-10-08",
-      "source": "tools/cts/log/benchmarks-baseline/imx8mp.md",
-      "section": "Tally",
+      "date": "2026-10-14",
+      "source": "tools/cts/RESULTS.md",
+      "section": "i.MX8MP: common set on cd738b1a (2026-10-14)",
       "status": "warn",
-      "note": "The board has no console, so there are no per-scene scores. README.md shows 37, the earlier round on 85c8d206 (2026-10-04, tools/cts/RESULTS.md, i.MX8MP common set round 4). Terrain samples black (#1; fixed on the host, not board-run)."
+      "note": "The board has no console, so there are no per-scene scores. Terrain samples black (#1; fixed on the host, not board-run)."
     },
     "glmark2.pi4": {
       "label": "glmark2-es2",

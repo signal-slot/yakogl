@@ -102,7 +102,7 @@ from the real GPU; software rendering is out of scope.</p>
       <dt>Feature</dt><dd><code>gpu-vivante</code></dd>
       <dt>Boots from</dt><dd>eMMC, U-Boot</dd>
     </dl>
-    <p class="muted">No firmware needed. Two intermittent gl_test cases are open.</p>
+    <p class="muted">No firmware needed. One gl_test case (an RGBA16F target) fails.</p>
   </div>
   <div class="card">
     <h3>Raspberry Pi 4</h3>
@@ -224,18 +224,21 @@ self-test's vertex shader) are still Mesa's pco output; replacing them is open w
 run on Zephyr on the real GPU.</p>
 <div class="tiles" data-tiles="deqp2"></div>
 <div class="note">
-<p><strong>Read the AM62P tile with its history.</strong> The 54 failures of the 2026-10-10 tree
-are 9 <code>shaders.invariance</code> cases (fixed in e17fb6a7, image 1 passes 1,379 / 0 on it) and 45
-vertex-texture cases (fixed on the host, board confirmation pending); the previous tree, on 2026-10-02,
-had none. The i.MX8MP tree is identical to the one of 2026-10-01. The Pi 4 tile is a composition
-of the 2026-10-10 tree and two later reruns (the 2026-10-01 tree had 25 cube-map failures; they are
-0 on the board now).
+<p><strong>Read the tiles with their history.</strong> The AM62P's 54 failures (tree of
+2026-10-10) are 9 <code>shaders.invariance</code> cases (fixed in e17fb6a7; image 1 passes
+1,379 / 0 on it) and 45 vertex-texture cases (fixed on the host, board confirmation pending);
+the previous tree, on 2026-10-02, had none. The i.MX8MP's 46 failures (tree of 2026-10-14)
+are all <code>GL_BGRA_EXT</code> renderbuffer cases in the <code>fbo</code> group, not yet fixed;
+its previous tree, on 2026-10-10, had none. The Pi 4 tile is a composition of the
+2026-10-10 tree and two later reruns, not one tree from one commit (the 2026-10-01 tree had
+25 cube-map failures; they are 0 on the board now). <strong>No board has a zero-failure tree
+from one commit yet.</strong>
 <a href="status.html">Details on the status page.</a></p>
 </div>
 
 <h3>glmark2-es2, 800x600 on-screen</h3>
-<p>All 33 scenes run on every board, but some still draw wrong, and performance work has not
-started. A public score for the same board under Linux with the vendor or Mesa driver is on
+<p>All 33 scenes run on every board, but two scenes drew wrong (terrain on every board, refract on the
+AM62P and the Pi 4; fixed on the host, not yet checked by eye on a board), and performance work has not started. A public score for the same board under Linux with the vendor or Mesa driver is on
 the status page; the conditions differ, so read it as a direction, not a contest.</p>
 <div class="tiles" data-tiles="glmark2"></div>
 
@@ -274,9 +277,10 @@ one GPU feature per build; none or two is a compile error.</p>
 <h2 id="roadmap">Roadmap</h2>
 <p>The goals, in order, from <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>:</p>
 <ol>
-<li><strong>ES 2.0 finished on the three boards</strong>, each booted from its own storage. The known
-dEQP-GLES2 failures are fixed on the host; the AM62P invariance regression is fixed on main
-(e17fb6a7) and confirmed on the board. One confirming board session per board remains.</li>
+<li><strong>ES 2.0 finished on the three boards</strong>, each booted from its own storage.
+Zero dEQP-GLES2 failures from one commit on each board is the criterion; the Pi 4 is at 0 in a
+composed reading, the AM62P and the i.MX8MP still have failures (see the tiles above), and the
+fixes for the AM62P's are waiting for a board run.</li>
 <li><strong>Minimum performance.</strong> Not started; the benchmarks are first made to draw
 correctly.</li>
 <li><strong>This website</strong>, live when the repository is public.</li>
