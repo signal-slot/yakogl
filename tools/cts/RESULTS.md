@@ -17332,3 +17332,17 @@ Images from origin/main `cd738b1a` (`cts-common.sh imx8mp build`), run by `cts-c
 | GT | `c35b0ceb` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
 
 Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. This is a second run on `cd738b1a`, separate from the section "i.MX8MP: common set on `cd738b1a` (2026-10-14)" above (GM score 43 there, 42 here; the other rows read the same).
+
+## i.MX8MP: common set on `d32d190a`, U-Boot from eMMC (2026-10-14)
+
+Images from origin/main `d32d190a` (`cts-common.sh imx8mp build`), run by `cts-common.sh imx8mp run` with `BOARD_BOOT=uboot-mmc`, one boot per row. Records `records/imx8mp/common-d32d190a/`.
+
+| row | image | verdict | record | reading |
+|---|---|---|---|---|
+| GM | `584ca301` | done | `594b120e fc3f002b 6184003f 0f258320` | glmark2 score 43; 33 ran, 0 failed, 0 unsupported; status pass; back after 402 s |
+| SO | `abe436bb` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| SV | `61fdc4e3` | done | `594b0601 08420862 00210842 c5920883` | slint probes pass |
+| CL | `6c0c60f9` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | cluster probes pass |
+| GT | `94833fdc` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
+
+Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (#6, section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. The first build attempt failed on GM and GT with "Disk quota exceeded" in /tmp; the images used here were rebuilt with `TMPDIR` on the workspace disk.
