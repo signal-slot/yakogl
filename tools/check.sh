@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# What to run before pushing. There is no CI on this repository, so this
-# script is the gate, and a red fmt or a single warning is a defect rather
-# than a matter of taste: main arrived unformatted twice in one day, and a
+# What to run before pushing. This script is the gate, locally and in the
+# CI (.github/workflows/gate.yml), and a red fmt or a single warning is a
+# defect rather than a matter of taste: main arrived unformatted twice in one day, and a
 # build that already prints a warning is one where the next real warning is
 # invisible -- which is how three unused_unsafe of my own survived (283cc56)
 # and how a function with no callers did (7715e3f).
@@ -174,6 +174,21 @@ fi
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
 if [ -n "${YAKOGL_CHECK_CONFIGS-}" ]; then read -r -a CONFIGS <<< "$YAKOGL_CHECK_CONFIGS"; fi
+
+# Preflight: the gate's own tools. A host without rustfmt or clippy used to
+# print "FAIL cargo fmt --check" and one FAIL per clippy row with rustup's
+# message buried in the tail; stop at once and say what to install instead
+# (exit 2: the gate did not run, which is neither green nor a code defect).
+missing=()
+command -v cargo >/dev/null 2>&1 || missing+=("cargo (install rustup)")
+cargo fmt --version >/dev/null 2>&1 || missing+=("rustfmt (rustup component add rustfmt)")
+cargo clippy --version >/dev/null 2>&1 || missing+=("clippy (rustup component add clippy)")
+if [ "${#missing[@]}" -gt 0 ]; then
+  printf '\033[31mtools/check.sh: cannot run, missing: %s\033[0m\n' "${missing[*]}" >&2
+  printf 'The active toolchain is "%s"; set RUSTUP_TOOLCHAIN to one that has them.\n' \
+    "$(rustup show active-toolchain 2>/dev/null | cut -d' ' -f1)" >&2
+  exit 2
+fi
 
 rc=0
 red() { printf '\033[31m%s\033[0m\n' "$*"; }
