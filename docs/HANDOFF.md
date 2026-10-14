@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `90167db6` (2026-10-14). The numbers below are read from
+main is `e3477a9d` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -172,6 +172,7 @@ es3-vertex).
 | Framebuffer completeness | host dEQP `fbo.completeness`: 17 cases Fail to Pass on the PowerVR and the GC7000UL, 0 regressions (depth larger than colour, colour on attachments 1.. alone, separate depth and stencil with no colour); `src/gl/framebuffer.rs` `check_status` under `!REPORT_ES2`; HOST-ONLY (reads no pixels); causes left in "Open work" item 4 | none (`tests/es3_fbo_fragops.rs`) |
 | Stage-interface link rules | interpolation and block mismatches refused (`b88fea5`, `03ff7a6`) | none |
 | GLSL ES 3.00 in the compiler | measured over dEQP's 5,596 programs (`4ab482e`, `79fe171`, `ed0c81d`); the GC7000UL now builds `large_constant_arrays.indexing.{float,vec4}_128_vertex` (gc-const-array, 2026-10-14), so its expected-build count equals the PowerVR's and the V3D's | `docs/es3-shaderc-coverage.md` |
+| Vertex array conversion | a buffer array of a type the GPU cannot fetch as it lies is converted to float32 rows like a client array (`src/gl/draw.rs`, `attrib_in_place_layout` decides): packed `GL_INT_2_10_10_10_REV` / `GL_UNSIGNED_INT_2_10_10_10_REV`, `GL_HALF_FLOAT`, and `GL_INT` / `GL_UNSIGNED_INT` set with `glVertexAttribPointer` (ES 3.0 2.9). The conversion reads the buffer's CPU view, or the OSAL `gpu_read` if there is none; element size and stride come from the real type (`attrib_elem_bytes`). An integer array narrower than its `ivec4` / `uvec4` input fills w with the integer 1 (`attrib_row`, ES 3.0 2.8; only `glVertexAttribIPointer` arrays feed integer inputs). HOST-ONLY: `tests/es3_vertex_arrays.rs`, 10 tests, needs `host-test,gpu-powervr,shaderc-online` and no `report-es2`; `tools/check.sh` runs it next to `es3_occlusion_gl` | none |
 | PowerVR 2D-array and shadow sampling | designed, not built | `docs/es3-pvr-2darray.md` |
 | ES 2.0 report guard | `tests/es2_report_guard.rs` pins what an ES 2.0 client sees; two pins are `#[ignore = "BUG: ..."]` (framebuffer and texture rows; the two state pins run since the state/program tranche, `tests/es2_error_rules_state.rs`) (`6c9e9ee`) | none |
 | ES 3.0 limits test | reverted for review (`3f78982`); es3-caps redoes it | none |
@@ -546,6 +547,18 @@ es3-vertex).
      op samples (`row_sampled`); `tests/es3_tf_sampler.rs`
      (`texture_size_of_each_target`) works around it with an extra
      `texture()` read.
+   - **`GL_HALF_FLOAT_OES`** (0x8D61, no issue yet): `attrib_type_size` and
+     `attrib_component` do not handle it, so it is read as float32 words.
+     Left as is: the ES 2.0 answer is unchanged, and the type is accepted
+     only under `report-es2`. It is wrong if an OES half-float array is ever
+     used; a separate item should decide.
+   - **Vertex array integer fill follows the array** (no issue yet): the
+     w fill of a narrow integer array follows `ga.integer`, not the type of
+     the shader input. A float array bound to an `ivec4` input is undefined
+     in GL, so this agrees with ES 3.0 for every defined case.
+   - **Vertex array convert path with no CPU view** (no issue yet): the
+     `gpu_read` branch is not covered by the host test, because its OSAL
+     stub has none.
    - Capture against draw, differences by design (`tests/es3_tf_sampler.rs`):
      the capture applies the texture swizzle and GL_TEXTURE_MIN_LOD / MAX_LOD,
      which the draw does not yet (`GlTexture` comment "the draw does not apply
@@ -718,6 +731,10 @@ es3-vertex).
        scan: a location written through a macro, or `#if`-ed out qualifiers,
        are not seen (the input then counts as unqualified); dEQP writes the
        plain form.
+     - `vertex_arrays` (tasks T2 and T3, 41 AM62P failures: 20
+       int2_10_10_10 and 21 components{2,3}_{i,u}vec4): fixed on the host
+       ("Vertex array conversion" in the ES 3.0 table above). Not yet seen on
+       a board.
      - `instanced`: the 6 failures are `{draw_arrays_instanced,
        draw_elements_instanced}.mixed.{2,4,20}_instances`; the other 39 pass.
        The cause is in the back ends, not in `src/gl/vertex.rs` (divisors 0,
@@ -1160,6 +1177,10 @@ already. Watch the `attrib_divisor` cases after P3 or V1, because they then
 use the hardware divide. If they fail on the i.MX8MP after V1, the GC7000UL
 FE ignores divisors > 1: set `max_instance_divisor` back to 1 and use V2 (a
 per-draw uniform).
+
+After the vertex array conversion (`src/gl/draw.rs`), re-run
+`dEQP-GLES3.functional.vertex_arrays.single_attribute.*` on the AM62P (expect
+the 41 failures gone; the other 920 pass as before).
 
 Common set (ran at `cd738b1a`, `docs/board-sessions/am62p-common-int.md`):
 re-run SV alone (it was empty). After the render pool fix ("Open work" item
