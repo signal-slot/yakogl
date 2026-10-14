@@ -2327,11 +2327,11 @@ fn renderbuffer_format_advertised(f: GLenum) -> bool {
         GL_RGB8 | GL_RGBA8 => listed("GL_OES_rgb8_rgba8"),
         GL_DEPTH24_STENCIL8 => listed("GL_OES_packed_depth_stencil"),
         /* GL_EXT_texture_rg, GL_EXT_color_buffer_half_float (RG16F and R16F
-         * need both) and the BGRA8 name of GL_EXT_texture_format_BGRA8888 */
+         * need both) and both BGRA names of GL_EXT_texture_format_BGRA8888 */
         GL_R8 | GL_RG8 => listed("GL_EXT_texture_rg"),
         GL_RGBA16F | GL_RGB16F => listed("GL_EXT_color_buffer_half_float"),
         GL_RG16F | GL_R16F => listed("GL_EXT_color_buffer_half_float") && listed("GL_EXT_texture_rg"),
-        GL_BGRA8_EXT => listed("GL_EXT_texture_format_BGRA8888"),
+        GL_BGRA_EXT | GL_BGRA8_EXT => listed("GL_EXT_texture_format_BGRA8888"),
         /* anything else ES 3.0 names (R32F, DEPTH_COMPONENT32F, DEPTH32F_STENCIL8, the integer formats, ...) */
         _ => false,
     }
