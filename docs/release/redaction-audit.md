@@ -3,7 +3,9 @@
 # Redaction audit before publication
 
 Read-only audit of the working tree and of every blob reachable from `HEAD`
-(1257 commits) for values that must not become public. The earlier audit
+(1257 commits, 5086 blobs; the secret, token-prefix and tailnet-name
+patterns were re-run over every blob with `git rev-list --objects HEAD`,
+`git cat-file --batch` and `grep -a`, with no hit) for values that must not become public. The earlier audit
 (`4b37a25`) never merged and is not reachable from this clone, so this one was
 redone from scratch on the current tip.
 
