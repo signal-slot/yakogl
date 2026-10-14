@@ -2,27 +2,36 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 board session 2, common set from the integration tip
 
-Status: **the five images built (rc=0 each, twice), but nothing ran on the board.**
-The Pi 4's console is reachable only through `BOARD_UART`, and the machine
-that held the lease (`system76`) had no value for it. `tools/board.sh pi4
-run|tree` needs `BOARD_UART` for every row, because the Pi 4's results come
-back only on its serial console. No verdict line, glmark2 score, per-scene
+Status: **the five images built (rc=0 each, twice). The session started, and
+its first row, GM, left the board hung in the firmware: `verdict=not_back`.
+The chain stopped, as it must, and SO, SV, CL and GT did not run.** The
+cause is almost certainly this machine's `BOARD_HDMI_TIMINGS`, which was
+`1920x720` instead of the lab's 17 fields (below). No glmark2 score, per-scene
 fps, carve-out boot line, Slint or cluster crc16, or gl_test tally comes from
 this session. Every figure in "Expected" below is a reference from earlier
-records, not a reading.
+records, not a reading. The board did not answer ssh 20 minutes later and
+needs a power cycle by a person (the lease has ssh only).
 
-Second turn (same day): the task was resumed with the message that it had
-moved to `nuc`, which has `BOARD_UART`. The shell still ran on `system76`.
-`board.sh --dry-run` printed the placeholder `/dev/PI4_UART`, so `BOARD_UART`
-was still unset. `BOARD_HOST` could not be set either: the command prefix,
-`env`, `export` and a wrapper script were all refused by the worker's
-permission policy. `git worktree add` was refused too, so the second build
-ran from the workspace itself (HEAD `1e0c7566`). That commit adds only this
-document and the handoff note on top of `3cc4b60a`, so the sources are
-identical. Its five images are listed below the first build's.
+How the session went (all on `system76`, 2026-10-15):
+
+1. First turn: built at `3cc4b60a`; no `BOARD_UART` on this machine, so
+   nothing ran.
+2. Second turn: the task was said to have moved to `nuc`, but it ran on
+   `system76` again, with `BOARD_UART` still unset. The worker's permission
+   policy refused every way of setting `BOARD_HOST` and also
+   `git worktree add`, so the images were rebuilt from the workspace
+   (HEAD `1e0c7566`, docs only on top of `3cc4b60a`, the same sources).
+3. Third turn: the permissions were granted. The console address came from
+   the farm's notes (`ask_farm`: the Pi 4's debug probe behind the TCP
+   serial bridge on the lab's USB host; it is not written here). `BOARD_HOST`
+   and `BOARD_UART` went in through a gitignored wrapper (`build/pi4-int2.sh`,
+   the UART on its command line), never in a file. The run started from the
+   `1e0c7566` images. `git worktree add` was not retried, because the images
+   already existed.
 
 HEAD8: `3cc4b60a` (the integration tip, `3cc4b60acf33ef757a754c99827962fbbced0446`;
-board.sh printed `build 3cc4b60a`). Board: Raspberry Pi 4 (the farm's
+board.sh printed `build 3cc4b60a`). The run's images carry `1e0c7566` (the
+same sources), and the runner printed `build 85a40794` (this branch, docs only). Board: Raspberry Pi 4 (the farm's
 lease, `$BOARD_HOST`), boot tryboot, no `BOARD_BOOT`. Date 2026-10-15.
 
 ## Built images (`tools/cts/cts-common.sh pi4 build build/common/pi4-3cc4b60a`)
@@ -76,24 +85,80 @@ records/pi4/common-3cc4b60a` printed the full sequence for all five rows
 `/dev/PI4_UART`. Without the placeholder, the real run stops at the first row
 on `: "${BOARD_UART:?set BOARD_UART (or PI4_UART)=...}"`.
 
+Third turn, just before the run: the board was idle (the seat0/tty1 login
+and the check's own ssh only, 307,591,168 bytes free on `/boot/firmware`).
+The dry run (`cts-common.sh --dry-run pi4 run build/common/pi4-1e0c7566
+records/pi4/common-1e0c7566`) printed the full sequence for all five rows,
+with the serial bridge's probe and capture.
+
 ## Verdict lines
 
-None. `tools/cts/cts-common.sh pi4 run` was not started, so there is no
-`board.sh pi4 <LABEL>-3cc4b60a ...` line for GM, SO, SV, CL or GT. Record
-directory, once it runs: `records/pi4/common-3cc4b60a/`, in the checkout that
-runs it (gitignored).
+`tools/cts/cts-common.sh pi4 run build/common/pi4-1e0c7566 records/pi4/common-1e0c7566`,
+started 06:49:05 and ended 07:01:30 (the output, verbatim, without the paths
+that name the bridge):
+
+```
+board.sh pi4: GM: build 85a40794 boot tryboot (row) image sha256 d330355f306ce35e footprint 250490880
+board.sh pi4: GM: image build: PVR_SAMPLE_TABLE=c95547a1 PVR_SAMPLE_TREE=1e0c7566; zephyr: v4.4.0-9848-gaf17c0c8aa2a
+board.sh pi4: GM: tryboot at 06:49:23, waiting for the record's end (at most 420 s)
+records:
+  none (the console has no yk-record line: the image prints none)
+board.sh pi4 GM rc=5 verdict=not_back boot=tryboot row boot_verdict=not_back result=none resets=0 record=absent back_after=?s
+=== GM rc=5 2026-10-15 07:01:30
+board.sh pi4: GM: the board did not come back; the chain stops (never keep booting)
+cts-common: board.sh tree rc=5
+common-tally: pi4, 5 rows from records/pi4/common-1e0c7566
+GM GM rc=5 verdict=not_back result=none record=absent; resets (console count) 0; image=d330355f306ce35e build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=1e0c7566
+    no result (result=none)
+SO no run (absent)
+SV no run (absent)
+CL no run (absent)
+GT no run (absent)
+common-tally: rows 5, with a run 1, without 4; verdict done 0, other 1
+```
+
+Record directory: `records/pi4/common-1e0c7566/20261015-0649-GM-d330355f/`
+(gitignored, in this workspace). Its `meta.txt` says `staged=... read back
+equal`, `end_seen=0`, `capture_stopped=2026-10-15 06:56:24, 113 lines`,
+`back=0` and `cleanup=not done: Linux not back`.
 
 | row | verdict | reading |
 |---|---|---|
-| GM | not run (no `BOARD_UART`) | none |
-| SO | not run | none |
+| GM | `not_back` (rc=5) | the console stops in the firmware, before the kernel; no Zephyr line |
+| SO | not run (the chain stops after rc=5) | none |
 | SV | not run | none |
 | CL | not run | none |
 | GT | not run | none |
 
+### What the GM console shows, and the cause
+
+The 113 lines are Linux shutting down, `reboot: Restarting system with
+command '0 tryboot'`, and the firmware: `MEM GPU: 76 ARM: 948 TOTAL: 1024`,
+`Starting start4.elf`, `brfs: File read: /mfs/sd/tryboot.txt` (210 bytes),
+`HDMI1:EDID giving up on reading EDID block 0`, and the last line,
+`06:49:31 MESS:00:00:05.349097:0: brfs: File read: 210 bytes`. There is
+nothing after it: no kernel load, no `sample: build` line, no `osal(v3d)`
+line. The capture ran on until 06:56:24 and got nothing more.
+
+`tools/board.sh` writes `hdmi_group=2 hdmi_mode=87
+hdmi_timings=$BOARD_HDMI_TIMINGS` into `tryboot.txt` (board.sh, the tryboot
+config). On `system76`, `BOARD_HDMI_TIMINGS` is `1920x720`. The lab's value
+is the 17 fields `1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1`
+(`tools/cts/README.md` line 557, `docs/standalone-boot.md`; the same value on
+the farm's other nodes, per `ask_farm`). The firmware stopped right after
+reading that `tryboot.txt`, so a malformed `hdmi_timings` is the likely cause.
+It is not proven: the firmware logs nothing about it. The image itself never
+started, so this says nothing about glmark2 or the carve-out.
+
+Board state left behind: `/boot/firmware/yakogl-GM.bin` and the run's
+`tryboot.txt` stay on the SD card (cleanup needs Linux). Tryboot is one-shot,
+so a power cycle boots Linux from `config.txt`. After that, remove
+`yakogl-GM.bin` and put back the empty `tryboot.txt` (or let a board.sh run
+refuse on the leftover and clean it), before the next run.
+
 ## glmark2 per scene
 
-Not run. The table to fill in. The reference column comes from the last Pi 4
+Not run (GM never reached Zephyr). The table to fill in. The reference column comes from the last Pi 4
 common run, `86be8aeb` (`docs/board-sessions/pi4-common-int.md`, on the same
 96 MiB carve-out and 24 MiB tiled-copy budget):
 
@@ -133,7 +198,8 @@ HEAD8=$(git rev-parse --short=8 HEAD)                 # 3cc4b60a
 export ZEPHYR_WS=<west workspace> WEST_VENV=$ZEPHYR_WS/.venv ZEPHYR_SDK_INSTALL_DIR=<zephyr sdk>
 export RUSTUP_TOOLCHAIN=nightly GLMARK2_SRC=<...> SLINT_NOSTD_DIR=<...> NOSTD_PATCH_DIR=<...> AGL_SLINT_CLUSTER_DIR=<...>
 export BOARD_HOST=<lease user@host> BOARD_UART=<the Pi 4 console: device or host:port of its bridge>
-export BOARD_HDMI_TIMINGS=<the lab's 17 fields, tools/cts/README.md>
+export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'   # 17 fields; NOT 1920x720
+tools/board.sh pi4 status          # after the power cycle: shows the GM leftover to remove
 tools/board.sh --dry-run pi4 status
 tools/cts/cts-common.sh pi4 build build/common/pi4-$HEAD8          # all five rc=0 at 3cc4b60a
 tools/cts/cts-common.sh --dry-run pi4 run build/common/pi4-$HEAD8 records/pi4/common-$HEAD8
