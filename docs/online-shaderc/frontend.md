@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The online front end: GLSL ES 1.00 in the library
 
 The design record for `src/shaderc/online/`, written as it is built. It is

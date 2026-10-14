@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 description: Cadence DSI host with TI K3 wrapper and Cadence D-PHY TX (AM62P dsi0 / dphy_tx0)
 
 compatible: "safeui,cdns-dsi-j721e"

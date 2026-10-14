@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 description: |
   Switches the listed TISCI devices on at boot, before the drivers that use
   them initialise (for cores served by Zephyr's TISCI driver; the polling

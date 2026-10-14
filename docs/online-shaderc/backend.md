@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The online shader back end (M3): module, ABI assembly, oracle
 
 The design record for the back-end half of `src/shaderc/online/`: our own

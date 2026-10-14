@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL OSAL — implementation notes
 
 The OSAL (layer 5b, `gles_osal.h`) is the only place the GL core and the GPU

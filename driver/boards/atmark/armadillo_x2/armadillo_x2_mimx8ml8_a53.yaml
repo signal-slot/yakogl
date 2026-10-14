@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 identifier: armadillo_x2/mimx8ml8/a53
 name: Atmark Techno Armadillo-X2 A53
 type: mcu

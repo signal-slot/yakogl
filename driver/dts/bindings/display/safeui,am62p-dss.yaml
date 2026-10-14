@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 description: TI AM62P display subsystem (DSS7) driven from the MCU R5F for the SafeUI safety layer
 
 compatible: "safeui,am62p-dss"

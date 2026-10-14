@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # sRGB render targets and sRGB texture sampling (ES 3.0): PowerVR, V3D 4.2, GC7000UL
 
 `docs/HANDOFF.md`, open work 4, srgb. Built on the host: the GL core's

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GLSL ES 3.00 coverage of the online shader compiler
 
 How much of GLSL ES 3.00 `src/shaderc/online/**` takes, measured over the

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The V3D 4.2 back end (Raspberry Pi 4): design record
 
 Status 2026-10-11: the instruction set (`src/shaderc/online/v3d/`: model,

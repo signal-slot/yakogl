@@ -1,3 +1,6 @@
+.. SPDX-License-Identifier: Apache-2.0
+.. SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
 .. _verdin_am62p:
 
 Toradex Verdin AM62P

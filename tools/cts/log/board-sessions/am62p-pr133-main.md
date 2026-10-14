@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P session for PR #133, case 206 and the gl_test set on 066a2db8 (main_uart0 console)
 
 Date: 2026-10-12. Board: Verdin AM62P (PowerVR), reached by ssh; console read

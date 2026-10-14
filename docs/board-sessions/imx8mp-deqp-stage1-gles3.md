@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP dEQP-GLES3 stage 1 and table image (item stage1-imx8mp, plan #19)
 
 Date 2026-10-14, yakogl `ba8b242a` (origin/main `72ee696d` merged into the zephyr-env base). Result: **the gles3 stage 1

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PR #129 GC7000 table: does this farm's etna_shc reproduce the 218 new rows?
 
 Date: 2026-10-12. Item `table-repro` of ccfarm plan #140.

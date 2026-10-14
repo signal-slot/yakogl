@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Transform feedback and rasterizer discard: design
 
 Status: built. The GL half, **tf-api** (state, errors, queries, rasterizer
