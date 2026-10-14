@@ -17286,7 +17286,6 @@ Not plain `origin/main` builds: the port was not yet on main. The record words s
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
 
-<<<<<<< HEAD
 ## i.MX8MP: common set on `cd738b1a` (2026-10-14)
 
 Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not built), run from U-Boot
@@ -17319,7 +17318,7 @@ Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not b
 GM, SO, SV and CL pass. GT's only failure is case 44, the known RGBA16F layout defect (#6),
 unchanged from `f2a13877`. The run count is 49 against the 48 of the earlier record because
 `ef00b291` has one more case; the failing and skipped cases are the same.
-=======
+
 ## i.MX8MP: common set on `cd738b1a`, U-Boot from eMMC (2026-10-14)
 
 Images from origin/main `cd738b1a` (`cts-common.sh imx8mp build`), run by `cts-common.sh imx8mp run` with `BOARD_BOOT=uboot-mmc`, one boot per row. Records `records/imx8mp/common-cd738b1a/`.
@@ -17332,5 +17331,4 @@ Images from origin/main `cd738b1a` (`cts-common.sh imx8mp build`), run by `cts-c
 | CL | `def54f55` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | cluster probes pass |
 | GT | `c35b0ceb` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
 
-Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run.
->>>>>>> 746ceb19e8b171f6af0075e68031368cd12b4254
+Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. This is a second run on `cd738b1a`, separate from the section "i.MX8MP: common set on `cd738b1a` (2026-10-14)" above (GM score 43 there, 42 here; the other rows read the same).
