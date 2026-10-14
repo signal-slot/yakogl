@@ -361,7 +361,7 @@ programs that must build do on PowerVR; 2,128 of 2,135 that must be refused are.
 | Link: interpolation and uniform-block mismatches accepted | shaderc link | 7 / 7 / 7 | `link-iface` (**merged**; not re-measured) |
 | Backslash-newline inside a token | shaderc preprocessor | 4 / 4 / 4 | `pp-splice` (**merged**; not re-measured) |
 | `centroid in` fragment input | shaderc PowerVR and V3D | 9 / 0 / 9 | `pvr-centroid` (running) for PowerVR; V3D: no item |
-| Indexed element passed as out/inout argument | shaderc PowerVR and V3D | 8 / 0 / 8 | no item yet (V3D: `v3d-shaderc-gaps` result on a branch, not on the tip) |
+| Indexed element passed as out/inout argument | shaderc PowerVR and V3D | 0 / 0 / 0 | none needed: the 8 programs build on PowerVR, GC7000UL and V3D at `cd738b1a` (they were refused for the missing `trunc` (`modf`), fixed by `b1cf9e4`); `tools/cts/log/investigations/shaderc-inout-indexed.md` |
 | `gl_MaxDrawBuffers` is 1 (two `constant_expressions.other.complex` programs) | GL core / limits | 2 / 2 / 2 | `mrt4` (todo) |
 | Reflection name of 63+ characters | shaderc/GL core | 2 / 2 / 2 | no item yet |
 | Matrix vertex attribute | V3D only | 0 / 0 / 132 | `v3d-shaderc-gaps` (done, result on branch) |
@@ -432,7 +432,7 @@ The table as it stood at `396d667a`, with each item's state on main
 | blit-ds, MSAA | none | RC8 (rest) | all |
 | pvr-centroid | `e5874527` | RC13 (9) | |
 | vertex-int-attribs | `8b3e7039` | RC12 | Appendix A tasks T1 to T7 |
-| **no item yet** | | RC7b (ubo ≤ 187), the float-target bucket (103), indexed out/inout arguments, long reflection names, multisample 16, uniform_api, rasterization 21, and the unclassified remainder | |
+| **no item yet** | | RC7b (ubo ≤ 187), the float-target bucket (103), long reflection names, multisample 16, uniform_api, rasterization 21, and the unclassified remainder | |
 
 ## What is still to measure
 
