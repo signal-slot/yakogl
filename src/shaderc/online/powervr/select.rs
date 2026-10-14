@@ -176,7 +176,7 @@ pub fn gradients_for(m: &ir::Module<'_>, op: &ir::Op) -> Option<u32> {
         return None;
     };
     let d = m.inputs.iter().find(|d| d.kind == ir::IoKind::Varying && d.location == loc)?;
-    (d.interp == ir::INTERP_SMOOTH).then_some(n)
+    matches!(d.interp, ir::INTERP_SMOOTH | ir::INTERP_CENTROID).then_some(n)
 }
 
 /// Does this fragment shader sample with exact plane gradients, so that a
