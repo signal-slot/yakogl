@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `4b019379` (2026-10-14). The numbers below are read from
+main is `90167db6` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -46,7 +46,7 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
-| AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. | 465, 33 scenes ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | Slint pass, cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
+| AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592), SV empty (0 console bytes, unresolved; same image as SO), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
 | i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `b568940` (2026-10-14, common set; `docs/board-sessions/imx8mp-common-int.md`); cases 2, 10 and 171 passed in this run. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `b568940` (2026-10-14, common set; record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO and SV pass (crc16 c592), CL pass (crc16 b107), on `b568940`; no fps (no console). |
 | Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
@@ -99,6 +99,8 @@ Each item waits for hardware. The commands and expected values are in
 - AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
+- AM62P: SV once more (empty at `cd738b1a`), and glmark2 after the render
+  pool fix (terrain and shadow out of memory, Known defects).
 - The i.MX8MP panel by eye (#23).
 
 ### ES 3.0 (goal 4)
@@ -463,13 +465,24 @@ es3-vertex).
    - glmark2 terrain black (#1) and the AM62P refract depth pass (#2) are
      fixed on the host (NPOT chains, `2673197`, `77693ff`, `cc78859`; the
      pool's top region, `541c9d3`); on the AM62P at `f2a13877` all 33
-     scenes ran, but no capture shows the pictures. The Pi 4 carve-out (#4,
+     scenes ran, but no capture shows the pictures. They are not closed on
+     the AM62P: at `cd738b1a` terrain and shadow run out of GPU memory and
+     refract raises `framebuffer 1 incomplete` (the next item). The Pi 4 carve-out (#4,
      #5): the Pi 4 glmark2 image takes 96 MiB (`ca4074a`); the host harness
      (`tools/hostharness/glmark2/FINDINGS-v3d.md`, 2026-10-12) shows no
      refused draw and no refused allocation since the image's tiled-copy
      budget is 24 MiB (refract's 1600x1200 mip chain was over the 8 MiB
      default: `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`);
      not yet run on the board.
+   - **AM62P glmark2 terrain and shadow out of GPU memory** (no issue yet;
+     `cd738b1a`, 2026-10-14, common set; `docs/board-sessions/am62p-common-int.md`):
+     the score passes (465), but terrain (1 fps) and shadow (3 fps) hit
+     `render pool exhausted` (5464 KiB and 21848 KiB requested, 3648 and
+     2744 KiB left), and refract raises 1694 `framebuffer 1 incomplete
+     (0x8cd6)` errors. The render pool (59200 KiB, about 38 MB live at the
+     end of jellyfish) does not fit terrain's 800x600 NPOT mip chain (5.6 MB)
+     after jellyfish; the `pvr-pool-npot` replay item is the host side of
+     this.
    - The glmark2 record carries the GL core's counters (#13): GL errors
      raised and draws that sampled an incomplete texture, 4 bits each in
      w3 (`driver/docs/glmark2.md`, "The record"). The host harness shows
@@ -533,6 +546,10 @@ es3-vertex).
      op samples (`row_sampled`); `tests/es3_tf_sampler.rs`
      (`texture_size_of_each_target`) works around it with an extra
      `texture()` read.
+   - **`docs/es3-cts-failures.md` RC13 is stale** (no issue yet): its table
+     row "Indexed element passed as out/inout argument" (8 / 0 / 8) and the
+     "no item yet" line (about line 435) still list the indexed out/inout
+     arguments, which build at `cd738b1ae7cf` (es3-shaderc, "Open work" item 4).
    - Capture against draw, differences by design (`tests/es3_tf_sampler.rs`):
      the capture applies the texture swizzle and GL_TEXTURE_MIN_LOD / MAX_LOD,
      which the draw does not yet (`GlTexture` comment "the draw does not apply
@@ -618,6 +635,17 @@ es3-vertex).
      characters or more (an instance block's default-block rows are named
      after the instance, so a 1,024-character instance name fills the
      64-byte field).
+     - The indexed element passed as an out/inout argument (RC13, 8 / 0 / 8)
+       needs no work: at `cd738b1ae7cf` the 8 programs
+       (`indexing.moredynamic.{builtin_fncall_out_parameter,
+       user_defined_fncall_out_parameter, user_defined_fncall_inout_parameter,
+       user_defined_fncall_inout_parameter_with_index_with_side_effects}`,
+       both stages) build on the PowerVR, the GC7000UL and the V3D. They were
+       refused for the missing `trunc` (`modf`), fixed by `b1cf9e4`; the
+       indexed copy-in/out (`LRef` in `lower.rs`) was already correct
+       (`tools/cts/log/investigations/shaderc-inout-indexed.md`). Left: in
+       `docs/es3-cts-failures.md`, remove "indexed out/inout arguments" from
+       the "no item yet" line and set the RC13 row to 0 / 0 / 0.
      - Item 4 of that table, the GC7000UL's 128-element constant array, is
        done (gc-const-array, 2026-10-14; `alloc.rs` `sink_definitions`,
        `tests/es3_gc_const_array.rs`), and not the way the item said: the
@@ -874,6 +902,14 @@ es3-vertex).
      `python3 -I tools/docs/check-refs.py docs/benchmarks.md`. At `b568940`
      `tools/docs/check-refs.py` does not exist (no `tools/docs/` directory),
      so the check could not run; it is probably on an unmerged branch.
+9. **AM62P common-set follow-ups** (integration `cd738b1a`, build id
+   `d5cb878`, 2026-10-14; session doc `docs/board-sessions/am62p-common-int.md`):
+   - glmark2: the score passes, but terrain and shadow run out of GPU memory
+     and refract raises `framebuffer 1 incomplete` ("Known defects"), so #1
+     and #2 are not closed on this board. Fix the render pool (or the order
+     of allocations); the `pvr-pool-npot` replay item is the host side.
+   - SV returned no console bytes: repeat it once to tell a boot or bridge
+     flake from a real failure.
 
 ## Next board session
 
@@ -1082,6 +1118,12 @@ already. Watch the `attrib_divisor` cases after P3 or V1, because they then
 use the hardware divide. If they fail on the i.MX8MP after V1, the GC7000UL
 FE ignores divisors > 1: set `max_instance_divisor` back to 1 and use V2 (a
 per-draw uniform).
+
+Common set (ran at `cd738b1a`, `docs/board-sessions/am62p-common-int.md`):
+re-run SV alone (it was empty). After the render pool fix ("Open work" item
+9), re-run GM and watch the console for `render pool exhausted` and `out of
+GPU memory`; the tally's "GL errors raised" reads `15 or more` and does not
+name the scene.
 
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
