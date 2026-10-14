@@ -18,6 +18,10 @@
 #   tools/check.sh --jobs N ...      up to N rows at once (YAKOGL_CHECK_JOBS);
 #                                    the log stays in the script's order
 #
+# However many rows run at once, the compilers they start share one set of
+# slots sized by the host's free memory (the compiler slots below,
+# YAKOGL_CHECK_MEM_PER_COMPILER_MB).
+#
 # A test row builds its binaries and runs them concurrently, and skips a
 # binary that passed on main with the same key (cargo_test below:
 # YAKOGL_CHECK_TEST_JOBS, YAKOGL_TEST_OK, YAKOGL_CHECK_RECORD,
@@ -297,6 +301,54 @@ gate_t0=$SECONDS
 #   v3d-mesa        build/v3d-check/mesa and build/v3d-check/tmp
 JOBS=${YAKOGL_CHECK_JOBS:-1}
 [[ $JOBS =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: --jobs/YAKOGL_CHECK_JOBS '$JOBS' is not a count"; exit 2; }
+
+# The compiler slots. Every compiler a row starts (rustc, clippy-driver, and
+# the C compilers of build scripts through the cc crate) takes a slot from one
+# GNU make jobserver, a FIFO under $ROWS, so the rows at once can never run
+# more compilers than the host's memory holds. Without it each cargo starts
+# one compiler per core: on 2026-10-13 hx90 (16 threads, 16 GB, no swap) ran
+# about ten clippy-drivers of 1 to 1.6 GB under four rows, ran out of memory
+# and hung for two hours (its kernel log: "Out of memory: Killed process ...
+# (clippy-driver)"). One clippy-driver on the yakogl crate peaks at 2.9 GB
+# (measured 2026-10-14 on Lepton, host-test,gpu-powervr), so a slot is
+# 3072 MB of MemAvailable at the start (YAKOGL_CHECK_MEM_PER_COMPILER_MB),
+# and never more slots than cores.
+#
+# cargo runs its first compiler without a token and takes a token for each
+# other one. So a pool row (--jobs) holds a token for its whole run
+# (run_row), which pays for that first compiler, and the FIFO starts with
+# all the slots; a serial run's rows hold none, and the FIFO starts with one
+# slot less. A jobserver already in the environment (check.sh under make
+# -j, or a self-test's check.sh inside a row) is used as it is, and its rows
+# take no token: the outer run paid for them.
+JS_OWN=0
+case " ${CARGO_MAKEFLAGS-} ${MAKEFLAGS-} " in
+*--jobserver-auth=*) ;;
+*)
+  per=${YAKOGL_CHECK_MEM_PER_COMPILER_MB:-3072}
+  [[ $per =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: YAKOGL_CHECK_MEM_PER_COMPILER_MB '$per' is not a count"; exit 2; }
+  avail=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
+  [[ $avail =~ ^[0-9]+$ ]] || { echo "check.sh: no MemAvailable in /proc/meminfo"; exit 2; }
+  SLOTS=$((avail / per))
+  [ "$SLOTS" -le "$(nproc)" ] || SLOTS=$(nproc)
+  [ "$SLOTS" -ge 1 ] || SLOTS=1
+  JS_FIFO=$(realpath "$ROWS")/jobserver
+  mkfifo "$JS_FIFO" && exec 9<> "$JS_FIFO" || { echo "check.sh: cannot make the jobserver $JS_FIFO"; exit 2; }
+  tokens=$SLOTS
+  [ "$JOBS" -gt 1 ] || tokens=$((SLOTS - 1))
+  [ "$tokens" -eq 0 ] || printf '%*s' "$tokens" '' | tr ' ' + >&9
+  export MAKEFLAGS="-j$SLOTS --jobserver-auth=fifo:$JS_FIFO" CARGO_MAKEFLAGS="-j$SLOTS --jobserver-auth=fifo:$JS_FIFO"
+  JS_OWN=1
+  echo "check.sh: $SLOTS compiler slot(s) ($avail MB available, $per MB each, $(nproc) cores)"
+  ;;
+esac
+# js_take / js_give: one token of this run's jobserver (nothing when the
+# jobserver is an outer run's).
+js_take() {
+  local token
+  [ "$JS_OWN" -eq 0 ] || read -r -n 1 -u 9 token
+}
+js_give() { [ "$JS_OWN" -eq 0 ] || printf + >&9; }
 ROW_USES=
 uses() { ROW_USES="$*"; }
 # rowkey <function> [args]: the row after it has an input key (below).
@@ -376,6 +428,12 @@ run_row() (
   for d in $deps; do
     while [ ! -e "$d" ]; do sleep 0.2; done
   done
+  # A pool row's first compiler (cargo starts it without a token) is paid
+  # for here, and the token goes back when the row's process ends.
+  if [ "$JOBS" -gt 1 ]; then
+    js_take
+    trap js_give EXIT
+  fi
   t0=$SECONDS
   export ROW_SEQ=$n
   if [ -n "$key" ] && row_cached "$n" "$key" "$@"; then
@@ -999,6 +1057,12 @@ if [ "${1-}" = "--pool-demo" ]; then
   step "demo    writes the lane's file" sh -c "sleep 1 && echo written > '$demo/lane'"
   [ "${3-}" = nolanes ] || uses r:demo
   step "demo    reads the lane's file" test -s "$demo/lane"
+  # Two rows that would overlap in the pool: each counts the rows inside the
+  # same second as itself and fails above YAKOGL_DEMO_AT_ONCE (default no
+  # limit). With one compiler slot they cannot overlap.
+  for x in a b; do
+    step "demo    slot $x" sh -c "touch '$demo/slot.$x'; sleep 1; n=\$(ls '$demo'/slot.* | wc -l); rm -f '$demo/slot.$x'; echo \"\$n at once\"; test \$n -le ${YAKOGL_DEMO_AT_ONCE:-99}"
+  done
   summary
 fi
 
@@ -2240,6 +2304,9 @@ mesa_reference_symbols() {
 artefact_worker() {
   local k=$1 jobs=$2 dir=$3 out=$4 i=0 e n
   shift 4
+  # Worker 0's cargo uses the row's own slot; every other worker's first
+  # compiler takes a token of its own (the compiler slots above).
+  [ "$k" -eq 0 ] || js_take
   for e in "$@"; do
     if [ $((i % jobs)) -eq "$k" ]; then
       if n=$(mesa_reference_symbols "$(cut -d' ' -f2 <<< "$e")" "$(cut -d' ' -f3 <<< "$e")" "$dir/$k"); then
@@ -2250,6 +2317,7 @@ artefact_worker() {
     fi
     i=$((i + 1))
   done
+  [ "$k" -eq 0 ] || js_give
 }
 
 check_no_mesa_reference() {
@@ -2281,6 +2349,9 @@ check_no_mesa_reference() {
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')/check-artefact || return 1
   out=$(mktemp "${TMPDIR:-/tmp}/check-artefact.XXXXXX") || return 1
+  # No more workers than compiler slots: a worker past the first waits for a
+  # token, and a serial run has one slot less in the FIFO than it has slots.
+  [ "$JS_OWN" -eq 0 ] || [ "$jobs" -le "$SLOTS" ] || jobs=$SLOTS
   for ((k = 0; k < jobs; k++)); do
     artefact_worker "$k" "$jobs" "$dir" "$out" "${entries[@]}" &
   done

@@ -290,6 +290,18 @@ strace survey (yakogl-precompile's tests write fixed paths under
 `build/test-tmp`). The CI runs 4 jobs (`gate.yml`): on 8 cores, 4 jobs
 took half the time of 1 (section 1); more was not measured.
 
+**Compiler slots.** Every compiler the rows start comes out of one GNU make
+jobserver that `check.sh` makes at its start (a FIFO under its run
+directory; cargo and the cc crate are its clients), sized by memory: one
+slot per 3072 MB of `MemAvailable` (`YAKOGL_CHECK_MEM_PER_COMPILER_MB`),
+never more than the cores. A pool row holds a slot for its whole run, so
+the rows at once can never run more compilers than the slots. Without it
+each cargo starts one compiler per core: on 2026-10-13 hx90 (16 threads,
+16 GB, no swap) ran about ten clippy-drivers of 1 to 1.6 GB under four
+rows, ran out of memory and hung for two hours. One clippy-driver on the
+yakogl crate peaks at 2.9 GB (2026-10-14). The run prints its slots on its
+first line.
+
 **Across machines.** When one machine is not enough, the workflow splits a
 run into shards (one job per scope class: `pvr`, `vivante`, `v3d`,
 `precompile`, `tools`, `images`), each a `check.sh --shard <class>` on its
