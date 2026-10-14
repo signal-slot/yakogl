@@ -393,3 +393,168 @@ Differences from the expectations; no expectation was edited.
 8. Rows 1 and 2 were not compared case by case with `c4ccc966`
    (`records/am62p/deqp-gles3-c4ccc966` is not on this machine) nor with the
    `f2a13877` records; the numbers above are group totals against RESULTS.md.
+
+## Re-run at the integration tip `9b525867` (gate-green)
+
+Device result. Date: 2026-10-14. Boot: `uboot-mmc`. Board: Verdin AM62P.
+
+Commit under test: `9b5258677baabd3c13374dab00a4d048d2000384` (sha8
+`9b525867`), the ccfarm/integration tip, 51 commits after `cd738b1a`
+(`src` and `driver` changes since: `src/gl/framebuffer.rs`,
+`src/gl/texture.rs`, `driver/samples/zephyr/deqp/CMakeLists.txt`). Image:
+`zephyr.bin` sha256
+`4acb9d771372aa35648b3a0aeee382ce11895cac2d269e73ffa3ad3dcd56ac12`, build id
+`PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=9b52586-dirty` (the `-dirty` is the
+`CONFIG_GL_TEST_CASES` line below, appended for the build and removed again;
+the sources are the commit's; `git status` was clean after).
+
+### Result in short
+
+Cases 196, 202, 203, 204 and 205: **5 of 5 pass**, 0 resets. Every expected
+value held, with the same two small differences that already passed at
+`cd738b1a` (finding 2 above: check 4 and 6 of case 204 read `...cc` for
+`...cb`; case 202 check 9 reads 199 for 200, tolerance 0.004). No failing
+case, so there is no failure analysis.
+
+### Build and run
+
+Environment names only: `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`,
+`PVR_FW_BLOB` (copied to `driver/src/fw/pvr_fw_blob.h`, git-ignored, not
+committed), `PCO_SHC`, `GLSL2USC_CACHE`.
+
+```sh
+# driver/samples/zephyr/gl_test/prj.conf gets this line for the build only
+#   CONFIG_GL_TEST_CASES="196,202,203,204,205"
+tools/cts/common-images.sh am62p tools/cts/common-tree.txt <imgdir> GT
+#   GT rc=0 sha256=4acb9d771372aa35648b3a0aeee382ce11895cac2d269e73ffa3ad3dcd56ac12 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=9b52586-dirty
+
+export BOARD_HOST=<user@host> BOARD_BOOT=uboot-mmc BOARD_UART=<bridge host>:<port 33>
+tools/board.sh --dry-run am62p run <imgdir>/GT/zephyr/zephyr.bin records/am62p es3gl
+tools/board.sh am62p disarm          # see "Deviations" 3
+tools/board.sh am62p run <imgdir>/GT/zephyr/zephyr.bin records/am62p es3gl
+```
+
+Record: `records/am62p/20261014-0910-es3gl-4acb9d77` (git-ignored).
+
+### Verdict line (verbatim)
+
+```
+board.sh am62p es3gl rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=64s
+gl_test: the list 196,202,203,204,205 (5 cases) on one context
+gl_test: all: 0 of 5 cases failed (5 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 34
+```
+
+The board.sh verdict is one line for the whole image; the five cases share
+one boot, so each case's own verdict is its `gl_test: case N name: PASS`
+line below.
+
+### Console lines that carry the numbers (verbatim)
+
+Case 196 occl, expected q0..q4 `available 1` with 0, 1, 0, 1, 1:
+
+```
+gl_test: occl: q0 ANY hidden: available 1 result 0 (want 1 0)
+gl_test: occl: q1 ANY visible: available 1 result 1 (want 1 1)
+gl_test: occl: q2 CONSERVATIVE empty: available 1 result 0 (want 1 0)
+gl_test: occl: q3 ANY two kicks: available 1 result 1 (want 1 1)
+gl_test: occl: q4 ANY then covered: available 1 result 1 (want 1 1)
+gl_test:   occl: the white quad on top  (32,32) = 0xffffffff  want 0xffffffff  ok  [check 1]
+gl_test:   occl: the occluder in the corner ( 2, 2) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+gl_test: case 196 occl: PASS
+```
+
+Case 202 blitconv, expected 12/12:
+
+```
+gl_test:   565 top-left from bottom-left ( 2,13) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+gl_test:   565 top-right from bottom-right (13,13) = 0xff00ff00  want 0xff00ff00  ok  [check 2]
+gl_test:   565 bottom-left from top-left ( 2, 2) = 0xffff0000  want 0xffff0000  ok  [check 3]
+gl_test:   565 bottom-right from top-right (13, 2) = 0xff9c6531  want 0xff9c6531  ok  [check 4]
+gl_test:   565 corner (0,0)             ( 0, 0) = 0xffff0000  want 0xffff0000  ok  [check 5]
+gl_test:   rgba16f (0,3) = 1000 0 0 1000 /1000  want 1000 0 0 1000  ok  [check 6]
+gl_test:   rgba16f (3,3) = 0 1000 0 1000 /1000  want 0 1000 0 1000  ok  [check 7]
+gl_test:   rgba16f (0,0) = 0 0 1000 1000 /1000  want 0 0 1000 1000  ok  [check 8]
+gl_test:   rgba16f (3,0) = 199 399 599 799 /1000  want 200 400 600 800  ok  [check 9]
+gl_test:   565 corner cleared           ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 10]
+gl_test:   565 blit kept beside it      ( 2, 2) = 0xffff0000  want 0xffff0000  ok  [check 11]
+gl_test:   565 blit kept far away       (13,13) = 0xff00ff00  want 0xff00ff00  ok  [check 12]
+gl_test: case 202 blitconv: PASS
+```
+
+Case 203 tfcap, expected 9/9 (PRIMITIVES_WRITTEN 2, records, guard, window
+green at (16,16); B 2; C discard leaves the window red):
+
+```
+gl_test:   A primitives written         = 2  want 2  ok  [check 1]
+gl_test:   tfcap A records              48 floats  ok  [check 2]
+gl_test:   A guard untouched            = 1  want 1  ok  [check 3]
+gl_test:   A the triangles are drawn    (16,16) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+gl_test:   B primitives written         = 2  want 2  ok  [check 5]
+gl_test:   tfcap B positions            24 floats  ok  [check 6]
+gl_test:   tfcap B colours              24 floats  ok  [check 7]
+gl_test:   tfcap C positions            12 floats  ok  [check 8]
+gl_test:   C discard draws nothing      (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 9]
+gl_test: case 203 tfcap: PASS
+```
+
+Case 204 srgb, expected 8/8 with the values of `docs/es3-srgb.md` section 10
+(124, 170, 203 89 160 191, 188, 128 51 0 128, 131):
+
+```
+gl_test:   srgb cleared                 (1,1) = 0xff7c7c7c  want 0xff7c7c7c  ok  [check 1]
+gl_test:   srgb cleared                 (6,6) = 0xff7c7c7c  want 0xff7c7c7c  ok  [check 2]
+gl_test:   srgb one,one (0.4 linear)    (1,3) = 0xffaaaaaa  want 0xffaaaaaa  ok  [check 3]
+gl_test:   srgb over (0.6,0.1,0.35,0.75) (6,3) = 0xbfa059cc  want 0xbfa059cb  ok  [check 4]
+gl_test:   srgb loaded + 0.1 (0.502)    (2,5) = 0xffbcbcbc  want 0xffbcbcbc  ok  [check 5]
+gl_test:   srgb right half kept         (5,5) = 0xbfa059cc  want 0xbfa059cb  ok  [check 6]
+gl_test:   srgb texel decoded           (32,32) = 0x80003380  want 0x80003380  ok  [check 7]
+gl_test:   srgb linear filter at 0.516  (32,32) = 0xff838383  want 0xff838383  ok  [check 8]
+gl_test: case 204 srgb: PASS
+```
+
+Case 205 mappbo, expected 15/15:
+
+```
+gl_test:   mappbo: a draw from the mapped VBO = 1282  want 1282  ok  [check 1]
+gl_test:   mappbo: glUnmapBuffer        = 1  want 1  ok  [check 2]
+gl_test:   mappbo: written through the map (32,40) = 0xff595452  want 0xff595452  ok  [check 3]
+gl_test:   mappbo: glUnmapBuffer 2      = 1  want 1  ok  [check 4]
+gl_test:   mappbo: collapsed by the flushed ranges (32,40) = 0xff000000  want 0xff000000  ok  [check 5]
+gl_test:   mappbo: texel (0,0)          ( 8,48) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+gl_test:   mappbo: texel (1,0)          (24,48) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+gl_test:   mappbo: texel (2,0)          (40,48) = 0xffff0000  want 0xffff0000  ok  [check 8]
+gl_test:   mappbo: texel (3,0)          (56,48) = 0xffffffff  want 0xffffffff  ok  [check 9]
+gl_test:   mappbo: texel (0,1)          ( 8,16) = 0xff00ffff  want 0xff00ffff  ok  [check 10]
+gl_test:   mappbo: texel (1,1)          (24,16) = 0xffffff00  want 0xffffff00  ok  [check 11]
+gl_test:   mappbo: texel (2,1)          (40,16) = 0xffff00ff  want 0xffff00ff  ok  [check 12]
+gl_test:   mappbo: texel (3,1)          (56,16) = 0xff204080  want 0xff204080  ok  [check 13]
+gl_test:   mappbo: rows the pack buffer holds unlike glReadPixels' = 0  want 0  ok  [check 14]
+gl_test:   mappbo: glUnmapBuffer 3      = 1  want 1  ok  [check 15]
+gl_test: case 205 mappbo: PASS
+```
+
+### Deviations from the common steps
+
+1. **No detached worktree.** `git worktree add` needed an approval the run
+   could not get, so the image was built in this task's own checkout, which
+   is the integration tip itself (a branch at `9b525867`, clean before).
+   The scripts build the checkout they live in, so the build is the same.
+2. **Console port.** As in the first session: the task's `BOARD_UART` and
+   the lease named ports 31 and 32, which are not main_uart0. The farm
+   (`ask_farm`) named the main_uart0 bridge at port 33 of the lab's bridge
+   host; `tools/am62p_netboot_uart.py probe` accepted it and the run
+   captured the whole console there.
+3. **A stale one-shot image.** The first `board.sh run` exited rc=3 before
+   touching the board: `/var/yakogl` held `once-SV-...bin` from an earlier
+   run that did not clean up (staged 2026-10-13 23:19, `yako_once` and
+   `yako_default` empty). `tools/board.sh am62p disarm` removed it (the
+   documented remedy in the refusal) and the run went through.
+4. **First image build failed with rc=101** (`GT rc=101 sha256=none`) with the
+   image directory under `/tmp`; the same command with the image directory
+   in the dependency cache gave rc=0. Cause unknown: the build output was not
+   kept. Next instrument if it recurs: run the `west build` of
+   `common-images.sh` by hand and read its first error line. Both
+   builds used the same sources, so the passing image is the one tested.
+5. The five cases ran as one list, in one boot, so there is one board.sh
+   verdict line for the five. The first session ran seven (196,
+   200-205) in one list; the cases and their values are the same.
