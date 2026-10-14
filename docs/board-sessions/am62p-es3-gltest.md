@@ -558,3 +558,269 @@ gl_test: case 205 mappbo: PASS
 5. The five cases ran as one list, in one boot, so there is one board.sh
    verdict line for the five. The first session ran seven (196,
    200-205) in one list; the cases and their values are the same.
+
+# Session 2: dEQP-GLES3 rows 3, 4, 6, 18, 21, 22 and the fbo MMU watch (`4e62d171`)
+
+Device result. Date: 2026-10-14. Boot: `uboot-mmc`. Board: Verdin AM62P.
+
+Commit under test: `4e62d171137b5d96d1865ad46c2d4a68d554499f` (sha8
+`4e62d171`), `origin/main` after `git fetch origin`; the task's checkout was
+that commit, clean, and the images were built from it as it is (image build
+id `PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=4e62d171`, no `-dirty`).
+`driver/src/fw/pvr_fw_blob.h` came from the dependency cache (gitignored,
+not committed). Stage 1 was built for this session with
+`tools/cts/cts-build-zephyr.sh` (`MODULE=gles3`, `BOARD=verdin_am62p/am62p54/a53`,
+CTS checkout from the dependency cache): the `DEQP_WORK` the farm copied was a
+GLES2 stage 1 and `am62p-deqp-images.sh` refused it ("no gles3 stage 1").
+
+## Result in short
+
+Six rows and the narrow fbo image ran to `verdict=done`, 0 resets, no GPU
+reset lines. Row 3 `fragment_ops.blend.fbo_srgb` passes 1,152 of 1,152
+(1,106 failed at `c4ccc966`). Rows 4 and 7 stop where they stopped before:
+image 5 is identical to `cd738b1a` (875 / 614 / 173) and image 7 ends at the
+same `ResourceError` as on `f2a13877`. The rows 18, 21 and 22 results are the
+first per-case ones for those groups on this board since `f2a13877`. No fault
+line next to `fbo.completeness.size.distinct` or `fbo.depth.*`.
+
+## Console
+
+Before the first image the candidate bridge ports were tried:
+`tools/am62p_netboot_uart.py probe <bridge host>:<port>` accepted the
+main_uart0 port (exit 0, nobody else on it) and a raw read of it returned the
+board's `login:` prompt, so the console shows bytes there. The leased port
+gave no bytes (mcu_uart0, as in session 1). `BOARD_UART` was set to the one
+that answered; no host or port is written here. All seven runs captured their
+whole console there (no `verdict=empty`).
+
+## Build and run
+
+```
+# stage 1 (once)
+tools/cts/cts-build-zephyr.sh        # MODULE=gles3 WORK=<stage 1> BOARD=verdin_am62p/am62p54/a53 CTS=<VK-GL-CTS>
+DEQP_MODULE=gles3 TREE_ROWS=3,4,6,18,21,22 tools/cts/am62p-deqp-images.sh \
+  tools/cts/am62p-gles3-tree.txt <imgdir> 4e62d171 > <imgdir>/build.out
+TREE_IMAGE_DIR=<imgdir> TREE_TAG=4e62d171 TREE_ROWS=3,4,6,18,21,22 BOARD_BOOT=uboot-mmc \
+  BOARD_HOST=<user@host> BOARD_UART=<bridge host>:<port main_uart0> \
+  tools/board.sh am62p tree tools/cts/am62p-gles3-tree.txt records/am62p/gles3-4e62d171
+# the MMU watch: a one-line filter file outside the repository
+#   dEQP-GLES3.functional.fbo.completeness.size.*,dEQP-GLES3.functional.fbo.depth.*
+DEQP_MODULE=gles3 tools/cts/am62p-deqp-images.sh <filter file> <imgdir-fbow> 4e62d171 > <imgdir-fbow>/build.out
+TREE_IMAGE_DIR=<imgdir-fbow> TREE_TAG=4e62d171 tools/board.sh am62p tree <filter file> records/am62p/fbow-4e62d171
+tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --statuses records/am62p/gles3-4e62d171/*/console.txt
+```
+
+Build lines (`build.out`; all `rc=0`):
+
+```
+img4 rc=0 bin=0642a836ba48283d
+img5 rc=0 bin=550e112e291614bc
+img7 rc=0 bin=5c96ade423914687
+img19 rc=0 bin=c05ac0b1e4e89b45
+img22 rc=0 bin=17c9504297297eb0
+img23 rc=0 bin=88d9ad25472ad561
+img1 rc=0 bin=44ba5695a0d385d2      # the fbo MMU-watch image (its own build.out)
+```
+
+Rows 19 and 20 of the table (images 20 and 21, the
+`texture.filtering.3d.formats.*` and `.sizes.*` GPU hang) were **not
+run**: the task skips them, so `texture.filtering.3d.formats` and `.sizes`
+(83 cases) have no result here.
+
+## Records
+
+| what | directory under `records/am62p/` |
+|---|---|
+| image 4 (row 3) | `gles3-4e62d171/20261014-1202-img4-4e62d171-0642a836` |
+| image 5 (row 4) | `gles3-4e62d171/20261014-1207-img5-4e62d171-550e112e` |
+| image 7 (row 6) | `gles3-4e62d171/20261014-1210-img7-4e62d171-5c96ade4` |
+| image 19 (row 18) | `gles3-4e62d171/20261014-1214-img19-4e62d171-c05ac0b1` |
+| image 22 (row 21) | `gles3-4e62d171/20261014-1218-img22-4e62d171-17c95042` |
+| image 23 (row 22) | `gles3-4e62d171/20261014-1226-img23-4e62d171-88d9ad25` |
+| fbo MMU watch | `fbow-4e62d171/20261014-1233-img1-4e62d171-44ba5695` |
+
+## Verdict and done lines (verbatim)
+
+```
+board.sh am62p img4-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=258s
+board.sh am62p img5-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=131s
+board.sh am62p img7-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=249s
+board.sh am62p img19-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=245s
+board.sh am62p img22-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=449s
+board.sh am62p img23-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=384s
+board.sh am62p img1-4e62d171 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=77s   (fbo MMU watch)
+```
+
+```
+img4  deqp: done: 1981 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 1981 cases begun, 1981 with a result, 0 without
+img5  deqp: done: 875 passed, 614 failed, 173 not supported, 0 warnings, complete=1 | deqp: summary: 1662 cases begun, 1662 with a result, 0 without
+img7  deqp: done: 594 passed, 41 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 635 cases begun, 635 with a result, 0 without
+img19 deqp: done: 235 passed, 413 failed, 24 not supported, 0 warnings, complete=1 | deqp: summary: 672 cases begun, 672 with a result, 0 without
+img22 deqp: done: 851 passed, 437 failed, 60 not supported, 180 warnings, complete=1 | deqp: summary: 1528 cases begun, 1528 with a result, 0 without
+img23 deqp: done: 852 passed, 871 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 1723 cases begun, 1723 with a result, 0 without
+fbow  deqp: done: 7 passed, 10 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 17 cases begun, 17 with a result, 0 without
+```
+
+Tally totals (`deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt`, the six
+tree records), verbatim:
+
+```
+mustpass cases with a result: 7472 (of 8201 seen)
+group                                       pass   fail    n/s  other
+fragment_ops                                2018      0      0      0
+fragment_out                                 242    583    115      0
+implementation_limits                         38     11      0      0
+instanced                                     39      6      0      0
+lifetime                                      55      1      0      0
+multisample                                   12      4     48      0
+negative_api                                 301      7      4      0
+occlusion_query                               62      0      0      0
+pbo                                           43      0      6      0
+polygon_offset                                20      0      0      0
+prerequisite                                   3      0      0      0
+shaders                                      512     40      0      0
+texture                                     1763   1275     84    180
+TOTAL                                       5108   1927    257    180
+```
+
+The tally counts only cases that are in `gles3-mustpass.txt`: 7,472 of the
+8,201 case lines the six images printed have a result there; 729 (280 Pass,
+449 Fail) are outside the list, so the images' own counters above are larger
+than the table's pass and fail columns (the image counters sum to 5,388 pass,
+2,376 fail, 257 NotSupported, 180 QualityWarning, which is 8,201). 1,397
+mustpass cases of image 7's buckets never ran (`NoResult`, below).
+
+## Group tables
+
+`cd738b1a` is this file's first session (rows 1, 2, 4, 24); `f2a13877` is
+RESULTS.md ("AM62P: the whole dEQP-GLES3 tree on `f2a13877`"). The per-case
+records of both are not on this machine, so the comparison is by group, never
+case by case, and a Pass that became a Fail cannot be shown or excluded
+beyond the equal totals below.
+
+| group (image) | this session `4e62d171` | `cd738b1a` | `f2a13877` | `c4ccc966` |
+|---|---|---|---|---|
+| `fragment_ops.blend.fbo_srgb` (4) | **1,152 pass, 0 fail** | not run | `fragment_ops` 1,109 fail (mostly this) | 1,106 of 1,152 fail |
+| `fragment_ops` (4 and 5) | 2,018 pass, 0 fail | 1,195 pass (rows 1, 2, 4) | 1,109 fail | 1,111 fail |
+| image 5 as a whole | 875 / 614 / 173, 1,662 cases, complete | 875 / 614 / 173, 1,662, complete | aborted, 558 never ran | - |
+| `fragment_out` (5) | 242 pass, 583 fail, 115 NotSupported | 583 fail, 115 NotSupported | 595 fail | 619 fail |
+| `lifetime`, `pbo`, `negative_api`, `multisample` (5) | 55/1, 43/0 (+6 NS), 301/7 (+4 NS), 12/4 (+48 NS) | the same (finding 6 above) | tail never ran | - |
+| `shaders.builtin_functions` (7) | 512 pass, 40 fail, 987 not run | not run | 987 without a result | - |
+| `shaders.builtin_variable`, `conditionals`, `constant_expressions` (7) | 29, 41, 340 not run | not run | 29, 41, 340 without a result | - |
+| `texture.specification` (23) | 696 pass, 467 fail | not run | in `texture` 1,752 fail; the "736" bucket | - |
+| `texture.swizzle` / `units` / `vertex` (23) | 3/80, 39/120, 85/89 (pass/fail) | not run | in `texture` | - |
+| `texture.filtering` 2d / 2d_array / cube / 3d.combinations (19, 22) | 117/0 (+12 NS), 7/115 (+12 NS), 112/0 (+12 NS), 3/53 | not run | in `texture` | - |
+| `texture.format` (22) | 340 pass, 158 fail, 48 NS (unsized 64 pass; compressed 12 pass, 32 NS) | not run | in `texture` | - |
+| `texture.mipmap` / `shadow` / `size` (22) | 139/85, 144/108 (+180 QW), 78/0 | not run | in `texture` | - |
+
+The `texture` fail total on this
+session's rows (1,275) is a part of `f2a13877`'s 1,752 for the whole group:
+the 3D filtering hang images were not run, so the groups are not the same set.
+
+Expectations of HANDOFF, checked, none edited:
+
+- Row 3 `fbo_srgb` all 1,152 pass: **met** (1,152 / 1,152).
+- `fragment_out`: unchanged from `cd738b1a`, 583 fail / 115 NotSupported. The
+  failure reasons of the six images have no
+  `glGetError() == GL_NO_ERROR` at `es3fTextureSpecificationTests` (the
+  "736" reason of `f2a13877`) and no "Texture upload failed ... at
+  gluTexture.cpp" (the "522" reason): those two reasons are gone; what
+  fails now is `Image comparison failed` (933), `Image verification failed`
+  (692), `Compile failed at sglrGLContext.cpp:863` (490),
+  `Failed to compile shader program at glsTextureTestUtil.cpp:411` (150),
+  `Result comparison failed` (40) and a few single ones. The 531 and 1,461
+  buckets of HANDOFF were not matched by reason text (no per-bucket number
+  from `f2a13877` here beyond the group totals above).
+- The sRGB view (`| grep -i srgb`, 1,310 cases of the tally): 1,219 pass, 27
+  fail, 64 NotSupported. The 27 fail are the 12
+  `fragment_out.array.fixed.srgb8_alpha8_*` (refused by name, as expected) and
+  15 others, listed in finding 3.
+
+## fbo MMU watch
+
+Image `fbow` (one row, `fbo.completeness.size.*` and `fbo.depth.*`) ran
+`verdict=done`, `resets=0`, 17 cases begun, 17 with a result, `complete=1`,
+back after 77 s. Its console holds no MMU fault, page fault, FWCORE fault or
+context reset line; `grep -i 'mmu\|fault\|reset'` finds only the boot's
+`MMU: FW heap mapped ...`, `M3 complete (MMU + FW load + FWIF structs)` and
+the sample's own `resetting the SoC` after `sample done`. Same for the six
+tree consoles: no fault line. Results:
+
+| case | status |
+|---|---|
+| `fbo.completeness.size.distinct` | Pass |
+| `fbo.completeness.size.zero` | Pass |
+| `fbo.depth.basic.depth24_stencil8`, `.depth32f_stencil8`, `.depth_component16`, `.depth_component24`, `.depth_component32f` | Pass (5) |
+| `fbo.depth.depth_test_clamp.*` (5 formats) | Fail: `Compile failed at sglrGLContext.cpp:863` |
+| `fbo.depth.depth_write_clamp.*` (5 formats) | Fail: `Compile failed at sglrGLContext.cpp:863` |
+
+The filter `fbo.completeness.size.*` matches only those two cases in this
+dEQP; the tree's image 2 had them inside `fbo.completeness.*`.
+
+## Findings
+
+Differences from the expectations; no expectation was edited.
+
+1. **Console port.** As in session 1 the lease's port gave no bytes. The
+   `BOARD_UART` of the machine's environment file did answer this time (probe
+   exit 0 and a `login:` prompt). So the lease's port is still the one to
+   fix; the farm lookup was not available to the session.
+2. **Stage 1.** The `DEQP_WORK` that `fetch_from_farm` copied (2.1 GiB) is a
+   GLES2 stage 1 (`build/modules/gles3` has no package library), so the
+   images could not be built until a gles3 stage 1 was built next to it. A
+   `DEQP_STAGE1` for the AM62P gles3 is still not a farm value (the farm's
+   `DEQP_STAGE1` is the i.MX8MP one).
+3. **sRGB cases that fail** besides the 12 refused by name (15):
+   `texture.filtering.2d_array.formats.srgb8_alpha8_*` (6: linear,
+   nearest and the four mipmap modes), `texture.specification.basic_teximage3d.srgb8_2d_array`,
+   `.srgb8_alpha8_2d_array`, `.srgb8_alpha8_3d`, `basic_texsubimage3d.srgb8_3d`,
+   `.srgb8_alpha8_3d`, `texstorage2d.format.srgb8_cube`, `.srgb8_alpha8_cube`,
+   `texstorage3d.format.srgb8_3d`, `.srgb8_alpha8_3d`. HANDOFF expected them
+   to pass. All are 2D-array, 3D or cube sRGB texture paths; the 2D and
+   cube-filtering sRGB cases and the `pbo` ones pass, and
+   `texture.filtering.2d_array` fails 115 of 122 for every format, so these
+   six are probably the same 2D-array cause, not an sRGB one. Not
+   investigated here.
+4. **`texture.filtering.2d_array`, `mipmap.3d`, `filtering.3d.combinations`,
+   `shadow.2d_array`** fail almost completely (115 of 122, 64 of 64, 53 of 56,
+   108 of 144): the 3D and 2D-array sampling is the next large texture item;
+   it is not an sRGB or a format matter.
+5. **`texture.specification`**: 467 of 1,163 mustpass cases fail (538 of the
+   console's failing result lines, counting cases outside the list). The
+   `GL_NO_ERROR` reason (736 at `f2a13877`) is gone. What remains, by the
+   console's `Fail (...)` lines: 354 `Compile failed at
+   sglrGLContext.cpp:863` (cube and integer cases such as
+   `basic_teximage2d.r16i_cube`) and 184 `Image comparison failed`. The 3D
+   and 2D-array rows fail wholesale (`basic_teximage3d` 69 of 69,
+   `texstorage3d` 70 of 76, `texsubimage3d_depth` 5 of 5).
+6. **`texture.swizzle` 80 of 83, `texture.units` 120 of 159, `texture.vertex`
+   89 of 174** fail: not in the HANDOFF's expectations, no earlier per-bucket
+   number on this machine. By the console's reason lines: `swizzle` 80
+   `Image comparison failed`, `units` 136 `Compile failed at
+   sglrGLContext.cpp:863` and 18 `Image comparison failed`, `vertex` 99
+   `Image comparison failed`; `texture.filtering` 489, `mipmap` 95 and
+   `shadow` 108 `Image verification failed`, `texture.format` 150 `Failed to
+   compile shader program at glsTextureTestUtil.cpp:411` and 8 `Image
+   comparison failed` (these counts include cases outside the mustpass list,
+   which is why they exceed the tally's).
+7. **Image 7 stops at the same case as `f2a13877`**:
+   `shaders.builtin_functions.precision.clamp.highp_fragment.vec3`, a
+   `ResourceError` ("a draw (24384 vertices/indices) does not fit an empty
+   frame: the general arena (1048576 bytes) is too small", then
+   `GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:684`, "Test run was ABORTED!",
+   `complete=0`). 987 `builtin_functions` plus 340 `constant_expressions`, 41
+   `conditionals` and 29 `builtin_variable` = 1,397 stay without a result; the
+   1,461 bucket of HANDOFF is thus still not measured. This is the image 7
+   `ResourceError` item of the roadmap.
+8. **fbo MMU watch**: no fault. `fbo.depth.depth_test_clamp` and
+   `depth_write_clamp` (10 cases) fail on a shader compile, not on a GPU
+   fault; `fbo.depth.basic` and `size.distinct` pass.
+9. **A stale one-shot image** again (`once-img5-4e62d171-...bin`, `yako_once`
+   empty) refused the first run with rc=3; `tools/board.sh am62p disarm`
+   removed it and the next run went through. The first run's refused record
+   directory (a `meta.txt` only) was moved aside, because a record is never
+   overwritten.
+10. **Comparison limits.** The per-case records of `cd738b1a` and `f2a13877`
+    are not on this machine; no Pass-to-Fail regression could be listed. The
+    totals that can be compared (image 5, `fragment_out`, `lifetime`) are
+    equal to `cd738b1a`.
