@@ -256,6 +256,8 @@ mod gl_api {
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     };
 
     /// The render target dEQP gets on the boards is larger; the cases take

@@ -254,6 +254,8 @@ macro_rules! table {
             query_begin: $begin,
             query_end: $end,
             query_result: $result,
+            generate_mipmap: None,
+            return_mipmap_chain: None,
         }
     };
 }

@@ -150,6 +150,21 @@ static void part_layout(void)
 	layout_case("13x7 x3 (non-pot)", 13, 7, 3, 704 + 3904,
 		    (struct want_slice[]){ { 4096, 64, 8, 0, UB2 }, { 3968, 32, 4, 0, LT },
 					   { 3904, 16, 4, 0, LT } });
+	/* The render images (src/v3d/backend.rs RtImage: a render target the
+	 * TMU samples as it is, stored by the TLB), at the sizes the Pi 4
+	 * benchmarks render into, sampled at one level. 1600x1200, glmark2
+	 * refract's colour target: 1600 is 50 columns of 4 UIF blocks (32
+	 * texels), so no width pad; 1200 is 150 UIF block rows (8 rows each),
+	 * 150 % 32 = 22, which is neither under 6 nor over 26: no ub_pad, and no
+	 * XOR; stride 6400, 7,680,000 bytes -- the 7,684,096 of RESULTS'
+	 * tiled-copy lines less the backend's 4 KiB of alignment slack. 800x600,
+	 * glmark2's canvas and terrain's targets: 800 is 25 columns, 600 is 75
+	 * rows (75 % 32 = 11): no pad, no XOR, stride 3200, 1,920,000 bytes.
+	 * Refract's 11-level chain image is pinned by tests/v3d_rt_sample.rs. */
+	layout_case("1600x1200 (refract's render target)", 1600, 1200, 1, 7680000,
+		    (struct want_slice[]){ { 0, 6400, 1200, 0, UIF } });
+	layout_case("800x600 (terrain's render targets)", 800, 600, 1, 1920000,
+		    (struct want_slice[]){ { 0, 3200, 600, 0, UIF } });
 
 	struct v3d_tex_layout l;
 	check(!v3d_tex_layout(0, 4, 1, 4, &l), "an empty image is refused");
@@ -1063,20 +1078,91 @@ static void part_layers(void)
 	      "layers size: a size past 32 bits is refused");
 }
 
+/* ---- part 10: the TFU mipmap job (v3d_tex_tfu_pack_mipmap) ---------------- */
+
+/* The job that makes levels 1.. of a render image from its level 0 (the
+ * V3D backend's v3d_generate_mipmap, Mesa's v3d_generate_mipmap through
+ * v3dX(tfu) with for_mipmap): each field against an independent source --
+ * the ICFG format against the layout's level 0 tiling (Mesa's
+ * V3D33_TFU_ICFG_FORMAT_LINEARTILE 11 + the tiling's distance from
+ * LINEARTILE), IIS against the padded height in UIF blocks, NUMMM against
+ * the level count, OPAD against the layout's padding rows (v3dx_tfu.c:154-162
+ * sets it for every UIF destination), IOA's format
+ * (V3D33_TFU_IOA_FORMAT_LINEARTILE 3 + the distance) and DIMTW -- and the
+ * refusals. */
+static void mip_case(const char *name, uint32_t w, uint32_t h, uint32_t levels, uint32_t icfg_fmt,
+		     uint32_t ioa_fmt)
+{
+	struct v3d_tex_layout l;
+	struct v3d_tex_tfu_job j = { 0 };
+	const uint32_t image = 0x01000000u;
+	bool ok = v3d_tex_layout(w, h, levels, 4, &l) && v3d_tex_tfu_pack_mipmap(&l, V3D_TFU_TTYPE_RGBA8, image, &j);
+	char what[160];
+	snprintf(what, sizeof(what), "mipmap job %s: packed", name);
+	check(ok, what);
+	const struct v3d_tex_slice *s = &l.slices[0];
+	const uint32_t level0 = image + s->offset;
+	const bool uif = s->tiling == V3D_TEX_TILING_UIF_NO_XOR || s->tiling == V3D_TEX_TILING_UIF_XOR;
+	/* RGBA8: utiles 4 rows high, UIF blocks 8 */
+	const uint32_t opad = uif ? (s->padded_height - (h + 7) / 8 * 8) / 8 : 0;
+	snprintf(what, sizeof(what), "mipmap job %s: icfg format %u, type RGBA8, %u levels after the first, OPAD %u",
+		 name, icfg_fmt, levels - 1, opad);
+	check(ok && j.icfg == (opad << 22 | icfg_fmt << 18 | V3D_TFU_TTYPE_RGBA8 << 9 | (levels - 1) << 5), what);
+	snprintf(what, sizeof(what), "mipmap job %s: iia level 0, iis %u", name, uif ? s->padded_height / 8 : 0);
+	check(ok && j.iia == level0 && j.iis == (uif ? s->padded_height / 8 : 0), what);
+	snprintf(what, sizeof(what), "mipmap job %s: ioa level 0 | format %u << 3 | DIMTW, ios h << 16 | w", name,
+		 ioa_fmt);
+	check(ok && j.ioa == (level0 | ioa_fmt << 3 | 1u) && j.ios == (h << 16 | w) && j.ica == 0 && j.iua == 0 &&
+		      j.coef0 == 0,
+	      what);
+}
+
+static void part_mipmap_job(void)
+{
+	/* refract's 1600x1200 x11 (UIF no XOR: 14 / 6), terrain's 800x600 x10,
+	 * a 1024x1024 x11 whose level 0 Mesa lays out with the XOR (15 / 7: the
+	 * render image drops it, backend.rs rt_layout, which the backend test
+	 * pins; the packer takes the layout as given), the Pi 4 window's
+	 * 1280x800 x11 whose level 0 Mesa pads by two UIF block rows (OPAD 2),
+	 * a 16x16 x3 UB-linear level 0 (13 / 5, no height word) and a 4x4 x3 LT
+	 * one (11 / 3) */
+	mip_case("1600x1200 x11", 1600, 1200, 11, 14, 6);
+	mip_case("800x600 x10", 800, 600, 10, 14, 6);
+	mip_case("1024x1024 x11 (XOR as Mesa lays it out)", 1024, 1024, 11, 15, 7);
+	mip_case("1280x800 x11 (two padding rows)", 1280, 800, 11, 14, 6);
+	mip_case("16x16 x3", 16, 16, 3, 13, 5);
+	mip_case("4x4 x3", 4, 4, 3, 11, 3);
+
+	struct v3d_tex_layout l;
+	struct v3d_tex_tfu_job j = { 0 };
+	check(v3d_tex_layout(64, 64, 1, 4, &l) && !v3d_tex_tfu_pack_mipmap(&l, V3D_TFU_TTYPE_RGBA8, 0x01000000u, &j),
+	      "mipmap job: one level is refused");
+	check(v3d_tex_layout(64, 64, 3, 4, &l) && !v3d_tex_tfu_pack_mipmap(&l, V3D_TFU_TTYPE_R8, 0x01000000u, &j),
+	      "mipmap job: a type of another texel size is refused");
+	check(v3d_tex_layout(64, 64, 3, 1, &l) && v3d_tex_tfu_pack_mipmap(&l, V3D_TFU_TTYPE_R8, 0x01000000u, &j) &&
+		      (j.icfg >> 9 & 0x7f) == V3D_TFU_TTYPE_R8 && (j.icfg >> 5 & 0xf) == 2,
+	      "mipmap job: an R8 layout takes the R8 type");
+	const uint32_t packed_iia = j.iia;
+	check(v3d_tex_layout(64, 64, 3, 4, &l) && !v3d_tex_tfu_pack_mipmap(&l, V3D_TFU_TTYPE_RGBA8, 0x01000020u, &j),
+	      "mipmap job: a level 0 off 64 bytes is refused");
+	check(j.iia == packed_iia && packed_iia != 0, "mipmap job: a refusal leaves the job untouched");
+}
+
 int main(void)
 {
-	/* part 1: 9 cases (2 + levels each: 3,3,3,3,3,3,11,4,5) + 4 refusals
-	 * + 5 for the 4x layout;
+	/* part 1: 11 cases (2 + levels each: 3,3,3,3,3,3,11,4,5,3,3) + 4
+	 * refusals + 5 for the 4x layout;
 	 * part 2: 1 + 13 sizes x 5 cpp; part 3: 1 + 8 + 3;
 	 * part 4: 9 sizes x 5 cpp x 2 (store, load) + 8 refusals x 2; part 5: 10 formats x 2 + 2;
 	 * part 6: 2 x 3 x 2 x 3 x 3 + 4 femtovg; part 7: 5 controls;
 	 * part 8: 1 + 12 state refusals + 2 bias edges + 9 sampler refusals +
 	 * P0 + P1 + 3 P0/P1 refusals; part 9: 3 hand cube layouts + 4 cubes
-	 * tiled + 1 cube record + 4 refusals; and the 3 population checks below */
-	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + 4 + 5;
+	 * tiled + 1 cube record + 4 refusals; part 10: 6 mipmap jobs x 4 + 5;
+	 * and the 3 population checks below */
+	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + (3 + 3) + 4 + 5;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 8 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + 3;
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + 3;
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
@@ -1089,6 +1175,7 @@ int main(void)
 	part_controls();
 	part_refusals_and_p0p1();
 	part_layers();
+	part_mipmap_job();
 
 	char what[160];
 	snprintf(what, sizeof(what), "population: %u boxes stored, planned %u", boxes_stored,

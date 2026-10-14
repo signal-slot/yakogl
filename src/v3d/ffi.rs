@@ -242,6 +242,12 @@ pub struct V3dJobTarget {
     pub ms_address: u32,
     pub ms_memory_format: u32,
     pub ms_height_in_ub: u32,
+    /// RT 0's render image (`backend::RtImage`): level 0 of the texture
+    /// the target is, in the TMU's layout, stored by the tile list right
+    /// after the raster store (0: none). Not with `msaa` or `rgb565`.
+    pub uif_address: u32,
+    pub uif_memory_format: u32,
+    pub uif_height_in_ub: u32,
 }
 
 /// `struct v3d_job_rt`: one of render targets 1..3.
@@ -446,8 +452,11 @@ pub struct V3dTexTfuJob {
 /// The TFU job types by texel size (v3d_tex.h `V3D_TFU_TTYPE_*`): a byte
 /// copy, as Mesa's blit rewrites the format (v3dx_tfu.c:63-73).
 pub const V3D_TFU_TTYPE_R8: u32 = 0;
+pub const V3D_TFU_TTYPE_RGBA8: u32 = 4;
 pub const V3D_TFU_TTYPE_R16F: u32 = 16;
 pub const V3D_TFU_TTYPE_R32F: u32 = 29;
+/// IOA bit 0 of a TFU job: do not write level 0 (a mipmap job's source).
+pub const V3D_TFU_IOA_DIMTW: u32 = 1;
 
 /// `struct v3d_tex_state`.
 #[repr(C)]
@@ -592,6 +601,9 @@ impl V3dJob {
             ms_address: 0,
             ms_memory_format: 0,
             ms_height_in_ub: 0,
+            uif_address: 0,
+            uif_memory_format: 0,
+            uif_height_in_ub: 0,
         },
         draws: 0,
         defaults: 0,
@@ -639,6 +651,11 @@ extern "C" {
         dst_gpu: u32,
         j: *mut V3dTexTfuJob,
     ) -> bool;
+    /// Pack the TFU job that generates levels 1.. of the tiled image at
+    /// `image_gpu` (laid out as `l`) from its own level 0, as Mesa's
+    /// v3d_generate_mipmap does; false for a one-level layout or a texel
+    /// size `ttype` does not name (v3d_tex.h).
+    pub fn v3d_tex_tfu_pack_mipmap(l: *const V3dTexLayout, ttype: u32, image_gpu: u32, j: *mut V3dTexTfuJob) -> bool;
     /// The bytes from one layer's mip tree to the next (Mesa's
     /// cube_map_stride, v3d_resource.c:757-764).
     pub fn v3d_tex_layer_stride(l: *const V3dTexLayout) -> u32;
@@ -720,7 +737,7 @@ const _: () = assert!(offset_of!(V3dCl, gpu) == 8);
 const _: () = assert!(offset_of!(V3dCl, used) == 16);
 const _: () = assert!(offset_of!(V3dCl, overflow) == 20);
 const _: () = assert!(offset_of!(V3dCl, bad_field) == 21);
-const _: () = assert!(size_of::<V3dJobTarget>() == 68);
+const _: () = assert!(size_of::<V3dJobTarget>() == 80);
 const _: () = assert!(offset_of!(V3dJobTarget, rgb565) == 20);
 const _: () = assert!(offset_of!(V3dJobTarget, rts) == 24);
 const _: () = assert!(offset_of!(V3dJobTarget, rt) == 28);
@@ -728,6 +745,9 @@ const _: () = assert!(offset_of!(V3dJobTarget, msaa) == 52);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_address) == 56);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_memory_format) == 60);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_height_in_ub) == 64);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_address) == 68);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_memory_format) == 72);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_height_in_ub) == 76);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
 const _: () = assert!(size_of::<V3dJobState>() == 188);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
@@ -799,12 +819,12 @@ const _: () = assert!(offset_of!(V3dJobClear, s_address) == 32);
 const _: () = assert!(offset_of!(V3dJobClear, s_height_in_ub) == 40);
 const _: () = assert!(offset_of!(V3dJobClear, s_load) == 44);
 const _: () = assert!(offset_of!(V3dJobClear, s_store) == 45);
-const _: () = assert!(size_of::<V3dJob>() == 832);
-const _: () = assert!(offset_of!(V3dJob, pack) == 104);
+const _: () = assert!(size_of::<V3dJob>() == 848);
+const _: () = assert!(offset_of!(V3dJob, pack) == 116);
 const _: () = assert!(size_of::<V3dJobPack>() == 728);
 const _: () = assert!(offset_of!(V3dJobPack, valid) == 4);
 const _: () = assert!(offset_of!(V3dJobPack, key) == 8);
 const _: () = assert!(offset_of!(V3dJobPack, n) == 712);
 const _: () = assert!(offset_of!(V3dJob, t) == 24);
-const _: () = assert!(offset_of!(V3dJob, draws) == 92);
-const _: () = assert!(offset_of!(V3dJob, broken) == 100);
+const _: () = assert!(offset_of!(V3dJob, draws) == 104);
+const _: () = assert!(offset_of!(V3dJob, broken) == 112);

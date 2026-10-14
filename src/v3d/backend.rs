@@ -238,6 +238,130 @@ impl Tiled {
     }
 }
 
+/// Render images kept at once (`RtImage`): the textures an application
+/// renders into and then samples. glmark2's desktop blurs 4 windows into 2
+/// textures, refract and shadow have 1 each, terrain 7 (its render-to-
+/// texture chain); Slint and the cluster render their layers into textures
+/// as femtovg's image render targets. The least recently used goes when the
+/// table is full; a target without a slot is sampled through a tiled copy,
+/// as before.
+pub const RT_IMAGES: usize = 8;
+
+/// A render target's second home, its render image (docs/online-shaderc/
+/// v3d-backend.md, "Render targets sampled from their render image"): a
+/// texture the application renders into (an FBO's colour attachment 0) and
+/// samples, laid out as Mesa lays out every tiled resource
+/// (`texture::rt_layout`, `levels` levels), so the TMU samples it as it is.
+/// Mesa keeps every render target UIF and samples it directly; the GL core
+/// here keeps every texture raster, so a job rendering into the texture
+/// stores RT 0 twice (v3d_job.h `uif_*`): the raster store into the GL
+/// core's storage, which every CPU path (glReadPixels, glTexSubImage2D,
+/// glCopyTex*) keeps reading and writing unchanged, and the UIF store into
+/// level 0 of this image. A draw that samples the texture then needs no
+/// copy: no CPU tiling of the 7.68 MB of a 1600x1200 target per frame, and
+/// no second 7.68 MB for the copy while the image stands (RESULTS "Pi 4:
+/// the OSAL looks at the job in flight", option (a)).
+///
+/// When the image holds what the storage holds: a texture is registered
+/// here the first time a draw samples it after a render into it
+/// (`GlesTextureBind::target_kick` not 0, `rt_sample`), with the texels'
+/// stamp of that moment (`seen_gen`) and the levels it is sampled with;
+/// every job that renders into the target from then on stores level 0 of
+/// the image, and `stored` says a submitted job has. The storage changes
+/// under the image only when the CPU writes it, and every CPU write moves
+/// `content_gen` (texture.rs `stamp_texels`), so a sample whose stamp is not
+/// `seen_gen` takes the copy path, records the new stamp and waits for the
+/// next render to store the image again. A sample whose stamp is `seen_gen`
+/// with `stored` set reads the image, which the same jobs wrote that wrote
+/// the storage. The first sample after a render into a texture is therefore
+/// a copy; from the second render on, none.
+///
+/// The levels below 0 (`chain`): glGenerateMipmap on a registered target is
+/// delegated to this backend (`v3d_generate_mipmap`), which has the TFU
+/// make levels 1.. of the image from its level 0, as Mesa's
+/// v3d_generate_mipmap does, instead of the GL core box-filtering 7.68 MB
+/// of non-cacheable storage on the CPU; the GL core's levels 1.. are then
+/// stale until it asks for them back (`v3d_return_mipmap_chain`, before any
+/// CPU read or write of them), and the image's are GL's chain, kept across
+/// renders into level 0 as GL keeps them. A mip-filtered sample reads the
+/// image only while `chain` holds.
+#[derive(Clone, Copy, Debug)]
+struct RtImage {
+    /// The target's identity (`Target`): the texture's level 0 at `gpu`,
+    /// `w` x `h` RGBA8 texels, rows `pitch` texels apart. 0: a free slot.
+    gpu: u64,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    /// The levels the image is laid out with: 1, or the chain the texture
+    /// is sampled with (`texture::levels_sampled`). A sample that needs more
+    /// lays the image out again.
+    levels: u32,
+    /// The image: `texture::rt_layout`'s bytes plus 4 KiB of slack, `base`
+    /// the layout's start at a 4 KiB boundary inside it and `address` level
+    /// 0 (at its slice offset; the texture state's base pointer and the TLB
+    /// store's address). Not allocated until the first job renders into the
+    /// target after the registration (`rt_for_render`): a texture sampled
+    /// once after a render costs nothing.
+    mem: OsalGpuMem,
+    base: u32,
+    address: u32,
+    /// The TLB store's memory format and "Height in UB" (`zs_layout`).
+    memory_format: u32,
+    height_in_ub: u32,
+    seen_gen: u32,
+    stored: bool,
+    /// Levels 1.. hold the chain the TFU made from level 0, GL's chain since
+    /// (`v3d_generate_mipmap`); false once the GL core took it back, the
+    /// storage was written under the image, or the image was made again.
+    chain: bool,
+    /// `V3dState::kicks` + 1 when last registered, rendered or sampled: the
+    /// LRU order when the table is full.
+    used: u32,
+}
+
+impl RtImage {
+    const NONE: RtImage = RtImage {
+        gpu: 0,
+        w: 0,
+        h: 0,
+        pitch: 0,
+        levels: 1,
+        mem: OsalGpuMem::ZERO,
+        base: 0,
+        address: 0,
+        memory_format: 0,
+        height_in_ub: 0,
+        seen_gen: 0,
+        stored: false,
+        chain: false,
+        used: 0,
+    };
+
+    fn live(&self) -> bool {
+        self.gpu != 0
+    }
+
+    fn has_image(&self) -> bool {
+        !self.mem.impl_.is_null()
+    }
+
+    /// The storage bytes the image stands for.
+    fn storage_bytes(&self) -> u64 {
+        u64::from(self.pitch) * 4 * u64::from(self.h)
+    }
+
+    fn overlaps(&self, base: u64, bytes: u64) -> bool {
+        self.live() && self.gpu < base.saturating_add(bytes) && base < self.gpu + self.storage_bytes()
+    }
+
+    /// The CPU view of the image's layout (`base`).
+    fn image_cpu(&self) -> *mut u8 {
+        // SAFETY: `base` is inside `mem` (rt_for_render placed it there).
+        unsafe { (self.mem.cpu as *mut u8).add((u64::from(self.base) - self.mem.gpu) as usize) }
+    }
+}
+
 /// The largest target the tile memory is sized for at init.
 pub const MAX_TARGET: u32 = 2048;
 
@@ -649,6 +773,9 @@ struct Job {
     /// A 4x job: its colour samples' slot in `V3dState::msbufs` (None: not
     /// kept, no memory for them).
     ms: Option<usize>,
+    /// The render image this job stores RT 0 into (`V3dState::rt_images`;
+    /// None: the target has none): `stored` once the job is submitted.
+    rt: Option<usize>,
     /// Whether this job's draws may read depth / stencil: the job cleared
     /// them, or it starts from a value it can reproduce.
     z_valid: bool,
@@ -707,6 +834,7 @@ impl Job {
         s_stored: false,
         zs_discard: false,
         ms: None,
+        rt: None,
         clear: V3dJobClear {
             load_rt0: true,
             rgba8: 0,
@@ -899,6 +1027,23 @@ struct V3dState {
     zs_parked: Parked<u32, ZsKnown, ZS_BUFS>,
     /// The colour samples of 4x targets, kept between jobs (`ms_buf`).
     msbufs: [MsBuf; MS_BUFS],
+    /// The render images of the textures sampled after a render into them
+    /// (`RtImage`), and their counters since init (`v3d_rt_images`): draw
+    /// bindings sampled from an image (no copy), registrations, samples
+    /// sent back to the copy path by a CPU write since the image was
+    /// stored, images not allocated for want of memory, mip chains the TFU
+    /// made in an image (glGenerateMipmap delegated) and those it failed,
+    /// chains written back into the GL core's storage, and the most bytes
+    /// the images held at once.
+    rt_images: [RtImage; RT_IMAGES],
+    rt_direct: u32,
+    rt_registered: u32,
+    rt_cpu_writes: u32,
+    rt_no_memory: u32,
+    rt_chains: u32,
+    rt_chains_failed: u32,
+    rt_chains_returned: u32,
+    rt_bytes_peak: usize,
     /// Counts `zs_buf` calls: the buffers' use stamps (`ZsBuf::used`).
     zs_clock: u32,
     /// Depth/stencil buffers lent to another id since init (`zs_buf`).
@@ -1064,6 +1209,15 @@ impl V3dState {
         zsbufs: [ZsBuf::NONE; ZS_BUFS],
         zs_parked: Parked::new(0, ZsKnown::Untouched),
         msbufs: [MsBuf::NONE; MS_BUFS],
+        rt_images: [RtImage::NONE; RT_IMAGES],
+        rt_direct: 0,
+        rt_registered: 0,
+        rt_cpu_writes: 0,
+        rt_no_memory: 0,
+        rt_chains: 0,
+        rt_chains_failed: 0,
+        rt_chains_returned: 0,
+        rt_bytes_peak: 0,
         zs_clock: 0,
         zs_lent: 0,
         zs_refused: None,
@@ -1447,6 +1601,376 @@ fn ms_buf(g: &mut V3dState, target: u64, w: u32, h: u32) -> Option<usize> {
     Some(i)
 }
 
+/* ---- render images ----------------------------------------------------------- */
+
+/// Is binding `b` a texture a render image can stand for (`RtImage`)? A
+/// stamped 2D RGBA8 texture at the GL core's pitch, not an EGLImage's, of a
+/// size a target can have. Named, the textures that keep the tiled copy:
+/// - a cube map or an array (a render goes into one face; the TMU reads
+///   every layer of one image);
+/// - a depth texture (R32F storage, RESULTS option (b): sampled from the
+///   D24S8 buffer one day; today its copy, stamped by `resolve_depth`);
+/// - L8, A8, LA8 (the GL core stores them narrow; a target is RGBA8), and
+///   the sRGB class (the TLB writes the class's bytes but a draw into it is
+///   refused by name, so it is never a target);
+/// - an EGLImage's (`bgra`, or no stamp: a sibling may write it);
+/// - render targets 1..3 of a multi-target framebuffer (RT 0 alone has an
+///   image; the job builder stores one), bgr565 and 4x targets
+///   (`v3d_job_begin` refuses an image with them).
+fn rt_texture(b: &GlesTextureBind) -> bool {
+    b.content_gen != 0
+        && b.type_ == GLES_TEXTYPE_2D
+        && texture::layers(b) == 1
+        && b.format == GLES_TEXFMT_RGBA8
+        && b.bgra == 0
+        && b.stride_texels == target_pitch(b.width)
+        && b.width != 0
+        && b.height != 0
+        && b.width <= MAX_TARGET
+        && b.height <= MAX_TARGET
+}
+
+/// Can a draw sample binding `b` from a render image? [`rt_texture`], and
+/// rendered into at some point (`target_kick`): a texture no job rendered
+/// into has nothing to store an image from.
+fn rt_eligible(b: &GlesTextureBind) -> bool {
+    rt_texture(b) && b.target_kick != 0
+}
+
+/// The slot of the render image of the target at `gpu`, `w` x `h` at
+/// `pitch` texels a row.
+fn rt_find(g: &V3dState, gpu: u64, w: u32, h: u32, pitch: u32) -> Option<usize> {
+    (0..RT_IMAGES).find(|&i| {
+        let r = &g.rt_images[i];
+        r.live() && r.gpu == gpu && (r.w, r.h, r.pitch) == (w, h, pitch)
+    })
+}
+
+/// Give slot `i`'s image back (held by the OSAL until the job in flight has
+/// run, as every free is), the slot's registration kept. With `keep_chain`,
+/// a chain the image holds for the GL core goes into the storage first
+/// (`rt_chain_back`): the GL core's levels 1.. are not lost with the image.
+/// Without it the storage is going away too.
+fn rt_free_image(g: &mut V3dState, i: usize, keep_chain: bool) {
+    if keep_chain {
+        rt_chain_back(g, i);
+    }
+    let r = &mut g.rt_images[i];
+    if r.has_image() {
+        osal::gpu_free(&mut r.mem);
+    }
+    (r.mem, r.base, r.address, r.memory_format, r.height_in_ub) = (OsalGpuMem::ZERO, 0, 0, 0, 0);
+    (r.stored, r.chain) = (false, false);
+}
+
+/// Give slot `i` back: its image to the OSAL (`rt_free_image`), the slot
+/// free.
+fn rt_free(g: &mut V3dState, i: usize, keep_chain: bool) {
+    rt_free_image(g, i, keep_chain);
+    g.rt_images[i] = RtImage::NONE;
+}
+
+/// Register the texture `b` as a render target the application samples,
+/// with `levels` levels: a free slot, else the least recently used one that
+/// the open job does not store into. The image itself is made when the
+/// next job renders into the target (`rt_for_render`).
+fn rt_register(g: &mut V3dState, b: &GlesTextureBind, levels: u32, now: u32) {
+    let keep = g.j.rt.filter(|_| g.j.open);
+    let i = match (0..RT_IMAGES).find(|&i| !g.rt_images[i].live()) {
+        Some(i) => i,
+        None => {
+            let Some(i) =
+                (0..RT_IMAGES).filter(|&i| Some(i) != keep).max_by_key(|&i| now.wrapping_sub(g.rt_images[i].used))
+            else {
+                return;
+            };
+            rt_free(g, i, true);
+            i
+        }
+    };
+    g.rt_images[i] = RtImage {
+        gpu: b.base_gpu,
+        w: b.width,
+        h: b.height,
+        pitch: b.stride_texels,
+        levels: levels.max(1),
+        seen_gen: b.content_gen,
+        used: now,
+        ..RtImage::NONE
+    };
+    g.rt_registered += 1;
+}
+
+/// Lay slot `i`'s image out again with `levels` levels: the image goes
+/// (its chain into the storage first), and the next render makes the new
+/// one.
+fn rt_relayout(g: &mut V3dState, i: usize, levels: u32) {
+    rt_free_image(g, i, true);
+    g.rt_images[i].levels = levels.max(1);
+}
+
+/// The image a draw samples binding `b` from, its layout and the levels the
+/// draw reads, when the texture has an image that holds what its storage
+/// holds (`RtImage`); `None` sends the draw to the tiled copy. The texture
+/// is registered here the first time, a stamp the image was not stored
+/// under (a CPU write since) is recorded and waits for the next render,
+/// and a sample with a mipmap filter reads the image only while its levels
+/// below 0 are GL's chain (`chain`).
+fn rt_sample(g: &mut V3dState, b: &GlesTextureBind) -> Option<(V3dTexLayout, u32, u32)> {
+    if !rt_eligible(b) {
+        return None;
+    }
+    let now = g.kicks.wrapping_add(1);
+    let levels = texture::levels_sampled(b);
+    let Some(i) = rt_find(g, b.base_gpu, b.width, b.height, b.stride_texels) else {
+        rt_register(g, b, levels, now);
+        return None;
+    };
+    let r = &mut g.rt_images[i];
+    r.used = now;
+    if r.seen_gen != b.content_gen {
+        r.seen_gen = b.content_gen;
+        r.stored = false;
+        r.chain = false;
+        g.rt_cpu_writes += 1;
+        return None;
+    }
+    if levels > r.levels {
+        rt_relayout(g, i, levels);
+        return None;
+    }
+    let r = &g.rt_images[i];
+    if !r.stored || !r.has_image() || (levels > 1 && !r.chain) {
+        return None;
+    }
+    let layout = texture::rt_layout(b.width, b.height, r.levels)?;
+    let base = r.base;
+    g.rt_direct += 1;
+    if g.rt_direct == 1 {
+        glog!(
+            "yakogl/v3d: a {}x{} render target is sampled from its render image ({} bytes, {} levels): no tiled copy",
+            b.width,
+            b.height,
+            layout.size,
+            layout.levels
+        );
+    }
+    Some((layout, base, levels))
+}
+
+/// The render image a job on `target` stores RT 0 into: the slot registered
+/// for the target, its image allocated now if it has none yet (`None`, and
+/// the target stays raster alone, when the OSAL has no memory for it, the
+/// layout refuses the size, or the target is one no image is made for).
+/// Every other image whose storage the render overlaps (another view of the
+/// same storage, a level above 0 attached) no longer holds what the storage
+/// holds: its chain goes back into the storage first, before the job that
+/// writes the storage is recorded.
+fn rt_for_render(g: &mut V3dState, target: &Target) -> Option<usize> {
+    let Target { gpu, w, h, pitch, bgr, rgb565, msaa, .. } = *target;
+    if gpu == 0 {
+        return None;
+    }
+    let bytes = u64::from(pitch) * u64::from(target.bpp()) * u64::from(h);
+    let found = rt_find(g, gpu, w, h, pitch).filter(|_| !bgr && !rgb565 && !msaa);
+    for i in 0..RT_IMAGES {
+        if Some(i) != found && g.rt_images[i].overlaps(gpu, bytes) {
+            rt_chain_back(g, i);
+            g.rt_images[i].stored = false;
+        }
+    }
+    let i = found?;
+    let now = g.kicks.wrapping_add(1);
+    g.rt_images[i].used = now;
+    if !g.rt_images[i].has_image() {
+        let levels = g.rt_images[i].levels;
+        let l = texture::rt_layout(w, h, levels)?;
+        /* the layout's start at a 4 KiB boundary, as a Mesa BO; the OSAL's
+         * granule is smaller */
+        let bytes = l.size as usize + 4096;
+        let mut mem = OsalGpuMem::ZERO;
+        if osal::gpu_alloc(V3D_HEAP_DATA, bytes, OSAL_MEM_DATA, &mut mem) != 0 {
+            g.rt_no_memory += 1;
+            glog_once!(
+                "yakogl/v3d: no GPU memory for the {}x{} render image ({} bytes): the target is sampled through a \
+                 tiled copy",
+                w,
+                h,
+                bytes
+            );
+            return None;
+        }
+        let Some(base) = gpu32(mem.gpu.next_multiple_of(4096)) else {
+            osal::gpu_free(&mut mem);
+            return None;
+        };
+        let (memory_format, height_in_ub) = zs_layout(&l.slices[0], 4);
+        let r = &mut g.rt_images[i];
+        (r.mem, r.base, r.address) = (mem, base, base + l.slices[0].offset);
+        (r.memory_format, r.height_in_ub, r.chain) = (memory_format, height_in_ub, false);
+        let live: usize = g.rt_images.iter().filter(|r| r.has_image()).map(|r| r.mem.size).sum();
+        g.rt_bytes_peak = g.rt_bytes_peak.max(live);
+    }
+    Some(i)
+}
+
+/// Drop every render image whose storage lies in `[base, base + bytes)`:
+/// the storage is going away, so no chain goes back into it.
+fn rt_drop(g: &mut V3dState, base: u64, bytes: u64) {
+    for i in 0..RT_IMAGES {
+        if g.rt_images[i].overlaps(base, bytes) {
+            rt_free(g, i, false);
+        }
+    }
+}
+
+/// Write the chain slot `i`'s image holds for the GL core (`RtImage::chain`)
+/// back into the GL core's storage: levels 1 .. `levels` - 1 untiled from
+/// the image into the raster rows the V3D's chain layout gives each level
+/// (`texture::gl_level_layered`, the GL core's `level_off` for this
+/// backend). The image is read by the CPU as the kept copies are written by
+/// it; nothing on the GPU writes those levels (a render writes level 0).
+/// Afterwards the storage is GL's chain again and the image's levels below
+/// 0 are no longer trusted.
+fn rt_chain_back(g: &mut V3dState, i: usize) {
+    let r = g.rt_images[i];
+    if !r.chain || !r.has_image() || r.levels < 2 {
+        return;
+    }
+    g.rt_images[i].chain = false;
+    let Some(layout) = texture::rt_layout(r.w, r.h, r.levels) else { return };
+    let (end, _, _) = texture::gl_level_layered(r.w, r.h, 1, 4, r.levels);
+    let Some(dst) = cpu_of(r.gpu, end) else { return };
+    let (first, _, _) = texture::gl_level_layered(r.w, r.h, 1, 4, 1);
+    let image = r.image_cpu() as *const u8;
+    for level in 1..r.levels {
+        let (off, pitch, rows) = texture::gl_level_layered(r.w, r.h, 1, 4, level);
+        let lw = (r.w >> level).max(1);
+        // SAFETY: the image is the layout's bytes (rt_for_render allocated
+        // it); the storage covers every level through `end` (the OSAL
+        // confirmed), and the level's rows are `pitch` texels apart.
+        unsafe {
+            v3d_tex_load_box(image, &layout, level, 0, 0, lw, rows, (dst as *mut u8).add(off as usize), pitch * 4)
+        };
+    }
+    // SAFETY: the levels just written, inside the storage.
+    unsafe { osal::cache_flush((dst as *mut u8).add(first as usize) as *mut c_void, (end - first) as usize) };
+    g.rt_chains_returned += 1;
+}
+
+/// glGenerateMipmap on the 2D texture `b` describes, whose storage holds a
+/// chain of `levels` levels (`YakoglBackend::generate_mipmap`): when the
+/// texture has a render image that holds its level 0, the TFU makes levels
+/// 1.. of the image from it, as Mesa's v3d_generate_mipmap does (one TFU
+/// job with `levels - 1` levels after the first, `v3d_tex_tfu_pack_mipmap`),
+/// and the answer is 1: the GL core then filters nothing and the next
+/// mip-filtered sample reads the image. The job rendering into the target
+/// is submitted and waited for first (the TFU reads what the TLB stored;
+/// the GL core's own filter waited for it too). 0 in every other case, and
+/// the GL core filters on the CPU as before: a texture without an image (not
+/// registered, not rendered since its registration, no memory for it), a
+/// stamp the image was not stored under, an image laid out with fewer
+/// levels (laid out again for the next render), an OSAL without the TFU, or
+/// a TFU job that failed (counted, logged once).
+pub unsafe extern "C" fn v3d_generate_mipmap(b: *const GlesTextureBind, levels: u32) -> i32 {
+    let g = g();
+    // SAFETY: the caller's contract.
+    let Some(b) = (unsafe { b.as_ref() }) else { return 0 };
+    if !g.inited || levels < 2 || !rt_texture(b) {
+        return 0;
+    }
+    let Some(i) = rt_find(g, b.base_gpu, b.width, b.height, b.stride_texels) else {
+        return 0;
+    };
+    let now = g.kicks.wrapping_add(1);
+    g.rt_images[i].used = now;
+    if g.rt_images[i].seen_gen != b.content_gen {
+        return 0;
+    }
+    if levels > g.rt_images[i].levels {
+        rt_relayout(g, i, levels);
+        return 0;
+    }
+    if g.tfu_min_bytes == 0 {
+        return 0;
+    }
+    /* the job rendering into the target may still be open: it stores the
+     * image when it runs */
+    if g.j.open && g.j.rt == Some(i) && flush_job(g) < 0 {
+        return 0;
+    }
+    let r = g.rt_images[i];
+    if !r.stored || !r.has_image() {
+        return 0;
+    }
+    if wait_in_flight(g) < 0 {
+        return 0;
+    }
+    let Some(layout) = texture::rt_layout(r.w, r.h, r.levels) else { return 0 };
+    let mut j = V3dTexTfuJob::default();
+    // SAFETY: a live layout and job.
+    if !unsafe { v3d_tex_tfu_pack_mipmap(&layout, V3D_TFU_TTYPE_RGBA8, r.base, &mut j) } {
+        return 0;
+    }
+    let Some(query) = osal::ops().and_then(|o| o.query) else { return 0 };
+    let mut q = OsalV3dTfu {
+        icfg: j.icfg,
+        iia: j.iia,
+        iis: j.iis,
+        ica: j.ica,
+        iua: j.iua,
+        ioa: j.ioa,
+        ios: j.ios,
+        coef0: j.coef0,
+        ..OsalV3dTfu::default()
+    };
+    // SAFETY: a live struct osal_v3d_tfu of the size passed.
+    let rc = unsafe {
+        query(OSAL_QUERY_V3D_TFU_RUN, &mut q as *mut OsalV3dTfu as *mut c_void, core::mem::size_of::<OsalV3dTfu>())
+    };
+    if rc != 0 || q.rc != 0 {
+        g.rt_chains_failed += 1;
+        if g.rt_chains_failed == 1 {
+            glog!(
+                "yakogl/v3d: the TFU did not make the {}-level chain of a {}x{} render image ({}, {}): the GL core \
+                 filters it",
+                r.levels,
+                r.w,
+                r.h,
+                rc,
+                q.rc
+            );
+        }
+        return 0;
+    }
+    g.rt_images[i].chain = true;
+    g.rt_chains += 1;
+    if g.rt_chains == 1 {
+        glog!(
+            "yakogl/v3d: the TFU made the {}-level chain of a {}x{} render image: glGenerateMipmap filters nothing",
+            r.levels,
+            r.w,
+            r.h
+        );
+    }
+    1
+}
+
+/// The GL core is about to read or write levels 1.. of the texture `b`
+/// describes on the CPU (`YakoglBackend::return_mipmap_chain`): the chain
+/// its render image holds goes back into the storage (`rt_chain_back`).
+pub unsafe extern "C" fn v3d_return_mipmap_chain(b: *const GlesTextureBind, _levels: u32) {
+    let g = g();
+    // SAFETY: the caller's contract.
+    let Some(b) = (unsafe { b.as_ref() }) else { return };
+    if !g.inited {
+        return;
+    }
+    if let Some(i) = rt_find(g, b.base_gpu, b.width, b.height, b.stride_texels) {
+        rt_chain_back(g, i);
+    }
+}
+
 /// The buffers a draw's `ds_id` keeps its depth and stencil in: the id
 /// itself for one buffer, or, with the halves apart (`split`), the depth's
 /// key and the stencil's. The GL core's FBO id is (depth name << 16) |
@@ -1546,6 +2070,9 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     if gpu != 0 {
         drop_tiled(g, gpu, pitch as u64 * target.bpp() as u64 * h as u64);
     }
+    /* the render image of a texture the application samples: this job
+     * stores RT 0 into it as well (v3d_job.h uif_*) */
+    let rt = rt_for_render(g, &target);
     /* a target with a depth/stencil buffer starts from its history; one
      * without, from the per-target history of what the tile buffer held */
     let (zkey, skey) = match ds {
@@ -1609,6 +2136,9 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         ms_address: ms.map_or(0, |i| g.msbufs[i].address),
         ms_memory_format: ms.map_or(0, |i| g.msbufs[i].memory_format),
         ms_height_in_ub: ms.map_or(0, |i| g.msbufs[i].height_in_ub),
+        uif_address: rt.map_or(0, |i| g.rt_images[i].address),
+        uif_memory_format: rt.map_or(0, |i| g.rt_images[i].memory_format),
+        uif_height_in_ub: rt.map_or(0, |i| g.rt_images[i].height_in_ub),
     };
     let (bcl, rcl, ind) = (&mut j.bcl as *mut V3dCl, &mut j.rcl as *mut V3dCl, &mut j.ind as *mut V3dCl);
     // SAFETY: the job and its three lists live in the backend's static state;
@@ -1619,6 +2149,7 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     j.open = true;
     j.target = target;
     j.ms = ms;
+    j.rt = rt;
     /* a 4x target whose samples no job has kept (a new surface, or one
      * swapped since, EGL 1.5 3.10.1): its content is undefined, so the job
      * starts from the clear colour rather than load what the buffer holds */
@@ -1752,6 +2283,12 @@ fn flush_job(g: &mut V3dState) -> i32 {
      * while the job was open (they are undefined after it) */
     if let Some(i) = g.j.ms {
         g.msbufs[i].valid = rc == 0 && !g.j.zs_discard;
+    }
+    /* the job stored RT 0 into the target's render image: a submitted job
+     * writes the image and the storage alike, so the image holds what the
+     * storage holds (RtImage); a dropped job wrote neither */
+    if let Some(i) = g.j.rt.filter(|&i| rc == 0 && g.rt_images[i].live() && g.rt_images[i].gpu == g.j.target.gpu) {
+        g.rt_images[i].stored = true;
     }
     /* the job may still be running: the OSAL holds these frees until it has
      * (src/osal/v3d_frees.h) */
@@ -2858,6 +3395,44 @@ fn tex_state_for(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u
     if let Some(i) = g.j.tex_keys[..g.j.ntex].iter().position(|k| *k == key) {
         return Ok(g.j.tex_states[i]);
     }
+    /* A render target the application samples reads its render image, which
+     * the jobs rendering into it stored in the TMU's layout (RtImage): no
+     * copy, and no wait (the GPU runs the jobs in order, and the image is
+     * loaded by none, so a job reads it only after the one that wrote it).
+     * Any other binding reads a copy tiled from the GL core's storage. */
+    let (layout, image_gpu, max_level) = match rt_sample(g, b) {
+        Some((layout, base, levels)) => (layout, base, levels - 1),
+        None => {
+            let (layout, image_gpu) = copy_image_for(g, b)?;
+            (layout, image_gpu, layout.levels - 1)
+        }
+    };
+    let mut st = texture::state(b, &layout, image_gpu);
+    /* an image laid out with more levels than the draw samples (a chain
+     * made for a mipmap filter, sampled without one): the levels below the
+     * last sampled are at the same places whatever the count */
+    st.max_level = max_level;
+    let (rec, rec_cpu) = tex_alloc(g, V3D_TEX_STATE_BYTES, V3D_TEX_RECORD_ALIGN as usize).ok_or(Attempt::Full)?;
+    // SAFETY: V3D_TEX_STATE_BYTES of the arena.
+    if !unsafe { v3d_tex_pack_state(rec_cpu, &st) } {
+        return Err(Attempt::Refused("the texture state does not fit its record (v3d_tex_pack_state refused a field)"));
+    }
+    if g.j.ntex < TEX_CACHE {
+        g.j.tex_keys[g.j.ntex] = key;
+        g.j.tex_states[g.j.ntex] = rec;
+        g.j.tex_images[g.j.ntex] = image_gpu;
+        // SAFETY: the record's V3D_TEX_STATE_BYTES, just packed.
+        g.j.tex_packed[g.j.ntex] = unsafe { *(rec_cpu as *const [u8; V3D_TEX_STATE_BYTES]) };
+        g.j.ntex += 1;
+    }
+    Ok(rec)
+}
+
+/// The tiled image of binding `b` for this job and its layout: the copy
+/// kept across jobs (`tiled_copy`, found again or made now), or one tiled
+/// into the job's arena when no kept copy could be made.
+fn copy_image_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout, u32), Attempt> {
+    let key = TexKey::of(b);
     /* The job that rendered into the texture (an FBO's colour attachment)
      * may still be running: since the async swap (6b6ec1e1) a flush submits
      * and returns. The copy below is tiled by the CPU (or the TFU) from the
@@ -2959,21 +3534,7 @@ fn tex_state_for(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u
             image_gpu
         }
     };
-    let st = texture::state(b, &layout, image_gpu);
-    let (rec, rec_cpu) = tex_alloc(g, V3D_TEX_STATE_BYTES, V3D_TEX_RECORD_ALIGN as usize).ok_or(Attempt::Full)?;
-    // SAFETY: V3D_TEX_STATE_BYTES of the arena.
-    if !unsafe { v3d_tex_pack_state(rec_cpu, &st) } {
-        return Err(Attempt::Refused("the texture state does not fit its record (v3d_tex_pack_state refused a field)"));
-    }
-    if g.j.ntex < TEX_CACHE {
-        g.j.tex_keys[g.j.ntex] = key;
-        g.j.tex_states[g.j.ntex] = rec;
-        g.j.tex_images[g.j.ntex] = image_gpu;
-        // SAFETY: the record's V3D_TEX_STATE_BYTES, just packed.
-        g.j.tex_packed[g.j.ntex] = unsafe { *(rec_cpu as *const [u8; V3D_TEX_STATE_BYTES]) };
-        g.j.ntex += 1;
-    }
-    Ok(rec)
+    Ok((layout, image_gpu))
 }
 
 /// Why a kept tiled copy was not made (`tiled_copy`): the draw then tiles
@@ -3274,6 +3835,7 @@ pub extern "C" fn v3d_texture_released(base_gpu: u64, bytes: u64) {
     let g = g();
     if g.inited {
         drop_tiled(g, base_gpu, bytes);
+        rt_drop(g, base_gpu, bytes);
     }
 }
 
@@ -3482,6 +4044,49 @@ pub unsafe extern "C" fn v3d_tiled_copies(live: *mut u32, bytes: *mut u64, high_
         }
         if let Some(h) = high_water.as_mut() {
             *h = g.tiled_high_water as u64;
+        }
+    }
+}
+
+/// The render images (`RtImage`): how many hold an image now, their bytes,
+/// and since init the draw bindings sampled from one (no tiled copy), the
+/// samples sent back to the copy path by a CPU write since the image was
+/// stored, the images not made for want of memory, the mip chains the TFU
+/// made in an image (glGenerateMipmap delegated), and the chains written
+/// back into the GL core's storage. Counters since init; read them as
+/// differences.
+///
+/// # Safety
+/// Each pointer is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn v3d_rt_images(
+    live: *mut u32,
+    bytes: *mut u64,
+    direct: *mut u32,
+    cpu_writes: *mut u32,
+    no_memory: *mut u32,
+    chains: *mut u32,
+    chains_returned: *mut u32,
+) {
+    let g = g();
+    // SAFETY: the caller's contract.
+    unsafe {
+        if let Some(l) = live.as_mut() {
+            *l = g.rt_images.iter().filter(|r| r.has_image()).count() as u32;
+        }
+        if let Some(b) = bytes.as_mut() {
+            *b = g.rt_images.iter().filter(|r| r.has_image()).map(|r| r.mem.size as u64).sum();
+        }
+        for (out, v) in [
+            (direct, g.rt_direct),
+            (cpu_writes, g.rt_cpu_writes),
+            (no_memory, g.rt_no_memory),
+            (chains, g.rt_chains),
+            (chains_returned, g.rt_chains_returned),
+        ] {
+            if let Some(o) = out.as_mut() {
+                *o = v;
+            }
         }
     }
 }
@@ -4162,6 +4767,24 @@ pub extern "C" fn v3d_shutdown() {
             free_tiled(g, i);
         }
     }
+    glog!(
+        "yakogl/v3d: render images: {} registered, {} draw bindings sampled from one, {} sent back to a copy by a \
+         CPU write, {} not made for want of memory, {} mip chains made by the TFU ({} failed, {} written back), {} \
+         bytes at most",
+        g.rt_registered,
+        g.rt_direct,
+        g.rt_cpu_writes,
+        g.rt_no_memory,
+        g.rt_chains,
+        g.rt_chains_failed,
+        g.rt_chains_returned,
+        g.rt_bytes_peak
+    );
+    for i in 0..RT_IMAGES {
+        if g.rt_images[i].live() {
+            rt_free(g, i, false);
+        }
+    }
     for b in g.zsbufs.iter_mut() {
         if b.live() {
             osal::gpu_free(&mut b.mem);
@@ -4744,6 +5367,10 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
     query_begin: Some(v3d_query_begin),
     query_end: None,
     query_result: Some(v3d_query_result),
+    /* a render target's mip chain is the TFU's, in its render image
+     * (RtImage), and goes back into the storage before the CPU reads it */
+    generate_mipmap: Some(v3d_generate_mipmap),
+    return_mipmap_chain: Some(v3d_return_mipmap_chain),
 };
 
 #[cfg(test)]

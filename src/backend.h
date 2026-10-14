@@ -596,6 +596,24 @@ struct yakogl_backend {
 	int (*query_begin)(uint32_t handle);
 	void (*query_end)(uint32_t handle);
 	int (*query_result)(uint32_t handle, uint64_t *samples);
+	/* glGenerateMipmap on the 2D texture `b` describes, whose storage holds
+	 * a chain of `levels` levels. A backend that keeps the texture's level 0
+	 * as its jobs rendered it (the V3D's render image) may make the chain
+	 * there itself, on the GPU, and answer 1: the GL core then filters
+	 * nothing, leaves levels 1.. of its storage as they are, and calls
+	 * return_mipmap_chain before it reads or writes those levels on the CPU.
+	 * 0: the GL core box-filters on the CPU, as without the entry. Called
+	 * after every kick rendering into the texture was handed over (the
+	 * backend waits for it) and before the texels' stamp would move.
+	 * Optional: NULL answers 0. */
+	int (*generate_mipmap)(const struct gles_texture_bind *b, uint32_t levels);
+	/* The GL core is about to read or write levels 1.. of the texture `b`
+	 * describes on the CPU, and the last generate_mipmap on it answered 1:
+	 * write the chain the backend made back into the storage (levels 1 ..
+	 * levels - 1, each at the GL core's level offset and pitch for this
+	 * backend's chain layout) before returning; nothing when the backend
+	 * no longer holds it. Optional: NULL on a backend that never answers 1. */
+	void (*return_mipmap_chain)(const struct gles_texture_bind *b, uint32_t levels);
 };
 
 extern const struct yakogl_backend *g_backend;   /* the backend of this build (src/backend.rs) */

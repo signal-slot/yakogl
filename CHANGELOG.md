@@ -36,6 +36,7 @@ There is no released version yet; everything below is unreleased.
 
 #### V3D (Raspberry Pi 4)
 - Non-seamless cube-map sampling in ES 2.0 builds, with a design note and host tests (ec5ba4fb, c3e4146d).
+- A render target the application samples is sampled from its render image, which the tile list stores in the TMU's layout next to the raster target, with no per-frame CPU tiled copy; glGenerateMipmap on such a target is delegated to the backend, which has the TFU make the chain in that image (`YakoglBackend::generate_mipmap` / `return_mipmap_chain`, the GL core's half for every back end).
 
 #### Shader compiler
 - In-process compiler is the default back end (84b5761e).

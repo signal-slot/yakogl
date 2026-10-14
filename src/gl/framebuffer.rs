@@ -1605,8 +1605,26 @@ pub unsafe extern "C" fn glFramebufferTexture2D(
     }
     let layer = if face { textarget.wrapping_sub(GL_TEXTURE_CUBE_MAP_POSITIVE_X) as GLint } else { 0 };
     debug_assert_eq!(bound, c.bound_framebuffer);
+    /* a level above 0 is rendered into and read through the storage: a
+     * chain the backend made in its own image comes back first */
+    if level > 0 {
+        super::texture::chain_back(c, texture as usize);
+    }
     replace_attachment(c, attachment, GL_TEXTURE, texture, level, layer);
     note_level_attached(c, texture, level);
+}
+
+/// Is a level above 0 of texture `ti` attached to one of this context's
+/// framebuffers? Such a level is rendered into and read through the
+/// storage, so glGenerateMipmap keeps the chain there (texture.rs) rather
+/// than in a backend's image.
+pub(super) fn level_above_zero_attached(c: &GlContext, ti: usize) -> bool {
+    c.framebuffers.iter().filter(|fb| fb.used).any(|fb| {
+        [&fb.color, &fb.depth, &fb.stencil]
+            .into_iter()
+            .chain(fb.color_n.iter())
+            .any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti && a.level > 0)
+    })
 }
 
 /// Rendering into a level fills it: the sampler may then walk down to it

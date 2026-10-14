@@ -2881,6 +2881,8 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: None,
     texture_uploaded: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
     /* divisor 1, as before the field (GcStream carries a divisor; whether
      * the FE takes more than 1 is unmeasured) */
     max_instance_divisor: 1,

@@ -149,6 +149,8 @@ static STAND_IN: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
 };
 
 /* ---------------------------------------------------------------- OSAL -- */

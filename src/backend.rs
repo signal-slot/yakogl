@@ -1318,6 +1318,26 @@ pub struct YakoglBackend {
     /// counted on `handle` since its `query_begin` ([`query_result`]); every
     /// kick holding such a draw has completed. 0, or a negative errno.
     pub query_result: Option<unsafe extern "C" fn(handle: u32, samples: *mut u64) -> i32>,
+    /// glGenerateMipmap on the 2D texture `b` describes, whose storage holds
+    /// a chain of `levels` levels: a backend that keeps the texture's level 0
+    /// as its jobs rendered it (the V3D's render image) may make the chain
+    /// there itself, on the GPU, and answer 1. The GL core then filters
+    /// nothing, leaves levels 1.. of its storage as they are, and calls
+    /// [`YakoglBackend::return_mipmap_chain`] before it reads or writes those
+    /// levels on the CPU. 0: the GL core box-filters the chain on the CPU, as
+    /// without the entry. Called after every kick that rendered into the
+    /// texture was handed to the backend (the backend waits for it itself)
+    /// and before the texels' stamp would move. `None`: 0.
+    pub generate_mipmap: Option<unsafe extern "C" fn(b: *const GlesTextureBind, levels: u32) -> i32>,
+    /// The GL core is about to read or write levels 1.. of the texture `b`
+    /// describes on the CPU (an upload, a copy, a CPU filter, a level above
+    /// 0 attached to a framebuffer), and the last `generate_mipmap` on it
+    /// answered 1: write the chain the backend made back into the storage
+    /// (levels 1 .. `levels` - 1, each at the GL core's level offset and
+    /// pitch for this backend's chain layout) before returning. Nothing when
+    /// the backend no longer holds it (it then wrote it back already, or
+    /// never had it). `None` on a backend that never answers 1.
+    pub return_mipmap_chain: Option<unsafe extern "C" fn(b: *const GlesTextureBind, levels: u32)>,
 }
 
 // SAFETY: the table is immutable; `name` points at a static string.
@@ -1750,5 +1770,28 @@ pub fn query_result(handle: u32) -> Result<u64, i32> {
     match unsafe { f(handle, &mut n) } {
         0 => Ok(n),
         rc => Err(rc),
+    }
+}
+
+/// Ask the backend to make the mip chain of the 2D texture `b` describes
+/// itself, `levels` levels, from the level 0 its jobs rendered
+/// ([`YakoglBackend::generate_mipmap`]): true when it did, and the GL core's
+/// levels 1.. are then the backend's until [`return_mipmap_chain`]. False
+/// (the default, and a backend without the entry): the GL core filters.
+pub fn generate_mipmap(b: &GlesTextureBind, levels: u32) -> bool {
+    match table().and_then(|t| t.generate_mipmap) {
+        // SAFETY: a static table's entry; `b` is live for the call.
+        Some(f) => (unsafe { f(b, levels) }) == 1,
+        None => false,
+    }
+}
+
+/// The GL core is about to read or write levels 1.. of the texture `b`
+/// describes on the CPU: have the backend write the chain it made back into
+/// the storage first ([`YakoglBackend::return_mipmap_chain`]).
+pub fn return_mipmap_chain(b: &GlesTextureBind, levels: u32) {
+    if let Some(f) = table().and_then(|t| t.return_mipmap_chain) {
+        // SAFETY: a static table's entry; `b` is live for the call.
+        unsafe { f(b, levels) }
     }
 }

@@ -89,6 +89,21 @@ struct v3d_job_target {
 	uint32_t ms_address;         /* GPU address, 4 KiB aligned; 0: samples not kept */
 	uint32_t ms_memory_format;   /* V3D_MEMORY_FORMAT_UIF_* */
 	uint32_t ms_height_in_ub;    /* the padded height in UIF blocks */
+	/* RT 0's second home, its render image (docs/online-shaderc/
+	 * v3d-backend.md "Render targets sampled from their render image"): the
+	 * target is a texture the application samples, and this is level 0 of
+	 * it laid out as Mesa lays out a tiled resource (v3d_tex_layout, RGBA8,
+	 * the UIF XOR dropped as the ms_* buffer drops it), which the TMU
+	 * samples as it is. The tile list stores RT 0 into it right after the
+	 * raster store, a second STORE_TILE_BUFFER_GENERAL of RT 0 as a 4x job
+	 * stores its samples and then the resolve (Mesa's v3d_rcl_emit_stores
+	 * stores one buffer to two surfaces the same way, v3dx_rcl.c:242-283):
+	 * SAMPLE_0, RGBA8, no R/B swap. It is never loaded: the raster target
+	 * is, so the image is not read before a job has written it. 0: none.
+	 * Refused by v3d_job_begin with msaa, rgb565 or no colour buffer. */
+	uint32_t uif_address;        /* GPU address of level 0, 64-byte aligned */
+	uint32_t uif_memory_format;  /* V3D_MEMORY_FORMAT_* (the layout's tiling) */
+	uint32_t uif_height_in_ub;   /* UIF: the padded height in UIF blocks; else 0 */
 };
 
 /* gallium pipe_stencil_state for one face, ops already in V3D's encoding. */

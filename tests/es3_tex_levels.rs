@@ -128,6 +128,8 @@ const fn backend_table(name: &'static core::ffi::CStr, native_layered: bool, mip
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     }
 }
 

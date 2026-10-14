@@ -1290,6 +1290,13 @@ step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
+# The render image a sampled render target is stored into and its TFU-made
+# mip chain (src/v3d/backend.rs RtImage): refract's one-level and 11-level
+# layouts and the chain's TFU job against Mesa's rules, and the TLB's and
+# the TMU's words of one image agreeing, on the real driver/src/v3d/v3d_tex.c
+# (built with cc, as the replay above).
+step "test    $V3D_CONFIG (tests/v3d_rt_sample.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_rt_sample
 # ES 3.0's integer colour render targets through the GL API (the stand-in
 # back end of the test draws nothing); the ES 2.0 report below must refuse
 # every one of the formats.

@@ -102,6 +102,8 @@ static BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
 };
 
 /// One context for the whole file; the tests take turns on it.
