@@ -2,13 +2,31 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # CTS の状況
 
-2026-10-11 更新。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
+2026-10-15 更新（dEQP-GLES2 の 10/12〜10/14 の記録。下の「10/12〜10/14 の dEQP-GLES2」の節）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
 このファイルはいまの状態だけを書く。細かい数字・ケース名・コミットは [RESULTS.md](RESULTS.md)、開いている作業とその順番は [docs/HANDOFF.md](../../docs/HANDOFF.md)、9/25〜10/7 の日記は [log/status-2026-09-25-to-10-07.md](log/status-2026-09-25-to-10-07.md)（それより前は git の履歴）。
 
 ## ひとことで
 
-**dEQP-GLES2 はほぼ完成。Pi 4 は 10/11 に失敗 0（17,126 合格 / 未対応 34 / 警告 5）、i.MX8MP は 10/10 に失敗 0、AM62P は 10/10 に 54 件の退行が出て、9 件はボードで直ったことを確認、残りはホストで直し済み（ボード確認待ち）。**
+**dEQP-GLES2: 10/12 に 3 ボードとも 1 つのコミットの全ツリーで失敗 0（AM62P 63efed8e、i.MX8MP c345ab74、Pi 4 d56e79e5）。その後 8bbf9ba2 で `GL_BGRA_EXT` のレンダーバッファ 46 件が退行し、i.MX8MP（cd738b1a、835cf9cc）と Pi 4（20a48791 の行 0〜14）で失敗 46。未修正。AM62P は 8bbf9ba2 を含むコミットをまだ走らせていない。**
 **dEQP-GLES3 は AM62P で必須 42,810 件の全 28 画像を 10/11 に走らせた（main f2a13877）: 32,669 合格（76.3%）、失敗 5,549、未対応 2,318、結果なし 2,089（GPU のハングが 2 ケース）。** ここが次の大きな山。Pi 4 と i.MX8MP の GLES3 はまだ走らせていない。性能はその後。
+
+## 10/12〜10/14 の dEQP-GLES2
+
+失敗ごとの状態と担当は docs/es2-cts-failures.md の「Per failure」と「After round 1」、まだ測っていないものは同じファイルの「Not yet measured in round 1」。数字はどれもコミット済みの記録から取った（必須 17,165 件）。
+
+| | コミット（日付） | 結果 | 記録 |
+|---|---|---|---|
+| AM62P | 63efed8e（10/12）、全 17 画像 + ms4 | **失敗 0**。1x は 17,125 合格 / 未対応 34 / 品質警告 5 / 互換警告 1、ms4 で multisample 16 件を置き換えて 17,141 / 0 / 18 / 5 / 1。invariance 9 件（画像 1: 1,512 / 1,512）、texture.vertex.2d 45 件（画像 9: 452 / 452）、ms4 の 2 件は全ツリーで合格を確認 | docs/board-sessions/am62p-es2-final-r2.md |
+| AM62P | 40dd2107（10/12）、画像 8〜17、ms4、gl_test | 画像 8〜17 は 7,023 / 失敗 0 / 34 / 5 / 2、ms4 16 / 0、gl_test 50/50、171 番単独も合格 | docs/board-sessions/am62p-es2-r1c.md |
+| AM62P | cd738b1a（10/14） | 何も走っていない（イメージは作った。コンソールが無音、またはワーカーからボードに届かない） | docs/board-sessions/am62p-es2-final.md |
+| i.MX8MP | c345ab74（10/12）、全ツリー | **失敗 0**。`TALLY (29 entries): begun 17371 passed 17318 failed 0 notsup 34 other 19 noresult 0` | docs/board-sessions/imx8mp-es2-final-r2.md |
+| i.MX8MP | cd738b1a（10/14、2 回）と 835cf9cc（10/14）、全ツリー | **失敗 46**。17,272 合格 / 失敗 46 / 未対応 34 / その他 19。46 件はすべて e21（fbo）の `GL_BGRA_EXT` レンダーバッファ | docs/board-sessions/imx8mp-es2-final.md、RESULTS.md の 835cf9cc の節 |
+| Pi 4 | a25712f2（10/12、統合の先端）、全ツリー | 17,118 / **失敗 9** / 34 / 3 / 1。9 件は T3 6 件と T4 3 件のキューブ（9b24ea2 を含まないコミット） | docs/board-sessions/pi4-es2-tip-r2.md |
+| Pi 4 | 40dd2107（10/12〜13）と d56e79e5（10/12）、全ツリー | **失敗 0**。どちらも 17,127 合格 / 未対応 34 / 品質警告 3 / 互換警告 1。fe5e8e73 のキューブ 25 件は全部合格。1 つのコミットの全ツリーで初めての失敗 0 | docs/board-sessions/pi4-es2-r1-tip.md、docs/board-sessions/pi4-es2-final-r2.md |
+| Pi 4 | 20a48791（10/14）、行 0〜14 | 11,877 / **失敗 46** / 25 / 3 / 2（11,953 件）。FB1 3 件、FB2 43 件、すべて `GL_BGRA_EXT`。行 15〜28 は未実行（pi4-es2-final-b） | docs/board-sessions/pi4-es2-final.md |
+
+- 46 件の原因（両方の記録）: 8bbf9ba2（10/12）の report-es2 のレンダーバッファ許可リストが `GL_BGRA8_EXT` だけを挙げ、dEQP-GLES2 が使う `GL_BGRA_EXT` を挙げていない。63efed8e、c345ab74、d56e79e5 はこのコミットを含まないので、失敗 0 の 3 つの全ツリーはこれを測っていない。担当の項目は記録にまだない（HANDOFF の Open work に「no issue yet」）。
+- まだ測っていないもの: 8bbf9ba2 を含むコミットでの AM62P の全ツリー（am62p-es2-final-a、-b）、Pi 4 の行 15〜28（pi4-es2-final-b）、修正後の i.MX8MP の e21 と Pi 4 の FB1・FB2。es2-docs-final がまとめる。
 
 ## 10/11 のボード実測（main f2a13877 と 1cf946a9、nuc、tools/board.sh。記録は RESULTS.md の 2026-10-11 の各節）
 
@@ -40,10 +58,11 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 
 ## 開いている不具合（10/11 時点。順番と詳細は docs/HANDOFF.md「Open work」）
 
-- **AM62P、dEQP-GLES2**: `texture.vertex.2d` の 45 件（画像 9）はホストで修正済み（a6fc6f14、インデックスを分割して描く）、ボード確認待ち。ms4 の `multisample.constancy_alpha_to_coverage` と `constancy_both_inverted` の 2 件は、フレームの PDS プログラムを共有する修正がホストにある（HANDOFF「State of main」）、ボード確認待ち。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
+- **dEQP-GLES2、3 ボード共通（10/15 時点）**: `GL_BGRA_EXT` のレンダーバッファ 46 件（8bbf9ba2 の退行、未修正）。i.MX8MP と Pi 4 で失敗、AM62P は未測定。
+- **AM62P、dEQP-GLES2**: `texture.vertex.2d` の 45 件（画像 9）と ms4 の `multisample.constancy_alpha_to_coverage`、`constancy_both_inverted` の 2 件は 63efed8e の全ツリーで合格（10/12、am62p-es2-final-r2.md）。以前は「ホストで修正済み、ボード確認待ち」。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
 - **AM62P、dEQP-GLES3**: 画像 20 と 21 の 3D テクスチャの 2 ケースで GPU がハングする。画像 7 は GENERAL アリーナ 1 MiB に入らない描画で打ち切り（ResourceError）。画像 5 は transform feedback の取り込みが未実装で打ち切り（保留中の着地はホストだけ）。
 - **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも cd738b1a でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
-- **Pi 4**: dEQP-GLES2 の失敗は 0。GLES3 は未実行。
+- **Pi 4**: dEQP-GLES2 は d56e79e5 の全ツリーで失敗 0（10/12）、20a48791 の行 0〜14 で `GL_BGRA_EXT` の 46 件が失敗（10/14）。GLES3 は未実行。
 - **キャプチャの欠落（Pi 4、AM62P とも）**: シリアルブリッジが行を落とす。集計は Lost、ランナーは done_lossy と読む。直すのはブリッジのファームウェア。
 
 ## 注意
