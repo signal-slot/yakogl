@@ -239,6 +239,12 @@ on_fail = "report"
 [[stages]]
 name = "board-common-am62p"
 after = "promote"
+# Each board-common stage runs only when a merge changed what its images are
+# built from or the scripts that boot and score them (only_if_changed): a
+# merge of docs, the website, HANDOFF or CTS records alone does not take three
+# boards for an hour (2026-10-14: 16 board-common runs in one morning, most
+# after document-only merges).
+#
 # The common set (tools/cts/common-tree.txt: glmark2, slint, slint-view,
 # gl_test) on the Verdin AM62P, booted by U-Boot from the eMMC
 # (BOARD_BOOT=uboot-mmc, docs/HANDOFF.md). cts-common.sh build is
@@ -248,6 +254,7 @@ commands = [
   "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh am62p run build/common/am62p-$(git rev-parse --short=8 HEAD) records/am62p/common-$(git rev-parse --short=8 HEAD)",
 ]
 requires = ["target:am62p"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
 on_fail = "report"
 
@@ -262,6 +269,7 @@ commands = [
   "BOARD_HOST=${resource.imx8mp.user}@${resource.imx8mp.host} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh imx8mp run build/common/imx8mp-$(git rev-parse --short=8 HEAD) records/imx8mp/common-$(git rev-parse --short=8 HEAD)",
 ]
 requires = ["target:imx8mp"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
 on_fail = "report"
 
@@ -275,6 +283,7 @@ commands = [
   "BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device} tools/cts/cts-common.sh pi4 run build/common/pi4-$(git rev-parse --short=8 HEAD) records/pi4/common-$(git rev-parse --short=8 HEAD)",
 ]
 requires = ["target:pi4"]
+only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
 on_fail = "report"
 
