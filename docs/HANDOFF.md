@@ -812,6 +812,52 @@ es3-vertex).
      sessions should run `fbo.completeness.size.distinct` and `fbo.depth.*`
      with a watch for MMU faults (a depth image of another size than the
      colour has not been drawn into on a board).
+   - **es3-mrt** (plan #19 item `mrt4`, RC14 in `docs/es3-cts-failures.md`):
+     the GL-core half is done (integration tip `2769e77d`). The draw-buffer
+     count is the back end's `backend::DRAW_TARGETS` (3 on every GPU):
+     GL_MAX_DRAW_BUFFERS, GL_MAX_COLOR_ATTACHMENTS, GL_DRAW_BUFFERi,
+     glClearBuffer's range, the attachment-point checks and the shader's
+     `gl_MaxDrawBuffers` read it, so nothing is advertised that a back end
+     cannot draw. The framebuffer stores 4 colour points
+     (`GL_CAP_COLOR_ATTACHMENTS` 4; `struct gl_framebuffer` 92 -> 108 bytes,
+     +8 KiB `.bss` with 2 contexts); a draw and a clear hand a 4-target back
+     end all 4 slots (host test, fake back end); `tools/yakogl-tools/src/es100.rs`
+     reads `max_draw_buffers()`. glDrawBuffers now answers
+     GL_INVALID_OPERATION (was GL_INVALID_ENUM) for `GL_COLOR_ATTACHMENTm`
+     with m below 32 and at or past GL_MAX_COLOR_ATTACHMENTS (ES 3.0 4.2.1).
+     Left, the back-end half: each GPU raises its `DRAW_TARGETS` arm in
+     `src/backend.rs` to 4 once a board draws 4 targets; the queries,
+     attachment points and `gl_MaxDrawBuffers` then follow. The same change
+     moves `tests/es2_report_guard.rs` `draw_buffer_queries_are_invalid_enum`
+     and `tests/es3_caps.rs` (caps-land, not on main yet) from 3 to 4.
+       - PowerVR (AM62P): the end-of-tile programs and the kick's PBE words
+         exist for 3 targets (`PVR_RENDER_MAX_RT` 3 in
+         `driver/src/pvr_render.h`, `eot_doutu_src0_n[]`;
+         `src/pvr/backend.rs` `PVR_BACKEND_MAX_RT` clamps to 3). A fourth
+         needs PBE state per render target (`docs/es3-pvr-formats.md` 1.2,
+         2.5) and a fourth end-of-tile program; the USC has 4 output
+         registers (1.8) and the compiler writes 4 (`select.rs`
+         `MAX_COLOUR_OUTPUTS`).
+       - V3D 4.2 (Pi 4): the TLB takes targets 0-3, the compiler writes 4
+         (`shaderc/online/v3d/prepare.rs` `MAX_RTS`), the backend takes up
+         to 4 (`docs/online-shaderc/v3d-backend.md`, "Multiple render
+         targets", step 4 pending). Left: a board run that draws into
+         target 3, then `DRAW_TARGETS` 4.
+       - GC7000UL (i.MX8MP): the PE has 4 render targets (etnaviv `num_rts`,
+         halved for 64-bit formats) and `vivante::backend::mrt_targets`
+         takes up to 4. Check on the board that the shader back end writes a
+         fourth output and the PE programs RT 3, then `DRAW_TARGETS` 4. A
+         64-bit format may halve the count: that needs a per-format check at
+         framebuffer completeness, not a lower `DRAW_TARGETS`.
+     Found on the way, not done: `tools/check.sh` lacks `--test es3_mrt_gl`
+     in the `$V3D_CONFIG` and `$V3D_ES2_CONFIG` rows (it passes there by
+     hand); the GL core does not check a fragment output at a location at or
+     past GL_MAX_DRAW_BUFFERS (`src/gl/program.rs`,
+     `src/shaderc/online/sema.rs`; each back-end compiler refuses it its own
+     way; whether ES 3.0 3.9.2 makes it a link error is unchecked);
+     glFramebufferTexture*/Renderbuffer and the attachment query answer
+     GL_INVALID_ENUM for a colour point past the limit where Mesa answers
+     GL_INVALID_OPERATION (GL 4.5 9.2.8), both readings exist, unchanged.
    - Then the dEQP-GLES3 tree on each board, after its ES 2.0 tree. The Pi 4
     has 84 of its 91 images left (FB4 is built, `build/` only); each ran in
     under 30 s of its 240 s window, so the table could be re-split into far
