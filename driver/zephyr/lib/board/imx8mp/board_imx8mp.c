@@ -37,9 +37,11 @@
 /* SCANOUT_VIEW: the panel-pitch buffer board_window() made, 0 for none */
 static uintptr_t s_view_phys;
 static size_t s_view_bytes;
+#if defined(CONFIG_SAFEUI_DISPLAY_IMX8MP) && defined(CONFIG_SAFEUI_GPU_VIVANTE)
 /* The buffer the LCDIF scans since board_show() turned it on or latched it,
  * 0 before the first show */
 static uintptr_t s_scan;
+#endif
 
 int board_window(uint32_t w, uint32_t h, struct board_window *out)
 {

@@ -2,12 +2,17 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP: why glmark2 frames take "about 24 ms" (host investigation)
 
-**Status (2026-10-11): open.** The cause below is a prediction from the
-code; the board recipe (step 1) has not run. Fix F1 is not applied:
-`board_show` in `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` still calls
-`imx8mp_display_set_fb(scan)` on every frame once the display is on.
-Nothing else tracks this item yet; it is proposed for docs/HANDOFF.md
-"Open work" (performance, the user's step 2).
+**Status (2026-10-14): F1 and F2 applied, not yet run on a board.** The
+cause below is a prediction from the code; the board recipe has not run.
+F1: `board_show` returns 0 without `imx8mp_display_set_fb` when the LCDIF
+already scans the shown buffer
+(`driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-178`). F2: a strong
+`yakogl_zephyr_wait_vblank` waits for the next VSYNC
+(`board_imx8mp.c:185-226`). `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`
+(`driver/zephyr/lib/board/Kconfig:101-114`) brings back the old behaviour
+for an A/B run. See "Fixes applied" and "Board recipe", step 2 (the next
+i.MX8MP board session). The sections up to "Proposed fix" describe the
+code before F1 and F2, at `fdff1147`.
 
 Written 2026-10-08 from the code at `fdff1147`. Line
 numbers are that commit's. Host-only: this item reads code and earlier
@@ -260,7 +265,7 @@ next limit after candidate 1 is fixed.
   published i.MX8MP scores (`driver/docs/glmark2.md:233-239`) are off-screen
   or Wayland runs, not a GL driver that spins on the LCDIF.
 
-## Proposed fix (not applied)
+## Proposed fix (F1 and F2 applied: see "Fixes applied")
 
 F1 (the floor; board layer only). In
 `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` `board_show`: when the LCDIF
@@ -293,6 +298,69 @@ CPU cost. A scene now at two periods also speeds up (to its own cost, no
 longer rounded up to 34.0 ms). The score should rise well above 58. The
 exact value is not predicted: it is the sum of candidates 2 and 3, which the
 record below measures.
+
+## Fixes applied (F1, F2; 2026-10-14, item check-steps)
+
+Board layer only. `src/osal/zephyr.c`, `driver/rust/**` and the samples are
+unchanged.
+
+- F1, `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-178`. `board_show`
+  keeps the address the LCDIF scans in `s_scan` (`:40-44`). It is set by the
+  first `imx8mp_display_on` and by every `imx8mp_display_set_fb` that
+  latched. Once the display is on, a show of the buffer in `s_scan` returns
+  0 at once. This is every show of the one-buffer window after the first, in
+  the scan-in-place and view paths and in the copy path (always `screen`).
+  The first show still calls `imx8mp_display_on`. A buffer the LCDIF does
+  not scan yet still goes through `imx8mp_display_set_fb` and its wait. A
+  failed latch leaves `s_scan` as it was, so the next show tries again.
+- F2, `board_imx8mp.c:185-226`. A strong `yakogl_zephyr_wait_vblank` takes
+  the place of the weak default (`src/osal/zephyr.c:603`). It calls
+  `imx8mp_display_set_fb(s_scan)`: it latches the address already scanned
+  again, so the picture does not change. It returns when the LCDIF clears
+  `SHADOW_LOAD_EN` at its next VSYNC. This is the wait `board_show` did
+  every frame before. Now it runs only as often as the swap interval asks.
+  - Why not the interrupt (`yakogl_imx8mp_lcdif_wait_vblank`,
+    `driver/drivers/display/display_yakogl_imx8mp_lcdif.c:178-188`): that
+    device exists only with `CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST`. That
+    option is default n and not board-proven (`driver/zephyr/Kconfig:317-330`),
+    and no sample or image script sets it. Its interrupt is enabled only by
+    a cold bring-up (`yakogl_imx8mp_lcdif_enable`), not on an adopted
+    layer. The common-set images use `driver/src/display/imx8mp_lcdif.c`,
+    where an interrupt-based wait would answer -ENOTSUP, and Slint and the
+    cluster would lose their pacing. The shadow-load wait works on both
+    LCDIF builds.
+  - The timeout. `timeout_us == 0` gives -ETIMEDOUT at once. Otherwise the
+    wait cannot be cut short: it ends at the VSYNC, or at the LCDIF
+    driver's own bound (`SHADOW_LOAD_TIMEOUT_US` 36 ms,
+    `driver/src/display/imx8mp_lcdif.c:94`; `FRAME_WAIT_US` 83 ms,
+    `driver/rust/src/ip/lcdifv3.rs:118`), which is -ETIMEDOUT. A VSYNC that
+    came later than `timeout_us` is also -ETIMEDOUT. EGL asks for 100 ms
+    (`src/gl/egl.rs:2132`), more than a 17.0 ms period, so the return is 0.
+  - -ENOTSUP comes back before the first show (the display is not on yet;
+    the first swap comes before the first `board_show`), with the A/B
+    option below, and when `set_fb` fails for another reason. EGL's loop
+    stops at the first -ENOTSUP (`src/gl/egl.rs:2131-2135`).
+- A/B, `driver/zephyr/lib/board/Kconfig:101-114`:
+  `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC` (default n). With `y`,
+  `board_show` calls `imx8mp_display_set_fb` on every show, and
+  `yakogl_zephyr_wait_vblank` answers -ENOTSUP. That is exactly the code
+  before F1 and F2.
+
+The effect on each application:
+
+- glmark2: swap interval 0. The sample compiles upstream's
+  `gl-state-egl.cpp` unchanged (`driver/samples/zephyr/glmark2/CMakeLists.txt:132`),
+  and its only patch is `libmatrix-util-zephyr.patch`. Upstream
+  `src/gl-state-egl.cpp:426-427` at `22c527cb` calls `eglSwapInterval(dpy,
+  0)` unless `--swap-mode fifo`. The default `CONFIG_GLMARK2_ARGS` is empty
+  (`driver/samples/zephyr/glmark2/Kconfig:17-19`). Read from the deps
+  cache's glmark2 checkout for this item. So no swap waits and no show
+  waits: the frame runs at its GPU and CPU cost.
+- Slint and the cluster keep EGL's default interval 1
+  (`src/gl/egl.rs:276`): one VSYNC a swap, as before, now in
+  `eglSwapBuffers` instead of `board_show`.
+- gl_test (GT) also keeps interval 1. Its swaps now wait one period each,
+  as `board_show` did when it was called.
 
 ## The frame-breakdown record (design, not built)
 
@@ -393,15 +461,74 @@ Verdict lines: `verdict=done`, `result=record:GLMARK2`, `resets=0`.
 - view = 29 or less: one clear takes more than 17 ms. Then candidate 2 or 3
   is large; step 3 page 1 and page 2 say which.
 
-### Step 2: after F1 (a later item's change)
+### Step 2: F1 and F2 on the board (the next i.MX8MP session)
 
-Rebuild the `view` arm from the tree with F1 and run it the same way
-(`clear-view-f1`). Expected: `594b12ss fc3f0XXX 2104003f 03200258` with the
-score `XXX` above 0x3b (59). Then the default list with the view (the step
-1 command without `CONFIG_GLMARK2_ARGS`, `RUN_BOUND=960` as in
-`driver/docs/glmark2.md` section 2): the score was 46; expected well above
-it. Also rerun the common set's Slint, Slint view and cluster rows if F2 is
-not in the same change (they lose their pacing with F1 alone).
+Step 2 can run without step 1. Its A/B arm (`GM-waits`) is the old
+behaviour, built from the same tree. The environment is as in
+`docs/board-sessions/imx8mp-common-int.md` ("Commands"): `ZEPHYR_WS`,
+`WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`, `GLMARK2_SRC`, `SLINT_NOSTD_DIR`,
+`NOSTD_PATCH_DIR`, `AGL_SLINT_CLUSTER_DIR`, `RUSTUP_TOOLCHAIN=nightly`.
+`BOARD_HOST` is the leased board's ssh login. `BOARD_BOOT=uboot-mmc` as in
+that session. Run from the checkout's top with a tree that has F1 and F2.
+
+```sh
+SW=$PWD
+IMG=build/floor-f1f2-$(git rev-parse --short=8 HEAD)
+REC=records/imx8mp/floor-f1f2-$(git rev-parse --short=8 HEAD)
+# 1. the common rows with F1+F2: glmark2 (default list), Slint, Slint view, cluster
+tools/cts/common-images.sh imx8mp tools/cts/common-tree.txt "$IMG" GM SO SV CL
+# 2. the extra glmark2 images: the A/B arm (old wait) and two light scenes
+export ZEPHYR_BASE=$ZEPHYR_WS/zephyr PATH=$WEST_VENV/bin:$PATH
+MODS=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS")
+gm() { # gm <dir> <cmake args...>
+  d=$SW/$IMG/$1; shift
+  (cd "$ZEPHYR_WS" && west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d "$d" \
+    "$SW/driver/samples/zephyr/glmark2" -- "-DZEPHYR_MODULES=$MODS" \
+    -DCONFIG_GC_BOARD_WDOG_SELF_ARM=y "-DGLMARK2_SRC=$GLMARK2_SRC" "$@")
+}
+gm GM-waits -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y
+gm GM-clear '-DCONFIG_GLMARK2_ARGS="-b clear"'
+gm GM-clear-waits '-DCONFIG_GLMARK2_ARGS="-b clear"' -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y
+gm GM-build '-DCONFIG_GLMARK2_ARGS="-b build:use-vbo=true"'
+# 3. run, one image at a time (board.sh: "run <image> <logdir> [name]")
+for r in GM-clear GM-clear-waits GM-build GM GM-waits SO SV CL; do
+  BOARD_HOST=<user@host> BOARD_BOOT=uboot-mmc \
+    tools/board.sh imx8mp run "$IMG/$r/zephyr/zephyr.bin" "$REC" "$r"
+done
+```
+
+As in that session, if the sandbox refuses a command line that starts with
+`BOARD_HOST=...`, export the two variables in a small wrapper. Each run
+prints one `board.sh imx8mp <name> rc=... verdict=...` line. The i.MX8MP has
+no console capture, so the record is the only result. A GLMARK2 record's
+second word is `fc3f` and then the score in hex (`fc3f002b` = 43, as in
+`imx8mp-common-int.md`).
+
+Expected:
+
+| Run | Expected record / verdict | Reading |
+|---|---|---|
+| GM-clear | `verdict=done result=record:GLMARK2`, second word `fc3fXXXX` with XXXX above `003a` | `clear` above 58 FPS. Before F1, every scene stopped at 58 (one period). Expected a few hundred: a full-screen clear is about 1.9 ms of GPU (candidate 2). |
+| GM-clear-waits | second word `fc3f003a` (58), or `fc3f001d` (29) | The A/B arm: locked to the panel, never above 58. |
+| GM-build | second word above `fc3f003a` | A light model scene above 58 FPS. |
+| GM | `verdict=done`, second word above `fc3f003a`, `scenes ran 33, failed 0` in the tally | The default list. The score is no longer capped near 58, and is well above the 43 of `imx8mp-common-int.md`. Heavy scenes still run at their GPU cost; see candidate 2. |
+| GM-waits | second word near `fc3f002b` (43; 37-46 earlier) | The old behaviour from the same tree, which confirms the A/B. |
+| SO, SV | `verdict=done result=record:PROBES record=594b0601,08420862,00210842,c5920883` | Probes as before: interval 1, one VSYNC a swap (F2), so they are still paced at 58.76 Hz. |
+| CL | `verdict=done result=record:PROBES record=594b0601,10c410c4,1905f7bf,b1076d5f` | Probes as before; paced the same way. |
+
+What the records cannot show: Slint and the cluster write no frame count,
+and the i.MX8MP has no console, so their pacing at the display rate is not
+in a record. Check it at the panel: the motion in SO, SV and CL has the same
+speed as in the earlier session, and there is no tearing. If a probe record
+differs from the table, or the motion runs fast, F2 is not pacing. Then
+rerun SO with `-DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y` to compare.
+A GT run of the common set (`tools/cts/common-images.sh ... GT`) should
+still fail only at case 44. gl_test keeps interval 1, so its swaps wait as
+`board_show` did.
+
+Reject F1 if: GM-clear is at 58 or below while GM-clear-waits is also at 58.
+The frame is then still locked, and something other than `board_show` waits.
+Step 3's page 0 (show us) and page 2 (frames per bin) say where.
 
 ### Step 3: the frame-breakdown record (after it is built)
 
@@ -435,6 +562,11 @@ than the pinned Zephyr's default (candidate 3): at 100, each sleep would be
 
 ## What this does not show
 
+- F1 and F2 are built for the board, not run on it. The Zephyr builds of
+  the glmark2 image, with and without the A/B option, are host evidence
+  that the code compiles and links, and that the strong
+  `yakogl_zephyr_wait_vblank` replaces the weak one. They say nothing about
+  timing.
 - No board run was made. The per-scene split (18 / 10 / 9 scenes at one
   period) is inferred from the scores, not measured.
 - The Zephyr tick rate was read from the pinned Zephyr's Kconfig files, not
