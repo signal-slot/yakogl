@@ -17333,7 +17333,6 @@ Images from origin/main `cd738b1a` (`cts-common.sh imx8mp build`), run by `cts-c
 
 Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. This is a second run on `cd738b1a`, separate from the section "i.MX8MP: common set on `cd738b1a` (2026-10-14)" above (GM score 43 there, 42 here; the other rows read the same).
 
-<<<<<<< HEAD
 ## i.MX8MP: common set on `d32d190a`, U-Boot from eMMC (2026-10-14)
 
 Images from origin/main `d32d190a` (`cts-common.sh imx8mp build`), run by `cts-common.sh imx8mp run` with `BOARD_BOOT=uboot-mmc`, one boot per row. Records `records/imx8mp/common-d32d190a/`.
@@ -17347,7 +17346,7 @@ Images from origin/main `d32d190a` (`cts-common.sh imx8mp build`), run by `cts-c
 | GT | `94833fdc` | failed (rc 4) | `594b010e 002c0107 ffff0030 00100031` | gl_test passed 48 of 49 run, 1 skipped (case 16), failing case 44 |
 
 Resets absent on every row (no UART). GM, SO, SV and CL are green. GT's failing case 44 is the known RGBA16F target failure (#6, section "i.MX8MP: gl_test case 44 on `f2a13877` still fails" above); it was not investigated in this run. The first build attempt failed on GM and GT with "Disk quota exceeded" in /tmp; the images used here were rebuilt with `TMPDIR` on the workspace disk.
-=======
+
 ## i.MX8MP: the whole dEQP-GLES2 tree on Zephyr at origin/main `835cf9cc`: 46 fail, all `GL_BGRA_EXT` renderbuffers (2026-10-14)
 
 `tools/cts/imx8mp-deqp-build.sh deqp-835cf9cc 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt`,
@@ -17369,4 +17368,3 @@ and the `render.*.rbo_bgra*` families). This is the failure set of `cd738b1a` (s
 still unfixed at `835cf9c`. Resets were absent; the entry 14 run needed 30 refused attempts
 because a first, killed run (background time limit) left a one-shot image in `/var/yakogl`;
 `board.sh imx8mp disarm` cleared it and the tree resumed.
->>>>>>> b450b45f67fc368017f10b5507fd97704ac4c590
