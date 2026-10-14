@@ -51,11 +51,13 @@ concurrency:
 
 jobs:
   check:
-    # The runner with the label gate-primary (hx90, a machine of its own: no
-    # farm agents share it). nuc and system76 keep their label yakogl-gate but
-    # do not take the gate any more; give one of them gate-primary to add it
-    # back.
-    runs-on: [self-hosted, Linux, X64, gate-primary]
+    # Any runner with the label yakogl-gate (hx90, nuc and system76), so the
+    # gate never waits on one machine: on 2026-10-13 hx90, the only runner
+    # then, hung out of memory and every pull request queued for hours behind
+    # it. A slower runner is still a runner (user, 2026-10-14). Each run sizes
+    # its compilers to the host's free memory (tools/check.sh, compiler slots),
+    # so a runner that shares its machine with farm agents is safe to use.
+    runs-on: [self-hosted, Linux, X64, yakogl-gate]
     timeout-minutes: 180
     env:
       PYTHONDONTWRITEBYTECODE: "1"

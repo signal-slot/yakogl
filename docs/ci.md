@@ -314,19 +314,23 @@ by default, and the runner units will be set below that. So a gate run
 on a busy machine is slower by design, and the gate makes up for it by
 doing less and running in parallel.
 
-**The third runner (2026-10-12).** hx90 (Minisforum HX90, Ryzen 9 5900HX,
-8 cores / 16 threads, 16 GB, Gentoo) runs the gate alone: `gate.yml`'s
-`runs-on` names the label `gate-primary`, which only hx90 carries, so the
-gate never waits behind or beside a farm agent; nuc and system76 keep
-their runner registration for the other project (label `yakogl-gate`),
-and giving one of them `gate-primary` adds it to the gate again. GitHub
-has no priority among runners: the label is the only lever. Measured on
-hx90 the same day, every row: 2009 s cold on its first run (five rows
-red for the host, since fixed: the table proofs needed the library's
-`.rmeta`, #222, and a glmark2 tree copied with two directories missing)
-and 1900 s green on main `bf6c98ca6` (run 38248051277, 144 ok, the
-cache-writing run); nuc's run of the same main took 2261 s. A document
-pull request's gate took 4 s there (#225).
+**The runners (2026-10-14).** `gate.yml`'s `runs-on` names the label
+`yakogl-gate`, which hx90, nuc and system76 all carry, so a run takes
+whichever is free. From 2026-10-12 to 10-14 the gate ran on hx90 alone
+(label `gate-primary`), to keep it away from farm agents; on 2026-10-13
+hx90 hung out of memory (section "Compiler slots") and every pull
+request queued behind it for hours. A slower runner is still a runner
+(user, 2026-10-14): the compiler slots keep a run inside the host's
+memory, and the farm keeps priority through CPU weight (above). GitHub
+has no priority among runners, so the faster one is not preferred.
+
+hx90 is a Minisforum HX90 (Ryzen 9 5900HX, 8 cores / 16 threads, 16 GB,
+Gentoo, no swap). Measured there on 2026-10-12, every row: 2009 s cold on
+its first run (five rows red for the host, since fixed: the table proofs
+needed the library's `.rmeta`, #222, and a glmark2 tree copied with two
+directories missing) and 1900 s green on main `bf6c98ca6` (run
+38248051277, 144 ok, the cache-writing run); nuc's run of the same main
+took 2261 s. A document pull request's gate took 4 s there (#225).
 
 ### 3.4 Make the slow tests faster
 
