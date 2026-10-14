@@ -15,6 +15,13 @@
 # (driver/tools/pvrlab/README.md, driver/tools/gclab/README.md), so the
 # checks went with them; they are in the history at 49058ba4. Check 16 keeps
 # its number so old logs still read.
+#
+# Checks 23-25 gate tools that no other gate ran: 23 tree-diff-selftest.sh
+# (tools/cts/tree-diff.py on its fixtures), 24 the licence audit's own fixture
+# test (tools/license_audit.py --self-test, tools/testdata/license_audit/),
+# 25 the audit in report mode over the repository (fails on unknown-id or a
+# crash only; the missing-spdx count is printed as information, --strict stays
+# off until the owner decides, docs/release/license-audit.md).
 set -u
 
 HERE=$(dirname "$0")
@@ -260,6 +267,62 @@ if [ "$grc" -eq 0 ]; then
     ok "GM row: exit 0 (amber is the cell; the verdict is done)"
 else
     bad "GM row: exit $grc, expected 0"
+fi
+
+echo
+# ---- 23: tree-diff-selftest.sh ---------------------------------------------
+echo
+echo "== 23. tree-diff-selftest.sh: tree-diff.py on its fixtures (testdata/tree-diff)"
+tdout=$(bash "$HERE/tree-diff-selftest.sh" 2>&1)
+tdrc=$?
+tdpass=$(printf '%s\n' "$tdout" | grep -c '^  ok ')
+if [ "$tdrc" -eq 0 ] && [ "$tdpass" -gt 0 ]; then
+    ok "tree-diff-selftest.sh: $tdpass check(s) passed"
+else
+    bad "tree-diff-selftest.sh: exit $tdrc, $tdpass ok line(s)"
+    printf '%s\n' "$tdout" | grep -v '^  ok ' | sed 's/^/        | /'
+fi
+
+echo
+# ---- 24: licence audit self-test -------------------------------------------
+echo
+echo "== 24. license_audit.py --self-test (tools/testdata/license_audit)"
+LA=$HERE/../license_audit.py
+laout=$(python3 -I "$LA" --self-test 2>&1)
+larc=$?
+lapass=$(printf '%s\n' "$laout" | grep -c '^ok ')
+if [ "$larc" -eq 0 ] && [ "$lapass" -gt 0 ] &&
+   printf '%s\n' "$laout" | grep -q '^self-test: passed'; then
+    ok "license_audit.py --self-test: $lapass fixture check(s) passed"
+else
+    bad "license_audit.py --self-test: exit $larc, $lapass ok line(s)"
+    printf '%s\n' "$laout" | sed 's/^/        | /'
+fi
+
+echo
+# ---- 25: licence audit, report mode, whole repository ----------------------
+#
+# Report mode (no --strict): the exit status is 0 whatever the findings, so a
+# non-zero exit is a crash. unknown-id (an identifier with no text in
+# LICENSES/) is the one finding that must stay at 0. missing-spdx is printed
+# only: whether those files get headers or allowlist rules is the owner's call.
+echo
+echo "== 25. license_audit.py in report mode over the repository"
+larep=$(python3 -I "$LA" 2>&1)
+larc=$?
+if [ "$larc" -ne 0 ]; then
+    bad "license audit: crashed (exit $larc)"
+    printf '%s\n' "$larep" | tail -5 | sed 's/^/        | /'
+else
+    launk=$(printf '%s\n' "$larep" | sed -n 's/^unknown-id: \([0-9][0-9]*\)$/\1/p')
+    lamiss=$(printf '%s\n' "$larep" | sed -n 's/^missing-spdx: \([0-9][0-9]*\)$/\1/p')
+    if [ -z "$launk" ] || [ -z "$lamiss" ]; then
+        bad "license audit: no unknown-id / missing-spdx line in the report"
+    elif [ "$launk" -ne 0 ]; then
+        bad "license audit: $launk unknown-id finding(s) (python3 -I tools/license_audit.py --list unknown-id)"
+    else
+        ok "license audit: unknown-id 0; missing-spdx $lamiss (information, strict mode is off)"
+    fi
 fi
 
 if [ "$fail" -eq 0 ]; then
