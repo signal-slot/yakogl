@@ -5118,6 +5118,34 @@ pub fn sink_definitions(scratch: &Arena<'_>, sel: &mut [SelInstr]) -> Result<usi
                 break;
             }
         }
+        /* And not past a SIBLING -- an instruction whose value the reader
+         * also reads -- when the move would keep two or more of this
+         * instruction's own sources alive across it. Such a move frees one
+         * value and holds two, and in a chain it compounds, because the sweep
+         * runs backwards and never returns to the sibling it left above:
+         * `acc = (i == k) ? c_k : acc` (lower.rs `select_among`, a run-time
+         * index into a constant array) moved each select past the next
+         * compare, so every compare ended up above every select. dEQP-GLES3
+         * large_constant_arrays.indexing.{float,vec4}_128_vertex then held
+         * 127 compare results at once, 35 and 34 temporaries, refused by
+         * `abi.rs` (Abi(LoadBalancingTempsUnmeasured)); in selection's order
+         * the chain needs 3 (tests/es3_gc_const_array.rs).
+         *
+         * Both conditions, MEASURED against each alone over the 809 shaders
+         * of tools/shaders and tests (GC7000, 2026-10-14; the old pass is the
+         * baseline). Stopping at every sibling: 2 Qt3D particle vertex
+         * shaders refused, 36 programs up a temporary. Refusing every move
+         * that holds two sources: 15 up, by as much as 2, because it stops the
+         * head of a chain that a later step of the sweep would have pulled
+         * down after it (a matrix column's `mad` chain next to its one use).
+         * Both: no verdict changes, 26 programs down, 4 up by one. */
+        if let Some(reader) = sel.get(limit).filter(|r| feeds(&sel[i], r)) {
+            if let Some(k) = (i + 1..limit).find(|&k| feeds(&sel[k], reader)) {
+                if sources_last_read_here(sel, i, limit) >= 2 {
+                    limit = k;
+                }
+            }
+        }
         let target = limit.saturating_sub(1);
         if target > i {
             sel[i..=target].rotate_left(1);
@@ -5125,6 +5153,42 @@ pub fn sink_definitions(scratch: &Arena<'_>, sel: &mut [SelInstr]) -> Result<usi
         }
     }
     Ok(moved)
+}
+
+/// How many registers `sel[i]` reads that nothing from `sel[after]` on
+/// reads: the sources that moving `sel[i]` down to just before `sel[after]`
+/// keeps alive longer.
+/// Virtual registers and input registers (which share the temporary file,
+/// see the top of this file), each counted once however many operands name
+/// it.
+fn sources_last_read_here(sel: &[SelInstr], i: usize, after: usize) -> usize {
+    let same = |a: &SelSrc, b: &SelSrc| match (a, b) {
+        (SelSrc::Virtual { v: x, .. }, SelSrc::Virtual { v: y, .. }) => x == y,
+        (SelSrc::Input { reg: x, .. }, SelSrc::Input { reg: y, .. }) => x == y,
+        _ => false,
+    };
+    let srcs = &sel[i].srcs;
+    let mut n = 0;
+    for (k, src) in srcs.iter().enumerate() {
+        let Some(src) = src else { continue };
+        if !matches!(src, SelSrc::Virtual { .. } | SelSrc::Input { .. }) {
+            continue;
+        }
+        if srcs[..k].iter().flatten().any(|e| same(e, src)) {
+            continue;
+        }
+        let read_later = sel.get(after..).unwrap_or(&[]).iter().any(|s| s.srcs.iter().flatten().any(|e| same(e, src)));
+        if !read_later {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// Does `reader` read the virtual register `def` writes?
+fn feeds(def: &SelInstr, reader: &SelInstr) -> bool {
+    let Some(SelDst::Virtual { v, .. }) = def.dst else { return false };
+    reader.srcs.iter().flatten().any(|src| matches!(src, SelSrc::Virtual { v: u, .. } if *u == v))
 }
 
 /// Does `later` write something `earlier` reads? Any file: a `Fixed`
