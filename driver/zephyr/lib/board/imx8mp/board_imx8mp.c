@@ -160,7 +160,8 @@ int board_show(const struct board_window *win)
 		 * after its first show): nothing to flip. set_fb would only
 		 * wait for the next VSYNC (the shadow load), a panel period a
 		 * frame whatever the swap interval; pacing is
-		 * yakogl_zephyr_wait_vblank()'s below. */
+		 * yakogl_zephyr_wait_vblank()'s below (not yet called on the
+		 * GC7000: until then nothing paces, A/B option to keep it). */
 		if (scan == s_scan && !IS_ENABLED(CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC)) {
 			return 0;
 		}
@@ -183,7 +184,9 @@ int board_show(const struct board_window *win)
 }
 
 /* The vertical-sync source for eglSwapInterval (src/osal/zephyr.c has the
- * weak default, -ENOTSUP). It latches the address the LCDIF already scans
+ * weak default, -ENOTSUP). Not called yet: the GC7000's OSAL,
+ * src/osal/zephyr_gc.c, has no .wait_vblank, so EGL sees -ENOTSUP and the
+ * linker drops this until that OSAL calls it. It latches the address the LCDIF already scans
  * again: set_fb sets the shadow-load bit, which the LCDIF clears at its next
  * VSYNC, and returns then. The picture does not change; it is the wait
  * board_show() did every frame before, now only for a swap interval of 1 or

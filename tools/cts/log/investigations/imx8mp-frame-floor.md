@@ -2,17 +2,27 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP: why glmark2 frames take "about 24 ms" (host investigation)
 
-**Status (2026-10-14): F1 and F2 applied, not yet run on a board.** The
-cause below is a prediction from the code; the board recipe has not run.
-F1: `board_show` returns 0 without `imx8mp_display_set_fb` when the LCDIF
-already scans the shown buffer
-(`driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-178`). F2: a strong
-`yakogl_zephyr_wait_vblank` waits for the next VSYNC
-(`board_imx8mp.c:185-226`). `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`
-(`driver/zephyr/lib/board/Kconfig:101-114`) brings back the old behaviour
-for an A/B run. See "Fixes applied" and "Board recipe", step 2 (the next
-i.MX8MP board session). The sections up to "Proposed fix" describe the
-code before F1 and F2, at `fdff1147`.
+**Status (2026-10-14): F1 and F2 applied, not yet run on a board. F2 is
+not reached yet.** The cause below is a prediction from the code; the board
+recipe has not run.
+
+- F1: `board_show` returns 0 without `imx8mp_display_set_fb` when the
+  LCDIF already scans the shown buffer
+  (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-179`).
+- F2: a strong `yakogl_zephyr_wait_vblank` waits for the next VSYNC
+  (`board_imx8mp.c:186-229`). Nothing calls it yet. The GC7000's OSAL,
+  `src/osal/zephyr_gc.c`, has no `.wait_vblank` (see "F2 is not reached
+  yet"). Until a change in `src/` wires it in, no swap waits on the
+  i.MX8MP. That is what glmark2 asks for, but Slint, the cluster and
+  gl_test run unpaced.
+- `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`
+  (`driver/zephyr/lib/board/Kconfig:101-113`) brings back the old
+  behaviour, for an A/B run or for a paced Slint or cluster image until
+  then.
+
+See "Fixes applied" and "Board recipe", step 2 (the next i.MX8MP board
+session). The sections up to "Proposed fix" describe the code before F1
+and F2, at `fdff1147`.
 
 Written 2026-10-08 from the code at `fdff1147`. Line
 numbers are that commit's. Host-only: this item reads code and earlier
@@ -304,7 +314,7 @@ record below measures.
 Board layer only. `src/osal/zephyr.c`, `driver/rust/**` and the samples are
 unchanged.
 
-- F1, `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-178`. `board_show`
+- F1, `driver/zephyr/lib/board/imx8mp/board_imx8mp.c:158-179`. `board_show`
   keeps the address the LCDIF scans in `s_scan` (`:40-44`). It is set by the
   first `imx8mp_display_on` and by every `imx8mp_display_set_fb` that
   latched. Once the display is on, a show of the buffer in `s_scan` returns
@@ -313,12 +323,14 @@ unchanged.
   The first show still calls `imx8mp_display_on`. A buffer the LCDIF does
   not scan yet still goes through `imx8mp_display_set_fb` and its wait. A
   failed latch leaves `s_scan` as it was, so the next show tries again.
-- F2, `board_imx8mp.c:185-226`. A strong `yakogl_zephyr_wait_vblank` takes
-  the place of the weak default (`src/osal/zephyr.c:603`). It calls
+- F2, `board_imx8mp.c:186-229`. A strong `yakogl_zephyr_wait_vblank`, the
+  i.MX8MP's answer to the hook whose weak default is `src/osal/zephyr.c:603`.
+  It is not called yet: see "F2 is not reached yet" below. It calls
   `imx8mp_display_set_fb(s_scan)`: it latches the address already scanned
   again, so the picture does not change. It returns when the LCDIF clears
   `SHADOW_LOAD_EN` at its next VSYNC. This is the wait `board_show` did
-  every frame before. Now it runs only as often as the swap interval asks.
+  every frame before. Once it is called, it runs only as often as the swap
+  interval asks.
   - Why not the interrupt (`yakogl_imx8mp_lcdif_wait_vblank`,
     `driver/drivers/display/display_yakogl_imx8mp_lcdif.c:178-188`): that
     device exists only with `CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST`. That
@@ -340,7 +352,7 @@ unchanged.
     the first swap comes before the first `board_show`), with the A/B
     option below, and when `set_fb` fails for another reason. EGL's loop
     stops at the first -ENOTSUP (`src/gl/egl.rs:2131-2135`).
-- A/B, `driver/zephyr/lib/board/Kconfig:101-114`:
+- A/B, `driver/zephyr/lib/board/Kconfig:101-113`:
   `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC` (default n). With `y`,
   `board_show` calls `imx8mp_display_set_fb` on every show, and
   `yakogl_zephyr_wait_vblank` answers -ENOTSUP. That is exactly the code
@@ -357,10 +369,55 @@ The effect on each application:
   cache's glmark2 checkout for this item. So no swap waits and no show
   waits: the frame runs at its GPU and CPU cost.
 - Slint and the cluster keep EGL's default interval 1
-  (`src/gl/egl.rs:276`): one VSYNC a swap, as before, now in
-  `eglSwapBuffers` instead of `board_show`.
-- gl_test (GT) also keeps interval 1. Its swaps now wait one period each,
-  as `board_show` did when it was called.
+  (`src/gl/egl.rs:276`). With F2 reached, that is one VSYNC a swap, as
+  before, now in `eglSwapBuffers` instead of `board_show`. Today (F2 not
+  reached), no swap waits: they run unpaced. Their output does not change,
+  because the window is the one scanned buffer either way. Only the rate
+  changes.
+- gl_test (GT) also keeps interval 1, so it is the same as Slint.
+
+### F2 is not reached yet (found in this item)
+
+The i.MX8MP image does not link `src/osal/zephyr.c`. The GC7000 build takes
+`src/osal/zephyr_gc.c` as its OSAL instead (`zephyr/CMakeLists.txt:86-90`).
+Its ops table, `osal_zephyr_ops` (`src/osal/zephyr_gc.c:558-577`), has no
+`.wait_vblank`, so `osal::wait_vblank` answers -ENOTSUP from the NULL op
+(`src/osal/mod.rs:469-474`). EGL's loop stops there. The link map of the GM
+image built below lists `.text.yakogl_zephyr_wait_vblank` of
+`libyakogl_board.a(board_imx8mp.c.obj)` under "Discarded input sections":
+nothing references it. The same holds for the code before F1. "The frame
+path" above credits the -ENOTSUP to zephyr.c's weak default; it actually
+comes from the missing op, with the same effect.
+
+Wiring it in is a change to `src/` and outside this item's scope. In
+`src/osal/zephyr_gc.c`, add a `yakogl_zephyr_wait_vblank` declaration (with
+a `__weak` -ENOTSUP default there, because zephyr.c is not linked) and
+`.wait_vblank = z_wait_vblank` calling it, as `src/osal/zephyr.c:603-612`
+does. Until then:
+
+- glmark2 gets what it asks for (interval 0, no wait). F1 alone removes the
+  floor.
+- Slint, the cluster and gl_test run unpaced on the default build. To keep
+  them paced as before, build those images with
+  `CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y`.
+
+## Host evidence (2026-10-14)
+
+- The Zephyr build of the common GM row from this change:
+  `tools/cts/common-images.sh imx8mp tools/cts/common-tree.txt build/ck-8f7d396d GM`
+  on the deps cache's shared workspace (Zephyr SDK 1.0.1). It printed `GM rc=0
+  sha256=5f0c0a911b7f22c4c7afda8a5b8d239cd4d53f98288479f55ce9977a16a56a18
+  build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=8f7d396d`. Its `.config`
+  has `CONFIG_SAFEUI_DISPLAY_IMX8MP=y`, `# CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST
+  is not set` and `# CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC is not
+  set`. The later commits change only comments and this doc.
+- The A/B arm compiled: the build's own compile command for
+  `board_imx8mp.c` (aarch64-zephyr-elf-gcc, from `compile_commands.json`),
+  run again with `-fsyntax-only -Wall -Wextra -Wno-unused-parameter`, once
+  as built and once with `-DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=1`.
+  Both rc=0 with no diagnostics. A full image of the A/B arm was not built
+  here: the task's sandbox refused the extra west/cmake command lines.
+  Step 2 builds it.
 
 ## The frame-breakdown record (design, not built)
 
@@ -513,18 +570,25 @@ Expected:
 | GM-build | second word above `fc3f003a` | A light model scene above 58 FPS. |
 | GM | `verdict=done`, second word above `fc3f003a`, `scenes ran 33, failed 0` in the tally | The default list. The score is no longer capped near 58, and is well above the 43 of `imx8mp-common-int.md`. Heavy scenes still run at their GPU cost; see candidate 2. |
 | GM-waits | second word near `fc3f002b` (43; 37-46 earlier) | The old behaviour from the same tree, which confirms the A/B. |
-| SO, SV | `verdict=done result=record:PROBES record=594b0601,08420862,00210842,c5920883` | Probes as before: interval 1, one VSYNC a swap (F2), so they are still paced at 58.76 Hz. |
-| CL | `verdict=done result=record:PROBES record=594b0601,10c410c4,1905f7bf,b1076d5f` | Probes as before; paced the same way. |
+| SO, SV | `verdict=done result=record:PROBES record=594b0601,08420862,00210842,c5920883` | Probes as before. Unpaced while F2 is not reached (no swap waits); paced at 58.76 Hz once `zephyr_gc.c` calls the hook. |
+| CL | `verdict=done result=record:PROBES record=594b0601,10c410c4,1905f7bf,b1076d5f` | Probes as before; paced as SO is. |
 
 What the records cannot show: Slint and the cluster write no frame count,
-and the i.MX8MP has no console, so their pacing at the display rate is not
-in a record. Check it at the panel: the motion in SO, SV and CL has the same
-speed as in the earlier session, and there is no tearing. If a probe record
-differs from the table, or the motion runs fast, F2 is not pacing. Then
-rerun SO with `-DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y` to compare.
+and the i.MX8MP has no console, so their pacing is not in a record. A
+person at the panel can check it.
+
+- While F2 is not reached, SO, SV and CL from the default build swap
+  without waiting. The probes must still pass, with the same records. If a
+  probe differs from the table, the unpaced present changed what is
+  scanned: rerun that row built with the A/B option (`gm`-style, or
+  `west build ... -DCONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC=y` on the
+  slint or cluster sample) and compare.
+- Once `zephyr_gc.c` calls `yakogl_zephyr_wait_vblank`, the motion in SO,
+  SV and CL should have the speed of the earlier session, without tearing.
+  Repeat these three rows then.
+
 A GT run of the common set (`tools/cts/common-images.sh ... GT`) should
-still fail only at case 44. gl_test keeps interval 1, so its swaps wait as
-`board_show` did.
+still fail only at case 44. gl_test's result does not depend on pacing.
 
 Reject F1 if: GM-clear is at 58 or below while GM-clear-waits is also at 58.
 The frame is then still locked, and something other than `board_show` waits.
