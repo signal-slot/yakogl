@@ -308,11 +308,19 @@ pub fn build_fragment_for<'a>(
     let mut listed: AVec<'a, ir::IoDecl<'a>> = AVec::new();
     for io in m.inputs.iter().filter(|io| io.kind == IoKind::Varying) {
         if sel.inputs.iter().any(|(slot, c)| *slot == IoSlot::Varying(io.location) && c.iter().any(Option::is_some)) {
+<<<<<<< HEAD
             /* Smooth, iterated; centroid, iterated at the centroid;
              * flat, read from its plane's constant
              * (`fragment::Iterated::flat`). Noperspective is not
              * transcribed. */
             if !matches!(io.interp, ir::INTERP_SMOOTH | ir::INTERP_CENTROID | ir::INTERP_FLAT) {
+=======
+            /* Smooth, iterated (`centroid` too: one sample, so the centroid
+             * is the pixel centre); flat, read from its plane's constant
+             * (`fragment::Iterated::flat`). Noperspective is not
+             * transcribed. */
+            if !matches!(io.interp, ir::INTERP_SMOOTH | ir::INTERP_FLAT | ir::INTERP_CENTROID) {
+>>>>>>> 8ac054e9378391b0504e1d6bad15fa2a5dbf67d8
                 return Err(ChainError::FragmentInputsNotBuilt);
             }
             listed.push(a, *io).map_err(oom)?;
