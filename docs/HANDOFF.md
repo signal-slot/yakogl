@@ -1032,15 +1032,17 @@ es3-vertex).
      - `tools/cts/RESULTS.md`, i.MX8MP common-set cells: `GM score 43, 33 ran,
        0 failed, 0 unsupported; SO pass (crc16 c592); SV pass (crc16 c592); CL
        pass (crc16 b107); GT 48 of 49 run, case 16 skipped, failing case 44
-       only (cases 2, 10, 171 passed)`, on `b568940` (2026-10-14).
+       only (cases 2 and 10 passed; 171 is not in the default list and did
+       not run)`, on `b568940` (2026-10-14).
      - `tools/cts/STATUS.md` (Japanese): `i.MX8MP 共通セット (b568940,
        2026-10-14, records/imx8mp/common-b5689400): GM スコア 43 (33 シーン実行、失敗 0)、SO・SV・CL は
        pass (crc16 c592 / c592 / b107)、GT は 49 件中 48 件 pass (case 16 は skip、失敗は case 44
-       のみ。case 2・10・171 は pass)。`
+       のみ。case 2・10 は pass。171 は既定のリストに無く未実行)。`
      - `README.md` Status table, i.MX8MP row: `GM 43 / SO pass / SV pass / CL
        pass / GT 48 of 49 run (case 16 skipped, case 44 fails)` (`b568940`).
-   - Case 171 (`viewwin`) passed at `b568940`; it can leave the queue (confirm
-     once more on the next GT run, since 2 and 10 are random). Cases 2 and 10
+   - Case 171 (`viewwin`) has NOT run on the i.MX8MP: the GT image runs the
+     default list, which does not hold 171 (corrected 2026-10-15, issue #15).
+     It needs its own run: gc_gl_test with `CONFIG_GL_TEST_CASES="171"`. Cases 2 and 10
      pass or fail at random (`docs/investigations/gc-case10-flake.md`); they
      passed in this one run, which settles nothing.
    - glmark2 terrain and refract on this board are still not judged per scene

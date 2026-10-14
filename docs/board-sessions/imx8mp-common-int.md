@@ -6,7 +6,7 @@ Status: **GM, SO, SV, CL and GT all ran on the board from integration tip
 `b568940021f0b097fb6dce01cd211ca0e305aac3`.** GM, SO, SV and CL pass (CL for the
 first time on an integration image since `f013dbb`). GT fails at case 44 only:
 47 of 48 cases pass in the set's terms (48 of 49 run, case 16 skipped), and
-cases 2, 10 and 171 (viewwin) all passed. Board: Verdin i.MX8M Plus (GC7000UL),
+cases 2 and 10 passed (case 171 is not in this list and did not run). Board: Verdin i.MX8M Plus (GC7000UL),
 boot `uboot-mmc`. Date: 2026-10-14 (08:58-09:18 local). The run's tools were at
 `941c91e`, which is `b568940` plus this session's docs-only commit; the images
 are built from `b568940` (their build ids say so).
@@ -96,7 +96,10 @@ needs a picture or a console, neither of which this board gives here.
 - Cases 10 and 2: **passed** in this run. Because the record has no second
   failure, no other case failed. They fail at random
   (`docs/investigations/gc-case10-flake.md`), so one pass settles nothing.
-- Case 171 (viewwin): **passed**.
+- Case 171 (viewwin): **not run**. The GT image runs the default list
+  (`order` in `driver/tools/pvrlab/gl_test.c`, 50 cases), which does not hold
+  171, and the image sets no `CONFIG_GL_TEST_CASES`; 49 run + 1 skipped = 50.
+  (Corrected 2026-10-15; this line said "passed", issue #15.)
 - I did not rerun GT: the failure is case 44, not 16, 10 or 2.
 
 ## Comparison with the 39bb67d session
@@ -110,8 +113,8 @@ needs a picture or a console, neither of which this board gives here.
 | GT | failed at case 16, 46 of 48 | failed at case 44 only, 48 of 49 run, 16 skipped | **yes**: case 16 no longer fails; case 44 is the failure now |
 
 Regressions: none. Changes: GT's case 16 no longer fails (skipped), and the
-record now lists the failures in full (case 44 only), so 10, 2 and 171 are
-known to pass. The case 44 failure is old (`docs/HANDOFF.md`, `tools/cts/RESULTS.md`),
+record now lists the failures in full (case 44 only), so 10 and 2 are
+known to pass in this run (171 did not run: it is not in the list). The case 44 failure is old (`docs/HANDOFF.md`, `tools/cts/RESULTS.md`),
 not new.
 
 ## To rerun it
