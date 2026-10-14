@@ -211,20 +211,78 @@ static void log_dss_stats(const char *when, int64_t t_ms)
 		"go_timeouts %u go_waits %u safety_flips %u app %d",
 		when, t_ms, st.vsyncs, st.app_frames, st.underflows, st.sync_lost,
 		st.go_timeouts, st.go_waits, st.safety_flips, st.app_plane_enabled);
+#ifdef CONFIG_PVR_SAMPLE_DISPLAY_DUMP
+	pvr_sample_display_dump(when);
+#endif
 }
 #endif
 
-int pvr_sample_finish(int rc)
+#if defined(CONFIG_PVR_SAMPLE_SHOW_ON_DSS) && defined(CONFIG_PVR_SAMPLE_DISPLAY_FILL)
+#if CONFIG_PVR_SAMPLE_DISPLAY_FILL != 0
+#define PVR_SAMPLE_FILL 1
+#endif
+#endif
+
+#ifdef PVR_SAMPLE_FILL
+/* The known-colour test (CONFIG_PVR_SAMPLE_DISPLAY_FILL): the safety layer,
+ * which the DSS blends above the application plane, is filled by the CPU
+ * with one opaque colour, flipped in, and the port is enabled. The panel
+ * must show that colour whatever the application plane carries; if it
+ * stays black the fault is in the DSS/DSI/bridge path, not in the
+ * application plane. The fill goes into the back buffer and takes effect
+ * at the next vsync (at once while the port is still off). */
+static void fill_safety_layer(void)
 {
+	const struct device *dss = DEVICE_DT_GET(DT_NODELABEL(dss1));
+	uint32_t w = 0, h = 0, stride = 0;
+	uint32_t *fb;
+
+	if (!device_is_ready(dss)) {
+		return;
+	}
+	fb = am62p_dss_safety_buffer(dss, &w, &h, &stride);
+	if (fb == NULL || w == 0 || h == 0) {
+		return;
+	}
+	for (uint32_t y = 0; y < h; y++) {
+		uint32_t *row = (uint32_t *)((uint8_t *)fb + (size_t)y * stride);
+
+		for (uint32_t x = 0; x < w; x++) {
+			row[x] = CONFIG_PVR_SAMPLE_DISPLAY_FILL;
+		}
+	}
+	pvr_sample_flush_dcache(fb, (size_t)h * stride);
+	am62p_dss_safety_flip(dss);
+	am62p_dss_output_enable(dss, true);
+	LOG_INF("safety layer %ux%u filled with 0x%08x, port on", w, h,
+		(uint32_t)CONFIG_PVR_SAMPLE_DISPLAY_FILL);
+}
+#endif
+
+void pvr_sample_before_hold(void)
+{
+#ifdef PVR_SAMPLE_FILL
+	fill_safety_layer();
+#endif
 #ifdef CONFIG_PVR_SAMPLE_SHOW_ON_DSS
 	log_dss_stats("before hold", k_uptime_get());
 #endif
-	if (CONFIG_PVR_SAMPLE_HOLD_SECONDS > 0) {
-		k_sleep(K_SECONDS(CONFIG_PVR_SAMPLE_HOLD_SECONDS));
-	}
+}
+
+void pvr_sample_after_hold(void)
+{
 #ifdef CONFIG_PVR_SAMPLE_SHOW_ON_DSS
 	log_dss_stats("after hold", k_uptime_get());
 #endif
+}
+
+int pvr_sample_finish(int rc)
+{
+	pvr_sample_before_hold();
+	if (CONFIG_PVR_SAMPLE_HOLD_SECONDS > 0) {
+		k_sleep(K_SECONDS(CONFIG_PVR_SAMPLE_HOLD_SECONDS));
+	}
+	pvr_sample_after_hold();
 	if (IS_ENABLED(CONFIG_PVR_SAMPLE_REBOOT)) {
 		LOG_INF("sample done (%d): resetting the SoC", rc);
 		sys_reboot(SYS_REBOOT_COLD);
