@@ -1,0 +1,15 @@
+# The dEQP-GLES2 cases the npot change (2673197d) moves Pass -> NotSupported on every board
+texture.completeness.2d.npot_all_repeat
+texture.completeness.2d.npot_mirrored_repeat
+texture.completeness.2d.npot_s_repeat
+texture.completeness.2d.npot_t_repeat
+texture.completeness.2d.repeat_width_npot
+texture.completeness.2d.repeat_height_npot
+texture.completeness.cube.npot_all_repeat
+texture.completeness.cube.npot_mirrored_repeat
+texture.completeness.cube.npot_s_repeat
+texture.completeness.cube.npot_t_repeat
+negative_api.texture.generatemipmap_npot_wdt_hgt
+# may stay NotSupported or pass
+texture.completeness.2d.npot_size*
+texture.completeness.cube.npot_size_level_*
