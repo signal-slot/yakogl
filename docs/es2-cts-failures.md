@@ -683,9 +683,15 @@ CLAMP_TO_EDGE and do not read the extension list.
 
 One test per case, named after it with the dots as underscores (for
 example `texture_completeness_2d_npot_t_repeat`), each on a fresh context
-and on both back end shapes (PowerVR, native-layered). Each asserts
-`GL_NO_ERROR` after every call and the bind the back end receives:
-complete (blue) or incomplete (black). Run with
+and on the three back end shapes the host can build: a stand-in back end
+with the capability flags of each GPU's table (the PowerVR's
+`yakogl_backend_pvr`; the GC7000's `yakogl_backend_vivante`, layered,
+`mip_level_align` 64, BGRA targets; the V3D's `yakogl_backend_v3d`,
+layered, align 0, ETC1 decoded at upload). The texture core lays an NPOT
+chain out by those flags (`npot_mip_chains`, `chain_layout_npot`), so each
+shape takes its own layout path. Each test asserts `GL_NO_ERROR` after
+every call and the bind the back end receives: complete (blue) or
+incomplete (black). Run with
 `cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_npot`
 (and without `report-es2`): 18 passed, 0 ignored. No defect was found, so
 no test is `#[ignore]`d.
@@ -744,8 +750,8 @@ no test is `#[ignore]`d.
 - Closed: `tests/es2_npot.rs` replays the 18 cases on the host, one test
   per case, in the CTS's order and at its sizes (`Incomplete2DSizeCase` at
   255x255, the cube size and wrap cases with the texture bound to
-  `GL_TEXTURE_2D`), on the PowerVR shape and the layered (GC7000, V3D)
-  shape. It asserts `GL_NO_ERROR` after every call and the completeness and
+  `GL_TEXTURE_2D`), on the PowerVR, GC7000 and V3D shapes (H.3.1). It
+  asserts `GL_NO_ERROR` after every call and the completeness and
   sampling of the bind the back end receives, not pixels (the stand-in back
   end draws nothing). It needs `shaderc-online`.
 - Follow-up, stale NPOT comments (`src/` is outside the test item; other
@@ -767,8 +773,8 @@ no test is `#[ignore]`d.
 
 One test per case in `tests/es2_npot.rs`. The test name is the case name
 after `dEQP-GLES2.functional.`, with the dots as underscores. Every test
-runs on a fresh context on the PowerVR shape and on the layered (GC7000,
-V3D) shape. After every GL call it asserts `GL_NO_ERROR`. In a `report-es2`
+runs on a fresh context on the PowerVR, the GC7000 and the V3D shape
+(H.3.1). After every GL call it asserts `GL_NO_ERROR`. In a `report-es2`
 build it also asserts that `GL_OES_texture_npot` is in `GL_EXTENSIONS`.
 "Complete" means the bind the back end receives has `incomplete == 0` (the
 CTS's blue). "Incomplete" means `incomplete == 1` (the CTS's black).
@@ -785,7 +791,7 @@ CTS's blue). "Incomplete" means `incomplete == 1` (the CTS's black).
 | `texture.completeness.cube.npot_s_repeat` | `texture_completeness_cube_npot_s_repeat` | the same |
 | `texture.completeness.cube.npot_all_repeat` | `texture_completeness_cube_npot_all_repeat` | the same |
 | `texture.completeness.cube.npot_mirrored_repeat` | `texture_completeness_cube_npot_mirrored_repeat` | the same |
-| `texture.completeness.2d.npot_size` | `texture_completeness_2d_npot_size` | 255x255, levels 255 down to 1: complete, a nearest-level mip filter, REPEAT; 8 levels on the layered shape |
+| `texture.completeness.2d.npot_size` | `texture_completeness_2d_npot_size` | 255x255, levels 255 down to 1: complete, a nearest-level mip filter, REPEAT; 8 levels on the GC7000 and V3D shapes |
 | `texture.completeness.2d.npot_size_level_0` | `texture_completeness_2d_npot_size_level_0` | 256 chain with a 255x255 level 0: incomplete |
 | `texture.completeness.2d.npot_size_level_1` | `texture_completeness_2d_npot_size_level_1` | 256 chain with a 127x127 level 1: incomplete |
 | `texture.completeness.cube.npot_size_level_0` | `texture_completeness_cube_npot_size_level_0` | 64 chain, level 0 63x63 on all six faces: incomplete |
@@ -796,8 +802,8 @@ CTS's blue). "Incomplete" means `incomplete == 1` (the CTS's black).
 
 No test is `#[ignore]`d. The file is
 `#![cfg(all(feature = "host-test", feature = "shaderc-online"))]`, because
-the quad's programs are not in the offline shader table. Runs on `9390731`
-(2026-10-12), each `18 passed; 0 failed; 0 ignored`:
+the quad's programs are not in the offline shader table. Runs on `a63fcc5`
+(2026-10-14, three shapes per test), each `18 passed; 0 failed; 0 ignored`:
 
 ```text
 cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_npot
@@ -805,3 +811,27 @@ cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online
 cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test es2_npot
 cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es2_npot
 ```
+
+What the host cannot show, and the hook it would need. The CTS compares
+pixels; the host asserts the bind's `incomplete` flag, which is the GL
+core's decision the colour follows from. The colour itself is the back
+end's: the PowerVR TPU's level arithmetic over an NPOT chain (a 63x63 level
+2 at a 64-texel pitch in `2d.npot_size`), the GC7000's REPEAT on an NPOT
+size, the V3D's tiled copy of each level. A host test of that would need a
+back end rig that samples (`testutil::TestGl`, the PowerVR, Vivante and V3D
+`backend_tests` rigs), and those are `cfg(test)` of the library: a file
+under `tests/` reaches only the public `gl*` entry points, `g_backend` and
+`g_shaderc`. Making such a rig public is a `src/` change, outside this
+item.
+
+Left for the board, per GPU (the pass criterion is all 18 Pass, none
+NotSupported):
+
+- AM62P: `completeness.2d.npot_size` is the one case that samples a
+  mipmapped NPOT 2D texture through the TPU's own level addressing; no board
+  run has measured that addressing on an NPOT size. H.4 shows no failure by
+  name on `32778b57`; a rerun on the tip confirms it.
+- i.MX8MP: the REPEAT and MIRRORED_REPEAT cases on an NPOT size
+  (`NON_POWER_OF_TWO` minor feature, H.1 caveat). H.4 shows 40/40 Pass on
+  `334d4e65` and `32778b57`.
+- Pi 4: one run of the 18 on the tip (H.4: none failing on `a27d69c0`).

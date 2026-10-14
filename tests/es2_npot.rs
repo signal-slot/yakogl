@@ -27,10 +27,14 @@
 //! chain are asserted on the bind too, so a sampler that read the wrong mode
 //! or level count would show.
 //!
-//! Each case runs on two back end shapes, because the core lays an NPOT chain
-//! out differently (`npot_mip_chains`, src/gl/texture.rs): the PowerVR's
-//! (level 0 handed to the TPU, 2D chain as its power-of-two extent) and the
-//! native-layered one of the GC7000 and the V3D.
+//! Each case runs on the three back end shapes the host can build: a stand-in
+//! back end with the capability flags of each GPU's table (the PowerVR's
+//! `yakogl_backend_pvr`, the GC7000's `yakogl_backend_vivante`, the V3D's
+//! `yakogl_backend_v3d`), because the core lays an NPOT chain out by those
+//! flags (`npot_mip_chains`, `chain_layout_npot`, src/gl/texture.rs): level 0
+//! handed to the TPU and the 2D chain as its power-of-two extent on the
+//! PowerVR, a layered chain with every level on a 64-byte boundary on the
+//! GC7000, a layered chain at each level's own pitch on the V3D.
 //!
 //! What this cannot see: pixels. The stand-in back end draws nothing, so a
 //! GPU's own NPOT REPEAT or mip addressing (doc section 3.1, "Risk" columns)
@@ -50,7 +54,10 @@
 use core::ffi::{c_char, c_void, CStr};
 use std::ffi::CString;
 use std::sync::Mutex;
-use yakogl::backend::{GlesDraw, GlesHeap, YakoglBackend, GLES_TEXTYPE_CUBE};
+use yakogl::backend::{
+    gles_attribf_bit, GlesDraw, GlesHeap, YakoglBackend, GLES_ATTRIBF_BYTE, GLES_ATTRIBF_FIXED, GLES_ATTRIBF_FLOAT32,
+    GLES_ATTRIBF_SHORT, GLES_ATTRIBF_UBYTE, GLES_ATTRIBF_USHORT, GLES_TEXTYPE_CUBE,
+};
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
 use yakogl::gl::program::*;
@@ -124,16 +131,77 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     0
 }
 
-const fn backend(name: &'static CStr, native_layered: bool) -> YakoglBackend {
+/// The capability flags of one GPU's back end table, the ones the GL core
+/// reads (`backend::*` in src/backend.rs); the stand-in takes them and the
+/// hooks of a back end that holds nothing.
+struct Caps {
+    native_attrib_formats: u32,
+    rt_rgba8888_is_bgra: bool,
+    mip_level_align: u32,
+    compressed_blocks_in_rows: bool,
+    native_layered_textures: bool,
+    front_facing_shader_variant: bool,
+    etc1_decoded_at_upload: bool,
+    max_instance_divisor: u32,
+    samples_texel_copies: bool,
+}
+
+/// `yakogl_backend_pvr` (src/pvr/backend.rs): no native layers, no level
+/// alignment, the TPU walks the chain from level 0.
+const PVR_CAPS: Caps = Caps {
+    native_attrib_formats: 0,
+    rt_rgba8888_is_bgra: false,
+    mip_level_align: 0,
+    compressed_blocks_in_rows: false,
+    native_layered_textures: false,
+    front_facing_shader_variant: false,
+    etc1_decoded_at_upload: false,
+    max_instance_divisor: 1,
+    samples_texel_copies: false,
+};
+
+/// `yakogl_backend_vivante` (src/vivante/backend.rs): layered textures, each
+/// level named by the descriptor from a 64-byte boundary, BGRA targets.
+const GC7000_CAPS: Caps = Caps {
+    native_attrib_formats: gles_attribf_bit(GLES_ATTRIBF_BYTE)
+        | gles_attribf_bit(GLES_ATTRIBF_UBYTE)
+        | gles_attribf_bit(GLES_ATTRIBF_SHORT)
+        | gles_attribf_bit(GLES_ATTRIBF_USHORT)
+        | gles_attribf_bit(GLES_ATTRIBF_FIXED),
+    rt_rgba8888_is_bgra: true,
+    mip_level_align: 64,
+    compressed_blocks_in_rows: true,
+    native_layered_textures: true,
+    front_facing_shader_variant: true,
+    etc1_decoded_at_upload: false,
+    max_instance_divisor: 1,
+    samples_texel_copies: false,
+};
+
+/// `yakogl_backend_v3d` (src/v3d/backend.rs): layered textures at each
+/// level's own pitch, ETC1 decoded at upload, the TMU samples tiled copies.
+const V3D_CAPS: Caps = Caps {
+    native_attrib_formats: gles_attribf_bit(GLES_ATTRIBF_FLOAT32),
+    rt_rgba8888_is_bgra: false,
+    mip_level_align: 0,
+    compressed_blocks_in_rows: false,
+    native_layered_textures: true,
+    front_facing_shader_variant: false,
+    etc1_decoded_at_upload: true,
+    max_instance_divisor: 0xffff,
+    samples_texel_copies: true,
+};
+
+const fn backend(name: &'static CStr, caps: Caps) -> YakoglBackend {
     YakoglBackend {
         name: name.as_ptr() as *const c_char,
-        native_attrib_formats: 0,
-        rt_rgba8888_is_bgra: false,
-        mip_level_align: 0,
-        compressed_blocks_in_rows: false,
-        native_layered_textures: native_layered,
-        front_facing_shader_variant: false,
-        etc1_decoded_at_upload: false,
+        native_attrib_formats: caps.native_attrib_formats,
+        rt_rgba8888_is_bgra: caps.rt_rgba8888_is_bgra,
+        mip_level_align: caps.mip_level_align,
+        compressed_blocks_in_rows: caps.compressed_blocks_in_rows,
+        native_layered_textures: caps.native_layered_textures,
+        front_facing_shader_variant: caps.front_facing_shader_variant,
+        etc1_decoded_at_upload: caps.etc1_decoded_at_upload,
         init: Some(b_init),
         shutdown: None,
         draw: Some(b_draw),
@@ -147,9 +215,9 @@ const fn backend(name: &'static CStr, native_layered: bool) -> YakoglBackend {
         texture_released: None,
         surface_swapped: None,
         texture_uploaded: None,
-        max_instance_divisor: 1,
+        max_instance_divisor: caps.max_instance_divisor,
         wait_kick: None,
-        samples_texel_copies: false,
+        samples_texel_copies: caps.samples_texel_copies,
         attachment_gone: None,
         depth_resolve: None,
         query_begin: None,
@@ -159,9 +227,16 @@ const fn backend(name: &'static CStr, native_layered: bool) -> YakoglBackend {
 }
 
 /// The PowerVR's shape: the TPU is handed level 0 and finds the rest itself.
-static PVR_SHAPE: YakoglBackend = backend(c"npot stand-in (PowerVR shape)", false);
-/// The GC7000's and the V3D's: the back end walks a layered texture itself.
-static NATIVE_SHAPE: YakoglBackend = backend(c"npot stand-in (native layered)", true);
+static PVR_SHAPE: YakoglBackend = backend(c"npot stand-in (PowerVR shape)", PVR_CAPS);
+/// The GC7000's: a layered chain, every level on a 64-byte boundary.
+static GC7000_SHAPE: YakoglBackend = backend(c"npot stand-in (GC7000 shape)", GC7000_CAPS);
+/// The V3D's: a layered chain, each level at its own pitch.
+static V3D_SHAPE: YakoglBackend = backend(c"npot stand-in (V3D shape)", V3D_CAPS);
+
+/// The shapes a case runs on: (name, whether the back end holds the chain
+/// itself (`native_layered_textures`), the table).
+const SHAPES: [(&str, bool, &YakoglBackend); 3] =
+    [("powervr", false, &PVR_SHAPE), ("gc7000", true, &GC7000_SHAPE), ("v3d", true, &V3D_SHAPE)];
 
 unsafe extern "C" fn o_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
     let mem = Box::leak(vec![0u64; size.div_ceil(8)].into_boxed_slice());
@@ -205,9 +280,10 @@ static SERIAL: Mutex<()> = Mutex::new(());
 
 /// Run `case` on a fresh context (so the default texture objects are
 /// pristine, as at the start of a CTS case group) on each back end shape.
+/// `case` gets the shape's name and whether it holds the chain itself.
 fn on_each_shape(case: impl Fn(&str, bool)) {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    for (name, native, be) in [("powervr", false, &PVR_SHAPE), ("native-layered", true, &NATIVE_SHAPE)] {
+    for (name, native, be) in SHAPES {
         // SAFETY: the guard serialises the tests; the tables are statics.
         let ctx = unsafe {
             osal_set_ops(&OSAL);
