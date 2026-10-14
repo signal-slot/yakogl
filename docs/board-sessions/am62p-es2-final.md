@@ -183,3 +183,13 @@ Then check the NotSupported list against section C of
 
 Assumptions: the farm notes say main_uart0 is the bridge's port after the leased one; the main_uart0 port is the bridge's port 33, as in final-r2 and
 am62p-es2-r1c; no port was used successfully in this attempt.
+
+## Retry on the same worker (2026-10-14)
+
+The item was resumed after the farm reported the node-local values as set.
+The worker was the same one: the board's ssh name still did not resolve
+("Name or service not known"), and the leased console tool still showed
+`connected` with 0 bytes buffered. No `board.sh` verdict line exists for
+images 10-17 or ms4, and no 17,165-case total; the section above stands.
+The item has to be run on a node that reaches the board, with the console on
+port 33 (main_uart0).
