@@ -260,16 +260,74 @@ fn align_up(v: u32, a: u32) -> u32 {
 /// It writes 32-bit pixels in B,G,R,A order, which is exactly the window
 /// surface's XRGB8888; `YakoglBackend::rt_rgba8888_is_bgra` is what tells the
 /// GL core to swap an RGBA8888 target back on read-back.
-fn pe_color_format(surf_format: u8) -> (u32, bool) {
+///
+/// The ES 3.0 integer surfaces ([`GC_INTEGER_RT_FORMATS`]) take the PE's
+/// integer formats (rnndb `PE_FORMAT`, `hw/state_3d.xml.h:104-111`), one for
+/// both signs: the output mode says signed or unsigned
+/// (`shader.rs` `ps_color_output_mode`). Their names list the channels from
+/// the high bits down, so R is the low byte, half or word: the R,G,B,A order
+/// in memory GL's packed integer layout is (`backend::gles_surf_int_layout`),
+/// and no swap on read-back. The 32-bit-channel ones (R32, RG32) have no
+/// integer format; they take R32F and G32R32F, whose 32-bit channels the
+/// UIF32 output mode stores as the register's bits (`COLOR_OUTPUT_MODE_UIF32`,
+/// `hw/state_3d.xml.h:132`, "UI or F32"). RGBA32I/UI is not here: the enum
+/// has no 128-bit format at all (`hw/state_3d.xml.h:89-113`; etnaviv renders
+/// one as two planes, which takes half of its render targets,
+/// VIVANTE_NOTES.md "Draw buffers"), so it is not in
+/// [`GC_INTEGER_RT_FORMATS`] and never arrives (`draw_one` refuses it too,
+/// and the held-back 64-bit ones).
+pub fn pe_color_format(surf_format: u8) -> (u32, bool) {
     match surf_format {
         GLES_SURF_RGB565 => (GC_PE_FORMAT_R5G6B5, false),
         GLES_SURF_XRGB8888 => (GC_PE_FORMAT_X8R8G8B8, false),
         GLES_SURF_RGBA16F => (GC_PE_FORMAT_A16B16G16R16F, true),
         GLES_SURF_R16F => (GC_PE_FORMAT_R16F, true),
         GLES_SURF_R32F => (GC_PE_FORMAT_R32F, true),
+        GLES_SURF_R8I | GLES_SURF_R8UI => (GC_PE_FORMAT_R8I, true),
+        GLES_SURF_RG8I | GLES_SURF_RG8UI => (GC_PE_FORMAT_G8R8I, true),
+        GLES_SURF_RGBA8I | GLES_SURF_RGBA8UI => (GC_PE_FORMAT_A8B8G8R8I, true),
+        GLES_SURF_R16I | GLES_SURF_R16UI => (GC_PE_FORMAT_R16I, true),
+        GLES_SURF_RG16I | GLES_SURF_RG16UI => (GC_PE_FORMAT_G16R16I, true),
+        GLES_SURF_RGBA16I | GLES_SURF_RGBA16UI => (GC_PE_FORMAT_A16B16G16R16I, true),
+        GLES_SURF_R32I | GLES_SURF_R32UI => (GC_PE_FORMAT_R32F, true),
+        GLES_SURF_RG32I | GLES_SURF_RG32UI => (GC_PE_FORMAT_G32R32F, true),
+        GLES_SURF_RGB10_A2UI => (GC_PE_FORMAT_A2B10G10R10UI, true),
         _ => (GC_PE_FORMAT_A8R8G8B8, false),
     }
 }
+
+/// The integer colour surfaces this back end renders into (bit `format -
+/// GLES_SURF_INT_FIRST`, `backend::INTEGER_RT_FORMATS`): the thirteen of 1, 2
+/// and 4 bytes a pixel. The GL core refuses a draw or clear into the other
+/// six by name:
+///
+/// - RGBA32I, RGBA32UI: the pixel engine has no format for them
+///   ([`pe_color_format`]), a hardware limit;
+/// - RGBA16I, RGBA16UI, RG32I, RG32UI, 8 bytes a pixel: held back, not a
+///   hardware limit. The PE's 64-bit LINEAR write is the open question of
+///   gl_test case 44 (an RGBA16F target stores pixel x's colour two texels
+///   off, VIVANTE_NOTES.md "RGBA16F targets"), and these would take the same
+///   path. Their PE formats and output modes are in place; [`GC_INT_RT_64BPP`]
+///   goes in once case 44's layout probe says the 64-bit target is right.
+pub const GC_INTEGER_RT_FORMATS: u32 = {
+    let all = (1u32 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1;
+    all & !GC_INT_RT_128BPP & !GC_INT_RT_64BPP
+};
+
+const fn int_rt_bit(format: u8) -> u32 {
+    1 << (format - GLES_SURF_INT_FIRST)
+}
+
+/// The integer surfaces the PE has no format for (bits as
+/// [`GC_INTEGER_RT_FORMATS`]).
+pub const GC_INT_RT_128BPP: u32 = int_rt_bit(GLES_SURF_RGBA32I) | int_rt_bit(GLES_SURF_RGBA32UI);
+
+/// The 64-bit integer surfaces, mapped but held back (see
+/// [`GC_INTEGER_RT_FORMATS`]).
+pub const GC_INT_RT_64BPP: u32 = int_rt_bit(GLES_SURF_RGBA16I)
+    | int_rt_bit(GLES_SURF_RGBA16UI)
+    | int_rt_bit(GLES_SURF_RG32I)
+    | int_rt_bit(GLES_SURF_RG32UI);
 
 /// The depth/stencil buffer. The pixel engine reads and writes it tiled, so
 /// only it ever touches these bytes; the backend just has to give it enough
@@ -1544,14 +1602,17 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         let t = gl.targets[slot];
         let (fmt, _) = pe_color_format(t.format);
         let rt_pitch = target_pitch(t.w, gles_surf_bytes_per_pixel(t.format));
+        /* an integer draw buffer is never blended (ES 3.0 4.1.8), whatever
+         * the float or unorm ones beside it are */
+        let rt_blend = blend && !gles_surf_is_integer(t.format);
         c.state(pe_rt_addr_8_pipe(rt as u32, 0), t.gpu as u32);
         c.state(pe_rt_config_8(rt as u32), rt_config_stride(rt_pitch) | rt_config_format(fmt));
         c.state(
             pe_halti5_rt_colormask(rt as u32),
             pe_halti5_rt_colormask_components(rt_mask(slot))
-                | if !blend && rt_mask(slot) == 0xf { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
+                | if !rt_blend && rt_mask(slot) == 0xf { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
         );
-        c.state(pe_halti5_rt_alpha_config(rt as u32), pe_alpha);
+        c.state(pe_halti5_rt_alpha_config(rt as u32), if rt_blend { pe_alpha } else { 0 });
     }
     c.state(GC_PE_HDEPTH_CONTROL, 0); /* hierarchical depth off */
     /* one pixel pipe on this part: both pipe registers name the same surface */
@@ -2373,6 +2434,21 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * inside it. (Clipping to the intersection through that one rectangle is
      * possible; it is not done here.) */
     let (slots, n) = hw_targets(gl);
+    /* An integer surface this back end does not draw: RGBA32I/UI, which the
+     * pixel engine has no format for (it would be drawn as RGBA8), and the
+     * held-back 64-bit ones ([`GC_INTEGER_RT_FORMATS`]). The GL core refuses
+     * them by name before they get here (`backend::rt_format_drawable`); this
+     * is the back end's own word. */
+    if slots[..n].iter().any(|&s| {
+        let (gpu, f) = if s == 0 {
+            (gl.target_gpu, gl.target_format)
+        } else {
+            (gl.targets[s as usize].gpu, gl.targets[s as usize].format)
+        };
+        gpu != 0 && gles_surf_is_integer(f) && (GC_INTEGER_RT_FORMATS >> (f - GLES_SURF_INT_FIRST)) & 1 == 0
+    }) {
+        return -crate::util::ENOTSUP;
+    }
     if slots[1..n].iter().any(|&s| {
         let t = gl.targets[s as usize];
         t.w < gl.target_w || t.h < gl.target_h

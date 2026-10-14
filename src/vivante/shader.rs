@@ -13,7 +13,10 @@
 //! through its instruction cache; the uniforms are written straight into the
 //! constant register file as command-stream words.
 
-use crate::backend::{gles_surf_rt_class, GlesTextureBind, GLES_SURF_R32F, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D};
+use crate::backend::{
+    gles_surf_int_layout, gles_surf_is_integer, gles_surf_rt_class, GlesTextureBind, GLES_SURF_R32F,
+    GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
+};
 use crate::shaderc::{
     ShcShader, SHC_RT_RGBA8, SHC_VIV_CONST_LITERAL, SHC_VIV_CONST_SAMPLER_LOD_MAX, SHC_VIV_CONST_TEXRECT_SCALE_X,
     SHC_VIV_CONST_TEXRECT_SCALE_Y, SHC_VIV_CONST_TEXTURE_DEPTH, SHC_VIV_CONST_TEXTURE_HEIGHT,
@@ -121,11 +124,39 @@ pub fn check_temp_limits(d: &GcDraw, vs_temps: u32, fs_temps: u32) -> bool {
 /// This backend wrote `NORMAL` unconditionally until the per-draw state audit
 /// against etnaviv (2026-09-22). No R32F draw has run on this part, so the
 /// `UIF32` arm is transcribed, not measured.
-fn ps_color_output_mode(target_format: u8) -> u32 {
+///
+/// The ES 3.0 integer targets (`backend.rs` `GC_INTEGER_RT_FORMATS`) take the
+/// rest of the rule, on a HALTI5 core (this one, regs.rs):
+///
+/// ```text
+/// if (bits == 10 || !halti5) return COLOR_OUTPUT_MODE_A2B10G10R10UI;
+/// if (is_pure_sint(fmt)) return bits == 8 ? I8 : I16;
+/// else                   return bits == 8 ? U8 : U16;
+/// ```
+///
+/// so R32I/UI and RG32I/UI are `UIF32` by the width test, RGB10_A2UI is
+/// `A2B10G10R10UI`, and the 8- and 16-bit ones `I8`/`I16`/`U8`/`U16` (values
+/// `hw/state_3d.xml.h:130-136`). The shader's integer output is the
+/// register's integer bits (the compiler converts nothing on the way out,
+/// tests/es3_int_rt_gc.rs); the mode is what makes the pixel engine store
+/// them as integers instead of reading them as a float colour. The integer
+/// arms were written down from etnaviv_translate.h without a Mesa tree at
+/// hand (int-rt-gc, docs/es3-int-rt-gc.md); the mode values are the rnndb
+/// header's. Not measured: no integer draw has run on this part.
+pub fn ps_color_output_mode(target_format: u8) -> u32 {
     if target_format == GLES_SURF_R32F {
-        GC_PS_OUTPUT_MODE_UIF32
-    } else {
-        GC_PS_OUTPUT_MODE_NORMAL
+        return GC_PS_OUTPUT_MODE_UIF32;
+    }
+    match gles_surf_int_layout(target_format) {
+        None => GC_PS_OUTPUT_MODE_NORMAL,
+        Some(l) if l.bits == 32 => GC_PS_OUTPUT_MODE_UIF32,
+        Some(l) if l.bits == 10 => GC_PS_OUTPUT_MODE_A2B10G10R10UI,
+        Some(l) => match (l.signed, l.bits) {
+            (true, 8) => GC_PS_OUTPUT_MODE_I8,
+            (true, _) => GC_PS_OUTPUT_MODE_I16,
+            (false, 8) => GC_PS_OUTPUT_MODE_U8,
+            (false, _) => GC_PS_OUTPUT_MODE_U16,
+        },
     }
 }
 
@@ -308,7 +339,10 @@ pub fn emit_shader_state(c: &mut GcCmd, d: &GcDraw) -> bool {
     let mut ps_control_ext = 0;
     for (rt, &slot) in slots[..targets].iter().enumerate() {
         let format = if rt == 0 { d.gl.target_format } else { d.gl.targets[slot as usize].format };
-        if gles_surf_rt_class(format) == SHC_RT_RGBA8 {
+        /* not an integer target: its class is RGBA8 too (no float variant),
+         * but it is not unorm, and saturating would clamp the integers to
+         * 0..1 (etnaviv saturates `util_format_is_unorm` only) */
+        if gles_surf_rt_class(format) == SHC_RT_RGBA8 && !gles_surf_is_integer(format) {
             ps_control |= ps_control_saturate_rt(rt as u32);
         }
         ps_control_ext |= ps_output_mode(rt as u32, ps_color_output_mode(format));

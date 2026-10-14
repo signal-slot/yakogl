@@ -366,6 +366,14 @@ pub const GC_PS_OUTPUT_MODE_NORMAL: u32 = 0;
 /// A render target whose components are 32 bits wide. `COLOR_OUTPUT_MODE_UIF32`
 /// in the rnndb header (`hw/state_3d.xml.h:131`).
 pub const GC_PS_OUTPUT_MODE_UIF32: u32 = 2;
+/// The integer modes (`COLOR_OUTPUT_MODE_*`, `hw/state_3d.xml.h:131,133-136`):
+/// the shader's integer register stored as the target's integer channels,
+/// unconverted. A2B10G10R10UI is the 10/10/10/2 one.
+pub const GC_PS_OUTPUT_MODE_A2B10G10R10UI: u32 = 1;
+pub const GC_PS_OUTPUT_MODE_U8: u32 = 3;
+pub const GC_PS_OUTPUT_MODE_U16: u32 = 4;
+pub const GC_PS_OUTPUT_MODE_I8: u32 = 5;
+pub const GC_PS_OUTPUT_MODE_I16: u32 = 6;
 pub const GC_PS_HALTI3_UNK0103C: u32 = 0x0000103c;
 pub const GC_PS_ICACHE_PREFETCH: u32 = 0x00001048;
 pub const GC_PS_MSAA_CONFIG: u32 = 0x00001054;
@@ -567,6 +575,18 @@ pub const GC_PE_FORMAT_A8R8G8B8: u32 = 0x6;
 pub const GC_PE_FORMAT_R16F: u32 = 0x11;
 pub const GC_PE_FORMAT_A16B16G16R16F: u32 = 0x13;
 pub const GC_PE_FORMAT_R32F: u32 = 0x14;
+pub const GC_PE_FORMAT_G32R32F: u32 = 0x15;
+// the integer ones (ES 3.0 integer render targets), state_3d.xml.h:104-111.
+// One format serves the signed and the unsigned layout; the fragment stage's
+// output mode (PS_CONTROL_EXT) says which. No 32-bit-channel integer and no
+// 128-bit format exists in the enum (state_3d.xml.h:89-113).
+pub const GC_PE_FORMAT_R8I: u32 = 0x17;
+pub const GC_PE_FORMAT_G8R8I: u32 = 0x18;
+pub const GC_PE_FORMAT_A8B8G8R8I: u32 = 0x19;
+pub const GC_PE_FORMAT_R16I: u32 = 0x1a;
+pub const GC_PE_FORMAT_G16R16I: u32 = 0x1b;
+pub const GC_PE_FORMAT_A16B16G16R16I: u32 = 0x1c;
+pub const GC_PE_FORMAT_A2B10G10R10UI: u32 = 0x1e;
 
 // depth formats (PE_DEPTH_CONFIG_DEPTH_FORMAT): D24S8 is the only one with
 // stencil, and the one this backend allocates.
