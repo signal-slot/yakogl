@@ -273,8 +273,16 @@ pub fn texture_target_use(c: &GlContext, ti: usize) -> u32 {
 /* --------------------------------------------------------------------------- */
 /* attachment resolution */
 
+/// GL_COLOR_ATTACHMENTi with i below GL_MAX_COLOR_ATTACHMENTS: a colour
+/// point this GL names. The storage has [`CAP_COLOR_ATTACHMENTS`] points;
+/// those past what the back end draws ([`context::max_color_attachments`])
+/// are refused like any other bad attachment.
+fn is_color_point(attachment: GLenum) -> bool {
+    (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum).contains(&attachment)
+}
+
 fn attachment_slot(fb: &mut GlFramebuffer, attachment: GLenum) -> Option<&mut GlAttachment> {
-    if attachment > GL_COLOR_ATTACHMENT0 && attachment < GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum {
+    if attachment > GL_COLOR_ATTACHMENT0 && is_color_point(attachment) {
         return Some(&mut fb.color_n[(attachment - GL_COLOR_ATTACHMENT0) as usize - 1]);
     }
     match attachment {
@@ -288,7 +296,7 @@ fn attachment_slot(fb: &mut GlFramebuffer, attachment: GLenum) -> Option<&mut Gl
 /// An attachment point glFramebufferTexture2D / glFramebufferRenderbuffer
 /// accept: one with a slot, or the packed depth/stencil point.
 fn is_attachment_point(attachment: GLenum) -> bool {
-    (attachment > GL_COLOR_ATTACHMENT0 && attachment < GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum)
+    is_color_point(attachment)
         || matches!(
             attachment,
             GL_COLOR_ATTACHMENT0 | GL_DEPTH_ATTACHMENT | GL_STENCIL_ATTACHMENT | GL_DEPTH_STENCIL_ATTACHMENT
@@ -1032,7 +1040,9 @@ pub fn fb_target_pitched(c: &GlContext) -> Option<(OsalGpuMem, u32, u32, u32, u3
 /// Which attachment an output writes is what glDrawBuffers said; the default
 /// is output `i` to attachment `i`.
 pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
-    if n == 0 || n as usize >= CAP_COLOR_ATTACHMENTS || c.bound_framebuffer == 0 {
+    /* a slot past what the back end draws is never handed to it (no point
+     * past it can be attached either: `is_color_point`) */
+    if n == 0 || n as usize >= context::max_draw_buffers() || c.bound_framebuffer == 0 {
         return None;
     }
     let fb = c.framebuffer_ref(c.bound_framebuffer)?;
@@ -2032,9 +2042,7 @@ pub unsafe extern "C" fn glGetFramebufferAttachmentParameteriv(
          * ES 2.0 with GL_NV_fbo_color_attachments ("Accepted by the
          * <attachment> parameter of ... GetFramebufferAttachmentParameteriv:
          * COLOR_ATTACHMENTi_NV"), which this GL claims on both surfaces */
-        n if n > GL_COLOR_ATTACHMENT0 && n < GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum => {
-            fb.color_n[(n - GL_COLOR_ATTACHMENT0) as usize - 1]
-        }
+        n if n > GL_COLOR_ATTACHMENT0 && is_color_point(n) => fb.color_n[(n - GL_COLOR_ATTACHMENT0) as usize - 1],
         /* GL_BACK and friends name the default framebuffer's images */
         GL_BACK | GL_DEPTH | GL_STENCIL if es3 => {
             c.set_error(GL_INVALID_OPERATION, FN);
@@ -3172,7 +3180,7 @@ fn invalidate_framebuffer(c: &mut GlContext, target: GLenum, num_attachments: GL
         let err = if c.bound_framebuffer == 0 {
             (!matches!(a, GL_COLOR | GL_DEPTH | GL_STENCIL)).then_some(GL_INVALID_ENUM)
         } else if (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + 32).contains(&a) {
-            ((a - GL_COLOR_ATTACHMENT0) as usize >= CAP_COLOR_ATTACHMENTS).then_some(GL_INVALID_OPERATION)
+            (!is_color_point(a)).then_some(GL_INVALID_OPERATION)
         } else {
             (!matches!(a, GL_DEPTH_ATTACHMENT | GL_STENCIL_ATTACHMENT | GL_DEPTH_STENCIL_ATTACHMENT))
                 .then_some(GL_INVALID_ENUM)
@@ -3254,12 +3262,15 @@ pub unsafe extern "C" fn glDrawBuffers(n: GLsizei, bufs: *const GLenum) {
         // SAFETY: the application passes `n` enums; i < n.
         unsafe { bufs.add(i as usize).read_unaligned() }
     };
-    let accepted = |b: GLenum| {
-        b == GL_NONE
-            || b == GL_BACK
-            || (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum).contains(&b)
-    };
-    if c.bound_framebuffer != 0 && n > context::MAX_DRAW_BUFFERS as GLsizei {
+    /* ES 3.0 4.2.1 names GL_COLOR_ATTACHMENT0..31 among the values (an
+     * attachment at or past GL_MAX_COLOR_ATTACHMENTS is then
+     * GL_INVALID_OPERATION, below: it is not COLOR_ATTACHMENTi for an i
+     * under n <= GL_MAX_DRAW_BUFFERS); anything else is GL_INVALID_ENUM.
+     * Only the points this GL has were accepted until 2026-10-14, which
+     * answered GL_INVALID_ENUM to GL_COLOR_ATTACHMENT3 where 3 points exist. */
+    let accepted =
+        |b: GLenum| b == GL_NONE || b == GL_BACK || (GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + 32).contains(&b);
+    if c.bound_framebuffer != 0 && n > context::max_draw_buffers() as GLsizei {
         c.set_error(GL_INVALID_VALUE, FUNC);
         return;
     }
@@ -3334,7 +3345,7 @@ pub unsafe extern "C" fn glReadBuffer(src: GLenum) {
     let ok = if bound == 0 {
         src == GL_BACK || src == GL_NONE
     } else {
-        src == GL_NONE || (attachment && src < GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum)
+        src == GL_NONE || (attachment && is_color_point(src))
     };
     if !ok {
         c.set_error(GL_INVALID_OPERATION, FN);
@@ -3695,7 +3706,9 @@ mod tests {
         ] {
             assert!(is_attachment_point(a), "0x{a:x}");
         }
-        for a in [GL_COLOR_ATTACHMENT3, GL_NONE, GL_TEXTURE, GL_FRAMEBUFFER, GL_DEPTH_STENCIL] {
+        /* the first point past what this build's back end draws (3) */
+        let past = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
+        for a in [past, GL_NONE, GL_TEXTURE, GL_FRAMEBUFFER, GL_DEPTH_STENCIL] {
             assert!(!is_attachment_point(a), "0x{a:x}");
         }
     }
@@ -4314,7 +4327,8 @@ mod tests {
         unsafe {
             glFramebufferTexture2D(GL_RENDERBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "target");
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, tex, 0);
+            let past = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
+            glFramebufferTexture2D(GL_FRAMEBUFFER, past, GL_TEXTURE_2D, tex, 0);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "attachment past the cap");
             /* the cube map target itself is not a face */
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP, tex, 0);
@@ -4409,7 +4423,8 @@ mod tests {
             assert_eq!(gl.error(), GL_INVALID_ENUM, "target");
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rb);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "renderbuffertarget");
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_RENDERBUFFER, rb);
+            let past = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, past, GL_RENDERBUFFER, rb);
             assert_eq!(gl.error(), GL_INVALID_ENUM, "attachment past the cap");
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb + 1);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "not a renderbuffer");
@@ -4902,7 +4917,7 @@ mod tests {
          * GL_NONE): ES 3.0, and ES 2.0 with GL_NV_fbo_color_attachments */
         assert_eq!(fb_param(GL_COLOR_ATTACHMENT1, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE), GL_NONE as GLint);
         assert_eq!(gl.error(), GL_NO_ERROR, "attachment 1 is a point");
-        let past = GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum;
+        let past = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
         assert_eq!(fb_param(past, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE), -1);
         assert_eq!(gl.error(), GL_INVALID_ENUM, "attachment");
         assert_eq!(fb_param(GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER_WIDTH), -1);
@@ -6137,7 +6152,7 @@ mod tests {
 
     #[test]
     fn draw_buffers_count_past_the_attachments_is_invalid_value() {
-        /* GL_MAX_DRAW_BUFFERS, per GPU (context::MAX_DRAW_BUFFERS) */
+        /* GL_MAX_DRAW_BUFFERS, per GPU (context::max_draw_buffers()) */
         let gl = TestGl::new(8, 8);
         let bufs = [GL_NONE; 8];
         // SAFETY: eight readable enums.
@@ -6146,10 +6161,10 @@ mod tests {
             assert_eq!(gl.error(), GL_INVALID_VALUE);
             /* the window has one buffer whatever the cap is: n other than
              * 1 is its own error, before the count's */
-            glDrawBuffers(context::MAX_DRAW_BUFFERS as GLsizei + 1, bufs.as_ptr());
+            glDrawBuffers(context::max_draw_buffers() as GLsizei + 1, bufs.as_ptr());
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
             bound_fb();
-            glDrawBuffers(context::MAX_DRAW_BUFFERS as GLsizei + 1, bufs.as_ptr());
+            glDrawBuffers(context::max_draw_buffers() as GLsizei + 1, bufs.as_ptr());
             assert_eq!(gl.error(), GL_INVALID_VALUE);
         }
     }
@@ -6204,7 +6219,7 @@ mod tests {
         attach_tex(GL_COLOR_ATTACHMENT1, tex_with_storage(8, 8));
         /* GL_DRAW_BUFFER1 exists where GL_MAX_DRAW_BUFFERS is 2 or more
          * (every GPU here) */
-        let two = context::MAX_DRAW_BUFFERS >= 2;
+        let two = context::max_draw_buffers() >= 2;
         assert_eq!(draw_buffer_q(0), GL_COLOR_ATTACHMENT0);
         assert!(fb_target_n(gl.ctx(), 1).is_some(), "never set: output 1 writes attachment 1");
         if two {
@@ -6284,7 +6299,7 @@ mod tests {
     #[test]
     fn invalidate_framebuffer_names_its_attachments() {
         let gl = TestGl::new(8, 8);
-        let too_far = GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum;
+        let too_far = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
         // SAFETY: plain GL calls; each list is one enum.
         unsafe {
             glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, [GL_COLOR].as_ptr());
@@ -6696,7 +6711,8 @@ mod tests {
             assert_eq!(gl.error(), GL_INVALID_VALUE);
             glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 99, 0, 0);
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
-            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, arr, 0, 0);
+            let past = GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum;
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, past, arr, 0, 0);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
             glFramebufferTextureLayer(GL_RENDERBUFFER, GL_COLOR_ATTACHMENT0, arr, 0, 0);
             assert_eq!(gl.error(), GL_INVALID_ENUM);
@@ -7020,7 +7036,7 @@ mod tests {
     fn read_buffer_selects_the_attachment_read() {
         let gl = TestGl::new(8, 8);
         bound_fb();
-        let n = CAP_COLOR_ATTACHMENTS as GLenum - 1;
+        let n = context::max_color_attachments() as GLenum - 1;
         let first = tex_with_storage(3, 2);
         attach_tex(GL_COLOR_ATTACHMENT0, first);
         let last = tex_with_storage(3, 2);
@@ -7033,7 +7049,7 @@ mod tests {
         assert_eq!(gl.ctx().framebuffers[gl.ctx().bound_framebuffer as usize].color.name, first, "put back");
         // SAFETY: plain GL calls.
         unsafe {
-            glReadBuffer(GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum);
+            glReadBuffer(GL_COLOR_ATTACHMENT0 + context::max_color_attachments() as GLenum);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "past GL_MAX_COLOR_ATTACHMENTS");
             glReadBuffer(GL_BACK);
             assert_eq!(gl.error(), GL_INVALID_OPERATION, "GL_BACK on an object");
@@ -7322,7 +7338,7 @@ mod tests {
     /// (the V3D's MRT steps 1-3, docs/online-shaderc/v3d-backend.md; the
     /// GC7000's 8-RT bank, vivante/backend.rs `mrt_targets`): three draw
     /// buffers are taken, and a fourth is past GL_MAX_DRAW_BUFFERS
-    /// (CAP_COLOR_ATTACHMENTS, 3).
+    /// (`backend::DRAW_TARGETS`, 3, until their four-target half lands).
     #[cfg(any(feature = "gpu-v3d", feature = "gpu-vivante"))]
     #[test]
     fn the_v3d_and_the_gc7000_take_every_draw_buffer() {
@@ -7335,8 +7351,7 @@ mod tests {
         // SAFETY: three readable enums.
         unsafe { glDrawBuffers(3, atts.as_ptr()) };
         assert_eq!(gl.error(), GL_NO_ERROR, "three draw buffers");
-        /* four valid enums (GL_COLOR_ATTACHMENT3 itself is no attachment
-         * point here, GL_INVALID_ENUM, which glDrawBuffers checks first) */
+        /* four buffers: n is checked first, whatever the fourth names */
         let four = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_NONE];
         // SAFETY: four readable enums.
         unsafe { glDrawBuffers(4, four.as_ptr()) };

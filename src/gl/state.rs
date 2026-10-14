@@ -17,7 +17,7 @@
 
 use super::consts::*;
 use super::context::{
-    self, gl_trace, GlContext, CAP_COLOR_ATTACHMENTS, CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_CONTEXTS,
+    self, gl_trace, GlContext, CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_CONTEXTS,
     MAX_FRAGMENT_UNIFORM_VECTORS, MAX_PROGRAM_TEXEL_OFFSET, MAX_UNIFORM_DWORDS, MAX_VARYING_VECTORS,
     MAX_VERTEX_ATTRIBS, MAX_VERTEX_UNIFORM_VECTORS, MIN_PROGRAM_TEXEL_OFFSET,
 };
@@ -116,7 +116,7 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * GL_NV_draw_buffers, not claimed (the registry text: "Rendering to color
      * attachments COLOR_ATTACHMENT[1..15]_NV can be activated through the
      * GL_NV_draw_buffers extension"). True on all three GPUs: each has
-     * CAP_COLOR_ATTACHMENTS points. dEQP-GLES2's completeness tests run their
+     * context::max_color_attachments() points (3 today). dEQP-GLES2's completeness tests run their
      * multi-attachment cases only when this is claimed
      * (es2fFboCompletenessTests.cpp:354): 54 were not supported on the Pi 4
      * (records/pi4/record_SW28_FB1_2c87c2e4.txt). */
@@ -1246,8 +1246,8 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
             c.set_error(GL_INVALID_ENUM, "glGetIntegerv");
             return 0;
         }
-        GL_MAX_DRAW_BUFFERS => context::MAX_DRAW_BUFFERS as GLint,
-        GL_MAX_COLOR_ATTACHMENTS => CAP_COLOR_ATTACHMENTS as GLint,
+        GL_MAX_DRAW_BUFFERS => context::max_draw_buffers() as GLint,
+        GL_MAX_COLOR_ATTACHMENTS => context::max_color_attachments() as GLint,
         GL_MAX_SAMPLES => 1,
         GL_NUM_PROGRAM_BINARY_FORMATS => 0,
         GL_MAX_ARRAY_TEXTURE_LAYERS => 256,
@@ -1281,7 +1281,7 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; 4]) -> usize
          * GL_MAX_DRAW_BUFFERS (only buffer 0 was answered, and always as
          * the default mapping, until 2026-09-29) */
         p if !crate::REPORT_ES2
-            && (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum).contains(&p) =>
+            && (GL_DRAW_BUFFER0..GL_DRAW_BUFFER0 + context::max_draw_buffers() as GLenum).contains(&p) =>
         {
             super::framebuffer::draw_buffer(c, (p - GL_DRAW_BUFFER0) as usize) as GLint
         }
@@ -3164,12 +3164,12 @@ mod tests {
     fn draw_buffer_queries_are_es3_only() {
         let gl = TestGl::new(8, 8);
         let mut pnames = std::vec![GL_MAX_DRAW_BUFFERS];
-        pnames.extend((0..context::MAX_DRAW_BUFFERS as GLenum + 1).map(|i| GL_DRAW_BUFFER0 + i));
+        pnames.extend((0..context::max_draw_buffers() as GLenum + 1).map(|i| GL_DRAW_BUFFER0 + i));
         for p in pnames {
             let mut v: GLint = -777;
             // SAFETY: one GLint out.
             unsafe { glGetIntegerv(p, &mut v) };
-            let in_range = p == GL_MAX_DRAW_BUFFERS || p < GL_DRAW_BUFFER0 + context::MAX_DRAW_BUFFERS as GLenum;
+            let in_range = p == GL_MAX_DRAW_BUFFERS || p < GL_DRAW_BUFFER0 + context::max_draw_buffers() as GLenum;
             if crate::REPORT_ES2 {
                 assert_eq!(gl.error(), GL_INVALID_ENUM, "0x{p:x} in an ES 2.0 report");
                 assert_eq!(v, -777, "0x{p:x}: nothing written");
@@ -3183,7 +3183,7 @@ mod tests {
         }
         /* the attachment points stay: ES 2.0 reaches them through
          * GL_NV_fbo_color_attachments, which the list claims */
-        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), CAP_COLOR_ATTACHMENTS as GLint);
+        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), context::max_color_attachments() as GLint);
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
@@ -3209,9 +3209,9 @@ mod tests {
         assert_eq!(geti1(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), 16);
         /* colour outputs one draw writes, per GPU; attachment points below */
         if !crate::REPORT_ES2 {
-            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::MAX_DRAW_BUFFERS);
+            assert_eq!(geti1(GL_MAX_DRAW_BUFFERS) as usize, context::max_draw_buffers());
         }
-        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS) as usize, CAP_COLOR_ATTACHMENTS);
+        assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS) as usize, context::max_color_attachments());
         /* the blocks are sized at link time, capped at this limit */
         assert_eq!(geti1(GL_MAX_VERTEX_UNIFORM_COMPONENTS) as usize, MAX_UNIFORM_DWORDS);
         assert_eq!(geti1(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS) as usize, MAX_UNIFORM_DWORDS);

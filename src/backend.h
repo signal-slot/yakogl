@@ -121,7 +121,8 @@ static inline uint8_t gles_surf_texfmt(uint8_t format)
 #define GLES_MAX_TEX_BINDS    16
 #define GLES_MAX_VS_TEX_BINDS 16 /* the capacity; the per-GPU limit is backend.rs GLES_VS_TEX_UNITS */
 
-/* Colour attachments one draw may write (attachment 0 plus GL_CAP_COLOR_ATTACHMENTS - 1). */
+/* Colour attachments one draw may write (attachment 0 plus GL_CAP_COLOR_ATTACHMENTS - 1); a back
+ * end writes its own count of them (src/backend.rs DRAW_TARGETS), at most this. */
 #define GLES_MAX_TARGETS      4
 /* occlusion query handles are 1 .. GLES_QUERY_HANDLES - 1 (gles_draw.occlusion_query) */
 #define GLES_QUERY_HANDLES    64

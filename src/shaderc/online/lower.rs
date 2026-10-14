@@ -12566,7 +12566,7 @@ mod builtin_constant_tests {
             ("gl_MaxFragmentUniformVectors", MAX_UNIFORM_DWORDS / 4),
             /* the query's value, unless the GL reports ES 2.0 (see
              * `reflect::builtin_constant`; this pinned 1 until 2026-09-24) */
-            ("gl_MaxDrawBuffers", if crate::REPORT_ES2 { 1 } else { crate::gl::context::MAX_DRAW_BUFFERS }),
+            ("gl_MaxDrawBuffers", if crate::REPORT_ES2 { 1 } else { crate::gl::context::max_draw_buffers() }),
         ] {
             /* A `const` initialiser must be a constant expression (4.3.2),
              * so this also checks that the checker treats it as one. */
@@ -12760,7 +12760,7 @@ mod es3_builtin_constant_tests {
     use super::*;
     #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
     use crate::gl::context::{
-        CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_DRAW_BUFFERS, MAX_PROGRAM_TEXEL_OFFSET, MAX_UNIFORM_DWORDS,
+        max_draw_buffers, CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_PROGRAM_TEXEL_OFFSET, MAX_UNIFORM_DWORDS,
         MAX_VERTEX_ATTRIBS, MIN_PROGRAM_TEXEL_OFFSET,
     };
     #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
@@ -12796,7 +12796,7 @@ mod es3_builtin_constant_tests {
             ("gl_MaxVertexTextureImageUnits", crate::backend::GLES_VS_TEX_UNITS as i64),
             ("gl_MaxCombinedTextureImageUnits", CAP_COMBINED_TEXTURE_UNITS as i64),
             ("gl_MaxTextureImageUnits", CAP_TEXTURE_UNITS as i64),
-            ("gl_MaxDrawBuffers", MAX_DRAW_BUFFERS as i64),
+            ("gl_MaxDrawBuffers", max_draw_buffers() as i64),
             ("gl_MinProgramTexelOffset", i64::from(MIN_PROGRAM_TEXEL_OFFSET)),
             ("gl_MaxProgramTexelOffset", i64::from(MAX_PROGRAM_TEXEL_OFFSET)),
         ] {

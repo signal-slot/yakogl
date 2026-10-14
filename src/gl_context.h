@@ -189,10 +189,11 @@ struct gl_attachment {
 	GLint  layer;   /* cube face / array layer of the texture */
 };
 
-/* Colour attachments a framebuffer may carry. One render can write them all
- * (a G-buffer pass writes three), which the backend and the driver's
- * end-of-tile programs support up to GL_CAP_COLOR_ATTACHMENTS. */
-#define GL_CAP_COLOR_ATTACHMENTS 3
+/* Colour attachment points a framebuffer object stores (GLES_MAX_TARGETS,
+ * src/backend.h). What the GL reports as GL_MAX_COLOR_ATTACHMENTS and
+ * GL_MAX_DRAW_BUFFERS is the back end's count, at most this
+ * (src/gl/context.rs max_color_attachments, src/backend.rs DRAW_TARGETS). */
+#define GL_CAP_COLOR_ATTACHMENTS 4
 
 struct gl_framebuffer {
 	bool used;
