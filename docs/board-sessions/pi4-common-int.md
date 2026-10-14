@@ -1,16 +1,60 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# Pi 4 board session, common set from the integration image: built, not run
+# Pi 4 board session, common set from the integration image: built, not run (console bridge cannot open the Debug Probe)
 
 HEAD8: `79c73ea2` (`79c73ea2c34546ab220329aa65f2ee3a720cfc21`, the
 ccfarm/integration tip). Third attempt, 2026-10-14.
 
 Status: **all five images (GM SO SV CL GT) built at rc=0. None ran on the
 board.** No `board.sh` verdict line and no tally line exists, and none is
-quoted here. The console bridge answers and the board is idle, but this
-worker's permission settings refused every way of giving `tools/board.sh` its
-`BOARD_UART` and `BOARD_HDMI_TIMINGS` (details below). A run without them
-would only print "result none", so I did not reboot the board.
+quoted here. The first pass was blocked by permissions (section "What could
+not run"). In the second pass, after the permissions were granted, GM was
+started with `BOARD_UART` set. The serial bridge accepted the TCP connection
+but could not open the Debug Probe's USB interface:
+`usb: cannot open the interface: open failed (esp_err 261)`. board.sh gave up
+before the reboot and removed the staged image. The other four rows were not
+tried; they would fail the same way.
+
+## Second pass: the bridge cannot reach the Debug Probe
+
+`ask_farm` (node nuc, confidence 0.85) confirmed
+`BOARD_UART=100.124.238.76:35931` (host `usb1`, where the Debug Probe is
+plugged in) and the 1920x720 `BOARD_HDMI_TIMINGS` below. The three values were
+exported by an untracked wrapper around `tools/board.sh`, which is removed
+again. The dry run showed the bridge capture in place of `/dev/PI4_UART`.
+
+```sh
+tools/board.sh pi4 run build/pi4ci/img/GM/zephyr/zephyr.bin build/pi4ci/rec/GM GM-79c73ea2
+```
+
+Output, verbatim (board.sh says `build d20e174d`, its checkout: `79c73ea2` plus
+the first version of this note; the image is the `79c73ea2` build):
+
+```
+board.sh pi4: GM-79c73ea2: build d20e174d boot tryboot (row) image sha256 6dd29d91e661d861 footprint 250490880
+board.sh pi4: GM-79c73ea2: image build: PVR_SAMPLE_TABLE=c95547a1 PVR_SAMPLE_TREE=79c73ea2; zephyr: v4.4.0-9848-gaf17c0c8aa2a
+board.sh pi4: bridge busy or unreachable (try 1 of 12)
+...
+board.sh pi4: bridge busy or unreachable (try 12 of 12)
+board.sh pi4: serial bridge 100.124.238.76:35931 busy or unreachable after 12 tries (staged image removed; no reboot)
+```
+
+Every capture attempt's `console.ts` holds one line, the bridge's own
+message, 12 times:
+
+```
+usb: cannot open the interface: open failed (esp_err 261)
+```
+
+esp_err 261 is 0x105, `ESP_ERR_NOT_FOUND`: the bridge (an ESP USB host) does
+not find the Debug Probe's interface. board.sh's `probe` still returns 0,
+because the message arrives after the probe's 1.5 s read. A separate 20 s
+capture about 15 minutes later (`timeout 20 python3
+tools/am62p_netboot_uart.py capture 100.124.238.76:35931 …`) got the same
+single line, so the condition persisted. The fault is on the bridge/probe side
+(probe unplugged, not enumerated, or the bridge needs a reset), outside the
+ssh lease. Afterwards the board was in Linux, untouched: no
+`/boot/firmware/yakogl-*.bin`, `tryboot.txt` 1 byte again, load 0.02.
 
 ## What was established
 
@@ -71,6 +115,8 @@ worker's environment.
 
 ## What could not run
 
+First pass (all refused at first; granted for the second pass):
+
 | step | outcome |
 |---|---|
 | `mcp__ccfarm__ask_farm` (bridge address, HDMI timings) | permission refused (twice) |
@@ -78,8 +124,8 @@ worker's environment.
 | `BOARD_UART=… BOARD_HDMI_TIMINGS=… tools/board.sh --dry-run pi4 run …` (inline assignment) | refused (twice) |
 | `env BOARD_UART=… tools/board.sh …` | refused |
 | an untracked wrapper script that exports the three values and runs board.sh | refused (removed again) |
-| `tools/board.sh pi4 run <img>/<LABEL>/zephyr/zephyr.bin <rec>/<LABEL> <LABEL>-79c73ea2` for GM SO SV CL GT | not run: no `BOARD_UART` |
-| `tools/cts/common-tally.py <rec>` | not run: no records |
+| `tools/board.sh pi4 run <img>/<LABEL>/zephyr/zephyr.bin <rec>/<LABEL> <LABEL>-79c73ea2` for GM SO SV CL GT | first pass: not run (no `BOARD_UART`); second pass: GM stopped before the reboot (the bridge cannot open the Debug Probe), SO SV CL GT not tried |
+| `tools/cts/common-tally.py <rec>` | not run: no records with a board result |
 
 ## Expected lines, all unverified
 
@@ -110,9 +156,12 @@ origin/main `8abeaabb`). That file is not merged into integration.
 
 ## To run it
 
-On a worker that may set `BOARD_UART` for board.sh (or that has it in
-ccfarm's node-local environment), from a checkout at `79c73ea2` (or with the
-images above, which live only in this worker's ignored `build/pi4ci/img`):
+First make the bridge reach the Debug Probe again (on `usb1`: re-plug the
+probe or reset the bridge). Check with a short capture: anything but the
+`usb: cannot open the interface` line will do (an idle Linux console prints
+nothing, so `echo MARK > /dev/serial0` over ssh, as in pi4-console-probe.md).
+Then, from a checkout at `79c73ea2` (or with the images above, which live only
+in this worker's ignored `build/pi4ci/img`):
 
 ```sh
 export BOARD_HOST=signal-slot@elegance-1           # the lease's RESOURCE_PI4_ELEGANCE_SSH
