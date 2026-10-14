@@ -12,20 +12,33 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## Goal, in order
 
-1. ES 2.0 finished on the three boards (AM62P PowerVR, i.MX8MP GC7000,
-   Raspberry Pi 4 V3D), each booted from its own storage by its bootloader.
-2. Minimum performance.
-3. A public website (`website/`). It goes live when the repository is public:
+The five stages of `ROADMAP.md` (the public form of this list, with each
+stage's criterion and state); keep the two in step.
+
+1. ES 2.0 conformance on the three boards (AM62P PowerVR, i.MX8MP GC7000,
+   Raspberry Pi 4 V3D): one whole dEQP-GLES2 mustpass tree (17,165 cases)
+   per board from one main commit with 0 Fail, each board booted from its
+   own storage by its bootloader.
+2. The benchmarks right on the three boards: glmark2-es2's 33 scenes with
+   checked pictures, the Slint sample and the AGL cluster demo with the same
+   picture on every board, a frame rate recorded for each (minimum
+   performance).
+3. Public release: every line of `docs/release/checklist.md` met, including
+   the website (`website/`). It goes live when the repository is public:
    `.github/workflows/pages.yml` deploys it once Pages is turned on
    (`website/README.md`). Every figure it shows is in `website/data.js` with
    its commit, date and record; update that file with each new board result.
    `tools/website-check.sh` checks links, metadata and `data.js`.
 4. ES 3.0 on the three boards (the dEQP-GLES3 mustpass, 42,810 cases). Host
-   work runs ahead of the boards. A product image still reports ES 2.0 by
+   work runs ahead of the boards and takes a board only when stages 1 to 3
+   do not need it. A product image still reports ES 2.0 by
    default (Kconfig `YAKOGL_REPORT_ES2` default `y`, CMake
    `YAKOGL_REPORT_ES2=ON`); ES 3.0 is what an image that turns that off gets,
    and what the cargo crate reports without the `report-es2` feature.
-5. ES 3.1 / 3.2 (#19).
+5. More boards: a board joins when it meets stages 1 and 2 as the first
+   three do.
+
+Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 

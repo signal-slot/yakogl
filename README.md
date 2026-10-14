@@ -32,7 +32,7 @@ describes. Software rendering is out of scope: every result here comes from the 
 ## Status
 
 OpenGL ES 2.0 is close to complete on all three boards. Known defects are tracked as
-GitHub Issues.
+GitHub Issues. The order of the work, in five stages, is [ROADMAP.md](ROADMAP.md).
 
 dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list):
 
