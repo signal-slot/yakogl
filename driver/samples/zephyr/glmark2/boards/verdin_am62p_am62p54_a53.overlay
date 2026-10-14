@@ -35,3 +35,24 @@
 &dsi0 {
 	status = "okay";
 };
+
+/* A 256 MiB GPU carve-out instead of the board's 64 MiB one, as the dEQP
+ * image takes (driver/samples/zephyr/deqp/boards/, run from U-Boot on
+ * 2026-10-12 with 0 resets). At 64 MiB about 36 MiB are taken whatever the
+ * scene (firmware, parameter buffer, freelists, HWRT sets;
+ * tools/cts/log/investigations/pvr-render-pool.md), so terrain's 5.6 MB
+ * NPOT mip chain and shadow's 22 MB depth chain cannot fit and refract's
+ * target allocations are refused (issues #1, #2). The board's 64 MiB region
+ * stays reserved but unused. */
+/ {
+	reserved-memory {
+		gpu_carveout_glmark2: gpu-carveout@a0000000 {
+			reg = <0xa0000000 0x10000000>;
+			no-map;
+		};
+	};
+};
+
+&gpu {
+	memory-region = <&gpu_carveout_glmark2>;
+};
