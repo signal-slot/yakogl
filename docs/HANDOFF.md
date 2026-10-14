@@ -29,7 +29,7 @@ from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## State of main
 
-main is `e6fb51b7` (2026-10-14). The numbers below are read from
+main is `4b019379` (2026-10-14). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -47,7 +47,7 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
 | AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. | 465, 33 scenes ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | Slint pass, cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
-| i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) passed on both boots; they fail now and then. | 42, 33 ran, 0 failed, on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | probes pass on `8abeaabb`; no fps (no console). |
+| i.MX8MP | whole tree on `32778b57` (2026-10-10): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning of the 17,371 begun; every selector equals `d8583f20`'s. | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `b568940` (2026-10-14, common set; `docs/board-sessions/imx8mp-common-int.md`); cases 2, 10 and 171 passed in this run. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `b568940` (2026-10-14, common set; record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO and SV pass (crc16 c592), CL pass (crc16 b107), on `b568940`; no fps (no console). |
 | Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
@@ -96,10 +96,6 @@ Each item waits for hardware. The commands and expected values are in
 - i.MX8MP case 44's layout probe (#6, step 6 of the i.MX8MP section).
 - i.MX8MP #8 (4x MSAA) and #9 / #25 (cases 10 and 2): the next instruments
   are in "Known defects".
-- AM62P dEQP-GLES3 rows that `c4dce9125` changes and have not run: the sRGB
-  rows, buffer and PBO, the `texture.specification`, `fragment_out` and
-  `shaders.builtin_functions` buckets (transform feedback, `occlusion_query`
-  and blit ran on `cd738b1a`).
 - AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
@@ -107,12 +103,16 @@ Each item waits for hardware. The commands and expected values are in
 
 ### ES 3.0 (goal 4)
 
-The AM62P dEQP-GLES3 tree, all 28 images on `f2a13877` (2026-10-11): of
-42,810, **32,669 pass / 5,549 fail / 2,318 NotSupported / 185
-QualityWarning / 2,089 without a result** (`c4ccc966`, 2026-10-10:
-30,431 / 7,011 / 2,274 / 5 / 3,088). The 2,089: image 5's tail 558 (it
-ran before transform-feedback capture landed), image 7's tail 1,397 (a
-`ResourceError`), the two hanging images' tails 83, and 51 lost in capture.
+The AM62P dEQP-GLES3 tree on `ad2b5ed` (main `e51de0af` plus docs; same
+`src/`, `driver/` and `capi/` as main `a63fcc5b`), 2026-10-14: of 42,810,
+**36,552 pass / 2,880 fail / 2,195 NotSupported / 185 QualityWarning / 998
+without a result** (`f2a13877`, 2026-10-11: 32,669 / 5,549 / 2,318 / 185 /
+2,089). It is the first board run of `c4dce9125`: `fragment_ops` 1,109 -> 0
+fail, `transform_feedback` 640 -> 0, `fbo` 872 -> 367. The 998: image 7's
+`builtin_functions.precision` tail 987 (the `ResourceError`) and 11 slow
+`texture.filtering.3d` cases not started. Per case:
+`tools/cts/log/board-sessions/am62p-gles3-percase-2026-10-13.md`; every case
+that is not Pass: `am62p-gles3-percase-2026-10-13.notpass.tsv` beside it.
 Rows re-run on `cd738b1a` (2026-10-14; images 2, 3, 5, 25, all `done`, 0
 resets; section "dEQP-GLES3 rows" of `docs/board-sessions/am62p-es3-gltest.md`)
 replace the `f2a13877` numbers of their groups: transform_feedback 882 / 882
@@ -299,6 +299,19 @@ es3-vertex).
      investigation's section 7 has the check. Until it is fixed the two
      images' tails (83 cases) have no result. Image 11 needs 4 resets
      (`done_with_resets`) to complete.
+     Update 2026-10-14 (`ad2b5ed`, per-case record named under "State of
+     main"): for image 20 it is the 600 s image lifetime, not a GPU hang. The
+     two non-mustpass `bgra*_linear_mipmap_linear` cases take about 4.5 min
+     each, so `r11f_g11f_b10f_linear_mipmap_linear` starts at 549 s; alone it
+     completes in 158 s (Fail, no reset). Next: narrow
+     `tools/cts/am62p-gles3-tree.txt`'s `3d.formats` and `3d.sizes` rows to
+     the mustpass names, one image per `*_linear_mipmap_linear` case (not
+     done). Image 21's `3x7x5_linear_mipmap_linear` has not run alone yet.
+     Image 11's 4 resets are `shaders.metamorphic.bubblesort_flag.variant_1`
+     (3) and `variant_2` (1).
+   - **Depth-PBO uploads** (`tools/cts/RESULTS.md` row "AM62P GLES3 (depth
+     uploads)", 10 cases): pass on the board at `ad2b5ed`, with a call trace
+     that raises no GL error. The row can close.
    - **PowerVR 3D textures sample level 0 only and lose REPEAT** (no issue
      yet; the defect behind the GLES3 hang): `src/gl/texture.rs`
      `texture_alloc_storage_3d`, `src/shaderc/online/powervr/select.rs`
@@ -343,13 +356,15 @@ es3-vertex).
      an empty frame. The GC7000 gives such a draw memory of its own
      (`src/vivante/state.rs`, `GcFrame::extra`); the PowerVR keeps its fixed render pool.
    - i.MX8MP gl_test case 44 `es3hdr`, an RGBA16F render target (#6):
-     still fails on `f2a13877` at check 3 (texel (5,0)'s colour stored at
+     still fails at `b568940` (2026-10-14, common set), on `f2a13877` at check 3 (texel (5,0)'s colour stored at
      (7,0) of an 8-wide linear target), and in the default list at
      `e0eb883d` (`failing 1: first case 44`; the same on both boots). `466e1b00`'s two fixes did not move
      it. The ranked hypotheses: `src/vivante/VIVANTE_NOTES.md`, "RGBA16F
      targets". The layout probe (case 44's check 3 on the GC7000,
      `hdr_layout_probe`, decode pinned by `tests/gltest_hdr_probe.c`) is
      the next board run (i.MX8MP step 6).
+   - i.MX8MP gl_test case 16 no longer fails in the common set: the set
+     skips it by name (#8 tracks the skip).
    - i.MX8MP gl_test case 10 fails about 1 run in 3 (#9), and case 2 now
      and then (#25), the same nondeterminism class. Cause not found
      (`8409419`): our sync sequence has a counterpart for every etnaviv
@@ -826,6 +841,39 @@ es3-vertex).
    real 148); make the AM62P Zephyr image rows a `gap` when
    `driver/src/fw/pvr_fw_blob.h` is absent; stop nested runs clobbering
    `build/check-fail/<n>.log`; correct the `--quick` comment.
+8. **i.MX8MP common-set follow-ups** (`b568940`, 2026-10-14; record
+   `records/imx8mp/common-b5689400`, session doc
+   `docs/board-sessions/imx8mp-common-int.md`):
+   - Apply the i.MX8MP cell text once the files are free (another plan held
+     them); each cites `b568940` and the record:
+     - `tools/cts/RESULTS.md`, i.MX8MP common-set cells: `GM score 43, 33 ran,
+       0 failed, 0 unsupported; SO pass (crc16 c592); SV pass (crc16 c592); CL
+       pass (crc16 b107); GT 48 of 49 run, case 16 skipped, failing case 44
+       only (cases 2, 10, 171 passed)`, on `b568940` (2026-10-14).
+     - `tools/cts/STATUS.md` (Japanese): `i.MX8MP 共通セット (b568940,
+       2026-10-14, records/imx8mp/common-b5689400): GM スコア 43 (33 シーン実行、失敗 0)、SO・SV・CL は
+       pass (crc16 c592 / c592 / b107)、GT は 49 件中 48 件 pass (case 16 は skip、失敗は case 44
+       のみ。case 2・10・171 は pass)。`
+     - `README.md` Status table, i.MX8MP row: `GM 43 / SO pass / SV pass / CL
+       pass / GT 48 of 49 run (case 16 skipped, case 44 fails)` (`b568940`).
+   - Case 171 (`viewwin`) passed at `b568940`; it can leave the queue (confirm
+     once more on the next GT run, since 2 and 10 are random). Cases 2 and 10
+     pass or fail at random (`docs/investigations/gc-case10-flake.md`); they
+     passed in this one run, which settles nothing.
+   - glmark2 terrain and refract on this board are still not judged per scene
+     (no console on the i.MX8MP): the record gives counts only.
+   - V3D `mem.cpu` NULL guard (`src/v3d/backend.rs`): the kept-image path at
+     about line 3087 does `(mem.cpu as *mut u8).add(pad)` after `gpu_alloc`
+     without a null check; lines 2150, 4089, 4110 and 4225 do check. Add the
+     same guard, free the allocation and return `KeptMiss::NoMemory` (or
+     `Address`).
+   - osal-linux V3D row in `tools/check.sh`: the host row list (about line
+     2274) has `osal-linux,gpu-powervr,...` and `osal-linux,gpu-vivante,...`
+     but no V3D entry; add one so the host-harness V3D build stays checked.
+   - Re-check `docs/benchmarks.md` code references with
+     `python3 -I tools/docs/check-refs.py docs/benchmarks.md`. At `b568940`
+     `tools/docs/check-refs.py` does not exist (no `tools/docs/` directory),
+     so the check could not run; it is probably on an unmerged branch.
 
 ## Next board session
 
@@ -940,6 +988,12 @@ export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out>
 (Steps 1 to 5 ran: 1 and 4 on `32778b57`, 2 on `a0f439d6`, 3 and 5 on
 integration images. Their recipes are in the record file.)
 
+The common set (GM SO SV CL GT) ran at `b568940`
+(`docs/board-sessions/imx8mp-common-int.md`); nothing more is required from
+it. If run again, use `BOARD_BOOT=uboot-mmc` (the default is `uboot-tftp`) and
+rerun GT once if 2, 10 or 16 fail; the session doc's "To rerun it" has the
+commands.
+
 The gl_test default list ran at `e0eb883d` (`docs/board-sessions/imx8mp-gltest-final.md`).
 `common-images.sh` cannot pass `-pipe`, and the worker's `/tmp` quota
 stopped the compile of `gl_test.c`; on a worker with enough `/tmp` the GT
@@ -1051,8 +1105,10 @@ Expected: combined mustpass 0 fail, the `fail` column of all 17 image rows
 moves from Pass to anything else is a regression: bisect it first. Time:
 at most about 11 min an image, 18 images.
 
-dEQP-GLES3 (the tree ran on `f2a13877`; "State of main"). Next, by size:
+dEQP-GLES3 (the tree ran on `ad2b5ed`; "State of main"). Next, by size:
 
+- the 11 slow `texture.filtering.3d.*_linear_mipmap_linear` mustpass cases,
+  one image each (up to about 4.5 min each);
 - the "hang" of images 20 and 21 (Known defects, most likely dEQP's slow
   check): before booting anything, read the `f2a13877` consoles of images
   20 and 21 (`records/am62p/deqp-gles3-f2a13877/full/20261011-0232-img20-*`,
