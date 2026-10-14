@@ -410,7 +410,12 @@ does. Until then:
   build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=8f7d396d`. Its `.config`
   has `CONFIG_SAFEUI_DISPLAY_IMX8MP=y`, `# CONFIG_SAFEUI_DISPLAY_IMX8MP_LCDIF_RUST
   is not set` and `# CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC is not
-  set`. The later commits change only comments and this doc.
+  set`. The later commits change only comments and this doc. Built again
+  from `9562c58a` (the same command, `build/ck-head`): `GM rc=0
+  sha256=0c4d71d27f5df3b66fcc158869e2534115564d1efe8016434c752d853d28fba9
+  build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=9562c58a`, the same
+  `.config` lines, and `.text.yakogl_zephyr_wait_vblank` again under
+  "Discarded input sections" in `zephyr.map`.
 - The A/B arm compiled: the build's own compile command for
   `board_imx8mp.c` (aarch64-zephyr-elf-gcc, from `compile_commands.json`),
   run again with `-fsyntax-only -Wall -Wextra -Wno-unused-parameter`, once
