@@ -42,3 +42,13 @@ The gles3 stage 1 exists in the deps cache
 (`deqp-stage1-rpi_4b-gles3/work/build/modules/gles3`); the gles2 stage 1 for the
 ES 2.0 rows (`DEQP_WORK`) was not found there. Run the tree in rows of at most
 four, or as a background job with the longest timeout (HANDOFF "Known defects").
+
+## Retry after permissions were granted
+
+`tailscale status` on the worker lists `elegance-1` (100.70.54.122) as active,
+but `ssh signal-slot@elegance-1` still fails with the same resolver error and
+`getent hosts elegance-1` returns nothing (MagicDNS name not resolvable here).
+The lease allows ssh to the host only as written, so the tailnet address was
+not substituted. `BOARD_UART` is still unset. `BOARD_HDMI_TIMINGS`, `ZEPHYR_WS`,
+`ZEPHYR_SDK_INSTALL_DIR` and `WEST_VENV` are now set. A rerun needs the name
+resolved (or the address allowed in the lease) and `BOARD_UART`.
