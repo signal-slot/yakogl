@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Per-kick timestamps of the render service (feature `pvr-kick-times`,
 //! Kconfig `CONFIG_SAFEUI_GPU_PVR_KICK_TIMES`;
-//! tools/cts/log/investigations/pvr-fence-wait.md, "The kick path").
+//! docs/notes/pvr-fence-wait.md, "The kick path").
 //!
 //! For each kick: when `submit` was entered, how long the pre-kick MMU cache
 //! invalidate took, when the kick was posted, when the host first saw its

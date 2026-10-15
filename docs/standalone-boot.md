@@ -13,8 +13,8 @@ the backend the runs of record use; `tools/board.sh` still defaults to
 `uboot-tftp`, which fetches it over TFTP), on the Pi 4 the firmware's tryboot.
 Those are development runners; the TFTP side is "The TFTP runner" below, and
 its bring-up records are
-`tools/cts/log/board-sessions/am62p-netboot.md` and
-`tools/cts/log/board-sessions/imx8mp-netboot.md`.
+`docs/notes/am62p-netboot.md` and
+`docs/notes/imx8mp-netboot.md`.
 
 State: the code is in `tools/board.sh` (backend `uboot-mmc`, verbs `default`
 and `nodefault`) and in `tools/uboot-netboot-lib.sh`, and
@@ -209,14 +209,14 @@ Linux crashes instead, the load can fail, and Linux boots.
   `ext4load mmc 0:1 0x82000000 ... && dcache off && icache off && go 0x82000000`
   (env record `records/am62p/netboot/env-before-install-*.txt`, main checkout,
   not in git), a path measured on this board
-  (`tools/cts/log/board-sessions/am62p-netboot.md` sections 1 and 3).
+  (`docs/notes/am62p-netboot.md` sections 1 and 3).
 - i.MX8MP: the eMMC is U-Boot's `mmc 2` (its env's `update_uboot`: `mmc dev 2
   1`); Torizon is on partition 1 (`distro_bootpart_uuid=8725ec00-01`); the
   env's `distro_bootcmd` runs `run bootcmd_${target}`, the form of `run
   yako_${yako_src}` (env record `records/imx8mp/netboot/env-before-install-*.txt`).
 - Boot partitions: 8192 sectors each, read on both boards
   (`/sys/block/mmcblk0boot*/size` on the AM62P, `mmcblk2boot*` on the i.MX8MP:
-  `tools/cts/log/board-sessions/imx8mp-netboot.md` section 1).
+  `docs/notes/imx8mp-netboot.md` section 1).
 - `ext4load`: both boards' mainline defconfigs set `CONFIG_CMD_EXT4_WRITE=y`,
   which needs `CMD_EXT4`
   ([verdin-am62p_a53_defconfig](https://github.com/u-boot/u-boot/blob/master/configs/verdin-am62p_a53_defconfig),
@@ -239,7 +239,7 @@ deleted the default). Still unmeasured: the load time of a 100 MB file (a
 
 These facts hold for every U-Boot route, eMMC or TFTP. They were measured on
 the boards on 2026-10-03 (the records are in
-`tools/cts/log/board-sessions/am62p-netboot.md` and `imx8mp-netboot.md`).
+`docs/notes/am62p-netboot.md` and `imx8mp-netboot.md`).
 
 **`go`, not `booti`.** `zephyr.bin` carries an AArch64 Image header with
 `text_offset` 0. `booti` places such an image at the start of DRAM

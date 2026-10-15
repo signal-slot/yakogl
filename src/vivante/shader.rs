@@ -141,7 +141,7 @@ pub fn check_temp_limits(d: &GcDraw, vs_temps: u32, fs_temps: u32) -> bool {
 /// tests/es3_int_rt_gc.rs); the mode is what makes the pixel engine store
 /// them as integers instead of reading them as a float colour. The integer
 /// arms were written down from etnaviv_translate.h without a Mesa tree at
-/// hand (int-rt-gc, docs/es3-int-rt-gc.md); the mode values are the rnndb
+/// hand (int-rt-gc, docs/es3/int-rt-gc.md); the mode values are the rnndb
 /// header's. Not measured: no integer draw has run on this part.
 pub fn ps_color_output_mode(target_format: u8) -> u32 {
     if target_format == GLES_SURF_R32F {

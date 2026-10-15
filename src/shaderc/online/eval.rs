@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! A reference evaluator for [`ir::Module`]: the tests' oracle, and the
-//! transform-feedback capture's vertex shader (`docs/es3-transform-feedback.md`
+//! transform-feedback capture's vertex shader (`docs/es3/transform-feedback.md`
 //! section 4.2), which runs it in the product.
 //!
 //! The lowering's control-flow rewrites -- early returns turned into a slot

@@ -168,15 +168,15 @@ const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
 /// The texel formats the PowerVR TPU descriptor sampler reads
 /// (`pvr/backend.rs`, the texture state, `es3_tex_format`): the base set
 /// and the ES 3.0 classes, each in the TPU format Mesa's pvr_format_table
-/// gives its pipe format (docs/es3-pvr-formats.md section 2); the sRGB class
-/// is U8U8U8U8 with TEXSTATE_IMAGE_WORD0 `gamma` on (docs/es3-srgb.md). The integer
+/// gives its pipe format (docs/es3/pvr-formats.md section 2); the sRGB class
+/// is U8U8U8U8 with TEXSTATE_IMAGE_WORD0 `gamma` on (docs/es3/srgb.md). The integer
 /// classes are read by an `isampler2D` / `usampler2D` (the online compiler's
 /// `smp` without `fcnorm`); the other integer sampler dimensions are refused
 /// by name at compile time.
 ///
 /// Not `GLES_TEXFMT_RGB10A2`, which the descriptor decodes too: a texture of
 /// that class is no render target and has no glGenerateMipmap in the GL core
-/// (docs/es3-sized-formats.md), and ES 3.0 makes GL_RGB10_A2 both, so it
+/// (docs/es3/sized-formats.md), and ES 3.0 makes GL_RGB10_A2 both, so it
 /// stays in RGBA8 (two bits lost) until the PowerVR renders the class.
 pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
@@ -304,7 +304,7 @@ pub const GLES_SURF_INT_LAST: u8 = GLES_SURF_RGB10_A2UI;
  * source and result and the clear colour are linear: a back end that renders
  * the class decodes the destination before blending and encodes what it
  * writes (on the PowerVR the PBE's gamma on store over an F16 accumulation,
- * docs/es3-srgb.md). glReadPixels returns the stored (encoded) bytes. A back
+ * docs/es3/srgb.md). glReadPixels returns the stored (encoded) bytes. A back
  * end says whether it can in [`SRGB_RT`]; a draw or clear into one it cannot
  * is refused by name ([`rt_format_drawable`]). */
 pub const GLES_SURF_SRGB8_A8: u8 = 25;
@@ -428,7 +428,7 @@ pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::
 /// Can this build's back end render into [`GLES_SURF_SRGB8_A8`], encoding
 /// what it writes and blending in linear space? The PowerVR does (the PBE's
 /// gamma over the F16 accumulation, the fragment shader's sRGB class); the
-/// GC7000 and the V3D not yet (docs/es3-srgb.md), so the GL core accepts the
+/// GC7000 and the V3D not yet (docs/es3/srgb.md), so the GL core accepts the
 /// renderbuffer or texture level (ES 3.0 requires the format) and refuses a
 /// draw or clear into it by name rather than storing linear values as if
 /// they were encoded.
@@ -648,7 +648,7 @@ pub const GLES_MAX_TARGETS: usize = 4;
 ///
 /// - PowerVR: the end-of-tile programs and the kick's PBE words exist for
 ///   three targets (`PVR_RENDER_MAX_RT`, driver/src/pvr_render.h); a fourth
-///   needs its PBE state per render target (docs/es3-pvr-formats.md).
+///   needs its PBE state per render target (docs/es3/pvr-formats.md).
 /// - GC7000: the PE has four render targets (etnaviv `num_rts`) and
 ///   `vivante::backend::mrt_targets` takes four, but no board has drawn four.
 /// - V3D: the TLB takes targets 0-3 and the compiler writes four

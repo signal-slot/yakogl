@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * Broadcom V3D 4.2 (Raspberry Pi 4) GPU driver: milestones M1..M3 of the
- * bring-up (tools/cts/log/board-sessions/pi4-v3d-bringup.md; the sequences
+ * bring-up (docs/notes/pi4-v3d-bringup.md; the sequences
  * are driver/docs/rpi4-v3d.md). Power the V3D domain and identify the GPU
  * (M1), program its MMU (M2), and submit one binning + render job and wait for
  * it (M3).

@@ -191,7 +191,7 @@ refusal and keeps the 7,684,096 B depth copy beside it (refract peak
 69,093,376 B of the carve-out, 0 refused allocations across the whole
 list; 16 MiB also clears it but evicts the depth copy every frame and peaks
 higher, at 70,146,048 B; both run refract at 23 FPS, so the choice rests on
-memory, not speed) - `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md` sections
+memory, not speed) - `tools/hostharness/glmark2/FINDINGS-refract-budget.md` sections
 3.2-3.4. The budget was a workaround for the per-frame CPU tiled copy of a
 render target. Since item `v3d-rt-sample` a colour render target the scene
 samples is stored by the tile list into a render image the TMU reads as it
@@ -257,7 +257,7 @@ and checks them against the library's own lines.
 Reference only: these are Linux stacks with the vendor or Mesa driver, under
 the conditions each row states. They are not our measurement and not a
 comparison we make (the website quotes them the same way). The first runs of
-our image are `tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md`.
+our image are `ab43a20c5:tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md`.
 
 Every row was read from the page itself. Rows marked (*) were also re-opened
 by the author of this file, and the quoted lines matched.

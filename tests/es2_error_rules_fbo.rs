@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 2.0 error rules, framebuffer part (item cts-tree-diff-readme; the audit
-//! is docs/investigations/es2-error-rules.md, Table A "Framebuffers and
+//! is docs/notes/es2-error-rules.md, Table A "Framebuffers and
 //! renderbuffers" rows 34-39 and section D).
 //!
 //! Only a `report-es2` build refuses; the ES 3.0 build keeps taking these

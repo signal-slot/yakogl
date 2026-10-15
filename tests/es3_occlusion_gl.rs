@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0 occlusion queries through the GL API on the host, against a back
-//! end of the test's own (docs/es3-occlusion-query.md sections 4, 5 and 8):
+//! end of the test's own (docs/es3/occlusion-query.md sections 4, 5 and 8):
 //! the query state machine, the per-draw `GlesDraw::occlusion_query`,
 //! RESULT / RESULT_AVAILABLE across several kicks, and the errors of ES 3.0
 //! section 2.14. The unit tests in `src/gl/es3.rs` drive the crate's mock

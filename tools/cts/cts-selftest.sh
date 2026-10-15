@@ -202,7 +202,7 @@ fi
 # ---- 21: cts-summary.py --by-message tallies failures by their detail -------
 #
 # host-deqp-run.sh writes this tally into every run's summary.txt, and
-# tools/cts/log/es3-host-run.md maps it onto RESULTS.md 1r's per-message table. The
+# ab43a20c5:tools/cts/log/es3-host-run.md maps it onto RESULTS.md 1r's per-message table. The
 # fixture (testdata/by-message.qpa, a batch log as deqp writes it) holds one
 # Pass and three Fail: two whose details differ only in the shader line
 # `0:<n>:`, which must fold into one row, and one other. cts-summary.py reads

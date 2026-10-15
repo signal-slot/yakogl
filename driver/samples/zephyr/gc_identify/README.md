@@ -17,6 +17,6 @@ west build -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_identify \
 
 Expected console lines: `GC7000 rev 0x6204`, `reset to idle`, `gc_identify: PASS`.
 Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
-(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
-`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+(`docs/notes/imx8mp-gc-driver-notes.md`; the milestones are
+`docs/notes/imx8mp-gc-bringup.md`). Not run since the kernel
 side became Rust (`driver/docs/vivante-kernel-rust.md`).

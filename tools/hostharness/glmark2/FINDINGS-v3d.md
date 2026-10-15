@@ -167,7 +167,7 @@ job completes inside `submit()`.
   2026-10-11 on `415e6ccc`). The Pi 4's glmark2 image now sets the budget
   to 24 MiB, and this run has no refused draw, no `-22` and no GL error in
   refract. Why 24 MiB and not 12 or 16:
-  [FINDINGS-refract-budget.md](../../cts/log/hostharness/glmark2/FINDINGS-refract-budget.md).
+  [FINDINGS-refract-budget.md](FINDINGS-refract-budget.md).
 * **Out of GPU memory: none at 96 MiB.** No allocation was refused in any
   entry. The largest high-waters are refract (69,093,376 bytes, the
   11,005,952-byte colour copy live beside the depth copy) and terrain

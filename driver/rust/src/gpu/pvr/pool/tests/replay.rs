@@ -4,7 +4,7 @@
 //! cluster one, replayed through the real pool and bump on the board's
 //! layout: a 64 MiB carveout whose render pool is its last 59200 KiB
 //! ("render pool summary: 59200 KiB",
-//! tools/cts/log/investigations/pvr-render-pool.md).
+//! docs/notes/pvr-render-pool.md).
 //!
 //! The board prints no per-allocation trace, so the sequence is a
 //! reconstruction, and each number says where it comes from:
@@ -36,7 +36,7 @@
 //! The board held about 6 MiB more than the reconstruction names at
 //! refract. "Unnamed" blocks stand for it: 256 KiB blocks kept from shadow
 //! on, swept from none to past what either pool arm survives
-//! (tools/cts/log/investigations/pvr-render-pool.md, "The host replay").
+//! (docs/notes/pvr-render-pool.md, "The host replay").
 
 use super::*;
 use crate::gpu::pvr::fwif::{PDSCODEDATA_HEAP_BASE, PMMETA_PROTECT_HEAP_BASE, USCCODE_HEAP_BASE};

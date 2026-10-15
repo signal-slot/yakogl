@@ -7,7 +7,7 @@
 //! draws the same triangles with both and fails on any pixel the first draw
 //! covered and the second did not (es2fShaderInvarianceTests.cpp:257-366),
 //! so the two programs must compute gl_Position bit for bit alike.
-//! tools/cts/log/investigations/es2-invariance.md has the cases and the
+//! docs/notes/es2-invariance.md has the cases and the
 //! cause (its proposed fix was not taken; main fixed it with f9688bc5).
 //!
 //! What is compared is the computation itself, as each back end hands it to

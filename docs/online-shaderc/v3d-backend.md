@@ -12,12 +12,12 @@ of their day unless a later line says otherwise, and code cites them by heading.
 Status 2026-09-24, as written then: 43 corpus pairs compile (40 in a
 `report-es2` build, which refuses GLSL ES 3.00). On the board, our programs drew
 the `v3d_triangle` sample three ways: plain, with uniforms, and with an `if`
-(`tools/cts/log/board-sessions/pi4-v3d-bringup.md` has the result rows). The
+(`docs/notes/pi4-v3d-bringup.md` has the result rows). The
 product path for this GPU is this compiler only (`driver/docs/rpi4-v3d.md`,
 "Shader compiler"); Mesa's compiler, built as `tools/v3d/v3d_shc`, is the
 reference we are compared with, never a path into the product. Two dated
 sections, the M9 Bevy survey and the slow-job readings of the E runs, are the
-record `tools/cts/log/v3d-backend-diary-2026-09.md`.
+record `ab43a20c5:tools/cts/log/v3d-backend-diary-2026-09.md`.
 
 References: Mesa 26.2.1 `src/broadcom/compiler/` and `src/broadcom/qpu/` (MIT,
 transcribed with attribution where we follow them). No GPL source is read for this
@@ -1172,7 +1172,7 @@ What Mesa does on V3D 4.2, and what was transcribed:
   throw away the alpha channel before alpha test happens", :266-268), 128
   for RGBA32*. The clamp is `clamp_for_format_and_type`'s
   (`v3dx_rcl.c:396-407`): INT for a pure integer format, NONE otherwise
-  (NORM for sRGB, whose render side is not built, `docs/es3-srgb.md` 5.1).
+  (NORM for sRGB, whose render side is not built, `docs/es3/srgb.md` 5.1).
 - **Tile size** (`v3d_util.c` `v3d_choose_tile_size`): one step down the
   table per bpp step on top of the RT-count and MSAA steps
   (`v3d_frame_tiling_bpp`; the table now runs to 8x8). The pools are sized

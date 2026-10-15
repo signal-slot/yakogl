@@ -111,7 +111,7 @@ static int pvr_power_on(const struct pvr_config *cfg)
 	/* Get control of and enable the GPU core clock, then set 800 MHz.
 	 * Mirrors the reference driver's manual power path (core clk up ->
 	 * short delay -> reset deassert) — see
-	 * tools/cts/log/investigations/pvr-bringup/gpu-bringup-spec.md M1.
+	 * docs/notes/pvr-bringup-spec.md M1.
 	 *
 	 * Non-fatal: on K3 the power domain already gates the GPU core clock,
 	 * so it runs at its default rate once PD 237/242 are on. If the request

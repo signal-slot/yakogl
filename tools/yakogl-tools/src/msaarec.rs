@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `yakogl-tools record msaa` - gl_test case 16's 4x probes, read from the
-//! result records they were written to (tools/cts/log/investigations/gc-msaa-record.md).
+//! result records they were written to (docs/notes/gc-msaa-record.md).
 //!
 //!     yakogl-tools record msaa [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...
 //!

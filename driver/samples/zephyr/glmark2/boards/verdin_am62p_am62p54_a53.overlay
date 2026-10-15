@@ -40,7 +40,7 @@
  * image takes (driver/samples/zephyr/deqp/boards/, run from U-Boot on
  * 2026-10-12 with 0 resets). At 64 MiB about 36 MiB are taken whatever the
  * scene (firmware, parameter buffer, freelists, HWRT sets;
- * tools/cts/log/investigations/pvr-render-pool.md), so terrain's 5.6 MB
+ * docs/notes/pvr-render-pool.md), so terrain's 5.6 MB
  * NPOT mip chain and shadow's 22 MB depth chain cannot fit and refract's
  * target allocations are refused (issues #1, #2). The board's 64 MiB region
  * stays reserved but unused. */

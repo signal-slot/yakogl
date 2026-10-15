@@ -2,7 +2,7 @@
 // ES 2.0 texture error rules: enums that ES 2.0 refuses but ES 3.0 accepts.
 // Self-contained (no crate:: or super:: imports) because it is also included
 // by tests/es2_texture_rules_pred.rs. Values are copied from consts.rs.
-// See docs/investigations/es2-error-rules.md, Table A rows 24-27.
+// See docs/notes/es2-error-rules.md, Table A rows 24-27.
 #![allow(dead_code)]
 
 const TEXTURE_3D: u32 = 0x806f;

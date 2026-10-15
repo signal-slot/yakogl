@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The GL core gives back the GPU memory of a deleted object
-//! (tools/cts/log/investigations/pvr-render-pool.md, "Who frees").
+//! (docs/notes/pvr-render-pool.md, "Who frees").
 //!
 //! glmark2 creates and deletes each scene's buffers, textures and
 //! framebuffers between scenes. On the AM62P the render pool ran dry in the
@@ -281,7 +281,7 @@ impl Drop for Scenes<'_> {
     }
 }
 
-/// Mechanism 2 of tools/cts/log/investigations/pvr-render-pool.md, at the GL
+/// Mechanism 2 of docs/notes/pvr-render-pool.md, at the GL
 /// level, with the Zephyr OSAL's hold rule the mock models (src/testutil.rs
 /// `held`): glmark2 draws a scene, swaps (here: glFlush submits the frame, and
 /// the GPU finishes it at once), deletes the scene's buffers, and sets up the

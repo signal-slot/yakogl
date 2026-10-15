@@ -5307,7 +5307,7 @@ fn gl_test_case_91_blends_into_rgba16f_on_the_host() {
     .unwrap();
 }
 
-/// An sRGB target (`SHC_RT_SRGB`, docs/es3-srgb.md 4) on the host: the same
+/// An sRGB target (`SHC_RT_SRGB`, docs/es3/srgb.md 4) on the host: the same
 /// shader as case 91 (es100/hdrcolor.frag, u_color = (0.5, 1.5, 0, 0.5)),
 /// built for the sRGB class the GL core keys an `SRGB8_ALPHA8` target with,
 /// run in the byte model over a linear pixel in two dwords of halves. The

@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_fence
 
-Milestones 2 and 3 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md` on the real GPU, without
+Milestones 2 and 3 of `docs/notes/imx8mp-gc-bringup.md` on the real GPU, without
 drawing anything: hardware init, MMU v2, the interrupt, the front end on its
 idle loop, and then a handful of empty submits with a fence wait after each.
 
@@ -43,6 +43,6 @@ MMU status, the events still in flight) before resetting the SoC.
 `CONFIG_GC_FENCE_ROUNDS` sets how many submits; more than one is the point.
 
 Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
-(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
-`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+(`docs/notes/imx8mp-gc-driver-notes.md`; the milestones are
+`docs/notes/imx8mp-gc-bringup.md`). Not run since the kernel
 side became Rust (`driver/docs/vivante-kernel-rust.md`).

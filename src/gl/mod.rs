@@ -34,7 +34,7 @@ pub mod state;
 pub mod texture;
 pub mod tf;
 /// The transform-feedback capture: the vertex shader evaluated on the CPU
-/// (`docs/es3-transform-feedback.md` section 4). Only where the evaluator is.
+/// (`docs/es3/transform-feedback.md` section 4). Only where the evaluator is.
 #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
 mod tf_capture;
 pub mod vao;

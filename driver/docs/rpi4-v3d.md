@@ -5,7 +5,7 @@
 The design facts of the V3D back end: the hardware addresses and sequences,
 the control lists, and what the shader compiler must do for this GPU. The
 bring-up log (M1 to M6, the first runs, the QEMU smoke test) is
-`tools/cts/log/board-sessions/pi4-v3d-bringup.md`. How an image boots on the
+`docs/notes/pi4-v3d-bringup.md`. How an image boots on the
 board is `docs/standalone-boot.md`, "Raspberry Pi 4".
 
 The code: the driver side is `driver/src/v3d/` (`v3d_hw.c` power, identity,

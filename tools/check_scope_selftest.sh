@@ -72,7 +72,7 @@ want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
 want docs/HANDOFF.md docs
 want website/index.html docs
 want README.md docs
-want tools/cts/log/board-sessions/x.md docs
+want docs/notes/x.md docs
 # the plan for a given change (YAKOGL_CHECK_PATHS stands in for the diff)
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).

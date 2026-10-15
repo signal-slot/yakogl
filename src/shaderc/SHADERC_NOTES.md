@@ -44,7 +44,7 @@ is a static in `src/osal/zephyr_shaderc_scratch.c`, sized by
 `CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES` and lent at boot by `SYS_INIT` so no OSAL
 has to remember to do it. The trade is that the image shrinks and the memory
 grows: on the AM62P gl_test image the compiler is 884,201 bytes of flash and
-5,244,035 bytes of `.bss` (2026-10-07; `docs/HANDOFF.md`, open work 1). The first
+5,244,035 bytes of `.bss` (2026-10-07; `docs/HANDOFF.md`, open work 2). The first
 measurement (2026-09-22, `gc_gl_test` on the i.MX8MP) is in
 `git show 5ad2fa0e:src/shaderc/SHADERC_NOTES.md`.
 

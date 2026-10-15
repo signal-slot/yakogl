@@ -94,7 +94,7 @@ pub const fn ps_control_saturate_rt(rt: u32) -> u32 {
 // src/etnaviv/hw, from rnndb) and its driver; nothing here is copied from a
 // vendor header. What
 // each one is for is in VIVANTE_NOTES.md and the pre-board map
-// tools/cts/log/investigations/imx8mp-draw-state.md.
+// docs/notes/imx8mp-draw-state.md.
 
 // ---- command stream ----------------------------------------------------
 

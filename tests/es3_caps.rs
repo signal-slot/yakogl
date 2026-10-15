@@ -4,7 +4,7 @@
 //! through the GL API on the host and held (a) against the minimum of the ES
 //! 3.0.6 specification (Tables 6.32, 6.33, 6.34) and (b) against what the
 //! hardware can do, where Mesa's v3d, etnaviv and pvr sources say so
-//! (docs/es3-backend-caps.md gives the file:line of every ceiling). The numbers are the ones each GPU's
+//! (docs/es3/backend-caps.md gives the file:line of every ceiling). The numbers are the ones each GPU's
 //! build reports (`gpu-powervr`, `gpu-vivante`, `gpu-v3d`).
 //!
 //! A limit below its minimum is not a silent pass: it is listed in
@@ -250,7 +250,7 @@ fn limits() -> Vec<Limit> {
 }
 
 /// The limits that are below their minimum today, with the reason. Keep this
-/// list true: it is the limit half of the gap list in docs/es3-backend-caps.md.
+/// list true: it is the limit half of the gap list in docs/es3/backend-caps.md.
 /// An entry is by name and holds for every GPU build unless it says otherwise.
 fn known_gaps() -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> = vec![
@@ -379,7 +379,7 @@ fn every_es3_limit_meets_the_spec_minimum_or_is_a_listed_gap() {
 /* ---- the hardware ceilings ------------------------------------------------ */
 
 /// What a build reports must not exceed what the hardware does. Each ceiling
-/// is a statement checked in docs/es3-backend-caps.md section 1 at the
+/// is a statement checked in docs/es3/backend-caps.md section 1 at the
 /// file:line given here, all in Mesa 26.2.1 (da14d65e): v3d_limits.h, the
 /// Imagination device-info / csbgen files, and the etnaviv ones (E/ =
 /// src/gallium/drivers/etnaviv/, H/ = the i.MX8MP hwdb row).
@@ -548,7 +548,7 @@ fn es2_report_answers_are_unchanged() {
 
 /// The sampled texel classes and integer render-target bits the build
 /// reports (informational: the class tables are the formats-* and int-rt-*
-/// items' to grow, and docs/es3-backend-caps.md section 4 holds the
+/// items' to grow, and docs/es3/backend-caps.md section 4 holds the
 /// hardware side). Run with --nocapture.
 #[cfg(not(feature = "report-es2"))]
 #[test]

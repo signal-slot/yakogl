@@ -39,7 +39,7 @@ that gap on the target.
 | `arena.rs` / `store.rs` — the memory model | **done** |
 | `ir.rs` — the front end / code generator contract | **agreed** and implemented; `ir.md` is the contract |
 | `backend.rs` — `ShcBackend`, cache, selection, blend variants | **done** |
-| the front end (M2, es100-frontend) | **done** for GLSL ES 1.00: preprocessor, parser, sema, lowering to IR, reflection; scored by `tools/es100_oracle.py`. GLSL ES 3.00: `docs/es3-shaderc-coverage.md` |
+| the front end (M2, es100-frontend) | **done** for GLSL ES 1.00: preprocessor, parser, sema, lowering to IR, reflection; scored by `tools/es100_oracle.py`. GLSL ES 3.00: `docs/es3/shaderc-coverage.md` |
 | the encoder and allocator (M1) | **done**: round-trip over the table's blobs, `allocate_and_build` |
 | `select.rs` — instruction selection | **done**: io, literals, uniforms, the `native` arithmetic and the `lower` library (the block below is resolved) |
 | `abi.rs` — the `ShcShader` assembly | **done**, eight named refusals |

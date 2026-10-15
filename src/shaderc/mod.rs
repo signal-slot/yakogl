@@ -108,7 +108,7 @@ pub const SHC_RT_RGBA8: u32 = 0;
 pub const SHC_RT_F16X4: u32 = 1;
 pub const SHC_RT_F16: u32 = 2;
 pub const SHC_RT_F32: u32 = 3;
-/// An sRGB target (`GLES_SURF_SRGB8_A8`, docs/es3-srgb.md): the colour is
+/// An sRGB target (`GLES_SURF_SRGB8_A8`, docs/es3/srgb.md): the colour is
 /// written as four linear halves in two dwords, as for [`SHC_RT_F16X4`], but
 /// saturated -- the target is unsigned normalised, so the blend's source is
 /// clamped as for RGBA8 and so is what is written, which keeps the F16

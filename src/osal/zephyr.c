@@ -92,7 +92,7 @@ static void report_owners_at_refusal(void);
 /* CONFIG_YAKOGL_PVR_POOL_RECLAIM (zephyr/Kconfig): a free with no frame open
  * waits only for the last submitted kick, and a refused allocation waits for
  * the submitted kicks and is tried once more
- * (tools/cts/log/investigations/pvr-render-pool.md, mechanism 2). On by default
+ * (docs/notes/pvr-render-pool.md, mechanism 2). On by default
  * (zephyr/Kconfig); n keeps the old hold. */
 #if defined(CONFIG_YAKOGL_PVR_POOL_RECLAIM)
 #define PVR_POOL_RECLAIM 1
@@ -261,7 +261,7 @@ void osal_zephyr_diag_print(void)
 }
 
 /* What the queue holds now: memory no allocation can reuse until its fence
- * completes (tools/cts/log/investigations/pvr-render-pool.md, mechanism 2). An
+ * completes (docs/notes/pvr-render-pool.md, mechanism 2). An
  * empty queue has no oldest fence: "none", not 0. */
 static uint32_t pending_kib(void)
 {

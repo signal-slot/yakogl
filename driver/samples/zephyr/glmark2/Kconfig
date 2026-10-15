@@ -33,7 +33,7 @@ config GLMARK2_PVR_ONE_KICK_IN_FLIGHT
 	  the ones before it, so every kick starts on an idle GPU. With
 	  CONFIG_SAFEUI_GPU_PVR_KICK_TIMES the kick line then shows the alone
 	  cost of a frame's kick
-	  (tools/cts/log/investigations/pvr-fence-wait.md, "The next
+	  (docs/notes/pvr-fence-wait.md, "The next
 	  experiment"). A measurement knob: off for a score.
 
 config GLMARK2_PVR_KEEP_ZS
@@ -43,7 +43,7 @@ config GLMARK2_PVR_KEEP_ZS
 	  Clears the PowerVR backend's PVR_BACKEND_OPT_SWAP_DROPS_ZS (on by
 	  default) before the first scene: the swapped frame stores its
 	  depth/stencil and the next loads them, as before
-	  (tools/cts/log/investigations/pvr-fence-wait.md). The arm that
+	  (docs/notes/pvr-fence-wait.md). The arm that
 	  measures what the default saves.
 
 endmenu

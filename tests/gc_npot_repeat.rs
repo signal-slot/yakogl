@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! GC7000 (i.MX8MP): what the back end emits for the dEQP-GLES2 NPOT wrap
 //! cases of docs/es2-cts-failures.md section H.3, pinned register by register
-//! (item gc-flake-instrument, part 2; docs/investigations/gc-npot-repeat.md).
+//! (item gc-flake-instrument, part 2; docs/notes/gc-npot-repeat.md).
 //!
 //! `GL_OES_texture_npot` is listed, so dEQP expects REPEAT and
 //! MIRRORED_REPEAT to work on an NPOT texture (section H.2). tests/es2_npot.rs

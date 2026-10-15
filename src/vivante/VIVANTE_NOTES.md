@@ -19,13 +19,13 @@ into a command stream the GPU's front end fetches.
 **Most of this has since run on hardware.** It was written before there was a
 board, and the encodings still come from Mesa's etnaviv driver and its register
 descriptions (the pre-board map is
-`tools/cts/log/investigations/imx8mp-draw-state.md`) — but an i.MX8MP has been
+`docs/notes/imx8mp-draw-state.md`) — but an i.MX8MP has been
 in the lab since 2026-09-20, and this backend runs there on Zephyr (the current
 gl_test standing is in `tools/cts/STATUS.md`). So read a claim here as
 unverified only where the text says so, and take the numbered questions at the
 end as the ones that were open when this was written; several are answered in
 `driver/docs/vivante-kernel-rust.md`, "Hardware findings that still hold", and in
-the bring-up record `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`.
+the bring-up record `docs/notes/imx8mp-gc-bringup.md`.
 
 ## The shape of the thing
 
@@ -1355,11 +1355,11 @@ next suspects. If arm 9 passes, make bit 3 the design (drop the knob bit),
 turn `GC_MSAA_ENABLE` on, and run dEQP multisample with the 4x config image.
 
 **Update 2026-10-12 (round 2 and the Mesa comparison).** Arms 1 and 9 both
-failed with an empty scratch (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`).
+failed with an empty scratch (`ab43a20c5:tools/cts/log/board-sessions/imx8mp-gltest-r2.md`).
 On the host, every PE colour address of the 4x frame is the scratch the probe
 reads, and the resolve matches Mesa 26.2.1 register by register. The
 recipe above was written from memory; read against the source
-(`tools/cts/log/investigations/gc-msaa-addresses.md`), Mesa never scales the
+(`docs/notes/gc-msaa-addresses.md`), Mesa never scales the
 viewport or scissor for 4x (bit 3 is not Mesa's) and writes only the
 alpha-to-coverage bits of PS_MSAA_CONFIG (bit 2 is not Mesa's), while it
 always writes what bit 1 holds (PS input and temporary + 1, PE_LOGIC_OP

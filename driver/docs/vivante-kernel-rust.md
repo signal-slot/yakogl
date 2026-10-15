@@ -30,7 +30,7 @@ from a measurement on the board.
 | rnndb | etna_viv rules-ng-ng headers in `driver/src/vivante/hw/*.xml.h` | MIT | register names, offsets, fields, command words; `regs.rs` is checked against them by a test |
 | galcore | NXP's Vivante kernel driver, `drivers/mxc/gpu-viv` of [nxp-imx/linux-imx](https://github.com/nxp-imx/linux-imx) branch `lf-6.12.y` (commit `df24f942`, 2025-11-21) | dual MIT / GPL-2.0-or-later, used under MIT | documentation of sequences and of the part's database entry; cited by file and function; nothing copied or vendored |
 | RM | i.MX 8M Plus Applications Processor Reference Manual, IMX8MPRM Rev. 3, 08/2024 | NXP document | GPC, CCM, the GPU register block, the interrupt |
-| board | measurements on the Verdin iMX8M Plus ("Hardware findings that still hold" below, RESULTS; the bring-up record `tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
+| board | measurements on the Verdin iMX8M Plus ("Hardware findings that still hold" below, RESULTS; the bring-up record `docs/notes/imx8mp-gc-driver-notes.md`) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
 
 galcore's licence: every `.c` and `.h` of the 112 under `drivers/mxc/gpu-viv`
 carries the same header. It begins "The MIT License (MIT) / Copyright (c) 2014 -
@@ -228,9 +228,9 @@ Everything else is the same traffic as the C, by the host record.
 Measured on the Verdin iMX8M Plus in September 2026, with the C kernel side
 and the Linux harness that are now gone. They are facts about the part, so
 they hold for the Rust. The full accounts are in
-`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md` (the old
+`docs/notes/imx8mp-gc-driver-notes.md` (the old
 `driver/src/vivante/NOTES.md`) and
-`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`.
+`docs/notes/imx8mp-gc-bringup.md`.
 
 Registers:
 

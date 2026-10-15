@@ -55,7 +55,7 @@ impl GcKick {
 }
 
 /// KICK_DIFF: read the render target twice after a kick, to tell a late
-/// write from a wrong one (tools/cts/log/investigations/gc-kick-diff.md).
+/// write from a wrong one (docs/notes/gc-kick-diff.md).
 ///
 /// i.MX8MP gl_test cases 10 and 2 (#9, #25) lose the pixels of a tiny draw
 /// that follows a clear in one kick. Two stories fit: the pixel engine's

@@ -32,8 +32,8 @@ Portable GL ES 2.0 state machine that records into `struct gl_context`
 | `gl/draw.rs`     | `glDrawArrays`/`glDrawElements`: builds `GlesDraw` from the current context; pending-clear plumbing; per-program GPU (USC + uniform) cache. |
 | `gl/framebuffer.rs` | `glGenFramebuffers`/`glBindFramebuffer`/`glFramebufferTexture2D`/`glFramebufferRenderbuffer`/`glCheckFramebufferStatus`/`glGetFramebufferAttachmentParameteriv`, the renderbuffer API, `glReadPixels`, and `gl_fb_target()` (the draw target: default surface or the bound FBO's colour attachment). |
 | `gl/es3.rs`     | The OpenGL ES 3.0 entry points not implemented elsewhere: `glClearBuffer*`, `glGetUniformuiv`, the program-binary calls, and the names of queries, samplers and transform feedback objects. |
-| `gl/es3_formats.rs` | ES 3.0's sized colour formats the original tables do not hold (snorm, packed float, shared exponent, 10-bit, integer), converted at upload into a class the back end samples (`docs/es3-sized-formats.md`). |
-| `gl/srgb.rs`    | The sRGB transfer function on the CPU for the 8-bit sRGB storage class: glGenerateMipmap's linear-space box filter and `glBlitFramebuffer`'s decode and encode (`docs/es3-srgb.md`). |
+| `gl/es3_formats.rs` | ES 3.0's sized colour formats the original tables do not hold (snorm, packed float, shared exponent, 10-bit, integer), converted at upload into a class the back end samples (`docs/es3/sized-formats.md`). |
+| `gl/srgb.rs`    | The sRGB transfer function on the CPU for the 8-bit sRGB storage class: glGenerateMipmap's linear-space box filter and `glBlitFramebuffer`'s decode and encode (`docs/es3/srgb.md`). |
 | `gl/blit.rs`    | `glBlitFramebuffer` (ES 3.0.6 4.3.3): colour copied on the CPU, scaled, flipped and converted; depth and stencil refused. |
 | `gl/tf.rs`, `gl/tf_capture.rs` | Transform feedback: the objects, bindings and begin/pause/resume state, and the CPU capture ("Transform feedback" below). |
 | `gl/names.rs`   | Object names past the fixed pools ("Object names past the pools" below). |
@@ -616,7 +616,7 @@ still stores and compares table slots.
 ## Transform feedback
 
 **Built:** the state (`16ac8641`, `gl/tf.rs`) and the capture (tf-capture,
-`gl/tf_capture.rs`); the design is `docs/es3-transform-feedback.md`. The
+`gl/tf_capture.rs`); the design is `docs/es3/transform-feedback.md`. The
 objects with their indexed bindings, the varyings resolved at link, the
 begin/end/pause/resume rules and errors, the primitives-written query,
 rasterizer discard for draws and clears, and the data path: at a draw with a

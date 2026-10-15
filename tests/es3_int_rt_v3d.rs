@@ -41,7 +41,7 @@ fn integer_surfaces() -> impl Iterator<Item = u8> {
 
 /// The GL core may draw every integer surface into the V3D
 /// (`INTEGER_RT_FORMATS` has all nineteen bits), and not the sRGB one
-/// (`SRGB_RT`, docs/es3-srgb.md 5.1).
+/// (`SRGB_RT`, docs/es3/srgb.md 5.1).
 #[test]
 fn every_integer_surface_is_drawable() {
     assert_eq!(backend::INTEGER_RT_FORMATS, (1 << 19) - 1);

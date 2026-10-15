@@ -274,7 +274,7 @@ bits, and this project's choices, each with its reason).
 
 ## What the board settled (2026-10-02)
 
-The staged runs are in `tools/cts/log/board-sessions/am62p-display-rust-2026-10-02.md`.
+The staged runs are in `ab43a20c5:tools/cts/log/board-sessions/am62p-display-rust-2026-10-02.md`.
 What they settled:
 
 - **The WIZ offset.** MOD_VER (MODULE_ID 992h, 69924881h on this silicon)
@@ -309,7 +309,7 @@ What they settled:
   known-colour fill (`CONFIG_PVR_SAMPLE_DISPLAY_FILL`), the register dump
   (`CONFIG_PVR_SAMPLE_DISPLAY_DUMP`), the board readings and the
   procedure are in
-  `tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`.
+  `ab43a20c5:tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`.
 - The WIZ offset is answered (above); the TRM summary could be reported to TI.
 - The DSS and DSI Kconfig symbols now depend on ARM64 (the Rust staticlib is
   built for aarch64-unknown-none-softfloat); an R5F/M4 build that compiled the

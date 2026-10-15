@@ -2082,7 +2082,7 @@ if command -v python3 >/dev/null 2>&1; then
     ':(glob)tools/testdata/am62p-netboot-*'
   step "tools   am62p netboot UART phases" python3 tools/am62p_netboot_uart.py --self-test
   # The i.MX8MP netboot's verdicts
-  # (tools/cts/log/board-sessions/imx8mp-netboot.md) are tools/board.sh's
+  # (docs/notes/imx8mp-netboot.md) are tools/board.sh's
   # now, replayed on the 2026-10-03 records by
   # tools/board_selftest.sh ("tools   board.sh dry-run matrix and replays"
   # below); the record's classes and stage table are

@@ -176,7 +176,7 @@ pub struct YdPvrKm {
     // ---- the render pool's top region ([`super::mem::bo_alloc_top`], [`super::pool`])
     /// GENERAL-heap requests of more than this many bytes are placed from
     /// the carveout's end downward, away from the small blocks the bump
-    /// places from below (tools/cts/log/investigations/pvr-render-pool.md, "the
+    /// places from below (docs/notes/pvr-render-pool.md, "the
     /// top region"). 0: off, every block from the bump, as before.
     pub pool_top_above: u32,
     /// Bytes handed out from the top now: the region is `[size - pool_top,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Host tests for `tf.rs` (`16ac8641`, docs/es3-transform-feedback.md 7.1):
+//! Host tests for `tf.rs` (`16ac8641`, docs/es3/transform-feedback.md 7.1):
 //! the transform feedback objects, indexed bindings, varying resolution at
 //! link, the begin/end rules, the primitives-written query and rasterizer
 //! discard. The shader-level cases compile GLSL ES 3.00 on the in-process

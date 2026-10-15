@@ -61,7 +61,6 @@ There is no released version yet; everything below is unreleased.
 
 #### Boards and samples
 - AGL cluster joins the common set: built, run and tallied on every board (c7c80ba1).
-- Per-board benchmark baselines under `tools/cts/log/benchmarks-baseline/`.
 - A release building guide lists every input of the benchmark images and the build line per board (`docs/release/building.md`, f3da7e9e).
 - CONTRIBUTING.md and SECURITY.md (b4ec4273).
 
@@ -89,7 +88,7 @@ There is no released version yet; everything below is unreleased.
 
 #### GL core
 - Refuse a `DEPTH_COMPONENT24` renderbuffer; ES 2.0 has no `MAX_DRAW_BUFFERS` (4e9397c6).
-- ES 2.0 CTS, board-confirmed (dEQP-GLES2, 17,165-case mustpass list; records in `docs/board-sessions/`, per-case detail in `docs/es2-cts-failures.md`):
+- ES 2.0 CTS, board-confirmed (dEQP-GLES2, 17,165-case mustpass list; results in `tools/cts/RESULTS.md`, per-case detail in `docs/es2-cts-failures.md`):
   - AM62P, `63efed8e`: 17,141 pass / 0 fail / 18 not supported / 6 warnings (17 images at 1x 17,125 / 0 / 34; the 4x multisample image 16 / 0). The accepted not supported: `clip_control` 8, `multisample` 16 at 1x, `multisampled_render_to_texture.readpixels` 1, `negative_api.texture.compressedtexsubimage2d_*` 9.
   - i.MX8MP, `c345ab74`: 17,318 pass / 0 fail / 34 not supported / 19 quality warnings of the 17,371 cases run (206 are outside the list); the same accepted not supported buckets.
   - Raspberry Pi 4: not zero. `20a48791` rows 0-14: 11,877 pass / 46 fail / 25 not supported; the 46 are `GL_BGRA_EXT` renderbuffer cases (`fbo.completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra`, 43 `fbo.render.*.rbo_bgra*`) broken by 8bbf9ba2; rows 15-28 have not run at that commit. The last whole tree, `d56e79e5`, had 17,127 pass / 0 fail / 34 not supported / 4 warnings.

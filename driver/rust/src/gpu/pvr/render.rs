@@ -1777,7 +1777,7 @@ fn dump_cccb_pending(k: &YdPvrKm, what: &str, ring: *const u8, from: u32, to: u3
 /// each millisecond of [`wait_for`]. Without the feature `pvr-fine-wait` it
 /// is the whole millisecond: one read per ms, so a wait ends on the first
 /// whole millisecond after the fence moved
-/// (tools/cts/log/investigations/pvr-fence-wait.md). With it, the UFO is read
+/// (docs/notes/pvr-fence-wait.md). With it, the UFO is read
 /// every 20 us; the once-per-ms work (FWCCB service, re-ring, re-post, HWR
 /// check) and the timeout stay per ms.
 #[cfg(feature = "pvr-fine-wait")]
@@ -1823,7 +1823,7 @@ pub const RUNAWAY_BATCH: u32 = 2;
 /// The runaway batch's dump (feature `pvr-grow-scene`): when one FWCCB
 /// batch served [`RUNAWAY_BATCH`] grows or more, the firmware took each
 /// answer's pages at once and asked again. That is the runaway of fwccb-2
-/// and ab3-on (tools/cts/log/investigations/pvr-render-pool.md), where a
+/// and ab3-on (docs/notes/pvr-render-pool.md), where a
 /// bump-height TA used 3328 pages more and never finished, and the ack words
 /// alone could not say why. One line, after the batch:
 /// - the TA's registers the wait's progress line reads;
@@ -1887,7 +1887,7 @@ fn runaway_dump(k: &YdPvrKm, r: &YdPvrRender, served: u32) {
 /// K kicks in flight: A with TA done and 3D pending, B with TA pending".
 /// The parameter manager's pages are held by kicks whose geometry has run
 /// and whose fragment has not, so A (and the size of their geometry) is what
-/// makes a list run out (tools/cts/log/investigations/pvr-render-pool.md, "the
+/// makes a list run out (docs/notes/pvr-render-pool.md, "the
 /// grow scene"). A kick's geometry is done when its geometry UFO slot holds its
 /// sequence or a later one; the slots are reused every [`GEOM_UFO_SLOTS`]
 /// kicks, and `submit` keeps the kicks in flight within that.
@@ -2511,7 +2511,7 @@ impl DrvTally {
 
 /// The driver's lines of the run-end owner report
 /// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
-/// tools/cts/log/investigations/pvr-render-pool.md): the render service's
+/// docs/notes/pvr-render-pool.md): the render service's
 /// one-time objects (`statics`: their page-rounded bytes per heap [general,
 /// pds, usc], counted by the C side that made them, in
 /// `nstatics` blocks), the freelists (backing pages, PFN arrays, the shared
@@ -2675,7 +2675,7 @@ mod owner_tests {
     }
 
     /// The driver's owner lines, from the formulas in
-    /// tools/cts/log/investigations/pvr-render-pool.md: two global freelists of
+    /// docs/notes/pvr-render-pool.md: two global freelists of
     /// the 64 MiB carveout (1536 backing pages, 4096-entry PFN arrays) and the
     /// local one (26 pages, 32 entries), the render context's VDM stream, and
     /// one HWRT member at its minimum sizes (TPC 16, VHEAP 8, region headers

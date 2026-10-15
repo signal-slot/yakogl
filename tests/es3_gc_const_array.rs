@@ -3,7 +3,7 @@
 //! A run-time index into a large constant array, on the GC7000UL.
 //!
 //! dEQP-GLES3 `shaders.large_constant_arrays.indexing.float_128_vertex` and
-//! `vec4_128_vertex` (docs/es3-shaderc-coverage.md) were refused as
+//! `vec4_128_vertex` (docs/es3/shaderc-coverage.md) were refused as
 //! `Abi(LoadBalancingTempsUnmeasured { temps: 35 / 34, temps_max: 21 })`.
 //! The front end reads `array[i]` as a chain `acc = (i == k) ? c_k : acc`
 //! (lower.rs `select_among`), the constants in the constant file or as

@@ -14,7 +14,7 @@
 #   no-cc  the tier on, this app's rows and no compiler at all
 #   apps   the tier on, every app the source list names
 #
-# The first three are the comparison step 6 of docs/HANDOFF.md (open work item 1)
+# The first three are the comparison step 6 of docs/HANDOFF.md (open work item 2)
 # turns on: what a compiler that serves any shader costs -- its .text and
 # .rodata in flash, its .bss in RAM -- against a table that serves only the apps
 # it names and grows with them. `apps` is what an image that runs all of them

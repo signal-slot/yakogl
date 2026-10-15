@@ -58,7 +58,7 @@ gate needs only the hashes, not the commit.
   reconstructed: 3072 pages listed; firmware current 2048 ready 0, stack
   top 2047; 0 HWRT datas reset to HWR").
   The third: the render service's stops apply without the grow knob too
-  (tools/cts/log/investigations/pvr-render-pool.md, the common set's round 2).
+  (docs/notes/pvr-render-pool.md, the common set's round 2).
   The scenario asks list 6, at its maximum of 16 pages with no room for a
   grow, to grow 22 times. Each "no grow (reserve 8, pool 1024/1024, 16/16
   pages)" is now followed by "render: stopped: the parameter manager out

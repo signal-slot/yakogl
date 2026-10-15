@@ -31,41 +31,41 @@ describes. Software rendering is out of scope: every result here comes from the 
 
 ## Status
 
-OpenGL ES 2.0 is close to complete on all three boards. Known defects are tracked as
-GitHub Issues. The order of the work, in five stages, is [ROADMAP.md](ROADMAP.md).
+OpenGL ES 2.0 passes the Khronos conformance tests on all three boards. Known
+defects are tracked as GitHub Issues. The order of the work, in five stages, is
+[ROADMAP.md](ROADMAP.md).
 
-dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list):
+dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list), one
+main commit `e9901869a` on the three boards (2026-10-15/16):
 
 | Board | Failures | Notes |
 | --- | --- | --- |
-| AM62P | 0 | Final tree on `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`): 17,141 pass, 18 not supported, 6 warnings (5 quality, 1 compatibility). The 17 images at 1x give 17,125 pass and 34 not supported; the 4x multisample image passes its 16 cases. `GL_BGRA_EXT` renderbuffers (see the Pi 4) are not covered: the commit predates the change that broke them |
-| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`), which predates `8bbf9ba2`, had 0 fail: 17,318 of 17,371 pass, identical to the trees of 2026-10-01 and 2026-10-10 |
-| Raspberry Pi 4 | 46 | Rows 0-14 of the tree on `20a48791` (2026-10-14; `docs/board-sessions/pi4-es2-final.md`): 11,877 pass, 46 fail, 25 not supported; every failure is a `GL_BGRA_EXT` renderbuffer case, a regression of `8bbf9ba2`; rows 15-28 have not run at that commit. The last whole tree (`d56e79e5`, 2026-10-12) had 17,127 pass, 0 fail, 34 not supported, 4 warnings |
+| AM62P | 0 | 17,140 pass, 18 not supported, 7 warnings (the 17 images at 1x, with the 16 `multisample.*` cases from the 4x image) |
+| i.MX8MP | 0 | 17,318 of 17,371 cases begun pass, 34 not supported, 19 quality warnings (the same cases warn on NXP's own driver) |
+| Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings |
+
+The not-supported cases are features ES 2.0 does not have, or a multisample
+surface the 1x configuration lacks (`docs/es2-cts-failures.md` section C).
 
 glmark2-es2 at 800x600 runs all 33 scenes on every board:
 
 | Board | Score |
 | --- | --- |
-| AM62P | 465 (`f2a13877`, 2026-10-11) |
-| Raspberry Pi 4 | 183 (2026-10-04) |
-| i.MX8MP | 43 (`cd738b1a`, 2026-10-14) |
+| AM62P | 462 (`e9901869a`, 2026-10-15) |
+| Raspberry Pi 4 | 188 (`e9901869a`, 2026-10-16) |
+| i.MX8MP | 43 (`a63fcc5b`, 2026-10-14) |
 
-Two scenes drew wrong: terrain sampled a black texture on every board, and refract
-missed its depth pass on the AM62P and Raspberry Pi 4. Both are fixed on the host;
-on the AM62P the depth pass now resolves, but no picture of either scene has been
-checked yet. On the Raspberry Pi 4 refract's draw was refused once a frame; the
-host harness no longer refuses it with the image's 24 MiB tiled-copy budget, but
-the board has not run it yet (see the Issues). The i.MX8MP's score is probably capped by a wait for the panel's
-VSYNC on every frame (a prediction from the code,
-`tools/cts/log/investigations/imx8mp-frame-floor.md`). Performance work has not
-started yet.
+The pictures of each scene are not checked yet, and performance work has not
+started. On the AM62P terrain, shadow and refract spend their time in GL calls on
+the CPU. The i.MX8MP's score is probably capped by a wait for the panel's VSYNC
+on every frame (`docs/notes/imx8mp-frame-floor.md`).
 
 Slint applications run on all three boards from one sample with the same picture
 (`driver/samples/zephyr/slint/`).
 
-`tools/cts/STATUS.md` has the detailed conformance state (in Japanese) and
-`tools/cts/RESULTS.md` the measurement log. Commit hashes in the logs from before
-2026-10-04 refer to the development history before this repository was published.
+`tools/cts/RESULTS.md` has the current board results and `tools/cts/STATUS.md`
+the summary in Japanese. Commit hashes from before 2026-10-04 refer to the
+development history before this repository was published.
 
 ## Shader compilers
 

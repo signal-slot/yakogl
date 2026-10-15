@@ -141,7 +141,7 @@
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
 #                      (AM62P env|typed), NETBOOT_NO_WATCHDOG, NETBOOT_BACKUP_DIR:
-#                      as tools/cts/log/board-sessions/am62p-netboot.md and imx8mp-netboot.md describe
+#                      as docs/notes/am62p-netboot.md and imx8mp-netboot.md describe
 #                      (uboot-mmc needs no server, TFTP root, log or route)
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #                      (pi4 420/300, am62p U-Boot 420/180, imx8mp U-Boot 600
@@ -1062,8 +1062,7 @@ uboot_on_exit() {
 # console_from_ts: console.txt ("HH:MM:SS line", the form deqp-uart-tally.py
 # reads) from the bridge capture's "<unix time> line" rows.
 # python3, not awk: strftime is a gawk-only extension, and a worker without
-# gawk got an empty console.txt (POSIX awk has no strftime; tools/cts/log/
-# investigations/am62p-console-empty.md). The conversion is
+# gawk got an empty console.txt (POSIX awk has no strftime). The conversion is
 # the gawk one's, row by row: the row's leading "<unix time>" (int(), so a
 # fraction is truncated) becomes local "HH:MM:SS", the rest of the row follows
 # verbatim (a row with no text after the timestamp keeps the separating

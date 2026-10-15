@@ -364,7 +364,7 @@ const GC_MSAA_RASTERISE: bool = true;
 /// scaling ([`vp_scale`]), bit 4 etnaviv's SINGLE_BUFFER value for the
 /// supertiled scratch ([`single_buffer`]). Bits 1 and 4 are what Mesa 26.2.1
 /// writes for every 4x target on this core; bits 2 and 3 are not
-/// (tools/cts/log/investigations/gc-msaa-addresses.md). A test knob: it and
+/// (docs/notes/gc-msaa-addresses.md). A test knob: it and
 /// its setter exist only with the `test-knobs` feature, and without it 4x is
 /// [`GC_MSAA_ENABLE`]'s, off, until the board has run it (issue #8).
 #[cfg(feature = "test-knobs")]
@@ -559,7 +559,7 @@ fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
 /// in target pixels for a 4x target too; its msaa_xscale / msaa_yscale only
 /// size the surface (etnaviv_resource.c:327-328) and the resolve window
 /// (etnaviv_rs.c:809-810). Board arms 1 and 9 read the same
-/// (tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
+/// (ab43a20c5:tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
 fn vp_scale(gl: &GlesDraw) -> u32 {
     if ms_scale(gl) > 1 && msaa_bits() & 8 != 0 {
         ms_scale(gl)

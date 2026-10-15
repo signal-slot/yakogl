@@ -23,7 +23,7 @@
 # prints "<n> cases in <ms> ms": an image near 200 s is split before the next sweep.
 #
 # Build: DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh tools/cts/pi4-gles3-tree.txt <img-dir>
-# Run, tally: docs/es3-board-recipe-pi4.md.
+# Run, tally: docs/es3/board-recipe-pi4.md.
 
 # image A1: 472
 dEQP-GLES3.functional.attribute_location.*,dEQP-GLES3.functional.color_clear.*,dEQP-GLES3.functional.default_vertex_array_object.*,dEQP-GLES3.functional.default_vertex_attrib.*,dEQP-GLES3.functional.depth_stencil_clear.*,dEQP-GLES3.functional.dither.*,dEQP-GLES3.functional.fence_sync.*,dEQP-GLES3.functional.implementation_limits.*,dEQP-GLES3.info.*,dEQP-GLES3.functional.prerequisite.*

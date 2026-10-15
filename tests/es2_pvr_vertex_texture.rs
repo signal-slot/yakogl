@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! dEQP-GLES2 texture.vertex.2d on the PowerVR (AM62P): what the 45 cases
 //! hand the back end, replayed on the host
-//! (tools/cts/log/investigations/es2-pvr-vertex-texture.md).
+//! (docs/notes/es2-pvr-vertex-texture.md).
 //!
-//! The board record tools/cts/log/board-sessions/am62p-es2-r1c.md has all 45
+//! The board record ab43a20c5:tools/cts/log/board-sessions/am62p-es2-r1c.md has all 45
 //! `texture.vertex.2d.*` cases "Fail (Image comparison failed)" while the 45
 //! `texture.vertex.cube.*` cases pass. These tests replay one cell of each
 //! case group as es2fVertexTextureTests.cpp draws it (VK-GL-CTS

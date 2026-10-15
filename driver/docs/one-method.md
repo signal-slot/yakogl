@@ -111,7 +111,7 @@ AM62P carries the record on the UART.
 ### 1.6 The runners
 
 The five runners this inventory found, and the defects found while reading
-them, are in `tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`.
+them, are in `ab43a20c5:tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`.
 Step 1 replaced them with `tools/board.sh` (section 4).
 
 ## 2. The board layer
@@ -277,7 +277,7 @@ the host decoder, so writer and reader cannot drift.
 one being the verdict). The dEQP case-name mapping (CRC-16 against the
 mustpass list) moves with it. It replaced the Python decoder's `record()`
 and the i.MX8MP tree runner's own decode (both deleted in Step 1). It is self-tested on the records quoted in
-`tools/cts/log/board-sessions/imx8mp-netboot.md` (`594b040e ff403f80 35706c4e 04000258` = PICTURE)
+`docs/notes/imx8mp-netboot.md` (`594b040e ff403f80 35706c4e 04000258` = PICTURE)
 and `gc_result.h` before it is used.
 
 ## 4. The runner
@@ -386,8 +386,8 @@ unmeasured. Each screen is also photographed into the run's INDEX.
 - 1a. Write the board layer, the record module, `yakogl-tools record` and
   `board.sh`, with `--dry-run` on all three boards.
 - 1b. `board.sh` reproduces one proven row per board before any old runner is
-  deleted: AM62P step C (`tools/cts/log/board-sessions/am62p-netboot.md` §10), Pi 4 any tryboot
-  runner row, i.MX8MP step B (`tools/cts/log/board-sessions/imx8mp-netboot.md`, step B).
+  deleted: AM62P step C (`docs/notes/am62p-netboot.md` §10), Pi 4 any tryboot
+  runner row, i.MX8MP step B (`docs/notes/imx8mp-netboot.md`, step B).
 - 1c. Slint on the AM62P (netboot proven), then the Pi 4 (tryboot proven),
   then the i.MX8MP. Its U-Boot entry used to die after the WDOG arm. On
   `imx8mp/cold-entry` (`18487926`) the STAGE breadcrumbs named the stage
@@ -418,7 +418,7 @@ goes once that user has moved.
 
 The one `slint` sample ran once per board from the bootloader boot path on
 2026-10-03; the table is in
-`tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`. The
+`ab43a20c5:tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`. The
 PROBES record was identical on the two Verdins and one LSB of green apart on
 the Pi 4, inside the tolerance of 1. After that run the old runners were
 deleted and `tools/board.sh` became the one runner ("Done in Step 1" above).
@@ -477,7 +477,7 @@ deleted and `tools/board.sh` became the one runner ("Done in Step 1" above).
 
    The Step 5 acceptance run of 2026-10-03 (AM62P and Pi 4 PASS; the
    i.MX8MP row pending then) is in
-   `tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`.
+   `ab43a20c5:tools/cts/log/board-sessions/one-method-acceptance-2026-10-03.md`.
 6. **deqp**: `deqp/` keeps its source. `v3d_deqp/src/v3d_board.c` (tap,
    record) and `deqp/src/deqp_snvs.c` go to the board layer's sinks. The
    tree runner replaces the chains (deleted already in Step 1). Deleted:
@@ -497,7 +497,7 @@ then moved. Driver bring-up samples (`gc_identify`, `gc_fence`, `v3d_clear`,
   unmeasured.
 - Whether a 1024x600 window can be shown on the i.MX8MP's 1280x800 panel
   without a copy (the Pi 4's view is measured:
-  `tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md` 5d,
+  `ab43a20c5:tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md` 5d,
   `tools/cts/RESULTS.md` "Scan-out view"), and whether the AM62P's cold display path
   (`am62p-display-cold.md`) shows the window after a U-Boot entry. Both are
   unmeasured. (The i.MX8MP cold-entry death is fixed, §5 step 1c.)

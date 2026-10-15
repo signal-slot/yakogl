@@ -10,7 +10,7 @@
 //! (fixed by a4f64950; gl_test 198 a2cconst; tests/usc_limits.rs
 //! `deqps_multisample_shader_keeps_samples_by_its_alpha_alone`). The host
 //! diagnosis that ruled the program out is the record
-//! tools/cts/log/investigations/es2-pvr-ms4-constancy.md.
+//! docs/notes/es2-pvr-ms4-constancy.md.
 //!
 //! A constancy case draws a green quad and then a red quad of the same
 //! geometry, with the same alpha and the same glSampleCoverage; the green

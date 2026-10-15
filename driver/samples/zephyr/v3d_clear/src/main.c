@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * v3d_clear: milestones M1..M4 of the V3D bring-up
- * (tools/cts/log/board-sessions/pi4-v3d-bringup.md) in one image for the
+ * (docs/notes/pi4-v3d-bringup.md) in one image for the
  * Raspberry Pi 4. The only output is HDMI, so the firmware framebuffer
  * is both the console (top half) and the render target (bottom half):
  *

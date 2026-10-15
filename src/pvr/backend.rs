@@ -180,7 +180,7 @@ pub const PVR_BACKEND_OPT_PBE_TWIDDLE: PvrBackendOption = 12;
 /// MEASUREMENT: 1 = one kick in flight. The swap's wait
 /// (`pvr_backend_finish_previous`) waits for the most recent kick too, not
 /// only for the ones before it, so every kick starts on an idle GPU
-/// (tools/cts/log/investigations/pvr-fence-wait.md, "The next experiment"). It
+/// (docs/notes/pvr-fence-wait.md, "The next experiment"). It
 /// changes only that wait's target; glFinish, the frame-set reuse and every
 /// kick are untouched. Off by default (0: wait for all but the most recent
 /// kick).
@@ -264,7 +264,7 @@ const PRIMS_PER_KICK_MAX: u32 = 1_500_000;
 /// zero, so the pass drew nothing (sceneeffects rendered a black view).
 const PVR_BACKEND_UNIFORM_PREFIX: bool = false;
 /// The default arenas, measured
-/// (tools/cts/log/investigations/pvr-render-pool.md, the frame-set run):
+/// (docs/notes/pvr-render-pool.md, the frame-set run):
 /// glmark2's largest frame on the AM62P used 325896 bytes of PDS and 516768 of
 /// GENERAL. 768 KiB and 1024 KiB are 2.4 and 2.0 times that, so its frames are
 /// not split. With 4 sets that is 7488 KiB of the render pool, where
@@ -280,7 +280,7 @@ const ARENA_GEN_MAX: u32 = 4096 * 1024;
 /// The frame sets a backend init builds ([`pvr_backend_set_frame_arenas`]):
 /// how many, and each one's GENERAL and PDS arena bytes. The defaults are
 /// the constants above; a smaller configuration takes less of the render
-/// pool (tools/cts/log/investigations/pvr-render-pool.md, the frame sets are
+/// pool (docs/notes/pvr-render-pool.md, the frame sets are
 /// 20.3 MiB of the fixed use).
 #[derive(Clone, Copy)]
 struct ArenaCfg {
@@ -1080,7 +1080,7 @@ const TEXF_A8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8, [SWIZ_ZERO,
 const TEXF_LA8: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_U8U8, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_G]);
 
 /* The ES 3.0 storage classes (src/backend.rs GLES_TEXFMT_R11G11B10F ..
- * GLES_TEXFMT_RGBA32F; docs/es3-sized-formats.md): every one four components
+ * GLES_TEXFMT_RGBA32F; docs/es3/sized-formats.md): every one four components
  * wide in memory, a component the GL format lacks stored as (0, 0, 0, 1) by
  * the GL core, so the swizzle is the identity except where the TPU format has
  * no alpha. TPU formats from Mesa 26.2.1's pvr_format_table
@@ -1595,7 +1595,7 @@ struct Backend {
     ndbias: u32,
     /// The last entry (draws with the same state share it).
     dbias_last: [f32; 3],
-    /// Occlusion queries (docs/es3-occlusion-query.md 3.2): the result areas
+    /// Occlusion queries (docs/es3/occlusion-query.md 3.2): the result areas
     /// (VIS_SLOTS x VIS_SLOT_BYTES, allocated by the first query), the
     /// handles counted by the open frame, per area the kick that writes it
     /// (0: free) and the handles it holds, and per handle the sum of its
@@ -2947,7 +2947,7 @@ pub extern "C" fn pvr_backend_shutdown() {
 }
 
 /* ------------------------------------------------------------------------- *
- * occlusion queries (docs/es3-occlusion-query.md 3.2)
+ * occlusion queries (docs/es3/occlusion-query.md 3.2)
  *
  * A draw carrying a query handle is a TRANSLUCENT object with
  * TA_STATE_ISPCTL.vistest and visreg = the handle; a kick with such draws
@@ -6397,7 +6397,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
     /* A draw counted by an occlusion query is TRANSLUCENT, not OPAQUE: its
      * visibility test must see the depth buffer as the draws before it left
      * it, in submission order, not the hidden-surface result of the whole
-     * kick (docs/es3-occlusion-query.md 3.2, "TBDR ordering hazard" 2; a
+     * kick (docs/es3/occlusion-query.md 3.2, "TBDR ordering hazard" 2; a
      * conservative choice, unverified on the ISP). */
     let counted = d.occlusion_query != 0 && d.occlusion_query < GLES_QUERY_HANDLES && !b.vis.cpu.is_null();
     let passtype = if fs.uses_discard != 0 {
@@ -7712,7 +7712,7 @@ pub unsafe extern "C" fn pvr_backend_ds_report(buf: *mut c_char, cap: usize) {
 /// open, else `last_submitted` itself. The backend submits only from
 /// [`flush`], which closes the frame, so with no frame open no unsubmitted
 /// kick holds anything; the memory is free once `last_submitted` completes
-/// (tools/cts/log/investigations/pvr-render-pool.md, mechanism 2). The OSAL
+/// (docs/notes/pvr-render-pool.md, mechanism 2). The OSAL
 /// uses it under `CONFIG_YAKOGL_PVR_POOL_RECLAIM`; it tags every free
 /// `last_submitted + 1` otherwise.
 #[no_mangle]
@@ -7770,7 +7770,7 @@ fn note_arena_hw(b: &mut Backend) {
 
 /// The backend's lines of the run-end owner report
 /// (`CONFIG_YAKOGL_PVR_POOL_OWNERS`,
-/// tools/cts/log/investigations/pvr-render-pool.md): the frame sets with their
+/// docs/notes/pvr-render-pool.md): the frame sets with their
 /// arenas' high-water marks, the persistent programs and tables, and the
 /// depth/stencil buffers. Returns their KiB.
 #[no_mangle]

@@ -219,35 +219,33 @@ self-test's vertex shader) are still Mesa's pco output; replacing them is open w
 <noscript><p class="note">The figures on this site are loaded from
 <a href="data.js">data.js</a>, which you can read directly; the
 <a href="status.html">status page</a> lists the records they come from.</p></noscript>
-<h3>dEQP-GLES2: failures in the last whole tree</h3>
+<h3>dEQP-GLES2: failures in the whole tree</h3>
 <p>The Khronos conformance tests for OpenGL ES 2.0, the 17,165 cases of the mustpass list,
 run on Zephyr on the real GPU.</p>
 <div class="tiles" data-tiles="deqp2"></div>
 <div class="note">
-<p><strong>Read the tiles with their history.</strong> The AM62P's 54 failures (tree of
-2026-10-10) are 9 <code>shaders.invariance</code> cases (fixed in e17fb6a7; image 1 passes
-1,379 / 0 on it) and 45 vertex-texture cases (fixed on the host, board confirmation pending);
-the previous tree, on 2026-10-02, had none. The i.MX8MP's 46 failures (tree of 2026-10-14)
-are all <code>GL_BGRA_EXT</code> renderbuffer cases in the <code>fbo</code> group, not yet fixed;
-its previous tree, on 2026-10-10, had none. The Pi 4 tile is a composition of the
-2026-10-10 tree and two later reruns, not one tree from one commit (the 2026-10-01 tree had
-25 cube-map failures; they are 0 on the board now). <strong>No board has a zero-failure tree
-from one commit yet.</strong>
+<p><strong>Zero failures on all three boards, from one commit.</strong> Each board ran the
+whole tree from main e9901869a (2026-10-15/16), booted by its own bootloader. The cases
+counted as not supported are features ES 2.0 does not have, or the multisample cases a 1x
+configuration cannot run (the AM62P runs those on a 4x image, and they pass).
 <a href="status.html">Details on the status page.</a></p>
 </div>
 
 <h3>glmark2-es2, 800x600 on-screen</h3>
-<p>All 33 scenes run on every board, but two scenes drew wrong (terrain on every board, refract on the
-AM62P and the Pi 4; fixed on the host, not yet checked by eye on a board), and performance work has not started. A public score for the same board under Linux with the vendor or Mesa driver is on
-the status page; the conditions differ, so read it as a direction, not a contest.</p>
+<p>All 33 scenes run on every board with no failed scene. The picture of each scene is not
+checked yet, and performance work has not started. A public score for the same board under
+Linux with the vendor or Mesa driver is on the status page; the conditions differ, so read it
+as a direction, not a contest.</p>
 <div class="tiles" data-tiles="glmark2"></div>
 
 <h3>OpenGL ES 3.0</h3>
-<p>ES 3.0 is work in progress on the host: transform feedback state, uniform blocks, sized
-and integer formats are built in the GL core, but no back end renders them yet. Product
-builds (Zephyr, CMake) report ES 2.0 by default. The dEQP-GLES3 tree has run on the
-AM62P only (2026-10-11; two cases hang its GPU, and 2,089 cases have no result): <span data-fig="deqp3.am62p"></span> of 42,810
-<span class="prov">(<span data-prov="deqp3.am62p"></span>)</span>.</p>
+<p>ES 3.0 is built on the host for the three GPUs: transform feedback, uniform blocks, sized
+and integer formats, occlusion queries, <code>glBlitFramebuffer</code>, sRGB and buffer
+mapping. Product builds (Zephyr, CMake) report ES 2.0 by default. The whole dEQP-GLES3 tree
+has run on the AM62P (2026-10-14; two cases hang its GPU, and 998 cases have no result):
+<span data-fig="deqp3.am62p"></span> of 42,810
+<span class="prov">(<span data-prov="deqp3.am62p"></span>)</span>. The Pi 4 has run 7 of its
+91 images; the i.MX8MP has not run it yet.</p>
 
 <h2 id="start">Getting started</h2>
 <p><strong>On a board.</strong> <a href="try-it.html">Try it</a> walks through the west
@@ -278,17 +276,15 @@ one GPU feature per build; none or two is a compile error.</p>
 <p>The goals, in order, from <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>:</p>
 <ol>
 <li><strong>ES 2.0 finished on the three boards</strong>, each booted from its own storage.
-Zero dEQP-GLES2 failures from one commit on each board is the criterion; the Pi 4 is at 0 in a
-composed reading, the AM62P and the i.MX8MP still have failures (see the tiles above), and the
-fixes for the AM62P's are waiting for a board run.</li>
-<li><strong>Minimum performance.</strong> Not started; the benchmarks are first made to draw
-correctly.</li>
+Met: zero dEQP-GLES2 failures from one commit on each board (see the tiles above).</li>
+<li><strong>Minimum performance.</strong> The benchmarks run on every board; the pictures
+of each glmark2 scene are checked next, then a frame rate is recorded for each.</li>
 <li><strong>This website</strong>, live when the repository is public.</li>
 <li><strong>OpenGL ES 3.0</strong> on the three boards (the 42,810-case dEQP-GLES3 mustpass),
 host first.</li>
 <li><strong>OpenGL ES 3.1 / 3.2</strong> (<a href="https://github.com/signal-slot/yakogl/issues/19">#19</a>).</li>
 </ol>
-<p>Not yet planned in HANDOFF: touch input. Every demo today runs by itself.</p>
+<p>Not yet planned: touch input (<a href="https://github.com/signal-slot/yakogl/issues/24">#24</a>). Every demo today runs by itself.</p>
 
 <h2 id="about">Licence, name and contact</h2>
 <p>YakoGL's own code is <a href="https://github.com/signal-slot/yakogl/blob/main/LICENSE">Apache-2.0</a>,

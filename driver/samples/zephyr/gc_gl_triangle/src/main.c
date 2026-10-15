@@ -397,7 +397,7 @@ static void record_display(void)
 #endif
 
 /* Microseconds on the SoC's system counter. On the direct-boot route
- * (tools/cts/log/x2-direct-boot.md) U-Boot SPL starts that counter early in its own
+ * (docs/notes/x2-direct-boot.md) U-Boot SPL starts that counter early in its own
  * start-up and nothing restarts it, so this is close to "time since power-on"
  * minus the Boot ROM; on the kexec route it is Linux's uptime and means
  * little. CNTFRQ_EL0 is the 8 MHz SPL programs. */

@@ -9,7 +9,7 @@ that start the back end know which GPU this is, and they are behind
 
 Current results are in `tools/cts/STATUS.md`. The bring-up diary of
 September 2026 (hold-time readings, results per case, the host build) is
-`tools/cts/log/board-sessions/imx8mp-gc-gl-test-2026-09.md`.
+`ab43a20c5:tools/cts/log/board-sessions/imx8mp-gc-gl-test-2026-09.md`.
 
 ## Build and run
 

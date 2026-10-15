@@ -1509,7 +1509,7 @@ pub(crate) fn chain_layout_npot(
 ///
 /// Mesa 26.2.1's pvr driver (src/imagination/vulkan/pvr_image.c; not
 /// vendored here, its rules are recorded in
-/// tools/cts/log/investigations/pvr-render-pool.md, "What the PowerVR's texture
+/// docs/notes/pvr-render-pool.md, "What the PowerVR's texture
 /// unit needs"):
 /// - `pvr_image_plane_init_physical_extent`: an image with more than one mip
 ///   level has the physical extent `util_next_power_of_two` of its extent on
@@ -4735,7 +4735,7 @@ pub unsafe extern "C" fn glTexImage3D(
          * false: layers > 1, no native layers): a stacked NPOT array cannot
          * hold its chain, so the level is recorded and its texels dropped,
          * and draws sample level 0. Left as it is on purpose: plan item
-         * pvr-2darray (docs/es3-pvr-2darray.md) lays PowerVR arrays out
+         * pvr-2darray (docs/es3/pvr-2darray.md) lays PowerVR arrays out
          * layer-major, and their levels >= 1 get storage there. Every other
          * array keeps the texels of each level (grown above, or a
          * power-of-two chain). */
@@ -9073,7 +9073,7 @@ mod tests {
     /// 800x600 and the odd shapes 100x60 and 3x5 too.
     /// Mesa 26.2.1 pvr's layout of a `w x h` image with a full mip chain, cpp
     /// `bpp`, written from Mesa's rules (src/imagination/vulkan/pvr_image.c,
-    /// not vendored: tools/cts/log/investigations/pvr-render-pool.md records
+    /// not vendored: docs/notes/pvr-render-pool.md records
     /// them):
     /// `pvr_image_plane_init_physical_extent` rounds the extent of a
     /// multi-level image up to `util_next_power_of_two` per axis;
@@ -11570,7 +11570,7 @@ mod tests {
         /* GL_EXTENSIONS names GL_OES_required_internalformat and
          * GL_EXT_texture_rg, so the sized names those cover are taken. It
          * does NOT name GL_EXT_sRGB or GL_OES_texture_float -- the sRGB
-         * class is ES 3.0's alone (docs/es3-srgb.md), and GL_RGBA32F would
+         * class is ES 3.0's alone (docs/es3/srgb.md), and GL_RGBA32F would
          * be stored as halves -- so those names are refused rather than accepted and then
          * reported as a complete framebuffer. dEQP's fbo.completeness reads
          * the second as a texture format this GL does not have. */
