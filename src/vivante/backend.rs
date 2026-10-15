@@ -515,8 +515,17 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
     ms_scale(gl) > 1 && msaa_bits() & 2 != 0
 }
 
-/// PE_LOGIC_OP's SINGLE_BUFFER field for this draw. 1, the linear-surface
-/// value, for every draw; with `gc_debug_msaa` bit 4 (a value of 16), a 4x
+/// Does this draw render into the tiled shadow of its colour target
+/// (`wide_target.rs`)? One hardware target with 64-bit pixels, drawn
+/// straight (not through the 4x scratch, not bottom-up).
+fn wide_target(gl: &GlesDraw) -> bool {
+    super::wide_target::wanted(gl, hw_targets(gl).1 == 1, !ms_via_scratch(gl) && !negative_stride(gl.flip_y))
+}
+
+/// PE_LOGIC_OP's SINGLE_BUFFER field for this draw. 2 for a draw into a
+/// tiled 64-bit shadow (`wide`): Mesa's value for a tiled target of more
+/// than 16 bits a pixel on a SINGLE_BUFFER core (etnaviv_state.c:536-539).
+/// Else 1, the linear-surface value; with `gc_debug_msaa` bit 4 (a value of 16), a 4x
 /// draw into the supertiled scratch takes the value Mesa's etnaviv gives a
 /// target that is not linear on a SINGLE_BUFFER core: 2, or 3 for a 16-bit
 /// target (etnaviv_state.c:536-539, Mesa 26.2.1, MIT; this core has the
@@ -524,8 +533,10 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
 /// etna_hwdb.c:84 maps to SINGLE_BUFFER). The 4x path wrote 1 with a
 /// SUPER_TILED colour format, a pair Mesa never emits. Issue #8; opt-in
 /// until the board has run it.
-fn single_buffer(gl: &GlesDraw) -> u32 {
-    if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
+fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
+    if wide {
+        2
+    } else if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
         if gles_surf_bytes_per_pixel(gl.target_format) <= 2 {
             3
         } else {
@@ -1569,8 +1580,12 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         pe_color |= GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW;
     }
     c.state(GC_PE_COLOR_FORMAT, pe_color);
+    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit) */
+    let shadow = if wide_target(gl) { super::wide_target::bind(gl, gc_kick_id()) } else { None };
     let pitch = if ms {
         ms_pitch(gl.target_w, gles_surf_bytes_per_pixel(gl.target_format))
+    } else if shadow.is_some() {
+        super::wide_target::stride(gl.target_w)
     } else {
         /* tex_pitch(w), or a view's wider pitch (draw_pitch) */
         crate::backend::draw_pitch(gl) * gles_surf_bytes_per_pixel(gl.target_format)
@@ -1622,6 +1637,8 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         g().no_colour.gpu as u32
     } else if ms_via_scratch(gl) {
         g().msaa.gpu as u32
+    } else if let Some(gpu) = shadow {
+        gpu as u32
     } else if upward {
         (gl.target_gpu + u64::from(gl.target_h.saturating_sub(1)) * u64::from(pitch)) as u32
     } else {
@@ -1634,11 +1651,15 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
 
     c.state(GC_PE_STENCIL_CONFIG_EXT, pe_stencil_ref_back(ref_back));
     /* SINGLE_BUFFER(1) is what a linear colour surface needs; every surface
-     * YakoGL renders to is linear, except the 4x scratch ([`single_buffer`]). */
+     * YakoGL renders to is linear, except the 4x scratch and a 64-bit
+     * target's tiled shadow ([`single_buffer`]). */
     let unk24 = if msaa_extras(gl) { pe_logic_op_unk24(5) } else { 0 };
     c.state(
         GC_PE_LOGIC_OP,
-        GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY) | pe_logic_op_single_buffer(single_buffer(gl)) | unk24,
+        GC_PE_LOGIC_OP_BASE
+            | pe_logic_op_op(GC_LOGIC_OP_COPY)
+            | pe_logic_op_single_buffer(single_buffer(gl, shadow.is_some()))
+            | unk24,
     );
     c.state(pe_dither(0), 0xffff_ffff); /* dithering off */
     c.state(pe_dither(1), 0xffff_ffff);
@@ -2203,6 +2224,7 @@ pub extern "C" fn gc_shutdown() {
         }
     }
     super::tiled_copy::release_all();
+    super::wide_target::release_all();
     super::ds_cache::release_all();
     if !g.clear_vs_code.impl_.is_null() {
         osal::gpu_free(&mut g.clear_vs_code);
@@ -2522,6 +2544,18 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     if super::tiled_copy::prepare(gl, |k| gc_kick_pending(k), || gc_finish()) != 0 {
         return -1;
     }
+    /* A 64-bit colour target is rendered into its tiled shadow
+     * (wide_target.rs), made current now: the PE writes 64-bit pixels into a
+     * LINEAR surface at the wrong places (#6), so without the shadow the
+     * draw is refused. */
+    if wide_target(gl) {
+        if super::wide_target::prepare(gl, || gc_finish()) != 0 {
+            return -ENOMEM;
+        }
+        if gl.depth_test || gl.stencil || gl.do_clear_depth || gl.do_clear_stencil {
+            glog_once!("yakogl/vivante: a draw into a tiled 64-bit target uses depth or stencil: their surface's layout in that mode is unmeasured (wide_target.rs)");
+        }
+    }
     clock.lap(Step::GcTiledCopy);
 
     /* a new target, a stream with no room left, or an arena that cannot take
@@ -2825,6 +2859,7 @@ pub extern "C" fn gc_finish() -> i32 {
             return rc;
         }
     }
+    retire_wide_targets();
     0
 }
 
@@ -2843,11 +2878,14 @@ pub extern "C" fn gc_finish_previous() -> i32 {
     let newest = g.frames[(g.cur + GC_FRAMES - 1) % GC_FRAMES].fence;
     let prev = core::mem::replace(&mut g.swap_fence, newest);
 
-    if prev <= 0 || completed_fence() >= prev {
-        return 0;
-    }
-    g.waits += 1;
-    wait_fence(prev)
+    let rc = if prev <= 0 || completed_fence() >= prev {
+        0
+    } else {
+        g.waits += 1;
+        wait_fence(prev)
+    };
+    retire_wide_targets();
+    rc
 }
 
 /// The kick being recorded: the id the frame now open will be submitted
@@ -2866,6 +2904,14 @@ pub extern "C" fn gc_kick_id() -> u32 {
 /// Is kick `kick_id` still to complete? The kick being recorded is, while
 /// the frame is open: it has not even been submitted.
 pub extern "C" fn gc_kick_pending(kick_id: u32) -> bool {
+    /* whoever learns that a kick completed may read what it rendered: the
+     * 64-bit targets it rendered are back in their storage first */
+    retire_wide_targets();
+    kick_pending(kick_id)
+}
+
+/// [`gc_kick_pending`] without writing anything back.
+fn kick_pending(kick_id: u32) -> bool {
     let g = g();
 
     if kick_id == 0 {
@@ -2884,6 +2930,18 @@ pub extern "C" fn gc_kick_pending(kick_id: u32) -> bool {
         return completed_fence() < f.fence;
     }
     false /* too old to still be in flight */
+}
+
+/// Write every 64-bit target whose rendering kicks have completed back into
+/// its linear storage (`wide_target.rs`).
+fn retire_wide_targets() {
+    super::wide_target::retire(kick_pending);
+}
+
+/// The GL core drops the storage `[base, base + bytes)`: the tiled shadow of
+/// a 64-bit target in it goes too (`wide_target.rs`).
+pub extern "C" fn gc_texture_released(base: u64, bytes: u64) {
+    super::wide_target::released(base, bytes);
 }
 
 pub extern "C" fn gc_heap_base(heap: GlesHeap) -> u64 {
@@ -2952,8 +3010,8 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     kick_pending: Some(gc_kick_pending),
     heap_base: Some(gc_heap_base),
     counters: Some(gc_counters),
-    /* keeps nothing per texel storage: it samples the GL core's own */
-    texture_released: None,
+    /* the tiled shadow of a 64-bit colour target (wide_target.rs) */
+    texture_released: Some(gc_texture_released),
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: None,
     texture_uploaded: None,

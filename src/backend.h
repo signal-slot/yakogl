@@ -386,6 +386,12 @@ struct gles_draw {
 	 * not a draw), whatever path the backend clears with. Sits in what was
 	 * tail padding. */
 	uint32_t occlusion_query;
+	/* The CPU view of target_gpu (the attached level, face or layer of an
+	 * FBO's colour buffer, or the default surface), NULL when the storage
+	 * has none or there is no colour target: for a backend that renders
+	 * into a copy of its own and writes it back on the CPU (the GC7000's
+	 * 64-bit targets, src/vivante/wide_target.rs). */
+	void    *target_cpu;
 };
 
 /* One-time backend init (after OSAL init: allocates persistent GPU objects,

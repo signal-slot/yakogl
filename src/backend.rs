@@ -1045,6 +1045,12 @@ pub struct GlesDraw {
     /// counted (ES 3.0 4.2.3: a clear is not a draw), whatever path the
     /// backend clears with. Sits in what was tail padding.
     pub occlusion_query: u32,
+    /// The CPU view of [`GlesDraw::target_gpu`] (the attached level, face or
+    /// layer of an FBO's colour buffer, or the default surface), null when
+    /// the storage has none or there is no colour target: for a backend
+    /// that renders into a copy of its own and writes it back on the CPU
+    /// (the GC7000's 64-bit targets, `vivante/wide_target.rs`).
+    pub target_cpu: *mut c_void,
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -1155,6 +1161,7 @@ impl GlesDraw {
         alpha_to_coverage: false,
         target_pitch: 0,
         occlusion_query: 0,
+        target_cpu: core::ptr::null_mut(),
     };
 }
 

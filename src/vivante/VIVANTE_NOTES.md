@@ -122,7 +122,10 @@ Files:
   and framebuffer compression live. `GL_MULTI_SAMPLE_CONFIG` is written as
   single-sampled and `TS_MEM_CONFIG`/`PE_MEM_CONFIG` as zero.
 - **Tiled and supertiled render targets.** Every colour surface YakoGL renders
-  to is linear, and so is every texture the fragment stage alone samples.
+  to is linear except a 64-bit one (RGBA16F), which is rendered into a
+  4x4-tiled shadow and written back on the CPU (`wide_target.rs`; "The fix:
+  64-bit targets are rendered tiled" below), and every texture the fragment
+  stage alone samples is linear too.
   Tiling is a bandwidth optimisation that needs the layout code and the
   descriptor's addressing mode to agree. The exceptions are sampled copies:
   the vertex stage reads every 2D texture from a 4x4-tiled copy, and an
@@ -1476,3 +1479,39 @@ layout (tools/check.sh runs it). Predicted records:
 | `20102006 00d0073e` | hypothesis 1 or 3, a 2-pixel shift (slots 0, 1 never drawn) | the tiled target first (it sidesteps both) |
 | `34......` or `3c......` (bit 2, 4 set) | hypothesis 2: 128- and 256-byte rows are right | the 16-texel pitch rule |
 | a CASE pass, or a failure at check 4 or later (all six arms whole) | the probe's draws land where they belong, which the case's own draw did not | what differs between the case's target and the probe's (allocation, history), then the sampler again |
+
+**The probe's answer (cba8b199, one run).** `got 0x20000004 want
+0x00c2073e`: only the RGBA8 control arm came back whole (bits 31:24 =
+0x20); the first arm not whole is the 8-wide RGBA16F one, and in its rows
+slots (0,0) and (1,0) hold their own colour, (2,0) pixel 6's, (7,0) pixel
+5's, (0,1) its own, (7,1) pixel (5,1)'s and (7,7) pixel (5,7)'s. Every row
+the same, every RGBA16F width wrong, the 128- and 256-byte rows included:
+hypothesis 1 (the PE places 64-bit pixels wrongly in a LINEAR surface at any
+pitch), in neither predicted pattern -- 16-byte pixel pairs are moved inside
+a row, not single pixels by `x ^ 2`. Hypothesis 2 is refuted (its arms are
+wrong), and so is 4 (the probe's targets are fresh allocations).
+
+**The fix: 64-bit targets are rendered tiled (`wide_target.rs`).** As Mesa
+renders every target on this core: the PE writes a 4x4-tiled shadow of the
+target (TILED, no SUPER_TILED bit; width padded to 16 and height to 4 as
+`etna_layout_multiple` pads a TILED render target without the BLT engine;
+PE_COLOR_STRIDE the padded width times 8; PE_LOGIC_OP SINGLE_BUFFER(2); a
+page-aligned base). The CPU tiles the linear storage into the shadow before
+the first draw of a kick when the storage is the newer copy, and untiles the
+shadow back when the backend learns that the kick completed
+(`gc_kick_pending`, `gc_finish`, `gc_finish_previous`): every reader of the
+storage in the GL core asks one of those first. `texture_released` drops a
+shadow without writing it back. The CPU does the untiling because this core
+has no BLT engine and the RS copies no 64-bit format
+(`etna_compatible_rs_format`); Mesa untiles on the CPU when it maps such a
+resource. The GL core gives the backend the target's CPU view for it
+(`GlesDraw::target_cpu`). Not covered, by name: a draw with more than one
+colour target keeps the linear path (SINGLE_BUFFER switches every target and
+RT_CONFIG has no tiled bit of its own), and the depth surface of a draw into
+a shadow is laid out as SINGLE_BUFFER(2) lays it out, unmeasured -- which
+matters to `depth_resolve` and to a depth buffer shared with draws into
+32-bit targets; such a draw logs it once. ES 2.0 has no 64-bit format to
+render into. Host tests: `a_64_bit_target_is_rendered_tiled_into_a_page_aligned_shadow`,
+`a_64_bit_target_comes_back_into_its_storage_when_its_kick_completes`,
+`a_released_64_bit_target_is_never_written_back`. The board verdict is case
+44 and the default gl_test set on the i.MX8MP (`tools/cts/RESULTS.md`).

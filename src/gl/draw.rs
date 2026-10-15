@@ -1910,6 +1910,11 @@ fn resolve_target(c: &mut GlContext, d: &mut GlesDraw) -> Result<(), DrawError> 
     match framebuffer::fb_target_pitched(c) {
         Some((m, w, h, off, pitch)) if w != 0 && h != 0 => {
             d.target_gpu = m.gpu.wrapping_add(off as u64); /* the attached level/face/layer */
+            d.target_cpu = if m.cpu.is_null() {
+                core::ptr::null_mut()
+            } else {
+                (m.cpu as *mut u8).wrapping_add(off as usize) as *mut c_void
+            };
             d.target_w = w;
             d.target_h = h;
             /* the default surface may be a view into a wider buffer, and a
@@ -1920,6 +1925,7 @@ fn resolve_target(c: &mut GlContext, d: &mut GlesDraw) -> Result<(), DrawError> 
         _ => match framebuffer::fb_depth_stencil_only_size(c) {
             Some((w, h)) => {
                 (d.target_gpu, d.target_w, d.target_h, d.target_pitch) = (0, w, h, 0);
+                d.target_cpu = core::ptr::null_mut();
                 Ok(())
             }
             None => Err((GL_INVALID_FRAMEBUFFER_OPERATION, "resolve_target")),
