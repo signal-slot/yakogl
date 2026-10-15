@@ -977,22 +977,29 @@ uboot_on_exit() {
 }
 
 # console_from_ts: console.txt ("HH:MM:SS line", the form deqp-uart-tally.py
-# reads) from the bridge capture's "<unix time> line" rows. python3 (which
-# the capture itself runs on, am62p_netboot_uart.py), not gawk: a host with
-# only mawk has no strftime, and left console.txt empty (tools/cts/log/
-# investigations/am62p-console-empty.md). Local time, as gawk's strftime was.
+# reads) from the bridge capture's "<unix time> line" rows.
+# python3, not awk: strftime is a gawk-only extension, and a worker without
+# gawk got an empty console.txt (POSIX awk has no strftime; tools/cts/log/
+# investigations/am62p-console-empty.md). The conversion is
+# the gawk one's, row by row: the row's leading "<unix time>" (int(), so a
+# fraction is truncated) becomes local "HH:MM:SS", the rest of the row follows
+# verbatim (a row with no text after the timestamp keeps the separating
+# space; a row that does not start with digits keeps its text and gets the
+# time of epoch 0, as gawk's int() of a non-numeric $1 is 0).
 console_from_ts() {
     [ -f "$RD/console.ts" ] || return 0
-    python3 - "$RD/console.ts" > "$RD/console.txt" <<'EOF'
+    python3 -I -c '
 import re, sys, time
+ts = re.compile(rb"^[0-9.]+ ?")   # the "<unix time> " prefix the old gawk sub removed
+num = re.compile(rb"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")  # the numeric prefix of $1
 out = sys.stdout.buffer
-for line in open(sys.argv[1], "rb"):
-    line = line.rstrip(b"\n")
-    m = re.match(rb"([0-9]+)[0-9.]* ?", line)
-    t = int(m.group(1)) if m else 0
-    rest = line[m.end():] if m else line
-    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + rest + b"\n")
-EOF
+for row in sys.stdin.buffer:      # bytes: a serial capture need not be valid UTF-8
+    if row[-1:] == b"\n":
+        row = row[:-1]            # the awk $0 carries no trailing newline
+    m = num.match(row.lstrip(b" \t"))   # $1: the first field, leading blanks skipped
+    t = int(float(m.group())) if m else 0
+    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + ts.sub(b"", row, 1) + b"\n")
+' < "$RD/console.ts" > "$RD/console.txt"
 }
 
 # ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------
