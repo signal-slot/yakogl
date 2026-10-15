@@ -17523,3 +17523,34 @@ were deleted, so the records above are one clean pass.
 
 `resets=absent` on every row. GT's failure is the known case 44 (es3hdr, #6) and the known skip of
 case 16; no new failing case. The glmark2 cell stays green (33 ran, 0 failed, 0 unsupported).
+
+## AM62P: common set on origin/main `e3749a25`, the 256 MiB GPU carve-out (2026-10-15)
+
+Images from `origin/main` `e3749a25` (`cts-common.sh am62p build`; the first AM62P common set with
+`504d4fae`, the glmark2 image on the dEQP image's 256 MiB carve-out), run by `cts-common.sh am62p run`
+with `BOARD_BOOT=uboot-mmc`, one boot per row, the console on the bridge's main_uart0 port. Records
+`records/am62p/common-e3749a25/` (gitignored); the SV repeat in `records/am62p/common-e3749a25-sv2/`.
+Session record: `docs/board-sessions/am62p-common-carveout.md`. Build ids `PVR_SAMPLE_TABLE=c95547a1`,
+`PVR_SAMPLE_TREE=e3749a25`, Zephyr `af17c0c8aa2a`.
+
+| row | image | verdict | record | result |
+|---|---|---|---|---|
+| GM glmark2 | `0b851d28652f4741` | done | `594b1201 fc3f01ce 6184003f 00258320` | score 462, 33 ran, 0 failed, 0 unsupported, status pass; **GL errors raised 0** (2573 on `cd738b1a`), 0 `render pool exhausted`, 0 `out of GPU memory`, 0 `framebuffer N incomplete` lines; 0 resets; back after 417 s |
+| SO slint, view off | `829b850368d4fd49` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; 564 frames in 10016 ms; back after 128 s |
+| SV slint, view on | `b058d31f3894e710` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; 563 frames in 10004 ms; console 17294 bytes (0 on `cd738b1a`); run again alone: done, same record, 17296 bytes, back after 115 s; back after 128 s |
+| CL cluster | `d6787fb4ca5d976b` | done | `594b0601 008510c4 19050085 110c6d5f` | probes pass, crc16 110c; 1024x600: 4390 frames in 60019 ms, 73.1 fps, 44.9 Mpx/s; draw 13.5 ms mean, 21.97 ms/Mpx; back after 178 s |
+| GT gl_test | `287872ecbf105519` | done | legacy `gl_test: all:` line, no record | 50 of 50 passed (0 failed, 0 timed out, 0 skipped); compiler runs 208; back after 88 s |
+
+`resets=0` on every row; `cts-common.sh` rc 0. The three checks of the carve-out commit (its message
+named them): terrain and shadow no longer log `render pool exhausted` (2 lines on `cd738b1a`, 0 here),
+refract no longer logs `framebuffer 1 incomplete` (1694 lines, 0 here), and the GL error count fell
+from 2573 to 0. The pool at close: `render pool summary: 255808 KiB, bump 91356 KiB high-water; top
+56716 KiB high-water`, `0 grow requests`, firmware `out of memory 0` (59200 KiB, 4 grow requests, 5
+on `cd738b1a`); refract's live set reaches 142.6 MB. What stays slow: terrain 1 fps (7 frames, 1467
+ms of GL calls per frame, one fence re-post per frame), shadow 3 fps (353 ms per frame, as before),
+refract 1 fps (5 frames, 2046 ms of GL calls per frame; its 85 fps on `cd738b1a` was the scene with
+its targets refused and its draws skipped). The time is CPU-side (`swap` is microseconds): the
+PowerVR backend has no `generate_mipmap` hook, so `glGenerateMipmap` is the GL core's CPU box filter
+over terrain's 800x600 and refract's 1600x1200 chains every frame (read in `src/pvr/backend.rs` and
+`src/gl/texture.rs`, not measured: the image has no `CONFIG_SAFEUI_GPU_PVR_KICK_TIMES`). Score 465
+-> 462 is refract's 85 -> 1 fps; every other scene is within 2 fps of `cd738b1a`.
