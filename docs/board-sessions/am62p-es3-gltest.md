@@ -824,3 +824,329 @@ Differences from the expectations; no expectation was edited.
     are not on this machine; no Pass-to-Fail regression could be listed. The
     totals that can be compared (image 5, `fragment_out`, `lifetime`) are
     equal to `cd738b1a`.
+
+# Re-run at main `3ff06479`
+
+Device result. Date: 2026-10-15. Boot: `uboot-mmc`. Board: Verdin AM62P.
+
+Commit under test: `3ff0647950badb6bd0c8643a9df7e4146c3c2a54` (sha8
+`3ff06479`), `origin/main` after `git fetch origin`; the task's checkout was
+detached at it, clean. It is 12 commits after `291f3cb9` and all of them are
+docs (`docs/handoff/`, `docs/board-sessions/`, `tools/cts/RESULTS.md`,
+`tools/cts/STATUS.md`, `tools/cts/log/`): no file under `src`, `driver` or
+`tools/*.sh` changed since `291f3cb9`. Every image was built from it as it
+is: all four build ids read `PVR_SAMPLE_TREE=3ff06479`, no `-dirty` (the ES
+3.0 case list went in as a `-D` option, Deviations 2).
+`driver/src/fw/pvr_fw_blob.h` came from the dependency cache (git-ignored,
+not committed; `git status` clean before and after).
+
+An earlier attempt at this item ran the same four images from `291f3cb9` on
+2026-10-15 (its pull request was closed before it landed, so that section is
+not on main). Its totals, read from that doc, equal the ones below check for
+check and count for count; its records are no longer on this machine.
+
+## Result in short
+
+- gl_test `196,200,201,202,203,204,205` on the online compiler: **7 of 7
+  pass**, 0 resets. The 82 `q0..q4`, `[check N]` and `case N name: PASS`
+  lines of the console are byte for byte the `cd738b1a` listing at the top of
+  this file (`diff` against it: no difference). That includes the two small
+  differences of finding 2 (case 204 checks 4 and 6 read `0xbfa059cc` for
+  `...cb`; case 202 check 9 reads `199 399 599 799` for `200 400 600 800`),
+  which pass as before.
+- ES 2.0 gl_test default set: **0 of 50 cases failed**, 208 compiler runs,
+  the same line as `cd738b1a` and `am62p-es2-r1c.md`. No regression.
+- dEQP-GLES3 rows 1 and 2 (images 2 and 3): both `done`, 0 resets, every
+  case begun has a result, no case lost in capture. Image 2 fails **218**
+  (250 at `cd738b1a`): `draw` 14 Fail to 0 and `fbo` 367 to 350 Fail in the
+  mustpass tally. Image 3 is unchanged (1,479 / 135 / 69). Every `fbo.blit`
+  group of finding 7 reads exactly as at `cd738b1a`, name for name.
+- Images 20 and 21 were not run (the known hang). Row 4 (finding 6) was not
+  part of this re-run.
+
+## Build and run
+
+Environment names only: `ZEPHYR_WS`, `WEST_VENV`, `ZEPHYR_SDK_INSTALL_DIR`,
+`PVR_FW_BLOB` (the copy in the dependency cache), `PCO_SHC`,
+`GLSL2USC_CACHE`, `DEQP_WORK` (the AM62P gles3 stage 1 in the dependency
+cache, `deqp-stage1-am62p-gles3`). The image directories were in the
+dependency cache, not under `/tmp`.
+
+```sh
+# (b) ES 2.0 default set
+tools/cts/common-images.sh am62p tools/cts/common-tree.txt <img-es2> GT
+#   GT rc=0 sha256=bffe314dd85cfd29dff1a076de65a1f40939efd7db4b44941fadf66481b95b64 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=3ff06479
+
+# (a) ES 3.0 set: west directly, the board, sample and options of
+# common-images.sh's GT row plus the case list (Deviations 2)
+west build -p always -b verdin_am62p/am62p54/a53 -d <img-es3>/GT driver/samples/zephyr/gl_test -- \
+  -DZEPHYR_MODULES=<tools/cts/zephyr-modules.sh $ZEPHYR_WS> -DYAKOGL_DIR=<checkout> \
+  -DCONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y -DCONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n \
+  -DCONFIG_GL_TEST_CASES="196,200,201,202,203,204,205"
+#   GT rc=0 sha256=8e3fa8bba9f35402ffd9beb029dd186d78ef2ea07d4921a05a5b693c22e68470 build=PVR_SAMPLE_TABLE=c95547a1,PVR_SAMPLE_TREE=3ff06479
+#   <img-es3>/GT/zephyr/.config: CONFIG_GL_TEST_CASES="196,200,201,202,203,204,205"
+
+# (c) dEQP-GLES3 images 2, 3
+DEQP_WORK=<gles3 stage 1> DEQP_MODULE=gles3 TREE_ROWS=1,2 \
+  tools/cts/am62p-deqp-images.sh tools/cts/am62p-gles3-tree.txt <img-gles3> 3ff06479 > <img-gles3>/build.out
+#   img2 rc=0 bin=1d6e11f628d87788   img3 rc=0 bin=f3f913c77f8d589e
+
+export BOARD_HOST=<user@host> BOARD_BOOT=uboot-mmc BOARD_UART=<the lease's bridge host>:<port>
+python3 tools/am62p_netboot_uart.py probe $BOARD_UART      # rc 0 at the first try
+tools/board.sh am62p status                                 # not armed, /var/yakogl empty, no lease
+tools/board.sh --dry-run am62p run <GT image>/zephyr/zephyr.bin records/am62p es3gl
+tools/board.sh am62p run <img-es2>/GT/zephyr/zephyr.bin records/am62p es2gl
+tools/board.sh am62p run <img-es3>/GT/zephyr/zephyr.bin records/am62p es3gl
+TREE_IMAGE_DIR=<img-gles3> TREE_TAG=3ff06479 TREE_ROWS=1,2 BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt \
+  tools/board.sh am62p tree tools/cts/am62p-gles3-tree.txt records/am62p/gles3-3ff06479
+tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --table --depth 2 \
+  records/am62p/gles3-3ff06479/*/console.txt
+```
+
+`tools/board.sh am62p status` before the first run: no board lease,
+`yako_once` and `yako_default` empty, `/var/yakogl` empty (`yako_file` still
+named another session's one-shot token, which U-Boot ignores without
+`yako_once`). The board was not armed, so `disarm` was not run. After the
+last run: the same, `/var/yakogl` empty.
+
+Records (git-ignored):
+
+| run | record directory under `records/am62p/` |
+|---|---|
+| ES 2.0 gl_test default set | `20261015-2043-es2gl-bffe314d` |
+| ES 3.0 gl_test | `20261015-2051-es3gl-8e3fa8bb` |
+| dEQP image 2 (row 1) | `gles3-3ff06479/20261015-2058-img2-3ff06479-1d6e11f6` |
+| dEQP image 3 (row 2) | `gles3-3ff06479/20261015-2104-img3-3ff06479-f3f913c7` |
+
+Each record's `meta.txt`: `who_sessions=0`, the one-shot image staged on the
+eMMC and read back equal, removed after the run (read back).
+
+## Verdict lines (verbatim)
+
+ES 3.0:
+
+```
+board.sh am62p es3gl rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=79s
+gl_test: the list 196,200,201,202,203,204,205 (7 cases) on one context
+gl_test: all: 0 of 7 cases failed (7 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 48
+```
+
+The seven cases share one boot, so the per-case verdicts are the console's
+`case N name: PASS` lines: `case 196 occl`, `case 200 intrt`, `case 201
+usamp`, `case 202 blitconv`, `case 203 tfcap`, `case 204 srgb`, `case 205
+mappbo`, each `PASS`. Check counts: 196 two pixel checks plus q0..q4
+`available 1` with 0, 1, 0, 1, 1; 200 16/16; 201 8/8; 202 12/12; 203 9/9;
+204 8/8; 205 15/15. The `ok` lines are identical to the `cd738b1a` listing
+above (82 lines compared). The console ends `gl_test: done`, `gl_test: OK
+(rc=0)`, then `GPU recoveries 0 (HWR counter 0)`.
+
+ES 2.0:
+
+```
+board.sh am62p es2gl rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=78s
+gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 208
+```
+
+50 `case N ...: PASS` lines; no FAIL, SKIP or timeout line in either
+console; `GPU recoveries 0 (HWR counter 0)` in both.
+
+dEQP-GLES3, runner lines:
+
+```
+board.sh am62p img2-3ff06479 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=213s
+board.sh am62p img3-3ff06479 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=156s
+```
+
+The images' own counters:
+
+```
+img2  deqp: done: 1476 passed, 218 failed, 262 not supported, 0 warnings, complete=1 | deqp: summary: 1956 cases begun, 1956 with a result, 0 without
+img3  deqp: done: 1479 passed, 135 failed, 69 not supported, 0 warnings, complete=1 | deqp: summary: 1683 cases begun, 1683 with a result, 0 without
+```
+
+Both consoles: no recoveries line, 0 GPU reset lines, no lost case. The
+tree's own tally (`BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt` was set this
+time) and `deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --table
+--depth 2` on the two consoles print the same table:
+
+```
+== mustpass: 3588 cases in these records' case filters (39222 outside them, not run, left out); 3588 with a result (3639 case lines seen)
+group                           pass   fail   n.s.     QW  other   none
+draw                             322      0      0      0      0      0
+draw_buffers_indexed               0      0     76      0      0      0
+fbo                             1423    350    255      0      0      0
+fence_sync                        10      0      0      0      0      0
+fragment_ops                    1152      0      0      0      0      0
+TOTAL                           2907    350    331      0      0      0
+```
+
+`cd738b1a`, the same two images (its table above also counts image 5's
+`fragment_ops.scissor`): `draw` 308 / 14, `fbo` 1,406 / 367 / 255,
+`fragment_ops` 1,152 / 0.
+
+The `fbo` subgroups, counted from all 3,639 console result lines (not only
+the mustpass list), pass / fail / NotSupported:
+
+| `fbo.` subgroup | pass | fail | NotSupported |
+|---|---:|---:|---:|
+| `api` | 20 | 0 | 0 |
+| `blit` | 476 | 19 | 146 |
+| `color` | 122 | 147 | 33 |
+| `completeness` | 529 | 42 | 7 |
+| `depth` | 5 | 10 | 0 |
+| `invalidate` | 94 | 33 | 4 |
+| `msaa` | 4 | 34 | 32 |
+| `multiview` | 0 | 0 | 3 |
+| `render` | 210 | 68 | 30 |
+| `stencil` | 9 | 0 | 0 |
+
+## Against findings 6 and 7
+
+Finding 7 (`fbo.blit`, rows 1 and 2), counted from the console result lines
+as in the `cd738b1a` table:
+
+| group | `3ff06479` pass / fail / NotSupported | `cd738b1a` |
+|---|---|---|
+| `fbo.blit.conversion` | 325 / 0 / 112 | 325 / 0 / 112 |
+| `fbo.blit.rect` | 70 / 0 / 0 | 70 / 0 / 0 |
+| `fbo.blit.default_framebuffer` | 81 / 3 / 22 | 81 / 3 / 22 |
+| `fbo.blit.depth_stencil` | 0 / 16 / 12 | 0 / 16 / 12 |
+| `fbo.color.repeated_clear` (its `blit` cases) | 56 / 40 / 12 (44 / 20 / 8) | 56 / 40 / 12 (20 fail) |
+| `fbo.invalidate.sub` / `.whole` | 12 / 7 and 12 / 7 | 12 / 7 and 12 / 7 |
+
+The failing names are exactly the ones of finding 7 (54 names, from the
+consoles):
+- `blit.default_framebuffer`: `r8_linear_out_of_bounds_blit_from_default`,
+  `r8_linear_scale_blit_from_default`, `r8_nearest_scale_blit_from_default`;
+- `blit.depth_stencil`: the 16
+  (`depth24_stencil8_{basic,depth_only,scale,stencil_only}`,
+  `depth32f_stencil8_{basic,depth_only,scale,stencil_only}`,
+  `depth_component{16,24,32f}_{basic,scale}`, `stencil_index8_{basic,scale}`);
+- `color.repeated_clear.blit.tex2d`: the 19 integer formats (`r8i` to
+  `rgba32ui`, `rgb10_a2ui`) and `rgb16f`;
+- `invalidate.sub` and `invalidate.whole`:
+  `unbind_blit_{color,depth,stencil,msaa_color,msaa_depth,msaa_stencil,msaa_depth_stencil}`,
+  7 each.
+
+So the `src/gl/blit.rs` part of finding 7 has not moved since `cd738b1a`.
+`fragment_ops.scissor` is in image 5 (row 4), which did not run here.
+
+What moved is outside `fbo.blit`. All 14 `draw` failures of `cd738b1a` pass
+now (`draw` 324 Pass in the console, 322 in the mustpass list), and `fbo`
+fails 17 fewer mustpass cases (350 against 367). The `cd738b1a` records are
+not on this machine, so the 17 cannot be named case by case, and a Pass that
+became a Fail elsewhere in the two images can be neither shown nor excluded
+beyond the totals: image 2's fail count fell by 32, image 3's did not change.
+The largest fail reasons of the two images are
+`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` at `es3fFboTestCase.cpp:146` (102),
+`Compile failed at sglrGLContext.cpp:863` (67),
+`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` at `es3fFboRenderTest.cpp:358` (43),
+`Image comparison failed` (42), `GL_INVALID_OPERATION at
+es3fFboTestCase.cpp:154` (34) and `:90` (22), and the `fbo.completeness`
+pair "checked is incomplete, expected complete" / "checked as complete,
+expected incomplete" (21 each). The failing cases also include all 19
+integer formats of `fbo.invalidate.format.*` (its 4 NotSupported are the
+`*32f` ones).
+
+Finding 6 (row 4, image 5) was not re-run: it was not in this task's rows.
+Finding 2 (the case 204 and 202 roundings) is unchanged at `3ff06479`.
+
+## Deviations from the common steps
+
+1. **The variables came from the lease through a helper.** This worker's
+   command sandbox refuses a `VAR=value` prefix on a script it does not know
+   (`BOARD_UART=... tools/board.sh ...`, `DEQP_MODULE=... TREE_ROWS=...
+   tools/cts/am62p-deqp-images.sh ...`, a wrapper shell script, `west`
+   itself). A temporary Python helper (`tools/tmp_env.py`, never committed,
+   removed before the commit) set `BOARD_HOST`, `BOARD_UART` (both from the
+   lease's `RESOURCE_*` variables, no value in any file) and `BOARD_BOOT`,
+   `DEQP_WORK`, `DEQP_MODULE`, `TREE_ROWS`, `TREE_IMAGE_DIR`, `TREE_TAG`,
+   `BOARD_MUSTPASS`, and ran the script given to it. The scripts and their
+   arguments are the ones listed above. `BOARD_UART` was not in the
+   machine's environment (`board.sh --dry-run` printed `BRIDGE:PORT`
+   without the helper).
+2. **The ES 3.0 case list as a `-D` option, through `west` directly.**
+   `tools/cts/common-images.sh` cannot forward a `-D` option, so a
+   temporary wrapper (`tools/tmp-build-es3-gt.sh`, never committed, removed
+   before the commit) ran the `west build` line above: the same board,
+   sample, `-p always`, module list, `YAKOGL_DIR` and arm options as
+   `common-images.sh`'s GT row, plus `-DCONFIG_GL_TEST_CASES`, and wrote the
+   same `GT.built` line (sha256, build ids, the `rti_arm: armed` and build
+   line checks). `prj.conf` was not edited: this is the first ES 3.0 gl_test
+   image of this file without `-dirty` in its build id.
+3. **No detached worktree.** `git worktree add` needed an approval the run
+   could not get; the task's own checkout was detached at `origin/main`
+   (`git checkout --detach origin/main`, clean) and the scripts built it.
+4. **Order.** The ES 2.0 image finished first and ran first (20:43), the ES
+   3.0 image next (20:51), then the tree (20:58, 21:04). The `--dry-run` of
+   `board.sh am62p run` came before any run, with the earlier attempt's ES
+   3.0 image as its stand-in (this session's was still building); it printed
+   the lease's bridge as the capture and every board step.
+5. **Console port.** The leased bridge port carried main_uart0 (U-Boot, the
+   kernel and Zephyr all captured; `verdict=done` four times, no
+   `verdict=empty`). `tools/am62p_netboot_uart.py probe` accepted at the
+   first try: the lease's serial console tool did not hold the bridge this
+   time (it was not used during the session).
+6. **Stage 1.** `DEQP_WORK` was set to the AM62P gles3 stage 1 in the
+   dependency cache (`deqp-stage1-am62p-gles3`,
+   `build/modules/gles3/libdeqp-gles3-package.a` present). It was not
+   rebuilt.
+7. **No note under `docs/handoff/`.** The hand-over is the section below
+   instead. A waiting note makes `tools/handoff-notes.sh --check` exit 1,
+   which the review of the earlier attempt required to pass; main itself
+   already carries a waiting note (`docs/handoff/20261015-am62p-gltest-es2.md`),
+   so that check fails on main with or without this result. Whoever next
+   updates `docs/HANDOFF.md` takes these lines from here.
+
+## Hand-over (for `docs/HANDOFF.md`)
+
+What `docs/HANDOFF.md` should say after this result, by section, in the
+headings of `docs/handoff/README.md`.
+
+### State of main
+
+In "ES 3.0 (goal 4)", after "196 and 202 to 205 pass again at the
+integration tip `9b525867` (...)", add: all seven cases 196 and 200 to 205
+pass again at main `3ff06479` (2026-10-15; 7 of 7, 0 resets, every check
+value the same as at `cd738b1a`; image sha256 `8e3fa8bb...`, build id
+`3ff06479`, the case list given as `-DCONFIG_GL_TEST_CASES` on the `west
+build` line; record `records/am62p/20261015-2051-es3gl-8e3fa8bb`). The ES
+2.0 default set passes there too: 0 of 50 failed, 208 compiler runs (image
+`bffe314d...`, build id `3ff06479`; record
+`records/am62p/20261015-2043-es2gl-bffe314d`).
+
+After "Rows re-run on `cd738b1a` (...)", add: rows 1 and 2 (images 2 and 3)
+re-ran on `3ff06479` (2026-10-15; both `done`, 0 resets, every case begun has
+a result; `records/am62p/gles3-3ff06479`). Image 2: 1,476 pass / 218 fail /
+262 NotSupported (1,444 / 250 / 262 at `cd738b1a`). Image 3 is unchanged:
+1,479 / 135 / 69. In the mustpass list, `draw` has 0 Fail (14 before) and
+`fbo` has 350 Fail (367 before). Every `fbo.blit` group of finding 7 and
+`fbo.invalidate.{sub,whole}.unbind_blit_*` read exactly as at `cd738b1a`.
+
+### Known defects
+
+"AM62P fbo / blit / invalidate failures": unchanged at `3ff06479`. The
+failing cases are the same ones:
+- `blit.default_framebuffer.r8_*` (3);
+- `blit.depth_stencil` (16);
+- `repeated_clear.blit.tex2d` (19 integer formats plus `rgb16f`);
+- `invalidate.sub` / `.whole` `unbind_blit_*` (7 + 7).
+
+The 14 `draw` failures of `cd738b1a` are gone.
+
+### Next board session
+
+In the AM62P part:
+
+- An ES 3.0 gl_test image no longer needs the `prj.conf` edit:
+  `-DCONFIG_GL_TEST_CASES="..."` on `common-images.sh`'s `west build` line
+  (run by hand) builds it with a clean build id. `common-images.sh` itself
+  still has no case override.
+- The AM62P gles3 stage 1 is in the dependency cache
+  (`deqp-stage1-am62p-gles3`); point `DEQP_WORK` at it (the farm's
+  `DEQP_WORK` may still be the GLES2 one).
+- `BOARD_UART` is not in the farm's environment on every worker; the
+  lease's `RESOURCE_*` variables name the bridge, and a worker that refuses
+  `VAR=value` prefixes needs a helper that exports them (Deviations 1).
+- A gles3 tree's own tally needs `BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt`;
+  with it the tree prints the mustpass table itself.
