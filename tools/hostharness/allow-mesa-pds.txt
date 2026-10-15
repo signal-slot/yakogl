@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # Only for comparing a build before source-form step 3 (Mesa's PDS generators
 # and csbgen; main up to land123) with one after it (land124 and later):
 #   HH_ALLOW=tools/hostharness/allow-mesa-pds.txt tools/hostharness/compare.sh ...

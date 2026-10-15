@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The online compiler's IR: the contract between the front end and the back end
 
 One file, because three people write against it: the front end (M2,

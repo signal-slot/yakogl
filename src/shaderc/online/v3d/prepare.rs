@@ -194,6 +194,17 @@ pub struct Prepared<'a> {
     /// write; with no bit the program writes only the pass-through Z (a
     /// depth pre-pass).
     pub rt_mask: u8,
+    /// Fragment shaders: bit n, render target n's output is declared `int`
+    /// or `uint` (any width: `ivec4`, `uvec2`, `int`, ...; an ES 3.00
+    /// output's declaration, `IoDecl::gl_type`). Its TLB write carries the
+    /// 32-bit values as they are (select.rs `tlb_config_32b`, Mesa's
+    /// TLB_TYPE_F32_COLOR, the one 32-bit type of V3D 4.2) where a float
+    /// output's is two f16 pairs.
+    pub rt_int: u8,
+    /// Fragment shaders: the declared components of render target n's
+    /// output (1..4; 4 for `gl_FragColor` and for an RT with no
+    /// declaration), the words an integer write takes.
+    pub rt_comps: [u8; MAX_RTS],
     /// Fragment shaders: the bool (~0 / 0) that holds in the lanes a
     /// `discard` ran in; `None` when the shader never discards.
     pub discard: Option<S>,
@@ -1147,7 +1158,19 @@ impl<'m, 'a> Walk<'m, 'a> {
                     }
                     (SHC_STAGE_FRAGMENT, IoSlot::FragColor(rt)) if (rt as usize) < MAX_RTS => {
                         let rt = rt as usize;
-                        for lane in 0..4 {
+                        /* an ES 3.00 output declared narrower than vec4
+                         * (`out uvec2`, `out int`) stores its declared lanes;
+                         * the rest stay unwritten (0, and select.rs writes
+                         * an integer output's declared components only). The
+                         * declaration's width, not the value's: `vec4(f)` is
+                         * a scalar read through a splat swizzle. */
+                        let comps = self
+                            .m
+                            .outputs
+                            .iter()
+                            .find(|d| d.kind == IoKind::Colour && usize::from(d.location) == rt)
+                            .map_or(4, |d| usize::from(d.components.clamp(1, 4)));
+                        for lane in 0..comps {
                             let s = self.src(src, lane)?;
                             /* A lane never written, carried through a store
                              * of the whole vector (`gl_FragColor.xy = ...`),
@@ -2269,6 +2292,18 @@ pub fn prepare_fragment_with<'a>(
     refuse_undef(ops)?;
     let color: [[S; 4]; MAX_RTS] = core::array::from_fn(|rt| core::array::from_fn(|lane| roots[4 * rt + lane]));
     let discard = w.discard.map(|_| roots[4 * MAX_RTS]);
+    /* The declared type and width of each ES 3.00 output: an integer one
+     * is written to the TLB as 32-bit words (select.rs). gl_FragColor and
+     * gl_FragData[n] are vec4 (their declaration says GL_FLOAT_VEC4). */
+    let mut rt_int = 0u8;
+    let mut rt_comps = [4u8; MAX_RTS];
+    for d in m.outputs.iter().filter(|d| d.kind == IoKind::Colour && (d.location as usize) < MAX_RTS) {
+        let rt = d.location as usize;
+        rt_comps[rt] = d.components.clamp(1, 4);
+        if integer_output(d.gl_type) {
+            rt_int |= 1 << rt;
+        }
+    }
     Ok(Prepared {
         stage: SHC_STAGE_FRAGMENT,
         ops,
@@ -2276,9 +2311,18 @@ pub fn prepare_fragment_with<'a>(
         varyings: &[],
         color,
         rt_mask,
+        rt_int,
+        rt_comps,
         discard,
         psiz: None,
     })
+}
+
+/// Is a fragment output's GL type an integer one: GL_INT (0x1404),
+/// GL_UNSIGNED_INT (0x1405), GL_INT_VEC2..4 (0x8B53..0x8B55) or
+/// GL_UNSIGNED_INT_VEC2..4 (0x8DC6..0x8DC8)?
+pub fn integer_output(gl_type: u16) -> bool {
+    matches!(gl_type, 0x1404 | 0x1405 | 0x8B53..=0x8B55 | 0x8DC6..=0x8DC8)
 }
 
 /// The fragment shader's inputs, in the order its `ldvary`s read them:
@@ -2351,6 +2395,8 @@ pub fn prepare_vertex_with<'a>(
         varyings: vary,
         color: [[S(0); 4]; MAX_RTS],
         rt_mask: 0,
+        rt_int: 0,
+        rt_comps: [4; MAX_RTS],
         discard: None,
         psiz,
     })

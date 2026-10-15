@@ -192,10 +192,18 @@ refusal and keeps the 7,684,096 B depth copy beside it (refract peak
 list; 16 MiB also clears it but evicts the depth copy every frame and peaks
 higher, at 70,146,048 B; both run refract at 23 FPS, so the choice rests on
 memory, not speed) - `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md` sections
-3.2-3.4. The budget is a workaround for the per-frame CPU tiled copy of a
-render target: item `v3d-rt-sample` (it owns `src/v3d/**`) may sample the
-render target without the copy at all, and then the Pi 4 board file can
-drop this line and go back to the 8 MiB default.
+3.2-3.4. The budget was a workaround for the per-frame CPU tiled copy of a
+render target. Since item `v3d-rt-sample` a colour render target the scene
+samples is stored by the tile list into a render image the TMU reads as it
+is, and its glGenerateMipmap (refract's and terrain's, every frame) is one
+TFU job in that image, so the image also sets `CONFIG_YAKOGL_V3D_TFU=y`
+(the OSAL runs TFU jobs only with it; the option's default stays `n`
+elsewhere). The copies of the render targets are gone from the second
+frame of a scene on; the budget still covers the uploaded textures and the
+first frame's copies, and can go back to the 8 MiB default once a board run
+has read the "render images" and "tiled copies high-water" lines at this
+setting (`docs/online-shaderc/v3d-backend.md`, "Render targets sampled from
+their render image").
 
 ### The record: kind 18 GLMARK2 (`record.rs`)
 

@@ -1749,6 +1749,32 @@ pub fn tlb_config_f16(rt: u32, components: u32) -> u32 {
     conf
 }
 
+/// The TLB config for an integer output (`int`, `uint` or a vector of them)
+/// to render target `rt`, `components` words long: vir_emit_tlb_color_write's
+/// 32-bit branch (nir_to_vir.c:1974-1977, the `f32_color_rb` targets, a key
+/// bit v3d_program.c:701-704 sets for every pure integer format as it does
+/// for 32F): per-pixel sample mode, the RT number reversed,
+/// TLB_TYPE_F32_COLOR (0 << 6, :1931) and the vector size minus one in bits
+/// 0..1 (TLB_VEC_SIZE_MINUS_1_SHIFT, :1938). Mesa 26.2.1 still defines
+/// TLB_TYPE_I32_COLOR (1 << 6, :1930) but never writes it: on V3D 4.2 one
+/// 32-bit type serves integer and float words alike, and the tile buffer's
+/// internal type (8I, 16UI, 32F, ...) says what they are. The words are the
+/// shader's 32-bit values as they are; the tile buffer narrows them to the
+/// target's internal type. Never the TLB's default, so the first word
+/// always goes through TLBU. A float output to a 32F target would take the
+/// same config; the V3D program is not keyed by the target's class, so a
+/// float output always writes f16 pairs.
+pub fn tlb_config_32b(rt: u32, components: u32) -> u32 {
+    const TLB_TYPE_F32_COLOR: u32 = 0 << 6;
+    const TLB_RENDER_TARGET_SHIFT: u32 = 3;
+    const TLB_SAMPLE_MODE_PER_PIXEL: u32 = 1 << 2;
+    0xffff_ff00
+        | TLB_SAMPLE_MODE_PER_PIXEL
+        | ((7 - rt) << TLB_RENDER_TARGET_SHIFT)
+        | TLB_TYPE_F32_COLOR
+        | (components.clamp(1, 4) - 1)
+}
+
 /// How hard selection works to keep values out of registers, in the order
 /// the chain tries them (`chain.rs` `vertex` and `fragment`): each level is
 /// asked for only when the one before does not fit 2 threads' registers,
@@ -2201,12 +2227,27 @@ pub fn select_fragment<'a>(
             },
         )?;
     }
-    /* One f16 vec4 write per render target the shader writes, in RT order
-     * (emit_frag_end calls vir_emit_tlb_color_write for rt 0..7): the
-     * first word of each through TLBU with the RT's config, unless the
-     * config is the default (RT 0). */
+    /* One colour write per render target the shader writes, in RT order
+     * (emit_frag_end calls vir_emit_tlb_color_write for rt 0..7): an f16
+     * vec4 (two VFPACK words) for a float output, the first word through
+     * TLBU with the RT's config unless the config is the default (RT 0);
+     * for an integer output (`Prepared::rt_int`: an ES 3.00 `out ivec4`,
+     * `uvec2`, `int`, ...) one 32-bit word per declared component as it is,
+     * MOVed to TLBU then TLB with the 32-bit config (vir_emit_tlb_color_write's
+     * 32-bit branch, nir_to_vir.c:2005-2021: vir_MOV_dest of each colour
+     * channel to tlbu / tlb; the hardware narrows to the target's type). */
     for (rt, colour) in p.color.iter().enumerate() {
         if p.rt_mask & (1 << rt) == 0 {
+            continue;
+        }
+        if p.rt_int & (1 << rt) != 0 {
+            let n = usize::from(p.rt_comps[rt].clamp(1, 4));
+            let conf = tlb_config_32b(rt as u32, n as u32);
+            for (i, &x) in colour.iter().enumerate().take(n) {
+                let v = s.val(a, x)?;
+                let dst = if i == 0 { Dst::Tlbu(Uniform::constant(conf)) } else { Dst::Tlb };
+                s.push(a, VOp::Mul { op: MulOp::Mov, dst, a: v, b: Operand::None })?;
+            }
             continue;
         }
         let mut c = [Operand::None; 4];

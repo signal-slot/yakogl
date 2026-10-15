@@ -1605,8 +1605,26 @@ pub unsafe extern "C" fn glFramebufferTexture2D(
     }
     let layer = if face { textarget.wrapping_sub(GL_TEXTURE_CUBE_MAP_POSITIVE_X) as GLint } else { 0 };
     debug_assert_eq!(bound, c.bound_framebuffer);
+    /* a level above 0 is rendered into and read through the storage: a
+     * chain the backend made in its own image comes back first */
+    if level > 0 {
+        super::texture::chain_back(c, texture as usize);
+    }
     replace_attachment(c, attachment, GL_TEXTURE, texture, level, layer);
     note_level_attached(c, texture, level);
+}
+
+/// Is a level above 0 of texture `ti` attached to one of this context's
+/// framebuffers? Such a level is rendered into and read through the
+/// storage, so glGenerateMipmap keeps the chain there (texture.rs) rather
+/// than in a backend's image.
+pub(super) fn level_above_zero_attached(c: &GlContext, ti: usize) -> bool {
+    c.framebuffers.iter().filter(|fb| fb.used).any(|fb| {
+        [&fb.color, &fb.depth, &fb.stencil]
+            .into_iter()
+            .chain(fb.color_n.iter())
+            .any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti && a.level > 0)
+    })
 }
 
 /// Rendering into a level fills it: the sampler may then walk down to it
@@ -2309,11 +2327,16 @@ fn renderbuffer_format_advertised(f: GLenum) -> bool {
         GL_RGB8 | GL_RGBA8 => listed("GL_OES_rgb8_rgba8"),
         GL_DEPTH24_STENCIL8 => listed("GL_OES_packed_depth_stencil"),
         /* GL_EXT_texture_rg, GL_EXT_color_buffer_half_float (RG16F and R16F
-         * need both) and the BGRA8 name of GL_EXT_texture_format_BGRA8888 */
+         * need both) and both BGRA names of GL_EXT_texture_format_BGRA8888 */
         GL_R8 | GL_RG8 => listed("GL_EXT_texture_rg"),
         GL_RGBA16F | GL_RGB16F => listed("GL_EXT_color_buffer_half_float"),
         GL_RG16F | GL_R16F => listed("GL_EXT_color_buffer_half_float") && listed("GL_EXT_texture_rg"),
-        GL_BGRA8_EXT => listed("GL_EXT_texture_format_BGRA8888"),
+        /* dEQP-GLES2 asks both names of GL_EXT_texture_format_BGRA8888 as
+         * renderbuffer storage from anyone who claims it (fbo.completeness
+         * .renderable.renderbuffer.*.bgra and render.*.rbo_bgra*); refusing
+         * the unsized GL_BGRA_EXT failed 46 cases on the i.MX8MP and the
+         * Pi 4 from 8bbf9ba2 on. */
+        GL_BGRA8_EXT | GL_BGRA_EXT => listed("GL_EXT_texture_format_BGRA8888"),
         /* anything else ES 3.0 names (R32F, DEPTH_COMPONENT32F, DEPTH32F_STENCIL8, the integer formats, ...) */
         _ => false,
     }

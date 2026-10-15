@@ -1,0 +1,3 @@
+# Fixture for rows-for-cases.py: two rows select the same case (dEQP would run it in both).
+dEQP-GLES2.functional.texture.completeness.*
+dEQP-GLES2.functional.texture.*

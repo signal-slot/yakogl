@@ -617,3 +617,55 @@ bool v3d_tex_tfu_pack(const struct v3d_tex_layout *l, uint32_t ttype, uint32_t s
 	*j = out;
 	return true;
 }
+
+/* v3dx_tfu.c:97-163 (Mesa 26.2.1, V3D 4.2), the for_mipmap call of
+ * v3d_generate_mipmap: one resource as source and destination, base level 0,
+ * `levels - 1` levels after it. ICFG = the source's tiled format (11 + its
+ * distance from LINEARTILE) << 18 | data type << 9 | levels after the first
+ * (NUMMM) << 5, and for a UIF destination OPAD << 22, the UIF block rows of
+ * padding beyond those the height needs (v3dx_tfu.c:154-162 sets it for
+ * every UIF destination, DIMTW or not; its comment says the hardware infers
+ * the tiling of levels 1+); IIS the UIF source's padded height in UIF
+ * blocks; IOA = level 0 | the same format (3 + the distance) << 3 | DIMTW
+ * (bit 0: level 0 is not written). */
+bool v3d_tex_tfu_pack_mipmap(const struct v3d_tex_layout *l, uint32_t ttype, uint32_t image_gpu,
+			     struct v3d_tex_tfu_job *j)
+{
+	uint32_t cpp;
+	switch (ttype) {
+	case V3D_TFU_TTYPE_R8:
+		cpp = 1;
+		break;
+	case V3D_TFU_TTYPE_RG8:
+	case V3D_TFU_TTYPE_R16F:
+		cpp = 2;
+		break;
+	case V3D_TFU_TTYPE_RGBA8:
+	case V3D_TFU_TTYPE_R32F:
+		cpp = 4;
+		break;
+	default:
+		return false;
+	}
+	if (!l || !j || l->levels < 2 || l->levels > V3D_TEX_MAX_LEVELS || l->cpp != cpp ||
+	    l->width >= 16384u || l->height >= 16384u)
+		return false;
+	const struct v3d_tex_slice *s = &l->slices[0];
+	const uint32_t level0 = image_gpu + s->offset;
+	if ((level0 & 0x3fu) != 0 || s->tiling < V3D_TEX_TILING_LINEARTILE)
+		return false;
+	const uint32_t distance = (uint32_t)s->tiling - V3D_TEX_TILING_LINEARTILE;
+	struct v3d_tex_tfu_job out = { 0 };
+	out.ios = l->height << 16 | l->width;
+	out.iia = level0;
+	out.icfg = (11u + distance) << 18 | ttype << 9 | (l->levels - 1u) << 5;
+	if (s->tiling == V3D_TEX_TILING_UIF_NO_XOR || s->tiling == V3D_TEX_TILING_UIF_XOR) {
+		const uint32_t ubh = 2u * utile_height(l->cpp);
+		const uint32_t implicit = (l->height + ubh - 1u) / ubh * ubh;
+		out.iis = s->padded_height / ubh;
+		out.icfg |= (s->padded_height - implicit) / ubh << 22;
+	}
+	out.ioa = level0 | (3u + distance) << 3 | 1u;
+	*j = out;
+	return true;
+}

@@ -37,15 +37,25 @@
 //! converted; `gl::srgb`), alpha linear; an sRGB-to-sRGB NEAREST copy
 //! keeps the bytes, the codec's encode inverting its decode exactly.
 //!
-//! Depth and stencil are validated as the spec says, but not copied: the back
-//! ends keep depth/stencil in buffers of their own (`ds_retention`), which
-//! have no CPU write path yet; a blit that would copy them is refused with
-//! GL_INVALID_OPERATION and says so once in the log.
+//! Depth and stencil are validated as the spec says. The back ends keep the
+//! depth/stencil a draw writes in buffers of their own (`ds_retention`), and
+//! the GL core can read a buffer's depth (`backend::depth_resolve`) but
+//! write none of it. So the depth half is copied on the CPU where the
+//! destination is a plane the GL core holds itself: the R32F texels of a
+//! depth texture (`texture::resolve_depth`), read from a depth texture's
+//! texels or a depth renderbuffer's resolved depth, with the colour path's
+//! rectangles, flips, cut and scissor, NEAREST only, the value copied as it
+//! is (the formats match). Such texels are what a sampler reads; a draw that
+//! later depth-tests against the texture uses the back end's buffer, which
+//! the copy does not reach, as for a glTexSubImage2D of depth. Every other
+//! depth or stencil copy -- into a renderbuffer or the window, any stencil
+//! -- needs a back-end entry that writes a buffer's plane and is refused
+//! with GL_INVALID_OPERATION, said once in the log per cause.
 
 use core::ffi::c_void;
 
 use super::consts::*;
-use super::context::{GlAttachment, GlContext, CAP_COLOR_ATTACHMENTS};
+use super::context::{ds_object_id, heap_data, GlAttachment, GlContext, CAP_COLOR_ATTACHMENTS, CAP_MIP_LEVELS};
 use super::framebuffer::{
     self, attached_samples, attachment_storage, check_status, loc_pitch, mem_at, mem_at_mut, quantise_unorm,
     renderbuffer_bits, renderbuffer_surf_format, texture_bits, AttachmentBits, ColorKind, MemLoc,
@@ -56,7 +66,7 @@ use crate::backend::{
     GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
     GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
-use crate::osal::{self, OsalGpuMem};
+use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
 const FN: &str = "glBlitFramebuffer";
@@ -249,11 +259,16 @@ fn draw_images(c: &GlContext) -> ([Option<Image>; CAP_COLOR_ATTACHMENTS], usize)
 /// A depth or stencil attachment of a framebuffer, as the blit's rules see
 /// it.
 struct DsImage {
-    /// (depth bits, depth component type, stencil bits).
+    /// (depth bits, depth component type, stencil bits), as
+    /// glGetFramebufferAttachmentParameteriv answers them.
     fmt: (GLint, GLenum, GLint),
-    /// Which image it is: the attached object (type, name), or (GL_NONE, 0)
-    /// for the window surface's own.
-    image: (GLenum, GLuint),
+    /// Which image it is: the attached object (type, name, level, layer),
+    /// or all GL_NONE / 0 for the window surface's own.
+    image: (GLenum, GLuint, GLint, GLint),
+    /// The attachment itself (GL_NONE for the window surface's own).
+    att: GlAttachment,
+    w: u32,
+    h: u32,
 }
 
 /// The depth (or with `stencil` the stencil) attachment of framebuffer
@@ -261,7 +276,13 @@ struct DsImage {
 fn ds_format(c: &GlContext, fb: GLuint, stencil: bool) -> Option<DsImage> {
     if fb == 0 {
         /* the window surface always has a D24S8 (`fb_target_depth_stencil`) */
-        return Some(DsImage { fmt: (24, GL_UNSIGNED_NORMALIZED, 8), image: (GL_NONE, 0) });
+        return Some(DsImage {
+            fmt: (24, GL_UNSIGNED_NORMALIZED, 8),
+            image: (GL_NONE, 0, 0, 0),
+            att: GlAttachment { type_: GL_NONE, name: 0, level: 0, layer: 0 },
+            w: c.target_w,
+            h: c.target_h,
+        });
     }
     let f = c.framebuffer_ref(fb)?;
     let a = if stencil { &f.stencil } else { &f.depth };
@@ -269,8 +290,61 @@ fn ds_format(c: &GlContext, fb: GLuint, stencil: bool) -> Option<DsImage> {
         return None;
     }
     let s = attachment_storage(c, a)?;
-    let b = renderbuffer_bits(s.internalformat);
-    Some(DsImage { fmt: (b.depth, b.component_type, b.stencil), image: (a.type_, a.name) })
+    /* a texture's bits from what it was specified with, as the query says
+     * (attachment_storage names every depth texture D24 or D24S8) */
+    let b = match a.type_ {
+        GL_TEXTURE => texture_bits(c.texture_ref(a.name)?),
+        _ => renderbuffer_bits(s.internalformat),
+    };
+    Some(DsImage {
+        fmt: (b.depth, b.component_type, b.stencil),
+        image: (a.type_, a.name, a.level, a.layer),
+        att: *a,
+        w: s.w,
+        h: s.h,
+    })
+}
+
+/// The R32F texels of the level of a depth texture attached at `a`: the
+/// depth plane the GL core holds itself (`texture::resolve_depth`). None
+/// for anything else, and for a texture whose level is not where a 2D
+/// texture's is (a cube face, an array layer: `attachment_storage` keeps no
+/// face or layer for a depth texture).
+#[derive(Clone, Copy, Debug)]
+struct DepthTexels {
+    ti: usize,
+    level: GLint,
+    /// Byte offset of the level in the texture's memory.
+    off: usize,
+    w: u32,
+    h: u32,
+    /// Row pitch in floats.
+    pitch: usize,
+}
+
+fn depth_texels(c: &GlContext, a: &GlAttachment) -> Option<DepthTexels> {
+    if a.type_ != GL_TEXTURE {
+        return None;
+    }
+    let t = c.texture_ref(a.name)?;
+    let level = usize::try_from(a.level).ok()?;
+    if !matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL)
+        || t.target != GL_TEXTURE_2D
+        || t.texfmt != GLES_TEXFMT_R32F
+        || t.mem.cpu.is_null()
+        || level >= t.chain_levels as usize
+        || level >= CAP_MIP_LEVELS
+    {
+        return None;
+    }
+    let (w, h) = ((t.width >> level).max(1), (t.height >> level).max(1));
+    let pitch = t.level_pitch_at(level as u32) as usize;
+    let off = t.level_off[level] as usize;
+    let bytes = ((h as usize - 1) * pitch + w as usize) * 4;
+    if pitch < w as usize || off + bytes > t.mem.size {
+        return None;
+    }
+    Some(DepthTexels { ti: a.name as usize, level: a.level, off, w, h, pitch })
 }
 
 /// A sized internal format with its sRGB encoding folded away (the
@@ -635,14 +709,192 @@ fn copy_colour(
     ok
 }
 
-/// "Said it once" for the depth/stencil refusal.
-static WARNED_DS: Global<bool> = Global::new(false);
+/// Copy the colour of `src` (cut to `src_rect`) into every draw buffer of
+/// `dsts` (each cut to `dst_rect` and the scissor). False when the platform
+/// failed a read or a write.
+#[allow(clippy::too_many_arguments)]
+fn blit_colour(
+    c: &mut GlContext,
+    src: &Image,
+    dsts: &[Option<Image>],
+    k: &Corners,
+    src_rect: Rect,
+    dst_rect: Rect,
+    scissor: Option<Rect>,
+    linear: bool,
+) -> bool {
+    let src_cut = src_rect.cut(Rect::of_image(src));
+    if src_cut.empty() {
+        return true;
+    }
+    invalidate(c, src);
+    let mut ok = true;
+    for d in dsts.iter().flatten() {
+        let mut cut = dst_rect.cut(Rect::of_image(d));
+        if let Some(s) = scissor {
+            cut = cut.cut(s);
+        }
+        if cut.empty() {
+            continue;
+        }
+        /* the CPU's lines of the image may be stale: dropped before the
+         * pixels are written, so the write-back carries only fresh bytes */
+        invalidate(c, d);
+        ok &= copy_colour(c, src, src_cut, d, cut, k, linear);
+        write_back(c, d);
+        if let Some((ti, level)) = d.tex {
+            super::texture::note_blit_written(c, ti, level);
+        }
+    }
+    ok
+}
 
-/// Unit tests: re-arm the log line.
+/// Where the depth of a depth blit is read from.
+#[derive(Clone, Copy, Debug)]
+enum DepthSource {
+    /// A depth texture's texels, once a rendered level reached them
+    /// (`texture::resolve_depth`).
+    Texels(DepthTexels),
+    /// A depth renderbuffer: the depth the back end keeps for it
+    /// (`backend::depth_resolve`, under its `GlesDraw::depth_id`).
+    Renderbuffer { id: u32 },
+}
+
+/// The source of a depth blit from `r`, when the GL core can read it. The
+/// window's own depth is not read: which way up a back end keeps it is not
+/// measured.
+fn depth_source(c: &GlContext, r: &DsImage) -> Option<DepthSource> {
+    match r.att.type_ {
+        GL_TEXTURE => depth_texels(c, &r.att).map(DepthSource::Texels),
+        GL_RENDERBUFFER => {
+            c.renderbuffer_ref(r.att.name).map(|rb| DepthSource::Renderbuffer { id: ds_object_id(rb.serial, false) })
+        }
+        _ => None,
+    }
+}
+
+/// A depth copy the call makes: from `src` (`w` x `h`) into `dst`.
+#[derive(Clone, Copy, Debug)]
+struct DepthCopy {
+    src: DepthSource,
+    w: u32,
+    h: u32,
+    dst: DepthTexels,
+}
+
+/// The depth/stencil copies that are refused, one bit per cause, each said
+/// once in the log.
+const REFUSED_STENCIL: u8 = 1 << 0;
+const REFUSED_DEPTH_DST: u8 = 1 << 1;
+const REFUSED_DEPTH_SRC: u8 = 1 << 2;
+
+/// The causes already said in the log.
+static WARNED_DS: Global<u8> = Global::new(0);
+
+/// Unit tests: re-arm the log lines.
 #[cfg(test)]
 pub(crate) fn reset_for_tests() {
     // SAFETY: single-threaded by contract.
-    unsafe { *WARNED_DS.get() = false };
+    unsafe { *WARNED_DS.get() = 0 };
+}
+
+/// Refuse a depth or stencil copy the GL core cannot make: GL_INVALID_OPERATION,
+/// and the cause said once.
+fn refuse_ds(c: &mut GlContext, cause: u8) {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let warned = unsafe { WARNED_DS.get() };
+    if *warned & cause == 0 {
+        *warned |= cause;
+        let why = match cause {
+            REFUSED_STENCIL => "a stencil blit: the back ends keep the stencil, and no entry reads or writes it",
+            REFUSED_DEPTH_DST => {
+                "a depth blit into a renderbuffer or the window (the back ends keep that depth, and no entry \
+                 writes it), or into a depth texture that is not a 2D texture"
+            }
+            _ => "a depth blit from the window or from a depth texture that is not a 2D texture",
+        };
+        glog!("glBlitFramebuffer: {} is not implemented (GL_INVALID_OPERATION)", why);
+    }
+    c.set_error(GL_INVALID_OPERATION, FN);
+}
+
+/// Copy the depth of `job` from its source (cut to `src_rect`) into its
+/// destination texels (cut to `dst_rect` and the scissor), NEAREST: the
+/// colour path's mapping, the value as it is. False when the source could
+/// not be read.
+fn copy_depth(
+    c: &mut GlContext,
+    job: DepthCopy,
+    k: &Corners,
+    src_rect: Rect,
+    dst_rect: Rect,
+    scissor: Option<Rect>,
+) -> bool {
+    let d = job.dst;
+    let src_cut = src_rect.cut(Rect { x: 0, y: 0, w: job.w as i64, h: job.h as i64 });
+    let mut dst_cut = dst_rect.cut(Rect { x: 0, y: 0, w: d.w as i64, h: d.h as i64 });
+    if let Some(s) = scissor {
+        dst_cut = dst_cut.cut(s);
+    }
+    if src_cut.empty() || dst_cut.empty() {
+        return true;
+    }
+    /* The destination's texels first take what was rendered into the level
+     * (the pixels outside the copy keep it), which also marks them resolved:
+     * a later sampling does not resolve over the copy. */
+    super::texture::resolve_depth(c, d.ti);
+    let mut scratch = OsalGpuMem::default();
+    let (from, pitch): (*const f32, usize) = match job.src {
+        DepthSource::Texels(s) => {
+            super::texture::resolve_depth(c, s.ti);
+            let t = &c.objs_ref().textures[s.ti];
+            ((t.mem.cpu as *const u8).wrapping_add(s.off) as *const f32, s.pitch)
+        }
+        DepthSource::Renderbuffer { id } => {
+            let bytes = job.w as usize * job.h as usize * 4;
+            if osal::gpu_alloc(heap_data(), bytes, OSAL_MEM_DATA, &mut scratch) != 0 || scratch.cpu.is_null() {
+                osal::gpu_free(&mut scratch);
+                return false;
+            }
+            // SAFETY: `scratch` holds `h` rows of `w` floats; the kicks that
+            // rendered the depth completed (gpu_idle_for_cpu).
+            let rc = unsafe { backend::depth_resolve(id, scratch.cpu as *mut f32, job.w, job.h, job.w) };
+            if rc != 0 {
+                osal::gpu_free(&mut scratch);
+                /* 1: the back end holds nothing for it, so the source is
+                 * undefined and the destination may stay as it is */
+                return rc == 1;
+            }
+            (scratch.cpu as *const f32, job.w as usize)
+        }
+    };
+    let to = (c.objs_ref().textures[d.ti].mem.cpu as *mut u8).wrapping_add(d.off) as *mut f32;
+    let ax = Axis::new(k.src[0], k.src[2], k.dst[0], k.dst[2], src_cut.x, dst_cut.x);
+    let ay = Axis::new(k.src[1], k.src[3], k.dst[1], k.dst[3], src_cut.y, dst_cut.y);
+    for yo in 0..dst_cut.h {
+        let sy = ay.at(yo);
+        if sy < 0.0 || sy >= src_cut.h as f32 {
+            continue; /* outside the cut source: left as it is */
+        }
+        let (row_in, row_out) = ((src_cut.y + floor(sy)) as usize, (dst_cut.y + yo) as usize);
+        for xo in 0..dst_cut.w {
+            let sx = ax.at(xo);
+            if sx < 0.0 || sx >= src_cut.w as f32 {
+                continue;
+            }
+            let (col_in, col_out) = ((src_cut.x + floor(sx)) as usize, (dst_cut.x + xo) as usize);
+            // SAFETY: both pixels lie inside their cut images, whose rows
+            // the two mappings hold (`depth_texels`, the scratch's size); a
+            // source and destination in one texture are different levels.
+            unsafe { to.add(row_out * d.pitch + col_out).write(from.add(row_in * pitch + col_in).read()) };
+        }
+    }
+    let bytes = ((d.h as usize - 1) * d.pitch + d.w as usize) * 4;
+    // SAFETY: the level's rows just written, inside the texture's mapping.
+    unsafe { osal::cache_flush(to as *mut c_void, bytes) };
+    osal::gpu_free(&mut scratch);
+    super::texture::note_blit_written(c, d.ti, d.level);
+    true
 }
 
 /// glBlitFramebuffer on the current context, the READ framebuffer `read`
@@ -703,6 +955,9 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
             _ => mask &= !GL_COLOR_BUFFER_BIT,
         }
     }
+    /* what the GL core cannot copy, refused after every check above */
+    let mut refused = 0u8;
+    let mut depth = None;
     for (bit, stencil) in [(GL_STENCIL_BUFFER_BIT, true), (GL_DEPTH_BUFFER_BIT, false)] {
         if mask & bit == 0 {
             continue;
@@ -724,60 +979,48 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
             c.set_error(GL_INVALID_OPERATION, FN);
             return;
         }
-    }
-    if mask & (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT) != 0 {
-        // SAFETY: single-threaded by contract; no other reference is live.
-        let warned = unsafe { WARNED_DS.get() };
-        if !*warned {
-            *warned = true;
-            glog!("glBlitFramebuffer: depth/stencil blits are not implemented (GL_INVALID_OPERATION)");
+        if stencil {
+            refused |= REFUSED_STENCIL;
+            continue;
         }
-        c.set_error(GL_INVALID_OPERATION, FN);
+        match (depth_source(c, &r), depth_texels(c, &d.att)) {
+            (_, None) => refused |= REFUSED_DEPTH_DST,
+            (None, _) => refused |= REFUSED_DEPTH_SRC,
+            (Some(src), Some(dst)) => depth = Some(DepthCopy { src, w: r.w, h: r.h, dst }),
+        }
+    }
+    if refused != 0 {
+        /* nothing is copied, the colour neither: the call fails whole */
+        for cause in [REFUSED_STENCIL, REFUSED_DEPTH_DST, REFUSED_DEPTH_SRC] {
+            if refused & cause != 0 {
+                refuse_ds(c, cause);
+            }
+        }
         return;
     }
-    let Some(src) = src.filter(|_| mask & GL_COLOR_BUFFER_BIT != 0) else { return };
-
-    let src_cut = Rect::of(k.src[0], k.src[1], k.src[2], k.src[3]).cut(Rect::of_image(&src));
-    if src_cut.empty() {
+    let src = src.filter(|_| mask & GL_COLOR_BUFFER_BIT != 0);
+    let src_rect = Rect::of(k.src[0], k.src[1], k.src[2], k.src[3]);
+    let dst_rect = Rect::of(k.dst[0], k.dst[1], k.dst[2], k.dst[3]);
+    if (src.is_none() && depth.is_none()) || src_rect.empty() || dst_rect.empty() {
         return;
     }
-    let scaled = {
-        let (s, d) =
-            (Rect::of(k.src[0], k.src[1], k.src[2], k.src[3]), Rect::of(k.dst[0], k.dst[1], k.dst[2], k.dst[3]));
-        s.w != d.w || s.h != d.h
-    };
+    let scaled = src_rect.w != dst_rect.w || src_rect.h != dst_rect.h;
     let scissor = c.scissor_test.then(|| {
         let [x, y, w, h] = c.scissor;
         Rect { x: x as i64, y: y as i64, w: w.max(0) as i64, h: h.max(0) as i64 }
     });
-    let dst_rect = Rect::of(k.dst[0], k.dst[1], k.dst[2], k.dst[3]);
-    if dst_rect.empty() {
-        return;
-    }
     /* The GPU's work reaches memory, once for the read and every write. Lost
      * work leaves the draw buffers as they were, with no GL error (as
      * glReadPixels and glCopyTex*: none fits). */
     if !framebuffer::gpu_idle_for_cpu(c) {
         return;
     }
-    invalidate(c, &src);
     let mut ok = true;
-    for d in dsts.iter().flatten() {
-        let mut cut = dst_rect.cut(Rect::of_image(d));
-        if let Some(s) = scissor {
-            cut = cut.cut(s);
-        }
-        if cut.empty() {
-            continue;
-        }
-        /* the CPU's lines of the image may be stale: dropped before the
-         * pixels are written, so the write-back carries only fresh bytes */
-        invalidate(c, d);
-        ok &= copy_colour(c, &src, src_cut, d, cut, &k, filter == GL_LINEAR && scaled);
-        write_back(c, d);
-        if let Some((ti, level)) = d.tex {
-            super::texture::note_blit_written(c, ti, level);
-        }
+    if let Some(src) = src {
+        ok &= blit_colour(c, &src, &dsts, &k, src_rect, dst_rect, scissor, filter == GL_LINEAR && scaled);
+    }
+    if let Some(job) = depth {
+        ok &= copy_depth(c, job, &k, src_rect, dst_rect, scissor);
     }
     if !ok {
         /* no GL error fits a failed copy exactly; OUT_OF_MEMORY is the "could
@@ -1284,8 +1527,13 @@ mod tests {
             blit([0, 0, 2, 2], [0, 0, 2, 2], GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
         }
+        for _ in 0..2 {
+            blit([0, 0, 2, 2], [0, 0, 2, 2], GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+            assert_eq!(gl.error(), GL_INVALID_OPERATION);
+        }
         let logs = gl.logs();
-        assert_eq!(logs.iter().filter(|l| l.contains("depth/stencil blits are not implemented")).count(), 1);
+        assert_eq!(logs.iter().filter(|l| l.contains("a depth blit into a renderbuffer")).count(), 1);
+        assert_eq!(logs.iter().filter(|l| l.contains("a stencil blit")).count(), 1, "each cause once");
         assert_eq!(stored(&gl, rb_gpu(&gl, dst_rb), 2, 4, 0, 0), vec![1; 4], "the refused call wrote nothing");
         ds(dst_fb, GL_DEPTH32F_STENCIL8);
         bind(src_fb, dst_fb);

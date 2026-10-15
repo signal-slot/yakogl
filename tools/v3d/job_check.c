@@ -167,6 +167,7 @@ static struct v3d_vs_prog vs_prog(uint32_t code, const struct v3d_uniform *u, ui
 #define TARGET     0x00400000u
 #define TILE_ALLOC 0x00800000u
 #define MS_BUF 0x00e00000u /* part 14's 4x colour buffer */
+#define RT_IMG 0x00f00000u /* part 20's render image */
 #define W 200u
 #define H 100u
 
@@ -442,6 +443,9 @@ static char *decode(const struct lists *l)
 	/* part 14's 4x colour buffer (2W x 2H RGBA8, UIF, and room for padding) */
 	static uint8_t msbuf[4 * W * H * 4 + 65536];
 	clif_dump_add_bo(clif, "msbuf", MS_BUF, sizeof(msbuf), msbuf);
+	/* part 20's render image (W x H RGBA8, UIF, and room for padding) */
+	static uint8_t rtimg[W * H * 4 + 65536];
+	clif_dump_add_bo(clif, "rtimg", RT_IMG, sizeof(rtimg), rtimg);
 	struct drm_v3d_submit_cl submit = {
 		.bcl_start = l->bcl.gpu, .bcl_end = l->bcl.gpu + l->bcl.used,
 		.rcl_start = l->rcl.gpu, .rcl_end = l->rcl.gpu + l->rcl.used,
@@ -1797,6 +1801,80 @@ static void part_msaa(void)
 	      "1x job: no 4x bit, no oversample, mask 0xf, sample 0 stored, 64x64 tiles");
 }
 
+/* ---- 20. the render image (v3d_job.h uif_*) ------------------------------ */
+
+/* A single-sampled job on the usual target whose RT 0 is also stored into
+ * the render image at `uif` (0: none), `rgb565` and `msaa` as given. */
+static char *rt_job(struct lists *l, const struct v3d_job_clear *c, uint32_t uif, bool rgb565, bool msaa,
+		    uint32_t address, bool *ended)
+{
+	struct v3d_fs_prog fs = fs_prog();
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	struct v3d_job_draw d = {
+		.st = &st, .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, address, rgb565 ? W * 2 : W * 4, TILE_ALLOC, rgb565 };
+	t.msaa = msaa;
+	t.uif_address = uif;
+	t.uif_memory_format = V3D_MEMORY_FORMAT_UIF_NO_XOR;
+	/* H = 100 rows: Mesa pads to 104 (13 UIF blocks of 8 rows) */
+	t.uif_height_in_ub = 13;
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	bool ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind);
+	if (ok)
+		ok = v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK;
+	*ended = ok && v3d_job_end(&j, c, NULL, NULL);
+	return ok ? decode(l) : NULL;
+}
+
+/* The render image (src/v3d/backend.rs RtImage): RT 0 stored a second time,
+ * UIF into the image right after the raster store, sample 0, RGBA8; the
+ * load still from the raster target; and the targets no image is made for
+ * are refused at begin. */
+static void part_rt_image(void)
+{
+	static struct lists l;
+	bool ended;
+	struct v3d_job_clear c = { .load_rt0 = true, .z = 1.0f };
+	char *text = rt_job(&l, &c, RT_IMG, false, false, TARGET, &ended);
+	check(ended && text, "render image: the job builds");
+	check(text && !strstr(text, "Failed") && !strstr(text, "nknown"),
+	      "render image: the decoder reported no error");
+	int s0 = text ? store_of(text, V3D_STORE_BUFFER_RT0) : -1;
+	check(s0 >= 0 && field_has(text, "STORE", s0, "Address", "[target+0x00000000]") &&
+		      field(text, "STORE", s0, "Memory Format") == V3D_MEMORY_FORMAT_RASTER &&
+		      field(text, "STORE", s0, "Decimate mode") == V3D_DECIMATE_MODE_SAMPLE_0,
+	      "render image: RT 0 stored raster into the target first (as without an image)");
+	check(s0 >= 0 && field(text, "STORE", s0 + 1, "Buffer to Store") == V3D_STORE_BUFFER_RT0 &&
+		      field_has(text, "STORE", s0 + 1, "Address", "[rtimg+0x00000000]") &&
+		      field(text, "STORE", s0 + 1, "Memory Format") == V3D_MEMORY_FORMAT_UIF_NO_XOR &&
+		      field(text, "STORE", s0 + 1, "Height in UB or Stride") == 13 &&
+		      field(text, "STORE", s0 + 1, "Output Image Format") == V3D_OUTPUT_IMAGE_FORMAT_RGBA8 &&
+		      field(text, "STORE", s0 + 1, "Decimate mode") == V3D_DECIMATE_MODE_SAMPLE_0,
+	      "render image: then RT 0 again, UIF (no XOR) into the image, 13 UB rows, RGBA8, sample 0");
+	check(s0 >= 0 && field(text, "STORE", s0 + 2, "Buffer to Store") != V3D_STORE_BUFFER_RT0,
+	      "render image: no third RT 0 store");
+	int l0 = text ? load_of(text, V3D_LOAD_BUFFER_RT0) : -1;
+	check(l0 >= 0 && field_has(text, "LOAD", l0, "Address", "[target+0x00000000]") &&
+		      field(text, "LOAD", l0, "Memory Format") == V3D_MEMORY_FORMAT_RASTER &&
+		      field(text, "LOAD", l0 + 1, "Buffer to Load") != V3D_LOAD_BUFFER_RT0,
+	      "render image: RT 0 loaded from the raster target alone, never from the image");
+	free(text);
+	/* refused at begin: 4x, bgr565, no colour buffer */
+	(void)rt_job(&l, &c, RT_IMG, false, true, TARGET, &ended);
+	check(!ended, "render image at 4x: refused");
+	(void)rt_job(&l, &c, RT_IMG, true, false, TARGET, &ended);
+	check(!ended, "render image of a bgr565 target: refused");
+	struct v3d_job_clear nc = { .load_rt0 = false, .z = 1.0f };
+	(void)rt_job(&l, &nc, RT_IMG, false, false, 0, &ended);
+	check(!ended, "render image with no colour buffer: refused");
+}
+
 /* ---- 15. packet skip (v3d_job.h "Packet skip") -------------------------- */
 
 /* A BCL walked packet by packet with Mesa's own packet lengths and names
@@ -2402,9 +2480,10 @@ int main(void)
 	 * part 16 (S8 stencil): 1 build + 7;
 	 * part 17 (a view's stride): 2 builds + 1 decode + 3 strides;
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
-	 * part 19 (occlusion queries): 2 builds + 4 */
+	 * part 19 (occlusion queries): 2 builds + 4;
+	 * part 20 (the render image): 1 build + 5 + 3 refusals */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 14 +
-			    28 + 8 + 6 + 10 + 6;
+			    28 + 8 + 6 + 10 + 6 + 9;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2422,6 +2501,7 @@ int main(void)
 	part_mrt();
 	part_instanced();
 	part_msaa();
+	part_rt_image();
 	part_pack_skip();
 	part_occlusion();
 	printf("job_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);

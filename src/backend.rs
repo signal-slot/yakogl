@@ -400,15 +400,18 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 /// requires the formats) and refuses to draw into it, by name, rather than
 /// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs
 /// `pbe_int_packmode`, the online compiler's packed integer output) as the
-/// one colour attachment of a draw; the GC7000 and the V3D none yet.
+/// one colour attachment of a draw; so does the V3D (src/v3d/state.rs
+/// `rt_format`: the TLB's typed render targets, the compiler's 32-bit TLB
+/// writes), among any attachments; the GC7000 the thirteen of 1, 2 and 4
+/// bytes a pixel (src/vivante/backend.rs `GC_INTEGER_RT_FORMATS`).
 pub const INTEGER_RT_FORMATS: u32 = {
     #[cfg(feature = "gpu-vivante")]
     {
-        0
+        crate::vivante::backend::GC_INTEGER_RT_FORMATS
     }
     #[cfg(feature = "gpu-v3d")]
     {
-        0
+        (1 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1
     }
     #[cfg(feature = "gpu-powervr")]
     {
@@ -1043,6 +1046,12 @@ pub struct GlesDraw {
     /// counted (ES 3.0 4.2.3: a clear is not a draw), whatever path the
     /// backend clears with. Sits in what was tail padding.
     pub occlusion_query: u32,
+    /// The CPU view of [`GlesDraw::target_gpu`] (the attached level, face or
+    /// layer of an FBO's colour buffer, or the default surface), null when
+    /// the storage has none or there is no colour target: for a backend
+    /// that renders into a copy of its own and writes it back on the CPU
+    /// (the GC7000's 64-bit targets, `vivante/wide_target.rs`).
+    pub target_cpu: *mut c_void,
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -1153,6 +1162,7 @@ impl GlesDraw {
         alpha_to_coverage: false,
         target_pitch: 0,
         occlusion_query: 0,
+        target_cpu: core::ptr::null_mut(),
     };
 }
 
@@ -1318,6 +1328,26 @@ pub struct YakoglBackend {
     /// counted on `handle` since its `query_begin` ([`query_result`]); every
     /// kick holding such a draw has completed. 0, or a negative errno.
     pub query_result: Option<unsafe extern "C" fn(handle: u32, samples: *mut u64) -> i32>,
+    /// glGenerateMipmap on the 2D texture `b` describes, whose storage holds
+    /// a chain of `levels` levels: a backend that keeps the texture's level 0
+    /// as its jobs rendered it (the V3D's render image) may make the chain
+    /// there itself, on the GPU, and answer 1. The GL core then filters
+    /// nothing, leaves levels 1.. of its storage as they are, and calls
+    /// [`YakoglBackend::return_mipmap_chain`] before it reads or writes those
+    /// levels on the CPU. 0: the GL core box-filters the chain on the CPU, as
+    /// without the entry. Called after every kick that rendered into the
+    /// texture was handed to the backend (the backend waits for it itself)
+    /// and before the texels' stamp would move. `None`: 0.
+    pub generate_mipmap: Option<unsafe extern "C" fn(b: *const GlesTextureBind, levels: u32) -> i32>,
+    /// The GL core is about to read or write levels 1.. of the texture `b`
+    /// describes on the CPU (an upload, a copy, a CPU filter, a level above
+    /// 0 attached to a framebuffer), and the last `generate_mipmap` on it
+    /// answered 1: write the chain the backend made back into the storage
+    /// (levels 1 .. `levels` - 1, each at the GL core's level offset and
+    /// pitch for this backend's chain layout) before returning. Nothing when
+    /// the backend no longer holds it (it then wrote it back already, or
+    /// never had it). `None` on a backend that never answers 1.
+    pub return_mipmap_chain: Option<unsafe extern "C" fn(b: *const GlesTextureBind, levels: u32)>,
 }
 
 // SAFETY: the table is immutable; `name` points at a static string.
@@ -1750,5 +1780,28 @@ pub fn query_result(handle: u32) -> Result<u64, i32> {
     match unsafe { f(handle, &mut n) } {
         0 => Ok(n),
         rc => Err(rc),
+    }
+}
+
+/// Ask the backend to make the mip chain of the 2D texture `b` describes
+/// itself, `levels` levels, from the level 0 its jobs rendered
+/// ([`YakoglBackend::generate_mipmap`]): true when it did, and the GL core's
+/// levels 1.. are then the backend's until [`return_mipmap_chain`]. False
+/// (the default, and a backend without the entry): the GL core filters.
+pub fn generate_mipmap(b: &GlesTextureBind, levels: u32) -> bool {
+    match table().and_then(|t| t.generate_mipmap) {
+        // SAFETY: a static table's entry; `b` is live for the call.
+        Some(f) => (unsafe { f(b, levels) }) == 1,
+        None => false,
+    }
+}
+
+/// The GL core is about to read or write levels 1.. of the texture `b`
+/// describes on the CPU: have the backend write the chain it made back into
+/// the storage first ([`YakoglBackend::return_mipmap_chain`]).
+pub fn return_mipmap_chain(b: &GlesTextureBind, levels: u32) {
+    if let Some(f) = table().and_then(|t| t.return_mipmap_chain) {
+        // SAFETY: a static table's entry; `b` is live for the call.
+        unsafe { f(b, levels) }
     }
 }

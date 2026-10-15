@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 plan #1 confirmation from the integration image: not run (no console)
 
 HEAD8=0175bac1 (integration tip, ccfarm/integration)
@@ -9,8 +11,8 @@ verified** (neither met nor failed).
 ## What was checked
 
 ```
-ssh -o BatchMode=yes signal-slot@elegance-1 true        # rc 0, board login works
-ssh -o BatchMode=yes signal-slot@elegance-1 -- ls /dev/serial/by-id
+ssh -o BatchMode=yes "$BOARD_HOST" true                 # rc 0, board login works
+ssh -o BatchMode=yes "$BOARD_HOST" -- ls /dev/serial/by-id
   ls: cannot access '/dev/serial/by-id': No such file or directory
 test -d /dev/serial/by-id                               # on the build host: no
 ```
@@ -46,10 +48,10 @@ was attempted and the board was left untouched (idle).
 On a machine with the Debug Probe attached and ssh to the board:
 
 ```sh
-export BOARD_HOST=signal-slot@elegance-1
+export BOARD_HOST=<user@board>   # from the lease
 export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01
 export BOARD_HDMI_TIMINGS='1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1'
-export DEQP_WORK=$CCFARM_DEPS_DIR/yakogl/deqp-stage1-rpi_4b/work   # exists on system76
+export DEQP_WORK=$CCFARM_DEPS_DIR/yakogl/deqp-stage1-rpi_4b/work   # exists on a farm node
 HEAD8=$(git rev-parse --short=8 HEAD)
 tools/board.sh --dry-run pi4 tree tools/cts/pi4-full-tree.txt $TMPDIR/dry
 tools/cts/common-images.sh pi4 tools/cts/common-tree.txt <img-gt> GT

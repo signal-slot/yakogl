@@ -110,15 +110,14 @@ env = { GLSLANG = "glslangValidator", PYTHONDONTWRITEBYTECODE = "1" }
 #                    the aarch64 check rows and the "no Mesa reference" row.
 #                    A machine with only a versioned clang (clang-23) sets
 #                    this to it.
-#   The board stages' image builds: GLMARK2_SRC, SLINT_NOSTD_DIR,
-#   NOSTD_PATCH_DIR, AGL_SLINT_CLUSTER_DIR, DEQP_WORK (tools/cts/common-images.sh,
-#   am62p-deqp-images.sh); the i.MX8MP dEQP build: ZEPHYR_WORKSPACE,
-#   ZEPHYR_VENV, IMX8MP_OUT (tools/cts/imx8mp-env.sh) and DEQP_STAGE1 (the
-#   output of tools/cts/imx8mp-deqp-stage1.sh, which imx8mp-deqp-build.sh
-#   requires). BOARD_HDMI_TIMINGS is the Pi 4 panel's hdmi_timings;
-#   BOARD_UART the Pi 4's serial device or its bridge's host:port
-#   (tools/board.sh); PVR_FW_BLOB the PowerVR firmware header the gate and
-#   every AM62P image copy to driver/src/fw/ (never committed).
+#   The board stages take their image dependencies from the layout
+#   themselves (tools/cts/board-stage.sh evaluates tools/cts/deps-env.sh
+#   <board>: GLMARK2_SRC, SLINT_NOSTD_DIR, NOSTD_PATCH_DIR,
+#   AGL_SLINT_CLUSTER_DIR, NOTO_SANS_DIR, DEQP_WORK, ...) and the board and
+#   its console from their leases (#907). DEQP_WORK, IMX8MP_OUT and
+#   DEQP_STAGE1 stay here for writable_env_names below. PVR_FW_BLOB is the
+#   PowerVR firmware header the gate and every AM62P image copy to
+#   driver/src/fw/ (never committed).
 env_names = [
   "ZEPHYR_WS",
   "HAL_NXP_DIR",
@@ -130,16 +129,11 @@ env_names = [
   "RUSTUP_TOOLCHAIN",
   "CC_aarch64_unknown_none",
   "GLMARK2_SRC",
-  "SLINT_NOSTD_DIR",
-  "NOSTD_PATCH_DIR",
-  "AGL_SLINT_CLUSTER_DIR",
   "DEQP_WORK",
   "ZEPHYR_WORKSPACE",
   "ZEPHYR_VENV",
   "IMX8MP_OUT",
   "DEQP_STAGE1",
-  "BOARD_HDMI_TIMINGS",
-  "BOARD_UART",
   "PVR_FW_BLOB",
 ]
 # The values a board task writes under (image output, the dEQP stage-1 trees,
@@ -191,10 +185,12 @@ tools = [
 # GPU, booted from the board's own bootloader by tools/board.sh, and only from
 # an image built from a commit on origin/main, so every board stage is
 # `after = "promote"`. One GL client per board: tools/board.sh takes the board
-# lock and refuses a busy board (exit 3). Board addresses never go in files:
-# tools/board.sh reads BOARD_HOST (user@host of the board's Linux) and
-# BOARD_UART (pi4: the serial device; am62p: host:port of the serial bridge;
-# the i.MX8MP has none) from the environment only. Run directories are
+# lock and the board lease (#867) and waits for a busy board. Board addresses
+# never go in files: each stage is one tools/cts/board-stage.sh command, which
+# takes BOARD_HOST from the lease of target:<board> (RESOURCE_<B>_SSH) and
+# BOARD_UART from the lease of target:<board>-console (the serial bridge's
+# host and port; the i.MX8MP has none). The Pi 4's resources carry the
+# target rpi4. Run directories are
 # written under records/<board>/ (gitignored, redacted); the numbers that
 # matter are copied into the docs by hand, which is why `record` is on.
 # Known defects make some rows fail by design (i.MX8MP cases 10, 16 and 2:
@@ -249,11 +245,8 @@ after = "promote"
 # gl_test) on the Verdin AM62P, booted by U-Boot from the eMMC
 # (BOARD_BOOT=uboot-mmc, docs/HANDOFF.md). cts-common.sh build is
 # tools/cts/common-images.sh; run is tools/board.sh am62p tree and the tally.
-commands = [
-  "tools/cts/cts-common.sh am62p build build/common/am62p-$(git rev-parse --short=8 HEAD)",
-  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh am62p run build/common/am62p-$(git rev-parse --short=8 HEAD) records/am62p/common-$(git rev-parse --short=8 HEAD)",
-]
-requires = ["target:am62p"]
+commands = ["tools/cts/board-stage.sh am62p common"]
+requires = ["target:am62p", "target:am62p-console"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
 on_fail = "report"
@@ -264,10 +257,7 @@ after = "promote"
 # The same four images on the Verdin iMX8M Plus (gc_gl_test for gl_test),
 # U-Boot from the eMMC. The board has no UART: its records come back in the
 # SNVS and are read over ssh afterwards.
-commands = [
-  "tools/cts/cts-common.sh imx8mp build build/common/imx8mp-$(git rev-parse --short=8 HEAD)",
-  "BOARD_HOST=${resource.imx8mp.user}@${resource.imx8mp.host} BOARD_BOOT=uboot-mmc tools/cts/cts-common.sh imx8mp run build/common/imx8mp-$(git rev-parse --short=8 HEAD) records/imx8mp/common-$(git rev-parse --short=8 HEAD)",
-]
+commands = ["tools/cts/board-stage.sh imx8mp common"]
 requires = ["target:imx8mp"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
@@ -278,11 +268,9 @@ name = "board-common-pi4"
 after = "promote"
 # The same four images on the Raspberry Pi 4 (v3d_gl_test), booted once by
 # the firmware's tryboot from the SD card (board.sh's default for pi4).
-commands = [
-  "tools/cts/cts-common.sh pi4 build build/common/pi4-$(git rev-parse --short=8 HEAD)",
-  "BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device} tools/cts/cts-common.sh pi4 run build/common/pi4-$(git rev-parse --short=8 HEAD) records/pi4/common-$(git rev-parse --short=8 HEAD)",
-]
-requires = ["target:pi4"]
+commands = ["tools/cts/board-stage.sh pi4 common"]
+env = { BOARD_HDMI_TIMINGS = "1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1" }
+requires = ["target:rpi4", "target:rpi4-console"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "third_party/**", "zephyr/**", "/build.rs", "/Cargo.toml", "/Cargo.lock", "/CMakeLists.txt", "/west.yml", "tools/board.sh", "tools/cts/cts-common.sh", "tools/cts/common-images.sh", "tools/cts/common-tally.py", "tools/cts/common-tree.txt", "tools/kexec-zephyr/**", "tools/uboot-netboot-lib.sh", "tools/tftp_oneshot.py", "tools/am62p_netboot_uart.py", "tools/mkfwblob.sh"]
 record = { enabled = true }
 on_fail = "report"
@@ -298,12 +286,8 @@ after = "promote"
 # img<N>-<tag> and board.sh finds it as img<N>-$TREE_TAG: one explicit tag
 # (the short commit hash) goes to both. Hours of board time; the result
 # rows go to tools/cts/RESULTS.md and README.md.
-commands = [
-  "mkdir -p build/deqp/am62p-$(git rev-parse --short=8 HEAD)",
-  "tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-$(git rev-parse --short=8 HEAD) $(git rev-parse --short=8 HEAD) > build/deqp/am62p-$(git rev-parse --short=8 HEAD)/build.out",
-  "BOARD_HOST=${resource.am62p.user}@${resource.am62p.host} BOARD_UART=${resource.am62p.device} BOARD_BOOT=uboot-mmc TREE_IMAGE_DIR=build/deqp/am62p-$(git rev-parse --short=8 HEAD) TREE_TAG=$(git rev-parse --short=8 HEAD) tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-$(git rev-parse --short=8 HEAD)",
-]
-requires = ["target:am62p"]
+commands = ["tools/cts/board-stage.sh am62p deqp"]
+requires = ["target:am62p", "target:am62p-console"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
 record = { enabled = true }
 on_fail = "report"
@@ -318,10 +302,7 @@ after = "promote"
 # imx8mp-deqp-stage1.sh; each entry is one boot with the
 # selector in SNVS word 1. results.tsv and rows.md are the outcome; the
 # 2026-10-03 baseline is tools/cts/imx8mp-full-tree-29460f96.results.tsv.
-commands = [
-  "tools/cts/imx8mp-deqp-build.sh deqp-$(git rev-parse --short=8 HEAD) 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt",
-  "BOARD_HOST=${resource.imx8mp.user}@${resource.imx8mp.host} BOARD_BOOT=uboot-mmc TREE_IMAGE=$IMX8MP_OUT/deqp-$(git rev-parse --short=8 HEAD)/zephyr/zephyr.bin tools/board.sh imx8mp tree tools/cts/imx8mp-full-tree.txt records/imx8mp/deqp-$(git rev-parse --short=8 HEAD)",
-]
+commands = ["tools/cts/board-stage.sh imx8mp deqp"]
 requires = ["target:imx8mp"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
 record = { enabled = true }
@@ -333,11 +314,9 @@ after = "promote"
 # The whole tree on the Pi 4: one v3d_deqp image per labelled block of
 # tools/cts/pi4-full-tree.txt (tools/cts/pi4-deqp-images.sh, DEQP_WORK built
 # with BOARD=rpi_4b), run and tallied by tools/board.sh pi4 tree.
-commands = [
-  "tools/cts/pi4-deqp-images.sh tools/cts/pi4-full-tree.txt build/deqp/pi4-$(git rev-parse --short=8 HEAD)",
-  "BOARD_HOST=${resource.pi4.user}@${resource.pi4.host} BOARD_UART=${resource.pi4.device} TREE_IMAGE_DIR=build/deqp/pi4-$(git rev-parse --short=8 HEAD) tools/board.sh pi4 tree tools/cts/pi4-full-tree.txt records/pi4/deqp-$(git rev-parse --short=8 HEAD)",
-]
-requires = ["target:pi4"]
+commands = ["tools/cts/board-stage.sh pi4 deqp"]
+env = { BOARD_HDMI_TIMINGS = "1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1" }
+requires = ["target:rpi4", "target:rpi4-console"]
 only_if_changed = ["src/**", "capi/**", "driver/**", "include/**", "tools/cts/**", "tools/shaders/**", "Cargo.toml", "Cargo.lock", "CMakeLists.txt", "zephyr/**"]
 record = { enabled = true }
 on_fail = "report"

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Gouraud varying interpolation on BXS-4-64 (Volcanic): root cause and fixes
 
 Bring-up note, cut to its conclusions. The first version decoded words of a

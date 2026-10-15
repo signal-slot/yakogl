@@ -9,6 +9,150 @@ quirk it reported is fixed (the script ends with `BUILD-EXIT`). This record
 stays because `website/data.js` cites it as the source of the
 images 1 to 7 figure.
 
+## Re-run at main `4d744e17` / `291f3cb9` (2026-10-15): images built, board run not started
+
+A re-run of images 1 to 7 (the fragdata row is in image 1) at main
+`4d744e17b5612bb47b92b1f6a7f7ecd4164ed75e` was tried on workers `system76`
+and `hx90` earlier on 2026-10-15, and again on `system76` at main tip
+`291f3cb9`. The integration results below keep their `b83216d4` label.
+**No image ran on the board, so there are no new verdict lines.** The one
+thing that stopped the run is a **sandbox permission refusal**, not an ssh
+or serial-console failure: ssh to the board worked on every attempt, and
+`tools/board.sh am62p tree ...` was refused by the worker's command sandbox
+with `This command requires approval` (twice on the last attempt, the
+second as a separate simple retry, then not retried again; on the earlier
+`hx90` attempt it was refused four times, and the `--dry-run` form the same
+way). The command never started, so `board.sh` did not stage, arm or reboot
+anything.
+
+### Last attempt (worker `hx90`, 09:22 UTC): still no `BOARD_UART`
+
+ccfarm reported the task moved to `nuc`, but `hostname` printed `hx90` and
+`BOARD_UART` was empty in the shell, so no bridge probe was possible. ssh
+worked (`uptime` 11 min, one user). The images from `4d744e17` are on this
+host and `git diff 4d744e17 HEAD -- driver src` is empty. The `board.sh am62p
+tree` command line above (with `BOARD_HOST`, `BOARD_BOOT` and `TREE_*` as
+prefix assignments) was refused again by the sandbox with `This Bash command
+contains multiple operations. The following part requires approval`; it was
+not retried further. It would have stopped at `board.sh`'s `BOARD_UART`
+check anyway. Still no verdict lines.
+
+### What was established
+
+- **ssh works.** On the last attempt `ssh torizon@<board> -- cat
+  /proc/uptime` (the lease's ssh destination, the farm key) printed
+  `379.81 1446.50`, and five seconds later `384.78 1465.53`: the board was
+  up and not rebooting at that moment. The one-minute-apart second read was
+  not taken, because the run could not start. On the earlier `hx90` attempt
+  the board rebooted twice (about 07:47 and 07:50 UTC) while the lease was
+  held, and the console bridge answered `busy` during the same minutes; no
+  other driver was named by anything on the board.
+- **The console bridge could not be probed on the last attempt.** The
+  sandbox refuses any command that expands a shell variable
+  (`A variable in this command can't be checked before it runs`), so
+  `python3 tools/am62p_netboot_uart.py probe "$BOARD_UART"` could not be
+  issued; `ask_farm` was also denied (a ccfarm permission request). On the
+  earlier `hx90` attempt the probe printed `probe: busy (another client
+  holds the bridge)` (exit 4) while the board was rebooting and exited 0 at
+  07:57 and 07:58 UTC. The bridge value is environment only
+  (`$BOARD_UART`, resource `usb-serial-1`) and is not recorded here.
+  After the permissions were granted later in the same session,
+  `ask_farm` answered, but `BOARD_UART` was still empty in the worker's
+  shell and the lease held only `verdin-am62p`, so the probe and
+  `board.sh` still could not run (`needs environment: BOARD_UART`).
+- **Main's driver and samples did not change.** `git diff --stat 4d744e17
+  291f3cb9 -- driver src tools/cts/am62p-deqp-images.sh
+  tools/cts/am62p-full-tree.txt` is empty, so images built at `4d744e17`
+  are valid for the current tip, and the tip's `HEAD8` for the run is
+  `4d744e17` as `TREE_TAG`.
+- **Firmware blob.** The board's `/lib/firmware/rgx.fw.36.53.104.796` is
+  229,376 bytes, sha256
+  `32c8b3d7730a523bdf2e392c62a42bcb8c0bef725f6e89b05c06a7cc4ea9a406`; the
+  bytes decoded from the dependency cache's `pvr_fw_blob.h` hash to the
+  same value. The header is copied to `driver/src/fw/pvr_fw_blob.h` in the
+  build worktree (ignored by `driver/.gitignore`, never committed).
+- **Images 1 to 7 built at `4d744e17`.** In a detached worktree with
+  `ZEPHYR_WS=<deps>/zephyr-ws`, `WEST_VENV=<deps>/zephyr-ws/.venv`,
+  `ZEPHYR_SDK_INSTALL_DIR=<deps>/zephyr-sdk-1.0.1`,
+  `DEQP_WORK=<deps>/deqp-stage1-am62p`, `TREE_ROWS=0-6`:
+  `tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt
+  <deps>/plan1-am62p-4d744e17/img 4d744e17 > build.out`. The `system76` set
+  (the one the run would use on that host), `build.out` as printed:
+
+```
+img1 rc=0 bin=6069e873959e22ee
+img2 rc=0 bin=46d3de696a19a81c
+img3 rc=0 bin=6b53183faa109835
+img4 rc=0 bin=022244ea005f92c8
+img5 rc=0 bin=d3ac5835f5e69883
+img6 rc=0 bin=5b6732c46b28ebd6
+img7 rc=0 bin=c1bff17aa7ce23e6
+BUILD-EXIT
+```
+
+  Full sha256 of `<img>/img<N>-4d744e17/zephyr/zephyr.bin` on `system76`:
+  1 `6069e873959e22eec1bdba77668ae33ea8acbc6b5a9540939a43bc115b37b465`, 2
+  `46d3de696a19a81c2ba68b5cb6f34c01a012b7a493cb27c99601959b1c7249b1`, 3
+  `6b53183faa1098353ec5c7d1e45e9f7e65ccb9ee87b5021b7649828c9f28cbb5`, 4
+  `022244ea005f92c8487d062ad64333873d5aadf2e15b46d93efd1c4e08f54203`, 5
+  `d3ac5835f5e69883c0ece110da2fd852b242f670551eba35f2dfa965da5a4fe9`, 6
+  `5b6732c46b28ebd6419487018f96730c7c1170fcd8444f7bf737bdf85ca95d7e`, 7
+  `c1bff17aa7ce23e66e4327c2cf51168c19cb96fde420cae3e76c89a6e048c769`.
+  The same commit built on `hx90` gave different hashes (`68c0302f…`,
+  `a06e352d…`, `fc181356…`, `9408dcee…`, `c667c00e…`, `e86b0932…`,
+  `ab792fe7…`): the image build is not byte-reproducible across hosts, so
+  a verdict line's `<sha8>` must be read against the host that built it.
+
+### The blocker: the run command was refused by the worker sandbox
+
+With the board up and the images built, this command was issued (the
+bridge value is in the worker's environment and was not written on the
+command line):
+
+```sh
+BOARD_HOST=<lease ssh destination> BOARD_BOOT=uboot-mmc \
+TREE_IMAGE_DIR=<deps>/plan1-am62p-4d744e17/img TREE_TAG=4d744e17 TREE_ROWS=0-6 \
+    tools/board.sh am62p tree tools/cts/am62p-full-tree.txt <deps>/plan1-am62p-4d744e17/rec/full
+```
+
+The sandbox answered `This command requires approval` both times; no
+approval came within the turn. Nothing was staged, armed or rebooted, so
+the board's `yako_once`, `/var/yakogl/` and U-Boot env are as found. This
+is a permission blocker on the worker (`tools/board.sh` is not on its
+allowed command list), not evidence about the board, the bridge or the
+code. A first attempt on `system76` (07:30 UTC) had no `BOARD_UART` in its
+environment and the lease held only `verdin-am62p` (capability ssh), so
+`board.sh` would have stopped at its `BOARD_UART` check there regardless.
+
+### Commands for the next attempt
+
+The next attempt needs a worker whose allowed commands include
+`tools/board.sh` and shell variable expansion, a lease of `verdin-am62p`
+and `usb-serial-1` (capability serial-console) with `BOARD_UART` set, and
+nobody else driving the board (the probe must exit 0, and the uptime must
+keep growing across two reads a minute apart). `$SW` is the checkout and
+`<deps>` the dependency cache.
+
+```sh
+python3 $SW/tools/am62p_netboot_uart.py probe "$BOARD_UART"   # exit 0; 4 = someone else holds it: stop
+ssh $BOARD_HOST -- 'cat /proc/uptime; sudo -n fw_printenv -n yako_once; ls /var/yakogl/'   # growing; empty; empty
+# only for a new tip: rebuild
+mkdir -p $SW/driver/src/fw && cp <deps>/pvr_fw_blob.h $SW/driver/src/fw/pvr_fw_blob.h
+export ZEPHYR_WS=<deps>/zephyr-ws WEST_VENV=<deps>/zephyr-ws/.venv \
+       ZEPHYR_SDK_INSTALL_DIR=<deps>/zephyr-sdk-1.0.1 DEQP_WORK=<deps>/deqp-stage1-am62p
+TREE_ROWS=0-6 $SW/tools/cts/am62p-deqp-images.sh $SW/tools/cts/am62p-full-tree.txt <img> $HEAD8 > <img>/build.out
+# the run (about 15 to 20 min for seven images, from the b83216d4 back_after times)
+BOARD_HOST=<lease ssh destination> BOARD_UART="$BOARD_UART" BOARD_BOOT=uboot-mmc \
+TREE_IMAGE_DIR=<img> TREE_TAG=$HEAD8 TREE_ROWS=0-6 \
+    $SW/tools/board.sh am62p tree $SW/tools/cts/am62p-full-tree.txt <rec>/full
+$SW/tools/board.sh am62p tally <rec>/full
+```
+
+Expected, from the 2026-10-10 run of `e17fb6a7` (`tools/cts/RESULTS.md`):
+image 1 at 1,379 pass / 0 fail with every `fragdata.*` case passing, and
+images 2 to 7 equal to the table below (994, 1172, 1100, 2525, 1318, 1631,
+all 0 fail).
+
 **Integration image, not a landing proof.** Source: the integration
 snapshot, HEAD `b83216d4003b3e0b4764adc067dbbc843083c8f0` (`b83216d4`, the
 integration tip this session ran; it replaces the earlier label

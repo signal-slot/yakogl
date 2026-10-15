@@ -5,31 +5,49 @@
 The state of the work and what comes next. A result does not edit this
 file: it adds a note under `docs/handoff/` (one file per result,
 `docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
-in after the merge; a person folds the same way. Last update: 2026-10-14.
+in after the merge; a person folds the same way. Last update: 2026-10-16.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
 
 ## Goal, in order
 
-1. ES 2.0 finished on the three boards (AM62P PowerVR, i.MX8MP GC7000,
-   Raspberry Pi 4 V3D), each booted from its own storage by its bootloader.
-2. Minimum performance.
-3. A public website (`website/`). It goes live when the repository is public:
+The five stages of `ROADMAP.md` (the public form of this list, with each
+stage's criterion and state); keep the two in step.
+
+1. ES 2.0 conformance on the three boards (AM62P PowerVR, i.MX8MP GC7000,
+   Raspberry Pi 4 V3D): one whole dEQP-GLES2 mustpass tree (17,165 cases)
+   per board from one main commit with 0 Fail, each board booted from its
+   own storage by its bootloader.
+2. The benchmarks right on the three boards: glmark2-es2's 33 scenes with
+   checked pictures, the Slint sample and the AGL cluster demo with the same
+   picture on every board, a frame rate recorded for each (minimum
+   performance).
+3. Public release: every line of `docs/release/checklist.md` met, including
+   the website (`website/`). It goes live when the repository is public:
    `.github/workflows/pages.yml` deploys it once Pages is turned on
    (`website/README.md`). Every figure it shows is in `website/data.js` with
    its commit, date and record; update that file with each new board result.
    `tools/website-check.sh` checks links, metadata and `data.js`.
 4. ES 3.0 on the three boards (the dEQP-GLES3 mustpass, 42,810 cases). Host
-   work runs ahead of the boards. A product image still reports ES 2.0 by
+   work runs ahead of the boards and takes a board only when stages 1 to 3
+   do not need it. A product image still reports ES 2.0 by
    default (Kconfig `YAKOGL_REPORT_ES2` default `y`, CMake
    `YAKOGL_REPORT_ES2=ON`); ES 3.0 is what an image that turns that off gets,
    and what the cargo crate reports without the `report-es2` feature.
-5. ES 3.1 / 3.2 (#19).
+5. More boards: a board joins when it meets stages 1 and 2 as the first
+   three do.
+
+Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `8d0b4132` (2026-10-14). The numbers below are read from
+main is `80351fa7` (2026-10-16; #912). ES 2.0 holds on all three boards
+there, each booted by its bootloader (`tools/cts/RESULTS.md`, the
+2026-10-15/16 sections): dEQP-GLES2 0 failures (AM62P 17,140 combined,
+i.MX8MP 17,318 of 17,371, Pi 4 17,126 with all 17,165 mustpass cases), the
+common set 5 of 5 rows done on every board, 0 GPU resets wherever counted.
+The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -42,13 +60,28 @@ Per-case detail: `docs/es2-cts-failures.md` (ES 2.0) and
 All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 (Pi 4): `docs/standalone-boot.md`.
 
+Gate and docs (2026-10-15):
+
+- main `81bffb65` failed `tools/check.sh --quick` (116 ok, 5 failed, 0 gaps)
+  since `7e8c0b37` (#787): `tests/es3_caps.rs` and `tests/es3_blit_ds.rs`
+  lacked the `YakoglBackend` fields `generate_mipmap` and
+  `return_mipmap_chain`. Fixed (both set to `None`).
+- `tools/check.sh` stops with exit 2 and names what to install when cargo,
+  rustfmt or clippy is missing, instead of failing every row.
+- `ccfarm/integration` (117 ahead, 775 behind main) has nothing left to
+  land: `docs/investigations/main-landing-audit.md`.
+- README.md carries the ten findings of `docs/release/readme-walkthrough.md`
+  (now marked fixed; its Status tables are unchanged). CONTRIBUTING.md step 1
+  of "How a change reaches main" says an untracked file outside the ignored
+  paths widens the `--changed` scope to all (finding N10). No script changed.
+
 ### ES 2.0, per board
 
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
-| AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592), SV empty (0 console bytes, unresolved; same image as SO), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
-| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `b568940` (2026-10-14, common set; `docs/board-sessions/imx8mp-common-int.md`); cases 2, 10 and 171 passed in this run. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `b568940` (2026-10-14, common set; record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO and SV pass (crc16 c592), CL pass (crc16 b107), on `b568940`; no fps (no console). |
-| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
+| AM62P | **final tree, `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`): 17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning** at 1x; ms4 16 / 16; combined 17,141 / 0 / 18 / 5 / 1. The 9 invariance and 45 `texture.vertex.2d.*` cases pass. Predates `8bbf9ba2` (BGRA renderbuffer, below). Superseded: `32778b57` 17,070 / 54. | **50 / 50, 0 resets, on `dc514010` (2026-10-15, RESULTS.md); the set holds 197 `vtxgrid` and 199 `es3trunc`. Cases 198 `a2cconst`, 197 `vtxgrid` and 171 `viewwin` pass alone on `dc514010` and again on the origin/main tip `2923d771`, 0 resets, no FWCCB event, no CONTEXT_RESET**; 50 / 50, 0 resets, on `e3749a25` (2026-10-15, common set; `docs/board-sessions/am62p-common-carveout.md`); 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 199 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | **465, 33 scenes ran, 0 failed, 0 resets, on `dc514010` (2026-10-15); the record's counters: GL errors raised 15 or more (console: 2579), draws that sampled an incomplete texture 0; terrain and refract run out of the render pool ("Known defects")**; 462, 33 scenes ran, 0 failed, 0 unsupported, 0 resets, **GL errors raised 0, no `render pool exhausted`, no `out of GPU memory`, no `framebuffer N incomplete`** on `e3749a25` (2026-10-15, common set, the first AM62P glmark2 run on the 256 MiB carve-out of `504d4fae`); terrain 1 fps, shadow 3 fps and refract 1 fps remain, now CPU-side ("Known defects"); 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592, 56 fps), **SV pass (crc16 c592, the console captured in both of two boots; the `cd738b1a` empty capture is not reproduced)**, CL pass (crc16 110c, 73.1 fps, 44.9 Mpx/s at 1024x600) on `e3749a25` (2026-10-15, common set); SO pass (crc16 c592), SV empty (0 console bytes), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
+| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning, 29 of 29 entries equal `d8583f20`'s; it predates `8bbf9ba2`. | 48 / 49 run passed, 1 skipped (case 16, #8), case 44 (#6) fails, on `a63fcc5b` (2026-10-14, common set; `tools/cts/RESULTS.md`); the same reading on `b568940` (`docs/board-sessions/imx8mp-common-int.md`), where cases 2, 10 and 171 passed. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. KICK_DIFF round on `e40e3835` (2026-10-15, image `kd-e40e3835`, 120 interleaved boots; `docs/board-sessions/imx8mp-gltest-r2.md`): base arm case 10 failed 4 of 40, case 2 0 of 40; KICK_DIFF arms case 10 1 of 40, case 2 1 of 40, both `stable`; 0 GPU resets. | 43, 33 ran, 0 failed, 0 unsupported, on `a63fcc5b` (2026-10-14, common set; also on `b568940`, record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO, SV and CL probes pass on `a63fcc5b` (on `b568940`: SO and SV crc16 c592, CL crc16 b107); no fps (no console). |
+| Pi 4 | **no final tree at the tip.** `20a48791` rows 0-14 (2026-10-14; `docs/board-sessions/pi4-es2-final.md`, `1344748`): 11,877 pass / **46 fail** (all `GL_BGRA_EXT` renderbuffer cases, FB1 3 + FB2 43) / 25 NotSupported / 5 warnings; rows 15-28 not run. Last whole tree `d56e79e5` (2026-10-12; `pi4-es2-final-r2.md`, `ce16942`): 17,127 / 0 / 34 / 4, before `8bbf9ba2`. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
 in `tools/cts/log/board-sessions/es2-final-expected.md`: one table per board
@@ -64,26 +97,121 @@ for every board and read 0 Fail: AM62P `63efed8e`
 (`docs/board-sessions/am62p-es2-final-r2.md`), i.MX8MP `c345ab74`
 (`docs/board-sessions/imx8mp-es2-final-r2.md`), Pi 4 `d56e79e5`
 (`docs/board-sessions/pi4-es2-final-r2.md`); `docs/es2-cts-failures.md` and
-`tools/cts/STATUS.md` do not carry them yet (`es2-docs-r1`).
+`tools/cts/STATUS.md` carry them. All three predate `8bbf9ba2` ("Final ES
+2.0 trees" below).
 
 The NotSupported 34 are the same on the three boards: `clip_control` 8,
 `negative_api.texture.compressedtexsubimage2d_*` 9,
 `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (the
 1x config; the AM62P measures them on its ms4 image).
 
+dEQP-GLES2 and the common set at main `e3749a25` (2026-10-15, U-Boot from
+eMMC, `tools/board.sh`; `tools/cts/RESULTS.md`, the 2026-10-15 section):
+
+- AM62P: whole tree 17,124 pass / **0 fail** / 34 NS / 5 QW / 2 CW, 0
+  resets; ms4 16 / 0 (combined with the 1x tree 17,140 / 0 / 18 / 5 / 2).
+  Common set 5 of 5 rows done, 0 resets: glmark2 462, 33 scenes, 0 failed, 0
+  GL errors, no render pool exhaustion; gl_test 50 of 50; cluster 73.2 fps at
+  1024x600.
+- i.MX8MP: whole tree begun 17,371 / pass 17,318 / **0 fail** / 34 NS / 19
+  other, 0 resets (equal to `c345ab74`); the 46 `GL_BGRA_EXT` failures are
+  gone (#828, entry 21 711 / 711). Common set: gl_test 48 of 49 (case 44,
+  #6); every other row done, 0 resets.
+- Pi 4: not run at `e3749a25` (the board is off the network).
+
+ES 2.0 at main `e9901869a` (contains #866), U-Boot from eMMC
+(`tools/cts/RESULTS.md`, "ES 2.0 at main `e9901869a`"): AM62P and i.MX8MP,
+every row done, 0 dEQP-GLES2 failures (AM62P 17,124 / 0 / 34 / 5 / 2, ms4
+16 / 0; i.MX8MP 17,318 of 17,371 / 0 / 34 / 19), common set 5 of 5 done on
+both (i.MX8MP gl_test 49 of 49). Resets 0 on every row that counts them.
+The Pi 4 is not run at this commit.
+
+Stage 2 benchmark audit (2026-10-15, main `548860df`):
+`docs/investigations/stage2-bench-gap.md` is the board x benchmark table for
+stage 2, with ten numbered items that close it (Open work item 10). glmark2
+pictures are not checked per scene today: no read-back or reference in
+`driver/samples/zephyr/glmark2/src/main.cpp`, and `glmark2_scenes()` of
+`tools/cts/common-tally.py` judges console error lines only.
+
+Pi 4 common set from the integration tip `3cc4b60a` (plan 18 item
+v3d-null-cpu, 2026-10-15): **built, started, no result**.
+`tools/cts/cts-common.sh pi4 build` gave rc=0 for GM, SO, SV, CL and GT, at
+`3cc4b60a` and again at `1e0c7566` (docs only on top); GM carries the 96 MiB
+carve-out and the 24 MiB tiled-copy budget and links (footprint 250,490,880
+bytes). The first row ended `board.sh pi4 GM rc=5 verdict=not_back
+boot=tryboot row boot_verdict=not_back result=none resets=0 record=absent`:
+the board hung in the firmware before the kernel, the chain stopped, and SO,
+SV, CL and GT did not run (`docs/board-sessions/pi4-common-int2.md`). No board
+figure changes: the README Status table keeps `| Raspberry Pi 4 | 183
+(2026-10-04) |`, and RESULTS.md and STATUS.md get no Pi 4 cell or section.
+When the session runs, the cells to write are: README
+`| Raspberry Pi 4 | <score> (`<HEAD8>`, <date>) |`; a RESULTS.md section `##
+Pi 4 common set from the integration tip <HEAD8> (<date>)` with the five
+verdict lines, the common-tally output and the per-scene glmark2 table of the
+session doc; a STATUS.md line under 「ひとことで」: `- **Pi 4: 共通セット（<HEAD8>、<date>、tryboot、records/pi4/common-<HEAD8>）。** glmark2 は <score>（33 シーン、失敗 <n>、carve-out 96 MiB、refract と terrain のメモリ不足の行 <n>）、SO / SV / CL のプローブは <合格|不合格>、GT は <p> / <n>。全行でリセット <n>。`
+
+Pi 4 GLES3 tree session (board-pi4, main `4a4fad60`): not run, no code
+changed; the baseline is still the 7 images of `cd738b1a`.
+
+Website (stage 3, 2026-10-15): `website/data.js` no longer cites the five
+commits of the rewritten history (`d60b9d76`, `fe5e8e73`, `1fa941e3` twice,
+`031de9a2`). `tools/website-check.sh` is unchanged; `website/index.html` and
+`website/status.html` did not repeat them.
+
+| entry | old hash | new hash | backing record |
+|---|---|---|---|
+| `deqp2.am62p.previous` | `d60b9d76` | dropped | 17,141 / 0 / 19 / 5 has no record here: `docs/board-sessions/am62p-es2-final-r2.md` (`63efed8e`) reads 17,141 / 0 / 18 NotSupported / 5 QW / 1 CompatW |
+| `deqp2.pi4.previous` | `fe5e8e73` | dropped | no record in this history holds 17,075 / 25 fail; `docs/board-sessions/pi4-es2-final-r2.md` only cites the number |
+| `glmark2.pi4` | `1fa941e3` | `d64e995b` | `docs/board-sessions/pi4-common-int.md`: score 183, 33 / 0 / 0, 0 GL errors, 96 MiB carve-out (2026-10-14) |
+| `slint.pi4` | `1fa941e3` | `d64e995b` | the same record: SO and SV probes pass |
+| `cluster.pi4` | `031de9a2` | `d64e995b` | the same record: 192.6 Mpx/s, 139.3 fps, 34 / 34 (was 193.4 / 139.8) |
+
+Other changes in `data.js`: the glmark2.pi4 note now says terrain 3 fps and
+refract 2 fps (the record's finding 1); `deqp2.am62p.integration`'s note says
+"the 2026-10-02 whole tree" instead of `d60b9d76`.
+
+Licence gate (stage 3, 2026-10-15): `tools/cts/cts-selftest.sh` has three new
+checks, run by `tools/check.sh` through its existing cts-selftest step: 23
+`tools/cts/tree-diff-selftest.sh` (17 checks pass at the tip); 24 `python3
+-I tools/license_audit.py --self-test` (2 fixture checks); 25 the audit in
+report mode over the repository, which fails on a crash or `unknown-id` > 0
+and prints `missing-spdx` (597 at `d2a07a33`). Broken fixtures make checks 24
+and 23 print FAIL.
+
+### Final ES 2.0 trees (2026-10-14)
+
+Stage 1 (0 Fail) is met by record on the AM62P (`63efed8e`) and the i.MX8MP
+(`c345ab74`), not on the Pi 4. Both commits predate `8bbf9ba2`, which made
+`renderbuffer_format_advertised` (`src/gl/framebuffer.rs`) refuse
+`GL_BGRA_EXT` beside the accepted `GL_BGRA8_EXT`; at `20a48791` that gives 46
+Pi 4 Fail (`docs/es2-cts-failures.md`, section A), and the i.MX8MP tree on
+`835cf9cc` (2026-10-14, `tools/cts/RESULTS.md`) reads the same 46 in entry
+21 (`fbo`). The fix is on main (`a81617db`):
+`renderbuffer_format_advertised()` takes `GL_BGRA_EXT | GL_BGRA8_EXT` in one
+arm, listed with `GL_EXT_texture_format_BGRA8888`, and
+`tests/es2_bgra_rbo.rs` pins both names in the `report-es2` and the default
+build (storage allocated, framebuffer complete with either as its only colour
+attachment; ES 3.0 behaviour unchanged). To close stage 1: re-run Pi 4 rows
+FB1 and FB2 and rows 15-28 at a tip with it (setup in
+`docs/board-sessions/pi4-es2-final.md`), and re-confirm the AM62P and i.MX8MP
+trees at that tip (plan items am62p-es2-r1a2, imx8mp-flake-remeasure and a
+Pi 4 round); none of the three trees has been re-run with the fix. AM62P gl_test 198 / 197 / 171 were not run
+(`am62p-es2-final.md`).
+
 ### Waiting for a board
 
 Each item waits for hardware. The commands and expected values are in
 "Next board session".
 
-- AM62P image 9 of the GLES2 tree: the 45 `texture.vertex.2d.*` cases
-  (`a6fc6f14`).
-- AM62P: one whole GLES2 tree from one main commit, with the ms4 image.
-- Pi 4: one whole GLES2 tree from one main commit (it replaces the composed
-  row).
+- Pi 4: a whole GLES2 tree at a tip with the `GL_BGRA_EXT` fix (rows 0-14
+  at `20a48791`: 46 Fail; rows 15-28 not run). AM62P and i.MX8MP: a re-run
+  at that tip (the i.MX8MP reads the same 46 Fail at `835cf9cc`). (The
+  AM62P image 9 and the whole tree with ms4 are done: `63efed8e`.)
 - gl_test 196 `occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205
   `mappbo` (the `work/land9` cases, on main since `c4dce9125`) on the
-  i.MX8MP (the AM62P ran them at `cd738b1a` and again at `9b525867`, 5 of 5;
+  i.MX8MP (the AM62P ran them at `cd738b1a`, at `9b525867` and at `dc514010`
+  (2026-10-15: 196 q0..q4 results 0 1 0 1 1, 202 12/12, 203 9/9, 204 8/8,
+  205 15/15, each alone, 0 resets), 5 of 5;
   the Pi 4 ran them at `cd738b1a`: 202, 203 and 205 pass, 196 and 204 wait
   for their defects, "Known defects"); 199 to 201 on the i.MX8MP and the
   Pi 4 where the GPU runs them.
@@ -94,13 +222,16 @@ Each item waits for hardware. The commands and expected values are in
   `texture.completeness.2d.npot_size` must still read Pass and glmark2
   terrain must still render (`docs/investigations/pvr-npot-levels.md`).
 - i.MX8MP case 44's layout probe (#6, step 6 of the i.MX8MP section).
-- i.MX8MP #8 (4x MSAA) and #9 / #25 (cases 10 and 2): the next instruments
-  are in "Known defects".
+- i.MX8MP #8 (4x MSAA): the next instrument is in "Known defects". #9 / #25
+  (cases 10 and 2): the next arm is the K1 arm ("Known defects").
 - AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
+- AM62P: goal 1's gl_test rows are done (198, 197, 171 and the default set on
+  `dc514010`); the AM62P dEQP-GLES2 items stay as they are.
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
-- AM62P: SV once more (empty at `cd738b1a`), and glmark2 after the render
-  pool fix (terrain and shadow out of memory, Known defects).
+- AM62P: glmark2 terrain, shadow and refract after a GPU `glGenerateMipmap`
+  path for the PowerVR (1467 / 353 / 2046 ms of GL-call time per frame at
+  `e3749a25`, Known defects). SV and the render pool are done there.
 - The i.MX8MP panel by eye (#23).
 
 ### ES 3.0 (goal 4)
@@ -121,7 +252,23 @@ replace the `f2a13877` numbers of their groups: transform_feedback 882 / 882
 and ubo 1,099 / 1,099 pass (image 25 lost 51 result lines on `f2a13877`, none
 now); image 5 completes (1,662 cases; the capture no longer aborts it) with
 `occlusion_query` 62 / 62 pass; `fbo.blit.conversion` 325 pass / 0 fail / 112
-NotSupported; `fragment_ops.scissor` 26 / 26 pass. This section's whole-tree
+NotSupported; `fragment_ops.scissor` 26 / 26 pass. Rows 3, 4, 6, 18, 21, 22
+and a narrow fbo image re-run on `4e62d171` (2026-10-14; all `done`, 0
+resets, no fault line; section "Session 2: dEQP-GLES3 rows 3, 4, 6, 18, 21,
+22 and the fbo MMU watch (`4e62d171`)" of
+`docs/board-sessions/am62p-es3-gltest.md`; records
+`records/am62p/gles3-4e62d171` and `records/am62p/fbow-4e62d171`): row 3
+`fragment_ops.blend.fbo_srgb` passes **1,152 of 1,152** (1,106 failed at
+`c4ccc966`); image 5 is unchanged from `cd738b1a` (875 pass / 614 fail / 173
+NotSupported, 1,662 cases, complete); image 7 still stops at
+`shaders.builtin_functions.precision.clamp.highp_fragment.vec3`
+(`ResourceError`, `complete=0`, 594 / 41); image 19 235 / 413 / 24, image 22
+851 / 437 / 60 (+ 180 QualityWarning), image 23 852 / 871 / 0. The two
+reasons of `f2a13877`'s "736" (`GL_NO_ERROR` at
+`es3fTextureSpecificationTests`) and "522" (`Texture upload failed` at
+`gluTexture.cpp`) buckets no longer occur. fbo MMU watch: 17 cases,
+`fbo.completeness.size.distinct` and `fbo.depth.basic.*` pass, 0 fault
+lines. Images 20 and 21 (the 3D filtering GPU hang) were not run. This section's whole-tree
 row, RESULTS.md and STATUS.md stay as they are until a whole tree runs. The
 gl_test cases 196 `occl`, 200 `intrt`, 201 `usamp`, 202 `blitconv`, 203
 `tfcap`, 204 `srgb` and 205 `mappbo` are board-proven on the AM62P at
@@ -164,8 +311,8 @@ es3-vertex).
 | Uniform blocks | host: `tests/es3_ubo.rs` ports dEQP's `functional.ubo` (2,032 cases); the GC7000 refuses four at link (`KNOWN_LIMITS`) (`1b0e431`, `b0c0fa6`) | none |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`; the GC7000 and V3D refuse the integer ones by name (`888af5d`, `e5c4a18`; PowerVR `25267d17`, merged in `a27d69c0`) | `docs/es3-sized-formats.md`, `docs/es3-pvr-formats.md` |
 | Occlusion queries | counted on the three back ends, host only (`2241cd84` GL core, `d9573ab9` PowerVR, `dcac96cb` GC7000, `7526b084` V3D; merged in `452d6c31`) | `docs/es3-occlusion-query.md` |
-| Integer colour render targets | GL half built; the PowerVR writes all nineteen as a draw's one colour attachment (`fc658e64`, merged in `a27d69c0`); the GC7000 and V3D refuse by name | `docs/es3-pvr-formats.md` section 10 |
-| `glBlitFramebuffer` | colour on the CPU, shared by the three back ends (`c4dce9125`); depth and stencil refused by name (blit-ds) | `src/gl/blit.rs` |
+| Integer colour render targets | GL half built; the PowerVR writes all nineteen as a draw's one colour attachment (`fc658e64`, merged in `a27d69c0`); the V3D writes all nineteen, the float ones (RGBA16F, R16F, R32F) and the ES 2.0 formats among any attachments, host only (int-rt-v3d: `src/v3d/state.rs` `rt_format`, the job builder's typed targets, the compiler's 32-bit TLB writes; `docs/online-shaderc/v3d-backend.md` "Integer and ES 3.0 colour render targets"); the GC7000 refuses by name | `docs/es3-pvr-formats.md` section 10; `tests/es3_int_rt_v3d.rs` |
+| `glBlitFramebuffer` | colour on the CPU, shared by the three back ends (`c4dce9125`); depth on the CPU into a depth texture's texels, from a depth texture or a depth renderbuffer (blit-ds, host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs` |
 | sRGB | PowerVR renders and samples; the GC7000 and V3D sample and refuse a draw into sRGB by name (`c4dce9125`) | `docs/es3-srgb.md` |
 | Buffer mapping and pixel buffers | host-proven (`c4dce9125`) | none |
 | NPOT levels of arrays and storage textures | valid at every level (`c40414b`) | none |
@@ -322,11 +469,53 @@ es3-vertex).
      3D-twiddled layout, IMAGE_WORD1 `depth`, the full chain, `addrmode_w`).
      The investigation's section 3 compares the fields one by one. Work:
      "Open work" item 4, pvr-3d.
-   - **AM62P GLES3 image 7** (no issue yet): a 24,384-vertex `glDrawArrays`
-     in `shaders.builtin_functions.precision.clamp.highp_fragment.vec3`
-     does not fit the 1 MiB general arena, and dEQP stops at the
-     `ResourceError` (1,397 cases never run). A non-indexed draw needs
-     cutting into pieces as `draw_indexed_pieces` cuts an indexed one.
+   - **AM62P GLES3 image 7** (no issue yet): fixed on the host, waiting for
+     the board to confirm. The 24,384-vertex `glDrawArrays` of
+     `shaders.builtin_functions.precision.clamp.highp_fragment.vec3` has four
+     client arrays (a vec4 position and three vec3 inputs, 52 bytes a vertex,
+     1.27 MB) and was refused whole ("does not fit an empty frame: the general
+     arena (1048576 bytes) is too small"), because only an indexed draw was
+     cut by its staged size. Now `draw_dispatch` (`src/pvr/backend.rs`) sends
+     every draw whose staged data is more than half an empty GENERAL arena
+     into pieces: an indexed draw to `draw_indexed_pieces`, a sequential draw
+     of at most 65,535 vertices to the new `draw_sequential_pieces`. Each
+     piece reads the sequential index list from its first vertex (absolute
+     indices, gl_VertexID stays right) and copies only its own window of each
+     staged array (`record_draw`'s `win`); VBO-resident attributes are
+     fetched as for the whole draw.
+     - Cut rule: `cut_unit`, shared by the three cutters. Triangles cut at a
+       multiple of 3; strips repeat 2 vertices and keep an even number of
+       triangles per piece; lines cut at 2; line strips repeat 1. A
+       sequential piece must also start on an **even** vertex
+       (`VDMCTRL_INDEX_LIST1` has no address bits 1:0, `index_base_addrlsb`
+       must be 0), so a triangle list steps by 6 and a line strip or a point
+       list by 2. The rig's fake index-list emitter
+       (`src/pvr/backend_tests.rs`) refuses a misaligned address as the real
+       one does.
+     - Fans, line loops, draws with a second index list, and draws one step
+       of which is more than half an arena still go whole and are refused by
+       name (`-ENOMEM`, the same "does not fit an empty frame" line). Past
+       `MAX_PIECES` (64) a draw is `-E2BIG` with its own line. Draws over
+       65,535 vertices still take `draw_chunked`, unchanged.
+     - Host evidence (HOST-ONLY; `tools/cts/host-deqp-run.sh --module=gles3
+       --gpu=powervr 'dEQP-GLES3.functional.shaders.builtin_functions.precision.'`,
+       1,147 cases): before, `79c73ea2`: 48 ResourceError, 130 Pass, 915
+       QualityWarning, 54 Fail; after: 0 ResourceError, 138 Pass, 955
+       QualityWarning, 54 Fail; the same on main `641c8b2f` plus the change
+       (2026-10-15), 1,147 of 1,147 cases began. The 54 Fail are the
+       `GL_COLOR_ATTACHMENT3` / `CAP_COLOR_ATTACHMENTS` 3 cause in
+       `docs/es3-host-run.md`, unrelated and unchanged.
+     - Host tests (`src/pvr/backend_tests.rs`):
+       `a_24384_vertex_draw_arrays_of_client_arrays_is_drawn_in_pieces`,
+       `a_sequential_strip_or_line_draw_of_client_arrays_is_cut_on_primitive_boundaries`,
+       `a_sequential_draw_reading_gl_vertexid_is_cut_with_absolute_indices`,
+       `a_sequential_fan_or_loop_of_client_arrays_too_large_for_the_arena_is_refused_by_name`,
+       `a_fitting_draw_records_the_same_frame_as_before_the_sequential_pieces`
+       (frame fingerprints taken on `79c73ea2`'s `backend.rs`).
+     - Behaviour change: a sequential draw of 512 KiB to 1 MiB of staged data
+       used to fit an empty frame whole and is now drawn as pieces (indexed
+       draws had the same threshold). The result is the same; only the
+       command stream differs.
    - **AM62P fbo / blit / invalidate failures** (no issue yet; findings 6 and
      7 of `docs/board-sessions/am62p-es3-gltest.md`, `cd738b1a`):
      `fbo.invalidate.{sub,whole}.unbind_blit_*` 14 Fail (the expected
@@ -344,15 +533,32 @@ es3-vertex).
      integer texture attachments, the unsized depth textures, the PowerVR 3D
      grid slice and the draw into colour-1-only. Each, with its file, is in
      "Open work" item 4, `fbo-completeness`.
-   - **pvr-msaa-split** (no issue yet): a 4x frame the PowerVR splits into
-     two kicks (a full arena, the 1024-draw cap, or a glFinish /
-     glReadPixels before more drawing) loses its samples: the next kick's
-     colour-load quad writes the resolved colour to all four samples.
+   - **pvr-msaa-split** (no issue yet): fixed on the host, unmeasured on the
+     board. A 4x frame the PowerVR splits into two kicks (a full arena, the
+     1024-draw cap, or a glFinish / glReadPixels before more drawing) now
+     keeps its samples: a multisampled kick that is not ended by a swap
+     emits each tile twice, resolved into the target as before (PBE
+     REG_WORD0 `downscale`) and unresolved into a sample store the back end
+     owns (`MsStore`, `src/pvr/backend.rs`: the TPU's multisampled image of
+     the target, `smpcnt` = log2 of the samples over the target's own
+     width, height and stride, four images' worth of bytes from the render
+     pool). The next kick's load quad binds the store in place of the
+     target, with the same load program, at the full sample rate, so each
+     instance reloads its own sample. A swap's kick stores the resolved
+     colour only, and a frame drawn into the surface after it reloads that,
+     as before. The 1x path and the dEQP-GLES2 answers do not change.
      `a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour`
-     (`src/pvr/backend_tests.rs`) is `#[ignore = "BUG: ..."]` and asserts
-     the right answer. The fix keeps each sample across kicks and reloads
-     it at the full sample rate; the PBE's unresolved layout and the
-     per-sample load are unmeasured on the board.
+     (`src/pvr/backend_tests.rs`) is no longer ignored; beside it
+     `a_4x_kick_before_a_readback_stores_its_samples_and_the_next_kick_loads_them`,
+     `a_swap_kick_keeps_no_samples_and_the_next_frame_reloads_the_resolved_colour`
+     and `a_4x_frame_split_at_the_draw_cap_or_a_full_arena_keeps_its_samples`
+     pin the two emits, the store's binding and the rates. Two things are
+     chosen from the vendored headers, not measured: that the PBE's
+     unresolved store (pbestate.xml:255, `downscale` off) is laid out as the
+     TPU's `smpcnt` image (texstate.xml:273) over the same stride, and that
+     a per-sample fetch of that image reads the running instance's sample.
+     The entry stays until the board check ("Next board session", AM62P)
+     passes; then it closes.
    - AM62P: an indexed draw whose staged data cannot be cut (a fan or a
      line loop, a second index list, or one primitive whose vertex window
      is over half the arena) is still refused by name when it does not fit
@@ -368,28 +574,31 @@ es3-vertex).
      the next board run (i.MX8MP step 6).
    - i.MX8MP gl_test case 16 no longer fails in the common set: the set
      skips it by name (#8 tracks the skip).
-   - i.MX8MP gl_test case 10 fails about 1 run in 3 (#9), and case 2 now
-     and then (#25), the same nondeterminism class. Cause not found
-     (`8409419`): our sync sequence has a counterpart for every etnaviv
-     step, and repeat runs on integration images (`b20e4d11`, `0175bac1`)
-     did not separate the three surface hypotheses
-     (`tools/cts/log/investigations/gc-case10-flake.md`). Rate without an
-     instrument (integration image `e3efeaad`, 2026-10-11, 32 boots): case
-     10 failed 4 of 32, case 2 0 of 32
-     (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`). gl_test now
-     calls the KICK_DIFF instrument (a second read-back 2 ms after the
-     fence) for cases 2 and 10 when the selector asks for its page; the
-     next step is the board run: about 40 interleaved boots each of the
-     base arm and the KICK_DIFF arm from one image
-     (`tools/cts/log/investigations/gc-kick-diff.md`, "How to run it on the
-     board"). The instrument was read end to end at main `a63fcc5b` and is
-     complete for that run; none of its seven gaps (G1 to G7) needs a code
-     change. Selectors: base `SEL=512`; KICK_DIFF case 10 `SEL=4586`
-     (`0x11ea`); case 2 `SEL=4578` (`0x11e2`); pages decode with
-     `yakogl-tools record kickdiff`. Corrections to `gc-kick-diff.md`, not
-     yet made: the two commands' comment "list 0" is list 1 (`0x11ea`);
-     case 10 is bit 10 of the sweep pass word, not bit 9; the sample
-     output's "10000 us" is 2000 us.
+   - i.MX8MP gl_test case 10 (#9) and case 2 (#25), the same nondeterminism
+     class. Cause not found (`8409419`): our sync sequence has a counterpart
+     for every etnaviv step, and repeat runs on integration images
+     (`b20e4d11`, `0175bac1`) did not separate the three surface hypotheses
+     (`tools/cts/log/investigations/gc-case10-flake.md`). Measured at
+     `e40e3835` (2026-10-15), 40 interleaved boots per arm from one image
+     (`kd-e40e3835`): base case 10 failed 4 of 40 and case 2 0 of 40 (4 of 32
+     and 0 of 32 at `e3efeaad`; the old "about 1 run in 3" is no longer the
+     rate). The KICK_DIFF arms (`SEL=4586`, `SEL=4578`, a second read-back
+     2000 us after the fence) failed 1 of 40 each (kd10-16, kd2-28), both
+     **stable**: no word changed between the two reads, and the case failed
+     at check 23. 0 `late` checks in all 80 KICK_DIFF runs. So the pixels
+     never appeared within 2 ms: the write was lost (or more than 2 ms late),
+     not a fence that fired before the PE write-back. Next: the K1 arm
+     (etnaviv's flush rule in `emit_flushes`, `gc-kick-diff.md` "How it
+     combines with K1"); a longer `KICK_DIFF_DELAY_US` arm only if "lost vs
+     very late" must be separated. Records:
+     `docs/board-sessions/imx8mp-gltest-r2.md`. The KICK_DIFF Zephyr build
+     (`gc_gl_test` with the `gl_test.c` call site) compiles (`rc=0`) and arms
+     on the board. `gc-kick-diff.md` (the short guide and
+     `tools/cts/log/investigations/gc-kick-diff.md`) is corrected: selectors
+     are list 1 (`0x11ea`, `0x11e2`), case 10 is bit 10 of the sweep pass
+     bits, the sample console lines say 2000 us.
+   - The cluster Pi 4 figure on the website moved (193.4 -> 192.6 Mpx/s)
+     because the old one has no record here; it is one 60 s run.
    - **GC7000 `TEXDESC_LOG_SIZE_EXT` for NPOT sizes** (no issue yet, low
      severity): `log2_fixp88` (`src/vivante/texture.rs`) is a linear
      approximation of log2; Mesa writes the exact value. The CTS sizes are
@@ -475,15 +684,55 @@ es3-vertex).
      budget is 24 MiB (refract's 1600x1200 mip chain was over the 8 MiB
      default: `tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md`);
      not yet run on the board.
-   - **AM62P glmark2 terrain and shadow out of GPU memory** (no issue yet;
-     `cd738b1a`, 2026-10-14, common set; `docs/board-sessions/am62p-common-int.md`):
-     the score passes (465), but terrain (1 fps) and shadow (3 fps) hit
-     `render pool exhausted` (5464 KiB and 21848 KiB requested, 3648 and
-     2744 KiB left), and refract raises 1694 `framebuffer 1 incomplete
-     (0x8cd6)` errors. The render pool (59200 KiB, about 38 MB live at the
-     end of jellyfish) does not fit terrain's 800x600 NPOT mip chain (5.6 MB)
-     after jellyfish; the `pvr-pool-npot` replay item is the host side of
-     this.
+     Since v3d-rt-sample a colour render target is sampled from its render
+     image (the tile list stores RT 0 a second time, in the TMU's layout) and
+     its glGenerateMipmap is the TFU's, so refract's and terrain's per-frame
+     copies and CPU box filters are gone on the host
+     (`docs/online-shaderc/v3d-backend.md`, "Render targets sampled from their
+     render image"). Run on the Pi 4 on 2026-10-14
+     (`tools/cts/log/board-sessions/pi4-rt-sample.md`): 33 ran / 0 failed /
+     0 unsupported, score 188 (183 before), the TFU made terrain's chain.
+     CPU time in GL calls per frame went from 711 to 188 ms in refract, from
+     442 to 177 ms in terrain, from 228 to 170 ms in shadow, and from 90 to 7
+     ms in desktop blur. refract, terrain and shadow still show 6 FPS. shadow
+     and refract still resolve a depth texture on the CPU every frame (option
+     (b), not done). Terrain's remaining CPU time is not explained yet.
+   - glmark2 terrain (#1) and refract (#2) on the AM62P at `dc514010`
+     (2026-10-15): both scenes exhaust the 59,200 KiB render pool (`render
+     pool exhausted: 5464 KiB requested, 3648 KiB left` in terrain, `21848
+     KiB requested, 2744 KiB left` in refract). terrain's 800x600 mip chain
+     and refract's 1600x1200 chain are refused ("out of GPU memory"), their
+     render-to-texture framebuffers stay incomplete (status 0x8cd6) every
+     frame, terrain runs at 1 FPS with `GL error 0x505/0x506/0x502` (16
+     lines) and refract at 85 FPS with 1,698 incomplete-framebuffer lines.
+     glmark2 counts both as ran. The "fixed on the host" text of #1 and #2
+     does not hold on this board; whether `f2a13877` already did this is
+     not in its record. No issue opened by this result.
+   - The AM62P console lease (`docs/boards/am62p-console-lease.md`): the
+     leased port carried main_uart0 on 2026-10-15 (`YK-PROBE-S2` arrived, 13
+     bytes; `YK-PROBE-S3` did not). The farm's console reader holds the
+     bridge's only client slot for the whole lease, so `tools/board.sh`'s
+     own capture gets `busy`; the 2026-10-15 session relayed the console by
+     hand (`docs/board-sessions/am62p-gltest-es2-20261015.md`).
+   - **AM62P glmark2 terrain and shadow out of GPU memory**: closed (no issue
+     number; `cd738b1a`, 2026-10-14). On `e3749a25` (2026-10-15) the GM
+     console has 0 `render pool exhausted`, 0 `out of GPU memory`, 0
+     `framebuffer N incomplete` and 0 `GL error` lines, `GL errors raised 0`
+     (was 2573); the pool is 255808 KiB, 0 grow requests, firmware `out of
+     memory 0` (was 59200 KiB, 4 grow requests, 5).
+   - **AM62P glmark2 terrain and refract at 1 fps, shadow at 3 fps: CPU time
+     in GL calls** (no issue yet; `e3749a25`, 2026-10-15,
+     `docs/board-sessions/am62p-common-carveout.md`): `glmark2-frame:` reads
+     `gl 1467010 us` (terrain), `gl 352737 us` (shadow), `gl 2045892 us`
+     (refract) per frame with `swap` in the tens of microseconds; one `fence
+     ... not moved at 20 ms, re-posted` per terrain frame (the known re-post
+     defect, 8 in the run, 0 GPU recoveries). refract's 85 fps on `cd738b1a`
+     was the scene with its draws skipped; 1 fps is the drawn scene. Cause
+     read in the sources, not measured: the PowerVR backend's
+     `glGenerateMipmap` is the GL core's CPU box filter.
+   - The AM62P SV empty-console reading of 2026-10-14 is closed: not
+     reproduced in two boots on `e3749a25` (17294 and 17296 console bytes,
+     both `done`).
    - The glmark2 record carries the GL core's counters (#13): GL errors
      raised and draws that sampled an incomplete texture, 4 bits each in
      w3 (`driver/docs/glmark2.md`, "The record"). The host harness shows
@@ -509,12 +758,16 @@ es3-vertex).
      `check.sh` now keeps a failed row's whole output in
      `build/check-fail/<n>.log`. Open until a red names its test; the next
      red of this row is read from that file, never rerun first.
-   - **`GL_BGRA_EXT` renderbuffers** (no issue yet): the 46 failures of entry
+   - **`GL_BGRA_EXT` renderbuffers** (no issue yet; fixed on main in
+     `a81617db`, not yet re-run on a board): the 46 failures of entry
      21 (`fbo`) on the i.MX8MP at `835cf9cc` (and the same 46 on the Pi 4 at
      `20a48791`, `1344748`). The report-es2 renderbuffer allowlist of
      `8bbf9ba2` names `GL_BGRA8_EXT` but not the unsized `GL_BGRA_EXT`
-     (`docs/board-sessions/imx8mp-es2-final.md`, `da842c6`). Fixing the
-     allowlist should bring the i.MX8MP back to 0 fail.
+     (`docs/board-sessions/imx8mp-es2-final.md`, `da842c6`). The fix
+     adds the unsized name to the allowlist; the rest of the report-es2
+     renderbuffer path (`renderbuffer_storage_args_ok`, the attachment-bits
+     tables) already takes both names. It should bring the i.MX8MP back to 0
+     fail.
    - **Pi 4 gl_test 196 `occl`** (no issue yet): the V3D occlusion counter
      reads 0 for every query on the board (q0..q4 `available 1`, results
      0,0,0,0,0; want 0,1,0,1,1), though it counts on the host (`cd738b1a`).
@@ -573,6 +826,61 @@ es3-vertex).
      `mip_levels_needed` uses w and h. A sampler object's WRAP_R and LOD range
      are not exposed by `es3.rs` (`sampler_state` returns min, mag, wrap S,
      wrap T), so the capture uses the texture's, as the draw does.
+   - **Depth blit and the back end's buffer** (no issue yet; host):
+     A depth blit into a depth texture changes the texels, which is what a
+     sampler reads. It does not change the back end's depth/stencil buffer
+     for that texture. A draw that later depth-tests against the texture,
+     with the texture as its depth attachment, still sees the depth it had
+     before the blit. The next resolve after such a draw also overwrites
+     the texels with that buffer. `glTexSubImage2D` of depth has the same
+     gap today (`src/gl/texture.rs` `resolve_depth`: "Not the other way
+     round"). The `ds_write` entry of blit-ds (item 4) closes both.
+   - sRGB cases that fail on the AM62P (`4e62d171`) besides the 12
+     `fragment_out.array.*srgb8_alpha8*` refused by name:
+     `texture.filtering.2d_array.formats.srgb8_alpha8_*` (6) and nine
+     `texture.specification` 3D / cube cases (`basic_teximage3d.srgb8_2d_array`,
+     `.srgb8_alpha8_2d_array`, `.srgb8_alpha8_3d`, `basic_texsubimage3d.srgb8_3d`,
+     `.srgb8_alpha8_3d`, `texstorage2d.format.srgb8_cube`, `.srgb8_alpha8_cube`,
+     `texstorage3d.format.srgb8_3d`, `.srgb8_alpha8_3d`); the 2D-array, 3D and
+     cube paths fail for every format, so this is the texture path, not sRGB.
+     The per-case records of `cd738b1a` and `f2a13877` are not on the machine
+     that ran the session: comparisons are by group only.
+   - AM62P SV returned 0 console bytes at `cd738b1a` (not repeated). The Slint
+     picture differs on the Pi 4 by one RGB565 step (crc16 312b vs c592).
+     Cluster crc16 values are not comparable across the three panel sizes
+     (`docs/investigations/stage2-bench-gap.md`).
+   - `docs/release/license-audit.md` tables still carry the `79c73ea` figures
+     (587 missing-spdx); the tip is 597 (`d2a07a33`). Re-measure when the
+     owner's decision is taken. Check 25 greps the report's `unknown-id:` /
+     `missing-spdx:` lines; a change of the report format makes it print FAIL
+     ("no ... line"), not pass silently.
+   - Environment, not driver: `system76`'s node-local `BOARD_HDMI_TIMINGS` for
+     this project is `1920x720`. The lab's value is the 17 fields `1920 1 50
+     44 50 720 1 10 20 50 0 0 0 60 0 99070000 1` (`tools/cts/README.md`; the
+     farm's other nodes have it). board.sh copies the value into `tryboot.txt`
+     as `hdmi_timings=`, and the `pi4-common-int2` GM tryboot stopped in the
+     firmware right after reading that file (last line `brfs: File read: 210
+     bytes`, no kernel load): the likely cause, not a proven one. Fix:
+     `ccfarm env set yakogl BOARD_HDMI_TIMINGS '<the 17 fields>'` on that node.
+   - README commands not run (`548860df`): the cross build, bare-metal and
+     compare.sh commands were checked by reading the sources and running
+     `python3 tools/api_coverage.py` (304 names, source fallback) only; no
+     toolchain file, no aarch64-none-elf GCC, 17 to 50 GB of disk. The README
+     names two open `ignore = "BUG` pins; one (`tests/gc_npot_repeat.rs`) may
+     not be listed here.
+   - #867 (opened): the board lock is per host, so runs from two hosts used
+     one board at once; and the farm's resource registry named the wrong
+     serial bridge port for the AM62P console (corrected in the registry;
+     AM62P rows on the wrong port read `empty` with 0 console bytes).
+   - #205: fixed on the i.MX8MP by #828 (board-read); the Pi 4 reading is
+     open.
+   - Pi 4 GLES3 tree session (board-pi4) not run: its worker could not resolve
+     `elegance-1` (`Could not resolve hostname`) and had no `BOARD_UART` /
+     `BOARD_HDMI_TIMINGS`; the deps cache has the gles3 stage 1 but no gles2
+     stage 1 for `rpi_4b`.
+   - #905 (opened): a Pi 4 glmark2 tryboot image kept the board off the
+     network for 15 h on 2026-10-15; the same recipe ran clean at
+     `e9901869a`. Image kept for a reproduction with someone at the board.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured. Each item keeps every `report-es2` answer and adds a test that
    pins it. What each item built is in the ES 3.0 table above; here is what
@@ -609,11 +917,61 @@ es3-vertex).
      `shaders.builtin_functions` buckets). Left on the PowerVR: an integer
      attachment beside other attachments, colour masks that keep some of an
      integer target's channels, precompiled rows for the integer variants.
-     The GC7000 and the V3D: none.
+     The V3D's is built on the host (int-rt-v3d). Left on the V3D: a board
+     run (gl_test 200 intrt on the Pi 4; the dEQP-GLES3 `fragment_out`,
+     `fbo.color` and `shaders.builtin_functions` buckets),
+     `tools/v3d/job_check.c` / `cl_golden.c` rows for a typed job, an
+     integer clear program for a scissored or masked clear of an integer
+     target (refused by name today), the F32 TLB write for an R32F target
+     (f16 pairs today; no dEQP case reaches it without
+     EXT_color_buffer_float), 4x on an ES 3.0 format (refused by name).
+     Verified against Mesa 26.2.1 source (2026-10-15):
+     `vir_emit_tlb_color_write` (`nir_to_vir.c:1974-1977`) writes every
+     `f32_color_rb` target with `TLB_TYPE_F32_COLOR (0 << 6)` and
+     `v3d_program.c:701-704` sets that key bit for pure integer formats;
+     `TLB_TYPE_I32_COLOR (1 << 6)` is never written. The compiler's integer
+     config is `tlb_config_32b` (0 << 6); the pinned words lost 0x40
+     (0xffffff3f for RT 0 vec4). `clamp_for_format_and_type`
+     (`v3dx_rcl.c:395-409`) returns INT for a pure integer format, NORM for
+     sRGB, NONE otherwise, so the clamp rows stand. Redo of #840 (closed,
+     CI red): on nuc rebased onto main `4d744e17`, `tools/check.sh --changed
+     origin/main` gave 154 ok, 0 failed, 0 gaps (2761 s); on system76 the
+     one red row is the host's MESA_V3D_TREE without `build-v3d`, and its
+     three programs pass by hand (tex_check 449, cl_golden 1,240,201,
+     job_check 373 checks, 0 failed). `tools/check_scope_selftest.sh` now
+     counts 151 skipped and 154 rows. The GC7000: int-rt-gc.
    - **formats**: each back end samples the new storage classes of
      `docs/es3-sized-formats.md` and gains isampler / usampler. Left on the
      PowerVR: integer cube / 3D / 2D-array samplers and `RGB10A2` as a
      class. The GC7000 and the V3D: none.
+   - **formats-pvr Part B, `RGB10A2` sampled in its own class on the
+     PowerVR**: not done. The TPU half has been in place since `25267d17`:
+     `es3_tex_format` maps `GLES_TEXFMT_RGB10A2` to `A2R10B10G10` with
+     PCK_INFO 0x148, pinned in the `R10G10B10A2_UNORM` row of the
+     texture-format test in `src/pvr/backend.rs`. Adding
+     `GLES_TEXFMT_RGB10A2` to `PVR_SAMPLED_TEXFMTS` alone would regress ES 3.0
+     behaviour, because GL_RGB10_A2 is colour-renderable and mipmappable and
+     the class would be neither. In order:
+     1. A render-target class for the 10/10/10/2 unorm word. There is
+        `GLES_SURF_RGB10_A2UI` (24) but no unorm surface in `src/backend.rs`.
+        Its PowerVR PBE/accumulation format (A2R10B10G10 packmode, F16 accum,
+        the RGBA16F shader output) is in `docs/es3-pvr-formats.md` §2.5, plus
+        a host test of its PBE words.
+     2. GL core, `src/gl/framebuffer.rs` texture-attachment guard (about line
+        430): accept `GLES_TEXFMT_RGB10A2` (today the guard takes only RGBA8,
+        sRGB, RGBA16F, R16F and R32F, and `t.es3_fmt != 0 && t.texfmt !=
+        RGBA8` is refused), and map its internalformat to GL_RGB10_A2.
+     3. GL core, `glGenerateMipmap` (`src/gl/texture.rs`, about line 3745):
+        allow GL_RGB10_A2 in the `RGB10A2` class, with a CPU box filter for
+        the packed word (`YakoglBackend::generate_mipmap`, `src/backend.rs`,
+        is `None` on the PowerVR, so the CPU filter is the path there).
+        glCopyTexImage into the class and glReadPixels from it go with this.
+     4. Then add the bit to `PVR_SAMPLED_TEXFMTS` and update the comment
+        there, `docs/es3-sized-formats.md` and `docs/es3-pvr-formats.md`
+        §10.1 ("Deviation: RGB10_A2 stays in RGBA8").
+
+     Steps 2 and 3 are in GL-core files that plan #2 also touches
+     (`src/gl/texture.rs`), so they should go behind its merges.
    - **srgb**: the PowerVR's is built (gl_test 204 and the dEQP-GLES3 cases
      at the top of `docs/es3-srgb.md`). Left: the GC7000's and the V3D's
      sRGB render targets (`docs/es3-srgb.md` 5.1, 6.1), an sRGB attachment
@@ -718,10 +1076,37 @@ es3-vertex).
        floor(x + 0.5) (`builtin_call.rs` `pack2x16`; only an input just below
        .5 of a step goes the wrong way; dEQP's pack_unpack cases pass on the
        AM62P).
-   - **blit-ds**: the depth/stencil half of `glBlitFramebuffer` (the 16
-     AM62P `fbo.blit.depth_stencil` failures). It needs a back-end entry
-     that copies a rectangle between two objects' planes
-     (`src/ds_retention.rs`) with the blit's mapping, NEAREST only.
+   - **blit-ds**: the depth/stencil half of `glBlitFramebuffer`. Done on
+     the host for the planes the GL core holds: depth copied on the CPU
+     into the R32F texels of a 2D depth texture, read from a 2D depth
+     texture's texels or from a depth renderbuffer's depth
+     (`backend::depth_resolve`), with the colour path's mapping, flips,
+     cut and scissor (`src/gl/blit.rs` `copy_depth`). Still
+     GL_INVALID_OPERATION, each cause logged once: (a) depth into a
+     renderbuffer or the window, (b) all stencil, (c) depth from the
+     window or from a cube/array depth texture. These are all 16 AM62P
+     `fbo.blit.depth_stencil` failures, because dEQP blits between
+     renderbuffers. (a) and (b) need two new back-end entries
+     (`src/backend.rs`, one per back end):
+     - `ds_write(id, plane, src, x, y, w, h, pitch) -> i32`: write a
+       rectangle of plane DEPTH (f32 in [0, 1]) or STENCIL (u8) of
+       object `id`'s buffer from the CPU. Take a buffer for `id` if it
+       has none (refuse as `ds_retention::refuse` does when the table is
+       full), and leave the plane `Plane::LIVE`. If the plane is
+       `CLEARED(v)`, fill the buffer with `v` before the rectangle is
+       written. The layouts are the ones `depth_resolve` reads: on the
+       PowerVR, packed D24S8 rows at the ZLS-tile-aligned width; on the
+       GC7000, D24S8 row-linear at the surface stride, depth in bits
+       31..8 and stencil in 7..0; on the V3D, UIF D24S8 without XOR
+       (the store side of `v3d_tex_load_box`).
+     - `stencil_resolve(id, dst: *mut u8, w, h, pitch) -> i32`: the
+       stencil half of `depth_resolve`, with the same answers (0 / 1 /
+       negative errno).
+     With these two entries, `copy_depth` writes through `ds_write`
+     instead of into texels. A stencil copy is the same loop over u8.
+     (c) also needs a measurement: which way up each back end keeps the
+     window's depth (the window's colour is stored top-down;
+     `default_y_up`).
    - **es3-caps**: redo the ES 3.0 limits test, reverted for review
      (`3f78982`).
    - **es2-report-gaps**: the four `BUG` pins of `tests/es2_report_guard.rs`
@@ -932,6 +1317,10 @@ es3-vertex).
      The board is open: see "Waiting for a board". The old scope of
      `am62p-es2-r1c` (images 8 to 17, ms4, gl_test) is not repeated; its
      record is `tools/cts/log/board-sessions/am62p-es2-r1c.md`.
+   - ES 2.0 sign-off (#870): met on the board records at `e9901869a`.
+     Roadmap step 1 (ES 2.0) is done; next is step 2, minimum performance
+     (glmark2 on the same board; the AM62P's terrain, shadow and refract
+     frame times and its re-posted kicks, #1, #2).
    - Follow-up for a `src/` change: `build_tex_desc` is private, so the test
      derives the texture words from the bind. Exposing it under `host-test`
      would let the test compare the real words.
@@ -944,12 +1333,16 @@ es3-vertex).
      `cargo test` rows pass; `--quick` is clean (119 ok, 0 failed, 0 gaps,
      236 s) only with `MESA_V3D_TREE` unset, otherwise 2 rows fail. The full
      gate was not re-run. CONTRIBUTING.md says so and names the `env -u` form.
-   - Line 6 (walkthrough): **partial**. README findings 1 to 10 are open
-     (steps 4 to 6 of its Building block fail as written), listed with line
-     and proposed text in the walkthrough doc; the item that holds README.md
-     (`pub-roadmap`) applies them. The line becomes met when they are applied
-     and a `tools/` item makes `--quick` exit 0 with `MESA_V3D_TREE` set to a
-     tree without `build-v3d`.
+   - Line 6 (walkthrough): **partial**. README findings 1 to 10 are fixed
+     (`548860df`, `docs/release/readme-walkthrough.md`). Still open: N9
+     (`MESA_V3D_TREE` without `build-v3d` fails `tools/check.sh --quick`;
+     it belongs to item gate-v3d-tree-gap) and N8 (docs-only change "runs two
+     rows" in CONTRIBUTING.md:16, untouched). The line becomes met when a
+     `tools/` item makes `--quick` exit 0 with `MESA_V3D_TREE` set to a tree
+     without `build-v3d`.
+   - Licence audit (`docs/release/license-audit.md`): owner decision, headers
+     or allowlist rules for the ~597 missing-spdx files; then switch check 25
+     of `tools/cts/cts-selftest.sh` to `--strict` or a baseline.
    - Line 4 (SECURITY.md): unchanged; the contact and two other
      `TODO(owner)` lines are the owner's.
    - For a `tools/` item: `tools/check.sh:17` (`--quick` wording) and
@@ -957,6 +1350,10 @@ es3-vertex).
      rows; cause not confirmed by a build).
    - Owner: CONTRIBUTING.md says a pushed branch is never rebased; the ccfarm
      `conventions` text says branches are rebased onto origin/main.
+   - Website: `site.js` lists the `.previous` rows by key; the two dropped
+     keys (`deqp2.am62p.previous`, `deqp2.pi4.previous`) simply no longer
+     render. `tools/cts/RESULTS.md` and `docs/es2-cts-failures.md` still cite
+     the old hashes in prose; the checker does not scan them.
 7. **Gate rows at the tip** (tools only; `docs/investigations/gate-red-tip.md`):
    fix the two row-count pins in `tools/check_scope_selftest.sh` (pinned 149,
    real 148); make the AM62P Zephyr image rows a `gap` when
@@ -970,15 +1367,17 @@ es3-vertex).
      - `tools/cts/RESULTS.md`, i.MX8MP common-set cells: `GM score 43, 33 ran,
        0 failed, 0 unsupported; SO pass (crc16 c592); SV pass (crc16 c592); CL
        pass (crc16 b107); GT 48 of 49 run, case 16 skipped, failing case 44
-       only (cases 2, 10, 171 passed)`, on `b568940` (2026-10-14).
+       only (cases 2 and 10 passed; 171 is not in the default list and did
+       not run)`, on `b568940` (2026-10-14).
      - `tools/cts/STATUS.md` (Japanese): `i.MX8MP 共通セット (b568940,
        2026-10-14, records/imx8mp/common-b5689400): GM スコア 43 (33 シーン実行、失敗 0)、SO・SV・CL は
        pass (crc16 c592 / c592 / b107)、GT は 49 件中 48 件 pass (case 16 は skip、失敗は case 44
-       のみ。case 2・10・171 は pass)。`
+       のみ。case 2・10 は pass。171 は既定のリストに無く未実行)。`
      - `README.md` Status table, i.MX8MP row: `GM 43 / SO pass / SV pass / CL
        pass / GT 48 of 49 run (case 16 skipped, case 44 fails)` (`b568940`).
-   - Case 171 (`viewwin`) passed at `b568940`; it can leave the queue (confirm
-     once more on the next GT run, since 2 and 10 are random). Cases 2 and 10
+   - Case 171 (`viewwin`) has NOT run on the i.MX8MP: the GT image runs the
+     default list, which does not hold 171 (corrected 2026-10-15, issue #15).
+     It needs its own run: gc_gl_test with `CONFIG_GL_TEST_CASES="171"`. Cases 2 and 10
      pass or fail at random (`docs/investigations/gc-case10-flake.md`); they
      passed in this one run, which settles nothing.
    - glmark2 terrain and refract on this board are still not judged per scene
@@ -997,17 +1396,108 @@ es3-vertex).
      so the check could not run; it is probably on an unmerged branch.
 9. **AM62P common-set follow-ups** (integration `cd738b1a`, build id
    `d5cb878`, 2026-10-14; session doc `docs/board-sessions/am62p-common-int.md`):
-   - glmark2: the score passes, but terrain and shadow run out of GPU memory
-     and refract raises `framebuffer 1 incomplete` ("Known defects"), so #1
-     and #2 are not closed on this board. Fix the render pool (or the order
-     of allocations); the `pvr-pool-npot` replay item is the host side.
-   - SV returned no console bytes: repeat it once to tell a boot or bridge
-     flake from a real failure.
+   - glmark2: done on the board for the first two sub-items. `504d4fae`
+     removes the out-of-memory of terrain and shadow and refract's incomplete
+     framebuffers (RESULTS.md, 2026-10-15); #1 and #2 are no longer
+     out-of-memory on the AM62P, but no capture shows the pictures, so they
+     are still not closed by a picture. At `e3749a25` (2026-10-15) the AM62P
+     glmark2 scored 462; terrain, shadow and refract run at 1.47 s, 0.38 s and
+     2.08 s a frame, with 8 "fence ... not moved at 20 ms, re-posted 1
+     kick(s)" lines (#1, #2; performance step).
+   - New: **PowerVR `glGenerateMipmap` on the CPU** (host item). terrain
+     (800x600, 10 levels, 5.6 MB) and refract (1600x1200, 11 levels, 22 MB)
+     box-filter their chains on the CPU every frame (`src/pvr/backend.rs`
+     `generate_mipmap: None`, `src/gl/texture.rs`'s CPU path): 1467 ms and
+     2046 ms of GL-call time per frame on the board, 1 fps each. The V3D's
+     TFU path (2026-10-14) is the model; the PowerVR needs a GPU chain (TQ or
+     a per-level draw). shadow's 353 ms per frame is not explained by this
+     reading and needs kick times (`CONFIG_SAFEUI_GPU_PVR_KICK_TIMES=y`) in a
+     next GM image.
+   - `tools/cts/common-tally.py` prints "no glmark2-mem lines: a line goes to
+     the next scene's result" for a console that has 66 `glmark2-mem:` lines
+     (the GM console of the `e3749a25` run); the verdict is right (no
+     known-bad line), the remark is not. Small tool fix, host only.
+   - SV was repeated twice with the whole console each time: the 2026-10-14
+     empty record was a capture flake of that attempt; nothing to fix in the
+     image or the row.
+   - The dEQP-GLES3 sRGB/formats rows are done on the AM62P except images 20
+     and 21 (hang) (`4e62d171`): the `texture.specification`, `fragment_out`
+     and `shaders.builtin_functions` buckets have run (numbers under "ES 3.0"
+     and in the group table of the session record). `builtin_functions` is
+     still 987 + 340 + 41 + 29 = 1,397 cases short because of image 7's
+     `ResourceError` (the general arena of 1 MiB; "Known defects").
+   - New host items from the `4e62d171` failures: `texture.filtering.2d_array`
+     (115 of 122 fail), `texture.mipmap.3d` (64 of 64),
+     `filtering.3d.combinations` (53 of 56), `texture.shadow.2d_array` (108 of
+     144), `texture.swizzle` (80 of 83), `texture.units` (120 of 159: 136
+     `sglrGLContext.cpp:863` compile failures), the cube/integer `Compile
+     failed at sglrGLContext.cpp:863` cases of `texture.specification` (354)
+     and the `fbo.depth.depth_test_clamp` / `depth_write_clamp` compile
+     failures (10).
+   - The panel stays black (backlight on) under a kexec'd yakogl (owner's
+     report, 2026-10-14); the U-Boot splash shows. Not settled: the red-fill
+     image ran on the board twice from hx90 (2026-10-15,
+     `tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md` and its
+     `-console.txt` record) and every register of the path on the board
+     equals the Linux dump except the allow-listed deviations and the
+     application plane being on; the DSI streams (VPOS advancing, no live
+     error), the bridge reads IRQ_STAT 0x00 with video flowing (the first such
+     reading), VP2 at 58.8 Hz with 0 underflows, and the image resets back
+     into Linux. The picture itself was not seen: the only camera on this
+     panel is on Lepton. Ruled out before that by the tree: the bridge's CSRs
+     equal Linux's i2cdump (again on the board), `tisci_power_on` is enabled
+     in every AM62P sample overlay and the bridge answered over I2C1, the
+     safety layer is zeroed/transparent at init. Candidates left, all below
+     the registers: the C-vs-Rust order and timing differences of the note's
+     table ((a) bridge EN after the DSI attach, (b) VID_VSIZE1 10/23/11, (c)
+     WAIT_BURST_TIME 4, (d) lanes after PLL_LCK, ...), or the owner's run
+     itself (a `HOLD_SECONDS=0` image resets at once). The instruments are in
+     the tree: `CONFIG_PVR_SAMPLE_DISPLAY_FILL` (known-colour fill of the
+     safety layer) and `CONFIG_PVR_SAMPLE_DISPLAY_DUMP` (the Linux dump's read
+     list with the counters and IRQ_STAT, before and after the hold), in both
+     sample routes.
+10. **Stage 2 closing items** (`docs/investigations/stage2-bench-gap.md`, 2026-10-15):
+    its ten numbered items, at the end of that file: per-scene picture value
+    in the image and tally, i.MX8MP per-scene evidence (no console), fps for
+    Slint and for Pi 4 / i.MX8MP, AM62P at 256 MiB (plan #149
+    am62p-common-carveout), AM62P SV repeat, terrain and refract on a board,
+    Slint Pi 4 fingerprint decision, cluster "same picture", one-commit README
+    table.
+11. **Pi 4 follow-ups** (2026-10-15):
+    - The 84 GLES3 images never run, gl_test 196 and 200 to 205, and the ES
+      2.0 regression rows: `docs/board-sessions/pi4-gles3.md` "To rerun".
+    - #4 and #5 (the Pi 4 glmark2 refract and terrain on the 96 MiB carve-out)
+      do not close from the common-set item (`pi4-common-int2`): GM never
+      reached Zephyr. The closest evidence is
+      `docs/board-sessions/pi4-common-int.md` (main snapshot `86be8aeb`,
+      2026-10-14): the carve-out boot line says 96 MiB, refract and terrain
+      print no memory refusal, GL errors are 0 and the score is 183. Decide
+      whether that run closes #4 and #5, or whether a run from the
+      integration tip is still needed.
+    - `board.sh` does not check the shape of `BOARD_HDMI_TIMINGS` (17
+      numbers): a check that refuses before the board is changed (rc=3)
+      would have stopped the `pi4-common-int2` run. Not done.
 
 ## Next board session
 
-After the `GL_BGRA_EXT` allowlist fix, re-run i.MX8MP entry 21 (`fbo`, with
-`TREE_ROWS` as in `tools/board.sh`) and expect 711 of 711.
+After the `GL_BGRA_EXT` allowlist fix (on main, `a81617db`), re-run the three
+final trees (AM62P 17 images + ms4, i.MX8MP whole tree, Pi 4 rows 0-28) at a
+tip containing it; expect the 46 `fbo` BGRA cases to pass and 0 Fail overall.
+For the i.MX8MP, entry 21 (`fbo`, with `TREE_ROWS` as in `tools/board.sh`)
+alone must read 711 of 711.
+
+AM62P glmark2: nothing is needed from the carve-out item. When a GPU mipmap
+path for the PowerVR lands, re-run GM (`tools/cts/cts-common.sh am62p
+build|run`) with `CONFIG_SAFEUI_GPU_PVR_KICK_TIMES=y` added to the GM image
+and read terrain, shadow and refract's `glmark2-frame:` lines against 1467 /
+353 / 2046 ms. Two operational notes for whoever runs the AM62P next (no
+address in any file): the board accepts ccfarm's node key, not this host's
+user key (give `tools/board.sh` an ssh-agent holding the node key, or install
+the user key); and another session's dEQP tree may hold the board and the
+bridge for hours with long idle gaps between rows (its builds), so wait for a
+quiet board (no `/var/yakogl/once-*.bin`, nobody in `who`, the bridge probe
+free) before a run, because on the AM62P `TREE_RETRIES` is 0 and a refused
+row stops the other session's chain.
 
 One session per board confirms what waits for hardware ("Waiting for a
 board"). Only steps not yet run are here; the steps that ran, with their
@@ -1080,14 +1570,18 @@ by name in an ES 2.0 context.
 
 ### i.MX8MP (Verdin, no UART: records are read from the SNVS)
 
-`imx8mp-gltest-r2` can run its #9/#25 part (the KICK_DIFF arms, "Known
-defects") as it is, with one condition: build the image first and read `rc=`.
-The Zephyr arm of `gc_gl_test` and `gl_test.c` has never been built from this
-code (`gc-kick-diff.md`, "What was checked"), so a compile error shows at the
-build, not at a boot. Use the selector values in "Known defects", not the
-comments in `gc-kick-diff.md`. The loop that interleaves the two arms is the
-session's to write. Image recipe:
-`tools/cts/imx8mp-gltest-build.sh kd-<sha8> 0 '-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'`.
+A board can hold a staged one-shot image (`/var/yakogl/once-*.bin`) after an
+interrupted run. If a run is refused with "holds a one-shot image of a run
+that did not clean up", run `board.sh disarm` (or remove the file) before
+retrying; `board.sh` does not clean up such an image after a killed run.
+
+The #9/#25 KICK_DIFF arms of `imx8mp-gltest-r2` are done ("Known defects").
+A K1 + KICK_DIFF image needs the K1 change in `src/vivante/backend.rs` first;
+the same selectors and loop then apply. One boot of `tools/board.sh imx8mp
+run` with `BOARD_BOOT=uboot-mmc` took about 2 to 2.5 minutes, so 120 boots
+need about 4.5 hours; a worker whose background commands stop at 2 hours must
+split the loop and check that an interrupted boot left no one-shot image
+(`fw_printenv yako_once`, `/var/yakogl/`) before resuming.
 
 The gl_test builds need `-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`, or
 `tools/board.sh` refuses the image (rc=3), and a `;` inside a sweep list
@@ -1146,12 +1640,35 @@ section 3, from an image rebuilt at the commit the board runs
 
 Still to run on the Pi 4:
 
+- first, **power-cycle the board** (it does not answer ssh since the 06:49
+  tryboot of 2026-10-15; tryboot is one-shot, so it comes back in Linux),
+  remove the leftover `/boot/firmware/yakogl-GM.bin` and put back the empty
+  `tryboot.txt` (`tools/board.sh pi4 status` shows both). Then the common
+  set from the integration tip, with `BOARD_HDMI_TIMINGS` set to the 17
+  fields, `BOARD_UART` (the debug probe's serial bridge, `host:port`) and
+  `BOARD_HOST`, using "Commands to rerun" in
+  `docs/board-sessions/pi4-common-int2.md`; the images at
+  `build/common/pi4-1e0c7566` (or a rebuild at the tip) are ready. Check the
+  GM boot line for `carve-out 96 MiB`, check refract and terrain for memory
+  and GL-error lines, compare the SO/SV crc16 with `c592` (fingerprint
+  `0xe7113010` reported by an unmerged run, unchecked), CL with `7b93` at
+  about 139.5 fps and GT with 12 of 12; if GT fails 2, 10 or 16, rerun GT
+  once;
+- the GLES3 tree: rebuild the images with `DEQP_MODULE=gles3`, run the tree
+  per `docs/es3-board-recipe-pi4.md` section 4, then gl_test and the ES 2.0
+  rows (the 84 images never run, gl_test 196 and 200 to 205:
+  `docs/board-sessions/pi4-gles3.md` "To rerun");
 - one whole GLES2 tree from one main commit, which replaces the composed
   row; `TREE_PREV=records/pi4/deqp-1cf946a9/rows` compares the six cube
   rows. Expected: 17,126 pass / 0 fail / 34 NotSupported / 5 warnings (3
   QualityWarning, 2 CompatibilityWarning). A row whose verdict is
   `done_lossy` has lost result lines in the bridge: read it against the
   image's counters and rerun the row (the bridge's fix is firmware work);
+- gl_test 200 `intrt` at the main tip, and the dEQP-GLES3
+  `fragment_out.basic.int`, `fragment_out.basic.uint` and `fbo.color.*`
+  integer cases: the first measurement of the V3D typed job's packets (the
+  COLOR packet's internal types and clamps, the 64/128-bpp clear words, the
+  smaller tiles) and of the 32-bit TLB writes;
 - gl_test 196 `occl` after the V3D counter is looked at, and 204 `srgb` after
   its guard (above; 202, 203 and 205 passed at `cd738b1a`);
 - the remaining dEQP-GLES3 tree images (`tools/cts/pi4-gles3-tree.txt`, 91
@@ -1182,6 +1699,25 @@ non-comment lines): check that the fragment variant was built
 refused on a bad field means the face size word found no size in the job
 builder's table (`texture_units`, v3d_job.c). `docs/v3d-noseamless-cube.md`
 has the rest.
+
+glmark2 on the Pi 4 after v3d-rt-sample. The host harness
+(`tools/hostharness/glmark2/run.sh <glmark2> <out> v3d`, run at this commit
+on 2026-10-14, 3 frames per scene, 33 ok) shows the image path for
+one-level targets only: desktop's 800x600 and terrain's 256x256 targets
+print "is sampled from its render image (...): no tiled copy". The Linux OSAL
+has no TFU (`src/osal/linux.c`, "What is not"), so there refract's and
+terrain's glGenerateMipmap stay on the CPU, the CPU filter moves the stamp,
+and refract's tiled-copy high-water stays at 19,742,720 bytes (its
+7,684,096-byte depth copy and the colour chain copied again): the TFU chain
+is tested on the board only. The "render images: ..." shutdown line is not
+printed in either place, because glmark2 ends without tearing the context
+down. On the board, the glmark2 image's console must show "the TFU made the
+11-level chain of a 1600x1200 render image" in refract (the 10-level
+800x600 one in terrain), no "tiled copy" line naming a colour render
+target, and 33 / 0 / 0. Terrain's remaining CPU cost is still unexplained:
+on the host its tiled-copy high-water climbs to 12,433,408 bytes before its
+first frame ends, and which textures those copies are (uploads, or targets
+sampled before their first render) is not read from the console.
 
 ### AM62P (`BOARD_BOOT=uboot-mmc`; `BOARD_UART` set; `driver/src/fw/pvr_fw_blob.h` in the checkout)
 
@@ -1226,6 +1762,32 @@ GPU memory`; the tally's "GL errors raised" reads `15 or more` and does not
 name the scene. The console is the bridge's main_uart0 port, not the lease's
 mcu_uart0 port.
 
+The panel must be seen before any further AM62P display result is trusted.
+The black-panel diagnosis, from Lepton (the document camera, `/dev/video2`):
+build `gl_triangle` with `CONFIG_PVR_SAMPLE_DISPLAY_FILL=0xffff0000`,
+`CONFIG_PVR_SAMPLE_DISPLAY_DUMP=y` and `CONFIG_PVR_SAMPLE_HOLD_SECONDS=40`
+(the `west build` line in
+`tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`, "Board
+procedure"), kexec it and photograph the panel 15-20 s after the jump; the
+console side was already read on 2026-10-15 (registers equal to Linux's, DSI
+streaming, bridge clean) and only needs its `sn65dsi8x IRQ_STAT` and `dss
+stats` lines re-checked. Red panel: the path is fine; the owner's black panel
+is the application plane or the image/hold they ran, so repeat with the
+triangle alone (`DISPLAY_FILL=0`) and photograph it. Black panel: the fault is
+below the registers; bisect the note's table one line at a time ((a), (b)
+first), each change with its host tests, until the fill shows. Record the
+photos in the note.
+
+At `4e62d171` the machine environment's `BOARD_UART` was the main_uart0 port;
+`tools/am62p_netboot_uart.py probe` plus a raw read showing the `login:`
+prompt is how to confirm it before the first image. A gles3 stage 1 for the
+AM62P is not the `DEQP_WORK` the farm copies (that one is GLES2): build one
+with `tools/cts/cts-build-zephyr.sh MODULE=gles3` first.
+
+Stage 2: the AM62P common set at a commit containing `504d4fae`, SV repeated.
+Pi 4 and i.MX8MP: nothing for stage 2 until the picture check of item 1 of
+`docs/investigations/stage2-bench-gap.md` exists.
+
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
 `32778b57` row.
@@ -1248,6 +1810,29 @@ Expected: combined mustpass 0 fail, the `fail` column of all 17 image rows
 moves from Pass to anything else is a regression: bisect it first. Time:
 at most about 11 min an image, 18 images.
 
+pvr-msaa-split, after the GLES2 ms4 row, on the ms4 image
+(`rgba8888d24s8ms4`). One measurement decides it, in
+`driver/tools/pvrlab/gl_test.c` as a new case next to 16 (the 4x diagonal
+triangle) and 173 (`splitzs`):
+
+1. Clear black. Draw case 16's white triangle (its hypotenuse the window
+   diagonal) into the 4x pbuffer. `glFinish()` (the frame splits: kick 1
+   stores the samples). Draw the same triangle again, `glReadPixels`.
+2. Expected: the pixels on the diagonal read `0x7f` (two of four samples
+   white), interior `0xff`, exterior `0x00`, the same picture as one
+   unsplit draw. The console shows `kick 1: ... 1 draws, 0 quads, samples`
+   and `kick 2: ... rt 1, 1 draws, 1 quads, samples`.
+3. The readings that name a wrong choice: `0xbf` on the diagonal means the
+   store held the resolved colour in every sample (the unresolved layout
+   is not the `smpcnt` image over the target's stride: next, a 2w x 2h
+   store with twice the pitch, the ZLS's 2x2 spread); `0xff` or `0x00` on
+   the diagonal means every instance read one sample (the per-sample fetch
+   needs the sample number: `gl_SampleID` in the load shader, SMP `sno`);
+   a BIF fault or a hang on kick 1 means the second emit's address or
+   extent is wrong (the kick log's `pbe1` words).
+4. Then the ms4 row again (`tools/cts/am62p-ms4-tree.txt`): 16 / 16
+   expected, as on `452d6c31`.
+
 dEQP-GLES3 (the tree ran on `ad2b5ed`; "State of main"). Next, by size:
 
 - the 11 slow `texture.filtering.3d.*_linear_mipmap_linear` mustpass cases,
@@ -1265,8 +1850,11 @@ dEQP-GLES3 (the tree ran on `ad2b5ed`; "State of main"). Next, by size:
   `RUN_BOUND=900 RETURN_BOUND=240`; the commands and the expected output
   per hypothesis are in section 7 of
   `tools/cts/log/investigations/pvr-3d-mipmap-hang.md`;
-- image 7's tail (Known defects): re-run image 7 (`TREE_ROWS=6`) after the
-  non-indexed draw is cut into pieces;
+- image 7's tail (Known defects): re-run image 7 (`TREE_ROWS=6`, line 14 of
+  `tools/cts/am62p-gles3-tree.txt`) now that the non-indexed draw is cut
+  into pieces. It should run to its end and give its 1,397 missing cases a
+  result. Check the shell log for any "does not fit an empty frame" or
+  `index_base_addrlsb` line;
 - the failing groups, by size: texture 1,752 (and 1,646 NotSupported),
   fragment_ops 1,109, fbo 872, transform_feedback 640 (191 NotSupported),
   fragment_out 595, shaders 412. The capture, blit and sRGB rows below are
@@ -1292,8 +1880,9 @@ with an integer attachment beside another stay refused by name.
 
 ES 3.0 sRGB (`docs/es3-srgb.md`): gl_test 204 passes (above). The dEQP-GLES3
 rows of `tools/cts/am62p-gles3-tree.txt` that hold sRGB cases have not run
-beyond rows 1, 2 and 4: run `TREE_ROWS=1-4,18,19,21,22` minus those, against
-the `c4ccc966` records (`records/am62p/deqp-gles3-c4ccc966`):
+beyond rows 1, 2 and 4 and (`4e62d171`) 3, 6, 18, 21 and 22 (row 3 passes
+1,152 of 1,152): only row 19 and the images 20 and 21 (hang) are left; the
+command below was `TREE_ROWS=1-4,18,19,21,22`, against the `c4ccc966` records (`records/am62p/deqp-gles3-c4ccc966`):
 
 ```sh
 DEQP_MODULE=gles3 DEQP_WORK=<gles3 stage 1> \

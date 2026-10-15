@@ -12,6 +12,7 @@
 #include "yakogl_board.h"
 #include "yakogl_record.h"
 #include "board_internal.h"
+#include "sample_glue.h"
 
 #ifdef CONFIG_YAKOGL_SHADERC_ONLINE
 int shc_online_keep_stats(size_t *in_use, size_t *peak); /* gles_shaderc.h */
@@ -96,6 +97,10 @@ void osal_zephyr_diag_print(void);
 /* The hold and the reset after a run's verdict. */
 static FUNC_NORETURN void board_hold_and_reset(int hold)
 {
+	/* The display's counters around the hold, and the diagnosis knobs of
+	 * the AM62P (the known-colour fill, the register dump): sample_glue.c,
+	 * the same lines pvr_sample_finish prints; nothing on the other boards. */
+	pvr_sample_before_hold();
 	printk("board: holding %d s, then the reset\n", hold);
 	/* The watchdog feeders are timers: they feed through the hold, up to
 	 * CONFIG_YAKOGL_BOARD_LIFETIME_S, while this says it is alive. */
@@ -103,6 +108,7 @@ static FUNC_NORETURN void board_hold_and_reset(int hold)
 		board_watchdog_feed();
 		k_sleep(K_SECONDS(1));
 	}
+	pvr_sample_after_hold();
 	board_reset();
 }
 

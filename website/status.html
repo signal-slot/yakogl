@@ -111,7 +111,13 @@ in e17fb6a7; image 1 on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
 <li><strong>PowerVR: glmark2 shadow and refract sampled a stale depth texture</strong>
 (pvr-depth-resolve). Fixed; the AM62P's glmark2 run of 2026-10-11 has no failed depth
 resolve.</li>
-<li><strong>i.MX8MP: gl_test case 10 fails about one run in three</strong>
+<li><strong>i.MX8MP: 46 dEQP-GLES2 <code>fbo</code> cases fail</strong> in the 835cf9cc tree
+(2026-10-14), all <code>GL_BGRA_EXT</code> renderbuffers: the report-es2 allowlist names
+<code>GL_BGRA8_EXT</code> but not the unsized <code>GL_BGRA_EXT</code>. Not fixed yet.</li>
+<li><strong>i.MX8MP: gl_test case 44 fails</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/6">#6</a>), an RGBA16F target layout
+defect, on cd738b1a (2026-10-14).</li>
+<li><strong>i.MX8MP: gl_test case 10 failed about one run in three</strong> on 2026-10-10
 (<a href="https://github.com/signal-slot/yakogl/issues/9">#9</a>) and case 2 intermittently
 (<a href="https://github.com/signal-slot/yakogl/issues/25">#25</a>). Cause not found.</li>
 <li><strong>i.MX8MP: 4x MSAA, gl_test case 16</strong>

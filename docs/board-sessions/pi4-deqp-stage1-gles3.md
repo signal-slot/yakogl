@@ -4,9 +4,9 @@
 
 Host only. Nothing was run on or sent to a board.
 
-**Status: built on 2026-10-14 from main `cd738b1` on the ccfarm node `Lepton`.** Stage 1 and image A1
+**Status: built on 2026-10-14 from main `cd738b1` on the ccfarm worker node.** Stage 1 and image A1
 were built from scratch in this session (both rc=0). The artefacts live in that node's
-`$CCFARM_DEPS_DIR` (`/home/tasuku/.local/share/ccfarm/deps/yakogl`). They are not in the repository and
+`$CCFARM_DEPS_DIR`. They are not in the repository and
 not on other nodes; on another machine run the commands below to make them. Only A1 was built: that is
 enough to prove the GLES3 link works. The other 90 images were not built.
 
@@ -73,7 +73,7 @@ DEQP_WORK=$S/work DEQP_MODULE=gles3 \
     tools/cts/pi4-deqp-images.sh tools/cts/pi4-gles3-tree.txt $S/img A1 > $S/logs/images.log 2>&1
 ```
 
-Timing on `Lepton` (64 threads): stage 1 02:51:46 to 02:53:42, A1 02:53:42 to 02:54:41 (JST).
+Timing on the worker node (64 threads): stage 1 02:51:46 to 02:53:42, A1 02:53:42 to 02:54:41 (JST).
 
 ## Result (paths under `D`, read with `ls -l` and `sha256sum` after the build)
 

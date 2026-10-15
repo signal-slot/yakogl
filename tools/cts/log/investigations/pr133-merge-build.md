@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PR #133: origin/work/int-pr49 + origin/main builds the three gl_test images
 
 Date: 2026-10-12. Host-only check (no board). Nothing was pushed.

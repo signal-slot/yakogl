@@ -46,7 +46,7 @@ OFF(v3d_cl, gpu, 8);
 OFF(v3d_cl, used, 16);
 OFF(v3d_cl, overflow, 20);
 OFF(v3d_cl, bad_field, 21);
-SZ(v3d_job_target, 68);
+SZ(v3d_job_target, 100);
 OFF(v3d_job_target, rgb565, 20);
 OFF(v3d_job_target, rts, 24);
 OFF(v3d_job_target, rt, 28);
@@ -54,6 +54,11 @@ OFF(v3d_job_target, msaa, 52);
 OFF(v3d_job_target, ms_address, 56);
 OFF(v3d_job_target, ms_memory_format, 60);
 OFF(v3d_job_target, ms_height_in_ub, 64);
+OFF(v3d_job_target, uif_address, 68);
+OFF(v3d_job_target, uif_memory_format, 72);
+OFF(v3d_job_target, uif_height_in_ub, 76);
+OFF(v3d_job_target, typed, 80);
+OFF(v3d_job_target, rt_format, 84);
 SZ(v3d_job_stencil_face, 28);
 SZ(v3d_job_state, 188);
 OFF(v3d_job_state, scissor, 24);
@@ -127,8 +132,9 @@ OFF(v3d_job_draw, prim, 76);
 OFF(v3d_job_draw, indexed, 88);
 OFF(v3d_job_draw, index_type, 92);
 OFF(v3d_job_draw, index_offset, 104);
-SZ(v3d_job_clear, 68);
+SZ(v3d_job_clear, 132);
 OFF(v3d_job_clear, s_s8, 64);
+OFF(v3d_job_clear, clear_rt, 68);
 OFF(v3d_job_clear, load_rt, 46);
 OFF(v3d_job_clear, rgba8_rt, 52);
 _Static_assert(V3D_TEX_TILING_LINEARTILE == 1 && V3D_TEX_TILING_UIF_NO_XOR == 4 &&
@@ -152,16 +158,29 @@ OFF(v3d_job_clear, s_load, 44);
 OFF(v3d_job_clear, s_store, 45);
 OFF(v3d_job_clear, rgba8, 4);
 OFF(v3d_job_clear, z, 8);
-SZ(v3d_job, 832);
-OFF(v3d_job, pack, 104);
+SZ(v3d_job, 864);
+OFF(v3d_job, pack, 136);
 SZ(v3d_job_pack, 728);
 OFF(v3d_job_pack, valid, 4);
 OFF(v3d_job_pack, key, 8);
 OFF(v3d_job_pack, n, 712);
 _Static_assert(V3D_PACK_GROUPS == 11 && V3D_PACK_KEY_MAX == 16, "ffi.rs carries these");
 OFF(v3d_job, t, 24);
-OFF(v3d_job, draws, 92);
-OFF(v3d_job, broken, 100);
+OFF(v3d_job, draws, 124);
+OFF(v3d_job, broken, 132);
+_Static_assert(V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI == 2 && V3D_OUTPUT_IMAGE_FORMAT_BGR565 == 7 &&
+		       V3D_OUTPUT_IMAGE_FORMAT_R32F == 11 && V3D_OUTPUT_IMAGE_FORMAT_RGBA32I == 12 &&
+		       V3D_OUTPUT_IMAGE_FORMAT_R32UI == 17 && V3D_OUTPUT_IMAGE_FORMAT_RGBA16F == 18 &&
+		       V3D_OUTPUT_IMAGE_FORMAT_R16F == 20 && V3D_OUTPUT_IMAGE_FORMAT_RGBA16I == 21 &&
+		       V3D_OUTPUT_IMAGE_FORMAT_R16UI == 26 && V3D_OUTPUT_IMAGE_FORMAT_RGBA8 == 27 &&
+		       V3D_OUTPUT_IMAGE_FORMAT_RGBA8I == 31 && V3D_OUTPUT_IMAGE_FORMAT_R8UI == 36,
+	       "the output image formats state.rs carries as numbers");
+_Static_assert(V3D_INTERNAL_TYPE_8I == 0 && V3D_INTERNAL_TYPE_8UI == 1 && V3D_INTERNAL_TYPE_8 == 2 &&
+		       V3D_INTERNAL_TYPE_16I == 4 && V3D_INTERNAL_TYPE_16UI == 5 && V3D_INTERNAL_TYPE_16F == 6 &&
+		       V3D_INTERNAL_TYPE_32I == 8 && V3D_INTERNAL_TYPE_32UI == 9 && V3D_INTERNAL_TYPE_32F == 10 &&
+		       V3D_INTERNAL_BPP_32 == 0 && V3D_INTERNAL_BPP_64 == 1 && V3D_INTERNAL_BPP_128 == 2 &&
+		       V3D_RENDER_TARGET_CLAMP_NONE == 0 && V3D_RENDER_TARGET_CLAMP_INT == 3,
+	       "the tile buffer's internal types, bpps and clamps state.rs carries as numbers");
 
 /* the constants ffi.rs carries as numbers */
 _Static_assert(V3D_QUNIFORM_CONSTANT == 0 && V3D_QUNIFORM_UNIFORM == 1 &&

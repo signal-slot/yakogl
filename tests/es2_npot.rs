@@ -223,6 +223,8 @@ const fn backend(name: &'static CStr, caps: Caps) -> YakoglBackend {
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     }
 }
 

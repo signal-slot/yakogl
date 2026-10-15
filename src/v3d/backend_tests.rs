@@ -240,12 +240,29 @@ unsafe extern "C" fn v3d_frame_tiling_rts(width: u32, height: u32, rts: u32, t: 
 /// v3d_frame_tiling_ms, job_check part 14): 32x32 for one RT.
 #[no_mangle]
 unsafe extern "C" fn v3d_frame_tiling_ms(width: u32, height: u32, rts: u32, msaa: bool, t: *mut V3dTiling) {
-    const SIZES: [(u32, u32); 5] = [(64, 64), (64, 32), (32, 32), (32, 16), (16, 16)];
+    // SAFETY: the backend's out-parameter, passed on.
+    unsafe { v3d_frame_tiling_bpp(width, height, rts, msaa, 0, t) }
+}
+
+/// ... and one step further per step of the largest internal bpp
+/// (v3d_frame.c v3d_frame_tiling_bpp, Mesa's v3d_choose_tile_size): 64 bpp
+/// one, 128 two, down to 8x8.
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling_bpp(
+    width: u32,
+    height: u32,
+    rts: u32,
+    msaa: bool,
+    max_bpp: u32,
+    t: *mut V3dTiling,
+) {
+    const SIZES: [(u32, u32); 7] = [(64, 64), (64, 32), (32, 32), (32, 16), (16, 16), (16, 8), (8, 8)];
     let idx = match rts {
         0 | 1 => 0,
         2 => 1,
         _ => 2,
-    } + if msaa { 2 } else { 0 };
+    } + if msaa { 2 } else { 0 }
+        + max_bpp.min(2) as usize;
     let (tw, th) = SIZES[idx];
     let tiles = V3dTiling {
         tile_w: tw,
@@ -497,15 +514,50 @@ fn platform_cpu(p: &mut Platform, gpu: u64, n: usize) -> *mut u8 {
 }
 
 /// The mock TFU: the job's rows copied from IIA (IIS texels apart) to IOA
-/// (the fake layout's raster rows), the texel size from the job's type.
+/// (the fake layout's raster rows), the texel size from the job's type. A
+/// mipmap job (DIMTW in IOA, `v3d_tex_tfu_pack_mipmap`'s fake) leaves level
+/// 0 and box-filters each level of the fake layout from the one above it,
+/// byte by byte, rounding half up as the GL core's filter does.
 fn tfu_run(p: &mut Platform, q: &crate::osal::OsalV3dTfu) {
     let cpp = match q.icfg >> 9 & 0x7f {
         V3D_TFU_TTYPE_R8 => 1,
         V3D_TFU_TTYPE_R16F => 2,
-        V3D_TFU_TTYPE_R32F => 4,
+        V3D_TFU_TTYPE_RGBA8 | V3D_TFU_TTYPE_R32F => 4,
         t => panic!("a TFU job of type {t}"),
     };
     let (w, h) = ((q.ios & 0xffff) as usize, (q.ios >> 16) as usize);
+    if q.ioa & V3D_TFU_IOA_DIMTW != 0 {
+        let levels = ((q.icfg >> 5) & 0xf) as usize + 1;
+        /* the fake layout: the levels back to back, smallest first, so
+         * level k is the sizes of the levels below it into the image */
+        let size = |k: usize| ((w >> k).max(1)) * ((h >> k).max(1)) * cpp;
+        let offset = |k: usize| (k + 1..levels).map(size).sum::<usize>();
+        let base = (q.iia & !0x3f) as u64 - offset(0) as u64;
+        for k in 1..levels {
+            let (sw, sh) = ((w >> (k - 1)).max(1), (h >> (k - 1)).max(1));
+            let (dw, dh) = ((w >> k).max(1), (h >> k).max(1));
+            let (sx, sy) = (if sw > 1 { 2 } else { 1 }, if sh > 1 { 2 } else { 1 });
+            let src = platform_cpu(p, base + offset(k - 1) as u64, size(k - 1)) as *const u8;
+            let dst = platform_cpu(p, base + offset(k) as u64, size(k));
+            for y in 0..dh {
+                for x in 0..dw {
+                    for c in 0..cpp {
+                        let mut sum = 0u32;
+                        for j in 0..sy {
+                            for i in 0..sx {
+                                // SAFETY: inside level k - 1 (platform_cpu checked its size).
+                                sum += u32::from(unsafe { *src.add(((y * sy + j) * sw + x * sx + i) * cpp + c) });
+                            }
+                        }
+                        let n = (sx * sy) as u32;
+                        // SAFETY: inside level k.
+                        unsafe { *dst.add((y * dw + x) * cpp + c) = ((sum + n / 2) / n) as u8 };
+                    }
+                }
+            }
+        }
+        return;
+    }
     let (src_row, dst_row) = (q.iis as usize * cpp, w * cpp);
     for y in 0..h {
         let from = platform_cpu(p, q.iia as u64 + (y * src_row) as u64, dst_row);
@@ -655,16 +707,29 @@ unsafe extern "C" fn v3d_tex_layout(w: u32, h: u32, levels: u32, cpp: u32, l: *m
         return false;
     }
     let mut out = V3dTexLayout { width: w, height: h, levels, cpp, ..V3dTexLayout::default() };
-    let mut off = 0;
+    /* level 0 on a 64-byte boundary, as the real layout puts it on a page
+     * (a TFU job and a texture state take its address with low flag bits):
+     * the smaller levels are shifted up by the pad, as Mesa's page
+     * alignment shifts every offset */
+    let below: u32 = (1..levels).map(|i| ((w >> i).max(1)) * ((h >> i).max(1)) * cpp).sum();
+    let mut off = below.next_multiple_of(64) - below;
     for i in (0..levels as usize).rev() {
         let (lw, lh) = ((w >> i).max(1), (h >> i).max(1));
-        out.slices[i] = V3dTexSlice {
-            offset: off,
-            stride: lw * cpp,
-            padded_height: lh,
-            size: lw * lh * cpp,
-            ..V3dTexSlice::default()
+        /* the tiling Mesa's v3d_setup_slices picks by the level's size for
+         * 4-byte texels (utile 4x4, UIF block 8x8): LT, UB-linear 1 or 2
+         * columns, else UIF without the XOR (the real one pads the height
+         * and may pick the XOR; this layout pads nothing) */
+        let tiling = if lw <= 4 || lh <= 4 {
+            V3D_TEX_TILING_LINEARTILE
+        } else if lw <= 8 {
+            2 /* UBLINEAR_1_COLUMN */
+        } else if lw <= 16 {
+            3 /* UBLINEAR_2_COLUMN */
+        } else {
+            V3D_TEX_TILING_UIF_NO_XOR
         };
+        out.slices[i] =
+            V3dTexSlice { offset: off, stride: lw * cpp, padded_height: lh, size: lw * lh * cpp, ub_pad: 0, tiling };
         off += lw * lh * cpp;
     }
     out.size = off;
@@ -718,6 +783,39 @@ unsafe extern "C" fn v3d_tex_tfu_pack(
         iia: src_gpu,
         iis: src_stride / l.cpp,
         ioa,
+        ios: l.height << 16 | l.width,
+        ..V3dTexTfuJob::default()
+    };
+    true
+}
+
+/// The fake layout's mipmap TFU job (v3d_tex.c v3d_tex_tfu_pack_mipmap's
+/// refusals): level 0 as the source and the destination, the levels after
+/// it in ICFG bits 5.., DIMTW in IOA; the mock TFU box-filters the fake
+/// layout's levels from it (`tfu_run`).
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_tfu_pack_mipmap(
+    l: *const V3dTexLayout,
+    ttype: u32,
+    image_gpu: u32,
+    j: *mut V3dTexTfuJob,
+) -> bool {
+    // SAFETY: the backend's live layout and job.
+    let (l, j) = unsafe { (&*l, &mut *j) };
+    let cpp = match ttype {
+        V3D_TFU_TTYPE_R8 => 1,
+        V3D_TFU_TTYPE_R16F => 2,
+        V3D_TFU_TTYPE_RGBA8 | V3D_TFU_TTYPE_R32F => 4,
+        _ => return false,
+    };
+    let level0 = image_gpu + l.slices[0].offset;
+    if l.levels < 2 || l.cpp != cpp || level0 & 0x3f != 0 {
+        return false;
+    }
+    *j = V3dTexTfuJob {
+        icfg: ttype << 9 | (l.levels - 1) << 5,
+        iia: level0,
+        ioa: level0 | V3D_TFU_IOA_DIMTW,
         ios: l.height << 16 | l.width,
         ..V3dTexTfuJob::default()
     };
@@ -3228,8 +3326,9 @@ fn a_program_reading_a_texture_size_gets_the_bindings_size() {
 }
 
 /// What the job builder cannot take is refused by name before anything is
-/// recorded: an attachment of another size, one that is not RGBA8, and a
-/// colour clear the quad would do (scissored), which writes RT 0 only.
+/// recorded: an attachment of another size, one of a format with no TLB
+/// row (the sRGB surface), and a colour clear the quad would do
+/// (scissored), which writes RT 0 only.
 #[test]
 fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     let rig = Rig::new();
@@ -3240,9 +3339,9 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     assert_eq!(draw(&d), -EINVAL);
     assert_eq!(rig.logs_with("colour attachments of different sizes"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
-    d.targets[1].format = GLES_SURF_RGBA16F;
+    d.targets[1].format = GLES_SURF_SRGB8_A8;
     assert_eq!(draw(&d), -EINVAL);
-    assert_eq!(rig.logs_with("a colour attachment past the first that is not RGBA8"), 1);
+    assert_eq!(rig.logs_with("a colour attachment past the first of a format the backend does not render"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
     d.clear_quad = true;
     assert_eq!(draw(&d), -EINVAL);
@@ -3816,6 +3915,534 @@ fn a_released_texture_frees_its_tiled_copy() {
     assert_eq!(draw(&sampling(&rig, t)), 0);
     v3d_texture_released(t.base_gpu + (1 << 20), 4096);
     assert_eq!(tiled().0, 1);
+}
+
+/* ---- render images (RtImage) ---------------------------------------------------- */
+
+/// A draw into texture `t`'s storage: an FBO whose colour attachment is `t`.
+fn render_into(rig: &Rig, t: &GlesTextureBind) -> GlesDraw {
+    let mut r = rig.draw();
+    (r.target_gpu, r.target_w, r.target_h) = (t.base_gpu, t.width, t.height);
+    r.viewport = [0, 0, t.width as i32, t.height as i32];
+    r
+}
+
+/// `v3d_rt_images`: (images live, their bytes, bindings sampled from an
+/// image, samples sent back to a copy by a CPU write, images not made for
+/// want of memory, chains the TFU made, chains written back).
+fn rt_images() -> (u32, u64, u32, u32, u32, u32, u32) {
+    let (mut l, mut b, mut d, mut c, mut n, mut m, mut r) = (0u32, 0u64, 0u32, 0u32, 0u32, 0u32, 0u32);
+    // SAFETY: live out-parameters.
+    unsafe { v3d_rt_images(&mut l, &mut b, &mut d, &mut c, &mut n, &mut m, &mut r) };
+    (l, b, d, c, n, m, r)
+}
+
+/// The render image the last job's target names: (level 0's address,
+/// memory format, height in UIF blocks); an address of 0 is none.
+fn last_uif(rig: &Rig) -> (u32, u32, u32) {
+    let t = rig.jobs().last().expect("a job").target;
+    (t.uif_address, t.uif_memory_format, t.uif_height_in_ub)
+}
+
+/// The render image the job before the last (a `frame`'s render, the last
+/// being its sample) stored: level 0's address, 0 for none.
+fn render_uif(rig: &Rig) -> u32 {
+    let jobs = rig.jobs();
+    jobs[jobs.len() - 2].target.uif_address
+}
+
+/// The last draw's unit 0 texture state: (its base address, its max level)
+/// (the fake packer's words 0 and 3).
+fn last_tex_state(rig: &Rig) -> (u32, u32) {
+    let w = words(rig, rig.draws().last().expect("a draw").tmu[0].tex_state, 4);
+    (w[0], w[3] & 0xffff)
+}
+
+fn last_tex_base(rig: &Rig) -> u32 {
+    last_tex_state(rig).0
+}
+
+/// Render into `t`, submit, and sample it with the render's kick: one
+/// frame of a render-to-texture scene. Returns what the sampling job's
+/// draw read as its texture base.
+fn frame(rig: &Rig, t: &mut GlesTextureBind) -> u32 {
+    assert_eq!(draw(&render_into(rig, t)), 0, "{:?}", rig.gl.logs());
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(draw(&sampling(rig, *t)), 0, "{:?}", rig.gl.logs());
+    let base = last_tex_base(rig);
+    assert_eq!(v3d_flush(), 0);
+    base
+}
+
+/// glGenerateMipmap as the GL core delegates it: through the V3D table's
+/// entry, with the chain's levels.
+fn generate(t: &GlesTextureBind, levels: u32) -> i32 {
+    let f = yakogl_backend_v3d.generate_mipmap.expect("the V3D table has generate_mipmap");
+    // SAFETY: `t` is live.
+    unsafe { f(t, levels) }
+}
+
+/// The GL core asking for the chain back, through the V3D table's entry.
+fn chain_back(t: &GlesTextureBind, levels: u32) {
+    let f = yakogl_backend_v3d.return_mipmap_chain.expect("the V3D table has return_mipmap_chain");
+    // SAFETY: `t` is live.
+    unsafe { f(t, levels) }
+}
+
+/// RESULTS option (a): a texture rendered into and sampled every frame is
+/// sampled from its render image, which the rendering job stores in the
+/// TMU's layout, from the second render on: no tiled copy is made or kept
+/// for it, and no tiling runs. The first render stores no image (nothing
+/// has sampled the target yet), the first sample is a copy and registers
+/// the target, the second render stores RT 0 into the image (UIF, no XOR,
+/// the padded height in UIF blocks) as well as into the storage, and the
+/// second sample's texture state points at the image.
+#[test]
+fn a_render_target_is_sampled_from_its_render_image_from_the_second_render_on() {
+    let rig = Rig::new();
+    rig.init();
+    /* 64x64: UIF in Mesa's layout (a target under 32 texels wide is UB-linear
+     * or LT, which the TLB stores with a height of 0) */
+    let mut t = texture(0, 64, 64, 1);
+    t.content_gen = 3;
+    /* render 1: nothing has sampled the target, so no image */
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(last_uif(&rig), (0, 0, 0), "a target nothing has sampled gets no image");
+    /* sample 1: the copy, and the registration */
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!((tilings(), tiled().0), (1, 1), "the first sample after a render is a copy");
+    assert_eq!(rt_images(), (0, 0, 0, 0, 0, 0, 0), "registered, no image yet");
+    /* render 2: the job stores RT 0 into the image too */
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    let (addr, fmt, hub) = last_uif(&rig);
+    assert_ne!(addr, 0, "the second render stores the image");
+    assert_eq!(addr % 4096, 0, "level 0 of a one-level layout at a page, as a Mesa BO");
+    assert_eq!(fmt, V3D_TEX_TILING_UIF_NO_XOR);
+    assert_eq!(hub, 8, "64 padded rows are 8 UIF blocks of 8 (the fake layout pads nothing)");
+    assert_eq!(rt_images().0, 1);
+    assert_eq!(tiled().0, 0, "the render dropped the copy");
+    /* sample 2: the image, no copy */
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, t)), 0, "{:?}", rig.gl.logs());
+    assert_eq!(tilings(), n, "nothing tiled");
+    assert_eq!(tiled().0, 0, "no copy made");
+    assert_eq!(last_tex_state(&rig), (addr, 0), "the texture state's base is the render image, level 0 alone");
+    assert_eq!(rt_images().2, 1);
+    assert_eq!(rig.logs_with("sampled from its render image"), 1);
+    assert_eq!(v3d_flush(), 0);
+    /* every later frame the same: no tiling, no copy */
+    for _ in 0..3 {
+        assert_eq!(frame(&rig, &mut t), addr);
+    }
+    assert_eq!((tilings(), tiled().0), (n, 0));
+    assert_eq!(rt_images().2, 4);
+}
+
+/// A CPU write of the texels (a new stamp) after the render: the image no
+/// longer holds what the storage holds, so the sample goes back to a copy
+/// (tiled from the storage), and so does every sample until a job renders
+/// into the target again and stores the image under the new stamp.
+#[test]
+fn a_cpu_write_after_the_render_sends_the_sample_back_to_the_copy_until_the_next_render() {
+    let rig = Rig::new();
+    rig.init();
+    let mut t = texture(0, 16, 16, 1);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    let addr = frame(&rig, &mut t);
+    assert_ne!(addr, 0);
+    assert_eq!(rt_images().2, 1, "the second frame read the image");
+    let n = tilings();
+    /* the CPU writes a sub-image: a new stamp, the same storage */
+    t.content_gen = 4;
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr, "a copy, not the image");
+    assert_eq!((tilings(), tiled().0), (n + 1, 1), "tiled from the storage, kept");
+    assert_eq!(rt_images().3, 1, "counted as a CPU write");
+    assert_eq!(v3d_flush(), 0);
+    /* still the copy without a render; the kept copy is found, not tiled again */
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr);
+    assert_eq!(tilings(), n + 1);
+    assert_eq!(v3d_flush(), 0);
+    /* the next render stores the image under the new stamp: the image again */
+    assert_eq!(frame(&rig, &mut t), addr);
+    assert_eq!((tilings(), tiled().0), (n + 1, 0));
+    assert_eq!(rt_images().2, 2);
+}
+
+/// The 2x2 box filter of `w` x `h` RGBA8 rows `src` (rows packed), rounding
+/// half up as the GL core's glGenerateMipmap and the mock TFU do.
+fn box_filtered(src: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let (dw, dh) = ((w / 2).max(1), (h / 2).max(1));
+    let mut out = vec![0u8; dw * dh * 4];
+    for y in 0..dh {
+        for x in 0..dw {
+            for c in 0..4 {
+                let at = |j: usize, i: usize| src[((y * 2 + j) * w + x * 2 + i) * 4 + c] as u32;
+                out[(y * dw + x) * 4 + c] = ((at(0, 0) + at(0, 1) + at(1, 0) + at(1, 1) + 2) / 4) as u8;
+            }
+        }
+    }
+    out
+}
+
+/// A render target sampled with a mipmap filter (glmark2's refract and
+/// terrain) keeps the copy until its chain is the image's: the image is laid
+/// out with the chain, a render stores its level 0, and glGenerateMipmap,
+/// delegated to the backend, submits the open render, waits for it and has
+/// the TFU make levels 1.. from level 0 in one job (DIMTW, the levels after
+/// the first in ICFG, the texture's real type). The next mip-filtered sample
+/// then reads the image, level 0 as its base and the chain as its levels;
+/// nothing is tiled. When the GL core asks for the chain back, the storage's
+/// levels 1.. hold the filtered texels and the sample is a copy again.
+#[test]
+fn a_mip_filtered_render_target_reads_the_image_once_the_tfu_made_its_chain() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    assert_eq!(texture::levels_sampled(&t), 3);
+    /* frame 1: no image; the copy of the CPU's 3-level chain; registered
+     * with the 3 levels */
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 0);
+    /* frame 2: the image, 3 levels, level 0 stored; the sample is still a
+     * copy: the image's levels below 0 are nobody's */
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    let (addr, fmt, hub) = last_uif(&rig);
+    assert_ne!(addr, 0);
+    assert_eq!((fmt, hub), (3, 0), "16 wide: UB-linear 2 columns, no height word");
+    let image_bytes = rt_images().1;
+    assert!(image_bytes >= (16 * 16 + 8 * 8 + 4 * 4) * 4, "the image holds the chain");
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr, "the chain is the CPU's: a copy");
+    assert_eq!(tilings(), n + 1);
+    assert_eq!(v3d_flush(), 0);
+    /* frame 3: the render is left open, as glmark2's is at glGenerateMipmap;
+     * level 0 of the image holds a known picture (what the TLB stored) */
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    let level0: Vec<u8> = (0..16 * 16 * 4).map(|i| (i * 7 % 251) as u8).collect();
+    with_platform(|p| {
+        let cpu = platform_cpu(p, u64::from(addr), level0.len());
+        // SAFETY: inside the image's allocation (platform_cpu checked).
+        unsafe { core::ptr::copy_nonoverlapping(level0.as_ptr(), cpu, level0.len()) };
+    });
+    let runs = with_platform(|p| p.tfu_runs.len());
+    assert_eq!(generate(&t, 3), 1, "{:?}", rig.gl.logs());
+    assert!(!g().j.open, "the open render was submitted first");
+    let run = with_platform(|p| p.tfu_runs.clone());
+    assert_eq!(run.len(), runs + 1, "one TFU job");
+    let j = run[runs];
+    assert_eq!(j.ioa & V3D_TFU_IOA_DIMTW, V3D_TFU_IOA_DIMTW, "level 0 is not written");
+    assert_eq!((j.ioa & !0x3f, j.iia), (addr, addr), "from level 0 of the image into the image");
+    assert_eq!((j.icfg >> 5) & 0xf, 2, "two levels after the first");
+    assert_eq!(j.icfg >> 9 & 0x7f, V3D_TFU_TTYPE_RGBA8, "the texture's type, not a byte copy");
+    assert_eq!(j.ios, 16 << 16 | 16);
+    assert_eq!(rt_images().5, 1);
+    assert_eq!(rig.logs_with("glGenerateMipmap filters nothing"), 1);
+    /* the fake layout: level 1 (8x8) right below level 0, level 2 below it */
+    let level1 = box_filtered(&level0, 16, 16);
+    let level2 = box_filtered(&level1, 8, 8);
+    assert_eq!(rig.gpu_bytes(addr - 256, 256), level1, "level 1 is the box filter of level 0");
+    assert_eq!(rig.gpu_bytes(addr - 256 - 64, 64), level2, "level 2 of level 1");
+    /* the sample reads the image through its chain, no tiling */
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, t)), 0, "{:?}", rig.gl.logs());
+    assert_eq!(last_tex_state(&rig), (addr, 2), "the image's level 0, max level 2");
+    assert_eq!((tilings(), tiled().0), (n, 0));
+    assert_eq!(v3d_flush(), 0);
+    /* a render keeps the chain (GL's levels 1.. stay until the next
+     * glGenerateMipmap): the next frame reads the image still */
+    assert_eq!(frame(&rig, &mut t), addr);
+    assert_eq!(tilings(), n);
+    /* the GL core asks for the chain back: the storage's level 1 holds the
+     * filtered texels at the GL core's pitch, and the next sample is a copy */
+    chain_back(&t, 3);
+    assert_eq!(rt_images().6, 1);
+    let (off, pitch, rows) = texture::gl_level(16, 16, 1);
+    assert_eq!((pitch, rows), (8, 8));
+    let storage = rig.gpu_bytes(t.base_gpu as u32 + off, 8 * 8 * 4);
+    assert_eq!(storage, level1, "the storage's level 1 is the chain's");
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr, "a copy again");
+    assert_eq!(tilings(), n + 1);
+    assert_eq!(v3d_flush(), 0);
+    chain_back(&t, 3);
+    assert_eq!(rt_images().6, 1, "nothing to give back twice");
+}
+
+/// glGenerateMipmap stays the GL core's (the hook answers 0) for a texture
+/// with no image: one never sampled after a render, one whose stamp moved
+/// since its image was stored, one whose image has fewer levels than the
+/// chain (laid out again for the next render), one on an OSAL without the
+/// TFU, and one whose TFU job failed (counted, logged once).
+#[test]
+fn glgeneratemipmap_stays_on_the_cpu_without_an_image_the_tfu_or_the_stamp() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    assert_eq!(generate(&t, 3), 0, "never sampled after a render: not registered");
+    frame(&rig, &mut t);
+    assert_eq!(generate(&t, 3), 0, "registered, but no render since: no image");
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 1);
+    t.content_gen = 4;
+    assert_eq!(generate(&t, 3), 0, "a stamp the image was not stored under");
+    t.content_gen = 3;
+    assert_eq!(generate(&t, 4), 0, "more levels than the image was laid out with");
+    assert_eq!(rt_images().0, 0, "the image went, to be laid out with the chain");
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 1, "the next render made the 4-level image");
+    assert_eq!(generate(&t, 4), 1);
+    assert_eq!(rt_images().5, 1);
+    drop(rig);
+    /* no TFU: the CPU's chain, as before */
+    let rig = Rig::new();
+    rig.init();
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 1);
+    assert_eq!(generate(&t, 3), 0, "an OSAL without the TFU");
+    assert_eq!(with_platform(|p| p.tfu_runs.len()), 0);
+    drop(rig);
+    /* a TFU job that fails: 0, the GL core filters, logged once */
+    let rig = tfu_rig(Some(1), -5);
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    frame(&rig, &mut t);
+    assert_eq!(generate(&t, 3), 0);
+    assert_eq!(generate(&t, 3), 0);
+    assert_eq!(rt_images().5, 0);
+    assert_eq!(rig.logs_with("the TFU did not make the 3-level chain"), 1);
+    let image = render_uif(&rig);
+    assert_ne!(image, 0);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), image, "a copy");
+}
+
+/// A texture registered from a sample without a mipmap filter has a
+/// one-level image; sampled with one later, it is laid out again with the
+/// chain by the next render (a copy meanwhile).
+#[test]
+fn a_sample_with_more_levels_lays_the_image_out_again() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut chain = texture(0, 16, 16, 3);
+    chain.content_gen = 3;
+    let mut one = GlesTextureBind { mip_filter: 0, mip_levels: 1, ..chain };
+    frame(&rig, &mut one);
+    let addr = frame(&rig, &mut one);
+    assert_ne!(addr, 0);
+    let bytes = rt_images().1;
+    chain.target_kick = one.target_kick;
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, chain)), 0);
+    assert_ne!(last_tex_base(&rig), addr, "a copy: the image has one level");
+    assert_eq!(tilings(), n + 1);
+    assert_eq!(rt_images().0, 0, "the one-level image went");
+    assert_eq!(v3d_flush(), 0);
+    frame(&rig, &mut chain);
+    assert!(rt_images().1 > bytes, "the next render made the chain's image");
+    assert_eq!(generate(&chain, 3), 1);
+    let image = frame(&rig, &mut chain);
+    assert_eq!(image, render_uif(&rig), "sampled from it");
+    /* and the one-level view reads the same image, level 0 alone */
+    one.target_kick = chain.target_kick;
+    assert_eq!(draw(&sampling(&rig, one)), 0);
+    assert_eq!(last_tex_state(&rig), (image, 0));
+    assert_eq!(v3d_flush(), 0);
+}
+
+/// glGenerateMipmap delegated while the render is in flight (the async
+/// swap): the hook waits for it before the TFU reads level 0.
+#[test]
+fn a_delegated_glgeneratemipmap_waits_for_the_render_in_flight() {
+    let rig = Rig::new();
+    with_platform(|p| (p.async_jobs, p.tfu_min) = (true, Some(1)));
+    rig.init();
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    complete_jobs();
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert!(v3d_kick_pending(t.target_kick), "the render runs");
+    let (_, waits) = counters();
+    assert_eq!(generate(&t, 3), 1);
+    assert_eq!(counters().1, waits + 1, "waited for it, once");
+    assert!(!v3d_kick_pending(t.target_kick));
+}
+
+/// The textures that keep the copy, by name: one with no stamp (an
+/// EGLImage's) and one nothing rendered into. Neither gets an image.
+#[test]
+fn an_unstamped_and_an_unrendered_texture_keep_the_copy() {
+    let rig = Rig::new();
+    rig.init();
+    let mut ext = texture(0, 16, 16, 1);
+    ext.content_gen = 0;
+    frame(&rig, &mut ext);
+    frame(&rig, &mut ext);
+    assert_eq!(rt_images(), (0, 0, 0, 0, 0, 0, 0), "an unstamped texture is never registered");
+    let mut plain = texture(0, 16, 16, 1);
+    plain.content_gen = 6;
+    let (n, kept) = (tilings(), tiled().0);
+    assert_eq!(draw(&sampling(&rig, plain)), 0);
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(draw(&sampling(&rig, plain)), 0);
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(rt_images(), (0, 0, 0, 0, 0, 0, 0), "a texture no draw rendered into is not registered");
+    assert_eq!((tilings(), tiled().0), (n + 1, kept + 1), "its kept copy, as before");
+}
+
+/// texture_released frees the image with the copies: the storage's address
+/// may be handed out again.
+#[test]
+fn a_released_render_target_frees_its_image() {
+    let rig = Rig::new();
+    rig.init();
+    let mut t = texture(0, 16, 16, 1);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 1);
+    let before = with_platform(|p| p.frees.len());
+    v3d_texture_released(t.base_gpu, texture::gl_bytes(&t) as u64);
+    assert_eq!(rt_images().0, 0);
+    assert_eq!(with_platform(|p| p.frees.len()), before + 1, "the image is freed");
+    /* the storage comes back under another texture: a copy, then an image of its own */
+    t.content_gen = 9;
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 0, "registered again, no image yet");
+    frame(&rig, &mut t);
+    assert_eq!(rt_images().0, 1);
+}
+
+/// No GPU memory for the image: the render stores the raster target alone
+/// (logged once), the sample tiles its copy as before, and the image is
+/// made by the next render once memory is there.
+#[test]
+fn no_memory_for_the_render_image_keeps_the_copy_path() {
+    let rig = Rig::new();
+    rig.init();
+    let mut t = texture(0, 64, 64, 1);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    /* the image is the layout's 16384 bytes + 4096; a kept copy asks the same */
+    with_platform(|p| p.fail_alloc_from = Some(16384 + 4096));
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(last_uif(&rig).0, 0, "no image: the raster store alone");
+    assert_eq!(rt_images().4, 1);
+    assert_eq!(rig.logs_with("no GPU memory for the 64x64 render image"), 1);
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_eq!(tilings(), n + 1, "tiled (into the arena: the copy found no memory either)");
+    assert_eq!(v3d_flush(), 0);
+    with_platform(|p| p.fail_alloc_from = None);
+    let addr = frame(&rig, &mut t);
+    assert_ne!(addr, 0, "the next render made the image, and the sample read it");
+    let jobs = rig.jobs();
+    assert_eq!(jobs[jobs.len() - 2].target.uif_address, addr, "stored by the render's job");
+    assert_eq!(rt_images().0, 1);
+}
+
+/// RT_IMAGES slots: one more render target gives up the least recently
+/// used, whose next sample is a copy again (and registers it again). A
+/// chain the evicted image held goes back into the storage first.
+#[test]
+fn the_least_recently_used_render_image_goes_when_the_table_is_full() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut ts: Vec<GlesTextureBind> =
+        (0..=RT_IMAGES as u32).map(|i| GlesTextureBind { content_gen: 100 + i, ..texture(0, 16, 16, 3) }).collect();
+    for t in ts.iter_mut().take(RT_IMAGES) {
+        frame(&rig, t);
+        frame(&rig, t);
+    }
+    assert_eq!(rt_images().0 as usize, RT_IMAGES, "every slot holds an image");
+    assert_eq!(generate(&ts[0], 3), 1, "the first texture's chain is the TFU's");
+    /* the others used since: the first is the least recently used again */
+    for t in ts.iter_mut().take(RT_IMAGES).skip(1) {
+        frame(&rig, t);
+    }
+    let direct = rt_images().2;
+    /* one more: registered in the first texture's slot (the least recently
+     * used), whose chain goes back into its storage */
+    frame(&rig, &mut ts[RT_IMAGES]);
+    assert_eq!(rt_images().0 as usize, RT_IMAGES - 1, "the first texture's image went");
+    assert_eq!(rt_images().6, 1, "its chain was written back");
+    frame(&rig, &mut ts[RT_IMAGES]);
+    assert_eq!(rt_images().0 as usize, RT_IMAGES);
+    assert_eq!(rt_images().2, direct);
+    assert_eq!(generate(&ts[RT_IMAGES], 3), 1);
+    let image = frame(&rig, &mut ts[RT_IMAGES]);
+    assert_eq!(image, render_uif(&rig));
+    assert_eq!(rt_images().2, direct + 1);
+    /* the first texture: a copy again (and registered again, in the second's slot) */
+    let n = tilings();
+    frame(&rig, &mut ts[0]);
+    assert_eq!(tilings(), n + 1, "the first texture is a copy again");
+    assert!(rt_images().0 as usize <= RT_IMAGES);
+}
+
+/// A render into the same storage as another target (another size or pitch
+/// at the texture's address, a level above 0 attached): the raster changed
+/// under the image, which no longer holds what the storage holds, so the
+/// next sample is a copy until the target itself is rendered again; a chain
+/// the image held goes back into the storage before the job that writes
+/// the storage is recorded.
+#[test]
+fn a_render_into_another_view_of_the_storage_invalidates_the_image() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut t = texture(0, 16, 16, 3);
+    t.content_gen = 3;
+    frame(&rig, &mut t);
+    frame(&rig, &mut t);
+    assert_eq!(generate(&t, 3), 1);
+    let addr = frame(&rig, &mut t);
+    assert_ne!(addr, 0);
+    /* an 8x8 target at the same address */
+    let mut small = t;
+    (small.width, small.height, small.stride_texels) = (8, 8, 8);
+    assert_eq!(draw(&render_into(&rig, &small)), 0);
+    assert_eq!(rt_images().6, 1, "the chain went back into the storage before the render");
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(last_uif(&rig).0, 0, "no image of its own for the view");
+    let n = tilings();
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr, "a copy: the image is not what the storage holds");
+    assert_eq!(tilings(), n + 1);
+    assert_eq!(v3d_flush(), 0);
+    /* the target's own render stores level 0 again; the chain is the GL
+     * core's until the next glGenerateMipmap, so a mip-filtered sample is
+     * a copy, and a level-0 sample reads the image */
+    assert_eq!(draw(&render_into(&rig, &t)), 0);
+    t.target_kick = v3d_kick_id();
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(draw(&sampling(&rig, t)), 0);
+    assert_ne!(last_tex_base(&rig), addr);
+    assert_eq!(v3d_flush(), 0);
+    let one = GlesTextureBind { mip_filter: 0, mip_levels: 1, ..t };
+    assert_eq!(draw(&sampling(&rig, one)), 0);
+    assert_eq!(last_tex_state(&rig), (addr, 0));
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(generate(&t, 3), 1);
+    assert_eq!(frame(&rig, &mut t), addr);
 }
 
 /// At most TILED_ENTRIES copies: the least recently sampled goes, and the
@@ -4946,6 +5573,132 @@ fn an_rgb565_target_is_drawn_two_bytes_a_pixel() {
     let c = j.clear.unwrap();
     assert_eq!((c.force_alpha_1, c.r_b_swap), (true, false));
     assert_eq!(rig.draws()[0].st.colormask, 0x7);
+}
+
+/* ---- ES 3.0 colour formats (int-rt-v3d) ----------------------------------- */
+
+/// An integer colour target (RGBA8I) is a typed job: RT 0 loaded and stored
+/// as output image format RGBA8I at 4 bytes a pixel, and its
+/// glClearBufferiv (the raw integers in `clear_rgba`) reaches the job as
+/// v3d_tlb_clear's one 8I word, a byte a channel; the untyped RGBA8 word
+/// is the same bits, never read. Revert check: with `typed` false the job
+/// builder would load RGBA8 and clear with pack_rgba8 of the raw bits.
+#[test]
+fn an_integer_target_is_a_typed_job_cleared_with_its_own_words() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    d.target_format = GLES_SURF_RGBA8I;
+    d.clear_rgba = [1u32, -2i32 as u32, 3, 0x1f4].map(f32::from_bits);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGBA8I);
+    assert_eq!(j.target.stride, 64 * 4, "4 bytes a pixel");
+    let c = j.clear.unwrap();
+    assert!(!c.load_rt0, "cleared, not loaded");
+    assert_eq!(c.clear_rt[0], [0xf403_fe01, 0, 0, 0], "a byte a channel, the raw integers narrowed");
+    assert_eq!(c.rgba8, 0xf403_fe01);
+    assert_eq!(rig.kicks()[0].tile_state_size, 256, "one 64x64 tile: 32 bpp");
+}
+
+/// A half-float target (RGBA16F) is a typed job at 8 bytes a pixel whose
+/// clear is four halves in two words (internal type 16F, 64 bpp), and whose
+/// 64-bpp tile buffer bins 64x32 tiles: twice the tile state of an RGBA8
+/// job of the same size. Revert check: without `max_bpp` in the tiling the
+/// kick's tile state stays one tile's.
+#[test]
+fn a_half_float_target_is_a_64_bpp_job() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    (d.target_format, d.target_alpha_bits) = (GLES_SURF_RGBA16F, 16);
+    d.clear_rgba = [1.0, 0.5, -2.0, 0.0];
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGBA16F);
+    assert_eq!(j.target.stride, 64 * 8, "8 bytes a pixel");
+    assert_eq!(j.clear.unwrap().clear_rt[0], [0x3800_3c00, 0x0000_c000, 0, 0], "halves, two a word");
+    assert_eq!(rig.kicks()[0].tile_state_size, 2 * 256, "64x32 tiles at 64 bpp");
+}
+
+/// Attachments of different formats in one job: RT 0 RGBA8 and RT 1
+/// RGBA32UI make a typed job whose RTs carry their own image formats and
+/// strides (16 bytes a pixel for RT 1), whose glClear words are each RT's
+/// own (one RGBA8 word, four raw words), and whose 128-bpp tile buffer with
+/// two RTs bins 32x16 tiles (8 of them for 64x64).
+#[test]
+fn attachments_of_different_formats_each_keep_their_own() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    d.clear_rgba = [0x1234_5678u32, 1, 2, 0xffff_ffff].map(f32::from_bits);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format, [27, V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, 27, 27]);
+    assert_eq!(j.target.stride, 64 * 4);
+    assert_eq!(j.target.rt[0], V3dJobRt { address: RT1 as u32, stride: 64 * 16 });
+    let c = j.clear.unwrap();
+    assert!(!c.load_rt0 && !c.load_rt[0]);
+    assert_eq!(c.clear_rt[0], [state::pack_rgba8(d.clear_rgba), 0, 0, 0], "RT 0: the RGBA8 word");
+    assert_eq!(c.clear_rt[1], [0x1234_5678, 1, 2, 0xffff_ffff], "RT 1: the four raw words");
+    assert_eq!(rig.kicks()[0].tile_state_size, 8 * 256, "32x16 tiles: two RTs at 128 bpp");
+}
+
+/// glClearBuffer(GL_COLOR, 1) (`clear_target_mask` bit 1) clears draw
+/// buffer 1 alone: RT 0 loads what it holds, RT 1 starts from the colour.
+/// Revert check: without the mask every RT was cleared.
+#[test]
+fn a_clear_of_one_draw_buffer_loads_the_others() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    d.clear_target_mask = 0b10;
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let c = rig.jobs()[0].clear.unwrap();
+    assert!(c.load_rt0, "RT 0 is not named: loaded");
+    assert!(!c.load_rt[0], "RT 1 cleared");
+    assert_eq!(c.rgba8_rt[0], 0xff00_00ff, "red");
+    assert_eq!(c.clear_rt[1][0], 0xff00_00ff);
+}
+
+/// What the typed job cannot take is refused by name before anything is
+/// recorded: 4x on an ES 3.0 format (the kept samples are RGBA8), a
+/// scissored or masked clear of an integer target (the clear quad writes
+/// halves), and a 128-bpp job with more tiles than the pools hold.
+#[test]
+fn what_a_typed_job_cannot_take_is_refused_by_name() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
+    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(rig.logs_with("4x multisampling of an ES 3.0 colour format"), 1);
+    let mut d = rig.draw();
+    (d.target_format, d.clear_quad) = (GLES_SURF_R32I, true);
+    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(rig.logs_with("a scissored or masked colour clear of an integer colour target"), 1);
+    let mut d = rig.draw();
+    (d.target_format, d.clear_color_mask) = (GLES_SURF_R32I, 0b0001);
+    assert_eq!(draw(&d), -EINVAL, "a masked clear is the quad's too");
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    (d.target_w, d.target_h) = (2048, 2048);
+    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
+    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    assert_eq!(draw(&d), -EINVAL, "32x16 tiles over 2048x2048: 8192 tiles");
+    assert_eq!(rig.logs_with("more tiles than the job pools hold"), 1);
+    assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }
 
 /// Why gl_test 18 draws into an RGB565 target: it asks eglChooseConfig for

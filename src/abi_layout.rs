@@ -239,7 +239,7 @@ const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, gpu) == 0);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, w) == 8);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, h) == 12);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, format) == 16);
-const _: () = assert!(size_of::<crate::backend::GlesDraw>() == 3200);
+const _: () = assert!(size_of::<crate::backend::GlesDraw>() == 3208);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_gpu) == 0);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_w) == 8);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_h) == 12);
@@ -336,7 +336,8 @@ const _: () = assert!(offset_of!(crate::backend::GlesDraw, sample_mask) == 3184)
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, alpha_to_coverage) == 3185);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_pitch) == 3188);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, occlusion_query) == 3192);
-const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 192);
+const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_cpu) == 3200);
+const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 208);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, name) == 0);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, native_attrib_formats) == 8);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, rt_rgba8888_is_bgra) == 12);
@@ -366,6 +367,8 @@ const _: () = assert!(offset_of!(crate::backend::YakoglBackend, depth_resolve) =
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_begin) == 168);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_end) == 176);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, query_result) == 184);
+const _: () = assert!(offset_of!(crate::backend::YakoglBackend, generate_mipmap) == 192);
+const _: () = assert!(offset_of!(crate::backend::YakoglBackend, return_mipmap_chain) == 200);
 const _: () = assert!(size_of::<crate::gl::context::GlBuffer>() == 104);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, used) == 0);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, target) == 4);
@@ -427,6 +430,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlTexture, pe_order) == 240
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, cpu_wrote) == 241);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, pot_chain) == 242);
 const _: () = assert!(offset_of!(crate::gl::context::GlTexture, es3_fmt) == 243);
+const _: () = assert!(offset_of!(crate::gl::context::GlTexture, chain_in_backend) == 244);
 #[cfg(feature = "gpu-powervr")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1296);
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 2504);
 #[cfg(feature = "gpu-v3d")] const _: () = assert!(size_of::<crate::gl::context::GlShader>() == 1480);

@@ -769,6 +769,8 @@ mod gl_api {
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     };
 
     static LOCK: Mutex<()> = Mutex::new(());

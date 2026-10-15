@@ -32,15 +32,15 @@ describes. Software rendering is out of scope: every result here comes from the 
 ## Status
 
 OpenGL ES 2.0 is close to complete on all three boards. Known defects are tracked as
-GitHub Issues.
+GitHub Issues. The order of the work, in five stages, is [ROADMAP.md](ROADMAP.md).
 
 dEQP-GLES2 (the Khronos conformance tests, the 17,165-case mustpass list):
 
 | Board | Failures | Notes |
 | --- | --- | --- |
-| AM62P | 54 | 17,070 pass, 34 not supported, 7 warnings (full tree on `32778b57`, 2026-10-10). The 54: 9 `shaders.invariance` cases, fixed in `e17fb6a7` and passing on the board, and 45 `texture.vertex.2d` cases, fixed on the host, board confirmation pending. The 4x multisample image's 2 failures of that tree (alpha to coverage) pass since `452d6c31`. The last tree before it (2026-10-02, `d60b9d76`) had 0 |
-| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14; `32778b57` had 0 fail) |
-| Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings: the full tree on `a27d69c0` (2026-10-10) with its 9 cube-map failures rerun and passing on `1cf946a9`, and one row rerun for 34 cases the serial capture lost (2026-10-11). Not yet one tree from one commit |
+| AM62P | 0 | Final tree on `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`): 17,141 pass, 18 not supported, 6 warnings (5 quality, 1 compatibility). The 17 images at 1x give 17,125 pass and 34 not supported; the 4x multisample image passes its 16 cases. `GL_BGRA_EXT` renderbuffers (see the Pi 4) are not covered: the commit predates the change that broke them |
+| i.MX8MP | 46 | 17,272 of 17,371 cases pass, 46 fail (all `GL_BGRA_EXT` renderbuffers in `fbo`, the report-es2 allowlist of `8bbf9ba2`), 34 not supported, 19 quality warnings, the same cases warn on NXP's own driver (full tree on `835cf9cc`, 2026-10-14). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`), which predates `8bbf9ba2`, had 0 fail: 17,318 of 17,371 pass, identical to the trees of 2026-10-01 and 2026-10-10 |
+| Raspberry Pi 4 | 46 | Rows 0-14 of the tree on `20a48791` (2026-10-14; `docs/board-sessions/pi4-es2-final.md`): 11,877 pass, 46 fail, 25 not supported; every failure is a `GL_BGRA_EXT` renderbuffer case, a regression of `8bbf9ba2`; rows 15-28 have not run at that commit. The last whole tree (`d56e79e5`, 2026-10-12) had 17,127 pass, 0 fail, 34 not supported, 4 warnings |
 
 glmark2-es2 at 800x600 runs all 33 scenes on every board:
 
@@ -185,15 +185,16 @@ to `RUSTFLAGS`, cargo configuration or the toolchain are not tracked: touch
 # host library (no GPU)
 cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux   # the driver sources: driver/src
 cmake --build build
-# cross build: a CMake toolchain file; the Rust target is derived from
+# cross build: a CMake toolchain file of your own (none is shipped); the Rust target is derived from
 # CMAKE_C_COMPILER_TARGET / CMAKE_SYSTEM_PROCESSOR + CMAKE_SYSTEM_NAME
 # (aarch64 + Generic -> aarch64-unknown-none) or given with -DYAKOGL_RUST_TARGET;
 # a triple whose architecture differs from the C compiler's is an error
-cmake -S . -B build-a64 --toolchain aarch64.cmake -DYAKOGL_OSAL=baremetal ...
-# bare metal (RUST_TARGET defaults to aarch64-unknown-none)
+cmake -S . -B build/a64 --toolchain aarch64.cmake -DYAKOGL_OSAL=baremetal ...
+# bare metal (RUST_TARGET defaults to aarch64-unknown-none); needs an aarch64-none-elf GCC on PATH, or use the clang form below
 make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src
 make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm \
-     OBJCOPY=llvm-objcopy DRVSRC=...
+     OBJCOPY=llvm-objcopy DRVSRC=driver/src
+# clang needs bare-metal C headers (a newlib sysroot, given with --sysroot in CC)
 # Zephyr: a workspace from west.yml (driver/samples/zephyr/README.md), or add this
 # directory and driver/ to ZEPHYR_EXTRA_MODULES,
 # CONFIG_YAKOGL=y (zephyr/Kconfig lists the FPU and libc requirements)
@@ -285,12 +286,13 @@ also defines `rust_eh_personality` for a `no_std` Rust library
 archive is not post-processed by YakoGL: whether its compiler_builtins `memcpy`/libm
 copies replace the platform's is up to that build.
 
-**API coverage** is checked, not assumed: `tools/api_coverage.py` (wired into `tools/check.sh`)
+**API coverage** is checked, not assumed: `tools/api_coverage.py` (wired into `tools/check.sh`;
+after `cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table`, without that archive it parses the source instead)
 parses the OpenGL ES 2.0 core entry points declared in `include/GLES2/gl2.h` and the EGL 1.x
 core declared in `include/EGL/egl.h` (186 names), `nm`s the built `yakogl-capi` archive for what
-the library actually exports (298 names, which also cover the ES 3.0 subset and the EGLImage/KHR
+the library actually exports (the names it exports, which also cover the ES 3.0 subset and the EGLImage/KHR
 extensions the crate implements), and parses the `PROCS` table in `src/gl/egl.rs` for the names
-`eglGetProcAddress` resolves (298 names, identical to the exported set today). It prints one row
+`eglGetProcAddress` resolves (the names it resolves, identical to the exported set today). It prints one row
 per name (declared / exported / procaddress) and the three difference sets, and fails only on an
 inconsistency of ours -- a name exported but not resolvable through `eglGetProcAddress`, or the
 reverse; a declared-but-not-exported name is reported and its count pinned in `check.sh` (0 for
@@ -304,7 +306,7 @@ module) and run on the host with
 
 ```sh
 tools/check.sh --changed origin/main   # <- before a pull request: the rows your change reaches
-tools/check.sh --quick                 #    the PowerVR build only, for a tight edit loop
+tools/check.sh --quick                 #    the short gate (about 120 rows; 4 to 14 minutes), for a tight edit loop
 tools/check.sh                         #    every row: what the CI runs
 
 cargo test --no-default-features --features host-test,gpu-powervr   # the PowerVR build
@@ -354,10 +356,9 @@ before their kick completes. The mock backend's kicks follow the PowerVR model
 after a configurable lag). Details: the module documentation of `src/testutil.rs`.
 With the `host-test` feature `g_backend` starts null, so test binaries do not need the
 driver's C generators. The convention for an open defect is a test marked
-`#[ignore = "BUG: ..."]` asserting the *correct* behaviour. Five are open today
-(`git grep -n 'ignore = "BUG' -- src tests`): four ES 2.0 report pins in
-`tests/es2_report_guard.rs` and the PowerVR's split 4x frame in
-`src/pvr/backend_tests.rs`; each is a known defect in `docs/HANDOFF.md`. Use the
+`#[ignore = "BUG: ..."]` asserting the *correct* behaviour. Run
+`git grep -n 'ignore = "BUG' -- src tests` for the open ones (the PowerVR's split 4x frame in
+`src/pvr/backend_tests.rs` and a Vivante texture-size pin in `tests/gc_npot_repeat.rs`); each is a known defect in `docs/HANDOFF.md`. Use the
 convention rather than leaving a defect undocumented.
 
 **Command-stream check.** `tools/hostharness/compare.sh <out> <libA> <libB> <driver checkout>`
@@ -365,12 +366,13 @@ builds two libraries (e.g. `rust:.` and `rust:/path/to/the/previous/checkout`, o
 as `csrc:<dir>`) with AddressSanitizer, runs `driver/tools/pvrlab/gl_test.c`'s cases, the
 harness's API sweeps and hostile sequences through both over a recording OSAL in every
 platform mode, dev and release, and exits non-zero when a log differs in a way
-`tools/hostharness/allow.txt` does not explain. `run.sh all <out> <lib> <driver>` runs one
+`tools/hostharness/allow.txt` does not explain (a job that times out on both sides is reported too; read the report before you call a difference a regression). `run.sh all <out> <lib> <driver>` runs one
 library (golden logs). Nothing is rendered. `tools/hostharness/README.md` lists what is
 and is not compared. Against a C tree the run is no longer expected to be quiet: it
 reports the fix round's divergences from upstream (see "Status"), and each of those has
 to be recognised before a real regression can be seen. Against the previous Rust build
 it is the regression gate, and every remaining difference has to be explained.
+With HH_TIMEOUT=60 a run takes 40 to 60 minutes and 17 to 50 GB of disk. With the default timeout (1200 s), gl_test case 174 fills a disk. Pass your own checkout of the driver as the last argument; in this repository it is driver/.
 
 ## Licensing
 

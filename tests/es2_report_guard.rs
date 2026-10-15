@@ -128,6 +128,8 @@ static BACKEND: YakoglBackend = YakoglBackend {
     query_begin: None,
     query_end: None,
     query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
 };
 
 /// One context for the whole file; the tests take turns on it.
@@ -591,6 +593,26 @@ fn the_bgra8_renderbuffer_is_accepted_for_now() {
         name_of(GL_NO_ERROR),
         "glRenderbufferStorage(GL_BGRA8_EXT): today accepted (es2-error-rules row 36, kept on purpose); \
          ES 2.0 4.4.3 wants GL_INVALID_ENUM: waits for the owner's decision on row 36"
+    );
+}
+
+/// The unsized GL_BGRA_EXT is renderbuffer storage as GL_BGRA8_EXT is:
+/// dEQP-GLES2 asks both names from anyone who claims
+/// GL_EXT_texture_format_BGRA8888 (fbo.completeness.renderable.renderbuffer
+/// .{color0,depth,stencil}.bgra and render.*.rbo_bgra*). Refusing it failed
+/// 46 fbo cases on the i.MX8MP (835cf9cc) and the Pi 4 after 8bbf9ba2.
+#[test]
+fn the_unsized_bgra_renderbuffer_is_accepted_like_bgra8() {
+    let _g = context();
+    assert_eq!(
+        name_of(renderbuffer_storage(GL_BGRA_EXT)),
+        name_of(renderbuffer_storage(GL_BGRA8_EXT)),
+        "glRenderbufferStorage(GL_BGRA_EXT) answers as GL_BGRA8_EXT does"
+    );
+    assert_eq!(
+        name_of(renderbuffer_storage(GL_BGRA_EXT)),
+        name_of(GL_NO_ERROR),
+        "glRenderbufferStorage(GL_BGRA_EXT): accepted (dEQP fbo bgra cases)"
     );
 }
 

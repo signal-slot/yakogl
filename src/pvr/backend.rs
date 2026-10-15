@@ -1486,6 +1486,12 @@ struct Backend {
     swap_drops_zs: bool,
     /// Kicks whose depth/stencil store the swap dropped (instrument).
     swap_zs_dropped: u32,
+    /// The open frame renders into the surface being swapped (set by
+    /// `pvr_backend_surface_swapped`, whatever the option above says): its
+    /// kick is the frame's last, so it keeps no samples ([`MsStore`]).
+    frame_swapped: bool,
+    /// The samples of a multisampled target across a split ([`MsStore`]).
+    ms: MsStore,
     /// Load/clear quads recorded ahead of the app's draws.
     frame_quads: u32,
     /// Tile buffers this frame's fragment shaders spilled outputs into: the
@@ -2929,6 +2935,8 @@ pub extern "C" fn pvr_backend_shutdown() {
         osal::gpu_free(&mut s.mem);
         *s = DsBuf::ZERO;
     }
+    osal::gpu_free(&mut b.ms.mem);
+    b.ms = MsStore::ZERO;
     if !b.vis.impl_.is_null() {
         osal::gpu_free(&mut b.vis);
     }
@@ -3341,6 +3349,14 @@ fn record_frame_quad(
     ld.textures[0].mip_levels = 1;
     ld.textures[0].format = if int { int_load_texfmt(d.target_format) } else { gles_surf_texfmt(d.target_format) };
     ld.textures[0].bgra = if d.target_format == GLES_SURF_XRGB8888 { 1 } else { 0 };
+    /* A multisampled frame going on from the kick before: the samples that
+     * kick stored, not the resolved colour -- the store bound as the target's
+     * multisampled image ([`MsStore`]; the descriptor's `smpcnt` is set
+     * where it is built, `build_desc_block`), read by the same program at
+     * the full sample rate (`loads_samples`), each instance its own sample. */
+    if load_color && b.ms.holds(d) {
+        ld.textures[0].base_gpu = b.ms.mem.gpu;
+    }
     ld.num_textures = 1;
     ld.viewport[2] = d.target_w as i32;
     ld.viewport[3] = d.target_h as i32;
@@ -3850,6 +3866,146 @@ fn ds_bytes(w: u32, h: u32, samples: u32) -> Option<usize> {
     aw.checked_mul(ah)?.checked_mul(4)
 }
 
+/// The samples of a multisampled target across a split.
+///
+/// A 4x frame resolves its samples on its end-of-tile store (PBE REG_WORD0
+/// `downscale`, pbestate.xml:255), so a frame the back end split into two
+/// kicks (a full arena, the draw cap, a glFinish or glReadPixels before more
+/// drawing) handed the next kick one colour per pixel, and that kick's
+/// load quad wrote it to every sample: a sample the later draws left
+/// uncovered held the average, not its own colour (docs/HANDOFF.md,
+/// pvr-msaa-split; dEQP's multisample.constancy_* before `a4f64950`).
+///
+/// Now a multisampled kick that may not be the frame's last (no swap) emits
+/// each tile twice: resolved into the target as before, and unresolved
+/// (`downscale` off) into this store, the TPU's multisampled image of the
+/// target -- TEXSTATE_IMAGE_WORD0 `smpcnt` (texstate.xml:273, two bits:
+/// log2 of the samples) over the target's own width, height and stride,
+/// `samples` times the single-sampled bytes. The next kick's load quad
+/// binds the store as that image in place of the target and runs at the
+/// full sample rate ([`fs_sample_rate`]), so each instance reads and writes
+/// its own sample. A kick that stores no samples (a swap's, a 1x frame's)
+/// into the store's target leaves it stale (`valid` false), and the next
+/// frame reloads the resolved colour as before. There is one store, the
+/// most recent such kick's: ES 2.0's one multisampled target is the window
+/// surface, and a second 4x target's split takes the store for itself.
+///
+/// Unmeasured on the board (docs/handoff/20261015-pvr-msaa-split.md): that
+/// the PBE's unresolved layout is the TPU's `smpcnt` layout over the same
+/// stride, and that a per-sample fetch of it reads the running instance's
+/// sample.
+#[derive(Clone, Copy)]
+struct MsStore {
+    mem: OsalGpuMem,
+    /// The target the store holds the samples of: its colour address,
+    /// extent, row pitch, format and sample count.
+    target_gpu: u64,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    format: u8,
+    samples: u32,
+    /// A submitted kick stored every sample of that target here, and no
+    /// later kick wrote the target without them.
+    valid: bool,
+}
+
+/// Bytes of the sample store of an `h`-row target of `format` whose rows
+/// are `pitch` pixels apart, at `samples` a pixel: the TPU's multisampled
+/// image, `samples` single-sampled images' worth. `None` when that does not
+/// fit a usize.
+fn ms_bytes(h: u32, pitch: u32, format: u8, samples: u32) -> Option<usize> {
+    (pitch as usize)
+        .checked_mul(h as usize)?
+        .checked_mul(gles_surf_bytes_per_pixel(format) as usize)?
+        .checked_mul(samples as usize)
+}
+
+/// The sample store, allocated or resized for the open frame's target:
+/// `false` (once named in the log) when the pool has no room for it, and the
+/// frame then stores its resolved colour only, as before.
+fn ms_store_ready(b: &mut Backend) -> bool {
+    let (w, h, pitch, format, samples) = (b.target_w, b.target_h, b.target_pitch, b.target_format, b.samples);
+    let Some(bytes) = ms_bytes(h, pitch, format, samples) else { return false };
+    let ms = &mut b.ms;
+    if !ms.mem.impl_.is_null() && ms.mem.size >= bytes {
+        return true;
+    }
+    /* too small for this target: the old store goes back (the OSAL holds it
+     * until the kicks that may still read it have completed) */
+    osal::gpu_free(&mut ms.mem);
+    *ms = MsStore::ZERO;
+    if osal::gpu_alloc(HEAP_GENERAL_BASE, bytes, OSAL_MEM_DATA, &mut ms.mem) != 0 {
+        ms.mem = OsalGpuMem::ZERO;
+        glog_once!(
+            "pvr_backend: no sample store for the {}x{} {}x target ({} bytes): a split frame reloads its resolved colour",
+            w,
+            h,
+            samples,
+            bytes
+        );
+        return false;
+    }
+    true
+}
+
+impl MsStore {
+    const ZERO: MsStore =
+        MsStore { mem: OsalGpuMem::ZERO, target_gpu: 0, w: 0, h: 0, pitch: 0, format: 0, samples: 0, valid: false };
+
+    /// Does the store hold every sample of the target draw `d` renders
+    /// into, as the frame `d` opens would render it?
+    fn holds(&self, d: &GlesDraw) -> bool {
+        self.valid
+            && !self.mem.impl_.is_null()
+            && self.target_gpu == d.target_gpu
+            && (self.w, self.h, self.pitch) == (d.target_w, d.target_h, crate::backend::draw_pitch(d))
+            && self.format == d.target_format
+            && self.samples == frame_samples(d.samples)
+    }
+
+    /// After a kick into target `t` was submitted: it stored every sample
+    /// here (`stored`), or it wrote the target without them.
+    fn settle(&mut self, t: MsStoreTarget, stored: bool) {
+        if stored {
+            (self.target_gpu, self.w, self.h, self.pitch) = (t.gpu, t.w, t.h, t.pitch);
+            (self.format, self.samples, self.valid) = (t.format, t.samples, true);
+        } else if self.valid && self.target_gpu == t.gpu {
+            self.valid = false;
+        }
+    }
+}
+
+/// The open frame's target, as [`MsStore::settle`] records it.
+struct MsStoreTarget {
+    gpu: u64,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    format: u8,
+    samples: u32,
+}
+
+/// Is draw `d` the frame's load quad reading the sample store? Nothing else
+/// binds the store's address. Such a draw runs at the full sample rate,
+/// whatever its program.
+fn loads_samples(b: &Backend, d: &GlesDraw) -> bool {
+    !b.ms.mem.impl_.is_null() && d.num_textures == 1 && d.textures[0].base_gpu == b.ms.mem.gpu
+}
+
+/// Mark descriptor `w`'s image as one of `samples` samples a texel:
+/// TEXSTATE_IMAGE_WORD0 `smpcnt` (texstate.xml:273, bits 62..63) is log2 of
+/// the count, which its two bits fit up to 8x.
+fn tex_desc_set_samples(w: &mut [u32], samples: u32) {
+    let s = csb_pack!(
+        ROGUE_TEXSTATE_IMAGE_WORD0_pack,
+        2,
+        csb::ROGUE_TEXSTATE_IMAGE_WORD0 { smpcnt: samples.max(1).ilog2(), ..Default::default() }
+    );
+    w[0] |= s[0];
+    w[1] |= s[1];
+}
+
 /// Before a draw opens a frame: every depth/stencil buffer the frame needs
 /// ([`zs_keys`]) has a slot, or gets one from a buffer that holds nothing GL
 /// keeps -- no live plane ([`Plane`]), not in the open frame. A buffer whose
@@ -4156,6 +4312,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.frame_cleared = bg_color;
     b.frame_loads_color = load_color; /* record_frame_quad(.., load_color, ..) below */
     b.swap_drops_zs = false;
+    b.frame_swapped = false;
     if bg_color {
         b.clear_rgba = d.clear_rgba;
     }
@@ -4854,20 +5011,45 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
 }
 
 /// One draw into the open frame: whole, or cut into 16-bit index lists when a
-/// sequential draw is longer than one list can address, or cut into pieces of
-/// its index list when an indexed draw's staged data is too large.
+/// sequential draw is longer than one list can address, or cut into pieces
+/// when its staged data is too large.
 ///
-/// An indexed draw whose staged data (client indices and arrays) is more
-/// than half an empty GENERAL arena is cut into pieces that each fit
-/// ([`draw_indexed_pieces`]).
+/// A draw whose staged data (client indices and arrays) is more than half an
+/// empty GENERAL arena is cut into pieces that each fit: an indexed one into
+/// pieces of its index list ([`draw_indexed_pieces`]), a sequential one into
+/// runs of its vertices ([`draw_sequential_pieces`]). Until the second, a
+/// glDrawArrays of client arrays larger than an empty arena was refused
+/// whole: dEQP-GLES3's builtin_functions.precision vec3/vec4 draws, 24,384
+/// vertices of four arrays (1.27 MB), ended AM62P image 7 on f2a13877.
 fn draw_dispatch(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let sequential = d.index_buf_gpu == 0 && (d.index_cpu.is_null() || d.index_bytes == 0);
     if sequential && d.index_count > SEQ_MAX_VERTICES {
         draw_chunked(p, d)
-    } else if !sequential && staged_bytes(d) > p.b.gen.mem.size as u64 / 2 {
-        draw_indexed_pieces(p, d)
+    } else if staged_bytes(d) > p.b.gen.mem.size as u64 / 2 {
+        if sequential {
+            draw_sequential_pieces(p, d)
+        } else {
+            draw_indexed_pieces(p, d)
+        }
     } else {
         draw_part(p, d, 0, d.index_count, None)
+    }
+}
+
+/// How a draw of mode `prim` is cut on primitive boundaries: the vertices
+/// (or indices) per piece beyond the first `overlap` are a multiple of
+/// `unit`, and the next piece repeats the last `overlap`. A strip's two
+/// (an even number of triangles per piece keeps the winding), a line
+/// strip's one. `unit` 0: fans and loops, whose primitives reach back to the
+/// first vertex, cannot be cut.
+fn cut_unit(prim: GlesPrim) -> (u32, u32) {
+    match prim {
+        GLES_PRIM_POINTS => (1, 0),
+        GLES_PRIM_LINES => (2, 0),
+        GLES_PRIM_LINE_STRIP => (1, 1),
+        GLES_PRIM_TRI_STRIP => (2, 2),
+        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
+        _ => (3, 0), /* a triangle list (record_draw's default topology) */
     }
 }
 
@@ -4881,13 +5063,14 @@ fn staged_bytes(d: &GlesDraw) -> u64 {
         .fold(idx, |n, a| n + a.cpu_bytes as u64)
 }
 
-/// The arena bytes a piece of an indexed draw copies: `n` indices and, of
-/// each staged attribute, vertices `vmin..=vmax` (a per-instance or constant
-/// one whole), each copy 16-byte aligned as [`record_draw`] places it.
+/// The arena bytes a piece of a draw copies: `n` indices (0 for a piece of a
+/// sequential draw, which copies none) and, of each staged attribute,
+/// vertices `vmin..=vmax` (a per-instance or constant one whole), each copy
+/// 16-byte aligned as [`record_draw`] places it.
 fn piece_bytes(d: &GlesDraw, n: u32, vmin: u32, vmax: u32) -> u64 {
     let pad = |b: u64| b + 15;
     d.attribs[..d.num_attribs as usize].iter().filter(|a| !a.cpu.is_null() && a.cpu_bytes != 0).fold(
-        pad(n as u64 * 2),
+        if n == 0 { 0 } else { pad(n as u64 * 2) },
         |sum, a| {
             let bytes = if a.per_instance != 0 || a.stride == 0 {
                 a.cpu_bytes as u64
@@ -4951,14 +5134,8 @@ fn next_index_piece(
 /// the same way. A failure after some pieces were recorded leaves those in
 /// the frame.
 fn draw_indexed_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
-    let (unit, overlap): (usize, usize) = match d.prim {
-        GLES_PRIM_POINTS => (1, 0),
-        GLES_PRIM_LINES => (2, 0),
-        GLES_PRIM_LINE_STRIP => (1, 1),
-        GLES_PRIM_TRI_STRIP => (2, 2),
-        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
-        _ => (3, 0), /* a triangle list (record_draw's default topology) */
-    };
+    let (unit, overlap) = cut_unit(d.prim);
+    let (unit, overlap) = (unit as usize, overlap as usize);
     let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
     if unit == 0
         || second
@@ -5024,6 +5201,117 @@ fn draw_indexed_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
             return 0;
         }
         start += n as usize - overlap;
+    }
+}
+
+/// The next piece of a sequential draw of `total` vertices from vertex
+/// `start`: all the vertices left when their copies fit `budget` bytes,
+/// else the most (`overlap` plus a multiple of `unit`, at least one
+/// step) that do. `None` when not even one step fits.
+fn next_seq_piece(d: &GlesDraw, total: u32, start: u32, unit: u32, overlap: u32, budget: u64) -> Option<u32> {
+    let left = total - start;
+    let fits = |n: u32| piece_bytes(d, 0, start, start + n - 1) <= budget;
+    if fits(left) {
+        return Some(left);
+    }
+    if left <= overlap + unit || !fits(overlap + unit) {
+        return None;
+    }
+    /* the copies grow with the vertices: the largest k that fits, by
+     * bisection (k = lo fits; past hi the piece would be the whole rest,
+     * which does not) */
+    let (mut lo, mut hi) = (1u32, (left - 1 - overlap) / unit);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if fits(overlap + mid * unit) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    Some(overlap + lo * unit)
+}
+
+/// A sequential draw (glDrawArrays) of at most SEQ_MAX_VERTICES vertices
+/// whose staged arrays do not fit half an empty GENERAL arena, drawn as runs
+/// of its vertices that do: each piece copies, of every staged per-vertex
+/// attribute, only its own vertices ([`record_draw`]'s `win`), and reads
+/// the sequential index list from its first vertex on, so its indices --
+/// and gl_VertexID with them -- are the draw's own and the VBO-resident
+/// attributes are fetched as for the whole draw.
+///
+/// The cut is [`draw_indexed_pieces`]'s: lists on a primitive boundary,
+/// strips repeating the vertices the next piece continues from; fans, loops
+/// and a draw with a second index list go whole (refused by name when they
+/// do not fit), as does a draw one primitive of which is more than half an
+/// arena. A failure after some pieces were recorded leaves those in the
+/// frame.
+fn draw_sequential_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    let (unit, overlap) = cut_unit(d.prim);
+    /* every piece starts at an even vertex: its index address is the list's
+     * plus two bytes a vertex, and VDMCTRL_INDEX_LIST1 has no address bits
+     * 1:0 (index_base_addrlsb must be 0; an odd start was refused by name on
+     * the host's csbgen). A triangle list then steps by six, a line strip or
+     * a point list by two. */
+    let unit = if unit % 2 == 0 { unit } else { unit * 2 };
+    let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
+    let total = d.index_count;
+    if unit == 0 || second || total == 0 || total > SEQ_MAX_VERTICES {
+        return draw_part(p, d, 0, total, None);
+    }
+    let budget = p.b.gen.mem.size as u64 / 2;
+    /* count the pieces first: past MAX_PIECES the draw is refused before
+     * anything is recorded (the bound draw_chunked keeps) */
+    let mut pieces = 0u32;
+    let mut start = 0u32;
+    loop {
+        let Some(n) = next_seq_piece(d, total, start, unit, overlap, budget) else {
+            return draw_part(p, d, 0, total, None); /* refused by name */
+        };
+        pieces += 1;
+        if pieces > MAX_PIECES {
+            if !p.b.warned_big {
+                glog!(
+                    "pvr_backend: a non-indexed draw of {} vertices needs more than {} pieces to fit its client arrays: not drawn",
+                    total,
+                    MAX_PIECES
+                );
+                p.b.warned_big = true;
+            }
+            return -E2BIG;
+        }
+        if start + n >= total {
+            break;
+        }
+        start += n - overlap;
+    }
+    /* every piece addresses the one sequential list, made long enough now */
+    let rc = seq_indices_ensure(&mut p.b, total);
+    if rc != 0 {
+        return rc;
+    }
+    /* as draw_chunked: a piece that opens a new frame loads the colour */
+    let mut cont = *d;
+    cont.do_clear = false;
+    cont.do_clear_depth = false;
+    cont.do_clear_stencil = false;
+    let mut start = 0u32;
+    loop {
+        let Some(n) = next_seq_piece(d, total, start, unit, overlap, budget) else {
+            unreachable!("counted above");
+        };
+        let mut pd = if start == 0 { *d } else { cont };
+        /* (read each time: a frame a piece opens may record a load quad) */
+        pd.index_buf_gpu = p.b.seq_idx.gpu + start as u64 * 2;
+        pd.index_count = n;
+        let rc = draw_part(p, &pd, 0, n, Some((start, n)));
+        if rc != 0 {
+            return rc;
+        }
+        if start + n >= total {
+            return 0;
+        }
+        start += n - overlap;
     }
 }
 
@@ -5099,14 +5387,7 @@ fn draw_chunked(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let vs = unsafe { &*d.vs };
     /* (vertices per piece are a multiple of `unit`; `overlap` vertices are
      * drawn again by the next piece) */
-    let (unit, overlap): (u32, u32) = match d.prim {
-        GLES_PRIM_POINTS => (1, 0),
-        GLES_PRIM_LINES => (2, 0),
-        GLES_PRIM_LINE_STRIP => (1, 1),
-        GLES_PRIM_TRI_STRIP => (2, 2),
-        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
-        _ => (3, 0), /* a triangle list (record_draw's default topology) */
-    };
+    let (unit, overlap) = cut_unit(d.prim);
     /* a second index list would be emitted once per piece */
     let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
     if unit == 0 || vs.vs_vertex_id_reg1 != 0 || second {
@@ -5329,6 +5610,10 @@ fn build_desc_block(
         let force_mip0 = b.opt[PVR_BACKEND_OPT_FORCE_MIP0 as usize] != 0;
 
         build_tex_desc(&mut desc[i * DESC..(i + 1) * DESC], t.unwrap_or(&fallback), &mut b.warned_tex_addr, force_mip0);
+        /* the sample store ([`MsStore`]): the target's multisampled image */
+        if t.is_some_and(|t| !b.ms.mem.impl_.is_null() && t.base_gpu == b.ms.mem.gpu) {
+            tex_desc_set_samples(&mut desc[i * DESC..(i + 1) * DESC], b.ms.samples);
+        }
     }
     let rc = arena_put_words(&mut b.gen, &desc[..ns * DESC], 32, None, Some(gpu));
     if rc != 0 {
@@ -5756,7 +6041,10 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             pvr_pds_render_kick_usc_program(
                 heap_off_of(d.fs_usc_gpu) as u64,
                 temps,
-                fs_sample_rate(b.samples, d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0),
+                fs_sample_rate(
+                    b.samples,
+                    d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0 || loads_samples(b, d),
+                ),
                 k_prog.as_mut_ptr(),
                 k_prog.as_mut_ptr().add(8),
                 &mut ki,
@@ -6746,6 +7034,8 @@ fn flush(p: &mut Pvr) -> i32 {
      * (gpu 0, a GL_NONE draw buffer) is skipped, so emit j can be slot i > j. */
     let mut slot_of = [0usize; PVR_BACKEND_MAX_RT as usize];
     let mut tb_emit = false;
+    /* this kick stores every sample of its target too ([`MsStore`]) */
+    let store_samples;
     {
         let mut col = [0u32; CLEAR_ATTACH_DWORDS as usize];
         let mut ed = [0u32; 3 * PVR_BACKEND_MAX_RT as usize + 2];
@@ -6838,6 +7128,23 @@ fn flush(p: &mut Pvr) -> i32 {
         }
         if nrt == 0 {
             nrt = 1;
+        }
+        /* A multisampled frame that may go on in another kick (no swap):
+         * its one attachment emitted again, unresolved, into the sample
+         * store ([`MsStore`]) -- a second state pair from the same output
+         * registers (source_pos 0), mrt_index 1, through the two-emit
+         * end-of-tile program. Not with several attachments or a tile
+         * buffer (ES 2.0 has neither at 4x), and not for a z-only frame. */
+        store_samples = b.samples > 1
+            && nrt == 1
+            && b.num_targets <= 1
+            && !tb_emit
+            && b.target_gpu != 0
+            && !b.frame_swapped
+            && ms_store_ready(b);
+        if store_samples {
+            emit[2..4].copy_from_slice(&pbe_emit_words(b.ms.mem.gpu, b.target_format, 0, 1));
+            nrt = 2;
         }
         if nrt > 1 && b.opt(PVR_BACKEND_OPT_DEBUG) != 0 && b.mrt_log_left != 0 {
             b.mrt_log_left -= 1;
@@ -7021,6 +7328,23 @@ fn flush(p: &mut Pvr) -> i32 {
     /* PBE REG_WORD0/1 per attachment: [`pbe_reg_words`]. */
     b.kick.frag.num_rt = nrt;
     for (rt, &slot) in slot_of.iter().enumerate().take(nrt as usize) {
+        /* the sample store's emit (state 1): the target's words again with
+         * `downscale` off, so every sample of the tile goes out, linear over
+         * the target's own row pitch ([`MsStore`]) */
+        if store_samples && rt == 1 {
+            let [w0, w1] = pbe_reg_words(
+                b.target_format,
+                b.target_alpha_bits == 0,
+                b.target_w,
+                b.target_h,
+                b.target_pitch,
+                false,
+                false,
+            );
+            b.kick.frag.pbe_word[rt][0] = w0;
+            b.kick.frag.pbe_word[rt][1] = w1;
+            continue;
+        }
         /* PBE register words per emitted state (its mrt_index), from the
          * attachment slot that state is for */
         let fmt = if slot != 0 { b.targets[slot].format } else { b.target_format };
@@ -7175,9 +7499,25 @@ fn flush(p: &mut Pvr) -> i32 {
             nrt,
             b.ndraws,
             b.frame_quads,
-            if b.frame_ds.buf().is_some() { ", ds" } else { "" }
+            match (b.frame_ds.buf().is_some(), store_samples) {
+                (true, true) => ", ds, samples",
+                (true, false) => ", ds",
+                (false, true) => ", samples",
+                (false, false) => "",
+            }
         );
     }
+    /* the sample store: this kick filled it with every sample of the
+     * target, or wrote the target without them */
+    let target = MsStoreTarget {
+        gpu: b.target_gpu,
+        w: b.target_w,
+        h: b.target_h,
+        pitch: b.target_pitch,
+        format: b.target_format,
+        samples: b.samples,
+    };
+    b.ms.settle(target, store_samples);
     ds_settle(b);
     if b.swap_drops_zs {
         /* PVR_BACKEND_OPT_SWAP_DROPS_ZS: this kick stored nothing, so the
@@ -7210,19 +7550,20 @@ fn flush(p: &mut Pvr) -> i32 {
 
 /// `YakoglBackend::surface_swapped`: `eglSwapBuffers` is posting the window
 /// surface whose colour buffer is at `surface_gpu`, before the swap's flush.
-/// With [`PVR_BACKEND_OPT_SWAP_DROPS_ZS`] on (the default) and the open
-/// frame rendering into that surface with a depth/stencil buffer, the flush
-/// that follows stores no depth/stencil. Nothing else changes, and nothing
-/// at all with the option off.
+/// The open frame rendering into that surface ends with that flush: its
+/// kick keeps no samples for a next kick ([`MsStore`]), and with
+/// [`PVR_BACKEND_OPT_SWAP_DROPS_ZS`] on (the default) and a depth/stencil
+/// buffer behind the frame, stores no depth/stencil. Nothing else changes.
 #[no_mangle]
 pub extern "C" fn pvr_backend_surface_swapped(surface_gpu: u64) {
     // SAFETY: single-threaded by contract; taken once per entry point.
     let b = unsafe { &mut PVR.get().b };
-    // SAFETY: a plain read of an int only the setter writes.
-    if !b.inited || unsafe { core::ptr::addr_of!(pvr_swap_drops_zs).read() } == 0 {
+    if !b.inited || !b.frame_open || b.target_gpu != surface_gpu {
         return;
     }
-    if b.frame_open && b.target_gpu == surface_gpu && b.frame_ds.buf().is_some() {
+    b.frame_swapped = true;
+    // SAFETY: a plain read of an int only the setter writes.
+    if unsafe { core::ptr::addr_of!(pvr_swap_drops_zs).read() } != 0 && b.frame_ds.buf().is_some() {
         b.swap_drops_zs = true;
     }
 }
@@ -7470,6 +7811,9 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
     for s in &b.ds {
         ds.add(&s.mem);
     }
+    /* the sample store ([`MsStore`]) beside the depth/stencil buffers: the
+     * per-sample memory a multisampled frame keeps across a split */
+    ds.add(&b.ms.mem);
     let kib =
         sets.report("backend frame sets") + statics.report("backend statics") + ds.report("backend depth/stencil");
     let size = |m: &OsalGpuMem| m.size as u32;
@@ -7527,6 +7871,8 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: Some(pvr_backend_surface_swapped),
     texture_uploaded: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
     max_instance_divisor: 1,
     /* the sync waits keep finish() until this backend waits for one kick */

@@ -25,12 +25,14 @@ pub type Refusal = &'static str;
 /// The draws the M6 first cut does not draw, checked before anything is
 /// recorded.
 pub fn refusal(d: &GlesDraw) -> Option<Refusal> {
-    /* one reason per format: the log names the value it saw */
+    /* one reason per format: the log names the value it saw. The ES 2.0
+     * three and every ES 3.0 colour format with a row in `rt_format` are
+     * drawn (int-rt-v3d); the sRGB surface's render side is not built
+     * (docs/es3-srgb.md 5.1; the GL core refuses it first, SRGB_RT). */
     match d.target_format {
         GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 | GLES_SURF_RGB565 => {}
-        GLES_SURF_RGBA16F => return Some("an RGBA16F colour target is not written yet"),
-        GLES_SURF_R16F => return Some("an R16F colour target is not written yet"),
-        GLES_SURF_R32F => return Some("an R32F colour target is not written yet"),
+        GLES_SURF_SRGB8_A8 => return Some("an sRGB colour target is not written yet"),
+        f if rt_format(f).is_some() => {}
         _ => return Some("a colour target of a format the backend does not know"),
     }
     /* 4x multisampling (docs/online-shaderc/v3d-backend.md
@@ -390,6 +392,136 @@ pub fn pack_rgba8(c: [f32; 4]) -> u32 {
         out |= (r as u32 & 0xff) << (8 * i);
     }
     out
+}
+
+/* ---- ES 3.0 colour formats (int-rt-v3d) ----------------------------------- */
+
+/// What the tile buffer and the colour load and store make of one
+/// `GLES_SURF_*` colour surface this backend renders: Mesa's row for the
+/// surface's pipe format in `v3dx_format_table.c` (the `rt` column of
+/// `FORMAT(...)`: RGBA8 :65, RGB10_A2UI :75, BGR565 :81, R16F :90, R32F :91,
+/// RGBA16F :100, the integer rows :118-137), the tile buffer internal type
+/// and bpp `v3dX(get_internal_type_bpp_for_output_format)` gives that output
+/// format (:220-341) and the clamp `clamp_for_format_and_type` gives it
+/// (v3dx_rcl.c:396-407, V3D 4.2: INT for a pure integer format, NONE for
+/// the rest drawn here, NORM for sRGB, which is not drawn). The numbers are
+/// the packet enums (`ffi.rs`, pinned against Mesa's generated packer by
+/// `ffi_layout_check.c`); the job builder (`driver/src/v3d/v3d_job.c`
+/// `rt_internal`) holds the same rows keyed by the output format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RtFormat {
+    /// `V3D_OUTPUT_IMAGE_FORMAT_*`: the load's input and the store's output
+    /// image format (`v3d_job_target::rt_format`).
+    pub output: u32,
+    /// `V3D_INTERNAL_TYPE_*`: what the tile buffer holds.
+    pub internal_type: u32,
+    /// `V3D_INTERNAL_BPP_*` (0: 32, 1: 64, 2: 128): with the RT count, the
+    /// job's tile size (`v3d_frame_tiling_bpp`).
+    pub internal_bpp: u32,
+    /// `V3D_RENDER_TARGET_CLAMP_*`.
+    pub clamp: u32,
+    /// Bytes a pixel in memory, the raster row's unit: the GL core's
+    /// `gles_surf_bytes_per_pixel` (a test pins the two agree).
+    pub bytes: u32,
+}
+
+/// The RGBA8 row: the ES 2.0 default, and what an unknown surface falls
+/// back to in [`rt_row`].
+pub const RGBA8_ROW: RtFormat = RtFormat {
+    output: V3D_OUTPUT_IMAGE_FORMAT_RGBA8,
+    internal_type: V3D_INTERNAL_TYPE_8,
+    internal_bpp: V3D_INTERNAL_BPP_32,
+    clamp: V3D_RENDER_TARGET_CLAMP_NONE,
+    bytes: 4,
+};
+
+/// The row of a colour surface; `None` for one this backend does not render
+/// (the sRGB surface, docs/es3-srgb.md 5.1, or a value it does not know).
+pub const fn rt_format(surf: u8) -> Option<RtFormat> {
+    const fn row(output: u32, internal_type: u32, internal_bpp: u32, clamp: u32, bytes: u32) -> Option<RtFormat> {
+        Some(RtFormat { output, internal_type, internal_bpp, clamp, bytes })
+    }
+    const NONE: u32 = V3D_RENDER_TARGET_CLAMP_NONE;
+    const INT: u32 = V3D_RENDER_TARGET_CLAMP_INT;
+    const B32: u32 = V3D_INTERNAL_BPP_32;
+    const B64: u32 = V3D_INTERNAL_BPP_64;
+    const B128: u32 = V3D_INTERNAL_BPP_128;
+    match surf {
+        GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 => Some(RGBA8_ROW),
+        GLES_SURF_RGB565 => row(V3D_OUTPUT_IMAGE_FORMAT_BGR565, V3D_INTERNAL_TYPE_8, B32, NONE, 2),
+        /* the 16F rows take 64 bpp, R16F included ("to make sure the TLB
+         * doesn't throw away the alpha channel before alpha test happens",
+         * v3dx_format_table.c:266-268) */
+        GLES_SURF_RGBA16F => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 8),
+        GLES_SURF_R16F => row(V3D_OUTPUT_IMAGE_FORMAT_R16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 2),
+        GLES_SURF_R32F => row(V3D_OUTPUT_IMAGE_FORMAT_R32F, V3D_INTERNAL_TYPE_32F, B32, NONE, 4),
+        GLES_SURF_R8I => row(V3D_OUTPUT_IMAGE_FORMAT_R8I, V3D_INTERNAL_TYPE_8I, B32, INT, 1),
+        GLES_SURF_R8UI => row(V3D_OUTPUT_IMAGE_FORMAT_R8UI, V3D_INTERNAL_TYPE_8UI, B32, INT, 1),
+        GLES_SURF_R16I => row(V3D_OUTPUT_IMAGE_FORMAT_R16I, V3D_INTERNAL_TYPE_16I, B32, INT, 2),
+        GLES_SURF_R16UI => row(V3D_OUTPUT_IMAGE_FORMAT_R16UI, V3D_INTERNAL_TYPE_16UI, B32, INT, 2),
+        GLES_SURF_R32I => row(V3D_OUTPUT_IMAGE_FORMAT_R32I, V3D_INTERNAL_TYPE_32I, B32, INT, 4),
+        GLES_SURF_R32UI => row(V3D_OUTPUT_IMAGE_FORMAT_R32UI, V3D_INTERNAL_TYPE_32UI, B32, INT, 4),
+        GLES_SURF_RG8I => row(V3D_OUTPUT_IMAGE_FORMAT_RG8I, V3D_INTERNAL_TYPE_8I, B32, INT, 2),
+        GLES_SURF_RG8UI => row(V3D_OUTPUT_IMAGE_FORMAT_RG8UI, V3D_INTERNAL_TYPE_8UI, B32, INT, 2),
+        GLES_SURF_RG16I => row(V3D_OUTPUT_IMAGE_FORMAT_RG16I, V3D_INTERNAL_TYPE_16I, B32, INT, 4),
+        GLES_SURF_RG16UI => row(V3D_OUTPUT_IMAGE_FORMAT_RG16UI, V3D_INTERNAL_TYPE_16UI, B32, INT, 4),
+        GLES_SURF_RG32I => row(V3D_OUTPUT_IMAGE_FORMAT_RG32I, V3D_INTERNAL_TYPE_32I, B64, INT, 8),
+        GLES_SURF_RG32UI => row(V3D_OUTPUT_IMAGE_FORMAT_RG32UI, V3D_INTERNAL_TYPE_32UI, B64, INT, 8),
+        GLES_SURF_RGBA8I => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA8I, V3D_INTERNAL_TYPE_8I, B32, INT, 4),
+        GLES_SURF_RGBA8UI => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA8UI, V3D_INTERNAL_TYPE_8UI, B32, INT, 4),
+        GLES_SURF_RGBA16I => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA16I, V3D_INTERNAL_TYPE_16I, B64, INT, 8),
+        GLES_SURF_RGBA16UI => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA16UI, V3D_INTERNAL_TYPE_16UI, B64, INT, 8),
+        GLES_SURF_RGBA32I => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA32I, V3D_INTERNAL_TYPE_32I, B128, INT, 16),
+        GLES_SURF_RGBA32UI => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, V3D_INTERNAL_TYPE_32UI, B128, INT, 16),
+        /* 16UI in the tile buffer, packed to 10/10/10/2 at the store (:282-285) */
+        GLES_SURF_RGB10_A2UI => row(V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI, V3D_INTERNAL_TYPE_16UI, B64, INT, 4),
+        _ => None,
+    }
+}
+
+/// [`rt_format`], the RGBA8 row for a surface without one (a draw into such
+/// a surface never gets this far: [`refusal`]).
+pub const fn rt_row(surf: u8) -> RtFormat {
+    match rt_format(surf) {
+        Some(r) => r,
+        None => RGBA8_ROW,
+    }
+}
+
+/// Is the surface one the job builder takes as a typed render target
+/// (`v3d_job_target::typed`)? Every colour format but the ES 2.0 three,
+/// whose jobs stay untyped, byte for byte as before.
+pub const fn typed(surf: u8) -> bool {
+    !matches!(surf, GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 | GLES_SURF_RGB565)
+}
+
+/// The clear colour of a surface as the tile buffer holds it, packed per
+/// internal type the way `v3d_tlb_clear` packs `job->clear_color`
+/// (v3dx_draw.c:1706-1769): type 8 one R8G8B8A8_UNORM word ([`pack_rgba8`];
+/// an RGB565 target is cleared through the same 8-bit tile buffer); 8I and
+/// 8UI the low byte of each of the four raw words in one word; 16F each
+/// channel as a half, two a word; 16I and 16UI the low 16 bits of each raw
+/// word, two a word; 32I, 32UI and 32F the four words as they are. For an
+/// integer surface `c` holds the raw integers glClearBuffer{i,ui}v gave as
+/// bit patterns (`GlesDraw::clear_rgba`). Word 0 alone reaches a 32-bpp
+/// tile buffer, two words a 64-bpp one, four a 128-bpp one (v3d_job.c, the
+/// CLEAR_COLORS packets). A surface without a row packs as RGBA8.
+pub fn clear_words(surf: u8, c: [f32; 4]) -> [u32; 4] {
+    let u = c.map(f32::to_bits);
+    match rt_format(surf).map(|f| f.internal_type) {
+        Some(V3D_INTERNAL_TYPE_8I) | Some(V3D_INTERNAL_TYPE_8UI) => {
+            [(u[0] & 0xff) | (u[1] & 0xff) << 8 | (u[2] & 0xff) << 16 | (u[3] & 0xff) << 24, 0, 0, 0]
+        }
+        Some(V3D_INTERNAL_TYPE_16F) => {
+            let h = c.map(|x| u32::from(f32_to_f16(x)));
+            [h[0] | h[1] << 16, h[2] | h[3] << 16, 0, 0]
+        }
+        Some(V3D_INTERNAL_TYPE_16I) | Some(V3D_INTERNAL_TYPE_16UI) => {
+            [(u[0] & 0xffff) | u[1] << 16, (u[2] & 0xffff) | u[3] << 16, 0, 0]
+        }
+        Some(V3D_INTERNAL_TYPE_32I) | Some(V3D_INTERNAL_TYPE_32UI) | Some(V3D_INTERNAL_TYPE_32F) => u,
+        _ => [pack_rgba8(c), 0, 0, 0],
+    }
 }
 
 /// The whole state of one draw, or why it cannot be expressed.
@@ -812,10 +944,8 @@ mod tests {
     fn every_refusal_has_its_own_reason() {
         /* each case: how to break the plain draw, and a word its reason names */
         type Case = (fn(&mut GlesDraw), &'static str);
-        let cases: [Case; 6] = [
-            (|d| d.target_format = GLES_SURF_RGBA16F, "RGBA16F"),
-            (|d| d.target_format = GLES_SURF_R16F, "R16F"),
-            (|d| d.target_format = GLES_SURF_R32F, "R32F"),
+        let cases: [Case; 4] = [
+            (|d| d.target_format = GLES_SURF_SRGB8_A8, "sRGB"),
             (|d| d.target_format = 99, "does not know"),
             (|d| d.samples = 2, "sample count"),
             (|d| d.index_count2 = 3, "second index list"),
@@ -863,10 +993,92 @@ mod tests {
         assert_eq!(unsupported(&d), Some("alpha-to-coverage is not implemented"));
         /* its reason is none of the refusal reasons */
         let mut other = draw();
-        for f in [GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F, 99] {
+        for f in [GLES_SURF_SRGB8_A8, 99] {
             other.target_format = f;
             assert_ne!(refusal(&other), unsupported(&d));
         }
+    }
+
+    /// Every ES 3.0 colour surface the backend renders (int-rt-v3d) has
+    /// Mesa's row (`rt_format`'s citations of v3dx_format_table.c and
+    /// v3dx_rcl.c): the output image format, the internal type and bpp, the
+    /// INT clamp on the integer rows and NONE on the rest, and bytes a
+    /// pixel equal to the GL core's; a draw into any of them is not refused.
+    /// The sRGB surface has no row and is refused by name.
+    #[test]
+    fn every_colour_surface_has_mesas_row() {
+        /* (surface, output image format, internal type, bpp, clamp) */
+        let rows: [(u8, u32, u32, u32, u32); 26] = [
+            (GLES_SURF_RGBA8888, 27, 2, 0, 0),
+            (GLES_SURF_XRGB8888, 27, 2, 0, 0),
+            (GLES_SURF_RGB565, 7, 2, 0, 0),
+            (GLES_SURF_RGBA16F, 18, 6, 1, 0),
+            (GLES_SURF_R16F, 20, 6, 1, 0),
+            (GLES_SURF_R32F, 11, 10, 0, 0),
+            (GLES_SURF_R8I, 33, 0, 0, 3),
+            (GLES_SURF_R8UI, 36, 1, 0, 3),
+            (GLES_SURF_R16I, 23, 4, 0, 3),
+            (GLES_SURF_R16UI, 26, 5, 0, 3),
+            (GLES_SURF_R32I, 14, 8, 0, 3),
+            (GLES_SURF_R32UI, 17, 9, 0, 3),
+            (GLES_SURF_RG8I, 32, 0, 0, 3),
+            (GLES_SURF_RG8UI, 35, 1, 0, 3),
+            (GLES_SURF_RG16I, 22, 4, 0, 3),
+            (GLES_SURF_RG16UI, 25, 5, 0, 3),
+            (GLES_SURF_RG32I, 13, 8, 1, 3),
+            (GLES_SURF_RG32UI, 16, 9, 1, 3),
+            (GLES_SURF_RGBA8I, 31, 0, 0, 3),
+            (GLES_SURF_RGBA8UI, 34, 1, 0, 3),
+            (GLES_SURF_RGBA16I, 21, 4, 1, 3),
+            (GLES_SURF_RGBA16UI, 24, 5, 1, 3),
+            (GLES_SURF_RGBA32I, 12, 8, 2, 3),
+            (GLES_SURF_RGBA32UI, 15, 9, 2, 3),
+            (GLES_SURF_RGB10_A2UI, 2, 5, 1, 3),
+            (GLES_SURF_SRGB8_A8, 0, 0, 0, 0),
+        ];
+        for (surf, output, ty, bpp, clamp) in rows {
+            let name = gles_surf_name(surf);
+            let Some(r) = rt_format(surf) else {
+                assert_eq!(surf, GLES_SURF_SRGB8_A8, "{name}: no row");
+                assert!(refusal(&GlesDraw { target_format: surf, ..draw() }).unwrap().contains("sRGB"));
+                continue;
+            };
+            assert_eq!((r.output, r.internal_type, r.internal_bpp, r.clamp), (output, ty, bpp, clamp), "{name}");
+            assert_eq!(r.bytes, gles_surf_bytes_per_pixel(surf), "{name}: bytes a pixel");
+            assert_eq!(r.clamp == V3D_RENDER_TARGET_CLAMP_INT, gles_surf_is_integer(surf), "{name}: INT clamp");
+            assert_eq!(refusal(&GlesDraw { target_format: surf, ..draw() }), None, "{name}: drawn");
+            assert_eq!(typed(surf), surf > GLES_SURF_RGB565, "{name}: typed");
+        }
+        assert_eq!(rt_format(99), None);
+        assert_eq!(rt_row(99), RGBA8_ROW);
+    }
+
+    /// The clear words of each internal type, as v3d_tlb_clear packs them
+    /// (`clear_words`): an integer clear is raw bits narrowed to the
+    /// channel, a float one halves or floats, the ES 2.0 formats their one
+    /// RGBA8 word.
+    #[test]
+    fn clear_words_pack_as_the_tlb_clear_does() {
+        let ints = [1u32, -2i32 as u32, 0x1_0003, 0xffff_fff4].map(f32::from_bits);
+        assert_eq!(clear_words(GLES_SURF_RGBA8I, ints), [0xf403_fe01, 0, 0, 0], "a byte a channel");
+        assert_eq!(clear_words(GLES_SURF_R8UI, ints), [0xf403_fe01, 0, 0, 0], "the same packing, one channel read");
+        assert_eq!(clear_words(GLES_SURF_RGBA16UI, ints), [0xfffe_0001, 0xfff4_0003, 0, 0], "16 bits a channel");
+        assert_eq!(clear_words(GLES_SURF_RG16I, ints), [0xfffe_0001, 0xfff4_0003, 0, 0]);
+        assert_eq!(
+            clear_words(GLES_SURF_RGB10_A2UI, ints),
+            [0xfffe_0001, 0xfff4_0003, 0, 0],
+            "16UI in the tile buffer"
+        );
+        assert_eq!(clear_words(GLES_SURF_RGBA32I, ints), ints.map(f32::to_bits), "the words as they are");
+        assert_eq!(clear_words(GLES_SURF_R32UI, ints), ints.map(f32::to_bits));
+        let f = [1.0f32, 0.5, -2.0, 0.0];
+        assert_eq!(clear_words(GLES_SURF_RGBA16F, f), [0x3800_3c00, 0x0000_c000, 0, 0], "halves, two a word");
+        assert_eq!(clear_words(GLES_SURF_R16F, f), [0x3800_3c00, 0x0000_c000, 0, 0]);
+        assert_eq!(clear_words(GLES_SURF_R32F, f), f.map(f32::to_bits));
+        let rgba = [1.0f32, 0.0, 0.0, 1.0];
+        assert_eq!(clear_words(GLES_SURF_RGBA8888, rgba), [0xff00_00ff, 0, 0, 0], "the ES 2.0 word");
+        assert_eq!(clear_words(GLES_SURF_RGB565, rgba), [0xff00_00ff, 0, 0, 0]);
+        assert_eq!(clear_words(99, rgba), [0xff00_00ff, 0, 0, 0]);
     }
 
     /// The quad takes the target and the clear's values from the draw it

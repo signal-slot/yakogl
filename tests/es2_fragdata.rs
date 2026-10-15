@@ -6,7 +6,8 @@
 //! and data/gles2/shaders/fragdata.test) compile one vertex and one fragment
 //! shader and either draw (`valid_*`) or expect a compile failure
 //! (`invalid_assign_to_1`, `write_fragcolor_and_fragdata_*`).
-//! tools/cts/log/investigations/es2-fragdata.md has the whole path.
+//! docs/investigations/es2-fragdata.md has the whole path and the board
+//! results (the first record: tools/cts/log/investigations/es2-fragdata.md).
 //!
 //! Two layers:
 //!
@@ -256,6 +257,8 @@ mod gl_api {
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     };
 
     /// The render target dEQP gets on the boards is larger; the cases take

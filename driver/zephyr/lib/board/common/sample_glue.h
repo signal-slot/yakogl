@@ -41,7 +41,21 @@ int pvr_sample_flip_window(uintptr_t phys, uint32_t width, uint32_t height,
 void pvr_sample_flush_dcache(void *addr, size_t size);
 
 /* Keep the picture for CONFIG_PVR_SAMPLE_HOLD_SECONDS, then reset the SoC
- * when CONFIG_PVR_SAMPLE_REBOOT is set. Returns rc otherwise. */
+ * when CONFIG_PVR_SAMPLE_REBOOT is set. Returns rc otherwise. With
+ * CONFIG_PVR_SAMPLE_DISPLAY_FILL (AM62P, diagnosis) the DSS safety layer is
+ * first filled with that opaque colour and the port enabled, so the panel
+ * must show it whatever the application plane carries. */
 int pvr_sample_finish(int rc);
+
+/* The two halves of pvr_sample_finish around its hold, for a run that holds
+ * elsewhere (the board layer's board_finish): before, the known-colour fill
+ * and the DSS counters ("before hold", with the register dump when
+ * configured); after, the counters again. Nothing without the DSS driver. */
+void pvr_sample_before_hold(void);
+void pvr_sample_after_hold(void);
+
+/* CONFIG_PVR_SAMPLE_DISPLAY_DUMP (AM62P): the display path's registers on
+ * the console in the Linux dump's format (am62p/display_dump.c). */
+void pvr_sample_display_dump(const char *when);
 
 #endif

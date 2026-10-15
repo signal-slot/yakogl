@@ -1910,6 +1910,11 @@ fn resolve_target(c: &mut GlContext, d: &mut GlesDraw) -> Result<(), DrawError> 
     match framebuffer::fb_target_pitched(c) {
         Some((m, w, h, off, pitch)) if w != 0 && h != 0 => {
             d.target_gpu = m.gpu.wrapping_add(off as u64); /* the attached level/face/layer */
+            d.target_cpu = if m.cpu.is_null() {
+                core::ptr::null_mut()
+            } else {
+                (m.cpu as *mut u8).wrapping_add(off as usize) as *mut c_void
+            };
             d.target_w = w;
             d.target_h = h;
             /* the default surface may be a view into a wider buffer, and a
@@ -1920,6 +1925,7 @@ fn resolve_target(c: &mut GlContext, d: &mut GlesDraw) -> Result<(), DrawError> 
         _ => match framebuffer::fb_depth_stencil_only_size(c) {
             Some((w, h)) => {
                 (d.target_gpu, d.target_w, d.target_h, d.target_pitch) = (0, w, h, 0);
+                d.target_cpu = core::ptr::null_mut();
                 Ok(())
             }
             None => Err((GL_INVALID_FRAMEBUFFER_OPERATION, "resolve_target")),
@@ -12687,6 +12693,82 @@ mod tests {
             assert!(d.color_write && d.do_clear);
             assert_eq!(d.index_count, 0, "the backend supplies the quad's geometry");
         }
+    }
+
+    /// `plan_clear` over depth mask x stencil write mask x scissor x
+    /// {D, S, D+S}: a depth/stencil clear changes only the buffers whose mask
+    /// is open, an empty box clears nothing, and it is a quad exactly when the
+    /// box is narrower than the target or only some stencil bits may change.
+    #[test]
+    fn plan_clear_depth_stencil_table() {
+        const W: u32 = 16;
+        const H: u32 = 16;
+        let boxes: [Option<[GLint; 4]>; 7] = [
+            None,
+            Some([0, 0, 16, 16]),
+            Some([-4, -4, 40, 40]),
+            Some([2, 3, 4, 5]),
+            Some([0, 0, 15, 16]),
+            Some([5, 5, 0, 3]),
+            Some([5, 5, 3, -1]),
+        ];
+        let mut seed = 0x2545_f491u32;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            seed >> 16
+        };
+        let mut cases = 0;
+        for round in 0..16 {
+            for &scissor in &boxes {
+                for bits in 1..4u8 {
+                    let (clear_d, clear_s) = (bits & 1 != 0, bits & 2 != 0);
+                    /* round 0 and 1 pin the open and the closed corners */
+                    let (depth_mask, swm) = match round {
+                        0 => (true, 0xff),
+                        1 => (false, 0),
+                        _ => (rnd() & 1 != 0, [0u8, 0xff, rnd() as u8][(rnd() % 3) as usize]),
+                    };
+                    let pc = PendingClear {
+                        depth: clear_d,
+                        stencil: clear_s,
+                        state: ClearState {
+                            color_mask: 0xf,
+                            depth_mask,
+                            stencil_write_mask: swm,
+                            scissor,
+                            target_mask: 0,
+                        },
+                        ..PendingClear::NONE
+                    };
+                    let what = format!(
+                        "round {round} D={clear_d} S={clear_s} dmask={depth_mask} smask={swm:#x} box={scissor:?}"
+                    );
+                    let want_d = clear_d && depth_mask;
+                    let want_s = clear_s && swm != 0;
+                    let empty = scissor.is_some_and(|b| b[2] <= 0 || b[3] <= 0);
+                    let plan = plan_clear(&pc, (W, H, true), true, true);
+                    if (!want_d && !want_s) || empty {
+                        assert!(plan.is_none(), "{what}: nothing to clear");
+                        cases += 1;
+                        continue;
+                    }
+                    let cp = plan.unwrap_or_else(|| panic!("{what}: a clear was lost"));
+                    assert_eq!((cp.depth, cp.stencil, cp.color), (want_d, want_s, false), "{what}");
+                    let covers = scissor.is_none_or(|b| {
+                        b[0] <= 0 && b[1] <= 0 && b[0] + b[2] >= W as GLint && b[1] + b[3] >= H as GLint
+                    });
+                    assert_eq!(cp.scissor, !covers, "{what}: scissor");
+                    assert_eq!(cp.quad, !covers || (want_s && swm != 0xff), "{what}: quad");
+                    if cp.stencil {
+                        assert_eq!(cp.stencil_write_mask, swm, "{what}");
+                    }
+                    cases += 1;
+                    /* a target without the buffer takes no clear of it */
+                    assert!(plan_clear(&pc, (W, H, true), false, false).is_none(), "{what}: no D/S buffer");
+                }
+            }
+        }
+        assert_eq!(cases, 16 * 7 * 3);
     }
 
     /// A stencil clear that may change only some bits cannot be the frame's
