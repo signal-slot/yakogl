@@ -42,6 +42,18 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 > "both" hunk's seam; a name check alone would not have.
 
 
+## ES 2.0 on the three boards at main `e9901869a`: the Pi 4 (2026-10-15/16)
+
+The Pi 4 at the same commit as the AM62P and the i.MX8MP below, booted by the Pi firmware's tryboot, `tools/board.sh`, records `records/pi4/{common,deqp}-e9901869` (gitignored). With it, all three boards read 0 dEQP-GLES2 failures and every common-set row done at one main commit. Issue #870.
+
+| Board | dEQP-GLES2 whole tree | Common set | GPU resets |
+|---|---|---|---|
+| Pi 4 | 17,126 pass / **0 fail** / 34 NS / 3 QW / 2 CW; all 17,165 mustpass cases with a result | 5 of 5 done: glmark2 188 (33 scenes, 0 failed, 0 GL errors, 0 draws that sampled an incomplete texture), Slint view off and on probes pass, cluster 139.4 fps (192.8 Mpx/s) at 1920x720, gl_test 12 of 12 | 0 (29 dEQP records: 0 recoveries, 0 GPU reset lines) |
+
+- fbo 709 pass / 0 fail: the 46 `GL_BGRA_EXT` failures of `20a48791` are gone on this board too (#828, #205).
+- The readings match `tools/cts/log/board-sessions/es2-final-expected.md` (CW 2 is within its 0 to 2).
+- Before this run the board had been off the network for 15 hours after a glmark2 tryboot image staged at 06:49 by a run with no record (#905). The GM row of this run, from the same recipe, came back to Linux by itself.
+
 ## ES 2.0 at main `e9901869a` (contains #866): AM62P and i.MX8MP, every row done, 0 dEQP-GLES2 failures (2026-10-15)
 
 The same runs as the `e3749a25` section below, one commit later on main (#866 and the commits landed between). U-Boot from eMMC, `tools/board.sh`, records `records/{am62p,imx8mp}/{common,deqp,deqp-ms4}-e9901869` (gitignored). Issue #870.
