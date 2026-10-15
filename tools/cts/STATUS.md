@@ -87,12 +87,8 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 
 ## 開いている不具合（10/11 時点。順番と詳細は docs/HANDOFF.md「Open work」）
 
-<<<<<<< HEAD
 - **dEQP-GLES2、3 ボード共通（10/15 時点）**: `GL_BGRA_EXT` のレンダーバッファ 46 件（8bbf9ba2 の退行、未修正）。i.MX8MP と Pi 4 で失敗、AM62P は未測定。
-- **AM62P、dEQP-GLES2**: 最終ツリー 63efed8e で失敗 0（10/12、am62p-es2-final-r2.md）。`texture.vertex.2d` の 45 件（画像 9）、invariance 9 件、ms4 の `multisample.constancy_alpha_to_coverage`、`constancy_both_inverted` の 2 件は合格。以前は「ホストで修正済み、ボード確認待ち」。8bbf9ba2 より前なので、BGRA の 46 件は先端で再確認が要る。gl_test 198 / 197 / 171 は未走行。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
-=======
-- **AM62P、dEQP-GLES2**: `texture.vertex.2d` の 45 件（画像 9）はホストで修正済み（a6fc6f14、インデックスを分割して描く）、ボード確認待ち。ms4 の `multisample.constancy_alpha_to_coverage` と `constancy_both_inverted` の 2 件は、フレームの PDS プログラムを共有する修正がホストにある（HANDOFF「State of main」）、ボード確認待ち。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）はホストで修正済み（スワップで終わらないキックがサンプルを `downscale` なしで back end のサンプル保存へも出し、次のキックのロード quad がそれを 4x 画像としてサンプルごとに読み戻す）、PBE の未解決レイアウトとサンプルごとの読み出しはボード未測定（docs/handoff/20261015-pvr-msaa-split.md）。
->>>>>>> bc27268e53e83c9fe6c90dba5eb12ef95213dcf8
+- **AM62P、dEQP-GLES2**: 最終ツリー 63efed8e で失敗 0（10/12、am62p-es2-final-r2.md）。`texture.vertex.2d` の 45 件（画像 9）、invariance 9 件、ms4 の `multisample.constancy_alpha_to_coverage`、`constancy_both_inverted` の 2 件は合格。以前は「ホストで修正済み、ボード確認待ち」。8bbf9ba2 より前なので、BGRA の 46 件は先端で再確認が要る。gl_test 198 / 197 / 171 は未走行。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）はホストで修正済み（スワップで終わらないキックがサンプルを `downscale` なしで back end のサンプル保存へも出し、次のキックのロード quad がそれを 4x 画像としてサンプルごとに読み戻す）、PBE の未解決レイアウトとサンプルごとの読み出しはボード未測定（docs/handoff/20261015-pvr-msaa-split.md）。
 - **AM62P、dEQP-GLES3**: 画像 20 と 21 の 3D テクスチャの 2 ケースで GPU がハングする。画像 7 は GENERAL アリーナ 1 MiB に入らない描画で打ち切り（ResourceError）。画像 5 は transform feedback の取り込みが未実装で打ち切り（保留中の着地はホストだけ）。
 - **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも cd738b1a でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
 - **Pi 4**: dEQP-GLES2 は d56e79e5 の全ツリーで失敗 0（10/12）、20a48791 の行 0〜14 で `GL_BGRA_EXT` の 46 件が失敗（10/14、修正は未着地）。行 15〜28 は未走行。GLES3 は未実行。
