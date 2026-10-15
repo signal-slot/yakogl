@@ -7,15 +7,37 @@ Tool: `tools/license_audit.py`. Re-run:
     python3 -I tools/license_audit.py [--depth N] [--list CLASS] [--json] [--strict]
     python3 -I tools/license_audit.py --self-test
 
-`--strict` exits non-zero when there are findings (the follow-up item
-`pub-license-gate` wires it into `tools/check.sh`; this item does not touch
-`check.sh`). The repository's own allowlist is `tools/license_audit.allow`,
+`--strict` exits non-zero when there are findings. It is not wired anywhere:
+`tools/cts/cts-selftest.sh` (run by `tools/check.sh`) runs checks 23-25, the
+tree-diff self-test, `--self-test` of this tool and the report-mode audit
+below. The repository's own allowlist is `tools/license_audit.allow`,
 read by default.
 
 Run at `79c73ea` (the integration tip) plus this item's changes: 2431 tracked
 files.
 
-## Output (summary counts)
+## Gate and open decision (strict mode)
+
+`tools/cts/cts-selftest.sh` check 25 runs `python3 -I tools/license_audit.py`
+in report mode over the repository. It fails only on a crash (non-zero exit)
+or on `unknown-id` above 0, and prints the `missing-spdx` count as
+information. Check 24 runs `--self-test` (the fixtures under
+`tools/testdata/license_audit/`).
+
+**Open owner decision:** whether the `missing-spdx` files get SPDX headers or
+allowlist rules (`tools/license_audit.allow`). Until then `--strict` stays off
+in every gate; turning it on with the current counts would fail. The
+`missing-spdx` files are mostly the Qt/femtovg corpora, the dEQP-generated
+fixtures and patches (table below).
+
+Counts measured at the tip `d2a07a33` (`python3 -I tools/license_audit.py`):
+2470 files, 1343 with an SPDX line, 342 allowlisted; `missing-spdx` 597,
+`unknown-id` 0, `unused-license` 4, `third-party-mismatch` 0,
+`third-party-unlabelled` 9 (information, not a finding), generated 57
+(mismatch 0); findings 601 (597 + 4). The 587 / 591 figures in the sections
+below were measured at the earlier tip `79c73ea` and have grown by 10 files.
+
+## Output (summary counts, at `79c73ea`)
 
 ```
 licence audit: 2431 files, 1315 with an SPDX line, 341 allowlisted
@@ -161,8 +183,7 @@ mix our code with Mesa-derived code (`pvr_pds_render_gen.h`,
 ## Follow-up
 
 1. Owner: items 1, 5 and 7-12 of the table (each blocks `--strict`).
-2. `pub-license-gate`: run `python3 -I tools/license_audit.py --strict` in
-   `tools/check.sh` once the remaining findings are decided, or wire it with a
-   baseline.
+2. After the owner decision: switch check 25 of `tools/cts/cts-selftest.sh`
+   to `--strict`, or to a baseline of the decided count.
 3. Not covered by the tool: copyright holders inside file headers (NOTICE is
    hand-kept); `tools/check.sh` is unchanged.
