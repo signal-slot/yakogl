@@ -5,7 +5,7 @@
 The state of the work and what comes next. A result does not edit this
 file: it adds a note under `docs/handoff/` (one file per result,
 `docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
-in after the merge; a person folds the same way. Last update: 2026-10-15.
+in after the merge; a person folds the same way. Last update: 2026-10-16.
 
 Board addresses, UART paths and credentials never go in this file; they come
 from the environment (`BOARD_HOST`, `BOARD_UART`, ...).
@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `3ff06479` (2026-10-15). The numbers below are read from
+main is `14fc448d` (2026-10-16). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -528,15 +528,32 @@ es3-vertex).
      integer texture attachments, the unsized depth textures, the PowerVR 3D
      grid slice and the draw into colour-1-only. Each, with its file, is in
      "Open work" item 4, `fbo-completeness`.
-   - **pvr-msaa-split** (no issue yet): a 4x frame the PowerVR splits into
-     two kicks (a full arena, the 1024-draw cap, or a glFinish /
-     glReadPixels before more drawing) loses its samples: the next kick's
-     colour-load quad writes the resolved colour to all four samples.
+   - **pvr-msaa-split** (no issue yet): fixed on the host, unmeasured on the
+     board. A 4x frame the PowerVR splits into two kicks (a full arena, the
+     1024-draw cap, or a glFinish / glReadPixels before more drawing) now
+     keeps its samples: a multisampled kick that is not ended by a swap
+     emits each tile twice, resolved into the target as before (PBE
+     REG_WORD0 `downscale`) and unresolved into a sample store the back end
+     owns (`MsStore`, `src/pvr/backend.rs`: the TPU's multisampled image of
+     the target, `smpcnt` = log2 of the samples over the target's own
+     width, height and stride, four images' worth of bytes from the render
+     pool). The next kick's load quad binds the store in place of the
+     target, with the same load program, at the full sample rate, so each
+     instance reloads its own sample. A swap's kick stores the resolved
+     colour only, and a frame drawn into the surface after it reloads that,
+     as before. The 1x path and the dEQP-GLES2 answers do not change.
      `a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour`
-     (`src/pvr/backend_tests.rs`) is `#[ignore = "BUG: ..."]` and asserts
-     the right answer. The fix keeps each sample across kicks and reloads
-     it at the full sample rate; the PBE's unresolved layout and the
-     per-sample load are unmeasured on the board.
+     (`src/pvr/backend_tests.rs`) is no longer ignored; beside it
+     `a_4x_kick_before_a_readback_stores_its_samples_and_the_next_kick_loads_them`,
+     `a_swap_kick_keeps_no_samples_and_the_next_frame_reloads_the_resolved_colour`
+     and `a_4x_frame_split_at_the_draw_cap_or_a_full_arena_keeps_its_samples`
+     pin the two emits, the store's binding and the rates. Two things are
+     chosen from the vendored headers, not measured: that the PBE's
+     unresolved store (pbestate.xml:255, `downscale` off) is laid out as the
+     TPU's `smpcnt` image (texstate.xml:273) over the same stride, and that
+     a per-sample fetch of that image reads the running instance's sample.
+     The entry stays until the board check ("Next board session", AM62P)
+     passes; then it closes.
    - AM62P: an indexed draw whose staged data cannot be cut (a fan or a
      line loop, a second index list, or one primitive whose vertex window
      is over half the arena) is still refused by name when it does not fit
@@ -1755,6 +1772,29 @@ Expected: combined mustpass 0 fail, the `fail` column of all 17 image rows
 `fragdata.invalid_assign_to_1`, which passes since `4e9397c`. A case that
 moves from Pass to anything else is a regression: bisect it first. Time:
 at most about 11 min an image, 18 images.
+
+pvr-msaa-split, after the GLES2 ms4 row, on the ms4 image
+(`rgba8888d24s8ms4`). One measurement decides it, in
+`driver/tools/pvrlab/gl_test.c` as a new case next to 16 (the 4x diagonal
+triangle) and 173 (`splitzs`):
+
+1. Clear black. Draw case 16's white triangle (its hypotenuse the window
+   diagonal) into the 4x pbuffer. `glFinish()` (the frame splits: kick 1
+   stores the samples). Draw the same triangle again, `glReadPixels`.
+2. Expected: the pixels on the diagonal read `0x7f` (two of four samples
+   white), interior `0xff`, exterior `0x00`, the same picture as one
+   unsplit draw. The console shows `kick 1: ... 1 draws, 0 quads, samples`
+   and `kick 2: ... rt 1, 1 draws, 1 quads, samples`.
+3. The readings that name a wrong choice: `0xbf` on the diagonal means the
+   store held the resolved colour in every sample (the unresolved layout
+   is not the `smpcnt` image over the target's stride: next, a 2w x 2h
+   store with twice the pitch, the ZLS's 2x2 spread); `0xff` or `0x00` on
+   the diagonal means every instance read one sample (the per-sample fetch
+   needs the sample number: `gl_SampleID` in the load shader, SMP `sno`);
+   a BIF fault or a hang on kick 1 means the second emit's address or
+   extent is wrong (the kick log's `pbe1` words).
+4. Then the ms4 row again (`tools/cts/am62p-ms4-tree.txt`): 16 / 16
+   expected, as on `452d6c31`.
 
 dEQP-GLES3 (the tree ran on `ad2b5ed`; "State of main"). Next, by size:
 
