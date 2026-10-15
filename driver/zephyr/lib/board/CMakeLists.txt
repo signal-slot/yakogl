@@ -49,6 +49,7 @@ if(CONFIG_YAKOGL_BOARD)
 
   if(CONFIG_YAKOGL_BOARD_AM62P)
     zephyr_library_sources(am62p/board_am62p.c)
+    zephyr_library_sources_ifdef(CONFIG_PVR_SAMPLE_DISPLAY_DUMP am62p/display_dump.c)
   elseif(CONFIG_YAKOGL_BOARD_IMX8MP)
     zephyr_library_sources(imx8mp/board_imx8mp.c)
   elseif(CONFIG_YAKOGL_BOARD_RPI4)

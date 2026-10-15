@@ -82,4 +82,28 @@ config PVR_SAMPLE_SHOW_ON_DSS
 	default y
 	depends on SAFEUI_DSS_AM62P
 
+config PVR_SAMPLE_DISPLAY_DUMP
+	bool "Print the display path's registers with the DSS counters (diagnosis)"
+	depends on PVR_SAMPLE_SHOW_ON_DSS
+	help
+	  Before and after the hold, print the DSS1, DSI, wrapper and D-PHY
+	  registers of driver/docs/am62p-display-cold.md's read list in the
+	  format of driver/docs/am62p-display-dump-linux.txt, plus the
+	  SN65DSI8x's IRQ_STAT, so a board run can be diffed against the dump
+	  taken while Linux drove the panel. Reads only.
+
+config PVR_SAMPLE_DISPLAY_FILL
+	hex "Fill the DSS safety layer with this opaque ARGB8888 colour before the hold (diagnosis)"
+	depends on PVR_SAMPLE_SHOW_ON_DSS
+	default 0x0
+	help
+	  0 does nothing. Otherwise, before the hold, the whole safety layer
+	  (the DSS driver's own VIDL1 plane, above the application plane) is
+	  filled with this colour by the CPU, flipped in, and the video port is
+	  enabled; the colour must then cover the panel whatever the GPU and
+	  the application plane did. A known-colour fill is the first step of
+	  a black-panel diagnosis: it separates "nothing reaches the panel"
+	  (the DSS/DSI/bridge path) from "the application plane is not shown"
+	  (buffer, format, plane enable). 0xffff0000 is opaque red.
+
 endmenu
