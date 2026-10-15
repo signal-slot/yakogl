@@ -42,7 +42,12 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `14fc448d` (2026-10-16). The numbers below are read from
+main is `e9901869a` (2026-10-16; #870). ES 2.0 holds on all three boards
+there, each booted by its bootloader (`tools/cts/RESULTS.md`, the
+2026-10-15/16 sections): dEQP-GLES2 0 failures (AM62P 17,140 combined,
+i.MX8MP 17,318 of 17,371, Pi 4 17,126 with all 17,165 mustpass cases), the
+common set 5 of 5 rows done on every board, 0 GPU resets wherever counted.
+The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -873,6 +878,9 @@ es3-vertex).
      `elegance-1` (`Could not resolve hostname`) and had no `BOARD_UART` /
      `BOARD_HDMI_TIMINGS`; the deps cache has the gles3 stage 1 but no gles2
      stage 1 for `rpi_4b`.
+   - #905 (opened): a Pi 4 glmark2 tryboot image kept the board off the
+     network for 15 h on 2026-10-15; the same recipe ran clean at
+     `e9901869a`. Image kept for a reproduction with someone at the board.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured. Each item keeps every `report-es2` answer and adds a test that
    pins it. What each item built is in the ES 3.0 table above; here is what
@@ -1287,8 +1295,10 @@ es3-vertex).
      The board is open: see "Waiting for a board". The old scope of
      `am62p-es2-r1c` (images 8 to 17, ms4, gl_test) is not repeated; its
      record is `tools/cts/log/board-sessions/am62p-es2-r1c.md`.
-   - ES 2.0 sign-off (#870): the Pi 4's whole tree and common set at the main
-     commit then current, once the board is back on the network.
+   - ES 2.0 sign-off (#870): met on the board records at `e9901869a`.
+     Roadmap step 1 (ES 2.0) is done; next is step 2, minimum performance
+     (glmark2 on the same board; the AM62P's terrain, shadow and refract
+     frame times and its re-posted kicks, #1, #2).
    - Follow-up for a `src/` change: `build_tex_desc` is private, so the test
      derives the texture words from the bind. Exposing it under `host-test`
      would let the test compare the real words.
