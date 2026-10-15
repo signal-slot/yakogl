@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `65b38531` (2026-10-15). The numbers below are read from
+main is `3cd71fe8` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -113,6 +113,13 @@ eMMC, `tools/board.sh`; `tools/cts/RESULTS.md`, the 2026-10-15 section):
   gone (#828, entry 21 711 / 711). Common set: gl_test 48 of 49 (case 44,
   #6); every other row done, 0 resets.
 - Pi 4: not run at `e3749a25` (the board is off the network).
+
+ES 2.0 at main `e9901869a` (contains #866), U-Boot from eMMC
+(`tools/cts/RESULTS.md`, "ES 2.0 at main `e9901869a`"): AM62P and i.MX8MP,
+every row done, 0 dEQP-GLES2 failures (AM62P 17,124 / 0 / 34 / 5 / 2, ms4
+16 / 0; i.MX8MP 17,318 of 17,371 / 0 / 34 / 19), common set 5 of 5 done on
+both (i.MX8MP gl_test 49 of 49). Resets 0 on every row that counts them.
+The Pi 4 is not run at this commit.
 
 Stage 2 benchmark audit (2026-10-15, main `548860df`):
 `docs/investigations/stage2-bench-gap.md` is the board x benchmark table for
@@ -1231,9 +1238,8 @@ es3-vertex).
      The board is open: see "Waiting for a board". The old scope of
      `am62p-es2-r1c` (images 8 to 17, ms4, gl_test) is not repeated; its
      record is `tools/cts/log/board-sessions/am62p-es2-r1c.md`.
-   - ES 2.0 sign-off (#870): merge #866 (case 44 on the i.MX8MP, 49 of 49 in
-     two runs), run the Pi 4's whole tree and common set once the board is
-     back, then one pass on all three boards at the main commit after #866.
+   - ES 2.0 sign-off (#870): the Pi 4's whole tree and common set at the main
+     commit then current, once the board is back on the network.
    - Follow-up for a `src/` change: `build_tex_desc` is private, so the test
      derives the texture words from the bind. Exposing it under `host-test`
      would let the test compare the real words.
