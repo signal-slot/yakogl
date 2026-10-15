@@ -42,6 +42,24 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 > "both" hunk's seam; a name check alone would not have.
 
 
+## dEQP-GLES2 whole trees and the common set at main `e3749a25`: AM62P and i.MX8MP (2026-10-15)
+
+One commit for both boards, `e3749a25` (contains #828, the `GL_BGRA_EXT` renderbuffer fix, and #831, the AM62P glmark2 image's 256 MiB GPU carve-out). Every image booted by U-Boot from eMMC (`BOARD_BOOT=uboot-mmc`), run with `tools/board.sh` from a detached checkout. Records under `records/<board>/` (gitignored), named below. Issue #870.
+
+| Board | Run | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning | GPU resets | Record |
+|---|---|---:|---:|---:|---|---:|---|
+| AM62P, 17 images 1x | whole tree | 17,124 | **0** | 34 | 5 / 2 | 0 | `records/am62p/deqp-e3749a25-r3` |
+| AM62P, ms4 image | `multisample.*` on the 4x config | 16 | **0** | 0 | 0 / 0 | 0 | `records/am62p/deqp-ms4-e3749a25` |
+| AM62P combined (ms4 replaces the 16 1x `multisample.*`) | | 17,140 | **0** | 18 | 5 / 2 | 0 | both |
+| i.MX8MP, 29 entries | whole tree | 17,318 of 17,371 begun | **0** | 34 | 19 (other) | 0 | `records/imx8mp/deqp-e3749a25` |
+
+- AM62P: every one of the 17 images has a result for every case it began (the image's own counters). The two CompatibilityWarnings are `flush_finish.flush` and `flush_finish.flush_wait`, dEQP's timing check (expected 0 to 2). The 34 NotSupported and 5 QualityWarnings are the accepted buckets of `es2-final-expected.md`.
+- i.MX8MP: `TALLY (29 entries): begun 17371 passed 17318 failed 0 notsup 34 other 19 noresult 0`, equal number for number to `c345ab74` (10-12) and to every entry of `es2-final-expected.md` section 3. Entry 21 (`fbo.*`) reads 711 / 711: #828 fixed the 46 `GL_BGRA_EXT` failures of `cd738b1a` and `835cf9cc` on this board (#205).
+- Common set, AM62P (`records/am62p/common-e3749a25`, 5 of 5 rows done, 0 resets): glmark2 score 462, 33 scenes, 0 failed, 0 unsupported, **GL errors raised 0** (2573 at `cd738b1a`), no `render pool exhausted` line (#1, #2); Slint view off and on: probes pass; cluster: probes pass, 1024x600 73.2 fps (45.0 Mpx/s); gl_test 50 of 50. Still open in glmark2: terrain 1.47 s, shadow 0.38 s and refract 2.08 s a frame, and 8 "fence ... not moved at 20 ms, re-posted 1 kick(s)" lines (7 in terrain, 1 in refract).
+- Common set, i.MX8MP (`records/imx8mp/common-e3749a25`, 0 resets): glmark2, Slint view off and on, cluster done; gl_test 48 of 49 run (case 16 skipped), case 44 failing (#6). PR #866 (fa7cd57c, 64-bit targets rendered tiled) reads 49 of 49 in two runs (`records/imx8mp/gt-fa7cd57c`).
+- Pi 4: not run. The board is off the network and its UART prints nothing; it needs a power cycle.
+- Two defects of the instrument met on the way (#867): the board lock is per host, so two farm agents on another host used the AM62P during this run; and the farm's registry named another port of the serial bridge as the AM62P console, so every AM62P row captured 0 console bytes and read `empty`. Both runs were discarded; the numbers above come from the single chain on the right port.
+
 ## dEQP-GLES2 final trees: AM62P `63efed8e`, i.MX8MP `c345ab74`, Pi 4 `20a48791` rows 0-14 (2026-10-14)
 
 Folded from the board-session records; this file adds no new measurement. Per-case names and causes: `docs/es2-cts-failures.md`.
