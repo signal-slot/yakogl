@@ -1317,6 +1317,18 @@ step "test    $V3D_CONFIG (tests/v3d_rt_sample.rs)" \
 # every one of the formats.
 step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
+# The V3D's own half of the integer and ES 3.0 colour render targets
+# (int-rt-v3d): the TLB render-target rows of src/v3d/state.rs against
+# Mesa's table, the clear words, and the compiler's 32-bit TLB writes of an
+# integer output on the QPU interpreter. Compiles to nothing under
+# report-es2 (no row below).
+step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt_v3d
+# The V3D shader back end's GLSL ES 3.00 gaps the dEQP corpus found
+# (matrix vertex attributes, integer shifts, trunc), built and run on the
+# interpreter. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_shaderc_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_shaderc_v3d
 # ES 3.0 transform feedback objects, varyings, queries and rasterizer
 # discard through the GL API (the capture itself is item tf-capture); the ES
 # 2.0 report below pins the old answers.

@@ -39,15 +39,24 @@ void v3d_frame_tiling_rts(uint32_t width, uint32_t height, uint32_t rts, struct 
 
 void v3d_frame_tiling_ms(uint32_t width, uint32_t height, uint32_t rts, bool msaa, struct v3d_tiling *t)
 {
+	v3d_frame_tiling_bpp(width, height, rts, msaa, 0, t);
+}
+
+void v3d_frame_tiling_bpp(uint32_t width, uint32_t height, uint32_t rts, bool msaa, uint32_t max_bpp,
+			  struct v3d_tiling *t)
+{
 	/* v3d_choose_tile_size, the 4.x branch (v3d_util.c:122-200, Mesa
 	 * b739817b): from 64x64, one step down the table for 2 render targets
 	 * and two for 3-4, two more for 4x MSAA ("if (msaa) idx += 2"), no
-	 * double buffer, and internal bpp 32 (enum 0) adding nothing. The
-	 * TILE_BINNING_MODE_CFG packet carries only the RT count, the max bpp
-	 * and the MSAA bit, and the hardware takes the tile size from them, so
-	 * this rule is the hardware's, not a choice. */
-	static const uint8_t sizes[][2] = { { 64, 64 }, { 64, 32 }, { 32, 32 }, { 32, 16 }, { 16, 16 } };
-	uint32_t idx = (rts > 2 ? 2 : rts > 1 ? 1 : 0) + (msaa ? 2 : 0);
+	 * double buffer, and one more per step of the largest internal bpp
+	 * ("tile_size_index += max_internal_bpp": 32 bpp adds nothing, 64 one,
+	 * 128 two; Mesa's table runs down to 8x8). The TILE_BINNING_MODE_CFG
+	 * packet carries only the RT count, the max bpp and the MSAA bit, and
+	 * the hardware takes the tile size from them, so this rule is the
+	 * hardware's, not a choice. */
+	static const uint8_t sizes[][2] = { { 64, 64 }, { 64, 32 }, { 32, 32 }, { 32, 16 },
+					    { 16, 16 }, { 16, 8 },  { 8, 8 } };
+	uint32_t idx = (rts > 2 ? 2 : rts > 1 ? 1 : 0) + (msaa ? 2 : 0) + (max_bpp > 2 ? 2 : max_bpp);
 	t->tile_w = sizes[idx][0];
 	t->tile_h = sizes[idx][1];
 	t->tiles_x = div_round_up(width, t->tile_w);

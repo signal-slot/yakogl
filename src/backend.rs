@@ -400,9 +400,10 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 /// requires the formats) and refuses to draw into it, by name, rather than
 /// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs
 /// `pbe_int_packmode`, the online compiler's packed integer output) as the
-/// one colour attachment of a draw; the GC7000 the thirteen of 1, 2 and 4
-/// bytes a pixel (src/vivante/backend.rs `GC_INTEGER_RT_FORMATS`); the V3D
-/// none yet.
+/// one colour attachment of a draw; so does the V3D (src/v3d/state.rs
+/// `rt_format`: the TLB's typed render targets, the compiler's 32-bit TLB
+/// writes), among any attachments; the GC7000 the thirteen of 1, 2 and 4
+/// bytes a pixel (src/vivante/backend.rs `GC_INTEGER_RT_FORMATS`).
 pub const INTEGER_RT_FORMATS: u32 = {
     #[cfg(feature = "gpu-vivante")]
     {
@@ -410,7 +411,7 @@ pub const INTEGER_RT_FORMATS: u32 = {
     }
     #[cfg(feature = "gpu-v3d")]
     {
-        0
+        (1 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1
     }
     #[cfg(feature = "gpu-powervr")]
     {

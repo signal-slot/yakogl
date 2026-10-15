@@ -104,6 +104,22 @@ struct v3d_job_target {
 	uint32_t uif_address;        /* GPU address of level 0, 64-byte aligned */
 	uint32_t uif_memory_format;  /* V3D_MEMORY_FORMAT_* (the layout's tiling) */
 	uint32_t uif_height_in_ub;   /* UIF: the padded height in UIF blocks; else 0 */
+	/* ES 3.0's colour formats (int-rt-v3d; docs/online-shaderc/v3d-backend.md
+	 * "Integer and ES 3.0 colour render targets"). With `typed` set,
+	 * rt_format[n] is the V3D_OUTPUT_IMAGE_FORMAT_* of render target n (RT 0
+	 * at [0], whose address and stride are the fields above; rgb565 is then
+	 * not read): the colour load and store of each RT use it, its tile
+	 * buffer internal type and bpp are Mesa's for the format
+	 * (v3dX(get_internal_type_bpp_for_output_format),
+	 * v3dx_format_table.c:220-341), its clamp clamp_for_format_and_type's
+	 * (v3dx_rcl.c:396-407: INT for a pure integer format), and the tile size
+	 * takes the largest bpp of all RTs (v3d_frame_tiling_bpp). The formats
+	 * this builder takes are the rows of rt_internal (v3d_job.c); any other
+	 * breaks the job at v3d_job_begin, and so does 4x with `typed` (the
+	 * kept samples are RGBA8). Clear (every ES 2.0 job): RT 0 is RGBA8 or
+	 * BGR565 as rgb565 says and RT 1..3 RGBA8, byte for byte as before. */
+	bool typed;
+	uint32_t rt_format[4];
 };
 
 /* gallium pipe_stencil_state for one face, ops already in V3D's encoding. */
@@ -272,6 +288,14 @@ struct v3d_job_clear {
 	 * separate stencil of a Z32F_S8X24 zsbuf (v3dx_rcl.c:92-93 load, :139-140
 	 * store); false: D24S8. */
 	bool s_s8;
+	/* With the target `typed` (v3d_job_target): the clear colour of RT n as
+	 * the tile buffer holds it, packed per internal type the way
+	 * v3d_tlb_clear packs job->clear_color (v3dx_draw.c:1705-1760: 8I/8UI
+	 * a byte a channel in one word, 16I/16UI/16F a half a channel in two,
+	 * 32I/32UI/32F the four words as they are); word 0 alone for 32 bpp,
+	 * two for 64, four for 128 (CLEAR_COLORS PART1, PART2 and PART3,
+	 * v3dx_rcl.c:833-860). rgba8 and rgba8_rt are not read then. */
+	uint32_t clear_rt[4][4];
 };
 
 /*
