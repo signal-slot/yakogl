@@ -1486,6 +1486,12 @@ struct Backend {
     swap_drops_zs: bool,
     /// Kicks whose depth/stencil store the swap dropped (instrument).
     swap_zs_dropped: u32,
+    /// The open frame renders into the surface being swapped (set by
+    /// `pvr_backend_surface_swapped`, whatever the option above says): its
+    /// kick is the frame's last, so it keeps no samples ([`MsStore`]).
+    frame_swapped: bool,
+    /// The samples of a multisampled target across a split ([`MsStore`]).
+    ms: MsStore,
     /// Load/clear quads recorded ahead of the app's draws.
     frame_quads: u32,
     /// Tile buffers this frame's fragment shaders spilled outputs into: the
@@ -2929,6 +2935,8 @@ pub extern "C" fn pvr_backend_shutdown() {
         osal::gpu_free(&mut s.mem);
         *s = DsBuf::ZERO;
     }
+    osal::gpu_free(&mut b.ms.mem);
+    b.ms = MsStore::ZERO;
     if !b.vis.impl_.is_null() {
         osal::gpu_free(&mut b.vis);
     }
@@ -3341,6 +3349,14 @@ fn record_frame_quad(
     ld.textures[0].mip_levels = 1;
     ld.textures[0].format = if int { int_load_texfmt(d.target_format) } else { gles_surf_texfmt(d.target_format) };
     ld.textures[0].bgra = if d.target_format == GLES_SURF_XRGB8888 { 1 } else { 0 };
+    /* A multisampled frame going on from the kick before: the samples that
+     * kick stored, not the resolved colour -- the store bound as the target's
+     * multisampled image ([`MsStore`]; the descriptor's `smpcnt` is set
+     * where it is built, `build_desc_block`), read by the same program at
+     * the full sample rate (`loads_samples`), each instance its own sample. */
+    if load_color && b.ms.holds(d) {
+        ld.textures[0].base_gpu = b.ms.mem.gpu;
+    }
     ld.num_textures = 1;
     ld.viewport[2] = d.target_w as i32;
     ld.viewport[3] = d.target_h as i32;
@@ -3850,6 +3866,146 @@ fn ds_bytes(w: u32, h: u32, samples: u32) -> Option<usize> {
     aw.checked_mul(ah)?.checked_mul(4)
 }
 
+/// The samples of a multisampled target across a split.
+///
+/// A 4x frame resolves its samples on its end-of-tile store (PBE REG_WORD0
+/// `downscale`, pbestate.xml:255), so a frame the back end split into two
+/// kicks (a full arena, the draw cap, a glFinish or glReadPixels before more
+/// drawing) handed the next kick one colour per pixel, and that kick's
+/// load quad wrote it to every sample: a sample the later draws left
+/// uncovered held the average, not its own colour (docs/HANDOFF.md,
+/// pvr-msaa-split; dEQP's multisample.constancy_* before `a4f64950`).
+///
+/// Now a multisampled kick that may not be the frame's last (no swap) emits
+/// each tile twice: resolved into the target as before, and unresolved
+/// (`downscale` off) into this store, the TPU's multisampled image of the
+/// target -- TEXSTATE_IMAGE_WORD0 `smpcnt` (texstate.xml:273, two bits:
+/// log2 of the samples) over the target's own width, height and stride,
+/// `samples` times the single-sampled bytes. The next kick's load quad
+/// binds the store as that image in place of the target and runs at the
+/// full sample rate ([`fs_sample_rate`]), so each instance reads and writes
+/// its own sample. A kick that stores no samples (a swap's, a 1x frame's)
+/// into the store's target leaves it stale (`valid` false), and the next
+/// frame reloads the resolved colour as before. There is one store, the
+/// most recent such kick's: ES 2.0's one multisampled target is the window
+/// surface, and a second 4x target's split takes the store for itself.
+///
+/// Unmeasured on the board (docs/handoff/20261015-pvr-msaa-split.md): that
+/// the PBE's unresolved layout is the TPU's `smpcnt` layout over the same
+/// stride, and that a per-sample fetch of it reads the running instance's
+/// sample.
+#[derive(Clone, Copy)]
+struct MsStore {
+    mem: OsalGpuMem,
+    /// The target the store holds the samples of: its colour address,
+    /// extent, row pitch, format and sample count.
+    target_gpu: u64,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    format: u8,
+    samples: u32,
+    /// A submitted kick stored every sample of that target here, and no
+    /// later kick wrote the target without them.
+    valid: bool,
+}
+
+/// Bytes of the sample store of an `h`-row target of `format` whose rows
+/// are `pitch` pixels apart, at `samples` a pixel: the TPU's multisampled
+/// image, `samples` single-sampled images' worth. `None` when that does not
+/// fit a usize.
+fn ms_bytes(h: u32, pitch: u32, format: u8, samples: u32) -> Option<usize> {
+    (pitch as usize)
+        .checked_mul(h as usize)?
+        .checked_mul(gles_surf_bytes_per_pixel(format) as usize)?
+        .checked_mul(samples as usize)
+}
+
+/// The sample store, allocated or resized for the open frame's target:
+/// `false` (once named in the log) when the pool has no room for it, and the
+/// frame then stores its resolved colour only, as before.
+fn ms_store_ready(b: &mut Backend) -> bool {
+    let (w, h, pitch, format, samples) = (b.target_w, b.target_h, b.target_pitch, b.target_format, b.samples);
+    let Some(bytes) = ms_bytes(h, pitch, format, samples) else { return false };
+    let ms = &mut b.ms;
+    if !ms.mem.impl_.is_null() && ms.mem.size >= bytes {
+        return true;
+    }
+    /* too small for this target: the old store goes back (the OSAL holds it
+     * until the kicks that may still read it have completed) */
+    osal::gpu_free(&mut ms.mem);
+    *ms = MsStore::ZERO;
+    if osal::gpu_alloc(HEAP_GENERAL_BASE, bytes, OSAL_MEM_DATA, &mut ms.mem) != 0 {
+        ms.mem = OsalGpuMem::ZERO;
+        glog_once!(
+            "pvr_backend: no sample store for the {}x{} {}x target ({} bytes): a split frame reloads its resolved colour",
+            w,
+            h,
+            samples,
+            bytes
+        );
+        return false;
+    }
+    true
+}
+
+impl MsStore {
+    const ZERO: MsStore =
+        MsStore { mem: OsalGpuMem::ZERO, target_gpu: 0, w: 0, h: 0, pitch: 0, format: 0, samples: 0, valid: false };
+
+    /// Does the store hold every sample of the target draw `d` renders
+    /// into, as the frame `d` opens would render it?
+    fn holds(&self, d: &GlesDraw) -> bool {
+        self.valid
+            && !self.mem.impl_.is_null()
+            && self.target_gpu == d.target_gpu
+            && (self.w, self.h, self.pitch) == (d.target_w, d.target_h, crate::backend::draw_pitch(d))
+            && self.format == d.target_format
+            && self.samples == frame_samples(d.samples)
+    }
+
+    /// After a kick into target `t` was submitted: it stored every sample
+    /// here (`stored`), or it wrote the target without them.
+    fn settle(&mut self, t: MsStoreTarget, stored: bool) {
+        if stored {
+            (self.target_gpu, self.w, self.h, self.pitch) = (t.gpu, t.w, t.h, t.pitch);
+            (self.format, self.samples, self.valid) = (t.format, t.samples, true);
+        } else if self.valid && self.target_gpu == t.gpu {
+            self.valid = false;
+        }
+    }
+}
+
+/// The open frame's target, as [`MsStore::settle`] records it.
+struct MsStoreTarget {
+    gpu: u64,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    format: u8,
+    samples: u32,
+}
+
+/// Is draw `d` the frame's load quad reading the sample store? Nothing else
+/// binds the store's address. Such a draw runs at the full sample rate,
+/// whatever its program.
+fn loads_samples(b: &Backend, d: &GlesDraw) -> bool {
+    !b.ms.mem.impl_.is_null() && d.num_textures == 1 && d.textures[0].base_gpu == b.ms.mem.gpu
+}
+
+/// Mark descriptor `w`'s image as one of `samples` samples a texel:
+/// TEXSTATE_IMAGE_WORD0 `smpcnt` (texstate.xml:273, bits 62..63) is log2 of
+/// the count, which its two bits fit up to 8x.
+fn tex_desc_set_samples(w: &mut [u32], samples: u32) {
+    let s = csb_pack!(
+        ROGUE_TEXSTATE_IMAGE_WORD0_pack,
+        2,
+        csb::ROGUE_TEXSTATE_IMAGE_WORD0 { smpcnt: samples.max(1).ilog2(), ..Default::default() }
+    );
+    w[0] |= s[0];
+    w[1] |= s[1];
+}
+
 /// Before a draw opens a frame: every depth/stencil buffer the frame needs
 /// ([`zs_keys`]) has a slot, or gets one from a buffer that holds nothing GL
 /// keeps -- no live plane ([`Plane`]), not in the open frame. A buffer whose
@@ -4156,6 +4312,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.frame_cleared = bg_color;
     b.frame_loads_color = load_color; /* record_frame_quad(.., load_color, ..) below */
     b.swap_drops_zs = false;
+    b.frame_swapped = false;
     if bg_color {
         b.clear_rgba = d.clear_rgba;
     }
@@ -5453,6 +5610,10 @@ fn build_desc_block(
         let force_mip0 = b.opt[PVR_BACKEND_OPT_FORCE_MIP0 as usize] != 0;
 
         build_tex_desc(&mut desc[i * DESC..(i + 1) * DESC], t.unwrap_or(&fallback), &mut b.warned_tex_addr, force_mip0);
+        /* the sample store ([`MsStore`]): the target's multisampled image */
+        if t.is_some_and(|t| !b.ms.mem.impl_.is_null() && t.base_gpu == b.ms.mem.gpu) {
+            tex_desc_set_samples(&mut desc[i * DESC..(i + 1) * DESC], b.ms.samples);
+        }
     }
     let rc = arena_put_words(&mut b.gen, &desc[..ns * DESC], 32, None, Some(gpu));
     if rc != 0 {
@@ -5880,7 +6041,10 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             pvr_pds_render_kick_usc_program(
                 heap_off_of(d.fs_usc_gpu) as u64,
                 temps,
-                fs_sample_rate(b.samples, d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0),
+                fs_sample_rate(
+                    b.samples,
+                    d.blend || fs.uses_fbfetch != 0 || fs.uses_discard != 0 || loads_samples(b, d),
+                ),
                 k_prog.as_mut_ptr(),
                 k_prog.as_mut_ptr().add(8),
                 &mut ki,
@@ -6870,6 +7034,8 @@ fn flush(p: &mut Pvr) -> i32 {
      * (gpu 0, a GL_NONE draw buffer) is skipped, so emit j can be slot i > j. */
     let mut slot_of = [0usize; PVR_BACKEND_MAX_RT as usize];
     let mut tb_emit = false;
+    /* this kick stores every sample of its target too ([`MsStore`]) */
+    let store_samples;
     {
         let mut col = [0u32; CLEAR_ATTACH_DWORDS as usize];
         let mut ed = [0u32; 3 * PVR_BACKEND_MAX_RT as usize + 2];
@@ -6962,6 +7128,23 @@ fn flush(p: &mut Pvr) -> i32 {
         }
         if nrt == 0 {
             nrt = 1;
+        }
+        /* A multisampled frame that may go on in another kick (no swap):
+         * its one attachment emitted again, unresolved, into the sample
+         * store ([`MsStore`]) -- a second state pair from the same output
+         * registers (source_pos 0), mrt_index 1, through the two-emit
+         * end-of-tile program. Not with several attachments or a tile
+         * buffer (ES 2.0 has neither at 4x), and not for a z-only frame. */
+        store_samples = b.samples > 1
+            && nrt == 1
+            && b.num_targets <= 1
+            && !tb_emit
+            && b.target_gpu != 0
+            && !b.frame_swapped
+            && ms_store_ready(b);
+        if store_samples {
+            emit[2..4].copy_from_slice(&pbe_emit_words(b.ms.mem.gpu, b.target_format, 0, 1));
+            nrt = 2;
         }
         if nrt > 1 && b.opt(PVR_BACKEND_OPT_DEBUG) != 0 && b.mrt_log_left != 0 {
             b.mrt_log_left -= 1;
@@ -7145,6 +7328,23 @@ fn flush(p: &mut Pvr) -> i32 {
     /* PBE REG_WORD0/1 per attachment: [`pbe_reg_words`]. */
     b.kick.frag.num_rt = nrt;
     for (rt, &slot) in slot_of.iter().enumerate().take(nrt as usize) {
+        /* the sample store's emit (state 1): the target's words again with
+         * `downscale` off, so every sample of the tile goes out, linear over
+         * the target's own row pitch ([`MsStore`]) */
+        if store_samples && rt == 1 {
+            let [w0, w1] = pbe_reg_words(
+                b.target_format,
+                b.target_alpha_bits == 0,
+                b.target_w,
+                b.target_h,
+                b.target_pitch,
+                false,
+                false,
+            );
+            b.kick.frag.pbe_word[rt][0] = w0;
+            b.kick.frag.pbe_word[rt][1] = w1;
+            continue;
+        }
         /* PBE register words per emitted state (its mrt_index), from the
          * attachment slot that state is for */
         let fmt = if slot != 0 { b.targets[slot].format } else { b.target_format };
@@ -7299,9 +7499,25 @@ fn flush(p: &mut Pvr) -> i32 {
             nrt,
             b.ndraws,
             b.frame_quads,
-            if b.frame_ds.buf().is_some() { ", ds" } else { "" }
+            match (b.frame_ds.buf().is_some(), store_samples) {
+                (true, true) => ", ds, samples",
+                (true, false) => ", ds",
+                (false, true) => ", samples",
+                (false, false) => "",
+            }
         );
     }
+    /* the sample store: this kick filled it with every sample of the
+     * target, or wrote the target without them */
+    let target = MsStoreTarget {
+        gpu: b.target_gpu,
+        w: b.target_w,
+        h: b.target_h,
+        pitch: b.target_pitch,
+        format: b.target_format,
+        samples: b.samples,
+    };
+    b.ms.settle(target, store_samples);
     ds_settle(b);
     if b.swap_drops_zs {
         /* PVR_BACKEND_OPT_SWAP_DROPS_ZS: this kick stored nothing, so the
@@ -7334,19 +7550,20 @@ fn flush(p: &mut Pvr) -> i32 {
 
 /// `YakoglBackend::surface_swapped`: `eglSwapBuffers` is posting the window
 /// surface whose colour buffer is at `surface_gpu`, before the swap's flush.
-/// With [`PVR_BACKEND_OPT_SWAP_DROPS_ZS`] on (the default) and the open
-/// frame rendering into that surface with a depth/stencil buffer, the flush
-/// that follows stores no depth/stencil. Nothing else changes, and nothing
-/// at all with the option off.
+/// The open frame rendering into that surface ends with that flush: its
+/// kick keeps no samples for a next kick ([`MsStore`]), and with
+/// [`PVR_BACKEND_OPT_SWAP_DROPS_ZS`] on (the default) and a depth/stencil
+/// buffer behind the frame, stores no depth/stencil. Nothing else changes.
 #[no_mangle]
 pub extern "C" fn pvr_backend_surface_swapped(surface_gpu: u64) {
     // SAFETY: single-threaded by contract; taken once per entry point.
     let b = unsafe { &mut PVR.get().b };
-    // SAFETY: a plain read of an int only the setter writes.
-    if !b.inited || unsafe { core::ptr::addr_of!(pvr_swap_drops_zs).read() } == 0 {
+    if !b.inited || !b.frame_open || b.target_gpu != surface_gpu {
         return;
     }
-    if b.frame_open && b.target_gpu == surface_gpu && b.frame_ds.buf().is_some() {
+    b.frame_swapped = true;
+    // SAFETY: a plain read of an int only the setter writes.
+    if unsafe { core::ptr::addr_of!(pvr_swap_drops_zs).read() } != 0 && b.frame_ds.buf().is_some() {
         b.swap_drops_zs = true;
     }
 }
@@ -7594,6 +7811,9 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
     for s in &b.ds {
         ds.add(&s.mem);
     }
+    /* the sample store ([`MsStore`]) beside the depth/stencil buffers: the
+     * per-sample memory a multisampled frame keeps across a split */
+    ds.add(&b.ms.mem);
     let kib =
         sets.report("backend frame sets") + statics.report("backend statics") + ds.report("backend depth/stencil");
     let size = |m: &OsalGpuMem| m.size as u32;
