@@ -364,6 +364,12 @@ impl RtImage {
 
 /// The largest target the tile memory is sized for at init.
 pub const MAX_TARGET: u32 = 2048;
+/// The most tiles one job may bin: what the pools hold, sized at init for
+/// `MAX_TARGET` square at four 32-bpp render targets (32x32 tiles). A typed
+/// job (an ES 3.0 colour format at 64 or 128 bpp) bins smaller tiles
+/// (`v3d_frame_tiling_bpp`); one with more tiles than this is refused by
+/// name rather than run past the tile state.
+const MAX_JOB_TILES: u32 = (MAX_TARGET / 32) * (MAX_TARGET / 32);
 
 /// Device-VA heap labels (the OSAL maps its carve-out whole; the labels only
 /// say which pool a request came from).
@@ -665,15 +671,24 @@ struct Target {
     /// The target is 16-bit RGB565 (`GLES_SURF_RGB565`): two bytes a pixel,
     /// loaded and stored as bgr565.
     rgb565: bool,
+    /// RT 0's surface format (`GLES_SURF_*`). An ES 3.0 colour format
+    /// (`state::typed`) makes the job's render targets typed: each loaded
+    /// and stored in `state::rt_format`'s image format at its own bytes a
+    /// pixel, with its internal type and bpp (v3d_job.h).
+    format: u8,
     ds: Option<u32>,
     /// The depth and stencil objects behind `ds` (`GlesDraw::depth_id` and
     /// `stencil_id`): the owners of its buffers.
     ds_owners: [u32; 2],
     /// Render targets the draw's framebuffer has (0 and 1: RT 0 alone), and
-    /// the GPU address of RT 1..3 (0: a GL_NONE draw buffer), each RGBA8 at
-    /// RT 0's size. Part of the job's identity: another set is another job.
+    /// the GPU address of RT 1..3 (0: a GL_NONE draw buffer), each at RT 0's
+    /// size in its own format (`rt_format`). Part of the job's identity:
+    /// another set is another job.
     rts: u8,
     rt: [u32; 3],
+    /// RT 1..3's surface formats (`GLES_SURF_*`; RGBA8888 for a GL_NONE
+    /// slot and past `rts`).
+    rt_format: [u8; 3],
     /// 4x multisampled (the draw's `samples` 4: a 4x EGL surface): part of
     /// the job's identity, one job is either 4x or not.
     msaa: bool,
@@ -688,20 +703,36 @@ impl Target {
         no_alpha: false,
         bgr: false,
         rgb565: false,
+        format: GLES_SURF_RGBA8888,
         ds: None,
         ds_owners: [0; 2],
         rts: 0,
         rt: [0; 3],
+        rt_format: [GLES_SURF_RGBA8888; 3],
         msaa: false,
     };
 
-    /// Bytes a pixel of the target.
+    /// Bytes a pixel of RT 0 (`state::rt_format`: 2 for RGB565, 4 for
+    /// RGBA8, the ES 3.0 formats' own).
     fn bpp(&self) -> u32 {
-        if self.rgb565 {
-            2
-        } else {
-            4
-        }
+        state::rt_row(self.format).bytes
+    }
+
+    /// The surface formats of RT 0..3.
+    fn formats(&self) -> [u8; 4] {
+        [self.format, self.rt_format[0], self.rt_format[1], self.rt_format[2]]
+    }
+
+    /// Is the job typed (`v3d_job_target::typed`): any RT in an ES 3.0
+    /// colour format?
+    fn typed(&self) -> bool {
+        self.formats().iter().any(|&f| state::typed(f))
+    }
+
+    /// The largest internal bpp of the configured RTs (`V3D_INTERNAL_BPP_*`).
+    fn max_bpp(&self) -> u32 {
+        let n = usize::from(self.rts.max(1)).min(4);
+        self.formats()[..n].iter().map(|&f| state::rt_row(f).internal_bpp).max().unwrap_or(0)
     }
 }
 
@@ -776,6 +807,9 @@ struct Job {
     /// The render image this job stores RT 0 into (`V3dState::rt_images`;
     /// None: the target has none): `stored` once the job is submitted.
     rt: Option<usize>,
+    /// The largest internal bpp of the job's render targets
+    /// (`Target::max_bpp`): with the RT count and 4x, the job's tile size.
+    max_bpp: u32,
     /// Whether this job's draws may read depth / stencil: the job cleared
     /// them, or it starts from a value it can reproduce.
     z_valid: bool,
@@ -835,6 +869,7 @@ impl Job {
         zs_discard: false,
         ms: None,
         rt: None,
+        max_bpp: 0,
         clear: V3dJobClear {
             load_rt0: true,
             rgba8: 0,
@@ -855,6 +890,7 @@ impl Job {
             load_rt: [true; 3],
             rgba8_rt: [0; 3],
             s_s8: false,
+            clear_rt: [[0; 4]; 4],
         },
         z_valid: false,
         s_valid: false,
@@ -2110,6 +2146,21 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         (None, None) => zs_known(g, gpu),
     };
     let tile_alloc = g.tile_alloc.gpu as u32;
+    /* ES 3.0 colour formats (int-rt-v3d, `state::rt_format`): the job
+     * builder's typed render targets, each RT loaded and stored in its own
+     * image format at its own bytes a pixel, and smaller tiles for 64- and
+     * 128-bpp tile buffers; a job whose tiles outnumber what the pools hold
+     * is refused by name. The ES 2.0 formats keep the untyped job, byte for
+     * byte as before. */
+    let (typed, max_bpp, formats) = (target.typed(), target.max_bpp(), target.formats());
+    if typed {
+        let mut tiling = V3dTiling::default();
+        // SAFETY: plain computations on the out-parameter given.
+        unsafe { v3d_frame_tiling_bpp(w, h, u32::from(target.rts.max(1)), msaa, max_bpp, &mut tiling) };
+        if tiling.tiles_x * tiling.tiles_y > MAX_JOB_TILES {
+            return refuse(g, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
+        }
+    }
     let (bcl_cpu, bcl_gpu) = (g.arenas.bcl.cpu as *mut u8, g.arenas.bcl.gpu as u32);
     let (rcl_cpu, rcl_gpu) = (g.arenas.rcl.cpu as *mut u8, g.arenas.rcl.gpu as u32);
     let (ind_cpu, ind_gpu) = (g.arenas.ind.cpu as *mut u8, g.arenas.ind.gpu as u32);
@@ -2128,10 +2179,15 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         stride: pitch * target.bpp(),
         tile_alloc,
         rgb565,
-        /* RT 1..3 of the draw's framebuffer, RGBA8 at RT 0's size and
-         * pitch (a GL_NONE one has address 0: configured, never stored) */
+        /* RT 1..3 of the draw's framebuffer, each in its own format at RT
+         * 0's size and pitch (a GL_NONE one has address 0: configured,
+         * never stored) */
         rts: u32::from(target.rts),
-        rt: target.rt.map(|a| V3dJobRt { address: a, stride: if a != 0 { target_pitch(w) * 4 } else { 0 } }),
+        rt: core::array::from_fn(|i| {
+            let a = target.rt[i];
+            let bytes = state::rt_row(target.rt_format[i]).bytes;
+            V3dJobRt { address: a, stride: if a != 0 { target_pitch(w) * bytes } else { 0 } }
+        }),
         msaa,
         ms_address: ms.map_or(0, |i| g.msbufs[i].address),
         ms_memory_format: ms.map_or(0, |i| g.msbufs[i].memory_format),
@@ -2139,6 +2195,10 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         uif_address: rt.map_or(0, |i| g.rt_images[i].address),
         uif_memory_format: rt.map_or(0, |i| g.rt_images[i].memory_format),
         uif_height_in_ub: rt.map_or(0, |i| g.rt_images[i].height_in_ub),
+        typed,
+        /* read by the job builder with `typed` only; an untyped (ES 2.0) job
+         * is handed exactly what it was */
+        rt_format: if typed { formats.map(|f| state::rt_row(f).output) } else { [0; 4] },
     };
     let (bcl, rcl, ind) = (&mut j.bcl as *mut V3dCl, &mut j.rcl as *mut V3dCl, &mut j.ind as *mut V3dCl);
     // SAFETY: the job and its three lists live in the backend's static state;
@@ -2150,6 +2210,7 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     j.target = target;
     j.ms = ms;
     j.rt = rt;
+    j.max_bpp = max_bpp;
     /* a 4x target whose samples no job has kept (a new surface, or one
      * swapped since, EGL 1.5 3.10.1): its content is undefined, so the job
      * starts from the clear colour rather than load what the buffer holds */
@@ -2529,10 +2590,10 @@ fn job_open_to_osal(open: bool) {
 /// step 3 (227e5dec) sized for four RTs at 2048x2048 (4096 tiles, 1 MiB):
 /// the cluster's single-RT 1920x720 job (360 tiles, 90 KiB) zeroed 1 MiB
 /// a job, glue's DEMO15 "prep" 76 -> 307 us.
-fn job_tile_state_bytes(t: &V3dJobTarget) -> u32 {
+fn job_tile_state_bytes(t: &V3dJobTarget, max_bpp: u32) -> u32 {
     let mut tiling = V3dTiling::default();
     // SAFETY: plain computations on the out-parameter given.
-    unsafe { v3d_frame_tiling_ms(t.width, t.height, t.rts.max(1), t.msaa, &mut tiling) };
+    unsafe { v3d_frame_tiling_bpp(t.width, t.height, t.rts.max(1), t.msaa, max_bpp, &mut tiling) };
     tiling.tiles_x * tiling.tiles_y * 256
 }
 
@@ -2557,7 +2618,7 @@ fn submit_job(g: &mut V3dState) -> i32 {
         tile_alloc: g.tile_alloc.gpu as u32,
         tile_alloc_size: g.tile_alloc_size,
         tile_state: g.tile_state.gpu as u32,
-        tile_state_size: job_tile_state_bytes(&j.job.t).min(g.tile_state_size),
+        tile_state_size: job_tile_state_bytes(&j.job.t, j.max_bpp).min(g.tile_state_size),
         pad: 0,
     };
 
@@ -4929,13 +4990,15 @@ pub unsafe extern "C" fn v3d_draw(draw: *const GlesDraw) -> i32 {
 
 /// The draw's colour attachments past the first (multiple render targets,
 /// docs/online-shaderc/v3d-backend.md): how many render targets the job
-/// configures and RT 1..3's addresses. The job builder takes them RGBA8 at
-/// RT 0's size; anything else is refused by name.
-fn extra_targets(d: &GlesDraw) -> Result<(u8, [u32; 3]), state::Refusal> {
+/// configures, RT 1..3's addresses and their surface formats. The job
+/// builder takes them at RT 0's size in any format with a TLB row
+/// (`state::rt_format`); anything else is refused by name.
+fn extra_targets(d: &GlesDraw) -> Result<(u8, [u32; 3], [u8; 3]), state::Refusal> {
     let n = d.num_targets.min(GLES_MAX_TARGETS as u8);
     let mut rt = [0u32; 3];
+    let mut formats = [GLES_SURF_RGBA8888; 3];
     if n <= 1 {
-        return Ok((0, rt));
+        return Ok((0, rt, formats));
     }
     for (i, t) in d.targets[1..n as usize].iter().enumerate() {
         if t.gpu == 0 {
@@ -4944,12 +5007,15 @@ fn extra_targets(d: &GlesDraw) -> Result<(u8, [u32; 3]), state::Refusal> {
         if (t.w, t.h) != (d.target_w, d.target_h) {
             return Err("colour attachments of different sizes");
         }
-        if t.format != GLES_SURF_RGBA8888 {
-            return Err("a colour attachment past the first that is not RGBA8");
+        /* any format with a TLB row (state::rt_format): RGBA8, the ES 3.0
+         * integer and float ones; the sRGB surface has none */
+        if state::rt_format(t.format).is_none() {
+            return Err("a colour attachment past the first of a format the backend does not render");
         }
         rt[i] = gpu32(t.gpu).ok_or("a colour attachment outside the V3D's 32-bit address space")?;
+        formats[i] = t.format;
     }
-    Ok((n, rt))
+    Ok((n, rt, formats))
 }
 
 /// `v3d_draw` without the stamp bookkeeping.
@@ -4992,7 +5058,7 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
     if d.target_w == 0 || d.target_h == 0 || d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
         return refuse(g, "a target larger than the tile memory is sized for (2048x2048), or empty");
     }
-    let (rts, rt) = match extra_targets(d) {
+    let (rts, rt, rt_format) = match extra_targets(d) {
         Ok(x) => x,
         Err(why) => return refuse(g, why),
     };
@@ -5004,10 +5070,12 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
         no_alpha: d.target_alpha_bits == 0,
         bgr: d.target_format == GLES_SURF_XRGB8888,
         rgb565: d.target_format == GLES_SURF_RGB565,
+        format: d.target_format,
         ds: d.ds_persist.then_some(d.ds_id),
         ds_owners: [d.depth_id, d.stencil_id],
         rts,
         rt,
+        rt_format,
         msaa: d.samples == 4,
     };
     /* 4x of several colour attachments: the job builder keeps one RT's
@@ -5015,6 +5083,18 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * surface with attachments, which the GL core does not make */
     if target.msaa && rts > 1 {
         return refuse(g, "4x multisampling of several colour attachments");
+    }
+    /* 4x of an ES 3.0 colour format: the kept samples and the resolve are
+     * RGBA8 (v3d_job.h); nothing in the GL core makes such a surface */
+    if target.msaa && target.typed() {
+        return refuse(g, "4x multisampling of an ES 3.0 colour format");
+    }
+    /* The clear quad's program writes gl_FragColor as halves, which an
+     * integer target cannot take: its clear is the TLB's alone (a whole,
+     * unmasked glClearBuffer{i,ui}v); a scissored or masked one is refused
+     * by name, before anything is recorded. */
+    if state::colour_needs_quad(d) && target.formats().iter().any(|&f| gles_surf_is_integer(f)) {
+        return refuse(g, "a scissored or masked colour clear of an integer colour target");
     }
     /* The clear quad writes gl_FragColor, RT 0 only, so a colour clear it
      * would do (scissored, or with a partial colour mask) cannot reach the
@@ -5096,11 +5176,27 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
         }
         if tlb_colour {
             /* glClear clears every draw buffer (ES 3.0 4.2.3): each RT the
-             * job configures starts from the same colour */
-            j.clear.load_rt0 = false;
-            j.clear.rgba8 = state::pack_rgba8(d.clear_rgba);
-            j.clear.load_rt = [false; 3];
-            j.clear.rgba8_rt = [j.clear.rgba8; 3];
+             * job configures starts from the same colour; glClearBuffer(
+             * GL_COLOR, n) names draw buffer n alone (`clear_target_mask`,
+             * bit n), the others load what they hold. Each RT starts from
+             * the colour as its own format holds it (`state::clear_words`:
+             * the one RGBA8 word of an ES 2.0 format, as before; an integer
+             * target's raw integers narrowed to its channels). */
+            let mask = if d.clear_target_mask == 0 { 0xf } else { d.clear_target_mask };
+            for (n, &f) in target.formats().iter().enumerate() {
+                if mask & (1 << n) == 0 {
+                    continue;
+                }
+                let w = state::clear_words(f, d.clear_rgba);
+                j.clear.clear_rt[n] = w;
+                if n == 0 {
+                    j.clear.load_rt0 = false;
+                    j.clear.rgba8 = w[0];
+                } else {
+                    j.clear.load_rt[n - 1] = false;
+                    j.clear.rgba8_rt[n - 1] = w[0];
+                }
+            }
         }
         if tlb_depth {
             j.clear.z = d.clear_depth;

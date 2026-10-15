@@ -1145,6 +1145,89 @@ begin when the default framebuffer (one attachment) is drawn with a program
 that writes more. That costs every such job the smaller tile, and nothing in the
 corpus needs it.
 
+## Integer and ES 3.0 colour render targets (int-rt-v3d, 2026-10-14; host only)
+
+**Built:** the nineteen integer colour formats of ES 3.0 table 3.13 (R/RG/RGBA
+8/16/32 I and UI, RGB10_A2UI) and the float ones (RGBA16F, R16F, R32F) are
+render targets on the V3D, alone or among other attachments, and an integer
+fragment output (`out ivec4`, `uvec2`, `int`, ...) reaches the TLB as 32-bit
+words. Nothing is measured on a board yet: the host checks are
+`tests/es3_int_rt_v3d.rs` (the rows against Mesa's table, the clear words,
+the compiler's TLB writes on the interpreter) and `src/v3d/backend_tests.rs`
+(the typed job, its strides, clears and refusals, against the fake job
+builder); the job builder's packets for a typed job have no `cl_golden` /
+`job_check` row yet (see "Left").
+
+What Mesa does on V3D 4.2, and what was transcribed:
+
+- **Formats** (`v3dx_format_table.c`, the `rt` column of `FORMAT(...)`: the
+  integer rows :118-137, R16F :90, R32F :91, RGBA16F :100, RGB10_A2UI :75):
+  each format is its own OUTPUT_IMAGE_FORMAT for the colour load and store,
+  raster, at its own bytes a pixel (`src/v3d/state.rs` `rt_format`).
+- **Tile buffer** (`v3dX(get_internal_type_bpp_for_output_format)`,
+  :220-341): the internal type is the channel width and kind (8I, 16UI,
+  32F, ...), the bpp the channels' total width: 32 for the 8-bit rows and
+  the one- and two-channel 16-bit ones, 64 for RGBA16*, RG32*, RGB10_A2UI
+  (held as 16UI) and BOTH 16F rows (R16F at 64 "to make sure the TLB doesn't
+  throw away the alpha channel before alpha test happens", :266-268), 128
+  for RGBA32*. The clamp is `clamp_for_format_and_type`'s
+  (`v3dx_rcl.c:396-407`): INT for a pure integer format, NONE otherwise
+  (NORM for sRGB, whose render side is not built, `docs/es3-srgb.md` 5.1).
+- **Tile size** (`v3d_util.c` `v3d_choose_tile_size`): one step down the
+  table per bpp step on top of the RT-count and MSAA steps
+  (`v3d_frame_tiling_bpp`; the table now runs to 8x8). The pools are sized
+  at init for 2048x2048 at four 32-bpp RTs (4096 tiles); a typed job with
+  more tiles is refused by name ("more tiles than the job pools hold").
+- **Clear** (`v3d_tlb_clear`, `v3dx_draw.c:1706-1769`; the packets
+  `v3dx_rcl.c:833-860`): the clear colour is packed per internal type (a byte
+  a channel for 8I/8UI, a half for 16F, 16 bits for 16I/16UI, the words as
+  they are at 32) into up to four words, CLEAR_COLORS PART1 for every RT,
+  PART2 from 64 bpp, PART3 at 128 (`state::clear_words`,
+  `v3d_job_clear.clear_rt`). glClearBuffer(GL_COLOR, n) (`clear_target_mask`)
+  clears draw buffer n alone; the other RTs load.
+- **Shader** (`vir_emit_tlb_color_write`, `nir_to_vir.c:1953-2036`, the
+  `f32_color_rb` branch `:1974-1977` and `:2005-2021`, which the key takes
+  for every pure integer format as for 32F, `v3d_program.c:701-704`): an
+  output declared `int`/`uint` (any width) is MOVed to the TLB one 32-bit
+  word per declared component, the first through TLBU with `0xffffff00 |
+  per-pixel | (7 - rt) << 3 | TLB_TYPE_F32_COLOR (0 << 6) | (components -
+  1)`, the rest through TLB; the hardware narrows to the target's type under
+  the INT clamp (`prepare.rs` `rt_int` / `rt_comps`, `select.rs`
+  `tlb_config_32b`). V3D 4.2 has one 32-bit TLB type for integer and float
+  words alike: Mesa 26.2.1 defines `TLB_TYPE_I32_COLOR (1 << 6)`
+  (`nir_to_vir.c:1930`) but never writes it, the tile buffer's internal type
+  says what the words are. A float output keeps its f16 pairs.
+
+**The job builder's interface** (`driver/src/v3d/v3d_job.h`): `v3d_job_target`
+gained `typed` and `rt_format[4]` (RT 0..3's output image formats; with
+`typed` false every ES 2.0 job is built byte for byte as before: RGBA8 or
+BGR565 by `rgb565`), `v3d_job_clear` gained `clear_rt[4][4]`, and
+`v3d_frame_tiling_bpp` takes the largest bpp. `rt_internal` in `v3d_job.c`
+holds the same rows as `state::rt_format`, keyed by the output format; a
+typed format outside them, or 4x with `typed`, breaks the job at begin.
+`src/v3d/ffi.rs` and `ffi_layout_check.c` pin the new layouts (target 88
+bytes, clear 132, job 856) and the enum values.
+
+**Left:**
+
+- A board run: gl_test 200 intrt (and 201 isamp once formats-v3d samples
+  integer textures) and the dEQP-GLES3 `fragment_out`, `fbo.color` and
+  `shaders.builtin_functions` buckets on the Pi 4.
+- `tools/v3d/job_check.c` and `cl_golden.c` rows for a typed job (the
+  PART2/PART3 clear packets, the COLOR packet with 16I/64 bpp, a 16x16
+  tile), against Mesa's CLE.
+- The clear quad's program writes halves: a scissored or masked colour
+  clear of an integer target is refused by name. An integer clear program
+  (`out ivec4 o = u_color`) would lift it.
+- A float output to an R32F target writes f16 pairs (the program is not
+  keyed by the target's class, so Mesa's F32 TLB write cannot be chosen);
+  the 32F tile buffer takes them at half precision. EXT_color_buffer_float
+  is not claimed, so no dEQP case reaches it.
+- 4x on an ES 3.0 colour format is refused by name (the kept samples and
+  the resolve are RGBA8). Nothing in the GL core makes such a surface.
+- `GL_MAX_DRAW_BUFFERS` stays 3 (`backend::DRAW_TARGETS`); a fourth
+  attachment is the MRT item's.
+
 ## Multisampling (4x; steps 1-3 of 4 built: the job builder, the backend, the EGL config behind a switch)
 
 The target: dEQP-GLES2 functional.multisample, 16 cases "NotSupported (No

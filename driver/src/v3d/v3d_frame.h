@@ -46,6 +46,13 @@ void v3d_frame_tiling(uint32_t width, uint32_t height, struct v3d_tiling *t);
 void v3d_frame_tiling_rts(uint32_t width, uint32_t height, uint32_t rts, struct v3d_tiling *t);
 /* The same with 4x multisampling when `msaa`. */
 void v3d_frame_tiling_ms(uint32_t width, uint32_t height, uint32_t rts, bool msaa, struct v3d_tiling *t);
+/* The same with the largest internal bpp of the render targets, as the
+ * TILE_BINNING_MODE_CFG packet carries it (V3D_INTERNAL_BPP_32 = 0, _64 = 1,
+ * _128 = 2): one step down the tile-size table per bpp step (v3d_util.c
+ * v3d_choose_tile_size, "tile_size_index += max_internal_bpp"). ES 3.0's
+ * 16-bit and 32-bit colour formats (int-rt-v3d) need 64 and 128. */
+void v3d_frame_tiling_bpp(uint32_t width, uint32_t height, uint32_t rts, bool msaa, uint32_t max_bpp,
+			  struct v3d_tiling *t);
 
 /* Tile allocation and tile state sizes for a frame (v3d_util.c
  * v3d_tile_alloc_sizes, one layer). `draws` is the number of draw calls. */

@@ -62,6 +62,8 @@
 	X(TILE_RENDERING_MODE_CFG_COLOR)                                                           \
 	X(TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES)                                                 \
 	X(TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1)                                              \
+	X(TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2)                                              \
+	X(TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3)                                              \
 	X(TILE_COORDINATES)                                                                        \
 	X(MULTICORE_RENDERING_SUPERTILE_CFG)                                                       \
 	X(MULTICORE_RENDERING_TILE_LIST_SET_BASE)                                                  \

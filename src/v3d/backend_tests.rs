@@ -240,12 +240,29 @@ unsafe extern "C" fn v3d_frame_tiling_rts(width: u32, height: u32, rts: u32, t: 
 /// v3d_frame_tiling_ms, job_check part 14): 32x32 for one RT.
 #[no_mangle]
 unsafe extern "C" fn v3d_frame_tiling_ms(width: u32, height: u32, rts: u32, msaa: bool, t: *mut V3dTiling) {
-    const SIZES: [(u32, u32); 5] = [(64, 64), (64, 32), (32, 32), (32, 16), (16, 16)];
+    // SAFETY: the backend's out-parameter, passed on.
+    unsafe { v3d_frame_tiling_bpp(width, height, rts, msaa, 0, t) }
+}
+
+/// ... and one step further per step of the largest internal bpp
+/// (v3d_frame.c v3d_frame_tiling_bpp, Mesa's v3d_choose_tile_size): 64 bpp
+/// one, 128 two, down to 8x8.
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling_bpp(
+    width: u32,
+    height: u32,
+    rts: u32,
+    msaa: bool,
+    max_bpp: u32,
+    t: *mut V3dTiling,
+) {
+    const SIZES: [(u32, u32); 7] = [(64, 64), (64, 32), (32, 32), (32, 16), (16, 16), (16, 8), (8, 8)];
     let idx = match rts {
         0 | 1 => 0,
         2 => 1,
         _ => 2,
-    } + if msaa { 2 } else { 0 };
+    } + if msaa { 2 } else { 0 }
+        + max_bpp.min(2) as usize;
     let (tw, th) = SIZES[idx];
     let tiles = V3dTiling {
         tile_w: tw,
@@ -3309,8 +3326,9 @@ fn a_program_reading_a_texture_size_gets_the_bindings_size() {
 }
 
 /// What the job builder cannot take is refused by name before anything is
-/// recorded: an attachment of another size, one that is not RGBA8, and a
-/// colour clear the quad would do (scissored), which writes RT 0 only.
+/// recorded: an attachment of another size, one of a format with no TLB
+/// row (the sRGB surface), and a colour clear the quad would do
+/// (scissored), which writes RT 0 only.
 #[test]
 fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     let rig = Rig::new();
@@ -3321,9 +3339,9 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     assert_eq!(draw(&d), -EINVAL);
     assert_eq!(rig.logs_with("colour attachments of different sizes"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
-    d.targets[1].format = GLES_SURF_RGBA16F;
+    d.targets[1].format = GLES_SURF_SRGB8_A8;
     assert_eq!(draw(&d), -EINVAL);
-    assert_eq!(rig.logs_with("a colour attachment past the first that is not RGBA8"), 1);
+    assert_eq!(rig.logs_with("a colour attachment past the first of a format the backend does not render"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
     d.clear_quad = true;
     assert_eq!(draw(&d), -EINVAL);
@@ -5555,6 +5573,132 @@ fn an_rgb565_target_is_drawn_two_bytes_a_pixel() {
     let c = j.clear.unwrap();
     assert_eq!((c.force_alpha_1, c.r_b_swap), (true, false));
     assert_eq!(rig.draws()[0].st.colormask, 0x7);
+}
+
+/* ---- ES 3.0 colour formats (int-rt-v3d) ----------------------------------- */
+
+/// An integer colour target (RGBA8I) is a typed job: RT 0 loaded and stored
+/// as output image format RGBA8I at 4 bytes a pixel, and its
+/// glClearBufferiv (the raw integers in `clear_rgba`) reaches the job as
+/// v3d_tlb_clear's one 8I word, a byte a channel; the untyped RGBA8 word
+/// is the same bits, never read. Revert check: with `typed` false the job
+/// builder would load RGBA8 and clear with pack_rgba8 of the raw bits.
+#[test]
+fn an_integer_target_is_a_typed_job_cleared_with_its_own_words() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    d.target_format = GLES_SURF_RGBA8I;
+    d.clear_rgba = [1u32, -2i32 as u32, 3, 0x1f4].map(f32::from_bits);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGBA8I);
+    assert_eq!(j.target.stride, 64 * 4, "4 bytes a pixel");
+    let c = j.clear.unwrap();
+    assert!(!c.load_rt0, "cleared, not loaded");
+    assert_eq!(c.clear_rt[0], [0xf403_fe01, 0, 0, 0], "a byte a channel, the raw integers narrowed");
+    assert_eq!(c.rgba8, 0xf403_fe01);
+    assert_eq!(rig.kicks()[0].tile_state_size, 256, "one 64x64 tile: 32 bpp");
+}
+
+/// A half-float target (RGBA16F) is a typed job at 8 bytes a pixel whose
+/// clear is four halves in two words (internal type 16F, 64 bpp), and whose
+/// 64-bpp tile buffer bins 64x32 tiles: twice the tile state of an RGBA8
+/// job of the same size. Revert check: without `max_bpp` in the tiling the
+/// kick's tile state stays one tile's.
+#[test]
+fn a_half_float_target_is_a_64_bpp_job() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    (d.target_format, d.target_alpha_bits) = (GLES_SURF_RGBA16F, 16);
+    d.clear_rgba = [1.0, 0.5, -2.0, 0.0];
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGBA16F);
+    assert_eq!(j.target.stride, 64 * 8, "8 bytes a pixel");
+    assert_eq!(j.clear.unwrap().clear_rt[0], [0x3800_3c00, 0x0000_c000, 0, 0], "halves, two a word");
+    assert_eq!(rig.kicks()[0].tile_state_size, 2 * 256, "64x32 tiles at 64 bpp");
+}
+
+/// Attachments of different formats in one job: RT 0 RGBA8 and RT 1
+/// RGBA32UI make a typed job whose RTs carry their own image formats and
+/// strides (16 bytes a pixel for RT 1), whose glClear words are each RT's
+/// own (one RGBA8 word, four raw words), and whose 128-bpp tile buffer with
+/// two RTs bins 32x16 tiles (8 of them for 64x64).
+#[test]
+fn attachments_of_different_formats_each_keep_their_own() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    d.clear_rgba = [0x1234_5678u32, 1, 2, 0xffff_ffff].map(f32::from_bits);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let j = &rig.jobs()[0];
+    assert!(j.target.typed);
+    assert_eq!(j.target.rt_format, [27, V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, 27, 27]);
+    assert_eq!(j.target.stride, 64 * 4);
+    assert_eq!(j.target.rt[0], V3dJobRt { address: RT1 as u32, stride: 64 * 16 });
+    let c = j.clear.unwrap();
+    assert!(!c.load_rt0 && !c.load_rt[0]);
+    assert_eq!(c.clear_rt[0], [state::pack_rgba8(d.clear_rgba), 0, 0, 0], "RT 0: the RGBA8 word");
+    assert_eq!(c.clear_rt[1], [0x1234_5678, 1, 2, 0xffff_ffff], "RT 1: the four raw words");
+    assert_eq!(rig.kicks()[0].tile_state_size, 8 * 256, "32x16 tiles: two RTs at 128 bpp");
+}
+
+/// glClearBuffer(GL_COLOR, 1) (`clear_target_mask` bit 1) clears draw
+/// buffer 1 alone: RT 0 loads what it holds, RT 1 starts from the colour.
+/// Revert check: without the mask every RT was cleared.
+#[test]
+fn a_clear_of_one_draw_buffer_loads_the_others() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    d.clear_target_mask = 0b10;
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let c = rig.jobs()[0].clear.unwrap();
+    assert!(c.load_rt0, "RT 0 is not named: loaded");
+    assert!(!c.load_rt[0], "RT 1 cleared");
+    assert_eq!(c.rgba8_rt[0], 0xff00_00ff, "red");
+    assert_eq!(c.clear_rt[1][0], 0xff00_00ff);
+}
+
+/// What the typed job cannot take is refused by name before anything is
+/// recorded: 4x on an ES 3.0 format (the kept samples are RGBA8), a
+/// scissored or masked clear of an integer target (the clear quad writes
+/// halves), and a 128-bpp job with more tiles than the pools hold.
+#[test]
+fn what_a_typed_job_cannot_take_is_refused_by_name() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
+    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(rig.logs_with("4x multisampling of an ES 3.0 colour format"), 1);
+    let mut d = rig.draw();
+    (d.target_format, d.clear_quad) = (GLES_SURF_R32I, true);
+    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(rig.logs_with("a scissored or masked colour clear of an integer colour target"), 1);
+    let mut d = rig.draw();
+    (d.target_format, d.clear_color_mask) = (GLES_SURF_R32I, 0b0001);
+    assert_eq!(draw(&d), -EINVAL, "a masked clear is the quad's too");
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    (d.target_w, d.target_h) = (2048, 2048);
+    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
+    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    assert_eq!(draw(&d), -EINVAL, "32x16 tiles over 2048x2048: 8192 tiles");
+    assert_eq!(rig.logs_with("more tiles than the job pools hold"), 1);
+    assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }
 
 /// Why gl_test 18 draws into an RGB565 target: it asks eglChooseConfig for

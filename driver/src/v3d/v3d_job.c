@@ -138,6 +138,132 @@ static uint32_t job_rts(const struct v3d_job_target *t)
 	return t->rts > 1 ? t->rts : 1;
 }
 
+/* The tile buffer's internal type, bpp and clamp of one OUTPUT_IMAGE_FORMAT
+ * this builder takes: Mesa's v3dX(get_internal_type_bpp_for_output_format)
+ * (v3dx_format_table.c:220-341; RGBA8 and BGR565 :225-234, the 8-bit
+ * integer rows :236-248, 16F :250-270 -- R16F at 64 bpp "to make sure the
+ * TLB doesn't throw away the alpha channel before alpha test happens" --
+ * 16I/16UI :272-291, 32I/32UI :293-317, 32F :319-330) and
+ * clamp_for_format_and_type (v3dx_rcl.c:396-407, V3D 4.2: NORM for an sRGB
+ * format, INT for a pure integer one, NONE otherwise). False for a format
+ * the table has no row for here (sRGB, RGB10_A2, R11F_G11F_B10F, the 2- and
+ * 3-channel float rows, the depth formats). */
+static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *clamp)
+{
+	*clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+	switch (fmt) {
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA8:
+	case V3D_OUTPUT_IMAGE_FORMAT_BGR565:
+		*type = V3D_INTERNAL_TYPE_8;
+		*bpp = V3D_INTERNAL_BPP_32;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA8I:
+	case V3D_OUTPUT_IMAGE_FORMAT_RG8I:
+	case V3D_OUTPUT_IMAGE_FORMAT_R8I:
+		*type = V3D_INTERNAL_TYPE_8I;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA8UI:
+	case V3D_OUTPUT_IMAGE_FORMAT_RG8UI:
+	case V3D_OUTPUT_IMAGE_FORMAT_R8UI:
+		*type = V3D_INTERNAL_TYPE_8UI;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA16F:
+	case V3D_OUTPUT_IMAGE_FORMAT_R16F:
+		*type = V3D_INTERNAL_TYPE_16F;
+		*bpp = V3D_INTERNAL_BPP_64;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA16I:
+		*type = V3D_INTERNAL_TYPE_16I;
+		*bpp = V3D_INTERNAL_BPP_64;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RG16I:
+	case V3D_OUTPUT_IMAGE_FORMAT_R16I:
+		*type = V3D_INTERNAL_TYPE_16I;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI:
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA16UI:
+		*type = V3D_INTERNAL_TYPE_16UI;
+		*bpp = V3D_INTERNAL_BPP_64;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RG16UI:
+	case V3D_OUTPUT_IMAGE_FORMAT_R16UI:
+		*type = V3D_INTERNAL_TYPE_16UI;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA32I:
+		*type = V3D_INTERNAL_TYPE_32I;
+		*bpp = V3D_INTERNAL_BPP_128;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RG32I:
+		*type = V3D_INTERNAL_TYPE_32I;
+		*bpp = V3D_INTERNAL_BPP_64;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_R32I:
+		*type = V3D_INTERNAL_TYPE_32I;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI:
+		*type = V3D_INTERNAL_TYPE_32UI;
+		*bpp = V3D_INTERNAL_BPP_128;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RG32UI:
+		*type = V3D_INTERNAL_TYPE_32UI;
+		*bpp = V3D_INTERNAL_BPP_64;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_R32UI:
+		*type = V3D_INTERNAL_TYPE_32UI;
+		*bpp = V3D_INTERNAL_BPP_32;
+		*clamp = V3D_RENDER_TARGET_CLAMP_INT;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_R32F:
+		*type = V3D_INTERNAL_TYPE_32F;
+		*bpp = V3D_INTERNAL_BPP_32;
+		return true;
+	default:
+		return false;
+	}
+}
+
+/* The output image format of render target n: the target's with `typed`,
+ * else RT 0 RGBA8 or BGR565 as `rgb565` says and RT 1..3 RGBA8. */
+static uint32_t rt_fmt(const struct v3d_job_target *t, uint32_t n)
+{
+	if (t->typed)
+		return t->rt_format[n];
+	if (n == 0 && t->rgb565)
+		return V3D_OUTPUT_IMAGE_FORMAT_BGR565;
+	return V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+}
+
+/* The largest internal bpp of the job's render targets: Mesa's
+ * job->internal_bpp maximum, which TILE_BINNING_MODE_CFG and the rendering
+ * mode's common config carry (v3dx_draw.c start_binning, v3dx_rcl.c
+ * emit_rcl) and the tile size follows. 32 (enum 0) for every untyped job. */
+static uint32_t job_max_bpp(const struct v3d_job_target *t)
+{
+	uint32_t max = V3D_INTERNAL_BPP_32;
+	for (uint32_t n = 0; n < job_rts(t); n++) {
+		uint32_t type, bpp, clamp;
+		if (rt_internal(rt_fmt(t, n), &type, &bpp, &clamp) && bpp > max)
+			max = bpp;
+	}
+	return max;
+}
+
 bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d_cl *bcl,
 		   struct v3d_cl *rcl, struct v3d_cl *ind)
 {
@@ -160,14 +286,29 @@ bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d
 		j->broken = true;
 		return false;
 	}
+	/* typed targets: every RT a format of rt_internal's table, and no 4x
+	 * (the kept samples and the resolve are RGBA8, v3d_job.h) */
+	if (t->typed) {
+		if (t->msaa) {
+			j->broken = true;
+			return false;
+		}
+		for (uint32_t n = 0; n < job_rts(t); n++) {
+			uint32_t type, bpp, clamp;
+			if (!rt_internal(t->rt_format[n], &type, &bpp, &clamp)) {
+				j->broken = true;
+				return false;
+			}
+		}
+	}
 
 	/* v3dx_draw.c v3dX(start_binning), V3D_VERSION 42: the RT count and
-	 * the max bpp decide the hardware's tile size (v3d_frame_tiling_rts) */
+	 * the max bpp decide the hardware's tile size (v3d_frame_tiling_bpp) */
 	v3d_cl_emit(bcl, TILE_BINNING_MODE_CFG, bin) {
 		bin.width_in_pixels = t->width;
 		bin.height_in_pixels = t->height;
 		bin.number_of_render_targets = job_rts(t);
-		bin.maximum_bpp_of_all_render_targets = V3D_INTERNAL_BPP_32;
+		bin.maximum_bpp_of_all_render_targets = job_max_bpp(t);
 		bin.multisample_mode_4x = t->msaa;
 		bin.tile_allocation_initial_block_size = V3D_JOB_TILE_ALLOC_INITIAL_BLOCK;
 		bin.tile_allocation_block_size = V3D_TILE_ALLOC_BLOCK_64B;
@@ -855,14 +996,14 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 
 	*start = v3d_cl_gpu_next(list);
 	v3d_cl_emit(list, TILE_COORDINATES_IMPLICIT, coords);
-	/* v3d_rcl_emit_loads -> load_general, RT0, raster RGBA8: the colour
-	 * the target already holds, when this job did not clear it. */
+	/* v3d_rcl_emit_loads -> load_general, RT0, raster in the target's
+	 * format (RGBA8 unless typed or rgb565): the colour the target already
+	 * holds, when this job did not clear it. */
 	if (rt0 && c->load_rt0 && !j->t.msaa) {
 		v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
 			ld.buffer_to_load = V3D_LOAD_BUFFER_RT0;
 			ld.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			ld.input_image_format = j->t.rgb565 ? V3D_OUTPUT_IMAGE_FORMAT_BGR565
-							     : V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+			ld.input_image_format = rt_fmt(&j->t, 0);
 			ld.height_in_ub_or_stride = j->t.stride;
 			ld.address = j->t.address;
 			ld.force_alpha_1 = c->force_alpha_1;
@@ -893,7 +1034,7 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 		v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
 			ld.buffer_to_load = V3D_LOAD_BUFFER_RT0 + n;
 			ld.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			ld.input_image_format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+			ld.input_image_format = rt_fmt(&j->t, n);
 			ld.height_in_ub_or_stride = rt->stride;
 			ld.address = rt->address;
 			ld.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
@@ -946,15 +1087,14 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 			ms.decimate_mode = V3D_DECIMATE_MODE_ALL_SAMPLES;
 		}
 	}
-	/* v3d_rcl_emit_stores -> store_general, RT0, raster RGBA8; at 4x the
-	 * resolve, decimate 4X (v3dx_rcl.c:159-166) */
+	/* v3d_rcl_emit_stores -> store_general, RT0, raster in the target's
+	 * format; at 4x the resolve, decimate 4X (v3dx_rcl.c:159-166) */
 	if (rt0) {
 		stores++;
 		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, st) {
 			st.buffer_to_store = V3D_STORE_BUFFER_RT0;
 			st.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			st.output_image_format = j->t.rgb565 ? V3D_OUTPUT_IMAGE_FORMAT_BGR565
-							     : V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+			st.output_image_format = rt_fmt(&j->t, 0);
 			st.height_in_ub_or_stride = j->t.stride;
 			st.address = j->t.address;
 			st.r_b_swap = c->r_b_swap;
@@ -986,7 +1126,7 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, sr) {
 			sr.buffer_to_store = V3D_STORE_BUFFER_RT0 + n;
 			sr.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			sr.output_image_format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+			sr.output_image_format = rt_fmt(&j->t, n);
 			sr.height_in_ub_or_stride = rt->stride;
 			sr.address = rt->address;
 			sr.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
@@ -1052,7 +1192,8 @@ bool v3d_job_end(struct v3d_job *j, const struct v3d_job_clear *c, uint32_t *til
 	v3d_cl_emit(j->bcl, FLUSH, flush);
 
 	struct v3d_tiling t;
-	v3d_frame_tiling_ms(j->t.width, j->t.height, job_rts(&j->t), j->t.msaa, &t);
+	const uint32_t max_bpp = job_max_bpp(&j->t);
+	v3d_frame_tiling_bpp(j->t.width, j->t.height, job_rts(&j->t), j->t.msaa, max_bpp, &t);
 	uint32_t list_start, list_end;
 	emit_tile_list(j, c, j->ind, &list_start, &list_end);
 	if (tile_list_start)
@@ -1066,44 +1207,76 @@ bool v3d_job_end(struct v3d_job *j, const struct v3d_job_clear *c, uint32_t *til
 		common.number_of_render_targets = job_rts(&j->t);
 		common.image_width_pixels = j->t.width;
 		common.image_height_pixels = j->t.height;
-		common.maximum_bpp_of_all_render_targets = V3D_INTERNAL_BPP_32;
+		common.maximum_bpp_of_all_render_targets = max_bpp;
 		/* early Z off (see v3d_job.h); the tile buffer's Z/S is D24S8:
 		 * internal type depth_24, what a Z24S8 zsbuf gives */
 		common.early_z_disable = true;
 		common.internal_depth_type = V3D_INTERNAL_TYPE_DEPTH_24;
 		common.multisample_mode_4x = j->t.msaa;
 	}
-	/* R8G8B8A8_UNORM clear colour, internal type 8: 32 bits (v3d_tlb_clear),
-	 * one PART1 per RT in RT order (v3dx_rcl.c:833-839); then the COLOR
-	 * packet with every configured RT RGBA8 (:898-913); an RT past the
-	 * job's count stays 0, as v3d_setup_render_target leaves it */
-	for (uint32_t n = 0; n < job_rts(&j->t); n++) {
+	/* The clear colour of each RT in RT order, as the tile buffer holds it
+	 * (v3d_tlb_clear: R8G8B8A8_UNORM's one word for internal type 8; a
+	 * typed target's words, v3d_job_clear.clear_rt): PART1 with the low 56
+	 * bits for every RT, PART2 with the next 56 at 64 bpp and more, PART3
+	 * with the top 16 at 128 (v3dx_rcl.c:833-860); then the COLOR packet
+	 * with every configured RT's internal bpp, type and clamp (:898-913);
+	 * an RT past the job's count stays 0, as v3d_setup_render_target
+	 * leaves it. An RT this job loads clears to 0 (never seen). */
+	const uint32_t rts = job_rts(&j->t);
+	uint32_t types[4] = { 0, 0, 0, 0 }, bpps[4] = { 0, 0, 0, 0 }, clamps[4] = { 0, 0, 0, 0 };
+	for (uint32_t n = 0; n < rts; n++) {
 		bool load = n == 0 ? c->load_rt0 : c->load_rt[n - 1];
-		uint32_t rgba8 = n == 0 ? c->rgba8 : c->rgba8_rt[n - 1];
+		uint32_t w[4] = { 0, 0, 0, 0 };
+		/* v3d_job_begin checked every typed format; an untyped job's are
+		 * RGBA8 / BGR565, rows of the table */
+		rt_internal(rt_fmt(&j->t, n), &types[n], &bpps[n], &clamps[n]);
+		if (!load) {
+			if (j->t.typed) {
+				for (int k = 0; k < 4; k++)
+					w[k] = c->clear_rt[n][k];
+			} else {
+				w[0] = n == 0 ? c->rgba8 : c->rgba8_rt[n - 1];
+			}
+		}
 		v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1, clear) {
 			clear.render_target_number = n;
-			clear.clear_color_low_32_bits = load ? 0 : rgba8;
+			clear.clear_color_low_32_bits = w[0];
+			clear.clear_color_next_24_bits = w[1] & 0xffffffu;
+		}
+		if (bpps[n] >= V3D_INTERNAL_BPP_64) {
+			v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2, clear2) {
+				clear2.render_target_number = n;
+				clear2.clear_color_mid_low_32_bits = (w[1] >> 24) | (w[2] << 8);
+				clear2.clear_color_mid_high_24_bits = (w[2] >> 24) | ((w[3] & 0xffffu) << 8);
+			}
+		}
+		if (bpps[n] >= V3D_INTERNAL_BPP_128) {
+			/* a raster target: no UIF padded height (Mesa writes the
+			 * surface's, 0 for raster tiling) */
+			v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3, clear3) {
+				clear3.render_target_number = n;
+				clear3.clear_color_high_16_bits = w[3] >> 16;
+			}
 		}
 	}
-	const uint32_t rts = job_rts(&j->t);
 	v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_COLOR, color) {
-		color.render_target_0_internal_bpp = V3D_INTERNAL_BPP_32;
-		color.render_target_0_internal_type = V3D_INTERNAL_TYPE_8;
-		color.render_target_0_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+		color.render_target_0_internal_bpp = bpps[0];
+		color.render_target_0_internal_type = types[0];
+		color.render_target_0_clamp = clamps[0];
 		if (rts > 1) {
-			color.render_target_1_internal_bpp = V3D_INTERNAL_BPP_32;
-			color.render_target_1_internal_type = V3D_INTERNAL_TYPE_8;
-			color.render_target_1_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+			color.render_target_1_internal_bpp = bpps[1];
+			color.render_target_1_internal_type = types[1];
+			color.render_target_1_clamp = clamps[1];
 		}
 		if (rts > 2) {
-			color.render_target_2_internal_bpp = V3D_INTERNAL_BPP_32;
-			color.render_target_2_internal_type = V3D_INTERNAL_TYPE_8;
-			color.render_target_2_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+			color.render_target_2_internal_bpp = bpps[2];
+			color.render_target_2_internal_type = types[2];
+			color.render_target_2_clamp = clamps[2];
 		}
 		if (rts > 3) {
-			color.render_target_3_internal_bpp = V3D_INTERNAL_BPP_32;
-			color.render_target_3_internal_type = V3D_INTERNAL_TYPE_8;
-			color.render_target_3_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+			color.render_target_3_internal_bpp = bpps[3];
+			color.render_target_3_internal_type = types[3];
+			color.render_target_3_clamp = clamps[3];
 		}
 	}
 	v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES, zs) {
