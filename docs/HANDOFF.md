@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `e9901869a` (2026-10-16; #870). ES 2.0 holds on all three boards
+main is `80351fa7` (2026-10-16; #912). ES 2.0 holds on all three boards
 there, each booted by its bootloader (`tools/cts/RESULTS.md`, the
 2026-10-15/16 sections): dEQP-GLES2 0 failures (AM62P 17,140 combined,
 i.MX8MP 17,318 of 17,371, Pi 4 17,126 with all 17,165 mustpass cases), the
@@ -311,7 +311,7 @@ es3-vertex).
 | Uniform blocks | host: `tests/es3_ubo.rs` ports dEQP's `functional.ubo` (2,032 cases); the GC7000 refuses four at link (`KNOWN_LIMITS`) (`1b0e431`, `b0c0fa6`) | none |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`; the GC7000 and V3D refuse the integer ones by name (`888af5d`, `e5c4a18`; PowerVR `25267d17`, merged in `a27d69c0`) | `docs/es3-sized-formats.md`, `docs/es3-pvr-formats.md` |
 | Occlusion queries | counted on the three back ends, host only (`2241cd84` GL core, `d9573ab9` PowerVR, `dcac96cb` GC7000, `7526b084` V3D; merged in `452d6c31`) | `docs/es3-occlusion-query.md` |
-| Integer colour render targets | GL half built; the PowerVR writes all nineteen as a draw's one colour attachment (`fc658e64`, merged in `a27d69c0`); the GC7000 and V3D refuse by name | `docs/es3-pvr-formats.md` section 10 |
+| Integer colour render targets | GL half built; the PowerVR writes all nineteen as a draw's one colour attachment (`fc658e64`, merged in `a27d69c0`); the V3D writes all nineteen, the float ones (RGBA16F, R16F, R32F) and the ES 2.0 formats among any attachments, host only (int-rt-v3d: `src/v3d/state.rs` `rt_format`, the job builder's typed targets, the compiler's 32-bit TLB writes; `docs/online-shaderc/v3d-backend.md` "Integer and ES 3.0 colour render targets"); the GC7000 refuses by name | `docs/es3-pvr-formats.md` section 10; `tests/es3_int_rt_v3d.rs` |
 | `glBlitFramebuffer` | colour on the CPU, shared by the three back ends (`c4dce9125`); depth on the CPU into a depth texture's texels, from a depth texture or a depth renderbuffer (blit-ds, host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs` |
 | sRGB | PowerVR renders and samples; the GC7000 and V3D sample and refuse a draw into sRGB by name (`c4dce9125`) | `docs/es3-srgb.md` |
 | Buffer mapping and pixel buffers | host-proven (`c4dce9125`) | none |
@@ -917,7 +917,29 @@ es3-vertex).
      `shaders.builtin_functions` buckets). Left on the PowerVR: an integer
      attachment beside other attachments, colour masks that keep some of an
      integer target's channels, precompiled rows for the integer variants.
-     The GC7000 and the V3D: none.
+     The V3D's is built on the host (int-rt-v3d). Left on the V3D: a board
+     run (gl_test 200 intrt on the Pi 4; the dEQP-GLES3 `fragment_out`,
+     `fbo.color` and `shaders.builtin_functions` buckets),
+     `tools/v3d/job_check.c` / `cl_golden.c` rows for a typed job, an
+     integer clear program for a scissored or masked clear of an integer
+     target (refused by name today), the F32 TLB write for an R32F target
+     (f16 pairs today; no dEQP case reaches it without
+     EXT_color_buffer_float), 4x on an ES 3.0 format (refused by name).
+     Verified against Mesa 26.2.1 source (2026-10-15):
+     `vir_emit_tlb_color_write` (`nir_to_vir.c:1974-1977`) writes every
+     `f32_color_rb` target with `TLB_TYPE_F32_COLOR (0 << 6)` and
+     `v3d_program.c:701-704` sets that key bit for pure integer formats;
+     `TLB_TYPE_I32_COLOR (1 << 6)` is never written. The compiler's integer
+     config is `tlb_config_32b` (0 << 6); the pinned words lost 0x40
+     (0xffffff3f for RT 0 vec4). `clamp_for_format_and_type`
+     (`v3dx_rcl.c:395-409`) returns INT for a pure integer format, NORM for
+     sRGB, NONE otherwise, so the clamp rows stand. Redo of #840 (closed,
+     CI red): on nuc rebased onto main `4d744e17`, `tools/check.sh --changed
+     origin/main` gave 154 ok, 0 failed, 0 gaps (2761 s); on system76 the
+     one red row is the host's MESA_V3D_TREE without `build-v3d`, and its
+     three programs pass by hand (tex_check 449, cl_golden 1,240,201,
+     job_check 373 checks, 0 failed). `tools/check_scope_selftest.sh` now
+     counts 151 skipped and 154 rows. The GC7000: int-rt-gc.
    - **formats**: each back end samples the new storage classes of
      `docs/es3-sized-formats.md` and gains isampler / usampler. Left on the
      PowerVR: integer cube / 3D / 2D-array samplers and `RGB10A2` as a
@@ -1642,6 +1664,11 @@ Still to run on the Pi 4:
   QualityWarning, 2 CompatibilityWarning). A row whose verdict is
   `done_lossy` has lost result lines in the bridge: read it against the
   image's counters and rerun the row (the bridge's fix is firmware work);
+- gl_test 200 `intrt` at the main tip, and the dEQP-GLES3
+  `fragment_out.basic.int`, `fragment_out.basic.uint` and `fbo.color.*`
+  integer cases: the first measurement of the V3D typed job's packets (the
+  COLOR packet's internal types and clamps, the 64/128-bpp clear words, the
+  smaller tiles) and of the 32-bit TLB writes;
 - gl_test 196 `occl` after the V3D counter is looked at, and 204 `srgb` after
   its guard (above; 202, 203 and 205 passed at `cd738b1a`);
 - the remaining dEQP-GLES3 tree images (`tools/cts/pi4-gles3-tree.txt`, 91
