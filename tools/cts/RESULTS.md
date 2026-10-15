@@ -17554,3 +17554,39 @@ PowerVR backend has no `generate_mipmap` hook, so `glGenerateMipmap` is the GL c
 over terrain's 800x600 and refract's 1600x1200 chains every frame (read in `src/pvr/backend.rs` and
 `src/gl/texture.rs`, not measured: the image has no `CONFIG_SAFEUI_GPU_PVR_KICK_TIMES`). Score 465
 -> 462 is refract's 85 -> 1 fps; every other scene is within 2 fps of `cd738b1a`.
+
+## AM62P: gl_test 198, 197, 171, the work/land9 cases and the default set on `dc514010`; glmark2 465 (2026-10-15)
+
+Record `docs/board-sessions/am62p-gltest-es2-20261015.md`. `tools/board.sh am62p`,
+`BOARD_BOOT=uboot-mmc`, images built from `dc514010` (on origin/main; the tip was `aed962e2`,
+which this session could not check out), one case per image (`CONFIG_GL_TEST_CASES="<n>"` on
+the GT row of `tools/cts/common-tree.txt`), records under `records/am62p/gltest-es2-dc514010/`.
+The console was the leased port, which carried main_uart0 (probe: `YK-PROBE-S2`, 13 bytes),
+captured through a local relay because the farm's reader held the bridge.
+
+| image | verdict | result |
+|---|---|---|
+| case 198 `a2cconst` | `rc=0 verdict=done ... resets=0 ... back_after=120s` | PASS (0 of 4096 pixels green in both pictures, checks 6 and 7 ok) |
+| case 197 `vtxgrid` | `rc=0 verdict=done ... resets=0 ... back_after=95s` | PASS (lods 0..3: 0 of 1024 wrong) |
+| case 171 `viewwin` | `rc=0 verdict=done ... resets=0 ... back_after=95s` | PASS (21 / 21) |
+| case 196 `occl` | `rc=0 verdict=done ... resets=0 ... back_after=154s` | PASS (q0..q4 available 1, results 0 1 0 1 1) |
+| case 202 `blitconv` | `rc=0 verdict=done ... resets=0 ... back_after=89s` | PASS (12 / 12) |
+| case 203 `tfcap` | `rc=0 verdict=done ... resets=0 ... back_after=99s` | PASS (9 / 9) |
+| case 204 `srgb` | `rc=0 verdict=done ... resets=0 ... back_after=99s` | PASS (8 / 8; the blend reads 204 89 160 191 against 203, within the case's tolerance) |
+| case 205 `mappbo` | `rc=0 verdict=done ... resets=0 ... back_after=91s` | PASS (15 / 15) |
+| GT, default set | `rc=0 verdict=done ... result=legacy:gl_test_all resets=0 record=absent back_after=594s` | **50 / 50**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...); precompiled hits 0, compiler runs 208` |
+| GM, glmark2 | `rc=0 verdict=done ... result=record:GLMARK2 resets=0 record=594b1201,fc3f01d1,6184003f,0f258320 back_after=457s unsupported=0` | **score 465, 33 scenes ran, 0 failed, 0 unsupported**; GL errors raised 2579 (record: 15 or more), draws that sampled an incomplete texture 0 |
+
+No FWCCB event and no CONTEXT_RESET line in any gl_test run (GPU recoveries 0, HWR counter 0).
+A first GT run ended `rc=4 verdict=no_spl` because the relay was slower than the 420 s bound; it is
+not a result (the rerun used `RUN_BOUND=3600 RETURN_BOUND=1800`, and the GT and GM `back_after`
+include the relay's lag). glmark2: terrain (#1) runs at 1 FPS with `render pool exhausted: 5464 KiB
+requested, 3648 KiB left`, its 800x600 mip chain refused (`GL error 0x505 in glGenerateMipmap`) and
+framebuffer 7 incomplete every frame; refract (#2) has `render pool exhausted: 21848 KiB
+requested, 2744 KiB left`, its 1600x1200 chain refused and framebuffer 1 incomplete 1,698 times.
+All 16 `GL error` lines of the console are terrain's.
+
+Re-run of the three goal-1 cases on the origin/main tip **`2923d771`** (same method, records under
+`records/am62p/gltest-es2-2923d771/`): case 198 `rc=0 verdict=done ... resets=0 ... back_after=126s`,
+case 197 `rc=0 verdict=done ... resets=0 ... back_after=100s`, case 171 `rc=0 verdict=done ...
+resets=0 ... back_after=109s`; all PASS with the same check values, no FWCCB event, no CONTEXT_RESET.
