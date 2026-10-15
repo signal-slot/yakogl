@@ -1333,6 +1333,10 @@ step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
 # or read, the errors); the ES 2.0 report below must refuse them.
 step "test    $V3D_CONFIG (tests/es3_occlusion_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_occlusion_gl
+# The EGL attribute lists of glmark2, Slint and the AGL cluster on the Pi 4's
+# windows (the PowerVR and GC7000 rows above run it with the rest of tests/).
+step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test egl_bench_configs
 # ES 3.0 vertex arrays in buffer objects (packed 2_10_10_10 and half-float
 # converted to float32 rows, the integer w of a narrow ivec4/uvec4 array)
 # through the GL API against a recording stand-in back end. Not an ES 2.0
