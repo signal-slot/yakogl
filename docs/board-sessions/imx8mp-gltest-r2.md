@@ -4,7 +4,7 @@
 # i.MX8MP board session: gl_test #9/#25 KICK_DIFF interleaved arms (imx8mp-gltest-r2)
 
 Plan #20 item `imx8mp-gltest-r2`. Date: 2026-10-15. Board: Verdin i.MX8M Plus (GC7000),
-the leased `verdin-imx8mp` resource, `BOARD_BOOT=uboot-mmc`. The board has no UART in this
+the farm's leased i.MX8MP, `BOARD_BOOT=uboot-mmc`. The board has no UART in this
 setup: each run's result is the SNVS record `tools/board.sh` reads after the cycle. No board
 address, credential or UART path is written here.
 
