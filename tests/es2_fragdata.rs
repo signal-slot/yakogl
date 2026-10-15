@@ -6,7 +6,8 @@
 //! and data/gles2/shaders/fragdata.test) compile one vertex and one fragment
 //! shader and either draw (`valid_*`) or expect a compile failure
 //! (`invalid_assign_to_1`, `write_fragcolor_and_fragdata_*`).
-//! tools/cts/log/investigations/es2-fragdata.md has the whole path.
+//! docs/investigations/es2-fragdata.md has the whole path and the board
+//! results (the first record: tools/cts/log/investigations/es2-fragdata.md).
 //!
 //! Two layers:
 //!
