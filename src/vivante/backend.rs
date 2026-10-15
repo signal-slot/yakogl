@@ -698,6 +698,27 @@ fn ms_pitch(w: u32, bpp: u32) -> u32 {
 /// [`ensure_no_colour_surface`]'s surface, which is never written.
 pub const DRAWS_WITHOUT_COLOUR: bool = true;
 
+/// The part's NPOT support: the GC7000UL's NON_POWER_OF_TWO feature bit
+/// (galcore's `gcFEATURE_BIT_REG_NonPowerOfTwo`, the NPOT bit of
+/// chipMinorFeatures1) is set, so the texture unit samples a
+/// non-power-of-two texture with any wrap mode. From Mesa 26.2.1's copy of
+/// NXP's feature database, `src/etnaviv/hwdb/nxp/gc_feature_database.h`
+/// (tag mesa-26.2.1): both entries matching the board's part (ChipID
+/// 0x7000, ChipRevision 0x6204, ProductID 0x70003, EcoID 0x0 and 0x1,
+/// CustomerID 0x11, both named `gc7000ULN_v123`, at :18841 and :19735)
+/// set it to 1 (:19036 and :19930). The same entries read REG_Halti5 1
+/// (:19172), REG_UnifiedSamplers 1 (:19090), REG_SeamlessCubeMap 1
+/// (:19049), REG_LinearTextureSupport 1 (:19037) and NO_ASTC 1 (:19200):
+/// a HALTI5 core with unified samplers, seamless cube maps and linear
+/// textures, and no ASTC. Mesa's etnaviv driver turns that database bit
+/// into its own NON_POWER_OF_TWO feature (`ETNA_FEATURE(REG_NonPowerOfTwo,
+/// NON_POWER_OF_TWO)`, src/etnaviv/hwdb/etna_hwdb.c:65, same tag) and
+/// claims GL_OES_texture_npot only where the feature is set
+/// (docs/es2-cts-failures.md section H), so this is the hardware fact the
+/// GC7000 build's claim rests on (`gl::state::NPOT_EXTENSION`;
+/// tests/vivante_npot.rs pins it).
+pub const NON_POWER_OF_TWO: bool = true;
+
 /// Bytes of the surface a draw with no colour target names: Mesa's etnaviv
 /// dummy render target, 64x64 RGBA8 (etnaviv_screen.c:1144-1151, Mesa 26.2.1).
 const NO_COLOUR_SURFACE_BYTES: usize = 64 * 64 * 4;

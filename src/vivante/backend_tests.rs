@@ -1719,8 +1719,10 @@ fn a_descriptor_names_every_level_on_a_64_byte_boundary_at_one_stride() {
 /// both axes with a linear mip filter.
 ///
 /// The hardware's own NPOT support (etnaviv asks for chipMinorFeatures1
-/// NON_POWER_OF_TWO, which this part's recorded words do not show) is not a
-/// host question: docs/es2-cts-failures.md says what the board must show.
+/// NON_POWER_OF_TWO) is recorded: the part's etnaviv hwdb entry sets it
+/// (`NON_POWER_OF_TWO` in this module, pinned by tests/vivante_npot.rs).
+/// What the board shows when it samples such a chain is the open half:
+/// docs/es2-cts-failures.md says what the board must show.
 #[test]
 fn a_generated_npot_chain_is_named_level_by_level() {
     use crate::gl::consts::*;
