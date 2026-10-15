@@ -809,8 +809,14 @@ texture on every board (`tools/cts/RESULTS.md`, 2026-10-04).
 The GC7000 caveat: etnaviv uses NPOT textures with any wrap mode only when
 `chipMinorFeatures1_NON_POWER_OF_TWO` is set. This repository records the
 part's `features` and `minor0` words (tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md) and the
-feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs),
-not `minor_features[1]`. The part is HALTI5 (an ES 3.x-class core, whose ES
+feature-database facts the kernel side uses (driver/rust/src/gpu/vivante/hw.rs);
+the part's own `minor_features[1]` word was never read from the board. NXP's
+feature database answers for it: both entries matching the part's ids (ChipID
+0x7000, ChipRevision 0x6204, ProductID 0x70003, CustomerID 0x11, both named
+`gc7000ULN_v123`) set the bit (Mesa 26.2.1,
+`src/etnaviv/hwdb/nxp/gc_feature_database.h`; recorded as
+`src/vivante/backend.rs`'s `NON_POWER_OF_TWO`, pinned by
+`tests/vivante_npot.rs`). The part is HALTI5 (an ES 3.x-class core, whose ES
 3.0 needs NPOT repeat and mipmaps), and the ES 3.0 build has always sampled
 NPOT textures with REPEAT there. The i.MX8MP tree (H.4) passes the REPEAT
 cases.
