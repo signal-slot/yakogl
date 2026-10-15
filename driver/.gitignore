@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # PowerVR firmware is TI/Img property; generate it locally, never commit it.
 src/fw/
 *.fw

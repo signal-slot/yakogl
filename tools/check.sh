@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# What to run before pushing. There is no CI on this repository, so this
-# script is the gate, and a red fmt or a single warning is a defect rather
-# than a matter of taste: main arrived unformatted twice in one day, and a
+# What to run before pushing. This script is the gate, locally and in the
+# CI (.github/workflows/gate.yml), and a red fmt or a single warning is a
+# defect rather than a matter of taste: main arrived unformatted twice in one day, and a
 # build that already prints a warning is one where the next real warning is
 # invisible -- which is how three unused_unsafe of my own survived (283cc56)
 # and how a function with no callers did (7715e3f).
@@ -174,6 +174,21 @@ fi
 # sets) tests only those, for a change whose reach is known (user, 2026-09-26);
 # the image builds, the aarch64 checks and the tool tests still run. Default: all.
 if [ -n "${YAKOGL_CHECK_CONFIGS-}" ]; then read -r -a CONFIGS <<< "$YAKOGL_CHECK_CONFIGS"; fi
+
+# Preflight: the gate's own tools. A host without rustfmt or clippy used to
+# print "FAIL cargo fmt --check" and one FAIL per clippy row with rustup's
+# message buried in the tail; stop at once and say what to install instead
+# (exit 2: the gate did not run, which is neither green nor a code defect).
+missing=()
+command -v cargo >/dev/null 2>&1 || missing+=("cargo (install rustup)")
+cargo fmt --version >/dev/null 2>&1 || missing+=("rustfmt (rustup component add rustfmt)")
+cargo clippy --version >/dev/null 2>&1 || missing+=("clippy (rustup component add clippy)")
+if [ "${#missing[@]}" -gt 0 ]; then
+  printf '\033[31mtools/check.sh: cannot run, missing: %s\033[0m\n' "${missing[*]}" >&2
+  printf 'The active toolchain is "%s"; set RUSTUP_TOOLCHAIN to one that has them.\n' \
+    "$(rustup show active-toolchain 2>/dev/null | cut -d' ' -f1)" >&2
+  exit 2
+fi
 
 rc=0
 red() { printf '\033[31m%s\033[0m\n' "$*"; }
@@ -1290,11 +1305,30 @@ step "test    $V3D_CONFIG (tests/v3d_clear.rs)" \
 # 96 MiB, and 48 MiB reproduces the refusals RESULTS.md records.
 step "test    $V3D_CONFIG (tests/v3d_glmark2_mem.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_glmark2_mem
+# The render image a sampled render target is stored into and its TFU-made
+# mip chain (src/v3d/backend.rs RtImage): refract's one-level and 11-level
+# layouts and the chain's TFU job against Mesa's rules, and the TLB's and
+# the TMU's words of one image agreeing, on the real driver/src/v3d/v3d_tex.c
+# (built with cc, as the replay above).
+step "test    $V3D_CONFIG (tests/v3d_rt_sample.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_rt_sample
 # ES 3.0's integer colour render targets through the GL API (the stand-in
 # back end of the test draws nothing); the ES 2.0 report below must refuse
 # every one of the formats.
 step "test    $V3D_CONFIG (tests/es3_int_rt.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt
+# The V3D's own half of the integer and ES 3.0 colour render targets
+# (int-rt-v3d): the TLB render-target rows of src/v3d/state.rs against
+# Mesa's table, the clear words, and the compiler's 32-bit TLB writes of an
+# integer output on the QPU interpreter. Compiles to nothing under
+# report-es2 (no row below).
+step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_int_rt_v3d
+# The V3D shader back end's GLSL ES 3.00 gaps the dEQP corpus found
+# (matrix vertex attributes, integer shifts, trunc), built and run on the
+# interpreter. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_shaderc_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_shaderc_v3d
 # ES 3.0 transform feedback objects, varyings, queries and rasterizer
 # discard through the GL API (the capture itself is item tf-capture); the ES
 # 2.0 report below pins the old answers.
@@ -1311,6 +1345,10 @@ step "test    $V3D_CONFIG (tests/es3_srgb.rs)" \
 # or read, the errors); the ES 2.0 report below must refuse them.
 step "test    $V3D_CONFIG (tests/es3_occlusion_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_occlusion_gl
+# The EGL attribute lists of glmark2, Slint and the AGL cluster on the Pi 4's
+# windows (the PowerVR and GC7000 rows above run it with the rest of tests/).
+step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test egl_bench_configs
 # ES 3.0 vertex arrays in buffer objects (packed 2_10_10_10 and half-float
 # converted to float32 rows, the integer w of a narrow ivec4/uvec4 array)
 # through the GL API against a recording stand-in back end. Not an ES 2.0

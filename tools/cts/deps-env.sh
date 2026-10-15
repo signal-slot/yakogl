@@ -35,6 +35,10 @@
 #   pvr_fw_blob.h              PVR_FW_BLOB             the PowerVR firmware header (never committed)
 #   with a board:
 #   deqp-stage1-<board>/       DEQP_WORK               the board's dEQP stage-1 tree
+#   slint-nostd/               SLINT_NOSTD_DIR         Slint's no_std tree (the common set's slint and cluster images)
+#   nostd/                     NOSTD_PATCH_DIR, FVG_NOSTD_DIR  the no_std patch workspace (femtovg, glow)
+#   agl-slint-cluster/         AGL_SLINT_CLUSTER_DIR   the cluster demo's sources
+#   noto/                      NOTO_SANS_DIR           the Noto Sans fonts the cluster image embeds
 #   imx8mp-out/                IMX8MP_OUT              i.MX8MP image output (imx8mp)
 #   deqp-stage1-imx8mp/        DEQP_STAGE1             the i.MX8MP dEQP stage-1 tree (imx8mp)
 #
@@ -87,6 +91,11 @@ row GLMARK2_SRC "$deps/glmark2-src" "$deps/glmark2-src/src/default-benchmarks.h"
 row PVR_FW_BLOB "$deps/pvr_fw_blob.h" "$deps/pvr_fw_blob.h"
 if [ -n "$BOARD" ]; then
   row DEQP_WORK "$deps/deqp-stage1-$BOARD" "$deps/deqp-stage1-$BOARD/build"
+  # the common set's images (tools/cts/common-images.sh reads these names)
+  row SLINT_NOSTD_DIR "$deps/slint-nostd" "$deps/slint-nostd/internal"
+  row NOSTD_PATCH_DIR "$deps/nostd" "$deps/nostd/Cargo.toml" FVG_NOSTD_DIR
+  row AGL_SLINT_CLUSTER_DIR "$deps/agl-slint-cluster" "$deps/agl-slint-cluster/ui/app-window.slint"
+  row NOTO_SANS_DIR "$deps/noto" "$deps/noto/NotoSans-Regular.ttf"
 fi
 if [ "$BOARD" = imx8mp ]; then
   row IMX8MP_OUT "$deps/imx8mp-out" "$deps/imx8mp-out"

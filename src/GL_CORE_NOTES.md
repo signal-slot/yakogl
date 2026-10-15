@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GL core notes
 
 - **Vertex array objects** (`gl/vao.rs`, `GL_OES_vertex_array_object`, ES 3.0 core

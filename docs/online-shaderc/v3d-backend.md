@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The V3D 4.2 back end (Raspberry Pi 4): design record
 
 Status 2026-10-11: the instruction set (`src/shaderc/online/v3d/`: model,
@@ -1142,6 +1144,89 @@ Open for the lead: the refusal in step 3 versus configuring the extra RTs at job
 begin when the default framebuffer (one attachment) is drawn with a program
 that writes more. That costs every such job the smaller tile, and nothing in the
 corpus needs it.
+
+## Integer and ES 3.0 colour render targets (int-rt-v3d, 2026-10-14; host only)
+
+**Built:** the nineteen integer colour formats of ES 3.0 table 3.13 (R/RG/RGBA
+8/16/32 I and UI, RGB10_A2UI) and the float ones (RGBA16F, R16F, R32F) are
+render targets on the V3D, alone or among other attachments, and an integer
+fragment output (`out ivec4`, `uvec2`, `int`, ...) reaches the TLB as 32-bit
+words. Nothing is measured on a board yet: the host checks are
+`tests/es3_int_rt_v3d.rs` (the rows against Mesa's table, the clear words,
+the compiler's TLB writes on the interpreter) and `src/v3d/backend_tests.rs`
+(the typed job, its strides, clears and refusals, against the fake job
+builder); the job builder's packets for a typed job have no `cl_golden` /
+`job_check` row yet (see "Left").
+
+What Mesa does on V3D 4.2, and what was transcribed:
+
+- **Formats** (`v3dx_format_table.c`, the `rt` column of `FORMAT(...)`: the
+  integer rows :118-137, R16F :90, R32F :91, RGBA16F :100, RGB10_A2UI :75):
+  each format is its own OUTPUT_IMAGE_FORMAT for the colour load and store,
+  raster, at its own bytes a pixel (`src/v3d/state.rs` `rt_format`).
+- **Tile buffer** (`v3dX(get_internal_type_bpp_for_output_format)`,
+  :220-341): the internal type is the channel width and kind (8I, 16UI,
+  32F, ...), the bpp the channels' total width: 32 for the 8-bit rows and
+  the one- and two-channel 16-bit ones, 64 for RGBA16*, RG32*, RGB10_A2UI
+  (held as 16UI) and BOTH 16F rows (R16F at 64 "to make sure the TLB doesn't
+  throw away the alpha channel before alpha test happens", :266-268), 128
+  for RGBA32*. The clamp is `clamp_for_format_and_type`'s
+  (`v3dx_rcl.c:396-407`): INT for a pure integer format, NONE otherwise
+  (NORM for sRGB, whose render side is not built, `docs/es3-srgb.md` 5.1).
+- **Tile size** (`v3d_util.c` `v3d_choose_tile_size`): one step down the
+  table per bpp step on top of the RT-count and MSAA steps
+  (`v3d_frame_tiling_bpp`; the table now runs to 8x8). The pools are sized
+  at init for 2048x2048 at four 32-bpp RTs (4096 tiles); a typed job with
+  more tiles is refused by name ("more tiles than the job pools hold").
+- **Clear** (`v3d_tlb_clear`, `v3dx_draw.c:1706-1769`; the packets
+  `v3dx_rcl.c:833-860`): the clear colour is packed per internal type (a byte
+  a channel for 8I/8UI, a half for 16F, 16 bits for 16I/16UI, the words as
+  they are at 32) into up to four words, CLEAR_COLORS PART1 for every RT,
+  PART2 from 64 bpp, PART3 at 128 (`state::clear_words`,
+  `v3d_job_clear.clear_rt`). glClearBuffer(GL_COLOR, n) (`clear_target_mask`)
+  clears draw buffer n alone; the other RTs load.
+- **Shader** (`vir_emit_tlb_color_write`, `nir_to_vir.c:1953-2036`, the
+  `f32_color_rb` branch `:1974-1977` and `:2005-2021`, which the key takes
+  for every pure integer format as for 32F, `v3d_program.c:701-704`): an
+  output declared `int`/`uint` (any width) is MOVed to the TLB one 32-bit
+  word per declared component, the first through TLBU with `0xffffff00 |
+  per-pixel | (7 - rt) << 3 | TLB_TYPE_F32_COLOR (0 << 6) | (components -
+  1)`, the rest through TLB; the hardware narrows to the target's type under
+  the INT clamp (`prepare.rs` `rt_int` / `rt_comps`, `select.rs`
+  `tlb_config_32b`). V3D 4.2 has one 32-bit TLB type for integer and float
+  words alike: Mesa 26.2.1 defines `TLB_TYPE_I32_COLOR (1 << 6)`
+  (`nir_to_vir.c:1930`) but never writes it, the tile buffer's internal type
+  says what the words are. A float output keeps its f16 pairs.
+
+**The job builder's interface** (`driver/src/v3d/v3d_job.h`): `v3d_job_target`
+gained `typed` and `rt_format[4]` (RT 0..3's output image formats; with
+`typed` false every ES 2.0 job is built byte for byte as before: RGBA8 or
+BGR565 by `rgb565`), `v3d_job_clear` gained `clear_rt[4][4]`, and
+`v3d_frame_tiling_bpp` takes the largest bpp. `rt_internal` in `v3d_job.c`
+holds the same rows as `state::rt_format`, keyed by the output format; a
+typed format outside them, or 4x with `typed`, breaks the job at begin.
+`src/v3d/ffi.rs` and `ffi_layout_check.c` pin the new layouts (target 88
+bytes, clear 132, job 856) and the enum values.
+
+**Left:**
+
+- A board run: gl_test 200 intrt (and 201 isamp once formats-v3d samples
+  integer textures) and the dEQP-GLES3 `fragment_out`, `fbo.color` and
+  `shaders.builtin_functions` buckets on the Pi 4.
+- `tools/v3d/job_check.c` and `cl_golden.c` rows for a typed job (the
+  PART2/PART3 clear packets, the COLOR packet with 16I/64 bpp, a 16x16
+  tile), against Mesa's CLE.
+- The clear quad's program writes halves: a scissored or masked colour
+  clear of an integer target is refused by name. An integer clear program
+  (`out ivec4 o = u_color`) would lift it.
+- A float output to an R32F target writes f16 pairs (the program is not
+  keyed by the target's class, so Mesa's F32 TLB write cannot be chosen);
+  the 32F tile buffer takes them at half precision. EXT_color_buffer_float
+  is not claimed, so no dEQP case reaches it.
+- 4x on an ES 3.0 colour format is refused by name (the kept samples and
+  the resolve are RGBA8). Nothing in the GL core makes such a surface.
+- `GL_MAX_DRAW_BUFFERS` stays 3 (`backend::DRAW_TARGETS`); a fourth
+  attachment is the MRT item's.
 
 ## Multisampling (4x; steps 1-3 of 4 built: the job builder, the backend, the EGL config behind a switch)
 
@@ -4251,3 +4336,191 @@ flushes the new job too: an extra job, not a wrong picture. Host test:
 a_sub_image_after_a_render_that_switched_jobs_waits_for_that_render (dEQP's
 exact call sequence from the QPA). gl_test 125 texsubfbo now clears the
 window first, as dEQP does.
+
+## Render targets sampled from their render image, and their TFU-made mip chain (v3d-rt-sample)
+
+**The problem** (tools/cts/RESULTS.md "Pi 4: the OSAL looks at the job in
+flight", option (a)). The TMU does not sample a raster image, and the GL core
+keeps every texture raster, so a texture a draw samples is tiled into a copy
+(`tiled_copy`, "M6 tiled-copy cache"). A render target is the worst case of
+it: every job that renders into the texture drops its copy (the stamp only
+moves on CPU writes, so the copy cannot be keyed), and the next sample tiles
+the whole target again, 7,684,096 bytes for glmark2 refract's 1600x1200
+colour target, once a frame, on the CPU, from non-cacheable memory; and
+while the copy stands it is a second 7.68 MB next to the storage. Refract
+and terrain add a glGenerateMipmap of that target every frame: the GL core
+box-filters 7.68 MB of non-cacheable storage on the CPU, and the copy is
+then the whole 11-level chain. Mesa keeps every render target UIF, samples
+it as it is, and has the TFU make its mipmaps.
+
+**The design.** A texture the application renders into and samples gets a
+*render image* (`RtImage`, `src/v3d/backend.rs`): Mesa's tiled layout of
+the texture (`texture::rt_layout`: `v3d_tex_layout(w, h, levels, 4)`, with
+level 0's UIF XOR dropped as the depth/stencil and 4x buffers drop it, so
+the TLB, the TMU and the TFU read one layout and the CPU never tiles into
+it; `levels` is 1, or the chain the texture is sampled with). A job
+rendering into the target stores RT 0 twice (`v3d_job_target.uif_*`,
+`emit_tile_list`): the raster store into the GL core's storage, as before,
+and a second STORE_TILE_BUFFER_GENERAL of RT 0 into level 0 of the image,
+UIF, sample 0, RGBA8, as Mesa stores one buffer to two surfaces when it
+resolves a blit in the same tile list (v3dx_rcl.c:242-283) and as this
+builder's 4x path stores the samples and then the resolve. The image is
+never loaded: the raster target is, so no job reads an image before one has
+written it. A draw that samples the texture then points its texture state
+at the image (`rt_sample`): no copy, no tiling, no wait for the rendering
+job (the GPU runs the jobs in order).
+
+Why the raster store stays: every CPU path of the GL core -- glReadPixels,
+glCopyTex*, glTexSubImage2D, the depth resolve -- reads and writes the
+storage as raster rows, and so does the window system. Keeping the storage
+current costs one more TLB store per tile (the GPU writing 7.68 MB a frame
+for refract's target, against the CPU tiling 7.68 MB from non-cacheable
+memory), and changes nothing the GL core does for level 0. The memory
+saving of option (a) is the copy's budget share and its churn, not the
+storage: the image is the copy's size.
+
+**The chain.** glGenerateMipmap on a 2D RGBA8 texture is offered to the
+backend first (`YakoglBackend::generate_mipmap`, `src/gl/texture.rs`).
+The V3D answers 1 when the texture has a render image that holds its level
+0 under the texture's current stamp: it submits the job rendering into the
+target if that one is still open (glmark2 calls glGenerateMipmap right
+after `glBindFramebuffer(0)`), waits for it, and runs one TFU job that
+makes levels 1.. of the image from its level 0 (`v3d_tex_tfu_pack_mipmap`,
+Mesa's v3d_generate_mipmap through v3dX(tfu) with for_mipmap: the source
+in its own tiling, NUMMM the levels after the first, IOA with DIMTW so level
+0 is not written over itself, the texture's real type so the filter averages
+channels). The GL core then filters nothing, moves no stamp, records the
+chain as present (`GlTexture::chain_in_backend`), and before any CPU read
+or write of levels 1.. (every `settle_texture`, a level above 0 attached
+to a framebuffer) asks the backend to write the chain back into the
+storage (`return_mipmap_chain`, `rt_chain_back`: v3d_tex_load_box level
+by level into the GL core's rows) -- so the storage is GL's chain again
+whenever the CPU looks. The image's levels 1.. are GL's chain (`chain`)
+from the TFU job until the GL core takes it back, the storage is written
+under the image (a render into another view, a level above 0 attached), or
+the image is laid out again; a render into level 0 keeps them, as GL keeps
+the old mips until the next glGenerateMipmap. A mip-filtered sample reads
+the image only while `chain` holds; a level-0 sample reads it whenever
+level 0 is stored. The hook answers 0 (the CPU filters as before) for a
+texture without an image, a stamp the image was not stored under, an image
+laid out with fewer levels (laid out again for the next render), an OSAL
+without the TFU, a level above 0 attached, or a TFU job that failed.
+
+**When the image is what the storage holds.** The backend cannot see the
+GL core's writes directly, but it sees their stamp: every CPU write of the
+texels moves `content_gen` (texture.rs `stamp_texels`, through
+`settle_texture`, `resolve_depth` and the layout). So:
+- a texture is registered the first time a draw samples it after a render
+  into it (`target_kick` not 0), with the stamp of that moment
+  (`seen_gen`) and the levels it is sampled with; that first sample is a
+  copy, as before;
+- every job that renders into the target from then on stores the image, and
+  a submitted job sets `stored` (`flush_job`);
+- a sample whose stamp is `seen_gen` with `stored` set reads the image: the
+  storage was last written by the jobs that wrote the image, and by nothing
+  else, so the two agree;
+- a sample whose stamp moved reads a copy, records the new stamp, and clears
+  `stored` and `chain`: the next render stores the image under the new stamp
+  (a render loads the raster target, which has the CPU's write) and the
+  sample after it reads the image again;
+- a sample with more levels than the image has lays it out again (the next
+  render makes the new one); a render into another view of the same storage
+  clears `stored` after the chain went back; `texture_released` drops the
+  image; the image's memory is allocated by the first render after the
+  registration (a texture sampled once after a render costs nothing), and
+  the least recently used of `RT_IMAGES` (8) slots goes when the table is
+  full, its chain written back first.
+So a render-to-texture scene is copy-free from its second frame on
+(refract: frame 1 registers the target with its 11 levels, frame 2's render
+makes the chain image and its glGenerateMipmap is the TFU's, frame 2's
+sample reads the image), and a scene that uploads into its render target
+between frames is a copy for one frame after each upload: never a stale
+image.
+
+**What keeps the copy, by name** (`rt_texture`, `rt_eligible`):
+- a depth texture: R32F storage the GL core resolves from the D24S8 buffer
+  every frame (RESULTS option (b), sampling the buffer with the TMU's
+  DEPTH24_X8 type: it needs the texture's object id in the binding, which
+  `GlesTextureBind` does not carry); refract's and shadow's depth maps.
+- a cube map or an array (one face is rendered; every layer is sampled);
+  L8, A8, LA8 (stored narrow; a target is RGBA8); the sRGB class (never a
+  target: a draw into it is refused by name); an EGLImage's texture
+  (`bgra`, or no stamp); render targets 1..3 of a multi-target framebuffer
+  (RT 0 alone has an image; `v3d_job_target` carries one); bgr565 and 4x
+  targets (`v3d_job_begin` refuses an image with them).
+- a texture a draw never rendered into (nothing stores an image from), and
+  the first sample after a texture's registration.
+
+**Evidence.**
+- `tools/v3d/tex_check.c` part 1: the one-level layouts of 1600x1200 and
+  800x600 against numbers derived by hand from Mesa's v3d_setup_slices (a
+  1600x1200 image is exactly the raster storage's 7,680,000 bytes: the
+  7,684,096 of the RESULTS lines less the backend's 4 KiB of alignment);
+  part 10: the TFU mipmap job's fields against the layout for five sizes
+  (UIF, UIF XOR as Mesa lays 1024x1024 out, UB-linear, LT), and its
+  refusals.
+- `tests/v3d_rt_sample.rs`, on the real v3d_tex.c (built with cc as the
+  glmark2 memory replay builds its shim): refract's 11-level chain image
+  derived by hand (11,001,856 bytes, level 0 at 3,321,856; a first
+  derivation padded the 256 and 512 levels, which v3d_get_ub_pad does not at
+  a multiple of 32 rows), the levels below 0 at the same distances whatever
+  the count the layout was asked for (so a chain image serves a sample of
+  fewer levels), the chain's TFU job register by register from Mesa's
+  v3d_tfu.h constants (ICFG 14 << 18 | 4 << 9 | 10 << 5, IIS 150, IOA level
+  0 | 6 << 3 | DIMTW), the boards' target sizes (800x600, 1024x600,
+  1280x800 with Mesa's two rows of ub_pad, 1920x720, 1024x1024 where Mesa
+  picks the XOR) and the small UB-linear and LT ones, the TLB's memory
+  format and height in UIF blocks against the TMU state's UIF bits for one
+  image, and that dropping the XOR changes the tiling word alone.
+- `tools/v3d/job_check.c` part 20, through Mesa's CLE decoder: the second RT 0
+  store right after the raster one (UIF no XOR, the padded height in UIF
+  blocks, RGBA8, sample 0), no load from the image, and the refusals (4x,
+  bgr565, no colour buffer).
+- Backend tests (`src/v3d/backend_tests.rs`, "render images"): the first
+  render stores no image and the first sample is a copy; the second render
+  stores the image (its address, format and height) and the second sample's
+  texture state points at it with no tiling and no copy; a CPU write sends
+  the sample back to a copy until the next render; a mip-filtered target is
+  a copy until the delegated glGenerateMipmap submits the open render, waits
+  and runs one TFU job (DIMTW, two levels after the first, RGBA8) whose
+  fake makes the box filter of level 0, after which the sample reads the
+  image's level 0 with max level 2 and nothing is tiled, a render keeps the
+  chain, and the chain asked back is in the storage's level 1 at the GL
+  core's pitch; the hook answers 0 without an image, with a moved stamp,
+  with fewer levels (the image laid out again), without the TFU, and after
+  a failed TFU job (logged once); it waits for the render in flight; the
+  unstamped and the never-rendered texture keep the copy; `texture_released`
+  frees the image; no memory keeps the copy path (logged once) and the next
+  render makes the image; the LRU slot goes when the table is full, its
+  chain written back; a render into another view of the storage writes the
+  chain back and invalidates the image.
+- GL core tests (`src/gl/texture.rs`): a delegated glGenerateMipmap filters
+  nothing, moves no stamp, records the chain as present and asks it back
+  once before the next CPU write; a refused one filters on the CPU and asks
+  nothing back; a new level 0 forgets the backend's chain; a level above 0
+  attached asks the chain back and keeps later glGenerateMipmaps on the CPU.
+
+**What was not run here.** The mipmap job's words were read from Mesa
+26.2.1's v3dx_tfu.c (lines 97-163, the V3D 4.2 arm) and v3d_tfu.h in the
+dependency layout (`mesa-26.2.1-full`, not vendored): NUMMM at ICFG bit 5,
+TTYPE at bit 9, the source tiling in ICFG's format field at bit 18, OPAD at
+bit 22 for every UIF destination (DIMTW or not: Mesa's comment says the
+hardware infers the tiling of levels 1+, its code sets the field anyway, and
+the packer follows the code), DIMTW at IOA bit 0 and the destination tiling
+at IOA bit 3. The job has not run on the board. If the board's first refract
+frame shows wrong minified levels, that is where to look; the TFU job's
+failure path (an MMU fault, a timeout) already falls back to the CPU filter.
+
+**Board expectation (Pi 4, not run here).** glmark2 33 ran / 0 failed / 0
+unsupported as before; no "tiled copies high-water" line names a colour
+render target: refract's 7,684,096-byte copy lines are gone (its target is
+sampled from the image from its second frame on, its chain the TFU's) and
+its fps rises from 4 (the CPU no longer filters 7.68 MB of non-cacheable
+storage nor tiles 10 MB of chain each frame; what remains per frame is the
+wait for the render job at glGenerateMipmap, which the CPU filter had too,
+and one TFU job); terrain's render targets and desktop's windows likewise;
+Slint's and the cluster's layer render targets are sampled from their
+images. The shutdown line "render images: N registered, M draw bindings
+sampled from one, ..., K mip chains made by the TFU" says whether the path
+ran; a non-zero "failed" count there, or "the TFU did not make the N-level
+chain" in the log, says the TFU refused the job and the CPU filtered.

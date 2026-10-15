@@ -459,6 +459,12 @@ pub struct GlTexture {
     /// texture holds (0: one of the original tables' formats). Sits in what
     /// was padding.
     pub es3_fmt: u8,
+    /// The last glGenerateMipmap was made by the backend in its own image
+    /// of the texture (`YakoglBackend::generate_mipmap` answered 1): levels
+    /// 1.. of the storage are stale until `backend::return_mipmap_chain`
+    /// (`texture.rs` `chain_back`), which every CPU read or write of them
+    /// asks for first. Sits in what was padding.
+    pub chain_in_backend: bool,
 }
 
 /// A number no object serial or storage generation has had (never 0): one

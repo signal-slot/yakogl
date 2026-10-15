@@ -260,16 +260,74 @@ fn align_up(v: u32, a: u32) -> u32 {
 /// It writes 32-bit pixels in B,G,R,A order, which is exactly the window
 /// surface's XRGB8888; `YakoglBackend::rt_rgba8888_is_bgra` is what tells the
 /// GL core to swap an RGBA8888 target back on read-back.
-fn pe_color_format(surf_format: u8) -> (u32, bool) {
+///
+/// The ES 3.0 integer surfaces ([`GC_INTEGER_RT_FORMATS`]) take the PE's
+/// integer formats (rnndb `PE_FORMAT`, `hw/state_3d.xml.h:104-111`), one for
+/// both signs: the output mode says signed or unsigned
+/// (`shader.rs` `ps_color_output_mode`). Their names list the channels from
+/// the high bits down, so R is the low byte, half or word: the R,G,B,A order
+/// in memory GL's packed integer layout is (`backend::gles_surf_int_layout`),
+/// and no swap on read-back. The 32-bit-channel ones (R32, RG32) have no
+/// integer format; they take R32F and G32R32F, whose 32-bit channels the
+/// UIF32 output mode stores as the register's bits (`COLOR_OUTPUT_MODE_UIF32`,
+/// `hw/state_3d.xml.h:132`, "UI or F32"). RGBA32I/UI is not here: the enum
+/// has no 128-bit format at all (`hw/state_3d.xml.h:89-113`; etnaviv renders
+/// one as two planes, which takes half of its render targets,
+/// VIVANTE_NOTES.md "Draw buffers"), so it is not in
+/// [`GC_INTEGER_RT_FORMATS`] and never arrives (`draw_one` refuses it too,
+/// and the held-back 64-bit ones).
+pub fn pe_color_format(surf_format: u8) -> (u32, bool) {
     match surf_format {
         GLES_SURF_RGB565 => (GC_PE_FORMAT_R5G6B5, false),
         GLES_SURF_XRGB8888 => (GC_PE_FORMAT_X8R8G8B8, false),
         GLES_SURF_RGBA16F => (GC_PE_FORMAT_A16B16G16R16F, true),
         GLES_SURF_R16F => (GC_PE_FORMAT_R16F, true),
         GLES_SURF_R32F => (GC_PE_FORMAT_R32F, true),
+        GLES_SURF_R8I | GLES_SURF_R8UI => (GC_PE_FORMAT_R8I, true),
+        GLES_SURF_RG8I | GLES_SURF_RG8UI => (GC_PE_FORMAT_G8R8I, true),
+        GLES_SURF_RGBA8I | GLES_SURF_RGBA8UI => (GC_PE_FORMAT_A8B8G8R8I, true),
+        GLES_SURF_R16I | GLES_SURF_R16UI => (GC_PE_FORMAT_R16I, true),
+        GLES_SURF_RG16I | GLES_SURF_RG16UI => (GC_PE_FORMAT_G16R16I, true),
+        GLES_SURF_RGBA16I | GLES_SURF_RGBA16UI => (GC_PE_FORMAT_A16B16G16R16I, true),
+        GLES_SURF_R32I | GLES_SURF_R32UI => (GC_PE_FORMAT_R32F, true),
+        GLES_SURF_RG32I | GLES_SURF_RG32UI => (GC_PE_FORMAT_G32R32F, true),
+        GLES_SURF_RGB10_A2UI => (GC_PE_FORMAT_A2B10G10R10UI, true),
         _ => (GC_PE_FORMAT_A8R8G8B8, false),
     }
 }
+
+/// The integer colour surfaces this back end renders into (bit `format -
+/// GLES_SURF_INT_FIRST`, `backend::INTEGER_RT_FORMATS`): the thirteen of 1, 2
+/// and 4 bytes a pixel. The GL core refuses a draw or clear into the other
+/// six by name:
+///
+/// - RGBA32I, RGBA32UI: the pixel engine has no format for them
+///   ([`pe_color_format`]), a hardware limit;
+/// - RGBA16I, RGBA16UI, RG32I, RG32UI, 8 bytes a pixel: held back, not a
+///   hardware limit. The PE's 64-bit LINEAR write is the open question of
+///   gl_test case 44 (an RGBA16F target stores pixel x's colour two texels
+///   off, VIVANTE_NOTES.md "RGBA16F targets"), and these would take the same
+///   path. Their PE formats and output modes are in place; [`GC_INT_RT_64BPP`]
+///   goes in once case 44's layout probe says the 64-bit target is right.
+pub const GC_INTEGER_RT_FORMATS: u32 = {
+    let all = (1u32 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1;
+    all & !GC_INT_RT_128BPP & !GC_INT_RT_64BPP
+};
+
+const fn int_rt_bit(format: u8) -> u32 {
+    1 << (format - GLES_SURF_INT_FIRST)
+}
+
+/// The integer surfaces the PE has no format for (bits as
+/// [`GC_INTEGER_RT_FORMATS`]).
+pub const GC_INT_RT_128BPP: u32 = int_rt_bit(GLES_SURF_RGBA32I) | int_rt_bit(GLES_SURF_RGBA32UI);
+
+/// The 64-bit integer surfaces, mapped but held back (see
+/// [`GC_INTEGER_RT_FORMATS`]).
+pub const GC_INT_RT_64BPP: u32 = int_rt_bit(GLES_SURF_RGBA16I)
+    | int_rt_bit(GLES_SURF_RGBA16UI)
+    | int_rt_bit(GLES_SURF_RG32I)
+    | int_rt_bit(GLES_SURF_RG32UI);
 
 /// The depth/stencil buffer. The pixel engine reads and writes it tiled, so
 /// only it ever touches these bytes; the backend just has to give it enough
@@ -457,8 +515,17 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
     ms_scale(gl) > 1 && msaa_bits() & 2 != 0
 }
 
-/// PE_LOGIC_OP's SINGLE_BUFFER field for this draw. 1, the linear-surface
-/// value, for every draw; with `gc_debug_msaa` bit 4 (a value of 16), a 4x
+/// Does this draw render into the tiled shadow of its colour target
+/// (`wide_target.rs`)? One hardware target with 64-bit pixels, drawn
+/// straight (not through the 4x scratch, not bottom-up).
+fn wide_target(gl: &GlesDraw) -> bool {
+    super::wide_target::wanted(gl, hw_targets(gl).1 == 1, !ms_via_scratch(gl) && !negative_stride(gl.flip_y))
+}
+
+/// PE_LOGIC_OP's SINGLE_BUFFER field for this draw. 2 for a draw into a
+/// tiled 64-bit shadow (`wide`): Mesa's value for a tiled target of more
+/// than 16 bits a pixel on a SINGLE_BUFFER core (etnaviv_state.c:536-539).
+/// Else 1, the linear-surface value; with `gc_debug_msaa` bit 4 (a value of 16), a 4x
 /// draw into the supertiled scratch takes the value Mesa's etnaviv gives a
 /// target that is not linear on a SINGLE_BUFFER core: 2, or 3 for a 16-bit
 /// target (etnaviv_state.c:536-539, Mesa 26.2.1, MIT; this core has the
@@ -466,8 +533,10 @@ pub fn msaa_extras(gl: &GlesDraw) -> bool {
 /// etna_hwdb.c:84 maps to SINGLE_BUFFER). The 4x path wrote 1 with a
 /// SUPER_TILED colour format, a pair Mesa never emits. Issue #8; opt-in
 /// until the board has run it.
-fn single_buffer(gl: &GlesDraw) -> u32 {
-    if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
+fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
+    if wide {
+        2
+    } else if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
         if gles_surf_bytes_per_pixel(gl.target_format) <= 2 {
             3
         } else {
@@ -639,6 +708,27 @@ fn ms_pitch(w: u32, bpp: u32) -> u32 {
 /// (`backend::DEPTH_ONLY_TARGETS`): `target_gpu` 0 names
 /// [`ensure_no_colour_surface`]'s surface, which is never written.
 pub const DRAWS_WITHOUT_COLOUR: bool = true;
+
+/// The part's NPOT support: the GC7000UL's NON_POWER_OF_TWO feature bit
+/// (galcore's `gcFEATURE_BIT_REG_NonPowerOfTwo`, the NPOT bit of
+/// chipMinorFeatures1) is set, so the texture unit samples a
+/// non-power-of-two texture with any wrap mode. From Mesa 26.2.1's copy of
+/// NXP's feature database, `src/etnaviv/hwdb/nxp/gc_feature_database.h`
+/// (tag mesa-26.2.1): both entries matching the board's part (ChipID
+/// 0x7000, ChipRevision 0x6204, ProductID 0x70003, EcoID 0x0 and 0x1,
+/// CustomerID 0x11, both named `gc7000ULN_v123`, at :18841 and :19735)
+/// set it to 1 (:19036 and :19930). The same entries read REG_Halti5 1
+/// (:19172), REG_UnifiedSamplers 1 (:19090), REG_SeamlessCubeMap 1
+/// (:19049), REG_LinearTextureSupport 1 (:19037) and NO_ASTC 1 (:19200):
+/// a HALTI5 core with unified samplers, seamless cube maps and linear
+/// textures, and no ASTC. Mesa's etnaviv driver turns that database bit
+/// into its own NON_POWER_OF_TWO feature (`ETNA_FEATURE(REG_NonPowerOfTwo,
+/// NON_POWER_OF_TWO)`, src/etnaviv/hwdb/etna_hwdb.c:65, same tag) and
+/// claims GL_OES_texture_npot only where the feature is set
+/// (docs/es2-cts-failures.md section H), so this is the hardware fact the
+/// GC7000 build's claim rests on (`gl::state::NPOT_EXTENSION`;
+/// tests/vivante_npot.rs pins it).
+pub const NON_POWER_OF_TWO: bool = true;
 
 /// Bytes of the surface a draw with no colour target names: Mesa's etnaviv
 /// dummy render target, 64x64 RGBA8 (etnaviv_screen.c:1144-1151, Mesa 26.2.1).
@@ -1511,8 +1601,12 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         pe_color |= GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW;
     }
     c.state(GC_PE_COLOR_FORMAT, pe_color);
+    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit) */
+    let shadow = if wide_target(gl) { super::wide_target::bind(gl, gc_kick_id()) } else { None };
     let pitch = if ms {
         ms_pitch(gl.target_w, gles_surf_bytes_per_pixel(gl.target_format))
+    } else if shadow.is_some() {
+        super::wide_target::stride(gl.target_w)
     } else {
         /* tex_pitch(w), or a view's wider pitch (draw_pitch) */
         crate::backend::draw_pitch(gl) * gles_surf_bytes_per_pixel(gl.target_format)
@@ -1544,14 +1638,17 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         let t = gl.targets[slot];
         let (fmt, _) = pe_color_format(t.format);
         let rt_pitch = target_pitch(t.w, gles_surf_bytes_per_pixel(t.format));
+        /* an integer draw buffer is never blended (ES 3.0 4.1.8), whatever
+         * the float or unorm ones beside it are */
+        let rt_blend = blend && !gles_surf_is_integer(t.format);
         c.state(pe_rt_addr_8_pipe(rt as u32, 0), t.gpu as u32);
         c.state(pe_rt_config_8(rt as u32), rt_config_stride(rt_pitch) | rt_config_format(fmt));
         c.state(
             pe_halti5_rt_colormask(rt as u32),
             pe_halti5_rt_colormask_components(rt_mask(slot))
-                | if !blend && rt_mask(slot) == 0xf { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
+                | if !rt_blend && rt_mask(slot) == 0xf { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
         );
-        c.state(pe_halti5_rt_alpha_config(rt as u32), pe_alpha);
+        c.state(pe_halti5_rt_alpha_config(rt as u32), if rt_blend { pe_alpha } else { 0 });
     }
     c.state(GC_PE_HDEPTH_CONTROL, 0); /* hierarchical depth off */
     /* one pixel pipe on this part: both pipe registers name the same surface */
@@ -1561,6 +1658,8 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         g().no_colour.gpu as u32
     } else if ms_via_scratch(gl) {
         g().msaa.gpu as u32
+    } else if let Some(gpu) = shadow {
+        gpu as u32
     } else if upward {
         (gl.target_gpu + u64::from(gl.target_h.saturating_sub(1)) * u64::from(pitch)) as u32
     } else {
@@ -1573,11 +1672,15 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
 
     c.state(GC_PE_STENCIL_CONFIG_EXT, pe_stencil_ref_back(ref_back));
     /* SINGLE_BUFFER(1) is what a linear colour surface needs; every surface
-     * YakoGL renders to is linear, except the 4x scratch ([`single_buffer`]). */
+     * YakoGL renders to is linear, except the 4x scratch and a 64-bit
+     * target's tiled shadow ([`single_buffer`]). */
     let unk24 = if msaa_extras(gl) { pe_logic_op_unk24(5) } else { 0 };
     c.state(
         GC_PE_LOGIC_OP,
-        GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY) | pe_logic_op_single_buffer(single_buffer(gl)) | unk24,
+        GC_PE_LOGIC_OP_BASE
+            | pe_logic_op_op(GC_LOGIC_OP_COPY)
+            | pe_logic_op_single_buffer(single_buffer(gl, shadow.is_some()))
+            | unk24,
     );
     c.state(pe_dither(0), 0xffff_ffff); /* dithering off */
     c.state(pe_dither(1), 0xffff_ffff);
@@ -2142,6 +2245,7 @@ pub extern "C" fn gc_shutdown() {
         }
     }
     super::tiled_copy::release_all();
+    super::wide_target::release_all();
     super::ds_cache::release_all();
     if !g.clear_vs_code.impl_.is_null() {
         osal::gpu_free(&mut g.clear_vs_code);
@@ -2373,6 +2477,21 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * inside it. (Clipping to the intersection through that one rectangle is
      * possible; it is not done here.) */
     let (slots, n) = hw_targets(gl);
+    /* An integer surface this back end does not draw: RGBA32I/UI, which the
+     * pixel engine has no format for (it would be drawn as RGBA8), and the
+     * held-back 64-bit ones ([`GC_INTEGER_RT_FORMATS`]). The GL core refuses
+     * them by name before they get here (`backend::rt_format_drawable`); this
+     * is the back end's own word. */
+    if slots[..n].iter().any(|&s| {
+        let (gpu, f) = if s == 0 {
+            (gl.target_gpu, gl.target_format)
+        } else {
+            (gl.targets[s as usize].gpu, gl.targets[s as usize].format)
+        };
+        gpu != 0 && gles_surf_is_integer(f) && (GC_INTEGER_RT_FORMATS >> (f - GLES_SURF_INT_FIRST)) & 1 == 0
+    }) {
+        return -crate::util::ENOTSUP;
+    }
     if slots[1..n].iter().any(|&s| {
         let t = gl.targets[s as usize];
         t.w < gl.target_w || t.h < gl.target_h
@@ -2445,6 +2564,18 @@ unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     clock.lap(Step::GcRest);
     if super::tiled_copy::prepare(gl, |k| gc_kick_pending(k), || gc_finish()) != 0 {
         return -1;
+    }
+    /* A 64-bit colour target is rendered into its tiled shadow
+     * (wide_target.rs), made current now: the PE writes 64-bit pixels into a
+     * LINEAR surface at the wrong places (#6), so without the shadow the
+     * draw is refused. */
+    if wide_target(gl) {
+        if super::wide_target::prepare(gl, || gc_finish()) != 0 {
+            return -ENOMEM;
+        }
+        if gl.depth_test || gl.stencil || gl.do_clear_depth || gl.do_clear_stencil {
+            glog_once!("yakogl/vivante: a draw into a tiled 64-bit target uses depth or stencil: their surface's layout in that mode is unmeasured (wide_target.rs)");
+        }
     }
     clock.lap(Step::GcTiledCopy);
 
@@ -2749,6 +2880,7 @@ pub extern "C" fn gc_finish() -> i32 {
             return rc;
         }
     }
+    retire_wide_targets();
     0
 }
 
@@ -2767,11 +2899,14 @@ pub extern "C" fn gc_finish_previous() -> i32 {
     let newest = g.frames[(g.cur + GC_FRAMES - 1) % GC_FRAMES].fence;
     let prev = core::mem::replace(&mut g.swap_fence, newest);
 
-    if prev <= 0 || completed_fence() >= prev {
-        return 0;
-    }
-    g.waits += 1;
-    wait_fence(prev)
+    let rc = if prev <= 0 || completed_fence() >= prev {
+        0
+    } else {
+        g.waits += 1;
+        wait_fence(prev)
+    };
+    retire_wide_targets();
+    rc
 }
 
 /// The kick being recorded: the id the frame now open will be submitted
@@ -2790,6 +2925,14 @@ pub extern "C" fn gc_kick_id() -> u32 {
 /// Is kick `kick_id` still to complete? The kick being recorded is, while
 /// the frame is open: it has not even been submitted.
 pub extern "C" fn gc_kick_pending(kick_id: u32) -> bool {
+    /* whoever learns that a kick completed may read what it rendered: the
+     * 64-bit targets it rendered are back in their storage first */
+    retire_wide_targets();
+    kick_pending(kick_id)
+}
+
+/// [`gc_kick_pending`] without writing anything back.
+fn kick_pending(kick_id: u32) -> bool {
     let g = g();
 
     if kick_id == 0 {
@@ -2808,6 +2951,18 @@ pub extern "C" fn gc_kick_pending(kick_id: u32) -> bool {
         return completed_fence() < f.fence;
     }
     false /* too old to still be in flight */
+}
+
+/// Write every 64-bit target whose rendering kicks have completed back into
+/// its linear storage (`wide_target.rs`).
+fn retire_wide_targets() {
+    super::wide_target::retire(kick_pending);
+}
+
+/// The GL core drops the storage `[base, base + bytes)`: the tiled shadow of
+/// a 64-bit target in it goes too (`wide_target.rs`).
+pub extern "C" fn gc_texture_released(base: u64, bytes: u64) {
+    super::wide_target::released(base, bytes);
 }
 
 pub extern "C" fn gc_heap_base(heap: GlesHeap) -> u64 {
@@ -2876,11 +3031,13 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     kick_pending: Some(gc_kick_pending),
     heap_base: Some(gc_heap_base),
     counters: Some(gc_counters),
-    /* keeps nothing per texel storage: it samples the GL core's own */
-    texture_released: None,
+    /* the tiled shadow of a 64-bit colour target (wide_target.rs) */
+    texture_released: Some(gc_texture_released),
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: None,
     texture_uploaded: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
     /* divisor 1, as before the field (GcStream carries a divisor; whether
      * the FE takes more than 1 is unmeasured) */
     max_instance_divisor: 1,

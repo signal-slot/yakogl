@@ -116,8 +116,8 @@ Two places, both existing:
 1. **The OSAL log** (`glog!`, so the board's console or panel):
 
    ```
-   yakogl/vivante: KICK_DIFF stable (4096 words, second read 10000 us later)
-   yakogl/vivante: KICK_DIFF late: 4 of 4096 words changed after the fence, rows 4, first word 1233 0xff000000 -> 0xff0000ff, last 1553, second read 10000 us later
+   yakogl/vivante: KICK_DIFF stable (4096 words, second read 2000 us later)
+   yakogl/vivante: KICK_DIFF late: 4 of 4096 words changed after the fence, rows 4, first word 1233 0xff000000 -> 0xff0000ff, last 1553, second read 2000 us later
    ```
 
    The `stable` line is printed once (the first check). Every `late` line is
@@ -165,10 +165,13 @@ tools/cts/imx8mp-gltest-build.sh kd-$(git rev-parse --short=8 HEAD) 0 \
 tell 1 failure from 2):
 
 ```sh
-SEL=512                        tools/board.sh imx8mp run <image> <rec> base-<i>    # list 0, no instrument: SWEEP record
-SEL=$((0x1000 + 0x100 + 0xea)) tools/board.sh imx8mp run <image> <rec> kd10-<i>    # SEL=4586: list 0, case 10 armed
-SEL=$((0x1000 + 0x100 + 0xe2)) tools/board.sh imx8mp run <image> <rec> kd2-<i>     # SEL=4578: list 0, case 2 armed
+SEL=512                        tools/board.sh imx8mp run <image> <rec> base-<i>    # sweep entry 0 (1-6,8-10), no instrument: SWEEP record
+SEL=$((0x1000 + 0x100 + 0xea)) tools/board.sh imx8mp run <image> <rec> kd10-<i>    # SEL=4586 (0x11ea): list 1 = entry 0, case 10 armed
+SEL=$((0x1000 + 0x100 + 0xe2)) tools/board.sh imx8mp run <image> <rec> kd2-<i>     # SEL=4578 (0x11e2): list 1 = entry 0, case 2 armed
 ```
+
+(Corrected in `imx8mp-gltest-r2`: these comments said "list 0"; `0x100` is
+list 1, the same run as `SEL=512`.)
 
 **Tally.** Feed the `record=` words of the KICK_DIFF runs to the decoder
 and count the lines:
@@ -179,7 +182,8 @@ grep -ho 'record=[0-9a-f,]*' <runner outputs of the kd runs> | cut -d= -f2 | tr 
 ```
 
 The base arm is read as in round 2 (`yakogl-tools record sweep 0 <w1> <w2>
-<w3>`; case 10 is bit 9 of the pass bits). A run that ends without a
+<w3>`; case 10 is bit 10 of the pass bits, case 2 bit 2: the base record
+of `1-6,8-10` is `0x77e` with all passing). A run that ends without a
 KICK_DIFF page (case not run, a hang) leaves its usual record; the decoder
 then says "no PERF record with a KICK_DIFF tag", and that boot is its own
 row, not a pass.

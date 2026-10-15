@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES2 host dEQP-GLES2 at the integration tip, PowerVR and GC7000 (item pi4-es2-r1b2)
 
 Every number below is **HOST-ONLY**. The library is built with the Linux OSAL, which keeps the

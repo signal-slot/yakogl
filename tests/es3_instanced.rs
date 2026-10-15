@@ -150,6 +150,8 @@ const fn backend(name: &'static core::ffi::CStr, max_instance_divisor: u32) -> Y
         query_begin: None,
         query_end: None,
         query_result: None,
+        generate_mipmap: None,
+        return_mipmap_chain: None,
     }
 }
 

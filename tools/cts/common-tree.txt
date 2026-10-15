@@ -6,11 +6,14 @@
 # each row by its label (TREE_IMAGE_DIR=<img-dir>: <img-dir>/<LABEL>/zephyr/zephyr.bin);
 # the line under the label is what tools/cts/common-images.sh builds for it:
 #   glmark2      driver/samples/zephyr/glmark2, its default benchmark set
-#   slint        driver/samples/zephyr/slint, the window copied to the screen
+#   slint        driver/samples/zephyr/slint, the window shown by a copy where
+#                the board copies (Pi 4, i.MX8MP) and scanned in place on the
+#                AM62P (board_show() flips the DSS plane to the window)
 #   slint-view   the same with CONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y: the window is
 #                a view into the scan-out buffer (on the Pi 4 and the i.MX8MP;
 #                the AM62P's board layer has no view and ignores the option,
-#                so there the row is the copy path again)
+#                so there the row is the same copy-free image as SO:
+#                docs/investigations/am62p-scanout-view.md)
 #   cluster      driver/samples/zephyr/cluster, the AGL cluster sample: the
 #                agl-slint-cluster UI on the no_std Slint workspace, animating
 #                for CONFIG_YAKOGL_BOARD_ANIMATE_S (60 s) at the board's panel

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # Zephyr ships the Verdin iMX8M Plus for its Cortex-M7 only; this extension
 # adds the Cortex-A53 cluster (the SafeUI Application Supervisor host and the
 # GPU bring-up target). The dts and defconfig for verdin_imx8mp/mimx8ml8/a53

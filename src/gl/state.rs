@@ -185,6 +185,15 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
 const ES2_ONLY_NAMES: usize = 3;
 /// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU (the
 /// list above says how each backend holds the chain); ES 3.0 has it in core.
+/// On the GC7000 the claim is the part's: it holds only while the hardware's
+/// NON_POWER_OF_TWO bit is set (`vivante::backend::NON_POWER_OF_TWO`, pinned
+/// from the etnaviv hwdb entry by tests/vivante_npot.rs). A build for a
+/// GC7000 variant without the bit takes the extension out here.
+#[cfg(feature = "gpu-vivante")]
+pub(crate) const NPOT_EXTENSION: bool = crate::REPORT_ES2 && crate::vivante::backend::NON_POWER_OF_TWO;
+/// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU (the
+/// list above says how each backend holds the chain); ES 3.0 has it in core.
+#[cfg(not(feature = "gpu-vivante"))]
 pub(crate) const NPOT_EXTENSION: bool = crate::REPORT_ES2;
 /// GL_OES_depth_texture and GL_OES_packed_depth_stencil are claimed on the
 /// ES 2.0 surface of every GPU. ES 3.0 has them in core (and samples a depth
@@ -194,7 +203,10 @@ pub(crate) const NPOT_EXTENSION: bool = crate::REPORT_ES2;
 /// CPU (`v3d_depth_resolve`); gl_test case 169 dstex passed on the Pi 4 with
 /// it (tools/cts/RESULTS.md, 2026-10-04).
 pub(crate) const DEPTH_TEXTURE_EXTENSIONS: bool = crate::REPORT_ES2;
-/* the ES 2.0-only tail is listed or left out whole */
+/* the ES 2.0-only tail is listed or left out whole. The GC7000's NPOT gate
+ * (above) reads the part's hwdb bit; if a build ever finds it clear, this
+ * assert is where the tail has to be split so npot can be left out on its
+ * own. */
 const _: () = assert!(NPOT_EXTENSION == DEPTH_TEXTURE_EXTENSIONS);
 /// The extension list of this build: [`ALL_EXTENSION_NAMES`] less the
 /// ES 2.0-only names where they are not claimed.
@@ -1577,6 +1589,20 @@ mod tests {
         assert_eq!(extension_listed("GL_OES_texture_npot"), crate::REPORT_ES2);
         /* no build keeps ES 2.0's NPOT rules any more */
         const { assert!(!super::super::texture::NPOT_RESTRICTED) };
+    }
+
+    /// On the GC7000 the claim is the part's: the extension is listed
+    /// exactly while the hardware's NON_POWER_OF_TWO bit is set, the bit the
+    /// etnaviv hwdb entry for the board's part records (the constant's
+    /// comment cites the entry; tests/vivante_npot.rs pins the constant).
+    #[cfg(feature = "gpu-vivante")]
+    #[test]
+    fn the_gc7000_claims_npot_while_the_part_has_the_bit() {
+        assert_eq!(NPOT_EXTENSION, crate::REPORT_ES2 && crate::vivante::backend::NON_POWER_OF_TWO);
+        assert_eq!(
+            extension_listed("GL_OES_texture_npot"),
+            crate::REPORT_ES2 && crate::vivante::backend::NON_POWER_OF_TWO
+        );
     }
 
     /// Advertised means the online front end lets a shader require it.

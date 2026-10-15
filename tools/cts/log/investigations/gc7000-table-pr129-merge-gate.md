@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GC7000 table, PR #129 + main 2fe4b879: host gate on the re-created merge
 
 One line for the record and the PR comment: `tools/check.sh --jobs 4` on the merge of

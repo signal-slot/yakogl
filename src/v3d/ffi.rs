@@ -242,7 +242,64 @@ pub struct V3dJobTarget {
     pub ms_address: u32,
     pub ms_memory_format: u32,
     pub ms_height_in_ub: u32,
+    /// RT 0's render image (`backend::RtImage`): level 0 of the texture
+    /// the target is, in the TMU's layout, stored by the tile list right
+    /// after the raster store (0: none). Not with `msaa` or `rgb565`.
+    pub uif_address: u32,
+    pub uif_memory_format: u32,
+    pub uif_height_in_ub: u32,
+    /// ES 3.0's colour formats (int-rt-v3d): with `typed` set, `rt_format[n]`
+    /// is the `V3D_OUTPUT_IMAGE_FORMAT_*` of RT n (RT 0 at `[0]`; `rgb565`
+    /// is then not read), each loaded and stored in it with Mesa's internal
+    /// type, bpp and clamp for the format, the tile size following the
+    /// largest bpp (v3d_job.h). Not with `msaa`. Clear for every ES 2.0 job.
+    pub typed: bool,
+    pub rt_format: [u32; 4],
 }
+
+/* The colour formats, internal types, bpps and clamps of the render-target
+ * packets (v3d_packet.xml "Output Image Format" :222-285, "Internal Type"
+ * :123-133, "Internal BPP" :135-139, "Render Target Clamp" :147-152), the
+ * rows `state::rt_format` uses; pinned against the generated packer's enums
+ * by ffi_layout_check.c. */
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI: u32 = 2;
+pub const V3D_OUTPUT_IMAGE_FORMAT_BGR565: u32 = 7;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R32F: u32 = 11;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA32I: u32 = 12;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG32I: u32 = 13;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R32I: u32 = 14;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI: u32 = 15;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG32UI: u32 = 16;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R32UI: u32 = 17;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA16F: u32 = 18;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R16F: u32 = 20;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA16I: u32 = 21;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG16I: u32 = 22;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R16I: u32 = 23;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA16UI: u32 = 24;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG16UI: u32 = 25;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R16UI: u32 = 26;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA8: u32 = 27;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA8I: u32 = 31;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG8I: u32 = 32;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R8I: u32 = 33;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA8UI: u32 = 34;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RG8UI: u32 = 35;
+pub const V3D_OUTPUT_IMAGE_FORMAT_R8UI: u32 = 36;
+pub const V3D_INTERNAL_TYPE_8I: u32 = 0;
+pub const V3D_INTERNAL_TYPE_8UI: u32 = 1;
+pub const V3D_INTERNAL_TYPE_8: u32 = 2;
+pub const V3D_INTERNAL_TYPE_16I: u32 = 4;
+pub const V3D_INTERNAL_TYPE_16UI: u32 = 5;
+pub const V3D_INTERNAL_TYPE_16F: u32 = 6;
+pub const V3D_INTERNAL_TYPE_32I: u32 = 8;
+pub const V3D_INTERNAL_TYPE_32UI: u32 = 9;
+pub const V3D_INTERNAL_TYPE_32F: u32 = 10;
+pub const V3D_INTERNAL_BPP_32: u32 = 0;
+pub const V3D_INTERNAL_BPP_64: u32 = 1;
+pub const V3D_INTERNAL_BPP_128: u32 = 2;
+pub const V3D_RENDER_TARGET_CLAMP_NONE: u32 = 0;
+pub const V3D_RENDER_TARGET_CLAMP_INT: u32 = 3;
 
 /// `struct v3d_job_rt`: one of render targets 1..3.
 #[repr(C)]
@@ -446,8 +503,11 @@ pub struct V3dTexTfuJob {
 /// The TFU job types by texel size (v3d_tex.h `V3D_TFU_TTYPE_*`): a byte
 /// copy, as Mesa's blit rewrites the format (v3dx_tfu.c:63-73).
 pub const V3D_TFU_TTYPE_R8: u32 = 0;
+pub const V3D_TFU_TTYPE_RGBA8: u32 = 4;
 pub const V3D_TFU_TTYPE_R16F: u32 = 16;
 pub const V3D_TFU_TTYPE_R32F: u32 = 29;
+/// IOA bit 0 of a TFU job: do not write level 0 (a mipmap job's source).
+pub const V3D_TFU_IOA_DIMTW: u32 = 1;
 
 /// `struct v3d_tex_state`.
 #[repr(C)]
@@ -524,6 +584,11 @@ pub struct V3dJobClear {
     /// use image format S8, as Mesa's separate stencil (v3dx_rcl.c:93,
     /// :140); else D24S8.
     pub s_s8: bool,
+    /// With the target `typed`: RT n's clear colour as the tile buffer holds
+    /// it, packed per internal type as `state::clear_words` packs it (word 0
+    /// for 32 bpp, two words for 64, four for 128); `rgba8` and `rgba8_rt`
+    /// are not read then (v3d_job.h).
+    pub clear_rt: [[u32; 4]; 4],
 }
 
 /// `V3D_PACK_GROUPS` and `V3D_PACK_KEY_MAX` (v3d_job.h "Packet skip").
@@ -592,6 +657,11 @@ impl V3dJob {
             ms_address: 0,
             ms_memory_format: 0,
             ms_height_in_ub: 0,
+            uif_address: 0,
+            uif_memory_format: 0,
+            uif_height_in_ub: 0,
+            typed: false,
+            rt_format: [0; 4],
         },
         draws: 0,
         defaults: 0,
@@ -625,6 +695,10 @@ extern "C" {
     pub fn v3d_frame_tiling(width: u32, height: u32, t: *mut V3dTiling);
     pub fn v3d_frame_tiling_rts(width: u32, height: u32, rts: u32, t: *mut V3dTiling);
     pub fn v3d_frame_tiling_ms(width: u32, height: u32, rts: u32, msaa: bool, t: *mut V3dTiling);
+    /// The tiling with the largest internal bpp of the render targets
+    /// (`V3D_INTERNAL_BPP_*`: 0 for 32, 1 for 64, 2 for 128), one step down
+    /// the tile-size table per step (v3d_frame.h).
+    pub fn v3d_frame_tiling_bpp(width: u32, height: u32, rts: u32, msaa: bool, max_bpp: u32, t: *mut V3dTiling);
     pub fn v3d_tex_layout(width: u32, height: u32, levels: u32, cpp: u32, l: *mut V3dTexLayout) -> bool;
     pub fn v3d_tex_layout_msaa(width: u32, height: u32, cpp: u32, l: *mut V3dTexLayout) -> bool;
     pub fn v3d_tex_store_level(image: *mut u8, l: *const V3dTexLayout, level: u32, src: *const u8, src_stride: u32);
@@ -639,6 +713,11 @@ extern "C" {
         dst_gpu: u32,
         j: *mut V3dTexTfuJob,
     ) -> bool;
+    /// Pack the TFU job that generates levels 1.. of the tiled image at
+    /// `image_gpu` (laid out as `l`) from its own level 0, as Mesa's
+    /// v3d_generate_mipmap does; false for a one-level layout or a texel
+    /// size `ttype` does not name (v3d_tex.h).
+    pub fn v3d_tex_tfu_pack_mipmap(l: *const V3dTexLayout, ttype: u32, image_gpu: u32, j: *mut V3dTexTfuJob) -> bool;
     /// The bytes from one layer's mip tree to the next (Mesa's
     /// cube_map_stride, v3d_resource.c:757-764).
     pub fn v3d_tex_layer_stride(l: *const V3dTexLayout) -> u32;
@@ -720,7 +799,7 @@ const _: () = assert!(offset_of!(V3dCl, gpu) == 8);
 const _: () = assert!(offset_of!(V3dCl, used) == 16);
 const _: () = assert!(offset_of!(V3dCl, overflow) == 20);
 const _: () = assert!(offset_of!(V3dCl, bad_field) == 21);
-const _: () = assert!(size_of::<V3dJobTarget>() == 68);
+const _: () = assert!(size_of::<V3dJobTarget>() == 100);
 const _: () = assert!(offset_of!(V3dJobTarget, rgb565) == 20);
 const _: () = assert!(offset_of!(V3dJobTarget, rts) == 24);
 const _: () = assert!(offset_of!(V3dJobTarget, rt) == 28);
@@ -728,6 +807,11 @@ const _: () = assert!(offset_of!(V3dJobTarget, msaa) == 52);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_address) == 56);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_memory_format) == 60);
 const _: () = assert!(offset_of!(V3dJobTarget, ms_height_in_ub) == 64);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_address) == 68);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_memory_format) == 72);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_height_in_ub) == 76);
+const _: () = assert!(offset_of!(V3dJobTarget, typed) == 80);
+const _: () = assert!(offset_of!(V3dJobTarget, rt_format) == 84);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
 const _: () = assert!(size_of::<V3dJobState>() == 188);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
@@ -783,8 +867,9 @@ const _: () = assert!(offset_of!(V3dJobDraw, prim) == 76);
 const _: () = assert!(offset_of!(V3dJobDraw, indexed) == 88);
 const _: () = assert!(offset_of!(V3dJobDraw, index_type) == 92);
 const _: () = assert!(offset_of!(V3dJobDraw, index_offset) == 104);
-const _: () = assert!(size_of::<V3dJobClear>() == 68);
+const _: () = assert!(size_of::<V3dJobClear>() == 132);
 const _: () = assert!(offset_of!(V3dJobClear, s_s8) == 64);
+const _: () = assert!(offset_of!(V3dJobClear, clear_rt) == 68);
 const _: () = assert!(offset_of!(V3dJobClear, load_rt) == 46);
 const _: () = assert!(offset_of!(V3dJobClear, rgba8_rt) == 52);
 const _: () = assert!(offset_of!(V3dJobClear, rgba8) == 4);
@@ -799,12 +884,12 @@ const _: () = assert!(offset_of!(V3dJobClear, s_address) == 32);
 const _: () = assert!(offset_of!(V3dJobClear, s_height_in_ub) == 40);
 const _: () = assert!(offset_of!(V3dJobClear, s_load) == 44);
 const _: () = assert!(offset_of!(V3dJobClear, s_store) == 45);
-const _: () = assert!(size_of::<V3dJob>() == 832);
-const _: () = assert!(offset_of!(V3dJob, pack) == 104);
+const _: () = assert!(size_of::<V3dJob>() == 864);
+const _: () = assert!(offset_of!(V3dJob, pack) == 136);
 const _: () = assert!(size_of::<V3dJobPack>() == 728);
 const _: () = assert!(offset_of!(V3dJobPack, valid) == 4);
 const _: () = assert!(offset_of!(V3dJobPack, key) == 8);
 const _: () = assert!(offset_of!(V3dJobPack, n) == 712);
 const _: () = assert!(offset_of!(V3dJob, t) == 24);
-const _: () = assert!(offset_of!(V3dJob, draws) == 92);
-const _: () = assert!(offset_of!(V3dJob, broken) == 100);
+const _: () = assert!(offset_of!(V3dJob, draws) == 124);
+const _: () = assert!(offset_of!(V3dJob, broken) == 132);

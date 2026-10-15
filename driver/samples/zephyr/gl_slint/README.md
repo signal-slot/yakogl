@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gl_slint: the crate the SafeUI Supervisor builds (not a sample any more)
 
 Step 1 of `driver/docs/one-method.md` deleted the `gl_slint` sample: the one

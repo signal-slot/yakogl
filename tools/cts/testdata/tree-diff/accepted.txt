@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# --accepted fixture: a glob with a reason comment after it
+dEQP-GLES2.functional.treediff.accepted_*  # fixture: a NotSupported the profile allows

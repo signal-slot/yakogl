@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # FWIF ABI checks
 
 The TI/Img DDK 25.2 kernel headers are vendored unmodified in

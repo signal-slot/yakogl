@@ -125,6 +125,7 @@ struct gl_texture {
 	bool     cpu_wrote;          /* the CPU wrote texels since the storage was allocated and cleared */
 	bool     pot_chain;          /* a NPOT 2D chain laid out as its power-of-two extent's (the PowerVR) */
 	uint8_t  es3_fmt;            /* es3_formats FORMATS index + 1 of the ES 3.0 sized format held (0: none) */
+	bool     chain_in_backend;   /* the last glGenerateMipmap's chain is in the backend's own image (levels 1.. of the storage stale) */
 };
 
 struct gl_shader {

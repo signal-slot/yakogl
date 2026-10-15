@@ -299,7 +299,17 @@ What they settled:
 
 - A human look at the panel with the Rust drivers is owed (nobody could see
   it on 2026-10-02); the counters, IRQ_STAT and read-backs cannot show a
-  colour or position error in the scan-out itself.
+  colour or position error in the scan-out itself. On 2026-10-14 the owner
+  reported the panel black (backlight on) under a kexec'd yakogl; the last
+  picture seen was the C drivers' (2026-09-14). On 2026-10-15 the board's
+  own register image under a red-fill run was read and equals the Linux
+  dump except the allow-list and the application plane; the bridge read
+  IRQ_STAT 0 with video flowing. The picture is still unseen. The
+  C-vs-Rust differences that a register image cannot show, the
+  known-colour fill (`CONFIG_PVR_SAMPLE_DISPLAY_FILL`), the register dump
+  (`CONFIG_PVR_SAMPLE_DISPLAY_DUMP`), the board readings and the
+  procedure are in
+  `tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`.
 - The WIZ offset is answered (above); the TRM summary could be reported to TI.
 - The DSS and DSI Kconfig symbols now depend on ARM64 (the Rust staticlib is
   built for aarch64-unknown-none-softfloat); an R5F/M4 build that compiled the

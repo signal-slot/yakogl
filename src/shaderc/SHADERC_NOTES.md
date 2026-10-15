@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Shader back ends — flow, ABI mapping, and how to add shaders
 
 This directory holds the shader back ends (layer 5a of `yakogl/DESIGN.md`). There

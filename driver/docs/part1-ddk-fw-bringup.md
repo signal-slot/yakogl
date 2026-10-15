@@ -3,6 +3,8 @@ title: Zephyr から PowerVR GPU (BXS-4-64) を素手で叩く #1（DDK ファ�
 tags: PowerVR, Zephyr, GPU, AM62P, 組み込み
 private: false
 ---
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
 ## このシリーズについて
 

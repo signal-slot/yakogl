@@ -1117,6 +1117,115 @@ fn a_float_target_goes_through_the_extended_format_field() {
     assert_eq!((f >> 24) & 0x7f, GC_PE_FORMAT_A16B16G16R16F);
 }
 
+/// An 8x8 RGBA16F storage with a CPU view, filled with each pixel's own
+/// index (8 bytes a pixel, rows of 64 bytes), and a draw into it.
+fn wide_target(rig: &Rig) -> (OsalGpuMem, GlesDraw) {
+    let mut mem = OsalGpuMem::ZERO;
+    assert_eq!(osal::gpu_alloc(GC_HEAP_DATA, 8 * 8 * 8, OSAL_MEM_DATA, &mut mem), 0);
+    assert!(!mem.cpu.is_null());
+    // SAFETY: 512 bytes just allocated with a CPU view.
+    let px = unsafe { core::slice::from_raw_parts_mut(mem.cpu as *mut u64, 64) };
+    for (i, p) in px.iter_mut().enumerate() {
+        *p = 0x1000 + i as u64;
+    }
+    let mut d = rig.draw(3);
+    (d.target_gpu, d.target_cpu, d.target_w, d.target_h) = (mem.gpu, mem.cpu, 8, 8);
+    d.target_format = GLES_SURF_RGBA16F;
+    d.targets[0] = GlesDrawTarget { gpu: mem.gpu, w: 8, h: 8, format: GLES_SURF_RGBA16F };
+    d.viewport = [0, 0, 8, 8];
+    (mem, d)
+}
+
+fn wide_pixels(mem: &OsalGpuMem) -> Vec<u64> {
+    // SAFETY: the 512 bytes `wide_target` allocated.
+    unsafe { core::slice::from_raw_parts(mem.cpu as *const u64, 64) }.to_vec()
+}
+
+/// A 64-bit target is rendered TILED into a page-aligned shadow (#6:
+/// the PE misplaces 64-bit pixels in a LINEAR surface; Mesa renders only
+/// tiled targets here): PE_LOGIC_OP SINGLE_BUFFER(2), no SUPER_TILED bit,
+/// the stride of a row 16 pixels wide (Mesa's TILED padding on a core
+/// without the BLT engine), and the storage itself never named.
+#[test]
+fn a_64_bit_target_is_rendered_tiled_into_a_page_aligned_shadow() {
+    let rig = Rig::new();
+    let (mut mem, d) = wide_target(&rig);
+    let st = rig.submit(&d);
+    let addr = st.reg(pe_pipe_color_addr(0));
+    assert_eq!(addr & 0xfff, 0, "the shadow starts on a page: 0x{addr:08x}");
+    assert_ne!(u64::from(addr), mem.gpu, "the PE never writes the linear storage");
+    assert_eq!(st.reg(pe_pipe_color_addr(1)), addr);
+    assert_eq!(st.reg(GC_PE_COLOR_STRIDE), 16 * 8, "rows of the 16-padded width");
+    assert_eq!((st.reg(GC_PE_LOGIC_OP) >> 8) & 3, 2, "SINGLE_BUFFER(2): a tiled target");
+    let f = st.reg(GC_PE_COLOR_FORMAT);
+    assert_eq!(f & (GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW), 0, "TILED, not supertiled");
+    assert_eq!((f >> 24) & 0x7f, GC_PE_FORMAT_A16B16G16R16F);
+    /* an RGBA8 target with a CPU view stays linear */
+    let mut e = rig.draw(3);
+    e.target_cpu = mem.cpu;
+    let st = rig.submit(&e);
+    assert_eq!(u64::from(st.reg(pe_pipe_color_addr(0))), TARGET_GPU);
+    assert_eq!((st.reg(GC_PE_LOGIC_OP) >> 8) & 3, 1, "SINGLE_BUFFER(1): linear");
+    assert_eq!(gc_finish(), 0);
+    osal::gpu_free(&mut mem);
+}
+
+/// The shadow is tiled from the storage before the first draw and written
+/// back when the backend learns its kick completed: at gc_finish, and at
+/// gc_kick_pending, which the GL core asks before a CPU access. The storage
+/// is cleared in between, so only the write-back can restore it -- every
+/// pixel at its own place (the tiling and the untiling invert each other).
+#[test]
+fn a_64_bit_target_comes_back_into_its_storage_when_its_kick_completes() {
+    let rig = Rig::new();
+    let (mut mem, d) = wide_target(&rig);
+    let want = wide_pixels(&mem);
+
+    let id = gc_kick_id();
+    rig.submit(&d);
+    // SAFETY: the storage's 512 bytes.
+    unsafe { core::ptr::write_bytes(mem.cpu as *mut u8, 0, 512) };
+    assert_eq!(gc_finish(), 0);
+    assert_eq!(wide_pixels(&mem), want, "gc_finish wrote the shadow back");
+    let (tiled, untiled) = crate::vivante::wide_target::counts();
+    assert!(tiled >= 512 && untiled >= 512, "tiled {tiled}, untiled {untiled}");
+
+    /* the second time through kick_pending, the GL core's question */
+    rig.submit(&d);
+    unsafe { core::ptr::write_bytes(mem.cpu as *mut u8, 0, 512) };
+    assert!(!gc_kick_pending(id + 1), "the rig completes a kick at its submit");
+    assert_eq!(wide_pixels(&mem), want, "gc_kick_pending wrote the shadow back");
+
+    /* a pending kick: nothing yet */
+    rig.submit(&d);
+    unsafe { core::ptr::write_bytes(mem.cpu as *mut u8, 0, 512) };
+    with_platform(|p| p.fence = 0);
+    assert!(gc_kick_pending(id + 2));
+    assert!(wide_pixels(&mem).iter().all(|&p| p == 0), "the kick is still running: the storage is left alone");
+    with_platform(|p| p.fence = 3);
+    assert_eq!(gc_finish(), 0);
+    assert_eq!(wide_pixels(&mem), want);
+    osal::gpu_free(&mut mem);
+}
+
+/// Storage the GL core drops takes its shadow with it, unwritten: the
+/// address may already belong to someone else.
+#[test]
+fn a_released_64_bit_target_is_never_written_back() {
+    let rig = Rig::new();
+    let (mut mem, d) = wide_target(&rig);
+    with_platform(|p| p.fence = 0);
+    // SAFETY: `d` is a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&d) }, 0);
+    assert_eq!(gc_flush(), 0);
+    unsafe { core::ptr::write_bytes(mem.cpu as *mut u8, 0, 512) };
+    gc_texture_released(mem.gpu, 512);
+    with_platform(|p| p.fence = 1);
+    assert_eq!(gc_finish(), 0);
+    assert!(wide_pixels(&mem).iter().all(|&p| p == 0), "nothing was written into released storage");
+    osal::gpu_free(&mut mem);
+}
+
 /// The PE_COLOR_FORMAT bits regs.rs names are the vendored rnndb header's
 /// (driver/src/vivante/hw/state_3d.xml.h, Mesa's src/etnaviv/hw): the bit-4
 /// write mask was once written down as bit 31, which is FORMAT_EXT's own.
@@ -1719,8 +1828,10 @@ fn a_descriptor_names_every_level_on_a_64_byte_boundary_at_one_stride() {
 /// both axes with a linear mip filter.
 ///
 /// The hardware's own NPOT support (etnaviv asks for chipMinorFeatures1
-/// NON_POWER_OF_TWO, which this part's recorded words do not show) is not a
-/// host question: docs/es2-cts-failures.md says what the board must show.
+/// NON_POWER_OF_TWO) is recorded: the part's etnaviv hwdb entry sets it
+/// (`NON_POWER_OF_TWO` in this module, pinned by tests/vivante_npot.rs).
+/// What the board shows when it samples such a chain is the open half:
+/// docs/es2-cts-failures.md says what the board must show.
 #[test]
 fn a_generated_npot_chain_is_named_level_by_level() {
     use crate::gl::consts::*;

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP dEQP-GLES3 stage 1 and table image (item stage1-imx8mp, plan #19)
 
 Date 2026-10-14, yakogl `ba8b242a` (origin/main `72ee696d` merged into the zephyr-env base). Result: **the gles3 stage 1
@@ -18,7 +20,7 @@ $ python3 -I tools/cts/imx8mp-gles3-gen.py | cmp - tools/cts/imx8mp-gles3-tree.t
 $ python3 -I tools/cts/check-deqp-images.py     # also checks the AM62P, Pi 4 and i.MX8MP GLES3 tables: OK
 ```
 
-## Environment (`D` = `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`)
+## Environment (`D` = `$CCFARM_DEPS_DIR`)
 
 Values come from `tools/cts/deps-env.sh --check imx8mp` (all `ok`).
 

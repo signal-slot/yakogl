@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR Rogue/Volcanic (BXS-4-64, BVNC 36.53.104.796): SMOOTH vs FLAT vec4 varying
 
 Read-only source analysis. Authoritative sources (Mesa `sailfishos-mirror/mesa @ main`):

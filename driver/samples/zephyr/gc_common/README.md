@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_common -- what only the i.MX8MP samples share
 
 The board support every i.MX8MP image needs (the watchdog and the bounded way

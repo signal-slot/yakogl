@@ -35,6 +35,15 @@ Mesa (`pvr_arch_job_render.c`, `pvr_arch_srv_job_render.c`, `pvr_arch_job_common
   with `pipe_enable = 1` is the confirmation that this was the cause.
 - PBE `REG_WORD0.downscale` (bit 56): the emit resolves the samples into the
   single-sampled memory surface (the EGL surface stays 8888 with tightly packed rows).
+- A kick that may not be the frame's last (no swap: a full arena, the draw cap, a
+  glFinish / glReadPixels before more drawing) emits the attachment a second time with
+  `downscale` off into the back end's sample store (`MsStore`, `src/pvr/backend.rs`):
+  the same output registers, mrt_index 1, the two-emit end-of-tile program, the
+  target's stride and extent, four images' worth of bytes. The next kick's load quad
+  binds the store as the target's multisampled image (`TEXSTATE_IMAGE_WORD0.smpcnt` =
+  log2 4) and runs at the full sample rate, so each sample reloads itself. Unmeasured on
+  the board (`docs/handoff/20261015-pvr-msaa-split.md`): the unresolved layout and the
+  per-sample fetch.
 - ZLS: the depth/stencil buffer is `align16(w) * 2` by `align16(h) * 2` samples of packed
   D24S8; `zlsextent` (tiles) is unchanged. 1024x600 needs 9.5 MiB, hence the 64 MiB carveout.
 
@@ -42,6 +51,7 @@ Mesa (`pvr_arch_job_render.c`, `pvr_arch_srv_job_render.c`, `pvr_arch_job_common
 - EGL config 2 = `EGL_SAMPLES 4`, `EGL_SAMPLE_BUFFERS 1`; the surface carries the sample
   count, `pvr_draw.samples` follows the bound target (FBOs stay 1) and a sample-count change
   starts a new frame. `GL_SAMPLES`/`GL_SAMPLE_BUFFERS` report it for the default surface.
-- The colour-load and depth/stencil-clear quads work unchanged (the FS output is written to
-  every covered sample). `glSampleCoverage` / alpha-to-coverage are not modelled (they
-  would need the FS to write the ISP sample mask through the meta word).
+- The depth/stencil-clear quad works unchanged (the FS output is written to every covered
+  sample); the colour-load quad of a split frame reads the sample store per sample (above).
+  `glSampleCoverage` / alpha-to-coverage go through the fragment shader's sample-kill
+  variant and the per-draw control word (`fs_meta_word`, `src/pvr/backend.rs`).

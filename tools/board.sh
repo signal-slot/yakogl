@@ -32,7 +32,10 @@
 #      board's RAM window, and the watchdog marker (the board's literal, or the
 #      board layer's "board: watchdog armed"; NETBOOT_NO_WATCHDOG=1 overrides);
 #   2. takes the board lock (driver/tools/kexec-zephyr/board_lock.sh: one lock
-#      per BOARD_HOST in /run/user/<uid>/yakogl-locks) and makes the pre-checks:
+#      per BOARD_HOST in /run/user/<uid>/yakogl-locks, which only runs on this
+#      host see) and the board lease on the board's own disk
+#      (/var/tmp/yakogl-board.lease, `lease_take`: runs from every host see it;
+#      waited for up to LOCK_WAIT), and makes the pre-checks:
 #      ssh and sudo -n, no session on the board from another machine (`who`),
 #      nobody holds the console or the GPU device, and the backend's own
 #      (free space on /boot/firmware; the TFTP server and its log; the U-Boot
@@ -765,6 +768,85 @@ take_lock() {
         # shellcheck source=/dev/null
         . "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
     fi
+    lease_take
+}
+
+# ---- the board lease: one run at a time per board, whichever host runs it (#867) ----
+# board_lock.sh's flock lives on the host that runs this script, so two hosts
+# (a workstation and a farm node) never saw each other: on 2026-10-15 two farm
+# agents on another host used the AM62P during a run from this one, took its
+# serial bridge and armed their own one-shot image. The lease lives where every
+# runner meets, on the board's own disk: LEASE (/var/tmp survives the reboot
+# every row makes; /run would not), "holder=<host>:<pid>", "row=<name>",
+# "expires=<board epoch>", written with the board's clock so no two clocks are
+# compared. The check-and-write runs inside a mkdir lock on the board (mkdir is
+# atomic; a stale one older than 60 s is removed), so two hosts racing cannot
+# both win. A lease of another holder that has not expired is waited for, up to
+# LOCK_WAIT (board_lock.sh's, 2700 s), polling every 20 s; an expired one is
+# taken over and the takeover is logged. While the board reboots the read fails
+# and is retried the same way. The lease is given back at exit
+# (lease_release, from every EXIT trap) only if it is still this run's.
+LEASE=/var/tmp/yakogl-board.lease
+LEASE_HELD=0
+LEASE_ME="$(hostname -s 2>/dev/null || echo host):$$"
+
+# lease_try: one attempt on the board. 0 taken (or renewed), 3 held by another
+# (the lease printed), anything else the board did not answer.
+lease_try() {
+    b "L=$LEASE; me='$LEASE_ME'; row='${NAME:-$VERB}'; hold=${HOLD_MAX:-900}
+now=\$(date +%s)
+if ! mkdir \$L.d 2>/dev/null; then
+    age=\$(( now - \$(stat -c %Y \$L.d 2>/dev/null || echo \$now) ))
+    [ \$age -gt 60 ] && rmdir \$L.d 2>/dev/null
+    mkdir \$L.d 2>/dev/null || { echo 'holder=(the lease is being written)'; exit 3; }
+fi
+rc=0
+if [ -f \$L ]; then
+    h=\$(sed -n 's/^holder=//p' \$L); e=\$(sed -n 's/^expires=//p' \$L)
+    if [ \"\$h\" != \"\$me\" ] && [ \"\${e:-0}\" -gt \$now ]; then cat \$L; rc=3; fi
+    [ \$rc = 0 ] && [ \"\$h\" != \"\$me\" ] && echo \"taken over: \$(tr '\\n' ' ' < \$L)\"
+fi
+if [ \$rc = 0 ]; then
+    printf 'holder=%s\\nrow=%s\\nexpires=%s\\n' \"\$me\" \"\$row\" \$((now + hold)) > \$L.new && mv \$L.new \$L &&
+        grep -qx \"holder=\$me\" \$L || rc=4
+fi
+rmdir \$L.d
+exit \$rc"
+}
+
+lease_take() {
+    local out rc deadline
+    if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ take $LEASE   # holder=<host>:<pid>, expires now + HOLD_MAX on the board's clock; wait while another holder's lease runs"
+        return 0
+    fi
+    deadline=$(( $(date +%s) + ${LOCK_WAIT:-2700} ))
+    while :; do
+        rc=0
+        out=$(lease_try 2>&1) || rc=$?
+        if [ "$rc" = 0 ]; then
+            LEASE_HELD=1
+            # given back at any exit before the path sets its own EXIT trap
+            # (every one of those calls lease_release too)
+            trap lease_release EXIT
+            [ -n "$out" ] && note "board lease: $out"
+            return 0
+        fi
+        [ "$(date +%s)" -lt "$deadline" ] ||
+            die "the board is leased to another run and LOCK_WAIT ran out: $(tr '\n' ' ' <<<"$out")"
+        if [ "$rc" = 3 ]; then
+            note "board lease held by another run, waiting: $(tr '\n' ' ' <<<"$out")" >&2
+        else
+            note "board lease: the board did not answer (rc $rc), retrying" >&2
+        fi
+        sleep 20
+    done
+}
+
+lease_release() {
+    [ "${LEASE_HELD:-0}" = 1 ] || return 0
+    b "grep -qx 'holder=$LEASE_ME' $LEASE 2>/dev/null && rm -f $LEASE" >/dev/null 2>&1
+    LEASE_HELD=0
 }
 
 # ---- the i.MX8MP record: the SNVS LPGPR words through nvmem (gc_result.h) --------
@@ -916,7 +998,7 @@ run_tryboot() {
     pi4_prechecks
     pi4_stage
     pi4_capture_start
-    trap 'stop_cap; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+    trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     t0=$(date +%s)
     meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then b 'sudo reboot "0 tryboot"'; else b 'sudo reboot "0 tryboot"' > /dev/null 2>&1; fi
@@ -971,28 +1053,36 @@ uboot_on_exit() {
         b "sudo -n rm -f $MMC_STAGED" && note "removed $MMC_STAGED (no reboot)" >&2
     fi
     stop_cap
+    lease_release
     rm -rf "$TMP"
     [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null
     return 0
 }
 
 # console_from_ts: console.txt ("HH:MM:SS line", the form deqp-uart-tally.py
-# reads) from the bridge capture's "<unix time> line" rows. python3 (which
-# the capture itself runs on, am62p_netboot_uart.py), not gawk: a host with
-# only mawk has no strftime, and left console.txt empty (tools/cts/log/
-# investigations/am62p-console-empty.md). Local time, as gawk's strftime was.
+# reads) from the bridge capture's "<unix time> line" rows.
+# python3, not awk: strftime is a gawk-only extension, and a worker without
+# gawk got an empty console.txt (POSIX awk has no strftime; tools/cts/log/
+# investigations/am62p-console-empty.md). The conversion is
+# the gawk one's, row by row: the row's leading "<unix time>" (int(), so a
+# fraction is truncated) becomes local "HH:MM:SS", the rest of the row follows
+# verbatim (a row with no text after the timestamp keeps the separating
+# space; a row that does not start with digits keeps its text and gets the
+# time of epoch 0, as gawk's int() of a non-numeric $1 is 0).
 console_from_ts() {
     [ -f "$RD/console.ts" ] || return 0
-    python3 - "$RD/console.ts" > "$RD/console.txt" <<'EOF'
+    python3 -I -c '
 import re, sys, time
+ts = re.compile(rb"^[0-9.]+ ?")   # the "<unix time> " prefix the old gawk sub removed
+num = re.compile(rb"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")  # the numeric prefix of $1
 out = sys.stdout.buffer
-for line in open(sys.argv[1], "rb"):
-    line = line.rstrip(b"\n")
-    m = re.match(rb"([0-9]+)[0-9.]* ?", line)
-    t = int(m.group(1)) if m else 0
-    rest = line[m.end():] if m else line
-    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + rest + b"\n")
-EOF
+for row in sys.stdin.buffer:      # bytes: a serial capture need not be valid UTF-8
+    if row[-1:] == b"\n":
+        row = row[:-1]            # the awk $0 carries no trailing newline
+    m = num.match(row.lstrip(b" \t"))   # $1: the first field, leading blanks skipped
+    t = int(float(m.group())) if m else 0
+    out.write(time.strftime("%H:%M:%S", time.localtime(t)).encode() + b" " + ts.sub(b"", row, 1) + b"\n")
+' < "$RD/console.ts" > "$RD/console.txt"
 }
 
 # ---- the eMMC staging (uboot-mmc, and "default" on am62p/imx8mp) ------------------
@@ -1313,7 +1403,7 @@ kexec_am62p() {
     # 5. the capture (bridge_capture: 'busy' retried)
     bridge_capture || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
     if [ "$DRY" != 1 ]; then
-        trap 'stop_cap; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+        trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     fi
     # 4.+6. kexec_run.sh copies the image and the loader, releases the GPU
     #    modules, checks the RTI watchdog and jumps; it exits 0 once the jump is
@@ -1511,6 +1601,7 @@ cmd_run() {
 # ---- status / install / uninstall / disarm -----------------------------------------
 cmd_status() {
     need_board
+    b "echo 'board lease ($LEASE):'; cat $LEASE 2>/dev/null || echo none; echo \"board clock: \$(date +%s)\""
     case "$BOOT" in
     uboot-tftp) nb_status ;;
     uboot-mmc)
@@ -1670,7 +1761,7 @@ cmd_default() {
     fi
     HOLD_MAX=${HOLD_MAX:-900}
     take_lock
-    trap 'rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+    trap 'lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     common_prechecks
     case "$BOARD:$VERB" in
     pi4:default) pi4_default ;;
