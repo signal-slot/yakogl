@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `e1497f42` (2026-10-15). The numbers below are read from
+main is `b1798dc5` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -75,7 +75,7 @@ Gate and docs (2026-10-15):
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
 | AM62P | **final tree, `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`): 17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning** at 1x; ms4 16 / 16; combined 17,141 / 0 / 18 / 5 / 1. The 9 invariance and 45 `texture.vertex.2d.*` cases pass. Predates `8bbf9ba2` (BGRA renderbuffer, below). Superseded: `32778b57` 17,070 / 54. | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592), SV empty (0 console bytes, unresolved; same image as SO), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
-| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning, 29 of 29 entries equal `d8583f20`'s; it predates `8bbf9ba2`. | 48 / 49 run passed, 1 skipped (case 16, #8), case 44 (#6) fails, on `a63fcc5b` (2026-10-14, common set; `tools/cts/RESULTS.md`); the same reading on `b568940` (`docs/board-sessions/imx8mp-common-int.md`), where cases 2, 10 and 171 passed. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `a63fcc5b` (2026-10-14, common set; also on `b568940`, record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO, SV and CL probes pass on `a63fcc5b` (on `b568940`: SO and SV crc16 c592, CL crc16 b107); no fps (no console). |
+| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning, 29 of 29 entries equal `d8583f20`'s; it predates `8bbf9ba2`. | 48 / 49 run passed, 1 skipped (case 16, #8), case 44 (#6) fails, on `a63fcc5b` (2026-10-14, common set; `tools/cts/RESULTS.md`); the same reading on `b568940` (`docs/board-sessions/imx8mp-common-int.md`), where cases 2, 10 and 171 passed. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. KICK_DIFF round on `e40e3835` (2026-10-15, image `kd-e40e3835`, 120 interleaved boots; `docs/board-sessions/imx8mp-gltest-r2.md`): base arm case 10 failed 4 of 40, case 2 0 of 40; KICK_DIFF arms case 10 1 of 40, case 2 1 of 40, both `stable`; 0 GPU resets. | 43, 33 ran, 0 failed, 0 unsupported, on `a63fcc5b` (2026-10-14, common set; also on `b568940`, record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO, SV and CL probes pass on `a63fcc5b` (on `b568940`: SO and SV crc16 c592, CL crc16 b107); no fps (no console). |
 | Pi 4 | **no final tree at the tip.** `20a48791` rows 0-14 (2026-10-14; `docs/board-sessions/pi4-es2-final.md`, `1344748`): 11,877 pass / **46 fail** (all `GL_BGRA_EXT` renderbuffer cases, FB1 3 + FB2 43) / 25 NotSupported / 5 warnings; rows 15-28 not run. Last whole tree `d56e79e5` (2026-10-12; `pi4-es2-final-r2.md`, `ce16942`): 17,127 / 0 / 34 / 4, before `8bbf9ba2`. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
@@ -127,6 +127,23 @@ session doc; a STATUS.md line under 「ひとことで」: `- **Pi 4: 共通セ�
 Pi 4 GLES3 tree session (board-pi4, main `4a4fad60`): not run, no code
 changed; the baseline is still the 7 images of `cd738b1a`.
 
+Website (stage 3, 2026-10-15): `website/data.js` no longer cites the five
+commits of the rewritten history (`d60b9d76`, `fe5e8e73`, `1fa941e3` twice,
+`031de9a2`). `tools/website-check.sh` is unchanged; `website/index.html` and
+`website/status.html` did not repeat them.
+
+| entry | old hash | new hash | backing record |
+|---|---|---|---|
+| `deqp2.am62p.previous` | `d60b9d76` | dropped | 17,141 / 0 / 19 / 5 has no record here: `docs/board-sessions/am62p-es2-final-r2.md` (`63efed8e`) reads 17,141 / 0 / 18 NotSupported / 5 QW / 1 CompatW |
+| `deqp2.pi4.previous` | `fe5e8e73` | dropped | no record in this history holds 17,075 / 25 fail; `docs/board-sessions/pi4-es2-final-r2.md` only cites the number |
+| `glmark2.pi4` | `1fa941e3` | `d64e995b` | `docs/board-sessions/pi4-common-int.md`: score 183, 33 / 0 / 0, 0 GL errors, 96 MiB carve-out (2026-10-14) |
+| `slint.pi4` | `1fa941e3` | `d64e995b` | the same record: SO and SV probes pass |
+| `cluster.pi4` | `031de9a2` | `d64e995b` | the same record: 192.6 Mpx/s, 139.3 fps, 34 / 34 (was 193.4 / 139.8) |
+
+Other changes in `data.js`: the glmark2.pi4 note now says terrain 3 fps and
+refract 2 fps (the record's finding 1); `deqp2.am62p.integration`'s note says
+"the 2026-10-02 whole tree" instead of `d60b9d76`.
+
 Licence gate (stage 3, 2026-10-15): `tools/cts/cts-selftest.sh` has three new
 checks, run by `tools/check.sh` through its existing cts-selftest step: 23
 `tools/cts/tree-diff-selftest.sh` (17 checks pass at the tip); 24 `python3
@@ -172,8 +189,8 @@ Each item waits for hardware. The commands and expected values are in
   `texture.completeness.2d.npot_size` must still read Pass and glmark2
   terrain must still render (`docs/investigations/pvr-npot-levels.md`).
 - i.MX8MP case 44's layout probe (#6, step 6 of the i.MX8MP section).
-- i.MX8MP #8 (4x MSAA) and #9 / #25 (cases 10 and 2): the next instruments
-  are in "Known defects".
+- i.MX8MP #8 (4x MSAA): the next instrument is in "Known defects". #9 / #25
+  (cases 10 and 2): the next arm is the K1 arm ("Known defects").
 - AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
@@ -462,28 +479,31 @@ es3-vertex).
      the next board run (i.MX8MP step 6).
    - i.MX8MP gl_test case 16 no longer fails in the common set: the set
      skips it by name (#8 tracks the skip).
-   - i.MX8MP gl_test case 10 fails about 1 run in 3 (#9), and case 2 now
-     and then (#25), the same nondeterminism class. Cause not found
-     (`8409419`): our sync sequence has a counterpart for every etnaviv
-     step, and repeat runs on integration images (`b20e4d11`, `0175bac1`)
-     did not separate the three surface hypotheses
-     (`tools/cts/log/investigations/gc-case10-flake.md`). Rate without an
-     instrument (integration image `e3efeaad`, 2026-10-11, 32 boots): case
-     10 failed 4 of 32, case 2 0 of 32
-     (`tools/cts/log/board-sessions/imx8mp-gltest-r2.md`). gl_test now
-     calls the KICK_DIFF instrument (a second read-back 2 ms after the
-     fence) for cases 2 and 10 when the selector asks for its page; the
-     next step is the board run: about 40 interleaved boots each of the
-     base arm and the KICK_DIFF arm from one image
-     (`tools/cts/log/investigations/gc-kick-diff.md`, "How to run it on the
-     board"). The instrument was read end to end at main `a63fcc5b` and is
-     complete for that run; none of its seven gaps (G1 to G7) needs a code
-     change. Selectors: base `SEL=512`; KICK_DIFF case 10 `SEL=4586`
-     (`0x11ea`); case 2 `SEL=4578` (`0x11e2`); pages decode with
-     `yakogl-tools record kickdiff`. Corrections to `gc-kick-diff.md`, not
-     yet made: the two commands' comment "list 0" is list 1 (`0x11ea`);
-     case 10 is bit 10 of the sweep pass word, not bit 9; the sample
-     output's "10000 us" is 2000 us.
+   - i.MX8MP gl_test case 10 (#9) and case 2 (#25), the same nondeterminism
+     class. Cause not found (`8409419`): our sync sequence has a counterpart
+     for every etnaviv step, and repeat runs on integration images
+     (`b20e4d11`, `0175bac1`) did not separate the three surface hypotheses
+     (`tools/cts/log/investigations/gc-case10-flake.md`). Measured at
+     `e40e3835` (2026-10-15), 40 interleaved boots per arm from one image
+     (`kd-e40e3835`): base case 10 failed 4 of 40 and case 2 0 of 40 (4 of 32
+     and 0 of 32 at `e3efeaad`; the old "about 1 run in 3" is no longer the
+     rate). The KICK_DIFF arms (`SEL=4586`, `SEL=4578`, a second read-back
+     2000 us after the fence) failed 1 of 40 each (kd10-16, kd2-28), both
+     **stable**: no word changed between the two reads, and the case failed
+     at check 23. 0 `late` checks in all 80 KICK_DIFF runs. So the pixels
+     never appeared within 2 ms: the write was lost (or more than 2 ms late),
+     not a fence that fired before the PE write-back. Next: the K1 arm
+     (etnaviv's flush rule in `emit_flushes`, `gc-kick-diff.md` "How it
+     combines with K1"); a longer `KICK_DIFF_DELAY_US` arm only if "lost vs
+     very late" must be separated. Records:
+     `docs/board-sessions/imx8mp-gltest-r2.md`. The KICK_DIFF Zephyr build
+     (`gc_gl_test` with the `gl_test.c` call site) compiles (`rc=0`) and arms
+     on the board. `gc-kick-diff.md` (the short guide and
+     `tools/cts/log/investigations/gc-kick-diff.md`) is corrected: selectors
+     are list 1 (`0x11ea`, `0x11e2`), case 10 is bit 10 of the sweep pass
+     bits, the sample console lines say 2000 us.
+   - The cluster Pi 4 figure on the website moved (193.4 -> 192.6 Mpx/s)
+     because the old one has no record here; it is one 60 s run.
    - **GC7000 `TEXDESC_LOG_SIZE_EXT` for NPOT sizes** (no issue yet, low
      severity): `log2_fixp88` (`src/vivante/texture.rs`) is a linear
      approximation of log2; Mesa writes the exact value. The CTS sizes are
@@ -1141,6 +1161,10 @@ es3-vertex).
      rows; cause not confirmed by a build).
    - Owner: CONTRIBUTING.md says a pushed branch is never rebased; the ccfarm
      `conventions` text says branches are rebased onto origin/main.
+   - Website: `site.js` lists the `.previous` rows by key; the two dropped
+     keys (`deqp2.am62p.previous`, `deqp2.pi4.previous`) simply no longer
+     render. `tools/cts/RESULTS.md` and `docs/es2-cts-failures.md` still cite
+     the old hashes in prose; the checker does not scan them.
 7. **Gate rows at the tip** (tools only; `docs/investigations/gate-red-tip.md`):
    fix the two row-count pins in `tools/check_scope_selftest.sh` (pinned 149,
    real 148); make the AM62P Zephyr image rows a `gap` when
@@ -1328,14 +1352,13 @@ interrupted run. If a run is refused with "holds a one-shot image of a run
 that did not clean up", run `board.sh disarm` (or remove the file) before
 retrying; `board.sh` does not clean up such an image after a killed run.
 
-`imx8mp-gltest-r2` can run its #9/#25 part (the KICK_DIFF arms, "Known
-defects") as it is, with one condition: build the image first and read `rc=`.
-The Zephyr arm of `gc_gl_test` and `gl_test.c` has never been built from this
-code (`gc-kick-diff.md`, "What was checked"), so a compile error shows at the
-build, not at a boot. Use the selector values in "Known defects", not the
-comments in `gc-kick-diff.md`. The loop that interleaves the two arms is the
-session's to write. Image recipe:
-`tools/cts/imx8mp-gltest-build.sh kd-<sha8> 0 '-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'`.
+The #9/#25 KICK_DIFF arms of `imx8mp-gltest-r2` are done ("Known defects").
+A K1 + KICK_DIFF image needs the K1 change in `src/vivante/backend.rs` first;
+the same selectors and loop then apply. One boot of `tools/board.sh imx8mp
+run` with `BOARD_BOOT=uboot-mmc` took about 2 to 2.5 minutes, so 120 boots
+need about 4.5 hours; a worker whose background commands stop at 2 hours must
+split the loop and check that an interrupted boot left no one-shot image
+(`fw_printenv yako_once`, `/var/yakogl/`) before resuming.
 
 The gl_test builds need `-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`, or
 `tools/board.sh` refuses the image (rc=3), and a `;` inside a sweep list
