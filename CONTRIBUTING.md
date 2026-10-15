@@ -14,6 +14,11 @@ CI, a review, then the merge. Never push main by hand.
 1. Locally, run the rows of the gate your change reaches:
    `tools/check.sh --changed origin/main`. It maps each changed path to the
    parts it can break and skips the rest (a docs-only change runs two rows).
+   The scope comes from `git diff <base> HEAD` plus `git status --porcelain`,
+   so an untracked file counts: one outside the ignored paths (for example
+   `build/`) that maps to no narrower scope widens it to "all" and runs every
+   row. Keep the tree clean, and keep scratch files in `build/`; the first
+   lines the script prints name each path that forces "every row".
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
    runs `tools/check.sh` on the pull request (the merge of the branch into
    main), again on main after the merge, and nightly, on self-hosted runners

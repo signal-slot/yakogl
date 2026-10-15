@@ -140,7 +140,8 @@ Status is from reading the text at the base, not from a run, unless a count is g
   counts 146 rows, not 149. Proposed for a `tools/` item: treat such a tree as a gap
   or ignore it in the v3d row, and make the self-test independent of the variable.
   Until then a reader on such a host runs `env -u MESA_V3D_TREE tools/check.sh --quick`.
-- **N10 (CONTRIBUTING.md, open).** An untracked file outside the ignored paths makes
+- **N10 (CONTRIBUTING.md, fixed: step 1 of "How a change reaches main" now says an
+  untracked file counts and widens the scope).** An untracked file outside the ignored paths makes
   `tools/check.sh --changed` select every row (here 6 paths, scope "all"; stopped after
   20 minutes). Same cause as S2. Proposed line for step 1 of "How a change reaches
   main": "Keep scratch files in `build/` (ignored); an untracked file elsewhere runs
@@ -148,7 +149,7 @@ Status is from reading the text at the base, not from a run, unless a count is g
 - **N8 (other item).** `CONTRIBUTING.md:16` says a docs-only change runs two rows, and
   `--local` "13 rows". Neither count was re-measured; both are left as written.
 
-## README findings, all open (README.md is held by pub-roadmap)
+## README findings, all fixed (see the list at the end of this section)
 
 Line numbers are of README.md at the base. Each proposed text replaces the quoted one.
 
@@ -172,11 +173,26 @@ Line numbers are of README.md at the base. Each proposed text replaces the quote
 9. **After line 373** (P9, S12). Add: `With HH_TIMEOUT=60 a run takes 40 to 60 minutes and 17 to 50 GB of disk. With the default timeout (1200 s), gl_test case 174 fills a disk. Pass your own checkout of the driver as the last argument; in this repository it is driver/.`
 10. **Line 367** (P10, S13). After `does not explain` add: `(a job that times out on both sides is reported too; read the report before you call a difference a regression)`.
 
+All ten are **fixed** in README.md (plan 149, item pub-readme-fixes):
+
+1. fixed: the comment says the toolchain file is the reader's own.
+2. fixed: `-B build/a64`.
+3. fixed: the comment names the aarch64-none-elf GCC need and the clang form.
+4. fixed: `DRVSRC=driver/src` and the sysroot comment are in place.
+5. fixed: the cargo build line follows `tools/api_coverage.py`.
+6. fixed: both counts dropped (the tool prints 304 today).
+7. fixed: the `--quick` comment says the short gate, 4 to 14 minutes.
+8. fixed: the count is dropped; the two open pins are named (the PowerVR split 4x
+   frame and the Vivante texture-size pin) and the `git grep` stays. The ES 2.0
+   report pins are no longer ignored.
+9. fixed: the HH_TIMEOUT, disk and driver-checkout sentence follows the compare.sh paragraph.
+10. fixed: the timed-out-on-both-sides remark follows `does not explain`.
+
 ## Checklist: what can change (checklist.md is held by pub-checklist)
 
 | Line | Now | Can change to | Condition |
 | --- | --- | --- | --- |
 | 3 CONTRIBUTING.md | met (text) | **partial** (not met) | the README commands were run (steps 1-14): steps 4-6 fail as written (S1, S3, S4). `tools/check.sh --quick` is clean only with `MESA_V3D_TREE` unset (steps 15-16, N9). The gate times in CONTRIBUTING.md come from walks 1 and 2 |
 | 5 DESIGN.md | met (text) | **met** | all named paths exist after this change (3 stale references fixed); proof: the table "Paths checked" |
-| 6 walkthrough | partial | stays **partial** | README findings 1-10 are open. The quick gate reaches clean (step 16) only after unsetting `MESA_V3D_TREE`; a host that sets it ends red (step 15) |
+| 6 walkthrough | partial | stays **partial** | README findings 1-10 are fixed. The quick gate reaches clean (step 16) only after unsetting `MESA_V3D_TREE`; a host that sets it ends red (step 15) |
 | 4 SECURITY.md | partial | stays partial | no stale path; the contact is the owner's |
