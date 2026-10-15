@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP gl_test #9/#25 KICK_DIFF arms, 2026-10-15, e40e3835
 
 ## State of main
