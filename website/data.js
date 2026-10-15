@@ -143,19 +143,6 @@ window.YAKOGL_DATA = {
       "status": "warn",
       "note": "The only failure is case 44 (#6): the RGBA16F target layout, unchanged since f2a13877. Cases 2 and 10 failed intermittently in the 32778b57 runs of 2026-10-10 (#25, #9); they did not in this run."
     },
-    "deqp2.am62p.previous": {
-      "label": "dEQP-GLES2, last whole tree",
-      "board": "am62p",
-      "value": { "pass": 17141, "fail": 0, "notSupported": 19, "warnings": 5, "total": 17165 },
-      "unit": "cases of the mustpass list",
-      "commit": "d60b9d76",
-      "onMain": false,
-      "date": "2026-10-02",
-      "source": "docs/es2-cts-failures.md",
-      "section": "Summary; tools/cts/RESULTS.md 1z2",
-      "status": "pass",
-      "note": "Superseded by the 2026-10-10 tree on 32778b57 (the row above), which found 54 failures that this tree did not have."
-    },
     "deqp2.am62p.integration": {
       "label": "dEQP-GLES2, shaders groups (images 1 to 7)",
       "board": "am62p",
@@ -167,7 +154,7 @@ window.YAKOGL_DATA = {
       "source": "tools/cts/log/board-sessions/am62p-plan1.md",
       "section": "Result",
       "status": "fail",
-      "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed at d60b9d76 fail. Fixed on main in e17fb6a7 (2026-10-10, no fusion on the way to an invariant output): image 1 of the AM62P tree on e17fb6a7 gives 1,379 pass / 0 fail."
+      "note": "An integration image, not a landing proof. Nine shaders.invariance common_subexpression cases that passed in the 2026-10-02 whole tree fail. Fixed on main in e17fb6a7 (2026-10-10, no fusion on the way to an invariant output): image 1 of the AM62P tree on e17fb6a7 gives 1,379 pass / 0 fail."
     },
     "deqp2.imx8mp.previous": {
       "label": "dEQP-GLES2, previous whole tree",
@@ -194,19 +181,6 @@ window.YAKOGL_DATA = {
       "section": "Pi 4: the whole dEQP-GLES2 tree, 0 fail",
       "status": "pass",
       "note": "Composed of three records on main builds, not one image set: the whole tree on a27d69c0 (2026-10-10: 17,083 pass, 9 fail, 34 not supported, 3 quality and 2 compatibility warnings, 34 cases lost by the serial capture), the 9 cube cases passing on 1cf946a9 (the six rows whose fragment cube look-ups changed: 934 of 934 pass), and the 34 lost cases passing in a rerun of image F1. The 25 cube failures (#12) of the 2026-10-01 tree are 0. 34 not supported: 16 multisample, 9 compressed-texture negative tests, 8 clip_control, 1 multisampled_render_to_texture. A single-commit tree is not run."
-    },
-    "deqp2.pi4.previous": {
-      "label": "dEQP-GLES2, last whole tree",
-      "board": "pi4",
-      "value": { "pass": 17075, "fail": 25, "notSupported": 62, "warnings": 3, "total": 17165 },
-      "unit": "cases of the mustpass list",
-      "commit": "fe5e8e73",
-      "onMain": false,
-      "date": "2026-10-01",
-      "source": "docs/es2-cts-failures.md",
-      "section": "A. Raspberry Pi 4 (sweep 30)",
-      "status": "info",
-      "note": "Superseded by the 2026-10-11 reading (the row above): the 25 cube-map failures (#12) are 0 on the board, and the 27 fbo and fragdata cases that were not supported pass."
     },
     "deqp3.am62p": {
       "label": "dEQP-GLES3, whole tree (28 images)",
@@ -291,13 +265,13 @@ window.YAKOGL_DATA = {
       "board": "pi4",
       "value": 183,
       "unit": "score, 800x600 on-screen, 33 of 33 scenes ran",
-      "commit": "1fa941e3",
-      "onMain": false,
-      "date": "2026-10-04",
-      "source": "tools/cts/RESULTS.md",
-      "section": "Pi 4 common set round 3",
-      "status": "warn",
-      "note": "Refract and terrain did not fit the 48 MiB GPU carve-out (#4, #5); the glmark2 image now takes 96 MiB (ca4074a), not board-run. Terrain samples black (#1; fixed on the host)."
+      "commit": "d64e995b",
+      "onMain": true,
+      "date": "2026-10-14",
+      "source": "docs/board-sessions/pi4-common-int.md",
+      "section": "Result; Before / after",
+      "status": "pass",
+      "note": "33 scenes, 0 failed, 0 GL errors, 0 incomplete-texture draws; the 96 MiB carve-out holds refract and terrain with no memory refusal. Terrain (3 fps) and refract (2 fps) are slower than before the refusals went away; not investigated."
     },
     "glmark2ref.am62p": {
       "label": "glmark2, public reference (Linux, vendor driver)",
@@ -369,13 +343,13 @@ window.YAKOGL_DATA = {
       "board": "pi4",
       "value": "pass",
       "unit": "picture probes, with the copy and through the scan-out view",
-      "commit": "1fa941e3",
-      "onMain": false,
-      "date": "2026-10-04",
-      "source": "tools/cts/RESULTS.md",
-      "section": "Pi 4 common set round 3",
+      "commit": "d64e995b",
+      "onMain": true,
+      "date": "2026-10-14",
+      "source": "docs/board-sessions/pi4-common-int.md",
+      "section": "Result; Before / after",
       "status": "pass",
-      "note": "Not run since."
+      "note": "SO and SV, 0 GL error lines; slint: check PASS."
     },
     "cluster.am62p": {
       "label": "Instrument cluster (agl-slint-cluster)",
@@ -406,15 +380,15 @@ window.YAKOGL_DATA = {
     "cluster.pi4": {
       "label": "Instrument cluster (agl-slint-cluster)",
       "board": "pi4",
-      "value": 193.4,
-      "unit": "Mpx/s (139.8 fps at 1920x720), probes pass",
-      "commit": "031de9a2",
-      "onMain": false,
-      "date": "2026-10-04",
-      "source": "tools/cts/RESULTS.md",
-      "section": "Cluster acceptance run, one sample on three boards",
+      "value": 192.6,
+      "unit": "Mpx/s (139.3 fps at 1920x720), probes pass",
+      "commit": "d64e995b",
+      "onMain": true,
+      "date": "2026-10-14",
+      "source": "docs/board-sessions/pi4-common-int.md",
+      "section": "Result; Before / after",
       "status": "pass",
-      "note": "031de9a2 is the branch tree that brought the sample to main, before it landed. Not run since."
+      "note": "34 of 34 probes, draw 5.5 ms mean, no GL error line. One 60 s run."
     },
     "boot.am62p": {
       "label": "Standalone boot",
