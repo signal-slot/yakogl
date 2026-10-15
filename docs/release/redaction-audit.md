@@ -1,14 +1,23 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-<<<<<<< HEAD
 
 # Redaction audit of the tree and the history (release stage 3)
 
-Read-only audit for checklist line 8 (`docs/release/checklist.md`). Nothing
-was edited, rewritten or deleted; this file is the only change.
+Audit for checklist line 8 (`docs/release/checklist.md`), in two passes
+that were made independently and merged into this file:
 
-Base: `5f8fff01` (ccfarm/integration tip, equal to `origin/main` in this
-clone), audited on 2026-10-15.
+- **Part 1** (this section down to "Notes for other items"): read-only
+  audit of the tree and of every ref of the clone. Base: `5f8fff01`
+  (ccfarm/integration tip, equal to `origin/main` in that clone), audited
+  on 2026-10-15. Part 1 edited nothing.
+- **Part 2** ("HEAD-only re-scan and tree fixes", below): the
+  pub-redaction-audit item's re-scan of the tree and of every blob
+  reachable from `HEAD`. It replaced values with environment-variable names
+  in four doc files (listed under "Applied in this item"). No history was
+  rewritten by either pass.
+
+Where the two passes disagree on the tree, the status after the merge is
+noted at the finding (H2, H3, M1).
 
 ## Verdict
 
@@ -81,15 +90,15 @@ commit. No hex array over 2000 bytes exists outside
 
 | Where | Masked value | Action |
 |---|---|---|
-| tree: `docs/board-sessions/pi4-common-int.md:27-28` (bridge host `u***[4]`, tailnet (100.64/10) `1***[14]`, port `359**`), `:35` (host and port again) | tailnet IPv4 + bridge host + port | **Edit:** replace them with "the host:port in `$BOARD_UART`". The file belongs to the running item pi4-common-int, so the edit is left to that item or a later docs item |
+| tree: `docs/board-sessions/pi4-common-int.md:27-28` (bridge host `u***[4]`, tailnet (100.64/10) `1***[14]`, port `359**`), `:35` (host and port again). After the merge with part 2 the values are still there, at `:21` and `:30` | tailnet IPv4 + bridge host + port | **Edit:** replace them with "the host:port in `$BOARD_UART`". The file belongs to the running item pi4-common-int, so the edit is left to that item or a later docs item. **Still open** |
 | history: commit `76b3242d` (main, 2026-10-12) adds it; 12 blob versions of the same file in other refs (`fca07828`, `7c724433`, `1b952480`, `d20e174d`, `0d1285dd`, `86be8aeb`, …), in about 130 remote branches | same | **History rewrite** (or a fresh history) |
 
 ### H3. Pi 4 lab login (class: user@host)
 
 | Where | Masked value | Action |
 |---|---|---|
-| tree: `docs/board-sessions/pi4-common-int.md:12,34,79`, `docs/board-sessions/pi4-plan1-int.md:12,13,49` | `s***[11]@e***[10]` | **Edit:** `"$BOARD_HOST"` or `<user@board>`. The first file is owned by the running pi4-common-int item |
-| tree: lease/resource id `pi4-e***[8]` at `docs/es3-board-recipe-pi4.md:221,223,224`, `docs/board-sessions/pi4-plan1-int.md:22`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` | the board's host name inside the id | **Edit:** `<pi4 resource>` |
+| tree: `docs/board-sessions/pi4-common-int.md:12,34,79`, `docs/board-sessions/pi4-plan1-int.md:12,13,49` | `s***[11]@e***[10]` | **Edit:** `"$BOARD_HOST"` or `<user@board>`. The first file is owned by the running pi4-common-int item. After the merge: `pi4-plan1-int.md` **fixed** by part 2; `pi4-common-int.md` **still open** (`:28`, `:30`) |
+| tree: lease/resource id `pi4-e***[8]` at `docs/es3-board-recipe-pi4.md:221,223,224`, `docs/board-sessions/pi4-plan1-int.md:22` (now `:24`), `docs/board-sessions/pi4-common-int.md:9`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` | the board's host name inside the id | **Edit:** `<pi4 resource>` |
 | history: commits `76b3242d`, `9c2c893a`, `04ed90de` on main (2026-10-12), plus copies in other refs | same | **History rewrite** |
 
 ### H4. Tailnet address and port of a farm node (class: IPv4, host name)
@@ -116,7 +125,7 @@ commit. No hex array over 2000 bytes exists outside
 
 | Where | Masked value | Action |
 |---|---|---|
-| tree: `docs/board-sessions/imx8mp-deqp-stage1-gles3.md:21`, `docs/board-sessions/pi4-common-int.md:14`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:9`, `docs/es3-zephyr-env.md:23`, `tools/cts/RESULTS.md:16868,16877`, `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69`, `tools/precompile/measure-image.sh:45` (a script default) | `/home/t***[6]/…` (the owner's login) | **Edit:** use `$CCFARM_DEPS_DIR`, `$ZEPHYR_WS`, `$WEST_VENV` and `$ZEPHYR_SDK_INSTALL_DIR`. In the script, use `${ZEPHYR_WS:?}` |
+| tree: `docs/board-sessions/imx8mp-deqp-stage1-gles3.md:21`, `docs/board-sessions/pi4-common-int.md:14`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:9`, `docs/es3-zephyr-env.md:23`, `tools/cts/RESULTS.md:16868,16877`, `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69`, `tools/precompile/measure-image.sh:45` (a script default) | `/home/t***[6]/…` (the owner's login) | **Edit:** use `$CCFARM_DEPS_DIR`, `$ZEPHYR_WS`, `$WEST_VENV` and `$ZEPHYR_SDK_INSTALL_DIR`. In the script, use `${ZEPHYR_WS:?}`. After the merge: the three `docs/board-sessions/*` / `docs/es3-zephyr-env.md` lines are **fixed** (part 2 T1) and `pi4-common-int.md` no longer has one; the `tools/` lines are still open |
 | history: 226 blob versions in all refs (`tools/cts/RESULTS.md`, `.ccfarm-workspace.md`, `.ccfarm-scripts/*.py`, board-session docs, `docs/farm/…`, `tools/hostharness/glmark2/FINDINGS-*.md` and others). Also commit message `0f1bad11` (main) | same | **History rewrite** (`--replace-text`), or a fresh history |
 | history, other refs only: `docs/farm/investigations/nuc-health-and-quota.md` (commits `f9e0264b` … `b1fdae97`, one remote branch `origin/ccfarm/01a11bcb-5310-…`) | `/home/s***[4]` (a second person's login) and a worker host name | **Delete the ref** |
 
@@ -215,10 +224,10 @@ Not run. If a rewrite is chosen instead of a fresh history:
 - A gate step that runs these patterns over `git ls-files` (and over the
   diff of a change) would stop new session logs from bringing the values
   back. It is not part of this item.
-=======
-# Redaction audit before publication
 
-Read-only audit of the working tree and of every blob reachable from `HEAD`
+# Part 2: HEAD-only re-scan and tree fixes
+
+Audit of the working tree and of every blob reachable from `HEAD`
 (1257 commits, 5086 blobs; the secret, token-prefix and tailnet-name
 patterns were re-run over every blob with `git rev-list --objects HEAD`,
 `git cat-file --batch` and `grep -a`, with no hit) for values that must not become public. The earlier audit
@@ -245,7 +254,7 @@ This file has to pass its own scan; nothing below is a real value.
 Skipped: `third_party/` (upstream copyright e-mail addresses), `*.xml.h`,
 `*.patch`, `tools/testdata/` (recorded fixtures). Binary blobs were not
 scanned. Only the history reachable from `HEAD` was scanned, not the other
-refs of the clone. Worker names were searched as whole words, case-insensitive
+refs of the clone (part 1 covers those and the binary blobs). Worker names were searched as whole words, case-insensitive
 (`git grep -nwi`, and `git log -S` for history).
 
 ## Result in one view
@@ -257,8 +266,8 @@ refs of the clone. Worker names were searched as whole words, case-insensitive
 | `/dev/serial/by-id` real serial | none (files show `<serial>` placeholders only) | none | **clean** |
 | tailnet name (`*.ts.net`) | none | none | **clean** |
 | home paths | 17 lines, 5 files remain (T1 rows marked open / no change); 3 doc files fixed by this item | 34 file/value pairs, 43 commits | fix tree docs, history owner decision |
-| lab login `s***[11]@e***[10]` | fixed in `pi4-plan1-int.md` by this item (`pi4-common-int.md` was already clean) | 3 commits | history owner decision |
-| tailnet IPv4 + bridge host/port | already clean in the tree | 1 commit | history owner decision |
+| lab login `s***[11]@e***[10]` | fixed in `pi4-plan1-int.md` by this item; still in `pi4-common-int.md` after the merge (part 1 H3) | 3 commits | fix tree doc, history owner decision |
+| tailnet IPv4 + bridge host/port | still in `pi4-common-int.md` after the merge (part 1 H2) | 1 commit | fix tree doc, history owner decision |
 | lab names (lease id, bridge host, ports, SoM host names) | 21 files | n/a | owner decision |
 | worker host names (4 nodes) | 12 files, 86 lines (T5); 4 doc files cleaned by this item | 38 / 34 / 6 commits (H table) | owner decision |
 | committed ccfarm worker files | `.ccfarm/project.toml` only | `.ccfarm-workspace.md`, `.ccfarm-scripts/*` | owner decision |
@@ -292,7 +301,7 @@ history (H table).
 | File:line (before this item) | Value | Fix | Status |
 | --- | --- | --- | --- |
 | `pi4-plan1-int.md:12,13,49` | `s***[11]@e***[10]` (lab login of the Pi 4) | `"$BOARD_HOST"` / `<user@board>` | **applied** |
-| `pi4-common-int.md` | same login, plus tailnet host `u***[4]`, tailnet IPv4 `1***[14]` (CGNAT range), TCP port `359**` | `"$BOARD_HOST"`, "host and port as in `$BOARD_UART`" | already clean at the tip |
+| `pi4-common-int.md` | same login, plus tailnet host `u***[4]`, tailnet IPv4 `1***[14]` (CGNAT range), TCP port `359**` | `"$BOARD_HOST"`, "host and port as in `$BOARD_UART`" | was clean at this item's base; main's later rewrite of the file brought the values back (`:21`, `:28`, `:30`), so **open** (part 1 H2, H3; owned by pi4-common-int) |
 
 ### T3 Lab and board names still in the tree (owner decision)
 
@@ -302,7 +311,7 @@ reader where the lab's gear is.
 
 | Class | Masked value | Files |
 | --- | --- | --- |
-| Pi 4 lease / resource id | `pi4-e***[7]` | `docs/es3-board-recipe-pi4.md:221-224`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `docs/board-sessions/pi4-plan1-int.md:22`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` |
+| Pi 4 lease / resource id | `pi4-e***[8]` | `docs/es3-board-recipe-pi4.md:221-224`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `docs/board-sessions/pi4-plan1-int.md:24`, `docs/board-sessions/pi4-common-int.md:9`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` |
 | serial bridge host | `u***[4]`, `usb-s***[8]-1` | 21 files; most lines in `tools/cts/RESULTS.md` (18), `tools/cts/log/investigations/console-map.md` (12) |
 | bridge ports | `3593*` (three ports) | `tools/cts/log/benchmarks-baseline/am62p.md:31`, `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md:26`, `tools/cts/log/investigations/*console*` |
 | board host login | `t***[7]@v***[12]`, `t***[7]@v***[13]` | `tools/cts/log/benchmarks-baseline/am62p.md:12,31`, `tools/cts/log/board-sessions/imx8mp-common-int.md:11,40`, `tools/cts/RESULTS.md:15875-15881` |
@@ -430,8 +439,9 @@ this audit did not scan them.
 - `docs/ci.md`, `docs/farm/devices.md`, `.github/workflows/gate.yml`,
   `tools/check.sh`, `tools/setup-gate-host.sh`, `.ccfarm/project.toml`:
   worker names (T5), owner decision.
-- `docs/es3-board-recipe-pi4.md`: lease id `pi4-e***[7]` (T3).
+- `docs/es3-board-recipe-pi4.md`: lease id `pi4-e***[8]` (T3).
+- `docs/board-sessions/pi4-common-int.md`: lab login, tailnet address,
+  bridge host and port (part 1 H2, H3), owned by the pi4-common-int item.
 - Add a gate step that runs these patterns over `git ls-files` (a small
   python scanner next to `tools/check.sh`), so new session logs cannot
   reintroduce the values.
->>>>>>> e4fe6c3d460efa0763c0098d57e60843b834b6c0
