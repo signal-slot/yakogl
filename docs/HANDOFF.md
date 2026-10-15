@@ -59,9 +59,9 @@ All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
-| AM62P | whole tree on `32778b57` (2026-10-10): 17,070 pass / 54 fail / 34 NotSupported / 5 QualityWarning / 2 CompatibilityWarning. Of the 54: the 9 `shaders.invariance` cases pass on the board since `e17fb6a7` (image 1, 1,379 / 0); the 45 `texture.vertex.2d.*` cases (image 9) are fixed on the host (`a6fc6f14`) and wait for the board. The ms4 image: 14 / 2 on `32778b57`; 16 / 16 on `452d6c31` and `a27d69c0` after the PDS fix (`a4f64950`; no RESULTS.md entry: the commit message of `a80b297f5` and the HANDOFF text of `bd8df7a49`). | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592), SV empty (0 console bytes, unresolved; same image as SO), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
-| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `b568940` (2026-10-14, common set; `docs/board-sessions/imx8mp-common-int.md`); cases 2, 10 and 171 passed in this run. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `b568940` (2026-10-14, common set; record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO and SV pass (crc16 c592), CL pass (crc16 b107), on `b568940`; no fps (no console). |
-| Pi 4 | 17,126 pass / 0 fail / 34 NotSupported / 5 warnings, composed of three records: the tree on `a27d69c0` (17,083 / 9 / 34, 34 lost in capture), the six cube rows on `1cf946a9` (934 / 934) and the F1 rerun (2026-10-10 and 10-11). One tree from one commit has not run. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
+| AM62P | **final tree, `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`): 17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning** at 1x; ms4 16 / 16; combined 17,141 / 0 / 18 / 5 / 1. The 9 invariance and 45 `texture.vertex.2d.*` cases pass. Predates `8bbf9ba2` (BGRA renderbuffer, below). Superseded: `32778b57` 17,070 / 54. | 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592), SV empty (0 console bytes, unresolved; same image as SO), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
+| i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning, 29 of 29 entries equal `d8583f20`'s; it predates `8bbf9ba2`. | 48 / 49 run, 1 skipped (case 16, #8), case 44 (#6) fails, on `b568940` (2026-10-14, common set; `docs/board-sessions/imx8mp-common-int.md`); cases 2, 10 and 171 passed in this run. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. | 43, 33 ran, 0 failed, 0 unsupported, on `b568940` (2026-10-14, common set; record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO and SV pass (crc16 c592), CL pass (crc16 b107), on `b568940`; no fps (no console). |
+| Pi 4 | **no final tree at the tip.** `20a48791` rows 0-14 (2026-10-14; `docs/board-sessions/pi4-es2-final.md`, `1344748`): 11,877 pass / **46 fail** (all `GL_BGRA_EXT` renderbuffer cases, FB1 3 + FB2 43) / 25 NotSupported / 5 warnings; rows 15-28 not run. Last whole tree `d56e79e5` (2026-10-12; `pi4-es2-final-r2.md`, `ce16942`): 17,127 / 0 / 34 / 4, before `8bbf9ba2`. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
 The expected reading of every image or row of the final dEQP-GLES2 trees is
 in `tools/cts/log/board-sessions/es2-final-expected.md`: one table per board
@@ -77,23 +77,38 @@ for every board and read 0 Fail: AM62P `63efed8e`
 (`docs/board-sessions/am62p-es2-final-r2.md`), i.MX8MP `c345ab74`
 (`docs/board-sessions/imx8mp-es2-final-r2.md`), Pi 4 `d56e79e5`
 (`docs/board-sessions/pi4-es2-final-r2.md`); `docs/es2-cts-failures.md` and
-`tools/cts/STATUS.md` do not carry them yet (`es2-docs-r1`).
+`tools/cts/STATUS.md` carry them. All three predate `8bbf9ba2` ("Final ES
+2.0 trees" below).
 
 The NotSupported 34 are the same on the three boards: `clip_control` 8,
 `negative_api.texture.compressedtexsubimage2d_*` 9,
 `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (the
 1x config; the AM62P measures them on its ms4 image).
 
+### Final ES 2.0 trees (2026-10-14)
+
+Stage 1 (0 Fail) is met by record on the AM62P (`63efed8e`) and the i.MX8MP
+(`c345ab74`), not on the Pi 4. Both commits predate `8bbf9ba2`, which made
+`renderbuffer_format_advertised` (`src/gl/framebuffer.rs`) refuse
+`GL_BGRA_EXT` beside the accepted `GL_BGRA8_EXT`; at `20a48791` that gives 46
+Pi 4 Fail (`docs/es2-cts-failures.md`, section A), and the i.MX8MP tree on
+`835cf9cc` (2026-10-14, `tools/cts/RESULTS.md`) reads the same 46 in entry
+21 (`fbo`). To close stage 1: land the
+one-line fix with a report-es2 test for both names, then re-run Pi 4 rows
+FB1 and FB2 and rows 15-28 at the new tip (setup in
+`docs/board-sessions/pi4-es2-final.md`), and re-confirm the AM62P and i.MX8MP
+trees at that tip. AM62P gl_test 198 / 197 / 171 were not run
+(`am62p-es2-final.md`).
+
 ### Waiting for a board
 
 Each item waits for hardware. The commands and expected values are in
 "Next board session".
 
-- AM62P image 9 of the GLES2 tree: the 45 `texture.vertex.2d.*` cases
-  (`a6fc6f14`).
-- AM62P: one whole GLES2 tree from one main commit, with the ms4 image.
-- Pi 4: one whole GLES2 tree from one main commit (it replaces the composed
-  row).
+- Pi 4: a whole GLES2 tree at a tip with the `GL_BGRA_EXT` fix (rows 0-14
+  at `20a48791`: 46 Fail; rows 15-28 not run). AM62P and i.MX8MP: a re-run
+  at that tip (the i.MX8MP reads the same 46 Fail at `835cf9cc`). (The
+  AM62P image 9 and the whole tree with ms4 are done: `63efed8e`.)
 - gl_test 196 `occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205
   `mappbo` (the `work/land9` cases, on main since `c4dce9125`) on the
   i.MX8MP (the AM62P ran them at `cd738b1a` and again at `9b525867`, 5 of 5;
