@@ -4854,20 +4854,45 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
 }
 
 /// One draw into the open frame: whole, or cut into 16-bit index lists when a
-/// sequential draw is longer than one list can address, or cut into pieces of
-/// its index list when an indexed draw's staged data is too large.
+/// sequential draw is longer than one list can address, or cut into pieces
+/// when its staged data is too large.
 ///
-/// An indexed draw whose staged data (client indices and arrays) is more
-/// than half an empty GENERAL arena is cut into pieces that each fit
-/// ([`draw_indexed_pieces`]).
+/// A draw whose staged data (client indices and arrays) is more than half an
+/// empty GENERAL arena is cut into pieces that each fit: an indexed one into
+/// pieces of its index list ([`draw_indexed_pieces`]), a sequential one into
+/// runs of its vertices ([`draw_sequential_pieces`]). Until the second, a
+/// glDrawArrays of client arrays larger than an empty arena was refused
+/// whole: dEQP-GLES3's builtin_functions.precision vec3/vec4 draws, 24,384
+/// vertices of four arrays (1.27 MB), ended AM62P image 7 on f2a13877.
 fn draw_dispatch(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let sequential = d.index_buf_gpu == 0 && (d.index_cpu.is_null() || d.index_bytes == 0);
     if sequential && d.index_count > SEQ_MAX_VERTICES {
         draw_chunked(p, d)
-    } else if !sequential && staged_bytes(d) > p.b.gen.mem.size as u64 / 2 {
-        draw_indexed_pieces(p, d)
+    } else if staged_bytes(d) > p.b.gen.mem.size as u64 / 2 {
+        if sequential {
+            draw_sequential_pieces(p, d)
+        } else {
+            draw_indexed_pieces(p, d)
+        }
     } else {
         draw_part(p, d, 0, d.index_count, None)
+    }
+}
+
+/// How a draw of mode `prim` is cut on primitive boundaries: the vertices
+/// (or indices) per piece beyond the first `overlap` are a multiple of
+/// `unit`, and the next piece repeats the last `overlap`. A strip's two
+/// (an even number of triangles per piece keeps the winding), a line
+/// strip's one. `unit` 0: fans and loops, whose primitives reach back to the
+/// first vertex, cannot be cut.
+fn cut_unit(prim: GlesPrim) -> (u32, u32) {
+    match prim {
+        GLES_PRIM_POINTS => (1, 0),
+        GLES_PRIM_LINES => (2, 0),
+        GLES_PRIM_LINE_STRIP => (1, 1),
+        GLES_PRIM_TRI_STRIP => (2, 2),
+        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
+        _ => (3, 0), /* a triangle list (record_draw's default topology) */
     }
 }
 
@@ -4881,13 +4906,14 @@ fn staged_bytes(d: &GlesDraw) -> u64 {
         .fold(idx, |n, a| n + a.cpu_bytes as u64)
 }
 
-/// The arena bytes a piece of an indexed draw copies: `n` indices and, of
-/// each staged attribute, vertices `vmin..=vmax` (a per-instance or constant
-/// one whole), each copy 16-byte aligned as [`record_draw`] places it.
+/// The arena bytes a piece of a draw copies: `n` indices (0 for a piece of a
+/// sequential draw, which copies none) and, of each staged attribute,
+/// vertices `vmin..=vmax` (a per-instance or constant one whole), each copy
+/// 16-byte aligned as [`record_draw`] places it.
 fn piece_bytes(d: &GlesDraw, n: u32, vmin: u32, vmax: u32) -> u64 {
     let pad = |b: u64| b + 15;
     d.attribs[..d.num_attribs as usize].iter().filter(|a| !a.cpu.is_null() && a.cpu_bytes != 0).fold(
-        pad(n as u64 * 2),
+        if n == 0 { 0 } else { pad(n as u64 * 2) },
         |sum, a| {
             let bytes = if a.per_instance != 0 || a.stride == 0 {
                 a.cpu_bytes as u64
@@ -4951,14 +4977,8 @@ fn next_index_piece(
 /// the same way. A failure after some pieces were recorded leaves those in
 /// the frame.
 fn draw_indexed_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
-    let (unit, overlap): (usize, usize) = match d.prim {
-        GLES_PRIM_POINTS => (1, 0),
-        GLES_PRIM_LINES => (2, 0),
-        GLES_PRIM_LINE_STRIP => (1, 1),
-        GLES_PRIM_TRI_STRIP => (2, 2),
-        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
-        _ => (3, 0), /* a triangle list (record_draw's default topology) */
-    };
+    let (unit, overlap) = cut_unit(d.prim);
+    let (unit, overlap) = (unit as usize, overlap as usize);
     let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
     if unit == 0
         || second
@@ -5024,6 +5044,117 @@ fn draw_indexed_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
             return 0;
         }
         start += n as usize - overlap;
+    }
+}
+
+/// The next piece of a sequential draw of `total` vertices from vertex
+/// `start`: all the vertices left when their copies fit `budget` bytes,
+/// else the most (`overlap` plus a multiple of `unit`, at least one
+/// step) that do. `None` when not even one step fits.
+fn next_seq_piece(d: &GlesDraw, total: u32, start: u32, unit: u32, overlap: u32, budget: u64) -> Option<u32> {
+    let left = total - start;
+    let fits = |n: u32| piece_bytes(d, 0, start, start + n - 1) <= budget;
+    if fits(left) {
+        return Some(left);
+    }
+    if left <= overlap + unit || !fits(overlap + unit) {
+        return None;
+    }
+    /* the copies grow with the vertices: the largest k that fits, by
+     * bisection (k = lo fits; past hi the piece would be the whole rest,
+     * which does not) */
+    let (mut lo, mut hi) = (1u32, (left - 1 - overlap) / unit);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if fits(overlap + mid * unit) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    Some(overlap + lo * unit)
+}
+
+/// A sequential draw (glDrawArrays) of at most SEQ_MAX_VERTICES vertices
+/// whose staged arrays do not fit half an empty GENERAL arena, drawn as runs
+/// of its vertices that do: each piece copies, of every staged per-vertex
+/// attribute, only its own vertices ([`record_draw`]'s `win`), and reads
+/// the sequential index list from its first vertex on, so its indices --
+/// and gl_VertexID with them -- are the draw's own and the VBO-resident
+/// attributes are fetched as for the whole draw.
+///
+/// The cut is [`draw_indexed_pieces`]'s: lists on a primitive boundary,
+/// strips repeating the vertices the next piece continues from; fans, loops
+/// and a draw with a second index list go whole (refused by name when they
+/// do not fit), as does a draw one primitive of which is more than half an
+/// arena. A failure after some pieces were recorded leaves those in the
+/// frame.
+fn draw_sequential_pieces(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    let (unit, overlap) = cut_unit(d.prim);
+    /* every piece starts at an even vertex: its index address is the list's
+     * plus two bytes a vertex, and VDMCTRL_INDEX_LIST1 has no address bits
+     * 1:0 (index_base_addrlsb must be 0; an odd start was refused by name on
+     * the host's csbgen). A triangle list then steps by six, a line strip or
+     * a point list by two. */
+    let unit = if unit % 2 == 0 { unit } else { unit * 2 };
+    let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
+    let total = d.index_count;
+    if unit == 0 || second || total == 0 || total > SEQ_MAX_VERTICES {
+        return draw_part(p, d, 0, total, None);
+    }
+    let budget = p.b.gen.mem.size as u64 / 2;
+    /* count the pieces first: past MAX_PIECES the draw is refused before
+     * anything is recorded (the bound draw_chunked keeps) */
+    let mut pieces = 0u32;
+    let mut start = 0u32;
+    loop {
+        let Some(n) = next_seq_piece(d, total, start, unit, overlap, budget) else {
+            return draw_part(p, d, 0, total, None); /* refused by name */
+        };
+        pieces += 1;
+        if pieces > MAX_PIECES {
+            if !p.b.warned_big {
+                glog!(
+                    "pvr_backend: a non-indexed draw of {} vertices needs more than {} pieces to fit its client arrays: not drawn",
+                    total,
+                    MAX_PIECES
+                );
+                p.b.warned_big = true;
+            }
+            return -E2BIG;
+        }
+        if start + n >= total {
+            break;
+        }
+        start += n - overlap;
+    }
+    /* every piece addresses the one sequential list, made long enough now */
+    let rc = seq_indices_ensure(&mut p.b, total);
+    if rc != 0 {
+        return rc;
+    }
+    /* as draw_chunked: a piece that opens a new frame loads the colour */
+    let mut cont = *d;
+    cont.do_clear = false;
+    cont.do_clear_depth = false;
+    cont.do_clear_stencil = false;
+    let mut start = 0u32;
+    loop {
+        let Some(n) = next_seq_piece(d, total, start, unit, overlap, budget) else {
+            unreachable!("counted above");
+        };
+        let mut pd = if start == 0 { *d } else { cont };
+        /* (read each time: a frame a piece opens may record a load quad) */
+        pd.index_buf_gpu = p.b.seq_idx.gpu + start as u64 * 2;
+        pd.index_count = n;
+        let rc = draw_part(p, &pd, 0, n, Some((start, n)));
+        if rc != 0 {
+            return rc;
+        }
+        if start + n >= total {
+            return 0;
+        }
+        start += n - overlap;
     }
 }
 
@@ -5099,14 +5230,7 @@ fn draw_chunked(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let vs = unsafe { &*d.vs };
     /* (vertices per piece are a multiple of `unit`; `overlap` vertices are
      * drawn again by the next piece) */
-    let (unit, overlap): (u32, u32) = match d.prim {
-        GLES_PRIM_POINTS => (1, 0),
-        GLES_PRIM_LINES => (2, 0),
-        GLES_PRIM_LINE_STRIP => (1, 1),
-        GLES_PRIM_TRI_STRIP => (2, 2),
-        GLES_PRIM_TRI_FAN | GLES_PRIM_LINE_LOOP => (0, 0),
-        _ => (3, 0), /* a triangle list (record_draw's default topology) */
-    };
+    let (unit, overlap) = cut_unit(d.prim);
     /* a second index list would be emitted once per piece */
     let second = d.index_count2 != 0 && d.index_buf2_gpu != 0;
     if unit == 0 || vs.vs_vertex_id_reg1 != 0 || second {

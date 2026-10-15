@@ -251,12 +251,15 @@ unsafe extern "C" fn pvr_vdm_emit_index_list_instanced(
     instance_count: u32,
     why: *mut PvrVdmFieldRefusal,
 ) -> i32 {
-    if with_gen(|g| g.refuse_index_list) {
+    /* as the real emitter: the index address has no bits 1:0 (a piece of a
+     * sequential draw from an odd vertex was refused so on the host's
+     * csbgen while this fake took it) */
+    if with_gen(|g| g.refuse_index_list) || addr & 3 != 0 {
         // SAFETY: the backend passes its own refusal record.
         unsafe {
             *why = PvrVdmFieldRefusal {
                 field: c"VDMCTRL_INDEX_LIST1.index_base_addrlsb (address bits 1:0)".as_ptr(),
-                value: 2,
+                value: if addr & 3 != 0 { addr & 3 } else { 2 },
                 max: 0,
                 unit_bytes: 0,
             };
@@ -1203,6 +1206,264 @@ fn an_indexed_draw_whose_one_triangle_spans_more_than_half_an_arena_is_refused()
         rig.logs()
     );
 }
+
+/// The vertex count of dEQP-GLES3's builtin_functions.precision vec3 draws
+/// (clamp.highp_fragment.vec3, AM62P image 7 on f2a13877): one glDrawArrays
+/// of client arrays.
+const PRECISION_VERTICES: usize = 24_384;
+
+/// A draw of `nv` sequential vertices with four staged arrays, as dEQP's
+/// shader executor sends one: a vec4 position and three vec3 inputs, 52
+/// bytes a vertex (1,267,968 bytes for [`PRECISION_VERTICES`], past the
+/// 1 MiB GENERAL arena). Vertex `v` of array `k` holds `v * 4 + k` in its
+/// first component; the arrays are returned to keep them alive.
+fn staged_arrays_draw(rig: &Rig, nv: usize) -> (GlesDraw, Vec<Vec<f32>>) {
+    let comps = [4usize, 3, 3, 3];
+    let arrays: Vec<Vec<f32>> = comps
+        .iter()
+        .enumerate()
+        .map(|(k, &c)| {
+            (0..nv).flat_map(|v| (0..c).map(move |j| if j == 0 { (v * 4 + k) as f32 } else { 0.5 })).collect()
+        })
+        .collect();
+    let mut d = rig.draw(nv as u32);
+    let mut reg = 0u8;
+    for (k, a) in arrays.iter().enumerate() {
+        d.attribs[k] = GlesAttrib {
+            components: comps[k] as u8,
+            stride: comps[k] as u32 * 4,
+            vi_reg: reg,
+            cpu: a.as_ptr() as *const c_void,
+            cpu_bytes: (a.len() * 4) as u32,
+            ..GlesAttrib::ZERO
+        };
+        reg += comps[k] as u8;
+    }
+    d.num_attribs = 4;
+    (d, arrays)
+}
+
+/// The index lists of the draw [`staged_arrays_draw`] built (its four
+/// streams; a frame a piece opens begins with a load quad, which has other
+/// streams), with the absolute vertex every index names, checked to fetch
+/// that vertex's data from each stream.
+fn staged_pieces(rig: &Rig) -> Vec<Vec<u32>> {
+    rig.lists_with_streams()
+        .into_iter()
+        .filter(|(_, st)| st.len() == 4 && st[0].dst_reg == 0 && st[1].dst_reg == 4)
+        .map(|(l, st)| {
+            (0..l.2 as u64)
+                .map(|i| {
+                    let word = rig.gpu_u32(l.1 + (i & !1) * 2);
+                    let v = if i % 2 == 0 { word & 0xffff } else { word >> 16 };
+                    for (k, s) in st.iter().enumerate() {
+                        let x = f32::from_bits(rig.gpu_u32(s.address.wrapping_add(v as u64 * s.stride as u64)));
+                        assert_eq!(x, (v * 4 + k as u32) as f32, "vertex {v} of stream {k}");
+                    }
+                    v
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// AM62P image 7 (dEQP-GLES3, f2a13877) stopped at
+/// shaders.builtin_functions.precision.clamp.highp_fragment.vec3: its
+/// 24,384-vertex glDrawArrays of client arrays "does not fit an empty frame:
+/// the general arena (1048576 bytes) is too small", a ResourceError that
+/// ended the run 1,397 cases early. Only an indexed draw was cut by its
+/// staged size. Now a sequential one is too: whole triangles per piece,
+/// each piece's copies within half an arena, and every vertex drawn once,
+/// fetching its own data.
+#[test]
+fn a_24384_vertex_draw_arrays_of_client_arrays_is_drawn_in_pieces() {
+    let rig = Rig::new();
+    let (d, _arrays) = staged_arrays_draw(&rig, PRECISION_VERTICES);
+    assert!(staged_bytes(&d) > rig.b().gen.mem.size as u64, "the draw is larger than an empty arena");
+    let _ = rig.logs();
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    assert!(!rig.logs().iter().any(|l| l.contains("not drawn")), "{:?}", rig.logs());
+    let pieces = staged_pieces(&rig);
+    assert_eq!(
+        pieces.len(),
+        3,
+        "1.27 MB in pieces of at most 512 KiB: {:?}",
+        pieces.iter().map(Vec::len).collect::<Vec<_>>()
+    );
+    assert!(pieces.iter().all(|p| p.len() % 3 == 0), "whole triangles");
+    let all: Vec<u32> = pieces.concat();
+    assert_eq!(all, (0..PRECISION_VERTICES as u32).collect::<Vec<_>>(), "every vertex once, in order, absolute");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks().len(), 2, "the second piece opens the next frame, which the third joins");
+}
+
+/// Strips repeat the vertices the next piece continues from (an even number
+/// of triangles per piece keeps the winding), line strips one, line lists
+/// cut on an even vertex; the pieces' primitives are the draw's, each once.
+#[test]
+fn a_sequential_strip_or_line_draw_of_client_arrays_is_cut_on_primitive_boundaries() {
+    let rig = Rig::new();
+    let (mut d, _arrays) = staged_arrays_draw(&rig, PRECISION_VERTICES);
+    for (prim, unit, overlap) in [
+        (GLES_PRIM_TRI_STRIP, 2usize, 2usize),
+        (GLES_PRIM_LINE_STRIP, 1, 1),
+        (GLES_PRIM_LINES, 2, 0),
+        (GLES_PRIM_POINTS, 1, 0),
+    ] {
+        rig.reset_records();
+        d.prim = prim;
+        assert_eq!(draw(&d), 0, "mode {prim}: {:?}", rig.logs());
+        let pieces = staged_pieces(&rig);
+        assert!(pieces.len() >= 3, "mode {prim}: {} pieces", pieces.len());
+        let mut at = 0u32;
+        for (k, p) in pieces.iter().enumerate() {
+            assert_eq!(p[0], at, "mode {prim}: piece {k} starts where the last one's shared vertices do");
+            assert!(p.windows(2).all(|w| w[1] == w[0] + 1), "mode {prim}: piece {k} is a run of vertices");
+            if k + 1 < pieces.len() {
+                assert_eq!((p.len() - overlap) % unit, 0, "mode {prim}: piece {k} ends on a primitive boundary");
+            }
+            at += (p.len() - overlap) as u32;
+        }
+        assert_eq!(at as usize + overlap, PRECISION_VERTICES, "mode {prim}: every vertex drawn");
+        assert_eq!(pvr_backend_flush(), 0);
+    }
+}
+
+/// gl_VertexID stays the draw's vertex number in every piece: the pieces
+/// address the sequential index list at their first vertex, so the index
+/// (IR0) is absolute and only the staged copies are windowed.
+#[test]
+fn a_sequential_draw_reading_gl_vertexid_is_cut_with_absolute_indices() {
+    let rig = Rig::new();
+    let (mut d, _arrays) = staged_arrays_draw(&rig, PRECISION_VERTICES);
+    let mut vs = *rig.fvs;
+    vs.vs_vertex_id_reg1 = 5;
+    d.vs = &vs;
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    let pieces = staged_pieces(&rig);
+    assert!(pieces.len() >= 2);
+    let seq = rig.b().seq_idx.gpu;
+    let lists: Vec<_> = rig.lists_with_streams().into_iter().filter(|(_, st)| st.len() == 4).map(|(l, _)| l).collect();
+    let mut at = 0u64;
+    for l in &lists {
+        assert_eq!(l.1, seq + at * 2, "the piece reads the sequential list from its first vertex");
+        at += l.2 as u64;
+    }
+    assert_eq!(pieces.concat(), (0..PRECISION_VERTICES as u32).collect::<Vec<_>>());
+}
+
+/// A fan or a line loop reaches back to its first vertex and is not cut: it
+/// goes whole and is refused by name, as an indexed one is.
+#[test]
+fn a_sequential_fan_or_loop_of_client_arrays_too_large_for_the_arena_is_refused_by_name() {
+    let rig = Rig::new();
+    let (mut d, _arrays) = staged_arrays_draw(&rig, PRECISION_VERTICES);
+    for prim in [GLES_PRIM_TRI_FAN, GLES_PRIM_LINE_LOOP] {
+        restart_with_arenas(4, 1024, 768);
+        rig.reset_records();
+        let _ = rig.logs();
+        d.prim = prim;
+        assert_eq!(draw(&d), -ENOMEM, "mode {prim}");
+        assert!(rig.index_lists().is_empty(), "nothing recorded");
+        assert!(
+            rig.logs().iter().any(|l| l
+                == "pvr_backend: a draw (24384 vertices/indices) does not fit an empty frame: the general arena (1048576 bytes) is too small; not drawn"),
+            "mode {prim}: {:?}",
+            rig.logs()
+        );
+    }
+}
+
+/// What a frame recorded, folded into one number: the VDM words of every
+/// kick, the index lists, the vertex streams, the PPP states' count, and
+/// the bytes of the GENERAL and PDS arenas the frame filled.
+fn frame_fingerprint(rig: &Rig) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut mix = |x: u64| {
+        for b in x.to_le_bytes() {
+            h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    let b = rig.b();
+    for a in [&b.gen, &b.pds] {
+        // SAFETY: the arena is a live CPU mapping of mem.size >= bump bytes.
+        let bytes = unsafe { core::slice::from_raw_parts(a.mem.cpu as *const u8, a.bump as usize) };
+        mix(a.bump as u64);
+        bytes.iter().for_each(|&x| mix(x as u64));
+    }
+    for l in rig.index_lists() {
+        [l.0 as u64, l.1, l.2 as u64, l.3 as u64].into_iter().for_each(&mut mix);
+    }
+    for st in rig.streams() {
+        for s in st {
+            [s.address, s.stride as u64, s.dma_size as u64, s.dst_reg as u64, s.per_instance as u64]
+                .into_iter()
+                .for_each(&mut mix);
+        }
+    }
+    mix(rig.ppp().len() as u64);
+    assert_eq!(pvr_backend_flush(), 0);
+    for (_, words) in rig.kicks() {
+        words.into_iter().for_each(|w| mix(w as u64));
+    }
+    h
+}
+
+/// A draw that fits half an arena records exactly what it did before the
+/// sequential pieces: the fingerprints were taken on 79c73ea2, before the
+/// change, with the same draws.
+#[test]
+fn a_fitting_draw_records_the_same_frame_as_before_the_sequential_pieces() {
+    let rig = Rig::new();
+    let mut got = Vec::new();
+    /* a VBO draw; one staged vec4 of 24,384 vertices (390 KB); a staged
+     * strip of 30,000 vertices (480 KB, just under half an arena); and the
+     * precision draw cut to 10,000 vertices (520 KB) */
+    for case in 0..4 {
+        restart_with_arenas(4, 1024, 768);
+        rig.reset_records();
+        /* the bytes between the 16-byte aligned copies are never written:
+         * zero them, or they hold what an earlier test left there */
+        for a in [&rig.b().gen, &rig.b().pds] {
+            // SAFETY: the arena is a live CPU mapping of mem.size bytes,
+            // past the bump of a frame nothing has recorded into yet.
+            unsafe {
+                let b = a.bump as usize;
+                core::ptr::write_bytes((a.mem.cpu as *mut u8).add(b), 0, a.mem.size - b)
+            };
+        }
+        let one: Vec<f32> = (0..30_000 * 4).map(|i| i as f32).collect();
+        let (mut d, _arrays) = staged_arrays_draw(&rig, 10_000);
+        match case {
+            0 => d = rig.draw(PRECISION_VERTICES as u32),
+            1 | 2 => {
+                d = rig.draw(if case == 1 { PRECISION_VERTICES as u32 } else { 30_000 });
+                if case == 2 {
+                    d.prim = GLES_PRIM_TRI_STRIP;
+                }
+                d.attribs[0] = GlesAttrib {
+                    components: 4,
+                    stride: 16,
+                    cpu: one.as_ptr() as *const c_void,
+                    cpu_bytes: d.index_count * 16,
+                    ..GlesAttrib::ZERO
+                };
+            }
+            _ => {}
+        }
+        assert!(staged_bytes(&d) <= rig.b().gen.mem.size as u64 / 2, "case {case} fits");
+        assert_eq!(draw(&d), 0, "case {case}");
+        assert_eq!(rig.index_lists().len(), 1, "case {case}: drawn whole");
+        got.push(frame_fingerprint(&rig));
+    }
+    std::println!("fingerprints: {got:#x?}");
+    assert_eq!(got, FITTING_DRAW_FINGERPRINTS);
+}
+
+/// [`a_fitting_draw_records_the_same_frame_as_before_the_sequential_pieces`]'s
+/// fingerprints, taken on 79c73ea2.
+const FITTING_DRAW_FINGERPRINTS: [u64; 4] =
+    [0x738f1a79705cffbb, 0x50bc022ef19984d5, 0xcd1bc084af510302, 0xcb902fa8b5be2f15];
 
 /// Fewer, smaller frame sets: the owner report counts what was built, and
 /// kicks rotate through the sets in use only.
