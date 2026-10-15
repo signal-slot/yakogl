@@ -2,12 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # CTS の状況
 
-2026-10-15 更新（main e3749a25 での AM62P と i.MX8MP の dEQP-GLES2 全ツリーと共通セット。下の「10/15 main e3749a25 の dEQP-GLES2 と共通セット」の節）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
+2026-10-15 更新（main e9901869a と e3749a25 での AM62P と i.MX8MP の dEQP-GLES2 全ツリーと共通セット。下の「10/15 main e3749a25 の dEQP-GLES2 と共通セット」の節と RESULTS.md）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
 このファイルはいまの状態だけを書く。細かい数字・ケース名・コミットは [RESULTS.md](RESULTS.md)、開いている作業とその順番は [docs/HANDOFF.md](../../docs/HANDOFF.md)、9/25〜10/7 の日記は [log/status-2026-09-25-to-10-07.md](log/status-2026-09-25-to-10-07.md)（それより前は git の履歴）。
 
 ## ひとことで
 
-**dEQP-GLES2: 10/15 に main e3749a25 の全ツリーで AM62P と i.MX8MP は失敗 0（AM62P 17,124 合格 / 失敗 0、i.MX8MP 17,318 合格 / 失敗 0、リセット 0）。8bbf9ba2 の `GL_BGRA_EXT` 46 件は #828 で直り、i.MX8MP の fbo（e21）は 711 / 711。共通セットは AM62P が 5 行とも done、i.MX8MP は gl_test の 44 番（#6）だけが失敗で、修正 #866 は 49 / 49。Pi 4 はボードがネットワークから落ちていて未実行。**
+**ES 2.0: 10/15 に main e9901869a（#866 を含む）で AM62P と i.MX8MP は全部の行が done、dEQP-GLES2 の失敗 0（AM62P 17,124 合格 / 失敗 0、ms4 16 / 0、i.MX8MP 17,318 合格 / 失敗 0）、共通セットは両ボードとも 5 行すべて done（i.MX8MP の gl_test は 49 / 49）。リセットは数えた行ですべて 0。残りは Pi 4（ネットワークから落ちていて電源の入れ直しが要る）。記録は RESULTS.md の 10/15 の節、#870。**
 **dEQP-GLES3 は AM62P で必須 42,810 件の全 28 画像を 10/11 に走らせた（main f2a13877）: 32,669 合格（76.3%）、失敗 5,549、未対応 2,318、結果なし 2,089（GPU のハングが 2 ケース）。** ここが次の大きな山。Pi 4 と i.MX8MP の GLES3 はまだ走らせていない。性能はその後。
 
 ## 10/15 main e3749a25 の dEQP-GLES2 と共通セット（記録は RESULTS.md の 2026-10-15 の節、#870）

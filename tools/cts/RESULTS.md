@@ -42,6 +42,18 @@ Instruments named by description below (the Pi 4 tryboot runner, the AM62P and i
 > "both" hunk's seam; a name check alone would not have.
 
 
+## ES 2.0 at main `e9901869a` (contains #866): AM62P and i.MX8MP, every row done, 0 dEQP-GLES2 failures (2026-10-15)
+
+The same runs as the `e3749a25` section below, one commit later on main (#866 and the commits landed between). U-Boot from eMMC, `tools/board.sh`, records `records/{am62p,imx8mp}/{common,deqp,deqp-ms4}-e9901869` (gitignored). Issue #870.
+
+| Board | dEQP-GLES2 whole tree | Common set | GPU resets |
+|---|---|---|---|
+| AM62P | 17 images 1x: 17,124 pass / **0 fail** / 34 NS / 5 QW / 2 CW; ms4 16 / **0**; combined 17,140 / **0** / 18 / 5 / 2 | 5 of 5 done: glmark2 462 (33 scenes, 0 failed, 0 GL errors), Slint view off and on probes pass, cluster 73.0 fps (44.8 Mpx/s) at 1024x600, gl_test 50 of 50 | 0 on every row |
+| i.MX8MP | `TALLY (29 entries): begun 17371 passed 17318 failed 0 notsup 34 other 19 noresult 0` | 5 of 5 done: gl_test **49 of 49 run** (case 16 skipped; case 44 passes, #6) | 0 where counted (4 rows); the rest of the rows carry no reset counter |
+| Pi 4 | not run (off the network) | not run | - |
+
+- Both boards read the same dEQP-GLES2 numbers as at `e3749a25`: the commits between changed no case on them.
+
 ## dEQP-GLES2 whole trees and the common set at main `e3749a25`: AM62P and i.MX8MP (2026-10-15)
 
 One commit for both boards, `e3749a25` (contains #828, the `GL_BGRA_EXT` renderbuffer fix, and #831, the AM62P glmark2 image's 256 MiB GPU carve-out). Every image booted by U-Boot from eMMC (`BOARD_BOOT=uboot-mmc`), run with `tools/board.sh` from a detached checkout. Records under `records/<board>/` (gitignored), named below. Issue #870.
