@@ -43,7 +43,8 @@ score and no gl_test result. Every item of the session is still open:
   (exclusive).
 - **ssh to the Pi's Linux login: `Connection timed out` on port 22,
   three times** (10:03, and twice more within the next few minutes).
-  Exit 255, 0 bytes. One node's access record already calls `pi4-elegance`
+  Exit 255, 0 bytes. A fourth try in a later turn, with
+  `-o ConnectTimeout=20`, also timed out. One node's access record already calls `pi4-elegance`
   unreachable from this worker.
 - **The console bridge, from the farm's notes: accepted.**
   `python3 -I tools/am62p_netboot_uart.py probe <bridge>` exited 0, so the
