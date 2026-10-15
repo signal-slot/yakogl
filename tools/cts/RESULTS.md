@@ -17340,7 +17340,6 @@ Not plain `origin/main` builds: the port was not yet on main. The record words s
 its APP record; neither arm's console was read (no UART). PR #129's table changes nothing for
 gl_femtovg here.
 
-<<<<<<< HEAD
 ## i.MX8MP: common set on `cd738b1a` (2026-10-14)
 
 Images from `origin/main` `cd738b1a` (`cts-common.sh imx8mp build`, 0 rows not built), run from U-Boot
@@ -17555,7 +17554,7 @@ PowerVR backend has no `generate_mipmap` hook, so `glGenerateMipmap` is the GL c
 over terrain's 800x600 and refract's 1600x1200 chains every frame (read in `src/pvr/backend.rs` and
 `src/gl/texture.rs`, not measured: the image has no `CONFIG_SAFEUI_GPU_PVR_KICK_TIMES`). Score 465
 -> 462 is refract's 85 -> 1 fps; every other scene is within 2 fps of `cd738b1a`.
-=======
+
 ## AM62P: gl_test 198, 197, 171, the work/land9 cases and the default set on `dc514010`; glmark2 465 (2026-10-15)
 
 Record `docs/board-sessions/am62p-gltest-es2-20261015.md`. `tools/board.sh am62p`,
@@ -17591,4 +17590,3 @@ Re-run of the three goal-1 cases on the origin/main tip **`2923d771`** (same met
 `records/am62p/gltest-es2-2923d771/`): case 198 `rc=0 verdict=done ... resets=0 ... back_after=126s`,
 case 197 `rc=0 verdict=done ... resets=0 ... back_after=100s`, case 171 `rc=0 verdict=done ...
 resets=0 ... back_after=109s`; all PASS with the same check values, no FWCCB event, no CONTEXT_RESET.
->>>>>>> a37639465600fcd61980f1bf6c0c19b04177d17c
