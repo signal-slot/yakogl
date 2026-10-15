@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `ebc502b6` (2026-10-15). The numbers below are read from
+main is `ddec9bd9` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -160,11 +160,16 @@ Stage 1 (0 Fail) is met by record on the AM62P (`63efed8e`) and the i.MX8MP
 `GL_BGRA_EXT` beside the accepted `GL_BGRA8_EXT`; at `20a48791` that gives 46
 Pi 4 Fail (`docs/es2-cts-failures.md`, section A), and the i.MX8MP tree on
 `835cf9cc` (2026-10-14, `tools/cts/RESULTS.md`) reads the same 46 in entry
-21 (`fbo`). To close stage 1: land the
-one-line fix with a report-es2 test for both names, then re-run Pi 4 rows
-FB1 and FB2 and rows 15-28 at the new tip (setup in
+21 (`fbo`). The fix is on main (`a81617db`):
+`renderbuffer_format_advertised()` takes `GL_BGRA_EXT | GL_BGRA8_EXT` in one
+arm, listed with `GL_EXT_texture_format_BGRA8888`, and
+`tests/es2_bgra_rbo.rs` pins both names in the `report-es2` and the default
+build (storage allocated, framebuffer complete with either as its only colour
+attachment; ES 3.0 behaviour unchanged). To close stage 1: re-run Pi 4 rows
+FB1 and FB2 and rows 15-28 at a tip with it (setup in
 `docs/board-sessions/pi4-es2-final.md`), and re-confirm the AM62P and i.MX8MP
-trees at that tip. AM62P gl_test 198 / 197 / 171 were not run
+trees at that tip (plan items am62p-es2-r1a2, imx8mp-flake-remeasure and a
+Pi 4 round); none of the three trees has been re-run with the fix. AM62P gl_test 198 / 197 / 171 were not run
 (`am62p-es2-final.md`).
 
 ### Waiting for a board
@@ -678,12 +683,16 @@ es3-vertex).
      `check.sh` now keeps a failed row's whole output in
      `build/check-fail/<n>.log`. Open until a red names its test; the next
      red of this row is read from that file, never rerun first.
-   - **`GL_BGRA_EXT` renderbuffers** (no issue yet): the 46 failures of entry
+   - **`GL_BGRA_EXT` renderbuffers** (no issue yet; fixed on main in
+     `a81617db`, not yet re-run on a board): the 46 failures of entry
      21 (`fbo`) on the i.MX8MP at `835cf9cc` (and the same 46 on the Pi 4 at
      `20a48791`, `1344748`). The report-es2 renderbuffer allowlist of
      `8bbf9ba2` names `GL_BGRA8_EXT` but not the unsized `GL_BGRA_EXT`
-     (`docs/board-sessions/imx8mp-es2-final.md`, `da842c6`). Fixing the
-     allowlist should bring the i.MX8MP back to 0 fail.
+     (`docs/board-sessions/imx8mp-es2-final.md`, `da842c6`). The fix
+     adds the unsized name to the allowlist; the rest of the report-es2
+     renderbuffer path (`renderbuffer_storage_args_ok`, the attachment-bits
+     tables) already takes both names. It should bring the i.MX8MP back to 0
+     fail.
    - **Pi 4 gl_test 196 `occl`** (no issue yet): the V3D occlusion counter
      reads 0 for every query on the board (q0..q4 `available 1`, results
      0,0,0,0,0; want 0,1,0,1,1), though it counts on the host (`cd738b1a`).
@@ -1343,8 +1352,11 @@ es3-vertex).
 
 ## Next board session
 
-After the `GL_BGRA_EXT` allowlist fix, re-run i.MX8MP entry 21 (`fbo`, with
-`TREE_ROWS` as in `tools/board.sh`) and expect 711 of 711.
+After the `GL_BGRA_EXT` allowlist fix (on main, `a81617db`), re-run the three
+final trees (AM62P 17 images + ms4, i.MX8MP whole tree, Pi 4 rows 0-28) at a
+tip containing it; expect the 46 `fbo` BGRA cases to pass and 0 Fail overall.
+For the i.MX8MP, entry 21 (`fbo`, with `TREE_ROWS` as in `tools/board.sh`)
+alone must read 711 of 711.
 
 One session per board confirms what waits for hardware ("Waiting for a
 board"). Only steps not yet run are here; the steps that ran, with their
