@@ -67,6 +67,10 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 - **Pi 4**: dEQP-GLES2 は d56e79e5 の全ツリーで失敗 0（10/12）、20a48791 の行 0〜14 で `GL_BGRA_EXT` の 46 件が失敗（10/14）。GLES3 は未実行。
 - **キャプチャの欠落（Pi 4、AM62P とも）**: シリアルブリッジが行を落とす。集計は Lost、ランナーは done_lossy と読む。直すのはブリッジのファームウェア。
 
+## 済み（以前の「残り」から）
+
+- **済み: クラスタのブランチとビューの板レイヤーの統合**（log/status-2026-09-25-to-10-07.md の「残り」に挙げていたもの）。クラスタはビューを使う（driver/samples/zephyr/cluster/prj.conf の `CONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y`）。共通セットにも入っている（tools/cts/common-tree.txt の CL 行）。AM62P にはビューが無いが、コピーもしない。board_show() が DSS のプレーンを窓に向けるだけなので、SO と SV は同じコピーなしのイメージになる（docs/investigations/am62p-scanout-view.md）。
+
 ## 注意
 
 - 上の数字は Zephyr 上、内蔵コンパイラ。dEQP-GLES2 は ES 2.0 報告、dEQP-GLES3 は ES 3.0 報告のイメージ。
