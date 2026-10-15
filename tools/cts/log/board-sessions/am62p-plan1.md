@@ -44,6 +44,10 @@ anything.
   holds the bridge)` (exit 4) while the board was rebooting and exited 0 at
   07:57 and 07:58 UTC. The bridge value is environment only
   (`$BOARD_UART`, resource `usb-serial-1`) and is not recorded here.
+  After the permissions were granted later in the same session,
+  `ask_farm` answered, but `BOARD_UART` was still empty in the worker's
+  shell and the lease held only `verdin-am62p`, so the probe and
+  `board.sh` still could not run (`needs environment: BOARD_UART`).
 - **Main's driver and samples did not change.** `git diff --stat 4d744e17
   291f3cb9 -- driver src tools/cts/am62p-deqp-images.sh
   tools/cts/am62p-full-tree.txt` is empty, so images built at `4d744e17`
