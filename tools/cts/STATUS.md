@@ -2,16 +2,11 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # CTS の状況
 
-<<<<<<< HEAD
-2026-10-15 更新（dEQP-GLES2 の 10/12〜10/14 の記録。下の「10/12〜10/14 の dEQP-GLES2」の節）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
-=======
-2026-10-14 更新（dEQP-GLES2 の最終ツリーの節を追加）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+2026-10-15 更新（dEQP-GLES2 の 10/12〜10/14 の記録と最終ツリー。下の「10/12〜10/14 の dEQP-GLES2」と「10/14 dEQP-GLES2 の最終ツリー」の節）。ゴールは「Zephyr 上で、内蔵シェーダコンパイラを使って、Khronos の CTS（dEQP）を通す」。
 このファイルはいまの状態だけを書く。細かい数字・ケース名・コミットは [RESULTS.md](RESULTS.md)、開いている作業とその順番は [docs/HANDOFF.md](../../docs/HANDOFF.md)、9/25〜10/7 の日記は [log/status-2026-09-25-to-10-07.md](log/status-2026-09-25-to-10-07.md)（それより前は git の履歴）。
 
 ## ひとことで
 
-<<<<<<< HEAD
 **dEQP-GLES2: 10/12 に 3 ボードとも 1 つのコミットの全ツリーで失敗 0（AM62P 63efed8e、i.MX8MP c345ab74、Pi 4 d56e79e5）。その後 8bbf9ba2 で `GL_BGRA_EXT` のレンダーバッファ 46 件が退行し、i.MX8MP（cd738b1a、835cf9cc）と Pi 4（20a48791 の行 0〜14）で失敗 46。未修正。AM62P は 8bbf9ba2 を含むコミットをまだ走らせていない。**
 **dEQP-GLES3 は AM62P で必須 42,810 件の全 28 画像を 10/11 に走らせた（main f2a13877）: 32,669 合格（76.3%）、失敗 5,549、未対応 2,318、結果なし 2,089（GPU のハングが 2 ケース）。** ここが次の大きな山。Pi 4 と i.MX8MP の GLES3 はまだ走らせていない。性能はその後。
 
@@ -31,24 +26,20 @@
 | Pi 4 | 20a48791（10/14）、行 0〜14 | 11,877 / **失敗 46** / 25 / 3 / 2（11,953 件）。FB1 3 件、FB2 43 件、すべて `GL_BGRA_EXT`。行 15〜28 は未実行（pi4-es2-final-b） | docs/board-sessions/pi4-es2-final.md |
 
 - 46 件の原因（両方の記録）: 8bbf9ba2（10/12）の report-es2 のレンダーバッファ許可リストが `GL_BGRA8_EXT` だけを挙げ、dEQP-GLES2 が使う `GL_BGRA_EXT` を挙げていない。63efed8e、c345ab74、d56e79e5 はこのコミットを含まないので、失敗 0 の 3 つの全ツリーはこれを測っていない。担当の項目は記録にまだない（HANDOFF の Open work に「no issue yet」）。
-- まだ測っていないもの: 8bbf9ba2 を含むコミットでの AM62P の全ツリー（am62p-es2-final-a、-b）、Pi 4 の行 15〜28（pi4-es2-final-b）、修正後の i.MX8MP の e21 と Pi 4 の FB1・FB2。es2-docs-final がまとめる。
-=======
-**dEQP-GLES2: 最終ツリーで AM62P（63efed8e）と i.MX8MP（c345ab74）は失敗 0。Pi 4 は 20a48791 の行 0〜14 で 46 件失敗（BGRA レンダーバッファ）、行 15〜28 は未走行。下の 10/14 の節。**
-**dEQP-GLES3 は AM62P で必須 42,810 件の全 28 画像を 10/11 に走らせた（main f2a13877）: 32,669 合格（76.3%）、失敗 5,549、未対応 2,318、結果なし 2,089（GPU のハングが 2 ケース）。** ここが次の大きな山。Pi 4 と i.MX8MP の GLES3 はまだ走らせていない。性能はその後。
+- まだ測っていないもの: 8bbf9ba2 を含むコミットでの AM62P の全ツリー（am62p-es2-final-a、-b）、Pi 4 の行 15〜28（pi4-es2-final-b）、修正後の i.MX8MP の e21 と Pi 4 の FB1・FB2。es2-docs-final がまとめる（下の節）。
 
 ## 10/14 dEQP-GLES2 の最終ツリー（記録は docs/board-sessions/、ケース名は docs/es2-cts-failures.md）
 
 | ボード | コミット（日付） | 合格 / 失敗 / 未対応 / 警告 | 記録（コミット） |
 |---|---|---|---|
 | AM62P | 63efed8e（10/12） | 1x の 17 画像 17,125 / **0** / 34 / 6（品質警告 5、互換警告 1）、ms4 16 / 0。合わせて 17,141 / **0** / 18 / 6 | docs/board-sessions/am62p-es2-final-r2.md（ca56dbc） |
-| i.MX8MP | c345ab74（10/12） | 17,371 件中 17,318 / **0** / 34 / 19。必須 17,165 件では 17,112〜17,116 / 0 / 30〜34 / 19。29 エントリ全部がベースラインと同じ | docs/board-sessions/imx8mp-es2-final-r2.md（b3dad33） |
+| i.MX8MP | 失敗 0 の最後は c345ab74（10/12）。最終セッションは cd738b1a（10/14、2 回）、その後 835cf9cc（10/14） | c345ab74: 17,371 件中 17,318 / **0** / 34 / 19。必須 17,165 件では 17,112〜17,116 / 0 / 30〜34 / 19。29 エントリ全部がベースラインと同じ。cd738b1a と 835cf9cc: 17,272 / **46** / 34 / 19（e21 の `GL_BGRA_EXT` だけが違う） | docs/board-sessions/imx8mp-es2-final-r2.md（b3dad33）、imx8mp-es2-final.md（da842c6d）、RESULTS.md の 835cf9cc の節（b450b45f） |
 | Pi 4 | 20a48791 の行 0〜14 のみ（10/14）。最後の全ツリーは d56e79e5（10/12） | 行 0〜14: 11,877 / **46** / 25 / 5（必須 11,953 件）。行 15〜28 は走らせていない。d56e79e5 の全ツリー: 17,127 / 0 / 34 / 4 | docs/board-sessions/pi4-es2-final.md（1344748）、pi4-es2-final-r2.md（ce16942） |
 
-- **失敗 0 を言えるのは AM62P（63efed8e）と i.MX8MP（c345ab74）の記録だけ。Pi 4 は言えない。** Pi 4 の 46 件は `fbo.completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra` と `fbo.render.*.rbo_bgra*` で、原因は 8bbf9ba2 が `renderbuffer_format_advertised`（src/gl/framebuffer.rs）で `GL_BGRA8_EXT` だけを通し `GL_BGRA_EXT` を断ること。直す 1 行と、FB1・FB2 と行 15〜28 の再走行は未了。
-- AM62P と i.MX8MP の最終ツリーは 8bbf9ba2 より前のコミット。同じ 46 件が、8bbf9ba2 を含む先端では出ると予想される（ボード非依存の規則）。
+- **最終記録で失敗 0 を言えるのは AM62P（63efed8e）だけ。i.MX8MP は c345ab74 で失敗 0 だが、その後の cd738b1a と 835cf9cc で 46 件失敗。Pi 4 は言えない。** 46 件はどのボードも `fbo.completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra` と `fbo.render.*.rbo_bgra*` で、原因は 8bbf9ba2 が `renderbuffer_format_advertised`（src/gl/framebuffer.rs）で `GL_BGRA8_EXT` だけを通し `GL_BGRA_EXT` を断ること。直す 1 行と、i.MX8MP の e21、Pi 4 の FB1・FB2 と行 15〜28 の再走行は未了。
+- 失敗 0 の 3 つの全ツリー（63efed8e、c345ab74、d56e79e5）はどれも 8bbf9ba2 より前のコミット。AM62P でも、8bbf9ba2 を含む先端では同じ 46 件が出ると予想される（ボード非依存の規則）。
 - 未対応 34（1x）と品質警告は 3 ボードとも受け入れ済み（clip_control 8、multisample 16、multisampled_render_to_texture.readpixels 1、negative_api.texture.compressedtexsubimage2d_* 9）。AM62P の gl_test 198 / 197 / 171 は走らなかった（コンソールが無音、ssh 不許可）。
-- tools/cts/tree-diff.py と es2-accepted.txt はこのツリーにまだ無い。ケース単位の比較は記録にある名前による。
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+- tools/cts/tree-diff.py と es2-accepted.txt（未対応 34 件の名前）はこのツリーにあるが、これらの記録のケースごとの結果ファイル（records/）はコミットされていない。ケース単位の比較は記録にある名前による。
 
 ## 10/11 のボード実測（main f2a13877 と 1cf946a9、nuc、tools/board.sh。記録は RESULTS.md の 2026-10-11 の各節）
 
@@ -82,18 +73,11 @@ main は f2a13877（2026-10-11）で統合の残り、Pi 4 のシリアルブリ
 
 ## 開いている不具合（10/11 時点。順番と詳細は docs/HANDOFF.md「Open work」）
 
-<<<<<<< HEAD
 - **dEQP-GLES2、3 ボード共通（10/15 時点）**: `GL_BGRA_EXT` のレンダーバッファ 46 件（8bbf9ba2 の退行、未修正）。i.MX8MP と Pi 4 で失敗、AM62P は未測定。
-- **AM62P、dEQP-GLES2**: `texture.vertex.2d` の 45 件（画像 9）と ms4 の `multisample.constancy_alpha_to_coverage`、`constancy_both_inverted` の 2 件は 63efed8e の全ツリーで合格（10/12、am62p-es2-final-r2.md）。以前は「ホストで修正済み、ボード確認待ち」。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
+- **AM62P、dEQP-GLES2**: 最終ツリー 63efed8e で失敗 0（10/12、am62p-es2-final-r2.md）。`texture.vertex.2d` の 45 件（画像 9）、invariance 9 件、ms4 の `multisample.constancy_alpha_to_coverage`、`constancy_both_inverted` の 2 件は合格。以前は「ホストで修正済み、ボード確認待ち」。8bbf9ba2 より前なので、BGRA の 46 件は先端で再確認が要る。gl_test 198 / 197 / 171 は未走行。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
 - **AM62P、dEQP-GLES3**: 画像 20 と 21 の 3D テクスチャの 2 ケースで GPU がハングする。画像 7 は GENERAL アリーナ 1 MiB に入らない描画で打ち切り（ResourceError）。画像 5 は transform feedback の取り込みが未実装で打ち切り（保留中の着地はホストだけ）。
 - **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも cd738b1a でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
-- **Pi 4**: dEQP-GLES2 は d56e79e5 の全ツリーで失敗 0（10/12）、20a48791 の行 0〜14 で `GL_BGRA_EXT` の 46 件が失敗（10/14）。GLES3 は未実行。
-=======
-- **AM62P、dEQP-GLES2**: 最終ツリー 63efed8e で失敗 0（`texture.vertex.2d` の 45 件、invariance 9 件、ms4 の 2 件は合格）。8bbf9ba2 より前なので、BGRA の 46 件は先端で再確認が要る。gl_test 198 / 197 / 171 は未走行。4x のフレームが 2 つのキックに分かれるとサンプルを失う欠陥（pvr-msaa-split）は残る。
-- **AM62P、dEQP-GLES3**: 画像 20 と 21 の 3D テクスチャの 2 ケースで GPU がハングする。画像 7 は GENERAL アリーナ 1 MiB に入らない描画で打ち切り（ResourceError）。画像 5 は transform feedback の取り込みが未実装で打ち切り（保留中の着地はホストだけ）。
-- **i.MX8MP**: gl_test 44 番（es3hdr、RGBA16F の描画先、#6）は f2a13877 でも cd738b1a でも失敗。gl_test 10 番と 2 番（#9、#25）はときどき失敗し、原因は未特定（tools/cts/log/investigations/gc-case10-flake.md）。16 番の 4x MSAA の経路（#8）は未解決。glmark2 のスコアが 37〜46 に留まるのは、ボード層が毎フレームパネルの VSYNC を待つため、という予測がある（glmark2 は待たない設定を求めている。コードを読んだ予測で、ボードでは未確認、修正 F1 も未適用。tools/cts/log/investigations/imx8mp-frame-floor.md）。
-- **Pi 4**: dEQP-GLES2 は 20a48791 の行 0〜14 で 46 件失敗（`GL_BGRA_EXT` レンダーバッファ、修正は未着地）。d56e79e5 の全ツリーは失敗 0。GLES3 は未実行。
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+- **Pi 4**: dEQP-GLES2 は d56e79e5 の全ツリーで失敗 0（10/12）、20a48791 の行 0〜14 で `GL_BGRA_EXT` の 46 件が失敗（10/14、修正は未着地）。行 15〜28 は未走行。GLES3 は未実行。
 - **キャプチャの欠落（Pi 4、AM62P とも）**: シリアルブリッジが行を落とす。集計は Lost、ランナーは done_lossy と読む。直すのはブリッジのファームウェア。
 
 ## 注意

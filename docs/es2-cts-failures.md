@@ -28,7 +28,6 @@ fixed (items `v3d-cube-design`, `v3d-cube-fix`).
 
 ## Summary
 
-<<<<<<< HEAD
 Latest committed reading per board (as of 2026-10-15). Mustpass list,
 17,165 cases.
 
@@ -55,36 +54,39 @@ of that commit have not run. The AM62P has no reading of a commit that
 carries `8bbf9ba2` (`am62p-es2-final-a` and `-b` built images at
 `cd738b1a` and ran nothing, `docs/board-sessions/am62p-es2-final.md`).
 
-Earlier rows of this table (2026-10-10 and 10-11), kept as the record:
+Final trees (item `es2-docs-final`): the last whole tree of each board
+that the final sessions name, with its record and commit, beside the newer
+readings of commits that carry `8bbf9ba2`.
 
-| Board | Last full tree | Date | Pass | Fail | NotSupported | QualityWarning |
-=======
 | Board | Final tree (record, commit) | Date | Pass | Fail | NotSupported | QualityWarning |
 |---|---|---|---:|---:|---:|---:|
 | AM62P (PowerVR) | `docs/board-sessions/am62p-es2-final-r2.md` (`ca56dbc`), origin/main `63efed8e`, 17 images + ms4 | 2026-10-12 | 17,141 (17,125 at 1x + the 16 `multisample.*` of ms4; was 17,070 at `32778b57`) | **0** (was 54) | 18 (34 at 1x; was 34) | 6 (5 QualityWarning, 1 CompatibilityWarning; was 7) |
-| i.MX8MP (GC7000) | `docs/board-sessions/imx8mp-es2-final-r2.md` (`b3dad33`), origin/main `c345ab74`, 29 entries | 2026-10-12 | 17,112 to 17,116 (17,318 of 17,371 begun) | **0** (was 0) | 30 to 34 | 19 |
+| i.MX8MP (GC7000) | 0-fail tree: `docs/board-sessions/imx8mp-es2-final-r2.md` (`b3dad33`), origin/main `c345ab74`, 29 entries. Newer, with `8bbf9ba2`: `docs/board-sessions/imx8mp-es2-final.md` (`da842c6d`), `cd738b1a`, twice; `tools/cts/RESULTS.md` (`b450b45f`), `835cf9cc` | 2026-10-12 (`c345ab74`); 2026-10-14 (`cd738b1a`, `835cf9cc`) | `c345ab74`: 17,112 to 17,116 (17,318 of 17,371 begun); `cd738b1a` / `835cf9cc`: 17,066 to 17,070 (17,272 begun) | `c345ab74`: **0**; `cd738b1a` / `835cf9cc`: **46** (new) | 30 to 34 | 19 |
 | Pi 4 (V3D) | **no final tree at the tip.** Rows 0-14 at `20a48791`: `docs/board-sessions/pi4-es2-final.md` (`1344748`). Last whole tree: `docs/board-sessions/pi4-es2-final-r2.md` (`ce16942`), `d56e79e5` | 2026-10-14 (rows 0-14); 2026-10-12 (whole tree) | `20a48791` rows 0-14: 11,877 of 11,953; `d56e79e5`: 17,127 | `20a48791` rows 0-14: **46** (new); `d56e79e5`: **0** | `20a48791` rows 0-14: 25; `d56e79e5`: 34 | `20a48791` rows 0-14: 5 (3 QualityWarning, 2 CompatibilityWarning); `d56e79e5`: 4 (3 + 1) |
 
-**Final trees, 2026-10-14.** AM62P and i.MX8MP: the final record shows 0
-Fail, at the commit in the row. The Pi 4 does not: rows 0-14 at `20a48791`
-have 46 Fail, every one a `GL_BGRA_EXT` renderbuffer case (section A, Pi 4);
-rows 15-28 were not run at that commit, so no Pi 4 whole-tree total exists
-there. The Pi 4's last whole tree, `d56e79e5`, read 0 Fail. The 46 come from
-`8bbf9ba2` (`renderbuffer_format_advertised`, `src/gl/framebuffer.rs`, names
-`GL_BGRA8_EXT` but not `GL_BGRA_EXT`), which is an ancestor of `20a48791` and
-not of `d56e79e5`, `63efed8e` or `c345ab74`. So the AM62P and i.MX8MP zero
-readings are of commits **before** `8bbf9ba2`; the rule is not per GPU, and
-both boards are expected to show the same 46 names at a tip that has it, until
-the one-line fix lands. `tools/cts/tree-diff.py` and
-`tools/cts/es2-accepted.txt` are not in this tree (item `cts-tree-diff` is
-running), so "per case against the mustpass list" below is by the names the
-records give (section C, the accepted NotSupported / warning buckets); no
-tool output is cited.
+**Final trees, 2026-10-14.** The AM62P's final record shows 0 Fail at
+`63efed8e`. The i.MX8MP's 0-Fail record is `c345ab74`; its later final
+session (`imx8mp-es2-final`, `cd738b1a`) and the tree on `835cf9cc` show 46
+Fail, every one a `GL_BGRA_EXT` renderbuffer case of entry 21 (`fbo`). The
+Pi 4 does not show 0 Fail: rows 0-14 at `20a48791` have the same 46 (section
+A, Pi 4); rows 15-28 were not run at that commit, so no Pi 4 whole-tree total
+exists there. The Pi 4's last whole tree, `d56e79e5`, read 0 Fail. The 46
+come from `8bbf9ba2` (`renderbuffer_format_advertised`,
+`src/gl/framebuffer.rs`, names `GL_BGRA8_EXT` but not `GL_BGRA_EXT`), which
+is an ancestor of `20a48791`, `cd738b1a` and `835cf9cc` and not of
+`d56e79e5`, `63efed8e` or `c345ab74`. So every zero reading is of a commit
+**before** `8bbf9ba2`; the rule is not per GPU, and the AM62P is expected to
+show the same 46 names at a tip that has it, until the one-line fix lands.
+`tools/cts/tree-diff.py` and `tools/cts/es2-accepted.txt` are in the tree,
+but the per-case result files of these records (`records/...`) are not
+committed, so "per case against the mustpass list" below is by the names
+the records give (section C, the accepted NotSupported / warning buckets;
+the 34 NotSupported names are the ones `es2-accepted.txt` lists); no tool
+output is cited.
 
-Superseded readings follow (before the final trees):
+Earlier rows of this table (2026-10-10 and 10-11), kept as the record:
 
-| Board | Last full tree before the final ones | Date | Pass | Fail | NotSupported | QualityWarning |
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+| Board | Last full tree | Date | Pass | Fail | NotSupported | QualityWarning |
 |---|---|---|---:|---:|---:|---:|
 | AM62P (PowerVR) | `32778b57` | 2026-10-10 | 17,070 (was 17,141 at `d60b9d76`) | 54 (was 0) | 34 (was 19) | 7 (5 QualityWarning, 2 CompatibilityWarning) |
 | i.MX8MP (GC7000) | `32778b57` | 2026-10-10 | 17,112 to 17,116 | 0 | 30 to 34 | 19 |
@@ -160,8 +162,9 @@ in board-session and investigation documents that are merged in this tree
 historical inventory of 2026-10-07; the Summary and Status tables above
 already carry the origin/main readings of 2026-10-10 and 10-11.
 
-<<<<<<< HEAD
-**Within round 1 no board had a final tree.** A final tree is a whole-tree
+**Within round 1 no board had a final tree** (superseded by the final
+trees of 2026-10-12 to 10-14: the Summary and the section "Final trees"
+below). A final tree is a whole-tree
 run of one origin/main tip that closes the plan. The i.MX8MP read 0
 failures on two commits (`334d4e65`, `32778b57`); that is a reading, not a
 final tree. The records written after round 1 (2026-10-12 to 10-14) are
@@ -169,17 +172,6 @@ in "After round 1" below; they include a 0-fail whole tree of one commit
 for each board, and a later regression (46 `GL_BGRA_EXT` cases). No board
 has a 0-fail tree of a commit that carries `8bbf9ba2`, so this file makes
 no zero-failure claim for the current main.
-=======
-**Superseded by the final trees (2026-10-14, see the Summary and the
-section "Final trees" below).** At the time of this round no board had a
-recorded final tree. A final tree is a whole-tree run of
-one origin/main tip that closes the plan. The only final-tree record in this
-tree, `docs/board-sessions/pi4-es2-final.md`, ran nothing. So this file
-makes no zero-failure claim for any board. The i.MX8MP reads 0 failures on
-two commits (`334d4e65`, `32778b57`); that is a reading, not a final tree.
-`am62p-es2-final.md`, `imx8mp-es2-final.md` and `pi4-es2-tip-r2.md` are not
-in this tree and are not cited.
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
 
 ### Per board: what ran
 
@@ -262,8 +254,9 @@ cases and the 45 `texture.vertex.2d.*` (AM62P, `63efed8e`); the 2 ms4
 `20a48791`); depth_component24 and the fragdata NotSupported (i.MX8MP
 `c345ab74`, fbo 711 / 711); the 25 Pi 4 cube cases, the 27 `fbo` combinations
 (Pi 4 `d56e79e5`; rows FB1 and T1-T4 at `20a48791` pass apart from the BGRA
-cases). Open: the 46 `GL_BGRA_EXT` renderbuffer cases at `20a48791` (Pi 4;
-expected on the AM62P and i.MX8MP at any tip with `8bbf9ba2`); Pi 4 rows
+cases). Open: the 46 `GL_BGRA_EXT` renderbuffer cases at `20a48791` (Pi 4)
+and at `cd738b1a` and `835cf9cc` (i.MX8MP entry 21; expected on the AM62P
+at any tip with `8bbf9ba2`); Pi 4 rows
 15-28 at `20a48791`; AM62P gl_test 198 / 197 / 171 (not run).
 Accepted (section C), unchanged on all three boards: NotSupported 34 at 1x
 (`clip_control` 8, `multisample` 16, `multisampled_render_to_texture.readpixels`
@@ -321,19 +314,11 @@ TALLY or total.
 
 ### AM62P (PowerVR BXS-4-64)
 
-<<<<<<< HEAD
-- Latest (2026-10-15): `63efed8e`, 2026-10-12, 17 images and the ms4 image:
-  1x **17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1
-  CompatibilityWarning**; with the ms4 image (16 / 0) **17,141 / 0 / 18 / 5
-  / 1**. Every image complete, 0 GPU resets
-  (`docs/board-sessions/am62p-es2-final-r2.md`). Nothing ran at `cd738b1a`
-  (`docs/board-sessions/am62p-es2-final.md`). The rows below are earlier.
-- Was latest: `32778b57`, 2026-10-10, 17 images and the ms4 image
-=======
-- **Final tree: origin/main `63efed8e`, 2026-10-12, 17 images and the ms4
-  image, boot `uboot-mmc`** (record `docs/board-sessions/am62p-es2-final-r2.md`,
-  `ca56dbc`; the final-a/final-b sessions `am62p-es2-final.md`, `146f856`,
-  ran nothing and cite it). 1x: 17,165 mustpass cases, **17,125 pass / 0 fail
+- **Final tree (latest, 2026-10-15): origin/main `63efed8e`, 2026-10-12, 17
+  images and the ms4 image, boot `uboot-mmc`** (record
+  `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`; the final-a/final-b
+  sessions `am62p-es2-final.md`, `146f856` and `2e9ef7b7`, built images at
+  `cd738b1a`, ran nothing and cite it). 1x: 17,165 mustpass cases, **17,125 pass / 0 fail
   / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning**; every
   image complete, 0 GPU resets. ms4: **16 pass / 0 fail**. Combined (ms4
   replaces the 16 1x `multisample.*`): **17,141 pass / 0 fail / 18
@@ -347,9 +332,8 @@ TALLY or total.
   port 32 gave `verdict=empty`. Not run: gl_test 198, 197, 171 (no console,
   ssh refused: `am62p-es2-final.md`), so those three have no final reading.
   Caveat: `63efed8e` does not contain `8bbf9ba2` (see the Summary), so this
-  tree does not cover the `GL_BGRA_EXT` rule.
-- Latest: `32778b57`, 2026-10-10, 17 images and the ms4 image
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+  tree does not cover the `GL_BGRA_EXT` rule. The rows below are earlier.
+- Was latest: `32778b57`, 2026-10-10, 17 images and the ms4 image
   (`records/am62p/deqp-32778b57/full/`, `ms4/`): **17,070 pass / 54 fail / 34
   NotSupported / 5 QualityWarning / 2 CompatibilityWarning**, 0 resets, every
   case with a result. RESULTS.md, "AM62P: the whole dEQP-GLES2 tree on
@@ -381,7 +365,6 @@ TALLY or total.
 
 ### i.MX8MP (Vivante GC7000)
 
-<<<<<<< HEAD
 - Latest (2026-10-15): `835cf9cc`, 2026-10-14, 29 entries: `TALLY (29
   entries): begun 17,371, passed 17,272, failed 46, notsup 34, other 19,
   noresult 0` (`tools/cts/RESULTS.md`). The same 46 at `cd738b1a`, two
@@ -389,12 +372,10 @@ TALLY or total.
   `GL_BGRA_EXT` renderbuffer cases in entry 21 (`fbo`); every other entry
   equals the earlier trees. Before that: `c345ab74`, 2026-10-12, `failed 0`,
   the rest as below (`docs/board-sessions/imx8mp-es2-final-r2.md`).
-- Was latest: `32778b57`, 2026-10-10, the 29 selectors
-=======
-- **Final tree: origin/main `c345ab74`, 2026-10-12, the 29 entries, image
+- **Last 0-fail tree: origin/main `c345ab74`, 2026-10-12, the 29 entries, image
   `deqp-c345ab74` sha256 `c4d409ab8515d0c3`, boot `uboot-mmc`** (record
-  `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`; the earlier
-  `imx8mp-es2-final.md` was blocked after the build and has no results).
+  `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`; the later
+  `imx8mp-es2-final.md` session at `cd738b1a` is the 46-fail reading above).
   `TALLY (29 entries): begun 17371 passed 17318 failed 0 notsup 34 other 19
   noresult 0`; every row `rc=0 verdict=done`; `results.tsv` byte-identical to
   `tools/cts/imx8mp-full-tree-29460f96.results.tsv` (29 of 29 entries
@@ -405,8 +386,7 @@ TALLY or total.
   5). Entry 21 fbo 711 / 711; entry 2 shaders 1,512 / 1,512; entry 10
   `texture.completeness` 40 / 40; entry 22 237 pass / 9 NotSupported.
   Caveat: `c345ab74` does not contain `8bbf9ba2`.
-- Latest: `32778b57`, 2026-10-10, the 29 selectors
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+- Was latest: `32778b57`, 2026-10-10, the 29 selectors
   (`records/imx8mp/deqp-32778b57/full`): the same numbers as `d8583f20` below,
   selector by selector (diffed, 29 of 29). RESULTS.md, "i.MX8MP: the whole
   dEQP-GLES2 tree on Zephyr at origin/main `32778b57`: 0 fail (2026-10-10)".
@@ -436,17 +416,6 @@ TALLY or total.
 
 ### Raspberry Pi 4 (V3D 4.2)
 
-<<<<<<< HEAD
-- Latest whole tree (2026-10-15): `d56e79e5`, 2026-10-12, all 29 rows from
-  one commit: **17,127 pass / 0 fail / 34 NotSupported / 3 QualityWarning /
-  1 CompatibilityWarning**, every row complete, 0 resets
-  (`docs/board-sessions/pi4-es2-final-r2.md`). `40dd2107` reads the same
-  (`docs/board-sessions/pi4-es2-r1-tip.md`). Newer, partial: rows 0-14 on
-  `20a48791`, 2026-10-14: 11,877 / **46** / 25 / 3 / 2 of 11,953, the 46
-  `GL_BGRA_EXT` cases (`docs/board-sessions/pi4-es2-final.md`). The
-  composed reading below is earlier.
-- Was current: **17,126 pass / 0 fail / 34 NotSupported / 5 warnings of 17,165**
-=======
 - **Final tree, rows 0-14 only: origin/main `20a48791`, 2026-10-14**
   (record `docs/board-sessions/pi4-es2-final.md`, `1344748`, item
   `pi4-es2-final-a`; images report `V3D_BUILD=20a48791`, tryboot, console
@@ -470,10 +439,10 @@ TALLY or total.
   `multisample.*` 16, `multisampled_render_to_texture.readpixels` 1,
   `negative_api.texture.compressedtexsubimage2d_*` 9,
   `rasterization.interpolation.{basic.lines,projected.lines,
-  projected.lines_wide}`, `flush_finish.flush`. This replaces the composed
+  projected.lines_wide}`, `flush_finish.flush`. `40dd2107` reads the same
+  (`docs/board-sessions/pi4-es2-r1-tip.md`). This replaces the composed
   three-record row below.
-- Current: **17,126 pass / 0 fail / 34 NotSupported / 5 warnings of 17,165**
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+- Was current: **17,126 pass / 0 fail / 34 NotSupported / 5 warnings of 17,165**
   (2026-10-10 and 10-11; sweep 30 below was 17,075 / 25 / 62 / 3). Three
   records, all on main builds:
   - the whole tree on `a27d69c0` (`records/pi4/deqp-a27d69c0/full/`, tally
@@ -797,17 +766,14 @@ Missing from the repository (so not in this file):
   only committed per-entry result file.
 - The exact name of the NotSupported case in `shaders.fragdata.*` on `72d16864`
   (it is in `records/imx8mp-tree/c3-shaders-72d16864`, gitignored).
-<<<<<<< HEAD
 - A whole tree of one commit that carries `8bbf9ba2` with 0 fail, on any
-  board (see "Not yet measured in round 1"). Was (2026-10-11): a whole tree
-  of one commit for the Pi 4 and a current tree for the AM62P; both now
-  exist (`d56e79e5`, `63efed8e`).
-=======
-- A whole Pi 4 tree at a tip that has the `GL_BGRA_EXT` fix (rows 0-14 at
-  `20a48791` have 46 Fail; rows 15-28 not run there), and AM62P and i.MX8MP
-  trees at a tip that contains `8bbf9ba2` (their final trees, `63efed8e` and
-  `c345ab74`, predate it).
->>>>>>> 2e66693777308d06035cf19ac92b45ad5b551655
+  board (see "Not yet measured in round 1"): a whole Pi 4 tree at a tip that
+  has the `GL_BGRA_EXT` fix (rows 0-14 at `20a48791` have 46 Fail; rows
+  15-28 not run there), an i.MX8MP tree at that tip (46 Fail at `cd738b1a`
+  and `835cf9cc`), and an AM62P tree at a tip that contains `8bbf9ba2` (its
+  final tree, `63efed8e`, predates it). Was (2026-10-11): a whole tree of one
+  commit for the Pi 4 and a current tree for the AM62P; both now exist
+  (`d56e79e5`, `63efed8e`).
 - A full-tree run on the i.MX8MP that repeats the same image several times to
   measure how often #9 and #25 flip a dEQP case. (`cd738b1a` ran twice with
   identical results; that is one data point.)

@@ -93,7 +93,7 @@ There is no released version yet; everything below is unreleased.
   - AM62P, `63efed8e`: 17,141 pass / 0 fail / 18 not supported / 6 warnings (17 images at 1x 17,125 / 0 / 34; the 4x multisample image 16 / 0). The accepted not supported: `clip_control` 8, `multisample` 16 at 1x, `multisampled_render_to_texture.readpixels` 1, `negative_api.texture.compressedtexsubimage2d_*` 9.
   - i.MX8MP, `c345ab74`: 17,318 pass / 0 fail / 34 not supported / 19 quality warnings of the 17,371 cases run (206 are outside the list); the same accepted not supported buckets.
   - Raspberry Pi 4: not zero. `20a48791` rows 0-14: 11,877 pass / 46 fail / 25 not supported; the 46 are `GL_BGRA_EXT` renderbuffer cases (`fbo.completeness.renderable.renderbuffer.{color0,depth,stencil}.bgra`, 43 `fbo.render.*.rbo_bgra*`) broken by 8bbf9ba2; rows 15-28 have not run at that commit. The last whole tree, `d56e79e5`, had 17,127 pass / 0 fail / 34 not supported / 4 warnings.
-  - The AM62P and i.MX8MP commits predate 8bbf9ba2; the BGRA fix and a re-run at the new tip are pending.
+  - The AM62P and i.MX8MP commits predate 8bbf9ba2; the i.MX8MP reads the same 46 `GL_BGRA_EXT` failures at `cd738b1a` and `835cf9cc` (17,272 pass / 46 fail). The BGRA fix and a re-run at the new tip are pending.
 - `glGetUniform*` of a `mat2x3`, `mat2x4`, `mat3x4` or `mat4x3` reads its own values instead of the wrong dwords (b0c0fa6b).
 
 #### PowerVR (TI AM62P)
