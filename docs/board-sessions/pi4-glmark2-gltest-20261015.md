@@ -34,6 +34,31 @@ score and no gl_test result. Every item of the session is still open:
    from `aed962e2`. With 1 and 2 also in the way, the images could not have
    run anyway.
 
+### Retry once the permissions were granted (10:03 to 10:10 UTC)
+
+- `ask_farm` was allowed this time. The farm's notes give the Pi 4's Linux
+  login as the resource `pi4-elegance` (`tailscale_direct`), and the console
+  as a TCP bridge port on the `usb1` node. One node's notes have the bridge
+  port; the other two do not. The lease was now on `pi4-elegance`
+  (exclusive).
+- **ssh to the Pi's Linux login: `Connection timed out` on port 22,
+  three times** (10:03, and twice more within the next few minutes).
+  Exit 255, 0 bytes. One node's access record already calls `pi4-elegance`
+  unreachable from this worker.
+- **The console bridge, from the farm's notes: accepted.**
+  `python3 -I tools/am62p_netboot_uart.py probe <bridge>` exited 0, so the
+  bridge is not busy and did not close. A 20 s read with the socket open:
+  **0 bytes**. That is expected while the board idles in Linux
+  (`pi4-console-probe.md`), but with no ssh the marker test
+  (`echo ... > /dev/serial0`) could not be made. Whether the board is up at
+  all is unknown.
+- `git worktree add` was refused again. With the board unreachable, no
+  image was built by any other route.
+
+So the blocker is the same: **the Pi 4's Linux does not answer ssh from
+this worker.** `board.sh pi4 run` needs it for the lock pre-checks, staging
+and `tryboot`.
+
 Board state: not touched. No image or `tryboot.txt` was staged, no reboot
 was made and the board lock was never taken, so nothing needs cleaning up.
 Whether an earlier run left files on the boot partition was not checked,
@@ -54,6 +79,7 @@ image).
   `occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb`, 205 `mappbo` one at a
   time, and 199 to 201 where the V3D runs them.
 
-What the next session needs: a lease that includes the Pi 4's own ssh
-login, as well as the bridge, plus `BOARD_UART` set on the worker or
-`ask_farm` allowed, and permission for `git worktree add`.
+What the next session needs: a worker that reaches the Pi 4's Linux login
+over ssh (or someone to check that the board is powered and on the
+tailnet), `BOARD_UART` set on that worker to the Pi's bridge (not the
+AM62P's), and permission for `git worktree add`.
