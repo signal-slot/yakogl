@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `ddec9bd9` (2026-10-15). The numbers below are read from
+main is `65b38531` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -99,6 +99,20 @@ The NotSupported 34 are the same on the three boards: `clip_control` 8,
 `negative_api.texture.compressedtexsubimage2d_*` 9,
 `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (the
 1x config; the AM62P measures them on its ms4 image).
+
+dEQP-GLES2 and the common set at main `e3749a25` (2026-10-15, U-Boot from
+eMMC, `tools/board.sh`; `tools/cts/RESULTS.md`, the 2026-10-15 section):
+
+- AM62P: whole tree 17,124 pass / **0 fail** / 34 NS / 5 QW / 2 CW, 0
+  resets; ms4 16 / 0 (combined with the 1x tree 17,140 / 0 / 18 / 5 / 2).
+  Common set 5 of 5 rows done, 0 resets: glmark2 462, 33 scenes, 0 failed, 0
+  GL errors, no render pool exhaustion; gl_test 50 of 50; cluster 73.2 fps at
+  1024x600.
+- i.MX8MP: whole tree begun 17,371 / pass 17,318 / **0 fail** / 34 NS / 19
+  other, 0 resets (equal to `c345ab74`); the 46 `GL_BGRA_EXT` failures are
+  gone (#828, entry 21 711 / 711). Common set: gl_test 48 of 49 (case 44,
+  #6); every other row done, 0 resets.
+- Pi 4: not run at `e3749a25` (the board is off the network).
 
 Stage 2 benchmark audit (2026-10-15, main `548860df`):
 `docs/investigations/stage2-bench-gap.md` is the board x benchmark table for
@@ -793,6 +807,12 @@ es3-vertex).
      toolchain file, no aarch64-none-elf GCC, 17 to 50 GB of disk. The README
      names two open `ignore = "BUG` pins; one (`tests/gc_npot_repeat.rs`) may
      not be listed here.
+   - #867 (opened): the board lock is per host, so runs from two hosts used
+     one board at once; and the farm's resource registry named the wrong
+     serial bridge port for the AM62P console (corrected in the registry;
+     AM62P rows on the wrong port read `empty` with 0 console bytes).
+   - #205: fixed on the i.MX8MP by #828 (board-read); the Pi 4 reading is
+     open.
    - Pi 4 GLES3 tree session (board-pi4) not run: its worker could not resolve
      `elegance-1` (`Could not resolve hostname`) and had no `BOARD_UART` /
      `BOARD_HDMI_TIMINGS`; the deps cache has the gles3 stage 1 but no gles2
@@ -1211,6 +1231,9 @@ es3-vertex).
      The board is open: see "Waiting for a board". The old scope of
      `am62p-es2-r1c` (images 8 to 17, ms4, gl_test) is not repeated; its
      record is `tools/cts/log/board-sessions/am62p-es2-r1c.md`.
+   - ES 2.0 sign-off (#870): merge #866 (case 44 on the i.MX8MP, 49 of 49 in
+     two runs), run the Pi 4's whole tree and common set once the board is
+     back, then one pass on all three boards at the main commit after #866.
    - Follow-up for a `src/` change: `build_tex_desc` is private, so the test
      derives the texture words from the bind. Exposing it under `host-test`
      would let the test compare the real words.
@@ -1289,7 +1312,11 @@ es3-vertex).
    - glmark2: the score passes, but terrain and shadow run out of GPU memory
      and refract raises `framebuffer 1 incomplete` ("Known defects"), so #1
      and #2 are not closed on this board. Fix the render pool (or the order
-     of allocations); the `pvr-pool-npot` replay item is the host side.
+     of allocations); the `pvr-pool-npot` replay item is the host side. At
+     `e3749a25` (2026-10-15) the AM62P glmark2 scored 462 with no render pool
+     exhaustion, but terrain, shadow and refract run at 1.47 s, 0.38 s and
+     2.08 s a frame, with 8 "fence ... not moved at 20 ms, re-posted 1
+     kick(s)" lines (#1, #2; performance step).
    - SV returned no console bytes: repeat it once to tell a boot or bridge
      flake from a real failure.
    - The dEQP-GLES3 sRGB/formats rows are done on the AM62P except images 20
