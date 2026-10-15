@@ -2458,8 +2458,9 @@ unsafe fn tex_image_2d(
     } else {
         /* A mip level. ES 2.0 3.7.1 has ONE error for it: without
          * GL_OES_texture_npot, a level above 0 that is not a power of two
-         * (dEQP texture.completeness.2d.npot_size expects it; NPOT_RESTRICTED,
-         * which no build is any more). A level that
+         * (NPOT_RESTRICTED, which no build is any more: dEQP
+         * texture.completeness.2d.npot_size expects GL_NO_ERROR when the
+         * extension is listed). A level that
          * does not fit the chain the base level laid out is no error in
          * either version: it is recorded, gets no storage, and leaves the
          * texture incomplete while it stands (3.7.10 / ES 3.0 3.8.13). Until
@@ -7518,8 +7519,9 @@ mod tests {
     }
 
     /// ES 2.0 3.7.1 without GL_OES_texture_npot: a level above 0 that is not
-    /// a power of two is GL_INVALID_VALUE (dEQP texture.completeness's
-    /// npot_size expects it; NPOT_RESTRICTED). With the extension, as in ES
+    /// a power of two is GL_INVALID_VALUE (NPOT_RESTRICTED; dEQP
+    /// texture.completeness's npot_size expects GL_NO_ERROR, since the
+    /// extension is listed). With the extension, as in ES
     /// 3.0, the level is accepted: on this PowerVR-shaped mock it lays the
     /// chain out as the 8x8 one (`pot_chain_layout`) and its texels land at
     /// level 1's power-of-two pitch; one of another size than GL's chain is
@@ -11961,8 +11963,8 @@ mod tests {
     /// An 8x8 cube map's whole chain, as dEQP's IncompleteCube*Case builds
     /// one: level by level, the six faces in dEQP's order; `spec(face,
     /// level)` gives each image's side and format. The error of each call is
-    /// not looked at (under ES 2.0 reporting a NPOT level above 0 is
-    /// GL_INVALID_VALUE, which dEQP expects too). True when complete.
+    /// not looked at (with GL_OES_texture_npot listed, a NPOT level above 0
+    /// is GL_NO_ERROR, which is what dEQP expects). True when complete.
     fn cube_chain_is_complete(gl: &TestGl, spec: impl Fn(usize, i32) -> (GLsizei, GLenum)) -> bool {
         let cube = bind_new(GL_TEXTURE_CUBE_MAP);
         let px = solid(64, 9);
