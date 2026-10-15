@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `e26f951d` (2026-10-15). The numbers below are read from
+main is `e1497f42` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -54,6 +54,21 @@ Per-case detail: `docs/es2-cts-failures.md` (ES 2.0) and
 `tools/cts/RESULTS.md`. The short status in Japanese: `tools/cts/STATUS.md`.
 All three boards boot standalone from eMMC (the two Verdins, U-Boot) or SD
 (Pi 4): `docs/standalone-boot.md`.
+
+Gate and docs (2026-10-15):
+
+- main `81bffb65` failed `tools/check.sh --quick` (116 ok, 5 failed, 0 gaps)
+  since `7e8c0b37` (#787): `tests/es3_caps.rs` and `tests/es3_blit_ds.rs`
+  lacked the `YakoglBackend` fields `generate_mipmap` and
+  `return_mipmap_chain`. Fixed (both set to `None`).
+- `tools/check.sh` stops with exit 2 and names what to install when cargo,
+  rustfmt or clippy is missing, instead of failing every row.
+- `ccfarm/integration` (117 ahead, 775 behind main) has nothing left to
+  land: `docs/investigations/main-landing-audit.md`.
+- README.md carries the ten findings of `docs/release/readme-walkthrough.md`
+  (now marked fixed; its Status tables are unchanged). CONTRIBUTING.md step 1
+  of "How a change reaches main" says an untracked file outside the ignored
+  paths widens the `--changed` scope to all (finding N10). No script changed.
 
 ### ES 2.0, per board
 
@@ -686,6 +701,12 @@ es3-vertex).
      firmware right after reading that file (last line `brfs: File read: 210
      bytes`, no kernel load): the likely cause, not a proven one. Fix:
      `ccfarm env set yakogl BOARD_HDMI_TIMINGS '<the 17 fields>'` on that node.
+   - README commands not run (`548860df`): the cross build, bare-metal and
+     compare.sh commands were checked by reading the sources and running
+     `python3 tools/api_coverage.py` (304 names, source fallback) only; no
+     toolchain file, no aarch64-none-elf GCC, 17 to 50 GB of disk. The README
+     names two open `ignore = "BUG` pins; one (`tests/gc_npot_repeat.rs`) may
+     not be listed here.
    - Pi 4 GLES3 tree session (board-pi4) not run: its worker could not resolve
      `elegance-1` (`Could not resolve hostname`) and had no `BOARD_UART` /
      `BOARD_HDMI_TIMINGS`; the deps cache has the gles3 stage 1 but no gles2
@@ -1088,12 +1109,13 @@ es3-vertex).
      `cargo test` rows pass; `--quick` is clean (119 ok, 0 failed, 0 gaps,
      236 s) only with `MESA_V3D_TREE` unset, otherwise 2 rows fail. The full
      gate was not re-run. CONTRIBUTING.md says so and names the `env -u` form.
-   - Line 6 (walkthrough): **partial**. README findings 1 to 10 are open
-     (steps 4 to 6 of its Building block fail as written), listed with line
-     and proposed text in the walkthrough doc; the item that holds README.md
-     (`pub-roadmap`) applies them. The line becomes met when they are applied
-     and a `tools/` item makes `--quick` exit 0 with `MESA_V3D_TREE` set to a
-     tree without `build-v3d`.
+   - Line 6 (walkthrough): **partial**. README findings 1 to 10 are fixed
+     (`548860df`, `docs/release/readme-walkthrough.md`). Still open: N9
+     (`MESA_V3D_TREE` without `build-v3d` fails `tools/check.sh --quick`;
+     it belongs to item gate-v3d-tree-gap) and N8 (docs-only change "runs two
+     rows" in CONTRIBUTING.md:16, untouched). The line becomes met when a
+     `tools/` item makes `--quick` exit 0 with `MESA_V3D_TREE` set to a tree
+     without `build-v3d`.
    - Licence audit (`docs/release/license-audit.md`): owner decision, headers
      or allowlist rules for the ~597 missing-spdx files; then switch check 25
      of `tools/cts/cts-selftest.sh` to `--strict` or a baseline.
