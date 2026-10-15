@@ -20,7 +20,7 @@ $ python3 -I tools/cts/imx8mp-gles3-gen.py | cmp - tools/cts/imx8mp-gles3-tree.t
 $ python3 -I tools/cts/check-deqp-images.py     # also checks the AM62P, Pi 4 and i.MX8MP GLES3 tables: OK
 ```
 
-## Environment (`D` = `$CCFARM_DEPS_DIR` = `/home/tasuku/.local/share/ccfarm/deps/yakogl`)
+## Environment (`D` = `$CCFARM_DEPS_DIR`)
 
 Values come from `tools/cts/deps-env.sh --check imx8mp` (all `ok`).
 
