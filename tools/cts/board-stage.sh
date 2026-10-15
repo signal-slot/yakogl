@@ -52,6 +52,11 @@ set -a
 eval "$(tools/cts/deps-env.sh "$layout")"
 set +a
 export RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN:-nightly}
+# every AM62P image needs the PowerVR firmware header, which is never
+# committed: copied from the layout as the CI gate copies it (gate.yml)
+if [ "$board" = am62p ] && [ ! -e driver/src/fw/pvr_fw_blob.h ]; then
+    mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/ || die "cannot copy PVR_FW_BLOB ($PVR_FW_BLOB) to driver/src/fw/"
+fi
 
 # the board, from the leases when not given
 ssh_var=RESOURCE_${key}_SSH
