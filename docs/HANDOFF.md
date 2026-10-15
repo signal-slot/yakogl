@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `cb93f638` (2026-10-15). The numbers below are read from
+main is `e26f951d` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -83,6 +83,41 @@ The NotSupported 34 are the same on the three boards: `clip_control` 8,
 `negative_api.texture.compressedtexsubimage2d_*` 9,
 `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (the
 1x config; the AM62P measures them on its ms4 image).
+
+Stage 2 benchmark audit (2026-10-15, main `548860df`):
+`docs/investigations/stage2-bench-gap.md` is the board x benchmark table for
+stage 2, with ten numbered items that close it (Open work item 10). glmark2
+pictures are not checked per scene today: no read-back or reference in
+`driver/samples/zephyr/glmark2/src/main.cpp`, and `glmark2_scenes()` of
+`tools/cts/common-tally.py` judges console error lines only.
+
+Pi 4 common set from the integration tip `3cc4b60a` (plan 18 item
+v3d-null-cpu, 2026-10-15): **built, started, no result**.
+`tools/cts/cts-common.sh pi4 build` gave rc=0 for GM, SO, SV, CL and GT, at
+`3cc4b60a` and again at `1e0c7566` (docs only on top); GM carries the 96 MiB
+carve-out and the 24 MiB tiled-copy budget and links (footprint 250,490,880
+bytes). The first row ended `board.sh pi4 GM rc=5 verdict=not_back
+boot=tryboot row boot_verdict=not_back result=none resets=0 record=absent`:
+the board hung in the firmware before the kernel, the chain stopped, and SO,
+SV, CL and GT did not run (`docs/board-sessions/pi4-common-int2.md`). No board
+figure changes: the README Status table keeps `| Raspberry Pi 4 | 183
+(2026-10-04) |`, and RESULTS.md and STATUS.md get no Pi 4 cell or section.
+When the session runs, the cells to write are: README
+`| Raspberry Pi 4 | <score> (`<HEAD8>`, <date>) |`; a RESULTS.md section `##
+Pi 4 common set from the integration tip <HEAD8> (<date>)` with the five
+verdict lines, the common-tally output and the per-scene glmark2 table of the
+session doc; a STATUS.md line under 「ひとことで」: `- **Pi 4: 共通セット（<HEAD8>、<date>、tryboot、records/pi4/common-<HEAD8>）。** glmark2 は <score>（33 シーン、失敗 <n>、carve-out 96 MiB、refract と terrain のメモリ不足の行 <n>）、SO / SV / CL のプローブは <合格|不合格>、GT は <p> / <n>。全行でリセット <n>。`
+
+Pi 4 GLES3 tree session (board-pi4, main `4a4fad60`): not run, no code
+changed; the baseline is still the 7 images of `cd738b1a`.
+
+Licence gate (stage 3, 2026-10-15): `tools/cts/cts-selftest.sh` has three new
+checks, run by `tools/check.sh` through its existing cts-selftest step: 23
+`tools/cts/tree-diff-selftest.sh` (17 checks pass at the tip); 24 `python3
+-I tools/license_audit.py --self-test` (2 fixture checks); 25 the audit in
+report mode over the repository, which fails on a crash or `unknown-id` > 0
+and prints `missing-spdx` (597 at `d2a07a33`). Broken fixtures make checks 24
+and 23 print FAIL.
 
 ### Waiting for a board
 
@@ -134,7 +169,23 @@ replace the `f2a13877` numbers of their groups: transform_feedback 882 / 882
 and ubo 1,099 / 1,099 pass (image 25 lost 51 result lines on `f2a13877`, none
 now); image 5 completes (1,662 cases; the capture no longer aborts it) with
 `occlusion_query` 62 / 62 pass; `fbo.blit.conversion` 325 pass / 0 fail / 112
-NotSupported; `fragment_ops.scissor` 26 / 26 pass. This section's whole-tree
+NotSupported; `fragment_ops.scissor` 26 / 26 pass. Rows 3, 4, 6, 18, 21, 22
+and a narrow fbo image re-run on `4e62d171` (2026-10-14; all `done`, 0
+resets, no fault line; section "Session 2: dEQP-GLES3 rows 3, 4, 6, 18, 21,
+22 and the fbo MMU watch (`4e62d171`)" of
+`docs/board-sessions/am62p-es3-gltest.md`; records
+`records/am62p/gles3-4e62d171` and `records/am62p/fbow-4e62d171`): row 3
+`fragment_ops.blend.fbo_srgb` passes **1,152 of 1,152** (1,106 failed at
+`c4ccc966`); image 5 is unchanged from `cd738b1a` (875 pass / 614 fail / 173
+NotSupported, 1,662 cases, complete); image 7 still stops at
+`shaders.builtin_functions.precision.clamp.highp_fragment.vec3`
+(`ResourceError`, `complete=0`, 594 / 41); image 19 235 / 413 / 24, image 22
+851 / 437 / 60 (+ 180 QualityWarning), image 23 852 / 871 / 0. The two
+reasons of `f2a13877`'s "736" (`GL_NO_ERROR` at
+`es3fTextureSpecificationTests`) and "522" (`Texture upload failed` at
+`gluTexture.cpp`) buckets no longer occur. fbo MMU watch: 17 cases,
+`fbo.completeness.size.distinct` and `fbo.depth.basic.*` pass, 0 fault
+lines. Images 20 and 21 (the 3D filtering GPU hang) were not run. This section's whole-tree
 row, RESULTS.md and STATUS.md stay as they are until a whole tree runs. The
 gl_test cases 196 `occl`, 200 `intrt`, 201 `usamp`, 202 `blitconv`, 203
 `tfcap`, 204 `srgb` and 205 `mappbo` are board-proven on the AM62P at
@@ -608,6 +659,37 @@ es3-vertex).
      the texels with that buffer. `glTexSubImage2D` of depth has the same
      gap today (`src/gl/texture.rs` `resolve_depth`: "Not the other way
      round"). The `ds_write` entry of blit-ds (item 4) closes both.
+   - sRGB cases that fail on the AM62P (`4e62d171`) besides the 12
+     `fragment_out.array.*srgb8_alpha8*` refused by name:
+     `texture.filtering.2d_array.formats.srgb8_alpha8_*` (6) and nine
+     `texture.specification` 3D / cube cases (`basic_teximage3d.srgb8_2d_array`,
+     `.srgb8_alpha8_2d_array`, `.srgb8_alpha8_3d`, `basic_texsubimage3d.srgb8_3d`,
+     `.srgb8_alpha8_3d`, `texstorage2d.format.srgb8_cube`, `.srgb8_alpha8_cube`,
+     `texstorage3d.format.srgb8_3d`, `.srgb8_alpha8_3d`); the 2D-array, 3D and
+     cube paths fail for every format, so this is the texture path, not sRGB.
+     The per-case records of `cd738b1a` and `f2a13877` are not on the machine
+     that ran the session: comparisons are by group only.
+   - AM62P SV returned 0 console bytes at `cd738b1a` (not repeated). The Slint
+     picture differs on the Pi 4 by one RGB565 step (crc16 312b vs c592).
+     Cluster crc16 values are not comparable across the three panel sizes
+     (`docs/investigations/stage2-bench-gap.md`).
+   - `docs/release/license-audit.md` tables still carry the `79c73ea` figures
+     (587 missing-spdx); the tip is 597 (`d2a07a33`). Re-measure when the
+     owner's decision is taken. Check 25 greps the report's `unknown-id:` /
+     `missing-spdx:` lines; a change of the report format makes it print FAIL
+     ("no ... line"), not pass silently.
+   - Environment, not driver: `system76`'s node-local `BOARD_HDMI_TIMINGS` for
+     this project is `1920x720`. The lab's value is the 17 fields `1920 1 50
+     44 50 720 1 10 20 50 0 0 0 60 0 99070000 1` (`tools/cts/README.md`; the
+     farm's other nodes have it). board.sh copies the value into `tryboot.txt`
+     as `hdmi_timings=`, and the `pi4-common-int2` GM tryboot stopped in the
+     firmware right after reading that file (last line `brfs: File read: 210
+     bytes`, no kernel load): the likely cause, not a proven one. Fix:
+     `ccfarm env set yakogl BOARD_HDMI_TIMINGS '<the 17 fields>'` on that node.
+   - Pi 4 GLES3 tree session (board-pi4) not run: its worker could not resolve
+     `elegance-1` (`Could not resolve hostname`) and had no `BOARD_UART` /
+     `BOARD_HDMI_TIMINGS`; the deps cache has the gles3 stage 1 but no gles2
+     stage 1 for `rpi_4b`.
 4. **ES 3.0, host first.** Goal 4. A proposed order, not a ranking anyone
    measured. Each item keeps every `report-es2` answer and adds a test that
    pins it. What each item built is in the ES 3.0 table above; here is what
@@ -1012,6 +1094,9 @@ es3-vertex).
      (`pub-roadmap`) applies them. The line becomes met when they are applied
      and a `tools/` item makes `--quick` exit 0 with `MESA_V3D_TREE` set to a
      tree without `build-v3d`.
+   - Licence audit (`docs/release/license-audit.md`): owner decision, headers
+     or allowlist rules for the ~597 missing-spdx files; then switch check 25
+     of `tools/cts/cts-selftest.sh` to `--strict` or a baseline.
    - Line 4 (SECURITY.md): unchanged; the contact and two other
      `TODO(owner)` lines are the owner's.
    - For a `tools/` item: `tools/check.sh:17` (`--quick` wording) and
@@ -1067,6 +1152,63 @@ es3-vertex).
      of allocations); the `pvr-pool-npot` replay item is the host side.
    - SV returned no console bytes: repeat it once to tell a boot or bridge
      flake from a real failure.
+   - The dEQP-GLES3 sRGB/formats rows are done on the AM62P except images 20
+     and 21 (hang) (`4e62d171`): the `texture.specification`, `fragment_out`
+     and `shaders.builtin_functions` buckets have run (numbers under "ES 3.0"
+     and in the group table of the session record). `builtin_functions` is
+     still 987 + 340 + 41 + 29 = 1,397 cases short because of image 7's
+     `ResourceError` (the general arena of 1 MiB; "Known defects").
+   - New host items from the `4e62d171` failures: `texture.filtering.2d_array`
+     (115 of 122 fail), `texture.mipmap.3d` (64 of 64),
+     `filtering.3d.combinations` (53 of 56), `texture.shadow.2d_array` (108 of
+     144), `texture.swizzle` (80 of 83), `texture.units` (120 of 159: 136
+     `sglrGLContext.cpp:863` compile failures), the cube/integer `Compile
+     failed at sglrGLContext.cpp:863` cases of `texture.specification` (354)
+     and the `fbo.depth.depth_test_clamp` / `depth_write_clamp` compile
+     failures (10).
+   - The panel stays black (backlight on) under a kexec'd yakogl (owner's
+     report, 2026-10-14); the U-Boot splash shows. Not settled: the red-fill
+     image ran on the board twice from hx90 (2026-10-15,
+     `tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md` and its
+     `-console.txt` record) and every register of the path on the board
+     equals the Linux dump except the allow-listed deviations and the
+     application plane being on; the DSI streams (VPOS advancing, no live
+     error), the bridge reads IRQ_STAT 0x00 with video flowing (the first such
+     reading), VP2 at 58.8 Hz with 0 underflows, and the image resets back
+     into Linux. The picture itself was not seen: the only camera on this
+     panel is on Lepton. Ruled out before that by the tree: the bridge's CSRs
+     equal Linux's i2cdump (again on the board), `tisci_power_on` is enabled
+     in every AM62P sample overlay and the bridge answered over I2C1, the
+     safety layer is zeroed/transparent at init. Candidates left, all below
+     the registers: the C-vs-Rust order and timing differences of the note's
+     table ((a) bridge EN after the DSI attach, (b) VID_VSIZE1 10/23/11, (c)
+     WAIT_BURST_TIME 4, (d) lanes after PLL_LCK, ...), or the owner's run
+     itself (a `HOLD_SECONDS=0` image resets at once). The instruments are in
+     the tree: `CONFIG_PVR_SAMPLE_DISPLAY_FILL` (known-colour fill of the
+     safety layer) and `CONFIG_PVR_SAMPLE_DISPLAY_DUMP` (the Linux dump's read
+     list with the counters and IRQ_STAT, before and after the hold), in both
+     sample routes.
+10. **Stage 2 closing items** (`docs/investigations/stage2-bench-gap.md`, 2026-10-15):
+    its ten numbered items, at the end of that file: per-scene picture value
+    in the image and tally, i.MX8MP per-scene evidence (no console), fps for
+    Slint and for Pi 4 / i.MX8MP, AM62P at 256 MiB (plan #149
+    am62p-common-carveout), AM62P SV repeat, terrain and refract on a board,
+    Slint Pi 4 fingerprint decision, cluster "same picture", one-commit README
+    table.
+11. **Pi 4 follow-ups** (2026-10-15):
+    - The 84 GLES3 images never run, gl_test 196 and 200 to 205, and the ES
+      2.0 regression rows: `docs/board-sessions/pi4-gles3.md` "To rerun".
+    - #4 and #5 (the Pi 4 glmark2 refract and terrain on the 96 MiB carve-out)
+      do not close from the common-set item (`pi4-common-int2`): GM never
+      reached Zephyr. The closest evidence is
+      `docs/board-sessions/pi4-common-int.md` (main snapshot `86be8aeb`,
+      2026-10-14): the carve-out boot line says 96 MiB, refract and terrain
+      print no memory refusal, GL errors are 0 and the score is 183. Decide
+      whether that run closes #4 and #5, or whether a run from the
+      integration tip is still needed.
+    - `board.sh` does not check the shape of `BOARD_HDMI_TIMINGS` (17
+      numbers): a check that refuses before the board is changed (rc=3)
+      would have stopped the `pi4-common-int2` run. Not done.
 
 ## Next board session
 
@@ -1215,6 +1357,24 @@ section 3, from an image rebuilt at the commit the board runs
 
 Still to run on the Pi 4:
 
+- first, **power-cycle the board** (it does not answer ssh since the 06:49
+  tryboot of 2026-10-15; tryboot is one-shot, so it comes back in Linux),
+  remove the leftover `/boot/firmware/yakogl-GM.bin` and put back the empty
+  `tryboot.txt` (`tools/board.sh pi4 status` shows both). Then the common
+  set from the integration tip, with `BOARD_HDMI_TIMINGS` set to the 17
+  fields, `BOARD_UART` (the debug probe's serial bridge, `host:port`) and
+  `BOARD_HOST`, using "Commands to rerun" in
+  `docs/board-sessions/pi4-common-int2.md`; the images at
+  `build/common/pi4-1e0c7566` (or a rebuild at the tip) are ready. Check the
+  GM boot line for `carve-out 96 MiB`, check refract and terrain for memory
+  and GL-error lines, compare the SO/SV crc16 with `c592` (fingerprint
+  `0xe7113010` reported by an unmerged run, unchecked), CL with `7b93` at
+  about 139.5 fps and GT with 12 of 12; if GT fails 2, 10 or 16, rerun GT
+  once;
+- the GLES3 tree: rebuild the images with `DEQP_MODULE=gles3`, run the tree
+  per `docs/es3-board-recipe-pi4.md` section 4, then gl_test and the ES 2.0
+  rows (the 84 images never run, gl_test 196 and 200 to 205:
+  `docs/board-sessions/pi4-gles3.md` "To rerun");
 - one whole GLES2 tree from one main commit, which replaces the composed
   row; `TREE_PREV=records/pi4/deqp-1cf946a9/rows` compares the six cube
   rows. Expected: 17,126 pass / 0 fail / 34 NotSupported / 5 warnings (3
@@ -1314,6 +1474,32 @@ GPU memory`; the tally's "GL errors raised" reads `15 or more` and does not
 name the scene. The console is the bridge's main_uart0 port, not the lease's
 mcu_uart0 port.
 
+The panel must be seen before any further AM62P display result is trusted.
+The black-panel diagnosis, from Lepton (the document camera, `/dev/video2`):
+build `gl_triangle` with `CONFIG_PVR_SAMPLE_DISPLAY_FILL=0xffff0000`,
+`CONFIG_PVR_SAMPLE_DISPLAY_DUMP=y` and `CONFIG_PVR_SAMPLE_HOLD_SECONDS=40`
+(the `west build` line in
+`tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`, "Board
+procedure"), kexec it and photograph the panel 15-20 s after the jump; the
+console side was already read on 2026-10-15 (registers equal to Linux's, DSI
+streaming, bridge clean) and only needs its `sn65dsi8x IRQ_STAT` and `dss
+stats` lines re-checked. Red panel: the path is fine; the owner's black panel
+is the application plane or the image/hold they ran, so repeat with the
+triangle alone (`DISPLAY_FILL=0`) and photograph it. Black panel: the fault is
+below the registers; bisect the note's table one line at a time ((a), (b)
+first), each change with its host tests, until the fill shows. Record the
+photos in the note.
+
+At `4e62d171` the machine environment's `BOARD_UART` was the main_uart0 port;
+`tools/am62p_netboot_uart.py probe` plus a raw read showing the `login:`
+prompt is how to confirm it before the first image. A gles3 stage 1 for the
+AM62P is not the `DEQP_WORK` the farm copies (that one is GLES2): build one
+with `tools/cts/cts-build-zephyr.sh MODULE=gles3` first.
+
+Stage 2: the AM62P common set at a commit containing `504d4fae`, SV repeated.
+Pi 4 and i.MX8MP: nothing for stage 2 until the picture check of item 1 of
+`docs/investigations/stage2-bench-gap.md` exists.
+
 dEQP-GLES2: image 9 (`TREE_ROWS=8`) confirms the 45 `texture.vertex.2d.*`
 cases (`a6fc6f14`); then the whole tree and the ms4 image replace the
 `32778b57` row.
@@ -1380,8 +1566,9 @@ with an integer attachment beside another stay refused by name.
 
 ES 3.0 sRGB (`docs/es3-srgb.md`): gl_test 204 passes (above). The dEQP-GLES3
 rows of `tools/cts/am62p-gles3-tree.txt` that hold sRGB cases have not run
-beyond rows 1, 2 and 4: run `TREE_ROWS=1-4,18,19,21,22` minus those, against
-the `c4ccc966` records (`records/am62p/deqp-gles3-c4ccc966`):
+beyond rows 1, 2 and 4 and (`4e62d171`) 3, 6, 18, 21 and 22 (row 3 passes
+1,152 of 1,152): only row 19 and the images 20 and 21 (hang) are left; the
+command below was `TREE_ROWS=1-4,18,19,21,22`, against the `c4ccc966` records (`records/am62p/deqp-gles3-c4ccc966`):
 
 ```sh
 DEQP_MODULE=gles3 DEQP_WORK=<gles3 stage 1> \
