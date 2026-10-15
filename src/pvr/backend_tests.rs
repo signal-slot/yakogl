@@ -4592,13 +4592,12 @@ fn a_pds_program_the_frame_already_holds_is_pointed_at_not_uploaded() {
 /// A multisampled frame split in two (a full arena, the draw cap, glFinish)
 /// must keep its samples: the GL's multisample buffer survives a flush. The
 /// backend resolves a 4x frame on its end-of-tile store (PBE `downscale`)
-/// and the next kick opens with the colour-load quad, which samples the
-/// resolved target once per pixel and writes that colour to all four
-/// samples: a sample the frame's later draws leave uncovered holds the
+/// and the next kick opens with the colour-load quad, which used to sample
+/// the resolved target once per pixel and write that colour to all four
+/// samples: a sample the frame's later draws leave uncovered held the
 /// average, not its own colour. Correct is a reload of each sample from a
 /// store of each sample: the load quad runs per sample.
 #[test]
-#[ignore = "BUG: a split 4x frame reloads its resolved colour into every sample (docs/HANDOFF.md, known defects, pvr-msaa-split)"]
 fn a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour() {
     let rig = Rig::new();
     with_platform(|p| p.kick_usc_rates.clear());
@@ -4612,6 +4611,169 @@ fn a_split_multisampled_frame_reloads_each_sample_not_the_resolved_colour() {
     let load = heap_off_of(rig.b().fbload_fs.gpu) as u64;
     let rates: Vec<u32> = with_platform(|p| p.kick_usc_rates.iter().filter(|r| r.0 == load).map(|r| r.1).collect());
     assert_eq!(rates, [PDS_DOUTU_SAMPLE_RATE_FULL], "the second kick's load quad");
+}
+
+/// PBE REG_WORD0.downscale (pbestate.xml:255): the emit resolves the samples.
+const PBE_WORD0_DOWNSCALE: u64 = 1 << 56;
+
+/// The sample rates the load program ran at, in kick order.
+fn load_rates(rig: &Rig) -> Vec<u32> {
+    let load = heap_off_of(rig.b().fbload_fs.gpu) as u64;
+    with_platform(|p| p.kick_usc_rates.iter().filter(|r| r.0 == load).map(|r| r.1).collect())
+}
+
+/// The texture descriptor the most recent draw DMA'd (sh0..): the first
+/// common-store kick, at destination 0, at least one descriptor long.
+fn last_desc_word(rig: &Rig, dword: u64) -> u32 {
+    let kicks = rig.dma_kicks();
+    let last = kicks.last().expect("a draw with a common-store DMA");
+    let (addr, _, _) =
+        *last.iter().find(|k| k.2 == 0 && k.1 >= TEX_DESC_DWORDS).expect("a texture descriptor in the DMA");
+    rig.gpu_u32(addr + 4 * dword)
+}
+
+/// A 4x frame flushed before more drawing (glReadPixels, glFinish) stores
+/// its samples beside the resolved colour: the kick emits the attachment
+/// twice, resolved (`downscale`) into the target and unresolved into the
+/// sample store, from the same output registers, over the target's extent
+/// and pitch. The next kick's load quad binds the store as the target's
+/// multisampled image (TEXSTATE_IMAGE_WORD0 `smpcnt` = log2 4) with the
+/// same program, at the full sample rate, and that kick stores the samples
+/// again: the frame may go on once more.
+#[test]
+fn a_4x_kick_before_a_readback_stores_its_samples_and_the_next_kick_loads_them() {
+    let rig = Rig::new();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let store = rig.b().ms.mem.gpu;
+    assert_ne!(store, 0, "the sample store was allocated");
+    assert_eq!(rig.b().ms.mem.size, 4 * 64 * 64 * 4, "four RGBA8 images' worth");
+    let (k, _) = rig.kicks()[0].clone();
+    assert_eq!(k.frag.num_rt, 2, "the resolved target and the samples");
+    let e = rig.eot_emits()[0].clone();
+    assert_eq!(emit_address(e[0], e[1]), d.target_gpu);
+    assert_eq!(emit_address(e[2], e[3]), store);
+    assert_eq!((e[3] >> 14) & 3, (e[1] >> 14) & 3, "the samples from the target's output registers");
+    assert_eq!((e[3] >> 16) & 7, 1, "mrt_index 1");
+    assert_eq!((e[3] >> 7) & 0x3f, (e[1] >> 7) & 0x3f, "the target's pack mode");
+    assert_ne!(k.frag.pbe_word[0][0] & PBE_WORD0_DOWNSCALE, 0, "the target takes the resolved colour");
+    assert_eq!(k.frag.pbe_word[1][0] & PBE_WORD0_DOWNSCALE, 0, "the store takes every sample");
+    assert_eq!(k.frag.pbe_word[1][0], k.frag.pbe_word[0][0] & !PBE_WORD0_DOWNSCALE, "the same stride and layout");
+    assert_eq!(k.frag.pbe_word[1][1], k.frag.pbe_word[0][1], "over the target's extent");
+    assert!(rig.b().ms.holds(&d));
+    /* the owner report claims the store's bytes too */
+    let _ = rig.logs();
+    let kib = pvr_backend_pool_owners();
+    let live: usize = with_platform(|p| p.allocs.values().map(|a| a.size.div_ceil(4096) * 4096).sum());
+    assert_eq!(kib as usize * 1024, live, "the backend owner lines do not balance: {:?}", rig.logs());
+
+    /* the frame goes on: the store, bound as the target's 4x image */
+    d.do_clear = false;
+    assert_eq!(draw(&d), 0);
+    let ld = rig.fbload().load_draw;
+    assert_eq!(rig.b().frame_quads, 1, "the frame starts with the load quad");
+    assert_eq!(ld.fs_usc_gpu, rig.b().fbload_fs.gpu, "the same load program");
+    let t = ld.textures[0];
+    assert_eq!((t.base_gpu, t.width, t.height, t.stride_texels), (store, 64, 64, 64));
+    assert!(loads_samples(rig.b(), &ld));
+    assert_eq!(last_desc_word(&rig, 1) >> 30, 2, "smpcnt: log2 of 4 samples");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(load_rates(&rig), [PDS_DOUTU_SAMPLE_RATE_FULL], "each instance its own sample");
+    assert_eq!(rig.kicks()[1].0.frag.num_rt, 2, "stored again: the frame may go on once more");
+    assert!(rig.b().ms.holds(&d));
+
+    /* a frame that clears does not read them, and holds them when it ends */
+    let mut c = d;
+    c.do_clear = true;
+    assert_eq!(draw(&c), 0);
+    assert_eq!(rig.b().frame_quads, 0, "no load quad");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert!(rig.b().ms.holds(&d), "the clear's kick stored its samples too");
+}
+
+/// A swap ends the frame: its kick stores the resolved colour only (the
+/// samples would never be read), and a frame drawn into the surface after
+/// it, without a clear, reloads that colour as before, once per pixel.
+#[test]
+fn a_swap_kick_keeps_no_samples_and_the_next_frame_reloads_the_resolved_colour() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    d.do_clear = false;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(rig.fbload().load_draw.textures[0].base_gpu, rig.b().ms.mem.gpu, "the split's reload");
+    pvr_backend_surface_swapped(d.target_gpu);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks()[1].0.frag.num_rt, 1, "the swap's kick: the resolved colour alone");
+    assert!(!rig.b().ms.holds(&d), "the samples are stale");
+    with_platform(|p| p.kick_usc_rates.clear());
+    assert_eq!(draw(&d), 0);
+    assert_eq!(rig.fbload().load_draw.textures[0].base_gpu, d.target_gpu, "the resolved colour");
+    assert_eq!(last_desc_word(&rig, 1) >> 30, 0, "a single-sampled image");
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(load_rates(&rig), [PDS_DOUTU_SAMPLE_RATE_INSTANCE]);
+    /* a swap of another surface is not this frame's */
+    assert_eq!(draw(&d), 0);
+    pvr_backend_surface_swapped(d.target_gpu + 0x10_0000);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(rig.kicks()[3].0.frag.num_rt, 2);
+}
+
+/// The split dEQP's 1024-draw frame hit (`a4f64950`): the draw past the
+/// cap opens the next kick, which reloads each sample from the store the
+/// first kick wrote. A 1x frame stores no samples and reloads as before.
+#[test]
+fn a_4x_frame_split_at_the_draw_cap_or_a_full_arena_keeps_its_samples() {
+    let rig = Rig::new();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    d.do_clear = false;
+    for _ in 1..=MAX_DRAWS_PER_FRAME {
+        assert_eq!(draw(&d), 0);
+    }
+    assert_eq!(rig.kicks().len(), 1, "the draw past the cap split the frame");
+    assert_eq!(rig.kicks()[0].0.frag.num_rt, 2, "the first kick stored its samples");
+    assert_eq!(rig.fbload().load_draw.textures[0].base_gpu, rig.b().ms.mem.gpu);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(load_rates(&rig), [PDS_DOUTU_SAMPLE_RATE_FULL]);
+
+    /* a full general arena: 16 KiB, which the second staged index list of
+     * 10000 u16 does not fit beside the first's pieces */
+    restart_with_arenas(2, 16, 64);
+    rig.reset_records();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let idx: Vec<u16> = (0..10000u16).collect();
+    let mut s = staged_index_draw(&rig, &idx);
+    s.samples = 4;
+    assert_eq!(draw(&s), 0);
+    s.do_clear = false;
+    assert_eq!(draw(&s), 0);
+    assert!(!rig.kicks().is_empty(), "the arena split the frame");
+    assert!(rig.kicks().iter().all(|(k, _)| k.frag.num_rt == 2), "every kick stored its samples");
+    assert_eq!(pvr_backend_flush(), 0);
+    let rates = load_rates(&rig);
+    assert!(!rates.is_empty() && rates.iter().all(|&r| r == PDS_DOUTU_SAMPLE_RATE_FULL), "{rates:?}");
+
+    /* 1x: the path as it was */
+    restart_with_arenas(4, 1024, 768);
+    rig.reset_records();
+    with_platform(|p| p.kick_usc_rates.clear());
+    let mut one = rig.draw(3);
+    assert_eq!(draw(&one), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    one.do_clear = false;
+    assert_eq!(draw(&one), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert!(rig.kicks().iter().all(|(k, _)| k.frag.num_rt == 1));
+    assert_eq!(rig.fbload().load_draw.textures[0].base_gpu, one.target_gpu);
+    assert_eq!(load_rates(&rig), [PDS_DOUTU_SAMPLE_RATE_INSTANCE]);
 }
 
 /* ---- integer render targets (docs/es3-pvr-formats.md 2.3, 5) -------------- */
