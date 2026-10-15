@@ -56,6 +56,20 @@ keeps it in a PERF record page (see the full record).
 A failing run with `late` points at the fence or the epilogue. A failing run
 with `stable` means the write was dropped (or the delay was too short).
 
+## How to run it on the board
+
+The recipe and the record page layout are in the full record, section of the
+same name. Three points there were wrong and are corrected (`imx8mp-gltest-r2`,
+`docs/board-sessions/imx8mp-gltest-r2.md`):
+
+- The KICK_DIFF selectors `SEL=4586` (`0x11ea`, case 10) and `SEL=4578`
+  (`0x11e2`, case 2) are **list 1**, not list 0: entry 0 of
+  `CONFIG_GC_GL_TEST_SWEEP_LISTS`, the same run as the base arm `SEL=512`.
+- In the base arm's SWEEP pass bits, case 10 is **bit 10**, not bit 9 (case 2
+  is bit 2; `1-6,8-10` all passing reads `0x77e`).
+- gl_test arms the instrument with a 2000 us wait, so the console lines say
+  `second read 2000 us later`, not `10000 us`.
+
 ## How it combines with K1
 
 K1 is the etnaviv flush rule in `emit_flushes`, added by the `v3d-null-cpu`
