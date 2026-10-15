@@ -42,7 +42,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `d3a082b7` (2026-10-15). The numbers below are read from
+main is `3ff06479` (2026-10-15). The numbers below are read from
 `tools/cts/RESULTS.md` and `tools/cts/STATUS.md`; the commit next to each is
 the image's. Where a number has no RESULTS.md entry, the line says so. What
 this section said before 2026-10-11, with every closed row and the
@@ -74,7 +74,7 @@ Gate and docs (2026-10-15):
 
 | Board | dEQP-GLES2 mustpass (17,165) | gl_test | glmark2 | Slint, cluster |
 |---|---|---|---|---|
-| AM62P | **final tree, `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`): 17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning** at 1x; ms4 16 / 16; combined 17,141 / 0 / 18 / 5 / 1. The 9 invariance and 45 `texture.vertex.2d.*` cases pass. Predates `8bbf9ba2` (BGRA renderbuffer, below). Superseded: `32778b57` 17,070 / 54. | 50 / 50, 0 resets, on `e3749a25` (2026-10-15, common set; `docs/board-sessions/am62p-common-carveout.md`); 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 198 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | 462, 33 scenes ran, 0 failed, 0 unsupported, 0 resets, **GL errors raised 0, no `render pool exhausted`, no `out of GPU memory`, no `framebuffer N incomplete`** on `e3749a25` (2026-10-15, common set, the first AM62P glmark2 run on the 256 MiB carve-out of `504d4fae`); terrain 1 fps, shadow 3 fps and refract 1 fps remain, now CPU-side ("Known defects"); 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592, 56 fps), **SV pass (crc16 c592, the console captured in both of two boots; the `cd738b1a` empty capture is not reproduced)**, CL pass (crc16 110c, 73.1 fps, 44.9 Mpx/s at 1024x600) on `e3749a25` (2026-10-15, common set); SO pass (crc16 c592), SV empty (0 console bytes), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
+| AM62P | **final tree, `63efed8e` (2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`, `ca56dbc`): 17,125 pass / 0 fail / 34 NotSupported / 5 QualityWarning / 1 CompatibilityWarning** at 1x; ms4 16 / 16; combined 17,141 / 0 / 18 / 5 / 1. The 9 invariance and 45 `texture.vertex.2d.*` cases pass. Predates `8bbf9ba2` (BGRA renderbuffer, below). Superseded: `32778b57` 17,070 / 54. | **50 / 50, 0 resets, on `dc514010` (2026-10-15, RESULTS.md); the set holds 197 `vtxgrid` and 199 `es3trunc`. Cases 198 `a2cconst`, 197 `vtxgrid` and 171 `viewwin` pass alone on `dc514010` and again on the origin/main tip `2923d771`, 0 resets, no FWCCB event, no CONTEXT_RESET**; 50 / 50, 0 resets, on `e3749a25` (2026-10-15, common set; `docs/board-sessions/am62p-common-carveout.md`); 49 / 49, 0 resets, on `c4ccc966` (197 `vtxgrid` in the set; no RESULTS.md entry); 48 / 48 on `32778b57` (RESULTS.md). Cases 199 to 201 pass on `a27d69c0`, 0 resets (no RESULTS.md entry: the HANDOFF text of `bd8df7a49`); 198 hung the fragment DM on `452d6c31` before `a80b297f5`. 50 / 50 on `cd738b1a` (2026-10-14, common set, build id `d5cb878`; `docs/board-sessions/am62p-common-int.md`). | **465, 33 scenes ran, 0 failed, 0 resets, on `dc514010` (2026-10-15); the record's counters: GL errors raised 15 or more (console: 2579), draws that sampled an incomplete texture 0; terrain and refract run out of the render pool ("Known defects")**; 462, 33 scenes ran, 0 failed, 0 unsupported, 0 resets, **GL errors raised 0, no `render pool exhausted`, no `out of GPU memory`, no `framebuffer N incomplete`** on `e3749a25` (2026-10-15, common set, the first AM62P glmark2 run on the 256 MiB carve-out of `504d4fae`); terrain 1 fps, shadow 3 fps and refract 1 fps remain, now CPU-side ("Known defects"); 465, 33 scenes ran, 0 failed, on `cd738b1a` (2026-10-14, common set), but terrain (1 fps) and shadow (3 fps) run out of GPU memory and refract raises 1694 `framebuffer 1 incomplete` errors ("Known defects"); 465, 33 ran, 0 failed, 0 resets, on `f2a13877` (2026-10-11): pvr-depth-resolve confirmed. | SO pass (crc16 c592, 56 fps), **SV pass (crc16 c592, the console captured in both of two boots; the `cd738b1a` empty capture is not reproduced)**, CL pass (crc16 110c, 73.1 fps, 44.9 Mpx/s at 1024x600) on `e3749a25` (2026-10-15, common set); SO pass (crc16 c592), SV empty (0 console bytes), CL pass (crc16 110c, 75.3 fps, 46.3 Mpx/s at 1024x600) on `cd738b1a` (2026-10-14, common set); cluster 91.8 fps (56.4 Mpx/s, 16.28 ms/Mpx) on `7dada1ff` (RESULTS.md, 2026-10-05). |
 | i.MX8MP | whole tree on `835cf9cc` (2026-10-14, 29 entries, `records/imx8mp/deqp-835cf9cc`): 17,272 pass / 46 fail / 34 NotSupported / 19 other of the 17,371 begun, 0 no-result. All 46 are `GL_BGRA_EXT` renderbuffer cases of entry 21 (`fbo`); every other entry equals the `32778b57` run (17,318 pass / 0 fail, 2026-10-10). The final tree on `c345ab74` (2026-10-12; `docs/board-sessions/imx8mp-es2-final-r2.md`, `b3dad33`): 17,318 pass / 0 fail / 34 NotSupported / 19 QualityWarning, 29 of 29 entries equal `d8583f20`'s; it predates `8bbf9ba2`. | 48 / 49 run passed, 1 skipped (case 16, #8), case 44 (#6) fails, on `a63fcc5b` (2026-10-14, common set; `tools/cts/RESULTS.md`); the same reading on `b568940` (`docs/board-sessions/imx8mp-common-int.md`), where cases 2, 10 and 171 passed. The same reading on `e0eb883d` (2026-10-14, two boots, identical; `docs/board-sessions/imx8mp-gltest-final.md`); 0 GPU resets. Case 16 passes when run alone (`SEL=16`). Cases 10 (#9) and 2 (#25) fail now and then. KICK_DIFF round on `e40e3835` (2026-10-15, image `kd-e40e3835`, 120 interleaved boots; `docs/board-sessions/imx8mp-gltest-r2.md`): base arm case 10 failed 4 of 40, case 2 0 of 40; KICK_DIFF arms case 10 1 of 40, case 2 1 of 40, both `stable`; 0 GPU resets. | 43, 33 ran, 0 failed, 0 unsupported, on `a63fcc5b` (2026-10-14, common set; also on `b568940`, record `records/imx8mp/common-b5689400`); 42 on `8abeaabb` (`tools/cts/log/benchmarks-baseline/imx8mp.md`); no console, so no per-scene score. | SO, SV and CL probes pass on `a63fcc5b` (on `b568940`: SO and SV crc16 c592, CL crc16 b107); no fps (no console). |
 | Pi 4 | **no final tree at the tip.** `20a48791` rows 0-14 (2026-10-14; `docs/board-sessions/pi4-es2-final.md`, `1344748`): 11,877 pass / **46 fail** (all `GL_BGRA_EXT` renderbuffer cases, FB1 3 + FB2 43) / 25 NotSupported / 5 warnings; rows 15-28 not run. Last whole tree `d56e79e5` (2026-10-12; `pi4-es2-final-r2.md`, `ce16942`): 17,127 / 0 / 34 / 4, before `8bbf9ba2`. | 12 / 12, 0 failed, 0 MMU faults, 0 recoveries, on `a63fcc5b` (2026-10-14; `docs/board-sessions/pi4-gltest-final.md`); 12 / 12 on `1cf946a9` (2026-10-11). The ES 3.0 cases on `cd738b1a` (2026-10-14; `docs/board-sessions/pi4-gles3-baseline.md`): 202 `blitconv` 12 / 12, 203 `tfcap` 9 / 9 and 205 `mappbo` 15 / 15 pass; 196 `occl` fails (all five queries available, all five results 0) and 204 `srgb` fails (the render half is refused by name, no sample-half checks ran); 0 MMU faults, 0 recoveries. | 183, 33 ran, 0 failed, on `b7170d35` (2026-10-04, a commit of the history before `afb16335`). | Slint probes pass on `1fa941e3` (2026-10-04, same history); the cluster's last row in RESULTS.md is "Batch 106" (`a8b11720`). |
 
@@ -204,7 +204,9 @@ Each item waits for hardware. The commands and expected values are in
   AM62P image 9 and the whole tree with ms4 are done: `63efed8e`.)
 - gl_test 196 `occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205
   `mappbo` (the `work/land9` cases, on main since `c4dce9125`) on the
-  i.MX8MP (the AM62P ran them at `cd738b1a` and again at `9b525867`, 5 of 5;
+  i.MX8MP (the AM62P ran them at `cd738b1a`, at `9b525867` and at `dc514010`
+  (2026-10-15: 196 q0..q4 results 0 1 0 1 1, 202 12/12, 203 9/9, 204 8/8,
+  205 15/15, each alone, 0 resets), 5 of 5;
   the Pi 4 ran them at `cd738b1a`: 202, 203 and 205 pass, 196 and 204 wait
   for their defects, "Known defects"); 199 to 201 on the i.MX8MP and the
   Pi 4 where the GPU runs them.
@@ -219,6 +221,8 @@ Each item waits for hardware. The commands and expected values are in
   (cases 10 and 2): the next arm is the K1 arm ("Known defects").
 - AM62P dEQP-GLES3: the "hang" of images 20 and 21, and image 7's
   `ResourceError` (Known defects).
+- AM62P: goal 1's gl_test rows are done (198, 197, 171 and the default set on
+  `dc514010`); the AM62P dEQP-GLES2 items stay as they are.
 - The Pi 4 glmark2 refract and terrain (#4, #5) on the 96 MiB carve-out.
 - AM62P: glmark2 terrain, shadow and refract after a GPU `glGenerateMipmap`
   path for the PowerVR (1467 / 353 / 2046 ms of GL-call time per frame at
@@ -671,6 +675,23 @@ es3-vertex).
      ms in desktop blur. refract, terrain and shadow still show 6 FPS. shadow
      and refract still resolve a depth texture on the CPU every frame (option
      (b), not done). Terrain's remaining CPU time is not explained yet.
+   - glmark2 terrain (#1) and refract (#2) on the AM62P at `dc514010`
+     (2026-10-15): both scenes exhaust the 59,200 KiB render pool (`render
+     pool exhausted: 5464 KiB requested, 3648 KiB left` in terrain, `21848
+     KiB requested, 2744 KiB left` in refract). terrain's 800x600 mip chain
+     and refract's 1600x1200 chain are refused ("out of GPU memory"), their
+     render-to-texture framebuffers stay incomplete (status 0x8cd6) every
+     frame, terrain runs at 1 FPS with `GL error 0x505/0x506/0x502` (16
+     lines) and refract at 85 FPS with 1,698 incomplete-framebuffer lines.
+     glmark2 counts both as ran. The "fixed on the host" text of #1 and #2
+     does not hold on this board; whether `f2a13877` already did this is
+     not in its record. No issue opened by this result.
+   - The AM62P console lease (`docs/boards/am62p-console-lease.md`): the
+     leased port carried main_uart0 on 2026-10-15 (`YK-PROBE-S2` arrived, 13
+     bytes; `YK-PROBE-S3` did not). The farm's console reader holds the
+     bridge's only client slot for the whole lease, so `tools/board.sh`'s
+     own capture gets `busy`; the 2026-10-15 session relayed the console by
+     hand (`docs/board-sessions/am62p-gltest-es2-20261015.md`).
    - **AM62P glmark2 terrain and shadow out of GPU memory**: closed (no issue
      number; `cd738b1a`, 2026-10-14). On `e3749a25` (2026-10-15) the GM
      console has 0 `render pool exhausted`, 0 `out of GPU memory`, 0
