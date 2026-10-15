@@ -25,6 +25,18 @@ second as a separate simple retry, then not retried again; on the earlier
 way). The command never started, so `board.sh` did not stage, arm or reboot
 anything.
 
+### Last attempt (worker `hx90`, 09:22 UTC): still no `BOARD_UART`
+
+ccfarm reported the task moved to `nuc`, but `hostname` printed `hx90` and
+`BOARD_UART` was empty in the shell, so no bridge probe was possible. ssh
+worked (`uptime` 11 min, one user). The images from `4d744e17` are on this
+host and `git diff 4d744e17 HEAD -- driver src` is empty. The `board.sh am62p
+tree` command line above (with `BOARD_HOST`, `BOARD_BOOT` and `TREE_*` as
+prefix assignments) was refused again by the sandbox with `This Bash command
+contains multiple operations. The following part requires approval`; it was
+not retried further. It would have stopped at `board.sh`'s `BOARD_UART`
+check anyway. Still no verdict lines.
+
 ### What was established
 
 - **ssh works.** On the last attempt `ssh torizon@<board> -- cat
