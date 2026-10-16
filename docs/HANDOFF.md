@@ -5,7 +5,7 @@
 The state of the work and what comes next. A result does not edit this
 file: it adds a note under `docs/handoff/` (one file per result,
 `docs/handoff/README.md`), and ccfarm's `handoff-fold` stage folds the notes
-in after the merge; a person folds the same way. Last update: 2026-10-16.
+in after the merge; a person folds the same way. Last update: 2026-10-17.
 
 This file holds the current state only. What happened before is in git
 history; records removed on 2026-10-16 are read with
@@ -46,7 +46,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `c13cf0692` (2026-10-16). Board numbers, with the commit each image
+main is `04b31ec6` (2026-10-17). Board numbers, with the commit each image
 was built from, are in `tools/cts/RESULTS.md`; the Japanese summary is
 `tools/cts/STATUS.md`. Per-case detail: `docs/es2-cts-failures.md` (ES 2.0)
 and `docs/es3-cts-failures.md` (ES 3.0). All three boards boot standalone
@@ -65,6 +65,15 @@ measured with the pipelined swap: every board's glmark2 now waits for its
 frame before showing it, so the next common set run re-measures them. The
 benchmark samples stay stock: the overlap comes back from the driver.
 
+The GL core keeps the first eight GL errors by entry point and client tag
+(`yakogl_gl_error_first`); glmark2 prints them as `glmark2: GL error K of N:`
+lines and, with the SNVS selector `0x800 | k`, stores error k as record kind
+23 GL_ERROR (`driver/docs/glmark2.md`, "The first GL errors by name"). The
+host harness models the GC7000's carve-out (`YAKOGL_GC_CARVEOUT_BYTES` in
+`src/osal/linux.c`, set by `tools/hostharness/glmark2/run.sh` from the
+i.MX8MP glmark2 image's overlay); the gate's glmark2 row fails on any GL
+error line and on an entry whose GC peak is above 3/4 of that carve-out.
+
 ### ES 2.0 (stage 1, met)
 
 At main `e9901869a` (2026-10-15/16), every image booted by the board's own
@@ -73,7 +82,7 @@ bootloader and run with `tools/board.sh`:
 | Board | dEQP-GLES2 | Common set (GM SO SV CL GT) |
 |---|---|---|
 | AM62P | 17,330 pass / **0 fail** / 34 NS / 5 QW / 2 CW (17 images at 1x, at `7e1dd598`; 17,371 cases begun, every case with a result), 0 resets | 5 of 5 done (at `fb9107af`, 0 GPU resets): glmark2 462 (33 scenes, 0 failed, 0 GL errors); Slint probes pass; cluster 75.2 fps / 46.2 Mpx/s at 1024x600; gl_test 50 / 50 |
-| i.MX8MP | 17,318 of 17,371 begun / **0 fail** / 34 NS / 19 other, 0 resets | 5 of 5 done: glmark2 33 scenes, 0 failed, **15+ GL errors** (#814); gl_test 49 / 49 run (case 16 skipped, #8) |
+| i.MX8MP | 17,318 of 17,371 begun / **0 fail** / 34 NS / 19 other, 0 resets | 5 of 5 done: glmark2 33 scenes, 0 failed, 15+ GL errors (#814) at `e9901869a`; **0 GL errors with the glmark2 image's 240 MiB carve-out, on branch `b421b447` (2026-10-16, two common sets, `records/imx8mp/common-b421b447{-r1,}`): score 42, 33 scenes ran, 0 failed, 0 incomplete-texture draws; SO, SV, CL probes pass; gl_test 48 / 49 (case 44) then 49 / 49. Rerun from main** (`tools/cts/RESULTS.md`, "Common set", "i.MX8MP glmark2 GL errors (#814)"); gl_test case 16 skipped (#8) |
 | Pi 4 | 17,126 / **0 fail** / 34 NS / 3 QW / 2 CW, every list case with a result, 0 recoveries | 5 of 5 done: glmark2 188, 0 GL errors; Slint probes pass; cluster 139.4 fps at 1920x720; gl_test 12 / 12 |
 
 The 34 NotSupported are the same on the three boards and accepted
@@ -147,9 +156,12 @@ is kept and pinned by tests.
      PowerVR needs a GPU chain (TQ or a per-level draw). shadow's 353 ms a
      frame is not explained by this and needs kick times
      (`CONFIG_SAFEUI_GPU_PVR_KICK_TIMES=y`) in the next GM image.
-   - **i.MX8MP: glmark2 GL errors** (#814, #915): 15 or more (the record's
-     counter saturates), cause not identified. The record carries the GL
-     core's counters (`driver/docs/glmark2.md`, "The record").
+   - **i.MX8MP: glmark2 GL errors** (#814, #915): cause found (the GC's
+     64 MiB carve-out), fixed in the glmark2 image and met by `b421b447` on
+     the board (0 errors). Closes when a common set built from main reads
+     `GL errors raised 0` in the GM row (`tools/cts/board-stage.sh imx8mp
+     common`). The old "an i.MX8MP glmark2 run whose record shows them" is
+     done (15 or more at 64 MiB; 0 at 240 MiB).
    - **i.MX8MP: present without a per-frame VSYNC wait** (#737). `board_show`
      (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c`) waits for the next
      VSYNC every frame although glmark2 asks for swap interval 0, which fits
@@ -420,7 +432,9 @@ Each has a GitHub issue unless marked "no issue yet". Unless a line says
 - **i.MX8MP gl_test 44 `es3hdr`, RGBA16F target** (#6): the 64-bit
   colour-target fix (#866) passes 49 / 49 at `e9901869a`; keep the layout
   probe recipe ("Next board session") if it comes back. Hypotheses:
-  `src/vivante/VIVANTE_NOTES.md`, "RGBA16F targets".
+  `src/vivante/VIVANTE_NOTES.md`, "RGBA16F targets". It failed once in
+  `b421b447`'s first common set and passed in the second; count it with
+  the flaky cases 2 and 10.
 - **i.MX8MP gl_test 16, 4x MSAA** (#8): the default image skips its 4x half
   by name. On the 4x image `x4 inside` reads 0, and the 4x scratch is empty
   after the clear and after the draw. Recipe: `docs/notes/gc-msaa-record.md`.
@@ -454,6 +468,22 @@ Each has a GitHub issue unless marked "no issue yet". Unless a line says
 - **Pi 4 gl_test 204 `srgb`** (no issue yet): the case prints that the render
   half is the PowerVR's, then FAIL with no checks; the sample half should
   run. Read case 204's V3D guard in `driver/tools/pvrlab/gl_test.c`.
+- **i.MX8MP glmark2 GL errors** (#814), cause found, fixed in the glmark2
+  image: every GC allocation, the board layer's 800x600 window and 1280x800
+  screen copy included, comes from the one `gpu-carveout` pool, 64 MiB on
+  the Verdin's device tree. On the host model terrain peaks at 51 MB and
+  refract at 48 MB of the 58 MB left (one entry per process, frees returned
+  at once); the board also holds frees until their kick completes and runs
+  every entry in one fragmenting pool, and a refused allocation is a GL
+  error. The glmark2 image now takes 240 MiB at 0x70000000 (60 of the GC
+  MMU's 64 slave tables; `KERNEL_VM_SIZE` 512 MiB). The same cause and step
+  as the AM62P's 2573 errors (#831). Not measured: which entry points
+  raised the errors at 64 MiB (the run with the new GL_ERROR record needs
+  `SEL`, which the diagnostic worker could not pass); the host model at
+  64 MiB raises none, so it pins the fix by headroom, not by an error.
+  Other GC images keep the board's 64 MiB (gl_test, Slint, cluster, dEQP:
+  `2d.2048x2048_l8_mipmap` ended on GL_OUT_OF_MEMORY there at `4f40f622`);
+  a client whose working set nears 48 MiB needs the same overlay step.
 - **Pi 4 tryboot image off the network** (#905): a glmark2 tryboot image
   kept the board off the network for 15 h on 2026-10-15 and the watchdog did
   not bring it back; the same recipe ran clean at `e9901869a`.
@@ -527,6 +557,11 @@ export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out>
   refuses the image, rc=3), and a `;` inside a sweep list is written `\;`.
   An interrupted run can leave `/var/yakogl/once-*.bin`: `board.sh imx8mp
   disarm` before retrying. One boot takes about 2 to 2.5 minutes.
+- After the #814 fix lands: `tools/cts/board-stage.sh imx8mp common` from
+  main; GM must read `GL errors raised 0`. If it does not, name the errors:
+  `SEL=$((0x800)) tools/board.sh imx8mp run <GM image> <logdir> gle0` (then
+  `0x801`, ...), one boot of about 7 minutes each; `yakogl-tools record`
+  names the entry point.
 - ES 3.0 gl_test 196, 202, 203, 204, 205 (first run on this board).
 - #9 / #25: the K1 arm (needs the K1 change in `src/vivante/backend.rs`),
   with the KICK_DIFF selectors of `docs/notes/gc-kick-diff.md`.
