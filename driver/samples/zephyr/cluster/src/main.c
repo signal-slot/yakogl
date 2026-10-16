@@ -715,9 +715,12 @@ static int egl_up(void)
 		return -ENOENT;
 	}
 	for (int k = 0; k < 2; k++) {
+		/* PIPELINED: this sample double-buffers (the half shown is never
+		 * the half being drawn), so a swap may leave its frame running. */
 		nw[k] = (struct gles_native_window){
 			.phys = s_half[k].phys, .width = s_half[k].w, .height = s_half[k].h,
-			.stride_bytes = s_half[k].stride, .format = s_half[k].format,
+			.stride_bytes = s_half[k].stride,
+			.format = s_half[k].format | GLES_NATIVE_WINDOW_PIPELINED,
 		};
 		s_surf[k] = eglCreateWindowSurface(s_dpy, cfg, &nw[k], NULL);
 		if (s_surf[k] == EGL_NO_SURFACE) {

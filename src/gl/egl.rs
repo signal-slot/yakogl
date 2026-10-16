@@ -49,6 +49,7 @@ pub const GLES_NATIVE_FORMAT_RGB565: u32 = 3;
 /// first, so the surface is drawn y-up (`GlContext::default_y_up`). Only
 /// windows take it; a native pixmap carrying it is refused.
 pub const GLES_NATIVE_WINDOW_BOTTOM_UP: u32 = 0x8000_0000;
+pub const GLES_NATIVE_WINDOW_PIPELINED: u32 = 0x4000_0000;
 
 /// A native window (`struct gles_native_window`): `phys` is the buffer's
 /// physical address, mapped for the GPU by eglCreateWindowSurface. The rows
@@ -167,6 +168,10 @@ struct EglSurface {
     window: bool,
     /// A window the display scans bottom row first (GLES_NATIVE_WINDOW_BOTTOM_UP).
     bottom_up: bool,
+    /// A window the application double-buffers itself (GLES_NATIVE_WINDOW_PIPELINED):
+    /// a swap leaves the frame it submitted running. Else the window is shown as
+    /// it is and a swap completes the frame.
+    pipelined: bool,
     /// `GLES_SURF_*`.
     format: u8,
     /// From the config: 1 or 4.
@@ -192,6 +197,7 @@ impl EglSurface {
         used: false,
         window: false,
         bottom_up: false,
+        pipelined: false,
         format: 0,
         samples: 0,
         width: 0,
@@ -227,7 +233,8 @@ impl EglContext {
  * the id of the kick the frame's commands go into (flushing them first,
  * as EGL_SYNC_PRIOR_COMMANDS_COMPLETE requires), and is signaled once the
  * backend reports that kick complete. That lets a client that pipelines
- * (eglSwapBuffers only waits for the previous frame) find out when the
+ * (eglSwapBuffers on a GLES_NATIVE_WINDOW_PIPELINED window only waits for
+ * the previous frame) find out when the
  * frame it just submitted has actually landed in its buffer, e.g. before
  * putting that buffer on a display, without eglWaitGL's full drain. */
 #[derive(Clone, Copy)]
@@ -1253,9 +1260,14 @@ unsafe fn create_window_surface(
     }
     // SAFETY: win is null or a valid native window description (EGL contract).
     let win = unsafe { win.as_ref() }.copied();
-    /* the scan-order flag is a window's alone: strip it before the buffer checks */
+    /* the scan-order and pipelining flags are a window's alone: strip them
+     * before the buffer checks */
     let bottom_up = win.is_some_and(|w| w.format & GLES_NATIVE_WINDOW_BOTTOM_UP != 0);
-    let win = win.map(|w| GlesNativeWindow { format: w.format & !GLES_NATIVE_WINDOW_BOTTOM_UP, ..w });
+    let pipelined = win.is_some_and(|w| w.format & GLES_NATIVE_WINDOW_PIPELINED != 0);
+    let win = win.map(|w| GlesNativeWindow {
+        format: w.format & !(GLES_NATIVE_WINDOW_BOTTOM_UP | GLES_NATIVE_WINDOW_PIPELINED),
+        ..w
+    });
     let Some((win, (format, pitch))) = win.and_then(|w| Some((w, native_window_pitch(&w)?))) else {
         e.error = EGL_BAD_NATIVE_WINDOW;
         return NO_SURFACE;
@@ -1302,6 +1314,7 @@ unsafe fn create_window_surface(
     s.used = true;
     s.window = true;
     s.bottom_up = bottom_up;
+    s.pipelined = pipelined;
     s.config_id = config_id(config);
     s.samples = config_samples(config);
     s.format = format;
@@ -2098,7 +2111,6 @@ pub unsafe extern "C" fn eglSwapBuffers(dpy: EGLDisplay, surface: EGLSurface) ->
     if e.cur_ctx.is_none() || e.cur_draw != Some(i) {
         return e.fail(EGL_BAD_SURFACE);
     }
-    /* single-buffered: the frame is complete in the surface when this returns */
     flush_pending_clear();
     /* EGL 1.5 3.10.1: the surface's ancillary buffers are undefined after
      * the swap; the backend may drop them before the frame is submitted.
@@ -2108,13 +2120,22 @@ pub unsafe extern "C" fn eglSwapBuffers(dpy: EGLDisplay, surface: EGLSurface) ->
     if e.surf[i].window {
         backend::surface_swapped(e.surf[i].mem.gpu);
     }
-    /* Submit this frame and let it run; wait only for the frames before it,
-     * so the caller may show the previous frame's buffer (double buffering)
-     * while this one renders. eglWaitGL / glFinish wait for everything. */
+    /* Submit this frame. A window is single-buffered, rendered in place and
+     * shown by the application right after this call, so the frame has to
+     * be complete in it when this returns (showing a buffer the GPU was
+     * still writing put a black band of the last-drawn rows on the i.MX8MP's
+     * panel in every glmark2 scene, 2026-10-16). Only an application that
+     * double-buffers the window itself (GLES_NATIVE_WINDOW_PIPELINED: two
+     * halves, the half shown is never the half being drawn, the cluster
+     * sample) may let this frame run and wait for the frames before it. A
+     * pbuffer is never shown: its swap "has no effect" (EGL 1.5 3.10.1) and
+     * waits for the frames before it as it always did. eglWaitGL / glFinish
+     * wait for everything. */
     if backend::flush() != 0 {
         return e.fail(EGL_CONTEXT_LOST);
     }
-    if backend::finish_previous() != 0 {
+    let complete = e.surf[i].window && !e.surf[i].pipelined;
+    if (if complete { backend::finish() } else { backend::finish_previous() }) != 0 {
         return e.fail(EGL_CONTEXT_LOST);
     }
     /* Debug: the frame's kicks are done here, which is the only point at
@@ -7456,6 +7477,60 @@ mod tests {
             assert!(!gl.kick_pending(2));
         }
         assert_eq!(gl.draws().len(), 2);
+    }
+
+    #[test]
+    fn a_window_swap_completes_the_frame_it_submitted() {
+        /* The window is single-buffered and shown as it is right after the
+         * swap (board_show in the samples): the frame must be in it when the
+         * swap returns. The i.MX8MP showed a black band of the last-drawn rows
+         * in every glmark2 scene while the swap left the frame running
+         * (2026-10-16). */
+        let gl = TestGl::new(8, 8);
+        let egl = Egl::new(&gl);
+        let mut win = window(GLES_NATIVE_FORMAT_XRGB8888, 8, 4);
+        let ws = window_surface(egl.dpy, CONFIG_1X, &mut win);
+        let c = egl.context(CONFIG_1X);
+        assert!(!ws.is_null() && !c.is_null());
+        // SAFETY: plain GL / EGL calls.
+        unsafe {
+            assert_eq!(egl.make_current(ws, c), TRUE);
+            clear_frame();
+            assert_eq!(eglSwapBuffers(egl.dpy, ws), TRUE);
+            assert_eq!(gl.submitted(), 1);
+            assert!(!gl.kick_pending(1), "the frame just submitted is complete when the swap returns");
+            clear_frame();
+            assert_eq!(eglSwapBuffers(egl.dpy, ws), TRUE);
+            assert!(!gl.kick_pending(2));
+        }
+        assert_eq!(egl_error(), EGL_SUCCESS);
+    }
+
+    #[test]
+    fn a_pipelined_window_swap_leaves_the_frame_running_and_completes_the_one_before() {
+        /* GLES_NATIVE_WINDOW_PIPELINED: the application double-buffers (two
+         * halves, the cluster sample), so the swap may return with its frame
+         * still rendering and wait only for the frame before it. */
+        let gl = TestGl::new(8, 8);
+        let egl = Egl::new(&gl);
+        let mut win = window(GLES_NATIVE_FORMAT_XRGB8888 | GLES_NATIVE_WINDOW_PIPELINED, 8, 4);
+        let ws = window_surface(egl.dpy, CONFIG_1X, &mut win);
+        let c = egl.context(CONFIG_1X);
+        assert!(!ws.is_null() && !c.is_null(), "the flag is stripped before the format is judged");
+        // SAFETY: plain GL / EGL calls.
+        unsafe {
+            assert_eq!(egl.make_current(ws, c), TRUE);
+            clear_frame();
+            assert_eq!(eglSwapBuffers(egl.dpy, ws), TRUE);
+            assert!(gl.kick_pending(1), "the frame just submitted keeps running");
+            clear_frame();
+            assert_eq!(eglSwapBuffers(egl.dpy, ws), TRUE);
+            assert!(!gl.kick_pending(1), "the previous frame is done before the swap returns");
+            assert!(gl.kick_pending(2));
+            assert_eq!(eglWaitGL(), TRUE);
+            assert!(!gl.kick_pending(2));
+        }
+        assert_eq!(egl_error(), EGL_SUCCESS);
     }
 
     #[test]

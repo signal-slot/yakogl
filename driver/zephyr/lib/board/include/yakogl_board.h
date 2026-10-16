@@ -89,7 +89,12 @@ extern "C" {
  *
  * A window may be split by the sample into screen-sized parts (two halves
  * for a double buffer: the same stride, `phys` and `cpu` moved by whole
- * rows); board_show() takes such a part as it takes the whole window.
+ * rows); board_show() takes such a part as it takes the whole window. A
+ * sample that does so tells EGL with GLES_NATIVE_WINDOW_PIPELINED in the
+ * native window's format, and then a swap may return with its frame still
+ * rendering (the half shown is the other one). Without the flag a swap
+ * completes the frame, so a sample that shows its one window right after
+ * eglSwapBuffers shows a finished picture (eglplatform.h).
  */
 struct board_window {
 	uintptr_t phys;

@@ -87,6 +87,7 @@ There is no released version yet; everything below is unreleased.
 ### Fixed
 
 #### GL core
+- `eglSwapBuffers` on a window completes the frame it submitted before it returns, unless the native window carries the new `GLES_NATIVE_WINDOW_PIPELINED` flag (the application double-buffers the window itself, as the cluster sample does). The swap used to wait only for the previous frame, so a sample that showed its one window right after the swap showed a buffer the GPU was still writing: a black band of the last-drawn rows in every glmark2 scene on the i.MX8MP (2026-10-16).
 - Refuse a `DEPTH_COMPONENT24` renderbuffer; ES 2.0 has no `MAX_DRAW_BUFFERS` (4e9397c6).
 - ES 2.0 CTS, board-confirmed (dEQP-GLES2, 17,165-case mustpass list; results in `tools/cts/RESULTS.md`, per-case detail in `docs/es2-cts-failures.md`):
   - AM62P, `63efed8e`: 17,141 pass / 0 fail / 18 not supported / 6 warnings (17 images at 1x 17,125 / 0 / 34; the 4x multisample image 16 / 0). The accepted not supported: `clip_control` 8, `multisample` 16 at 1x, `multisampled_render_to_texture.readpixels` 1, `negative_api.texture.compressedtexsubimage2d_*` 9.

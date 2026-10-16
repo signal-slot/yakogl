@@ -39,6 +39,15 @@
  * (the AM62P DSS with a negative VID_ROW_INC), so GL draws it y-up as it draws
  * an FBO and gl_FragCoord needs no mirroring. Refused on a native pixmap. */
 #define GLES_NATIVE_WINDOW_BOTTOM_UP 0x80000000u
+/* OR'd into a WINDOW's format: the application double-buffers this window
+ * itself (two halves of one board window, each its own surface, the half
+ * shown is never the half being drawn: driver/samples/zephyr/cluster), so
+ * eglSwapBuffers may return with the frame it submitted still rendering and
+ * wait only for the frame before it. Without it a window is shown as it is,
+ * so eglSwapBuffers completes the frame before it returns: showing a buffer
+ * the GPU is still writing put a black band of the last-drawn rows on the
+ * i.MX8MP's panel in every glmark2 scene (2026-10-16). */
+#define GLES_NATIVE_WINDOW_PIPELINED 0x40000000u
 
 /* A native window: `phys` is the buffer's physical address, mapped for the
  * GPU by eglCreateWindowSurface; rows must be tightly packed
