@@ -46,11 +46,24 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `86ce5ea58` (2026-10-16). Board numbers, with the commit each image
+main is `0247ac665` (2026-10-16). Board numbers, with the commit each image
 was built from, are in `tools/cts/RESULTS.md`; the Japanese summary is
 `tools/cts/STATUS.md`. Per-case detail: `docs/es2-cts-failures.md` (ES 2.0)
 and `docs/es3-cts-failures.md` (ES 3.0). All three boards boot standalone
 from eMMC (the two Verdins, U-Boot) or SD (Pi 4): `docs/standalone-boot.md`.
+
+`eglSwapBuffers` on a window surface completes the frame it submitted unless
+the native window carries `GLES_NATIVE_WINDOW_PIPELINED`
+(`include/EGL/eglplatform.h`), the flag an application sets when it
+double-buffers the window itself (the cluster sample sets it; glmark2, Slint
+and triangle do not). A pbuffer's swap is unchanged. This removed the black
+band of the last-drawn rows (about rows 40 to 90 of 800x600) on every
+glmark2 scene of the i.MX8MP, which showed a buffer the GPU was still
+writing (present since `dc6e62e4a`, 2026-10-07; not a regression). The
+glmark2 scores below (AM62P 462, Pi 4 188, i.MX8MP 43 at `e9901869a`) were
+measured with the pipelined swap: every board's glmark2 now waits for its
+frame before showing it, so the next common set run re-measures them. The
+benchmark samples stay stock: the overlap comes back from the driver.
 
 ### ES 2.0 (stage 1, met)
 
@@ -150,6 +163,16 @@ is kept and pinned by tests.
      their render image"); shadow and refract still resolve a depth texture
      on the CPU every frame, and terrain's remaining CPU time is unexplained.
      Decide whether `e9901869a` closes #4 and #5.
+   - **Double-buffering inside YakoGL's EGL window surface**, so a stock
+     application gets a complete picture AND the CPU/GPU overlap: the surface
+     owns a second colour buffer (OSAL GPU memory), `eglSwapBuffers` submits
+     the frame into the buffer not on screen, waits for the frame before it
+     and presents that one through an OSAL present hook the board layer
+     implements (board_show() of a given buffer, which the Pi 4 pan, the
+     AM62P plane flip and the i.MX8MP LCDIF address already support). The
+     samples' flip() then only feeds the watchdog.
+     `GLES_NATIVE_WINDOW_PIPELINED` stays for an application that manages its
+     own halves (the cluster sample).
    - `tools/cts/common-tally.py` prints "no glmark2-mem lines" for a console
      that has them; the verdict is right, the remark is not (host only).
 2. **Compile shaders at build time with our own compiler.** Shaders known at
