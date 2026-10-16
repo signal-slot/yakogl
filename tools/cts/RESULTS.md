@@ -54,15 +54,15 @@ view off SO and on SV, the AGL cluster CL, gl_test GT).
 
 | Board | glmark2-es2 | Slint SO / SV | Cluster | gl_test | GPU resets |
 |---|---|---|---|---|---:|
-| AM62P | 289, 33 scenes, 0 failed, 0 GL errors | probes pass | 75.2 fps, 46.2 Mpx/s at 1024x600 | 50 of 50 | 0 |
+| AM62P | 289, 33 scenes, 0 failed, 0 GL errors | probes pass | 75.0 fps, 46.1 Mpx/s at 1024x600 | 50 of 50 | 0 |
 | i.MX8MP | 33 scenes, 0 failed, **15 or more GL errors** (#814); no console, so no score (43 at `a63fcc5b`, 2026-10-14) | probes pass | probes pass, no fps (no console) | 49 of 49 run, case 16 skipped (#8) | 0 where counted |
 | Pi 4 | 188, 33 scenes, 0 failed, 0 GL errors | probes pass | 139.4 fps, 192.8 Mpx/s at 1920x720 | 12 of 12 | 0 |
 
-- The AM62P row is from `1d54a4eb` (2026-10-16, `records/am62p/common-1d54a4eb/`:
-  GM `20261016-1915-GM-a54c5bf1`, SO `-1925-SO-6cafbfdc`, SV `-1928-SV-904fa4f0`,
-  CL `-1930-CL-6e108434`, GT `-1933-GT-f70582c4`); all five rows done. The
-  glmark2 score fell from 462 (`fb9107af`) to 289 with 0 failed scenes and 0
-  GL errors; the cause is not investigated.
+- The AM62P row is from `04b31ec6` (2026-10-17, `records/am62p/common-04b31ec6/`:
+  GM `20261017-0138-GM-322cbfca`, SO `-0146-SO-c4bc09dd`, SV `-0149-SV-e059e685`,
+  CL `-0151-CL-10e6f04b`, GT `-0154-GT-8a8c30a9`); all five rows done. The
+  glmark2 score is 289 again (462 at `fb9107af`), 0 failed scenes and 0 GL
+  errors; the cause of the drop is not investigated.
 - AM62P glmark2 is slow in terrain (1.47 s a frame), shadow (0.38 s) and
   refract (2.08 s): GL-call time on the CPU, a GPU `glGenerateMipmap` path
   for the PowerVR is open (HANDOFF "Known defects").
