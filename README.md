@@ -51,7 +51,7 @@ glmark2-es2 at 800x600 runs all 33 scenes on every board:
 
 | Board | Score |
 | --- | --- |
-| AM62P | 462 (`e9901869a`, 2026-10-15) |
+| AM62P | 289 (`1d54a4eb`, 2026-10-16) |
 | Raspberry Pi 4 | 188 (`e9901869a`, 2026-10-16) |
 | i.MX8MP | 43 (`a63fcc5b`, 2026-10-14) |
 
