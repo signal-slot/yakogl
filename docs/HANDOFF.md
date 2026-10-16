@@ -46,7 +46,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `0247ac665` (2026-10-16). Board numbers, with the commit each image
+main is `c13cf0692` (2026-10-16). Board numbers, with the commit each image
 was built from, are in `tools/cts/RESULTS.md`; the Japanese summary is
 `tools/cts/STATUS.md`. Per-case detail: `docs/es2-cts-failures.md` (ES 2.0)
 and `docs/es3-cts-failures.md` (ES 3.0). All three boards boot standalone
@@ -72,7 +72,7 @@ bootloader and run with `tools/board.sh`:
 
 | Board | dEQP-GLES2 | Common set (GM SO SV CL GT) |
 |---|---|---|
-| AM62P | 17,140 pass / **0 fail** / 18 NS / 5 QW / 2 CW (17 images at 1x plus the ms4 image), 0 resets | 5 of 5 done (at `fb9107af`, 0 GPU resets): glmark2 462 (33 scenes, 0 failed, 0 GL errors); Slint probes pass; cluster 75.2 fps / 46.2 Mpx/s at 1024x600; gl_test 50 / 50 |
+| AM62P | 17,330 pass / **0 fail** / 34 NS / 5 QW / 2 CW (17 images at 1x, at `7e1dd598`; 17,371 cases begun, every case with a result), 0 resets | 5 of 5 done (at `fb9107af`, 0 GPU resets): glmark2 462 (33 scenes, 0 failed, 0 GL errors); Slint probes pass; cluster 75.2 fps / 46.2 Mpx/s at 1024x600; gl_test 50 / 50 |
 | i.MX8MP | 17,318 of 17,371 begun / **0 fail** / 34 NS / 19 other, 0 resets | 5 of 5 done: glmark2 33 scenes, 0 failed, **15+ GL errors** (#814); gl_test 49 / 49 run (case 16 skipped, #8) |
 | Pi 4 | 17,126 / **0 fail** / 34 NS / 3 QW / 2 CW, every list case with a result, 0 recoveries | 5 of 5 done: glmark2 188, 0 GL errors; Slint probes pass; cluster 139.4 fps at 1920x720; gl_test 12 / 12 |
 
@@ -576,7 +576,9 @@ shows bytes before the first image. `board.sh am62p disarm` clears a stale
 `/var/yakogl/once-*.bin`; a bridge capture timeout (`verdict=scan_failed`,
 rc 4) is a transport problem: rerun the row. If `board.sh` refuses (rc=3) because
 a previous run left `/var/yakogl/once-img8-*.bin`, `board.sh am62p disarm` and
-removing the stale image clear it. Another session's dEQP tree may
+removing the stale image clear it (a one-shot image left in `/var/yakogl` by an
+interrupted run blocks `board.sh tree`; `disarm` only cleared the U-Boot env on
+2026-10-16, the file had to be removed by hand). Another session's dEQP tree may
 hold the board for hours; on the AM62P `TREE_RETRIES` is 0, so wait for a
 quiet board. A gles3 stage 1 is not the farm's `DEQP_WORK` (GLES2): build
 one with `tools/cts/cts-build-zephyr.sh MODULE=gles3`.
