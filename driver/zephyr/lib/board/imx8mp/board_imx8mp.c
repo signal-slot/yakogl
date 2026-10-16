@@ -37,6 +37,11 @@
 /* SCANOUT_VIEW: the panel-pitch buffer board_window() made, 0 for none */
 static uintptr_t s_view_phys;
 static size_t s_view_bytes;
+#if defined(CONFIG_SAFEUI_DISPLAY_IMX8MP) && defined(CONFIG_SAFEUI_GPU_VIVANTE)
+/* The buffer the LCDIF scans since board_show() turned it on or latched it,
+ * 0 before the first show */
+static uintptr_t s_scan;
+#endif
 
 int board_window(uint32_t w, uint32_t h, struct board_window *out)
 {
@@ -151,13 +156,74 @@ int board_show(const struct board_window *win)
 		pitch = pw * 4u;
 	}
 	if (on) {
-		return imx8mp_display_set_fb(scan);
+		/* The LCDIF already scans this buffer (the one-buffer window
+		 * after its first show): nothing to flip. set_fb would only
+		 * wait for the next VSYNC (the shadow load), a panel period a
+		 * frame whatever the swap interval; pacing is
+		 * yakogl_zephyr_wait_vblank()'s below (not yet called on the
+		 * GC7000: until then nothing paces, A/B option to keep it). */
+		if (scan == s_scan && !IS_ENABLED(CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC)) {
+			return 0;
+		}
+		rc = imx8mp_display_set_fb(scan);
+		if (rc == 0) {
+			s_scan = scan;
+		}
+		return rc;
 	}
 	rc = imx8mp_display_on(scan, pitch);
 	on = rc == 0;
+	if (on) {
+		s_scan = scan;
+	}
 	return rc;
 #else
 	ARG_UNUSED(win);
+	return -ENOTSUP;
+#endif
+}
+
+/* The vertical-sync source for eglSwapInterval (src/osal/zephyr.c has the
+ * weak default, -ENOTSUP). Not called yet: the GC7000's OSAL,
+ * src/osal/zephyr_gc.c, has no .wait_vblank, so EGL sees -ENOTSUP and the
+ * linker drops this until that OSAL calls it. It latches the address the
+ * LCDIF already scans again: set_fb sets the shadow-load bit, which the
+ * LCDIF clears at its next VSYNC, and returns then. The picture does not
+ * change; it is the wait board_show() did every frame before, now only for a
+ * swap interval of 1 or more. It works on both LCDIF builds (imx8mp_lcdif.c and the Rust
+ * yakogl,imx8mp-lcdif, whose interrupt only a cold bring-up enables).
+ *
+ * The wait cannot be cut short: it ends at the VSYNC or at the LCDIF
+ * driver's own bound (36 ms in imx8mp_lcdif.c, 83 ms in lcdifv3.rs), and a
+ * VSYNC later than timeout_us is reported as -ETIMEDOUT. Returns 0,
+ * -ETIMEDOUT, or -ENOTSUP before the first show, with
+ * YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC (board_show() waits instead) and
+ * without the display. */
+int yakogl_zephyr_wait_vblank(int64_t timeout_us)
+{
+#if defined(CONFIG_SAFEUI_DISPLAY_IMX8MP) && defined(CONFIG_SAFEUI_GPU_VIVANTE)
+	uint64_t t0;
+	int64_t us;
+	int rc;
+
+	if (IS_ENABLED(CONFIG_YAKOGL_BOARD_IMX8MP_SHOW_WAITS_VSYNC) || s_scan == 0u) {
+		return -ENOTSUP;
+	}
+	if (timeout_us == 0) {
+		return -ETIMEDOUT;
+	}
+	t0 = k_cycle_get_64();
+	rc = imx8mp_display_set_fb(s_scan);
+	if (rc == -ETIMEDOUT) {
+		return rc;
+	}
+	if (rc != 0) {
+		return -ENOTSUP;
+	}
+	us = (int64_t)k_cyc_to_us_floor64(k_cycle_get_64() - t0);
+	return timeout_us > 0 && us > timeout_us ? -ETIMEDOUT : 0;
+#else
+	ARG_UNUSED(timeout_us);
 	return -ENOTSUP;
 #endif
 }
