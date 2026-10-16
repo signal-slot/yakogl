@@ -27,7 +27,7 @@ closed). Mustpass list: 17,165 cases.
 
 | Board | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning | GPU resets |
 |---|---:|---:|---:|---|---:|
-| AM62P, 17 images at 1x | 17,124 | **0** | 34 | 5 / 2 | 0 |
+| AM62P, 17 images at 1x (re-run at `7e1dd598`, 17,371 cases begun: the list plus 206 outside it) | 17,330 | **0** | 34 | 5 / 2 | 0 |
 | AM62P, ms4 image (`multisample.*` on the 4x config) | 16 | **0** | 0 | 0 / 0 | 0 |
 | AM62P combined (ms4 replaces the 16 1x `multisample.*`) | 17,140 | **0** | 18 | 5 / 2 | 0 |
 | i.MX8MP, 29 entries (17,371 cases begun: the list plus 206 outside it) | 17,318 | **0** | 34 | 19 (other) | 0 |
@@ -38,6 +38,11 @@ closed). Mustpass list: 17,165 cases.
   `clip_control` 8, `negative_api.texture.compressedtexsubimage2d_*` 9,
   `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (no
   multisample surface at 1x; the AM62P runs them on its ms4 image).
+- The AM62P 1x row is from `7e1dd598` (2026-10-16,
+  `records/am62p/deqp-7e1dd598/`, 17 images, every case has a result). It
+  replaced the `e9901869a` 1x figure, 17,124 pass on the 17,165-case list. The
+  ms4 and combined rows are still from `e9901869a`: the combined 17,140 is that
+  17,124 plus the 16 ms4 passes.
 - The two CompatibilityWarnings are `flush_finish.flush` and
   `flush_finish.flush_wait`, dEQP's timing check.
 - The i.MX8MP's 19 warnings appear on NXP's own driver too.
