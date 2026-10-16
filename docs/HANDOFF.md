@@ -46,7 +46,7 @@ Beyond the five stages, not scheduled: ES 3.1 / 3.2 (#19).
 
 ## State of main
 
-main is `b44e9a9f` (2026-10-17). Board numbers, with the commit each image
+main is `d61a4c5d` (2026-10-17). Board numbers, with the commit each image
 was built from, are in `tools/cts/RESULTS.md`; the Japanese summary is
 `tools/cts/STATUS.md`. Per-case detail: `docs/es2-cts-failures.md` (ES 2.0)
 and `docs/es3-cts-failures.md` (ES 3.0). All three boards boot standalone
@@ -81,7 +81,7 @@ bootloader and run with `tools/board.sh`:
 
 | Board | dEQP-GLES2 | Common set (GM SO SV CL GT) |
 |---|---|---|
-| AM62P | 17,330 pass / **0 fail** / 34 NS / 5 QW / 2 CW (17 images at 1x, at `7e1dd598`; 17,371 cases begun, every case with a result), 0 resets | 5 of 5 done (at `fb9107af`, 0 GPU resets): glmark2 462 (33 scenes, 0 failed, 0 GL errors); Slint probes pass; cluster 75.2 fps / 46.2 Mpx/s at 1024x600; gl_test 50 / 50 |
+| AM62P | 17,330 pass / **0 fail** / 34 NS / 5 QW / 2 CW (17 images at 1x, at `a731983d`; 17,371 cases begun, every case with a result), 0 resets | 5 of 5 done (at `fb9107af`, 0 GPU resets): glmark2 462 (33 scenes, 0 failed, 0 GL errors); Slint probes pass; cluster 75.2 fps / 46.2 Mpx/s at 1024x600; gl_test 50 / 50 |
 | i.MX8MP | 17,318 of 17,371 begun / **0 fail** / 34 NS / 19 other (e14 14, e27 5), 0 resets (tree re-run at `f40a2aba`, 29 selector rows, `records/imx8mp/deqp-f40a2aba/`, same totals) | 5 of 5 done: glmark2 33 scenes, 0 failed, 15+ GL errors (#814) at `e9901869a`; **0 GL errors with the glmark2 image's 240 MiB carve-out, on branch `b421b447` (2026-10-16, two common sets, `records/imx8mp/common-b421b447{-r1,}`): score 42, 33 scenes ran, 0 failed, 0 incomplete-texture draws; SO, SV, CL probes pass; gl_test 48 / 49 (case 44) then 49 / 49. Rerun from main** (`tools/cts/RESULTS.md`, "Common set", "i.MX8MP glmark2 GL errors (#814)"); gl_test case 16 skipped (#8) |
 | Pi 4 | 17,126 / **0 fail** / 34 NS / 3 QW / 2 CW, every list case with a result, 0 recoveries | 5 of 5 done: glmark2 188, 0 GL errors; Slint probes pass; cluster 139.4 fps at 1920x720; gl_test 12 / 12 |
 
