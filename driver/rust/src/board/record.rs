@@ -198,6 +198,17 @@ kinds! {
          IRQ_STAT one ms after the video started << 8 (0xff the check failed) | the \
          display health (IMX8MP_DISPLAY_HEALTH_*) << 16 | the LCDIF's CTRLDESCL0_5 BPP code \
          << 24 | its pitch in KiB << 28 (saturating at 15)";
+    GL_ERROR = 23, Tag,
+        "one of the first GL errors a run raised, by name (issue #814); not a verdict of its \
+         own: written after the run's verdict when the runner's selector asks for it \
+         (GL_ERROR_SEL | k: driver/samples/zephyr/glmark2), so a runner that keeps only the \
+         last record (the i.MX8MP) reads it. tag = k, the error's index (0 the first). w1 = \
+         the GL error code (16 bits) | the client's tag when it was raised (glmark2: the \
+         benchmark-list entry; GL_ERROR_TAG_NONE none or before the first) << \
+         GL_ERROR_TAG_SHIFT (8 bits) | how many errors the GL core kept (at most 8) << \
+         GL_ERROR_KEPT_SHIFT; w2 = the FNV-1a (32 bits, fnv1a32) of the name of the entry \
+         point that raised it, 0 when k is not below the kept count (code 0, tag none); \
+         w3 = every GL error the entry points raised (yakogl_gl_errors_raised, 32 bits)";
 }
 
 /// Kind numbers taken on another branch and not defined here yet (16 SET,
@@ -352,6 +363,12 @@ values! {
     GLMARK2_WHY_LINK = 3;
     GLMARK2_WHY_FILE = 4;
     GLMARK2_WHY_OTHER = 15;
+    // kind GL_ERROR: the selector that asks for error k (GL_ERROR_SEL | k)
+    // and w1's fields.
+    GL_ERROR_SEL = 0x800;
+    GL_ERROR_TAG_SHIFT = 16;
+    GL_ERROR_TAG_NONE = 0xff;
+    GL_ERROR_KEPT_SHIFT = 24;
     // kind GPU_STOP: the cause (gpu::pvr::freelist STOP_*).
     // 1 is not a cause: a refused grow is survived
     // (docs/notes/pvr-render-pool.md).
@@ -1110,6 +1127,53 @@ pub fn parse_line(line: &str) -> Option<[u32; 4]> {
     Some(w)
 }
 
+/// FNV-1a, 32 bits (offset basis 0x811c9dc5, prime 0x01000193): kind
+/// GL_ERROR's w2, the hash of an entry point's name, which a decoder matches
+/// against the GL headers' names.
+pub const fn fnv1a32(data: &[u8]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < data.len() {
+        h = (h ^ data[i] as u32).wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    h
+}
+
+/// The name of a GL error code, or "?".
+fn gl_error_name(code: u32) -> &'static str {
+    match code {
+        0x500 => "GL_INVALID_ENUM",
+        0x501 => "GL_INVALID_VALUE",
+        0x502 => "GL_INVALID_OPERATION",
+        0x505 => "GL_OUT_OF_MEMORY",
+        0x506 => "GL_INVALID_FRAMEBUFFER_OPERATION",
+        _ => "?",
+    }
+}
+
+/// kind GL_ERROR after its prefix: error `k`, its code, entry point hash and
+/// tag, and the run's count.
+fn describe_gl_error(out: &mut impl fmt::Write, k: u8, w1: u32, w2: u32, w3: u32) -> fmt::Result {
+    let (code, tag, kept) = (w1 & 0xffff, (w1 >> GL_ERROR_TAG_SHIFT) & 0xff, w1 >> GL_ERROR_KEPT_SHIFT);
+    if u32::from(k) >= kept {
+        return write!(out, "error {k}: not kept ({kept} kept); GL errors raised {w3}");
+    }
+    write!(
+        out,
+        "error {k} of {kept} kept: 0x{code:x} ({}) in the entry point with FNV-1a 0x{w2:08x}, ",
+        gl_error_name(code)
+    )?;
+    if tag == GL_ERROR_TAG_NONE {
+        out.write_str("no tag")?;
+    } else {
+        write!(out, "tag {tag} (glmark2: ")?;
+        write_glmark2_entry(out, tag)?;
+        out.write_str(")")?;
+    }
+    write!(out, "; GL errors raised {w3}")
+}
+
 fn status_name(s: u32) -> &'static str {
     match s {
         STATUS_PASS => "pass",
@@ -1517,6 +1581,7 @@ pub fn describe(out: &mut impl fmt::Write, w: [u32; 4]) -> fmt::Result {
             _ => write!(out, "what {low} (?) {w1:08x} {w2:08x} {w3:08x}"),
         },
         kind::DISPLAY => describe_display(out, w1, w2, w3),
+        kind::GL_ERROR => describe_gl_error(out, low, w1, w2, w3),
         _ => Ok(()),
     }
 }
@@ -1674,20 +1739,21 @@ mod tests {
     }
 
     #[test]
-    fn kinds_are_one_to_twenty_two_and_the_tag_list_is_the_formats() {
-        // 1..=22 in order, each number once, defined here or reserved
-        let mut want = (1..=22u8).filter(|v| !RESERVED_KINDS.contains(v));
+    fn kinds_are_one_to_twenty_three_and_the_tag_list_is_the_formats() {
+        // 1..=23 in order, each number once, defined here or reserved
+        let mut want = (1..=23u8).filter(|v| !RESERVED_KINDS.contains(v));
         for k in KINDS {
             assert_eq!(Some(k.value), want.next(), "{}", k.name);
         }
         assert_eq!(want.next(), None, "a kind is missing");
-        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 22);
+        assert_eq!(KINDS.len() + RESERVED_KINDS.len(), 23);
         assert_eq!(kind::STAGE, 14);
         assert_eq!(kind::FINGERPRINT, 15);
         assert_eq!(kind::GLMARK2, 18);
         assert_eq!(kind::GPU_STOP, 20);
         assert_eq!(kind::CHECK, 21);
         assert_eq!(kind::DISPLAY, 22);
+        assert_eq!(kind::GL_ERROR, 23);
         // one-method.md section 3's list, plus STAGE and FAULT's tag.
         let tags = [
             kind::FAULT,
@@ -1701,6 +1767,7 @@ mod tests {
             kind::STAGE,
             kind::GPU_STOP,
             kind::CHECK,
+            kind::GL_ERROR,
         ];
         for k in KINDS {
             assert_eq!(k.low == Low::Tag, tags.contains(&k.value), "{}", k.name);
@@ -2057,5 +2124,36 @@ mod tests {
         assert_eq!(d.as_str(), "APP (2) seq 3: stage 7 status 1 (pass) shown by copy frames 3600 app 0x0000ea60");
         let d = text(|b| describe(b, [0x594B0203, 7 << 8 | 2, 0, 0]));
         assert_eq!(d.as_str(), "APP (2) seq 3: stage 7 status 2 (fail) frames 0 app 0x00000000");
+    }
+
+    /// GL_ERROR (issue #814): the hash is FNV-1a (the published test
+    /// vectors), each field decodes, and an error not kept says so.
+    #[test]
+    fn gl_error_words_and_their_decode() {
+        assert_eq!(fnv1a32(b""), 0x811c_9dc5);
+        assert_eq!(fnv1a32(b"a"), 0xe40c_292c);
+        assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
+        assert_eq!(fnv1a32(b"glTexImage2D"), 0xebee_a496);
+        let w1 = 0x505 | 22 << GL_ERROR_TAG_SHIFT | 8 << GL_ERROR_KEPT_SHIFT;
+        assert_eq!(w1, 0x0816_0505);
+        let d = text(|b| describe(b, [w0(kind::GL_ERROR, 0), w1, fnv1a32(b"glTexImage2D"), 37]));
+        assert_eq!(
+            d.as_str(),
+            "GL_ERROR (23) tag 0: error 0 of 8 kept: 0x505 (GL_OUT_OF_MEMORY) in the entry point with FNV-1a \
+             0xebeea496, tag 22 (glmark2: entry 22 (default list: terrain)); GL errors raised 37"
+        );
+        let d = text(|b| describe(b, [w0(kind::GL_ERROR, 0), 0x01ff_0500, 0x1234_5678, 1]));
+        assert_eq!(
+            d.as_str(),
+            "GL_ERROR (23) tag 0: error 0 of 1 kept: 0x500 (GL_INVALID_ENUM) in the entry point with FNV-1a \
+             0x12345678, no tag; GL errors raised 1"
+        );
+        let d = text(|b| describe(b, [w0(kind::GL_ERROR, 3), 0x02ff_0000, 0, 2]));
+        assert_eq!(d.as_str(), "GL_ERROR (23) tag 3: error 3: not kept (2 kept); GL errors raised 2");
+        // the selector does not take another kind's bits
+        for sel in [DEQP_SEL_FAILS, DEQP_SEL_PROBE, DEQP_SEL_STATUS, PERF_SEL, SWEEP_SEL_LEAKS, SWEEP_SEL_LIST] {
+            assert_eq!(GL_ERROR_SEL & sel, 0, "0x{sel:x}");
+        }
+        assert_eq!(classify([w0(kind::GL_ERROR, 0), w1, 0, 37]), Class::Verdict);
     }
 }

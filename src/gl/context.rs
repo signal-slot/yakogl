@@ -1135,10 +1135,112 @@ pub extern "C" fn yakogl_gl_errors_recorded() -> u32 {
     gl_errors_recorded()
 }
 
-/// An entry point raised `e`: count it and log it (the first few).
+/// An entry point raised `e`: count it, keep it (the first
+/// [`FIRST_ERRORS`]) and log it (the first few).
 fn note_raised(e: GLenum, func: &str) {
     count_saturating(&GL_ERRORS_RAISED);
+    keep_first(e, func);
     log_error(e, func);
+}
+
+/* ---- the first GL errors -----------------------------------------------------
+ * The counters above say how many errors a run raised; these say which: the
+ * first FIRST_ERRORS errors of the process, each with its code, the entry
+ * point that raised it and the client's tag at that moment
+ * (yakogl_gl_error_tag; glmark2 sets the benchmark-list entry it is running).
+ * For a run whose console is lost (the i.MX8MP's glmark2, issue #814) the
+ * client puts them in its record; a console only shows the first
+ * g_gl_error_log_limit lines, without the tag. Process-global like the
+ * counters; never cleared. */
+
+/// How many of the first GL errors are kept (see "the first GL errors").
+pub const FIRST_ERRORS: usize = 8;
+/// The longest entry point name kept, in bytes; a longer one is cut.
+const FIRST_ERROR_NAME: usize = 40;
+
+/// One kept GL error.
+#[derive(Clone, Copy)]
+struct FirstError {
+    code: GLenum,
+    tag: u32,
+    len: u8,
+    name: [u8; FIRST_ERROR_NAME],
+}
+
+const NO_FIRST_ERROR: FirstError = FirstError { code: 0, tag: 0, len: 0, name: [0; FIRST_ERROR_NAME] };
+static FIRST: Global<[FirstError; FIRST_ERRORS]> = Global::new([NO_FIRST_ERROR; FIRST_ERRORS]);
+/// How many of FIRST hold an error.
+static FIRST_KEPT: AtomicU32 = AtomicU32::new(0);
+/// The client's tag, stored with each error kept (yakogl_gl_error_tag).
+static ERROR_TAG: AtomicU32 = AtomicU32::new(0);
+
+/// Keep `e` from `func` if fewer than [`FIRST_ERRORS`] are kept.
+fn keep_first(e: GLenum, func: &str) {
+    let n = FIRST_KEPT.load(Ordering::Relaxed) as usize;
+    if n >= FIRST_ERRORS {
+        return;
+    }
+    let len = func.len().min(FIRST_ERROR_NAME);
+    let mut f = FirstError { code: e, tag: ERROR_TAG.load(Ordering::Relaxed), len: len as u8, ..NO_FIRST_ERROR };
+    f.name[..len].copy_from_slice(&func.as_bytes()[..len]);
+    // SAFETY: single-threaded by contract (as ERRORS_LOGGED); n is in range.
+    unsafe { FIRST.get()[n] = f };
+    FIRST_KEPT.store(n as u32 + 1, Ordering::Relaxed);
+}
+
+/// Set the tag stored with every GL error kept from now on (see "the first
+/// GL errors"): glmark2's benchmark-list entry, or any value of the
+/// client's. 0 until a client sets one. In every build.
+#[no_mangle]
+pub extern "C" fn yakogl_gl_error_tag(tag: u32) {
+    ERROR_TAG.store(tag, Ordering::Relaxed);
+}
+
+/// How many of the first GL errors are kept: the errors raised, up to
+/// [`FIRST_ERRORS`].
+#[no_mangle]
+pub extern "C" fn yakogl_gl_errors_kept() -> u32 {
+    FIRST_KEPT.load(Ordering::Relaxed)
+}
+
+/// Kept GL error `i` (0 is the first the process raised): its code, the tag
+/// set when it was raised, and the name of the entry point that raised it,
+/// NUL-terminated in `name` and cut to `cap - 1` bytes. Returns 0, or -1 when
+/// fewer than `i + 1` are kept (nothing is written then). A null pointer, or
+/// a `cap` of 0 for `name`, skips that output.
+///
+/// # Safety
+/// `code` and `tag` are null or valid for a write; `name` is null or valid
+/// for `cap` bytes of writes.
+#[no_mangle]
+pub unsafe extern "C" fn yakogl_gl_error_first(
+    i: u32,
+    code: *mut u32,
+    tag: *mut u32,
+    name: *mut c_char,
+    cap: usize,
+) -> i32 {
+    if i >= yakogl_gl_errors_kept() {
+        return -1;
+    }
+    // SAFETY: single-threaded by contract; i is below FIRST_KEPT, at most
+    // FIRST_ERRORS.
+    let f = unsafe { FIRST.get()[i as usize] };
+    // SAFETY: the caller's pointers, as documented.
+    unsafe {
+        if !code.is_null() {
+            *code = f.code;
+        }
+        if !tag.is_null() {
+            *tag = f.tag;
+        }
+        if !name.is_null() && cap > 0 {
+            let n = usize::from(f.len).min(cap - 1);
+            core::ptr::copy_nonoverlapping(f.name.as_ptr().cast::<c_char>(), name, n);
+            *name.add(n) = 0;
+        }
+    }
+    0
 }
 
 /// Log the first few GL errors with the entry point that raised them: a
@@ -2068,6 +2170,8 @@ pub(crate) fn reset_for_tests() {
     }
     owner_release();
     REFUSAL_LOGGED.store(false, Ordering::Relaxed);
+    FIRST_KEPT.store(0, Ordering::Relaxed);
+    ERROR_TAG.store(0, Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -2625,6 +2729,51 @@ mod tests {
         // SAFETY: as above.
         unsafe { core::ptr::write(&raw mut g_gl_error_log_limit, restore) };
         reset_error_log_cap();
+    }
+
+    /// Issue #814: the first errors are kept by name, with the client's tag
+    /// (glmark2's entry), for a record to name them; later ones only count.
+    #[test]
+    fn the_first_errors_are_kept_with_their_entry_point_and_tag() {
+        let gl = TestGl::new(8, 8);
+        let raised = gl_errors_raised();
+        yakogl_gl_error_tag(22);
+        gl.ctx().set_error(GL_OUT_OF_MEMORY, "glTexImage2D");
+        yakogl_gl_error_tag(24);
+        for _ in 0..FIRST_ERRORS + 3 {
+            set_error_no_ctx(GL_INVALID_FRAMEBUFFER_OPERATION, "glDrawElements");
+        }
+        assert_eq!(yakogl_gl_errors_kept(), FIRST_ERRORS as u32, "only the first are kept");
+        assert_eq!(gl_errors_raised() - raised, FIRST_ERRORS as u32 + 4, "every one is counted");
+        let (mut code, mut tag) = (0u32, 0u32);
+        let mut name = [0 as c_char; 48];
+        // SAFETY: valid pointers; `name` holds 48 bytes.
+        let rc = unsafe { yakogl_gl_error_first(0, &mut code, &mut tag, name.as_mut_ptr(), name.len()) };
+        assert_eq!((rc, code, tag), (0, GL_OUT_OF_MEMORY, 22));
+        // SAFETY: yakogl_gl_error_first terminated it.
+        assert_eq!(unsafe { CStr::from_ptr(name.as_ptr()) }, c"glTexImage2D");
+        // a short buffer gets the name cut and still terminated
+        let mut short = [0 as c_char; 6];
+        // SAFETY: as above, 6 bytes.
+        let rc = unsafe { yakogl_gl_error_first(1, &mut code, &mut tag, short.as_mut_ptr(), short.len()) };
+        assert_eq!((rc, code, tag), (0, GL_INVALID_FRAMEBUFFER_OPERATION, 24));
+        // SAFETY: as above.
+        assert_eq!(unsafe { CStr::from_ptr(short.as_ptr()) }, c"glDra");
+        // past the kept ones: -1 and nothing written
+        code = 7;
+        // SAFETY: valid pointers; null name is allowed.
+        let rc = unsafe { yakogl_gl_error_first(FIRST_ERRORS as u32, &mut code, &mut tag, core::ptr::null_mut(), 0) };
+        assert_eq!((rc, code), (-1, 7));
+        // a name longer than the 40 bytes kept is cut there (a new TestGl
+        // starts with none kept and tag 0: reset_for_tests)
+        drop(gl);
+        let gl = TestGl::new(8, 8);
+        gl.ctx().set_error(GL_INVALID_ENUM, "glAnEntryPointWhoseNameIsLongerThanFortyBytes");
+        // SAFETY: as above, 48 bytes.
+        let rc = unsafe { yakogl_gl_error_first(0, &mut code, &mut tag, name.as_mut_ptr(), name.len()) };
+        assert_eq!((rc, code, tag), (0, GL_INVALID_ENUM, 0));
+        // SAFETY: as above.
+        assert_eq!(unsafe { CStr::from_ptr(name.as_ptr()) }.to_bytes().len(), FIRST_ERROR_NAME);
     }
 
     #[test]

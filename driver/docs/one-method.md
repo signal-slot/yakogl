@@ -256,6 +256,16 @@ LCDIF's format and pitch (record.rs has the bits; `yd_record_display_words`
 packs them). It is written after PICTURE, so on the i.MX8MP it is the
 record the SNVS keeps; its status is n/a, like PICTURE's.
 
+**Added:** kind 23 GL_ERROR, one of the first GL errors a run raised, by
+name (issue #814). The GL core keeps the first eight errors with the entry
+point that raised them and the client's tag (`yakogl_gl_error_tag`;
+glmark2 sets its benchmark-list entry). glmark2 prints them all; with the
+selector `GL_ERROR_SEL | k` (0x800 | k) it also stores error k as a GL_ERROR
+record, tag k, after its GLMARK2 verdict, so the i.MX8MP's SNVS keeps it. w1
+is the code, the tag (bits 16..23) and how many were kept (bits 24..31), w2
+the FNV-1a of the entry point's name (`yakogl-tools record` names it from the
+GL headers), w3 every GL error raised, 32 bits. Its status is n/a.
+
 **Defined once, in Rust:** `driver/rust/src/board/record.rs` (no_std) holds
 the kinds, the packing (`case`, `probes`, `picture`, ...), the CRC-16 used
 by PROBES and DEQP, and the decoder. The C shim `common/record.c` calls

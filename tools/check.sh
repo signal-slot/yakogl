@@ -2795,13 +2795,36 @@ fi
 # the pinned commit) into build/glmark2-host/shaders. Without GLMARK2_SRC the
 # row is a gap. The same run's logs must hold no depth texture sampled stale
 # (shadow and refract on the PowerVR, pvr-depth-resolve: "the backend did not
-# resolve its depth").
+# resolve its depth"), and no GL error: the GC7000's run has the i.MX8MP
+# glmark2 image's GPU memory (run.sh, YAKOGL_GC_CARVEOUT_BYTES), where a
+# 64 MiB carve-out raised GL errors in terrain, shadow and refract (#814).
 glmark2_corpus_tests() {
-  local c stale
+  local c stale glerr
   GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
     >build/glmark2-host.log 2>&1 || { tail -20 build/glmark2-host.log; return 1; }
   stale=$(grep -l 'did not resolve its depth' build/glmark2-host/logs/*/*.log || true)
   [ -z "$stale" ] || { echo "a depth texture sampled stale in: $stale"; return 1; }
+  glerr=$(grep -l -E 'GL error 0x[0-9a-f]+ in ' build/glmark2-host/logs/*/*.log || true)
+  [ -z "$glerr" ] || {
+    echo "GL errors in: $glerr"
+    grep -h -E 'GL error 0x|GC carve-out' build/glmark2-host/logs/*/*.log | sort | uniq -c | head -20
+    return 1
+  }
+  # and headroom: each entry's GC memory peak (the sum of its heaps' "at
+  # most", an upper bound) within 3/4 of the modelled carve-out. The host
+  # returns a free at once and runs one entry per process; the board holds a
+  # free until its kick completes and runs every entry in one fragmenting
+  # pool. At 64 MiB terrain peaked at 83% here with no error, and the board
+  # raised GL errors in every common set (#814).
+  local budget tight f
+  budget=$(sed -n 's/^YAKOGL_GC_CARVEOUT_BYTES=\([0-9]*\).*/\1/p' build/glmark2-host/gc-settings.txt)
+  [ -n "$budget" ] || { echo "no YAKOGL_GC_CARVEOUT_BYTES in build/glmark2-host/gc-settings.txt"; return 1; }
+  tight=$(for f in build/glmark2-host/logs/vivante/*.log; do
+    awk -v b="$budget" -v f="${f##*/}" '/osal\(linux\): heap 0x/ {
+        for (i = 2; i < NF; i++) if ($i == "at" && $(i + 1) == "most,") s += $(i - 1)
+      } END { if (s * 4 > b * 3) printf "entry %s: %d of %d bytes\n", f, s, b }' "$f"
+  done)
+  [ -z "$tight" ] || { echo "GC7000 peak above 3/4 of the i.MX8MP glmark2 carve-out:"; echo "$tight"; return 1; }
   # Plain `cargo test`, not cargo_test: the corpus is generated under
   # build/, outside git, so no key of cargo_test covers it.
   for c in host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \

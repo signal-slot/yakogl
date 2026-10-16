@@ -252,6 +252,33 @@ the selector, as DEQP_FAILS does; not done. The host harness prints the two
 counters per scene (`tools/hostharness/glmark2`, the `gm2: scene-end` line)
 and checks them against the library's own lines.
 
+### The first GL errors by name: kind 23 GL_ERROR (issue #814)
+
+The GL core keeps the first eight GL errors with the entry point that
+raised them and a tag the client sets (`src/gl/context.rs`,
+`yakogl_gl_error_tag`, `yakogl_gl_error_first`); the sample sets the tag to
+the benchmark-list entry at each entry's setup (255 before the first). At
+the end it prints one line per kept error:
+
+```text
+glmark2: GL error 1 of 37: 0x505 in glTexImage2D, entry 22
+```
+
+With the selector `GL_ERROR_SEL | k` (0x800 | k) in the SNVS it also stores
+error k as a kind 23 GL_ERROR record after the GLMARK2 verdict, which then
+is the run's last record: the only way the i.MX8MP shows which calls failed.
+One boot per error: `SEL=$((0x800)) tools/board.sh imx8mp run <GM image>
+<logdir> gle0`, then `0x801`, ... `yakogl-tools record` decodes it and names
+the entry point from the GL and EGL headers (w2 is the FNV-1a of its name):
+
+```text
+GL_ERROR (23) tag 0: error 0 of 8 kept: 0x505 (GL_OUT_OF_MEMORY) in the entry point with FNV-1a 0xebeea496, tag 22 (glmark2: entry 22 (default list: terrain)); GL errors raised 37
+  entry point: glTexImage2D
+```
+
+(a synthetic record, `tools/testdata/record-decode.txt`). w3 is the whole
+count of errors raised, 32 bits, where GLMARK2's field stops at 15.
+
 ## 3. Public scores (opened 2026-10-03)
 
 Reference only: these are Linux stacks with the vendor or Mesa driver, under

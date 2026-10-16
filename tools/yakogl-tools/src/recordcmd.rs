@@ -242,9 +242,27 @@ fn wcr(v: u32) -> String {
     )
 }
 
+/// The headers whose entry points kind GL_ERROR's hash is matched against.
+const GL_HEADERS: [&str; 3] = [
+    include_str!("../../../include/GLES3/gl32.h"),
+    include_str!("../../../include/GLES2/gl2ext.h"),
+    include_str!("../../../include/EGL/egl.h"),
+];
+
+/// The GL or EGL entry point whose name has FNV-1a `hash` (record::fnv1a32,
+/// kind GL_ERROR's w2), from the headers' identifiers.
+pub fn gl_entry_name(hash: u32) -> Option<&'static str> {
+    GL_HEADERS
+        .iter()
+        .flat_map(|h| h.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')))
+        .filter(|w| w.starts_with("gl") || w.starts_with("egl"))
+        .find(|w| record::fnv1a32(w.as_bytes()) == hash)
+}
+
 /// The decoded record: record.rs's `describe` line, then what only the host
 /// can add (the case names behind name checks, the bits of a DEQP_CASES run,
-/// the field names of the WDOG registers and console stage 1).
+/// the field names of the WDOG registers and console stage 1, the entry point
+/// of a GL_ERROR).
 pub fn decode(w: &[u32; 4], cases: &CaseList) -> Vec<String> {
     let mut first = String::new();
     // describe writes into a String, which cannot fail
@@ -282,6 +300,10 @@ pub fn decode(w: &[u32; 4], cases: &CaseList) -> Vec<String> {
                 }
             }
         }
+        kind::GL_ERROR if w1 >> record::GL_ERROR_KEPT_SHIFT > u32::from(low) => out.push(format!(
+            "  entry point: {}",
+            gl_entry_name(w2).unwrap_or("(no GL or EGL entry point of the headers has this FNV-1a)")
+        )),
         kind::WDOG => {
             let (flags, refusal) = (w2 & 0xff, (w2 >> 8) & 0xff);
             let why = match refusal {
@@ -621,12 +643,12 @@ mod tests {
                 lines.push(l.to_string());
             }
         }
-        // the population: the golden file's 58 blocks (45 + GLMARK2 on- and off-screen, with
+        // the population: the golden file's 59 blocks (45 + GLMARK2 on- and off-screen, with
         // GLMARK2_SCENES and with GLMARK2_GL + GPU_STOP + four CHECK: a probe, and CHECK_RUN for a fence
         // timeout, a frame over the budget with its slowest step, and nothing measured
         // + DISPLAY + three set records: CASE_SET failed and passed, and the earlier
-        // CASE_SET_FAIL form), every kind of record.rs's table among them
-        assert_eq!(blocks, 58, "the golden file's block count changed: re-derive the pin");
+        // CASE_SET_FAIL form + GL_ERROR), every kind of record.rs's table among them
+        assert_eq!(blocks, 59, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
     }

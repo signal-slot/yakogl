@@ -68,6 +68,15 @@ view off SO and on SV, the AGL cluster CL, gl_test GT).
   for the PowerVR is open (HANDOFF "Known defects").
 - Pictures are not checked per scene yet: the tally judges console error
   lines only (`docs/notes/stage2-bench-gap.md`).
+- i.MX8MP glmark2 GL errors (#814): the cause is the GC7000's 64 MiB GPU
+  carve-out, from which every GC allocation (the board layer's 800x600 window
+  and 1280x800 screen copy included) is taken. A diagnostic run from branch
+  `b421b447` (main `ab43a20c` plus the 240 MiB carve-out of the glmark2
+  image's overlay and the first-GL-errors instrumentation), `board-stage.sh
+  imx8mp common` twice, read GM `594b120e fc3f002a 6184003f 00258320`: score
+  42, 33 ran, 0 failed, **0 GL errors**, in both runs; SO / SV / CL probes
+  pass; GT 48 of 49 (case 44, #6) then 49 of 49. Not a row of main: the row
+  above is replaced by a run from main once the change lands.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 

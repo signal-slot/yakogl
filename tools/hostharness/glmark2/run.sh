@@ -31,6 +31,9 @@
 #                    one not set is taken from the Pi 4's glmark2 image,
 #                    driver/samples/zephyr/glmark2/boards/rpi_4b.conf (its
 #                    CONFIG_YAKOGL_V3D_* lines: the 96 MiB carve-out)
+#   YAKOGL_GC_CARVEOUT_BYTES  the GC7000's GPU memory (src/osal/linux.c);
+#                    unset, the i.MX8MP glmark2 image's carve-out less the
+#                    board's window and screen (below; gc-settings.txt)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -39,7 +42,7 @@ VERSION=2023.01 # meson.build's project version at that commit
 
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { sed -n '3,32p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,35p' "$0"; exit 2; }
 # The physical path: the tree is often reached through a symlink (ccfarm's
 # dependency layout, ~/.local/share/ccfarm/deps/<project>/glmark2-src, is
 # one), and git reports its top level resolved, so the comparison below
@@ -86,11 +89,47 @@ while IFS='=' read -r name value; do
 done < <(grep -E '^CONFIG_YAKOGL_V3D_[A-Z0-9_]+=' "$PI4_CONF")
 [ -n "${YAKOGL_V3D_CARVEOUT_BYTES:-}" ] || die "$PI4_CONF sets no CONFIG_YAKOGL_V3D_CARVEOUT_BYTES"
 
+# The GC7000's GPU memory as the i.MX8MP's glmark2 image has it (issue
+# #814): the size of the gpu-carveout node of the image's board overlay, else
+# of the board's own device tree, less what the board layer keeps there
+# itself (the 800x600 window and the 1280x800 panel-sized screen copy,
+# driver/zephyr/lib/board/imx8mp/board_imx8mp.c). src/osal/linux.c refuses an
+# allocation past it (YAKOGL_GC_CARVEOUT_BYTES), as the board's pool does.
+# The environment's value wins; the one used is in gc-settings.txt.
+# carveout_bytes FILE: the reg size of FILE's gpu-carveout node, empty if none
+carveout_bytes() {
+  sed -n '/gpu-carveout@/,/;/p' "$1" | grep -m1 -E '^\s*reg\s*=' |
+    sed -E 's/.*<\s*[^ ]+\s+([^>]+)>.*/\1/; s/^DT_SIZE_M\(([0-9]+)\)\s*$/\1 MiB/' | {
+    read -r size unit || exit 0
+    case "$unit:$size" in
+      MiB:[0-9]*) echo $((size << 20)) ;;
+      :0x* | :[0-9]*) echo $((size)) ;;
+    esac
+  }
+}
+IMX8MP_OVERLAY="$ROOT/driver/samples/zephyr/glmark2/boards/verdin_imx8mp_mimx8ml8_a53.overlay"
+IMX8MP_DTS="$ROOT/driver/boards/toradex/verdin_imx8mp/verdin_imx8mp_mimx8ml8_a53.dts"
+if [ -z "${YAKOGL_GC_CARVEOUT_BYTES:-}" ]; then
+  gc_carve=$(carveout_bytes "$IMX8MP_OVERLAY" || true)
+  gc_from="$IMX8MP_OVERLAY"
+  if [ -z "$gc_carve" ]; then
+    gc_carve=$(carveout_bytes "$IMX8MP_DTS" || true)
+    gc_from="$IMX8MP_DTS"
+  fi
+  [ -n "$gc_carve" ] || die "no gpu-carveout size in $IMX8MP_OVERLAY or $IMX8MP_DTS"
+  GC_BOARD_BYTES=$(( 800 * 600 * 4 + 1280 * 800 * 4 ))
+  export YAKOGL_GC_CARVEOUT_BYTES=$(( gc_carve - GC_BOARD_BYTES ))
+  gc_note="the carve-out of ${gc_from#"$ROOT"/}, $gc_carve bytes, less $GC_BOARD_BYTES for the board's window and screen"
+else
+  gc_note="from the environment"
+fi
+
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 GM="$GM_ROOT/src"
 echo "glmark2: $provenance" | tee "$OUT/provenance.txt"
 env | grep -E '^YAKOGL_V3D_' | sort > "$OUT/v3d-settings.txt" || true
+echo "YAKOGL_GC_CARVEOUT_BYTES=$YAKOGL_GC_CARVEOUT_BYTES ($gc_note)" | tee "$OUT/gc-settings.txt"
 
 # ---------------------------------------------------------------------------
 # glmark2: upstream's sources, unchanged (src/meson.build's common_sources,
@@ -215,6 +254,13 @@ export -f run_entry
 export OUT SIZE FRAMES
 printf '%s\n' "${jobs[@]}" | xargs -P "${GM2_JOBS:-$(nproc)}" -L1 bash -c 'run_entry $0 $1'
 echo "glmark2: runs done in $OUT/logs"
+# the entries whose GC7000 allocations the carve-out refused (linux.c's
+# "out of the N-byte GC carve-out" lines, the first 16 per process)
+if [ -d "$OUT/logs/vivante" ]; then
+  refused=$(grep -c 'GC carve-out:' "$OUT"/logs/vivante/*.log | grep -v ':0$' | sed "s|^$OUT/logs/vivante/||" || true)
+  echo "glmark2: GC7000 allocations refused by the carve-out (entry.log:lines): ${refused:-none}" | tr '\n' ' '
+  echo
+fi
 
 # Two reports: the PowerVR and the GC7000 in FINDINGS.md (with the shader
 # corpus), the V3D in FINDINGS-v3d.md (its run models the Pi 4's carve-out,

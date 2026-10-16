@@ -92,6 +92,10 @@ static struct {
 		size_t size;
 	} map[64];
 	unsigned maps;
+#if defined(YAKOGL_GPU_VIVANTE)
+	uint64_t gc_budget;  /* YAKOGL_GC_CARVEOUT_BYTES: 0 = no limit */
+	uint64_t gc_refused; /* allocations the budget refused */
+#endif
 } l;
 
 /* Find the allocation a device address falls in, and the offset into it. */
@@ -140,11 +144,47 @@ static int heap_index_of(uint64_t gpu)
 	return -1;
 }
 
+#if defined(YAKOGL_GPU_VIVANTE)
+/* YAKOGL_GC_CARVEOUT_BYTES: the GC7000's GPU memory as the board has it,
+ * one carve-out every heap shares (src/osal/zephyr_gc.c: gc_render_alloc
+ * ignores the heap base). An allocation that would take the live bytes of
+ * all heaps together past it fails with -ENOMEM, as the board's pool does.
+ * Unset or 0: no limit (each heap's own HEAP_RANGE_BYTES only). The board
+ * also keeps its window and the panel-sized screen copy in the carve-out
+ * (driver/zephyr/lib/board/imx8mp/board_imx8mp.c), and holds frees until
+ * their kick completes; a caller models those by passing less than the
+ * carve-out's size (tools/hostharness/glmark2/run.sh, GM2_GC_CARVEOUT). */
+static void gc_budget_from_env(void)
+{
+	const char *b = getenv("YAKOGL_GC_CARVEOUT_BYTES");
+
+	l.gc_budget = b && *b ? strtoull(b, NULL, 0) : 0;
+	if (l.gc_budget)
+		l_log("osal(linux): YAKOGL_GC_CARVEOUT_BYTES %llu: the heaps share this budget",
+		      (unsigned long long)l.gc_budget);
+}
+
+/* The live bytes of every heap together. */
+static uint64_t gc_live(void)
+{
+	uint64_t n = 0;
+	int i;
+
+	for (i = 0; i < MAX_HEAPS; i++)
+		if (l.heap[i] != 0)
+			n += l.heaps[i].used;
+	return n;
+}
+#endif
+
 static int l_init(void *platform_arg)
 {
 	(void)platform_arg;
 	memset(&l, 0, sizeof(l));
 	error_log_from_env();
+#if defined(YAKOGL_GPU_VIVANTE)
+	gc_budget_from_env();
+#endif
 	l.inited = true;
 	return 0;
 }
@@ -163,6 +203,11 @@ static void report_heaps(void)
 		      (unsigned long long)l.heaps[i].high, (unsigned long long)HEAP_RANGE_BYTES,
 		      (unsigned long long)l.heaps[i].leaked);
 	}
+#if defined(YAKOGL_GPU_VIVANTE)
+	if (l.gc_budget)
+		l_log("osal(linux): YAKOGL_GC_CARVEOUT_BYTES %llu: %llu allocation(s) refused",
+		      (unsigned long long)l.gc_budget, (unsigned long long)l.gc_refused);
+#endif
 }
 
 static void l_shutdown(void)
@@ -194,6 +239,14 @@ static int l_gpu_alloc(uint64_t heap_base, size_t size, uint32_t flags, struct o
 	(void)flags;
 	if (!l.inited || !out || size == 0 || hi < 0)
 		return -22;
+#if defined(YAKOGL_GPU_VIVANTE)
+	if (l.gc_budget && gc_live() + rsz > l.gc_budget) {
+		if (l.gc_refused++ < 16)
+			l_log("osal(linux): out of the %llu-byte GC carve-out: %zu bytes asked, %llu live",
+			      (unsigned long long)l.gc_budget, size, (unsigned long long)gc_live());
+		return -12;
+	}
+#endif
 	/* The heap's finite fake-VA range, first fit over its free list, else a
 	 * checked bump (linux_heap.h); -1 is this heap's HEAP_RANGE_BYTES
 	 * exhausted, reported as -ENOMEM rather than wrapping (R-25). */

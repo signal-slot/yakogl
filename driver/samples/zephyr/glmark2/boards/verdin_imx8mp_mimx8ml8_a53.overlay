@@ -2,3 +2,36 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /* The display chain of the Verdin iMX8M Plus on a Mallow carrier. */
 #include "../../gc_common/verdin_imx8mp_display.dtsi"
+
+/* A 240 MiB GPU carve-out instead of the board's 64 MiB one (issue #814).
+ * Every GC7000 allocation comes from this one pool (src/osal/zephyr_gc.c),
+ * and so do the board layer's 800x600 window and its 1280x800 screen copy
+ * (5.7 MiB). At 64 MiB the GC's own peak in terrain is 51 MB on the host
+ * (tools/hostharness/glmark2, one scene per process, frees returned at
+ * once); on the board the frees are held until their kick completes and the
+ * scenes run one after another in one pool, and a refused allocation is a
+ * GL error (the record's "GL errors raised 15 or more" on every common set).
+ * The AM62P's image took the same step for the same scenes (its overlay,
+ * 256 MiB: 2573 GL errors to 0).
+ *
+ * Where: 0x70000000, above the image's 256 MiB at 0x60000000 and below the
+ * M7's reserved 0x80000000 (the board's Linux /proc/iomem: System RAM from
+ * 0x55500000 to 0x7fffffff; nothing runs from it while this image does).
+ * Below 4 GiB and 4 MiB-aligned, as the GC's MMU needs (mmu.rs: the
+ * carve-out is identity-mapped, one slave table per 4 MiB).
+ * How much: 240 MiB, 60 of the 64 slave tables the carve-out's head holds
+ * (gc_internal.h GC_STLB_COUNT, 256 MiB of VA); the other four are for
+ * gc_render_map_phys's imports. tools/hostharness/glmark2/run.sh reads this
+ * node, so the host run models the same memory. */
+/ {
+	reserved-memory {
+		gpu_carveout_glmark2: gpu-carveout@70000000 {
+			reg = <0x70000000 0x0f000000>;
+			no-map;
+		};
+	};
+};
+
+&gpu3d {
+	memory-region = <&gpu_carveout_glmark2>;
+};

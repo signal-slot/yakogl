@@ -22,7 +22,10 @@ built. What it records per GPU:
 On the V3D it also records the GPU memory: linux.c models the Pi 4's
 carve-out (its size from the Pi 4's glmark2 image), so an allocation the
 board would refuse is refused here, with the board's "out of GPU memory"
-line, and each entry's high-water is listed.
+line, and each entry's high-water is listed. On the GC7000 it models the
+i.MX8MP's carve-out (its size from the i.MX8MP glmark2 image, issue #814):
+an allocation past it fails as `gc_render_alloc` fails on the board, which
+the GL core turns into a GL error.
 
 The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000) and
 [FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D), beside this file because the run
@@ -63,8 +66,9 @@ generated parts of `FINDINGS.md` and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMA
 entry, default 600), `GM2_KICKS=1` (PowerVR: a `gm2: draw <n> fb <fb> kick <k>
 submitted <s>` line after every draw, the framebuffer it rendered into, the
 kick holding it and the kicks submitted so far, to read a scene's pass
-order; `shim.c`), and
-the V3D's settings `YAKOGL_V3D_*` (below). It needs
+order; `shim.c`), the
+V3D's settings `YAKOGL_V3D_*` and the GC7000's `YAKOGL_GC_CARVEOUT_BYTES`
+(below). It needs
 gcc, g++, cmake, cargo, objcopy and python3, and no network.
 
 ### The V3D's settings
@@ -87,6 +91,26 @@ YAKOGL_V3D_CARVEOUT_BYTES=50331648 GM2_WRITE=0 \
 The values a run used are in `out/v3d-settings.txt` and in the GPU memory
 section of `FINDINGS-v3d.md`.
 
+### The GC7000's carve-out
+
+On the board every GC7000 allocation comes from one pool over the device
+tree's `gpu-carveout` (`src/osal/zephyr_gc.c`, `gc_render_alloc`), which also
+holds the board layer's 800x600 window and its 1280x800 screen copy
+(`driver/zephyr/lib/board/imx8mp/board_imx8mp.c`). `run.sh` sets
+`YAKOGL_GC_CARVEOUT_BYTES` to the carve-out of the i.MX8MP glmark2 image (the
+`gpu-carveout` node of `driver/samples/zephyr/glmark2/boards/verdin_imx8mp_mimx8ml8_a53.overlay`,
+else of the board's device tree) less those two buffers, unless the
+environment sets it; linux.c refuses an allocation that would take the live
+bytes of all heaps past it. The value used is in `out/gc-settings.txt`. The
+model is generous: it does not charge the MMU tables and the ring at the
+carve-out's head (384 KiB), the board's held frees (`gc_frees.h`) or the
+pool's fragmentation. So the gate's glmark2 row fails on any GL error line
+and also on an entry whose GC peak (the sum of its heaps' high-waters) is
+above 3/4 of the modelled carve-out: at the board's 64 MiB, terrain peaked
+at 83% (51 MB) and refract at 79% here with no error, while every i.MX8MP
+common set raised GL errors; with the glmark2 image's 240 MiB the board
+raised none (b421b447, issue #814).
+
 ## How it works
 
 | file | what it is |
@@ -107,7 +131,8 @@ entry, from an empty carve-out.
 ## GPUs
 
 * **gpu-powervr** and **gpu-vivante**: linux.c's per-heap host memory,
-  page-granular fake device addresses, no limit but 256 MiB a heap.
+  page-granular fake device addresses, no limit but 256 MiB a heap; on the
+  GC7000 also the board's carve-out over every heap together (above).
 * **gpu-v3d**: linux.c's model of the Zephyr V3D OSAL (`src/osal/zephyr_v3d.c`):
   one carve-out for every heap label, the board's GPU address layout (a
   512 KiB page table and a scratch page at its front, allocations from GPU VA
@@ -126,7 +151,7 @@ entry, from an empty carve-out.
   example a GL error or an incomplete-texture line. That is how terrain's
   black texture showed before `GL_OES_texture_npot`.
 * The fake GPU never fails, and linux.c's submits complete at once, so no
-  in-flight path runs. Only the V3D can run out of memory (its carve-out);
-  the PowerVR and the GC7000 cannot.
+  in-flight path runs. Only the V3D and the GC7000 can run out of memory
+  (their carve-outs); the PowerVR cannot.
 * Frames: 3 per entry by default. Per-frame lines are counted, so their
   count scales with `GM2_FRAMES`.

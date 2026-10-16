@@ -216,3 +216,8 @@ CASE (1) seq 14: set status 7 (set passed) passed 48 of 48 run; skipped 1, first
 ### 594b010e 0010ff06 0000002f 00000031
 CASE (1) seq 14: case 16 check 255 status 6 (set failed) got 0x0000002f want 0x00000031
 ### classify verdict
+# GL_ERROR (issue #814): a synthetic record (a glmark2 run's first GL error, glTexImage2D out of memory in terrain), not a run
+### 594b1700 08160505 ebeea496 00000025
+GL_ERROR (23) tag 0: error 0 of 8 kept: 0x505 (GL_OUT_OF_MEMORY) in the entry point with FNV-1a 0xebeea496, tag 22 (glmark2: entry 22 (default list: terrain)); GL errors raised 37
+  entry point: glTexImage2D
+### classify verdict

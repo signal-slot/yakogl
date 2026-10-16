@@ -59,6 +59,16 @@
  * each, also printed as a "glmark2: GL errors raised" line; they do not
  * change the verdict), the run's last record, which the i.MX8MP keeps
  * in its SNVS (it has no UART); board_finish then keeps it as the verdict.
+ *
+ * The first GL errors by name (issue #814): the GL core keeps the first
+ * eight with the entry point that raised them and a tag, which this file sets
+ * to the benchmark-list entry at each entry's setup (yakogl_gl_error_tag).
+ * Each is printed as a "glmark2: GL error K of N:" line. A runner without a
+ * console asks for one of them with the selector YK_RECORD_GL_ERROR_SEL | K
+ * (the i.MX8MP's SNVS, tools/board.sh SEL): the run then stores a kind
+ * GL_ERROR record for error K after GLMARK2, which becomes the run's last
+ * record (record.rs, GL_ERROR: the code, the entry, the FNV-1a of the entry
+ * point's name, every error raised as a 32-bit count).
  */
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -93,6 +103,10 @@ extern "C" {
 uint32_t yakogl_gl_errors_raised(void);         /* src/gl/context.rs */
 uint32_t yakogl_gl_errors_recorded(void);       /* src/gl/context.rs */
 uint32_t yakogl_incomplete_texture_draws(void); /* src/gl/draw.rs */
+/* the first GL errors, by name (issue #814): src/gl/context.rs */
+void yakogl_gl_error_tag(uint32_t tag);
+uint32_t yakogl_gl_errors_kept(void);
+int yakogl_gl_error_first(uint32_t i, uint32_t *code, uint32_t *tag, char *name, size_t cap);
 }
 #if defined(CONFIG_YAKOGL_GPU_V3D)
 extern "C" {
@@ -362,6 +376,59 @@ private:
 SetupErrors s_setup_errors;
 std::ostream s_setup_log(&s_setup_errors);
 
+/* ---- the first GL errors, by name (issue #814) -------------------------- */
+
+/* FNV-1a, 32 bits, of an entry point's name: record.rs fnv1a32, which the
+ * decoder matches against the GL headers' names. */
+uint32_t fnv1a32(const char *s)
+{
+    uint32_t h = 2166136261u;
+    for (; *s != '\0'; s++) {
+        h = (h ^ static_cast<uint8_t>(*s)) * 16777619u;
+    }
+    return h;
+}
+
+/* One line per GL error the GL core kept: its code, the entry point and the
+ * benchmark-list entry that was running. */
+void print_first_gl_errors(uint32_t raised)
+{
+    const uint32_t kept = yakogl_gl_errors_kept();
+    for (uint32_t i = 0; i < kept; i++) {
+        uint32_t code = 0, tag = 0;
+        char name[48];
+        if (yakogl_gl_error_first(i, &code, &tag, name, sizeof(name)) == 0) {
+            printk("glmark2: GL error %u of %u: 0x%x in %s, entry %u\n", i + 1, raised, code, name, tag);
+        }
+    }
+}
+
+/* The selector YK_RECORD_GL_ERROR_SEL | K: store GL error K (0-based) as a
+ * kind GL_ERROR record, tag K, after the GLMARK2 verdict, so a runner that
+ * reads only the last record (the i.MX8MP) reads it. Without that selector
+ * nothing is stored. */
+void store_gl_error_record(uint32_t raised)
+{
+    const int sel = board_selector();
+    if (sel < 0 || (static_cast<uint32_t>(sel) & ~0xffu) != YK_RECORD_GL_ERROR_SEL) {
+        return;
+    }
+    const uint32_t k = static_cast<uint32_t>(sel) & 0xffu;
+    const uint32_t kept = yakogl_gl_errors_kept();
+    uint32_t code = 0, tag = YK_RECORD_GL_ERROR_TAG_NONE, hash = 0;
+    char name[48];
+    if (k < kept && yakogl_gl_error_first(k, &code, &tag, name, sizeof(name)) == 0) {
+        hash = fnv1a32(name);
+        if (tag > YK_RECORD_GL_ERROR_TAG_NONE) {
+            tag = YK_RECORD_GL_ERROR_TAG_NONE;
+        }
+    }
+    board_result_tag(YK_RECORD_KIND_GL_ERROR, static_cast<uint8_t>(k),
+                     (code & 0xffffu) | tag << YK_RECORD_GL_ERROR_TAG_SHIFT |
+                         kept << YK_RECORD_GL_ERROR_KEPT_SHIFT,
+                     hash, raised);
+}
+
 /* ---- the main loop, counting outcomes ----------------------------------- */
 
 /* The counts and, for the record, which list entries did not run: the first
@@ -400,6 +467,8 @@ public:
     /* The scene's setup is the window in which an error line says why. */
     void before_scene_setup() override
     {
+        /* the GL errors from here to the next entry's setup are this entry's */
+        yakogl_gl_error_tag(static_cast<uint32_t>(bench_iter_ - benchmarks_.begin()));
         print_mem("before setup");
         s_setup_errors.arm();
     }
@@ -614,6 +683,8 @@ int run()
 
     printk("glmark2: upstream %s (%s), size %s, args \"%s\"\n", GLMARK2_COMMIT,
            GLMARK_VERSION, CONFIG_GLMARK2_SIZE, CONFIG_GLMARK2_ARGS);
+    /* a GL error before the first entry's setup (EGL, the canvas) is no entry's */
+    yakogl_gl_error_tag(YK_RECORD_GL_ERROR_TAG_NONE);
     if (parse_size(CONFIG_GLMARK2_SIZE, &w, &h) != 0) {
         printk("glmark2: CONFIG_GLMARK2_SIZE \"%s\" is not WxH\n", CONFIG_GLMARK2_SIZE);
         return -EINVAL;
@@ -730,6 +801,7 @@ int run()
     printk("glmark2: GL errors raised %u, draws that sampled an incomplete texture %u (GL "
            "errors recorded %u)\n",
            gl_errors, incomplete_draws, yakogl_gl_errors_recorded());
+    print_first_gl_errors(gl_errors);
     if (pass && out.unsupported != 0) {
         printk("glmark2: no scene failed; %u unsupported, left out of the score (not a pass or "
                "a fail)\n",
@@ -753,6 +825,7 @@ int run()
     uint32_t rec[3];
     yd_record_glmark2_words(&o, rec);
     board_result(YK_RECORD_KIND_GLMARK2, rec[0], rec[1], rec[2]);
+    store_gl_error_record(gl_errors);
     return pass ? 0 : -EIO;
 }
 
