@@ -17536,6 +17536,26 @@ were deleted, so the records above are one clean pass.
 `resets=absent` on every row. GT's failure is the known case 44 (es3hdr, #6) and the known skip of
 case 16; no new failing case. The glmark2 cell stays green (33 ran, 0 failed, 0 unsupported).
 
+## i.MX8MP: common set on main ab43a20c (2026-10-16)
+
+Images from `origin/main` `ab43a20c` (`cts-common.sh imx8mp build`), run by `tools/board.sh imx8mp`
+from U-Boot (`BOARD_BOOT=uboot-mmc`), one boot per row (`tools/cts/board-stage.sh imx8mp common`).
+Records `records/imx8mp/common-ab43a20c/` (gitignored). Build ids `PVR_SAMPLE_TABLE=c95547a1`,
+`PVR_SAMPLE_TREE=ab43a20c`, Zephyr `af17c0c8aa2a`.
+
+| row | image | verdict | record | result |
+|---|---|---|---|---|
+| GM glmark2 | `824c83652133ceaa` | done | `594b120e fc3f002b 6184003f 0f258320` | score 43, 33 ran, 0 failed, 0 unsupported, status pass; GL errors raised 15 or more; back after 403 s |
+| SO slint offline | `4c44d784b8ba33d9` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; back after 106 s |
+| SV slint online | `3b521af922fa02d7` | done | `594b0601 08420862 00210842 c5920883` | probes pass, crc16 c592; back after 144 s |
+| CL cluster | `112e5263278d3116` | done | `594b0601 10c410c4 1905f7bf b1076d5f` | probes pass, crc16 b107; no throughput (no console); back after 200 s |
+| GT gl_test | `5e76d1d30e4bba15` | failed (rc 4) | `594b010e 00110107 ffff0030 00100031` | set failed: 48 of 49 run passed, 1 skipped (case 16, #8), 1 failing (case 17, `ctx2`); back after 118 s |
+
+`resets=absent` on every row. The glmark2 cell stays green. GT differs from `a63fcc5b`: the failing
+case is 17 (`ctx2`), and case 44 (es3hdr, #6) is no longer failing (the record names one failing case,
+17, and "second case none"). One boot, no console, so this is one reading: case 17 is either a flake
+or a new failure, and case 44's pass needs a second boot before #6 is closed for this board.
+
 ## AM62P: common set on origin/main `e3749a25`, the 256 MiB GPU carve-out (2026-10-15)
 
 Images from `origin/main` `e3749a25` (`cts-common.sh am62p build`; the first AM62P common set with
