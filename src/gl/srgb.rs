@@ -4,7 +4,7 @@
 //! (`GLES_TEXFMT_SRGB8_A8`, `GLES_SURF_SRGB8_A8`): what the GL core computes
 //! itself where the GPU does not -- glGenerateMipmap's box filter, which
 //! averages in linear space -- and the oracle the host tests hold the GPU
-//! paths' expectations to (docs/es3-srgb.md, appendix).
+//! paths' expectations to (docs/es3/srgb.md, appendix).
 //!
 //! The formulas are ES 3.0.6's: decode (3.8.16, eq. 3.24)
 //!
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(encode(f32::INFINITY), 255);
         assert_eq!(encode(f32::NEG_INFINITY), 0);
         assert_eq!(encode(f32::NAN), 0);
-        /* docs/es3-srgb.md B1: 0.2 linear is byte 124, 0.4 is 170 */
+        /* docs/es3/srgb.md B1: 0.2 linear is byte 124, 0.4 is 170 */
         assert_eq!((encode(0.2), encode(0.4)), (124, 170));
     }
 }

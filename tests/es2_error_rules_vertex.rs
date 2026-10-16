@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 2.0 error rules, vertex part (item es2-error-rules; the audit is
-//! tools/cts/log/investigations/es2-error-rules.md, Table A "Vertex arrays").
+//! docs/notes/es2-error-rules.md, Table A "Vertex arrays").
 //!
 //! A `report-es2` build refuses what ES 2.0 does not define; an ES 3.0 build
 //! behaves as before. Decision per row:

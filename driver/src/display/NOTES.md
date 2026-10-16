@@ -602,7 +602,7 @@ earlier bring-up.
    yes. On 2026-10-03 an image started by U-Boot, with MEDIAMIX and the GPU
    domains off from reset, powered both up itself (`soc::imx8mp::media`,
    `gpu::vivante::power`) and left the same PICTURE record as the kexec
-   route (`tools/cts/log/board-sessions/imx8mp-netboot.md`, "step C root
+   route (`docs/notes/imx8mp-netboot.md`, "step C root
    cause and fix").
 7. **The ADB400 handshake.** Like Linux, the code delays instead of waiting
    for `PU_PWRHSK` bit 30. If the MEDIA_BLK_CTRL registers read back as

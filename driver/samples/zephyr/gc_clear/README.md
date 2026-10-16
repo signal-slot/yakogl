@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_clear
 
-Milestone 4 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: fill a linear XRGB8888 surface
+Milestone 4 of `docs/notes/imx8mp-gc-bringup.md`: fill a linear XRGB8888 surface
 in the GPU carveout with a colour, then read the pixels back on the CPU.
 
 The clear goes through the **resolve engine**, not a full-screen quad. This
@@ -43,6 +43,6 @@ refuses any other width, and the driver rejects it rather than letting the
 GPU do something undefined.
 
 Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
-(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
-`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+(`docs/notes/imx8mp-gc-driver-notes.md`; the milestones are
+`docs/notes/imx8mp-gc-bringup.md`). Not run since the kernel
 side became Rust (`driver/docs/vivante-kernel-rust.md`).

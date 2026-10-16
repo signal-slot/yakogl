@@ -42,7 +42,8 @@ with anyone else's.
   fails while any remain, which the fold's agent runs last.
 - The other docs of a result (`tools/cts/RESULTS.md`, `tools/cts/STATUS.md`,
   `README.md` tables) are still edited directly in the same pull request:
-  their rows are per board or per run and seldom collide.
+  their rows are per board and seldom collide. They hold the current state
+  only: a new result replaces the old row.
 
 ## Folding
 

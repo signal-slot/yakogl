@@ -4,7 +4,7 @@
  * WDOG1 armed by the image itself, then fed for a bounded time
  * (CONFIG_GC_BOARD_WDOG_SELF_ARM; docs/standalone-boot.md, "What the image
  * does on a go entry"; the bring-up record is
- * tools/cts/log/board-sessions/imx8mp-netboot.md, "Watchdog").
+ * docs/notes/imx8mp-netboot.md, "Watchdog").
  *
  * Why: an image that U-Boot starts with "go" cannot rely on any earlier stage
  * having armed WDOG1, and gc_sample.c only services the one it finds. The

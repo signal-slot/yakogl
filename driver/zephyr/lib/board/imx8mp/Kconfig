@@ -398,7 +398,7 @@ config GC_COMMON_RESULT_STAGES
 	depends on GC_COMMON_RESULT_SNVS
 	help
 	  For a board with no UART that dies before its result record
-	  (tools/cts/log/board-sessions/imx8mp-netboot.md, "Board run
+	  (docs/notes/imx8mp-netboot.md, "Board run
 	  2026-10-03": the first gc_gl_triangle run from U-Boot left only the
 	  WDOG1 arming breadcrumb). Writes a kind STAGE record (gc_result.h,
 	  which lists the stages) at the PRE_KERNEL_1, PRE_KERNEL_2 and

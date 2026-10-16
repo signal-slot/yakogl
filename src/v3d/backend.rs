@@ -4884,7 +4884,7 @@ pub extern "C" fn v3d_shutdown() {
 
 /// Bytes between two handles' counters: a cache line of their own, so the
 /// CPU zeroing or reading one never touches a line the GPU writes for
-/// another (docs/es3-occlusion-query.md 3.1).
+/// another (docs/es3/occlusion-query.md 3.1).
 const OQ_STRIDE: usize = 64;
 const OQ_BYTES: usize = GLES_QUERY_HANDLES as usize * OQ_STRIDE;
 

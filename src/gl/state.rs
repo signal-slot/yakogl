@@ -103,7 +103,7 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * 32-bit texels and `sized_format` stores GL_RGBA32F as halves, so
      * claiming it would be a claim about precision this GL does not have.
      * GL_EXT_sRGB is not claimed either: the ES 3.0 sRGB class
-     * (docs/es3-srgb.md) is encoded only where the back end renders it (the
+     * (docs/es3/srgb.md) is encoded only where the back end renders it (the
      * PowerVR), and the ES 2.0 report keeps the sRGB names refused, as they
      * always were. */
     b"GL_OES_texture_half_float\0",

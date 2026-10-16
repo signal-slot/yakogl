@@ -96,68 +96,53 @@ network (<code>docs/standalone-boot.md</code>).</li>
 <h2 id="not-yet">Not yet</h2>
 <p>From <a href="https://github.com/signal-slot/yakogl/blob/main/docs/HANDOFF.md">HANDOFF</a>,
 "Known defects" and "Open work", as of main at <span data-meta="checked">the commit named in data.js</span>.
-Fixes below are confirmed on a board from main only where a line says so. The Pi 4 ran nothing on 2026-10-10.</p>
+Fixes below are confirmed on a board from main only where a line says so.</p>
 <h3>Known defects</h3>
 <ul>
-<li><strong>AM62P: 45 <code>texture.vertex.2d.{filtering,wrap}.*</code> dEQP cases fail</strong>
-in the 32778b57 tree (2026-10-10, image 9): a 1 MiB draw arena refused dEQP's 127 x 127
-quad grid. Fixed on the host (indexed pieces, gl_test 197); board confirmation pending.</li>
-<li><strong>AM62P: 2 of 16 <code>multisample.*</code> cases fail</strong> on the 4x image at
-32778b57 (<code>constancy_alpha_to_coverage</code>, <code>constancy_both_inverted</code>;
-both runs identical; 16 / 16 on 2026-10-02). Under diagnosis, no issue yet.</li>
-<li><strong>AM62P: 9 <code>shaders.invariance.*.common_subexpression_*</code> dEQP cases</strong>
-failed on a 2026-10-08 integration image and in the 32778b57 tree (2026-10-10). Fixed on main
-in e17fb6a7; image 1 on e17fb6a7 passes 1,379 / 0 (2026-10-10).</li>
-<li><strong>PowerVR: glmark2 shadow and refract sampled a stale depth texture</strong>
-(pvr-depth-resolve). Fixed; the AM62P's glmark2 run of 2026-10-11 has no failed depth
-resolve.</li>
-<li><strong>i.MX8MP: 46 dEQP-GLES2 <code>fbo</code> cases fail</strong> in the 835cf9cc tree
-(2026-10-14), all <code>GL_BGRA_EXT</code> renderbuffers: the report-es2 allowlist names
-<code>GL_BGRA8_EXT</code> but not the unsized <code>GL_BGRA_EXT</code>. Not fixed yet.</li>
-<li><strong>i.MX8MP: gl_test case 44 fails</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/6">#6</a>), an RGBA16F target layout
-defect, on cd738b1a (2026-10-14).</li>
-<li><strong>i.MX8MP: gl_test case 10 failed about one run in three</strong> on 2026-10-10
-(<a href="https://github.com/signal-slot/yakogl/issues/9">#9</a>) and case 2 intermittently
-(<a href="https://github.com/signal-slot/yakogl/issues/25">#25</a>). Cause not found.</li>
-<li><strong>i.MX8MP: 4x MSAA, gl_test case 16</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/8">#8</a>). The harness now skips the
-4x half by name without a 4x config; the 4x path itself still fails, cause unknown.</li>
-<li><strong>Pi 4: 25 cube-map cases differed from the ES 2.0 reference images</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/12">#12</a>). Fixed; 0 fail on the
-board (2026-10-11).</li>
+<li><strong>glmark2 raises GL errors on the i.MX8MP</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/814">#814</a>): 15 or more a run
+(the counter saturates); cause not found.</li>
+<li><strong>AM62P: glmark2 terrain, shadow and refract are slow</strong> (1.47, 0.38 and
+2.08 s a frame), time spent in GL calls on the CPU; a GPU <code>glGenerateMipmap</code> path
+for the PowerVR is open (<a href="https://github.com/signal-slot/yakogl/issues/1">#1</a>,
+<a href="https://github.com/signal-slot/yakogl/issues/2">#2</a>).</li>
+<li><strong>AM62P: a refused free-list grow with no 3D work pending cannot complete</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/3">#3</a>): the partial render is
+missing.</li>
 <li><strong>AM62P: two dEQP-GLES3 cases hang the GPU</strong>
 (<code>texture.filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear</code> and
-<code>texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear</code>, 2026-10-11, no issue yet).
-The board returns only with the reset; cause not found.</li>
-<li><strong>glmark2 terrain samples a black texture on every board</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/1">#1</a>), <strong>AM62P refract's
-depth pass is refused</strong> (<a href="https://github.com/signal-slot/yakogl/issues/2">#2</a>),
-<strong>Pi 4 refract and terrain do not fit the GPU carve-out</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/4">#4</a>,
-<a href="https://github.com/signal-slot/yakogl/issues/5">#5</a>). Fixed on the host, waiting
-for a board round.</li>
-<li><strong>i.MX8MP panel at its pixel clock</strong>
-(<a href="https://github.com/signal-slot/yakogl/issues/23">#23</a>): the link is back at
-69.3 MHz with a checked margin; viewing the panel by eye is pending.</li>
-<li><strong>GC7000 precompiled table lacks <code>matattr</code></strong>
+<code>texture.filtering.3d.sizes.3x7x5_linear_mipmap_linear</code>). The board returns only
+with the reset; cause not found.</li>
+<li><strong>i.MX8MP: gl_test case 10 fails sometimes</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/9">#9</a>). Cause not found.</li>
+<li><strong>i.MX8MP: 4x MSAA, gl_test case 16</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/8">#8</a>). The harness skips the 4x
+half by name without a 4x config; the 4x path itself fails at setup.</li>
+<li><strong>i.MX8MP: glmark2 score capped by a per-frame VSYNC wait</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/737">#737</a>), a prediction from the
+code.</li>
+<li><strong>i.MX8MP panel</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/23">#23</a>): viewing the panel by
+eye is pending.</li>
+<li><strong>GC7000 precompiled table has 4 stale <code>matattr</code> rows</strong>
 (<a href="https://github.com/signal-slot/yakogl/issues/22">#22</a>).</li>
+<li><strong>Pi 4: a tryboot glmark2 image kept the board off the network</strong>
+(<a href="https://github.com/signal-slot/yakogl/issues/905">#905</a>); the watchdog did not
+bring it back.</li>
 </ul>
 <h3>Open work</h3>
 <ul>
-<li>One confirming board session per board for every host-proved fix, including a whole
-dEQP-GLES2 tree on the AM62P.</li>
-<li>OpenGL ES 3.0, host first: transform feedback capture, integer render targets, the new
-sampled formats, sRGB, occlusion queries, PowerVR 2D-array and shadow sampling; then the
-dEQP-GLES3 tree on each board.</li>
-<li>Performance: not started.</li>
+<li>Benchmarks: check the picture of each glmark2 scene on each board, then record a frame
+rate for each (minimum performance).</li>
+<li>OpenGL ES 3.0: the remaining dEQP-GLES3 failures on the AM62P, then the whole tree on the
+Pi 4 and the i.MX8MP; PowerVR 2D-array and shadow sampling.</li>
 <li>Bare metal: <code>src/osal/baremetal.c</code> is a skeleton; no bare-metal boot is
 recorded yet.</li>
 <li>The PowerVR driver's end-of-tile programs and boot self-test vertex shader are still
 Mesa's pco output; the GC7000 has no precompiled rows for most gl_test sources.</li>
 <li>Design clean-up: debug knobs out of the product, the remaining C moved to Rust, names.</li>
 <li>OpenGL ES 3.1 / 3.2 (<a href="https://github.com/signal-slot/yakogl/issues/19">#19</a>).</li>
-<li>Touch input for the demos: not yet planned.</li>
+<li>Touch input for the demos (<a href="https://github.com/signal-slot/yakogl/issues/24">#24</a>).</li>
 </ul>
 <p>All issues: <a href="https://github.com/signal-slot/yakogl/issues">github.com/signal-slot/yakogl/issues</a>.</p>
 </main>

@@ -44,7 +44,7 @@ The board has no UART: the runner reads the result from the SNVS record
   window of the AM62P's `gl_triangle`, so the PICTURE record compares across
   boards. Its baseline is `594b040e ff403f80 35706c4e 04000258`, the same from
   a U-Boot entry and from kexec
-  (`tools/cts/log/board-sessions/imx8mp-netboot.md`, step C).
+  (`docs/notes/imx8mp-netboot.md`, step C).
 - `CONFIG_GC_GL_TRIANGLE_DISPLAY_RECORD` writes a DISPLAY record (pixel clock,
   lane rate, the bridge's IRQ_STAT) about a second into the picture.
 

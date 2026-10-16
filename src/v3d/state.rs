@@ -28,7 +28,7 @@ pub fn refusal(d: &GlesDraw) -> Option<Refusal> {
     /* one reason per format: the log names the value it saw. The ES 2.0
      * three and every ES 3.0 colour format with a row in `rt_format` are
      * drawn (int-rt-v3d); the sRGB surface's render side is not built
-     * (docs/es3-srgb.md 5.1; the GL core refuses it first, SRGB_RT). */
+     * (docs/es3/srgb.md 5.1; the GL core refuses it first, SRGB_RT). */
     match d.target_format {
         GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 | GLES_SURF_RGB565 => {}
         GLES_SURF_SRGB8_A8 => return Some("an sRGB colour target is not written yet"),
@@ -436,7 +436,7 @@ pub const RGBA8_ROW: RtFormat = RtFormat {
 };
 
 /// The row of a colour surface; `None` for one this backend does not render
-/// (the sRGB surface, docs/es3-srgb.md 5.1, or a value it does not know).
+/// (the sRGB surface, docs/es3/srgb.md 5.1, or a value it does not know).
 pub const fn rt_format(surf: u8) -> Option<RtFormat> {
     const fn row(output: u32, internal_type: u32, internal_bpp: u32, clamp: u32, bytes: u32) -> Option<RtFormat> {
         Some(RtFormat { output, internal_type, internal_bpp, clamp, bytes })

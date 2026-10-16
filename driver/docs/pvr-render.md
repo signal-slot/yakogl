@@ -4,9 +4,9 @@
 
 What the render service does today with GPU memory and with the frame fence,
 and the decisions behind its defaults. The measurements that led here are
-two logs: `tools/cts/log/investigations/pvr-render-pool.md` (the render
+two logs: `docs/notes/pvr-render-pool.md` (the render
 pool, AM62P, 2026-10-03 to 10-05) and
-`tools/cts/log/investigations/pvr-fence-wait.md` (where a swap spends its
+`docs/notes/pvr-fence-wait.md` (where a swap spends its
 time, 2026-10-03 and 10-04). Code comments cite those logs by section name.
 
 The code: `driver/rust/src/gpu/pvr/` (`pool.rs`, `mem.rs`, `freelist.rs`,

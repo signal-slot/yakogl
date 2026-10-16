@@ -356,7 +356,7 @@ struct Target {
 /// the terrain pass at 800x600 with a depth target, bloom at 256x256 (one
 /// target with a chain, one a single level), the overlay and the two tilt
 /// passes at 800x600. The mesh buffers are three of 4608 KiB and one of
-/// 3072 KiB (tools/cts/log/investigations/pvr-render-pool.md; glmark2.md:
+/// 3072 KiB (docs/notes/pvr-render-pool.md; glmark2.md:
 /// "terrain asks 3,072 KiB (a buffer), 1,368 KiB (512x512 mip chain), 2 x 1,876
 /// KiB (800x600)").
 ///
@@ -514,7 +514,7 @@ fn the_48_mib_control_reproduces_the_recorded_refusals() {
 }
 
 /// refract after npot: the colour render target has its whole 11-level chain, so
-/// its tiled copy is 11,005,952 bytes (tools/cts/log/hostharness/glmark2/FINDINGS-refract-budget.md section 2).
+/// its tiled copy is 11,005,952 bytes (tools/hostharness/glmark2/FINDINGS-refract-budget.md section 2).
 /// `budget` is CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES, an LRU cap on the copies
 /// kept across jobs: when the depth copy and the colour copy together exceed
 /// it, the depth copy is evicted before the colour copy is made. Returns the

@@ -3,7 +3,7 @@
 //! The float functions the evaluator needs where `core` has none: the crate
 //! is `no_std` and has no libm (`Cargo.toml`, no dependencies). Used by the
 //! transform-feedback capture, which runs the evaluator in the product
-//! (`docs/es3-transform-feedback.md` section 4.2); the host's test oracles
+//! (`docs/es3/transform-feedback.md` section 4.2); the host's test oracles
 //! keep the host's `std` functions so that their pins do not move.
 //!
 //! What each one promises, checked against the host's `std` in the tests

@@ -211,7 +211,7 @@ config GC_GL_TEST_MSAA_BITS
 	  clip scaled to the 2x scratch surface, bit 4 etnaviv's PE_LOGIC_OP
 	  SINGLE_BUFFER value for the supertiled scratch. 19 = bits 0, 1 and 4
 	  is what Mesa writes for a 4x target on this core; bits 2 and 3 are not
-	  Mesa's (tools/cts/log/investigations/gc-msaa-addresses.md).
+	  Mesa's (docs/notes/gc-msaa-addresses.md).
 
 config GC_GL_TEST_UNIIDX_NO_CLAMP
 	bool "gl_test 108: no clamp before the movar (a measurement)"

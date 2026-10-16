@@ -159,7 +159,7 @@ static const struct yd_pvr_km_ops g_km_ops = {
 /* CONFIG_SAFEUI_GPU_PVR_FWCCB_CHECK (gpu::pvr::ccb): a FWCCB slot read
  * without the command magic is re-read for up to 2 ms before it is
  * consumed, and the write offset is watched for going back. Off by default
- * (an instrument, tools/cts/log/investigations/pvr-render-pool.md "FWCCB slot
+ * (an instrument, docs/notes/pvr-render-pool.md "FWCCB slot
  * read empty"). */
 #ifndef PVR_FL_PROBE_SERVE_MAX
 /* CONFIG_SAFEUI_GPU_PVR_FL_PROBE_SERVE_MAX: a probe, never a product

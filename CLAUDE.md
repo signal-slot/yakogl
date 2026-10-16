@@ -47,9 +47,11 @@ the message says what to install). That is the host, not the code.
 - A result never edits `docs/HANDOFF.md`; it adds a note under
   `docs/handoff/` (`docs/handoff/README.md`). Editing HANDOFF made most
   pull requests conflict and be redone.
-- Before landing an old record, check it is not on main already: records
-  from `ccfarm/integration` were re-landed under `tools/cts/log/` with new
-  paths (`docs/investigations/integration-main-overlap.md`).
+- Board results replace their row in `tools/cts/RESULTS.md` (current
+  results only, no run log) and the summary in `tools/cts/STATUS.md`. Do not
+  add per-session or investigation records: what a session found goes into
+  the commit message, RESULTS.md and the handoff note; a design or a finding
+  that code relies on goes into `docs/notes/` (`docs/README.md`).
 
 ## Do not touch
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! OpenGL ES 3.0 transform feedback capture, the data path
-//! (`docs/es3-transform-feedback.md` section 4, item tf-capture): the GL core
+//! (`docs/es3/transform-feedback.md` section 4, item tf-capture): the GL core
 //! evaluates the program's vertex shader on the CPU for every vertex the
 //! draw captures, assembles the draw's primitives into Begin's primitive
 //! type, and writes the captured varyings into the bound buffers. The GPU

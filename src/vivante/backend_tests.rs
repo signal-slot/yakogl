@@ -4199,7 +4199,7 @@ fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
 /// address and writes the target, and the probe's size is the supertiled
 /// 128x128 scratch (512-byte rows, 64 KiB). Case 16's shape: a 64x64 RGBA8
 /// target cleared and drawn in one frame, arms 1 and 9 of the board record
-/// (tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
+/// (ab43a20c5:tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
 #[cfg(feature = "test-knobs")]
 #[test]
 fn every_4x_colour_address_is_the_scratch_the_probe_reads() {

@@ -174,7 +174,7 @@ built-in expansions belong to neither, because they are already written.
 ## 8. Contracts settled while building it
 
 The build-up of this back end (2026-09-23 onward, section 8 of this file until
-2026-10-11) is the record `tools/cts/log/usc-backend-2026-09-23.md`. Two of
+2026-10-11) is the record `docs/notes/usc-backend.md`. Two of
 its results are contracts code depends on, and stay here.
 
 ### Loops counted at run time: the cap

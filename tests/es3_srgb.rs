@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0's sRGB colour buffers and textures through the GL API on the host
-//! (docs/es3-srgb.md; the AM62P dEQP-GLES3 failures it answers are listed
+//! (docs/es3/srgb.md; the AM62P dEQP-GLES3 failures it answers are listed
 //! there and in docs/HANDOFF.md, srgb).
 //!
 //! What is held here is the GL layer's contract with a back end: an

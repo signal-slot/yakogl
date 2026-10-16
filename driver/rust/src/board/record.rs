@@ -354,7 +354,7 @@ values! {
     GLMARK2_WHY_OTHER = 15;
     // kind GPU_STOP: the cause (gpu::pvr::freelist STOP_*).
     // 1 is not a cause: a refused grow is survived
-    // (tools/cts/log/investigations/pvr-render-pool.md).
+    // (docs/notes/pvr-render-pool.md).
     GPU_STOP_AT_MAXIMUM = 2;
     GPU_STOP_GROW_TABLE_FULL = 3;
     GPU_STOP_KICK_TIMEOUT = 4;
@@ -1724,7 +1724,7 @@ mod tests {
     }
 
     /// The old Python decoder's self-test cases, the two board records of
-    /// 2026-10-03 first (tools/cts/log/board-sessions/imx8mp-netboot.md).
+    /// 2026-10-03 first (docs/notes/imx8mp-netboot.md).
     #[test]
     fn classify_known_records() {
         let cases: &[([u32; 4], &str)] = &[

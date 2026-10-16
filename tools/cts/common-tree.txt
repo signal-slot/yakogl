@@ -13,7 +13,7 @@
 #                a view into the scan-out buffer (on the Pi 4 and the i.MX8MP;
 #                the AM62P's board layer has no view and ignores the option,
 #                so there the row is the same copy-free image as SO:
-#                docs/investigations/am62p-scanout-view.md)
+#                docs/notes/am62p-scanout-view.md)
 #   cluster      driver/samples/zephyr/cluster, the AGL cluster sample: the
 #                agl-slint-cluster UI on the no_std Slint workspace, animating
 #                for CONFIG_YAKOGL_BOARD_ANIMATE_S (60 s) at the board's panel

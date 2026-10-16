@@ -404,7 +404,7 @@ struct yd_pvr_km {
 	uint32_t pad;
 };
 /* The driver's pool_top_above: 256 KiB
- * (tools/cts/log/investigations/pvr-render-pool.md, the top region). */
+ * (docs/notes/pvr-render-pool.md, the top region). */
 #define YD_PVR_POOL_TOP_ABOVE (256u * 1024u)
 
 /* What the driver chooses for the FWIF structures (gpu::pvr::fwinit). */

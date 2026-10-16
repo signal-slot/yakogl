@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Host tests for `tf_capture.rs` (docs/es3-transform-feedback.md 7.2,
+//! Host tests for `tf_capture.rs` (docs/es3/transform-feedback.md 7.2,
 //! tf-capture): the bytes a captured draw writes, against values computed
 //! here from the inputs, in every draw mode, both buffer modes, with
 //! instancing, pause/resume, ranges and guards, overflow, rasterizer
@@ -827,7 +827,7 @@ fn an_es100_program_captures_its_varyings() {
 /// C-perf, run by hand: 10^4 points of a vertex shader of about 20
 /// operations through the capture, and one point (the lowering and set-up
 /// alone). Prints the time per vertex and per draw for the record
-/// (docs/es3-transform-feedback.md section 4.1, "Speed").
+/// (docs/es3/transform-feedback.md section 4.1, "Speed").
 ///
 /// ```text
 /// cargo test --release --no-default-features --features host-test,gpu-powervr,shaderc-online \

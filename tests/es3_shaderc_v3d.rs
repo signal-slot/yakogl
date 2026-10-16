@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! V3D 4.2 shader back-end gaps found by the dEQP gles3 shader corpus
-//! (docs/es3-shaderc-coverage.md): matrix vertex attributes (a matCxR takes C
+//! (docs/es3/shaderc-coverage.md): matrix vertex attributes (a matCxR takes C
 //! consecutive locations), integer shift left/right and `trunc()`. Each
 //! shader is compiled and linked through `SHC_ONLINE`, which is what
 //! glCompileShader and glLinkProgram reach.

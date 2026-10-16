@@ -98,7 +98,7 @@ commit. No hex array over 2000 bytes exists outside
 | Where | Masked value | Action |
 |---|---|---|
 | tree: `docs/board-sessions/pi4-common-int.md:12,34,79`, `docs/board-sessions/pi4-plan1-int.md:12,13,49` | `s***[11]@e***[10]` | **Edit:** `"$BOARD_HOST"` or `<user@board>`. The first file is owned by the running pi4-common-int item. After the merge: `pi4-plan1-int.md` **fixed** by part 2; `pi4-common-int.md` **still open** (`:28`, `:30`) |
-| tree: lease/resource id `pi4-e***[8]` at `docs/es3-board-recipe-pi4.md:221,223,224`, `docs/board-sessions/pi4-plan1-int.md:22` (now `:24`), `docs/board-sessions/pi4-common-int.md:9`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` | the board's host name inside the id | **Edit:** `<pi4 resource>` |
+| tree: lease/resource id `pi4-e***[8]` at `docs/es3/board-recipe-pi4.md:221,223,224`, `docs/board-sessions/pi4-plan1-int.md:22` (now `:24`), `docs/board-sessions/pi4-common-int.md:9`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` | the board's host name inside the id | **Edit:** `<pi4 resource>` |
 | history: commits `76b3242d`, `9c2c893a`, `04ed90de` on main (2026-10-12), plus copies in other refs | same | **History rewrite** |
 
 ### H4. Tailnet address and port of a farm node (class: IPv4, host name)
@@ -125,7 +125,7 @@ commit. No hex array over 2000 bytes exists outside
 
 | Where | Masked value | Action |
 |---|---|---|
-| tree: `docs/board-sessions/imx8mp-deqp-stage1-gles3.md:21`, `docs/board-sessions/pi4-common-int.md:14`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:9`, `docs/es3-zephyr-env.md:23`, `tools/cts/RESULTS.md:16868,16877`, `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69`, `tools/precompile/measure-image.sh:45` (a script default) | `/home/t***[6]/…` (the owner's login) | **Edit:** use `$CCFARM_DEPS_DIR`, `$ZEPHYR_WS`, `$WEST_VENV` and `$ZEPHYR_SDK_INSTALL_DIR`. In the script, use `${ZEPHYR_WS:?}`. After the merge: the three `docs/board-sessions/*` / `docs/es3-zephyr-env.md` lines are **fixed** (part 2 T1) and `pi4-common-int.md` no longer has one; the `tools/` lines are still open |
+| tree: `docs/board-sessions/imx8mp-deqp-stage1-gles3.md:21`, `docs/board-sessions/pi4-common-int.md:14`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:9`, `docs/es3/zephyr-env.md:23`, `tools/cts/RESULTS.md:16868,16877`, `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69`, `tools/precompile/measure-image.sh:45` (a script default) | `/home/t***[6]/…` (the owner's login) | **Edit:** use `$CCFARM_DEPS_DIR`, `$ZEPHYR_WS`, `$WEST_VENV` and `$ZEPHYR_SDK_INSTALL_DIR`. In the script, use `${ZEPHYR_WS:?}`. After the merge: the three `docs/board-sessions/*` / `docs/es3/zephyr-env.md` lines are **fixed** (part 2 T1) and `pi4-common-int.md` no longer has one; the `tools/` lines are still open |
 | history: 226 blob versions in all refs (`tools/cts/RESULTS.md`, `.ccfarm-workspace.md`, `.ccfarm-scripts/*.py`, board-session docs, `docs/farm/…`, `tools/hostharness/glmark2/FINDINGS-*.md` and others). Also commit message `0f1bad11` (main) | same | **History rewrite** (`--replace-text`), or a fresh history |
 | history, other refs only: `docs/farm/investigations/nuc-health-and-quota.md` (commits `f9e0264b` … `b1fdae97`, one remote branch `origin/ccfarm/01a11bcb-5310-…`) | `/home/s***[4]` (a second person's login) and a worker host name | **Delete the ref** |
 
@@ -159,21 +159,21 @@ commit. No hex array over 2000 bytes exists outside
 |---|---|---|
 | author/committer of about 2000 commit fields: `ccfarm (<host>) <ccfarm@<host>>` for six worker hosts (`L***[6]`, `s***[8]`, `X***[9]`, `n***[3]`, `h***[4]`, `L***[12]`) | farm machine names | **Owner decision.** With a rewrite, use `--mailmap` to map them to one `ccfarm <noreply@…>`; a fresh history removes them |
 | commit messages: worker names in about 75 messages (60 on main); "tailscale" in 3 (`f2a13877`, `28fb55ae` on main); `/dev/ttyACM9` (fixture) and `/dev/ttyS2` (board-side Linux name) | no address | accept, or drop with the history |
-| tree: worker and runner names in `docs/ci.md`, `.github/workflows/gate.yml:54-64`, `tools/check.sh:309,313,2301`, `tools/setup-gate-host.sh:89,207`, `tools/cts/STATUS.md:13,26`, `docs/es3-zephyr-env.md`, `tools/cts/log/zephyr-env-lepton-2026-10-08.md` (two file paths, this one and `nuc-health-and-quota.md` in M1, contain a worker name; paths are shown in full) | self-hosted runner labels and the documentation of where the gate runs | accept (they document the CI), or generalise to "the gate host" |
+| tree: worker and runner names in `docs/ci.md`, `.github/workflows/gate.yml:54-64`, `tools/check.sh:309,313,2301`, `tools/setup-gate-host.sh:89,207`, `tools/cts/STATUS.md:13,26`, `docs/es3/zephyr-env.md`, `tools/cts/log/zephyr-env-lepton-2026-10-08.md` (two file paths, this one and `nuc-health-and-quota.md` in M1, contain a worker name; paths are shown in full) | self-hosted runner labels and the documentation of where the gate runs | accept (they document the CI), or generalise to "the gate host" |
 
 ### L2. Default board logins and product host names (class: user@host)
 
 | Where | Masked value | Action |
 |---|---|---|
-| tree: `tools/cts/RESULTS.md:15875-15881`, `tools/cts/log/board-sessions/imx8mp-common-int.md:11,40`, `tools/cts/log/benchmarks-baseline/am62p.md:12,31`, `tools/cts/RESULTS.md:15636` and `tools/cts/log/x2-direct-boot.md:218-224` (`r***[4]@a***[15]` and `root@BOARD`) | the vendor images' default user and mDNS names (`t***[7]@v***[13]`, `t***[7]@v***[12]`, `r***[4]@a***[15]`) | low risk: they are product defaults, not lab addresses. Replace them with `$BOARD_HOST` if no lab name should remain |
+| tree: `tools/cts/RESULTS.md:15875-15881`, `tools/cts/log/board-sessions/imx8mp-common-int.md:11,40`, `tools/cts/log/benchmarks-baseline/am62p.md:12,31`, `tools/cts/RESULTS.md:15636` and `docs/notes/x2-direct-boot.md:218-224` (`r***[4]@a***[15]` and `root@BOARD`) | the vendor images' default user and mDNS names (`t***[7]@v***[13]`, `t***[7]@v***[12]`, `r***[4]@a***[15]`) | low risk: they are product defaults, not lab addresses. Replace them with `$BOARD_HOST` if no lab name should remain |
 | tree: `/home/t***[7]` (the board's default user home) in `tools/cts/RESULTS.md:5376,5475,5555,5736,5833,8405,15878,15879` and `driver/tools/kexec-zephyr/board-sudo-setup.sh:72,73` | on-board paths | no action (overridable defaults on the board) |
 
 ### L3. Serial device paths (class: UART path)
 
 | Where | Detail | Action |
 |---|---|---|
-| tree: `/dev/ttyS2`, `/dev/ttyS3` and others (board-side Linux names) in AM62P session docs; `/dev/ttyUSB0`, `/dev/ttyACM1`, `/dev/ttymxc1` in `tools/cts/RESULTS.md` and `tools/cts/log/x2-direct-boot.md`; `/dev/ttyACM0` in `docs/board-sessions/pi4-common-int.md:20` | generic kernel device names; no lab machine can be told from them | no action |
-| tree: `/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01` at `docs/board-sessions/pi4-plan1-int.md:50`, `docs/es3-board-recipe-pi4.md:33`, `tools/cts/README.md:553` | placeholder only; no ref in history holds the real serial except the partly masked one in H6 | no action |
+| tree: `/dev/ttyS2`, `/dev/ttyS3` and others (board-side Linux names) in AM62P session docs; `/dev/ttyUSB0`, `/dev/ttyACM1`, `/dev/ttymxc1` in `tools/cts/RESULTS.md` and `docs/notes/x2-direct-boot.md`; `/dev/ttyACM0` in `docs/board-sessions/pi4-common-int.md:20` | generic kernel device names; no lab machine can be told from them | no action |
+| tree: `/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01` at `docs/board-sessions/pi4-plan1-int.md:50`, `docs/es3/board-recipe-pi4.md:33`, `tools/cts/README.md:553` | placeholder only; no ref in history holds the real serial except the partly masked one in H6 | no action |
 
 ## Checked and clean
 
@@ -283,7 +283,7 @@ login.
 | --- | --- | --- | --- |
 | `docs/board-sessions/imx8mp-deqp-stage1-gles3.md:21` | `/home/<t***[6]>/.local/share/ccfarm/deps/...` | `$CCFARM_DEPS_DIR` (already named in the line) | **applied** |
 | `docs/board-sessions/pi4-deqp-stage1-gles3.md:9` | same | `$CCFARM_DEPS_DIR` | **applied** |
-| `docs/es3-zephyr-env.md:23` | `/home/<t***[6]>/.local/share/ccfarm-local/deps/...` | `$CCFARM_DEPS_DIR` | **applied** |
+| `docs/es3/zephyr-env.md:23` | `/home/<t***[6]>/.local/share/ccfarm-local/deps/...` | `$CCFARM_DEPS_DIR` | **applied** |
 | `docs/board-sessions/pi4-common-int.md` | was `/home/<t***[6]>/.local/share/ccfarm/deps/...` | `$CCFARM_DEPS_DIR` | already clean at the tip (rewritten by an earlier merge) |
 | `tools/precompile/measure-image.sh:45` | default for `ZEPHYR_WS` is an owner checkout path | default to `${ZEPHYR_WS:?set ZEPHYR_WS}` or a path relative to `$CCFARM_DEPS_DIR` | open, script (not a doc) |
 | `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69` | `ZEPHYR_WS`, `WEST_VENV`, SDK dir under `/home/<t***[6]>/org/...` | `$ZEPHYR_WS`, `$WEST_VENV`, `$ZEPHYR_SDK_INSTALL_DIR` | open, outside this item's file set |
@@ -311,12 +311,12 @@ reader where the lab's gear is.
 
 | Class | Masked value | Files |
 | --- | --- | --- |
-| Pi 4 lease / resource id | `pi4-e***[8]` | `docs/es3-board-recipe-pi4.md:221-224`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `docs/board-sessions/pi4-plan1-int.md:24`, `docs/board-sessions/pi4-common-int.md:9`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` |
+| Pi 4 lease / resource id | `pi4-e***[8]` | `docs/es3/board-recipe-pi4.md:221-224`, `docs/board-sessions/pi4-deqp-stage1-gles3.md:27`, `docs/board-sessions/pi4-plan1-int.md:24`, `docs/board-sessions/pi4-common-int.md:9`, `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:28` |
 | serial bridge host | `u***[4]`, `usb-s***[8]-1` | 21 files; most lines in `tools/cts/RESULTS.md` (18), `tools/cts/log/investigations/console-map.md` (12) |
 | bridge ports | `3593*` (three ports) | `tools/cts/log/benchmarks-baseline/am62p.md:31`, `tools/cts/log/board-sessions/farm-console-blocked-2026-10.md:26`, `tools/cts/log/investigations/*console*` |
 | board host login | `t***[7]@v***[12]`, `t***[7]@v***[13]` | `tools/cts/log/benchmarks-baseline/am62p.md:12,31`, `tools/cts/log/board-sessions/imx8mp-common-int.md:11,40`, `tools/cts/RESULTS.md:15875-15881` |
-| SoM host name with serial suffix `v***[N]-0864****` | 8-hex module serial | `driver/docs/am62p-display-dump-linux.txt:11`, `tools/cts/RESULTS.md` (3), `tools/cts/log/board-sessions/am62p-pr133.md:35`, `tools/cts/log/board-sessions/imx8mp-gc-bringup.md:155`, `tools/cts/log/investigations/console-map.md:34,36` |
-| root login on dev board | `r***[4]@a***[15]`, `r***[4]@l***[9]`, `r***[4]@B***[5]` | `tools/cts/RESULTS.md:15636`, `tools/cts/log/x2-direct-boot.md:218-224`, `docs/direct-boot.md` |
+| SoM host name with serial suffix `v***[N]-0864****` | 8-hex module serial | `driver/docs/am62p-display-dump-linux.txt:11`, `tools/cts/RESULTS.md` (3), `tools/cts/log/board-sessions/am62p-pr133.md:35`, `docs/notes/imx8mp-gc-bringup.md:155`, `tools/cts/log/investigations/console-map.md:34,36` |
+| root login on dev board | `r***[4]@a***[15]`, `r***[4]@l***[9]`, `r***[4]@B***[5]` | `tools/cts/RESULTS.md:15636`, `docs/notes/x2-direct-boot.md:218-224`, `docs/direct-boot.md` |
 | `.ccfarm/project.toml:195` | placeholder `<user@host>` only | none needed |
 
 Proposed fix for the whole class: replace with `$BOARD_HOST`, `$BOARD_UART`,
@@ -343,10 +343,10 @@ name the farm. Counts are lines matched by
 | `docs/farm/devices.md` (44 lines) | all five names | the farm device report itself; its subject is the worker nodes | owner decision: drop the file from the release or keep it internal |
 | `tools/cts/RESULTS.md:16979,17120`, `tools/cts/STATUS.md:13,26` | `n***[3]` | "run on the owner's machine" | replace with "the lead's machine" |
 | `tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md:32`, `pi4-pr133-baseline.md:69`, `investigations/pr133-texel-levels.md:295` | `l***[6]` (in a file name), `n***[3]` | prose | owner decision |
-| `tools/cts/log/zephyr-env-<l***[6]>-2026-10-08.md` (6 lines; the name is in the file name too) | `l***[6]` | copy of `docs/es3-zephyr-env.md` | rename and mask with the owner's other log moves |
+| `tools/cts/log/zephyr-env-<l***[6]>-2026-10-08.md` (6 lines; the name is in the file name too) | `l***[6]` | copy of `docs/es3/zephyr-env.md` | rename and mask with the owner's other log moves |
 
 Applied by this item (doc files it touched, neutral wording "a farm node" /
-"the worker node"): `docs/es3-zephyr-env.md` (five places),
+"the worker node"): `docs/es3/zephyr-env.md` (five places),
 `docs/board-sessions/pi4-deqp-stage1-gles3.md` (two places),
 `docs/board-sessions/pi4-plan1-int.md:52`. The earlier Pi 4 session notes
 `pi4-common-int.md` had none left. Everything else in this table is left as
@@ -362,7 +362,7 @@ measurements per machine.
 | `driver/tools/kexec-zephyr/board-sudo-setup.sh:188,200` | `PASSWD`-style match is the sudoers line `NOPASSWD:` (no secret) |
 | `SECURITY.md`, `docs/release/readme-walkthrough.md` | `<security contact placeholder>` placeholder, a TODO for the owner |
 | `.github/workflows/*.yml` | `actions/...@vN` action pins |
-| `tools/cts/log/board-sessions/pi4-v3d-bringup.md:390` | version string `1***[6]` (QEMU), not an address |
+| `docs/notes/pi4-v3d-bringup.md:390` | version string `1***[6]` (QEMU), not an address |
 
 ## History findings (reachable from `HEAD`)
 
@@ -382,7 +382,7 @@ the number of distinct historic versions that hold the value.
 | tailnet IPv4 | `docs/board-sessions/pi4-common-int.md` | `1***[14]` | 1 | `76b3242` |
 | private IPv4 | `docs/farm/investigations/replica-zero.md`, `driver/docs/rpi4-v3d-backend-plan.md` | `1***[13]`, `1***[6]` | 3 / 2 | LAN addresses of the lab, owner to confirm |
 | board login | `docs/benchmarks-baseline/imx8mp.md`, `docs/board-sessions/{am62p-common-int,am62p-plan1,imx8mp-common-int,imx8mp-gc-case10,imx8mp-gltest-final}.md`, `tools/cts/log/benchmarks-baseline/am62p.md`, `tools/cts/RESULTS.md` | `t***[7]@v***[12/13]` | 1-39 | |
-| worker host name | `docs/ci.md`, `docs/farm/devices.md`, `docs/es3-zephyr-env.md`, `tools/check.sh`, `tools/setup-gate-host.sh`, `.github/workflows/gate.yml`, `.ccfarm/project.toml`, `tools/cts/**`, many board-session docs | `s***[8]` | 38 commits touch it (`git log -i -S`) | `ae81d86`, `83115f9`, `1cf74cf`, `3f0bcd7`, ... |
+| worker host name | `docs/ci.md`, `docs/farm/devices.md`, `docs/es3/zephyr-env.md`, `tools/check.sh`, `tools/setup-gate-host.sh`, `.github/workflows/gate.yml`, `.ccfarm/project.toml`, `tools/cts/**`, many board-session docs | `s***[8]` | 38 commits touch it (`git log -i -S`) | `ae81d86`, `83115f9`, `1cf74cf`, `3f0bcd7`, ... |
 | worker host name | same group | `l***[6]` | 34 commits | `ee9404e`, `d043fa1`, `cb476f6`, ... |
 | worker host name | `docs/ci.md`, `tools/check.sh`, `.github/workflows/gate.yml` | `h***[4]` | 6 commits | `ee9404e`, `a5f396e`, `d043fa1`, ... |
 | worker host name | `docs/farm/devices.md` and others | `n***[3]`, `X***[8]` | too short or generic to count by pickaxe | owner decision |
@@ -428,7 +428,7 @@ this audit did not scan them.
 - `docs/board-sessions/pi4-plan1-int.md`: lab login to
   `$BOARD_HOST`/`<user@board>`; worker name to "a farm node".
 - `docs/board-sessions/imx8mp-deqp-stage1-gles3.md`,
-  `pi4-deqp-stage1-gles3.md`, `docs/es3-zephyr-env.md`: owner home path
+  `pi4-deqp-stage1-gles3.md`, `docs/es3/zephyr-env.md`: owner home path
   dropped in favour of `$CCFARM_DEPS_DIR`; worker node names made neutral.
 
 ## Left for other items
@@ -439,7 +439,7 @@ this audit did not scan them.
 - `docs/ci.md`, `docs/farm/devices.md`, `.github/workflows/gate.yml`,
   `tools/check.sh`, `tools/setup-gate-host.sh`, `.ccfarm/project.toml`:
   worker names (T5), owner decision.
-- `docs/es3-board-recipe-pi4.md`: lease id `pi4-e***[8]` (T3).
+- `docs/es3/board-recipe-pi4.md`: lease id `pi4-e***[8]` (T3).
 - `docs/board-sessions/pi4-common-int.md`: lab login, tailnet address,
   bridge host and port (part 1 H2, H3), owned by the pi4-common-int item.
 - Add a gate step that runs these patterns over `git ls-files` (a small

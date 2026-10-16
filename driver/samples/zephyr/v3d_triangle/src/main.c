@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * v3d_triangle: milestone M5 of the V3D bring-up
- * (tools/cts/log/board-sessions/pi4-v3d-bringup.md) for the Raspberry Pi 4. The same bring-up as v3d_clear (M1 power and identity, M2
+ * (docs/notes/pi4-v3d-bringup.md) for the Raspberry Pi 4. The same bring-up as v3d_clear (M1 power and identity, M2
  * MMU, M3 one bin + render job), and the render is a clear followed by one
  * triangle with a colour per vertex, drawn by the three QPU programs v3d_shc
  * compiled from tools/shaders/passthrough.vert + interp_color.frag.

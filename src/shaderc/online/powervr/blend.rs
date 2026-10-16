@@ -37,7 +37,7 @@
 //! An sRGB target ([`SHC_RT_SRGB`]) is read and written as RGBA16F is: the
 //! accumulation holds linear halves (the frame load decodes, the PBE encodes
 //! on store), so the blend is in linear space with no conversion of its own
-//! -- `nir_lower_blend` has none either (docs/es3-srgb.md 4.2). The target is
+//! -- `nir_lower_blend` has none either (docs/es3/srgb.md 4.2). The target is
 //! unsigned normalised, so the source is clamped as for RGBA8, and so is the
 //! blended colour (pco's `nir_fsat` before the F16 pack of an sRGB format,
 //! pco_nir_pvfio.c:97-101): the next blend reads it back from the

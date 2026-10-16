@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! OpenGL ES 3.0 transform feedback, the GL-layer half (`docs/es3-transform-feedback.md`
+//! OpenGL ES 3.0 transform feedback, the GL-layer half (`docs/es3/transform-feedback.md`
 //! section 5): the transform feedback objects with their indexed buffer
 //! bindings and begin/pause/resume state, the varyings a program is asked to
 //! capture and what the link resolves them to, and the draw-time rules.

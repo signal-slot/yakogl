@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 2.0 error rules, buffer part (item cts-tree-diff-readme; the audit is
-//! docs/investigations/es2-error-rules.md, Table A "Buffers" rows 1-3).
+//! docs/notes/es2-error-rules.md, Table A "Buffers" rows 1-3).
 //!
 //! Only a `report-es2` build refuses; the ES 3.0 build keeps taking these
 //! values (its own tests cover that). Run with

@@ -102,7 +102,7 @@ impl YdPvrKm {
     /// (pvr_fw_riscv.c:110-120). Through the cached window the firmware's
     /// writes can stay in its own data cache: on the AM62P a FWCCB slot read
     /// zero for 2 ms of invalidated re-reads while the write offset said
-    /// it was written (tools/cts/log/investigations/pvr-render-pool.md, the
+    /// it was written (docs/notes/pvr-render-pool.md, the
     /// check's A/B). Whether this firmware build maps region 0x4 over the heap
     /// is not readable: if it does not, its first read of a host object faults.
     pub fn heap_fwaddr(&self, off: u32) -> u32 {

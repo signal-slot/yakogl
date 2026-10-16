@@ -391,7 +391,7 @@ west build -p always -b <ZBOARD> -d <dir> $REPO/driver/samples/zephyr/<sample> -
 |---|---|---|
 | glmark2 | `glmark2` | `-DGLMARK2_SRC=$GLMARK2_SRC` |
 | Slint, view off | `slint` | `-DSLINT_NOSTD_DIR=$SLINT_NOSTD_DIR -DNOSTD_PATCH_DIR=$NOSTD_PATCH_DIR` |
-| Slint, view on | `slint` | the same and `-DCONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y` (the AM62P has no view and makes no copy: `board_show()` flips the DSS plane to the PowerVR window, `driver/zephyr/lib/board/include/yakogl_board.h:114-118`, `driver/zephyr/lib/board/am62p/board_am62p.c:69-87`; there this row and "view off" are the same copy-free image, `docs/investigations/am62p-scanout-view.md`) |
+| Slint, view on | `slint` | the same and `-DCONFIG_YAKOGL_BOARD_SCANOUT_VIEW=y` (the AM62P has no view and makes no copy: `board_show()` flips the DSS plane to the PowerVR window, `driver/zephyr/lib/board/include/yakogl_board.h:114-118`, `driver/zephyr/lib/board/am62p/board_am62p.c:69-87`; there this row and "view off" are the same copy-free image, `docs/notes/am62p-scanout-view.md`) |
 | AGL cluster | `cluster` | `-DAGL_SLINT_CLUSTER_DIR=$AGL_SLINT_CLUSTER_DIR -DSLINT_NOSTD_DIR=... -DNOSTD_PATCH_DIR=... -DNOTO_SANS_DIR=$NOTO_SANS_DIR` |
 | gl_test | `gl_test` (AM62P), `gc_gl_test` (i.MX8MP), `v3d_gl_test` (Pi 4) | none (the sample's default case list) |
 

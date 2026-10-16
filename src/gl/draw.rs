@@ -12017,7 +12017,7 @@ mod tests {
         assert_eq!(current_blend_key(gl.ctx()), 0);
     }
 
-    /// An sRGB renderbuffer (docs/es3-srgb.md): the draw targets the sRGB
+    /// An sRGB renderbuffer (docs/es3/srgb.md): the draw targets the sRGB
     /// surface and keys the sRGB class, with the blend and the colour mask
     /// (alpha's included) read back from the key; a one-channel float target
     /// drops the mask bits of channels it lacks, so no such key is ever an

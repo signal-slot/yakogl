@@ -146,7 +146,7 @@ bool pvr_render_pool_rollback;         /* 0 = off, the default */
 
 /* The render pool's free lists and counters (Rust: gpu::pvr::pool, which has
  * what each one does, and its host tests;
- * tools/cts/log/investigations/pvr-render-pool.md). */
+ * docs/notes/pvr-render-pool.md). */
 static struct yd_pvr_pool g_pool;
 
 static uint32_t *const *pool_bumps(void)
@@ -393,7 +393,7 @@ bool pvr_render_hwrt_refuse;
 /* Build the global lists with one grow's reserve instead of four, and
  * refill it from the render pool after each served grow
  * (CONFIG_SAFEUI_GPU_PVR_FL_GROW_ON_DEMAND; gpu::pvr::freelist::serve and
- * tools/cts/log/investigations/pvr-render-pool.md, "Next: refract's 7600 KiB").
+ * docs/notes/pvr-render-pool.md, "Next: refract's 7600 KiB").
  * It frees 2 x 768 pages at the 64 MiB carveout's sizing, and a grow is refused
  * only when the render pool refused the refill and refuses again when the
  * firmware asks. Off until gl_test and glmark2 have run with it. */

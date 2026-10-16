@@ -224,7 +224,7 @@ fn is_object(pool: &[Es3Name], name: GLuint) -> GLboolean {
  * returns.
  *
  * GL_ANY_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED_CONSERVATIVE are counted by
- * the backend (docs/es3-occlusion-query.md): each (context, name) owns one
+ * the backend (docs/es3/occlusion-query.md): each (context, name) owns one
  * backend handle, every draw recorded while the query is active carries it
  * (`GlesDraw::occlusion_query`), and the result is read once the last kick
  * that can hold a counted draw has completed. A backend without
@@ -1730,7 +1730,7 @@ mod tests {
         }
     }
 
-    /* ---- occlusion queries (docs/es3-occlusion-query.md section 8) ---- */
+    /* ---- occlusion queries (docs/es3/occlusion-query.md section 8) ---- */
 
     /// The ES 2.0 report refuses the occlusion targets even on a backend
     /// that counts samples, exactly as it did before the backends did.

@@ -606,7 +606,7 @@ pub fn color_kind(internalformat: GLenum) -> ColorKind {
 fn is_renderbuffer_color_format(f: GLenum) -> bool {
     /* GL_SRGB8_ALPHA8 is renderbuffer storage in ES 3.0 and in ES 2.0 only
      * with GL_EXT_sRGB or GL_EXT_sRGB_write_control. The ES 2.0 surface
-     * claims neither (the sRGB surface is ES 3.0's, docs/es3-srgb.md), so
+     * claims neither (the sRGB surface is ES 3.0's, docs/es3/srgb.md), so
      * there the name is not renderbuffer storage, and a framebuffer built
      * on one is not complete. glTexImage2D refuses the same name for the
      * same reason. */
@@ -2659,7 +2659,7 @@ pub fn read_pixels_sync(c: &mut GlContext) -> bool {
 }
 
 /// KICK_DIFF on the current render target (src/vivante/kick.rs `diff`,
-/// tools/cts/log/investigations/gc-kick-diff.md): arms the instrument on the
+/// docs/notes/gc-kick-diff.md): arms the instrument on the
 /// CPU view glReadPixels reads -- the same descriptor, the attached level's
 /// offset and the same row pitch -- so gl_test does not need to know where
 /// the library keeps its surfaces. The bound framebuffer at the call is the
@@ -7802,7 +7802,7 @@ mod tests {
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 
-    /// ES 3.0's sRGB colour buffers (docs/es3-srgb.md): an `SRGB8_ALPHA8`
+    /// ES 3.0's sRGB colour buffers (docs/es3/srgb.md): an `SRGB8_ALPHA8`
     /// renderbuffer and texture level are complete, report the encoding
     /// GL_SRGB and eight bits a channel, and are the sRGB surface of a draw;
     /// `SRGB8` is a texture format only (table 3.13), so its level is an

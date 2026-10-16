@@ -12,7 +12,7 @@ Raspberry Pi 4 uses Zephyr's own `rpi_4b`.
 | Toradex Verdin AM62P (Dahlia) | `verdin_am62p/am62p54/a53` | PowerVR BXS-4-64 |
 | Toradex Verdin iMX8M Plus | `verdin_imx8mp/mimx8ml8/a53` | Vivante GC7000UL |
 | Atmark Armadillo-X2 | `armadillo_x2/mimx8ml8/a53` | Vivante GC7000UL |
-| Atmark Armadillo-X2, direct boot (TF-A BL33, `tools/cts/log/x2-direct-boot.md`) | `armadillo_x2/mimx8ml8/a53/direct` | Vivante GC7000UL |
+| Atmark Armadillo-X2, direct boot (TF-A BL33, `docs/notes/x2-direct-boot.md`) | `armadillo_x2/mimx8ml8/a53/direct` | Vivante GC7000UL |
 | Raspberry Pi 4 | `rpi_4b` | Broadcom V3D 4.2 |
 
 ## The workspace

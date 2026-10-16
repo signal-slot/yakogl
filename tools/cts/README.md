@@ -7,13 +7,12 @@ YakoGL, so progress can be measured instead of guessed. On every board it runs
 in a Zephyr image (`driver/samples/zephyr/deqp`, one `CONFIG_DEQP_CASE` filter
 per image) booted from the bootloader by `tools/board.sh`; the record comes
 back on the UART (AM62P, Pi 4) or in the SNVS (i.MX8MP). The current numbers
-per board are in [STATUS.md](STATUS.md) (Japanese); every measured run is in
+per board are in [STATUS.md](STATUS.md) (Japanese); the current results are in
 [RESULTS.md](RESULTS.md).
 
 ```
 tools/cts/
-  README.md, STATUS.md, RESULTS.md   this file, the current state, the measured results
-  log/                         finished board sessions and investigations (records, not instructions)
+  README.md, STATUS.md, RESULTS.md   this file, the current state, the current results
   testdata/                    fixtures of the parsers' self-tests (testdata/README.md)
   wedge_probe/                 the closed GC7000 shader-hang investigation (wedge_probe/README.md)
 
@@ -247,7 +246,7 @@ cases began against how many were asked for, and each chunk's exit status: a
 `GPU` is `vivante` (the default), `powervr` or `v3d` (`build/host-deqp/lib-v3d`,
 the run in `run-<commit>-v3d`; the script exports
 `YAKOGL_V3D_TILED_COPIES_BYTES=16777216` unless the caller set it, as the Pi 4
-image does). The whole gles3 mustpass on all three: `docs/es3-host-run.md`.
+image does). The whole gles3 mustpass on all three: `ab43a20c5:docs/es3-host-run.md`.
 `MODULE=gles3` runs dEQP-GLES3 instead: it builds `deqp-gles3` in
 its own directory, links a library that reports ES 3.0
 (`YAKOGL_REPORT_ES2=OFF`), and runs the union of the checkout's

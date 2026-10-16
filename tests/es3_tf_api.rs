@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0 transform feedback and rasterizer discard through the GL API on the
-//! host (`16ac8641`, docs/es3-transform-feedback.md section 5): the objects
+//! host (`16ac8641`, docs/es3/transform-feedback.md section 5): the objects
 //! and their indexed bindings, `glTransformFeedbackVaryings` resolved at link
 //! against the vertex outputs, `glGetTransformFeedbackVarying`, the
 //! begin/end/pause/resume rules, the primitives-written query, and

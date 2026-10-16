@@ -6,8 +6,8 @@ YakoGL's work runs in five stages, in this order. Each stage has a
 criterion that can be checked from the repository, and a stage is done when
 its criterion is met and the record is committed. The state written under
 each stage is read from what is committed: the `README.md` "Status" tables,
-`docs/es2-cts-failures.md`, `docs/es3-cts-failures.md`, the board records
-under `docs/board-sessions/`, `docs/release/checklist.md` and `CHANGELOG.md`.
+`docs/es2-cts-failures.md`, `docs/es3-cts-failures.md`, the board results in
+`tools/cts/RESULTS.md`, `docs/release/checklist.md` and `CHANGELOG.md`.
 Every number carries the date of its record. Known defects are tracked as
 GitHub Issues.
 
@@ -35,22 +35,14 @@ config, `multisampled_render_to_texture.readpixels`; section C of
 `docs/es2-cts-failures.md`). The `README.md` dEQP-GLES2 table shows those
 numbers for every board, with the commit and the record they come from.
 
-**State.** Every board has recorded one such run from a single main commit
-(2026-10-12; `docs/board-sessions/am62p-es2-final-r2.md`,
-`imx8mp-es2-final-r2.md`, `pi4-es2-final-r2.md`):
+**State.** Met. The three boards ran the whole tree from one main commit,
+`e9901869a` (2026-10-15/16, issue #870; `tools/cts/RESULTS.md`):
 
 | Board | Pass | Fail | NotSupported | Warnings |
 | --- | ---: | ---: | ---: | ---: |
-| AM62P (1x tree; the 4x multisample image reads 16 of 16) | 17,125 | 0 | 34 | 6 |
+| AM62P (1x tree with the 16 `multisample.*` cases of the 4x image) | 17,140 | 0 | 18 | 7 |
 | i.MX8MP | 17,318 of 17,371 begun | 0 | 34 | 19 |
-| Raspberry Pi 4 | 17,127 | 0 | 34 | 4 |
-
-The `README.md` table does not carry those records yet: it shows the AM62P
-tree of 2026-10-10 (54 failures, all fixed since, as the table says) and a
-later i.MX8MP tree (2026-10-14) that regressed to 46 failures, every one a
-`GL_BGRA_EXT` renderbuffer case in `fbo`. The stage closes when that
-regression is fixed and confirmed on the i.MX8MP and the README table reads
-0 Fail on all three boards from the records above or newer ones.
+| Raspberry Pi 4 | 17,126 | 0 | 34 | 5 |
 
 ## 2. Benchmarks on the three boards
 
@@ -62,16 +54,14 @@ cluster demo (`driver/samples/zephyr/cluster/`) run with the same picture on
 every board, and a frame rate is recorded for each. The `README.md` glmark2
 table holds one score per board from one main commit under those conditions.
 
-**State.** glmark2-es2 runs all 33 scenes on every board (AM62P 465,
-Raspberry Pi 4 183, i.MX8MP 43; the `README.md` table with its dates). Two
-scenes drew wrong, terrain on every board and refract on the AM62P and the
-Pi 4; both are fixed on the host, and no picture of either has been checked
-on a board yet. On the AM62P terrain and shadow run out of GPU memory and
-refract reports incomplete framebuffers; the i.MX8MP's score is probably
-capped by a wait for the panel's VSYNC every frame. Slint runs on all three
-boards from one sample with the same picture, and the AGL cluster demo is
-built, run and tallied on every board as part of the common benchmark set
-(`CHANGELOG.md`). Performance work has not started.
+**State.** glmark2-es2 runs all 33 scenes on every board with no failed
+scene (AM62P 462 and Raspberry Pi 4 188 at `e9901869a`, i.MX8MP 43; the
+`README.md` table). Left for the criterion: no scene's picture is checked yet;
+the i.MX8MP still raises GL errors (#814) and its score is probably capped by
+a wait for the panel's VSYNC every frame; on the AM62P terrain, shadow and
+refract are slow in GL calls on the CPU. Slint and the AGL cluster demo run on
+all three boards as part of the common set. The gap list is
+`docs/notes/stage2-bench-gap.md`.
 
 ## 3. Public release
 
@@ -109,7 +99,7 @@ the AM62P's whole tree read 36,552 pass / 2,880 fail / 2,195 NotSupported /
 998 without a result (2026-10-14, `docs/HANDOFF.md`); the per-cause
 inventory is `docs/es3-cts-failures.md`. The Raspberry Pi 4 ran a first
 baseline of 7 of its 91 images (2,798 pass / 744 fail, 2026-10-14,
-`docs/board-sessions/pi4-gles3-baseline.md`); the i.MX8MP has an image table
+`tools/cts/RESULTS.md`); the i.MX8MP has an image table
 that has not run on the board yet.
 
 ## 5. More boards

@@ -698,7 +698,7 @@ citations are removed from `v3d_regs.h`, `v3d_hw.c` and
   `multidraw_stencil_recipe.md`, `gpu-hw-capture.md` and `frag_fault_pin.md`
   are cut to their conclusions (`fullpanel_sizes.md`, `gpu-hw-capture.md`
   and `frag_fault_pin.md` later moved to
-  `tools/cts/log/investigations/pvr-bringup/` as finished records);
+  records, since removed; `docs/notes/pvr-bringup-spec.md` keeps the spec);
   `gpu-fwtrace-enable.md` is rewritten for
   `RGXFWIF_TRACEBUF` and the `rgx_fwif_sf.h` decoder; the captured-word
   decode in `depth-clip-convention.md` is cut as well.

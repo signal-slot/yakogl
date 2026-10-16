@@ -76,9 +76,15 @@ When a change produces a result, update the docs in the same pull request:
   `docs/HANDOFF.md` in a result's pull request: every result did, and two
   results in the same days always conflicted there. ccfarm's `handoff-fold`
   stage folds the notes in after the merge,
-- `tools/cts/RESULTS.md` (the measurement log; cite the commit and record),
-- `tools/cts/STATUS.md` (the summary),
+- `tools/cts/RESULTS.md` (current results only: a new run replaces its row,
+  with the commit it ran; no run log),
+- `tools/cts/STATUS.md` (the summary, current state only),
 - `README.md` status tables, where they apply.
+
+No per-session or investigation records go in the tree. What a session or
+an investigation found goes into the commit message, the handoff note and
+RESULTS.md; a design or a finding that code relies on goes into
+`docs/notes/` (`docs/README.md`).
 
 ## Board results
 

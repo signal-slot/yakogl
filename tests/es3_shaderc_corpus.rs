@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! How much of GLSL ES 3.00 the online shader compiler takes, measured over
-//! the dEQP `data/gles3/shaders/*.test` corpus (docs/es3-shaderc-coverage.md).
+//! the dEQP `data/gles3/shaders/*.test` corpus (docs/es3/shaderc-coverage.md).
 //!
 //! Two parts:
 //!

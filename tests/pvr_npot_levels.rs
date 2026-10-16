@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! PowerVR (AM62P): the level layout of a non-power-of-two 2D chain, pinned
 //! level by level for dEQP-GLES2 `texture.completeness.2d.npot_size`
-//! (item am62p-es2-r1c; the record is docs/investigations/pvr-npot-levels.md).
+//! (item am62p-es2-r1c; the record is docs/notes/pvr-npot-levels.md).
 //!
 //! docs/es2-cts-failures.md (section H.5) names a risk no test covers: the
 //! TPU finds level l of an NPOT chain by its own arithmetic, and only this
@@ -19,7 +19,7 @@
 //! output. The TPU is given level 0's address, its stride and the level
 //! count, and walks the rest itself (Mesa 26.2.1 pvr,
 //! src/imagination/vulkan/pvr_image.c, as recorded in
-//! tools/cts/log/investigations/pvr-render-pool.md and cited by
+//! docs/notes/pvr-render-pool.md and cited by
 //! src/gl/texture.rs `pot_chain_level_pitch`):
 //!
 //! 1. `pvr_image_plane_init_physical_extent`: the extent of a multi-level

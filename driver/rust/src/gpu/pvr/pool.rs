@@ -12,7 +12,7 @@
 //! when they are contiguous in both VA and CPU space. That is not always
 //! true, because the physical cursor is shared: a block of another heap
 //! allocated in between splits them
-//! (tools/cts/log/investigations/pvr-render-pool.md, mechanism 3).
+//! (docs/notes/pvr-render-pool.md, mechanism 3).
 //!
 //! Before 2026-10-04 this was C (`driver/src/pvr_render_pool.h`, a header so
 //! that two C host checks compiled the shipped code). It is ported here
@@ -36,7 +36,7 @@
 //! that scene's large ones, and after the scene they are free in pieces no
 //! later large request fits. glmark2's refract (a 7600 KiB depth buffer after
 //! shadow and terrain) met 11.6 MiB free with no range over 3936 KiB
-//! (tools/cts/log/investigations/pvr-render-pool.md, "the top region"). In the
+//! (docs/notes/pvr-render-pool.md, "the top region"). In the
 //! top region the large blocks lie only beside each other, so a scene's frees
 //! merge back into one range; a range that reaches the region's floor goes back
 //! to the gap at once, so the gap stays one piece for either end.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! GC7000UL (i.MX8MP): ES 3.0 integer colour render targets (item int-rt-gc,
-//! docs/es3-int-rt-gc.md).
+//! docs/es3/int-rt-gc.md).
 //!
 //! The GL core accepts the nineteen colour-renderable integer formats and
 //! refuses a draw into one a back end has not learned (tests/es3_int_rt.rs,
@@ -26,7 +26,7 @@
 //!   interpreter of tests/common.
 //!
 //! What it cannot see: the GPU. Whether the PE stores the integers as the
-//! mode says is the board's (docs/es3-int-rt-gc.md, "For the board").
+//! mode says is the board's (docs/es3/int-rt-gc.md, "For the board").
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante --test es3_int_rt_gc

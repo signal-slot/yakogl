@@ -5037,7 +5037,7 @@ fn a_4x_frame_split_at_the_draw_cap_or_a_full_arena_keeps_its_samples() {
     assert_eq!(load_rates(&rig), [PDS_DOUTU_SAMPLE_RATE_INSTANCE]);
 }
 
-/* ---- integer render targets (docs/es3-pvr-formats.md 2.3, 5) -------------- */
+/* ---- integer render targets (docs/es3/pvr-formats.md 2.3, 5) -------------- */
 
 /// A 64x64 integer target of `format` for [`Rig::draw`]'s draw: one
 /// attachment, nothing cleared yet.
@@ -5163,7 +5163,7 @@ fn integer_targets_refuse_partial_masks_and_company() {
     assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
 }
 
-/* ---- sRGB render targets (docs/es3-srgb.md 4) ------------------------------ */
+/* ---- sRGB render targets (docs/es3/srgb.md 4) ------------------------------ */
 
 /// A 64x64 sRGB target for [`Rig::draw`]'s draw: one attachment.
 fn srgb_target(d: &mut GlesDraw) {

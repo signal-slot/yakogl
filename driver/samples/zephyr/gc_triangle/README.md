@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gc_triangle
 
-Milestone 5 of `tools/cts/log/board-sessions/imx8mp-gc-bringup.md`: clear a surface, then draw one
+Milestone 5 of `docs/notes/imx8mp-gc-bringup.md`: clear a surface, then draw one
 smooth-shaded triangle into it through the 3D pipe and check the pixels.
 
 The vertices are red (top), green (bottom left) and blue (bottom right), and
@@ -53,6 +53,6 @@ On a failure the sample prints `gc_triangle: FAIL <reason>` and the stall
 dump before resetting the SoC.
 
 Ran on the Verdin iMX8M Plus on 2026-09-20 with the C kernel side: PASS
-(`tools/cts/log/board-sessions/imx8mp-gc-driver-notes.md`; the milestones are
-`tools/cts/log/board-sessions/imx8mp-gc-bringup.md`). Not run since the kernel
+(`docs/notes/imx8mp-gc-driver-notes.md`; the milestones are
+`docs/notes/imx8mp-gc-bringup.md`). Not run since the kernel
 side became Rust (`driver/docs/vivante-kernel-rust.md`).

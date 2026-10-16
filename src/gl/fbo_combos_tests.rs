@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The 81 dEQP-GLES2 `functional.fbo.completeness.attachment_combinations`
-//! cases on the GL core (docs/investigations/es2-v3d-fbo-combos.md, section 2
-//! and follow-up 2).
+//! cases on the GL core.
 //!
 //! The 27 Pi 4 cases ending in `_tex` were NotSupported only because the V3D
 //! build did not claim GL_OES_packed_depth_stencil and GL_OES_depth_texture:

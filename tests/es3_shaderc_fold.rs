@@ -3,9 +3,7 @@
 //! GLSL ES 3.00 `round` and `roundEven` (section 8.3) give the exact
 //! result: the dEQP-GLES3 `shaders.builtin_functions.common.round.*_highp_*`
 //! and `roundeven.*_highp_*` cases (16), which failed on the AM62P with
-//! "Result comparison failed" (tools/cts/log/board-sessions/
-//! am62p-gles3-percase-2026-10-13.notpass.tsv, commit cd238b6, on the
-//! ccfarm/01a13578-d134-74b9-a507-0227e984ec7b branch, not on main).
+//! "Result comparison failed" (docs/es3/am62p-gles3-notpass.tsv).
 //!
 //! The shaders are the ones dEQP's shader executor writes for these cases
 //! (VK-GL-CTS `modules/glshared/glsShaderExecUtil.cpp`,
@@ -193,7 +191,7 @@ fn build(vs: &str, fs: &str) -> Result<(), String> {
 /// back end refuses the vec2 and vec3 executor programs whatever their
 /// body (`Program(Prepare(Undefined(..)))` at link; the
 /// "Shader compilation failed (glsBuiltinPrecisionTests)" row of
-/// docs/es3-host-run.md), which is not this function's to fix.
+/// ab43a20c5:docs/es3-host-run.md), which is not this function's to fix.
 fn builds_where_a_copy_builds(func: &str, ty: &str, uty: &str, vs: &str, fs: &str) {
     let copy = "out0 = in0;";
     let (pvs, pfs) = (passthrough_vertex("highp", ty), passthrough_fragment("highp", ty, uty));

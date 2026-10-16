@@ -23,7 +23,7 @@
 # DEQP_MODULE=gles3 builds the dEQP-GLES3 image (-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n
 # -DCONFIG_YAKOGL_REPORT_ES2=n: the library reports ES 3.0; DEQP_STAGE1 must
 # be a stage 1 built with DEQP_MODULE=gles3) and filters like dEQP-GLES3.info.*; the gles2 default is unchanged.
-# tools/cts/imx8mp-gles3-tree.txt is the whole GLES3 mustpass in 133 table rows (docs/es3-board-recipe-imx8mp.md).
+# tools/cts/imx8mp-gles3-tree.txt is the whole GLES3 mustpass in 133 table rows (docs/es3/board-recipe-imx8mp.md).
 # Name the image after the commit it is built from: a result is reported against that hash.
 #
 # Needs: the variables of imx8mp-env.sh (Zephyr part) and DEQP_STAGE1 (from imx8mp-deqp-stage1.sh).

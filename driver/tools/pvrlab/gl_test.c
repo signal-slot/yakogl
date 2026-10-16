@@ -987,7 +987,7 @@ static void dump_map(const uint32_t *px, uint32_t w, uint32_t h)
 /*
  * KICK_DIFF (#9, #25): does the fence fire before the pixel engine's write
  * reaches memory? The library's instrument (src/vivante/kick.rs `diff`, a
- * test knob; tools/cts/log/investigations/gc-kick-diff.md) reads the render
+ * test knob; docs/notes/gc-kick-diff.md) reads the render
  * target twice after the fence, KICK_DIFF_DELAY_US apart; a difference means
  * the first read came too early (a late write).
  *
@@ -3029,8 +3029,8 @@ static int case_egl(void)
 /* The 4x half's probe readings, kept for a board with no console: the
  * console lines below are the same numbers in words. gl_test_msaa_page()
  * hands them out three words at a time, for a PERF-kind record of the
- * image's own (tools/yakogl-tools `record msaa`; tools/cts/log/
- * investigations/gc-msaa-record.md has the layout):
+ * image's own (tools/yakogl-tools `record msaa`; docs/notes/gc-msaa-record.md
+ * has the layout):
  *   tag 0xf0 x4 inside, outside, edge pixels (0xAABBGGRR as read back)
  *   tag 0xf1 what was taken (MSAA_REC_*), the scratch's bytes, the two
  *            maps' chunk counts (clear only | draw only << 16)
@@ -17128,7 +17128,7 @@ static int case_vtxgrid(void)
 
 /* ---- case 196 occl: ES 3.0 occlusion queries (GL_ANY_SAMPLES_PASSED) -------
  *
- * docs/es3-occlusion-query.md; HANDOFF open work 4, occlusion-query. Depth
+ * docs/es3/occlusion-query.md; HANDOFF open work 4, occlusion-query. Depth
  * test LESS on a cleared depth buffer, a full-screen red occluder at z -0.5
  * drawn first and outside every query, then five queries:
  *
@@ -18128,7 +18128,7 @@ out:
 
 /* ---- case 200: an integer render target, drawn and read back (intrt) -----
  *
- * ES 3.0's integer colour buffers on the PowerVR (docs/es3-pvr-formats.md,
+ * ES 3.0's integer colour buffers on the PowerVR (docs/es3/pvr-formats.md,
  * sections 2.3 and 5): an 8x8 RGBA8UI renderbuffer, then an RGBA32UI one,
  * each
  *   1. cleared with glClearBufferuiv -- a quad through the clear-attach
@@ -18505,7 +18505,7 @@ static int case_blitconv(void)
 
 /* ---- case 203: transform feedback capture, read back (tfcap) ---------------
  *
- * docs/es3-transform-feedback.md; HANDOFF open work 4, tf-capture. The GL
+ * docs/es3/transform-feedback.md; HANDOFF open work 4, tf-capture. The GL
  * core evaluates the vertex shader on the CPU and writes the captured
  * varyings itself (the same path on the three GPUs), and the GPU still
  * draws. gl_test's ES 1.00 pair (gl_test_vs_src: gl_Position = a_pos,
@@ -19943,14 +19943,14 @@ static int case_hdrblend(void)
 
 /* ---- case 204: sRGB render target and sRGB texture (srgb) ------------------
  *
- * ES 3.0's GL_SRGB8_ALPHA8 (docs/es3-srgb.md). The render half, on an 8x8
+ * ES 3.0's GL_SRGB8_ALPHA8 (docs/es3/srgb.md). The render half, on an 8x8
  * SRGB8_ALPHA8 renderbuffer read back as bytes (glReadPixels returns the
  * stored, encoded values):
  *   1. cleared to linear (0.2, 0.2, 0.2, 1): 124 124 124 255 (the clear is
  *      encoded: 0.2 linear is byte 124);
  *   2. the left half blended ONE/ONE with u_color (0.2, 0.2, 0.2, 0.5):
  *      170 170 170 255 -- 0.4 linear, blended in linear space (a blend of the
- *      encoded bytes would read 248), alpha clamped at 1 (docs/es3-srgb.md
+ *      encoded bytes would read 248), alpha clamped at 1 (docs/es3/srgb.md
  *      B1);
  *   3. the right half blended SRC_ALPHA/ONE_MINUS_SRC_ALPHA with (1, 0, 0.5,
  *      0.5): linear (0.6, 0.1, 0.35, 0.75) = 203 89 160 191 (on the encoded
@@ -20816,7 +20816,7 @@ static int case_clearload(void)
  * offset says the slot is written, and the host reads type 0 there (with
  * CONFIG_SAFEUI_GPU_PVR_FWCCB_CHECK: "slot S read empty; still empty after
  * 2000 us"). glmark2 met it at slot 12, read offset 12 / write offset 14,
- * the 13th command of a run (tools/cts/log/investigations/pvr-render-pool.md).
+ * the 13th command of a run (docs/notes/pvr-render-pool.md).
  * The loss is in the queue's traffic, so this case makes traffic that the
  * driver always answers with pages:
  * - frames of L layers into a 1024x1024 target, each frame flushed without
@@ -20999,7 +20999,7 @@ static int case_fwccbloss(void)
  * The AM62P glmark2 cell's hang: a freelist grow the host refuses while no
  * kick's 3D is pending to return pages. The out-of-memory TA then has
  * nothing to wait for and never completes, because this driver queues no
- * partial-render command (tools/cts/log/investigations/pvr-render-pool.md,
+ * partial-render command (docs/notes/pvr-render-pool.md,
  * "Design: the firmware's partial render"). d320c8a5 met it in glmark2 with one
  * kick in flight. This case is that, alone: one kick in flight (glFinish after
  * every frame), frames of N full-screen quads into a 1024x1024 target, N up by
