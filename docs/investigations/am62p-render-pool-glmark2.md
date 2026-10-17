@@ -11,9 +11,9 @@ investigation only: no code changed.
   real shortfall in total memory, not fragmentation and not a leak. About
   25224 KiB (24.6 MiB) of the 59200 KiB (57.8 MiB) render pool is taken
   before the first scene, so a scene has 33976 KiB (33.2 MiB). NPOT mip
-  chains are laid out at their power-of-two extent, so terrain needs about
-  37.7 MiB and refract about 36.6 MiB, plus the 6 MiB more that the board
-  held at refract.
+  chains are laid out at their power-of-two extent, so terrain needs 38732
+  KiB (37.8 MiB) and refract 45160 KiB (44.1 MiB): the glmark2 host
+  harness's per-scene high-water on the PowerVR build.
 - The 21848 KiB request that `am62p-common-int.md` puts in shadow is
   **refract's** 1600x1200 colour mip chain (entry 24). Shadow allocates no
   such texture. Refract's framebuffer goes incomplete because the refused
@@ -45,10 +45,14 @@ investigation only: no code changed.
   `cargo test --manifest-path driver/rust/Cargo.toml scratch_npot -- --nocapture`
   and was deleted afterwards. Its design is the host test in the last
   section. "Model" below means this replay.
-- The glmark2 host harness (`tools/hostharness/glmark2/run.sh`) did **not**
-  run: this session was not allowed to start it. It also does not model
-  the PowerVR pool (its README, "How it works"). The conclusions that
-  still need it are listed at the end.
+- The glmark2 host harness on the PowerVR build:
+  `tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/gm2-pool powervr`
+  (glmark2 checked out at `22c527cb`, 3 frames per entry, one process per
+  entry; the generated `FINDINGS.md` was put back). It has no PowerVR
+  render pool (its README, "How it works"), but `src/osal/linux.c:194-205`
+  prints each heap's high-water at exit. That is the GL core's and the
+  back end's memory per scene; the render service's own blocks
+  (freelists, statics, HWRT) are not in it. Section "Harness" below.
 
 How well the model matches the board:
 
@@ -60,6 +64,32 @@ How well the model matches the board:
 | gap at terrain's chain request, 64 MiB | 3648 KiB, one of two chains served | 1816 KiB, both refused | model holds about 3.6 MiB too much in terrain |
 | bump at the end, 256 MiB | 91356 KiB | 90544 KiB | -812 KiB |
 | live at refract's end (its frees still held), 256 MiB | 142553088 B = 139212 KiB | 139356 KiB (refract's peak) | +144 KiB |
+
+## Harness: per-entry GL and back-end high-water
+
+KiB, from each entry's `osal(linux): heap ...: U bytes used at close, H at
+most` lines (GENERAL `0x8000000000`, PDS `0xda00000000`, USC
+`0xe000000000`). "Scene" is the sum of the heaps' highs minus what every
+entry holds at close (the back end's frame sets, statics and the window
+depth buffer: GENERAL about 6300 + PDS 3088 + USC 168). 0 GL errors, 0
+refused draws in every entry.
+
+| Entry | GENERAL max | all heaps max | Scene | Board pool live at 64 MiB (25224 + scene) | at 256 MiB (94984 + scene) |
+|---|---|---|---|---|---|
+| 0-20 (build ... ideas) | 8220-14344 | 11480-17672 | 1900-8100 | at most 33400 | at most 103100 |
+| 21 jellyfish | 19740 | 23016 | 13468 | 38692 | 108452 |
+| 22 terrain | 45064 | 48404 | 38732 | **63956**, over the 59200 pool | 133716 |
+| 23 shadow | 23900 | 27172 | 17580 | 42804 | 112564 |
+| 24 refract | 51568 | 54832 | 45160 | **70384**, over the 59200 pool | 140144 (board: 139212) |
+| 25-32 (conditionals ... clear) | 8292 | 11548 | about 2000 | | |
+
+The harness agrees with the replay on terrain (scene 38732 against the
+replay's 38608 KiB) and on shadow (17580 against 16268). For refract it
+measures 45160 KiB, 7700 KiB more than the replay's named blocks (37460):
+that is the "unnamed" 6 MiB the board showed at refract
+(`driver/rust/src/gpu/pvr/pool/tests/replay.rs:384-395`), now measured. With it, the
+predicted live at refract on the 256 MiB board is 140144 KiB against the
+board's 139212 KiB.
 
 ## 1. What is live at the end of jellyfish, and why
 
@@ -111,7 +141,7 @@ lists and the top-region allocation have failed (`driver/rust/src/gpu/pvr/pool.r
 | Request (board) | Gap (board) | Model at the request | Can any layout serve it? |
 |---|---|---|---|
 | terrain, 5464 KiB (800x600 chain) | 3648 KiB | lists 728 KiB, largest 684; gap 1816 | No. Terrain's peak with both chains is 63832 KiB live, more than the whole 59200 KiB pool (before NPOT chains it was 56656 KiB and fitted) |
-| refract, 21848 KiB (1600x1200 chain) | 2744 KiB | lists 7736 KiB, largest 7500 (its own released level 0); gap 3676 | No. Lists + gap = 11412 KiB, about half of the request |
+| refract, 21848 KiB (1600x1200 chain) | 2744 KiB | lists 7736 KiB, largest 7500 (its own released level 0); gap 3676 | No. Lists + gap = 11412 KiB, about half of the request; the harness puts refract's peak 11184 KiB over the pool |
 
 The per-entry live high-water from the model (KiB; 64 MiB with the board's
 24 extra blocks from shadow on, driver/rust/src/gpu/pvr/pool/tests/replay.rs:395):
@@ -188,7 +218,7 @@ mipmaps generated each frame by `scene-terrain/base-renderer.cpp lines 84-90`).
 | Coalescing | no gain | Already done (`driver/rust/src/gpu/pvr/pool.rs:490-525`); the lists hold under 1316 KiB |
 | Allocation order (top region, 256 KiB threshold, `driver/src/pvr_fw_boot.c:181-186,210`) | no | Already on. It fixes the fragmentation window around 80 MiB, not the 64 MiB total. Growing the chain before releasing level 0 would add 7500 KiB at refract's peak: worse |
 | GL-sized NPOT chains (no POT padding) | no | Saves 2.9 MiB per terrain chain and 11.6 MiB for refract (2559756 and 10239756 bytes). Still refused at 64 MiB (model). It also changes the layout the texture unit reads (Mesa's rule, `src/gl/texture.rs:1507-1533`): a hardware risk for no fit |
-| A smaller persistent set at 64 MiB | no | It needs 4632 KiB (terrain) to 10436 KiB (refract) cut from the 25224 KiB. The only large part is the freelists' 4-grow reserve (8 MiB), which guards against a refused freelist grow (#3) |
+| A smaller persistent set at 64 MiB | no | It needs 4756 KiB (terrain) to 11184 KiB (refract) cut from the 25224 KiB (harness figures). The only large part is the freelists' 4-grow reserve (8 MiB), which guards against a refused freelist grow (#3) |
 | General-heap fallback for big textures | yes, in principle | New code in `mem.rs`, `pool.rs` and the Zephyr OSAL: the GPU MMU would map pages from outside the reserved, no-map carve-out with the same cache rules. The largest change and a new failure surface |
 | **A bigger carve-out** | yes, from 96 MiB (model) | DRAM reserved for the GPU. At 128 MiB or more the render service also takes a quarter of the carve-out as the freelist grow pool (`driver/src/pvr_render.c:632-650`), so the persistent set jumps from 25224 KiB (120 MiB) to 62152 KiB (128 MiB) and 94984 KiB (256 MiB) |
 
@@ -213,8 +243,8 @@ Why 256 MiB and not the 96 MiB the model says is enough:
 - The board's own peak is 148072 KiB handed out (bump 91356 + top 56716
   KiB high-water, am62p-common-carveout.md line 183) of 255808 KiB: 107736 KiB
   headroom. That covers the model's error of a few MiB many times over.
-  At 96 MiB the headroom would be 22372 KiB, and terrain's list is a
-  reconstruction.
+  At 96 MiB the headroom would be about 21600 KiB (91968 - 70384), close
+  to the error between the board and the host at terrain (below).
 
 The 64 MiB of grow pool that 256 MiB brings stays unused by glmark2 (0
 grow requests at e3749a25). Only shrink the carve-out with the test below
@@ -241,9 +271,12 @@ Pieces:
    `pot_chain_layout`). A `grow(scene, old, new)` that frees the level-0
    block first, then allocates, as `src/gl/texture.rs:1598-1602` does.
 4. Terrain: `TERRAIN`, then both 800x600 targets grown to `CHAIN_800`.
-   Shadow: `SHADOW` plus `UNNAMED_AT_THE_BOARD` 256 KiB blocks kept from
-   there on. Refract: `REFRACT_SETUP`, the 1600x1216 depth buffer, then
-   the colour texture grown to `CHAIN_1600`.
+   Shadow: `SHADOW`. Refract: `REFRACT_SETUP`, the 1600x1216 depth buffer,
+   then the colour texture grown to `CHAIN_1600`, plus the 7700 KiB the
+   harness measures above the named blocks (it replaces
+   `UNNAMED_AT_THE_BOARD`). Better: take each scene's sizes from a harness
+   run with an allocation trace, so the list is measured, not
+   reconstructed.
 5. `live()`: (bump + top) minus every heap's list bytes, as
    `osal_mem_line`. Record its high-water per entry.
 
@@ -267,15 +300,14 @@ Tests:
 - Optional: `the_freelist_grow_pool_takes_a_quarter_from_128_mib`: the
   persistent set at 128 MiB is about 36928 KiB above that at 120 MiB.
 
-## What still needs a harness run or a board record
+## What still needs a board record
 
-- **Terrain's real allocation list.** The model holds about 3.6 MiB more
-  than the board at terrain: the board served one of the two chains, the
-  model refuses both. Run `tools/hostharness/glmark2/run.sh "$GLMARK2_SRC"
-  <out> powervr` and read each entry's `osal(linux): heap 0x...: ... at
-  most` lines; they are the GL core's and back end's per-scene high-water.
-  The harness has no PowerVR pool, so the driver's persistent set must
-  still be added from the table in section 1.
+- **Terrain on the board.** The harness agrees with the replay at terrain
+  (38732 against 38608 KiB), yet the board had about 3.6 MiB more room
+  there: it served one of the two chains, where the replay refuses both.
+  The difference is on the board side (the persistent set at that moment,
+  or when the first chain was asked for), not in terrain's list. It does
+  not change the answer: terrain's peak is 4756 KiB over the pool.
 - **The board's list state at each refusal**: the ERR
   `render pool general: free ... largest ...` line after each
   `render pool exhausted` in the cd738b1a and f8741799 records.
@@ -283,4 +315,5 @@ Tests:
   line of either 64 MiB record.
 
 None of these can change the answers above. The 64 MiB shortfall is
-4632 KiB for terrain even with perfect packing, and 10436 KiB for refract.
+4756 KiB for terrain even with perfect packing, and 11184 KiB for refract
+(harness scene + persistent set - pool).

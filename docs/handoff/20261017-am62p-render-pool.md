@@ -29,10 +29,14 @@ Item 1 (stage 2), add under it:
   refusals for want of memory at 64 MiB and no refusal at the overlay's
   carve-out with every entry under 3/4 of the pool (model now: refract
   139356 of 255808 KiB).
-- Not yet measured (they cannot change the answer): terrain's real
-  allocation list on the host harness (`tools/hostharness/glmark2/run.sh
-  "$GLMARK2_SRC" <out> powervr`, the per-entry `heap ... at most` lines);
-  the model holds about 3.6 MiB more than the board at terrain.
+- Measured on the host harness (PowerVR build, per-entry heap
+  high-water): terrain's scene needs 38732 KiB and refract's 45160 KiB
+  above the back end's fixed part, so with the driver's 25224 KiB
+  persistent set they peak at 63956 and 70384 KiB, both over the 64 MiB
+  image's 59200 KiB pool. At 256 MiB refract's predicted 140144 KiB
+  matches the board's 139212. Left: why the board had about 3.6 MiB more
+  room at terrain than host and replay say (it served one of the two
+  chains); it does not change the answer.
 - A decision, low: from 128 MiB up the render service takes a quarter of
   the carve-out as the freelist grow pool (`driver/src/pvr_render.c:632-650`), 64 MiB
   at 256 MiB, and glmark2 asked for 0 grows at `e3749a25`. A 120 MiB
