@@ -47,12 +47,18 @@
 //! colour texture, pinned by the GL crate's tests/pvr_pool_npot.rs, and
 //! [`Regrow`] is how it asks (level 0 freed, then the chain). The AM62P's
 //! glmark2 image runs on a 256 MiB carveout since 504d4fae
-//! ([`CARVEOUT_GLMARK2`]); the board's own 64 MiB region ([`CARVEOUT`]) is
-//! the driver's minimum and what every other image has.
+//! ([`glmark2_carveout`], read from its overlay); the board's own 64 MiB
+//! region ([`CARVEOUT`]) is the driver's minimum and what every other
+//! image has. The freelists are sized by the carveout as pvr_render.c
+//! sizes them ([`Replay::boot`]), and each scene's live high-water is
+//! kept as the board's `osal_mem_line` counts live bytes
+//! ([`Replay::live_kib`]). The findings and the board records this is
+//! checked against: docs/notes/am62p-render-pool-glmark2.md.
 
 use super::*;
 use crate::gpu::pvr::fwif::{PDSCODEDATA_HEAP_BASE, PMMETA_PROTECT_HEAP_BASE, USCCODE_HEAP_BASE};
 use crate::gpu::pvr::mem::{bo_alloc, bo_alloc_pm, pool_align};
+use std::collections::BTreeMap;
 use std::eprintln;
 
 const PDS: usize = 1;
@@ -60,11 +66,25 @@ const K: u32 = 1024;
 /// The AM62P's carveout and render pool: 64 MiB, the pool after the
 /// firmware heap's 4 MiB + 192 KiB and the 2 MiB of page tables.
 const CARVEOUT: usize = 64 << 20;
-/// The glmark2 image's carveout (driver/samples/zephyr/glmark2/boards/
-/// verdin_am62p_am62p54_a53.overlay, 256 MiB at 0xa0000000); the pool
-/// starts at the same offset.
-const CARVEOUT_GLMARK2: usize = 256 << 20;
+/// The glmark2 image's AM62P overlay: its `gpu_carveout_glmark2` node's
+/// `reg` is the carveout the image runs on (256 MiB at 0xa0000000 since
+/// 504d4fae). Read at compile time so that the replay's verdict follows
+/// the overlay: shrinking the carveout below what glmark2 needs fails
+/// `the_glmark2_images_carveout_serves_terrains_and_refracts_chains`.
+const GLMARK2_OVERLAY: &str =
+    include_str!("../../../../../../samples/zephyr/glmark2/boards/verdin_am62p_am62p54_a53.overlay");
 const POOL_AM62P: u32 = (4 << 20) + (192 << 10) + (2 << 20);
+
+/// The glmark2 image's carveout size, bytes, from [`GLMARK2_OVERLAY`]: the
+/// second cell of the `reg = <base size>;` after `gpu_carveout_glmark2`.
+fn glmark2_carveout() -> usize {
+    let node = GLMARK2_OVERLAY.find("gpu_carveout_glmark2:").expect("the overlay's gpu_carveout_glmark2 node");
+    let rest = &GLMARK2_OVERLAY[node..];
+    let reg = rest.find("reg = <").expect("the node's reg") + "reg = <".len();
+    let cells = &rest[reg..rest[reg..].find('>').expect("reg's closing bracket") + reg];
+    let size = cells.split_whitespace().nth(1).expect("reg's size cell");
+    usize::from_str_radix(size.trim_start_matches("0x"), 16).expect("reg's size cell is hex")
+}
 /// A mipmapped 800x600 RGBA8 texture on the PowerVR (terrain's render
 /// targets): the 1024x1024 chain, 4 * (1024^2 + 512^2 + ... + 1) bytes,
 /// 5462 KiB where level 0 alone is 1875. Pinned by tests/pvr_pool_npot.rs
@@ -145,6 +165,8 @@ struct Replay {
     pm: u32,
     scene: u32,
     refused: Vec<(u32, &'static str, u32)>,
+    /// Each scene's live high-water, KiB ([`Replay::live_kib`]).
+    peak: BTreeMap<u32, u32>,
 }
 
 impl Replay {
@@ -153,7 +175,7 @@ impl Replay {
     }
 
     /// The AM62P's layout on a carveout of `carveout` bytes ([`CARVEOUT`],
-    /// [`CARVEOUT_GLMARK2`]).
+    /// [`glmark2_carveout`]).
     fn with_carveout(top_above: u32, carveout: usize) -> Replay {
         Replay {
             r: Rig::with_layout(carveout, POOL_AM62P, top_above),
@@ -161,6 +183,7 @@ impl Replay {
             pm: 0,
             scene: LIFE,
             refused: Vec::new(),
+            peak: BTreeMap::new(),
         }
     }
 
@@ -169,12 +192,34 @@ impl Replay {
         Shot { largest: f.largest / K, free: (f.bytes / 1024) as u32, gap: (self.r.k.pool_gap() / 1024) as u32 }
     }
 
+    /// The pool's size, KiB (the carveout after the pool's offset).
+    fn pool_kib(&self) -> u32 {
+        ((self.r.k.pool_end() - u64::from(POOL_AM62P)) / 1024) as u32
+    }
+
+    /// Live bytes as the board's `osal_mem_line` counts them, KiB: what
+    /// the pool handed out (the bump and the top region) minus the bytes
+    /// on every heap's free lists (src/osal/zephyr.c).
+    fn live_kib(&mut self) -> u32 {
+        let handed = u64::from(self.r.pool_used()) + u64::from(self.r.k.pool_top);
+        let listed: u64 = (0..POOL_HEAPS).map(|h| self.r.free_of(h).bytes).sum();
+        ((handed - listed) / 1024) as u32
+    }
+
+    /// The scene's live high-water, after a block was served.
+    fn note_live(&mut self) {
+        let live = self.live_kib();
+        let p = self.peak.entry(self.scene).or_insert(0);
+        *p = (*p).max(live);
+    }
+
     /// A pool allocation (`pvr_render_alloc`) for `scene`; false when
     /// refused (and recorded).
     fn a(&mut self, scene: u32, what: &'static str, heap: usize, bytes: u32) -> bool {
         match self.r.try_alloc(heap, bytes) {
             Some(bo) => {
                 self.live.push(Blk { scene, heap, size: bytes, bo });
+                self.note_live();
                 true
             }
             None => {
@@ -191,6 +236,8 @@ impl Replay {
         let bo = bo_alloc(&mut self.r.k, base, &mut self.r.bumps[heap], bytes, L0_FLAGS_DATA);
         if bo.cpu.is_null() {
             self.refused.push((self.scene, "a driver block", bytes.div_ceil(K)));
+        } else {
+            self.note_live();
         }
     }
 
@@ -201,6 +248,8 @@ impl Replay {
         self.pm = pm;
         if bo.cpu.is_null() {
             self.refused.push((self.scene, "a PM block", bytes.div_ceil(K)));
+        } else {
+            self.note_live();
         }
     }
 
@@ -240,11 +289,25 @@ impl Replay {
         /* the parameter-buffer reserve, the border colours */
         self.drv(GEN, 2048 * K);
         self.drv(GEN, 4 * K);
-        /* the freelists: 1536 pages each for the two global ones, 26 local */
-        for pages in [1536, 1536, 26] {
+        /* The freelists, sized by the carveout as pvr_render.c sizes them
+         * (its parameter-buffer block). Below 128 MiB: two global lists of
+         * 448 current + 64 ready + 4 grows of 256 pages, 1536 backed, with
+         * a 4096-entry PFN array each. From 128 MiB: a quarter of the
+         * carveout as the shared grow pool first (freelist::pool_init, 16
+         * KiB aligned), then two lists of 2048 pages with no reserve and a
+         * PFN array of 2048 + the pool's pages. The local list is 26 pages
+         * either way. */
+        let carveout = self.r.k.size;
+        let grow_pool = if carveout >= 128 << 20 { ((carveout / 4 / 4096) as u32) & !1023 } else { 0 };
+        if grow_pool != 0 {
+            pool_align(&mut self.r.k, 0x4000);
+            self.drv(GEN, grow_pool * 4 * K);
+        }
+        let global = if grow_pool != 0 { 2048 } else { 1536 };
+        for pages in [global, global, 26] {
             pool_align(&mut self.r.k, 0x4000);
             self.drv(GEN, pages * 4 * K);
-            self.pm(16 * K);
+            self.pm(if pages == 26 { 16 * K } else { (if grow_pool != 0 { 2048 + grow_pool } else { 4096 }) * 4 });
         }
         self.drv(GEN, 4 * K); /* the render context's VDM stream */
         /* the backend: 4 frame sets of 1024 + 768 KiB arenas and their tables */
@@ -462,6 +525,14 @@ struct Glmark2 {
     at_colour_chain: Shot,
     colour_chain_served: Option<bool>,
     refused: Vec<(u32, &'static str, u32)>,
+    /// Each scene's live high-water, KiB ([`Replay::live_kib`]; the boot
+    /// and the blocks kept for the run are under [`LIFE`]).
+    peak: BTreeMap<u32, u32>,
+    /// The bump after refract's teardown, KiB (the board's "bump N KiB
+    /// now" of the summary).
+    end_bump: u32,
+    /// The pool's size, KiB.
+    pool: u32,
 }
 
 /// One glmark2 replay: the pool arm, the unnamed blocks, and what
@@ -501,6 +572,12 @@ const BOARD_LEFT: u32 = 1940;
 /// as 256 KiB blocks kept from shadow on; this many bring its free bytes
 /// and its bump to the board's.
 const UNNAMED_AT_THE_BOARD: u32 = 24;
+
+/// The glmark2 host harness on the PowerVR build measured refract's scene
+/// at 45160 KiB, 7700 KiB above the blocks the reconstruction names
+/// (docs/notes/am62p-render-pool-glmark2.md, "Harness"): the unnamed
+/// blocks measured, 30 of 256 KiB (7680 KiB).
+const UNNAMED_AT_THE_HARNESS: u32 = 30;
 
 /// glmark2's entries 0-24 (to refract's first draw), with `unnamed` 256 KiB
 /// blocks kept for the rest of the run from shadow's frames on: the board's
@@ -543,6 +620,7 @@ fn replay(run: Run) -> Glmark2 {
     let colour_chain_served =
         refract_chain.then(|| rp.regrow(24, "1600x1200 colour mip chain", TEX_1600, NPOT_1600X1200));
     rp.teardown();
+    let (end_bump, pool) = (rp.r.pool_used() / K, rp.pool_kib());
     Glmark2 {
         before_refract,
         at_depth_buffer,
@@ -550,6 +628,9 @@ fn replay(run: Run) -> Glmark2 {
         at_colour_chain,
         colour_chain_served,
         refused: rp.refused,
+        peak: rp.peak,
+        end_bump,
+        pool,
     }
 }
 
@@ -701,24 +782,68 @@ fn refracts_own_1600x1200_chain_is_beyond_the_64_mib_carveouts_capacity() {
     }
 }
 
-/// The glmark2 image's 256 MiB carveout (504d4fae): terrain's chains,
-/// refract's three blocks and its colour chain are all served, in both
-/// arms, with up to 38 unnamed blocks; nothing in the run is refused, and
-/// the threshold stays 256 KiB.
+/// The glmark2 image's carveout, read from its overlay (256 MiB, 504d4fae):
+/// terrain's chains, refract's three blocks and its colour chain are all
+/// served, in both arms, alone, at the board's and at the harness's extra
+/// bytes and with 38 unnamed blocks; nothing in the run is refused, every
+/// scene's live high-water stays under 3/4 of the pool (the rule the
+/// GC7000's glmark2 row uses), and the threshold stays 256 KiB. The pool
+/// is 255808 KiB there, and the persistent set about 95 MiB: from 128 MiB
+/// up the render service takes a quarter of the carveout as the freelist
+/// grow pool. Shrinking the overlay's carveout below what glmark2 needs
+/// fails here.
 #[test]
-fn the_glmark2_images_256_mib_carveout_serves_terrains_and_refracts_chains() {
+fn the_glmark2_images_carveout_serves_terrains_and_refracts_chains() {
     assert_eq!(YD_PVR_POOL_TOP_ABOVE, 256 * K);
-    for n in [0, UNNAMED_AT_THE_BOARD, 38] {
+    let carveout = glmark2_carveout();
+    assert_eq!(carveout, 256 << 20, "the overlay's gpu_carveout_glmark2 reg size");
+    for n in [0, UNNAMED_AT_THE_BOARD, UNNAMED_AT_THE_HARNESS, 38] {
         for top_above in [YD_PVR_POOL_TOP_ABOVE, 0] {
-            let run = Run { chains: 4, ..Run::with_chains(top_above, n, CARVEOUT_GLMARK2) };
+            let run = Run { chains: 4, ..Run::with_chains(top_above, n, carveout) };
             let g = replay(run);
-            say(&std::format!("256 MiB, top region {}, 4 npot chains, refract's chain", top_above / K), n, &g);
+            say(
+                &std::format!("{} MiB, top region {}, 4 npot chains, refract's chain", carveout >> 20, top_above / K),
+                n,
+                &g,
+            );
+            eprintln!("  pool {} KiB, end bump {} KiB, peaks {:?}", g.pool, g.end_bump, g.peak);
+            assert_eq!(g.pool, 255_808, "{n} unnamed, top region {top_above}");
             assert_eq!(g.refused, [], "{n} unnamed, top region {top_above}");
             assert!(g.depth_buffer_served, "{n} unnamed, top region {top_above}");
             assert_eq!(g.colour_chain_served, Some(true), "{n} unnamed, top region {top_above}");
             assert!(g.before_refract.contiguous() >= REFRACT_NEEDS + COLOUR_CHAIN_KIB);
+            for (scene, peak) in &g.peak {
+                assert!(
+                    *peak < g.pool / 4 * 3,
+                    "{n} unnamed, top region {top_above}: scene {scene} peaks at {peak} KiB"
+                );
+            }
         }
     }
+}
+
+/// The 256 MiB replay against the board run at e3749a25
+/// (docs/notes/am62p-render-pool-glmark2.md, "How well the model
+/// matches the board"): the bump after refract, with no unnamed blocks (on
+/// the board they are a scene's and go back; here they are kept for the
+/// run), is within 1 MiB of the board's end-of-run 91356 KiB, and
+/// refract's live high-water at the board's extra bytes is within 1 MiB of
+/// its 139212 KiB (142553088 bytes live at refract's end). At the
+/// harness's extra bytes the peak is 1.5 MiB over the board's. This keeps
+/// the reconstruction honest against a measured run.
+#[test]
+fn the_replay_matches_the_256_mib_board_run() {
+    let carveout = glmark2_carveout();
+    let alone = replay(Run::with_chains(YD_PVR_POOL_TOP_ABOVE, 0, carveout));
+    let board = replay(Run::with_chains(YD_PVR_POOL_TOP_ABOVE, UNNAMED_AT_THE_BOARD, carveout));
+    let harness = replay(Run::with_chains(YD_PVR_POOL_TOP_ABOVE, UNNAMED_AT_THE_HARNESS, carveout));
+    eprintln!(
+        "256 MiB board match: end bump {} KiB alone (board 91356); refract's peak {} KiB at the board's bytes, {} at the harness's (board 139212)",
+        alone.end_bump, board.peak[&24], harness.peak[&24]
+    );
+    assert!(alone.end_bump.abs_diff(91_356) <= 1024, "end bump {}", alone.end_bump);
+    assert!(board.peak[&24].abs_diff(139_212) <= 1024, "refract's peak {}", board.peak[&24]);
+    assert!(harness.peak[&24].abs_diff(139_212) <= 2048, "refract's peak {}", harness.peak[&24]);
 }
 
 /// A UI run: the boot, then the application's objects, which live for the

@@ -5055,7 +5055,14 @@ released before the chain is asked for, `texture_alloc_laid_out`; the
 texture was settled first, so the reclaim drains the held level 0 without
 a wait). The replay sweeps terrain's chains from none to four and adds
 refract's chain at the end of its first frame, on the board's 64 MiB
-carveout and on the glmark2 image's 256 MiB one (504d4fae).
+carveout and on the glmark2 image's, read from its overlay (256 MiB,
+504d4fae). The freelists are sized by the carveout as `pvr_render.c`
+sizes them (from 128 MiB a quarter of the carveout is the grow pool, and
+the global lists are 2048 pages), and each scene's live high-water is
+kept as the board's `osal_mem_line` counts live bytes. The findings this
+follows, and the board records it is checked against, are the
+baseline3-am62p investigation
+(docs/notes/am62p-render-pool-glmark2.md).
 
 **On the 64 MiB carveout** (the pool its last 59200 KiB); the lists are the
 same alone and with the board's 24 unnamed blocks:
@@ -5084,16 +5091,24 @@ same alone and with the board's 24 unnamed blocks:
   (9984 free and 72 KiB with it off): 10056 KiB in either arm for a 21846
   KiB request. Refract needs 7500 + 21846 + 7600 = 36946 KiB while about
   26 MiB are held before it whatever the arm. `glGenerateMipmap` then
-  raises GL_OUT_OF_MEMORY and the texture keeps its one level under a
-  mipmap filter (incomplete: refract samples black), every frame.
-- **On the glmark2 image's 256 MiB carveout** every block of the run is
-  served in both arms, with four chains, refract's chain and up to 38
-  unnamed blocks (gap before refract 228516 KiB with the region). This is
-  the image the AM62P rows have run since 504d4fae (`1d54a4eb`: 33 scenes,
-  0 failed, 0 GL errors, refract's 11-level chain filtered on the CPU each
-  frame, 2.08 s).
+  raises GL_OUT_OF_MEMORY, and as level 0 was released first the texture
+  has no storage at all: refract's framebuffer is incomplete (0x8cd6)
+  every frame, cd738b1a's 1694 `framebuffer 1 incomplete` lines.
+- **On the glmark2 image's 256 MiB carveout** (pool 255808 KiB, the
+  persistent set about 95 MiB with the 64 MiB grow pool) every block of
+  the run is served in both arms, with four chains, refract's chain and
+  0, 24, 30 or 38 unnamed blocks (gap before refract 158756 KiB with the
+  region, alone), and every scene's live high-water stays under 3/4 of the
+  pool: jellyfish 106560 KiB, terrain 140768 (four chains), refract 139356
+  at the board's bytes, 142940 at 38 unnamed. Against the e3749a25 board
+  run the replay's end bump is 90544 KiB (board 91356) and refract's peak
+  139356 (board 139212). This is the image the AM62P rows have run since
+  504d4fae (`1d54a4eb`: 33 scenes, 0 failed, 0 GL errors, refract's
+  11-level chain filtered on the CPU each frame, 2.08 s). The test reads
+  the carveout from the overlay, so shrinking it below what glmark2 needs
+  fails on the host.
 - The recorded 2769-operation golden trace is unchanged; the pool test
-  count is 31 (`tools/check.sh`, "pvr render pool").
+  count is 32 (`tools/check.sh`, "pvr render pool").
 
 ### The other candidates
 

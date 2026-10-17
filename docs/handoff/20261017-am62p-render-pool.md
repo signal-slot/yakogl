@@ -3,7 +3,7 @@
 # am62p-render-pool, 2026-10-17, plan item baseline3-am62p (from main `c854e0ae`)
 
 Host investigation, no code change:
-`docs/investigations/am62p-render-pool-glmark2.md`.
+`docs/notes/am62p-render-pool-glmark2.md`.
 
 ## State of main
 
@@ -14,7 +14,7 @@ persistent set (freelists 12440, frame sets 7488, statics, the window's
 depth buffer). The NPOT mip chains laid out at their POT extent (800x600
 chain 5592404 bytes, 1600x1200 chain 22369620 bytes) then do not fit
 terrain or refract in total. It was not fragmentation and not a leak
-(`docs/investigations/am62p-render-pool-glmark2.md`, sections 1 and 2).
+(`docs/notes/am62p-render-pool-glmark2.md`, sections 1 and 2).
 
 ## Open work
 
