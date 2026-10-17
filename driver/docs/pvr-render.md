@@ -16,9 +16,12 @@ The code: `driver/rust/src/gpu/pvr/` (`pool.rs`, `mem.rs`, `freelist.rs`,
 ## The render pool
 
 **Layout.** The carveout is the board's reserved-memory region (64 MiB at
-0x97800000 on the Verdin AM62P). The render pool is its tail after the
-firmware heap and the page tables. Each heap (GENERAL, PDS, USC, PM) has its
-own device-VA cursor; one physical cursor is shared by all heaps.
+0x97800000 on the Verdin AM62P; the glmark2 and deqp images take a 256 MiB
+region at 0xa0000000 by overlay, which glmark2 needs since the PowerVR
+stores NPOT mip chains: docs/notes/pvr-render-pool.md, "The replay with the
+NPOT mip chains"). The render pool is its tail after the firmware heap and
+the page tables. Each heap (GENERAL, PDS, USC, PM) has its own device-VA
+cursor; one physical cursor is shared by all heaps.
 
 **Who allocates.** The parameter-buffer freelists, the per-size HWRT buffers
 and the render context's VDM stream take memory from the bump at init. GL

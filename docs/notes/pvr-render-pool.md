@@ -5030,6 +5030,71 @@ gap before refract is at least 22600 KiB while the blocks the board holds
 beyond the reconstruction stay under 9.5 MiB; the board run says whether
 they do.
 
+#### The replay with the NPOT mip chains (pvr-pool-npot, 2026-10-17)
+
+The table above sizes terrain's four 800x600 targets at level 0 (1875 KiB
+each), as the board measured them before the PowerVR stored NPOT chains.
+Since pvr-npot-mips a mipmapped NPOT texture holds the chain of its
+power-of-two extent (src/gl/texture.rs `pot_chain_layout`, Mesa pvr's
+rule), and glmark2 mipmaps two 800x600 targets of terrain
+(`terrain_renderer`, `tilt_h_renderer`: `setup_texture(GL_LINEAR_MIPMAP_
+LINEAR, ...)` at glmark2's default options) and refract's 1600x1200 colour
+texture (`glGenerateMipmap` after every frame's depth pass). What the GL
+core asks the pool for each, in its order, is pinned by
+`tests/pvr_pool_npot.rs` on a backend with the PowerVR's layout flags:
+
+| texture | `glTexImage2D` | first `glGenerateMipmap` |
+|---|---|---|
+| 800x600 RGBA8, mipmapped (terrain, 2 of them) | level 0, 1,920,000 bytes (1875 KiB) | level 0 freed, then the 1024x1024 chain: 5,592,404 bytes (**5462 KiB**, 2.9x) |
+| 1600x1200 RGBA8, mipmapped (refract's colour texture) | level 0, 7,680,000 (7500 KiB) | level 0 freed, then the 2048x2048 chain: 22,369,620 bytes (**21846 KiB**, 2.9x) |
+| 1600x1200 depth (refract, shadow; NEAREST) | one level, 7500 KiB | never |
+| 512x512 / 256x256 RGBA8, mipmapped | the whole chain at once: 1,398,100 / 349,524 bytes | nothing more |
+
+`Regrow` in `pool/tests/replay.rs` is that order (the old storage is
+released before the chain is asked for, `texture_alloc_laid_out`; the
+texture was settled first, so the reclaim drains the held level 0 without
+a wait). The replay sweeps terrain's chains from none to four and adds
+refract's chain at the end of its first frame, on the board's 64 MiB
+carveout and on the glmark2 image's 256 MiB one (504d4fae).
+
+**On the 64 MiB carveout** (the pool its last 59200 KiB); the lists are the
+same alone and with the board's 24 unnamed blocks:
+
+| terrain's chains | top region on: refused | off: refused |
+|---|---|---|
+| 0 | nothing | nothing |
+| 1 | terrain's 800x608 depth buffer (1900) | the same |
+| 2 (the source) | two 800x600 targets (1875 each), the depth buffer | one chain (5462) |
+| 3 | a target, a chain, a target, the depth buffer | two chains, **refract's 1600x1216 depth buffer (7600)** |
+| 4 | a target, a chain, a target, a chain, the depth buffer | three chains, **refract's depth buffer** |
+
+- **Refract's three blocks still fit, with the region.** Terrain's blocks
+  all come back at its teardown, so GENERAL before refract is the same as
+  with level-0 targets (gap 31908 KiB alone, 26276 at the board's bytes,
+  holding refract's 22600), and refract's depth buffer is served at every
+  chain count. Without the region, from three chains on the old
+  fragmentation is back and refract's depth buffer is refused again. The
+  threshold stays 256 KiB; the placement is unchanged.
+- **Terrain's own set-up no longer fits 59200 KiB**, from one chain on:
+  3587 KiB more per chain on top of its 30 MiB. Both arms refuse about the
+  same bytes of it (which blocks differs with the order the chains are
+  asked in), so this is capacity, not placement.
+- **Refract's own chain is beyond the 64 MiB carveout's capacity.** At the
+  chain, GENERAL has 748 KiB free and a gap of 9308 KiB with the region
+  (9984 free and 72 KiB with it off): 10056 KiB in either arm for a 21846
+  KiB request. Refract needs 7500 + 21846 + 7600 = 36946 KiB while about
+  26 MiB are held before it whatever the arm. `glGenerateMipmap` then
+  raises GL_OUT_OF_MEMORY and the texture keeps its one level under a
+  mipmap filter (incomplete: refract samples black), every frame.
+- **On the glmark2 image's 256 MiB carveout** every block of the run is
+  served in both arms, with four chains, refract's chain and up to 38
+  unnamed blocks (gap before refract 228516 KiB with the region). This is
+  the image the AM62P rows have run since 504d4fae (`1d54a4eb`: 33 scenes,
+  0 failed, 0 GL errors, refract's 11-level chain filtered on the CPU each
+  frame, 2.08 s).
+- The recorded 2769-operation golden trace is unchanged; the pool test
+  count is 31 (`tools/check.sh`, "pvr render pool").
+
 ### The other candidates
 
 - **Releasing scene resources at teardown:** already prompt. With the
@@ -5045,7 +5110,9 @@ they do.
   (`driver/samples/zephyr/deqp/boards/verdin_am62p_am62p54_a53.overlay`),
   but its note relies on the image being kexec'ed; whether U-Boot (the
   route of every glmark2 round since 10-04) leaves that DDR free is not
-  shown. Kept as the fallback if the board run below misses.
+  shown. Kept as the fallback if the board run below misses. (Taken since:
+  the glmark2 image carries the same 256 MiB overlay, 504d4fae, and the
+  NPOT chains need it, "The replay with the NPOT mip chains" above.)
 
 ### The board expectation (AM62P, glmark2 image from this commit)
 

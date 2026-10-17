@@ -37,6 +37,18 @@
 //! refract. "Unnamed" blocks stand for it: 256 KiB blocks kept from shadow
 //! on, swept from none to past what either pool arm survives
 //! (docs/notes/pvr-render-pool.md, "The host replay").
+//!
+//! The tables above are the board's reconstruction of 2026-10-04, when a
+//! non-power-of-two texture had one level on the PowerVR. Since
+//! pvr-npot-mips the GL core stores the whole chain of a mipmapped NPOT
+//! texture, laid out as its power-of-two extent's chain (src/gl/texture.rs
+//! `pot_chain_layout`): [`NPOT_800X600`] and [`NPOT_1600X1200`] are what
+//! the real path asks for terrain's 800x600 targets and refract's 1600x1200
+//! colour texture, pinned by the GL crate's tests/pvr_pool_npot.rs, and
+//! [`Regrow`] is how it asks (level 0 freed, then the chain). The AM62P's
+//! glmark2 image runs on a 256 MiB carveout since 504d4fae
+//! ([`CARVEOUT_GLMARK2`]); the board's own 64 MiB region ([`CARVEOUT`]) is
+//! the driver's minimum and what every other image has.
 
 use super::*;
 use crate::gpu::pvr::fwif::{PDSCODEDATA_HEAP_BASE, PMMETA_PROTECT_HEAP_BASE, USCCODE_HEAP_BASE};
@@ -48,7 +60,21 @@ const K: u32 = 1024;
 /// The AM62P's carveout and render pool: 64 MiB, the pool after the
 /// firmware heap's 4 MiB + 192 KiB and the 2 MiB of page tables.
 const CARVEOUT: usize = 64 << 20;
+/// The glmark2 image's carveout (driver/samples/zephyr/glmark2/boards/
+/// verdin_am62p_am62p54_a53.overlay, 256 MiB at 0xa0000000); the pool
+/// starts at the same offset.
+const CARVEOUT_GLMARK2: usize = 256 << 20;
 const POOL_AM62P: u32 = (4 << 20) + (192 << 10) + (2 << 20);
+/// A mipmapped 800x600 RGBA8 texture on the PowerVR (terrain's render
+/// targets): the 1024x1024 chain, 4 * (1024^2 + 512^2 + ... + 1) bytes,
+/// 5462 KiB where level 0 alone is 1875. Pinned by tests/pvr_pool_npot.rs
+/// (`terrains_800x600_target_frees_level_0_then_takes_the_chain`).
+const NPOT_800X600: u32 = 5_592_404;
+/// A mipmapped 1600x1200 RGBA8 texture (refract's colour texture): the
+/// 2048x2048 chain, 21846 KiB where level 0 is 7500. Pinned by
+/// tests/pvr_pool_npot.rs (`refracts_colour_texture_frees_level_0_then_
+/// takes_the_chain_at_its_first_frame`).
+const NPOT_1600X1200: u32 = 22_369_620;
 /// Blocks that live for the whole run, and the index buffer (which grows).
 const LIFE: u32 = u32::MAX;
 const INDEX: u32 = u32::MAX - 1;
@@ -75,6 +101,15 @@ enum Op {
     Index(u32),
     /// The scene's first draw: what follows is allocated there.
     Draw,
+    /// A mipmapped NPOT texture's first `glGenerateMipmap`: the scene's most
+    /// recent block of the first size (its level 0, a `Gen` before this) is
+    /// freed, then its chain, the second size, is allocated
+    /// (`texture_alloc_laid_out` releases the old storage before it asks for
+    /// the new one; tests/pvr_pool_npot.rs). The free counts at once: the
+    /// texture was settled first (its kick submitted and waited), so with
+    /// the reclaim (the default) a refused chain drains the held level 0
+    /// without a wait and asks again, and the chain can take its place.
+    Regrow(&'static str, u32, u32),
 }
 use Op::*;
 
@@ -87,7 +122,7 @@ struct Blk {
 }
 
 /// GENERAL's state, KiB.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct Shot {
     /// The largest free range on the lists.
     largest: u32,
@@ -114,8 +149,14 @@ struct Replay {
 
 impl Replay {
     fn new(top_above: u32) -> Replay {
+        Replay::with_carveout(top_above, CARVEOUT)
+    }
+
+    /// The AM62P's layout on a carveout of `carveout` bytes ([`CARVEOUT`],
+    /// [`CARVEOUT_GLMARK2`]).
+    fn with_carveout(top_above: u32, carveout: usize) -> Replay {
         Replay {
-            r: Rig::with_layout(CARVEOUT, POOL_AM62P, top_above),
+            r: Rig::with_layout(carveout, POOL_AM62P, top_above),
             live: Vec::new(),
             pm: 0,
             scene: LIFE,
@@ -245,8 +286,22 @@ impl Replay {
                     self.a(INDEX, "index buffer", GEN, bytes);
                 }
                 Draw => {}
+                Regrow(what, level0, chain) => {
+                    self.regrow(n, what, level0, chain);
+                }
             }
         }
+    }
+
+    /// [`Regrow`]: free the scene's most recent block of `level0` bytes (if
+    /// level 0 itself was served), then allocate `chain`; whether the chain
+    /// was served.
+    fn regrow(&mut self, n: u32, what: &'static str, level0: u32, chain: u32) -> bool {
+        if let Some(i) = self.live.iter().rposition(|b| b.scene == n && b.heap == GEN && b.size == level0) {
+            let old = self.live.remove(i);
+            self.r.free(&old.bo, old.size);
+        }
+        self.a(n, what, GEN, chain)
     }
 
     fn teardown(&mut self) {
@@ -302,6 +357,30 @@ const TERRAIN: &[Op] = &[
     Hwrt(512, 512),
     Hwrt(512, 512),
 ];
+
+/// [`TERRAIN`] on the PowerVR since pvr-npot-mips: its first `chains`
+/// 800x600 targets are mipmapped, so each is regrown from level 0 to its
+/// NPOT chain ([`Regrow`], [`NPOT_800X600`]) right after `glTexImage2D`
+/// (`BaseRenderer::setup_texture` calls `update_mipmap` at set-up). At
+/// glmark2's default options (bloom and tilt-shift on) the source has two
+/// such targets, `terrain_renderer` and `tilt_h_renderer`
+/// (scene-terrain.cpp `init_renderers`); the table's other two 800x600
+/// targets are the board's reconstruction and stay at level 0. `chains` is
+/// swept past two for margin. 0 is the table as it was.
+fn terrain(chains: u32) -> Vec<Op> {
+    let mut left = chains;
+    let mut ops = Vec::new();
+    for &op in TERRAIN {
+        ops.push(op);
+        if let Gen("800x600 target", level0) = op {
+            if left > 0 {
+                left -= 1;
+                ops.push(Regrow("800x600 mip chain", level0, NPOT_800X600));
+            }
+        }
+    }
+    ops
+}
 
 const SHADOW: &[Op] = &[
     Prog,
@@ -373,12 +452,41 @@ fn before_jellyfish(rp: &mut Replay) {
 }
 
 /// What the replay shows: GENERAL before refract's set-up and at its depth
-/// buffer, whether that buffer was served, and every refusal.
+/// buffer, whether that buffer was served, GENERAL at its colour chain and
+/// whether that was served (`None`: the run stopped at the depth buffer,
+/// the table as the board measured it), and every refusal.
 struct Glmark2 {
     before_refract: Shot,
     at_depth_buffer: Shot,
     depth_buffer_served: bool,
+    at_colour_chain: Shot,
+    colour_chain_served: Option<bool>,
     refused: Vec<(u32, &'static str, u32)>,
+}
+
+/// One glmark2 replay: the pool arm, the unnamed blocks, and what
+/// pvr-npot-mips added (`chains` of terrain's targets regrown, refract's
+/// colour texture regrown at its first frame) on a carveout.
+#[derive(Clone, Copy)]
+struct Run {
+    top_above: u32,
+    unnamed: u32,
+    chains: u32,
+    refract_chain: bool,
+    carveout: usize,
+}
+
+impl Run {
+    /// The board's reconstruction: level-0 targets on the 64 MiB carveout.
+    const fn measured(top_above: u32, unnamed: u32) -> Run {
+        Run { top_above, unnamed, chains: 0, refract_chain: false, carveout: CARVEOUT }
+    }
+
+    /// The PowerVR since pvr-npot-mips: terrain's two mipmapped targets and
+    /// refract's colour texture as chains, on `carveout`.
+    const fn with_chains(top_above: u32, unnamed: u32, carveout: usize) -> Run {
+        Run { top_above, unnamed, chains: 2, refract_chain: true, carveout }
+    }
 }
 
 /// The board's GENERAL at refract's depth buffer (the reclaim round,
@@ -395,9 +503,17 @@ const BOARD_LEFT: u32 = 1940;
 const UNNAMED_AT_THE_BOARD: u32 = 24;
 
 /// glmark2's entries 0-24 (to refract's first draw), with `unnamed` 256 KiB
-/// blocks kept for the rest of the run from shadow's frames on.
+/// blocks kept for the rest of the run from shadow's frames on: the board's
+/// reconstruction ([`Run::measured`]).
 fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
-    let mut rp = Replay::new(top_above);
+    replay(Run::measured(top_above, unnamed))
+}
+
+/// [`glmark2`] for any [`Run`]: with `refract_chain` the run goes on to the
+/// end of refract's first frame, where its colour texture is regrown.
+fn replay(run: Run) -> Glmark2 {
+    let Run { top_above, unnamed, chains, refract_chain, carveout } = run;
+    let mut rp = Replay::with_carveout(top_above, carveout);
     rp.boot();
     before_jellyfish(&mut rp);
     /* 21 jellyfish: 32 caustic frames of 256x256 with mips (344 KiB), the
@@ -410,7 +526,7 @@ fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
     let jelly: u32 = rp.live.iter().filter(|b| b.scene == 21).map(|b| b.size.div_ceil(4096) * 4).sum();
     assert_eq!((rp.live.iter().filter(|b| b.scene == 21).count(), jelly), (45, 11576), "jellyfish's frees");
     rp.teardown();
-    rp.scene(22, TERRAIN);
+    rp.scene(22, &terrain(chains));
     rp.teardown();
     rp.scene(23, SHADOW);
     for _ in 0..unnamed {
@@ -421,8 +537,20 @@ fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
     rp.scene(24, REFRACT_SETUP);
     let at_depth_buffer = rp.shot();
     let depth_buffer_served = rp.a(24, "1600x1216 depth buffer", GEN, DS_1600);
+    let at_colour_chain = rp.shot();
+    /* the first frame's glGenerateMipmap of the colour texture, after the
+     * depth pass (scene-refract.cpp) */
+    let colour_chain_served =
+        refract_chain.then(|| rp.regrow(24, "1600x1200 colour mip chain", TEX_1600, NPOT_1600X1200));
     rp.teardown();
-    Glmark2 { before_refract, at_depth_buffer, depth_buffer_served, refused: rp.refused }
+    Glmark2 {
+        before_refract,
+        at_depth_buffer,
+        depth_buffer_served,
+        at_colour_chain,
+        colour_chain_served,
+        refused: rp.refused,
+    }
 }
 
 /// Refract's three large blocks (depth and colour textures, the depth
@@ -432,12 +560,14 @@ const DS_KIB: u32 = DS_1600 / 1024;
 
 fn say(arm: &str, unnamed: u32, g: &Glmark2) {
     eprintln!(
-        "glmark2 replay, {arm}, {unnamed} unnamed: before refract {:?} (contiguous {} KiB, refract needs {} KiB); at its depth buffer {:?}, served {}; refused {:?}",
+        "glmark2 replay, {arm}, {unnamed} unnamed: before refract {:?} (contiguous {} KiB, refract needs {} KiB); at its depth buffer {:?}, served {}; at its colour chain {:?}, served {:?}; refused {:?}",
         g.before_refract,
         g.before_refract.contiguous(),
         REFRACT_NEEDS,
         g.at_depth_buffer,
         g.depth_buffer_served,
+        g.at_colour_chain,
+        g.colour_chain_served,
         g.refused
     );
 }
@@ -490,6 +620,104 @@ fn glmark2_with_the_top_region_fits_refract_after_shadow_and_terrain() {
         assert!(g.before_refract.contiguous() >= REFRACT_NEEDS, "{n} unnamed: {:?}", g.before_refract);
         assert!(g.depth_buffer_served, "{n} unnamed");
         assert_eq!(g.refused, [], "{n} unnamed");
+    }
+}
+
+/// Refract's colour chain, KiB.
+const COLOUR_CHAIN_KIB: u32 = NPOT_1600X1200.div_ceil(K);
+
+/// Terrain's NPOT mip chains (pvr-pool-npot) on the board's 64 MiB
+/// carveout: with one to four of its 800x600 targets regrown to chains
+/// (5462 KiB instead of 1875; the source has two), refract's three blocks
+/// (22600 KiB) still fit after shadow and terrain with the top region at
+/// the driver's threshold, alone and at the board's bytes, and its depth
+/// buffer is served. Terrain's blocks all go back at its teardown, so
+/// GENERAL before refract is what it is with level-0 targets.
+///
+/// What the chains strain is terrain's own set-up: from one chain on the
+/// 59200 KiB pool refuses some of it in either arm (capacity: 3587 KiB more
+/// per chain on top of its 30 MiB). With the region the refusals are
+/// terrain's alone; without it, from three chains on, the old
+/// fragmentation is back and refract's depth buffer is refused again. The
+/// lists are the same alone and at the board's bytes.
+#[test]
+fn glmark2_with_terrains_npot_mip_chains_still_fits_refract_in_the_64_mib_carveout() {
+    let target = (22, "800x600 target", 800 * 600 * 4 / 1024);
+    let chain = (22, "800x600 mip chain", NPOT_800X600.div_ceil(K));
+    let depth = (22, "800x608 depth buffer", 800 * 608 * 4 / 1024);
+    let refract_ds = (24, "1600x1216 depth buffer", DS_KIB);
+    let on_refuses: [&[(u32, &str, u32)]; 5] = [
+        &[],
+        &[depth],
+        &[target, target, depth],
+        &[target, chain, target, depth],
+        &[target, chain, target, chain, depth],
+    ];
+    let off_refuses: [&[(u32, &str, u32)]; 5] =
+        [&[], &[depth], &[chain], &[chain, chain, refract_ds], &[chain, chain, chain, refract_ds]];
+    for chains in 0..=4 {
+        for n in [0, UNNAMED_AT_THE_BOARD] {
+            let run =
+                Run { top_above: YD_PVR_POOL_TOP_ABOVE, unnamed: n, chains, refract_chain: false, carveout: CARVEOUT };
+            let on = replay(run);
+            let off = replay(Run { top_above: 0, ..run });
+            say(&std::format!("top region on, {chains} npot chains"), n, &on);
+            say(&std::format!("top region off, {chains} npot chains"), n, &off);
+            let level0 = glmark2(YD_PVR_POOL_TOP_ABOVE, n);
+            assert_eq!(
+                on.before_refract, level0.before_refract,
+                "{chains} chains, {n} unnamed: GENERAL before refract"
+            );
+            assert!(on.before_refract.contiguous() >= REFRACT_NEEDS, "{chains} chains, {n} unnamed");
+            assert!(on.depth_buffer_served, "{chains} chains, {n} unnamed");
+            assert_eq!(on.refused, on_refuses[chains as usize], "{chains} chains, {n} unnamed, top region on");
+            assert_eq!(off.refused, off_refuses[chains as usize], "{chains} chains, {n} unnamed, top region off");
+            assert_eq!(off.depth_buffer_served, chains < 3, "{chains} chains, {n} unnamed, top region off");
+        }
+    }
+}
+
+/// Refract's own colour texture is a 2048x2048 chain since pvr-npot-mips
+/// (21846 KiB, [`NPOT_1600X1200`]), regrown at the end of its first frame.
+/// On the board's 64 MiB carveout its three blocks are served (the source's
+/// two terrain chains) and the colour chain is refused in both arms, with
+/// the free bytes and the gap together short of it: capacity, not
+/// placement. With it refract needs 7500 + 21846 + 7600 = 36946 KiB, and
+/// the pool holds about 26 MiB before refract whatever the arm.
+#[test]
+fn refracts_own_1600x1200_chain_is_beyond_the_64_mib_carveouts_capacity() {
+    for n in [0, UNNAMED_AT_THE_BOARD] {
+        let on = replay(Run::with_chains(YD_PVR_POOL_TOP_ABOVE, n, CARVEOUT));
+        let off = replay(Run::with_chains(0, n, CARVEOUT));
+        say("top region on, refract's chain", n, &on);
+        say("top region off, refract's chain", n, &off);
+        for (arm, g) in [("on", &on), ("off", &off)] {
+            assert!(g.depth_buffer_served, "{n} unnamed, top region {arm}");
+            assert_eq!(g.colour_chain_served, Some(false), "{n} unnamed, top region {arm}");
+            let s = g.at_colour_chain;
+            assert!(s.free + s.gap < COLOUR_CHAIN_KIB, "{n} unnamed, top region {arm}: {s:?} is capacity");
+            assert_eq!(g.refused.last(), Some(&(24, "1600x1200 colour mip chain", COLOUR_CHAIN_KIB)));
+        }
+    }
+}
+
+/// The glmark2 image's 256 MiB carveout (504d4fae): terrain's chains,
+/// refract's three blocks and its colour chain are all served, in both
+/// arms, with up to 38 unnamed blocks; nothing in the run is refused, and
+/// the threshold stays 256 KiB.
+#[test]
+fn the_glmark2_images_256_mib_carveout_serves_terrains_and_refracts_chains() {
+    assert_eq!(YD_PVR_POOL_TOP_ABOVE, 256 * K);
+    for n in [0, UNNAMED_AT_THE_BOARD, 38] {
+        for top_above in [YD_PVR_POOL_TOP_ABOVE, 0] {
+            let run = Run { chains: 4, ..Run::with_chains(top_above, n, CARVEOUT_GLMARK2) };
+            let g = replay(run);
+            say(&std::format!("256 MiB, top region {}, 4 npot chains, refract's chain", top_above / K), n, &g);
+            assert_eq!(g.refused, [], "{n} unnamed, top region {top_above}");
+            assert!(g.depth_buffer_served, "{n} unnamed, top region {top_above}");
+            assert_eq!(g.colour_chain_served, Some(true), "{n} unnamed, top region {top_above}");
+            assert!(g.before_refract.contiguous() >= REFRACT_NEEDS + COLOUR_CHAIN_KIB);
+        }
     }
 }
 
