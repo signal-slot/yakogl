@@ -57,8 +57,13 @@ view off SO and on SV, the AGL cluster CL, gl_test GT).
 |---|---|---|---|---|---:|
 | AM62P | 289, 33 scenes, 0 failed, 0 GL errors | probes pass | 75.2 fps, 46.2 Mpx/s at 1024x600 | 50 of 50 | 0 |
 | i.MX8MP | 33 scenes, 0 failed, **15 or more GL errors** (#814); no console, so no score (43 at `a63fcc5b`, 2026-10-14) | probes pass | probes pass, no fps (no console) | 49 of 49 run, case 16 skipped (#8) | 0 where counted |
-| Pi 4 | 188, 33 scenes, 0 failed, 0 GL errors | probes pass | 139.4 fps, 192.8 Mpx/s at 1920x720 | 12 of 12 | 0 |
+| Pi 4 | 157, 33 scenes, 0 failed, 0 GL errors | probes pass | 139.3 fps, 192.5 Mpx/s at 1920x720 | 12 of 12 | 0 |
 
+- The Pi 4 row is from `5b133bb5` (2026-10-17, `records/pi4/common-5b133bb5/`:
+  GM `20261017-0943-GM-aaabf6ae`, SO `-0950-SO-4342dcff`, SV `-0952-SV-6a91938f`,
+  CL `-0955-CL-4f5d59d3`, GT `-0958-GT-ac832221`); all five rows done, 0 resets.
+  The glmark2 score fell from 188 (`e9901869a`) to 157 with 0 failed scenes and 0
+  GL errors; the cause is not investigated.
 - The AM62P row is from `1d54a4eb` (2026-10-16, `records/am62p/common-1d54a4eb/`:
   GM `20261016-1915-GM-a54c5bf1`, SO `-1925-SO-6cafbfdc`, SV `-1928-SV-904fa4f0`,
   CL `-1930-CL-6e108434`, GT `-1933-GT-f70582c4`); all five rows done. The
