@@ -39,6 +39,7 @@ pub mod tf;
 /// (`docs/es3/transform-feedback.md` section 4). Only where the evaluator is.
 #[cfg(all(feature = "shaderc-online", any(test, feature = "host-test", not(feature = "report-es2"))))]
 mod tf_capture;
+pub mod timing;
 pub mod vao;
 pub mod vertex;
 

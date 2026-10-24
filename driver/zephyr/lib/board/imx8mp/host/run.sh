@@ -39,7 +39,7 @@ build() { # build <buffers> <view 0|1>
     -I"$here/shim" -I"$top/driver/zephyr/lib/board/include" \
     -I"$top/driver/zephyr/lib/board/common" -I"$top/include" \
     -DCONFIG_YAKOGL_BOARD=1 -DCONFIG_YAKOGL_DRV_DISPLAY_IMX8MP=1 -DCONFIG_YAKOGL_DRV_GPU_VIVANTE=1 \
-    -DCONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS="$1" "${v[@]}" \
+    -DCONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS="$1" -DCONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS=1 "${v[@]}" \
     -o "$out/model-$1-$2" "$board" "$here/latch_model.c"
 }
 

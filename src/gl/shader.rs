@@ -318,6 +318,29 @@ pub unsafe extern "C" fn glCompileShader(shader: GLuint) {
     shaderc::release_shader(&s.compiled_shader);
     // SAFETY: every field of ShcShader is valid when all-zero.
     core::ptr::write_bytes(&mut s.compiled_shader as *mut ShcShader, 0, 1);
+    /* A text this compiler already refused fails again at once, with the
+     * same log: a client that retries a failed pipeline every frame (Qt
+     * Quick 3D does) no longer pays a full compile per frame (1.5 s for a
+     * register-bound fragment shader on the AM62P, 2026-10-22). */
+    // SAFETY: source is the NUL-terminated copy glShaderSource made.
+    let refusal_key = refused_key(stage, util::cstr_bytes(s.source));
+    if let Some(prev) = refused_lookup(&refusal_key) {
+        let n = prev.len().min(log.len() - 1);
+        log[..n].copy_from_slice(&prev[..n]);
+        log[n] = 0;
+        s.compiled = false;
+        s.missing = false;
+        if osal::ops().and_then(|o| o.log).is_some() {
+            glog!(
+                "glCompileShader({}): {} [{} stage, {} bytes]",
+                shader,
+                Bytes(&prev[..n]),
+                if stage == SHC_STAGE_VERTEX { "vertex" } else { "fragment" },
+                util::cstr_bytes(s.source).len() as u32
+            );
+        }
+        return;
+    }
     // SAFETY: source is the NUL-terminated copy glShaderSource made; the log
     // buffer is INFO_LOG_SIZE bytes.
     let rc = compile(stage, s.source, &mut s.compiled_shader, log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE);
@@ -337,7 +360,10 @@ pub unsafe extern "C" fn glCompileShader(shader: GLuint) {
         s.compiled = true;
         s.missing = true;
         log_missing_source(st, ctx, shader, src, stage);
-    } else if !s.compiled && osal::ops().and_then(|o| o.log).is_some() {
+    } else if !s.compiled {
+        refused_insert(&refusal_key, log_text(&st.log[ctx][obj_index(shader)]));
+    }
+    if !table_lacks_it && !c.objs().shaders[obj_index(shader)].compiled && osal::ops().and_then(|o| o.log).is_some() {
         glog!(
             "glCompileShader({}): {} [{} stage, {} bytes]",
             shader,
@@ -346,6 +372,43 @@ pub unsafe extern "C" fn glCompileShader(shader: GLuint) {
             src.len() as u32
         );
     }
+}
+
+/* The last few refused shader texts (stage + SHA-256 of the source) and
+ * their logs: bounded, round-robin. */
+const REFUSED_SLOTS: usize = 8;
+const REFUSED_LOG: usize = 256;
+struct Refused {
+    used: [bool; REFUSED_SLOTS],
+    key: [[u8; 32]; REFUSED_SLOTS],
+    log: [[u8; REFUSED_LOG]; REFUSED_SLOTS],
+    len: [usize; REFUSED_SLOTS],
+    next: usize,
+}
+static REFUSED: Global<Refused> = Global::zeroed();
+
+fn refused_key(stage: u32, src: &[u8]) -> [u8; 32] {
+    let mut k = shaderc::sha256::sha256(src);
+    k[0] ^= stage as u8;
+    k
+}
+
+fn refused_lookup(key: &[u8; 32]) -> Option<&'static [u8]> {
+    // SAFETY: single-threaded by contract (the GL client's thread).
+    let r = unsafe { REFUSED.get() };
+    (0..REFUSED_SLOTS).find(|&i| r.used[i] && r.key[i] == *key).map(|i| &r.log[i][..r.len[i]])
+}
+
+fn refused_insert(key: &[u8; 32], log: &[u8]) {
+    // SAFETY: single-threaded by contract (the GL client's thread).
+    let r = unsafe { REFUSED.get() };
+    let i = r.next % REFUSED_SLOTS;
+    r.next = r.next.wrapping_add(1);
+    let n = log.len().min(REFUSED_LOG);
+    r.used[i] = true;
+    r.key[i] = *key;
+    r.log[i][..n].copy_from_slice(&log[..n]);
+    r.len[i] = n;
 }
 
 #[no_mangle]

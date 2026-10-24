@@ -10,7 +10,9 @@ Raspberry Pi 4 uses Zephyr's own `rpi_4b`.
 | Board | Target | GPU |
 |---|---|---|
 | Toradex Verdin AM62P (Dahlia) | `verdin_am62p/am62p54/a53` | PowerVR BXS-4-64 |
+| Toradex Verdin AM62P, direct boot (A53 SPL, `docs/notes/am62p-direct-boot.md`) | `verdin_am62p/am62p54/a53/direct` | PowerVR BXS-4-64 |
 | Toradex Verdin iMX8M Plus | `verdin_imx8mp/mimx8ml8/a53` | Vivante GC7000UL |
+| Toradex Verdin iMX8M Plus, direct boot (TF-A BL33, `docs/notes/imx8mp-direct-boot.md`) | `verdin_imx8mp/mimx8ml8/a53/direct` | Vivante GC7000UL |
 | Atmark Armadillo-X2 | `armadillo_x2/mimx8ml8/a53` | Vivante GC7000UL |
 | Atmark Armadillo-X2, direct boot (TF-A BL33, `docs/notes/x2-direct-boot.md`) | `armadillo_x2/mimx8ml8/a53/direct` | Vivante GC7000UL |
 | Raspberry Pi 4 | `rpi_4b` | Broadcom V3D 4.2 |
@@ -48,6 +50,10 @@ board configurations, not samples of their own).
 | `examples/slint` | the Slint demo (outside this directory) |
 | `deqp` | the dEQP conformance run |
 | `glmark2` | the performance measure |
+
+`boot_stage2` is not a sample either: it is the second-stage loader of the
+Verdin direct boot, which unpacks a direct image and jumps to it
+(`docs/notes/am62p-direct-boot.md`, "The second stage").
 
 Probes are not samples: the NanoPC-T6 bring-up images are in
 `tools/probes/`, and the host replay of recorded runs is `tools/host-replay/`.

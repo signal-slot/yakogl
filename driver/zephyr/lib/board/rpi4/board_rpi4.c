@@ -298,6 +298,7 @@ static int show_view(const struct board_window *win)
 
 int board_show(const struct board_window *win)
 {
+	board_first_frame();
 	int rc;
 
 	if (!s_have_fb) {

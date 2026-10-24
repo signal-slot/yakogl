@@ -9,7 +9,9 @@
 #
 # What is shared, by path:
 #   - the UI, ui/cluster.slint (moved here from gl_slint in Step 1),
-#     with the SafeUI layout for 1024x600 (driver/samples/zephyr/cluster_dir.cmake) on every board;
+#     with the SafeUI layout for the window's size (Kconfig SLINT_WINDOW_*,
+#     driver/samples/zephyr/cluster_dir.cmake): 1024x600 unless the board
+#     layer's conf sets the panel's own size;
 #   - the no_std Slint workspace (SLINT_NOSTD_DIR) and the femtovg/glow forks
 #     (NOSTD_PATCH_DIR), recreated from ../nostd's patches (../nostd/README.md);
 #   - the check, ./check (crate yakogl-slint-check, host-tested by
@@ -47,10 +49,17 @@ endif()
 # with a git history at another commit stops the build (build-inputs.cmake).
 set(SLINT_BASE_REV 1007c032ca1573e60dce2113e802e0ccb91c2641)
 
-# The AM62P's 1024x600 layout on every board: the window is 1024x600 on all
-# three panels, and the reference points are the AM62P's.
+# The SafeUI layout generated for the window's size (Kconfig SLINT_WINDOW_*):
+# the AM62P's 1024x600 by default, which the other panels also fit, and
+# 1280x800 where a board renders at its own panel's size (the Verdin
+# iMX8MP's direct image). The layout's unit scales the 1024x600 design to
+# that panel.
 include("${PVR_REPO}/samples/zephyr/cluster_dir.cmake")
-yakogl_drv_layout_dir(CLUSTER_LAYOUT_DIR YAKOGL_DRV_ROOT_DIR 1024x600)
+set(SLINT_LAYOUT "${CONFIG_SLINT_WINDOW_WIDTH}x${CONFIG_SLINT_WINDOW_HEIGHT}")
+if(NOT SLINT_LAYOUT MATCHES "^(1024x600|1280x800)$")
+  message(FATAL_ERROR "slint: no SafeUI layout is generated for a ${SLINT_LAYOUT} window (cluster/ui has 1024x600 and 1280x800)")
+endif()
+yakogl_drv_layout_dir(CLUSTER_LAYOUT_DIR YAKOGL_DRV_ROOT_DIR ${SLINT_LAYOUT})
 
 # ---------------------------------------------------------------------------
 # The Rust staticlib (rust/): built for aarch64-unknown-none (release) with

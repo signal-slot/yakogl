@@ -26,6 +26,10 @@
 #include <zephyr/device.h>
 #include <yakogl_drivers.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Configure the EN pin as an output at `asserted`, without a transition:
  * a bridge found running stays running. */
 int sn65dsi8x_claim_enable(const struct device *dev, bool asserted);
@@ -40,6 +44,10 @@ int sn65dsi8x_start(const struct device *dev, const struct yd_sn65dsi8x_mode *mo
  * clean link) or a negative errno. */
 int sn65dsi8x_check_link(const struct device *dev);
 
+/* The panel backlight (backlight-gpios); with
+ * CONFIG_YAKOGL_DRV_SN65DSI8X_BACKLIGHT_DEFERRED the self-start leaves it off. */
+int sn65dsi8x_backlight_set(const struct device *dev, bool on);
+
 /* EN low for the reset time (the part forgets its CSRs). */
 int sn65dsi8x_stop(const struct device *dev);
 
@@ -53,5 +61,9 @@ int sn65dsi8x_irq_stat(const struct device *dev);
 
 /* What the last start found and wrote; NULL as above. */
 const struct yd_sn65dsi8x_data *sn65dsi8x_data(const struct device *dev);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* YAKOGL_DRV_SN65DSI8X_H */

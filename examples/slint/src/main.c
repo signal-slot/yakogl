@@ -41,9 +41,16 @@
 
 #include <yakogl_board.h>
 #include <yakogl_record.h>
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+/* SafeUI route 3 on the Verdin iMX8MP direct image: the M7 shows the frames
+ * and publishes the vehicle state (docs/notes/imx8mp-direct-boot.md) */
+#include <board_imx8mp_route3.h>
+#endif
 
-#define WIN_W 1024 /* the AM62P's panel; fits all three panels */
-#define WIN_H 600
+/* The window (Kconfig SLINT_WINDOW_*): the AM62P's 1024x600 by default,
+ * which the other panels also fit; a board sets its panel's size in its conf. */
+#define WIN_W CONFIG_SLINT_WINDOW_WIDTH
+#define WIN_H CONFIG_SLINT_WINDOW_HEIGHT
 /* check/src/lib.rs: GUARD_ROWS, SENTINEL */
 #define GUARD_ROWS 8u
 #define SENTINEL   0x00000001u
@@ -94,6 +101,47 @@ int slint_sample_animate_frame(slint_get_proc_fn get_proc, uint32_t w, uint32_t 
 			       uint32_t frame);
 int slint_sample_check(const uint32_t *cpu, uint32_t w, uint32_t h, uint32_t stride, uint32_t guard_rows,
 		       const uint32_t *guard_before, uint32_t format, struct slint_sample_result *out);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+void slint_sample_route3(bool on);
+int slint_sample_animate_frame_m7(slint_get_proc_fn get_proc, uint32_t w, uint32_t h, uint32_t t_ms,
+				  uint32_t frame, const struct cluster_vehicle_state *v);
+
+/* The frame's vehicle in route 3: the M7's newest (the last one read when a
+ * read races its write; zeros before its first), or NULL for the demo drive
+ * when the M7 is absent (the picture then moves without the safe core's
+ * elements, which is how the panel says the M7 did not come up). */
+static const struct cluster_vehicle_state *route3_vehicle(void)
+{
+	static struct cluster_vehicle_state last;
+	static bool have;
+	struct cluster_vehicle_state v;
+	int64_t t0 = k_uptime_get();
+
+	/* Until the M7's first publish, wait for it (bounded by the time the
+	 * board layer gives the M7 to come up): a frame drawn from no data
+	 * would put zeros under the M7's own values for a frame or two
+	 * (2026-10-22, the first frames wrong). */
+	while (!have && board_route3_state() != BOARD_ROUTE3_ABSENT &&
+	       k_uptime_get() - t0 < CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS) {
+		if (board_route3_vehicle(&v)) {
+			last = v;
+			have = true;
+			printk("slint: route 3: the M7's vehicle state after %lld ms\n",
+			       (long long)(k_uptime_get() - t0));
+			break;
+		}
+		board_watchdog_feed();
+		k_sleep(K_MSEC(1));
+	}
+	if (board_route3_state() == BOARD_ROUTE3_ABSENT)
+		return NULL;
+	if (board_route3_vehicle(&v)) {
+		last = v;
+		have = true;
+	}
+	return &last;
+}
+#endif
 
 static const void *get_proc(const char *name)
 {
@@ -102,9 +150,19 @@ static const void *get_proc(const char *name)
 
 /* ---- the run ------------------------------------------------------------- */
 
+/* The windows (Kconfig SLINT_WINDOW_BUFFERS): one on a board whose board
+ * layer copies or pans; two or three where the screen flips to a window by
+ * address and in place (the i.MX8MP at the panel's size), so that the frame
+ * being drawn is never the one scanned. s_win and s_surf are the current
+ * ones; next_window() advances before each animated frame. */
+#define WINDOWS CONFIG_SLINT_WINDOW_BUFFERS
+static struct board_window s_wins[WINDOWS];
+static EGLSurface s_surfs[WINDOWS];
+static unsigned int s_cur;
 static struct board_window s_win; /* the window as EGL and the screen see it */
 static EGLDisplay s_dpy;
 static EGLSurface s_surf;
+static EGLContext s_ctx;
 static struct slint_sample_result s_result;
 static bool s_checked;
 
@@ -130,14 +188,16 @@ static int egl_up(void)
 		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_NONE,
 	};
 	static const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
-	static struct gles_native_window nw;
+	static struct gles_native_window nw[WINDOWS];
 	EGLConfig cfg;
 	EGLint n = 0;
 
-	nw = (struct gles_native_window){
-		.phys = s_win.phys, .width = s_win.w, .height = s_win.h,
-		.stride_bytes = s_win.stride, .format = s_win.format,
-	};
+	for (unsigned int i = 0; i < WINDOWS; i++) {
+		nw[i] = (struct gles_native_window){
+			.phys = s_wins[i].phys, .width = s_wins[i].w, .height = s_wins[i].h,
+			.stride_bytes = s_wins[i].stride, .format = s_wins[i].format,
+		};
+	}
 	/* every board: the Pi 4 board layer gives the V3D OSAL its clock
 	 * switch through the OSAL's default-platform hook (db659a88) */
 	s_dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -149,13 +209,16 @@ static int egl_up(void)
 		printk("slint: eglChooseConfig: %d configs for RGBA8888 + stencil 8\n", n);
 		return -ENOENT;
 	}
-	s_surf = eglCreateWindowSurface(s_dpy, cfg, &nw, single_buffer);
-	if (s_surf == EGL_NO_SURFACE)
-		return egl_fail("eglCreateWindowSurface");
-	EGLContext ctx = eglCreateContext(s_dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
-	if (ctx == EGL_NO_CONTEXT)
+	for (unsigned int i = 0; i < WINDOWS; i++) {
+		s_surfs[i] = eglCreateWindowSurface(s_dpy, cfg, &nw[i], single_buffer);
+		if (s_surfs[i] == EGL_NO_SURFACE)
+			return egl_fail("eglCreateWindowSurface");
+	}
+	s_surf = s_surfs[0];
+	s_ctx = eglCreateContext(s_dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
+	if (s_ctx == EGL_NO_CONTEXT)
 		return egl_fail("eglCreateContext");
-	if (!eglMakeCurrent(s_dpy, s_surf, s_surf, ctx))
+	if (!eglMakeCurrent(s_dpy, s_surf, s_surf, s_ctx))
 		return egl_fail("eglMakeCurrent");
 	printk("slint: GL_RENDERER %s, GL_VERSION %s\n", (const char *)glGetString(GL_RENDERER),
 	       (const char *)glGetString(GL_VERSION));
@@ -176,7 +239,36 @@ static int swap(void)
 	return 0;
 }
 
+static int window_one(unsigned int i);
+
 static int window(void)
+{
+	for (unsigned int i = 0; i < WINDOWS; i++) {
+		int ret = window_one(i);
+
+		if (ret)
+			return ret;
+	}
+	s_cur = 0;
+	s_win = s_wins[0];
+	return 0;
+}
+
+/* The next window, before an animated frame: the GPU draws into it while
+ * the screen still scans the one shown last (one window: a no-op). */
+static int next_window(void)
+{
+	if (WINDOWS == 1)
+		return 0;
+	s_cur = (s_cur + 1) % WINDOWS;
+	s_win = s_wins[s_cur];
+	s_surf = s_surfs[s_cur];
+	if (!eglMakeCurrent(s_dpy, s_surf, s_surf, s_ctx))
+		return egl_fail("eglMakeCurrent (next window)");
+	return 0;
+}
+
+static int window_one(unsigned int i)
 {
 	struct board_window full;
 	int ret = board_window(WIN_W, WIN_H + GUARD_ROWS, &full);
@@ -210,14 +302,16 @@ static int window(void)
 		if (y < WIN_H) {
 			for (uint32_t x = 0; x < WIN_W; x++)
 				row[x] = SENTINEL;
-		} else {
+		} else if (i == 0) {
+			/* the guard rows of the checked window (the first frame's) */
 			memcpy(&s_guard_before[(y - WIN_H) * WIN_W], row, WIN_W * 4u);
 		}
 	}
-	s_win = full;
-	s_win.h = WIN_H; /* EGL and the screen get the window, not the guard rows */
-	printk("slint: window %ux%u at phys 0x%lx, stride %u, format 0x%x, %u guard rows\n", s_win.w,
-	       s_win.h, (unsigned long)s_win.phys, s_win.stride, s_win.format, GUARD_ROWS);
+	s_wins[i] = full;
+	s_wins[i].h = WIN_H; /* EGL and the screen get the window, not the guard rows */
+	printk("slint: window %u: %ux%u at phys 0x%lx, stride %u, format 0x%x, %u guard rows\n", i,
+	       s_wins[i].w, s_wins[i].h, (unsigned long)s_wins[i].phys, s_wins[i].stride,
+	       s_wins[i].format, GUARD_ROWS);
 	return 0;
 }
 
@@ -246,9 +340,24 @@ static int first_frame_and_check(void)
 		return ret;
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_SWAPPED);
 	show();
-	ret = slint_sample_check(s_win.cpu, WIN_W, WIN_H, s_win.stride / 4u, GUARD_ROWS, s_guard_before,
-				 s_win.format, &s_result);
-	s_checked = ret >= 0;
+	/* The check's reference points (check/src/lib.rs REFERENCE) are pixel
+	 * positions and colours of the 1024x600 design, and the check reads
+	 * the whole window back through the CPU: on another window size the
+	 * points land elsewhere, so the verdict would be about the wrong
+	 * pixels, and the read-back of a 1280x800 window in non-cacheable
+	 * memory held the picture still for about two seconds on the Verdin
+	 * iMX8MP (2026-10-22). So the check runs only at the design size;
+	 * elsewhere the frame is shown and the run goes on unchecked. */
+	if (WIN_W == 1024u && WIN_H == 600u) {
+		ret = slint_sample_check(s_win.cpu, WIN_W, WIN_H, s_win.stride / 4u, GUARD_ROWS,
+					 s_guard_before, s_win.format, &s_result);
+		s_checked = ret >= 0;
+	} else {
+		printk("slint: first-frame check skipped: the reference points are the 1024x600 "
+		       "design's, this window is %ux%u\n", WIN_W, WIN_H);
+		s_checked = false;
+		ret = 0;
+	}
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_CHECKED);
 	return ret;
 }
@@ -277,8 +386,16 @@ static int animate(void)
 	int ret = 0;
 
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_ANIMATING);
-	while ((now = k_uptime_get() - t0) < bound_ms) {
-		ret = slint_sample_animate_frame(get_proc, WIN_W, WIN_H, (uint32_t)now, frame);
+	while ((now = k_uptime_get() - t0) < bound_ms || IS_ENABLED(CONFIG_SLINT_ANIMATE_FOREVER)) {
+		ret = next_window();
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+		if (ret == 0)
+			ret = slint_sample_animate_frame_m7(get_proc, WIN_W, WIN_H, (uint32_t)now, frame,
+							    route3_vehicle());
+#else
+		if (ret == 0)
+			ret = slint_sample_animate_frame(get_proc, WIN_W, WIN_H, (uint32_t)now, frame);
+#endif
 		if (ret == 0)
 			ret = swap();
 		if (ret)
@@ -307,6 +424,10 @@ int main(void)
 	int rc;
 
 	sys_heap_init(&s_ui_heap, s_ui_heap_mem, sizeof(s_ui_heap_mem));
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	slint_sample_route3(true);
+	printk("slint: route 3: the M7 composites and shows the frames\n");
+#endif
 	printk("slint-build: %s\n", slint_sample_build_inputs());
 	printk("slint: the cluster at %ux%u, then %d s of animation\n", WIN_W, WIN_H,
 	       CONFIG_YAKOGL_BOARD_ANIMATE_S);

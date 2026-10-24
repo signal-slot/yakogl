@@ -1393,14 +1393,15 @@ pub fn trace(name: &'static CStr) {
 /// `GL_TRACE()`: `gl_trace!(glFoo)` traces the entry point `glFoo`.
 macro_rules! gl_trace {
     ($name:ident) => {
-        $crate::gl::context::trace(
-            const {
-                match core::ffi::CStr::from_bytes_with_nul(concat!(stringify!($name), "\0").as_bytes()) {
-                    Ok(s) => s,
-                    Err(_) => panic!("entry point name"),
-                }
-            },
-        )
+        let __gl_name: &'static core::ffi::CStr = const {
+            match core::ffi::CStr::from_bytes_with_nul(concat!(stringify!($name), "\0").as_bytes()) {
+                Ok(s) => s,
+                Err(_) => panic!("entry point name"),
+            }
+        };
+        /* the entry point's CPU time, to its end (gl::timing) */
+        let _gl_timing = $crate::gl::timing::Guard::enter(__gl_name);
+        $crate::gl::context::trace(__gl_name)
     };
 }
 pub(crate) use gl_trace;

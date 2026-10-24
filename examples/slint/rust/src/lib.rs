@@ -166,10 +166,13 @@ struct State {
     /// Slint's clock (Platform::duration_since_start), set by the sample so
     /// that the checked frame is the same picture on every run and board.
     clock_ms: u64,
+    /// Route 3 ([`slint_sample_route3`]): the safe core draws its own
+    /// elements over this picture, so `standalone` is false in every frame.
+    route3: bool,
 }
 
 static STATE: Single<State> =
-    Single::new(State { get_proc: None, adapter: None, ui: None, platform_set: false, clock_ms: 0 });
+    Single::new(State { get_proc: None, adapter: None, ui: None, platform_set: false, clock_ms: 0, route3: false });
 
 /// The state. As gl_slint's crate: the entry points and Slint's callbacks
 /// all run on the UI thread, one at a time.
@@ -327,7 +330,88 @@ fn set_vehicle(ui: &MainWindow, v: &Vehicle) {
     ui.set_fuel_empty(v.fuel_empty);
     ui.set_uptime_secs(v.uptime_secs);
     ui.set_frame(v.frame);
-    ui.set_standalone(v.standalone);
+    ui.set_standalone(v.standalone && !state().route3);
+}
+
+/// `struct cluster_vehicle_state` (cluster/frame_ring.h): what the M7 publishes
+/// in its page in route 3, 16 words.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ClusterVehicle {
+    pub gen: u32,
+    pub time_ms: u32,
+    pub speed_kmh_x10: i32,
+    pub engine_rpm: i32,
+    pub gear: i32,
+    pub fuel_ml: i32,
+    pub fuel_tank_ml: i32,
+    pub odometer_m: i32,
+    pub trip_m: i32,
+    pub valid: u32,
+    pub lamps: u32,
+    pub warnings: u32,
+    pub source: u32,
+    pub reserved: [u32; 3],
+}
+const _: () = assert!(core::mem::size_of::<ClusterVehicle>() == 64);
+
+/// Route 3's first frame, before the M7 has published: at rest, every value
+/// valid and zero (the trip shown as 0, not as unknown).
+const ROUTE3_AT_REST: ClusterVehicle = ClusterVehicle {
+    gen: 0,
+    time_ms: 0,
+    speed_kmh_x10: 0,
+    engine_rpm: 0,
+    gear: 0,
+    fuel_ml: 0,
+    fuel_tank_ml: 45000,
+    odometer_m: 0,
+    trip_m: 0,
+    valid: VALID_TRIP,
+    lamps: 0,
+    warnings: 0,
+    source: 0,
+    reserved: [0; 3],
+};
+
+// frame_ring.h CLUSTER_VEHICLE_VALID_*, CLUSTER_VEHICLE_LAMP_* / _ENGINE_RUNNING;
+// abi.h CLUSTER_WARN_*.
+const VALID_TRIP: u32 = 1 << 6;
+const LAMP_TURN_LEFT: u32 = 1 << 0;
+const LAMP_TURN_RIGHT: u32 = 1 << 1;
+const LAMP_BLINK_ON: u32 = 1 << 2;
+const LAMP_LOW_BEAM: u32 = 1 << 3;
+const ENGINE_RUNNING: u32 = 1 << 4;
+const WARN_FUEL_LOW: u32 = 1 << 0;
+const WARN_FUEL_EMPTY: u32 = 1 << 1;
+const WARN_ENGINE: u32 = 1 << 2;
+
+/// The M7's vehicle state as the cluster's properties: the values the safety
+/// layer draws over this picture, so the two never disagree. The indicator is
+/// lit when the switch is set AND the M7's flasher is in its lit phase (the
+/// A53 runs no flasher of its own).
+fn m7_vehicle(v: &ClusterVehicle, frame: u32) -> Vehicle {
+    let blink = v.lamps & LAMP_BLINK_ON != 0;
+    Vehicle {
+        speed_x10: v.speed_kmh_x10,
+        rpm: v.engine_rpm,
+        fuel_ml: v.fuel_ml,
+        tank_ml: v.fuel_tank_ml,
+        trip_m: v.trip_m,
+        trip_valid: v.valid & VALID_TRIP != 0,
+        odo_m: v.odometer_m,
+        gear: v.gear,
+        engine_on: v.lamps & ENGINE_RUNNING != 0,
+        engine_warn: v.warnings & WARN_ENGINE != 0,
+        turn_left: blink && v.lamps & LAMP_TURN_LEFT != 0,
+        turn_right: blink && v.lamps & LAMP_TURN_RIGHT != 0,
+        lights: v.lamps & LAMP_LOW_BEAM != 0,
+        fuel_low: v.warnings & WARN_FUEL_LOW != 0,
+        fuel_empty: v.warnings & WARN_FUEL_EMPTY != 0,
+        uptime_secs: (v.time_ms / 1000) as i32,
+        frame: frame as i32,
+        standalone: false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +441,10 @@ fn draw(get_proc: GetProc, width: u32, height: u32) -> i32 {
     }
     if state().ui.is_none() {
         match MainWindow::new() {
-            Ok(ui) => state().ui = Some(ui),
+            Ok(ui) => {
+                ui.set_standalone(!state().route3);
+                state().ui = Some(ui)
+            }
             Err(_) => return 2,
         }
     }
@@ -412,7 +499,12 @@ pub extern "C" fn slint_sample_first_frame(get_proc: GetProc, width: u32, height
         return rc;
     }
     if let Some(ui) = state().ui.as_ref() {
-        set_vehicle(ui, &demo_vehicle(0, 0));
+        // Route 3: no demo values under the M7's layer. The M7 composites
+        // its first frame over this one, before it has published anything
+        // the A53 could draw from, so this frame shows the state of a car
+        // at rest (the M7's model at its start), not the demo's 123 km.
+        let v = if state().route3 { m7_vehicle(&ROUTE3_AT_REST, 0) } else { demo_vehicle(0, 0) };
+        set_vehicle(ui, &v);
     }
     state().clock_ms = FRAME2_CLOCK_MS;
     let rc = draw(get_proc, width, height);
@@ -430,6 +522,52 @@ pub extern "C" fn slint_sample_animate_frame(get_proc: GetProc, width: u32, heig
         return 2;
     };
     set_vehicle(ui, &demo_vehicle(t_ms as i64, frame));
+    state().clock_ms = FRAME2_CLOCK_MS + t_ms as u64;
+    let rc = draw(get_proc, width, height);
+    if rc != 0 {
+        line!("slint: animation frame {frame} at {t_ms} ms: rc {rc}, {}", draw_rc_what(rc));
+    }
+    rc
+}
+
+/// Route 3 on (before the first frame): the cluster is drawn without the safe
+/// core's elements and over a flat background (cluster.slint, `standalone`
+/// false), and [`slint_sample_animate_frame_m7`] takes the vehicle from the
+/// M7.
+#[no_mangle]
+pub extern "C" fn slint_sample_route3(on: bool) {
+    state().route3 = on;
+    if let Some(ui) = state().ui.as_ref() {
+        ui.set_standalone(!on);
+    }
+}
+
+/// [`slint_sample_animate_frame`] with the vehicle the M7 published (route
+/// 3), or, for a null `v`, the demo drive (route 3 without an M7: the
+/// picture then moves without the safe core's elements). The caller swaps
+/// afterwards.
+///
+/// # Safety
+/// `v` is null or points at a whole `struct cluster_vehicle_state`.
+#[no_mangle]
+pub unsafe extern "C" fn slint_sample_animate_frame_m7(
+    get_proc: GetProc,
+    width: u32,
+    height: u32,
+    t_ms: u32,
+    frame: u32,
+    v: *const ClusterVehicle,
+) -> i32 {
+    let Some(ui) = state().ui.as_ref() else {
+        line!("slint: animation frame {frame}: no component (the first frame did not run)");
+        return 2;
+    };
+    // SAFETY: the caller's contract.
+    let vehicle = match unsafe { v.as_ref() } {
+        Some(v) => m7_vehicle(v, frame),
+        None => demo_vehicle(t_ms as i64, frame),
+    };
+    set_vehicle(ui, &vehicle);
     state().clock_ms = FRAME2_CLOCK_MS + t_ms as u64;
     let rc = draw(get_proc, width, height);
     if rc != 0 {

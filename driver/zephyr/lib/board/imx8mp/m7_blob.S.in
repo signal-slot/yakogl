@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* Generated from m7_blob.S.in: the stripped M7 firmware (m7_image.py) for
+ * route 3 (board_route3.c). */
+	.section .rodata.yakogl_m7_image, "a"
+	.balign 8
+	.global yakogl_m7_image
+yakogl_m7_image:
+	.incbin "@M7_STRIPPED@"
+	.global yakogl_m7_image_end
+yakogl_m7_image_end:
+	.balign 8

@@ -81,6 +81,11 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 	return 0;
 }
 
+/* no backlight in the model: the first show's light-up is a no-op */
+void imx8mp_display_backlight_on(void)
+{
+}
+
 /* the address is taken at the next VSYNC, and the call returns then */
 int imx8mp_display_set_fb(uintptr_t fb_phys)
 {

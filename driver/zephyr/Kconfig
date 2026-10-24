@@ -295,6 +295,23 @@ config YAKOGL_DRV_DISPLAY_IMX8MP
 
 if YAKOGL_DRV_DISPLAY_IMX8MP
 
+config YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW
+	bool "Backlight on at the first shown frame, not at the display's bring-up"
+	help
+	  The cold bring-up (and an adopted chain whose backlight is off)
+	  leaves the backlight off until the board layer's first board_show()
+	  has its window scanned, so nothing but the picture is ever seen on
+	  the panel: on the Verdin iMX8MP's DSI panel the interval between
+	  bring-up and the first frame showed as a solid red/pink frame on the
+	  power-on route (2026-10-21). A run that never shows a frame gets its
+	  backlight after BACKLIGHT_FALLBACK_MS, for the panel console.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_FALLBACK_MS
+	int "Milliseconds after the bring-up at which the backlight comes on anyway"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW
+	default 5000
+	range 100 60000
+
 config YAKOGL_DRV_DISPLAY_IMX8MP_HDMI
 	bool "HDMI brought up from cold (yakogl,imx8mp-hdmi), register logic in Rust"
 	depends on DT_HAS_YAKOGL_IMX8MP_HDMI_ENABLED
@@ -533,6 +550,15 @@ config YAKOGL_DRV_SN65DSI8X_INIT_PRIORITY
 	help
 	  After I2C and GPIO, before the controller (yakogl,imx8mp-display,
 	  80) that claims its EN pin at init. Nothing is touched here.
+
+config YAKOGL_DRV_SN65DSI8X_BACKLIGHT_DEFERRED
+	bool "SN65DSI8x self-start leaves the backlight off"
+	help
+	  The self-starting bridge lights the panel's backlight as soon as the
+	  link is up, about a second before an application's first frame: the
+	  panel shows a lit black screen meanwhile. With this option the
+	  backlight stays off until sn65dsi8x_backlight_set(dev, true), which
+	  the application calls at its first present.
 
 config YAKOGL_DRV_SN65DSI8X_SELF_START_INIT_PRIORITY
 	int "Init priority of a bridge that starts itself (dsi-host)"

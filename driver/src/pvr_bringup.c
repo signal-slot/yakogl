@@ -232,14 +232,16 @@ static int pvr_init(const struct device *dev)
 	/* The core clock as the GPU sees it: RGX_CR_TIMER (0x0160) is a free-running
 	 * 48-bit counter advancing once every 256 core clock cycles (DDK
 	 * RGX_CRTIME_TICK_IN_CYCLES). TISCI refuses to tell this host the clock
-	 * rate, so measure it over 100 ms. */
+	 * rate, so measure it: 10 ms is 31,250 ticks at 800 MHz, a 0.003 %
+	 * resolution, and 90 ms less on the way to the first frame than the
+	 * 100 ms this took until 2026-10-21. */
 	{
 		uint64_t t0 = pvr_rd64(data->regs, 0x0160) & 0xFFFFFFFFFFFFULL, t1;
 
-		k_busy_wait(100000);
+		k_busy_wait(10000);
 		t1 = pvr_rd64(data->regs, 0x0160) & 0xFFFFFFFFFFFFULL;
-		LOG_INF("GPU core clock measured: %llu MHz (CR_TIMER %llu ticks in 100 ms)",
-			(unsigned long long)((t1 - t0) * 256ULL * 10ULL / 1000000ULL),
+		LOG_INF("GPU core clock measured: %llu MHz (CR_TIMER %llu ticks in 10 ms)",
+			(unsigned long long)((t1 - t0) * 256ULL * 100ULL / 1000000ULL),
 			(unsigned long long)(t1 - t0));
 	}
 

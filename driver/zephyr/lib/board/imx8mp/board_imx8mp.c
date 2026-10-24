@@ -21,6 +21,13 @@
  *   reset    sys_reboot (PSCI SYSTEM_RESET)
  *   finish   with YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD, a passed run's last
  *            record is the display chain's state (board_finish_record)
+ *
+ * With YAKOGL_BOARD_IMX8MP_ROUTE3 (board_route3.c) the windows are SafeUI
+ * frame-ring buffers in the M7's carve-out, the first show brings the panel
+ * up and releases the M7, and every later show is a publish to the ring: the
+ * M7 flips the LCDIF, this layer does not (no latch thread). If the M7 does
+ * not come up, board_route3_show() says -EAGAIN and this layer flips the
+ * same windows itself from then on.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -42,6 +49,11 @@
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
 #include <yakogl_drivers.h>
 #include "yakogl_record.h"
+#endif
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+#include "board_imx8mp_route3.h"
+BUILD_ASSERT(CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS >= 2,
+	     "route 3 renders into one window while the M7 shows the other");
 #endif
 
 /* SCANOUT_VIEW: the panel-pitch buffer board_window() made, 0 for none */
@@ -150,6 +162,14 @@ static void latch_thread(void *p1, void *p2, void *p3)
 	}
 }
 
+/* The panel scans `phys` (turned on): start the latch thread. s_lock held. */
+static void latch_start(uintptr_t phys)
+{
+	s_shown = phys;
+	k_thread_create(&s_latch_thread, s_latch_stack, K_THREAD_STACK_SIZEOF(s_latch_stack),
+			latch_thread, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
+}
+
 /* Ask the thread to latch `phys`, or the shown address again for 0 (a request
  * waiting for an address is kept then). s_lock held. Returns the request's
  * number for latched(). */
@@ -243,12 +263,31 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 		return -EINVAL;
 	}
 #ifdef CONFIG_YAKOGL_DRV_GPU_VIVANTE
-	static bool taken;
+	/* Up to YAKOGL_BOARD_IMX8MP_WINDOWS windows, each its own carve-out
+	 * buffer (a view takes the one and only). A sample that renders into
+	 * two of the panel's size in turn and shows each in place never draws
+	 * into the buffer the LCDIF scans (slint, SLINT_WINDOW_BUFFERS). */
+	static unsigned int taken;
 	const struct device *gpu = DEVICE_DT_GET_ONE(vivante_gc);
 	struct gc_bo bo;
 	int rc;
 
-	if (taken) {
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	/* route 3: the windows are the ring's buffers (unless the M7 image did
+	 * not load: then windows of our own, and no M7) */
+	if (board_route3_state() != BOARD_ROUTE3_ABSENT) {
+		int r3 = board_route3_window(taken, w, h, out);
+
+		if (r3 == 0) {
+			taken++;
+			return 0;
+		}
+		if (board_route3_state() != BOARD_ROUTE3_ABSENT) {
+			return r3;
+		}
+	}
+#endif
+	if (taken >= CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS || s_view_phys != 0u) {
 		return -ENOMEM;
 	}
 	if (!device_is_ready(gpu)) {
@@ -284,7 +323,7 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 		printk("board: gc_render_alloc(%ux%u, stride %u): %d\n", w, h, stride, rc);
 		return -ENOMEM;
 	}
-	taken = true;
+	taken++;
 	*out = (struct board_window){
 		.phys = (uintptr_t)bo.phys,
 		.cpu = bo.cpu,
@@ -311,6 +350,7 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 
 int board_show(const struct board_window *win)
 {
+	board_first_frame();
 #if defined(CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP) && defined(CONFIG_YAKOGL_DRV_GPU_VIVANTE)
 	uint32_t pw = 0, ph = 0;
 	uintptr_t scan;
@@ -326,10 +366,32 @@ int board_show(const struct board_window *win)
 	if (win->w > pw || win->h > ph || (win->format & GLES_NATIVE_WINDOW_BOTTOM_UP)) {
 		return -ENOTSUP;
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	{
+		static uintptr_t r3_first; /* what the panel was turned on with */
+		int st = board_route3_state();
+
+		if (st != BOARD_ROUTE3_OFF && st != BOARD_ROUTE3_ABSENT) {
+			if (st == BOARD_ROUTE3_LOADED) {
+				r3_first = win->phys;
+			}
+			rc = board_route3_show(win);
+			if (rc != -EAGAIN) {
+				return rc;
+			}
+			/* no M7: the panel still scans the first frame (nobody
+			 * else flipped it); from here this layer flips */
+			k_mutex_lock(&s_lock, K_FOREVER);
+			latch_start(r3_first);
+			k_mutex_unlock(&s_lock);
+		}
+	}
+#endif
 	k_mutex_lock(&s_lock, K_FOREVER);
-	if ((win->w == pw && win->h == ph) ||
-	    (s_view_phys != 0u && win->stride == pw * 4u && win->phys >= s_view_phys &&
-	     win->phys + (size_t)ph * win->stride <= s_view_phys + s_view_bytes)) {
+	if (!IS_ENABLED(CONFIG_YAKOGL_BOARD_IMX8MP_ALWAYS_COPY) &&
+	    ((win->w == pw && win->h == ph) ||
+	     (s_view_phys != 0u && win->stride == pw * 4u && win->phys >= s_view_phys &&
+	      win->phys + (size_t)ph * win->stride <= s_view_phys + s_view_bytes))) {
 		/* the panel's size, or a view at the panel's pitch with ph rows
 		 * of its buffer from the window's first row on: scanned in place */
 		scan = win->phys;
@@ -373,10 +435,10 @@ int board_show(const struct board_window *win)
 		/* the first show: the panel on, then the latch thread */
 		rc = imx8mp_display_on(scan, pitch);
 		if (rc == 0) {
-			s_shown = scan;
-			k_thread_create(&s_latch_thread, s_latch_stack, K_THREAD_STACK_SIZEOF(s_latch_stack),
-					latch_thread, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0,
-					K_NO_WAIT);
+			/* the window is scanned (display_on waited for its latch):
+			 * now the viewer may see the panel */
+			imx8mp_display_backlight_on();
+			latch_start(scan);
 		}
 		k_mutex_unlock(&s_lock);
 		return rc;

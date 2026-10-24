@@ -1,0 +1,76 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Toradex Verdin AM62P (Dahlia), Cortex-A53 cluster, started at power-on:
+ * Boot ROM -> tiboot3.bin (R5 SPL, TIFS) -> tispl.bin (TF-A BL31, OP-TEE,
+ * DM firmware, A53 SPL) -> this image, loaded by the A53 SPL from the FIT
+ * that normally holds U-Boot proper (u-boot.img). No U-Boot proper and no
+ * Linux run (docs/notes/am62p-direct-boot.md, tools/am62p-mkboot.py).
+ *
+ * The a53 devicetree with two differences:
+ *
+ * 1. RAM: unchanged, and on purpose. TF-A's BL33 is the A53 SPL at
+ *    PRELOADED_BL33_BASE 0x80080000 (TF-A plat/ti/k3/platform.mk); this
+ *    image is the SPL's next stage, and the SPL loads it at the load
+ *    address its FIT node gives, so the FIT says 0x82000000 (the address
+ *    the U-Boot "go" and kexec entries use) instead of U-Boot proper's
+ *    0x80800000. What the earlier stages own in DDR (2 GiB at 0x80000000):
+ *      0x80000000  512 KiB  TF-A BL31 (tispl.bin "atf" load address),
+ *                           secure; never mapped here
+ *      0x80080000           the A53 SPL, its BSS (0x80c80000) and, below
+ *                           0x82000000 (CONFIG_SPL_STACK_R_ADDR), its stack
+ *                           and malloc pool: dead once this image runs
+ *      0x82000000  344 MiB  this image (zephyr,sram). The SPL appends its
+ *                           devicetree right after zephyr.bin; that lands
+ *                           in this image's .bss and is cleared
+ *      0x89000000           the R5 SPL's staging copy of the DM firmware,
+ *                           consumed before the A53 started
+ *      0x97800000   64 MiB  GPU carveout
+ *      0x9b800000 / 0x9b900000 / 0x9c800000 / 0x9c900000
+ *                           MCU and WKUP (DM) R5F regions; the DM runs there
+ *      0x9e800000   24 MiB  OP-TEE (tispl.bin "tee"), secure
+ *
+ * 2. The display path is on: nobody else owns the panel on this route (no
+ *    Linux, no SafeUI R5F firmware), so DSS1 -> DSI -> SN65DSI83 -> panel,
+ *    I2C1, the GPIO banks and the TISCI power-on list are enabled here
+ *    rather than by every sample's overlay. The C display drivers bring the
+ *    path up from cold, as they did under U-Boot "go".
+ *
+ * Nothing starts the RTI watchdog on this route (the R5 SPL only configures
+ * the ESMs, U-Boot has no RTI driver); a sample that wants a bound arms it
+ * itself (CONFIG_YAKOGL_AM62P_RTI_SELF_ARM).
+ */
+
+#include "verdin_am62p_am62p54_a53.dts"
+
+/ {
+	model = "Toradex Verdin AM62P (Dahlia), direct boot";
+};
+
+&tisci_power_on {
+	status = "okay";
+};
+
+&main_gpio0_1 {
+	status = "okay";
+};
+
+&main_gpio1_0 {
+	status = "okay";
+};
+
+&main_i2c1 {
+	status = "okay";
+};
+
+&panel {
+	status = "okay";
+};
+
+&dss1 {
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+};

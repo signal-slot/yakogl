@@ -234,7 +234,8 @@ am62p)
     # so pvr_resets reads the count from them (driver/rust/src/gpu/pvr/render.rs)
     # the gl_test sample's own end, "gl_test: OK|FAILED (rc=N)", ends a
     # single-case run too (it prints no "all:" line)
-    END_RE_DEFAULT='^deqp: summary|ZEPHYR FATAL ERROR|RTI feeder lifetime over|^gl_test: all: |^gl_test: (OK|FAILED) \(rc='
+    # the two feeders' ends: the SafeUI inherited feeder's and rti_arm's
+    END_RE_DEFAULT='^deqp: summary|ZEPHYR FATAL ERROR|RTI feeder lifetime over|rti_arm: feeding bound of|^gl_test: all: |^gl_test: (OK|FAILED) \(rc='
     LEGACY_RE='^(deqp: summary: |gl_test: all: )'
     BOARD_UART=${BOARD_UART:-${UART_ADDR:-}}
     TREE_RETRIES_DEFAULT=0

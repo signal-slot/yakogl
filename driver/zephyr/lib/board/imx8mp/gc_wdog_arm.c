@@ -69,7 +69,8 @@ bool gc_wdog_arm_may_feed(void)
 		return false;
 	}
 	/* The board layer's "still making progress" (board_watchdog_feed). */
-	return k_uptime_get() < (int64_t)CONFIG_GC_BOARD_WDOG_SECONDS * MSEC_PER_SEC &&
+	return (IS_ENABLED(CONFIG_GC_BOARD_WDOG_UNBOUNDED) ||
+		k_uptime_get() < (int64_t)CONFIG_GC_BOARD_WDOG_SECONDS * MSEC_PER_SEC) &&
 	       board_wdog_alive();
 }
 

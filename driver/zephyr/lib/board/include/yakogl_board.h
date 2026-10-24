@@ -172,6 +172,17 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out);
  */
 int board_show(const struct board_window *win);
 
+/* CONFIG_YAKOGL_BOARD_BOOT_TIME: the system counter at `where`, and the
+ * first-frame mark every board_show() implementation calls first (printed
+ * once). Both are no-ops without the option. */
+#ifdef CONFIG_YAKOGL_BOARD_BOOT_TIME
+void board_boot_time(const char *where);
+void board_first_frame(void);
+#else
+static inline void board_boot_time(const char *where) { (void)where; }
+static inline void board_first_frame(void) {}
+#endif
+
 /*
  * Which of the n buffers at phys[] (n <= 32) the display may still scan:
  * bit k for phys[k]. On a board whose board_show() does not wait for the

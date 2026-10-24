@@ -68,12 +68,13 @@ export component MainWindow inherits Window {
     // The window background belongs to whoever owns the panel. Standalone,
     // that is this design. In the product (route 3 on the i.MX8MP, where
     // `standalone` is false) the safe core owns the panel and the application
-    // draws its elements over a TRANSPARENT background: the full-screen
+    // draws its elements over a FLAT background, one clear: the full-screen
     // gradient was the single most expensive draw of the frame (gc_slint at
-    // 60 fps, RESULTS.md). The M7 scans the frame out as XRGB8888, so the
-    // cleared pixels show as black and the premultiplied edges as drawn over
-    // black.
-    background: root.standalone ? @linear-gradient(180deg, Layout.bg-top 0%, Layout.bg-bottom 100%) : transparent;
+    // 60 fps, RESULTS.md). It was transparent until 2026-10-22, which the
+    // M7 scans out (XRGB8888) as black; the flat bottom colour of the
+    // gradient costs the same clear (docs/notes/imx8mp-direct-boot.md,
+    // "Route 3").
+    background: root.standalone ? @linear-gradient(180deg, Layout.bg-top 0%, Layout.bg-bottom 100%) : Layout.bg-bottom;
 
     // --- live values (the platform snapshot) ---
     in property <int> speed_x10: 0;        // km/h x 10

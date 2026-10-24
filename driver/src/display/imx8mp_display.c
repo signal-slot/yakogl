@@ -93,6 +93,61 @@ static bool backlight_is_on(const struct display_ctx *c)
 	return yakogl_imx_pwm_is_enabled(c->backlight.dev);
 }
 
+/* The backlight and its enable pin on, together. */
+static void backlight_light(struct display_ctx *c)
+{
+	backlight_on(c);
+	if (c->backlight_enable.port != NULL) {
+		gpio_pin_set_dt(&c->backlight_enable, 1);
+	}
+}
+
+#ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW
+/*
+ * The backlight waits for the first frame (imx8mp_display_backlight_on(),
+ * called by the board layer once its first window is scanned), so that a
+ * viewer never sees the panel between power-up and the picture: on the
+ * Verdin iMX8MP's DSI panel that interval was a solid red/pink frame
+ * (2026-10-21, the power-on route). A fallback turns it on after
+ * BACKLIGHT_FALLBACK_MS anyway, so a run that never shows a frame still
+ * has its panel console.
+ */
+static void backlight_fallback(struct k_work *work)
+{
+	ARG_UNUSED(work);
+	if (!backlight_is_on(&g_ctx)) {
+		LOG_INF("no frame within %u ms; backlight on for the console",
+			CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_FALLBACK_MS);
+		backlight_light(&g_ctx);
+	}
+}
+static K_WORK_DELAYABLE_DEFINE(s_backlight_fallback, backlight_fallback);
+
+static void backlight_arm(struct display_ctx *c)
+{
+	ARG_UNUSED(c);
+	k_work_schedule(&s_backlight_fallback,
+			K_MSEC(CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_FALLBACK_MS));
+}
+
+void imx8mp_display_backlight_on(void)
+{
+	(void)k_work_cancel_delayable(&s_backlight_fallback);
+	if (g_mapped && !backlight_is_on(&g_ctx)) {
+		backlight_light(&g_ctx);
+	}
+}
+#else
+static void backlight_arm(struct display_ctx *c)
+{
+	backlight_light(c);
+}
+
+void imx8mp_display_backlight_on(void)
+{
+}
+#endif
+
 /* The bridge (yakogl,sn65dsi8x) is started with the DSI clock lane in HS and
  * no video flowing, which is where dsim_enable() stops: the panel's mode at
  * the pixel clock the CCM produces, and the bit rate per lane the DSIM PLL
@@ -350,10 +405,7 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 		 */
 		if (!backlight_is_on(c)) {
 			LOG_INF("backlight was off; turning it on");
-			backlight_on(c);
-			if (c->backlight_enable.port != NULL) {
-				gpio_pin_set_dt(&c->backlight_enable, 1);
-			}
+			backlight_arm(c);
 		}
 		if (fb_phys == 0) {
 			return 0;
@@ -474,10 +526,7 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 	dsim_video_start(c);
 	bridge_check(c);
 	STOP_AFTER(7);
-	backlight_on(c);
-	if (c->backlight_enable.port != NULL) {
-		gpio_pin_set_dt(&c->backlight_enable, 1);
-	}
+	backlight_arm(c);
 
 	c->info.on = true;
 	LOG_INF("display on: %ux%u at %u.%03u Hz, pixel clock %u Hz, DSI %u Hz",

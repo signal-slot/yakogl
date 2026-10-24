@@ -1,0 +1,47 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The second-stage loader on the Verdin iMX8M Plus A53
+ * (docs/notes/imx8mp-direct-boot.md). Two changes to the a53 board:
+ *
+ * 1. Its own RAM, 0x40200000 + 32 MiB: TF-A enters BL33 there
+ *    (PLAT_NS_IMAGE_OFFSET, the FIT's "uboot" load address in Toradex's
+ *    imx-boot), and SPL appends the FIT's devicetree right after the file,
+ *    inside this RAM. The 2 MiB below it hold SPL's saved DDR timing for
+ *    TF-A. It ends well below the image it loads.
+ *
+ * 2. The image's region, 0x48000000 .. 0x58000000 (the direct board's
+ *    zephyr,sram, up to the GPU carveout), identity mapped write-back
+ *    cacheable so the loader can inflate into it at the physical addresses
+ *    the image is linked at. Kconfig BOOT_STAGE2_LOAD/_STAGING/_REGION_END
+ *    lie in it. The GPU is off.
+ */
+
+#include <mem.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm64.h>
+
+/ {
+	chosen {
+		zephyr,sram = &stage2_ram;
+	};
+
+	stage2_ram: memory@40200000 {
+		reg = <0x40200000 DT_SIZE_M(32)>;
+	};
+
+	stage2_payload: memory@48000000 {
+		compatible = "zephyr,memory-region";
+		reg = <0x48000000 DT_SIZE_M(256)>;
+		zephyr,memory-region = "STAGE2_PAYLOAD";
+		/* DT_MEM_ARM64_MMU_NORMAL = DT_MEM_CACHEABLE | the WB bit: without
+		 * DT_MEM_CACHEABLE, DT_MEM_ATTR_TO_MT (arch/arm64/arm_mmu.h) makes
+		 * the region MT_NORMAL_NC, and the inflate ran at 6.8 MB/s on the
+		 * AM62P (2026-10-21: 1 MiB memcpy 155 ms, 66 MB in 25.5 s). */
+		zephyr,memory-attr = <(DT_MEM_ARM64_MMU_NORMAL)>;
+	};
+};
+
+&gpu3d {
+	status = "disabled";
+};

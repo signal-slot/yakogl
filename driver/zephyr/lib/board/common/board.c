@@ -77,6 +77,39 @@ void board_wdog_release(void)
 	s_released = true;
 }
 
+#ifdef CONFIG_YAKOGL_BOARD_BOOT_TIME
+void board_boot_time(const char *where)
+{
+	/* The architected counter, read directly: k_uptime starts at this
+	 * image's own boot, the counter at the boot loader's start of it. */
+	uint64_t cnt, frq;
+
+	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(cnt));
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
+	printk("boot time: system counter at %s: %llu us (%llu ticks at %llu Hz)\n", where,
+	       (unsigned long long)(frq >= 1000000u ? cnt / (frq / 1000000u) : 0u),
+	       (unsigned long long)cnt, (unsigned long long)frq);
+}
+
+static int board_boot_time_init(void)
+{
+	board_boot_time("application init");
+	return 0;
+}
+
+SYS_INIT(board_boot_time_init, APPLICATION, 0);
+
+void board_first_frame(void)
+{
+	static bool marked;
+
+	if (!marked) {
+		marked = true;
+		board_boot_time("the first frame");
+	}
+}
+#endif
+
 static uint32_t s_show_copies;
 
 void board_show_copied(uint32_t w, uint32_t h, const char *why)
