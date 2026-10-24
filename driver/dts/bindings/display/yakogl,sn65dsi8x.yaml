@@ -87,6 +87,16 @@ properties:
       The MIPI DSI host to attach at init. Present: the node starts itself
       (and needs the mode below). Absent: a display controller drives it.
 
+  video-source:
+    type: phandle
+    description: |
+      A self-starting node only: the display device that feeds the DSI
+      host. The self-start turns its blanking off (Zephyr display API)
+      between bringing the bridge up and checking the link, init seq 8 of
+      SLLSEC2H Table 7-2, so the panel receives a valid stream from boot
+      instead of from the application's first frame. Absent: whoever owns
+      the display starts the stream.
+
   pixel-clock-hz:
     type: int
   width:

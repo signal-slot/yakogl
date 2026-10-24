@@ -442,6 +442,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "yakogl-boot-stage2"
+version = "0.1.0"
+
+[[package]]
 name = "yakogl-capi"
 version = "0.1.0"
 dependencies = [

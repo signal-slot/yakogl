@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The logic of the AM62P second-stage loader (driver/samples/zephyr/boot_stage2,
+# docs/notes/am62p-direct-boot.md "The second stage"): the image header in the eMMC user
+# area, CRC-32, a raw-deflate decoder and the hand-off to the loaded image.
+# The C side (src/main.c) is the Zephyr part only: the eMMC through Zephyr's
+# disk API, the log, the cache flush.
+#
+# No dependencies (no_std, no allocator, no floating point: the target is
+# aarch64-unknown-none-softfloat, as the drivers crate's). Built by the
+# sample's CMakeLists.txt through capi/yakogl_capi.cmake
+# (yakogl_add_rust_archive); host tests are `cargo test -p yakogl-boot-stage2`,
+# and with BS2_VECTORS=<dir> they also decode the images that
+# `tools/am62p-mkboot.py stage2-vectors <dir>` wrote with Python's zlib.
+[package]
+name = "yakogl-boot-stage2"
+description = "Second-stage loader logic for the Verdin AM62P direct boot: header, CRC-32, inflate, jump"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+
+[lib]
+name = "boot_stage2"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+doctest = false
+bench = false

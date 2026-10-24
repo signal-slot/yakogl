@@ -1,0 +1,56 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The eMMC source of the second-stage loader on the Verdin AM62P
+ * (BOOT_STAGE2_SOURCE_EMMC, emmc.conf), on top of verdin_am62p_am62p54_a53.overlay:
+ *
+ * 3. The eMMC: MMC0 (main_sdhci0, 8 bit), as Linux's
+ *    k3-am62p-j722s-common-main.dtsi describes it for the AM62P
+ *    ("ti,am64-sdhci-8bit": a PHY with a DLL, no pin mux of its own) and
+ *    k3-am62p-verdin.dtsi (50 ohm drive). Zephyr's k3-am62-main.dtsi has the
+ *    AM62x's values; the AM62P's taps and trim replace them. No HS200: the
+ *    loader reads a few MB, and HS (52 MHz) needs neither tuning nor the
+ *    DLL lock. The GPU is off.
+ *
+ * 4. MMC0 (TISCI device 57, Linux's power-domains = <&k3_pds 57>) switched on
+ *    through TISCI first: after an eMMC boot the SPLs left it on, after a USB
+ *    (DFU) boot nobody did.
+ */
+
+&tisci_power_on {
+	devices = <57>;
+	status = "okay";
+};
+
+&main_sdhci0 {
+	/* HS200 (tuned, up to 200 MHz SDR): the 52 MHz HS bus capped the
+	 * payload read at about 47 MB/s (1.2 s for the 57 MB Qt image on
+	 * 2026-10-22). The SoC dtsi's mmc-hs200-1_8v stays; the tap delays
+	 * below are Linux's for the AM62P. */
+	/* The SD stack waits power-delay-ms twice (power off, power on) before
+	 * the first command; the binding's default 500 ms was 1.0 of the 1.09 s
+	 * the eMMC took to become ready on 2026-10-22. The embedded eMMC's
+	 * supplies are never switched (no regulator here) and the boot ROM and
+	 * the SPLs have just read it: the card is powered and idle. */
+	power-delay-ms = <2>;
+	ti,dll-present;
+	ti,trm-icp = <0x8>;
+	ti,driver-strength-ohm = <50>;
+	ti,clkbuf-sel = <0x7>;
+	ti,otap-del-sel-legacy = <0x1>;
+	ti,itap-del-sel-legacy = <0x10>;
+	ti,otap-del-sel-hs = <0x1>;
+	ti,itap-del-sel-hs = <0xa>;
+	ti,otap-del-sel-ddr52 = <0x6>;
+	ti,itap-del-sel-ddr52 = <0x3>;
+	ti,otap-del-sel-hs200 = <0x8>;
+	status = "okay";
+
+	mmc {
+		compatible = "zephyr,mmc-disk";
+		bus-width = <8>;
+		disk-name = "emmc";
+		status = "okay";
+	};
+};

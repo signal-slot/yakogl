@@ -2523,6 +2523,28 @@ if command -v python3 >/dev/null 2>&1; then
   rowkey key_python_row tools/am62p_netboot_uart.py tools/board.sh driver/zephyr/lib/board/am62p/rti_arm.c \
     ':(glob)tools/testdata/am62p-netboot-*'
   step "tools   am62p netboot UART phases" python3 tools/am62p_netboot_uart.py --self-test
+  # The AM62P direct boot (docs/notes/am62p-direct-boot.md): u-boot.img with
+  # Zephyr in place of U-Boot proper, on a synthetic FIT in the prebuilt's form
+  # (the payload, load/entry, crc32, fdt-0 and its certificate kept, external
+  # data, the refusals, the boot-partition layout against U-Boot's environment).
+  step "tools   am62p-mkboot u-boot.img and boot partition" python3 tools/am62p-mkboot.py --self-test
+  # The AM62P second stage (the same note, "The second stage"): the images
+  # am62p-mkboot.py writes for the eMMC user area (Python's zlib) decoded by
+  # the loader's own Rust (yakogl-boot-stage2: header, CRC-32, inflate): every
+  # ok-*.img loads, every bad-*.img is refused. The row requires the test's
+  # "verified" line (without BS2_VECTORS it checks nothing).
+  stage2_vectors_check() {
+    local d="$PWD/build/stage2-check" out
+    rm -rf "$d"
+    python3 tools/am62p-mkboot.py stage2-vectors "$d" > /dev/null || return 1
+    out=$(BS2_VECTORS="$d" cargo test -q -p yakogl-boot-stage2 mkboot_vectors -- --nocapture 2>&1) ||
+      { printf '%s\n' "$out" | tail -20; return 1; }
+    printf '%s\n' "$out" | grep -qE '^mkboot_vectors: [0-9]+ images verified' || {
+      echo "mkboot_vectors passed without its verified line"
+      return 1
+    }
+  }
+  step "tools   am62p second stage: mkboot images decoded by the loader's Rust" stage2_vectors_check
   # The i.MX8MP netboot's verdicts
   # (docs/notes/imx8mp-netboot.md) are tools/board.sh's
   # now, replayed on the 2026-10-03 records by
@@ -3142,6 +3164,31 @@ if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-so
 else
   gap "yakogl-drivers for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
 fi
+# The AM62P second-stage loader's logic (driver/samples/zephyr/boot_stage2/loader,
+# the yakogl-boot-stage2 crate): lint, host tests (header, CRC-32, inflate) and
+# the target it ships for, aarch64-unknown-none-softfloat (the jump is inline
+# assembly there). The cross-check with am62p-mkboot.py is the tools row above.
+step "clippy  yakogl-boot-stage2" cargo clippy -p yakogl-boot-stage2 --all-targets
+step "test    yakogl-boot-stage2" cargo test --no-fail-fast -p yakogl-boot-stage2
+stage2_softfloat_check() {
+  local t=aarch64-unknown-none-softfloat
+  if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
+    cargo clippy -p yakogl-boot-stage2 --target "$t"
+  else
+    CARGO_FUTURE_INCOMPAT_REPORT_FREQUENCY=never cargo +nightly clippy -p yakogl-boot-stage2 \
+      --target "$t" -Z build-std=core
+  fi
+}
+if rustup target list --installed 2>/dev/null | grep -qx aarch64-unknown-none-softfloat ||
+  [ -d "$(rustc +nightly --print sysroot 2>/dev/null)/lib/rustlib/src/rust/library/core" ]; then
+  step "clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)" stage2_softfloat_check
+else
+  gap "yakogl-boot-stage2 for aarch64-unknown-none-softfloat: neither the target (rustup target add) nor a nightly with rust-src"
+fi
+if command -v cc >/dev/null 2>&1; then
+  step "cc      boot_stage2.h layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
+    -x c driver/samples/zephyr/boot_stage2/loader/include/boot_stage2.h
+fi
 if command -v cc >/dev/null 2>&1; then
   # The C view of the crate's structs, with the layout pins the Rust side
   # asserts too (driver/rust/include/yakogl_drivers.h).
@@ -3206,6 +3253,31 @@ zephyr_precompiled_only_image() {
     echo "^ the compiler or its scratch region is in the image without a compiler"
     return 1
   fi
+}
+# The direct-boot images (docs/notes/am62p-direct-boot.md,
+# docs/notes/imx8mp-direct-boot.md): examples/triangle for each board's direct
+# variant (the panel from cold, the boot-time marks), and the second-stage
+# loader for each board with a payload linked in (a vector image from
+# am62p-mkboot.py stage2-vectors, in the loader's own layout: the real
+# payload needs the direct image, which the loader row does not build).
+zephyr_direct_images() {
+  # The direct images and the loader link Rust built with -Z build-std
+  # (yakogl_add_rust_archive): a nightly, as the aarch64 cargo rows above use.
+  local RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-nightly}"
+  export RUSTUP_TOOLCHAIN
+  local v="$PWD/build/stage2-check-images"
+  rm -rf "$v"
+  python3 tools/am62p-mkboot.py stage2-vectors "$v" > /dev/null || return 1
+  zephyr_werror_image verdin_am62p/am62p54/a53/direct examples/triangle am62p-direct-triangle || return 1
+  zephyr_werror_image verdin_imx8mp/mimx8ml8/a53/direct examples/triangle imx8mp-direct-triangle || return 1
+  zephyr_werror_image verdin_am62p/am62p54/a53 boot_stage2 am62p-boot-stage2 \
+    "-DBOOT_STAGE2_PAYLOAD=$v/ok-deflate-small.img" || return 1
+  zephyr_werror_image verdin_imx8mp/mimx8ml8/a53 boot_stage2 imx8mp-boot-stage2 \
+    "-DBOOT_STAGE2_PAYLOAD=$v/ok-deflate-small.img" || return 1
+  nm build/zephyr-werror/am62p-boot-stage2/zephyr/zephyr.elf | grep -q ' bs2_payload_start$' || {
+    echo "the AM62P loader has no linked payload"
+    return 1
+  }
 }
 # The NanoPC-T6 image (Z1): it builds, and its watchdog glue is in it: the
 # SYS_INIT entry of t6_wdt_arm is the FIRST PRE_KERNEL_1 hook (what runs
@@ -3283,6 +3355,10 @@ if [ "$QUICK" -eq 0 ]; then
     scope v3d drivers samples
     step "zephyr  rpi4 examples/triangle-rust image, -Werror on our C files, the Rust main" \
       zephyr_triangle_rust_image rpi_4b rpi4-triangle-rust
+    scope pvr vivante drivers samples tools
+    needs_pvr_fw_blob
+    step "zephyr  direct-boot images: am62p and imx8mp triangle (direct variants), boot_stage2 for both, -Werror" \
+      zephyr_direct_images
     scope drivers samples
     step "zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue), -Werror on our C files" \
       zephyr_nanopc_t6_image

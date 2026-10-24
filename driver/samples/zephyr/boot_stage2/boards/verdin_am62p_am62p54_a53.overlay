@@ -1,0 +1,49 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The second-stage loader on the Verdin AM62P A53
+ * (docs/notes/am62p-direct-boot.md, "The second stage"). Two changes to the
+ * a53 board here; the eMMC source's two more are in
+ * verdin_am62p_am62p54_a53_emmc.overlay:
+ *
+ * 1. Its own RAM, 0x80800000 + 24 MiB: the A53 SPL loads it there (U-Boot
+ *    proper's load address in Toradex's u-boot.img; the SPL's text, BSS at
+ *    0x80c80000 and stack/malloc below 0x82000000 are dead once it runs,
+ *    and the file itself, with the devicetree the SPL appends, ends far
+ *    below 0x80c80000). It ends where the image it loads begins.
+ *
+ * 2. The image's region, 0x82000000 .. 0x97800000 (the a53 board's
+ *    zephyr,sram, up to the GPU carveout), identity mapped write-back
+ *    cacheable so the loader can read and inflate into it at the physical
+ *    addresses the image is linked at. Kconfig BOOT_STAGE2_LOAD/_STAGING/
+ *    _REGION_END lie in it. The GPU is off.
+ */
+
+#include <mem.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm64.h>
+
+/ {
+	chosen {
+		zephyr,sram = &stage2_ram;
+	};
+
+	stage2_ram: memory@80800000 {
+		reg = <0x80800000 DT_SIZE_M(24)>;
+	};
+
+	stage2_payload: memory@82000000 {
+		compatible = "zephyr,memory-region";
+		reg = <0x82000000 DT_SIZE_M(344)>;
+		zephyr,memory-region = "STAGE2_PAYLOAD";
+		/* DT_MEM_ARM64_MMU_NORMAL = DT_MEM_CACHEABLE | the WB bit: without
+		 * DT_MEM_CACHEABLE, DT_MEM_ATTR_TO_MT (arch/arm64/arm_mmu.h) makes
+		 * the region MT_NORMAL_NC, and the inflate ran at 6.8 MB/s on the
+		 * AM62P (2026-10-21: 1 MiB memcpy 155 ms, 66 MB in 25.5 s). */
+		zephyr,memory-attr = <(DT_MEM_ARM64_MMU_NORMAL)>;
+	};
+};
+
+&gpu {
+	status = "disabled";
+};

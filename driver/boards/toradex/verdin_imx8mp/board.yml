@@ -4,5 +4,14 @@
 # adds the Cortex-A53 cluster (the SafeUI Application Supervisor host and the
 # GPU bring-up target). The dts and defconfig for verdin_imx8mp/mimx8ml8/a53
 # live next to this file.
+#   verdin_imx8mp/mimx8ml8/a53         an image kexec'd out of Torizon
+#                                      (verdin_imx8mp_mimx8ml8_a53.dts)
+#   verdin_imx8mp/mimx8ml8/a53/direct  the same image type started by TF-A as
+#                                      BL33 at power-on, no U-Boot proper and
+#                                      no Linux (verdin_imx8mp_mimx8ml8_a53_direct.dts,
+#                                      docs/notes/imx8mp-direct-boot.md)
 board:
   extend: verdin_imx8mp
+  variants:
+    - name: direct
+      qualifier: mimx8ml8/a53

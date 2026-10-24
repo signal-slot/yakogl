@@ -183,6 +183,7 @@
 		compatible = "yakogl,sn65dsi8x";
 		reg = <0x2c>;
 		dsi-host = <&dsi0>;
+		video-source = <&dss1>;  /* its port on at bridge init: the panel powers up from boot */
 		lvds-termination-ohms = <100>;
 		enable-gpios = <&main_gpio0 39 GPIO_ACTIVE_HIGH>;    /* GPIO_10_DSI = display PWR_DN# */
 		reset-gpios = <&main_gpio0 35 GPIO_ACTIVE_LOW>;      /* I2S_2_BCLK = display global reset */

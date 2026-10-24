@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The kexec variant's image type, linked at 0x48000000 and started there by
+# the second-stage loader (TF-A's BL33 at 0x40200000) with the MMU and caches
+# off, at EL1 (docs/notes/imx8mp-direct-boot.md). Zephyr's arm64 reset path
+# takes an EL1 entry; the image header's first word is "b __start", so
+# entering at the load address is entering at the code.
+CONFIG_XIP=n
+CONFIG_SERIAL=y
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y
+CONFIG_UART_INTERRUPT_DRIVEN=y
+CONFIG_CLOCK_CONTROL=y
+
+# ARM Options
+CONFIG_AARCH64_IMAGE_HEADER=y
+CONFIG_ARMV8_A_NS=y
+CONFIG_ARM64_VA_BITS_36=y
+CONFIG_ARM64_PA_BITS_36=y
+
+# Cache Options
+CONFIG_CACHE_MANAGEMENT=y
+CONFIG_DCACHE_LINE_SIZE_DETECT=y
+CONFIG_ICACHE_LINE_SIZE_DETECT=y
+
+# Multicore
+CONFIG_SMP=y
+CONFIG_PM_CPU_OPS=y
+CONFIG_MP_MAX_NUM_CPUS=4
+
+# Nothing else runs on the A53s: TF-A initialised the GIC for the secure
+# side and left the non-secure configuration to us, so take the distributor
+# rather than share it (as the kexec variant does).
+CONFIG_GIC_SAFE_CONFIG=n

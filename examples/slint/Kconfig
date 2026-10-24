@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+mainmenu "YakoGL Slint cluster sample"
+
+config SLINT_WINDOW_WIDTH
+	int "Window width in pixels"
+	default 1024
+	range 320 4096
+	help
+	  The window the cluster renders into and the screen shows. The
+	  default is the AM62P's panel, which the other panels also fit; a
+	  board whose panel is larger sets its own size in its conf so the
+	  picture fills the panel (the Verdin iMX8MP's DSI panel: 1280x800).
+	  The UI scales with the window (ui/layout.slint's unit).
+
+config SLINT_WINDOW_HEIGHT
+	int "Window height in pixels"
+	default 600
+	range 200 4096
+
+config SLINT_WINDOW_BUFFERS
+	int "Windows the cluster is rendered into in turn"
+	default 1
+	range 1 3
+	help
+	  One where the board layer copies or pans the window (the AM62P,
+	  the Pi 4). Two or three where the screen flips to the window by
+	  address and scans it in place (the i.MX8MP at its panel's size):
+	  the frame being drawn is then never the one the LCDIF scans, no
+	  copy is made, and the show's wait for the latch paces the frames
+	  at the panel's rate. Each window is a full buffer of the board
+	  layer's (the i.MX8MP: the GPU carve-out).
+
+config SLINT_ANIMATE_FOREVER
+	bool "Animate until the board is reset (ignore YAKOGL_BOARD_ANIMATE_S)"
+	help
+	  For a power-on demo that has to keep running (the iMX8MP route-3
+	  image): the run never reaches its result records, its hold or its
+	  reset. Pair it with a watchdog that is fed for as long as the
+	  loop is alive (the iMX8MP: GC_BOARD_WDOG_UNBOUNDED).
+
+source "Kconfig.zephyr"

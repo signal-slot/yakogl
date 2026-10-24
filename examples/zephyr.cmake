@@ -30,12 +30,29 @@ if(NOT DEFINED _yk_layer_${_yk_board_name})
   message(FATAL_ERROR "examples: ${BOARD} is not a board of the board layer (verdin_am62p, verdin_imx8mp, rpi_4b)")
 endif()
 set(_yk_board_dir "${PVR_REPO}/zephyr/lib/board/${_yk_layer_${_yk_board_name}}")
-if(NOT EXISTS "${_yk_board_dir}/app.conf")
-  message(FATAL_ERROR "examples: no board files for ${BOARD} (${_yk_board_dir}/app.conf)")
+if(BOARD MATCHES "/direct$")
+  # The direct variant (-b <board>/direct: started at power-on in place of
+  # U-Boot proper) has the display path in its own devicetree: no overlay, and
+  # its Kconfig fragment is app_direct.conf.
+  set(_yk_app_conf "${_yk_board_dir}/app_direct.conf")
+  set(_yk_app_overlay "")
+else()
+  set(_yk_app_conf "${_yk_board_dir}/app.conf")
+  set(_yk_app_overlay "${_yk_board_dir}/app.overlay")
 endif()
-list(APPEND EXTRA_CONF_FILE "${_yk_board_dir}/app.conf")
-if(EXISTS "${_yk_board_dir}/app.overlay")
-  list(APPEND EXTRA_DTC_OVERLAY_FILE "${_yk_board_dir}/app.overlay")
+if(NOT EXISTS "${_yk_app_conf}")
+  message(FATAL_ERROR "examples: no board files for ${BOARD} (${_yk_app_conf})")
+endif()
+list(APPEND EXTRA_CONF_FILE "${_yk_app_conf}")
+# What one example needs on a board's direct image beyond app_direct.conf
+# (the power-on demo's run length, watchdog and window): the board layer's
+# <example>_direct.conf, e.g. imx8mp/slint_direct.conf for examples/slint.
+get_filename_component(_yk_example "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+if(BOARD MATCHES "/direct$" AND EXISTS "${_yk_board_dir}/${_yk_example}_direct.conf")
+  list(APPEND EXTRA_CONF_FILE "${_yk_board_dir}/${_yk_example}_direct.conf")
+endif()
+if(_yk_app_overlay AND EXISTS "${_yk_app_overlay}")
+  list(APPEND EXTRA_DTC_OVERLAY_FILE "${_yk_app_overlay}")
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})

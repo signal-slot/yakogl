@@ -70,6 +70,12 @@ struct imx8mp_display_info {
  */
 int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch);
 
+/* With YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW: the backlight on, now
+ * that the first frame is being scanned (the board layer calls it from its
+ * first board_show()). Without the option it is a no-op: the backlight came
+ * on inside imx8mp_display_on(). */
+void imx8mp_display_backlight_on(void);
+
 /* Re-point the scan-out at another buffer and wait for the LCDIF to latch
  * it (CTRLDESCL0_5_SHADOW_LOAD_EN clears at the next vblank). */
 int imx8mp_display_set_fb(uintptr_t fb_phys);

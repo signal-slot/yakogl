@@ -98,6 +98,32 @@ config YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT
 	  the screen to y (SET_VIRTUAL_OFFSET, no copy). A refused grant is
 	  printed and falls back to a screen-sized framebuffer.
 
+config YAKOGL_BOARD_IMX8MP_WINDOWS
+	int "i.MX8MP: windows board_window() hands out, each its own carve-out buffer"
+	default 1
+	range 1 3
+	depends on YAKOGL_BOARD_IMX8MP
+	help
+	  One for every sample so far. Two (or three) for a sample that
+	  renders into windows of the panel's size in turn and shows each
+	  with the in-place flip (slint's SLINT_WINDOW_BUFFERS): the LCDIF
+	  then never scans the buffer being drawn, and nothing is copied. A
+	  SCANOUT_VIEW window is always the only one.
+
+config YAKOGL_BOARD_IMX8MP_ALWAYS_COPY
+	bool "i.MX8MP: never scan the window in place; copy every frame and flip at VSYNC"
+	depends on YAKOGL_BOARD_IMX8MP
+	help
+	  A window of the panel's size is scanned in place by default (no
+	  copy, the measurement images' choice): the GPU then draws the next
+	  frame into the buffer the LCDIF is scanning, which an animated
+	  picture shows as flicker and tearing (the Slint cluster at 1280x800
+	  on the Verdin iMX8MP, 2026-10-22). With this option every show
+	  copies the finished frame into one of the SCREEN_BUFFERS below and
+	  the latch thread flips to it at the next VSYNC, so the scanned
+	  buffer never changes under the LCDIF. Costs one panel-sized copy
+	  per frame (4 MiB at 1280x800); use 2 or 3 screen buffers.
+
 config YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS
 	int "i.MX8MP: screen buffers a copied window is shown through (1: every show waits for VSYNC)"
 	default 1
@@ -204,6 +230,20 @@ config YAKOGL_BOARD_ANIMATE_S
 	range 0 600
 	help
 	  Read by the samples (the Slint demo), not by the board layer.
+
+config YAKOGL_BOARD_BOOT_TIME
+	bool "Print the system counter at the board layer's init and at the first board_show()"
+	depends on ARM64
+	help
+	  For the direct-boot routes (docs/notes/am62p-direct-boot.md,
+	  docs/notes/x2-direct-boot.md): nothing restarts CNTPCT_EL0 between
+	  the boot loader that starts it and this image, so the value is the
+	  time since that start. What that start is depends on the board: on
+	  the Verdin AM62P the R5 SPL enables the GTC just before it starts
+	  the A53 cluster (ROM, R5 SPL and DDR training are not in it); on the
+	  i.MX8MP SPL starts it early. After a kexec entry it is Linux's
+	  uptime and means little. The two lines: "boot time: system counter at
+	  application init: N us" and "... at the first frame: N us".
 
 endif # YAKOGL_BOARD
 

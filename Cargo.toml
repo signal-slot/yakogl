@@ -17,6 +17,7 @@ members = [
     ".",
     "capi",
     "driver/rust",
+    "driver/samples/zephyr/boot_stage2/loader",
     "driver/tools/pvrlab/runner",
     "examples/femtovg/check",
     "examples/slint/check",

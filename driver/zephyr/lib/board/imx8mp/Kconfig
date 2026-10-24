@@ -221,6 +221,20 @@ config GC_BOARD_WDOG_SECONDS
 	  448 s); a hold longer than this is cut short by the watchdog 60 s
 	  after the bound, which changes the return time the hold encodes.
 
+config GC_BOARD_WDOG_UNBOUNDED
+	bool "Feed WDOG1 for as long as the application is alive, without an uptime bound"
+	depends on GC_BOARD_WDOG_SELF_ARM && !GC_BOARD_WDOG_PROOF
+	help
+	  For an image that is the product, not a test run: a demo that
+	  must keep running after power-on (the route-3 cluster,
+	  examples/slint/imx8mp_route3.conf). WDOG1 is still
+	  armed and fed only while board_watchdog_feed() comes within
+	  YAKOGL_BOARD_ALIVE_S, so a hung application still resets the board
+	  60 s later; only GC_BOARD_WDOG_SECONDS' end of feeding is dropped.
+	  Without it every image ends 60 s after GC_BOARD_WDOG_SECONDS of
+	  uptime (2026-10-22: the route-3 power-on demo went dark about
+	  6 minutes in, before its ANIMATE_S was over).
+
 config GC_BOARD_WDOG_PROOF
 	bool "Proof image: arm WDOG1, never feed it, software reset as a backstop"
 	depends on GC_BOARD_WDOG_SELF_ARM
@@ -408,5 +422,49 @@ config GC_COMMON_RESULT_STAGES
 	  is stored and never counted in the record's sequence number, so an
 	  image that reaches its verdict leaves the same record as without this.
 	  Each costs five register writes to the SNVS.
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3
+	bool "SafeUI route 3: start the Cortex-M7 from this image and hand it frames"
+	depends on YAKOGL_BOARD_IMX8MP && YAKOGL_DRV_DISPLAY_IMX8MP && YAKOGL_DRV_GPU_VIVANTE && MMU
+	help
+	  For the direct image (docs/notes/imx8mp-direct-boot.md, "Route
+	  3"). The board layer carries the M7 firmware named by
+	  YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF, loads it into the M7's TCM and
+	  DDR carve-out (0x80000000), hands out windows that are SafeUI frame
+	  ring buffers (0x82008000 + n x 4 MiB, 1280x800 only), brings the
+	  panel up on the first frame, then releases the M7 through TF-A
+	  (SiP 0xC2000005) and publishes every later frame to the ring instead
+	  of flipping the LCDIF. The M7 adopts the running LCDIF, blends its
+	  safety layer into each frame and flips the panel to it. Without a
+	  status block from the M7 within YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS
+	  the M7 is stopped again and this image flips its own windows.
+	  Needs YAKOGL_BOARD_IMX8MP_WINDOWS >= 2 (the window drawn is then
+	  never the one the M7 or the LCDIF reads).
+
+if YAKOGL_BOARD_IMX8MP_ROUTE3
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF
+	string "The M7 firmware ELF to carry (absolute path at build time)"
+	help
+	  A SafeUI platform/fw_imx8mp build with
+	  CONFIG_SAFEUI_M7_TAKEOVER_AT_BOOT=y and frame ring version 3
+	  (the M7's page: vehicle state). It is stripped to its program
+	  headers and segments at build time (m7_image.py) and linked in.
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS
+	int "How long the M7 has to write its status block after the release (ms)"
+	default 3000
+	range 100 60000
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
+	int "Heartbeat period (ms)"
+	default 100
+	range 10 150
+	help
+	  The M7 takes the A53 for gone after 1500 ms without a beat
+	  (CLUSTER_FRAME_RING_TIMEOUT_MS); the header asks for ten beats in
+	  that window.
+
+endif # YAKOGL_BOARD_IMX8MP_ROUTE3
 
 endif # YAKOGL_GC_BOARD

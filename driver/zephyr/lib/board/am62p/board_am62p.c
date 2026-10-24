@@ -68,6 +68,7 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 
 int board_show(const struct board_window *win)
 {
+	board_first_frame();
 	int rc;
 
 	if (!IS_ENABLED(CONFIG_YAKOGL_SAMPLE_SHOW_ON_DSS)) {

@@ -1,0 +1,51 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Toradex Verdin iMX8M Plus, Cortex-A53 cluster, started at power-on:
+ * Boot ROM -> U-Boot SPL -> TF-A BL31 -> the second-stage loader as BL33
+ * (driver/samples/zephyr/boot_stage2, in the u-boot.img slot of Toradex's
+ * imx-boot, which carries no OP-TEE) -> this image, inflated from the
+ * loader's own payload. No U-Boot proper and no Linux
+ * (docs/notes/imx8mp-direct-boot.md).
+ *
+ * The kexec variant's devicetree with two differences:
+ *
+ * 1. RAM. TF-A enters BL33 at PLAT_NS_IMAGE_OFFSET = 0x40200000 (the FIT's
+ *    "uboot" load address); the loader lives there, and this image is
+ *    linked above it. What the earlier stages own:
+ *      0x40000000    2 MiB  below the entry point: the DDR timing SPL saves
+ *                           for TF-A's DRAM frequency service, never touched
+ *      0x40200000   32 MiB  the loader and its payload; dead once this runs
+ *      0x48000000  256 MiB  this image's RAM (zephyr,sram), up to the carveout
+ *      0x58000000   64 MiB  GPU carveout, as in the kexec variant
+ *      0x80000000   16 MiB  Cortex-M7 firmware in DDR, as in the kexec variant
+ *    The crash-window address (0x60000000) of the kexec variant is not used.
+ *
+ * 2. The display path is on: nobody else owns the panel on this route, so
+ *    the sample overlays' display chain (LCDIF1 -> MIPI DSI -> SN65DSI84 ->
+ *    LVDS panel, the media block control, the backlight PWM) is the board's
+ *    here, brought up from cold.
+ *
+ * The GIC, the system counter and CNTFRQ are as TF-A and SPL leave them; the
+ * defconfig re-initialises the distributor like the kexec variant.
+ */
+
+#include "verdin_imx8mp_mimx8ml8_a53.dts"
+#include "../../../samples/zephyr/common/verdin_imx8mp_display.dtsi"
+
+/ {
+	model = "Toradex Verdin iMX8M Plus A53 (direct boot)";
+
+	chosen {
+		zephyr,sram = &a53_direct_ram;
+	};
+};
+
+&ddr0 {
+	/delete-node/ memory@60000000;
+
+	a53_direct_ram: memory@48000000 {
+		reg = <0x48000000 DT_SIZE_M(256)>;
+	};
+};

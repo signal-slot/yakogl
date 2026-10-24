@@ -15,6 +15,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/display.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/mipi_dsi.h>
@@ -34,6 +35,7 @@ struct sn_cfg {
 	struct gpio_dt_spec gpio[N_LINES];
 	struct gpio_dt_spec backlight;
 	const struct device *dsi;        /* NULL: started by its display controller */
+	const struct device *video;      /* video-source, or NULL */
 	struct yd_sn65dsi8x_config yd;
 	struct yd_sn65dsi8x_mode mode;   /* self-starting nodes only */
 };
@@ -151,8 +153,11 @@ const struct yd_sn65dsi8x_data *sn65dsi8x_data(const struct device *dev)
 }
 
 /* A node with a dsi-host: attach the host (its clock lane goes to HS, which
- * the data sheet wants before EN rises), then bring the bridge up, then
- * check the link; the video source (the AM62P DSS) is already running. */
+ * the data sheet wants before EN rises), bring the bridge up (init seq 1-7),
+ * start the video source (seq 8: its blanking off, the AM62P DSS's video
+ * port), then check the link (seq 9-11). Without a video-source the stream
+ * starts whenever the application turns the DSS output on, and the check
+ * below sees no video. */
 static int sn_self_start(const struct device *dev)
 {
 	const struct sn_cfg *c = dev->config;
@@ -187,17 +192,51 @@ static int sn_self_start(const struct device *dev)
 	if (rc) {
 		return rc;
 	}
+#ifdef CONFIG_DISPLAY
+	if (c->video != NULL) {
+		/* The panel's power-up (a valid LVDS stream before its backlight)
+		 * runs from here, not from the application's first frame: the
+		 * DSS scans its black background until the application plane
+		 * comes on. */
+		if (!device_is_ready(c->video)) {
+			LOG_ERR("video source %s not ready", c->video->name);
+		} else if (display_blanking_off(c->video) != 0) {
+			LOG_ERR("video source %s did not start", c->video->name);
+		}
+	}
+#endif
 	rc = yd_sn65dsi8x_check_link(&d->yd, &d->env);
 	if (rc < 0) {
 		return rc;
 	}
-	if (c->backlight.port != NULL) {
+	LOG_WRN("bridge up, video %s, IRQ_STAT 0x%02x, at %lld ms",
+		c->video != NULL ? "on" : "off", d->yd.irq_stat, k_uptime_get());
+	if (c->backlight.port != NULL && !IS_ENABLED(CONFIG_YAKOGL_DRV_SN65DSI8X_BACKLIGHT_DEFERRED)) {
 		gpio_pin_set_dt(&c->backlight, 1);
+		LOG_WRN("backlight on at %lld ms", k_uptime_get());
 	}
 	LOG_INF("SN65DSI8x up: lvds range %u, dsi range %u, div %u, fmt 0x%02x, IRQ_STAT 0x%02x",
 		d->yd.lvds_clk_range, d->yd.dsi_clk_range, d->yd.dsi_clk_div, d->yd.lvds_fmt,
 		d->yd.irq_stat);
 	return 0;
+}
+
+int sn65dsi8x_backlight_set(const struct device *dev, bool on)
+{
+	const struct sn_cfg *c;
+	int rc;
+
+	if (!is_sn(dev)) {
+		return -ENODEV;
+	}
+	c = dev->config;
+	if (c->backlight.port == NULL) {
+		return -ENOTSUP;
+	}
+	/* A GPIO write, nothing queued: the line moves before this returns. */
+	rc = gpio_pin_set_dt(&c->backlight, on ? 1 : 0);
+	LOG_WRN("backlight %s at %lld ms (rc %d)", on ? "on" : "off", k_uptime_get(), rc);
+	return rc;
 }
 
 static int sn_init(const struct device *dev)
@@ -271,6 +310,8 @@ static int sn_init(const struct device *dev)
 		.backlight = GPIO_DT_SPEC_INST_GET_OR(inst, backlight_gpios, {0}),             \
 		.dsi = COND_CODE_1(SN_SELF_START(inst),                                        \
 				   (DEVICE_DT_GET(DT_INST_PHANDLE(inst, dsi_host))), (NULL)),  \
+		.video = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, video_source),                \
+			(DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(inst, video_source))), (NULL)), \
 		.yd = {                                                                        \
 			.lanes = DT_INST_PROP(inst, data_lanes),                               \
 			.flags = SN_FLAG(inst, lvds_24bpp, YD_SN65DSI8X_LVDS_24BPP) |          \
