@@ -212,6 +212,12 @@ path = "pvr_fw_blob.h"
 marker = "pvr_fw_blob.h"
 note = "not reproducible: the header is made from the board's PowerVR firmware file with driver/tools/mkfwblob.sh (driver/README.md) and is never committed; copy the host's existing one"
 
+[[dep]]
+name = "MALI_CSFFW"
+path = "mali-csffw/mali_csffw.bin"
+marker = "mali-csffw/mali_csffw.bin"
+note = "not reproducible here: the NanoPC-T6's Mali CSF firmware, copied read-only from its Armbian (/lib/firmware/arm/mali/arch10.8/mali_csffw.bin, 282624 bytes, sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b); never committed; driver/tools/mkmalifw.sh makes the header; without it the firmware row of tools/check.sh is a gap"
+
 # With a board.
 
 [[dep]]

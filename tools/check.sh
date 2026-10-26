@@ -3104,13 +3104,15 @@ step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --al
 # the literal empty range 1..1 without pvr-fine-wait, which clippy refuses,
 # and this row did not see it). So clippy each feature set an image or a
 # knob builds, alone, with -D warnings: none, each SoC, the PowerVR rgxlayer
-# alone and as the AM62P builds it, with each opt-in knob and both, and the
-# i.MX 8M Plus GC7000 side. The V3D has no feature in this crate (its
-# driver is C, driver/src/v3d). A new feature or knob joins this list.
+# alone and as the AM62P builds it, with each opt-in knob and both, the
+# i.MX 8M Plus GC7000 side, and the NanoPC-T6's (rk3588, mali: the watchdog
+# glue, the GPU power-on, the Z3 firmware). The V3D has no feature in this
+# crate (its driver is C, driver/src/v3d). A new feature or knob joins this
+# list.
 drivers_clippy_arms() {
   local f
   for f in "" imx8mp am62p pvr am62p,pvr am62p,pvr,pvr-fine-wait am62p,pvr,pvr-kick-times \
-    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante; do
+    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali; do
     echo "== yakogl-drivers features [$f]"
     cargo clippy -p yakogl-drivers --no-default-features --features "$f" --all-targets -- -D warnings ||
       { echo "clippy refused yakogl-drivers features [$f]"; return 1; }
@@ -3118,16 +3120,54 @@ drivers_clippy_arms() {
 }
 step "clippy  yakogl-drivers, each shipped feature arm (-D warnings)" drivers_clippy_arms
 step "test    yakogl-drivers (register model)" cargo_test --no-fail-fast -p yakogl-drivers --all-features
+# The Mali-G610's CSF firmware (Z3, driver/docs/nanopc-t6-mali.md, "The
+# firmware (Z3)"), which is never committed: the board's mali_csffw.bin at
+# MALI_CSFFW (tools/cts/deps.toml; when unset, deps-env.sh's place for it).
+# The header driver/tools/mkmalifw.sh makes from it compiles, and the two
+# tests that read it (ignored in the row above, which has no firmware) pass
+# by name: the section list is the design page's table, and the boot over
+# the MCU model reads interface 1.5.0 and gets the PING acknowledged.
+# Without the file the row is a gap naming it (`needs`, as the AM62P image
+# rows for pvr_fw_blob.h), never a pass and never a failure.
+MALI_CSFFW_TESTS=(
+  gpu::mali::fw::tests::the_boards_file_parses_into_the_design_pages_table
+  gpu::mali::csf::tests::the_boards_file_boots_over_the_model
+)
+mali_csffw_check() {
+  local f="$1" out t
+  mkdir -p build/mali-csffw
+  bash driver/tools/mkmalifw.sh "$f" build/mali-csffw/mali_csffw_blob.h || return 1
+  if command -v cc >/dev/null 2>&1; then
+    printf '#include "mali_csffw_blob.h"\n_Static_assert(sizeof(mali_csffw_blob) == MALI_CSFFW_SIZE, "size");\n' |
+      cc -std=c11 -fsyntax-only -Wall -Wextra -Werror -Ibuild/mali-csffw -x c - || return 1
+  fi
+  out=$(cargo_test --libtest env MALI_CSFFW="$f" --no-fail-fast -p yakogl-drivers --features mali --lib gpu::mali:: \
+    -- --ignored 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked|left|right' | head -20; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result'
+  for t in "${MALI_CSFFW_TESTS[@]}"; do
+    printf '%s\n' "$out" | grep -qxF "test $t ... ok" || { echo "firmware test did not run and pass: $t"; return 1; }
+  done
+}
+mali_csffw=${MALI_CSFFW-}
+[ -n "$mali_csffw" ] || mali_csffw=$(tools/cts/deps-env.sh 2>/dev/null | sed -n 's/^MALI_CSFFW=//p')
+[ -n "$mali_csffw" ] || mali_csffw=${CONNECTED_DEPS_DIR:-${CCFARM_DEPS_DIR:-$HOME/.local/share/connected/deps/yakogl}}/mali-csffw/mali_csffw.bin
+scope drivers
+needs "$mali_csffw" "copy the board's /lib/firmware/arm/mali/arch10.8/mali_csffw.bin there, or name it in MALI_CSFFW"
+step "test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, ${#MALI_CSFFW_TESTS[@]} tests by name)" \
+  mali_csffw_check "$mali_csffw"
+scope drivers pvr vivante
 # The target it ships for: aarch64-unknown-none-softfloat (no FP/SIMD registers:
 # the code runs at PRE_KERNEL_1 and in ISRs). With the target installed for the
 # default toolchain that is a plain check; otherwise a nightly with rust-src
 # builds core for it; with neither the row is a gap. The feature sets an image
 # builds: all SoC drivers; the AM62P's (the GPU's rgxlayer and the display
-# path); the i.MX 8M Plus GC7000 kernel side (gpu::vivante); and
+# path); the i.MX 8M Plus GC7000 kernel side (gpu::vivante); the NanoPC-T6's
+# (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); and
 # none (only the SoC-independent I2C driver, ip::sn65dsi8x).
 drivers_softfloat_check() {
   local t=aarch64-unknown-none-softfloat f
-  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante ""; do
+  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali ""; do
     if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
       cargo check -p yakogl-drivers --no-default-features --features "$f" --target "$t" || return 1
     else
