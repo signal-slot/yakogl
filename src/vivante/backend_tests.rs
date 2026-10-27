@@ -691,6 +691,74 @@ fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
     assert_eq!(gc_refused_draws().wrapping_sub(base), 1);
 }
 
+/// The same refusal through the real online compiler, whose record `gc_draw`
+/// actually tests (`docs/notes/instanceid-per-draw.md`, V0). The GC7000UL
+/// compiler used to leave `vs_instance_id_reg1` at 0 for every program --
+/// only the PowerVR's set it -- so the refusal never fired for a real
+/// program: dEQP `instanced.*.mixed.*` drew every instance with
+/// `gl_InstanceID` = 0, all of them on top of each other, `gc_refused_draws`
+/// unchanged and no log line anywhere. Now the compiler names the program,
+/// instance 0 is drawn and instances 1..3 are refused, counted, and logged
+/// once by name. The source is dEQP-GLES3
+/// `functional.instanced.draw_arrays_instanced.mixed.4_instances`
+/// (`es3fInstancedRenderingTests.cpp`, TYPE_FLOAT, 4 instances): it reads
+/// `gl_InstanceID` and two divisor-2 arrays, so the GL core draws it
+/// instance by instance.
+#[test]
+#[cfg(all(feature = "shaderc-online", not(feature = "report-es2")))]
+fn the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id() {
+    const MIXED_VS: &str = "#version 300 es\nin highp vec4 a_position;\nin mediump float a_instanceG;\n\
+        in mediump float a_instanceB;\nout mediump vec4 v_color;\n\nvoid main()\n{\n    \
+        gl_Position = a_position + vec4(float(gl_InstanceID) * 2.0 / 4.0, 0.0, 0.0, 0.0);\n    \
+        v_color.r = float(gl_InstanceID) / 4.0;\n    v_color.g = a_instanceG;\n    \
+        v_color.b = a_instanceB;\n    v_color.a = 1.0;\n}\n";
+
+    let rig = Rig::new();
+    let mut real = ShcShader::ZERO;
+    let mut log = [0 as core::ffi::c_char; 1024];
+    let text = format!("{MIXED_VS}\0");
+    let compile = crate::shaderc::online::SHC_ONLINE.compile.expect("the online back end compiles");
+    // SAFETY: NUL-terminated source, a real output, a log of the announced size.
+    let rc = unsafe {
+        compile(
+            crate::shaderc::SHC_STAGE_VERTEX,
+            text.as_ptr() as *const core::ffi::c_char,
+            &mut real,
+            log.as_mut_ptr(),
+            log.len(),
+        )
+    };
+    let log_text: String = log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
+    assert_eq!(rc, 0, "compiles: {log_text}");
+
+    /* the compiler's own fields, not a hand-set fixture: the three inputs in
+     * t0..t2 and the ids in t3, as the design's host check measured
+     * (`vs_id_in_reg` 3, `vs_instance_id_reg1` until V0: 0) */
+    assert_eq!(real.viv.vs_id_in_reg, 3, "the id register after the three attributes");
+    assert_eq!(real.vs_instance_id_reg1, real.viv.vs_id_in_reg + 1, "named: the id register, one-based");
+
+    let mut vs = *rig.vs;
+    vs.viv.vs_id_in_reg = real.viv.vs_id_in_reg;
+    vs.vs_instance_id_reg1 = real.vs_instance_id_reg1;
+    rig._gl.logs();
+    let base = gc_refused_draws();
+    let mut d = rig.draw(3);
+    d.vs = &vs;
+    for id in 0..4u32 {
+        d.instance_id = id;
+        // SAFETY: a live draw.
+        let rc = unsafe { gc_draw(&d) };
+        if id == 0 {
+            assert_eq!(rc, 0, "instance 0 is drawn");
+        } else {
+            assert_eq!(rc, -EINVAL, "instance {id} would read gl_InstanceID = 0");
+        }
+    }
+    assert_eq!(gc_refused_draws().wrapping_sub(base), 3);
+    let named: Vec<String> = rig._gl.logs().into_iter().filter(|l| l.contains("gl_InstanceID")).collect();
+    assert_eq!(named.len(), 1, "refused by name, once for the three: {named:?}");
+}
+
 /// ES 3.0 lets colour attachments differ in size (4.4.4.2); the render area
 /// is their intersection. The pixel engine clips to RT 0 alone, so a later
 /// target smaller than RT 0 in either dimension is refused by name (review

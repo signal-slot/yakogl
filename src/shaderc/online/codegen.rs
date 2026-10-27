@@ -525,6 +525,7 @@ pub fn assemble_from_ir_keyed(
         vs_pos_out_reg: sel.vs_pos_out_reg.map(place),
         vs_pointsize_out_reg: sel.vs_pointsize_out_reg.map(place),
         vs_id_in_reg: sel.vs_id_in_reg,
+        vs_reads_instance_id: sel.vs_reads_instance_id,
         ps_color_out_reg: sel.ps_color_out_reg.map(place),
         ps_depth_out_reg: None,
         /* Copied, never chosen: gc7000-abi.md lists both as not understood,
@@ -1790,6 +1791,10 @@ mod lowered_ops {
         assert!(read_before_written(&lines, 1, 'x'), "t1.x is read as the vertex id before t1 is written: {lines:#?}");
         /* The instrument tells the lanes apart: the instance id is not read. */
         assert!(!read_before_written(&lines, 1, 'y'), "nothing reads t1.y here: {lines:#?}");
+        /* ... and the record says so too: only a program that reads
+         * gl_InstanceID gets vs_instance_id_reg1, the field gc_draw refuses
+         * split instance draws on (docs/notes/instanceid-per-draw.md, V0). */
+        assert_eq!(sh.vs_instance_id_reg1, 0, "reads only gl_VertexID: its split instance draws stay drawn");
     }
 
     /// `gl_InstanceID` is the `.y` of the same register (etnaviv_compiler_nir_ra.c
@@ -1807,6 +1812,11 @@ mod lowered_ops {
         let lines = listing(&sh);
         assert!(read_before_written(&lines, 1, 'y'), "t1.y is read as the instance id: {lines:#?}");
         assert!(!read_before_written(&lines, 1, 'x'), "and not the vertex id in t1.x: {lines:#?}");
+        /* The record names it (the id register plus one, the same encoding
+         * the PowerVR's own record uses): gc_draw refuses this program's
+         * split instance draws on it (docs/notes/instanceid-per-draw.md,
+         * V0; the refusal itself is tested in src/vivante/backend_tests.rs). */
+        assert_eq!(sh.vs_instance_id_reg1, 2, "t1, one-based");
     }
 
     /// "After the attributes" counts locations, every column of a matrix
