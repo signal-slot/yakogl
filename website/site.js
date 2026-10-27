@@ -21,13 +21,8 @@
   function num(v) {
     return typeof v === "number" ? v.toLocaleString("en-US") : esc(v);
   }
-  function blob(path) {
-    return D.repo + "/blob/main/" + path;
-  }
-  function issues(text) {
-    return esc(text).replace(/#(\d+)\b/g, function (m, n) {
-      return '<a href="' + D.repo + '/issues/' + n + '">#' + n + "</a>";
-    });
+  function blob(f) {
+    return D.repo + "/blob/" + f.provenance.recordCommit + "/" + f.source;
   }
 
   function value(f) {
@@ -36,6 +31,7 @@
       var parts = [num(v.pass) + " pass", num(v.fail) + " fail"];
       if (v.notSupported !== undefined) parts.push(num(v.notSupported) + " not supported");
       if (v.warnings !== undefined) parts.push(num(v.warnings) + " warnings");
+      if (v.noResult !== undefined) parts.push(num(v.noResult) + " without a result");
       return parts.join(" · ");
     }
     return num(v);
@@ -44,13 +40,14 @@
   function prov(f) {
     var bits = [];
     if (f.commit) {
-      bits.push("measured on <code>" + esc(f.commit) + "</code>" +
-        (f.onMain ? "" : '<span class="dag" title="not an ancestor of main: development history before publication, or a branch">†</span>'));
+      bits.push("build <code>" + esc(f.commit) + "</code>");
+      if (f.provenance.kind === "pre-publication") bits.push("pre-publication build");
+      else if (!f.onMain) bits.push("branch build");
     } else {
-      bits.push("not our build");
+      bits.push(f.provenance.kind === "external" ? "external measurement" : "build commit not recorded");
     }
     bits.push(f.date ? esc(f.date) : "date not stated");
-    var src = '<a href="' + esc(blob(f.source)) + '" title="' + esc(f.section || "") + '">' + esc(f.source) + "</a>";
+    var src = '<a href="' + esc(blob(f)) + '" title="' + esc(f.section || "") + '">Public record: ' + esc(f.source) + "</a>";
     var out = bits.join(", ") + " · " + src;
     if (f.unverified) out += ' · <span class="unv" title="part of the provenance could not be checked">unverified</span>';
     return out;
@@ -65,11 +62,12 @@
   }
   fill("data-fig", value);
   fill("data-prov", prov);
-  fill("data-note", function (f) { return issues(f.note || ""); });
+  fill("data-note", function (f) { return esc(f.note || ""); });
 
   var meta = document.querySelectorAll('[data-meta="checked"]');
   for (var m = 0; m < meta.length; m++) {
-    meta[m].innerHTML = "<code>" + esc(D.checkedAgainst.commit) + "</code>, " + esc(D.checkedAgainst.date);
+    meta[m].innerHTML = '<a href="' + esc(D.repo + "/commit/" + D.checkedAgainst.commit) + '"><code>' +
+      esc(D.checkedAgainst.commit.slice(0, 9)) + "</code></a>, " + esc(D.checkedAgainst.date);
   }
 
   // status.html: one table per board.
@@ -91,7 +89,7 @@
       html += '<tr class="st-' + esc(f.status) + '"><th scope="row">' + esc(ROWS[r][0]) +
         '</th><td><span class="badge">' + esc(f.status) + '</span> <strong>' + value(f) +
         "</strong> <span class=\"unit\">" + esc(f.unit) + "</span>" +
-        (f.note ? '<div class="fnote">' + issues(f.note) + "</div>" : "") +
+        (f.note ? '<div class="fnote">' + esc(f.note) + "</div>" : "") +
         '</td><td class="prov">' + prov(f) + "</td></tr>";
     }
     tbodies[t].innerHTML = html;

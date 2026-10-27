@@ -12,11 +12,13 @@
 //   label     what was measured
 //   board     "am62p" | "imx8mp" | "pi4" | null
 //   value     a number, a string, or for a dEQP tree an object
-//             {pass, fail, notSupported, warnings, total}
+//             {pass, fail, notSupported, warnings, noResult, total}
 //   unit      what the value counts
 //   commit    the commit the image was built from (null: not ours, or not recorded)
-//   onMain    true if that commit is an ancestor of main; false for the
-//             development history before publication or an integration branch
+//   onMain    true only for an ancestor in this public repository
+//   provenance.kind   repository | pre-publication | external | unrecorded-build
+//   provenance.recordCommit   public commit containing the cited record
+//             Pre-publication hashes are identifiers, not public Git links.
 //   date      YYYY-MM-DD (or YYYY-MM / YYYY for a public reference); null if unknown
 //   source    repository path of the record the figure comes from
 //   section   where in that file
@@ -26,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "8c362f8e0c2",
-    "date": "2026-10-19",
+    "commit": "381b0f09e9c8e7b3d437946c888224f12a27b367",
+    "date": "2026-10-27",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -70,23 +72,27 @@ window.YAKOGL_DATA = {
   ],
   "figures": {
     "deqp2.am62p": {
-      "label": "dEQP-GLES2, whole tree",
+      "label": "dEQP-GLES2, whole tree at 1x",
       "board": "am62p",
       "value": {
-        "pass": 17140,
+        "pass": 17330,
         "fail": 0,
-        "notSupported": 18,
+        "notSupported": 34,
         "warnings": 7,
-        "total": 17165
+        "total": 17371
       },
-      "unit": "cases of the mustpass list (17 images at 1x, the 16 multisample.* cases from the 4x image)",
-      "commit": "e9901869a",
-      "onMain": true,
-      "date": "2026-10-15",
+      "unit": "cases begun at 1x (17,165 mustpass cases plus 206 outside the list)",
+      "commit": "996bc35f",
+      "onMain": false,
+      "date": "2026-10-26",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "0 GPU resets. Warnings: 5 quality, 2 compatibility (flush_finish timing). The 18 not supported are the accepted ES 2.0 buckets: clip_control 8, compressed-texture negative tests 9, multisampled_render_to_texture.readpixels 1."
+      "note": "0 GPU resets. Within the mustpass list: 17,124 pass, 34 not supported, 7 warnings. The 16 multisample cases require the separate 4x image below; that image has not been rerun since 2026-10-15.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "deqp2.am62p.ms4": {
       "label": "dEQP-GLES2, multisample on the 4x image",
@@ -97,12 +103,16 @@ window.YAKOGL_DATA = {
       },
       "unit": "cases (the 16 multisample.* cases)",
       "commit": "e9901869a",
-      "onMain": true,
+      "onMain": false,
       "date": "2026-10-15",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "Counted in the whole-tree figure above in place of the 16 multisample cases the 1x configuration cannot run."
+      "note": "A separate 4x run from 2026-10-15. These 16 passes replace the unsupported multisample cases only when reporting a combined 1x/4x result; they are not part of the newer 1x result above.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "deqp2.imx8mp": {
       "label": "dEQP-GLES2, whole tree",
@@ -115,13 +125,17 @@ window.YAKOGL_DATA = {
         "total": 17371
       },
       "unit": "cases begun (the 17,165 of the mustpass list plus 206 outside it)",
-      "commit": "e9901869a",
-      "onMain": true,
-      "date": "2026-10-15",
+      "commit": "d0c5dc48",
+      "onMain": false,
+      "date": "2026-10-23",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "0 GPU resets. The 34 not supported are the accepted ES 2.0 buckets (16 of them multisample at 1x). The 19 warnings appear on NXP's own driver too."
+      "note": "0 GPU resets. The 34 not-supported cases include the 16 multisample cases at 1x. The 19 quality warnings are also reported with NXP's driver.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "deqp2.pi4": {
       "label": "dEQP-GLES2, whole tree",
@@ -134,110 +148,143 @@ window.YAKOGL_DATA = {
         "total": 17165
       },
       "unit": "cases of the mustpass list; every case has a result",
-      "commit": "e9901869a",
-      "onMain": true,
-      "date": "2026-10-16",
+      "commit": "46f93767",
+      "onMain": false,
+      "date": "2026-10-24",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "0 recoveries in 29 records. Warnings: 3 quality, 2 compatibility. The 34 not supported are the accepted ES 2.0 buckets (16 of them multisample at 1x)."
+      "note": "0 GPU recoveries in 29 records. Three quality warnings and two timing compatibility warnings. The 34 not-supported cases include the 16 multisample cases at 1x.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "deqp3.am62p": {
-      "label": "dEQP-GLES3, whole tree (28 images)",
+      "label": "dEQP-GLES3, recorded full-tree baseline",
       "board": "am62p",
       "value": {
         "pass": 36552,
         "fail": 2880,
         "notSupported": 2195,
         "warnings": 185,
-        "total": 42810
+        "total": 42810,
+        "noResult": 998
       },
-      "unit": "cases of the mustpass list; 998 more have no result",
+      "unit": "cases of the ES 3.0 mustpass list; baseline from 2026-10-14",
       "commit": "ad2b5ed",
-      "onMain": true,
+      "onMain": false,
       "date": "2026-10-14",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 3.0: dEQP-GLES3 (stage 4)",
-      "status": "info",
-      "note": "The 998 without a result: image 7 stops at a draw too big for its arena (987 cases after it) and 11 slow 3D filtering cases did not start; two 3D filtering cases hang the GPU. Some groups were re-run later and pass in full (transform_feedback, ubo, occlusion_query, fragment_ops.blend.fbo_srgb)."
+      "status": "warn",
+      "note": "This full-tree baseline has not been replaced by a complete rerun. Later targeted runs pass several groups; five images of a revised 31-image set completed on 2026-10-25. Other images remain unrun, and 3D texture filtering can hang the GPU. Product builds report ES 2.0 by default.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "gltest.am62p": {
       "label": "gl_test regression set",
       "board": "am62p",
       "value": "50 / 50",
       "unit": "cases passed, 0 GPU resets",
-      "commit": "bc43ea09",
-      "onMain": true,
-      "date": "2026-10-18",
+      "commit": "445c5653",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "pass",
-      "note": "The ES 3.0 cases 196 and 200 to 205 pass too (on cd738b1a)."
+      "note": "The common regression set, run from the same build as the AM62P benchmark below.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "gltest.imx8mp": {
       "label": "gl_test regression set",
       "board": "imx8mp",
       "value": "49 / 49",
-      "unit": "cases run passed; case 16 skipped (4x MSAA, #8)",
-      "commit": "a8fdc9f0",
-      "onMain": true,
-      "date": "2026-10-18",
+      "unit": "cases run passed; case 16 skipped (4x multisampling)",
+      "commit": "445c5653",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
-      "status": "pass",
-      "note": "Cases 10 and 17 fail sometimes (#9, #7); case 44 (#6, the RGBA16F target) passes since the 64-bit render-target fix."
+      "status": "warn",
+      "note": "This run passes every case that was run. Earlier repeated boots expose intermittent failures in cases 10 and 17; the record does not establish that those defects are fixed.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "gltest.pi4": {
       "label": "gl_test regression set",
       "board": "pi4",
       "value": "12 / 12",
       "unit": "cases passed, 0 GPU resets",
-      "commit": "33a0f264",
-      "onMain": true,
-      "date": "2026-10-18",
+      "commit": "445c5653",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "pass",
-      "note": ""
+      "note": "The gl_test result was not rerun with the newer Pi 4 glmark2 build below.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2.am62p": {
       "label": "glmark2-es2",
       "board": "am62p",
-      "value": 462,
+      "value": 461,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "bc43ea09",
-      "onMain": true,
-      "date": "2026-10-18",
+      "commit": "445c5653",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Every scene's picture is recorded (column am62p of tools/cts/glmark2-pictures.txt, none black) and was looked at on the panel; ideas and jellyfish by value only. terrain, shadow and refract are slow: 94, 353 and 375 ms a frame."
+      "note": "All 33 scene picture values are recorded; none is black. Twenty-nine match the earlier run inspected on the panel, with four differences in animated scenes. Heavy scenes remain slow: terrain about 94 ms, shadow 353 ms, refract 376 ms per frame.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2.imx8mp": {
       "label": "glmark2-es2",
       "board": "imx8mp",
       "value": 42,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "a8fdc9f0",
-      "onMain": true,
-      "date": "2026-10-18",
+      "commit": "a917d123",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Per-scene FPS and picture values come from the SNVS record (no console); the pictures are not black but nobody has looked at the panel. With 3 screen buffers the score is 49 (bebce725), not the default until the panel is checked. terrain, shadow and refract run at 1 to 2 FPS."
+      "note": "Default one-buffer configuration. All 33 picture values match the earlier 445c5653 run; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2.pi4": {
       "label": "glmark2-es2",
       "board": "pi4",
-      "value": 188,
+      "value": 195,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "33a0f264",
-      "onMain": true,
-      "date": "2026-10-18",
+      "commit": "c4af4917",
+      "onMain": false,
+      "date": "2026-10-22",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Pictures are not checked per scene yet (no pi4 column of glmark2-pictures.txt). terrain, shadow and refract run at 6 FPS."
+      "note": "All 33 scenes recorded; none is black. Thirty-one picture values match the earlier column; two animated scenes differ. Terrain is 161.79 ms, shadow 7.34 ms and refract 17.27 ms per frame. This is a newer build than the common-commit 193 score in the README.",
+      "provenance": {
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2ref.am62p": {
       "label": "glmark2, public reference (Linux, vendor driver)",
@@ -250,7 +297,11 @@ window.YAKOGL_DATA = {
       "source": "driver/docs/glmark2.md",
       "section": "Verdin AM62P / AM62P (TI Linux Performance Guide, table 2.15)",
       "status": "info",
-      "note": "Not our measurement; conditions differ. The source does not state its date."
+      "note": "Not our measurement; conditions differ. The source does not state its date.",
+      "provenance": {
+        "kind": "external",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2ref.imx8mp": {
       "label": "glmark2, public reference (Linux, vendor driver)",
@@ -263,7 +314,11 @@ window.YAKOGL_DATA = {
       "source": "driver/docs/glmark2.md",
       "section": "Verdin iMX8M Plus (NXP community thread)",
       "status": "info",
-      "note": "Not our measurement; off-screen, while ours is on-screen."
+      "note": "Not our measurement; off-screen, while ours is on-screen.",
+      "provenance": {
+        "kind": "external",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "glmark2ref.pi4": {
       "label": "glmark2, public reference (Linux, Mesa)",
@@ -276,7 +331,11 @@ window.YAKOGL_DATA = {
       "source": "driver/docs/glmark2.md",
       "section": "Raspberry Pi 4 (geerlingguy/sbc-reviews issue 4)",
       "status": "info",
-      "note": "Not our measurement; conditions differ."
+      "note": "Not our measurement; conditions differ.",
+      "provenance": {
+        "kind": "external",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "boot.am62p": {
       "label": "Standalone boot",
@@ -289,7 +348,12 @@ window.YAKOGL_DATA = {
       "source": "docs/standalone-boot.md",
       "section": "State",
       "status": "pass",
-      "note": "The records are not in git, and the image commit is not stated. The product form (default forever) has not run on any board."
+      "note": "The records are not in git, and the image commit is not stated. The product form (default forever) has not run on any board.",
+      "provenance": {
+        "kind": "unrecorded-build",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      },
+      "unverified": true
     },
     "boot.imx8mp": {
       "label": "Standalone boot",
@@ -302,7 +366,12 @@ window.YAKOGL_DATA = {
       "source": "docs/standalone-boot.md",
       "section": "State",
       "status": "pass",
-      "note": "The records are not in git, and the image commit is not stated. The counted default was set but its cycle is not proved; default forever has not run."
+      "note": "The records are not in git, and the image commit is not stated. The counted default was set but its cycle is not proved; default forever has not run.",
+      "provenance": {
+        "kind": "unrecorded-build",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      },
+      "unverified": true
     },
     "boot.pi4": {
       "label": "Standalone boot",
@@ -315,35 +384,48 @@ window.YAKOGL_DATA = {
       "source": "docs/standalone-boot.md",
       "section": "State",
       "status": "pass",
-      "note": "The literal config.txt swap has not run on the board."
+      "note": "The public record does not identify an image commit. The literal config.txt swap has not run on the board.",
+      "provenance": {
+        "kind": "unrecorded-build",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      },
+      "unverified": true
     },
     "size.compiler": {
       "label": "The on-board shader compiler's cost",
       "board": "am62p",
       "value": 884201,
       "unit": "bytes of flash (plus 5,244,035 bytes of RAM for its scratch and keep regions)",
-      "commit": "67488fec",
-      "onMain": true,
+      "commit": null,
+      "onMain": false,
       "date": "2026-10-07",
       "source": "zephyr/Kconfig",
       "section": "YAKOGL_PRECOMPILED_SHADERS",
       "status": "info",
-      "note": "AM62P gl_test image, release build. The commit is the one that recorded the numbers; the image's own commit is not stated.",
-      "unverified": true
+      "note": "AM62P gl_test image, measured 2026-10-07. The public record gives these sizes but does not identify the image commit.",
+      "unverified": true,
+      "provenance": {
+        "kind": "unrecorded-build",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     },
     "size.table": {
       "label": "A precompiled table for one app (gl_test_es100, 176 sources)",
       "board": "am62p",
       "value": 2173648,
       "unit": "bytes of flash",
-      "commit": "67488fec",
-      "onMain": true,
+      "commit": null,
+      "onMain": false,
       "date": "2026-10-07",
       "source": "zephyr/Kconfig",
       "section": "YAKOGL_PRECOMPILED_SHADERS",
       "status": "info",
-      "note": "It grows with the app's shader set; the compiler does not. So the tier is off by default. The commit is the one that recorded the numbers.",
-      "unverified": true
+      "note": "Measured 2026-10-07 for one application; the table grows with its shader set. The public record does not identify the image commit.",
+      "unverified": true,
+      "provenance": {
+        "kind": "unrecorded-build",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+      }
     }
   }
 };
