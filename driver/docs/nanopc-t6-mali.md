@@ -132,6 +132,87 @@ and a `/dev/mem` read of `0xfb000000 + 0x88` both give 0 on the board (2026-10-2
 `panthor-query.out`, `regread.out`; `GPU_TIMESTAMP` runs at 24 MHz, the arch timer's
 frequency, `panthor_drv.c:771`). The image leaves it alone.
 
+**Host side, written 2026-10-26 (no board run yet).** What is code:
+
+- **The file.** The board's `/lib/firmware/arm/mali/arch10.8/mali_csffw.bin`
+  (Armbian's armbian-firmware), copied read-only on 2026-10-26: 282624
+  bytes, sha256 `a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b`,
+  header 0.3, version hash 0x01050000, build `git_sha:
+  95a25d71030715381f33105394285e1dcc860a65`. It lives outside the tree
+  (`MALI_CSFFW`, `tools/cts/deps.toml`). `driver/tools/mkmalifw.sh` makes
+  `driver/src/fw/mali_csffw_blob.h` from it (gitignored, the form of
+  `mkfwblob.sh`), after checking the CSF magic and header major 0.
+- **The section list**: `driver/rust/src/gpu/mali/fw.rs` (`fw::parse`),
+  panthor's checks in panthor's order plus three of ours (no overlap in AS0,
+  no more data than the range, at most 16 sections). On the board's file it
+  gives the table above: 7 sections to load and the protected one skipped;
+  15 other entries (2 config, 8 trace buffers, 1 timeline, 4 optional
+  unknown) read past. The shared section's data is 8 KiB at file offset
+  0x43000; its GLB control block before boot reads version 0, features 0,
+  input 0x04002000, output 0x04006000, 8 groups of stride 0xa0,
+  `instr_features` 0x71; group n's control block is at 0x1000 + 0xa0·n
+  (input 0x04003000 + 0x80·n, output 0x04007000 + 0x40·n, 8 streams of
+  stride 0xc), its streams at + 0x40 + 0xc·m (stream m of group 0: input
+  0x04003400 + 0x80·m, output 0x04007200 + 0x100·m).
+- **The interface and the boot**: `driver/rust/src/gpu/mali/csf.rs`. The
+  GLB/CSG/CS blocks as `repr(C)` layouts with their sizes pinned (GLB
+  control 0x20, GLB input 0x88 with `idle_timer` at 0x80, CS output 0xd8,
+  ...; the test `the_layouts_are_panthors` holds every field offset), the
+  req/ack toggle, update and wait, the doorbells, and `csf::boot`: load
+  every section where AS0 maps it (data, then zeroes, then a clean),
+  `MCU_STATUS` must read disabled, clear `JOB_INT` bit 31 (refused if it
+  stays set), `MCU_CONTROL` = 2, poll bit 31 for 1 s, read the GLB control
+  (version 0 refused), require every group and stream block and page inside
+  the shared section, panthor's counts (3-31 groups, 8-32 streams) and
+  identical slots, write the global configuration, wait 100 ms for its
+  toggles' acknowledge (ours; panthor does not wait there), then one `PING`
+  acknowledged within 100 ms. Each stop is a numbered `CsfRefusal` with its
+  value. All access is through `Mmio`; AS0 is behind the `McuMemory` trait
+  (where a section is for the CPU, and a clean). The host tests run the
+  sequence over a model of the MCU that boots only from loaded and cleaned
+  code; the gate's firmware row runs the parser and the boot on the board's
+  file (`MALI_CSFFW`), and is a gap naming the file without it.
+
+**Predicted for the board run** (each value is what the code above writes or
+expects):
+
+| Item | Predicted |
+|---|---|
+| `MCU_STATUS` before the start | 0 (disabled, after Z1's soft reset) |
+| `JOB_INT_RAWSTAT` bit 31 | rises within 1 s of `MCU_CONTROL` = 2; `MCU_STATUS` then 1 |
+| GLB `version` | 0x01050000 = **1.5.0**, the image header's version hash; `features` 0, `instr_features` 0x71 (the board's dmesg under panthor, read 2026-10-26: "CSF FW using interface v1.5.0, Features 0x0 Instrumentation features 0x71"; the image's control block holds the same 0 and 0x71 before boot) |
+| GLB input / output | 0x04002000 / 0x04006000; 8 groups, stride 0xa0 (the image's values; the firmware may rewrite them) |
+| CSG 0 | input 0x04003000, output 0x04007000, 8 streams of stride 0xc; `suspend_size` and `protm_suspend_size` 24577..28672 (the 7-page buffers panthor allocates, above) |
+| CS 0 of CSG 0 | input 0x04003400, output 0x04007200; `features`: work registers 96 (`cs_reg_count`, measured under panthor), scoreboards 8 |
+| Written | `core_en_mask` 0x50005; `poweroff_timer` 235, `idle_timer` 19 (24 MHz ticks of 1024); `progress_timer` 0x271000; `ack_irq_mask` 0x0400050e; `req` 0x40e |
+| Acknowledged | `CFG_ALLOC_EN`, `CFG_POWEROFF_TIMER`, `CFG_PROGRESS_TIMER` within 100 ms; then **`PING`** (req bit 8 toggled, ack bit 8 follows) within 100 ms |
+
+After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
+
+**Open, before the board run:**
+
+- **Z2's map, extended to every section.** The boot needs AS0 enabled with
+  every loaded section mapped at its MCU address (the 7 of the table, 896
+  KiB: read-only for the data and code, writable for 0x02000000 and the
+  shared section, executable only for the code; uncached on the GPU side
+  except `CACHED`, as panthor maps them on a non-coherent GPU), and the
+  shared section mapped uncached for the CPU, since the req/ack words take
+  no cache maintenance. Z2's host side (below, "Z2: AS0 and a cache
+  flush"; `gpu::mali::pgtable::Tables`, `mmu::as_enable`,
+  `board::nanopc_t6_mmu::mmu_up`) maps one section, the shared one, onto
+  the `t6_mmu` probe's 64 KiB backing; the other six need backing in the
+  image and their own `map` calls (9 table pages, Z2's pool holds 16).
+  `csf::McuMemory` is the seam: its `cpu` is the backing's CPU address for
+  the section's MCU address, its `clean` the probe's
+  `sys_cache_data_flush_range`. Not written here.
+- The Zephyr side: a sample that embeds `mali_csffw_blob.h`, runs Z1's
+  power-on, Z2's AS0 and `csf::boot`, and prints the record; and a
+  `yd_t6_*` FFI entry for it. Its image row in the gate will need the
+  header, and must be a gap without it, like the firmware row (`needs`).
+- Whether the firmware needs a GPU cache flush after the load beyond the
+  clean (panthor syncs each section for the device and flushes nothing
+  else; the L2 has just been powered).
+
 The interface (linux:`panthor_fw.h:15-269`): a **global** block (GLB) at 0x04000000
 with input/output pages; 8 **command stream groups** (CSG, stride 0xa0), each with 8
 **command streams** (CS, stride 0xc). **Runtime values** after the firmware boots
@@ -589,7 +670,10 @@ milestones (Zephyr booted by U-Boot), as on every board.
   gate row; below, "Z2: AS0 and a cache flush"); **the board run has not
   happened**: it waits for the owner's go-ahead and the UART.
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
-  acknowledged.
+  acknowledged. Host side written 2026-10-26 ("The firmware (Z3)": the
+  generator, the parser, the interface, the boot over a model of the MCU);
+  the board run waits for Z2's board run and for its map to cover every
+  section ("The firmware (Z3)", "Open, before the board run").
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.

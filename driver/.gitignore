@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# PowerVR firmware is TI/Img property; generate it locally, never commit it.
+# GPU firmware is the vendor's (PowerVR: TI/Img, tools/mkfwblob.sh; Mali CSF:
+# Arm's, tools/mkmalifw.sh); generate the headers locally, never commit them.
 src/fw/
 *.fw
 

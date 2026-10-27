@@ -121,6 +121,12 @@ its own licence. Turn it into a header locally with `driver/tools/mkfwblob.sh`
 (the header is `driver/src/fw/pvr_fw_blob.h`). Do not attach it to issues or
 pull requests.
 
+The Mali CSF firmware (`mali_csffw.bin`, Arm's, from the NanoPC-T6's
+Armbian) is handled the same way: never committed, turned into
+`driver/src/fw/mali_csffw_blob.h` by `driver/tools/mkmalifw.sh`. The gate
+reads the board's file at `MALI_CSFFW` (`tools/cts/deps.toml`); without it
+the firmware row is a gap.
+
 ## Licensing
 
 - YakoGL's own code is Apache-2.0 (`LICENSE`). Every source file carries an
