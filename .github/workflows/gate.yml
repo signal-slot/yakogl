@@ -120,7 +120,12 @@ jobs:
           fetch-depth: 0
       - name: the project environment (ccfarm's dependency layout, tools/cts/deps-env.sh)
         if: steps.seen.outputs.run == 'true'
+        # The Mali CSF firmware is one file pinned by sha256 in deps.toml
+        # (linux-firmware's, never committed): a runner that lacks it fetches
+        # it here, where an entry that is present is never touched. Every
+        # other entry is a tree a host is prepared with, never built here.
         run: |
+          tools/cts/deps-env.sh --build MALI_CSFFW
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {
