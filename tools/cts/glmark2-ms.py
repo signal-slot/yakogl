@@ -10,7 +10,8 @@ The log has (driver/docs/glmark2.md, section 1), per scene, upstream's line
 
     [<scene>] <options>: FPS: <n> FrameTime: <ms> ms     (or "Set up failed" / "Unsupported")
 
-each optionally behind a console timestamp, then glmark2's `glmark2 Score: <n>`
+each optionally behind a console timestamp (or cut in two by a library log
+line after the scene prefix, the result then on a line of its own), then glmark2's `glmark2 Score: <n>`
 banner and the sample's `glmark2: score <n>: <r> scenes ran, <f> failed,
 <u> unsupported` line. The table has one row per scene (scene string,
 FrameTime ms, FPS) and the final score. `--cells` prints
@@ -33,6 +34,16 @@ GOOD_RE = re.compile(r"FPS: (\d+) FrameTime: (\d+(?:\.\d+)?) ms\s*$")
 START_RE = re.compile(r"glmark2-mem: entry \d+ (\[[\w-]+\] .*?): before setup")
 SCORE_RE = re.compile(r"glmark2 Score: (\d+)")
 SUMMARY_RE = re.compile(r"glmark2: score (\d+): (\d+) scenes ran, (\d+) failed, (\d+) unsupported")
+# A scene's line cut in two by a library log line printed between glmark2's
+# scene prefix and its result (the first kick of a new render target logs
+# its HWRT on the AM62P): "[shadow] <default>:I: render: ..." and, lines
+# later, " FPS: 95 FrameTime: 10.636 ms" on its own. The prefix is the scene
+# string (its options have no space) with the log line's own prefix right
+# after its colon (a Zephyr level "I: ", the library's "glmark2:", ...); the
+# bare result line, with nothing but a console timestamp before it,
+# completes it.
+PREFIX_RE = re.compile(r"(?:^|\s)(\[[\w-]+\] \S+?):(?=[IWED]: |glmark2|osal|yakogl|shaderc)")
+BARE_RE = re.compile(r"^(?:\S+ )?\s*(FPS: .*|Set up failed.*|Unsupported.*)$")
 
 
 def parse(text):
@@ -40,6 +51,7 @@ def parse(text):
     rows, started, problems = [], [], []
     score = summary = None
     seen = set()
+    pending = None  # a started scene whose prefix was seen, its result not yet
     for line in text.splitlines():
         m = START_RE.search(line)
         if m:
@@ -56,9 +68,17 @@ def parse(text):
                 score = summary[0]
             continue
         m = RESULT_RE.search(line)
-        if not m:
+        if m:
+            scene, rest = m.group(1), m.group(2)
+            pending = None
+        elif pending is not None and BARE_RE.search(line):
+            scene, rest = pending, BARE_RE.search(line).group(1)
+            pending = None
+        else:
+            p = PREFIX_RE.search(line)
+            if p and p.group(1) not in seen:
+                pending = p.group(1)
             continue
-        scene, rest = m.group(1), m.group(2)
         if scene in seen:
             problems.append("scene listed twice: %s" % scene)
             continue

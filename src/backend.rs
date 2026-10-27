@@ -1813,22 +1813,29 @@ pub fn narrow_la_texels() -> bool {
 /// answer is a reading of that record, never a submit or a wait of its own.
 ///
 /// The V3D's answer (`v3d_depth_sampled`): yes when the buffer owned by
-/// `id` holds stored depth of that size, single-sampled. The PowerVR, the
-/// GC7000 and the Mali keep the CPU resolve (their texture units are not
-/// known to read their depth layouts, `gl::texture::resolve_depth`). Not an
-/// entry of the table: the one backend with an answer is named here, as
+/// `id` holds stored depth of that size, single-sampled. The PowerVR's
+/// (`pvr_depth_sampled`): yes when the buffer owned by `id` holds depth a
+/// submitted kick stored, single-sampled, at that size; the TPU reads the
+/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The GC7000
+/// and the Mali keep the CPU resolve (their texture units are not known to
+/// read their depth layouts, `gl::texture::resolve_depth`). Not an entry of
+/// the table: the backends with an answer are named here, as
 /// `DEPTH_ONLY_TARGETS` and `narrow_la_texels` name theirs, and the host
-/// tests' mock tables (`testutil`) keep the resolve. The V3D answers only
+/// tests' mock tables (`testutil`) keep the resolve. Each answers only
 /// while it is initialised, which it is only under its own table: the GL
 /// suite runs with a mock table on every GPU build, and the answer there is
-/// no. (The function reads the V3D's state alone, so a test binary of the
-/// GL core on the mock table links without the V3D's C job builder.)
+/// no. (The functions read their backend's state alone, so a test binary of
+/// the GL core on the mock table links without the C job builders.)
 pub fn samples_rendered_depth(id: u32, w: u32, h: u32) -> bool {
     #[cfg(feature = "gpu-v3d")]
     {
         crate::v3d::backend::v3d_depth_sampled(id, w, h)
     }
-    #[cfg(not(feature = "gpu-v3d"))]
+    #[cfg(feature = "gpu-powervr")]
+    {
+        crate::pvr::backend::pvr_depth_sampled(id, w, h)
+    }
+    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr")))]
     {
         let _ = (id, w, h);
         false
@@ -1839,16 +1846,21 @@ pub fn samples_rendered_depth(id: u32, w: u32, h: u32) -> bool {
 /// R32F storage until something reads or writes its texels
 /// (`gl::texture::ensure_storage`, docs/notes/v3d-depth-storage.md)? Only
 /// where a draw samples rendered depth from the backend's own buffer
-/// ([`samples_rendered_depth`]): the V3D, while it is initialised
-/// (`v3d_defers_depth_storage`). Everywhere else a draw samples the texels,
-/// resolved into them on the CPU, and the storage is allocated at once as
-/// before. Not an entry of the table, as [`samples_rendered_depth`] is not.
+/// ([`samples_rendered_depth`]): the V3D and the PowerVR, while
+/// initialised (`v3d_defers_depth_storage`, `pvr_defers_depth_storage`).
+/// Everywhere else a draw samples the texels, resolved into them on the
+/// CPU, and the storage is allocated at once as before. Not an entry of the
+/// table, as [`samples_rendered_depth`] is not.
 pub fn defers_depth_storage() -> bool {
     #[cfg(feature = "gpu-v3d")]
     {
         crate::v3d::backend::v3d_defers_depth_storage()
     }
-    #[cfg(not(feature = "gpu-v3d"))]
+    #[cfg(feature = "gpu-powervr")]
+    {
+        crate::pvr::backend::pvr_defers_depth_storage()
+    }
+    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr")))]
     {
         false
     }

@@ -13,6 +13,15 @@ the project was developed in.
 
 ## [Unreleased]
 
+### Changed
+
+- PowerVR: a depth texture a kick rendered into is sampled by the TPU from
+  the ISP's depth buffer (X8U24, Mesa's design), not resolved into R32F
+  texels on the CPU first (`docs/notes/pvr-depth-sample.md`, #40). glmark2
+  shadow on the AM62P goes from 353 to 10.6 ms a frame and refract from
+  376 to 37.0 ms (score 461 to 467); gl_test case 215 `shadowmap` is the
+  reproducer (355 to 27.8 ms a frame for its 1600x1200 shadow map).
+
 ## [0.1.0] - 2026-10-27
 
 YakoGL is an OpenGL ES 2.0 and EGL 1.5 library for embedded GPUs that runs
@@ -109,9 +118,9 @@ state on 2026-10-26.
 - The `gpu-mali` back end runs only on the NanoPC-T6's own Linux, through the
   panthor kernel driver, not on Zephyr yet (#1281). Its newest `gl_test`
   sweep reads 98 of 256 cases PASS and 0 FAIL (2026-10-24).
-- Slow glmark2 scenes: terrain, shadow and refract on the AM62P (94, 353 and
-  376 ms a frame) and on the i.MX8MP (4, 2 and 2 FPS), terrain on the Pi 4
-  (162 ms).
+- Slow glmark2 scenes: terrain on the AM62P (91 ms a frame; shadow and
+  refract are 10.6 and 37.0 ms since #40), terrain, shadow and refract on
+  the i.MX8MP (4, 2 and 2 FPS), terrain on the Pi 4 (162 ms).
 - One thread issues every GL and EGL call; the library does not lock
   (`include/gles_osal.h`, "threads").
 - Some display and GPU bring-up files were written after GPL-only Linux

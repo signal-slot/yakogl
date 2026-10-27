@@ -395,6 +395,13 @@
  *               copy given back before the job opened, not held for it).
  *               All three GPUs; on the Pi 4 PASS with b7170d35 and
  *               FAIL at check 8 (+266240 bytes) without it (2026-10-04)
+ * 215 shadowmap glmark2 shadow's two passes a frame, timed (#40): a
+ *               1600x1200 depth texture alone in an FBO (case 177), 20
+ *               frames of the depth ramp drawn into it and the texture
+ *               sampled over the window, glFinish each; the last frame's
+ *               picture at case 177's four points. Logs the ms a frame, the
+ *               depth map's Mpx/s and (PowerVR) the GPU's busy time a frame.
+ *               Not in the regression set (a measurement); SKIP as case 177
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8478,7 +8485,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19843,6 +19850,164 @@ static int case_mappbo(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 215: glmark2 shadow's two passes, timed (shadowmap) ----------------
+ *
+ * The reproducer of glmark2 shadow's 353 ms a frame on the AM62P (#40): the
+ * scene's work a frame, on the same kind of objects, timed. A
+ * DEPTH_COMPONENT/UNSIGNED_INT texture of the scene's size (1600x1200, twice
+ * its 800x600 canvas; clamped to GL_MAX_TEXTURE_SIZE at the same shape, as
+ * scene-shadow.cpp:88-99 clamps) alone in an FBO (case 177). SHADOWMAP_FRAMES
+ * frames, each: the depth cleared to 1 and the blue quad's depth ramp drawn
+ * into it with depth test LESS and no colour buffer (the scene's
+ * DepthRenderTarget::enable and the horse), then the texture sampled over
+ * the window, NEAREST, as the scene's ground (GroundRenderer::draw), then
+ * glFinish (the swap's wait for the frame). The window of the last frame is
+ * read back at case 177's four points: the ramp, the same picture whichever
+ * way the depth reaches the sampling draw.
+ *
+ * The figure, log only: "gl_test: shadowmap: <n> frames, <ms> ms a frame
+ * (<w>x<h> depth map, <Mpx/s> Mpx/s)", the whole frame's wall time and the
+ * depth map's pixels a second through it; on the PowerVR also the GPU's busy
+ * time a frame from its counters, as case 39 prints them, so the CPU's share
+ * is the frame less the GPU's. Before the fix of #40 the PowerVR's frame was
+ * the CPU resolve of the 1.92 Mpx depth map into the texture's R32F texels
+ * (src/gl/texture.rs resolve_depth); with the TPU reading the depth buffer
+ * (pvr_depth_sampled, docs/notes/pvr-depth-sample.md) it is the two passes'
+ * GPU time. Checks: 1 the two programs linked, 2 no GL error after the
+ * setup, 3 the status, 4 no GL error after the frames, 5..8 the four
+ * points. SKIP by name as case 177 (GL_FRAMEBUFFER_UNSUPPORTED, or an ES
+ * 2.0 library without GL_OES_depth_texture).
+ * ------------------------------------------------------------------------- */
+#define SHADOWMAP_FRAMES 20
+
+static int case_shadowmap(void)
+{
+	static const uint32_t px[4][2] = { { 32, 4 }, { 4, 32 }, { 32, TH - 5 }, { TW - 5, 32 } };
+	static const char *const where[4] = { "top", "left", "bottom", "right" };
+	GLuint tprog, dprog, d = 0, fbo = 0;
+	GLenum status = 0;
+	GLint max_size = 0;
+	GLsizei tw = 1600, th = 1200;
+	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7];
+	bool es2, ok = true;
+
+	if (!zonly_supported(215, "shadowmap", &es2))
+		return -3;
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	dprog = link_program(gl_test_passthrough_vs_src, gl_test_uniform_fs_src);
+	/* check 1: got = which linked (bit 0 the sampler, bit 1 the ramp) */
+	if (!expect_u32("shadowmap: programs linked", (tprog ? 1u : 0u) | (dprog ? 2u : 0u), 3u))
+		return -1;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
+	if (max_size > 0 && max_size < tw) {
+		tw = max_size;
+		th = max_size * 3 / 4;
+	}
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+
+	/* the shadow map: a depth texture alone in a framebuffer */
+	glGenTextures(1, &d);
+	glBindTexture(GL_TEXTURE_2D, d);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, depth_target_format(GL_DEPTH_COMPONENT, GL_UNSIGNED_INT), tw, th, 0,
+		     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, d, 0);
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	/* check 2: got = the GL error */
+	if (!expect_u32("shadowmap: error after setup", glGetError(), GL_NO_ERROR)) {
+		pr_info("gl_test:   shadowmap: status 0x%04x\n", status);
+		ok = false;
+		goto out;
+	}
+	if (status == GL_FRAMEBUFFER_UNSUPPORTED) {
+		pr_info("gl_test: case 215 shadowmap: SKIP (GL_FRAMEBUFFER_UNSUPPORTED: this GPU renders only "
+			"with a colour buffer)\n");
+		goto out;
+	}
+	/* check 3: got = the status */
+	if (!expect_u32("shadowmap: status", status, GL_FRAMEBUFFER_COMPLETE)) {
+		ok = false;
+		goto out;
+	}
+
+	/* the frames: the depth pass, then the ground sampling it */
+	gl_test_perf_read(pc0);
+	t0 = now_ms();
+	for (int f = 0; f < SHADOWMAP_FRAMES; f++) {
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glViewport(0, 0, tw, th);
+		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+		glClearDepthf(1.0f);
+		glDepthMask(GL_TRUE);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS);
+		zonly_ramp(dprog);
+		glDisable(GL_DEPTH_TEST);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, TW, TH);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glClearColor(0, 0, 0, 1);
+		glClear(GL_COLOR_BUFFER_BIT);
+		dst_sample(tprog, d);
+		glFinish();
+	}
+	t1 = now_ms();
+	gl_test_perf_read(pc1);
+	/* check 4 */
+	ok &= expect_u32("shadowmap: error after the frames", glGetError(), GL_NO_ERROR);
+	{
+		const uint32_t ms = t1 - t0;
+		/* hundredths of a ms a frame; the depth map's kilopixels a second */
+		const uint32_t ms100 = ms * 100u / SHADOWMAP_FRAMES;
+		const uint64_t kpx_s = ms ? (uint64_t)tw * (uint64_t)th * SHADOWMAP_FRAMES / ms : 0u;
+
+		pr_info("gl_test: shadowmap: %d frames, %u.%02u ms a frame (%dx%d depth map, %u.%u Mpx/s)\n",
+			SHADOWMAP_FRAMES, ms100 / 100u, ms100 % 100u, (int)tw, (int)th, (unsigned)(kpx_s / 1000u),
+			(unsigned)(kpx_s % 1000u / 100u));
+		/* GPU-side attribution per frame: busy cycles at 800 MHz -> us (0 where
+		 * the build has no counters) */
+		pr_info("gl_test:   per frame: TA busy %u us, 3D busy %u us, TA|3D %u us, wall %u us\n",
+			(pc1[0] - pc0[0]) / 800u / SHADOWMAP_FRAMES, (pc1[1] - pc0[1]) / 800u / SHADOWMAP_FRAMES,
+			(pc1[2] - pc0[2]) / 800u / SHADOWMAP_FRAMES,
+			(uint32_t)(((uint64_t)(pc1[6] - pc0[6]) * 256u) / 800u / SHADOWMAP_FRAMES));
+	}
+
+	/* the last frame's picture: the ramp at case 177's points (checks 5..8) */
+	read_topdown();
+	for (int i = 0; i < 4; i++) {
+		const uint8_t v = dst_ramp_byte(px[i][0], px[i][1]);
+		char what[48];
+
+		snprintf(what, sizeof(what), "shadowmap: depth %s", where[i]);
+		ok &= expect_px(what, px[i][0], px[i][1], es2 ? rgba_u32(v, v, v, 255) : rgba_u32(v, 0, 0, 255), 2);
+	}
+out:
+	glDepthFunc(GL_LESS);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &d);
+	glUseProgram(0);
+	glDeleteProgram(tprog);
+	glDeleteProgram(dprog);
+	if (ok && status == GL_FRAMEBUFFER_UNSUPPORTED)
+		return -3;
+	return ok ? 0 : -1;
+}
+
 /* ---- case 180: memory a finished job held, back at once (teardown) --------
  *
  * glmark2 tears a scene down and sets the next one up with no wait in
@@ -22396,6 +22561,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		rc = case_splitkick();
 		if (rc == -3)
 			return -3; /* skipped by name: no 4x config */
+		break;
+	case 215:
+		rc = case_shadowmap();
+		if (rc == -3)
+			return -3; /* skipped by name: as case 177 */
 		break;
 	case 179:
 		rc = case_retile();
