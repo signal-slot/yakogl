@@ -10,7 +10,8 @@
 //!     yakogl-tools record --nvmem <file> [--classify|--line]   the 16 bytes of the SNVS nvmem file
 //!     yakogl-tools record --log <file> [--classify|--line]     every `yk-record:` line of a console log;
 //!                                                     the last one that is not a FINGERPRINT is the verdict
-//!     yakogl-tools record crc <crc16 hex> [prefix]    dEQP case names whose name check is <crc16>
+//!     yakogl-tools record crc <crc16 hex> [prefix]    case names whose name check is <crc16>,
+//!                                                     starting with <prefix> (default: every name)
 //!     yakogl-tools record crc16 <case name>           the name check of a case name (CRC-16/CCITT-FALSE)
 //!     yakogl-tools record bitmap <prefix> <w1> <w2>   a kind-9 bitmap as names (filter = <prefix>*)
 //!     yakogl-tools record sweep <first> <w1> <w2> <w3>  a gl_test counters record as case numbers
@@ -36,9 +37,13 @@
 //! It replaced the old Python decoder's `record` and `classify` (deleted in
 //! Step 1); the classify tokens are that decoder's, pinned by
 //! tools/testdata/record-decode.txt.
-//! The dEQP case names come from DEQP_CASELIST when set, else
-//! tools/cts/gles2-mustpass.txt. A name check can match two names; all of
-//! them are printed.
+//! The dEQP case names come from DEQP_CASELIST when set, else both
+//! tools/cts/gles2-mustpass.txt and tools/cts/gles3-mustpass.txt: a name
+//! check is the CRC-16 of the whole case name, module prefix included (the
+//! dEQP sample's deqp_snvs.c), so one list decodes the records of an image
+//! of either table. A name check can match two names; all of them are
+//! printed, and the reader (tools/board.sh results_tsv) keeps the ones
+//! inside the image's own case-table entry.
 
 use crate::record::{self, kind};
 use crate::{py, repo_root, Error, R};
@@ -71,13 +76,20 @@ impl CaseList {
         CaseList { names: text.lines().map(py::strip).filter(|l| !l.is_empty()).map(String::from).collect() }
     }
 
-    /// DEQP_CASELIST when set, else tools/cts/gles2-mustpass.txt.
+    /// DEQP_CASELIST when set, else tools/cts/gles2-mustpass.txt and
+    /// tools/cts/gles3-mustpass.txt together (an image names its cases from
+    /// one of the two tables; its record does not say which, the CRC does).
     pub fn load() -> R<Self> {
-        let path =
-            py::env_set("DEQP_CASELIST").unwrap_or_else(|| py::join(&repo_root(), "tools/cts/gles2-mustpass.txt"));
-        Ok(Self::from_text(&py::read_text(&path)?))
+        if let Some(path) = py::env_set("DEQP_CASELIST") {
+            return Ok(Self::from_text(&py::read_text(&path)?));
+        }
+        let mut text = py::read_text(&py::join(&repo_root(), "tools/cts/gles2-mustpass.txt"))?;
+        text.push_str(&py::read_text(&py::join(&repo_root(), "tools/cts/gles3-mustpass.txt"))?);
+        Ok(Self::from_text(&text))
     }
 
+    /// The names whose CRC-16 is `want`, restricted to those starting with
+    /// `prefix` (empty: every name in the list).
     pub fn by_crc(&self, want: u16, prefix: &str) -> Vec<&str> {
         self.names
             .iter()
@@ -86,8 +98,6 @@ impl CaseList {
             .collect()
     }
 }
-
-const DEQP_PREFIX: &str = "dEQP-GLES2.";
 
 fn magic(w: &[u32; 4]) -> bool {
     w[0] & 0xffff_0000 == record::MAGIC
@@ -279,7 +289,7 @@ pub fn decode(w: &[u32; 4], cases: &CaseList) -> Vec<String> {
     let [_, w1, w2, w3] = *w;
     let (k, low) = kind_low(w[0]);
     let names = |c: u32| {
-        let n = cases.by_crc(c as u16, DEQP_PREFIX);
+        let n = cases.by_crc(c as u16, "");
         if n.is_empty() {
             "(no name in the case list)".to_string()
         } else {
@@ -497,7 +507,7 @@ pub fn main(args: &[String]) -> R<()> {
         "crc" if args.len() >= 2 => {
             let want = u16::from_str_radix(args[1].trim_start_matches("0x"), 16)
                 .map_err(|_| Error::Usage(format!("{USAGE}\n\n'{}' is not a CRC-16", args[1])))?;
-            let prefix = args.get(2).map(String::as_str).unwrap_or(DEQP_PREFIX);
+            let prefix = args.get(2).map(String::as_str).unwrap_or("");
             for n in CaseList::load()?.by_crc(want, prefix) {
                 println!("{n}");
             }
@@ -666,6 +676,35 @@ mod tests {
         assert_eq!(blocks, 61, "the golden file's block count changed: re-derive the pin");
         let want: std::collections::BTreeSet<u8> = record::KINDS.iter().map(|k| k.value).chain([32]).collect();
         assert_eq!(kinds_seen, want, "every kind (and one unknown) has a golden block");
+    }
+
+    /// A GLES3 name check decodes from the default case list. The i.MX8MP
+    /// dEQP table image (docs/es3/board-recipe-imx8mp.md) has no console: a
+    /// failing case comes back as the CRC-16 of its whole name and nothing
+    /// else. That list held only GLES2 names and `crc` only looked for the
+    /// GLES2 prefix, so a GLES3 record's failures stayed `crc:<hex>`;
+    /// tools/cts/gles3-mustpass.txt is in the default list now.
+    #[test]
+    fn a_gles3_name_check_decodes() {
+        // the default list of CaseList::load() with DEQP_CASELIST unset,
+        // built directly so an operator's DEQP_CASELIST cannot change it
+        // (load() itself is exercised end to end by tools/board_selftest.sh)
+        let mut text = py::read_text(&py::join(&repo_root(), "tools/cts/gles2-mustpass.txt")).unwrap();
+        text.push_str(&py::read_text(&py::join(&repo_root(), "tools/cts/gles3-mustpass.txt")).unwrap());
+        let cl = CaseList::from_text(&text);
+        let name = "dEQP-GLES3.functional.attribute_location.bind.float";
+        let crc = record::crc16_ccitt_false(name.as_bytes());
+        assert!(cl.by_crc(crc, "").contains(&name), "the default list holds the GLES3 names");
+        assert!(cl.by_crc(crc, "dEQP-GLES2.").is_empty(), "a prefix still restricts");
+        // the row's DEQP record: w1 failed|passed, w3 the first fail | begun
+        let w = [0x594b0801, 0x00020001, 0, (u32::from(crc) << 16) | 3];
+        assert!(decode(&w, &cl).iter().any(|l| l.contains(name)), "first fail named: {:?}", decode(&w, &cl));
+        // and a DEQP_FAILS page names its six checks (w1..w3, 16 bits each)
+        let p = [0x594b0a02, u32::from(crc), u32::MAX, u32::MAX];
+        assert!(decode(&p, &cl).iter().any(|l| l.contains(name)), "page check named");
+        // GLES2 records decode as before (the golden file, tools/board.sh results_tsv)
+        let n2 = "dEQP-GLES2.functional.attribute_location.bind.float";
+        assert!(cl.by_crc(record::crc16_ccitt_false(n2.as_bytes()), "").contains(&n2));
     }
 
     /// classify on records with known meaning: the two 2026-10-03 netboot
