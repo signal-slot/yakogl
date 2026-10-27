@@ -6,18 +6,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Run the Slint demo — YakoGL</title>
-<meta name="description" content="Build YakoGL's Slint demo with west and boot it from the eMMC of a Verdin AM62P or iMX8M Plus or the SD card of a Raspberry Pi 4, or run the host tests with no board.">
+<meta name="description" content="Build YakoGL's Slint demo with west and boot it on a Verdin AM62P, Verdin iMX8M Plus or Raspberry Pi 4. Real hardware is required.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="YakoGL">
 <meta property="og:url" content="https://yako.gl/try-it.html">
 <meta property="og:title" content="Run the Slint demo — YakoGL">
-<meta property="og:description" content="Build the Slint demo and boot it from the board's own storage, or run the host tests on a PC.">
+<meta property="og:description" content="Build the Slint demo and run YakoGL on a supported embedded GPU board.">
 <meta property="og:image" content="https://yako.gl/og-image.png">
 <meta property="og:image:alt" content="The YakoGL triangle on a dark nacre gradient">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Run the Slint demo — YakoGL">
-<meta name="twitter:description" content="Build and boot the Slint demo, or run the host tests.">
+<meta name="twitter:description" content="Build and boot the Slint demo on supported embedded GPU hardware.">
 <meta name="twitter:image" content="https://yako.gl/og-image.png">
 <link rel="canonical" href="https://yako.gl/try-it.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -43,10 +43,9 @@
 <main class="wrap" id="main-content">
 <h1>Run the Slint demo</h1>
 <p class="lead">Choose your board, build the sample and boot a GPU-rendered Slint interface
-on Zephyr. The guide covers the tested displays, build dependencies and a first boot.</p>
+on Zephyr. This is a real-hardware demo: YakoGL drives the board's GPU.</p>
 <nav class="try-nav" aria-label="On this page">
   <a href="#board">Build and boot on a board</a>
-  <a href="#host">Run tests on a PC</a>
   <a href="#gaps">Known gaps</a>
 </nav>
 <p class="muted">Throughout, <code>&lt;user&gt;@&lt;board&gt;</code>, <code>&lt;board&gt;</code> and
@@ -197,22 +196,6 @@ on this site was booted.</p>
 card in a PC and copy <code>config-linux.txt</code> over <code>config.txt</code>. (This literal swap
 has not yet been run on our board; the tryboot path has.)</p>
 </div>
-
-<h2 id="host">Run tests on a PC</h2>
-<p><strong>These are host tests, not a rendered graphics demo.</strong> No board is required.
-The GL core and one GPU back end run against a mock platform that models non-coherent GPU
-memory (it flags unflushed, freed or out-of-range reads) and a recording back end. You need
-Rust 1.88 or newer and a C compiler.</p>
-<pre><code>git clone https://github.com/signal-slot/yakogl
-cd yakogl
-cargo test --no-default-features --features host-test,gpu-powervr
-cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online   # the shader compiler
-cargo test --no-default-features --features host-test,gpu-powervr,report-es2       # the ES 2.0 report's rules
-cargo test -p yakogl-tools                                                          # the host tools</code></pre>
-<p>Use <code>gpu-vivante</code> or <code>gpu-v3d</code> for the other back ends; exactly one GPU
-feature per build. The project's full gate is <code>tools/check.sh</code>; it also needs a
-Zephyr workspace and more, see the
-<a href="https://github.com/signal-slot/yakogl/blob/main/README.md#testing-on-the-host">README</a>.</p>
 
 <h2 id="gaps">Known gaps</h2>
 <ul>
