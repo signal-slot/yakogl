@@ -62,8 +62,8 @@
       <div class="stack-down" aria-hidden="true"><span></span><span></span></div>
       <div class="stack-hardware" aria-label="SoC hardware">
         <div class="stack-hw"><strong>CPU</strong><span>Arm cores</span></div>
-        <div class="stack-hw stack-hw-gpu"><strong>GPU</strong><div class="stack-gpus" aria-label="Hardware-proven GPU families"><span>PowerVR</span><span>Vivante</span><span>Broadcom V3D</span></div></div>
-        <div class="stack-soc-label"><span>SoC</span><strong>AM62P · i.MX8MP · BCM2711</strong></div>
+        <div class="stack-hw stack-hw-gpu"><strong>GPU</strong><div class="stack-gpus" aria-label="GPU families; Mali-G610 is work in progress"><span>PowerVR</span><span>Vivante</span><span>Broadcom V3D</span><span class="wip">Mali-G610 · WIP</span></div></div>
+        <div class="stack-soc-label"><span>SoC</span><strong>AM62P · i.MX8MP · BCM2711 · RK3588 <small>WIP</small></strong></div>
       </div>
       <figcaption id="stack-caption">Software above, hardware below: Zephyr runs on the CPU, YakoGL drives the GPU, and both processors are part of the SoC.</figcaption>
     </figure>
@@ -87,13 +87,14 @@
 </div></section>
 
 <section class="section" id="boards" aria-labelledby="boards-title"><div class="wrap">
-  <div class="section-heading"><div><p class="eyebrow">The strongest path today</p><h2 class="display" id="boards-title">Try it on Zephyr.</h2></div><p>These are the three hardware-proven Zephyr targets today. They are the quickest way to evaluate YakoGL, not the limit of its platform model.</p></div>
+  <div class="section-heading"><div><p class="eyebrow">Three proven targets. One active port.</p><h2 class="display" id="boards-title">Try it on Zephyr.</h2></div><p>The first three targets are hardware-proven on Zephyr today. NanoPC-T6 / Mali-G610 is the next target and is shown explicitly as work in progress.</p></div>
   <div class="board-list">
     <article class="board-row"><span class="board-index" aria-hidden="true">01</span><div><p class="tag">TI AM62P</p><h3>Verdin AM62P</h3><p class="board-gpu">Imagination PowerVR BXS-4-64</p></div><div class="board-detail"><p>eMMC · U-Boot</p><p class="muted">Requires separately supplied GPU firmware.</p></div><a class="board-cta" href="try-it.html?board=am62p#board">Start with AM62P ↗</a></article>
     <article class="board-row"><span class="board-index" aria-hidden="true">02</span><div><p class="tag">NXP i.MX 8M Plus</p><h3>Verdin iMX8M Plus</h3><p class="board-gpu">Vivante GC7000UL</p></div><div class="board-detail"><p>eMMC · U-Boot</p><p class="muted">No separate GPU firmware needed.</p></div><a class="board-cta" href="try-it.html?board=imx8mp#board">Start with iMX8MP ↗</a></article>
     <article class="board-row"><span class="board-index" aria-hidden="true">03</span><div><p class="tag">Broadcom BCM2711</p><h3>Raspberry Pi 4</h3><p class="board-gpu">Broadcom V3D 4.2</p></div><div class="board-detail"><p>SD card · Pi firmware</p><p class="muted">Tested with a 1920 × 720 HDMI display.</p></div><a class="board-cta" href="try-it.html?board=pi4#board">Start with Pi 4 ↗</a></article>
+    <article class="board-row board-row-wip"><span class="board-index" aria-hidden="true">04</span><div><p class="tag">WIP · Rockchip RK3588</p><h3>FriendlyElec NanoPC-T6</h3><p class="board-gpu">Arm Mali-G610</p></div><div class="board-detail"><p>Linux / panthor path running</p><p class="muted">YakoGL's Mali back end is active; the Zephyr path is being brought up and validated.</p></div><a class="board-cta" href="status.html#mali">Follow Mali progress ↗</a></article>
   </div>
-  <p class="board-note"><strong>Working on another GPU?</strong> The Mali-G610 back end for NanoPC-T6 is in development on Linux through panthor. Zephyr support is still in progress. <a href="status.html#mali">See what is being worked on →</a></p>
+  <p class="board-note"><strong>Support gate.</strong> NanoPC-T6 remains WIP until the Zephyr path reaches the same board-level validation standard as the three supported targets.</p>
 </div></section>
 
 <section class="band band-night proof-section" id="results" aria-labelledby="results-title"><div class="wrap">
