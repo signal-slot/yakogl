@@ -2940,10 +2940,18 @@ clean (472, 470).
 
 ## Design: the firmware's partial render (PR), for the user's go/no-go
 
-No code. The implementation (about 12 days, sized below) is the user's
-decision. Mesa 26.2.1 (MIT) is transcribed with attribution where code is
-taken. Linux drm/imagination and the DDK are cited only. The reading this
-builds on is the section above.
+The implementation (about 12 days, sized below) was the user's decision;
+the go came from the development repository (dev #3, 2026-10-27). Parts 1
+and 4 are code (b05b8008): the PR commands and the geometry timeline word
+behind the knob, the RTA arrays in `hwrt_get` and the reconstruction clear
+in `freelist::reset_hwrts`. What is not code yet: parts 2 and 3 (SPM
+scratch and PR PBE words, the PR EOT program, the background-load shader
+and its PDS program, PR depth/stencil) and the first board measurement -
+until they land, a geometry refusal at A = 0 is still survived only while
+a 3D is pending, so the knob stays off on the board. Mesa 26.2.1 (MIT) is
+transcribed with attribution where code is taken. Linux drm/imagination
+and the DDK are cited only. The reading this builds on is the section
+above.
 
 **The knob:** `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, off by default. It is
 a new runtime switch in `YdPvrRenderCfg` (`partial_render`, set by
@@ -3123,9 +3131,12 @@ d320c8a5's exact case, made deterministic:
   2.4 MB for the PR depth and stencil (4 + 1 bytes a pixel at 800x600),
   at the window size, where glmark2 already runs it dry.
 
-**Until the decision:** refusals are survived only while a 3D is pending.
-The stop ends a hang at 10 s with a record (fix 2), and the knob stays
-opt-in.
+**After the decision (2026-10-27):** the knob landed opt-in (off). With
+parts 1 and 4 only, a refusal is still survived only while a 3D is
+pending - the PR command can be queued, but a partial render that must
+save and resume a frame needs its frame side (parts 2 and 3). The stop
+still ends a hang at 10 s with a record (fix 2) until the forced case
+below runs with the knob on.
 
 ### The landing tip with every switch on: image 67f54d8a, predictions (written before it runs)
 
