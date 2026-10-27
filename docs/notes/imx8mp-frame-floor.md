@@ -552,7 +552,8 @@ order with a draw of 0.3 periods, and prints periods a frame, latches a
 frame and the cluster's invariant (no frame submitted into the half on the
 panel). With the tree's board file it checks each row against the table
 above. Given an older board file (`run.sh old.c outdir`) it prints that
-file's table. It is not a `tools/check.sh` row (see the hand-over note).
+file's table. Since 2026-10-27 it is a `tools/check.sh` row,
+`host    imx8mp latch model: waits per swap`.
 
 ## Host evidence (2026-10-17)
 

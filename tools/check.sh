@@ -791,6 +791,17 @@ key_python_row() {
   key_python && key_tree "$@"
 }
 
+# key_host_cc_row <pathspec>...: a host C check: the compiler and the files.
+key_host_cc_row() {
+  echo "cc: $(${CC:-cc} --version 2>/dev/null | head -1)"
+  key_tree "$@"
+}
+# key_perf_page_row <pathspec>...: the glmark2 PERF page row: the toolchain
+# (cc packs, cargo builds yakogl-tools), the named files and the tool's crate.
+key_perf_page_row() {
+  key_toolchain && key_tree "$@" tools/yakogl-tools Cargo.toml Cargo.lock
+}
+
 # A test row: cargo_test <cargo test arguments> [-- <harness arguments>]
 #
 # `cargo test` runs a row's test binaries one after another, so a row took
@@ -3024,6 +3035,26 @@ step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
 scope tools drivers
 step "tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits" \
   driver/tools/kexec-zephyr/board_lock_selftest.sh
+# The i.MX8MP board layer's host model (docs/notes/imx8mp-frame-floor.md,
+# "Waits per swap"): the latch thread and yakogl_zephyr_wait_vblank on cc and
+# pthreads, about 30 s. It reads the host/ directory and the three board
+# files it compiles; the host C compiler is the one tool. It times real
+# threads and fails a row 0.25 periods off, so it runs alone (w:tree): next to
+# cargo and compiler jobs of the pool it would flake. Headers it also reads
+# (the rest of board/include, board/common, include/) are not in the key.
+scope drivers
+uses w:tree
+rowkey key_host_cc_row driver/zephyr/lib/board/imx8mp/host driver/zephyr/lib/board/imx8mp/board_imx8mp.c \
+  driver/zephyr/lib/board/include/yakogl_board.h driver/zephyr/lib/board/common/board_internal.h
+step "host    imx8mp latch model: waits per swap" driver/zephyr/lib/board/imx8mp/host/run.sh
+# The glmark2 image's PERF page (src/gm_perf_page.h) packed on the host and
+# decoded by `yakogl-tools record`, which run.sh builds with cargo when
+# YAKOGL_TOOLS is unset, so the toolchain and the tool's crate are in the key.
+scope drivers samples toolscrate
+rowkey key_perf_page_row driver/samples/zephyr/glmark2/host driver/samples/zephyr/glmark2/src/gm_perf_page.h \
+  driver/zephyr/lib/board/include/yakogl_record.h driver/rust/src/board/record.rs
+step "host    glmark2 PERF page: packed and decoded by yakogl-tools record" \
+  driver/samples/zephyr/glmark2/host/run.sh
 # The map --changed selects rows by, pinned path by path, and the plans of
 # a docs, a V3D, a gl_test and a shared-layer change.
 scope tools local

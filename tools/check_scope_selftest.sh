@@ -111,7 +111,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 194 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 196 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -145,6 +145,20 @@ out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)
 expect "nanopc_t6 glue: its image" '^plan  zephyr  nanopc_t6 t6_hello image' "$out"
 expect "nanopc_t6 glue: the GPU sample's image" '^plan  zephyr  nanopc_t6 t6_gpu image' "$out"
 expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers' "$out"
+# The two host rows (2026-10-27) run every key file they compile or decode
+# with: a change to one of them reaches the row (they were rows of nothing
+# before, so a change that broke them stayed green).
+out=$(plan driver/zephyr/lib/board/imx8mp/board_imx8mp.c)
+expect "host rows: the board file reaches the latch model" '^plan  host    imx8mp latch model: waits per swap$' "$out"
+out=$(plan "driver/zephyr/lib/board/include/yakogl_board.h driver/zephyr/lib/board/common/board_internal.h")
+expect "host rows: the headers they compile reach the latch model" '^plan  host    imx8mp latch model: waits per swap$' "$out"
+out=$(plan driver/rust/src/board/record.rs)
+expect "host rows: the decoder reaches the PERF page row" '^plan  host    glmark2 PERF page' "$out"
+out=$(plan driver/samples/zephyr/glmark2/src/gm_perf_page.h)
+expect "host rows: the pack header reaches the PERF page row" '^plan  host    glmark2 PERF page' "$out"
+expect "host rows: a sample header does not reach the latch model" '^skip  host    imx8mp latch model' "$out"
+out=$(plan tools/yakogl-tools/src/recordcmd.rs)
+expect "host rows: the decoder's crate reaches the PERF page row" '^plan  host    glmark2 PERF page' "$out"
 out=$(plan driver/tools/pvrlab/gl_test.c)
 expect "gl_test: the three images" '^plan  zephyr  imx8mp ' "$out"
 expect "gl_test: its cc arms" '^plan  cc      gl_test.c ' "$out"
@@ -191,12 +205,13 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 197 rows: ok plus gaps, because a row whose tool this host lacks is a gap
-# here and a plan row on the gate host; the sum is the same on both.
+# 199 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# here and a plan row on the gate host; the sum is the same on both. (Two
+# more than before the imx8mp latch and glmark2 PERF page host rows.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 197 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 197:$line"; fails=$((fails + 1)); }
+[ "$total" = 199 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 199:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
