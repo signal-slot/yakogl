@@ -98,15 +98,94 @@ BLEND.f32 r0:r1:r2:r3, r60, blend_descriptor_1, blend_descriptor_1[1], _.h00, sr
 IADD_IMM.i32 r48, 0x0, #0x0 ; BRANCHZI.eq.absolute 0x0, blend_descriptor_1.w1
 ```
 
-- Both `BLEND`s read the colour in **r0-r3** (it is copied again between them) and
-  the one coverage word `r60` that `ATEST` wrote. Only the alpha comes straight
-  from the uniform (`u3[1]`); the colour is `MOV`ed into place.
+- Both `BLEND`s read the colour in **r0-r3** (it is moved in again before each
+  `BLEND`) and the one coverage word `r60` that `ATEST` wrote. Only the alpha comes
+  straight from the uniform (`u3[1]`); the colour is `MOV`ed into place.
 - Each `BLEND` is followed by an `IADD_IMM r48 / BRANCHZI` stub through the
-  descriptor's second word (the blend-shader return); the last one ends the
-  program. This is the single-RT `BLEND` of our code, repeated per target.
+  descriptor's second word (the blend-shader call). **The stubs differ**: see
+  "The BLEND word" below. Only the last `BLEND` has `.end`.
 - FAU: `blend_descriptor_<rt>` is a 64-bit FAU slot, `BIR_FAU_BLEND_0 + rt`
   (`bifrost_compile.c:1626-1631`), after the uniform words; the uniforms are the
   8 words `u2..u5` (two vec4s).
+
+### The BLEND word: `target`, the stub and the colour copy
+
+Words are `fsout_55_es3mrt.expect.json` ("fs.fragment", byte offset = 8 x word
+index) unless said otherwise; `fsout_106_mrt3` is the three-output twin. Checked
+against Mesa 26.2.1 (`B/` = `src/panfrost/compiler/bifrost/`).
+
+**1. `target:0x2` is `branch_offset >> 3`, not `blend_target`.** The disassembler
+prints the 8-bit field at bits 8-15 of the word. In `va_pack.c`
+(`B/valhall/va_pack.c:999-1010`) the `BLEND` case packs
+`(I->branch_offset >> 3) << 8` (with errors for an offset that is unaligned or over
+2040, `:1005-1008`), and nothing else goes there. `I->blend_target`
+(`B/compiler.h:687`, set from the NIR `io.location` at
+`B/bifrost_compile.c:1701`) is read only by the Bifrost packer (`B/bi_pack.c:678`);
+`va_pack.c` never reads it. So the render target is chosen **only** by the
+descriptor FAU slot, `src0`: low byte `0xf0 + 2 x rt`
+(`VA_FAU_SPECIAL_PAGE_0_BLEND_DESCRIPTOR_0 + rt`, `va_pack.c:100-101`).
+Words:
+
+| program | word offset | word | byte 1 (`target`) | src0 byte |
+|---|---|---|---|---|
+| 55 `BLEND` rt 0 | 0x30 | `007f4008323c02f0` | `0x02` | `0xf0` |
+| 55 `BLEND` rt 1, `.end` | 0x68 | `787f4008723c00f2` | `0x00` | `0xf2` |
+| 106 rt 0 / 1 / 2 | 0x20 / 0x48 / 0x70 | `007f4004333c02f0` / `007f4004733c02f2` / `787f4004b33c00f4` | `0x02` / `0x02` / `0x00` | `0xf0` / `0xf2` / `0xf4` |
+| 91 `hdrscale`, `hdrcolor` (one RT, `.end`) | 0x38 / 0x20 | `787f4004b33c00f0` / `787f4004333c00f0` | `0x00` | `0xf0` |
+
+(`0x78` in the top byte of the `.end` words is the flow field; the others have
+`0x00`.) rt 0 and rt 1 of 55 differ in four bytes only: byte 7 (flow `.end`),
+byte 3 (`0x32` / `0x72`: bit 6 is the message slot, 0 / 1), byte 1 (`target`) and
+byte 0 (`src0`). 55 and 106 differ further in bytes 3-4 (the register format:
+f32 `0x08`, f16 `0x04`).
+
+**2. A `BLEND` that is not the last skips its stub: `branch_offset` = 16.**
+`va_lower_blend` (`B/valhall/va_pack.c:1173-1202`) puts `IADD_IMM r48 = pc + 8` and
+`BRANCHZI.eq.absolute 0x0, desc.w1` after every `BLEND`; `prolog_length` is
+`2 * 8` (`:1184`) and, if the `BLEND` is not `VA_FLOW_END`,
+`I->branch_offset = prolog_length` (`:1199-1200`). The ISA text says why
+(`B/valhall/ISA.xml:1745-1752`): with fixed-function blending a `BLEND` without
+termination "acts as a relative branch, branching with the offset specified as
+`target`", so that "the subsequent instructions" (the stub) "are skipped"; with a
+blend shader the branch is ignored and the stub runs. The offset is relative to the
+instruction after the `BLEND`: in 55 the `BLEND` at 0x30 jumps to
+0x38 + 16 = 0x48, the first `MOV` of rt 1 (`0091c2000000008a`), over the
+`IADD_IMM` at 0x38 (`0710f000000008fe`, immediate 8) and the `BRANCHZI` at 0x40
+(`002fc1100000f1c0`). In 106, 0x20 -> 0x28 + 16 = 0x38 and 0x48 -> 0x50 + 16 =
+0x60, both `MOV`s. The `IADD_IMM` immediate 8 is `prolog_length - 8` (`:1194`): the
+return address of a blend shader, the instruction after the `BRANCHZI`.
+
+**3. The last `BLEND` ends the shader.** `.end` (`VA_FLOW_END`), `branch_offset` 0
+(no `target`), and its stub is `IADD_IMM r48, 0x0, #0x0` (`va_pack.c:1191-1192`;
+word 0x70 `0110f000000000c0` in 55) then the same `BRANCHZI`; the call is taken
+only if the descriptor's second word is non-zero.
+
+**4. The colour copy is guarded.** `bifrost_compile.c:1686`,
+`if (b->shader->nir->info.outputs_written >> FRAG_RESULT_DATA1)`, builds the colour
+again with `bi_make_vec_to(b, rgba, {rgba x4}, {0,1,2,3}, 4, size)` (`:1687-1690`)
+"since BLEND inputs are precoloured to R0-R3", just before `bi_blend_to` (`:1698`).
+The guard holds for 55 (`outputs_written: 4-5`, `fsout_55_es3mrt.stderr:186`) and
+106 (`4-6`, `:211`) and not for the one-output programs (`hdrscale`, `hdrcolor`: bit
+4 only). It adds no instruction of its own that survives to the words: the BIR
+shows one `COLLECT` per `BLEND` in both cases, and the words are `MOV`s into
+r0-r3 (55: `r2, r3, r0, r1` for each target, 0x10-0x28 and 0x48-0x60; in 106: r0, r1).
+What differs between one and many outputs is not seen in the words, so a compiler
+that emits, per target, the colour in r0.. (as the existing single-output rows do)
+needs no separate copy step.
+
+**What `src/shaderc/online/mali` must emit** (consequence):
+- Per target `rt`: the colour into r0..r3 (r0..r1 for fp16), the `BLEND` with
+  descriptor slot `0xf0 + 2 x rt` (`Special::BlendDescriptor0` is rt 0 only,
+  `pack.rs:30`, `nir_fs.rs:3586`, `:4201`, `:4331`, `preload.rs:72`: it needs the
+  rt), and its `BRANCHZI` source `desc_<rt>.w1`.
+- `pack.rs:lower_blend` (`:697-713`) refuses a `BLEND` that is not the last
+  (`Defect::BlendNotLast`; its comment cites `va_pack.c:1172-1202`). It must insert the stub after every `BLEND` and give a
+  `BLEND` without `.end` the offset 16 in `target` (`branch_offset` at
+  `pack.rs:717` returns 0 for `Blend`); the `IADD_IMM` of a non-last stub is
+  `r48 = program_counter + 8` (`IADD_IMM.i32 r48, program_counter.w0, #0x8`), the
+  last one `r48 = 0`.
+- Only the last `BLEND` carries `.end`; the `ATEST` is once, before the first.
+- Test: the 55 and 106 words above, byte for byte.
 
 **What the frame must build for an MRT framebuffer** (`fsout_55_es3mrt.trace`):
 
@@ -131,7 +210,7 @@ IADD_IMM.i32 r48, 0x0, #0x0 ; BRANCHZI.eq.absolute 0x0, blend_descriptor_1.w1
 **Implementation order** (cases 55, 106):
 1. Selector: `layout()` accepts `IoKind::Colour` at locations 0..7; the fragment
    program emits the `ATEST` on output 0's alpha and, per output, the colour copy
-   to r0-r3 and one `BLEND` as above. Constant outputs (106) first: its `ATEST`
+   to r0-r3 and one `BLEND` as above, with the `target`, stub and `.end` rules of "The BLEND word". Constant outputs (106) first: its `ATEST`
    takes the literal `0x3F800000` and the colours are `MOV`s of constants
    (`fsout_106_mrt3.trace`).
 2. FAU: `blend_descriptor_<rt>` entries after the uniform words, one per output.
@@ -296,6 +375,6 @@ fold; (2) a host test: `predlive_fs_uni.frag` against `fsout_192_uni.expect.json
 
 | case | refusal site | what the reference shows | first step |
 |---|---|---|---|
-| 55 | `nir_fs.rs:1882-1884` (`FragOutput`); frame `frame.rs:2847`, `:2942` | one `ATEST` on output 0's alpha, per RT a colour copy to r0-r3 and a `BLEND` on `blend_descriptor_<rt>`; two blend descriptors (`RT: i`), mask 0x3, RT count 2, buffer offsets 0/4096 | accept locations 0..7, constant outputs (106) first |
+| 55 | `nir_fs.rs:1882-1884` (`FragOutput`); frame `frame.rs:2847`, `:2942` | one `ATEST` on output 0's alpha, per RT the colour in r0-r3 and a `BLEND` on `blend_descriptor_<rt>` (src0 `0xf0 + 2 rt`; `target` = `branch_offset >> 3` = 2 unless last; stub skipped by offset 16); two blend descriptors (`RT: i`), mask 0x3, RT count 2, buffer offsets 0/4096 | accept locations 0..7, constant outputs (106) first |
 | 91 | `nir_fs.rs:2298-2300` (`FsOperandForm`), (Tex, product) | `FMA.v2f16 r0, r0, 0x34000000.h11, -0.0` per texel pair, in place | admit `prod(Tex, MulA)` |
 | 192 | `nir.rs:1155-1160` (`ArithConstant`), `is_const_product` | Mesa folds `2.0 * (u_q * 3.0)` to `6.0 * u_q` (`nir_opt_algebraic.py:2406`, no use-count condition) | do the fold instead of refusing |
