@@ -359,8 +359,8 @@ on the host (`yakogl-build=376b9cf8`).
 
   Eleven rows moved from one refusal to another (63, 68, 71, 74, 78, 81,
   100, 101, 116, 142, 148). Every earlier sweep record's PASS set is a
-  subset of this one (`tools/mali/sweep_passsets.py`: the 98 contains the
-  48 earlier records' sets, and this record contains the 98).
+  subset of this one (`tools/mali/sweep_passsets.py` over the 48 records of
+  `0dce654a8:tools/mali/board-ref/` and this one: 49 records).
 - One FAIL, a case new in gl_test (NO-CASE before): `verdict case 214
   splitkick: FAIL rc -1, first bad check 5 got 0xffc0c0c0 want 0xff808080`.
   A 4x frame split into two kicks: the second kick reloads the resolved

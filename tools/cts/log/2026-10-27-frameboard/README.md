@@ -58,9 +58,9 @@ line that changed:
 - Refusal reason moved, still REFUSED: 63, 68, 71, 74, 78, 81, 100, 101,
   116, 142, 148 (exact lines in the verdict files).
 
-No PASS was lost. `python3 -I tools/mali/sweep_passsets.py` over the
-baseline record and this one: `each earlier PASS set is a subset of
-2026-10-27-frameboard (102 PASS)`. Cases 8, 28, 29, 30, 52, 113, 122, 169,
+No PASS was lost. `python3 -I tools/mali/sweep_passsets.py` over the 48
+records of `0dce654a8:tools/mali/board-ref/` plus this one: `49 record(s),
+each earlier PASS set is a subset of 2026-10-27-frameboard (102 PASS)`. Cases 8, 28, 29, 30, 52, 113, 122, 169,
 196, 197, 198, 207, 208 and 209 PASS in both runs.
 
 Prediction check: predicted 100 PASS (98 + 4 + 54) "or more"; got 102 (also
