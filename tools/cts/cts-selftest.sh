@@ -156,7 +156,7 @@ done
 # reads as a failure here, not as a pass -- and a new check in
 # images-selftest.sh without a bump here is a red row too (pull request
 # #1838 failed exactly there).
-IMAGES_SELFTEST_CHECKS=107
+IMAGES_SELFTEST_CHECKS=109
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)
