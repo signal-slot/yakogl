@@ -335,6 +335,70 @@ int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
 		 void (*delay_us)(uint32_t us),
 		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *out);
 
+/* Z2, after yd_t6_gpu_up returned 0 (board::nanopc_t6_mmu over
+ * gpu::mali::mmu and gpu::mali::pgtable; feature mali): read AS0 and the
+ * interrupt state, one cache flush round trip (GPU_CMD 0x3304, wait for
+ * GPU_INT_RAWSTAT bit 17), build AS0's tables in pool (pool_pages 4 KiB
+ * pages at physical tables_pa) with MCU VA 0x04000000 + 64 KiB mapped to
+ * backing_pa, walk VA 0x04001234 on the CPU, clean the tables with clean(),
+ * enable AS0 as panthor_mmu_as_enable does (lock, flush, unlock, TRANSTAB,
+ * MEMATTR, TRANSCFG, UPDATE), read AS0 back, then the flush after a map
+ * (lock 64 KiB, GPU_CMD 0x0304, unlock). gpu maps 0xfb000000 for at least
+ * 0x3000; mmu_features is ident[4] of yd_t6_gpu_up; pool is 4 KiB
+ * aligned. 0 when every step ran, -EIO when one stopped, -EINVAL for a null
+ * or misaligned argument. A 64-bit value is two words, lo first. */
+#define YD_T6_MMU_STOP_NONE      0 /* every step ran, AS0 reads back as written */
+#define YD_T6_MMU_STOP_FEATURES  1 /* MMU_FEATURES is not 48 VA / 40 PA bits (detail) */
+#define YD_T6_MMU_STOP_FLUSH     2 /* the flush round trip did not complete */
+#define YD_T6_MMU_STOP_TABLES    3 /* the tables could not be built (refusal: YD_MALI_PT_*) */
+#define YD_T6_MMU_STOP_WALK      4 /* the CPU walk of the probe VA misses the backing */
+#define YD_T6_MMU_STOP_CLEAN     5 /* clean() failed (detail: its rc) */
+#define YD_T6_MMU_STOP_ENABLE    6 /* the AS0 enable sequence stopped */
+#define YD_T6_MMU_STOP_READ_BACK 7 /* AS0 reads back otherwise (refusal 1 TRANSTAB, 2 MEMATTR, 3 TRANSCFG) */
+#define YD_T6_MMU_STOP_FAULT     8 /* refusal 1 AS_ACTIVE, 2 AS_FAULTSTATUS, 3 MMU_INT_RAWSTAT set */
+#define YD_T6_MMU_STOP_FLUSH_PT  9 /* the flush after the map stopped */
+
+/* refusal of YD_T6_MMU_STOP_FLUSH, _ENABLE, _FLUSH_PT (gpu::mali::MaliRefusal) */
+#define YD_MALI_FLUSH_TIMEOUT    6 /* CLEAN_CACHES_COMPLETED did not rise in 100 ms */
+#define YD_MALI_FLUSH_BIT_STUCK  7 /* CLEAN_CACHES_COMPLETED reads set after its clear */
+#define YD_MALI_AS_ACTIVE_STUCK  8 /* AS_STATUS.AS_ACTIVE stayed set for 100 ms */
+/* refusal of YD_T6_MMU_STOP_TABLES (gpu::mali::pgtable::PtRefusal) */
+#define YD_MALI_PT_BAD_POOL      1
+#define YD_MALI_PT_UNALIGNED     2
+#define YD_MALI_PT_OUT_OF_RANGE  3
+#define YD_MALI_PT_POOL_FULL     4
+#define YD_MALI_PT_ALREADY_MAPPED 5
+#define YD_MALI_PT_FOREIGN_TABLE 6
+
+struct yd_t6_mmu_up {
+	uint32_t found[12];     /* AS0: TRANSTAB, MEMATTR, TRANSCFG, LOCKADDR (lo, hi each),
+				 * STATUS, FAULTSTATUS, FAULTADDRESS (lo, hi) */
+	uint32_t found_irq[4];  /* MMU_INT_RAWSTAT, MMU_INT_MASK, GPU_INT_RAWSTAT, GPU_INT_MASK */
+	uint32_t flush[4];      /* GPU_CMD written, GPU_INT_RAWSTAT before / after the clear, polls */
+	uint32_t tables_pa[2];
+	uint32_t backing_pa[2];
+	uint32_t tables_used;   /* table pages in use */
+	uint32_t walk_va[2];
+	uint32_t walk_desc[4][2]; /* the descriptor read at levels 0..3 */
+	uint32_t walk_levels;
+	uint32_t walk_pa[2];    /* 0 when the walk found no page */
+	int32_t clean_rc;
+	uint32_t enable_op[10]; /* LOCKADDR (lo, hi), LOCK polls (before, after), flush[4],
+				 * UNLOCK polls (before, after) */
+	uint32_t enable_regs[3][2]; /* TRANSTAB, MEMATTR, TRANSCFG written */
+	uint32_t update_polls[2];
+	uint32_t after[12];     /* AS0 after the UPDATE, as found[] */
+	uint32_t after_irq[4];
+	uint32_t flush_pt[10];  /* the flush after the map, as enable_op[] */
+	uint32_t stop;          /* YD_T6_MMU_STOP_* */
+	uint32_t refusal;
+	uint32_t detail[2];
+};
+
+int yd_t6_mmu_up(uintptr_t gpu, uint32_t mmu_features, void *pool, uint32_t pool_pages,
+		 uint64_t tables_pa, uint64_t backing_pa, int (*clean)(uintptr_t addr, size_t len),
+		 void (*delay_us)(uint32_t us), struct yd_t6_mmu_up *out);
+
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
  * display adapter's reset (logical, 1 = asserted). */
@@ -1333,6 +1397,11 @@ _Static_assert(offsetof(struct yd_dw_wdt_arm, cr_now) == 20, "yd_dw_wdt_arm.cr_n
 _Static_assert(offsetof(struct yd_dw_wdt_arm, flags) == 32, "yd_dw_wdt_arm.flags");
 _Static_assert(offsetof(struct yd_dw_wdt_arm, refusal) == 36, "yd_dw_wdt_arm.refusal");
 _Static_assert(offsetof(struct yd_dw_wdt_arm, period_ms) == 40, "yd_dw_wdt_arm.period_ms");
+_Static_assert(sizeof(struct yd_t6_mmu_up) == 348, "struct yd_t6_mmu_up");
+_Static_assert(offsetof(struct yd_t6_mmu_up, walk_va) == 100, "yd_t6_mmu_up.walk_va");
+_Static_assert(offsetof(struct yd_t6_mmu_up, enable_op) == 156, "yd_t6_mmu_up.enable_op");
+_Static_assert(offsetof(struct yd_t6_mmu_up, after) == 228, "yd_t6_mmu_up.after");
+_Static_assert(offsetof(struct yd_t6_mmu_up, stop) == 332, "yd_t6_mmu_up.stop");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

@@ -520,6 +520,235 @@ pub unsafe extern "C" fn yd_t6_gpu_up(
     }
 }
 
+/// `struct yd_t6_mmu_up`: what [`crate::board::nanopc_t6_mmu::mmu_up`]
+/// read, in 32-bit words (a 64-bit value is lo, hi). An `as` array is
+/// `TRANSTAB`, `MEMATTR`, `TRANSCFG`, `LOCKADDR` (lo, hi each), `STATUS`,
+/// `FAULTSTATUS`, `FAULTADDRESS` (lo, hi); an `irq` array is
+/// `MMU_INT_RAWSTAT`, `MMU_INT_MASK`, `GPU_INT_RAWSTAT`, `GPU_INT_MASK`; a
+/// `flush` array is the `GPU_CMD` written, `GPU_INT_RAWSTAT` before the
+/// clear and after it, and the polls; an `op` array is the `AS_LOCKADDR`
+/// written (lo, hi), the LOCK polls (before, after), the `flush`, the UNLOCK
+/// polls.
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdT6MmuUp {
+    pub found: [u32; 12],
+    pub found_irq: [u32; 4],
+    pub flush: [u32; 4],
+    pub tables_pa: [u32; 2],
+    pub backing_pa: [u32; 2],
+    pub tables_used: u32,
+    /// The walk of the probe VA: the VA, the descriptor at each level, the
+    /// levels read, the PA it gives (0 when none).
+    pub walk_va: [u32; 2],
+    pub walk_desc: [[u32; 2]; 4],
+    pub walk_levels: u32,
+    pub walk_pa: [u32; 2],
+    pub clean_rc: i32,
+    pub enable_op: [u32; 10],
+    /// What the enable wrote: `TRANSTAB`, `MEMATTR`, `TRANSCFG`; the UPDATE
+    /// polls (before, after).
+    pub enable_regs: [[u32; 2]; 3],
+    pub update_polls: [u32; 2],
+    pub after: [u32; 12],
+    pub after_irq: [u32; 4],
+    pub flush_pt: [u32; 10],
+    /// `YD_T6_MMU_STOP_*`, the refusal number of that step, and the value it
+    /// is about (lo, hi).
+    pub stop: u32,
+    pub refusal: u32,
+    pub detail: [u32; 2],
+}
+
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(size_of::<YdT6MmuUp>() == 4 * 87);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6MmuUp, walk_va) == 4 * 25);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6MmuUp, enable_op) == 4 * 39);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6MmuUp, after) == 4 * 57);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6MmuUp, stop) == 4 * 83);
+
+#[cfg(any(feature = "mali", test))]
+fn as_words(r: &crate::gpu::mali::mmu::AsRegs) -> [u32; 12] {
+    let [t0, t1] = lo_hi(r.transtab);
+    let [m0, m1] = lo_hi(r.memattr);
+    let [c0, c1] = lo_hi(r.transcfg);
+    let [l0, l1] = lo_hi(r.lockaddr);
+    let [f0, f1] = lo_hi(r.faultaddress);
+    [t0, t1, m0, m1, c0, c1, l0, l1, r.status, r.faultstatus, f0, f1]
+}
+
+#[cfg(any(feature = "mali", test))]
+fn flush_words(f: &crate::gpu::mali::Flush) -> [u32; 4] {
+    [f.cmd, f.raw_before, f.raw_cleared, f.waited_us]
+}
+
+#[cfg(any(feature = "mali", test))]
+fn op_words(o: &crate::gpu::mali::mmu::Op) -> [u32; 10] {
+    let [l0, l1] = lo_hi(o.lockaddr);
+    let [c, b, a, w] = flush_words(&o.flush);
+    [l0, l1, o.lock_polls[0], o.lock_polls[1], c, b, a, w, o.unlock_polls[0], o.unlock_polls[1]]
+}
+
+#[cfg(any(feature = "mali", test))]
+impl From<&crate::board::nanopc_t6_mmu::MmuUp> for YdT6MmuUp {
+    fn from(o: &crate::board::nanopc_t6_mmu::MmuUp) -> YdT6MmuUp {
+        let e = &o.enable;
+        YdT6MmuUp {
+            found: as_words(&o.found),
+            found_irq: o.found_irq,
+            flush: flush_words(&o.flush),
+            tables_pa: lo_hi(o.tables_pa),
+            backing_pa: lo_hi(o.backing_pa),
+            tables_used: o.tables_used,
+            walk_va: lo_hi(crate::board::nanopc_t6_mmu::PROBE_VA),
+            walk_desc: o.walk.desc.map(lo_hi),
+            walk_levels: o.walk.levels,
+            walk_pa: lo_hi(o.walk.pa.unwrap_or(0)),
+            clean_rc: o.clean_rc,
+            enable_op: op_words(&e.flush),
+            enable_regs: [lo_hi(e.transtab), lo_hi(e.memattr), lo_hi(e.transcfg)],
+            update_polls: e.update_polls,
+            after: as_words(&o.after),
+            after_irq: o.after_irq,
+            flush_pt: op_words(&o.flush_pt),
+            stop: o.stop as u32,
+            refusal: o.refusal,
+            detail: lo_hi(o.detail),
+        }
+    }
+}
+
+/// Z2 on the NanoPC-T6 ([`crate::board::nanopc_t6_mmu::mmu_up`]), after
+/// [`yd_t6_gpu_up`] returned 0: 0 when every step ran, `-EIO` when one
+/// stopped (`out.stop` says which), `-EINVAL` for a null or misaligned
+/// argument. `gpu` maps the GPU (0xfb000000) for at least 0x3000 bytes;
+/// `mmu_features` is `ident[4]` of the power-on; `pool` is `pool_pages`
+/// 4 KiB pages of the image's memory at physical `tables_pa`, written by
+/// this call; `backing_pa` is 64 KiB the firmware section maps to (not
+/// touched here); `clean` cleans the data cache over a range to the point
+/// of coherency, 0 on success; `delay_us` busy-waits.
+///
+/// # Safety
+/// `gpu` is mapped device memory covering the block; `pool` is valid for
+/// writes of `pool_pages` * 4096 bytes and is the memory at `tables_pa`;
+/// `out` is valid.
+#[cfg(feature = "mali")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn yd_t6_mmu_up(
+    gpu: usize,
+    mmu_features: u32,
+    pool: *mut u8,
+    pool_pages: u32,
+    tables_pa: u64,
+    backing_pa: u64,
+    clean: Option<extern "C" fn(usize, usize) -> i32>,
+    delay_us: Option<extern "C" fn(u32)>,
+    out: *mut YdT6MmuUp,
+) -> i32 {
+    use crate::gpu::mali::pgtable::{Table, PAGE};
+    let (Some(clean), Some(delay_us)) = (clean, delay_us) else { return -EINVAL };
+    if out.is_null() || pool.is_null() || pool_pages == 0 || !(pool as usize).is_multiple_of(PAGE as usize) {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
+    let pages = unsafe { core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize) };
+    // SAFETY: the caller's contract.
+    let hw = unsafe { Hw::new() };
+    let o = crate::board::nanopc_t6_mmu::mmu_up(
+        &hw,
+        gpu,
+        mmu_features,
+        pages,
+        tables_pa,
+        backing_pa,
+        &mut |a, n| clean(a, n),
+        &mut |us| delay_us(us),
+    );
+    // SAFETY: the caller's contract.
+    unsafe { *out = YdT6MmuUp::from(&o) };
+    if o.stop == crate::board::nanopc_t6_mmu::Stop::None {
+        0
+    } else {
+        -EIO
+    }
+}
+
+#[cfg(test)]
+mod mmu_tests {
+    use super::*;
+    use crate::board::nanopc_t6_mmu::{mmu_up, Stop};
+    use crate::gpu::mali::mmu::tests::{Gpu, BASE};
+    use crate::gpu::mali::pgtable::{PtRefusal, ENTRIES};
+    use crate::gpu::mali::MaliRefusal;
+
+    #[test]
+    fn the_c_header_has_the_z2_numbers_and_layout() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_MMU_STOP_NONE", Stop::None as u32),
+            ("YD_T6_MMU_STOP_FEATURES", Stop::Features as u32),
+            ("YD_T6_MMU_STOP_FLUSH", Stop::Flush as u32),
+            ("YD_T6_MMU_STOP_TABLES", Stop::Tables as u32),
+            ("YD_T6_MMU_STOP_WALK", Stop::Walk as u32),
+            ("YD_T6_MMU_STOP_CLEAN", Stop::Clean as u32),
+            ("YD_T6_MMU_STOP_ENABLE", Stop::Enable as u32),
+            ("YD_T6_MMU_STOP_READ_BACK", Stop::ReadBack as u32),
+            ("YD_T6_MMU_STOP_FAULT", Stop::Fault as u32),
+            ("YD_T6_MMU_STOP_FLUSH_PT", Stop::FlushPt as u32),
+            ("YD_MALI_FLUSH_TIMEOUT", MaliRefusal::FlushTimeout as u32),
+            ("YD_MALI_FLUSH_BIT_STUCK", MaliRefusal::FlushBitStuck as u32),
+            ("YD_MALI_AS_ACTIVE_STUCK", MaliRefusal::AsActiveStuck as u32),
+            ("YD_MALI_PT_BAD_POOL", PtRefusal::BadPool as u32),
+            ("YD_MALI_PT_UNALIGNED", PtRefusal::Unaligned as u32),
+            ("YD_MALI_PT_OUT_OF_RANGE", PtRefusal::OutOfRange as u32),
+            ("YD_MALI_PT_POOL_FULL", PtRefusal::PoolFull as u32),
+            ("YD_MALI_PT_ALREADY_MAPPED", PtRefusal::AlreadyMapped as u32),
+            ("YD_MALI_PT_FOREIGN_TABLE", PtRefusal::ForeignTable as u32),
+        ] {
+            assert_eq!(def(name), v, "{name}");
+        }
+        let pins = [
+            ("sizeof(struct yd_t6_mmu_up)", size_of::<YdT6MmuUp>()),
+            ("offsetof(struct yd_t6_mmu_up, walk_va)", offset_of!(YdT6MmuUp, walk_va)),
+            ("offsetof(struct yd_t6_mmu_up, enable_op)", offset_of!(YdT6MmuUp, enable_op)),
+            ("offsetof(struct yd_t6_mmu_up, after)", offset_of!(YdT6MmuUp, after)),
+            ("offsetof(struct yd_t6_mmu_up, stop)", offset_of!(YdT6MmuUp, stop)),
+        ];
+        for (what, v) in pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+    }
+
+    #[test]
+    fn the_words_c_prints_are_the_run_s_values() {
+        let g = Gpu::new(0);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = mmu_up(&g, BASE, 0x2830, &mut pool, 0x1040_0000, 0x1050_0000, &mut |_, _| 0, &mut |_| {});
+        let w = YdT6MmuUp::from(&o);
+        assert_eq!((w.stop, w.tables_used, w.walk_levels), (0, 4, 4));
+        assert_eq!(w.walk_va, [0x0400_1234, 0]);
+        assert_eq!(w.walk_pa, [0x1050_1234, 0]);
+        assert_eq!(w.walk_desc[3], [0x1050_1f47, 0x0060_0000]);
+        assert_eq!(w.flush[0], 0x3304);
+        assert_eq!(w.enable_regs, [[0x1040_0000, 0], [0x8c4c_8f4c, 0x8f8f_8f8f], [0x4200_01c6, 0]]);
+        assert_eq!(&w.after[..6], &[0x1040_0000, 0, 0x8c4c_8f4c, 0x8f8f_8f8f, 0x4200_01c6, 0]);
+        assert_eq!(&w.enable_op[..2], &[63, 0]);
+        assert_eq!(&w.flush_pt[..2], &[0x0400_000f, 0]);
+        assert_eq!(w.flush_pt[4], 0x0304);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

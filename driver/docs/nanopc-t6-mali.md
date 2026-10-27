@@ -101,6 +101,8 @@ four attributes the page tables use (PTE attribute index 0-3), are what
 device as non-cacheable, 0x8C write-back for `INC_OWBRWA`); bytes 4-7 read 0x8F, not
 the 0x4C that a zero MAIR byte would give, and no PTE selects them. The image
 writes the live word. Changes go LOCK, wait, cache flush, UNLOCK (`panthor_mmu.c:506-621`).
+The whole of it, with the values the image writes: "Z2: AS0 and a cache flush"
+below.
 
 ## The firmware (Z3)
 
@@ -582,7 +584,10 @@ milestones (Zephyr booted by U-Boot), as on every board.
   `t6_gpu` powered PD_GPU, read `GPU_ID` 0xa8670005, soft reset the GPU and
   brought its L2 up (below, "Z1" and "The GPU power-on"). The sign-off form
   (U-Boot starting the image) has not run.
-- **Z2**: AS0 page tables; a GPU cache flush round trip.
+- **Z2**: AS0 page tables; a GPU cache flush round trip. Host side done
+  2026-10-26 (design, builder, register sequence, the `t6_mmu` image and its
+  gate row; below, "Z2: AS0 and a cache flush"); **the board run has not
+  happened**: it waits for the owner's go-ahead and the UART.
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
   acknowledged.
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
@@ -1161,6 +1166,249 @@ the jump and after the return).**
   `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/regread.out`): `PRIORITY`
   0x80000000, `MODE` 0, `BANDWIDTH` 0, `SATURATION` 0, `EXTCONTROL` 0 in all four
   blocks. The image leaves them (under "Open").
+
+### Z2: AS0 and a cache flush
+
+Written on the host 2026-10-26, before the code; **not run on the board**
+(a kexec reboots the board's Armbian; the owner schedules it, procedure at
+the end). What Z2 shows: our kernel side builds the MCU address space's
+page tables in the image, enables AS0 on them the way panthor enables the
+MCU's VM, and gets a GPU cache flush back with its completion bit. It is
+the step before Z3, whose firmware is loaded into exactly these tables.
+
+Sources. Linux v6.18 `drivers/gpu/drm/panthor/` under its MIT option
+(decision 1): `panthor_regs.h` (the `MMU_*`, `AS_*`, `GPU_CMD` and
+`GPU_INT_*` definitions), `panthor_mmu.c` (`panthor_vm_create`,
+`panthor_vm_active`, `mair_to_memattr`, `lock_region`, `wait_ready`,
+`write_cmd`, `mmu_hw_do_operation_locked`, `panthor_mmu_as_enable`,
+`flags_to_prot`, `panthor_vm_map_pages`), `panthor_gpu.c`
+(`panthor_gpu_flush_caches`, `panthor_gpu_irq_handler`). io-pgtable-arm.c
+is GPL only: facts with their function, never its code
+(`arm_lpae_prot_to_pte`, `arm_lpae_install_table`, its stage-1 `MAIR`, the
+PTE sync of a non-coherent walk). The Arm ARM's VMSAv8-64 descriptor fields
+are the architecture. **These citations name the function or macro, not a
+line:** the hosts that wrote this subsection had no Linux tree and could not
+fetch one, so the reading is from these functions as named; where this page
+already had line numbers (`panthor_mmu.c:506-621, 785-790, 1990-2030`)
+they are the earlier reading's. A line-numbered pass against v6.18 is a
+review item before the board run.
+
+**Where the tables live.** In the image, at no fixed address: two arrays in
+the `t6_mmu` probe's `.bss`, inside the Z1 memory map's "ours" window.
+
+| Range (Z1's map) | What | Size |
+|---|---|---|
+| 0x10000000-0x10ffffff | the Zephyr image, as in Z1 | 16 MiB |
+| ... `.bss`, `t6_mmu_pool` | AS0's table pages, 4 KiB aligned; Z2 uses 4, Z3's sections need 9 | 16 pages, 64 KiB |
+| ... `.bss`, `t6_mmu_backing` | what the MCU's shared-interface section (VA 0x04000000) maps to | 64 KiB |
+
+Why there:
+- 0x10000000-0x10ffffff is the only range of the Z1 map that is ours after
+  the kexec. The Image header's `image_size` covers `.bss`, so
+  `nanopc-t6.sh` loads the segment over all of it, and nothing else needs
+  reserving.
+- Zephyr maps the kernel image as normal cacheable memory at its link
+  address (`zephyr,sram`), so `k_mem_phys_addr()` gives the physical
+  address the descriptors and `AS_TRANSTAB` need. The image prints it.
+- Not a fixed window outside the image, and not an uncached mapping: either
+  is a second mapping of the same RAM with other attributes, which the Arm
+  ARM calls mismatched. Linux keeps cacheable tables and cleans them for a
+  non-coherent walker (io-pgtable's PTE sync when `coherent_walk` is false;
+  panthor sets `coherent_walk` from `ptdev->coherent`, false on the T6).
+  The image does the same: after building, `sys_cache_data_flush_range`
+  over the used pages (Zephyr's "flush" is a clean to the point of
+  coherency, `dc cvac` on arm64). Then the enable's own whole-VA flush
+  cleans and invalidates the GPU's L2 before `UPDATE`, so the GPU cannot hold
+  an old line of those pages.
+- The code that takes the pool (`gpu::mali::pgtable::Tables`) allocates
+  nothing: it is given the pages and their physical address, as the GC7000's
+  MMU is given its pool.
+
+**The format.** panthor gives a VM's tables to io-pgtable as
+`ARM_64_LPAE_S1` (`panthor_vm_create`: 4 KiB and 2 MiB page sizes, `ias`
+the GPU's VA bits, `oas` its PA bits). That is the Arm VMSAv8-64 stage-1
+format. It is **not** `ARM_MALI_LPAE`, panfrost's format for the older
+job-manager GPUs; the CSF GPUs select the AArch64 mode in `AS_TRANSCFG`
+(`ADRMODE_AARCH64_4K`, `panthor_vm_active`). `MMU_FEATURES` 0x2830 gives
+48 VA bits and 40 PA bits (Z1's read, panthor's probe line), so: four
+levels (VA bits 47:39, 38:30, 29:21, 20:12), each table one 4 KiB page of
+512 descriptors, the root's PA is `AS_TRANSTAB` as it is (io-pgtable's
+`ttbr`). Z2 builds level-3 pages only, no 2 MiB blocks.
+
+| Descriptor | Bits | Source |
+|---|---|---|
+| table (levels 0-2) | next table's PA (47:12) \| 0b11 | `arm_lpae_install_table` (no `NSTable`: only with a quirk panthor does not set) |
+| page (level 3) | PA (47:12) \| 0b11 | `arm_lpae_init_pte` |
+| `AttrIndx` 4:2 | 1 (write-back) for a cached mapping, 0 (non-cacheable) otherwise | `arm_lpae_prot_to_pte`, `IOMMU_CACHE` |
+| `AP[1]` bit 6 | always (unprivileged; panthor never asks `IOMMU_PRIV`) | `arm_lpae_prot_to_pte`, `flags_to_prot` |
+| `AP[2]` bit 7 | read only (`MAP_READONLY`) | the same |
+| `SH` 9:8 | inner shareable (3) cached, outer (2) otherwise | `arm_lpae_prot_to_pte` |
+| `AF` bit 10, `nG` bit 11 | always (stage 1) | the same |
+| `PXN`/`UXN` 54:53 | both, unless executable (`MAP_NOEXEC` clear) | the same |
+
+The section VA 0x04000000, 64 KiB, writable, cached, not executable (as
+panthor maps a section without the execute flag): its page `n` is
+`backing + n·0x1000 | 0x0060000000000f47`.
+
+**The registers** (panthor_regs.h; AS n at 0x2400 + 0x40·n, AS0 the
+MCU's: `panthor_vm_active` always gives the MCU VM slot 0):
+
+| Register | Offset | Z2 writes |
+|---|---|---|
+| `AS_TRANSTAB` | +0x00 (64) | the pool's PA |
+| `AS_MEMATTR` | +0x08 (64) | 0x8f8f8f8f8c4c8f4c (panthor's live word) |
+| `AS_LOCKADDR` | +0x10 (64) | 0x3f (all of VA), then 0x000000000400000f |
+| `AS_COMMAND` | +0x18 | `LOCK` 2, `UNLOCK` 3, `UPDATE` 1 (`FLUSH_PT` 4, `FLUSH_MEM` 5 are not written: they name the operation only) |
+| `AS_FAULTSTATUS`, `AS_FAULTADDRESS` | +0x1c, +0x20 | read |
+| `AS_STATUS` | +0x28 | read; bit 0 `AS_ACTIVE` |
+| `AS_TRANSCFG` | +0x30 (64) | 0x00000000420001c6 |
+| `MMU_INT_RAWSTAT`, `_CLEAR`, `_MASK` | 0x2000, 0x2004, 0x2008 | read (bit n a fault of AS n, bit 16+n its bus error) |
+| `GPU_CMD` | 0x30 | 0x3304, 0x0304 |
+| `GPU_INT_RAWSTAT`, `_CLEAR` | 0x20, 0x24 | bit 17 `CLEAN_CACHES_COMPLETED` |
+
+- `AS_TRANSCFG` (`panthor_vm_active`): `PTW_MEMATTR_WB` (2 << 24) |
+  `PTW_RA` (1 << 30) | `ADRMODE_AARCH64_4K` (6) | `INA_BITS(55 - 48)`
+  (7 << 6) = 0x420001c6, the live value; `PTW_SH_OS` only when coherent.
+- `AS_MEMATTR` (`mair_to_memattr` over io-pgtable's stage-1 `MAIR`
+  0xf404ff44: index 0 normal non-cacheable 0x44, 1 write-back 0xff, 2
+  device 0x04, 3 inner non-cacheable outer write-back 0xf4): a byte is
+  write-back only when inner and outer both are, else non-cacheable
+  (0x4c: `INNER_OUTER_NC` | `INNER_ALLOC_EXPL(0, 0)`); write-back takes the
+  inner allocation hints and, non-coherent, `SH_MIDGARD_INNER`: 0xff gives
+  0x8f, 0xf4 gives 0x4c (its inner is non-cacheable), 0x04 and the unused
+  bytes 0x4c. So 0x4c4c4c4c8c4c8f4c derived; the board's live word
+  ("MMU (Z2)" above) is 0x8f8f8f8f8c4c8f4c, the same in bytes 0-3, the
+  ones a PTE selects, and 0x8f in bytes 4-7, which none does. The image
+  writes the live word (`MEMATTR_LIVE`; a host test holds its bytes 0-3 to
+  `mair_to_memattr`); the page's `AttrIndx` 1 is the 0x8f byte.
+- `AS_LOCKADDR` (`lock_region`): the naturally aligned power-of-two block
+  holding the range, at least `AS_LOCK_REGION_MIN_SIZE` (32 KiB), as its
+  base with log2(size) - 1 in the low bits. All of VA: 63; the section's
+  64 KiB: 0x0400000f.
+- `GPU_FLUSH_CACHES(l2, lsc, other)` = `GPU_CMD_DEF(4, l2 | lsc << 4 |
+  other << 8)`, `CACHE_CLEAN` 1, `CACHE_INV` 2: L2 and LSC cleaned and
+  invalidated 0x3304 (`FLUSH_MEM`), the L2 only 0x0304 (`FLUSH_PT`).
+
+**The sequences.**
+
+1. The round trip alone (`panthor_gpu_flush_caches`): clear bit 17, read it
+   clear (else refuse: a completion could not be told from an old one),
+   write `GPU_CMD` 0x3304, poll `GPU_INT_RAWSTAT` bit 17 for at most 100 ms
+   (panthor's `wait_event_timeout`), clear it. panthor waits for the IRQ and
+   its handler clears the bit; Zephyr has no handler on SPI 94 here, so the
+   image polls the raw status, as Z1's soft reset does.
+2. AS0 on (`panthor_mmu_as_enable`): `mmu_hw_do_operation_locked` over the
+   whole VA with `FLUSH_MEM`: `AS_LOCKADDR` = 63, `wait_ready`, `LOCK`,
+   `wait_ready`, the flush (0x3304, bit 17), `UNLOCK` (a `GPU_CMD` flush does
+   not unlock the region, panthor's comment there), `wait_ready`; then
+   `AS_TRANSTAB`, `AS_MEMATTR`, `AS_TRANSCFG` (each 64-bit, low word first),
+   `wait_ready`, `UPDATE`. `wait_ready` polls `AS_STATUS` bit 0 every 10 µs
+   for at most 100 ms (`gpu_read_relaxed_poll_timeout_atomic(..., 10,
+   100000)`).
+3. The flush after a map (`panthor_vm_map_pages` ends with the range's
+   `FLUSH_PT`): `AS_LOCKADDR` = 0x0400000f, `LOCK`, the L2-only flush
+   0x0304, `UNLOCK`.
+
+One difference from panthor, on purpose: after each `AS_COMMAND` the image
+waits for `AS_ACTIVE` to clear (panthor only waits before the next one), so
+each command's completion is a measured count. AS0's registers are read
+back after `UPDATE`; the run passes when they equal what was written,
+`AS_STATUS`, `AS_FAULTSTATUS` and `MMU_INT_RAWSTAT` read 0, and the three
+flushes came back. Interrupt masks are read, never written.
+
+**What Z2 does not show.** That the GPU walks these tables right: nothing
+reads through AS0 before the MCU runs, and the MMU has no translate
+command. A CPU walk of VA 0x04001234 over the same pages (after the build,
+following each descriptor's PA back into the pool) is printed instead; the
+GPU's first walk is the MCU's first fetch at Z3, and a wrong table shows
+there as `MMU_INT_RAWSTAT` bit 0 with `AS_FAULTSTATUS`/`AS_FAULTADDRESS`.
+Nor the MMU's IRQ line (SPI 93).
+
+**The code.** Following "Where the code goes" and Z1's split:
+`driver/rust/src/gpu/mali/pgtable.rs` (the builder and the walk),
+`gpu/mali/mmu.rs` (the AS registers and sequences, `mair_to_memattr`,
+`lock_region`), `gpu::mali::flush_caches` in `gpu/mali/mod.rs`,
+`board/nanopc_t6_mmu.rs` (the Z2 run over them),
+`ffi/rk3588.rs` `yd_t6_mmu_up` with `struct yd_t6_mmu_up` in
+`include/yakogl_drivers.h`, and the probe `tools/probes/nanopc_t6/t6_mmu`
+beside `t6_gpu` (Z1 split `t6_hello` and `t6_gpu` the same way; a probe of
+its own keeps `t6_gpu`'s record reproducible). `t6_mmu` runs Z1's
+`yd_t6_gpu_up`, prints its outcome in one line, then Z2. Host tests: the
+descriptors, the indices, the section mapped and walked back, shared
+tables, refusals (pool full, unaligned, out of range, remap, a foreign
+table); `AS_TRANSCFG`, `AS_MEMATTR` and the lock regions; the enable's
+register writes in panthor's order against a register model that refuses an
+`AS_COMMAND` while `AS_ACTIVE` is set and a flush while one is pending; a
+stuck `AS_ACTIVE`; the whole run, a failed clean, a register that does not
+keep its value, a fault after the update; the C header's numbers and layout.
+The gate row is `zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache
+flush)`, built as the `t6_gpu` row is.
+
+```sh
+west build -p always -b nanopc_t6 -d build/t6_mmu yakogl/tools/probes/nanopc_t6/t6_mmu
+```
+
+**The board procedure (not run).** As Z1's ("The first board
+procedure"), from a detached checkout of main with the image built from it:
+someone who can power-cycle the T6 named, the UART captured read only from
+before the jump, Linux's watchdog open by default.
+
+1. Ask who uses the board; the dry run `nanopc-t6.sh <t6_mmu zephyr.bin>`
+   and its plan. Note the PAs the ELF gives: `nm zephyr.elf | grep
+   't6_mmu_\(pool\|backing\)'` (the image is identity mapped, so the UART's
+   PAs must equal these).
+2. `T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=$BOARD_UART nanopc-t6.sh
+   <t6_mmu zephyr.bin> --go`.
+
+Predicted on uart2, written before any run (`P` is `t6_mmu_pool`'s address,
+`B` is `t6_mmu_backing`'s, from step 1):
+
+- the Z1 banner and marker as for `t6_gpu` (`T6:A` .. `T6:C`), then
+  `t6_mmu: build <describe>`, `t6_mmu: WDT0 period 22369 ms, fed until
+  60000 ms of uptime`;
+- `t6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES
+  0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1`;
+- `t6_mmu: pool ... at PA P (16 pages), backing ... at PA B`;
+- `AS0 as found`: `STATUS` 0, `FAULTSTATUS` 0, `TRANSTAB`, `MEMATTR`,
+  `LOCKADDR` 0 after Z1's soft reset; `TRANSCFG` as found is not predicted
+  (recorded). `IRQ as found`: `MMU_INT_RAWSTAT` 0; `GPU_INT_RAWSTAT` bit 17
+  clear (bits 9/10, `POWER_CHANGED`, may be set by Z1's L2 power-on); the
+  masks as the reset left them (expected 0, recorded, not asserted);
+- `flush round trip: GPU_CMD 0x00003304`, bit 17 clear after the clear,
+  then set within the 100 ms (Z1's soft reset completed in one 1 µs poll);
+- `tables at PA P: 4 of 16 pages used`;
+- `walk VA 0x0000000004001234: L0 P+0x1003 L1 P+0x2003 L2 P+0x3003 L3
+  (B+0x1000) | 0x0060000000000f47 (4 levels): PA B+0x1234`;
+- `tables cleaned to the point of coherency: rc 0`;
+- `AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f`, the flush
+  `GPU_CMD 0x00003304`; `TRANSTAB P MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG
+  0x00000000420001c6 written`;
+- `AS0 after`: the same three values read back, `LOCKADDR` 0x3f,
+  `STATUS` 0, `FAULTSTATUS` 0, `FAULTADDRESS` 0; `IRQ after`:
+  `MMU_INT_RAWSTAT` 0;
+- `the flush after the map: LOCKADDR 0x000000000400000f`, `GPU_CMD
+  0x00000304`;
+- `t6_mmu: PASS: AS0 on TRANSTAB P, three cache flush round trips, N ms`,
+  then `t6: t6_mmu done: PSCI SYSTEM_RESET`, the DDR loader, U-Boot;
+  `nanopc-t6.sh` prints "back in Armbian N s after the jump" (45 s for
+  `t6_hello`).
+
+A refusal prints `t6_mmu: FAIL: stop <n> (<step>), refusal <n>, detail
+<value>` and resets the same way; the stop and refusal numbers are
+`YD_T6_MMU_STOP_*` and `YD_MALI_*` in `yakogl_drivers.h`.
+
+**The bounded way back.** Every wait of the run is bounded: Z1's (100 ms
+reset, 20 ms L2, the PMU and SPI budgets), three flushes of at most 100 ms
+and ten `AS_STATUS` waits of at most 100 ms each, so Z2 adds at most
+about 1.3 s, under the 5 s the feeder allows between `t6_watchdog_feed()`
+calls (one before and one after each of `yd_t6_gpu_up` and
+`yd_t6_mmu_up`). A hang anywhere after the arming is reset by WDT0 at
+most 82.4 s after it (Z1: 60 s lifetime + 22.4 s period); before it, by
+Linux's watchdog (44.7 s from the open). If PSCI `SYSTEM_RESET` returns,
+WDT0 resets the board within one period. A stuck GPU register is a
+bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
+an external abort, but Z2 runs only after Z1 returned 0 (PD_GPU on, L2
+ready).
 
 ## Decisions
 
