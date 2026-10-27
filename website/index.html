@@ -47,22 +47,25 @@
       <div class="stack-label">A conceptual split</div>
       <div class="stack-app"><span>Application / UI toolkit</span><strong>Slint UI · FemtoVG</strong></div>
       <div class="stack-fork" aria-hidden="true"><span></span></div>
-      <div class="stack-paths">
-        <div class="stack-path stack-cpu">
-          <span class="stack-tag">CPU side</span>
-          <strong>Zephyr</strong>
-          <span>scheduling · devices · application runtime</span>
-          <em>CPU</em>
-        </div>
-        <div class="stack-path stack-gpu">
-          <span class="stack-tag">GPU side</span>
-          <strong>YakoGL<span aria-hidden="true">.</span></strong>
-          <span>OpenGL ES / EGL · shaders · GPU back ends</span>
-          <em>GPU</em>
+      <div class="stack-soc">
+        <div class="stack-soc-label"><span>Embedded SoC</span><strong>AM62P · i.MX8MP · BCM2711</strong></div>
+        <div class="stack-paths">
+          <div class="stack-path stack-cpu">
+            <span class="stack-tag">CPU side</span>
+            <strong>Zephyr</strong>
+            <span>scheduling · devices · application runtime</span>
+            <em>CPU</em>
+          </div>
+          <div class="stack-path stack-gpu">
+            <span class="stack-tag">GPU side</span>
+            <strong>YakoGL<span aria-hidden="true">.</span></strong>
+            <span>OpenGL ES / EGL · shaders · GPU back ends</span>
+            <div class="stack-gpus" aria-label="Hardware-proven GPU families"><span>PowerVR</span><span>Vivante</span><span>Broadcom V3D</span></div>
+            <em>GPU</em>
+          </div>
         </div>
       </div>
-      <div class="stack-gpus" aria-label="Hardware-proven GPU families"><span>PowerVR</span><span>Vivante</span><span>Broadcom</span></div>
-      <figcaption id="stack-caption">Conceptual responsibilities, not a strict boundary: YakoGL executes CPU-side driver work too, while Zephyr and YakoGL cooperate to drive the GPU.</figcaption>
+      <figcaption id="stack-caption">Conceptual responsibilities, not a strict boundary: the SoC contains both CPU and GPU; Zephyr runs the CPU side while YakoGL drives the GPU side.</figcaption>
     </figure>
   </div>
   <div class="hero-bottom"><span>Hardware-proven on Zephyr</span><a href="status.html#am62p">Verdin AM62P</a><a href="status.html#imx8mp">Verdin iMX8M Plus</a><a href="status.html#pi4">Raspberry Pi 4</a></div>
