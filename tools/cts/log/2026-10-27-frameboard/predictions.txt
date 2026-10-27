@@ -1,0 +1,37 @@
+# plan #153 frameboard: predictions, written before any board run
+# Tree: the integration tip 0543b60b (builtin-lower's cull fix 272033a3,
+# frame-instance and frame-f16rt merged). Board: NanoPC-T6, panthor.
+# Baseline: the RESULTS.md Mali record (2026-10-24-refusals, tip 02900052),
+# 98 PASS, 63 REFUSED, 87 NO-CASE, 8 SKIP, 0 FAIL.
+
+## case 4 cull (#32, #33)
+Was: REFUSED draw: mali: a draw with face culling on is not built yet
+Predict: PASS in both runs.
+The six draws carry r57 (DCD Flags 0) as pinned in
+src/mali/frame_cull_tests.rs (case_4_s_six_draws_are_the_board_s_dcd_flags):
+  frame 1 window, front CCW, cull back   0x521AB  triangle drawn (0xff00ffff)
+  frame 2 window, front CCW, cull front  0x321AB  culled (0xff000000)
+  frame 3 window, front CW,  cull back   0x421AB  culled
+  frame 4 window, front CW,  cull front  0x221AB  drawn
+  frame 5 FBO,    front CCW, cull back   0x421AB  drawn
+  frame 6 FBO,    front CCW, cull front  0x221AB  culled
+If a frame shows the wrong pixel, the swapped winding of the window flip
+(bit 16) is the first suspect, not the cull bits.
+
+## case 52 es3split (per-instance attributes)
+Was: PASS (since 2026-10-24-refusals).
+Predict: PASS in both runs (frame-instance merged before that record;
+nothing since touches the instance split).
+
+## case 54 es3chain (RGBA16F targets)
+Was: REFUSED draw: mali: a colour target other than RGBA8888, XRGB8888 or
+RGB565 is not built yet
+Predict: PASS in both runs. Phase B's half-float pass (cube 128x128 down
+to 4x4, six faces each, clear then one opaque draw) is the only RGBA16F
+use; no blend, so NOT_BUILT_FLOAT_BLEND is not reached.
+
+## panthor-gltest --sweep x2
+Predict: both runs equal; PASS = the 98 of the baseline plus 4 cull and
+54 es3chain (100), FAIL 0, no kernel messages. Other merges since 02900052
+(alu-lower, linkconst, uniarray-int) may turn more REFUSED rows into PASS
+(114 cubelod is the likely one) or move refusal reasons; no PASS lost.
