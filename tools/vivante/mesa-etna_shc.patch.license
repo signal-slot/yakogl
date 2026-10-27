@@ -1,5 +1,0 @@
-SPDX-License-Identifier: MIT
-SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-SPDX-FileCopyrightText: 2012-2015 Etnaviv Project
-SPDX-FileCopyrightText: 2017 Intel Corporation
-A patch to Mesa src/gallium/drivers/etnaviv/ (etnaviv_screen.[ch], meson.build) (NOTICE 1f).

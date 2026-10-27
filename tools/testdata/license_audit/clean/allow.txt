@@ -1,2 +1,0 @@
-# fixture allowlist
-up.patch | undecided | owner decision pending

@@ -1,4 +1,0 @@
-#version 100
-attribute vec2 a_pos;
-uniform vec2 u_scale;
-void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); }

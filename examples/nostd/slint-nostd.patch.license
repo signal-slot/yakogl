@@ -1,4 +1,0 @@
-SPDX-License-Identifier: (GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0) AND Apache-2.0 AND MIT
-SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-SPDX-FileCopyrightText: SixtyFPS GmbH <info@slint.dev>
-A patch to Slint (https://github.com/slint-ui/slint): its hunks to Slint's files are under Slint's licence; the new probe/ and slint-ui-app/ files are ours, Apache-2.0 (gauge-parts.slint: MIT), as their SPDX lines say (NOTICE 8).

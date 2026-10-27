@@ -1,1 +1,0 @@
-GM	/img/GM/zephyr/zephyr.bin	-	glmark2

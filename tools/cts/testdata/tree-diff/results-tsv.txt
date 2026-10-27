@@ -1,5 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# index	filter	begun	passed	failed	notsup	other	noresult	failing names (';'-separated)
-0	dEQP-GLES2.functional.treediff.*	7	5	0	1	1	0	dEQP-GLES2.functional.treediff.regress_fail
-TALLY (1 entries): begun 7 passed 5 failed 0 notsup 1 other 1 noresult 0

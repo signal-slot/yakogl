@@ -1,6 +1,0 @@
-15:00:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
-15:00:01 [build] use-vbo=false:interleave=true yakogl/v3d: binner pool after job 1: overflow blocks 0 of 2
-15:00:10  FPS: 157 FrameTime: 6.380 ms
-15:00:11 [shading] shading=gouraud:yakogl/v3d: tiled copies high-water 1052672 of 25165824 bytes
-15:00:20  FPS: 227 FrameTime: 4.410 ms
-15:00:20 glmark2: score 190

@@ -1,4 +1,0 @@
-name: Up
-licence: MIT (LICENSE)
-generated: out/gen_up.h, by gen.py
-files:

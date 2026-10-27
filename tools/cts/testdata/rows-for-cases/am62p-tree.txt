@@ -1,7 +1,0 @@
-# Fixture for rows-for-cases.py: am62p-full-tree.txt's form (no labels: images img<N>-<tag>).
-dEQP-GLES2.functional.attribute_location.*
-
-# a blank line and this comment are not rows
-dEQP-GLES2.functional.texture.completeness.*,dEQP-GLES2.functional.texture.filtering.*
-dEQP-GLES2.functional.texture.size.*
-dEQP-GLES2.functional.state_query.*,dEQP-GLES2.functional.negative_api.*

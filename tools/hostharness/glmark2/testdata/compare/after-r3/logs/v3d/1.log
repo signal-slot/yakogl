@@ -1,4 +1,0 @@
-gm2: scene-end shadow: ok frames=11 draws=100 refused=0 gl_errors=0 incomplete_draws=0
-gm2: gl-time glDrawElements setup=1,1000,1000 frames=100,342000000,342000000 teardown=0,0,0
-gm2: gl-time eglSwapBuffers setup=1,1000,1000 frames=10,228000000,228000000 teardown=0,0,0
-gm2: gl-frames swaps=11 counted=10 wall_ns=590000000 cpu_ns=580000000 gl_wall_ns=570000000

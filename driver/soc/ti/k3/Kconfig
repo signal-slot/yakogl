@@ -1,5 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-if SOC_FAMILY_TI_K3
-rsource "*/Kconfig"
-endif

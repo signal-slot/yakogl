@@ -1,6 +1,0 @@
-# Fixture for rows-for-cases.py: imx8mp-full-tree.txt's form (one image, the row picked by selector i).
-dEQP-GLES2.info.*,dEQP-GLES2.functional.prerequisite.*
-dEQP-GLES2.functional.texture.completeness.2d.*
-dEQP-GLES2.functional.texture.completeness.cube.*
-dEQP-GLES2.functional.fbo.*
-dEQP-GLES2.functional.negative_api.*

@@ -1,4 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-max_width = 120
-use_small_heuristics = "Max"

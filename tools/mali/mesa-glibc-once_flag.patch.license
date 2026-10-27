@@ -1,5 +1,0 @@
-SPDX-License-Identifier: BSL-1.0
-SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-SPDX-FileCopyrightText: 2012 yohhoy
-SPDX-FileCopyrightText: 2022 Yonggang Luo
-A patch to Mesa 25.0.x src/c11/threads.h and impl/threads_posix.c, which are BSL-1.0 (NOTICE 1f).

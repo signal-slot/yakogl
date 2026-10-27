@@ -1,5 +1,0 @@
-gm2: scene-end ideas:speed=duration: ok frames=11 draws=200 refused=0 gl_errors=0 incomplete_draws=0
-gm2: gl-time glDrawElements setup=2,2000000,2000000 frames=2000,20000000,20000000 teardown=0,0,0
-gm2: gl-time eglSwapBuffers setup=1,1000,1000 frames=10,2000000,2000000 teardown=0,0,0
-gm2: gl-frames swaps=11 counted=10 wall_ns=30000000 cpu_ns=30000000 gl_wall_ns=22000000
-gm2: draw-steps counted=10 scopes=2000 untimed=6000 ns=0,0,0,0,0,0,0,0,0,0,0,0

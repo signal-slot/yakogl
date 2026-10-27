@@ -1,7 +1,0 @@
-[00:00:01.000,000] <inf> glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
-[00:00:11.000,000] <inf> glmark2: [build] use-vbo=true: FPS: 250 FrameTime: 4.000 ms
-[00:00:21.000,000] <inf> glmark2: [terrain] <default>: FPS: 20 FrameTime: 50.250 ms
-[00:00:31.000,000] <inf> glmark2: [shadow] <default>: FPS: 25 FrameTime: 40.000 ms
-[00:00:41.000,000] <inf> glmark2: [refract] <default>: FPS: 30 FrameTime: 33.333 ms
-[00:00:42.000,000] <inf> glmark2: [jellyfish] <default>: Unsupported
-[00:00:43.000,000] <inf> glmark2: score 183: 4 scenes ran, 0 failed, 1 unsupported (5 list entries); window 800x600, shown yes, GPU resets 0

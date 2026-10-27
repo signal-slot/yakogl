@@ -1,1 +1,0 @@
-1.000 tftp: done peer=<board-host>:1 file=yakogl/x.bin bytes=1000 sha256=aaaaaaaaaaaaaaaa seconds=0.010
