@@ -38,27 +38,45 @@ The NIR quoted below is the final NIR in `BIFROST_MESA_DEBUG=shaders` output
    `do_if_simplification`, `opt_flatten_nested_if_blocks`,
    `do_dead_code_unlinked`, `do_tree_grafting`, `do_minmax_prune`,
    **`do_rebalance_tree`**, **`do_algebraic`**, `do_lower_jumps`.
-   So rebalance precedes GLSL's algebraic simplification, and the tree it sees
-   still holds `x * 1.0` and every constant.
+   (`glsl_parser_extras.cpp:2604-2605`.) So rebalance precedes GLSL's
+   algebraic pass, and the tree it sees still holds `x * 1.0` and every
+   constant.
 2. `do_rebalance_tree` (`src/compiler/glsl/opt_rebalance_tree.cpp`):
    `ir_rebalance_visitor::handle_rvalue` -> `handle_expression` ->
    `visit_tree(is_reduction)`; if a reduction with `num_expr > 2`, the tree is
    turned into a vine (`tree_to_vine`) and back (`vine_to_tree`, DSW). It
    skips: an assignment to an `invariant`/`precise` variable
-   (`visit_enter(ir_assignment)`); a tree with **two or more constants**; a
+   (`visit_enter(ir_assignment)`); a tree with **two or more constants**
+   (`is_reduction`, `opt_rebalance_tree.cpp:209-216`); a
    tree containing an `ir_dereference_array`/`_record` (`foo[a+b]+c`); a
    matrix-typed operand; mixed expression types or operations; and operations
    other than add, mul, and/or/xor, logic and/or/xor, min, max
    (`is_reduction_operation`). Swizzles are not expressions (`as_expression()`
    is null), so they count towards nothing; `num_expr` counts only
    `ir_expression` nodes.
-3. `do_algebraic` (`opt_algebraic.cpp`): `x * 1.0 -> x`, and
-   `reassociate_constant` (l.175: moves a constant down a same-operation tree
-   only when a sub-expression has a constant operand itself).
-4. After `glsl_to_nir`, `nir_opt_algebraic` (`src/compiler/nir/
-   nir_opt_algebraic.py`): "Propagate constants up multiplication chains"
-   (l.2394: `fmul(fmul(a, b) [used once, a and b not const], #c) ->
-   fmul(fmul(a, c), b)`, also l.2406 and l.3609) and the late `ffma` fusion
+3. `do_algebraic` (`opt_algebraic.cpp`) has **no `x * 1.0` rule**: its
+   `ir_binop_mul` case (l.276-284) only calls `reassociate_constant`, and
+   `is_one()` appears only in the min/max saturate rules (l.322-352). Its one
+   job here is `reassociate_constant` (l.175-216, with `reassociate_operands`,
+   l.148-166): for `op(const, tree)` of the same operation (add or mul, no
+   matrices) it walks down the tree to the first sub-expression that has a
+   constant operand and **swaps** the outer constant with that sub-expression's
+   other operand (l.196-201: the outer constant takes the place of the sub-expression's
+   non-constant operand, which goes to the outer expression), so the two
+   constants meet and constant folding joins them. It does not remove the `* 1.0`; it moves the other operand out.
+4. `x * 1.0` is removed in NIR, not in GLSL. After `glsl_to_nir`,
+   `nir_opt_algebraic` (`src/compiler/nir/nir_opt_algebraic.py`) has
+   `fmul(a, 1.0) -> fcanonicalize(a)` (l.292; `fmul(a, -1.0) -> fneg` is l.296),
+   and `fcanonicalize(a@32)` is `a` unless the shader flushes fp32 denormals
+   (l.162; also l.167, l.171, the rules in `optimize_fcanonicalize`,
+   l.154-172, added at l.600). So the `* 1.0` goes away in two steps, and with
+   a denormal-flushing mode it would stay as a real `fmul a, 1.0` (late
+   lowering of `fcanonicalize`, l.4094). Then: "Propagate constants up
+   multiplication chains" (l.2393-2397: `fmul(fmul(a, b) [used once, a and b
+   not const], #c) -> fmul(fmul(a, c), b)`), "Reassociate constants in add/mul
+   chains" (l.2406: `fmul(#a, fmul(b, #c)) -> fmul(fmul(a, c), b)`) and, in
+   `before_ffma_optimizations`, the opposite move "Propagate constants down
+   multiplication chains" (l.3608-3609), then the late `ffma` fusion
    (`fadd(fmul(a, b), c) -> ffma`); `reassoc_fma_optimizations` (l.4353, run by
    `nir_opt_reassociate_for_fma`, l.4446) only touches `fadd` trees fed by
    `fmul`s. The panfrost backend adds none of its own reassociation.
@@ -113,9 +131,19 @@ allocator's, not an effect of the order.
 
 The third lane `((u_b * 1.0) * u_q) * 8.0` has two constants (1.0, 8.0), so
 `is_reduction` rejects it (step 2, `contains_constant`); the first two lanes
-have fewer than three expressions. `do_algebraic` removes the `* 1.0`s; the
-remaining `(u_b * u_q) * 8.0` is left (`reassociate_constant` finds no constant
-operand inside). NIR's l.2394 rule then moves the constant inward. Final NIR
+have fewer than three expressions. Then `do_algebraic` does **not** drop the
+`* 1.0`. With `ir1` = the outer `* 8.0` (constant operand 1),
+`handle_expression` (l.276-284) calls `reassociate_constant(ir1, 1, 8.0,
+(u_b * 1.0) * u_q)`. That sub-tree has no constant operand, so the function
+recurses into its operand 0 (l.204), `u_b * 1.0`, whose operand 1 is the
+constant: `reassociate_operands(ir1, 1, ir2, 0)` (l.200) swaps `8.0` and `u_b`.
+The lane is now `((8.0 * 1.0) * u_q) * u_b`; constant folding makes it
+`(8.0 * u_q) * u_b`. This, not NIR l.2394, is where the order `(8 * q) * b`
+comes from: the outer operand `u_b` is never a constant and the inner product
+already has 8.0 in it, so l.2394 and l.2406 have nothing to match. (Lane 1
+`abs(..) * 1.0` and lane 2 `1.0 * -(..)` meet no `reassociate_constant` case,
+as the other operand is not a multiplication; their `* 1.0` goes in NIR, l.292
+then l.162.) Final NIR
 (uniforms in one `load_ubo` vec4, x=u_x y=u_q z=u_a w=u_b):
 
     %3  = ffma -2.0, %2.z, %2.x           ; u_x - 2*u_a
@@ -142,7 +170,14 @@ Not `(u_b * u_q) * 8` and not the source's order. `fs.fragment` (16 words,
 The exact words are in `chain_mulone_fs_mods.expect.json` (`fs.fragment`).
 The product `8.0 * u_q` is one `FMA` (8.0 as the shifted immediate, the
 addend a zero register with `.neg`), then `* u_b` another `FMA` with a `-0`
-addend: the order is `(8 * u_q) * u_b`, not the source's. Which FAU word is
+addend: the order is `(8 * u_q) * u_b`, not the source's. The words show both
+points of this section. There is no multiply by 1.0 anywhere in the 16 words:
+lane 0 is `FMA -2.0 * u_a + u_x` then only the `.abs` source of the f16
+conversion `FADD`, lane 1 is the negated `FADD`, lane 2 has exactly the two `FMA`s. And the first `FMA` has `8.0` first
+and `u3.w0` (= u_q: the `FADD r0, u3.w0, ..` of lane 1 is `u_q - u_a`) second,
+the second has `u3.w1` (= u_b) last, which is the result of the
+`reassociate_constant` swap. `tools/mali/testdata/algfold_189_mods.*` is the
+same shader from the algebraic-folds study. Which FAU word is
 which uniform is the JSON's `fau` list (u2/u3 are uniform pairs of this
 program); it was not decoded further here.
 
@@ -164,10 +199,14 @@ broad and, as applied, unnecessary here:
    (`num_expr`), whether an operand came from an array deref
    (matrix column of an attribute), and the count of constants in the tree
    before `x * 1.0` folding.
-2. **Constant motion.** For a `fmul(fmul(a, b), #c)` with one use,
-   NIR gives `fmul(fmul(a', c), b')`, where `(a', b')` are the pair in
-   NIR's canonical operand order (here swizzle order: u_q before u_b). The
-   builder must apply this before building FMAs, and fold `x * 1.0` first.
+2. **Constant motion.** For `op(const, tree)` or `op(tree, const)` of one
+   operation, GLSL's `reassociate_constant` (see step 3 above) swaps the
+   constant with the operand of the first sub-expression that has a constant
+   operand; for `((b * 1.0) * q) * 8.0` the result is `(8 * q) * b`. The
+   builder must apply this (on the tree as written, before `* 1.0` is
+   dropped, since the `1.0` is what the swap pairs the `8.0` with) and drop
+   `x * 1.0` as NIR does (l.292, l.162). NIR's own rule l.2394 never fires on
+   the result.
 3. **Do the real rebalance where it applies.** The DSW pair
    (`tree_to_vine` / `vine_to_tree`) is small; sel_u_rebalance (the existing
    reference, `tests.rs` `a_chain_of_additions_is_mesa_s_rebalanced_tree`)
@@ -178,5 +217,8 @@ broad and, as applied, unnecessary here:
    is already what the existing alu_* references cover.
 
 Caveat: the NIR text above is the final NIR of the compile, so which pass made
-each step is inferred from the passes' source and the NIR, not traced rule by
-rule (no NIR dump between passes was taken).
+each step is inferred from the passes' source (Mesa 26.2.1 line numbers above)
+and from the reference words, not traced rule by rule (no IR dump between
+passes was taken). That `x * 1.0` is removed in NIR and not in GLSL, and that
+`(8 * q) * b` is the `reassociate_constant` swap, follow from the source plus
+the words; a minimal shader with only one of the two would pin each by itself.
