@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali Valhall: a vertex-stage look-up at a coordinate with a constant lane
 
-Case 149 `vsunits` (sixteen vertex samplers, #1385) refuses with
+Case 149 `vsunits` (sixteen vertex samplers, #1385; issue #33) refuses with
 `MaliError::TexVertexConstant` ("a vertex shader look-up at a coordinate with
 a constant lane (a shape no reference draws) is not lowered yet"). This note
 records what Mesa 26.2.1 emits for that shape, from drm-shim references, so
@@ -129,56 +129,137 @@ four-instruction staging:
 * `u_w[4]` is a uniform array read at constant indices: one `load_ubo` of
   64 bytes whose lanes become FAU words, already covered by `uniarray`.
 
-## 4. What the compiler needs
+## 4. The plan, in two steps
 
-The refusal site is `src/shaderc/online/mali/nir.rs:1726` (a cube direction of
-three constants) and `:1734-1736` (a 2D coordinate where `s` or `t` is
-`Val::Const`), both returning `MaliError::TexVertexConstant`
-(`mod.rs:172`, text at `:379`). `select.rs:531` (`Kind::VsTex`) already
-implements the staging: it moves "a staging word not in a register" with
-`MovI32` before the `Collect`, takes the handle as `Idx::Const(TEX_HANDLE)`
-and the sampler word as `Idx::Const(0)`, and `src()` turns a `Val::Const` into
-a constant source. So, for the one-sampler references
-(`case149_vstexconst`, `case149_vstexconst_s`) the lowering is probably only
-the removal of the two refusals, plus making sure that
+Status of case 149 at the tip (0749ee2d): `tools/mali/corpus-verdicts.txt`
+has no line for it (it is a case of the board sweep, not of the corpus). Its
+status is the 2026-10-27 sweep record,
+`tools/cts/log/2026-10-27-frameboard/sweep-{1,2}.verdicts.txt` line 153:
+`verdict case 149 vsunits: REFUSED compile: ... Mali(Valhall: a vertex shader
+look-up at a coordinate with a constant lane (a shape no reference draws) is
+not lowered yet)`. Step A alone does not make it pass (section 5).
 
-1. the constant lane's `MovI32` is emitted before the handle's and the sampler
-   word's moves, in lane order (`s` then `t`), and that the order matches the
-   reference (`u5.w1` first, then `u6.w0`, then `0x0`);
-2. the FAU assigns the constant its word before the handle (11 then 12, 13 for
-   the zero), i.e. in first-use order of the staging;
-3. two equal constant lanes are two `MovI32`, not one (`vsunits`).
+### Step A (small): the 2D constant-lane refusal
 
-For `case149_vsunits` the refusal is only the first obstacle (section 5).
-`va_lower_constants`' choice between an immediate and a FAU word is by value:
-0.5 is a FAU word. A constant lane of 0.0 is expected to be `0x0`; this is not
-drawn in these references (add one when the lowering item needs it).
+Checked against the tip:
+
+* The refusal sites are `src/shaderc/online/mali/nir.rs:1831` (a cube
+  direction of three constants) and `:1840` (a 2D coordinate where `s` or `t`
+  is `Val::Const`; the `if` is at `:1839`), both
+  `MaliError::TexVertexConstant` (`mod.rs:177`, text at `:389`). Step A deletes
+  the `if` at `:1839-1841` and its comment (`:1836-1838`). The cube refusal at
+  `:1831` stays.
+* Nothing else is expected to change for the one-sampler shape.
+  `select.rs:549-571` (`Kind::VsTex`) already moves a staging word that is not
+  in a register with `MovI32` before the `Collect` (`src()` turns a
+  `Val::Const` into a constant source), takes the handle as
+  `Idx::Const(TEX_HANDLE)` and the sampler word as `Idx::Const(0)`. The order
+  of the moves (s, t, then handle, then `0x0`) and the FAU order (0.5, handle,
+  zero) should follow from the emission order; the test below is what proves
+  it. If a word differs, the fix is in that emission order, not a new rule.
+* No existing test asserts the 2D refusal: `tests.rs:1040` is the
+  second-look-up case (`TexVertex`, stays); `:1044` and `:2094` are cube
+  (`TexVertexConstant`, stay). The removal deletes no test.
+* The references already in the tree, pinned by this step:
+  `tools/mali/testdata/case149_vstexconst.{vert,frag,expect.json}` (t lane
+  0.5) and `case149_vstexconst_s.{vert,frag,expect.json}` (s lane 0.5).
+* Test shape: the same call as `tex_vs_zero`
+  (`tests.rs:1997-2001`, `a_vertex_look_up_at_level_zero_is_byte_equal_to_mesa_26_2_1`):
+
+```rust
+let (v, _) = check_program(td!("case149_vstexconst.vert"), td!("case149_vstexconst.frag"), td!("case149_vstexconst.expect.json"));
+assert_eq!(v.info.sampler, Some(0));
+```
+
+  and the same for `case149_vstexconst_s`. Optionally assert the FAU tail as
+  the level test does (`tests.rs:1984-1991`): `Constant(0x3f00_0000)`,
+  `Constant(TEX_HANDLE)`, `Constant(0)` (reference words 11, 12, 13 after the
+  sysvals 8..10, section 2). The tests go next to `tex_vs_zero`; the
+  `td!` list at `tests.rs:1966` (the include check) gets the two `.vert` names.
+
+Step A does not pass case 149. It lowers the shape of the one-sampler
+references, which is what the refusal text claims is missing ("a shape no
+reference draws"). After it the text is wrong for 2D and still right for the
+cube.
+
+### Step B (larger, an issue of its own): sixteen vertex samplers
+
+`case149_vsunits` (`.expect.json`: 162-word `vs.varying`, 32 work registers)
+needs three things beyond step A.
+
+1. **Per-look-up sampler indices in the compiler.**
+   * `nir.rs:1819` guards the look-up arm with `vs.sampler.is_none()` and
+     `:1820` sets the one `vs.sampler`; the second look-up falls to `:1856`
+     (`TexVertex`). `vs.sampler` is an `Option<u8>` and `:2042` clears it when
+     DCE removed every `VsTex`. It must become a set of bindings (each
+     look-up's own `sampler` from `IrOp::Tex`), and `Kind::VsTex` must carry
+     its sampler index.
+   * `select.rs:570` uses the single `TEX_HANDLE` (`nir_fs.rs:134`:
+     `(4<<27) | (TEX_INDEX<<16) | (3<<11) | TEX_INDEX`, `TEX_INDEX` is 0 at
+     `:129`). The handle of sampler K is that formula with K in both index
+     fields: `(4<<27) | (K<<16) | (3<<11) | K = 0x20001800 + K * 0x10001`.
+     The reference confirms it: `vs.varying` FAU words 28..43 are `20001800,
+     20011801, 20021802, ... 200f180f`. It is **not** `0x20001800 + K * 0x1000`
+     (that gives `0x20002800` for K=1; the reference has `0x20011801`). It is
+     one shared function of K for texture index and sampler index alike (the
+     driver binds texture K and sampler K together). The FAU then holds
+     sixteen `FauWord::Constant` handles in first-use order after the 0.5
+     constant (word 27).
+   * `MaliShader::sampler` (`mod.rs:589-593`, set at `:1140`) is one binding;
+     it must report all bindings used (a mask or a list), and its readers
+     follow.
+   * The weights `u_w[4]` and the final exact `ffma x, 0.0, x` are separate
+     checks once the look-ups lower (section 5, item 2).
+2. **N texture and sampler descriptors in the vertex tables of `src/mali`.**
+   * Today `frame.rs:2807-2812` builds one `vs_texture` descriptor
+     (`DrawCall::vs_texture: Option<SampledTexture>`, `frame.rs:1449`, filled
+     by `backend.rs:1560` through `sampled_bind(d, true)`, `:1577`, which finds
+     one binding through `MaliShader::sampler`). `emit_stage_uniforms`
+     (`frame.rs:2463-2469`) allocates one `Sampler`; `:2836-2838` points
+     `TABLE_SAMPLER` and `TABLE_TEXTURE` at them with count 1;
+     `Layout::vs_sampler` / `vs_texture` (`:1487`, `:1493`) are single blocks;
+     `frame.rs:2044` tests "samples a texture" as a boolean.
+   * Needed: one texture descriptor and one sampler descriptor per used
+     binding, at index K, in two arrays (at most `GLES_MAX_VS_TEX_BINDS` = 16,
+     `src/backend.rs:619`; the GPU's limit is `GLES_VS_TEX_UNITS`), both
+     counts in the vertex `Resource` table entries, the layout fields as
+     arrays or spans, and `d.vs_textures` / `num_vs_textures` read per binding.
+   * This note does not choose the layout: the descriptor order and stride and
+     the table counts are known only from the board reference (item 3).
+3. **A Mesa 26.2.1 board reference of the descriptor layout first**, with
+   `tools/mali/mesa-board-ref.sh` (on the NanoPC-T6, only through
+   `tools/mali/panthor/run-on-board.sh`), run x2, on case 149's program
+   (`case149_vsunits.vert/.frag`). Pin in a README under
+   `tools/cts/log/<date>-vsunits-ref/`: the vertex resource-table entries
+   (`TABLE_TEXTURE` and `TABLE_SAMPLER`: count, address), the 16 texture and
+   16 sampler descriptor words and their stride, and whether the two IDVS
+   shaders share one handle set (the drm-shim says yes). The `src/mali` host
+   tests are then pinned to those words with every differing byte named; the
+   captures stay out of the tree. The drm-shim reference holds the program
+   words only, not the descriptors.
+
+Suggested title for the step B issue: *Mali: a vertex shader with sixteen
+texture look-ups (case 149 vsunits): per-look-up sampler indices and N vertex
+texture/sampler descriptors*. It depends on step A (constant lanes), on the
+board reference (descriptors) and on the running lowering chain (`nir.rs`,
+`select.rs`).
 
 ## 5. Does case 149 hit a further refusal?
 
-Yes, three, in the order the compiler meets them:
+Yes, in the order the compiler meets them (re-checked at the tip):
 
-1. **A second look-up.** `nir.rs:1714` guards the arm with
-   `vs.sampler.is_none()`: the first `txl` sets `vs.sampler`, and the second
-   falls to `IrOp::Tex { .. } => Err(MaliError::TexVertex)` (`:1751`, "a second
-   one"). Sixteen look-ups on sixteen samplers need `vs.sampler` to become a
-   per-look-up value (the sampler binding, with the handle
-   `0x20001800 + K * 0x10001` of section 3 rather than the single
-   `TEX_HANDLE`), `Kind::VsTex` to carry the sampler index, and the FAU to hold
-   the 16 handles; `nir.rs:1934`'s "does the program have a look-up" scan and
-   the frame's sampler table (`vs.sampler` is one binding today) follow.
-2. **The weights.** `u_w[4]` read at constant indices and `r +=` of products
-   with a `texture` result need the `ffma` chain above (`Alu::Ffma` is in the
-   vertex path; the `ffma` of `mix` was lowered by plan #153's `ffma`) and the
-   `u_w` FAU words; the `uniarray` item covers the array. The final exact
-   `ffma x, 0.0, x` (marked exact, from `v_c = r`) must be reproduced as
-   `FMA.f32 rK, rK, 0x0, rK` and not folded away.
-3. **The frame.** Sixteen vertex samplers are sixteen texture descriptors and
-   sixteen sampler descriptors in the draw (`GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS`
-   on this driver is a frame matter); the frame side is not examined here.
+1. **A second look-up** (step B item 1): the guard at `nir.rs:1819`, then
+   `TexVertex` at `:1856`. After step A this is the first refusal; the
+   sweep text of case 149 changes from the constant-lane text to the "second
+   one" text.
+2. **The weights.** `u_w[4]` read at constant indices (a 64-byte `load_ubo`
+   whose lanes become FAU words, covered by `uniarray`) and the `ffma` chain of
+   section 3, with the final exact `ffma x, 0.0, x` kept as
+   `FMA.f32 rK, rK, 0x0, rK` and not folded away. The references decide.
+3. **The frame** (step B items 2 and 3).
 
-Also a fragment shader of the pair (`vsunits_fs.frag`) is the plain
+The fragment shader of the pair (`vsunits_fs.frag`) is the plain
 varying-to-`gl_FragColor` shape that already compiles.
 
-This list is by reading the code against the reference, not by running it:
-the compiler was not changed or run on these shaders.
+This list is by reading the code against the references at 0749ee2d, not by
+running it: the compiler was not changed or run on these shaders.
