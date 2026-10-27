@@ -18,11 +18,11 @@ zephyr_library_sources_ifdef(CONFIG_GC_BOARD_WDOG_SELF_ARM gc_wdog_arm.c)
 # find_package(Zephyr) (samples/zephyr/gl_test/CMakeLists.txt does); these
 # are the fallbacks gc_panel_console.c uses otherwise.
 
-# SafeUI route 3 from the direct image (board_route3.c; docs/notes/
+# Route 3 from the direct image (board_route3.c; docs/notes/
 # imx8mp-direct-boot.md, "Route 3"): the M7 firmware named by
 # CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF, stripped to its program headers and
 # segments (m7_image.py) and linked into .rodata. The frame-ring protocol is
-# the SafeUI header copy in samples/zephyr/cluster.
+# the frame-ring header copy in samples/zephyr/cluster.
 if(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3)
   set(m7_elf "${CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF}")
   if(m7_elf STREQUAL "" OR NOT EXISTS "${m7_elf}")

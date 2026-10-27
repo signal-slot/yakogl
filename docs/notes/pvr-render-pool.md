@@ -4355,7 +4355,7 @@ default (FW_UNCACHED on, as on 520a6c0f).
 
 ### The AM62P glmark2 cell: the render pool's size, and room for 23 MiB more
 
-From the board definition (SafeUI repository,
+From the board definition (platform repository,
 `boards/toradex/verdin_am62p/verdin_am62p_am62p54_a53.dts`) and
 `driver/src/pvr_internal.h`:
 
@@ -4388,7 +4388,7 @@ From the board definition (SafeUI repository,
   - **Not shown:**
     - whether 0xa0000000+ is free when booted from U-Boot rather than
       kexec. The deqp overlay's note says "the image is kexec'ed".
-    - whether the SafeUI platform (the R5F owner) agrees to the move.
+    - whether the platform (the R5F owner) agrees to the move.
   - Cost: carveout memory is not usable as Zephyr heap.
 
 ### The AM62P glmark2 cell: the z-only render on the board, gl_test 177 PASS (82c9612a, 2026-10-04 14:19)
@@ -5048,7 +5048,7 @@ they do.
   reclaim on (the default since 8e7257f8) the board printed "pending frees
   now 0" and "reclaim found nothing held" at refract; nothing to release.
 - **A bigger pool:** the carveout is the board's reserved-memory region,
-  64 MiB at 0x97800000 (SafeUI `boards/toradex/verdin_am62p/
+  64 MiB at 0x97800000 (`boards/toradex/verdin_am62p/
   verdin_am62p_am62p54_a53.dts:75`), ending where the MCU R5F's region
   starts (0x9b800000). There is no Kconfig for its size: the driver takes
   the memory-region's (`pvr_carveout_size`, at least

@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * SafeUI route 3 from the direct image (board_imx8mp_route3.h): the M7
+ * Route 3 from the direct image (board_imx8mp_route3.h): the M7
  * loaded from this image, released through TF-A, and fed through the frame
  * ring. Design, addresses and the reasons for the order:
  * docs/notes/imx8mp-direct-boot.md, "Route 3". The ring protocol is the
  * shared header <cluster/frame_ring.h>; the A53 producer that ran on Torizon
- * on 2026-10-03 was gc_common/safeui_ring_a53.c (removed in dac31030953),
+ * on 2026-10-03 was gc_common/ring_a53.c (removed in dac31030953),
  * whose map, status checks and buffer rule this file keeps.
  *
  * The order, which the M7 firmware dictates (its first tick reads the LCDIF,
@@ -39,7 +39,7 @@
 #include "imx8mp_display.h"
 #include "board_imx8mp_route3.h"
 
-/* ---- the M7's map (SafeUI platform/fw_imx8mp/src/m7_mem.h) ---------------- */
+/* ---- the M7's map (the M7 firmware's m7_mem.h) ---------------- */
 
 #define M7_CARVEOUT_BASE 0x80000000u
 #define M7_UNCACHED_BASE 0x81000000u
@@ -50,7 +50,7 @@
 #define M7_FB_APP_ADDR   0x81408000u
 #define M7_FB_STRIDE     0x400000u
 /* The A53's buffers: the first above the M7's scan-out pair, one stride
- * apart (fb_app is the M7's stand-in and never ours; safeui_ring_a53.c). */
+ * apart (fb_app is the M7's stand-in and never ours; ring_a53.c). */
 #define RING_FB0_ADDR    (M7_FB_APP_ADDR + 3u * M7_FB_STRIDE) /* 0x82008000 */
 #define RING_FB_MAX      4u
 #define RING_W           1280u

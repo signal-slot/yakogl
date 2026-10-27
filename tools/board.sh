@@ -222,9 +222,9 @@ pi4)
 am62p)
     BOOTS="uboot-tftp uboot-mmc kexec-dev"
     # the eMMC's first user-area partition (Torizon's ext4 root): U-Boot's
-    # "mmc 0:1" (SafeUI's bootcmd loads from it with ext4load), Linux's mmcblk0p1
+    # "mmc 0:1" (the stock bootcmd loads from it with ext4load), Linux's mmcblk0p1
     NB_MMC=0:1; MMC_PART=/dev/mmcblk0p1
-    # the SafeUI A53 board DTS: the image's link address up to the GPU carve-out (344 MiB)
+    # the A53 board DTS: the image's link address up to the GPU carve-out (344 MiB)
     YAKO_ADDR=0x82000000; LOAD_END=0x97800000
     MARKER='rti_arm: armed'              # driver/zephyr/lib/board/am62p/rti_arm.c:235
     NB_WATCHDOG="the RTI"
@@ -234,7 +234,7 @@ am62p)
     # so pvr_resets reads the count from them (driver/rust/src/gpu/pvr/render.rs)
     # the gl_test sample's own end, "gl_test: OK|FAILED (rc=N)", ends a
     # single-case run too (it prints no "all:" line)
-    # the two feeders' ends: the SafeUI inherited feeder's and rti_arm's
+    # the two feeders' ends: the inherited feeder's and rti_arm's
     END_RE_DEFAULT='^deqp: summary|ZEPHYR FATAL ERROR|RTI feeder lifetime over|rti_arm: feeding bound of|^gl_test: all: |^gl_test: (OK|FAILED) \(rc='
     LEGACY_RE='^(deqp: summary: |gl_test: all: )'
     BOARD_UART=${BOARD_UART:-${UART_ADDR:-}}

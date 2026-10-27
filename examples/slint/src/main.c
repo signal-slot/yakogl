@@ -42,7 +42,7 @@
 #include <yakogl_board.h>
 #include <yakogl_record.h>
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
-/* SafeUI route 3 on the Verdin iMX8MP direct image: the M7 shows the frames
+/* Route 3 on the Verdin iMX8MP direct image: the M7 shows the frames
  * and publishes the vehicle state (docs/notes/imx8mp-direct-boot.md) */
 #include <board_imx8mp_route3.h>
 #endif

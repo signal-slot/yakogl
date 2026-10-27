@@ -74,8 +74,8 @@
 1791009416.269 yakogl-netboot: fetch failed, booting Linux
 1791009416.333 6188160 bytes read in 55 ms (107.3 MiB/s)
 1791009416.354 288 bytes read in 20 ms (13.7 KiB/s)
-1791009416.364 Failed to load '/safeui/zephyr_a53.bin'
-1791009416.364 SafeUI images not found, booting Linux
+1791009416.364 Failed to load '/stock/zephyr_a53.bin'
+1791009416.364 stock images not found, booting Linux
 1791009416.472 7[r[999;999H[6n8MMC: no card present
 1791009416.476 No EFI system partition
 1791009416.476 No EFI system partition

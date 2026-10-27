@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //
-// The SafeUI meter cluster for the GPU (Slint's FemtoVG / OpenGL ES 2.0
-// renderer on YakoGL). A faithful port of the hand-written C cluster
-// (apps/cluster_c/main.c in the SafeUI repository): same layout, same colours,
+// The meter cluster for the GPU (Slint's FemtoVG / OpenGL ES 2.0
+// renderer on YakoGL). A faithful port of the hand-written C cluster:
+// same layout, same colours,
 // same fonts, drawn as vector geometry instead of pixel routines.
 //
 // One design, two owners: in the product the safe core (AM62P R5F, i.MX8MP M7)
@@ -13,7 +13,7 @@
 // the complete picture; the application build sets it to false.
 //
 // One design, two panels: every coordinate comes from `Layout`
-// (cluster-layout.slint), generated from the SafeUI repository's
+// (cluster-layout.slint), generated from
 // include/cluster/ui_layout.h for the panel this image is built for and put on
 // the Slint include path by CMake. The cluster therefore fills the panel --
 // 1024x600 on the AM62P, 1280x800 on the Verdin iMX8M Plus -- rather than

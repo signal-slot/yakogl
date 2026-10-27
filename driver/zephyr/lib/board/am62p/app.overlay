@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * Toradex Verdin AM62P (SafeUI board definition). The board DTS has the GPU
+ * Toradex Verdin AM62P (board definition). The board DTS has the GPU
  * node with its 64 MiB carveout and the display path wired but disabled
- * (the R5F owns the display in the SafeUI platform). This stand-alone
+ * (the R5F owns the display in the platform). This stand-alone
  * application drives the panel itself, so it enables DSS1, DSI, the bridge
  * on I2C1, the GPIO banks and the TISCI power-on list.
  */

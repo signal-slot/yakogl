@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# Where the SafeUI files the samples share with the safety core are.
+# Where the files the samples share with the safety core are.
 #
 # Two things in these samples have to be the same on both cores, because an
 # agreement that is typed twice is not one:
@@ -17,7 +17,7 @@
 # ui_layout.h and scripts/gen_layout_slint.py, which generates the layouts).
 # -DCLUSTER_DIR=<tree> still names another tree with the same layout, for a
 # safety-core repository that carries its own copy. The environment variable
-# of that name is no longer read: it used to name the SafeUI checkout that
+# of that name is no longer read: it used to name the platform checkout that
 # supplied the boards, and a stale one must not silently win.
 
 function(yakogl_drv_find_dir out_var probe_file what)
@@ -27,7 +27,7 @@ function(yakogl_drv_find_dir out_var probe_file what)
   endif()
   if(NOT EXISTS "${dir}/${probe_file}")
     message(FATAL_ERROR
-      "${what} needs the SafeUI layout files, and CLUSTER_DIR='${dir}' has no "
+      "${what} needs the layout files, and CLUSTER_DIR='${dir}' has no "
       "${probe_file}. Drop -DCLUSTER_DIR to use the copy in this repository "
       "(driver/samples/zephyr/cluster).")
   endif()

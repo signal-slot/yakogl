@@ -169,7 +169,7 @@ marked so.
 
 - **EL2 entry**, MMU and data cache off: TF-A enters the SPL in EL2, the SPL
   stays there and calls `dcache_disable()` before the jump. Zephyr's reset
-  path drops to EL1, as under U-Boot `go` (where SafeUI turned the caches off
+  path drops to EL1, as under U-Boot `go` (where the caches were turned off
   by hand first).
 - **Display on in the board DTS**: DSS1, DSI, the SN65DSI83 on I2C1, the GPIO
   banks and the TISCI power-on list, which the a53 variant leaves to each
@@ -204,7 +204,7 @@ watchdog driver (only EFI's watchdog strings). What remains, and who does it:
 | DDR size | U-Boot detects it for Linux | Zephyr's DT is static (2 GiB module) |
 | caches off before the jump | `dcache off; icache off; go` by hand | the SPL's `dcache_disable()` |
 
-So the direct image starts from the state the SafeUI U-Boot `go` entry had,
+So the direct image starts from the state the U-Boot `go` entry had,
 minus U-Boot proper's Ethernet/MMC/USB probing. That this is the whole
 difference is unmeasured.
 
@@ -212,7 +212,7 @@ difference is unmeasured.
 
 The board files and samples are in this repository. Build from the workspace
 that holds Zephyr (af17c0c8 was used), with the module list given explicitly
-when that workspace also carries a SafeUI checkout
+when that workspace also carries another checkout
 (`tools/cts/zephyr-modules.sh`), and with the PowerVR firmware header in
 `driver/src/fw/` (never committed):
 

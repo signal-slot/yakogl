@@ -205,7 +205,7 @@ Linux crashes instead, the load can fail, and Linux boots.
 
 ### Facts and sources
 
-- AM62P: the board's own `bootcmd` loads SafeUI's Zephyr with
+- AM62P: the board's own `bootcmd` loads the stock Zephyr with
   `ext4load mmc 0:1 0x82000000 ... && dcache off && icache off && go 0x82000000`
   (env record `records/am62p/netboot/env-before-install-*.txt`, main checkout,
   not in git), a path measured on this board
@@ -248,8 +248,8 @@ v2024.07 `arch/arm/lib/image.c`), and the image, linked at its load address,
 does not start there. `go` jumps to the load address and passes no device
 tree; Zephyr has its devicetree built in. `dcache off; icache off` before
 `go` cleans the D-cache and turns the MMU off, so Zephyr enters with the MMU
-and caches off, as it does from kexec's purgatory. SafeUI measured the
-AM62P case on 2026-09-05; the i.MX8MP case follows from the same code and
+and caches off, as it does from kexec's purgatory. This was measured on the
+AM62P on 2026-09-05; the i.MX8MP case follows from the same code and
 the self-arm images ran there.
 
 **The image arms its own watchdog.** A hang must not hold a board until a

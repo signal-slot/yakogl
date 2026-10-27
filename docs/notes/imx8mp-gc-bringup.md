@@ -10,7 +10,7 @@ Note 2026-10-03: the C kernel side named below (`gc_bringup.c`, `gc_hw.c`,
 steps below are the plan as it was written.
 
 Status: started 2026-09-16. The board is the **Toradex Verdin iMX8M Plus** (decided
-2026-09-16; it keeps the SafeUI carrier and display, and has a Cortex-M7 where the AM62P
+2026-09-16; it keeps the carrier and display, and has a Cortex-M7 where the AM62P
 has the R5F). No i.MX8MP board has been used yet: everything below is derived from the
 sources on the lab host and from what the AM62P port taught, and the code written so
 far is compile-tested only.
@@ -28,7 +28,7 @@ far is compile-tested only.
 - **The offline shader path**: `struct shc_shader` keeps the reflection (attributes,
   varyings, uniforms, samplers); only the binary changes (`usc` becomes `code`). The
   compiler is Mesa's etnaviv NIR back end run on the host, as `pco_shc` is for PowerVR.
-- **The samples and the Supervisor**: `gl_test`, `gl_slint`, the SafeUI rich UI need no
+- **The samples and the Supervisor**: `gl_test`, `gl_slint`, the rich UI need no
   change beyond the board port.
 
 ## What is new
@@ -80,7 +80,7 @@ shader variants.
 ### 3. Board port
 
 Zephyr has an i.MX8MP A53 board (`imx8mp_evk/mimx8ml8/a53`); a Verdin i.MX8M Plus
-port would follow the AM62P one in the SafeUI repo (SoC, display: LCDIF + MIPI DSI,
+port would follow the AM62P one in the platform notes (SoC, display: LCDIF + MIPI DSI,
 touch). The kexec route from Linux applies unchanged (the tool already stops the
 Ethernet DMA before the jump; the i.MX FEC/EQOS interfaces are on its list once known).
 The safety core is a Cortex-M7 (no MMU, TCM + DDR), so the R5F firmware becomes an M7
@@ -102,10 +102,10 @@ has fewer planes: the safety layer may have to be composited by the A53 instead.
    backend's shader ABI (step 3/4 decide how uniforms and samplers are bound).
 3. *(written 2026-09-16, not run)* The Zephyr board and milestone 1. Zephyr ships
    `verdin_imx8mp` for its Cortex-M7 only and rejects a second board of the same
-   name, so the A53 cluster is a board extension in the SafeUI repository
+   name, so the A53 cluster is a board extension in the platform repository
    (`boards/toradex/verdin_imx8mp/`: `board.yml` with `extend:`, the dts, defconfig
    and a Kconfig fragment that selects `SOC_MIMX8ML8_A53`). It needs the `hal_nxp`
-   module (added to the SafeUI `west.yml` allow-list; the lab workspace has it as a
+   module (added to the `west.yml` allow-list; the lab workspace has it as a
    clone at Zephyr's pinned revision). Console is UART3 (Verdin UART_1), the image
    loads at 0x42000000, the GPU carveout is 64 MiB at 0x58000000 (above OP-TEE at
    0x56000000, below the M7's DDR at 0x80000000: check against `/proc/iomem` on the
@@ -201,7 +201,7 @@ on the `vivante-gl` branch is that instrument):
    confirmed) and halts; WDOG1 then resets the SoC (128 s on the normal route,
    sooner on the crash route). `zephyr/lib/gc_board/gc_irq_guard.c`
    connects every unregistered line at PRE_KERNEL_1 and disables it on its
-   first hit. The GIC EOI-mode fix that the AM62P needed is in the SafeUI
+   first hit. The GIC EOI-mode fix that the AM62P needed is in the platform's
    board extension too (`board_a53.c`).
 
 With both, on 2026-09-20, read on the panel by the user and confirmed by the

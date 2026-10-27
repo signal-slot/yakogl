@@ -11,7 +11,7 @@
  * first timed wait. Put the interface back into the reset mode on the boot
  * CPU; the secondary CPUs come out of PSCI CPU_ON in reset state.
  *
- * This was the SafeUI Verdin board extension's board_a53.c, and it moved here
+ * This was the Verdin board extension's board_a53.c, and it moved here
  * because every image kexec'd onto an i.MX8MP needs it, whichever board file
  * describes the carrier (the Verdin, the Armadillo-X2). It runs at the EARLY
  * init level: before the board and SoC early hooks, and before PRE_KERNEL_1,

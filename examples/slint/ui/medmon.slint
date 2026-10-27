@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //
-// The medical monitor for the GPU: the Slint port of the SafeUI medmon
-// application (apps/medmon/main.c), same layout (include/cluster/ui_layout.h,
+// The medical monitor for the GPU: the Slint port of the medmon
+// application, same layout (include/cluster/ui_layout.h,
 // "medical"), drawn as vector geometry. One design, two owners: the safe core
 // draws the current heart rate, SpO2 and respiration values, the alarm state
 // and the lead-off / signal messages into its overlay plane; this panel draws
@@ -105,7 +105,7 @@ export component MedicalPanel inherits Rectangle {
 
     // patient bar (MD_TOPBAR_H)
     LText { lx: Layout.md-wave-x; ty: 10 * Layout.u; text: "BED 12"; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold; }
-    LText { lx: Layout.md-wave-x + 96 * Layout.u; ty: 10 * Layout.u; text: "SAFEUI, Taro"; color: Layout.text2; font-size: Layout.label; font-weight: Layout.semibold; }
+    LText { lx: Layout.md-wave-x + 96 * Layout.u; ty: 10 * Layout.u; text: "YAMADA, Taro"; color: Layout.text2; font-size: Layout.label; font-weight: Layout.semibold; }
     LText { lx: Layout.md-wave-x + 260 * Layout.u; ty: 14 * Layout.u; text: "ADULT"; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
     RText { rx: Layout.w - 24 * Layout.u; ty: 10 * Layout.u; text: root.clock; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold; }
     Rectangle { x: 0; y: Layout.md-topbar-h; width: Layout.w; height: 1 * Layout.u; background: Layout.hairline; }

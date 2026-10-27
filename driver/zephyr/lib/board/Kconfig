@@ -20,7 +20,7 @@ config YAKOGL_BOARD_AM62P
 	select REBOOT
 	imply YAKOGL_AM62P_RTI_SELF_ARM
 	help
-	  Window: a static buffer in the image; screen: the SafeUI DSS
+	  Window: a static buffer in the image; screen: the DSS
 	  application plane (am62p/sample_glue.c); record: the UART line;
 	  watchdog: the MAIN RTI0 self-arm (am62p/rti_arm.c) for
 	  YAKOGL_AM62P_WDT_SECONDS (= YAKOGL_BOARD_LIFETIME_S by default).
