@@ -242,6 +242,12 @@ pub enum LodMode {
     /// The level in the staging word after the coordinate, signed 8.8
     /// fixed point (`BI_VA_LOD_MODE_EXPLICIT`): any other `txl`.
     Explicit,
+    /// `texelFetch` at level 0: a `txf`, which `bi_emit_tex_valhall`
+    /// selects as `TEX_FETCH` (bifrost_compile.c:3535-3540) on the integer
+    /// coordinate's words, no level word, and which has no `skip` bit
+    /// (`bi_has_skip_bit`, bi_helper_invocations.c:43-60). Measured:
+    /// fbload_fbload.expect.json's `TEX_FETCH.slot0.reserved.32.2d`.
+    Fetch,
 }
 
 /// A look-up's texture dimension (`enum bi_dimension` as
@@ -430,10 +436,13 @@ pub enum Op {
         z: bool,
         s: bool,
     },
-    /// `f32`: the colour in fp32 registers (register format F32), else fp16.
+    /// `f32`: the colour in fp32 registers (register format F32), else fp16;
+    /// `u32`: in unsigned integer registers (U32, a `uvec4` output's
+    /// `nir_type_uint32`, `bi_reg_fmt_for_nir`), `f32` then false.
     Blend {
         sr_count: u8,
         f32: bool,
+        u32: bool,
     },
     /// `BRANCHZI.absolute`: `.eq` the fragment shader's blend-shader call
     /// (va_lower_blend), `.ne` a blend shader's return through the link

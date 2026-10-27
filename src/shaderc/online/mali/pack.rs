@@ -509,13 +509,18 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("z", z as u32)?.put("stencil", s as u32)?;
             f.put("staging_register_index", reg(i.dest[0].idx)?)?;
         }
-        Op::Blend { f32, .. } => {
+        Op::Blend { f32, u32, .. } => {
             f = Fill::new(IsaOp::Blend);
             /* the descriptor's low word; the coverage as a bare register,
              * without its last-use bit (`va_pack_reg`, va_pack.c:1011-1012);
-             * register format f16 (3) or f32 (2) */
+             * register format f16 (3), f32 (2) or u32 (6) */
             f.put("src0", src_byte(&i.src[2])?)?.put("src2", reg(i.src[1].idx)?)?;
-            f.put("register_format", if f32 { 2 } else { 3 })?.put("message_slot_index", i.slot as u32)?;
+            let fmt = match (f32, u32) {
+                (_, true) => 6,
+                (true, false) => 2,
+                (false, false) => 3,
+            };
+            f.put("register_format", fmt)?.put("message_slot_index", i.slot as u32)?;
             f.put("staging_register_index", reg(i.src[0].idx)?)?.put("offset", 0)?;
         }
         Op::BranchzI { eq } => {
@@ -591,6 +596,22 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             }
             f.put("cmpf", cmpf as u32)?;
         }
+        /* `TEX_FETCH`: the fields of TEX_SINGLE without a level mode, a
+         * compare or a skip bit (va_pack.c:1052-1077) */
+        Op::TexSingle { mask, f16, lod: LodMode::Fetch, dim, .. } => {
+            f = Fill::new(IsaOp::TexFetch);
+            let dim = match dim {
+                TexDim::D2 => TEX_DIM_2D,
+                TexDim::Cube => TEX_DIM_CUBE,
+            };
+            f.put("src0", src_byte(&i.src[1])?)?;
+            f.put("array_enable", 0)?.put("texel_offset", 0)?.put("wide_indices", 0)?;
+            f.put("dimensionality", dim)?.put("write_mask", mask as u32)?;
+            f.put("register_width", if f16 { 0 } else { 1 })?.put("skip", 0)?;
+            f.put("message_slot_index", i.slot as u32)?;
+            f.put("staging_register_index", reg(i.src[0].idx)?)?;
+            f.put("staging_register_write_index", reg(i.dest[0].idx)?)?;
+        }
         Op::TexSingle { mask, f16, skip, lod, dim, .. } => {
             f = Fill::new(IsaOp::TexSingle);
             /* the handle pair (`va_pack_src` of source 1, its register
@@ -602,6 +623,7 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                 LodMode::Computed => TEX_LOD_COMPUTED,
                 LodMode::Zero => TEX_LOD_ZERO,
                 LodMode::Explicit => TEX_LOD_EXPLICIT,
+                LodMode::Fetch => return Err(MaliError::Defect(Defect::Operand)),
             };
             let dim = match dim {
                 TexDim::D2 => TEX_DIM_2D,

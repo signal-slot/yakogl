@@ -257,7 +257,7 @@ pub fn shader<'s>(
     };
     alu(
         &mut p,
-        Op::Blend { sr_count: 2, f32: false },
+        Op::Blend { sr_count: 2, f32: false, u32: false },
         &[
             Src::ssa(col),
             Src::ssa(coverage),

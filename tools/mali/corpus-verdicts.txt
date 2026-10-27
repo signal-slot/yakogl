@@ -40,7 +40,7 @@ tools/shaders/es100/f2b.frag: Valhall: arithmetic other than +, -, * and a dot o
 tools/shaders/es100/fmods.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/fmods2.frag: ok
 tools/shaders/es100/fragcentre.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/es100/fragcoord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/es100/fragcoord.frag: ok
 tools/shaders/es100/fragz.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
 tools/shaders/es100/frontfacing.frag: Valhall: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet
 tools/shaders/es100/hdrcolor.frag: ok
@@ -101,7 +101,7 @@ tools/shaders/es100/tmparr_const.vert: Valhall: a shader of more than 256 IR val
 tools/shaders/es100/transc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.vert: ok
-tools/shaders/es100/tri_fragcoord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/es100/tri_fragcoord.frag: Valhall: a colour or point size constant fp16 does not hold exactly is not lowered yet
 tools/shaders/es100/tri_fragcoord.vert: ok
 tools/shaders/es100/tri_if.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/tri_if.vert: ok
@@ -258,7 +258,7 @@ tools/shaders/gltest/fsat_vs_ctrl.vert: Valhall: arithmetic other than +, -, * a
 tools/shaders/gltest/fsat_vs_folded.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/fshp_vs.vert: ok
 tools/shaders/gltest/intrt.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
-tools/shaders/gltest/isamp.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/gltest/isamp.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/kc_fadd_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/gltest/kc_fmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/gltest/kc_maxmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
@@ -297,9 +297,9 @@ tools/shaders/gltest/vtxgrid_vs.vert: ok
 tools/shaders/internal/clear.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/clear.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/es/clear.frag: ok
-tools/shaders/internal/es/fbload.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/internal/es/fbload_int.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/internal/es/mipgen.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/internal/es/fbload.frag: ok
+tools/shaders/internal/es/fbload_int.frag: ok
+tools/shaders/internal/es/mipgen.frag: ok
 tools/shaders/internal/es/quad.vert: ok
 tools/shaders/internal/fbload.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/fbload.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }

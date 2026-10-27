@@ -381,6 +381,15 @@ impl UboLayout {
                 l.push(u.dword_off + e * comps, comps, halves)?;
             }
         }
+        /* gl_FbWposYTransform, as [`UboLayout::fs32`] places it: a state
+         * slot, no declared mediump uniform, so its words stay fp32
+         * (prec_84.expect.json: `FMA.f32 r1, r1^, u2.w0, u2.w1`, the words
+         * 1.0 and 0.0, before the fp16 constant pair `u3.w0`) */
+        let wpos = super::nir_fs::FB_WPOS_Y_TRANSFORM;
+        let reads = |id: &u16| matches!(fs.nodes[*id as usize].kind, nir::Kind::Uniform { dword, .. } if dword == wpos);
+        if fs.order[..fs.len].iter().any(reads) {
+            l.push(wpos, 4, false)?;
+        }
         Ok(l)
     }
 

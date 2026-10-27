@@ -99,6 +99,10 @@ pub struct TexLookup {
     /// [`walk_nodes`]): its coordinate is [`TexCoord::Computed`], the
     /// look-up node's three sources.
     pub cube: Option<Cube>,
+    /// A `texelFetch` at level 0 of a highp shader ([`walk_nodes`]): its
+    /// coordinate is [`TexCoord::Computed`], two integer lanes, and the
+    /// look-up `TEX_FETCH` ([`super::bir::LodMode::Fetch`]).
+    pub fetch: bool,
     /// The IR instruction of the look-up.
     pub at: u16,
 }
@@ -160,6 +164,7 @@ const F32_HALF: u32 = 0x3f00_0000;
 /// IR index.
 pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
     let n = m.instrs.len().min(MAX_VALUES).min(keys.len());
+    let grafted = grafted_locals(m, n);
     /* an `if`'s condition tree is placed by the condition's own
      * instruction (the `if` stands right after it) */
     let conds = m.nodes.iter().filter_map(|nd| match *nd {
@@ -167,6 +172,7 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
         _ => None,
     });
     let stores = (0..n).filter_map(|i| match m.instrs[i] {
+        ir::Op::StoreLocal { local, .. } if grafted.get(local.0 as usize).is_some_and(|g| g.is_some()) => None,
         ir::Op::StoreLocal { src, .. } | ir::Op::StoreOutput { src, .. } => Some((i, src.val)),
         _ => None,
     });
@@ -231,10 +237,89 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
                 ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0)),
                 /* a look-up's coordinate is visited as its child */
                 ir::Op::Tex { coord, .. } => child(coord.val.0),
+                /* a grafted local's one read is its stored tree */
+                ir::Op::LoadLocal { local, index: None, .. } => {
+                    if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {
+                        child(src.0)
+                    }
+                }
                 _ => {}
             }
         }
     }
+}
+
+/// GLSL IR's `opt_tree_grafting` (glsl/opt_tree_grafting.cpp): a local
+/// assigned once and read once has its assignment's tree grafted into the
+/// read, so the tree is computed where the read stands, not where it was
+/// assigned (measured: fbload_int.frag's `float y = gl_FragCoord.y *
+/// u_flip.x + u_flip.y`, whose `ffma` follows `int(gl_FragCoord.x)`'s
+/// `u2u32` in fbload_fbload_int.stderr). The value each grafted local's
+/// read stands for, by local; only in a body without control flow, and
+/// not past a store to a local the tree reads (`can_graft`'s check of the
+/// instructions between, :210-240).
+fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS] {
+    let mut out = [None; MAX_LOCALS];
+    if m.nodes.iter().any(|nd| matches!(nd, Node::If { .. } | Node::Loop { .. })) {
+        return out;
+    }
+    for (l, o) in out.iter_mut().enumerate().take(m.locals.len()) {
+        let stores =
+            (0..n).filter(|&i| matches!(m.instrs[i], ir::Op::StoreLocal { local, .. } if local.0 as usize == l));
+        let loads = (0..n).filter(|&i| matches!(m.instrs[i], ir::Op::LoadLocal { local, .. } if local.0 as usize == l));
+        let (Some(st), 1, Some(ld), 1) = (stores.clone().next(), stores.count(), loads.clone().next(), loads.count())
+        else {
+            continue;
+        };
+        let ir::Op::StoreLocal { src, index: None, write_mask, .. } = m.instrs[st] else { continue };
+        if st > ld || !matches!(m.instrs[ld], ir::Op::LoadLocal { index: None, .. }) {
+            continue;
+        }
+        /* a whole assignment, read with the identity swizzle */
+        let comps = m.comps_of(src.val) as usize;
+        if write_mask != (1u8 << comps) - 1 || (0..comps).any(|c| src.swizzle[c] as usize != c) {
+            continue;
+        }
+        /* the locals the tree reads, none stored in between; a tree of
+         * other instructions (a look-up, an indexed read) is not grafted
+         * here */
+        let mut reads = [false; MAX_LOCALS];
+        let mut stack = [0u32; MAX_VALUES];
+        let (mut sp, mut ok) = (1, true);
+        stack[0] = src.val.0;
+        while sp > 0 && ok {
+            sp -= 1;
+            match m.instrs.get(stack[sp] as usize) {
+                Some(ir::Op::Alu(a, srcs)) => {
+                    for x in srcs.iter().take(a.arity()) {
+                        ok &= sp < stack.len();
+                        if ok {
+                            stack[sp] = x.val.0;
+                            sp += 1;
+                        }
+                    }
+                }
+                Some(ir::Op::LoadLocal { local, .. }) => match reads.get_mut(local.0 as usize) {
+                    Some(r) => *r = true,
+                    None => ok = false,
+                },
+                Some(
+                    ir::Op::ConstF32(_) | ir::Op::ConstI32(_) | ir::Op::LoadUniform { .. } | ir::Op::LoadInput { .. },
+                ) => {}
+                _ => ok = false,
+            }
+        }
+        if !ok {
+            continue;
+        }
+        let clobbered = (st + 1..ld).any(
+            |i| matches!(m.instrs[i], ir::Op::StoreLocal { local, .. } if reads.get(local.0 as usize) == Some(&true)),
+        );
+        if !clobbered {
+            *o = Some(src.val);
+        }
+    }
+    out
 }
 
 /// What a node of the colour is, as an operand or as an output word.
@@ -307,6 +392,7 @@ pub const ADMITTED: u128 = {
         | prod(Splat, FmaB)
         | prod(Mk, AddB)
         | prod(Mk, FmaC)
+        | prod(Mk, MulA)
         | prod(Mk, Output)
         | prod(Uniform, AddB)
         | prod(Uniform, MulB)
@@ -459,6 +545,9 @@ pub struct Fs<'s> {
     /// and the node of its z and w.
     frag_xy: Option<[Val; 2]>,
     frag_zw: Option<u16>,
+    /// gl_FragCoord's x and y narrowed to fp16, the mediump read of an ES
+    /// 1.00 shader ([`Fs::frag_coord16`]).
+    frag16: Option<[Val; 2]>,
     /// Each local's rank by its first load or store in the walk, and the
     /// colour's by its first store (`u32::MAX`: none yet): the order
     /// `nir_lower_vars_to_ssa` registers the variables in
@@ -742,6 +831,40 @@ impl<'s> Fs<'s> {
         Ok([xy[0], xy[1], Val::Lane(zw, 0), Val::Lane(zw, 1)])
     }
 
+    /// gl_FragCoord's lanes in a mediump shader of ES 1.00, where the
+    /// built-in is mediump (builtin_variables.cpp:1333-1335): x and y are
+    /// built at fp32 as in a highp shader ([`Fs::frag_coord`]), each then
+    /// narrowed by its own `f2f16` (the `f2fmp` lower_precision puts on the
+    /// fp32 read, `FADD.f32 r0.h0, r0^, 0x0.neg`), and the two halves are
+    /// one word by `MKVEC.v2i16` where an operation reads them as a pair
+    /// (prec_84.expect.json; docs/notes/mali-fragcoord-mediump.md 3). z and
+    /// w stay [`Kind::FragCoordZw`]'s.
+    fn frag_coord16(&mut self, at: usize) -> Result<[Val; 4], MaliError> {
+        let [x, y, z, w] = self.frag_coord(at)?;
+        let xy = match self.frag16 {
+            Some(xy) => xy,
+            None => {
+                let mut xy = [Val::Undef; 2];
+                for (o, v) in xy.iter_mut().zip([x, y]) {
+                    let nd =
+                        NirNode { kind: Kind::Alu(Alu::F2f16), src: [v, Val::Undef, Val::Undef], bits: 16, width: 1 };
+                    let n = self.nir.push_node(nd)?;
+                    self.origin[n as usize] = at as u16;
+                    *o = Val::Lane(n, 0);
+                }
+                self.frag16 = Some(xy);
+                xy
+            }
+        };
+        Ok([xy[0], xy[1], z, w])
+    }
+
+    /// The lane of the narrowed position `v` is ([`Fs::frag_coord16`]): 0
+    /// for x, 1 for y.
+    fn frag16_lane(&self, v: Val) -> Option<u8> {
+        self.frag16?.iter().position(|&l| l == v).map(|k| k as u8)
+    }
+
     /// One lane of an fp32 operation of a highp shader: the vertex stage's
     /// folding, rules and CSE ([`Nir::alu`]) over operands that are fp32 (a
     /// varying of the shader's width, a constant, an fp32 result).
@@ -796,6 +919,17 @@ impl<'s> Fs<'s> {
             (_, Some((Alu::Frcp, [p, ..]))) => self.not_negative(p),
             _ => false,
         }
+    }
+
+    /// The pixel position's 16-bit lane `v` is the centre of: `v` is
+    /// `fadd(u2f32(p), b)`, `p` a lane of [`Kind::PixelCoord`] and `b` a
+    /// constant in (0, 1) ([`Fs::frag_coord`]'s x).
+    fn pixel_lane(&self, v: Val) -> Option<Val> {
+        let (Alu::Fadd, [s, Val::Const(b), _]) = self.alu_of(v)? else { return None };
+        let (Alu::U2f32, [p, ..]) = self.alu_of(s)? else { return None };
+        let Val::Lane(n, _) = p else { return None };
+        let half = f32::from_bits(b);
+        (self.nir.nodes[n as usize].kind == Kind::PixelCoord && half > 0.0 && half < 1.0).then_some(p)
     }
 
     /// `v` is `fneg(b2f(c))`.
@@ -991,7 +1125,15 @@ impl<'s> Fs<'s> {
              * 0x3C000000.h11, r0^.h00` in case87_databreak.expect.json) */
             AluOp::Bcsel if y == Val::Const(F32_ONE) && z == Val::Const(F32_ZERO) => self.op32(Alu::B2f, [x, u, u], at),
             AluOp::Bcsel => self.op32(Alu::Bcsel, [x, y, z], at),
-            AluOp::F2i => self.op32(Alu::F2i, [x, u, u], at),
+            /* `f2i(fadd(a, b))` of an integral, non-negative `a` and a `b` in
+             * (0, 1) is `f2i(a)`, and `f2i32(u2f32(a@16))` is `u2u32(a)`
+             * (nir_opt_algebraic.py:1955-1958): `int(gl_FragCoord.x)` is the
+             * pixel's own x, `U16_TO_U32 r1, r59^.h0`
+             * (fbload_fbload.expect.json) */
+            AluOp::F2i => match self.pixel_lane(x) {
+                Some(px) => self.op32(Alu::U2u32, [px, u, u], at),
+                None => self.op32(Alu::F2i, [x, u, u], at),
+            },
             AluOp::I2f => self.op32(Alu::I2f, [x, u, u], at),
             AluOp::Iadd => self.op32(Alu::Iadd, [x, y, u], at),
             /* every front-end ffma is `FMA.f32` with its sources in order: a
@@ -1260,6 +1402,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         npairs: 0,
         frag_xy: None,
         frag_zw: None,
+        frag16: None,
         rank: [u32::MAX; MAX_LOCALS],
         colour_rank: u32::MAX,
         next_rank: 0,
@@ -1275,6 +1418,19 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         return Err(MaliError::ControlFlow);
     }
     order_keys(m, f.keys);
+    /* each read of gl_FragCoord is its own lowered load, and `nir_opt_cse`
+     * keeps the first in program order: the position's nodes stand at the
+     * read whose statement comes first (fbload_fbload_int.stderr: the y
+     * pair's `ffma` before `int(gl_FragCoord.x)`'s `u2u32`, the y read
+     * being grafted into the later lane of the constructor) */
+    let is_fc = |i: usize| matches!(m.instrs.get(i), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
+    if let Some(first) = (0..m.instrs.len().min(MAX_VALUES)).filter(|&i| is_fc(i)).min_by_key(|&i| f.keys[i]) {
+        for o in f.origin[..f.nir.n].iter_mut() {
+            if is_fc(*o as usize) {
+                *o = first as u16;
+            }
+        }
+    }
     for (i, op) in m.instrs.iter().enumerate().take(MAX_VALUES) {
         match *op {
             ir::Op::LoadInput { slot: IoSlot::Varying(v), .. } => {
@@ -1694,9 +1850,11 @@ fn walk_nodes(
                     *o = Val::Lane(n, c as u8);
                 }
             }
-            /* gl_FragCoord is mediump in ES 1.00: a mediump shader's
-             * arithmetic on it is fp16 (no reference yet) */
+            /* gl_FragCoord is highp in ES 3.00 and mediump in ES 1.00: a
+             * mediump shader's read is narrowed to fp16 ([`Fs::frag_coord16`]);
+             * a mediump ES 3.00 shader's highp read has no reference */
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if prec.highp => out = f.frag_coord(at)?,
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp => out = f.frag_coord16(at)?,
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => return Err(MaliError::FragCoordMediump),
             ir::Op::LoadInput { .. } => return Err(MaliError::SpecialInput),
             ir::Op::LoadLocal { local, index: None, comps } => {
@@ -1748,7 +1906,7 @@ fn walk_nodes(
                  * operands'), so Mesa computes it in fp16; one on a highp
                  * copy (a highp local or parameter) is fp32 */
                 let fc = |x: &ir::Src| matches!(m.def(x.val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
-                if s.iter().take(ir_arity(a)).any(fc) {
+                if !prec.frag_coord_highp && s.iter().take(ir_arity(a)).any(fc) {
                     return Err(MaliError::FragCoordMediump);
                 }
                 out = f.alu32(m, a, &s, vals, at)?
@@ -1980,7 +2138,44 @@ fn walk_nodes(
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
                 let cube = Some(Cube { explicit });
-                f.look_up = Some((TexLookup { sampler, coord: TexCoord::Computed, cube, at: at as u16 }, n));
+                f.look_up =
+                    Some((TexLookup { sampler, coord: TexCoord::Computed, cube, fetch: false, at: at as u16 }, n));
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `texelFetch(s, ivec2, 0)` of a highp shader: Mesa's `txf`,
+             * `TEX_FETCH` on the coordinate's two integer words with no
+             * level word (fbload_fbload.expect.json, of a `sampler2D`;
+             * fbload_fbload_int.expect.json, of a `usampler2D`). A level
+             * other than the constant 0, or a signed integer texel, has no
+             * reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::D2,
+                shadow: false,
+                proj: false,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::U32),
+                sampler,
+                coord,
+                lod: ir::TexLod::Fetch(level),
+                offset: None,
+            } if prec.highp => {
+                if f.look_up.is_some() {
+                    return Err(MaliError::TexCount);
+                }
+                if lane(vals, level, 0) != Val::Const(0) {
+                    return Err(MaliError::TexKind);
+                }
+                let (s, t) = (lane(vals, coord, 0), lane(vals, coord, 1));
+                if s == Val::Undef || t == Val::Undef {
+                    return Err(MaliError::TexCoord);
+                }
+                let highp = prec.highp_samplers >> (sampler & 31) & 1 != 0;
+                let bits = if highp || ret == ir::ScalarType::U32 { 32 } else { 16 };
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: [s, t, Val::Undef], bits, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let t = TexLookup { sampler, coord: TexCoord::Computed, cube: None, fetch: true, at: at as u16 };
+                f.look_up = Some((t, n));
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -2012,9 +2207,13 @@ fn walk_nodes(
                     TexCoord::Computed => [s, t, Val::Undef],
                     _ => [Val::Undef; 3],
                 };
-                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits: 16, width: 1 })?;
+                /* a highp sampler's look-up is 32-bit in a highp shader, as
+                 * a cube's (fbload_mipgen.expect.json's `TEX_SINGLE ... .32
+                 * .2d.computed` of `highp sampler2D u_src`) */
+                let bits = if prec.highp && prec.highp_samplers >> (sampler & 31) & 1 != 0 { 32 } else { 16 };
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                f.look_up = Some((TexLookup { sampler, coord, cube: None, at: at as u16 }, n));
+                f.look_up = Some((TexLookup { sampler, coord, cube: None, fetch: false, at: at as u16 }, n));
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -2420,6 +2619,9 @@ enum Leaf {
     /// bi_lower_mkvec_swz makes `U16_TO_U32 x` (case108_uniidx's red and
     /// green): node `x` a lane alone ([`Pairs::scalar`]).
     Zext(u8),
+    /// gl_FragCoord's x and y narrowed to fp16, in order, as one word
+    /// (`MKVEC.v2i16 x.h0, y.h0`; [`Fs::frag_coord16`], [`frag16`]).
+    Frag,
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -2471,6 +2673,8 @@ impl Pairs {
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
             P::Leaf(Leaf::Zext(_)) => Form::Mk,
+            /* `MKVEC.v2i16 x, y` of the position's two halves */
+            P::Leaf(Leaf::Frag) => Form::Mk,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -2549,6 +2753,12 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         (Some((op @ (Alu::Fneg | Alu::Fabs), sa)), Some((o2, sb))) if o2 == op => {
             P::Op(op, [vectorise(f, pr, sa[0], sb[0], pair, ubo)?, 0, 0])
         }
+        /* the narrowed position: x and y in order (prec_84's `vec4(x / 64.0,
+         * y / 64.0, ..)`); any other pairing of its lanes has no reference */
+        _ if f.frag16_lane(a).is_some() || f.frag16_lane(b).is_some() => match (f.frag16_lane(a), f.frag16_lane(b)) {
+            (Some(0), Some(1)) => P::Leaf(Leaf::Frag),
+            _ => return Err(MaliError::FragCoordMediump),
+        },
         /* the look-up's result in its own pairs, in order */
         _ if f.texel(a).is_some() || f.texel(b).is_some() => match (f.texel(a), f.texel(b)) {
             (Some(i), Some(j)) if i % 2 == 0 && j == i + 1 => P::Leaf(Leaf::Tex(i / 2)),
@@ -2919,7 +3129,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     const UBO: u8 = 3;
     const NODE: u8 = 4;
     const DISCARD: u8 = 5;
-    let mut events = [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + 2 + 2 * MAX_UBO_READS + MAX_DISCARDS];
+    const FRAG: u8 = 6;
+    let mut events = [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + 3 + 2 * MAX_UBO_READS + MAX_DISCARDS];
     let mut ne = 0;
     for (k, d) in discards[..nd].iter().enumerate() {
         events[ne] = (d.0, 0, DISCARD, k as u8);
@@ -2927,6 +3138,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     }
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
         events[ne] = (v.key(), 0, LOAD, k as u8);
+        ne += 1;
+    }
+    /* the narrowed position, where gl_FragCoord is read (its fp32 build,
+     * the narrowings and the word: [`frag16`]) */
+    if let (Some([x, _]), true) = (f.frag16, (0..pr.n).any(|i| live[i] && pr.nodes[i] == P::Leaf(Leaf::Frag))) {
+        events[ne] = (f.key(x), 0, FRAG, 0);
         ne += 1;
     }
     let key_of = |at: u16| f.keys.get(at as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex));
@@ -2985,6 +3202,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        frag: None,
     };
     let mut val = [None::<Src>; MAX_PAIRS];
     let mut rows = 0u64;
@@ -3035,6 +3253,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     texel = Some(alu(p, Op::Collect, &w)?);
                 }
             }
+            FRAG => lv.frag = Some(frag16(p, &lv, &mut rows)?),
             UBO if vec4 => ubo_load(p, f, &mut lv, &mut rows)?,
             OFFSET => ubo_offset(p, f, x as usize, &mut lv, &mut rows)?,
             UBO => ubo_fetch(p, x as usize, &mut lv)?,
@@ -3088,7 +3307,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     };
     alu(
         p,
-        Op::Blend { sr_count: 2, f32: false },
+        Op::Blend { sr_count: 2, f32: false, u32: false },
         &[
             Src::ssa(col),
             Src::ssa(t),
@@ -3552,6 +3771,7 @@ pub fn select_highp(
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        frag: None,
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
     let mut rows = 0u64;
@@ -3621,8 +3841,11 @@ pub fn select_highp(
      * the alpha's, `BLEND.v4.f32` of the collected vector (case114_f.
      * expect.json: `ATEST ... r3`, `BLEND.slot2.v4.f32.end @r0:r1:r2:r3`;
      * alu_divloop's constant alpha `0x3F800000`). A deferred load stands
-     * before them: its first use is the store (`nir_opt_move`) */
-    if f.prec.colour_f32 {
+     * before them: its first use is the store (`nir_opt_move`). A `highp
+     * uvec4` output's words are stored as they are, `BLEND.v4.u32`, its
+     * ATEST on the constant alpha 1.0 (fbload_fbload_int.expect.json) */
+    let u32 = f.prec.colour_u32;
+    if f.prec.colour_f32 || u32 {
         let mut s = [Src::NULL; 4];
         for (x, v) in s.iter_mut().zip(c) {
             if let Some((false, k, _)) = load_lane(f, v)? {
@@ -3633,11 +3856,23 @@ pub fn select_highp(
             }
             *x = src32(f, &lv, val, v)?;
         }
-        let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), s[3], Src::of(Idx::Special(Special::AtestDatum, false))])?;
-        let col = alu(p, Op::Collect, &s)?;
+        /* the look-up's own vector stored whole: `bi_emit_tex_valhall`
+         * collects its def right after the split (the `vec4` the store
+         * reads), before ATEST; any other colour is collected at the store
+         * (fbload_mipgen.stderr's `COLLECT.i32 %32^, %33^, %34^, %35` then
+         * `ATEST`, against fbload_isamp's `ATEST` then `COLLECT`). Its place
+         * moves the pressure the scheduler weighs (sched.rs) */
+        let whole = f.look_up.is_some_and(|(_, n)| (0..4).all(|i| c[i] == Val::Lane(n, i as u8)));
+        let early = if whole { Some(alu(p, Op::Collect, &s)?) } else { None };
+        let alpha = if u32 { Src::of(Idx::Const(F32_ONE)) } else { s[3] };
+        let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), alpha, Src::of(Idx::Special(Special::AtestDatum, false))])?;
+        let col = match early {
+            Some(col) => col,
+            None => alu(p, Op::Collect, &s)?,
+        };
         alu(
             p,
-            Op::Blend { sr_count: 4, f32: true },
+            Op::Blend { sr_count: 4, f32: !u32, u32 },
             &[
                 Src::ssa(col),
                 Src::ssa(t),
@@ -3742,7 +3977,7 @@ pub fn select_highp(
     let col = alu(p, Op::Collect, &out)?;
     alu(
         p,
-        Op::Blend { sr_count: 2, f32: false },
+        Op::Blend { sr_count: 2, f32: false, u32: false },
         &[
             Src::ssa(col),
             Src::ssa(t),
@@ -3900,6 +4135,8 @@ struct Leaves {
     /// half ([`ubo_fetch`]).
     ubo_off: [Option<u16>; MAX_UBO_READS],
     ubo_half: [Option<u16>; MAX_UBO_READS],
+    /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
+    frag: Option<u16>,
 }
 
 /// The read of a vec4 array element at a run-time index, as Mesa's BIR has
@@ -4057,8 +4294,9 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, computed: Option<&[Src]>) 
     let sr = alu(p, Op::Collect, &staging[..n])?;
     /* a cube's level mode follows the call (`EXPLICIT` or `ZERO_LOD`,
      * pan_nir_lower_tex.c:927-937), its dimension `cube`; a 2D look-up
-     * here is `texture2D`'s computed level */
+     * here is `texture2D`'s computed level, or `texelFetch`'s */
     let (lod, dim) = match t.cube {
+        None if t.fetch => (super::bir::LodMode::Fetch, super::bir::TexDim::D2),
         Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
         Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
         None => (super::bir::LodMode::Computed, super::bir::TexDim::D2),
@@ -4073,6 +4311,32 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, computed: Option<&[Src]>) 
         lv.tex[i] = Some(*x);
     }
     Ok(())
+}
+
+/// The narrowed position's word in a mediump shader ([`Fs::frag_coord16`]):
+/// x and y at fp32 in NIR's order (`u2f32` of both halves of the preloaded
+/// pixel, their `+ 0.5`, y's `ffma` with `gl_FbWposYTransform`), each
+/// narrowed (`f2f16`), then `vec2` of the two halves (prec_84.expect.json:
+/// `U16_TO_F32` x2, `FADD_IMM` x2, `FMA.f32`, `FADD.f32 .h0` x2,
+/// `MKVEC.v2i16 r0, r0^.h0, r1^.h0`).
+fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u64) -> Result<u16, MaliError> {
+    let defect = MaliError::Defect(Defect::IrIndex);
+    let px = |c: Swz| Src::of(Idx::Reg(super::ra::POSITION_XY)).swz(c);
+    let wpos = |c: u8| -> Result<Src, MaliError> {
+        Ok(Src::of(Idx::Ubo { base: lv.ubo.word(FB_WPOS_Y_TRANSFORM).ok_or(defect)?, comp: c }))
+    };
+    let r32 = |op: Alu| Row { op, bits: 32, width: 1 };
+    let ux = row(p, rows, r32(Alu::U2f32), &[px(Swz::H00)])?;
+    let uy = row(p, rows, r32(Alu::U2f32), &[px(Swz::H11)])?;
+    let half = Src::of(Idx::Const(F32_HALF));
+    let x = row(p, rows, r32(Alu::Fadd), &[Src::ssa(ux), half])?;
+    let y = row(p, rows, r32(Alu::Fadd), &[Src::ssa(uy), half])?;
+    let y = row(p, rows, r32(Alu::Ffma), &[Src::ssa(y), wpos(0)?, wpos(1)?])?;
+    let n16 = Row { op: Alu::F2f16, bits: 16, width: 1 };
+    let x = row(p, rows, n16, &[Src::ssa(x)])?;
+    let y = row(p, rows, n16, &[Src::ssa(y)])?;
+    let s = [Src::ssa(x).swz(Swz::H00), Src::ssa(y).swz(Swz::H00)];
+    row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
 }
 
 fn conv_of(lv: &Leaves, k: u8, c: u8) -> Result<u16, MaliError> {
@@ -4096,6 +4360,7 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         P::Leaf(Leaf::Tex(h)) => {
             Src::ssa(lv.tex.get(h as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
+        P::Leaf(Leaf::Frag) => Src::ssa(lv.frag.ok_or(MaliError::Defect(Defect::IrIndex))?),
         P::Leaf(Leaf::Ubo(h)) => {
             Src::ssa(lv.ubo_words.get(h as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
         }

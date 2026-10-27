@@ -74,8 +74,9 @@ pub fn analyze_helper_requirements(p: &mut Prog<'_>) {
     }
     for i in p.ins[..p.n].iter_mut() {
         let exec = i.dests().iter().any(|d| matches!(d.idx, Idx::Ssa(v, _) if deps[v as usize]));
-        if let Op::TexSingle { ref mut skip, .. } = i.op {
-            *skip = !exec;
+        /* `TEX_FETCH` has no skip bit (`bi_has_skip_bit`) */
+        if let Op::TexSingle { ref mut skip, lod, .. } = i.op {
+            *skip = !exec && lod != super::bir::LodMode::Fetch;
         }
     }
 }
