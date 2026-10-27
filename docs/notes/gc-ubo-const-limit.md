@@ -270,3 +270,18 @@ recipe") does: `tools/cts/imx8mp-gltest-build.sh <name> 0 "<case list>"` and
 Expected: the case reports PASS and the record shows the expected colour for
 every block member. I did not run a board session in this item, so no board
 result is claimed here.
+
+## 7. Status (2026-10-27): option A implemented on the host
+
+- `select::select_blocks` takes the `(dword_off, dwords)` ranges of the
+  uniform rows that are block members (`codegen::assemble_from_ir_blocks`,
+  from `reflection.block_members`). A constant register all of whose real
+  dwords are members is left out of the file (`Sel::reg_of`); its
+  `LoadUniform` is `mov t.x, byte_offset` + `load.u32` from
+  `SHC_VIV_CONST_UBO_ADDR` (`Sel::block_read`). A mixed register stays.
+- `take_uniforms` no longer refuses a block over 1280 dwords: it hands the GL
+  core's block over in place (null or unaligned still refused).
+- `KNOWN_LIMITS` in `tests/es3_ubo.rs` is empty: the four cases link and
+  compare on the host. Unit test: `block_members_are_loads_and_leave_the_
+  constant_file` (select.rs).
+- Not done: the i.MX8MP run of a constant-offset `load` from a user block.
