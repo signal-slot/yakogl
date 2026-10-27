@@ -1317,7 +1317,7 @@ fn blending(d: &GlesDraw) -> Result<blend::Blending, FrameError> {
     })
 }
 
-/// The GL core's primitive code (`GLES_PRIM_*`) as the frame's topology.
+/// The GL core's cull winding (`GLES_CULL_*`) as the frame's.
 fn cull(c: backend::GlesCull) -> Result<frame::Cull, FrameError> {
     match c {
         backend::GLES_CULL_NONE => Ok(frame::Cull::None),
@@ -1327,6 +1327,7 @@ fn cull(c: backend::GlesCull) -> Result<frame::Cull, FrameError> {
     }
 }
 
+/// The GL core's primitive code (`GLES_PRIM_*`) as the frame's topology.
 fn topology(prim: backend::GlesPrim) -> Result<frame::Topology, FrameError> {
     use frame::Topology as T;
     Ok(match prim {
