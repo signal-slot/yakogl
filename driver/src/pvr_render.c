@@ -413,6 +413,25 @@ bool pvr_render_fl_grow_on_demand = PVR_FL_GROW_ON_DEMAND_DEFAULT;
 #endif
 bool pvr_render_fl_ready_pages = PVR_FL_READY_PAGES_DEFAULT;
 
+/* Hand the firmware its partial render: the geometry command's PR fence
+ * words {timeline, seq - 1}, a second geometry UPDATE to a timeline word,
+ * and per kick a FENCE_PR, a 3D_PR (a byte copy of the 3D command, the
+ * single-pass shape per Mesa pvr_arch_cmd_buffer.c:1736-1747) and an UPDATE,
+ * before today's FENCE + 3D + UPDATE -- the order of Linux drm/imagination's
+ * fragment queue (pvr_queue.c:698-737) and the fence arithmetic of
+ * Mesa's srvkm (pvr_arch_srv_job_render.c:531-569, :870-902).
+ * (CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER; gpu::pvr::render::submit and
+ * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render".)
+ * It is what the firmware waits for when the geometry phase is out of
+ * parameter memory with no 3D render running to free some: today such a
+ * kick never completes and ends in the 10 s stop (gl_test case 175,
+ * refusehang). Independent of the grow knob. Off until gl_test case 175 and
+ * glmark2 have run with it, knob off and on. */
+#ifndef PVR_PARTIAL_RENDER_DEFAULT
+#define PVR_PARTIAL_RENDER_DEFAULT 0
+#endif
+bool pvr_render_partial_render = PVR_PARTIAL_RENDER_DEFAULT;
+
 /* Ask the firmware to release the pair's two HWRTDatas before recycling the
  * pair, the DDK's sequence rather than an approximation of it. The freelists
  * are NOT part of it -- see the comment at the call site for why.
@@ -580,6 +599,7 @@ static void rr_sync_cfg(void)
 	RR.cfg.hwrt_cleanup = pvr_render_hwrt_cleanup;
 	RR.cfg.hwrt_reinit = pvr_render_hwrt_reinit;
 	RR.cfg.fl_grow_on_demand = pvr_render_fl_grow_on_demand;
+	RR.cfg.partial_render = pvr_render_partial_render;
 #ifdef PVR_RENDER_VERBOSE
 	RR.cfg.verbose = 1;
 #else

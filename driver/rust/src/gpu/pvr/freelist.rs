@@ -651,7 +651,9 @@ fn fw_before_the_answer(k: &YdPvrKm, i: usize) {
 ///   listed pages (current + ready) and 0;
 /// - every HWRT data in `hwrts` (heap offsets of the render service's built
 ///   members) that uses the list goes to `RGXFWIF_RTDATA_STATE_HWR` and loses
-///   `HWRTDATA_HAS_LAST_TA` ([`reset_hwrts`]). This code used to leave them
+///   `HWRTDATA_HAS_LAST_TA` and `HWRTDATA_PARTIAL_RENDERED` ([`reset_hwrts`]) -
+///   a reconstruction drops the render state the partial render built on.
+///   This code used to leave them
 ///   as the reset found them. On the AM62P (4c25118c), after one recovery
 ///   each later one faulted the TA at VA 0x40, 536 times.
 ///
@@ -709,8 +711,10 @@ pub fn reconstruct(k: &mut YdPvrKm, id: u32, hwrts: &[u32]) {
 
 /// Every HWRT data in `hwrts` (firmware-heap offsets) whose freelists
 /// include the one at firmware address `fl_fw_addr` goes to
-/// `RGXFWIF_RTDATA_STATE_HWR` and loses `HWRTDATA_HAS_LAST_TA`: the reset of
-/// the associated HWRTs in drm/imagination's `pvr_free_list_reconstruct`.
+/// `RGXFWIF_RTDATA_STATE_HWR` and loses `HWRTDATA_HAS_LAST_TA` and
+/// `HWRTDATA_PARTIAL_RENDERED` (the latter only ever set if the
+/// partial-render knob ran): the reset of the associated HWRTs in
+/// drm/imagination's `pvr_free_list_reconstruct`.
 pub fn reset_hwrts(k: &YdPvrKm, fl_fw_addr: u32, hwrts: &[u32]) -> u32 {
     let mut n = 0;
     for &off in hwrts {
@@ -726,7 +730,7 @@ pub fn reset_hwrts(k: &YdPvrKm, fl_fw_addr: u32, hwrts: &[u32]) -> u32 {
         unsafe {
             wr32(h, HWRTDATA_STATE, RTDATA_STATE_HWR);
             let f = rd32(h, HWRTDATA_FLAGS);
-            wr32(h, HWRTDATA_FLAGS, f & !HWRTDATA_HAS_LAST_TA);
+            wr32(h, HWRTDATA_FLAGS, f & !(HWRTDATA_HAS_LAST_TA | HWRTDATA_PARTIAL_RENDERED));
         }
         k.flush(h, HWRTDATA_SIZE);
         n += 1;
@@ -1386,16 +1390,17 @@ mod grow_tests {
     }
 
     /// Every HWRT data that uses the list goes to RTDATA_STATE_HWR and loses
-    /// HAS_LAST_TA; one that does not use it is left alone. Before, no HWRT
-    /// was touched, and after one recovery on the AM62P every later one
-    /// faulted the TA at VA 0x40 (4c25118c, 536 recoveries).
+    /// HAS_LAST_TA and PARTIAL_RENDERED; one that does not use it is left
+    /// alone. Before, no HWRT was touched, and after one recovery on the
+    /// AM62P every later one faulted the TA at VA 0x40 (4c25118c, 536
+    /// recoveries).
     #[test]
     fn reconstruction_resets_every_hwrt_that_uses_the_list() {
         let mut r = grown_twice();
         for (off, fl) in [(HWRT_A, FL_FW), (HWRT_B, 0xC000_9000)] {
             w32(&mut r, off, HWRTDATA_FREELISTS + GLOBAL_FREELIST * HWRTDATA_FREELIST_PTR_SIZE, fl);
             w32(&mut r, off, HWRTDATA_STATE, 1); // KICKTA
-            w32(&mut r, off, HWRTDATA_FLAGS, HWRTDATA_HAS_LAST_TA | 0x1);
+            w32(&mut r, off, HWRTDATA_FLAGS, HWRTDATA_HAS_LAST_TA | HWRTDATA_PARTIAL_RENDERED | 0x1);
         }
         reconstruct(&mut r.k, 1, &[HWRT_A, HWRT_B]);
         assert_eq!(
@@ -1405,7 +1410,7 @@ mod grow_tests {
         assert_eq!((r32(&r, HWRT_A, HWRTDATA_STATE), r32(&r, HWRT_A, HWRTDATA_FLAGS)), (RTDATA_STATE_HWR, 0x1));
         assert_eq!(
             (r32(&r, HWRT_B, HWRTDATA_STATE), r32(&r, HWRT_B, HWRTDATA_FLAGS)),
-            (1, HWRTDATA_HAS_LAST_TA | 0x1),
+            (1, HWRTDATA_HAS_LAST_TA | HWRTDATA_PARTIAL_RENDERED | 0x1),
             "an HWRT that does not use the list is left alone"
         );
     }

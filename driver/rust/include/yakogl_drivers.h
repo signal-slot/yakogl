@@ -649,13 +649,14 @@ int yd_pvr_fw_wait_started(struct yd_pvr_km *km);
 /* One render-target dataset (an HWRT data and its buffers). */
 struct yd_pvr_hwrt {
 	uint32_t used, w, h, samples;
-	uint32_t hcmn_off, hrt_off, hrt_fwaddr, pad;
+	uint32_t hcmn_off, hrt_off, hrt_fwaddr;
+	uint32_t rta_valid_off;         /* the partial render's sValidRenderTargets array */
 	struct yd_pvr_bo tpc, vheap, rgnhdr, macrotile, mlist;
 	uint32_t tpc_alloc, rgn_alloc;  /* bytes behind tpc / rgnhdr */
 	uint32_t fw_built;              /* the HWRT data structures exist */
 	uint32_t last_seq;              /* the last kick that used it */
 	uint32_t next;                  /* the pair member the next render takes (even slot) */
-	uint32_t pad2;
+	uint32_t rta_partial_off;       /* the partial render's sRTANumPartialRenders array */
 };
 
 /* The run-time switches (pvr_render.c has what each is for), 0/1 but
@@ -665,6 +666,7 @@ struct yd_pvr_render_cfg {
 	uint32_t mmu_ack_probe, mmu_ack_reping, hwrt_refuse, hwrt_cleanup, hwrt_reinit;
 	uint32_t verbose;               /* PVR_RENDER_VERBOSE */
 	uint32_t fl_grow_on_demand;     /* serve a freelist grow from the render pool */
+	uint32_t partial_render;        /* the firmware's partial render commands */
 };
 
 struct yd_pvr_render_ops {
@@ -1415,16 +1417,16 @@ _Static_assert(sizeof(struct yd_pvr_hwrt) == 176, "struct yd_pvr_hwrt");
 _Static_assert(offsetof(struct yd_pvr_hwrt, tpc) == 32, "yd_pvr_hwrt.tpc");
 _Static_assert(offsetof(struct yd_pvr_hwrt, mlist) == 128, "yd_pvr_hwrt.mlist");
 _Static_assert(offsetof(struct yd_pvr_hwrt, next) == 168, "yd_pvr_hwrt.next");
-_Static_assert(sizeof(struct yd_pvr_render_cfg) == 48, "struct yd_pvr_render_cfg");
+_Static_assert(sizeof(struct yd_pvr_render_cfg) == 52, "struct yd_pvr_render_cfg");
 _Static_assert(sizeof(struct yd_pvr_render_ops) == 16, "struct yd_pvr_render_ops");
-_Static_assert(offsetof(struct yd_pvr_render, ops) == 48, "yd_pvr_render.ops");
-_Static_assert(offsetof(struct yd_pvr_render, gen_b) == 60, "yd_pvr_render.gen_b");
-_Static_assert(offsetof(struct yd_pvr_render, last_hs) == 140, "yd_pvr_render.last_hs");
-_Static_assert(offsetof(struct yd_pvr_render, vdm_cs) == 152, "yd_pvr_render.vdm_cs");
-_Static_assert(offsetof(struct yd_pvr_render, reposts) == 176, "yd_pvr_render.reposts");
-_Static_assert(offsetof(struct yd_pvr_render, last_frag_cmd) == 216, "yd_pvr_render.last_frag_cmd");
-_Static_assert(offsetof(struct yd_pvr_render, last_kick) == 536, "yd_pvr_render.last_kick");
-_Static_assert(offsetof(struct yd_pvr_render, hwrt) == 856, "yd_pvr_render.hwrt");
+_Static_assert(offsetof(struct yd_pvr_render, ops) == 56, "yd_pvr_render.ops");
+_Static_assert(offsetof(struct yd_pvr_render, gen_b) == 68, "yd_pvr_render.gen_b");
+_Static_assert(offsetof(struct yd_pvr_render, last_hs) == 148, "yd_pvr_render.last_hs");
+_Static_assert(offsetof(struct yd_pvr_render, vdm_cs) == 160, "yd_pvr_render.vdm_cs");
+_Static_assert(offsetof(struct yd_pvr_render, reposts) == 184, "yd_pvr_render.reposts");
+_Static_assert(offsetof(struct yd_pvr_render, last_frag_cmd) == 224, "yd_pvr_render.last_frag_cmd");
+_Static_assert(offsetof(struct yd_pvr_render, last_kick) == 544, "yd_pvr_render.last_kick");
+_Static_assert(offsetof(struct yd_pvr_render, hwrt) == 864, "yd_pvr_render.hwrt");
 _Static_assert(sizeof(struct yd_pvr_kick_stamp) == 72, "struct yd_pvr_kick_stamp");
 _Static_assert(sizeof(struct yd_pvr_kick_times) == 24 + 72 * (1 + YD_PVR_KT_RING),
 	       "struct yd_pvr_kick_times");
@@ -1436,14 +1438,14 @@ _Static_assert(offsetof(struct yd_pvr_kick_times, ring) == 24 + 72, "yd_pvr_kick
 _Static_assert(offsetof(struct yd_pvr_kick_us, kick_geom_us) == 16, "yd_pvr_kick_us.kick_geom_us");
 _Static_assert(offsetof(struct yd_pvr_kick_us, frag_frag_us) == 32, "yd_pvr_kick_us.frag_frag_us");
 _Static_assert(offsetof(struct yd_pvr_kick_us, flags) == 40, "yd_pvr_kick_us.flags");
-_Static_assert(offsetof(struct yd_pvr_render, kick_times) == 856 + 176 * YD_PVR_HWRT_SETS,
+_Static_assert(offsetof(struct yd_pvr_render, kick_times) == 864 + 176 * YD_PVR_HWRT_SETS,
 	       "yd_pvr_render.kick_times");
 _Static_assert(offsetof(struct yd_pvr_render, grow_scene) ==
-		       856 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times),
+		       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times),
 	       "yd_pvr_render.grow_scene");
 _Static_assert(sizeof(struct yd_pvr_grow_scene) == 16, "struct yd_pvr_grow_scene");
 _Static_assert(sizeof(struct yd_pvr_render) ==
-	       856 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times) + 16,
+	       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times) + 16,
 	       "struct yd_pvr_render");
 _Static_assert(sizeof(struct yd_pvr_bo) == 24, "struct yd_pvr_bo");
 _Static_assert(offsetof(struct yd_pvr_bo, heap_off) == 16, "yd_pvr_bo.heap_off");
