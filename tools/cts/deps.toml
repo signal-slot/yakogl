@@ -53,7 +53,9 @@
 #             tools/setup-gate-host.sh, `deps-env.sh --packages apt`.
 #
 # deps-env.sh --check is what every host and image is judged by. --build is
-# for hosts and images, run on purpose; the gate never builds these.
+# for hosts and images, run on purpose; the gate never builds these, but for
+# MALI_CSFFW: one pinned file, fetched by .github/workflows/gate.yml when a
+# runner lacks it (its note).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -211,6 +213,21 @@ name = "PVR_FW_BLOB"
 path = "pvr_fw_blob.h"
 marker = "pvr_fw_blob.h"
 note = "not reproducible: the header is made from the board's PowerVR firmware file with driver/tools/mkfwblob.sh (driver/README.md) and is never committed; copy the host's existing one"
+
+[[dep]]
+name = "MALI_CSFFW"
+path = "mali-csffw/mali_csffw.bin"
+marker = "mali-csffw/mali_csffw.bin"
+note = "the Mali-G610's CSF firmware (Arm's, LICENCE.mali_csffw of linux-firmware): the NanoPC-T6's Armbian file /lib/firmware/arm/mali/arch10.8/mali_csffw.bin is byte for byte linux-firmware's at 930ef904 (282624 bytes, the sha256 below, checked 2026-10-28), so it is fetched from there; never committed; driver/tools/mkmalifw.sh makes the header; without it the firmware row of tools/check.sh is a gap. The gate workflow builds this one entry when it is absent (a single pinned file, no tree)"
+build = '''
+mkdir -p "$DEPS/mali-csffw"
+cp "$DEPS/downloads/mali_csffw.bin" "$DEPS/mali-csffw/mali_csffw.bin.part"
+mv "$DEPS/mali-csffw/mali_csffw.bin.part" "$DEPS/mali-csffw/mali_csffw.bin"
+'''
+
+[[dep.inputs]]
+url = "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/930ef9046e3848df688d98b7d5e68154b031dc66/arm/mali/arch10.8/mali_csffw.bin"
+sha256 = "a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b"
 
 # With a board.
 

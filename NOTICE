@@ -357,6 +357,11 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
     (GPL-2.0-only) is not
     copied: driver/rust/src/gpu/mali/pgtable.rs states its stage-1 choices
     as facts with the function they are in.
+    driver/rust/src/gpu/mali/fw.rs and csf.rs (Copyright 2023 Collabora
+    ltd.): the firmware image format and its checks of panthor_fw.c, the
+    shared-interface structures and req/ack helpers of panthor_fw.h, and
+    the boot, interface discovery, global init and ping sequences of
+    panthor_fw.c, transcribed under MIT.
 
 Material written after GPL-only sources (Linux display, v3d and
 bcm2835-power drivers) is listed in docs/source-form.md with the plan

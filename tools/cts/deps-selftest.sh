@@ -49,6 +49,7 @@ check "--check has the MESA_PAN_TREE marker" "missing  MESA_PAN_TREE  $L/mesa-pa
 check "--check counts the entries" "entries missing in $L" "$out"
 check "--check accepts the layout itself as a marker" "ok       GLSL2USC_CACHE  $L" "$out"
 absent "--check without a board has no board entry" DEQP_WORK "$out"
+check "--check has the Mali firmware entry" "missing  MALI_CSFFW  $L/mali-csffw/mali_csffw.bin" "$out"
 check "--check has the rustup target entry" "RUST_TARGET_AARCH64_LINUX  $(rustc --print sysroot)/lib/rustlib/aarch64-unknown-linux-gnu/lib" "$out"
 
 out=$("$ENV_SH" 2>&1)
@@ -182,6 +183,26 @@ out=$(BOARD_NAME=am62p "$ENV_SH" --build-missing am62p 2>&1); rc=$?
 check "--build-missing makes the board's entry" "built    W  $L/w-am62p/done" "$out"
 check "--build-missing names what it could not make" "not made: C D E F" "$out"
 [ "$(wc -l < "$L/d.runs")" -eq 2 ] && ok "--build-missing retried D (still missing)" || bad "D's runs: $(cat "$L/d.runs")"
+
+# The gate workflow builds MALI_CSFFW on a runner without it: the real
+# entry's path, marker and build, on a stand-in download (file://, its own
+# digest) named as the pinned URL names the firmware.
+printf 'not the firmware\n' > "$T/mali_csffw.bin"
+python3 -I - "$HERE/deps.toml" "$T" > "$T/mali.toml" <<'PY' || bad "the MALI_CSFFW entry: no stand-in made"
+import hashlib, json, sys, tomllib
+d = next(e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"] if e["name"] == "MALI_CSFFW")
+if d["inputs"][0]["url"].rsplit("/", 1)[1] != "mali_csffw.bin":
+    sys.exit("MALI_CSFFW: the pinned URL does not name mali_csffw.bin, the download its build copies")
+t = sys.argv[2]
+sha = hashlib.sha256(open(f"{t}/mali_csffw.bin", "rb").read()).hexdigest()
+q = json.dumps  # a JSON string is a TOML basic string
+print(f'[[dep]]\nname = "M"\npath = {q(d["path"])}\nmarker = {q(d["marker"])}\nbuild = {q(d["build"])}')
+print(f'[[dep.inputs]]\nurl = "file://{t}/mali_csffw.bin"\nsha256 = "{sha}"')
+PY
+out=$(DEPS_TOML=$T/mali.toml "$ENV_SH" --build M 2>&1); rc=$?
+[ "$rc" -eq 0 ] && cmp -s "$T/mali_csffw.bin" "$L/mali-csffw/mali_csffw.bin" &&
+  ok "MALI_CSFFW's build puts the pinned download at its marker" || bad "MALI_CSFFW's build: rc $rc: $out"
+[ ! -e "$L/mali-csffw/mali_csffw.bin.part" ] && ok "MALI_CSFFW's build leaves no .part" || bad "MALI_CSFFW: .part left"
 
 echo
 if [ "$fail" -eq 0 ]; then
