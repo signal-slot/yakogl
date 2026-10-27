@@ -313,8 +313,15 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
         t.push_str(rest);
         for stmt in t.split([';', '{', '}']) {
             let w: Vec<&str> = stmt.split_whitespace().collect();
-            if w.first() == Some(&"uniform") {
-                let name = w.last().expect("a name").to_string();
+            if w.first() != Some(&"uniform") {
+                continue;
+            }
+            /* `uniform [precision] type a, b, ...`: each declarator in
+             * order (gl_test case 192's `uniform float u_x, u_q, u_a, u_b`) */
+            let skip = if matches!(w.get(1), Some(&("lowp" | "mediump" | "highp"))) { 3 } else { 2 };
+            let names = w.get(skip..).unwrap_or(&[]).join(" ");
+            for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+                let name = name.to_string();
                 if !out.contains(&name) {
                     out.push(name);
                 }
@@ -1063,14 +1070,16 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * passes */
         (FS, "precision highp float; varying vec4 v; uniform float u; void main(){ vec4 c = v; for (float i = 0.0; i < 8.0; i += 1.0) { if (i >= u) break; if (i >= v.x) break; c = c + v; } gl_FragColor = c; }", MaliError::LoopForm),
         (FS, "precision highp float; varying vec4 v; void main(){ vec4 c = v; for (int i = 0; i < 40; i++) c = c * v; gl_FragColor = c; }", MaliError::LoopForm),
-        /* gl_FragCoord's z and w; any read of it in a mediump shader and
-         * arithmetic on the built-in itself in a highp one (both fp16 in
-         * Mesa: gl_FragCoord is mediump in ES 1.00) */
+        /* gl_FragCoord's w; its lanes out of order in a mediump shader and
+         * a product of the built-in itself in a highp one (both fp16 in
+         * Mesa: gl_FragCoord is mediump in ES 1.00), forms no reference
+         * draws */
         (FS, "precision highp float; void main(){ gl_FragColor = vec4(gl_FragCoord.zw, 0.0, 1.0); }", MaliError::SpecialInput),
-        (FS, "precision mediump float; void main(){ gl_FragColor = gl_FragCoord; }", MaliError::FragCoordMediump),
-        (FS, "precision highp float; void main(){ gl_FragColor = vec4(floor(gl_FragCoord.xy), 0.0, 1.0); }", MaliError::FragCoordMediump),
+        (FS, "precision mediump float; void main(){ gl_FragColor = vec4(gl_FragCoord.yx, 0.0, 1.0); }", MaliError::FragCoordMediump),
+        (FS, "precision highp float; void main(){ gl_FragColor = vec4(gl_FragCoord.x * 0.5, 0.0, 0.0, 1.0); }", MaliError::FragCoordMediump),
         (FS, "precision mediump float; void main(){ }", MaliError::NoColour),
-        (FS, "precision mediump float; void main(){ gl_FragColor = vec4(0.1, 0.0, 0.0, 1.0); }", MaliError::Fp16Inexact),
+        /* 1e-6 is an fp16 subnormal */
+        (FS, "precision mediump float; void main(){ gl_FragColor = vec4(1.0e-6, 0.0, 0.0, 1.0); }", MaliError::Fp16Inexact),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
         (FS, "precision mediump float; varying vec2 v; void main(){ gl_FragColor = vec4(1.0, v, 1.0); }", MaliError::ColourPair),
@@ -1929,6 +1938,10 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.push(td!("case121.frag"));
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
+    /* gl_FragCoord by precision class, case 192's uniform twin and the
+     * rounded mediump constant (plan #153 frame-cull) */
+    srcs.extend(FRAG_COORD_POPULATION.iter().map(|c| c.1));
+    srcs.extend([td!("algfold_192_predlive.frag"), td!("mixprec_hello.frag")]);
     srcs
 }
 
@@ -3039,6 +3052,8 @@ fn the_fragment_productions_are_the_references() {
     /* the constant coordinate and the run-time index (#1385 (b)) */
     fs.extend([td!("tex_coord_const.frag"), td!("vtl_fs.frag"), td!("uniidx_d.frag"), td!("uniidx_i.frag")]);
     fs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
+    /* the narrowed gl_FragCoord pair under a product (`Mk` at `MulA`) */
+    fs.push(td!("prec_84.frag"));
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();
@@ -4005,4 +4020,131 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn a_mediump_discard_of_a_varying_lane_is_refused() {
     assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("alu_branchquad.frag")), MaliError::DiscardForm);
+}
+
+/// gl_FragCoord by precision class (docs/notes/mali-fragcoord-mediump.md):
+/// highp in ES 3.00, so the position stays fp32 (the frame's preload
+/// `fbload`, `fbload_int`, and `glGenerateMipmap`'s `mipgen`: `texelFetch`
+/// as `TEX_FETCH`, `int(gl_FragCoord.x)` as `U16_TO_U32`, a `highp uvec4`
+/// colour as `BLEND.v4.u32`; gl_test's isamp: `ivec2(gl_FragCoord.xy) /
+/// 32` as the signed divide by a power of two, `CSEL.s32`, `IABS.s32`,
+/// `RSHIFT_OR.i32`, `IMUL.i32`, of an `isampler2D` fetch), mediump in ES
+/// 1.00: narrowed after its fp32 build in a mediump shader (prec_84, gl_test
+/// case 84's fragcoord), and in a highp one fp16 where lower_precision
+/// lowers the operation (predif_fs_coord and predlive_fs_coord's `x <
+/// 32.0`, `FCMP_OR.v2f16` whose mask the 32-bit selects read through
+/// `S16_TO_S32`; prec_82's `floor` and `fract` of x and y, `FROUND.v2f16`
+/// and `FADD.v2f16`, widened by `F16_TO_F32` where the highp locals take
+/// them; prec_119 is case 119's draw of the same program). Each drawn once
+/// on the shim with gl_ref.py's default uniforms (all 0, so `u_flip` and
+/// `u_scale` are the words 0), every word, the register count, preload and
+/// FAU words compared.
+/// (name, FS, expect.json)
+const FRAG_COORD_POPULATION: [(&str, &str, &str); 9] = [
+    ("fbload", td!("fbload_fbload.frag"), td!("fbload_fbload.expect.json")),
+    ("fbload_int", td!("fbload_fbload_int.frag"), td!("fbload_fbload_int.expect.json")),
+    ("mipgen", td!("fbload_mipgen.frag"), td!("fbload_mipgen.expect.json")),
+    ("isamp", td!("fbload_isamp.frag"), td!("fbload_isamp.expect.json")),
+    ("prec_84", td!("prec_84.frag"), td!("prec_84.expect.json")),
+    ("predif_fs_coord", td!("fbload_predif_fs_coord.frag"), td!("fbload_predif_fs_coord.expect.json")),
+    ("predlive_fs_coord", td!("fbload_predlive_fs_coord.frag"), td!("fbload_predlive_fs_coord.expect.json")),
+    ("prec_82", td!("prec_82.frag"), td!("prec_82.expect.json")),
+    ("prec_119", td!("prec_119.frag"), td!("prec_119.expect.json")),
+];
+
+#[test]
+fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
+    for (name, fs, json) in FRAG_COORD_POPULATION {
+        let f = compile(SHC_STAGE_FRAGMENT, fs).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let rf = region(json, "fs.fragment").expect("fs.fragment");
+        assert_words(name, &trim(&f.code), &rf.words);
+        assert_facts(name, &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
+        assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: padding");
+    }
+}
+
+/// The internal shaders under tools/shaders are the references' sources
+/// (byte copies); a fetch needs no helper threads (fbload_fbload.trace,
+/// `Requires helper threads: false`), the mip level's `texture()` does,
+/// and none stores fp16.
+#[test]
+fn the_internal_frag_coord_shaders_are_the_references() {
+    let srcs = [
+        (include_str!("../../../../tools/shaders/internal/es/fbload.frag"), td!("fbload_fbload.frag"), false),
+        (include_str!("../../../../tools/shaders/internal/es/fbload_int.frag"), td!("fbload_fbload_int.frag"), false),
+        (include_str!("../../../../tools/shaders/internal/es/mipgen.frag"), td!("fbload_mipgen.frag"), true),
+    ];
+    for (tree, reference, helpers) in srcs {
+        assert_eq!(tree, reference);
+        let f = compile(SHC_STAGE_FRAGMENT, tree).expect("compiles");
+        assert_eq!(f.info.helper_threads, helpers);
+        assert!(!f.info.colour_f16);
+    }
+}
+
+/// The corpus sources the gl_FragCoord references pin are the references'
+/// own (byte copies; tools/mali/corpus-verdicts.txt holds their verdicts).
+#[test]
+fn the_corpus_frag_coord_sources_are_the_references() {
+    let pairs = [
+        (include_str!("../../../../tools/shaders/es100/fragcoord.frag"), td!("prec_84.frag")),
+        (include_str!("../../../../tools/shaders/es100/fragcentre.frag"), td!("prec_82.frag")),
+        (include_str!("../../../../tools/shaders/gltest/isamp.frag"), td!("fbload_isamp.frag")),
+        (include_str!("../../../../tools/shaders/gltest/predif_fs_coord.frag"), td!("fbload_predif_fs_coord.frag")),
+        (include_str!("../../../../tools/shaders/gltest/predlive_fs_coord.frag"), td!("fbload_predlive_fs_coord.frag")),
+        (include_str!("../../../../tools/shaders/gltest/predlive_fs_uni.frag"), td!("algfold_192_predlive.frag")),
+        (include_str!("../../../../tools/shaders/es100/hello.frag"), td!("mixprec_hello.frag")),
+    ];
+    for (tree, reference) in pairs {
+        assert_eq!(tree, reference);
+    }
+}
+
+/// gl_test case 192's two programs (docs/notes/mali-algebraic-folds.md),
+/// drawn with `--uniform-values`: predlive_fs_uni's `a * 2.0` of a local
+/// is NIR's reassociation (`fmul 6.0, u_q`, `FMA.f32 r1, u3.w1, r1^,
+/// 0x0.neg`) and its `s` the late `fadd(b, bcsel(c, fneg(a), a))`; the
+/// gl_FragCoord twin is predlive_fs_coord's program, here with the
+/// uniforms' values in the FAU.
+#[test]
+fn the_case_192_programs_are_byte_equal_to_mesa_26_2_1() {
+    let cases = [
+        (td!("algfold_192_predlive.vert"), td!("algfold_192_predlive.frag"), td!("algfold_192_predlive.expect.json")),
+        (td!("algfold_192_coord.vert"), td!("algfold_192_coord.frag"), td!("algfold_192_coord.expect.json")),
+    ];
+    for (vs, fs, json) in cases {
+        let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    }
+}
+
+/// A mediump tree's constant fp16 does not hold exactly is rounded to
+/// nearest even (`_mesa_float_to_half`, lower_precision.cpp:739-746):
+/// es100/hello.frag's 0.66 is `0x3948`, the colour's second FAU word
+/// `3c003948` (mixprec_hello.expect.json; its vertex shader, prec_19's
+/// fp16 matrix, is another gap).
+#[test]
+fn a_mediump_constant_is_rounded_to_nearest_even() {
+    let (vs, fs, json) = (td!("mixprec_hello.vert"), td!("mixprec_hello.frag"), td!("mixprec_hello.expect.json"));
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// Two corpus programs on the same rules that no reference draws yet (the
+/// drm-shim run of each is to be recorded): tri_fragcoord's `x / 1280.0`
+/// and `y / 512.0` take the constants rounded to fp16 in one FAU word
+/// (1/1280 is `0x1266`, 1/512 `0x1800`), and fragz's gl_FragCoord.z is the
+/// special varying's fp32 lane (`LD_VAR_SPECIAL` of `frag_z`,
+/// pan_nir_lower_var_special.c:17-38) with no pixel position preloaded
+/// (r60 and r61 only).
+#[test]
+fn the_unreferenced_frag_coord_programs_follow_the_rules() {
+    let tri = compile(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/tri_fragcoord.frag"))
+        .expect("tri_fragcoord compiles");
+    assert!(tri.info.fau.contains(&FauWord::Constant(0x1800_1266)), "{:?}", tri.info.fau);
+    let z = compile(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/es100/fragz.frag"))
+        .expect("fragz compiles");
+    let first = text(z.code[0]);
+    assert!(first.starts_with("LD_VAR_SPECIAL.f32.center") && first.ends_with("index:0x3"), "{first}");
+    assert_eq!(z.info.preload, 0x3000_0000_0000_0000);
 }

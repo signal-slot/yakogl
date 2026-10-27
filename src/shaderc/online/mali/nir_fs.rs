@@ -32,7 +32,7 @@
 //!
 //! A shape it does not take is refused with its own gap ([`MaliError`]).
 
-use super::bir::{clamp, Cmpf, Dest, Idx, Ins, Op, Prog, Special, Src, Swz};
+use super::bir::{clamp, Cmpf, Dest, Idx, Ins, Op, Prog, Special, Src, Swz, VaryingName};
 use super::emit::{self, Row};
 use super::motion::{Moved, MAX_MOVED};
 use super::nir::{self, Alu, Kind, Nir, NirNode, Val, MAX_LOCALS, MAX_NODES, MAX_VALUES};
@@ -99,6 +99,10 @@ pub struct TexLookup {
     /// [`walk_nodes`]): its coordinate is [`TexCoord::Computed`], the
     /// look-up node's three sources.
     pub cube: Option<Cube>,
+    /// A `texelFetch` at level 0 of a highp shader ([`walk_nodes`]): its
+    /// coordinate is [`TexCoord::Computed`], two integer lanes, and the
+    /// look-up `TEX_FETCH` ([`super::bir::LodMode::Fetch`]).
+    pub fetch: bool,
     /// The IR instruction of the look-up.
     pub at: u16,
 }
@@ -133,6 +137,14 @@ pub const TEX_HANDLE: u32 = (4 << 27) | (TEX_INDEX << 16) | (3 << 11) | TEX_INDE
 /// of a varying's (the selector keeps 16).
 pub const POINT_COORD: u8 = u8::MAX;
 
+/// The location [`FsVarying`] give gl_FragCoord.z of a highp shader, read
+/// as a special varying (`load_frag_coord_z`, which
+/// `pan_nir_lower_var_special_pan` makes `load_var_special_pan` of
+/// `BI_VARYING_NAME_FRAG_Z`, pan_nir_lower_var_special.c:17-38; Valhall's
+/// `LD_VAR_SPECIAL.frag_z`, bifrost_compile.c:1419-1440): none of a
+/// varying's either.
+pub const FRAG_Z: u8 = u8::MAX - 1;
+
 /// The uniform dword the graph names `gl_FbWposYTransform` by, the state
 /// uniform `st_nir_lower_wpos_ytransform` adds for gl_FragCoord's y
 /// (st_glsl_to_nir.cpp:395-435, `STATE_FB_WPOS_Y_TRANSFORM`): past every
@@ -160,6 +172,7 @@ const F32_HALF: u32 = 0x3f00_0000;
 /// IR index.
 pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
     let n = m.instrs.len().min(MAX_VALUES).min(keys.len());
+    let grafted = grafted_locals(m, n);
     /* an `if`'s condition tree is placed by the condition's own
      * instruction (the `if` stands right after it) */
     let conds = m.nodes.iter().filter_map(|nd| match *nd {
@@ -167,6 +180,7 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
         _ => None,
     });
     let stores = (0..n).filter_map(|i| match m.instrs[i] {
+        ir::Op::StoreLocal { local, .. } if grafted.get(local.0 as usize).is_some_and(|g| g.is_some()) => None,
         ir::Op::StoreLocal { src, .. } | ir::Op::StoreOutput { src, .. } => Some((i, src.val)),
         _ => None,
     });
@@ -231,9 +245,102 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
                 ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0)),
                 /* a look-up's coordinate is visited as its child */
                 ir::Op::Tex { coord, .. } => child(coord.val.0),
+                /* a grafted local's one read is its stored tree */
+                ir::Op::LoadLocal { local, index: None, .. } => {
+                    if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {
+                        child(src.0)
+                    }
+                }
                 _ => {}
             }
         }
+    }
+}
+
+/// GLSL IR's `opt_tree_grafting` (glsl/opt_tree_grafting.cpp): a local
+/// assigned once and read once has its assignment's tree grafted into the
+/// read, so the tree is computed where the read stands, not where it was
+/// assigned (measured: fbload_int.frag's `float y = gl_FragCoord.y *
+/// u_flip.x + u_flip.y`, whose `ffma` follows `int(gl_FragCoord.x)`'s
+/// `u2u32` in fbload_fbload_int.stderr). The value each grafted local's
+/// read stands for, by local; only in a body without control flow, and
+/// not past a store to a local the tree reads (`can_graft`'s check of the
+/// instructions between, :210-240).
+fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS] {
+    let mut out = [None; MAX_LOCALS];
+    if m.nodes.iter().any(|nd| matches!(nd, Node::If { .. } | Node::Loop { .. })) {
+        return out;
+    }
+    for (l, o) in out.iter_mut().enumerate().take(m.locals.len()) {
+        let stores =
+            (0..n).filter(|&i| matches!(m.instrs[i], ir::Op::StoreLocal { local, .. } if local.0 as usize == l));
+        let loads = (0..n).filter(|&i| matches!(m.instrs[i], ir::Op::LoadLocal { local, .. } if local.0 as usize == l));
+        let (Some(st), 1, Some(ld), 1) = (stores.clone().next(), stores.count(), loads.clone().next(), loads.count())
+        else {
+            continue;
+        };
+        let ir::Op::StoreLocal { src, index: None, write_mask, .. } = m.instrs[st] else { continue };
+        if st > ld || !matches!(m.instrs[ld], ir::Op::LoadLocal { index: None, .. }) {
+            continue;
+        }
+        /* a whole assignment, read with the identity swizzle */
+        let comps = m.comps_of(src.val) as usize;
+        if write_mask != (1u8 << comps) - 1 || (0..comps).any(|c| src.swizzle[c] as usize != c) {
+            continue;
+        }
+        /* the locals the tree reads, none stored in between; a tree of
+         * other instructions (a look-up, an indexed read) is not grafted
+         * here */
+        let mut reads = [false; MAX_LOCALS];
+        let mut stack = [0u32; MAX_VALUES];
+        let (mut sp, mut ok) = (1, true);
+        stack[0] = src.val.0;
+        while sp > 0 && ok {
+            sp -= 1;
+            match m.instrs.get(stack[sp] as usize) {
+                Some(ir::Op::Alu(a, srcs)) => {
+                    for x in srcs.iter().take(a.arity()) {
+                        ok &= sp < stack.len();
+                        if ok {
+                            stack[sp] = x.val.0;
+                            sp += 1;
+                        }
+                    }
+                }
+                Some(ir::Op::LoadLocal { local, .. }) => match reads.get_mut(local.0 as usize) {
+                    Some(r) => *r = true,
+                    None => ok = false,
+                },
+                Some(
+                    ir::Op::ConstF32(_) | ir::Op::ConstI32(_) | ir::Op::LoadUniform { .. } | ir::Op::LoadInput { .. },
+                ) => {}
+                _ => ok = false,
+            }
+        }
+        if !ok {
+            continue;
+        }
+        let clobbered = (st + 1..ld).any(
+            |i| matches!(m.instrs[i], ir::Op::StoreLocal { local, .. } if reads.get(local.0 as usize) == Some(&true)),
+        );
+        if !clobbered {
+            *o = Some(src.val);
+        }
+    }
+    out
+}
+
+/// `s` is a read of a local GLSL's `opt_tree_grafting` leaves in place
+/// ([`grafted_locals`]): the value it stands for is another expression
+/// tree of GLSL IR, so its rules saw the two apart and NIR's see them
+/// together.
+fn kept_local(m: &Module<'_>, s: ir::Src) -> bool {
+    match m.def(s.val) {
+        Some(ir::Op::LoadLocal { local, index: None, .. }) => {
+            let grafted = grafted_locals(m, m.instrs.len().min(MAX_VALUES));
+            grafted.get(local.0 as usize).is_some_and(|g| g.is_none())
+        }
+        _ => false,
     }
 }
 
@@ -307,6 +414,7 @@ pub const ADMITTED: u128 = {
         | prod(Splat, FmaB)
         | prod(Mk, AddB)
         | prod(Mk, FmaC)
+        | prod(Mk, MulA)
         | prod(Mk, Output)
         | prod(Uniform, AddB)
         | prod(Uniform, MulB)
@@ -421,9 +529,13 @@ pub struct Fs<'s> {
     /// Each varying location's first read (`u32::MAX`: not read).
     var_key: [u32; MAX_VARYINGS],
     pcoord_key: u32,
-    /// The input node of each varying location, and of gl_PointCoord.
+    /// gl_FragCoord's first read in a highp shader ([`FRAG_Z`]).
+    fz_key: u32,
+    /// The input node of each varying location, of gl_PointCoord and of
+    /// gl_FragCoord.z ([`FRAG_Z`]).
     inputs: [Option<u16>; MAX_VARYINGS],
     pcoord: Option<u16>,
+    fz: Option<u16>,
     /// The loads, in Mesa's order.
     pub varyings: [FsVarying; MAX_VARYINGS],
     pub nvar: usize,
@@ -459,6 +571,9 @@ pub struct Fs<'s> {
     /// and the node of its z and w.
     frag_xy: Option<[Val; 2]>,
     frag_zw: Option<u16>,
+    /// gl_FragCoord's x and y narrowed to fp16, the mediump read of an ES
+    /// 1.00 shader ([`Fs::frag_coord16`]).
+    frag16: Option<[Val; 2]>,
     /// Each local's rank by its first load or store in the walk, and the
     /// colour's by its first store (`u32::MAX`: none yet): the order
     /// `nir_lower_vars_to_ssa` registers the variables in
@@ -664,14 +779,10 @@ impl<'s> Fs<'s> {
         }
     }
 
-    /// The input node of varying location `loc` (or gl_PointCoord).
+    /// The input node of varying location `loc` (or gl_PointCoord, or
+    /// gl_FragCoord.z).
     fn input(&mut self, loc: u8, at: usize) -> Result<u16, MaliError> {
-        let slot = if loc == POINT_COORD {
-            &mut self.pcoord
-        } else {
-            self.inputs.get_mut(loc as usize).ok_or(MaliError::VaryingLocation)?
-        };
-        if let Some(n) = *slot {
+        if let Some(n) = *self.input_slot(loc)? {
             return Ok(n);
         }
         let n = self.nir.push_node(NirNode {
@@ -681,9 +792,16 @@ impl<'s> Fs<'s> {
             width: 1,
         })?;
         self.origin[n as usize] = at as u16;
-        let slot = if loc == POINT_COORD { &mut self.pcoord } else { &mut self.inputs[loc as usize] };
-        *slot = Some(n);
+        *self.input_slot(loc)? = Some(n);
         Ok(n)
+    }
+
+    fn input_slot(&mut self, loc: u8) -> Result<&mut Option<u16>, MaliError> {
+        match loc {
+            POINT_COORD => Ok(&mut self.pcoord),
+            FRAG_Z => Ok(&mut self.fz),
+            _ => self.inputs.get_mut(loc as usize).ok_or(MaliError::VaryingLocation),
+        }
     }
 
     /// The node of uniform dword `d` (one fp16 lane, or an int uniform's
@@ -742,15 +860,51 @@ impl<'s> Fs<'s> {
         Ok([xy[0], xy[1], Val::Lane(zw, 0), Val::Lane(zw, 1)])
     }
 
+    /// gl_FragCoord's lanes in a mediump shader of ES 1.00, where the
+    /// built-in is mediump (builtin_variables.cpp:1333-1335): x and y are
+    /// built at fp32 as in a highp shader ([`Fs::frag_coord`]), each then
+    /// narrowed by its own `f2f16` (the `f2fmp` lower_precision puts on the
+    /// fp32 read, `FADD.f32 r0.h0, r0^, 0x0.neg`), and the two halves are
+    /// one word by `MKVEC.v2i16` where an operation reads them as a pair
+    /// (prec_84.expect.json; docs/notes/mali-fragcoord-mediump.md 3). z and
+    /// w stay [`Kind::FragCoordZw`]'s.
+    fn frag_coord16(&mut self, at: usize) -> Result<[Val; 4], MaliError> {
+        let [x, y, z, w] = self.frag_coord(at)?;
+        let xy = match self.frag16 {
+            Some(xy) => xy,
+            None => {
+                let mut xy = [Val::Undef; 2];
+                for (o, v) in xy.iter_mut().zip([x, y]) {
+                    let nd =
+                        NirNode { kind: Kind::Alu(Alu::F2f16), src: [v, Val::Undef, Val::Undef], bits: 16, width: 1 };
+                    let n = self.nir.push_node(nd)?;
+                    self.origin[n as usize] = at as u16;
+                    *o = Val::Lane(n, 0);
+                }
+                self.frag16 = Some(xy);
+                xy
+            }
+        };
+        Ok([xy[0], xy[1], z, w])
+    }
+
+    /// The lane of the narrowed position `v` is ([`Fs::frag_coord16`]): 0
+    /// for x, 1 for y.
+    fn frag16_lane(&self, v: Val) -> Option<u8> {
+        self.frag16?.iter().position(|&l| l == v).map(|k| k as u8)
+    }
+
     /// One lane of an fp32 operation of a highp shader: the vertex stage's
     /// folding, rules and CSE ([`Nir::alu`]) over operands that are fp32 (a
     /// varying of the shader's width, a constant, an fp32 result).
     fn op32(&mut self, op: Alu, s: [Val; 3], at: usize) -> Result<Val, MaliError> {
-        for v in s.into_iter().take(op.arity()) {
-            if v == Val::Undef {
+        let mut s = s;
+        for v in s.iter_mut().take(op.arity()) {
+            if *v == Val::Undef {
                 return Err(MaliError::ColourForm);
             }
-            self.mark_mixed(v);
+            self.mark_mixed(*v);
+            *v = self.widen(*v, at)?;
         }
         let first = self.nir.n;
         let r = self.nir.alu(op, s[0], s[1], s[2])?;
@@ -758,6 +912,152 @@ impl<'s> Fs<'s> {
             self.origin[id] = at as u16;
         }
         Ok(r)
+    }
+
+    /// `v` is a lane of an fp16 value of a highp shader: a mediump
+    /// expression on gl_FragCoord ([`Fs::alu16`]), not a compare's mask.
+    fn is_f16(&self, v: Val) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        matches!(self.nir.nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 16, .. } if !op.is_int())
+    }
+
+    /// An fp16 lane where a highp value is read: lower_precision's
+    /// up-conversion at the edge of the lowered tree (`f162f`,
+    /// lower_precision.cpp:693-694; NIR's `f2f32`, `F16_TO_F32 rd, rs.hN`
+    /// of the lane's half, bifrost_compile.c:3073). Any other lane is
+    /// itself.
+    fn widen(&mut self, v: Val, at: usize) -> Result<Val, MaliError> {
+        if !self.is_f16(v) {
+            return Ok(v);
+        }
+        let first = self.nir.n;
+        let r = self.nir.alu(Alu::F2f32, v, Val::Undef, Val::Undef)?;
+        for id in first..self.nir.n {
+            self.origin[id] = at as u16;
+        }
+        Ok(r)
+    }
+
+    /// An fp16 node of a highp shader: `op` over `src` at `width` lanes
+    /// (2: a vector of two halves, `nir_opt_vectorize`'s `vec2` of 16-bit
+    /// lanes), CSE'd (`nir_opt_cse`), made by IR instruction `at`.
+    fn node16(&mut self, op: Alu, src: [Val; 3], width: u8, at: usize) -> Result<Val, MaliError> {
+        let nd = NirNode { kind: Kind::Alu(op), src, bits: 16, width };
+        if let Some(i) = self.nir.nodes[..self.nir.n].iter().position(|x| *x == nd) {
+            return Ok(Val::Lane(i as u16, 0));
+        }
+        let id = self.nir.push_node(nd)?;
+        self.origin[id as usize] = at as u16;
+        Ok(Val::Lane(id, 0))
+    }
+
+    /// The two halves `x` and `y` as one fp16 vector: the vector they are
+    /// lanes 0 and 1 of, or their `vec2` (`MKVEC.v2i16 x.h0, y.h0`,
+    /// prec_82.expect.json).
+    fn vec16(&mut self, x: Val, y: Val, at: usize) -> Result<Val, MaliError> {
+        if let (Val::Lane(n, 0), Val::Lane(m, 1)) = (x, y) {
+            if n == m && self.nir.nodes[n as usize].width == 2 {
+                return Ok(Val::Lane(n, 0));
+            }
+        }
+        if !self.is_f16(x) || !self.is_f16(y) {
+            return Err(MaliError::FragCoordMediump);
+        }
+        self.node16(Alu::Vec2, [x, y, Val::Undef], 2, at)
+    }
+
+    /// A highp shader's IR operation `a` that lower_precision computes at
+    /// fp16 (lower_precision.cpp:295-312: every operand is mediump, the
+    /// ES 1.00 gl_FragCoord read itself (builtin_variables.cpp:1333-1335)
+    /// or an fp16 result of such an operation, or a constant, which takes
+    /// the precision of the others; docs/notes/mali-fragcoord-mediump.md
+    /// 3). The read is narrowed where the operation reads it
+    /// ([`Fs::frag_coord16`]); a constant is converted to fp16 by
+    /// `_mesa_float_to_half`, round to nearest even (lower_precision.cpp:
+    /// 739-746). `fc` says which sources are the read. The forms the
+    /// references draw: one lane's compare (fbload_predif_fs_coord,
+    /// fbload_predlive_fs_coord: `FCMP_OR.v2f16.lt.m1 r0^.h00, u3.w0` of
+    /// `x < 32.0`) and `floor`, `fract` of the position's x and y
+    /// (prec_82: `FROUND.v2f16.rtn` and `FADD.v2f16` of the two halves,
+    /// whose `vec2` the late `f2f32(op(f2fmp(a)))` rule, nir_opt_algebraic.py:
+    /// 4173-4174, does not see through). Another has no reference.
+    fn alu16(&mut self, a: AluOp, s: [[Val; 4]; 3], fc: [bool; 3], w: usize, at: usize) -> Result<[Val; 4], MaliError> {
+        let mut x = [[Val::Undef; 4]; 3];
+        for k in 0..ir_arity(a) {
+            for i in 0..w {
+                x[k][i] = match s[k][i] {
+                    Val::Const(b) => Val::Const(u32::from(f16_rtne(b).ok_or(MaliError::Fp16Inexact)?)),
+                    v if fc[k] => {
+                        let [x32, y32, ..] = self.frag_coord(at)?;
+                        let [x16, y16, ..] = self.frag_coord16(at)?;
+                        if v == x32 {
+                            x16
+                        } else if v == y32 {
+                            y16
+                        } else {
+                            return Err(MaliError::FragCoordMediump);
+                        }
+                    }
+                    v => v,
+                };
+            }
+        }
+        /* the front end records no width here (`comps_of` answers 4) and
+         * pads a swizzle with its last lane: a lane whose operands are the
+         * lane before's is the same scalar operation, one node (`nir_opt_cse`
+         * after `nir_lower_alu_width`) */
+        let same = |i: usize| (0..ir_arity(a)).all(|k| x[k][i] == x[k][i - 1]);
+        let d = (1..w).find(|&i| same(i)).unwrap_or(w);
+        if (d..w).any(|i| !same(i)) {
+            return Err(MaliError::FragCoordMediump);
+        }
+        let (lanes, w) = (w, d);
+        let u = Val::Undef;
+        let mut out = [u; 4];
+        match a {
+            /* against a constant, which lower_precision made a 16-bit one:
+             * the late `flt(f2fmp(a), f2fmp(b))` -> `flt(a, b)`
+             * (nir_opt_algebraic.py:4185-4186) takes a compare of two
+             * narrowed values back to fp32, a form no reference draws */
+            AluOp::Flt | AluOp::Fle | AluOp::Feq
+                if w == 1 && matches!(x[0][0], Val::Const(_)) != matches!(x[1][0], Val::Const(_)) =>
+            {
+                let (p, q) = (x[0][0], x[1][0]);
+                out[0] = match a {
+                    AluOp::Flt => self.node16(Alu::Fcmp(Cmpf::Lt), [p, q, u], 1, at)?,
+                    AluOp::Fle => self.node16(Alu::Fcmp(Cmpf::Ge), [q, p, u], 1, at)?,
+                    _ => self.node16(Alu::Fcmp(Cmpf::Eq), [p, q, u], 1, at)?,
+                };
+            }
+            /* two lanes, one vector operation of halves; `lower_ffract`
+             * (nir_opt_algebraic.py:546) is `fadd(a, fneg(ffloor(a)))`, the
+             * `ffloor` CSE'd with `floor()`'s. A constant operand has no
+             * reference */
+            AluOp::Ffloor | AluOp::Ffract | AluOp::Fneg | AluOp::Fadd if w == 2 => {
+                let v = self.vec16(x[0][0], x[0][1], at)?;
+                let r = match a {
+                    AluOp::Ffloor => self.node16(Alu::Ffloor, [v, u, u], 2, at)?,
+                    AluOp::Fneg => self.node16(Alu::Fneg, [v, u, u], 2, at)?,
+                    AluOp::Fadd => {
+                        let q = self.vec16(x[1][0], x[1][1], at)?;
+                        self.node16(Alu::Fadd, [v, q, u], 2, at)?
+                    }
+                    _ => {
+                        let fl = self.node16(Alu::Ffloor, [v, u, u], 2, at)?;
+                        let ng = self.node16(Alu::Fneg, [fl, u, u], 2, at)?;
+                        self.node16(Alu::Fadd, [v, ng, u], 2, at)?
+                    }
+                };
+                let Val::Lane(n, _) = r else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                out[0] = Val::Lane(n, 0);
+                out[1] = Val::Lane(n, 1);
+            }
+            _ => return Err(MaliError::FragCoordMediump),
+        }
+        for i in w..lanes {
+            out[i] = out[w - 1];
+        }
+        Ok(out)
     }
 
     /// Mark a highp operand of the other width: gl_PointCoord is mediump,
@@ -796,6 +1096,17 @@ impl<'s> Fs<'s> {
             (_, Some((Alu::Frcp, [p, ..]))) => self.not_negative(p),
             _ => false,
         }
+    }
+
+    /// The pixel position's 16-bit lane `v` is the centre of: `v` is
+    /// `fadd(u2f32(p), b)`, `p` a lane of [`Kind::PixelCoord`] and `b` a
+    /// constant in (0, 1) ([`Fs::frag_coord`]'s x).
+    fn pixel_lane(&self, v: Val) -> Option<Val> {
+        let (Alu::Fadd, [s, Val::Const(b), _]) = self.alu_of(v)? else { return None };
+        let (Alu::U2f32, [p, ..]) = self.alu_of(s)? else { return None };
+        let Val::Lane(n, _) = p else { return None };
+        let half = f32::from_bits(b);
+        (self.nir.nodes[n as usize].kind == Kind::PixelCoord && half > 0.0 && half < 1.0).then_some(p)
     }
 
     /// `v` is `fneg(b2f(c))`.
@@ -883,21 +1194,35 @@ impl<'s> Fs<'s> {
              * (nir_opt_algebraic.py:1696), a form no reference draws: refused
              * before the graph's `fmul(fneg(a), b)` rule rewrites it */
             AluOp::Fmul if [x, y].iter().any(|v| self.is_neg_b2f(*v)) => Err(MaliError::AlgebraicForm),
-            /* in an unrolled loop, the counter's constant (computed, so
-             * GLSL IR's `reassociate_constant` never saw it: a source
-             * constant here is the vertex stage's refusal, [`Nir::alu`])
-             * times a product with a constant: `fmul(#a, fmul(b, #c))` is
+            /* a constant GLSL IR's `reassociate_constant` never saw, times a
+             * product with a constant: `fmul(#a, fmul(b, #c))` is
              * `fmul(fmul(a, c), b)`, the folded constant first
-             * (nir_opt_algebraic.py:2406, "Reassociate constants"; measured:
-             * s6_discloop's `acc += vec3(1.0, 2.0, 3.0) * u_w * float(i + 1)`,
-             * whose passes end as Mesa's `fmul u_w, 10.0`) */
-            AluOp::Fmul if self.loops > 0 => {
+             * (nir_opt_algebraic.py:2406, "Reassociate constants"). Two
+             * shapes reach NIR so: in an unrolled loop the counter's
+             * constant (computed; measured: s6_discloop's `acc +=
+             * vec3(1.0, 2.0, 3.0) * u_w * float(i + 1)`, whose passes end as
+             * Mesa's `fmul u_w, 10.0`), and a source constant times a local
+             * `opt_tree_grafting` keeps, so the product was another tree
+             * (measured: fbload_predlive_fs_coord's `a * 2.0` of `float a =
+             * u_q * 3.0`, `fmul 6.0, u_q`). A constant on the right of one
+             * tree ends the same when GLSL IR reassociates it
+             * (opt_algebraic.cpp:175-217: `(b * #c) * #a` and `(#c * b) *
+             * #a` are `(a * c) * b` and `(c * a) * b`) and when it does not
+             * (a division, which GLSL IR keeps and NIR's `lower_fdiv` makes
+             * a product; measured: prec_82's `p.x * 4.0 / 255.0`, `FMA.f32
+             * r1, u3.w0, r1^, 0x0.neg` with `u3.w0` = 4/255). One on the
+             * left of one tree GLSL IR makes `b * (a * c)`, the other
+             * order: the vertex stage's refusal ([`Nir::alu`]) */
+            AluOp::Fmul
+                if self.loops > 0 || matches!(y, Val::Const(_)) || [0, 1].iter().any(|&k| kept_local(m, srcs[k])) =>
+            {
                 /* the counter's conversion (`float(i + 1)`), not a constant
                  * of the source (a constructor's reach through a temporary) */
                 let computed = |k: usize| matches!(m.def(srcs[k].val), Some(ir::Op::Alu(..)));
+                let local = |k: usize| kept_local(m, srcs[k]);
                 let outer = match (x, y) {
-                    (Val::Const(c), o) if computed(0) => Some((c, o)),
-                    (o, Val::Const(c)) if computed(1) => Some((c, o)),
+                    (Val::Const(c), o) if computed(0) || local(1) => Some((c, o)),
+                    (o, Val::Const(c)) => Some((c, o)),
                     _ => None,
                 };
                 let inner = outer.and_then(|(c2, o)| match (o, self.alu_of(o)) {
@@ -991,7 +1316,15 @@ impl<'s> Fs<'s> {
              * 0x3C000000.h11, r0^.h00` in case87_databreak.expect.json) */
             AluOp::Bcsel if y == Val::Const(F32_ONE) && z == Val::Const(F32_ZERO) => self.op32(Alu::B2f, [x, u, u], at),
             AluOp::Bcsel => self.op32(Alu::Bcsel, [x, y, z], at),
-            AluOp::F2i => self.op32(Alu::F2i, [x, u, u], at),
+            /* `f2i(fadd(a, b))` of an integral, non-negative `a` and a `b` in
+             * (0, 1) is `f2i(a)`, and `f2i32(u2f32(a@16))` is `u2u32(a)`
+             * (nir_opt_algebraic.py:1955-1958): `int(gl_FragCoord.x)` is the
+             * pixel's own x, `U16_TO_U32 r1, r59^.h0`
+             * (fbload_fbload.expect.json) */
+            AluOp::F2i => match self.pixel_lane(x) {
+                Some(px) => self.op32(Alu::U2u32, [px, u, u], at),
+                None => self.op32(Alu::F2i, [x, u, u], at),
+            },
             AluOp::I2f => self.op32(Alu::I2f, [x, u, u], at),
             AluOp::Iadd => self.op32(Alu::Iadd, [x, y, u], at),
             /* every front-end ffma is `FMA.f32` with its sources in order: a
@@ -1131,6 +1464,45 @@ impl<'s> Fs<'s> {
             }
             return Ok(out);
         }
+        /* a signed divide by a positive constant power of two `2^k`:
+         * `imul(isign(a), ushr(iabs(a), k))` (nir_opt_algebraic.py:208,
+         * the constant `find_lsb(b)` folded), whose `isign` is `imin(imax(a,
+         * -1), 1)` (:2812, `lower_isign`, bifrost_compile.h:89). The rule
+         * rewrites the vector operation, building its replacement source
+         * first, and `nir_lower_alu_width` splits each vector operation in
+         * place: every lane's `imax`, then every lane's `imin`, and so on
+         * (fbload_isamp.expect.json: `CSEL.s32.gt` x2, `CSEL.s32.lt` x2,
+         * `IABS.s32` x2, `RSHIFT_OR.i32` x2, `IMUL.i32` x2). Another
+         * divisor has no reference */
+        if a == AluOp::Idiv {
+            let k = match lane(1, 0) {
+                Val::Const(d) if d > 1 && d.is_power_of_two() && d < 1 << 31 => d.trailing_zeros(),
+                _ => return Err(MaliError::Arithmetic),
+            };
+            let n = (0..w).take_while(|&i| lane(0, i) != Val::Undef).count();
+            if (0..n).any(|i| lane(1, i) != lane(1, 0)) {
+                return Err(MaliError::Arithmetic);
+            }
+            let u = Val::Undef;
+            let mut sign = [u; 4];
+            let mut mag = [u; 4];
+            for (i, s) in sign.iter_mut().enumerate().take(n) {
+                *s = self.op32(Alu::Imax, [lane(0, i), Val::Const(u32::MAX), u], id)?;
+            }
+            for s in sign.iter_mut().take(n) {
+                *s = self.op32(Alu::Imin, [*s, Val::Const(1), u], id)?;
+            }
+            for (i, m) in mag.iter_mut().enumerate().take(n) {
+                *m = self.op32(Alu::Iabs, [lane(0, i), u, u], id)?;
+            }
+            for m in mag.iter_mut().take(n) {
+                *m = self.op32(Alu::Ushr, [*m, Val::Const(k), u], id)?;
+            }
+            for i in 0..n {
+                out[i] = self.op32(Alu::Imul, [sign[i], mag[i], u], id)?;
+            }
+            return Ok(out);
+        }
         /* the front end records no width for a conversion or a compare
          * (`comps_of` answers 4): the value has the lanes its sources
          * have, so a lane past the sources' ends is not one of its */
@@ -1148,7 +1520,8 @@ impl<'s> Fs<'s> {
     /// A mediump operation's operand: one Mesa computes at fp32 (a highp
     /// varying's lane) makes the shader mixed.
     fn fp16_operand(&mut self, v: Val) -> Val {
-        if self.input_lane(v).is_some_and(|(loc, _)| loc != POINT_COORD && self.prec.other >> (loc & 31) & 1 != 0) {
+        let generic = |loc: u8| (loc as usize) < MAX_VARYINGS;
+        if self.input_lane(v).is_some_and(|(loc, _)| generic(loc) && self.prec.other >> (loc & 31) & 1 != 0) {
             self.mixed = true;
         }
         v
@@ -1242,8 +1615,10 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
         pcoord_key: u32::MAX,
+        fz_key: u32::MAX,
         inputs: [None; MAX_VARYINGS],
         pcoord: None,
+        fz: None,
         varyings: [FsVarying::NONE; MAX_VARYINGS],
         nvar: 0,
         reads: [FsRead { location: 0, mask: 0, offset: 0 }; MAX_VARYINGS],
@@ -1260,6 +1635,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         npairs: 0,
         frag_xy: None,
         frag_zw: None,
+        frag16: None,
         rank: [u32::MAX; MAX_LOCALS],
         colour_rank: u32::MAX,
         next_rank: 0,
@@ -1275,6 +1651,19 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         return Err(MaliError::ControlFlow);
     }
     order_keys(m, f.keys);
+    /* each read of gl_FragCoord is its own lowered load, and `nir_opt_cse`
+     * keeps the first in program order: the position's nodes stand at the
+     * read whose statement comes first (fbload_fbload_int.stderr: the y
+     * pair's `ffma` before `int(gl_FragCoord.x)`'s `u2u32`, the y read
+     * being grafted into the later lane of the constructor) */
+    let is_fc = |i: usize| matches!(m.instrs.get(i), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
+    if let Some(first) = (0..m.instrs.len().min(MAX_VALUES)).filter(|&i| is_fc(i)).min_by_key(|&i| f.keys[i]) {
+        for o in f.origin[..f.nir.n].iter_mut() {
+            if is_fc(*o as usize) {
+                *o = first as u16;
+            }
+        }
+    }
     for (i, op) in m.instrs.iter().enumerate().take(MAX_VALUES) {
         match *op {
             ir::Op::LoadInput { slot: IoSlot::Varying(v), .. } => {
@@ -1282,6 +1671,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
                 *k = (*k).min(f.keys[i]);
             }
             ir::Op::LoadInput { slot: IoSlot::PointCoord, .. } => f.pcoord_key = f.pcoord_key.min(f.keys[i]),
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => f.fz_key = f.fz_key.min(f.keys[i]),
             _ => {}
         }
     }
@@ -1694,9 +2084,18 @@ fn walk_nodes(
                     *o = Val::Lane(n, c as u8);
                 }
             }
-            /* gl_FragCoord is mediump in ES 1.00: a mediump shader's
-             * arithmetic on it is fp16 (no reference yet) */
-            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if prec.highp => out = f.frag_coord(at)?,
+            /* gl_FragCoord is highp in ES 3.00 and mediump in ES 1.00: a
+             * mediump shader's read is narrowed to fp16 ([`Fs::frag_coord16`]);
+             * a mediump ES 3.00 shader's highp read has no reference */
+            /* a highp shader's z is the special varying's fp32 lane
+             * ([`FRAG_Z`], loaded only when read, [`layout`]): Mesa reads it
+             * at fp32 where a highp operation does, as the position's x and
+             * y (`load_var_special_pan` is 32-bit, bifrost_compile.c:1428) */
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if prec.highp => {
+                out = f.frag_coord(at)?;
+                out[2] = Val::Lane(f.input(FRAG_Z, at)?, 0);
+            }
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp => out = f.frag_coord16(at)?,
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => return Err(MaliError::FragCoordMediump),
             ir::Op::LoadInput { .. } => return Err(MaliError::SpecialInput),
             ir::Op::LoadLocal { local, index: None, comps } => {
@@ -1709,6 +2108,18 @@ fn walk_nodes(
                 let mut lanes = [Val::Undef; 4];
                 for (i, t) in lanes.iter_mut().enumerate() {
                     *t = lane(vals, src, i);
+                }
+                /* an fp16 value stored to a highp local is converted at the
+                 * assignment ([`Fs::widen`]; prec_82's `vec2 p =
+                 * floor(gl_FragCoord.xy)`, `F16_TO_F32` of each half). A
+                 * local of a highp shader is highp: one declared at the
+                 * other width is refused ([`FsPrecision::mixed`]) */
+                if prec.highp {
+                    for (i, t) in lanes.iter_mut().enumerate() {
+                        if write_mask & (1 << i) != 0 {
+                            *t = f.widen(*t, at)?;
+                        }
+                    }
                 }
                 /* a texel stored to a (highp) local: the look-up returns
                  * fp32 ([`Fs::look_up`]) */
@@ -1745,13 +2156,34 @@ fn walk_nodes(
             ir::Op::Alu(a, s) if prec.highp => {
                 /* an operation on the mediump built-in itself is mediump
                  * (lower_precision.cpp:295-312: its precision is its
-                 * operands'), so Mesa computes it in fp16; one on a highp
-                 * copy (a highp local or parameter) is fp32 */
-                let fc = |x: &ir::Src| matches!(m.def(x.val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
-                if s.iter().take(ir_arity(a)).any(fc) {
-                    return Err(MaliError::FragCoordMediump);
+                 * operands'), so Mesa computes it in fp16 when every other
+                 * operand is a constant or such an fp16 result
+                 * ([`Fs::alu16`]); with a highp operand it is fp32, the
+                 * read taken at fp32 as a highp copy's (a highp local or
+                 * parameter) is, and an fp16 operand widened ([`Fs::widen`]) */
+                let arity = ir_arity(a);
+                let mut fc = [false; 3];
+                for (k, x) in fc.iter_mut().enumerate().take(arity) {
+                    *x = !prec.frag_coord_highp
+                        && matches!(m.def(s[k].val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }));
                 }
-                out = f.alu32(m, a, &s, vals, at)?
+                let w = (m.comps_of(ir::ValueId(id.0)) as usize).min(4);
+                let mut src = [[Val::Undef; 4]; 3];
+                for (k, l) in src.iter_mut().enumerate().take(arity) {
+                    for (i, v) in l.iter_mut().enumerate().take(w) {
+                        *v = lane(vals, s[k], i);
+                    }
+                }
+                /* the lanes an operand has (a compare's and a conversion's
+                 * width is its sources', [`Fs::alu32_lanes`]) */
+                let n = (0..w).take_while(|&i| src[0][i] != Val::Undef).count();
+                let low = |f: &Fs<'_>, k: usize| fc[k] || (0..n).any(|i| f.is_f16(src[k][i]));
+                let konst = |k: usize| (0..n).all(|i| matches!(src[k][i], Val::Const(_)));
+                if (0..arity).any(|k| low(f, k)) && (0..arity).all(|k| low(f, k) || konst(k)) {
+                    out = f.alu16(a, src, fc, n, at)?;
+                } else {
+                    out = f.alu32(m, a, &s, vals, at)?
+                }
             }
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s) => {
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
@@ -1980,7 +2412,45 @@ fn walk_nodes(
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
                 let cube = Some(Cube { explicit });
-                f.look_up = Some((TexLookup { sampler, coord: TexCoord::Computed, cube, at: at as u16 }, n));
+                f.look_up =
+                    Some((TexLookup { sampler, coord: TexCoord::Computed, cube, fetch: false, at: at as u16 }, n));
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `texelFetch(s, ivec2, 0)` of a highp shader: Mesa's `txf`,
+             * `TEX_FETCH` on the coordinate's two integer words with no
+             * level word (fbload_fbload.expect.json, of a `sampler2D`;
+             * fbload_fbload_int.expect.json, of a `usampler2D`;
+             * fbload_isamp.expect.json, of an `isampler2D`: the same
+             * `.32.2d` word). A level other than the constant 0 has no
+             * reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::D2,
+                shadow: false,
+                proj: false,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::U32 | ir::ScalarType::I32),
+                sampler,
+                coord,
+                lod: ir::TexLod::Fetch(level),
+                offset: None,
+            } if prec.highp => {
+                if f.look_up.is_some() {
+                    return Err(MaliError::TexCount);
+                }
+                if lane(vals, level, 0) != Val::Const(0) {
+                    return Err(MaliError::TexKind);
+                }
+                let (s, t) = (lane(vals, coord, 0), lane(vals, coord, 1));
+                if s == Val::Undef || t == Val::Undef {
+                    return Err(MaliError::TexCoord);
+                }
+                let highp = prec.highp_samplers >> (sampler & 31) & 1 != 0;
+                let bits = if highp || ret != ir::ScalarType::F32 { 32 } else { 16 };
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: [s, t, Val::Undef], bits, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let t = TexLookup { sampler, coord: TexCoord::Computed, cube: None, fetch: true, at: at as u16 };
+                f.look_up = Some((t, n));
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -2012,9 +2482,13 @@ fn walk_nodes(
                     TexCoord::Computed => [s, t, Val::Undef],
                     _ => [Val::Undef; 3],
                 };
-                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits: 16, width: 1 })?;
+                /* a highp sampler's look-up is 32-bit in a highp shader, as
+                 * a cube's (fbload_mipgen.expect.json's `TEX_SINGLE ... .32
+                 * .2d.computed` of `highp sampler2D u_src`) */
+                let bits = if prec.highp && prec.highp_samplers >> (sampler & 31) & 1 != 0 { 32 } else { 16 };
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                f.look_up = Some((TexLookup { sampler, coord, cube: None, at: at as u16 }, n));
+                f.look_up = Some((TexLookup { sampler, coord, cube: None, fetch: false, at: at as u16 }, n));
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -2246,7 +2720,8 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     }
     let roots = &roots[..nroots];
     let c = roots;
-    /* gl_FragCoord's z and w (`load_frag_coord_z`/`_w`) are not lowered */
+    /* gl_FragCoord's w (`load_frag_coord_w`), and a mediump shader's z,
+     * are not lowered */
     if let Some(zw) = f.frag_zw {
         if (0..2).any(|k| c.iter().any(|&root| reaches(f, root, Val::Lane(zw, k)))) {
             return Err(MaliError::SpecialInput);
@@ -2254,25 +2729,31 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     }
     let mut read = [0u8; MAX_VARYINGS];
     let mut whole = [false; MAX_VARYINGS];
-    let mut pcoord = false;
-    /* the inputs the walk loaded: each varying location, and gl_PointCoord */
+    let (mut pcoord, mut fz) = (false, false);
+    /* the inputs the walk loaded: each varying location, gl_PointCoord
+     * and gl_FragCoord.z */
     let locs = (0..MAX_VARYINGS as u8).filter(|&l| f.inputs[l as usize].is_some());
-    for loc in locs.chain(f.pcoord.map(|_| POINT_COORD)) {
-        let node = if loc == POINT_COORD { f.pcoord } else { f.inputs[loc as usize] };
+    for loc in locs.chain(f.pcoord.map(|_| POINT_COORD)).chain(f.fz.map(|_| FRAG_Z)) {
+        let node = match loc {
+            POINT_COORD => f.pcoord,
+            FRAG_Z => f.fz,
+            _ => f.inputs[loc as usize],
+        };
         let Some(node) = node else { continue };
         for comp in 0..4u8 {
             let reached = c.iter().any(|&root| reaches(f, root, Val::Lane(node, comp)));
-            if reached && loc == POINT_COORD {
-                pcoord = true;
-            } else if reached {
-                *read.get_mut(loc as usize).ok_or(MaliError::VaryingLocation)? |= 1 << comp;
+            match loc {
+                POINT_COORD => pcoord |= reached,
+                FRAG_Z => fz |= reached,
+                _ if reached => *read.get_mut(loc as usize).ok_or(MaliError::VaryingLocation)? |= 1 << comp,
+                _ => {}
             }
         }
         /* a varying a dot product reads is read whole: the link sees the
          * `fdot`'s vector source, not its lanes (measured: `dot(v.xy,
          * vec2(2.0, 3.0))` keeps all four lanes of v, pan_shc-out/
          * s4_motion_dot.json, where `v.x * 2.0 + v.y * 3.0` keeps two) */
-        if loc != POINT_COORD && read[loc as usize] != 0 {
+        if (loc as usize) < MAX_VARYINGS && read[loc as usize] != 0 {
             let order = &f.nir.order[..f.nir.len];
             whole[loc as usize] = order.iter().any(|&id| {
                 let nd = f.nir.nodes[id as usize];
@@ -2336,7 +2817,8 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     }
     let nslots = s.div_ceil(4) as usize;
     let pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
-    for v in slots[..nslots].iter().copied().chain(pcoord.then_some(pc)) {
+    let z = FsVarying::new(FRAG_Z, 1, 0, f.fz_key);
+    for v in slots[..nslots].iter().copied().chain(pcoord.then_some(pc)).chain(fz.then_some(z)) {
         if f.nvar >= MAX_VARYINGS {
             return Err(MaliError::VaryingLocation);
         }
@@ -2366,8 +2848,8 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
 
 /// Lane `c` of the input at `loc`: its load's index and its lane there.
 fn index(f: &Fs<'_>, loc: u8, c: u8) -> Result<(u8, u8), MaliError> {
-    let (slot, lane) = if loc == POINT_COORD {
-        (POINT_COORD, c)
+    let (slot, lane) = if loc == POINT_COORD || loc == FRAG_Z {
+        (loc, c)
     } else {
         f.lane_of.get(loc as usize).and_then(|x| x[c as usize & 3]).ok_or(MaliError::Defect(Defect::IrIndex))?
     };
@@ -2420,6 +2902,9 @@ enum Leaf {
     /// bi_lower_mkvec_swz makes `U16_TO_U32 x` (case108_uniidx's red and
     /// green): node `x` a lane alone ([`Pairs::scalar`]).
     Zext(u8),
+    /// gl_FragCoord's x and y narrowed to fp16, in order, as one word
+    /// (`MKVEC.v2i16 x.h0, y.h0`; [`Fs::frag_coord16`], [`frag16`]).
+    Frag,
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -2438,11 +2923,6 @@ struct Pairs {
     /// (`.h00`, `bi_emit_alu` of a one-component 16-bit op).
     scalar: [bool; MAX_PAIRS],
     n: usize,
-    /// A constant operand is rounded to fp16 (`_mesa_float_to_half`,
-    /// [`f16_rtne`]) rather than refused when fp16 does not hold it: set
-    /// while the cube direction is vectorised (case41's `0.8`, Mesa's
-    /// `u3.w0` = 0x3a663a66), the one place a reference draws the rounding.
-    round: bool,
 }
 
 /// The vectorised operations and operands of the colour.
@@ -2471,6 +2951,8 @@ impl Pairs {
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
             P::Leaf(Leaf::Zext(_)) => Form::Mk,
+            /* `MKVEC.v2i16 x, y` of the position's two halves */
+            P::Leaf(Leaf::Frag) => Form::Mk,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -2500,8 +2982,8 @@ impl Pairs {
 /// lane): the two trees match operation for operation, their leaves pair
 /// up as [`Leaf`] names them; the late fusion where an fadd stands.
 fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
-    let round = pr.round;
-    let f16 = |bits: u32| if round { f16_rtne(bits) } else { f16_exact(bits) }.ok_or(MaliError::Fp16Inexact);
+    /* a mediump tree's constant is rounded to fp16 ([`f16_rtne`]) */
+    let f16 = |bits: u32| f16_rtne(bits).ok_or(MaliError::Fp16Inexact);
     let place = (f.key(a), pair);
     let p = match (f.alu_of(a), f.alu_of(b)) {
         /* a float array's indexed read, or a sum of them, and 0.0:
@@ -2549,6 +3031,12 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         (Some((op @ (Alu::Fneg | Alu::Fabs), sa)), Some((o2, sb))) if o2 == op => {
             P::Op(op, [vectorise(f, pr, sa[0], sb[0], pair, ubo)?, 0, 0])
         }
+        /* the narrowed position: x and y in order (prec_84's `vec4(x / 64.0,
+         * y / 64.0, ..)`); any other pairing of its lanes has no reference */
+        _ if f.frag16_lane(a).is_some() || f.frag16_lane(b).is_some() => match (f.frag16_lane(a), f.frag16_lane(b)) {
+            (Some(0), Some(1)) => P::Leaf(Leaf::Frag),
+            _ => return Err(MaliError::FragCoordMediump),
+        },
         /* the look-up's result in its own pairs, in order */
         _ if f.texel(a).is_some() || f.texel(b).is_some() => match (f.texel(a), f.texel(b)) {
             (Some(i), Some(j)) if i % 2 == 0 && j == i + 1 => P::Leaf(Leaf::Tex(i / 2)),
@@ -2653,7 +3141,7 @@ fn scalar(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliError>
 /// other reference pins; any other operand has no reference either.
 fn cmp_leaf(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<(u8, Swz), MaliError> {
     let (leaf, swz) = match (f.alu_of(v), f.input_lane(v), f.uniform_dword(v), v) {
-        (_, _, _, Val::Const(c)) => (Leaf::Const(u32::from(f16_exact(c).ok_or(MaliError::Fp16Inexact)?)), Swz::H00),
+        (_, _, _, Val::Const(c)) => (Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?)), Swz::H00),
         (None, None, Some(d), _) => {
             let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
             (Leaf::Uniform { base, comp: (w - base) as u8, swz: Swz::H01 }, if half == 0 { Swz::H00 } else { Swz::H11 })
@@ -2682,10 +3170,7 @@ fn coord_lane(f: &Fs<'_>, pr: &mut Pairs, v: Val) -> Result<u8, MaliError> {
         (None, Some(c), _) => P::Leaf(Leaf::UboLane(c)),
         /* a product with 2.0 is the late rules' `fadd(a, a)`: no reference */
         (None, None, Val::Const(F32_TWO)) => return Err(MaliError::AlgebraicForm),
-        (None, None, Val::Const(c)) => {
-            let h = if pr.round { f16_rtne(c) } else { f16_exact(c) };
-            P::Leaf(Leaf::Const(u32::from(h.ok_or(MaliError::Fp16Inexact)?)))
-        }
+        (None, None, Val::Const(c)) => P::Leaf(Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?))),
         _ => return Err(MaliError::TexCoord),
     };
     let x = pr.push(p, place)?;
@@ -2803,7 +3288,6 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         place: [(0, 0); MAX_PAIRS],
         scalar: [false; MAX_PAIRS],
         n: 0,
-        round: false,
     };
     let mut roots = [0u8; 2];
     let c = f.colour.ok_or(MaliError::NoColour)?;
@@ -2842,10 +3326,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         Some((TexLookup { cube: Some(_), .. }, _)) => {
             let (_, n) = f.look_up.ok_or(MaliError::Defect(Defect::IrIndex))?;
             let nd = f.nir.nodes[n as usize];
-            pr.round = true;
             let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
             let z = cube_lane(f, &mut pr, nd.src[2], ubo)?;
-            pr.round = false;
             Some((xy, z))
         }
         _ => None,
@@ -2869,7 +3351,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     }
     f.npairs = pr.n;
     let alpha = match c[3] {
-        Val::Const(b) => Some(f16_exact(b).ok_or(MaliError::Fp16Inexact)?),
+        Val::Const(b) => Some(f16_rtne(b).ok_or(MaliError::Fp16Inexact)?),
         _ => None,
     };
     f.alpha = alpha;
@@ -2919,7 +3401,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     const UBO: u8 = 3;
     const NODE: u8 = 4;
     const DISCARD: u8 = 5;
-    let mut events = [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + 2 + 2 * MAX_UBO_READS + MAX_DISCARDS];
+    const FRAG: u8 = 6;
+    let mut events = [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + 3 + 2 * MAX_UBO_READS + MAX_DISCARDS];
     let mut ne = 0;
     for (k, d) in discards[..nd].iter().enumerate() {
         events[ne] = (d.0, 0, DISCARD, k as u8);
@@ -2927,6 +3410,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     }
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
         events[ne] = (v.key(), 0, LOAD, k as u8);
+        ne += 1;
+    }
+    /* the narrowed position, where gl_FragCoord is read (its fp32 build,
+     * the narrowings and the word: [`frag16`]) */
+    if let (Some([x, _]), true) = (f.frag16, (0..pr.n).any(|i| live[i] && pr.nodes[i] == P::Leaf(Leaf::Frag))) {
+        events[ne] = (f.key(x), 0, FRAG, 0);
         ne += 1;
     }
     let key_of = |at: u16| f.keys.get(at as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex));
@@ -2985,6 +3474,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        frag: None,
     };
     let mut val = [None::<Src>; MAX_PAIRS];
     let mut rows = 0u64;
@@ -3035,6 +3525,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     texel = Some(alu(p, Op::Collect, &w)?);
                 }
             }
+            FRAG => lv.frag = Some(frag16(p, &lv, &mut rows)?),
             UBO if vec4 => ubo_load(p, f, &mut lv, &mut rows)?,
             OFFSET => ubo_offset(p, f, x as usize, &mut lv, &mut rows)?,
             UBO => ubo_fetch(p, x as usize, &mut lv)?,
@@ -3088,7 +3579,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     };
     alu(
         p,
-        Op::Blend { sr_count: 2, f32: false },
+        Op::Blend { sr_count: 2, f32: false, u32: false },
         &[
             Src::ssa(col),
             Src::ssa(t),
@@ -3273,6 +3764,14 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let (k, l) = index(f, loc, c)?;
                 lv.raw[k as usize][l as usize & 3].map(Src::ssa).ok_or(defect)
             }
+            /* a 16-bit value's half: the low one of a scalar (a narrowing's
+             * `FADD.f32 rN.h0`, a compare's mask), lane `c`'s of a vector of
+             * two ([`Fs::alu16`]); a vector's user that reads it whole sets
+             * `.h01` ([`select_highp`]) */
+            Kind::Alu(_) if f.nir.nodes[n as usize].bits == 16 => {
+                let s = val.get(n as usize).copied().flatten().ok_or(defect)?;
+                Ok(s.swz(if f.nir.nodes[n as usize].width == 2 && c == 1 { Swz::H11 } else { Swz::H00 }))
+            }
             Kind::Alu(_) | Kind::Phi => val.get(n as usize).copied().flatten().ok_or(defect),
             /* a float array read's loaded word (`select_highp`'s `UBO`) */
             Kind::UniformIdx { .. } if f.nir.nodes[n as usize].bits == 32 => {
@@ -3350,10 +3849,12 @@ pub fn select_highp(
     nir::dce(&mut f.nir, None);
     nir::fuse(&mut f.nir);
     nir::late_rules(&mut f.nir);
+    nir::bcsel_fadd(&mut f.nir)?;
     nir::dce(&mut f.nir, None);
     clamp_forms(&f.nir)?;
     shrink_uniforms(f, m);
-    /* an fneg the fusion made stands where its ffma does */
+    /* an fneg the fusion made stands where its ffma does, a select
+     * `bcsel_fadd` made where its fadd does: each before the node after it */
     for k in (0..f.nir.len).rev() {
         let id = f.nir.order[k] as usize;
         if id >= first {
@@ -3552,10 +4053,15 @@ pub fn select_highp(
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        frag: None,
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
     let mut rows = 0u64;
     let none = [[None; 4]; MAX_VARYINGS];
+    /* the 16-bit masks widened for 32-bit selects: (the compare's node,
+     * the block of the widening, its value) */
+    let mut wide = [(0u16, 0u8, 0u16); 8];
+    let mut nwide = 0;
     let mut block = 0u8;
     for &(b, _, what, x) in events.iter() {
         while block < b {
@@ -3602,9 +4108,45 @@ pub fn select_highp(
                 let Kind::Alu(op) = nd.kind else { return Err(defect) };
                 let mut s = [Src::NULL; 3];
                 for (k, y) in s.iter_mut().enumerate().take(op.arity()) {
-                    *y = src32(f, &lv, val, nd.src[k])?;
+                    let v = nd.src[k];
+                    *y = src32(f, &lv, val, v)?;
+                    /* an fp16 operation's sources ([`Fs::alu16`]): a vector
+                     * of two read whole, a constant's half in both lanes as
+                     * a lane's is (`bi_alu_src_index`) */
+                    if nd.bits == 16 {
+                        let whole = matches!(v, Val::Lane(m, _) if nd.width == 2 && f.nir.nodes[m as usize].width == 2);
+                        if whole {
+                            *y = y.swz(Swz::H01);
+                        } else if matches!(v, Val::Const(_)) {
+                            *y = y.swz(Swz::H00);
+                        }
+                    }
                 }
-                val[id] = Some(Src::ssa(row(p, &mut rows, Row { op, bits: 32, width: 1 }, &s)?));
+                /* `pan_nir_lower_bool_to_bitsize`: a 32-bit `bcsel_pan` of a
+                 * 16-bit compare's mask reads it through `i2i32`, made before
+                 * the select and CSE'd (fbload_predif_fs_coord.stderr: one
+                 * `%12 = i2i32 %11` for both selects, `S16_TO_S32 r3, r0.h0`) */
+                if op == Alu::Bcsel && nd.bits == 32 {
+                    if let Val::Lane(c, _) = nd.src[0] {
+                        if f.nir.nodes[c as usize].bits == 16 {
+                            let b = f.nir.block[id];
+                            let seen = wide[..nwide].iter().find(|w| w.0 == c && f.nir.dominates(w.1, b));
+                            s[0] = Src::ssa(match seen {
+                                Some(w) => w.2,
+                                None => {
+                                    if nwide == wide.len() {
+                                        return Err(MaliError::TooManyValues);
+                                    }
+                                    let r = row(p, &mut rows, Row { op: Alu::I2i32, bits: 32, width: 1 }, &s[..1])?;
+                                    wide[nwide] = (c, b, r);
+                                    nwide += 1;
+                                    r
+                                }
+                            });
+                        }
+                    }
+                }
+                val[id] = Some(Src::ssa(row(p, &mut rows, Row { op, bits: nd.bits, width: nd.width }, &s)?));
             }
         }
     }
@@ -3621,8 +4163,11 @@ pub fn select_highp(
      * the alpha's, `BLEND.v4.f32` of the collected vector (case114_f.
      * expect.json: `ATEST ... r3`, `BLEND.slot2.v4.f32.end @r0:r1:r2:r3`;
      * alu_divloop's constant alpha `0x3F800000`). A deferred load stands
-     * before them: its first use is the store (`nir_opt_move`) */
-    if f.prec.colour_f32 {
+     * before them: its first use is the store (`nir_opt_move`). A `highp
+     * uvec4` output's words are stored as they are, `BLEND.v4.u32`, its
+     * ATEST on the constant alpha 1.0 (fbload_fbload_int.expect.json) */
+    let u32 = f.prec.colour_u32;
+    if f.prec.colour_f32 || u32 {
         let mut s = [Src::NULL; 4];
         for (x, v) in s.iter_mut().zip(c) {
             if let Some((false, k, _)) = load_lane(f, v)? {
@@ -3633,11 +4178,23 @@ pub fn select_highp(
             }
             *x = src32(f, &lv, val, v)?;
         }
-        let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), s[3], Src::of(Idx::Special(Special::AtestDatum, false))])?;
-        let col = alu(p, Op::Collect, &s)?;
+        /* the look-up's own vector stored whole: `bi_emit_tex_valhall`
+         * collects its def right after the split (the `vec4` the store
+         * reads), before ATEST; any other colour is collected at the store
+         * (fbload_mipgen.stderr's `COLLECT.i32 %32^, %33^, %34^, %35` then
+         * `ATEST`, against fbload_isamp's `ATEST` then `COLLECT`). Its place
+         * moves the pressure the scheduler weighs (sched.rs) */
+        let whole = f.look_up.is_some_and(|(_, n)| (0..4).all(|i| c[i] == Val::Lane(n, i as u8)));
+        let early = if whole { Some(alu(p, Op::Collect, &s)?) } else { None };
+        let alpha = if u32 { Src::of(Idx::Const(F32_ONE)) } else { s[3] };
+        let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), alpha, Src::of(Idx::Special(Special::AtestDatum, false))])?;
+        let col = match early {
+            Some(col) => col,
+            None => alu(p, Op::Collect, &s)?,
+        };
         alu(
             p,
-            Op::Blend { sr_count: 4, f32: true },
+            Op::Blend { sr_count: 4, f32: !u32, u32 },
             &[
                 Src::ssa(col),
                 Src::ssa(t),
@@ -3665,7 +4222,7 @@ pub fn select_highp(
         }
     }
     /* the conversions at the store, in lane order; a lane converted once */
-    let mut conv = [(Val::Undef, 0u16); 4];
+    let mut conv = [(Val::Undef, Src::NULL); 4];
     let mut nconv = 0;
     let mut pair = [0u16; 2];
     /* a deferred load, before the first conversion that reads it */
@@ -3693,15 +4250,40 @@ pub fn select_highp(
                     load(p, &mut lv, &mut rows, x)?;
                     /* `f2fmp(b2f32(c))` is `b2f16(c)` (nir_opt_algebraic.py:1980):
                      * the conversion of a boolean lane is its 16-bit MUX, read
-                     * as the mask's low half */
+                     * as the mask's low half. An fp16 lane ([`Fs::alu16`]) is
+                     * stored as it is. `f2f16` of a select of two constants
+                     * is folded into a select of the two converted constants
+                     * (`nir_try_constant_fold_alu`, nir_opt_constant_folding.c:
+                     * 58-150, `_mesa_float_to_half` rounding to nearest
+                     * even): a 16-bit select (fbload_predif_fs_coord.
+                     * expect.json: `MUX.v2i16 r0, u3.w1, 0x34000000.h11,
+                     * r0^.h00`). It reads the mask's low half: a 16-bit
+                     * mask's own, a 32-bit one's through `i2i16`
+                     * (`pan_nir_lower_bool_to_bitsize`), a `MOV.i32` the copy
+                     * propagation takes (bifrost_compile.c:3228-3234; the
+                     * `b2f16` of a 32-bit compare, s4_flt.expect.json's
+                     * `FCMP_OR.f32` then `MUX.v2i16 .., r0^.h00`). A select
+                     * with a side that is no constant is not folded, and
+                     * narrowed after it (s4_b2f.expect.json: `CSEL.u32.eq`
+                     * then `FADD.f32 r0.h0`) */
+                    let h00 = |r: u16| Src::ssa(r).swz(Swz::H00);
                     let r = match f.alu_of(x) {
+                        _ if f.is_f16(x) => src32(f, &lv, val, x)?,
                         Some((Alu::B2f, [c, ..])) => {
                             let s = [src32(f, &lv, val, c)?];
-                            row(p, &mut rows, Row { op: Alu::B2f, bits: 16, width: 1 }, &s)?
+                            h00(row(p, &mut rows, Row { op: Alu::B2f, bits: 16, width: 1 }, &s)?)
+                        }
+                        Some((Alu::Bcsel, [c, Val::Const(t), Val::Const(e)])) => {
+                            let k = |b: u32| -> Result<Src, MaliError> {
+                                Ok(Src::of(Idx::Const(u32::from(f16_rtne(b).ok_or(MaliError::Fp16Inexact)?)))
+                                    .swz(Swz::H00))
+                            };
+                            let s = [src32(f, &lv, val, c)?.swz(Swz::H00), k(t)?, k(e)?];
+                            h00(row(p, &mut rows, Row { op: Alu::Bcsel, bits: 16, width: 1 }, &s)?)
                         }
                         _ => {
                             let s = [src32(f, &lv, val, x)?];
-                            row(p, &mut rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &s)?
+                            h00(row(p, &mut rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &s)?)
                         }
                     };
                     conv[nconv] = (x, r);
@@ -3714,7 +4296,7 @@ pub fn select_highp(
     let half = |x: Val| -> Result<Src, MaliError> {
         Ok(match x {
             Val::Const(b) => Src::of(Idx::Const(f16_exact(b).ok_or(MaliError::Fp16Inexact)? as u32)).swz(Swz::H00),
-            _ => Src::ssa(conv[..nconv].iter().find(|e| e.0 == x).ok_or(defect)?.1).swz(Swz::H00),
+            _ => conv[..nconv].iter().find(|e| e.0 == x).ok_or(defect)?.1,
         })
     };
     let tex_word = |h: u8| lv.tex.get(h as usize).copied().flatten().ok_or(defect);
@@ -3742,7 +4324,7 @@ pub fn select_highp(
     let col = alu(p, Op::Collect, &out)?;
     alu(
         p,
-        Op::Blend { sr_count: 2, f32: false },
+        Op::Blend { sr_count: 2, f32: false, u32: false },
         &[
             Src::ssa(col),
             Src::ssa(t),
@@ -3802,6 +4384,7 @@ fn ir_arity(a: AluOp) -> usize {
         | AluOp::Feq
         | AluOp::Fne
         | AluOp::Iadd
+        | AluOp::Idiv
         | AluOp::Ilt
         | AluOp::Ile
         | AluOp::Ieq
@@ -3900,6 +4483,8 @@ struct Leaves {
     /// half ([`ubo_fetch`]).
     ubo_off: [Option<u16>; MAX_UBO_READS],
     ubo_half: [Option<u16>; MAX_UBO_READS],
+    /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
+    frag: Option<u16>,
 }
 
 /// The read of a vec4 array element at a run-time index, as Mesa's BIR has
@@ -3993,10 +4578,10 @@ fn convert(
 ) -> Result<(), MaliError> {
     let v = f.varyings[k];
     let ld = p.temp()?;
-    let op = if v.location == POINT_COORD {
-        Op::LdVarSpecialPointF32 { vecsize: v.comps }
-    } else {
-        Op::LdVarBufImmF32 { index: v.offset as u8, vecsize: v.comps }
+    let op = match v.location {
+        POINT_COORD => Op::LdVarSpecialF32 { name: VaryingName::Point, vecsize: v.comps },
+        FRAG_Z => Op::LdVarSpecialF32 { name: VaryingName::FragZ, vecsize: v.comps },
+        _ => Op::LdVarBufImmF32 { index: v.offset as u8, vecsize: v.comps },
     };
     p.push(Ins::new(op, &[Dest::ssa(ld)], &[Src::of(Idx::Reg(61))]))?;
     let lanes = split(p, ld, v.comps as usize)?;
@@ -4057,8 +4642,9 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, computed: Option<&[Src]>) 
     let sr = alu(p, Op::Collect, &staging[..n])?;
     /* a cube's level mode follows the call (`EXPLICIT` or `ZERO_LOD`,
      * pan_nir_lower_tex.c:927-937), its dimension `cube`; a 2D look-up
-     * here is `texture2D`'s computed level */
+     * here is `texture2D`'s computed level, or `texelFetch`'s */
     let (lod, dim) = match t.cube {
+        None if t.fetch => (super::bir::LodMode::Fetch, super::bir::TexDim::D2),
         Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
         Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
         None => (super::bir::LodMode::Computed, super::bir::TexDim::D2),
@@ -4073,6 +4659,32 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, computed: Option<&[Src]>) 
         lv.tex[i] = Some(*x);
     }
     Ok(())
+}
+
+/// The narrowed position's word in a mediump shader ([`Fs::frag_coord16`]):
+/// x and y at fp32 in NIR's order (`u2f32` of both halves of the preloaded
+/// pixel, their `+ 0.5`, y's `ffma` with `gl_FbWposYTransform`), each
+/// narrowed (`f2f16`), then `vec2` of the two halves (prec_84.expect.json:
+/// `U16_TO_F32` x2, `FADD_IMM` x2, `FMA.f32`, `FADD.f32 .h0` x2,
+/// `MKVEC.v2i16 r0, r0^.h0, r1^.h0`).
+fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u64) -> Result<u16, MaliError> {
+    let defect = MaliError::Defect(Defect::IrIndex);
+    let px = |c: Swz| Src::of(Idx::Reg(super::ra::POSITION_XY)).swz(c);
+    let wpos = |c: u8| -> Result<Src, MaliError> {
+        Ok(Src::of(Idx::Ubo { base: lv.ubo.word(FB_WPOS_Y_TRANSFORM).ok_or(defect)?, comp: c }))
+    };
+    let r32 = |op: Alu| Row { op, bits: 32, width: 1 };
+    let ux = row(p, rows, r32(Alu::U2f32), &[px(Swz::H00)])?;
+    let uy = row(p, rows, r32(Alu::U2f32), &[px(Swz::H11)])?;
+    let half = Src::of(Idx::Const(F32_HALF));
+    let x = row(p, rows, r32(Alu::Fadd), &[Src::ssa(ux), half])?;
+    let y = row(p, rows, r32(Alu::Fadd), &[Src::ssa(uy), half])?;
+    let y = row(p, rows, r32(Alu::Ffma), &[Src::ssa(y), wpos(0)?, wpos(1)?])?;
+    let n16 = Row { op: Alu::F2f16, bits: 16, width: 1 };
+    let x = row(p, rows, n16, &[Src::ssa(x)])?;
+    let y = row(p, rows, n16, &[Src::ssa(y)])?;
+    let s = [Src::ssa(x).swz(Swz::H00), Src::ssa(y).swz(Swz::H00)];
+    row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
 }
 
 fn conv_of(lv: &Leaves, k: u8, c: u8) -> Result<u16, MaliError> {
@@ -4096,6 +4708,7 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         P::Leaf(Leaf::Tex(h)) => {
             Src::ssa(lv.tex.get(h as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
+        P::Leaf(Leaf::Frag) => Src::ssa(lv.frag.ok_or(MaliError::Defect(Defect::IrIndex))?),
         P::Leaf(Leaf::Ubo(h)) => {
             Src::ssa(lv.ubo_words.get(h as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
