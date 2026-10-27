@@ -42,7 +42,8 @@
 # Framebuffer descriptor
 #   tile buffer 8 bytes a sample: tile = (16384 >> 3 = 2048) min 1024 = 1024
 #   pixels, colour buffer allocation = 8 * 1024 = 8192 bytes (RGBA8:
-#   4 * 1024 = 4096; src/mali frame.rs tile_size assumes 4 bytes a sample)
+#   4 * 1024 = 4096; src/mali frame.rs tile_size takes the bytes a sample
+#   from TargetFormat::tib_bytes, which the f16rt frames of the board dump pin)
 # Fragment shader: for a blendable target on v9+ the draw's shader does not
 # depend on the render target format (pan_shader.c:173-176, 335-350 are
 # arch <= 5 only); the bytes should equal case 54's RGBA8 draws'.
