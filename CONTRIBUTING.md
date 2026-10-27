@@ -46,14 +46,19 @@ CI, a review, then the merge. Never push main by hand.
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
   firmware header, and the `aarch64-unknown-none-softfloat` Rust target
   (`rustup target add`). Without them you get a red run with named gaps;
-  read which rows failed and which were gaps. `ZEPHYR_WS` may be given
-  through a symbolic link: the gate resolves it to the real path first, and
-  every Zephyr build rewrites its generated linker snippets' `#include` paths
-  to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
-  the image rows build from a checkout at any depth (they once failed with
-  `swi_tables.ld` not found in a worktree of another depth). A snippet that
-  names a file no path resolves is left as it is and the configure warns with
-  that line.
+  read which rows failed and which were gaps. The six rows that need those
+  trees are the Zephyr images, `tests/reference/blobs.rs`, the glmark2
+  corpus, the i.MX8MP `regs.rs`, the Mali `pan_shc` comparison and every
+  AM62P image (the firmware header). `tools/cts/deps-env.sh --build-missing`
+  builds the trees on your machine (`tools/cts/README.md`); the CI's machines
+  have them from the gate image (`tools/env/`), so no row is a gap there.
+  `ZEPHYR_WS` may be given through a symbolic link: the gate resolves it to
+  the real path first, and every Zephyr build rewrites its generated linker
+  snippets' `#include` paths to absolute at the end of the configure
+  (`zephyr/linker_snippets.cmake`), so the image rows build from a checkout
+  at any depth (they once failed with `swi_tables.ld` not found in a worktree
+  of another depth). A snippet that names a file no path resolves is left as
+  it is and the configure warns with that line.
 - `tools/check.sh --quick` (about 120 rows, fewer than the full run; 14
   minutes in one walk, 4 to 10 minutes on a warm tree in others) is for the
   edit loop. If `MESA_V3D_TREE` is set on your host to a Mesa tree without

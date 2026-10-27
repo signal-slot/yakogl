@@ -87,6 +87,8 @@ want driver/CMakeLists.txt drivers
 want tools/cts/deqp-uart-tally.py tools
 want tools/board.sh tools
 want tools/env/build-gate-image.sh tools
+want tools/env/yakogl-gate.yaml tools
+want tools/env/gate-image.sh tools
 want tools/hostharness/glmark2/run.sh tools
 want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
 want docs/standalone-boot.md docs

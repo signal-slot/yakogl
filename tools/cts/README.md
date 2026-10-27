@@ -122,6 +122,11 @@ the `inputs` that build downloads (url and sha256) and the distribution
   the gate's image from these tools alone: `setup-gate-host.sh --install`,
   the firmware header copied into the layout (the one hand step, it is never
   committed), `deps-env.sh --build-missing`, then `deps-env.sh --check`.
+  `tools/env/gate-image.sh` runs it on a fresh orion machine through the
+  manifest `yakogl-gate.image.yaml` and the recipe `yakogl-gate.recipe.yaml`
+  (which also installs the GitHub runner), as the next generation of the
+  pool's image. `tools/env/yakogl-gate.yaml` is the pool itself, the
+  definition the lab's orion server holds (`orion pool apply`).
 - A change that adds a gate row needing an external tree adds its `[[dep]]` in
   the same commit. Without it a host or an image cannot learn from the
   repository what to install and build (PR #1078 needed the `MESA_PAN_TREE`
