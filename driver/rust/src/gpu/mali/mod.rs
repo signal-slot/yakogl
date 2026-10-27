@@ -22,6 +22,12 @@
 //! L2:0x7120306 Tiler:0x809 Mem:0x301 MMU:0x2830 AS:0xff", "shader_present=
 //! 0x50005 l2_present=0x1 tiler_present=0x1"; `GPU_ID` read with the GPU
 //! active: 0xa8670005.
+//!
+//! Z3, the firmware (host side): [`fw`] parses `mali_csffw.bin`, [`csf`]
+//! loads it, boots the MCU and talks to it through the shared interface.
+
+pub mod csf;
+pub mod fw;
 
 use crate::mmio::Mmio;
 
