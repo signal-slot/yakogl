@@ -50,10 +50,13 @@ use crate::shaderc::online::ir::{
     self, AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, ScalarType, TexDim, TexLod, ValueId,
 };
 
-/// The instructions one vertex shader may hold here.
-pub const MAX_NODES: usize = 384;
+/// The instructions one vertex shader may hold here (the fragment walk's
+/// too). The largest measured, femtovg's fill_color with 256 offset arms
+/// (case 194's offarm256), takes 611 (docs/notes/mali-int-and-size.md).
+pub const MAX_NODES: usize = 768;
 /// The IR values the walk keeps lanes for (the fragment walk's too).
-pub const MAX_VALUES: usize = 256;
+/// offarm256 takes 1658, about six per arm.
+pub const MAX_VALUES: usize = 2048;
 /// The local variables the walk keeps lanes for (the fragment walk's too).
 pub const MAX_LOCALS: usize = 32;
 /// The `if`s one shader may hold ([`IfRegion`]): gl_test's databreak (case
@@ -1570,14 +1573,15 @@ impl<'s> Nir<'s> {
     }
 }
 
-/// The front end's lanes of every IR value, as [`Val`]s.
-#[derive(Clone, Copy)]
-struct Walk {
-    vals: [[Val; 4]; MAX_VALUES],
+/// The front end's lanes of every IR value, as [`Val`]s. The values' table
+/// is in the scratch arena: at [`MAX_VALUES`] it is too large for a
+/// compiling thread's stack.
+struct Walk<'s> {
+    vals: &'s mut [[Val; 4]],
     locals: [[Val; 4]; MAX_LOCALS],
 }
 
-fn lane(w: &Walk, s: ir::Src, i: usize) -> Val {
+fn lane(w: &Walk<'_>, s: ir::Src, i: usize) -> Val {
     w.vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[i] as usize & 3])
 }
 
@@ -1677,13 +1681,8 @@ pub fn build<'s>(
     }
     refuse_rebalanced(m)?;
     let mut vs = Nir::new(scratch)?;
-    let w = scratch
-        .alloc_copy(core::slice::from_ref(&Walk {
-            vals: [[Val::Undef; 4]; MAX_VALUES],
-            locals: [[Val::Undef; 4]; MAX_LOCALS],
-        }))
-        .map_err(|_| MaliError::OutOfScratch)?;
-    let w = &mut w[0];
+    let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(|_| MaliError::OutOfScratch)?;
+    let w = &mut Walk { vals, locals: [[Val::Undef; 4]; MAX_LOCALS] };
     let mut position: Option<[Val; 4]> = None;
     let mut point_size: Option<Val> = None;
     let mut varyings: [Option<[Val; 4]>; MAX_VARYINGS] = [None; MAX_VARYINGS];
