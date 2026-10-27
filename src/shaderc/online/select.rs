@@ -67,6 +67,15 @@ pub struct Selected<'a> {
     /// `Sel::vs_id_reg`. Not an io row: the driver programs it through
     /// `FE_HALTI5_ID_CONFIG`, as Mesa's etnaviv does.
     pub vs_id_in_reg: Option<u8>,
+    /// Whether it was `gl_InstanceID` that made that register: false when
+    /// only `gl_VertexID` was read, or there is no id register.
+    /// [`super::abi::assemble`] records it as
+    /// [`crate::shaderc::ShcShader::vs_instance_id_reg1`], which is how
+    /// `gc_draw` refuses a per-instance split of an instanced draw (the FE
+    /// restarts `gl_InstanceID` at 0 in every such draw); one that reads
+    /// only `gl_VertexID` is drawn today (`docs/notes/instanceid-per-draw.md`,
+    /// V0).
+    pub vs_reads_instance_id: bool,
     /// The shader's inputs with the registers this file assigned them, ready
     /// for `abi::assemble`. Produced here rather than recomputed there, so
     /// that the numbering the instructions read from and the numbering the
@@ -4069,11 +4078,16 @@ pub fn select_keyed<'a>(
     }
 
     let vs_pos_out_reg = (m.stage == SHC_STAGE_VERTEX).then_some(VS_POS_REG);
-    let reads_ids = m
-        .instrs
-        .iter()
-        .any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::VertexId | ir::IoSlot::InstanceId, .. }));
-    let vs_id_in_reg = if m.stage == SHC_STAGE_VERTEX && reads_ids { Some(s.vs_id_reg()?) } else { None };
+    /* The two ids share one register, but the record must name them apart:
+     * only a program that reads `gl_InstanceID` is refused when the GL core
+     * splits an instanced draw into instances (the FE restarts the id at 0
+     * per draw). A program reading only `gl_VertexID` is drawn correctly by
+     * such splits (`docs/notes/instanceid-per-draw.md`, V0). */
+    let reads_vertex_id = m.instrs.iter().any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::VertexId, .. }));
+    let reads_instance_id =
+        m.instrs.iter().any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::InstanceId, .. }));
+    let vs_id_in_reg =
+        if m.stage == SHC_STAGE_VERTEX && (reads_vertex_id || reads_instance_id) { Some(s.vs_id_reg()?) } else { None };
     /* Named only when the shader writes it: an unwritten gl_PointSize must
      * stay NO_REG, or the driver reads a register the code never set. */
     let vs_pointsize_out_reg = m.outputs.iter().any(|d| d.kind == ir::IoKind::PointSize).then(|| s.vs_pointsize_reg());
@@ -4088,6 +4102,7 @@ pub fn select_keyed<'a>(
         ps_color_out_reg,
         vs_pointsize_out_reg,
         vs_id_in_reg,
+        vs_reads_instance_id: m.stage == SHC_STAGE_VERTEX && reads_instance_id,
         io_in,
         io_out,
         back_edges: s.back_edges.into_slice(),

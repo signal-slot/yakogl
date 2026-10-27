@@ -7,6 +7,14 @@ source was changed.** Plan #144 item `instanceid-design`, a follow-up to
 `es3-instanced` (`6730b25` and its hand-over note,
 `tests/es3_instanced.rs`).
 
+**Update (2026-10-27): V0 has landed** -- the GC7000UL online compiler now
+records a program that reads `gl_InstanceID` (`select.rs` names the read
+apart from `gl_VertexID`, `abi.rs` writes `vs_instance_id_reg1`, and
+`src/vivante/backend_tests.rs` keeps the scratch check of section 4 as a
+permanent test: instances 1..3 of the mixed shader are refused and
+counted). P1, P3 and V1 remain open; the section 5 board re-check is due
+after they land.
+
 ## Summary
 
 The six dEQP-GLES3 cases
@@ -25,7 +33,9 @@ instance number (`src/gl/draw.rs:4635-4637`).
   sets that field. The GC7000UL online compiler leaves it at 0. Every
   instance is drawn, and `gl_InstanceID` reads 0 in each one (the FE counts
   from 0 in every DRAW_INSTANCED). The image is wrong, and
-  `gc_refused_draws` stays 0.
+  `gc_refused_draws` stays 0. (This bullet describes the pre-V0 world: V0
+  made the refusal fire for programs our online compiler makes -- the Update
+  and section 1.)
 - **Fix, PowerVR:** first use the PDS's own `instance_id_modifier` (Mesa
   `pvr_pds.c`). It adds a constant to the instance number before the
   `gl_InstanceID` write. That costs one PDS instruction and one constant per
@@ -84,43 +94,62 @@ Related sites:
 
 ### GC7000UL (`src/vivante/**`, `src/shaderc/online/vivante/**`)
 
-`src/vivante/backend.rs:2350-2355`, `draw_one` (`:2340`, called by `gc_draw`):
+`src/vivante/backend.rs`, `draw_one` (called by `gc_draw`):
 
 ```rust
     /* one instance of an instanced draw the GL core draws instance by
      * instance: the FE starts the instance ID at 0 for every draw, so a
-     * program that reads gl_InstanceID is refused (counted by gc_draw) */
+     * program that reads gl_InstanceID is refused (counted by gc_draw). The
+     * online compiler names such programs in vs_instance_id_reg1
+     * (shaderc/online/abi.rs, docs/notes/instanceid-per-draw.md V0); before
+     * that it left the field 0 and these draws went through with
+     * gl_InstanceID reading 0 in every instance. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
+        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 1) whose program reads gl_InstanceID");
         return -crate::util::EINVAL;
     }
 ```
 
-This check never fires for a GC7000UL program (see section 4):
+Until V0 landed this check never fired for a GC7000UL program (section 4 is
+that world's scratch record):
 
-- The GC7000UL compiler gives the id register in
-  `ShcViv::vs_id_in_reg` only: `src/shaderc/online/select.rs:3983-3987`
-  (`reads_ids` is true for `VertexId` **or** `InstanceId`) and
-  `src/shaderc/online/abi.rs:552`. `gl_VertexID` is `.x` of that register and
-  `gl_InstanceID` is `.y` (`src/shaderc/online/select.rs:1562-1566`).
-- `vs_instance_id_reg1` is set only in `src/shaderc/online/powervr/chain.rs:212`
-  (search for `vs_instance_id_reg1` under `src/`). The unit test
+- `vs_instance_id_reg1` was set only by the PowerVR compiler
+  (`src/shaderc/online/powervr/chain.rs`, `record_vs_ids`). The GC7000UL
+  compiler recorded `ShcViv::vs_id_in_reg` alone: one scan was true for a
+  `gl_VertexID` **or** a `gl_InstanceID` read and named nothing
+  (`gl_VertexID` is `.x` of that register, `gl_InstanceID` its `.y`). The
+  unit test
   `an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused`
-  (`src/vivante/backend_tests.rs`) sets the field by hand, so it passes even
+  (`src/vivante/backend_tests.rs`) set the field by hand, so it passed even
   though real programs never set it.
-- `src/shaderc/online/vivante/**` (encoder, allocator, ISA) holds no
-  instance-ID code and no refusal.
+
+Since V0 it fires for programs our own compiler made: `select_keyed`
+(`src/shaderc/online/select.rs`) scans the two id reads apart,
+`Selected::vs_reads_instance_id` carries which one made the register through
+`codegen`, and `assemble` (`src/shaderc/online/abi.rs`) writes that register,
+one-based, into `vs_instance_id_reg1`. A program that reads only
+`gl_VertexID` keeps 0 and its split draws stay drawn. The boundary: a row
+built by Mesa's own compiler keeps both fields 0 (etna_shc never writes them;
+`tools/vivante/gen_shader_table.py` writes the Mesa-built rows of
+`tests/reference/vivante_blobs.rs`), and such a row reaches only the host
+tests and the `mesa-reference-table` measurement images — `build.rs`
+(`mesa_reference`): "no other product build can link a Mesa-built row".
+`src/vivante/internal.rs` and the tier tables are made by our own compiler,
+so they carry the field. The online-vs-table differential
+(`tests/online_oracle.rs`) leaves both reg1 fields out of its comparison, so
+one source deliberately gets different values in our record and in Mesa's
+row.
 
 Related sites:
 
-- `src/vivante/backend.rs:2884-2886`: `/* divisor 1, as before the field
-  (GcStream carries a divisor; whether the FE takes more than 1 is
-  unmeasured) */ max_instance_divisor: 1,`
-- `src/vivante/backend.rs:2261`: `GcStream { ..., divisor: u32::from(a.per_instance != 0) }`.
+- `src/vivante/backend.rs:3356`: `max_instance_divisor: 1,` (GcStream
+  carries a divisor; whether the FE takes more than 1 is unmeasured)
+- `src/vivante/backend.rs:2649`: `GcStream { ..., divisor: u32::from(a.per_instance != 0) }`.
   It ignores `GlesAttrib::divisor`.
-- `src/vivante/backend.rs:1156-1158`: `emit_streams` already writes
-  `nfe_vertex_streams_vertex_divisor(i)` (0x14680 + 4i, `src/vivante/regs.rs:158-159`)
+- `src/vivante/backend.rs:1307`: `emit_streams` already writes
+  `nfe_vertex_streams_vertex_divisor(i)` (0x14680 + 4i, `src/vivante/regs.rs:161`)
   for every stream on every draw.
-- `src/vivante/shader.rs:199-206`: `GC_FE_HALTI5_ID_CONFIG` puts the vertex
+- `src/vivante/shader.rs:229-238`: `GC_FE_HALTI5_ID_CONFIG` puts the vertex
   ID in `vs_id_in_reg*4` and the instance ID in `vs_id_in_reg*4+1`.
 
 ## 2. How the hardware and Mesa supply gl_InstanceID and divisors

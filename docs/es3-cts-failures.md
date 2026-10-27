@@ -402,10 +402,14 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
 - **T6, instancing with `gl_InstanceID` on the PowerVR and the GC7000UL**
   (open): the 6 `instanced.*.mixed.*` cases. Both take divisor 1 only, so the
   GL core draws instance by instance and `gl_InstanceID` starts at 0 in every
-  draw; the PowerVR refuses such a draw, the GC7000UL draws it wrong. The
-  design is chosen (`docs/notes/instanceid-per-draw.md`): PowerVR P1, Mesa's
+  draw; the PowerVR refuses such a draw, and the GC7000UL now refuses it too
+  (host-checked): its online compiler records a program that reads
+  `gl_InstanceID` in `vs_instance_id_reg1`, the field `gc_draw` tests
+  (V0 in `docs/notes/instanceid-per-draw.md`); before that it drew the split
+  wrong, with no refusal and no log line. The six cases still fail on the
+  boards until `gl_InstanceID` is supplied per draw: PowerVR P1, Mesa's
   PDS `instance_id_modifier` set to the draw's instance, then P3, hardware
-  divisors; GC7000UL V0, `vs_instance_id_reg1`, and V1, the stream divisor.
+  divisors; GC7000UL V1, the stream divisor.
   The V3D takes any divisor and is expected to pass.
 - **T7, the i.MX8MP and Pi 4 columns**: their first whole dEQP-GLES3 trees.
 

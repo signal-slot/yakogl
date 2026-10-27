@@ -2751,8 +2751,13 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     let mut clock = Timer::start();
     /* one instance of an instanced draw the GL core draws instance by
      * instance: the FE starts the instance ID at 0 for every draw, so a
-     * program that reads gl_InstanceID is refused (counted by gc_draw) */
+     * program that reads gl_InstanceID is refused (counted by gc_draw). The
+     * online compiler names such programs in vs_instance_id_reg1
+     * (shaderc/online/abi.rs, docs/notes/instanceid-per-draw.md V0); before
+     * that it left the field 0 and these draws went through with
+     * gl_InstanceID reading 0 in every instance. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
+        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 1) whose program reads gl_InstanceID");
         return -crate::util::EINVAL;
     }
     /* ES 3.0 4.4.4.2 lets colour attachments differ in size; the render

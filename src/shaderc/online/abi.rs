@@ -107,6 +107,12 @@ pub struct VivProgram<'a> {
     pub vs_pos_out_reg: Option<u8>,
     pub vs_pointsize_out_reg: Option<u8>,
     pub vs_id_in_reg: Option<u8>,
+    /// The id register was read by `gl_InstanceID`, not only `gl_VertexID`
+    /// ([`select::Selected::vs_reads_instance_id`]). [`assemble`] records it
+    /// as [`ShcShader::vs_instance_id_reg1`] so `gc_draw` can refuse a
+    /// per-instance split of an instanced draw
+    /// (`docs/notes/instanceid-per-draw.md`, V0).
+    pub vs_reads_instance_id: bool,
     pub ps_color_out_reg: Option<u8>,
     pub ps_depth_out_reg: Option<u8>,
 }
@@ -615,6 +621,19 @@ pub fn assemble(p: &VivProgram<'_>, uniforms: &[ShcUniform], uniform_dwords: u16
     sh.blend_key = 0;
     sh.blend_consts_off = SHC_NO_BLEND_CONSTS;
     sh.viv = viv;
+    /* V0 of `docs/notes/instanceid-per-draw.md`: name a program that reads
+     * `gl_InstanceID`. The GC7000 has no per-draw base for the FE's instance
+     * number (section 2: no base-instance state in the command stream), so a
+     * draw the GL core splits per instance (a divisor past what the back end
+     * takes) would make this program read `gl_InstanceID` = 0 in every
+     * instance. `ShcShader::vs_instance_id_reg1` is what `gc_draw` tests to
+     * refuse those draws instead (`src/vivante/backend.rs`, `draw_one`). A
+     * program reading only `gl_VertexID` stays 0: those draws are correct
+     * today, and the refusal must not reach them. */
+    sh.vs_instance_id_reg1 = match (p.vs_id_in_reg, p.vs_reads_instance_id) {
+        (Some(r), true) => r + 1,
+        _ => 0,
+    };
     Ok(sh)
 }
 
@@ -652,6 +671,7 @@ mod tests {
             vs_pos_out_reg: Some(0),
             vs_pointsize_out_reg: None,
             vs_id_in_reg: None,
+            vs_reads_instance_id: false,
             ps_color_out_reg: None,
             ps_depth_out_reg: None,
         }
@@ -674,6 +694,7 @@ mod tests {
             vs_pos_out_reg: None,
             vs_pointsize_out_reg: None,
             vs_id_in_reg: None,
+            vs_reads_instance_id: false,
             ps_color_out_reg: Some(0),
             ps_depth_out_reg: None,
         }
