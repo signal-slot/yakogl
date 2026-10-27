@@ -1,0 +1,53 @@
+size   drm_version 64
+size   drm_gem_close 8
+size   drm_syncobj_create 8
+size   drm_syncobj_destroy 8
+size   drm_syncobj_wait 40
+size   obj_array 16
+size   sync_op 16
+size   gpu_info 112
+size   csif_info 24
+size   timestamp_info 24
+size   group_priorities_info 4
+size   dev_query 16
+size   vm_create 16
+size   vm_destroy 8
+size   vm_bind_op 48
+size   vm_bind 24
+size   vm_get_state 8
+size   bo_create 24
+size   bo_mmap_offset 16
+size   queue_create 8
+size   group_create 56
+size   group_destroy 8
+size   queue_submit 40
+size   group_submit 24
+size   group_get_state 16
+size   tiler_heap_create 40
+size   tiler_heap_destroy 8
+offset struct drm_panthor_gpu_info.shader_present 72
+offset struct drm_panthor_gpu_info.gpu_features 104
+offset struct drm_panthor_group_create.compute_core_mask 24
+offset struct drm_panthor_group_create.vm_id 48
+offset struct drm_panthor_tiler_heap_create.tiler_heap_ctx_gpu_va 24
+offset struct drm_panthor_vm_bind_op.syncs 32
+offset struct drm_panthor_queue_submit.syncs 24
+ioctl  VERSION 0xc0406400
+ioctl  GEM_CLOSE 0x40086409
+ioctl  SYNCOBJ_CREATE 0xc00864bf
+ioctl  SYNCOBJ_DESTROY 0xc00864c0
+ioctl  SYNCOBJ_WAIT 0xc02864c3
+ioctl  PANTHOR_DEV_QUERY 0xc0106440
+ioctl  PANTHOR_VM_CREATE 0xc0106441
+ioctl  PANTHOR_VM_DESTROY 0xc0086442
+ioctl  PANTHOR_VM_BIND 0xc0186443
+ioctl  PANTHOR_VM_GET_STATE 0xc0086444
+ioctl  PANTHOR_BO_CREATE 0xc0186445
+ioctl  PANTHOR_BO_MMAP_OFFSET 0xc0106446
+ioctl  PANTHOR_GROUP_CREATE 0xc0386447
+ioctl  PANTHOR_GROUP_DESTROY 0xc0086448
+ioctl  PANTHOR_GROUP_SUBMIT 0xc0186449
+ioctl  PANTHOR_GROUP_GET_STATE 0xc010644a
+ioctl  PANTHOR_TILER_HEAP_CREATE 0xc028644b
+ioctl  PANTHOR_TILER_HEAP_DESTROY 0xc008644c
+const SYNC_OP_SIGNAL 0x80000000

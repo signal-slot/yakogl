@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  Imagination PowerVR Rogue GPU (BXS-4-64 on the TI AM62P) driven by the
+  yakogl-drivers module: powered and clocked through TISCI, with a physically
+  contiguous 64 MiB DDR carveout for the firmware heap, page tables and
+  render objects.
+
+compatible: "img,img-rogue"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  tisci:
+    type: phandle
+    required: true
+    description: "The TISCI (ti,k2g-sci) device that owns the GPU power domains and clock."
+
+  tisci-power-domain-ids:
+    type: array
+    required: true
+    description: "TISCI device ids to power on (AM62P: 237 and 242)."
+
+  tisci-clock-dev-id:
+    type: int
+    required: true
+    description: "TISCI device id the GPU core clock belongs to (AM62P: 237)."
+
+  tisci-clock-id:
+    type: int
+    required: true
+    description: "TISCI clock id of the GPU core clock (AM62P: 3)."
+
+  clock-frequency:
+    type: int
+    required: true
+    description: "GPU core clock in Hz (AM62P: 800000000)."
+
+  memory-region:
+    type: phandle
+    required: true
+    description: |
+      The GPU carveout: a reserved-memory node of at least 64 MiB that no
+      other Zephyr memory region overlaps (the driver maps it itself).

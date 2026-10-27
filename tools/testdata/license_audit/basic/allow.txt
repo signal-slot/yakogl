@@ -1,0 +1,2 @@
+# fixture allowlist
+table.dat | Apache-2.0 | numeric table, no comments

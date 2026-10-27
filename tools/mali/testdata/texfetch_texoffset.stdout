@@ -1,0 +1,5 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+gl_ref: sampler2D s at unit 0: a 2x2 RGBA8 texture
+gl_ref: uniform vec2 uv at 1 = 32 33
+gl_ref: uniform float level at 2 = 48
+gl_ref: attributes pos, framebuffer 64x64, viewport 0,0,64,64, depth range 0,1, glGetError 0x0

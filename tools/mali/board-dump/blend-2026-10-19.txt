@@ -1,0 +1,416 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# An excerpt of ten board traces, one blended GLES2 draw each, on the
+# NanoPC-T6, for the frame builder's blending proof
+# (src/mali/frame_blend_tests.rs): the command-stream words from the
+# frame's resource request to its one RUN_IDVS, and the draw's blend
+# descriptor (the row d50 names).
+#
+# Board: NanoPC-T6 (RK3588, Mali-G610, GPU_ID 0xa8670005), Armbian,
+# Linux 6.18.55-current-rockchip64, panthor 1.5.0, Mesa 25.0.7-2+deb13u1.
+# The program, 0dce654a8:tools/mali/board-ref/2026-10-19-blend/blend.c: a 64x64 RGBA8
+# FBO cleared to (0.25, 0.5, 0.75, 0.5), a quad over the left half in
+# (1.0, 0.5, 0.25, 0.75) with blending on in the mode named, by
+# tools/mali/mesa-board-ref.sh (PAN_MESA_DEBUG=linear,nocrc,dump,trace,sync).
+# Each block is headed by its file (mesa-<mode>) and its line range in it.
+#   mesa-over.pandecode sha256 89d18eefb2aca48aeab72e08474493a63de077421f69ce20cfdc7234e5f77b6d
+#   mesa-add.pandecode sha256 ff108c65e19e6840fffdc1be86e9d5728a47294f20543445df5c400159e0a67e
+#   mesa-premul.pandecode sha256 0b886f8c69f256c0435d5eaece128fa2dc87ce76692f563a82d31dacfa269ec9
+#   mesa-replace.pandecode sha256 5802936649ed451674837168ace0a5de0904de3b031a6c14cdaa4ea4227f17b8
+#   mesa-sub.pandecode sha256 986acac9e49ce2d05bfaf2ff54321d8f2c1f272cb047abb733c79a52dc7f36a3
+#   mesa-revsub.pandecode sha256 bf3d38e30aa5352a0e1544e2fe9dbb00ff89b07638ca1a842ede6203249d5e96
+#   mesa-mul.pandecode sha256 1a88b2d40e45e93586de3019c307d0080776f06d1ffadc53d387cccf08eecff9
+#   mesa-twosd.pandecode sha256 b3250d160a5bde8f2f9ceec956c55b60b4be03a4c9d87f6f6c775b75843bd63f
+#   mesa-const.pandecode sha256 d239422496a01ba5ff33bf51a4d0e17265e75486e1fd538a2b451c308bcc7e8b
+#   mesa-sep.pandecode sha256 c92a9956800341cee576e793e33d0f989db7ef825718b0bfbf38e86a544192c6
+## mesa-over lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-over lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-over lines 1206-1206
+000140  01 02 00 00 03 35 50 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-add lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-add lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-add lines 1206-1206
+000140  01 02 00 00 32 29 93 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-premul lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-premul lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-premul lines 1206-1206
+000140  01 02 00 00 32 2D D3 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-replace lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-replace lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-replace lines 1206-1206
+000140  00 02 00 00 32 21 13 F0 19 00 00 00 00 D0 0E 00 
+## mesa-sub lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-sub lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-sub lines 1206-1206
+000140  01 02 00 00 B2 29 9B F0 1A 00 00 00 00 D0 0E 00 
+## mesa-revsub lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-revsub lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-revsub lines 1206-1206
+000140  01 02 00 00 3A A9 93 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-mul lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-mul lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-mul lines 1206-1206
+000140  01 02 00 00 21 13 32 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-twosd lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-twosd lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-twosd lines 1206-1206
+000140  01 02 00 00 31 14 43 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-const lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-const lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-const lines 1206-1206
+000140  01 02 00 7F 03 37 70 F0 1A 00 00 00 00 D0 0E 00 
+## mesa-sep lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  aa 21 00 00 00 00 39 02    MOVE32 r57, #0x21AA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+## mesa-sep lines 1188-1188
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+## mesa-sep lines 1206-1206
+000140  01 02 00 00 03 25 13 F0 1A 00 00 00 00 D0 0E 00 

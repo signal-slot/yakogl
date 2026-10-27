@@ -1,0 +1,216 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The workspace: the library crate `yakogl` (this directory), the C-ABI
+# archive crate `yakogl-capi` (capi/), the display/SoC driver archive
+# `yakogl-drivers` (driver/rust/; its path is also named once in
+# driver/zephyr/CMakeLists.txt, YAKOGL_DRIVERS_CRATE_DIR) and the gl_test
+# runner `yakogl-gltest-runner` (driver/tools/pvrlab/runner, an rlib the
+# archive takes behind `gl-test-runner`). Host tools join as further members:
+# adding one is one line in `members`. `default-members` is the library only,
+# so a plain `cargo build` / `cargo test` / `cargo check` here never builds the
+# archive crate or a host tool; the C builds (CMakeLists.txt, baremetal.mk,
+# zephyr/) always name their package (`-p yakogl-capi`), so feature
+# unification never mixes a host tool's features into the no_std archive.
+[workspace]
+members = [
+    ".",
+    "capi",
+    "driver/rust",
+    "driver/tools/pvrlab/runner",
+    "examples/femtovg/check",
+    "examples/slint/check",
+    "examples/triangle/check",
+    "examples/triangle/rust",
+    "examples/triangle-rust",
+    "tools/yakogl-tools",
+    "tools/precompile",
+    "tools/mali/panthor",
+]
+default-members = ["."]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# 1.88: slice::as_chunks (1.88), statics in constants (1.83), `&raw const`
+# and Option::is_none_or (1.82). Checked: 1.88 builds, 1.79 does not.
+rust-version = "1.88"
+license = "Apache-2.0"
+publish = false
+
+[package]
+name = "yakogl"
+description = "Portable OpenGL ES + EGL for GPUs with no operating system driver (PowerVR BXS-4-64)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND MIT"
+publish.workspace = true
+
+# The library is an rlib only: it has no panic handler and is never a
+# staticlib itself. C applications link the archive built from capi/
+# (libyakogl.a); a Rust application depends on this crate directly and brings
+# its own panic handler (README.md, "Linking").
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["osal-linux"]
+# The OSAL whose ops table is the compile-time default of `g_osal`. At most
+# one (several are a compile error). With none, `g_osal` starts null and the
+# application calls `osal_set_ops()` before the first GL call. The OSALs are C
+# (src/osal/<name>.c) and are linked by the build system, not by cargo.
+osal-linux = []
+osal-zephyr = []
+osal-baremetal = []
+# Report OpenGL ES 2.0 instead of ES 3.0: glGetString(GL_VERSION) says
+# "OpenGL ES 2.0", GL_SHADING_LANGUAGE_VERSION "OpenGL ES GLSL ES 1.00", the
+# ES 3.0-only queries (GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_NUM_EXTENSIONS)
+# are GL_INVALID_ENUM, and GL_EXTENSIONS lists the ES 2.0 extensions ES 3.0
+# has in core (GL_OES_texture_npot and the depth-texture pair). A conformance run must
+# have this: a client that reads GL_MAJOR_VERSION and gets an answer concludes
+# it is talking to ES 3 whatever the version string said. Off by default,
+# because Qt's RHI takes the ES 3.0 path from that string.
+report-es2 = []
+# The GPU whose backend and offline shader table are compiled in. Exactly one
+# of `gpu-powervr`, `gpu-vivante`, `gpu-v3d` and `gpu-mali` is in a build
+# (src/lib.rs refuses none and two). `default` names none: a default GPU would
+# be wrong on every board but one and would make `--features gpu-vivante` a
+# two-GPU build.
+#
+# The AM62P's PowerVR BXS-4-64 (`pvr/`).
+gpu-powervr = []
+# The i.MX8MP's Vivante GC7000 (`vivante/`), which changes the shader ABI
+# (`struct shc_shader` grows its GC7000 half) and the table the shader back
+# end looks shaders up in.
+gpu-vivante = []
+# The Raspberry Pi 4's Broadcom V3D 4.2 (`v3d/`): the GL core draws through
+# the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
+# "M6"). The only shader back end for this GPU is the in-process compiler:
+# there is no offline table, so it needs `shaderc-online` and takes no
+# table (`no-shader-table` in the host tests; src/lib.rs says so at compile time rather than building
+# a library that cannot compile a shader). Like the GC7000, `struct shc_shader`
+# grows a V3D half (`ShcShader::v3d`).
+gpu-v3d = []
+# The NanoPC-T6's Arm Mali-G610 (RK3588, Valhall arch 10; `mali/`): a
+# skeleton. The descriptor packers are generated from Mesa's v10.xml
+# (src/mali/genxml/v10.rs, tools/mali/gen_pack_rs.py); the backend refuses
+# every draw and the shader back end every compile, each by name, until
+# their milestones land (driver/docs/nanopc-t6-mali.md). As on the V3D, the
+# only shader back end is the in-process compiler: it needs `shaderc-online`
+# and takes no table (`no-shader-table` in the host tests).
+gpu-mali = []
+# The Vivante depth canary (the C's CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD): a
+# guard either side of the depth surface, filled with a pattern, so what the
+# pixel engine writes outside the surface can be read back. Bring-up only.
+vivante-depth-guard = ["gpu-vivante"]
+# The test knobs: C entry points the on-silicon suites (gl_test.c, the dEQP
+# sample) set to run an experiment's arms or to probe the backend's state,
+# and the switches behind them. Without it none of them is in the build and
+# the backend behaves as each knob's default. Off by default; the gl_test
+# (i.MX8MP) and deqp Zephyr images turn it on (CONFIG_YAKOGL_TEST_KNOBS),
+# a product image never does (tools/check.sh "no test knob in the
+# artefact"). A knob's C symbol is in its GPU's debug namespace, which is
+# what that row reads: the GC7000's gc_debug_* (gc_debug_msaa and its
+# scratch probes, issue #8; gc_debug_flip_experiment; gc_debug_narrow_la),
+# the PowerVR's pvr_debug_* (pvr_debug_split_zs, pvr_debug_narrow_la) and
+# its backend options marked TEST KNOB in src/pvr/pvr_backend.h, which
+# pvr_backend_set_option refuses without the feature.
+test-knobs = []
+# Host tests only: links std so the test harness can unwind, and starts with a
+# null `g_backend` (the tests install mocks). Never enable it in a product:
+# it is a compile error on bare-metal targets and in the C archive.
+#   cargo test --no-default-features --features host-test,gpu-powervr
+host-test = []
+# The in-process ("online") shader compiler: src/shaderc/online/, a GLSL ES
+# 1.00 front end and a PowerVR USC back end that run on the target, so a
+# Zephyr or bare-metal image can compile a shader an application hands it
+# instead of looking the text up in the offline table. It is no_std and
+# heap-free (the crate has no allocator): the caller lends it a scratch
+# buffer and owns the output. It also owns the instruction set itself - the USC
+# decoder, encoder and disassembler, gated by a byte-exact round trip over
+# every blob of the offline table (docs/online-shaderc/isa.md). It is the
+# only back end that needs neither a build-time table (offline) nor a host on
+# the network, so it is the one a product can ship with an application that
+# writes its shaders at run time; with the feature in it registers as
+# `g_shaderc`.
+shaderc-online = []
+# The precompiled shaders: a table our own compiler made of
+# tools/shaders/precompiled.list at image-build time (yakogl-precompile,
+# tools/precompile), looked up by the same record key the compiler's cache
+# uses. With `shaderc-online` it is the tier in front of the compiler: a hit
+# runs no compile, a miss compiles. Without it, it is the whole back end (an
+# image with no compiler, no front end and no scratch region): a miss is
+# refused by name, -ENOENT. The table is a file build.rs is pointed at
+# with YAKOGL_PRECOMPILED_TABLE (the C builds generate it into their build
+# directory: Kconfig YAKOGL_PRECOMPILED_SHADERS, CMake
+# YAKOGL_PRECOMPILED_SHADERS); its toolchain mark must name this build's GPU
+# and ES level or the build stops. Off by default.
+precompiled-shaders = []
+# MEASUREMENT IMAGES ONLY: link the Mesa reference table
+# (tests/reference/blobs.rs, PowerVR, from pco_shc; vivante_blobs.rs, GC7000,
+# from etna_shc) as this build's shader table, behind the offline back end
+# (src/shaderc/offline.rs, `g_shaderc` = `SHC_OFFLINE`). It exists so that an
+# image can still be built with Mesa's code for an A/B against our compiler
+# (gl_test 193..195's "table image"; Kconfig YAKOGL_SHADERC_OFFLINE, the C
+# builds' SHADERC offline, select it). It will be replaced by the precompiled
+# table our own compiler makes (tools/precompile; what is left:
+# #1214, #1215). Off by default: without it no product build links a Mesa-built
+# row (tools/check.sh, "no Mesa reference in the artefact"), and a build
+# with neither this nor `shaderc-online` has no shader back end and is
+# refused (src/lib.rs). The host tests compile the reference without it
+# (`host-test`), to compare our compiler with it.
+mesa-reference-table = []
+# Leave the Mesa reference table OUT of a host-test build too.
+#
+# Outside the host tests the table is only ever in a build that asks for it
+# (`mesa-reference-table`); `host-test` compiles it, because the tests
+# compare the compiler with it in one process, and this takes it out again:
+# the build-only image configurations of tools/check.sh and the V3D, which
+# has no table. A product build may pass it as well (the C builds do with
+# the in-process compiler); it changes nothing there.
+#
+# Requires a back end that needs no table (`shaderc-online`); the build stops
+# otherwise, rather than producing a library that cannot compile anything.
+no-shader-table = []
+
+[dependencies]
+
+# build.rs compiles Mesa's QPU packer (third_party/mesa-26.2.1/src/broadcom/qpu)
+# for a `gpu-v3d` build and the PowerVR backend's csbgen packer wrappers
+# (driver/src/pvr/generated/csbgen_wrap.c) for a `gpu-powervr` build; the GC7000
+# build compiles no C here.
+[build-dependencies]
+cc = "1.2"
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+# The tests (`cargo test`, every test row of tools/check.sh) at opt-level 3.
+# The profile inherits `dev` otherwise, and opt-level 1 halves the speed of
+# the compiler-heavy tests (docs/ci.md, section 3.4). Debug assertions and
+# overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
+# harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
+# applies. The edit loop's `dev` profile keeps opt-level 1.
+[profile.test]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true
+
+# The C archive's dev build (YAKOGL_CARGO_PROFILE=dev): dev semantics
+# (overflow checks, debug assertions) but one LTO object, which the archive
+# post-processing (capi/assemble.cmake) needs to hide the Rust runtime symbols.
+[profile.dev-lto]
+inherits = "dev"
+lto = true
+codegen-units = 1
+incremental = false
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+lto = true
+codegen-units = 1
+debug = true

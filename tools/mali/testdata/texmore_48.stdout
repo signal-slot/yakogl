@@ -1,0 +1,4 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+gl_ref: sampler3D vol at unit 0: a 4x4x5 RGBA8 volume of 1 level
+gl_ref: uniform float zz at 1 = 32
+gl_ref: attributes pos, framebuffer 64x64, viewport 0,0,64,64, depth range 0,1, glGetError 0x0

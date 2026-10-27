@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+This file holds no per-case result in any form the tool reads.
+deqp: summary: 3 cases begun, 3 with a result, 0 without

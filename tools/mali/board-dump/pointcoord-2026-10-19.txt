@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# An excerpt of two board traces of gl_test case 83's draw (one point of
+# gl_PointSize 16 whose fragment shader writes gl_PointCoord) into an FBO
+# texture (fbo) and into an EGL pbuffer (pb), on the NanoPC-T6, for the
+# frame builder's point sprite origin (src/mali/frame_points_tests.rs): per
+# mode the draw's command stream, the fragment job's (its FBD pointer in
+# d40), and the first 64 bytes of the framebuffer descriptor.
+#
+# Board: NanoPC-T6 (RK3588, Mali-G610, GPU_ID 0xa8670005), Armbian,
+# Linux 6.18.55-current-rockchip64, panthor 1.5.0, Mesa 25.0.7-2+deb13u1.
+# The program, 0dce654a8:tools/mali/board-ref/2026-10-19-pointcoord/pcoord.c, by
+# tools/mali/mesa-board-ref.sh (PAN_MESA_DEBUG=linear,nocrc,dump,trace,sync).
+# Each block is headed by its file (mesa-<mode>) and its line range in it.
+#   mesa-fbo.pandecode sha256 a19e36ced5f32308ed8c0e5f416877e48a6250f125768be3ddd21baa30ce4ac2
+#   mesa-pb.pandecode sha256 345e914fbfc3fb85716086681f1895e91297b8e89727f49bdd8404c7d5f1a372
+## mesa-fbo lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  a0 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD42A0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  87 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4687
+  40 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4240
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  00 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD000
+  07 47 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD4707
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  00 43 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD4300
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 90 83 00 00 00 38 02    MOVE32 r56, #0x839000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 00 00 00 00 3c 01    MOVE d60, #0x0
+  01 00 00 00 00 00 21 02    MOVE32 r33, #0x1
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  01 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #1
+## mesa-fbo lines 625-633
+  01 40 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD4001
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 01    MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02    MOVE32 r46, #0x0
+  00 00 01 00 00 4c 4e 14    LOAD_MULTIPLE r78, [d76]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 00 4e 00 16    BRANCH.le r78, #1
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+## mesa-fbo lines 1115-1120
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000020  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 94 00 04 
+000030  00 00 01 00 00 00 00 00 00 43 FD FF FF 7F 00 00 
+## mesa-pb lines 46-79
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  a0 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD42A0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  87 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4687
+  40 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4240
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  00 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD000
+  07 47 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD4707
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  00 43 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD4300
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 90 83 00 00 00 38 02    MOVE32 r56, #0x839000
+  ab 21 01 00 00 00 39 02    MOVE32 r57, #0x121AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 00 00 00 00 3c 01    MOVE d60, #0x0
+  01 00 00 00 00 00 21 02    MOVE32 r33, #0x1
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  01 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #1
+## mesa-pb lines 625-633
+  01 40 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD4001
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 01    MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02    MOVE32 r46, #0x0
+  00 00 01 00 00 4c 4e 14    LOAD_MULTIPLE r78, [d76]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 00 4e 00 16    BRANCH.le r78, #1
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+## mesa-pb lines 1115-1120
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000020  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04 
+000030  00 00 01 00 00 00 00 00 00 43 FD FF FF 7F 00 00 

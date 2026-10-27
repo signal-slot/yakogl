@@ -1,0 +1,9 @@
+| scene | FrameTime ms | FPS |
+|---|---:|---:|
+| [build] use-vbo=true | 4.00 | 250 |
+| [terrain] <default> | 50.25 | 20 |
+| [shadow] <default> | 40.00 | 25 |
+| [refract] <default> | 33.33 | 30 |
+| [jellyfish] <default> | unsupported | - |
+
+glmark2 Score: 183

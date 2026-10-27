@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config BOARD_ARMADILLO_X2
+	select SOC_MIMX8ML8_A53 if BOARD_ARMADILLO_X2_MIMX8ML8_A53 || \
+			     BOARD_ARMADILLO_X2_MIMX8ML8_A53_DIRECT
+	select SOC_PART_NUMBER_MIMX8ML8DVNLZ

@@ -1,0 +1,169 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * pvr_backend.h - the boundary between the GL core (gl/draw.rs) and the PowerVR
+ * command generator. gl/draw.rs resolves the current GL context into one
+ * `pvr_draw` and calls pvr_backend_draw(); the backend records the draw into
+ * the current frame's command streams (VDM/PPP/PDS in GPU memory, via OSAL)
+ * and pvr_backend_flush() submits the frame as one GEOM+FRAG kick.
+ *
+ * One kick per frame (not per draw) keeps the on-chip depth buffer and the
+ * colour tiles coherent across the draw calls of a frame. When a frame has
+ * to be split (draw table / arena limits) or does not start with a clear,
+ * the next kick loads the colour back through a full-screen texel-fetch
+ * quad and the depth/stencil through the ISP Z load/store unit (a packed
+ * D24S8 buffer per target, pvr_draw.ds_persist).
+ *
+ * This keeps the GL core independent of PowerVR command encoding, and keeps the
+ * (silicon-proven) command generator independent of GL. All GPU memory is
+ * allocated through the OSAL; the backend never calls an OS API directly.
+ */
+#ifndef PVR_BACKEND_H
+#define PVR_BACKEND_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "../backend.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* The PowerVR implementation of the backend contract (backend.h). */
+extern const struct yakogl_backend yakogl_backend_pvr;
+
+int  pvr_backend_init(void);
+void pvr_backend_shutdown(void);
+int  pvr_backend_draw(const struct gles_draw *draw);
+int  pvr_backend_flush(void);
+int  pvr_backend_finish(void);
+int  pvr_backend_finish_previous(void);
+uint32_t pvr_backend_kick_id(void);
+void pvr_backend_counters(uint32_t *kicks, uint32_t *waits);
+void pvr_backend_workload(uint32_t *draws, uint32_t *tiles);
+/* What the kicks carried beyond the application's draws: full-screen quads the
+ * driver added (colour reload / clear) and kicks a frame was split into. */
+void pvr_backend_overhead(uint32_t *quads, uint32_t *splits);
+bool pvr_backend_kick_pending(uint32_t kick_id);
+/* The newest kick that may read GPU memory freed now: last_submitted + 1
+ * while a frame is being recorded, last_submitted otherwise. */
+uint32_t pvr_backend_free_fence(uint32_t last_submitted);
+/* The frame sets the next backend init builds (CONFIG_YAKOGL_PVR_FRAME_SETS;
+ * default 4 x (1024 KiB general + 768 KiB pds)): 0, -EBUSY once the backend
+ * runs with another, -EINVAL outside 1..4 sets, 16..4096 KiB general,
+ * 8..1024 KiB pds. */
+int pvr_backend_set_frame_arenas(uint32_t sets, uint32_t gen_kib, uint32_t pds_kib);
+/* The backend's owner lines ("pool owner backend ..."), returns their KiB. */
+uint64_t pvr_backend_pool_owners(void);
+/* The GL core's owner lines ("pool owner gl ..."), returns their KiB. */
+uint64_t yakogl_pool_owners(void);
+/* Fence waits that timed out (the kick still incomplete after WAIT_MS). */
+uint32_t pvr_backend_wait_timeouts(void);
+/* Draws and clears refused (GL_OUT_OF_MEMORY) because their depth/stencil
+ * buffer could not be allocated, or its contents were lost that way. */
+uint32_t pvr_backend_ds_refused(void);
+/* The depth/stencil line a run ends with, into buf (cap bytes, NUL-terminated,
+ * truncated): "ds slots peak N/8, ds bytes peak M, ds refused R (slots full F,
+ * no buffer B)", or "ds slots: none allocated, ..." when no buffer ever was. */
+void pvr_backend_ds_report(char *buf, size_t cap);
+uint64_t pvr_backend_heap_base(enum gles_heap heap);
+
+/* Backend options (defaults: all 0). Three are product options:
+ * ONE_IN_FLIGHT, FS_TEMPS_MIN and IF_LOWERING. The ones marked TEST KNOB take
+ * effect only in a library built with the `test-knobs` feature
+ * (CONFIG_YAKOGL_TEST_KNOBS); elsewhere setting one changes nothing. The
+ * RETIRED slots keep their numbers so every later option keeps its own
+ * (ffi_layout_check.c pins them); setting one changes nothing. */
+enum pvr_backend_option {
+	/* TEST KNOB. 1: vertex positions are already in screen space (x,y
+	 * pixels, z, w=1) and the TA must not apply the viewport transform (PPP
+	 * pretransform).
+	 * Used to reproduce the silicon test rig through the GL path. */
+	PVR_BACKEND_OPT_PRETRANSFORM = 0,
+	/* TEST KNOB. The TA clip mode: PVR_DEPTH_CLIP_* below. Unset (0) is FRONT_REAR --
+	 * near and far clipping, as GL ES 2.0 2.11 asks for it.
+	 *
+	 * It was off for a while because FRONT_REAR appeared to over-clip
+	 * (dEQP's clip_z cases rendered a sliver of the reference). The volume
+	 * turned out to be selected by CR_PPP_CTRL bit 0, which we inherited
+	 * clear from Mesa -- a VULKAN driver, and Vulkan clips 0 <= z <= w.
+	 * With bit 0 set (PPP_CTRL 0x203, measured by z_probe) the TA clips
+	 * GL's -w <= z <= w and FRONT_REAR is simply right. See
+	 * driver/docs/gpu-recipes/depth-clip-convention.md. */
+	PVR_BACKEND_OPT_DEPTH_CLIP,
+	/* TEST KNOB. CR_PPP_CTRL value override (0 = the default for the
+	 * current mode). */
+	PVR_BACKEND_OPT_PPP_CTRL,
+	/* TEST KNOB. 1: never merge adjacent attributes into one DMA stream (one DDMAD per
+	 * attribute); 0: merge attributes that are contiguous in memory and in
+	 * their vi registers (fewer DMAs, the layout the test rig used). */
+	PVR_BACKEND_OPT_NO_COALESCE,
+	/* TEST KNOB. 1: log every generated PPP/VDM/PDS word (bring-up comparison). */
+	PVR_BACKEND_OPT_DEBUG,
+	/* RETIRED (was TERM0, a raw TA_STATE_TERMINATE0 override for bisection). */
+	PVR_BACKEND_OPT_RETIRED_TERM0,
+	/* RETIRED (was NO_SUBMIT, the A/B hand-off to the self-test rig, which
+	 * went with pvrgpu.ko): the slot keeps its number so the later options
+	 * keep theirs; setting it changes nothing. */
+	PVR_BACKEND_OPT_RETIRED_NO_SUBMIT,
+	/* TEST KNOB. 1: after every kick, log a summary of the target's stored depth/stencil
+	 * buffer (bring-up aid for the ISP Z load/store path). */
+	PVR_BACKEND_OPT_DS_DUMP,
+	/* TEST KNOB. Primitives one kick may tile before the frame is split (0 = the
+	 * built-in budget). A test can set it low to exercise the split on a
+	 * workload small enough for any parameter buffer. */
+	PVR_BACKEND_OPT_PRIM_BUDGET,
+	/* RETIRED (was MRT_STRIDE, a bring-up override of the pixel output width). */
+	PVR_BACKEND_OPT_RETIRED_MRT_STRIDE,
+	/* RETIRED (was FORCE_MIP0, every texture sampled from level 0). */
+	PVR_BACKEND_OPT_RETIRED_FORCE_MIP0,
+	/* RETIRED (was DBIAS_INT: the ISP always takes glPolygonOffset's
+	 * constant in integer depth units, measured on the AM62P, RESULTS 1i). */
+	PVR_BACKEND_OPT_RETIRED_DBIAS_INT,
+	/* TEST KNOB, PROBE ONLY: 1 = colour target 0 written TWIDDLE_2D (backend.rs
+	 * PVR_BACKEND_OPT_PBE_TWIDDLE; set by cube_probe.c, retired with pvrgpu.ko,
+	 * in the history at 8b53557f). */
+	PVR_BACKEND_OPT_PBE_TWIDDLE,
+	/* MEASUREMENT: 1 = one kick in flight: the swap waits for its own kick
+	 * too (backend.rs PVR_BACKEND_OPT_ONE_IN_FLIGHT; driver/docs/pvr-render.md).
+	 */
+	PVR_BACKEND_OPT_ONE_IN_FLIGHT,
+	/* RETIRED (was SWAP_DROPS_ZS: the swap always drops the window's
+	 * depth/stencil, measured on the AM62P, glmark2 315 -> 550). */
+	PVR_BACKEND_OPT_RETIRED_SWAP_DROPS_ZS,
+	/* MEASUREMENT: the fragment kick declares at least this many temps
+	 * (backend.rs PVR_BACKEND_OPT_FS_TEMPS_MIN); 0 = the shader's own. A
+	 * product option until the shader-compiler rename, whose
+	 * online-vs-table A/B it serves. */
+	PVR_BACKEND_OPT_FS_TEMPS_MIN,
+	/* MEASUREMENT: how the online compiler lowers an `if` whose arms are
+	 * straight-line arithmetic, PVR_IF_LOWERING_* below (backend.rs
+	 * PVR_BACKEND_OPT_IF_LOWERING). Read when a shader is compiled from its
+	 * source; its variants keep it, so one source compiles both ways on one
+	 * context. The table path ignores it. */
+	PVR_BACKEND_OPT_IF_LOWERING,
+	PVR_BACKEND_OPT_COUNT
+};
+
+/* PVR_BACKEND_OPT_DEPTH_CLIP values. 1 and 2 are the ones z_probe and
+ * gl_test case 62 already pass, so they keep meaning what they meant when
+ * those measurements were taken; 0 selects the default, which is why turning
+ * clipping OFF is an explicit value rather than zero. */
+#define PVR_DEPTH_CLIP_FRONT_REAR        1u  /* near and far, GL's volume */
+#define PVR_DEPTH_CLIP_FRONT_REAR_DEPTH  2u  /* clips nothing on its own (measured) */
+#define PVR_DEPTH_CLIP_OFF               3u  /* no near/far clipping; bring-up only */
+/* PVR_BACKEND_OPT_IF_LOWERING values: the compiler's choice (by the arms'
+ * sizes: select.rs branch_pays), the arms predicated (pco_cf.c lower_if_pred_exec), the arms
+ * under the execution mask with a branch past each (lower_if_cond_exec,
+ * pco's PCO_DEBUG=no_pred_cf). Any other value is the default. */
+#define PVR_IF_LOWERING_DEFAULT    0u
+#define PVR_IF_LOWERING_PREDICATE  1u
+#define PVR_IF_LOWERING_BRANCH     2u
+void pvr_backend_set_option(enum pvr_backend_option opt, uint32_t value);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PVR_BACKEND_H */

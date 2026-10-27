@@ -1,0 +1,19 @@
+--- a/src/broadcom/meson.build
++++ b/src/broadcom/meson.build
+@@ -73,6 +73,16 @@
+   dependencies: [dep_valgrind, dep_thread, idep_mesautil, dep_libdrm],
+ )
+ 
++# YakoGL's offline shader tool (OpenGL SPIR-V program -> V3D 4.2 FS/VS/CS + reflection)
++v3d_shc = executable(
++  'v3d_shc',
++  ['v3d_shc.c', v3d_xml_pack],
++  include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_broadcom],
++  link_with : [libbroadcom_v3d],
++  dependencies : [dep_libdrm, idep_nir, idep_vtn, idep_mesautil],
++  build_by_default : false,
++)
++
+ subdir('perfcntrs')
+ 
+ if with_perfetto and (with_datasources.contains('v3d') or with_datasources.contains('auto'))

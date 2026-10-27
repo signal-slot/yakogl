@@ -1,0 +1,8 @@
+# Fixture for rows-for-cases.py: pi4-full-tree.txt's form ("# image <LABEL>:" above a row).
+# image AL: 1
+dEQP-GLES2.functional.attribute_location.*
+# image T1: 38
+dEQP-GLES2.functional.texture.completeness.*,dEQP-GLES2.functional.texture.wrap.*
+# image NS: 2
+dEQP-GLES2.functional.negative_api.*
+dEQP-GLES2.functional.state_query.*

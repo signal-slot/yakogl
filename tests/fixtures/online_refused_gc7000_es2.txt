@@ -1,0 +1,71 @@
+armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+es300/array.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/bands.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cube.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cube.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cubelodf.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cubelodf.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cubelodv.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/cubelodv.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/derivs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/divloop.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/divnest.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/dynidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/facing.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/flatlast.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/flatlast.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/gcops.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/hdrsample.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/idxtex.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/idxtex.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/ifelse_uint.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/inst.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/inst2.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/int_div.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/int_div.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/ishr.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/layers2.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/layersunused.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/loop_exit.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/loop_exit.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt2.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt2.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt3.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/mrt3.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/texfetch.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/texoffset.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/texsize.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/tmpidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/uniidx.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/uniloop.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/uops.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/vcolor.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/vid.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+es300/vol.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/es3trunc_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/es3trunc_vary_fs.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/es3trunc_vs.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/es3trunc_vsc.vert: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/intrt.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/isamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+gltest/usamp.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/es/fbload.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+internal/es/fbload_int.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+internal/es/mipgen.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+interp_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+points.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+texture.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+texture2.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uniform_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler

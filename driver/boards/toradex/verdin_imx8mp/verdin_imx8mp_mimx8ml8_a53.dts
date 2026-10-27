@@ -1,0 +1,98 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Toradex Verdin iMX8M Plus on Dahlia, Cortex-A53 cluster: the host of the
+ * SafeUI Application Supervisor and of the Vivante GC7000UL GPU bring-up.
+ *
+ * Memory map (4 GiB DDR at 0x40000000 on the lab board, measured on
+ * 2026-09-20 from Torizon's /proc/iomem: no OP-TEE, CMA at 0xa0000000):
+ *   0x58000000  64 MiB    GPU carveout (page tables, command buffers, render pool)
+ *   0x60000000  256 MiB   Zephyr A53 image and RAM. The first 64 MiB are the
+ *                         Linux crashkernel=64M@0x60000000 reservation, so the
+ *                         image can be loaded on the kernel's crash route
+ *                         (kexec_zephyr zephyr.bin 0x60000000 --crash), which
+ *                         does not shut the display down on the way out.
+ *   0x80000000  16 MiB    Cortex-M7 firmware in DDR (Zephyr verdin_imx8mp/mimx8ml8/m7/ddr)
+ */
+
+/dts-v1/;
+
+#include <nxp/nxp_mimx8mp_a53.dtsi>
+#include "verdin_imx8mp_a53-pinctrl.dtsi"
+
+/ {
+	model = "Toradex Verdin iMX8M Plus A53";
+	compatible = "toradex,verdin_imx8mp";
+
+	chosen {
+		zephyr,console = &uart3;
+		zephyr,shell-uart = &uart3;
+		zephyr,sram = &a53_ddr_section;
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	ddr0: memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 DT_SIZE_M(768)>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		a53_ddr_section: memory@60000000 {
+			reg = <0x60000000 DT_SIZE_M(256)>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* GPU page tables, command buffers and render objects; the
+		 * driver maps it itself, so it stays out of zephyr,sram.
+		 */
+		gpu_carveout: gpu-carveout@58000000 {
+			reg = <0x58000000 DT_SIZE_M(64)>;
+			no-map;
+		};
+	};
+
+	soc {
+		/* Verdin UART_1: not in Zephyr's SoC file (it has UART2 and UART4). */
+		uart3: uart@30880000 {
+			compatible = "nxp,imx-iuart";
+			reg = <0x30880000 DT_SIZE_K(64)>;
+			interrupts = <GIC_SPI 28 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "irq_0";
+			interrupt-parent = <&gic>;
+			clocks = <&ccm IMX_CCM_UART3_CLK 0x6c 24>;
+			status = "disabled";
+		};
+
+		/* Vivante GC7000UL. The driver powers it through the GPC and
+		 * clocks it through the CCM (the second and third ranges). */
+		gpu3d: gpu@38000000 {
+			compatible = "vivante,gc";
+			reg = <0x38000000 DT_SIZE_K(32)>,
+			      <0x303a0000 DT_SIZE_K(64)>,
+			      <0x30380000 DT_SIZE_K(64)>;
+			reg-names = "gpu", "gpc", "ccm";
+			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			interrupt-parent = <&gic>;
+			clock-frequency = <800000000>;
+			memory-region = <&gpu_carveout>;
+			status = "okay";
+		};
+	};
+};
+
+&uart3 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart3_default>;
+	pinctrl-names = "default";
+};

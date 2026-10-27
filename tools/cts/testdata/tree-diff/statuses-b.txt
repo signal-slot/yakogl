@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# deqp-uart-tally.py --statuses form: "<Status> <case>", NoResult and Lost are no result
+Pass dEQP-GLES2.functional.treediff.same_pass
+Pass dEQP-GLES2.functional.treediff.fixed_case
+NotSupported dEQP-GLES2.functional.treediff.accepted_ns
+NotSupported dEQP-GLES2.functional.treediff.accepted_stays
+Lost dEQP-GLES2.functional.treediff.missing_case

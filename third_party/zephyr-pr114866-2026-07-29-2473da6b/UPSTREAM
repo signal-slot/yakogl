@@ -1,0 +1,32 @@
+name:      Zephyr RTOS, pull request #114866 "Add support for MIPI DSI with the Cadence DSI
+           controller" (Texas Instruments; open, not merged)
+url:       https://github.com/zephyrproject-rtos/zephyr/pull/114866
+           (head branch in https://github.com/Yash-Srivastava-TI/zephyr)
+version:   the PR's head commit as of 2026-10-02 (no tag)
+commit:    2473da6b52b78f5bd428280f56d7cb47bd104eea (2026-07-29, "boards: am62l_evm/am62l3/a53:
+           Add board support for MIPI DSI")
+date:      2026-10-02
+licence:   Apache-2.0 (the file's SPDX line; the repository's LICENSE)
+copyright: Copyright (c) 2026 Texas Instruments Incorporated
+licence-files: LICENSE (the repository's, at the same commit, unchanged)
+generated: driver/rust/src/soc/am62p/ti_pr114866.rs, by tools/ti-zephyr/gen_dphy_data.py
+           from drivers/mipi_dsi/dsi_cdns_ti.c (committed; tools/check.sh regenerates
+           and compares)
+patches:   none
+local-changes: none (a change would be a patch under patches/, with its reason)
+
+Why it is here (docs/source-form.md, group E step 7): the AM62P's D-PHY TX and DSI host
+are written from the AM62Px TRM (TI SPRUJ83D) in driver/rust/src/ip/cdns_{dphy,dsi}.rs.
+Where the TRM is silent the source is TI's own driver, vendored unmodified: the D-PHY's
+data-rate band table, the PLL gm PWM divider values, the WIZ registers' place in the
+D-PHY region, and the MCTL_DPHY_CFG0 sequence. The file is not compiled (it is a whole
+Zephyr driver for another binding, ti,j721e-dsi, and another clock API); the generator
+reads those four facts out of it. driver/docs/am62p-display-cold.md has the table of
+what the TRM documents and what comes from here.
+
+Every file below is the file of that path at the commit above, byte for byte (the git
+blob ids match the PR branch's: dsi_cdns_ti.c 71c2c9a7, LICENSE 8f71f43f).
+
+files:
+c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08  LICENSE
+1d09395d1eba4a00be605b34c5720f1ba4851932747f391f04ce39bcb9e5ca9a  drivers/mipi_dsi/dsi_cdns_ti.c

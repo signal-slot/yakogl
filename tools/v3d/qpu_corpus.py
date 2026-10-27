@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+"""Collect the V3D 4.2 QPU instruction words of every program glsl2v3d.py
+compiles into one deduplicated fixture, for the round-trip gate of
+src/shaderc/online/v3d (roundtrip.rs).
+
+It runs glsl2v3d.py with --json and --keep (or reads the output of an earlier
+run with --from), takes the fs, vs and cs `code` arrays of every pair whose
+status is ok, and writes each distinct 64-bit word once, sorted, one per line.
+
+The header records what the words came from, and the Rust test pins its
+numbers, so a corpus that grows or shrinks fails the pin instead of widening
+the gate without anyone deciding it:
+
+  # pairs: <ok> ok of <formed> formed
+  # words: <n> with repeats (fs <a>, vs <b>, cs <c>)
+  # unique: <u>
+
+Nothing is skipped silently: an ok pair without an out.json, or with a stage
+that has no `code`, fails the run. The known positive of glsl2v3d.py
+(color_uv.vert + color_uv.frag, 12/31/22 instructions) is checked here too,
+so a changed naming of the --keep directories cannot make the words vanish.
+
+Usage: qpu_corpus.py [--out FILE] [--from DIR] [--jobs N]
+  --from DIR  reuse DIR/pairs.json and DIR/keep/ from an earlier run
+              (glsl2v3d.py --json DIR/pairs.json --keep DIR/keep)
+"""
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
+DEFAULT_OUT = os.path.join(HERE, "qpu_corpus.txt")
+STAGES = ("fs", "vs", "cs")
+
+# The same pair and counts as glsl2v3d.py's KNOWN_POSITIVE, restated so that
+# this script does not import the pairing machinery.
+KNOWN_POSITIVE = ("color_uv.vert", "color_uv.frag")
+KNOWN_POSITIVE_COUNTS = {"fs": 12, "vs": 31, "cs": 22}
+
+
+def keep_dir(keep, vs, fs):
+    """The directory glsl2v3d.py's run_pair() writes a pair's out.json to."""
+    return os.path.join(keep, re.sub(r"[^\w.]", "_", vs) + "__" + re.sub(r"[^\w.]", "_", fs))
+
+
+def build_id():
+    try:
+        return subprocess.run(["git", "-C", REPO, "describe", "--always", "--dirty"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--from", dest="src", help="directory with pairs.json and keep/")
+    ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
+    args = ap.parse_args()
+
+    src = args.src
+    if src is None:
+        src = tempfile.mkdtemp(prefix="qpu_corpus-")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "glsl2v3d.py"),
+                            "--jobs", str(args.jobs), "--json", os.path.join(src, "pairs.json"),
+                            "--keep", os.path.join(src, "keep")])
+        if r.returncode != 0:
+            raise SystemExit("qpu_corpus: glsl2v3d.py exited %d" % r.returncode)
+    with open(os.path.join(src, "pairs.json")) as f:
+        js = json.load(f)
+    pairs = js["pairs"]
+    keep = os.path.join(src, "keep")
+
+    ok = [p for p in pairs if p["status"] == "ok"]
+    if not ok:
+        raise SystemExit("qpu_corpus: FAIL: no pair compiled")
+    words = set()
+    per_stage = {st: 0 for st in STAGES}
+    known = None
+    for p in ok:
+        path = os.path.join(keep_dir(keep, p["vs"], p["fs"]), "out.json")
+        if not os.path.isfile(path):
+            raise SystemExit("qpu_corpus: FAIL: ok pair %s + %s has no %s" % (p["vs"], p["fs"], path))
+        with open(path) as f:
+            out = json.load(f)
+        counts = {}
+        for st in STAGES:
+            code = (out.get(st) or {}).get("code")
+            if not code:
+                raise SystemExit("qpu_corpus: FAIL: %s + %s: stage %s has no code"
+                                 % (p["vs"], p["fs"], st))
+            counts[st] = len(code)
+            per_stage[st] += len(code)
+            for w in code:
+                v = int(w, 16)
+                if not 0 <= v < 1 << 64:
+                    raise SystemExit("qpu_corpus: FAIL: %s is not a 64-bit word" % w)
+                words.add(v)
+        if (p["vs"], p["fs"]) == KNOWN_POSITIVE:
+            known = counts
+    if known != KNOWN_POSITIVE_COUNTS:
+        raise SystemExit("qpu_corpus: FAIL: known positive %s + %s read as %s (want %s)"
+                         % (KNOWN_POSITIVE + (known, KNOWN_POSITIVE_COUNTS)))
+
+    total = sum(per_stage.values())
+    build = build_id()  # before the file is truncated, or a tracked corpus reads -dirty
+    with open(args.out, "w") as f:
+        f.write("# V3D 4.2 QPU instruction words: every distinct word of the fs, vs and cs\n")
+        f.write("# of every program tools/v3d/glsl2v3d.py compiles, sorted. Generated by\n")
+        f.write("# tools/v3d/qpu_corpus.py; the round trip in src/shaderc/online/v3d pins\n")
+        f.write("# the three counts below.\n")
+        f.write("# build: %s\n" % build)
+        f.write("# v3d_shc: %s\n" % os.path.basename(js.get("v3d_shc", "unknown")))
+        f.write("# pairs: %d ok of %d formed\n" % (len(ok), len(pairs)))
+        f.write("# gl_test sites not read: %d (glsl2v3d.py KNOWN_UNRESOLVED)\n"
+                % len(js.get("known_unresolved_sites", [])))
+        f.write("# words: %d with repeats (fs %d, vs %d, cs %d)\n"
+                % (total, per_stage["fs"], per_stage["vs"], per_stage["cs"]))
+        f.write("# unique: %d\n" % len(words))
+        for v in sorted(words):
+            f.write("0x%016x\n" % v)
+    print("qpu_corpus: %d pairs ok of %d; %d words (fs %d, vs %d, cs %d); %d unique -> %s"
+          % (len(ok), len(pairs), total, per_stage["fs"], per_stage["vs"], per_stage["cs"],
+             len(words), args.out))
+
+
+if __name__ == "__main__":
+    main()

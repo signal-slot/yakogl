@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# An excerpt of a board trace of gl_test case 198 a2cconst (#1386,
+# alpha-to-coverage), for the frame builder's alpha-to-coverage proof
+# (src/mali/frame_msaa_tests.rs): the first draw of the second picture's
+# frame (a green triangle, alpha to coverage on, alpha masked, depth test
+# off, blending off), its command-stream words, and the first 0x200 bytes
+# of the buffer that holds its depth/stencil (+0x120) and blend (+0x140)
+# descriptors, as the dump shows it after that frame ran.
+#
+# Board: NanoPC-T6 (RK3588, Mali-G610, GPU_ID 0xa8670005), Armbian,
+# Linux 6.18.55-current-rockchip64, panthor 1.5.0, Mesa 25.0.7-2+deb13u1.
+# The program, 0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/cases.c (sha256
+# 59018946a3ecba87...), mode a2cconst, by the steps of
+# tools/mali/mesa-board-ref.sh (PAN_MESA_DEBUG=linear,nocrc,dump,trace,sync)
+# on Mesa's own 4x pbuffer (EGL_SAMPLES 4): "verdict case 198 a2cconst:
+# PASS" (0dce654a8:tools/mali/board-ref/2026-10-23-a2c/mesa).
+#   mesa-a2cconst.pandecode sha256 8eada567dd51780b391c8b792279c1a8e12da6b6fd676a4ff5a0f0e65067fcb4
+# The dump is three submits, each a command-stream listing and then the
+# memory after it ran: the depth clear's, picture 1's (its first draw at
+# line 1369), picture 2's (its first draw at 662507); every a2c draw of
+# either picture
+# names the same blend and depth/stencil addresses (d50, d52). Cut by
+# tools/mali/board_dump_cut.py --from 653903 mesa-a2cconst.pandecode
+# mesa-a2cconst 7fffffece000, the memory block then cut at row 0x1F0 (the
+# whole block is 2914 lines of the frame's 1024 draws).
+## mesa-a2cconst lines 662507-662541
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  a0 e2 ec ff ff 7f 4c 01    MOVE d76, #0x7FFFFFECE2A0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  87 e6 ec ff ff 7f 00 01    MOVE d0, #0x7FFFFFECE687
+  40 e2 ec ff 00 00 08 02    MOVE32 r8, #0xFFECE240
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d1 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD120
+  07 e7 ec ff ff 7f 04 01    MOVE d4, #0x7FFFFFECE707
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  60 d1 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD160
+  40 d1 ff ff ff 7f 12 01    MOVE d18, #0x7FFFFFFFD140
+  00 e1 ec ff ff 7f 18 01    MOVE d24, #0x7FFFFFECE100
+  00 e1 ec ff ff 7f 1e 01    MOVE d30, #0x7FFFFFECE100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  00 e3 ec ff ff 7f 28 01    MOVE d40, #0x7FFFFFECE300
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  10 00 00 00 00 00 30 02    MOVE32 r48, #0x10
+  41 e1 ec ff ff 7f 32 01    MOVE d50, #0x7FFFFFECE141
+  20 e1 ec ff ff 7f 34 01    MOVE d52, #0x7FFFFFECE120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ba 01 59 00 00 00 39 02    MOVE32 r57, #0x5901BA
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  03 00 00 00 00 00 21 02    MOVE32 r33, #0x3
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  08 00 04 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #40008
+## mesa-a2cconst lines 1286847-1286875
+Buffer: memory_7fffffece000 gpu 7fffffece000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F2 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000020  3F 00 3F 00 00 00 00 00 3F 00 3F 00 92 14 00 10 
+000030  00 00 01 00 00 00 00 00 00 E3 EC FF FF 7F 00 00 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  00 00 00 14 A9 B2 0A 88 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000A0  00 E0 FD FF FF 7F 00 00 80 00 00 00 00 20 00 00 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  00 00 00 00 1F 00 00 00 00 00 00 00 00 00 00 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000120  07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000130  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+000140  01 02 00 00 22 21 12 70 1A 00 00 00 00 20 0E 00 
+000150  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000160  15 01 C0 2F 02 00 00 00 00 00 00 00 00 00 00 00 
+000170  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000180  15 01 C0 2F 02 00 00 00 00 00 00 00 01 00 00 00 
+000190  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001A0  19 00 00 00 00 7F 0E 00 00 61 EF FF FF 7F 00 00 
+0001B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001C0  19 00 00 00 D0 7E 0E 00 30 61 EF FF FF 7F 00 00 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001E0  01 99 A9 06 00 00 00 00 00 00 00 00 00 00 00 00 
+0001F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 

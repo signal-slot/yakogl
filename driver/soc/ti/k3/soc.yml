@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+family:
+- name: ti_k3
+  series:
+  - name: am62px
+    socs:
+    - name: am62p54
+      cpuclusters:
+      - name: a53

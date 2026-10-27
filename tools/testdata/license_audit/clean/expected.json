@@ -1,0 +1,7 @@
+{
+  "missing-spdx": [],
+  "unknown-id": [],
+  "unused-license": [],
+  "allowlisted": ["LICENSES/Apache-2.0.txt"],
+  "undecided": ["up.patch"]
+}

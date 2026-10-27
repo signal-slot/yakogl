@@ -1,0 +1,37 @@
+{
+ "trace": "preload_zs.trace",
+ "secondary_offset": null,
+ "regions": {
+  "fs.fragment": {
+   "va": "7fffffffe180",
+   "found": true,
+   "words": [
+    "685480041200007d",
+    "0110c218001000c0",
+    "0891c300000000c0",
+    "0128408450420042",
+    "0110c318011000c0",
+    "0091c40000000043",
+    "0091c500000000c0",
+    "4128408490800044",
+    "407dbc0200ead07c",
+    "787ebc02037c4042"
+   ],
+   "text": [
+    "LD_VAR_IMM.slot0.v2.f32.center.store.discard @r0:r1, r61^, table:0x0, index:0x0",
+    "IADD_IMM.i32 r2, 0x0, #0x18001000",
+    "MOV.i32.wait0 r3, 0x0",
+    "TEX_SINGLE.slot1.skip.reserved.32.r.2d.zero @r2, @r0:r1, [r2^:r3^]",
+    "IADD_IMM.i32 r3, 0x0, #0x18011000",
+    "MOV.i32 r4, r3^",
+    "MOV.i32 r5, 0x0",
+    "TEX_SINGLE.slot2.skip.reserved.32.g.2d.zero.wait0126 @r0, @r0:r1, [r4^:r5^]",
+    "ATEST.wait0126 @r60, r60^, 0x3F800000, atest_datum.w0",
+    "ZS_EMIT.z.stencil.slot0.end @r60, r2^, r0^, r60^"
+   ],
+   "work_reg_count": null,
+   "preload": null,
+   "fau": null
+  }
+ }
+}

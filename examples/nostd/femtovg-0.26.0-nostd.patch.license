@@ -1,0 +1,4 @@
+SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: 2021 femtovg contributors
+A patch to femtovg 0.26.0 (crates.io), under femtovg's licence (NOTICE 8).

@@ -1,0 +1,7 @@
+15:00:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+15:00:01 [build] use-vbo=false:yakogl/v3d: binner pool after job 1: overflow blocks 0 of 2
+15:00:02  Set up failed
+15:00:03 [build] use-vbo=false:yakogl/v3d: binner pool after job 1: overflow blocks 0 of 2
+15:00:10  FPS: 157 FrameTime: 6.380 ms
+15:00:10 glmark2-frame: [build] use-vbo=false: 1568 frames; us per frame: gl 2733, swap 55, show 3589, other 2, frame 6379 (end waited for in 1 of 1568)
+15:00:10 glmark2: score 157

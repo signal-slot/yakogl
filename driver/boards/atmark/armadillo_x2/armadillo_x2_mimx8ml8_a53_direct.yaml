@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+identifier: armadillo_x2/mimx8ml8/a53/direct
+name: Atmark Techno Armadillo-X2 A53 (direct boot, BL33)
+type: mcu
+arch: arm64
+toolchain:
+  - zephyr
+  - cross-compile
+ram: 262144
+supported:
+  - uart
+vendor: atmark

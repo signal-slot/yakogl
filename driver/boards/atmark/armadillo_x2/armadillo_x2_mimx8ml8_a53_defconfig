@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The same A53 image type as the Verdin's: an AArch64 Image kexec'd out of
+# Linux to 0x60000000, SMP, identity-mapped.
+CONFIG_XIP=n
+CONFIG_SERIAL=y
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y
+CONFIG_UART_INTERRUPT_DRIVEN=y
+CONFIG_CLOCK_CONTROL=y
+
+CONFIG_AARCH64_IMAGE_HEADER=y
+CONFIG_ARMV8_A_NS=y
+CONFIG_ARM64_VA_BITS_36=y
+CONFIG_ARM64_PA_BITS_36=y
+
+CONFIG_CACHE_MANAGEMENT=y
+CONFIG_DCACHE_LINE_SIZE_DETECT=y
+CONFIG_ICACHE_LINE_SIZE_DETECT=y
+
+CONFIG_SMP=y
+CONFIG_PM_CPU_OPS=y
+CONFIG_MP_MAX_NUM_CPUS=4
+
+# Kexec'd out of Linux, which leaves the GIC distributor enabled with its
+# SPIs routed: re-initialise it rather than share it (the Verdin A53 board's
+# defconfig records the measurement that led to this).
+CONFIG_GIC_SAFE_CONFIG=n

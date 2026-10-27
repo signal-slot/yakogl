@@ -1,0 +1,14 @@
+{
+  "missing-spdx": ["nohdr.rs"],
+  "unknown-id": ["malformed.c:Apache-2.0 MIT", "unknown.c:Foo-1.0"],
+  "unused-license": ["BSD-3-Clause", "GPL-2.0-only"],
+  "third-party-mismatch": ["third_party/up/bsd.h", "third_party/up/spdx_bad.h"],
+  "third-party-unlabelled": ["third_party/up/bare.h"],
+  "allowlisted": ["LICENSES/Apache-2.0.txt", "LICENSES/BSD-3-Clause.txt", "LICENSES/GPL-2.0-only.txt", "LICENSES/MIT.txt", "data.json", "table.dat", "third_party/up/UPSTREAM"],
+  "generated": {
+    "gen_bad.rs": ["tools/gen_mit.py", "MIT"],
+    "gen_ok.rs": ["tools/gen.py", "Apache-2.0"],
+    "out/gen_up.h": ["upstream up", "MIT"]
+  },
+  "generated-mismatch": ["gen_bad.rs", "out/gen_up.h"]
+}

@@ -1,0 +1,6 @@
+gm2: scene-end terrain: ok frames=11 draws=100 refused=0 gl_errors=0 incomplete_draws=0
+gm2: gl-time glGenerateMipmap setup=1,1000000,1000000 frames=50,500000000,500000000 teardown=0,0,0
+gm2: gl-time glDrawArrays setup=1,1000000,1000000 frames=100,100000000,100000000 teardown=0,0,0
+gm2: gl-time glUniform1f setup=1,1000,1000 frames=200,10000000,10000000 teardown=0,0,0
+gm2: gl-time eglSwapBuffers setup=1,1000,1000 frames=10,20000000,20000000 teardown=0,0,0
+gm2: gl-frames swaps=11 counted=10 wall_ns=1000000000 cpu_ns=900000000 gl_wall_ns=630000000

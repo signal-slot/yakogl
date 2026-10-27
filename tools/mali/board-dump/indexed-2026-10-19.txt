@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# An excerpt of five board traces, one indexed GLES2 draw each, on the
+# NanoPC-T6, for the frame builder's indexed-draw proof
+# (src/mali/frame_indexed_tests.rs): the command-stream words from the
+# frame's resource request to its one RUN_IDVS.
+#
+# Board: NanoPC-T6 (RK3588, Mali-G610, GPU_ID 0xa8670005), Armbian,
+# Linux 6.18.55-current-rockchip64, panthor 1.5.0, Mesa 25.0.7-2+deb13u1.
+# The program, 0dce654a8:tools/mali/board-ref/2026-10-19-indexed/idx.c: a 64x64
+# RGBA8 FBO cleared blue, one red glDrawElements in the mode named, by
+# tools/mali/mesa-board-ref.sh (PAN_MESA_DEBUG=linear,nocrc,dump,trace,sync).
+# Each block is headed by its file (mesa-<mode>) and its line range in it.
+#   mesa-u16_client.pandecode sha256 19798539235fbb0132a64746d1454b486281558cf5f0990cf1e3b374638362aa
+#   mesa-u16_ibo.pandecode sha256 5da0ecfd3bb3d11cff40bbb2e679f1cc30b963166a78bbde034073c2d21a971d
+#   mesa-u16_offset.pandecode sha256 7e6d031acd1859a06ad58ecaa0a6309ce231b678bf6beb4816b7c581415f89d6
+#   mesa-strip_ibo.pandecode sha256 7a103863aa6cef4137bb2f01bd54fd0513a9a74ec7a412c627f0111779ad88a8
+#   mesa-u8_ibo.pandecode sha256 432413846fa81337ed245ea2c2e3b72f1b7ccd450ea990a969a3fb689e49cb38
+## mesa-u16_client lines 46-80
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  80 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4280
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  87 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4687
+  20 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4220
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  07 47 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD4707
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  00 43 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD4300
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  61 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4161
+  40 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4140
+  20 41 fd ff ff 7f 36 01    MOVE d54, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  0c 00 00 00 00 00 27 02    MOVE32 r39, #0xC
+  08 02 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #208
+## mesa-u16_ibo lines 46-80
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 b0 fc ff ff 7f 36 01    MOVE d54, #0x7FFFFFFCB000
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  0c 00 00 00 00 00 27 02    MOVE32 r39, #0xC
+  08 02 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #208
+## mesa-u16_offset lines 46-80
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  06 b0 fc ff ff 7f 36 01    MOVE d54, #0x7FFFFFFCB006
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  0c 00 00 00 00 00 27 02    MOVE32 r39, #0xC
+  08 02 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #208
+## mesa-strip_ibo lines 46-80
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 b0 fc ff ff 7f 36 01    MOVE d54, #0x7FFFFFFCB000
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  04 00 00 00 00 00 21 02    MOVE32 r33, #0x4
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  08 00 00 00 00 00 27 02    MOVE32 r39, #0x8
+  0a 02 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #20a
+## mesa-u8_ibo lines 46-80
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  60 42 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD4260
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  47 46 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD4647
+  00 42 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD4200
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  c7 46 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD46C7
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  40 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD040
+  00 41 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD4100
+  00 41 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD4100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  c0 42 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD42C0
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 b0 fc ff ff 7f 36 01    MOVE d54, #0x7FFFFFFCB000
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  06 00 00 00 00 00 27 02    MOVE32 r39, #0x6
+  08 01 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #108

@@ -1,0 +1,227 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The board layer (include/yakogl_board.h; driver/docs/one-method.md,
+# section 2): one implementation per board, chosen by the SoC.
+
+menuconfig YAKOGL_BOARD
+	bool "YakoGL board layer (yakogl_board.h)"
+	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711
+	depends on ARM64
+	help
+	  The window, the screen, the result record, the watchdog and the end
+	  of a run, the same calls on the Verdin AM62P, the Verdin iMX8M Plus
+	  and the Raspberry Pi 4. A sample includes yakogl_board.h and EGL/GL,
+	  nothing else from the board.
+
+if YAKOGL_BOARD
+
+config YAKOGL_BOARD_AM62P
+	def_bool SOC_SERIES_AM62PX_A53
+	select REBOOT
+	imply YAKOGL_AM62P_RTI_SELF_ARM
+	help
+	  Window: a static buffer in the image; screen: the SafeUI DSS
+	  application plane (am62p/sample_glue.c); record: the UART line;
+	  watchdog: the MAIN RTI0 self-arm (am62p/rti_arm.c) for
+	  YAKOGL_AM62P_WDT_SECONDS (= YAKOGL_BOARD_LIFETIME_S by default).
+
+config YAKOGL_BOARD_IMX8MP
+	def_bool SOC_MIMX8ML8_A53
+	select REBOOT
+	select YAKOGL_GC_BOARD
+	select GC_COMMON_RESULT_SNVS
+	select GC_BOARD_WDOG_SELF_ARM
+	help
+	  Window: the GPU carve-out; screen: the panel (imx8mp_display_on);
+	  record: the SNVS LPGPR and the panel console line; watchdog: the
+	  WDOG1 self-arm (imx8mp/gc_wdog_arm.c) for GC_BOARD_WDOG_SECONDS
+	  (= YAKOGL_BOARD_LIFETIME_S by default).
+
+config YAKOGL_BOARD_RPI4
+	def_bool SOC_BCM2711
+	help
+	  Window: a view into the firmware framebuffer with
+	  YAKOGL_BOARD_SCANOUT_VIEW when it fits (board_show() copies
+	  nothing, or pans to a half), else a static buffer in the image,
+	  copied into the framebuffer by board_show(); screen: the HDMI framebuffer from the mailbox, the
+	  console (fbcon) beside the window; record: the UART
+	  line and the record screen; watchdog: the PM watchdog
+	  (rpi4/rpi_wdog.c) fed until YAKOGL_BOARD_LIFETIME_S.
+
+config YAKOGL_BOARD_WINDOW_MAX_KB
+	int "KiB of the static window buffer (AM62P, Pi 4)"
+	default 4800
+	depends on YAKOGL_BOARD_AM62P || YAKOGL_BOARD_RPI4
+	help
+	  The largest window board_window() can give on the boards whose
+	  window is a buffer in the image: 4800 KiB holds 1280x960, or two
+	  1024x600 halves (the AM62P cluster). On the Pi 4 a window that is
+	  a view into the framebuffer (YAKOGL_BOARD_SCANOUT_VIEW) does not
+	  use this buffer.
+
+config YAKOGL_BOARD_RPI4_FB_WIDTH
+	int "Pi 4: framebuffer width asked of the firmware"
+	default 1280
+	depends on YAKOGL_BOARD_RPI4
+
+config YAKOGL_BOARD_RPI4_FB_HEIGHT
+	int "Pi 4: framebuffer height asked of the firmware"
+	default 720
+	depends on YAKOGL_BOARD_RPI4
+
+config YAKOGL_BOARD_WINDOW_RGB565
+	bool "The window is RGB565 (2 bytes a pixel) instead of XRGB8888 (measurement)"
+	default n
+	depends on YAKOGL_BOARD_AM62P
+	help
+	  board_window() hands out a GLES_NATIVE_FORMAT_RGB565 window with a
+	  stride of w * 2; the client picks the 565 EGL config for it (glmark2:
+	  --visual-config red=5:green=6:blue=5:alpha=0). Half the bytes the
+	  PBE writes at the same tile count: the measurement that splits the
+	  fragment phase's per-tile time into store and walk
+	  (docs/notes/pvr-fence-wait.md). board_show() of it
+	  returns -ENOTSUP: the DSS path is set up for 32-bit pixels, so the
+	  window is rendered but not shown. AM62P only: the i.MX8MP and Pi 4
+	  board layers hard-code XRGB8888 too, and their board_show() copies
+	  32-bit pixels into the screen; the symbol extends to them when a 565
+	  copy exists.
+config YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT
+	int "Pi 4: the framebuffer's rows in memory (0: the screen's)"
+	default 0
+	depends on YAKOGL_BOARD_RPI4
+	help
+	  Above YAKOGL_BOARD_RPI4_FB_HEIGHT, the firmware is asked for a
+	  framebuffer that tall (two screens, 1440 for 1920x720: the grant
+	  v3d_fb_flip measured). With YAKOGL_BOARD_SCANOUT_VIEW a window may
+	  then be a view of up to this many rows (a double buffer: two
+	  screen-sized halves), and board_show() of the half at row y pans
+	  the screen to y (SET_VIRTUAL_OFFSET, no copy). A refused grant is
+	  printed and falls back to a screen-sized framebuffer.
+
+config YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS
+	int "i.MX8MP: screen buffers a copied window is shown through (1: every show waits for VSYNC)"
+	default 1
+	range 1 3
+	depends on YAKOGL_BOARD_IMX8MP
+	help
+	  A window that is neither the panel's size nor a view (glmark2's
+	  800x600, the 1024x600 Slint window without YAKOGL_BOARD_SCANOUT_VIEW)
+	  is copied into a panel-sized buffer of the GPU carve-out (4 MiB at
+	  1280x800) and the LCDIF is pointed at it. That latch takes effect at
+	  the panel's next VSYNC, and the display driver waits for it; the
+	  board layer (imx8mp/board_imx8mp.c) does the wait on a thread of its
+	  own. With 1 (the default) the copy goes into the one buffer on the
+	  panel and every show waits for its latch: the timing the board has
+	  run with (docs/notes/imx8mp-frame-floor.md), one panel period under
+	  every frame whatever the swap interval. With 3 (one on the panel, one
+	  on its way, one to copy into) board_show() returns once the copy is
+	  done: frames run at their own cost, and a frame overtaken before its
+	  latch is dropped. With 2 a frame faster than the panel waits for the
+	  latch in flight: paced at the panel's rate (58.76 Hz). 2 and 3 are
+	  the opt-in arms of that note's board recipe, not the default, until a
+	  board run has checked the picture: #793 let a show return without the
+	  wait and glmark2 drew wrong (#923, reverted); why is not confirmed,
+	  and that a copy into a buffer the LCDIF does not scan keeps the
+	  picture whole is the hypothesis the run checks. With 2 or 3, an
+	  application at swap interval 1 (Slint without the view) is paced by
+	  the swap's wait for the shown frame's latch, at the panel's rate. A
+	  window shown in place (the panel's size, the cluster's halves, a
+	  view) waits for its latch whatever the value, and its swap then does
+	  not wait a second time.
+
+config YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
+	bool "i.MX8MP: a passed run ends with the display chain's state (kind DISPLAY)"
+	default n
+	depends on YAKOGL_BOARD_IMX8MP && YAKOGL_DRV_DISPLAY_IMX8MP && YAKOGL_DRV_GPU_VIVANTE
+	help
+	  A diagnostic for issue #23 (the panel showed a picture the records
+	  could not see). When a run passes and its window is on the panel,
+	  board_finish() waits about a second and then writes a DISPLAY record
+	  (driver/rust/src/board/record.rs): the pixel clock and the DSI lane
+	  rate as the driver has them, the SN65DSI84's IRQ_STAT (0xE5) then
+	  and at the start, the health bits, and the LCDIF's format and pitch.
+	  It is the last record, so it replaces the run's verdict in the SNVS;
+	  the verdict line is still printed. A failed run keeps its verdict.
+
+config YAKOGL_BOARD_SCANOUT_VIEW
+	bool "A window smaller than the screen is a view into the scan-out buffer"
+	default n
+	help
+	  board_window() hands out a view at the scan-out buffer's (0,0) with
+	  its pitch instead of a buffer of its own, and board_show() of it
+	  copies nothing (yakogl_board.h): on the Pi 4 into the firmware
+	  framebuffer (with YAKOGL_BOARD_RPI4_FB_VIRTUAL_HEIGHT also a view
+	  taller than the screen, shown by a pan), on the i.MX8MP into a
+	  panel-sized carve-out buffer. The window's stride is then wider
+	  than w * 4 when the window is narrower than the screen, which
+	  YakoGL takes for a window (src/gl/egl.rs native_window_pitch) and a
+	  sample must hand to EGL and walk when it reads the window back.
+	  Off until all three boards have passed with it; the copy path
+	  stays, and every copy is counted (the APP record's
+	  YK_RECORD_APP_SHOWN_BY_COPY).
+
+config YAKOGL_BOARD_LIFETIME_S
+	int "Seconds after boot the watchdog is fed at most"
+	default 300
+	range 30 3600
+	help
+	  The bound of every image: after it nothing feeds the watchdog and
+	  the board resets within one watchdog period (60 s on the Verdins,
+	  10 s on the Pi 4), also when the sample hangs, faults or wedges the
+	  GPU. It must cover the run and the hold (YAKOGL_BOARD_HOLD_S).
+
+config YAKOGL_BOARD_ALIVE_S
+	int "Seconds between two board_watchdog_feed() calls at most"
+	default 20
+	range 1 600
+	help
+	  Once a sample has called board_watchdog_feed(), a longer gap stops
+	  the feeding, so a stuck loop is reset long before the lifetime.
+
+config YAKOGL_BOARD_HOLD_S
+	int "Seconds board_finish() holds the picture after a pass"
+	default 60
+	range 0 3000
+
+config YAKOGL_BOARD_HOLD_FAIL_S
+	int "Seconds board_finish() holds the picture after a fail"
+	default 40
+	range 0 3000
+
+config YAKOGL_BOARD_RECORD_SCREEN
+	bool "Pi 4: freeze the console ring on the framebuffer at the end"
+	default y
+	depends on YAKOGL_BOARD_RPI4
+	help
+	  The last lines of the console, the last yk-record line at the
+	  bottom, drawn over the framebuffer when board_finish() runs, and
+	  kept until the watchdog resets the board: a camera reads the result
+	  of a run whose UART was not captured.
+
+config YAKOGL_BOARD_ANIMATE_S
+	int "Seconds a sample animates after its checked frames"
+	default 10
+	range 0 600
+	help
+	  Read by the samples (the Slint demo), not by the board layer.
+
+endif # YAKOGL_BOARD
+
+config YAKOGL_BOARD_RECORD_RUST
+	bool
+	default y if YAKOGL_BOARD || YAKOGL_GC_BOARD
+	help
+	  The record writer's rules come from the yakogl-drivers crate
+	  (driver/rust/src/board/record.rs): the crate is built and linked.
+	  The i.MX8MP samples' end (gc_sample.c) asks the same crate for its
+	  hold (driver/rust/src/board/imx8mp.rs), so every YAKOGL_GC_BOARD
+	  image links it too.
+
+# The per-board options the board layer is built from. Their old names stay
+# until the last sample has moved (driver/docs/one-method.md, section 2).
+rsource "am62p/Kconfig"
+rsource "imx8mp/Kconfig"
+
+# The NanoPC-T6 (RK3588) glue: on every image built for the board, outside the
+# board layer above (Z1 has no screen or record yet; nanopc_t6/Kconfig).
+rsource "nanopc_t6/Kconfig"

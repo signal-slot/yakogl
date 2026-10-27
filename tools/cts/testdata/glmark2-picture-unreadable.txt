@@ -1,0 +1,11 @@
+15:24:00 glmark2-mem: entry 21 [jellyfish] <default>: before setup: osal mem: carve-out used 1, high-water 2, of 3 bytes
+15:24:05 [jellyfish] <default>: FPS: 20 FrameTime: 50.000 ms
+15:24:05 glmark2-picture: [jellyfish] <default>: 800x600; probes c 4a6f9cff, tl 1c2b4aff, tr 1d2c4bff, bl 0e1a30ff, br 0f1b31ff; crc16 a1b2, crc16q c3d4; mean 40 62 96; black no
+15:24:06 glmark2-mem: entry 22 [terrain] <default>: before setup: osal mem: carve-out used 1, high-water 2, of 3 bytes
+15:24:11 [terrain] <default>: FPS: 20 FrameTime: 50.000 ms
+15:24:11 glmark2-picture: [terrain] <default>: 800x600; probes c 7a9ec0ff, tl 5f8fd0ff, tr 5e8ed0ff, bl 3c5a2aff, br 3b592bff; crc16 1234, crc16q 5678; mean 90 120 100; black nox
+15:24:12 glmark2-mem: entry 23 [shadow] <default>: before setup: osal mem: carve-out used 1, high-water 2, of 3 bytes
+15:24:17 [shadow] <default>: FPS: 20 FrameTime: 50.000 ms
+15:24:17 glmark2-picture: [shadow] <default>: absent (the readback failed)
+15:24:18 glmark2: score 100: 3 scenes ran, 0 failed, 0 unsupported (3 list entries); window 800x600, shown yes, GPU resets 0
+15:24:18 glmark2: PASS

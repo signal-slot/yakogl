@@ -1,0 +1,137 @@
+{
+ "trace": "mesa-varyorder.pandecode",
+ "secondary_offset": 128,
+ "regions": {
+  "vs.position": {
+   "va": "7fffffffc000",
+   "found": true,
+   "words": [
+    "0866800832017d7c",
+    "009cc30000000043",
+    "0110c4c7000000c0",
+    "00a4c30000034443",
+    "0110c447000000c0",
+    "00a4c30000024443",
+    "00b2c00400c00340",
+    "00b2c10400c00341",
+    "00b2c20400c00342",
+    "00b2c00000818040",
+    "00b2c10000838241",
+    "00b2c20000858442",
+    "105e840440000d7b",
+    "78614008b9000044"
+   ],
+   "text": [
+    "LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, ^r60, ^r61, index:0x0, table:0x1",
+    "FRCP.f32 r3, ^r3",
+    "IADD_IMM.i32 r4, 0x0, #0xC7000000",
+    "FMAX.f32 r3, ^r3, ^r4",
+    "IADD_IMM.i32 r4, 0x0, #0x47000000",
+    "FMIN.f32 r3, ^r3, ^r4",
+    "FMA.f32 r0, ^r0, r3, 0x0.neg",
+    "FMA.f32 r1, ^r1, r3, 0x0.neg",
+    "FMA.f32 r2, ^r2, r3, 0x0.neg",
+    "FMA.f32 r0, ^r0, u0, u1",
+    "FMA.f32 r1, ^r1, u2, u3",
+    "FMA.f32 r2, ^r2, u4, u5",
+    "LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0",
+    "STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3800000000000000",
+   "fau": [
+    "42000000",
+    "42000000",
+    "c2000000",
+    "42000000",
+    "3f000000",
+    "3f000000"
+   ]
+  },
+  "vs.varying": {
+   "va": "7fffffffc080",
+   "found": true,
+   "words": [
+    "0066800412213d3c",
+    "185e820440000d7b",
+    "00614004aa002002",
+    "0066840832313d3c",
+    "0091c00000000002",
+    "2891c10000000003",
+    "006144087a001040",
+    "00668408b2117d7c",
+    "0091c00000000042",
+    "3091c10000000043",
+    "786144083a000040"
+   ],
+   "text": [
+    "LD_ATTR_IMM.v2.f32.slot0 @r0:r1, r60, r61, index:0x2, table:0x1",
+    "LEA_BUF_IMM.slot1.wait01 @r2:r3, ^r59, table:0xD, index:0x0",
+    "STORE.i64.estream.slot2 @r0:r1, r2, offset:32",
+    "LD_ATTR_IMM.v4.f32.slot0 @r4:r5:r6:r7, r60, r61, index:0x3, table:0x1",
+    "MOV.i32 r0, r2",
+    "MOV.i32.wait02 r1, r3",
+    "STORE.i128.estream.slot1 @r4:r5:r6:r7, ^r0, offset:16",
+    "LD_ATTR_IMM.v4.f32.slot2 @r4:r5:r6:r7, ^r60, ^r61, index:0x1, table:0x1",
+    "MOV.i32 r0, ^r2",
+    "MOV.i32.wait12 r1, ^r3",
+    "STORE.i128.estream.slot0.end @r4:r5:r6:r7, ^r0, offset:0"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3800000000000000",
+   "fau": [
+    "42000000",
+    "42000000",
+    "c2000000",
+    "42000000",
+    "3f000000",
+    "3f000000"
+   ]
+  },
+  "fs.fragment": {
+   "va": "7fffffffc100",
+   "found": true,
+   "words": [
+    "085c80083210003d",
+    "105c84045220003d",
+    "205c8608b200007d",
+    "68b2c00000404446",
+    "00b2c10000414547",
+    "00a4c20000004248",
+    "00a4c30000004349",
+    "00a5c00000044040",
+    "00a5c10000044141",
+    "00a5c20000044242",
+    "00a5c30000044343",
+    "00a1c00000054140",
+    "40a1c10000054342",
+    "487dbc0208ea017c",
+    "787f4004333c00f0",
+    "0110f000000000c0",
+    "002fc1100000f1c0"
+   ],
+   "text": [
+    "LD_VAR_BUF_IMM.f32.slot0.v4.src_f32.center.store.wait0 @r0:r1:r2:r3, r61, index:0x10",
+    "LD_VAR_BUF_IMM.f32.slot1.v2.src_f32.center.store.wait1 @r4:r5, r61, index:0x20",
+    "LD_VAR_BUF_IMM.f32.slot2.v4.src_f32.center.store.wait2 @r6:r7:r8:r9, ^r61, index:0x0",
+    "FMA.f32.discard r0, ^r6, ^r4, ^r0",
+    "FMA.f32 r1, ^r7, ^r5, ^r1",
+    "FADD.f32 r2, ^r8, ^r2",
+    "FADD.f32 r3, ^r9, ^r3",
+    "V2F32_TO_V2F16 r0, ^r0, ^r0",
+    "V2F32_TO_V2F16 r1, ^r1, ^r1",
+    "V2F32_TO_V2F16 r2, ^r2, ^r2",
+    "V2F32_TO_V2F16 r3, ^r3, ^r3",
+    "MKVEC.v2i16 r0, ^r0.h00, ^r1.h00",
+    "MKVEC.v2i16.wait0126 r1, ^r2.h00, ^r3.h00",
+    "ATEST.wait @r60, ^r60, r1.h1, atest_datum.w0",
+    "BLEND.slot0.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0",
+    "IADD_IMM.i32 r48, 0x0, #0x0",
+    "BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3000000000000000",
+   "fau": null
+  }
+ }
+}

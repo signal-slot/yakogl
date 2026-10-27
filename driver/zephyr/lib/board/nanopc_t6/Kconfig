@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The NanoPC-T6 board glue (nanopc_t6.c over driver/rust's ip::dw_wdt,
+# soc::rk3588 and aarch64): every image built for the board has it, so no
+# image can run without its bounded watchdog.
+
+config YAKOGL_NANOPC_T6
+	def_bool BOARD_NANOPC_T6
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  The early banner (raw T6:A/A1/A2/A3 lines on uart2 before the
+	  console, T6:X for an exception taken to EL2) and HCR_EL2 at entry;
+	  WDT0 (the DesignWare APB watchdog at 0xfeaf0000) armed at
+	  PRE_KERNEL_1 and fed from a timer for a bounded time; the GICv3 CPU
+	  interface put back into its reset EOI mode at EARLY; and
+	  t6_reset_to_linux() (nanopc_t6.h), the end of a run: PSCI
+	  SYSTEM_RESET, with WDT0 behind it. YAKOGL_DRV_DISPLAY_RUST is the switch
+	  that builds the yakogl-drivers crate (driver/zephyr/CMakeLists.txt,
+	  feature rk3588).
+
+if YAKOGL_NANOPC_T6
+
+config YAKOGL_NANOPC_T6_VHE_EXIT
+	bool "Write HCR_EL2 := RW at entry (leave Linux's VHE state)"
+	default y
+	help
+	  Armbian's Linux runs at EL2 with VHE, and its kexec enters the
+	  image with HCR_EL2.E2H (and FMO) still set. Zephyr's
+	  z_arm64_el2_init keeps both, writes CNTHCTL_EL2 in the E2H=0
+	  layout, and EL1's first physical-timer write in z_arm64_el1_init
+	  then traps to EL2, where nothing of the image's is: the first jump
+	  on 2026-10-19 printed nothing (driver/rust/src/aarch64.rs). With
+	  this, the image's first code writes HCR_EL2 = RW only, as Linux's
+	  own entry writes a whole HCR_EL2. n keeps Linux's value: the A/B
+	  arm that shows the failure (T6:A with E2H set, then T6:X).
+
+config YAKOGL_NANOPC_T6_WDT_TOP
+	int "WDT0 period: TOP (period = 2^(16 + TOP) / 24 MHz)"
+	default 13
+	range 11 15
+	help
+	  11: 5.6 s, 12: 11.2 s, 13: 22.4 s, 14: 44.7 s, 15: 89.5 s. The
+	  board resets at most one period after the feeding stops. Below 11
+	  a missed tick of the 1 s feeder would already reset the board.
+
+config YAKOGL_NANOPC_T6_LIFETIME_S
+	int "Seconds of uptime the watchdog is fed at most"
+	default 60
+	range 10 3600
+	help
+	  After this nothing feeds WDT0 and the board resets within one
+	  period, also when the image hangs or faults. The run must end
+	  before it (t6_reset_to_linux()).
+
+config YAKOGL_NANOPC_T6_ALIVE_S
+	int "Seconds between two t6_watchdog_feed() calls at most"
+	default 5
+	range 1 600
+	help
+	  Once the sample has called t6_watchdog_feed(), a longer gap stops
+	  the feeding, so a stuck sample is reset long before the lifetime.
+
+config YAKOGL_NANOPC_T6_WDT_PROOF
+	bool "Proof: arm WDT0 and never feed it"
+	help
+	  The measurement of the reset path itself: WDT0 is armed and not
+	  fed, and t6_reset_to_linux() waits for it instead of calling PSCI.
+	  A software backstop (PSCI SYSTEM_RESET) fires 10 s after one period
+	  and prints "t6: proof FAILED" first.
+
+endif # YAKOGL_NANOPC_T6

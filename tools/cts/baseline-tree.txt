@@ -1,0 +1,26 @@
+# The dEQP-GLES2 baseline: the five groups that say whether a board is worth
+# measuring further, one image (one CONFIG_DEQP_CASE) per group, on every board.
+# The form of pi4-full-tree.txt: each filter line is preceded by
+# "# image <LABEL>: <what it selects>", and '#' and blank lines are skipped, so
+# am62p-deqp-images.sh, pi4-deqp-images.sh and imx8mp-deqp-build.sh --table all
+# read it, and tools/board.sh tree names each row by its label (the i.MX8MP's
+# single table image runs the rows by selector, e00..e04, in this order).
+# Run it with tools/cts/cts-baseline.sh <board> build|run (tools/cts/README.md,
+# section 2). Mustpass counts per group (gles2-mustpass.txt):
+#   info 6: the GL strings; no draw, so it separates a broken harness from a
+#     broken driver
+#   prerequisite 3: a clear, a read-back and a state reset
+#   negative_api 246: error semantics only, no rendering
+#   state_query 396: every glGet* against its default and a value just set
+#   shaders.functions 256: the first group that compiles and runs shaders
+#     dEQP invents (in the image: the online compiler or the offline table)
+# image BI: info (6)
+dEQP-GLES2.info.*
+# image BP: functional.prerequisite (3)
+dEQP-GLES2.functional.prerequisite.*
+# image BN: functional.negative_api (246)
+dEQP-GLES2.functional.negative_api.*
+# image BQ: functional.state_query (396)
+dEQP-GLES2.functional.state_query.*
+# image BF: functional.shaders.functions (256)
+dEQP-GLES2.functional.shaders.functions.*

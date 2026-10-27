@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Additional TI K3 series provided by this module (family symbols live in Zephyr).
+rsource "*/Kconfig.soc"

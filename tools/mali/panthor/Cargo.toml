@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# yakogl-mali-panthor: the development OSAL of the Mali-G610 port, over
+# panthor's uAPI on the NanoPC-T6 under Armbian (driver/docs/nanopc-t6-mali.md,
+# milestones L1-L3). A std host/board tool; it never ships in an image.
+[package]
+name = "yakogl-mali-panthor"
+description = "Development OSAL for the Mali-G610 (panthor uAPI, Linux only)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND MIT"
+publish.workspace = true
+
+[[bin]]
+name = "panthor-hello"
+path = "src/bin/panthor-hello.rs"
+
+[[bin]]
+name = "panthor-replay"
+path = "src/bin/panthor-replay.rs"
+
+[[bin]]
+name = "panthor-frame"
+path = "src/bin/panthor-frame.rs"
+
+[[bin]]
+name = "panthor-gl"
+path = "src/bin/panthor-gl.rs"
+
+[[bin]]
+name = "panthor-gltest"
+path = "src/bin/panthor-gltest.rs"
+
+[dependencies]
+libc = "0.2"
+# The frame builder (src/mali/frame.rs) and its packers, in the image
+# configuration of the Mali build: the in-process compiler, no table, no OSAL
+# (this crate is the OSAL) and no host-test. Every gate row that builds this
+# crate names it with `-p`, so these features never unify with another GPU's.
+yakogl = { path = "../../..", default-features = false, features = ["gpu-mali", "shaderc-online", "no-shader-table"] }
+# The gl_test runner, gl_test.c's walker (gl_test_run calls it): what
+# panthor-gltest's gl_test.o links against, beside the library.
+yakogl-gltest-runner = { path = "../../../driver/tools/pvrlab/runner" }

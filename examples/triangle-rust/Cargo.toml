@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# triangle-rust's staticlib: the whole example (main, EGL, GL, the board
+# layer's calls) over the check crate (../triangle/check). A workspace
+# member, built as every Rust archive of an image is
+# (yakogl_add_rust_archive, CMakeLists.txt): the workspace's release profile
+# (panic=abort, LTO: the crate is one object).
+[package]
+name = "yakogl-example-triangle-rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+
+[lib]
+name = "triangle_rust"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+triangle-check = { package = "yakogl-triangle-check", path = "../triangle/check", features = ["printk"] }

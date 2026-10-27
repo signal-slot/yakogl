@@ -1,0 +1,5 @@
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: 2018 Rob Clark
+SPDX-FileCopyrightText: 2019 Collabora
+A patch to Mesa src/panfrost/meson.build, under Mesa's licence (NOTICE 1f).

@@ -1,0 +1,19 @@
+# The whole dEQP-GLES2 tree for the Verdin AM62P in 17 deqp images (CONFIG_DEQP_CASE per line).
+# 1-7 shaders, 8-10 texture, 11-12 fragment_ops (+ color_clear), 13-17 the other groups; 17 holds info and the small groups.
+dEQP-GLES2.functional.shaders.struct.*,dEQP-GLES2.functional.shaders.keywords.*,dEQP-GLES2.functional.shaders.scoping.*,dEQP-GLES2.functional.shaders.linkage.*,dEQP-GLES2.functional.shaders.conditionals.*,dEQP-GLES2.functional.shaders.return.*,dEQP-GLES2.functional.shaders.qualification_order.*,dEQP-GLES2.functional.shaders.reserved_operators.*,dEQP-GLES2.functional.shaders.discard.*,dEQP-GLES2.functional.shaders.invariance.*,dEQP-GLES2.functional.shaders.builtin_variable.*,dEQP-GLES2.functional.shaders.texture_functions.*,dEQP-GLES2.functional.shaders.declarations.*,dEQP-GLES2.functional.shaders.function.*,dEQP-GLES2.functional.shaders.algorithm.*,dEQP-GLES2.functional.shaders.fragdata.*,dEQP-GLES2.functional.shaders.misc.*,dEQP-GLES2.functional.shaders.functions.*,dEQP-GLES2.functional.shaders.constant_expressions.*,dEQP-GLES2.functional.shaders.constants.*
+dEQP-GLES2.functional.shaders.matrix.*,dEQP-GLES2.functional.shaders.invalid_implicit_conversions.*
+dEQP-GLES2.functional.shaders.swizzles.*,dEQP-GLES2.functional.shaders.conversions.*
+dEQP-GLES2.functional.shaders.indexing.*,dEQP-GLES2.functional.shaders.preprocessor.*
+dEQP-GLES2.functional.shaders.loops.*,dEQP-GLES2.functional.shaders.random.*
+dEQP-GLES2.functional.shaders.operator.binary_operator.*
+dEQP-GLES2.functional.shaders.operator.unary_operator.*,dEQP-GLES2.functional.shaders.operator.common_functions.*,dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.*,dEQP-GLES2.functional.shaders.operator.geometric.*,dEQP-GLES2.functional.shaders.operator.exponential.*,dEQP-GLES2.functional.shaders.operator.float_compare.*,dEQP-GLES2.functional.shaders.operator.int_compare.*,dEQP-GLES2.functional.shaders.operator.selection.*,dEQP-GLES2.functional.shaders.operator.sequence.*,dEQP-GLES2.functional.shaders.operator.bool_compare.*
+dEQP-GLES2.functional.texture.completeness.*,dEQP-GLES2.functional.texture.filtering.*,dEQP-GLES2.functional.texture.format.*
+dEQP-GLES2.functional.texture.mipmap.*,dEQP-GLES2.functional.texture.specification.*,dEQP-GLES2.functional.texture.vertex.*,dEQP-GLES2.functional.texture.wrap.*
+dEQP-GLES2.functional.texture.size.*
+dEQP-GLES2.functional.fragment_ops.blend.*
+dEQP-GLES2.functional.fragment_ops.depth.*,dEQP-GLES2.functional.fragment_ops.stencil.*,dEQP-GLES2.functional.fragment_ops.depth_stencil.*,dEQP-GLES2.functional.fragment_ops.random.*,dEQP-GLES2.functional.fragment_ops.interaction.*,dEQP-GLES2.functional.fragment_ops.scissor.*,dEQP-GLES2.functional.color_clear.*
+dEQP-GLES2.functional.uniform_api.*
+dEQP-GLES2.functional.fbo.*
+dEQP-GLES2.functional.clipping.*,dEQP-GLES2.functional.vertex_arrays.*
+dEQP-GLES2.functional.state_query.*,dEQP-GLES2.functional.negative_api.*,dEQP-GLES2.functional.draw.*
+dEQP-GLES2.info.*,dEQP-GLES2.functional.attribute_location.*,dEQP-GLES2.functional.rasterization.*,dEQP-GLES2.functional.buffer.*,dEQP-GLES2.functional.default_vertex_attrib.*,dEQP-GLES2.functional.shader_api.*,dEQP-GLES2.functional.lifetime.*,dEQP-GLES2.functional.depth_range.*,dEQP-GLES2.functional.dither.*,dEQP-GLES2.functional.light_amount.*,dEQP-GLES2.functional.multisample.*,dEQP-GLES2.functional.implementation_limits.*,dEQP-GLES2.functional.depth_stencil_clear.*,dEQP-GLES2.functional.polygon_offset.*,dEQP-GLES2.functional.read_pixels.*,dEQP-GLES2.functional.clip_control.*,dEQP-GLES2.functional.flush_finish.*,dEQP-GLES2.functional.prerequisite.*,dEQP-GLES2.functional.debug_marker.*,dEQP-GLES2.functional.multisampled_render_to_texture.*

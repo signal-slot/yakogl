@@ -1,0 +1,49 @@
+config_kernel.h in this directory
+=================================
+
+This is not a file of the DDK source tree. It is the configuration header the
+DDK's own build system generates, pinned here because every structure layout
+in include/rogue/rgx_fwif_km.h depends on it. It is copied unchanged from
+binary_am62p_linux_nulldrmws_release/config_kernel.h of the DDK 25.2 tree on
+the build host (sha256 in ../../UPSTREAM).
+
+How it was produced
+-------------------
+
+The build that produced it was run in a scratch directory that no longer
+exists, and its exact command line was not recorded. What is known:
+
+- The output directory name comes from build/linux/config/core.mk line 145,
+  OUT ?= $(TOP)/binary_$(PVR_BUILD_DIR)_$(WINDOW_SYSTEM)_$(BUILD),
+  so the build ran with PVR_BUILD_DIR=am62p_linux, WINDOW_SYSTEM=nulldrmws,
+  BUILD=release.
+- The config_kernel.mk written next to it records the rest:
+  KERNELDIR = a Linux 6.6.138 tree (KERNEL_ID 6.6.138-7.6.1, Toradex),
+  KERNEL_CROSS_COMPILE = aarch64--glibc--stable-2024.05-1 (bootlin)
+  bin/aarch64-linux-, RGX_BNC 36.V.104.796, PVR_SYSTEM rgx_ti_linux,
+  KERNEL_COMPONENTS srvkm.
+
+Following the DDK's INSTALL file and root Makefile, the corresponding command
+from the DDK root is
+
+  make PVR_BUILD_DIR=am62p_linux WINDOW_SYSTEM=nulldrmws BUILD=release \
+       KERNELDIR=<linux 6.6 tree> CROSS_COMPILE=aarch64-linux-
+
+This reconstruction has not been re-run. Some defines come from the kernel
+configuration (for example PVRSRV_USE_LINUX_CONFIG_INIT_ON_ALLOC); which of
+them could change a firmware-interface layout was not checked. The layouts the
+driver relies on are pinned by driver/tools/offsetof/ddk_abi_check.c.
+
+Which firmware it matches
+-------------------------
+
+It is the kernel-module configuration for the AM62P, the one TI builds next to
+rgx.fw.36.53.104.796. The firmware binary is prebuilt by Imagination and its
+own build configuration is not published. This header gives the structure
+sizes the firmware reads (RGXFWIF_KCCB_CMD 160 bytes, RGXFWIF_FWCOMMONCONTEXT
+456 bytes), which the board confirms; the DDK's copy-to-kernel-tc/config_kernel.h
+gives different sizes (80 and 336) and does not match the firmware.
+
+To compile the FWIF headers against it, force-include it (-include
+config_kernel.h) with this directory on the include path; it already defines
+RGX_FW_HEAP_OSID_ASSIGNMENT and PVRSRV_HWPERF_COUNTERS_PERBLK.

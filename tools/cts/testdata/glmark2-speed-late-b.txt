@@ -1,0 +1,30 @@
+16:00:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+16:00:01 [build] use-vbo=false:yakogl/v3d: binner pool after job 1: overflow blocks 0 of 2 (262144 bytes each)
+16:00:10  FPS: 160 FrameTime: 6.250 ms
+16:00:10 glmark2-frame: [build] use-vbo=false: 1600 frames; us per frame: gl 2700, swap 55, show 3500, other 2, frame 6250 (end waited for in 1 of 1600)
+16:00:20 [build] use-vbo=true: FPS: 276 FrameTime: 3.628 ms
+16:00:20 glmark2-frame: [build] use-vbo=true: 2758 frames; us per frame: gl 21, swap 16, show 3588, other 1, frame 3626 (end waited for in 1 of 2758)
+16:00:20 [shading] shading=gouraud:yakogl/v3d: tiled copies high-water 1052672 of 25165824 bytes
+16:00:30  FPS: 250 FrameTime: 4.000 ms
+16:00:30 glmark2-frame: [shading] shading=gouraud: 2500 frames; us per frame: gl 30, swap 20, show 3600, other 1, frame 4000 (end waited for in 1 of 2500)
+16:00:30 [shading] shading=blinn-phong-inf:yakogl/v3d: binner tile pool high-water at frame 1: 36864 of 1056768 bytes
+16:00:40  FPS: 219 FrameTime: 4.579 ms
+16:00:40 glmark2-frame: [shading] shading=blinn-phong-inf: 2190 frames; us per frame: gl 31, swap 21, show 3700, other 1, frame 4579 (end waited for in 1 of 2190)
+16:00:40 glmark2-mem: entry 22 [terrain] <default>: before setup: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+16:00:41 GL error 0x502 in glGenerateMipmap
+16:00:50  FPS: 8 FrameTime: 125.000 ms
+16:00:50 glmark2-frame: [terrain] <default>: 81 frames; us per frame: gl 9000, swap 112000, show 300, other 3700, frame 125000 (end waited for in 81 of 81)
+16:00:50 glmark2-mem: entry 22 [terrain] <default>: end: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+16:00:50 glmark2-mem: entry 23 [shadow] <default>: before setup: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+16:00:51 yakogl/v3d: sampler variants high-water at frame 43963: 1 built, 0 refused
+16:01:00  FPS: 20 FrameTime: 50.000 ms
+16:01:00 glmark2-frame: [shadow] <default>: 201 frames; us per frame: gl 8000, swap 38000, show 300, other 3700, frame 50000 (end waited for in 201 of 201)
+16:01:00 glmark2-mem: entry 23 [shadow] <default>: end: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+16:01:01 [refract] <default>:yakogl/v3d: job arenas high-water at frame 3: BCL 10796 of 139264, 353 draws
+16:01:10  FPS: 5 FrameTime: 200.000 ms
+16:01:10 glmark2-frame: [refract] <default>: 51 frames; us per frame: gl 190000, swap 600, show 4700, other 2, frame 200000 (end waited for in 51 of 51)
+16:01:11 [jellyfish] <default>:yakogl/v3d: job arenas high-water at frame 5: BCL 900 of 139264, 20 draws
+16:01:20  FPS: 25
+16:01:20 [ideas] speed=duration: Unsupported
+16:01:20 glmark2: score 190: 8 scenes ran, 0 failed, 1 unsupported (9 list entries); window 800x600, shown yes, GPU resets 0
+16:01:20 glmark2: PASS

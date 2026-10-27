@@ -1,0 +1,85 @@
+{
+ "trace": "tri_varying.pandecode",
+ "secondary_offset": 128,
+ "regions": {
+  "vs.position": {
+   "va": "7fffffffc000",
+   "found": true,
+   "words": [
+    "0866800412017d7c",
+    "00b2c00000818040",
+    "00b2c10000838241",
+    "0091c20000000084",
+    "0091c300000000d0",
+    "105e840440000d7b",
+    "78614008b9000044"
+   ],
+   "text": [
+    "LD_ATTR_IMM.v2.f32.slot0.wait0 @r0:r1, ^r60, ^r61, index:0x0, table:0x1",
+    "FMA.f32 r0, ^r0, u0, u1",
+    "FMA.f32 r1, ^r1, u2, u3",
+    "MOV.i32 r2, u4",
+    "MOV.i32 r3, 0x3F800000",
+    "LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0",
+    "STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3800000000000000",
+   "fau": [
+    "42000000",
+    "42000000",
+    "42000000",
+    "42000000",
+    "3f000000",
+    "00000000"
+   ]
+  },
+  "vs.varying": {
+   "va": "7fffffffc080",
+   "found": true,
+   "words": [
+    "0066800622117d7c",
+    "185e840440000d7b",
+    "78614006b2000044"
+   ],
+   "text": [
+    "LD_ATTR_IMM.v3.f32.slot0 @r0:r1:r2, ^r60, ^r61, index:0x1, table:0x1",
+    "LEA_BUF_IMM.slot1.wait01 @r4:r5, ^r59, table:0xD, index:0x0",
+    "STORE.i96.estream.slot2.end @r0:r1:r2, ^r4, offset:0"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3800000000000000",
+   "fau": [
+    "42000000",
+    "42000000",
+    "42000000",
+    "42000000",
+    "3f000000",
+    "00000000"
+   ]
+  },
+  "fs.fragment": {
+   "va": "7fffffffc100",
+   "found": true,
+   "words": [
+    "085d80042200007d",
+    "40a1c1000c05db41",
+    "487dbc0208ea017c",
+    "787f4004733c00f0",
+    "0110f000000000c0",
+    "002fc1100000f1c0"
+   ],
+   "text": [
+    "LD_VAR_BUF_IMM.f16.slot0.v3.src_f32.center.store.wait0 @r0:r1, ^r61, index:0x0",
+    "MKVEC.v2i16.wait0126 r1, ^r1.h00, 0x3C000000.h11",
+    "ATEST.wait @r60, ^r60, r1.h1, atest_datum.w0",
+    "BLEND.slot1.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0",
+    "IADD_IMM.i32 r48, 0x0, #0x0",
+    "BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3000000000000000",
+   "fau": null
+  }
+ }
+}

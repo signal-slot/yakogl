@@ -1,0 +1,759 @@
+10:49:41   5.05 [sdcard] pieeprom.upd not found
+10:49:41   5.06 [sdcard] recover4.elf not found
+10:49:41   5.06 [sdcard] recovery.elf not found
+10:49:41   5.90 Read start4.elf bytes  2299008 hnd 0x211ac
+10:49:41   5.96 Read fixup4.dat bytes     5496 hnd 0x20bca
+10:49:41   5.98 0x00d03114 0x00000000 0x00001fff
+10:49:41   5.01 MEM GPU: 76 ARM: 948 TOTAL: 1024
+10:49:41   5.38 Starting start4.elf @ 0xfec00200 partition 1
+10:49:41   5.24 XHCI-STOP
+10:49:41   5.24 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+10:49:41   5.24 USBSTS 18
+10:49:41   5.25 PCI0 reset
+10:49:41   5.26 +
+10:49:41 
+10:49:41 MESS:00:00:05.272697:0: arasan: arasan_emmc_open
+10:49:41 MESS:00:00:05.274356:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+10:49:41 MESS:00:00:05.394583:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+10:49:41 MESS:00:00:05.407453:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+10:49:41 MESS:00:00:05.441749:0: boot-part: 1 fs-type: 0
+10:49:41 MESS:00:00:05.443162:0: boot-part: 1 fs-type: 3
+10:49:42 MESS:00:00:05.447546:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+10:49:42 MESS:00:00:05.610722:0: brfs: File read: /mfs/sd/tryboot.txt
+10:49:42 MESS:00:00:05.613610:0: brfs: File read: 272 bytes
+10:49:42 MESS:00:00:05.706807:0: HDMI1:EDID error reading EDID block 0 attempt 0
+10:49:42 MESS:00:00:05.711315:0: HDMI1:EDID giving up on reading EDID block 0
+10:49:42 MESS:00:00:05.725588:0: brfs: File read: /mfs/sd/tryboot.txt
+10:49:42 MESS:00:00:06.224705:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+10:49:42 MESS:00:00:06.230253:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+10:49:42 MESS:00:00:06.239282:0: *** Restart logging
+10:49:42 MESS:00:00:06.241060:0: brfs: File read: 272 bytes
+10:49:42 MESS:00:00:06.320005:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+10:49:42 MESS:00:00:06.325036:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+10:49:42 MESS:00:00:06.337441:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+10:49:42 MESS:00:00:06.347344:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+10:49:42 MESS:00:00:06.351182:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+10:49:42 MESS:00:00:06.359937:0: HDMI0: hdmi_pixel_encoding: 300000000
+10:49:42 MESS:00:00:06.365427:0: HDMI1: hdmi_pixel_encoding: 300000000
+10:49:42 MESS:00:00:06.387094:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+10:49:42 MESS:00:00:06.402499:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+10:49:42 MESS:00:00:06.405789:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+10:49:42 MESS:00:00:06.446476:0: brfs: File read: 56249 bytes
+10:49:43 MESS:00:00:06.467047:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+10:49:43 MESS:00:00:06.532108:0: brfs: File read: 5971 bytes
+10:49:43 MESS:00:00:06.534829:0: brfs: File read: /mfs/sd/tryboot.txt
+10:49:43 MESS:00:00:06.577982:0: brfs: File read: 272 bytes
+10:49:43 MESS:00:00:06.581732:0: brfs: File read: /mfs/sd/cmdline.txt
+10:49:43 MESS:00:00:06.585141:0: Read command line from file 'cmdline.txt':
+10:49:43 MESS:00:00:06.590992:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+10:49:43 MESS:00:00:06.747773:0: brfs: File read: 145 bytes
+10:49:43 MESS:00:00:06.908789:0: brfs: File read: /mfs/sd/pi4run-GT21-29460f96.bin
+10:49:43 MESS:00:00:06.912480:0: Loaded 'pi4run-GT21-29460f96.bin' to 0x200000 size 0x1aa950
+10:49:43 MESS:00:00:06.919871:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+10:49:43 MESS:00:00:06.928656:0: uart: Set PL011 baud rate to 103448.300000 Hz
+10:49:43 MESS:00:00:06.935176:0: uart: Baud rate change done...
+10:49:43 MESS:00:00:06.937199:0:*** Booting Zephyr OS build af17c0c8aa2a ***
+10:49:43 I: shader compiler scratch: 4194304 bytes, keep: 524288 bytes
+10:49:44 v3d_gl_test: NO SCREEN (mailbox/framebuffer -116): headless, the UART is the only output
+10:49:44 v3d_gl_test: build 29460f96 (the record at the end or at 75 s)
+10:49:44 board: PM watchdog resets the SoC ~210 s after boot (tryboot -> Linux)
+10:49:45 v3d_gl_test: the list 5,58,59,66,67,102,3,9,11,12,13,4,70,71,55,142,106,148,162,167,168 (21 cases) on one context
+10:49:45 gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+10:49:46   fw clock 5 on: -116 (not fatal)
+10:49:47   fw clock 5 off: -116 (not fatal)
+10:49:48   fw clock 5 on: -116 (not fatal)
+10:49:48 I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+10:49:48 I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+10:49:48 osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+10:49:48 osal(v3d): UIFCFG 0x00000045
+10:49:48 osal(v3d): ready: carve-out 48 MiB at phys 0x21d6000, GPU VA 0x181000..0x3100000
+10:49:48 yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+10:49:48 yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 8388608 bytes
+10:49:48 yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+10:49:48 yakogl/v3d: clear program built: 408 bytes of code
+10:49:48 yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+10:49:48 osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x22306a ra 0x223069 qba 0x223000 qea 0x22306a
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px                                 
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test: px RRRRRRRRRRRRRRRR                
+10:49:48 gl_test:   inside (bottom-left)         (16,48) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+10:49:49 gl_test:   inside edge                  (31,32) = 0xff00ffff  want 0xff00ffff  ok  [check 2]
+10:49:49 gl_test:   outside right                (32,32) = 0xff000000  want 0xff000000  ok  [check 3]
+10:49:49 gl_test:   outside above                (16,31) = 0xff000000  want 0xff000000  ok  [check 4]
+10:49:49 gl_test:   outside (top-right)          (48,16) = 0xff000000  want 0xff000000  ok  [check 5]
+10:49:49 gl_test: case 5 scissor: PASS
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+10:49:49 gl_test:   inside the box               (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+10:49:49 gl_test:   inside, at a corner          (17,17) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+10:49:49 gl_test:   left of the box              ( 8,32) = 0xffff0000  want 0xffff0000  ok  [check 3]
+10:49:49 gl_test:   right of the box             (56,32) = 0xffff0000  want 0xffff0000  ok  [check 4]
+10:49:49 gl_test:   one row above the box        (32,15) = 0xffff0000  want 0xffff0000  ok  [check 5]
+10:49:49 gl_test:   one row below the box        (32,48) = 0xffff0000  want 0xffff0000  ok  [check 6]
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test:   the clear is after the draw  (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 7]
+10:49:49 gl_test:   the draw is everywhere else  ( 8,32) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+10:49:49 gl_test:   an empty box clears nothing  (32,32) = 0xffff0000  want 0xffff0000  ok  [check 9]
+10:49:49 gl_test: case 58 clearscis: PASS
+10:49:49 gl_test:   a fully masked colour clear does nothing (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test:   a masked depth clear does nothing (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+10:49:49 gl_test:   the masked bits were not cleared (32,32) = 0xffff0000  want 0xffff0000  ok  [check 3]
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:49 gl_test:   the allowed bits were cleared (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+10:49:49 gl_test: case 59 clearmask: PASS
+10:49:49 gl_test:   full-viewport clear: inside  (16,16) = 0xffffffff  want 0xffffffff  ok  [check 1]
+10:49:49 gl_test:   full-viewport clear: far corner (63,63) = 0xffffffff  want 0xffffffff  ok  [check 2]
+10:49:49 gl_test:   quarter viewport: inside is cleared (16,16) = 0xffff0000  want 0xffff0000  ok  [check 3]
+10:49:49 gl_test:   outside the viewport, right  (63,16) = 0xffff0000  want 0xffff0000  ok  [check 4]
+10:49:49 gl_test:   outside the viewport, below  (16,63) = 0xffff0000  want 0xffff0000  ok  [check 5]
+10:49:49 gl_test:   outside the viewport, corner (63,63) = 0xffff0000  want 0xffff0000  ok  [check 6]
+10:49:49 gl_test:   first pixel past the edge    (32, 0) = 0xffff0000  want 0xffff0000  ok  [check 7]
+10:49:49 gl_test:   scissored clear: inside the box (16,47) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+10:49:49 gl_test:   scissored clear: outside the box (63,16) = 0xffff0000  want 0xffff0000  ok  [check 9]
+10:49:49 gl_test: case 66 clearvp: PASS
+10:49:49 gl_test:   no depth buffer              (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 1]
+10:49:49 gl_test:   no stencil buffer            (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+10:49:49 gl_test:   RGB target reads alpha 1     (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+10:49:49 gl_test:   A drew the near quad         (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 4]
+10:49:49 gl_test:   B has its own depth          (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRBBBBBBBBBBBBBBBBRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+10:49:49 gl_test:   stencil box, centre          (32,32) = 0xffff0000  want 0xffff0000  ok  [check 6]
+10:49:49 gl_test:   stencil box, corner          (17,17) = 0xffff0000  want 0xffff0000  ok  [check 7]
+10:49:49 gl_test:   left of the box              ( 8,32) = 0xff0000ff  want 0xff0000ff  ok  [check 8]
+10:49:49 gl_test:   right of the box             (56,32) = 0xff0000ff  want 0xff0000ff  ok  [check 9]
+10:49:49 gl_test:   above the box                (32, 8) = 0xff0000ff  want 0xff0000ff  ok  [check 10]
+10:49:49 gl_test:   below the box                (32,56) = 0xff0000ff  want 0xff0000ff  ok  [check 11]
+10:49:49 gl_test:   one kick box                 (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 12]
+10:49:49 gl_test:   one kick outside             ( 8,32) = 0xff0000ff  want 0xff0000ff  ok  [check 13]
+10:49:49 gl_test:   across a kick box            (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 14]
+10:49:49 gl_test:   across a kick outside        ( 8,32) = 0xff0000ff  want 0xff0000ff  ok  [check 15]
+10:49:50 gl_test: case 67 fbods: PASS
+10:49:50 gl_test:   R+A: (1,0,0,0.5)             0 of 4096 pixels wrong  ok
+10:49:50 gl_test:   G, scissored                 0 of 4096 pixels wrong  ok
+10:49:50 gl_test:   B, fused; quad yellow        0 of 4096 pixels wrong  ok
+10:49:50 gl_test: case 102 maskclear: PASS
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                 R               
+10:49:50 gl_test: px                RR               
+10:49:50 gl_test: px                RRR              
+10:49:50 gl_test: px               RRRR              
+10:49:50 gl_test: px               RRRRR             
+10:49:50 gl_test: px              RRRRRR             
+10:49:50 gl_test: px              RRRRRRR            
+10:49:50 gl_test: px             RRRRRRRR            
+10:49:50 gl_test: px             RRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRRR          
+10:49:50 gl_test: px           RRRRRRBRRRRR          
+10:49:50 gl_test: px           RRRRRBBRRRRRR         
+10:49:50 gl_test: px          RRRRRRBBBRRRRR         
+10:49:50 gl_test: px          RRRRRBBBBRRRRRR        
+10:49:50 gl_test: px         RRRRRRBBBBBRRRRR        
+10:49:50 gl_test: px         RRRRRBBBBBBRRRRRR       
+10:49:50 gl_test: px        RRRRRRBBBBBBBRRRRR       
+10:49:50 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+10:49:50 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+10:49:50 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+10:49:50 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+10:49:50 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+10:49:50 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRR    
+10:49:50 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRRR   
+10:49:50 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRR   
+10:49:50 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRRR  
+10:49:50 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRR  
+10:49:50 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRRR 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test:   depth on: C in front         (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+10:49:50 gl_test:   depth on: B hidden           (32,44) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+10:49:50 gl_test:   depth on: A only             (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+10:49:50 gl_test:   depth off: C last            (32,32) = 0xffff0000  want 0xffff0000  ok  [check 4]
+10:49:50 gl_test:   depth off: B over A          (32,44) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+10:49:50 gl_test:   depth off: A only            (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+10:49:50 gl_test:   greater: B over A, C         (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+10:49:50 gl_test:   greater: B over A            (32,44) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+10:49:50 gl_test:   greater: A only              (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 9]
+10:49:50 gl_test:   offset -4: D in front of A   (32,54) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+10:49:50 gl_test:   offset +4: A stays           (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 11]
+10:49:50 gl_test: case 3 depth: PASS
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                 R               
+10:49:50 gl_test: px                RR               
+10:49:50 gl_test: px                RRR              
+10:49:50 gl_test: px               RRRR              
+10:49:50 gl_test: px               RRRRR             
+10:49:50 gl_test: px              RRRRRR             
+10:49:50 gl_test: px              RRRRRRR            
+10:49:50 gl_test: px             RRRRRRRR            
+10:49:50 gl_test: px             RRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRRR          
+10:49:50 gl_test: px           RRRRRRRRRRRR          
+10:49:50 gl_test: px           RRRRRRRRRRRRR         
+10:49:50 gl_test: px          RRRRRRRRRRRRRR         
+10:49:50 gl_test: px          RRRRRRRRRRRRRRR        
+10:49:50 gl_test: px         RRRRRRRRRRRRRRRR        
+10:49:50 gl_test: px         RRRRRRRRRRRRRRRRR       
+10:49:50 gl_test: px        RRRRRRRRRRRRRRRRRR       
+10:49:50 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+10:49:50 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+10:49:50 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+10:49:50 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+10:49:50 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test:   equal 1: inside mask         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+10:49:50 gl_test:   equal 1: outside mask        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 2]
+10:49:50 gl_test:   mask pass wrote no colour    (32,50) = 0xff00ffff  want 0xff00ffff  ok  [check 3]
+10:49:50 gl_test:   notequal 1: inside mask      (32,40) = 0xff000000  want 0xff000000  ok  [check 4]
+10:49:50 gl_test:   notequal 1: outside mask     ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+10:49:50 gl_test:   incr x2: inside == 2         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 6]
+10:49:50 gl_test:   incr x2: outside == 0        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 7]
+10:49:50 gl_test:   cleared to 1: quad everywhere ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 8]
+10:49:50 gl_test:   write mask 0xfe: nothing     (32,40) = 0xff000000  want 0xff000000  ok  [check 9]
+10:49:50 gl_test: case 9 stencil: PASS
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R                             
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                 R               
+10:49:50 gl_test: px                RR               
+10:49:50 gl_test: px                RRR              
+10:49:50 gl_test: px               RRRR              
+10:49:50 gl_test: px               RRRRR             
+10:49:50 gl_test: px              RRRRRR             
+10:49:50 gl_test: px              RRRRRRR            
+10:49:50 gl_test: px             RRRRRRRR            
+10:49:50 gl_test: px             RRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRR           
+10:49:50 gl_test: px            RRRRRRRRRRR          
+10:49:50 gl_test: px           GRRRRRRRRRRR          
+10:49:50 gl_test: px           GGRRRRRRRRBBB         
+10:49:50 gl_test: px          GGGGGRRRRRBBBB         
+10:49:50 gl_test: px          GGGGGGRRBBBBBBB        
+10:49:50 gl_test: px         GGGGGGGGBBBBBBBB        
+10:49:50 gl_test: px         GGGGGGGGBBBBBBBBB       
+10:49:50 gl_test: px        GGGGGGGGGBBBBBBBBB       
+10:49:50 gl_test: px        GGGGGGGGGBBBBBBBBBB      
+10:49:50 gl_test: px       GGGGGGGGGGBBBBBBBBBB      
+10:49:50 gl_test: px       GGGGGGGGGGBBBBBBBBBBB     
+10:49:50 gl_test: px      GGGGGGGGGGGBBBBBBBBBBB     
+10:49:50 gl_test: px      GGGGGGGGGGGBBBBBBBBBBBB    
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test:   earlier frame kept           (32,40) = 0xff595452  want 0xff595452  ok  [check 1]
+10:49:50 gl_test:   earlier frame kept           (31,12) = 0xff090fe7  want 0xff090fe7  ok  [check 2]
+10:49:50 gl_test:   new draw                     ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 3]
+10:49:50 gl_test:   still clear elsewhere        (60, 4) = 0xff000000  want 0xff000000  ok  [check 4]
+10:49:50 gl_test:   no-clear 113: draw 112       (40,24) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+10:49:50 gl_test:   no-clear 113: earlier kept   (32,40) = 0xff595452  want 0xff595452  ok  [check 6]
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+10:49:50 gl_test: px                                 
+10:49:50 gl_test:   draw 0                       ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 7]
+10:49:50 gl_test:   draw 255 (last of kick 1)    (49,52) = 0xff00ffff  want 0xff00ffff  ok  [check 8]
+10:49:50 gl_test:   draw 256 (first of kick 2)   (52,52) = 0xff00ffff  want 0xff00ffff  ok  [check 9]
+10:49:50 gl_test:   draw 299                     (61,60) = 0xff00ffff  want 0xff00ffff  ok  [check 10]
+10:49:50 gl_test:   triangle from frame 1 cleared (32,40) = 0xff000000  want 0xff000000  ok  [check 11]
+10:49:50 gl_test: case 11 persist: PASS
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px         R               B       
+10:49:50 gl_test: px         R               B       
+10:49:50 gl_test: px        RR              BB       
+10:49:50 gl_test: px        RR              BB       
+10:49:50 gl_test: px        RRR             BBB      
+10:49:50 gl_test: px        RRR             BBB      
+10:49:50 gl_test: px       RRRR            BBBB      
+10:49:50 gl_test: px       RRRR            BBBB      
+10:49:50 gl_test: px       RRRRR           BBBBB     
+10:49:50 gl_test: px       RRRRR           BBBBB     
+10:49:50 gl_test: px      RRRRRR          BBBBBB     
+10:49:50 gl_test: px      RRRRRR          BBBBBB     
+10:49:50 gl_test: px      RRRRRRR         BBBBBBB    
+10:49:50 gl_test: px      RRRRRRR         BBBBBBB    
+10:49:50 gl_test: px     RRRRRRRR        BBBBBBBB    
+10:49:50 gl_test: px     RRRRRRRR        BBBBBBBB    
+10:49:50 gl_test: px     RRRRRRRRR       BBBBBBBBB   
+10:49:50 gl_test: px     RRRRRRRRR       BBBBBBBBB   
+10:49:50 gl_test: px    RRRRRRRRRR      BBBBBBBBBB   
+10:49:50 gl_test: px    RRRRRRRRRR      BBBBBBBBBB   
+10:49:50 gl_test: px    RRRRRRRRRRR     BBBBBBBBBBB  
+10:49:50 gl_test: px    RRRRRRRRRRR     BBBBBBBBBBB  
+10:49:50 gl_test: px   RRRRRRRRRRRR    BBBBBBBBBBBB  
+10:49:50 gl_test: px   RRRRRRRRRRRR    BBBBBBBBBBBB  
+10:49:50 gl_test: px   RRRRRRRRRRRRR   BBBBBBBBBBBBB 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test: px                                 
+10:49:50 gl_test:   ccw front: left (front) == 1 red (16,40) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+10:49:50 gl_test:   ccw front: right (back) == 2 blue (48,40) = 0xffff0000  want 0xffff0000  ok  [check 2]
+10:49:50 gl_test:   ccw front: outside untouched (32, 4) = 0xff000000  want 0xff000000  ok  [check 3]
+10:49:50 gl_test:   cw front: left (back) == 2 blue (16,40) = 0xffff0000  want 0xffff0000  ok  [check 4]
+10:49:50 gl_test:   cw front: right (front) == 1 red (48,40) = 0xff0000ff  want 0xff0000ff  ok  [check 5]
+10:49:50 gl_test:   fbo ccw front: left == 1 red (16,40) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+10:49:51 gl_test:   fbo ccw front: right == 2 blue (48,40) = 0xffff0000  want 0xffff0000  ok  [check 7]
+10:49:51 gl_test: case 12 stencil2: PASS
+10:49:51 gl_test:   clear 0.5: mid quad passes   (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+10:49:51 gl_test:   clear 0.5: far quad fails    ( 4, 4) = 0xffff0000  want 0xffff0000  ok  [check 2]
+10:49:51 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:51 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRGGRGRRGGRGGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGGGGGGRRGGGGGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRGGRRRRGGRGGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGGGGGRRRRGGGGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRGGRRRRRGRGGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGGGGRRRRRRGGGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRGRRRRRRRRGGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGGGRRRRRRRRGGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRRRRRRRRRRGGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGGRRRRRRRRRRGGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGGRRRRRRRRRRRGRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGGRRRRRRRRRRRRGGGGGGGGGG
+10:49:51 gl_test: px GGRGGRGGRGRRRRRRRRRRRRRRGGRGGRGG
+10:49:51 gl_test: px GGGGGGGGGRRRRRRRRRRRRRRGGGGGGGGG
+10:49:51 gl_test: px GGGGGGGGGRRRRRRRRRRRRRRRGGGGGGGG
+10:49:51 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+10:49:51 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRRGGGGGGG
+10:49:51 gl_test: px GGGGGGGRRRRRRRRRRRRRRRRRRGGGGGGG
+10:49:51 gl_test: px GGGGGGGRRRRRRRRRRRRRRRRRRRGGGGGG
+10:49:51 gl_test: px GGGGGGRRRRRRRRRRRRRRRRRRRRGGGGGG
+10:49:51 gl_test: px GGGGGGRRRRRRRRRRRRRRRRRRRRRGGGGG
+10:49:51 gl_test: px GGGGGRRRRRRRRRRRRRRRRRRRRRRGGGGG
+10:49:51 gl_test: px GGGGGRRRRRRRRRRRRRRRRRRRRRRRGGGG
+10:49:51 gl_test: px GGGGRRRRRRRRRRRRRRRRRRRRRRRRGGGG
+10:49:51 gl_test: px GGGGRRRRRRRRRRRRRRRRRRRRRRRRRGGG
+10:49:51 gl_test: px GGGRRRRRRRRRRRRRRRRRRRRRRRRRRGGG
+10:49:51 gl_test: px GGGRRRRRRRRRRRRRRRRRRRRRRRRRRRGG
+10:49:51 gl_test: px GGRRRRRRRRRRRRRRRRRRRRRRRRRRRRGG
+10:49:51 gl_test: px GGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRG
+10:49:51 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+10:49:51 gl_test:   split: near triangle kept    (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+10:49:51 gl_test:   split: kick-1 small tri kept ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 4]
+10:49:51 gl_test:   split: kick-2 small tri      (61,28) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+10:49:51 gl_test:   split: far quad elsewhere    (60,40) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+10:49:51 gl_test:   stencil kept: inside         (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+10:49:51 gl_test:   stencil kept: outside        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 8]
+10:49:51 gl_test:   depth cleared mid-frame: far quad wins (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+10:49:51 gl_test:   depth range 0..0.3: far quad wins (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+10:49:51 gl_test: case 13 zls: PASS
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                 R               
+10:49:51 gl_test: px                RR               
+10:49:51 gl_test: px                RRR              
+10:49:51 gl_test: px               RRRR              
+10:49:51 gl_test: px               RRRRR             
+10:49:51 gl_test: px              RRRRRR             
+10:49:51 gl_test: px              RRRRRRR            
+10:49:51 gl_test: px             RRRRRRRR            
+10:49:51 gl_test: px             RRRRRRRRR           
+10:49:51 gl_test: px            RRRRRRRRRR           
+10:49:51 gl_test: px            RRRRRRRRRRR          
+10:49:51 gl_test: px           RRRRRRRRRRRR          
+10:49:51 gl_test: px           RRRRRRRRRRRRR         
+10:49:51 gl_test: px          RRRRRRRRRRRRRR         
+10:49:51 gl_test: px          RRRRRRRRRRRRRRR        
+10:49:51 gl_test: px         RRRRRRRRRRRRRRRR        
+10:49:51 gl_test: px         RRRRRRRRRRRRRRRRR       
+10:49:51 gl_test: px        RRRRRRRRRRRRRRRRRR       
+10:49:51 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+10:49:51 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+10:49:51 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+10:49:51 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+10:49:51 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test: px                                 
+10:49:51 gl_test:   ccw front, cull back         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+10:49:51 gl_test:   ccw front, cull front        (32,40) = 0xff000000  want 0xff000000  ok  [check 2]
+10:49:51 gl_test:   cw front, cull back          (32,40) = 0xff000000  want 0xff000000  ok  [check 3]
+10:49:51 gl_test:   cw front, cull front         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 4]
+10:49:51 gl_test:   fbo: ccw front, cull back    (32,32) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+10:49:51 gl_test:   fbo: ccw front, cull front   (32,32) = 0xff000000  want 0xff000000  ok  [check 6]
+10:49:51 gl_test: case 4 cull: PASS
+10:49:51 gl_test:   loopcarry: three trips       (32,32) = 0xff0000bf  want 0xff0000bf  ok  [check 1]
+10:49:51 gl_test:   loopcarry: two trips         (32,32) = 0xff000080  want 0xff000080  ok  [check 2]
+10:49:51 gl_test: case 70 loopcarry: PASS
+10:49:51 gl_test:   deadloop: three trips, z > 0 (32,32) = 0xff0000bf  want 0xff0000bf  ok  [check 1]
+10:49:51 gl_test:   deadloop: three trips, z < 0 (32,32) = 0xff0000bf  want 0xff0000bf  ok  [check 2]
+10:49:51 gl_test: case 71 deadloop: PASS
+10:49:51 gl_test: mrt: uniform locations 0 1
+10:49:51 gl_test: mrt: attachment 0 = 255,0,0,255 (want 255,0,0,255)
+10:49:51 gl_test: mrt: attachment 1 = 0,255,0,255 (want 0,255,0,255)
+10:49:51 gl_test: case 55 es3mrt: PASS
+10:49:51 gl_test:   unibranch: then arm          ( 8, 8) = 0xff5a347d  want 0xff5a347d  ok  [check 1]
+10:49:51 gl_test:   unibranch: then arm          (40,20) = 0xff5a347d  want 0xff5a347d  ok  [check 2]
+10:49:51 gl_test:   unibranch: then arm          (55,57) = 0xff5a347d  want 0xff5a347d  ok  [check 3]
+10:49:51 gl_test:   unibranch: else arm          ( 8, 8) = 0xff996082  want 0xff996082  ok  [check 4]
+10:49:51 gl_test:   unibranch: else arm          (40,20) = 0xff996082  want 0xff996082  ok  [check 5]
+10:49:51 gl_test:   unibranch: else arm          (55,57) = 0xff996082  want 0xff996082  ok  [check 6]
+10:49:51 gl_test: case 142 unibranch: PASS
+10:49:51 gl_test:   mrt3 clear   attachment 0 = 0xff808080  want 0xff808080
+10:49:51 gl_test:   mrt3 clear   attachment 1 = 0xff808080  want 0xff808080
+10:49:51 gl_test:   mrt3 clear   attachment 2 = 0xff808080  want 0xff808080
+10:49:51 gl_test:   mrt3 draw    attachment 0 = 0xff0000ff  want 0xff0000ff
+10:49:51 gl_test:   mrt3 draw    attachment 1 = 0xff00ff00  want 0xff00ff00
+10:49:51 gl_test:   mrt3 draw    attachment 2 = 0xffff0000  want 0xffff0000
+10:49:51 gl_test:   mrt3 hole clear attachment 0 = 0xff000000  want 0xff000000
+10:49:51 gl_test:   mrt3 hole clear attachment 1 = 0xff00ff00  want 0xff00ff00
+10:49:51 gl_test:   mrt3 hole clear attachment 2 = 0xff000000  want 0xff000000
+10:49:51 gl_test:   mrt3 hole draw  attachment 0 = 0xff0000ff  want 0xff0000ff
+10:49:51 gl_test:   mrt3 hole draw  attachment 1 = 0xff00ff00  want 0xff00ff00
+10:49:51 gl_test:   mrt3 hole draw  attachment 2 = 0xffff0000  want 0xffff0000
+10:49:51 gl_test:   mrt3 fail mask (0-2 clear, 3-5 draw, 6-8 NONE draw, 9-11 NONE clear) = 0  want 0  ok  [check 1]
+10:49:51 gl_test: case 106 mrt3: PASS
+10:49:51 gl_test:   texbranch: then arm, gate on, 3 passes ( 8, 8) = 0xff2099cc  want 0xff2099cc  ok  [check 1]
+10:49:51 gl_test:   texbranch: then arm, gate on, 3 passes (40,20) = 0xff2099cc  want 0xff2099cc  ok  [check 2]
+10:49:51 gl_test:   texbranch: then arm, gate on, 3 passes (55,57) = 0xff2099cc  want 0xff2099cc  ok  [check 3]
+10:49:51 gl_test:   texbranch: else arm, gate off, no pass ( 8, 8) = 0xff000033  want 0xff000033  ok  [check 4]
+10:49:51 gl_test:   texbranch: else arm, gate off, no pass (40,20) = 0xff000033  want 0xff000033  ok  [check 5]
+10:49:51 gl_test:   texbranch: else arm, gate off, no pass (55,57) = 0xff000033  want 0xff000033  ok  [check 6]
+10:49:51 gl_test:   texbranch: else arm, gate on, 24 passes ( 8, 8) = 0xffff9933  want 0xffff9933  ok  [check 7]
+10:49:51 gl_test:   texbranch: else arm, gate on, 24 passes (40,20) = 0xffff9933  want 0xffff9933  ok  [check 8]
+10:49:51 gl_test:   texbranch: else arm, gate on, 24 passes (55,57) = 0xffff9933  want 0xffff9933  ok  [check 9]
+10:49:51 gl_test: case 148 texbranch: PASS
+10:49:51 yakogl/v3d: depth/stencil refused for object 0x9d: all 32 depth/stencil buffers hold contents GL keeps (none deleted, none cleared whole since its last draw); the draw is not recorded (GL_OUT_OF_MEMORY)
+10:49:51 yakogl: glDrawArrays was not recorded (-12); the frame is missing it
+10:49:51 GL error 0x505 in glDrawArrays
+10:49:51 gl_test: dskeep: 31 framebuffer(s) kept their depth, framebuffer 31 refused (GL_OUT_OF_MEMORY)
+10:49:51 gl_test: dskeep: framebuffer 0: 3906 of 3906 pixels as its kept depth draws them
+10:49:51 gl_test:   dskeep: fb 0 below the diagonal ( 8,55) = 0xffff0000  want 0xffff0000  ok  [check 3]
+10:49:51 gl_test:   dskeep: fb 0 above the diagonal (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+10:49:51 gl_test:   dskeep: the refused fb draws (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+10:49:51 gl_test: case 162 dskeep: PASS
+10:49:51 gl_test: stcycle: 13 framebuffer(s), 0 with a draw refused (GL_OUT_OF_MEMORY)
+10:49:51 gl_test:   stcycle: fb 0 lower left     ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 2]
+10:49:51 gl_test:   stcycle: fb 0 upper right    (55, 8) = 0xff000000  want 0xff000000  ok  [check 3]
+10:49:51 gl_test:   stcycle: fb 1 lower left     ( 8,55) = 0xff000000  want 0xff000000  ok  [check 4]
+10:49:51 gl_test:   stcycle: fb 1 upper right    (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+10:49:51 gl_test:   stcycle: fb 2 lower left     ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+10:49:51 gl_test:   stcycle: fb 2 upper right    (55, 8) = 0xff000000  want 0xff000000  ok  [check 7]
+10:49:51 gl_test:   stcycle: fb 3 lower left     ( 8,55) = 0xff000000  want 0xff000000  ok  [check 8]
+10:49:51 gl_test:   stcycle: fb 3 upper right    (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+10:49:51 gl_test:   stcycle: fb 4 lower left     ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+10:49:51 gl_test:   stcycle: fb 4 upper right    (55, 8) = 0xff000000  want 0xff000000  ok  [check 11]
+10:49:51 gl_test:   stcycle: fb 5 lower left     ( 8,55) = 0xff000000  want 0xff000000  ok  [check 12]
+10:49:51 gl_test:   stcycle: fb 5 upper right    (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 13]
+10:49:51 gl_test:   stcycle: fb 6 lower left     ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 14]
+10:49:51 gl_test:   stcycle: fb 6 upper right    (55, 8) = 0xff000000  want 0xff000000  ok  [check 15]
+10:49:51 gl_test:   stcycle: fb 7 lower left     ( 8,55) = 0xff000000  want 0xff000000  ok  [check 16]
+10:49:51 gl_test:   stcycle: fb 7 upper right    (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 17]
+10:49:51 gl_test:   stcycle: fb 8 lower left     ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 18]
+10:49:51 gl_test:   stcycle: fb 8 upper right    (55, 8) = 0xff000000  want 0xff000000  ok  [check 19]
+10:49:51 gl_test:   stcycle: fb 9 lower left     ( 8,55) = 0xff000000  want 0xff000000  ok  [check 20]
+10:49:51 gl_test:   stcycle: fb 9 upper right    (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 21]
+10:49:51 gl_test:   stcycle: fb 10 lower left    ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 22]
+10:49:51 gl_test:   stcycle: fb 10 upper right   (55, 8) = 0xff000000  want 0xff000000  ok  [check 23]
+10:49:51 gl_test:   stcycle: fb 11 lower left    ( 8,55) = 0xff000000  want 0xff000000  ok  [check 24]
+10:49:51 gl_test:   stcycle: fb 11 upper right   (55, 8) = 0xff00ff00  want 0xff00ff00  ok  [check 25]
+10:49:51 gl_test:   stcycle: fb 12 lower left    ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 26]
+10:49:52 gl_test:   stcycle: fb 12 upper right   (55, 8) = 0xff000000  want 0xff000000  ok  [check 27]
+10:49:52 gl_test: case 167 stcycle: PASS
+10:49:52 osal(v3d): out of GPU memory for 1463296 bytes (0 frees held; this size refused 1 time)
+10:49:52 yakogl/v3d: depth/stencil refused for object 0x101: no GPU memory for its 1463296 byte depth/stencil buffer; the draw is not recorded (GL_OUT_OF_MEMORY)
+10:49:52 yakogl: glDrawArrays was not recorded (-12); the frame is missing it
+10:49:52 GL error 0x505 in glDrawArrays
+10:49:52 yakogl: glDrawArrays was not recorded (-12); the frame is missing it
+10:49:52 GL error 0x505 in glDrawArrays
+10:49:52 osal(v3d): out of GPU memory for 1440000 bytes (0 frees held; this size refused 1 time)
+10:49:52 texture 600x600 x1 fmt 0 (1 levels, 1440000 bytes): out of GPU memory
+10:49:52 GL error 0x505 in glTexImage2D
+10:49:52 gl_test: stlayers: layer 12 has no colour storage: no more layers
+10:49:52 gl_test: stlayers: 12 of 13 layer(s) of 600x600 made, alive together; 1 refused on the first pass (GL_OUT_OF_MEMORY), 1 texture(s) not allocated
+10:49:52 gl_test:   stlayers: fb  0 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 1]
+10:49:52 gl_test:   stlayers: fb  0 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 2]
+10:49:52 gl_test:   stlayers: fb  1 lower left  ( 60, 60) = 0xff000000  want 0xff000000  ok  [check 3]
+10:49:52 gl_test:   stlayers: fb  1 upper right (539,539) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+10:49:52 gl_test:   stlayers: fb  2 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+10:49:52 gl_test:   stlayers: fb  2 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 6]
+10:49:52 gl_test:   stlayers: fb  3 lower left  ( 60, 60) = 0xff000000  want 0xff000000  ok  [check 7]
+10:49:52 gl_test:   stlayers: fb  3 upper right (539,539) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+10:49:52 gl_test:   stlayers: fb  4 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+10:49:52 gl_test:   stlayers: fb  4 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 10]
+10:49:52 gl_test:   stlayers: fb  5 lower left  ( 60, 60) = 0xff000000  want 0xff000000  ok  [check 11]
+10:49:52 gl_test:   stlayers: fb  5 upper right (539,539) = 0xff00ff00  want 0xff00ff00  ok  [check 12]
+10:49:52 gl_test:   stlayers: fb  6 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 13]
+10:49:52 gl_test:   stlayers: fb  6 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 14]
+10:49:52 gl_test:   stlayers: fb  7 lower left  ( 60, 60) = 0xff000000  want 0xff000000  ok  [check 15]
+10:49:52 gl_test:   stlayers: fb  7 upper right (539,539) = 0xff00ff00  want 0xff00ff00  ok  [check 16]
+10:49:52 gl_test:   stlayers: fb  8 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 17]
+10:49:52 gl_test:   stlayers: fb  8 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 18]
+10:49:52 gl_test:   stlayers: fb  9 lower left  ( 60, 60) = 0xff000000  want 0xff000000  ok  [check 19]
+10:49:52 gl_test:   stlayers: fb  9 upper right (539,539) = 0xff00ff00  want 0xff00ff00  ok  [check 20]
+10:49:52 gl_test:   stlayers: fb 10 lower left  ( 60, 60) = 0xff00ff00  want 0xff00ff00  ok  [check 21]
+10:49:52 gl_test:   stlayers: fb 10 upper right (539,539) = 0xff000000  want 0xff000000  ok  [check 22]
+10:49:52 yakogl/v3d: depth/stencil refused for object 0x101: no GPU memory for its 1463296 byte depth/stencil buffer; the draw is not recorded (GL_OUT_OF_MEMORY)
+10:49:52 yakogl: glDrawArrays was not recorded (-12); the frame is missing it
+10:49:52 GL error 0x505 in glDrawArrays
+10:49:52 gl_test: stlayers: second pass: 1 refused (GL_OUT_OF_MEMORY), 11 read back, 0 drawn layer(s) refused, 0 not checked
+10:49:52 gl_test: case 168 stlayers: PASS
+10:49:52 gl_test: all: 0 of 21 cases failed (21 passed; 0 timed out; first failure case -1 at index -1)
+10:49:52 gl_test: done
+10:49:52 v3d_gl_test RECORD (no screen: the UART), build 29460f96, 8 s after boot: DONE
+10:49:52 --- the OSAL ---
+10:49:52 BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x22306a ra 0x223069 qba 0x223000 qea 0x22306a
+10:49:52 FIRST FAILURE: none (no timeout)
+10:49:52 slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+10:49:52 binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+10:49:52 binning by interrupt (IRQ 106): 152 interrupts, 0 overflow blocks fed by the ISR
+10:49:52 carve-out: 15509248 bytes used now, 48898560 at most, of 49803264; 0 frees held
+10:49:52 osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+10:49:52 carve-out find: 215 calls, 81961 map reads (381 a call, at most 4140 in one); free runs 12, longest 34139136 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+10:49:52 packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 152 jobs ended; emitted 5485, skipped 9832; groups compared 5619, mismatches 114
+10:49:52 allocations refused for lack of GPU memory: 2 (2 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+10:49:52 UIFCFG 0x00000045 (read at init)
+10:49:52 --- the verdicts ---
+10:49:52 
+10:49:52 v3d_gl_test: case 5 PASS
+10:49:52 v3d_gl_test: case 58 PASS
+10:49:52 v3d_gl_test: case 59 PASS
+10:49:52 v3d_gl_test: case 66 PASS
+10:49:52 v3d_gl_test: case 67 PASS
+10:49:52 v3d_gl_test: case 102 PASS
+10:49:52 v3d_gl_test: case 3 PASS
+10:49:52 v3d_gl_test: case 9 PASS
+10:49:52 v3d_gl_test: case 11 PASS
+10:49:52 v3d_gl_test: case 12 PASS
+10:49:52 v3d_gl_test: case 13 PASS
+10:49:52 v3d_gl_test: case 4 PASS
+10:49:52 v3d_gl_test: case 70 PASS
+10:49:52 v3d_gl_test: case 71 PASS
+10:49:52 v3d_gl_test: case 55 PASS
+10:49:52 v3d_gl_test: case 142 PASS
+10:49:52 v3d_gl_test: case 106 PASS
+10:49:52 v3d_gl_test: case 148 PASS
+10:49:52 v3d_gl_test: case 162 PASS
+10:49:52 v3d_gl_test: case 167 PASS
+10:49:52 v3d_gl_test: case 168 PASS
+10:49:52 v3d_gl_test: 21 of 21 cases passed (6716 ms)
+10:49:52 v3d_gl_test: build 29460f96
+10:49:52 v3d_gl_test RECORD end, build 29460f96

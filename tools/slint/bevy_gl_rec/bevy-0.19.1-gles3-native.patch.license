@@ -1,0 +1,4 @@
+SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: Bevy Contributors
+A patch to Bevy 0.19.1 (crates.io), under Bevy's licence (NOTICE 8).

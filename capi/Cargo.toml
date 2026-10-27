@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The C-ABI archive: `yakogl` + the panic handler, as one staticlib. The C
+# builds (../CMakeLists.txt, ../baremetal.mk, ../zephyr/) build it with
+# `-p yakogl-capi`, post-process it with assemble.cmake (the Rust runtime and
+# compiler_builtins' libc/libm symbols made local) and append the C parts:
+# the result is libyakogl.a. Rust applications do not use this crate; they
+# depend on `yakogl` and provide their own panic handler.
+[package]
+name = "yakogl-capi"
+description = "libyakogl.a: the YakoGL C ABI as a static library"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND MIT"
+publish.workspace = true
+
+[lib]
+# Not `yakogl`: the library crate's rlib already has that file stem. The build
+# systems install the post-processed archive as libyakogl.a.
+name = "yakogl_capi"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+# A no_std staticlib with a panic handler cannot be a test harness.
+test = false
+doctest = false
+bench = false
+
+[features]
+# At most one: the OSAL whose ops table is the default `g_osal` (see the
+# yakogl crate). None leaves `g_osal` null (osal_set_ops() first).
+osal-linux = ["yakogl/osal-linux"]
+osal-zephyr = ["yakogl/osal-zephyr"]
+osal-baremetal = ["yakogl/osal-baremetal"]
+# The GPU whose backend is compiled in (the yakogl crate's own features):
+# exactly one of the four. The AM62P's PowerVR BXS:
+gpu-powervr = ["yakogl/gpu-powervr"]
+# The i.MX8MP's GC7000:
+gpu-vivante = ["yakogl/gpu-vivante"]
+# The Raspberry Pi 4's V3D 4.2 (the yakogl crate's `gpu-v3d`): the in-process
+# compiler is its only shader back end, so it goes with `shaderc-online` and
+# `no-shader-table` (the yakogl crate refuses it otherwise).
+gpu-v3d = ["yakogl/gpu-v3d"]
+# The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`, a skeleton that
+# refuses every draw): like the V3D it goes with `shaderc-online` and
+# `no-shader-table`.
+gpu-mali = ["yakogl/gpu-mali"]
+# The in-process compiler: no_std, it needs no table, and it is the only back
+# end a Zephyr image can take.
+shaderc-online = ["yakogl/shaderc-online"]
+# The precompiled tier in front of the compiler (the yakogl crate's own
+# feature; capi/yakogl_capi.cmake's PRECOMPILED generates the table and
+# points YAKOGL_PRECOMPILED_TABLE at it).
+precompiled-shaders = ["yakogl/precompiled-shaders"]
+# No table in the image (the yakogl crate's own feature): what a Zephyr build
+# with the in-process compiler passes. Outside the host tests the table is
+# only ever in a build that asks for it, below, so this changes nothing there.
+no-shader-table = ["yakogl/no-shader-table"]
+# MEASUREMENT IMAGES ONLY: the Mesa reference table as this build's shader
+# table (the yakogl crate's own feature; `SHADERC offline` in the C builds,
+# Kconfig YAKOGL_SHADERC_OFFLINE). It will be replaced by the table our own
+# compiler precompiles (tools/precompile).
+mesa-reference-table = ["yakogl/mesa-reference-table"]
+# Report OpenGL ES 2.0 rather than ES 3.0 (the yakogl crate's own feature);
+# what a conformance build of the library needs.
+report-es2 = ["yakogl/report-es2"]
+# The test knobs (the yakogl crate's own feature): what the gl_test
+# and deqp images take; a product image never does.
+test-knobs = ["yakogl/test-knobs"]
+# The gl_test runner (driver/tools/pvrlab/runner): the walker of
+# tools/pvrlab/gl_test.c, which that file's gl_test_run calls, so every
+# build that links gl_test.c takes it (the gl_test images through Kconfig
+# YAKOGL_GL_TEST_RUNNER, the host harness, the CMake option
+# YAKOGL_GL_TEST_RUNNER). Its symbols are gl_test_*; a product image never
+# has them (tools/check.sh, "no test knob in the artefact").
+gl-test-runner = ["dep:yakogl-gltest-runner"]
+
+[dependencies]
+yakogl = { path = "..", default-features = false }
+yakogl-gltest-runner = { path = "../driver/tools/pvrlab/runner", optional = true }

@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The display and SoC drivers written for this project (docs/source-form.md,
+# group E): register sequences in Rust, behind thin C shims in
+# driver/drivers/<class>/ that register them with Zephyr's driver model; and
+# the PowerVR GPU's rgxlayer (group A, step 6: the layer under the vendored
+# DDK's rgxstartstop.c / rgxfwimageutils.c, exported with the DDK's C names).
+# No dependencies at all -- in particular not the `zephyr` crate, which at our
+# pin supports applications only (no device registration, no devicetree
+# instances, no ISR hookup). Everything the code needs from the OS comes in
+# through `struct yd_env` (include/yakogl_drivers.h).
+#
+# Built as a staticlib for aarch64-unknown-none-softfloat: this code runs at
+# PRE_KERNEL_1 and inside ISRs, where arm64 Zephyr forbids the FP registers.
+# driver/zephyr/CMakeLists.txt builds it (libyakogl_drivers.a) when a driver
+# that needs it selects YAKOGL_DRV_DISPLAY_RUST or YAKOGL_DRV_GPU_PVR_RUST; the host tests are
+# `cargo test -p yakogl-drivers`.
+[package]
+name = "yakogl-drivers"
+description = "Display and SoC drivers and the PowerVR rgxlayer for the YakoGL boards, in Rust behind Zephyr C shims"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND BSD-3-Clause AND MIT"
+publish.workspace = true
+
+[lib]
+name = "yakogl_drivers"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+doctest = false
+bench = false
+
+[features]
+# The SoC whose drivers are compiled in. A Zephyr build passes the ones its
+# Kconfig selected; the host tests take both.
+imx8mp = []
+am62p = []
+# The RK3588 (NanoPC-T6): the WDT0 self-arm and the board glue's CPU
+# helpers (driver/zephyr/lib/board/nanopc_t6).
+rk3588 = []
+# The Mali-G610's kernel side (gpu::mali); the NanoPC-T6 images.
+mali = []
+# The PowerVR GPU's rgxlayer (gpu::pvr::rgxlayer), under the vendored DDK's
+# rgxstartstop.c / rgxfwimageutils.c; AM62P images with the GPU driver.
+pvr = []
+# PowerVR fence wait: read the fragment UFO every 20 us instead of once per
+# ms (gpu::pvr::render::WAIT_POLL_US;
+# docs/notes/pvr-fence-wait.md). Opt-in until gl_test and
+# glmark2 have run with it on the AM62P; a Zephyr image takes it from
+# CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT.
+pvr-fine-wait = ["pvr"]
+# Per-kick timestamps of the PowerVR render service (gpu::pvr::kick_times:
+# submit, MMU invalidate, post, geometry and fragment fence seen, wait), read
+# by the glmark2 sample. Opt-in instrument; a Zephyr image takes it from
+# CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES.
+pvr-kick-times = ["pvr"]
+# The grow line's scene context (gpu::pvr::render, "the grow scene"): the
+# kicks and the time since the application marked its scene's start, said at
+# every freelist grow request. Opt-in instrument; a Zephyr image takes it
+# from CONFIG_YAKOGL_DRV_GPU_PVR_GROW_SCENE.
+pvr-grow-scene = ["pvr"]
+# The Vivante GC7000 kernel side (gpu::vivante): power, identify, reset, MMU,
+# ring, interrupt; i.MX 8M Plus images with YAKOGL_DRV_GPU_VIVANTE.
+vivante = ["imx8mp"]

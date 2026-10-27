@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# yakogl-precompile: the build-time half of "compile shaders at build time
+# with our own compiler" (what is left: #1214, #1215). It reads
+# tools/shaders/precompiled.list, drives the product's own shader back end
+# (src/shaderc/online, the in-process compiler) on the host in the order the
+# GL core calls it, and writes every record it made as a Rust table into
+# build/ (never committed). tools/README.md, "The source list and the
+# precompiler".
+#
+# Lean on purpose: no dependency but the library, which it links as an image
+# does -- the in-process compiler with no table and WITHOUT `host-test`, so
+# the compiler it runs is the one that ships (`host-test` switches code the
+# compiler runs: the V3D scheduler's second hoisting search, the GC7000
+# allocator's per-thread instruments).
+[package]
+name = "yakogl-precompile"
+description = "Precompile the shader source list with YakoGL's own compiler (a host tool)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "yakogl-precompile"
+path = "src/main.rs"
+
+[features]
+# The GPU the table is compiled for: exactly one, as in the library
+# (src/main.rs refuses none and two). No default, for the library's reason:
+# a default GPU would be wrong on the other boards.
+gpu-powervr = ["yakogl/gpu-powervr"]
+gpu-vivante = ["yakogl/gpu-vivante"]
+# The compiler of a build that reports OpenGL ES 2.0 (it refuses GLSL ES
+# 3.00): the table such an image takes.
+report-es2 = ["yakogl/report-es2"]
+
+[dependencies]
+# The image configuration of the library (tools/check.sh, TARGET_CONFIGS):
+# the in-process compiler and no Mesa table. No OSAL: the generator lends the
+# compiler its two regions itself, as an OSAL does.
+yakogl = { path = "../..", default-features = false, features = ["shaderc-online", "no-shader-table"] }

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+if SOC_SERIES_AM62PX
+
+config NUM_IRQS
+	default 512 if SOC_SERIES_AM62PX_R5
+	default 992 if SOC_SERIES_AM62PX_A53
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 25000000 if SOC_SERIES_AM62PX_R5
+	default 200000000 if SOC_SERIES_AM62PX_A53
+
+config KERNEL_ENTRY
+	default "_vector_table" if SOC_SERIES_AM62PX_R5
+
+configdefault UART_NS16550_TI_K3
+	default y
+
+if SERIAL
+
+choice UART_NS16550_VARIANT
+	default UART_NS16550_VARIANT_NS16750
+endchoice
+
+endif # SERIAL
+
+config BUILD_OUTPUT_BIN
+	default n if SOC_SERIES_AM62PX_R5
+
+endif # SOC_SERIES_AM62PX

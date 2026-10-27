@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The i.MX 8M Plus MIPI DSI host (the Samsung DSIM core, 0x32e60000) and its
+  D-PHY as a Zephyr MIPI-DSI device, register logic in Rust
+  (driver/rust/src/ip/samsung_dsim.rs and ip/dphy_timing.rs, written from
+  IMX8MPRM Rev. 3 13.6 / 13.7 and the MIPI D-PHY v1.2 minimums):
+  driver/drivers/mipi_dsi/dsi_yakogl_samsung.c. Video mode, 24-bit RGB.
+
+  mipi_dsi_attach() brings the link up to the clock lane in HS with the data
+  lanes held in stop state (ESCMODE[ForceStopstate]) and returns: a bridge
+  such as the SN65DSI84 is programmed in that window. The data lanes are
+  released by yakogl_samsung_dsim_video_start() (include/yakogl_drv/
+  samsung_dsim.h), which the LCDIF's blanking_off() or the chain owner calls
+  once the LCDIF scans (risk R5). transfer() is not supported (video only).
+
+  The block's power domain (mipi-dsi1), clocks, resets and PLL reference
+  (MEDIA_MIPI_PHY1_REF) are the chain owner's (yakogl,imx8mp-media-pd); this
+  device's init maps the registers and reads nothing.
+
+  Design and board plan: driver/docs/imx8mp-display-cold.md.
+
+compatible: "yakogl,samsung-dsim"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  pll-ref-frequency:
+    type: int
+    required: true
+    description: |
+      The PLL's input (MEDIA_MIPI_PHY1_REF), Hz; 6-300 MHz, and P must bring
+      it into 2-30 MHz (IMX8MPRM Table 13-27).
+
+  burst-clock-frequency:
+    type: int
+    default: 0
+    description: |
+      The lane bit rate, Hz; the PLL runs the nearest setting. 0: the slowest
+      rate the PLL makes that carries pixel clock x 24 / lanes. A rate that
+      cannot carry the stream is refused at attach.
+
+  esc-clock-frequency:
+    type: int
+    default: 20000000
+    description: The escape clock not to exceed (at most 20 MHz, 13.6.9.1.6).
+
+  data-lanes:
+    type: int
+    default: 4
+    description: Data lanes, 1-4 (a mipi_dsi_device's data_lanes overrides it).
+
+  pixel-clock-frequency:
+    type: int
+    default: 0
+    description: |
+      The pixel clock the LCDIF really runs, Hz, used to turn the porches into
+      blanking word counts. The chain owner sets the measured rate with
+      yakogl_samsung_dsim_set_pixel_clock(); this is the default before it.
+
+  burst-mode:
+    type: boolean
+    description: Burst mode (else non-burst with sync events), CONFIG[BurstMode].

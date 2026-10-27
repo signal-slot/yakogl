@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Armadillo-X2 (i.MX 8M Plus): the HDMI display path's registers read through
+# /dev/mem while the board's Linux shows a picture on HDMI-A-1 (1920x1200).
+# Test data for driver/rust/src/soc/imx8mp/hdmi_golden.rs; how it is taken
+# and why each address is safe to read: driver/docs/x2-hdmi-cold.md, board
+# plan (a). Format: ADDRESS WIDTH VALUE (hex, 8 or 32, hex).
+#
+# NOT TAKEN YET. The header of the real dump records the date, `uname -a`,
+# /proc/cmdline, the connector's mode and the clock summary lines; the data
+# lines follow, one register each, in the order of the read list.
