@@ -34,6 +34,8 @@
 #    - i.MX8MP tree: tools/cts/imx8mp-full-tree-29460f96.results.tsv turned
 #      back into records and tallied: results.tsv against the committed one,
 #      rows.md, the TALLY line and the diff against the old tree runner's.
+#      And a dEQP-GLES3 table image: records built from the known CRCs of
+#      two GLES3 cases come back with those names (no crc:<hex> left).
 # 4. The record's own status (no old runner read it): APP and PROBES records
 #    with a pass, a fail and an undefined status, and the gl_test set's CASE
 #    records (CASE_SET passed, failed and inconsistent; the earlier
@@ -46,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=243
+WANT_CHECKS=246
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -90,7 +92,8 @@ export YAKOGL_TOOLS=$td/debug/yakogl-tools
 # nothing of the operator's environment reaches the runs
 unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART UART_ADDR NETBOOT_SERVER NETBOOT_TFTP_ROOT \
     NETBOOT_TFTP_LOG NETBOOT_ROUTE NETBOOT_NO_WATCHDOG SEL TREE_IMAGE TREE_IMAGE_DIR TREE_TAG TREE_ROWS \
-    TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS
+    TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS \
+    DEQP_CASELIST
 
 # ---- fake images: the AArch64 Image header, image_size, a marker ------------
 mkimg() { # mkimg FILE FOOTPRINT MARKER
@@ -948,6 +951,34 @@ gold "imx8mp tree runner: --prev (e01 passed 18): DIFF" > "$S/a"
 "$B" imx8mp diff "$S/prevdir" "$T" | sed '1s/ against .*:/:/' > "$S/b"
 same "the per-row diff equal ($(tail -1 "$S/b" | sed 's/^ *//'))" "$S/a" "$S/b"
 check "the diff names the changed row e01" grep -q '^  e01 now' "$S/b"
+
+echo "== 3f. i.MX8MP GLES3 table image: known CRCs come back as case names (docs/es3/board-recipe-imx8mp.md)"
+# row 5 of tools/cts/imx8mp-gles3-tree.txt as a one-image selector tree, its
+# records built from the CRCs of two known cases of that table entry: what
+# the image of that entry writes (deqp_snvs.c). Nothing of the GLES2 default
+# may be needed: the tally must name the failures, not print crc:<hex>.
+T3="$S/imx3tree"
+mkdir -p "$T3"
+printf 'e00\t%s\t0\tdEQP-GLES3.functional.attribute_location.*\n' "$S/one.bin" > "$T3/tree.txt"
+nA=dEQP-GLES3.functional.attribute_location.bind.float
+nB=dEQP-GLES3.functional.attribute_location.bind.int
+cA=$(crc "$nA")
+cB=$(crc "$nB")
+d3="$T3/20261003-1500-e00-$sha8"
+mkrun "$d3" board=imx8mp boot=uboot-tftp name=e00 probe=0 back=1 up=40
+printf '594b0801 00020001 00000000 %s0003\n' "$cA" > "$d3/snvs.txt"
+: > "$d3/INDEX.txt"
+p3="$T3/20261003-1500-e00-p0-$sha8"
+mkrun "$p3" board=imx8mp boot=uboot-tftp name=e00-p0 probe=0 back=1
+printf '594b0a02 %s%s ffffffff ffffffff\n' "$cB" "$cA" > "$p3/snvs.txt"
+: > "$p3/INDEX.txt"
+"$B" imx8mp tally "$T3" > "$S/new-imx3.txt" 2>&1
+check "GLES3 table image: the tally names both failures ($nA; $nB), no crc: left" \
+    eval 'grep -qF "$nA;$nB" "$T3/results.tsv" && ! grep -q "crc:" "$T3/results.tsv"'
+check "record crc on a known GLES3 check ($cA) prints its name, no list and no prefix given" \
+    eval '"$YAKOGL_TOOLS" record crc "$cA" | grep -qxF "$nA"'
+check "the decoded GLES3 row record names its first fail ($nA)" \
+    eval '"$YAKOGL_TOOLS" record 594b0801 00020001 00000000 "${cA}0003" | grep -qF "$nA"'
 
 echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
 [ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]

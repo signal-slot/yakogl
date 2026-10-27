@@ -175,16 +175,13 @@ When a row has a failure, another status or a case without a result, `board.sh` 
 `e<i>-p<page>` with selector `0x8000 | page << 8 | i`. Each of these boots reads six failing-case CRC-16s.
 `NAMES=0` turns this off.
 
-**GLES3 caveat (failing names).** `board.sh` maps each CRC to a name with `yakogl-tools record crc <c>`.
-That command defaults to `tools/cts/gles2-mustpass.txt` and the prefix `dEQP-GLES2.`, so for a GLES3 tree
-the names in `results.tsv` come out as `crc:<hex>`. The counts are not affected. To resolve a CRC by hand:
-
-```sh
-DEQP_CASELIST=tools/cts/gles3-mustpass.txt cargo run -q -p yakogl-tools -- record crc <hex> dEQP-GLES3.
-```
-
-Then keep only the names inside that row's filter, which is column 2 of `results.tsv`. Making `board.sh`
-do this by itself is follow-up work (see the handoff of item imx8mp-gles3-tree).
+**Failing names.** `board.sh` maps each CRC to a name with `yakogl-tools record crc <c>`. Its case list
+is `tools/cts/gles2-mustpass.txt` and `tools/cts/gles3-mustpass.txt` together and it matches a check
+against every name in it, so a GLES3 table image's failures resolve as they are: the `failing names`
+column of `results.tsv` holds case names, never `crc:<hex>` — kept only when they start inside the row's
+own table entry (column 2). A name check of two names can be equal; both are then printed. To search one
+module or another list only: `record crc <hex> dEQP-GLES3.`, or `DEQP_CASELIST=<file>` to replace the
+list.
 
 ### Expected verdict lines
 

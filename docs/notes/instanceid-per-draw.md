@@ -384,8 +384,8 @@ tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt \
   --statuses records/imx8mp/instanced-$HEAD8/*/console.txt | grep instanced
 ```
 
-(Failing GLES3 names on the i.MX8MP may print as `crc:<hex>`; map them with
-the table, as #1274 says.)
+(Failing GLES3 names on the i.MX8MP print as case names: the tally maps
+each CRC through the image's table and both mustpass lists, as #1274 says.)
 
 Expected verdicts:
 
