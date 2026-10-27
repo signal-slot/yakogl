@@ -347,8 +347,11 @@ change() {
 change tools/tftp_oneshot.py "the TFTP server" 'TFTP server'
 change tools/cts/am62p-gles3-tree.txt "the GLES3 tree table" 'gles3-tree'
 change tests/reference/blobs.rs "the committed Mesa table" '^(gen     tests/reference|no )'
-# The environment: the toolchain's variables, the interpreter's.
-moved "RUSTFLAGS" '^(gen     precompiled table|no )' "$(row_keys RUSTFLAGS=--cfg=testcache_probe)"
+# The environment: the toolchain's variables, the interpreter's. Rows whose
+# key holds the toolchain (key_toolchain) move with RUSTFLAGS: the precompile
+# table rows, the rows that read their artefacts, and the glmark2 PERF page
+# row, whose run.sh builds the decoder binary with cargo.
+moved "RUSTFLAGS" '^(gen     precompiled table|no |host    glmark2 PERF page)' "$(row_keys RUSTFLAGS=--cfg=testcache_probe)"
 moved "PYTHONPATH" '^tools ' "$(row_keys PYTHONPATH=/nonexistent)"
 moved "PCO_DEBUG" '^gen     tests/reference' "$(row_keys PCO_DEBUG=probe)"
 echo "check_testcache_selftest: $checks checks run (planned $checks), $fails failed"
