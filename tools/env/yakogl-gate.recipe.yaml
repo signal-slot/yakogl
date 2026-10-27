@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# What makes a fresh Ubuntu machine the gate's: the repository's own
+# build-gate-image.sh (packages, rustup, the dependency layout of
+# tools/cts/deps.toml, the firmware header) and the GitHub Actions runner the
+# pool starts per job (`~/actions-runner/run.sh --jitconfig`). The tree and
+# the firmware header come from build/gate-image/, which tools/env/gate-image.sh
+# stages on the operator's machine: the header is never committed, and the
+# tree is the operator's checkout, so an unpushed change can be tried.
+description: the yakogl gate machine (tools/check.sh with every row, and the runner)
+linux:
+  - copy: { from: build/gate-image/yakogl.tar, to: /tmp/yakogl.tar }
+  - copy: { from: build/gate-image/pvr_fw_blob.h, to: /tmp/pvr_fw_blob.h }
+  - run: rm -rf ~/yakogl && mkdir -p ~/yakogl && tar -xf /tmp/yakogl.tar -C ~/yakogl && rm /tmp/yakogl.tar
+  - run: ~/yakogl/tools/env/build-gate-image.sh --pvr-fw-blob /tmp/pvr_fw_blob.h && rm /tmp/pvr_fw_blob.h
+  # The runner, pinned; the pool refuses an image without ~/actions-runner/run.sh.
+  - run: >-
+      mkdir -p ~/actions-runner && cd ~/actions-runner &&
+      curl -fsSLo runner.tar.gz https://github.com/actions/runner/releases/download/v2.338.1/actions-runner-linux-x64-2.338.1.tar.gz &&
+      echo "08e9ccb3604d2462c24b5e33604dc30810296ca15cc65f23cffd4317eb144c37  runner.tar.gz" | sha256sum -c - &&
+      tar -xzf runner.tar.gz && rm runner.tar.gz &&
+      sudo ./bin/installdependencies.sh
+  # The tree was only for the build: a job checks out its own.
+  - run: rm -rf ~/yakogl && sudo apt-get clean && sudo fstrim -v /

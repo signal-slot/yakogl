@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The gate image, built from this repository alone: `tools/env/gate-image.sh`
+# stages the tree and the firmware header under build/gate-image/ and runs
+# `orion image build` on this manifest with ORION_RECIPES=tools/env, so the
+# recipe below is tools/env/yakogl-gate.recipe.yaml. An image the pool keeps
+# generations of is built as its next generation (ubuntu+yakogl-gate@<now>)
+# and every server of the pool takes it from the store (orion-complex
+# docs/pools.md, "A rebuild retires the generations before it").
+name: ubuntu+yakogl-gate
+from: ubuntu+noble
+vcpus: 8
+memory-gb: 24
+disk-gb: 200
+provision: [yakogl-gate.recipe]

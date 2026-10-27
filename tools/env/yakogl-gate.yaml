@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The orion pool that runs this project's CI jobs and farm tasks: one
+# single-use machine per job, cloned from the newest generation of the image
+# ubuntu+yakogl-gate (tools/env/yakogl-gate.image.yaml builds it). Applied to
+# the server that keeps the lab's pools with `orion pool apply tools/env/yakogl-gate.yaml`
+# (orion-complex docs/pools.md). This file is the definition the server holds;
+# a change is made here and applied, never on the server alone.
+#
+# ci: the GitHub jobs. The borrower's token covers the owner's repositories,
+# so `repos` names the repository by name. A green job on `refresh` (main) is
+# captured as the image's next generation, so the pool's machines stay warm.
+name: yakogl
+description: yakogl machines, one single-use machine per CI job or connected task
+image: ubuntu+yakogl-gate
+vcpus: 4                  # a farm task's machine
+memory-gb: 8
+disk-gb: 200
+generations:
+  keep: 2
+  before-capture:
+    - sudo rm -rf ~/.cache/yakogl/tmp ~/actions-runner/_work ~/actions-runner/_diag ~/runner.log
+    - sudo fstrim -v /
+ci:
+  repos: [signal-slot/yakogl]
+  labels: [self-hosted, Linux, X64, yakogl-gate]
+  path: ["$HOME/.cargo/bin"]
+  refresh: main
+  vcpus: 8                # a CI job's machine
+  memory-gb: 12
