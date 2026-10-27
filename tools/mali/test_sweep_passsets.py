@@ -125,6 +125,71 @@ class SetsMode(unittest.TestCase):
         self.assertNotIn("notes", out)
 
 
+class LogLayout(unittest.TestCase):
+    """Records laid out like tools/cts/log/<date>-<item>/."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def record(self, name, runs, total=6):
+        for i, v in enumerate(runs):
+            write(os.path.join(self.root, name, "sweep-%d.verdicts.txt" % (i + 1)),
+                  sweep_log(v if isinstance(v, dict) else verdicts(v, total)))
+        write(os.path.join(self.root, name, "README.md"), "notes\n")
+        write(os.path.join(self.root, name, "predictions.txt"), "case 1: PASS\n")
+        # a case run that is not a sweep
+        write(os.path.join(self.root, name, "case-5.log"),
+              "panthor-gltest: verdict case 5 x: FAIL rc -1\npanthor-gltest: 1 case(s) run: FAIL 1\n")
+
+    def test_verdicts_txt_records(self):
+        self.record("2026-10-27-a", [{1}, {1}])
+        self.record("2026-10-28-b", [{1, 2}, {1, 2}])
+        rc, out = tool(self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("(2 sweep log(s))", out)
+
+    def test_require_pass(self):
+        self.record("2026-10-27-a", [{1}, {1}])
+        self.record("2026-10-28-b", [{1, 2, 3}, {1, 2, 3}])
+        rc, out = tool("--require", "1,2,3", self.root)
+        self.assertEqual(rc, 0, out)
+
+    def test_require_missing_case_names_log_and_line(self):
+        self.record("2026-10-27-a", [{1}, {1}])
+        self.record("2026-10-28-b", [{1, 2, 3}, {1, 2}])
+        rc, out = tool("--require", "2,3", self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("REQUIRED case 3: not PASS in", out)
+        self.assertIn("sweep-2.verdicts.txt: panthor-gltest: verdict case 3 name3: REFUSED rc 0", out)
+        self.assertNotIn("REQUIRED case 2", out)
+
+    def test_require_absent_case(self):
+        self.record("2026-10-28-b", [{1}, {1}])
+        rc, out = tool("--require", "99", self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("REQUIRED case 99: no verdict line in", out)
+
+    def test_delta_exact_strings(self):
+        self.record("2026-10-27-a", [{1}, {1}])
+        self.record("2026-10-28-b", [{1, 2}, {1, 2}])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("case 2: panthor-gltest: verdict case 2 name2: REFUSED rc 0 -> "
+                      "panthor-gltest: verdict case 2 name2: PASS rc 0", out)
+        self.assertNotIn("case 1:", out)
+        self.assertIn("1 case(s) differ", out)
+
+    def test_delta_with_one_record(self):
+        self.record("2026-10-27-a", [{1}, {1}])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("--delta needs two records", out)
+
+
 class CorpusMode(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
