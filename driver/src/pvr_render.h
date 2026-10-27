@@ -247,6 +247,12 @@ extern bool pvr_render_fl_grow_on_demand;
 /* CONFIG_YAKOGL_DRV_GPU_PVR_FL_READY_PAGES: the global freelists keep the
  * firmware's ready pages (off by default). */
 extern bool pvr_render_fl_ready_pages;
+/* CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: hand the firmware its partial
+ * render (gpu::pvr::render::submit: the geometry command's PR fence words, a
+ * geometry timeline word, and per kick a FENCE_PR, a 3D_PR and an UPDATE;
+ * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render").
+ * Off until gl_test case 175 (refusehang) and glmark2 have run with it. */
+extern bool pvr_render_partial_render;
 /* GPU recoveries (the firmware's HWR counter) since the render service
  * started: the board layer's recovery count on the PowerVR. */
 uint32_t pvr_render_hwr_recoveries(void);

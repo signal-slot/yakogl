@@ -309,6 +309,26 @@ pins! {
     /// The flag a reconstruction clears (drm/imagination calls it
     /// HWRTDATA_HAS_LAST_GEOM).
     HWRTDATA_HAS_LAST_TA: u32 = 0x4 => "HWRTDATA_HAS_LAST_TA";
+    /// The flag the firmware sets when a partial render on this render
+    /// target finished and reads to resume the geometry after it; the host
+    /// only drops it on a reconstruction (freelist::reset_hwrts), as
+    /// drm/imagination does (rgx_fwif_shared.h:1152).
+    HWRTDATA_PARTIAL_RENDERED: u32 = 0x8 => "HWRTDATA_PARTIAL_RENDERED";
+    // The render-target accounting the firmware's partial render reads
+    // (RGXFWIF_RTA_CTL inside the HWRT data, rgx_fwif_shared.h:1218-1235;
+    // the arrays' own dwords are the 4-byte firmware-heap addresses).
+    HWRTDATA_RTA_CTL: usize = 112 => "offsetof(RGXFWIF_HWRTDATA, sRTACtl)";
+    HWRTDATA_RTA_CTL_SIZE: usize = 32 => "sizeof(RGXFWIF_RTA_CTL)";
+    RTA_CTL_VALID_RENDER_TARGETS: usize = 16 => "offsetof(RGXFWIF_RTA_CTL, sValidRenderTargets)";
+    RTA_CTL_VALID_RENDER_TARGETS_SIZE: usize = 4 => "sizeof(((RGXFWIF_RTA_CTL *)0)->sValidRenderTargets)";
+    RTA_CTL_NUM_PARTIAL_RENDERS: usize = 20 => "offsetof(RGXFWIF_RTA_CTL, sRTANumPartialRenders)";
+    RTA_CTL_MAX_RTS: usize = 24 => "offsetof(RGXFWIF_RTA_CTL, ui32MaxRTs)";
+    RTA_CTL_FLAGS: usize = 28 => "offsetof(RGXFWIF_RTA_CTL, ui32RTACtlFlags)";
+    /// The two states of the partial render sequence (rgx_fwif_shared.h:1164-1178):
+    /// the geometry phase stopped out of parameter memory, and the partial
+    /// render that resumes it finished.
+    RTDATA_STATE_TAOUTOFMEM: u32 = 7 => "RGXFWIF_RTDATA_STATE_TAOUTOFMEM";
+    RTDATA_STATE_PARTIALRENDERFINISHED: u32 = 8 => "RGXFWIF_RTDATA_STATE_PARTIALRENDERFINISHED";
     LOCAL_FREELIST: usize = 0 => "RGXFW_LOCAL_FREELIST";
     GLOBAL_FREELIST: usize = 1 => "RGXFW_GLOBAL_FREELIST";
     GLOBAL2_FREELIST: usize = 2 => "RGXFW_GLOBAL2_FREELIST";
@@ -319,6 +339,8 @@ pins! {
     CCB_CMD_HEADER_SIZE_FIELD: usize = 4 => "offsetof(RGXFWIF_CCB_CMD_HEADER, ui32CmdSize)";
     CCB_CMD_TYPE_GEOM: u32 = 0x2ABC_80C9 => "RGXFWIF_CCB_CMD_TYPE_GEOM";
     CCB_CMD_TYPE_3D: u32 = 0x2ABC_80CB => "RGXFWIF_CCB_CMD_TYPE_3D";
+    /// The 3D command of a partial render (rgx_fwif_km.h:1325).
+    CCB_CMD_TYPE_3D_PR: u32 = 0x2ABC_80CC => "RGXFWIF_CCB_CMD_TYPE_3D_PR";
     CCB_CMD_TYPE_FENCE: u32 = 0x2ABC_00D4 => "RGXFWIF_CCB_CMD_TYPE_FENCE";
     CCB_CMD_TYPE_UPDATE: u32 = 0x2ABC_00D5 => "RGXFWIF_CCB_CMD_TYPE_UPDATE";
     CCB_CMD_TYPE_FENCE_PR: u32 = 0x2ABC_00D7 => "RGXFWIF_CCB_CMD_TYPE_FENCE_PR";

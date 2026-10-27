@@ -55,6 +55,9 @@ pub const GEOM_UFO_SLOTS: u32 = 16;
 /// Two PBE register words per colour attachment in this firmware's 3D
 /// command, four dwords apart (measured on the board).
 const PBE_STRIDE_DW: usize = 4;
+/// How many colour attachments one render can write: the PBE words above
+/// cover it, and it is the size of the partial render's RTA arrays
+/// (`sRTACtl.ui32MaxRTs`).
 pub const MAX_RT: usize = 3;
 /// Render-target tiling constants for this core (Mesa bxs-4-64.h): 16x16
 /// tiles, simple internal parameter format v2, 4x4 macrotiles.
@@ -155,7 +158,10 @@ pub struct YdPvrHwrt {
     pub hcmn_off: u32,
     pub hrt_off: u32,
     pub hrt_fwaddr: u32,
-    pub pad: u32,
+    /// The partial render's render-target arrays, firmware-heap offsets
+    /// (`partial_render`; the HWRT data's sRTACtl points at them,
+    /// `hwrt_get`). 0 when the knob never built them.
+    pub rta_valid_off: u32,
     pub tpc: PvrGpuBo,
     pub vheap: PvrGpuBo,
     pub rgnhdr: PvrGpuBo,
@@ -175,7 +181,9 @@ pub struct YdPvrHwrt {
     /// Which member of the pair the next render of this size takes (kept on
     /// the even slot).
     pub next: u32,
-    pub pad2: u32,
+    /// The partial render's per-render-target partial-render counts array
+    /// (`rta_valid_off`'s partner).
+    pub rta_partial_off: u32,
 }
 
 /// `struct yd_pvr_render_cfg`: the render service's run-time switches
@@ -201,6 +209,13 @@ pub struct YdPvrRenderCfg {
     /// (`CONFIG_YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND`; the C then builds the
     /// lists with no reserve).
     pub fl_grow_on_demand: u32,
+    /// Hand the firmware its partial render: the geometry command's PR fence
+    /// words and, per kick, a FENCE_PR, a 3D_PR (a copy of the 3D command)
+    /// and an UPDATE on a geometry timeline word
+    /// (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`; docs/notes/pvr-render-pool.md,
+    /// "Design: the firmware's partial render"). Without it every command
+    /// and word is what it was without the knob.
+    pub partial_render: u32,
 }
 
 /// `struct yd_pvr_render_ops`: what the render side borrows from the C.
@@ -294,24 +309,26 @@ const _: () = {
     assert!(offset_of!(YdPvrHwrt, mlist) == 128);
     assert!(offset_of!(YdPvrHwrt, tpc_alloc) == 152);
     assert!(offset_of!(YdPvrHwrt, next) == 168);
-    assert!(size_of::<YdPvrRenderCfg>() == 48);
+    // cfg is 52 bytes, so `ops` (a pointer) starts at 56 with the 4 bytes of
+    // alignment after it on any target this crate is built for (lp64).
+    assert!(size_of::<YdPvrRenderCfg>() == 52);
     assert!(size_of::<YdPvrRenderOps>() == 16);
-    assert!(offset_of!(YdPvrRender, ops) == 48);
-    assert!(offset_of!(YdPvrRender, inited) == 56);
-    assert!(offset_of!(YdPvrRender, gen_b) == 60);
-    assert!(offset_of!(YdPvrRender, gfl_off) == 64);
-    assert!(offset_of!(YdPvrRender, last_hs) == 140);
-    assert!(offset_of!(YdPvrRender, dbg_vdm) == 144);
-    assert!(offset_of!(YdPvrRender, vdm_cs) == 152);
-    assert!(offset_of!(YdPvrRender, reposts) == 176);
-    assert!(offset_of!(YdPvrRender, last_kick_n) == 208);
-    assert!(offset_of!(YdPvrRender, last_frag_cmd) == 216);
-    assert!(offset_of!(YdPvrRender, last_kick) == 536);
-    assert!(offset_of!(YdPvrRender, hwrt) == 856);
-    assert!(offset_of!(YdPvrRender, kick_times) == 856 + 176 * HWRT_SETS);
-    assert!(offset_of!(YdPvrRender, grow_scene) == 856 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>());
+    assert!(offset_of!(YdPvrRender, ops) == 56);
+    assert!(offset_of!(YdPvrRender, inited) == 64);
+    assert!(offset_of!(YdPvrRender, gen_b) == 68);
+    assert!(offset_of!(YdPvrRender, gfl_off) == 72);
+    assert!(offset_of!(YdPvrRender, last_hs) == 148);
+    assert!(offset_of!(YdPvrRender, dbg_vdm) == 152);
+    assert!(offset_of!(YdPvrRender, vdm_cs) == 160);
+    assert!(offset_of!(YdPvrRender, reposts) == 184);
+    assert!(offset_of!(YdPvrRender, last_kick_n) == 216);
+    assert!(offset_of!(YdPvrRender, last_frag_cmd) == 224);
+    assert!(offset_of!(YdPvrRender, last_kick) == 544);
+    assert!(offset_of!(YdPvrRender, hwrt) == 864);
+    assert!(offset_of!(YdPvrRender, kick_times) == 864 + 176 * HWRT_SETS);
+    assert!(offset_of!(YdPvrRender, grow_scene) == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>());
     assert!(size_of::<YdPvrGrowScene>() == 16);
-    assert!(size_of::<YdPvrRender>() == 856 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>() + 16);
+    assert!(size_of::<YdPvrRender>() == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>() + 16);
 };
 
 // ---- helpers ----------------------------------------------------------------------
@@ -455,7 +472,12 @@ pub fn ctx_init(k: &mut YdPvrKm, r: &mut YdPvrRender) {
     // One geometry UFO word per in-flight kick: the fragment phase waits on
     // it with the firmware's plain UFO check, an EQUALITY test, so a single
     // word that a geometry phase running ahead moves past the awaited value
-    // would never match again.
+    // would never match again. The word after the slots is the geometry
+    // timeline of the partial render (`partial_render`, Option A of
+    // docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+    // render"): monotonic, one UPDATE per geometry command, referenced only
+    // by the PR fences, so the slot ring's wrap cannot move it away from the
+    // value a pending partial render waits for.
     r.gufo_off = fw_alloc(k, 4 * GEOM_UFO_SLOTS + 4);
     r.fcccb_off = fw_alloc(k, CCCB_SIZE);
     r.fcccbctl_off = fw_alloc(k, CCCB_CTL_SIZE as u32);
@@ -503,7 +525,9 @@ pub fn ctx_init(k: &mut YdPvrKm, r: &mut YdPvrRender) {
     }
     k.flush(k.heap_cpu(r.rc_off), rc_sz as usize);
 
-    for i in 0..GEOM_UFO_SLOTS {
+    // The slots and the timeline word: a zeroed timeline is below every seq,
+    // so the first kick's partial-render fence simply waits.
+    for i in 0..GEOM_UFO_SLOTS + 1 {
         hwr(k, r.gufo_off, (i * 4) as usize, 0);
     }
     hwr(k, r.fufo_off, 0, 0);
@@ -843,6 +867,36 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
         // SAFETY: the HWRT data (256 bytes).
         unsafe { core::ptr::write_bytes(hrt, 0, HWRTDATA_SIZE) };
     }
+    // The partial render's render-target accounting (knob only, so with the
+    // knob off these words stay what they were, new and recycled). Two
+    // dword arrays the HWRT data's sRTACtl points at: the valid render
+    // target indices, and the partial renders counted per render target
+    // (RGXFWIF_RTA_CTL, rgx_fwif_shared.h:1218-1235; the firmware names a
+    // null ValidRenderTargets an invalid setup, rgx_fwif_sf.h:569). The
+    // arrays hold MAX_RT (PVR_RENDER_MAX_RT) dwords: the colour attachments
+    // one render can write, what sRTACtl.ui32MaxRTs names.
+    let pr = r.cfg.partial_render != 0;
+    if pr {
+        let s = &mut r.hwrt[hs];
+        for off in [&mut s.rta_valid_off, &mut s.rta_partial_off] {
+            if *off == 0 {
+                *off = fw_alloc(k, 4 * MAX_RT as u32);
+                // SAFETY: the MAX_RT dwords just allocated.
+                unsafe { core::ptr::write_bytes(k.heap_cpu(*off), 0, 4 * MAX_RT) };
+                k.flush(k.heap_cpu(*off), 4 * MAX_RT);
+            }
+        }
+        // Valid render targets: the index array. The partial-render counts
+        // stay zero; the firmware counts them.
+        let v = k.heap_cpu(s.rta_valid_off);
+        // SAFETY: MAX_RT dwords.
+        unsafe {
+            for i in 0..MAX_RT {
+                wr32(v, 4 * i, i as u32);
+            }
+        }
+        k.flush(v, 4 * MAX_RT);
+    }
     let (hc_fa, fl_fa, gfl_fa, gfl2_fa) =
         (k.heap_fwaddr(hc_off), k.heap_fwaddr(r.fl_off), k.heap_fwaddr(r.gfl_off), k.heap_fwaddr(r.gfl2_off));
     let s = r.hwrt[hs];
@@ -859,6 +913,14 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
         wr64(hrt, HWRTDATA_RGN_HEADER_DEVVADDR, s.rgnhdr.gpu);
         wr64(hrt, HWRTDATA_MACROTILE_ARRAY_DEVVADDR, s.macrotile.gpu);
         wr64(hrt, HWRTDATA_RTC_DEVVADDR, 0);
+        if pr {
+            wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_VALID_RENDER_TARGETS, k.heap_fwaddr(s.rta_valid_off));
+            wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_NUM_PARTIAL_RENDERS, k.heap_fwaddr(s.rta_partial_off));
+            wr32(hrt, HWRTDATA_RTA_CTL + RTA_CTL_MAX_RTS, MAX_RT as u32);
+            // ui32HWRTDataFlags are the firmware's: PARTIAL_RENDERED is the
+            // firmware's to set and use; the host only drops it with a
+            // reconstruction (freelist::reset_hwrts), as upstream does.
+        }
     }
     k.flush(hrt, HWRTDATA_SIZE);
     r.hwrt[hs].hrt_fwaddr = k.heap_fwaddr(hrt_off);
@@ -1251,10 +1313,24 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
     let gring = k.heap_cpu(r.gcccb_off);
     let fring = k.heap_cpu(r.fcccb_off);
     let hrt_fwaddr = r.hwrt[hs].hrt_fwaddr;
-    let gufo_fa = k.heap_fwaddr(r.gufo_off) + geom_ufo_slot(seq) * 4;
+    let gufo_base = k.heap_fwaddr(r.gufo_off);
+    let gufo_fa = gufo_base + geom_ufo_slot(seq) * 4;
+    // With the partial-render knob: the geometry timeline word (the word
+    // after the UFO slots, ctx_init) and the invariant it keeps, timeline
+    // == seq exactly when this kick's geometry phase has run. The PR fences
+    // use it exactly as upstream uses its single sync timeline: the geometry
+    // command references seq - 1, the fragment PR fence references seq
+    // (Linux drm/imagination pvr_queue.c, "Holds the TA/3D fence value to
+    // allow the 3D partial render command to go through"; Mesa srvkm
+    // pvr_arch_srv_job_render.c:531-569). Option A of docs/notes/
+    // pvr-render-pool.md, "Design: the firmware's partial render".
+    let pr = r.cfg.partial_render != 0;
+    let timeline_fa = gufo_base + 4 * GEOM_UFO_SLOTS;
 
     // GEOM: RGXFWIF_CMDTA (16 dwords; past CMDTA3D_SHARED a value from DDK
-    // capture) + UPDATE (geometry UFO = seq).
+    // capture) + UPDATE (geometry UFO = seq); with the knob the PR fence
+    // words {timeline, seq - 1} in the command and a second UPDATE to the
+    // timeline (value = seq, once the GEOM command itself has run).
     {
         let mut dk = [0u32; 16];
         dk[CMDTA3D_SHARED_HWRT_DATA / 4] = hrt_fwaddr;
@@ -1264,15 +1340,32 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         dk[9] = kick.geom.te_psg;
         dk[12] = GEOM_FLAGS_FIRSTKICK | GEOM_FLAGS_LASTKICK;
         dk[13] = gufo_fa; // partial-render fence address
+        dk[14] = 0; // ... and value, unwritten today
+        if pr {
+            // The words after the flags are the command's partial-render
+            // fence (RGXFWIF_CMDTA.partial_render_ta_3d_fence, Mesa
+            // pvr_rogue_fwif.h; dk[13] already carries the address today,
+            // the value never). The offsets are the captured layout
+            // (driver/src/pvr_selftest.c's CMDTA3D_SHARED copy; the DDK's
+            // own CMDTA struct is not in the vendored headers, so this is
+            // as far as a pin reaches).
+            dk[13] = timeline_fa;
+            dk[14] = seq.wrapping_sub(1);
+        }
         let mut gwo = r.gwo;
-        ring_reserve(k, gring, &mut gwo, 16 + 64 + 16 + 16); // bodies padded to 16
+        ring_reserve(k, gring, &mut gwo, 16 + 64 + 16 + 16 + if pr { 16 + 16 } else { 0 }); // bodies padded to 16
         ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_GEOM, &words_bytes::<16, 64>(&dk));
         ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(gufo_fa, seq));
+        if pr {
+            ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
+        }
         r.gwo = gwo;
     }
 
-    // FRAG: FENCE (geometry UFO) + RGXFWIF_CMD3D (80 dwords; past
-    // CMDTA3D_SHARED a value from DDK capture) + UPDATE (fragment UFO = seq).
+    // FRAG: with the knob the PR trio FENCE_PR + 3D_PR + UPDATE (geometry
+    // timeline), then FENCE (geometry UFO) + RGXFWIF_CMD3D (80 dwords; past
+    // CMDTA3D_SHARED a value from DDK capture; the 3D_PR body is a copy of
+    // it) + UPDATE (fragment UFO = seq).
     {
         let f = &kick.frag;
         let mut dk = [0u32; 80];
@@ -1329,11 +1422,32 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
                 i += 8;
             }
         }
+        let mut fwo = r.fwo;
+        // One trio (FENCE + 3D + UPDATE) today's shape; the PR trio adds an
+        // equal amount (bodies padded to 16).
+        let need = 16 + 16 + 16 + 320 + 16 + 16;
+        ring_reserve(k, fring, &mut fwo, if pr { 2 * need } else { need });
+        if pr {
+            // The partial-render trio first, the order of Linux
+            // drm/imagination's fragment queue (pvr_queue.c:698-737):
+            // FENCE_PR on the geometry timeline at seq (satisfied exactly
+            // when this kick's geometry UPDATE has run), the 3D_PR, and its
+            // UPDATE. The 3D_PR body is a byte copy of the 3D command below:
+            // for an ordinary single-pass render Mesa builds it exactly so -
+            // same attachments, same EOT data, same Z/S and background words
+            // (pvr_arch_cmd_buffer.c:1736-1747, pvr_arch_job_render.c:1353-
+            // 1407) - and the firmware never executes it unless a partial
+            // render is pending. Its UPDATE rewrites the timeline with the
+            // same seq (not seq + 1: the next kick's geometry fence names
+            // seq by equality, and the firmware's UFO test is an equality
+            // test, ctx_init) - a no-op while no partial render is pending.
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE_PR, &ufo_bytes(timeline_fa, seq));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dk));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
+        }
         // The FENCE on the geometry UFO first: the firmware schedules a 3D as
         // soon as its kick arrives, so without it the 3D can run before the
         // TA has tiled (observed: an empty frame).
-        let mut fwo = r.fwo;
-        ring_reserve(k, fring, &mut fwo, 16 + 16 + 16 + 320 + 16 + 16); // bodies padded to 16
         ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE, &ufo_bytes(gufo_fa, seq));
         r.last_frag_cmd = dk;
         r.last_frag_seq = seq;
@@ -3432,5 +3546,364 @@ mod wait_tests {
         let (_, o) = last(&t);
         assert_eq!(o.seq, kt::KT_RING as u32 + 1);
         assert_eq!((o.done, o.lost), (kt::KT_RING as u32, 1));
+    }
+}
+
+#[cfg(test)]
+mod submit_tests {
+    //! The client CCB bytes of [`submit`], knob off and on
+    //! (docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+    //! render", host tests): with the knob, the fragment CCB of one kick
+    //! holds, in this order, FENCE_PR {timeline, seq}, 3D_PR (the 3D
+    //! command's size and words), UPDATE, then FENCE, 3D, UPDATE, and the
+    //! geometry command's PR fence words are {timeline, seq - 1}. Without
+    //! the knob, the bytes are today's (the km render record unchanged).
+    //! Today's code fails the first test: it is the design's known negative.
+    use super::*;
+    use crate::gpu::pvr::km::YdPvrKmOps;
+    use std::cell::RefCell;
+
+    /// Carveout layout (byte offsets; the wait tests' pattern, all objects
+    /// in the firmware heap's main region). The rings hold whole kicks, so
+    /// a command never wraps during a test.
+    const FUFO: u32 = 0x300;
+    const MC_SYNC: u32 = 0x310;
+    const GUFO: u32 = 0x400;
+    const KCTL: u32 = 0x1000;
+    const KCMD: u32 = 0x1040; // 8 slots of KCCB commands
+    const KRTN: u32 = 0x1600;
+    const HWRINFO: u32 = 0x2000;
+    const HC0: u32 = 0x3000; // the seeded pair's HWRT data commons and datas
+    const HRT0: u32 = 0x3080;
+    const HC1: u32 = 0x3180;
+    const HRT1: u32 = 0x3200;
+    // The pair's partial-render render-target arrays, pre-seeded so the rig
+    // never allocates (MAX_RT dwords each; regions past all of the above).
+    const RTA0V: u32 = 0x3400;
+    const RTA0P: u32 = 0x3410;
+    const RTA1V: u32 = 0x3500;
+    const RTA1P: u32 = 0x3510;
+    const GCCCB: u32 = 0x8000;
+    const FCCCB: u32 = 0x10000;
+    const CARVEOUT_BYTES: usize = 0x40000;
+    const KICK_W: u32 = 8;
+    const KICK_H: u32 = 8;
+
+    struct Sim {
+        lines: RefCell<Vec<String>>,
+    }
+
+    unsafe extern "C" fn nop_range(_: *mut c_void, _: *const c_void, _: usize) {}
+    unsafe extern "C" fn nop(_: *mut c_void) {}
+    unsafe extern "C" fn busy_wait(_: *mut c_void, _: u32) {}
+    unsafe extern "C" fn log(ctx: *mut c_void, _: u32, b: *const u8, n: usize) {
+        // SAFETY: ctx is the test's Sim; b is valid for n bytes.
+        let s = unsafe { &*(ctx as *const Sim) };
+        s.lines.borrow_mut().push(String::from_utf8_lossy(unsafe { core::slice::from_raw_parts(b, n) }).into_owned());
+    }
+
+    struct Rig {
+        mem: Vec<u32>,
+        /// The KCCB doorbell registers `k.regs` points at (alive while k is).
+        _regs: Vec<u32>,
+        sim: Box<Sim>,
+        /// Kept alive for `k.ops`.
+        _ops: Box<YdPvrKmOps>,
+        k: Box<YdPvrKm>,
+        r: Box<YdPvrRender>,
+    }
+
+    /// A rig with the two rings, the geometry UFO slots and timeline word,
+    /// the KCCB, and one 8x8 render-target pair already "built" - enough of
+    /// a context for [`submit`] to write a kick, with nothing in flight
+    /// (no waits, no re-post, no grow). `partial_render` is the knob.
+    fn rig(partial_render: u32) -> Rig {
+        let mut mem = vec![0u32; CARVEOUT_BYTES / 4];
+        let cpu = mem.as_mut_ptr() as *mut u8;
+        let sim = Box::new(Sim { lines: RefCell::new(Vec::new()) });
+        let ops = Box::new(YdPvrKmOps {
+            ctx: &*sim as *const Sim as *mut c_void,
+            flush: nop_range,
+            invd: nop_range,
+            fence: nop,
+            busy_wait_us: busy_wait,
+            log,
+        });
+        // SAFETY: both are repr(C) structs of integers, raw pointers and
+        // arrays of them; all-zero is a valid value of each.
+        let mut k: Box<YdPvrKm> = Box::new(unsafe { core::mem::zeroed() });
+        let mut r: Box<YdPvrRender> = Box::new(unsafe { core::mem::zeroed() });
+        let mut regs = vec![0u32; 0x4000];
+        k.cpu = cpu;
+        k.size = CARVEOUT_BYTES as u64;
+        k.ops = &*ops;
+        k.fw_main_size = CARVEOUT_BYTES as u32;
+        k.fw_config_off = u32::MAX;
+        k.fwccb_ctl_off = 0x100;
+        k.fwccb_cmds_off = 0x140;
+        k.kccb_ctl_off = KCTL;
+        k.kccb_cmds_off = KCMD;
+        k.kccb_rtn_off = KRTN;
+        k.hwrinfobuf_off = HWRINFO;
+        k.regs = regs.as_mut_ptr() as usize;
+        // The KCCB's wrap mask, eight slots.
+        mem[KCTL as usize / 4 + CCB_CTL_WRAP_MASK / 4] = 7;
+
+        r.inited = 1;
+        r.cfg.partial_render = partial_render;
+        r.gcccb_off = GCCCB;
+        r.fcccb_off = FCCCB;
+        r.gufo_off = GUFO;
+        r.fufo_off = FUFO;
+        r.mc_sync_off = MC_SYNC;
+        // Both members start free but built: buffers "allocated" (the rig
+        // only needs non-null block handles), HWRT data and RTA arrays at
+        // the seeded offsets, nobody in flight (last_seq 0). Kick 1 then
+        // builds member 0, kick 2 the pair's second member: every handout
+        // walks the build path, which rewrites the HWRT data words at the
+        // seeded offsets without allocating.
+        for (m, (hc, hrt, rtav, rtap)) in [(0usize, (HC0, HRT0, RTA0V, RTA0P)), (1, (HC1, HRT1, RTA1V, RTA1P))] {
+            let s = &mut r.hwrt[m];
+            (s.used, s.w, s.h, s.samples, s.fw_built) = (0, 0, 0, 0, 1);
+            (s.hcmn_off, s.hrt_off) = (hc, hrt);
+            (s.rta_valid_off, s.rta_partial_off) = (rtav, rtap);
+            s.hrt_fwaddr = k.heap_fwaddr(hrt);
+            let bo = |base: u32| PvrGpuBo {
+                gpu: GENERAL_HEAP_BASE + u64::from(base),
+                cpu: cpu.wrapping_add(base as usize),
+                heap_off: base,
+            };
+            s.tpc = bo(0x20000);
+            s.vheap = bo(0x24000);
+            s.rgnhdr = bo(0x28000);
+            s.macrotile = bo(0x2c000);
+            s.mlist = bo(0x30000);
+            s.tpc_alloc = 0x4000;
+            s.rgn_alloc = 0x10000;
+        }
+        super::kick_times::test_clock::set(1_000_000);
+        Rig { mem, _regs: regs, sim, _ops: ops, k, r }
+    }
+
+    /// An 8x8 kick with distinguishable non-zero registers (tag picks the
+    /// values, so a command of kick 1 and of kick 2 differ word by word).
+    /// Control-register values use only high bits: submit reads meaning out
+    /// of the low bits of ISP CTL, PPP CTRL or the command flags (z-buffer
+    /// bits, GETVISRESULTS), and a test value must not claim any of them.
+    fn kick(tag: u32) -> PvrRenderKick {
+        // SAFETY: every field is a plain integer or an array of them.
+        let mut c: PvrRenderKick = unsafe { core::mem::zeroed() };
+        let o = |x: u32| x * 0x1000 + tag; // heap offsets (u32)
+        let v = |x: u32| u64::from(o(x)); // ... as GPU VAs (u64)
+        let r = |x: u32| x * 0x10000 + tag; // control-register values (u32)
+        (c.width, c.height, c.samples) = (KICK_W, KICK_H, 1);
+        c.geom.vdm_ctrl_stream_base = GENERAL_HEAP_BASE + v(0xF0);
+        c.geom.ppp_ctrl = r(0x11);
+        c.geom.te_psg = r(0x22);
+        c.frag.usc_pixel_output_ctrl = r(0x33);
+        c.frag.isp_ctl = r(0x44);
+        c.frag.event_pixel_pds_data = o(0x50);
+        c.frag.pbe_word[0] = [v(0x60), v(0x70)];
+        c.frag.num_rt = 1;
+        c.frag.pds_bgnd[0] = v(0x80);
+        c.frag.isp_scissor_base = v(0x90);
+        c.frag.cmd_flags = r(0x99);
+        c
+    }
+
+    impl Rig {
+        /// The commands written into a client CCB so far, as (type, size,
+        /// body dwords). The rings never wrapped during a test (the reserve
+        /// checks hold in the asserts below).
+        fn cmds(&self, ring: u32, woff: u32) -> Vec<(u32, u32, Vec<u32>)> {
+            let mut out = Vec::new();
+            let mut o = 0u32;
+            while o < woff {
+                let b = (ring + o) as usize / 4;
+                let (ty, size) = (self.mem[b], self.mem[b + 1]);
+                out.push((ty, size, self.mem[b + 4..b + 4 + (size / 4) as usize].to_vec()));
+                o += 16 + size;
+            }
+            out
+        }
+        fn types(&self, ring: u32, woff: u32) -> Vec<u32> {
+            self.cmds(ring, woff).into_iter().map(|(ty, _, _)| ty).collect()
+        }
+        /// The fence's {address, value} of an UPDATE / FENCE / FENCE_PR body.
+        fn ufo(body: &[u32]) -> (u32, u32) {
+            (body[0], body[1])
+        }
+        fn log(&self) -> String {
+            self.sim.lines.borrow().join("\n")
+        }
+        /// A carveout dword at a byte offset.
+        fn word(&self, at: usize) -> u32 {
+            self.mem[at / 4]
+        }
+        /// The carveout dwords at a byte offset.
+        fn words(&self, at: usize, n: usize) -> Vec<u32> {
+            self.mem[at / 4..at / 4 + n].to_vec()
+        }
+    }
+
+    /// The bytes one kick writes into a ring: 16-byte header per command
+    /// plus body, [knob off, knob on].
+    const GEOM_BYTES: [u32; 2] = [16 + 64 + 16 + 16, 16 + 64 + 16 + 16 + 16 + 16];
+    const FRAG_BYTES: [u32; 2] = [16 + 16 + 16 + 320 + 16 + 16, 2 * (16 + 16 + 16 + 320 + 16 + 16)];
+
+    /// With the knob: the fragment CCB gains FENCE_PR + 3D_PR + UPDATE on
+    /// the geometry timeline before today's trio, and the geometry command
+    /// carries {timeline, seq - 1} and a second UPDATE to the timeline.
+    /// Today's code fails this test (the design's known negative).
+    #[test]
+    fn with_the_knob_the_pr_trio_comes_first_on_both_ccbs() {
+        let mut t = rig(1);
+        let gufo_base = t.k.heap_fwaddr(GUFO);
+        let timeline = gufo_base + 4 * GEOM_UFO_SLOTS;
+        let (mut f1, mut f2) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        assert_eq!((f1, f2), (1, 2));
+        assert_eq!((t.r.gwo, t.r.fwo), (2 * GEOM_BYTES[1], 2 * FRAG_BYTES[1]));
+
+        let g = t.cmds(GCCCB, t.r.gwo);
+        let f = t.cmds(FCCCB, t.r.fwo);
+        assert_eq!(
+            g.iter().map(|c| c.0).collect::<Vec<_>>(),
+            [CCB_CMD_TYPE_GEOM, CCB_CMD_TYPE_UPDATE, CCB_CMD_TYPE_UPDATE].repeat(2)
+        );
+        assert_eq!(
+            f.iter().map(|c| c.0).collect::<Vec<_>>(),
+            [
+                CCB_CMD_TYPE_FENCE_PR,
+                CCB_CMD_TYPE_3D_PR,
+                CCB_CMD_TYPE_UPDATE,
+                CCB_CMD_TYPE_FENCE,
+                CCB_CMD_TYPE_3D,
+                CCB_CMD_TYPE_UPDATE
+            ]
+            .repeat(2)
+        );
+
+        // Kick 2 (the geometry ring's commands 3..=5, the fragment ring's
+        // 6..=11). Its geometry PR fence words are {timeline, 2 - 1}.
+        let g2 = &g[3];
+        assert_eq!((g2.1, g2.2.len()), (64, 16));
+        assert_eq!((g2.2[13], g2.2[14]), (timeline, 1));
+        assert_eq!(g2.2[1], t.k.heap_fwaddr(HRT1)); // the member this kick took
+        assert_eq!(Rig::ufo(&g[4].2), (gufo_base + geom_ufo_slot(2) * 4, 2));
+        assert_eq!(Rig::ufo(&g[5].2), (timeline, 2));
+
+        // The fragment PR trio: FENCE_PR waits at the timeline's value seq,
+        // the 3D_PR is the 3D command's own bytes (its size 320), and the
+        // UPDATE rewrites the timeline with the same seq.
+        let fp = &f[6];
+        assert_eq!((fp.1, fp.2.len()), (16, 4));
+        assert_eq!(Rig::ufo(&fp.2), (timeline, 2));
+        assert_eq!((f[7].1, f[7].2.len()), (320, 80));
+        assert_eq!(f[7].2, f[10].2, "the 3D_PR body is the 3D command's");
+        assert!(f[7].2.iter().any(|&w| w != 0), "the copy carries the kick's words");
+        assert_eq!(Rig::ufo(&f[8].2), (timeline, 2));
+        // And today's trio after it, unchanged: FENCE on the kick's own
+        // geometry slot, 3D, UPDATE on the fragment UFO.
+        assert_eq!(Rig::ufo(&f[9].2), (gufo_base + geom_ufo_slot(2) * 4, 2));
+        assert_eq!(Rig::ufo(&f[11].2), (t.k.heap_fwaddr(FUFO), 2));
+    }
+
+    /// Without the knob: the commands are the ones every board record holds
+    /// today - GEOM + one UPDATE per kick, FENCE + 3D + UPDATE per kick -
+    /// the old partial-render fence words of the geometry command untouched
+    /// (the slot address, value 0), and no FENCE_PR or 3D_PR anywhere.
+    #[test]
+    fn without_the_knob_the_commands_are_todays() {
+        let mut t = rig(0);
+        let gufo_base = t.k.heap_fwaddr(GUFO);
+        let (mut f1, mut f2) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        assert_eq!((f1, f2), (1, 2));
+        assert_eq!((t.r.gwo, t.r.fwo), (2 * GEOM_BYTES[0], 2 * FRAG_BYTES[0]));
+
+        assert_eq!(t.types(GCCCB, t.r.gwo), [CCB_CMD_TYPE_GEOM, CCB_CMD_TYPE_UPDATE].repeat(2));
+        assert_eq!(t.types(FCCCB, t.r.fwo), [CCB_CMD_TYPE_FENCE, CCB_CMD_TYPE_3D, CCB_CMD_TYPE_UPDATE].repeat(2));
+        let g2 = &t.cmds(GCCCB, t.r.gwo)[2];
+        assert_eq!((g2.2[13], g2.2[14]), (gufo_base + geom_ufo_slot(2) * 4, 0));
+        assert_eq!(Rig::ufo(&t.cmds(FCCCB, t.r.fwo)[0].2), (gufo_base + geom_ufo_slot(1) * 4, 1));
+        assert_eq!(Rig::ufo(&t.cmds(FCCCB, t.r.fwo)[2].2), (t.k.heap_fwaddr(FUFO), 1));
+    }
+
+    /// The knob adds the PR commands and their geometry words, and nothing
+    /// else: the 3D body, the FENCE and the trailing UPDATE, and every other
+    /// geometry word, are byte-identical between knob on and knob off for
+    /// the same kick.
+    #[test]
+    fn the_knob_changes_only_the_pr_commands_and_the_geometry_fence_words() {
+        // Both rigs start at seq 0, so the same kick sequence lines up.
+        let (mut on, mut off) = (rig(1), rig(0));
+        for tag in 1..=2u32 {
+            let (mut a, mut b) = (0u32, 0u32);
+            assert_eq!(submit(&mut on.k, &mut on.r, &kick(tag), &mut a), 0, "log:\n{}", on.log());
+            assert_eq!(submit(&mut off.k, &mut off.r, &kick(tag), &mut b), 0, "log:\n{}", off.log());
+            // GEOM: knob off writes 2 commands per kick, knob on 3.
+            let g = on.cmds(GCCCB, on.r.gwo);
+            let h = off.cmds(GCCCB, off.r.gwo);
+            let (geom_on, geom_off) = (&g[3 * (tag - 1) as usize], &h[2 * (tag - 1) as usize]);
+            assert_eq!((geom_on.0, geom_on.1), (geom_off.0, geom_off.1));
+            for i in 0..16 {
+                if i != 13 && i != 14 {
+                    assert_eq!(geom_on.2[i], geom_off.2[i], "GEOM dw{i} of kick {tag}");
+                }
+            }
+            // The fragment ring's ordinary trio (knob on: 6 commands per
+            // kick, the trio the last three).
+            let f = on.cmds(FCCCB, on.r.fwo);
+            let e = off.cmds(FCCCB, off.r.fwo);
+            let i_on = 6 * (tag - 1) as usize;
+            let i_off = 3 * (tag - 1) as usize;
+            for (x, y) in f[i_on + 3..i_on + 6].iter().zip(&e[i_off..i_off + 3]) {
+                assert_eq!((x.0, x.1, &x.2), (y.0, y.1, &y.2), "fragment command of kick {tag}");
+            }
+        }
+    }
+
+    /// With the knob, building an HWRT dataset fills its partial-render
+    /// accounting (design Part 4): sRTACtl names the two render-target
+    /// arrays and ui32MaxRTs, the valid array holds the render target
+    /// indices, the counts array is zero for the firmware to count into.
+    /// Asserted on both pair members (each kick builds one).
+    #[test]
+    fn with_the_knob_the_hwrt_data_carries_the_partial_render_accounting() {
+        let mut t = rig(1);
+        let (mut f1, mut f2) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        for (hrt, rtav, rtap) in [(HRT0, RTA0V, RTA0P), (HRT1, RTA1V, RTA1P)] {
+            let ctl = hrt as usize + HWRTDATA_RTA_CTL;
+            assert_eq!(t.word(ctl + RTA_CTL_VALID_RENDER_TARGETS), t.k.heap_fwaddr(rtav));
+            assert_eq!(t.word(ctl + RTA_CTL_NUM_PARTIAL_RENDERS), t.k.heap_fwaddr(rtap));
+            assert_eq!(t.word(ctl + RTA_CTL_MAX_RTS), MAX_RT as u32);
+            // The counters and flags words are the firmware's; the host
+            // hands them out zero.
+            assert_eq!(t.words(ctl, 4), [0; 4]);
+            assert_eq!(t.word(ctl + RTA_CTL_FLAGS), 0);
+            assert_eq!(t.words(rtav as usize, MAX_RT), [0, 1, 2]);
+            assert_eq!(t.words(rtap as usize, MAX_RT), [0; MAX_RT]);
+        }
+    }
+
+    /// Without the knob, none of that is written: the sRTACtl words and the
+    /// two array regions stay zero, so a built HWRT data is byte-for-byte
+    /// what it was before the feature existed.
+    #[test]
+    fn without_the_knob_the_partial_render_words_stay_zero() {
+        let mut t = rig(0);
+        let (mut f1, mut f2) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        for (hrt, rtav, rtap) in [(HRT0, RTA0V, RTA0P), (HRT1, RTA1V, RTA1P)] {
+            assert_eq!(t.words(hrt as usize + HWRTDATA_RTA_CTL, HWRTDATA_RTA_CTL_SIZE / 4), [0; 8]);
+            assert_eq!(t.words(rtav as usize, MAX_RT), [0; MAX_RT]);
+            assert_eq!(t.words(rtap as usize, MAX_RT), [0; MAX_RT]);
+        }
     }
 }
