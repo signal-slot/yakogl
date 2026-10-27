@@ -14,6 +14,14 @@ line `rev path: ok -> new`, exit 1. Every commit must be green, so a
 regression that a later commit fixes is still reported. Added paths, refusals
 whose text changes and refusals that become ok are allowed (listed under
 --verbose). A malformed line or an unreadable revision is exit 2.
+
+No exemption exists, none is needed over the public range. Plan #154 (a)
+expected to accept the removal of the tools/shaders/qt* lines, whose sources
+the owner removed in c2538996 (#1509). That commit belongs to the history
+before the repository started over (root 381b0f09, 2026-10-27): the root's
+corpus-verdicts.txt has no qt* line, so 381b0f09..HEAD removes none, and the
+range reports 0 regressions. A removal in a later range is an offence like any
+other; do not add an allow-list for it.
 """
 import subprocess
 import sys
