@@ -34,19 +34,19 @@ complete kexec cycle's UART log that contains a whole U-Boot boot
 | Env storage | `/dev/emmc-boot0` offset `-0x2200`, size `0x2000`, **one copy (not redundant)** | `/etc/fw_env.config` on the board |
 | Linux tool | libubootenv `fw_setenv` 0.3.5, with `-s <script>` (many variables in one write) | `fw_setenv --help` on the board |
 | `bootdelay` | `0` (the compiled-in default is `1`) | env; strings of `u-boot.img` |
-| `bootcmd` | the **SafeUI** persistent boot: `ext4load` `/safeui/r5_ddr.bin`, `/safeui/r5_tcm.bin`, `/safeui/zephyr_a53.bin`, then `dcache off && icache off && go 0x82000000`; on any failure `bootflow scan -b` (Torizon Linux) | env; SafeUI repo `docs/uboot-boot.md` ("電源投入で自動起動", 2026-09-06) |
+| `bootcmd` | the stock persistent boot: `ext4load` `/stock/r5_ddr.bin`, `/stock/r5_tcm.bin`, `/stock/zephyr_a53.bin`, then `dcache off && icache off && go 0x82000000`; on any failure `bootflow scan -b` (Torizon Linux) | env; platform notes `docs/uboot-boot.md` ("電源投入で自動起動", 2026-09-06) |
 | `bootcmd_orig` | `bootflow scan -b` | env |
 | compiled-in default `bootcmd` | `bootflow scan -b` (what a bad env CRC falls back to) | strings of `u-boot.img` |
-| `/sysroot/safeui/` | `r5_ddr.bin`, `r5_tcm.bin`, `r5_layout.txt`, `zephyr_a53.bin.safeui-bak`. There is **no `zephyr_a53.bin`**, so today's `bootcmd` falls through to Linux | `ls` on the board |
+| `/sysroot/stock/` | `r5_ddr.bin`, `r5_tcm.bin`, `r5_layout.txt`, `zephyr_a53.bin.stock-bak`. There is **no `zephyr_a53.bin`**, so today's `bootcmd` falls through to Linux | `ls` on the board |
 | bootcount | `bootcount=1`, `bootlimit=3`, `altbootcmd=env set rollback 1; run bootcmd`, **no `upgrade_available`**: Torizon's OTA rollback, inactive | env |
 | `preboot` | Toradex's `fdtfile` default | env |
 | Network | `ethact=ethernet@8000000port@1`, `ethprime=eth0`. Linux `ethernet0` has the same MAC as `ethaddr`, so U-Boot's DHCP gets the board's usual lease. No `serverip`/`ipaddr` in the env | env; `/sys/class/net/ethernet0/address` |
-| Addresses | `loadaddr`/`kernel_addr_r=0x88200000`, `fdt_addr_r=0x90200000`; Zephyr is linked at **0x82000000** | env; SafeUI A53 board DTS |
+| Addresses | `loadaddr`/`kernel_addr_r=0x88200000`, `fdt_addr_r=0x90200000`; Zephyr is linked at **0x82000000** | env; A53 board DTS |
 | Watchdog in U-Boot | **none**: no `rti_wdt` driver, no `wdt` command, no `watchdog` uclass | strings of `u-boot.img`, checked against positives found the same way (`am65_cpsw_nuss`, `cpsw_mdio`, `mmc_blk`) |
 | Network commands | `dhcp`, `tftpboot [loadAddress] [[hostIPaddr:]bootfilename]`, `ping`; env `tftpblocksize`, `tftpwindowsize`, `tftptimeout`, `tftptimeoutcountmax`, `netretry`, `autoload`. **No `tftpdstp`** (always UDP port 69), no `wget`; fastboot over UDP/TCP is present | strings of `u-boot.img` |
 | Ethernet in U-Boot | `Net: eth0: ethernet@8000000port@1 [PRIME]`, then `Could not get PHY for mdio@f00: addr 7` and `ethernet@8000000port@2: phy_connect() failed` | the saved UART log |
 
-The last row corrects a SafeUI note (`docs/uboot-boot.md`, "新イメージの書き込みに
+The last row corrects a note (`docs/uboot-boot.md`, "新イメージの書き込みに
 Linux が要る理由"). It read "Could not get PHY" as "U-Boot's Ethernet does not
 work". But the error is for **port 2** (PHY address 7, the second Ethernet, not
 the one in use). Port 1 (PHY address 0) registers as `eth0 [PRIME]`. Whether
@@ -55,10 +55,10 @@ the one in use). Port 1 (PHY address 0) registers as `eth0 [PRIME]`. Whether
 
 ### A trap in the current `bootcmd`
 
-Today a file named `/sysroot/safeui/zephyr_a53.bin` makes **every** boot go to
+Today a file named `/sysroot/stock/zephyr_a53.bin` makes **every** boot go to
 Zephyr, and Zephyr cannot delete it. The board would then never come back to
 Linux without someone at the UART. The netboot never writes that path. Nobody
-should stage an image under that name while the SafeUI boot is in `bootcmd`.
+should stage an image under that name while the stock boot is in `bootcmd`.
 
 ## 2. The boot flow: a one-shot armed from Linux
 
@@ -121,8 +121,8 @@ Why not the mechanisms already in the env:
   deployment. Borrowing it would put Torizon's update state at risk. Not used.
 - `preboot` would also work (it runs before autoboot), but it already holds
   Toradex's `fdtfile` logic. `bootcmd` already carries one local change
-  (SafeUI's), so our one local change goes in the same place, in front.
-- Interrupting U-Boot over the UART bridge and typing commands (what SafeUI's
+  (the stock one), so our one local change goes in the same place, in front.
+- Interrupting U-Boot over the UART bridge and typing commands (what the platform's
   `uboot-boot-zephyr.sh` does) needs no env change. But if the host or the
   bridge fails half-way, the board waits at the U-Boot prompt, with no
   watchdog, until a person comes. Not used for unattended runs.
@@ -151,7 +151,7 @@ and the board's own `fw_setenv --help`.
   help text confirms the `[[hostIPaddr:]bootfilename]` form.
 - **`go`, not `booti`**: `booti` reads `text_offset=0` from the AArch64 header
   and moves the image to 0x80000000 (TF-A), and it does not start. With
-  `dcache off; icache off; go 0x82000000` it does. SafeUI measured this on this
+  `dcache off; icache off; go 0x82000000` it does. This was measured on this
   board on 2026-09-05 (`docs/uboot-boot.md`, "ハマりどころ").
 - **No dtb**: the Zephyr image has its devicetree built in; `go` passes none.
 - The image is the same `zephyr.bin` the kexec route uses (built with
@@ -159,7 +159,7 @@ and the board's own `fw_setenv --help`.
   image without the header's magic. It also refuses an image whose `image_size`
   (header bytes 16..23) runs past the GPU carve-out at 0x97800000 (344 MiB; a
   gl_test image is 106 MiB).
-- The load address is not in U-Boot's reserved list: SafeUI's `ext4load` to
+- The load address is not in U-Boot's reserved list: the stock `ext4load` to
   0x82000000 worked, and U-Boot applies the same reserved-memory check ("trying
   to overwrite reserved memory") to `tftpboot`. **Unmeasured for TFTP.**
 - DHCP gives the board its usual lease (same MAC). `netretry no` makes a failed
@@ -172,7 +172,7 @@ ran before the image. So there is no CPSW receive DMA writing into Zephyr's
 memory, no split-EOI GIC mode, no tidss shutdown and no runtime-PM state left
 behind (`driver/tools/kexec-zephyr/README.md` lists what Linux leaves). The GPU
 and display paths were first brought up on this board under a U-Boot `go` entry
-(SafeUI `docs/gpu-port-plan.md`, "Reflash loop"). Whether today's gl_test image
+(`docs/gpu-port-plan.md`, "Reflash loop"). Whether today's gl_test image
 behaves the same under both entries is **unmeasured**; step C in section 7
 compares the two on the same image.
 
@@ -180,7 +180,7 @@ compares the two on the same image.
 
 - Under kexec, the image's only way back is the RTI watchdog **Linux** started
   (systemd `RuntimeWatchdogUSec=30s`; `watchdog0` "K3 RTI Watchdog", 60 s). The
-  SafeUI SoC feeder (`soc/ti/k3/am62px/soc_a53_wdt.c`,
+  SoC-layer feeder (`soc/ti/k3/am62px/soc_a53_wdt.c`,
   `CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT`) feeds it for a bounded time
   (`..._SECONDS`: 150 for gl_test, 600 for deqp), then lets it reset the SoC.
 - Under U-Boot `go`, **nobody starts the RTI**. This U-Boot has no watchdog
@@ -191,12 +191,12 @@ compares the two on the same image.
   then the loader refuses to jump without a running RTI.
 - So **the image must arm the RTI itself** before a netboot is allowed. This is
   Z1: `driver/samples/zephyr/common/rti_arm.c`, behind
-  `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM` (default n; it requires the SafeUI feeder
+  `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM` (default n; it requires the SoC-layer feeder
   off, see below). At `POST_KERNEL` 47 (a `BUILD_ASSERT` keeps it after TISCI):
   1. TISCI device **125** (MAIN RTI0: `power-domains = <&k3_pds 0x7d 1>` in the
      U-Boot control DT) on, unless it already is. This is done in the arming
      code, not in the board's `tisci_power_on` list (`devices = <103 77 78>` in
-     the SafeUI A53 DTS): the list belongs to the SafeUI board, every sample
+     the A53 board DTS): the list belongs to the board, every sample
      would have to override it, and here it is tied to the option and comes
      before the first RTI register read.
   2. `DWDCTRL` already `0xa98559da` (a kexec entry: Linux started it): feed
@@ -209,10 +209,10 @@ compares the two on the same image.
      and feed from a timer until `CONFIG_YAKOGL_AM62P_WDT_SECONDS`, then stop
      and let the RTI reset the SoC. That symbol is the image's one bound: the
      AM62P sample confs set it (150 gl_test, gl_triangle and gl_femtovg, 200
-     gl_slint, 600 deqp; the two Rust samples still set the SafeUI symbol,
+     gl_slint, 600 deqp; the two Rust samples still set the symbol,
      because they cannot be configured on this host, see below), and a
-     `configdefault` passes it on to the SafeUI feeder for kexec images. So a
-     netboot build turns the SafeUI feeder off without leaving a SafeUI value
+     `configdefault` passes it on to the SoC-layer feeder for kexec images. So a
+     netboot build turns the SoC-layer feeder off without leaving a value
      assigned (which gave a Kconfig warning in the first build).
   Any refusal logs `rti_arm: FAILED (...)` and resets the SoC at once: an image
   that could not arm its watchdog does not run.
@@ -226,7 +226,7 @@ compares the two on the same image.
   subtract 1; the expiry is 60.25 s). Z1 writes `0xef` (exactly 60.000 s).
   Whether the parent is already 2 after U-Boot is **unmeasured**; the code
   does not depend on it.
-- The SafeUI feeder must be **off** in a self-arm image (Kconfig
+- The SoC-layer feeder must be **off** in a self-arm image (Kconfig
   `depends on !SOC_AM62PX_A53_FEED_INHERITED_WDT`). It reads `DWDCTRL` at
   `POST_KERNEL` 0, before any TISCI power-on. On a U-Boot entry, RTI0 may be
   powered off at that point, and that read could abort. Z1 covers the kexec
@@ -240,12 +240,12 @@ compares the two on the same image.
   | RTI proof (step B) | as self-arm, plus `RTI_PROOF=y`, `YAKOGL_SAMPLE_REBOOT=n` | 1 980 724 | `aa6b4d7f36e772e828c30e17f95d5db4351a3de8f5592aaed98b08bf90562cc7` | present |
 
   All three builds show the same 11 gcc/Kconfig warnings, all pre-existing
-  (unused cases in `gl_test.c`, `pvr_fw_boot.c`, the SafeUI DSI driver,
+  (unused cases in `gl_test.c`, `pvr_fw_boot.c`, the DSI driver,
   Zephyr's `tisci.c`); none is in the new files. The control is byte-identical
   (same sha256) before and after the Kconfig change, so kexec images do not
   change. For deqp, gl_femtovg, gl_slint and gl_triangle a configure-only build
   before and after gives the same `.config` except the one new
-  `YAKOGL_AM62P_WDT_SECONDS` line, and the SafeUI bound keeps its value (600,
+  `YAKOGL_AM62P_WDT_SECONDS` line, and the bound keeps its value (600,
   150, 200, 150). The Rust samples need `zephyr-lang-rust`, which is not on
   this host, so their confs were left unchanged (**not checked**). The runner's
   dry run accepts both self-arm images and refuses the control.
@@ -260,8 +260,8 @@ compares the two on the same image.
   kexec rc=6 run ("RTI feeder lifetime over", then `U-Boot SPL` in the log)
   shows that path working. The same boot loader runs before a netboot, so the
   path should be the same. Step B in section 7 proves it directly.
-- **Residual gap**: between `go` and priority 47, nothing bounds a hang. SafeUI
-  measured about 0.11 s from the Zephyr banner to the application, so this
+- **Residual gap**: between `go` and priority 47, nothing bounds a hang. About
+  0.11 s was measured from the Zephyr banner to the application, so this
   window is short, but it is not zero. With kexec there is no such window
   (Linux's RTI is already running). This is the one safety property kexec has
   and the netboot lacks. Closing it needs a watchdog in U-Boot, i.e. a rebuilt
@@ -336,7 +336,7 @@ Today, measured: in a back-to-back chain (am62p-land `g3-396d667a`, img5 to
 img23, 2026-09-26) the next jump started at Linux uptime **32-48 s** (mostly
 32-38 s). `kexec_run.sh` prints the uptime before each jump, and it includes
 the wait for `systemctl is-system-running`. So the Linux leg costs about 35 s
-per image, plus the firmware before the kernel (SafeUI measured SPL to its
+per image, plus the firmware before the kernel (measured SPL to its
 Zephyr banner at 2.75 s, 2026-09-06). The `back_after=154s` rows of the gl_test
 runners are not a board time: gl_test prints no dEQP summary, so rc 4 waits out
 `RUN_BOUND`=150 s. That number measures the runner.
@@ -459,7 +459,7 @@ sha256 and the armed-to-reset time.
 
 | Failure | What happens | Why it is safe |
 |---|---|---|
-| `fw_setenv` (arm or install) interrupted | The env has one copy: a half-written copy fails its CRC. U-Boot prints "using default environment" (the string is in the binary) and runs the compiled-in `bootcmd=bootflow scan -b`, i.e. Linux | The SafeUI `bootcmd` and our variables are lost, not the boot. The runner saved the env before install, and Linux-side `fw_setenv` restores it |
+| `fw_setenv` (arm or install) interrupted | The env has one copy: a half-written copy fails its CRC. U-Boot prints "using default environment" (the string is in the binary) and runs the compiled-in `bootcmd=bootflow scan -b`, i.e. Linux | The `bootcmd` and our variables are lost, not the boot. The runner saved the env before install, and Linux-side `fw_setenv` restores it |
 | `saveenv` in U-Boot fails | `if saveenv` is false: echo, skip the image, old `bootcmd`, Linux | The image loads only after the clear is on eMMC, so a one-shot cleared only in RAM can never loop |
 | `saveenv` interrupted by power loss | Bad CRC, default env, Linux | Same as the first row |
 | DHCP fails (PHY, no lease) | With `netretry no` it fails once: echo, Linux | U-Boot has no watchdog, so an endless retry would be a hang; `netretry no` removes it |
@@ -471,7 +471,7 @@ sha256 and the armed-to-reset time.
 | Image ends normally | `sys_reboot`, SPL, U-Boot, empty hook, Linux | The one-shot was cleared before the image loaded |
 | The runner dies after arming, before the reboot | Its trap disarms and removes the staged file. If it is killed hard (no trap), `yako_once` stays set and the image stays in the TFTP root; the next reboot by anyone fires the hook. The server refuses the image once it is older than `--max-age` (300 s), so that boot gets "File not found" and goes to Linux, and the one-shot is cleared by that boot. Inside the first 300 s such a reboot WOULD boot the image, which is then bounded by its own RTI arming like any run | Two independent limits: the env one-shot and the server's one-shot plus age limit. The next `run` also refuses while `yako_once` is set |
 | The host goes away during a cycle | TFTP timeouts, then Linux | The way back needs no host |
-| Someone stages `/sysroot/safeui/zephyr_a53.bin` | Every boot runs SafeUI's Zephyr | Not caused by this plan (it never writes that path), but the trap is real: section 1 |
+| Someone stages `/sysroot/stock/zephyr_a53.bin` | Every boot runs the stock Zephyr | Not caused by this plan (it never writes that path), but the trap is real: section 1 |
 
 What could still need a person: a hang in the first 0.1 s of an image
 (section 4), and broken arming in step B.
@@ -498,7 +498,7 @@ at 15:00 and at 15:31 was the 46 variables of the 09-29 record, value for value
 1. `install` printed `am62p-netboot: installed; bootcmd = 'run yako_hook; ' +
    the saved bootcmd`. Read back: 50 variables, equal to the expected list
    (the 46 plus `yako_addr`, `yako_bootcmd_prev`, `yako_hook`, `yako_net`,
-   with `bootcmd` = `run yako_hook; ` + SafeUI's `bootcmd`) in every variable
+   with `bootcmd` = `run yako_hook; ` + the platform's `bootcmd`) in every variable
    but the four redacted identifiers, which are present in both.
 2. **A. `probe`: the board did everything; the runner's verdict was wrong.**
    The UART capture (`probe.uart.ts`, times are the host's):

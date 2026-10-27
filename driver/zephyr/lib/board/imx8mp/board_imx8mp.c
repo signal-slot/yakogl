@@ -22,7 +22,7 @@
  *   finish   with YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD, a passed run's last
  *            record is the display chain's state (board_finish_record)
  *
- * With YAKOGL_BOARD_IMX8MP_ROUTE3 (board_route3.c) the windows are SafeUI
+ * With YAKOGL_BOARD_IMX8MP_ROUTE3 (board_route3.c) the windows are
  * frame-ring buffers in the M7's carve-out, the first show brings the panel
  * up and releases the M7, and every later show is a publish to the ring: the
  * M7 flips the LCDIF, this layer does not (no latch thread). If the M7 does

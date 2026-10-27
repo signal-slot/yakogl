@@ -50,7 +50,7 @@
 #                 $ZEPHYR_WS/modules/fs/fatfs the FatFs module
 #   (CLUSTER_DIR is no longer used: the A53 board, SoC and the DSS/DSI/TISCI
 #   drivers are in driver/. The module list comes from zephyr-modules.sh, which
-#   leaves out a SafeUI checkout the workspace may still carry.)
+#   leaves out a checkout of the full platform the workspace may still carry.)
 #   DEQP_WORK     stage 1's output (tools/cts/cts-build-zephyr.sh WORK=):
 #                 $DEQP_WORK/cts and $DEQP_WORK/build
 #   ZEPHYR_TOOLCHAIN_VARIANT  (default zephyr) and the Zephyr SDK the

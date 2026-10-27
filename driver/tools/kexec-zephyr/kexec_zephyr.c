@@ -5,7 +5,7 @@
  *
  * The Torizon kernel on the Verdin AM62P has CONFIG_KEXEC (the kexec_load
  * system call) but ships no kexec binary. A Zephyr image is a flat binary
- * linked at a fixed physical address (0x82000000 on the SafeUI board), so
+ * linked at a fixed physical address (0x82000000 on the board), so
  * one segment placed at that address with the entry point at its start is
  * all the kernel needs: the arm64 kexec path stops the other CPUs, turns the
  * MMU and caches off and jumps to the entry with x0..x3 = 0 (the same state
@@ -16,7 +16,7 @@
  *
  * On the AM62P the jump is refused unless the MAIN RTI watchdog is running.
  * A Zephyr image there feeds the watchdog Linux left armed, for a bounded
- * time, and has no other way back: the SafeUI SoC code feeds a running RTI
+ * time, and has no other way back: the SoC code feeds a running RTI
  * and otherwise logs "RTI watchdog not running, nothing to feed", so an image
  * that then hangs holds the board until someone cuts the power (2026-09-23:
  * a Qt Quick 3D demo jumped ~20 s into Linux's boot, hung, and was never
@@ -28,7 +28,7 @@
  * the image.
  *
  * Extra "file@addr" arguments are placed at the given physical addresses as
- * further segments before the jump: e.g. the SafeUI MCU R5F firmware images
+ * further segments before the jump: e.g. the MCU R5F firmware images
  * (r5_ddr.bin@0x9b900000 r5_tcm.bin@0x9b880000) that U-Boot's bootcmd would
  * load, so the Supervisor can start the R5F. Up to 15 extra segments.
  *

@@ -14,4 +14,4 @@ if(CONFIG_SOC_SERIES_AM62PX_A53)
   set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm64/scripts/linker.ld CACHE INTERNAL "")
 endif()
 # The MCU R5F cluster (soc_r5*.c, boot_r5.S, rsc_table.c, linker_r5.ld) is
-# not carried here: it belongs to the SafeUI platform firmware.
+# not carried here: it belongs to the platform firmware.

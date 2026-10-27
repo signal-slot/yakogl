@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
  *
  * Toradex Verdin iMX8M Plus on Dahlia, Cortex-A53 cluster: the host of the
- * SafeUI Application Supervisor and of the Vivante GC7000UL GPU bring-up.
+ * Application Supervisor and of the Vivante GC7000UL GPU bring-up.
  *
  * Memory map (4 GiB DDR at 0x40000000 on the lab board, measured on
  * 2026-09-20 from Torizon's /proc/iomem: no OP-TEE, CMA at 0xa0000000):

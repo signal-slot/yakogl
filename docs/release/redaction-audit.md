@@ -373,7 +373,7 @@ login.
 | `tools/precompile/measure-image.sh:45` | default for `ZEPHYR_WS` is an owner checkout path | default to `${ZEPHYR_WS:?set ZEPHYR_WS}` or a path relative to `$CCFARM_DEPS_DIR` | open, script (not a doc) |
 | `tools/cts/log/investigations/gc7000-femtovg-imx8mp.md:67-69` | `ZEPHYR_WS`, `WEST_VENV`, SDK dir under `/home/<t***[6]>/org/...` | `$ZEPHYR_WS`, `$WEST_VENV`, `$ZEPHYR_SDK_INSTALL_DIR` | open, outside this item's file set |
 | `tools/cts/RESULTS.md:16868,16877` | `/home/<t***[6]>/org/yakogl-cts/...` | `$CTS_OUT`-style variable name | open, outside this item's file set |
-| `tools/cts/RESULTS.md:5376,5475,5555,5736,5833,8405,15878,15879` | `/home/<t***[7]>/{gcgpu,kexec,vendor-probe,safeui}/...` (board's default login home) | low risk: product default; replace with `<board home>` if the owner wants none | open, owner decision |
+| `tools/cts/RESULTS.md:5376,5475,5555,5736,5833,8405,15878,15879` | `/home/<t***[7]>/{gcgpu,kexec,vendor-probe}/...` (board's default login home) | low risk: product default; replace with `<board home>` if the owner wants none | open, owner decision |
 | `driver/tools/kexec-zephyr/board-sudo-setup.sh:72,73` | `KO_DIR=/home/<t***[7]>/gcgpu`, `KEXEC_DIR=/home/<t***[7]>/kexec` | code default on the board; keep (it is the on-board path, overridable by `KO_DIR`/`KEXEC_DIR`) | no change |
 
 Agent-written `docs/board-sessions/*.md` and `docs/benchmarks-baseline/*.md`

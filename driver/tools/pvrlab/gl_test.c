@@ -4388,7 +4388,7 @@ static int case_unishare(void)
 
 /* ---- case 21: RGB565 window surface -------------------------------------- */
 
-/* A 16-bit R5G6B5 window (the SafeUI application surface, DRM RGB565): the
+/* A 16-bit R5G6B5 window (the application surface, DRM RGB565): the
  * PBE packs the FS output into 5/6/5 bits, glReadPixels expands them back,
  * and a frame without glClear keeps the previous one through the load quad
  * (the TPU reads the surface as an R5G6B5 texture). The raw memory is
@@ -4847,7 +4847,7 @@ static int case_compact(void)
 
 /* ---- case 25: continuous-render stress (reproduce the VDM/tiler HWR stall) -- */
 
-/* Many multi-draw kicks, like the SafeUI gpu_demo that trips the intermittent
+/* Many multi-draw kicks, like the gpu_demo that trips the intermittent
  * VDM/tiler context-store HWR (seen at 366..5000 frames). Not in the default
  * suite; run with GL_TEST_CASE=25 and watch the console for "HWR during fence".
  * Returns non-zero if any kick reports a GL error. */

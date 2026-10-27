@@ -7,11 +7,11 @@
  *
  * Why: an image entered from U-Boot with "go" (docs/standalone-boot.md, "What
  * the image does on a go entry") finds the RTI stopped, because this U-Boot has
- * no watchdog driver. The SafeUI feeder
+ * no watchdog driver. The SoC-layer feeder
  * (CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT) only feeds a running RTI, so such
  * an image had no way back from a hang. An image entered through kexec finds
  * the RTI running (Linux started it); then this code only feeds it, as the
- * SafeUI feeder would. The two are exclusive (Kconfig): the SafeUI feeder reads
+ * SoC-layer feeder would. The two are exclusive (Kconfig): the SoC-layer feeder reads
  * the RTI at POST_KERNEL 0, before any TISCI power-on, which on a U-Boot entry
  * may be a read of a module that is off.
  *
@@ -19,7 +19,7 @@
  * (after TISCI):
  *   1. TISCI device 125 (MAIN RTI0) on, unless it already is. This is done
  *      here rather than in the board's tisci_power_on list: the list is the
- *      SafeUI board DTS's (each sample would have to override it), and here
+ *      board DTS's (each sample would have to override it), and here
  *      it is tied to the option and ordered before the first register read;
  *   2. if DWDCTRL says enabled: feed only (kexec entry);
  *   3. otherwise set the functional clock's parent to 2 (the 32768 Hz
@@ -37,7 +37,7 @@
  *
  * Register offsets and values: the TI K3 RTI as Zephyr's
  * drivers/watchdog/wdt_ti_rti.c (Apache-2.0) defines them. The feeding rule
- * (feed only when the down counter is in the open half) is the SafeUI
+ * (feed only when the down counter is in the open half) is the SoC-layer
  * feeder's (soc/ti/k3/am62px/soc_a53_wdt.c).
  */
 #include <zephyr/kernel.h>

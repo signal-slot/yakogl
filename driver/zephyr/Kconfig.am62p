@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # Verdin AM62P Cortex-A53 display path and TISCI helpers, split out of the
-# SafeUI module's Kconfig (signal-slot/slint-safe-ui-zephyr eb1a48e): the
+# platform module's Kconfig: the
 # DSS and Cadence DSI drivers, the yakogl_drv_tisci_* API on Zephyr's
 # TISCI driver, the TISCI power-on list and the register calculations they
 # share. Each driver turns itself on from an enabled device tree node.
@@ -34,7 +34,7 @@ config YAKOGL_DRV_TISCI_ZEPHYR
 	help
 	  Implements include/yakogl_drv/tisci_poll.h on top of the interrupt-driven
 	  TISCI driver (ti,k2g-sci), so the display drivers run unchanged on the
-	  A53. (The SafeUI MCU R5F firmware uses a polling client instead.)
+	  A53. (The MCU R5F firmware uses a polling client instead.)
 
 config YAKOGL_DRV_TISCI_POWER_ON
 	bool "Power on a list of TISCI devices at boot"

@@ -11,7 +11,7 @@
 //! no_std target has neither a font stack nor an image decoder.
 //!
 //! CLUSTER_LAYOUT_DIR names the generated layout for the panel (ui/1024x600
-//! in the SafeUI tree, the same on every board), put on the Slint include
+//! in the tree, the same on every board), put on the Slint include
 //! path so that `import ... from "cluster-layout.slint"` resolves.
 /// The build inputs the image reports ("slint-build: ..." at boot, src/main.c):
 /// the line build-inputs.cmake wrote (the Slint, femtovg and glow trees and the

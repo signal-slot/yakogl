@@ -23,7 +23,7 @@ int pvr_sample_flip_app_buffer(uintptr_t phys, uint32_t width, uint32_t height,
 			       uint32_t stride_bytes);
 /* What to OR into a GL window's format (struct gles_native_window.format):
  * GLES_NATIVE_WINDOW_BOTTOM_UP when the display can scan the buffer bottom row
- * first (the SafeUI DSS driver with AM62P_DSS_PLANE_VFLIP), so GL draws the
+ * first (the DSS driver with AM62P_DSS_PLANE_VFLIP), so GL draws the
  * window y-up as it draws an FBO; 0 otherwise. */
 uint32_t pvr_sample_window_flags(void);
 /* pvr_sample_show_on_dss / pvr_sample_flip_app_buffer for a GL window: the

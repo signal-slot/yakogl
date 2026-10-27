@@ -285,7 +285,7 @@ add_subdirectory(lib/board)
 
 # Verdin AM62P Cortex-A53 display path (DSS1 -> Cadence DSI -> SN65DSI83 ->
 # LVDS panel; the bridge is yakogl,sn65dsi8x, above) and the TISCI helpers it uses, from ../drivers and ../lib (split
-# out of the SafeUI module, which compiled the same files under the same
+# out of the platform module, which compiled the same files under the same
 # symbols). Their headers are <yakogl_drv/*.h> under ../include, which the samples
 # also include (yakogl_drv/am62p_dss.h).
 zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)

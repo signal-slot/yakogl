@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # RGB565 colour surfaces (PBE pack + TPU read-back)
 
-A 16-bit R5G6B5 window (DRM `RGB565`, red in bits 15..11; the SafeUI
+A 16-bit R5G6B5 window (DRM `RGB565`, red in bits 15..11; the
 application surface) needs two encodings on top of the RGBA8888 path.
 Verified by `gl_test` case 21 (on the Linux harness, since removed, and on Zephyr, 2026-09-14).
 

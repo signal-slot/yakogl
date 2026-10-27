@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * SafeUI route 3 from the direct image on the Verdin iMX8M Plus
+ * Route 3 from the direct image on the Verdin iMX8M Plus
  * (CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3; docs/notes/imx8mp-direct-boot.md,
  * "Route 3"): this image loads the Cortex-M7 firmware it carries, brings the
  * panel up, releases the M7 and from then on hands it finished frames through
- * the SafeUI frame ring (<cluster/frame_ring.h>) instead of flipping the LCDIF.
+ * the frame ring (<cluster/frame_ring.h>) instead of flipping the LCDIF.
  * The M7 blends its safety layer into each frame and flips the panel to it.
  *
  * board_imx8mp.c calls the board_route3_* functions marked "board layer";

@@ -31,7 +31,7 @@
  *      0x9e800000   24 MiB  OP-TEE (tispl.bin "tee"), secure
  *
  * 2. The display path is on: nobody else owns the panel on this route (no
- *    Linux, no SafeUI R5F firmware), so DSS1 -> DSI -> SN65DSI83 -> panel,
+ *    Linux, no R5F firmware), so DSS1 -> DSI -> SN65DSI83 -> panel,
  *    I2C1, the GPIO banks and the TISCI power-on list are enabled here
  *    rather than by every sample's overlay. The C display drivers bring the
  *    path up from cold, as they did under U-Boot "go".

@@ -167,7 +167,7 @@ exactly, no margin. Its runs measured the refresh (60.28 Hz) and PASS records,
 but nobody looked at the panel until 2026-10-06, which showed the defect of
 issue #23. A 60 Hz plan needs a faster link: the bridge's divider 4 (DSI
 clock 284.4 MHz, 568.8 Mbit/s a lane, `CHA_DSI_CLK_RANGE` 56, DSIM PLL p 5
-m 474 s 1) would give 33 % -- unmeasured. **The SafeUI M7 still re-tunes
+m 474 s 1) would give 33 % -- unmeasured. **The M7 still re-tunes
 VIDEO_PLL1 to 71.1 MHz when it adopts the panel** (its `src/pixclk_m7.c`,
 `CONFIG_YAKOGL_DRV_M7_PIXEL_CLOCK_HZ`): on this 426.6 Mbit/s link that is the same
 no-margin plan, and route 3 is exposed to issue #23 until that repository
@@ -191,7 +191,7 @@ With htotal 1404 (1280 + 36 + 24 + 64) and vtotal 840 (800 + 8 + 8 + 24),
 Measured on the Verdin (2026-10-02, gc_slint PERF page 7, which times 60 vblanks
 after the run): the cold path (FORCE_COLD) at the then device tree's 71.1 MHz
 **60.28 Hz, 16 587 us** a frame (the refresh; the picture was not looked at); the adopt path at Linux's 69.3 MHz 58.76 Hz, 17 018 us. A
-script polling LCDIF1's VSYNC bit from Linux counted 58.756 Hz before the SafeUI
+script polling LCDIF1's VSYNC bit from Linux counted 58.756 Hz before the
 M7 started and 60.284 Hz after its re-tune.
 
 **DSI link** (the analysis of the old SYS_PLL2 / 14 plan; the device tree now

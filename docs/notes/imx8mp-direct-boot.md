@@ -3,7 +3,7 @@
 # Direct boot on the Verdin iMX8M Plus: Zephyr in place of U-Boot proper
 
 Goal (2026-10-21, the owner): the board powers on into Zephyr and the Slint
-cluster (SafeUI route 3, the M7 with it) with no U-Boot proper and no Linux,
+cluster (route 3, the M7 with it) with no U-Boot proper and no Linux,
 as fast as the chain allows; the owner's wish is 100 ms from power-on to the
 first frame, the number to measure against. Everything the board itself runs
 before Zephyr is Toradex's and NXP's: the Boot ROM, U-Boot SPL (DDR
@@ -174,7 +174,7 @@ on this carrier, the panel and the camera are the result channel):**
    through the C LCDIF/DSIM path). Two findings on that first picture:
    - it was the sample's 1024x600 window on the 1280x800 panel (the
      board layer copies a smaller window into a panel-sized buffer), and
-     the UI's unit comes from the generated SafeUI layout, which the
+     the UI's unit comes from the generated layout, which the
      sample always took for 1024x600: now `SLINT_WINDOW_WIDTH/HEIGHT`
      (the sample's Kconfig) pick the window and the layout, and this
      board's direct conf says 1280x800;
@@ -398,7 +398,7 @@ chain minus the eMMC read, so it is the real first test.
 ## Route 3: the M7 from the direct image
 
 Design of 2026-10-22; first run on the board the same morning (RAM trial,
-"At the board", item 5). Route 3 is SafeUI's split: the
+"At the board", item 5). Route 3 is a split: the
 Cortex-M7 runs the safety firmware, owns the vehicle state and the panel
 once it has adopted it. The A53 renders the rich UI with the GPU and hands
 each finished frame to the M7 through a ring in shared DDR. The M7 blends its
@@ -406,17 +406,16 @@ safety layer into that frame and flips the LCDIF to it. The A53 draws only
 from the vehicle state the M7 publishes, and when the A53 stops, the M7 shows
 its own picture. The 2026-10-03 board runs on Torizon passed this way at
 45 fps and later 58 fps. There, U-Boot and Linux brought the panel up, a
-systemd unit (`route3_boot.sh`, SafeUI `platform/fw_imx8mp/scripts`) paused
+systemd unit (`route3_boot.sh`) paused
 the demo container and started the M7 through remoteproc, and the A53 image
 came later over kexec. On this route the direct image does all of it.
 
-**The M7 firmware.** SafeUI `platform/fw_imx8mp`, branch
-`route3/vehicle-state-and-background` (`adf4b94`), built for
-`verdin_imx8mp/mimx8ml8/m7/ddr` with `CONFIG_SAFEUI_M7_TAKEOVER_AT_BOOT=y`
+**The M7 firmware.** A separate build (commit `adf4b94`), built for
+`verdin_imx8mp/mimx8ml8/m7/ddr` with the M7's take-over-at-boot option set
 (Zephyr af17c0c8, Slint from the slint-zephyr tree). The result is
-`safeui_m7_4e43a5dc.elf` (build id 0x4e43a5dc, sha256 `19d39ba6...`) in the
+`m7_4e43a5dc.elf` (build id 0x4e43a5dc, sha256 `19d39ba6...`) in the
 build host's deps directory, next to the script that built it. The earlier
-`safeui_m7_b87c5576.elf` cannot be used: it predates the M7's page (frame
+`m7_b87c5576.elf` cannot be used: it predates the M7's page (frame
 ring version 2), so it would refuse this producer's version-3 ring and
 publishes no vehicle state. The board-tested `cfc7c618` build of the same
 branch exists only on the board's Torizon. Its `PT_LOAD`s (`readelf -l`):
@@ -494,7 +493,7 @@ in the A53 image is:
    drive. The picture moves but has no M7 safety elements (`standalone`
    stays false), which tells the viewer the M7 did not come up.
 
-**Shared memory** (SafeUI `m7_mem.h`; the A53's mappings are Normal
+**Shared memory** (the M7 firmware's memory map; the A53's mappings are Normal
 non-cacheable, the attribute the 2026-10-03 producer used and the one
 `gc_render` gives an import; the M7 maps the carve-out cacheable except its
 uncached window and invalidates before it reads):
@@ -534,7 +533,7 @@ zero. `demo_vehicle()` is used only standalone or when the M7 is absent.
 west build -p always -b verdin_imx8mp/mimx8ml8/a53/direct -d build/imx8mp/slint_direct_route3 \
     examples/slint -- <the slint direct arguments above> \
     -DEXTRA_CONF_FILE=imx8mp_route3.conf \
-    '-DCONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF="<deps>/directboot/safeui_m7_4e43a5dc.elf"'
+    '-DCONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_ELF="<deps>/directboot/m7_4e43a5dc.elf"'
 ```
 
 The direct image is 6.81 MB (5.32 MB without route 3: the stripped M7 is
@@ -571,7 +570,7 @@ start moved into a function.
 
 **Risks.**
 
-- The new M7 build differs from the board-tested `cfc7c618` (the same SafeUI
+- The new M7 build differs from the board-tested `cfc7c618` (the same
   commit) only in its Slint tree. It has not run.
 - The M7 ran under Linux before: Linux had enabled its clock and the
   MEDIAMIX/LCDIF clocks were the Linux driver's (69.3 MHz pixel clock). Here

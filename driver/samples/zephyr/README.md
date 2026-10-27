@@ -78,7 +78,7 @@ support) to the module list on its own (`common/yakogl_dir.cmake`), so a
 plain `west build` needs no module arguments.
 
 A workspace whose manifest is something else works too, as long as no other
-module defines the same boards: a SafeUI checkout (slint-safe-ui-zephyr, where
+module defines the same boards: a checkout of the full platform (where
 the Verdin boards used to live) must not be a module of the build, or Zephyr
 stops with "Board(s): {'verdin_am62p'}, defined multiple times". The
 `tools/cts` scripts pass `-DZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh
@@ -130,8 +130,8 @@ the Verdins, the firmware's tryboot on the Pi 4) and reads the result.
 
 ## cluster/
 
-The files the Slint samples share with the SafeUI safety core (moved here from
-the SafeUI repository, contents unchanged):
+The files the Slint samples share with the safety core (moved here from
+the platform repository, contents unchanged):
 
 - `include/cluster/ui_layout.h`: where every element of the meter cluster sits,
   per panel; `scripts/gen_layout_slint.py` turns it into

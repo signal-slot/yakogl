@@ -2715,7 +2715,7 @@ section's convention is Mesa's; it is shared with them before any code depends o
 
 **Status 2026-09-24 20:23 (v3d-slint): Zephyr + Slint + YakoGL run on the Raspberry
 Pi 4.** `v3d_gl_slint` (build 1b045956: m5's discard fix aa391d2f plus the samples'
-fringe checks) draws the SafeUI cluster through Slint's FemtoVG renderer, YakoGL's
+fringe checks) draws the meter cluster through Slint's FemtoVG renderer, YakoGL's
 GL core, its in-process compiler and its V3D backend, and reads its first frame
 back: "v3d_gl_slint: PASS (the AM62P's cluster frame through YakoGL on the V3D)".
 All five AM62P reference points are within 1 of the AM62P's own readings, and
@@ -3011,7 +3011,7 @@ until all 30 programs link.
 `driver/samples/zephyr/v3d_gl_slint`: `gl_slint`'s Rust crate and UI by path, the
 no_std Slint workspace (`SLINT_NOSTD_DIR`) and the femtovg/glow forks
 (`NOSTD_PATCH_DIR`) recreated from `examples/nostd/README.md`, and the board support
-of `v3d_gl_triangle`. **Layout** (the lead, 2026-09-24): the SafeUI repository has
+of `v3d_gl_triangle`. **Layout** (the lead, 2026-09-24): the platform repository has
 no Pi 4 panel directory, so the Pi 4 uses the AM62P's `ui/1024x600`, drawn into a
 1024x600 EGL window. The frame is then the AM62P's, and its reference pixels apply.
 The window is a buffer of its own in the image (tightly packed, followed by 8 guard
@@ -3036,7 +3036,7 @@ not of the failed one. Both samples now check every EGL call on its own.
 | ef8f4211 | the EGL fix holds: step 1 as `v3d_gl_femtovg` prints it ("2 of 30 link (121 ms)", 14 x Discard, 10 x Tex, 4 x gl_FragCoord, stops at FillGradient glyph); then `slint_zephyr: rust panic: .../internal/renderers/femtovg/opengl.rs:118:14: called Result::unwrap() on an Err value: ShaderLinkError("online shaderc: the code generator refused this fragment shader: Program(NotYet("Discard"))")`; no verdict line; the watchdog returned the board |
 | 0f6ac998 (batch 7) | "GL_RENDERER Broadcom V3D 4.2 (YakoGL), GL_VERSION OpenGL ES 3.0 YakoGL"; "femtovg programs: 28 of 30 link (127 ms)", 2 x NotYet("loop") (FilterImage and FilterImage nodiscard), "femtovg stops at FilterImage"; "v3d_gl_slint: FAIL (femtovg's programs do not all link (above): the frame is not attempted, because Slint's renderer panics on a link error)" (sha256 6fd831e9..., booted 14:40:56, read from the screen by the lead) |
 | ba703983 (batch 14) | "v3d_gl_slint: build ba703983"; "femtovg programs: 22 of 30 link (135 ms)", "8 x link: online shaderc: out of compiler memory on this fragment shader (10624 bytes left in the keep arena)" (FillGradientConic nodiscard and FillImageGradientConic nodiscard among them), "femtovg stops at FillGradient nodiscard"; "v3d_gl_slint: FAIL (femtovg's programs do not all link (above); the frame is not attempted, because Slint's renderer panics on a link error)"; magenta window, no panic (captured 20 s after the 18:05:46 boot). An earlier capture of the same image at 60 s showed no HDMI signal: the watchdog reset window (it is fed for RPI_WDOG_HOLD_S = 50 s, then fires within one period, at most ~16 s), and Linux was back within a minute |
-| 7953742b (10bcfe1a, the keep region placed by lifetime) | **the SafeUI cluster on the screen** (gauges, the Slint logo, drive info, the power bar, fuel): the first Slint frame on the V3D. "femtovg programs: 30 of 30 link (127 ms)"; "keep used 390976 (peak 401536) of 524288 bytes with Slint's renderer alive" (388,544 + the clear program's 2,432); "UI heap: 329160 bytes now, 686824 at most, of 50331648"; "job arenas high-water at frame 1: BCL 55395 of 65536, RCL 583 of 4096, indirect 188557 of 262144, data 0, textures 12664 of 8388608 bytes, 493 draws"; "swap: 32 ms, GL error 0x0"; "window 1024x600: 0 sentinel pixels left, 0 with alpha != 255, crc32 0x7ea0e569"; "guard rows 0 of 8192 pixels changed"; four of the five AM62P points within 1 (bg-top-left 11,15,23; face-left 9,12,18; face-right 8,11,17; bg-bottom 4,6,10); **"track (47,330) = 8,11,17: AM62P 13,17,24 (diff 7), host 12,16,23 (diff 6) WRONG"**; "v3d_gl_slint: FAIL (the AM62P reference points)" (sha256 47bc7c06..., captured 18:28:05, read by the lead) |
+| 7953742b (10bcfe1a, the keep region placed by lifetime) | **the meter cluster on the screen** (gauges, the Slint logo, drive info, the power bar, fuel): the first Slint frame on the V3D. "femtovg programs: 30 of 30 link (127 ms)"; "keep used 390976 (peak 401536) of 524288 bytes with Slint's renderer alive" (388,544 + the clear program's 2,432); "UI heap: 329160 bytes now, 686824 at most, of 50331648"; "job arenas high-water at frame 1: BCL 55395 of 65536, RCL 583 of 4096, indirect 188557 of 262144, data 0, textures 12664 of 8388608 bytes, 493 draws"; "swap: 32 ms, GL error 0x0"; "window 1024x600: 0 sentinel pixels left, 0 with alpha != 255, crc32 0x7ea0e569"; "guard rows 0 of 8192 pixels changed"; four of the five AM62P points within 1 (bg-top-left 11,15,23; face-left 9,12,18; face-right 8,11,17; bg-bottom 4,6,10); **"track (47,330) = 8,11,17: AM62P 13,17,24 (diff 7), host 12,16,23 (diff 6) WRONG"**; "v3d_gl_slint: FAIL (the AM62P reference points)" (sha256 47bc7c06..., captured 18:28:05, read by the lead) |
 
 Every femtovg program must link, or Slint panics; the panic is bounded by the
 watchdog, and since 07b3acc7 the sample does not reach it: it stops after step 1
@@ -3244,7 +3244,7 @@ the guard band red and the console column readable, and the run stops where a
 machine with no V3D must ("osal(v3d): power-on failed (-19)", then "v3d_gl_slint:
 FAIL (EGL did not initialise ...)").
 
-### The milestone: the SafeUI cluster through YakoGL on the Pi 4
+### The milestone: the meter cluster through YakoGL on the Pi 4
 
 `v3d_gl_slint`, build 1b045956 (aa391d2f on a60104c2, plus 8e942583 and 1b045956;
 all in batch 18), image sha256 0a211b60d51a3d15fc83e4a6637daf859da8106107d334e3486b8668e3940308
