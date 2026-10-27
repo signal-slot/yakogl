@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-#
-# The site has no domain yet. When it has one, add
-#   Sitemap: https://<domain>/<path>/sitemap.xml
-# (a Sitemap line must be an absolute URL).
 User-agent: *
 Allow: /
+Sitemap: https://yako.gl/sitemap.xml

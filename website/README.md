@@ -2,30 +2,40 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The YakoGL website
 
-Static HTML, CSS and JavaScript, written by hand: no generator, no build
-step, no external resources.
+Static HTML, CSS and JavaScript. No generator, build step, external fonts or
+external scripts. The canonical public origin is `https://yako.gl`.
 
-- `index.html`, `status.html`, `try-it.html`, `404.html`: the pages.
-- `data.js`: every figure the pages show, with its value, unit, commit,
-  date and source record. A new measurement changes this file only;
-  `site.js` renders it. The format is described at the top of the file.
-- `style.css`: the one stylesheet (light and dark).
-- `hero.js`: the home page's WebGL background; the page works without it.
+- `index.html`: what runs, board selection and the next step.
+- `how-it-works.html`: architecture and shader compilation choices.
+- `status.html`: measured results, sources and current limitations.
+- `try-it.html`, `try-it.js`: the board guide; `?board=am62p`,
+  `?board=imx8mp` or `?board=pi4` selects a target. Without JavaScript all
+  instructions remain available. Host tests are a separate section.
+- `404.html`: the not-found page.
+- `data.js`: measurement values and their provenance, rendered by `site.js`.
+  Its header describes the schema. Pre-publication builds retain their
+  identifiers and link to the record in the first public snapshot; they do
+  not link to unavailable development commits or issue numbers.
+- `style.css`: the shared stylesheet, responsive in light and dark schemes.
 - `og-image.png`: written by `tools/website-og-image.py`.
 
-Check it with `tools/website-check.sh` (relative links, page metadata,
-`data.js` against its schema and the repository). Preview it by opening
-`index.html` in a browser, or with `python3 -m http.server -d website`.
+The home page uses a labelled stack diagram. It does not present browser
+WebGL or an illustrative UI as a capture of YakoGL running on a board.
+The older `hero.js` and `home.js` effects are not loaded by the pages.
+
+Check with `tools/website-check.sh` (links, metadata and measurement
+provenance). Before a pull request, run `tools/check.sh --changed origin/main`
+as described in `CONTRIBUTING.md`. Preview with `python3 -m http.server -d website`.
 
 ## Publishing
 
-`.github/workflows/pages.yml` deploys this directory with GitHub Pages on
-every push to `main` that touches it, and on demand. It does nothing until
-Pages is turned on: when the repository goes public, set Settings > Pages >
-Source to "GitHub Actions" and the repository variable `PAGES_ENABLED` to
-`true` (Settings > Secrets and variables > Actions > Variables; the job is
-skipped without it, because a private repository on the free plan has no
-Pages and the deploy would fail on every push). There is no custom domain and no `CNAME`; the
-site lives at the address GitHub gives it. Once it is known, put it in front
-of the `<loc>` entries of `sitemap.xml` and add a `Sitemap:` line to
-`robots.txt`.
+`.github/workflows/pages.yml` uploads `website/` to GitHub Pages on pushes
+to `main` that touch the site, and on demand. It runs only when the
+repository variable `PAGES_ENABLED` is `true` and Pages is configured to
+use GitHub Actions. DNS and the hosting account's custom-domain settings
+are managed separately; there is no `CNAME` in this directory.
+
+Canonical URLs, social preview images, `robots.txt` and `sitemap.xml` use
+`https://yako.gl`. If the public origin changes, update them together with
+`SITE_ORIGIN` in `tools/website-check.sh`. New pages belong in the sitemap;
+error pages do not.
