@@ -99,22 +99,22 @@ pointcoord and 105 pointcoordvary): `LD_VAR_SPECIAL.point`
 ## Where Mesa reads each built-in
 
 Register numbers: `bi_preload_reg` (`src/panfrost/compiler/bifrost/compiler.h`
-~1180-1215), Valhall (arch >= 9). A program's `preload` mask has bit n for
+~1157-1250), Valhall (arch >= 9). A program's `preload` mask has bit n for
 register n (`0x38 << 56` = r59, r60, r61).
 
 | built-in | Valhall source | Mesa |
 |---|---|---|
-| gl_VertexID | **r60** of the IDVS vertex (varying and position) shader, a plain `MOV` of the preloaded register. No base or offset is added: on Valhall's malloc-IDVS flow the hardware's r60 already is the vertex number (non-indexed: `first + n`; indexed: the index plus the bias). | `bifrost_compile.c:2039` `load_vertex_id` -> `bi_vertex_id` = `BI_PRELOAD_VERTEX_ID` = 60; the `raw_vertex_id + raw_vertex_offset` split (`pan_nir_lower_vertex_id.c`) is only for non-IDVS (Bifrost) flows |
+| gl_VertexID | **r60** of the IDVS vertex (varying and position) shader, a plain `MOV` of the preloaded register. No base or offset is added: on Valhall's malloc-IDVS flow the hardware's r60 already is the vertex number (non-indexed: `first + n`; indexed: the index plus the bias). | `bifrost_compile.c:2039` `load_vertex_id` -> `bi_vertex_id` = `BI_PRELOAD_VERTEX_ID` = 60; the `raw_vertex_id + raw_vertex_offset` split (`pan_nir_lower_vertex_id.c`) is only for arch <= 7 (`bifrost_nir.c:419`, `midgard_compile.c:372`) |
 | gl_InstanceID | **r61** of the same shader | `bifrost_compile.c:2049` `BI_PRELOAD_INSTANCE_ID` = 61; no base instance added |
 | (r59, r62, r63) | r59 = INTERNAL_ID (the LEA_BUF_IMM source of every IDVS store, already lowered), r62 = draw id, r63 = view id | not needed |
-| gl_FrontFacing | **r58**, the fragment "primitive flags" word: `(flags & 1) == 0` means front. On arch 10 (G610) the word is compared whole; arch >= 11 first masks bit 0 with `LSHIFT_AND` | `bifrost_compile.c:2017-2030`, `BI_PRELOAD_PRIMITIVE_FLAGS` = 58 |
+| gl_FrontFacing | **r58**, the fragment "primitive flags" word: `(flags & 1) == 0` means front. On arch 10 (G610) the word is compared whole, `ICMP_OR eq.m1 dst, r58, 0, 0` with no `LSHIFT_AND` mask (builtin_49 word 0, `68f0c00080c0c07a`, below); arch >= 11 first masks bit 0 with `LSHIFT_AND` | `bifrost_compile.c:2017-2029`, `BI_PRELOAD_PRIMITIVE_FLAGS` = 58 (`compiler.h:1205`) |
 | gl_PointCoord | `LD_VAR_SPECIAL.point` (a special varying, no slot of the VS) | as above, done |
 
 What the frame supplies:
 
 - gl_VertexID: nothing beyond what the draw already carries. Mesa's CSF draw
   sets `IDVS.VERTEX_OFFSET` to `draw->start` (non-indexed) or `index_bias`
-  (indexed) (`pan_csf.c:1706-1717`), and INDEX_OFFSET/INSTANCE_OFFSET 0; the
+  (indexed) (`pan_csf.c:1705-1718`), and INDEX_OFFSET/INSTANCE_OFFSET 0; the
   frame has these registers (`src/mali/frame.rs:257-259`, `INVALID_INDEXED_FIRST_VERTEX`
   at :132). No FAU word, no sysval: the shader reads r60. Case 57 (indexed,
   reversed indices) relies on r60 being the element value, not the position in
@@ -387,7 +387,7 @@ two 24-byte records, so instance 3 reads record 1, which is what the case
 checks (instances 0-1 red, instance 3 half-green at 0.5 alpha).
 
 What Mesa does for a divisor of 2 on Valhall (arch >= 9),
-`panfrost_pack_attribute`, `src/gallium/drivers/panfrost/pan_cmdstream.c:4083-4116`
+`panfrost_pack_attribute`, `src/gallium/drivers/panfrost/pan_cmdstream.c:4083-4117`
 (packed when the vertex elements are created, no draw state involved):
 
 - divisor 0: `1D`, Frequency Vertex, Offset enable (what the frame builds for
