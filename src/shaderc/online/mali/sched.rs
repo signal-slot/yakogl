@@ -141,16 +141,40 @@ fn delta(i: &Ins, live: &Live) -> i32 {
 }
 
 struct Dag<'s> {
-    /// Children (earlier instructions) of each node, in the scratch arena.
-    edges: &'s mut [[u8; MAX_INSTRS]],
-    nedges: [u8; MAX_INSTRS],
-    parents: [u8; MAX_INSTRS],
-    heads: [u8; MAX_INSTRS],
+    /// Children (earlier instructions) of each node: `n` rows of `n`
+    /// entries, row `p` at `p * n`, in the scratch arena.
+    edges: &'s mut [u16],
+    nedges: &'s mut [u16],
+    parents: &'s mut [u16],
+    heads: &'s mut [u16],
     nheads: usize,
+    /// The block's node count: the edge table's row length.
+    n: usize,
 }
 
-impl Dag<'_> {
-    fn remove_head(&mut self, n: u8) {
+/// The scheduler's scratch tables, sized by the largest block.
+struct Tables<'s> {
+    edges: &'s mut [u16],
+    nedges: &'s mut [u16],
+    parents: &'s mut [u16],
+    heads: &'s mut [u16],
+    schedule: &'s mut [u16],
+}
+
+impl<'s> Dag<'s> {
+    /// An empty DAG over `n` nodes; the tables hold at least `n * n`
+    /// (`edges`) and `n` (the others) entries, all zero.
+    fn new(
+        n: usize,
+        edges: &'s mut [u16],
+        nedges: &'s mut [u16],
+        parents: &'s mut [u16],
+        heads: &'s mut [u16],
+    ) -> Self {
+        Dag { edges, nedges, parents, heads, nheads: 0, n }
+    }
+
+    fn remove_head(&mut self, n: u16) {
         if let Some(k) = self.heads[..self.nheads].iter().position(|&h| h == n) {
             self.heads.copy_within(k + 1..self.nheads, k);
             self.nheads -= 1;
@@ -158,26 +182,28 @@ impl Dag<'_> {
     }
 
     /// `dag_add_edge` (dag.c): once per (parent, child).
-    fn add(&mut self, parent: Option<u8>, child: Option<u8>) {
+    fn add(&mut self, parent: Option<u16>, child: Option<u16>) {
         let (Some(p), Some(c)) = (parent, child) else { return };
         let (p, c) = (p as usize, c as usize);
-        if self.edges[p][..self.nedges[p] as usize].contains(&(c as u8)) {
+        let row = p * self.n;
+        if self.edges[row..row + self.nedges[p] as usize].contains(&(c as u16)) {
             return;
         }
-        self.remove_head(c as u8);
-        self.edges[p][self.nedges[p] as usize] = c as u8;
+        self.remove_head(c as u16);
+        self.edges[row + self.nedges[p] as usize] = c as u16;
         self.nedges[p] += 1;
         self.parents[c] += 1;
     }
 
     /// `dag_prune_head` (dag.c).
-    fn prune(&mut self, n: u8) {
+    fn prune(&mut self, n: u16) {
         self.remove_head(n);
+        let row = n as usize * self.n;
         for k in 0..self.nedges[n as usize] as usize {
-            let c = self.edges[n as usize][k] as usize;
+            let c = self.edges[row + k] as usize;
             self.parents[c] -= 1;
             if self.parents[c] == 0 {
-                self.heads[self.nheads] = c as u8;
+                self.heads[self.nheads] = c as u16;
                 self.nheads += 1;
             }
         }
@@ -187,13 +213,13 @@ impl Dag<'_> {
 /// `create_dag` (bi_pressure_schedule.c:33-164) over one block's
 /// instructions before its branch, for the messages here.
 fn create_dag(ins: &[Ins], dag: &mut Dag<'_>) {
-    let mut last_write = [None::<u8>; MAX_NODES];
+    let mut last_write = [None::<u16>; MAX_NODES];
     /* no LOAD is selected here, so only a DISCARD ever records a memory
      * load (:141-149) */
-    let (mut coverage, mut preload, mut memory_load, mut memory_store) = (None, None, None::<u8>, None);
+    let (mut coverage, mut preload, mut memory_load, mut memory_store) = (None, None, None::<u16>, None);
     for (k, i) in ins.iter().enumerate() {
-        let node = Some(k as u8);
-        dag.heads[dag.nheads] = k as u8;
+        let node = Some(k as u16);
+        dag.heads[dag.nheads] = k as u16;
         dag.nheads += 1;
         for (_, v) in ssa_srcs(i) {
             dag.add(node, last_write[v as usize]);
@@ -246,7 +272,7 @@ fn schedule_block(
     p: &mut Prog<'_>,
     (start, stop, end): (usize, usize, usize),
     live_out: &Live,
-    edges: &mut [[u8; MAX_INSTRS]],
+    tables: &mut Tables<'_>,
     out: &mut [Ins],
 ) -> Result<(), MaliError> {
     let (mut pressure, mut orig_max) = (0i32, 0i32);
@@ -260,11 +286,14 @@ fn schedule_block(
     if n == 0 {
         return Ok(());
     }
-    let mut dag = Dag { edges, nedges: [0; MAX_INSTRS], parents: [0; MAX_INSTRS], heads: [0; MAX_INSTRS], nheads: 0 };
+    tables.edges[..n * n].fill(0);
+    tables.nedges[..n].fill(0);
+    tables.parents[..n].fill(0);
+    let mut dag = Dag::new(n, &mut *tables.edges, &mut *tables.nedges, &mut *tables.parents, &mut *tables.heads);
     create_dag(&p.ins[start..stop], &mut dag);
     let mut live = *live_out;
     let (mut pressure, mut max) = (0i32, 0i32);
-    let mut schedule = [0u8; MAX_INSTRS];
+    let schedule = &mut *tables.schedule;
     let mut ns = 0usize;
     while dag.nheads > 0 {
         /* choose_instr: the first head with the least delta */
@@ -305,7 +334,21 @@ pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), Ma
         return Err(MaliError::Defect(super::Defect::ScheduleTable));
     }
     let live_out = liveness_ssa(p);
-    let edges = scratch.alloc_filled(MAX_INSTRS, [0u8; MAX_INSTRS]).map_err(|_| MaliError::OutOfScratch)?;
+    /* a block's DAG holds the instructions before its branch, so the
+     * largest block bounds every table */
+    let max_n = (0..p.nblocks)
+        .filter(|&b| !p.blocks[b as usize].dead)
+        .map(|b| p.block_end(b) - p.block_start(b))
+        .max()
+        .unwrap_or(0);
+    let oos = |_| MaliError::OutOfScratch;
+    let mut tables = Tables {
+        edges: scratch.alloc_filled(max_n * max_n, 0u16).map_err(oos)?,
+        nedges: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+        parents: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+        heads: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+        schedule: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+    };
     let out = scratch.alloc_filled(MAX_INSTRS, Ins::NOP).map_err(|_| MaliError::OutOfScratch)?;
     for b in 0..p.nblocks {
         if p.blocks[b as usize].dead {
@@ -314,7 +357,64 @@ pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), Ma
         let (start, end) = (p.block_start(b), p.block_end(b));
         /* "Leave branches at the end" (:52-53) */
         let stop = (start..end).find(|&k| props(p.ins[k].op).branch).unwrap_or(end);
-        schedule_block(p, (start, stop, end), &live_out[b as usize], edges, out)?;
+        schedule_block(p, (start, stop, end), &live_out[b as usize], &mut tables, out)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// More nodes than a `u8` index holds (the size-limit programs need
+    /// 312): the DAG keeps every edge, parent count and head.
+    #[test]
+    fn dag_indices_pass_255() {
+        const N: usize = 300;
+        let mut edges = vec![0u16; N * N];
+        let (mut nedges, mut parents, mut heads) = (vec![0u16; N], vec![0u16; N], vec![0u16; N]);
+        let mut dag = Dag::new(N, &mut edges, &mut nedges, &mut parents, &mut heads);
+        for k in 0..N {
+            dag.heads[dag.nheads] = k as u16;
+            dag.nheads += 1;
+        }
+        /* node k depends on k - 1 (a chain), every third also on k - 2 */
+        for k in 1..N as u16 {
+            dag.add(Some(k), Some(k - 1));
+            dag.add(Some(k), Some(k - 1)); /* once per pair */
+            if k % 3 == 0 {
+                dag.add(Some(k), Some(k - 2));
+            }
+        }
+        assert_eq!(dag.nheads, 1);
+        assert_eq!(dag.heads[0], N as u16 - 1);
+        assert_eq!(dag.nedges[N - 1], 1); /* 299 is not a multiple of 3 */
+        assert_eq!(dag.edges[(N - 1) * N], N as u16 - 2);
+        assert_eq!(dag.nedges[270], 2);
+        assert_eq!(dag.edges[270 * N + 1], 268);
+        assert_eq!(dag.parents[0], 1);
+        assert_eq!(dag.parents[N - 1], 0);
+        /* pruning from the head down visits the chain in order */
+        let mut order = Vec::new();
+        while dag.nheads > 0 {
+            let h = dag.heads[0];
+            dag.prune(h);
+            order.push(h);
+        }
+        let want: Vec<u16> = (0..N as u16).rev().collect();
+        assert_eq!(order, want);
+    }
+
+    /// `create_dag` over 300 instructions that touch nothing: all heads.
+    #[test]
+    fn create_dag_pass_255() {
+        const N: usize = 300;
+        let ins = vec![Ins::NOP; N];
+        let mut edges = vec![0u16; N * N];
+        let (mut nedges, mut parents, mut heads) = (vec![0u16; N], vec![0u16; N], vec![0u16; N]);
+        let mut dag = Dag::new(N, &mut edges, &mut nedges, &mut parents, &mut heads);
+        create_dag(&ins, &mut dag);
+        assert_eq!(dag.nheads, N);
+        assert_eq!(dag.heads[N - 1], N as u16 - 1);
+    }
 }
