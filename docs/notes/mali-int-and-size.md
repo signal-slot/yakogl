@@ -11,9 +11,10 @@ with each other: four (42, 72, 79, 112) by an integer or boolean value, four
 **State of this note.** The references below were recorded with
 `tools/mali/drm_shim_ref.sh` on Mesa 26.2.1 (`tools/mali/testdata/intbig_*`:
 `.trace`, `.stdout`, `.stderr` per program). The Mesa source reading, the
-refusal sites and the caps are from the code; our own IR / NIR value counts of
-the four large shaders are **not measured** (no compiler run in this item,
-see "The four shaders' sizes").
+refusal sites and the caps are from the code. **Since plan #154 item
+sizelimit** the caps are raised and the offarm programs of 193, 194 and 195
+are byte-equal (see "The caps since plan #154"); the sections between were
+written before, against the old caps.
 
 ## The eight cases and their shaders
 
@@ -258,6 +259,54 @@ None spills; 5 to 13 registers (table above). Our file refuses past 32
 3. The register allocator is the real limit: dep4/offarm256 are long
    chains; a straight-line program with few live values does not need the
    spill path, a wide one does (`Spill`, `ra.rs:689`).
+
+### The caps since plan #154 (item sizelimit)
+
+Measured with `module_facts` (`src/shaderc/online/mali/tests.rs`), each
+table's mark for the fragment shader, in a scratch build with every cap
+raised far past it:
+
+| program | IR values | NIR instructions | BIR instructions | BIR values | scratch peak |
+|---|---|---|---|---|---|
+| offarm24 (194) | 266 | 147 | 97 | 98 | 0.80 MB |
+| offarm32 (193, 195) | 314 | 163 | 105 | 106 | 0.82 MB |
+| offarm128 (193) | 890 | 355 | 201 | 202 | 1.57 MB |
+| offarm256 (194) | 1658 | 611 | 329 | 330 | 2.73 MB |
+| femtovg main.vert | 27 | 35 | 56 | 32 | |
+
+The IR grows by six values an arm, the NIR by two, the BIR by one (Mesa's
+312 instructions for offarm256 are ours less the constant and FAU moves).
+Case 184's dep1/2/4 need 336 IR values (sizelimit-measure) and are then
+refused by the gl_FragColor lane and the chain (the chains item).
+
+The caps, each the offarm256 mark with headroom:
+
+| cap | was | now |
+|---|---|---|
+| `nir::MAX_VALUES` | 256 | 2048 |
+| `nir::MAX_NODES` | 384 | 768 |
+| `bir::MAX_INSTRS` | 192 | 384 |
+| `bir::MAX_NODES` | 192 | 384 |
+
+With them `intbig_case193_offarm32/128`, `intbig_case194_offarm24/256` and
+`intbig_case195` are byte-equal in both stages
+(`case_19*_is_byte_equal_to_mesa_26_2_1`; their `.expect.json` are
+`pan_ref_diff.py extract <trace> --draw`, the vertex shader's uniforms unset),
+and every offarm source of the corpus compiles. The scheduler's order is
+untouched (sched-u16 widened its indices; its edge table is sized by the
+largest block, 329² u16, about 216 KB for offarm256). The vertex walk's value
+table moved from a stack temporary into the scratch arena (2048 x 4 lanes);
+the other `[_; MAX_VALUES]` arrays stay on the stack, at most about 18 KB at
+once (`order_keys`' 10 KB calling `grafted_locals`' 8 KB; not measured on a
+target), inside the 256 KiB the compiling thread is given
+(`zephyr/Kconfig`, YAKOGL_SHADERC_ONLINE). The largest scratch use,
+offarm256's 2.73 MB, is inside the 4 MiB default region.
+
+With the value table at 384 two stress sources of the gap tests moved: the
+alternating chain of 24 attribute loads that filled the 192 values now fits,
+and a vertex shader of more than 16 attributes is then refused by the encoder
+as a defect (`Encode`), not by a gap (open, not in this item); the value table
+is now reached by 27 matrix products, the instruction table by 21.
 
 ## Recommended order
 

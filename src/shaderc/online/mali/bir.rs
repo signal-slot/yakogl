@@ -32,10 +32,12 @@
 
 /// The instructions one program may hold: selection, the constant moves and
 /// the flow NOPs all count. A program that needs more is refused
-/// ([`super::MaliError::InstrTableFull`]), never truncated.
-pub const MAX_INSTRS: usize = 192;
-/// The most SSA values a program may define (the RA's node count).
-pub const MAX_NODES: usize = 192;
+/// ([`super::MaliError::InstrTableFull`]), never truncated. The largest
+/// measured, case 194's offarm256, holds 329 (Mesa's 312 and the moves).
+pub const MAX_INSTRS: usize = 384;
+/// The most SSA values a program may define (the RA's node count);
+/// offarm256 defines 330.
+pub const MAX_NODES: usize = 384;
 /// Sources of one instruction (BLEND has five: colour, coverage, the blend
 /// descriptor's two words, the dual-source colour).
 pub const MAX_SRCS: usize = 5;

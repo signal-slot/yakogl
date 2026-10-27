@@ -1100,7 +1100,7 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     v.push((VS, format!("attribute vec4 p; void main(){{ {locals} gl_Position = a32; }}"), MaliError::TooManyLocals));
     v.push((
         VS,
-        format!("attribute vec4 p; void main(){{ vec4 a = p; {} gl_Position = a; }}", "a = a; ".repeat(200)),
+        format!("attribute vec4 p; void main(){{ vec4 a = p; {} gl_Position = a; }}", "a = a; ".repeat(1100)),
         MaliError::TooManyValues,
     ));
     v.push((
@@ -2514,11 +2514,11 @@ fn the_tables_high_water_marks_are_measured() {
     assert_eq!(
         got,
         [
-            ("IR values", 34, 256),
+            ("IR values", 34, 2048),
             ("locals", 1, 32),
-            ("NIR instructions", 52, 384),
-            ("BIR instructions", 116, 192),
-            ("BIR values", 56, 192),
+            ("NIR instructions", 52, 768),
+            ("BIR instructions", 116, 384),
+            ("BIR values", 56, 384),
             ("FAU words", 64, 128),
             ("immediates", 9, 64),
             ("uniform rows", 14, 32),
@@ -2573,18 +2573,22 @@ fn a_chain_of_additions_is_mesa_s_rebalanced_tree() {
 fn stress_cases() -> Vec<(u32, String, MaliError)> {
     const VS: u32 = SHC_STAGE_VERTEX;
     let attrs = |n: usize| (0..n).map(|i| format!("attribute vec4 a{i}; ")).collect::<String>();
-    /* nine matrix products: 144 FMAs */
+    /* 21 matrix products: 336 FMAs (20 fit both tables, 22 fill the values
+     * table first) */
     let instrs = format!(
         "attribute vec4 a; uniform mat4 m; void main(){{ gl_Position = {}a{}; }}",
-        "m * (".repeat(9),
-        ")".repeat(9)
+        "m * (".repeat(21),
+        ")".repeat(21)
     );
-    /* 24 attribute loads (a SPLIT each) in one alternating chain */
-    let mut e = "(a0 * a1 + a2)".to_string();
-    for k in (3..23).step_by(2) {
-        e = format!("({e} * a{k} + a{})", k + 1);
-    }
-    let values = format!("{} void main(){{ gl_Position = {e}; }}", attrs(24));
+    /* 27 matrix products: selection defines a value per FMA and fills the
+     * values table before the moves fill the instructions'. (The alternating
+     * chain of 24 attribute loads this was at 192 values now fits the table
+     * and is refused past 16 attributes by the encoder, `Encode`.) */
+    let values = format!(
+        "attribute vec4 a; uniform mat4 m; void main(){{ gl_Position = {}a{}; }}",
+        "m * (".repeat(27),
+        ")".repeat(27)
+    );
     /* 64 distinct fused addends, four a statement */
     let mut body = String::new();
     let mut prev = "a".to_string();
@@ -4147,4 +4151,79 @@ fn the_unreferenced_frag_coord_programs_follow_the_rules() {
     let first = text(z.code[0]);
     assert!(first.starts_with("LD_VAR_SPECIAL.f32.center") && first.ends_with("index:0x3"), "{first}");
     assert_eq!(z.info.preload, 0x3000_0000_0000_0000);
+}
+
+/* ---- the size limit (plan #154, sizelimit) ----------------------------- */
+
+/// Case 184's three programs (dep1/2/4_fs, 48 `x*u_b+u_c` steps) need 336 IR
+/// values (sizelimit-measure); their byte-equal check waits for the chain
+/// lowerings.
+const _: () = assert!(super::nir::MAX_VALUES >= 336);
+
+const OFFARM_VS: &str = include_str!("../../../../tools/shaders/femtovg/main.vert");
+
+/// femtovg's `fill_color.nodiscard` with offset arms (tools/shaders/offarm,
+/// gl_test's cases 193, 194 and 195) against its drm-shim reference
+/// (`intbig_case*`, docs/notes/mali-int-and-size.md): both IDVS programs and
+/// the fragment program byte-equal, with every fact; the draw sets none of
+/// the vertex shader's uniforms (`viewSize` reads 0). Returns what the
+/// fragment shader used of each table.
+fn check_offarm(name: &str, vs: &str, fs: &str, json: &str) -> [usize; super::Table::ALL.len()] {
+    check_program_for(name, vs, fs, json, false);
+    module_facts(SHC_STAGE_FRAGMENT, fs).1
+}
+
+/// Case 193's offarm32: 88 Mesa instructions, past the old 256 IR values.
+#[test]
+fn case_193_offarm32_is_byte_equal_to_mesa_26_2_1() {
+    let fs = include_str!("../../../../tools/shaders/offarm/fill_color.nodiscard.offarm32.frag");
+    let marks = check_offarm("offarm32", OFFARM_VS, fs, td!("intbig_case193_offarm32.expect.json"));
+    assert_eq!(marks[super::Table::IrValues as usize], 314);
+}
+
+/// Case 193's offarm128 (184 Mesa instructions, also the largest program
+/// case 195 draws): past the old 192-instruction and 192-value tables.
+#[test]
+fn case_193_offarm128_is_byte_equal_to_mesa_26_2_1() {
+    let fs = include_str!("../../../../tools/shaders/offarm/fill_color.nodiscard.offarm128.frag");
+    let marks = check_offarm("offarm128", OFFARM_VS, fs, td!("intbig_case193_offarm128.expect.json"));
+    assert_eq!(marks[super::Table::Instrs as usize], 201);
+}
+
+/// Case 194's offarm24: the first of its programs over the old caps.
+#[test]
+fn case_194_offarm24_is_byte_equal_to_mesa_26_2_1() {
+    let fs = include_str!("../../../../tools/shaders/offarm/fill_color.nodiscard.offarm24.frag");
+    let marks = check_offarm("offarm24", OFFARM_VS, fs, td!("intbig_case194_offarm24.expect.json"));
+    assert_eq!(marks[super::Table::IrValues as usize], 266);
+}
+
+/// Case 194's offarm256, the largest program of the corpus (312 Mesa
+/// instructions): the marks the caps are sized from, each under its table.
+#[test]
+fn case_194_offarm256_is_byte_equal_to_mesa_26_2_1() {
+    use super::Table;
+    let fs = include_str!("../../../../tools/shaders/offarm/fill_color.nodiscard.offarm256.frag");
+    let marks = check_offarm("offarm256", OFFARM_VS, fs, td!("intbig_case194_offarm256.expect.json"));
+    let got: Vec<(&str, usize, usize)> = [Table::IrValues, Table::NirNodes, Table::Instrs, Table::Values]
+        .iter()
+        .map(|t| (t.label(), marks[*t as usize], t.capacity()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("IR values", 1658, 2048),
+            ("NIR instructions", 611, 768),
+            ("BIR instructions", 329, 384),
+            ("BIR values", 330, 384)
+        ],
+        "(table, offarm256's use, capacity)"
+    );
+}
+
+/// Case 195 (ifbranch): its first program over the old caps, offarm32, from
+/// its own sources and reference (the same words as case 193's).
+#[test]
+fn case_195_offarm32_is_byte_equal_to_mesa_26_2_1() {
+    check_offarm("case195", td!("intbig_case195.vert"), td!("intbig_case195.frag"), td!("intbig_case195.expect.json"));
 }

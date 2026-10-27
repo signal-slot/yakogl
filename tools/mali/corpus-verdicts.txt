@@ -60,7 +60,7 @@ tools/shaders/es100/int_div.frag: Valhall: arithmetic other than +, -, * and a d
 tools/shaders/es100/intlit.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/ioswap.vert: ok
 tools/shaders/es100/light_amount.frag: ok
-tools/shaders/es100/light_amount_0_16.vert: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/es100/light_amount_0_16.vert: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/es100/light_amount_2_2.vert: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/es100/loop_full.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/loop_nested.dowhile.frag: Valhall: an integer or boolean value is not lowered yet
@@ -96,8 +96,8 @@ tools/shaders/es100/texbranch.frag: Valhall: control flow (if, a loop, a return 
 tools/shaders/es100/texfill.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet
 tools/shaders/es100/textured.frag: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 tools/shaders/es100/textured.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
-tools/shaders/es100/tmparr_const.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/es100/tmparr_const.vert: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/es100/tmparr_const.frag: Valhall: a shader with more than 32 local variables is not lowered yet
+tools/shaders/es100/tmparr_const.vert: Valhall: a shader with more than 32 local variables is not lowered yet
 tools/shaders/es100/transc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.vert: ok
@@ -232,9 +232,9 @@ tools/shaders/gl_test_es100/uniform_color.frag: ok
 tools/shaders/gl_test_es100/uv.vert: ok
 tools/shaders/gl_test_es100/zorder.vert: ok
 tools/shaders/gltest/blendonce_fs.frag: ok
-tools/shaders/gltest/dep1_fs.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/gltest/dep2_fs.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/gltest/dep4_fs.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/gltest/dep1_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/gltest/dep2_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/gltest/dep4_fs.frag: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
 tools/shaders/gltest/deqp_position.vert: ok
 tools/shaders/gltest/es3trunc_fs.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/es3trunc_vary_fs.frag: ok
@@ -307,18 +307,18 @@ tools/shaders/interp_color.frag: front end: Rejected { line: 1, tok: "#version",
 tools/shaders/mvp.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/mvp_color.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/offarm/fill_color.nodiscard.offarm12.frag: ok
-tools/shaders/offarm/fill_color.nodiscard.offarm128.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/offarm/fill_color.nodiscard.offarm128.frag: ok
 tools/shaders/offarm/fill_color.nodiscard.offarm16.frag: ok
-tools/shaders/offarm/fill_color.nodiscard.offarm192.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/offarm/fill_color.nodiscard.offarm192.frag: ok
 tools/shaders/offarm/fill_color.nodiscard.offarm2.frag: ok
-tools/shaders/offarm/fill_color.nodiscard.offarm24.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/offarm/fill_color.nodiscard.offarm256.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/offarm/fill_color.nodiscard.offarm32.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/offarm/fill_color.nodiscard.offarm24.frag: ok
+tools/shaders/offarm/fill_color.nodiscard.offarm256.frag: ok
+tools/shaders/offarm/fill_color.nodiscard.offarm32.frag: ok
 tools/shaders/offarm/fill_color.nodiscard.offarm4.frag: ok
-tools/shaders/offarm/fill_color.nodiscard.offarm48.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
-tools/shaders/offarm/fill_color.nodiscard.offarm64.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/offarm/fill_color.nodiscard.offarm48.frag: ok
+tools/shaders/offarm/fill_color.nodiscard.offarm64.frag: ok
 tools/shaders/offarm/fill_color.nodiscard.offarm8.frag: ok
-tools/shaders/offarm/fill_color.nodiscard.offarm96.frag: Valhall: a shader of more than 256 IR values (or 384 instructions before selection) is not lowered yet
+tools/shaders/offarm/fill_color.nodiscard.offarm96.frag: ok
 tools/shaders/passthrough.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/points.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/texture.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
