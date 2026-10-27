@@ -5,14 +5,15 @@
 All notable changes to YakoGL are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-No version has been released yet. Until the first one, the section below
-says what the project is and what it has today; the first version's section
-is made from it when that version is tagged.
+The first version is 0.1.0; its section says what the project is and what it has
+at that version.
 
 Commit hashes quoted here name commits of the non-public working repository
 the project was developed in.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-10-27
 
 YakoGL is an OpenGL ES 2.0 and EGL 1.5 library for embedded GPUs that runs
 without an operating-system GPU driver. It drives the GPU directly, from
@@ -115,3 +116,6 @@ state on 2026-10-26.
   (`include/gles_osal.h`, "threads").
 - Some display and GPU bring-up files were written after GPL-only Linux
   drivers and are still in that form; `docs/source-form.md` lists them.
+
+[Unreleased]: https://github.com/signal-slot/yakogl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/signal-slot/yakogl/releases/tag/v0.1.0
