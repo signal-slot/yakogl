@@ -5,20 +5,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YakoGL — GPU graphics for Zephyr</title>
-<meta name="description" content="Run Slint and OpenGL ES applications on embedded GPUs with Zephyr. YakoGL provides OpenGL ES 2.0 and EGL, a no_std Rust core and a C ABI. Choose a board and build the demo.">
+<title>YakoGL — portable OpenGL ES for embedded GPUs</title>
+<meta name="description" content="A portable OpenGL ES and EGL implementation for embedded GPUs. Proven today with Slint on Zephyr, with an OS-independent no_std core and pluggable platform layer.">
 <meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://yako.gl/">
 <meta property="og:url" content="https://yako.gl/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="YakoGL">
-<meta property="og:title" content="YakoGL — GPU graphics for Zephyr">
-<meta property="og:description" content="Slint and OpenGL ES applications on real embedded GPUs. Three tested boards. One graphics API. Start with the hardware you have.">
+<meta property="og:title" content="YakoGL — portable OpenGL ES for embedded GPUs">
+<meta property="og:description" content="Slint on Zephyr is the visible demo. YakoGL is the portable OpenGL ES and EGL stack underneath it.">
 <meta property="og:image" content="https://yako.gl/og-image.png">
 <meta property="og:image:alt" content="The YakoGL triangle on a dark nacre gradient">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="YakoGL — GPU graphics for Zephyr">
-<meta name="twitter:description" content="Run Slint and OpenGL ES applications on embedded GPUs with Zephyr.">
+<meta name="twitter:title" content="YakoGL — portable OpenGL ES for embedded GPUs">
+<meta name="twitter:description" content="Slint on Zephyr, powered by a portable OpenGL ES and EGL implementation for embedded GPUs.">
 <meta name="twitter:image" content="https://yako.gl/og-image.png">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
@@ -37,38 +37,44 @@
 <section class="h-hero" aria-labelledby="hero-title"><div class="wrap">
   <div class="hero-grid">
     <div class="hero-copy">
-      <p class="kicker">Embedded graphics, from the ground up</p>
-      <h1 class="h-title" id="hero-title">GPU graphics.<br>On <span class="iridescent">Zephyr.</span></h1>
-      <p class="h-lead">Run Slint and OpenGL ES applications on real embedded GPUs. YakoGL brings the graphics API, shader compiler and GPU drivers together in a stack that runs without Linux.</p>
-      <div class="cta"><a class="button primary" href="try-it.html#board">Build the Slint demo <span aria-hidden="true">→</span></a><a class="button" href="#boards">Choose your board <span aria-hidden="true">↓</span></a></div>
-      <p class="hero-footnote">OpenGL ES 2.0 + EGL · Rust <code>no_std</code> · C ABI</p>
+      <p class="kicker">Portable OpenGL ES for embedded GPUs</p>
+      <h1 class="h-title" id="hero-title">Slint on Zephyr.<br><span class="iridescent">Running on the real GPU.</span></h1>
+      <p class="h-lead">That is the demo. YakoGL is the layer beneath it: a portable OpenGL ES and EGL implementation that drives embedded GPUs without depending on an operating-system GPU driver stack.</p>
+      <div class="cta"><a class="button primary" href="try-it.html#board">Build the Slint demo <span aria-hidden="true">→</span></a><a class="button" href="how-it-works.html">Meet YakoGL <span aria-hidden="true">→</span></a></div>
+      <p class="hero-footnote">Proven today on Zephyr · OS-independent <code>no_std</code> core · C ABI</p>
     </div>
     <figure class="stack-figure" aria-labelledby="stack-caption">
-      <div class="stack-label">Application → silicon</div>
-      <div class="stack-app"><span>Your application</span><strong>Slint · FemtoVG · OpenGL ES</strong></div>
+      <div class="stack-label">A proven path today</div>
+      <div class="stack-app"><span>Visible application</span><strong>Slint UI · FemtoVG</strong></div>
       <div class="stack-link" aria-hidden="true"></div>
-      <div class="stack-yako"><span class="stack-tag">The graphics stack</span><strong>YakoGL<span aria-hidden="true">.</span></strong><span>GL / EGL · GLSL compiler · GPU back ends</span></div>
+      <div class="stack-yako"><span class="stack-tag">Portable graphics implementation</span><strong>YakoGL<span aria-hidden="true">.</span></strong><span>OpenGL ES / EGL · GLSL compiler · GPU back ends</span></div>
       <div class="stack-link" aria-hidden="true"></div>
-      <div class="stack-os"><strong>Zephyr</strong><span>OS abstraction · GPU &amp; display drivers</span></div>
+      <div class="stack-os"><strong>Zephyr</strong><span>the primary, hardware-proven platform today</span></div>
       <div class="stack-link" aria-hidden="true"></div>
       <div class="stack-gpus"><span>PowerVR</span><span>Vivante</span><span>Broadcom</span></div>
-      <figcaption id="stack-caption">Stack overview. One GPU back end is selected for each build.</figcaption>
+      <figcaption id="stack-caption">One working combination, not YakoGL’s boundary. The core and GPU back ends are OS-independent.</figcaption>
     </figure>
   </div>
-  <div class="hero-bottom"><span>Tested on real hardware</span><a href="status.html#am62p">Verdin AM62P</a><a href="status.html#imx8mp">Verdin iMX8M Plus</a><a href="status.html#pi4">Raspberry Pi 4</a></div>
+  <div class="hero-bottom"><span>Hardware-proven on Zephyr</span><a href="status.html#am62p">Verdin AM62P</a><a href="status.html#imx8mp">Verdin iMX8M Plus</a><a href="status.html#pi4">Raspberry Pi 4</a></div>
 </div></section>
 
-<section class="section section-paper" id="demo" aria-labelledby="demo-title"><div class="wrap demo-layout">
-  <div><p class="eyebrow">Start with a working application</p><h2 class="display" id="demo-title">One Slint UI.<br>Three GPU families.</h2></div>
-  <div class="demo-copy"><p>The instrument-cluster sample renders through Slint’s FemtoVG renderer and YakoGL on all three boards. Start with the sample, then build your own interface against the same OpenGL ES and EGL APIs.</p>
-    <p>For instrument clusters, HMI panels and other dedicated displays that need GPU graphics on a real-time operating system.</p>
-    <div class="text-links"><a href="try-it.html#board">Build and boot the sample →</a><a href="https://github.com/signal-slot/yakogl/tree/main/examples/slint">Explore the sample source ↗</a></div>
-    <p class="small muted">The sample uses patched <code>no_std</code> Slint, FemtoVG and glow trees. The <a href="try-it.html#board">guide</a> covers those prerequisites and the tested displays.</p>
+<section class="section section-paper" id="demo" aria-labelledby="demo-title"><div class="wrap">
+  <div class="demo-layout">
+    <div><p class="eyebrow">The demo is concrete. The layer is general.</p><h2 class="display" id="demo-title">Not just Slint.<br>Not just Zephyr.</h2></div>
+    <div class="demo-copy"><p>Slint on Zephyr is the main showcase because it makes the result visible: a modern UI, rendered by the real GPU, without a Linux GPU stack. It exercises the same OpenGL ES and EGL implementation available to other clients and platforms.</p>
+      <p>YakoGL keeps the graphics core and GPU back ends OS-independent. Platform-specific work sits behind a small OS abstraction.</p>
+      <div class="text-links"><a href="how-it-works.html">See the architecture →</a><a href="try-it.html#board">Run the Zephyr + Slint demo →</a></div>
+    </div>
+  </div>
+  <div class="scope-grid" aria-label="YakoGL scope">
+    <div><p class="tag">Applications</p><strong>OpenGL ES clients</strong><p>Slint · FemtoVG · glmark2 · your renderer</p></div>
+    <div><p class="tag">Platforms</p><strong>OS-independent core</strong><p><b>Zephyr — proven</b> · bare metal · other OS integrations</p></div>
+    <div><p class="tag">GPUs</p><strong>Multiple back ends</strong><p>PowerVR · Vivante · V3D · Mali in progress</p></div>
   </div>
 </div></section>
 
 <section class="section" id="boards" aria-labelledby="boards-title"><div class="wrap">
-  <div class="section-heading"><div><p class="eyebrow">Find your starting point</p><h2 class="display" id="boards-title">Choose your board.</h2></div><p>These three targets run on Zephyr.<br>Each guide keeps the board-specific steps together.</p></div>
+  <div class="section-heading"><div><p class="eyebrow">The strongest path today</p><h2 class="display" id="boards-title">Try it on Zephyr.</h2></div><p>These are the three hardware-proven Zephyr targets today. They are the quickest way to evaluate YakoGL, not the limit of its platform model.</p></div>
   <div class="board-list">
     <article class="board-row"><span class="board-index" aria-hidden="true">01</span><div><p class="tag">TI AM62P</p><h3>Verdin AM62P</h3><p class="board-gpu">Imagination PowerVR BXS-4-64</p></div><div class="board-detail"><p>eMMC · U-Boot</p><p class="muted">Requires separately supplied GPU firmware.</p></div><a class="board-cta" href="try-it.html?board=am62p#board">Start with AM62P ↗</a></article>
     <article class="board-row"><span class="board-index" aria-hidden="true">02</span><div><p class="tag">NXP i.MX 8M Plus</p><h3>Verdin iMX8M Plus</h3><p class="board-gpu">Vivante GC7000UL</p></div><div class="board-detail"><p>eMMC · U-Boot</p><p class="muted">No separate GPU firmware needed.</p></div><a class="board-cta" href="try-it.html?board=imx8mp#board">Start with iMX8MP ↗</a></article>
