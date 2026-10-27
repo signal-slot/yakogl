@@ -3504,14 +3504,14 @@ fn ds_line_from_zero(rig: &Rig) -> impl Fn() -> String {
 fn the_ds_line_says_none_allocated_when_no_buffer_ever_was() {
     let rig = Rig::new();
     let line = ds_line_from_zero(&rig);
-    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0)");
+    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)");
     let mut d = rig.draw(3);
     d.ds_persist = false;
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
     assert_eq!(
         line(),
-        "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+        "ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)",
         "{:?}",
         rig.logs()
     );
@@ -3533,7 +3533,7 @@ fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     assert_eq!(ds_of(&rig, 100).expect("framebuffer 0's buffer").mem.size, one);
     assert_eq!(
         line(),
-        format!("ds slots peak 1/{N}, ds bytes peak 16384, ds given up 0, ds refused 0 (slots full 0, no buffer 0)")
+        format!("ds slots peak 1/{N}, ds bytes peak 16384, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)")
     );
     for i in 1..PVR_BACKEND_MAX_DS as u32 {
         assert_eq!(draw(&fbo_draw(&rig, i)), 0, "framebuffer {i}: {:?}", rig.logs());
@@ -3542,7 +3542,7 @@ fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3550,7 +3550,7 @@ fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 1 (slots full 1, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 1 (slots full 1, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3558,7 +3558,7 @@ fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3569,7 +3569,7 @@ fn the_ds_line_counts_one_a_full_table_and_one_past_it() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 2 (slots full 2, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3595,7 +3595,7 @@ fn the_ds_line_counts_a_buffer_given_up_for_another_target() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3605,7 +3605,7 @@ fn the_ds_line_counts_a_buffer_given_up_for_another_target() {
     assert_eq!(
         line(),
         format!(
-            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 1, ds refused 0 (slots full 0, no buffer 0)",
+            "ds slots peak {N}/{N}, ds bytes peak {}, ds given up 1, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)",
             N as usize * 16384
         )
     );
@@ -3646,7 +3646,7 @@ fn the_ds_line_counts_a_refusal_for_no_buffer_apart() {
     let line = ds_line_from_zero(&rig);
     with_platform(|p| p.fail_alloc_in = 1);
     assert_eq!(draw(&fbo_draw(&rig, 0)), -ENOMEM, "{:?}", rig.logs());
-    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 1 (slots full 0, no buffer 1)");
+    assert_eq!(line(), "ds slots: none allocated, ds given up 0, ds refused 1 (slots full 0, no buffer 1), depth sampled from the buffer 0 (refused 0)");
 }
 
 /// `depth_resolve` reads the depth a kick left for an object as the

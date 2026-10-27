@@ -678,13 +678,15 @@ fn stamp_texels(t: &mut GlTexture) {
 /// backend's own depth/stencil buffer, keyed by the texture (draw.rs
 /// ds_identity), not into the texels: the PowerVR's ISP stores packed D24S8
 /// row-linear in its ZLS layout, the GC7000's pixel engine D24S8 row-linear
-/// at its surface stride (both measured, gl_test 169), and neither is a
-/// format the texture unit is known to sample (not tried on either board:
-/// the performance phase's experiment). So the depth is resolved here, into
-/// the R32F texels the texture unit does sample, when it is next read: before a draw
-/// samples the texture (draw.rs `resolve_sampled_depth`, unless the backend
-/// samples the buffer itself, [`depth_for_draw`]), and before the CPU
-/// writes it ([`settle_texture`], so a sub-image keeps the rendered rest).
+/// at its surface stride (both measured, gl_test 169). The GC7000's is not
+/// a format its texture unit is known to sample; the PowerVR's TPU reads
+/// its buffer as X8U24 and the V3D's TMU its own as DEPTH24_X8, so a draw
+/// on those samples the buffer itself ([`depth_for_draw`]). Otherwise the
+/// depth is resolved here, into the R32F texels the texture unit does
+/// sample, when it is next read: before a draw samples the texture
+/// (draw.rs `resolve_sampled_depth`, unless the backend samples the buffer
+/// itself), and before the CPU writes it ([`settle_texture`], so a
+/// sub-image keeps the rendered rest).
 /// The kick that rendered it is waited for, then the backend writes the
 /// level the draw rendered (`backend::depth_resolve`, which answers 1 when
 /// it keeps nothing for the texture: the texels stay as they are). The

@@ -1132,6 +1132,21 @@ const TEXF_R32F: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_F32, [SWIZ_R,
 /// R32F read as luminance (r, r, r, 1), the L8 swizzle: a depth texture
 /// under GL_OES_depth_texture (`GlesTextureBind::depth_luminance`).
 const TEXF_R32F_LUMINANCE: TexFormat = tex_stride(csb::ROGUE_TEXSTATE_FORMAT_F32, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_ONE]);
+/* The ISP's packed D24S8 depth/stencil buffer read as a depth texture
+ * ([`depth_buffer_binding`], docs/notes/pvr-depth-sample.md): Mesa's TPU
+ * format for the depth aspect of a D24S8 image, X8U24
+ * (pvr_arch_formats.c:156, `FORMAT_DEPTH_STENCIL(Z24_UNORM_S8_UINT, ST8U24,
+ * X8U24, U8X24)`: the 24-bit unorm in bits 23..0 as the red channel, the
+ * stencil byte ignored), a STRIDE image as every linear texture here. Read
+ * as (r, 0, 0, 1), and as the luminance (r, r, r, 1) of GL_OES_depth_texture.
+ * `alpha_msb` is Mesa's for the format (false: no alpha). The pack info is
+ * Mesa's setup_pck_info for Z24X8_UNORM, which pco_pipe_to_pck_format does
+ * not list ("no pack format", 0x1f) with UNORM (0x100). */
+const TEXF_X8U24: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_X8U24, [SWIZ_R, SWIZ_ZERO, SWIZ_ZERO, SWIZ_ONE]);
+const TEXF_X8U24_LUMINANCE: TexFormat =
+    tex_stride_no_alpha(csb::ROGUE_TEXSTATE_FORMAT_X8U24, [SWIZ_R, SWIZ_R, SWIZ_R, SWIZ_ONE]);
+const TEX_PCK_INFO_X8U24: u32 = PVR_PCK_FORMAT_INVALID | PCO_PCK_UNORM;
 /// pco's PCK_INFO SPLIT flag (pco_pipe_to_pck_format).
 const PCO_PCK_SPLIT: u32 = 0x20;
 const TEX_PCK_INFO_F16: u32 = 14 | PCO_PCK_SPLIT;
@@ -1717,6 +1732,11 @@ struct Backend {
     /// the frames says the application uses more targets than there are
     /// slots.
     ds_given_up: u32,
+    /// Draws that sampled a depth texture from its depth buffer, no CPU
+    /// resolve ([`depth_buffer_binding`]), and draws whose binding named a
+    /// buffer that was not there to sample (black instead).
+    depth_direct: u32,
+    depth_refused: u32,
     /// Depth/stencil buffer requests ([`ds_get`]): the buffers' age.
     ds_clock: u32,
     /// The frame arenas' high-water marks over every kick recorded so far,
@@ -2075,6 +2095,11 @@ const PVR_TEXFMT_RAW16: u8 = 0xf1;
 const PVR_TEXFMT_RAW32: u8 = 0xf2;
 const PVR_TEXFMT_RAW64: u8 = 0xf3;
 const PVR_TEXFMT_RAW128: u8 = 0xf4;
+/// A depth texture's depth/stencil buffer bound in place of its texels
+/// (`GlesTextureBind::depth_id`, [`depth_buffer_binding`]): the ISP's
+/// packed D24S8 words read as X8U24 ([`TEXF_X8U24`]). pvr-private, as the
+/// raw formats above.
+const PVR_TEXFMT_DEPTH_BUFFER: u8 = 0xf5;
 
 /// The raw texel an integer surface's frame load reads it as.
 fn int_load_texfmt(surf: u8) -> u8 {
@@ -2867,6 +2892,7 @@ pub extern "C" fn pvr_backend_init() -> i32 {
         let ds_full_refused = b.ds_full_refused;
         let (ds_slots_peak, ds_bytes_peak) = (b.ds_slots_peak, b.ds_bytes_peak);
         let ds_given_up = b.ds_given_up;
+        let (depth_direct, depth_refused) = (b.depth_direct, b.depth_refused);
         let arena_hw = b.arena_hw;
 
         // SAFETY: all-zero is a valid Backend (see PVR); b is exclusive.
@@ -2885,6 +2911,7 @@ pub extern "C" fn pvr_backend_init() -> i32 {
         b.ds_full_refused = ds_full_refused;
         (b.ds_slots_peak, b.ds_bytes_peak) = (ds_slots_peak, ds_bytes_peak);
         b.ds_given_up = ds_given_up;
+        (b.depth_direct, b.depth_refused) = (depth_direct, depth_refused);
         b.arena_hw = arena_hw;
         /* Bring-up budgets. The C keeps these in function-local statics, so
          * they survive an init; here they are part of the state init resets,
@@ -3784,11 +3811,13 @@ fn ds_report(b: &Backend, out: &mut impl core::fmt::Write) -> core::fmt::Result 
     }
     write!(
         out,
-        ", ds given up {}, ds refused {} (slots full {}, no buffer {})",
+        ", ds given up {}, ds refused {} (slots full {}, no buffer {}), depth sampled from the buffer {} (refused {})",
         b.ds_given_up,
         b.ds_full_refused.wrapping_add(b.ds_refused),
         b.ds_full_refused,
-        b.ds_refused
+        b.ds_refused,
+        b.depth_direct,
+        b.depth_refused
     )
 }
 
@@ -4316,6 +4345,120 @@ pub extern "C" fn pvr_backend_attachment_gone(id: u32) {
     }
 }
 
+/// The slot of the single-sampled buffer whose depth plane GL object `id`
+/// (a depth texture's `GlesDraw::depth_id` form) owns and that holds depth a
+/// submitted kick stored, at `w` x `h`: what a draw may sample in place of
+/// the texels ([`pvr_depth_sampled`], [`depth_buffer_binding`]). A plane
+/// that is a whole clear alone, or undefined, is not it (the CPU resolve
+/// writes the clear value); nor is a buffer the frame being recorded still
+/// draws into (the GL core submitted that kick before it asked, so this is
+/// a check, not a path), nor one sized for another target.
+fn depth_buffer_sampleable(b: &Backend, id: u32, w: u32, h: u32) -> Option<usize> {
+    let i = ds_plane_buf(b, DEPTH, id)?;
+    let s = &b.ds[i];
+    let open = b.frame_open && (b.frame_ds.buf() == Some(i) || b.frame_s.buf() == Some(i));
+    (s.valid && s.planes[DEPTH].is_live() && s.samples <= 1 && (s.w, s.h) == (w, h) && !open).then_some(i)
+}
+
+/// Will the next draw sample the depth GL object `id` (a depth texture's
+/// `GlesDraw::depth_id` form, `w` x `h`) rendered from the buffer that
+/// holds it, instead of the GL core's texels
+/// (`crate::backend::samples_rendered_depth`)? True when the buffer owned
+/// by `id` holds depth a submitted kick stored at that size
+/// ([`depth_buffer_sampleable`]): the GL core then puts `id` into the
+/// draw's binding (`GlesTextureBind::depth_id`) and resolves nothing, and
+/// [`depth_buffer_binding`] points the draw's texture state at the buffer.
+/// False: the GL core resolves on the CPU as before
+/// ([`pvr_backend_depth_resolve`]).
+///
+/// A reading of the pool, nothing more: the GL core has submitted the kick
+/// that rendered the depth first (`backend::flush`, as
+/// `texture::resolve_depth` did before it read the buffer), so `valid` and
+/// the plane say what that kick stored. No submit and no wait here: the GPU
+/// runs kicks in order ([`flush`]), so the kick that samples the buffer
+/// reads it after the one that stored it. The TPU converts the 24-bit
+/// unorm the ISP stored, the bits [`pvr_backend_depth_resolve`] converts
+/// on the CPU, so a draw reads the same depth either way, less the
+/// resolve: on the AM62P that was the whole of glmark2 shadow's frame
+/// (docs/notes/pvr-depth-sample.md).
+pub fn pvr_depth_sampled(id: u32, w: u32, h: u32) -> bool {
+    // SAFETY: single-threaded by contract; a read of the backend's state.
+    let p = unsafe { PVR.get() };
+    p.b.inited && id != 0 && depth_buffer_sampleable(&p.b, id, w, h).is_some()
+}
+
+/// May the GL core defer a depth texture's R32F storage
+/// (`crate::backend::defers_depth_storage`)? Yes while initialised: a draw
+/// that samples a rendered depth texture reads this backend's D24S8 buffer
+/// ([`pvr_depth_sampled`]) and never the texels, so glmark2's shadow and
+/// refract need no 7.68 MB R32F store for their 1600x1200 shadow map. A
+/// draw that falls back to the texels, and every CPU read or write of them,
+/// has the GL core allocate them first (`gl::texture::ensure_storage`).
+pub fn pvr_defers_depth_storage() -> bool {
+    // SAFETY: single-threaded by contract; a read of the backend's state.
+    unsafe { PVR.get() }.b.inited
+}
+
+/// (draws that sampled a depth texture from its depth buffer, draws whose
+/// binding named a buffer that was not there), the counts the exit line
+/// prints ([`ds_report`]); for the host tests of the path
+/// (tests/depth_resolve_pvr_backend.rs).
+pub fn pvr_backend_depth_sample_stats() -> (u32, u32) {
+    // SAFETY: single-threaded by contract; a read of the backend's state.
+    let b = &unsafe { PVR.get() }.b;
+    (b.depth_direct, b.depth_refused)
+}
+
+/// The binding a draw samples depth texture `t` through when the GL core
+/// left its rendered depth in this backend's buffer (`t.depth_id`, set after
+/// [`pvr_depth_sampled`] answered true): the buffer's words as an X8U24
+/// STRIDE image ([`PVR_TEXFMT_DEPTH_BUFFER`], [`build_tex_desc`]) at the
+/// ZLS-tile-aligned width the ISP stores rows at ([`pvr_backend_depth_resolve`]
+/// reads the same layout), one level, the API extent, the texture's own
+/// sampler state. `None` when the buffer is not there to sample (gone, or
+/// holding other depth since): the texels are stale by the GL core's
+/// agreement, so the caller binds the black texel and one line says so.
+/// Between the answer and the draw nothing frees a buffer holding contents
+/// ([`ds_make_room`] never takes one), so that is a check, not a path.
+fn depth_buffer_binding(b: &mut Backend, t: &GlesTextureBind) -> Option<GlesTextureBind> {
+    let Some(i) = depth_buffer_sampleable(b, t.depth_id, t.width, t.height) else {
+        b.depth_refused = b.depth_refused.wrapping_add(1);
+        glog_once!(
+            "pvr_backend: the depth buffer a {}x{} depth texture was to be sampled from holds no stored depth of its \
+             size: the draw samples black",
+            t.width,
+            t.height
+        );
+        return None;
+    };
+    let s = b.ds[i];
+    let aw = s.w.div_ceil(ZLS_TILE) * ZLS_TILE;
+    let rows = s.h.div_ceil(ZLS_TILE) * ZLS_TILE;
+    b.depth_direct = b.depth_direct.wrapping_add(1);
+    if b.depth_direct == 1 {
+        glog!(
+            "pvr_backend: a {}x{} depth texture is sampled from its depth buffer (X8U24, stride {}): no CPU resolve",
+            t.width,
+            t.height,
+            aw
+        );
+    }
+    Some(GlesTextureBind {
+        format: PVR_TEXFMT_DEPTH_BUFFER,
+        type_: GLES_TEXTYPE_2D,
+        layers: 0,
+        base_gpu: s.mem.gpu,
+        stride_texels: aw,
+        bytes: aw.wrapping_mul(rows).wrapping_mul(4),
+        mip_filter: 0,
+        mip_levels: 1,
+        content_gen: 0,
+        target_kick: 0,
+        cpu: core::ptr::null(),
+        ..*t
+    })
+}
+
 /// Write the depth plane of GL object `id` (a depth texture) into `w` x `h`
 /// floats at `dst`, `pitch` a row (`YakoglBackend::depth_resolve`).
 ///
@@ -4838,6 +4981,14 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         fmt = f;
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
         w[7] = pck;
+    } else if t.format == PVR_TEXFMT_DEPTH_BUFFER {
+        /* a depth texture read from its depth buffer (depth_buffer_binding):
+         * one level, the ISP's packed D24S8 words as X8U24 at the ZLS-tile-
+         * aligned width the binding carries as its stride */
+        fmt = if t.depth_luminance != 0 { TEXF_X8U24_LUMINANCE } else { TEXF_X8U24 };
+        levels = 1;
+        w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(4);
+        w[7] = TEX_PCK_INFO_X8U24;
     } else if let Some((f, bytes)) = raw_tex_format(t.format) {
         /* an integer target's frame load: its pixels as raw unsigned bits */
         fmt = f;
@@ -6445,8 +6596,18 @@ fn build_desc_block(
          * texture GL calls incomplete: both sample (0,0,0,1) (GL ES 2.0
          * section 3.7.10), which is what the fallback texel holds. */
         let t = texs.iter().rev().find(|t| t.unit == unit && t.incomplete == 0);
+        /* a depth texture whose rendered depth the GL core left in this
+         * backend's buffer (depth_id, pvr_depth_sampled) reads the buffer;
+         * a binding whose buffer is not there samples black (the texels are
+         * stale by agreement) */
+        let from_buffer = t.filter(|t| t.depth_id != 0).and_then(|t| depth_buffer_binding(b, t));
+        let bound = match (&from_buffer, t) {
+            (Some(d), _) => d,
+            (None, Some(t)) if t.depth_id == 0 => t,
+            _ => &fallback,
+        };
 
-        build_tex_desc(&mut desc[i * DESC..(i + 1) * DESC], t.unwrap_or(&fallback), &mut b.warned_tex_addr);
+        build_tex_desc(&mut desc[i * DESC..(i + 1) * DESC], bound, &mut b.warned_tex_addr);
         /* the sample store ([`MsStore`]): the target's multisampled image */
         if t.is_some_and(|t| !b.ms.mem.impl_.is_null() && t.base_gpu == b.ms.mem.gpu) {
             tex_desc_set_samples(&mut desc[i * DESC..(i + 1) * DESC], b.ms.samples);
@@ -9624,6 +9785,52 @@ mod tests {
         let iw0 = TEX_IMAGE_WORD0_R32F_LUMINANCE | (2u64 << 34) | (11u64 << 48);
         assert_eq!((lum[0], lum[1]), (iw0 as u32, (iw0 >> 32) as u32));
         assert_eq!(lum[2..], red[2..], "the rest of the descriptor is the R32F one");
+    }
+
+    /// A depth texture read from its depth buffer (`depth_buffer_binding`,
+    /// `PVR_TEXFMT_DEPTH_BUFFER`) is Mesa's depth-aspect view of a D24S8
+    /// image: FORMAT X8U24 (texstate.xml: 21) as a STRIDE image, (r, 0, 0,
+    /// 1), or the luminance (r, r, r, 1) under GL_OES_depth_texture, no
+    /// `alpha_msb` (Z24X8 has none), one level whatever the sampler's mip
+    /// filter asks (the buffer holds level 0 alone), the row stride the
+    /// binding carries (the ZLS-tile-aligned width), the layer size that
+    /// stride times the height in words, and Mesa's pack info for a format
+    /// pco has no pack format for: "no pack format" with UNORM (0x11f). The
+    /// sampler words are the texture's own.
+    #[test]
+    fn a_depth_buffer_binding_is_mesas_x8u24_stride_image() {
+        let t = GlesTextureBind {
+            format: PVR_TEXFMT_DEPTH_BUFFER,
+            base_gpu: 0x80_0000_2000,
+            width: 1600,
+            height: 1200,
+            stride_texels: 1600, /* a 32-aligned width stays itself */
+            mip_filter: 2,
+            mip_levels: 1,
+            linear_filter: 0,
+            wrap_s: GLES_WRAP_CLAMP_TO_EDGE,
+            wrap_t: GLES_WRAP_CLAMP_TO_EDGE,
+            ..GlesTextureBind::ZERO
+        };
+        let red = desc(&t);
+        let lum = desc(&GlesTextureBind { depth_luminance: 1, ..t });
+        let swiz = |w: u64| (((w >> 14) & 7), ((w >> 11) & 7), ((w >> 8) & 7), ((w >> 5) & 7));
+        let (w0_red, w0_lum) = (red[0] as u64 | (red[1] as u64) << 32, lum[0] as u64 | (lum[1] as u64) << 32);
+        assert_eq!((w0_red >> 27) & 0x3f, 21, "FORMAT X8U24");
+        assert_eq!(w0_red & 7, 4, "TEXTYPE STRIDE");
+        assert_eq!(swiz(w0_red), (0, 5, 5, 4), "(r, 0, 0, 1)");
+        assert_eq!(swiz(w0_lum), (0, 0, 0, 4), "(r, r, r, 1)");
+        assert_eq!(w0_lum & !0x7fe0, w0_red & !0x7fe0, "only the swizzle");
+        assert_eq!(((w0_red >> 34) & 0x3fff, (w0_red >> 48) & 0x3fff), (1599, 1199), "the API extent");
+        let stride = tex_stride_image_word1(1600, 1, 0x80_0000_2000, false);
+        assert_eq!(red[2..4], stride, "one level at the buffer's stride and address, no alpha_msb");
+        assert_eq!(lum[2..], red[2..], "the rest of the descriptor is the same");
+        assert_eq!(red[4], 1600 * 1200 * 4, "the layer's bytes");
+        assert_eq!(red[7], 0x11f, "Mesa's pack info for Z24X8_UNORM");
+        /* an aligned stride wider than the texture: the ISP's rows */
+        let wide = desc(&GlesTextureBind { width: 1000, height: 700, stride_texels: 1024, ..t });
+        assert_eq!(wide[2..4], tex_stride_image_word1(1024, 1, 0x80_0000_2000, false));
+        assert_eq!(wide[4], 1024 * 700 * 4);
     }
 
     /// The ES 3.0 storage classes' descriptors against Mesa 26.2.1, field by
