@@ -110,12 +110,17 @@ The Pi 4 has partial hardware results, with failures still present. i.MX8MP host
 work is recorded separately from hardware validation.
 <a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md#es-30-deqp-gles3-stage-4">Read the ES 3.0 record</a>.</p>
 
-<h3 id="mali">Mali-G610 / NanoPC-T6</h3>
-<p>The fourth GPU back end is in progress on the Rockchip RK3588. Current
-<code>gl_test</code> sweeps use the board's Linux and panthor kernel driver;
-Zephyr support remains in development. Some cases pass, while others are explicitly refused,
-unimplemented or skipped. This target is separate from the three Zephyr boards above.
-<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a>.</p>
+<h3 id="mali">Mali-G610 / NanoPC-T6 <span class="badge">WIP</span></h3>
+<p>The fourth GPU back end is actively being brought up on the FriendlyElec NanoPC-T6
+(Rockchip RK3588, Arm Mali-G610). The <code>gpu-mali</code> back end already runs
+<code>gl_test</code> on the board's Linux through the panthor kernel driver; the
+2026-10-24 sweep records 98 of 256 cases PASS and 0 FAIL, with the remaining
+cases refused, not present, or skipped. Zephyr board support, board glue and
+GPU bring-up probes are already in the tree, while the complete Zephyr graphics
+path and board-level validation are still in progress. This is therefore a WIP
+target, not yet one of the three supported Zephyr boards.
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a> ·
+<a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">support criteria</a>.</p>
 
 <h2 id="not-yet">What to assess before integration</h2>
 <ul>
