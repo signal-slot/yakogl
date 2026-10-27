@@ -58,7 +58,7 @@ if [ "$dry" = 1 ]; then
 	done
 	exit 0
 fi
-cd "$ZEPHYR_WORKSPACE" || exit 1
+cd "$ZEPHYR_WS" || exit 1
 "${cmd[@]}" > "$IMX8MP_OUT/$name.log" 2>&1
 rc=$?
 # a build that exits 0 but wrote no image is not a build

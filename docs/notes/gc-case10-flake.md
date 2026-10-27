@@ -330,7 +330,7 @@ and without the `gc_wdog_arm: armed` marker `tools/board.sh` refuses the image
 (rc=3, "would not arm WDOG1").
 
 ```sh
-# a detached checkout of the integration tip, with ZEPHYR_WORKSPACE,
+# a detached checkout of the integration tip, with ZEPHYR_WS,
 # ZEPHYR_VENV, ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT exported
 # (tools/cts/imx8mp-env.sh), BOARD_BOOT=uboot-mmc
 LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10\;10\;2"'  # SEL 512, 513, 514

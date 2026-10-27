@@ -521,7 +521,7 @@ earlier outdir>` adds the per-entry diff. The commands are in 2d.
 
 gl_test images on the i.MX8MP:
 
-- Environment of the i.MX8MP build scripts: `export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out> DEQP_STAGE1=<stage 1>` (`tools/cts/imx8mp-env.sh` checks it and sets `ZEPHYR_BASE` from the workspace).
+- Environment of the i.MX8MP build scripts: `export ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out> DEQP_STAGE1=<stage 1>` (`tools/cts/imx8mp-env.sh` checks it and sets `ZEPHYR_BASE` from the workspace).
 - gl_test builds need `-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y`, else `board.sh` refuses the image (rc=3). A `;` inside a sweep list is written `\;`.
 - An interrupted run can leave `/var/yakogl/once-*.bin` on the board: `tools/board.sh imx8mp disarm` before retrying (`board-stage.sh` removes them itself). One boot takes about 2 to 2.5 minutes.
 - Free space in the deps cache (`IMX8MP_OUT`) before a tree run: a row once stopped on a full local disk quota (board.sh could not write its `once` token) and was rerun from the same records directory.
@@ -591,7 +591,7 @@ or `uboot-mmc`; no UART: the record is in the SNVS). One image carries all 29
 rows, picked by selector:
 
 ```sh
-export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out> DEQP_STAGE1=<stage 1>
+export ZEPHYR_VENV=$ZEPHYR_WS/.venv IMX8MP_OUT=<out> DEQP_STAGE1=<stage 1>
 $SW/tools/cts/imx8mp-deqp-stage1.sh                                   # stage 1, log $IMX8MP_OUT/deqp-stage1.log
 $SW/tools/cts/imx8mp-deqp-build.sh wt-$HEAD8 'dEQP-GLES2.info.*' --table $SW/tools/cts/imx8mp-full-tree.txt
 TREE_IMAGE=$IMX8MP_OUT/wt-$HEAD8/zephyr/zephyr.bin $SW/tools/board.sh imx8mp tree $SW/tools/cts/imx8mp-full-tree.txt <rec>/full

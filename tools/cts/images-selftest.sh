@@ -125,7 +125,7 @@ check "names west" "west not on PATH" "$out"
 echo
 echo "== 6. imx8mp-gltest-build.sh"
 G=$R/tools/cts/imx8mp-gltest-build.sh
-export ZEPHYR_WORKSPACE=$T/ws ZEPHYR_VENV=$T/venv ZEPHYR_SDK_INSTALL_DIR=$T/sdk IMX8MP_OUT=$T/imx
+export ZEPHYR_WS=$T/ws ZEPHYR_VENV=$T/venv ZEPHYR_SDK_INSTALL_DIR=$T/sdk IMX8MP_OUT=$T/imx
 out=$("$G" sweep1 96 2>&1); rc=$?
 [ "$rc" = 0 ] && ok "build rc 0" || bad "rc=$rc: $out"
 check "rc line" "rc=0" "$out"
@@ -147,13 +147,17 @@ mkdir -p "$T/other/zephyr"
 out=$(ZEPHYR_BASE=$T/other/zephyr "$G" zb1 96 2>&1); rc=$?
 [ "$rc" = 0 ] && ok "bogus ZEPHYR_BASE: build rc 0" || bad "bogus ZEPHYR_BASE: rc=$rc: $out"
 check "bogus ZEPHYR_BASE: west got the workspace's zephyr" "$(cd "$T/ws/zephyr" && pwd -P)" "$(cat "$T/imx/zb1/zephyr/zephyr_base" 2>&1)"
-check "bogus ZEPHYR_BASE: the override is said" "preset ZEPHYR_BASE=$T/other/zephyr is not in ZEPHYR_WORKSPACE" "$out"
+check "bogus ZEPHYR_BASE: the override is said" "preset ZEPHYR_BASE=$T/other/zephyr is not in ZEPHYR_WS" "$out"
 out=$(ZEPHYR_BASE=$T/nonexistent "$G" zb2 96 2>&1)
 check "missing ZEPHYR_BASE dir: the override is said" "preset ZEPHYR_BASE=$T/nonexistent" "$out"
 out=$(ZEPHYR_BASE=$T/ws/zephyr "$G" zb3 96 2>&1)
 absent "matching ZEPHYR_BASE: silent" "preset ZEPHYR_BASE" "$out"
-out=$(ZEPHYR_WORKSPACE=$T/nows "$G" zb4 96 2>&1); rc=$?
+out=$(ZEPHYR_WS=$T/nows "$G" zb4 96 2>&1); rc=$?
 [ "$rc" = 2 ] && ok "workspace without zephyr/: rc 2" || bad "no zephyr dir: rc=$rc: $out"
+# the old name alone still selects the workspace
+out=$(env -u ZEPHYR_WS ZEPHYR_WORKSPACE=$T/ws "$G" old1 96 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "only ZEPHYR_WORKSPACE: build rc 0" || bad "only ZEPHYR_WORKSPACE: rc=$rc: $out"
+check "only ZEPHYR_WORKSPACE: west got the workspace's zephyr" "$(cd "$T/ws/zephyr" && pwd -P)" "$(cat "$T/imx/old1/zephyr/zephyr_base" 2>&1)"
 rm "$T/bin/west"
 out=$(PATH="/usr/bin:/bin" "$G" n4 96 2>&1); rc=$?
 [ "$rc" = 2 ] && ok "no west: rc 2" || bad "no west: rc=$rc: $out"

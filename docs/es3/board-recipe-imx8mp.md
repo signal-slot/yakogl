@@ -68,7 +68,7 @@ dEQP filters over the whole dEQP tree, so a row can also begin a few cases that 
 
 ## Environment
 
-The same as for gles2 (`tools/cts/imx8mp-env.sh`): `ZEPHYR_WORKSPACE`, `ZEPHYR_VENV`,
+The same as for gles2 (`tools/cts/imx8mp-env.sh`): `ZEPHYR_WS`, `ZEPHYR_VENV`,
 `ZEPHYR_SDK_INSTALL_DIR` and `IMX8MP_OUT`. You also need `DEQP_STAGE1`. Give gles3 a directory of its own,
 because the gles2 directory holds the gles2 libraries and stage 2 links what it finds there. On the board
 side, set `BOARD_HOST=<user@host>` from the environment (never write it into a file) and
@@ -77,7 +77,7 @@ side, set `BOARD_HOST=<user@host>` from the environment (never write it into a f
 ## 1. Stage 1 (once per VK-GL-CTS revision, about 1.9 GB)
 
 ```sh
-export ZEPHYR_WORKSPACE=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
+export ZEPHYR_WS=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
        ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out>
 tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3
 ```

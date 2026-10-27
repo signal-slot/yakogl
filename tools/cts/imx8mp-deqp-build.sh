@@ -70,7 +70,7 @@ case "${DEQP_MODULE:-gles2}" in
 	*) echo "imx8mp: DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" >&2; exit 2 ;;
 esac
 unset DEQP_GL_CONFIG_NAME   # the Kconfig default reads it; a fragment says it explicitly
-cd "$ZEPHYR_WORKSPACE" || exit 1
+cd "$ZEPHYR_WS" || exit 1
 west build -p always -b "$BOARD" -d "$IMX8MP_OUT/$name" "$YAKOGL_DIR/driver/samples/zephyr/deqp" -- \
 	-DZEPHYR_MODULES="$ZEPHYR_MODULES" \
 	-DDEQP_SRC="$DEQP_STAGE1/cts" -DDEQP_BUILD="$DEQP_STAGE1/build" \
