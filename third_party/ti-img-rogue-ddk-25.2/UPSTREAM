@@ -77,7 +77,7 @@ sha256:    as the files exist in the upstream clone at 72723eea; identical on th
   90801924598a1ecfeb2f15d402aa9a13e440fab5d8ce6235e0bfaea34f49fe51  services/server/devices/rgxstartstop.h
   f29d40f21906eb06092ee18355921874d440c2622fc336cfa222edcb30ff8764  services/server/devices/rogue/rgxstartstop.c
       (build host: 789308b4885b50413607faf0d98a7c0abc705919077c51484dee5b73412159a7, the
-      same file plus a 23-line SAFEUI_REMAP register dump we added for bring-up)
+      same file plus a 23-line remap register dump we added for bring-up)
   088f862fc364e45f57f4570e127432ac9d4ec4f9d784ea726caa294e2848bd37  services/server/include/rgx_firmware_boot.h
   224b963713c50defbb27fb8e6ba4352e5d42814dc563b91ea74b21f90bef340b  config/am62p_linux_release/config_kernel.h
       (build host: binary_am62p_linux_nulldrmws_release/config_kernel.h; its config_kernel.mk,

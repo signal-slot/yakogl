@@ -11,11 +11,11 @@ Overview
 
 Board support for the Toradex Verdin AM62P SoM (TI AM62P54: 4x Cortex-A53,
 MCU Cortex-R5F, IMG BXS GPU) on the Dahlia carrier board, as used by the
-SafeUI application platform PoC.  This tree provides the Cortex-A53 target:
+application platform PoC.  This tree provides the Cortex-A53 target:
 
 * ``verdin_am62p/am62p54/a53`` — Cortex-A53 cluster
 
-The MCU-domain Cortex-R5F target (``mcu_r5f0_0``) stays with the SafeUI
+The MCU-domain Cortex-R5F target (``mcu_r5f0_0``) stays with the
 platform firmware and is not part of this tree.
 
 Status

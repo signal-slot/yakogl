@@ -133,7 +133,7 @@ v2024.07 `arch/arm/lib/image.c:70-75` (`dst = gd->bd->bi_dram[0].start`, then
 `ALIGN(dst, SZ_2M) + text_offset`), i.e. 0x40000000, and an image linked at
 0x60000000 does not run there. `go` jumps to the load address (`cmd/boot.c`,
 `do_go_exec`) and passes no device tree, which Zephyr does not need. This is
-the AM62P finding (SafeUI measured it there on 2026-09-05); for this board it
+the AM62P finding (measured there on 2026-09-05); for this board it
 follows from the same code and is **unmeasured**. `dcache off` cleans the
 D-cache and turns the MMU off before the jump, so Zephyr enters with MMU and
 caches off, as it does from kexec's purgatory.

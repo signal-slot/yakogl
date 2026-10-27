@@ -99,8 +99,8 @@
 	};
 
 	/* Display: DSS1 (VP2 -> DSI) and the Cadence DSI host + D-PHY, the same
-	 * SafeUI drivers the MCU R5F uses (in the SafeUI platform). Off
-	 * by default: the R5F owns the display in the SafeUI platform; an A53
+	 * drivers the MCU R5F uses (in the platform). Off
+	 * by default: the R5F owns the display in the platform; an A53
 	 * application that runs alone enables them in its overlay (the
 	 * examples through driver/zephyr/lib/board/am62p/app.overlay). Register bases and interrupts from the TI Linux
 	 * 6.12 device tree.

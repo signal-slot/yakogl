@@ -192,7 +192,7 @@ setting in `yakogl_capi.cmake`).
 the checkout's `driver/` and root last. The workspace's own `yakogl` clone
 is listed too, but Zephyr keys modules by name and the last entry wins
 (`zephyr_module.py`: `all_modules_by_name[meta['name']] = …`), so the
-checkout's `yakogl` module is the one the build uses. A SafeUI checkout
+checkout's `yakogl` module is the one the build uses. A platform checkout
 that defines the same Verdin boards is left out by the script.
 
 ## Not verified

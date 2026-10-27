@@ -5,7 +5,7 @@
  *   window   a static buffer in the image, used through a Normal
  *            non-cacheable alias (as v3d_gl_slint does on the Pi 4), so
  *            neither the GPU nor a check needs cache maintenance
- *   screen   the SafeUI DSS application plane, through sample_glue.c's
+ *   screen   the DSS application plane, through sample_glue.c's
  *            pvr_sample_show_window / _flip_window (vflip when the driver
  *            can; the window is then drawn bottom-up): every board_show()
  *            points the plane at the window's memory, never a copy

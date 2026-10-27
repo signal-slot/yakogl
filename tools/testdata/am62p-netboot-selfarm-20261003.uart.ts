@@ -2003,8 +2003,8 @@
 1791013686.158 Hit any key to stop autoboot:  0 
 1791013686.219 6188160 bytes read in 55 ms (107.3 MiB/s)
 1791013686.248 288 bytes read in 20 ms (13.7 KiB/s)
-1791013686.253 Failed to load '/safeui/zephyr_a53.bin'
-1791013686.260 SafeUI images not found, booting Linux
+1791013686.253 Failed to load '/stock/zephyr_a53.bin'
+1791013686.260 stock images not found, booting Linux
 1791013686.362 7[r[999;999H[6n8MMC: no card present
 1791013686.362 No EFI system partition
 1791013686.368 No EFI system partition

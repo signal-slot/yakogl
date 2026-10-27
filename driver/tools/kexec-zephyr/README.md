@@ -73,7 +73,7 @@ cut; that a WDT0 timeout brings this SoC back into Armbian is still unproven.
 ## The loader refuses to jump without a running watchdog (AM62P)
 
 A Zephyr image entered this way has exactly one way back: the RTI watchdog
-Linux left armed. The SafeUI SoC code feeds it for a bounded time
+Linux left armed. The SoC code feeds it for a bounded time
 (`SOC_AM62PX_A53_FEED_INHERITED_WDT_SECONDS`) and then lets it reset the SoC --
 but only if it is already running. If it is not, the feeder logs "RTI watchdog
 not running, nothing to feed" and returns, and an image that hangs holds the
@@ -90,12 +90,12 @@ waits for `systemctl is-system-running --wait` first; whether Torizon has
 always armed the watchdog by then is not measured yet (the check makes that
 question safe to get wrong). A runner that calls the loader itself should do
 the same. The durable fix is for the image to arm the RTI itself when it finds it
-stopped (the SafeUI SoC code, not this repository).
+stopped (the SoC code, not this repository).
 
 ## What a previous Linux leaves behind (Verdin AM62P, Torizon 7.6.1)
 
 - The GICv3 CPU interface stays in split EOI/deactivate mode; a Zephyr image
-  must clear `ICC_CTLR_EL1.EOImode` before it enables interrupts (the SafeUI
+  must clear `ICC_CTLR_EL1.EOImode` before it enables interrupts (the
   A53 SoC hook does), otherwise each interrupt is delivered once and the
   kernel hangs in its first timed wait.
 - The K3 RTI watchdog (60 s, 50 % window) keeps running and cannot be

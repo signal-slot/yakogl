@@ -62,10 +62,10 @@ pattern the rest should follow.
 | Concern | AM62P (`common/`) | i.MX8MP (`driver/zephyr/lib/gc_board/`) | Pi 4 (`v3d_clear/src/`) |
 |---|---|---|---|
 | Window memory | static `__noinit` buffer in the image (`gl_triangle/src/main.c:29`; `gl_slint` 3 buffers, `main.c:38`) | GPU carve-out, `gc_render_alloc()` (`gc_gl_triangle/src/main.c:298`) | firmware framebuffer from the mailbox (`v3d_gl_triangle/src/main.c:358`, bottom half `:391`). Slint: own static buffer + guard rows, copied to the fb (`v3d_gl_slint/src/main.c:81-92,119`) |
-| Display | SafeUI DSS app plane, `pvr_sample_show_window()` (`common/sample_glue.c:101-159`), vflip | `imx8mp_display_on(phys, pitch)` (`gc_gl_triangle/src/main.c:342`), panel-sized only | HDMI fb from the firmware (`rpi_mbox.c`), `fbcon` console on part of it |
+| Display | DSS app plane, `pvr_sample_show_window()` (`common/sample_glue.c:101-159`), vflip | `imx8mp_display_on(phys, pitch)` (`gc_gl_triangle/src/main.c:342`), panel-sized only | HDMI fb from the firmware (`rpi_mbox.c`), `fbcon` console on part of it |
 | Console | UART (`LOG_MODE_IMMEDIATE`, `gl_triangle/prj.conf`) | panel console, no UART (`gc_gl_triangle/prj.conf`: `UART_CONSOLE=n`) | HDMI fbcon + mini UART (`v3d_gl_triangle/prj.conf`) |
 | Result | UART text; triangle prints a record line (`gl_triangle/src/main.c:170`) | SNVS record (`gc_result.c`) | UART text + the frozen record screen (`v3d_gl_test/src/main.c:60-150`) |
-| Watchdog arm | `rti_arm.c` at POST_KERNEL 47 (`common/rti_arm.c:233`) or the SafeUI feeder on kexec (`common/Kconfig:34-87`) | `gc_wdog_arm.c` at PRE_KERNEL_1 1 (`:124`); `wdog_map` PRE_KERNEL_1 0 (`gc_sample.c:44`) | `rpi_wdog.c` at POST_KERNEL 0 (`:80`) |
+| Watchdog arm | `rti_arm.c` at POST_KERNEL 47 (`common/rti_arm.c:233`) or the SoC-layer feeder on kexec (`common/Kconfig:34-87`) | `gc_wdog_arm.c` at PRE_KERNEL_1 1 (`:124`); `wdog_map` PRE_KERNEL_1 0 (`gc_sample.c:44`) | `rpi_wdog.c` at POST_KERNEL 0 (`:80`) |
 | Watchdog bound | `YAKOGL_AM62P_WDT_SECONDS` | `GC_BOARD_WDOG_SECONDS` (300) | `RPI_WDOG_HOLD_S` (50, `rpi_wdog.h:14`), per sample |
 | End of run | `pvr_sample_finish(rc)`: hold `YAKOGL_SAMPLE_HOLD_SECONDS`, `sys_reboot` (`sample_glue.c:233-249`) | `gc_sample_finish()`: hold 60 s / 40 s on fail / hold codes, PSCI reset (`gc_sample.c:172`) | no call: `for (;;) k_sleep` and the watchdog resets (`v3d_gl_triangle/src/main.c:517`) |
 | Verdict rule | sample prints its own | `gc_sample_verdict()`: a GPU reset turns PASS into FAIL (`gc_sample.c:146`) | sample prints its own |
@@ -387,11 +387,11 @@ check, moved into the crate as Rust. The new sample is
   AM62P-only glue (`lib.rs:147-151`) and has a wrong expected value
   (§1.4). It is all Rust, but it is not the one to build on.
 - `gl_slint`'s C main has no check at all. `gc_slint` is 3879 lines of
-  i.MX8MP modes (SafeUI ring, PERF pages, stages). `v3d_gl_slint` has the
+  i.MX8MP modes (ring, PERF pages, stages). `v3d_gl_slint` has the
   most complete check (§1.4) and a fixed state.
 
 **"Same" means:**
-- the same `cluster.slint` with the SafeUI `ui/1024x600` layout;
+- the same `cluster.slint` with the `ui/1024x600` layout;
 - a 1024x600 window (it fits all three panels: 1024x600, 1280x800,
   1920x720) shown at (0,0);
 - `demo_vehicle` at t = 0, two `slint_draw_frame` calls, then
@@ -432,8 +432,8 @@ were deleted; `gl_slint`'s UI and no_std patches moved to `slint/ui` and
 `slint/nostd`, `v3d_gl_slint`'s host recorders to `slint/host` (the Slint
 recorder now drives the one sample's crate); nothing outside `gc_slint` used
 its ring or PERF modes, so they went with it (and gc_common's ring hook).
-`gl_slint/rust` stays, with `gl_slint/ui` a link to `slint/ui`: the SafeUI
-repository's Supervisor builds that crate by path (`gl_slint/README.md`); it
+`gl_slint/rust` stays, with `gl_slint/ui` a link to `slint/ui`: the
+platform's Supervisor builds that crate by path (`gl_slint/README.md`); it
 goes once that user has moved.
 
 ### Step 1 acceptance run

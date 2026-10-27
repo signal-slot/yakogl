@@ -248,7 +248,7 @@ One OSAL-visible behaviour deliberately differs from the C library: the core now
 fresh GPU storage before the application can observe it, because `zephyr.c` and
 `baremetal.c` hand out pool memory with the previous user's contents while `linux.c`
 zeroes it (GL leaves the contents undefined, but the leak between UI elements does not
-belong in a SafeUI stack). Reused storage is not cleared, so steady-state streaming pays
+belong in a stack). Reused storage is not cleared, so steady-state streaming pays
 nothing. In a harness log against the C this shows up as one extra `cache_flush` per new
 allocation. The same defect is still open upstream.
 

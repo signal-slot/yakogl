@@ -49,7 +49,7 @@ imx8mp_zephyr_env() {
 	export ZEPHYR_BASE=$zb
 	export ZEPHYR_SDK_INSTALL_DIR
 	mkdir -p "$IMX8MP_OUT"
-	# The module list, explicitly: a workspace whose manifest is a SafeUI checkout would otherwise
+	# The module list, explicitly: a workspace whose manifest is a checkout of the full platform would otherwise
 	# define the Verdin boards twice (see zephyr-modules.sh).
 	ZEPHYR_MODULES=$("$YAKOGL_DIR/tools/cts/zephyr-modules.sh" "$ZEPHYR_WS") || exit 2
 	export ZEPHYR_MODULES

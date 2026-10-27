@@ -4,13 +4,12 @@
 // Building blocks of the meter cluster, drawn as vector geometry: arcs, tick
 // rings, scale numbers, the framed bars and the pictograms of the safety
 // layer. Each component mirrors one drawing routine of the C implementation
-// (apps/cluster_c/main.c and lib/platform_core/safety_render.c in the SafeUI
-// repository).
+// of the cluster.
 //
 // Angles are degrees clockwise from 12 o'clock; a point at angle a and radius
 // r sits at (cx + r*sin(a), cy - r*cos(a)) because y grows downwards.
 //
-// Sizes come from `Layout` (generated from the SafeUI repository's
+// Sizes come from `Layout` (generated from
 // include/cluster/ui_layout.h by its scripts/gen_layout_slint.py), so the
 // same file draws the 1024x600 AM62P panel and the 1280x800 Verdin panel. The
 // pictograms are the exception: they are line art with no name of their own in

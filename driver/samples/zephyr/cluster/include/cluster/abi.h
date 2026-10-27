@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
  *
- * SafeUI Application ABI — shared between the A53 Supervisor, the app SDK
+ * Application ABI — shared between the A53 Supervisor, the app SDK
  * runtime and the applications themselves.  Everything in this header is
  * plain data: no kernel objects, no pointers into privileged memory.
  *

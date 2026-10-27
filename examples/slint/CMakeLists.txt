@@ -9,7 +9,7 @@
 #
 # What is shared, by path:
 #   - the UI, ui/cluster.slint (moved here from gl_slint in Step 1),
-#     with the SafeUI layout for 1024x600 (driver/samples/zephyr/cluster_dir.cmake) on every board;
+#     with the layout for 1024x600 (driver/samples/zephyr/cluster_dir.cmake) on every board;
 #   - the no_std Slint workspace (SLINT_NOSTD_DIR) and the femtovg/glow forks
 #     (NOSTD_PATCH_DIR), recreated from ../nostd's patches (../nostd/README.md);
 #   - the check, ./check (crate yakogl-slint-check, host-tested by

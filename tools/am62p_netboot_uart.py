@@ -526,7 +526,7 @@ I: sample done (0): resetting the SoC
 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
 Hit any key to stop autoboot:  0
-SafeUI images not found, booting Linux
+stock images not found, booting Linux
 Starting kernel ...
 """
 
@@ -582,7 +582,7 @@ class _FakeUBoot:
         time.sleep(0.3)
         c.sendall(b"Net:   eth0: ethernet@8000000port@1 [PRIME]\r\n\r\nHit any key to stop autoboot:  0 ")
         if not (self.keys and drain()):
-            c.sendall(b"\r\nSafeUI images not found, booting Linux\r\nStarting kernel ...\r\n")
+            c.sendall(b"\r\nstock images not found, booting Linux\r\nStarting kernel ...\r\n")
             time.sleep(1.0)
             drain()
             c.close()
@@ -602,7 +602,7 @@ class _FakeUBoot:
                         continue
                     self.executed.append(cmd)
                     if cmd == "boot":
-                        c.sendall(b"SafeUI images not found, booting Linux\r\nStarting kernel ...\r\n")
+                        c.sendall(b"stock images not found, booting Linux\r\nStarting kernel ...\r\n")
                         c.close()
                         return
                     m = re.match(r"echo yakogl-netboot: once=(\S+); echo yakogl-netboot: typed;", cmd)
@@ -612,7 +612,7 @@ class _FakeUBoot:
                                    "TFTP from server 192.0.2.2; our IP address is 192.0.2.3\r\n"
                                    "TFTP error: 'File not found' (1)\r\n"
                                    "yakogl-netboot: fetch failed, booting Linux\r\n"
-                                   "SafeUI images not found, booting Linux\r\nStarting kernel ...\r\n" % m.group(1)).encode())
+                                   "stock images not found, booting Linux\r\nStarting kernel ...\r\n" % m.group(1)).encode())
                         c.close()
                         return
                     c.sendall(b"Unknown command\r\n" + PROMPT)
@@ -1044,11 +1044,11 @@ def self_test(saved_log=None):
         FIXTURE_DONE.split("Bytes transferred = 16107024 (f5c510 hex)\n")[1]
     r = run(mmc, "glt-abc123")
     check(r["verdict"] == "done" and r["fetched_bytes"] == 16107024, "eMMC cycle: done, 16107024 bytes read (%s)" % r["verdict"])
-    # the probe's end: the file absent, then the normal bootcmd (SafeUI's
+    # the probe's end: the file absent, then the normal bootcmd (the stock
     # ext4load of its own files prints "bytes read" too: not the image's)
     t = cut_at("TFTP from") + ("** File not found /ostree/deploy/torizon/var/yakogl/once-p.bin **\n"
                                "yakogl-netboot: mmc load failed, booting Linux\n"
-                               "65536 bytes read in 4 ms (15.6 MiB/s)\nSafeUI images not found, booting Linux\n"
+                               "65536 bytes read in 4 ms (15.6 MiB/s)\nstock images not found, booting Linux\n"
                                "Starting kernel ...\n")
     r = run(t)
     check(r["verdict"] == "load_failed" and r["load_failed_line"] and r["fetched_bytes"] is None and r["back"],
@@ -1057,7 +1057,7 @@ def self_test(saved_log=None):
     check(run(cut_at("HK***"))["verdict"] == "no_zephyr", "jump, no banner: no_zephyr")
     check(run(cut_at("\x1b"))["verdict"] == "no_reset", "Zephyr, no reset: no_reset")
     check(run(FIXTURE_DONE.replace("Starting kernel ...\n", ""))["verdict"] == "no_linux", "reset, no Linux: no_linux")
-    t = FIXTURE_DONE.replace("SafeUI images", "yakogl-netboot: once=glt-abc123\nSafeUI images")
+    t = FIXTURE_DONE.replace("stock images", "yakogl-netboot: once=glt-abc123\nstock images")
     check(run(t)["verdict"] == "looped", "hook twice: looped")
     check(r["kernel_after_spl"], "fetch failed, Linux booted: kernel_after_spl set")
     check(not run(cut_at("\x1b"))["kernel_after_spl"], "Zephyr still running: kernel_after_spl clear")

@@ -22,7 +22,7 @@
  * pads. The bridge is an SN65DSI84 on the schematic but Linux drives it as
  * an SN65DSI83, i.e. one LVDS link; src/display/NOTES.md has the detail.
  *
- * This belongs in boards/toradex/verdin_imx8mp/ in the SafeUI application
+ * This belongs in boards/toradex/verdin_imx8mp/ in the application
  * repository once it has run on hardware. It lives here while it is
  * unproven so that repository keeps building for everyone else.
  */
