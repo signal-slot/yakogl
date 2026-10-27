@@ -655,7 +655,7 @@ RG_EXTRA=
 echo "== 28. glmark2-ms.py (testdata/glmark2-ms)"
 GMS=$HERE/glmark2-ms.py
 GMD=$HERE/testdata/glmark2-ms
-for b in pi4 imx8mp am62p; do
+for b in pi4 imx8mp am62p split; do
     out=$(python3 -I "$GMS" "$GMD/pass-$b.txt" 2>&1)
     rc=$?
     if [ "$rc" -eq 0 ] && [ "$out" = "$(cat "$GMD/pass-$b.expected")" ]; then

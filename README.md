@@ -59,11 +59,13 @@ The not-supported cases are features ES 2.0 does not have, or a multisample
 surface the 1x configuration lacks (`docs/es2-cts-failures.md` section C).
 
 glmark2-es2 at 800x600 runs all 33 scenes on every board, with 0 failed
-scenes and 0 GL errors. All three scores are from one main commit:
+scenes and 0 GL errors. The Pi 4 and i.MX8MP scores are from one main
+commit; the AM62P's is from that main's successor with the PowerVR
+depth-texture fix of #40 (`tools/cts/RESULTS.md`):
 
 | Board | Score |
 | --- | --- |
-| AM62P | 461 (`445c5653`, 2026-10-20) |
+| AM62P | 467 (`c5dcf5e8` plus #40, image `c999f2f7`, 2026-10-27; 461 at `445c5653`, 2026-10-20) |
 | Raspberry Pi 4 | 193 (`445c5653`, 2026-10-20) |
 | i.MX8MP | 42 (`445c5653`, 2026-10-20) |
 
@@ -74,7 +76,8 @@ AM62P's scenes were looked at on its panel through a camera at `bc43ea09`, and
 this commit's pictures match those in 29 of 33 scenes. The other 4 are
 animated scenes, sampled at a different last frame. The Pi 4 and i.MX8MP pictures are judged
 by value only. The slow scenes are terrain, shadow and refract: on the AM62P
-they take 94, 353 and 376 ms a frame, mostly GL-call time on the CPU. On the
+terrain takes 91 ms a frame, mostly GL-call time on the CPU, while shadow
+and refract take 10.6 and 37.0 ms since #40 (353 and 376 before). On the
 Pi 4, terrain takes 179 ms (shadow 7.3, refract 18.7). On the i.MX8MP they run
 at 1 to 2 FPS. The i.MX8MP's other scenes are capped by a wait for the panel's
 VSYNC on every frame (`docs/notes/imx8mp-frame-floor.md`).
