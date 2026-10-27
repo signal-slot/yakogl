@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # plan #153 frameboard: predictions, written before any board run
 # Tree: the integration tip 0543b60b (builtin-lower's cull fix 272033a3,
 # frame-instance and frame-f16rt merged). Board: NanoPC-T6, panthor.

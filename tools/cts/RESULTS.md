@@ -340,39 +340,35 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-*-sweep-1.log`
-and `16-*-sweep-2.log` (board clock 2026-10-24, 00:46 UTC; plan #153
-refusalsboard, after the uniform-array, computed-coordinate, loop-break,
-fragment-cube, per-instance-attribute and compiled-blend-shader merges and
-gl_test's case 56 fix). Code: the integration tip `02900052`, carried to the
-board as a diff and built there (board commit `b1649c8d7`, git tree
-`b77e81fb`, the host commit's).
+newest record: `tools/cts/log/2026-10-27-frameboard/` (board clock
+2026-10-27, 11:56 UTC; plan #153 frameboard, after the face-culling
+(`272033a3`) and RGBA16F-target merges). Code: the
+integration tip `0543b60b` plus the record's predictions commit, cross-built
+on the host (`yakogl-build=376b9cf8`).
 
 | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | Kernel messages |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **98** | 63 | 87 | 8 | 0 | 0 |
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **102** | 59 | 86 | 8 | 1 | 0 |
 
-- The PASS set is the previous record's 90 (`2026-10-24-final-sweep`) to
-  the string, plus:
-  - 36 `fvgconic` and 38 `fvgstencil` (fill_image_gradient_conic's computed
-    coordinate)
-  - 41 `es3cube` (a cube in the fragment stage)
-  - 52 `es3split` (per-instance attributes)
-  - 56 `manylines` (gl_test now sets its colour attribute)
-  - 87 `databreak` (a loop with a run-time break)
-  - 108 `uniidx` (float uniform arrays)
-  - 121 `uniidxh` (a computed texture coordinate)
+- The PASS set is the previous record's 98 (`2026-10-24-refusals`) to the
+  string, plus:
+  - 4 `cull` (face culling, #32, #33)
+  - 54 `es3chain` (RGBA16F colour targets)
+  - 73 `branchlane` (was refused as arithmetic other than +, -, *)
+  - 114 `cubelod` (was refused as a constant varying lane)
 
-  Also moved, from one refusal to another: 114 `cubelod`, 149 `vsunits`
-  and 150 `shprobe`. Every earlier sweep record's PASS set is a subset of
-  this one (`tools/mali/sweep_passsets.py`, 48 records).
-- No FAIL. Cases 41, 87, 108, 121, 190 and 211 also PASS in two runs each
-  on their own.
-- Open refusal of the plan's list: 114 (its cubelodf vertex shader writes
-  a constant varying lane; the link step that propagates it exists in
-  shaderc, but the GL core does not call it yet). Cases 8, 16, 27, 28, 29,
-  30, 31, 32, 33, 36, 37, 38, 39, 41, 52, 56, 87, 108, 113, 121, 122, 169,
-  186, 187, 190, 196, 197, 198, 207, 208, 209, 210, 211, 212 and 213 PASS.
+  Eleven rows moved from one refusal to another (63, 68, 71, 74, 78, 81,
+  100, 101, 116, 142, 148). Every earlier sweep record's PASS set is a
+  subset of this one (`tools/mali/sweep_passsets.py`: the 98 contains the
+  48 earlier records' sets, and this record contains the 98).
+- One FAIL, a case new in gl_test (NO-CASE before): `verdict case 214
+  splitkick: FAIL rc -1, first bad check 5 got 0xffc0c0c0 want 0xff808080`.
+  A 4x frame split into two kicks: the second kick reloads the resolved
+  colour, not the four samples, so the diagonal is blended twice.
+- Cases 4, 52 and 54 also PASS in two runs each on their own. Cases 8, 16,
+  27, 28, 29, 30, 31, 32, 33, 36, 37, 38, 39, 41, 52, 56, 87, 108, 113, 114,
+  121, 122, 169, 186, 187, 190, 196, 197, 198, 207, 208, 209, 210, 211, 212
+  and 213 PASS.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
