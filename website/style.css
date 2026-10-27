@@ -234,20 +234,24 @@ figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
 .hero-bottom a:hover { color: var(--accent); text-decoration: underline; }
 .stack-figure { margin: 0; padding: 29px; border: 1px solid #353747; border-radius: 16px; background: radial-gradient(ellipse at 90% 0%, #283439 0, transparent 50%), radial-gradient(ellipse at 0% 100%, #2b223a 0, transparent 55%), #10151c; color: #f3f2f6; box-shadow: 0 18px 40px #15202712; }
 .stack-label { font: 500 0.64rem/1.4 ui-monospace, monospace; letter-spacing: 0.17em; text-transform: uppercase; color: #b0b4c1; margin-bottom: 22px; }
-.stack-app, .stack-os { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 15px 10px; border: 1px solid #41454f; border-radius: 7px; background: #ffffff04; text-align: center; }
+.stack-app { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 15px 10px; border: 1px solid #41454f; border-radius: 7px; background: #ffffff04; text-align: center; }
 .stack-app > span { color: #aab0bf; font-size: 0.73rem; }
 .stack-app strong { font-size: 0.86rem; font-weight: 500; }
-.stack-link { width: 1px; height: 18px; background: linear-gradient(#85bebc, #8373a5); margin: auto; }
-.stack-yako { display: flex; flex-direction: column; gap: 7px; padding: 18px 8px 20px; align-items: center; background: linear-gradient(120deg, #77cab620, #ad91da20); border: 1px solid #8b9fbd; border-radius: 8px; text-align: center; }
-.stack-yako strong { font: 600 2.8rem/1.1 var(--display); letter-spacing: -0.05em; }
-.stack-yako strong span { color: #a29cdb; }
-.stack-yako > span { color: #d0d9dd; font-size: 0.69rem; }
-.stack-yako .stack-tag { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.58rem; }
-.stack-os strong { font-size: 0.92rem; }
-.stack-os > span { color: #aab0bf; font-size: 0.68rem; }
-.stack-gpus { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.stack-fork { position: relative; width: 50%; height: 26px; margin: 0 auto; border-bottom: 1px solid #727c96; }
+.stack-fork::before { content: ""; position: absolute; left: 50%; top: 0; height: 14px; border-left: 1px solid #85bebc; }
+.stack-fork::after { content: ""; position: absolute; left: 0; right: 0; bottom: -13px; height: 13px; border-left: 1px solid #727c96; border-right: 1px solid #727c96; }
+.stack-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.stack-path { display: flex; min-width: 0; min-height: 150px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 16px 10px; border: 1px solid #545967; border-radius: 8px; text-align: center; }
+.stack-path strong { font: 600 1.7rem/1.1 var(--display); letter-spacing: -0.04em; }
+.stack-path strong span { color: #a29cdb; }
+.stack-path > span:not(.stack-tag) { color: #c3c9d3; font-size: 0.67rem; line-height: 1.45; }
+.stack-path .stack-tag { color: #aab0bf; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.56rem; }
+.stack-path em { margin-top: 6px; padding: 4px 12px; border: 1px solid #4d5260; border-radius: 999px; color: #dfe2e8; font: 600 0.62rem/1 ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.stack-cpu { background: linear-gradient(145deg, #78b5c012, #ffffff02); }
+.stack-gpu { background: linear-gradient(145deg, #77cab620, #ad91da20); border-color: #8b9fbd; }
+.stack-gpus { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px; }
 .stack-gpus > span { border: 1px solid #4d485d; border-radius: 4px; padding: 9px 2px; text-align: center; font-size: 0.67rem; color: #dedbe9; background: #ffffff04; }
-.stack-figure figcaption { color: #a6adbb; font-size: 0.65rem; margin-top: 18px; text-align: center; }
+.stack-figure figcaption { color: #a6adbb; font-size: 0.65rem; line-height: 1.55; margin-top: 18px; text-align: center; }
 .section .wrap, .band .wrap { padding-top: 78px; padding-bottom: 78px; }
 .section-paper { background: var(--paper); }
 .section-heading { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: end; margin-bottom: 30px; }
