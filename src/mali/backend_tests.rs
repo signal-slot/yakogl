@@ -835,7 +835,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let rgba16f_masked = state(|d| (d.target_format, d.color_mask) = (backend::GLES_SURF_RGBA16F, 0x7));
         let mut bad_blend = blend;
         bad_blend.blend_src_rgb = 0;
-        let cull = state(|d| d.cull = backend::GLES_CULL_NONE + 1);
+        let cull = state(|d| d.cull = backend::GLES_CULL_CCW);
+        let bad_cull = state(|d| d.cull = backend::GLES_CULL_CCW + 1);
         let polygon_offset = state(|d| d.polygon_offset = true);
         let colour_off = state(|d| d.color_write = false);
         let colour_mask = state(|d| d.color_mask = 0x7);
@@ -938,7 +939,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("case 190's ONE_MINUS_DST_ALPHA column runs in Mesa's blend shader", why(&blend_190_4), built),
             ("case 190's GL_MIN column at 4x", why(&blend_190_3_4x), not_built(frame::NOT_BUILT_BLEND_SHADER)),
             ("a blend code that is not the core's", why(&bad_blend), invalid(INVALID_BLEND_CODE)),
-            ("cull", why(&cull), not_built(NOT_BUILT_CULL)),
+            ("face culling", why(&cull), built),
+            ("a cull code that is not the core's", why(&bad_cull), invalid(INVALID_CULL)),
             ("a draw with polygon offset is built", why(&polygon_offset), built),
             ("colour writes off: no fragment shader", why(&colour_off), built),
             ("colour mask RGB", why(&colour_mask), built),
@@ -1123,7 +1125,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_ZS_SIZE,
         frame::NOT_BUILT_BLEND_SHADER,
         INVALID_BLEND_CODE,
-        NOT_BUILT_CULL,
+        INVALID_CULL,
         INVALID_QUERY_HANDLE,
         NOT_BUILT_CLEAR_PROGRAM,
         NOT_BUILT_ATTRIBUTE,

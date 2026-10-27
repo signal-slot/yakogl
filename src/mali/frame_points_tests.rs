@@ -138,6 +138,7 @@ fn build_on(
                 zs: DepthStencilState::OFF,
                 colour_mask: 0xf,
                 front_cw: false,
+                cull: Cull::None,
                 vs: &vs,
                 fs: &fs,
                 primitive,

@@ -148,6 +148,7 @@ fn build(mode: &str, flip_y: bool) -> Built {
                 zs: DepthStencilState::OFF,
                 colour_mask: 0xf,
                 front_cw: mode == "frontcw",
+                cull: Cull::None,
                 texture: None,
                 vs_texture: None,
                 occlusion_query: None,

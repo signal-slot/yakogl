@@ -1157,7 +1157,22 @@ pub enum Topology {
     Points,
 }
 
+/// The winding of the faces a triangle draw culls (`GlesDraw::cull`):
+/// glEnable(GL_CULL_FACE) with glCullFace and glFrontFace folded into the
+/// winding of the culled faces. Points and lines are never culled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cull {
+    None,
+    Cw,
+    Ccw,
+}
+
 impl Topology {
+    /// Mesa's `u_reduced_prim(mode) == TRIANGLES`.
+    fn polygon(self) -> bool {
+        matches!(self, Topology::Triangles | Topology::TriangleStrip | Topology::TriangleFan)
+    }
+
     fn draw_mode(self) -> DrawMode {
         match self {
             Topology::Triangles => DrawMode::TRIANGLES,
@@ -1423,6 +1438,8 @@ pub struct DrawCall<'a> {
     pub colour_mask: u8,
     /// glFrontFace(GL_CW): which winding the stencil's front face is.
     pub front_cw: bool,
+    /// The winding of the faces to cull (triangles only).
+    pub cull: Cull,
     /// The texture the fragment shader samples, when it samples one
     /// ([`ShaderMeta::samples_texture`]).
     pub texture: Option<SampledTexture>,
@@ -2965,7 +2982,7 @@ fn emit_draw(
      * (`panfrost_overdraw_alpha`, :124-139). The front face as st/mesa
      * gives it for an FBO: GL's winding inverted, so GL's default CCW is
      * `false` (st_atom_rasterizer.c:77, 90-93); it decides which stencil
-     * face a triangle tests, culling is not built. Aligned line ends
+     * face a triangle tests and which face culling takes as the front. Aligned line ends
      * (`!line_rectangular`). A draw with no fragment shader is force
      * early with forward pixel kill on (pan_csf.c:1621-1637: "These
      * operations need to be FORCE to benefit from the depth-only pass
@@ -2990,6 +3007,9 @@ fn emit_draw(
     let late_coverage = a2c || discard;
     let late_update = a2c || (late_coverage && (d.zs.writes_zs() || d.occlusion_query.is_some()));
     let early = if fs_required && d.zs.always_passes() { PixelKill::WEAK_EARLY } else { PixelKill::FORCE_EARLY };
+    let culls = d.primitive.polygon() && d.cull != Cull::None;
+    let cull_front = culls && ((d.cull == Cull::Cw) == d.front_cw);
+    let cull_back = culls && !cull_front;
     let dcd0 = DcdFlags0 {
         /* `pan_allow_forward_pixel_to_kill` (pan_cmdstream.h:98-111): not
          * while the blend reads the destination, alpha-to-coverage is on or
@@ -3023,6 +3043,12 @@ fn emit_draw(
          * (st_atom_rasterizer.c:83-93); the board's Mesa writes r57 bit 16
          * set for a CCW triangle in a pbuffer, clear in an FBO */
         front_face_ccw: d.front_cw != d.flip_y,
+        /* `cull_front_face = polygon && (cull_face & FRONT)`, `cull_back_face`
+         * likewise (pan_csf.c:1544-1559): the culled winding is the front
+         * face when it is the `glFrontFace` winding, else the back face;
+         * points and lines are drawn with every face culled */
+        cull_front_face: cull_front,
+        cull_back_face: cull_back,
         ..Default::default()
     };
     cs.move32(reg::DCD0, pack_u32(dcd0.pack()?))?;
