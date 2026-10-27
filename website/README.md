@@ -8,9 +8,10 @@ external scripts. The canonical public origin is `https://yako.gl`.
 - `index.html`: what runs, board selection and the next step.
 - `how-it-works.html`: architecture and shader compilation choices.
 - `status.html`: measured results, sources and current limitations.
-- `try-it.html`, `try-it.js`: the board guide; `?board=am62p`,
+- `try-it.html`, `try-it.js`: the real-hardware board guide; `?board=am62p`,
   `?board=imx8mp` or `?board=pi4` selects a target. Without JavaScript all
-  instructions remain available. Host tests are a separate section.
+  instructions remain available. Host-side development tests stay in the repository
+  documentation rather than being presented as a YakoGL demo.
 - `404.html`: the not-found page.
 - `data.js`: measurement values and their provenance, rendered by `site.js`.
   Its header describes the schema. Pre-publication builds retain their
