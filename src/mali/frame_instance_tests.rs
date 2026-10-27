@@ -130,6 +130,7 @@ fn build(instances: u32, attributes: &[VertexAttribute]) -> Result<(Vec<u64>, Ve
             zs: DepthStencilState::OFF,
             colour_mask: 0xf,
             front_cw: false,
+            cull: Cull::None,
             vs: &vs,
             fs: &fs,
             primitive: Topology::Triangles,

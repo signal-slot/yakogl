@@ -158,7 +158,8 @@ pub const INVALID_ROW_STRIDE: &str = "mali: the target's row pitch in bytes does
 /// A blend factor or equation code outside `shc_blend_factor` /
 /// `shc_blend_func`: the GL core's defect.
 pub const INVALID_BLEND_CODE: &str = "mali: a blend factor or equation code that is not the core's";
-pub const NOT_BUILT_CULL: &str = "mali: a draw with face culling on is not built yet";
+/// A cull code outside `GLES_CULL_*`: the GL core's defect.
+pub const INVALID_CULL: &str = "mali: the draw's cull winding is not the core's";
 pub const INVALID_PRIMITIVE: &str = "mali: the draw's primitive is not a GL primitive";
 /// The GL core hands u16 indices only (`GlesDraw::index_size`), `index_bytes`
 /// of them staged; anything else is the core's defect.
@@ -1261,9 +1262,7 @@ fn check(d: &GlesDraw) -> Result<(), FrameError> {
     if d.occlusion_query >= backend::GLES_QUERY_HANDLES {
         return Err(FrameError::Invalid(INVALID_QUERY_HANDLE));
     }
-    if d.cull != backend::GLES_CULL_NONE {
-        return not_built(NOT_BUILT_CULL);
-    }
+    cull(d.cull)?;
     Ok(())
 }
 
@@ -1319,6 +1318,15 @@ fn blending(d: &GlesDraw) -> Result<blend::Blending, FrameError> {
 }
 
 /// The GL core's primitive code (`GLES_PRIM_*`) as the frame's topology.
+fn cull(c: backend::GlesCull) -> Result<frame::Cull, FrameError> {
+    match c {
+        backend::GLES_CULL_NONE => Ok(frame::Cull::None),
+        backend::GLES_CULL_CW => Ok(frame::Cull::Cw),
+        backend::GLES_CULL_CCW => Ok(frame::Cull::Ccw),
+        _ => Err(FrameError::Invalid(INVALID_CULL)),
+    }
+}
+
 fn topology(prim: backend::GlesPrim) -> Result<frame::Topology, FrameError> {
     use frame::Topology as T;
     Ok(match prim {
@@ -1546,6 +1554,7 @@ fn add_gl_draw(
         zs: depth_stencil_state(d),
         colour_mask: if d.color_write { d.color_mask & 0xf } else { 0 },
         front_cw: d.front_cw,
+        cull: cull(d.cull)?,
         texture: sampled_texture(d, false, &mut a.data)?,
         vs_texture: sampled_texture(d, true, &mut a.data)?,
         occlusion_query: occlusion,

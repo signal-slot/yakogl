@@ -144,6 +144,7 @@ fn build(s: State) -> (Vec<u8>, BTreeMap<u32, u32>) {
             zs: s.zs,
             colour_mask: s.colour_mask,
             front_cw: false,
+            cull: Cull::None,
             texture: None,
             vs_texture: None,
             occlusion_query: s.occlusion_query,

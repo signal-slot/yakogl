@@ -175,6 +175,7 @@ fn try_build(ubo: &'static [UboRow], fs_uniforms: &[u32]) -> Result<Built, Frame
             zs: DepthStencilState::OFF,
             colour_mask: 0xf,
             front_cw: false,
+            cull: Cull::None,
             texture: Some(texture()),
             vs_texture: None,
             occlusion_query: None,

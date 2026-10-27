@@ -118,6 +118,7 @@ fn build(primitive: Topology, vertex_count: u32) -> Result<Vec<u64>, FrameError>
             zs: DepthStencilState::OFF,
             colour_mask: 0xf,
             front_cw: false,
+            cull: Cull::None,
             texture: None,
             vs_texture: None,
             occlusion_query: None,

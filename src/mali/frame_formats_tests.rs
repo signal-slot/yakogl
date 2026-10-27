@@ -115,6 +115,7 @@ fn build(target: Target) -> (Vec<u8>, BTreeMap<u32, u32>, Frame) {
                 zs: DepthStencilState::OFF,
                 colour_mask: 0xf,
                 front_cw: false,
+                cull: Cull::None,
                 vs: &vs,
                 fs: &fs,
                 primitive: Topology::Triangles,

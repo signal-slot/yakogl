@@ -106,6 +106,7 @@ pub fn build_triangle_frame(
             zs: frame::DepthStencilState::OFF,
             colour_mask: 0xf,
             front_cw: false,
+            cull: frame::Cull::None,
             texture: None,
             vs_texture: None,
             occlusion_query: None,

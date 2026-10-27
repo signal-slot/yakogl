@@ -110,6 +110,7 @@ fn build(polygon_offset: Option<[f32; 2]>) -> (Vec<u8>, BTreeMap<u32, u32>) {
                 zs: DepthStencilState { depth_func: Func::LESS, depth_write: true, ..DepthStencilState::OFF },
                 colour_mask: 0xf,
                 front_cw: false,
+                cull: Cull::None,
                 vs: &vs,
                 fs: &fs,
                 primitive: Topology::Triangles,

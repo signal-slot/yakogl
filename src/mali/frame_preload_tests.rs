@@ -135,6 +135,7 @@ fn build(desc_base: u64, target: Target, zs: Option<ZsMode>) -> (Vec<u8>, u64, u
             },
             colour_mask: 0xf,
             front_cw: false,
+            cull: Cull::None,
             texture: None,
             vs_texture: None,
             occlusion_query: None,

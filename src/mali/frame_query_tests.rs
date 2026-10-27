@@ -139,6 +139,7 @@ fn try_build(counter: Option<u64>) -> Result<Vec<u64>, FrameError> {
             zs: DepthStencilState { depth_func: Func::LESS, depth_write: true, ..DepthStencilState::OFF },
             colour_mask: 0xf,
             front_cw: false,
+            cull: Cull::None,
             texture: None,
             vs_texture: None,
             occlusion_query: None,
