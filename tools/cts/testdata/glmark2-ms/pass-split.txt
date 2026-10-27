@@ -1,0 +1,17 @@
+22:55:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+22:55:01 glmark2-mem: entry 0 before setup: osal(zephyr) mem: pool handed out 94216192, free in the lists 0, live 94216192 bytes
+22:55:01 [build] use-vbo=false:I: render: hc dwords: 00000000 0257031f 00000088 00000000
+22:55:01 I: render: HWRT 800x600 x1 te_screen=0x00025031 mtile1=0x00380000 mtile2=0x00280000
+22:55:12  FPS: 173 FrameTime: 5.795 ms
+22:55:12 glmark2-mem: entry 1 before setup: osal(zephyr) mem: pool handed out 108584960, free in the lists 28672, live 108556288 bytes
+22:55:12 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4:I: eglSwapBuffers: the display held every window buffer; the swap waited for one to be free
+22:55:22  FPS: 47 FrameTime: 21.310 ms
+22:55:22 glmark2-mem: entry 2 before setup: osal(zephyr) mem: pool handed out 111153152, free in the lists 1150976, live 110002176 bytes
+22:55:22 [terrain] <default>:W: render: fence 106072 (HWRT member in flight) not moved at 20 ms, re-posted 1 kick(s) (1 so far)
+22:55:33  FPS: 11 FrameTime: 90.912 ms
+22:55:33 glmark2-mem: entry 3 before setup: osal(zephyr) mem: pool handed out 111153152, free in the lists 1150976, live 110002176 bytes
+22:55:33 [shadow] <default>:I: pvr_backend: a 1600x1200 depth texture is sampled from its depth buffer (X8U24, stride 1600): no CPU resolve
+22:55:44  FPS: 95 FrameTime: 10.636 ms
+22:55:44 glmark2-mem: entry 4 before setup: osal(zephyr) mem: pool handed out 111734784, free in the lists 1441792, live 110292992 bytes
+22:55:55 [refract] <default>: FPS: 28 FrameTime: 37.033 ms
+22:55:56 glmark2: score 70: 5 scenes ran, 0 failed, 0 unsupported (5 list entries); window 800x600, shown yes, GPU resets 0

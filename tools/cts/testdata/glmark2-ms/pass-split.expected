@@ -1,0 +1,9 @@
+| scene | FrameTime ms | FPS |
+|---|---:|---:|
+| [build] use-vbo=false | 5.79 | 173 |
+| [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 21.31 | 47 |
+| [terrain] <default> | 90.91 | 11 |
+| [shadow] <default> | 10.64 | 95 |
+| [refract] <default> | 37.03 | 28 |
+
+glmark2 Score: 70

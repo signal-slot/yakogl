@@ -767,9 +767,28 @@ fn resolved(word: u32) -> u32 {
     yakogl::ds_retention::unorm24_depth(word).to_bits()
 }
 
-/// What one frame left: the depth the frame's depth pass stored, what the
-/// texture held when the ground sampled it, and the library's depth-resolve
-/// lines.
+/// The depth plane of texture `tex` as the backend holds it, resolved into
+/// `w` x `h` floats by `pvr_backend_depth_resolve` (the CPU conversion of
+/// the buffer the draw sampled); `None` when the backend keeps nothing for
+/// it (1) or the frame still draws into it (-EBUSY).
+fn buffer_depth(tex: GLuint, w: u32, h: u32) -> Option<Vec<u32>> {
+    let serial = ctx().objs_ref().textures[tex as usize].serial;
+    let mut out = vec![0f32; (w * h) as usize];
+    // SAFETY: `out` holds h rows of w floats.
+    let rc = unsafe { pvr_backend_depth_resolve(context::ds_object_id(serial, true), out.as_mut_ptr(), w, h, w) };
+    (rc == 0).then(|| out.iter().map(|f| f.to_bits()).collect())
+}
+
+/// Does texture `tex` still have no R32F storage (`storage_deferred`: the
+/// GL core allocated none, so nothing was resolved into it)?
+fn storage_deferred(tex: GLuint) -> bool {
+    ctx().objs_ref().textures[tex as usize].storage_deferred
+}
+
+/// What one frame left: the depth the frame's depth pass stored, the depth
+/// the buffer the ground sampled holds, whether the ground read the buffer
+/// (the backend's count of such draws moved by one), and the library's
+/// depth-resolve lines.
 #[derive(Debug)]
 struct Frame {
     /// (the texture's render stamp, the kick the backend was recording) just
@@ -777,6 +796,7 @@ struct Frame {
     stamp: (u32, u32),
     stored: u32,
     sampled: u32,
+    direct: bool,
     lines: Vec<String>,
 }
 
@@ -792,8 +812,9 @@ fn shadow_frame(tex: GLuint, fbo: GLuint, flush_between: bool) -> Frame {
         // SAFETY: plain GL call.
         unsafe { glFlush() };
     }
+    let direct_before = pvr_backend_depth_sample_stats();
     ground(tex);
-    let sampled = texel(tex, 1, 1);
+    let direct_after = pvr_backend_depth_sample_stats();
     draw(unsafe { PROGRAMS.0 }); /* the horse, in the canvas */
     // SAFETY: plain GL call (eglSwapBuffers' submit).
     unsafe { glFlush() };
@@ -803,8 +824,17 @@ fn shadow_frame(tex: GLuint, fbo: GLuint, flush_between: bool) -> Frame {
         let k = stamp.1 as i64;
         p.stored.get(&k).copied().or_else(|| p.stored.get(&(k + 1)).copied())
     });
-    let lines = logs().into_iter().filter(|l| l.contains("depth")).collect();
-    Frame { stamp, stored: stored.expect("the depth pass stored no depth"), sampled, lines }
+    let sampled =
+        buffer_depth(tex, DEPTH.0 as u32, DEPTH.1 as u32).expect("the backend keeps no depth for the texture");
+    let lines = logs().into_iter().filter(|l| l.contains("depth") && !l.contains("no CPU resolve")).collect();
+    assert_eq!(direct_after.1, direct_before.1, "a binding named a buffer that was not there: {:?}", logs());
+    Frame {
+        stamp,
+        stored: stored.expect("the depth pass stored no depth"),
+        sampled: sampled[DEPTH.0 as usize + 1],
+        direct: direct_after.0 == direct_before.0 + 1,
+        lines,
+    }
 }
 
 /* ---- the tests --------------------------------------------------------------- */
@@ -812,18 +842,65 @@ fn shadow_frame(tex: GLuint, fbo: GLuint, flush_between: bool) -> Frame {
 /// glmark2 shadow, three frames as the host harness runs it, on a GPU that
 /// finishes every kick at once (linux.c; on the board: whenever the canvas
 /// clear's kick has completed by the ground draw): each frame's ground must
-/// sample that frame's depth.
+/// sample that frame's depth. Since the TPU reads the buffer (X8U24,
+/// `pvr_depth_sampled`) the ground samples the buffer itself: no resolve
+/// line, the backend's count of such draws moves by one a frame, the
+/// buffer holds the frame's depth, and the texture's R32F storage is never
+/// allocated (docs/notes/pvr-depth-sample.md).
 #[test]
 fn glmark2_shadow_samples_the_depth_its_frame_rendered() {
     let _g = rig(false);
     let (tex, fbo) = depth_target();
+    assert!(storage_deferred(tex), "a depth texture laid out with no pixels has no storage yet");
     let frames: Vec<Frame> = (0..3).map(|_| shadow_frame(tex, fbo, false)).collect();
+    let deferred = storage_deferred(tex);
     release(tex, fbo);
     for (i, f) in frames.iter().enumerate() {
         let (stamp, recording) = f.stamp;
         assert!(f.lines.is_empty(), "frame {i}: stamp {stamp}, recording {recording}: {f:?}");
+        assert!(f.direct, "frame {i}: the ground did not sample the depth buffer: {f:?}");
         assert_eq!(f.sampled, resolved(f.stored), "frame {i} sampled other depth than it rendered: {f:?}");
     }
+    assert!(deferred, "no CPU read of the texels: the R32F storage stays unallocated");
+    let (direct, refused) = pvr_backend_depth_sample_stats();
+    assert!(direct >= 3 && refused == 0, "the exit line's counts: {direct} sampled from the buffer, {refused} refused");
+}
+
+/// A CPU write of the texels after a frame (glTexSubImage2D of one texel)
+/// allocates the storage and resolves the rendered depth into it first, so
+/// the texels hold what the ground sampled, and the next frame's ground
+/// samples the buffer again.
+#[test]
+fn a_cpu_write_after_the_ground_resolves_the_sampled_depth_into_the_texels() {
+    let _g = rig(false);
+    let (tex, fbo) = depth_target();
+    let f = shadow_frame(tex, fbo, false);
+    assert!(f.direct && f.lines.is_empty(), "{f:?}");
+    let one = [0u32];
+    // SAFETY: plain GL calls; `one` is a 1x1 GL_UNSIGNED_INT depth image.
+    unsafe {
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            1,
+            1,
+            GL_DEPTH_COMPONENT,
+            GL_UNSIGNED_INT,
+            one.as_ptr() as *const c_void,
+        );
+        glBindTexture(GL_TEXTURE_2D, 0);
+        assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+    }
+    assert!(!storage_deferred(tex), "the write allocated the storage");
+    assert_eq!(texel(tex, 1, 1), resolved(f.stored), "the rendered depth was resolved into the texels first");
+    assert_eq!(texel(tex, 0, 0), 0, "then the texel was written");
+    let g = shadow_frame(tex, fbo, false);
+    release(tex, fbo);
+    assert!(g.direct && g.lines.is_empty(), "{g:?}");
+    assert_eq!(g.sampled, resolved(g.stored), "{g:?}");
 }
 
 /// The mechanism of the above, pinned on its own: after the depth draw the
@@ -842,12 +919,13 @@ fn the_depth_draws_stamp_names_a_kick_still_to_complete() {
 }
 
 /// The same frames with the GPU still busy with the canvas clear's kick at
-/// the ground draw (the board, some of the time): `resolve_depth` waits, the
-/// wait submits the depth pass too, and every frame samples its own depth.
-/// So the object id the GL core resolves (`ds_object_id(serial, true)`) is
-/// the one the backend keeps the plane under, the plane is live after the
-/// kick, level 0 is the level rendered, and the re-attachment every frame
-/// changes nothing.
+/// the ground draw (the board, some of the time): `depth_for_draw` submits
+/// the depth pass (no wait), the backend's record of what it stored is
+/// complete, and every frame's ground samples the buffer holding its own
+/// depth. So the object id the GL core asks about (`ds_object_id(serial,
+/// true)`) is the one the backend keeps the plane under, the plane is live
+/// after the kick, level 0 is the level rendered, and the re-attachment
+/// every frame changes nothing.
 #[test]
 fn with_the_canvas_kick_in_flight_every_frame_samples_its_own_depth() {
     let _g = rig(true);
@@ -855,29 +933,30 @@ fn with_the_canvas_kick_in_flight_every_frame_samples_its_own_depth() {
     let frames: Vec<Frame> = (0..3).map(|_| shadow_frame(tex, fbo, false)).collect();
     release(tex, fbo);
     for (i, f) in frames.iter().enumerate() {
-        assert!(f.lines.is_empty(), "frame {i}: {f:?}");
+        assert!(f.lines.is_empty() && f.direct, "frame {i}: {f:?}");
         assert_eq!(f.sampled, resolved(f.stored), "frame {i}: {f:?}");
     }
     assert_ne!(frames[0].stored, frames[2].stored, "every frame stores a depth of its own");
 }
 
-/// The depth pass submitted before the ground draw: every frame resolves.
+/// The depth pass submitted before the ground draw: every frame samples
+/// the buffer.
 #[test]
-fn a_depth_pass_submitted_before_the_ground_resolves() {
+fn a_depth_pass_submitted_before_the_ground_samples_the_buffer() {
     let _g = rig(false);
     let (tex, fbo) = depth_target();
     let frames: Vec<Frame> = (0..3).map(|_| shadow_frame(tex, fbo, true)).collect();
     release(tex, fbo);
     for (i, f) in frames.iter().enumerate() {
-        assert!(f.lines.is_empty(), "frame {i}: {f:?}");
+        assert!(f.lines.is_empty() && f.direct, "frame {i}: {f:?}");
         assert_eq!(f.sampled, resolved(f.stored), "frame {i}: {f:?}");
     }
 }
 
 /// No frame open when the depth pass starts (no canvas clear first): the
-/// stamp is the depth pass's own kick, and the ground resolves it.
+/// stamp is the depth pass's own kick, and the ground samples its buffer.
 #[test]
-fn a_depth_pass_into_no_open_frame_resolves() {
+fn a_depth_pass_into_no_open_frame_samples_the_buffer() {
     let _g = rig(false);
     let (tex, fbo) = depth_target();
     for i in 0..3 {
@@ -885,13 +964,17 @@ fn a_depth_pass_into_no_open_frame_resolves() {
         depth_pass(tex, fbo);
         let stamp = texture_target_use(ctx(), tex as usize);
         assert_eq!(stamp, pvr_backend_kick_id(), "frame {i}: the stamp is the depth pass's kick");
+        let before = pvr_backend_depth_sample_stats();
         ground(tex);
-        let sampled = texel(tex, 1, 1);
+        let after = pvr_backend_depth_sample_stats();
         // SAFETY: plain GL call.
         unsafe { glFlush() };
         let stored = with_platform(|p| p.stored.get(&(stamp as i64)).copied()).expect("no depth stored");
-        let lines: Vec<String> = logs().into_iter().filter(|l| l.contains("depth")).collect();
+        let sampled = buffer_depth(tex, DEPTH.0 as u32, DEPTH.1 as u32).expect("no depth kept")[DEPTH.0 as usize + 1];
+        let lines: Vec<String> =
+            logs().into_iter().filter(|l| l.contains("depth") && !l.contains("no CPU resolve")).collect();
         assert!(lines.is_empty(), "frame {i}: {lines:?}");
+        assert_eq!((after.0, after.1), (before.0 + 1, before.1), "frame {i}: the ground samples the buffer");
         assert_eq!(sampled, resolved(stored), "frame {i}");
     }
     release(tex, fbo);
