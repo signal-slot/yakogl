@@ -165,6 +165,23 @@ pub enum Alu {
     Iand,
     /// `ior` of two 32-bit integers (`LSHIFT_OR.i32 a, b, #0`).
     Ior,
+    /// `imax` and `imin` of two 32-bit signed integers (`CSEL.s32.gt a, b,
+    /// a, b` and `.lt`, bifrost_compile.c:3061-3071): `isign`'s lowering,
+    /// `imin(imax(a, -1), 1)` (nir_opt_algebraic.py:2812, `lower_isign`).
+    Imax,
+    Imin,
+    /// `iabs` of a 32-bit signed integer (`IABS.s32`).
+    Iabs,
+    /// `ushr` of a 32-bit integer by a constant (`RSHIFT_OR.i32 a, #0,
+    /// shift`, the shift byte 0 of its source).
+    Ushr,
+    /// `imul` of two 32-bit integers (`IMUL.i32`).
+    Imul,
+    /// `i2i32` of a 16-bit boolean (`S16_TO_S32`, bifrost_compile.c:
+    /// 3205-3211): the mask a 32-bit `bcsel_pan` reads when its condition
+    /// is a 16-bit compare's (`pan_nir_lower_bool_to_bitsize`'s
+    /// `resize_bool_alu_source`).
+    I2i32,
 }
 
 impl Alu {
@@ -183,7 +200,9 @@ impl Alu {
             | Alu::I2f
             | Alu::U2f32
             | Alu::U2u32
-            | Alu::F2f32 => 1,
+            | Alu::F2f32
+            | Alu::Iabs
+            | Alu::I2i32 => 1,
             Alu::Ffma
             | Alu::Bcsel
             | Alu::Cubeface1
@@ -203,7 +222,17 @@ impl Alu {
     /// The first two sources commute (`nir_op_info::algebraic_properties`).
     const fn commutes(self) -> bool {
         match self {
-            Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fmax | Alu::Fmin | Alu::Iadd | Alu::Iand | Alu::Ior => true,
+            Alu::Fadd
+            | Alu::Fmul
+            | Alu::Ffma
+            | Alu::Fmax
+            | Alu::Fmin
+            | Alu::Iadd
+            | Alu::Iand
+            | Alu::Ior
+            | Alu::Imax
+            | Alu::Imin
+            | Alu::Imul => true,
             Alu::Fcmp(c) | Alu::Icmp(c) => matches!(c, Cmpf::Eq | Cmpf::Ne),
             _ => false,
         }
@@ -223,6 +252,12 @@ impl Alu {
                 | Alu::BitfieldSelect
                 | Alu::Iand
                 | Alu::Ior
+                | Alu::Imax
+                | Alu::Imin
+                | Alu::Iabs
+                | Alu::Ushr
+                | Alu::Imul
+                | Alu::I2i32
         )
     }
 }
@@ -1322,7 +1357,13 @@ impl<'s> Nir<'s> {
                 | Alu::Ishl
                 | Alu::BitfieldSelect
                 | Alu::Iand
-                | Alu::Ior => return Err(MaliError::ConstantFold),
+                | Alu::Ior
+                | Alu::Imax
+                | Alu::Imin
+                | Alu::Iabs
+                | Alu::Ushr
+                | Alu::Imul
+                | Alu::I2i32 => return Err(MaliError::ConstantFold),
                 Alu::F2f16
                 | Alu::Fneg
                 | Alu::Fabs
@@ -2055,6 +2096,47 @@ pub(super) fn late_rules(vs: &mut Nir<'_>) {
             }
         }
     }
+}
+
+/// `bcsel(a, fadd(b, c), fadd(b, d))`, one of the sums used once, is
+/// `fadd(b, bcsel(a, c, d))` (nir_opt_algebraic.py:4139-4143, a late rule:
+/// "These kinds of sequences can occur after nir_opt_peephole_select").
+/// Each `fadd` is matched both ways round, the first sum's order before
+/// the second's (nir_search's commutative combinations: the second
+/// expression's swap is the higher bit). The new select stands before the
+/// `fadd`, which takes the old select's place. Measured:
+/// fbload_predlive_fs_coord.stderr's `s = b - a` / `s = a + b`, `%18 =
+/// bcsel_pan %17, %13 (fneg a), %3 (a)` then `%19 = fadd %5 (b), %18`.
+pub(super) fn bcsel_fadd(vs: &mut Nir<'_>) -> Result<(), MaliError> {
+    let mut k = 0;
+    while k < vs.len {
+        let x = vs.order[k] as usize;
+        let nd = vs.nodes[x];
+        k += 1;
+        let (Kind::Alu(Alu::Bcsel), 32, 1) = (nd.kind, nd.bits, nd.width) else { continue };
+        let sum = |vs: &Nir<'_>, v: Val| match v {
+            Val::Lane(n, 0) => match vs.nodes[n as usize] {
+                NirNode { kind: Kind::Alu(Alu::Fadd), src, bits: 32, width: 1 } => Some((n, [src[0], src[1]])),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (Some((t, ts)), Some((e, es))) = (sum(vs, nd.src[1]), sum(vs, nd.src[2])) else { continue };
+        if vs.uses(t).count() != 1 && vs.uses(e).count() != 1 {
+            continue;
+        }
+        let found = (0..4u8).find_map(|comb| {
+            let (tb, tc) = if comb & 1 == 0 { (ts[0], ts[1]) } else { (ts[1], ts[0]) };
+            let (eb, ed) = if comb & 2 == 0 { (es[0], es[1]) } else { (es[1], es[0]) };
+            (tb == eb).then_some((tb, tc, ed))
+        });
+        let Some((b, c, d)) = found else { continue };
+        let sel = NirNode { kind: Kind::Alu(Alu::Bcsel), src: [nd.src[0], c, d], ..nd };
+        let n = vs.insert_before(k - 1, sel)?;
+        vs.nodes[x] = NirNode { kind: Kind::Alu(Alu::Fadd), src: [b, Val::Lane(n, 0), Val::Undef], ..nd };
+        k += 1;
+    }
+    Ok(())
 }
 
 /// The late fusion, last instruction first (nir_search.c's worklist pops

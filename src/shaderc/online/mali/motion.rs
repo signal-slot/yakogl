@@ -62,7 +62,7 @@
 //! Mesa's clone stands and stores it in the varying's lane.
 
 use super::nir::{self, Alu, Kind, Nir, Val};
-use super::nir_fs::{Fs, TexCoord, POINT_COORD};
+use super::nir_fs::{Fs, TexCoord, FRAG_Z, POINT_COORD};
 use super::{Defect, MaliError};
 use crate::shaderc::online::ir::Module;
 
@@ -339,10 +339,10 @@ fn dominance<'a>(nir: &'a Nir<'a>, colour: [Val; 4]) -> Dom<'a> {
 
 /// `update_movable_flags` for a value: a constant is movable and
 /// convergent; a varying's lane movable and interpolated; gl_PointCoord,
-/// a uniform (measured, above) and a look-up are not; an operation is
-/// movable when its sources are and, on an interpolated value, when it
-/// commutes with interpolation; a dot product's lowered chain is not
-/// (module text: the linker sees the `fdot`).
+/// gl_FragCoord.z, a uniform (measured, above) and a look-up are not; an
+/// operation is movable when its sources are and, on an interpolated
+/// value, when it commutes with interpolation; a dot product's lowered
+/// chain is not (module text: the linker sees the `fdot`).
 fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
     let nir = &f.nir;
     let Val::Lane(n, _) = v else {
@@ -354,7 +354,8 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
     let nd = nir.nodes[n as usize];
     match nd.kind {
         Kind::Input { loc, .. } => {
-            if loc == POINT_COORD {
+            /* a special varying is no output of the vertex shader */
+            if loc == POINT_COORD || loc == FRAG_Z {
                 Flag::Unmovable
             } else {
                 Flag::Interpolated

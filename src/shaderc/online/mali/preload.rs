@@ -65,7 +65,7 @@ pub fn colour<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Preload<'s>
     let col = alu(&mut p, Op::Collect, &[Src::ssa(w[0]), Src::ssa(w[1]), Src::ssa(w[2]), Src::ssa(w[3])])?;
     alu(
         &mut p,
-        Op::Blend { sr_count: 4, f32: true },
+        Op::Blend { sr_count: 4, f32: true, u32: false },
         &[
             Src::ssa(col),
             Src::of(Idx::Reg(60)),

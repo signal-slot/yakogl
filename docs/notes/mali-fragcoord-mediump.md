@@ -140,7 +140,46 @@ version is honoured, and two of them (`fbload`, `fbload_int`) and `mipgen` are
 the driver's own paths (PowerVR frame load and `glGenerateMipmap`), so they
 are the shaders worth lowering first.
 
-## 5. Caveats
+## 5. What the back end does now (plan #153 item `frame-cull`)
+
+Every program of section 4 is lowered and pinned byte-equal to its reference
+(`src/shaderc/online/mali/tests.rs`, `FRAG_COORD_POPULATION`), with the rules
+the code cites:
+
+* ES 3.00 (`fbload`, `fbload_int`, `mipgen`, `isamp`): the fp32 path. The
+  signed divide is `imul(isign(a), ushr(iabs(a), log2 b))`
+  (`nir_opt_algebraic.py:208`), `isign` as `imin(imax(a, -1), 1)`
+  (`:2812`, `lower_isign`), built one vector operation at a time.
+* ES 1.00 highp (`predif_fs_coord`, `predlive_fs_coord`, prec_82 and
+  prec_119): an operation whose operands are the read, fp16 results of such
+  operations or constants is fp16 (`lower_precision.cpp:295-312`); the read
+  is narrowed there. One with a highp operand is fp32 and reads the
+  position at fp32. An fp16 value read by a highp operation or stored to a
+  highp local is widened (`F16_TO_F32`). A 32-bit `bcsel` reads a 16-bit
+  mask through `i2i32` (`S16_TO_S32`, `pan_nir_lower_bool_to_bitsize`).
+  `floor` and `fract` of x and y are one `vec2` of halves
+  (`nir_lower_alu_width` builds it, `nir_opt_vectorize` pairs the scalar
+  operations on it); the late `f2f32(op(f2fmp(a)))` rule does not see
+  through that `vec2`, so they stay fp16.
+* The colour's narrowing of a select of two constants is folded into a
+  16-bit select (`nir_try_constant_fold_alu`,
+  `nir_opt_constant_folding.c:58-150`); a select with another side is
+  narrowed after it (s4_b2f). Panfrost does not set `support_16bit_alu`,
+  so `nir_opt_algebraic.py:3149-3150` never fires.
+* predlive's `a * 2.0` of a local is NIR's `fmul(#a, fmul(b, #c))` rule
+  (`:2406`), and its `s` the late `bcsel` of two `fadd`s (`:4139-4143`).
+* A mediump tree's constant is rounded to nearest even
+  (`_mesa_float_to_half`); mixprec_hello.expect.json pins it.
+
+Two corpus programs follow the same rules but have no reference yet (the
+drm-shim run of each was not recorded): es100/tri_fragcoord (`1/1280` rounded
+to `0x1266`) and es100/fragz (gl_FragCoord.z of a highp shader is
+`LD_VAR_SPECIAL` of `frag_z`, `pan_nir_lower_var_special.c:17-38`; the ISA
+reads its update as `.none`). Record them with `tools/mali/drm_shim_ref.sh
+run` (`es100/fragz.frag` with `prec_84.vert`, `tri_fragcoord` with its own
+`.vert`) and pin them like the others.
+
+## 6. Caveats
 
 * `gl_ref.py` binds no texture for an integer sampler, so the `isamp` and
   `fbload_int` descriptors in the references are the shim's defaults; the

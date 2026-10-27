@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 49] = [
+pub const ROWS: [(Row, &str); 57] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -106,6 +106,19 @@ pub const ROWS: [(Row, &str); 49] = [
     /* a mediump discard's compare (tools/mali/testdata/alu_branchlane,
      * alu_branchquad: `DISCARD.f32.lt 0x38000000.h1, u2.w0.h1` once fused) */
     (row(Alu::Fcmp(Cmpf::Lt), 16, 1), "nir_op_flt_pan of one 16-bit lane: FCMP.v2f16.lt.m1 a.hN, b.hN"),
+    /* a signed divide by a constant power of two, `imul(isign(a), ushr(iabs(a),
+     * log2 b))` with `isign` lowered (gl_test's isamp, tools/mali/testdata/
+     * fbload_isamp: `ivec2(gl_FragCoord.xy) / 32`) */
+    (row(Alu::Imax, 32, 1), "nir_op_imax: CSEL.s32.gt a, b, a, b"),
+    (row(Alu::Imin, 32, 1), "nir_op_imin: CSEL.s32.lt a, b, a, b"),
+    (row(Alu::Iabs, 32, 1), "nir_op_iabs: IABS.s32"),
+    (row(Alu::Ushr, 32, 1), "nir_op_ushr: RSHIFT_OR.i32 a, #0, b.b0"),
+    (row(Alu::Imul, 32, 1), "nir_op_imul: IMUL.i32"),
+    /* a highp ES 1.00 shader's mediump arithmetic on gl_FragCoord
+     * (tools/mali/testdata/fbload_predif_fs_coord, prec_82) */
+    (row(Alu::I2i32, 32, 1), "nir_op_i2i32 of a 16-bit mask: S16_TO_S32"),
+    (row(Alu::Bcsel, 16, 1), "nir_op_bcsel_pan of one 16-bit lane: MUX.v2i16.int_zero else, then, c.h00"),
+    (row(Alu::Ffloor, 16, 2), "nir_op_ffloor of two 16-bit lanes: FROUND.v2f16.rtn"),
 ];
 
 /// `row`'s bit in a set of [`ROWS`] (a program's rows drawn).
@@ -197,6 +210,22 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * bi_imm_u8(0))` (bifrost_compile.c:3375-3381) */
         (Alu::Iand, 32, 1) => ins(p, Op::LshiftAndI32, &[s[0], s[1], ZERO])?,
         (Alu::Ior, 32, 1) => ins(p, Op::LshiftOrI32, &[s[0], s[1], ZERO])?,
+        /* `bi_csel_to(.., s0, s1, s0, s1, BI_CMPF_GT / _LT)`
+         * (bifrost_compile.c:3061-3071) */
+        (Alu::Imax, 32, 1) => ins(p, Op::CselS32 { cmpf: Cmpf::Gt }, &[s[0], s[1], s[0], s[1]])?,
+        (Alu::Imin, 32, 1) => ins(p, Op::CselS32 { cmpf: Cmpf::Lt }, &[s[0], s[1], s[0], s[1]])?,
+        (Alu::Iabs, 32, 1) => ins(p, Op::IabsS32, &s[..1])?,
+        /* `bi_rshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0), false)`
+         * (:3050-3052), the shift's byte lane as `Ishl`'s */
+        (Alu::Ushr, 32, 1) => ins(p, Op::RshiftOrI32, &[s[0], ZERO, s[1]])?,
+        (Alu::Imul, 32, 1) => ins(p, Op::ImulI32, &s[..2])?,
+        /* `bi_s16_to_s32_to(b, dst, s0)` (:3205-3211), the mask's half the
+         * caller's swizzle */
+        (Alu::I2i32, 32, 1) => ins(p, Op::S16ToS32, &s[..1])?,
+        /* `bi_mux_to(.., s2, s1, s0, BI_MUX_INT_ZERO)` as the 32-bit row,
+         * each source's half in both (the caller's swizzle) */
+        (Alu::Bcsel, 16, 1) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
+        (Alu::Ffloor, 16, 2) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &s[..1])?,
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })
 }

@@ -43,6 +43,7 @@ const fn size(op: Op) -> u8 {
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
         | Op::MuxV2i16
+        | Op::FroundV2f16 { .. }
         | Op::FcmpOrV2f16 { .. } => 16,
         Op::ShaddxS64 => 64,
         _ => 32,
@@ -73,9 +74,13 @@ const fn mods(op: Op) -> (u8, u8) {
          * `absneg` on each coordinate, none on the face index) */
         Op::Cubeface1 | Op::Cubeface2 => (0b111, 0b111),
         Op::CubeSsel | Op::CubeTsel => (0b11, 0b11),
-        Op::FrcpF32 | Op::FrsqF32 | Op::FroundF32 { .. } | Op::F32ToS32 | Op::FabsnegF32 | Op::FabsnegV2f16 => {
-            (0b1, 0b1)
-        }
+        Op::FrcpF32
+        | Op::FrsqF32
+        | Op::FroundF32 { .. }
+        | Op::FroundV2f16 { .. }
+        | Op::F32ToS32
+        | Op::FabsnegF32
+        | Op::FabsnegV2f16 => (0b1, 0b1),
         _ => (0, 0),
     }
 }

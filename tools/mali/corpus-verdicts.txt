@@ -39,14 +39,14 @@ tools/shaders/es100/equirect.frag: ok
 tools/shaders/es100/f2b.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/fmods.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/fmods2.frag: ok
-tools/shaders/es100/fragcentre.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/es100/fragcoord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/es100/fragz.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/es100/fragcentre.frag: ok
+tools/shaders/es100/fragcoord.frag: ok
+tools/shaders/es100/fragz.frag: ok
 tools/shaders/es100/frontfacing.frag: Valhall: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet
 tools/shaders/es100/hdrcolor.frag: ok
 tools/shaders/es100/hdrquad.vert: ok
 tools/shaders/es100/hdrscale.frag: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
-tools/shaders/es100/hello.frag: Valhall: a colour or point size constant fp16 does not hold exactly is not lowered yet
+tools/shaders/es100/hello.frag: ok
 tools/shaders/es100/hello.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet
 tools/shaders/es100/idiv.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/ifelse_loop.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
@@ -101,7 +101,7 @@ tools/shaders/es100/tmparr_const.vert: Valhall: a shader of more than 256 IR val
 tools/shaders/es100/transc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tri_discard.vert: ok
-tools/shaders/es100/tri_fragcoord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/es100/tri_fragcoord.frag: ok
 tools/shaders/es100/tri_fragcoord.vert: ok
 tools/shaders/es100/tri_if.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/tri_if.vert: ok
@@ -258,7 +258,7 @@ tools/shaders/gltest/fsat_vs_ctrl.vert: Valhall: arithmetic other than +, -, * a
 tools/shaders/gltest/fsat_vs_folded.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/fshp_vs.vert: ok
 tools/shaders/gltest/intrt.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
-tools/shaders/gltest/isamp.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/gltest/isamp.frag: ok
 tools/shaders/gltest/kc_fadd_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/gltest/kc_fmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/gltest/kc_maxmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
@@ -269,11 +269,11 @@ tools/shaders/gltest/mulone_fs_mods.frag: Valhall: three or more additions or mu
 tools/shaders/gltest/mulone_fs_one.frag: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 tools/shaders/gltest/position_only.vert: ok
 tools/shaders/gltest/position_only2.vert: ok
-tools/shaders/gltest/predif_fs_coord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/gltest/predif_fs_coord.frag: ok
 tools/shaders/gltest/predif_fs_uni.frag: ok
 tools/shaders/gltest/predif_vs_uni.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-tools/shaders/gltest/predlive_fs_coord.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/gltest/predlive_fs_uni.frag: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
+tools/shaders/gltest/predlive_fs_coord.frag: ok
+tools/shaders/gltest/predlive_fs_uni.frag: ok
 tools/shaders/gltest/psizvpm_plain_vs.vert: ok
 tools/shaders/gltest/psizvpm_word_vs.vert: ok
 tools/shaders/gltest/texcube_fs.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
@@ -297,9 +297,9 @@ tools/shaders/gltest/vtxgrid_vs.vert: ok
 tools/shaders/internal/clear.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/clear.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/es/clear.frag: ok
-tools/shaders/internal/es/fbload.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/internal/es/fbload_int.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
-tools/shaders/internal/es/mipgen.frag: Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet
+tools/shaders/internal/es/fbload.frag: ok
+tools/shaders/internal/es/fbload_int.frag: ok
+tools/shaders/internal/es/mipgen.frag: ok
 tools/shaders/internal/es/quad.vert: ok
 tools/shaders/internal/fbload.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/fbload.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }

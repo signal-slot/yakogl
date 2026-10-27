@@ -242,6 +242,12 @@ pub enum LodMode {
     /// The level in the staging word after the coordinate, signed 8.8
     /// fixed point (`BI_VA_LOD_MODE_EXPLICIT`): any other `txl`.
     Explicit,
+    /// `texelFetch` at level 0: a `txf`, which `bi_emit_tex_valhall`
+    /// selects as `TEX_FETCH` (bifrost_compile.c:3535-3540) on the integer
+    /// coordinate's words, no level word, and which has no `skip` bit
+    /// (`bi_has_skip_bit`, bi_helper_invocations.c:43-60). Measured:
+    /// fbload_fbload.expect.json's `TEX_FETCH.slot0.reserved.32.2d`.
+    Fetch,
 }
 
 /// A look-up's texture dimension (`enum bi_dimension` as
@@ -256,6 +262,17 @@ pub enum TexDim {
     /// words are the cube descriptor `build_cube_desc` packs (the face
     /// index in the top three bits of S).
     Cube,
+}
+
+/// A special varying's name (`enum bi_varying_name`, the ISA's
+/// `varying_name`: point 0, frag_w 2, frag_z 3, valhall/ISA.xml).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum VaryingName {
+    /// gl_PointCoord.
+    Point = 0,
+    /// gl_FragCoord.z.
+    FragZ = 3,
 }
 
 /// The ops of this back end (`enum bi_opcode`).
@@ -354,9 +371,25 @@ pub enum Op {
     /// `CSEL.u32.eq dest, a, b, t, f`: `t` where `a == b`, else `f`
     /// (`bi_csel_from_mux`).
     CselU32,
+    /// `CSEL.s32.cmpf dest, a, b, t, f`: `t` where `a cmpf b` (signed),
+    /// else `f`; `imax` is `.gt a, b, a, b` and `imin` `.lt`
+    /// (`bi_csel_to(.., nir_type_int, ..)`, bifrost_compile.c:3061-3071).
+    CselS32 {
+        cmpf: Cmpf,
+    },
+    /// `IABS.s32` (`nir_op_iabs`, bifrost_compile.c:3371-3373).
+    IabsS32,
+    /// `IMUL.i32` (`nir_op_imul`, bifrost_compile.c:3367-3369: the low word
+    /// of the product).
+    ImulI32,
     /// `FROUND.f32` with the rounding mode (`ffloor`: `.rtn`, `fceil`:
     /// `.rtp`).
     FroundF32 {
+        round: Round,
+    },
+    /// `FROUND.v2f16`, the same per 16-bit lane (an fp16 `ffloor` of a
+    /// vector of two halves).
+    FroundV2f16 {
         round: Round,
     },
     FrsqF32,
@@ -365,6 +398,10 @@ pub enum Op {
     /// `S32_TO_F32` (`nir_op_i2f32`).
     S32ToF32,
     IaddS32,
+    /// `S16_TO_S32 dest, x.hN`: a 16-bit half sign-extended into a word
+    /// (`nir_op_i2i32` of a 16-bit source, bifrost_compile.c:3205-3211: a
+    /// 16-bit compare's mask widened for a 32-bit select).
+    S16ToS32,
     /// `U16_TO_U32 dest, x.hN`: a 16-bit half into a word (what
     /// `MKVEC.v2i16 x, #0` lowers to, bi_lower_mkvec_swz.c:256-257).
     U16ToU32,
@@ -408,9 +445,12 @@ pub enum Op {
         index: u8,
         vecsize: u8,
     },
-    /// gl_PointCoord (`load_var_special_pan`, varying name `point`):
-    /// `vecsize` f32 components at the centre, `.clobber` update.
-    LdVarSpecialPointF32 {
+    /// A special varying (`load_var_special_pan`, bifrost_compile.c:
+    /// 1419-1440): `name` the ISA's `varying_name` (gl_PointCoord's
+    /// `point`, gl_FragCoord.z's `frag_z`, pan_nir_lower_var_special.c:
+    /// 17-25), `vecsize` f32 components at the centre, `.clobber` update.
+    LdVarSpecialF32 {
+        name: VaryingName,
         vecsize: u8,
     },
     /// Input `index` of attribute table `table` interpolated at the
@@ -430,10 +470,13 @@ pub enum Op {
         z: bool,
         s: bool,
     },
-    /// `f32`: the colour in fp32 registers (register format F32), else fp16.
+    /// `f32`: the colour in fp32 registers (register format F32), else fp16;
+    /// `u32`: in unsigned integer registers (U32, a `uvec4` output's
+    /// `nir_type_uint32`, `bi_reg_fmt_for_nir`), `f32` then false.
     Blend {
         sr_count: u8,
         f32: bool,
+        u32: bool,
     },
     /// `BRANCHZI.absolute`: `.eq` the fragment shader's blend-shader call
     /// (va_lower_blend), `.ne` a blend shader's return through the link
@@ -454,6 +497,10 @@ pub enum Op {
     /// (`bi_rshift_and_i32`, the sample id of r61, `bi_load_sample_id_to`,
     /// bifrost_compile.c:887-896); the sources as [`Op::LshiftAndI32`]'s.
     RshiftAndI32,
+    /// `RSHIFT_OR.i32 dest, a, b, shift`: `(a >> shift) | b` (a NIR `ushr`
+    /// is `(a >> shift) | 0`, bifrost_compile.c:3050-3052); the sources
+    /// as [`Op::LshiftAndI32`]'s.
+    RshiftOrI32,
     /// `LD_PKA.i<32 * words> @dest, address, descriptor` (`bi_ld_pka_to`
     /// with `seg = BI_SEG_UBO`, bifrost_compile.c:870-883): `words` 32-bit
     /// words of the buffer the mode descriptor (source 1, UBO 0 is the
@@ -596,7 +643,7 @@ pub const fn props(op: Op) -> Props {
             Props { msg: Msg::Store, sr_count: SrCount::Fixed(1), sr_read: true, ..ALU }
         }
         /* VARYING, FORMAT, 0, 1, 0, 0 */
-        Op::LdVarBufImmF32 { .. } | Op::LdVarSpecialPointF32 { .. } | Op::LdVarImmF32 { .. } => {
+        Op::LdVarBufImmF32 { .. } | Op::LdVarSpecialF32 { .. } | Op::LdVarImmF32 { .. } => {
             Props { msg: Msg::Varying, sr_count: SrCount::Format, sr_write: true, ..ALU }
         }
         /* ATEST, 1, 0, 1, 0, 0 */
@@ -664,6 +711,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::FaddF32 | Op::FmaxF32 | Op::FminF32, 0..=1) => info(true, true, false, false, 32),
         (Op::FmaxV2f16 | Op::FminV2f16, 0..=1) => info(true, true, false, false, 16),
         (Op::FrcpF32 | Op::FrsqF32 | Op::FroundF32 { .. }, 0) => info(true, true, false, false, 32),
+        (Op::FroundV2f16 { .. }, 0) => info(true, true, false, false, 16),
         /* a pseudo-op (IR_pseudo.xml:139-147: a plain source) */
         (Op::FclampF32, 0) => info(false, false, false, false, 32),
         (Op::FclampV2f16, 0) => info(false, false, false, false, 16),
@@ -679,7 +727,9 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
          * `widen = 1`, valhall.c ICMP_OR.u32/.s32 and IADD.s32); it does
          * not swizzle */
         (Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::IaddS32, 0..=1) => info(false, false, true, false, 32),
-        (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32, 0..=3) => info(false, false, false, false, 32),
+        (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselS32 { .. }, 0..=3) => info(false, false, false, false, 32),
+        /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
+        (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
         /* the coordinates: absneg and widen, as FMA.f32's (valhall.c
          * CUBEFACE1, CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL); the face index a
          * plain word */
@@ -689,7 +739,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::MuxV2i16, 0..=2) => info(false, true, false, false, 16),
         (Op::F32ToS32, 0) => info(true, false, false, false, 32),
         (Op::S32ToF32, 0) => info(false, false, false, false, 32),
-        (Op::U16ToU32, 0) => info(false, false, false, true, 16),
+        (Op::U16ToU32 | Op::S16ToS32, 0) => info(false, false, false, true, 16),
         (Op::U16ToF32, 0) => info(false, false, false, true, 16),
         (Op::F16ToF32, 0) => info(true, false, false, true, 16),
         (Op::MovI32 | Op::IaddImmI32(_), 0) => info(false, false, false, false, 32),
@@ -704,7 +754,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::LeaBufImm { .. }, 0) => info(false, false, false, false, 32),
         (Op::StoreI32 { .. } | Op::StoreI16 { .. }, 0) => info(false, false, false, false, 32),
         (Op::StoreI32 { .. } | Op::StoreI16 { .. }, 1) => info(false, false, false, false, 64),
-        (Op::LdVarBufImmF32 { .. } | Op::LdVarSpecialPointF32 { .. } | Op::LdVarImmF32 { .. }, 0) => {
+        (Op::LdVarBufImmF32 { .. } | Op::LdVarSpecialF32 { .. } | Op::LdVarImmF32 { .. }, 0) => {
             info(false, false, false, false, 32)
         }
         (Op::Atest, 0) | (Op::Atest, 2) => info(false, false, false, false, 32),
@@ -716,9 +766,13 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* LSHIFT_AND.i32: the value (widen), then, swapped by va_swap_12,
          * BIR's mask is Valhall's third source (32 bits, notted) and BIR's
          * shift its second (an 8-bit `lanes` source) */
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32, 0) => info(false, false, true, false, 32),
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32, 1) => info(false, false, false, false, 32),
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32, 2) => {
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 0) => {
+            info(false, false, true, false, 32)
+        }
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 1) => {
+            info(false, false, false, false, 32)
+        }
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 2) => {
             SrcInfo { lanes: true, ..info(false, false, false, false, 8) }
         }
         /* the byte offset, then the mode descriptor (va_pack.c:746-769) */
@@ -762,14 +816,17 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FrcpF32
         | Op::FrsqF32
         | Op::FroundF32 { .. }
+        | Op::FroundV2f16 { .. }
         | Op::F32ToS32
         | Op::S32ToF32
+        | Op::S16ToS32
         | Op::U16ToU32
         | Op::U16ToF32
         | Op::F16ToF32
+        | Op::IabsS32
         | Op::LeaBufImm { .. }
         | Op::LdVarBufImmF32 { .. }
-        | Op::LdVarSpecialPointF32 { .. }
+        | Op::LdVarSpecialF32 { .. }
         | Op::LdVarImmF32 { .. } => 1,
         Op::StoreI32 { .. } | Op::StoreI16 { .. } | Op::TexSingle { .. } => 1,
         Op::FaddF32
@@ -779,23 +836,26 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FminF32
         | Op::FminV2f16
         | Op::IaddS32
+        | Op::ImulI32
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
         | Op::ShaddxS64 => 2,
         Op::LdAttrImm { .. } | Op::Blend { .. } | Op::BranchzI { .. } | Op::LdPka { .. } => 2,
-        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::MkvecV2i8 | Op::LdTile { .. } => 3,
+        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::MkvecV2i8 | Op::LdTile { .. } => {
+            3
+        }
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
         Op::FcmpOrV2f16 { .. } => 3,
         Op::MuxBitI32 | Op::Cubeface1 | Op::Cubeface2 | Op::CubeSsel | Op::CubeTsel => 3,
-        Op::CselU32 => 4,
+        Op::CselU32 | Op::CselS32 { .. } => 4,
     }
 }
 
 /// `valhall_opcodes[op].is_signed` (valhall.py:198: the name's type, after
 /// its dot, has an `s`; `ICMP_OR.u32` has none).
 pub const fn is_signed(op: Op) -> bool {
-    matches!(op, Op::ShaddxS64 | Op::IaddS32 | Op::IcmpOrS32 { .. })
+    matches!(op, Op::ShaddxS64 | Op::IaddS32 | Op::IcmpOrS32 { .. } | Op::CselS32 { .. } | Op::IabsS32 | Op::S16ToS32)
 }
 
 /// One instruction (`bi_instr`).
@@ -873,7 +933,7 @@ impl Ins {
             SrCount::Format => match self.op {
                 Op::LdAttrImm { vecsize, .. }
                 | Op::LdVarBufImmF32 { vecsize, .. }
-                | Op::LdVarSpecialPointF32 { vecsize }
+                | Op::LdVarSpecialF32 { vecsize, .. }
                 | Op::LdVarImmF32 { vecsize, .. } => vecsize as u32,
                 /* a 16-bit register format packs two channels a register */
                 Op::LdTile { vecsize, f16 } => {

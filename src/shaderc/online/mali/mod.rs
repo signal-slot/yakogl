@@ -140,11 +140,16 @@ pub enum MaliError {
     /// ([`FsPrecision`]): Mesa computes the highp ones in fp32 and the
     /// mediump and lowp ones in fp16, converting where they meet.
     MixedPrecision,
-    /// Arithmetic on gl_FragCoord read straight from the built-in, or any
-    /// read of it in a mediump shader: gl_FragCoord is mediump in GLSL ES
-    /// 1.00 (builtin_variables.cpp:1333-1335), so Mesa lowers that
-    /// arithmetic to fp16 (lower_precision.cpp:295-312); a copy to a highp
-    /// variable first (femtovg's `ditherNoise(gl_FragCoord.xy)`) is fp32.
+    /// fp16 arithmetic on gl_FragCoord in a form no reference draws:
+    /// gl_FragCoord is mediump in GLSL ES 1.00 (builtin_variables.cpp:
+    /// 1333-1335), so Mesa lowers an operation whose other operands are
+    /// constants or such results to fp16 (lower_precision.cpp:295-312;
+    /// docs/notes/mali-fragcoord-mediump.md). Lowered: x and y in order in
+    /// a mediump shader (prec_84), and in a highp one a compare of one lane
+    /// (fbload_predif_fs_coord) and `floor`, `fract` of x and y (prec_82);
+    /// any other operation, lane or pairing is this gap. An operation with
+    /// a highp operand, or a copy to a highp variable first (femtovg's
+    /// `ditherNoise(gl_FragCoord.xy)`), is fp32.
     FragCoordMediump,
     /// More uniform words than the FAU's 128 (Mesa loads the rest from the
     /// UBO).
@@ -226,6 +231,11 @@ pub enum MaliError {
     /// A pair of a varying lane and the constant 0.0, which Mesa selects as
     /// `U16_TO_U32` (bi_lower_mkvec_swz.c:256-257), an op not transcribed.
     ColourZeroHalf,
+    /// A constant fp16 does not hold: one a mediump tree reads that rounds
+    /// to no normal fp16 (Mesa's `_mesa_float_to_half` makes a subnormal,
+    /// a zero or an infinity, which no reference draws; a normal one is
+    /// rounded to nearest even, mixprec_hello.expect.json), or an inexact
+    /// colour or point size constant of a highp shader or a vertex stage.
     Fp16Inexact,
     FauPage,
     FauFull,
@@ -353,7 +363,7 @@ impl MaliError {
                 "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet"
             }
             MaliError::FragCoordMediump => {
-                "Valhall: mediump arithmetic on gl_FragCoord (a read not first copied to a highp variable) is not lowered yet"
+                "Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet"
             }
             MaliError::UboFallback => {
                 "Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO) is not lowered yet"
@@ -431,7 +441,9 @@ impl MaliError {
             MaliError::ColourZeroHalf => {
                 "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet"
             }
-            MaliError::Fp16Inexact => "Valhall: a colour or point size constant fp16 does not hold exactly is not lowered yet",
+            MaliError::Fp16Inexact => {
+                "Valhall: a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly) is not lowered yet"
+            }
             MaliError::FauPage => "Valhall: a push word past FAU page 0 is not lowered yet",
             MaliError::FauFull => "Valhall: a program whose sysvals overflow the FAU is not lowered yet",
             MaliError::Spill => {
@@ -893,6 +905,16 @@ pub struct FsPrecision {
     /// gl_FragColor (mediump in ES 1.00) and a mediump output are fp16
     /// (case114_f.expect.json, alu_divloop.expect.json).
     pub colour_f32: bool,
+    /// The colour is an ES 3.00 output declared `highp uvec4`: Mesa stores
+    /// its four words as they are (`nir_type_uint32`, `BLEND.v4.u32`) and
+    /// tests the constant alpha 1.0 (fbload_fbload_int.expect.json's
+    /// `ATEST ... 0x3F800000`).
+    pub colour_u32: bool,
+    /// gl_FragCoord is highp: the shader is ES 3.00 or later, where Mesa
+    /// declares the built-in highp, and mediump in ES 1.00
+    /// (builtin_variables.cpp:1333-1335, `frag_coord_precision`;
+    /// docs/notes/mali-fragcoord-mediump.md 1).
+    pub frag_coord_highp: bool,
     /// The vertex shader's constant varying lanes Mesa's link propagates
     /// into this shader ([`link::VaryingConsts`]; none for a shader
     /// compiled alone).
@@ -925,7 +947,7 @@ impl FsPrecision {
         /* a function defined under the other default computes at its width */
         let mixed =
             [Precision::Low, Precision::Medium, Precision::High].into_iter().any(|p| at_fns[p as usize] && other(p));
-        let mut f = FsPrecision { highp, mixed, ..FsPrecision::default() };
+        let mut f = FsPrecision { highp, mixed, frag_coord_highp: pre.version >= 300, ..FsPrecision::default() };
         let mut dflt = Precision::Default;
         for d in ast.top_level() {
             match *d {
@@ -933,6 +955,14 @@ impl FsPrecision {
                 Decl::Var { storage: StorageQualifier::FragOut, ty, .. } if float(&ty.base) => {
                     let p = if ty.precision == Precision::Default { dflt } else { ty.precision };
                     f.colour_f32 |= p == Precision::High;
+                }
+                /* an unsigned integer output (fbload_int.frag's `highp uvec4
+                 * o_color`): Mesa stores its words as computed,
+                 * `BLEND.v4.u32` (fbload_fbload_int.expect.json) */
+                Decl::Var { storage: StorageQualifier::FragOut, ty, .. }
+                    if matches!(ty.base, BaseType::UVec(4)) && ty.precision == Precision::High =>
+                {
+                    f.colour_u32 = true;
                 }
                 Decl::Var { storage: StorageQualifier::Varying, ty, name, .. } if float(&ty.base) => {
                     let p = if ty.precision == Precision::Default { dflt } else { ty.precision };
@@ -1150,7 +1180,7 @@ fn compile_stage<'s>(
         }
         /* a highp output of a mediump shader: an fp32 store of fp16 values
          * (no reference) */
-        if fs.colour_f32 && !fs.highp {
+        if (fs.colour_f32 || fs.colour_u32) && !fs.highp {
             return Err(MaliError::MixedPrecision);
         }
         let mut f = nir_fs::walk(m, scratch, fs)?;
@@ -1167,8 +1197,8 @@ fn compile_stage<'s>(
                 .uniforms
                 .iter()
                 .find(|u| u.dword_off == crate::shaderc::SHC_UNIFORM_NO_BLOCK && u.binding == t.sampler);
-            /* a highp shader's cube look-up takes it at 32 bits */
-            let taken = fs.highp && t.cube.is_some();
+            /* a highp shader's look-up takes it at 32 bits */
+            let taken = fs.highp;
             if !taken && decl.is_some_and(|u| matches!(prec(u.name), Some(Precision::High))) {
                 return Err(MaliError::TexHighp);
             }
@@ -1202,7 +1232,7 @@ fn compile_stage<'s>(
         let c = finish(&mut p, &mut layout, true, &ubo, scratch, out, marks)?;
         sc.info.preload = c.preload;
         sc.info.work_reg_count = c.work_reg_count;
-        sc.info.colour_f16 = !fs.colour_f32;
+        sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
         sc.info.compacted = f.compacted;
         sc.info.sampler = f.tex.map(|(t, _)| t.sampler);
         /* a program with an `LD_PKA` reads the block from memory: the frame
@@ -1213,8 +1243,10 @@ fn compile_stage<'s>(
         /* the one look-up there is takes its LOD from the derivatives,
          * unless it is a cube's at a given level (`txl` has no implicit
          * derivative: 0dce654a8:tools/mali/board-ref/2026-10-24-mesa-refs4/mesa/
-         * mesa-es3cube.pandecode, `Requires helper threads: false`) */
-        sc.info.helper_threads = f.tex.is_some_and(|(t, _)| t.cube.is_none());
+         * mesa-es3cube.pandecode, `Requires helper threads: false`) or a
+         * `texelFetch` (`TEX_FETCH` is none of `bi_instr_uses_helpers`';
+         * fbload_fbload.trace, `Requires helper threads: false`) */
+        sc.info.helper_threads = f.tex.is_some_and(|(t, _)| t.cube.is_none() && !t.fetch);
         sc.info.can_discard = f.discards > 0;
         sc.rows = f.rows;
         for r in &f.reads[..f.nreads] {
