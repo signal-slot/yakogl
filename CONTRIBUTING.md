@@ -2,9 +2,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Contributing to YakoGL
 
-YakoGL is an OpenGL ES 2.0 + EGL library for embedded GPUs, with no OS GPU
-driver. Start with `README.md`, then this file. The open work, the known
-defects and the next board sessions are the repository's GitHub issues.
+YakoGL does not accept external pull requests. GitHub issues are welcome for
+reproducible defects and other technical problems; security issues must be
+reported through the process in `SECURITY.md`.
+
+This file documents the maintainer development workflow. YakoGL is an OpenGL
+ES 2.0 + EGL library for embedded GPUs, with no OS GPU driver. Start with
+`README.md`, then this file. The open work, the known defects and the next
+board sessions are the repository's GitHub issues.
 
 ## How a change reaches main
 
