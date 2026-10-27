@@ -10,6 +10,8 @@ Zephyr images that measure one thing on one board and are not samples
 - `nanopc_t6/t6_hello`: milestone Z1 on the NanoPC-T6, the build line and the
   watchdog arming (`driver/docs/nanopc-t6-mali.md`).
 - `nanopc_t6/t6_gpu`: the second half of Z1, the GPU's power at hand-over.
+- `nanopc_t6/t6_mmu`: milestone Z2, AS0's page tables from the image and a
+  GPU cache flush round trip, after Z1's power-on.
 
 Build (from the west workspace):
 

@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Mali-G610 (Valhall, CSF) of the RK3588: the kernel side's first
 //! steps (feature `mali`): read the identity, soft reset, set the coherency
-//! mode, power the L2 cache on (driver/docs/nanopc-t6-mali.md, "Z1").
+//! mode, power the L2 cache on (driver/docs/nanopc-t6-mali.md, "Z1"); flush
+//! the caches, and in [`mmu`] and [`pgtable`] an address space's tables and
+//! its `AS_COMMAND` sequences ("Z2").
 //!
 //! Source: Linux v6.18's panthor, used under the MIT option of its
 //! `GPL-2.0 or MIT` licence (the design page's decision 1): register
@@ -22,6 +24,9 @@
 //! active: 0xa8670005.
 
 use crate::mmio::Mmio;
+
+pub mod mmu;
+pub mod pgtable;
 
 /// Registers (panthor_regs.h:13-126).
 pub const GPU_ID: usize = 0x0;
@@ -50,6 +55,24 @@ pub const MCU_STATUS: usize = 0x704;
 pub const IRQ_RESET_COMPLETED: u32 = 1 << 8;
 /// `GPU_SOFT_RESET` = `GPU_CMD_DEF(1, 1)` (panthor_regs.h:51-53).
 pub const CMD_SOFT_RESET: u32 = 1 | (1 << 8);
+/// `GPU_IRQ_CLEAN_CACHES_COMPLETED` (panthor_regs.h, the `GPU_INT_*` bits).
+pub const IRQ_CLEAN_CACHES_COMPLETED: u32 = 1 << 17;
+/// The cache operations of `GPU_FLUSH_CACHES` (panthor_regs.h
+/// `CACHE_CLEAN`, `CACHE_INV`).
+pub const CACHE_CLEAN: u32 = 1 << 0;
+pub const CACHE_INV: u32 = 1 << 1;
+/// `GPU_FLUSH_CACHES(l2, lsc, oth)` = `GPU_CMD_DEF(4, l2 | lsc << 4 |
+/// oth << 8)` (panthor_regs.h).
+pub const fn cmd_flush_caches(l2: u32, lsc: u32, other: u32) -> u32 {
+    4 | (l2 | lsc << 4 | other << 8) << 8
+}
+/// The flush `panthor_mmu_as_enable` asks for (`AS_COMMAND_FLUSH_MEM` in
+/// `mmu_hw_do_operation_locked`): L2 and LSC cleaned and invalidated.
+pub const CMD_FLUSH_L2_LSC: u32 = cmd_flush_caches(CACHE_CLEAN | CACHE_INV, CACHE_CLEAN | CACHE_INV, 0);
+/// panthor's wait for the flush: 100 ms (`panthor_gpu_flush_caches`,
+/// `wait_event_timeout(..., msecs_to_jiffies(100))`).
+pub const FLUSH_WAIT_US: u32 = 100_000;
+
 /// `GPU_COHERENCY_NONE` (panthor_regs.h:119): the RK3588's GPU node has no
 /// `dma-coherent`, so panthor writes this (panthor_gpu.c:49-53).
 pub const COHERENCY_NONE: u32 = 31;
@@ -120,6 +143,12 @@ pub enum MaliRefusal {
     /// `RESET_COMPLETED` still reads set after its clear: a completion
     /// could not be told from an old one.
     ResetBitStuck = 5,
+    /// `CLEAN_CACHES_COMPLETED` did not rise within [`FLUSH_WAIT_US`].
+    FlushTimeout = 6,
+    /// `CLEAN_CACHES_COMPLETED` still reads set after its clear.
+    FlushBitStuck = 7,
+    /// `AS_STATUS.AS_ACTIVE` stayed set ([`mmu::READY_WAIT_US`]).
+    AsActiveStuck = 8,
 }
 
 /// Poll the 64-bit register at `addr` once per microsecond for at most
@@ -177,6 +206,52 @@ pub struct Reset {
     pub waited_us: u32,
 }
 
+/// What [`flush_caches`] saw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Flush {
+    /// The `GPU_CMD` value written.
+    pub cmd: u32,
+    /// `GPU_INT_RAWSTAT` before the clear and after it.
+    pub raw_before: u32,
+    pub raw_cleared: u32,
+    /// Polls (each followed by a 1 µs wait) before `CLEAN_CACHES_COMPLETED`
+    /// rose.
+    pub waited_us: u32,
+}
+
+/// A cache flush round trip (`panthor_gpu_flush_caches`, panthor_gpu.c):
+/// write `GPU_FLUSH_CACHES(l2, lsc, other)` to `GPU_CMD`, wait for
+/// `CLEAN_CACHES_COMPLETED`. panthor waits for the interrupt (its handler
+/// clears the bit, `panthor_gpu_irq_handler`) and on its timeout reads
+/// `GPU_INT_RAWSTAT`; this polls the raw status and clears the bit itself,
+/// as [`soft_reset`] does: the bit is cleared first, and the command is
+/// written only when it reads clear, so the completion seen is this one's.
+pub fn flush_caches(
+    m: &impl Mmio,
+    base: usize,
+    l2: u32,
+    lsc: u32,
+    other: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Flush, (MaliRefusal, u32)> {
+    let cmd = cmd_flush_caches(l2, lsc, other);
+    let raw_before = m.read32(base + GPU_INT_RAWSTAT);
+    m.write32(base + GPU_INT_CLEAR, IRQ_CLEAN_CACHES_COMPLETED);
+    let raw_cleared = m.read32(base + GPU_INT_RAWSTAT);
+    if raw_cleared & IRQ_CLEAN_CACHES_COMPLETED != 0 {
+        return Err((MaliRefusal::FlushBitStuck, raw_cleared));
+    }
+    m.write32(base + GPU_CMD, cmd);
+    for t in 0..=FLUSH_WAIT_US {
+        if m.read32(base + GPU_INT_RAWSTAT) & IRQ_CLEAN_CACHES_COMPLETED != 0 {
+            m.write32(base + GPU_INT_CLEAR, IRQ_CLEAN_CACHES_COMPLETED);
+            return Ok(Flush { cmd, raw_before, raw_cleared, waited_us: t });
+        }
+        delay_us(1);
+    }
+    Err((MaliRefusal::FlushTimeout, m.read32(base + GPU_INT_RAWSTAT)))
+}
+
 /// What [`l2_power_on`] saw.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct L2On {
@@ -232,6 +307,7 @@ mod tests {
         lag: u32,
         polls: RefCell<u32>,
         reset_pending: RefCell<bool>,
+        flush_pending: RefCell<bool>,
         l2_on: RefCell<bool>,
         /// The L2 never becomes ready.
         stuck_l2: bool,
@@ -258,6 +334,7 @@ mod tests {
                 lag,
                 polls: RefCell::new(0),
                 reset_pending: RefCell::new(false),
+                flush_pending: RefCell::new(false),
                 l2_on: RefCell::new(false),
                 stuck_l2: false,
                 sticky_raw: false,
@@ -276,6 +353,10 @@ mod tests {
                         *self.reset_pending.borrow_mut() = false;
                         let mut r = self.regs.borrow_mut();
                         *r.entry(GPU_INT_RAWSTAT).or_insert(0) |= IRQ_RESET_COMPLETED;
+                    }
+                    if *self.flush_pending.borrow() && *p > self.lag {
+                        *self.flush_pending.borrow_mut() = false;
+                        *self.regs.borrow_mut().entry(GPU_INT_RAWSTAT).or_insert(0) |= IRQ_CLEAN_CACHES_COMPLETED;
                     }
                 }
                 L2_READY if *self.l2_on.borrow() && *p > self.lag && !self.stuck_l2 => {
@@ -299,6 +380,7 @@ mod tests {
                     self.regs.borrow_mut().insert(L2_READY, 0);
                     *self.l2_on.borrow_mut() = false;
                 }
+                GPU_CMD if val & 0xff == 4 => *self.flush_pending.borrow_mut() = true,
                 L2_PWRON if val & 1 != 0 => *self.l2_on.borrow_mut() = true,
                 _ => {
                     self.regs.borrow_mut().insert(off, val);
@@ -369,5 +451,36 @@ mod tests {
         g.regs.borrow_mut().insert(GPU_L2_PRESENT, 0);
         assert_eq!(l2_power_on(&g, BASE, &mut |_| {}), Err((MaliRefusal::NoL2, 0)));
         assert!(g.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn the_flush_command_is_panthor_s_encoding() {
+        assert_eq!(CMD_FLUSH_L2_LSC, 0x3304);
+        assert_eq!(cmd_flush_caches(CACHE_CLEAN | CACHE_INV, 0, 0), 0x0304);
+    }
+
+    #[test]
+    fn a_flush_clears_then_commands_then_sees_its_completion() {
+        let g = G610::new(5);
+        let f = flush_caches(&g, BASE, CACHE_CLEAN | CACHE_INV, CACHE_CLEAN | CACHE_INV, 0, &mut |_| {}).unwrap();
+        assert_eq!(f, Flush { cmd: 0x3304, raw_before: 0, raw_cleared: 0, waited_us: 5 });
+        assert_eq!(*g.writes.borrow(), vec![(GPU_INT_CLEAR, 1 << 17), (GPU_CMD, 0x3304), (GPU_INT_CLEAR, 1 << 17)]);
+        assert_eq!(g.read32(BASE + GPU_INT_RAWSTAT), 0);
+    }
+
+    #[test]
+    fn a_flush_that_cannot_be_told_from_an_old_one_or_never_ends_is_refused() {
+        let mut g = G610::new(0);
+        g.sticky_raw = true;
+        g.regs.borrow_mut().insert(GPU_INT_RAWSTAT, IRQ_CLEAN_CACHES_COMPLETED);
+        assert_eq!(flush_caches(&g, BASE, 3, 3, 0, &mut |_| {}), Err((MaliRefusal::FlushBitStuck, 1 << 17)));
+        assert!(g.writes.borrow().iter().all(|w| w.0 != GPU_CMD));
+        let g = G610::new(u32::MAX);
+        let mut slept = 0u64;
+        assert_eq!(
+            flush_caches(&g, BASE, 3, 3, 0, &mut |us| slept += u64::from(us)),
+            Err((MaliRefusal::FlushTimeout, 0))
+        );
+        assert_eq!(slept, u64::from(FLUSH_WAIT_US) + 1);
     }
 }

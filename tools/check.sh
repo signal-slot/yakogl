@@ -3289,6 +3289,9 @@ if [ "$QUICK" -eq 0 ]; then
     # The GPU power-on sample (Z1's second half) is C the gate must compile.
     step "zephyr  nanopc_t6 t6_gpu image (Z1, GPU power-on), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_gpu nanopc_t6_gpu
+    # Z2's probe (AS0's page tables, the cache flush round trip) likewise.
+    step "zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files" \
+      zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi

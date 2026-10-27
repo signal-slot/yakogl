@@ -6,7 +6,8 @@
 //! the i.MX8MP samples' hold before their reset ([`imx8mp`]), and when the
 //! NanoPC-T6 glue still feeds its watchdog ([`nanopc_t6`]) and what its
 //! image prints before Zephyr's console exists ([`nanopc_t6_early`]) and
-//! its GPU power-on ([`nanopc_t6_gpu`]).
+//! its GPU power-on ([`nanopc_t6_gpu`]) and its AS0 and cache flush
+//! ([`nanopc_t6_mmu`]).
 //! The C side reaches both through `ffi::board`.
 
 pub mod imx8mp;
@@ -15,6 +16,8 @@ pub mod nanopc_t6;
 pub mod nanopc_t6_early;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_gpu;
+#[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
+pub mod nanopc_t6_mmu;
 pub mod record;
 pub mod rpi4;
 
