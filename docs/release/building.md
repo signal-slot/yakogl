@@ -62,8 +62,8 @@ repository at the commit that added this file.
   keep the checkout apart and set `YAKOGL_DIR` (below).
 - **Variable:** `ZEPHYR_WS`, the directory that holds `zephyr/` and `.west/`.
   `ZEPHYR_BASE` is `$ZEPHYR_WS/zephyr` (`tools/cts/common-images.sh:155`).
-  `tools/cts/imx8mp-env.sh:33` calls the same directory `ZEPHYR_WORKSPACE`;
-  give both the same value.
+  The i.MX8MP scripts read it too (`ZEPHYR_WORKSPACE`, the old name, is
+  still accepted when `ZEPHYR_WS` is unset).
 - **Needed by:** every image.
 - **Module list:** the scripts pass `-DZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh $ZEPHYR_WS)`
   (`tools/cts/zephyr-modules.sh:1-30`). It needs `west` on `PATH`. In a
@@ -406,7 +406,7 @@ is not a conformance image gets `rc=not-conformance`).
 `tools/cts/imx8mp-deqp-build.sh:1-30`):
 
 ```sh
-export ZEPHYR_WORKSPACE=$ZEPHYR_WS ZEPHYR_VENV=$WEST_VENV IMX8MP_OUT=$WORK/imx8mp-out
+export ZEPHYR_VENV=$WEST_VENV IMX8MP_OUT=$WORK/imx8mp-out
 export DEQP_STAGE1=$WORK/deqp-imx8mp
 tools/cts/imx8mp-deqp-stage1.sh                       # stage 1, once
 tools/cts/imx8mp-deqp-build.sh deqp-$(git rev-parse --short=8 HEAD) \

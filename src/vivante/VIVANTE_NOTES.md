@@ -1236,7 +1236,7 @@ a branch.
 
 ```sh
 # from a detached checkout of origin/main (CONTRIBUTING.md)
-# with ZEPHYR_WORKSPACE, ZEPHYR_VENV, ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT
+# with ZEPHYR_WS, ZEPHYR_VENV, ZEPHYR_SDK_INSTALL_DIR and IMX8MP_OUT
 # exported (tools/cts/imx8mp-env.sh says what each one is)
 LIST='-DCONFIG_GC_GL_TEST_SWEEP_LISTS="1-6,8-10"'   # list 0: the set's order up to case 10
 tools/cts/imx8mp-gltest-build.sh gc9-base   0 "$LIST"
