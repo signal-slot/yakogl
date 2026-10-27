@@ -44,15 +44,25 @@
       <p class="hero-footnote">Proven today on Zephyr · OS-independent <code>no_std</code> core · C ABI</p>
     </div>
     <figure class="stack-figure" aria-labelledby="stack-caption">
-      <div class="stack-label">A proven path today</div>
-      <div class="stack-app"><span>Visible application</span><strong>Slint UI · FemtoVG</strong></div>
-      <div class="stack-link" aria-hidden="true"></div>
-      <div class="stack-yako"><span class="stack-tag">Portable graphics implementation</span><strong>YakoGL<span aria-hidden="true">.</span></strong><span>OpenGL ES / EGL · GLSL compiler · GPU back ends</span></div>
-      <div class="stack-link" aria-hidden="true"></div>
-      <div class="stack-os"><strong>Zephyr</strong><span>the primary, hardware-proven platform today</span></div>
-      <div class="stack-link" aria-hidden="true"></div>
-      <div class="stack-gpus"><span>PowerVR</span><span>Vivante</span><span>Broadcom</span></div>
-      <figcaption id="stack-caption">One working combination, not YakoGL’s boundary. The core and GPU back ends are OS-independent.</figcaption>
+      <div class="stack-label">A conceptual split</div>
+      <div class="stack-app"><span>Application / UI toolkit</span><strong>Slint UI · FemtoVG</strong></div>
+      <div class="stack-fork" aria-hidden="true"><span></span></div>
+      <div class="stack-paths">
+        <div class="stack-path stack-cpu">
+          <span class="stack-tag">CPU side</span>
+          <strong>Zephyr</strong>
+          <span>scheduling · devices · application runtime</span>
+          <em>CPU</em>
+        </div>
+        <div class="stack-path stack-gpu">
+          <span class="stack-tag">GPU side</span>
+          <strong>YakoGL<span aria-hidden="true">.</span></strong>
+          <span>OpenGL ES / EGL · shaders · GPU back ends</span>
+          <em>GPU</em>
+        </div>
+      </div>
+      <div class="stack-gpus" aria-label="Hardware-proven GPU families"><span>PowerVR</span><span>Vivante</span><span>Broadcom</span></div>
+      <figcaption id="stack-caption">Conceptual responsibilities, not a strict boundary: YakoGL executes CPU-side driver work too, while Zephyr and YakoGL cooperate to drive the GPU.</figcaption>
     </figure>
   </div>
   <div class="hero-bottom"><span>Hardware-proven on Zephyr</span><a href="status.html#am62p">Verdin AM62P</a><a href="status.html#imx8mp">Verdin iMX8M Plus</a><a href="status.html#pi4">Raspberry Pi 4</a></div>
