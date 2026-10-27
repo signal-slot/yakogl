@@ -570,7 +570,17 @@ struct Sel<'a> {
     /// if-converted arm holds no `if`, so one `if_convert` never runs inside
     /// another and the buffer is reused.
     arm_flags: &'a mut [u8],
+    /// Per register of the uniform block (`d / 4`): its number in the
+    /// constant file, or [`NOT_IN_FILE`] when every dword of it is a
+    /// user-block member and so is read with `load`. Empty (every register
+    /// in the file, at its own number) when the stage has no block members.
+    reg_of: &'a [u16],
+    /// The first register after the uniform registers kept in the file.
+    first_literal: usize,
 }
+
+/// `Sel::reg_of` entry of a register left out of the constant file.
+const NOT_IN_FILE: u16 = u16::MAX;
 
 /// `arm_flags` bits: the then arm stores the slot, the else arm stores it,
 /// the then arm reads it or writes some of its lanes.
@@ -1010,13 +1020,10 @@ impl<'a> Sel<'a> {
                 }
                 let simple = matches!(
                     self.m.def(src.val),
-                    Some(
-                        ir::Op::LoadInput { .. }
-                            | ir::Op::ConstF32(_)
-                            | ir::Op::ConstI32(_)
-                            | ir::Op::ConstBool(_)
-                            | ir::Op::LoadUniform { .. }
-                    )
+                    Some(ir::Op::LoadInput { .. } | ir::Op::ConstF32(_) | ir::Op::ConstI32(_) | ir::Op::ConstBool(_))
+                ) || matches!(
+                    self.m.def(src.val),
+                    Some(ir::Op::LoadUniform { dword_off, .. }) if !self.reads_block_memory(*dword_off)
                 );
                 if !simple {
                     return None;
@@ -1411,18 +1418,49 @@ impl<'a> Sel<'a> {
     /// block of six would otherwise leave the first literal sharing a register
     /// with two uniform dwords, and a literal's register number is what
     /// [`Sel::const_reg`] hands out.
-    fn uniform_block(&mut self) -> Result<(), SelectError> {
+    fn uniform_block(&mut self, members: &[(u16, u16)]) -> Result<(), SelectError> {
         let used = self.m.uniform_dwords as usize;
-        let dwords = used.div_ceil(4) * 4;
+        let regs = used.div_ceil(4);
+        /* Which registers leave the file: every real dword is a block member.
+         * A register that mixes members with default-block uniforms stays and
+         * is read as a uniform is, since the two cannot be split. */
+        let mut reg_of: &'a [u16] = &[];
+        if !members.is_empty() {
+            let member = self.arena.alloc_filled(regs * 4, false)?;
+            for &(off, n) in members {
+                for d in off as usize..(off as usize + n as usize).min(used) {
+                    member[d] = true;
+                }
+            }
+            let table = self.arena.alloc_filled(regs, 0u16)?;
+            let mut next = 0u16;
+            for (r, e) in table.iter_mut().enumerate() {
+                let real = r * 4..(r * 4 + 4).min(used);
+                if real.clone().all(|d| member[d]) {
+                    *e = NOT_IN_FILE;
+                } else {
+                    *e = next;
+                    next += 1;
+                }
+            }
+            reg_of = &*table;
+        }
         /* The last register's lanes past the block are padding, which no
          * read reaches (`uniform_src` refuses one): described as uniform
          * dwords they named dwords the block does not have, and the backend
          * logged each one as missing on every draw (the i.MX8MP cluster's
          * 2.7 s frame, tests/gc_const_map.rs). */
-        for d in 0..dwords {
-            let slot = if d < used { ConstSlot::uniform(d as u32) } else { ConstSlot::UNUSED };
-            self.consts.push(self.arena, slot)?;
+        for r in 0..regs {
+            if reg_of.get(r) == Some(&NOT_IN_FILE) {
+                continue;
+            }
+            for d in r * 4..r * 4 + 4 {
+                let slot = if d < used { ConstSlot::uniform(d as u32) } else { ConstSlot::UNUSED };
+                self.consts.push(self.arena, slot)?;
+            }
         }
+        self.first_literal = self.consts.len() / 4;
+        self.reg_of = reg_of;
         /* A dynamically indexed array needs nothing more here: it is read
          * with `load` from the block's copy in memory (LoadUniformIdx), not
          * through the address register. Until 2026-09-25 each such array got
@@ -1431,12 +1469,19 @@ impl<'a> Sel<'a> {
         Ok(())
     }
 
+    /// Is the uniform read at `dword_off` a `load` from the block's copy in
+    /// memory: its register was left out of the constant file
+    /// (`uniform_block`).
+    fn reads_block_memory(&self, dword_off: u16) -> bool {
+        self.reg_of.get(dword_off as usize / 4) == Some(&NOT_IN_FILE)
+    }
+
     /// A read of `comps` dwords of the uniform block starting at `dword_off`.
     fn uniform_src(&self, dword_off: u16, comps: u8, sw: [u8; 4]) -> Result<SelSrc, SelectError> {
         if dword_off >= self.m.uniform_dwords {
             return Err(SelectError::Unsupported("a uniform read past the block the module declares"));
         }
-        let reg = dword_off / 4;
+        let reg = self.reg_of.get(dword_off as usize / 4).copied().unwrap_or(dword_off / 4);
         let first = (dword_off % 4) as u8;
         /* The load's own components, then the caller's swizzle on top of them.
          * Components the load does not cover repeat its last rather than
@@ -1450,6 +1495,53 @@ impl<'a> Sel<'a> {
         p.swizzle =
             [base[sw[0] as usize & 3], base[sw[1] as usize & 3], base[sw[2] as usize & 3], base[sw[3] as usize & 3]];
         Ok(SelSrc::Physical(p))
+    }
+
+    /// A uniform read from a register that is not in the constant file:
+    ///
+    ///   mov      t.x, byte_offset
+    ///   load.u32 v, t.x, u[ubo_addr]
+    ///
+    /// `RGROUP_IMMED` is not a `load` operand, so the offset goes through a
+    /// temporary. The lanes past `comps` repeat the last, as a narrower
+    /// uniform's read does.
+    fn block_read(&mut self, id: ir::InstrId, dword_off: u16, comps: u8) -> Result<(), SelectError> {
+        let load = build::op_id("load").ok_or(SelectError::Unsupported("the machine has no `load`"))?;
+        let off = VReg(self.next_vreg);
+        let got = VReg(self.next_vreg + 1);
+        self.next_vreg += 2;
+        let imm = build::Src::imm_s20(i32::from(dword_off) * 4)
+            .map(SelSrc::Physical)
+            .map_err(|_| SelectError::Unsupported("a block offset too large for an immediate"))?;
+        self.emit(
+            SelInstr::new(self.mov, OpType::S32)
+                .dst(SelDst::Virtual { v: off, write_mask: 0x1 })
+                .operand(MOV_OPERAND, imm),
+        )?;
+        let (ubo_reg, ubo_lane) = self.ubo_addr_reg()?;
+        let mut base = build::Src::reg(build::RGROUP_UNIFORM_0, ubo_reg);
+        base.swizzle = [ubo_lane; 4];
+        let x = SelSrc::Virtual { v: off, swizzle: [0; 4], neg: false, abs: false };
+        self.emit(
+            SelInstr::new(load, OpType::U32)
+                .dst(SelDst::Virtual { v: got, write_mask: build::WRITE_MASK_ALL })
+                .operand(0, x)
+                .operand(1, SelSrc::Physical(base)),
+        )?;
+        let lane = comps.saturating_sub(1).min(3);
+        self.emit(
+            SelInstr::new(self.mov, OpType::F32)
+                .dst(SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL })
+                .operand(
+                    MOV_OPERAND,
+                    SelSrc::Virtual {
+                        v: got,
+                        swizzle: [0, 1.min(lane), 2.min(lane), 3.min(lane)],
+                        neg: false,
+                        abs: false,
+                    },
+                ),
+        )
     }
 
     /// Place a vec4 literal in the constant file, packed.
@@ -1475,7 +1567,7 @@ impl<'a> Sel<'a> {
     fn const_reg(&mut self, bits: [u32; 4]) -> Result<(u16, [u8; 4]), SelectError> {
         /* Literals begin after the uniform block, which `uniform_block` laid
          * down first and whose dwords are not ours to pack into. */
-        let first_literal = (self.m.uniform_dwords as usize).div_ceil(4);
+        let first_literal = self.first_literal;
 
         /* A register can serve this literal if, for each distinct value, it
          * already holds it or has a free dword to take it. Registers are
@@ -1630,7 +1722,9 @@ impl<'a> Sel<'a> {
             ir::Op::ConstBool(v) => self.int_literal_src(v.map(|b| if b { u32::MAX } else { 0 }), s.swizzle),
             /* Folded like a literal: the hardware reads the constant file
              * directly, so a uniform needs no instruction of its own. */
-            ir::Op::LoadUniform { dword_off, comps } => self.uniform_src(dword_off, comps, s.swizzle),
+            ir::Op::LoadUniform { dword_off, comps } if !self.reads_block_memory(dword_off) => {
+                self.uniform_src(dword_off, comps, s.swizzle)
+            }
 
             /* A local slot IS a virtual register, so reading one is reading
              * that register -- no instruction, exactly as an attribute read
@@ -2195,6 +2289,10 @@ impl<'a> Sel<'a> {
             ir::Op::LoadInput { slot: ir::IoSlot::FrontFacing, .. } => self.front_facing(id),
             ir::Op::LoadInput { slot: ir::IoSlot::FragCoord, .. } => self.frag_coord(id),
             ir::Op::LoadInput { slot: ir::IoSlot::PointCoord, .. } => self.point_coord(id),
+            /* A block member in memory: a `mov` and a `load` where it is. */
+            ir::Op::LoadUniform { dword_off, comps } if self.reads_block_memory(dword_off) => {
+                self.block_read(id, dword_off, comps)
+            }
             /* Folded into their uses by `src`; they emit nothing themselves. */
             ir::Op::LoadInput { .. }
             | ir::Op::ConstF32(_)
@@ -3880,6 +3978,21 @@ pub fn select_keyed<'a>(
     arena: &'a Arena<'a>,
     front_flipped: bool,
 ) -> Result<Selected<'a>, SelectError> {
+    select_blocks(m, arena, front_flipped, &[])
+}
+
+/// [`select_keyed`], with the uniform-block member rows of the stage:
+/// `(dword_off, dwords)` ranges of the module's uniform dwords that belong to
+/// a user block's members. A constant register all of whose dwords are
+/// members is not put in the constant file; its reads are `load`s from the
+/// block's copy in memory (`Sel::block_read`), as Mesa's etnaviv reads every
+/// user block (docs/notes/gc-ubo-const-limit.md).
+pub fn select_blocks<'a>(
+    m: &'a ir::Module<'a>,
+    arena: &'a Arena<'a>,
+    front_flipped: bool,
+    members: &[(u16, u16)],
+) -> Result<Selected<'a>, SelectError> {
     if m.stage != SHC_STAGE_VERTEX && m.stage != SHC_STAGE_FRAGMENT {
         return Err(SelectError::Unsupported("a stage that is neither vertex nor fragment"));
     }
@@ -3927,8 +4040,10 @@ pub fn select_keyed<'a>(
         loop_limits: AVec::new(),
         under_control_flow,
         arm_flags,
+        reg_of: &[],
+        first_literal: 0,
     };
-    s.uniform_block()?;
+    s.uniform_block(members)?;
     s.nodes(m.body)?;
     s.propagate_copies()?;
     s.fold_constant_reads()?;
@@ -5020,6 +5135,62 @@ mod tests {
         };
         let e = store::with_scratch(|a| select(&m, a).map(|_| ())).unwrap().expect_err("refused");
         assert_eq!(e, SelectError::Unsupported("a uniform read past the block the module declares"));
+    }
+
+    /// A user block's member is read with `mov t.x, byte_offset` and `load`
+    /// from the block's copy in memory, and its registers are not in the
+    /// constant file (docs/notes/gc-ubo-const-limit.md). A register that
+    /// mixes a member with a default-block uniform stays in the file.
+    #[test]
+    fn block_members_are_loads_and_leave_the_constant_file() {
+        let _s = store::test_lock();
+        let instrs = [
+            ir::Op::LoadUniform { dword_off: 4, comps: 4 }, /* member: register 1 */
+            ir::Op::LoadUniform { dword_off: 8, comps: 1 }, /* default uniform: register 2 */
+            ir::Op::Alu(
+                ir::AluOp::Fadd,
+                [ir::Src::id(ir::ValueId(0)), ir::Src::id(ir::ValueId(1)), ir::Src::id(ir::ValueId(0))],
+            ),
+            ir::Op::StoreOutput { slot: ir::IoSlot::FragColor(0), src: ir::Src::id(ir::ValueId(2)) },
+        ];
+        let nodes: Vec<ir::Node> = (0..4).map(|i| ir::Node::Instr(ir::InstrId(i))).collect();
+        let m = ir::Module {
+            instrs: &instrs,
+            nodes: &nodes,
+            body: ir::Range { first: 0, len: 4 },
+            uniform_dwords: 12,
+            ..ir::Module::empty(SHC_STAGE_FRAGMENT)
+        };
+        let load = build::op_id("load").unwrap();
+        /* the block is dwords 0..8 (registers 0 and 1), the default uniform dword 8 */
+        let (loads, consts) = store::with_scratch(|a| {
+            let sel = select_blocks(&m, a, false, &[(0, 8)]).unwrap();
+            (
+                sel.instrs.iter().filter(|i| i.op == load).count(),
+                sel.consts.iter().map(|c| (c.contents, c.data)).collect::<Vec<_>>(),
+            )
+        })
+        .unwrap();
+        assert_eq!(loads, 1, "the member is one load; the default uniform is a register operand");
+        assert_eq!(consts.len(), 8, "register 2 (kept, now register 0) and the UBO address register");
+        assert_eq!(consts[0], (crate::shaderc::SHC_VIV_CONST_UNIFORM, 8), "the default uniform is register 0");
+        assert_eq!(consts.iter().filter(|c| c.0 == crate::shaderc::SHC_VIV_CONST_UBO_ADDR).count(), 1);
+
+        /* no members: the file is the block, as before */
+        let (loads, n) = store::with_scratch(|a| {
+            let sel = select_blocks(&m, a, false, &[]).unwrap();
+            (sel.instrs.iter().filter(|i| i.op == load).count(), sel.consts.len())
+        })
+        .unwrap();
+        assert_eq!((loads, n), (0, 12));
+
+        /* a register that mixes a member with a default uniform stays */
+        let (loads, n) = store::with_scratch(|a| {
+            let sel = select_blocks(&m, a, false, &[(4, 2)]).unwrap();
+            (sel.instrs.iter().filter(|i| i.op == load).count(), sel.consts.len())
+        })
+        .unwrap();
+        assert_eq!((loads, n), (0, 12), "half a register of members is not moved");
     }
 
     #[test]

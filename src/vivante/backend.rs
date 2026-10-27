@@ -2669,23 +2669,29 @@ fn build_vertex_input(f: &mut GcFrame, d: &mut GcDraw, gl: &GlesDraw) -> i32 {
 static UNIFORM_BLOCKS: Global<[[u32; GC_MAX_UNIFORM_DWORDS]; 2]> = Global::zeroed();
 
 /// Copy one stage's uniform block out of the draw. `vertex` picks the buffer.
-/// `None` when the block is larger than the constant registers: a copy of a
-/// prefix would drop the rest without a word, and `gc_draw` refuses the draw
-/// for it (until `take_uniforms`'s copy is no longer the block's only home,
-/// the gc-ubo item lifting that is what raises the cap).
+/// A block larger than the constant registers is not copied: the block is
+/// read where the GL core keeps it. The constant file takes only the dwords
+/// the shader's slots name, and a block member past them is a `load` from the
+/// block's copy in memory (`ubo_copy`, select.rs `block_read`), so the whole
+/// block has to be reachable. `None` only for a block that is that large and
+/// has no CPU mapping or is not dword aligned, which `gc_draw` refuses.
 ///
 /// # Safety
-/// `cpu` must be null or hold `dwords` dwords.
+/// `cpu` must be null or hold `dwords` dwords, which stay valid until the end
+/// of the draw.
 unsafe fn take_uniforms(cpu: *const c_void, dwords: u16, vertex: bool) -> Option<&'static [u32]> {
     let n = dwords as usize;
     if n > GC_MAX_UNIFORM_DWORDS {
-        glog_once!(
-            "yakogl/vivante: {} uniform block of {} dwords exceeds the {} the constant registers hold; draw refused",
-            if vertex { "vertex" } else { "fragment" },
-            n,
-            GC_MAX_UNIFORM_DWORDS
-        );
-        return None;
+        if cpu.is_null() || !(cpu as *const u32).is_aligned() {
+            glog_once!(
+                "yakogl/vivante: {} uniform block of {} dwords has no aligned CPU mapping; draw refused",
+                if vertex { "vertex" } else { "fragment" },
+                n
+            );
+            return None;
+        }
+        // SAFETY: the caller's contract; the block is only read.
+        return Some(unsafe { core::slice::from_raw_parts(cpu as *const u32, n) });
     }
     // SAFETY: single-threaded by contract; the two blocks are used only
     // between here and the end of the draw that asked for them.

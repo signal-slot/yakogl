@@ -369,7 +369,21 @@ pub fn assemble_from_ir_keyed(
     uniforms: &[crate::shaderc::ShcUniform],
     front_flipped: bool,
 ) -> Result<ShcShader, CompileError> {
-    let sel = select::select_keyed(m, scratch, front_flipped)?;
+    assemble_from_ir_blocks(m, scratch, uniforms, front_flipped, &[])
+}
+
+/// [`assemble_from_ir_keyed`] with the `(dword_off, dwords)` ranges of the
+/// uniform rows that are user-block members, which `select::select_blocks`
+/// reads from memory instead of the constant file.
+#[cfg(feature = "gpu-vivante")]
+pub fn assemble_from_ir_blocks(
+    m: &ir::Module<'_>,
+    scratch: &Arena<'_>,
+    uniforms: &[crate::shaderc::ShcUniform],
+    front_flipped: bool,
+    members: &[(u16, u16)],
+) -> Result<ShcShader, CompileError> {
+    let sel = select::select_blocks(m, scratch, front_flipped, members)?;
 
     /* The stage, because the fragment file's r0 is gl_FragCoord whether the
      * shader names it or not; the allocator cannot see that from `sel`. */
@@ -812,7 +826,17 @@ fn compile_vivante<'s>(
         }
     }
     let _ = keep;
-    let mut sh = assemble_from_ir_keyed(&lowered.module, scratch, uniforms, front_flipped)?;
+    /* The rows of the block members: their dwords are read from the block's
+     * copy in memory, not the constant file (`select::select_blocks`). */
+    let members = scratch.alloc_filled(lowered.reflection.block_members.len(), (0u16, 0u16))?;
+    let mut n = 0;
+    for bm in lowered.reflection.block_members {
+        if let Some(r) = lowered.reflection.uniforms.get(bm.row as usize) {
+            members[n] = (r.dword_off, r.dwords);
+            n += 1;
+        }
+    }
+    let mut sh = assemble_from_ir_blocks(&lowered.module, scratch, uniforms, front_flipped, &members[..n])?;
     /* Says the draw has to pick between the two senses (the GL core asks for
      * the variant only for a shader that says so). */
     sh.reads_front_facing = u8::from(stage == crate::shaderc::SHC_STAGE_FRAGMENT && lowered.module.uses_front_facing);
